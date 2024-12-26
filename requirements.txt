@@ -2,7 +2,6 @@ requests
 btpy
 numpy
 websocket-client
-yaml
 pyyaml
 pandas
 aiohttp
