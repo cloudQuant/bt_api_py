@@ -1,7 +1,7 @@
-from btpy.containers.balances.binance_balance import (BinanceSwapWssBalanceData,
-                                                      BinanceSwapRequestBalanceData,
-                                                      BinanceSpotRequestBalanceData,
-                                                      BinanceSpotWssBalanceData)
+from bt_api_py.containers.balances.binance_balance import (BinanceSwapWssBalanceData,
+                                                           BinanceSwapRequestBalanceData,
+                                                           BinanceSpotRequestBalanceData,
+                                                           BinanceSpotWssBalanceData)
 
 
 def test_binance_spot_wss_balance_data():

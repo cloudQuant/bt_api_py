@@ -2,7 +2,7 @@ import requests
 import time
 import json
 import rapidjson
-from btpy.containers.bars.okx_bar import OkxBarData
+from bt_api_py.containers.bars.okx_bar import OkxBarData
 
 
 def test_get_history_bar():

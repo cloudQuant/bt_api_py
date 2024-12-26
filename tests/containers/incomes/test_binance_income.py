@@ -1,4 +1,4 @@
-from btpy.containers.incomes.binance_income import BinanceIncomeData
+from bt_api_py.containers.incomes.binance_income import BinanceIncomeData
 
 
 def test_binance_income():

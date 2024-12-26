@@ -1,4 +1,4 @@
-from btpy.containers.balances.okx_balance import OkxBalanceData
+from bt_api_py.containers.balances.okx_balance import OkxBalanceData
 
 
 balance_data = {

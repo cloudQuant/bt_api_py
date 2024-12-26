@@ -1,5 +1,5 @@
-from btpy.containers.requestdatas.request_data import RequestData
-from btpy.containers.orders.binance_order import BinanceRequestOrderData
+from bt_api_py.containers.requestdatas.request_data import RequestData
+from bt_api_py.containers.orders.binance_order import BinanceRequestOrderData
 
 
 def test_request_data():

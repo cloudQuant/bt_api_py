@@ -1,4 +1,4 @@
-from btpy.containers.positions.okx_position import OkxPositionData
+from bt_api_py.containers.positions.okx_position import OkxPositionData
 
 
 def test_okx_position():

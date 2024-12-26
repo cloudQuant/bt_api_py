@@ -1,6 +1,6 @@
 import json
 
-from btpy.containers.fundingrates.okx_funding_rate import OkxFundingRateData
+from bt_api_py.containers.fundingrates.okx_funding_rate import OkxFundingRateData
 
 data = {
     "code": "0",

@@ -1,19 +1,19 @@
 import queue
 import time
 import random
-from btpy.functions.utils import read_yaml_file
-from btpy.feeds.live_okx_feed import OkxMarketWssDataSwap, OkxKlineWssDataSwap, OkxAccountWssDataSwap
-from btpy.containers.exchanges.okx_exchange_data import OkxExchangeDataSwap
-from btpy.containers.bars.okx_bar import OkxBarData
-from btpy.containers.markprices.okx_mark_price import OkxMarkPriceData
-from btpy.containers.tickers.okx_ticker import OkxTickerData
-from btpy.containers.orderbooks.okx_orderbook import OkxOrderBookData
-from btpy.containers.fundingrates.okx_funding_rate import OkxFundingRateData
-from btpy.containers.accounts.okx_account import OkxAccountData
-from btpy.containers.orders.okx_order import OkxOrderData
-from btpy.feeds.live_okx_feed import OkxRequestDataSwap
-# from btpy.containers.trades.okx_trade import OkxWssTradeData
-# from btpy.containers.positions.okx_position import OkxPositionData
+from bt_api_py.functions.utils import read_yaml_file
+from bt_api_py.feeds.live_okx_feed import OkxMarketWssDataSwap, OkxKlineWssDataSwap, OkxAccountWssDataSwap
+from bt_api_py.containers.exchanges.okx_exchange_data import OkxExchangeDataSwap
+from bt_api_py.containers.bars.okx_bar import OkxBarData
+from bt_api_py.containers.markprices.okx_mark_price import OkxMarkPriceData
+from bt_api_py.containers.tickers.okx_ticker import OkxTickerData
+from bt_api_py.containers.orderbooks.okx_orderbook import OkxOrderBookData
+from bt_api_py.containers.fundingrates.okx_funding_rate import OkxFundingRateData
+from bt_api_py.containers.accounts.okx_account import OkxAccountData
+from bt_api_py.containers.orders.okx_order import OkxOrderData
+from bt_api_py.feeds.live_okx_feed import OkxRequestDataSwap
+# from bt_api_py.containers.trades.okx_trade import OkxWssTradeData
+# from bt_api_py.containers.positions.okx_position import OkxPositionData
 
 
 def generate_kwargs(exchange=OkxExchangeDataSwap):

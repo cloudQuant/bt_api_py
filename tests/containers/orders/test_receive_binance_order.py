@@ -1,8 +1,8 @@
 import json
-from btpy.containers.orders.binance_order import (BinanceSwapWssOrderData,
-                                                  BinanceRequestOrderData,
-                                                  BinanceSpotWssOrderData,
-                                                  BinanceForceOrderData)
+from bt_api_py.containers.orders.binance_order import (BinanceSwapWssOrderData,
+                                                       BinanceRequestOrderData,
+                                                       BinanceSpotWssOrderData,
+                                                       BinanceForceOrderData)
 
 
 def test_binance_force_order_data():

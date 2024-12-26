@@ -1,6 +1,6 @@
 # import json
-from btpy.containers.accounts.okx_account import OkxAccountData
-from btpy.containers.balances.balance import BalanceData
+from bt_api_py.containers.accounts.okx_account import OkxAccountData
+from bt_api_py.containers.balances.balance import BalanceData
 
 balance_data = {
     "availBal": "4834.317093622894",

@@ -1,6 +1,6 @@
 import json
 
-from btpy.containers.markprices.okx_mark_price import OkxMarkPriceData
+from bt_api_py.containers.markprices.okx_mark_price import OkxMarkPriceData
 
 
 def test_okx_req_mark_price():

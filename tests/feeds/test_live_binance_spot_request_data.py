@@ -1,16 +1,16 @@
 import queue
 import time
 import random
-from btpy.functions.utils import read_yaml_file
-from btpy.feeds.live_binance_feed import BinanceRequestDataSpot
-from btpy.containers.exchanges.binance_exchange_data import BinanceExchangeDataSpot
-from btpy.containers.orderbooks.binance_orderbook import BinanceRequestOrderBookData
-from btpy.containers.fundingrates.binance_funding_rate import BinanceRequestFundingRateData
-from btpy.containers.balances.binance_balance import BinanceSwapRequestBalanceData, BinanceSpotRequestBalanceData
-from btpy.containers.accounts.binance_account import BinanceSwapRequestAccountData, BinanceSpotRequestAccountData
-from btpy.containers.requestdatas.request_data import RequestData
-from btpy.containers.tickers.binance_ticker import BinanceRequestTickerData
-from btpy.containers.bars.binance_bar import BinanceRequestBarData
+from bt_api_py.functions.utils import read_yaml_file
+from bt_api_py.feeds.live_binance_feed import BinanceRequestDataSpot
+from bt_api_py.containers.exchanges.binance_exchange_data import BinanceExchangeDataSpot
+from bt_api_py.containers.orderbooks.binance_orderbook import BinanceRequestOrderBookData
+from bt_api_py.containers.fundingrates.binance_funding_rate import BinanceRequestFundingRateData
+from bt_api_py.containers.balances.binance_balance import BinanceSwapRequestBalanceData, BinanceSpotRequestBalanceData
+from bt_api_py.containers.accounts.binance_account import BinanceSwapRequestAccountData, BinanceSpotRequestAccountData
+from bt_api_py.containers.requestdatas.request_data import RequestData
+from bt_api_py.containers.tickers.binance_ticker import BinanceRequestTickerData
+from bt_api_py.containers.bars.binance_bar import BinanceRequestBarData
 
 
 def test_get_binance_key():

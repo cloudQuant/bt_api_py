@@ -49,10 +49,10 @@ def set_cpp_version(cpp_version: str) -> str:
 # 定义扩展模块
 extensions = [
     Extension(
-        name='btpy.functions.calculate_number.calculate_numbers_by_cython',  # 模块名称
-        sources=['btpy/functions/calculate_number/calculate_numbers.pyx'],  # 源文件路径
+        name='bt_api_py.functions.calculate_number.calculate_numbers_by_cython',  # 模块名称
+        sources=['bt_api_py/functions/calculate_number/calculate_numbers.pyx'],  # 源文件路径
         include_dirs=[np.get_include(),
-                      'btpy.functions.calculate_number',
+                      'bt_api_py.functions.calculate_number',
                       ],
         language='c++',
         extra_compile_args=[
@@ -70,10 +70,10 @@ extensions = [
 ]
 
 setup(
-    name='btpy',  # 项目的名称
-    version='0.12',  # 版本号
-    packages=find_packages(include=['btpy', 'btpy.*'], exclude=["tests"]),
-    package_data={'btpy': ['configs/*',
+    name='bt_api_py',  # 项目的名称
+    version='0.13',  # 版本号
+    packages=find_packages(include=['bt_api_py', 'bt_api_py.*'], exclude=["tests"]),
+    package_data={'bt_api_py': ['configs/*',
                            'functions/calculate_number/*',
                            'functions/update_data/*']},
     author='cloudQuant',  # 作者名字

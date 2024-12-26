@@ -1,4 +1,4 @@
-from btpy.containers.positions.binance_position import BinanceWssPositionData, BinanceRequestPositionData
+from bt_api_py.containers.positions.binance_position import BinanceWssPositionData, BinanceRequestPositionData
 
 
 def test_binance_position():

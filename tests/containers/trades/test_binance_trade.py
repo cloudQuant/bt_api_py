@@ -1,8 +1,8 @@
 # import json
-from btpy.containers.trades.binance_trade import (BinanceSwapWssTradeData,
-                                                  BinanceRequestTradeData,
-                                                  BinanceSpotWssTradeData,
-                                                  BinanceAggTradeData)
+from bt_api_py.containers.trades.binance_trade import (BinanceSwapWssTradeData,
+                                                       BinanceRequestTradeData,
+                                                       BinanceSpotWssTradeData,
+                                                       BinanceAggTradeData)
 
 
 def test_binance_agg_trade():

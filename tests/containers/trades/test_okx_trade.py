@@ -1,5 +1,5 @@
 # import json
-from btpy.containers.trades.okx_trade import *
+from bt_api_py.containers.trades.okx_trade import *
 
 
 def test_okx_req_order():

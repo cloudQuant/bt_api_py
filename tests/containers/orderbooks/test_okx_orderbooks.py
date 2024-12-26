@@ -1,5 +1,5 @@
 import json
-from btpy.containers.orderbooks.okx_orderbook import OkxOrderBookData
+from bt_api_py.containers.orderbooks.okx_orderbook import OkxOrderBookData
 
 
 def test_okx_swap_req_orderbook():

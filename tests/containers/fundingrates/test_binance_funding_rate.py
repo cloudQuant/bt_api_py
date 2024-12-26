@@ -1,4 +1,4 @@
-from btpy.containers.fundingrates.binance_funding_rate import BinanceRequestFundingRateData, BinanceWssFundingRateData
+from bt_api_py.containers.fundingrates.binance_funding_rate import BinanceRequestFundingRateData, BinanceWssFundingRateData
 
 
 def test_binance_request_funding_rate():

@@ -1,5 +1,5 @@
 import json
-from btpy.containers.tickers.okx_ticker import OkxTickerData
+from bt_api_py.containers.tickers.okx_ticker import OkxTickerData
 
 
 def test_okx_ticker():

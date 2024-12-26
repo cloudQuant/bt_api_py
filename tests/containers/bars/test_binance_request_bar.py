@@ -1,4 +1,4 @@
-from btpy.containers.bars.binance_bar import BinanceWssBarData, BinanceRequestBarData
+from bt_api_py.containers.bars.binance_bar import BinanceWssBarData, BinanceRequestBarData
 
 
 def test_binance_wss_bar_functions():

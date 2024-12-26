@@ -1,5 +1,5 @@
 # import json
-from btpy.containers.orderbooks.binance_orderbook import BinanceWssOrderBookData, BinanceRequestOrderBookData
+from bt_api_py.containers.orderbooks.binance_orderbook import BinanceWssOrderBookData, BinanceRequestOrderBookData
 
 
 def test_binance_request_orderbook():

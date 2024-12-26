@@ -1,5 +1,5 @@
 import json
-from btpy.containers.tickers.binance_ticker import BinanceWssTickerData, BinanceRequestTickerData
+from bt_api_py.containers.tickers.binance_ticker import BinanceWssTickerData, BinanceRequestTickerData
 
 
 def test_binance_request_ticker():

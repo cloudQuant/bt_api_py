@@ -1,10 +1,10 @@
 # import json
-from btpy.containers.accounts.binance_account import (BinanceSwapRequestAccountData,
-                                                      BinanceSwapWssAccountData,
-                                                      BinanceSpotRequestAccountData,
-                                                      BinanceSpotWssAccountData)
-from btpy.containers.positions.binance_position import BinanceRequestPositionData, BinanceWssPositionData
-from btpy.containers.balances.binance_balance import BinanceSwapRequestBalanceData
+from bt_api_py.containers.accounts.binance_account import (BinanceSwapRequestAccountData,
+                                                           BinanceSwapWssAccountData,
+                                                           BinanceSpotRequestAccountData,
+                                                           BinanceSpotWssAccountData)
+from bt_api_py.containers.positions.binance_position import BinanceRequestPositionData, BinanceWssPositionData
+from bt_api_py.containers.balances.binance_balance import BinanceSwapRequestBalanceData
 
 
 def test_binance_swap_wss_account():

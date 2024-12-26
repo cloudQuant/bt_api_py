@@ -1,4 +1,4 @@
-from btpy.containers.symbols.binance_symbol import BinanceSwapSymbolData, BinanceSpotSymbolData
+from bt_api_py.containers.symbols.binance_symbol import BinanceSwapSymbolData, BinanceSpotSymbolData
 import requests
 
 

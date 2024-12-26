@@ -1,10 +1,10 @@
 import os
-from btpy.functions.update_data.update_exchange_symbol_info import *
+from bt_api_py.functions.update_data.update_exchange_symbol_info import *
 
 
 def test_update_binance_swap_symbol_info():
     update_binance_swap_symbol_info()
-    root = get_package_path("btpy")
+    root = get_package_path("bt_api_py")
     full_file_name = root + f"/configs/binance_swap_symbol_info.pkl"
     if not os.path.exists(full_file_name):
         assert False
@@ -22,7 +22,7 @@ def test_update_binance_swap_symbol_info():
 
 def test_update_binance_spot_symbol_info():
     update_binance_spot_symbol_info()
-    root = get_package_path("btpy")
+    root = get_package_path("bt_api_py")
     full_file_name = root + f"/configs/binance_spot_symbol_info.pkl"
     if not os.path.exists(full_file_name):
         assert False

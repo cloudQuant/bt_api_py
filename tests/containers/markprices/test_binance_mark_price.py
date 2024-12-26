@@ -1,5 +1,5 @@
 # import json
-from btpy.containers.markprices.binance_mark_price import BinanceWssMarkPriceData, BinanceRequestMarkPriceData
+from bt_api_py.containers.markprices.binance_mark_price import BinanceWssMarkPriceData, BinanceRequestMarkPriceData
 
 
 def test_binance_request_mark_price():

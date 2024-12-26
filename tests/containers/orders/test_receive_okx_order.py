@@ -1,5 +1,5 @@
 import json
-from btpy.containers.orders.okx_order import OkxOrderData
+from bt_api_py.containers.orders.okx_order import OkxOrderData
 
 
 def test_receive_okx_order():

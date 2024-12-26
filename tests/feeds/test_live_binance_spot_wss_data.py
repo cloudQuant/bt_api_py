@@ -1,17 +1,17 @@
 import queue
 import time
 import random
-from btpy.functions.utils import read_yaml_file
-from btpy.feeds.live_binance_feed import BinanceMarketWssDataSpot, BinanceAccountWssDataSpot
-from btpy.containers.exchanges.binance_exchange_data import BinanceExchangeDataSpot
-from btpy.containers.bars.binance_bar import BinanceWssBarData
-from btpy.containers.tickers.binance_ticker import BinanceWssTickerData
-from btpy.containers.orderbooks.binance_orderbook import BinanceWssOrderBookData
-from btpy.containers.accounts.binance_account import BinanceSpotWssAccountData
-from btpy.containers.orders.binance_order import BinanceSpotWssOrderData
-# from btpy.containers.trades.binance_trade import BinanceWssTradeData
-# from btpy.containers.positions.binance_position import BinanceWssPositionData
-from btpy.feeds.live_binance_feed import BinanceRequestDataSpot
+from bt_api_py.functions.utils import read_yaml_file
+from bt_api_py.feeds.live_binance_feed import BinanceMarketWssDataSpot, BinanceAccountWssDataSpot
+from bt_api_py.containers.exchanges.binance_exchange_data import BinanceExchangeDataSpot
+from bt_api_py.containers.bars.binance_bar import BinanceWssBarData
+from bt_api_py.containers.tickers.binance_ticker import BinanceWssTickerData
+from bt_api_py.containers.orderbooks.binance_orderbook import BinanceWssOrderBookData
+from bt_api_py.containers.accounts.binance_account import BinanceSpotWssAccountData
+from bt_api_py.containers.orders.binance_order import BinanceSpotWssOrderData
+# from bt_api_py.containers.trades.binance_trade import BinanceWssTradeData
+# from bt_api_py.containers.positions.binance_position import BinanceWssPositionData
+from bt_api_py.feeds.live_binance_feed import BinanceRequestDataSpot
 
 
 def generate_kwargs(exchange=BinanceExchangeDataSpot):
