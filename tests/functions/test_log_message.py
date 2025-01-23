@@ -32,7 +32,7 @@ class TestSpdLogManager:
         assert manager.print_info is True
 
     def test_multiple_sinks(self):
-        """测试多个日志输出目标（文件和控制台）"""
+        """测试多个日志输出目标(文件和控制台)"""
         current_directory = os.getcwd()  # 获取当前工作目录
         log_file_name = os.path.join(current_directory, "test_log2.log")  # 拼接日志文件路径
         manager = SpdLogManager(file_name=log_file_name, logger_name="multi_sink_logger", print_info=True)
