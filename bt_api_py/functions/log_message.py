@@ -32,4 +32,5 @@ class SpdLogManager(object):
         else:
             sinks = [spdlog.daily_file_sink_st(self.file_name, self.rotation_hour, self.rotation_minute)]
         logger = spdlog.SinkLogger(self.logger_name, sinks)
+        # logger = spdlog.create(self.logger_name, sinks)
         return logger

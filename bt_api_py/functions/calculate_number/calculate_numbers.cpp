@@ -4,14 +4,14 @@
 {
     "distutils": {
         "extra_compile_args": [
-            "-O2",
-            "-std=c++11"
+            "/O2",
+            "-std:c++11"
         ],
         "extra_link_args": [
-            "-Dlgomp"
+            "/lgomp"
         ],
         "include_dirs": [
-            "/Users/yunjinqi/opt/anaconda3/lib/python3.11/site-packages/numpy/core/include",
+            "c:\\anaconda3\\Lib\\site-packages\\numpy\\core\\include",
             "bt_api_py.functions.calculate_number"
         ],
         "language": "c++",
@@ -1503,7 +1503,7 @@ static const char *__pyx_filename;
 /* #### Code section: filename_table ### */
 
 static const char *__pyx_f[] = {
-  "bt_api_py/functions/calculate_number/calculate_numbers.pyx",
+  "bt_api_py\\\\functions\\\\calculate_number\\\\calculate_numbers.pyx",
 };
 /* #### Code section: utility_code_proto_before_types ### */
 /* ForceInitThreads.proto */
@@ -2208,7 +2208,7 @@ static const char __pyx_k_cal_sum_of_key_values[] = "cal_sum_of_key_values";
 static const char __pyx_k_hedge_swap_price_unit[] = "hedge_swap_price_unit";
 static const char __pyx_k_normalise_hedge_data_to_base[] = "normalise_hedge_data_to_base";
 static const char __pyx_k_bt_api_py_functions_calculate_nu[] = "bt_api_py.functions.calculate_numbers";
-static const char __pyx_k_bt_api_py_functions_calculate_nu_2[] = "bt_api_py/functions/calculate_number/calculate_numbers.pyx";
+static const char __pyx_k_bt_api_py_functions_calculate_nu_2[] = "bt_api_py\\functions\\calculate_number\\calculate_numbers.pyx";
 static const char __pyx_k_bt_api_py_functions_calculate_nu_3[] = "bt_api_py.functions.calculate_number.calculate_numbers_by_cython";
 /* #### Code section: decls ### */
 static PyObject *__pyx_pf_9bt_api_py_9functions_16calculate_number_27calculate_numbers_by_cython_cal_sum_of_key_values(CYTHON_UNUSED PyObject *__pyx_self, PyObject *__pyx_v_zheng_order_dict, PyObject *__pyx_v_key); /* proto */

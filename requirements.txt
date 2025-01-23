@@ -1,11 +1,9 @@
 requests
-btpy
 numpy
 websocket-client
 pyyaml
 pandas
 aiohttp
-typing
 spdlog
 matplotlib
 pyecharts
@@ -14,3 +12,10 @@ setuptools
 pytz
 aiosmtplib
 ntplib
+pytest
+pytest_benchmark
+pytest-sugar
+pytest-cov
+pytest-picked
+pytest-xdist
+python-rapidjson
