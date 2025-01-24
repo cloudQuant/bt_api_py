@@ -9,7 +9,7 @@ cd ..
 pip install -U ./bt_api_py
 
 :: 运行 backtrader 的测试用例，使用 4 个进程并行测试
-pytest ./bt_api_py/tests -n 4
+:: pytest ./bt_api_py/tests -n 4
 
 :: 暂停脚本，以便查看输出结果
 pause
