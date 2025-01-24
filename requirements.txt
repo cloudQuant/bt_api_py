@@ -19,3 +19,4 @@ pytest-cov
 pytest-picked
 pytest-xdist
 python-rapidjson
+backports.tarfile
