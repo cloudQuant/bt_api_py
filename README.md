@@ -20,10 +20,13 @@ pip install ./bt_api_py/
 - First, create an `account_config.yaml` file in the `btpy/configs` folder to configure account information.  
   - Refer to the format in `account_config_example.yaml`.  
   - To successfully run the tests, you will need APIs for Binance and OKX exchanges, and ensure there are at least 10 USDT in both the spot and contract accounts.  
-- In the `btpy` folder, run the following commands:  
+  - You usually need to add your IP address to the exchange's whitelist in order to use it for trading.
+- In the `bt_api_py` folder, run the following commands:  
   - `pytest tests -n 4`  # Run tests using 4 CPUs.  
   - `pytest tests -n 4 --picked`  # Use 4 CPUs to only test new or previously failed tests.
 
+- run tests result
+![tests_passed](imgs/1737725796239.png)
 ####  how to use
 
 This is a part of btpy package, which is used to high frequency trading and market making.
