@@ -1339,6 +1339,7 @@ class BinanceMarketWssData(MyWebsocketApp, BinanceRequestData):
         symbol = content['s']
         bar_data = BinanceWssBarData(content, symbol, self.asset_type, True)
         self.data_queue.put(bar_data)
+        bar_data.init_data()
         # print("获取kline成功，close_price = ", bar_data.get_close_price())
 
     def push_account(self, content):

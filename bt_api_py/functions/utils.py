@@ -89,7 +89,12 @@ def from_dict_get_bool(content, key, default=None):
         return default
     else:
         value = content[key]
-        return True if value == "true" else False
+        if isinstance(value, bool):
+            return value
+        elif isinstance(value, str):
+            return True if value == "true" else False
+        else:
+            raise TypeError(f"value {value} is not considered")
 
 
 def from_dict_get_float(content, key, default=None):
