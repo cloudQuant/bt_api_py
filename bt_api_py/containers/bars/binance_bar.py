@@ -23,6 +23,7 @@ class BinanceRequestBarData(BarData):
         self.num_trades = None
         self.taker_buy_base_asset_volume = None
         self.taker_buy_quote_asset_volume = None
+        self.bar_status = None
         self.all_data = None
         self.has_been_init_data = False
 
@@ -43,10 +44,13 @@ class BinanceRequestBarData(BarData):
         self.num_trades = float(self.bar_data[8])
         self.taker_buy_base_asset_volume = float(self.bar_data[9])
         self.taker_buy_quote_asset_volume = float(self.bar_data[10])
+        self.bar_status = True
         self.has_been_init_data = True
         return self
 
     def get_all_data(self):
+        if not self.has_been_init_data:
+            self.init_data()
         if self.all_data is None:
             self.all_data = {
                 "open_time": self.open_time,
@@ -63,7 +67,8 @@ class BinanceRequestBarData(BarData):
                 "exchange_name": self.exchange_name,
                 "local_update_time": self.local_update_time,
                 "symbol_name": self.symbol_name,
-                "asset_type": self.asset_type
+                "asset_type": self.asset_type,
+                "bar_status": True,
             }
         return self.all_data
 
@@ -132,10 +137,11 @@ class BinanceRequestBarData(BarData):
         return self.taker_buy_quote_asset_volume
 
     def get_bar_status(self):
-        return None
+        return self.bar_status
 
     def get_bar_data(self):
         return self.bar_data
+
 
 
 class BinanceWssBarData(BarData):
