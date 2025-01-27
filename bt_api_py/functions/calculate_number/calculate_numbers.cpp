@@ -11,7 +11,7 @@
             "/lgomp"
         ],
         "include_dirs": [
-            "c:\\anaconda3\\Lib\\site-packages\\numpy\\core\\include",
+            "C:\\python\\Lib\\site-packages\\numpy\\_core\\include",
             "bt_api_py.functions.calculate_number"
         ],
         "language": "c++",
