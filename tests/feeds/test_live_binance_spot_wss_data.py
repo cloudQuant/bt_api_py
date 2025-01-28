@@ -19,7 +19,6 @@ def generate_kwargs(exchange=BinanceExchangeDataSpot):
     kwargs = {
         "public_key": data['binance']['public_key'],
         "private_key": data['binance']['private_key'],
-        "exchange_data": exchange(),
         "topics": {"tick": {"symbol": "BTC-USDT"}}
     }
     return kwargs

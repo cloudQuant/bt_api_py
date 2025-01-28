@@ -25,9 +25,7 @@ def generate_kwargs(exchange=BinanceExchangeDataSpot):
     data = read_yaml_file("account_config.yaml")
     kwargs = {
         "public_key": data['binance']['public_key'],
-        "private_key": data['binance']['private_key'],
-        "exchange_data": exchange(),
-        "topics": {"tick": {"symbol": "BTC-USDT"}}
+        "private_key": data['binance']['private_key']
     }
     return kwargs
 

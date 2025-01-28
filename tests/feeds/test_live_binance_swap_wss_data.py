@@ -33,8 +33,7 @@ def test_binance_wss_data_feed():
             {"topic": "force_order", "symbol": "BTC-USDT"},
         ],
         "wss_name": "test_market_data",
-        "wss_url": 'wss://fstream.binance.com/ws',
-        "exchange_data": BinanceExchangeDataSwap()
+        "wss_url": 'wss://fstream.binance.com/ws'
     }
     BinanceMarketWssDataSwap(data_queue, **kwargs).start()
     time.sleep(20)

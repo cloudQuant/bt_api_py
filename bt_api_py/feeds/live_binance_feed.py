@@ -1399,12 +1399,14 @@ class BinanceMarketWssDataSwap(BinanceMarketWssData):
     def __init__(self, data_queue, **kwargs):
         super(BinanceMarketWssDataSwap, self).__init__(data_queue, **kwargs)
         self.asset_type = kwargs.get("asset_type", "SWAP")
+        self._params = BinanceExchangeDataSwap()
 
 
 class BinanceMarketWssDataSpot(BinanceMarketWssData):
     def __init__(self, data_queue, **kwargs):
         super(BinanceMarketWssDataSpot, self).__init__(data_queue, **kwargs)
         self.asset_type = kwargs.get("asset_type", "SPOT")
+        self._params = BinanceExchangeDataSpot()
 
 
 class BinanceAccountWssData(MyWebsocketApp, BinanceRequestData):
@@ -1532,6 +1534,10 @@ class BinanceAccountWssDataSwap(BinanceAccountWssData):
 
 
 class BinanceAccountWssDataSpot(BinanceAccountWssData):
+    def __init__(self, data_queue, **kwargs):
+        super(BinanceAccountWssDataSpot, self).__init__(data_queue, **kwargs)
+        self._params = BinanceExchangeDataSpot()
+
     def handle_data(self, content):
         event = content.get("e", None)
         if event is not None:

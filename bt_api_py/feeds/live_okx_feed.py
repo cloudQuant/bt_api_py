@@ -9,6 +9,9 @@ import time
 import json
 import numpy as np
 from urllib import parse
+
+from bt_api_py.containers.exchanges.okx_exchange_data import OkxExchangeDataSwap, OkxExchangeDataSpot
+
 from bt_api_py.feeds.feed import Feed
 from bt_api_py.feeds.my_websocket_app import MyWebsocketApp
 from bt_api_py.functions.log_message import SpdLogManager
@@ -47,7 +50,6 @@ class OkxRequestData(Feed):
         self.private_key = kwargs.get("private_key", None)
         self.passphrase = kwargs.get("passphrase", None)
         self.topics = kwargs.get("topics", {})
-        self._params = kwargs.get("exchange_data", None)
         self.asset_type = kwargs.get("asset_type", "SWAP")
         self.logger_name = kwargs.get("logger_name", "okx_swap_feed.log")
         # self.account_wss = OkxAccountWss("okx_account_wss",
@@ -57,6 +59,8 @@ class OkxRequestData(Feed):
         #                            self._params.wss_url,
         #                            data_queue, **kwargs)
 
+        # self._params = kwargs.get("exchange_data", None)
+        self._params = OkxExchangeDataSwap()
         self.request_logger = SpdLogManager("./logs/" + self.logger_name, "request",
                                             0, 0, False).create_logger()
         self.async_logger = SpdLogManager("./logs/" + self.logger_name, "async_request",
@@ -991,6 +995,7 @@ class OkxRequestDataSpot(OkxRequestData):
         super(OkxRequestDataSpot, self).__init__(data_queue, **kwargs)
         self.asset_type = kwargs.get("asset_type", "SPOT")
         self.logger_name = kwargs.get("logger_name", "okx_spot_feed.log")
+        self._params = OkxExchangeDataSpot()
 
     def _get_index_price(self, symbol, extra_data=None, **kwargs):
         if symbol is not None:

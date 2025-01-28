@@ -22,7 +22,6 @@ def generate_kwargs(exchange=OkxExchangeDataSwap):
         "public_key": data['okx']['public_key'],
         "private_key": data['okx']['private_key'],
         "passphrase": data['okx']["passphrase"],
-        "exchange_data": exchange(),
         "topics": {"tick": {"symbol": "BTC-USDT"}}
     }
     return kwargs
