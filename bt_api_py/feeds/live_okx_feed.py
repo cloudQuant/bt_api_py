@@ -1174,7 +1174,10 @@ class OkxWssData(MyWebsocketApp):
         bar_info = content['data'][0]
         symbol = content['arg']['instId']
         bar_data = OkxBarData(bar_info, symbol, self.asset_type, True)
-        self.data_queue.put(bar_data)
+        bar_data.init_data()
+        bar_status = bar_data.get_bar_status()
+        if bar_status:
+            self.data_queue.put(bar_data)
         # print("获取kline成功，close_price = ", bar_data.get_close_price())
 
     def push_account(self, content):
