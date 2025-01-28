@@ -56,7 +56,7 @@ def test_binance_req_bar_functions():
     asset_type = "PERPETUAL"
     binance_bar_data = BinanceRequestBarData(data, symbol, asset_type, True)
     binance_bar_data.init_data()
-    assert binance_bar_data.get_bar_status() is None
+    assert binance_bar_data.get_bar_status() is True
     assert binance_bar_data.get_amount() == 9302145.66080
     assert binance_bar_data.get_volume() == 492.363
     assert binance_bar_data.get_low_price() == 18878.98

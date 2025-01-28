@@ -106,7 +106,7 @@ def test_binance_req_kline_data():
     assert data[0].init_data().get_close_price() >= 0
     assert data[0].init_data().get_volume() >= 0
     assert data[0].init_data().get_taker_buy_base_asset_volume() >= 0
-    assert data[0].init_data().get_bar_status() is None
+    assert data[0].init_data().get_bar_status() is True
 
 
 def test_binance_async_kline_data():
