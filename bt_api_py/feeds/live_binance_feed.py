@@ -221,6 +221,7 @@ class BinanceRequestData(Feed):
         status = True if input_data is not None else False
         symbol_name = extra_data["symbol_name"]
         asset_type = extra_data["asset_type"]
+        print("symbol_name", symbol_name, "asset_type", asset_type)
         if isinstance(input_data, list) and asset_type == "SWAP":
             data = [BinanceSwapRequestBalanceData(i, symbol_name, asset_type, True)
                     for i in input_data]
