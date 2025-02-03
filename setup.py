@@ -71,7 +71,7 @@ extensions = [
 
 setup(
     name='bt_api_py',  # 项目的名称
-    version='0.13',  # 版本号
+    version='0.14',  # 版本号
     packages=find_packages(include=['bt_api_py', 'bt_api_py.*'], exclude=["tests"]),
     package_data={'bt_api_py': ['configs/*',
                            'functions/calculate_number/*',

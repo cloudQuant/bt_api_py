@@ -6,6 +6,7 @@ __pycache__/
 .DS_Store
 */.virtual_documents/*
 */configs/account_config.yaml
+*.log
 # C extensions
 *.so
 

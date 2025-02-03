@@ -1436,7 +1436,9 @@ class BinanceAccountWssData(MyWebsocketApp, BinanceRequestData):
             "normalize_function": None,
         }
         data = self.request(path, extra_data=extra_data, is_sign=False)
-        return data.get_data()
+        result = data.get_data()
+        # print("get_listen_key", result)
+        return result
 
     def refresh_listen_key(self):
         params = {
