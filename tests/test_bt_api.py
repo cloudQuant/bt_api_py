@@ -75,7 +75,7 @@ def test_okx_spot_bt_api():
     bt_api = BtApi(exchange_kwargs, debug=True)
     for exchange_name in exchange_kwargs.keys():
         api = bt_api.get_request_api(exchange_name)
-        data = api.get_server_time()
+        data = api.get_tick("BTC-USDT")
         assert isinstance(data, RequestData)
         print(data.get_data())
 
@@ -85,7 +85,7 @@ def test_okx_swap_bt_api():
     bt_api = BtApi(exchange_kwargs, debug=True)
     for exchange_name in exchange_kwargs.keys():
         api = bt_api.get_request_api(exchange_name)
-        data = api.get_server_time()
+        data = api.get_tick("BTC-USDT")
         assert isinstance(data, RequestData)
         print(data.get_data())
 
