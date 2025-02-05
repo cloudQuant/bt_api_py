@@ -219,7 +219,7 @@ def test_binance_swap_wss_data():
     receive_binance_order_book_data = False
     receive_binance_mark_price_data = False
     receive_binance_funding_rate_data = False
-    receive_binance_force_order_data = False
+    # receive_binance_force_order_data = False
     receive_binance_agg_trade_data = False
     count = 1
     while True:
@@ -240,14 +240,16 @@ def test_binance_swap_wss_data():
             receive_binance_funding_rate_data = True
         if isinstance(data, BinanceWssMarkPriceData):
             receive_binance_mark_price_data = True
+            data.init_data()
+            print(data.get_all_data())
         if isinstance(data, BinanceForceOrderData):
             receive_binance_force_order_data = True
             data.init_data()
-            print(data.get_all_data())
+            # print(data.get_all_data())
         if isinstance(data, BinanceAggTradeData):
             receive_binance_agg_trade_data = True
             data.init_data()
-            print(data.get_all_data())
+            # print(data.get_all_data())
 
     assert receive_binance_bar_data is True
     assert receive_binance_ticker_data is True
