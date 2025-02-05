@@ -13,7 +13,7 @@ def generate_binance_swap_kwargs():
         "private_key": data['binance']['private_key']
     }
 
-    return {"binance___swap": kwargs}
+    return {"BINANCE___SWAP": kwargs}
 
 
 def generate_binance_spot_kwargs():
@@ -23,7 +23,7 @@ def generate_binance_spot_kwargs():
         "private_key": data['binance']['private_key']
     }
 
-    return {"binance___spot": kwargs}
+    return {"BINANCE___SPOT": kwargs}
 
 
 def generate_okx_spot_kwargs():
@@ -33,7 +33,7 @@ def generate_okx_spot_kwargs():
         "private_key": data['okx']['private_key'],
         "passphrase": data['okx']["passphrase"]
     }
-    return {"okx___spot": kwargs}
+    return {"OKX___SPOT": kwargs}
 
 def generate_okx_swap_kwargs():
     data = read_yaml_file("account_config.yaml")
@@ -42,7 +42,7 @@ def generate_okx_swap_kwargs():
         "private_key": data['okx']['private_key'],
         "passphrase": data['okx']["passphrase"]
     }
-    return {"okx___swap": kwargs}
+    return {"OKX___SWAP": kwargs}
 
 
 def generate_bt_api_kwargs():
@@ -56,8 +56,8 @@ def generate_bt_api_kwargs():
         "private_key": data['okx']['private_key'],
         "passphrase": data['okx']["passphrase"]
     }
-    return {"binance___swap": binance_kwargs, "okx___swap": okx_kwargs,
-            "binance___spot": binance_kwargs, "okx___spot": okx_kwargs}
+    return {"BINANCE___SWAP": binance_kwargs, "OKX___SWAP": okx_kwargs,
+            "BINANCE___SPOT": binance_kwargs, "OKX___SPOT": okx_kwargs}
 
 
 def test_binance_swap_bt_api():
