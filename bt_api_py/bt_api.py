@@ -16,6 +16,8 @@ class BtApi(object):
         self._value_dict = {}                       # 保存各个交易所账户的净值
         self._cash_dict = {}                        # 保存各个交易所账户的现金
         self.init_exchange(exchange_kwargs)         # 根据提供的交易所列表进行相应的初始化
+        self.binance_swap_account_subscribed = 0    # binance的合约账户是否订阅了
+        self.binance_spot_account_subscribed = 0    # binance的现货账户是否订阅了
 
 
     def init_exchange(self, exchange_kwargs):
@@ -123,15 +125,16 @@ class BtApi(object):
             kwargs['topics'] = topics
             self.log(f"wss_start_binance_swap kwargs: {kwargs}")
             BinanceMarketWssDataSwap(data_queue, **kwargs).start()
-
-            account_kwargs = {k:v for k, v in kwargs.items()}
-            account_kwargs['topics'] =  [
-                {"topic": "account"},
-                {"topic": "order"},
-                {"topic": "trade"},
-            ]
-            BinanceAccountWssDataSwap(data_queue, **account_kwargs).start()
-            self.log(f"wss_start_binance_swap kwargs: {account_kwargs}")
+            if self.binance_swap_account_subscribed == 0:
+                account_kwargs = {k:v for k, v in kwargs.items()}
+                account_kwargs['topics'] =  [
+                    {"topic": "account"},
+                    {"topic": "order"},
+                    {"topic": "trade"},
+                ]
+                BinanceAccountWssDataSwap(data_queue, **account_kwargs).start()
+                self.log(f"wss_start_binance_swap kwargs: {account_kwargs}")
+                self.binance_swap_account_subscribed = 1
 
 
     def wss_start_binance_spot(self, data_queue, exchange_params, topics):
@@ -145,14 +148,16 @@ class BtApi(object):
             kwargs["exchange_data"] = BinanceExchangeDataSpot()
             kwargs['topics'] = topics
             BinanceMarketWssDataSpot(data_queue, **kwargs).start()
-            account_kwargs = {k: v for k, v in kwargs.items()}
-            account_kwargs['topics'] = [
-                {"topic": "account"},
-                {"topic": "order"},
-                {"topic": "trade"},
-            ]
-            BinanceAccountWssDataSpot(data_queue, **account_kwargs).start()
-            self.log(f"wss_start_binance_spot kwargs: {account_kwargs}")
+            if self.binance_spot_account_subscribed == 0:
+                account_kwargs = {k: v for k, v in kwargs.items()}
+                account_kwargs['topics'] = [
+                    {"topic": "account"},
+                    {"topic": "order"},
+                    {"topic": "trade"},
+                ]
+                BinanceAccountWssDataSpot(data_queue, **account_kwargs).start()
+                self.log(f"wss_start_binance_spot kwargs: {account_kwargs}")
+                self.binance_spot_account_subscribed = 1
 
 
     def wss_start_okx_spot(self, data_queue, exchange_params, topics):
