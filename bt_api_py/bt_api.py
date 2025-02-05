@@ -15,6 +15,7 @@ class BtApi(object):
         self.logger = self.init_logger()            # 初始化日志
         self._value_dict = {}                       # 保存各个交易所账户的净值
         self._cash_dict = {}                        # 保存各个交易所账户的现金
+        self.subscribe_bar_num = 0                  # 记录订阅了多少个品种的K线
         self.init_exchange(exchange_kwargs)         # 根据提供的交易所列表进行相应的初始化
         self.binance_swap_account_subscribed = 0    # binance的合约账户是否订阅了
         self.binance_spot_account_subscribed = 0    # binance的现货账户是否订阅了
@@ -97,13 +98,15 @@ class BtApi(object):
 
     def subscribe(self, exchange_params, topics):
         for exchange_name in exchange_params:
+            for topic in topics:
+                if topic['topic'] == "kline":
+                    self.subscribe_bar_num += 1
             exchange, asset_type = exchange_name.split('___')
             data_queue = self.get_data_queue(exchange_name)
             if data_queue is None:
                 self.log(f"exchange_name: {exchange_name} does not exist", level="error")
             if exchange == "BINANCE" and asset_type == "SWAP":
                 self.wss_start_binance_swap(data_queue, exchange_params, topics)
-
             if exchange == "BINANCE" and asset_type == "SPOT":
                 self.wss_start_binance_spot(data_queue, exchange_params, topics)
 
@@ -156,7 +159,6 @@ class BtApi(object):
                     {"topic": "trade"},
                 ]
                 BinanceAccountWssDataSpot(data_queue, **account_kwargs).start()
-                self.log(f"wss_start_binance_spot kwargs: {account_kwargs}")
                 self.binance_spot_account_subscribed = 1
 
 
@@ -175,7 +177,6 @@ class BtApi(object):
                 kline_topics = [i for i in exchange_params['topics'] if i['topic']=="kline"]
                 kline_kwargs['topics'] = kline_topics
                 OkxKlineWssDataSpot(data_queue, **kline_kwargs).start()
-                self.log(f"wss_start_okx_spot subscribe topics: {kline_topics}")
 
         ticker_true = "ticker" in topic_list
         depth_true = "depth" in topic_list
@@ -190,14 +191,12 @@ class BtApi(object):
                 market_topics = [i for i in exchange_params['topics'] if i['topic'] != "kline"]
                 market_kwargs['topics'] = market_topics
                 OkxMarketWssDataSpot(data_queue, **market_kwargs).start()
-                self.log(f"wss_start_okx_spot subscribe topics: {market_topics}")
         for exchange_name in exchange_params:
             account_kwargs = {key: v for key, v in exchange_params[exchange_name].items()}
             account_topics = [i for i in topics if
                               (i['topic'] == "account" or i['topic'] == "orders" or i['topic'] == "positions")]
             account_kwargs['topics'] = account_topics
             OkxAccountWssDataSpot(data_queue, **account_kwargs).start()
-            self.log(f"wss_start_okx_spot subscribe topics: {account_topics}")
 
 
     def wss_start_okx_swap(self, data_queue, exchange_params, topics):
@@ -215,7 +214,6 @@ class BtApi(object):
                 kline_topics = [i for i in topics if i['topic'] == "kline"]
                 kline_kwargs['topics'] = kline_topics
                 OkxKlineWssDataSwap(data_queue, **kline_kwargs).start()
-                self.log(f"wss_start_okx_swap subscribe topics: {kline_topics}")
 
         ticker_true = "ticker" in topic_list
         depth_true = "depth" in topic_list
@@ -230,14 +228,12 @@ class BtApi(object):
                 market_topics = [i for i in topics if i['topic'] != "kline"]
                 market_kwargs['topics'] = market_topics
                 OkxMarketWssDataSwap(data_queue, **market_kwargs).start()
-                self.log(f"wss_start_okx_swap subscribe topics: {market_topics}")
         for exchange_name in exchange_params:
             account_kwargs = {key: v for key, v in exchange_params[exchange_name].items()}
             account_topics = [i for i in topics if
                               (i['topic'] == "account" or i['topic'] == "orders" or i['topic'] == "positions")]
             account_kwargs['topics'] = account_topics
             account_kwargs['exchange_data'] = OkxExchangeDataSwap()
-            self.log(f"wss_start_okx_swap subscribe topics: {account_topics}")
             OkxAccountWssDataSwap(data_queue, **account_kwargs).start()
 
 
