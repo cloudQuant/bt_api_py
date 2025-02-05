@@ -56,19 +56,19 @@ class BtApi(object):
             print("exchange_name", exchange_name)
             exchange, asset_type = exchange_name.split('___')
             data_queue = self.get_data_queue(exchange_name)
-            if exchange == "binance" and asset_type == "swap":
+            if exchange == "BINANCE" and asset_type == "SWAP":
                 from bt_api_py.feeds.live_binance_feed import BinanceRequestDataSwap
                 self.exchange_feeds[exchange_name] = BinanceRequestDataSwap(data_queue, **exchange_params)
 
-            if exchange == "binance" and asset_type == "spot":
+            if exchange == "BINANCE" and asset_type == "SPOT":
                 from bt_api_py.feeds.live_binance_feed import BinanceRequestDataSpot
                 self.exchange_feeds[exchange_name] =  BinanceRequestDataSpot(data_queue, **exchange_params)
 
-            if exchange == "okx" and asset_type == "spot":
+            if exchange == "OKX" and asset_type == "SPOT":
                 from bt_api_py.feeds.live_okx_feed import OkxRequestDataSpot
                 self.exchange_feeds[exchange_name] = OkxRequestDataSpot(data_queue, **exchange_params)
 
-            if exchange == "okx" and asset_type == "swap":
+            if exchange == "OKX" and asset_type == "SWAP":
                 from bt_api_py.feeds.live_okx_feed import OkxRequestDataSwap
                 self.exchange_feeds[exchange_name] = OkxRequestDataSwap(data_queue, **exchange_params)
         else:
@@ -99,16 +99,16 @@ class BtApi(object):
             data_queue = self.get_data_queue(exchange_name)
             if data_queue is None:
                 self.log(f"exchange_name: {exchange_name} does not exist", level="error")
-            if exchange == "binance" and asset_type == "swap":
+            if exchange == "BINANCE" and asset_type == "SWAP":
                 self.wss_start_binance_swap(data_queue, exchange_params, topics)
 
-            if exchange == "binance" and asset_type == "spot":
+            if exchange == "BINANCE" and asset_type == "SPOT":
                 self.wss_start_binance_spot(data_queue, exchange_params, topics)
 
-            if exchange == "okx" and asset_type == "spot":
+            if exchange == "OKX" and asset_type == "SPOT":
                 self.wss_start_okx_spot(data_queue, exchange_params, topics)
 
-            if exchange == "okx" and asset_type == "swap":
+            if exchange == "OKX" and asset_type == "SWAP":
                 self.wss_start_okx_swap(data_queue, exchange_params, topics)
 
     def wss_start_binance_swap(self, data_queue, exchange_params, topics):

@@ -26,6 +26,10 @@ class OrderData(object):
         """# 资产类型"""
         raise NotImplementedError
 
+    def get_symbol_name(self):
+        """# symbol名称"""
+        raise NotImplementedError
+
     def get_server_time(self):
         """# 服务器时间戳"""
         raise NotImplementedError

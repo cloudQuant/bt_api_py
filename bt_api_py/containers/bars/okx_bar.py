@@ -128,6 +128,3 @@ class OkxBarData(BarData):
     def get_bar_status(self):
         # print("bar status:", self.bar_data)
         return self.bar_status
-
-    def get_bar_data(self):
-        return self.bar_data

@@ -74,7 +74,7 @@ class BarData(object):
     def get_bar_status(self):
         raise NotImplementedError
 
-    def get_bar_data(self):
+    def get_all_data(self):
         raise NotImplementedError
 
     def __str__(self):

@@ -139,9 +139,6 @@ class BinanceRequestBarData(BarData):
     def get_bar_status(self):
         return self.bar_status
 
-    def get_bar_data(self):
-        return self.bar_data
-
 
 
 class BinanceWssBarData(BarData):
@@ -280,6 +277,3 @@ class BinanceWssBarData(BarData):
 
     def get_bar_status(self):
         return self.bar_status
-
-    def get_bar_data(self):
-        return self.bar_data
