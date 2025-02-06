@@ -913,8 +913,8 @@ class OkxRequestData(Feed):
                     callback=self.async_callback)
 
     # noinspection PyMethodMayBeStatic
-    def async_get_kline(self, symbol, period, count=100, after=0, extra_data=None, **kwargs):
-        path, params, extra_data = self._get_kline(symbol, period, count, after, extra_data, **kwargs)
+    def async_get_kline(self, symbol, period, count=100, before=0, after=0, extra_data=None, **kwargs):
+        path, params, extra_data = self._get_kline(symbol, period, count, before, after, extra_data, **kwargs)
         self.submit(self.async_request(path, params=params, extra_data=extra_data),
                     callback=self.async_callback)
 

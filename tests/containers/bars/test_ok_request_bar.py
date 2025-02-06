@@ -61,7 +61,7 @@ def test_ok_bar_functions():
     assert okx_bar_data.get_close_price() == 27004.5
     assert okx_bar_data.get_open_price() == 26990.4
     assert okx_bar_data.get_high_price() == 27004.5
-    assert okx_bar_data.get_open_time() is None
+    assert okx_bar_data.get_open_time() > 0
     assert okx_bar_data.get_close_time() is None
     assert okx_bar_data.get_asset_type() == "SWAP"
     assert okx_bar_data.get_symbol_name() == "BTC-USDT"
