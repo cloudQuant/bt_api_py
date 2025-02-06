@@ -7,6 +7,20 @@ def get_utc_time():
     return datetime.now(UTC).strftime('%Y-%m-%dT%H:%M:%S.%fZ')
 
 
+def convert_utc_local_datetime(datetime_utc, timezone=pytz.timezone('Asia/Shanghai')):
+    """
+    Convert a UTC datetime object to a local datetime in the given timezone.
+    If no timezone is provided, defaults to 'Asia/Shanghai'.
+
+    :param datetime_utc: A datetime object in UTC.
+    :param timezone: A pytz timezone object (optional).
+    :return: A datetime object in the local timezone.
+    """
+    # 将 UTC 时间转换为目标时区的时间
+    dtime_local = datetime_utc.astimezone(timezone)
+
+    return dtime_local
+
 def get_string_tz_time(tz='Asia/Singapore', string_format='%Y-%m-%d %H:%M:%S.%f'):
     """generate string timezone datetime in particular timezone
     :param  tz: timezone in pytz.common_timezones
