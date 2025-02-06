@@ -124,7 +124,7 @@ class Feed(AsyncBase):
             # print(f"response: {res.text}")
             # print(res)
             try:
-                res.raise_for_status()  # raise error, if HTTP code not equals 200
+                res.raise_for_status()  # raise error if HTTP code not equals 200
             except Exception as e:
                 print(f"response: {res.text}")
                 print(res)
@@ -143,8 +143,8 @@ class Feed(AsyncBase):
     def cancel_all(self, symbol, extra_data=None, **kwargs):
         """
         cancel all order
-        :param symbol: default None, get all the currency, can be string, eg "BTC-USDT".
-        :param extra_data: extra_data ,default is None, can be a dict passed by user
+        :param symbol: default None, get all the currency, can be string, e.g. "BTC-USDT".
+        :param extra_data: extra_data, default is None, can be a dict passed by user
         :param kwargs: pass key-worded, variable-length arguments.
         :return: RequestData
         """
@@ -153,9 +153,9 @@ class Feed(AsyncBase):
     def cancel_order(self, symbol, order_id, extra_data=None, **kwargs):
         """
         cancel order by order_id
-        :param symbol: default None, get all the currency, can be string, eg "BTC-USDT".
-        :param order_id: order_id ,default is None, can be a string passed by user
-        :param extra_data: extra_data ,default is None, can be a dict passed by user
+        :param symbol: default None, get all the currency, can be string, e.g. "BTC-USDT".
+        :param order_id: order_id, default is None, can be a string passed by user
+        :param extra_data: extra_data, default is None, can be a dict passed by user
         :param kwargs: pass key-worded, variable-length arguments.
         :return: RequestData
         """
@@ -164,9 +164,9 @@ class Feed(AsyncBase):
     def async_cancel_order(self, symbol, order_id, extra_data=None, **kwargs):
         """
         cancel order by order_id using async
-        :param symbol: default None, get all the currency, can be string, eg "BTC-USDT".
-        :param order_id: order_id ,default is None, can be a string passed by user
-        :param extra_data: extra_data ,default is None, can be a dict passed by user
+        :param symbol: default None, get all the currency, can be string, e.g. "BTC-USDT".
+        :param order_id: order_id, default is None, can be a string passed by user
+        :param extra_data: extra_data, default is None, can be a dict passed by user
         :param kwargs: pass key-worded, variable-length arguments.
         :return: RequestData
         """
@@ -175,8 +175,8 @@ class Feed(AsyncBase):
     def get_account(self, symbol="ALL", extra_data=None, **kwargs):
         """
         get account info
-        :param symbol: default None, get all the currency, can be string, eg "BTC-USDT".
-        :param extra_data: extra_data ,default is None, can be a dict passed by user
+        :param symbol: default None, get all the currency, can be string, e.g. "BTC-USDT".
+        :param extra_data: extra_data, default is None, can be a dict passed by user
         :param kwargs: pass key-worded, variable-length arguments.
         :return: RequestData
         """
@@ -185,8 +185,8 @@ class Feed(AsyncBase):
     def async_get_account(self, symbol="ALL", extra_data=None, **kwargs):
         """
         get account info using async
-        :param symbol: default None, get all the currency, can be string, eg "BTC-USDT".
-        :param extra_data: extra_data ,default is None, can be a dict passed by user
+        :param symbol: default None, get all the currency, can be string, e.g. "BTC-USDT".
+        :param extra_data: extra_data, default is None, can be a dict passed by user
         :param kwargs: pass key-worded, variable-length arguments.
         :return: RequestData
         """
@@ -195,8 +195,8 @@ class Feed(AsyncBase):
     def get_balance(self, symbol, extra_data=None, **kwargs):
         """
         get balance by symbol
-        :param symbol: default None, get all the currency, can be string, eg "BTC-USDT".
-        :param extra_data: extra_data ,default is None, can be a dict passed by user
+        :param symbol: default None, get all the currency, can be string, e.g. "BTC-USDT".
+        :param extra_data: extra_data, default is None, can be a dict passed by user
         :param kwargs: pass key-worded, variable-length arguments.
         :return: RequestData
         """
@@ -205,8 +205,8 @@ class Feed(AsyncBase):
     def async_get_balance(self, symbol=None, extra_data=None, **kwargs):
         """
         get balance by symbol using async
-        :param symbol: default None, get all the currency, can be string, eg "BTC-USDT".
-        :param extra_data: extra_data ,default is None, can be a dict passed by user
+        :param symbol: default None, get all the currency, can be string, e.g. "BTC-USDT".
+        :param extra_data: extra_data, default is None, can be a dict passed by user
         :param kwargs: pass key-worded, variable-length arguments.
         :return: RequestData
         """
@@ -215,8 +215,8 @@ class Feed(AsyncBase):
     def get_clear_price(self, symbol, extra_data=None, **kwargs):
         """
         get clear price by symbol
-        :param symbol: default None, get all the currency, can be string, eg "BTC-USDT".
-        :param extra_data: extra_data ,default is None, can be a dict passed by user
+        :param symbol: default None, get all the currency, can be string, e.g. "BTC-USDT".
+        :param extra_data: extra_data, default is None, can be a dict passed by user
         :param kwargs: pass key-worded, variable-length arguments.
         :return: RequestData
         """
@@ -225,8 +225,8 @@ class Feed(AsyncBase):
     def async_get_clear_price(self, symbol, extra_data=None, **kwargs):
         """
         get clear price by symbol using async
-        :param symbol: default None, get all the currency, can be string, eg "BTC-USDT".
-        :param extra_data: extra_data ,default is None, can be a dict passed by user
+        :param symbol: default None, get all the currency, can be string, e.g. "BTC-USDT".
+        :param extra_data: extra_data, default is None, can be a dict passed by user
         :param kwargs: pass key-worded, variable-length arguments.
         :return: RequestData
         """
@@ -235,11 +235,11 @@ class Feed(AsyncBase):
     def get_deals(self, symbol, count=100, start_time=None, end_time=None, extra_data=None, **kwargs):
         """
         get trade history by symbol
-        :param symbol: default None, get all the currency, can be string, eg "BTC-USDT".
-        :param count: default 100, the maximum number of trade history can be got once
+        :param symbol: default None, get all the currency, can be string, e.g. "BTC-USDT".
+        :param count: default 100, the maximum amount of trade history can be got once
         :param start_time: default None, start time of trade history
         :param end_time: default None, end time of trade history
-        :param extra_data: extra_data ,default is None, can be a dict passed by user
+        :param extra_data: extra_data, default is None, can be a dict passed by user
         :param kwargs: pass key-worded, variable-length arguments.
         :return: RequestData
         """
@@ -248,11 +248,11 @@ class Feed(AsyncBase):
     def async_get_deals(self, symbol, count=100, start_time=None, end_time=None, extra_data="", **kwargs):
         """
         get trade history by symbol using async
-        :param symbol: default None, get all the currency, can be string, eg "BTC-USDT".
-        :param count: default 100, the maximum number of trade history can be got once
+        :param symbol: default None, get all the currency, can be string, e.g. "BTC-USDT".
+        :param count: default 100, the maximum amount of trade history can be got once
         :param start_time: default None, start time of trade history
         :param end_time: default None, end time of trade history
-        :param extra_data: extra_data ,default is None, can be a dict passed by user
+        :param extra_data: extra_data, default is None, can be a dict passed by user
         :param kwargs: pass key-worded, variable-length arguments.
         :return: RequestData
         """
@@ -261,9 +261,9 @@ class Feed(AsyncBase):
     def get_depth(self, symbol, count=20, extra_data=None, **kwargs):
         """
         get order_book_data by symbol
-        :param symbol: default None, get all the currency, can be string, eg "BTC-USDT".
+        :param symbol: default None, get all the currency, can be string, e.g. "BTC-USDT".
         :param count: default 20, the maximum number of order book level
-        :param extra_data: extra_data ,default is None, can be a dict passed by user
+        :param extra_data: extra_data, default is None, can be a dict passed by user
         :param kwargs: pass key-worded, variable-length arguments.
         :return: RequestData
         """
@@ -272,9 +272,9 @@ class Feed(AsyncBase):
     def async_get_depth(self, symbol, count=20, extra_data=None, **kwargs):
         """
         get order_book_data by symbol using async
-        :param symbol: default None, get all the currency, can be string, eg "BTC-USDT".
+        :param symbol: default None, get all the currency, can be string, e.g. "BTC-USDT".
         :param count: default 20, the maximum number of order book level
-        :param extra_data: extra_data ,default is None, can be a dict passed by user
+        :param extra_data: extra_data, default is None, can be a dict passed by user
         :param kwargs: pass key-worded, variable-length arguments.
         :return: RequestData
         """
@@ -283,8 +283,8 @@ class Feed(AsyncBase):
     def get_funding_rate(self, symbol, extra_data=None, **kwargs):
         """
         get funding rate by symbol
-        :param symbol: default None, get all the currency, can be string, eg "BTC-USDT".
-        :param extra_data: extra_data ,default is None, can be a dict passed by user
+        :param symbol: default None, get all the currency, can be string, e.g. "BTC-USDT".
+        :param extra_data: extra_data, default is None, can be a dict passed by user
         :param kwargs: pass key-worded, variable-length arguments.
         :return: RequestData
         """
@@ -293,8 +293,8 @@ class Feed(AsyncBase):
     def async_get_funding_rate(self, symbol, extra_data=None, **kwargs):
         """
         get funding rate by symbol using async
-        :param symbol: default None, get all the currency, can be string, eg "BTC-USDT".
-        :param extra_data: extra_data ,default is None, can be a dict passed by user
+        :param symbol: default None, get all the currency, can be string, e.g. "BTC-USDT".
+        :param extra_data: extra_data, default is None, can be a dict passed by user
         :param kwargs: pass key-worded, variable-length arguments.
         :return: RequestData
         """
@@ -303,10 +303,10 @@ class Feed(AsyncBase):
     def get_kline(self, symbol, period, count=20, extra_data=None, **kwargs):
         """
         get kline or bars by symbol
-        :param symbol: default None, get all the currency, can be string, eg "BTC-USDT".
-        :param period: str, the period of the bar, eg "1m"
+        :param symbol: default None, get all the currency, can be string, e.g. "BTC-USDT".
+        :param period: str, the period of the bar, e.g. "1m"
         :param count: default 20, the maximum number of order book level
-        :param extra_data: extra_data ,default is None, can be a dict passed by user
+        :param extra_data: extra_data, default is None, can be a dict passed by user
         :param kwargs: pass key-worded, variable-length arguments.
         :return: RequestData
         """
@@ -315,10 +315,10 @@ class Feed(AsyncBase):
     def async_get_kline(self, symbol, period, count=20, extra_data=None, **kwargs):
         """
         get kline or bars by symbol using async
-        :param symbol: default None, get all the currency, can be string, eg "BTC-USDT".
-        :param period: str, the period of the bar, eg "1m"
+        :param symbol: default None, get all the currency, can be string, e.g. "BTC-USDT".
+        :param period: str, the period of the bar, e.g. "1m"
         :param count: default 20, the maximum number of order book level
-        :param extra_data: extra_data ,default is None, can be a dict passed by user
+        :param extra_data: extra_data, default is None, can be a dict passed by user
         :param kwargs: pass key-worded, variable-length arguments.
         :return: RequestData
         """
@@ -327,8 +327,8 @@ class Feed(AsyncBase):
     def get_open_orders(self, symbol, extra_data=None, **kwargs):
         """
         get open orders by symbol
-        :param symbol: default None, get all the currency, can be string, eg "BTC-USDT".
-        :param extra_data: extra_data ,default is None, can be a dict passed by user
+        :param symbol: default None, get all the currency, can be string, e.g. "BTC-USDT".
+        :param extra_data: extra_data, default is None, can be a dict passed by user
         :param kwargs: pass key-worded, variable-length arguments.
         :return: RequestData
         """
@@ -337,8 +337,8 @@ class Feed(AsyncBase):
     def async_get_open_orders(self, symbol, extra_data=None, **kwargs):
         """
         get open orders by symbol using async
-        :param symbol: default None, get all the currency, can be string, eg "BTC-USDT".
-        :param extra_data: extra_data ,default is None, can be a dict passed by user
+        :param symbol: default None, get all the currency, can be string, e.g. "BTC-USDT".
+        :param extra_data: extra_data, default is None, can be a dict passed by user
         :param kwargs: pass key-worded, variable-length arguments.
         :return: RequestData
         """
@@ -347,8 +347,8 @@ class Feed(AsyncBase):
     def get_tick(self, symbol, extra_data=None, **kwargs):
         """
         get tick price by symbol
-        :param symbol: default None, get all the currency, can be string, eg "BTC-USDT".
-        :param extra_data: extra_data ,default is None, can be a dict passed by user
+        :param symbol: default None, get all the currency, can be string, e.g. "BTC-USDT".
+        :param extra_data: extra_data, default is None, can be a dict passed by user
         :param kwargs: pass key-worded, variable-length arguments.
         :return: RequestData
         """
@@ -357,8 +357,8 @@ class Feed(AsyncBase):
     def async_get_tick(self, symbol, extra_data=None, **kwargs):
         """
         get tick price by symbol using async
-        :param symbol: default None, get all the currency, can be string, eg "BTC-USDT".
-        :param extra_data: extra_data ,default is None, can be a dict passed by user
+        :param symbol: default None, get all the currency, can be string, e.g. "BTC-USDT".
+        :param extra_data: extra_data, default is None, can be a dict passed by user
         :param kwargs: pass key-worded, variable-length arguments.
         :return: RequestData
         """
@@ -368,14 +368,14 @@ class Feed(AsyncBase):
                    post_only=False, client_order_id=None, extra_data=None, **kwargs):
         """
         make order by symbol
-        :param symbol: default None, get all the currency, can be string, eg "BTC-USDT".
+        :param symbol: default None, get all the currency, can be string, e.g. "BTC-USDT".
         :param volume: the order volume
         :param price: the order price
         :param order_type: the order type
         :param offset: the order offset
         :param post_only: post_only flag, default is False
         :param client_order_id: the client_order_id, defined by user
-        :param extra_data: extra_data ,default is None, can be a dict passed by user
+        :param extra_data: extra_data, default is None, can be a dict passed by user
         :param kwargs: pass key-worded, variable-length arguments.
         :return: RequestData
         """
@@ -385,14 +385,14 @@ class Feed(AsyncBase):
                          post_only=False, client_order_id=None, extra_data=None, **kwargs):
         """
         make order by symbol
-        :param symbol: default None, get all the currency, can be string, eg "BTC-USDT".
+        :param symbol: default None, get all the currency, can be string, e.g. "BTC-USDT".
         :param volume: the order volume
         :param price: the order price
         :param order_type: the order type
         :param offset: the order offset
         :param post_only: post_only flag, default is False
         :param client_order_id: the client_order_id, defined by user
-        :param extra_data: extra_data ,default is None, can be a dict passed by user
+        :param extra_data: extra_data, default is None, can be a dict passed by user
         :param kwargs: pass key-worded, variable-length arguments.
         :return: RequestData
         """
@@ -401,9 +401,9 @@ class Feed(AsyncBase):
     def query_order(self, symbol, order_id, extra_data=None, **kwargs):
         """
         query order by order_id
-        :param symbol: default None, get all the currency, can be string, eg "BTC-USDT".
-        :param order_id: order_id ,default is None, can be a string passed by user
-        :param extra_data: extra_data ,default is None, can be a dict passed by user
+        :param symbol: default None, get all the currency, can be string, e.g. "BTC-USDT".
+        :param order_id: order_id, default is None, can be a string passed by user
+        :param extra_data: extra_data, default is None, can be a dict passed by user
         :param kwargs: pass key-worded, variable-length arguments.
         :return: RequestData
         """
@@ -412,9 +412,9 @@ class Feed(AsyncBase):
     def async_query_order(self, symbol, order_id, extra_data=None, **kwargs):
         """
         query order by order_id using async
-        :param symbol: default None, get all the currency, can be string, eg "BTC-USDT".
-        :param order_id: order_id ,default is None, can be a string passed by user
-        :param extra_data: extra_data ,default is None, can be a dict passed by user
+        :param symbol: default None, get all the currency, can be string, e.g. "BTC-USDT".
+        :param order_id: order_id, default is None, can be a string passed by user
+        :param extra_data: extra_data, default is None, can be a dict passed by user
         :param kwargs: pass key-worded, variable-length arguments.
         :return: RequestData
         """
@@ -424,8 +424,8 @@ class Feed(AsyncBase):
         """
         get mark price from okx
         :param symbol: symbol name, eg: BTC-USDT.
-        :param extra_data: extra_data ,default is None, can be a dict passed by user
-        :param kwargs: pass  key-worded, variable-length arguments.
+        :param extra_data: extra_data, default is None, can be a dict passed by user
+        :param kwargs: pass key-worded, variable-length arguments.
         :return: None
         """
         raise NotImplementedError
@@ -434,8 +434,8 @@ class Feed(AsyncBase):
         """
         get mark price from okx using async, it is not blocked and push data to data_queue
         :param symbol: symbol name, eg: BTC-USDT.
-        :param extra_data: extra_data ,default is None, can be a dict passed by user
-        :param kwargs: pass  key-worded, variable-length arguments.
+        :param extra_data: extra_data, default is None, can be a dict passed by user
+        :param kwargs: pass key-worded, variable-length arguments.
         :return: None
         """
         raise NotImplementedError

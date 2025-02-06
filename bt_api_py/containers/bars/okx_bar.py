@@ -1,7 +1,7 @@
 from bt_api_py.containers.bars.bar import BarData
 import time
 import json
-from bt_api_py.functions.utils import from_dict_get_string, from_dict_get_float
+# from bt_api_py.functions.utils import from_dict_get_string, from_dict_get_float
 
 class OkxBarData(BarData):
     def __init__(self, bar_info, symbol_name, asset_type, has_been_json_encoded=False):
@@ -12,6 +12,7 @@ class OkxBarData(BarData):
         self.local_update_time = time.time()
         self.bar_data = bar_info if has_been_json_encoded else None
         self.server_time = None
+        self.open_time = None
         self.open_price = None
         self.high_price = None
         self.low_price = None
@@ -29,7 +30,7 @@ class OkxBarData(BarData):
             self.has_been_json_encoded = True
         if self.has_been_init_data:
             return self
-        self.server_time = float(self.bar_data[0])
+        self.server_time = self.open_time = float(self.bar_data[0])
         self.open_price = float(self.bar_data[1])
         self.high_price = float(self.bar_data[2])
         self.low_price = float(self.bar_data[3])
@@ -44,6 +45,7 @@ class OkxBarData(BarData):
     def get_all_data(self):
         if self.all_data is None:
             self.all_data = {
+                "open_time": self.open_time,
                 "open_price": self.open_price,
                 "high_price": self.high_price,
                 "low_price": self.low_price,
@@ -87,7 +89,7 @@ class OkxBarData(BarData):
         return self.local_update_time
 
     def get_open_time(self):
-        return None
+        return self.open_time
 
     def get_open_price(self):
         return self.open_price

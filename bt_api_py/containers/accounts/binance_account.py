@@ -23,6 +23,7 @@ class BinanceSpotRequestAccountData(AccountData):
         self.can_deposit = None
         self.account_type = None
         self.server_time = None
+        self.is_multi_assets_margin = None
         self.all_data = None
         self.has_been_init_data = False
 
@@ -94,7 +95,7 @@ class BinanceSpotRequestAccountData(AccountData):
 
     def get_is_multi_assets_margin(self):
         """是否是多账户资产类型"""
-        return None
+        return self.is_multi_assets_margin
 
     def get_can_deposit(self):
         """# 是否可以存钱"""

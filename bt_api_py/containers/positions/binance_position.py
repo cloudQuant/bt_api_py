@@ -9,6 +9,8 @@ class BinancePositionData(PositionData):
 
     def __init__(self, position_info, symbol_name, asset_type, has_been_json_encoded):
         super(BinancePositionData, self).__init__(position_info, has_been_json_encoded)
+        self.position_commission = None
+        self.maintenance_margin = None
         self.exchange_name = "BINANCE"
         self.local_update_time = time.time()  # 本地时间戳
         self.symbol_name = symbol_name
@@ -144,7 +146,7 @@ class BinancePositionData(PositionData):
 
     def get_maintenance_margin(self):
         """# 维持保证金"""
-        return None
+        return self.maintenance_margin
 
     def open_order_initial_margin(self):
         """# 当前挂单所需起始保证金(基于最新标记价格)"""
@@ -156,7 +158,7 @@ class BinancePositionData(PositionData):
 
     def get_position_commission(self):
         """# 这个position交易所耗费的手续费"""
-        return None
+        return self.position_commission
 
     def get_position_realized_pnl(self):
         """# 已经实现的利润"""

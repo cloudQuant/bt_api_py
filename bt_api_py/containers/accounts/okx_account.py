@@ -30,6 +30,7 @@ class OkxAccountData(AccountData):
             self.has_been_json_encoded = True
         if self.has_been_init_data:
             return self
+        # print("self.account_data = ", self.account_data)
         self.server_time = from_dict_get_float(self.account_data, "uTime")
         self.total_margin = from_dict_get_float(self.account_data, "totalEq")
         self.total_used_margin = from_dict_get_float(self.account_data, "imr")

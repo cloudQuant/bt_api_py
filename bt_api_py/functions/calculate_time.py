@@ -1,10 +1,10 @@
-import datetime
+from datetime import datetime, UTC
 # import time
 import pytz
 
 
 def get_utc_time():
-    return datetime.datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%S.%fZ')
+    return datetime.now(UTC).strftime('%Y-%m-%dT%H:%M:%S.%fZ')
 
 
 def get_string_tz_time(tz='Asia/Singapore', string_format='%Y-%m-%d %H:%M:%S.%f'):
@@ -14,7 +14,7 @@ def get_string_tz_time(tz='Asia/Singapore', string_format='%Y-%m-%d %H:%M:%S.%f'
     :return: now: timestamp
     """
     tz = pytz.timezone(tz)
-    now = datetime.datetime.now(tz).strftime(string_format)
+    now = datetime.now(tz).strftime(string_format)
     return now
 
 
@@ -25,7 +25,7 @@ def timestamp2datetime(timestamp, string_format='%Y-%m-%d %H:%M:%S.%f'):
     :return: formatted_time (Str): timestamp
     """
     # 将时间戳转换为datetime对象
-    dt_object = datetime.datetime.fromtimestamp(timestamp)
+    dt_object = datetime.fromtimestamp(timestamp)
     # 将datetime对象格式化为字符串形式
     formatted_time = dt_object.strftime(string_format)
     return formatted_time
@@ -37,7 +37,7 @@ def datetime2timestamp(datetime_string="2023-06-01 09:30:00.000", string_format=
     :param  string_format: string format
     :return: timestamp
     """
-    time_date = datetime.datetime.strptime(datetime_string, string_format)
+    time_date = datetime.strptime(datetime_string, string_format)
     timestamp = time_date.timestamp()
     return timestamp
 
@@ -48,7 +48,7 @@ def str2datetime(datetime_string="2023-06-01 09:30:00.0", string_format='%Y-%m-%
     :param  string_format: string format
     :return: datetime
     """
-    return datetime.datetime.strptime(datetime_string, string_format)
+    return datetime.strptime(datetime_string, string_format)
 
 
 def datetime2str(datetime_obj, string_format='%Y-%m-%d %H:%M:%S.%f'):

@@ -339,7 +339,7 @@ class BinanceOrderData(OrderData):
         return None
 
     def get_take_profit_trigger_price_type(self):
-        # get stop profit trigger price type
+        # get a stop profit trigger price type
         return None
 
 

@@ -1,7 +1,7 @@
 import time
 import json
 from bt_api_py.containers.balances.balance import BalanceData
-from bt_api_py.functions.utils import from_dict_get_float
+from bt_api_py.functions.utils import from_dict_get_float, from_dict_get_string
 
 
 class OkxBalanceData(BalanceData):
@@ -16,6 +16,7 @@ class OkxBalanceData(BalanceData):
         self.unrealized_profit = None
         self.open_order_initial_margin = None
         self.available_margin = None
+        self.position_initial_margin = None
         self.used_margin = None
         self.margin = None
         self.server_time = None
@@ -28,6 +29,8 @@ class OkxBalanceData(BalanceData):
             self.has_been_json_encoded = True
         if self.has_been_init_data:
             return self
+        # print("self.balance_data = ", self.balance_data)
+        self.symbol_name = from_dict_get_string(self.balance_data, "ccy")
         self.server_time = from_dict_get_float(self.balance_data, "uTime")
         self.margin = from_dict_get_float(self.balance_data, "eq")
         self.used_margin = from_dict_get_float(self.balance_data, "frozenBal")
@@ -120,7 +123,7 @@ class OkxBalanceData(BalanceData):
 
     def get_position_initial_margin(self):
         """# 总的持仓初始化保证金"""
-        return None
+        return self.position_initial_margin
 
     def get_unrealized_profit(self):
         """# 总的未实现利润 """

@@ -56,7 +56,7 @@ class RequestData(object):
 
     def get_event(self):
         """
-        get event type from request data info
+        get an event type from request data info
         :return: str
         """
         return self.event
@@ -80,7 +80,7 @@ class RequestData(object):
 
     def get_data(self):
         """
-        get data from request data info
+        get data from a request data info
         :return: list of different data instance
         """
         if not self.has_been_init_data:

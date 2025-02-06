@@ -15,6 +15,7 @@ class BinanceSpotRequestBalanceData(BalanceData):
         self.balance_data = balance_info if has_been_json_encoded else None
         self.available_margin = None
         self.used_margin = None
+        self.position_initial_margin = None
         self.all_data = None
         self.has_been_init_data = False
 
@@ -107,7 +108,8 @@ class BinanceSpotRequestBalanceData(BalanceData):
 
     def get_position_initial_margin(self):
         """# 总的持仓初始化保证金"""
-        return None
+        return self.position_initial_margin
+        # return None
 
     def get_unrealized_profit(self):
         """# 总的未实现利润 """
@@ -268,6 +270,7 @@ class BinanceSwapWssBalanceData(BalanceData):
         self.balance_data = balance_info if has_been_json_encoded else None
         self.margin = None
         self.account_type = None
+        self.position_initial_margin = None
         self.all_data = None
         self.has_been_init_data = False
 
@@ -359,7 +362,8 @@ class BinanceSwapWssBalanceData(BalanceData):
 
     def get_position_initial_margin(self):
         """# 总的持仓初始化保证金"""
-        return None
+        return self.position_initial_margin
+        # return None
 
     def get_unrealized_profit(self):
         """# 总的未实现利润 """
@@ -381,6 +385,7 @@ class BinanceSpotWssBalanceData(BalanceData):
         self.available_margin = None
         self.used_margin = None
         self.server_time = None
+        self.position_initial_margin = None
         self.all_data = None
         self.has_been_init_data = False
 
@@ -472,7 +477,7 @@ class BinanceSpotWssBalanceData(BalanceData):
 
     def get_position_initial_margin(self):
         """# 总的持仓初始化保证金"""
-        return None
+        return self.position_initial_margin
 
     def get_unrealized_profit(self):
         """# 总的未实现利润 """

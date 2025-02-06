@@ -1,6 +1,6 @@
 """订单簿类，用于确定订单簿的属性和方法
 """
-import json
+# import json
 
 
 class OrderBookData(object):

@@ -1,9 +1,9 @@
 """用于分析日志中函数运行开始和结束之间的时间间隔，画出箱体图和统计指标"""
-import os
+# import os
 import re
-import numpy as np
+# import numpy as np
 import pandas as pd
-from matplotlib import pyplot as plt
+# from matplotlib import pyplot as plt
 from bt_api_py.functions import get_package_path
 from datetime import datetime
 from pyecharts import options as opts
@@ -71,7 +71,7 @@ page = (
 page.render(data_root+f'/configs/system_speed/swap合约对冲时间分析_{num}_num.html')
 # c.render("./bit新框架对冲时间分析.html")
 # page.save_resize_html(
-#     # Page 第一次渲染后的 html 文件
+#     # Page 第一次渲染后的 HTML 文件
 #     source=data_root+f'/configs/system_speed/swap合约摆盘时间分析_{num}_num.html',
 #     # 布局配置文件
 #     cfg_file="./chart_config.json",

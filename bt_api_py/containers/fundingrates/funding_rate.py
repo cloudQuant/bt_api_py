@@ -20,7 +20,7 @@ class FundingRateData:
 
     def init_data(self):
         """
-        init params, in order to get data
+        init params, to get data
         :return: None
         """
         raise NotImplementedError

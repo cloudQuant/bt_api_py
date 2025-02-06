@@ -139,7 +139,7 @@ class OrderData(object):
         raise NotImplementedError
 
     def get_take_profit_trigger_price_type(self):
-        # get stop profit trigger price type
+        # get a stop profit trigger price type
         raise NotImplementedError
 
     def get_close_position(self):

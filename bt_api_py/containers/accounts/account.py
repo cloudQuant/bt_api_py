@@ -3,7 +3,7 @@
 账户类
 用于确定账户数据的属性和方法
 """
-import json
+# import json
 
 
 class AccountData(object):

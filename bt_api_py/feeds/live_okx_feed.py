@@ -7,11 +7,8 @@ import hmac
 import base64
 import time
 import json
-import numpy as np
 from urllib import parse
-
 from bt_api_py.containers.exchanges.okx_exchange_data import OkxExchangeDataSwap, OkxExchangeDataSpot
-
 from bt_api_py.feeds.feed import Feed
 from bt_api_py.feeds.my_websocket_app import MyWebsocketApp
 from bt_api_py.functions.log_message import SpdLogManager
@@ -31,15 +28,12 @@ from bt_api_py.containers.positions.okx_position import OkxPositionData
 # session = requests.Session()
 # session.keep_alive = False
 # adapter = requests.adapters.HTTPAdapter(
-#     max_retries=5,  # 最大重试次数
-#     pool_connections=100,  # 连接池大小
-#     pool_maxsize=100,  # 连接池最大空闲连接数
-#     pool_block=True,  # 连接池是否阻塞
-# )
+#     max_retries=5, # 最大重试次数
+#     pool_connections=100, # 连接池大小
+#     pool_maxsize=100, # 连接池最大空闲连接数
+#     pool_block=True, # 连接池是否阻塞)
 # session.mount('http://', adapter)
 # session.mount('https://', adapter)
-
-usdt_inif = {'btc/usdt': 0.01, 'eth/usdt': 0.1, 'bch/usdt': 0.1, 'doge/usdt': 1000}
 
 
 class OkxRequestData(Feed):
@@ -132,7 +126,7 @@ class OkxRequestData(Feed):
         timestamp = round(time.time(), 3)  # datetime.datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%S')
         # now = datetime.datetime.utcnow()
         # t = now.isoformat("T", "milliseconds")
-        # timestamp =  t + "Z"
+        # timestamp = t + "Z"
         signature_ = self.signature(timestamp, method, path, self.private_key,
                                     json.dumps(body) if body is not None else None)
         headers = self.get_header(self.public_key, signature_, timestamp, self.passphrase)
@@ -150,8 +144,8 @@ class OkxRequestData(Feed):
     def _get_account(self, symbol=None, extra_data=None, **kwargs):
         """
         get account info using async
-        :param symbol: default None, get all the currency, can be string, eg "BTC-USDT".
-        :param extra_data: extra_data ,default is None, can be a dict passed by user
+        :param symbol: default None, get all the currency, can be string, e.g. "BTC-USDT".
+        :param extra_data: extra_data, default is None, can be a dict passed by user
         :param kwargs: pass key-worded, variable-length arguments.
         :return: RequestData
         """
@@ -200,16 +194,17 @@ class OkxRequestData(Feed):
     def get_account(self, symbol=None, extra_data=None, **kwargs):
         path, params, extra_data = self._get_account(symbol, extra_data, **kwargs)
         data = self.request(path, params=params, extra_data=extra_data)
+
         return data
 
-    def get_balance(self, symbol, extra_data=None, **kwargs):
+    def get_balance(self, symbol=None, extra_data=None, **kwargs):
         return self.get_account(symbol, extra_data, **kwargs)
 
     def _get_position(self, symbol, extra_data=None, **kwargs):
         """
         get position info from okx by symbol
-        :param symbol: default None, get all the currency, can be string, eg "BTC-USDT".
-        :param extra_data: extra_data ,default is None, can be a dict passed by user
+        :param symbol: default None, get all the currency, can be string, e.g. "BTC-USDT".
+        :param extra_data: extra_data, default is None, can be a dict passed by user
         :param kwargs: pass key-worded, variable-length arguments.
         :return: RequestData
         """
@@ -249,8 +244,8 @@ class OkxRequestData(Feed):
     def get_position(self, symbol, extra_data=None, **kwargs):
         """
         get position info from okx by symbol
-        :param symbol: default None, get all the currency, can be string, eg "BTC-USDT".
-        :param extra_data: extra_data ,default is None, can be a dict passed by user
+        :param symbol: default None, get all the currency, can be string, e.g. "BTC-USDT".
+        :param extra_data: extra_data, default is None, can be a dict passed by user
         :param kwargs: pass key-worded, variable-length arguments.
         :return: RequestData
         """
@@ -261,8 +256,8 @@ class OkxRequestData(Feed):
     def _get_tick(self, symbol, extra_data=None, **kwargs):
         """
         get tick price by symbol
-        :param symbol: default None, get all the currency, can be string, eg "BTC-USDT".
-        :param extra_data: extra_data ,default is None, can be a dict passed by user
+        :param symbol: default None, get all the currency, can be string, e.g. "BTC-USDT".
+        :param extra_data: extra_data, default is None, can be a dict passed by user
         :param kwargs: pass key-worded, variable-length arguments.
         :return: RequestData
         """
@@ -304,11 +299,11 @@ class OkxRequestData(Feed):
 
     def _get_depth(self, symbol, size=20, extra_data=None, **kwargs):
         """
-        get depth data from okx using requests
+        get depth data from okx using requests package
         :param symbol: instrument name
         :param size: the size of the orderbook level
         :param args:  pass a variable number of arguments to a function.
-        :param extra_data: extra_data, generate by user and extends by function
+        :param extra_data: extra_data, generated by user and extended by function
         :param kwargs: pass key-worded, variable-length arguments.
         :return: tuple of (str, dict, dict)
         """
@@ -349,14 +344,15 @@ class OkxRequestData(Feed):
         data = self.request(path, params=params, extra_data=extra_data)
         return data
 
-    def _get_kline(self, symbol, period, count=100, after=0, extra_data=None, **kwargs):
+    def _get_kline(self, symbol, period, count=100, before=0, after=0, extra_data=None, **kwargs):
         """
         get kline from okx using request.
         :param symbol: instrument name.
         :param period: kline interval.
         :param count: kline number, default is 100.
-        :param after: after params.
-        :param extra_data: extra_data, generate by user and function
+        :param before: begin time, default is 0.
+        :param after: end time, default is 0.
+        :param extra_data: extra_data, generated by user and function
         :param args:  pass a variable number of arguments to a function.
         :param kwargs: pass a key-worded, variable-length argument list.
         :return: tuple of (str, dict, dict)
@@ -366,10 +362,13 @@ class OkxRequestData(Feed):
         params = {
             'instId': request_symbol,
             'bar': self._params.get_period(period),
-            'limit': count,
         }
+        if count:
+            params['limit'] = count
         if after:
             params.update({"after": after})
+        if before:
+            params.update({"before": before})
         path = self._params.get_rest_path(request_type)
         extra_data = update_extra_data(extra_data, **{
             "request_type": request_type,
@@ -396,8 +395,8 @@ class OkxRequestData(Feed):
             target_data = []
         return target_data, status
 
-    def get_kline(self, symbol, period, count=100, after=0, extra_data=None, **kwargs):
-        path, params, extra_data = self._get_kline(symbol, period, count, after, extra_data, **kwargs)
+    def get_kline(self, symbol, period, count=100, before=0, after=0, extra_data=None, **kwargs):
+        path, params, extra_data = self._get_kline(symbol, period, count, before, after, extra_data, **kwargs)
         data = self.request(path, params=params, extra_data=extra_data)
         return data
 
@@ -406,7 +405,7 @@ class OkxRequestData(Feed):
         get funding rate from okx
         :param symbol: symbol name, eg: BTC-USDT.
         :param args:  pass a variable number of arguments to a function.
-        :param extra_data: extra_data, generate by user and function
+        :param extra_data: extra_data, generated by user and function
         :param kwargs: pass a key-worded, variable-length argument list.
         :return: tuple of (str, dict, dict)
         """
@@ -450,7 +449,7 @@ class OkxRequestData(Feed):
         """
         get mark_price from okx
         :param symbol: symbol name, eg: BTC-USDT.
-        :param extra_data: extra_data, generate by user and function
+        :param extra_data: extra_data, generated by user and function
         :param args:  pass a variable number of arguments to a function.
         :param kwargs: pass a key-worded, variable-length argument list.
         :return: tuple of (str, dict, dict)
@@ -613,9 +612,9 @@ class OkxRequestData(Feed):
     def _cancel_order(self, symbol, order_id=None, extra_data=None, **kwargs):
         """
         cancel order by order_id using async
-        :param symbol: default None, get all the currency, can be string, eg "BTC-USDT".
-        :param order_id: order_id ,default is None, can be a string passed by user
-        :param extra_data: extra_data ,default is None, can be a dict passed by user
+        :param symbol: default None, get all the currency, can be string, e.g. "BTC-USDT".
+        :param order_id: order_id, default is None, can be a string passed by user
+        :param extra_data: extra_data, default is None, can be a dict passed by user
         :param kwargs: pass key-worded, variable-length arguments.
         :return: RequestData
         :return:
@@ -715,8 +714,8 @@ class OkxRequestData(Feed):
     def _get_open_orders(self, symbol=None, extra_data=None, **kwargs):
         """
         get open orders by symbol using async
-        :param symbol: default None, get all the currency, can be string, eg "BTC-USDT".
-        :param extra_data: extra_data ,default is None, can be a dict passed by user
+        :param symbol: default None, get all the currency, can be string, e.g. "BTC-USDT".
+        :param extra_data: extra_data, default is None, can be a dict passed by user
         :param kwargs: pass key-worded, variable-length arguments.
         :return: RequestData
         """
@@ -882,8 +881,8 @@ class OkxRequestData(Feed):
     def async_get_position(self, symbol, extra_data=None, **kwargs):
         """
         get position info from okx by symbol using async
-        :param symbol: default None, get all the currency, can be string, eg "BTC-USDT".
-        :param extra_data: extra_data ,default is None, can be a dict passed by user
+        :param symbol: default None, get all the currency, can be string, e.g. "BTC-USDT".
+        :param extra_data: extra_data, default is None, can be a dict passed by user
         :param kwargs: pass key-worded, variable-length arguments.
         :return: RequestData
         """

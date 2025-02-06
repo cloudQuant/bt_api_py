@@ -32,10 +32,10 @@ def test_request_data():
         "goodTillDate": 1693207680000  # 订单TIF为GTD时的自动取消时间
     }
 
-    def _get_open_orders_normalize_function(input_data, extra_data):
+    def _get_open_orders_normalize_function(input_data, extra_data_):
         status = True if input_data is not None else False
-        symbol_name = extra_data["symbol_name"]
-        asset_type = extra_data["asset_type"]
+        symbol_name = extra_data_["symbol_name"]
+        asset_type = extra_data_["asset_type"]
         if isinstance(input_data, list):
             data = [BinanceRequestOrderData(i, symbol_name, asset_type, True)
                     for i in input_data]

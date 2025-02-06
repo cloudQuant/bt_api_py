@@ -124,6 +124,7 @@ class BinanceRequestHistoryFundingRateData(FundingRateData):
         self.server_time = None
         self.current_funding_rate = None
         self.mark_price = None
+        self.funding_rate_symbol_name = None
         self.all_data = None
         self.has_been_init_data = False
 
@@ -176,7 +177,7 @@ class BinanceRequestHistoryFundingRateData(FundingRateData):
         return self.symbol_name
 
     def get_funding_rate_symbol_name(self):
-        return None
+        return self.funding_rate_symbol_name
 
     def get_pre_funding_rate(self):
         return None

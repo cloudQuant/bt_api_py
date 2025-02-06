@@ -144,7 +144,7 @@ class MyWebsocketApp(object):
             # if _timeout >= 10:
             #     print(f"===== {time.strftime('%Y-%m-%d %H:%M:%S')}
             #     {self._params.exchange_name} Websocket Connected Timeout!! =====")
-            #     # break  # 不重连了
+            #     # break # 不重连了
             #     timeout = 0 # 重置
             continue
         # 重启定时器
