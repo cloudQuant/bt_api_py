@@ -10,6 +10,7 @@ class BinanceRequestBarData(BarData):
         self.exchange_name = "BINANCE"
         self.symbol_name = symbol_name
         self.asset_type = asset_type
+        self.server_time = None
         self.local_update_time = time.time()
         self.bar_data = bar_info if has_been_json_encoded else None
         self.open_time = None
@@ -39,7 +40,7 @@ class BinanceRequestBarData(BarData):
         self.low_price = float(self.bar_data[3])
         self.close_price = float(self.bar_data[4])
         self.volume = float(self.bar_data[5])
-        self.close_time = float(self.bar_data[6])
+        self.close_time = self.server_time = float(self.bar_data[6])
         self.amount = float(self.bar_data[7])
         self.num_trades = float(self.bar_data[8])
         self.taker_buy_base_asset_volume = float(self.bar_data[9])
@@ -53,6 +54,7 @@ class BinanceRequestBarData(BarData):
             self.init_data()
         if self.all_data is None:
             self.all_data = {
+                "server_time": self.server_time,
                 "open_time": self.open_time,
                 "open_price": self.open_price,
                 "high_price": self.high_price,
@@ -92,7 +94,7 @@ class BinanceRequestBarData(BarData):
         return self.asset_type
 
     def get_server_time(self):
-        return None
+        return self.server_time
 
     def get_local_update_time(self):
         return self.local_update_time
@@ -194,6 +196,7 @@ class BinanceWssBarData(BarData):
             self.all_data = {
                 "exchange_name": self.exchange_name,
                 "symbol_name": self.symbol_name,
+                "server_time": self.server_time,
                 "local_update_time": self.local_update_time,
                 "asset_type": self.asset_type,
                 "open_time": self.open_time,

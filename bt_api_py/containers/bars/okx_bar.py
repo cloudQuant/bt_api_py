@@ -13,6 +13,7 @@ class OkxBarData(BarData):
         self.bar_data = bar_info if has_been_json_encoded else None
         self.server_time = None
         self.open_time = None
+        self.close_time = None
         self.open_price = None
         self.high_price = None
         self.low_price = None
@@ -38,7 +39,7 @@ class OkxBarData(BarData):
         self.volume = float(self.bar_data[5])
         self.base_asset_volume = float(self.bar_data[6])
         self.quote_asset_volume = float(self.bar_data[7])
-        self.bar_status = float(self.bar_data[-1])
+        self.bar_status = True if float(self.bar_data[-1])==1 else False
         self.has_been_init_data = True
         return self
 
@@ -46,6 +47,7 @@ class OkxBarData(BarData):
         if self.all_data is None:
             self.all_data = {
                 "open_time": self.open_time,
+                "close_time": self.close_time,
                 "open_price": self.open_price,
                 "high_price": self.high_price,
                 "low_price": self.low_price,
