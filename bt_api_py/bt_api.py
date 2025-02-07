@@ -9,6 +9,7 @@ from bt_api_py.functions.log_message import SpdLogManager
 
 class BtApi(object):
     def __init__(self, exchange_kwargs, debug=True):
+        self.exchange_kwargs = exchange_kwargs
         self.debug = debug                          # 是否是debug模式，默认是
         self.data_queues = {}                       # 保存各个交易所的数据队列
         self.exchange_feeds = {}                    # 保存各个交易所的feed接口
@@ -96,71 +97,69 @@ class BtApi(object):
             self.log(f"exchange_name: {exchange_name} does not exist", level="error")
         return data_queue
 
-    def subscribe(self, exchange_params, topics):
-        self.log(f"begin subscribe {exchange_params}, topics = {topics}")
-        for exchange_name in exchange_params:
-            for topic in topics:
-                if topic['topic'] == "kline":
-                    self.subscribe_bar_num += 1
-            exchange, asset_type = exchange_name.split('___')
-            data_queue = self.get_data_queue(exchange_name)
-            if data_queue is None:
-                self.log(f"exchange_name: {exchange_name} does not exist", level="error")
-            if exchange == "BINANCE" and asset_type == "SWAP":
-                self.wss_start_binance_swap(data_queue, exchange_params, topics)
-            if exchange == "BINANCE" and asset_type == "SPOT":
-                self.wss_start_binance_spot(data_queue, exchange_params, topics)
+    def subscribe(self, dataname, topics):
+        exchange, asset_type, symbol = dataname.split('___')
+        exchange_name = exchange+"___"+asset_type
+        exchange_params = self.exchange_kwargs[exchange_name]
+        for topic in topics:
+            if topic['topic'] == "kline":
+                self.subscribe_bar_num += 1
+        data_queue = self.get_data_queue(exchange_name)
+        if data_queue is None:
+            self.log(f"exchange_name: {exchange_name} does not exist", level="error")
+        if exchange == "BINANCE" and asset_type == "SWAP":
+            self.wss_start_binance_swap(data_queue, exchange_params, topics)
+        if exchange == "BINANCE" and asset_type == "SPOT":
+            self.wss_start_binance_spot(data_queue, exchange_params, topics)
 
-            if exchange == "OKX" and asset_type == "SPOT":
-                self.wss_start_okx_spot(data_queue, exchange_params, topics)
+        if exchange == "OKX" and asset_type == "SPOT":
+            self.wss_start_okx_spot(data_queue, exchange_params, topics)
 
-            if exchange == "OKX" and asset_type == "SWAP":
-                self.wss_start_okx_swap(data_queue, exchange_params, topics)
+        if exchange == "OKX" and asset_type == "SWAP":
+            self.wss_start_okx_swap(data_queue, exchange_params, topics)
 
     def wss_start_binance_swap(self, data_queue, exchange_params, topics):
         from bt_api_py.containers.exchanges.binance_exchange_data import BinanceExchangeDataSwap
         from bt_api_py.feeds.live_binance_feed import BinanceMarketWssDataSwap
         from bt_api_py.feeds.live_binance_feed import BinanceAccountWssDataSwap
-        for exchange_name in exchange_params:
-            kwargs = {key:v for key, v in exchange_params[exchange_name].items()}
-            kwargs['wss_name'] = 'binance_market_data'
-            kwargs["wss_url"] = 'wss://fstream.binance.com/ws'
-            kwargs["exchange_data"] = BinanceExchangeDataSwap()
-            kwargs['topics'] = topics
-            # self.log(f"wss_start_binance_swap kwargs: {kwargs}")
-            BinanceMarketWssDataSwap(data_queue, **kwargs).start()
-            if self.binance_swap_account_subscribed == 0:
-                account_kwargs = {k:v for k, v in kwargs.items()}
-                account_kwargs['topics'] =  [
-                    {"topic": "account"},
-                    {"topic": "order"},
-                    {"topic": "trade"},
-                ]
-                BinanceAccountWssDataSwap(data_queue, **account_kwargs).start()
-                # self.log(f"wss_start_binance_swap kwargs: {account_kwargs}")
-                self.binance_swap_account_subscribed = 1
+        kwargs = {key:v for key, v in exchange_params.items()}
+        kwargs['wss_name'] = 'binance_market_data'
+        kwargs["wss_url"] = 'wss://fstream.binance.com/ws'
+        kwargs["exchange_data"] = BinanceExchangeDataSwap()
+        kwargs['topics'] = topics
+        # self.log(f"wss_start_binance_swap kwargs: {kwargs}")
+        BinanceMarketWssDataSwap(data_queue, **kwargs).start()
+        if self.binance_swap_account_subscribed == 0:
+            account_kwargs = {k:v for k, v in kwargs.items()}
+            account_kwargs['topics'] =  [
+                {"topic": "account"},
+                {"topic": "order"},
+                {"topic": "trade"},
+            ]
+            BinanceAccountWssDataSwap(data_queue, **account_kwargs).start()
+            # self.log(f"wss_start_binance_swap kwargs: {account_kwargs}")
+            self.binance_swap_account_subscribed = 1
 
 
     def wss_start_binance_spot(self, data_queue, exchange_params, topics):
         from bt_api_py.containers.exchanges.binance_exchange_data import BinanceExchangeDataSpot
         from bt_api_py.feeds.live_binance_feed import BinanceMarketWssDataSpot
         from bt_api_py.feeds.live_binance_feed import BinanceAccountWssDataSpot
-        for exchange_name in exchange_params:
-            kwargs = {key: v for key, v in exchange_params[exchange_name].items()}
-            kwargs['wss_name'] = 'binance_market_data'
-            kwargs["wss_url"] = 'wss://fstream.binance.com/ws'
-            kwargs["exchange_data"] = BinanceExchangeDataSpot()
-            kwargs['topics'] = topics
-            BinanceMarketWssDataSpot(data_queue, **kwargs).start()
-            if self.binance_spot_account_subscribed == 0:
-                account_kwargs = {k: v for k, v in kwargs.items()}
-                account_kwargs['topics'] = [
-                    {"topic": "account"},
-                    {"topic": "order"},
-                    {"topic": "trade"},
-                ]
-                BinanceAccountWssDataSpot(data_queue, **account_kwargs).start()
-                self.binance_spot_account_subscribed = 1
+        kwargs = {key: v for key, v in exchange_params.items()}
+        kwargs['wss_name'] = 'binance_market_data'
+        kwargs["wss_url"] = 'wss://fstream.binance.com/ws'
+        kwargs["exchange_data"] = BinanceExchangeDataSpot()
+        kwargs['topics'] = topics
+        BinanceMarketWssDataSpot(data_queue, **kwargs).start()
+        if self.binance_spot_account_subscribed == 0:
+            account_kwargs = {k: v for k, v in kwargs.items()}
+            account_kwargs['topics'] = [
+                {"topic": "account"},
+                {"topic": "order"},
+                {"topic": "trade"},
+            ]
+            BinanceAccountWssDataSpot(data_queue, **account_kwargs).start()
+            self.binance_spot_account_subscribed = 1
 
 
     def wss_start_okx_spot(self, data_queue, exchange_params, topics):
@@ -170,37 +169,35 @@ class BtApi(object):
         from bt_api_py.feeds.live_okx_feed import OkxKlineWssDataSpot
         topic_list = [i['topic'] for i in topics]
         if "kline" in topic_list:
-            for exchange_name in exchange_params:
-                kline_kwargs = {key: v for key, v in exchange_params[exchange_name].items()}
-                kline_kwargs['wss_name'] = 'okx_spot_kline_data'
-                kline_kwargs["wss_url"] = 'wss://ws.okx.com:8443/ws/v5/business'
-                kline_kwargs["exchange_data"] = OkxExchangeDataSpot()
-                kline_topics = [i for i in exchange_params['topics'] if i['topic']=="kline"]
-                kline_kwargs['topics'] = kline_topics
-                OkxKlineWssDataSpot(data_queue, **kline_kwargs).start()
-                self.log(f"{exchange_name} kline spot start")
+            kline_kwargs = {key: v for key, v in exchange_params.items()}
+            kline_kwargs['wss_name'] = 'okx_spot_kline_data'
+            kline_kwargs["wss_url"] = 'wss://ws.okx.com:8443/ws/v5/business'
+            kline_kwargs["exchange_data"] = OkxExchangeDataSpot()
+            kline_topics = [i for i in exchange_params['topics'] if i['topic']=="kline"]
+            kline_kwargs['topics'] = kline_topics
+            OkxKlineWssDataSpot(data_queue, **kline_kwargs).start()
+            self.log(f"kline spot start")
 
         ticker_true = "ticker" in topic_list
         depth_true = "depth" in topic_list
         funding_rate_true = "funding_rate" in topic_list
         mark_price_true = "mark_price" in topic_list
         if ticker_true or depth_true or funding_rate_true or mark_price_true:
-            for exchange_name in exchange_params:
-                market_kwargs = {key: v for key, v in exchange_params[exchange_name].items()}
-                market_kwargs['wss_name'] = 'okx_spot_market_data'
-                market_kwargs["wss_url"] = 'wss://ws.okx.com:8443/ws/v5/public'
-                market_kwargs["exchange_data"] = OkxExchangeDataSpot()
-                market_topics = [i for i in exchange_params['topics'] if i['topic'] != "kline"]
-                market_kwargs['topics'] = market_topics
-                OkxMarketWssDataSpot(data_queue, **market_kwargs).start()
-                self.log(f"{exchange_name} market spot start")
-        for exchange_name in exchange_params:
-            account_kwargs = {key: v for key, v in exchange_params[exchange_name].items()}
-            account_topics = [i for i in topics if
-                              (i['topic'] == "account" or i['topic'] == "orders" or i['topic'] == "positions")]
-            account_kwargs['topics'] = account_topics
-            OkxAccountWssDataSpot(data_queue, **account_kwargs).start()
-            self.log(f"{exchange_name} account spot start")
+            market_kwargs = {key: v for key, v in exchange_params.items()}
+            market_kwargs['wss_name'] = 'okx_spot_market_data'
+            market_kwargs["wss_url"] = 'wss://ws.okx.com:8443/ws/v5/public'
+            market_kwargs["exchange_data"] = OkxExchangeDataSpot()
+            market_topics = [i for i in exchange_params['topics'] if i['topic'] != "kline"]
+            market_kwargs['topics'] = market_topics
+            OkxMarketWssDataSpot(data_queue, **market_kwargs).start()
+            self.log(f"market spot start")
+
+        account_kwargs = {key: v for key, v in exchange_params.items()}
+        account_topics = [i for i in topics if
+                          (i['topic'] == "account" or i['topic'] == "orders" or i['topic'] == "positions")]
+        account_kwargs['topics'] = account_topics
+        OkxAccountWssDataSpot(data_queue, **account_kwargs).start()
+        self.log(f" account spot start")
 
 
     def wss_start_okx_swap(self, data_queue, exchange_params, topics):
@@ -212,39 +209,37 @@ class BtApi(object):
         topic_list = [i['topic'] for i in topics]
         if "kline" in topic_list:
             self.log("begin to subscribe okx swap kline")
-            for exchange_name in exchange_params:
-                kline_kwargs = {key: v for key, v in exchange_params[exchange_name].items()}
-                kline_kwargs['wss_name'] = 'okx_spot_kline_data'
-                kline_kwargs["wss_url"] = 'wss://ws.okx.com:8443/ws/v5/business'
-                kline_kwargs["exchange_data"] = OkxExchangeDataSwap()
-                kline_topics = [i for i in topics if i['topic'] == "kline"]
-                kline_kwargs['topics'] = kline_topics
-                self.log(f"{kline_kwargs} begin to start")
-                OkxKlineWssDataSwap(data_queue, **kline_kwargs).start()
-                self.log(f"{exchange_name} kline swap started. ")
+            kline_kwargs = {key: v for key, v in exchange_params.items()}
+            kline_kwargs['wss_name'] = 'okx_spot_kline_data'
+            kline_kwargs["wss_url"] = 'wss://ws.okx.com:8443/ws/v5/business'
+            kline_kwargs["exchange_data"] = OkxExchangeDataSwap()
+            kline_topics = [i for i in topics if i['topic'] == "kline"]
+            kline_kwargs['topics'] = kline_topics
+            self.log(f"{kline_kwargs} begin to start")
+            OkxKlineWssDataSwap(data_queue, **kline_kwargs).start()
+            self.log(f"okx_swap kline swap started. ")
 
         ticker_true = "ticker" in topic_list
         depth_true = "depth" in topic_list
         funding_rate_true = "funding_rate" in topic_list
         mark_price_true = "mark_price" in topic_list
         if ticker_true or depth_true or funding_rate_true or mark_price_true:
-            for exchange_name in exchange_params:
-                market_kwargs = {key: v for key, v in exchange_params[exchange_name].items()}
-                market_kwargs['wss_name'] = 'okx_spot_market_data'
-                market_kwargs["wss_url"] = 'wss://ws.okx.com:8443/ws/v5/public'
-                market_kwargs["exchange_data"] = OkxExchangeDataSwap()
-                market_topics = [i for i in topics if i['topic'] != "kline"]
-                market_kwargs['topics'] = market_topics
-                OkxMarketWssDataSwap(data_queue, **market_kwargs).start()
-                self.log(f"{exchange_name} market swap started. ")
-        for exchange_name in exchange_params:
-            account_kwargs = {key: v for key, v in exchange_params[exchange_name].items()}
-            account_topics = [i for i in topics if
-                              (i['topic'] == "account" or i['topic'] == "orders" or i['topic'] == "positions")]
-            account_kwargs['topics'] = account_topics
-            account_kwargs['exchange_data'] = OkxExchangeDataSwap()
-            OkxAccountWssDataSwap(data_queue, **account_kwargs).start()
-            self.log(f"{exchange_name} account swap started. ")
+            market_kwargs = {key: v for key, v in exchange_params.items()}
+            market_kwargs['wss_name'] = 'okx_spot_market_data'
+            market_kwargs["wss_url"] = 'wss://ws.okx.com:8443/ws/v5/public'
+            market_kwargs["exchange_data"] = OkxExchangeDataSwap()
+            market_topics = [i for i in topics if i['topic'] != "kline"]
+            market_kwargs['topics'] = market_topics
+            OkxMarketWssDataSwap(data_queue, **market_kwargs).start()
+            self.log(f"okx_swap market swap started. ")
+
+        account_kwargs = {key: v for key, v in exchange_params.items()}
+        account_topics = [i for i in topics if
+                          (i['topic'] == "account" or i['topic'] == "orders" or i['topic'] == "positions")]
+        account_kwargs['topics'] = account_topics
+        account_kwargs['exchange_data'] = OkxExchangeDataSwap()
+        OkxAccountWssDataSwap(data_queue, **account_kwargs).start()
+        self.log(f"okx swap account swap started. ")
 
 
 
@@ -361,10 +356,10 @@ class BtApi(object):
             for balance in account.get_balances():
                 balance.init_data()
                 currency = balance.get_symbol_name()
-                value_result[currency] = {}
-                value_result[currency]["cash"] = balance.get_available_margin()
                 cash_result[currency] = {}
-                cash_result[currency]["value"] = balance.get_margin() + balance.get_unrealized_profit()
+                cash_result[currency]["cash"] = balance.get_available_margin()
+                value_result[currency] = {}
+                value_result[currency]["value"] = balance.get_margin() + balance.get_unrealized_profit()
         self._value_dict[exchange_name] = value_result
         self._cash_dict[exchange_name] = cash_result
 
@@ -376,10 +371,10 @@ class BtApi(object):
             for balance in account.get_balances():
                 balance.init_data()
                 currency = balance.get_symbol_name()
-                value_result[currency] = {}
-                value_result[currency]["cash"] = balance.get_available_margin()
                 cash_result[currency] = {}
-                cash_result[currency]["value"] = balance.get_margin() + balance.get_unrealized_profit()
+                cash_result[currency]["cash"] = balance.get_available_margin()
+                value_result[currency] = {}
+                value_result[currency]["value"] = balance.get_margin() + balance.get_unrealized_profit()
         self._value_dict[exchange_name] = value_result
         self._cash_dict[exchange_name] = cash_result
 
@@ -390,10 +385,10 @@ class BtApi(object):
         for account in account_list:
             account.init_data()
             currency = account.get_account_type()
-            value_result[currency] = {}
-            value_result[currency]["cash"] = account.get_available_margin()
             cash_result[currency] = {}
-            cash_result[currency]["value"] = account.get_margin() + account.get_unrealized_profit()
+            cash_result[currency]["cash"] = account.get_available_margin()
+            value_result[currency] = {}
+            value_result[currency]["value"] = account.get_margin() + account.get_unrealized_profit()
         self._value_dict[exchange_name] = value_result
         self._cash_dict[exchange_name] = cash_result
 
@@ -403,10 +398,10 @@ class BtApi(object):
         for account in account_list:
             account.init_data()
             currency = account.get_account_type()
-            value_result[currency] = {}
-            value_result[currency]["cash"] = account.get_available_margin()
             cash_result[currency] = {}
-            cash_result[currency]["value"] = account.get_margin() + account.get_unrealized_profit()
+            cash_result[currency]["cash"] = account.get_available_margin()
+            value_result[currency] = {}
+            value_result[currency]["value"] = account.get_margin() + account.get_unrealized_profit()
         self._value_dict[exchange_name] = value_result
         self._cash_dict[exchange_name] = cash_result
 

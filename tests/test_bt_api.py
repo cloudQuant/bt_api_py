@@ -212,7 +212,7 @@ def test_binance_swap_wss_data():
                 {"topic": "agg_trade", "symbol": "BTC-USDT"},
                 {"topic": "force_order", "symbol": "BTC-USDT"}]
     bt_api = BtApi(exchange_kwargs, debug=True)
-    bt_api.subscribe(exchange_kwargs, topics)
+    bt_api.subscribe("BINANCE___SWAP___BTC-USDT", topics)
     data_queue = bt_api.get_data_queue("BINANCE___SWAP")
     receive_binance_bar_data = False
     receive_binance_ticker_data = False

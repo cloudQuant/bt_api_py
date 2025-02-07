@@ -363,7 +363,7 @@ class OkxRequestData(Feed):
             'instId': request_symbol,
             'bar': self._params.get_period(period),
         }
-        if count:
+        if count and count!=100:
             params['limit'] = count
         if end_time:
             params.update({"after": end_time})
@@ -384,12 +384,14 @@ class OkxRequestData(Feed):
     @staticmethod
     def _get_kline_normalize_function(input_data, extra_data):
         status = True if input_data["code"] == '0' else False
-        data = input_data['data'][0]
+        # print("live_okx_feed, get_kline", input_data)
+        data = sorted(input_data['data'],key=lambda x: x[0])
         if len(data) > 0:
-            data_list = [OkxBarData(data,
+            data_list = [OkxBarData(i,
                                     extra_data['symbol_name'],
                                     extra_data['asset_type'],
-                                    True)]
+                                    True)
+                         for i in data]
             target_data = data_list
         else:
             target_data = []

@@ -12,5 +12,10 @@ pip install -U --no-build-isolation ./bt_api_py
 # 切换到 bt_api_py 目录
 cd ./bt_api_py
 
+# Delete all .log files
+echo "Deleting all .log files..."
+find . -type f -name "*.log" -exec rm -f {} \;
+echo "All .log files deleted."
+
 # 运行 backtrader 的测试用例，使用 4 个进程并行测试
 pytest tests -n 4

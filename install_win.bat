@@ -28,5 +28,10 @@ IF EXIST %BENCHMARKS_DIR% (
     rmdir /s /q %BENCHMARKS_DIR%
     echo Deleted %BENCHMARKS_DIR% directory.
 )
+
+:: Delete all .log files
+echo Deleting all .log files...
+del /s /q *.log
+echo All .log files deleted.
 :: 暂停脚本，以便查看输出结果
 :: pause
