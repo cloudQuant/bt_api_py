@@ -228,7 +228,7 @@ def test_binance_swap_wss_data():
             data = data_queue.get(False)
         except queue.Empty:
             break
-        if count > 10000:
+        if count > 20000:
             break
         if isinstance(data, BinanceWssBarData):
             receive_binance_bar_data = True

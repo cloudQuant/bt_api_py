@@ -94,7 +94,7 @@ def test_binance_req_kline_data():
     live_binance_spot_feed = init_req_feed()
     data = live_binance_spot_feed.get_kline("BTC-USDT", "1m", count=2).get_data()
     assert isinstance(data, list)
-    assert data[0].init_data().get_server_time() is None
+    assert data[0].init_data().get_server_time() > 0
     assert data[0].init_data().get_exchange_name() == "BINANCE"
     assert data[0].init_data().get_symbol_name() == "BTC-USDT"
     assert data[0].init_data().get_local_update_time() > 0
