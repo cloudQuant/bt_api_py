@@ -3,6 +3,8 @@ import hmac
 # import urllib
 import time
 import json
+from datetime import datetime
+import pytz
 # import threading
 # from urllib import parse
 from urllib.parse import urlencode
@@ -1176,6 +1178,7 @@ class BinanceRequestDataSpot(BinanceRequestData):
         return data
 
 class BinanceMarketWssData(MyWebsocketApp, BinanceRequestData):
+    count = 0
     def __init__(self, data_queue, **kwargs):
         super(BinanceMarketWssData, self).__init__(data_queue, **kwargs)
         self.topics = kwargs.get("topics", {})
@@ -1195,70 +1198,69 @@ class BinanceMarketWssData(MyWebsocketApp, BinanceRequestData):
         time.sleep(0.1)
 
     def _init(self):
-        count = 0
         for topics in self.topics:
             # time.sleep(0.2)
-            count += 1
+            self.count += 1
             if "ticker" == topics['topic']:
                 symbol = topics.get("symbol", "BTC—USDT")
                 self.subscribe(topic='tick', symbol=symbol)
-                print(f"订阅{count}个数据,数据类型---ticker---{symbol}")
+                print(f"subscribe {self.count} data, BINANCE, {self.asset_type}, {symbol}, ticker")
 
             if "depth" == topics['topic']:
                 # print(topics)
                 if "symbol" in topics:
                     symbol = topics.get("symbol")
                     self.subscribe(topic='depth', symbol=symbol, type='step0')
-                    print(f"订阅{count}个数据,数据类型---depth---{symbol}")
+                    print(f"subscribe {self.count} data, BINANCE, {self.asset_type}, {symbol}, depth")
                 elif "symbol_list" in topics:
                     symbol_list = topics.get("symbol_list")
                     self.subscribe(topic='depth', symbol_list=symbol_list, type='step0')
-                    print(f"订阅{count}个数据,数据类型---depth---symbol_list")
+                    print(f"subscribe {self.count} data, BINANCE, {self.asset_type}, depth, symbol_list")
                 else:
                     print("depth need symbol to subscribe")
 
             if 'funding_rate' == topics['topic']:
                 symbol = topics.get("symbol", "BTC—USDT")
                 self.subscribe(topic='funding_rate', symbol=symbol)
-                print(f"订阅{count}个数据,数据类型---funding_rate---{symbol}")
+                print(f"subscribe {self.count} data, BINANCE, {self.asset_type}, {symbol}, funding_rate")
 
             if 'mark_price' == topics['topic']:
                 symbol = topics.get("symbol", "BTC—USDT")
                 self.subscribe(topic='mark_price', symbol=symbol)
-                print(f"订阅{count}个数据,数据类型---mark_price---{symbol}")
+                print(f"subscribe {self.count} data, BINANCE, {self.asset_type}, {symbol}, mark_price")
 
             if "kline" == topics['topic']:
                 period = topics.get("period", "1m")
                 symbol = topics.get("symbol", "BTC—USDT")
                 self.subscribe(topic='kline', symbol=symbol, period=period)
-                print(f"订阅{count}个数据,数据类型---kline---{symbol}---{period}")
+                print(f"subscribe {self.count} data, BINANCE, {self.asset_type}, {symbol}, kline")
 
             if "all_mark_price" == topics['topic']:
                 self.subscribe(topic='all_mark_price')
-                print(f"订阅{count}个数据,数据类型---all_mark_price")
+                print(f"subscribe {self.count} data, BINANCE, {self.asset_type}, all_mark_price")
 
             if "all_ticker" == topics['topic']:
                 self.subscribe(topic='all_ticker')
-                print(f"订阅{count}个数据,数据类型---all_mark_price")
+                print(f"subscribe {self.count} data, BINANCE, {self.asset_type},all_ticker")
 
             if "all_force_order" == topics['topic']:
                 self.subscribe(topic='all_force_order')
-                print(f"订阅{count}个数据,数据类型---all_force_order")
+                print(f"subscribe {self.count} data, BINANCE, {self.asset_type}, all_force_order")
 
             if "agg_trade" == topics['topic']:
                 if "symbol" in topics:
                     symbol = topics.get("symbol")
                     self.subscribe(topic='agg_trade', symbol=symbol)
-                    print(f"订阅{count}个数据,数据类型---agg_trade---{symbol}")
+                    print(f"subscribe {self.count} data, BINANCE, {self.asset_type}, {symbol}, agg_trade")
                 if "symbol_list" in topics:
                     symbol_list = topics.get("symbol_list")
                     self.subscribe(topic='agg_trade', symbol_list=symbol_list)
-                    print(f"订阅{count}个数据,数据类型---agg_trade---symbol_list")
+                    print(f"subscribe {self.count} data, BINANCE, {self.asset_type}, agg_trade, symbol_list")
 
             if "force_order" == topics['topic']:
                 symbol = topics.get("symbol", "BTC—USDT")
                 self.subscribe(topic='force_order', symbol=symbol)
-                print(f"订阅{count}个数据,数据类型---force_order---{symbol}")
+                print(f"subscribe {self.count} data, BINANCE, {self.asset_type}, {symbol}, force_order")
 
     # def handle_all_data(self, content):
     #     if isinstance(content, list):
@@ -1277,6 +1279,7 @@ class BinanceMarketWssData(MyWebsocketApp, BinanceRequestData):
                 self.push_order_book(content)
             if "kline" == event:
                 self.push_bar(content)
+                # print(content)
             if "markPriceUpdate" == event:
                 self.push_funding_rate(content)
             if "markPriceUpdate" == event:
@@ -1338,12 +1341,20 @@ class BinanceMarketWssData(MyWebsocketApp, BinanceRequestData):
         # 推送bar数据并添加到事件中
         symbol = content['s']
         bar_data = BinanceWssBarData(content, symbol, self.asset_type, True)
-        # bar_data.init_data()
-        # bar_status = bar_data.get_bar_status()
+        bar_data.init_data()
+        bar_status = bar_data.get_bar_status()
         # if bar_status:
         #     self.data_queue.put(bar_data)
         self.data_queue.put(bar_data)
-        # print("获取kline成功，close_price = ", bar_data.get_close_price())
+        # all_data = bar_data.get_all_data()
+        # timestamp = all_data["open_time"]
+        # # dtime_utc = datetime.fromtimestamp(timestamp // 1000, tz=UTC)
+        # # 将时间戳转换为 UTC 时间（确保它是 UTC 时间）
+        # dtime_utc = datetime.fromtimestamp(timestamp // 1000, tz=pytz.UTC)
+        # if bar_status:
+        #     print(f"获取binance {dtime_utc} kline成功,"
+        #           f"close_price = {bar_data.get_close_price()},"
+        #           f"bar_status = {bar_status}")
 
     def push_account(self, content):
         # 推送account数据并添加到事件中

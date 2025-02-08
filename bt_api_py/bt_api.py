@@ -215,7 +215,7 @@ class BtApi(object):
             kline_kwargs["exchange_data"] = OkxExchangeDataSwap()
             kline_topics = [i for i in topics if i['topic'] == "kline"]
             kline_kwargs['topics'] = kline_topics
-            self.log(f"{kline_kwargs} begin to start")
+            # self.log(f"{kline_kwargs} begin to start")
             OkxKlineWssDataSwap(data_queue, **kline_kwargs).start()
             self.log(f"okx_swap kline swap started. ")
 

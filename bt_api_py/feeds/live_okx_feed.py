@@ -7,6 +7,8 @@ import hmac
 import base64
 import time
 import json
+import pytz
+from datetime import datetime
 from urllib import parse
 from bt_api_py.containers.exchanges.okx_exchange_data import OkxExchangeDataSwap, OkxExchangeDataSpot
 from bt_api_py.feeds.feed import Feed
@@ -1039,6 +1041,7 @@ class OkxRequestDataSpot(OkxRequestData):
 
 
 class OkxWssData(MyWebsocketApp):
+    count = 0
     def __init__(self, data_queue, **kwargs):
         super(OkxWssData, self).__init__(data_queue, **kwargs)
         self.topics = kwargs.get("topics", {})
@@ -1082,40 +1085,62 @@ class OkxWssData(MyWebsocketApp):
 
     def _init(self):
         for topics in self.topics:
+            self.count+=1
             if "orders" in topics['topic']:
                 symbol = topics.get("symbol", "BTC—USDT")
                 self.subscribe(topic='orders', symbol=symbol)
+                print(f"subscribe {self.count} data, OKX, {self.asset_type}, {symbol}, orders")
+
             if "account" in topics['topic']:
                 symbol = topics.get("symbol", "BTC—USDT")
                 currency = topics.get("currency", "USDT")
                 self.subscribe(topic='account', symbol=symbol, currency=currency)
+                print(f"subscribe {self.count} data, OKX, {self.asset_type}, {symbol}, account")
+
             if "positions" in topics['topic']:
                 symbol = topics.get("symbol", "BTC—USDT")
                 self.subscribe(topic='positions', symbol=symbol)
+                print(f"subscribe {self.count} data, OKX, {self.asset_type}, {symbol}, positions")
+
             if "balance_position" in self.topics:
                 self.subscribe(topic='balance_position')
+                print(f"subscribe {self.count} data, OKX, {self.asset_type}, balance_position")
+
             if "ticker" in topics['topic']:
                 symbol = topics.get("symbol", "BTC—USDT")
                 self.subscribe(topic='tick', symbol=symbol)
+                print(f"subscribe {self.count} data, OKX, {self.asset_type}, {symbol}, ticker")
+
             if "depth" in topics['topic']:
                 symbol = topics.get("symbol", "BTC—USDT")
                 self.subscribe(topic='depth', symbol=symbol, type='step0')
+                print(f"subscribe {self.count} data, OKX, {self.asset_type}, {symbol}, depth")
+
             if "books" in topics['topic']:
                 symbol = topics.get("symbol", "BTC—USDT")
                 self.subscribe(topic='books', symbol=symbol, type='step0')
+                print(f"subscribe {self.count} data, OKX, {self.asset_type}, {symbol}, orderbook")
+
             if 'bidAsk' in topics['topic']:
                 symbol = topics.get("symbol", "BTC—USDT")
                 self.subscribe(topic='bidAsk', symbol=symbol, type='step0')
+                print(f"subscribe {self.count} data, OKX, {self.asset_type}, {symbol}, bidAsk")
+
             if 'funding_rate' in topics['topic']:
                 symbol = topics.get("symbol", "BTC—USDT")
                 self.subscribe(topic='funding_rate', symbol=symbol)
+                print(f"subscribe {self.count} data, OKX, {self.asset_type}, {symbol}, funding_rate")
+
             if 'mark_price' in topics['topic']:
                 symbol = topics.get("symbol", "BTC—USDT")
                 self.subscribe(topic='mark_price', symbol=symbol)
+                print(f"subscribe {self.count} data, OKX, {self.asset_type}, {symbol}, mark_price")
+
             if "kline" in topics['topic']:
                 period = topics.get("period", "1m")
                 symbol = topics.get("symbol", "BTC—USDT")
                 self.subscribe(topic='kline', symbol=symbol, period=period)
+                print(f"subscribe {self.count} data, OKX, {self.asset_type}, {symbol}, kline")
 
     def handle_data(self, content):
         # print(content)
@@ -1180,12 +1205,19 @@ class OkxWssData(MyWebsocketApp):
         bar_info = content['data'][0]
         symbol = content['arg']['instId']
         bar_data = OkxBarData(bar_info, symbol, self.asset_type, True)
-        # bar_data.init_data()
-        # bar_status = bar_data.get_bar_status()
-        # if bar_status:
-        #     self.data_queue.put(bar_data)
         self.data_queue.put(bar_data)
-        # print("获取kline成功，close_price = ", bar_data.get_close_price())
+        # print(f"okx bar info {bar_info}")
+        # bar_data.init_data()
+        # all_data = bar_data.get_all_data()
+        # bar_status = bar_data.get_bar_status()
+        # timestamp = all_data["open_time"]
+        # # dtime_utc = datetime.fromtimestamp(timestamp // 1000, tz=UTC)
+        # # 将时间戳转换为 UTC 时间（确保它是 UTC 时间）
+        # dtime_utc = datetime.fromtimestamp(timestamp // 1000, tz=pytz.UTC)
+        # if bar_status:
+        #     print(f"获取OKX {dtime_utc} kline成功,"
+        #           f"close_price = {bar_data.get_close_price()},"
+        #           f"bar_status = {bar_status}")
 
     def push_account(self, content):
         # 推送account数据并添加到事件中
