@@ -3,7 +3,7 @@ from bt_api_py.containers.orders.binance_order import (BinanceSwapWssOrderData,
                                                        BinanceRequestOrderData,
                                                        BinanceSpotWssOrderData,
                                                        BinanceForceOrderData)
-
+from bt_api_py.containers.orders.order import OrderStatus
 
 def test_binance_force_order_data():
     data = {
@@ -36,7 +36,7 @@ def test_binance_force_order_data():
     assert fo.get_order_price() == 9910
     assert fo.get_order_qty() == 0.014
     assert fo.get_order_avg_price() == 9910
-    assert fo.get_order_status() == "FILLED"
+    assert fo.get_order_status() == OrderStatus.COMPLETED
 
 
 
@@ -66,7 +66,7 @@ def test_binance_spot_wss_order():
     assert spot_wss_data.get_order_price() == 3.379
     assert spot_wss_data.get_reduce_only() is None
     assert spot_wss_data.get_order_side() == "BUY"
-    assert spot_wss_data.get_order_status() == "CANCELED"
+    assert spot_wss_data.get_order_status() == OrderStatus.CANCELED
     assert spot_wss_data.get_order_symbol_name() == 'OPUSDT'
     assert spot_wss_data.get_order_time_in_force() == "GTC"
     assert spot_wss_data.get_order_type() == "LIMIT"
@@ -132,7 +132,7 @@ def test_binance_wss_order():
     assert bo.get_order_size() == 0.001
     assert bo.get_order_price() == 0.0
     assert bo.get_reduce_only() is False
-    assert bo.get_order_status() == "NEW"
+    assert bo.get_order_status() == OrderStatus.ACCEPTED
     assert bo.get_trailing_stop_price() == 7103.04
     assert bo.get_trailing_stop_trigger_price() == 7476.89
     assert bo.get_trailing_stop_callback_rate() == 5.0
@@ -187,7 +187,7 @@ def test_binance_req_order():
     assert bo.get_order_size() == 10.0
     assert bo.get_order_price() == 0.0
     assert bo.get_reduce_only() is False
-    assert bo.get_order_status() == "NEW"
+    assert bo.get_order_status() == OrderStatus.ACCEPTED
     assert bo.get_trailing_stop_price() == 0.0
     assert bo.get_trailing_stop_trigger_price() == 9020
     assert bo.get_trailing_stop_callback_rate() == 0.3

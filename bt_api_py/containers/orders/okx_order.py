@@ -1,6 +1,6 @@
 import json
 import time
-from bt_api_py.containers.orders.order import OrderData
+from bt_api_py.containers.orders.order import OrderData, OrderStatus
 from bt_api_py.functions.utils import from_dict_get_float, from_dict_get_string, from_dict_get_bool
 
 
@@ -54,7 +54,8 @@ class OkxOrderData(OrderData):
         self.order_price = from_dict_get_float(self.order_data, 'px')
         self.reduce_only = from_dict_get_bool(self.order_data, 'reduceOnly')
         self.order_side = from_dict_get_string(self.order_data, 'side')
-        self.order_status = from_dict_get_string(self.order_data, 'state')
+        okx_order_status = from_dict_get_string(self.order_data, 'state')
+        self.order_status = OrderStatus.from_value(okx_order_status)
         self.order_symbol_name = from_dict_get_string(self.order_data, 'instId')
         self.order_type = from_dict_get_string(self.order_data, 'ordType')
         self.order_avg_price = from_dict_get_float(self.order_data, 'avgPx')
@@ -80,7 +81,7 @@ class OkxOrderData(OrderData):
                 "client_order_id": self.client_order_id,
                 "order_symbol_name": self.order_symbol_name,
                 "order_type": self.order_type,
-                "order_status": self.order_status,
+                "order_status": self.order_status.value,
                 "order_size": self.order_size,
                 "order_price": self.order_price,
                 "trade_id": self.trade_id,

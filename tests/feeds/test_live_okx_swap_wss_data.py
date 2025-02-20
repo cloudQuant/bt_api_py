@@ -14,6 +14,7 @@ from bt_api_py.containers.orders.okx_order import OkxOrderData
 from bt_api_py.feeds.live_okx_feed import OkxRequestDataSwap
 # from bt_api_py.containers.trades.okx_trade import OkxWssTradeData
 # from bt_api_py.containers.positions.okx_position import OkxPositionData
+from bt_api_py.containers.orders.order import OrderStatus
 
 
 def generate_kwargs(exchange=OkxExchangeDataSwap):

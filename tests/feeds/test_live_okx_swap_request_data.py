@@ -14,6 +14,7 @@ from bt_api_py.containers.accounts.okx_account import OkxAccountData
 # from bt_api_py.containers.orders.okx_order import OkxOrderData
 # from bt_api_py.containers.trades.okx_trade import OkxRequestTradeData, OkxWssTradeData
 from bt_api_py.containers.positions.okx_position import OkxPositionData
+from bt_api_py.containers.orders.order import OrderStatus
 
 
 def test_get_okx_key():

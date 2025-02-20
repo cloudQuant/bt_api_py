@@ -754,11 +754,19 @@ class OkxRequestData(Feed):
     def _get_open_orders_normalize_function(input_data, extra_data):
         status = True if input_data["code"] == '0' else False
         data = input_data['data']
-        if len(data) > 0:
+        if isinstance(data, list):
+            data_list = [OkxOrderData(i,
+                                      extra_data['symbol_name'],
+                                      extra_data['asset_type'],
+                                      True)
+                         for i in data]
+            target_data = data_list
+        elif isinstance(data, dict):
             data_list = [OkxOrderData(data,
                                       extra_data['symbol_name'],
                                       extra_data['asset_type'],
-                                      True)]
+                                      True)
+                         ]
             target_data = data_list
         else:
             target_data = []

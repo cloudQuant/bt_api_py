@@ -11,6 +11,7 @@ from bt_api_py.containers.accounts.binance_account import BinanceSwapRequestAcco
 from bt_api_py.containers.requestdatas.request_data import RequestData
 from bt_api_py.containers.tickers.binance_ticker import BinanceRequestTickerData
 from bt_api_py.containers.bars.binance_bar import BinanceRequestBarData
+from bt_api_py.containers.orders.order import OrderStatus
 
 
 def test_get_binance_key():

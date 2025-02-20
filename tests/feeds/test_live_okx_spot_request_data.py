@@ -14,6 +14,7 @@ from bt_api_py.containers.accounts.okx_account import OkxAccountData
 # from bt_api_py.containers.orders.okx_order import OkxOrderData
 # from bt_api_py.containers.trades.okx_trade import OkxRequestTradeData, OkxWssTradeData
 from bt_api_py.containers.positions.okx_position import OkxPositionData
+from bt_api_py.containers.orders.order import OrderStatus
 
 
 def generate_kwargs():
@@ -251,7 +252,9 @@ def okx_req_spot_query_order_by_client_order_id(client_order_id):
 def okx_req_spot_get_open_order():
     live_okx_spot_feed = init_req_feed()
     data = live_okx_spot_feed.get_open_orders()
-    print(data.get_data())
+    order_list = data.get_data()
+    for order in order_list:
+        print(order)
     assert isinstance(data, RequestData)
     return data
 

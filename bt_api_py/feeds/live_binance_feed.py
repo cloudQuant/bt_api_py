@@ -631,21 +631,24 @@ class BinanceRequestData(Feed):
     def _make_order(self, symbol, vol, price=None, order_type='buy-limit',
                     offset='open', post_only=False, client_order_id=None,
                     extra_data=None, **kwargs):
+        # todo 双向账户下下单
         request_symbol = self._params.get_symbol(symbol)
         request_type = "make_order"
         path = self._params.get_rest_path(request_type)
         side, order_type = order_type.split('-')
+        side = side.upper()
         time_in_force = kwargs.get('time_in_force', "GTC")
         params = {
             'symbol': request_symbol,
-            'side': side.upper(),
+            'side': side,
             'quantity': vol,
             'price': price,
             'type': order_type.upper(),
             'timeInForce': time_in_force,
         }
+        print(f"offset = {offset}")
         if self.asset_type == "SWAP":
-            params['reduceOnly'] = 'false' if offset == 'open' else 'true' if offset == 'close' else None,
+            params['reduceOnly'] = 'false' if offset == 'open' else 'true' if offset == 'close' else None
         if client_order_id is not None:
             params['newClientOrderId'] = client_order_id
         if order_type == 'market':
@@ -654,6 +657,14 @@ class BinanceRequestData(Feed):
         if "position_side" in kwargs:
             params["positionSide"] = kwargs["position_side"]
             params.pop("reduceOnly", None)
+        else:
+            params.pop("reduceOnly", None)
+            if side=="BUY":
+                params["positionSide"] = "LONG"
+            elif side=="SELL":
+                params["positionSide"] = "SHORT"
+
+
         extra_data = update_extra_data(extra_data, **{
             "request_type": request_type,
             "symbol_name": symbol,
@@ -1629,7 +1640,7 @@ if __name__ == "__main__":
 
     # buy_data = live_binance_spot_feed.make_order("MOVR-USDT", 1,
     #                                              8.7, "buy-limit",
-    #                                              # client_order_id=buy_client_order_id,
+    #                                              # client_order_id=buy_client_order_id
     #                                              )
 
     # 测试买单和卖单

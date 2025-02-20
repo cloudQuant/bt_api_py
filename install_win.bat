@@ -30,8 +30,15 @@ IF EXIST %BENCHMARKS_DIR% (
 )
 
 :: Delete all .log files
+:: Delete all .log files
 echo Deleting all .log files...
 del /s /q *.log
+echo All .log files deleted.
+
+:: Delete the "logs" folder and its contents if it exists
+echo Deleting logs folder if it exists...
+rd /s /q logs
+echo logs folder deleted if it existed.
 echo All .log files deleted.
 :: 暂停脚本，以便查看输出结果
 :: pause

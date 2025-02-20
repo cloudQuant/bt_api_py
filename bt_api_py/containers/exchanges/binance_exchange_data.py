@@ -3,22 +3,7 @@ from enum import Enum
 from bt_api_py.containers.exchanges.exchange_data import ExchangeData
 
 
-class BinanceOrderStatus(Enum):
-    NEW = 'submit'
-    PARTIALLY_FILLED = 'partial_filled'
-    FILLED = 'filled'
-    CANCELED = 'cancel'
-    REJECTED = 'rejected'
-    EXPIRED = 'expired'
 
-
-class NormalizedBinanceOrderStatus(Enum):
-    submit = "NEW"
-    partial_filled = "PARTIALLY_FILLED"
-    filled = "FILLED"
-    canceled = "CANCELED"
-    rejected = "REJECTED"
-    expired = "EXPIRED"
 
 
 class BinanceExchangeData(ExchangeData):
@@ -111,18 +96,6 @@ class BinanceExchangeData(ExchangeData):
             '1M': '1M',
         }
         self.reverse_kline_periods = {v: k for k, v in self.kline_periods.items()}
-
-        # self.order_status = {
-        #     'NEW': 'submit',
-        #     'PARTIALLY_FILLED': 'partial-filled',
-        #     'FILLED': 'filled',
-        #     'CANCELED': 'cancel',
-        #     'REJECTED': 'rejected',
-        #     'EXPIRED': 'expired',
-        # }
-
-        self.order_status = BinanceOrderStatus
-        self.normalized_order_status = NormalizedBinanceOrderStatus
 
         self.legal_currency = [
             'USDT', 'USD', 'BTC', 'ETH',

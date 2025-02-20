@@ -13,6 +13,7 @@ from bt_api_py.containers.orderbooks.okx_orderbook import OkxOrderBookData
 # from bt_api_py.containers.fundingrates.okx_funding_rate import OkxFundingRateData
 from bt_api_py.containers.accounts.okx_account import OkxAccountData
 from bt_api_py.containers.orders.okx_order import OkxOrderData
+from bt_api_py.containers.orders.order import OrderStatus
 
 
 # from bt_api_py.containers.trades.okx_trade import OkxWssTradeData

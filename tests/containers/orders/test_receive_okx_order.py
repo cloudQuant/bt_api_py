@@ -1,6 +1,6 @@
 import json
 from bt_api_py.containers.orders.okx_order import OkxOrderData
-
+from bt_api_py.containers.orders.order import OrderStatus
 
 def test_receive_okx_order():
     data = {
@@ -76,7 +76,7 @@ def test_receive_okx_order():
     assert bo.get_order_price() == 999.0
     assert bo.get_order_size() == 3.0
     assert bo.get_order_side() == "buy"
-    assert bo.get_order_status() == "live"
+    assert bo.get_order_status() == OrderStatus.ACCEPTED
     assert bo.get_order_symbol_name() == "BTC-USD-200329"
     assert bo.get_order_time_in_force() == "limit"
     assert bo.get_order_type() == "limit"

@@ -1,6 +1,6 @@
 import json
 import time
-from bt_api_py.containers.orders.order import OrderData
+from bt_api_py.containers.orders.order import OrderData, OrderStatus
 from bt_api_py.functions.utils import from_dict_get_float, from_dict_get_string, from_dict_get_bool
 
 
@@ -42,7 +42,7 @@ class BinanceForceOrderData(object):
         self.order_price = from_dict_get_float(self.order_data, "p")
         self.order_qty = from_dict_get_float(self.order_data, "q")
         self.order_avg_price = from_dict_get_float(self.order_data, "ap")
-        self.order_status = from_dict_get_string(self.order_data, "X")
+        self.order_status = OrderStatus.from_value(from_dict_get_string(self.order_data, "X"))
         self.trade_time = from_dict_get_float(self.order_data, "T")
         self.last_trade_volume = from_dict_get_float(self.order_data, "l")
         self.total_trade_volume = from_dict_get_float(self.order_data, "z")
@@ -63,7 +63,7 @@ class BinanceForceOrderData(object):
                 "order_price": self.order_price,
                 "order_qty": self.order_qty,
                 "order_avg_price": self.order_avg_price,
-                "order_status": self.order_status,
+                "order_status": self.order_status.value,
                 "trade_time": self.trade_time,
                 "last_trade_volume": self.last_trade_volume,
                 "total_trade_volume": self.total_trade_volume
@@ -189,7 +189,7 @@ class BinanceOrderData(OrderData):
                 "client_order_id": self.client_order_id,
                 "order_symbol_name": self.order_symbol_name,
                 "order_type": self.order_type,
-                "order_status": self.order_status,
+                "order_status": self.order_status.value,
                 "order_size": self.order_size,
                 "order_price": self.order_price,
                 "trade_id": self.trade_id,
@@ -364,7 +364,7 @@ class BinanceRequestOrderData(BinanceOrderData):
         self.order_price = from_dict_get_float(self.order_data, "price")
         self.reduce_only = from_dict_get_bool(self.order_data, 'reduceOnly')
         self.order_side = from_dict_get_string(self.order_data, "side")
-        self.order_status = from_dict_get_string(self.order_data, "status")
+        self.order_status = OrderStatus.from_value(from_dict_get_string(self.order_data, "status"))
         self.order_symbol_name = from_dict_get_string(self.order_data, "symbol")
         self.order_type = from_dict_get_string(self.order_data, 'type')
         self.order_time_in_force = from_dict_get_string(self.order_data, "timeInForce")
@@ -399,7 +399,7 @@ class BinanceSwapWssOrderData(BinanceOrderData):
         self.order_price = from_dict_get_float(order_dict, "p")
         self.reduce_only = from_dict_get_bool(order_dict, "R")
         self.order_side = from_dict_get_string(order_dict, "S")
-        self.order_status = from_dict_get_string(order_dict, "X")
+        self.order_status = OrderStatus.from_value(from_dict_get_string(order_dict, "X"))
         self.trailing_stop_price = from_dict_get_float(order_dict, "sp")
         self.trailing_stop_trigger_price = from_dict_get_float(order_dict, "AP")
         self.trailing_stop_callback_rate = from_dict_get_float(order_dict, "cr")
@@ -434,7 +434,7 @@ class BinanceSpotWssOrderData(BinanceOrderData):
         self.order_price = from_dict_get_float(self.order_data, "p")
         # self.reduce_only = from_dict_get_bool(self.order_data, "R")
         self.order_side = from_dict_get_string(self.order_data, "S")
-        self.order_status = from_dict_get_string(self.order_data, "X")
+        self.order_status = OrderStatus.from_value(from_dict_get_string(self.order_data, "X"))
         # self.trailing_stop_price = from_dict_get_float(self.order_data, "sp")
         # self.trailing_stop_trigger_price = from_dict_get_float(self.order_data, "AP")
         # self.trailing_stop_callback_rate = from_dict_get_float(self.order_data, "cr")

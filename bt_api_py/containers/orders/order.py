@@ -1,6 +1,57 @@
 """订单类，用于确定订单的属性和方法
 """
 import json
+from enum import Enum
+
+
+class OrderStatus(Enum):
+    SUBMITTED = 'submitted'
+    ACCEPTED = "new"
+    PARTIAL = 'partially_filled'
+    COMPLETED = 'filled'
+    CANCELED = 'canceled'
+    REJECTED = 'rejected'
+    MARGIN = "margin"
+    EXPIRED = 'expired'
+    MMP_CANCELED = 'mmp_canceled'
+    EXPIRED_IN_MATCH = "expired_in_match"
+
+
+    def __str__(self):
+        return self.value
+
+    # Custom method to return a dictionary mapping strings to enum members
+    @classmethod
+    def get_static_dict(cls):
+        return {
+            'submitted': cls.SUBMITTED,
+            'accepted': cls.ACCEPTED,
+            'margin': cls.MARGIN,
+            'NEW': cls.ACCEPTED,  # 'new' maps to ACCEPTED
+            'new': cls.ACCEPTED,
+            'live': cls.ACCEPTED,  # 'live' maps to ACCEPTED
+            'PARTIALLY_FILLED': cls.PARTIAL,
+            'partially_filled': cls.PARTIAL,
+            'FILLED': cls.COMPLETED,
+            'filled': cls.COMPLETED,
+            'CANCELED': cls.CANCELED,
+            'canceled': cls.CANCELED,
+            'REJECTED': cls.REJECTED,
+            'EXPIRED': cls.EXPIRED,
+            'EXPIRED_IN_MATCH': cls.EXPIRED_IN_MATCH,
+            'mmp_canceled': cls.MMP_CANCELED,
+        }
+
+    @classmethod
+    def from_value(cls, status_value):
+        """
+        Look up the status value from the custom dictionary and return the corresponding enum.
+        """
+        try:
+            # Correct the method call to get_static_dict
+            return cls.get_static_dict()[status_value]
+        except KeyError:
+            raise ValueError(f"Invalid order status value: {status_value}")
 
 
 class OrderData(object):
