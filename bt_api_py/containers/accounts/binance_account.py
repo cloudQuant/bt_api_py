@@ -121,6 +121,9 @@ class BinanceSpotRequestAccountData(AccountData):
         """# 总的初始化保证金"""
         return None
 
+    def get_margin(self):
+        return 0
+
     def get_total_used_margin(self):
         """# 总的使用的保证金"""
         return None
@@ -128,6 +131,9 @@ class BinanceSpotRequestAccountData(AccountData):
     def get_total_maintain_margin(self):
         """# 总的维持资金"""
         return None
+
+    def get_available_margin(self):
+        return 0
 
     def get_total_available_margin(self):
         """# 总的可用保证金"""
@@ -144,6 +150,9 @@ class BinanceSpotRequestAccountData(AccountData):
     def get_total_unrealized_profit(self):
         """# 总的未实现利润 """
         return None
+
+    def get_unrealized_profit(self):
+        return 0
 
     def get_total_wallet_balance(self):
         """# 总的钱包余额"""

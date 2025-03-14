@@ -7,7 +7,8 @@ from bt_api_py.functions.utils import read_yaml_file
 from bt_api_py.feeds.live_binance_feed import BinanceRequestDataSwap
 from bt_api_py.containers.exchanges.binance_exchange_data import BinanceExchangeDataSwap
 from bt_api_py.containers.orderbooks.binance_orderbook import BinanceRequestOrderBookData
-from bt_api_py.containers.fundingrates.binance_funding_rate import BinanceRequestFundingRateData
+from bt_api_py.containers.fundingrates.binance_funding_rate import BinanceRequestFundingRateData, \
+    BinanceRequestHistoryFundingRateData
 from bt_api_py.containers.balances.binance_balance import BinanceSwapRequestBalanceData
 from bt_api_py.containers.accounts.binance_account import BinanceSwapRequestAccountData
 from bt_api_py.containers.requestdatas.request_data import RequestData
@@ -198,6 +199,18 @@ def test_binance_req_funding_rate_data():
     assert isinstance(data, list)
     assert isinstance(data[0], BinanceRequestFundingRateData)
     assert_funding_rate_value(data[0].init_data())
+
+def test_binance_req_history_funding_rate_data():
+    live_binance_swap_feed = init_req_feed()
+    data_list = live_binance_swap_feed.get_history_funding_rate("BTC-USDT", "2024-09-30 00:00:00.000", "2024-12-31 00:00:00.000", 1000).get_data()
+    # print(data_list)
+    assert isinstance(data_list, list)
+    print(type(data_list[0]))
+    assert isinstance(data_list[0], BinanceRequestHistoryFundingRateData)
+    funding_rate_data = data_list[0].init_data()
+    assert funding_rate_data.get_current_funding_rate() is not None
+    assert funding_rate_data.get_symbol_name() == "BTC-USDT"
+    assert funding_rate_data.get_current_funding_time() > 0
 
 
 def test_binance_async_funding_rate_data():
@@ -578,8 +591,9 @@ if __name__ == "__main__":
     # test_binance_async_kline_data()
     # test_binance_req_depth_data()
     # test_binance_async_depth_data()
-    test_binance_req_funding_rate_data()
-    test_binance_async_funding_rate_data()
+    # test_binance_req_funding_rate_data()
+    # test_binance_async_funding_rate_data()
+    test_binance_req_history_funding_rate_data()
     # test_binance_req_mark_price_data()
     # test_binance_async_mark_price_data()
     # test_binance_req_get_balance()

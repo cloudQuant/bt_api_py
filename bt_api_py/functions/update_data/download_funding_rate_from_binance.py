@@ -3,6 +3,7 @@ import time
 import queue
 import requests
 import pandas as pd
+import random
 from bt_api_py.feeds.live_binance_feed import BinanceRequestDataSwap
 from bt_api_py.containers.exchanges.binance_exchange_data import BinanceExchangeDataSwap
 from bt_api_py.functions.utils import read_yaml_file
@@ -20,7 +21,9 @@ def download_funding_rate_from_binance():
     live_binance_swap_feed = BinanceRequestDataSwap(data_queue_, **kwargs_)
     res = requests.get("https://fapi.binance.com/fapi/v1/exchangeInfo")
     result = res.json()
-    symbol_list = [item['symbol'] for item in result['symbols']]
+    # print(result)
+    symbol_list = [item['symbol'] for item in result['symbols'] if item['contractType'] == 'PERPETUAL']
+    random.shuffle(symbol_list)
     time_list = ["2019-12-31 00:00:00.000", "2020-03-31 00:00:00.000",
                  "2020-06-30 00:00:00.000", "2020-09-30 00:00:00.000",
                  "2020-12-31 00:00:00.000", "2021-03-31 00:00:00.000",
@@ -31,8 +34,11 @@ def download_funding_rate_from_binance():
                  "2023-06-30 00:00:00.000", "2023-09-30 00:00:00.000",
                  "2023-12-31 00:00:00.000", "2024-03-31 00:00:00.000",
                  "2024-06-30 00:00:00.000", "2024-09-30 00:00:00.000",
-                 "2024-12-31 00:00:00.000"]
-    file_list = os.listdir("/Users/yunjinqi/Documents/data/binance_funding_rate_data/")
+                 "2024-12-31 00:00:00.000", "2025-03-31 00:00:00.000"]
+    # 如果不存在这个文件夹，创建一个
+    if not os.path.exists("./binance_funding_rate_data/"):
+        os.mkdir("binance_funding_rate_data/")
+    file_list = os.listdir("./binance_funding_rate_data/")
     # symbol_list = ["GASUSDT", "TOKENUSDT"]
     for symbol in symbol_list:
         file_name = f"funding_rate_{symbol}.csv"
@@ -44,18 +50,18 @@ def download_funding_rate_from_binance():
         for i in range(len(time_list) - 1):
             funding_rate_data = live_binance_swap_feed.get_history_funding_rate(
                 symbol, start_time=time_list[i], end_time=time_list[i+1], limit=1000)
+            print(type(funding_rate_data))
             funding_rate_list = funding_rate_data.get_data()
             # print(funding_rate_list)
             result = []
             for item in funding_rate_list:
                 item.init_data()
-                # print("item", item)
-                result.append([item.get_symbol_name(), item.get_current_funding_rate(), item.get_server_time()])
+                print("item", item)
+                result.append([item.get_symbol_name(), item.get_current_funding_rate(), item.get_current_funding_time()])
             time.sleep(1)
             df = pd.DataFrame(result, columns=['symbol', 'current_funding_rate', 'funding_rate_time'])
             if len(df) > 0:
                 funding_rate_data_list.append(df)
-                # print(df.head())
             else:
                 print(f"{symbol} cannot get data in {time_list[i]} to {time_list[i+1]}")
         if len(funding_rate_data_list) == 0:
@@ -65,9 +71,15 @@ def download_funding_rate_from_binance():
             print(f"{symbol} cannot get data")
             time.sleep(30)
             continue
-        data.to_csv(f"/Users/yunjinqi/Documents/data/binance_funding_rate_data/funding_rate_{symbol}.csv", index=False)
+        data.to_csv(f"binance_funding_rate_data/funding_rate_{symbol}.csv", index=False)
         print(f"{symbol} done")
 
 
 if __name__ == '__main__':
-    download_funding_rate_from_binance()
+    while True:
+        try:
+            download_funding_rate_from_binance()
+            break
+        except Exception as e:
+            print(e)
+            time.sleep(6)

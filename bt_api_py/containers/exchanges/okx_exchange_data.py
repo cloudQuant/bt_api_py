@@ -25,6 +25,7 @@ class OkxExchangeData(ExchangeData):
         self.rest_paths = {
             'get_account': 'GET /api/v5/account/balance',
             'get_balance': 'GET /api/futures/v3/accounts/<underlying>',
+            'get_instruments': 'GET /api/v5/account/instruments',
             # 'getBalance_assert': 'GET /api/v5/users/subaccount/list',
             'get_balance_assert': 'GET /api/v5/asset/balances',
             'get_position': 'GET /api/v5/account/positions',

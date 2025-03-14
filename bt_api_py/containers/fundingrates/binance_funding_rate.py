@@ -122,6 +122,7 @@ class BinanceRequestHistoryFundingRateData(FundingRateData):
         self.local_update_time = time.time()
         self.funding_rate_data = funding_rate_info if has_been_json_encoded else None
         self.server_time = None
+        self.current_funding_time = None
         self.current_funding_rate = None
         self.mark_price = None
         self.funding_rate_symbol_name = None
@@ -135,7 +136,7 @@ class BinanceRequestHistoryFundingRateData(FundingRateData):
         if self.has_been_init_data:
             return self
         # {'symbol': 'BTCUSDT', 'fundingTime': 1731744000001, 'fundingRate': '0.00010000', 'markPrice': '91172.07627273'}
-        self.server_time = from_dict_get_float(self.funding_rate_data, "fundingTime")
+        self.current_funding_time = from_dict_get_float(self.funding_rate_data, "fundingTime")
         self.current_funding_rate = from_dict_get_float(self.funding_rate_data, 'fundingRate')
         self.mark_price = from_dict_get_float(self.funding_rate_data, 'markPrice')
         self.has_been_init_data = True
@@ -149,7 +150,7 @@ class BinanceRequestHistoryFundingRateData(FundingRateData):
                 "asset_type": self.asset_type,
                 "local_update_time": self.local_update_time,
                 "current_funding_rate": self.current_funding_rate,
-                "server_time": self.server_time,
+                "current_funding_time": self.current_funding_time,
                 "mark_price": self.mark_price,
             }
         return self.all_data
@@ -201,7 +202,7 @@ class BinanceRequestHistoryFundingRateData(FundingRateData):
         return self.current_funding_rate
 
     def get_current_funding_time(self):
-        return None
+        return self.current_funding_time
 
     def get_settlement_funding_rate(self):
         return None

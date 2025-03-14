@@ -7,6 +7,9 @@ __pycache__/
 */.virtual_documents/*
 */configs/account_config.yaml
 *.log
+**/binance_swap_history_bar_data/
+**/binance_spot_history_bar_data/
+**/binance_funding_rate_data/
 # C extensions
 *.so
 

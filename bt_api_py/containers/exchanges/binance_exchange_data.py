@@ -29,6 +29,7 @@ class BinanceExchangeData(ExchangeData):
             'get_funding_rate': 'GET /fapi/v1/premiumIndex',
             'get_clear_price': 'GET /fapi/v1/premiumIndex',
             'get_mark_price': 'GET /fapi/v1/premiumIndex',
+            'get_history_funding_rate': 'GET /fapi/v1/fundingRate',
             'make_order': 'POST /fapi/v1/order',
             'make_orders': 'POST /fapi/v1/batchOrders',
             'cancel_order': 'DELETE /fapi/v1/order',

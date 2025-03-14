@@ -1,12 +1,9 @@
 import spdlog
+import os
 
 
 class SpdLogManager(object):
-    """创建一个spdlog的日志输出功能，每天一个日志文件，使用需要先pip install spdlog
-    :param: file_name:输出日志的文件
-    :logger_name:输出日志的名称
-    :rotation_hour和rotation_minute：用于控制在每天什么时间换新的日志文件
-    """
+    _logger_cache = {}
 
     def __init__(self, file_name="log_strategy_info.log", logger_name="hello", rotation_hour=0, rotation_minute=0,
                  print_info=False):
@@ -17,20 +14,27 @@ class SpdLogManager(object):
         self.print_info = print_info
 
     def create_logger(self):
+        # 创建缓存键
+        key = (self.file_name, self.logger_name, self.rotation_hour, self.rotation_minute, self.print_info)
+        # 如果已存在，直接返回缓存的logger
+        if key in SpdLogManager._logger_cache:
+            return SpdLogManager._logger_cache[key]
+
+        # 确保日志目录存在
+        log_dir = os.path.dirname(self.file_name)
+        if log_dir:
+            os.makedirs(log_dir, exist_ok=True)
+
+        # 创建sinks
         if self.print_info:
             sinks = [
                 spdlog.stdout_sink_st(),
-                # spdlog.stdout_sink_mt(),
-                # spdlog.stderr_sink_st(),
-                # spdlog.stderr_sink_mt(),
-                # spdlog.daily_file_sink_st("DailySinkSt.log", 0, 0),
-                # spdlog.daily_file_sink_mt("DailySinkMt.log", 0, 0),
-                # spdlog.rotating_file_sink_st("RotSt.log", 1024, 1024),
-                # spdlog.rotating_file_sink_mt(self.file_name, 1024, 1024),
                 spdlog.daily_file_sink_st(self.file_name, self.rotation_hour, self.rotation_minute)
             ]
         else:
             sinks = [spdlog.daily_file_sink_st(self.file_name, self.rotation_hour, self.rotation_minute)]
+
+        # 创建logger并缓存
         logger = spdlog.SinkLogger(self.logger_name, sinks)
-        # logger = spdlog.create(self.logger_name, sinks)
+        SpdLogManager._logger_cache[key] = logger
         return logger

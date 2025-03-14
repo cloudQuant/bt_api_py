@@ -449,6 +449,45 @@ class OkxRequestData(Feed):
         data = self.request(path, params=params, extra_data=extra_data)
         return data
 
+    def _get_instruments(self, asset_type=None, underlying=None, inst_family=None, inst_id=None, extra_data=None, **kwargs):
+        request_type = "get_instruments"
+        params = {}
+        if asset_type:
+            params['instType']=asset_type
+        if underlying:
+            params['uly'] = underlying
+        if inst_family:
+            params['instFamily'] = inst_family
+        if inst_id:
+            params['instId'] = inst_id
+        path = self._params.get_rest_path(request_type)
+        extra_data = update_extra_data(extra_data, **{
+            "request_type": request_type,
+            "symbol_name": "ALL",
+            "asset_type": self.asset_type,
+            "exchange_name": self.exchange_name,
+            "normalize_function": OkxRequestData._get_instruments_normalize_function,
+        })
+        if kwargs is not None:
+            extra_data.update(kwargs)
+        return path, params, extra_data
+
+    @staticmethod
+    def _get_instruments_normalize_function(self, input_data, extra_data):
+        status = True if input_data["code"] == '0' else False
+        data = input_data['data']
+        if len(data) > 0:
+            data_list = data
+            target_data = data_list
+        else:
+            target_data = []
+        return target_data, status
+
+    def get_instruments(self, asset_type=None, underlying=None, inst_family=None, inst_id=None, extra_data=None, **kwargs):
+        path, params, extra_data = self._get_instruments(asset_type, underlying, inst_family, inst_id, extra_data, **kwargs)
+        data = self.request(path, params=params, extra_data=extra_data)
+        return data
+
     def _get_mark_price(self, symbol, extra_data=None, **kwargs):
         """
         get mark_price from okx
@@ -1236,12 +1275,12 @@ class OkxWssData(MyWebsocketApp):
         # print("获取account数据成功，当前账户净值为：", account_data.get_total_margin())
 
     def push_order(self, content):
-        # print("订阅到order数据")
+        print("订阅到order数据")
         order_info = content['data'][0]
         symbol = content['arg']['instId']
         order_data = OkxOrderData(order_info, symbol, self.asset_type, True)
         self.data_queue.put(order_data)
-        # print("获取order成功，当前order_status 为：", order_data.get_order_status())
+        print("获取order成功，当前order_status 为：", order_data.get_order_status())
 
     def push_trade(self, content):
         trade_info = content['data'][0]
