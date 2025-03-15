@@ -73,8 +73,6 @@ class OkxSymbolData(SymbolData):
         self.contract_notional_value = from_dict_get_float(self.symbol_data, "ctVal")
         self.min_amount = from_dict_get_float(self.symbol_data, "notional")
         self.price_unit = from_dict_get_float(self.symbol_data, "tickSz")
-        print("self.symbol_data = ", self.symbol_data)
-        print("self.price_unit = ", self.price_unit)
         self.price_digital = 1/self.price_unit
         self.qty_unit = from_dict_get_float(self.symbol_data, 'lotSz')
         self.qty_digital = 1/self.qty_unit

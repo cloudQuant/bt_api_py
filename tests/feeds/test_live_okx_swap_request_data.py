@@ -49,6 +49,19 @@ def init_async_feed(data_queue):
     return live_okx_swap_feed
 
 
+def test_okx_req_symbol_data():
+    live_okx_swap_feed = init_req_feed()
+    data = live_okx_swap_feed.get_instruments(asset_type="SWAP")
+    assert isinstance(data, RequestData)
+    symbol_data_list = data.get_data()
+    assert isinstance(symbol_data_list, list)
+    assert len(symbol_data_list) > 0
+    symbol_data = symbol_data_list[0]
+    symbol_data.init_data()
+    assert isinstance(symbol_data.get_symbol_name(), str)
+
+
+
 def test_okx_req_tick_data():
     live_okx_swap_feed = init_req_feed()
     data_list = live_okx_swap_feed.get_tick("BTC-USDT").get_data()
@@ -500,6 +513,7 @@ def cancel_all_orders():
 
 if __name__ == "__main__":
     test_get_okx_key()
+    test_okx_req_symbol_data()
     # test_okx_req_tick_data()
     # test_okx_req_get_config()
     # test_okx_async_tick_data()

@@ -26,6 +26,7 @@ from bt_api_py.containers.accounts.okx_account import OkxAccountData
 from bt_api_py.containers.orders.okx_order import OkxOrderData
 from bt_api_py.containers.trades.okx_trade import OkxRequestTradeData, OkxWssTradeData
 from bt_api_py.containers.positions.okx_position import OkxPositionData
+from bt_api_py.containers.symbols.okx_symbol import OkxSymbolData
 
 # session = requests.Session()
 # session.keep_alive = False
@@ -473,12 +474,13 @@ class OkxRequestData(Feed):
         return path, params, extra_data
 
     @staticmethod
-    def _get_instruments_normalize_function(self, input_data, extra_data):
+    def _get_instruments_normalize_function(input_data, extra_data):
         status = True if input_data["code"] == '0' else False
         data = input_data['data']
-        if len(data) > 0:
-            data_list = data
-            target_data = data_list
+        if isinstance(data, list):
+            target_data = [OkxSymbolData(i,True) for i in data]
+        elif isinstance(data, dict):
+            target_data = [OkxSymbolData(data,True)]
         else:
             target_data = []
         return target_data, status
