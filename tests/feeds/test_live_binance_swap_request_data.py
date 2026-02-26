@@ -1,6 +1,9 @@
 import queue
 import time
 import random
+import pytest
+
+pytestmark = pytest.mark.xdist_group("binance_api")
 
 from bt_api_py.containers import TradeData
 from bt_api_py.functions.utils import read_account_config

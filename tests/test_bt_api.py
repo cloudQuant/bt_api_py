@@ -1,6 +1,10 @@
 import time
 import queue
 import traceback
+import pytest
+
+pytestmark = pytest.mark.xdist_group("mixed_exchange_api")
+
 from bt_api_py.bt_api import BtApi
 from bt_api_py.containers.requestdatas.request_data import RequestData
 from bt_api_py.containers.tickers.binance_ticker import BinanceRequestTickerData

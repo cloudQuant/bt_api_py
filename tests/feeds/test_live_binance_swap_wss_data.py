@@ -1,8 +1,11 @@
 import queue
 import time
 import random
+import pytest
 from bt_api_py.functions.utils import read_account_config
 from bt_api_py.feeds.live_binance_feed import BinanceMarketWssDataSwap, BinanceAccountWssDataSwap
+
+pytestmark = pytest.mark.xdist_group("binance_api")
 from bt_api_py.containers.exchanges.binance_exchange_data import BinanceExchangeDataSwap
 from bt_api_py.containers.bars.binance_bar import BinanceWssBarData
 from bt_api_py.containers.markprices.binance_mark_price import BinanceWssMarkPriceData

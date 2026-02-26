@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+import json
+import time
 from bt_api_py.feeds.live_binance.request_base import BinanceRequestData
 from bt_api_py.feeds.live_binance.market_wss_base import BinanceMarketWssData
 from bt_api_py.feeds.live_binance.account_wss_base import BinanceAccountWssData
@@ -90,8 +92,89 @@ class BinanceMarketWssDataSpot(BinanceMarketWssData):
 
 class BinanceAccountWssDataSpot(BinanceAccountWssData):
     def __init__(self, data_queue, **kwargs):
+        kwargs.setdefault("exchange_data", BinanceExchangeDataSpot())
         super(BinanceAccountWssDataSpot, self).__init__(data_queue, **kwargs)
         self._params = BinanceExchangeDataSpot()
+
+    def get_listen_key(self, max_retries=3):
+        """Obtain listenKey via WebSocket API userDataStream.start.
+
+        The old REST endpoint POST /api/v3/userDataStream is deprecated (410 Gone).
+        The new approach connects to the WS API, sends userDataStream.start with
+        the apiKey, and retrieves the listenKey from the response.
+        """
+        import ssl
+        import threading
+        import websocket as _ws
+
+        result_holder = [None]
+        error_holder = [None]
+        done = threading.Event()
+
+        def _on_open(ws):
+            ws.send(json.dumps({
+                "id": "start-listen-key",
+                "method": "userDataStream.start",
+                "params": {"apiKey": self.public_key}
+            }))
+
+        def _on_message(ws, message):
+            rsp = json.loads(message)
+            if rsp.get("status") == 200 and "listenKey" in rsp.get("result", {}):
+                result_holder[0] = rsp["result"]
+            else:
+                error_holder[0] = rsp.get("error", rsp)
+            done.set()
+            ws.close()
+
+        def _on_error(ws, error):
+            error_holder[0] = str(error)
+            done.set()
+
+        last_err = None
+        for attempt in range(max_retries):
+            result_holder[0] = None
+            error_holder[0] = None
+            done.clear()
+            try:
+                tmp_ws = _ws.WebSocketApp(
+                    self._params.acct_wss_url,
+                    on_open=_on_open,
+                    on_message=_on_message,
+                    on_error=_on_error,
+                )
+                t = threading.Thread(
+                    target=lambda: tmp_ws.run_forever(sslopt={"cert_reqs": ssl.CERT_NONE}),
+                    daemon=True,
+                )
+                t.start()
+                done.wait(timeout=10)
+                if result_holder[0] is not None:
+                    return result_holder[0]
+                last_err = error_holder[0]
+                self.logger.warn(f"get_listen_key attempt {attempt + 1}/{max_retries} "
+                                 f"unexpected response: {last_err}")
+            except Exception as e:
+                last_err = e
+                self.logger.warn(f"get_listen_key attempt {attempt + 1}/{max_retries} error: {e}")
+            if attempt < max_retries - 1:
+                time.sleep(2)
+        raise RuntimeError(f"Failed to get listen key after {max_retries} attempts: {last_err}")
+
+    def wss_author(self):
+        result = self.get_listen_key()
+        self.listen_key = result["listenKey"]
+        self.wss_url = f"{self._params.wss_url}"
+
+    def open_rsp(self):
+        self.wss_logger.info(
+            f"===== {time.strftime('%Y-%m-%d %H:%M:%S')} {self._params.exchange_name} Websocket Connected =====")
+        subscribe_msg = json.dumps({
+            "method": "SUBSCRIBE",
+            "params": [self.listen_key],
+            "id": 1
+        })
+        self.ws.send(subscribe_msg)
 
     def handle_data(self, content):
         event = content.get("e", None)

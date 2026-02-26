@@ -1,8 +1,11 @@
 import queue
 import time
 import random
+import pytest
 from bt_api_py.functions.utils import read_account_config
 from bt_api_py.containers.exchanges.okx_exchange_data import OkxExchangeDataSwap
+
+pytestmark = pytest.mark.xdist_group("okx_api")
 from bt_api_py.feeds.live_okx_feed import OkxRequestDataSpot, OkxMarketWssDataSpot, OkxKlineWssDataSpot, \
     OkxAccountWssDataSpot
 from bt_api_py.containers.exchanges.okx_exchange_data import OkxExchangeDataSpot

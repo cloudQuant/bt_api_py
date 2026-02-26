@@ -259,7 +259,7 @@ class BinanceExchangeDataSpot(BinanceExchangeData):
         super(BinanceExchangeDataSpot, self).__init__()
         self.exchange_name = 'binanceSpot'
         self.rest_url = 'https://api.binance.com'
-        self.acct_wss_url = 'wss://stream.binance.com/ws'
+        self.acct_wss_url = 'wss://ws-api.binance.com:443/ws-api/v3'
         self.wss_url = 'wss://stream.binance.com/ws'
 
         self.rest_paths = {
@@ -314,8 +314,8 @@ class BinanceExchangeDataSpot(BinanceExchangeData):
             # --- Filters ---
             'get_my_filters': 'GET /api/v3/myFilters',
             # --- Listen Key ---
-            'get_listen_key': 'POST /sapi/v1/userDataStream',
-            'refresh_listen_key': 'PUT /sapi/v1/userDataStream',
+            'get_listen_key': 'POST /sapi/v1/userListenToken',
+            'refresh_listen_key': 'POST /sapi/v1/userListenToken',
             # --- Sub-account ---
             'query_referral': 'GET /sapi/v1/apiReferral/ifNewUser',
             'universal_transfer': 'POST /sapi/v1/sub-account/universalTransfer',

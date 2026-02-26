@@ -1,6 +1,10 @@
 import queue
 import time
 import random
+import pytest
+
+pytestmark = pytest.mark.xdist_group("okx_api")
+
 from bt_api_py.functions.utils import read_account_config, get_public_ip
 from bt_api_py.feeds.live_okx_feed import OkxRequestDataSpot
 from bt_api_py.containers.exchanges.okx_exchange_data import OkxExchangeDataSpot

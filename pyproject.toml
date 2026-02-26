@@ -33,6 +33,9 @@ classifiers = [
 Homepage = "https://github.com/cloudQuant/bt_api_py"
 Repository = "https://github.com/cloudQuant/bt_api_py"
 
+[tool.pytest.ini_options]
+addopts = "--dist loadgroup"
+
 [project.optional-dependencies]
 dev = [
     "pytest>=7.0",
