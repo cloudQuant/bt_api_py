@@ -56,7 +56,7 @@ def _binance_spot_subscribe_handler(data_queue, exchange_params, topics, bt_api)
     exchange_data = BinanceExchangeDataSpot()
     kwargs = {key: v for key, v in exchange_params.items()}
     kwargs['wss_name'] = 'binance_market_data'
-    kwargs["wss_url"] = 'wss://fstream.binance.com/ws'
+    kwargs["wss_url"] = 'wss://stream.binance.com:9443/ws'
     kwargs["exchange_data"] = exchange_data
     kwargs['topics'] = topics
     BinanceMarketWssDataSpot(data_queue, **kwargs).start()

@@ -47,6 +47,8 @@ class OrderStatus(Enum):
         """
         Look up the status value from the custom dictionary and return the corresponding enum.
         """
+        if status_value is None:
+            return cls.REJECTED
         try:
             # Correct the method call to get_static_dict
             return cls.get_static_dict()[status_value]

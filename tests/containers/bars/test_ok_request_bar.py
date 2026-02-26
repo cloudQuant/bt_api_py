@@ -47,11 +47,8 @@ def test_get_history_bar():
 
 def test_ok_bar_functions():
     # {"code":"0","msg":"","data":[["1696089660000","26990.4","27004.5","26990.3","27004.5","4794","47.94","1294336.087","1"]]}
-    url = ("https://www.okx.com/api/v5/market/history-candles?instId=BTC-USDT-SWAP&bar=1m&after=1696089720000&before"
-           "=1696089600000")
-    # url = "https://www.okx.com/api/v5/market/history-candles?instId=BTC-USDT-SWAP"
-    r = requests.get(url)
-    okx_bar_data = OkxBarData(json.loads(r.text)['data'][0], "BTC-USDT", "SWAP", True)
+    sample_bar = ["1696089660000","26990.4","27004.5","26990.3","27004.5","4794","47.94","1294336.087","1"]
+    okx_bar_data = OkxBarData(sample_bar, "BTC-USDT", "SWAP", True)
     okx_bar_data.init_data()
     assert okx_bar_data.get_bar_status() == 1
     assert okx_bar_data.get_quote_asset_volume() == 1294336.087

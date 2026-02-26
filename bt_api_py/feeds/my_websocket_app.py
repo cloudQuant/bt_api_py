@@ -130,23 +130,19 @@ class MyWebsocketApp(object):
                 # time.sleep(1)
             time.sleep(1)
 
-    def start(self):
-        # print("Starting WebSocket Server")
+    def start(self, connect_timeout=30):
         self.process = threading.Thread(target=self.run, daemon=True)
         self.process.start()
-        _timeout = 0
-        # print("WebSocket Server running")
-        while not self._running_flag:  # 阻塞
+        _elapsed = 0
+        while not self._running_flag:
             self.wss_logger.info(f"===== {time.strftime('%Y-%m-%d %H:%M:%S')} "
                                  f"Wait {self._params.exchange_name} Websocket Connecting... =====")
-            # _timeout += 1
             time.sleep(0.5)
-            # if _timeout >= 10:
-            #     print(f"===== {time.strftime('%Y-%m-%d %H:%M:%S')}
-            #     {self._params.exchange_name} Websocket Connected Timeout!! =====")
-            #     # break # 不重连了
-            #     timeout = 0 # 重置
-            continue
+            _elapsed += 0.5
+            if _elapsed >= connect_timeout:
+                self.wss_logger.warn(f"===== {time.strftime('%Y-%m-%d %H:%M:%S')} "
+                                     f"{self._params.exchange_name} Websocket Connect Timeout ({connect_timeout}s)! =====")
+                break
         # 重启定时器
         if self.restart_gap:
             restart_timer = threading.Thread(target=self.restart_timer)

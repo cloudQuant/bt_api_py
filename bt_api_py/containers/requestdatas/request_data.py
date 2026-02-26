@@ -93,6 +93,9 @@ class RequestData(object):
         get status of request
         :return: bool, True or False
         """
+        if not self.has_been_init_data:
+            self.init_data()
+            self.has_been_init_data = True
         return self.status
 
     def get_exchange_name(self):

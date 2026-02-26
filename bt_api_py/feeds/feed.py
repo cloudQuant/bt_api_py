@@ -4,6 +4,7 @@ import requests
 import json
 from bt_api_py.functions.log_message import SpdLogManager
 from bt_api_py.functions.async_base import AsyncBase
+from bt_api_py.exceptions import RequestTimeoutError, RequestError
 
 
 class Feed(AsyncBase):
@@ -13,9 +14,10 @@ class Feed(AsyncBase):
         :param data_queue: queue.Queue()
         :param kwargs: pass key-worded, variable-length arguments.
         """
-        super().__init__()
+        super().__init__(**kwargs)
         self.data_queue = data_queue
         self.exchange_name = kwargs.get('exchange_name', '')
+        self.proxies = kwargs.get('proxies', None)
         self.logger = SpdLogManager("./logs/feed_data.log", "base_feed", 0, 0, False).create_logger()
 
     def handle_timeout_exception(self, url, method, body, timeout, e):
@@ -74,7 +76,7 @@ class Feed(AsyncBase):
         :param args: pass a variable number of arguments
         :return: None
         """
-        raise Exception(f"api not access {args} ")
+        raise RequestError(self.exchange_name, detail=f"api not access {args}")
 
     def raise_timeout(self, timeout, *args):
         """
@@ -83,7 +85,7 @@ class Feed(AsyncBase):
         :param args: pass a variable number of arguments
         :return: None
         """
-        raise Exception(f"{args} rest timeout {timeout}s")
+        raise RequestTimeoutError(self.exchange_name, timeout=timeout)
 
     def raise400(self, *args):
         """
@@ -91,7 +93,7 @@ class Feed(AsyncBase):
         :param args: pass a variable number of arguments
         :return: None
         """
-        raise Exception(f"{args} rest request response <400>")
+        raise RequestError(self.exchange_name, detail="rest request response <400>")
 
     def raise_proxy_error(self, *args):
         """
@@ -99,9 +101,9 @@ class Feed(AsyncBase):
         :param args: pass a variable number of arguments
         :return: None
         """
-        raise Exception(f"{args} proxy_error")
+        raise RequestError(self.exchange_name, detail="proxy_error")
 
-    def http_request(self, method, url, headers=None, body=None, timeout=1):
+    def http_request(self, method, url, headers=None, body=None, timeout=10, max_retries=3):
         """
         request http function
         :param method: str, request method, get, post, put, delete
@@ -109,6 +111,7 @@ class Feed(AsyncBase):
         :param headers: dict, request headers
         :param body: dict, body
         :param timeout: int, request timeout
+        :param max_retries: int, max retry count for transient errors
         :return: json, http response
         """
         if headers is None:
@@ -116,29 +119,54 @@ class Feed(AsyncBase):
         if body is None:
             body = {}
         # print(f"url: {url}, method: {method}, headers: {headers}, body: {body}")
-        try:
-            if not body:
-                res = requests.request(method, url, headers=headers, timeout=timeout)
-            else:
-                res = requests.request(method, url, headers=headers, json=body, timeout=timeout)
-            # print(f"response: {res.text}")
-            # print(res)
+        last_exception = None
+        for attempt in range(max_retries):
             try:
-                res.raise_for_status()  # raise error if HTTP code not equals 200
-            except Exception as e:
-                print(f"response: {res.text}")
-                print(res)
-                print(e)
-            return res.json()
+                req_kwargs = {"headers": headers, "timeout": timeout}
+                if self.proxies:
+                    req_kwargs["proxies"] = self.proxies
+                if body:
+                    req_kwargs["json"] = body
+                res = requests.request(method, url, **req_kwargs)
+                # print(f"response: {res.text}")
+                # print(res)
+                try:
+                    res.raise_for_status()  # raise error if HTTP code not equals 200
+                except Exception as e:
+                    self.logger.warn(f"response: {res.text}, status: {res.status_code}, error: {e}")
+                    if res.status_code in (410, 404):
+                        raise RequestError(self.exchange_name,
+                                           detail=f"endpoint gone/not found ({res.status_code}): {url}")
+                return res.json()
 
-        except requests.exceptions.Timeout as e:
-            self.handle_timeout_exception(url, method, body, timeout, e)
+            except requests.exceptions.Timeout as e:
+                last_exception = e
+                if attempt < max_retries - 1:
+                    import time as _time
+                    _time.sleep(1)
+                    continue
+                self.handle_timeout_exception(url, method, body, timeout, e)
 
-        except requests.exceptions.RequestException as e:
-            self.handle_request_exception(url, method, body, e)
+            except (requests.exceptions.ConnectionError, requests.exceptions.SSLError) as e:
+                last_exception = e
+                if attempt < max_retries - 1:
+                    self.logger.warn(f"Retry {attempt + 1}/{max_retries} for {url}: {e}")
+                    import time as _time
+                    _time.sleep(1)
+                    continue
+                self.handle_request_exception(url, method, body, e)
 
-        except json.JSONDecodeError as e:
-            self.handle_json_decode_error(url, headers, body, e)
+            except (json.JSONDecodeError, requests.exceptions.JSONDecodeError) as e:
+                last_exception = e
+                if attempt < max_retries - 1:
+                    self.logger.warn(f"Retry {attempt + 1}/{max_retries} JSON decode for {url}: {e}")
+                    import time as _time
+                    _time.sleep(1)
+                    continue
+                self.handle_json_decode_error(url, headers, body, e)
+
+            except requests.exceptions.RequestException as e:
+                self.handle_request_exception(url, method, body, e)
 
     def cancel_all(self, symbol, extra_data=None, **kwargs):
         """

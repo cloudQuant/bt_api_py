@@ -19,4 +19,5 @@ pytest-cov
 pytest-picked
 pytest-xdist
 python-rapidjson
+python-dotenv
 backports.tarfile

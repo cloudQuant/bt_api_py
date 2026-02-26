@@ -12,10 +12,12 @@ Auto-init mixin for Container classes
 class AutoInitMixin:
     """自动初始化 mixin，确保 init_data() 在数据访问前被调用"""
 
-    _initialized = False
+    def __init_subclass__(cls, **kwargs):
+        super().__init_subclass__(**kwargs)
 
     def _ensure_init(self):
         """如果尚未初始化，自动调用 init_data()"""
-        if not self._initialized:
+        if not getattr(self, '_initialized', False):
             self.init_data()
+            self._initialized = True
         return self

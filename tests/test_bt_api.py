@@ -4,57 +4,69 @@ import traceback
 from bt_api_py.bt_api import BtApi
 from bt_api_py.containers.requestdatas.request_data import RequestData
 from bt_api_py.containers.tickers.binance_ticker import BinanceRequestTickerData
-from bt_api_py.functions.utils import read_yaml_file
+from bt_api_py.functions.utils import read_account_config
 
 def generate_binance_swap_kwargs():
-    data = read_yaml_file("account_config.yaml")
+    data = read_account_config()
     kwargs = {
         "public_key": data['binance']['public_key'],
-        "private_key": data['binance']['private_key']
+        "private_key": data['binance']['private_key'],
+        "proxies": data.get('proxies'),
+        "async_proxy": data.get('async_proxy'),
     }
 
     return {"BINANCE___SWAP": kwargs}
 
 
 def generate_binance_spot_kwargs():
-    data = read_yaml_file("account_config.yaml")
+    data = read_account_config()
     kwargs = {
         "public_key": data['binance']['public_key'],
-        "private_key": data['binance']['private_key']
+        "private_key": data['binance']['private_key'],
+        "proxies": data.get('proxies'),
+        "async_proxy": data.get('async_proxy'),
     }
 
     return {"BINANCE___SPOT": kwargs}
 
 
 def generate_okx_spot_kwargs():
-    data = read_yaml_file("account_config.yaml")
+    data = read_account_config()
     kwargs = {
         "public_key": data['okx']['public_key'],
         "private_key": data['okx']['private_key'],
-        "passphrase": data['okx']["passphrase"]
+        "passphrase": data['okx']["passphrase"],
+        "proxies": data.get('proxies'),
+        "async_proxy": data.get('async_proxy'),
     }
     return {"OKX___SPOT": kwargs}
 
 def generate_okx_swap_kwargs():
-    data = read_yaml_file("account_config.yaml")
+    data = read_account_config()
     kwargs = {
         "public_key": data['okx']['public_key'],
         "private_key": data['okx']['private_key'],
-        "passphrase": data['okx']["passphrase"]
+        "passphrase": data['okx']["passphrase"],
+        "proxies": data.get('proxies'),
+        "async_proxy": data.get('async_proxy'),
     }
     return {"OKX___SWAP": kwargs}
 
 
 def generate_bt_api_kwargs():
-    data = read_yaml_file("account_config.yaml")
+    data = read_account_config()
     binance_kwargs = {
         "public_key": data['binance']['public_key'],
-        "private_key": data['binance']['private_key']
+        "private_key": data['binance']['private_key'],
+        "proxies": data.get('proxies'),
+        "async_proxy": data.get('async_proxy'),
     }
     okx_kwargs = {
         "public_key": data['okx']['public_key'],
         "private_key": data['okx']['private_key'],
-        "passphrase": data['okx']["passphrase"]
+        "passphrase": data['okx']["passphrase"],
+        "proxies": data.get('proxies'),
+        "async_proxy": data.get('async_proxy'),
     }
     return {"BINANCE___SWAP": binance_kwargs, "OKX___SWAP": okx_kwargs,
             "BINANCE___SPOT": binance_kwargs, "OKX___SPOT": okx_kwargs}
@@ -127,12 +139,12 @@ def test_async_binance_swap_api():
         data_queue = bt_api.get_data_queue(exchange_name)
         api = bt_api.get_request_api(exchange_name)
         api.async_get_tick("BTC-USDT", extra_data={"test_async_tick_data": True})
-        time.sleep(3)
         try:
-            tick_data = data_queue.get(False)
+            tick_data = data_queue.get(timeout=10)
         except queue.Empty:
             tick_data = None
         # 检测tick数据
+        assert tick_data is not None, "async_get_tick returned no data"
         print(tick_data.get_data())
         assert isinstance(tick_data, RequestData)
         assert isinstance(tick_data.get_data(), list)
@@ -159,7 +171,7 @@ def test_async_bt_api():
         # data_queue = bt_api.get_data_queue(exchange_name)
         api = bt_api.get_request_api(exchange_name)
         api.async_get_tick("BTC-USDT", extra_data={"test_async_tick_data": True})
-        time.sleep(1)
+        time.sleep(3)
         # for exchange_name in exchange_kwargs.keys():
         data_queue = bt_api.get_data_queue(exchange_name)
         try:

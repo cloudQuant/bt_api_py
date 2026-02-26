@@ -30,6 +30,11 @@ try:
 except ImportError as e:
     _reg_logger.debug(f"CTP register skipped (install ctp-python to enable): {e}")
 
+try:
+    import bt_api_py.feeds.register_ib  # noqa: F401
+except ImportError as e:
+    _reg_logger.debug(f"IB register skipped (install ib_insync to enable): {e}")
+
 
 class BtApi(object):
     def __init__(self, exchange_kwargs, debug=True, event_bus=None):
@@ -98,10 +103,7 @@ class BtApi(object):
         return api
 
     def get_async_request_api(self, exchange_name):
-        feed = self.exchange_feeds.get(exchange_name, None)
-        if feed is None:
-            self.log(f"exchange_name: {exchange_name} does not exist", level="error")
-        return feed
+        return self.get_request_api(exchange_name)
 
     def get_data_queue(self, exchange_name):
         data_queue = self.data_queues.get(exchange_name, None)
@@ -195,17 +197,17 @@ class BtApi(object):
                         symbol, period, start_time=begin_stamp, end_time=end_stamp, extra_data=extra_data
                     )
                     self.push_bar_data_to_queue(exchange_name, data)
-                    print(f"download successfully: {symbol}, period: {period}, "
-                          f"begin: {begin_time}, end: {current_end_time}")
+                    self.log(f"download successfully: {symbol}, period: {period}, "
+                             f"begin: {begin_time}, end: {current_end_time}")
 
                     begin_time = current_end_time
 
                     if begin_time >= stop_time:
                         break
                 except Exception as e:
-                    print(f"download fail, retry: {e}")
+                    self.log(f"download fail, retry: {e}", level="warning")
                     time.sleep(3)
-            print(f"download all data completely: {symbol}, period: {period}")
+            self.log(f"download all data completely: {symbol}, period: {period}")
 
     def update_total_balance(self):
         """通过 ExchangeRegistry 查找余额解析函数，无需硬编码交易所类型"""
@@ -235,7 +237,7 @@ class BtApi(object):
                 if account.get_account_type() == currency:
                     self._value_dict[exchange_name][currency]["value"] = account.get_margin() + account.get_unrealized_profit()
                     self._cash_dict[exchange_name][currency]["cash"] = account.get_available_margin()
-            if currency is None:
+            elif currency is None:
                 self._value_dict[exchange_name][account.get_account_type()]["value"] = account.get_margin() + account.get_unrealized_profit()
                 self._cash_dict[exchange_name][account.get_account_type()]["cash"] = account.get_available_margin()
 

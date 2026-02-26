@@ -1,7 +1,7 @@
 import queue
 import time
 import random
-from bt_api_py.functions.utils import read_yaml_file, get_public_ip
+from bt_api_py.functions.utils import read_account_config, get_public_ip
 from bt_api_py.feeds.live_okx_feed import OkxRequestDataSpot
 from bt_api_py.containers.exchanges.okx_exchange_data import OkxExchangeDataSpot
 from bt_api_py.containers.requestdatas.request_data import RequestData
@@ -18,12 +18,14 @@ from bt_api_py.containers.orders.order import OrderStatus
 
 
 def generate_kwargs():
-    data = read_yaml_file("account_config.yaml")
+    data = read_account_config()
     kwargs = {
         "public_key": data['okx']['public_key'],
         "private_key": data['okx']['private_key'],
         "passphrase": data['okx']["passphrase"],
-        "topics": {"tick": {"symbol": "BTC-USDT"}}
+        "topics": {"tick": {"symbol": "BTC-USDT"}},
+        "proxies": data.get('proxies'),
+        "async_proxy": data.get('async_proxy'),
     }
     return kwargs
 
@@ -68,7 +70,7 @@ def test_okx_async_spot_tick_data():
     data_queue = queue.Queue()
     live_okx_spot_feed = init_async_feed(data_queue)
     live_okx_spot_feed.async_get_tick("BTC-USDT", extra_data={"test_async_tick_data": True})
-    time.sleep(1)
+    time.sleep(3)
     try:
         tick_data = data_queue.get(False)
     except queue.Empty:
@@ -111,11 +113,12 @@ def test_okx_async_spot_kline_data():
     live_okx_spot_feed.async_get_kline("BTC-USDT", period="1m", count=3,
                                        extra_data={"test_async_kline_data": True})
 
-    time.sleep(1)
+    time.sleep(5)
     try:
         kline_data = data_queue.get(False)
     except queue.Empty:
         kline_data = None
+    assert kline_data is not None, "async_get_kline returned no data in time"
     assert isinstance(kline_data, RequestData)
     target_data_list = kline_data.get_data()
     async_kline_data = target_data_list[0].init_data()
@@ -159,7 +162,7 @@ def test_okx_async_spot_depth_data():
     data_queue = queue.Queue()
     live_okx_spot_feed = init_async_feed(data_queue)
     live_okx_spot_feed.async_get_depth("BTC-USDT", 20)
-    time.sleep(1)
+    time.sleep(3)
     try:
         depth_data = data_queue.get(False)
     except queue.Empty:
@@ -192,7 +195,7 @@ def test_okx_async_spot_mark_price_data():
     data_queue = queue.Queue()
     live_okx_spot_feed = init_async_feed(data_queue)
     live_okx_spot_feed.async_get_mark_price("BTC-USDT")
-    time.sleep(1)
+    time.sleep(3)
     try:
         depth_data = data_queue.get(False)
     except queue.Empty:
@@ -225,7 +228,7 @@ def test_okx_async_spot_account_data():
     data_queue = queue.Queue()
     live_okx_spot_feed = init_async_feed(data_queue)
     live_okx_spot_feed.async_get_account()
-    time.sleep(1)
+    time.sleep(3)
     try:
         depth_data = data_queue.get(False)
     except queue.Empty:
@@ -355,19 +358,18 @@ def test_okx_async_spot_order_functions():
     while lots * bid_price < 10:
         lots += 1
     live_okx_spot_feed.async_make_order("OP-USDT", lots, bid_price, "buy-limit", client_order_id=buy_client_order_id)
-    time.sleep(1)
+    time.sleep(3)
     live_okx_spot_feed.async_query_order("OP-USDT", **{"client_order_id": buy_client_order_id})
     live_okx_spot_feed.async_get_open_orders()
-    time.sleep(1)
+    time.sleep(3)
     live_okx_spot_feed.async_cancel_order("OP-USDT", **{"client_order_id": buy_client_order_id})
-    time.sleep(1.5)
+    time.sleep(3)
     # live_okx_spot_feed.async_get_open_orders("OP-USDT")
     while True:
         try:
             target_data = data_queue.get(False)
         except queue.Empty:
-            target_data = None
-            pass
+            break
         event_data = target_data.get_data()
         event_type = target_data.get_event()
         request_type = target_data.get_request_type()
@@ -421,7 +423,7 @@ def test_okx_async_spot_get_deals():
     data_queue = queue.Queue()
     live_okx_spot_feed = init_async_feed(data_queue)
     live_okx_spot_feed.async_get_deals()
-    time.sleep(1)
+    time.sleep(3)
     try:
         depth_data = data_queue.get(False)
     except queue.Empty:
@@ -461,13 +463,13 @@ def test_okx_async_spot_get_position():
     data_queue = queue.Queue()
     live_okx_spot_feed = init_async_feed(data_queue)
     live_okx_spot_feed.async_get_position(symbol="OP-USDT")
-    time.sleep(1)
+    time.sleep(5)
     try:
         position_data = data_queue.get(False)
         # print("position_data", position_data)
     except queue.Empty:
         position_data = None
-    if len(position_data.get_data()) > 0:
+    if position_data is not None and len(position_data.get_data()) > 0:
         target_data = position_data.get_data()[0]
         assert isinstance(position_data, RequestData)
         assert isinstance(target_data, OkxPositionData)

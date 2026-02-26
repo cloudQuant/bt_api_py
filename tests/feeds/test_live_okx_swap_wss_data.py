@@ -1,7 +1,7 @@
 import queue
 import time
 import random
-from bt_api_py.functions.utils import read_yaml_file
+from bt_api_py.functions.utils import read_account_config
 from bt_api_py.feeds.live_okx_feed import OkxMarketWssDataSwap, OkxKlineWssDataSwap, OkxAccountWssDataSwap
 from bt_api_py.containers.exchanges.okx_exchange_data import OkxExchangeDataSwap
 from bt_api_py.containers.bars.okx_bar import OkxBarData
@@ -18,12 +18,14 @@ from bt_api_py.containers.orders.order import OrderStatus
 
 
 def generate_kwargs(exchange=OkxExchangeDataSwap):
-    data = read_yaml_file("account_config.yaml")
+    data = read_account_config()
     kwargs = {
         "public_key": data['okx']['public_key'],
         "private_key": data['okx']['private_key'],
         "passphrase": data['okx']["passphrase"],
-        "topics": {"tick": {"symbol": "BTC-USDT"}}
+        "topics": {"tick": {"symbol": "BTC-USDT"}},
+        "proxies": data.get('proxies'),
+        "async_proxy": data.get('async_proxy'),
     }
     return kwargs
 
@@ -37,7 +39,7 @@ def init_req_feed():
 
 def test_okx_wss_data_feed():
     data_queue = queue.Queue()
-    data = read_yaml_file("account_config.yaml")
+    data = read_account_config()
     kwargs = {
         "public_key": data['okx']['public_key'],
         "private_key": data['okx']['private_key'],
@@ -50,7 +52,9 @@ def test_okx_wss_data_feed():
         ],
         "wss_name": "test_market_data",
         "wss_url": 'wss://ws.okx.com:8443/ws/v5/public',
-        "exchange_data": OkxExchangeDataSwap()
+        "exchange_data": OkxExchangeDataSwap(),
+        "proxies": data.get('proxies'),
+        "async_proxy": data.get('async_proxy'),
     }
     OkxMarketWssDataSwap(data_queue, **kwargs).start()
     kline_kwargs = {
@@ -64,7 +68,9 @@ def test_okx_wss_data_feed():
         ],
         "wss_name": "test_kline_data",
         "wss_url": 'wss://ws.okx.com:8443/ws/v5/business',
-        "exchange_data": OkxExchangeDataSwap()
+        "exchange_data": OkxExchangeDataSwap(),
+        "proxies": data.get('proxies'),
+        "async_proxy": data.get('async_proxy'),
     }
     OkxKlineWssDataSwap(data_queue, **kline_kwargs).start()
     time.sleep(3)
@@ -102,7 +108,7 @@ def test_okx_wss_data_feed():
 
 def test_get_okx_account_data_feed():
     data_queue = queue.Queue()
-    data = read_yaml_file("account_config.yaml")
+    data = read_account_config()
     kwargs = {
         "public_key": data['okx']['public_key'],
         "private_key": data['okx']['private_key'],
@@ -114,7 +120,9 @@ def test_get_okx_account_data_feed():
         ],
         "wss_name": "test_market_data",
         # "wss_url": 'wss://ws.okx.com:8443/ws/v5/public',
-        "exchange_data": OkxExchangeDataSwap()
+        "exchange_data": OkxExchangeDataSwap(),
+        "proxies": data.get('proxies'),
+        "async_proxy": data.get('async_proxy'),
     }
     OkxAccountWssDataSwap(data_queue, **kwargs).start()
     time.sleep(3)

@@ -1,7 +1,7 @@
 import queue
 import time
 import random
-from bt_api_py.functions.utils import read_yaml_file
+from bt_api_py.functions.utils import read_account_config
 from bt_api_py.feeds.live_binance_feed import BinanceRequestDataSpot
 from bt_api_py.containers.exchanges.binance_exchange_data import BinanceExchangeDataSpot
 from bt_api_py.containers.orderbooks.binance_orderbook import BinanceRequestOrderBookData
@@ -15,7 +15,7 @@ from bt_api_py.containers.orders.order import OrderStatus
 
 
 def test_get_binance_key():
-    data = read_yaml_file("account_config.yaml")
+    data = read_account_config()
     public_key = data['binance']['public_key']
     private_key = data['binance']['private_key']
     assert len(public_key) == 64, "public key is wrong"
@@ -23,10 +23,12 @@ def test_get_binance_key():
 
 
 def generate_kwargs(exchange=BinanceExchangeDataSpot):
-    data = read_yaml_file("account_config.yaml")
+    data = read_account_config()
     kwargs = {
         "public_key": data['binance']['public_key'],
-        "private_key": data['binance']['private_key']
+        "private_key": data['binance']['private_key'],
+        "proxies": data.get('proxies'),
+        "async_proxy": data.get('async_proxy'),
     }
     return kwargs
 
@@ -71,9 +73,9 @@ def test_binance_async_tick_data():
     data_queue = queue.Queue()
     live_binance_spot_feed = init_async_feed(data_queue)
     live_binance_spot_feed.async_get_tick("BTC-USDT", extra_data={"test_async_tick_data": True})
-    time.sleep(1)
+    time.sleep(3)
     try:
-        tick_data = data_queue.get(False)
+        tick_data = data_queue.get(timeout=10)
     except queue.Empty:
         tick_data = None
     # 检测tick数据
@@ -114,9 +116,9 @@ def test_binance_async_kline_data():
     live_binance_spot_feed.async_get_kline("BTC-USDT", period="1m",
                                            extra_data={"test_async_kline_data": True})
 
-    time.sleep(1)
+    time.sleep(3)
     try:
-        kline_data = data_queue.get(False)
+        kline_data = data_queue.get(timeout=10)
     except queue.Empty:
         target_data = None
     else:
@@ -161,9 +163,9 @@ def test_binance_async_depth_data():
     data_queue = queue.Queue()
     live_binance_spot_feed = init_async_feed(data_queue)
     live_binance_spot_feed.async_get_depth("BTC-USDT", 20)
-    time.sleep(1)
+    time.sleep(3)
     try:
-        depth_data = data_queue.get(False)
+        depth_data = data_queue.get(timeout=10)
     except queue.Empty:
         target_data = None
     else:
@@ -193,9 +195,9 @@ def test_binance_async_account_data():
     data_queue = queue.Queue()
     live_binance_spot_feed = init_async_feed(data_queue)
     live_binance_spot_feed.async_get_account()
-    time.sleep(3)
+    time.sleep(5)
     try:
-        depth_data = data_queue.get(False)
+        depth_data = data_queue.get(timeout=10)
     except queue.Empty:
         target_data = None
     else:
@@ -223,9 +225,9 @@ def test_binance_async_get_balance():
     data_queue = queue.Queue()
     live_binance_spot_feed = init_async_feed(data_queue)
     live_binance_spot_feed.async_get_balance()
-    time.sleep(1)
+    time.sleep(3)
     try:
-        depth_data = data_queue.get(False)
+        depth_data = data_queue.get(timeout=10)
     except queue.Empty:
         target_data = None
     else:
@@ -375,17 +377,17 @@ def test_binance_async_order_functions():
                                             "buy-limit",
                                             client_order_id=buy_client_order_id,
                                             )
-    time.sleep(2)
+    time.sleep(5)
     live_binance_spot_feed.async_query_order("OP-USDT", **{"client_order_id": buy_client_order_id})
-    time.sleep(1)
+    time.sleep(3)
     live_binance_spot_feed.async_get_open_orders()
-    time.sleep(1)
+    time.sleep(3)
     live_binance_spot_feed.async_cancel_order("OP-USDT", **{"client_order_id": buy_client_order_id})
     time.sleep(5)
     # live_binance_spot_feed.async_get_open_orders("OP-USDT")
     while True:
         try:
-            target_data = data_queue.get(False)
+            target_data = data_queue.get(timeout=1)
         except queue.Empty:
             target_data = None
             break
@@ -457,9 +459,9 @@ def test_binance_async_get_deals():
     data_queue = queue.Queue()
     live_binance_spot_feed = init_async_feed(data_queue)
     live_binance_spot_feed.async_get_deals("OP-USDT")
-    time.sleep(1)
+    time.sleep(3)
     try:
-        depth_data = data_queue.get(False)
+        depth_data = data_queue.get(timeout=10)
     except queue.Empty:
         target_data = None
     else:

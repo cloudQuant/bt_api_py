@@ -3,6 +3,8 @@ import os
 import yaml
 import importlib
 import requests
+from pathlib import Path
+from dotenv import load_dotenv, find_dotenv
 
 
 def get_public_ip():
@@ -57,6 +59,66 @@ def read_yaml_file(file_name, data_root=None):
     with open(file_path, 'r') as file:
         file_content = yaml.load(file, Loader=yaml.FullLoader)
     return file_content
+
+
+def read_account_config():
+    """从 .env 文件读取账号配置，返回与 read_yaml_file("account_config.yaml") 相同格式的字典。
+    .env 文件查找顺序: 项目根目录（bt_api_py 包的上一级）、当前工作目录。
+    """
+    # 尝试从项目根目录加载 .env
+    env_loaded = False
+    package_path = get_package_path("bt_api_py")
+    if package_path:
+        project_root = Path(package_path).parent
+        env_file = project_root / ".env"
+        if env_file.exists():
+            load_dotenv(env_file, override=True)
+            env_loaded = True
+    if not env_loaded:
+        # 回退: 从当前工作目录向上查找 .env
+        load_dotenv(find_dotenv(usecwd=True), override=True)
+
+    # 代理配置
+    http_proxy = os.environ.get("HTTP_PROXY", "") or os.environ.get("http_proxy", "")
+    https_proxy = os.environ.get("HTTPS_PROXY", "") or os.environ.get("https_proxy", "")
+    proxies = None
+    async_proxy = None
+    if http_proxy or https_proxy:
+        proxies = {}
+        if http_proxy:
+            proxies["http"] = http_proxy
+        if https_proxy:
+            proxies["https"] = https_proxy
+        async_proxy = https_proxy or http_proxy
+
+    config = {
+        "okx": {
+            "public_key": os.environ.get("OKX_API_KEY", ""),
+            "private_key": os.environ.get("OKX_SECRET", ""),
+            "passphrase": os.environ.get("OKX_PASSWORD", ""),
+        },
+        "binance": {
+            "public_key": os.environ.get("BINANCE_API_KEY", ""),
+            "private_key": os.environ.get("BINANCE_PASSWORD", ""),
+        },
+        "ctp": {
+            "broker_id": os.environ.get("CTP_BROKER_ID", "9999"),
+            "user_id": os.environ.get("CTP_USER_ID", ""),
+            "password": os.environ.get("CTP_PASSWORD", ""),
+            "auth_code": os.environ.get("CTP_AUTH_CODE", ""),
+            "app_id": os.environ.get("CTP_APP_ID", "simnow_client_test"),
+            "md_front": os.environ.get("CTP_MD_FRONT", ""),
+            "td_front": os.environ.get("CTP_TD_FRONT", ""),
+        },
+        "ib": {
+            "host": os.environ.get("IB_HOST", "127.0.0.1"),
+            "port": int(os.environ.get("IB_PORT", "7497")),
+            "client_id": int(os.environ.get("IB_CLIENT_ID", "1")),
+        },
+        "proxies": proxies,
+        "async_proxy": async_proxy,
+    }
+    return config
 
 
 def update_extra_data(extra_data, **kwargs):

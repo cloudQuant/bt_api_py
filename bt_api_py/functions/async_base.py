@@ -6,7 +6,7 @@ from threading import Thread
 
 # import aiohttp
 # from aiohttp import ClientTimeout
-from aiohttp import TCPConnector, ClientSession
+from aiohttp import TCPConnector, ClientSession, ClientTimeout
 from bt_api_py.functions.log_message import SpdLogManager
 from bt_api_py.functions.calculate_time import get_string_tz_time
 
@@ -15,12 +15,13 @@ __all__ = ['AsyncBase']
 
 class AsyncBase(object):
 
-    def __init__(self):
+    def __init__(self, **kwargs):
         self.loop = None
         self.keepalive_timeout = 30
         self.client_timeout = 5
         self.limit = 100
         self.session = None
+        self.async_proxy = kwargs.get('async_proxy', None)
         self.async_base_logger = SpdLogManager("./logs/async_data.log",
                                                "async_base",
                                                0,
@@ -75,16 +76,18 @@ class AsyncBase(object):
                 self.session = session
             params = {}
             if timeout is not None:
-                params['timeout'] = timeout
+                params['timeout'] = ClientTimeout(total=timeout)
             if headers is not None:
                 params['headers'] = headers
             if body is not None:
                 params['data'] = json.dumps(body, ensure_ascii=False)
             # print(f' rest _ async httpRequest params: {params}')
+            if self.async_proxy:
+                params['proxy'] = self.async_proxy
             func = getattr(session, method.lower())
             # print(f' func: {func.__name__}')
             async with func(url, **params) as resp:
-                ret = await resp.json()
+                ret = await resp.json(content_type=None)
             return ret
         except Exception as e:
             # print(traceback.format_exc())

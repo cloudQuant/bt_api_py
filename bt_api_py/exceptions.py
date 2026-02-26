@@ -19,7 +19,7 @@ class ExchangeNotFoundError(BtApiError):
         self.exchange_name = exchange_name
 
 
-class ConnectionError(BtApiError):
+class ExchangeConnectionError(BtApiError):
     """交易所连接失败"""
     def __init__(self, exchange_name, detail=""):
         msg = f"Connection failed: {exchange_name}"
@@ -29,7 +29,11 @@ class ConnectionError(BtApiError):
         self.exchange_name = exchange_name
 
 
-class AuthenticationError(ConnectionError):
+# 向后兼容别名（已弃用，请使用 ExchangeConnectionError）
+ConnectionError = ExchangeConnectionError
+
+
+class AuthenticationError(ExchangeConnectionError):
     """认证失败（API Key / 密码 / 穿透式认证错误）"""
     pass
 

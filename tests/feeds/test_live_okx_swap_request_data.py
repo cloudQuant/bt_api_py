@@ -1,7 +1,7 @@
 import queue
 import time
 import random
-from bt_api_py.functions.utils import read_yaml_file, get_public_ip
+from bt_api_py.functions.utils import read_account_config, get_public_ip
 from bt_api_py.feeds.live_okx_feed import OkxRequestDataSwap
 from bt_api_py.containers.exchanges.okx_exchange_data import OkxExchangeDataSwap
 from bt_api_py.containers.requestdatas.request_data import RequestData
@@ -18,7 +18,7 @@ from bt_api_py.containers.orders.order import OrderStatus
 
 
 def test_get_okx_key():
-    data = read_yaml_file("account_config.yaml")
+    data = read_account_config()
     public_key = data['okx']['public_key']
     private_key = data['okx']['private_key'] + "//" + data['okx']["passphrase"]
     assert len(public_key) == 36, "public key is wrong"
@@ -26,12 +26,14 @@ def test_get_okx_key():
 
 
 def generate_kwargs(exchange=OkxExchangeDataSwap):
-    data = read_yaml_file("account_config.yaml")
+    data = read_account_config()
     kwargs = {
         "public_key": data['okx']['public_key'],
         "private_key": data['okx']['private_key'],
         "passphrase": data['okx']["passphrase"],
-        "topics": {"tick": {"symbol": "BTC-USDT"}}
+        "topics": {"tick": {"symbol": "BTC-USDT"}},
+        "proxies": data.get('proxies'),
+        "async_proxy": data.get('async_proxy'),
     }
     return kwargs
 
@@ -82,7 +84,7 @@ def test_okx_async_tick_data():
     data_queue = queue.Queue()
     live_okx_swap_feed = init_async_feed(data_queue)
     live_okx_swap_feed.async_get_tick("BTC-USDT", extra_data={"test_async_tick_data": True})
-    time.sleep(1)
+    time.sleep(3)
     try:
         tick_data = data_queue.get(False)
     except queue.Empty:
@@ -125,7 +127,7 @@ def test_okx_async_kline_data():
     live_okx_swap_feed.async_get_kline("BTC-USDT", period="1m",
                                        extra_data={"test_async_kline_data": True})
 
-    time.sleep(1)
+    time.sleep(3)
     try:
         kline_data = data_queue.get(False)
     except queue.Empty:
@@ -172,7 +174,7 @@ def test_okx_async_depth_data():
     data_queue = queue.Queue()
     live_okx_swap_feed = init_async_feed(data_queue)
     live_okx_swap_feed.async_get_depth("BTC-USDT", 20)
-    time.sleep(1)
+    time.sleep(3)
     try:
         depth_data = data_queue.get(False)
     except queue.Empty:
@@ -212,7 +214,7 @@ def test_okx_async_funding_rate_data():
     data_queue = queue.Queue()
     live_okx_swap_feed = init_async_feed(data_queue)
     live_okx_swap_feed.async_get_funding_rate("BTC-USDT")
-    time.sleep(1)
+    time.sleep(3)
     try:
         depth_data = data_queue.get(False)
     except queue.Empty:
@@ -246,7 +248,7 @@ def test_okx_async_mark_price_data():
     data_queue = queue.Queue()
     live_okx_swap_feed = init_async_feed(data_queue)
     live_okx_swap_feed.async_get_mark_price("BTC-USDT")
-    time.sleep(1)
+    time.sleep(5)
     try:
         depth_data = data_queue.get(False)
     except queue.Empty:
@@ -254,6 +256,7 @@ def test_okx_async_mark_price_data():
     else:
         target_data = depth_data.get_data()
         # 检测kline数据
+    assert target_data is not None, "async_get_mark_price returned no data in time"
     assert isinstance(target_data, list)
     assert isinstance(target_data[0], OkxMarkPriceData)
     assert_mark_price_data_value(target_data[0].init_data())
@@ -279,7 +282,7 @@ def test_okx_async_account_data():
     data_queue = queue.Queue()
     live_okx_swap_feed = init_async_feed(data_queue)
     live_okx_swap_feed.async_get_account()
-    time.sleep(1)
+    time.sleep(3)
     try:
         depth_data = data_queue.get(False)
     except queue.Empty:
@@ -381,19 +384,18 @@ def test_okx_async_order_functions():
     cancel_order_func = False
     open_order_func = False
     live_okx_swap_feed.async_make_order("OP-USDT", 1, bid_price, "buy-limit", client_order_id=buy_client_order_id)
-    time.sleep(1)
+    time.sleep(3)
     live_okx_swap_feed.async_query_order("OP-USDT", **{"client_order_id": buy_client_order_id})
     live_okx_swap_feed.async_get_open_orders()
-    time.sleep(1)
+    time.sleep(3)
     live_okx_swap_feed.async_cancel_order("OP-USDT", **{"client_order_id": buy_client_order_id})
-    time.sleep(1)
+    time.sleep(3)
     # live_okx_swap_feed.async_get_open_orders("OP-USDT")
     while True:
         try:
             target_data = data_queue.get(False)
         except queue.Empty:
-            target_data = None
-            pass
+            break
         event_data = target_data.get_data()
         event_type = target_data.get_event()
         request_type = target_data.get_request_type()
@@ -447,7 +449,7 @@ def test_okx_async_get_deals():
     data_queue = queue.Queue()
     live_okx_swap_feed = init_async_feed(data_queue)
     live_okx_swap_feed.async_get_deals()
-    time.sleep(1)
+    time.sleep(3)
     try:
         depth_data = data_queue.get(False)
     except queue.Empty:
@@ -489,7 +491,7 @@ def test_okx_async_get_position():
     data_queue = queue.Queue()
     live_okx_swap_feed = init_async_feed(data_queue)
     live_okx_swap_feed.async_get_position(symbol="OP-USDT")
-    time.sleep(1)
+    time.sleep(3)
     try:
         position_data = data_queue.get(False)
         # print("position_data", position_data)

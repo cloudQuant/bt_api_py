@@ -1,7 +1,7 @@
 import queue
 import time
 import random
-from bt_api_py.functions.utils import read_yaml_file
+from bt_api_py.functions.utils import read_account_config
 from bt_api_py.feeds.live_binance_feed import BinanceMarketWssDataSpot, BinanceAccountWssDataSpot
 from bt_api_py.containers.exchanges.binance_exchange_data import BinanceExchangeDataSpot
 from bt_api_py.containers.bars.binance_bar import BinanceWssBarData
@@ -15,11 +15,13 @@ from bt_api_py.feeds.live_binance_feed import BinanceRequestDataSpot
 
 
 def generate_kwargs(exchange=BinanceExchangeDataSpot):
-    data = read_yaml_file("account_config.yaml")
+    data = read_account_config()
     kwargs = {
         "public_key": data['binance']['public_key'],
         "private_key": data['binance']['private_key'],
-        "topics": {"tick": {"symbol": "BTC-USDT"}}
+        "topics": {"tick": {"symbol": "BTC-USDT"}},
+        "proxies": data.get('proxies'),
+        "async_proxy": data.get('async_proxy'),
     }
     return kwargs
 
@@ -33,7 +35,7 @@ def init_req_feed():
 
 def test_binance_wss_data_feed():
     data_queue = queue.Queue()
-    data = read_yaml_file("account_config.yaml")
+    data = read_account_config()
     kwargs = {
         "public_key": data['binance']['public_key'],
         "private_key": data['binance']['private_key'],
@@ -45,7 +47,9 @@ def test_binance_wss_data_feed():
         ],
         "wss_name": "test_market_data",
         "wss_url": 'wss://fstream.binance.com/ws',
-        "exchange_data": BinanceExchangeDataSpot()
+        "exchange_data": BinanceExchangeDataSpot(),
+        "proxies": data.get('proxies'),
+        "async_proxy": data.get('async_proxy'),
     }
     BinanceMarketWssDataSpot(data_queue, **kwargs).start()
     time.sleep(20)
@@ -75,7 +79,7 @@ def test_binance_wss_data_feed():
 
 def test_get_binance_account_data_feed():
     data_queue = queue.Queue()
-    data = read_yaml_file("account_config.yaml")
+    data = read_account_config()
     kwargs = {
         "public_key": data['binance']['public_key'],
         "private_key": data['binance']['private_key'],
@@ -86,7 +90,9 @@ def test_get_binance_account_data_feed():
         ],
         "wss_name": "test_market_data",
         "wss_url": 'wss://fstream.binance.com/ws',
-        "exchange_data": BinanceExchangeDataSpot()
+        "exchange_data": BinanceExchangeDataSpot(),
+        "proxies": data.get('proxies'),
+        "async_proxy": data.get('async_proxy'),
     }
     BinanceAccountWssDataSpot(data_queue, **kwargs).start()
     time.sleep(3)
