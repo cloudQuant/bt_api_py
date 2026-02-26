@@ -20,23 +20,7 @@ from bt_api_py.containers.exchanges.okx_exchange_data import (
 )
 
 
-def _okx_balance_handler(account_list):
-    """OKX 通用余额解析处理函数（Swap 和 Spot 逻辑相同）
-    :param account_list: list of AccountData
-    :return: (value_result, cash_result)
-    """
-    value_result = {}
-    cash_result = {}
-    for account in account_list:
-        account.init_data()
-        for balance in account.get_balances():
-            balance.init_data()
-            currency = balance.get_symbol_name()
-            cash_result[currency] = {}
-            cash_result[currency]["cash"] = balance.get_available_margin()
-            value_result[currency] = {}
-            value_result[currency]["value"] = balance.get_margin() + balance.get_unrealized_profit()
-    return value_result, cash_result
+from bt_api_py.balance_utils import nested_balance_handler as _okx_balance_handler
 
 
 def _okx_subscribe_handler(data_queue, exchange_params, topics, bt_api,

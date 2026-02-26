@@ -5,3 +5,5 @@ bt_api_py/ctp/api/**/*.dll filter=lfs diff=lfs merge=lfs -text
 bt_api_py/ctp/api/**/*.lib filter=lfs diff=lfs merge=lfs -text
 bt_api_py/ctp/api/**/thostmduserapi_se filter=lfs diff=lfs merge=lfs -text
 bt_api_py/ctp/api/**/thosttraderapi_se filter=lfs diff=lfs merge=lfs -text
+bt_api_py/ctp/**/thostmduserapi_se filter=lfs diff=lfs merge=lfs -text
+bt_api_py/ctp/**/thosttraderapi_se filter=lfs diff=lfs merge=lfs -text

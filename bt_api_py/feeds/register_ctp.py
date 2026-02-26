@@ -14,21 +14,7 @@ from bt_api_py.feeds.live_ctp_feed import (
 from bt_api_py.containers.exchanges.ctp_exchange_data import CtpExchangeDataFuture
 
 
-def _ctp_balance_handler(account_list):
-    """CTP 余额解析处理函数
-    :param account_list: list of AccountData
-    :return: (value_result, cash_result)
-    """
-    value_result = {}
-    cash_result = {}
-    for account in account_list:
-        account.init_data()
-        currency = account.get_account_type()
-        cash_result[currency] = {}
-        cash_result[currency]["cash"] = account.get_available_margin()
-        value_result[currency] = {}
-        value_result[currency]["value"] = account.get_margin() + account.get_unrealized_profit()
-    return value_result, cash_result
+from bt_api_py.balance_utils import simple_balance_handler as _ctp_balance_handler
 
 
 def _ctp_future_subscribe_handler(data_queue, exchange_params, topics, bt_api):
@@ -53,12 +39,12 @@ def _ctp_future_subscribe_handler(data_queue, exchange_params, topics, bt_api):
         bt_api.log("CTP market stream started")
 
     # 启动交易流 — 接收订单/成交回报推送
-    if not getattr(bt_api, '_ctp_future_account_subscribed', False):
+    if not bt_api._subscription_flags.get('CTP___FUTURE_account', False):
         trade_kwargs = {k: v for k, v in exchange_params.items()}
         trade_kwargs['stream_name'] = 'ctp_trade_stream'
         stream = CtpTradeStream(data_queue, **trade_kwargs)
         stream.start()
-        bt_api._ctp_future_account_subscribed = True
+        bt_api._subscription_flags['CTP___FUTURE_account'] = True
         bt_api.log("CTP trade stream started")
 
 

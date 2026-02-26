@@ -4,10 +4,11 @@ CTP Tick 数据容器
 包含最新价、买卖盘、涨跌停板、持仓量等
 """
 from bt_api_py.containers.tickers.ticker import TickerData
+from bt_api_py.containers.auto_init_mixin import AutoInitMixin
 from bt_api_py.functions.utils import from_dict_get_float, from_dict_get_string, from_dict_get_int
 
 
-class CtpTickerData(TickerData):
+class CtpTickerData(AutoInitMixin, TickerData):
     """CTP Tick 行情数据"""
 
     def __init__(self, ticker_info, symbol_name=None, asset_type="FUTURE",
@@ -68,12 +69,15 @@ class CtpTickerData(TickerData):
         return self
 
     def get_exchange_name(self):
+        self._ensure_init()
         return self.exchange_name
 
     def get_local_update_time(self):
+        self._ensure_init()
         return self.update_time_val
 
     def get_symbol_name(self):
+        self._ensure_init()
         return self.instrument_id or self.symbol_name
 
     def get_ticker_symbol_name(self):
@@ -86,9 +90,11 @@ class CtpTickerData(TickerData):
         return self.update_time_val
 
     def get_bid_price(self):
+        self._ensure_init()
         return self.bid_price_1
 
     def get_ask_price(self):
+        self._ensure_init()
         return self.ask_price_1
 
     def get_bid_volume(self):
@@ -98,6 +104,7 @@ class CtpTickerData(TickerData):
         return self.ask_volume_1
 
     def get_last_price(self):
+        self._ensure_init()
         return self.last_price_val
 
     def get_last_volume(self):

@@ -3,10 +3,11 @@ CTP 账户数据容器
 对应 CTP 的 CThostFtdcTradingAccountField 结构体
 """
 from bt_api_py.containers.accounts.account import AccountData
+from bt_api_py.containers.auto_init_mixin import AutoInitMixin
 from bt_api_py.functions.utils import from_dict_get_float, from_dict_get_string
 
 
-class CtpAccountData(AccountData):
+class CtpAccountData(AutoInitMixin, AccountData):
     """CTP 账户资金数据"""
 
     def __init__(self, account_info, symbol_name=None, asset_type="FUTURE",
@@ -57,12 +58,15 @@ class CtpAccountData(AccountData):
         return self
 
     def get_exchange_name(self):
+        self._ensure_init()
         return self.exchange_name
 
     def get_asset_type(self):
+        self._ensure_init()
         return self.asset_type
 
     def get_account_type(self):
+        self._ensure_init()
         return self.account_id or "CNY"
 
     def get_server_time(self):
@@ -73,14 +77,17 @@ class CtpAccountData(AccountData):
 
     def get_margin(self):
         """动态权益"""
+        self._ensure_init()
         return self.balance or 0.0
 
     def get_available_margin(self):
         """可用资金"""
+        self._ensure_init()
         return self.available or 0.0
 
     def get_unrealized_profit(self):
         """持仓盈亏"""
+        self._ensure_init()
         return self.position_profit or 0.0
 
     def get_balances(self):

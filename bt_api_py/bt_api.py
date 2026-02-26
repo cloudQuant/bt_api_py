@@ -8,11 +8,27 @@ from datetime import datetime, timedelta, timezone
 from bt_api_py.functions.log_message import SpdLogManager
 from bt_api_py.registry import ExchangeRegistry
 from bt_api_py.event_bus import EventBus
+from bt_api_py.exceptions import ExchangeNotFoundError
 
 # 导入注册模块，确保交易所在使用前完成注册
-import bt_api_py.feeds.register_binance  # noqa: F401
-import bt_api_py.feeds.register_okx      # noqa: F401
-import bt_api_py.feeds.register_ctp      # noqa: F401
+# 使用 try/except 以便在缺少依赖时不阻塞其他交易所的使用
+import logging as _logging
+_reg_logger = _logging.getLogger(__name__)
+
+try:
+    import bt_api_py.feeds.register_binance  # noqa: F401
+except ImportError as e:
+    _reg_logger.debug(f"Binance register skipped: {e}")
+
+try:
+    import bt_api_py.feeds.register_okx  # noqa: F401
+except ImportError as e:
+    _reg_logger.debug(f"OKX register skipped: {e}")
+
+try:
+    import bt_api_py.feeds.register_ctp  # noqa: F401
+except ImportError as e:
+    _reg_logger.debug(f"CTP register skipped (install ctp-python to enable): {e}")
 
 
 class BtApi(object):
@@ -28,9 +44,6 @@ class BtApi(object):
         self.event_bus = event_bus or EventBus()    # 事件总线，支持回调模式
         self._subscription_flags = {}               # 跟踪各交易所账户订阅状态
         self.init_exchange(exchange_kwargs)         # 根据提供的交易所列表进行相应的初始化
-        # 向后兼容的旧属性
-        self.binance_swap_account_subscribed = 0
-        self.binance_spot_account_subscribed = 0
 
 
     def init_exchange(self, exchange_kwargs):
@@ -66,7 +79,8 @@ class BtApi(object):
     def add_exchange(self, exchange_name, exchange_params):
         """通过 ExchangeRegistry 创建 feed，无需硬编码交易所类型"""
         if exchange_name not in self.exchange_feeds:
-            assert exchange_name not in self.data_queues
+            if exchange_name in self.data_queues:
+                raise ExchangeNotFoundError(exchange_name, "data_queue exists but feed does not — inconsistent state")
             self.data_queues[exchange_name] = queue.Queue()
             self.log(f"adding exchange: {exchange_name}")
             data_queue = self.get_data_queue(exchange_name)
@@ -219,18 +233,18 @@ class BtApi(object):
             account.init_data()
             if currency is not None:
                 if account.get_account_type() == currency:
-                    self._value_dict[exchange_name][currency]["cash"] = account.get_margin() + account.get_unrealized_profit()
-                    self._cash_dict[exchange_name][currency]["value"] = account.get_available_margin()
+                    self._value_dict[exchange_name][currency]["value"] = account.get_margin() + account.get_unrealized_profit()
+                    self._cash_dict[exchange_name][currency]["cash"] = account.get_available_margin()
             if currency is None:
-                self._value_dict[exchange_name][account.get_account_type()]["cash"] = account.get_margin() + account.get_unrealized_profit()
-                self._cash_dict[exchange_name][account.get_account_type()]["value"] = account.get_available_margin()
+                self._value_dict[exchange_name][account.get_account_type()]["value"] = account.get_margin() + account.get_unrealized_profit()
+                self._cash_dict[exchange_name][account.get_account_type()]["cash"] = account.get_available_margin()
 
 
     def get_cash(self, exchange_name, currency):
-        return self._value_dict[exchange_name][currency]["value"]
+        return self._cash_dict[exchange_name][currency]["cash"]
 
     def get_value(self, exchange_name, currency):
-        return self._cash_dict[exchange_name][currency]["cash"]
+        return self._value_dict[exchange_name][currency]["value"]
 
     def get_total_cash(self):
         return self._cash_dict

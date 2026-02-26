@@ -18,21 +18,7 @@ from bt_api_py.containers.exchanges.binance_exchange_data import (
 )
 
 
-def _binance_balance_handler(account_list):
-    """Binance 通用余额解析处理函数（Swap 和 Spot 逻辑相同）
-    :param account_list: list of AccountData
-    :return: (value_result, cash_result)
-    """
-    value_result = {}
-    cash_result = {}
-    for account in account_list:
-        account.init_data()
-        currency = account.get_account_type()
-        cash_result[currency] = {}
-        cash_result[currency]["cash"] = account.get_available_margin()
-        value_result[currency] = {}
-        value_result[currency]["value"] = account.get_margin() + account.get_unrealized_profit()
-    return value_result, cash_result
+from bt_api_py.balance_utils import simple_balance_handler as _binance_balance_handler
 
 
 def _binance_swap_subscribe_handler(data_queue, exchange_params, topics, bt_api):
@@ -49,7 +35,7 @@ def _binance_swap_subscribe_handler(data_queue, exchange_params, topics, bt_api)
     kwargs["exchange_data"] = exchange_data
     kwargs['topics'] = topics
     BinanceMarketWssDataSwap(data_queue, **kwargs).start()
-    if not getattr(bt_api, '_binance_swap_account_subscribed', False):
+    if not bt_api._subscription_flags.get('BINANCE___SWAP_account', False):
         account_kwargs = {k: v for k, v in kwargs.items()}
         account_kwargs['topics'] = [
             {"topic": "account"},
@@ -57,7 +43,7 @@ def _binance_swap_subscribe_handler(data_queue, exchange_params, topics, bt_api)
             {"topic": "trade"},
         ]
         BinanceAccountWssDataSwap(data_queue, **account_kwargs).start()
-        bt_api._binance_swap_account_subscribed = True
+        bt_api._subscription_flags['BINANCE___SWAP_account'] = True
 
 
 def _binance_spot_subscribe_handler(data_queue, exchange_params, topics, bt_api):
@@ -74,7 +60,7 @@ def _binance_spot_subscribe_handler(data_queue, exchange_params, topics, bt_api)
     kwargs["exchange_data"] = exchange_data
     kwargs['topics'] = topics
     BinanceMarketWssDataSpot(data_queue, **kwargs).start()
-    if not getattr(bt_api, '_binance_spot_account_subscribed', False):
+    if not bt_api._subscription_flags.get('BINANCE___SPOT_account', False):
         account_kwargs = {k: v for k, v in kwargs.items()}
         account_kwargs['topics'] = [
             {"topic": "account"},
@@ -82,7 +68,7 @@ def _binance_spot_subscribe_handler(data_queue, exchange_params, topics, bt_api)
             {"topic": "trade"},
         ]
         BinanceAccountWssDataSpot(data_queue, **account_kwargs).start()
-        bt_api._binance_spot_account_subscribed = True
+        bt_api._subscription_flags['BINANCE___SPOT_account'] = True
 
 
 def register_binance():

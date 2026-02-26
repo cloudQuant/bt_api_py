@@ -24,6 +24,7 @@ from bt_api_py.containers.ctp.ctp_order import CtpOrderData
 from bt_api_py.containers.ctp.ctp_position import CtpPositionData
 from bt_api_py.containers.ctp.ctp_trade import CtpTradeData
 from bt_api_py.containers.ctp.ctp_ticker import CtpTickerData
+from bt_api_py.exceptions import ConnectionError as BtConnectionError
 
 # CTP 开平方向映射
 CTP_OFFSET_FLAG = {
@@ -93,7 +94,7 @@ class CtpRequestData(Feed):
         if self._trader is None or not self._trader.is_ready:
             self.connect()
         if not self._trader.is_ready:
-            raise ConnectionError("CTP TraderClient not ready after connect()")
+            raise BtConnectionError("CTP", "TraderClient not ready after connect()")
 
     def connect(self):
         """连接 CTP 交易前置并完成认证流程

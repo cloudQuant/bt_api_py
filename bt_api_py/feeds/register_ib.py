@@ -18,21 +18,7 @@ from bt_api_py.containers.exchanges.ib_exchange_data import (
 )
 
 
-def _ib_balance_handler(account_list):
-    """IB 余额解析处理函数
-    :param account_list: list of AccountData
-    :return: (value_result, cash_result)
-    """
-    value_result = {}
-    cash_result = {}
-    for account in account_list:
-        account.init_data()
-        currency = account.get_account_type()
-        cash_result[currency] = {}
-        cash_result[currency]["cash"] = account.get_available_margin()
-        value_result[currency] = {}
-        value_result[currency]["value"] = account.get_margin() + account.get_unrealized_profit()
-    return value_result, cash_result
+from bt_api_py.balance_utils import simple_balance_handler as _ib_balance_handler
 
 
 def _ib_subscribe_handler(data_queue, exchange_params, topics, bt_api):
