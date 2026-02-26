@@ -1,0 +1,24 @@
+# CTP API 头文件和库文件
+recursive-include bt_api_py/ctp/api *.h *.so *.dll *.lib *.dtd *.xml
+recursive-include bt_api_py/ctp/api *.framework
+recursive-include bt_api_py/ctp/api *
+
+# CTP SWIG 源文件
+include bt_api_py/ctp/ctp_wrap.cpp
+include bt_api_py/ctp/ctp_wrap.h
+include bt_api_py/ctp/ctp.i
+
+# CTP Python 文件
+include bt_api_py/ctp/ctp.py
+include bt_api_py/ctp/client.py
+include bt_api_py/ctp/__init__.py
+
+# Cython 源文件
+include bt_api_py/functions/calculate_number/*.pyx
+
+# 配置文件
+recursive-include bt_api_py/configs *
+
+# README
+include README.md
+include requirements.txt

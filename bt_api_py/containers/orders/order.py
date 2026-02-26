@@ -197,6 +197,16 @@ class OrderData(object):
         """# 是否为触发平仓单; 仅在条件订单情况下会推送此字段"""
         raise NotImplementedError
 
+    def get_order_offset(self):
+        """# 开平方向: open / close / close_today / close_yesterday
+        CTP 下单必填; 加密货币交易所可返回 None"""
+        return None
+
+    def get_order_exchange_id(self):
+        """# 交易所代码, 如 'CFFEX', 'SHFE', 'SMART' 等
+        CTP/IB 需要; 加密货币交易所可返回 None"""
+        return None
+
     def __str__(self):
         raise NotImplementedError
 

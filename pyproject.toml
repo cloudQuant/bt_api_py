@@ -1,0 +1,43 @@
+[build-system]
+requires = ["setuptools>=64", "wheel", "cython", "numpy"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "bt_api_py"
+dynamic = ["version"]
+description = "Implement backtesting and trading of quantitative strategy"
+readme = "README.md"
+license = {text = "MIT"}
+requires-python = ">=3.11"
+authors = [
+    {name = "cloudQuant", email = "yunjinqi@gmail.com"},
+]
+dependencies = [
+    "cython",
+    "numpy",
+    "python-dotenv",
+]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: Implementation :: CPython",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: POSIX :: Linux",
+    "Operating System :: Microsoft :: Windows",
+    "Operating System :: MacOS",
+]
+
+[project.urls]
+Homepage = "https://github.com/cloudQuant/bt_api_py"
+Repository = "https://github.com/cloudQuant/bt_api_py"
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0",
+    "pytest-sugar",
+    "pytest-cov",
+    "pytest-timeout",
+    "python-dotenv>=1.0",
+]

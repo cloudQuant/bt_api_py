@@ -10,8 +10,18 @@ __pycache__/
 **/binance_swap_history_bar_data/
 **/binance_spot_history_bar_data/
 **/binance_funding_rate_data/
-# C extensions
+# C extensions (compiled output)
 *.so
+# But keep CTP API runtime libraries (they are pre-built vendor binaries)
+!bt_api_py/ctp/api/**/*.so
+
+# CTP compiled extension (built during pip install)
+bt_api_py/ctp/_ctp*.so
+bt_api_py/ctp/_ctp*.pyd
+bt_api_py/ctp/_ctp*.dylib
+
+# CTP flow data directories (created at runtime)
+ctp_flow_*/
 
 # Distribution / packaging
 .Python

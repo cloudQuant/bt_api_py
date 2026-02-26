@@ -6,3 +6,19 @@ okx:
 binance:
   public_key: 'xxx'
   private_key: 'xxx'
+
+# CTP 期货配置 (中国期货市场)
+ctp:
+  broker_id: "9999"                              # 期货公司代号, simnow 为 9999
+  user_id: "xxx"                                 # 资金账号
+  password: "xxx"                                # 密码
+  auth_code: "xxx"                               # 认证码
+  app_id: "simnow_client_test"                   # 产品名称
+  md_front: "tcp://180.168.146.187:10131"        # 行情前置地址
+  td_front: "tcp://180.168.146.187:10130"        # 交易前置地址
+
+# Interactive Brokers 配置 (全球多市场)
+ib:
+  host: "127.0.0.1"                              # TWS/Gateway 地址
+  port: 7497                                     # TWS=7497, Gateway=4001
+  client_id: 1                                   # 客户端ID (多策略需不同ID)

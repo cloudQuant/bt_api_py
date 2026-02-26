@@ -1,0 +1,16 @@
+description = """Game concept ideation with guided design techniques. Use when the user says ""lets create game design ideas"" or ""I want to brainstorm game concepts"""""
+prompt = """
+Execute the BMAD 'brainstorm-game' workflow.
+
+CRITICAL: This is a structured YAML workflow. Follow these steps precisely:
+
+1. LOAD the workflow definition from {project-root}/_bmad/gds/workflows/1-preproduction/brainstorm-game/workflow.yaml
+2. PARSE the YAML structure to understand:
+   - Workflow phases and steps
+   - Required inputs and outputs
+   - Dependencies between steps
+3. EXECUTE each step in order
+4. VALIDATE outputs before proceeding to next step
+
+WORKFLOW FILE: {project-root}/_bmad/gds/workflows/1-preproduction/brainstorm-game/workflow.yaml
+"""

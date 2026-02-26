@@ -1,0 +1,16 @@
+description = """Game vision definition workflow. Use when the user says ""lets create a game brief"" or ""I want to define my game vision"""""
+prompt = """
+Execute the BMAD 'game-brief' workflow.
+
+CRITICAL: This is a structured YAML workflow. Follow these steps precisely:
+
+1. LOAD the workflow definition from {project-root}/_bmad/gds/workflows/1-preproduction/game-brief/workflow.yaml
+2. PARSE the YAML structure to understand:
+   - Workflow phases and steps
+   - Required inputs and outputs
+   - Dependencies between steps
+3. EXECUTE each step in order
+4. VALIDATE outputs before proceeding to next step
+
+WORKFLOW FILE: {project-root}/_bmad/gds/workflows/1-preproduction/game-brief/workflow.yaml
+"""
