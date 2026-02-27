@@ -800,7 +800,7 @@ def test_okx_req_cancel_all_after():
     """Test cancel_all_after interface"""
     live_okx_swap_feed = init_req_feed()
     # Set cancel all after 5 seconds
-    data = live_okx_swap_feed.cancel_all_after(time_slap='5000')
+    data = live_okx_swap_feed.cancel_all_after(time_slug='5000')
     assert isinstance(data, RequestData)
     print("cancel_all_after status:", data.get_status())
 
@@ -820,8 +820,8 @@ def test_okx_req_get_bills():
 def test_okx_req_get_lever():
     """Test get_lever interface"""
     live_okx_swap_feed = init_req_feed()
-    # Get leverage for BTC-USDT-SWAP
-    data = live_okx_swap_feed.get_lever(symbol="BTC-USDT", mgn_mode="cross")
+    # Get leverage for SWAP instruments
+    data = live_okx_swap_feed.get_lever(inst_type="SWAP", mgn_mode="cross")
     assert isinstance(data, RequestData)
     print("get_lever status:", data.get_status())
     lever_list = data.get_data()
@@ -847,8 +847,8 @@ def test_okx_req_amend_algo_order():
     live_okx_swap_feed = init_req_feed()
     # Amend algo order - this will fail without a valid algo_id
     result = live_okx_swap_feed.amend_algo_order(
-        symbol="BTC-USDT",
         algo_id="test_algo_id",  # Placeholder
+        inst_id="BTC-USDT-SWAP",
         new_sz="1"
     )
     assert isinstance(result, RequestData)

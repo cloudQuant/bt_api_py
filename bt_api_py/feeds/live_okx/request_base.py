@@ -434,6 +434,18 @@ class OkxRequestData(Feed):
         return path, params, extra_data
 
     @staticmethod
+    def _generic_normalize_function(input_data, extra_data):
+        """Generic normalize function for OKX API responses.
+        Extracts 'data' list and checks 'code' for status."""
+        status = True if input_data.get("code") == '0' else False
+        if 'data' not in input_data:
+            return [], status
+        data = input_data['data']
+        if isinstance(data, list):
+            return data, status
+        return [data] if data else [], status
+
+    @staticmethod
     def _get_config_normalize_function(input_data, extra_data):
         status = True if input_data["code"] == '0' else False
         if 'data' not in input_data:
@@ -721,7 +733,7 @@ class OkxRequestData(Feed):
             "symbol_name": symbol,
             "asset_type": self.asset_type,
             "exchange_name": self.exchange_name,
-            "normalize_function": None,
+            "normalize_function": OkxRequestData._generic_normalize_function,
         })
         if kwargs is not None:
             extra_data.update(kwargs)
@@ -1081,7 +1093,7 @@ class OkxRequestData(Feed):
             "symbol_name": inst_id or "ALL",
             "asset_type": self.asset_type,
             "exchange_name": self.exchange_name,
-            "normalize_function": None,
+            "normalize_function": OkxRequestData._generic_normalize_function,
         })
         if kwargs is not None:
             extra_data.update(kwargs)
@@ -1763,7 +1775,7 @@ class OkxRequestData(Feed):
             "symbol_name": inst_id,
             "asset_type": self.asset_type,
             "exchange_name": self.exchange_name,
-            "normalize_function": None,
+            "normalize_function": OkxRequestData._generic_normalize_function,
         })
         data = self.request(path, body=params, extra_data=extra_data)
         return data
@@ -1802,7 +1814,7 @@ class OkxRequestData(Feed):
             "symbol_name": inst_family,
             "asset_type": "OPTION",
             "exchange_name": self.exchange_name,
-            "normalize_function": None,
+            "normalize_function": OkxRequestData._generic_normalize_function,
         })
         if kwargs is not None:
             extra_data.update(kwargs)
@@ -1845,7 +1857,7 @@ class OkxRequestData(Feed):
             "symbol_name": inst_id,
             "asset_type": "OPTION",
             "exchange_name": self.exchange_name,
-            "normalize_function": None,
+            "normalize_function": OkxRequestData._generic_normalize_function,
         })
         if kwargs is not None:
             extra_data.update(kwargs)
@@ -1880,7 +1892,7 @@ class OkxRequestData(Feed):
             "symbol_name": "ALL",
             "asset_type": self.asset_type,
             "exchange_name": self.exchange_name,
-            "normalize_function": None,
+            "normalize_function": OkxRequestData._generic_normalize_function,
         })
         if kwargs is not None:
             extra_data.update(kwargs)
@@ -1925,7 +1937,7 @@ class OkxRequestData(Feed):
             "symbol_name": inst_id or "ALL",
             "asset_type": self.asset_type,
             "exchange_name": self.exchange_name,
-            "normalize_function": None,
+            "normalize_function": OkxRequestData._generic_normalize_function,
         })
         if kwargs is not None:
             extra_data.update(kwargs)
@@ -1967,7 +1979,7 @@ class OkxRequestData(Feed):
             "symbol_name": index or "ALL",
             "asset_type": "INDEX",
             "exchange_name": self.exchange_name,
-            "normalize_function": None,
+            "normalize_function": OkxRequestData._generic_normalize_function,
         })
         if kwargs is not None:
             extra_data.update(kwargs)
@@ -2208,7 +2220,7 @@ class OkxRequestData(Feed):
             "symbol_name": index,
             "asset_type": "INDEX",
             "exchange_name": self.exchange_name,
-            "normalize_function": None,
+            "normalize_function": OkxRequestData._generic_normalize_function,
         })
         if kwargs is not None:
             extra_data.update(kwargs)
@@ -2263,7 +2275,7 @@ class OkxRequestData(Feed):
             "symbol_name": symbol,
             "asset_type": self.asset_type,
             "exchange_name": self.exchange_name,
-            "normalize_function": None,
+            "normalize_function": OkxRequestData._generic_normalize_function,
         })
         if kwargs is not None:
             extra_data.update(kwargs)
@@ -4578,7 +4590,7 @@ class OkxRequestData(Feed):
             "symbol_name": ccy or uly or "ALL",
             "asset_type": inst_type or self.asset_type,
             "exchange_name": self.exchange_name,
-            "normalize_function": None,
+            "normalize_function": OkxRequestData._generic_normalize_function,
         })
         if kwargs is not None:
             extra_data.update(kwargs)
@@ -4837,7 +4849,7 @@ class OkxRequestData(Feed):
             "symbol_name": "SYSTEM",
             "asset_type": self.asset_type,
             "exchange_name": self.exchange_name,
-            "normalize_function": None,
+            "normalize_function": OkxRequestData._generic_normalize_function,
         })
         if kwargs is not None:
             extra_data.update(kwargs)
@@ -4869,7 +4881,7 @@ class OkxRequestData(Feed):
             "symbol_name": inst_id or "ALL",
             "asset_type": inst_type,
             "exchange_name": self.exchange_name,
-            "normalize_function": None,
+            "normalize_function": OkxRequestData._generic_normalize_function,
         })
         if kwargs is not None:
             extra_data.update(kwargs)
@@ -4901,7 +4913,7 @@ class OkxRequestData(Feed):
             "symbol_name": symbol,
             "asset_type": self.asset_type,
             "exchange_name": self.exchange_name,
-            "normalize_function": None,
+            "normalize_function": OkxRequestData._generic_normalize_function,
         })
         if kwargs is not None:
             extra_data.update(kwargs)
@@ -4940,7 +4952,7 @@ class OkxRequestData(Feed):
             "symbol_name": symbol,
             "asset_type": self.asset_type,
             "exchange_name": self.exchange_name,
-            "normalize_function": None,
+            "normalize_function": OkxRequestData._generic_normalize_function,
         })
         if kwargs is not None:
             extra_data.update(kwargs)
@@ -4976,7 +4988,7 @@ class OkxRequestData(Feed):
             "symbol_name": symbol,
             "asset_type": self.asset_type,
             "exchange_name": self.exchange_name,
-            "normalize_function": None,
+            "normalize_function": OkxRequestData._generic_normalize_function,
         })
         if kwargs is not None:
             extra_data.update(kwargs)
@@ -5014,7 +5026,7 @@ class OkxRequestData(Feed):
             "symbol_name": symbol,
             "asset_type": self.asset_type,
             "exchange_name": self.exchange_name,
-            "normalize_function": None,
+            "normalize_function": OkxRequestData._generic_normalize_function,
         })
         if kwargs is not None:
             extra_data.update(kwargs)
@@ -5053,7 +5065,7 @@ class OkxRequestData(Feed):
             "symbol_name": inst_id or "ALL",
             "asset_type": inst_type,
             "exchange_name": self.exchange_name,
-            "normalize_function": None,
+            "normalize_function": OkxRequestData._generic_normalize_function,
         })
         if kwargs is not None:
             extra_data.update(kwargs)
@@ -5095,7 +5107,7 @@ class OkxRequestData(Feed):
             "symbol_name": uly,
             "asset_type": inst_type,
             "exchange_name": self.exchange_name,
-            "normalize_function": None,
+            "normalize_function": OkxRequestData._generic_normalize_function,
         })
         if kwargs is not None:
             extra_data.update(kwargs)
@@ -5134,7 +5146,7 @@ class OkxRequestData(Feed):
             "symbol_name": inst_id or uly or "ALL",
             "asset_type": inst_type,
             "exchange_name": self.exchange_name,
-            "normalize_function": None,
+            "normalize_function": OkxRequestData._generic_normalize_function,
         })
         if kwargs is not None:
             extra_data.update(kwargs)
@@ -5176,7 +5188,7 @@ class OkxRequestData(Feed):
             "symbol_name": uly,
             "asset_type": inst_type,
             "exchange_name": self.exchange_name,
-            "normalize_function": None,
+            "normalize_function": OkxRequestData._generic_normalize_function,
         })
         if kwargs is not None:
             extra_data.update(kwargs)
@@ -5214,7 +5226,7 @@ class OkxRequestData(Feed):
             "symbol_name": inst_id or uly or "ALL",
             "asset_type": inst_type,
             "exchange_name": self.exchange_name,
-            "normalize_function": None,
+            "normalize_function": OkxRequestData._generic_normalize_function,
         })
         if kwargs is not None:
             extra_data.update(kwargs)
@@ -5249,7 +5261,7 @@ class OkxRequestData(Feed):
             "symbol_name": uly or "ALL",
             "asset_type": inst_type,
             "exchange_name": self.exchange_name,
-            "normalize_function": None,
+            "normalize_function": OkxRequestData._generic_normalize_function,
         })
         if kwargs is not None:
             extra_data.update(kwargs)
@@ -5288,7 +5300,7 @@ class OkxRequestData(Feed):
             "symbol_name": inst_id or uly or "ALL",
             "asset_type": inst_type,
             "exchange_name": self.exchange_name,
-            "normalize_function": None,
+            "normalize_function": OkxRequestData._generic_normalize_function,
         })
         if kwargs is not None:
             extra_data.update(kwargs)
@@ -5322,7 +5334,7 @@ class OkxRequestData(Feed):
             "symbol_name": "ALL",
             "asset_type": self.asset_type,
             "exchange_name": self.exchange_name,
-            "normalize_function": None,
+            "normalize_function": OkxRequestData._generic_normalize_function,
         })
         if kwargs is not None:
             extra_data.update(kwargs)
@@ -5359,7 +5371,7 @@ class OkxRequestData(Feed):
             "symbol_name": "ALL",
             "asset_type": self.asset_type,
             "exchange_name": self.exchange_name,
-            "normalize_function": None,
+            "normalize_function": OkxRequestData._generic_normalize_function,
         })
         if kwargs is not None:
             extra_data.update(kwargs)
@@ -5398,7 +5410,7 @@ class OkxRequestData(Feed):
             "symbol_name": inst_id or uly or "ALL",
             "asset_type": inst_type,
             "exchange_name": self.exchange_name,
-            "normalize_function": None,
+            "normalize_function": OkxRequestData._generic_normalize_function,
         })
         if kwargs is not None:
             extra_data.update(kwargs)
@@ -5439,7 +5451,7 @@ class OkxRequestData(Feed):
             "symbol_name": inst_id or uly or "ALL",
             "asset_type": inst_type,
             "exchange_name": self.exchange_name,
-            "normalize_function": None,
+            "normalize_function": OkxRequestData._generic_normalize_function,
         })
         if kwargs is not None:
             extra_data.update(kwargs)
@@ -5480,7 +5492,7 @@ class OkxRequestData(Feed):
             "symbol_name": inst_id or uly or "ALL",
             "asset_type": inst_type,
             "exchange_name": self.exchange_name,
-            "normalize_function": None,
+            "normalize_function": OkxRequestData._generic_normalize_function,
         })
         if kwargs is not None:
             extra_data.update(kwargs)
@@ -5516,7 +5528,7 @@ class OkxRequestData(Feed):
             "symbol_name": inst_id or uly or "ALL",
             "asset_type": inst_type,
             "exchange_name": self.exchange_name,
-            "normalize_function": None,
+            "normalize_function": OkxRequestData._generic_normalize_function,
         })
         if kwargs is not None:
             extra_data.update(kwargs)
@@ -5551,7 +5563,7 @@ class OkxRequestData(Feed):
             "symbol_name": inst_id or uly or "ALL",
             "asset_type": inst_type,
             "exchange_name": self.exchange_name,
-            "normalize_function": None,
+            "normalize_function": OkxRequestData._generic_normalize_function,
         })
         if kwargs is not None:
             extra_data.update(kwargs)
@@ -5585,7 +5597,7 @@ class OkxRequestData(Feed):
             "symbol_name": ccy or "ALL",
             "asset_type": self.asset_type,
             "exchange_name": self.exchange_name,
-            "normalize_function": None,
+            "normalize_function": OkxRequestData._generic_normalize_function,
         })
         if kwargs is not None:
             extra_data.update(kwargs)
@@ -5613,7 +5625,7 @@ class OkxRequestData(Feed):
             "symbol_name": "ALL",
             "asset_type": self.asset_type,
             "exchange_name": self.exchange_name,
-            "normalize_function": None,
+            "normalize_function": OkxRequestData._generic_normalize_function,
         })
         if kwargs is not None:
             extra_data.update(kwargs)
@@ -5658,7 +5670,7 @@ class OkxRequestData(Feed):
             "symbol_name": inst_id or "ALL",
             "asset_type": inst_type or self.asset_type,
             "exchange_name": self.exchange_name,
-            "normalize_function": None,
+            "normalize_function": OkxRequestData._generic_normalize_function,
         })
         if kwargs is not None:
             extra_data.update(kwargs)
@@ -5696,7 +5708,7 @@ class OkxRequestData(Feed):
             "symbol_name": inst_id or uly or "ALL",
             "asset_type": inst_type,
             "exchange_name": self.exchange_name,
-            "normalize_function": None,
+            "normalize_function": OkxRequestData._generic_normalize_function,
         })
         if kwargs is not None:
             extra_data.update(kwargs)
@@ -5731,7 +5743,7 @@ class OkxRequestData(Feed):
             "symbol_name": ccy or "ALL",
             "asset_type": self.asset_type,
             "exchange_name": self.exchange_name,
-            "normalize_function": None,
+            "normalize_function": OkxRequestData._generic_normalize_function,
         })
         if kwargs is not None:
             extra_data.update(kwargs)
@@ -5761,7 +5773,7 @@ class OkxRequestData(Feed):
             "symbol_name": ccy or "ALL",
             "asset_type": self.asset_type,
             "exchange_name": self.exchange_name,
-            "normalize_function": None,
+            "normalize_function": OkxRequestData._generic_normalize_function,
         })
         if kwargs is not None:
             extra_data.update(kwargs)
@@ -5791,7 +5803,7 @@ class OkxRequestData(Feed):
             "symbol_name": ccy or "ALL",
             "asset_type": self.asset_type,
             "exchange_name": self.exchange_name,
-            "normalize_function": None,
+            "normalize_function": OkxRequestData._generic_normalize_function,
         })
         if kwargs is not None:
             extra_data.update(kwargs)
@@ -5821,7 +5833,7 @@ class OkxRequestData(Feed):
             "symbol_name": ccy or "ALL",
             "asset_type": self.asset_type,
             "exchange_name": self.exchange_name,
-            "normalize_function": None,
+            "normalize_function": OkxRequestData._generic_normalize_function,
         })
         if kwargs is not None:
             extra_data.update(kwargs)
@@ -5859,7 +5871,7 @@ class OkxRequestData(Feed):
             "symbol_name": ccy,
             "asset_type": self.asset_type,
             "exchange_name": self.exchange_name,
-            "normalize_function": None,
+            "normalize_function": OkxRequestData._generic_normalize_function,
         })
         if kwargs is not None:
             extra_data.update(kwargs)
@@ -5898,7 +5910,7 @@ class OkxRequestData(Feed):
             "symbol_name": "ALL",
             "asset_type": self.asset_type,
             "exchange_name": self.exchange_name,
-            "normalize_function": None,
+            "normalize_function": OkxRequestData._generic_normalize_function,
         })
         if kwargs is not None:
             extra_data.update(kwargs)
@@ -5941,7 +5953,7 @@ class OkxRequestData(Feed):
             "symbol_name": ccy or "ALL",
             "asset_type": self.asset_type,
             "exchange_name": self.exchange_name,
-            "normalize_function": None,
+            "normalize_function": OkxRequestData._generic_normalize_function,
         })
         if kwargs is not None:
             extra_data.update(kwargs)
@@ -5984,7 +5996,7 @@ class OkxRequestData(Feed):
             "symbol_name": ccy or "ALL",
             "asset_type": self.asset_type,
             "exchange_name": self.exchange_name,
-            "normalize_function": None,
+            "normalize_function": OkxRequestData._generic_normalize_function,
         })
         if kwargs is not None:
             extra_data.update(kwargs)
@@ -6020,7 +6032,7 @@ class OkxRequestData(Feed):
             "symbol_name": ccy,
             "asset_type": self.asset_type,
             "exchange_name": self.exchange_name,
-            "normalize_function": None,
+            "normalize_function": OkxRequestData._generic_normalize_function,
         })
         if kwargs is not None:
             extra_data.update(kwargs)
@@ -6056,7 +6068,7 @@ class OkxRequestData(Feed):
             "symbol_name": ccy or "ALL",
             "asset_type": self.asset_type,
             "exchange_name": self.exchange_name,
-            "normalize_function": None,
+            "normalize_function": OkxRequestData._generic_normalize_function,
         })
         if kwargs is not None:
             extra_data.update(kwargs)
@@ -6097,7 +6109,7 @@ class OkxRequestData(Feed):
             "symbol_name": ccy or "ALL",
             "asset_type": self.asset_type,
             "exchange_name": self.exchange_name,
-            "normalize_function": None,
+            "normalize_function": OkxRequestData._generic_normalize_function,
         })
         if kwargs is not None:
             extra_data.update(kwargs)
@@ -6143,7 +6155,7 @@ class OkxRequestData(Feed):
             "symbol_name": ccy,
             "asset_type": self.asset_type,
             "exchange_name": self.exchange_name,
-            "normalize_function": None,
+            "normalize_function": OkxRequestData._generic_normalize_function,
         })
         if kwargs is not None:
             extra_data.update(kwargs)
@@ -6179,7 +6191,7 @@ class OkxRequestData(Feed):
             "symbol_name": ccy or "ALL",
             "asset_type": self.asset_type,
             "exchange_name": self.exchange_name,
-            "normalize_function": None,
+            "normalize_function": OkxRequestData._generic_normalize_function,
         })
         if kwargs is not None:
             extra_data.update(kwargs)
@@ -6216,7 +6228,7 @@ class OkxRequestData(Feed):
             "symbol_name": ccy or "ALL",
             "asset_type": self.asset_type,
             "exchange_name": self.exchange_name,
-            "normalize_function": None,
+            "normalize_function": OkxRequestData._generic_normalize_function,
         })
         if kwargs is not None:
             extra_data.update(kwargs)
@@ -6250,7 +6262,7 @@ class OkxRequestData(Feed):
             "symbol_name": "ALL",
             "asset_type": self.asset_type,
             "exchange_name": self.exchange_name,
-            "normalize_function": None,
+            "normalize_function": OkxRequestData._generic_normalize_function,
         })
         if kwargs is not None:
             extra_data.update(kwargs)
@@ -6280,7 +6292,7 @@ class OkxRequestData(Feed):
             "symbol_name": sub_acct,
             "asset_type": self.asset_type,
             "exchange_name": self.exchange_name,
-            "normalize_function": None,
+            "normalize_function": OkxRequestData._generic_normalize_function,
         })
         if kwargs is not None:
             extra_data.update(kwargs)
@@ -6315,7 +6327,7 @@ class OkxRequestData(Feed):
             "symbol_name": sub_acct,
             "asset_type": self.asset_type,
             "exchange_name": self.exchange_name,
-            "normalize_function": None,
+            "normalize_function": OkxRequestData._generic_normalize_function,
         })
         if kwargs is not None:
             extra_data.update(kwargs)
@@ -6347,7 +6359,7 @@ class OkxRequestData(Feed):
             "symbol_name": sub_acct,
             "asset_type": self.asset_type,
             "exchange_name": self.exchange_name,
-            "normalize_function": None,
+            "normalize_function": OkxRequestData._generic_normalize_function,
         })
         if kwargs is not None:
             extra_data.update(kwargs)
@@ -6385,7 +6397,7 @@ class OkxRequestData(Feed):
             "symbol_name": sub_acct,
             "asset_type": self.asset_type,
             "exchange_name": self.exchange_name,
-            "normalize_function": None,
+            "normalize_function": OkxRequestData._generic_normalize_function,
         })
         if kwargs is not None:
             extra_data.update(kwargs)
@@ -6420,7 +6432,7 @@ class OkxRequestData(Feed):
             "symbol_name": sub_acct,
             "asset_type": self.asset_type,
             "exchange_name": self.exchange_name,
-            "normalize_function": None,
+            "normalize_function": OkxRequestData._generic_normalize_function,
         })
         if kwargs is not None:
             extra_data.update(kwargs)
@@ -6452,7 +6464,7 @@ class OkxRequestData(Feed):
             "symbol_name": sub_acct,
             "asset_type": self.asset_type,
             "exchange_name": self.exchange_name,
-            "normalize_function": None,
+            "normalize_function": OkxRequestData._generic_normalize_function,
         })
         if kwargs is not None:
             extra_data.update(kwargs)
@@ -6484,7 +6496,7 @@ class OkxRequestData(Feed):
             "symbol_name": sub_acct,
             "asset_type": self.asset_type,
             "exchange_name": self.exchange_name,
-            "normalize_function": None,
+            "normalize_function": OkxRequestData._generic_normalize_function,
         })
         if kwargs is not None:
             extra_data.update(kwargs)
@@ -6516,7 +6528,7 @@ class OkxRequestData(Feed):
             "symbol_name": "BATCH",
             "asset_type": self.asset_type,
             "exchange_name": self.exchange_name,
-            "normalize_function": None,
+            "normalize_function": OkxRequestData._generic_normalize_function,
         })
         if kwargs is not None:
             extra_data.update(kwargs)
@@ -6544,7 +6556,7 @@ class OkxRequestData(Feed):
             "symbol_name": "BATCH",
             "asset_type": self.asset_type,
             "exchange_name": self.exchange_name,
-            "normalize_function": None,
+            "normalize_function": OkxRequestData._generic_normalize_function,
         })
         if kwargs is not None:
             extra_data.update(kwargs)
@@ -6572,7 +6584,7 @@ class OkxRequestData(Feed):
             "symbol_name": "BATCH",
             "asset_type": self.asset_type,
             "exchange_name": self.exchange_name,
-            "normalize_function": None,
+            "normalize_function": OkxRequestData._generic_normalize_function,
         })
         if kwargs is not None:
             extra_data.update(kwargs)
@@ -6615,7 +6627,7 @@ class OkxRequestData(Feed):
             "symbol_name": inst_id or "ALL",
             "asset_type": inst_type or self.asset_type,
             "exchange_name": self.exchange_name,
-            "normalize_function": None,
+            "normalize_function": OkxRequestData._generic_normalize_function,
         })
         if kwargs is not None:
             extra_data.update(kwargs)
@@ -6659,7 +6671,7 @@ class OkxRequestData(Feed):
             "symbol_name": symbol,
             "asset_type": self.asset_type,
             "exchange_name": self.exchange_name,
-            "normalize_function": None,
+            "normalize_function": OkxRequestData._generic_normalize_function,
         })
         if kwargs is not None:
             extra_data.update(kwargs)
@@ -6706,7 +6718,7 @@ class OkxRequestData(Feed):
             "symbol_name": inst_id or "ALL",
             "asset_type": inst_type or self.asset_type,
             "exchange_name": self.exchange_name,
-            "normalize_function": None,
+            "normalize_function": OkxRequestData._generic_normalize_function,
         })
         if kwargs is not None:
             extra_data.update(kwargs)
@@ -6753,7 +6765,7 @@ class OkxRequestData(Feed):
             "symbol_name": inst_id or "ALL",
             "asset_type": inst_type or self.asset_type,
             "exchange_name": self.exchange_name,
-            "normalize_function": None,
+            "normalize_function": OkxRequestData._generic_normalize_function,
         })
         if kwargs is not None:
             extra_data.update(kwargs)
@@ -6788,7 +6800,7 @@ class OkxRequestData(Feed):
             "symbol_name": "ALL",
             "asset_type": self.asset_type,
             "exchange_name": self.exchange_name,
-            "normalize_function": None,
+            "normalize_function": OkxRequestData._generic_normalize_function,
         })
         if kwargs is not None:
             extra_data.update(kwargs)
@@ -6843,7 +6855,7 @@ class OkxRequestData(Feed):
             "symbol_name": inst_id,
             "asset_type": self.asset_type,
             "exchange_name": self.exchange_name,
-            "normalize_function": None,
+            "normalize_function": OkxRequestData._generic_normalize_function,
         })
         if kwargs is not None:
             extra_data.update(kwargs)
@@ -6897,7 +6909,7 @@ class OkxRequestData(Feed):
             "symbol_name": inst_id or "ALL",
             "asset_type": inst_type or self.asset_type,
             "exchange_name": self.exchange_name,
-            "normalize_function": None,
+            "normalize_function": OkxRequestData._generic_normalize_function,
         })
         if kwargs is not None:
             extra_data.update(kwargs)
@@ -6945,7 +6957,7 @@ class OkxRequestData(Feed):
             "symbol_name": inst_id or "ALL",
             "asset_type": inst_type or self.asset_type,
             "exchange_name": self.exchange_name,
-            "normalize_function": None,
+            "normalize_function": OkxRequestData._generic_normalize_function,
         })
         if kwargs is not None:
             extra_data.update(kwargs)
@@ -6984,7 +6996,7 @@ class OkxRequestData(Feed):
             "symbol_name": inst_id,
             "asset_type": self.asset_type,
             "exchange_name": self.exchange_name,
-            "normalize_function": None,
+            "normalize_function": OkxRequestData._generic_normalize_function,
         })
         if kwargs is not None:
             extra_data.update(kwargs)
@@ -7017,7 +7029,7 @@ class OkxRequestData(Feed):
             "symbol_name": inst_id or "ALL",
             "asset_type": inst_type,
             "exchange_name": self.exchange_name,
-            "normalize_function": None,
+            "normalize_function": OkxRequestData._generic_normalize_function,
         })
         if kwargs is not None:
             extra_data.update(kwargs)
@@ -7045,7 +7057,7 @@ class OkxRequestData(Feed):
             "symbol_name": "ALL",
             "asset_type": self.asset_type,
             "exchange_name": self.exchange_name,
-            "normalize_function": None,
+            "normalize_function": OkxRequestData._generic_normalize_function,
         })
         if kwargs is not None:
             extra_data.update(kwargs)
@@ -7073,7 +7085,7 @@ class OkxRequestData(Feed):
             "symbol_name": "ALL",
             "asset_type": self.asset_type,
             "exchange_name": self.exchange_name,
-            "normalize_function": None,
+            "normalize_function": OkxRequestData._generic_normalize_function,
         })
         if kwargs is not None:
             extra_data.update(kwargs)
@@ -7107,7 +7119,7 @@ class OkxRequestData(Feed):
             "symbol_name": from_ccy,
             "asset_type": self.asset_type,
             "exchange_name": self.exchange_name,
-            "normalize_function": None,
+            "normalize_function": OkxRequestData._generic_normalize_function,
         })
         if kwargs is not None:
             extra_data.update(kwargs)
@@ -7144,7 +7156,7 @@ class OkxRequestData(Feed):
             "symbol_name": "ALL",
             "asset_type": self.asset_type,
             "exchange_name": self.exchange_name,
-            "normalize_function": None,
+            "normalize_function": OkxRequestData._generic_normalize_function,
         })
         if kwargs is not None:
             extra_data.update(kwargs)
@@ -7176,7 +7188,7 @@ class OkxRequestData(Feed):
             "symbol_name": "ALL",
             "asset_type": self.asset_type,
             "exchange_name": self.exchange_name,
-            "normalize_function": None,
+            "normalize_function": OkxRequestData._generic_normalize_function,
         })
         if kwargs is not None:
             extra_data.update(kwargs)
@@ -7209,7 +7221,7 @@ class OkxRequestData(Feed):
             "symbol_name": ccy,
             "asset_type": self.asset_type,
             "exchange_name": self.exchange_name,
-            "normalize_function": None,
+            "normalize_function": OkxRequestData._generic_normalize_function,
         })
         if kwargs is not None:
             extra_data.update(kwargs)
@@ -7247,7 +7259,7 @@ class OkxRequestData(Feed):
             "symbol_name": "ALL",
             "asset_type": self.asset_type,
             "exchange_name": self.exchange_name,
-            "normalize_function": None,
+            "normalize_function": OkxRequestData._generic_normalize_function,
         })
         if kwargs is not None:
             extra_data.update(kwargs)
@@ -7284,7 +7296,7 @@ class OkxRequestData(Feed):
             "symbol_name": inst_id or "ALL",
             "asset_type": inst_type,
             "exchange_name": self.exchange_name,
-            "normalize_function": None,
+            "normalize_function": OkxRequestData._generic_normalize_function,
         })
         if kwargs is not None:
             extra_data.update(kwargs)
@@ -7325,7 +7337,7 @@ class OkxRequestData(Feed):
             "symbol_name": symbol,
             "asset_type": self.asset_type,
             "exchange_name": self.exchange_name,
-            "normalize_function": None,
+            "normalize_function": OkxRequestData._generic_normalize_function,
         })
         if kwargs is not None:
             extra_data.update(kwargs)
@@ -7567,7 +7579,7 @@ class OkxRequestData(Feed):
             "symbol_name": inst_id or uly or ccy or "ALL",
             "asset_type": self.asset_type,
             "exchange_name": self.exchange_name,
-            "normalize_function": None,
+            "normalize_function": OkxRequestData._generic_normalize_function,
         })
         if kwargs is not None:
             extra_data.update(kwargs)
@@ -7615,7 +7627,7 @@ class OkxRequestData(Feed):
             "symbol_name": inst_id or uly or ccy or "ALL",
             "asset_type": self.asset_type,
             "exchange_name": self.exchange_name,
-            "normalize_function": None,
+            "normalize_function": OkxRequestData._generic_normalize_function,
         })
         if kwargs is not None:
             extra_data.update(kwargs)
@@ -7656,7 +7668,7 @@ class OkxRequestData(Feed):
             "symbol_name": ccy or "ALL",
             "asset_type": self.asset_type,
             "exchange_name": self.exchange_name,
-            "normalize_function": None,
+            "normalize_function": OkxRequestData._generic_normalize_function,
         })
         if kwargs is not None:
             extra_data.update(kwargs)
@@ -7697,7 +7709,7 @@ class OkxRequestData(Feed):
             "symbol_name": ccy or "ALL",
             "asset_type": self.asset_type,
             "exchange_name": self.exchange_name,
-            "normalize_function": None,
+            "normalize_function": OkxRequestData._generic_normalize_function,
         })
         if kwargs is not None:
             extra_data.update(kwargs)
@@ -7744,7 +7756,7 @@ class OkxRequestData(Feed):
             "symbol_name": inst_id or uly or ccy or "ALL",
             "asset_type": self.asset_type,
             "exchange_name": self.exchange_name,
-            "normalize_function": None,
+            "normalize_function": OkxRequestData._generic_normalize_function,
         })
         if kwargs is not None:
             extra_data.update(kwargs)
@@ -7789,7 +7801,7 @@ class OkxRequestData(Feed):
             "symbol_name": uly or ccy or "ALL",
             "asset_type": self.asset_type,
             "exchange_name": self.exchange_name,
-            "normalize_function": None,
+            "normalize_function": OkxRequestData._generic_normalize_function,
         })
         if kwargs is not None:
             extra_data.update(kwargs)
@@ -7859,7 +7871,7 @@ class OkxRequestData(Feed):
             "symbol_name": inst_id,
             "asset_type": self.asset_type,
             "exchange_name": self.exchange_name,
-            "normalize_function": None,
+            "normalize_function": OkxRequestData._generic_normalize_function,
         })
         if kwargs is not None:
             extra_data.update(kwargs)
@@ -7924,7 +7936,7 @@ class OkxRequestData(Feed):
             "symbol_name": inst_id,
             "asset_type": self.asset_type,
             "exchange_name": self.exchange_name,
-            "normalize_function": None,
+            "normalize_function": OkxRequestData._generic_normalize_function,
         })
         if kwargs is not None:
             extra_data.update(kwargs)
@@ -7965,7 +7977,7 @@ class OkxRequestData(Feed):
             "symbol_name": inst_id,
             "asset_type": self.asset_type,
             "exchange_name": self.exchange_name,
-            "normalize_function": None,
+            "normalize_function": OkxRequestData._generic_normalize_function,
         })
         if kwargs is not None:
             extra_data.update(kwargs)
@@ -8006,7 +8018,7 @@ class OkxRequestData(Feed):
             "symbol_name": inst_id or "ALL",
             "asset_type": self.asset_type,
             "exchange_name": self.exchange_name,
-            "normalize_function": None,
+            "normalize_function": OkxRequestData._generic_normalize_function,
         })
         if kwargs is not None:
             extra_data.update(kwargs)
@@ -8055,7 +8067,7 @@ class OkxRequestData(Feed):
             "symbol_name": inst_id or "ALL",
             "asset_type": self.asset_type,
             "exchange_name": self.exchange_name,
-            "normalize_function": None,
+            "normalize_function": OkxRequestData._generic_normalize_function,
         })
         if kwargs is not None:
             extra_data.update(kwargs)
@@ -8106,7 +8118,7 @@ class OkxRequestData(Feed):
             "symbol_name": inst_id,
             "asset_type": self.asset_type,
             "exchange_name": self.exchange_name,
-            "normalize_function": None,
+            "normalize_function": OkxRequestData._generic_normalize_function,
         })
         if kwargs is not None:
             extra_data.update(kwargs)
@@ -8150,7 +8162,7 @@ class OkxRequestData(Feed):
             "symbol_name": inst_id,
             "asset_type": self.asset_type,
             "exchange_name": self.exchange_name,
-            "normalize_function": None,
+            "normalize_function": OkxRequestData._generic_normalize_function,
         })
         if kwargs is not None:
             extra_data.update(kwargs)
@@ -8185,7 +8197,7 @@ class OkxRequestData(Feed):
             "symbol_name": inst_id,
             "asset_type": self.asset_type,
             "exchange_name": self.exchange_name,
-            "normalize_function": None,
+            "normalize_function": OkxRequestData._generic_normalize_function,
         })
         if kwargs is not None:
             extra_data.update(kwargs)
@@ -8221,7 +8233,7 @@ class OkxRequestData(Feed):
             "symbol_name": inst_id,
             "asset_type": self.asset_type,
             "exchange_name": self.exchange_name,
-            "normalize_function": None,
+            "normalize_function": OkxRequestData._generic_normalize_function,
         })
         if kwargs is not None:
             extra_data.update(kwargs)
@@ -8256,7 +8268,7 @@ class OkxRequestData(Feed):
             "symbol_name": inst_id,
             "asset_type": self.asset_type,
             "exchange_name": self.exchange_name,
-            "normalize_function": None,
+            "normalize_function": OkxRequestData._generic_normalize_function,
         })
         if kwargs is not None:
             extra_data.update(kwargs)
@@ -8300,7 +8312,7 @@ class OkxRequestData(Feed):
             "symbol_name": inst_id,
             "asset_type": self.asset_type,
             "exchange_name": self.exchange_name,
-            "normalize_function": None,
+            "normalize_function": OkxRequestData._generic_normalize_function,
         })
         if kwargs is not None:
             extra_data.update(kwargs)
@@ -8340,7 +8352,7 @@ class OkxRequestData(Feed):
             "symbol_name": inst_id or "ALL",
             "asset_type": self.asset_type,
             "exchange_name": self.exchange_name,
-            "normalize_function": None,
+            "normalize_function": OkxRequestData._generic_normalize_function,
         })
         if kwargs is not None:
             extra_data.update(kwargs)
@@ -8379,7 +8391,7 @@ class OkxRequestData(Feed):
             "symbol_name": inst_id,
             "asset_type": self.asset_type,
             "exchange_name": self.exchange_name,
-            "normalize_function": None,
+            "normalize_function": OkxRequestData._generic_normalize_function,
         })
         if kwargs is not None:
             extra_data.update(kwargs)
@@ -8427,7 +8439,7 @@ class OkxRequestData(Feed):
             "symbol_name": inst_id,
             "asset_type": self.asset_type,
             "exchange_name": self.exchange_name,
-            "normalize_function": None,
+            "normalize_function": OkxRequestData._generic_normalize_function,
         })
         if kwargs is not None:
             extra_data.update(kwargs)
@@ -8472,7 +8484,7 @@ class OkxRequestData(Feed):
             "symbol_name": inst_id,
             "asset_type": self.asset_type,
             "exchange_name": self.exchange_name,
-            "normalize_function": None,
+            "normalize_function": OkxRequestData._generic_normalize_function,
         })
         if kwargs is not None:
             extra_data.update(kwargs)
@@ -8513,7 +8525,7 @@ class OkxRequestData(Feed):
             "symbol_name": inst_id,
             "asset_type": self.asset_type,
             "exchange_name": self.exchange_name,
-            "normalize_function": None,
+            "normalize_function": OkxRequestData._generic_normalize_function,
         })
         if kwargs is not None:
             extra_data.update(kwargs)
@@ -8555,7 +8567,7 @@ class OkxRequestData(Feed):
             "symbol_name": inst_id,
             "asset_type": self.asset_type,
             "exchange_name": self.exchange_name,
-            "normalize_function": None,
+            "normalize_function": OkxRequestData._generic_normalize_function,
         })
         if kwargs is not None:
             extra_data.update(kwargs)
@@ -8600,7 +8612,7 @@ class OkxRequestData(Feed):
             "symbol_name": inst_id,
             "asset_type": self.asset_type,
             "exchange_name": self.exchange_name,
-            "normalize_function": None,
+            "normalize_function": OkxRequestData._generic_normalize_function,
         })
         if kwargs is not None:
             extra_data.update(kwargs)
@@ -8644,7 +8656,7 @@ class OkxRequestData(Feed):
             "symbol_name": inst_id,
             "asset_type": self.asset_type,
             "exchange_name": self.exchange_name,
-            "normalize_function": None,
+            "normalize_function": OkxRequestData._generic_normalize_function,
         })
         if kwargs is not None:
             extra_data.update(kwargs)
@@ -8681,7 +8693,7 @@ class OkxRequestData(Feed):
             "symbol_name": inst_id,
             "asset_type": self.asset_type,
             "exchange_name": self.exchange_name,
-            "normalize_function": None,
+            "normalize_function": OkxRequestData._generic_normalize_function,
         })
         if kwargs is not None:
             extra_data.update(kwargs)
@@ -8715,7 +8727,7 @@ class OkxRequestData(Feed):
             "symbol_name": ccy or "ALL",
             "asset_type": self.asset_type,
             "exchange_name": self.exchange_name,
-            "normalize_function": None,
+            "normalize_function": OkxRequestData._generic_normalize_function,
         })
         if kwargs is not None:
             extra_data.update(kwargs)
@@ -8745,7 +8757,7 @@ class OkxRequestData(Feed):
             "symbol_name": "ALL",
             "asset_type": self.asset_type,
             "exchange_name": self.exchange_name,
-            "normalize_function": None,
+            "normalize_function": OkxRequestData._generic_normalize_function,
         })
         if kwargs is not None:
             extra_data.update(kwargs)
@@ -8775,7 +8787,7 @@ class OkxRequestData(Feed):
             "symbol_name": "ALL",
             "asset_type": self.asset_type,
             "exchange_name": self.exchange_name,
-            "normalize_function": None,
+            "normalize_function": OkxRequestData._generic_normalize_function,
         })
         if kwargs is not None:
             extra_data.update(kwargs)
@@ -8803,7 +8815,7 @@ class OkxRequestData(Feed):
             "symbol_name": "ALL",
             "asset_type": self.asset_type,
             "exchange_name": self.exchange_name,
-            "normalize_function": None,
+            "normalize_function": OkxRequestData._generic_normalize_function,
         })
         if kwargs is not None:
             extra_data.update(kwargs)
@@ -8835,7 +8847,7 @@ class OkxRequestData(Feed):
             "symbol_name": f"{from_ccy or 'ALL'}-{to_ccy or 'ALL'}",
             "asset_type": self.asset_type,
             "exchange_name": self.exchange_name,
-            "normalize_function": None,
+            "normalize_function": OkxRequestData._generic_normalize_function,
         })
         if kwargs is not None:
             extra_data.update(kwargs)
@@ -8868,7 +8880,7 @@ class OkxRequestData(Feed):
             "symbol_name": f"{from_ccy}-{to_ccy}",
             "asset_type": self.asset_type,
             "exchange_name": self.exchange_name,
-            "normalize_function": None,
+            "normalize_function": OkxRequestData._generic_normalize_function,
         })
         if kwargs is not None:
             extra_data.update(kwargs)
@@ -8901,7 +8913,7 @@ class OkxRequestData(Feed):
             "symbol_name": f"{from_ccy}-{to_ccy}",
             "asset_type": self.asset_type,
             "exchange_name": self.exchange_name,
-            "normalize_function": None,
+            "normalize_function": OkxRequestData._generic_normalize_function,
         })
         if kwargs is not None:
             extra_data.update(kwargs)
@@ -8935,7 +8947,7 @@ class OkxRequestData(Feed):
             "symbol_name": "ALL",
             "asset_type": self.asset_type,
             "exchange_name": self.exchange_name,
-            "normalize_function": None,
+            "normalize_function": OkxRequestData._generic_normalize_function,
         })
         if kwargs is not None:
             extra_data.update(kwargs)
@@ -8965,7 +8977,7 @@ class OkxRequestData(Feed):
             "symbol_name": ccy or "ALL",
             "asset_type": self.asset_type,
             "exchange_name": self.exchange_name,
-            "normalize_function": None,
+            "normalize_function": OkxRequestData._generic_normalize_function,
         })
         if kwargs is not None:
             extra_data.update(kwargs)
@@ -8995,7 +9007,7 @@ class OkxRequestData(Feed):
             "symbol_name": ccy or "ALL",
             "asset_type": self.asset_type,
             "exchange_name": self.exchange_name,
-            "normalize_function": None,
+            "normalize_function": OkxRequestData._generic_normalize_function,
         })
         if kwargs is not None:
             extra_data.update(kwargs)
@@ -9038,7 +9050,7 @@ class OkxRequestData(Feed):
             "symbol_name": ccy,
             "asset_type": self.asset_type,
             "exchange_name": self.exchange_name,
-            "normalize_function": None,
+            "normalize_function": OkxRequestData._generic_normalize_function,
         })
         if kwargs is not None:
             extra_data.update(kwargs)
@@ -9072,7 +9084,7 @@ class OkxRequestData(Feed):
             "symbol_name": "ALL",
             "asset_type": self.asset_type,
             "exchange_name": self.exchange_name,
-            "normalize_function": None,
+            "normalize_function": OkxRequestData._generic_normalize_function,
         })
         if kwargs is not None:
             extra_data.update(kwargs)
@@ -9111,7 +9123,7 @@ class OkxRequestData(Feed):
             "symbol_name": ccy or "ALL",
             "asset_type": self.asset_type,
             "exchange_name": self.exchange_name,
-            "normalize_function": None,
+            "normalize_function": OkxRequestData._generic_normalize_function,
         })
         if kwargs is not None:
             extra_data.update(kwargs)
@@ -9145,7 +9157,7 @@ class OkxRequestData(Feed):
             "symbol_name": "ALL",
             "asset_type": self.asset_type,
             "exchange_name": self.exchange_name,
-            "normalize_function": None,
+            "normalize_function": OkxRequestData._generic_normalize_function,
         })
         if kwargs is not None:
             extra_data.update(kwargs)
@@ -9184,7 +9196,7 @@ class OkxRequestData(Feed):
             "symbol_name": ccy or "ALL",
             "asset_type": self.asset_type,
             "exchange_name": self.exchange_name,
-            "normalize_function": None,
+            "normalize_function": OkxRequestData._generic_normalize_function,
         })
         if kwargs is not None:
             extra_data.update(kwargs)
@@ -9218,7 +9230,7 @@ class OkxRequestData(Feed):
             "symbol_name": "ALL",
             "asset_type": self.asset_type,
             "exchange_name": self.exchange_name,
-            "normalize_function": None,
+            "normalize_function": OkxRequestData._generic_normalize_function,
         })
         if kwargs is not None:
             extra_data.update(kwargs)
@@ -9246,7 +9258,7 @@ class OkxRequestData(Feed):
             "symbol_name": "ALL",
             "asset_type": self.asset_type,
             "exchange_name": self.exchange_name,
-            "normalize_function": None,
+            "normalize_function": OkxRequestData._generic_normalize_function,
         })
         if kwargs is not None:
             extra_data.update(kwargs)
@@ -9274,7 +9286,7 @@ class OkxRequestData(Feed):
             "symbol_name": "ALL",
             "asset_type": self.asset_type,
             "exchange_name": self.exchange_name,
-            "normalize_function": None,
+            "normalize_function": OkxRequestData._generic_normalize_function,
         })
         if kwargs is not None:
             extra_data.update(kwargs)
@@ -9308,7 +9320,7 @@ class OkxRequestData(Feed):
             "symbol_name": f"{base_ccy}-{quote_ccy}",
             "asset_type": self.asset_type,
             "exchange_name": self.exchange_name,
-            "normalize_function": None,
+            "normalize_function": OkxRequestData._generic_normalize_function,
         })
         if kwargs is not None:
             extra_data.update(kwargs)
@@ -9343,7 +9355,7 @@ class OkxRequestData(Feed):
             "symbol_name": f"{base_ccy}-{quote_ccy}",
             "asset_type": self.asset_type,
             "exchange_name": self.exchange_name,
-            "normalize_function": None,
+            "normalize_function": OkxRequestData._generic_normalize_function,
         })
         if kwargs is not None:
             extra_data.update(kwargs)
@@ -9377,7 +9389,7 @@ class OkxRequestData(Feed):
             "symbol_name": "ALL",
             "asset_type": self.asset_type,
             "exchange_name": self.exchange_name,
-            "normalize_function": None,
+            "normalize_function": OkxRequestData._generic_normalize_function,
         })
         if kwargs is not None:
             extra_data.update(kwargs)
@@ -9418,7 +9430,7 @@ class OkxRequestData(Feed):
             "symbol_name": sub_acct or "ALL",
             "asset_type": self.asset_type,
             "exchange_name": self.exchange_name,
-            "normalize_function": None,
+            "normalize_function": OkxRequestData._generic_normalize_function,
         })
         if kwargs is not None:
             extra_data.update(kwargs)
@@ -9461,7 +9473,7 @@ class OkxRequestData(Feed):
             "symbol_name": sub_acct or "ALL",
             "asset_type": self.asset_type,
             "exchange_name": self.exchange_name,
-            "normalize_function": None,
+            "normalize_function": OkxRequestData._generic_normalize_function,
         })
         if kwargs is not None:
             extra_data.update(kwargs)
@@ -9502,7 +9514,7 @@ class OkxRequestData(Feed):
             "symbol_name": ccy,
             "asset_type": self.asset_type,
             "exchange_name": self.exchange_name,
-            "normalize_function": None,
+            "normalize_function": OkxRequestData._generic_normalize_function,
         })
         if kwargs is not None:
             extra_data.update(kwargs)
@@ -9538,7 +9550,7 @@ class OkxRequestData(Feed):
             "symbol_name": sub_acct or "ALL",
             "asset_type": self.asset_type,
             "exchange_name": self.exchange_name,
-            "normalize_function": None,
+            "normalize_function": OkxRequestData._generic_normalize_function,
         })
         if kwargs is not None:
             extra_data.update(kwargs)
@@ -9566,7 +9578,7 @@ class OkxRequestData(Feed):
             "symbol_name": "ALL",
             "asset_type": self.asset_type,
             "exchange_name": self.exchange_name,
-            "normalize_function": None,
+            "normalize_function": OkxRequestData._generic_normalize_function,
         })
         if kwargs is not None:
             extra_data.update(kwargs)
