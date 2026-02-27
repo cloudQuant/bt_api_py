@@ -1,85 +1,184 @@
 # CoinSpot API 文档
 
-## 交易所信息
+## 文档信息
+- 文档版本: 1.0.0
+- 创建日期: 2026-02-27
+- 官方文档: https://www.coinspot.com.au/api
+- 数据来源: CCXT 源码验证
 
-- **交易所名称**: CoinSpot
-- **官方网站**: https://www.coinspot.com.au
-- **API文档**: https://www.coinspot.com.au/v2/api
-- **24h交易量排名**: #42
-- **24h交易量**: $20M+
-- **支持的交易对**: 300+（以官方 markets 列表为准）
-- **API版本**: v2（Public/Private/Read Only）
+## 交易所基本信息
+- 官方名称: CoinSpot
+- 官网: https://www.coinspot.com.au
+- 交易所类型: CEX (中心化交易所)
+- 总部: 澳大利亚
+- 支持的交易对: 300+ (AUD, USDT 计价)
+- 支持的交易类型: 现货(Spot) - 仅限价单
+- 法币支持: AUD (澳元)
 
-## API基础信息
+## API基础URL
 
-### 基础URL
-
-```text
-# Public API
-https://www.coinspot.com.au/pubapi/v2
-
-# Private API
-https://www.coinspot.com.au/api/v2
-
-# Read Only API
-https://www.coinspot.com.au/api/v2/ro
-```
-
-### 请求头（Private API）
-
-```text
-Content-Type: application/json
-key: {api_key}
-signature: {signature}
-nonce: {nonce_ms}
-```
+| 端点类型 | URL |
+|---------|-----|
+| Public V1 | `https://www.coinspot.com.au/pubapi` |
+| Private V1 | `https://www.coinspot.com.au/api` |
+| Public V2 | `https://www.coinspot.com.au/pubapi/v2` |
+| Private V2 | `https://www.coinspot.com.au/api/v2` |
 
 ## 认证方式
 
-CoinSpot 使用 HMAC SHA512。
+### HMAC SHA512 签名
 
-**签名规则**:
+**请求头**:
 
-- 使用共享密钥对请求参数进行 HMAC SHA512 签名
-- 签名随请求一起发送（详见官方文档 Security 说明）
+| Header | 描述 |
+|--------|------|
+| key | API Key |
+| sign | HMAC-SHA512 签名 |
+| Content-Type | application/json |
 
-## 市场数据API（示例）
+**签名步骤**:
+1. 构建 JSON body，包含 `nonce` (时间戳)
+2. 使用 Secret 对 JSON body 进行 HMAC SHA512
 
-- 最新买价: `GET /pubapi/v2/buyprice/{cointype}`
-- 最新卖价: `GET /pubapi/v2/sellprice/{cointype}`
-- 订单簿: `GET /pubapi/v2/orders/open/{cointype}`
+### Python 签名示例
 
-## 交易API（示例）
+```python
+import hmac
+import hashlib
+import time
+import json
+import requests
 
-- 现货买入: `POST /api/v2/my/buy`
-- 现货卖出: `POST /api/v2/my/sell`
-- 取消买单: `POST /api/v2/my/buy/cancel`
-- 取消卖单: `POST /api/v2/my/sell/cancel`
+API_KEY = "your_api_key"
+API_SECRET = "your_api_secret"
+BASE_URL = "https://www.coinspot.com.au/api"
 
-## 账户管理API（示例）
+def coinspot_request(path, params=None):
+    nonce = int(time.time() * 1000)
+    body_params = {"nonce": nonce}
+    if params:
+        body_params.update(params)
+    body = json.dumps(body_params)
+    signature = hmac.new(
+        API_SECRET.encode(), body.encode(), hashlib.sha512
+    ).hexdigest()
+    headers = {
+        "Content-Type": "application/json",
+        "key": API_KEY,
+        "sign": signature,
+    }
+    resp = requests.post(f"{BASE_URL}/{path}", headers=headers, data=body)
+    return resp.json()
+```
 
-- 余额: `POST /api/v2/my/balances`
-- 充值地址: `POST /api/v2/my/coin/deposit`
-- 提现: `POST /api/v2/my/coin/withdraw/send`
+## 市场数据API
+
+### V1 Public (GET)
+
+| 端点 | 描述 |
+|------|------|
+| /pubapi/latest | 全部 Ticker |
+
+### V2 Public (GET)
+
+| 端点 | 描述 |
+|------|------|
+| /pubapi/v2/latest | 全部最新价 |
+| /pubapi/v2/latest/{cointype} | 单币最新价 |
+| /pubapi/v2/buyprice/{cointype} | 买入价 |
+| /pubapi/v2/sellprice/{cointype} | 卖出价 |
+| /pubapi/v2/orders/open/{cointype} | 公开挂单 |
+| /pubapi/v2/orders/completed/{cointype} | 已完成订单 |
+
+```python
+# 获取全部 Ticker
+resp = requests.get("https://www.coinspot.com.au/pubapi/latest")
+prices = resp.json().get("prices", {})
+for coin, p in list(prices.items())[:5]:
+    print(f"{coin}: bid={p['bid']}, ask={p['ask']}, last={p['last']}")
+```
+
+## 交易API (POST, 需签名)
+
+### V1 Private
+
+| 端点 | 描述 |
+|------|------|
+| my/buy | 限价买单 |
+| my/sell | 限价卖单 |
+| my/buy/cancel | 撤销买单 |
+| my/sell/cancel | 撤销卖单 |
+| orders | 公开订单簿 |
+| orders/history | 成交历史 |
+| my/balances | 余额 |
+| my/orders | 我的挂单 |
+
+### V2 Private
+
+| 端点 | 描述 |
+|------|------|
+| my/buy | 限价买单 |
+| my/sell | 限价卖单 |
+| my/buy/now | 即时买入 (市价) |
+| my/sell/now | 即时卖出 (市价) |
+| my/swap/now | 即时兑换 |
+| my/buy/cancel | 撤销买单 |
+| my/sell/cancel | 撤销卖单 |
+| my/buy/cancel/all | 撤销全部买单 |
+| my/sell/cancel/all | 撤销全部卖单 |
+| my/coin/withdraw/send | 提现 |
+| ro/my/balances | 余额 (只读) |
+| ro/my/orders/completed | 已完成订单 |
+| ro/my/deposits | 充值记录 |
+| ro/my/withdrawals | 提现记录 |
+
+```python
+# 限价买单
+order = coinspot_request("my/buy", {
+    "cointype": "BTC",
+    "amount": 0.001,
+    "rate": 50000
+})
+
+# 限价卖单
+order = coinspot_request("my/sell", {
+    "cointype": "BTC",
+    "amount": 0.001,
+    "rate": 60000
+})
+
+# 撤单 (需指定 side)
+coinspot_request("my/buy/cancel", {"id": "order_id_here"})
+
+# 余额查询
+balance = coinspot_request("my/balances")
+```
+
+> **注意**: CoinSpot V1 API 仅支持限价单。V2 API 支持即时（市价）订单。
 
 ## 速率限制
 
-- 1000 次/分钟
+| 类别 | 限制 |
+|------|------|
+| REST API | 1 次/秒 |
 
-## WebSocket支持
+## 错误处理
 
-- 官方文档未提供 WebSocket API 说明
+成功: `{"status": "ok", ...}`
+失败: `{"status": "error", "message": "..."}`
 
-## 错误代码
+## 变更历史
 
-- 返回 `status` 与 `message` 字段
+### 2026-02-27
+- 基于 CCXT 源码验证完善
 
-## 代码示例
+---
 
-```python
-# Public: 获取最新买价
-import requests
+## 相关资源
 
-url = "https://www.coinspot.com.au/pubapi/v2/buyprice/BTC"
-print(requests.get(url).json())
-```
+- [CoinSpot API 文档](https://www.coinspot.com.au/api)
+- [CCXT CoinSpot 实现](https://github.com/ccxt/ccxt/blob/master/python/ccxt/coinspot.py)
+
+---
+
+*本文档由 bt_api_py 项目维护。*

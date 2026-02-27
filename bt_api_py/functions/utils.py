@@ -115,6 +115,15 @@ def read_account_config():
             "port": int(os.environ.get("IB_PORT", "7497")),
             "client_id": int(os.environ.get("IB_CLIENT_ID", "1")),
         },
+        "ib_web": {
+            "base_url": os.environ.get("IB_WEB_BASE_URL", "https://localhost:5000"),
+            "account_id": os.environ.get("IB_WEB_ACCOUNT_ID", ""),
+            "verify_ssl": os.environ.get("IB_WEB_VERIFY_SSL", "false").lower() == "true",
+            "timeout": int(os.environ.get("IB_WEB_TIMEOUT", "10")),
+            "access_token": os.environ.get("IB_WEB_ACCESS_TOKEN", ""),
+            "client_id": os.environ.get("IB_WEB_CLIENT_ID", ""),
+            "private_key_path": os.environ.get("IB_WEB_PRIVATE_KEY_PATH", ""),
+        },
         "proxies": proxies,
         "async_proxy": async_proxy,
     }

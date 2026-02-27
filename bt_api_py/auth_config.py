@@ -59,3 +59,33 @@ class IbAuthConfig(AuthConfig):
         self.host = host
         self.port = port              # TWS=7497, Gateway=4001
         self.client_id = client_id
+
+
+class IbWebAuthConfig(AuthConfig):
+    """Interactive Brokers Web API 认证配置
+
+    支持两种认证方式:
+      1. Client Portal Gateway (个人客户): base_url="https://localhost:5000", verify_ssl=False
+      2. OAuth 2.0 (机构客户): base_url="https://api.interactivebrokers.com",
+         需提供 client_id + private_key_path 或 access_token
+    """
+
+    def __init__(self, exchange="IB_WEB", asset_type="STK",
+                 base_url="https://localhost:5000",
+                 account_id=None,
+                 access_token=None,
+                 client_id=None,
+                 private_key_path=None,
+                 verify_ssl=False,
+                 proxies=None,
+                 timeout=10,
+                 **kwargs):
+        super().__init__(exchange, asset_type, **kwargs)
+        self.base_url = base_url                  # API 基础URL
+        self.account_id = account_id              # IBKR 账户ID, 如 "U1234567"
+        self.access_token = access_token          # OAuth 2.0 access token
+        self.client_id = client_id                # OAuth 2.0 client_id
+        self.private_key_path = private_key_path  # OAuth 2.0 私钥文件路径
+        self.verify_ssl = verify_ssl              # 是否验证SSL (Gateway模式设为False)
+        self.proxies = proxies                    # HTTP代理
+        self.timeout = timeout                    # 请求超时(秒)

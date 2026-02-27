@@ -35,6 +35,11 @@ try:
 except ImportError as e:
     _reg_logger.debug(f"IB register skipped (install ib_insync to enable): {e}")
 
+try:
+    import bt_api_py.feeds.register_ib_web  # noqa: F401
+except ImportError as e:
+    _reg_logger.debug(f"IB Web API register skipped: {e}")
+
 
 class BtApi(object):
     def __init__(self, exchange_kwargs, debug=True, event_bus=None):

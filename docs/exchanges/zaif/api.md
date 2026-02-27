@@ -1,79 +1,242 @@
 # Zaif API 文档
 
-## 交易所信息
+## 文档信息
+- 文档版本: 1.0.0
+- API版本: V1
+- 创建日期: 2026-02-27
+- 最后更新: 2026-02-27
+- 官方文档: https://zaif-api-document.readthedocs.io/ja/latest/
+- 数据来源: CCXT 源码验证
 
-- **交易所名称**: Zaif
-- **官方网站**: https://zaif.jp
-- **API文档**: https://zaif-api-document.readthedocs.io/ja/latest/
-- **24h交易量排名**: #39
-- **24h交易量**: $40M+
-- **支持的交易对**: 100+（以官方列表为准）
-- **API版本**: Public API / Trading API / WebSocket
+## 交易所基本信息
+- 官方名称: Zaif
+- 官网: https://zaif.jp
+- 交易所类型: CEX (中心化交易所)
+- 总部: 日本
+- 支持的交易对: 30+ (JPY 计价)
+- 支持的交易类型: 现货(Spot)、保证金(Margin via tlapi)、期货(fapi)
+- 手续费: Maker 0%, Taker 0.1%
+- 法币支持: JPY (日本円)
+- 合规: 日本金融厅 (FSA) 注册
 
-## API基础信息
+## API基础URL
 
-### 基础URL
-
-```text
-# Public API
-https://api.zaif.jp/api/1
-
-# Trading API
-https://api.zaif.jp/tapi
-
-# WebSocket
-wss://ws.zaif.jp/stream?currency_pair={currency_pair}
-```
-
-### 请求头（Trading API）
-
-```text
-key: {api_key}
-sign: {signature}
-```
+| 端点类型 | URL | 说明 |
+|---------|-----|------|
+| Public API | `https://api.zaif.jp/api/1` | 公共数据 |
+| Trading API (tapi) | `https://api.zaif.jp/tapi` | 现货交易 |
+| Margin API (tlapi) | `https://api.zaif.jp/tlapi` | 保证金交易 |
+| Futures API (fapi) | `https://api.zaif.jp/fapi/1` | 期货数据 |
 
 ## 认证方式
 
-Trading API 使用 HMAC-SHA512。
+### HMAC SHA512 签名
 
-**签名字符串**:
+**请求头**:
 
-将所有 POST 参数（包含 nonce、method 及其他参数）URL 编码为查询串 `param1=val1&param2=val2`，然后用 Secret Key 进行 HMAC-SHA512 签名。
+| Header | 描述 |
+|--------|------|
+| Key | API Key |
+| Sign | HMAC-SHA512 签名 |
+| Content-Type | application/x-www-form-urlencoded |
 
-## 市场数据API（示例）
+**签名步骤**:
+1. 构建 POST body（URL-encoded），包含 `method` 和 `nonce`
+2. nonce 使用 `milliseconds / 1000`，精确到小数点后 8 位
+3. 使用 Secret 对 body 进行 HMAC SHA512
 
-- 通货信息: `GET /currencies/{currency}`
-- 通货对: `GET /currency_pairs/{currency_pair}`
-- Ticker: `GET /ticker/{currency_pair}`
-- Orderbook: `GET /depth/{currency_pair}`
+### Python 签名示例
 
-## 交易API（示例）
+```python
+import hmac
+import hashlib
+import time
+import requests
+from urllib.parse import urlencode
 
-- Trading API 方法（如 `get_info`, `trade`, `cancel_order`）通过 `POST /tapi` 调用
+API_KEY = "your_api_key"
+API_SECRET = "your_api_secret"
+BASE_URL = "https://api.zaif.jp"
+
+def zaif_private(method_name, params=None):
+    """发送 Zaif 私有 API 请求"""
+    nonce = format(time.time(), '.8f')
+    body_params = {"method": method_name, "nonce": nonce}
+    if params:
+        body_params.update(params)
+
+    body = urlencode(body_params)
+    signature = hmac.new(
+        API_SECRET.encode('utf-8'),
+        body.encode('utf-8'),
+        hashlib.sha512
+    ).hexdigest()
+
+    headers = {
+        "Content-Type": "application/x-www-form-urlencoded",
+        "Key": API_KEY,
+        "Sign": signature,
+    }
+
+    resp = requests.post(f"{BASE_URL}/tapi", headers=headers, data=body)
+    return resp.json()
+```
+
+## 市场数据API
+
+### 1. 获取交易对列表
+
+**端点**: `GET /api/1/currency_pairs/all`
+
+```python
+resp = requests.get(f"{BASE_URL}/api/1/currency_pairs/all")
+for p in resp.json()[:5]:
+    print(f"{p['currency_pair']}: name={p['name']}")
+```
+
+### 2. 获取 Ticker
+
+**端点**: `GET /api/1/ticker/{pair}`
+
+```python
+resp = requests.get(f"{BASE_URL}/api/1/ticker/btc_jpy")
+t = resp.json()
+print(f"BTC/JPY: last={t['last']}, bid={t['bid']}, ask={t['ask']}, "
+      f"high={t['high']}, low={t['low']}, vwap={t['vwap']}, volume={t['volume']}")
+```
+
+### 3. 获取订单簿
+
+**端点**: `GET /api/1/depth/{pair}`
+
+```python
+resp = requests.get(f"{BASE_URL}/api/1/depth/btc_jpy")
+book = resp.json()
+for ask in book["asks"][:5]:
+    print(f"ASK: price={ask[0]}, amount={ask[1]}")
+for bid in book["bids"][:5]:
+    print(f"BID: price={bid[0]}, amount={bid[1]}")
+```
+
+### 4. 获取最近成交
+
+**端点**: `GET /api/1/trades/{pair}`
+
+```python
+resp = requests.get(f"{BASE_URL}/api/1/trades/btc_jpy")
+for t in resp.json()[:5]:
+    print(f"ID={t['tid']} price={t['price']} amount={t['amount']} "
+          f"type={t['trade_type']} date={t['date']}")
+```
+
+### 5. 获取最新价
+
+**端点**: `GET /api/1/last_price/{pair}`
+
+## 交易API (POST to /tapi)
+
+### 1. 查询余额
+
+**方法**: `get_info2`
+
+```python
+info = zaif_private("get_info2")
+if info.get("success") == 1:
+    for currency, amount in info["return"]["funds"].items():
+        if float(amount) > 0:
+            print(f"{currency}: {amount}")
+```
+
+### 2. 下单
+
+**方法**: `trade`
+
+| 参数 | 类型 | 必需 | 描述 |
+|------|------|------|------|
+| currency_pair | STRING | 是 | 交易对 (btc_jpy) |
+| action | STRING | 是 | bid (买) / ask (卖) |
+| price | FLOAT | 是 | 价格 |
+| amount | FLOAT | 是 | 数量 |
+| limit | FLOAT | 否 | 止盈价 |
+| comment | STRING | 否 | 备注 |
+
+```python
+# 限价买单
+order = zaif_private("trade", {
+    "currency_pair": "btc_jpy",
+    "action": "bid",
+    "price": 4000000,
+    "amount": 0.001
+})
+if order.get("success") == 1:
+    print(f"Order ID: {order['return']['order_id']}")
+```
+
+### 3. 撤单
+
+**方法**: `cancel_order`
+
+```python
+result = zaif_private("cancel_order", {"order_id": 12345})
+```
+
+### 4. 查询挂单
+
+**方法**: `active_orders`
+
+```python
+orders = zaif_private("active_orders", {"currency_pair": "btc_jpy"})
+if orders.get("success") == 1:
+    for oid, o in orders["return"].items():
+        print(f"ID:{oid} {o['action']} price={o['price']} amount={o['amount']}")
+```
+
+### 5. 查询成交历史
+
+**方法**: `trade_history`
 
 ## 账户管理API
 
-- 余额与订单信息等通过 Trading API 获取
+| 方法 | 描述 |
+|------|------|
+| get_info | 完整账户信息 (含权限) |
+| get_info2 | 余额信息 |
+| get_personal_info | 个人信息 |
+| get_id_info | KYC 信息 |
+| deposit_history | 充值历史 |
+| withdraw | 提现 |
+| withdraw_history | 提现历史 |
 
 ## 速率限制
 
-- Public API: 10 次/秒
-- WebSocket 断线重连：每 IP 约 4 次/秒以内
+| 端点 | 限制 |
+|------|------|
+| Public API | 10 次/秒 |
+| get_info | 1 次/秒 |
+| get_info2 | 2 次/秒 |
+| active_orders / cancel_order | 2 次/秒 |
+| trade | 2 次/秒 |
+| trade_history | 0.2 次/秒 |
 
-## WebSocket支持
+## 错误处理
 
-- 实时板与终值推送
+成功: `{"success": 1, "return": {...}}`
+失败: `{"success": 0, "error": "错误信息"}`
 
-## 错误代码
+## 变更历史
 
-- 详见官方文档
+### 2026-02-27
+- 基于 CCXT 源码验证完善
+- 添加 HMAC SHA512 签名（含特殊 nonce 格式）
+- 添加完整端点列表和 Python 示例
 
-## 代码示例
+---
 
-```python
-# Public: 获取 ticker
-import requests
+## 相关资源
 
-url = "https://api.zaif.jp/api/1/ticker/btc_jpy"
-print(requests.get(url).json())
-```
+- [Zaif API 文档](https://zaif-api-document.readthedocs.io/ja/latest/)
+- [CCXT Zaif 实现](https://github.com/ccxt/ccxt/blob/master/python/ccxt/zaif.py)
+
+---
+
+*本文档由 bt_api_py 项目维护，内容基于 CCXT 源码验证整理。*
