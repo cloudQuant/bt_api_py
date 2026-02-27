@@ -71,6 +71,201 @@ class BinanceRequestDataSpot(BinanceRequestData):
             data = []
         return data, status
 
+    # ==================== 账户快照接口 ====================
+
+    def _get_account_snapshot(self, account_type='SPOT', extra_data=None, **kwargs):
+        """获取账户快照
+
+        Args:
+            account_type: 账户类型 (SPOT, MARGIN, FUTURES)
+            extra_data: 额外数据
+            **kwargs: 其他参数
+
+        Returns:
+            tuple: (path, params, extra_data)
+        """
+        request_type = 'get_account_snapshot'
+        path = self._params.get_rest_path(request_type)
+        params = {
+            'type': account_type,
+        }
+        extra_data = update_extra_data(extra_data, **{
+            "request_type": request_type,
+            "symbol_name": "ALL",
+            "asset_type": self.asset_type,
+            "exchange_name": self.exchange_name,
+            "normalize_function": None,
+        })
+        return path, params, extra_data
+
+    def get_account_snapshot(self, account_type='SPOT', extra_data=None, **kwargs):
+        """获取账户快照
+
+        Args:
+            account_type: 账户类型 (SPOT, MARGIN, FUTURES)
+
+        Returns:
+            RequestData: 请求结果
+        """
+        path, params, extra_data = self._get_account_snapshot(
+            account_type=account_type, extra_data=extra_data, **kwargs
+        )
+        data = self.request(path, params=params, extra_data=extra_data, is_sign=True)
+        return data
+
+    # ==================== 交易日统计数据接口 ====================
+
+    def _get_ticker_trading_day(self, symbol=None, extra_data=None, **kwargs):
+        """获取交易日统计数据
+
+        Args:
+            symbol: 交易对
+            extra_data: 额外数据
+            **kwargs: 其他参数
+
+        Returns:
+            tuple: (path, params, extra_data)
+        """
+        request_type = 'get_ticker_trading_day'
+        path = self._params.get_rest_path(request_type)
+        params = {}
+        if symbol is not None:
+            request_symbol = self._params.get_symbol(symbol)
+            params['symbol'] = request_symbol
+        extra_data = update_extra_data(extra_data, **{
+            "request_type": request_type,
+            "symbol_name": symbol or "ALL",
+            "asset_type": self.asset_type,
+            "exchange_name": self.exchange_name,
+            "normalize_function": None,
+        })
+        return path, params, extra_data
+
+    def get_ticker_trading_day(self, symbol=None, extra_data=None, **kwargs):
+        """获取交易日统计数据
+
+        Args:
+            symbol: 交易对
+
+        Returns:
+            RequestData: 请求结果
+        """
+        path, params, extra_data = self._get_ticker_trading_day(
+            symbol=symbol, extra_data=extra_data, **kwargs
+        )
+        data = self.request(path, params=params, extra_data=extra_data, is_sign=False)
+        return data
+
+    # ==================== 合约划转接口 ====================
+
+    def _futures_transfer(self, asset, amount, transfer_type, extra_data=None, **kwargs):
+        """合约账户划转
+
+        Args:
+            asset: 资产名称 (如 USDT)
+            amount: 划转数量
+            transfer_type: 划转类型 (1: 现货转U本位合约, 2: U本位合约转现货,
+                                        3: 现货转币本位合约, 4: 币本位合约转现货)
+            extra_data: 额外数据
+            **kwargs: 其他参数
+
+        Returns:
+            tuple: (path, params, extra_data)
+        """
+        request_type = 'futures_transfer'
+        path = self._params.get_rest_path('transfer')
+        params = {
+            'asset': asset,
+            'amount': amount,
+            'type': transfer_type,
+        }
+        extra_data = update_extra_data(extra_data, **{
+            "request_type": request_type,
+            "symbol_name": asset,
+            "asset_type": self.asset_type,
+            "exchange_name": self.exchange_name,
+            "normalize_function": None,
+        })
+        return path, params, extra_data
+
+    def futures_transfer(self, asset, amount, transfer_type, extra_data=None, **kwargs):
+        """合约账户划转
+
+        Args:
+            asset: 资产名称 (如 USDT)
+            amount: 划转数量
+            transfer_type: 划转类型 (1: 现货转U本位合约, 2: U本位合约转现货,
+                                        3: 现货转币本位合约, 4: 币本位合约转现货)
+
+        Returns:
+            RequestData: 请求结果
+        """
+        path, params, extra_data = self._futures_transfer(
+            asset=asset, amount=amount, transfer_type=transfer_type,
+            extra_data=extra_data, **kwargs
+        )
+        data = self.request(path, params=params, extra_data=extra_data, is_sign=True)
+        return data
+
+    def _get_futures_transfer_history(self, asset=None, start_time=None, end_time=None,
+                                      limit=None, page=None, extra_data=None, **kwargs):
+        """查询合约划转历史
+
+        Args:
+            asset: 资产名称
+            start_time: 开始时间戳
+            end_time: 结束时间戳
+            limit: 每页数量 (默认100, 最大1000)
+            page: 页码 (默认1)
+            extra_data: 额外数据
+            **kwargs: 其他参数
+
+        Returns:
+            tuple: (path, params, extra_data)
+        """
+        request_type = 'get_futures_transfer_history'
+        path = self._params.get_rest_path(request_type)
+        params = {}
+        if asset is not None:
+            params['asset'] = asset
+        if start_time is not None:
+            params['startTime'] = start_time
+        if end_time is not None:
+            params['endTime'] = end_time
+        if limit is not None:
+            params['limit'] = limit
+        if page is not None:
+            params['page'] = page
+        extra_data = update_extra_data(extra_data, **{
+            "request_type": request_type,
+            "symbol_name": asset or "ALL",
+            "asset_type": self.asset_type,
+            "exchange_name": self.exchange_name,
+            "normalize_function": None,
+        })
+        return path, params, extra_data
+
+    def get_futures_transfer_history(self, asset=None, start_time=None, end_time=None,
+                                     limit=None, page=None, extra_data=None, **kwargs):
+        """查询合约划转历史
+
+        Args:
+            asset: 资产名称
+            start_time: 开始时间戳
+            end_time: 结束时间戳
+            limit: 每页数量 (默认100, 最大1000)
+            page: 页码 (默认1)
+
+        Returns:
+            RequestData: 请求结果
+        """
+        path, params, extra_data = self._get_futures_transfer_history(
+            asset=asset, start_time=start_time, end_time=end_time,
+            limit=limit, page=page, extra_data=extra_data, **kwargs
+        )
+        data = self.request(path, params=params, extra_data=extra_data, is_sign=True)
+        return data
+
     # noinspection PyBroadException
     def make_order(self, symbol, vol, price=None, order_type='buy-limit',
                    offset='open', post_only=False, client_order_id=None, extra_data=None, **kwargs):
@@ -79,6 +274,178 @@ class BinanceRequestDataSpot(BinanceRequestData):
                                                     post_only, client_order_id, extra_data,
                                                     **kwargs)
         # print("params = ", params)
+        data = self.request(path, params=params, extra_data=extra_data, is_sign=True)
+        return data
+
+    # ==================== 高级订单接口 ====================
+
+    def _cancel_replace_order(self, symbol, cancel_order_id=None, cancel_client_order_id=None,
+                              side=None, order_type=None, quantity=None, price=None,
+                              stop_price=None, new_client_order_id=None,
+                              cancel_restrictions=None, extra_data=None, **kwargs):
+        """取消并替换订单 (Cancel Replace Order)
+
+        Args:
+            symbol: 交易对
+            cancel_order_id: 要取消的订单ID
+            cancel_client_order_id: 要取消的客户端订单ID (与cancel_order_id二选一)
+            side: 订单方向 (BUY/SELL)
+            order_type: 订单类型 (LIMIT, MARKET, STOP_LOSS, STOP_LOSS_LIMIT, TAKE_PROFIT, TAKE_PROFIT_LIMIT)
+            quantity: 订单数量
+            price: 订单价格 (LIMIT订单必需)
+            stop_price: 触发价格 (止损/止盈订单必需)
+            new_client_order_id: 新订单的客户端ID
+            cancel_restrictions: 取消限制 (ONLY_NEW, ONLY_PARTIALLY_FILLED)
+            extra_data: 额外数据
+            **kwargs: 其他参数
+
+        Returns:
+            tuple: (path, params, extra_data)
+        """
+        request_type = 'cancel_replace_order'
+        request_symbol = self._params.get_symbol(symbol)
+        path = self._params.get_rest_path(request_type)
+        params = {'symbol': request_symbol}
+
+        if cancel_order_id is not None:
+            params['cancelOrderId'] = cancel_order_id
+        if cancel_client_order_id is not None:
+            params['cancelOrigClientOrderId'] = cancel_client_order_id
+        if side is not None:
+            params['side'] = side.upper()
+        if order_type is not None:
+            params['type'] = order_type.upper()
+        if quantity is not None:
+            params['quantity'] = quantity
+        if price is not None:
+            params['price'] = price
+        if stop_price is not None:
+            params['stopPrice'] = stop_price
+        if new_client_order_id is not None:
+            params['newClientOrderId'] = new_client_order_id
+        if cancel_restrictions is not None:
+            params['cancelRestrictions'] = cancel_restrictions
+
+        extra_data = update_extra_data(extra_data, **{
+            "request_type": request_type,
+            "symbol_name": symbol,
+            "asset_type": self.asset_type,
+            "exchange_name": self.exchange_name,
+            "normalize_function": BinanceRequestDataSpot._make_order_normalize_function,
+        })
+        return path, params, extra_data
+
+    def cancel_replace_order(self, symbol, cancel_order_id=None, cancel_client_order_id=None,
+                             side=None, order_type=None, quantity=None, price=None,
+                             stop_price=None, new_client_order_id=None,
+                             cancel_restrictions=None, extra_data=None, **kwargs):
+        """取消并替换订单
+
+        Returns:
+            RequestData: 请求结果
+        """
+        path, params, extra_data = self._cancel_replace_order(
+            symbol=symbol, cancel_order_id=cancel_order_id,
+            cancel_client_order_id=cancel_client_order_id, side=side,
+            order_type=order_type, quantity=quantity, price=price,
+            stop_price=stop_price, new_client_order_id=new_client_order_id,
+            cancel_restrictions=cancel_restrictions, extra_data=extra_data, **kwargs
+        )
+        data = self.request(path, params=params, extra_data=extra_data, is_sign=True)
+        return data
+
+    def _cancel_all_orders(self, symbol=None, extra_data=None, **kwargs):
+        """取消所有订单
+
+        Args:
+            symbol: 交易对，如果不指定则取消所有现货订单
+            extra_data: 额外数据
+            **kwargs: 其他参数
+
+        Returns:
+            tuple: (path, params, extra_data)
+        """
+        request_type = 'cancel_all'
+        path = self._params.get_rest_path(request_type)
+        params = {}
+        if symbol is not None:
+            request_symbol = self._params.get_symbol(symbol)
+            params['symbol'] = request_symbol
+
+        extra_data = update_extra_data(extra_data, **{
+            "request_type": request_type,
+            "symbol_name": symbol or "ALL",
+            "asset_type": self.asset_type,
+            "exchange_name": self.exchange_name,
+            "normalize_function": None,
+        })
+        return path, params, extra_data
+
+    def cancel_all_orders(self, symbol=None, extra_data=None, **kwargs):
+        """取消所有订单
+
+        Args:
+            symbol: 交易对，如果不指定则取消所有现货订单
+
+        Returns:
+            RequestData: 请求结果
+        """
+        path, params, extra_data = self._cancel_all_orders(
+            symbol=symbol, extra_data=extra_data, **kwargs
+        )
+        data = self.request(path, params=params, extra_data=extra_data, is_sign=True)
+        return data
+
+    def _amend_keep_priority(self, symbol, order_id=None, client_order_id=None,
+                            quantity=None, price=None, extra_data=None, **kwargs):
+        """修改订单并保持队列优先级
+
+        Args:
+            symbol: 交易对
+            order_id: 订单ID (与client_order_id二选一)
+            client_order_id: 客户端订单ID
+            quantity: 新数量
+            price: 新价格
+            extra_data: 额外数据
+            **kwargs: 其他参数
+
+        Returns:
+            tuple: (path, params, extra_data)
+        """
+        request_type = 'amend_keep_priority'
+        request_symbol = self._params.get_symbol(symbol)
+        path = self._params.get_rest_path(request_type)
+        params = {'symbol': request_symbol}
+
+        if order_id is not None:
+            params['orderId'] = order_id
+        if client_order_id is not None:
+            params['origClientOrderId'] = client_order_id
+        if quantity is not None:
+            params['quantity'] = quantity
+        if price is not None:
+            params['price'] = price
+
+        extra_data = update_extra_data(extra_data, **{
+            "request_type": request_type,
+            "symbol_name": symbol,
+            "asset_type": self.asset_type,
+            "exchange_name": self.exchange_name,
+            "normalize_function": BinanceRequestDataSpot._make_order_normalize_function,
+        })
+        return path, params, extra_data
+
+    def amend_keep_priority(self, symbol, order_id=None, client_order_id=None,
+                           quantity=None, price=None, extra_data=None, **kwargs):
+        """修改订单并保持队列优先级
+
+        Returns:
+            RequestData: 请求结果
+        """
+        path, params, extra_data = self._amend_keep_priority(
+            symbol=symbol, order_id=order_id, client_order_id=client_order_id,
+            quantity=quantity, price=price, extra_data=extra_data, **kwargs
+        )
         data = self.request(path, params=params, extra_data=extra_data, is_sign=True)
         return data
 
@@ -186,8 +553,9 @@ class BinanceAccountWssDataSpot(BinanceAccountWssData):
                 self.push_account(content)
             if "executionReport" == event and content.get("x", None) == "TRADE":
                 self.push_trade(content)
-            # if "balanceUpdate" == event:
-            #     self.push_balance(content)
+            # 余额更新事件 (分红等)
+            if "balanceUpdate" == event:
+                self.push_balance(content)
 
     def push_account(self, content):
         # 推送account数据并添加到事件中
@@ -210,3 +578,19 @@ class BinanceAccountWssDataSpot(BinanceAccountWssData):
         trade_data = BinanceSpotWssTradeData(content, symbol, self.asset_type, True)
         self.data_queue.put(trade_data)
         # print("获取trade成功，当前trade_id 为：", trade_data.get_trade_id())
+
+    def push_balance(self, content):
+        """推送余额更新数据 (分红等)
+
+        balanceUpdate 事件结构:
+        {
+            "e": "balanceUpdate",
+            "E": 1573200697114,
+            "s": "BTC",
+            "u": "15896533547050558808",
+            "B": "500.00000000"
+        }
+        """
+        symbol = content.get('s', 'ALL')
+        balance_data = BinanceSpotWssAccountData(content, symbol, self.asset_type, True)
+        self.data_queue.put(balance_data)

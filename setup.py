@@ -21,6 +21,18 @@ from setuptools import Extension, find_packages, setup
 from setuptools.command.build_ext import build_ext
 
 # ---------------------------------------------------------------------------
+#  CTP wrapper 拆分: 将 SWIG 生成的 ctp.py 拆分为多个分类子模块
+# ---------------------------------------------------------------------------
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "scripts"))
+try:
+    from split_ctp_wrapper import split_ctp_wrapper
+    split_ctp_wrapper()
+except Exception as e:
+    print(f"WARNING: CTP wrapper split skipped: {e}")
+finally:
+    sys.path.pop(0)
+
+# ---------------------------------------------------------------------------
 #  版本
 # ---------------------------------------------------------------------------
 VERSION = "0.15"
@@ -199,7 +211,9 @@ pkg_data = {
         "functions/update_data/*",
     ],
     "bt_api_py.ctp": [
-        "ctp.py",          # SWIG 生成的 Python wrapper
+        "ctp.py",          # 向后兼容垫片 (auto-generated)
+        "_ctp_base.py",    # SWIG 基础设施 (auto-generated)
+        "ctp_*.py",        # 拆分后的子模块 (auto-generated)
         "client.py",       # 高层封装
         "api/**/*",        # API 头文件 & 库文件
     ] + ctp_package_data,  # runtime 库

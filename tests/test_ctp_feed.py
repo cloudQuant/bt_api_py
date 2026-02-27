@@ -106,6 +106,62 @@ class TestCtpImports:
         available = BtApi.list_available_exchanges()
         assert "CTP___FUTURE" in available
 
+    def test_split_submodule_imports(self):
+        """验证拆分后的子模块可以独立导入"""
+        from bt_api_py.ctp.ctp_md_api import CThostFtdcMdApi, CThostFtdcMdSpi
+        from bt_api_py.ctp.ctp_trader_api import CThostFtdcTraderApi, CThostFtdcTraderSpi
+        from bt_api_py.ctp.ctp_structs_common import CThostFtdcReqUserLoginField
+        from bt_api_py.ctp.ctp_structs_order import CThostFtdcInputOrderField
+        from bt_api_py.ctp.ctp_structs_query import CThostFtdcQryTradingAccountField
+        from bt_api_py.ctp.ctp_structs_market import CThostFtdcDepthMarketDataField
+        from bt_api_py.ctp.ctp_structs_account import CThostFtdcTradingAccountField
+        from bt_api_py.ctp.ctp_structs_position import CThostFtdcInvestorPositionField
+        from bt_api_py.ctp.ctp_constants import THOST_TERT_RESTART
+        assert CThostFtdcMdApi is not None
+        assert CThostFtdcTraderSpi is not None
+        assert THOST_TERT_RESTART is not None
+
+    def test_split_submodule_backward_compat(self):
+        """验证拆分子模块与原始包导入返回相同对象 (向后兼容)"""
+        from bt_api_py.ctp import CThostFtdcMdApi as via_init
+        from bt_api_py.ctp.ctp_md_api import CThostFtdcMdApi as via_submod
+        assert via_init is via_submod
+
+        from bt_api_py.ctp import CThostFtdcInputOrderField as via_init2
+        from bt_api_py.ctp.ctp_structs_order import CThostFtdcInputOrderField as via_submod2
+        assert via_init2 is via_submod2
+
+    def test_split_submodule_field_instantiation(self):
+        """验证通过拆分子模块导入的 Field 可正常实例化和赋值"""
+        from bt_api_py.ctp.ctp_structs_order import CThostFtdcInputOrderField
+        field = CThostFtdcInputOrderField()
+        field.InstrumentID = "IF2506"
+        field.VolumeTotalOriginal = 1
+        assert field.InstrumentID == "IF2506"
+        assert field.VolumeTotalOriginal == 1
+
+    def test_split_submodule_all_modules_importable(self):
+        """验证所有 12 个拆分子模块都可以导入"""
+        import importlib
+        modules = [
+            "bt_api_py.ctp.ctp_constants",
+            "bt_api_py.ctp.ctp_md_api",
+            "bt_api_py.ctp.ctp_trader_api",
+            "bt_api_py.ctp.ctp_structs_common",
+            "bt_api_py.ctp.ctp_structs_order",
+            "bt_api_py.ctp.ctp_structs_trade",
+            "bt_api_py.ctp.ctp_structs_position",
+            "bt_api_py.ctp.ctp_structs_account",
+            "bt_api_py.ctp.ctp_structs_market",
+            "bt_api_py.ctp.ctp_structs_query",
+            "bt_api_py.ctp.ctp_structs_transfer",
+            "bt_api_py.ctp.ctp_structs_risk",
+        ]
+        for mod_name in modules:
+            mod = importlib.import_module(mod_name)
+            assert hasattr(mod, "__all__"), f"{mod_name} missing __all__"
+            assert len(mod.__all__) > 0, f"{mod_name} has empty __all__"
+
 
 class TestCtpContainerParsing:
     """测试 CTP 容器类数据解析（纯单元测试，不需要网络）"""

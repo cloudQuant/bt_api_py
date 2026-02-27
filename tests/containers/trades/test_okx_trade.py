@@ -180,3 +180,61 @@ def test_okx_wss_trade():
 
 if __name__ == "__main__":
     test_okx_req_order()
+    test_okx_wss_trade()
+    print("All tests passed!")
+
+
+def test_okx_wss_fills():
+    """Test OkxWssFillsData for fills channel."""
+    data = {
+        "arg": {
+            "channel": "fills",
+            "instType": "SWAP",
+            "instId": "BTC-USDT-SWAP"
+        },
+        "data": [
+            {
+                "tradeId": "123456",
+                "instId": "BTC-USDT-SWAP",
+                "ordId": "312269865356374016",
+                "clOrdId": "b16",
+                "billId": "1111",
+                "tag": "",
+                "fillPx": "30000",
+                "fillSz": "1",
+                "side": "buy",
+                "posSide": "long",
+                "execType": "T",
+                "feeCcy": "USDT",
+                "fee": "-0.03",
+                "ts": "1597026383085",
+                "fillTime": "1597026383084"
+            }
+        ]
+    }
+
+    from bt_api_py.containers.trades.okx_trade import OkxWssFillsData
+    fill = OkxWssFillsData(data["data"][0], "BTC-USDT-SWAP", "SWAP", True)
+    fill.init_data()
+
+    assert fill.get_server_time() == 1597026383084.0
+    assert fill.get_exchange_name() == "OKX"
+    assert fill.get_asset_type() == "SWAP"
+    assert fill.get_trade_id() == 123456.0
+    assert fill.get_trade_symbol_name() == "BTC-USDT-SWAP"
+    assert fill.get_order_id() == "312269865356374016"
+    assert fill.get_client_order_id() == "b16"
+    assert fill.get_trade_side() == "buy"
+    assert fill.get_trade_price() == 30000.0
+    assert fill.get_trade_volume() == 1.0
+    assert fill.get_trade_type() == "taker"
+    assert fill.get_trade_time() == 1597026383084.0
+    assert fill.get_trade_fee() == -0.03
+    assert fill.get_trade_fee_symbol() == "USDT"
+
+
+if __name__ == "__main__":
+    test_okx_req_order()
+    test_okx_wss_trade()
+    test_okx_wss_fills()
+    print("All tests passed!")

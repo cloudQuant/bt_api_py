@@ -129,3 +129,36 @@ class OkxWssTradeData(OkxTradeData):
 
     def _get_server_time(self):
         return from_dict_get_float(self.trade_data, "uTime")
+
+
+class OkxWssFillsData(OkxTradeData):
+    """Fills channel data container.
+
+    WebSocket channel: fills
+    Pushes when a trade is filled.
+
+    Example data:
+    {
+        "arg": {"channel": "fills", "instType": "SWAP", "instId": "BTC-USDT-SWAP"},
+        "data": [{
+            "tradeId": "123",
+            "instId": "BTC-USDT-SWAP",
+            "ordId": "312269865356374016",
+            "clOrdId": "b16",
+            "billId": "1111",
+            "tag": "",
+            "fillPx": "999",
+            "fillSz": "3",
+            "side": "buy",
+            "posSide": "long",
+            "execType": "M",
+            "feeCcy": "USDT",
+            "fee": "-0.02522168",
+            "ts": "1597026383085",
+            "fillTime": "1597026383084"
+        }]
+    }
+    """
+
+    def _get_server_time(self):
+        return from_dict_get_float(self.trade_data, "fillTime")

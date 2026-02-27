@@ -477,6 +477,176 @@ def test_binance_async_get_deals():
         assert first_trade.get_trade_volume() > 0
 
 
+# ==================== 新增测试用例 ====================
+
+def test_binance_get_account_snapshot():
+    """测试获取账户快照"""
+    live_binance_spot_feed = init_req_feed()
+    data = live_binance_spot_feed.get_account_snapshot(account_type='SPOT')
+    assert isinstance(data, RequestData)
+    result = data.get_data()
+    print("account_snapshot:", result)
+    # 验证返回数据结构
+    if result:
+        assert isinstance(result, dict) or isinstance(result, list)
+
+
+def test_binance_get_account_snapshot_margin():
+    """测试获取杠杆账户快照"""
+    live_binance_spot_feed = init_req_feed()
+    data = live_binance_spot_feed.get_account_snapshot(account_type='MARGIN')
+    assert isinstance(data, RequestData)
+    result = data.get_data()
+    print("margin_snapshot:", result)
+
+
+def test_binance_get_ticker_trading_day():
+    """测试获取交易日统计数据"""
+    live_binance_spot_feed = init_req_feed()
+    data = live_binance_spot_feed.get_ticker_trading_day(symbol='BTC-USDT')
+    assert isinstance(data, RequestData)
+    result = data.get_data()
+    print("ticker_trading_day:", result)
+    # 验证返回数据结构
+    if result and isinstance(result, list):
+        first_item = result[0]
+        assert isinstance(first_item, dict)
+
+
+def test_binance_futures_transfer_history():
+    """测试查询合约划转历史"""
+    import time
+    live_binance_spot_feed = init_req_feed()
+    # 获取最近7天的历史记录
+    end_time = int(time.time() * 1000)
+    start_time = end_time - 7 * 24 * 60 * 60 * 1000
+    data = live_binance_spot_feed.get_futures_transfer_history(
+        asset='USDT', start_time=start_time, end_time=end_time, limit=10
+    )
+    assert isinstance(data, RequestData)
+    result = data.get_data()
+    print("futures_transfer_history:", result)
+    # 验证返回数据结构
+    if result and isinstance(result, list):
+        assert isinstance(result[0], dict) or isinstance(result[0], str)
+
+
+# ==================== 高级订单接口测试 ====================
+
+def test_spot_has_cancel_replace_order():
+    """测试有 cancel_replace_order 方法"""
+    live_binance_spot_feed = init_req_feed()
+    assert hasattr(live_binance_spot_feed, 'cancel_replace_order')
+    assert hasattr(live_binance_spot_feed, '_cancel_replace_order')
+
+
+def test_spot_cancel_replace_order_params():
+    """测试 cancel_replace_order 参数构建"""
+    live_binance_spot_feed = init_req_feed()
+    path, params, extra_data = live_binance_spot_feed._cancel_replace_order(
+        symbol='BTC-USDT',
+        cancel_order_id='123456',
+        side='BUY',
+        order_type='LIMIT',
+        quantity=1,
+        price=50000
+    )
+
+    assert path == 'POST /api/v3/order/cancelReplace'
+    assert params['symbol'] == 'BTCUSDT'
+    assert params['cancelOrderId'] == '123456'
+    assert params['side'] == 'BUY'
+    assert params['type'] == 'LIMIT'
+    assert params['quantity'] == 1
+    assert params['price'] == 50000
+    assert extra_data['request_type'] == 'cancel_replace_order'
+
+
+def test_spot_cancel_replace_order_with_client_id():
+    """测试使用 client_order_id 的 cancel_replace_order"""
+    live_binance_spot_feed = init_req_feed()
+    path, params, extra_data = live_binance_spot_feed._cancel_replace_order(
+        symbol='ETH-USDT',
+        cancel_client_order_id='my_client_id',
+        side='SELL',
+        order_type='MARKET',
+        quantity=10
+    )
+
+    assert path == 'POST /api/v3/order/cancelReplace'
+    assert params['cancelOrigClientOrderId'] == 'my_client_id'
+    assert params['side'] == 'SELL'
+    assert params['type'] == 'MARKET'
+
+
+def test_spot_has_cancel_all_orders():
+    """测试有 cancel_all_orders 方法"""
+    live_binance_spot_feed = init_req_feed()
+    assert hasattr(live_binance_spot_feed, 'cancel_all_orders')
+    assert hasattr(live_binance_spot_feed, '_cancel_all_orders')
+
+
+def test_spot_cancel_all_orders_params():
+    """测试 cancel_all_orders 参数构建"""
+    live_binance_spot_feed = init_req_feed()
+    path, params, extra_data = live_binance_spot_feed._cancel_all_orders(
+        symbol='BTC-USDT'
+    )
+
+    assert path == 'DELETE /api/v3/openOrders'
+    assert params['symbol'] == 'BTCUSDT'
+    assert extra_data['request_type'] == 'cancel_all'
+
+
+def test_spot_cancel_all_orders_no_symbol():
+    """测试不带 symbol 的 cancel_all_orders"""
+    live_binance_spot_feed = init_req_feed()
+    path, params, extra_data = live_binance_spot_feed._cancel_all_orders()
+
+    assert path == 'DELETE /api/v3/openOrders'
+    assert 'symbol' not in params  # 不应该有 symbol 参数
+    assert extra_data['symbol_name'] == 'ALL'
+
+
+def test_spot_has_amend_keep_priority():
+    """测试有 amend_keep_priority 方法"""
+    live_binance_spot_feed = init_req_feed()
+    assert hasattr(live_binance_spot_feed, 'amend_keep_priority')
+    assert hasattr(live_binance_spot_feed, '_amend_keep_priority')
+
+
+def test_spot_amend_keep_priority_params():
+    """测试 amend_keep_priority 参数构建"""
+    live_binance_spot_feed = init_req_feed()
+    path, params, extra_data = live_binance_spot_feed._amend_keep_priority(
+        symbol='BTC-USDT',
+        order_id='123456',
+        quantity=2,
+        price=49000
+    )
+
+    assert path == 'PUT /api/v3/order/amend/keepPriority'
+    assert params['symbol'] == 'BTCUSDT'
+    assert params['orderId'] == '123456'
+    assert params['quantity'] == 2
+    assert params['price'] == 49000
+    assert extra_data['request_type'] == 'amend_keep_priority'
+
+
+def test_spot_amend_keep_priority_with_client_id():
+    """测试使用 client_order_id 的 amend_keep_priority"""
+    live_binance_spot_feed = init_req_feed()
+    path, params, extra_data = live_binance_spot_feed._amend_keep_priority(
+        symbol='ETH-USDT',
+        client_order_id='my_client_id',
+        quantity=5
+    )
+
+    assert params['origClientOrderId'] == 'my_client_id'
+    assert params['quantity'] == 5
+    assert 'price' not in params  # 价格是可选的
+
+
 if __name__ == "__main__":
     test_get_binance_key()
     # test_binance_req_tick_data()

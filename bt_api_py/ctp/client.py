@@ -32,14 +32,14 @@ import tempfile
 import threading
 import time
 
-from . import (
-    CThostFtdcMdApi,
-    CThostFtdcMdSpi,
-    CThostFtdcTraderApi,
-    CThostFtdcTraderSpi,
+from .ctp_md_api import CThostFtdcMdApi, CThostFtdcMdSpi
+from .ctp_trader_api import CThostFtdcTraderApi, CThostFtdcTraderSpi
+from .ctp_structs_common import (
     CThostFtdcReqUserLoginField,
     CThostFtdcReqAuthenticateField,
     CThostFtdcSettlementInfoConfirmField,
+)
+from .ctp_structs_query import (
     CThostFtdcQryTradingAccountField,
     CThostFtdcQryInvestorPositionField,
 )

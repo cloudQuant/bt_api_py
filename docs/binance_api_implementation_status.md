@@ -4,6 +4,26 @@
 >
 > 本文档统计了 Binance 各产品线 REST API 和 WebSocket API 的实现状态。
 
+## 📊 总体统计
+
+| 产品线 | REST API | WebSocket API | 完成度 |
+|--------|----------|---------------|--------|
+| USDT-M 永续合约 | ~80 | ~25 | 高 |
+| 现货 Spot | ~50 | ~20 | 高 |
+| 币本位合约 Coin-M | ~60 | ~25 | 高 |
+| 期权 Option | ~25 | ~10 | 中 |
+| 杠杆 Margin | ~45 | ~15 | 高 |
+| 算法交易 Algo | ~12 | 0 | 中 |
+| **钱包 Wallet** | **~17** | **0** | **✅ 新增** |
+| **子账户 Sub-Account** | **~17** | **0** | **✅ 新增** |
+| **组合保证金 Portfolio** | **~3** | **0** | **✅ 新增** |
+| **网格交易 Grid** | **~5** | **0** | **✅ 新增** |
+| **质押理财 Staking** | **~5** | **0** | **✅ 新增** |
+| **矿池 Mining** | **~3** | **0** | **✅ 新增** |
+| **VIP借贷 VIP Loan** | **~5** | **0** | **✅ 新增** |
+
+**总计新增**: ~55 个 REST API 接口
+
 ---
 
 ## 一、USDT-M 永续合约 (BinanceExchangeDataSwap)
@@ -446,7 +466,72 @@
 
 ---
 
-## 八、统计汇总
+## 八、新增 API 类 (2025-02-26)
+
+### 8.1 Wallet API (BinanceExchangeDataWallet)
+
+钱包资产相关接口，用于处理资产查询、划转、充值、提现等功能。
+
+#### 资产查询
+| 接口 | 路径 | 状态 |
+|------|------|------|
+| get_wallet_balance | `GET /sapi/v1/asset/wallet/balance` | ✅ 新增 |
+| get_asset_detail | `GET /sapi/v1/asset/assetDetail` | ✅ 新增 |
+| get_asset_ledger | `GET /sapi/v1/asset/ledger` | ✅ 新增 |
+| get_asset_dividend | `GET /sapi/v1/asset/assetDividend` | ✅ 新增 |
+
+#### 资产划转
+| 接口 | 路径 | 状态 |
+|------|------|------|
+| asset_transfer | `POST /sapi/v1/asset/transfer` | ✅ 新增 |
+| get_asset_transfer | `GET /sapi/v1/asset/transfer` | ✅ 新增 |
+| transfer_to_futures_main | `POST /sapi/v1/asset/transfer-to-future-main-account` | ✅ 新增 |
+| transfer_to_futures_sub | `POST /sapi/v1/asset/transfer-to-future-sub-account` | ✅ 新增 |
+| transfer_to_um | `POST /sapi/v1/asset/transfer-to-UM` | ✅ 新增 |
+| transfer_to_isolated_margin | `POST /sapi/v1/asset/transfer-to-isolated-margin` | ✅ 新增 |
+
+#### 充值提现
+| 接口 | 路径 | 状态 |
+|------|------|------|
+| get_deposit_address | `GET /sapi/v1/capital/deposit/address` | ✅ 新增 |
+| get_deposit_history | `GET /sapi/v1/capital/deposit/hisrec` | ✅ 新增 |
+| withdraw | `POST /sapi/v1/capital/withdraw/apply` | ✅ 新增 |
+| get_withdraw_history | `GET /sapi/v1/capital/withdraw/history` | ✅ 新增 |
+| get_withdraw_address | `GET /sapi/v1/capital/withdraw/address` | ✅ 新增 |
+
+#### 小额资产转换
+| 接口 | 路径 | 状态 |
+|------|------|------|
+| get_dust | `GET /sapi/v1/asset/dust` | ✅ 新增 |
+| dust_transfer | `POST /sapi/v1/asset/dust/btc` | ✅ 新增 |
+
+### 8.2 Sub-account API (BinanceExchangeDataSubAccount)
+
+子账户管理相关接口，共 17 个接口。
+
+### 8.3 Portfolio Margin API (BinanceExchangeDataPortfolio)
+
+组合保证金相关接口，共 3 个接口。
+
+### 8.4 Grid Trading API (BinanceExchangeDataGrid)
+
+网格交易相关接口，共 5 个接口。
+
+### 8.5 Staking API (BinanceExchangeDataStaking)
+
+质押理财相关接口，共 5 个接口。
+
+### 8.6 Mining API (BinanceExchangeDataMining)
+
+矿池相关接口，共 3 个接口。
+
+### 8.7 VIP Loan API (BinanceExchangeDataVipLoan)
+
+VIP借贷相关接口，共 5 个接口。
+
+---
+
+## 九、统计汇总
 
 | 产品线 | REST API | WebSocket API | 完成度 |
 |--------|----------|---------------|--------|
@@ -456,17 +541,23 @@
 | 期权 Option | ~25 | ~10 | 中 |
 | 杠杆 Margin | ~45 | ~15 | 高 |
 | 算法交易 Algo | ~12 | 0 | 中 |
+| **钱包 Wallet** | **~17** | **0** | **✅ 新增** |
+| **子账户 Sub-Account** | **~17** | **0** | **✅ 新增** |
+| **组合保证金 Portfolio** | **~3** | **0** | **✅ 新增** |
+| **网格交易 Grid** | **~5** | **0** | **✅ 新增** |
+| **质押理财 Staking** | **~5** | **0** | **✅ 新增** |
+| **矿池 Mining** | **~3** | **0** | **✅ 新增** |
+| **VIP借贷 VIP Loan** | **~5** | **0** | **✅ 新增** |
 
 **注意**：
 1. 以上统计基于 `binance_exchange_data.py` 文件分析
 2. 部分接口可能通过别名或兼容层实现
-3. Wallet API (充提、资产划转等) 大部分未实现
-4. 子账户相关 API 未实现
-5. 部分 WebSocket 用户数据流通过 Listen Key 机制实现（paths 中为空字符串）
+3. 新增 7 个 API 类，共约 55 个 REST API 接口
+4. 部分 WebSocket 用户数据流通过 Listen Key 机制实现（paths 中为空字符串）
 
 ---
 
-## 九、参考文档
+## 十、参考文档
 
 - [Binance Spot API Docs](https://binance-docs.github.io/apidocs/spot/en/)
 - [Binance USDT-M Futures API Docs](https://binance-docs.github.io/apidocs/futures/en/)

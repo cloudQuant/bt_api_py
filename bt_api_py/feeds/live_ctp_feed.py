@@ -191,14 +191,14 @@ class CtpRequestData(Feed):
         :param kwargs: exchange_id='CFFEX' 等额外参数
         """
         self._ensure_connected()
-        import bt_api_py.ctp as ctp_mod
+        from bt_api_py.ctp.ctp_structs_order import CThostFtdcInputOrderField
 
         side, otype = order_type.split('-')
         direction = CTP_DIRECTION_FLAG.get(side.lower(), '0')
         offset_flag = CTP_OFFSET_FLAG.get(offset, '0')
         exchange_id = kwargs.get('exchange_id', '')
 
-        field = ctp_mod.CThostFtdcInputOrderField()
+        field = CThostFtdcInputOrderField()
         field.BrokerID = self.broker_id
         field.InvestorID = self.user_id
         field.InstrumentID = symbol
@@ -248,9 +248,9 @@ class CtpRequestData(Feed):
         :param kwargs: exchange_id, front_id, session_id, order_ref 等
         """
         self._ensure_connected()
-        import bt_api_py.ctp as ctp_mod
+        from bt_api_py.ctp.ctp_structs_order import CThostFtdcInputOrderActionField
 
-        field = ctp_mod.CThostFtdcInputOrderActionField()
+        field = CThostFtdcInputOrderActionField()
         field.BrokerID = self.broker_id
         field.InvestorID = self.user_id
         field.InstrumentID = symbol

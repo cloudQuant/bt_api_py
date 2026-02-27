@@ -1487,6 +1487,217 @@ class BinanceRequestData(Feed):
         data = self.request(path, params=params, extra_data=extra_data, is_sign=True)
         return data
 
+    # ==================== 期货高级数据接口 ====================
+
+    def _get_top_long_short_account_ratio(self, symbol, period="5m", count=30, start_time=None,
+                                          end_time=None, extra_data=None, **kwargs):
+        """获取大户多空比 (账户)
+
+        Args:
+            symbol: 交易对
+            period: 时间周期 (5m, 15m, 30m, 1h, 2h, 4h, 6h, 12h, 1d)
+            count: 数量限制 (1-500)
+            start_time: 开始时间戳
+            end_time: 结束时间戳
+            extra_data: 额外数据
+            **kwargs: 其他参数
+
+        Returns:
+            tuple: (path, params, extra_data)
+        """
+        request_type = "get_top_long_short_account_ratio"
+        request_symbol = self._params.get_symbol(symbol)
+        params = {
+            'symbol': request_symbol,
+            'period': period,
+            'limit': count,
+        }
+        if start_time is not None:
+            if isinstance(start_time, str):
+                start_time = int(datetime2timestamp(start_time) * 1000)
+            params['startTime'] = start_time
+        if end_time is not None:
+            if isinstance(end_time, str):
+                end_time = int(datetime2timestamp(end_time) * 1000)
+            params['endTime'] = end_time
+        path = self._params.get_rest_path(request_type)
+        extra_data = update_extra_data(extra_data, **{
+            "request_type": request_type,
+            "symbol_name": symbol,
+            "asset_type": self.asset_type,
+            "exchange_name": self.exchange_name,
+            "normalize_function": None,
+        })
+        if kwargs is not None:
+            extra_data.update(kwargs)
+        return path, params, extra_data
+
+    def get_top_long_short_account_ratio(self, symbol, period="5m", count=30, start_time=None,
+                                         end_time=None, extra_data=None, **kwargs):
+        """获取大户多空比 (账户)"""
+        path, params, extra_data = self._get_top_long_short_account_ratio(
+            symbol, period, count, start_time, end_time, extra_data, **kwargs)
+        data = self.request(path, params=params, extra_data=extra_data, is_sign=False)
+        return data
+
+    def _get_top_long_short_position_ratio(self, symbol, period="5m", count=30, start_time=None,
+                                           end_time=None, extra_data=None, **kwargs):
+        """获取大户多空比 (持仓)
+
+        Args:
+            symbol: 交易对
+            period: 时间周期 (5m, 15m, 30m, 1h, 2h, 4h, 6h, 12h, 1d)
+            count: 数量限制 (1-500)
+            start_time: 开始时间戳
+            end_time: 结束时间戳
+            extra_data: 额外数据
+            **kwargs: 其他参数
+
+        Returns:
+            tuple: (path, params, extra_data)
+        """
+        request_type = "get_top_long_short_position_ratio"
+        request_symbol = self._params.get_symbol(symbol)
+        params = {
+            'symbol': request_symbol,
+            'period': period,
+            'limit': count,
+        }
+        if start_time is not None:
+            if isinstance(start_time, str):
+                start_time = int(datetime2timestamp(start_time) * 1000)
+            params['startTime'] = start_time
+        if end_time is not None:
+            if isinstance(end_time, str):
+                end_time = int(datetime2timestamp(end_time) * 1000)
+            params['endTime'] = end_time
+        path = self._params.get_rest_path(request_type)
+        extra_data = update_extra_data(extra_data, **{
+            "request_type": request_type,
+            "symbol_name": symbol,
+            "asset_type": self.asset_type,
+            "exchange_name": self.exchange_name,
+            "normalize_function": None,
+        })
+        if kwargs is not None:
+            extra_data.update(kwargs)
+        return path, params, extra_data
+
+    def get_top_long_short_position_ratio(self, symbol, period="5m", count=30, start_time=None,
+                                          end_time=None, extra_data=None, **kwargs):
+        """获取大户多空比 (持仓)"""
+        path, params, extra_data = self._get_top_long_short_position_ratio(
+            symbol, period, count, start_time, end_time, extra_data, **kwargs)
+        data = self.request(path, params=params, extra_data=extra_data, is_sign=False)
+        return data
+
+    def _get_open_interest_hist(self, symbol, period="5m", count=30, start_time=None,
+                                end_time=None, extra_data=None, **kwargs):
+        """获取持仓量历史
+
+        Args:
+            symbol: 交易对
+            period: 时间周期 (5m, 15m, 30m, 1h, 2h, 4h, 6h, 12h, 1d)
+            count: 数量限制 (1-500)
+            start_time: 开始时间戳
+            end_time: 结束时间戳
+            extra_data: 额外数据
+            **kwargs: 其他参数
+
+        Returns:
+            tuple: (path, params, extra_data)
+        """
+        request_type = "get_open_interest_hist"
+        request_symbol = self._params.get_symbol(symbol)
+        params = {
+            'symbol': request_symbol,
+            'period': period,
+            'limit': count,
+        }
+        if start_time is not None:
+            if isinstance(start_time, str):
+                start_time = int(datetime2timestamp(start_time) * 1000)
+            params['startTime'] = start_time
+        if end_time is not None:
+            if isinstance(end_time, str):
+                end_time = int(datetime2timestamp(end_time) * 1000)
+            params['endTime'] = end_time
+        path = self._params.get_rest_path(request_type)
+        extra_data = update_extra_data(extra_data, **{
+            "request_type": request_type,
+            "symbol_name": symbol,
+            "asset_type": self.asset_type,
+            "exchange_name": self.exchange_name,
+            "normalize_function": None,
+        })
+        if kwargs is not None:
+            extra_data.update(kwargs)
+        return path, params, extra_data
+
+    def get_open_interest_hist(self, symbol, period="5m", count=30, start_time=None,
+                              end_time=None, extra_data=None, **kwargs):
+        """获取持仓量历史"""
+        path, params, extra_data = self._get_open_interest_hist(
+            symbol, period, count, start_time, end_time, extra_data, **kwargs)
+        data = self.request(path, params=params, extra_data=extra_data, is_sign=False)
+        return data
+
+    # NOTE: get_liquidation_orders endpoint (/fapi/v1/allForceOrder) discontinued by Binance
+    # Use WebSocket stream !forceOrder@arr for liquidation data instead
+
+    def _get_force_orders(self, symbol=None, start_time=None, end_time=None, limit=None,
+                          extra_data=None, **kwargs):
+        """获取用户强平订单
+
+        Args:
+            symbol: 交易对 (可选)
+            start_time: 开始时间戳
+            end_time: 结束时间戳
+            limit: 数量限制 (1-100)
+            extra_data: 额外数据
+            **kwargs: 其他参数
+
+        Returns:
+            tuple: (path, params, extra_data)
+        """
+        request_type = "get_force_orders"
+        params = {}
+        if symbol is not None:
+            request_symbol = self._params.get_symbol(symbol)
+            params['symbol'] = request_symbol
+        if start_time is not None:
+            if isinstance(start_time, str):
+                start_time = int(datetime2timestamp(start_time) * 1000)
+            params['startTime'] = start_time
+        if end_time is not None:
+            if isinstance(end_time, str):
+                end_time = int(datetime2timestamp(end_time) * 1000)
+            params['endTime'] = end_time
+        if limit is not None:
+            params['limit'] = limit
+        path = self._params.get_rest_path(request_type)
+        extra_data = update_extra_data(extra_data, **{
+            "request_type": request_type,
+            "symbol_name": symbol or "ALL",
+            "asset_type": self.asset_type,
+            "exchange_name": self.exchange_name,
+            "normalize_function": None,
+        })
+        if kwargs is not None:
+            extra_data.update(kwargs)
+        return path, params, extra_data
+
+    def get_force_orders(self, symbol=None, start_time=None, end_time=None, limit=None,
+                         extra_data=None, **kwargs):
+        """获取用户强平订单"""
+        path, params, extra_data = self._get_force_orders(
+            symbol, start_time, end_time, limit, extra_data, **kwargs)
+        data = self.request(path, params=params, extra_data=extra_data, is_sign=True)
+        return data
+
+    # NOTE: get_open_interest_interval endpoint not available
+    # Use get_open_interest_hist for historical open interest data instead
+
     async def async_request(self, path, params=None, body=None, extra_data=None, timeout=10, is_sign=False):
         """http request function
         Args:

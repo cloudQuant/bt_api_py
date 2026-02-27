@@ -135,8 +135,8 @@ class BinanceExchangeDataSwap(BinanceExchangeData):
             'get_avg_price': 'GET /fapi/v1/avgPrice',
             'get_ticker': 'GET /fapi/v1/ticker',
             'get_open_interest': 'GET /fapi/v1/openInterest',
-            'get_open_interest_interval': 'GET /fapi/v1/openInterestInterval',
-            'get_liquidation_orders': 'GET /fapi/v1/allForceOrder',
+            # 'get_open_interest_interval': 'GET /fapi/v1/openInterestInterval',  # Endpoint not available
+            # 'get_liquidation_orders': 'GET /fapi/v1/allForceOrder',  # Discontinued by Binance
             'get_delivery_price': 'GET /fapi/v1/deliveryPrice',
             # --- Market Data (Futures Data Endpoints) ---
             'get_long_short_ratio': 'GET /futures/data/globalLongShortAccountRatio',
@@ -161,7 +161,7 @@ class BinanceExchangeDataSwap(BinanceExchangeData):
             'get_api_trading_status': 'GET /fapi/v1/apiTradingStatus',
             'get_api_key_permission': 'GET /fapi/v1/apiKeyPermission',
             'get_order_rate_limit': 'GET /fapi/v1/rateLimit/order',
-            'get_user_force_orders': 'GET /fapi/v1/userForceOrders',
+            'get_force_orders': 'GET /fapi/v1/forceOrders',  # User's force orders
             'get_symbol_config': 'GET /fapi/v1/symbolConfig',
             'get_account_config': 'GET /fapi/v1/accountConfig',
             # --- Trade ---
@@ -236,6 +236,7 @@ class BinanceExchangeDataSwap(BinanceExchangeData):
             'bidAsk': {'params': ['<symbol>@bookTicker'], 'method': 'SUBSCRIBE', 'id': 1},
             'clearPrice': {'params': ['<symbol>@markPrice@1s'], 'method': 'SUBSCRIBE', 'id': 1},
             'liquidation': {'params': ['<symbol>@forceOrder'], 'method': 'SUBSCRIBE', 'id': 1},
+            'liquidation_order': {'params': ['<symbol>@forceOrder'], 'method': 'SUBSCRIBE', 'id': 1},
             'contract_info': {'params': ['!contractInfo'], 'method': 'SUBSCRIBE', 'id': 1},
             # --- User Data Streams (listen key based) ---
             'orders': '',
@@ -322,6 +323,11 @@ class BinanceExchangeDataSpot(BinanceExchangeData):
             'account_summary': 'GET /sapi/v2/sub-account/futures/account',
             # --- Transfer (Futures) ---
             'transfer': 'POST /sapi/v1/futures/transfer',
+            'get_futures_transfer_history': 'GET /sapi/v1/futures/transfer',
+            # --- Account Snapshot ---
+            'get_account_snapshot': 'GET /sapi/v1/accountSnapshot',
+            # --- Trading Day Stats ---
+            'get_ticker_trading_day': 'GET /api/v3/ticker/tradingDay',
         }
 
         self.wss_paths = {
@@ -338,6 +344,8 @@ class BinanceExchangeDataSpot(BinanceExchangeData):
             'depth_partial': {'params': ['<symbol>@depth<level>@100ms'], 'method': 'SUBSCRIBE', 'id': 1},
             'increDepthFlow': {'params': ['<symbol>@depth@100ms'], 'method': 'SUBSCRIBE', 'id': 1},
             'force_order': {'params': ['<symbol>@forceOrder'], 'method': 'SUBSCRIBE', 'id': 1},
+            # --- Timezone Kline (UTC+8) ---
+            'kline_timezone': {'params': ['<symbol>@kline_<period>@+08:00'], 'method': 'SUBSCRIBE', 'id': 1},
             # --- All Market Streams ---
             'all_mini_ticker': {'params': ['!miniTicker@arr'], 'method': 'SUBSCRIBE', 'id': 1},
             'all_ticker': {'params': ['!ticker@arr'], 'method': 'SUBSCRIBE', 'id': 1},
@@ -350,6 +358,7 @@ class BinanceExchangeDataSpot(BinanceExchangeData):
             'market': {'params': ['!bookTicker'], 'method': 'SUBSCRIBE', 'id': 1},
             'bidAsk': {'params': ['<symbol>@bookTicker'], 'method': 'SUBSCRIBE', 'id': 1},
             'liquidation': {'params': ['<symbol>@forceOrder'], 'method': 'SUBSCRIBE', 'id': 1},
+            'liquidation_order': {'params': ['<symbol>@forceOrder'], 'method': 'SUBSCRIBE', 'id': 1},
             # --- User Data Streams (listen key based) ---
             'orders': '',
             'deals': '',
@@ -468,8 +477,8 @@ class BinanceExchangeDataCoinM(BinanceExchangeData):
             'get_avg_price': 'GET /dapi/v1/avgPrice',
             'get_ticker': 'GET /dapi/v1/ticker',
             'get_open_interest': 'GET /dapi/v1/openInterest',
-            'get_open_interest_interval': 'GET /dapi/v1/openInterestInterval',
-            'get_liquidation_orders': 'GET /dapi/v1/allForceOrder',
+            # 'get_open_interest_interval': 'GET /dapi/v1/openInterestInterval',  # Endpoint not available
+            # 'get_liquidation_orders': 'GET /dapi/v1/allForceOrder',  # Discontinued by Binance
             'get_delivery_price': 'GET /dapi/v1/deliveryPrice',
             # --- Market Data (Futures Data Endpoints) ---
             'get_long_short_ratio': 'GET /futures/data/globalLongShortAccountRatio',
@@ -489,7 +498,7 @@ class BinanceExchangeDataCoinM(BinanceExchangeData):
             'get_leverage_bracket_v2': 'GET /dapi/v2/leverageBracket',
             'get_position_mode': 'GET /dapi/v1/positionSide/dual',
             'get_api_key_permission': 'GET /dapi/v1/apiKeyPermission',
-            'get_user_force_orders': 'GET /dapi/v1/userForceOrders',
+            'get_force_orders': 'GET /dapi/v1/forceOrders',  # User's force orders
             # --- Trade ---
             'make_order': 'POST /dapi/v1/order',
             'make_order_test': 'POST /dapi/v1/order/test',
@@ -558,6 +567,7 @@ class BinanceExchangeDataCoinM(BinanceExchangeData):
             'bidAsk': {'params': ['<symbol>@bookTicker'], 'method': 'SUBSCRIBE', 'id': 1},
             'clearPrice': {'params': ['<symbol>@markPrice@1s'], 'method': 'SUBSCRIBE', 'id': 1},
             'liquidation': {'params': ['<symbol>@forceOrder'], 'method': 'SUBSCRIBE', 'id': 1},
+            'liquidation_order': {'params': ['<symbol>@forceOrder'], 'method': 'SUBSCRIBE', 'id': 1},
             'contract_info': {'params': ['!contractInfo'], 'method': 'SUBSCRIBE', 'id': 1},
             # --- User Data Streams (listen key based) ---
             'orders': '',
@@ -812,6 +822,285 @@ class BinanceExchangeDataAlgo(BinanceExchangeData):
 
         self.legal_currency = [
             'USDT', 'USD', 'BTC', 'ETH', 'BNB', 'BUSD',
+        ]
+
+    def get_symbol(self, symbol):
+        return symbol.replace('-', '')
+
+
+class BinanceExchangeDataWallet(BinanceExchangeData):
+    """Binance Wallet API - 资产钱包接口
+
+    负责处理资产查询、划转、充值、提现等钱包相关功能。
+    """
+
+    def __init__(self):
+        super(BinanceExchangeDataWallet, self).__init__()
+        self.exchange_name = 'binance_wallet'
+
+        self.rest_url = 'https://api.binance.com'
+        self.acct_wss_url = 'wss://stream.binance.com/ws'
+        self.wss_url = 'wss://stream.binance.com/ws'
+
+        self.rest_paths = {
+            # --- 通用接口 ---
+            'ping': 'GET /api/v3/ping',
+            'get_server_time': 'GET /api/v3/time',
+            # --- 资产查询 ---
+            'get_wallet_balance': 'GET /sapi/v1/asset/wallet/balance',
+            'get_asset_detail': 'GET /sapi/v1/asset/assetDetail',
+            'get_asset_ledger': 'GET /sapi/v1/asset/ledger',
+            'get_asset_dividend': 'GET /sapi/v1/asset/assetDividend',
+            # --- 资产划转 ---
+            'asset_transfer': 'POST /sapi/v1/asset/transfer',
+            'get_asset_transfer': 'GET /sapi/v1/asset/transfer',
+            'transfer_to_futures_main': 'POST /sapi/v1/asset/transfer-to-future-main-account',
+            'transfer_to_futures_sub': 'POST /sapi/v1/asset/transfer-to-future-sub-account',
+            'transfer_to_um': 'POST /sapi/v1/asset/transfer-to-UM',
+            'transfer_to_isolated_margin': 'POST /sapi/v1/asset/transfer-to-isolated-margin',
+            # --- 充值相关 ---
+            'get_deposit_address': 'GET /sapi/v1/capital/deposit/address',
+            'get_deposit_history': 'GET /sapi/v1/capital/deposit/hisrec',
+            # --- 提现相关 ---
+            'withdraw': 'POST /sapi/v1/capital/withdraw/apply',
+            'get_withdraw_history': 'GET /sapi/v1/capital/withdraw/history',
+            'get_withdraw_address': 'GET /sapi/v1/capital/withdraw/address',
+            # --- 小额资产转换 (Dust) ---
+            'get_dust': 'GET /sapi/v1/asset/dust',
+            'dust_transfer': 'POST /sapi/v1/asset/dust/btc',
+        }
+
+        self.wss_paths = {}
+
+        self.legal_currency = [
+            'USDT', 'USD', 'BTC', 'ETH', 'BNB', 'BUSD',
+        ]
+
+    def get_symbol(self, symbol):
+        return symbol.replace('-', '')
+
+
+class BinanceExchangeDataSubAccount(BinanceExchangeData):
+    """Binance Sub-account API - 子账户管理接口
+
+    负责处理子账户管理、资产划转、API Key管理等子账户相关功能。
+    """
+
+    def __init__(self):
+        super(BinanceExchangeDataSubAccount, self).__init__()
+        self.exchange_name = 'binance_sub_account'
+
+        self.rest_url = 'https://api.binance.com'
+        self.acct_wss_url = 'wss://stream.binance.com/ws'
+        self.wss_url = 'wss://stream.binance.com/ws'
+
+        self.rest_paths = {
+            # --- 通用接口 ---
+            'ping': 'GET /api/v3/ping',
+            'get_server_time': 'GET /api/v3/time',
+            # --- 子账户管理 ---
+            'get_sub_account_list': 'GET /sapi/v1/sub-account/list',
+            'get_sub_account_status': 'GET /sapi/v1/sub-account/status',
+            'get_sub_account_spot_summary': 'GET /sapi/v1/sub-account/spotSummary',
+            # --- 子账户资金划转 ---
+            'sub_transfer_to_main': 'POST /sapi/v1/sub-account/transfer/sub-to-main',
+            'main_transfer_to_sub': 'POST /sapi/v1/sub-account/transfer/main-to-sub',
+            'sub_transfer_to_sub': 'POST /sapi/v1/sub-account/transfer/sub-to-sub',
+            'get_sub_transfer_history': 'GET /sapi/v1/sub-account/sub-transfer-history',
+            'get_sub_account_universal_transfer': 'GET /sapi/v1/sub-account/universal-transfer',
+            # --- 子账户资产查询 ---
+            'get_sub_account_assets': 'GET /sapi/v1/sub-account/assets',
+            'get_sub_account_margin_account': 'GET /sapi/v1/sub-account/margin/account',
+            'get_sub_account_margin_summary': 'GET /sapi/v1/sub-account/margin/accountSummary',
+            'get_sub_account_futures_account': 'GET /sapi/v1/sub-account/futuresAccount',
+            # --- 子账户 API Key 管理 ---
+            'create_sub_api_key': 'POST /sapi/v1/sub-account/apiKey',
+            'get_sub_api_key': 'GET /sapi/v1/sub-account/apiKey',
+            'delete_sub_api_key': 'DELETE /sapi/v1/sub-account/apiKey',
+            'get_sub_api_ip_restriction': 'GET /sapi/v1/sub-account/apiIpRestriction',
+            'delete_sub_ip_restriction': 'DELETE /sapi/v1/sub-account/apiIpRestriction',
+        }
+
+        self.wss_paths = {}
+
+        self.legal_currency = [
+            'USDT', 'USD', 'BTC', 'ETH', 'BNB', 'BUSD',
+        ]
+
+    def get_symbol(self, symbol):
+        return symbol.replace('-', '')
+
+
+class BinanceExchangeDataPortfolio(BinanceExchangeData):
+    """Binance Portfolio Margin API - 组合保证金接口
+
+    负责处理组合保证金(PM)账户相关功能。
+    """
+
+    def __init__(self):
+        super(BinanceExchangeDataPortfolio, self).__init__()
+        self.exchange_name = 'binance_portfolio'
+
+        self.rest_url = 'https://api.binance.com'
+        self.acct_wss_url = 'wss://stream.binance.com/ws'
+        self.wss_url = 'wss://stream.binance.com/ws'
+
+        self.rest_paths = {
+            # --- 通用接口 ---
+            'ping': 'GET /api/v3/ping',
+            'get_server_time': 'GET /api/v3/time',
+            # --- 组合保证金 ---
+            'get_portfolio_account': 'GET /sapi/v1/portfolio/account',
+            'get_portfolio_collateral_rate': 'GET /sapi/v1/portfolio/collateralRate',
+            'portfolio_transfer': 'POST /sapi/v1/portfolio/transfer',
+        }
+
+        self.wss_paths = {}
+
+        self.legal_currency = [
+            'USDT', 'USD', 'BTC', 'ETH', 'BNB',
+        ]
+
+    def get_symbol(self, symbol):
+        return symbol.replace('-', '')
+
+
+class BinanceExchangeDataGrid(BinanceExchangeData):
+    """Binance Grid Trading API - 网格交易接口
+
+    负责处理合约网格交易相关功能。
+    """
+
+    def __init__(self):
+        super(BinanceExchangeDataGrid, self).__init__()
+        self.exchange_name = 'binance_grid'
+
+        self.rest_url = 'https://api.binance.com'
+        self.acct_wss_url = 'wss://stream.binance.com/ws'
+        self.wss_url = 'wss://stream.binance.com/ws'
+
+        self.rest_paths = {
+            # --- 通用接口 ---
+            'ping': 'GET /api/v3/ping',
+            'get_server_time': 'GET /api/v3/time',
+            # --- 合约网格交易 ---
+            'futures_grid_new_order': 'POST /sapi/v1/futures/fortune/order',
+            'futures_grid_cancel_order': 'DELETE /sapi/v1/futures/fortune/order',
+            'get_futures_grid_orders': 'GET /sapi/v1/futures/fortune/order',
+            'get_futures_grid_position': 'GET /sapi/v1/futures/fortune/position',
+            'get_futures_grid_income': 'GET /sapi/v1/futures/fortune/income',
+        }
+
+        self.wss_paths = {}
+
+        self.legal_currency = [
+            'USDT', 'USD', 'BTC', 'ETH', 'BNB',
+        ]
+
+    def get_symbol(self, symbol):
+        return symbol.replace('-', '')
+
+
+class BinanceExchangeDataStaking(BinanceExchangeData):
+    """Binance Staking API - 质押理财接口
+
+    负责处理质押、理财等投资产品相关功能。
+    """
+
+    def __init__(self):
+        super(BinanceExchangeDataStaking, self).__init__()
+        self.exchange_name = 'binance_staking'
+
+        self.rest_url = 'https://api.binance.com'
+        self.acct_wss_url = 'wss://stream.binance.com/ws'
+        self.wss_url = 'wss://stream.binance.com/ws'
+
+        self.rest_paths = {
+            # --- 通用接口 ---
+            'ping': 'GET /api/v3/ping',
+            'get_server_time': 'GET /api/v3/time',
+            # --- Staking 产品 ---
+            'get_staking_products': 'GET /sapi/v1/staking/productList',
+            'staking_purchase': 'POST /sapi/v1/staking/purchase',
+            'staking_redeem': 'POST /sapi/v1/staking/redeem',
+            'get_staking_position': 'GET /sapi/v1/staking/position',
+            'get_staking_history': 'GET /sapi/v1/staking/stakingRecord',
+        }
+
+        self.wss_paths = {}
+
+        self.legal_currency = [
+            'USDT', 'USD', 'BTC', 'ETH', 'BNB',
+        ]
+
+    def get_symbol(self, symbol):
+        return symbol.replace('-', '')
+
+
+class BinanceExchangeDataMining(BinanceExchangeData):
+    """Binance Mining API - 矿池接口
+
+    负责处理矿池相关功能。
+    """
+
+    def __init__(self):
+        super(BinanceExchangeDataMining, self).__init__()
+        self.exchange_name = 'binance_mining'
+
+        self.rest_url = 'https://api.binance.com'
+        self.acct_wss_url = 'wss://stream.binance.com/ws'
+        self.wss_url = 'wss://stream.binance.com/ws'
+
+        self.rest_paths = {
+            # --- 通用接口 ---
+            'ping': 'GET /api/v3/ping',
+            'get_server_time': 'GET /api/v3/time',
+            # --- 矿池接口 ---
+            'get_mining_algo_list': 'GET /sapi/v1/mining/pub/algoList',
+            'get_mining_worker_list': 'GET /sapi/v1/mining/worker/list',
+            'get_mining_statistics': 'GET /sapi/v1/mining/statistics/user/status',
+        }
+
+        self.wss_paths = {}
+
+        self.legal_currency = [
+            'USDT', 'USD', 'BTC', 'ETH', 'BNB',
+        ]
+
+    def get_symbol(self, symbol):
+        return symbol.replace('-', '')
+
+
+class BinanceExchangeDataVipLoan(BinanceExchangeData):
+    """Binance VIP Loan API - VIP借贷接口
+
+    负责处理VIP借贷相关功能。
+    """
+
+    def __init__(self):
+        super(BinanceExchangeDataVipLoan, self).__init__()
+        self.exchange_name = 'binance_vip_loan'
+
+        self.rest_url = 'https://api.binance.com'
+        self.acct_wss_url = 'wss://stream.binance.com/ws'
+        self.wss_url = 'wss://stream.binance.com/ws'
+
+        self.rest_paths = {
+            # --- 通用接口 ---
+            'ping': 'GET /api/v3/ping',
+            'get_server_time': 'GET /api/v3/time',
+            # --- VIP Loan ---
+            'get_vip_loan_ongoing_orders': 'GET /sapi/v1/loan/ongoing/order',
+            'vip_loan_borrow': 'POST /sapi/v1/loan/borrow',
+            'vip_loan_repay': 'POST /sapi/v1/loan/repay',
+            'get_vip_loan_history': 'GET /sapi/v1/loan/loan/history',
+            'get_vip_repayment_history': 'GET /sapi/v1/loan/repayment/history',
+        }
+
+        self.wss_paths = {}
+
+        self.legal_currency = [
+            'USDT', 'USD', 'BTC', 'ETH', 'BNB',
         ]
 
     def get_symbol(self, symbol):

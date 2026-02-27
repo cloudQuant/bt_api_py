@@ -1087,6 +1087,118 @@ def test_binance_req_get_all_orders_with_time():
     assert isinstance(result, list)
 
 
+# ===== Tests for new futures advanced data endpoints =====
+
+def test_binance_has_top_long_short_methods():
+    """测试有大户多空比方法"""
+    live_binance_swap_feed = init_req_feed()
+    assert hasattr(live_binance_swap_feed, 'get_top_long_short_account_ratio')
+    assert hasattr(live_binance_swap_feed, 'get_top_long_short_position_ratio')
+
+
+def test_binance_req_top_long_short_account_ratio():
+    """测试获取大户多空比 (账户)"""
+    live_binance_swap_feed = init_req_feed()
+    data = live_binance_swap_feed.get_top_long_short_account_ratio("BTC-USDT", period="1h", count=5)
+    assert isinstance(data, RequestData)
+    result = data.get_data()
+    assert isinstance(result, list)
+    assert len(result) > 0
+    first = result[0]
+    assert 'symbol' in first
+    assert 'longPosition' in first or 'longAccount' in first
+    assert 'shortPosition' in first or 'shortAccount' in first
+
+
+def test_binance_req_top_long_short_position_ratio():
+    """测试获取大户多空比 (持仓)"""
+    live_binance_swap_feed = init_req_feed()
+    data = live_binance_swap_feed.get_top_long_short_position_ratio("BTC-USDT", period="1h", count=5)
+    assert isinstance(data, RequestData)
+    result = data.get_data()
+    assert isinstance(result, list)
+    assert len(result) > 0
+    first = result[0]
+    assert 'symbol' in first
+
+
+def test_binance_has_liquidation_methods():
+    """测试有强平订单方法"""
+    live_binance_swap_feed = init_req_feed()
+    # NOTE: get_liquidation_orders endpoint discontinued by Binance
+    assert hasattr(live_binance_swap_feed, 'get_force_orders')
+
+# NOTE: get_liquidation_orders tests removed - endpoint discontinued by Binance
+# Use WebSocket stream !forceOrder@arr for liquidation data instead
+
+def test_binance_req_force_orders():
+    """测试获取用户强平订单"""
+    live_binance_swap_feed = init_req_feed()
+    data = live_binance_swap_feed.get_force_orders(limit=10)
+    assert isinstance(data, RequestData)
+    result = data.get_data()
+    assert isinstance(result, list)
+
+
+def test_binance_has_open_interest_hist():
+    """测试有持仓量历史方法"""
+    live_binance_swap_feed = init_req_feed()
+    assert hasattr(live_binance_swap_feed, 'get_open_interest_hist')
+
+
+def test_binance_req_open_interest_hist():
+    """测试获取持仓量历史"""
+    live_binance_swap_feed = init_req_feed()
+    data = live_binance_swap_feed.get_open_interest_hist("BTC-USDT", period="1h", count=5)
+    assert isinstance(data, RequestData)
+    result = data.get_data()
+    assert isinstance(result, list)
+    assert len(result) > 0
+    first = result[0]
+    assert 'symbol' in first
+    assert 'sumOpenInterest' in first or 'openInterest' in first
+    assert 'timestamp' in first
+
+
+def test_binance_req_top_long_short_params():
+    """测试大户多空比参数构建"""
+    live_binance_swap_feed = init_req_feed()
+    path, params, extra_data = live_binance_swap_feed._get_top_long_short_account_ratio(
+        "BTC-USDT", period="5m", count=30
+    )
+    assert path == "GET /futures/data/topLongShortAccountRatio"
+    assert params['symbol'] == "BTCUSDT"
+    assert params['period'] == "5m"
+    assert params['limit'] == 30
+
+
+def test_binance_req_force_orders_params():
+    """测试用户强平订单参数构建"""
+    live_binance_swap_feed = init_req_feed()
+    path, params, extra_data = live_binance_swap_feed._get_force_orders(
+        symbol="ETH-USDT", limit=20
+    )
+    assert path == "GET /fapi/v1/forceOrders"
+    assert params['symbol'] == "ETHUSDT"
+    assert params['limit'] == 20
+
+
+def test_binance_req_open_interest_hist_params():
+    """测试持仓量历史参数构建"""
+    live_binance_swap_feed = init_req_feed()
+    path, params, extra_data = live_binance_swap_feed._get_open_interest_hist(
+        "BTC-USDT", period="1h", count=100
+    )
+    assert path == "GET /futures/data/openInterestHist"
+    assert params['symbol'] == "BTCUSDT"
+    assert params['period'] == "1h"
+    assert params['limit'] == 100
+
+
+# NOTE: get_open_interest_interval tests removed - endpoint not available
+# Use get_open_interest_hist for historical open interest data instead
+
+
 if __name__ == "__main__":
     test_binance_req_server_time()
     # test_binance_req_tick_data()
