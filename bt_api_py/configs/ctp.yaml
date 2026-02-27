@@ -1,0 +1,79 @@
+# CTP 交易所统一配置
+# 数据来源: bt_api_py/containers/exchanges/ctp_exchange_data.py
+id: ctp
+display_name: CTP (中国期货)
+venue_type: cex
+website: http://www.sfit.com.cn
+
+base_urls: {}
+
+connection:
+  type: spi
+  timeout: 15
+  max_retries: 3
+  md_front: "tcp://180.168.146.187:10131"
+  td_front: "tcp://180.168.146.187:10130"
+
+authentication:
+  type: password
+
+# 共享 kline 周期映射
+kline_periods:
+  1m: "1m"
+  3m: "3m"
+  5m: "5m"
+  15m: "15m"
+  30m: "30m"
+  1h: "1h"
+  1d: "1d"
+
+# 交易所代码映射 (CTP ExchangeID -> 交易所名称)
+exchange_id_map:
+  CFFEX: "中金所"
+  SHFE: "上期所"
+  DCE: "大商所"
+  CZCE: "郑商所"
+  INE: "能源中心"
+  GFEX: "广期所"
+
+rate_limits:
+  - name: query_rate
+    type: fixed_window
+    interval: 1
+    limit: 1
+    scope: global
+    weight: 1
+
+broker_id: "9999"
+app_id: "simnow_client_test"
+
+asset_types:
+  # ─── CtpExchangeDataFuture (期货) ──────────────────────────
+  future:
+    exchange_name: ctp_future
+    symbol_format: "{instrument_id}"
+    kline_periods:
+      1m: "1m"
+      3m: "3m"
+      5m: "5m"
+      15m: "15m"
+      30m: "30m"
+      1h: "1h"
+      1d: "1d"
+    rest_paths: {}
+    wss_paths: {}
+
+  # ─── CtpExchangeDataOption (期权) ──────────────────────────
+  option:
+    exchange_name: ctp_option
+    symbol_format: "{instrument_id}"
+    kline_periods:
+      1m: "1m"
+      3m: "3m"
+      5m: "5m"
+      15m: "15m"
+      30m: "30m"
+      1h: "1h"
+      1d: "1d"
+    rest_paths: {}
+    wss_paths: {}

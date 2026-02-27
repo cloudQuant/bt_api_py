@@ -1,0 +1,138 @@
+# -*- coding: utf-8 -*-
+"""
+统一 Instrument 模型
+
+用于表示所有交易标的（现货、永续、交割、期权、股票、外汇等），
+提供内部符号 ↔ 场所符号双向映射能力。
+"""
+import dataclasses
+from dataclasses import dataclass, field
+from datetime import datetime
+from decimal import Decimal
+from enum import Enum, unique
+from typing import Optional, Dict, Any
+
+
+@unique
+class AssetType(str, Enum):
+    """资产类型枚举"""
+    SPOT = "spot"
+    SWAP = "swap"
+    FUTURE = "future"
+    OPTION = "option"
+    STK = "stk"
+    FUND = "fund"
+    BOND = "bond"
+    FX = "fx"
+    INDEX = "index"
+
+
+@dataclass(frozen=True)
+class Instrument:
+    """统一交易标的模型（不可变，线程安全）"""
+
+    # === 基础标识 ===
+    internal: str                    # 内部统一符号，如 BTC-USDT, IF2506, AAPL
+    venue: str                       # BINANCE___SWAP, CTP___FUTURE, IB___STK
+    venue_symbol: str                # 交易所/券商原始符号，如 BTCUSDT, IF2506, AAPL
+    asset_type: AssetType            # 资产类型
+
+    # === 标的属性 ===
+    underlying: Optional[str] = None       # 标的：BTC、沪深300、Apple
+    base_currency: Optional[str] = None    # 基础货币（现货/合约）
+    quote_currency: Optional[str] = None   # 计价货币
+
+    # === 合约属性（FUTURE/OPTION） ===
+    expiry: Optional[datetime] = None
+    strike: Optional[Decimal] = None
+    contract_size: Optional[Decimal] = None
+    option_type: Optional[str] = None      # CALL / PUT
+
+    # === 交易属性 ===
+    tick_size: Optional[Decimal] = None
+    min_qty: Optional[Decimal] = None
+    max_qty: Optional[Decimal] = None
+    qty_step: Optional[Decimal] = None
+    min_notional: Optional[Decimal] = None
+
+    # === 状态信息 ===
+    status: str = "active"                 # active / suspend / expire / delist
+    list_time: Optional[datetime] = None
+    delist_time: Optional[datetime] = None
+
+    # === 扩展信息 ===
+    extra: Dict[str, Any] = field(default_factory=dict)
+
+    @property
+    def is_expired(self) -> bool:
+        if self.expiry is None:
+            return False
+        return datetime.now() > self.expiry
+
+    @property
+    def is_listed(self) -> bool:
+        if self.status != "active":
+            return False
+        if self.delist_time and datetime.now() > self.delist_time:
+            return False
+        return True
+
+    def with_params(self, **kwargs) -> 'Instrument':
+        """创建带有新参数的副本"""
+        return dataclasses.replace(self, **kwargs)
+
+
+# ── InstrumentFactory ─────────────────────────────────────────
+
+# 已知的 quote 货币列表（按长度降序排列，优先匹配长的）
+KNOWN_QUOTES = [
+    "USDT", "USDC", "BUSD", "TUSD", "FDUSD",
+    "USD", "BTC", "ETH", "BNB",
+    "EUR", "GBP", "AUD", "TRY", "BRL",
+]
+
+
+class InstrumentFactory:
+    """Instrument 工厂类"""
+
+    @staticmethod
+    def from_venue(
+        venue: str,
+        venue_symbol: str,
+        asset_type: AssetType,
+        **kwargs,
+    ) -> Instrument:
+        """从交易所符号创建 Instrument"""
+        internal = InstrumentFactory._make_internal(venue, venue_symbol, asset_type)
+        return Instrument(
+            internal=internal,
+            venue=venue,
+            venue_symbol=venue_symbol,
+            asset_type=asset_type,
+            **kwargs,
+        )
+
+    @staticmethod
+    def _make_internal(venue: str, venue_symbol: str, asset_type: AssetType) -> str:
+        """生成内部统一符号
+
+        解析策略：
+        1. 如果符号包含分隔符（-/_.），直接按分隔符拆分并用 '-' 连接
+        2. 否则，使用已知 quote 货币列表从后往前匹配
+        3. 匹配失败时返回原始符号（不抛异常，留给上层处理）
+        """
+        # 已含分隔符的交易所（OKX, Bitget, KuCoin 等）
+        for sep in ["-", "/", "_", "."]:
+            if sep in venue_symbol:
+                parts = venue_symbol.split(sep)
+                return "-".join(parts)
+
+        # 无分隔符（Binance: BTCUSDT, DOGEUSDT, SHIBUSDT）
+        upper = venue_symbol.upper()
+        for quote in KNOWN_QUOTES:
+            if upper.endswith(quote) and len(upper) > len(quote):
+                base = upper[:-len(quote)]
+                return f"{base}-{quote}"
+
+        # 非 crypto 场所（CTP: IF2506, IB: AAPL）直接返回
+        return venue_symbol

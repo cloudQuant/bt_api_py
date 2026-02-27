@@ -10,6 +10,9 @@ import json
 from urllib import parse
 from bt_api_py.containers.exchanges.okx_exchange_data import OkxExchangeDataSwap
 from bt_api_py.feeds.feed import Feed
+from bt_api_py.feeds.capability import Capability
+from bt_api_py.error_framework import OKXErrorTranslator
+from bt_api_py.rate_limiter import RateLimiter, RateLimitRule, RateLimitType, RateLimitScope
 from bt_api_py.functions.log_message import SpdLogManager
 from bt_api_py.functions.utils import update_extra_data
 from bt_api_py.containers.requestdatas.request_data import RequestData
@@ -26,6 +29,35 @@ from bt_api_py.containers.symbols.okx_symbol import OkxSymbolData
 
 
 class OkxRequestData(Feed):
+    @classmethod
+    def _capabilities(cls):
+        return {
+            Capability.GET_TICK,
+            Capability.GET_DEPTH,
+            Capability.GET_KLINE,
+            Capability.GET_FUNDING_RATE,
+            Capability.GET_MARK_PRICE,
+            Capability.MAKE_ORDER,
+            Capability.CANCEL_ORDER,
+            Capability.QUERY_ORDER,
+            Capability.QUERY_OPEN_ORDERS,
+            Capability.GET_DEALS,
+            Capability.GET_BALANCE,
+            Capability.GET_ACCOUNT,
+            Capability.GET_POSITION,
+            Capability.MARKET_STREAM,
+            Capability.ACCOUNT_STREAM,
+            Capability.CROSS_MARGIN,
+            Capability.ISOLATED_MARGIN,
+            Capability.HEDGE_MODE,
+            Capability.BATCH_ORDER,
+            Capability.CONDITIONAL_ORDER,
+            Capability.TRAILING_STOP,
+            Capability.OCO_ORDER,
+            Capability.GET_EXCHANGE_INFO,
+            Capability.GET_SERVER_TIME,
+        }
+
     def __init__(self, data_queue, **kwargs):
         super(OkxRequestData, self).__init__(data_queue, **kwargs)
         self.data_queue = data_queue
@@ -40,6 +72,46 @@ class OkxRequestData(Feed):
                                             0, 0, False).create_logger()
         self.async_logger = SpdLogManager("./logs/" + self.logger_name, "async_request",
                                           0, 0, False).create_logger()
+        self._error_translator = OKXErrorTranslator()
+        self._rate_limiter = kwargs.get("rate_limiter", self._create_default_rate_limiter())
+
+    @staticmethod
+    def _create_default_rate_limiter():
+        rules = [
+            RateLimitRule(
+                name="okx_general",
+                limit=20,
+                interval=2,
+                type=RateLimitType.SLIDING_WINDOW,
+                scope=RateLimitScope.ENDPOINT,
+                endpoint="/api/v5/market/*",
+            ),
+            RateLimitRule(
+                name="okx_trade",
+                limit=60,
+                interval=2,
+                type=RateLimitType.SLIDING_WINDOW,
+                scope=RateLimitScope.ENDPOINT,
+                endpoint="/api/v5/trade/order",
+            ),
+            RateLimitRule(
+                name="okx_account",
+                limit=10,
+                interval=2,
+                type=RateLimitType.SLIDING_WINDOW,
+                scope=RateLimitScope.ENDPOINT,
+                endpoint="/api/v5/account/*",
+            ),
+        ]
+        return RateLimiter(rules)
+
+    def translate_error(self, raw_response):
+        """将原始 OKX API 响应翻译为 UnifiedError（如有错误），否则返回 None"""
+        if isinstance(raw_response, dict):
+            code = raw_response.get("code", raw_response.get("sCode", "0"))
+            if str(code) != "0":
+                return self._error_translator.translate(raw_response, self.exchange_name)
+        return None
 
     def push_data_to_queue(self, data):
         if self.data_queue is not None:

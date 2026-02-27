@@ -1,81 +1,92 @@
-# 查看文档 API 文档
+# Hyperliquid API 文档
 
 ## 交易所信息
 
-- **交易所名称**: 查看文档
-- **官方网站**: 待补充
-- **API文档**: 待补充
-- **24h交易量排名**: 待补充
-- **24h交易量**: 待补充
-- **支持的交易对**: 待补充
-- **API版本**: 待补充
-- **特点**: 待补充
+- **交易所名称**: Hyperliquid
+- **官方网站**: https://hyperliquid.xyz
+- **API文档**: https://hyperliquid.gitbook.io/hyperliquid-docs/for-developers/api
+- **24h交易量排名**: #2（DEX）
+- **支持的市场**: Perps / Spot（详见官方文档）
 
 ## API基础信息
 
 ### 基础URL
 
 ```text
-# REST API
-待补充
+# Mainnet
+https://api.hyperliquid.xyz
 
-# WebSocket
-待补充
+# Testnet
+https://api.hyperliquid-testnet.xyz
 ```
 
-### 请求头
+### 主要 REST 端点
+
+- `POST /info`  市场与账户查询（根据请求体 `type` 不同返回不同信息）
+- `POST /exchange`  交易/账户操作（需签名）
+
+### WebSocket
 
 ```text
-待补充
+wss://api.hyperliquid.xyz/ws
+wss://api.hyperliquid-testnet.xyz/ws
 ```
 
 ## 认证方式
 
-### 1. 获取API密钥
+- 交易相关接口需要签名
+- 官方文档提供 Python SDK 示例
 
-1. 待补充
+## Info Endpoint 说明（官方）
 
-### 2. 请求签名算法
+- 时间范围查询最多返回 500 条；可用最后时间戳作为下一次请求的 `startTime` 分页
+- Perps 与 Spot 的 `coin` 规则不同：
+  - Perps：使用 `meta` 返回的 `coin`
+  - Spot：`PURR/USDC` 用对名，其他 Spot token 用 `@{index}`（`spotMeta.universe` 中对应索引）
 
-待补充
+## 常用 Info 请求类型（示例）
 
-### 3. Python 认证示例
+- 市场数据：`allMids`、`l2Book`、`candleSnapshot`、`exchangeStatus`
+- 账户与订单：`clearinghouseState`、`spotClearinghouseState`、`orderStatus`
+- 其他：`userRole`
 
-```python
-# TODO: 根据官方文档补充签名逻辑
-```
+### candleSnapshot 说明
 
-## 市场数据API
+- 仅提供最近 5000 根 K 线
+- 支持周期：`1m, 3m, 5m, 15m, 30m, 1h, 2h, 4h, 8h, 12h, 1d, 3d, 1w, 1M`
 
-- 获取服务器时间: 待补充
-- 获取交易对信息: 待补充
-- 获取Ticker信息: 待补充
-- 获取K线数据: 待补充
-- 获取深度信息: 待补充
+## 常用 Exchange 操作（示例）
 
-## 交易API
+- `order` / `cancel` / `modify`
+- `transfer` / `withdraw`
+- 其他类型详见官方文档
 
-- 下单: 待补充
-- 撤单: 待补充
-- 查询订单: 待补充
+## Exchange Endpoint 说明（官方）
 
-## 账户管理API
+- `asset`（Perps）：`meta.universe` 中的索引
+- `asset`（Spot）：`10000 + spotMeta.universe` 中的索引
+- 子账户与 Vault 需由主账户签名，并设置 `vaultAddress`
+- 部分操作支持 `expiresAfter`（毫秒时间戳）
 
-- 账户余额: 待补充
-- 资产划转: 待补充
+## 速率限制（官方）
 
-## 速率限制
-
-待补充
-
-## WebSocket支持
-
-待补充
+- REST 请求总权重：1200/分钟/IP
+- `info` 请求权重示例：`l2Book, allMids, clearinghouseState, orderStatus, spotClearinghouseState, exchangeStatus` 为 2；`userRole` 为 60；其他多数为 20
+- `candleSnapshot` 会按返回条数增加权重
+- WebSocket：最多 10 个连接、30 次/分钟新连接、1000 订阅、2000 消息/分钟
+- 地址级限额：默认 10000 初始 buffer；开放订单数默认 1000，随成交增加上限（上限 5000）
 
 ## 错误代码
 
-待补充
+- 详见官方文档
 
 ## 代码示例
 
-待补充
+```python
+# 获取市场信息（allMids）
+import requests
+
+url = "https://api.hyperliquid.xyz/info"
+body = {"type": "allMids"}
+print(requests.post(url, json=body).json())
+```

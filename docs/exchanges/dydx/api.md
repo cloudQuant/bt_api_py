@@ -1,81 +1,93 @@
-# 查看文档 API 文档
+# dYdX API 文档
 
 ## 交易所信息
 
-- **交易所名称**: 查看文档
-- **官方网站**: 待补充
-- **API文档**: 待补充
-- **24h交易量排名**: 待补充
-- **24h交易量**: 待补充
-- **支持的交易对**: 待补充
-- **API版本**: 待补充
-- **特点**: 待补充
+- **交易所名称**: dYdX
+- **官方网站**: https://dydx.xyz
+- **API文档**: https://docs.dydx.xyz/
+- **24h交易量排名**: #4（DEX）
+- **区块链**: dYdX Chain
 
 ## API基础信息
 
-### 基础URL
+### Indexer HTTP API (Swagger)
 
 ```text
-# REST API
-待补充
-
-# WebSocket
-待补充
 ```
 
-### 请求头
+### WebSocket API
 
 ```text
-待补充
+wss://indexer.dydx.trade/v4/ws
+wss://indexer.v4testnet.dydx.exchange/v4/ws
 ```
 
-## 认证方式
+## 端点清单（来自官方 Swagger）
 
-### 1. 获取API密钥
+### Indexer
 
-1. 待补充
-
-### 2. 请求签名算法
-
-待补充
-
-### 3. Python 认证示例
-
-```python
-# TODO: 根据官方文档补充签名逻辑
-```
-
-## 市场数据API
-
-- 获取服务器时间: 待补充
-- 获取交易对信息: 待补充
-- 获取Ticker信息: 待补充
-- 获取K线数据: 待补充
-- 获取深度信息: 待补充
-
-## 交易API
-
-- 下单: 待补充
-- 撤单: 待补充
-- 查询订单: 待补充
-
-## 账户管理API
-
-- 账户余额: 待补充
-- 资产划转: 待补充
+- `GET /addresses/{address}`
+- `GET /addresses/{address}/parentSubaccountNumber/{parentSubaccountNumber}`
+- `POST /addresses/{address}/registerToken`
+- `GET /addresses/{address}/subaccountNumber/{subaccountNumber}`
+- `POST /addresses/{address}/testNotification`
+- `GET /affiliates/address`
+- `GET /affiliates/metadata`
+- `POST /affiliates/referralCode`
+- `GET /affiliates/snapshot`
+- `GET /affiliates/total_volume`
+- `GET /assetPositions`
+- `GET /assetPositions/parentSubaccountNumber`
+- `GET /candles/perpetualMarkets/{ticker}`
+- `GET /compliance/screen/{address}`
+- `GET /fills`
+- `GET /fills/parentSubaccount`
+- `GET /fundingPayments`
+- `GET /fundingPayments/parentSubaccount`
+- `GET /height`
+- `GET /historical-pnl`
+- `GET /historical-pnl/parentSubaccountNumber`
+- `GET /historicalBlockTradingRewards/{address}`
+- `GET /historicalFunding/{ticker}`
+- `GET /historicalTradingRewardAggregations/{address}`
+- `GET /orderbooks/perpetualMarket/{ticker}`
+- `GET /orders`
+- `GET /orders/parentSubaccountNumber`
+- `GET /orders/{orderId}`
+- `GET /perpetualMarkets`
+- `GET /perpetualPositions`
+- `GET /perpetualPositions/parentSubaccountNumber`
+- `GET /pnl`
+- `GET /pnl/parentSubaccountNumber`
+- `GET /screen`
+- `GET /sparklines`
+- `GET /time`
+- `GET /trader/search`
+- `GET /trades/perpetualMarket/{ticker}`
+- `GET /transfers`
+- `GET /transfers/between`
+- `GET /transfers/parentSubaccountNumber`
+- `POST /turnkey/appleLoginRedirect`
+- `POST /turnkey/signin`
+- `POST /turnkey/uploadAddress`
+- `GET /vault/v1/megavault/historicalPnl`
+- `GET /vault/v1/megavault/positions`
+- `GET /vault/v1/vaults/historicalPnl`
 
 ## 速率限制
 
-待补充
-
-## WebSocket支持
-
-待补充
+- 以官方文档为准
 
 ## 错误代码
 
-待补充
+- 以官方文档为准
 
 ## 代码示例
 
-待补充
+```python
+# 获取永续市场列表
+import requests
+
+url = "https://indexer.dydx.trade/v4/perpetualMarkets"
+print(requests.get(url).json())
+```

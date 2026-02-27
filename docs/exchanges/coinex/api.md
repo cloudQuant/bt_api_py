@@ -1,15 +1,14 @@
-# 查看文档 API 文档
+# CoinEx API 文档
 
 ## 交易所信息
 
-- **交易所名称**: 查看文档
-- **官方网站**: 待补充
-- **API文档**: 待补充
-- **24h交易量排名**: 待补充
-- **24h交易量**: 待补充
-- **支持的交易对**: 待补充
-- **API版本**: 待补充
-- **特点**: 待补充
+- **交易所名称**: CoinEx
+- **官方网站**: https://www.coinex.com
+- **API文档**: https://docs.coinex.com/api/v2/
+- **24h交易量排名**: #23
+- **24h交易量**: $100M+
+- **支持的交易对**: 1000+ 交易对（以官方列表为准）
+- **API版本**: v2
 
 ## API基础信息
 
@@ -17,65 +16,68 @@
 
 ```text
 # REST API
-待补充
+https://api.coinex.com/v2
 
 # WebSocket
-待补充
+wss://socket.coinex.com/v2/spot
+wss://socket.coinex.com/v2/futures
 ```
 
-### 请求头
+### 请求头（私有接口）
 
 ```text
-待补充
+X-COINEX-KEY: {api_key}
+X-COINEX-SIGN: {signature}
+X-COINEX-TIMESTAMP: {timestamp_ms}
+X-COINEX-WINDOWTIME: {window_ms}  # 可选
+Content-Type: application/json
 ```
 
 ## 认证方式
 
 ### 1. 获取API密钥
 
-1. 待补充
+1. 登录 CoinEx 账户
+2. 进入 API 管理
+3. 创建 API Key 并设置权限
+4. 保存 API Key / Secret
 
 ### 2. 请求签名算法
 
-待补充
-
-### 3. Python 认证示例
-
-```python
-# TODO: 根据官方文档补充签名逻辑
-```
+- 需要签名的接口在文档中标记为 `signature required`
+- 签名与鉴权详细流程见官方 Authentication
 
 ## 市场数据API
 
-- 获取服务器时间: 待补充
-- 获取交易对信息: 待补充
-- 获取Ticker信息: 待补充
-- 获取K线数据: 待补充
-- 获取深度信息: 待补充
+- 市场列表、行情、深度、K线、成交等（详见官方文档）
 
 ## 交易API
 
-- 下单: 待补充
-- 撤单: 待补充
-- 查询订单: 待补充
+- 下单、撤单、批量订单、订单查询等（详见官方文档）
 
 ## 账户管理API
 
-- 账户余额: 待补充
-- 资产划转: 待补充
+- 资产、充值提现、资金划转、子账户等（详见官方文档）
 
 ## 速率限制
 
-待补充
+- IP 维度限频：400 次/秒
+- 用户限频：短周期与长周期两级限频（详见官方说明）
 
 ## WebSocket支持
 
-待补充
+- Spot 与 Futures 分离的 WS 域名
 
 ## 错误代码
 
-待补充
+- 官方文档提供错误码列表与处理建议
 
 ## 代码示例
 
-待补充
+```python
+# 获取服务器时间
+import requests
+
+url = "https://api.coinex.com/v2/time"
+print(requests.get(url).json())
+```

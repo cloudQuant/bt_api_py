@@ -9,6 +9,9 @@ import pytz
 # from urllib import parse
 from urllib.parse import urlencode
 from bt_api_py.feeds.feed import Feed
+from bt_api_py.feeds.capability import Capability
+from bt_api_py.error_framework import BinanceErrorTranslator
+from bt_api_py.rate_limiter import RateLimiter, RateLimitRule, RateLimitType, RateLimitScope
 from bt_api_py.feeds.my_websocket_app import MyWebsocketApp
 from bt_api_py.functions.log_message import SpdLogManager
 from bt_api_py.functions.calculate_time import datetime2timestamp
@@ -55,6 +58,33 @@ from bt_api_py.containers.balances.binance_balance import BinanceSwapRequestBala
 # session.mount('https://', adapter)
 
 class BinanceRequestData(Feed):
+    @classmethod
+    def _capabilities(cls):
+        return {
+            Capability.GET_TICK,
+            Capability.GET_DEPTH,
+            Capability.GET_KLINE,
+            Capability.GET_FUNDING_RATE,
+            Capability.GET_MARK_PRICE,
+            Capability.MAKE_ORDER,
+            Capability.CANCEL_ORDER,
+            Capability.QUERY_ORDER,
+            Capability.QUERY_OPEN_ORDERS,
+            Capability.GET_DEALS,
+            Capability.GET_BALANCE,
+            Capability.GET_ACCOUNT,
+            Capability.GET_POSITION,
+            Capability.MARKET_STREAM,
+            Capability.ACCOUNT_STREAM,
+            Capability.CROSS_MARGIN,
+            Capability.ISOLATED_MARGIN,
+            Capability.HEDGE_MODE,
+            Capability.BATCH_ORDER,
+            Capability.OCO_ORDER,
+            Capability.GET_EXCHANGE_INFO,
+            Capability.GET_SERVER_TIME,
+        }
+
     def __init__(self, data_queue, **kwargs):
         super(BinanceRequestData, self).__init__(data_queue, **kwargs)
         self.data_queue = data_queue
@@ -67,7 +97,38 @@ class BinanceRequestData(Feed):
                                             0, 0, False).create_logger()
         self.async_logger = SpdLogManager("./logs/" + self.logger_name, "async_request",
                                           0, 0, False).create_logger()
+        self._error_translator = BinanceErrorTranslator()
+        self._rate_limiter = kwargs.get("rate_limiter", self._create_default_rate_limiter())
         # self.start_loop()  # 在开始订阅数据的时候启动
+
+    @staticmethod
+    def _create_default_rate_limiter():
+        rules = [
+            RateLimitRule(
+                name="binance_request_weight",
+                limit=2400,
+                interval=60,
+                type=RateLimitType.SLIDING_WINDOW,
+                scope=RateLimitScope.GLOBAL,
+            ),
+            RateLimitRule(
+                name="binance_order_rate",
+                limit=300,
+                interval=10,
+                type=RateLimitType.SLIDING_WINDOW,
+                scope=RateLimitScope.ENDPOINT,
+                endpoint="/fapi/v1/order*",
+            ),
+        ]
+        return RateLimiter(rules)
+
+    def translate_error(self, raw_response):
+        """将原始 Binance API 响应翻译为 UnifiedError（如有错误），否则返回 None"""
+        if isinstance(raw_response, dict):
+            code = raw_response.get("code")
+            if code is not None and int(code) < 0:
+                return self._error_translator.translate(raw_response, self.exchange_name)
+        return None
 
     def push_data_to_queue(self, data):
         if self.data_queue is not None:

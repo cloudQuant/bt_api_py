@@ -1,15 +1,14 @@
-# 查看文档 API 文档
+# Luno API 文档
 
 ## 交易所信息
 
-- **交易所名称**: 查看文档
-- **官方网站**: 待补充
-- **API文档**: 待补充
-- **24h交易量排名**: 待补充
-- **24h交易量**: 待补充
-- **支持的交易对**: 待补充
-- **API版本**: 待补充
-- **特点**: 待补充
+- **交易所名称**: Luno
+- **官方网站**: https://www.luno.com
+- **API文档**: https://www.luno.com/en/developers/api
+- **24h交易量排名**: #44
+- **24h交易量**: $50M+
+- **支持的交易对**: 50+（以官方 markets 列表为准）
+- **API版本**: v1（REST + Streaming）
 
 ## API基础信息
 
@@ -17,65 +16,64 @@
 
 ```text
 # REST API
-待补充
+https://api.luno.com/api/1
 
-# WebSocket
-待补充
+# Exchange REST API
+https://api.luno.com/api/exchange/1
+
+# WebSocket (市场)
+wss://ws.luno.com/api/1/stream/:pair
+
+# WebSocket (用户)
+wss://ws.luno.com/api/1/userstream
 ```
 
-### 请求头
+### 认证方式
 
-```text
-待补充
-```
+Luno 使用 HTTP Basic Auth。
 
-## 认证方式
+- 用户名: API key id
+- 密码: API key secret
 
-### 1. 获取API密钥
+## 市场数据API（示例）
 
-1. 待补充
+- 行情: `GET /api/1/ticker`
+- 全部行情: `GET /api/1/tickers`
+- 订单簿: `GET /api/1/orderbook`
+- Top 订单簿: `GET /api/1/orderbook_top`
+- 成交: `GET /api/1/trades`
+- K线: `GET /api/exchange/1/candles`（需认证）
+- 市场信息: `GET /api/exchange/1/markets`
 
-### 2. 请求签名算法
+## 交易API（示例）
 
-待补充
+- 下单、撤单、订单查询等详见官方文档
 
-### 3. Python 认证示例
+## 账户管理API（示例）
 
-```python
-# TODO: 根据官方文档补充签名逻辑
-```
-
-## 市场数据API
-
-- 获取服务器时间: 待补充
-- 获取交易对信息: 待补充
-- 获取Ticker信息: 待补充
-- 获取K线数据: 待补充
-- 获取深度信息: 待补充
-
-## 交易API
-
-- 下单: 待补充
-- 撤单: 待补充
-- 查询订单: 待补充
-
-## 账户管理API
-
-- 账户余额: 待补充
-- 资产划转: 待补充
+- 余额: `GET /api/1/balance`
+- 账户与资金接口详见官方文档
 
 ## 速率限制
 
-待补充
+- REST API: 300 次/分钟
+- Streaming: 50 个并发会话
 
 ## WebSocket支持
 
-待补充
+- 市场 WebSocket: `wss://ws.luno.com/api/1/stream/:pair`
+- 用户 WebSocket: `wss://ws.luno.com/api/1/userstream`
 
 ## 错误代码
 
-待补充
+- 超限返回 HTTP 429
 
 ## 代码示例
 
-待补充
+```python
+# 获取行情
+import requests
+
+url = "https://api.luno.com/api/1/ticker?pair=XBTZAR"
+print(requests.get(url).json())
+```

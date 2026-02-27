@@ -1,81 +1,41 @@
-# 查看文档 API 文档
+# Balancer API 文档
 
 ## 交易所信息
 
-- **交易所名称**: 查看文档
-- **官方网站**: 待补充
-- **API文档**: 待补充
-- **24h交易量排名**: 待补充
-- **24h交易量**: 待补充
-- **支持的交易对**: 待补充
-- **API版本**: 待补充
-- **特点**: 待补充
+- **交易所名称**: Balancer
+- **官方网站**: https://balancer.fi
+- **API文档**: https://docs-v3.balancer.fi/data-and-analytics/data-and-analytics/balancer-api.html
+- **24h交易量排名**: #8（DEX）
+- **区块链**: 多链
 
 ## API基础信息
 
-### 基础URL
+### GraphQL API
 
 ```text
-# REST API
-待补充
-
-# WebSocket
-待补充
+https://api-v3.balancer.fi
 ```
 
-### 请求头
+### 主要 Query 域（官方 Backend 文档）
 
-```text
-待补充
-```
+- Pools: `poolGetPool`, `poolGetPools`
+- Gauges: `veBalGetUser`, `veBalGetUserBalance`, `veBalGetVotingList`
+- Events: `poolGetEvents`
+- Users: `userGetPoolBalances`, `userGetStaking`
+- Tokens: `tokenGetTokens`, `tokenGetTokenDynamicData`, `tokenGetTokensDynamicData`, `tokenGetTokenData`, `tokenGetTokensData`
+- Prices: `tokenGetCurrentPrices`, `tokenGetHistoricalPrices`
+- SOR: `sorGetSwapPaths`
 
-## 认证方式
-
-### 1. 获取API密钥
-
-1. 待补充
-
-### 2. 请求签名算法
-
-待补充
-
-### 3. Python 认证示例
-
-```python
-# TODO: 根据官方文档补充签名逻辑
-```
-
-## 市场数据API
-
-- 获取服务器时间: 待补充
-- 获取交易对信息: 待补充
-- 获取Ticker信息: 待补充
-- 获取K线数据: 待补充
-- 获取深度信息: 待补充
-
-## 交易API
-
-- 下单: 待补充
-- 撤单: 待补充
-- 查询订单: 待补充
-
-## 账户管理API
-
-- 账户余额: 待补充
-- 资产划转: 待补充
-
-## 速率限制
-
-待补充
-
-## WebSocket支持
-
-待补充
-
-## 错误代码
-
-待补充
+> 多数查询需要 `chain` 参数。
 
 ## 代码示例
 
-待补充
+```graphql
+# 查询池子信息
+{
+  poolGetPool(id: "POOL_ID", chain: MAINNET) {
+    id
+    name
+  }
+}
+```

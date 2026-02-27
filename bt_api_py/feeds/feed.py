@@ -5,9 +5,11 @@ import json
 from bt_api_py.functions.log_message import SpdLogManager
 from bt_api_py.functions.async_base import AsyncBase
 from bt_api_py.exceptions import RequestTimeoutError, RequestError
+from bt_api_py.feeds.connection_mixin import ConnectionMixin
+from bt_api_py.feeds.capability import CapabilityMixin
 
 
-class Feed(AsyncBase):
+class Feed(AsyncBase, ConnectionMixin, CapabilityMixin):
     def __init__(self, data_queue, **kwargs):
         """
         feed initial
@@ -15,6 +17,7 @@ class Feed(AsyncBase):
         :param kwargs: pass key-worded, variable-length arguments.
         """
         super().__init__(**kwargs)
+        self.__init_connection__()
         self.data_queue = data_queue
         self.exchange_name = kwargs.get('exchange_name', '')
         self.proxies = kwargs.get('proxies', None)
@@ -465,5 +468,25 @@ class Feed(AsyncBase):
         :param extra_data: extra_data, default is None, can be a dict passed by user
         :param kwargs: pass key-worded, variable-length arguments.
         :return: None
+        """
+        raise NotImplementedError
+
+    def get_position(self, symbol=None, extra_data=None, **kwargs):
+        """
+        get position info by symbol (futures/options)
+        :param symbol: default None, get all positions.
+        :param extra_data: extra_data, default is None, can be a dict passed by user
+        :param kwargs: pass key-worded, variable-length arguments.
+        :return: RequestData
+        """
+        raise NotImplementedError
+
+    def async_get_position(self, symbol=None, extra_data=None, **kwargs):
+        """
+        get position info by symbol using async
+        :param symbol: default None, get all positions.
+        :param extra_data: extra_data, default is None, can be a dict passed by user
+        :param kwargs: pass key-worded, variable-length arguments.
+        :return: RequestData
         """
         raise NotImplementedError

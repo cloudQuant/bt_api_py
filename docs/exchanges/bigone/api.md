@@ -1,81 +1,91 @@
-# 查看文档 API 文档
+# BigONE API 文档
 
 ## 交易所信息
 
-- **交易所名称**: 查看文档
-- **官方网站**: 待补充
-- **API文档**: 待补充
-- **24h交易量排名**: 待补充
-- **24h交易量**: 待补充
-- **支持的交易对**: 待补充
-- **API版本**: 待补充
-- **特点**: 待补充
+- **交易所名称**: BigONE
+- **官方网站**: https://big.one
+- **API文档**: https://open.big.one/docs/
+- **24h交易量排名**: #25
+- **24h交易量**: $440M+
+- **支持的交易对**: 200+ 交易对（以官方列表为准）
+- **API版本**: v3（现货/钱包）、合约 v2
 
 ## API基础信息
 
 ### 基础URL
 
 ```text
-# REST API
-待补充
+# Spot / Wallet REST
+https://api.big.one/api/v3
+
+# Convert REST
+https://api.big.one/sapi/v1/convert
+
+# Contract REST
+https://api.big.one/api/contract/v2
 
 # WebSocket
-待补充
+wss://api.big.one/ws/v2
 ```
 
-### 请求头
+### 请求头（私有接口）
 
 ```text
-待补充
+Authorization: Bearer {jwt_token}
+Content-Type: application/json
 ```
 
 ## 认证方式
 
 ### 1. 获取API密钥
 
-1. 待补充
+1. 登录 BigONE 账户
+2. 进入 User Center -> API 管理
+3. 创建 API Key 与 Secret
+4. 保存密钥
 
-### 2. 请求签名算法
+### 2. JWT 签名算法
 
-待补充
+BigONE 使用 JWT（HS256）。
 
-### 3. Python 认证示例
+**JWT Payload 必须包含**:
 
-```python
-# TODO: 根据官方文档补充签名逻辑
-```
+- `type`: 固定为 `OpenAPIV2`
+- `sub`: API Key
+- `nonce`: 纳秒级时间戳
+
+将生成的 JWT 放入 `Authorization: Bearer {token}`。
 
 ## 市场数据API
 
-- 获取服务器时间: 待补充
-- 获取交易对信息: 待补充
-- 获取Ticker信息: 待补充
-- 获取K线数据: 待补充
-- 获取深度信息: 待补充
+- 交易对、行情、深度、成交、K线等（详见官方文档）
 
 ## 交易API
 
-- 下单: 待补充
-- 撤单: 待补充
-- 查询订单: 待补充
+- 下单、撤单、订单查询等（详见官方文档）
 
 ## 账户管理API
 
-- 账户余额: 待补充
-- 资产划转: 待补充
+- 资产与资金接口、充值提现等（详见官方文档）
 
 ## 速率限制
 
-待补充
+- 官方文档提供限频规则（以接口说明为准）
 
 ## WebSocket支持
 
-待补充
+- 行情与账户数据推送（详见官方文档）
 
 ## 错误代码
 
-待补充
+- 官方文档提供错误码表
 
 ## 代码示例
 
-待补充
+```python
+# REST: 获取账户资产
+import requests
+
+url = "https://api.big.one/api/v3/viewer/accounts"
+print(requests.get(url).json())
+```

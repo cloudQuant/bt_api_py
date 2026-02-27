@@ -1,81 +1,87 @@
-# 查看文档 API 文档
+# Bitbank API 文档
 
 ## 交易所信息
 
-- **交易所名称**: 查看文档
-- **官方网站**: 待补充
-- **API文档**: 待补充
-- **24h交易量排名**: 待补充
-- **24h交易量**: 待补充
-- **支持的交易对**: 待补充
-- **API版本**: 待补充
-- **特点**: 待补充
+- **交易所名称**: bitbank
+- **官方网站**: https://bitbank.cc
+- **API文档**: https://github.com/bitbankinc/bitbank-api-docs
+- **24h交易量排名**: #38
+- **24h交易量**: $50M+
+- **支持的交易对**: 30+（以官方列表为准）
+- **API版本**: REST v1 / WebSocket
 
 ## API基础信息
 
 ### 基础URL
 
 ```text
-# REST API
-待补充
+# Private REST API
+https://api.bitbank.cc/v1
 
-# WebSocket
-待补充
+# Public REST API
+https://public.bitbank.cc
+
+# WebSocket (Public Stream)
+wss://stream.bitbank.cc
 ```
 
-### 请求头
+### 请求头（私有接口）
 
 ```text
-待补充
+ACCESS-KEY: {api_key}
+ACCESS-NONCE: {nonce}
+ACCESS-SIGNATURE: {signature}
+
+# 或使用 ACCESS-TIME-WINDOW 方式:
+ACCESS-REQUEST-TIME: {timestamp_ms}
+ACCESS-TIME-WINDOW: {window_ms}
+ACCESS-SIGNATURE: {signature}
 ```
 
 ## 认证方式
 
-### 1. 获取API密钥
+- 公共 API 无需认证
+- 私有 API 使用 HMAC-SHA256 签名
+- ACCESS-TIME-WINDOW 与 ACCESS-NONCE 两种模式（详见官方说明）
 
-1. 待补充
+## 市场数据API（示例）
 
-### 2. 请求签名算法
+- Ticker: `GET /{pair}/ticker`
+- Depth: `GET /{pair}/depth`
+- Trades: `GET /{pair}/transactions/{YYYYMMDD}`
+- Candlestick: `GET /{pair}/candlestick/{candle-type}/{YYYY}`
 
-待补充
+## 交易API（示例）
 
-### 3. Python 认证示例
-
-```python
-# TODO: 根据官方文档补充签名逻辑
-```
-
-## 市场数据API
-
-- 获取服务器时间: 待补充
-- 获取交易对信息: 待补充
-- 获取Ticker信息: 待补充
-- 获取K线数据: 待补充
-- 获取深度信息: 待补充
-
-## 交易API
-
-- 下单: 待补充
-- 撤单: 待补充
-- 查询订单: 待补充
+- 下单: `POST /user/spot/order`
+- 撤单: `POST /user/spot/cancel_order`
+- 查询订单: `GET /user/spot/order`
 
 ## 账户管理API
 
-- 账户余额: 待补充
-- 资产划转: 待补充
+- 资产: `GET /user/assets`
 
 ## 速率限制
 
-待补充
+- 取得系: 10 次/秒
+- 更新系（下单、撤单、出金请求等）: 6 次/秒
+- 触发限频返回 429
 
 ## WebSocket支持
 
-待补充
+- Socket.IO 4.x 实现的 Public Stream
+- 频道：`ticker_{pair}`、`transactions_{pair}`、`depth_diff_{pair}`、`depth_whole_{pair}`、`circuit_break_info_{pair}`
 
 ## 错误代码
 
-待补充
+- 详见官方错误码列表（errors_JP.md）
 
 ## 代码示例
 
-待补充
+```python
+# 获取板信息
+import requests
+
+url = "https://public.bitbank.cc/btc_jpy/depth"
+print(requests.get(url).json())
+```

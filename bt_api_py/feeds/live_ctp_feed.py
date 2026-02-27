@@ -15,6 +15,8 @@ CTP Feed 实现
 import time
 import threading
 from bt_api_py.feeds.feed import Feed
+from bt_api_py.feeds.capability import Capability
+from bt_api_py.error_framework import CTPErrorTranslator
 from bt_api_py.feeds.base_stream import BaseDataStream, ConnectionState
 from bt_api_py.functions.log_message import SpdLogManager
 from bt_api_py.containers.exchanges.ctp_exchange_data import CtpExchangeDataFuture
@@ -67,6 +69,22 @@ def _ctp_field_to_dict(field):
 class CtpRequestData(Feed):
     """CTP 同步请求封装，基于 ctp.client.TraderClient"""
 
+    @classmethod
+    def _capabilities(cls):
+        return {
+            Capability.GET_TICK,
+            Capability.MAKE_ORDER,
+            Capability.CANCEL_ORDER,
+            Capability.QUERY_ORDER,
+            Capability.QUERY_OPEN_ORDERS,
+            Capability.GET_DEALS,
+            Capability.GET_BALANCE,
+            Capability.GET_ACCOUNT,
+            Capability.GET_POSITION,
+            Capability.MARKET_STREAM,
+            Capability.ACCOUNT_STREAM,
+        }
+
     def __init__(self, data_queue, **kwargs):
         super().__init__(data_queue)
         self.data_queue = data_queue
@@ -84,10 +102,19 @@ class CtpRequestData(Feed):
         self.request_logger = SpdLogManager(
             "./logs/" + self.logger_name, "ctp_request", 0, 0, False
         ).create_logger()
+        self._error_translator = CTPErrorTranslator()
         # TraderClient 实例 — 负责交易查询和下单
         self._trader = None
         self._connected = False
         self._connect_timeout = kwargs.get("connect_timeout", 15)
+
+    def translate_error(self, raw_response):
+        """将原始 CTP 错误信息翻译为 UnifiedError（如有错误），否则返回 None"""
+        if isinstance(raw_response, dict):
+            error_id = raw_response.get("ErrorID", 0)
+            if error_id != 0:
+                return self._error_translator.translate(raw_response, self.exchange_name)
+        return None
 
     def _ensure_connected(self):
         """确保 TraderClient 已连接并就绪"""

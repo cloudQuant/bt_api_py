@@ -1,81 +1,102 @@
-# 查看文档 API 文档
+# GMX API 文档
 
 ## 交易所信息
 
-- **交易所名称**: 查看文档
-- **官方网站**: 待补充
-- **API文档**: 待补充
-- **24h交易量排名**: 待补充
-- **24h交易量**: 待补充
-- **支持的交易对**: 待补充
-- **API版本**: 待补充
-- **特点**: 待补充
+- **交易所名称**: GMX
+- **官方网站**: https://gmx.io
+- **API文档**: https://docs.gmx.io/docs/api/rest/
+- **24h交易量排名**: #9（DEX）
+- **区块链**: Arbitrum / Avalanche / Botanix
 
 ## API基础信息
 
-### 基础URL
+### REST（Oracle / Pricing）
 
 ```text
-# REST API
-待补充
+# Ping
+https://arbitrum-api.gmxinfra.io/ping
+https://avalanche-api.gmxinfra.io/ping
+https://botanix-api.gmxinfra.io/ping
 
-# WebSocket
-待补充
+# Tickers
+https://arbitrum-api.gmxinfra.io/prices/tickers
+https://avalanche-api.gmxinfra.io/prices/tickers
+https://botanix-api.gmxinfra.io/prices/tickers
+
+# Signed Prices
+https://arbitrum-api.gmxinfra.io/signed_prices/latest
+https://avalanche-api.gmxinfra.io/signed_prices/latest
+https://botanix-api.gmxinfra.io/signed_prices/latest
 ```
 
-### 请求头
+### Candles
 
 ```text
-待补充
+# Candlesticks
+https://arbitrum-api.gmxinfra.io/prices/candles?tokenSymbol=ETH&period=1d
+https://avalanche-api.gmxinfra.io/prices/candles?tokenSymbol=AVAX&period=1d
+https://botanix-api.gmxinfra.io/prices/candles?tokenSymbol=BTC&period=1d
 ```
 
-## 认证方式
+- `tokenSymbol` 必填
+- `period` 必填：1m / 5m / 15m / 1h / 4h / 1d
+- `limit` 可选：1–10000（默认 1000）
 
-### 1. 获取API密钥
+### Tokens / APY / Performance / GLV
 
-1. 待补充
+```text
+# Tokens
+https://arbitrum-api.gmxinfra.io/tokens
+https://avalanche-api.gmxinfra.io/tokens
+https://botanix-api.gmxinfra.io/tokens
 
-### 2. 请求签名算法
+# APY
+https://arbitrum-api.gmxinfra.io/apy?period=total
+https://avalanche-api.gmxinfra.io/apy?period=total
+https://botanix-api.gmxinfra.io/apy?period=total
 
-待补充
+# Performance
+https://arbitrum-api.gmxinfra.io/performance/annualized?period=total
+https://avalanche-api.gmxinfra.io/performance/annualized?period=total
+https://botanix-api.gmxinfra.io/performance/annualized?period=total
 
-### 3. Python 认证示例
+# GLV Tokens
+https://arbitrum-api.gmxinfra.io/glvs/
+https://avalanche-api.gmxinfra.io/glvs/
+https://botanix-api.gmxinfra.io/glvs/
 
-```python
-# TODO: 根据官方文档补充签名逻辑
+# GLV Info
+https://arbitrum-api.gmxinfra.io/glvs/info
+https://avalanche-api.gmxinfra.io/glvs/info
+https://botanix-api.gmxinfra.io/glvs/info
 ```
 
-## 市场数据API
+- APY `period`: 1d / 7d / 30d / 90d / 180d / 1y / total（默认 30d）
+- Performance `period`: 7d / 30d / 90d / 180d / 1y / total（默认 90d）
+- Performance `address` 可选：指定 GM/GLV 地址
 
-- 获取服务器时间: 待补充
-- 获取交易对信息: 待补充
-- 获取Ticker信息: 待补充
-- 获取K线数据: 待补充
-- 获取深度信息: 待补充
+### 备用域名（Fallback）
 
-## 交易API
+```text
+# Arbitrum
+https://arbitrum-api-fallback.gmxinfra.io
+https://arbitrum-api-fallback.gmxinfra2.io
 
-- 下单: 待补充
-- 撤单: 待补充
-- 查询订单: 待补充
+# Avalanche
+https://avalanche-api-fallback.gmxinfra.io
+https://avalanche-api-fallback.gmxinfra2.io
 
-## 账户管理API
-
-- 账户余额: 待补充
-- 资产划转: 待补充
-
-## 速率限制
-
-待补充
-
-## WebSocket支持
-
-待补充
-
-## 错误代码
-
-待补充
+# Botanix
+https://botanix-api-fallback.gmxinfra.io
+https://botanix-api-fallback.gmxinfra2.io
+```
 
 ## 代码示例
 
-待补充
+```python
+# 获取 GMX Arbitrum 价格 Tickers
+import requests
+
+url = "https://arbitrum-api.gmxinfra.io/prices/tickers"
+print(requests.get(url).json())
+```

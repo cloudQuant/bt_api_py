@@ -1,81 +1,99 @@
-# 查看文档 API 文档
+# SushiSwap API 文档
 
 ## 交易所信息
 
-- **交易所名称**: 查看文档
-- **官方网站**: 待补充
-- **API文档**: 待补充
-- **24h交易量排名**: 待补充
-- **24h交易量**: 待补充
-- **支持的交易对**: 待补充
-- **API版本**: 待补充
-- **特点**: 待补充
+- **交易所名称**: SushiSwap
+- **官方网站**: https://www.sushi.com
+- **API文档**: https://docs.sushi.com
+- **24h交易量排名**: #7（DEX）
+- **区块链**: 多链
 
 ## API基础信息
 
 ### 基础URL
 
 ```text
-# REST API
-待补充
+# Price API
+https://api.sushi.com/price/v1/{chainId}
 
-# WebSocket
-待补充
+# Quote API
+https://api.sushi.com/quote/v7/{chainId}
+
+# Swap API
+https://api.sushi.com/swap/v7/{chainId}
 ```
 
-### 请求头
+### 认证方式
 
-```text
-待补充
+- API Key 可在 Sushi Portal 获取
+- API Key 可作为查询参数 `apiKey` 或请求头（Authorization）提供
+
+## Price API
+
+- `GET /price/v1/{chainId}`  获取链上所有 token 的 USD 价格（映射）
+- `GET /price/v1/{chainId}/{address}`  获取指定 token 的 USD 价格
+
+## Quote API
+
+### 说明
+
+- Quote API 用于生成报价（不执行交易）
+
+### 常用查询参数（示例）
+
+- `tokenIn` / `tokenOut`
+- `amount`
+- `maxSlippage`
+
+### 示例请求
+
+```
+GET https://api.sushi.com/quote/v7/1?tokenIn=0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE&tokenOut=0x6B3595068778DD592e39A122f4f5a5cF09C90fE2&amount=1000000000000000&maxSlippage=0.005
 ```
 
-## 认证方式
+## Swap API
 
-### 1. 获取API密钥
+### 说明
 
-1. 待补充
+- Swap API 生成交易 calldata（用于链上执行）
 
-### 2. 请求签名算法
+### 常用查询参数（示例）
 
-待补充
+- `tokenIn` / `tokenOut`
+- `amount`
+- `maxSlippage`
+- `sender`
+- `apiKey`（可选）
 
-### 3. Python 认证示例
+### 示例请求
 
-```python
-# TODO: 根据官方文档补充签名逻辑
+```
+GET https://api.sushi.com/swap/v7/1?tokenIn=0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE&tokenOut=0x6B3595068778DD592e39A122f4f5a5cF09C90fE2&amount=1000000000000000&maxSlippage=0.005&sender=0xYOUR_WALLET
 ```
 
-## 市场数据API
+## 错误代码（示例）
 
-- 获取服务器时间: 待补充
-- 获取交易对信息: 待补充
-- 获取Ticker信息: 待补充
-- 获取K线数据: 待补充
-- 获取深度信息: 待补充
-
-## 交易API
-
-- 下单: 待补充
-- 撤单: 待补充
-- 查询订单: 待补充
-
-## 账户管理API
-
-- 账户余额: 待补充
-- 资产划转: 待补充
-
-## 速率限制
-
-待补充
-
-## WebSocket支持
-
-待补充
-
-## 错误代码
-
-待补充
+- `invalid-api-key` (401)
+- `unauthorized` (403)
+- `ratelimit-exceeded` (429)
+- `insufficient-allowance` (422)
+- `insufficient-balance` (422)
+- `estimate-gas` (422)
+- `not-found` (404)
+- `service-unavailable` (503)
 
 ## 代码示例
 
-待补充
+```python
+# 获取报价
+import requests
+
+url = "https://api.sushi.com/quote/v7/1"
+params = {
+    "tokenIn": "0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE",
+    "tokenOut": "0x6B3595068778DD592e39A122f4f5a5cF09C90fE2",
+    "amount": "1000000000000000",
+    "maxSlippage": "0.005",
+}
+print(requests.get(url, params=params).json())
+```

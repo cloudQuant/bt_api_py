@@ -1,81 +1,94 @@
-# 查看文档 API 文档
+# CoW Swap API 文档
 
 ## 交易所信息
 
-- **交易所名称**: 查看文档
-- **官方网站**: 待补充
-- **API文档**: 待补充
-- **24h交易量排名**: 待补充
-- **24h交易量**: 待补充
-- **支持的交易对**: 待补充
-- **API版本**: 待补充
-- **特点**: 待补充
+- **交易所名称**: CoW Swap (CoW Protocol)
+- **官方网站**: https://cow.fi
+- **API文档**: https://docs.cow.fi/
+- **24h交易量排名**: #10（DEX）
+- **区块链**: 多链
 
 ## API基础信息
 
-### 基础URL
+### Orderbook API (OpenAPI)
+
+OpenAPI 定义位于 CoW Protocol Services 仓库：
 
 ```text
-# REST API
-待补充
-
-# WebSocket
-待补充
+https://raw.githubusercontent.com/cowprotocol/services/main/crates/orderbook/openapi.yml
 ```
 
-### 请求头
+### Base URLs（按链）
 
-```text
-待补充
-```
+- Mainnet: `https://api.cow.fi/mainnet`
+- Mainnet (Staging): `https://barn.api.cow.fi/mainnet`
+- Gnosis Chain: `https://api.cow.fi/xdai`
+- Gnosis Chain (Staging): `https://barn.api.cow.fi/xdai`
+- Arbitrum One: `https://api.cow.fi/arbitrum_one`
+- Arbitrum One (Staging): `https://barn.api.cow.fi/arbitrum_one`
+- Base: `https://api.cow.fi/base`
+- Base (Staging): `https://barn.api.cow.fi/base`
+- Avalanche: `https://api.cow.fi/avalanche`
+- Avalanche (Staging): `https://barn.api.cow.fi/avalanche`
+- Polygon: `https://api.cow.fi/polygon`
+- Polygon (Staging): `https://barn.api.cow.fi/polygon`
+- Lens: `https://api.cow.fi/lens`
+- Lens (Staging): `https://barn.api.cow.fi/lens`
+- BNB: `https://api.cow.fi/bnb`
+- BNB (Staging): `https://barn.api.cow.fi/bnb`
+- Sepolia: `https://api.cow.fi/sepolia`
+- Sepolia (Staging): `https://barn.api.cow.fi/sepolia`
 
-## 认证方式
+## 核心端点（OpenAPI 摘要）
 
-### 1. 获取API密钥
+### 订单
 
-1. 待补充
+- `POST /api/v1/orders`  创建订单（支持 replacement order UID）
+- `DELETE /api/v1/orders`  批量撤单（EIP-712 签名）
+- `GET /api/v1/orders/{UID}`  查询订单
+- `DELETE /api/v1/orders/{UID}`  撤单（Deprecated）
+- `GET /api/v1/orders/{UID}/status`  订单状态
+- `GET /api/v1/account/{owner}/orders`  用户订单列表（分页）
 
-### 2. 请求签名算法
+### 交易与撮合
 
-待补充
+- `GET /api/v1/transactions/{txHash}/orders`  根据成交交易哈希查询订单
+- `GET /api/v1/trades`  交易记录（Deprecated）
+- `GET /api/v2/trades`  交易记录（分页）
+- `GET /api/v1/auction`  当前批次竞价（权限接口）
 
-### 3. Python 认证示例
+### 报价
 
-```python
-# TODO: 根据官方文档补充签名逻辑
-```
+- `POST /api/v1/quote`  报价与费用估算
 
-## 市场数据API
+### Solver 竞赛
 
-- 获取服务器时间: 待补充
-- 获取交易对信息: 待补充
-- 获取Ticker信息: 待补充
-- 获取K线数据: 待补充
-- 获取深度信息: 待补充
+- `GET /api/v1/solver_competition/{auction_id}`  竞赛信息（Deprecated）
+- `GET /api/v1/solver_competition/by_tx_hash/{tx_hash}`  竞赛信息（Deprecated）
+- `GET /api/v1/solver_competition/latest`  最近竞赛（Deprecated）
+- `GET /api/v2/solver_competition/{auction_id}`  竞赛信息
+- `GET /api/v2/solver_competition/by_tx_hash/{tx_hash}`  竞赛信息
+- `GET /api/v2/solver_competition/latest`  最近竞赛
 
-## 交易API
+### Token 与 AppData
 
-- 下单: 待补充
-- 撤单: 待补充
-- 查询订单: 待补充
+- `GET /api/v1/token/{token}/native_price`  token 对原生币报价
+- `GET /api/v1/app_data/{app_data_hash}`  获取完整 appData
+- `PUT /api/v1/app_data/{app_data_hash}`  注册完整 appData
+- `PUT /api/v1/app_data`  注册 appData 并返回 hash
 
-## 账户管理API
+### 版本
 
-- 账户余额: 待补充
-- 资产划转: 待补充
-
-## 速率限制
-
-待补充
-
-## WebSocket支持
-
-待补充
-
-## 错误代码
-
-待补充
+- `GET /api/v1/version`  获取 API 版本信息
 
 ## 代码示例
 
-待补充
+```python
+# 获取订单状态
+import requests
+
+base = "https://api.cow.fi/mainnet"
+uid = "0x..."
+url = f"{base}/api/v1/orders/{uid}/status"
+print(requests.get(url).json())
+```

@@ -1,15 +1,14 @@
-# 查看文档 API 文档
+# WazirX API 文档
 
 ## 交易所信息
 
-- **交易所名称**: 查看文档
-- **官方网站**: 待补充
-- **API文档**: 待补充
-- **24h交易量排名**: 待补充
-- **24h交易量**: 待补充
-- **支持的交易对**: 待补充
-- **API版本**: 待补充
-- **特点**: 待补充
+- **交易所名称**: WazirX
+- **官方网站**: https://wazirx.com
+- **API文档**: https://github.com/wazirx/wazirx-api
+- **24h交易量排名**: #56
+- **24h交易量**: $40M+
+- **支持的交易对**: 200+（以官方列表为准）
+- **API版本**: REST / WebSocket
 
 ## API基础信息
 
@@ -17,65 +16,49 @@
 
 ```text
 # REST API
-待补充
+https://api.wazirx.com
 
 # WebSocket
-待补充
-```
-
-### 请求头
-
-```text
-待补充
+wss://stream.wazirx.com/stream
 ```
 
 ## 认证方式
 
-### 1. 获取API密钥
+- 私有 API 采用 HMAC-SHA256 签名（详见官方文档）
 
-1. 待补充
+## 市场数据API（示例）
 
-### 2. 请求签名算法
+- 市场列表: `GET /sapi/v1/exchangeInfo`
+- 行情: `GET /sapi/v1/tickers/24hr`
+- 深度: `GET /sapi/v1/depth?symbol=btcinr`
 
-待补充
+## 交易API（示例）
 
-### 3. Python 认证示例
-
-```python
-# TODO: 根据官方文档补充签名逻辑
-```
-
-## 市场数据API
-
-- 获取服务器时间: 待补充
-- 获取交易对信息: 待补充
-- 获取Ticker信息: 待补充
-- 获取K线数据: 待补充
-- 获取深度信息: 待补充
-
-## 交易API
-
-- 下单: 待补充
-- 撤单: 待补充
-- 查询订单: 待补充
+- 下单: `POST /sapi/v1/order`
+- 撤单: `DELETE /sapi/v1/order`
 
 ## 账户管理API
 
-- 账户余额: 待补充
-- 资产划转: 待补充
+- 账户信息: `GET /sapi/v1/account`
 
 ## 速率限制
 
-待补充
+- 详见官方文档
 
 ## WebSocket支持
 
-待补充
+- `wss://stream.wazirx.com/stream` 支持多流订阅
 
 ## 错误代码
 
-待补充
+- 官方文档提供错误码说明
 
 ## 代码示例
 
-待补充
+```python
+# 获取行情
+import requests
+
+url = "https://api.wazirx.com/sapi/v1/tickers/24hr"
+print(requests.get(url).json())
+```

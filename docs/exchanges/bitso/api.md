@@ -1,81 +1,92 @@
-# 查看文档 API 文档
+# Bitso API 文档
 
 ## 交易所信息
 
-- **交易所名称**: 查看文档
-- **官方网站**: 待补充
-- **API文档**: 待补充
-- **24h交易量排名**: 待补充
-- **24h交易量**: 待补充
-- **支持的交易对**: 待补充
-- **API版本**: 待补充
-- **特点**: 待补充
+- **交易所名称**: Bitso
+- **官方网站**: https://bitso.com
+- **API文档**: https://docs.bitso.com/bitso-api/
+- **24h交易量排名**: #22
+- **24h交易量**: $100M+
+- **支持的交易对**: 100+ 交易对（以官方列表为准）
+- **API版本**: v3
 
 ## API基础信息
 
 ### 基础URL
 
 ```text
-# REST API
-待补充
+# REST API (生产环境)
+https://bitso.com/api/v3
+
+# REST API (测试环境)
+https://stage.bitso.com/api/v3
+
+# REST API (Sandbox)
+https://api-sandbox.bitso.com/api/v3
 
 # WebSocket
-待补充
+wss://ws.bitso.com
 ```
 
-### 请求头
+### 请求头（私有接口）
 
 ```text
-待补充
+Authorization: Bitso {key}:{nonce}:{signature}
+Content-Type: application/json
 ```
 
 ## 认证方式
 
 ### 1. 获取API密钥
 
-1. 待补充
+1. 登录 Bitso 账户
+2. 进入 Profile -> API
+3. 创建 API Key 并设置权限（交易/余额/账户信息等）
+4. 保存 API Key / Secret（仅显示一次）
 
 ### 2. 请求签名算法
 
-待补充
+Bitso 使用 HMAC SHA256。
 
-### 3. Python 认证示例
+**签名字符串**:
 
-```python
-# TODO: 根据官方文档补充签名逻辑
-```
+`nonce + HTTP method + request path + JSON payload`
+
+将结果十六进制编码，并放入 `Authorization` 头。
 
 ## 市场数据API
 
-- 获取服务器时间: 待补充
-- 获取交易对信息: 待补充
-- 获取Ticker信息: 待补充
-- 获取K线数据: 待补充
-- 获取深度信息: 待补充
+- 公共接口提供交易对、Ticker、订单簿、成交等信息（详见官方文档）
 
 ## 交易API
 
-- 下单: 待补充
-- 撤单: 待补充
-- 查询订单: 待补充
+- 私有接口支持下单、撤单与订单查询（详见官方文档）
 
 ## 账户管理API
 
-- 账户余额: 待补充
-- 资产划转: 待补充
+- 账户余额、充值与提现等接口（详见官方文档）
 
 ## 速率限制
 
-待补充
+- 公共接口：60 RPM / IP
+- 私有接口：300 RPM / 账户（需完成 KYC）
+- 超限会被锁定 1 分钟，持续超限可能被限制 24 小时
 
 ## WebSocket支持
 
-待补充
+- 频道：trades / orders / diff-orders
+- 支持订阅指定交易对
 
 ## 错误代码
 
-待补充
+- 官方文档提供错误信息与处理建议
 
 ## 代码示例
 
-待补充
+```python
+# WebSocket 连接示例
+import websocket
+
+ws = websocket.WebSocket()
+ws.connect("wss://ws.bitso.com")
+```

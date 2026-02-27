@@ -2,7 +2,34 @@
 CTP 交易所配置数据
 包含 CTP 行情和交易的前置地址、REST path 映射、品种信息等
 """
+import os
+import logging
 from bt_api_py.containers.exchanges.exchange_data import ExchangeData
+
+logger = logging.getLogger(__name__)
+
+# ── 配置加载缓存 ──────────────────────────────────────────────
+_ctp_config = None
+_ctp_config_loaded = False
+
+
+def _get_ctp_config():
+    """延迟加载并缓存 CTP YAML 配置"""
+    global _ctp_config, _ctp_config_loaded
+    if _ctp_config_loaded:
+        return _ctp_config
+    _ctp_config_loaded = True
+    try:
+        from bt_api_py.config_loader import load_exchange_config
+        config_path = os.path.join(
+            os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
+            'configs', 'ctp.yaml'
+        )
+        if os.path.exists(config_path):
+            _ctp_config = load_exchange_config(config_path)
+    except Exception as e:
+        logger.warning("Failed to load ctp.yaml config: %s", e)
+    return _ctp_config
 
 
 class CtpExchangeData(ExchangeData):
@@ -38,6 +65,42 @@ class CtpExchangeData(ExchangeData):
             'GFEX': '广期所',     # 广州期货交易所
         }
 
+        # 从 YAML 配置加载 (基类不指定 asset_type)
+        self._load_from_config(None)
+
+    def _load_from_config(self, asset_type):
+        """从 YAML 配置文件加载交易所参数
+
+        Args:
+            asset_type: 资产类型 key, 如 'future', 'option', 或 None (仅加载 exchange 级别)
+        Returns:
+            bool: 是否加载成功
+        """
+        config = _get_ctp_config()
+        if config is None:
+            return False
+
+        # exchange-level kline_periods
+        if config.kline_periods:
+            self.kline_periods = dict(config.kline_periods)
+            self.reverse_kline_periods = {v: k for k, v in self.kline_periods.items()}
+
+        # exchange_id_map
+        if config.exchange_id_map:
+            self.exchange_id_map = dict(config.exchange_id_map)
+
+        # asset-type level
+        if asset_type:
+            asset_cfg = config.asset_types.get(asset_type)
+            if asset_cfg:
+                if asset_cfg.exchange_name:
+                    self.exchange_name = asset_cfg.exchange_name
+                if asset_cfg.kline_periods:
+                    self.kline_periods = dict(asset_cfg.kline_periods)
+                    self.reverse_kline_periods = {v: k for k, v in self.kline_periods.items()}
+
+        return True
+
     def get_symbol(self, symbol):
         """CTP 品种名称直接使用, 如 'IF2506', 'rb2510'"""
         return symbol
@@ -54,7 +117,7 @@ class CtpExchangeDataFuture(CtpExchangeData):
 
     def __init__(self):
         super().__init__()
-        self.exchange_name = 'CTP_FUTURE'
+        self._load_from_config('future')
 
 
 class CtpExchangeDataOption(CtpExchangeData):
@@ -62,4 +125,4 @@ class CtpExchangeDataOption(CtpExchangeData):
 
     def __init__(self):
         super().__init__()
-        self.exchange_name = 'CTP_OPTION'
+        self._load_from_config('option')

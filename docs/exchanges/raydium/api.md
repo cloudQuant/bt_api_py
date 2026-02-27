@@ -1,81 +1,91 @@
-# 查看文档 API 文档
+# Raydium API 文档
 
 ## 交易所信息
 
-- **交易所名称**: 查看文档
-- **官方网站**: 待补充
-- **API文档**: 待补充
-- **24h交易量排名**: 待补充
-- **24h交易量**: 待补充
-- **支持的交易对**: 待补充
-- **API版本**: 待补充
-- **特点**: 待补充
+- **交易所名称**: Raydium
+- **官方网站**: https://raydium.io
+- **API文档**: https://docs.raydium.io/raydium/for-developers/api
+- **API 文档（Swagger）**: https://api-v3.raydium.io/docs/
+- **24h交易量排名**: #3（DEX）
+- **区块链**: Solana
 
 ## API基础信息
 
 ### 基础URL
 
 ```text
-# REST API
-待补充
-
-# WebSocket
-待补充
+https://api-v3.raydium.io
 ```
 
-### 请求头
+## 端点分类
 
-```text
-待补充
-```
+- **MAIN**: Main API
+- **MINT**: Mint Info
+- **POOLS**: Pools Info And Keys
+- **FARMS**: Farms Info And Keys
+- **IDO**: IDO Pool Info
 
-## 认证方式
+## 端点清单
 
-### 1. 获取API密钥
+### MAIN
 
-1. 待补充
+- `GET /main/auto-fee`  transaction auto fee
+- `GET /main/chain-time`  Chain Time
+- `GET /main/clmm-config`  Clmm Config
+- `GET /main/cpmm-config`  Cpmm Config
+- `GET /main/info`  TVL and 24 hour volume
+- `GET /main/migrate-lp`  Migrate Lp Pool List
+- `GET /main/mint-filter-config`  Mint Filter Config
+- `GET /main/rpcs`  UI RPCS
+- `GET /main/stake-pools`  RAY Stake
+- `GET /main/version`  UI V3 current version
 
-### 2. 请求签名算法
+### MINT
 
-待补充
+- `GET /mint/ids`  Mint Info
+- `GET /mint/list`  Default Mint List
+- `GET /mint/price`  Mint Price
 
-### 3. Python 认证示例
+### POOLS
 
-```python
-# TODO: 根据官方文档补充签名逻辑
-```
+- `GET /pools/info/ids`  Pool Info
+- `GET /pools/info/list`  Pool Info List
+- `GET /pools/info/list-v2`  Pool Info List V2
+- `GET /pools/info/lps`  Pool Info By Lp Mint
+- `GET /pools/info/mint`  Pool Info By Token Mint
+- `GET /pools/key/ids`  Pool Key
+- `GET /pools/line/liquidity`  Pool Liquidity history
+- `GET /pools/line/position`  Clmm Position
 
-## 市场数据API
+### FARMS
 
-- 获取服务器时间: 待补充
-- 获取交易对信息: 待补充
-- 获取Ticker信息: 待补充
-- 获取K线数据: 待补充
-- 获取深度信息: 待补充
+- `GET /farms/info/ids`  Farm Pool Info
+- `GET /farms/info/lp`  Search Farm By Lp Mint
+- `GET /farms/key/ids`  Farm Pool Key
 
-## 交易API
+### IDO
 
-- 下单: 待补充
-- 撤单: 待补充
-- 查询订单: 待补充
-
-## 账户管理API
-
-- 账户余额: 待补充
-- 资产划转: 待补充
+- `GET /ido/key/ids`  Ido Pool Keys
 
 ## 速率限制
 
-待补充
+- 以官方文档为准
 
 ## WebSocket支持
 
-待补充
+- 官方文档未提供 WebSocket API 说明（更多实时能力建议通过 SDK + gRPC）
 
 ## 错误代码
 
-待补充
+- 以官方文档为准
 
 ## 代码示例
 
-待补充
+```python
+# 获取池子列表
+import requests
+
+url = "https://api-v3.raydium.io/pools/info/list"
+params = {"poolType": "all", "poolSortField": "default", "sortType": "desc", "pageSize": 10, "page": 1}
+print(requests.get(url, params=params).json())
+```

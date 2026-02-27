@@ -1,81 +1,84 @@
-# 查看文档 API 文档
+# BitFlyer API 文档
 
 ## 交易所信息
 
-- **交易所名称**: 查看文档
-- **官方网站**: 待补充
-- **API文档**: 待补充
-- **24h交易量排名**: 待补充
-- **24h交易量**: 待补充
-- **支持的交易对**: 待补充
-- **API版本**: 待补充
-- **特点**: 待补充
+- **交易所名称**: bitFlyer
+- **官方网站**: https://bitflyer.com
+- **API文档**: https://lightning.bitflyer.com/docs
+- **实时API文档**: https://bf-lightning-api.readme.io/docs/realtime-api
+- **24h交易量排名**: #35
+- **24h交易量**: $77M+
+- **支持的交易对**: 50+（以官方列表为准）
+- **API版本**: HTTP API + Realtime API
 
 ## API基础信息
 
 ### 基础URL
 
 ```text
-# REST API
-待补充
+# HTTP API
+https://api.bitflyer.com/v1/
 
-# WebSocket
-待补充
+# Realtime API (Socket.IO 2.0)
+https://io.lightstream.bitflyer.com
+
+# Realtime API (JSON-RPC)
+wss://ws.lightstream.bitflyer.com/json-rpc
 ```
 
-### 请求头
+### 请求头（Private API）
 
 ```text
-待补充
+ACCESS-KEY: {api_key}
+ACCESS-TIMESTAMP: {timestamp}
+ACCESS-SIGN: {signature}
 ```
 
 ## 认证方式
 
-### 1. 获取API密钥
+bitFlyer 使用 HMAC SHA256。
 
-1. 待补充
+**签名字符串**:
 
-### 2. 请求签名算法
+`timestamp + HTTP method + request path + request body`
 
-待补充
+将签名写入 `ACCESS-SIGN`。
 
-### 3. Python 认证示例
+## 市场数据API（示例）
 
-```python
-# TODO: 根据官方文档补充签名逻辑
-```
+- 公共行情、板、成交等：`GET /v1/` 下的 Public API
 
-## 市场数据API
+## 交易API（示例）
 
-- 获取服务器时间: 待补充
-- 获取交易对信息: 待补充
-- 获取Ticker信息: 待补充
-- 获取K线数据: 待补充
-- 获取深度信息: 待补充
-
-## 交易API
-
-- 下单: 待补充
-- 撤单: 待补充
-- 查询订单: 待补充
+- 私有下单：`POST /v1/me/sendchildorder`
+- 私有撤单：`POST /v1/me/cancelallchildorders`
 
 ## 账户管理API
 
-- 账户余额: 待补充
-- 资产划转: 待补充
+- 私有资产与订单相关接口见官方文档
 
 ## 速率限制
 
-待补充
+- 同 IP：500 次 / 5 分钟
+- Private API：500 次 / 5 分钟
+- 小额订单（<=0.1）: 100 次 / 分钟
+- 部分私有接口合计 300 次 / 5 分钟
 
 ## WebSocket支持
 
-待补充
+- 支持 Socket.IO 与 JSON-RPC 两种方式
+- Public/Private Channels 均可订阅（详见官方 Realtime API 文档）
 
 ## 错误代码
 
-待补充
+- 官方文档提供错误码与限制说明
 
 ## 代码示例
 
-待补充
+```python
+# 获取板信息
+import requests
+
+url = "https://api.bitflyer.com/v1/board?product_code=BTC_JPY"
+print(requests.get(url).json())
+```

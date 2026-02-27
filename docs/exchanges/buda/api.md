@@ -1,15 +1,14 @@
-# 查看文档 API 文档
+# Buda API 文档
 
 ## 交易所信息
 
-- **交易所名称**: 查看文档
-- **官方网站**: 待补充
-- **API文档**: 待补充
-- **24h交易量排名**: 待补充
-- **24h交易量**: 待补充
-- **支持的交易对**: 待补充
-- **API版本**: 待补充
-- **特点**: 待补充
+- **交易所名称**: Buda.com
+- **官方网站**: https://www.buda.com
+- **API文档**: https://api.buda.com
+- **24h交易量排名**: #54
+- **24h交易量**: $30M+
+- **支持的交易对**: 以官方 markets 列表为准
+- **API版本**: v2
 
 ## API基础信息
 
@@ -17,65 +16,58 @@
 
 ```text
 # REST API
-待补充
-
-# WebSocket
-待补充
+https://api.buda.com
 ```
 
-### 请求头
+### 请求头（私有接口）
 
 ```text
-待补充
+X-SBTC-APIKEY: {api_key}
+X-SBTC-SIGNATURE: {signature}
+X-SBTC-TIMESTAMP: {timestamp_ms}
 ```
 
 ## 认证方式
 
-### 1. 获取API密钥
+Buda 使用 HMAC-SHA256。
 
-1. 待补充
+**签名字符串**:
 
-### 2. 请求签名算法
+`timestamp + method + request_path + body`
 
-待补充
+## 市场数据API（示例）
 
-### 3. Python 认证示例
+- 市场列表: `GET /markets`
+- Ticker: `GET /markets/{market_id}/ticker`
 
-```python
-# TODO: 根据官方文档补充签名逻辑
-```
+## 交易API（示例）
 
-## 市场数据API
-
-- 获取服务器时间: 待补充
-- 获取交易对信息: 待补充
-- 获取Ticker信息: 待补充
-- 获取K线数据: 待补充
-- 获取深度信息: 待补充
-
-## 交易API
-
-- 下单: 待补充
-- 撤单: 待补充
-- 查询订单: 待补充
+- 下单: `POST /markets/{market_id}/orders`
+- 撤单: `DELETE /markets/{market_id}/orders/{order_id}`
 
 ## 账户管理API
 
-- 账户余额: 待补充
-- 资产划转: 待补充
+- 余额: `GET /balances`
 
 ## 速率限制
 
-待补充
+- 公共：按 IP 30 req/min
+- 私有：按账号 30 req/min
 
 ## WebSocket支持
 
-待补充
+- `wss://api.buda.com/websocket`（详见官方文档）
 
 ## 错误代码
 
-待补充
+- 详见官方文档
 
 ## 代码示例
 
-待补充
+```python
+# 获取市场列表
+import requests
+
+url = "https://api.buda.com/markets"
+print(requests.get(url).json())
+```

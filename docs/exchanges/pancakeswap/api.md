@@ -1,81 +1,39 @@
-# 查看文档 API 文档
+# PancakeSwap API 文档
 
 ## 交易所信息
 
-- **交易所名称**: 查看文档
-- **官方网站**: 待补充
-- **API文档**: 待补充
-- **24h交易量排名**: 待补充
-- **24h交易量**: 待补充
-- **支持的交易对**: 待补充
-- **API版本**: 待补充
-- **特点**: 待补充
+- **交易所名称**: PancakeSwap
+- **官方网站**: https://pancakeswap.finance
+- **开发者文档**: https://developer.pancakeswap.finance/
+- **Subgraph 文档**: https://docs.pancakeswap.finance/to-delete/api/subgraph
+- **24h交易量排名**: #5（DEX）
+- **区块链**: BSC / 多链
 
 ## API基础信息
 
-### 基础URL
+### Subgraph（GraphQL）
 
-```text
-# REST API
-待补充
+官方子图入口（示例）：
 
-# WebSocket
-待补充
-```
+- Blocks (BSC): `https://thegraph.com/legacy-explorer/subgraph/pancakeswap/blocks`
+- Blocks (zkSync): `https://api.studio.thegraph.com/query/45376/blocks-zksync/version/latest`
+- Blocks (zkSync testnet): `https://api.studio.thegraph.com/query/45376/blocks-zksync-testnet/version/latest`
+- Blocks (Polygon zkEVM): `https://api.studio.thegraph.com/query/45376/polygon-zkevm-block/version/latest`
+- Blocks (opBNB): `https://opbnb-mainnet-graph.nodereal.io/subgraphs/name/pancakeswap/blocks`
 
-### 请求头
+- Exchange V2 (BSC): `https://nodereal.io/meganode/api-marketplace/pancakeswap-graphql`
 
-```text
-待补充
-```
-
-## 认证方式
-
-### 1. 获取API密钥
-
-1. 待补充
-
-### 2. 请求签名算法
-
-待补充
-
-### 3. Python 认证示例
-
-```python
-# TODO: 根据官方文档补充签名逻辑
-```
-
-## 市场数据API
-
-- 获取服务器时间: 待补充
-- 获取交易对信息: 待补充
-- 获取Ticker信息: 待补充
-- 获取K线数据: 待补充
-- 获取深度信息: 待补充
-
-## 交易API
-
-- 下单: 待补充
-- 撤单: 待补充
-- 查询订单: 待补充
-
-## 账户管理API
-
-- 账户余额: 待补充
-- 资产划转: 待补充
-
-## 速率限制
-
-待补充
-
-## WebSocket支持
-
-待补充
-
-## 错误代码
-
-待补充
+> 其他子图（Prediction / Profile / Farm / NFT 等）详见官方 Subgraph 文档与 pancake-subgraph 仓库。
 
 ## 代码示例
 
-待补充
+```graphql
+# 获取 Pair 日维度数据（示例）
+{
+  pairDayDatas(first: 1, orderBy: date, orderDirection: desc) {
+    date
+    dailyVolumeUSD
+    reserveUSD
+  }
+}
+```

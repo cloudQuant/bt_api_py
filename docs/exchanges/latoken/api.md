@@ -1,81 +1,44 @@
-# 查看文档 API 文档
+# LATOKEN API 文档
 
 ## 交易所信息
 
-- **交易所名称**: 查看文档
-- **官方网站**: 待补充
-- **API文档**: 待补充
-- **24h交易量排名**: 待补充
-- **24h交易量**: 待补充
-- **支持的交易对**: 待补充
-- **API版本**: 待补充
-- **特点**: 待补充
+- **交易所名称**: LATOKEN
+- **官方网站**: https://latoken.com
+- **API文档**: https://api.latoken.com/doc/v2/
+- **WebSocket文档**: https://api.latoken.com/doc/ws/
+- **24h交易量排名**: #29
+- **24h交易量**: $200M+
+- **支持的交易对**: 300+（以官方文档为准）
+- **API版本**: v2（REST），WS（STOMP）
 
 ## API基础信息
 
-### 基础URL
+> 官方文档为交互式页面，详细端点与签名规则请以官方文档为准。
 
-```text
-# REST API
-待补充
+## 认证与权限
 
-# WebSocket
-待补充
-```
+API Key 权限集（示例）：
 
-### 请求头
-
-```text
-待补充
-```
-
-## 认证方式
-
-### 1. 获取API密钥
-
-1. 待补充
-
-### 2. 请求签名算法
-
-待补充
-
-### 3. Python 认证示例
-
-```python
-# TODO: 根据官方文档补充签名逻辑
-```
-
-## 市场数据API
-
-- 获取服务器时间: 待补充
-- 获取交易对信息: 待补充
-- 获取Ticker信息: 待补充
-- 获取K线数据: 待补充
-- 获取深度信息: 待补充
-
-## 交易API
-
-- 下单: 待补充
-- 撤单: 待补充
-- 查询订单: 待补充
-
-## 账户管理API
-
-- 账户余额: 待补充
-- 资产划转: 待补充
+- VIEW_ACCOUNT / VIEW_MARKET_DATA / VIEW_QUOTAS / VIEW_TRANSACTIONS / VIEW_TRANSFERS
+- PLACE_ORDER / CANCEL_ORDER
+- DEPOSIT_SPOT / WITHDRAW_SPOT
+- DEPOSIT_WALLET / WITHDRAW_WALLET
+- EMAIL_TRANSFER / ID_TRANSFER / PHONE_TRANSFER / BYPASS_2FA
 
 ## 速率限制
 
-待补充
+- 详见官方文档
 
 ## WebSocket支持
 
-待补充
+- 官方文档提供 STOMP WebSocket 说明
 
 ## 错误代码
 
-待补充
+- 官方文档提供错误码列表
 
 ## 代码示例
 
-待补充
+```python
+# 官方文档提供完整示例
+```

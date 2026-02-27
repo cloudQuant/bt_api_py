@@ -1,15 +1,14 @@
-# 查看文档 API 文档
+# BeQuant API 文档
 
 ## 交易所信息
 
-- **交易所名称**: 查看文档
-- **官方网站**: 待补充
-- **API文档**: 待补充
-- **24h交易量排名**: 待补充
-- **24h交易量**: 待补充
-- **支持的交易对**: 待补充
-- **API版本**: 待补充
-- **特点**: 待补充
+- **交易所名称**: BeQuant
+- **官方网站**: https://bequant.io
+- **API文档**: https://api.bequant.io/
+- **24h交易量排名**: #34
+- **24h交易量**: $80M+
+- **支持的交易对**: 200+（以官方列表为准）
+- **API版本**: v3（推荐），v2 仍可用
 
 ## API基础信息
 
@@ -17,65 +16,64 @@
 
 ```text
 # REST API
-待补充
+https://api.bequant.io/api/3
 
 # WebSocket
-待补充
+wss://api.bequant.io/api/3/ws/public
+wss://api.bequant.io/api/3/ws/trading
+wss://api.bequant.io/api/3/ws/wallet
 ```
 
-### 请求头
+### 认证方式
 
-```text
-待补充
-```
+BeQuant 支持 **Basic** 与 **HS256** 两种鉴权方式。
 
-## 认证方式
+**Basic**: `Authorization: Basic base64(apiKey:secretKey)`
 
-### 1. 获取API密钥
+**HS256**:
 
-1. 待补充
+1. 组装签名串：`method + path + [?query] + [body] + timestamp + [window]`
+2. 用 secretKey 做 HMAC SHA256
+3. `Authorization: HS256 base64(apiKey:signature:timestamp[:window])`
 
-### 2. 请求签名算法
+## 市场数据API（示例）
 
-待补充
+- 货币列表: `GET /api/3/public/currency`
+- 交易对: `GET /api/3/public/symbol`
+- 行情: `GET /api/3/public/ticker`
 
-### 3. Python 认证示例
+## 交易API（示例）
 
-```python
-# TODO: 根据官方文档补充签名逻辑
-```
+- 下单: `POST /api/3/spot/order`
+- 撤单: `DELETE /api/3/spot/order`
+- 查询订单: `GET /api/3/spot/order`
 
-## 市场数据API
+## 账户管理API（示例）
 
-- 获取服务器时间: 待补充
-- 获取交易对信息: 待补充
-- 获取Ticker信息: 待补充
-- 获取K线数据: 待补充
-- 获取深度信息: 待补充
-
-## 交易API
-
-- 下单: 待补充
-- 撤单: 待补充
-- 查询订单: 待补充
-
-## 账户管理API
-
-- 账户余额: 待补充
-- 资产划转: 待补充
+- 资产: `GET /api/3/wallet/balance`
 
 ## 速率限制
 
-待补充
+- REST 默认：`/*` 20/30，`/public/*` 30/50，`/wallet/*` 10/10
+- 交易类接口：`/spot/order/*` 300/450
+- WS：`/ws/public`、`/ws/trading`、`/ws/wallet` 10/10
+- 账户总挂单上限：全市场 25000，单交易对 2000
 
 ## WebSocket支持
 
-待补充
+- Public/Trading/Wallet 三类 WS 端点
+- 支持 Basic / HS256 登录
 
 ## 错误代码
 
-待补充
+- 官方文档提供完整错误码与 HTTP 状态码说明
 
 ## 代码示例
 
-待补充
+```python
+# 获取行情
+import requests
+
+url = "https://api.bequant.io/api/3/public/ticker"
+print(requests.get(url).json())
+```

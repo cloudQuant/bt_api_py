@@ -1,15 +1,14 @@
-# 查看文档 API 文档
+# Exmo API 文档
 
 ## 交易所信息
 
-- **交易所名称**: 查看文档
-- **官方网站**: 待补充
-- **API文档**: 待补充
-- **24h交易量排名**: 待补充
-- **24h交易量**: 待补充
-- **支持的交易对**: 待补充
-- **API版本**: 待补充
-- **特点**: 待补充
+- **交易所名称**: EXMO
+- **官方网站**: https://exmo.com
+- **API文档**: https://documenter.getpostman.com/view/10287440/SzYXWKPi
+- **24h交易量排名**: #33
+- **24h交易量**: $83M+
+- **支持的交易对**: 200+（以官方列表为准）
+- **API版本**: v1.1（REST）
 
 ## API基础信息
 
@@ -17,65 +16,54 @@
 
 ```text
 # REST API
-待补充
-
-# WebSocket
-待补充
+https://api.exmo.com/v1.1/{api_name}
 ```
 
-### 请求头
+### 请求头（私有接口）
 
 ```text
-待补充
+Key: {api_key}
+Sign: {signature}
+Content-Type: application/x-www-form-urlencoded
 ```
 
 ## 认证方式
 
-### 1. 获取API密钥
+EXMO 使用 HMAC SHA512。
 
-1. 待补充
+**签名步骤**:
 
-### 2. 请求签名算法
-
-待补充
-
-### 3. Python 认证示例
-
-```python
-# TODO: 根据官方文档补充签名逻辑
-```
+1. 构造 POST 数据字符串 `post_data`
+2. `sign = HMAC_SHA512(post_data, secret)`
+3. 将 `Key` 与 `Sign` 作为请求头发送
 
 ## 市场数据API
 
-- 获取服务器时间: 待补充
-- 获取交易对信息: 待补充
-- 获取Ticker信息: 待补充
-- 获取K线数据: 待补充
-- 获取深度信息: 待补充
+- 详见官方 Postman 文档（Public API）
 
 ## 交易API
 
-- 下单: 待补充
-- 撤单: 待补充
-- 查询订单: 待补充
+- 详见官方 Postman 文档（Authenticated API）
 
 ## 账户管理API
 
-- 账户余额: 待补充
-- 资产划转: 待补充
+- 详见官方 Postman 文档（Wallet API / EX-CODE API）
 
 ## 速率限制
 
-待补充
+- API 请求限制：10 次/秒（按 IP 或用户）
 
 ## WebSocket支持
 
-待补充
+- 支持 Public 与 Authenticated WebSocket 方法
+- 频道类型详见官方文档
 
 ## 错误代码
 
-待补充
+- 官方文档提供错误码说明
 
 ## 代码示例
 
-待补充
+```python
+# 官方文档提供完整示例
+```

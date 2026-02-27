@@ -1,15 +1,14 @@
-# 查看文档 API 文档
+# LocalBitcoins API 文档
 
 ## 交易所信息
 
-- **交易所名称**: 查看文档
-- **官方网站**: 待补充
-- **API文档**: 待补充
-- **24h交易量排名**: 待补充
-- **24h交易量**: 待补充
-- **支持的交易对**: 待补充
-- **API版本**: 待补充
-- **特点**: 待补充
+- **交易所名称**: LocalBitcoins
+- **官方网站**: https://localbitcoins.com
+- **API文档**: https://localbitcoins.com/api-docs/
+- **24h交易量排名**: #47
+- **24h交易量**: $15M+
+- **支持的交易对**: 以 P2P 交易为主
+- **API版本**: REST
 
 ## API基础信息
 
@@ -17,65 +16,49 @@
 
 ```text
 # REST API
-待补充
-
-# WebSocket
-待补充
+https://localbitcoins.com/api
 ```
 
-### 请求头
+### 认证方式
 
-```text
-待补充
-```
+LocalBitcoins 使用 HMAC-SHA256（签名 header: `Apiauth`）。
 
-## 认证方式
+**签名字符串**:
 
-### 1. 获取API密钥
+`nonce + api_key + endpoint + query + body`
 
-1. 待补充
+签名结果为 Base64，并写入 `Apiauth` 头。
 
-### 2. 请求签名算法
+## 市场数据API（示例）
 
-待补充
+- 公共报价: `GET /api/advertisement/`（详见官方文档）
 
-### 3. Python 认证示例
+## 交易API（示例）
 
-```python
-# TODO: 根据官方文档补充签名逻辑
-```
-
-## 市场数据API
-
-- 获取服务器时间: 待补充
-- 获取交易对信息: 待补充
-- 获取Ticker信息: 待补充
-- 获取K线数据: 待补充
-- 获取深度信息: 待补充
-
-## 交易API
-
-- 下单: 待补充
-- 撤单: 待补充
-- 查询订单: 待补充
+- 发布/更新广告与交易相关接口详见官方文档
 
 ## 账户管理API
 
-- 账户余额: 待补充
-- 资产划转: 待补充
+- 钱包/交易/消息等接口详见官方文档
 
 ## 速率限制
 
-待补充
+- 详见官方文档
 
 ## WebSocket支持
 
-待补充
+- 官方未提供 WebSocket API 说明
 
 ## 错误代码
 
-待补充
+- 官方文档提供错误码说明
 
 ## 代码示例
 
-待补充
+```python
+# 获取广告列表（示例）
+import requests
+
+url = "https://localbitcoins.com/api/advertisement/"
+print(requests.get(url).json())
+```

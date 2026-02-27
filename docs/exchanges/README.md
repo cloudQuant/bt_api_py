@@ -38,46 +38,46 @@
 | 18 | Poloniex | $150M+ | ✅ | [查看文档](./poloniex/api.md) |
 | 19 | BingX | $400M+ | ✅ | [查看文档](./bingx/api.md) |
 | 20 | Phemex | $300M+ | ✅ | [查看文档](./phemex/api.md) |
-| 21 | BitMart | $250M+ | ⏳ | [查看文档](./bitmart/api.md) |
-| 22 | Bitso | $100M+ | ⏳ | [查看文档](./bitso/api.md) |
-| 23 | CoinEx | $100M+ | ⏳ | [查看文档](./coinex/api.md) |
-| 24 | Bitunix | $450M+ | ⏳ | [查看文档](./bitunix/api.md) |
-| 25 | BigONE | $440M+ | ⏳ | [查看文档](./bigone/api.md) |
-| 26 | Bitvavo | $260M+ | ⏳ | [查看文档](./bitvavo/api.md) |
-| 27 | BYDFi | $250M+ | ⏳ | [查看文档](./bydfi/api.md) |
-| 28 | YoBit | $200M+ | ⏳ | [查看文档](./yobit/api.md) |
-| 29 | LATOKEN | $200M+ | ⏳ | [查看文档](./latoken/api.md) |
-| 30 | Coinone | $130M+ | ⏳ | [查看文档](./coinone/api.md) |
-| 31 | BTCTurk | $110M+ | ⏳ | [查看文档](./btcturk/api.md) |
-| 32 | HitBTC | $85M+ | ⏳ | [查看文档](./hitbtc/api.md) |
-| 33 | Exmo | $83M+ | ⏳ | [查看文档](./exmo/api.md) |
-| 34 | BeQuant | $80M+ | ⏳ | [查看文档](./bequant/api.md) |
-| 35 | BitFlyer | $77M+ | ⏳ | [查看文档](./bitflyer/api.md) |
-| 36 | Korbit | $70M+ | ⏳ | [查看文档](./korbit/api.md) |
-| 37 | Coincheck | $60M+ | ⏳ | [查看文档](./coincheck/api.md) |
-| 38 | Bitbank | $50M+ | ⏳ | [查看文档](./bitbank/api.md) |
-| 39 | Zaif | $40M+ | ⏳ | [查看文档](./zaif/api.md) |
-| 40 | Independent Reserve | $30M+ | ⏳ | [查看文档](./independent-reserve/api.md) |
-| 41 | BTC Markets | $25M+ | ⏳ | [查看文档](./btc-markets/api.md) |
-| 42 | CoinSpot | $20M+ | ⏳ | [查看文档](./coinspot/api.md) |
-| 43 | Swyftx | $15M+ | ⏳ | [查看文档](./swyftx/api.md) |
-| 44 | Luno | $50M+ | ⏳ | [查看文档](./luno/api.md) |
-| 45 | VALR | $30M+ | ⏳ | [查看文档](./valr/api.md) |
-| 46 | Paxful | $20M+ | ⏳ | [查看文档](./paxful/api.md) |
-| 47 | LocalBitcoins | $15M+ | ⏳ | [查看文档](./localbitcoins/api.md) |
-| 48 | Mercado Bitcoin | $40M+ | ⏳ | [查看文档](./mercado-bitcoin/api.md) |
-| 49 | Foxbit | $25M+ | ⏳ | [查看文档](./foxbit/api.md) |
-| 50 | Bitso | $100M+ | ⏳ | [查看文档](./bitso/api.md) |
-| 51 | Ripio | $20M+ | ⏳ | [查看文档](./ripio/api.md) |
-| 52 | SatoshiTango | $15M+ | ⏳ | [查看文档](./satoshitango/api.md) |
-| 53 | Bitinka | $10M+ | ⏳ | [查看文档](./bitinka/api.md) |
-| 54 | Buda | $30M+ | ⏳ | [查看文档](./buda/api.md) |
-| 55 | CoinDCX | $50M+ | ⏳ | [查看文档](./coindcx/api.md) |
-| 56 | WazirX | $40M+ | ⏳ | [查看文档](./wazirx/api.md) |
-| 57 | CoinSwitch | $30M+ | ⏳ | [查看文档](./coinswitch/api.md) |
-| 58 | ZebPay | $25M+ | ⏳ | [查看文档](./zebpay/api.md) |
-| 59 | Giottus | $15M+ | ⏳ | [查看文档](./giottus/api.md) |
-| 60 | Bitbns | $20M+ | ⏳ | [查看文档](./bitbns/api.md) |
+| 21 | BitMart | $250M+ | ✅ | [查看文档](./bitmart/api.md) |
+| 22 | Bitso | $100M+ | ✅ | [查看文档](./bitso/api.md) |
+| 23 | CoinEx | $100M+ | ✅ | [查看文档](./coinex/api.md) |
+| 24 | Bitunix | $450M+ | ✅ | [查看文档](./bitunix/api.md) |
+| 25 | BigONE | $440M+ | ✅ | [查看文档](./bigone/api.md) |
+| 26 | Bitvavo | $260M+ | ✅ | [查看文档](./bitvavo/api.md) |
+| 27 | BYDFi | $250M+ | ✅ | [查看文档](./bydfi/api.md) |
+| 28 | YoBit | $200M+ | ✅ | [查看文档](./yobit/api.md) |
+| 29 | LATOKEN | $200M+ | ✅ | [查看文档](./latoken/api.md) |
+| 30 | Coinone | $130M+ | ✅ | [查看文档](./coinone/api.md) |
+| 31 | BTCTurk | $110M+ | ✅ | [查看文档](./btcturk/api.md) |
+| 32 | HitBTC | $85M+ | ✅ | [查看文档](./hitbtc/api.md) |
+| 33 | Exmo | $83M+ | ✅ | [查看文档](./exmo/api.md) |
+| 34 | BeQuant | $80M+ | ✅ | [查看文档](./bequant/api.md) |
+| 35 | BitFlyer | $77M+ | ✅ | [查看文档](./bitflyer/api.md) |
+| 36 | Korbit | $70M+ | ✅ | [查看文档](./korbit/api.md) |
+| 37 | Coincheck | $60M+ | ✅ | [查看文档](./coincheck/api.md) |
+| 38 | Bitbank | $50M+ | ✅ | [查看文档](./bitbank/api.md) |
+| 39 | Zaif | $40M+ | ✅ | [查看文档](./zaif/api.md) |
+| 40 | Independent Reserve | $30M+ | ✅ | [查看文档](./independent-reserve/api.md) |
+| 41 | BTC Markets | $25M+ | ✅ | [查看文档](./btc-markets/api.md) |
+| 42 | CoinSpot | $20M+ | ✅ | [查看文档](./coinspot/api.md) |
+| 43 | Swyftx | $15M+ | ✅ | [查看文档](./swyftx/api.md) |
+| 44 | Luno | $50M+ | ✅ | [查看文档](./luno/api.md) |
+| 45 | VALR | $30M+ | ✅ | [查看文档](./valr/api.md) |
+| 46 | Paxful | $20M+ | ✅ | [查看文档](./paxful/api.md) |
+| 47 | LocalBitcoins | $15M+ | ✅ | [查看文档](./localbitcoins/api.md) |
+| 48 | Mercado Bitcoin | $40M+ | ✅ | [查看文档](./mercado-bitcoin/api.md) |
+| 49 | Foxbit | $25M+ | ✅ | [查看文档](./foxbit/api.md) |
+| 50 | Bitso | $100M+ | ✅ | [查看文档](./bitso/api.md) |
+| 51 | Ripio | $20M+ | ✅ | [查看文档](./ripio/api.md) |
+| 52 | SatoshiTango | $15M+ | ✅ | [查看文档](./satoshitango/api.md) |
+| 53 | Bitinka | $10M+ | ✅ | [查看文档](./bitinka/api.md) |
+| 54 | Buda | $30M+ | ✅ | [查看文档](./buda/api.md) |
+| 55 | CoinDCX | $50M+ | ✅ | [查看文档](./coindcx/api.md) |
+| 56 | WazirX | $40M+ | ✅ | [查看文档](./wazirx/api.md) |
+| 57 | CoinSwitch | $30M+ | ✅ | [查看文档](./coinswitch/api.md) |
+| 58 | ZebPay | $25M+ | ✅ | [查看文档](./zebpay/api.md) |
+| 59 | Giottus | $15M+ | ✅ | [查看文档](./giottus/api.md) |
+| 60 | Bitbns | $20M+ | ✅ | [查看文档](./bitbns/api.md) |
 
 更多交易所文档正在添加中...
 
@@ -89,16 +89,16 @@
 
 | 排名 | 交易所 | 区块链 | 文档状态 | API文档 |
 |------|--------|--------|----------|---------|
-| 1 | Uniswap | Ethereum | ⏳ | [查看文档](./uniswap/api.md) |
-| 2 | Hyperliquid | - | ⏳ | [查看文档](./hyperliquid/api.md) |
-| 3 | Raydium | Solana | ⏳ | [查看文档](./raydium/api.md) |
-| 4 | dYdX | Ethereum | ⏳ | [查看文档](./dydx/api.md) |
-| 5 | PancakeSwap | BSC | ⏳ | [查看文档](./pancakeswap/api.md) |
-| 6 | Curve | Ethereum | ⏳ | [查看文档](./curve/api.md) |
-| 7 | SushiSwap | Multi-chain | ⏳ | [查看文档](./sushiswap/api.md) |
-| 8 | Balancer | Ethereum | ⏳ | [查看文档](./balancer/api.md) |
-| 9 | GMX | Arbitrum | ⏳ | [查看文档](./gmx/api.md) |
-| 10 | CoW Swap | Ethereum | ⏳ | [查看文档](./cow-swap/api.md) |
+| 1 | Uniswap | Ethereum | ✅ | [查看文档](./uniswap/api.md) |
+| 2 | Hyperliquid | - | ✅ | [查看文档](./hyperliquid/api.md) |
+| 3 | Raydium | Solana | ✅ | [查看文档](./raydium/api.md) |
+| 4 | dYdX | Ethereum | ✅ | [查看文档](./dydx/api.md) |
+| 5 | PancakeSwap | BSC | ✅ | [查看文档](./pancakeswap/api.md) |
+| 6 | Curve | Ethereum | ✅ | [查看文档](./curve/api.md) |
+| 7 | SushiSwap | Multi-chain | ✅ | [查看文档](./sushiswap/api.md) |
+| 8 | Balancer | Ethereum | ✅ | [查看文档](./balancer/api.md) |
+| 9 | GMX | Arbitrum | ✅ | [查看文档](./gmx/api.md) |
+| 10 | CoW Swap | Ethereum | ✅ | [查看文档](./cow-swap/api.md) |
 
 ---
 

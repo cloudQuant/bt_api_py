@@ -1,15 +1,14 @@
-# 查看文档 API 文档
+# Coincheck API 文档
 
 ## 交易所信息
 
-- **交易所名称**: 查看文档
-- **官方网站**: 待补充
-- **API文档**: 待补充
-- **24h交易量排名**: 待补充
-- **24h交易量**: 待补充
-- **支持的交易对**: 待补充
-- **API版本**: 待补充
-- **特点**: 待补充
+- **交易所名称**: Coincheck
+- **官方网站**: https://coincheck.com
+- **API文档**: https://coincheck.com/documents/exchange/api
+- **24h交易量排名**: #37
+- **24h交易量**: $60M+
+- **支持的交易对**: 30+（以官方列表为准）
+- **API版本**: REST / Public WebSocket
 
 ## API基础信息
 
@@ -17,65 +16,63 @@
 
 ```text
 # REST API
-待补充
+https://coincheck.com/api
 
 # WebSocket
-待补充
+wss://ws-api.coincheck.com
 ```
 
-### 请求头
+### 请求头（私有接口）
 
 ```text
-待补充
+ACCESS-KEY: {api_key}
+ACCESS-NONCE: {nonce_ms}
+ACCESS-SIGNATURE: {signature}
 ```
 
 ## 认证方式
 
-### 1. 获取API密钥
+Coincheck 使用 HMAC SHA256 签名。
 
-1. 待补充
+**签名字符串**:
 
-### 2. 请求签名算法
+`nonce + request_url + request_body`
 
-待补充
+## 市场数据API（示例）
 
-### 3. Python 认证示例
+- Ticker: `GET /api/ticker`
+- Orderbook: `GET /api/order_books`
+- Trades: `GET /api/trades`
 
-```python
-# TODO: 根据官方文档补充签名逻辑
-```
+## 交易API（示例）
 
-## 市场数据API
-
-- 获取服务器时间: 待补充
-- 获取交易对信息: 待补充
-- 获取Ticker信息: 待补充
-- 获取K线数据: 待补充
-- 获取深度信息: 待补充
-
-## 交易API
-
-- 下单: 待补充
-- 撤单: 待补充
-- 查询订单: 待补充
+- 新建订单: `POST /api/exchange/orders`
+- 取消订单: `DELETE /api/exchange/orders/{id}`
 
 ## 账户管理API
 
-- 账户余额: 待补充
-- 资产划转: 待补充
+- 余额: `GET /api/accounts/balance`
 
 ## 速率限制
 
-待补充
+- 交易所新下单：最多 4 请求/秒（超过返回 429）
 
 ## WebSocket支持
 
-待补充
+- Public WebSocket 订阅 `*-orderbook` 与 `*-trades` 频道
 
 ## 错误代码
 
-待补充
+- 超限返回 `429: too_many_requests`
 
 ## 代码示例
 
-待补充
+```python
+# WebSocket 订阅
+import websocket
+import json
+
+ws = websocket.WebSocket()
+ws.connect("wss://ws-api.coincheck.com")
+ws.send(json.dumps({"type": "subscribe", "channel": "btc_jpy-orderbook"}))
+```
