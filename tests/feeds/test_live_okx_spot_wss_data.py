@@ -132,18 +132,34 @@ def test_get_okx_account_data_feed():
     receive_okx_order_data = False
     # 下单撤单测试订单功能
     live_okx_spot_feed = init_req_feed()
+    # 清理挂单释放保证金
+    try:
+        open_orders = live_okx_spot_feed.get_open_orders()
+        for order in open_orders.get_data():
+            try:
+                order_data = order.init_data()
+                inst_id = order_data.get_order_symbol_name()
+                order_id = order_data.get_order_id()
+                if order_id:
+                    live_okx_spot_feed.cancel_order(inst_id, order_id=order_id)
+            except Exception:
+                pass
+        time.sleep(1)
+    except Exception:
+        pass
     price_data = live_okx_spot_feed.get_tick("OP-USDT")
     price_data = price_data.get_data()[0].init_data()
     ask_price = round(price_data.get_ask_price() * 1.1, 2)
     random_number = random.randint(10 ** 17, 10 ** 18 - 1)
     sell_client_order_id = str(random_number + 1)
     lots = 0
-    while lots * ask_price < 10:
+    while lots * ask_price < 1:
         lots += 1
     sell_data = live_okx_spot_feed.make_order("OP-USDT", lots, ask_price,
                                               "sell-limit",
                                               client_order_id=sell_client_order_id,
                                               )
+    assert sell_data.get_status(), f"make sell order failed: {sell_data.get_input_data()}"
     print(sell_data)
     data = live_okx_spot_feed.query_order("OP-USDT", client_order_id=sell_client_order_id)
     print("下单数据", data.get_data())
