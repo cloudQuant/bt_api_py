@@ -85,6 +85,7 @@ class HttpClient:
         json_data: Optional[Dict[str, Any]] = None,
         data: Optional[Any] = None,
         timeout: Optional[float] = None,
+        cookies: Optional[Dict[str, str]] = None,
         **kwargs,
     ) -> Dict[str, Any]:
         """同步请求"""
@@ -100,8 +101,15 @@ class HttpClient:
         if timeout is not None:
             req_kwargs["timeout"] = timeout
 
+        # 将 cookies 添加到 Cookie header 以避免 httpx 警告
+        if cookies:
+            cookie_header = '; '.join(f'{k}={v}' for k, v in cookies.items())
+            if 'headers' not in req_kwargs:
+                req_kwargs['headers'] = {}
+            req_kwargs['headers']['Cookie'] = cookie_header
+
         try:
-            response = self._sync_client.request(method, url, **req_kwargs, **kwargs)
+            response = self._sync_client.request(method, url, **req_kwargs)
         except httpx.TimeoutException as e:
             raise RequestFailedError(
                 venue=self._venue, message=f"Request timeout: {e}"
@@ -122,6 +130,7 @@ class HttpClient:
         json_data: Optional[Dict[str, Any]] = None,
         data: Optional[Any] = None,
         timeout: Optional[float] = None,
+        cookies: Optional[Dict[str, str]] = None,
         **kwargs,
     ) -> Dict[str, Any]:
         """异步请求"""
@@ -139,8 +148,15 @@ class HttpClient:
         if timeout is not None:
             req_kwargs["timeout"] = timeout
 
+        # 将 cookies 添加到 Cookie header 以避免 httpx 警告
+        if cookies:
+            cookie_header = '; '.join(f'{k}={v}' for k, v in cookies.items())
+            if 'headers' not in req_kwargs:
+                req_kwargs['headers'] = {}
+            req_kwargs['headers']['Cookie'] = cookie_header
+
         try:
-            response = await client.request(method, url, **req_kwargs, **kwargs)
+            response = await client.request(method, url, **req_kwargs)
         except httpx.TimeoutException as e:
             raise RequestFailedError(
                 venue=self._venue, message=f"Async request timeout: {e}"

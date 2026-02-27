@@ -123,6 +123,8 @@ def read_account_config():
             "access_token": os.environ.get("IB_WEB_ACCESS_TOKEN", ""),
             "client_id": os.environ.get("IB_WEB_CLIENT_ID", ""),
             "private_key_path": os.environ.get("IB_WEB_PRIVATE_KEY_PATH", ""),
+            "cookie_source": os.environ.get("IB_WEB_COOKIE_SOURCE", ""),
+            "cookie_browser": os.environ.get("IB_WEB_COOKIE_BROWSER", "chrome"),
         },
         "proxies": proxies,
         "async_proxy": async_proxy,

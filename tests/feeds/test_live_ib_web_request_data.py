@@ -76,6 +76,8 @@ def _init_feed():
         "verify_ssl": cfg.get("verify_ssl", False),
         "timeout": cfg.get("timeout", 10),
         "access_token": cfg.get("access_token", "") or None,
+        "cookie_source": cfg.get("cookie_source", "") or None,
+        "cookie_browser": cfg.get("cookie_browser", "chrome"),
     }
     feed = IbWebRequestDataStock(data_queue, **kwargs)
     return feed
@@ -195,15 +197,14 @@ class TestAccountInfo:
         account_id = cfg.get("account_id", "")
         if not account_id:
             pytest.skip("account_id not configured in .env (IB_WEB_ACCOUNT_ID)")
+
         feed.get_portfolio_accounts()
         time.sleep(1)
-        try:
-            result = feed.get_account(extra_data={"account_id": account_id})
-        except AuthenticationError:
-            pytest.skip("Gateway returns 401 on /portfolio/{id}/summary — "
-                        "需要浏览器会话 cookie, 可用 /iserver/accounts 替代")
+        result = feed.get_account(extra_data={"account_id": account_id})
         print(f"Account summary: {json.dumps(result, indent=2, default=str)[:500]}")
         assert result is not None
+        # 验证返回包含余额信息
+        assert "balance" in result or "availableFunds" in result
 
     def test_get_balance(self):
         """获取账户余额"""
@@ -213,15 +214,14 @@ class TestAccountInfo:
         account_id = cfg.get("account_id", "")
         if not account_id:
             pytest.skip("account_id not configured")
+
         feed.get_portfolio_accounts()
         time.sleep(1)
-        try:
-            result = feed.get_balance(extra_data={"account_id": account_id})
-        except AuthenticationError:
-            pytest.skip("Gateway returns 401 on /portfolio/{id}/ledger — "
-                        "需要浏览器会话 cookie")
+        result = feed.get_balance(extra_data={"account_id": account_id})
         print(f"Balance: {json.dumps(result, indent=2, default=str)[:500]}")
         assert result is not None
+        # 验证返回包含余额信息
+        assert "balance" in result or "availableFunds" in result
 
 
 # ── 合约搜索测试 ──────────────────────────────────────────
@@ -479,15 +479,18 @@ class TestPositionAndOrders:
         account_id = cfg.get("account_id", "")
         if not account_id:
             pytest.skip("account_id not configured")
-        feed.get_portfolio_accounts()
-        time.sleep(1)
-        try:
+
+        # get_position 需要 cookies 或会抛出 NotImplementedError
+        if not feed.has_cookies():
+            with pytest.raises(NotImplementedError):
+                feed.get_position(extra_data={"account_id": account_id})
+            pytest.skip("get_position requires browser session cookies")
+        else:
+            feed.get_portfolio_accounts()
+            time.sleep(1)
             result = feed.get_position(extra_data={"account_id": account_id})
-        except AuthenticationError:
-            pytest.skip("Gateway returns 401 on /portfolio/{id}/positions — "
-                        "需要浏览器会话 cookie")
-        print(f"Positions: {json.dumps(result, indent=2, default=str)[:500]}")
-        assert result is not None
+            print(f"Positions: {json.dumps(result, indent=2, default=str)[:500]}")
+            assert result is not None
 
     def test_get_open_orders(self):
         """查询未完成订单"""
@@ -531,6 +534,63 @@ class TestConfigLoading:
         assert isinstance(ib_web["verify_ssl"], bool)
         assert isinstance(ib_web["timeout"], int)
         assert ib_web["timeout"] > 0
+
+    def test_ib_web_cookie_config(self):
+        """测试 cookie 配置项存在"""
+        config = read_account_config()
+        ib_web = config["ib_web"]
+        assert "cookie_source" in ib_web
+        assert "cookie_browser" in ib_web
+
+
+# ── Cookie 功能测试 ────────────────────────────────────────────
+
+class TestCookieFunctionality:
+    """Cookie 功能测试 (不需要 Gateway)"""
+
+    def test_cookie_string_parsing(self):
+        """测试 Cookie 字符串解析"""
+        from bt_api_py.functions.browser_cookies import extract_cookie_string
+
+        cookie_str = "key1=value1; key2=value2; key3=value3"
+        cookies = extract_cookie_string(cookie_str)
+
+        assert cookies["key1"] == "value1"
+        assert cookies["key2"] == "value2"
+        assert cookies["key3"] == "value3"
+
+    def test_cookies_to_header(self):
+        """测试 Cookie 转换为 Header 格式"""
+        from bt_api_py.functions.browser_cookies import cookies_to_header
+
+        cookies = {"key1": "value1", "key2": "value2"}
+        header = cookies_to_header(cookies)
+
+        assert "key1=value1" in header
+        assert "key2=value2" in header
+
+    def test_feed_has_cookies_method(self):
+        """测试 Feed 的 cookie 方法"""
+        data_queue = queue.Queue()
+        feed = IbWebRequestDataStock(
+            data_queue,
+            cookies={"test_key": "test_value"}
+        )
+
+        assert feed.has_cookies() is True
+        cookies = feed.get_cookies()
+        assert cookies.get("test_key") == "test_value"
+
+    def test_feed_set_cookies(self):
+        """测试动态设置 cookies"""
+        data_queue = queue.Queue()
+        feed = IbWebRequestDataStock(data_queue)
+
+        assert feed.has_cookies() is False
+
+        feed.set_cookies({"new_key": "new_value"})
+        assert feed.has_cookies() is True
+        assert feed.get_cookies().get("new_key") == "new_value"
 
 
 if __name__ == "__main__":

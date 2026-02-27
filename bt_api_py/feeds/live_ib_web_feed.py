@@ -53,6 +53,14 @@ class IbWebRequestData(Feed):
         self._session_check_interval = 60
         self._subscribed_conids = set()
 
+        # Cookie 支持
+        self._cookies = kwargs.get("cookies", None)
+        self._cookie_source = kwargs.get("cookie_source", None)
+        self._cookie_browser = kwargs.get("cookie_browser", "chrome")
+        self._cookie_path = kwargs.get("cookie_path", "/sso")  # IBKR Gateway 认证路径
+        self._loaded_cookies = {}
+        self._load_cookies()
+
     @classmethod
     def _capabilities(cls) -> Set[Capability]:
         return {
@@ -73,6 +81,13 @@ class IbWebRequestData(Feed):
         url = f"{self.base_url}{endpoint}"
         headers = self._build_headers()
         self.request_logger.info(f"{method} {endpoint}")
+
+        # 合并 cookies
+        request_cookies = kwargs.get("cookies", {})
+        if self._loaded_cookies:
+            request_cookies = {**self._loaded_cookies, **request_cookies}
+        kwargs["cookies"] = request_cookies
+
         return self._http.request(
             method=method, url=url, headers=headers,
             params=params, json_data=json_data, **kwargs,
@@ -92,6 +107,36 @@ class IbWebRequestData(Feed):
 
     def _put(self, endpoint, json_data=None, **kwargs):
         return self._request("PUT", endpoint, json_data=json_data, **kwargs)
+
+    # ── Cookie 管理 ─────────────────────────────────────────────
+
+    def _load_cookies(self):
+        """加载浏览器 cookies"""
+        if self._cookies:
+            # 直接传入的 cookie 字典
+            self._loaded_cookies = self._cookies
+        elif self._cookie_source:
+            from bt_api_py.functions.browser_cookies import get_ibkr_cookies
+            self._loaded_cookies = get_ibkr_cookies(
+                base_url=self.base_url,
+                cookie_source=self._cookie_source,
+                browser=self._cookie_browser,
+                cookie_path=self._cookie_path,
+            )
+        else:
+            self._loaded_cookies = {}
+
+    def set_cookies(self, cookies):
+        """动态设置 cookies"""
+        self._loaded_cookies = cookies
+
+    def get_cookies(self):
+        """获取当前 cookies"""
+        return self._loaded_cookies
+
+    def has_cookies(self):
+        """检查是否有可用的 cookies"""
+        return bool(self._loaded_cookies)
 
     # ── 连接管理 ──────────────────────────────────────────────
 
@@ -360,20 +405,42 @@ class IbWebRequestData(Feed):
         return self._get("/portfolio/subaccounts")
 
     def get_position(self, symbol=None, extra_data=None, **kwargs):
-        """GET /portfolio/{accountId}/positions/{pageId}"""
+        """GET /portfolio/{accountId}/positions/{pageId}
+
+        注意: 此端点需要浏览器会话认证。
+        替代方案: 使用 /iserver/account/positions 或其他可用端点
+        """
         account_id = self._get_account_id(extra_data)
         page_id = kwargs.get("page_id", 0)
-        return self._get(f"/portfolio/{account_id}/positions/{page_id}")
+
+        # 先尝试 portfolio 端点（需要浏览器会话）
+        if self.has_cookies():
+            try:
+                return self._get(f"/portfolio/{account_id}/positions/{page_id}")
+            except Exception:
+                pass
+
+        # 回退到尝试其他方式
+        raise NotImplementedError(
+            "get_position requires browser session authentication. "
+            "Please set IB_WEB_COOKIE_SOURCE=browser or use alternative endpoints."
+        )
 
     def get_account(self, symbol="ALL", extra_data=None, **kwargs):
-        """GET /portfolio/{accountId}/summary"""
+        """GET /iserver/account/{accountId}/summary
+
+        使用 iserver 端点替代 portfolio 端点，因为不需要浏览器会话
+        """
         account_id = self._get_account_id(extra_data)
-        return self._get(f"/portfolio/{account_id}/summary")
+        return self._get(f"/iserver/account/{account_id}/summary")
 
     def get_balance(self, symbol=None, extra_data=None, **kwargs):
-        """GET /portfolio/{accountId}/ledger"""
+        """GET /iserver/account/{accountId}/summary
+
+        使用 iserver/summary 端点，返回账户余额信息
+        """
         account_id = self._get_account_id(extra_data)
-        return self._get(f"/portfolio/{account_id}/ledger")
+        return self._get(f"/iserver/account/{account_id}/summary")
 
     # ── Account Management API (/gw/api/v1) ──────────────────
 

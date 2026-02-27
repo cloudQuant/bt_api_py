@@ -64,10 +64,12 @@ class IbAuthConfig(AuthConfig):
 class IbWebAuthConfig(AuthConfig):
     """Interactive Brokers Web API 认证配置
 
-    支持两种认证方式:
+    支持三种认证方式:
       1. Client Portal Gateway (个人客户): base_url="https://localhost:5000", verify_ssl=False
       2. OAuth 2.0 (机构客户): base_url="https://api.interactivebrokers.com",
          需提供 client_id + private_key_path 或 access_token
+      3. 浏览器 Cookie (个人客户增强认证): 从已登录浏览器提取 cookie，
+         用于访问需要浏览器会话的端点 (/portfolio/{id}/summary 等)
     """
 
     def __init__(self, exchange="IB_WEB", asset_type="STK",
@@ -79,6 +81,10 @@ class IbWebAuthConfig(AuthConfig):
                  verify_ssl=False,
                  proxies=None,
                  timeout=10,
+                 cookies=None,
+                 cookie_source=None,
+                 cookie_browser="chrome",
+                 cookie_path="/sso",
                  **kwargs):
         super().__init__(exchange, asset_type, **kwargs)
         self.base_url = base_url                  # API 基础URL
@@ -89,3 +95,7 @@ class IbWebAuthConfig(AuthConfig):
         self.verify_ssl = verify_ssl              # 是否验证SSL (Gateway模式设为False)
         self.proxies = proxies                    # HTTP代理
         self.timeout = timeout                    # 请求超时(秒)
+        self.cookies = cookies                    # Cookie 字典
+        self.cookie_source = cookie_source        # Cookie 来源配置
+        self.cookie_browser = cookie_browser      # 浏览器类型 (chrome, firefox, etc.)
+        self.cookie_path = cookie_path            # Cookie 路径，默认 "/sso"
