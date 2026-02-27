@@ -39,8 +39,8 @@ class OkxOrderBookData(OrderBookData):
         self.ask_price_list = [float(i[0]) for i in self.order_book_data['asks']]
         self.bid_volume_list = [float(i[1]) for i in self.order_book_data['bids']]
         self.ask_volume_list = [float(i[1]) for i in self.order_book_data['asks']]
-        self.bid_trade_nums = [float(i[3]) for i in self.order_book_data['bids']]
-        self.ask_trade_nums = [float(i[3]) for i in self.order_book_data['asks']]
+        self.bid_trade_nums = [float(i[3]) if len(i) > 3 else 0.0 for i in self.order_book_data['bids']]
+        self.ask_trade_nums = [float(i[3]) if len(i) > 3 else 0.0 for i in self.order_book_data['asks']]
         self.has_been_init_data = True
         return self
 
