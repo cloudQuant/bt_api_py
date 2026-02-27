@@ -282,8 +282,27 @@ def okx_req_spot_cancel_order_by_client_order_id(client_order_id):
     return data
 
 
+def cleanup_open_orders(feed):
+    """取消所有挂单，释放保证金"""
+    try:
+        open_orders = feed.get_open_orders()
+        for order in open_orders.get_data():
+            try:
+                order_data = order.init_data()
+                inst_id = order_data.get_order_symbol_name()
+                order_id = order_data.get_order_id()
+                if order_id:
+                    feed.cancel_order(inst_id, order_id=order_id)
+            except Exception:
+                pass
+        time.sleep(1)
+    except Exception:
+        pass
+
+
 def test_okx_req_spot_order_functions():
     live_okx_spot_feed = init_req_feed()
+    cleanup_open_orders(live_okx_spot_feed)
     price_data = live_okx_spot_feed.get_tick("OP-USDT")
     price_data = price_data.get_data()[0].init_data()
     bid_price = round(price_data.get_bid_price() * 0.9, 2)
@@ -292,51 +311,62 @@ def test_okx_req_spot_order_functions():
     buy_client_order_id = str(random_number)
     sell_client_order_id = str(random_number + 1)
     lots = 0
-    while lots * ask_price < 10:
+    while lots * ask_price < 1:
         lots += 1
-    buy_data = live_okx_spot_feed.make_order("OP-USDT", lots, bid_price, "buy-limit",
-                                             client_order_id=buy_client_order_id)
-    sell_data = live_okx_spot_feed.make_order("OP-USDT", lots, ask_price, "sell-limit",
-                                              client_order_id=sell_client_order_id)
-    # 测试买单和卖单
-    # assert buy_data.get_status()
-    buy_info = buy_data.get_data()[0]
-    assert isinstance(buy_data, RequestData)
-    assert isinstance(buy_info, dict)
-    buy_order_id = buy_info.get("order_id")
-    assert buy_order_id is not None
+    try:
+        # 测试买单: 下单 -> 查询 -> 查open_orders -> 用order_id撤单
+        buy_data = live_okx_spot_feed.make_order("OP-USDT", lots, bid_price, "buy-limit",
+                                                 client_order_id=buy_client_order_id)
+        assert buy_data.get_status(), f"make buy order failed: {buy_data.get_input_data()}"
+        buy_info = buy_data.get_data()[0]
+        assert isinstance(buy_data, RequestData)
+        assert isinstance(buy_info, dict)
+        buy_order_id = buy_info.get("order_id")
+        assert buy_order_id is not None
 
-    sell_info = sell_data.get_data()[0]
-    assert isinstance(sell_data, RequestData)
-    assert isinstance(sell_info, dict)
-    sell_order_id = sell_info.get("order_id")
-    assert sell_order_id is not None
+        # 根据order_id查询买单
+        data = live_okx_spot_feed.query_order("OP-USDT", order_id=buy_order_id)
+        order_info = data.get_data()[0]
+        assert data.get_status()
+        assert isinstance(data, RequestData)
+        assert order_info.init_data().get_order_price() == bid_price
+        assert order_info.init_data().get_client_order_id() == buy_client_order_id
 
-    # 根据order_id查询订单
-    data = live_okx_spot_feed.query_order("OP-USDT", order_id=buy_order_id)
-    # print(data.get_data())
-    order_info = data.get_data()[0]
-    assert data.get_status()
-    assert isinstance(data, RequestData)
-    assert order_info.init_data().get_order_price() == bid_price
-    assert order_info.init_data().get_client_order_id() == buy_client_order_id
+        # 根据client_order_id查询买单
+        okx_req_spot_query_order_by_client_order_id(buy_client_order_id)
 
-    data = live_okx_spot_feed.query_order("OP-USDT", order_id=sell_order_id)
-    # print(data.get_data())
-    order_info = data.get_data()[0]
-    assert data.get_status()
-    assert isinstance(data, RequestData)
-    assert order_info.init_data().get_order_price() == ask_price
-    assert order_info.init_data().get_client_order_id() == sell_client_order_id
-    # 根据client_order_id查询订单
-    okx_req_spot_query_order_by_client_order_id(buy_client_order_id)
-    okx_req_spot_query_order_by_client_order_id(sell_client_order_id)
-    # 查询有哪些open_order
-    orders = okx_req_spot_get_open_order()
-    assert len(orders.get_data()) >= 1
-    # 用order_id和client_order_id进行撤单
-    okx_req_spot_cancel_order_by_order_id(buy_order_id)
-    okx_req_spot_cancel_order_by_client_order_id(sell_client_order_id)
+        # 查询有哪些open_order
+        orders = okx_req_spot_get_open_order()
+        assert len(orders.get_data()) >= 1
+
+        # 用order_id撤买单
+        okx_req_spot_cancel_order_by_order_id(buy_order_id)
+
+        # 测试卖单: 下单 -> 查询 -> 用client_order_id撤单
+        sell_data = live_okx_spot_feed.make_order("OP-USDT", lots, ask_price, "sell-limit",
+                                                  client_order_id=sell_client_order_id)
+        assert sell_data.get_status(), f"make sell order failed: {sell_data.get_input_data()}"
+        sell_info = sell_data.get_data()[0]
+        assert isinstance(sell_data, RequestData)
+        assert isinstance(sell_info, dict)
+        sell_order_id = sell_info.get("order_id")
+        assert sell_order_id is not None
+
+        # 根据order_id查询卖单
+        data = live_okx_spot_feed.query_order("OP-USDT", order_id=sell_order_id)
+        order_info = data.get_data()[0]
+        assert data.get_status()
+        assert isinstance(data, RequestData)
+        assert order_info.init_data().get_order_price() == ask_price
+        assert order_info.init_data().get_client_order_id() == sell_client_order_id
+
+        # 根据client_order_id查询卖单
+        okx_req_spot_query_order_by_client_order_id(sell_client_order_id)
+
+        # 用client_order_id撤卖单
+        okx_req_spot_cancel_order_by_client_order_id(sell_client_order_id)
+    finally:
+        cleanup_open_orders(live_okx_spot_feed)
     # Querying orders can only be done during single-backtrader testing.
     # When executing across multiple backtrader, the order of execution is not guaranteed,
     # which can lead to conflicts and errors.
@@ -348,6 +378,7 @@ def test_okx_req_spot_order_functions():
 def test_okx_async_spot_order_functions():
     data_queue = queue.Queue()
     live_okx_spot_feed = init_async_feed(data_queue)
+    cleanup_open_orders(live_okx_spot_feed)
     price_data = live_okx_spot_feed.get_tick("OP-USDT").get_data()[0].init_data()
     bid_price = round(price_data.get_bid_price() * 0.9, 2)
     # ask_price = round(price_data.get_ask_price() * 1.1, 2)
@@ -359,7 +390,7 @@ def test_okx_async_spot_order_functions():
     cancel_order_func = False
     open_order_func = False
     lots = 0
-    while lots * bid_price < 10:
+    while lots * bid_price < 1:
         lots += 1
     live_okx_spot_feed.async_make_order("OP-USDT", lots, bid_price, "buy-limit", client_order_id=buy_client_order_id)
     time.sleep(3)
