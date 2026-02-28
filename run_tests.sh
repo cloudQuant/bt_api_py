@@ -2,11 +2,16 @@
 # Run tests script for bt_api_py
 # Usage: ./run_tests.sh [--ctp] [-p|--parallel NUM]
 
-set -e
+set -eo pipefail
 
 # Default values
 RUN_CTP=false
-PARALLEL=4
+PARALLEL=8
+
+# Log setup
+LOG_DIR="logs"
+mkdir -p "$LOG_DIR"
+LOG_FILE="${LOG_DIR}/test_$(date '+%Y%m%d_%H%M%S').log"
 
 # Parse arguments
 while [[ $# -gt 0 ]]; do
@@ -29,13 +34,13 @@ while [[ $# -gt 0 ]]; do
             echo ""
             echo "Options:"
             echo "  -c, --ctp              Run CTP related tests (default: false)"
-            echo "  -p, --parallel NUM     Number of parallel processes (default: 4)"
+            echo "  -p, --parallel NUM     Number of parallel processes (default: 8)"
             echo "                         Use 1 for single process, or any positive number"
             echo "  -h, --help             Show this help message"
             echo ""
             echo "Examples:"
-            echo "  ./run_tests.sh                  # Run tests without CTP, 4 processes"
-            echo "  ./run_tests.sh --ctp            # Run tests including CTP, 4 processes"
+            echo "  ./run_tests.sh                  # Run tests without CTP, 8 processes"
+            echo "  ./run_tests.sh --ctp            # Run tests including CTP, 8 processes"
             echo "  ./run_tests.sh -p 1             # Single process, no CTP"
             echo "  ./run_tests.sh --ctp -p 8       # Include CTP, 8 processes"
             exit 0
@@ -72,5 +77,8 @@ echo ""
 echo "Command: $PYTEST_CMD"
 echo ""
 
-# Run tests
-eval "$PYTEST_CMD"
+# Run tests (output to both terminal and log file)
+echo "Log file: $LOG_FILE"
+echo ""
+eval "$PYTEST_CMD" 2>&1 | tee "$LOG_FILE"
+exit ${PIPESTATUS[0]}

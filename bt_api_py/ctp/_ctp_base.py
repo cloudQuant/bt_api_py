@@ -11,7 +11,7 @@
 from sys import stderr, float_info
 from traceback import print_exc, print_exception
 
-
+import weakref
 
 from sys import version_info as _swig_python_version_info
 # Import the low-level C/C++ module
@@ -25,12 +25,13 @@ try:
 except ImportError:
     import __builtin__
 
+
 def _swig_repr(self):
     try:
         strthis = "proxy of " + self.this.__repr__()
     except __builtin__.Exception:
         strthis = ""
-    return "<%s.%s; %s >" % (self.__class__.__module__, self.__class__.__name__, strthis,)
+    return "<{}.{}; {} >".format(self.__class__.__module__, self.__class__.__name__, strthis)
 
 
 def _swig_setattr_nondynamic_instance_variable(set):
@@ -43,6 +44,7 @@ def _swig_setattr_nondynamic_instance_variable(set):
             set(self, name, value)
         else:
             raise AttributeError("You cannot add instance attributes to %s" % self)
+
     return set_instance_attr
 
 
@@ -52,38 +54,42 @@ def _swig_setattr_nondynamic_class_variable(set):
             set(cls, name, value)
         else:
             raise AttributeError("You cannot add class attributes to %s" % cls)
+
     return set_class_attr
 
 
 def _swig_add_metaclass(metaclass):
     """Class decorator for adding a metaclass to a SWIG wrapped class - a slimmed down version of six.add_metaclass"""
+
     def wrapper(cls):
         return metaclass(cls.__name__, cls.__bases__, cls.__dict__.copy())
+
     return wrapper
 
 
 class _SwigNonDynamicMeta(type):
     """Meta class to enforce nondynamic attributes (no new attributes) for a class"""
+
     __setattr__ = _swig_setattr_nondynamic_class_variable(type.__setattr__)
 
 
-import weakref
 
 
 def _swig_repr(self):
     values = []
     for k in vars(self.__class__):
-        if not k.startswith('_'):
+        if not k.startswith("_"):
             v = getattr(self, k)
             if isinstance(v, float):
                 if v == float_info.max:
                     values.append("%s: None" % k)
                 else:
-                    values.append("%s: %.2f" % (k, v))
+                    values.append("{}: {:.2f}".format(k, v))
             elif isinstance(v, int):
                 values.append("%s: %i" % (k, v))
             else:
-                values.append('%s: "%s"' % (k, v))
+                values.append('{}: "{}"'.format(k, v))
 
-    return "<%s.%s; %s>" % (self.__class__.__module__, self.__class__.__name__, ', '.join(values))
-
+    return "<{}.{}; {}>".format(
+        self.__class__.__module__, self.__class__.__name__, ", ".join(values)
+    )
