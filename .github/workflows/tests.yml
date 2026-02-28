@@ -1,0 +1,101 @@
+name: Tests
+
+on:
+  push:
+    branches: [ main, master, develop ]
+  pull_request:
+    branches: [ main, master, develop ]
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        python-version: ['3.11', '3.12', '3.13']
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Python ${{ matrix.python-version }}
+      uses: actions/setup-python@v5
+      with:
+        python-version: ${{ matrix.python-version }}
+        cache: 'pip'
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -e ".[dev]"
+
+    - name: Run unit tests (no API keys required)
+      run: |
+        pytest tests -v -m "unit" --cov=bt_api_py --cov-report=xml --cov-report=html
+      continue-on-error: false
+
+    - name: Run integration tests (skip if no API keys)
+      run: |
+        pytest tests -v -m "not unit" --cov=bt_api_py --cov-append --cov-report=xml --cov-report=html || echo "Integration tests skipped (no API keys)"
+      continue-on-error: true
+      env:
+        SKIP_LIVE_TESTS: "true"
+
+    - name: Upload coverage to Codecov
+      uses: codecov/codecov-action@v4
+      with:
+        file: ./coverage.xml
+        flags: unittests
+        name: codecov-${{ matrix.os }}-py${{ matrix.python-version }}
+        fail_ci_if_error: false
+
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+        cache: 'pip'
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install ruff mypy
+
+    - name: Run Ruff
+      run: |
+        ruff check bt_api_py --output-format=github
+
+    - name: Run MyPy
+      run: |
+        mypy bt_api_py --ignore-missing-imports
+      continue-on-error: true
+
+  security:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install bandit safety
+
+    - name: Run Bandit security check
+      run: |
+        bandit -r bt_api_py -ll
+      continue-on-error: true
+
+    - name: Check dependencies for vulnerabilities
+      run: |
+        safety check --json
+      continue-on-error: true

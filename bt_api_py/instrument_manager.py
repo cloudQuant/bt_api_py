@@ -4,7 +4,6 @@ InstrumentManager — 统一交易标的管理器
 替代/增强现有 SymbolManager，提供 Instrument 注册、查询、双向映射功能。
 """
 
-from typing import Dict, List, Optional
 
 from bt_api_py.containers.instrument import AssetType, Instrument
 
@@ -13,11 +12,11 @@ class InstrumentManager:
     """Instrument 管理器"""
 
     def __init__(self):
-        self._instruments: Dict[str, Instrument] = {}  # internal -> Instrument
-        self._by_venue: Dict[str, Dict[str, Instrument]] = (
+        self._instruments: dict[str, Instrument] = {}  # internal -> Instrument
+        self._by_venue: dict[str, dict[str, Instrument]] = (
             {}
         )  # venue -> {venue_symbol -> Instrument}
-        self._by_underlying: Dict[str, List[Instrument]] = {}  # underlying -> [Instrument]
+        self._by_underlying: dict[str, list[Instrument]] = {}  # underlying -> [Instrument]
 
     def register(self, instrument: Instrument) -> None:
         """注册 Instrument"""
@@ -26,26 +25,26 @@ class InstrumentManager:
         if instrument.underlying:
             self._by_underlying.setdefault(instrument.underlying, []).append(instrument)
 
-    def register_many(self, instruments: List[Instrument]) -> None:
+    def register_many(self, instruments: list[Instrument]) -> None:
         """批量注册"""
         for inst in instruments:
             self.register(inst)
 
-    def get(self, internal: str) -> Optional[Instrument]:
+    def get(self, internal: str) -> Instrument | None:
         """获取 Instrument（通过内部符号）"""
         return self._instruments.get(internal)
 
-    def get_by_venue(self, venue: str, venue_symbol: str) -> Optional[Instrument]:
+    def get_by_venue(self, venue: str, venue_symbol: str) -> Instrument | None:
         """获取 Instrument（通过场所符号）"""
         return self._by_venue.get(venue, {}).get(venue_symbol)
 
     def find(
         self,
-        venue: Optional[str] = None,
-        underlying: Optional[str] = None,
-        asset_type: Optional[AssetType] = None,
+        venue: str | None = None,
+        underlying: str | None = None,
+        asset_type: AssetType | None = None,
         active_only: bool = True,
-    ) -> List[Instrument]:
+    ) -> list[Instrument]:
         """查找符合条件的 Instrument"""
         results = list(self._instruments.values())
 
@@ -60,21 +59,21 @@ class InstrumentManager:
 
         return results
 
-    def to_internal(self, venue: str, venue_symbol: str) -> Optional[str]:
+    def to_internal(self, venue: str, venue_symbol: str) -> str | None:
         """场所符号转换为内部符号"""
         instrument = self.get_by_venue(venue, venue_symbol)
         return instrument.internal if instrument else None
 
-    def to_venue_symbol(self, internal: str) -> Optional[str]:
+    def to_venue_symbol(self, internal: str) -> str | None:
         """内部符号转换为场所符号"""
         instrument = self.get(internal)
         return instrument.venue_symbol if instrument else None
 
-    def all_internals(self) -> List[str]:
+    def all_internals(self) -> list[str]:
         """返回所有已注册的内部符号"""
         return list(self._instruments.keys())
 
-    def all_venues(self) -> List[str]:
+    def all_venues(self) -> list[str]:
         """返回所有已注册的场所"""
         return list(self._by_venue.keys())
 

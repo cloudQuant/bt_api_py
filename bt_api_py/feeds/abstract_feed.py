@@ -9,7 +9,7 @@
 
 import asyncio
 import functools
-from typing import Any, Optional, Protocol, Set, runtime_checkable
+from typing import Any, Protocol, runtime_checkable
 
 
 @runtime_checkable
@@ -71,7 +71,7 @@ class AbstractVenueFeed(Protocol):
         """撤单"""
         ...
 
-    def cancel_all(self, symbol: Optional[str] = None, extra_data=None, **kwargs) -> Any:
+    def cancel_all(self, symbol: str | None = None, extra_data=None, **kwargs) -> Any:
         """撤销所有订单（可选能力）"""
         ...
 
@@ -79,7 +79,7 @@ class AbstractVenueFeed(Protocol):
         """查询订单"""
         ...
 
-    def get_open_orders(self, symbol: Optional[str] = None, extra_data=None, **kwargs) -> Any:
+    def get_open_orders(self, symbol: str | None = None, extra_data=None, **kwargs) -> Any:
         """查询挂单"""
         ...
 
@@ -93,7 +93,7 @@ class AbstractVenueFeed(Protocol):
         """查询账户信息"""
         ...
 
-    def get_position(self, symbol: Optional[str] = None, extra_data=None, **kwargs) -> Any:
+    def get_position(self, symbol: str | None = None, extra_data=None, **kwargs) -> Any:
         """查询持仓（期货/期权）"""
         ...
 
@@ -121,7 +121,7 @@ class AbstractVenueFeed(Protocol):
     # ── 能力声明 ───────────────────────────────────────────────
 
     @property
-    def capabilities(self) -> Set[str]:
+    def capabilities(self) -> set[str]:
         """返回该 Feed 支持的能力集合"""
         ...
 

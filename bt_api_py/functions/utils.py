@@ -166,7 +166,7 @@ def from_dict_get_bool(content, key, default=None):
         if isinstance(value, bool):
             return value
         elif isinstance(value, str):
-            return True if value == "true" else False
+            return value == "true"
         else:
             raise TypeError(f"value {value} is not considered")
 
@@ -175,9 +175,7 @@ def from_dict_get_float(content, key, default=None):
     if key not in content:
         return default
     value = content[key]
-    if value == "":
-        return None
-    elif value is None:
+    if value == "" or value is None:
         return None
     elif isinstance(value, float):
         return value
@@ -189,9 +187,7 @@ def from_dict_get_int(content, key, default=None):
     if key not in content:
         return default
     value = content[key]
-    if value == "":
-        return None
-    elif value is None:
+    if value == "" or value is None:
         return None
     elif isinstance(value, int):
         return value

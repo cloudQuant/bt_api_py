@@ -13,9 +13,9 @@ class ExchangeData:
         self.server_time = 0.0  # 服务器时间戳
         self.local_update_time = 0.0  # 本地时间戳
         self.timezone = ""  # 时区
-        self.rate_limits = list()  # 频率限制
-        self.exchange_filters = list()  # 交易所过滤
-        self.symbols = list()  # 品种信息
+        self.rate_limits = []  # 频率限制
+        self.exchange_filters = []  # 交易所过滤
+        self.symbols = []  # 品种信息
         self.exchange_name = ""  # 交易所名称
         self.rest_url = ""
         self.acct_wss_url = ""

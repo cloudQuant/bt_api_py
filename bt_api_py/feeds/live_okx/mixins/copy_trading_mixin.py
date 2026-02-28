@@ -62,14 +62,11 @@ class CopyTradingMixin:
     @staticmethod
     def _copytrading_get_current_subpositions_normalize_function(input_data, extra_data):
         """Normalize copy trading current subpositions data"""
-        status = True if input_data.get("code") == "0" else False
+        status = input_data.get("code") == "0"
         if "data" not in input_data:
             return [], status
         data = input_data["data"]
-        if len(data) > 0:
-            target_data = data
-        else:
-            target_data = []
+        target_data = data if len(data) > 0 else []
         return target_data, status
 
     def copytrading_get_current_subpositions(
@@ -159,14 +156,11 @@ class CopyTradingMixin:
     @staticmethod
     def _copytrading_get_subpositions_history_normalize_function(input_data, extra_data):
         """Normalize copy trading subpositions history data"""
-        status = True if input_data.get("code") == "0" else False
+        status = input_data.get("code") == "0"
         if "data" not in input_data:
             return [], status
         data = input_data["data"]
-        if len(data) > 0:
-            target_data = data
-        else:
-            target_data = []
+        target_data = data if len(data) > 0 else []
         return target_data, status
 
     def copytrading_get_subpositions_history(
@@ -264,14 +258,11 @@ class CopyTradingMixin:
     @staticmethod
     def _copytrading_algo_order_normalize_function(input_data, extra_data):
         """Normalize copy trading algo order response"""
-        status = True if input_data.get("code") == "0" else False
+        status = input_data.get("code") == "0"
         if "data" not in input_data:
             return [], status
         data = input_data["data"]
-        if len(data) > 0:
-            target_data = [data[0]]
-        else:
-            target_data = []
+        target_data = [data[0]] if len(data) > 0 else []
         return target_data, status
 
     def copytrading_algo_order(
@@ -359,14 +350,11 @@ class CopyTradingMixin:
     @staticmethod
     def _copytrading_close_subposition_normalize_function(input_data, extra_data):
         """Normalize copy trading close subposition response"""
-        status = True if input_data.get("code") == "0" else False
+        status = input_data.get("code") == "0"
         if "data" not in input_data:
             return [], status
         data = input_data["data"]
-        if len(data) > 0:
-            target_data = [data[0]]
-        else:
-            target_data = []
+        target_data = [data[0]] if len(data) > 0 else []
         return target_data, status
 
     def copytrading_close_subposition(self, sub_pos_id, extra_data=None, **kwargs):
@@ -413,14 +401,11 @@ class CopyTradingMixin:
     @staticmethod
     def _copytrading_get_instruments_normalize_function(input_data, extra_data):
         """Normalize copy trading instruments data"""
-        status = True if input_data.get("code") == "0" else False
+        status = input_data.get("code") == "0"
         if "data" not in input_data:
             return [], status
         data = input_data["data"]
-        if len(data) > 0:
-            target_data = data
-        else:
-            target_data = []
+        target_data = data if len(data) > 0 else []
         return target_data, status
 
     def copytrading_get_instruments(self, extra_data=None, **kwargs):
@@ -470,14 +455,11 @@ class CopyTradingMixin:
     @staticmethod
     def _copytrading_set_instruments_normalize_function(input_data, extra_data):
         """Normalize copy trading set instruments response"""
-        status = True if input_data.get("code") == "0" else False
+        status = input_data.get("code") == "0"
         if "data" not in input_data:
             return [], status
         data = input_data["data"]
-        if len(data) > 0:
-            target_data = [data[0]]
-        else:
-            target_data = []
+        target_data = [data[0]] if len(data) > 0 else []
         return target_data, status
 
     def copytrading_set_instruments(self, inst_type, inst_ids=None, extra_data=None, **kwargs):
@@ -537,14 +519,11 @@ class CopyTradingMixin:
     @staticmethod
     def _copytrading_get_profit_sharing_details_normalize_function(input_data, extra_data):
         """Normalize copy trading profit sharing details data"""
-        status = True if input_data.get("code") == "0" else False
+        status = input_data.get("code") == "0"
         if "data" not in input_data:
             return [], status
         data = input_data["data"]
-        if len(data) > 0:
-            target_data = data
-        else:
-            target_data = []
+        target_data = data if len(data) > 0 else []
         return target_data, status
 
     def copytrading_get_profit_sharing_details(
@@ -596,14 +575,11 @@ class CopyTradingMixin:
     @staticmethod
     def _copytrading_get_total_profit_sharing_normalize_function(input_data, extra_data):
         """Normalize copy trading total profit sharing data"""
-        status = True if input_data.get("code") == "0" else False
+        status = input_data.get("code") == "0"
         if "data" not in input_data:
             return [], status
         data = input_data["data"]
-        if len(data) > 0:
-            target_data = data
-        else:
-            target_data = []
+        target_data = data if len(data) > 0 else []
         return target_data, status
 
     def copytrading_get_total_profit_sharing(self, extra_data=None, **kwargs):
@@ -660,14 +636,11 @@ class CopyTradingMixin:
         input_data, extra_data
     ):
         """Normalize copy trading unrealized profit sharing details data"""
-        status = True if input_data.get("code") == "0" else False
+        status = input_data.get("code") == "0"
         if "data" not in input_data:
             return [], status
         data = input_data["data"]
-        if len(data) > 0:
-            target_data = data
-        else:
-            target_data = []
+        target_data = data if len(data) > 0 else []
         return target_data, status
 
     def copytrading_get_unrealized_profit_sharing_details(
@@ -719,14 +692,11 @@ class CopyTradingMixin:
     @staticmethod
     def _copytrading_get_total_unrealized_profit_sharing_normalize_function(input_data, extra_data):
         """Normalize copy trading total unrealized profit sharing data"""
-        status = True if input_data.get("code") == "0" else False
+        status = input_data.get("code") == "0"
         if "data" not in input_data:
             return [], status
         data = input_data["data"]
-        if len(data) > 0:
-            target_data = data
-        else:
-            target_data = []
+        target_data = data if len(data) > 0 else []
         return target_data, status
 
     def copytrading_get_total_unrealized_profit_sharing(self, extra_data=None, **kwargs):
@@ -779,14 +749,11 @@ class CopyTradingMixin:
     @staticmethod
     def _copytrading_set_profit_sharing_ratio_normalize_function(input_data, extra_data):
         """Normalize copy trading set profit sharing ratio response"""
-        status = True if input_data.get("code") == "0" else False
+        status = input_data.get("code") == "0"
         if "data" not in input_data:
             return [], status
         data = input_data["data"]
-        if len(data) > 0:
-            target_data = [data[0]]
-        else:
-            target_data = []
+        target_data = [data[0]] if len(data) > 0 else []
         return target_data, status
 
     def copytrading_set_profit_sharing_ratio(self, profit_sharing_ratio, extra_data=None, **kwargs):
@@ -835,14 +802,11 @@ class CopyTradingMixin:
     @staticmethod
     def _copytrading_get_config_normalize_function(input_data, extra_data):
         """Normalize copy trading config data"""
-        status = True if input_data.get("code") == "0" else False
+        status = input_data.get("code") == "0"
         if "data" not in input_data:
             return [], status
         data = input_data["data"]
-        if len(data) > 0:
-            target_data = data
-        else:
-            target_data = []
+        target_data = data if len(data) > 0 else []
         return target_data, status
 
     def copytrading_get_config(self, extra_data=None, **kwargs):
@@ -892,14 +856,11 @@ class CopyTradingMixin:
     @staticmethod
     def _copytrading_first_copy_settings_normalize_function(input_data, extra_data):
         """Normalize copy trading first copy settings response"""
-        status = True if input_data.get("code") == "0" else False
+        status = input_data.get("code") == "0"
         if "data" not in input_data:
             return [], status
         data = input_data["data"]
-        if len(data) > 0:
-            target_data = [data[0]]
-        else:
-            target_data = []
+        target_data = [data[0]] if len(data) > 0 else []
         return target_data, status
 
     def copytrading_first_copy_settings(self, copy_inst_id, lever=None, extra_data=None, **kwargs):
@@ -954,14 +915,11 @@ class CopyTradingMixin:
     @staticmethod
     def _copytrading_amend_copy_settings_normalize_function(input_data, extra_data):
         """Normalize copy trading amend copy settings response"""
-        status = True if input_data.get("code") == "0" else False
+        status = input_data.get("code") == "0"
         if "data" not in input_data:
             return [], status
         data = input_data["data"]
-        if len(data) > 0:
-            target_data = [data[0]]
-        else:
-            target_data = []
+        target_data = [data[0]] if len(data) > 0 else []
         return target_data, status
 
     def copytrading_amend_copy_settings(self, copy_inst_id, lever=None, extra_data=None, **kwargs):
@@ -1013,14 +971,11 @@ class CopyTradingMixin:
     @staticmethod
     def _copytrading_stop_copy_trading_normalize_function(input_data, extra_data):
         """Normalize copy trading stop copy trading response"""
-        status = True if input_data.get("code") == "0" else False
+        status = input_data.get("code") == "0"
         if "data" not in input_data:
             return [], status
         data = input_data["data"]
-        if len(data) > 0:
-            target_data = [data[0]]
-        else:
-            target_data = []
+        target_data = [data[0]] if len(data) > 0 else []
         return target_data, status
 
     def copytrading_stop_copy_trading(self, copy_inst_id, extra_data=None, **kwargs):
@@ -1067,14 +1022,11 @@ class CopyTradingMixin:
     @staticmethod
     def _copytrading_get_copy_settings_normalize_function(input_data, extra_data):
         """Normalize copy trading copy settings data"""
-        status = True if input_data.get("code") == "0" else False
+        status = input_data.get("code") == "0"
         if "data" not in input_data:
             return [], status
         data = input_data["data"]
-        if len(data) > 0:
-            target_data = data
-        else:
-            target_data = []
+        target_data = data if len(data) > 0 else []
         return target_data, status
 
     def copytrading_get_copy_settings(self, extra_data=None, **kwargs):
@@ -1118,14 +1070,11 @@ class CopyTradingMixin:
     @staticmethod
     def _copytrading_get_batch_leverage_info_normalize_function(input_data, extra_data):
         """Normalize copy trading batch leverage info data"""
-        status = True if input_data.get("code") == "0" else False
+        status = input_data.get("code") == "0"
         if "data" not in input_data:
             return [], status
         data = input_data["data"]
-        if len(data) > 0:
-            target_data = data
-        else:
-            target_data = []
+        target_data = data if len(data) > 0 else []
         return target_data, status
 
     def copytrading_get_batch_leverage_info(self, extra_data=None, **kwargs):
@@ -1169,14 +1118,11 @@ class CopyTradingMixin:
     @staticmethod
     def _copytrading_get_copy_trading_configuration_normalize_function(input_data, extra_data):
         """Normalize copy trading configuration data"""
-        status = True if input_data.get("code") == "0" else False
+        status = input_data.get("code") == "0"
         if "data" not in input_data:
             return [], status
         data = input_data["data"]
-        if len(data) > 0:
-            target_data = data
-        else:
-            target_data = []
+        target_data = data if len(data) > 0 else []
         return target_data, status
 
     def copytrading_get_copy_trading_configuration(self, extra_data=None, **kwargs):
@@ -1254,14 +1200,11 @@ class CopyTradingMixin:
     @staticmethod
     def _copytrading_public_lead_traders_normalize_function(input_data, extra_data):
         """Normalize copy trading public lead traders data"""
-        status = True if input_data.get("code") == "0" else False
+        status = input_data.get("code") == "0"
         if "data" not in input_data:
             return [], status
         data = input_data["data"]
-        if len(data) > 0:
-            target_data = data
-        else:
-            target_data = []
+        target_data = data if len(data) > 0 else []
         return target_data, status
 
     def copytrading_public_lead_traders(
@@ -1343,14 +1286,11 @@ class CopyTradingMixin:
     @staticmethod
     def _copytrading_public_weekly_pnl_normalize_function(input_data, extra_data):
         """Normalize copy trading public weekly PnL data"""
-        status = True if input_data.get("code") == "0" else False
+        status = input_data.get("code") == "0"
         if "data" not in input_data:
             return [], status
         data = input_data["data"]
-        if len(data) > 0:
-            target_data = data
-        else:
-            target_data = []
+        target_data = data if len(data) > 0 else []
         return target_data, status
 
     def copytrading_public_weekly_pnl(
@@ -1416,14 +1356,11 @@ class CopyTradingMixin:
     @staticmethod
     def _copytrading_public_pnl_normalize_function(input_data, extra_data):
         """Normalize copy trading public PnL data"""
-        status = True if input_data.get("code") == "0" else False
+        status = input_data.get("code") == "0"
         if "data" not in input_data:
             return [], status
         data = input_data["data"]
-        if len(data) > 0:
-            target_data = data
-        else:
-            target_data = []
+        target_data = data if len(data) > 0 else []
         return target_data, status
 
     def copytrading_public_pnl(
@@ -1478,14 +1415,11 @@ class CopyTradingMixin:
     @staticmethod
     def _copytrading_public_stats_normalize_function(input_data, extra_data):
         """Normalize copy trading public stats data"""
-        status = True if input_data.get("code") == "0" else False
+        status = input_data.get("code") == "0"
         if "data" not in input_data:
             return [], status
         data = input_data["data"]
-        if len(data) > 0:
-            target_data = data
-        else:
-            target_data = []
+        target_data = data if len(data) > 0 else []
         return target_data, status
 
     def copytrading_public_stats(self, copy_inst_id, extra_data=None, **kwargs):
@@ -1536,14 +1470,11 @@ class CopyTradingMixin:
     @staticmethod
     def _copytrading_public_preference_currency_normalize_function(input_data, extra_data):
         """Normalize copy trading public preference currency data"""
-        status = True if input_data.get("code") == "0" else False
+        status = input_data.get("code") == "0"
         if "data" not in input_data:
             return [], status
         data = input_data["data"]
-        if len(data) > 0:
-            target_data = data
-        else:
-            target_data = []
+        target_data = data if len(data) > 0 else []
         return target_data, status
 
     def copytrading_public_preference_currency(self, copy_inst_id, extra_data=None, **kwargs):
@@ -1605,14 +1536,11 @@ class CopyTradingMixin:
     @staticmethod
     def _copytrading_public_current_subpositions_normalize_function(input_data, extra_data):
         """Normalize copy trading public current subpositions data"""
-        status = True if input_data.get("code") == "0" else False
+        status = input_data.get("code") == "0"
         if "data" not in input_data:
             return [], status
         data = input_data["data"]
-        if len(data) > 0:
-            target_data = data
-        else:
-            target_data = []
+        target_data = data if len(data) > 0 else []
         return target_data, status
 
     def copytrading_public_current_subpositions(
@@ -1678,14 +1606,11 @@ class CopyTradingMixin:
     @staticmethod
     def _copytrading_public_subpositions_history_normalize_function(input_data, extra_data):
         """Normalize copy trading public subpositions history data"""
-        status = True if input_data.get("code") == "0" else False
+        status = input_data.get("code") == "0"
         if "data" not in input_data:
             return [], status
         data = input_data["data"]
-        if len(data) > 0:
-            target_data = data
-        else:
-            target_data = []
+        target_data = data if len(data) > 0 else []
         return target_data, status
 
     def copytrading_public_subpositions_history(
@@ -1751,14 +1676,11 @@ class CopyTradingMixin:
     @staticmethod
     def _copytrading_public_copy_traders_normalize_function(input_data, extra_data):
         """Normalize copy trading public copy traders data"""
-        status = True if input_data.get("code") == "0" else False
+        status = input_data.get("code") == "0"
         if "data" not in input_data:
             return [], status
         data = input_data["data"]
-        if len(data) > 0:
-            target_data = data
-        else:
-            target_data = []
+        target_data = data if len(data) > 0 else []
         return target_data, status
 
     def copytrading_public_copy_traders(

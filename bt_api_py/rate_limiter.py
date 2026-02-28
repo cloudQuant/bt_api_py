@@ -12,7 +12,7 @@ import time
 from collections import deque
 from dataclasses import dataclass
 from enum import Enum, unique
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 
 @unique
@@ -38,8 +38,8 @@ class RateLimitRule:
     interval: int  # 时间窗口（秒）
     limit: int  # 限制数量
     scope: RateLimitScope = RateLimitScope.GLOBAL
-    endpoint: Optional[str] = None  # 端点匹配（支持 glob）
-    weight_map: Optional[Dict[str, int]] = None  # {method_or_key: weight}
+    endpoint: str | None = None  # 端点匹配（支持 glob）
+    weight_map: dict[str, int] | None = None  # {method_or_key: weight}
     weight: int = 1  # 默认权重
 
     def match(self, method: str, path: str) -> bool:
@@ -160,9 +160,9 @@ class RateLimiter:
         await limiter.async_acquire("POST", "/api/v3/order")
     """
 
-    def __init__(self, rules: Optional[List[RateLimitRule]] = None):
+    def __init__(self, rules: list[RateLimitRule] | None = None):
         self.rules = rules or []
-        self._limiters: Dict[str, Any] = {}
+        self._limiters: dict[str, Any] = {}
 
         for rule in self.rules:
             if rule.type == RateLimitType.SLIDING_WINDOW:
@@ -193,7 +193,7 @@ class RateLimiter:
         method: str = "",
         path: str = "",
         weight: int = 1,
-        timeout: Optional[float] = None,
+        timeout: float | None = None,
     ) -> bool:
         """同步阻塞获取许可"""
         start = time.time()
@@ -218,7 +218,7 @@ class RateLimiter:
                 return True
             await asyncio.sleep(0.05)
 
-    def get_status(self) -> Dict[str, Dict]:
+    def get_status(self) -> dict[str, dict]:
         """获取各限流器状态（用于监控）"""
         status = {}
         for rule in self.rules:

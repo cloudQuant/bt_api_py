@@ -10,7 +10,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from decimal import Decimal
 from enum import Enum, unique
-from typing import Any, Dict, Optional
+from typing import Any
 
 
 @unique
@@ -39,30 +39,30 @@ class Instrument:
     asset_type: AssetType  # 资产类型
 
     # === 标的属性 ===
-    underlying: Optional[str] = None  # 标的：BTC、沪深300、Apple
-    base_currency: Optional[str] = None  # 基础货币（现货/合约）
-    quote_currency: Optional[str] = None  # 计价货币
+    underlying: str | None = None  # 标的：BTC、沪深300、Apple
+    base_currency: str | None = None  # 基础货币（现货/合约）
+    quote_currency: str | None = None  # 计价货币
 
     # === 合约属性（FUTURE/OPTION） ===
-    expiry: Optional[datetime] = None
-    strike: Optional[Decimal] = None
-    contract_size: Optional[Decimal] = None
-    option_type: Optional[str] = None  # CALL / PUT
+    expiry: datetime | None = None
+    strike: Decimal | None = None
+    contract_size: Decimal | None = None
+    option_type: str | None = None  # CALL / PUT
 
     # === 交易属性 ===
-    tick_size: Optional[Decimal] = None
-    min_qty: Optional[Decimal] = None
-    max_qty: Optional[Decimal] = None
-    qty_step: Optional[Decimal] = None
-    min_notional: Optional[Decimal] = None
+    tick_size: Decimal | None = None
+    min_qty: Decimal | None = None
+    max_qty: Decimal | None = None
+    qty_step: Decimal | None = None
+    min_notional: Decimal | None = None
 
     # === 状态信息 ===
     status: str = "active"  # active / suspend / expire / delist
-    list_time: Optional[datetime] = None
-    delist_time: Optional[datetime] = None
+    list_time: datetime | None = None
+    delist_time: datetime | None = None
 
     # === 扩展信息 ===
-    extra: Dict[str, Any] = field(default_factory=dict)
+    extra: dict[str, Any] = field(default_factory=dict)
 
     @property
     def is_expired(self) -> bool:
@@ -74,9 +74,7 @@ class Instrument:
     def is_listed(self) -> bool:
         if self.status != "active":
             return False
-        if self.delist_time and datetime.now() > self.delist_time:
-            return False
-        return True
+        return not (self.delist_time and datetime.now() > self.delist_time)
 
     def with_params(self, **kwargs) -> "Instrument":
         """创建带有新参数的副本"""

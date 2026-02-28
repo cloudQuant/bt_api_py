@@ -36,10 +36,10 @@ class OkxWssData(MyWebsocketApp):
     def __init__(self, data_queue, **kwargs):
         super().__init__(data_queue, **kwargs)
         self.topics = kwargs.get("topics", {})
-        self.public_key = kwargs.get("public_key", None)
-        self.private_key = kwargs.get("private_key", None)
-        self.passphrase = kwargs.get("passphrase", None)
-        self.wss_url = kwargs.get("wss_url", None)
+        self.public_key = kwargs.get("public_key")
+        self.private_key = kwargs.get("private_key")
+        self.passphrase = kwargs.get("passphrase")
+        self.wss_url = kwargs.get("wss_url")
         self.asset_type = kwargs.get("asset_type", "SWAP")
 
     def sign(self, content):
@@ -389,9 +389,7 @@ class OkxWssData(MyWebsocketApp):
             # Orderbook channels - check specific ones first
             if "books-l2-tbt" in channel:
                 self.push_l2_order_book(content)
-            elif "books5" in channel:
-                self.push_order_book(content)
-            elif "books" in channel:
+            elif "books5" in channel or "books" in channel:
                 self.push_order_book(content)
 
             if "candle" in channel:
@@ -419,9 +417,7 @@ class OkxWssData(MyWebsocketApp):
                 self.push_liquidation_warning(content)
             if "account-greeks" in channel:
                 self.push_account_greeks(content)
-            if "trades-all" in channel:
-                self.push_market_trades(content)
-            elif "trades" in channel:
+            if "trades-all" in channel or "trades" in channel:
                 self.push_market_trades(content)
             if "open-interest" in channel:
                 self.push_open_interest(content)

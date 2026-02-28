@@ -40,7 +40,7 @@ class MarketDataMixin:
 
     @staticmethod
     def _get_tick_normalize_function(input_data, extra_data):
-        status = True if input_data["code"] == "0" else False
+        status = input_data["code"] == "0"
         if "data" not in input_data or not input_data["data"]:
             return [], status
         data = input_data["data"][0]
@@ -86,7 +86,7 @@ class MarketDataMixin:
 
     @staticmethod
     def _get_depth_normalize_function(input_data, extra_data):
-        status = True if input_data["code"] == "0" else False
+        status = input_data["code"] == "0"
         if "data" not in input_data or not input_data["data"]:
             return [], status
         data = input_data["data"][0]
@@ -143,7 +143,7 @@ class MarketDataMixin:
 
     @staticmethod
     def _get_kline_normalize_function(input_data, extra_data):
-        status = True if input_data["code"] == "0" else False
+        status = input_data["code"] == "0"
         if "data" not in input_data:
             return [], status
         data = sorted(input_data["data"], key=lambda x: x[0])
@@ -203,7 +203,7 @@ class MarketDataMixin:
 
     @staticmethod
     def _get_funding_rate_normalize_function(input_data, extra_data):
-        status = True if input_data["code"] == "0" else False
+        status = input_data["code"] == "0"
         if "data" not in input_data or not input_data["data"]:
             return [], status
         data = input_data["data"][0]
@@ -260,7 +260,7 @@ class MarketDataMixin:
 
     @staticmethod
     def _get_funding_rate_history_normalize_function(input_data, extra_data):
-        status = True if input_data["code"] == "0" else False
+        status = input_data["code"] == "0"
         if "data" not in input_data or not input_data["data"]:
             return [], status
         data = input_data["data"]
@@ -319,7 +319,7 @@ class MarketDataMixin:
 
     @staticmethod
     def _get_instruments_normalize_function(input_data, extra_data):
-        status = True if input_data["code"] == "0" else False
+        status = input_data["code"] == "0"
         if "data" not in input_data:
             return [], status
         data = input_data["data"]
@@ -369,7 +369,7 @@ class MarketDataMixin:
 
     @staticmethod
     def _get_mark_price_normalize_function(input_data, extra_data):
-        status = True if input_data["code"] == "0" else False
+        status = input_data["code"] == "0"
         if "data" not in input_data or not input_data["data"]:
             return [], status
         data = input_data["data"][0]
@@ -494,14 +494,11 @@ class MarketDataMixin:
 
     @staticmethod
     def _get_premium_history_normalize_function(input_data, extra_data):
-        status = True if input_data["code"] == "0" else False
+        status = input_data["code"] == "0"
         if "data" not in input_data:
             return [], status
         data = input_data["data"]
-        if len(data) > 0:
-            target_data = data
-        else:
-            target_data = []
+        target_data = data if len(data) > 0 else []
         return target_data, status
 
     def get_premium_history(
@@ -579,14 +576,11 @@ class MarketDataMixin:
 
     @staticmethod
     def _get_economic_calendar_normalize_function(input_data, extra_data):
-        status = True if input_data["code"] == "0" else False
+        status = input_data["code"] == "0"
         if "data" not in input_data:
             return [], status
         data = input_data["data"]
-        if len(data) > 0:
-            target_data = data
-        else:
-            target_data = []
+        target_data = data if len(data) > 0 else []
         return target_data, status
 
     def get_economic_calendar(self, after=None, before=None, limit=None, extra_data=None, **kwargs):
@@ -637,14 +631,11 @@ class MarketDataMixin:
 
     @staticmethod
     def _get_exchange_rate_normalize_function(input_data, extra_data):
-        status = True if input_data["code"] == "0" else False
+        status = input_data["code"] == "0"
         if "data" not in input_data:
             return [], status
         data = input_data["data"]
-        if len(data) > 0:
-            target_data = data
-        else:
-            target_data = []
+        target_data = data if len(data) > 0 else []
         return target_data, status
 
     def get_exchange_rate(self, extra_data=None, **kwargs):
@@ -688,7 +679,7 @@ class MarketDataMixin:
 
     @staticmethod
     def _get_index_components_normalize_function(input_data, extra_data):
-        status = True if input_data["code"] == "0" else False
+        status = input_data["code"] == "0"
         if "data" not in input_data:
             return {}, status
         data = input_data["data"]
@@ -748,14 +739,11 @@ class MarketDataMixin:
 
     @staticmethod
     def _get_estimated_price_normalize_function(input_data, extra_data):
-        status = True if input_data["code"] == "0" else False
+        status = input_data["code"] == "0"
         if "data" not in input_data:
             return [], status
         data = input_data["data"]
-        if len(data) > 0:
-            target_data = data
-        else:
-            target_data = []
+        target_data = data if len(data) > 0 else []
         return target_data, status
 
     def get_estimated_price(self, inst_type, uly=None, inst_id=None, extra_data=None, **kwargs):
@@ -810,14 +798,11 @@ class MarketDataMixin:
 
     @staticmethod
     def _get_discount_rate_normalize_function(input_data, extra_data):
-        status = True if input_data["code"] == "0" else False
+        status = input_data["code"] == "0"
         if "data" not in input_data:
             return [], status
         data = input_data["data"]
-        if len(data) > 0:
-            target_data = data
-        else:
-            target_data = []
+        target_data = data if len(data) > 0 else []
         return target_data, status
 
     def get_discount_rate(self, ccy=None, discount_level=None, extra_data=None, **kwargs):
@@ -867,14 +852,11 @@ class MarketDataMixin:
 
     @staticmethod
     def _get_interest_rate_loan_quota_normalize_function(input_data, extra_data):
-        status = True if input_data["code"] == "0" else False
+        status = input_data["code"] == "0"
         if "data" not in input_data:
             return [], status
         data = input_data["data"]
-        if len(data) > 0:
-            target_data = data
-        else:
-            target_data = []
+        target_data = data if len(data) > 0 else []
         return target_data, status
 
     def get_interest_rate_loan_quota(self, ccy=None, extra_data=None, **kwargs):
@@ -981,14 +963,11 @@ class MarketDataMixin:
 
     @staticmethod
     def _get_underlying_normalize_function(input_data, extra_data):
-        status = True if input_data["code"] == "0" else False
+        status = input_data["code"] == "0"
         if "data" not in input_data:
             return [], status
         data = input_data["data"]
-        if len(data) > 0:
-            target_data = data
-        else:
-            target_data = []
+        target_data = data if len(data) > 0 else []
         return target_data, status
 
     def get_underlying(self, inst_type, uly=None, extra_data=None, **kwargs):
@@ -1057,14 +1036,11 @@ class MarketDataMixin:
 
     @staticmethod
     def _get_insurance_fund_normalize_function(input_data, extra_data):
-        status = True if input_data["code"] == "0" else False
+        status = input_data["code"] == "0"
         if "data" not in input_data:
             return [], status
         data = input_data["data"]
-        if len(data) > 0:
-            target_data = data
-        else:
-            target_data = []
+        target_data = data if len(data) > 0 else []
         return target_data, status
 
     def get_insurance_fund(
@@ -1144,14 +1120,11 @@ class MarketDataMixin:
 
     @staticmethod
     def _convert_contract_coin_normalize_function(input_data, extra_data):
-        status = True if input_data["code"] == "0" else False
+        status = input_data["code"] == "0"
         if "data" not in input_data:
             return [], status
         data = input_data["data"]
-        if len(data) > 0:
-            target_data = data
-        else:
-            target_data = []
+        target_data = data if len(data) > 0 else []
         return target_data, status
 
     def convert_contract_coin(
@@ -1211,14 +1184,11 @@ class MarketDataMixin:
 
     @staticmethod
     def _get_instrument_tick_bands_normalize_function(input_data, extra_data):
-        status = True if input_data["code"] == "0" else False
+        status = input_data["code"] == "0"
         if "data" not in input_data:
             return [], status
         data = input_data["data"]
-        if len(data) > 0:
-            target_data = data
-        else:
-            target_data = []
+        target_data = data if len(data) > 0 else []
         return target_data, status
 
     def get_instrument_tick_bands(

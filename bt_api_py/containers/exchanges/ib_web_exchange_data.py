@@ -7,12 +7,14 @@ IB Web API 分为两大组件:
   - Account Management API (/gw/api/v1 端点): 账户管理、资金、报告
 """
 
-import logging
 import os
 
 from bt_api_py.containers.exchanges.exchange_data import ExchangeData
+from bt_api_py.functions.log_message import SpdLogManager
 
-logger = logging.getLogger(__name__)
+logger = SpdLogManager(
+    file_name="ib_web_exchange_data.log", logger_name="ib_web_data", print_info=False
+).create_logger()
 
 # ── 配置加载缓存 ──────────────────────────────────────────────
 _ib_config = None  # pydantic ExchangeConfig 对象

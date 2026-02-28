@@ -19,7 +19,7 @@ total_base_qty = 0.008
 count = 0
 hedge_result = []
 self_result = []
-for index, row in okex_df.iterrows():
+for _index, row in okex_df.iterrows():
     count += 1
     hedge_ts = row["ts"]
     hedge_qty = row["qty"]

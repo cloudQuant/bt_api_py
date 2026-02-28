@@ -72,10 +72,7 @@ class CThostFtdcMdSpi:
         print_exception(type, value, traceback)
 
     def __init__(self):
-        if self.__class__ == CThostFtdcMdSpi:
-            _self = None
-        else:
-            _self = self
+        _self = None if self.__class__ == CThostFtdcMdSpi else self
         _ctp.CThostFtdcMdSpi_swiginit(
             self,
             _ctp.new_CThostFtdcMdSpi(

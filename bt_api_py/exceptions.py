@@ -103,3 +103,104 @@ class DataParseError(BtApiError):
         if detail:
             msg += f": {detail}"
         super().__init__(msg)
+
+
+class RateLimitError(BtApiError):
+    """API 速率限制错误"""
+
+    def __init__(self, exchange_name, retry_after=None, detail=""):
+        msg = f"{exchange_name} rate limit exceeded"
+        if retry_after:
+            msg += f" (retry after {retry_after}s)"
+        if detail:
+            msg += f": {detail}"
+        super().__init__(msg)
+        self.exchange_name = exchange_name
+        self.retry_after = retry_after
+
+
+class NetworkError(BtApiError):
+    """网络错误（连接失败、DNS 解析失败等）"""
+
+    def __init__(self, exchange_name, detail=""):
+        msg = f"{exchange_name} network error"
+        if detail:
+            msg += f": {detail}"
+        super().__init__(msg)
+        self.exchange_name = exchange_name
+
+
+class InvalidSymbolError(BtApiError):
+    """无效的交易对符号"""
+
+    def __init__(self, exchange_name, symbol, detail=""):
+        msg = f"{exchange_name} invalid symbol: {symbol}"
+        if detail:
+            msg += f" — {detail}"
+        super().__init__(msg)
+        self.exchange_name = exchange_name
+        self.symbol = symbol
+
+
+class InsufficientBalanceError(OrderError):
+    """余额不足"""
+
+    def __init__(self, exchange_name, symbol="", required=None, available=None):
+        detail = "Insufficient balance"
+        if required is not None and available is not None:
+            detail += f" (required: {required}, available: {available})"
+        super().__init__(exchange_name, symbol, detail)
+        self.required = required
+        self.available = available
+
+
+class InvalidOrderError(OrderError):
+    """无效的订单参数（价格、数量等）"""
+
+    pass
+
+
+class OrderNotFoundError(OrderError):
+    """订单不存在"""
+
+    def __init__(self, exchange_name, order_id, symbol=""):
+        detail = f"Order not found: {order_id}"
+        super().__init__(exchange_name, symbol, detail)
+        self.order_id = order_id
+
+
+class ConfigurationError(BtApiError):
+    """配置错误（缺少必需参数、配置格式错误等）"""
+
+    def __init__(self, detail=""):
+        msg = "Configuration error"
+        if detail:
+            msg += f": {detail}"
+        super().__init__(msg)
+
+
+class WebSocketError(BtApiError):
+    """WebSocket 连接或订阅错误"""
+
+    def __init__(self, exchange_name, detail=""):
+        msg = f"{exchange_name} WebSocket error"
+        if detail:
+            msg += f": {detail}"
+        super().__init__(msg)
+        self.exchange_name = exchange_name
+
+
+class RequestFailedError(BtApiError):
+    """通用请求失败错误（用于 HTTP 客户端）"""
+
+    def __init__(self, venue="", message="", status_code=None):
+        msg = f"Request failed"
+        if venue:
+            msg = f"{venue} request failed"
+        if message:
+            msg += f": {message}"
+        if status_code:
+            msg += f" (HTTP {status_code})"
+        super().__init__(msg)
+        self.venue = venue
+        self.status_code = status_code

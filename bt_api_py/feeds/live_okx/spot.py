@@ -24,10 +24,7 @@ class OkxRequestDataSpot(OkxRequestData):
         ).create_logger()
 
     def _get_index_price(self, symbol, extra_data=None, **kwargs):
-        if symbol is not None:
-            request_symbol = self._params.get_symbol(symbol)
-        else:
-            request_symbol = ""
+        request_symbol = self._params.get_symbol(symbol) if symbol is not None else ""
         request_type = "get_index_price"
         params = {
             "instId": request_symbol,
@@ -51,7 +48,7 @@ class OkxRequestDataSpot(OkxRequestData):
     def _get_index_price_normalize_function(input_data, extra_data):
         if extra_data is None:
             pass
-        status = True if input_data["code"] == "0" else False
+        status = input_data["code"] == "0"
         data = input_data["data"][0]
         timestamp = float(data["ts"])
         data = [timestamp, float(data["idxPx"])]

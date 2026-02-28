@@ -51,9 +51,7 @@ def download_okex_bars(symbol, period, begin_time, end_time, dst="okex_btc-usdt.
                 end_time = begin_time + datetime.timedelta(hours=50)
             elif period == "1H":
                 end_time = begin_time + datetime.timedelta(hours=100)
-            elif period == "1D":
-                end_time = begin_time + datetime.timedelta(hours=24 * 100)
-            elif period == "1Dutc":
+            elif period == "1D" or period == "1Dutc":
                 end_time = begin_time + datetime.timedelta(hours=24 * 100)
             begin_stamp = begin_time.timestamp() * 1000
             end_stamp = end_time.timestamp() * 1000

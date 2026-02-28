@@ -42,7 +42,7 @@ class OkxBarData(BarData):
         self.volume = float(self.bar_data[5])
         self.base_asset_volume = float(self.bar_data[6])
         self.quote_asset_volume = float(self.bar_data[7])
-        self.bar_status = True if float(self.bar_data[-1]) == 1 else False
+        self.bar_status = float(self.bar_data[-1]) == 1
         self.has_been_init_data = True
         return self
 

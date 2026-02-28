@@ -6,7 +6,6 @@ Capability 机制 — 声明场所支持的功能
 """
 
 from enum import Enum, unique
-from typing import Set
 
 
 @unique
@@ -87,12 +86,12 @@ class CapabilityMixin:
     """
 
     @classmethod
-    def _capabilities(cls) -> Set[Capability]:
+    def _capabilities(cls) -> set[Capability]:
         """子类覆盖此方法声明支持的能力"""
         return set()
 
     @property
-    def capabilities(self) -> Set[Capability]:
+    def capabilities(self) -> set[Capability]:
         """返回该 Feed 支持的能力集合"""
         return self._capabilities()
 

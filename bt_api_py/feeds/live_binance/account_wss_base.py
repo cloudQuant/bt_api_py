@@ -13,15 +13,15 @@ class BinanceAccountWssData(MyWebsocketApp, BinanceRequestData):
     def __init__(self, data_queue, **kwargs):
         super().__init__(data_queue, **kwargs)
         self.topics = kwargs.get("topics", {})
-        self.public_key = kwargs.get("public_key", None)
-        self.private_key = kwargs.get("private_key", None)
-        self.wss_url = kwargs.get("wss_url", None)  # 必须传入特定的链接
+        self.public_key = kwargs.get("public_key")
+        self.private_key = kwargs.get("private_key")
+        self.wss_url = kwargs.get("wss_url")  # 必须传入特定的链接
         self.asset_type = kwargs.get("asset_type", "SWAP")
         self.exchange_name = kwargs.get("exchange_name", "BINANCE")
-        self.symbol_name = kwargs.get("symbol_name", None)
-        self.listen_key = kwargs.get("listen_key", None)
-        self.proxies = kwargs.get("proxies", None)
-        self.async_proxy = kwargs.get("async_proxy", None)
+        self.symbol_name = kwargs.get("symbol_name")
+        self.listen_key = kwargs.get("listen_key")
+        self.proxies = kwargs.get("proxies")
+        self.async_proxy = kwargs.get("async_proxy")
         self.logger = SpdLogManager(
             "./logs/binance_account_wss.log", "account_wss", 0, 0, False
         ).create_logger()
@@ -106,11 +106,11 @@ class BinanceAccountWssData(MyWebsocketApp, BinanceRequestData):
     def handle_data(self, content):
         event = content.get("e", None)
         if event is not None:
-            if "ACCOUNT_UPDATE" == event:
+            if event == "ACCOUNT_UPDATE":
                 self.push_account(content)
-            if "ORDER_TRADE_UPDATE" == event:
+            if event == "ORDER_TRADE_UPDATE":
                 self.push_order(content)
-            if "ORDER_TRADE_UPDATE" == event and content["o"].get("t") != 0:
+            if event == "ORDER_TRADE_UPDATE" and content["o"].get("t") != 0:
                 self.push_trade(content)
             # # 现货账户事件类型
             # if "executionReport" == event:

@@ -7,7 +7,7 @@
 
 from dataclasses import dataclass, field
 from enum import Enum, unique
-from typing import Any, ClassVar, Dict, Optional
+from typing import Any, ClassVar
 
 from bt_api_py.exceptions import BtApiError
 
@@ -89,8 +89,8 @@ class UnifiedError(BtApiError):
     category: ErrorCategory
     venue: str
     message: str
-    original_error: Optional[str] = None
-    context: Dict[str, Any] = field(default_factory=dict)
+    original_error: str | None = None
+    context: dict[str, Any] = field(default_factory=dict)
 
     def __str__(self):
         return f"[{self.venue}] {self.code.name}: {self.message}"
@@ -98,7 +98,7 @@ class UnifiedError(BtApiError):
     def __repr__(self):
         return f"UnifiedError(code={self.code.name}, venue={self.venue}, message={self.message!r})"
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "code": self.code.value,
             "code_name": self.code.name,
@@ -172,10 +172,10 @@ class ErrorTranslator:
     """错误翻译器基类"""
 
     # 子类覆盖此映射: {原始错误码: (UnifiedErrorCode, 默认消息)}
-    ERROR_MAP: ClassVar[Dict[Any, tuple]] = {}
+    ERROR_MAP: ClassVar[dict[Any, tuple]] = {}
 
     # 通用 HTTP 状态码映射
-    HTTP_STATUS_MAP: ClassVar[Dict[int, tuple]] = {
+    HTTP_STATUS_MAP: ClassVar[dict[int, tuple]] = {
         400: (UnifiedErrorCode.INVALID_PARAMETER, "Invalid request parameters"),
         401: (UnifiedErrorCode.INVALID_API_KEY, "Invalid API key"),
         403: (UnifiedErrorCode.PERMISSION_DENIED, "Permission denied"),
@@ -318,7 +318,7 @@ class OKXErrorTranslator(ErrorTranslator):
     }
 
     @classmethod
-    def translate(cls, raw_error: dict, venue: str) -> Optional[UnifiedError]:
+    def translate(cls, raw_error: dict, venue: str) -> UnifiedError | None:
         """OKX 错误码是字符串，需要特殊处理"""
         code = raw_error.get("code", raw_error.get("sCode", ""))
         msg = raw_error.get("msg", raw_error.get("sMsg", ""))
@@ -394,7 +394,7 @@ class IBWebErrorTranslator(ErrorTranslator):
     }
 
     @classmethod
-    def translate(cls, raw_error: dict, venue: str) -> Optional[UnifiedError]:
+    def translate(cls, raw_error: dict, venue: str) -> UnifiedError | None:
         """IB Web API 错误码是字符串，嵌套在 error 对象中"""
         error_obj = raw_error.get("error", raw_error)
         code = error_obj.get("code", "")

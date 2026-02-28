@@ -42,7 +42,7 @@ class StatusMixin:
         """Normalize system status response
         Returns: (status_list, status_bool) where status_list contains system status data
         """
-        status = True if input_data.get("code") == "0" else False
+        status = input_data.get("code") == "0"
         if "data" not in input_data or not input_data["data"]:
             return [], status
         return input_data["data"], status
@@ -108,7 +108,7 @@ class StatusMixin:
         """Normalize announcements response
         Returns: (announcement_list, status_bool) where announcement_list contains announcement data
         """
-        status = True if input_data.get("code") == "0" else False
+        status = input_data.get("code") == "0"
         if "data" not in input_data or not input_data["data"]:
             return [], status
         # Return the announcement details directly
@@ -178,7 +178,7 @@ class StatusMixin:
         """Normalize announcement types response
         Returns: (type_list, status_bool) where type_list contains announcement type data
         """
-        status = True if input_data.get("code") == "0" else False
+        status = input_data.get("code") == "0"
         if "data" not in input_data or not input_data["data"]:
             return [], status
         # Return the announcement types directly

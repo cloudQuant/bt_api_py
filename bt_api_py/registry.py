@@ -3,21 +3,22 @@
 新交易所只需注册 feed_class / stream_classes / exchange_data_class，无需修改核心代码
 """
 
-from typing import Any, Callable, Dict, List, Optional, Type
+from collections.abc import Callable
+from typing import Any
 
 
 class ExchangeRegistry:
     """全局交易所注册表，管理 feed 类、流式数据类、交易所配置类的注册与创建"""
 
-    _feed_classes: Dict[str, Type] = {}  # {"BINANCE___SWAP": BinanceRequestDataSwap, ...}
-    _stream_classes: Dict[str, Dict[str, Any]] = (
+    _feed_classes: dict[str, type] = {}  # {"BINANCE___SWAP": BinanceRequestDataSwap, ...}
+    _stream_classes: dict[str, dict[str, Any]] = (
         {}
     )  # {"BINANCE___SWAP": {"market": cls, "account": cls}}
-    _exchange_data_classes: Dict[str, Type] = {}  # {"BINANCE___SWAP": BinanceExchangeDataSwap, ...}
-    _balance_handlers: Dict[str, Callable] = {}  # {"BINANCE___SWAP": handler_func, ...}
+    _exchange_data_classes: dict[str, type] = {}  # {"BINANCE___SWAP": BinanceExchangeDataSwap, ...}
+    _balance_handlers: dict[str, Callable] = {}  # {"BINANCE___SWAP": handler_func, ...}
 
     @classmethod
-    def register_feed(cls, exchange_name: str, feed_class: Type) -> None:
+    def register_feed(cls, exchange_name: str, feed_class: type) -> None:
         """注册 REST feed 类
         :param exchange_name: 交易所标识, 如 "BINANCE___SWAP", "CTP___FUTURE"
         :param feed_class: Feed 子类
@@ -34,7 +35,7 @@ class ExchangeRegistry:
         cls._stream_classes.setdefault(exchange_name, {})[stream_type] = stream_class
 
     @classmethod
-    def register_exchange_data(cls, exchange_name: str, exchange_data_class: Type) -> None:
+    def register_exchange_data(cls, exchange_name: str, exchange_data_class: type) -> None:
         """注册交易所配置类
         :param exchange_name: 交易所标识
         :param exchange_data_class: ExchangeData 子类
@@ -80,7 +81,7 @@ class ExchangeRegistry:
         return ed_cls()
 
     @classmethod
-    def get_stream_classes(cls, exchange_name: str) -> Dict[str, Any]:
+    def get_stream_classes(cls, exchange_name: str) -> dict[str, Any]:
         """获取某个交易所的所有流式数据类
         :param exchange_name: 交易所标识
         :return: dict of {stream_type: stream_class}
@@ -88,7 +89,7 @@ class ExchangeRegistry:
         return cls._stream_classes.get(exchange_name, {})
 
     @classmethod
-    def get_stream_class(cls, exchange_name: str, stream_type: str) -> Optional[Any]:
+    def get_stream_class(cls, exchange_name: str, stream_type: str) -> Any | None:
         """获取某个交易所的某种流式数据类
         :param exchange_name: 交易所标识
         :param stream_type: 流类型
@@ -97,7 +98,7 @@ class ExchangeRegistry:
         return cls._stream_classes.get(exchange_name, {}).get(stream_type)
 
     @classmethod
-    def get_balance_handler(cls, exchange_name: str) -> Optional[Callable]:
+    def get_balance_handler(cls, exchange_name: str) -> Callable | None:
         """获取余额解析处理函数
         :param exchange_name: 交易所标识
         :return: handler_func or None
@@ -110,7 +111,7 @@ class ExchangeRegistry:
         return exchange_name in cls._feed_classes
 
     @classmethod
-    def list_exchanges(cls) -> List[str]:
+    def list_exchanges(cls) -> list[str]:
         """列出所有已注册的交易所"""
         return list(cls._feed_classes.keys())
 

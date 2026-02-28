@@ -390,13 +390,12 @@ class TraderClient:
         api = self._api
         self._api = None
         self._spi = None
-        if api is not None:
-            if self._thread is None or not self._thread.is_alive():
-                try:
-                    api.RegisterSpi(None)
-                    api.Release()
-                except Exception:
-                    pass
+        if api is not None and (self._thread is None or not self._thread.is_alive()):
+            try:
+                api.RegisterSpi(None)
+                api.Release()
+            except Exception:
+                pass
 
     @property
     def is_ready(self):

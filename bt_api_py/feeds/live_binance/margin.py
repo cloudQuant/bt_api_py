@@ -437,16 +437,16 @@ class BinanceAccountWssDataMargin(BinanceAccountWssData):
         event = content.get("e", None)
         if event is not None:
             # 订单执行报告 (非成交事件)
-            if "executionReport" == event and content.get("x", None) != "TRADE":
+            if event == "executionReport" and content.get("x", None) != "TRADE":
                 self.push_order(content)
             # 账户余额变动
-            if "outboundAccountPosition" == event:
+            if event == "outboundAccountPosition":
                 self.push_account(content)
             # 成交事件
-            if "executionReport" == event and content.get("x", None) == "TRADE":
+            if event == "executionReport" and content.get("x", None) == "TRADE":
                 self.push_trade(content)
             # 余额更新 (分红等)
-            if "balanceUpdate" == event:
+            if event == "balanceUpdate":
                 self.push_balance(content)
 
     def push_account(self, content):

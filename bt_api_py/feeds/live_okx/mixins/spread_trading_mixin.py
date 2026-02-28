@@ -76,7 +76,7 @@ class SpreadTradingMixin:
     @staticmethod
     def _sprd_order_normalize_function(input_data, extra_data):
         """Normalize spread order response"""
-        status = True if input_data["code"] == "0" else False
+        status = input_data["code"] == "0"
         if "data" not in input_data or not input_data["data"]:
             return [], status
         data = input_data["data"][0]
@@ -177,7 +177,7 @@ class SpreadTradingMixin:
     @staticmethod
     def _sprd_cancel_order_normalize_function(input_data, extra_data):
         """Normalize spread cancel order response"""
-        status = True if input_data["code"] == "0" else False
+        status = input_data["code"] == "0"
         if "data" not in input_data or not input_data["data"]:
             return [], status
         data = input_data["data"][0]
@@ -247,7 +247,7 @@ class SpreadTradingMixin:
     @staticmethod
     def _sprd_get_order_normalize_function(input_data, extra_data):
         """Normalize spread get order response"""
-        status = True if input_data["code"] == "0" else False
+        status = input_data["code"] == "0"
         if "data" not in input_data or not input_data["data"]:
             return [], status
         data = input_data["data"]
@@ -346,7 +346,7 @@ class SpreadTradingMixin:
     @staticmethod
     def _sprd_get_orders_pending_normalize_function(input_data, extra_data):
         """Normalize spread pending orders response"""
-        status = True if input_data["code"] == "0" else False
+        status = input_data["code"] == "0"
         if "data" not in input_data or not input_data["data"]:
             return [], status
         data = input_data["data"]
@@ -464,7 +464,7 @@ class SpreadTradingMixin:
     @staticmethod
     def _sprd_get_orders_history_normalize_function(input_data, extra_data):
         """Normalize spread order history response"""
-        status = True if input_data["code"] == "0" else False
+        status = input_data["code"] == "0"
         if "data" not in input_data or not input_data["data"]:
             return [], status
         data = input_data["data"]
@@ -571,7 +571,7 @@ class SpreadTradingMixin:
     @staticmethod
     def _sprd_get_trades_normalize_function(input_data, extra_data):
         """Normalize spread trades response"""
-        status = True if input_data["code"] == "0" else False
+        status = input_data["code"] == "0"
         if "data" not in input_data or not input_data["data"]:
             return [], status
         data = input_data["data"]

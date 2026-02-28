@@ -1,14 +1,16 @@
 """
-CTP 交易所配置数据
+CTP 交易所配置数据类
 包含 CTP 行情和交易的前置地址、REST path 映射、品种信息等
 """
 
-import logging
 import os
 
 from bt_api_py.containers.exchanges.exchange_data import ExchangeData
+from bt_api_py.functions.log_message import SpdLogManager
 
-logger = logging.getLogger(__name__)
+logger = SpdLogManager(
+    file_name="ctp_exchange_data.log", logger_name="ctp_data", print_info=False
+).create_logger()
 
 # ── 配置加载缓存 ──────────────────────────────────────────────
 _ctp_config = None

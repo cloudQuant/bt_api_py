@@ -75,7 +75,7 @@ class BinanceRequestDataSpot(BinanceRequestData):
 
     @staticmethod
     def _make_order_normalize_function(input_data, extra_data):
-        status = True if input_data is not None else False
+        status = input_data is not None
         symbol_name = extra_data["symbol_name"]
         asset_type = extra_data["asset_type"]
         if isinstance(input_data, list):
@@ -667,14 +667,14 @@ class BinanceAccountWssDataSpot(BinanceAccountWssData):
         event = content.get("e", None)
         if event is not None:
             # 现货账户事件类型
-            if "executionReport" == event and content.get("x", None) != "TRADE":
+            if event == "executionReport" and content.get("x", None) != "TRADE":
                 self.push_order(content)
-            if "outboundAccountPosition" == event:
+            if event == "outboundAccountPosition":
                 self.push_account(content)
-            if "executionReport" == event and content.get("x", None) == "TRADE":
+            if event == "executionReport" and content.get("x", None) == "TRADE":
                 self.push_trade(content)
             # 余额更新事件 (分红等)
-            if "balanceUpdate" == event:
+            if event == "balanceUpdate":
                 self.push_balance(content)
 
     def push_account(self, content):

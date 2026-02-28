@@ -26,7 +26,7 @@ def _ctp_future_subscribe_handler(data_queue, exchange_params, topics, bt_api):
     # 启动行情流 — 订阅 tick/ticker/depth 数据
     has_tick = any(t in topic_list for t in ("tick", "ticker", "depth"))
     if has_tick:
-        market_kwargs = {k: v for k, v in exchange_params.items()}
+        market_kwargs = dict(exchange_params.items())
         market_kwargs["stream_name"] = "ctp_market_stream"
         market_kwargs["topics"] = topics
         stream = CtpMarketStream(data_queue, **market_kwargs)
@@ -35,7 +35,7 @@ def _ctp_future_subscribe_handler(data_queue, exchange_params, topics, bt_api):
 
     # 启动交易流 — 接收订单/成交回报推送
     if not bt_api._subscription_flags.get("CTP___FUTURE_account", False):
-        trade_kwargs = {k: v for k, v in exchange_params.items()}
+        trade_kwargs = dict(exchange_params.items())
         trade_kwargs["stream_name"] = "ctp_trade_stream"
         stream = CtpTradeStream(data_queue, **trade_kwargs)
         stream.start()

@@ -62,14 +62,11 @@ class TradingAccountMixin:
 
     @staticmethod
     def _get_interest_limits_normalize_function(input_data, extra_data):
-        status = True if input_data["code"] == "0" else False
+        status = input_data["code"] == "0"
         if "data" not in input_data:
             return [], status
         data = input_data["data"]
-        if len(data) > 0:
-            target_data = data
-        else:
-            target_data = []
+        target_data = data if len(data) > 0 else []
         return target_data, status
 
     def get_interest_limits(
@@ -137,14 +134,11 @@ class TradingAccountMixin:
 
     @staticmethod
     def _set_fee_type_normalize_function(input_data, extra_data):
-        status = True if input_data["code"] == "0" else False
+        status = input_data["code"] == "0"
         if "data" not in input_data:
             return [], status
         data = input_data["data"]
-        if len(data) > 0:
-            target_data = [data[0]]
-        else:
-            target_data = []
+        target_data = [data[0]] if len(data) > 0 else []
         return target_data, status
 
     def set_fee_type(self, fee_type, extra_data=None, **kwargs):
@@ -189,14 +183,11 @@ class TradingAccountMixin:
 
     @staticmethod
     def _set_greeks_normalize_function(input_data, extra_data):
-        status = True if input_data["code"] == "0" else False
+        status = input_data["code"] == "0"
         if "data" not in input_data:
             return [], status
         data = input_data["data"]
-        if len(data) > 0:
-            target_data = [data[0]]
-        else:
-            target_data = []
+        target_data = [data[0]] if len(data) > 0 else []
         return target_data, status
 
     def set_greeks(self, greeks_type, extra_data=None, **kwargs):
@@ -244,14 +235,11 @@ class TradingAccountMixin:
 
     @staticmethod
     def _set_isolated_mode_normalize_function(input_data, extra_data):
-        status = True if input_data["code"] == "0" else False
+        status = input_data["code"] == "0"
         if "data" not in input_data:
             return [], status
         data = input_data["data"]
-        if len(data) > 0:
-            target_data = [data[0]]
-        else:
-            target_data = []
+        target_data = [data[0]] if len(data) > 0 else []
         return target_data, status
 
     def set_isolated_mode(self, symbol, iso_mode, extra_data=None, **kwargs):
@@ -312,14 +300,11 @@ class TradingAccountMixin:
 
     @staticmethod
     def _borrow_repay_normalize_function(input_data, extra_data):
-        status = True if input_data["code"] == "0" else False
+        status = input_data["code"] == "0"
         if "data" not in input_data:
             return [], status
         data = input_data["data"]
-        if len(data) > 0:
-            target_data = [data[0]]
-        else:
-            target_data = []
+        target_data = [data[0]] if len(data) > 0 else []
         return target_data, status
 
     def borrow_repay(
@@ -372,14 +357,11 @@ class TradingAccountMixin:
 
     @staticmethod
     def _set_auto_repay_normalize_function(input_data, extra_data):
-        status = True if input_data["code"] == "0" else False
+        status = input_data["code"] == "0"
         if "data" not in input_data:
             return [], status
         data = input_data["data"]
-        if len(data) > 0:
-            target_data = [data[0]]
-        else:
-            target_data = []
+        target_data = [data[0]] if len(data) > 0 else []
         return target_data, status
 
     def set_auto_repay(self, auto_repay, extra_data=None, **kwargs):
@@ -445,14 +427,11 @@ class TradingAccountMixin:
 
     @staticmethod
     def _get_borrow_repay_history_normalize_function(input_data, extra_data):
-        status = True if input_data["code"] == "0" else False
+        status = input_data["code"] == "0"
         if "data" not in input_data:
             return [], status
         data = input_data["data"]
-        if len(data) > 0:
-            target_data = data
-        else:
-            target_data = []
+        target_data = data if len(data) > 0 else []
         return target_data, status
 
     def get_borrow_repay_history(
@@ -525,14 +504,11 @@ class TradingAccountMixin:
 
     @staticmethod
     def _mmp_reset_normalize_function(input_data, extra_data):
-        status = True if input_data["code"] == "0" else False
+        status = input_data["code"] == "0"
         if "data" not in input_data:
             return [], status
         data = input_data["data"]
-        if len(data) > 0:
-            target_data = data
-        else:
-            target_data = []
+        target_data = data if len(data) > 0 else []
         return target_data, status
 
     def mmp_reset(self, inst_type, symbol=None, extra_data=None, **kwargs):
@@ -595,14 +571,11 @@ class TradingAccountMixin:
 
     @staticmethod
     def _set_mmp_config_normalize_function(input_data, extra_data):
-        status = True if input_data["code"] == "0" else False
+        status = input_data["code"] == "0"
         if "data" not in input_data:
             return [], status
         data = input_data["data"]
-        if len(data) > 0:
-            target_data = data
-        else:
-            target_data = []
+        target_data = data if len(data) > 0 else []
         return target_data, status
 
     def set_mmp_config(
@@ -668,14 +641,11 @@ class TradingAccountMixin:
 
     @staticmethod
     def _get_mmp_config_normalize_function(input_data, extra_data):
-        status = True if input_data["code"] == "0" else False
+        status = input_data["code"] == "0"
         if "data" not in input_data:
             return [], status
         data = input_data["data"]
-        if len(data) > 0:
-            target_data = data
-        else:
-            target_data = []
+        target_data = data if len(data) > 0 else []
         return target_data, status
 
     def get_mmp_config(self, inst_type, extra_data=None, **kwargs):
@@ -734,14 +704,11 @@ class TradingAccountMixin:
 
     @staticmethod
     def _apply_bills_history_archive_normalize_function(input_data, extra_data):
-        status = True if input_data["code"] == "0" else False
+        status = input_data["code"] == "0"
         if "data" not in input_data:
             return [], status
         data = input_data["data"]
-        if len(data) > 0:
-            target_data = data
-        else:
-            target_data = []
+        target_data = data if len(data) > 0 else []
         return target_data, status
 
     def apply_bills_history_archive(
@@ -806,14 +773,11 @@ class TradingAccountMixin:
 
     @staticmethod
     def _get_bills_history_archive_normalize_function(input_data, extra_data):
-        status = True if input_data["code"] == "0" else False
+        status = input_data["code"] == "0"
         if "data" not in input_data:
             return [], status
         data = input_data["data"]
-        if len(data) > 0:
-            target_data = data
-        else:
-            target_data = []
+        target_data = data if len(data) > 0 else []
         return target_data, status
 
     def get_bills_history_archive(
@@ -878,14 +842,11 @@ class TradingAccountMixin:
 
     @staticmethod
     def _set_auto_loan_normalize_function(input_data, extra_data):
-        status = True if input_data["code"] == "0" else False
+        status = input_data["code"] == "0"
         if "data" not in input_data:
             return [], status
         data = input_data["data"]
-        if len(data) > 0:
-            target_data = [data[0]]
-        else:
-            target_data = []
+        target_data = [data[0]] if len(data) > 0 else []
         return target_data, status
 
     def set_auto_loan(
@@ -966,14 +927,11 @@ class TradingAccountMixin:
 
     @staticmethod
     def _set_account_level_normalize_function(input_data, extra_data):
-        status = True if input_data["code"] == "0" else False
+        status = input_data["code"] == "0"
         if "data" not in input_data:
             return [], status
         data = input_data["data"]
-        if len(data) > 0:
-            target_data = [data[0]]
-        else:
-            target_data = []
+        target_data = [data[0]] if len(data) > 0 else []
         return target_data, status
 
     def set_account_level(
@@ -1063,14 +1021,11 @@ class TradingAccountMixin:
 
     @staticmethod
     def _account_level_switch_preset_normalize_function(input_data, extra_data):
-        status = True if input_data["code"] == "0" else False
+        status = input_data["code"] == "0"
         if "data" not in input_data:
             return [], status
         data = input_data["data"]
-        if len(data) > 0:
-            target_data = data
-        else:
-            target_data = []
+        target_data = data if len(data) > 0 else []
         return target_data, status
 
     def account_level_switch_preset(
@@ -1143,14 +1098,11 @@ class TradingAccountMixin:
 
     @staticmethod
     def _account_level_switch_precheck_normalize_function(input_data, extra_data):
-        status = True if input_data["code"] == "0" else False
+        status = input_data["code"] == "0"
         if "data" not in input_data:
             return [], status
         data = input_data["data"]
-        if len(data) > 0:
-            target_data = [data[0]]
-        else:
-            target_data = []
+        target_data = [data[0]] if len(data) > 0 else []
         return target_data, status
 
     def account_level_switch_precheck(
@@ -1207,14 +1159,11 @@ class TradingAccountMixin:
 
     @staticmethod
     def _set_collateral_assets_normalize_function(input_data, extra_data):
-        status = True if input_data["code"] == "0" else False
+        status = input_data["code"] == "0"
         if "data" not in input_data:
             return [], status
         data = input_data["data"]
-        if len(data) > 0:
-            target_data = [data[0]]
-        else:
-            target_data = []
+        target_data = [data[0]] if len(data) > 0 else []
         return target_data, status
 
     def set_collateral_assets(self, ccy_list, auto_loan=None, extra_data=None, **kwargs):
@@ -1263,14 +1212,11 @@ class TradingAccountMixin:
 
     @staticmethod
     def _get_collateral_assets_normalize_function(input_data, extra_data):
-        status = True if input_data["code"] == "0" else False
+        status = input_data["code"] == "0"
         if "data" not in input_data:
             return [], status
         data = input_data["data"]
-        if len(data) > 0:
-            target_data = data
-        else:
-            target_data = []
+        target_data = data if len(data) > 0 else []
         return target_data, status
 
     def get_collateral_assets(self, ccy=None, extra_data=None, **kwargs):
@@ -1348,14 +1294,11 @@ class TradingAccountMixin:
 
     @staticmethod
     def _set_risk_offset_amt_normalize_function(input_data, extra_data):
-        status = True if input_data["code"] == "0" else False
+        status = input_data["code"] == "0"
         if "data" not in input_data:
             return [], status
         data = input_data["data"]
-        if len(data) > 0:
-            target_data = [data[0]]
-        else:
-            target_data = []
+        target_data = [data[0]] if len(data) > 0 else []
         return target_data, status
 
     def set_risk_offset_amt(
@@ -1459,14 +1402,11 @@ class TradingAccountMixin:
 
     @staticmethod
     def _activate_option_normalize_function(input_data, extra_data):
-        status = True if input_data["code"] == "0" else False
+        status = input_data["code"] == "0"
         if "data" not in input_data:
             return [], status
         data = input_data["data"]
-        if len(data) > 0:
-            target_data = data
-        else:
-            target_data = []
+        target_data = data if len(data) > 0 else []
         return target_data, status
 
     def activate_option(
@@ -1530,14 +1470,11 @@ class TradingAccountMixin:
 
     @staticmethod
     def _move_positions_normalize_function(input_data, extra_data):
-        status = True if input_data["code"] == "0" else False
+        status = input_data["code"] == "0"
         if "data" not in input_data:
             return [], status
         data = input_data["data"]
-        if len(data) > 0:
-            target_data = data
-        else:
-            target_data = []
+        target_data = data if len(data) > 0 else []
         return target_data, status
 
     def move_positions(self, symbol, pos_id, ccy, algo_id=None, extra_data=None, **kwargs):
@@ -1601,14 +1538,11 @@ class TradingAccountMixin:
 
     @staticmethod
     def _get_move_positions_history_normalize_function(input_data, extra_data):
-        status = True if input_data["code"] == "0" else False
+        status = input_data["code"] == "0"
         if "data" not in input_data:
             return [], status
         data = input_data["data"]
-        if len(data) > 0:
-            target_data = data
-        else:
-            target_data = []
+        target_data = data if len(data) > 0 else []
         return target_data, status
 
     def get_move_positions_history(
@@ -1667,14 +1601,11 @@ class TradingAccountMixin:
 
     @staticmethod
     def _set_auto_earn_normalize_function(input_data, extra_data):
-        status = True if input_data["code"] == "0" else False
+        status = input_data["code"] == "0"
         if "data" not in input_data:
             return [], status
         data = input_data["data"]
-        if len(data) > 0:
-            target_data = data
-        else:
-            target_data = []
+        target_data = data if len(data) > 0 else []
         return target_data, status
 
     def set_auto_earn(self, ccy, auto_earn, auto_earn_type=None, extra_data=None, **kwargs):
@@ -1727,14 +1658,11 @@ class TradingAccountMixin:
 
     @staticmethod
     def _set_settle_currency_normalize_function(input_data, extra_data):
-        status = True if input_data["code"] == "0" else False
+        status = input_data["code"] == "0"
         if "data" not in input_data:
             return [], status
         data = input_data["data"]
-        if len(data) > 0:
-            target_data = data
-        else:
-            target_data = []
+        target_data = data if len(data) > 0 else []
         return target_data, status
 
     def set_settle_currency(self, symbol, ccy, extra_data=None, **kwargs):
@@ -1802,14 +1730,11 @@ class TradingAccountMixin:
 
     @staticmethod
     def _set_trading_config_normalize_function(input_data, extra_data):
-        status = True if input_data["code"] == "0" else False
+        status = input_data["code"] == "0"
         if "data" not in input_data:
             return [], status
         data = input_data["data"]
-        if len(data) > 0:
-            target_data = data
-        else:
-            target_data = []
+        target_data = data if len(data) > 0 else []
         return target_data, status
 
     def set_trading_config(
@@ -1882,14 +1807,11 @@ class TradingAccountMixin:
 
     @staticmethod
     def _set_delta_neutral_precheck_normalize_function(input_data, extra_data):
-        status = True if input_data["code"] == "0" else False
+        status = input_data["code"] == "0"
         if "data" not in input_data:
             return [], status
         data = input_data["data"]
-        if len(data) > 0:
-            target_data = data
-        else:
-            target_data = []
+        target_data = data if len(data) > 0 else []
         return target_data, status
 
     def set_delta_neutral_precheck(self, symbol, delta_neutral_precheck, extra_data=None, **kwargs):

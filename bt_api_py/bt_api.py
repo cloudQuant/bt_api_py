@@ -5,17 +5,18 @@ Integrate all exchange APIs using this BtApi class
 
 # 导入注册模块，确保交易所在使用前完成注册
 # 使用 try/except 以便在缺少依赖时不阻塞其他交易所的使用
-import logging as _logging
 import queue
 import time
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from bt_api_py.event_bus import EventBus
 from bt_api_py.exceptions import ExchangeNotFoundError
 from bt_api_py.functions.log_message import SpdLogManager
 from bt_api_py.registry import ExchangeRegistry
 
-_reg_logger = _logging.getLogger(__name__)
+_reg_logger = SpdLogManager(
+    file_name="bt_api_registry.log", logger_name="registry", print_info=False
+).create_logger()
 
 try:
     import bt_api_py.feeds.register_binance  # noqa: F401
@@ -65,10 +66,7 @@ class BtApi:
             self.add_exchange(exchange_name, exchange_params)
 
     def init_logger(self):
-        if self.debug:
-            print_info = True
-        else:
-            print_info = False
+        print_info = bool(self.debug)
         logger = SpdLogManager(
             file_name="bt_api.log", logger_name="api", print_info=print_info
         ).create_logger()
@@ -171,13 +169,13 @@ class BtApi:
             """解析时间，支持字符串和 datetime 类型，并将时间转换为 UTC"""
             if isinstance(input_time, str):
                 local_time = datetime.fromisoformat(input_time)
-                return local_time.astimezone(timezone.utc)
+                return local_time.astimezone(UTC)
             elif isinstance(input_time, datetime):
                 if input_time.tzinfo is None:
-                    local_time = input_time.replace(tzinfo=timezone.utc).astimezone()
+                    local_time = input_time.replace(tzinfo=UTC).astimezone()
                 else:
                     local_time = input_time
-                return local_time.astimezone(timezone.utc)
+                return local_time.astimezone(UTC)
             elif input_time is None:
                 return None
             else:
@@ -195,7 +193,7 @@ class BtApi:
 
         if begin_time is not None:
             if stop_time is None:
-                now = datetime.now(timezone.utc)
+                now = datetime.now(UTC)
                 period_seconds = int(period[:-1]) * 60 if "m" in period else int(period[:-1]) * 3600
                 stop_time = now - timedelta(seconds=now.timestamp() % period_seconds)
 

@@ -66,14 +66,11 @@ class StatisticsMixin:
 
     @staticmethod
     def _get_taker_volume_contract_normalize_function(input_data, extra_data):
-        status = True if input_data["code"] == "0" else False
+        status = input_data["code"] == "0"
         if "data" not in input_data:
             return [], status
         data = input_data["data"]
-        if len(data) > 0:
-            target_data = data
-        else:
-            target_data = []
+        target_data = data if len(data) > 0 else []
         return target_data, status
 
     def get_taker_volume_contract(
@@ -157,14 +154,11 @@ class StatisticsMixin:
 
     @staticmethod
     def _get_margin_loan_ratio_normalize_function(input_data, extra_data):
-        status = True if input_data["code"] == "0" else False
+        status = input_data["code"] == "0"
         if "data" not in input_data:
             return [], status
         data = input_data["data"]
-        if len(data) > 0:
-            target_data = data
-        else:
-            target_data = []
+        target_data = data if len(data) > 0 else []
         return target_data, status
 
     def get_margin_loan_ratio(
@@ -243,14 +237,11 @@ class StatisticsMixin:
 
     @staticmethod
     def _get_option_long_short_ratio_normalize_function(input_data, extra_data):
-        status = True if input_data["code"] == "0" else False
+        status = input_data["code"] == "0"
         if "data" not in input_data:
             return [], status
         data = input_data["data"]
-        if len(data) > 0:
-            target_data = data
-        else:
-            target_data = []
+        target_data = data if len(data) > 0 else []
         return target_data, status
 
     def get_option_long_short_ratio(
@@ -334,14 +325,11 @@ class StatisticsMixin:
 
     @staticmethod
     def _get_contracts_oi_volume_normalize_function(input_data, extra_data):
-        status = True if input_data["code"] == "0" else False
+        status = input_data["code"] == "0"
         if "data" not in input_data:
             return [], status
         data = input_data["data"]
-        if len(data) > 0:
-            target_data = data
-        else:
-            target_data = []
+        target_data = data if len(data) > 0 else []
         return target_data, status
 
     def get_contracts_oi_volume(
@@ -420,14 +408,11 @@ class StatisticsMixin:
 
     @staticmethod
     def _get_option_oi_volume_normalize_function(input_data, extra_data):
-        status = True if input_data["code"] == "0" else False
+        status = input_data["code"] == "0"
         if "data" not in input_data:
             return [], status
         data = input_data["data"]
-        if len(data) > 0:
-            target_data = data
-        else:
-            target_data = []
+        target_data = data if len(data) > 0 else []
         return target_data, status
 
     def get_option_oi_volume(
@@ -522,14 +507,11 @@ class StatisticsMixin:
 
     @staticmethod
     def _get_option_oi_volume_expiry_normalize_function(input_data, extra_data):
-        status = True if input_data["code"] == "0" else False
+        status = input_data["code"] == "0"
         if "data" not in input_data:
             return [], status
         data = input_data["data"]
-        if len(data) > 0:
-            target_data = data
-        else:
-            target_data = []
+        target_data = data if len(data) > 0 else []
         return target_data, status
 
     def get_option_oi_volume_expiry(
@@ -624,14 +606,11 @@ class StatisticsMixin:
 
     @staticmethod
     def _get_option_oi_volume_strike_normalize_function(input_data, extra_data):
-        status = True if input_data["code"] == "0" else False
+        status = input_data["code"] == "0"
         if "data" not in input_data:
             return [], status
         data = input_data["data"]
-        if len(data) > 0:
-            target_data = data
-        else:
-            target_data = []
+        target_data = data if len(data) > 0 else []
         return target_data, status
 
     def get_option_oi_volume_strike(
@@ -726,14 +705,11 @@ class StatisticsMixin:
 
     @staticmethod
     def _get_option_taker_flow_normalize_function(input_data, extra_data):
-        status = True if input_data["code"] == "0" else False
+        status = input_data["code"] == "0"
         if "data" not in input_data:
             return [], status
         data = input_data["data"]
-        if len(data) > 0:
-            target_data = data
-        else:
-            target_data = []
+        target_data = data if len(data) > 0 else []
         return target_data, status
 
     def get_option_taker_flow(
@@ -837,14 +813,11 @@ class StatisticsMixin:
     @staticmethod
     def _position_builder_normalize_function(input_data, extra_data):
         """Normalize position builder response"""
-        status = True if input_data.get("code") == "0" else False
+        status = input_data.get("code") == "0"
         if "data" not in input_data:
             return [], status
         data = input_data["data"]
-        if len(data) > 0:
-            target_data = data
-        else:
-            target_data = []
+        target_data = data if len(data) > 0 else []
         return target_data, status
 
     def position_builder(
@@ -968,14 +941,11 @@ class StatisticsMixin:
     @staticmethod
     def _position_builder_trend_normalize_function(input_data, extra_data):
         """Normalize position builder trend response"""
-        status = True if input_data.get("code") == "0" else False
+        status = input_data.get("code") == "0"
         if "data" not in input_data:
             return [], status
         data = input_data["data"]
-        if len(data) > 0:
-            target_data = data
-        else:
-            target_data = []
+        target_data = data if len(data) > 0 else []
         return target_data, status
 
     def position_builder_trend(
@@ -1046,7 +1016,7 @@ class StatisticsMixin:
         API returns data with different coin types grouped by category.
         Response format: {"code": "0", "data": {"contract": [...], "option": [...], "spot": [...]}}
         """
-        status = True if input_data.get("code") == "0" else False
+        status = input_data.get("code") == "0"
         if "data" not in input_data or not input_data["data"]:
             return {}, status
         # Data is already a dict with keys: contract, option, spot

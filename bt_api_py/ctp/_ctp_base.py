@@ -8,17 +8,13 @@
 # the SWIG interface file instead.
 
 
-from sys import stderr, float_info
-from traceback import print_exc, print_exception
+from sys import float_info
 
-import weakref
-
-from sys import version_info as _swig_python_version_info
 # Import the low-level C/C++ module
 if getattr(globals().get("__spec__"), "parent", None) or __package__ or "." in __name__:
-    from . import _ctp
+    pass
 else:
-    import _ctp
+    pass
 
 try:
     import builtins as __builtin__
@@ -31,7 +27,7 @@ def _swig_repr(self):
         strthis = "proxy of " + self.this.__repr__()
     except __builtin__.Exception:
         strthis = ""
-    return "<{}.{}; {} >".format(self.__class__.__module__, self.__class__.__name__, strthis)
+    return f"<{self.__class__.__module__}.{self.__class__.__name__}; {strthis} >"
 
 
 def _swig_setattr_nondynamic_instance_variable(set):
@@ -43,7 +39,7 @@ def _swig_setattr_nondynamic_instance_variable(set):
         elif hasattr(self, name) and isinstance(getattr(type(self), name), property):
             set(self, name, value)
         else:
-            raise AttributeError("You cannot add instance attributes to %s" % self)
+            raise AttributeError(f"You cannot add instance attributes to {self}")
 
     return set_instance_attr
 
@@ -53,7 +49,7 @@ def _swig_setattr_nondynamic_class_variable(set):
         if hasattr(cls, name) and not isinstance(getattr(cls, name), property):
             set(cls, name, value)
         else:
-            raise AttributeError("You cannot add class attributes to %s" % cls)
+            raise AttributeError(f"You cannot add class attributes to {cls}")
 
     return set_class_attr
 
@@ -82,13 +78,13 @@ def _swig_repr(self):
             v = getattr(self, k)
             if isinstance(v, float):
                 if v == float_info.max:
-                    values.append("%s: None" % k)
+                    values.append(f"{k}: None")
                 else:
-                    values.append("{}: {:.2f}".format(k, v))
+                    values.append(f"{k}: {v:.2f}")
             elif isinstance(v, int):
                 values.append("%s: %i" % (k, v))
             else:
-                values.append('{}: "{}"'.format(k, v))
+                values.append(f'{k}: "{v}"')
 
     return "<{}.{}; {}>".format(
         self.__class__.__module__, self.__class__.__name__, ", ".join(values)

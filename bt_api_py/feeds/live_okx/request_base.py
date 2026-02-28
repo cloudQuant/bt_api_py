@@ -79,9 +79,9 @@ class OkxRequestData(
     def __init__(self, data_queue, **kwargs):
         super().__init__(data_queue, **kwargs)
         self.data_queue = data_queue
-        self.public_key = kwargs.get("public_key", None)
-        self.private_key = kwargs.get("private_key", None)
-        self.passphrase = kwargs.get("passphrase", None)
+        self.public_key = kwargs.get("public_key")
+        self.private_key = kwargs.get("private_key")
+        self.passphrase = kwargs.get("passphrase")
         self.topics = kwargs.get("topics", {})
         self.asset_type = kwargs.get("asset_type", "SWAP")
         self.logger_name = kwargs.get("logger_name", "okx_swap_feed.log")
@@ -141,10 +141,7 @@ class OkxRequestData(
 
     # noinspection PyMethodMayBeStatic
     def signature(self, timestamp, method, request_path, secret_key, body=None):
-        if body is None:
-            body = ""
-        else:
-            body = str(body)
+        body = "" if body is None else str(body)
         message = str(timestamp) + str.upper(method) + request_path + body
         mac = hmac.new(
             bytes(secret_key, encoding="utf8"), bytes(message, encoding="utf-8"), digestmod="sha256"
@@ -154,7 +151,7 @@ class OkxRequestData(
 
     # noinspection PyMethodMayBeStatic
     def get_header(self, api_key, sign, timestamp, passphrase):
-        header = dict()
+        header = {}
         header["Content-Type"] = "application/json"
         header["OK-ACCESS-KEY"] = api_key
         header["OK-ACCESS-SIGN"] = sign

@@ -6,7 +6,7 @@
 
 import os
 from enum import Enum, unique
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 try:
     from pydantic import BaseModel, Field, field_validator
@@ -54,9 +54,9 @@ class ConnectionType(str, Enum):
 
 
 class BaseUrlsConfig(BaseModel):
-    rest: Dict[str, str] = Field(default_factory=dict)
-    wss: Dict[str, str] = Field(default_factory=dict)
-    acct_wss: Dict[str, str] = Field(default_factory=dict)
+    rest: dict[str, str] = Field(default_factory=dict)
+    wss: dict[str, str] = Field(default_factory=dict)
+    acct_wss: dict[str, str] = Field(default_factory=dict)
 
 
 class ConnectionConfig(BaseModel):
@@ -65,23 +65,23 @@ class ConnectionConfig(BaseModel):
     max_retries: int = Field(default=3, ge=0, le=10)
 
     # SPI/本地终端 特定配置
-    md_front: Optional[str] = None
-    td_front: Optional[str] = None
-    exe_path: Optional[str] = None
-    session_id: Optional[int] = None
+    md_front: str | None = None
+    td_front: str | None = None
+    exe_path: str | None = None
+    session_id: int | None = None
 
     # TWS 特定配置
-    host: Optional[str] = None
-    port: Optional[int] = None
-    client_id: Optional[int] = None
+    host: str | None = None
+    port: int | None = None
+    client_id: int | None = None
 
 
 class AuthConfig(BaseModel):
     type: AuthType
-    header_name: Optional[str] = None
-    timestamp_key: Optional[str] = None
-    signature_key: Optional[str] = None
-    api_key_param: Optional[str] = None
+    header_name: str | None = None
+    timestamp_key: str | None = None
+    signature_key: str | None = None
+    api_key_param: str | None = None
 
 
 class RateLimitRuleConfig(BaseModel):
@@ -90,22 +90,22 @@ class RateLimitRuleConfig(BaseModel):
     interval: int = Field(..., gt=0)
     limit: int = Field(..., gt=0)
     scope: str = Field(default="global", pattern="^(global|endpoint|ip)$")
-    endpoint: Optional[str] = None
+    endpoint: str | None = None
     weight: int = Field(default=1, ge=1)
-    weight_map: Optional[Dict[str, int]] = None
+    weight_map: dict[str, int] | None = None
 
 
 class AssetTypeConfig(BaseModel):
-    exchange_name: Optional[str] = Field(
+    exchange_name: str | None = Field(
         default=None, description="交易所子类型名称, 如 binance_swap"
     )
     symbol_format: str = Field(..., description="如 {base}{quote} 或 {base}-{quote}")
-    rest_paths: Dict[str, str] = Field(default_factory=dict)
-    wss_paths: Dict[str, Any] = Field(default_factory=dict)
-    wss_channels: Dict[str, str] = Field(default_factory=dict)
-    kline_periods: Optional[Dict[str, str]] = None
-    legal_currency: Optional[List[str]] = None
-    symbols: Optional[List[str]] = None
+    rest_paths: dict[str, str] = Field(default_factory=dict)
+    wss_paths: dict[str, Any] = Field(default_factory=dict)
+    wss_channels: dict[str, str] = Field(default_factory=dict)
+    kline_periods: dict[str, str] | None = None
+    legal_currency: list[str] | None = None
+    symbols: list[str] | None = None
 
 
 # ── 主配置模型 ────────────────────────────────────────────────
@@ -117,29 +117,29 @@ class ExchangeConfig(BaseModel):
     id: str = Field(..., min_length=2, max_length=30)
     display_name: str
     venue_type: VenueType
-    website: Optional[str] = None
-    api_doc: Optional[str] = None
+    website: str | None = None
+    api_doc: str | None = None
 
-    base_urls: Optional[BaseUrlsConfig] = None
+    base_urls: BaseUrlsConfig | None = None
     connection: ConnectionConfig
-    authentication: Optional[AuthConfig] = None
-    rate_limits: List[RateLimitRuleConfig] = Field(default_factory=list)
-    asset_types: Dict[str, AssetTypeConfig] = Field(default_factory=dict)
+    authentication: AuthConfig | None = None
+    rate_limits: list[RateLimitRuleConfig] = Field(default_factory=list)
+    asset_types: dict[str, AssetTypeConfig] = Field(default_factory=dict)
 
     # DEX 特定
-    chains: Optional[List[str]] = None
-    router_address: Optional[str] = None
-    factory_address: Optional[str] = None
+    chains: list[str] | None = None
+    router_address: str | None = None
+    factory_address: str | None = None
 
     # 共享数据
-    kline_periods: Optional[Dict[str, str]] = None
-    legal_currency: Optional[List[str]] = None
-    status_dict: Optional[Dict[str, str]] = None
-    exchange_id_map: Optional[Dict[str, str]] = None
+    kline_periods: dict[str, str] | None = None
+    legal_currency: list[str] | None = None
+    status_dict: dict[str, str] | None = None
+    exchange_id_map: dict[str, str] | None = None
 
     # Broker 特定
-    broker_id: Optional[str] = None
-    app_id: Optional[str] = None
+    broker_id: str | None = None
+    app_id: str | None = None
 
     model_config = {"extra": "ignore"}
 
@@ -196,7 +196,7 @@ def load_exchange_config(config_path: str) -> ExchangeConfig:
     return ExchangeConfig(**data)
 
 
-def load_all_exchange_configs(config_dir: str) -> Dict[str, ExchangeConfig]:
+def load_all_exchange_configs(config_dir: str) -> dict[str, ExchangeConfig]:
     """从目录加载所有交易所配置
 
     :param config_dir: 配置目录路径
@@ -213,8 +213,11 @@ def load_all_exchange_configs(config_dir: str) -> Dict[str, ExchangeConfig]:
                 config = load_exchange_config(filepath)
                 configs[config.id] = config
             except Exception as e:
-                import logging
+                from bt_api_py.functions.log_message import SpdLogManager
 
-                logging.getLogger(__name__).warning(f"Failed to load config {filepath}: {e}")
+                logger = SpdLogManager(
+                    file_name="config_loader.log", logger_name="config_loader", print_info=False
+                ).create_logger()
+                logger.warning(f"Failed to load config {filepath}: {e}")
 
     return configs

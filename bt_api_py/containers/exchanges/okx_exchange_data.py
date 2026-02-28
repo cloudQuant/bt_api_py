@@ -1,13 +1,15 @@
 import copy
 import datetime
 import json
-import logging
 import os
 import time
 
 from bt_api_py.containers.exchanges.exchange_data import ExchangeData
+from bt_api_py.functions.log_message import SpdLogManager
 
-logger = logging.getLogger(__name__)
+logger = SpdLogManager(
+    file_name="okx_exchange_data.log", logger_name="okx_data", print_info=False
+).create_logger()
 
 # ── 配置加载缓存 ──────────────────────────────────────────────
 _okx_config = None
@@ -166,7 +168,7 @@ class OkxExchangeData(ExchangeData):
             self.raise_path_error(self.exchange_name, key)
         # print("kwargs", kwargs)
         req = copy.deepcopy(self.wss_paths[key])
-        for k, v in req["args"][0].items():
+        for k, _v in req["args"][0].items():
             symbol = kwargs.get("symbol", "")
             # print("symbol", symbol, "k = ", k, "v = ", v)
             req["args"][0][k] = req["args"][0][k].replace("<symbol>", symbol)
@@ -235,7 +237,7 @@ class OkxExchangeDataSpot(OkxExchangeData):
         if key not in self.wss_paths or self.wss_paths[key] == "":
             self.raise_path_error(self.exchange_name, key)
         req = copy.deepcopy(self.wss_paths[key])
-        for k, v in req["args"][0].items():
+        for k, _v in req["args"][0].items():
             symbol = kwargs.get("symbol", "")
             req["args"][0][k] = req["args"][0][k].replace("<symbol>", symbol)
             req["args"][0][k] = req["args"][0][k].replace("<currency>", symbol.split("-")[0])

@@ -12,6 +12,7 @@ IB Web API WebSocket 协议:
 依赖: pip install websocket-client
 """
 
+import contextlib
 import json
 import threading
 import time
@@ -29,7 +30,7 @@ class IbWebDataStream(BaseDataStream):
     def __init__(self, data_queue, **kwargs):
         super().__init__(data_queue, **kwargs)
         self.base_url = kwargs.get("base_url", "https://localhost:5000")
-        self.access_token = kwargs.get("access_token", None)
+        self.access_token = kwargs.get("access_token")
         self.verify_ssl = kwargs.get("verify_ssl", False)
         self.topics = kwargs.get("topics", [])
         self._ws = None
@@ -82,10 +83,8 @@ class IbWebDataStream(BaseDataStream):
         """断开 WebSocket 连接"""
         self._running = False
         if self._ws:
-            try:
+            with contextlib.suppress(Exception):
                 self._ws.close()
-            except Exception:
-                pass
         self.state = ConnectionState.DISCONNECTED
 
     def subscribe_topics(self, topics):
@@ -262,9 +261,9 @@ class IbWebAccountStream(BaseDataStream):
     def __init__(self, data_queue, **kwargs):
         super().__init__(data_queue, **kwargs)
         self.base_url = kwargs.get("base_url", "https://localhost:5000")
-        self.access_token = kwargs.get("access_token", None)
+        self.access_token = kwargs.get("access_token")
         self.verify_ssl = kwargs.get("verify_ssl", False)
-        self.account_id = kwargs.get("account_id", None)
+        self.account_id = kwargs.get("account_id")
         self.topics = kwargs.get("topics", [])
         self._ws = None
         self._heartbeat_interval = 30
@@ -310,10 +309,8 @@ class IbWebAccountStream(BaseDataStream):
     def disconnect(self):
         self._running = False
         if self._ws:
-            try:
+            with contextlib.suppress(Exception):
                 self._ws.close()
-            except Exception:
-                pass
         self.state = ConnectionState.DISCONNECTED
 
     def subscribe_topics(self, topics):

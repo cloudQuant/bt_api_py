@@ -7,7 +7,6 @@ import time
 # from urllib import parse
 from urllib.parse import urlencode
 
-
 from bt_api_py.containers.accounts.binance_account import (
     BinanceSpotRequestAccountData,
     BinanceSwapRequestAccountData,
@@ -92,8 +91,8 @@ class BinanceRequestData(Feed):
     def __init__(self, data_queue, **kwargs):
         super().__init__(data_queue, **kwargs)
         self.data_queue = data_queue
-        self.public_key = kwargs.get("public_key", None)
-        self.private_key = kwargs.get("private_key", None)
+        self.public_key = kwargs.get("public_key")
+        self.private_key = kwargs.get("private_key")
         self.asset_type = kwargs.get("asset_type", "SWAP")
         self.logger_name = kwargs.get("logger_name", "binance_swap_feed.log")
         self._params = kwargs.get("exchange_data", BinanceExchangeDataSwap())
@@ -196,7 +195,7 @@ class BinanceRequestData(Feed):
         req = urlencode(req)
         url = f"{self._params.rest_url}{path}?{req}"
         headers = {"X-MBX-APIKEY": self.public_key}
-        request_type = extra_data.get("request_type")
+        extra_data.get("request_type")
         # print("url ", url)
         # print("headers ", headers)
         # print("method ", method)
@@ -236,7 +235,7 @@ class BinanceRequestData(Feed):
 
     @staticmethod
     def _get_account_normalize_function(input_data, extra_data):
-        status = True if input_data is not None else False
+        status = input_data is not None
         symbol_name = extra_data["symbol_name"]
         asset_type = extra_data["asset_type"]
         if len(input_data) > 0:
@@ -286,7 +285,7 @@ class BinanceRequestData(Feed):
 
     @staticmethod
     def _get_balance_normalize_function(input_data, extra_data):
-        status = True if input_data is not None else False
+        status = input_data is not None
         symbol_name = extra_data["symbol_name"]
         asset_type = extra_data["asset_type"]
         print("symbol_name", symbol_name, "asset_type", asset_type)
@@ -341,7 +340,7 @@ class BinanceRequestData(Feed):
 
     @staticmethod
     def _get_position_normalize_function(input_data, extra_data):
-        status = True if input_data is not None else False
+        status = input_data is not None
         symbol_name = extra_data["symbol_name"]
         asset_type = extra_data["asset_type"]
         if isinstance(input_data, list) and isinstance(input_data[0], dict):
@@ -397,7 +396,7 @@ class BinanceRequestData(Feed):
 
     @staticmethod
     def _get_tick_normalize_function(input_data, extra_data):
-        status = True if input_data is not None else False
+        status = input_data is not None
         symbol_name = extra_data["symbol_name"]
         asset_type = extra_data["asset_type"]
         if isinstance(input_data, list):
@@ -443,7 +442,7 @@ class BinanceRequestData(Feed):
 
     @staticmethod
     def _get_depth_normalize_function(input_data, extra_data):
-        status = True if input_data is not None else False
+        status = input_data is not None
         symbol_name = extra_data["symbol_name"]
         asset_type = extra_data["asset_type"]
         if isinstance(input_data, list):
@@ -515,7 +514,7 @@ class BinanceRequestData(Feed):
 
     @staticmethod
     def _get_kline_normalize_function(input_data, extra_data):
-        status = True if input_data is not None else False
+        status = input_data is not None
         symbol_name = extra_data["symbol_name"]
         asset_type = extra_data["asset_type"]
         if isinstance(input_data, list):
@@ -566,7 +565,7 @@ class BinanceRequestData(Feed):
 
     @staticmethod
     def _get_funding_rate_normalize_function(input_data, extra_data):
-        status = True if input_data is not None else False
+        status = input_data is not None
         symbol_name = extra_data["symbol_name"]
         asset_type = extra_data["asset_type"]
         # print('input_data', input_data)
@@ -640,7 +639,7 @@ class BinanceRequestData(Feed):
 
     @staticmethod
     def _get_history_funding_rate_normalize_function(input_data, extra_data):
-        status = True if input_data is not None else False
+        status = input_data is not None
         symbol_name = extra_data["symbol_name"]
         asset_type = extra_data["asset_type"]
         # print('input_data', input_data)
@@ -695,7 +694,7 @@ class BinanceRequestData(Feed):
 
     @staticmethod
     def _get_mark_price_normalize_function(input_data, extra_data):
-        status = True if input_data is not None else False
+        status = input_data is not None
         symbol_name = extra_data["symbol_name"]
         asset_type = extra_data["asset_type"]
         if isinstance(input_data, list):
@@ -808,7 +807,7 @@ class BinanceRequestData(Feed):
 
     @staticmethod
     def _make_order_normalize_function(input_data, extra_data):
-        status = True if input_data is not None else False
+        status = input_data is not None
         symbol_name = extra_data["symbol_name"]
         asset_type = extra_data["asset_type"]
         if isinstance(input_data, list):
@@ -876,7 +875,7 @@ class BinanceRequestData(Feed):
 
     @staticmethod
     def _cancel_order_normalize_function(input_data, extra_data):
-        status = True if input_data is not None else False
+        status = input_data is not None
         symbol_name = extra_data["symbol_name"]
         asset_type = extra_data["asset_type"]
         if isinstance(input_data, list):
@@ -955,7 +954,7 @@ class BinanceRequestData(Feed):
 
     @staticmethod
     def _query_order_normalize_function(input_data, extra_data):
-        status = True if input_data is not None else False
+        status = input_data is not None
         symbol_name = extra_data["symbol_name"]
         asset_type = extra_data["asset_type"]
         if isinstance(input_data, list):
@@ -1004,7 +1003,7 @@ class BinanceRequestData(Feed):
 
     @staticmethod
     def _get_open_orders_normalize_function(input_data, extra_data):
-        status = True if input_data is not None else False
+        status = input_data is not None
         symbol_name = extra_data["symbol_name"]
         asset_type = extra_data["asset_type"]
         if isinstance(input_data, list):
@@ -1066,7 +1065,7 @@ class BinanceRequestData(Feed):
 
     @staticmethod
     def _get_deals_normalize_function(input_data, extra_data):
-        status = True if input_data is not None else False
+        status = input_data is not None
         symbol_name = extra_data["symbol_name"]
         asset_type = extra_data["asset_type"]
         if isinstance(input_data, list):

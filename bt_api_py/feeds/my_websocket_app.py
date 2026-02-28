@@ -18,7 +18,7 @@ class MyWebsocketApp:
         self.data_queue = data_queue
         self.wss_name = kwargs.get("wss_name", "default_name")
         self._params = kwargs.get("exchange_data")
-        self.wss_url = kwargs.get("wss_url", None)
+        self.wss_url = kwargs.get("wss_url")
         self.wss_url = self._params.get_wss_url() if self.wss_url is None else self.wss_url
         self.ping_interval = kwargs.get("ping_interval", 10)
         self.ping_timeout = kwargs.get("ping_timeout", 5)

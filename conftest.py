@@ -11,6 +11,40 @@ project_root = Path(__file__).parent
 sys.path.insert(0, str(project_root))
 
 
+# Check if API keys are available
+def has_binance_api_keys():
+    """Check if Binance API keys are configured."""
+    return bool(os.getenv("BINANCE_API_KEY") and os.getenv("BINANCE_SECRET"))
+
+
+def has_okx_api_keys():
+    """Check if OKX API keys are configured."""
+    return bool(
+        os.getenv("OKX_API_KEY")
+        and os.getenv("OKX_SECRET")
+        and os.getenv("OKX_PASSPHRASE")
+    )
+
+
+def has_ctp_credentials():
+    """Check if CTP credentials are configured."""
+    return bool(
+        os.getenv("CTP_BROKER_ID")
+        and os.getenv("CTP_USER_ID")
+        and os.getenv("CTP_PASSWORD")
+    )
+
+
+def has_ib_credentials():
+    """Check if IB credentials are configured."""
+    return bool(os.getenv("IB_ACCOUNT_ID"))
+
+
+def should_skip_live_tests():
+    """Check if live tests should be skipped."""
+    return os.getenv("SKIP_LIVE_TESTS", "").lower() in ("true", "1", "yes")
+
+
 def pytest_configure(config):
     """Configure pytest with custom settings."""
     # Register custom markers
@@ -29,7 +63,9 @@ def pytest_configure(config):
 
 
 def pytest_collection_modifyitems(config, items):
-    """Modify test collection to add markers automatically."""
+    """Modify test collection to add markers automatically and skip tests without API keys."""
+    skip_live = should_skip_live_tests()
+
     for item in items:
         # Auto-mark slow tests based on timeout or explicit markers
         if "slow" not in item.keywords:
@@ -37,23 +73,57 @@ def pytest_collection_modifyitems(config, items):
             test_name = item.nodeid.lower()
             if any(keyword in test_name for keyword in ["slow", "benchmark", "stress"]):
                 item.add_marker(pytest.mark.slow)
-        
+
         # Auto-mark network tests
         if "network" not in item.keywords:
             test_name = item.nodeid.lower()
             if any(keyword in test_name for keyword in ["request", "wss", "websocket", "api"]):
                 item.add_marker(pytest.mark.network)
-        
-        # Auto-mark exchange-specific tests
+
+        # Auto-mark exchange-specific tests and skip if no API keys
         test_path = str(item.fspath).lower()
+        test_name = item.nodeid.lower()
+
+        # Binance tests
         if "binance" in test_path and "binance" not in item.keywords:
             item.add_marker(pytest.mark.binance)
+        if "binance" in item.keywords or "binance" in test_path:
+            # Skip if it's a live test and no API keys
+            if any(kw in test_name for kw in ["live", "request", "wss"]):
+                if skip_live or not has_binance_api_keys():
+                    item.add_marker(
+                        pytest.mark.skip(reason="Binance API keys not configured or SKIP_LIVE_TESTS=true")
+                    )
+
+        # OKX tests
         if "okx" in test_path and "okx" not in item.keywords:
             item.add_marker(pytest.mark.okx)
+        if "okx" in item.keywords or "okx" in test_path:
+            if any(kw in test_name for kw in ["live", "request", "wss"]):
+                if skip_live or not has_okx_api_keys():
+                    item.add_marker(
+                        pytest.mark.skip(reason="OKX API keys not configured or SKIP_LIVE_TESTS=true")
+                    )
+
+        # CTP tests
         if "ctp" in test_path and "ctp" not in item.keywords:
             item.add_marker(pytest.mark.ctp)
+        if "ctp" in item.keywords or "ctp" in test_path:
+            if any(kw in test_name for kw in ["live", "feed"]):
+                if skip_live or not has_ctp_credentials():
+                    item.add_marker(
+                        pytest.mark.skip(reason="CTP credentials not configured or SKIP_LIVE_TESTS=true")
+                    )
+
+        # IB tests
         if "ib" in test_path and "ib" not in item.keywords:
             item.add_marker(pytest.mark.ib)
+        if "ib" in item.keywords or "ib" in test_path:
+            if any(kw in test_name for kw in ["live", "request", "wss"]):
+                if skip_live or not has_ib_credentials():
+                    item.add_marker(
+                        pytest.mark.skip(reason="IB credentials not configured or SKIP_LIVE_TESTS=true")
+                    )
 
 
 @pytest.fixture(scope="session")

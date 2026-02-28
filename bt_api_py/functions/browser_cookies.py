@@ -11,11 +11,10 @@
 
 import json
 from pathlib import Path
-from typing import Dict, Optional
 from urllib.parse import urlparse
 
 
-def extract_cookie_string(cookie_str: str) -> Dict[str, str]:
+def extract_cookie_string(cookie_str: str) -> dict[str, str]:
     """从 Cookie 字符串解析为字典
     Args:
         cookie_str: Cookie 字符串，格式如 "key1=value1; key2=value2"
@@ -37,7 +36,7 @@ def extract_cookie_string(cookie_str: str) -> Dict[str, str]:
 
 def get_cookies_from_browser(
     domain: str = "localhost:5000", browser: str = "chrome", path: str = None
-) -> Dict[str, str]:
+) -> dict[str, str]:
     """从浏览器提取指定域名的 cookies
 
     Args:
@@ -95,7 +94,7 @@ def get_cookies_from_browser(
     return cookies
 
 
-def get_cookies_from_file(file_path: str) -> Dict[str, str]:
+def get_cookies_from_file(file_path: str) -> dict[str, str]:
     """从 JSON 文件读取 cookies
 
     Args:
@@ -126,7 +125,7 @@ def get_cookies_from_file(file_path: str) -> Dict[str, str]:
     return {}
 
 
-def get_cookies_from_netscape(file_path: str) -> Dict[str, str]:
+def get_cookies_from_netscape(file_path: str) -> dict[str, str]:
     """从 Netscape Cookie 格式文件读取 (curl -c 的输出格式)
 
     Args:
@@ -160,10 +159,10 @@ def get_cookies_from_netscape(file_path: str) -> Dict[str, str]:
 
 def get_ibkr_cookies(
     base_url: str = "https://localhost:5000",
-    cookie_source: Optional[str] = None,
+    cookie_source: str | None = None,
     browser: str = "chrome",
     cookie_path: str = "/sso",
-) -> Dict[str, str]:
+) -> dict[str, str]:
     """获取 IBKR Gateway 所需的 cookies
 
     Args:
@@ -204,7 +203,7 @@ def get_ibkr_cookies(
     return cookies
 
 
-def save_cookies_to_file(cookies: Dict[str, str], file_path: str):
+def save_cookies_to_file(cookies: dict[str, str], file_path: str):
     """将 cookies 保存到 JSON 文件
 
     Args:
@@ -233,7 +232,7 @@ def export_browser_cookies_to_file(
     return cookies
 
 
-def cookies_to_header(cookies: Dict[str, str]) -> str:
+def cookies_to_header(cookies: dict[str, str]) -> str:
     """将 Cookie 字典转换为 HTTP Header 格式
 
     Args:

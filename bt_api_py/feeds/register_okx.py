@@ -45,7 +45,7 @@ def _okx_subscribe_handler(
     topic_list = [i["topic"] for i in topics]
 
     if "kline" in topic_list:
-        kline_kwargs = {key: v for key, v in exchange_params.items()}
+        kline_kwargs = dict(exchange_params.items())
         kline_kwargs["wss_name"] = "okx_kline_data"
         kline_kwargs["wss_url"] = "wss://ws.okx.com:8443/ws/v5/business"
         kline_kwargs["exchange_data"] = exchange_data_cls()
@@ -59,7 +59,7 @@ def _okx_subscribe_handler(
     funding_rate_true = "funding_rate" in topic_list
     mark_price_true = "mark_price" in topic_list
     if ticker_true or depth_true or funding_rate_true or mark_price_true:
-        market_kwargs = {key: v for key, v in exchange_params.items()}
+        market_kwargs = dict(exchange_params.items())
         market_kwargs["wss_name"] = "okx_market_data"
         market_kwargs["wss_url"] = "wss://ws.okx.com:8443/ws/v5/public"
         market_kwargs["exchange_data"] = exchange_data_cls()
@@ -68,7 +68,7 @@ def _okx_subscribe_handler(
         market_wss_cls(data_queue, **market_kwargs).start()
         bt_api.log("market start")
 
-    account_kwargs = {key: v for key, v in exchange_params.items()}
+    account_kwargs = dict(exchange_params.items())
     account_topics = [
         i
         for i in topics

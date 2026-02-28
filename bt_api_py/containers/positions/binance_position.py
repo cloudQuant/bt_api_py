@@ -185,7 +185,7 @@ class BinanceRequestPositionData(BinancePositionData):
             return self
         self.server_time = from_dict_get_float(self.position_data, "updateTime")
         self.margin_type = from_dict_get_string(self.position_data, "marginType")
-        self.is_isolated = True if self.margin_type == "isolated" else False
+        self.is_isolated = self.margin_type == "isolated"
         self.is_auto_add_margin = from_dict_get_bool(self.position_data, "isAutoAddMargin")
         self.leverage = from_dict_get_float(self.position_data, "leverage")
         self.max_notional_value = from_dict_get_float(self.position_data, "maxNotionalValue")
@@ -210,7 +210,7 @@ class BinanceWssPositionData(BinancePositionData):
             return self
         self.server_time = None
         self.margin_type = from_dict_get_string(self.position_data, "mt")
-        self.is_isolated = True if self.margin_type == "isolated" else False
+        self.is_isolated = self.margin_type == "isolated"
         self.is_auto_add_margin = None
         self.leverage = None
         self.max_notional_value = None

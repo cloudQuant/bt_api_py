@@ -750,10 +750,7 @@ class CThostFtdcTraderSpi:
         print_exception(type, value, traceback)
 
     def __init__(self):
-        if self.__class__ == CThostFtdcTraderSpi:
-            _self = None
-        else:
-            _self = self
+        _self = None if self.__class__ == CThostFtdcTraderSpi else self
         _ctp.CThostFtdcTraderSpi_swiginit(
             self,
             _ctp.new_CThostFtdcTraderSpi(

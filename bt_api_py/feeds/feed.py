@@ -22,7 +22,7 @@ class Feed(AsyncBase, ConnectionMixin, CapabilityMixin):
         self.__init_connection__()
         self.data_queue = data_queue
         self.exchange_name = kwargs.get("exchange_name", "")
-        self.proxies = kwargs.get("proxies", None)
+        self.proxies = kwargs.get("proxies")
         self.logger = SpdLogManager(
             "./logs/feed_data.log", "base_feed", 0, 0, False
         ).create_logger()
@@ -129,7 +129,6 @@ class Feed(AsyncBase, ConnectionMixin, CapabilityMixin):
         if body is None:
             body = {}
         # print(f"url: {url}, method: {method}, headers: {headers}, body: {body}")
-        last_exception = None
         for attempt in range(max_retries):
             try:
                 req_kwargs = {"headers": headers, "timeout": timeout}
@@ -152,7 +151,6 @@ class Feed(AsyncBase, ConnectionMixin, CapabilityMixin):
                 return res.json()
 
             except requests.exceptions.Timeout as e:
-                last_exception = e
                 if attempt < max_retries - 1:
                     import time as _time
 
@@ -161,7 +159,6 @@ class Feed(AsyncBase, ConnectionMixin, CapabilityMixin):
                 self.handle_timeout_exception(url, method, body, timeout, e)
 
             except (requests.exceptions.ConnectionError, requests.exceptions.SSLError) as e:
-                last_exception = e
                 if attempt < max_retries - 1:
                     self.logger.warn(f"Retry {attempt + 1}/{max_retries} for {url}: {e}")
                     import time as _time
@@ -171,7 +168,6 @@ class Feed(AsyncBase, ConnectionMixin, CapabilityMixin):
                 self.handle_request_exception(url, method, body, e)
 
             except (json.JSONDecodeError, requests.exceptions.JSONDecodeError) as e:
-                last_exception = e
                 if attempt < max_retries - 1:
                     self.logger.warn(
                         f"Retry {attempt + 1}/{max_retries} JSON decode for {url}: {e}"

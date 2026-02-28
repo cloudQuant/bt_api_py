@@ -53,7 +53,7 @@ class AccountMixin:
 
     @staticmethod
     def _get_account_normalize_function(input_data, extra_data):
-        status = True if input_data["code"] == "0" else False
+        status = input_data["code"] == "0"
         if "data" not in input_data or not input_data["data"]:
             return [], status
         data = input_data["data"][0]
@@ -120,7 +120,7 @@ class AccountMixin:
 
     @staticmethod
     def _get_position_normalize_function(input_data, extra_data):
-        status = True if input_data["code"] == "0" else False
+        status = input_data["code"] == "0"
         if "data" not in input_data:
             return [], status
         data = input_data["data"]
@@ -208,7 +208,7 @@ class AccountMixin:
     @staticmethod
     def _get_positions_history_normalize_function(input_data, extra_data):
         """Normalize positions history data"""
-        status = True if input_data["code"] == "0" else False
+        status = input_data["code"] == "0"
         if "data" not in input_data:
             return [], status
         data = input_data["data"]
@@ -285,7 +285,7 @@ class AccountMixin:
     def _generic_normalize_function(input_data, extra_data):
         """Generic normalize function for OKX API responses.
         Extracts 'data' list and checks 'code' for status."""
-        status = True if input_data.get("code") == "0" else False
+        status = input_data.get("code") == "0"
         if "data" not in input_data:
             return [], status
         data = input_data["data"]
@@ -295,16 +295,13 @@ class AccountMixin:
 
     @staticmethod
     def _get_config_normalize_function(input_data, extra_data):
-        status = True if input_data["code"] == "0" else False
+        status = input_data["code"] == "0"
         if "data" not in input_data:
             return [], status
         if extra_data is None:
             pass
         data = input_data["data"]
-        if len(data) > 0:
-            data = data
-        else:
-            data = []
+        data = data if len(data) > 0 else []
         return data, status
 
     def get_config(self, extra_data=None):
@@ -380,7 +377,7 @@ class AccountMixin:
     @staticmethod
     def _get_fee_normalize_function(input_data, extra_data):
         """Normalize fee data"""
-        status = True if input_data["code"] == "0" else False
+        status = input_data["code"] == "0"
         if "data" not in input_data:
             return [], status
         data = input_data["data"]
@@ -455,7 +452,7 @@ class AccountMixin:
     @staticmethod
     def _get_max_size_normalize_function(input_data, extra_data):
         """Normalize max size data"""
-        status = True if input_data["code"] == "0" else False
+        status = input_data["code"] == "0"
         if "data" not in input_data:
             return [], status
         data = input_data["data"]
@@ -526,7 +523,7 @@ class AccountMixin:
     @staticmethod
     def _get_max_avail_size_normalize_function(input_data, extra_data):
         """Normalize max avail size data"""
-        status = True if input_data["code"] == "0" else False
+        status = input_data["code"] == "0"
         if "data" not in input_data:
             return [], status
         data = input_data["data"]

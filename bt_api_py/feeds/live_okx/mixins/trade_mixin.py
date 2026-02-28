@@ -67,7 +67,7 @@ class TradeMixin:
     def _make_order_normalize_function(input_data, extra_data):
         if extra_data is None:
             pass
-        status = True if input_data["code"] == "0" else False
+        status = input_data["code"] == "0"
         if "data" not in input_data:
             return [], status
         data = [
@@ -167,7 +167,7 @@ class TradeMixin:
     def _amend_order_normalize_function(input_data, extra_data):
         if extra_data is None:
             pass
-        status = True if input_data["code"] == "0" else False
+        status = input_data["code"] == "0"
         if "data" not in input_data:
             return [], status
         data = [
@@ -241,7 +241,7 @@ class TradeMixin:
     def _cancel_order_normalize_function(input_data, extra_data):
         if extra_data:
             pass
-        status = True if input_data["code"] == "0" else False
+        status = input_data["code"] == "0"
         if "data" not in input_data:
             return [], status
         data = input_data["data"]
@@ -297,7 +297,7 @@ class TradeMixin:
 
     @staticmethod
     def _query_order_normalize_function(input_data, extra_data):
-        status = True if input_data["code"] == "0" else False
+        status = input_data["code"] == "0"
         if "data" not in input_data:
             return [], status
         data = input_data["data"]
@@ -325,10 +325,7 @@ class TradeMixin:
         )
 
     def _get_open_orders(self, symbol=None, extra_data=None, **kwargs):
-        if symbol is not None:
-            request_symbol = self._params.get_symbol(symbol)
-        else:
-            request_symbol = ""
+        request_symbol = self._params.get_symbol(symbol) if symbol is not None else ""
         request_type = "get_open_orders"
         uly = kwargs.get("uly", "")
         inst_type = kwargs.get("instType", "")
@@ -365,7 +362,7 @@ class TradeMixin:
 
     @staticmethod
     def _get_open_orders_normalize_function(input_data, extra_data):
-        status = True if input_data["code"] == "0" else False
+        status = input_data["code"] == "0"
         if "data" not in input_data:
             return [], status
         data = input_data["data"]
@@ -494,7 +491,7 @@ class TradeMixin:
 
     @staticmethod
     def _get_deals_normalize_function(input_data, extra_data):
-        status = True if input_data["code"] == "0" else False
+        status = input_data["code"] == "0"
         if "data" not in input_data:
             return [], status
         data = input_data["data"]
@@ -898,7 +895,7 @@ class TradeMixin:
     @staticmethod
     def _get_index_candles_normalize_function(input_data, extra_data):
         """Normalize index candles data - API returns 6 elements, OkxBarData expects 9"""
-        status = True if input_data["code"] == "0" else False
+        status = input_data["code"] == "0"
         if "data" not in input_data:
             return [], status
         data = sorted(input_data["data"], key=lambda x: x[0])
@@ -1003,7 +1000,7 @@ class TradeMixin:
     @staticmethod
     def _get_mark_price_candles_normalize_function(input_data, extra_data):
         """Normalize mark price candles data - API returns 6-7 elements, OkxBarData expects 9"""
-        status = True if input_data["code"] == "0" else False
+        status = input_data["code"] == "0"
         if "data" not in input_data:
             return [], status
         data = sorted(input_data["data"], key=lambda x: x[0])

@@ -1,26 +1,27 @@
 """
-统一 HTTP 客户端 — 基于 httpx
-
-提供同步和异步 HTTP 请求能力，替代直接使用 requests 库。
+统一 HTTP 客户端
+基于 httpx 实现同步/异步请求，替代各交易所重复的 requests 代码。
 支持连接池复用、统一错误处理、代理配置。
 """
 
-import logging
-from typing import Any, Dict, Optional
+from typing import Any
 
 try:
     import httpx
 except ImportError:
-    httpx = None  # 非 HTTP 场所（CTP/IB/QMT）不强制依赖 httpx
+    httpx = None
 
 from bt_api_py.error_framework import (
     AuthenticationError,
     RateLimitError,
-    RequestFailedError,
     ServerError,
 )
+from bt_api_py.exceptions import RequestFailedError
+from bt_api_py.functions.log_message import SpdLogManager
 
-logger = logging.getLogger(__name__)
+logger = SpdLogManager(
+    file_name="http_client.log", logger_name="http_client", print_info=False
+).create_logger()
 
 
 class HttpClient:
@@ -33,7 +34,7 @@ class HttpClient:
         max_connections: int = 100,
         max_keepalive_connections: int = 20,
         verify: bool = True,
-        proxies: Optional[str] = None,
+        proxies: str | None = None,
         **kwargs,
     ):
         if httpx is None:
@@ -63,7 +64,7 @@ class HttpClient:
         )
 
         # 异步客户端（延迟初始化）
-        self._async_client: Optional[httpx.AsyncClient] = None
+        self._async_client: httpx.AsyncClient | None = None
         self._async_kwargs = {
             "timeout": timeout,
             "limits": limits,
@@ -83,14 +84,14 @@ class HttpClient:
         self,
         method: str,
         url: str,
-        headers: Optional[Dict[str, str]] = None,
-        params: Optional[Dict[str, Any]] = None,
-        json_data: Optional[Dict[str, Any]] = None,
-        data: Optional[Any] = None,
-        timeout: Optional[float] = None,
-        cookies: Optional[Dict[str, str]] = None,
+        headers: dict[str, str] | None = None,
+        params: dict[str, Any] | None = None,
+        json_data: dict[str, Any] | None = None,
+        data: Any | None = None,
+        timeout: float | None = None,
+        cookies: dict[str, str] | None = None,
         **kwargs,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """同步请求"""
         req_kwargs = {}
         if headers:
@@ -124,14 +125,14 @@ class HttpClient:
         self,
         method: str,
         url: str,
-        headers: Optional[Dict[str, str]] = None,
-        params: Optional[Dict[str, Any]] = None,
-        json_data: Optional[Dict[str, Any]] = None,
-        data: Optional[Any] = None,
-        timeout: Optional[float] = None,
-        cookies: Optional[Dict[str, str]] = None,
+        headers: dict[str, str] | None = None,
+        params: dict[str, Any] | None = None,
+        json_data: dict[str, Any] | None = None,
+        data: Any | None = None,
+        timeout: float | None = None,
+        cookies: dict[str, str] | None = None,
         **kwargs,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """异步请求"""
         client = self._get_async_client()
 
@@ -163,7 +164,7 @@ class HttpClient:
 
         return self._process_response(response)
 
-    def _process_response(self, response: "httpx.Response") -> Dict[str, Any]:
+    def _process_response(self, response: "httpx.Response") -> dict[str, Any]:
         """处理响应，统一错误转换"""
         try:
             response.raise_for_status()

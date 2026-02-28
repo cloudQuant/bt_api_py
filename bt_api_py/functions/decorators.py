@@ -1,7 +1,8 @@
 import time
 import warnings
+from collections.abc import Callable
 from functools import wraps
-from typing import Any, Callable
+from typing import Any
 
 
 def deprecated(msg=None, stack_level=2):
@@ -23,7 +24,7 @@ def deprecated(msg=None, stack_level=2):
         @wraps(fn)
         def wrapper(*args, **kwargs):
             warnings.warn(
-                msg or "Function %s is deprecated." % fn.__name__,
+                msg or f"Function {fn.__name__} is deprecated.",
                 category=DeprecationWarning,
                 stacklevel=stack_level,
             )

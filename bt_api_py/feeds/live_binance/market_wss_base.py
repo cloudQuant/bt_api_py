@@ -1,7 +1,6 @@
 import json
 import time
 
-
 from bt_api_py.containers.accounts.binance_account import BinanceSwapWssAccountData
 from bt_api_py.containers.bars.binance_bar import BinanceWssBarData
 from bt_api_py.containers.fundingrates.binance_funding_rate import BinanceWssFundingRateData
@@ -22,13 +21,13 @@ class BinanceMarketWssData(MyWebsocketApp, BinanceRequestData):
     def __init__(self, data_queue, **kwargs):
         super().__init__(data_queue, **kwargs)
         self.topics = kwargs.get("topics", {})
-        self.public_key = kwargs.get("public_key", None)
-        self.private_key = kwargs.get("private_key", None)
-        self.wss_url = kwargs.get("wss_url", None)  # 必须传入特定的链接
+        self.public_key = kwargs.get("public_key")
+        self.private_key = kwargs.get("private_key")
+        self.wss_url = kwargs.get("wss_url")  # 必须传入特定的链接
         self.asset_type = kwargs.get("asset_type", "SWAP")
-        self.listen_key = kwargs.get("listen_key", None)
-        self.proxies = kwargs.get("proxies", None)
-        self.async_proxy = kwargs.get("async_proxy", None)
+        self.listen_key = kwargs.get("listen_key")
+        self.proxies = kwargs.get("proxies")
+        self.async_proxy = kwargs.get("async_proxy")
         self.exchange_name = kwargs.get("exchange_name", "BINANCE")
         self.logger = SpdLogManager(
             "./logs/binance_market_wss.log", "market_wss", 0, 0, False
@@ -48,12 +47,12 @@ class BinanceMarketWssData(MyWebsocketApp, BinanceRequestData):
         for topics in self.topics:
             # time.sleep(0.2)
             self.count += 1
-            if "ticker" == topics["topic"]:
+            if topics["topic"] == "ticker":
                 symbol = topics.get("symbol", "BTC—USDT")
                 self.subscribe(topic="tick", symbol=symbol)
                 print(f"subscribe {self.count} data, BINANCE, {self.asset_type}, {symbol}, ticker")
 
-            if "depth" == topics["topic"]:
+            if topics["topic"] == "depth":
                 # print(topics)
                 if "symbol" in topics:
                     symbol = topics.get("symbol")
@@ -70,39 +69,39 @@ class BinanceMarketWssData(MyWebsocketApp, BinanceRequestData):
                 else:
                     print("depth need symbol to subscribe")
 
-            if "funding_rate" == topics["topic"]:
+            if topics["topic"] == "funding_rate":
                 symbol = topics.get("symbol", "BTC—USDT")
                 self.subscribe(topic="funding_rate", symbol=symbol)
                 print(
                     f"subscribe {self.count} data, BINANCE, {self.asset_type}, {symbol}, funding_rate"
                 )
 
-            if "mark_price" == topics["topic"]:
+            if topics["topic"] == "mark_price":
                 symbol = topics.get("symbol", "BTC—USDT")
                 self.subscribe(topic="mark_price", symbol=symbol)
                 print(
                     f"subscribe {self.count} data, BINANCE, {self.asset_type}, {symbol}, mark_price"
                 )
 
-            if "kline" == topics["topic"]:
+            if topics["topic"] == "kline":
                 period = topics.get("period", "1m")
                 symbol = topics.get("symbol", "BTC—USDT")
                 self.subscribe(topic="kline", symbol=symbol, period=period)
                 print(f"subscribe {self.count} data, BINANCE, {self.asset_type}, {symbol}, kline")
 
-            if "all_mark_price" == topics["topic"]:
+            if topics["topic"] == "all_mark_price":
                 self.subscribe(topic="all_mark_price")
                 print(f"subscribe {self.count} data, BINANCE, {self.asset_type}, all_mark_price")
 
-            if "all_ticker" == topics["topic"]:
+            if topics["topic"] == "all_ticker":
                 self.subscribe(topic="all_ticker")
                 print(f"subscribe {self.count} data, BINANCE, {self.asset_type},all_ticker")
 
-            if "all_force_order" == topics["topic"]:
+            if topics["topic"] == "all_force_order":
                 self.subscribe(topic="all_force_order")
                 print(f"subscribe {self.count} data, BINANCE, {self.asset_type}, all_force_order")
 
-            if "agg_trade" == topics["topic"]:
+            if topics["topic"] == "agg_trade":
                 if "symbol" in topics:
                     symbol = topics.get("symbol")
                     self.subscribe(topic="agg_trade", symbol=symbol)
@@ -116,36 +115,36 @@ class BinanceMarketWssData(MyWebsocketApp, BinanceRequestData):
                         f"subscribe {self.count} data, BINANCE, {self.asset_type}, agg_trade, symbol_list"
                     )
 
-            if "force_order" == topics["topic"]:
+            if topics["topic"] == "force_order":
                 symbol = topics.get("symbol", "BTC—USDT")
                 self.subscribe(topic="force_order", symbol=symbol)
                 print(
                     f"subscribe {self.count} data, BINANCE, {self.asset_type}, {symbol}, force_order"
                 )
 
-            if "liquidation" == topics["topic"]:
+            if topics["topic"] == "liquidation":
                 symbol = topics.get("symbol", "BTC—USDT")
                 self.subscribe(topic="liquidation", symbol=symbol)
                 print(
                     f"subscribe {self.count} data, BINANCE, {self.asset_type}, {symbol}, liquidation"
                 )
 
-            if "mini_ticker" == topics["topic"]:
+            if topics["topic"] == "mini_ticker":
                 symbol = topics.get("symbol", "BTC—USDT")
                 self.subscribe(topic="mini_ticker", symbol=symbol)
                 print(
                     f"subscribe {self.count} data, BINANCE, {self.asset_type}, {symbol}, mini_ticker"
                 )
 
-            if "all_mini_ticker" == topics["topic"]:
+            if topics["topic"] == "all_mini_ticker":
                 self.subscribe(topic="all_mini_ticker")
                 print(f"subscribe {self.count} data, BINANCE, {self.asset_type}, all_mini_ticker")
 
-            if "all_book_ticker" == topics["topic"]:
+            if topics["topic"] == "all_book_ticker":
                 self.subscribe(topic="all_book_ticker")
                 print(f"subscribe {self.count} data, BINANCE, {self.asset_type}, all_book_ticker")
 
-            if "continuous_kline" == topics["topic"]:
+            if topics["topic"] == "continuous_kline":
                 period = topics.get("period", "1m")
                 pair = topics.get("pair", topics.get("symbol", "BTC—USDT"))
                 self.subscribe(topic="continuous_kline", pair=pair, period=period)
@@ -153,7 +152,7 @@ class BinanceMarketWssData(MyWebsocketApp, BinanceRequestData):
                     f"subscribe {self.count} data, BINANCE, {self.asset_type}, {pair}, continuous_kline"
                 )
 
-            if "contract_info" == topics["topic"]:
+            if topics["topic"] == "contract_info":
                 self.subscribe(topic="contract_info")
                 print(f"subscribe {self.count} data, BINANCE, {self.asset_type}, contract_info")
 
@@ -168,28 +167,28 @@ class BinanceMarketWssData(MyWebsocketApp, BinanceRequestData):
         # print(content)
         event = content.get("e", None)
         if event is not None:
-            if "bookTicker" == event:
+            if event == "bookTicker":
                 self.push_ticker(content)
-            if "depthUpdate" == event:
+            if event == "depthUpdate":
                 self.push_order_book(content)
-            if "kline" == event:
+            if event == "kline":
                 self.push_bar(content)
                 # print(content)
-            if "markPriceUpdate" == event:
+            if event == "markPriceUpdate":
                 self.push_funding_rate(content)
-            if "markPriceUpdate" == event:
+            if event == "markPriceUpdate":
                 self.push_mark_price(content)
-            if "ACCOUNT_UPDATE" == event:
+            if event == "ACCOUNT_UPDATE":
                 self.push_account(content)
-            if "aggTrade" == event:
+            if event == "aggTrade":
                 self.push_agg_trade(content)
-            if "forceOrder" == event:
+            if event == "forceOrder":
                 self.push_force_order(content)
-            if "24hrTicker" == event:
+            if event == "24hrTicker":
                 self.push_ticker(content)
-            if "24hrMiniTicker" == event:
+            if event == "24hrMiniTicker":
                 self.push_ticker(content)
-            if "continuous_kline" == event:
+            if event == "continuous_kline":
                 self.push_continuous_kline(content)
             # if "bookTicker" == event:
             #     self.push_order(content)
@@ -252,7 +251,7 @@ class BinanceMarketWssData(MyWebsocketApp, BinanceRequestData):
         symbol = content["s"]
         bar_data = BinanceWssBarData(content, symbol, self.asset_type, True)
         bar_data.init_data()
-        bar_status = bar_data.get_bar_status()
+        bar_data.get_bar_status()
         # if bar_status:
         #     self.data_queue.put(bar_data)
         self.data_queue.put(bar_data)

@@ -31,15 +31,9 @@ def allocate_value_to_arr(arr, target_value):
     """
     arr_sum_value = sum(arr)
 
-    if arr_sum_value > 0:
-        percent = target_value / sum(arr)
-    else:
-        percent = 0
+    percent = target_value / sum(arr) if arr_sum_value > 0 else 0
 
-    if percent < 1:
-        target_arr = [i * percent for i in arr]
-    else:
-        target_arr = arr
+    target_arr = [i * percent for i in arr] if percent < 1 else arr
     return target_arr
 
 
@@ -185,14 +179,11 @@ def merge_zheng_order(zheng_order_dict):
             key: value for key, value in zheng_order_dict.items() if value["qty_wbf"] > 0
         }
         # 对zheng_order_dict的多头盈利进行排序，按照从大到小的顺序进行排序
-        sorted_long_order = {
-            k: v
-            for k, v in sorted(
+        sorted_long_order = dict(sorted(
                 long_zheng_order_dict.items(),
                 key=lambda x: (x[1]["price_binance"] - x[1]["price_wbf"]) / x[1]["price_wbf"],
                 reverse=True,
-            )
-        }
+            ))
         key_list = list(sorted_long_order.keys())
         for key in key_list:
             value = sorted_long_order[key]
@@ -212,14 +203,11 @@ def merge_zheng_order(zheng_order_dict):
         short_zheng_order_dict = {
             key: value for key, value in zheng_order_dict.items() if value["qty_wbf"] < 0
         }
-        sorted_short_order = {
-            k: v
-            for k, v in sorted(
+        sorted_short_order = dict(sorted(
                 short_zheng_order_dict.items(),
                 key=lambda x: (x[1]["price_wbf"] - x[1]["price_binance"]) / x[1]["price_wbf"],
                 reverse=True,
-            )
-        }
+            ))
 
         key_list = list(sorted_short_order.keys())
         for key in key_list:
@@ -245,6 +233,6 @@ def cal_sum_of_key_values(zheng_order_dict, key):
     :return: float sum_value
     """
     sum_value = 0
-    for trade_id, value in zheng_order_dict.items():
+    for _trade_id, value in zheng_order_dict.items():
         sum_value += value[key]
     return sum_value

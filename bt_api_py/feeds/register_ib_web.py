@@ -22,7 +22,7 @@ def _ib_web_stk_subscribe_handler(data_queue, exchange_params, topics, bt_api):
     :param bt_api: BtApi 实例
     """
     exchange_data = IbWebExchangeDataStock()
-    kwargs = {key: v for key, v in exchange_params.items()}
+    kwargs = dict(exchange_params.items())
     kwargs["exchange_data"] = exchange_data
     kwargs["topics"] = topics
 
@@ -31,7 +31,7 @@ def _ib_web_stk_subscribe_handler(data_queue, exchange_params, topics, bt_api):
 
     # 启动账户数据流 (每个资产类型只启动一次)
     if not bt_api._subscription_flags.get("IB_WEB___STK_account", False):
-        account_kwargs = {k: v for k, v in kwargs.items()}
+        account_kwargs = dict(kwargs.items())
         account_kwargs["topics"] = [
             {"topic": "account"},
             {"topic": "order"},
@@ -49,14 +49,14 @@ def _ib_web_fut_subscribe_handler(data_queue, exchange_params, topics, bt_api):
     :param bt_api: BtApi 实例
     """
     exchange_data = IbWebExchangeDataFuture()
-    kwargs = {key: v for key, v in exchange_params.items()}
+    kwargs = dict(exchange_params.items())
     kwargs["exchange_data"] = exchange_data
     kwargs["topics"] = topics
 
     IbWebDataStream(data_queue, **kwargs).start()
 
     if not bt_api._subscription_flags.get("IB_WEB___FUT_account", False):
-        account_kwargs = {k: v for k, v in kwargs.items()}
+        account_kwargs = dict(kwargs.items())
         account_kwargs["topics"] = [
             {"topic": "account"},
             {"topic": "order"},

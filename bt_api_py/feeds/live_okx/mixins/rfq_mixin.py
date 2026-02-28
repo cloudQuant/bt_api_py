@@ -32,14 +32,11 @@ class RfqMixin:
     @staticmethod
     def _get_counterparties_normalize_function(input_data, extra_data):
         """Normalize RFQ counterparties response"""
-        status = True if input_data.get("code") == "0" else False
+        status = input_data.get("code") == "0"
         if "data" not in input_data:
             return [], status
         data = input_data["data"]
-        if len(data) > 0:
-            target_data = data
-        else:
-            target_data = []
+        target_data = data if len(data) > 0 else []
         return target_data, status
 
     def get_counterparties(self, extra_data=None, **kwargs):
@@ -90,14 +87,11 @@ class RfqMixin:
     @staticmethod
     def _create_rfq_normalize_function(input_data, extra_data):
         """Normalize create RFQ response"""
-        status = True if input_data.get("code") == "0" else False
+        status = input_data.get("code") == "0"
         if "data" not in input_data:
             return [], status
         data = input_data["data"]
-        if len(data) > 0:
-            target_data = data
-        else:
-            target_data = []
+        target_data = data if len(data) > 0 else []
         return target_data, status
 
     def create_rfq(
@@ -147,14 +141,11 @@ class RfqMixin:
     @staticmethod
     def _cancel_rfq_normalize_function(input_data, extra_data):
         """Normalize cancel RFQ response"""
-        status = True if input_data.get("code") == "0" else False
+        status = input_data.get("code") == "0"
         if "data" not in input_data:
             return [], status
         data = input_data["data"]
-        if len(data) > 0:
-            target_data = data
-        else:
-            target_data = []
+        target_data = data if len(data) > 0 else []
         return target_data, status
 
     def cancel_rfq(self, rfq_id, inst_id, extra_data=None, **kwargs):
@@ -196,14 +187,11 @@ class RfqMixin:
     @staticmethod
     def _cancel_multiple_rfqs_normalize_function(input_data, extra_data):
         """Normalize cancel multiple RFQs response"""
-        status = True if input_data.get("code") == "0" else False
+        status = input_data.get("code") == "0"
         if "data" not in input_data:
             return [], status
         data = input_data["data"]
-        if len(data) > 0:
-            target_data = data
-        else:
-            target_data = []
+        target_data = data if len(data) > 0 else []
         return target_data, status
 
     def cancel_multiple_rfqs(self, rfq_ids, inst_id, extra_data=None, **kwargs):
@@ -246,14 +234,11 @@ class RfqMixin:
     @staticmethod
     def _cancel_all_rfqs_normalize_function(input_data, extra_data):
         """Normalize cancel all RFQs response"""
-        status = True if input_data.get("code") == "0" else False
+        status = input_data.get("code") == "0"
         if "data" not in input_data:
             return [], status
         data = input_data["data"]
-        if len(data) > 0:
-            target_data = data
-        else:
-            target_data = []
+        target_data = data if len(data) > 0 else []
         return target_data, status
 
     def cancel_all_rfqs(self, inst_id, extra_data=None, **kwargs):
@@ -316,14 +301,11 @@ class RfqMixin:
     @staticmethod
     def _execute_quote_normalize_function(input_data, extra_data):
         """Normalize execute quote response"""
-        status = True if input_data.get("code") == "0" else False
+        status = input_data.get("code") == "0"
         if "data" not in input_data:
             return [], status
         data = input_data["data"]
-        if len(data) > 0:
-            target_data = data
-        else:
-            target_data = []
+        target_data = data if len(data) > 0 else []
         return target_data, status
 
     def execute_quote(
@@ -390,14 +372,11 @@ class RfqMixin:
     @staticmethod
     def _get_quote_products_normalize_function(input_data, extra_data):
         """Normalize quote products response"""
-        status = True if input_data.get("code") == "0" else False
+        status = input_data.get("code") == "0"
         if "data" not in input_data:
             return [], status
         data = input_data["data"]
-        if len(data) > 0:
-            target_data = data
-        else:
-            target_data = []
+        target_data = data if len(data) > 0 else []
         return target_data, status
 
     def get_quote_products(self, extra_data=None, **kwargs):
@@ -436,14 +415,11 @@ class RfqMixin:
     @staticmethod
     def _set_quote_products_normalize_function(input_data, extra_data):
         """Normalize set quote products response"""
-        status = True if input_data.get("code") == "0" else False
+        status = input_data.get("code") == "0"
         if "data" not in input_data:
             return [], status
         data = input_data["data"]
-        if len(data) > 0:
-            target_data = data
-        else:
-            target_data = []
+        target_data = data if len(data) > 0 else []
         return target_data, status
 
     def set_quote_products(self, products, extra_data=None, **kwargs):
@@ -482,14 +458,11 @@ class RfqMixin:
     @staticmethod
     def _rfq_mmp_reset_normalize_function(input_data, extra_data):
         """Normalize RFQ MMP reset response"""
-        status = True if input_data.get("code") == "0" else False
+        status = input_data.get("code") == "0"
         if "data" not in input_data:
             return [], status
         data = input_data["data"]
-        if len(data) > 0:
-            target_data = data
-        else:
-            target_data = []
+        target_data = data if len(data) > 0 else []
         return target_data, status
 
     def rfq_mmp_reset(self, inst_id, extra_data=None, **kwargs):
@@ -533,14 +506,11 @@ class RfqMixin:
     @staticmethod
     def _rfq_mmp_config_normalize_function(input_data, extra_data):
         """Normalize RFQ MMP config response"""
-        status = True if input_data.get("code") == "0" else False
+        status = input_data.get("code") == "0"
         if "data" not in input_data:
             return [], status
         data = input_data["data"]
-        if len(data) > 0:
-            target_data = data
-        else:
-            target_data = []
+        target_data = data if len(data) > 0 else []
         return target_data, status
 
     def rfq_mmp_config(self, inst_id, mode, tier, quote_limit, extra_data=None, **kwargs):
@@ -583,14 +553,11 @@ class RfqMixin:
     @staticmethod
     def _get_rfq_mmp_config_normalize_function(input_data, extra_data):
         """Normalize get RFQ MMP config response"""
-        status = True if input_data.get("code") == "0" else False
+        status = input_data.get("code") == "0"
         if "data" not in input_data:
             return [], status
         data = input_data["data"]
-        if len(data) > 0:
-            target_data = data
-        else:
-            target_data = []
+        target_data = data if len(data) > 0 else []
         return target_data, status
 
     def get_rfq_mmp_config(self, inst_id, extra_data=None, **kwargs):
@@ -636,14 +603,11 @@ class RfqMixin:
     @staticmethod
     def _create_quote_normalize_function(input_data, extra_data):
         """Normalize create quote response"""
-        status = True if input_data.get("code") == "0" else False
+        status = input_data.get("code") == "0"
         if "data" not in input_data:
             return [], status
         data = input_data["data"]
-        if len(data) > 0:
-            target_data = data
-        else:
-            target_data = []
+        target_data = data if len(data) > 0 else []
         return target_data, status
 
     def create_quote(self, inst_id, side, px, sz, cl_ord_id, tif, extra_data=None, **kwargs):
@@ -688,14 +652,11 @@ class RfqMixin:
     @staticmethod
     def _cancel_quote_normalize_function(input_data, extra_data):
         """Normalize cancel quote response"""
-        status = True if input_data.get("code") == "0" else False
+        status = input_data.get("code") == "0"
         if "data" not in input_data:
             return [], status
         data = input_data["data"]
-        if len(data) > 0:
-            target_data = data
-        else:
-            target_data = []
+        target_data = data if len(data) > 0 else []
         return target_data, status
 
     def cancel_quote(self, inst_id, quote_id, cl_ord_id=None, extra_data=None, **kwargs):
@@ -746,14 +707,11 @@ class RfqMixin:
     @staticmethod
     def _cancel_multiple_quotes_normalize_function(input_data, extra_data):
         """Normalize cancel multiple quotes response"""
-        status = True if input_data.get("code") == "0" else False
+        status = input_data.get("code") == "0"
         if "data" not in input_data:
             return [], status
         data = input_data["data"]
-        if len(data) > 0:
-            target_data = data
-        else:
-            target_data = []
+        target_data = data if len(data) > 0 else []
         return target_data, status
 
     def cancel_multiple_quotes(self, inst_id, quote_ids, cl_ord_id=None, extra_data=None, **kwargs):
@@ -798,14 +756,11 @@ class RfqMixin:
     @staticmethod
     def _cancel_all_quotes_normalize_function(input_data, extra_data):
         """Normalize cancel all quotes response"""
-        status = True if input_data.get("code") == "0" else False
+        status = input_data.get("code") == "0"
         if "data" not in input_data:
             return [], status
         data = input_data["data"]
-        if len(data) > 0:
-            target_data = data
-        else:
-            target_data = []
+        target_data = data if len(data) > 0 else []
         return target_data, status
 
     def cancel_all_quotes(self, inst_id, extra_data=None, **kwargs):
@@ -848,14 +803,11 @@ class RfqMixin:
     @staticmethod
     def _rfq_cancel_all_after_normalize_function(input_data, extra_data):
         """Normalize RFQ cancel all after response"""
-        status = True if input_data.get("code") == "0" else False
+        status = input_data.get("code") == "0"
         if "data" not in input_data:
             return [], status
         data = input_data["data"]
-        if len(data) > 0:
-            target_data = data
-        else:
-            target_data = []
+        target_data = data if len(data) > 0 else []
         return target_data, status
 
     def rfq_cancel_all_after(
@@ -921,14 +873,11 @@ class RfqMixin:
     @staticmethod
     def _get_rfqs_normalize_function(input_data, extra_data):
         """Normalize get RFQs response"""
-        status = True if input_data.get("code") == "0" else False
+        status = input_data.get("code") == "0"
         if "data" not in input_data:
             return [], status
         data = input_data["data"]
-        if len(data) > 0:
-            target_data = data
-        else:
-            target_data = []
+        target_data = data if len(data) > 0 else []
         return target_data, status
 
     def get_rfqs(
@@ -1011,14 +960,11 @@ class RfqMixin:
     @staticmethod
     def _get_rfq_quotes_normalize_function(input_data, extra_data):
         """Normalize get RFQ quotes response"""
-        status = True if input_data.get("code") == "0" else False
+        status = input_data.get("code") == "0"
         if "data" not in input_data:
             return [], status
         data = input_data["data"]
-        if len(data) > 0:
-            target_data = data
-        else:
-            target_data = []
+        target_data = data if len(data) > 0 else []
         return target_data, status
 
     def get_rfq_quotes(
@@ -1091,14 +1037,11 @@ class RfqMixin:
     @staticmethod
     def _get_rfq_trades_normalize_function(input_data, extra_data):
         """Normalize get RFQ trades response"""
-        status = True if input_data.get("code") == "0" else False
+        status = input_data.get("code") == "0"
         if "data" not in input_data:
             return [], status
         data = input_data["data"]
-        if len(data) > 0:
-            target_data = data
-        else:
-            target_data = []
+        target_data = data if len(data) > 0 else []
         return target_data, status
 
     def get_rfq_trades(
@@ -1155,14 +1098,11 @@ class RfqMixin:
     @staticmethod
     def _get_public_rfq_trades_normalize_function(input_data, extra_data):
         """Normalize get public RFQ trades response"""
-        status = True if input_data.get("code") == "0" else False
+        status = input_data.get("code") == "0"
         if "data" not in input_data:
             return [], status
         data = input_data["data"]
-        if len(data) > 0:
-            target_data = data
-        else:
-            target_data = []
+        target_data = data if len(data) > 0 else []
         return target_data, status
 
     def get_public_rfq_trades(
@@ -1215,14 +1155,11 @@ class RfqMixin:
     @staticmethod
     def _get_block_tickers_normalize_function(input_data, extra_data):
         """Normalize get block tickers response"""
-        status = True if input_data.get("code") == "0" else False
+        status = input_data.get("code") == "0"
         if "data" not in input_data:
             return [], status
         data = input_data["data"]
-        if len(data) > 0:
-            target_data = data
-        else:
-            target_data = []
+        target_data = data if len(data) > 0 else []
         return target_data, status
 
     def get_block_tickers(self, inst_type=None, uly=None, inst_id=None, extra_data=None, **kwargs):
@@ -1267,14 +1204,11 @@ class RfqMixin:
     @staticmethod
     def _get_block_ticker_normalize_function(input_data, extra_data):
         """Normalize get block ticker response"""
-        status = True if input_data.get("code") == "0" else False
+        status = input_data.get("code") == "0"
         if "data" not in input_data:
             return [], status
         data = input_data["data"]
-        if len(data) > 0:
-            target_data = data
-        else:
-            target_data = []
+        target_data = data if len(data) > 0 else []
         return target_data, status
 
     def get_block_ticker(self, inst_id, extra_data=None, **kwargs):
@@ -1323,14 +1257,11 @@ class RfqMixin:
     @staticmethod
     def _get_public_block_trades_normalize_function(input_data, extra_data):
         """Normalize get public block trades response"""
-        status = True if input_data.get("code") == "0" else False
+        status = input_data.get("code") == "0"
         if "data" not in input_data:
             return [], status
         data = input_data["data"]
-        if len(data) > 0:
-            target_data = data
-        else:
-            target_data = []
+        target_data = data if len(data) > 0 else []
         return target_data, status
 
     def get_public_block_trades(

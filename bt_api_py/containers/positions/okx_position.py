@@ -41,7 +41,7 @@ class OkxPositionData(PositionData):
             return self
         self.server_time = from_dict_get_float(self.position_data, "uTime")
         self.margin_type = from_dict_get_string(self.position_data, "mgnMode")
-        self.is_isolated = True if self.margin_type == "isolated" else False
+        self.is_isolated = self.margin_type == "isolated"
         self.leverage = from_dict_get_float(self.position_data, "lever")
         self.position_symbol_name = from_dict_get_string(self.position_data, "instId")
         self.position_volume = from_dict_get_float(self.position_data, "pos")

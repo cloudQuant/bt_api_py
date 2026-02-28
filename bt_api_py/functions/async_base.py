@@ -23,7 +23,7 @@ class AsyncBase:
         self.client_timeout = 5
         self.limit = 100
         self.session = None
-        self.async_proxy = kwargs.get("async_proxy", None)
+        self.async_proxy = kwargs.get("async_proxy")
         self.async_base_logger = SpdLogManager(
             "./logs/async_data.log", "async_base", 0, 0, False
         ).create_logger()

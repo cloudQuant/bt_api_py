@@ -28,14 +28,14 @@ def _binance_swap_subscribe_handler(data_queue, exchange_params, topics, bt_api)
     :param bt_api: BtApi 实例 (用于访问共享状态)
     """
     exchange_data = BinanceExchangeDataSwap()
-    kwargs = {key: v for key, v in exchange_params.items()}
+    kwargs = dict(exchange_params.items())
     kwargs["wss_name"] = "binance_market_data"
     kwargs["wss_url"] = "wss://fstream.binance.com/ws"
     kwargs["exchange_data"] = exchange_data
     kwargs["topics"] = topics
     BinanceMarketWssDataSwap(data_queue, **kwargs).start()
     if not bt_api._subscription_flags.get("BINANCE___SWAP_account", False):
-        account_kwargs = {k: v for k, v in kwargs.items()}
+        account_kwargs = dict(kwargs.items())
         account_kwargs["topics"] = [
             {"topic": "account"},
             {"topic": "order"},
@@ -53,14 +53,14 @@ def _binance_spot_subscribe_handler(data_queue, exchange_params, topics, bt_api)
     :param bt_api: BtApi 实例
     """
     exchange_data = BinanceExchangeDataSpot()
-    kwargs = {key: v for key, v in exchange_params.items()}
+    kwargs = dict(exchange_params.items())
     kwargs["wss_name"] = "binance_market_data"
     kwargs["wss_url"] = "wss://stream.binance.com:9443/ws"
     kwargs["exchange_data"] = exchange_data
     kwargs["topics"] = topics
     BinanceMarketWssDataSpot(data_queue, **kwargs).start()
     if not bt_api._subscription_flags.get("BINANCE___SPOT_account", False):
-        account_kwargs = {k: v for k, v in kwargs.items()}
+        account_kwargs = dict(kwargs.items())
         account_kwargs["topics"] = [
             {"topic": "account"},
             {"topic": "order"},

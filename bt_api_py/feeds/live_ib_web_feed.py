@@ -11,7 +11,6 @@ Interactive Brokers Web API Feed 实现
 
 import threading
 import time
-from typing import Set
 
 from bt_api_py.containers.exchanges.ib_web_exchange_data import (
     IbWebExchangeDataFuture,
@@ -31,10 +30,10 @@ class IbWebRequestData(Feed):
         self.data_queue = data_queue
         self.exchange_name = "IB_WEB"
         self.base_url = kwargs.get("base_url", "https://localhost:5000")
-        self.account_id = kwargs.get("account_id", None)
-        self.access_token = kwargs.get("access_token", None)
+        self.account_id = kwargs.get("account_id")
+        self.access_token = kwargs.get("access_token")
         self.verify_ssl = kwargs.get("verify_ssl", False)
-        self.proxies = kwargs.get("proxies", None)
+        self.proxies = kwargs.get("proxies")
         self.timeout = kwargs.get("timeout", 10)
         self.asset_type = kwargs.get("asset_type", "STK")
         self._params = IbWebExchangeDataStock()
@@ -56,15 +55,15 @@ class IbWebRequestData(Feed):
         self._subscribed_conids = set()
 
         # Cookie 支持
-        self._cookies = kwargs.get("cookies", None)
-        self._cookie_source = kwargs.get("cookie_source", None)
+        self._cookies = kwargs.get("cookies")
+        self._cookie_source = kwargs.get("cookie_source")
         self._cookie_browser = kwargs.get("cookie_browser", "chrome")
         self._cookie_path = kwargs.get("cookie_path", "/sso")  # IBKR Gateway 认证路径
         self._loaded_cookies = {}
         self._load_cookies()
 
     @classmethod
-    def _capabilities(cls) -> Set[Capability]:
+    def _capabilities(cls) -> set[Capability]:
         return {
             Capability.GET_TICK,
             Capability.GET_DEPTH,
