@@ -18,6 +18,10 @@ pytest-sugar
 pytest-cov
 pytest-picked
 pytest-xdist
+pytest-html
+pytest-rerunfailures
 python-rapidjson
 python-dotenv
 backports.tarfile
+ruff
+mypy

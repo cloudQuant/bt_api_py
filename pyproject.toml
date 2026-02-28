@@ -34,7 +34,122 @@ Homepage = "https://github.com/cloudQuant/bt_api_py"
 Repository = "https://github.com/cloudQuant/bt_api_py"
 
 [tool.pytest.ini_options]
-addopts = "--dist loadgroup"
+addopts = [
+    "--dist=loadgroup",
+    "--strict-markers",
+    "--tb=short",
+]
+markers = [
+    "unit: Unit tests (fast, no external dependencies)",
+    "integration: Integration tests (may require external services)",
+    "slow: Slow tests (> 1s)",
+    "network: Tests requiring network access",
+    "ctp: CTP related tests",
+    "binance: Binance exchange tests",
+    "okx: OKX exchange tests",
+    "ib: Interactive Brokers tests",
+]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+
+[tool.coverage.run]
+source = ["bt_api_py"]
+omit = [
+    "*/tests/*",
+    "*/test_*.py",
+    "*/__pycache__/*",
+    "*/site-packages/*",
+    "*/ctp/_ctp.*.so",
+    "*/ctp/ctp_wrap.*",
+]
+branch = true
+parallel = true
+
+[tool.coverage.report]
+precision = 2
+show_missing = true
+skip_covered = false
+exclude_lines = [
+    "pragma: no cover",
+    "def __repr__",
+    "raise AssertionError",
+    "raise NotImplementedError",
+    "if __name__ == .__main__.:",
+    "if TYPE_CHECKING:",
+    "@abstractmethod",
+]
+
+[tool.coverage.html]
+directory = "htmlcov"
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+exclude = [
+    ".git",
+    "__pycache__",
+    "build",
+    "dist",
+    "*.egg-info",
+    ".venv",
+    "venv",
+    "bt_api_py/ctp/ctp.py.bak",
+    "bt_api_py/ctp/ctp_wrap.*",
+]
+
+[tool.ruff.lint]
+select = [
+    "E",   # pycodestyle errors
+    "W",   # pycodestyle warnings
+    "F",   # pyflakes
+    "I",   # isort
+    "N",   # pep8-naming
+    "UP",  # pyupgrade
+    "B",   # flake8-bugbear
+    "C4",  # flake8-comprehensions
+    "SIM", # flake8-simplify
+    "TCH", # flake8-type-checking
+]
+ignore = [
+    "E501",  # line too long (handled by formatter)
+    "B008",  # do not perform function calls in argument defaults
+    "N802",  # function name should be lowercase (CTP uses CamelCase)
+    "N803",  # argument name should be lowercase (CTP uses CamelCase)
+    "N806",  # variable in function should be lowercase (CTP uses CamelCase)
+]
+
+[tool.ruff.lint.per-file-ignores]
+"__init__.py" = ["F401", "F403"]
+"bt_api_py/ctp/*.py" = ["N801", "N802", "N803", "N806"]  # CTP uses C-style naming
+"tests/*.py" = ["N802", "N803"]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+
+[tool.mypy]
+python_version = "3.11"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = false
+disallow_incomplete_defs = false
+check_untyped_defs = true
+no_implicit_optional = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+warn_no_return = true
+strict_equality = true
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = "bt_api_py.ctp.*"
+ignore_errors = true
+
+[[tool.mypy.overrides]]
+module = "tests.*"
+disallow_untyped_defs = false
 
 [project.optional-dependencies]
 dev = [
@@ -42,5 +157,10 @@ dev = [
     "pytest-sugar",
     "pytest-cov",
     "pytest-timeout",
+    "pytest-html",
+    "pytest-rerunfailures",
+    "pytest-xdist",
     "python-dotenv>=1.0",
+    "ruff>=0.1.0",
+    "mypy>=1.0",
 ]

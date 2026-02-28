@@ -1,12 +1,15 @@
 #!/bin/bash
 # Run tests script for bt_api_py
-# Usage: ./run_tests.sh [--ctp] [-p|--parallel NUM]
+# Usage: ./run_tests.sh [OPTIONS]
 
 set -eo pipefail
 
 # Default values
 RUN_CTP=false
 PARALLEL=8
+COVERAGE=false
+HTML_REPORT=false
+MARKERS=""
 
 # Log setup
 LOG_DIR="logs"
@@ -29,20 +32,44 @@ while [[ $# -gt 0 ]]; do
                 exit 1
             fi
             ;;
+        --cov|--coverage)
+            COVERAGE=true
+            shift
+            ;;
+        --html)
+            HTML_REPORT=true
+            shift
+            ;;
+        -m|--markers)
+            if [[ -n "$2" ]]; then
+                MARKERS="$2"
+                shift 2
+            else
+                echo "Error: --markers requires an argument"
+                exit 1
+            fi
+            ;;
         -h|--help)
             echo "Usage: ./run_tests.sh [OPTIONS]"
             echo ""
             echo "Options:"
             echo "  -c, --ctp              Run CTP related tests (default: false)"
             echo "  -p, --parallel NUM     Number of parallel processes (default: 8)"
-            echo "                         Use 1 for single process, or any positive number"
+            echo "  --cov, --coverage      Generate coverage report"
+            echo "  --html                 Generate HTML test report (requires pytest-html)"
+            echo "  -m, --markers EXPR     Run tests matching marker expression"
+            echo "                         Examples: 'unit', 'not slow', 'network and binance'"
             echo "  -h, --help             Show this help message"
             echo ""
+            echo "Available markers:"
+            echo "  unit, integration, slow, network, ctp, binance, okx, ib"
+            echo ""
             echo "Examples:"
-            echo "  ./run_tests.sh                  # Run tests without CTP, 8 processes"
-            echo "  ./run_tests.sh --ctp            # Run tests including CTP, 8 processes"
-            echo "  ./run_tests.sh -p 1             # Single process, no CTP"
-            echo "  ./run_tests.sh --ctp -p 8       # Include CTP, 8 processes"
+            echo "  ./run_tests.sh                      # Run all tests (no CTP), 8 processes"
+            echo "  ./run_tests.sh --ctp --cov          # Run with CTP and coverage"
+            echo "  ./run_tests.sh -m unit              # Run only unit tests"
+            echo "  ./run_tests.sh -m 'not slow' --cov  # Fast tests with coverage"
+            echo "  ./run_tests.sh --html               # Generate HTML report"
             exit 0
             ;;
         *)
@@ -70,6 +97,24 @@ if [ "$RUN_CTP" = false ]; then
     PYTEST_CMD="$PYTEST_CMD --ignore=tests/test_ctp_feed.py"
 else
     echo "Including CTP related tests..."
+fi
+
+# Add coverage options
+if [ "$COVERAGE" = true ]; then
+    echo "Enabling coverage reporting..."
+    PYTEST_CMD="$PYTEST_CMD --cov=bt_api_py --cov-report=term-missing --cov-report=html"
+fi
+
+# Add HTML report
+if [ "$HTML_REPORT" = true ]; then
+    echo "Enabling HTML test report..."
+    PYTEST_CMD="$PYTEST_CMD --html=logs/report_$(date '+%Y%m%d_%H%M%S').html --self-contained-html"
+fi
+
+# Add marker filtering
+if [ -n "$MARKERS" ]; then
+    echo "Filtering tests with markers: $MARKERS"
+    PYTEST_CMD="$PYTEST_CMD -m \"$MARKERS\""
 fi
 
 # Print command
