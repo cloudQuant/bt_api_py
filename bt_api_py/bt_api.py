@@ -272,6 +272,224 @@ class BtApi(object):
         """列出所有已注册可用的交易所"""
         return ExchangeRegistry.list_exchanges()
 
+    # ══════════════════════════════════════════════════════════════
+    # 统一接口 — 直接在 BtApi 上调用，自动路由到对应交易所的 Feed
+    # 用法:
+    #   bt_api.get_tick("BINANCE___SWAP", "BTC-USDT")
+    #   bt_api.make_order("OKX___SWAP", "BTC-USDT", 0.001, 50000, "limit")
+    # 原有接口 (get_request_api -> feed.method) 保持不变
+    # ══════════════════════════════════════════════════════════════
 
+    def _get_feed(self, exchange_name):
+        """获取 feed 实例，不存在时抛出 ExchangeNotFoundError"""
+        feed = self.exchange_feeds.get(exchange_name)
+        if feed is None:
+            raise ExchangeNotFoundError(exchange_name, list(self.exchange_feeds.keys()))
+        return feed
 
+    # ── 行情查询（同步）────────────────────────────────────────────
 
+    def get_tick(self, exchange_name, symbol, extra_data=None, **kwargs):
+        """获取最新行情
+        :param exchange_name: 交易所标识, 如 "BINANCE___SWAP"
+        :param symbol: 交易对, 如 "BTC-USDT"
+        """
+        return self._get_feed(exchange_name).get_tick(symbol, extra_data=extra_data, **kwargs)
+
+    def get_depth(self, exchange_name, symbol, count=20, extra_data=None, **kwargs):
+        """获取深度数据
+        :param exchange_name: 交易所标识
+        :param symbol: 交易对
+        :param count: 深度档数
+        """
+        return self._get_feed(exchange_name).get_depth(symbol, count=count, extra_data=extra_data, **kwargs)
+
+    def get_kline(self, exchange_name, symbol, period, count=20, extra_data=None, **kwargs):
+        """获取K线数据
+        :param exchange_name: 交易所标识
+        :param symbol: 交易对
+        :param period: K线周期, 如 "1m", "5m", "1H", "1D"
+        :param count: K线数量
+        """
+        return self._get_feed(exchange_name).get_kline(symbol, period, count=count, extra_data=extra_data, **kwargs)
+
+    # ── 交易操作（同步）────────────────────────────────────────────
+
+    def make_order(self, exchange_name, symbol, volume, price, order_type,
+                   offset="open", post_only=False, client_order_id=None,
+                   extra_data=None, **kwargs):
+        """下单
+        :param exchange_name: 交易所标识
+        :param symbol: 交易对
+        :param volume: 数量
+        :param price: 价格 (市价单传0)
+        :param order_type: 订单类型, "limit" / "market"
+        :param offset: 开平方向, "open" / "close" / "close_today" / "close_yesterday"
+        :param post_only: 是否只做 maker
+        :param client_order_id: 客户端自定义订单ID
+        """
+        return self._get_feed(exchange_name).make_order(
+            symbol, volume, price, order_type,
+            offset=offset, post_only=post_only, client_order_id=client_order_id,
+            extra_data=extra_data, **kwargs
+        )
+
+    def cancel_order(self, exchange_name, symbol, order_id, extra_data=None, **kwargs):
+        """撤单
+        :param exchange_name: 交易所标识
+        :param symbol: 交易对
+        :param order_id: 订单ID
+        """
+        return self._get_feed(exchange_name).cancel_order(symbol, order_id, extra_data=extra_data, **kwargs)
+
+    def cancel_all(self, exchange_name, symbol=None, extra_data=None, **kwargs):
+        """撤销所有订单
+        :param exchange_name: 交易所标识
+        :param symbol: 交易对 (None 表示所有品种)
+        """
+        return self._get_feed(exchange_name).cancel_all(symbol, extra_data=extra_data, **kwargs)
+
+    def query_order(self, exchange_name, symbol, order_id, extra_data=None, **kwargs):
+        """查询订单
+        :param exchange_name: 交易所标识
+        :param symbol: 交易对
+        :param order_id: 订单ID
+        """
+        return self._get_feed(exchange_name).query_order(symbol, order_id, extra_data=extra_data, **kwargs)
+
+    def get_open_orders(self, exchange_name, symbol=None, extra_data=None, **kwargs):
+        """查询挂单
+        :param exchange_name: 交易所标识
+        :param symbol: 交易对 (None 表示所有品种)
+        """
+        return self._get_feed(exchange_name).get_open_orders(symbol, extra_data=extra_data, **kwargs)
+
+    # ── 账户查询（同步）────────────────────────────────────────────
+
+    def get_balance(self, exchange_name, symbol=None, extra_data=None, **kwargs):
+        """查询余额
+        :param exchange_name: 交易所标识
+        :param symbol: 币种 (None 表示全部)
+        """
+        return self._get_feed(exchange_name).get_balance(symbol, extra_data=extra_data, **kwargs)
+
+    def get_account(self, exchange_name, symbol="ALL", extra_data=None, **kwargs):
+        """查询账户信息
+        :param exchange_name: 交易所标识
+        :param symbol: 币种
+        """
+        return self._get_feed(exchange_name).get_account(symbol, extra_data=extra_data, **kwargs)
+
+    def get_position(self, exchange_name, symbol=None, extra_data=None, **kwargs):
+        """查询持仓
+        :param exchange_name: 交易所标识
+        :param symbol: 交易对 (None 表示所有品种)
+        """
+        return self._get_feed(exchange_name).get_position(symbol, extra_data=extra_data, **kwargs)
+
+    # ── 行情查询（异步）────────────────────────────────────────────
+
+    def async_get_tick(self, exchange_name, symbol, extra_data=None, **kwargs):
+        """异步获取行情，结果推送到 data_queue"""
+        return self._get_feed(exchange_name).async_get_tick(symbol, extra_data=extra_data, **kwargs)
+
+    def async_get_depth(self, exchange_name, symbol, count=20, extra_data=None, **kwargs):
+        """异步获取深度，结果推送到 data_queue"""
+        return self._get_feed(exchange_name).async_get_depth(symbol, count=count, extra_data=extra_data, **kwargs)
+
+    def async_get_kline(self, exchange_name, symbol, period, count=20, extra_data=None, **kwargs):
+        """异步获取K线，结果推送到 data_queue"""
+        return self._get_feed(exchange_name).async_get_kline(symbol, period, count=count, extra_data=extra_data, **kwargs)
+
+    # ── 交易操作（异步）────────────────────────────────────────────
+
+    def async_make_order(self, exchange_name, symbol, volume, price, order_type,
+                         offset="open", post_only=False, client_order_id=None,
+                         extra_data=None, **kwargs):
+        """异步下单，结果推送到 data_queue"""
+        return self._get_feed(exchange_name).async_make_order(
+            symbol, volume, price, order_type,
+            offset=offset, post_only=post_only, client_order_id=client_order_id,
+            extra_data=extra_data, **kwargs
+        )
+
+    def async_cancel_order(self, exchange_name, symbol, order_id, extra_data=None, **kwargs):
+        """异步撤单，结果推送到 data_queue"""
+        return self._get_feed(exchange_name).async_cancel_order(symbol, order_id, extra_data=extra_data, **kwargs)
+
+    def async_cancel_all(self, exchange_name, symbol=None, extra_data=None, **kwargs):
+        """异步撤销所有订单，结果推送到 data_queue"""
+        return self._get_feed(exchange_name).async_cancel_all(symbol, extra_data=extra_data, **kwargs)
+
+    def async_query_order(self, exchange_name, symbol, order_id, extra_data=None, **kwargs):
+        """异步查询订单，结果推送到 data_queue"""
+        return self._get_feed(exchange_name).async_query_order(symbol, order_id, extra_data=extra_data, **kwargs)
+
+    def async_get_open_orders(self, exchange_name, symbol=None, extra_data=None, **kwargs):
+        """异步查询挂单，结果推送到 data_queue"""
+        return self._get_feed(exchange_name).async_get_open_orders(symbol, extra_data=extra_data, **kwargs)
+
+    # ── 账户查询（异步）────────────────────────────────────────────
+
+    def async_get_balance(self, exchange_name, symbol=None, extra_data=None, **kwargs):
+        """异步查询余额，结果推送到 data_queue"""
+        return self._get_feed(exchange_name).async_get_balance(symbol, extra_data=extra_data, **kwargs)
+
+    def async_get_account(self, exchange_name, symbol="ALL", extra_data=None, **kwargs):
+        """异步查询账户，结果推送到 data_queue"""
+        return self._get_feed(exchange_name).async_get_account(symbol, extra_data=extra_data, **kwargs)
+
+    def async_get_position(self, exchange_name, symbol=None, extra_data=None, **kwargs):
+        """异步查询持仓，结果推送到 data_queue"""
+        return self._get_feed(exchange_name).async_get_position(symbol, extra_data=extra_data, **kwargs)
+
+    # ── 批量操作 ───────────────────────────────────────────────────
+
+    def get_all_ticks(self, symbol, extra_data=None, **kwargs):
+        """从所有已连接的交易所获取行情
+        :param symbol: 交易对
+        :return: dict {exchange_name: ticker_data}
+        """
+        results = {}
+        for exchange_name in self.exchange_feeds:
+            try:
+                results[exchange_name] = self.get_tick(exchange_name, symbol, extra_data=extra_data, **kwargs)
+            except Exception as e:
+                self.log(f"get_tick failed for {exchange_name}: {e}", level="warning")
+        return results
+
+    def get_all_balances(self, symbol=None, extra_data=None, **kwargs):
+        """从所有已连接的交易所查询余额
+        :return: dict {exchange_name: balance_data}
+        """
+        results = {}
+        for exchange_name in self.exchange_feeds:
+            try:
+                results[exchange_name] = self.get_balance(exchange_name, symbol, extra_data=extra_data, **kwargs)
+            except Exception as e:
+                self.log(f"get_balance failed for {exchange_name}: {e}", level="warning")
+        return results
+
+    def get_all_positions(self, symbol=None, extra_data=None, **kwargs):
+        """从所有已连接的交易所查询持仓
+        :return: dict {exchange_name: position_data}
+        """
+        results = {}
+        for exchange_name in self.exchange_feeds:
+            try:
+                results[exchange_name] = self.get_position(exchange_name, symbol, extra_data=extra_data, **kwargs)
+            except Exception as e:
+                self.log(f"get_position failed for {exchange_name}: {e}", level="warning")
+        return results
+
+    def cancel_all_orders(self, symbol=None, extra_data=None, **kwargs):
+        """撤销所有已连接交易所的所有订单
+        :return: dict {exchange_name: result}
+        """
+        results = {}
+        for exchange_name in self.exchange_feeds:
+            try:
+                results[exchange_name] = self.cancel_all(exchange_name, symbol, extra_data=extra_data, **kwargs)
+            except Exception as e:
+                self.log(f"cancel_all failed for {exchange_name}: {e}", level="warning")
+        return results

@@ -9,7 +9,8 @@
 - [环境准备](#环境准备)
 - [账户配置](#账户配置)
 - [初始化 BtApi](#初始化-btapi)
-- [REST 同步请求](#rest-同步请求)
+- [统一接口（推荐）](#统一接口推荐)
+- [REST 同步请求（Feed 模式）](#rest-同步请求feed-模式)
 - [异步请求](#异步请求)
 - [WebSocket 实时订阅](#websocket-实时订阅)
 - [余额与持仓管理](#余额与持仓管理)
@@ -170,7 +171,104 @@ bt_api.add_exchange("BINANCE___SPOT", {
 
 ---
 
-## REST 同步请求
+## 统一接口（推荐）
+
+BtApi 提供统一接口，直接在 `BtApi` 实例上调用方法，第一个参数传入交易所标识即可自动路由到对应交易所。
+
+### 行情查询
+
+```python
+# 获取最新行情
+tick = bt_api.get_tick("BINANCE___SWAP", "BTC-USDT")
+tick.init_data()
+print(f"价格: {tick.get_last_price()}")
+
+# 获取深度
+depth = bt_api.get_depth("BINANCE___SWAP", "BTC-USDT", count=20)
+depth.init_data()
+print(f"买一价: {depth.get_bid_price(0)}")
+
+# 获取K线
+kline = bt_api.get_kline("BINANCE___SWAP", "BTC-USDT", "1m", count=100)
+```
+
+### 交易操作
+
+```python
+# 下单 — 所有交易所使用完全相同的接口
+order = bt_api.make_order("BINANCE___SWAP", "BTC-USDT",
+                          volume=0.001, price=50000.0, order_type="limit")
+order.init_data()
+print(f"订单ID: {order.get_order_id()}")
+
+# 撤单
+bt_api.cancel_order("BINANCE___SWAP", "BTC-USDT", order_id="123456789")
+
+# 撤销所有挂单
+bt_api.cancel_all("BINANCE___SWAP", "BTC-USDT")
+
+# 查询订单
+order = bt_api.query_order("BINANCE___SWAP", "BTC-USDT", order_id="123456789")
+
+# 查询挂单
+open_orders = bt_api.get_open_orders("BINANCE___SWAP", "BTC-USDT")
+```
+
+### 账户查询
+
+```python
+# 查询余额
+balance = bt_api.get_balance("BINANCE___SWAP")
+
+# 查询账户
+account = bt_api.get_account("BINANCE___SWAP")
+
+# 查询持仓
+position = bt_api.get_position("BINANCE___SWAP", "BTC-USDT")
+```
+
+### 异步统一接口
+
+异步方法以 `async_` 前缀，结果推送到对应的 data_queue：
+
+```python
+bt_api.async_get_tick("BINANCE___SWAP", "BTC-USDT")
+bt_api.async_make_order("OKX___SWAP", "BTC-USDT", 0.001, 50000.0, "limit")
+bt_api.async_cancel_order("BINANCE___SWAP", "BTC-USDT", "123456789")
+bt_api.async_get_balance("OKX___SWAP")
+```
+
+### 批量操作（跨交易所）
+
+```python
+# 从所有已连接交易所获取 BTC-USDT 行情
+all_ticks = bt_api.get_all_ticks("BTC-USDT")
+# 返回: {"BINANCE___SWAP": tick_data, "OKX___SWAP": tick_data, ...}
+
+# 查询所有交易所余额
+all_balances = bt_api.get_all_balances()
+
+# 查询所有交易所持仓
+all_positions = bt_api.get_all_positions("BTC-USDT")
+
+# 撤销所有交易所的所有订单
+bt_api.cancel_all_orders("BTC-USDT")
+```
+
+### 统一接口完整方法列表
+
+| 分类 | 同步方法 | 异步方法 |
+|------|---------|---------|
+| 行情 | `get_tick`, `get_depth`, `get_kline` | `async_get_tick`, `async_get_depth`, `async_get_kline` |
+| 交易 | `make_order`, `cancel_order`, `cancel_all`, `query_order`, `get_open_orders` | `async_make_order`, `async_cancel_order`, `async_cancel_all`, `async_query_order`, `async_get_open_orders` |
+| 账户 | `get_balance`, `get_account`, `get_position` | `async_get_balance`, `async_get_account`, `async_get_position` |
+| 批量 | `get_all_ticks`, `get_all_balances`, `get_all_positions`, `cancel_all_orders` | — |
+
+---
+
+## REST 同步请求（Feed 模式）
+
+> **注意**: 推荐使用上面的统一接口。Feed 模式保留向后兼容。
 
 ### 获取 Feed API
 
