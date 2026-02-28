@@ -1,20 +1,30 @@
 #!/usr/bin/env python3
 """
-split_ctp_wrapper.py — 自动拆分 SWIG 生成的 ctp.py 为多个分类子模块 (v2)
+split_ctp_wrapper.py — 自动拆分 SWIG 生成的 ctp.py 为多个分类子模块 (v2.1)
 
 用法:
     python scripts/split_ctp_wrapper.py
     python scripts/split_ctp_wrapper.py --dry-run
 
-原理 (v2 — 真正代码拆分):
+原理 (v2.1 — 真正代码拆分 + 保留关键导入):
     解析 bt_api_py/ctp/ctp.py，将实际代码提取到各子模块中:
 
     1. _ctp_base.py          — SWIG 基础设施 (preamble 共享代码)
+                                **现在会保留关键导入: _ctp, stderr, print_exception, weakref**
     2. ctp_constants.py      — THOST_* 常量赋值语句
     3. ctp_md_api.py         — CThostFtdcMdSpi / CThostFtdcMdApi 类定义
     4. ctp_trader_api.py     — CThostFtdcTraderSpi / CThostFtdcTraderApi 类定义
     5. ctp_structs_*.py      — 各类 CThostFtdc*Field 结构体类定义
     6. ctp.py                — 替换为向后兼容垫片 (从子模块重新导入全部符号)
+
+v2.1 更新 (2026-02-28):
+    修复了 _ctp_base.py 生成时丢失关键导入的问题。现在会自动检测并恢复:
+    - from sys import stderr, float_info
+    - from traceback import print_exc, print_exception
+    - import weakref
+    - from . import _ctp (或 import _ctp)
+
+    这些导入是子模块正常工作所必需的。
 """
 
 import os
@@ -260,16 +270,62 @@ def _write_file(filepath: str, content: str, dry_run: bool = False):
 
 
 def generate_base_module(preamble_code: str, output_dir: str, dry_run: bool = False):
-    """生成 _ctp_base.py — 包含 SWIG 基础设施共享代码。"""
+    """生成 _ctp_base.py — 包含 SWIG 基础设施共享代码。
+
+    CRITICAL: Preserves essential imports that were stripped during parsing:
+    - from sys import stderr, float_info
+    - from traceback import print_exc, print_exception
+    - import weakref
+    - from . import _ctp (or import _ctp)
+
+    These imports are required by submodules that import from _ctp_base.
+    """
+    # Ensure critical imports are preserved in preamble
+    # The preamble parsing may have stripped these, so we restore them
+    import_lines = []
+
+    # Check if imports are already in preamble
+    has_stderr = "from sys import" in preamble_code and "stderr" in preamble_code
+    has_traceback = "from traceback import" in preamble_code
+    has_weakref = "import weakref" in preamble_code
+    has_ctp_import = "import _ctp" in preamble_code or "from . import _ctp" in preamble_code
+
+    # Add missing imports at the beginning
+    if not has_stderr:
+        import_lines.append("from sys import stderr, float_info")
+    if not has_traceback:
+        import_lines.append("from traceback import print_exc, print_exception")
+    if not has_weakref:
+        import_lines.append("\nimport weakref")
+
+    # Ensure _ctp import is present (this is the most critical one)
+    if not has_ctp_import:
+        import_lines.extend([
+            "\nfrom sys import version_info as _swig_python_version_info",
+            "# Import the low-level C/C++ module",
+            'if getattr(globals().get("__spec__"), "parent", None) or __package__ or "." in __name__:',
+            "    from . import _ctp",
+            "else:",
+            "    import _ctp",
+        ])
+
+    # Construct the final content
+    if import_lines:
+        restored_imports = "\n".join(import_lines) + "\n\n"
+    else:
+        restored_imports = ""
+
     content = (
         _AUTO_GEN_HEADER
         + '"""SWIG 基础设施 — 被所有 CTP 子模块共享"""\n\n'
+        + restored_imports
         + preamble_code
     )
+
     filepath = os.path.join(output_dir, "_ctp_base.py")
     _write_file(filepath, content, dry_run)
     label = "[DRY-RUN] Would generate" if dry_run else "Generated"
-    print(f"  {label}: _ctp_base.py (SWIG infrastructure)")
+    print(f"  {label}: _ctp_base.py (SWIG infrastructure with preserved imports)")
 
 
 def generate_constants_module(constants_code: str, constant_names: list,

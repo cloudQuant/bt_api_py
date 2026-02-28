@@ -22,6 +22,8 @@ help:
 	@echo "  make format           Format code with ruff"
 	@echo "  make type-check       Run mypy type checking"
 	@echo "  make check            Run all checks (lint + type-check)"
+	@echo "  make pre-commit       Install pre-commit hooks"
+	@echo "  make pre-commit-run   Run pre-commit on all files"
 	@echo ""
 	@echo "Cleanup:"
 	@echo "  make clean            Remove build artifacts and cache"
@@ -74,6 +76,15 @@ type-check:
 
 check: lint type-check
 	@echo "All checks passed!"
+
+pre-commit:
+	@echo "Installing pre-commit hooks..."
+	pre-commit install
+	@echo "Pre-commit hooks installed! They will run automatically on git commit."
+
+pre-commit-run:
+	@echo "Running pre-commit on all files..."
+	pre-commit run --all-files
 
 # Cleanup
 clean:

@@ -25,3 +25,4 @@ python-dotenv
 backports.tarfile
 ruff
 mypy
+pre-commit

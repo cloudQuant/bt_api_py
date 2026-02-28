@@ -21,7 +21,19 @@ pip install -e ".[dev]"
 pip install -r requirements.txt
 ```
 
-### 2. Verify Installation
+### 2. Install Pre-commit Hooks (Recommended)
+
+```bash
+# Install pre-commit hooks to automatically check code before commits
+make pre-commit
+
+# Or manually:
+pre-commit install
+```
+
+This will automatically run code quality checks (ruff, mypy, file checks) before each commit.
+
+### 3. Verify Installation
 
 ```bash
 # Run tests
@@ -112,21 +124,21 @@ def calculate_position_size(
     stop_loss_distance: float
 ) -> float:
     """Calculate position size based on risk management rules.
-    
+
     Args:
         account_balance: Total account balance in base currency
         risk_percent: Risk percentage (0-100)
         stop_loss_distance: Distance to stop loss in price units
-        
+
     Returns:
         Position size in units
-        
+
     Raises:
         ValueError: If risk_percent is invalid
     """
     if not 0 < risk_percent <= 100:
         raise ValueError("risk_percent must be between 0 and 100")
-    
+
     risk_amount = account_balance * (risk_percent / 100)
     return risk_amount / stop_loss_distance
 ```
@@ -164,7 +176,7 @@ bt_api_py/
    git add .
    git commit -m "feat: add new feature description"
    ```
-   
+
    Use conventional commit messages:
    - `feat:` New feature
    - `fix:` Bug fix
@@ -191,10 +203,10 @@ bt_api_py/
    def test_order_creation():
        # Arrange
        account = Account(balance=10000)
-       
+
        # Act
        order = account.create_order(symbol="BTCUSDT", quantity=0.1)
-       
+
        # Assert
        assert order.symbol == "BTCUSDT"
        assert order.quantity == 0.1
@@ -205,7 +217,7 @@ bt_api_py/
    @pytest.fixture
    def mock_exchange():
        return MockExchange(api_key="test_key")
-   
+
    def test_with_fixture(mock_exchange):
        result = mock_exchange.get_balance()
        assert result > 0
