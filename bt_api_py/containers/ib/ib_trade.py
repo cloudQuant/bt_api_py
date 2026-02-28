@@ -2,14 +2,14 @@
 IB 成交数据容器
 对应 IB TWS API 的 Execution
 """
+
 from bt_api_py.containers.trades.trade import TradeData
 
 
 class IbTradeData(TradeData):
     """IB 成交数据"""
 
-    def __init__(self, trade_info, symbol_name=None, asset_type="STK",
-                 has_been_json_encoded=False):
+    def __init__(self, trade_info, symbol_name=None, asset_type="STK", has_been_json_encoded=False):
         super().__init__(trade_info, has_been_json_encoded)
         self.symbol_name = symbol_name
         self.asset_type = asset_type
@@ -18,7 +18,7 @@ class IbTradeData(TradeData):
         self.exec_id = None
         self.order_id_val = None
         self.perm_id = None
-        self.side = None             # BOT / SLD
+        self.side = None  # BOT / SLD
         self.shares = None
         self.price_val = None
         self.cum_qty = None
@@ -32,17 +32,17 @@ class IbTradeData(TradeData):
             return self
         info = self.trade_info
         if isinstance(info, dict):
-            self.exec_id = info.get('execId', '')
-            self.order_id_val = info.get('orderId')
-            self.perm_id = info.get('permId')
-            self.side = info.get('side', 'BOT')
-            self.shares = float(info.get('shares', 0))
-            self.price_val = float(info.get('price', 0))
-            self.cum_qty = float(info.get('cumQty', 0))
-            self.avg_price_val = float(info.get('avgPrice', 0))
-            self.exec_time = info.get('time', '')
-            self.commission_val = float(info.get('commission', 0))
-            self.exchange_val = info.get('exchange', '')
+            self.exec_id = info.get("execId", "")
+            self.order_id_val = info.get("orderId")
+            self.perm_id = info.get("permId")
+            self.side = info.get("side", "BOT")
+            self.shares = float(info.get("shares", 0))
+            self.price_val = float(info.get("price", 0))
+            self.cum_qty = float(info.get("cumQty", 0))
+            self.avg_price_val = float(info.get("avgPrice", 0))
+            self.exec_time = info.get("time", "")
+            self.commission_val = float(info.get("commission", 0))
+            self.exchange_val = info.get("exchange", "")
         self._initialized = True
         return self
 
@@ -68,7 +68,7 @@ class IbTradeData(TradeData):
         return self.perm_id
 
     def get_trade_side(self):
-        return 'buy' if self.side == 'BOT' else 'sell'
+        return "buy" if self.side == "BOT" else "sell"
 
     def get_trade_offset(self):
         return None  # IB 没有开平方向概念

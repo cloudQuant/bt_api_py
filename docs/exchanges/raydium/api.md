@@ -3,19 +3,20 @@
 ## 交易所信息
 
 - **交易所名称**: Raydium
-- **官方网站**: https://raydium.io
-- **API文档**: https://docs.raydium.io/raydium/for-developers/api
-- **API 文档（Swagger）**: https://api-v3.raydium.io/docs/
-- **24h交易量排名**: #3（DEX）
+- **官方网站**: <https://raydium.io>
+- **API 文档**: <https://docs.raydium.io/raydium/for-developers/api>
+- **API 文档（Swagger）**: <https://api-v3.raydium.io/docs/>
+- **24h 交易量排名**: #3（DEX）
 - **区块链**: Solana
 
-## API基础信息
+## API 基础信息
 
-### 基础URL
+### 基础 URL
 
 ```text
-https://api-v3.raydium.io
-```
+<https://api-v3.raydium.io>
+
+```bash
 
 ## 端点分类
 
@@ -71,7 +72,7 @@ https://api-v3.raydium.io
 
 - 以官方文档为准
 
-## WebSocket支持
+## WebSocket 支持
 
 - 官方文档未提供 WebSocket API 说明（更多实时能力建议通过 SDK + gRPC）
 
@@ -82,10 +83,13 @@ https://api-v3.raydium.io
 ## 代码示例
 
 ```python
+
 # 获取池子列表
+
 import requests
 
-url = "https://api-v3.raydium.io/pools/info/list"
+url = "<https://api-v3.raydium.io/pools/info/list">
 params = {"poolType": "all", "poolSortField": "default", "sortType": "desc", "pageSize": 10, "page": 1}
 print(requests.get(url, params=params).json())
-```
+
+```bash

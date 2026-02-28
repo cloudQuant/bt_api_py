@@ -1,10 +1,11 @@
 import json
 import time
+
 from bt_api_py.containers.orders.order import OrderData, OrderStatus
-from bt_api_py.functions.utils import from_dict_get_float, from_dict_get_string, from_dict_get_bool
+from bt_api_py.functions.utils import from_dict_get_bool, from_dict_get_float, from_dict_get_string
 
 
-class BinanceForceOrderData(object):
+class BinanceForceOrderData:
     def __init__(self, order_info, symbol_name, asset_type, has_been_json_encoded=False):
         self.order_info = order_info
         self.exchange_name = "BINANCE"
@@ -47,7 +48,6 @@ class BinanceForceOrderData(object):
         self.last_trade_volume = from_dict_get_float(self.order_data, "l")
         self.total_trade_volume = from_dict_get_float(self.order_data, "z")
 
-
     def get_all_data(self):
         if self.all_data is None:
             self.all_data = {
@@ -66,7 +66,7 @@ class BinanceForceOrderData(object):
                 "order_status": self.order_status.value,
                 "trade_time": self.trade_time,
                 "last_trade_volume": self.last_trade_volume,
-                "total_trade_volume": self.total_trade_volume
+                "total_trade_volume": self.total_trade_volume,
             }
         return self.all_data
 
@@ -82,7 +82,7 @@ class BinanceForceOrderData(object):
         return self.exchange_name
 
     def get_symbol_name(self):
-        """ # 品种名称"""
+        """# 品种名称"""
         return self.symbol_name
 
     def get_asset_type(self):
@@ -137,13 +137,11 @@ class BinanceForceOrderData(object):
         return self.total_trade_volume
 
 
-
 class BinanceOrderData(OrderData):
-    """ 订单类，用于确定订单的属性和方法
-    """
+    """订单类，用于确定订单的属性和方法"""
 
     def __init__(self, order_info, symbol_name, asset_type, has_been_json_encoded=False):
-        super(BinanceOrderData, self).__init__(order_info, has_been_json_encoded)
+        super().__init__(order_info, has_been_json_encoded)
         self.exchange_name = "BINANCE"
         self.local_update_time = time.time()  # 本地时间戳
         self.symbol_name = symbol_name
@@ -220,7 +218,7 @@ class BinanceOrderData(OrderData):
         return self.exchange_name
 
     def get_symbol_name(self):
-        """ # 品种名称"""
+        """# 品种名称"""
         return self.symbol_name
 
     def get_asset_type(self):
@@ -344,13 +342,12 @@ class BinanceOrderData(OrderData):
 
 
 class BinanceRequestOrderData(BinanceOrderData):
-    """ 订单类，用于确定订单的属性和方法
-    """
+    """订单类，用于确定订单的属性和方法"""
 
     def init_data(self):
         if not self.has_been_json_encoded:
             self.order_info = json.loads(self.order_info)
-            self.order_data = self.order_info['data']
+            self.order_data = self.order_info["data"]
             self.has_been_json_encoded = True
         if self.has_been_init_data:
             return self
@@ -362,11 +359,11 @@ class BinanceRequestOrderData(BinanceOrderData):
         self.order_id = from_dict_get_string(self.order_data, "orderId")
         self.order_size = from_dict_get_float(self.order_data, "origQty")
         self.order_price = from_dict_get_float(self.order_data, "price")
-        self.reduce_only = from_dict_get_bool(self.order_data, 'reduceOnly')
+        self.reduce_only = from_dict_get_bool(self.order_data, "reduceOnly")
         self.order_side = from_dict_get_string(self.order_data, "side")
         self.order_status = OrderStatus.from_value(from_dict_get_string(self.order_data, "status"))
         self.order_symbol_name = from_dict_get_string(self.order_data, "symbol")
-        self.order_type = from_dict_get_string(self.order_data, 'type')
+        self.order_type = from_dict_get_string(self.order_data, "type")
         self.order_time_in_force = from_dict_get_string(self.order_data, "timeInForce")
         self.order_avg_price = from_dict_get_float(self.order_data, "avgPrice")
         self.origin_order_type = from_dict_get_string(self.order_data, "origType")
@@ -381,8 +378,8 @@ class BinanceRequestOrderData(BinanceOrderData):
 
 
 class BinanceSwapWssOrderData(BinanceOrderData):
-    """ 订单类，用于确定订单的属性和方法
-    """
+    """订单类，用于确定订单的属性和方法"""
+
     def init_data(self):
         if not self.has_been_json_encoded:
             self.order_data = json.loads(self.order_info)
@@ -390,7 +387,7 @@ class BinanceSwapWssOrderData(BinanceOrderData):
         if self.has_been_init_data:
             return self
         self.server_time = from_dict_get_float(self.order_data, "E")
-        order_dict = self.order_data['o']
+        order_dict = self.order_data["o"]
         self.trade_id = from_dict_get_float(order_dict, "t")
         self.client_order_id = from_dict_get_string(order_dict, "c")
         self.executed_qty = from_dict_get_float(order_dict, "z")
@@ -416,8 +413,8 @@ class BinanceSwapWssOrderData(BinanceOrderData):
 
 
 class BinanceSpotWssOrderData(BinanceOrderData):
-    """ spot订单类，用于确定订单的属性和方法
-    """
+    """spot订单类，用于确定订单的属性和方法"""
+
     def init_data(self):
         if not self.has_been_json_encoded:
             self.order_data = json.loads(self.order_info)

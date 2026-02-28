@@ -11,12 +11,12 @@ IB Web API WebSocket 协议:
 
 依赖: pip install websocket-client
 """
+
 import json
-import time
 import threading
+import time
 
 from bt_api_py.feeds.base_stream import BaseDataStream, ConnectionState
-from bt_api_py.functions.log_message import SpdLogManager
 
 
 class IbWebDataStream(BaseDataStream):
@@ -60,6 +60,7 @@ class IbWebDataStream(BaseDataStream):
         ssl_opts = {}
         if not self.verify_ssl:
             import ssl
+
             ssl_opts = {"cert_reqs": ssl.CERT_NONE, "check_hostname": False}
 
         self._ws = websocket.WebSocketApp(
@@ -162,38 +163,48 @@ class IbWebDataStream(BaseDataStream):
         if isinstance(data, dict):
             # 市场数据更新
             if "conid" in data or "conidEx" in data:
-                self.push_data({
-                    "type": "market_data",
-                    "exchange": "IB_WEB",
-                    "data": data,
-                })
+                self.push_data(
+                    {
+                        "type": "market_data",
+                        "exchange": "IB_WEB",
+                        "data": data,
+                    }
+                )
             # 系统消息
             elif "topic" in data:
                 topic = data.get("topic", "")
                 if topic.startswith("smd"):
-                    self.push_data({
-                        "type": "market_data",
-                        "exchange": "IB_WEB",
-                        "data": data,
-                    })
+                    self.push_data(
+                        {
+                            "type": "market_data",
+                            "exchange": "IB_WEB",
+                            "data": data,
+                        }
+                    )
                 elif topic.startswith("sor"):
-                    self.push_data({
-                        "type": "order_update",
-                        "exchange": "IB_WEB",
-                        "data": data,
-                    })
+                    self.push_data(
+                        {
+                            "type": "order_update",
+                            "exchange": "IB_WEB",
+                            "data": data,
+                        }
+                    )
                 elif topic.startswith("spl"):
-                    self.push_data({
-                        "type": "pnl_update",
-                        "exchange": "IB_WEB",
-                        "data": data,
-                    })
+                    self.push_data(
+                        {
+                            "type": "pnl_update",
+                            "exchange": "IB_WEB",
+                            "data": data,
+                        }
+                    )
                 else:
-                    self.push_data({
-                        "type": "system",
-                        "exchange": "IB_WEB",
-                        "data": data,
-                    })
+                    self.push_data(
+                        {
+                            "type": "system",
+                            "exchange": "IB_WEB",
+                            "data": data,
+                        }
+                    )
 
     def _on_error(self, ws, error):
         """WebSocket 错误回调"""
@@ -209,8 +220,7 @@ class IbWebDataStream(BaseDataStream):
         if self._running:
             self.logger.info(f"Reconnecting in {self._reconnect_delay}s...")
             time.sleep(self._reconnect_delay)
-            self._reconnect_delay = min(
-                self._reconnect_delay * 2, self._max_reconnect_delay)
+            self._reconnect_delay = min(self._reconnect_delay * 2, self._max_reconnect_delay)
             try:
                 self.connect()
                 # 重新订阅
@@ -221,6 +231,7 @@ class IbWebDataStream(BaseDataStream):
 
     def _start_heartbeat(self):
         """启动心跳发送线程"""
+
         def heartbeat_loop():
             while self._running and self._ws:
                 try:
@@ -279,6 +290,7 @@ class IbWebAccountStream(BaseDataStream):
         ssl_opts = {}
         if not self.verify_ssl:
             import ssl
+
             ssl_opts = {"cert_reqs": ssl.CERT_NONE, "check_hostname": False}
 
         self._ws = websocket.WebSocketApp(
@@ -357,35 +369,45 @@ class IbWebAccountStream(BaseDataStream):
         if isinstance(data, dict):
             topic = data.get("topic", "")
             if topic.startswith("spl"):
-                self.push_data({
-                    "type": "pnl_update",
-                    "exchange": "IB_WEB",
-                    "data": data,
-                })
+                self.push_data(
+                    {
+                        "type": "pnl_update",
+                        "exchange": "IB_WEB",
+                        "data": data,
+                    }
+                )
             elif topic.startswith("sor"):
-                self.push_data({
-                    "type": "order_update",
-                    "exchange": "IB_WEB",
-                    "data": data,
-                })
+                self.push_data(
+                    {
+                        "type": "order_update",
+                        "exchange": "IB_WEB",
+                        "data": data,
+                    }
+                )
             elif topic.startswith("sacct") or "accountId" in data:
-                self.push_data({
-                    "type": "account_update",
-                    "exchange": "IB_WEB",
-                    "data": data,
-                })
+                self.push_data(
+                    {
+                        "type": "account_update",
+                        "exchange": "IB_WEB",
+                        "data": data,
+                    }
+                )
             elif topic.startswith("str"):
-                self.push_data({
-                    "type": "trade_update",
-                    "exchange": "IB_WEB",
-                    "data": data,
-                })
+                self.push_data(
+                    {
+                        "type": "trade_update",
+                        "exchange": "IB_WEB",
+                        "data": data,
+                    }
+                )
             else:
-                self.push_data({
-                    "type": "account_system",
-                    "exchange": "IB_WEB",
-                    "data": data,
-                })
+                self.push_data(
+                    {
+                        "type": "account_system",
+                        "exchange": "IB_WEB",
+                        "data": data,
+                    }
+                )
 
     def _on_error(self, ws, error):
         self.logger.warning(f"IB Account WebSocket error: {error}")
@@ -397,8 +419,7 @@ class IbWebAccountStream(BaseDataStream):
         if self._running:
             self.logger.info(f"Account WS reconnecting in {self._reconnect_delay}s...")
             time.sleep(self._reconnect_delay)
-            self._reconnect_delay = min(
-                self._reconnect_delay * 2, self._max_reconnect_delay)
+            self._reconnect_delay = min(self._reconnect_delay * 2, self._max_reconnect_delay)
             try:
                 self.connect()
             except Exception as e:

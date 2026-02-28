@@ -1,5 +1,6 @@
-import time
 import json
+import time
+
 from bt_api_py.containers.incomes.income import IncomeData
 from bt_api_py.functions.utils import from_dict_get_float, from_dict_get_string
 
@@ -8,7 +9,7 @@ class BinanceIncomeData(IncomeData):
     """保存收入信息"""
 
     def __init__(self, income_info, exchange_name, symbol_name, asset_type, has_been_json_encoded):
-        super(BinanceIncomeData, self).__init__(income_info, has_been_json_encoded)
+        super().__init__(income_info, has_been_json_encoded)
         self.exchange_name = exchange_name
         self.symbol_name = symbol_name
         self.asset_type = asset_type
@@ -23,24 +24,24 @@ class BinanceIncomeData(IncomeData):
 
     def init_data(self):
         if not self.has_been_json_encoded:
-            self.income_data = json.loads(self.income_info)['data'][0]
+            self.income_data = json.loads(self.income_info)["data"][0]
             self.has_been_json_encoded = True
         if self.has_been_init_data:
             return self
-        self.server_time = from_dict_get_float(self.income_data, 'time')
-        self.income_type = from_dict_get_string(self.income_data, 'incomeType')
-        self.income_value = from_dict_get_float(self.income_data, 'income')
-        self.income_asset = from_dict_get_string(self.income_data, 'asset')
+        self.server_time = from_dict_get_float(self.income_data, "time")
+        self.income_type = from_dict_get_string(self.income_data, "incomeType")
+        self.income_value = from_dict_get_float(self.income_data, "income")
+        self.income_asset = from_dict_get_string(self.income_data, "asset")
         self.has_been_init_data = True
         return self
 
     def get_all_data(self):
         if self.all_data is None:
             self.all_data = {
-                'server_time': self.server_time,
-                'income_type': self.income_type,
-                'income_value': self.income_value,
-                'income_asset': self.income_asset,
+                "server_time": self.server_time,
+                "income_type": self.income_type,
+                "income_value": self.income_value,
+                "income_asset": self.income_asset,
                 "exchange_name": self.exchange_name,
                 "symbol_name": self.symbol_name,
                 "asset_type": self.asset_type,

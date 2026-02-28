@@ -3,8 +3,6 @@ import time
 import random
 import pytest
 
-pytestmark = pytest.mark.xdist_group("okx_api")
-
 from bt_api_py.functions.utils import read_account_config, get_public_ip
 from bt_api_py.feeds.live_okx_feed import OkxRequestDataSpot
 from bt_api_py.containers.exchanges.okx_exchange_data import OkxExchangeDataSpot
@@ -199,14 +197,12 @@ def test_okx_async_spot_mark_price_data():
     data_queue = queue.Queue()
     live_okx_spot_feed = init_async_feed(data_queue)
     live_okx_spot_feed.async_get_mark_price("BTC-USDT")
-    time.sleep(3)
     try:
-        depth_data = data_queue.get(False)
+        depth_data = data_queue.get(timeout=15)
     except queue.Empty:
-        target_data = None
-    else:
-        target_data = depth_data.get_data()
-
+        depth_data = None
+    assert depth_data is not None
+    target_data = depth_data.get_data()
     assert isinstance(target_data, list)
     assert isinstance(target_data[0], OkxMarkPriceData)
     assert_mark_price_data_value(target_data[0].init_data())

@@ -1,12 +1,12 @@
-
 """
 账户类
 用于确定账户数据的属性和方法
 """
+
 # import json
 
 
-class AccountData(object):
+class AccountData:
     def __init__(self, account_info, has_been_json_encoded=False):
         self.event = "AccountEvent"
         self.account_info = account_info
@@ -90,7 +90,7 @@ class AccountData(object):
         raise NotImplementedError
 
     def get_total_unrealized_profit(self):
-        """# 总的未实现利润 """
+        """# 总的未实现利润"""
         raise NotImplementedError
 
     def get_total_wallet_balance(self):

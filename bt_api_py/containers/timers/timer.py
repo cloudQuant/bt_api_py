@@ -1,4 +1,4 @@
-class TimerData(object):
+class TimerData:
     def __init__(self, data):
         self.event_type = "Timer_update"
         self.data = data

@@ -17,20 +17,23 @@ GET `/sapi/v1/margin/available-inventory`
 ## Request Weight(UID)​
 
 
-**50**
+- *50**
 
 
 ## Request Parameters​
 
 
 | Name | Type | Mandatory | Description |
+
 | --- | --- | --- | --- |
+
 | type | STRING | YES | MARGIN,ISOLATED |
 
 
 ## Response Example​
 
 
-```
+```bash
 {    "assets": {        "MATIC": "100000000",        "STPT": "100000000",        "TVK": "100000000",        "SHIB": "97409653"    }   "updateTime": 1699272487}
-```
+
+```bash

@@ -1,17 +1,17 @@
-# -*- coding: utf-8 -*-
 import json
 import time
-from bt_api_py.feeds.live_binance.request_base import BinanceRequestData
-from bt_api_py.feeds.my_websocket_app import MyWebsocketApp
-from bt_api_py.functions.log_message import SpdLogManager
+
 from bt_api_py.containers.accounts.binance_account import BinanceSwapWssAccountData
 from bt_api_py.containers.orders.binance_order import BinanceSwapWssOrderData
 from bt_api_py.containers.trades.binance_trade import BinanceSwapWssTradeData
+from bt_api_py.feeds.live_binance.request_base import BinanceRequestData
+from bt_api_py.feeds.my_websocket_app import MyWebsocketApp
+from bt_api_py.functions.log_message import SpdLogManager
 
 
 class BinanceAccountWssData(MyWebsocketApp, BinanceRequestData):
     def __init__(self, data_queue, **kwargs):
-        super(BinanceAccountWssData, self).__init__(data_queue, **kwargs)
+        super().__init__(data_queue, **kwargs)
         self.topics = kwargs.get("topics", {})
         self.public_key = kwargs.get("public_key", None)
         self.private_key = kwargs.get("private_key", None)
@@ -22,7 +22,9 @@ class BinanceAccountWssData(MyWebsocketApp, BinanceRequestData):
         self.listen_key = kwargs.get("listen_key", None)
         self.proxies = kwargs.get("proxies", None)
         self.async_proxy = kwargs.get("async_proxy", None)
-        self.logger = SpdLogManager("./logs/binance_account_wss.log", "account_wss", 0, 0, False).create_logger()
+        self.logger = SpdLogManager(
+            "./logs/binance_account_wss.log", "account_wss", 0, 0, False
+        ).create_logger()
         self.wss_author()
         # ping = threading.Thread(target=self.ping)
         # ping.start()
@@ -42,10 +44,12 @@ class BinanceAccountWssData(MyWebsocketApp, BinanceRequestData):
             try:
                 data = self.request(path, extra_data=extra_data, is_sign=False)
                 result = data.get_data()
-                if isinstance(result, dict) and 'listenKey' in result:
+                if isinstance(result, dict) and "listenKey" in result:
                     return result
-                self.logger.warn(f"get_listen_key attempt {attempt + 1}/{max_retries} "
-                                 f"unexpected response: {result}")
+                self.logger.warn(
+                    f"get_listen_key attempt {attempt + 1}/{max_retries} "
+                    f"unexpected response: {result}"
+                )
             except Exception as e:
                 last_err = e
                 self.logger.warn(f"get_listen_key attempt {attempt + 1}/{max_retries} error: {e}")
@@ -55,12 +59,12 @@ class BinanceAccountWssData(MyWebsocketApp, BinanceRequestData):
 
     def refresh_listen_key(self):
         params = {
-            'listenKey': self.listen_key,
+            "listenKey": self.listen_key,
         }
         extra_data = {
             "asset_type": "get_listen_key",
             "symbol_name": None,
-            "request_type": "get_listen_key"
+            "request_type": "get_listen_key",
         }
         path = self._params.get_rest_path("refresh_listen_key")
         data = self.request(path, params=params, extra_data=extra_data, is_sign=True)
@@ -75,37 +79,38 @@ class BinanceAccountWssData(MyWebsocketApp, BinanceRequestData):
                 print(e)
 
     def wss_author(self):
-        self.listen_key = self.get_listen_key()['listenKey']
+        self.listen_key = self.get_listen_key()["listenKey"]
         self.wss_url = f"{self._params.wss_url}/{self.listen_key}"
         # print("wss_author", self.wss_url)
 
     def open_rsp(self):
         self.wss_logger.info(
-            f"===== {time.strftime('%Y-%m-%d %H:%M:%S')} {self._params.exchange_name} Websocket Connected =====")
+            f"===== {time.strftime('%Y-%m-%d %H:%M:%S')} {self._params.exchange_name} Websocket Connected ====="
+        )
 
     def _init(self):
         for topics in self.topics:
-            if "orders" in topics['topic']:
+            if "orders" in topics["topic"]:
                 symbol = topics.get("symbol", "BTC—USDT")
-                self.subscribe(topic='orders', symbol=symbol)
-            if "account" in topics['topic']:
+                self.subscribe(topic="orders", symbol=symbol)
+            if "account" in topics["topic"]:
                 symbol = topics.get("symbol", "BTC—USDT")
                 currency = topics.get("currency", "USDT")
-                self.subscribe(topic='account', symbol=symbol, currency=currency)
-            if "positions" in topics['topic']:
+                self.subscribe(topic="account", symbol=symbol, currency=currency)
+            if "positions" in topics["topic"]:
                 symbol = topics.get("symbol", "BTC—USDT")
-                self.subscribe(topic='positions', symbol=symbol)
+                self.subscribe(topic="positions", symbol=symbol)
             if "balance_position" in self.topics:
-                self.subscribe(topic='balance_position')
+                self.subscribe(topic="balance_position")
 
     def handle_data(self, content):
         event = content.get("e", None)
         if event is not None:
             if "ACCOUNT_UPDATE" == event:
                 self.push_account(content)
-            if 'ORDER_TRADE_UPDATE' == event:
+            if "ORDER_TRADE_UPDATE" == event:
                 self.push_order(content)
-            if 'ORDER_TRADE_UPDATE' == event and content['o'].get("t") != 0:
+            if "ORDER_TRADE_UPDATE" == event and content["o"].get("t") != 0:
                 self.push_trade(content)
             # # 现货账户事件类型
             # if "executionReport" == event:
@@ -125,13 +130,13 @@ class BinanceAccountWssData(MyWebsocketApp, BinanceRequestData):
 
     def push_order(self, content):
         # print("订阅到order数据")
-        symbol = content['o']['s']
+        symbol = content["o"]["s"]
         order_data = BinanceSwapWssOrderData(content, symbol, self.asset_type, True)
         self.data_queue.put(order_data)
         # print("获取order成功，当前order_status 为：", order_data.get_order_status())
 
     def push_trade(self, content):
-        symbol = content['o']['s']
+        symbol = content["o"]["s"]
         trade_data = BinanceSwapWssTradeData(content, symbol, self.asset_type, True)
         self.data_queue.put(trade_data)
         # print("获取trade成功，当前trade_id 为：", trade_data.get_trade_id())

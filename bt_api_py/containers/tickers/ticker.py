@@ -1,5 +1,4 @@
-"""tick类，用于确定ticker的属性和方法
-"""
+"""tick类，用于确定ticker的属性和方法"""
 
 
 class TickerData:

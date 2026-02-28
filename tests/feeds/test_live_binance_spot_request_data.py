@@ -5,7 +5,6 @@ import pytest
 from bt_api_py.functions.utils import read_account_config
 from bt_api_py.feeds.live_binance_feed import BinanceRequestDataSpot
 
-pytestmark = pytest.mark.xdist_group("binance_api")
 from bt_api_py.containers.exchanges.binance_exchange_data import BinanceExchangeDataSpot
 from bt_api_py.containers.orderbooks.binance_orderbook import BinanceRequestOrderBookData
 from bt_api_py.containers.fundingrates.binance_funding_rate import BinanceRequestFundingRateData

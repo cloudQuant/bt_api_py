@@ -17,21 +17,25 @@ GET `/sapi/v1/margin/tradeCoeff`
 ## Request Weight​
 
 
-**10(IP)**
+- *10(IP)**
 
 
 ## Request Parameters​
 
 
 | Name | Type | Mandatory | Description |
+
 | --- | --- | --- | --- |
+
 | recvWindow | LONG | NO |  |
+
 | timestamp | LONG | YES |  |
 
 
 ## Response Example​
 
 
-```
+```bash
 {  "normalBar": "1.5",  "marginCallBar": "1.3",  "forceLiquidationBar": "1.1"}
-```
+
+```bash

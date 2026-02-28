@@ -17,21 +17,25 @@ GET `/sapi/v1/margin/list-schedule`
 ## Request Weight(IP)​
 
 
-**100**
+- *100**
 
 
 ## Request Parameters​
 
 
 | Name | Type | Mandatory | Description |
+
 | --- | --- | --- | --- |
+
 | recvWindow | LONG | NO |  |
+
 | timestamp | LONG | YES |  |
 
 
 ## Response Example​
 
 
-```
-[  {    "listTime": 1686161202000,    "crossMarginAssets": [      "BTC",      "USDT"    ],    "isolatedMarginSymbols": [      "ADAUSDT",      "BNBUSDT"    ]  },  {    "listTime": 1686222232000,    "crossMarginAssets": [      "ADA"    ],    "isolatedMarginSymbols": []  }]
-```
+```bash
+[{    "listTime": 1686161202000,    "crossMarginAssets": ["BTC",      "USDT"  ],    "isolatedMarginSymbols": ["ADAUSDT",      "BNBUSDT"   ]  },  {    "listTime": 1686222232000,    "crossMarginAssets": ["ADA"   ],    "isolatedMarginSymbols": []  }]
+
+```bash

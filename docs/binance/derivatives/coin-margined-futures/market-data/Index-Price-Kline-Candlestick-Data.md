@@ -14,55 +14,64 @@ GET `/dapi/v1/indexPriceKlines`
 
 based on parameter `LIMIT`
 
-LIMIT| weight  
----|---  
-[1,100)| 1  
-[100, 500)| 2  
-[500, 1000]| 5  
-  
+LIMIT| weight
+
+- --|---
+
+[1,100)| 1
+
+[100, 500)| 2
+
+[500, 1000]| 5
+
 > 1000 | 10
 
 ## Request Parameters
 
-Name| Type| Mandatory| Description  
----|---|---|---  
-pair| STRING| YES|   
-interval| ENUM| YES|   
-startTime| LONG| NO|   
-endTime| LONG| NO|   
-limit| INT| NO| Default 500; max 1500.  
-  
->   * The difference between `startTime` and `endTime` can only be up to 200 days
->   * Between `startTime` and `endTime`, the most recent `limit` data from `endTime` will be returned: 
->     * If `startTime` and `endTime` are not sent, current timestamp will be set as `endTime`, and the most recent data will be returned.
->     * If `startTime` is sent only, the timestamp of 200 days after `startTime` will be set as `endTime`(up to the current time)
->     * If `endTime` is sent only, the timestamp of 200 days before `endTime` will be set as `startTime`
-> 
+Name| Type| Mandatory| Description
+
+- --|---|---|---
+
+pair| STRING| YES|
+
+interval| ENUM| YES|
+
+startTime| LONG| NO|
+
+endTime| LONG| NO|
+
+limit| INT| NO| Default 500; max 1500.
+
+>   *The difference between `startTime` and `endTime` can only be up to 200 days
+>  *Between `startTime` and `endTime`, the most recent `limit` data from `endTime` will be returned:
+>    *If `startTime` and `endTime` are not sent, current timestamp will be set as `endTime`, and the most recent data will be returned.
+>    *If `startTime` is sent only, the timestamp of 200 days after `startTime` will be set as `endTime`(up to the current time)
+>    * If `endTime` is sent only, the timestamp of 200 days before `endTime` will be set as `startTime`
+>
 
 ## Response Example
-    
-    
-    [  
-      [  
-        1591256400000,      	// Open time  
-        "9653.69440000",    	// Open  
-        "9653.69640000",     	// High  
-        "9651.38600000",     	// Low  
-        "9651.55200000",     	// Close (or latest price)  
-        "0	", 					// Ignore  
-        1591256459999,      	// Close time  
-        "0",    				// Ignore  
-        60,                		// Number of bisic data  
-        "0",    				// Ignore  
-        "0",      				// Ignore  
-        "0" 					// Ignore  
-      ]  
-    ]  
-    
 
-  * [API Description](</docs/derivatives/coin-margined-futures/market-data/Index-Price-Kline-Candlestick-Data#api-description>)
-  * [HTTP Request](</docs/derivatives/coin-margined-futures/market-data/Index-Price-Kline-Candlestick-Data#http-request>)
-  * [Request Weight](</docs/derivatives/coin-margined-futures/market-data/Index-Price-Kline-Candlestick-Data#request-weight>)
-  * [Request Parameters](</docs/derivatives/coin-margined-futures/market-data/Index-Price-Kline-Candlestick-Data#request-parameters>)
-  * [Response Example](</docs/derivatives/coin-margined-futures/market-data/Index-Price-Kline-Candlestick-Data#response-example>)
 
+    [
+      [
+        1591256400000,          // Open time
+        "9653.69440000",        // Open
+        "9653.69640000",         // High
+        "9651.38600000",         // Low
+        "9651.55200000",         // Close (or latest price)
+        "0    ",                     // Ignore
+        1591256459999,          // Close time
+        "0",                    // Ignore
+        60,                        // Number of bisic data
+        "0",                    // Ignore
+        "0",                      // Ignore
+        "0"                     // Ignore
+      ]
+    ]
+
+
+  - [API Description](</docs/derivatives/coin-margined-futures/market-data/Index-Price-Kline-Candlestick-Data#api-description>)
+  - [HTTP Request](</docs/derivatives/coin-margined-futures/market-data/Index-Price-Kline-Candlestick-Data#http-request>)
+  - [Request Weight](</docs/derivatives/coin-margined-futures/market-data/Index-Price-Kline-Candlestick-Data#request-weight>)
+  - [Request Parameters](</docs/derivatives/coin-margined-futures/market-data/Index-Price-Kline-Candlestick-Data#request-parameters>)
+  - [Response Example](</docs/derivatives/coin-margined-futures/market-data/Index-Price-Kline-Candlestick-Data#response-example>)

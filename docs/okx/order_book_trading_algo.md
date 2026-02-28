@@ -10,40 +10,60 @@ Place algo orders including trigger order, oco order, conditional order, iceberg
 - **Rate limit rule**: User ID + Instrument ID
 - **Permission**: Trade
 
-```
+```bash
 POST /api/v5/trade/order-algo
-```
 
+```bash
 Key Request Parameters:
 
 | Parameter | Type | Required | Description |
+
 |-----------|------|----------|-------------|
+
 | instId | String | Yes | Instrument ID |
+
 | tdMode | String | Yes | Trade mode: `cross`, `isolated`, `cash` |
+
 | side | String | Yes | `buy` or `sell` |
+
 | ordType | String | Yes | `conditional`, `oco`, `trigger`, `move_order_stop`, `iceberg`, `twap` |
+
 | sz | String | Yes | Quantity |
+
 | tgtCcy | String | No | Target currency for SPOT |
+
 | posSide | String | Conditional | Position side |
+
 | clOrdId | String | No | Client-supplied algo ID |
 
-**For trigger orders:**
+- *For trigger orders:**
 
 | Parameter | Type | Required | Description |
+
 |-----------|------|----------|-------------|
+
 | triggerPx | String | Yes | Trigger price |
+
 | orderPx | String | Yes | Order price (-1 for market) |
+
 | triggerPxType | String | No | `last`, `index`, `mark` (default `last`) |
 
-**For conditional orders (TP/SL):**
+- *For conditional orders (TP/SL):**
 
 | Parameter | Type | Required | Description |
+
 |-----------|------|----------|-------------|
+
 | tpTriggerPx | String | Conditional | Take-profit trigger price |
+
 | tpOrdPx | String | Conditional | Take-profit order price (-1 for market) |
+
 | slTriggerPx | String | Conditional | Stop-loss trigger price |
+
 | slOrdPx | String | Conditional | Stop-loss order price (-1 for market) |
+
 | tpTriggerPxType | String | No | `last`, `index`, `mark` |
+
 | slTriggerPxType | String | No | `last`, `index`, `mark` |
 
 ### POST / Cancel algo order
@@ -51,25 +71,31 @@ Key Request Parameters:
 - **Rate Limit**: 20 requests per 2 seconds
 - **Permission**: Trade
 
-```
+```bash
 POST /api/v5/trade/cancel-algos
-```
+
+```bash
 
 ### POST / Amend algo order
 
-```
+```bash
 POST /api/v5/trade/amend-algos
-```
+
+```bash
 
 ### GET / Algo order details
 
-```
+```bash
 GET /api/v5/trade/order-algo
-```
+
+```bash
 
 | Parameter | Type | Required | Description |
+
 |-----------|------|----------|-------------|
+
 | algoId | String | Conditional | Algo ID |
+
 | algoClOrdId | String | Conditional | Client-supplied algo ID |
 
 ### GET / Algo order list
@@ -79,24 +105,31 @@ Retrieve incomplete algo order list.
 - **Rate Limit**: 20 requests per 2 seconds
 - **Permission**: Read
 
-```
+```bash
 GET /api/v5/trade/orders-algo-pending
-```
+
+```bash
 
 | Parameter | Type | Required | Description |
+
 |-----------|------|----------|-------------|
+
 | ordType | String | Yes | `conditional`, `oco`, `trigger`, `move_order_stop`, `iceberg`, `twap` |
+
 | algoId | String | No | Algo ID |
+
 | instType | String | No | Instrument type |
+
 | instId | String | No | Instrument ID |
 
 ### GET / Algo order history
 
-```
+```bash
 GET /api/v5/trade/orders-algo-history
-```
 
----
+```bash
+
+- --
 
 ## WebSocket
 
@@ -106,6 +139,7 @@ GET /api/v5/trade/orders-algo-history
 - **Channel**: `orders-algo`
 
 Subscribe Example:
+
 ```json
 {
   "id": "1512",
@@ -116,7 +150,8 @@ Subscribe Example:
     "instId": "BTC-USD-200329"
   }]
 }
-```
+
+```bash
 
 ### WS / Advance algo orders channel
 

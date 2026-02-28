@@ -6,15 +6,17 @@ IB Web API 分为两大组件:
   - Trading API (/iserver 端点): 交易、行情、持仓
   - Account Management API (/gw/api/v1 端点): 账户管理、资金、报告
 """
-import os
+
 import logging
+import os
+
 from bt_api_py.containers.exchanges.exchange_data import ExchangeData
 
 logger = logging.getLogger(__name__)
 
 # ── 配置加载缓存 ──────────────────────────────────────────────
-_ib_config = None          # pydantic ExchangeConfig 对象
-_ib_raw_config = None      # 原始 yaml dict (用于加载 pydantic 忽略的额外字段)
+_ib_config = None  # pydantic ExchangeConfig 对象
+_ib_raw_config = None  # 原始 yaml dict (用于加载 pydantic 忽略的额外字段)
 _ib_config_loaded = False
 
 
@@ -22,7 +24,8 @@ def _get_ib_yaml_path():
     """获取 ib.yaml 配置文件路径"""
     return os.path.join(
         os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
-        'configs', 'ib.yaml'
+        "configs",
+        "ib.yaml",
     )
 
 
@@ -34,12 +37,14 @@ def _get_ib_config():
     _ib_config_loaded = True
     try:
         import yaml
+
         from bt_api_py.config_loader import load_exchange_config
+
         config_path = _get_ib_yaml_path()
         if os.path.exists(config_path):
             _ib_config = load_exchange_config(config_path)
             # 同时缓存原始 dict 以访问 pydantic 忽略的额外字段
-            with open(config_path, 'r', encoding='utf-8') as f:
+            with open(config_path, encoding="utf-8") as f:
                 _ib_raw_config = yaml.safe_load(f)
     except Exception as e:
         logger.warning("Failed to load ib.yaml config: %s", e)
@@ -65,9 +70,9 @@ class IbWebExchangeData(ExchangeData):
 
     def __init__(self):
         super().__init__()
-        self.exchange_name = 'IB_WEB'
+        self.exchange_name = "IB_WEB"
         self.rest_url = self.GATEWAY_REST_URL
-        self.wss_url = ''
+        self.wss_url = ""
 
         # 以下均为空白默认值 — 实际数据全部由 ib.yaml 加载
         self.kline_periods = {}
@@ -83,7 +88,7 @@ class IbWebExchangeData(ExchangeData):
         self.rate_limits_config = {}
 
         # 从 YAML 配置加载 (默认加载 stk)
-        self._load_from_config('stk')
+        self._load_from_config("stk")
 
     def _load_from_config(self, asset_type):
         """从 YAML 配置文件加载交易所参数
@@ -113,9 +118,9 @@ class IbWebExchangeData(ExchangeData):
 
         # URLs
         if config.base_urls:
-            self.rest_url = config.base_urls.rest.get('default', self.rest_url)
-            self.wss_url = config.base_urls.wss.get('default', self.wss_url)
-            self.acct_wss_url = config.base_urls.acct_wss.get('default', self.wss_url)
+            self.rest_url = config.base_urls.rest.get("default", self.rest_url)
+            self.wss_url = config.base_urls.wss.get("default", self.wss_url)
+            self.acct_wss_url = config.base_urls.acct_wss.get("default", self.wss_url)
 
         # rest_paths
         if asset_cfg.rest_paths:
@@ -137,32 +142,30 @@ class IbWebExchangeData(ExchangeData):
 
         # rate_limits → rate_limits_config
         if config.rate_limits:
-            self.rate_limits_config = {
-                r.name: r.limit / r.interval for r in config.rate_limits
-            }
+            self.rate_limits_config = {r.name: r.limit / r.interval for r in config.rate_limits}
 
         # ── 从原始 yaml dict 加载 pydantic 忽略的额外字段 ──
 
         if raw:
             # sec_type_map
-            if 'sec_type_map' in raw:
-                self.sec_type_map = dict(raw['sec_type_map'])
+            if "sec_type_map" in raw:
+                self.sec_type_map = dict(raw["sec_type_map"])
 
             # market_data_fields
-            if 'market_data_fields' in raw:
-                self.market_data_fields = {k: str(v) for k, v in raw['market_data_fields'].items()}
+            if "market_data_fields" in raw:
+                self.market_data_fields = {k: str(v) for k, v in raw["market_data_fields"].items()}
 
             # default_snapshot_fields
-            if 'default_snapshot_fields' in raw:
-                self.default_snapshot_fields = [str(f) for f in raw['default_snapshot_fields']]
+            if "default_snapshot_fields" in raw:
+                self.default_snapshot_fields = [str(f) for f in raw["default_snapshot_fields"]]
 
             # order_type_map
-            if 'order_type_map' in raw:
-                self.order_type_map = dict(raw['order_type_map'])
+            if "order_type_map" in raw:
+                self.order_type_map = dict(raw["order_type_map"])
 
             # tif_map
-            if 'tif_map' in raw:
-                self.tif_map = dict(raw['tif_map'])
+            if "tif_map" in raw:
+                self.tif_map = dict(raw["tif_map"])
 
         return True
 
@@ -179,7 +182,7 @@ class IbWebExchangeData(ExchangeData):
     def get_rest_path(self, key):
         """获取 REST 端点路径 (含 HTTP 方法, 如 'GET /path')"""
         path = self.rest_paths.get(key)
-        if path is None or path == '':
+        if path is None or path == "":
             self.raise_path_error(self.exchange_name, key)
         return path
 
@@ -191,11 +194,11 @@ class IbWebExchangeData(ExchangeData):
         """
         raw = self.get_rest_path(key)
         # 解析 'METHOD /path' 格式
-        parts = raw.split(' ', 1)
+        parts = raw.split(" ", 1)
         if len(parts) == 2:
             method, path = parts
         else:
-            method, path = 'GET', parts[0]
+            method, path = "GET", parts[0]
         if kwargs:
             path = path.format(**kwargs)
         return method, f"{self.rest_url}{path}"
@@ -220,7 +223,7 @@ class IbWebExchangeDataStock(IbWebExchangeData):
 
     def __init__(self):
         super().__init__()
-        self._load_from_config('stk')
+        self._load_from_config("stk")
 
 
 class IbWebExchangeDataFuture(IbWebExchangeData):
@@ -228,7 +231,7 @@ class IbWebExchangeDataFuture(IbWebExchangeData):
 
     def __init__(self):
         super().__init__()
-        self._load_from_config('fut')
+        self._load_from_config("fut")
 
 
 class IbWebExchangeDataOption(IbWebExchangeData):
@@ -236,7 +239,7 @@ class IbWebExchangeDataOption(IbWebExchangeData):
 
     def __init__(self):
         super().__init__()
-        self._load_from_config('opt')
+        self._load_from_config("opt")
 
 
 class IbWebExchangeDataForex(IbWebExchangeData):
@@ -244,4 +247,4 @@ class IbWebExchangeDataForex(IbWebExchangeData):
 
     def __init__(self):
         super().__init__()
-        self._load_from_config('cash')
+        self._load_from_config("cash")

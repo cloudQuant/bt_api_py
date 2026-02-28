@@ -1,12 +1,14 @@
-# -*- coding: utf-8 -*-
 """feed类, 用于处理数据、获取数据、向交易所传递数据"""
-import requests
+
 import json
-from bt_api_py.functions.log_message import SpdLogManager
-from bt_api_py.functions.async_base import AsyncBase
-from bt_api_py.exceptions import RequestTimeoutError, RequestError
-from bt_api_py.feeds.connection_mixin import ConnectionMixin
+
+import requests
+
+from bt_api_py.exceptions import RequestError, RequestTimeoutError
 from bt_api_py.feeds.capability import CapabilityMixin
+from bt_api_py.feeds.connection_mixin import ConnectionMixin
+from bt_api_py.functions.async_base import AsyncBase
+from bt_api_py.functions.log_message import SpdLogManager
 
 
 class Feed(AsyncBase, ConnectionMixin, CapabilityMixin):
@@ -19,9 +21,11 @@ class Feed(AsyncBase, ConnectionMixin, CapabilityMixin):
         super().__init__(**kwargs)
         self.__init_connection__()
         self.data_queue = data_queue
-        self.exchange_name = kwargs.get('exchange_name', '')
-        self.proxies = kwargs.get('proxies', None)
-        self.logger = SpdLogManager("./logs/feed_data.log", "base_feed", 0, 0, False).create_logger()
+        self.exchange_name = kwargs.get("exchange_name", "")
+        self.proxies = kwargs.get("proxies", None)
+        self.logger = SpdLogManager(
+            "./logs/feed_data.log", "base_feed", 0, 0, False
+        ).create_logger()
 
     def handle_timeout_exception(self, url, method, body, timeout, e):
         """
@@ -33,12 +37,14 @@ class Feed(AsyncBase, ConnectionMixin, CapabilityMixin):
         :param e: exception type, exception value, exception traceback
         :return: None
         """
-        self.logger.warn(f'exchange -> {self.exchange_name}\n '
-                         f'url -> {url},\n '
-                         f'method -> {method},\n '
-                         f'body -> {body},\n'
-                         f'rest timeout -> {timeout}s,\n'
-                         f'e -> {e}')
+        self.logger.warn(
+            f"exchange -> {self.exchange_name}\n "
+            f"url -> {url},\n "
+            f"method -> {method},\n "
+            f"body -> {body},\n"
+            f"rest timeout -> {timeout}s,\n"
+            f"e -> {e}"
+        )
         self.raise_timeout(timeout, self.exchange_name)
 
     def handle_request_exception(self, url, method, body, exception):
@@ -50,12 +56,14 @@ class Feed(AsyncBase, ConnectionMixin, CapabilityMixin):
         :param exception: exception type, exception value, exception traceback
         :return: None
         """
-        self.logger.warn(f'exchange -> {self.exchange_name}\n '
-                         f'rest timeout or error -> \n '
-                         f'URL -> {url}\n'
-                         f'METHOD -> {method}\n'
-                         f'BODY -> {body}\n'
-                         f'ERROR: {exception}')
+        self.logger.warn(
+            f"exchange -> {self.exchange_name}\n "
+            f"rest timeout or error -> \n "
+            f"URL -> {url}\n"
+            f"METHOD -> {method}\n"
+            f"BODY -> {body}\n"
+            f"ERROR: {exception}"
+        )
         self.raise_timeout(0, self.exchange_name)
 
     def handle_json_decode_error(self, url, headers, body, e):
@@ -67,10 +75,9 @@ class Feed(AsyncBase, ConnectionMixin, CapabilityMixin):
         :param e: exception type, exception value, exception traceback
         :return: None
         """
-        self.logger.warn(f"url -> {url},\n "
-                         f"headers -> {headers},\n "
-                         f"body:{body},\n "
-                         f"e:{e}")
+        self.logger.warn(
+            f"url -> {url},\n " f"headers -> {headers},\n " f"body:{body},\n " f"e:{e}"
+        )
         self.raise400(self.exchange_name)
 
     def raise_path_error(self, *args):
@@ -138,14 +145,17 @@ class Feed(AsyncBase, ConnectionMixin, CapabilityMixin):
                 except Exception as e:
                     self.logger.warn(f"response: {res.text}, status: {res.status_code}, error: {e}")
                     if res.status_code in (410, 404):
-                        raise RequestError(self.exchange_name,
-                                           detail=f"endpoint gone/not found ({res.status_code}): {url}")
+                        raise RequestError(
+                            self.exchange_name,
+                            detail=f"endpoint gone/not found ({res.status_code}): {url}",
+                        )
                 return res.json()
 
             except requests.exceptions.Timeout as e:
                 last_exception = e
                 if attempt < max_retries - 1:
                     import time as _time
+
                     _time.sleep(1)
                     continue
                 self.handle_timeout_exception(url, method, body, timeout, e)
@@ -155,6 +165,7 @@ class Feed(AsyncBase, ConnectionMixin, CapabilityMixin):
                 if attempt < max_retries - 1:
                     self.logger.warn(f"Retry {attempt + 1}/{max_retries} for {url}: {e}")
                     import time as _time
+
                     _time.sleep(1)
                     continue
                 self.handle_request_exception(url, method, body, e)
@@ -162,8 +173,11 @@ class Feed(AsyncBase, ConnectionMixin, CapabilityMixin):
             except (json.JSONDecodeError, requests.exceptions.JSONDecodeError) as e:
                 last_exception = e
                 if attempt < max_retries - 1:
-                    self.logger.warn(f"Retry {attempt + 1}/{max_retries} JSON decode for {url}: {e}")
+                    self.logger.warn(
+                        f"Retry {attempt + 1}/{max_retries} JSON decode for {url}: {e}"
+                    )
                     import time as _time
+
                     _time.sleep(1)
                     continue
                 self.handle_json_decode_error(url, headers, body, e)
@@ -263,7 +277,9 @@ class Feed(AsyncBase, ConnectionMixin, CapabilityMixin):
         """
         raise NotImplementedError
 
-    def get_deals(self, symbol, count=100, start_time=None, end_time=None, extra_data=None, **kwargs):
+    def get_deals(
+        self, symbol, count=100, start_time=None, end_time=None, extra_data=None, **kwargs
+    ):
         """
         get trade history by symbol
         :param symbol: default None, get all the currency, can be string, e.g. "BTC-USDT".
@@ -276,7 +292,9 @@ class Feed(AsyncBase, ConnectionMixin, CapabilityMixin):
         """
         raise NotImplementedError
 
-    def async_get_deals(self, symbol, count=100, start_time=None, end_time=None, extra_data="", **kwargs):
+    def async_get_deals(
+        self, symbol, count=100, start_time=None, end_time=None, extra_data="", **kwargs
+    ):
         """
         get trade history by symbol using async
         :param symbol: default None, get all the currency, can be string, e.g. "BTC-USDT".
@@ -395,8 +413,18 @@ class Feed(AsyncBase, ConnectionMixin, CapabilityMixin):
         """
         raise NotImplementedError
 
-    def make_order(self, symbol, volume, price, order_type, offset="open",
-                   post_only=False, client_order_id=None, extra_data=None, **kwargs):
+    def make_order(
+        self,
+        symbol,
+        volume,
+        price,
+        order_type,
+        offset="open",
+        post_only=False,
+        client_order_id=None,
+        extra_data=None,
+        **kwargs,
+    ):
         """
         make order by symbol
         :param symbol: default None, get all the currency, can be string, e.g. "BTC-USDT".
@@ -412,8 +440,18 @@ class Feed(AsyncBase, ConnectionMixin, CapabilityMixin):
         """
         raise NotImplementedError
 
-    def async_make_order(self, symbol, volume, price, order_type, offset="open",
-                         post_only=False, client_order_id=None, extra_data=None, **kwargs):
+    def async_make_order(
+        self,
+        symbol,
+        volume,
+        price,
+        order_type,
+        offset="open",
+        post_only=False,
+        client_order_id=None,
+        extra_data=None,
+        **kwargs,
+    ):
         """
         make order by symbol
         :param symbol: default None, get all the currency, can be string, e.g. "BTC-USDT".

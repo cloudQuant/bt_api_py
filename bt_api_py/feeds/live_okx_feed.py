@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 OKX Feed - Backward compatibility re-export module.
 
@@ -7,65 +6,69 @@ This file re-exports everything for backward compatibility.
 
 1. okx单币种模式下，现货下单的时候返回的订单种类并不是SPOT, 而是MARGIN, 订阅orders的时候需要制定为MARGIN
 """
-# Base classes
-from bt_api_py.feeds.live_okx.request_base import OkxRequestData
-from bt_api_py.feeds.live_okx.market_wss_base import OkxWssData
+
 from bt_api_py.feeds.live_okx.account_wss_base import (
-    OkxAccountWssData, OkxMarketWssData, OkxKlineWssData
-)
-
-# Swap
-from bt_api_py.feeds.live_okx.swap import (
-    OkxRequestDataSwap,
-    OkxAccountWssDataSwap,
-    OkxMarketWssDataSwap,
-    OkxKlineWssDataSwap,
-    OkxWssDataSwap,
-)
-
-# Spot
-from bt_api_py.feeds.live_okx.spot import (
-    OkxRequestDataSpot,
-    OkxAccountWssDataSpot,
-    OkxMarketWssDataSpot,
-    OkxKlineWssDataSpot,
-    OkxWssDataSpot,
+    OkxAccountWssData,
+    OkxKlineWssData,
+    OkxMarketWssData,
 )
 
 # Futures
 from bt_api_py.feeds.live_okx.futures import (
-    OkxRequestDataFutures,
     OkxAccountWssDataFutures,
-    OkxMarketWssDataFutures,
     OkxKlineWssDataFutures,
+    OkxMarketWssDataFutures,
+    OkxRequestDataFutures,
     OkxWssDataFutures,
+)
+from bt_api_py.feeds.live_okx.market_wss_base import OkxWssData
+
+# Base classes
+from bt_api_py.feeds.live_okx.request_base import OkxRequestData
+
+# Spot
+from bt_api_py.feeds.live_okx.spot import (
+    OkxAccountWssDataSpot,
+    OkxKlineWssDataSpot,
+    OkxMarketWssDataSpot,
+    OkxRequestDataSpot,
+    OkxWssDataSpot,
+)
+
+# Swap
+from bt_api_py.feeds.live_okx.swap import (
+    OkxAccountWssDataSwap,
+    OkxKlineWssDataSwap,
+    OkxMarketWssDataSwap,
+    OkxRequestDataSwap,
+    OkxWssDataSwap,
 )
 
 __all__ = [
     # Base
-    'OkxRequestData',
-    'OkxWssData',
-    'OkxAccountWssData',
-    'OkxMarketWssData',
-    'OkxKlineWssData',
+    "OkxRequestData",
+    "OkxWssData",
+    "OkxAccountWssData",
+    "OkxMarketWssData",
+    "OkxKlineWssData",
     # Swap
-    'OkxRequestDataSwap',
-    'OkxAccountWssDataSwap',
-    'OkxMarketWssDataSwap',
-    'OkxKlineWssDataSwap',
-    'OkxWssDataSwap',
+    "OkxRequestDataSwap",
+    "OkxAccountWssDataSwap",
+    "OkxMarketWssDataSwap",
+    "OkxKlineWssDataSwap",
+    "OkxWssDataSwap",
     # Spot
-    'OkxRequestDataSpot',
-    'OkxAccountWssDataSpot',
-    'OkxMarketWssDataSpot',
-    'OkxKlineWssDataSpot',
-    'OkxWssDataSpot',
+    "OkxRequestDataSpot",
+    "OkxAccountWssDataSpot",
+    "OkxMarketWssDataSpot",
+    "OkxKlineWssDataSpot",
+    "OkxWssDataSpot",
     # Futures
-    'OkxRequestDataFutures',
-    'OkxAccountWssDataFutures',
-    'OkxMarketWssDataFutures',
-    'OkxKlineWssDataFutures',
-    'OkxWssDataFutures',
+    "OkxRequestDataFutures",
+    "OkxAccountWssDataFutures",
+    "OkxMarketWssDataFutures",
+    "OkxKlineWssDataFutures",
+    "OkxWssDataFutures",
 ]
 
 

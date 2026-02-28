@@ -1,15 +1,17 @@
 # Crypto.com Exchange API 文档
 
 ## 文档信息
+
 - 文档版本: 1.0.0
-- API版本: V1
+- API 版本: V1
 - 创建日期: 2026-02-27
 - 最后更新: 2026-02-27
-- 官方文档: https://exchange-docs.crypto.com/exchange/v1/rest-ws/index.html
+- 官方文档: <https://exchange-docs.crypto.com/exchange/v1/rest-ws/index.html>
 
 ## 交易所基本信息
+
 - 官方名称: Crypto.com Exchange
-- 官网: https://crypto.com/exchange
+- 官网: <https://crypto.com/exchange>
 - 交易所类型: CEX (中心化交易所)
 - 总部: 新加坡
 - 支持的交易对: 500+ (USDT, USD, BTC, CRO 计价)
@@ -19,17 +21,21 @@
 - 合规: 多国持牌，美国 FinCEN MSB 注册
 - 特点: CRO 代币生态，Visa 卡集成
 
-## API基础URL
+## API 基础 URL
 
 | 端点类型 | URL | 说明 |
+
 |---------|-----|------|
-| REST API | `https://api.crypto.com/exchange/v1` | 主端点 |
+
+| REST API | `<https://api.crypto.com/exchange/v1`> | 主端点 |
+
 | WebSocket (User) | `wss://stream.crypto.com/exchange/v1/user` | 私有频道 |
+
 | WebSocket (Market) | `wss://stream.crypto.com/exchange/v1/market` | 公共行情 |
 
 ## 认证方式
 
-### API密钥获取
+### API 密钥获取
 
 1. 登录 Crypto.com Exchange 账户
 2. 进入 Settings -> API Keys
@@ -39,7 +45,7 @@
 
 ### HMAC-SHA256 签名
 
-**签名步骤**:
+- *签名步骤**:
 1. 将请求参数键按字母升序排列
 2. 将所有参数键值对拼接为字符串（无分隔符）: `key1value1key2value2...`
 3. 构建签名字符串: `method + id + api_key + param_string + nonce`
@@ -57,7 +63,7 @@ import requests
 
 API_KEY = "your_api_key"
 SECRET_KEY = "your_secret_key"
-BASE_URL = "https://api.crypto.com/exchange/v1"
+BASE_URL = "<https://api.crypto.com/exchange/v1">
 
 def build_param_string(params):
     """将参数按键排序并拼接"""
@@ -76,7 +82,7 @@ def build_param_string(params):
 
 def crypto_request(method, req_id=None, params=None):
     """发送 Crypto.com Exchange 签名请求"""
-    nonce = int(time.time() * 1000)
+    nonce = int(time.time() *1000)
     if req_id is None:
         req_id = nonce
 
@@ -102,17 +108,19 @@ def crypto_request(method, req_id=None, params=None):
     return resp.json()
 
 # 测试
+
 result = crypto_request("private/get-account-summary")
 print(result)
-```
 
-## 市场数据API
+```bash
+
+## 市场数据 API
 
 > 公共 API 无需认证。
 
 ### 1. 获取交易对信息
 
-**端点**: `GET /public/get-instruments`
+- *端点**: `GET /public/get-instruments`
 
 ```python
 resp = requests.get(f"{BASE_URL}/public/get-instruments")
@@ -121,14 +129,17 @@ if data["code"] == 0:
     for inst in data["result"]["data"][:5]:
         print(f"{inst['symbol']}: base={inst['base_ccy']}, quote={inst['quote_ccy']}, "
               f"price_decimals={inst['price_decimals']}, qty_decimals={inst['quantity_decimals']}")
-```
+
+```bash
 
 ### 2. 获取 Ticker
 
-**端点**: `GET /public/get-tickers` 或 `GET /public/get-tickers?instrument_name={symbol}`
+- *端点**: `GET /public/get-tickers` 或 `GET /public/get-tickers?instrument_name={symbol}`
 
 ```python
+
 # 单个
+
 resp = requests.get(f"{BASE_URL}/public/get-tickers", params={"instrument_name": "BTC_USDT"})
 data = resp.json()
 if data["code"] == 0:
@@ -137,29 +148,41 @@ if data["code"] == 0:
               f"high={t['h']}, low={t['l']}, vol={t['v']}")
 
 # 全部
+
 resp = requests.get(f"{BASE_URL}/public/get-tickers")
 print(f"Total: {len(resp.json()['result']['data'])}")
-```
 
-**Ticker 字段说明**:
+```bash
+
+- *Ticker 字段说明**:
 
 | 字段 | 描述 |
+
 |------|------|
+
 | i | 交易对名称 |
+
 | a | 最新价 |
+
 | b | 最优买价 |
+
 | k | 最优卖价 |
-| h | 24h最高价 |
-| l | 24h最低价 |
-| v | 24h成交量 |
-| vv | 24h成交额 |
+
+| h | 24h 最高价 |
+
+| l | 24h 最低价 |
+
+| v | 24h 成交量 |
+
+| vv | 24h 成交额 |
+
 | t | 时间戳 |
 
 ### 3. 获取订单簿
 
-**端点**: `GET /public/get-book`
+- *端点**: `GET /public/get-book`
 
-**参数**: `instrument_name` (必需), `depth` (可选, 默认50, 最大50)
+- *参数**: `instrument_name` (必需), `depth` (可选, 默认 50, 最大 50)
 
 ```python
 resp = requests.get(f"{BASE_URL}/public/get-book", params={
@@ -173,13 +196,14 @@ if data["code"] == 0:
         print(f"ASK: price={ask[0]}, qty={ask[1]}, count={ask[2]}")
     for bid in book["bids"][:5]:
         print(f"BID: price={bid[0]}, qty={bid[1]}, count={bid[2]}")
-```
+
+```bash
 
 ### 4. 获取最近成交
 
-**端点**: `GET /public/get-trades`
+- *端点**: `GET /public/get-trades`
 
-**参数**: `instrument_name` (必需), `count` (可选, 默认100)
+- *参数**: `instrument_name` (必需), `count` (可选, 默认 100)
 
 ```python
 resp = requests.get(f"{BASE_URL}/public/get-trades", params={
@@ -191,19 +215,24 @@ if data["code"] == 0:
     for t in data["result"]["data"]:
         side = t["s"]  # BUY/SELL
         print(f"Price={t['p']}, Qty={t['q']}, Side={side}, Time={t['t']}")
-```
 
-### 5. 获取K线数据
+```bash
 
-**端点**: `GET /public/get-candlestick`
+### 5. 获取 K 线数据
 
-**参数**:
+- *端点**: `GET /public/get-candlestick`
+
+- *参数**:
 
 | 参数 | 类型 | 必需 | 描述 |
+
 |------|------|------|------|
+
 | instrument_name | STRING | 是 | 交易对 |
+
 | period | STRING | 是 | 1m/5m/15m/30m/1h/4h/6h/12h/1D/7D/14D/1M |
-| count | INT | 否 | 数量 (默认300, 最大300) |
+
+| count | INT | 否 | 数量 (默认 300, 最大 300) |
 
 ```python
 resp = requests.get(f"{BASE_URL}/public/get-candlestick", params={
@@ -215,15 +244,16 @@ data = resp.json()
 if data["code"] == 0:
     for c in data["result"]["data"]:
         print(f"T={c['t']} O={c['o']} H={c['h']} L={c['l']} C={c['c']} V={c['v']}")
-```
 
-## 交易API
+```bash
+
+## 交易 API
 
 > 以下端点均需签名认证。
 
 ### 1. 查询账户摘要
 
-**方法**: `private/get-account-summary`
+- *方法**: `private/get-account-summary`
 
 ```python
 result = crypto_request("private/get-account-summary")
@@ -233,28 +263,41 @@ if result["code"] == 0:
         if balance > 0:
             print(f"{acc['instrument_name']}: balance={acc['total_balance']}, "
                   f"available={acc['total_available']}")
-```
+
+```bash
 
 ### 2. 下单
 
-**方法**: `private/create-order`
+- *方法**: `private/create-order`
 
-**参数**:
+- *参数**:
 
 | 参数 | 类型 | 必需 | 描述 |
+
 |------|------|------|------|
+
 | instrument_name | STRING | 是 | 交易对，如 BTC_USDT |
+
 | side | STRING | 是 | BUY / SELL |
+
 | type | STRING | 是 | LIMIT / MARKET / STOP_LOSS / STOP_LIMIT / TAKE_PROFIT / TAKE_PROFIT_LIMIT |
+
 | quantity | DECIMAL | 条件 | 数量 |
+
 | price | DECIMAL | 条件 | 价格（LIMIT 必需） |
+
 | notional | DECIMAL | 条件 | 金额（市价买可用） |
-| client_oid | STRING | 否 | 客户端订单ID |
+
+| client_oid | STRING | 否 | 客户端订单 ID |
+
 | time_in_force | STRING | 否 | GOOD_TILL_CANCEL / FILL_OR_KILL / IMMEDIATE_OR_CANCEL |
+
 | exec_inst | STRING | 否 | POST_ONLY |
 
 ```python
+
 # 限价买单
+
 order = crypto_request("private/create-order", params={
     "instrument_name": "BTC_USDT",
     "side": "BUY",
@@ -267,46 +310,52 @@ if order["code"] == 0:
     print(f"Order ID: {order['result']['order_id']}")
 
 # 市价买单（按金额）
+
 order = crypto_request("private/create-order", params={
     "instrument_name": "BTC_USDT",
     "side": "BUY",
     "type": "MARKET",
     "notional": "100"  # 100 USDT
+
 })
 
 # 市价卖单（按数量）
+
 order = crypto_request("private/create-order", params={
     "instrument_name": "BTC_USDT",
     "side": "SELL",
     "type": "MARKET",
     "quantity": "0.001"
 })
-```
+
+```bash
 
 ### 3. 撤单
 
-**方法**: `private/cancel-order`
+- *方法**: `private/cancel-order`
 
 ```python
 result = crypto_request("private/cancel-order", params={
     "instrument_name": "BTC_USDT",
     "order_id": "12345678"
 })
-```
+
+```bash
 
 ### 4. 全部撤单
 
-**方法**: `private/cancel-all-orders`
+- *方法**: `private/cancel-all-orders`
 
 ```python
 result = crypto_request("private/cancel-all-orders", params={
     "instrument_name": "BTC_USDT"
 })
-```
+
+```bash
 
 ### 5. 查询挂单
 
-**方法**: `private/get-open-orders`
+- *方法**: `private/get-open-orders`
 
 ```python
 orders = crypto_request("private/get-open-orders", params={
@@ -316,39 +365,53 @@ if orders["code"] == 0:
     for o in orders["result"]["data"]:
         print(f"ID:{o['order_id']} {o['side']} {o['type']} "
               f"price={o['price']} qty={o['quantity']} status={o['status']}")
-```
+
+```bash
 
 ### 6. 查询订单详情
 
-**方法**: `private/get-order-detail`
+- *方法**: `private/get-order-detail`
 
 ### 7. 查询历史订单
 
-**方法**: `private/get-order-history`
+- *方法**: `private/get-order-history`
 
 ### 8. 查询成交记录
 
-**方法**: `private/get-trades`
+- *方法**: `private/get-trades`
 
-## 账户管理API
+## 账户管理 API
 
 | 方法 | 描述 |
+
 |------|------|
+
 | private/get-account-summary | 账户摘要 |
+
 | private/get-deposit-address | 充值地址 |
+
 | private/get-deposit-history | 充值记录 |
+
 | private/create-withdrawal | 发起提现 |
+
 | private/get-withdrawal-history | 提现记录 |
+
 | private/get-currency-networks | 币种网络信息 |
 
 ## 速率限制
 
 | 类别 | 限制 | 说明 |
+
 |------|------|------|
+
 | 公共端点 | 100 次/秒 | 按 IP |
+
 | create-order | 15 次/100ms | 按用户 |
+
 | cancel-order | 15 次/100ms | 按用户 |
+
 | get-order-detail | 30 次/100ms | 按用户 |
+
 | get-trades / get-order-history | 5 次/秒 | 按用户 |
 
 ### 最佳实践
@@ -357,23 +420,31 @@ if orders["code"] == 0:
 - 使用 `client_oid` 实现订单幂等性
 - 利用 CRO 质押降低手续费
 
-## WebSocket支持
+## WebSocket 支持
 
 ### 连接信息
 
 | URL | 用途 |
+
 |-----|------|
+
 | `wss://stream.crypto.com/exchange/v1/market` | 公共行情 |
+
 | `wss://stream.crypto.com/exchange/v1/user` | 私有频道（需认证） |
 
 ### 公共频道
 
 | 频道 | 描述 |
+
 |------|------|
+
 | `ticker.{instrument}` | Ticker |
+
 | `trade.{instrument}` | 实时成交 |
+
 | `book.{instrument}.{depth}` | 订单簿 |
-| `candlestick.{period}.{instrument}` | K线 |
+
+| `candlestick.{period}.{instrument}` | K 线 |
 
 ### Python WebSocket 示例
 
@@ -401,19 +472,22 @@ def on_message(ws, message):
                 print(f"Book: asks={len(b.get('asks', []))}, bids={len(b.get('bids', []))}")
 
 def on_open(ws):
-    # 订阅 Ticker
+
+# 订阅 Ticker
     ws.send(json.dumps({
         "id": 1,
         "method": "subscribe",
         "params": {"channels": ["ticker.BTC_USDT"]}
     }))
-    # 订阅成交
+
+# 订阅成交
     ws.send(json.dumps({
         "id": 2,
         "method": "subscribe",
         "params": {"channels": ["trade.BTC_USDT"]}
     }))
-    # 订阅订单簿
+
+# 订阅订单簿
     ws.send(json.dumps({
         "id": 3,
         "method": "subscribe",
@@ -428,7 +502,8 @@ ws = websocket.WebSocketApp(
     on_close=lambda ws, code, msg: print("Closed")
 )
 ws.run_forever(ping_interval=30)
-```
+
+```bash
 
 ### WebSocket 认证 (私有频道)
 
@@ -448,7 +523,8 @@ def ws_auth(ws):
         "sig": sig,
         "nonce": nonce,
     }))
-```
+
+```bash
 
 ## 错误代码
 
@@ -461,26 +537,43 @@ def ws_auth(ws):
   "code": 0,
   "result": { ... }
 }
-```
+
+```bash
 
 ### 常见错误码
 
 | 错误码 | 描述 |
+
 |--------|------|
+
 | 0 | 成功 |
+
 | 10001 | 系统错误 |
+
 | 10002 | 参数无效 |
+
 | 10003 | IP 未授权 |
+
 | 10004 | API Key 无效 |
+
 | 10005 | 签名无效 |
+
 | 10006 | 时间戳过期 |
+
 | 10007 | 请求过于频繁 |
+
 | 10008 | 权限不足 |
+
 | 20001 | 余额不足 |
+
 | 20007 | 订单不存在 |
+
 | 30003 | 交易对不存在 |
+
 | 30004 | 价格精度错误 |
+
 | 30005 | 数量精度错误 |
+
 | 30006 | 最小下单金额不满足 |
 
 ### Python 错误处理
@@ -499,26 +592,28 @@ def safe_crypto_request(method, params=None):
     except Exception as e:
         print(f"Request failed: {e}")
         return None
-```
+
+```bash
 
 ## 变更历史
 
 ### 2026-02-27
+
 - 完善文档，添加详细 V1 REST API 端点说明
 - 添加 HMAC-SHA256 签名认证完整 Python 示例
-- 添加市场数据 API（Ticker、订单簿、成交、K线）详细说明
+- 添加市场数据 API（Ticker、订单簿、成交、K 线）详细说明
 - 添加交易 API（下单、撤单、查询）完整示例
 - 添加 WebSocket (公共/认证) 订阅示例
 - 添加错误代码表和错误处理
 
----
+- --
 
 ## 相关资源
 
-- [Crypto.com Exchange API V1 文档](https://exchange-docs.crypto.com/exchange/v1/rest-ws/index.html)
-- [Crypto.com 官网](https://crypto.com/exchange)
-- [CCXT Crypto.com 实现](https://github.com/ccxt/ccxt)
+- [Crypto.com Exchange API V1 文档](<https://exchange-docs.crypto.com/exchange/v1/rest-ws/index.html)>
+- [Crypto.com 官网](<https://crypto.com/exchange)>
+- [CCXT Crypto.com 实现](<https://github.com/ccxt/ccxt)>
 
----
+- --
 
-*本文档由 bt_api_py 项目维护，内容基于 Crypto.com Exchange 官方 API V1 文档整理。*
+- 本文档由 bt_api_py 项目维护，内容基于 Crypto.com Exchange 官方 API V1 文档整理。*

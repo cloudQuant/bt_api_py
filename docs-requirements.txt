@@ -1,0 +1,22 @@
+# bt_api_py 文档构建依赖
+
+# MkDocs 核心框架
+mkdocs>=1.6.0
+
+# Material 主题
+mkdocs-material>=9.5.0
+
+# 必需插件
+mkdocs-git-revision-date-localized-plugin>=1.2.0
+mkdocs-minify-plugin>=0.8.0
+
+# 可选插件 (取消注释以启用)
+mkdocs-blog-plugin>=1.0.0        # 博客功能
+mkdocs-tags-plugin>=0.2.0        # 标签功能
+
+# 国际化支持 (多语言)
+# mkdocs-static-i18n>=1.0.0      # 中英文双语支持
+
+# 其他有用插件
+# mkdocs-awesome-pages-plugin    # 高级页面组织
+# mike                            # 文档版本管理

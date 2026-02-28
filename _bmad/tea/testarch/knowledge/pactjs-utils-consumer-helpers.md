@@ -9,6 +9,7 @@ Use `createProviderState` and `toJsonMap` from `@seontechnologies/pactjs-utils` 
 ### Problems with raw provider state handling
 
 - **JsonMap requirement**: Pact's `.given(stateName, params)` requires `params` to be `JsonMap` — a flat object where every value must be `string | number | boolean | null`
+
 - **Type gymnastics**: Complex params (Date objects, nested objects, null values) require manual casting that TypeScript can't verify
 - **Inconsistent serialization**: Different developers serialize the same data differently (e.g., dates as ISO strings vs timestamps)
 - **Verbose `.given()` calls**: Repeating state name and params inline makes consumer tests harder to read
@@ -55,9 +56,10 @@ describe('Movie API Contract', () => {
       });
   });
 });
-```
 
-**Key Points**:
+```bash
+
+- *Key Points**:
 
 - `createProviderState` accepts `{ name: string, params: Record<string, unknown> }`
 - Both `name` and `params` are required (pass `params: {}` for states without parameters)
@@ -96,9 +98,10 @@ const params = toJsonMap({
 //   createdAt: "2025-01-15T10:00:00.000Z",
 //   metadata: '{"role":"admin","permissions":["read","write"]}'
 // }
-```
 
-**Key Points**:
+```bash
+
+- *Key Points**:
 
 - `toJsonMap` is called internally by `createProviderState` — you rarely need it directly
 - Use it when you need explicit control over parameter conversion outside of provider states
@@ -123,7 +126,8 @@ await provider
     const movies = await res.json();
     expect(movies).toEqual([]);
   });
-```
+
+```bash
 
 ### Example 4: Multiple Provider States
 
@@ -145,7 +149,8 @@ await provider
   .executeTest(async (mockServer) => {
     // test implementation
   });
-```
+
+```bash
 
 ## Key Points
 
@@ -174,7 +179,8 @@ provider.given('user exists', {
   createdAt: new Date().toISOString(),
   metadata: JSON.stringify({ role: 'admin' }),
 } as JsonMap);
-```
+
+```bash
 
 ### Right: Use createProviderState
 
@@ -186,7 +192,8 @@ provider.given(
     params: { id: 1, createdAt: new Date(), metadata: { role: 'admin' } },
   }),
 );
-```
+
+```bash
 
 ### Wrong: Inline state names without helper
 
@@ -194,7 +201,8 @@ provider.given(
 // ❌ Duplicated state names between consumer and provider — easy to mismatch
 provider.given('a user with id 1 exists', { id: '1' });
 // Later in provider: 'user with id 1 exists' — different string!
-```
+
+```bash
 
 ### Right: Share state constants
 
@@ -206,6 +214,6 @@ const STATES = {
 } as const;
 
 provider.given(...createProviderState({ name: STATES.USER_EXISTS, params: { id: 1 } }));
-```
 
+```bash
 _Source: @seontechnologies/pactjs-utils consumer-helpers module, pactjs-utils sample-app consumer tests_

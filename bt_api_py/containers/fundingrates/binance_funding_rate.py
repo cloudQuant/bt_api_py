@@ -1,5 +1,6 @@
-import time
 import json
+import time
+
 from bt_api_py.containers.fundingrates.funding_rate import FundingRateData
 from bt_api_py.functions.utils import from_dict_get_float, from_dict_get_string
 
@@ -30,10 +31,10 @@ class BinanceRequestFundingRateData(FundingRateData):
             return self
         # {'symbol': 'BTCUSDT', 'fundingTime': 1731744000001, 'fundingRate': '0.00010000', 'markPrice': '91172.07627273'}
         self.server_time = from_dict_get_float(self.funding_rate_data, "time")
-        self.funding_rate_symbol_name = from_dict_get_string(self.funding_rate_data, 'symbol')
-        self.next_funding_rate = from_dict_get_float(self.funding_rate_data, 'nextFundingRate')
-        self.next_funding_rate_time = from_dict_get_float(self.funding_rate_data, 'nextFundingTime')
-        self.current_funding_rate = from_dict_get_float(self.funding_rate_data, 'lastFundingRate')
+        self.funding_rate_symbol_name = from_dict_get_string(self.funding_rate_data, "symbol")
+        self.next_funding_rate = from_dict_get_float(self.funding_rate_data, "nextFundingRate")
+        self.next_funding_rate_time = from_dict_get_float(self.funding_rate_data, "nextFundingTime")
+        self.current_funding_rate = from_dict_get_float(self.funding_rate_data, "lastFundingRate")
         self.has_been_init_data = True
         return self
 
@@ -137,8 +138,8 @@ class BinanceRequestHistoryFundingRateData(FundingRateData):
             return self
         # {'symbol': 'BTCUSDT', 'fundingTime': 1731744000001, 'fundingRate': '0.00010000', 'markPrice': '91172.07627273'}
         self.current_funding_time = from_dict_get_float(self.funding_rate_data, "fundingTime")
-        self.current_funding_rate = from_dict_get_float(self.funding_rate_data, 'fundingRate')
-        self.mark_price = from_dict_get_float(self.funding_rate_data, 'markPrice')
+        self.current_funding_rate = from_dict_get_float(self.funding_rate_data, "fundingRate")
+        self.mark_price = from_dict_get_float(self.funding_rate_data, "markPrice")
         self.has_been_init_data = True
         return self
 

@@ -7,11 +7,8 @@
             "-O2",
             "-std=c++11"
         ],
-        "extra_link_args": [
-            "-lgomp"
-        ],
         "include_dirs": [
-            "/private/var/folders/7d/hnmknylj1w91h3cvq6mh3thm0000gn/T/pip-build-env-dtctzapo/overlay/lib/python3.11/site-packages/numpy/_core/include",
+            "/private/var/folders/7d/hnmknylj1w91h3cvq6mh3thm0000gn/T/pip-build-env-hd41i15k/overlay/lib/python3.11/site-packages/numpy/_core/include",
             "bt_api_py/functions/calculate_number"
         ],
         "language": "c++",
@@ -2521,7 +2518,7 @@ return 0;
 #endif
 /* #### Code section: module_code ### */
 
-/* "bt_api_py/functions/calculate_number/calculate_numbers.pyx":17
+/* "bt_api_py/functions/calculate_number/calculate_numbers.pyx":18
  * 
  * 
  * cpdef double cal_sum_of_key_values(dict zheng_order_dict, str key):             # <<<<<<<<<<<<<<
@@ -2556,7 +2553,7 @@ static double __pyx_f_9bt_api_py_9functions_16calculate_number_27calculate_numbe
   int __pyx_clineno = 0;
   __Pyx_RefNannySetupContext("cal_sum_of_key_values", 0);
 
-  /* "bt_api_py/functions/calculate_number/calculate_numbers.pyx":18
+  /* "bt_api_py/functions/calculate_number/calculate_numbers.pyx":19
  * 
  * cpdef double cal_sum_of_key_values(dict zheng_order_dict, str key):
  *     cdef double sum_value = 0.0             # <<<<<<<<<<<<<<
@@ -2565,7 +2562,7 @@ static double __pyx_f_9bt_api_py_9functions_16calculate_number_27calculate_numbe
 */
   __pyx_v_sum_value = 0.0;
 
-  /* "bt_api_py/functions/calculate_number/calculate_numbers.pyx":21
+  /* "bt_api_py/functions/calculate_number/calculate_numbers.pyx":22
  *     cdef dict value
  *     cdef str trade_id
  *     for trade_id, value in zheng_order_dict.items():             # <<<<<<<<<<<<<<
@@ -2575,9 +2572,9 @@ static double __pyx_f_9bt_api_py_9functions_16calculate_number_27calculate_numbe
   __pyx_t_2 = 0;
   if (unlikely(__pyx_v_zheng_order_dict == Py_None)) {
     PyErr_Format(PyExc_AttributeError, "'NoneType' object has no attribute '%.30s'", "items");
-    __PYX_ERR(0, 21, __pyx_L1_error)
+    __PYX_ERR(0, 22, __pyx_L1_error)
   }
-  __pyx_t_5 = __Pyx_dict_iterator(__pyx_v_zheng_order_dict, 1, __pyx_mstate_global->__pyx_n_u_items, (&__pyx_t_3), (&__pyx_t_4)); if (unlikely(!__pyx_t_5)) __PYX_ERR(0, 21, __pyx_L1_error)
+  __pyx_t_5 = __Pyx_dict_iterator(__pyx_v_zheng_order_dict, 1, __pyx_mstate_global->__pyx_n_u_items, (&__pyx_t_3), (&__pyx_t_4)); if (unlikely(!__pyx_t_5)) __PYX_ERR(0, 22, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_5);
   __Pyx_XDECREF(__pyx_t_1);
   __pyx_t_1 = __pyx_t_5;
@@ -2585,42 +2582,42 @@ static double __pyx_f_9bt_api_py_9functions_16calculate_number_27calculate_numbe
   while (1) {
     __pyx_t_7 = __Pyx_dict_iter_next(__pyx_t_1, __pyx_t_3, &__pyx_t_2, &__pyx_t_5, &__pyx_t_6, NULL, __pyx_t_4);
     if (unlikely(__pyx_t_7 == 0)) break;
-    if (unlikely(__pyx_t_7 == -1)) __PYX_ERR(0, 21, __pyx_L1_error)
+    if (unlikely(__pyx_t_7 == -1)) __PYX_ERR(0, 22, __pyx_L1_error)
     __Pyx_GOTREF(__pyx_t_5);
     __Pyx_GOTREF(__pyx_t_6);
-    if (!(likely(PyUnicode_CheckExact(__pyx_t_5))||((__pyx_t_5) == Py_None) || __Pyx_RaiseUnexpectedTypeError("str", __pyx_t_5))) __PYX_ERR(0, 21, __pyx_L1_error)
-    if (!(likely(PyDict_CheckExact(__pyx_t_6))||((__pyx_t_6) == Py_None) || __Pyx_RaiseUnexpectedTypeError("dict", __pyx_t_6))) __PYX_ERR(0, 21, __pyx_L1_error)
+    if (!(likely(PyUnicode_CheckExact(__pyx_t_5))||((__pyx_t_5) == Py_None) || __Pyx_RaiseUnexpectedTypeError("str", __pyx_t_5))) __PYX_ERR(0, 22, __pyx_L1_error)
+    if (!(likely(PyDict_CheckExact(__pyx_t_6))||((__pyx_t_6) == Py_None) || __Pyx_RaiseUnexpectedTypeError("dict", __pyx_t_6))) __PYX_ERR(0, 22, __pyx_L1_error)
     __Pyx_XDECREF_SET(__pyx_v_trade_id, ((PyObject*)__pyx_t_5));
     __pyx_t_5 = 0;
     __Pyx_XDECREF_SET(__pyx_v_value, ((PyObject*)__pyx_t_6));
     __pyx_t_6 = 0;
 
-    /* "bt_api_py/functions/calculate_number/calculate_numbers.pyx":22
+    /* "bt_api_py/functions/calculate_number/calculate_numbers.pyx":23
  *     cdef str trade_id
  *     for trade_id, value in zheng_order_dict.items():
  *         sum_value += value[key]             # <<<<<<<<<<<<<<
  *     return sum_value
  * 
 */
-    __pyx_t_6 = PyFloat_FromDouble(__pyx_v_sum_value); if (unlikely(!__pyx_t_6)) __PYX_ERR(0, 22, __pyx_L1_error)
+    __pyx_t_6 = PyFloat_FromDouble(__pyx_v_sum_value); if (unlikely(!__pyx_t_6)) __PYX_ERR(0, 23, __pyx_L1_error)
     __Pyx_GOTREF(__pyx_t_6);
     if (unlikely(__pyx_v_value == Py_None)) {
       PyErr_SetString(PyExc_TypeError, "'NoneType' object is not subscriptable");
-      __PYX_ERR(0, 22, __pyx_L1_error)
+      __PYX_ERR(0, 23, __pyx_L1_error)
     }
-    __pyx_t_5 = __Pyx_PyDict_GetItem(__pyx_v_value, __pyx_v_key); if (unlikely(!__pyx_t_5)) __PYX_ERR(0, 22, __pyx_L1_error)
+    __pyx_t_5 = __Pyx_PyDict_GetItem(__pyx_v_value, __pyx_v_key); if (unlikely(!__pyx_t_5)) __PYX_ERR(0, 23, __pyx_L1_error)
     __Pyx_GOTREF(__pyx_t_5);
-    __pyx_t_8 = PyNumber_InPlaceAdd(__pyx_t_6, __pyx_t_5); if (unlikely(!__pyx_t_8)) __PYX_ERR(0, 22, __pyx_L1_error)
+    __pyx_t_8 = PyNumber_InPlaceAdd(__pyx_t_6, __pyx_t_5); if (unlikely(!__pyx_t_8)) __PYX_ERR(0, 23, __pyx_L1_error)
     __Pyx_GOTREF(__pyx_t_8);
     __Pyx_DECREF(__pyx_t_6); __pyx_t_6 = 0;
     __Pyx_DECREF(__pyx_t_5); __pyx_t_5 = 0;
-    __pyx_t_9 = __Pyx_PyFloat_AsDouble(__pyx_t_8); if (unlikely((__pyx_t_9 == (double)-1) && PyErr_Occurred())) __PYX_ERR(0, 22, __pyx_L1_error)
+    __pyx_t_9 = __Pyx_PyFloat_AsDouble(__pyx_t_8); if (unlikely((__pyx_t_9 == (double)-1) && PyErr_Occurred())) __PYX_ERR(0, 23, __pyx_L1_error)
     __Pyx_DECREF(__pyx_t_8); __pyx_t_8 = 0;
     __pyx_v_sum_value = __pyx_t_9;
   }
   __Pyx_DECREF(__pyx_t_1); __pyx_t_1 = 0;
 
-  /* "bt_api_py/functions/calculate_number/calculate_numbers.pyx":23
+  /* "bt_api_py/functions/calculate_number/calculate_numbers.pyx":24
  *     for trade_id, value in zheng_order_dict.items():
  *         sum_value += value[key]
  *     return sum_value             # <<<<<<<<<<<<<<
@@ -2630,7 +2627,7 @@ static double __pyx_f_9bt_api_py_9functions_16calculate_number_27calculate_numbe
   __pyx_r = __pyx_v_sum_value;
   goto __pyx_L0;
 
-  /* "bt_api_py/functions/calculate_number/calculate_numbers.pyx":17
+  /* "bt_api_py/functions/calculate_number/calculate_numbers.pyx":18
  * 
  * 
  * cpdef double cal_sum_of_key_values(dict zheng_order_dict, str key):             # <<<<<<<<<<<<<<
@@ -2693,39 +2690,39 @@ PyObject *__pyx_args, PyObject *__pyx_kwds
   {
     PyObject ** const __pyx_pyargnames[] = {&__pyx_mstate_global->__pyx_n_u_zheng_order_dict,&__pyx_mstate_global->__pyx_n_u_key,0};
     const Py_ssize_t __pyx_kwds_len = (__pyx_kwds) ? __Pyx_NumKwargs_FASTCALL(__pyx_kwds) : 0;
-    if (unlikely(__pyx_kwds_len) < 0) __PYX_ERR(0, 17, __pyx_L3_error)
+    if (unlikely(__pyx_kwds_len) < 0) __PYX_ERR(0, 18, __pyx_L3_error)
     if (__pyx_kwds_len > 0) {
       switch (__pyx_nargs) {
         case  2:
         values[1] = __Pyx_ArgRef_FASTCALL(__pyx_args, 1);
-        if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[1])) __PYX_ERR(0, 17, __pyx_L3_error)
+        if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[1])) __PYX_ERR(0, 18, __pyx_L3_error)
         CYTHON_FALLTHROUGH;
         case  1:
         values[0] = __Pyx_ArgRef_FASTCALL(__pyx_args, 0);
-        if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[0])) __PYX_ERR(0, 17, __pyx_L3_error)
+        if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[0])) __PYX_ERR(0, 18, __pyx_L3_error)
         CYTHON_FALLTHROUGH;
         case  0: break;
         default: goto __pyx_L5_argtuple_error;
       }
       const Py_ssize_t kwd_pos_args = __pyx_nargs;
-      if (__Pyx_ParseKeywords(__pyx_kwds, __pyx_kwvalues, __pyx_pyargnames, 0, values, kwd_pos_args, __pyx_kwds_len, "cal_sum_of_key_values", 0) < (0)) __PYX_ERR(0, 17, __pyx_L3_error)
+      if (__Pyx_ParseKeywords(__pyx_kwds, __pyx_kwvalues, __pyx_pyargnames, 0, values, kwd_pos_args, __pyx_kwds_len, "cal_sum_of_key_values", 0) < (0)) __PYX_ERR(0, 18, __pyx_L3_error)
       for (Py_ssize_t i = __pyx_nargs; i < 2; i++) {
-        if (unlikely(!values[i])) { __Pyx_RaiseArgtupleInvalid("cal_sum_of_key_values", 1, 2, 2, i); __PYX_ERR(0, 17, __pyx_L3_error) }
+        if (unlikely(!values[i])) { __Pyx_RaiseArgtupleInvalid("cal_sum_of_key_values", 1, 2, 2, i); __PYX_ERR(0, 18, __pyx_L3_error) }
       }
     } else if (unlikely(__pyx_nargs != 2)) {
       goto __pyx_L5_argtuple_error;
     } else {
       values[0] = __Pyx_ArgRef_FASTCALL(__pyx_args, 0);
-      if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[0])) __PYX_ERR(0, 17, __pyx_L3_error)
+      if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[0])) __PYX_ERR(0, 18, __pyx_L3_error)
       values[1] = __Pyx_ArgRef_FASTCALL(__pyx_args, 1);
-      if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[1])) __PYX_ERR(0, 17, __pyx_L3_error)
+      if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[1])) __PYX_ERR(0, 18, __pyx_L3_error)
     }
     __pyx_v_zheng_order_dict = ((PyObject*)values[0]);
     __pyx_v_key = ((PyObject*)values[1]);
   }
   goto __pyx_L6_skip;
   __pyx_L5_argtuple_error:;
-  __Pyx_RaiseArgtupleInvalid("cal_sum_of_key_values", 1, 2, 2, __pyx_nargs); __PYX_ERR(0, 17, __pyx_L3_error)
+  __Pyx_RaiseArgtupleInvalid("cal_sum_of_key_values", 1, 2, 2, __pyx_nargs); __PYX_ERR(0, 18, __pyx_L3_error)
   __pyx_L6_skip:;
   goto __pyx_L4_argument_unpacking_done;
   __pyx_L3_error:;
@@ -2736,8 +2733,8 @@ PyObject *__pyx_args, PyObject *__pyx_kwds
   __Pyx_RefNannyFinishContext();
   return NULL;
   __pyx_L4_argument_unpacking_done:;
-  if (unlikely(!__Pyx_ArgTypeTest(((PyObject *)__pyx_v_zheng_order_dict), (&PyDict_Type), 1, "zheng_order_dict", 1))) __PYX_ERR(0, 17, __pyx_L1_error)
-  if (unlikely(!__Pyx_ArgTypeTest(((PyObject *)__pyx_v_key), (&PyUnicode_Type), 1, "key", 1))) __PYX_ERR(0, 17, __pyx_L1_error)
+  if (unlikely(!__Pyx_ArgTypeTest(((PyObject *)__pyx_v_zheng_order_dict), (&PyDict_Type), 1, "zheng_order_dict", 1))) __PYX_ERR(0, 18, __pyx_L1_error)
+  if (unlikely(!__Pyx_ArgTypeTest(((PyObject *)__pyx_v_key), (&PyUnicode_Type), 1, "key", 1))) __PYX_ERR(0, 18, __pyx_L1_error)
   __pyx_r = __pyx_pf_9bt_api_py_9functions_16calculate_number_27calculate_numbers_by_cython_cal_sum_of_key_values(__pyx_self, __pyx_v_zheng_order_dict, __pyx_v_key);
 
   /* function exit code */
@@ -2767,8 +2764,8 @@ static PyObject *__pyx_pf_9bt_api_py_9functions_16calculate_number_27calculate_n
   int __pyx_clineno = 0;
   __Pyx_RefNannySetupContext("cal_sum_of_key_values", 0);
   __Pyx_XDECREF(__pyx_r);
-  __pyx_t_1 = __pyx_f_9bt_api_py_9functions_16calculate_number_27calculate_numbers_by_cython_cal_sum_of_key_values(__pyx_v_zheng_order_dict, __pyx_v_key, 1); if (unlikely(__pyx_t_1 == ((double)-1) && PyErr_Occurred())) __PYX_ERR(0, 17, __pyx_L1_error)
-  __pyx_t_2 = PyFloat_FromDouble(__pyx_t_1); if (unlikely(!__pyx_t_2)) __PYX_ERR(0, 17, __pyx_L1_error)
+  __pyx_t_1 = __pyx_f_9bt_api_py_9functions_16calculate_number_27calculate_numbers_by_cython_cal_sum_of_key_values(__pyx_v_zheng_order_dict, __pyx_v_key, 1); if (unlikely(__pyx_t_1 == ((double)-1) && PyErr_Occurred())) __PYX_ERR(0, 18, __pyx_L1_error)
+  __pyx_t_2 = PyFloat_FromDouble(__pyx_t_1); if (unlikely(!__pyx_t_2)) __PYX_ERR(0, 18, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_2);
   __pyx_r = __pyx_t_2;
   __pyx_t_2 = 0;
@@ -2785,7 +2782,7 @@ static PyObject *__pyx_pf_9bt_api_py_9functions_16calculate_number_27calculate_n
   return __pyx_r;
 }
 
-/* "bt_api_py/functions/calculate_number/calculate_numbers.pyx":26
+/* "bt_api_py/functions/calculate_number/calculate_numbers.pyx":27
  * 
  * 
  * cpdef normalise_hedge_data_to_base(depth_data, dict params):             # <<<<<<<<<<<<<<
@@ -2847,59 +2844,59 @@ static PyObject *__pyx_f_9bt_api_py_9functions_16calculate_number_27calculate_nu
   int __pyx_clineno = 0;
   __Pyx_RefNannySetupContext("normalise_hedge_data_to_base", 0);
 
-  /* "bt_api_py/functions/calculate_number/calculate_numbers.pyx":28
+  /* "bt_api_py/functions/calculate_number/calculate_numbers.pyx":29
  * cpdef normalise_hedge_data_to_base(depth_data, dict params):
  *     # new_percent = params['percent'] / 100 / params["base_spot_qty_unit"]
  *     cdef list spot_bid_price_list = depth_data.bid_price_list             # <<<<<<<<<<<<<<
  *     cdef list spot_bid_volume_list = depth_data.bid_volume_list
  *     cdef list spot_ask_price_list = depth_data.ask_price_list
 */
-  __pyx_t_1 = __Pyx_PyObject_GetAttrStr(__pyx_v_depth_data, __pyx_mstate_global->__pyx_n_u_bid_price_list); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 28, __pyx_L1_error)
+  __pyx_t_1 = __Pyx_PyObject_GetAttrStr(__pyx_v_depth_data, __pyx_mstate_global->__pyx_n_u_bid_price_list); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 29, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_1);
-  if (!(likely(PyList_CheckExact(__pyx_t_1))||((__pyx_t_1) == Py_None) || __Pyx_RaiseUnexpectedTypeError("list", __pyx_t_1))) __PYX_ERR(0, 28, __pyx_L1_error)
+  if (!(likely(PyList_CheckExact(__pyx_t_1))||((__pyx_t_1) == Py_None) || __Pyx_RaiseUnexpectedTypeError("list", __pyx_t_1))) __PYX_ERR(0, 29, __pyx_L1_error)
   __pyx_v_spot_bid_price_list = ((PyObject*)__pyx_t_1);
   __pyx_t_1 = 0;
 
-  /* "bt_api_py/functions/calculate_number/calculate_numbers.pyx":29
+  /* "bt_api_py/functions/calculate_number/calculate_numbers.pyx":30
  *     # new_percent = params['percent'] / 100 / params["base_spot_qty_unit"]
  *     cdef list spot_bid_price_list = depth_data.bid_price_list
  *     cdef list spot_bid_volume_list = depth_data.bid_volume_list             # <<<<<<<<<<<<<<
  *     cdef list spot_ask_price_list = depth_data.ask_price_list
  *     cdef list spot_ask_volume_list = depth_data.ask_volume_list
 */
-  __pyx_t_1 = __Pyx_PyObject_GetAttrStr(__pyx_v_depth_data, __pyx_mstate_global->__pyx_n_u_bid_volume_list); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 29, __pyx_L1_error)
+  __pyx_t_1 = __Pyx_PyObject_GetAttrStr(__pyx_v_depth_data, __pyx_mstate_global->__pyx_n_u_bid_volume_list); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 30, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_1);
-  if (!(likely(PyList_CheckExact(__pyx_t_1))||((__pyx_t_1) == Py_None) || __Pyx_RaiseUnexpectedTypeError("list", __pyx_t_1))) __PYX_ERR(0, 29, __pyx_L1_error)
+  if (!(likely(PyList_CheckExact(__pyx_t_1))||((__pyx_t_1) == Py_None) || __Pyx_RaiseUnexpectedTypeError("list", __pyx_t_1))) __PYX_ERR(0, 30, __pyx_L1_error)
   __pyx_v_spot_bid_volume_list = ((PyObject*)__pyx_t_1);
   __pyx_t_1 = 0;
 
-  /* "bt_api_py/functions/calculate_number/calculate_numbers.pyx":30
+  /* "bt_api_py/functions/calculate_number/calculate_numbers.pyx":31
  *     cdef list spot_bid_price_list = depth_data.bid_price_list
  *     cdef list spot_bid_volume_list = depth_data.bid_volume_list
  *     cdef list spot_ask_price_list = depth_data.ask_price_list             # <<<<<<<<<<<<<<
  *     cdef list spot_ask_volume_list = depth_data.ask_volume_list
  *     # qty_unit_equal = params['base_spot_qty_unit'] == params['hedge_swap_qty_unit']
 */
-  __pyx_t_1 = __Pyx_PyObject_GetAttrStr(__pyx_v_depth_data, __pyx_mstate_global->__pyx_n_u_ask_price_list); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 30, __pyx_L1_error)
+  __pyx_t_1 = __Pyx_PyObject_GetAttrStr(__pyx_v_depth_data, __pyx_mstate_global->__pyx_n_u_ask_price_list); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 31, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_1);
-  if (!(likely(PyList_CheckExact(__pyx_t_1))||((__pyx_t_1) == Py_None) || __Pyx_RaiseUnexpectedTypeError("list", __pyx_t_1))) __PYX_ERR(0, 30, __pyx_L1_error)
+  if (!(likely(PyList_CheckExact(__pyx_t_1))||((__pyx_t_1) == Py_None) || __Pyx_RaiseUnexpectedTypeError("list", __pyx_t_1))) __PYX_ERR(0, 31, __pyx_L1_error)
   __pyx_v_spot_ask_price_list = ((PyObject*)__pyx_t_1);
   __pyx_t_1 = 0;
 
-  /* "bt_api_py/functions/calculate_number/calculate_numbers.pyx":31
+  /* "bt_api_py/functions/calculate_number/calculate_numbers.pyx":32
  *     cdef list spot_bid_volume_list = depth_data.bid_volume_list
  *     cdef list spot_ask_price_list = depth_data.ask_price_list
  *     cdef list spot_ask_volume_list = depth_data.ask_volume_list             # <<<<<<<<<<<<<<
  *     # qty_unit_equal = params['base_spot_qty_unit'] == params['hedge_swap_qty_unit']
  *     cdef bint price_unit_equal = params['base_spot_price_unit'] == params['hedge_swap_price_unit']
 */
-  __pyx_t_1 = __Pyx_PyObject_GetAttrStr(__pyx_v_depth_data, __pyx_mstate_global->__pyx_n_u_ask_volume_list); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 31, __pyx_L1_error)
+  __pyx_t_1 = __Pyx_PyObject_GetAttrStr(__pyx_v_depth_data, __pyx_mstate_global->__pyx_n_u_ask_volume_list); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 32, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_1);
-  if (!(likely(PyList_CheckExact(__pyx_t_1))||((__pyx_t_1) == Py_None) || __Pyx_RaiseUnexpectedTypeError("list", __pyx_t_1))) __PYX_ERR(0, 31, __pyx_L1_error)
+  if (!(likely(PyList_CheckExact(__pyx_t_1))||((__pyx_t_1) == Py_None) || __Pyx_RaiseUnexpectedTypeError("list", __pyx_t_1))) __PYX_ERR(0, 32, __pyx_L1_error)
   __pyx_v_spot_ask_volume_list = ((PyObject*)__pyx_t_1);
   __pyx_t_1 = 0;
 
-  /* "bt_api_py/functions/calculate_number/calculate_numbers.pyx":33
+  /* "bt_api_py/functions/calculate_number/calculate_numbers.pyx":34
  *     cdef list spot_ask_volume_list = depth_data.ask_volume_list
  *     # qty_unit_equal = params['base_spot_qty_unit'] == params['hedge_swap_qty_unit']
  *     cdef bint price_unit_equal = params['base_spot_price_unit'] == params['hedge_swap_price_unit']             # <<<<<<<<<<<<<<
@@ -2908,72 +2905,72 @@ static PyObject *__pyx_f_9bt_api_py_9functions_16calculate_number_27calculate_nu
 */
   if (unlikely(__pyx_v_params == Py_None)) {
     PyErr_SetString(PyExc_TypeError, "'NoneType' object is not subscriptable");
-    __PYX_ERR(0, 33, __pyx_L1_error)
+    __PYX_ERR(0, 34, __pyx_L1_error)
   }
-  __pyx_t_1 = __Pyx_PyDict_GetItem(__pyx_v_params, __pyx_mstate_global->__pyx_n_u_base_spot_price_unit); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 33, __pyx_L1_error)
+  __pyx_t_1 = __Pyx_PyDict_GetItem(__pyx_v_params, __pyx_mstate_global->__pyx_n_u_base_spot_price_unit); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 34, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_1);
   if (unlikely(__pyx_v_params == Py_None)) {
     PyErr_SetString(PyExc_TypeError, "'NoneType' object is not subscriptable");
-    __PYX_ERR(0, 33, __pyx_L1_error)
+    __PYX_ERR(0, 34, __pyx_L1_error)
   }
-  __pyx_t_2 = __Pyx_PyDict_GetItem(__pyx_v_params, __pyx_mstate_global->__pyx_n_u_hedge_swap_price_unit); if (unlikely(!__pyx_t_2)) __PYX_ERR(0, 33, __pyx_L1_error)
+  __pyx_t_2 = __Pyx_PyDict_GetItem(__pyx_v_params, __pyx_mstate_global->__pyx_n_u_hedge_swap_price_unit); if (unlikely(!__pyx_t_2)) __PYX_ERR(0, 34, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_2);
-  __pyx_t_3 = PyObject_RichCompare(__pyx_t_1, __pyx_t_2, Py_EQ); __Pyx_XGOTREF(__pyx_t_3); if (unlikely(!__pyx_t_3)) __PYX_ERR(0, 33, __pyx_L1_error)
+  __pyx_t_3 = PyObject_RichCompare(__pyx_t_1, __pyx_t_2, Py_EQ); __Pyx_XGOTREF(__pyx_t_3); if (unlikely(!__pyx_t_3)) __PYX_ERR(0, 34, __pyx_L1_error)
   __Pyx_DECREF(__pyx_t_1); __pyx_t_1 = 0;
   __Pyx_DECREF(__pyx_t_2); __pyx_t_2 = 0;
-  __pyx_t_4 = __Pyx_PyObject_IsTrue(__pyx_t_3); if (unlikely((__pyx_t_4 == (int)-1) && PyErr_Occurred())) __PYX_ERR(0, 33, __pyx_L1_error)
+  __pyx_t_4 = __Pyx_PyObject_IsTrue(__pyx_t_3); if (unlikely((__pyx_t_4 == (int)-1) && PyErr_Occurred())) __PYX_ERR(0, 34, __pyx_L1_error)
   __Pyx_DECREF(__pyx_t_3); __pyx_t_3 = 0;
   __pyx_v_price_unit_equal = __pyx_t_4;
 
-  /* "bt_api_py/functions/calculate_number/calculate_numbers.pyx":35
+  /* "bt_api_py/functions/calculate_number/calculate_numbers.pyx":36
  *     cdef bint price_unit_equal = params['base_spot_price_unit'] == params['hedge_swap_price_unit']
  * 
  *     cdef list new_spot_bid_price_list = []             # <<<<<<<<<<<<<<
  *     cdef list new_spot_bid_volume_list = []
  *     cdef list new_spot_ask_price_list = []
 */
-  __pyx_t_3 = PyList_New(0); if (unlikely(!__pyx_t_3)) __PYX_ERR(0, 35, __pyx_L1_error)
+  __pyx_t_3 = PyList_New(0); if (unlikely(!__pyx_t_3)) __PYX_ERR(0, 36, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_3);
   __pyx_v_new_spot_bid_price_list = ((PyObject*)__pyx_t_3);
   __pyx_t_3 = 0;
 
-  /* "bt_api_py/functions/calculate_number/calculate_numbers.pyx":36
+  /* "bt_api_py/functions/calculate_number/calculate_numbers.pyx":37
  * 
  *     cdef list new_spot_bid_price_list = []
  *     cdef list new_spot_bid_volume_list = []             # <<<<<<<<<<<<<<
  *     cdef list new_spot_ask_price_list = []
  *     cdef list new_spot_ask_volume_list = []
 */
-  __pyx_t_3 = PyList_New(0); if (unlikely(!__pyx_t_3)) __PYX_ERR(0, 36, __pyx_L1_error)
+  __pyx_t_3 = PyList_New(0); if (unlikely(!__pyx_t_3)) __PYX_ERR(0, 37, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_3);
   __pyx_v_new_spot_bid_volume_list = ((PyObject*)__pyx_t_3);
   __pyx_t_3 = 0;
 
-  /* "bt_api_py/functions/calculate_number/calculate_numbers.pyx":37
+  /* "bt_api_py/functions/calculate_number/calculate_numbers.pyx":38
  *     cdef list new_spot_bid_price_list = []
  *     cdef list new_spot_bid_volume_list = []
  *     cdef list new_spot_ask_price_list = []             # <<<<<<<<<<<<<<
  *     cdef list new_spot_ask_volume_list = []
  *     cdef int i
 */
-  __pyx_t_3 = PyList_New(0); if (unlikely(!__pyx_t_3)) __PYX_ERR(0, 37, __pyx_L1_error)
+  __pyx_t_3 = PyList_New(0); if (unlikely(!__pyx_t_3)) __PYX_ERR(0, 38, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_3);
   __pyx_v_new_spot_ask_price_list = ((PyObject*)__pyx_t_3);
   __pyx_t_3 = 0;
 
-  /* "bt_api_py/functions/calculate_number/calculate_numbers.pyx":38
+  /* "bt_api_py/functions/calculate_number/calculate_numbers.pyx":39
  *     cdef list new_spot_bid_volume_list = []
  *     cdef list new_spot_ask_price_list = []
  *     cdef list new_spot_ask_volume_list = []             # <<<<<<<<<<<<<<
  *     cdef int i
  *     # i==0
 */
-  __pyx_t_3 = PyList_New(0); if (unlikely(!__pyx_t_3)) __PYX_ERR(0, 38, __pyx_L1_error)
+  __pyx_t_3 = PyList_New(0); if (unlikely(!__pyx_t_3)) __PYX_ERR(0, 39, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_3);
   __pyx_v_new_spot_ask_volume_list = ((PyObject*)__pyx_t_3);
   __pyx_t_3 = 0;
 
-  /* "bt_api_py/functions/calculate_number/calculate_numbers.pyx":51
+  /* "bt_api_py/functions/calculate_number/calculate_numbers.pyx":52
  *     cdef double now_ask_volume
  *     cdef double v
  *     cdef int data_len = len(spot_bid_price_list)             # <<<<<<<<<<<<<<
@@ -2982,12 +2979,12 @@ static PyObject *__pyx_f_9bt_api_py_9functions_16calculate_number_27calculate_nu
 */
   if (unlikely(__pyx_v_spot_bid_price_list == Py_None)) {
     PyErr_SetString(PyExc_TypeError, "object of type 'NoneType' has no len()");
-    __PYX_ERR(0, 51, __pyx_L1_error)
+    __PYX_ERR(0, 52, __pyx_L1_error)
   }
-  __pyx_t_5 = __Pyx_PyList_GET_SIZE(__pyx_v_spot_bid_price_list); if (unlikely(__pyx_t_5 == ((Py_ssize_t)-1))) __PYX_ERR(0, 51, __pyx_L1_error)
+  __pyx_t_5 = __Pyx_PyList_GET_SIZE(__pyx_v_spot_bid_price_list); if (unlikely(__pyx_t_5 == ((Py_ssize_t)-1))) __PYX_ERR(0, 52, __pyx_L1_error)
   __pyx_v_data_len = __pyx_t_5;
 
-  /* "bt_api_py/functions/calculate_number/calculate_numbers.pyx":52
+  /* "bt_api_py/functions/calculate_number/calculate_numbers.pyx":53
  *     cdef double v
  *     cdef int data_len = len(spot_bid_price_list)
  *     cdef double percent = params['percent']             # <<<<<<<<<<<<<<
@@ -2996,15 +2993,15 @@ static PyObject *__pyx_f_9bt_api_py_9functions_16calculate_number_27calculate_nu
 */
   if (unlikely(__pyx_v_params == Py_None)) {
     PyErr_SetString(PyExc_TypeError, "'NoneType' object is not subscriptable");
-    __PYX_ERR(0, 52, __pyx_L1_error)
+    __PYX_ERR(0, 53, __pyx_L1_error)
   }
-  __pyx_t_3 = __Pyx_PyDict_GetItem(__pyx_v_params, __pyx_mstate_global->__pyx_n_u_percent); if (unlikely(!__pyx_t_3)) __PYX_ERR(0, 52, __pyx_L1_error)
+  __pyx_t_3 = __Pyx_PyDict_GetItem(__pyx_v_params, __pyx_mstate_global->__pyx_n_u_percent); if (unlikely(!__pyx_t_3)) __PYX_ERR(0, 53, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_3);
-  __pyx_t_6 = __Pyx_PyFloat_AsDouble(__pyx_t_3); if (unlikely((__pyx_t_6 == (double)-1) && PyErr_Occurred())) __PYX_ERR(0, 52, __pyx_L1_error)
+  __pyx_t_6 = __Pyx_PyFloat_AsDouble(__pyx_t_3); if (unlikely((__pyx_t_6 == (double)-1) && PyErr_Occurred())) __PYX_ERR(0, 53, __pyx_L1_error)
   __Pyx_DECREF(__pyx_t_3); __pyx_t_3 = 0;
   __pyx_v_percent = __pyx_t_6;
 
-  /* "bt_api_py/functions/calculate_number/calculate_numbers.pyx":53
+  /* "bt_api_py/functions/calculate_number/calculate_numbers.pyx":54
  *     cdef int data_len = len(spot_bid_price_list)
  *     cdef double percent = params['percent']
  *     cdef double base_spot_price_unit = params['base_spot_price_unit']             # <<<<<<<<<<<<<<
@@ -3013,15 +3010,15 @@ static PyObject *__pyx_f_9bt_api_py_9functions_16calculate_number_27calculate_nu
 */
   if (unlikely(__pyx_v_params == Py_None)) {
     PyErr_SetString(PyExc_TypeError, "'NoneType' object is not subscriptable");
-    __PYX_ERR(0, 53, __pyx_L1_error)
+    __PYX_ERR(0, 54, __pyx_L1_error)
   }
-  __pyx_t_3 = __Pyx_PyDict_GetItem(__pyx_v_params, __pyx_mstate_global->__pyx_n_u_base_spot_price_unit); if (unlikely(!__pyx_t_3)) __PYX_ERR(0, 53, __pyx_L1_error)
+  __pyx_t_3 = __Pyx_PyDict_GetItem(__pyx_v_params, __pyx_mstate_global->__pyx_n_u_base_spot_price_unit); if (unlikely(!__pyx_t_3)) __PYX_ERR(0, 54, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_3);
-  __pyx_t_6 = __Pyx_PyFloat_AsDouble(__pyx_t_3); if (unlikely((__pyx_t_6 == (double)-1) && PyErr_Occurred())) __PYX_ERR(0, 53, __pyx_L1_error)
+  __pyx_t_6 = __Pyx_PyFloat_AsDouble(__pyx_t_3); if (unlikely((__pyx_t_6 == (double)-1) && PyErr_Occurred())) __PYX_ERR(0, 54, __pyx_L1_error)
   __Pyx_DECREF(__pyx_t_3); __pyx_t_3 = 0;
   __pyx_v_base_spot_price_unit = __pyx_t_6;
 
-  /* "bt_api_py/functions/calculate_number/calculate_numbers.pyx":54
+  /* "bt_api_py/functions/calculate_number/calculate_numbers.pyx":55
  *     cdef double percent = params['percent']
  *     cdef double base_spot_price_unit = params['base_spot_price_unit']
  *     cdef double base_spot_qty_unit = params['base_spot_qty_unit']             # <<<<<<<<<<<<<<
@@ -3030,15 +3027,15 @@ static PyObject *__pyx_f_9bt_api_py_9functions_16calculate_number_27calculate_nu
 */
   if (unlikely(__pyx_v_params == Py_None)) {
     PyErr_SetString(PyExc_TypeError, "'NoneType' object is not subscriptable");
-    __PYX_ERR(0, 54, __pyx_L1_error)
+    __PYX_ERR(0, 55, __pyx_L1_error)
   }
-  __pyx_t_3 = __Pyx_PyDict_GetItem(__pyx_v_params, __pyx_mstate_global->__pyx_n_u_base_spot_qty_unit); if (unlikely(!__pyx_t_3)) __PYX_ERR(0, 54, __pyx_L1_error)
+  __pyx_t_3 = __Pyx_PyDict_GetItem(__pyx_v_params, __pyx_mstate_global->__pyx_n_u_base_spot_qty_unit); if (unlikely(!__pyx_t_3)) __PYX_ERR(0, 55, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_3);
-  __pyx_t_6 = __Pyx_PyFloat_AsDouble(__pyx_t_3); if (unlikely((__pyx_t_6 == (double)-1) && PyErr_Occurred())) __PYX_ERR(0, 54, __pyx_L1_error)
+  __pyx_t_6 = __Pyx_PyFloat_AsDouble(__pyx_t_3); if (unlikely((__pyx_t_6 == (double)-1) && PyErr_Occurred())) __PYX_ERR(0, 55, __pyx_L1_error)
   __Pyx_DECREF(__pyx_t_3); __pyx_t_3 = 0;
   __pyx_v_base_spot_qty_unit = __pyx_t_6;
 
-  /* "bt_api_py/functions/calculate_number/calculate_numbers.pyx":56
+  /* "bt_api_py/functions/calculate_number/calculate_numbers.pyx":57
  *     cdef double base_spot_qty_unit = params['base_spot_qty_unit']
  *     #
  *     if price_unit_equal:             # <<<<<<<<<<<<<<
@@ -3047,7 +3044,7 @@ static PyObject *__pyx_f_9bt_api_py_9functions_16calculate_number_27calculate_nu
 */
   if (__pyx_v_price_unit_equal) {
 
-    /* "bt_api_py/functions/calculate_number/calculate_numbers.pyx":57
+    /* "bt_api_py/functions/calculate_number/calculate_numbers.pyx":58
  *     #
  *     if price_unit_equal:
  *         for i in range(data_len):             # <<<<<<<<<<<<<<
@@ -3059,7 +3056,7 @@ static PyObject *__pyx_f_9bt_api_py_9functions_16calculate_number_27calculate_nu
     for (__pyx_t_9 = 0; __pyx_t_9 < __pyx_t_8; __pyx_t_9+=1) {
       __pyx_v_i = __pyx_t_9;
 
-      /* "bt_api_py/functions/calculate_number/calculate_numbers.pyx":58
+      /* "bt_api_py/functions/calculate_number/calculate_numbers.pyx":59
  *     if price_unit_equal:
  *         for i in range(data_len):
  *             v = round_number(spot_bid_price_list[i],base_spot_price_unit,"down")             # <<<<<<<<<<<<<<
@@ -3067,13 +3064,13 @@ static PyObject *__pyx_f_9bt_api_py_9functions_16calculate_number_27calculate_nu
  *             v = int(spot_bid_volume_list[i] * percent / base_spot_qty_unit)
 */
       __pyx_t_2 = NULL;
-      __Pyx_GetModuleGlobalName(__pyx_t_1, __pyx_mstate_global->__pyx_n_u_round_number); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 58, __pyx_L1_error)
+      __Pyx_GetModuleGlobalName(__pyx_t_1, __pyx_mstate_global->__pyx_n_u_round_number); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 59, __pyx_L1_error)
       __Pyx_GOTREF(__pyx_t_1);
       if (unlikely(__pyx_v_spot_bid_price_list == Py_None)) {
         PyErr_SetString(PyExc_TypeError, "'NoneType' object is not subscriptable");
-        __PYX_ERR(0, 58, __pyx_L1_error)
+        __PYX_ERR(0, 59, __pyx_L1_error)
       }
-      __pyx_t_10 = PyFloat_FromDouble(__pyx_v_base_spot_price_unit); if (unlikely(!__pyx_t_10)) __PYX_ERR(0, 58, __pyx_L1_error)
+      __pyx_t_10 = PyFloat_FromDouble(__pyx_v_base_spot_price_unit); if (unlikely(!__pyx_t_10)) __PYX_ERR(0, 59, __pyx_L1_error)
       __Pyx_GOTREF(__pyx_t_10);
       __pyx_t_11 = 1;
       #if CYTHON_UNPACK_METHODS
@@ -3093,26 +3090,26 @@ static PyObject *__pyx_f_9bt_api_py_9functions_16calculate_number_27calculate_nu
         __Pyx_XDECREF(__pyx_t_2); __pyx_t_2 = 0;
         __Pyx_DECREF(__pyx_t_10); __pyx_t_10 = 0;
         __Pyx_DECREF(__pyx_t_1); __pyx_t_1 = 0;
-        if (unlikely(!__pyx_t_3)) __PYX_ERR(0, 58, __pyx_L1_error)
+        if (unlikely(!__pyx_t_3)) __PYX_ERR(0, 59, __pyx_L1_error)
         __Pyx_GOTREF(__pyx_t_3);
       }
-      __pyx_t_6 = __Pyx_PyFloat_AsDouble(__pyx_t_3); if (unlikely((__pyx_t_6 == (double)-1) && PyErr_Occurred())) __PYX_ERR(0, 58, __pyx_L1_error)
+      __pyx_t_6 = __Pyx_PyFloat_AsDouble(__pyx_t_3); if (unlikely((__pyx_t_6 == (double)-1) && PyErr_Occurred())) __PYX_ERR(0, 59, __pyx_L1_error)
       __Pyx_DECREF(__pyx_t_3); __pyx_t_3 = 0;
       __pyx_v_v = __pyx_t_6;
 
-      /* "bt_api_py/functions/calculate_number/calculate_numbers.pyx":59
+      /* "bt_api_py/functions/calculate_number/calculate_numbers.pyx":60
  *         for i in range(data_len):
  *             v = round_number(spot_bid_price_list[i],base_spot_price_unit,"down")
  *             new_spot_bid_price_list.append(v)             # <<<<<<<<<<<<<<
  *             v = int(spot_bid_volume_list[i] * percent / base_spot_qty_unit)
  *             new_spot_bid_volume_list.append(v)
 */
-      __pyx_t_3 = PyFloat_FromDouble(__pyx_v_v); if (unlikely(!__pyx_t_3)) __PYX_ERR(0, 59, __pyx_L1_error)
+      __pyx_t_3 = PyFloat_FromDouble(__pyx_v_v); if (unlikely(!__pyx_t_3)) __PYX_ERR(0, 60, __pyx_L1_error)
       __Pyx_GOTREF(__pyx_t_3);
-      __pyx_t_12 = __Pyx_PyList_Append(__pyx_v_new_spot_bid_price_list, __pyx_t_3); if (unlikely(__pyx_t_12 == ((int)-1))) __PYX_ERR(0, 59, __pyx_L1_error)
+      __pyx_t_12 = __Pyx_PyList_Append(__pyx_v_new_spot_bid_price_list, __pyx_t_3); if (unlikely(__pyx_t_12 == ((int)-1))) __PYX_ERR(0, 60, __pyx_L1_error)
       __Pyx_DECREF(__pyx_t_3); __pyx_t_3 = 0;
 
-      /* "bt_api_py/functions/calculate_number/calculate_numbers.pyx":60
+      /* "bt_api_py/functions/calculate_number/calculate_numbers.pyx":61
  *             v = round_number(spot_bid_price_list[i],base_spot_price_unit,"down")
  *             new_spot_bid_price_list.append(v)
  *             v = int(spot_bid_volume_list[i] * percent / base_spot_qty_unit)             # <<<<<<<<<<<<<<
@@ -3121,39 +3118,39 @@ static PyObject *__pyx_f_9bt_api_py_9functions_16calculate_number_27calculate_nu
 */
       if (unlikely(__pyx_v_spot_bid_volume_list == Py_None)) {
         PyErr_SetString(PyExc_TypeError, "'NoneType' object is not subscriptable");
-        __PYX_ERR(0, 60, __pyx_L1_error)
+        __PYX_ERR(0, 61, __pyx_L1_error)
       }
-      __pyx_t_3 = PyFloat_FromDouble(__pyx_v_percent); if (unlikely(!__pyx_t_3)) __PYX_ERR(0, 60, __pyx_L1_error)
+      __pyx_t_3 = PyFloat_FromDouble(__pyx_v_percent); if (unlikely(!__pyx_t_3)) __PYX_ERR(0, 61, __pyx_L1_error)
       __Pyx_GOTREF(__pyx_t_3);
-      __pyx_t_1 = PyNumber_Multiply(__Pyx_PyList_GET_ITEM(__pyx_v_spot_bid_volume_list, __pyx_v_i), __pyx_t_3); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 60, __pyx_L1_error)
+      __pyx_t_1 = PyNumber_Multiply(__Pyx_PyList_GET_ITEM(__pyx_v_spot_bid_volume_list, __pyx_v_i), __pyx_t_3); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 61, __pyx_L1_error)
       __Pyx_GOTREF(__pyx_t_1);
       __Pyx_DECREF(__pyx_t_3); __pyx_t_3 = 0;
-      __pyx_t_3 = PyFloat_FromDouble(__pyx_v_base_spot_qty_unit); if (unlikely(!__pyx_t_3)) __PYX_ERR(0, 60, __pyx_L1_error)
+      __pyx_t_3 = PyFloat_FromDouble(__pyx_v_base_spot_qty_unit); if (unlikely(!__pyx_t_3)) __PYX_ERR(0, 61, __pyx_L1_error)
       __Pyx_GOTREF(__pyx_t_3);
-      __pyx_t_10 = __Pyx_PyNumber_Divide(__pyx_t_1, __pyx_t_3); if (unlikely(!__pyx_t_10)) __PYX_ERR(0, 60, __pyx_L1_error)
+      __pyx_t_10 = __Pyx_PyNumber_Divide(__pyx_t_1, __pyx_t_3); if (unlikely(!__pyx_t_10)) __PYX_ERR(0, 61, __pyx_L1_error)
       __Pyx_GOTREF(__pyx_t_10);
       __Pyx_DECREF(__pyx_t_1); __pyx_t_1 = 0;
       __Pyx_DECREF(__pyx_t_3); __pyx_t_3 = 0;
-      __pyx_t_3 = __Pyx_PyNumber_Int(__pyx_t_10); if (unlikely(!__pyx_t_3)) __PYX_ERR(0, 60, __pyx_L1_error)
+      __pyx_t_3 = __Pyx_PyNumber_Int(__pyx_t_10); if (unlikely(!__pyx_t_3)) __PYX_ERR(0, 61, __pyx_L1_error)
       __Pyx_GOTREF(__pyx_t_3);
       __Pyx_DECREF(__pyx_t_10); __pyx_t_10 = 0;
-      __pyx_t_6 = __Pyx_PyFloat_AsDouble(__pyx_t_3); if (unlikely((__pyx_t_6 == (double)-1) && PyErr_Occurred())) __PYX_ERR(0, 60, __pyx_L1_error)
+      __pyx_t_6 = __Pyx_PyFloat_AsDouble(__pyx_t_3); if (unlikely((__pyx_t_6 == (double)-1) && PyErr_Occurred())) __PYX_ERR(0, 61, __pyx_L1_error)
       __Pyx_DECREF(__pyx_t_3); __pyx_t_3 = 0;
       __pyx_v_v = __pyx_t_6;
 
-      /* "bt_api_py/functions/calculate_number/calculate_numbers.pyx":61
+      /* "bt_api_py/functions/calculate_number/calculate_numbers.pyx":62
  *             new_spot_bid_price_list.append(v)
  *             v = int(spot_bid_volume_list[i] * percent / base_spot_qty_unit)
  *             new_spot_bid_volume_list.append(v)             # <<<<<<<<<<<<<<
  *             v = round_number(spot_ask_price_list[i], base_spot_price_unit, "up")
  *             new_spot_ask_price_list.append(v)
 */
-      __pyx_t_3 = PyFloat_FromDouble(__pyx_v_v); if (unlikely(!__pyx_t_3)) __PYX_ERR(0, 61, __pyx_L1_error)
+      __pyx_t_3 = PyFloat_FromDouble(__pyx_v_v); if (unlikely(!__pyx_t_3)) __PYX_ERR(0, 62, __pyx_L1_error)
       __Pyx_GOTREF(__pyx_t_3);
-      __pyx_t_12 = __Pyx_PyList_Append(__pyx_v_new_spot_bid_volume_list, __pyx_t_3); if (unlikely(__pyx_t_12 == ((int)-1))) __PYX_ERR(0, 61, __pyx_L1_error)
+      __pyx_t_12 = __Pyx_PyList_Append(__pyx_v_new_spot_bid_volume_list, __pyx_t_3); if (unlikely(__pyx_t_12 == ((int)-1))) __PYX_ERR(0, 62, __pyx_L1_error)
       __Pyx_DECREF(__pyx_t_3); __pyx_t_3 = 0;
 
-      /* "bt_api_py/functions/calculate_number/calculate_numbers.pyx":62
+      /* "bt_api_py/functions/calculate_number/calculate_numbers.pyx":63
  *             v = int(spot_bid_volume_list[i] * percent / base_spot_qty_unit)
  *             new_spot_bid_volume_list.append(v)
  *             v = round_number(spot_ask_price_list[i], base_spot_price_unit, "up")             # <<<<<<<<<<<<<<
@@ -3161,13 +3158,13 @@ static PyObject *__pyx_f_9bt_api_py_9functions_16calculate_number_27calculate_nu
  *             v = int(spot_ask_volume_list[i] * percent / base_spot_qty_unit)
 */
       __pyx_t_10 = NULL;
-      __Pyx_GetModuleGlobalName(__pyx_t_1, __pyx_mstate_global->__pyx_n_u_round_number); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 62, __pyx_L1_error)
+      __Pyx_GetModuleGlobalName(__pyx_t_1, __pyx_mstate_global->__pyx_n_u_round_number); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 63, __pyx_L1_error)
       __Pyx_GOTREF(__pyx_t_1);
       if (unlikely(__pyx_v_spot_ask_price_list == Py_None)) {
         PyErr_SetString(PyExc_TypeError, "'NoneType' object is not subscriptable");
-        __PYX_ERR(0, 62, __pyx_L1_error)
+        __PYX_ERR(0, 63, __pyx_L1_error)
       }
-      __pyx_t_2 = PyFloat_FromDouble(__pyx_v_base_spot_price_unit); if (unlikely(!__pyx_t_2)) __PYX_ERR(0, 62, __pyx_L1_error)
+      __pyx_t_2 = PyFloat_FromDouble(__pyx_v_base_spot_price_unit); if (unlikely(!__pyx_t_2)) __PYX_ERR(0, 63, __pyx_L1_error)
       __Pyx_GOTREF(__pyx_t_2);
       __pyx_t_11 = 1;
       #if CYTHON_UNPACK_METHODS
@@ -3187,26 +3184,26 @@ static PyObject *__pyx_f_9bt_api_py_9functions_16calculate_number_27calculate_nu
         __Pyx_XDECREF(__pyx_t_10); __pyx_t_10 = 0;
         __Pyx_DECREF(__pyx_t_2); __pyx_t_2 = 0;
         __Pyx_DECREF(__pyx_t_1); __pyx_t_1 = 0;
-        if (unlikely(!__pyx_t_3)) __PYX_ERR(0, 62, __pyx_L1_error)
+        if (unlikely(!__pyx_t_3)) __PYX_ERR(0, 63, __pyx_L1_error)
         __Pyx_GOTREF(__pyx_t_3);
       }
-      __pyx_t_6 = __Pyx_PyFloat_AsDouble(__pyx_t_3); if (unlikely((__pyx_t_6 == (double)-1) && PyErr_Occurred())) __PYX_ERR(0, 62, __pyx_L1_error)
+      __pyx_t_6 = __Pyx_PyFloat_AsDouble(__pyx_t_3); if (unlikely((__pyx_t_6 == (double)-1) && PyErr_Occurred())) __PYX_ERR(0, 63, __pyx_L1_error)
       __Pyx_DECREF(__pyx_t_3); __pyx_t_3 = 0;
       __pyx_v_v = __pyx_t_6;
 
-      /* "bt_api_py/functions/calculate_number/calculate_numbers.pyx":63
+      /* "bt_api_py/functions/calculate_number/calculate_numbers.pyx":64
  *             new_spot_bid_volume_list.append(v)
  *             v = round_number(spot_ask_price_list[i], base_spot_price_unit, "up")
  *             new_spot_ask_price_list.append(v)             # <<<<<<<<<<<<<<
  *             v = int(spot_ask_volume_list[i] * percent / base_spot_qty_unit)
  *             new_spot_ask_volume_list.append(v)
 */
-      __pyx_t_3 = PyFloat_FromDouble(__pyx_v_v); if (unlikely(!__pyx_t_3)) __PYX_ERR(0, 63, __pyx_L1_error)
+      __pyx_t_3 = PyFloat_FromDouble(__pyx_v_v); if (unlikely(!__pyx_t_3)) __PYX_ERR(0, 64, __pyx_L1_error)
       __Pyx_GOTREF(__pyx_t_3);
-      __pyx_t_12 = __Pyx_PyList_Append(__pyx_v_new_spot_ask_price_list, __pyx_t_3); if (unlikely(__pyx_t_12 == ((int)-1))) __PYX_ERR(0, 63, __pyx_L1_error)
+      __pyx_t_12 = __Pyx_PyList_Append(__pyx_v_new_spot_ask_price_list, __pyx_t_3); if (unlikely(__pyx_t_12 == ((int)-1))) __PYX_ERR(0, 64, __pyx_L1_error)
       __Pyx_DECREF(__pyx_t_3); __pyx_t_3 = 0;
 
-      /* "bt_api_py/functions/calculate_number/calculate_numbers.pyx":64
+      /* "bt_api_py/functions/calculate_number/calculate_numbers.pyx":65
  *             v = round_number(spot_ask_price_list[i], base_spot_price_unit, "up")
  *             new_spot_ask_price_list.append(v)
  *             v = int(spot_ask_volume_list[i] * percent / base_spot_qty_unit)             # <<<<<<<<<<<<<<
@@ -3215,40 +3212,40 @@ static PyObject *__pyx_f_9bt_api_py_9functions_16calculate_number_27calculate_nu
 */
       if (unlikely(__pyx_v_spot_ask_volume_list == Py_None)) {
         PyErr_SetString(PyExc_TypeError, "'NoneType' object is not subscriptable");
-        __PYX_ERR(0, 64, __pyx_L1_error)
+        __PYX_ERR(0, 65, __pyx_L1_error)
       }
-      __pyx_t_3 = PyFloat_FromDouble(__pyx_v_percent); if (unlikely(!__pyx_t_3)) __PYX_ERR(0, 64, __pyx_L1_error)
+      __pyx_t_3 = PyFloat_FromDouble(__pyx_v_percent); if (unlikely(!__pyx_t_3)) __PYX_ERR(0, 65, __pyx_L1_error)
       __Pyx_GOTREF(__pyx_t_3);
-      __pyx_t_1 = PyNumber_Multiply(__Pyx_PyList_GET_ITEM(__pyx_v_spot_ask_volume_list, __pyx_v_i), __pyx_t_3); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 64, __pyx_L1_error)
+      __pyx_t_1 = PyNumber_Multiply(__Pyx_PyList_GET_ITEM(__pyx_v_spot_ask_volume_list, __pyx_v_i), __pyx_t_3); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 65, __pyx_L1_error)
       __Pyx_GOTREF(__pyx_t_1);
       __Pyx_DECREF(__pyx_t_3); __pyx_t_3 = 0;
-      __pyx_t_3 = PyFloat_FromDouble(__pyx_v_base_spot_qty_unit); if (unlikely(!__pyx_t_3)) __PYX_ERR(0, 64, __pyx_L1_error)
+      __pyx_t_3 = PyFloat_FromDouble(__pyx_v_base_spot_qty_unit); if (unlikely(!__pyx_t_3)) __PYX_ERR(0, 65, __pyx_L1_error)
       __Pyx_GOTREF(__pyx_t_3);
-      __pyx_t_2 = __Pyx_PyNumber_Divide(__pyx_t_1, __pyx_t_3); if (unlikely(!__pyx_t_2)) __PYX_ERR(0, 64, __pyx_L1_error)
+      __pyx_t_2 = __Pyx_PyNumber_Divide(__pyx_t_1, __pyx_t_3); if (unlikely(!__pyx_t_2)) __PYX_ERR(0, 65, __pyx_L1_error)
       __Pyx_GOTREF(__pyx_t_2);
       __Pyx_DECREF(__pyx_t_1); __pyx_t_1 = 0;
       __Pyx_DECREF(__pyx_t_3); __pyx_t_3 = 0;
-      __pyx_t_3 = __Pyx_PyNumber_Int(__pyx_t_2); if (unlikely(!__pyx_t_3)) __PYX_ERR(0, 64, __pyx_L1_error)
+      __pyx_t_3 = __Pyx_PyNumber_Int(__pyx_t_2); if (unlikely(!__pyx_t_3)) __PYX_ERR(0, 65, __pyx_L1_error)
       __Pyx_GOTREF(__pyx_t_3);
       __Pyx_DECREF(__pyx_t_2); __pyx_t_2 = 0;
-      __pyx_t_6 = __Pyx_PyFloat_AsDouble(__pyx_t_3); if (unlikely((__pyx_t_6 == (double)-1) && PyErr_Occurred())) __PYX_ERR(0, 64, __pyx_L1_error)
+      __pyx_t_6 = __Pyx_PyFloat_AsDouble(__pyx_t_3); if (unlikely((__pyx_t_6 == (double)-1) && PyErr_Occurred())) __PYX_ERR(0, 65, __pyx_L1_error)
       __Pyx_DECREF(__pyx_t_3); __pyx_t_3 = 0;
       __pyx_v_v = __pyx_t_6;
 
-      /* "bt_api_py/functions/calculate_number/calculate_numbers.pyx":65
+      /* "bt_api_py/functions/calculate_number/calculate_numbers.pyx":66
  *             new_spot_ask_price_list.append(v)
  *             v = int(spot_ask_volume_list[i] * percent / base_spot_qty_unit)
  *             new_spot_ask_volume_list.append(v)             # <<<<<<<<<<<<<<
  * 
  *         return new_spot_bid_price_list, new_spot_bid_volume_list, new_spot_ask_price_list, new_spot_ask_volume_list
 */
-      __pyx_t_3 = PyFloat_FromDouble(__pyx_v_v); if (unlikely(!__pyx_t_3)) __PYX_ERR(0, 65, __pyx_L1_error)
+      __pyx_t_3 = PyFloat_FromDouble(__pyx_v_v); if (unlikely(!__pyx_t_3)) __PYX_ERR(0, 66, __pyx_L1_error)
       __Pyx_GOTREF(__pyx_t_3);
-      __pyx_t_12 = __Pyx_PyList_Append(__pyx_v_new_spot_ask_volume_list, __pyx_t_3); if (unlikely(__pyx_t_12 == ((int)-1))) __PYX_ERR(0, 65, __pyx_L1_error)
+      __pyx_t_12 = __Pyx_PyList_Append(__pyx_v_new_spot_ask_volume_list, __pyx_t_3); if (unlikely(__pyx_t_12 == ((int)-1))) __PYX_ERR(0, 66, __pyx_L1_error)
       __Pyx_DECREF(__pyx_t_3); __pyx_t_3 = 0;
     }
 
-    /* "bt_api_py/functions/calculate_number/calculate_numbers.pyx":67
+    /* "bt_api_py/functions/calculate_number/calculate_numbers.pyx":68
  *             new_spot_ask_volume_list.append(v)
  * 
  *         return new_spot_bid_price_list, new_spot_bid_volume_list, new_spot_ask_price_list, new_spot_ask_volume_list             # <<<<<<<<<<<<<<
@@ -3256,25 +3253,25 @@ static PyObject *__pyx_f_9bt_api_py_9functions_16calculate_number_27calculate_nu
  *         for i in range(data_len):
 */
     __Pyx_XDECREF(__pyx_r);
-    __pyx_t_3 = PyTuple_New(4); if (unlikely(!__pyx_t_3)) __PYX_ERR(0, 67, __pyx_L1_error)
+    __pyx_t_3 = PyTuple_New(4); if (unlikely(!__pyx_t_3)) __PYX_ERR(0, 68, __pyx_L1_error)
     __Pyx_GOTREF(__pyx_t_3);
     __Pyx_INCREF(__pyx_v_new_spot_bid_price_list);
     __Pyx_GIVEREF(__pyx_v_new_spot_bid_price_list);
-    if (__Pyx_PyTuple_SET_ITEM(__pyx_t_3, 0, __pyx_v_new_spot_bid_price_list) != (0)) __PYX_ERR(0, 67, __pyx_L1_error);
+    if (__Pyx_PyTuple_SET_ITEM(__pyx_t_3, 0, __pyx_v_new_spot_bid_price_list) != (0)) __PYX_ERR(0, 68, __pyx_L1_error);
     __Pyx_INCREF(__pyx_v_new_spot_bid_volume_list);
     __Pyx_GIVEREF(__pyx_v_new_spot_bid_volume_list);
-    if (__Pyx_PyTuple_SET_ITEM(__pyx_t_3, 1, __pyx_v_new_spot_bid_volume_list) != (0)) __PYX_ERR(0, 67, __pyx_L1_error);
+    if (__Pyx_PyTuple_SET_ITEM(__pyx_t_3, 1, __pyx_v_new_spot_bid_volume_list) != (0)) __PYX_ERR(0, 68, __pyx_L1_error);
     __Pyx_INCREF(__pyx_v_new_spot_ask_price_list);
     __Pyx_GIVEREF(__pyx_v_new_spot_ask_price_list);
-    if (__Pyx_PyTuple_SET_ITEM(__pyx_t_3, 2, __pyx_v_new_spot_ask_price_list) != (0)) __PYX_ERR(0, 67, __pyx_L1_error);
+    if (__Pyx_PyTuple_SET_ITEM(__pyx_t_3, 2, __pyx_v_new_spot_ask_price_list) != (0)) __PYX_ERR(0, 68, __pyx_L1_error);
     __Pyx_INCREF(__pyx_v_new_spot_ask_volume_list);
     __Pyx_GIVEREF(__pyx_v_new_spot_ask_volume_list);
-    if (__Pyx_PyTuple_SET_ITEM(__pyx_t_3, 3, __pyx_v_new_spot_ask_volume_list) != (0)) __PYX_ERR(0, 67, __pyx_L1_error);
+    if (__Pyx_PyTuple_SET_ITEM(__pyx_t_3, 3, __pyx_v_new_spot_ask_volume_list) != (0)) __PYX_ERR(0, 68, __pyx_L1_error);
     __pyx_r = __pyx_t_3;
     __pyx_t_3 = 0;
     goto __pyx_L0;
 
-    /* "bt_api_py/functions/calculate_number/calculate_numbers.pyx":56
+    /* "bt_api_py/functions/calculate_number/calculate_numbers.pyx":57
  *     cdef double base_spot_qty_unit = params['base_spot_qty_unit']
  *     #
  *     if price_unit_equal:             # <<<<<<<<<<<<<<
@@ -3283,7 +3280,7 @@ static PyObject *__pyx_f_9bt_api_py_9functions_16calculate_number_27calculate_nu
 */
   }
 
-  /* "bt_api_py/functions/calculate_number/calculate_numbers.pyx":69
+  /* "bt_api_py/functions/calculate_number/calculate_numbers.pyx":70
  *         return new_spot_bid_price_list, new_spot_bid_volume_list, new_spot_ask_price_list, new_spot_ask_volume_list
  *     else:
  *         for i in range(data_len):             # <<<<<<<<<<<<<<
@@ -3296,7 +3293,7 @@ static PyObject *__pyx_f_9bt_api_py_9functions_16calculate_number_27calculate_nu
     for (__pyx_t_9 = 0; __pyx_t_9 < __pyx_t_8; __pyx_t_9+=1) {
       __pyx_v_i = __pyx_t_9;
 
-      /* "bt_api_py/functions/calculate_number/calculate_numbers.pyx":70
+      /* "bt_api_py/functions/calculate_number/calculate_numbers.pyx":71
  *     else:
  *         for i in range(data_len):
  *             new_spot_bid_price_list.append(round_number(spot_bid_price_list[i], base_spot_price_unit, 'down'))             # <<<<<<<<<<<<<<
@@ -3304,13 +3301,13 @@ static PyObject *__pyx_f_9bt_api_py_9functions_16calculate_number_27calculate_nu
  *         spot_bid_price_list = new_spot_bid_price_list
 */
       __pyx_t_2 = NULL;
-      __Pyx_GetModuleGlobalName(__pyx_t_1, __pyx_mstate_global->__pyx_n_u_round_number); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 70, __pyx_L1_error)
+      __Pyx_GetModuleGlobalName(__pyx_t_1, __pyx_mstate_global->__pyx_n_u_round_number); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 71, __pyx_L1_error)
       __Pyx_GOTREF(__pyx_t_1);
       if (unlikely(__pyx_v_spot_bid_price_list == Py_None)) {
         PyErr_SetString(PyExc_TypeError, "'NoneType' object is not subscriptable");
-        __PYX_ERR(0, 70, __pyx_L1_error)
+        __PYX_ERR(0, 71, __pyx_L1_error)
       }
-      __pyx_t_10 = PyFloat_FromDouble(__pyx_v_base_spot_price_unit); if (unlikely(!__pyx_t_10)) __PYX_ERR(0, 70, __pyx_L1_error)
+      __pyx_t_10 = PyFloat_FromDouble(__pyx_v_base_spot_price_unit); if (unlikely(!__pyx_t_10)) __PYX_ERR(0, 71, __pyx_L1_error)
       __Pyx_GOTREF(__pyx_t_10);
       __pyx_t_11 = 1;
       #if CYTHON_UNPACK_METHODS
@@ -3330,13 +3327,13 @@ static PyObject *__pyx_f_9bt_api_py_9functions_16calculate_number_27calculate_nu
         __Pyx_XDECREF(__pyx_t_2); __pyx_t_2 = 0;
         __Pyx_DECREF(__pyx_t_10); __pyx_t_10 = 0;
         __Pyx_DECREF(__pyx_t_1); __pyx_t_1 = 0;
-        if (unlikely(!__pyx_t_3)) __PYX_ERR(0, 70, __pyx_L1_error)
+        if (unlikely(!__pyx_t_3)) __PYX_ERR(0, 71, __pyx_L1_error)
         __Pyx_GOTREF(__pyx_t_3);
       }
-      __pyx_t_12 = __Pyx_PyList_Append(__pyx_v_new_spot_bid_price_list, __pyx_t_3); if (unlikely(__pyx_t_12 == ((int)-1))) __PYX_ERR(0, 70, __pyx_L1_error)
+      __pyx_t_12 = __Pyx_PyList_Append(__pyx_v_new_spot_bid_price_list, __pyx_t_3); if (unlikely(__pyx_t_12 == ((int)-1))) __PYX_ERR(0, 71, __pyx_L1_error)
       __Pyx_DECREF(__pyx_t_3); __pyx_t_3 = 0;
 
-      /* "bt_api_py/functions/calculate_number/calculate_numbers.pyx":71
+      /* "bt_api_py/functions/calculate_number/calculate_numbers.pyx":72
  *         for i in range(data_len):
  *             new_spot_bid_price_list.append(round_number(spot_bid_price_list[i], base_spot_price_unit, 'down'))
  *             new_spot_ask_price_list.append(round_number(spot_ask_price_list[i], base_spot_price_unit, 'up'))             # <<<<<<<<<<<<<<
@@ -3344,13 +3341,13 @@ static PyObject *__pyx_f_9bt_api_py_9functions_16calculate_number_27calculate_nu
  *         spot_ask_price_list = new_spot_ask_price_list
 */
       __pyx_t_1 = NULL;
-      __Pyx_GetModuleGlobalName(__pyx_t_10, __pyx_mstate_global->__pyx_n_u_round_number); if (unlikely(!__pyx_t_10)) __PYX_ERR(0, 71, __pyx_L1_error)
+      __Pyx_GetModuleGlobalName(__pyx_t_10, __pyx_mstate_global->__pyx_n_u_round_number); if (unlikely(!__pyx_t_10)) __PYX_ERR(0, 72, __pyx_L1_error)
       __Pyx_GOTREF(__pyx_t_10);
       if (unlikely(__pyx_v_spot_ask_price_list == Py_None)) {
         PyErr_SetString(PyExc_TypeError, "'NoneType' object is not subscriptable");
-        __PYX_ERR(0, 71, __pyx_L1_error)
+        __PYX_ERR(0, 72, __pyx_L1_error)
       }
-      __pyx_t_2 = PyFloat_FromDouble(__pyx_v_base_spot_price_unit); if (unlikely(!__pyx_t_2)) __PYX_ERR(0, 71, __pyx_L1_error)
+      __pyx_t_2 = PyFloat_FromDouble(__pyx_v_base_spot_price_unit); if (unlikely(!__pyx_t_2)) __PYX_ERR(0, 72, __pyx_L1_error)
       __Pyx_GOTREF(__pyx_t_2);
       __pyx_t_11 = 1;
       #if CYTHON_UNPACK_METHODS
@@ -3370,14 +3367,14 @@ static PyObject *__pyx_f_9bt_api_py_9functions_16calculate_number_27calculate_nu
         __Pyx_XDECREF(__pyx_t_1); __pyx_t_1 = 0;
         __Pyx_DECREF(__pyx_t_2); __pyx_t_2 = 0;
         __Pyx_DECREF(__pyx_t_10); __pyx_t_10 = 0;
-        if (unlikely(!__pyx_t_3)) __PYX_ERR(0, 71, __pyx_L1_error)
+        if (unlikely(!__pyx_t_3)) __PYX_ERR(0, 72, __pyx_L1_error)
         __Pyx_GOTREF(__pyx_t_3);
       }
-      __pyx_t_12 = __Pyx_PyList_Append(__pyx_v_new_spot_ask_price_list, __pyx_t_3); if (unlikely(__pyx_t_12 == ((int)-1))) __PYX_ERR(0, 71, __pyx_L1_error)
+      __pyx_t_12 = __Pyx_PyList_Append(__pyx_v_new_spot_ask_price_list, __pyx_t_3); if (unlikely(__pyx_t_12 == ((int)-1))) __PYX_ERR(0, 72, __pyx_L1_error)
       __Pyx_DECREF(__pyx_t_3); __pyx_t_3 = 0;
     }
 
-    /* "bt_api_py/functions/calculate_number/calculate_numbers.pyx":72
+    /* "bt_api_py/functions/calculate_number/calculate_numbers.pyx":73
  *             new_spot_bid_price_list.append(round_number(spot_bid_price_list[i], base_spot_price_unit, 'down'))
  *             new_spot_ask_price_list.append(round_number(spot_ask_price_list[i], base_spot_price_unit, 'up'))
  *         spot_bid_price_list = new_spot_bid_price_list             # <<<<<<<<<<<<<<
@@ -3387,7 +3384,7 @@ static PyObject *__pyx_f_9bt_api_py_9functions_16calculate_number_27calculate_nu
     __Pyx_INCREF(__pyx_v_new_spot_bid_price_list);
     __Pyx_DECREF_SET(__pyx_v_spot_bid_price_list, __pyx_v_new_spot_bid_price_list);
 
-    /* "bt_api_py/functions/calculate_number/calculate_numbers.pyx":73
+    /* "bt_api_py/functions/calculate_number/calculate_numbers.pyx":74
  *             new_spot_ask_price_list.append(round_number(spot_ask_price_list[i], base_spot_price_unit, 'up'))
  *         spot_bid_price_list = new_spot_bid_price_list
  *         spot_ask_price_list = new_spot_ask_price_list             # <<<<<<<<<<<<<<
@@ -3397,41 +3394,41 @@ static PyObject *__pyx_f_9bt_api_py_9functions_16calculate_number_27calculate_nu
     __Pyx_INCREF(__pyx_v_new_spot_ask_price_list);
     __Pyx_DECREF_SET(__pyx_v_spot_ask_price_list, __pyx_v_new_spot_ask_price_list);
 
-    /* "bt_api_py/functions/calculate_number/calculate_numbers.pyx":74
+    /* "bt_api_py/functions/calculate_number/calculate_numbers.pyx":75
  *         spot_bid_price_list = new_spot_bid_price_list
  *         spot_ask_price_list = new_spot_ask_price_list
  *         new_spot_bid_price_list = []             # <<<<<<<<<<<<<<
  *         new_spot_ask_price_list = []
  *         #
 */
-    __pyx_t_3 = PyList_New(0); if (unlikely(!__pyx_t_3)) __PYX_ERR(0, 74, __pyx_L1_error)
+    __pyx_t_3 = PyList_New(0); if (unlikely(!__pyx_t_3)) __PYX_ERR(0, 75, __pyx_L1_error)
     __Pyx_GOTREF(__pyx_t_3);
     __Pyx_DECREF_SET(__pyx_v_new_spot_bid_price_list, ((PyObject*)__pyx_t_3));
     __pyx_t_3 = 0;
 
-    /* "bt_api_py/functions/calculate_number/calculate_numbers.pyx":75
+    /* "bt_api_py/functions/calculate_number/calculate_numbers.pyx":76
  *         spot_ask_price_list = new_spot_ask_price_list
  *         new_spot_bid_price_list = []
  *         new_spot_ask_price_list = []             # <<<<<<<<<<<<<<
  *         #
  *         # i==0
 */
-    __pyx_t_3 = PyList_New(0); if (unlikely(!__pyx_t_3)) __PYX_ERR(0, 75, __pyx_L1_error)
+    __pyx_t_3 = PyList_New(0); if (unlikely(!__pyx_t_3)) __PYX_ERR(0, 76, __pyx_L1_error)
     __Pyx_GOTREF(__pyx_t_3);
     __Pyx_DECREF_SET(__pyx_v_new_spot_ask_price_list, ((PyObject*)__pyx_t_3));
     __pyx_t_3 = 0;
 
-    /* "bt_api_py/functions/calculate_number/calculate_numbers.pyx":78
+    /* "bt_api_py/functions/calculate_number/calculate_numbers.pyx":79
  *         #
  *         # i==0
  *         pre_bid_price = spot_bid_price_list[0]             # <<<<<<<<<<<<<<
  *         pre_bid_volume = spot_bid_volume_list[0]
  *         pre_ask_price = spot_ask_price_list[0]
 */
-    __pyx_t_6 = __Pyx_PyFloat_AsDouble(__Pyx_PyList_GET_ITEM(__pyx_v_spot_bid_price_list, 0)); if (unlikely((__pyx_t_6 == (double)-1) && PyErr_Occurred())) __PYX_ERR(0, 78, __pyx_L1_error)
+    __pyx_t_6 = __Pyx_PyFloat_AsDouble(__Pyx_PyList_GET_ITEM(__pyx_v_spot_bid_price_list, 0)); if (unlikely((__pyx_t_6 == (double)-1) && PyErr_Occurred())) __PYX_ERR(0, 79, __pyx_L1_error)
     __pyx_v_pre_bid_price = __pyx_t_6;
 
-    /* "bt_api_py/functions/calculate_number/calculate_numbers.pyx":79
+    /* "bt_api_py/functions/calculate_number/calculate_numbers.pyx":80
  *         # i==0
  *         pre_bid_price = spot_bid_price_list[0]
  *         pre_bid_volume = spot_bid_volume_list[0]             # <<<<<<<<<<<<<<
@@ -3440,22 +3437,22 @@ static PyObject *__pyx_f_9bt_api_py_9functions_16calculate_number_27calculate_nu
 */
     if (unlikely(__pyx_v_spot_bid_volume_list == Py_None)) {
       PyErr_SetString(PyExc_TypeError, "'NoneType' object is not subscriptable");
-      __PYX_ERR(0, 79, __pyx_L1_error)
+      __PYX_ERR(0, 80, __pyx_L1_error)
     }
-    __pyx_t_6 = __Pyx_PyFloat_AsDouble(__Pyx_PyList_GET_ITEM(__pyx_v_spot_bid_volume_list, 0)); if (unlikely((__pyx_t_6 == (double)-1) && PyErr_Occurred())) __PYX_ERR(0, 79, __pyx_L1_error)
+    __pyx_t_6 = __Pyx_PyFloat_AsDouble(__Pyx_PyList_GET_ITEM(__pyx_v_spot_bid_volume_list, 0)); if (unlikely((__pyx_t_6 == (double)-1) && PyErr_Occurred())) __PYX_ERR(0, 80, __pyx_L1_error)
     __pyx_v_pre_bid_volume = __pyx_t_6;
 
-    /* "bt_api_py/functions/calculate_number/calculate_numbers.pyx":80
+    /* "bt_api_py/functions/calculate_number/calculate_numbers.pyx":81
  *         pre_bid_price = spot_bid_price_list[0]
  *         pre_bid_volume = spot_bid_volume_list[0]
  *         pre_ask_price = spot_ask_price_list[0]             # <<<<<<<<<<<<<<
  *         pre_ask_volume = spot_ask_volume_list[0]
  *         # i=1i=data_len-2
 */
-    __pyx_t_6 = __Pyx_PyFloat_AsDouble(__Pyx_PyList_GET_ITEM(__pyx_v_spot_ask_price_list, 0)); if (unlikely((__pyx_t_6 == (double)-1) && PyErr_Occurred())) __PYX_ERR(0, 80, __pyx_L1_error)
+    __pyx_t_6 = __Pyx_PyFloat_AsDouble(__Pyx_PyList_GET_ITEM(__pyx_v_spot_ask_price_list, 0)); if (unlikely((__pyx_t_6 == (double)-1) && PyErr_Occurred())) __PYX_ERR(0, 81, __pyx_L1_error)
     __pyx_v_pre_ask_price = __pyx_t_6;
 
-    /* "bt_api_py/functions/calculate_number/calculate_numbers.pyx":81
+    /* "bt_api_py/functions/calculate_number/calculate_numbers.pyx":82
  *         pre_bid_volume = spot_bid_volume_list[0]
  *         pre_ask_price = spot_ask_price_list[0]
  *         pre_ask_volume = spot_ask_volume_list[0]             # <<<<<<<<<<<<<<
@@ -3464,12 +3461,12 @@ static PyObject *__pyx_f_9bt_api_py_9functions_16calculate_number_27calculate_nu
 */
     if (unlikely(__pyx_v_spot_ask_volume_list == Py_None)) {
       PyErr_SetString(PyExc_TypeError, "'NoneType' object is not subscriptable");
-      __PYX_ERR(0, 81, __pyx_L1_error)
+      __PYX_ERR(0, 82, __pyx_L1_error)
     }
-    __pyx_t_6 = __Pyx_PyFloat_AsDouble(__Pyx_PyList_GET_ITEM(__pyx_v_spot_ask_volume_list, 0)); if (unlikely((__pyx_t_6 == (double)-1) && PyErr_Occurred())) __PYX_ERR(0, 81, __pyx_L1_error)
+    __pyx_t_6 = __Pyx_PyFloat_AsDouble(__Pyx_PyList_GET_ITEM(__pyx_v_spot_ask_volume_list, 0)); if (unlikely((__pyx_t_6 == (double)-1) && PyErr_Occurred())) __PYX_ERR(0, 82, __pyx_L1_error)
     __pyx_v_pre_ask_volume = __pyx_t_6;
 
-    /* "bt_api_py/functions/calculate_number/calculate_numbers.pyx":83
+    /* "bt_api_py/functions/calculate_number/calculate_numbers.pyx":84
  *         pre_ask_volume = spot_ask_volume_list[0]
  *         # i=1i=data_len-2
  *         for i in range(1, data_len - 1):             # <<<<<<<<<<<<<<
@@ -3481,17 +3478,17 @@ static PyObject *__pyx_f_9bt_api_py_9functions_16calculate_number_27calculate_nu
     for (__pyx_t_7 = 1; __pyx_t_7 < __pyx_t_14; __pyx_t_7+=1) {
       __pyx_v_i = __pyx_t_7;
 
-      /* "bt_api_py/functions/calculate_number/calculate_numbers.pyx":84
+      /* "bt_api_py/functions/calculate_number/calculate_numbers.pyx":85
  *         # i=1i=data_len-2
  *         for i in range(1, data_len - 1):
  *             now_bid_price = spot_bid_price_list[i]             # <<<<<<<<<<<<<<
  *             now_bid_volume = spot_bid_volume_list[i]
  *             now_ask_price = spot_ask_price_list[i]
 */
-      __pyx_t_6 = __Pyx_PyFloat_AsDouble(__Pyx_PyList_GET_ITEM(__pyx_v_spot_bid_price_list, __pyx_v_i)); if (unlikely((__pyx_t_6 == (double)-1) && PyErr_Occurred())) __PYX_ERR(0, 84, __pyx_L1_error)
+      __pyx_t_6 = __Pyx_PyFloat_AsDouble(__Pyx_PyList_GET_ITEM(__pyx_v_spot_bid_price_list, __pyx_v_i)); if (unlikely((__pyx_t_6 == (double)-1) && PyErr_Occurred())) __PYX_ERR(0, 85, __pyx_L1_error)
       __pyx_v_now_bid_price = __pyx_t_6;
 
-      /* "bt_api_py/functions/calculate_number/calculate_numbers.pyx":85
+      /* "bt_api_py/functions/calculate_number/calculate_numbers.pyx":86
  *         for i in range(1, data_len - 1):
  *             now_bid_price = spot_bid_price_list[i]
  *             now_bid_volume = spot_bid_volume_list[i]             # <<<<<<<<<<<<<<
@@ -3500,22 +3497,22 @@ static PyObject *__pyx_f_9bt_api_py_9functions_16calculate_number_27calculate_nu
 */
       if (unlikely(__pyx_v_spot_bid_volume_list == Py_None)) {
         PyErr_SetString(PyExc_TypeError, "'NoneType' object is not subscriptable");
-        __PYX_ERR(0, 85, __pyx_L1_error)
+        __PYX_ERR(0, 86, __pyx_L1_error)
       }
-      __pyx_t_6 = __Pyx_PyFloat_AsDouble(__Pyx_PyList_GET_ITEM(__pyx_v_spot_bid_volume_list, __pyx_v_i)); if (unlikely((__pyx_t_6 == (double)-1) && PyErr_Occurred())) __PYX_ERR(0, 85, __pyx_L1_error)
+      __pyx_t_6 = __Pyx_PyFloat_AsDouble(__Pyx_PyList_GET_ITEM(__pyx_v_spot_bid_volume_list, __pyx_v_i)); if (unlikely((__pyx_t_6 == (double)-1) && PyErr_Occurred())) __PYX_ERR(0, 86, __pyx_L1_error)
       __pyx_v_now_bid_volume = __pyx_t_6;
 
-      /* "bt_api_py/functions/calculate_number/calculate_numbers.pyx":86
+      /* "bt_api_py/functions/calculate_number/calculate_numbers.pyx":87
  *             now_bid_price = spot_bid_price_list[i]
  *             now_bid_volume = spot_bid_volume_list[i]
  *             now_ask_price = spot_ask_price_list[i]             # <<<<<<<<<<<<<<
  *             now_ask_volume = spot_ask_volume_list[i]
  *             #
 */
-      __pyx_t_6 = __Pyx_PyFloat_AsDouble(__Pyx_PyList_GET_ITEM(__pyx_v_spot_ask_price_list, __pyx_v_i)); if (unlikely((__pyx_t_6 == (double)-1) && PyErr_Occurred())) __PYX_ERR(0, 86, __pyx_L1_error)
+      __pyx_t_6 = __Pyx_PyFloat_AsDouble(__Pyx_PyList_GET_ITEM(__pyx_v_spot_ask_price_list, __pyx_v_i)); if (unlikely((__pyx_t_6 == (double)-1) && PyErr_Occurred())) __PYX_ERR(0, 87, __pyx_L1_error)
       __pyx_v_now_ask_price = __pyx_t_6;
 
-      /* "bt_api_py/functions/calculate_number/calculate_numbers.pyx":87
+      /* "bt_api_py/functions/calculate_number/calculate_numbers.pyx":88
  *             now_bid_volume = spot_bid_volume_list[i]
  *             now_ask_price = spot_ask_price_list[i]
  *             now_ask_volume = spot_ask_volume_list[i]             # <<<<<<<<<<<<<<
@@ -3524,12 +3521,12 @@ static PyObject *__pyx_f_9bt_api_py_9functions_16calculate_number_27calculate_nu
 */
       if (unlikely(__pyx_v_spot_ask_volume_list == Py_None)) {
         PyErr_SetString(PyExc_TypeError, "'NoneType' object is not subscriptable");
-        __PYX_ERR(0, 87, __pyx_L1_error)
+        __PYX_ERR(0, 88, __pyx_L1_error)
       }
-      __pyx_t_6 = __Pyx_PyFloat_AsDouble(__Pyx_PyList_GET_ITEM(__pyx_v_spot_ask_volume_list, __pyx_v_i)); if (unlikely((__pyx_t_6 == (double)-1) && PyErr_Occurred())) __PYX_ERR(0, 87, __pyx_L1_error)
+      __pyx_t_6 = __Pyx_PyFloat_AsDouble(__Pyx_PyList_GET_ITEM(__pyx_v_spot_ask_volume_list, __pyx_v_i)); if (unlikely((__pyx_t_6 == (double)-1) && PyErr_Occurred())) __PYX_ERR(0, 88, __pyx_L1_error)
       __pyx_v_now_ask_volume = __pyx_t_6;
 
-      /* "bt_api_py/functions/calculate_number/calculate_numbers.pyx":89
+      /* "bt_api_py/functions/calculate_number/calculate_numbers.pyx":90
  *             now_ask_volume = spot_ask_volume_list[i]
  *             #
  *             if now_bid_price == pre_bid_price:             # <<<<<<<<<<<<<<
@@ -3539,7 +3536,7 @@ static PyObject *__pyx_f_9bt_api_py_9functions_16calculate_number_27calculate_nu
       __pyx_t_4 = (__pyx_v_now_bid_price == __pyx_v_pre_bid_price);
       if (__pyx_t_4) {
 
-        /* "bt_api_py/functions/calculate_number/calculate_numbers.pyx":90
+        /* "bt_api_py/functions/calculate_number/calculate_numbers.pyx":91
  *             #
  *             if now_bid_price == pre_bid_price:
  *                 pre_bid_volume += now_bid_volume             # <<<<<<<<<<<<<<
@@ -3548,7 +3545,7 @@ static PyObject *__pyx_f_9bt_api_py_9functions_16calculate_number_27calculate_nu
 */
         __pyx_v_pre_bid_volume = (__pyx_v_pre_bid_volume + __pyx_v_now_bid_volume);
 
-        /* "bt_api_py/functions/calculate_number/calculate_numbers.pyx":89
+        /* "bt_api_py/functions/calculate_number/calculate_numbers.pyx":90
  *             now_ask_volume = spot_ask_volume_list[i]
  *             #
  *             if now_bid_price == pre_bid_price:             # <<<<<<<<<<<<<<
@@ -3557,7 +3554,7 @@ static PyObject *__pyx_f_9bt_api_py_9functions_16calculate_number_27calculate_nu
 */
       }
 
-      /* "bt_api_py/functions/calculate_number/calculate_numbers.pyx":91
+      /* "bt_api_py/functions/calculate_number/calculate_numbers.pyx":92
  *             if now_bid_price == pre_bid_price:
  *                 pre_bid_volume += now_bid_volume
  *             if now_ask_price == pre_ask_price:             # <<<<<<<<<<<<<<
@@ -3567,7 +3564,7 @@ static PyObject *__pyx_f_9bt_api_py_9functions_16calculate_number_27calculate_nu
       __pyx_t_4 = (__pyx_v_now_ask_price == __pyx_v_pre_ask_price);
       if (__pyx_t_4) {
 
-        /* "bt_api_py/functions/calculate_number/calculate_numbers.pyx":92
+        /* "bt_api_py/functions/calculate_number/calculate_numbers.pyx":93
  *                 pre_bid_volume += now_bid_volume
  *             if now_ask_price == pre_ask_price:
  *                 pre_ask_volume += now_ask_volume             # <<<<<<<<<<<<<<
@@ -3576,7 +3573,7 @@ static PyObject *__pyx_f_9bt_api_py_9functions_16calculate_number_27calculate_nu
 */
         __pyx_v_pre_ask_volume = (__pyx_v_pre_ask_volume + __pyx_v_now_ask_volume);
 
-        /* "bt_api_py/functions/calculate_number/calculate_numbers.pyx":91
+        /* "bt_api_py/functions/calculate_number/calculate_numbers.pyx":92
  *             if now_bid_price == pre_bid_price:
  *                 pre_bid_volume += now_bid_volume
  *             if now_ask_price == pre_ask_price:             # <<<<<<<<<<<<<<
@@ -3585,7 +3582,7 @@ static PyObject *__pyx_f_9bt_api_py_9functions_16calculate_number_27calculate_nu
 */
       }
 
-      /* "bt_api_py/functions/calculate_number/calculate_numbers.pyx":94
+      /* "bt_api_py/functions/calculate_number/calculate_numbers.pyx":95
  *                 pre_ask_volume += now_ask_volume
  *             #
  *             if now_bid_price != pre_bid_price:             # <<<<<<<<<<<<<<
@@ -3595,31 +3592,31 @@ static PyObject *__pyx_f_9bt_api_py_9functions_16calculate_number_27calculate_nu
       __pyx_t_4 = (__pyx_v_now_bid_price != __pyx_v_pre_bid_price);
       if (__pyx_t_4) {
 
-        /* "bt_api_py/functions/calculate_number/calculate_numbers.pyx":96
+        /* "bt_api_py/functions/calculate_number/calculate_numbers.pyx":97
  *             if now_bid_price != pre_bid_price:
  *                 #
  *                 new_spot_bid_price_list.append(pre_bid_price)             # <<<<<<<<<<<<<<
  *                 new_spot_bid_volume_list.append(pre_bid_volume)
  *                 #
 */
-        __pyx_t_3 = PyFloat_FromDouble(__pyx_v_pre_bid_price); if (unlikely(!__pyx_t_3)) __PYX_ERR(0, 96, __pyx_L1_error)
+        __pyx_t_3 = PyFloat_FromDouble(__pyx_v_pre_bid_price); if (unlikely(!__pyx_t_3)) __PYX_ERR(0, 97, __pyx_L1_error)
         __Pyx_GOTREF(__pyx_t_3);
-        __pyx_t_12 = __Pyx_PyList_Append(__pyx_v_new_spot_bid_price_list, __pyx_t_3); if (unlikely(__pyx_t_12 == ((int)-1))) __PYX_ERR(0, 96, __pyx_L1_error)
+        __pyx_t_12 = __Pyx_PyList_Append(__pyx_v_new_spot_bid_price_list, __pyx_t_3); if (unlikely(__pyx_t_12 == ((int)-1))) __PYX_ERR(0, 97, __pyx_L1_error)
         __Pyx_DECREF(__pyx_t_3); __pyx_t_3 = 0;
 
-        /* "bt_api_py/functions/calculate_number/calculate_numbers.pyx":97
+        /* "bt_api_py/functions/calculate_number/calculate_numbers.pyx":98
  *                 #
  *                 new_spot_bid_price_list.append(pre_bid_price)
  *                 new_spot_bid_volume_list.append(pre_bid_volume)             # <<<<<<<<<<<<<<
  *                 #
  *                 pre_bid_price = now_bid_price
 */
-        __pyx_t_3 = PyFloat_FromDouble(__pyx_v_pre_bid_volume); if (unlikely(!__pyx_t_3)) __PYX_ERR(0, 97, __pyx_L1_error)
+        __pyx_t_3 = PyFloat_FromDouble(__pyx_v_pre_bid_volume); if (unlikely(!__pyx_t_3)) __PYX_ERR(0, 98, __pyx_L1_error)
         __Pyx_GOTREF(__pyx_t_3);
-        __pyx_t_12 = __Pyx_PyList_Append(__pyx_v_new_spot_bid_volume_list, __pyx_t_3); if (unlikely(__pyx_t_12 == ((int)-1))) __PYX_ERR(0, 97, __pyx_L1_error)
+        __pyx_t_12 = __Pyx_PyList_Append(__pyx_v_new_spot_bid_volume_list, __pyx_t_3); if (unlikely(__pyx_t_12 == ((int)-1))) __PYX_ERR(0, 98, __pyx_L1_error)
         __Pyx_DECREF(__pyx_t_3); __pyx_t_3 = 0;
 
-        /* "bt_api_py/functions/calculate_number/calculate_numbers.pyx":99
+        /* "bt_api_py/functions/calculate_number/calculate_numbers.pyx":100
  *                 new_spot_bid_volume_list.append(pre_bid_volume)
  *                 #
  *                 pre_bid_price = now_bid_price             # <<<<<<<<<<<<<<
@@ -3628,7 +3625,7 @@ static PyObject *__pyx_f_9bt_api_py_9functions_16calculate_number_27calculate_nu
 */
         __pyx_v_pre_bid_price = __pyx_v_now_bid_price;
 
-        /* "bt_api_py/functions/calculate_number/calculate_numbers.pyx":100
+        /* "bt_api_py/functions/calculate_number/calculate_numbers.pyx":101
  *                 #
  *                 pre_bid_price = now_bid_price
  *                 pre_bid_volume = now_bid_volume             # <<<<<<<<<<<<<<
@@ -3637,7 +3634,7 @@ static PyObject *__pyx_f_9bt_api_py_9functions_16calculate_number_27calculate_nu
 */
         __pyx_v_pre_bid_volume = __pyx_v_now_bid_volume;
 
-        /* "bt_api_py/functions/calculate_number/calculate_numbers.pyx":94
+        /* "bt_api_py/functions/calculate_number/calculate_numbers.pyx":95
  *                 pre_ask_volume += now_ask_volume
  *             #
  *             if now_bid_price != pre_bid_price:             # <<<<<<<<<<<<<<
@@ -3646,7 +3643,7 @@ static PyObject *__pyx_f_9bt_api_py_9functions_16calculate_number_27calculate_nu
 */
       }
 
-      /* "bt_api_py/functions/calculate_number/calculate_numbers.pyx":101
+      /* "bt_api_py/functions/calculate_number/calculate_numbers.pyx":102
  *                 pre_bid_price = now_bid_price
  *                 pre_bid_volume = now_bid_volume
  *             if now_ask_price != pre_ask_price:             # <<<<<<<<<<<<<<
@@ -3656,31 +3653,31 @@ static PyObject *__pyx_f_9bt_api_py_9functions_16calculate_number_27calculate_nu
       __pyx_t_4 = (__pyx_v_now_ask_price != __pyx_v_pre_ask_price);
       if (__pyx_t_4) {
 
-        /* "bt_api_py/functions/calculate_number/calculate_numbers.pyx":103
+        /* "bt_api_py/functions/calculate_number/calculate_numbers.pyx":104
  *             if now_ask_price != pre_ask_price:
  *                 #
  *                 new_spot_ask_price_list.append(pre_ask_price)             # <<<<<<<<<<<<<<
  *                 new_spot_ask_volume_list.append(pre_ask_volume)
  *                 #
 */
-        __pyx_t_3 = PyFloat_FromDouble(__pyx_v_pre_ask_price); if (unlikely(!__pyx_t_3)) __PYX_ERR(0, 103, __pyx_L1_error)
+        __pyx_t_3 = PyFloat_FromDouble(__pyx_v_pre_ask_price); if (unlikely(!__pyx_t_3)) __PYX_ERR(0, 104, __pyx_L1_error)
         __Pyx_GOTREF(__pyx_t_3);
-        __pyx_t_12 = __Pyx_PyList_Append(__pyx_v_new_spot_ask_price_list, __pyx_t_3); if (unlikely(__pyx_t_12 == ((int)-1))) __PYX_ERR(0, 103, __pyx_L1_error)
+        __pyx_t_12 = __Pyx_PyList_Append(__pyx_v_new_spot_ask_price_list, __pyx_t_3); if (unlikely(__pyx_t_12 == ((int)-1))) __PYX_ERR(0, 104, __pyx_L1_error)
         __Pyx_DECREF(__pyx_t_3); __pyx_t_3 = 0;
 
-        /* "bt_api_py/functions/calculate_number/calculate_numbers.pyx":104
+        /* "bt_api_py/functions/calculate_number/calculate_numbers.pyx":105
  *                 #
  *                 new_spot_ask_price_list.append(pre_ask_price)
  *                 new_spot_ask_volume_list.append(pre_ask_volume)             # <<<<<<<<<<<<<<
  *                 #
  *                 pre_ask_price = now_ask_price
 */
-        __pyx_t_3 = PyFloat_FromDouble(__pyx_v_pre_ask_volume); if (unlikely(!__pyx_t_3)) __PYX_ERR(0, 104, __pyx_L1_error)
+        __pyx_t_3 = PyFloat_FromDouble(__pyx_v_pre_ask_volume); if (unlikely(!__pyx_t_3)) __PYX_ERR(0, 105, __pyx_L1_error)
         __Pyx_GOTREF(__pyx_t_3);
-        __pyx_t_12 = __Pyx_PyList_Append(__pyx_v_new_spot_ask_volume_list, __pyx_t_3); if (unlikely(__pyx_t_12 == ((int)-1))) __PYX_ERR(0, 104, __pyx_L1_error)
+        __pyx_t_12 = __Pyx_PyList_Append(__pyx_v_new_spot_ask_volume_list, __pyx_t_3); if (unlikely(__pyx_t_12 == ((int)-1))) __PYX_ERR(0, 105, __pyx_L1_error)
         __Pyx_DECREF(__pyx_t_3); __pyx_t_3 = 0;
 
-        /* "bt_api_py/functions/calculate_number/calculate_numbers.pyx":106
+        /* "bt_api_py/functions/calculate_number/calculate_numbers.pyx":107
  *                 new_spot_ask_volume_list.append(pre_ask_volume)
  *                 #
  *                 pre_ask_price = now_ask_price             # <<<<<<<<<<<<<<
@@ -3689,7 +3686,7 @@ static PyObject *__pyx_f_9bt_api_py_9functions_16calculate_number_27calculate_nu
 */
         __pyx_v_pre_ask_price = __pyx_v_now_ask_price;
 
-        /* "bt_api_py/functions/calculate_number/calculate_numbers.pyx":107
+        /* "bt_api_py/functions/calculate_number/calculate_numbers.pyx":108
  *                 #
  *                 pre_ask_price = now_ask_price
  *                 pre_ask_volume = now_ask_volume             # <<<<<<<<<<<<<<
@@ -3698,7 +3695,7 @@ static PyObject *__pyx_f_9bt_api_py_9functions_16calculate_number_27calculate_nu
 */
         __pyx_v_pre_ask_volume = __pyx_v_now_ask_volume;
 
-        /* "bt_api_py/functions/calculate_number/calculate_numbers.pyx":101
+        /* "bt_api_py/functions/calculate_number/calculate_numbers.pyx":102
  *                 pre_bid_price = now_bid_price
  *                 pre_bid_volume = now_bid_volume
  *             if now_ask_price != pre_ask_price:             # <<<<<<<<<<<<<<
@@ -3708,7 +3705,7 @@ static PyObject *__pyx_f_9bt_api_py_9functions_16calculate_number_27calculate_nu
       }
     }
 
-    /* "bt_api_py/functions/calculate_number/calculate_numbers.pyx":109
+    /* "bt_api_py/functions/calculate_number/calculate_numbers.pyx":110
  *                 pre_ask_volume = now_ask_volume
  *         # i = data_len-1
  *         now_bid_price = spot_bid_price_list[data_len - 1]             # <<<<<<<<<<<<<<
@@ -3716,10 +3713,10 @@ static PyObject *__pyx_f_9bt_api_py_9functions_16calculate_number_27calculate_nu
  *         now_ask_price = spot_ask_price_list[data_len - 1]
 */
     __pyx_t_13 = (__pyx_v_data_len - 1);
-    __pyx_t_6 = __Pyx_PyFloat_AsDouble(__Pyx_PyList_GET_ITEM(__pyx_v_spot_bid_price_list, __pyx_t_13)); if (unlikely((__pyx_t_6 == (double)-1) && PyErr_Occurred())) __PYX_ERR(0, 109, __pyx_L1_error)
+    __pyx_t_6 = __Pyx_PyFloat_AsDouble(__Pyx_PyList_GET_ITEM(__pyx_v_spot_bid_price_list, __pyx_t_13)); if (unlikely((__pyx_t_6 == (double)-1) && PyErr_Occurred())) __PYX_ERR(0, 110, __pyx_L1_error)
     __pyx_v_now_bid_price = __pyx_t_6;
 
-    /* "bt_api_py/functions/calculate_number/calculate_numbers.pyx":110
+    /* "bt_api_py/functions/calculate_number/calculate_numbers.pyx":111
  *         # i = data_len-1
  *         now_bid_price = spot_bid_price_list[data_len - 1]
  *         now_bid_volume = spot_bid_volume_list[data_len - 1]             # <<<<<<<<<<<<<<
@@ -3728,13 +3725,13 @@ static PyObject *__pyx_f_9bt_api_py_9functions_16calculate_number_27calculate_nu
 */
     if (unlikely(__pyx_v_spot_bid_volume_list == Py_None)) {
       PyErr_SetString(PyExc_TypeError, "'NoneType' object is not subscriptable");
-      __PYX_ERR(0, 110, __pyx_L1_error)
+      __PYX_ERR(0, 111, __pyx_L1_error)
     }
     __pyx_t_13 = (__pyx_v_data_len - 1);
-    __pyx_t_6 = __Pyx_PyFloat_AsDouble(__Pyx_PyList_GET_ITEM(__pyx_v_spot_bid_volume_list, __pyx_t_13)); if (unlikely((__pyx_t_6 == (double)-1) && PyErr_Occurred())) __PYX_ERR(0, 110, __pyx_L1_error)
+    __pyx_t_6 = __Pyx_PyFloat_AsDouble(__Pyx_PyList_GET_ITEM(__pyx_v_spot_bid_volume_list, __pyx_t_13)); if (unlikely((__pyx_t_6 == (double)-1) && PyErr_Occurred())) __PYX_ERR(0, 111, __pyx_L1_error)
     __pyx_v_now_bid_volume = __pyx_t_6;
 
-    /* "bt_api_py/functions/calculate_number/calculate_numbers.pyx":111
+    /* "bt_api_py/functions/calculate_number/calculate_numbers.pyx":112
  *         now_bid_price = spot_bid_price_list[data_len - 1]
  *         now_bid_volume = spot_bid_volume_list[data_len - 1]
  *         now_ask_price = spot_ask_price_list[data_len - 1]             # <<<<<<<<<<<<<<
@@ -3742,10 +3739,10 @@ static PyObject *__pyx_f_9bt_api_py_9functions_16calculate_number_27calculate_nu
  *         #
 */
     __pyx_t_13 = (__pyx_v_data_len - 1);
-    __pyx_t_6 = __Pyx_PyFloat_AsDouble(__Pyx_PyList_GET_ITEM(__pyx_v_spot_ask_price_list, __pyx_t_13)); if (unlikely((__pyx_t_6 == (double)-1) && PyErr_Occurred())) __PYX_ERR(0, 111, __pyx_L1_error)
+    __pyx_t_6 = __Pyx_PyFloat_AsDouble(__Pyx_PyList_GET_ITEM(__pyx_v_spot_ask_price_list, __pyx_t_13)); if (unlikely((__pyx_t_6 == (double)-1) && PyErr_Occurred())) __PYX_ERR(0, 112, __pyx_L1_error)
     __pyx_v_now_ask_price = __pyx_t_6;
 
-    /* "bt_api_py/functions/calculate_number/calculate_numbers.pyx":112
+    /* "bt_api_py/functions/calculate_number/calculate_numbers.pyx":113
  *         now_bid_volume = spot_bid_volume_list[data_len - 1]
  *         now_ask_price = spot_ask_price_list[data_len - 1]
  *         now_ask_volume = spot_ask_volume_list[data_len - 1]             # <<<<<<<<<<<<<<
@@ -3754,13 +3751,13 @@ static PyObject *__pyx_f_9bt_api_py_9functions_16calculate_number_27calculate_nu
 */
     if (unlikely(__pyx_v_spot_ask_volume_list == Py_None)) {
       PyErr_SetString(PyExc_TypeError, "'NoneType' object is not subscriptable");
-      __PYX_ERR(0, 112, __pyx_L1_error)
+      __PYX_ERR(0, 113, __pyx_L1_error)
     }
     __pyx_t_13 = (__pyx_v_data_len - 1);
-    __pyx_t_6 = __Pyx_PyFloat_AsDouble(__Pyx_PyList_GET_ITEM(__pyx_v_spot_ask_volume_list, __pyx_t_13)); if (unlikely((__pyx_t_6 == (double)-1) && PyErr_Occurred())) __PYX_ERR(0, 112, __pyx_L1_error)
+    __pyx_t_6 = __Pyx_PyFloat_AsDouble(__Pyx_PyList_GET_ITEM(__pyx_v_spot_ask_volume_list, __pyx_t_13)); if (unlikely((__pyx_t_6 == (double)-1) && PyErr_Occurred())) __PYX_ERR(0, 113, __pyx_L1_error)
     __pyx_v_now_ask_volume = __pyx_t_6;
 
-    /* "bt_api_py/functions/calculate_number/calculate_numbers.pyx":114
+    /* "bt_api_py/functions/calculate_number/calculate_numbers.pyx":115
  *         now_ask_volume = spot_ask_volume_list[data_len - 1]
  *         #
  *         if now_bid_price == pre_bid_price:             # <<<<<<<<<<<<<<
@@ -3770,7 +3767,7 @@ static PyObject *__pyx_f_9bt_api_py_9functions_16calculate_number_27calculate_nu
     __pyx_t_4 = (__pyx_v_now_bid_price == __pyx_v_pre_bid_price);
     if (__pyx_t_4) {
 
-      /* "bt_api_py/functions/calculate_number/calculate_numbers.pyx":115
+      /* "bt_api_py/functions/calculate_number/calculate_numbers.pyx":116
  *         #
  *         if now_bid_price == pre_bid_price:
  *             pre_bid_volume += now_bid_volume             # <<<<<<<<<<<<<<
@@ -3779,31 +3776,31 @@ static PyObject *__pyx_f_9bt_api_py_9functions_16calculate_number_27calculate_nu
 */
       __pyx_v_pre_bid_volume = (__pyx_v_pre_bid_volume + __pyx_v_now_bid_volume);
 
-      /* "bt_api_py/functions/calculate_number/calculate_numbers.pyx":117
+      /* "bt_api_py/functions/calculate_number/calculate_numbers.pyx":118
  *             pre_bid_volume += now_bid_volume
  *             #
  *             new_spot_bid_price_list.append(pre_bid_price)             # <<<<<<<<<<<<<<
  *             new_spot_bid_volume_list.append(pre_bid_volume)
  *         if now_ask_price == pre_ask_price:
 */
-      __pyx_t_3 = PyFloat_FromDouble(__pyx_v_pre_bid_price); if (unlikely(!__pyx_t_3)) __PYX_ERR(0, 117, __pyx_L1_error)
+      __pyx_t_3 = PyFloat_FromDouble(__pyx_v_pre_bid_price); if (unlikely(!__pyx_t_3)) __PYX_ERR(0, 118, __pyx_L1_error)
       __Pyx_GOTREF(__pyx_t_3);
-      __pyx_t_12 = __Pyx_PyList_Append(__pyx_v_new_spot_bid_price_list, __pyx_t_3); if (unlikely(__pyx_t_12 == ((int)-1))) __PYX_ERR(0, 117, __pyx_L1_error)
+      __pyx_t_12 = __Pyx_PyList_Append(__pyx_v_new_spot_bid_price_list, __pyx_t_3); if (unlikely(__pyx_t_12 == ((int)-1))) __PYX_ERR(0, 118, __pyx_L1_error)
       __Pyx_DECREF(__pyx_t_3); __pyx_t_3 = 0;
 
-      /* "bt_api_py/functions/calculate_number/calculate_numbers.pyx":118
+      /* "bt_api_py/functions/calculate_number/calculate_numbers.pyx":119
  *             #
  *             new_spot_bid_price_list.append(pre_bid_price)
  *             new_spot_bid_volume_list.append(pre_bid_volume)             # <<<<<<<<<<<<<<
  *         if now_ask_price == pre_ask_price:
  *             pre_ask_volume += now_ask_volume
 */
-      __pyx_t_3 = PyFloat_FromDouble(__pyx_v_pre_bid_volume); if (unlikely(!__pyx_t_3)) __PYX_ERR(0, 118, __pyx_L1_error)
+      __pyx_t_3 = PyFloat_FromDouble(__pyx_v_pre_bid_volume); if (unlikely(!__pyx_t_3)) __PYX_ERR(0, 119, __pyx_L1_error)
       __Pyx_GOTREF(__pyx_t_3);
-      __pyx_t_12 = __Pyx_PyList_Append(__pyx_v_new_spot_bid_volume_list, __pyx_t_3); if (unlikely(__pyx_t_12 == ((int)-1))) __PYX_ERR(0, 118, __pyx_L1_error)
+      __pyx_t_12 = __Pyx_PyList_Append(__pyx_v_new_spot_bid_volume_list, __pyx_t_3); if (unlikely(__pyx_t_12 == ((int)-1))) __PYX_ERR(0, 119, __pyx_L1_error)
       __Pyx_DECREF(__pyx_t_3); __pyx_t_3 = 0;
 
-      /* "bt_api_py/functions/calculate_number/calculate_numbers.pyx":114
+      /* "bt_api_py/functions/calculate_number/calculate_numbers.pyx":115
  *         now_ask_volume = spot_ask_volume_list[data_len - 1]
  *         #
  *         if now_bid_price == pre_bid_price:             # <<<<<<<<<<<<<<
@@ -3812,7 +3809,7 @@ static PyObject *__pyx_f_9bt_api_py_9functions_16calculate_number_27calculate_nu
 */
     }
 
-    /* "bt_api_py/functions/calculate_number/calculate_numbers.pyx":119
+    /* "bt_api_py/functions/calculate_number/calculate_numbers.pyx":120
  *             new_spot_bid_price_list.append(pre_bid_price)
  *             new_spot_bid_volume_list.append(pre_bid_volume)
  *         if now_ask_price == pre_ask_price:             # <<<<<<<<<<<<<<
@@ -3822,7 +3819,7 @@ static PyObject *__pyx_f_9bt_api_py_9functions_16calculate_number_27calculate_nu
     __pyx_t_4 = (__pyx_v_now_ask_price == __pyx_v_pre_ask_price);
     if (__pyx_t_4) {
 
-      /* "bt_api_py/functions/calculate_number/calculate_numbers.pyx":120
+      /* "bt_api_py/functions/calculate_number/calculate_numbers.pyx":121
  *             new_spot_bid_volume_list.append(pre_bid_volume)
  *         if now_ask_price == pre_ask_price:
  *             pre_ask_volume += now_ask_volume             # <<<<<<<<<<<<<<
@@ -3831,31 +3828,31 @@ static PyObject *__pyx_f_9bt_api_py_9functions_16calculate_number_27calculate_nu
 */
       __pyx_v_pre_ask_volume = (__pyx_v_pre_ask_volume + __pyx_v_now_ask_volume);
 
-      /* "bt_api_py/functions/calculate_number/calculate_numbers.pyx":122
+      /* "bt_api_py/functions/calculate_number/calculate_numbers.pyx":123
  *             pre_ask_volume += now_ask_volume
  *             #
  *             new_spot_ask_price_list.append(pre_ask_price)             # <<<<<<<<<<<<<<
  *             new_spot_ask_volume_list.append(pre_ask_volume)
  *         #
 */
-      __pyx_t_3 = PyFloat_FromDouble(__pyx_v_pre_ask_price); if (unlikely(!__pyx_t_3)) __PYX_ERR(0, 122, __pyx_L1_error)
+      __pyx_t_3 = PyFloat_FromDouble(__pyx_v_pre_ask_price); if (unlikely(!__pyx_t_3)) __PYX_ERR(0, 123, __pyx_L1_error)
       __Pyx_GOTREF(__pyx_t_3);
-      __pyx_t_12 = __Pyx_PyList_Append(__pyx_v_new_spot_ask_price_list, __pyx_t_3); if (unlikely(__pyx_t_12 == ((int)-1))) __PYX_ERR(0, 122, __pyx_L1_error)
+      __pyx_t_12 = __Pyx_PyList_Append(__pyx_v_new_spot_ask_price_list, __pyx_t_3); if (unlikely(__pyx_t_12 == ((int)-1))) __PYX_ERR(0, 123, __pyx_L1_error)
       __Pyx_DECREF(__pyx_t_3); __pyx_t_3 = 0;
 
-      /* "bt_api_py/functions/calculate_number/calculate_numbers.pyx":123
+      /* "bt_api_py/functions/calculate_number/calculate_numbers.pyx":124
  *             #
  *             new_spot_ask_price_list.append(pre_ask_price)
  *             new_spot_ask_volume_list.append(pre_ask_volume)             # <<<<<<<<<<<<<<
  *         #
  *         if now_bid_price != pre_bid_price:
 */
-      __pyx_t_3 = PyFloat_FromDouble(__pyx_v_pre_ask_volume); if (unlikely(!__pyx_t_3)) __PYX_ERR(0, 123, __pyx_L1_error)
+      __pyx_t_3 = PyFloat_FromDouble(__pyx_v_pre_ask_volume); if (unlikely(!__pyx_t_3)) __PYX_ERR(0, 124, __pyx_L1_error)
       __Pyx_GOTREF(__pyx_t_3);
-      __pyx_t_12 = __Pyx_PyList_Append(__pyx_v_new_spot_ask_volume_list, __pyx_t_3); if (unlikely(__pyx_t_12 == ((int)-1))) __PYX_ERR(0, 123, __pyx_L1_error)
+      __pyx_t_12 = __Pyx_PyList_Append(__pyx_v_new_spot_ask_volume_list, __pyx_t_3); if (unlikely(__pyx_t_12 == ((int)-1))) __PYX_ERR(0, 124, __pyx_L1_error)
       __Pyx_DECREF(__pyx_t_3); __pyx_t_3 = 0;
 
-      /* "bt_api_py/functions/calculate_number/calculate_numbers.pyx":119
+      /* "bt_api_py/functions/calculate_number/calculate_numbers.pyx":120
  *             new_spot_bid_price_list.append(pre_bid_price)
  *             new_spot_bid_volume_list.append(pre_bid_volume)
  *         if now_ask_price == pre_ask_price:             # <<<<<<<<<<<<<<
@@ -3864,7 +3861,7 @@ static PyObject *__pyx_f_9bt_api_py_9functions_16calculate_number_27calculate_nu
 */
     }
 
-    /* "bt_api_py/functions/calculate_number/calculate_numbers.pyx":125
+    /* "bt_api_py/functions/calculate_number/calculate_numbers.pyx":126
  *             new_spot_ask_volume_list.append(pre_ask_volume)
  *         #
  *         if now_bid_price != pre_bid_price:             # <<<<<<<<<<<<<<
@@ -3874,55 +3871,55 @@ static PyObject *__pyx_f_9bt_api_py_9functions_16calculate_number_27calculate_nu
     __pyx_t_4 = (__pyx_v_now_bid_price != __pyx_v_pre_bid_price);
     if (__pyx_t_4) {
 
-      /* "bt_api_py/functions/calculate_number/calculate_numbers.pyx":127
+      /* "bt_api_py/functions/calculate_number/calculate_numbers.pyx":128
  *         if now_bid_price != pre_bid_price:
  *             #
  *             new_spot_bid_price_list.append(pre_bid_price)             # <<<<<<<<<<<<<<
  *             new_spot_bid_volume_list.append(pre_bid_volume)
  *             new_spot_bid_price_list.append(now_bid_price)
 */
-      __pyx_t_3 = PyFloat_FromDouble(__pyx_v_pre_bid_price); if (unlikely(!__pyx_t_3)) __PYX_ERR(0, 127, __pyx_L1_error)
+      __pyx_t_3 = PyFloat_FromDouble(__pyx_v_pre_bid_price); if (unlikely(!__pyx_t_3)) __PYX_ERR(0, 128, __pyx_L1_error)
       __Pyx_GOTREF(__pyx_t_3);
-      __pyx_t_12 = __Pyx_PyList_Append(__pyx_v_new_spot_bid_price_list, __pyx_t_3); if (unlikely(__pyx_t_12 == ((int)-1))) __PYX_ERR(0, 127, __pyx_L1_error)
+      __pyx_t_12 = __Pyx_PyList_Append(__pyx_v_new_spot_bid_price_list, __pyx_t_3); if (unlikely(__pyx_t_12 == ((int)-1))) __PYX_ERR(0, 128, __pyx_L1_error)
       __Pyx_DECREF(__pyx_t_3); __pyx_t_3 = 0;
 
-      /* "bt_api_py/functions/calculate_number/calculate_numbers.pyx":128
+      /* "bt_api_py/functions/calculate_number/calculate_numbers.pyx":129
  *             #
  *             new_spot_bid_price_list.append(pre_bid_price)
  *             new_spot_bid_volume_list.append(pre_bid_volume)             # <<<<<<<<<<<<<<
  *             new_spot_bid_price_list.append(now_bid_price)
  *             new_spot_bid_volume_list.append(now_bid_volume)
 */
-      __pyx_t_3 = PyFloat_FromDouble(__pyx_v_pre_bid_volume); if (unlikely(!__pyx_t_3)) __PYX_ERR(0, 128, __pyx_L1_error)
+      __pyx_t_3 = PyFloat_FromDouble(__pyx_v_pre_bid_volume); if (unlikely(!__pyx_t_3)) __PYX_ERR(0, 129, __pyx_L1_error)
       __Pyx_GOTREF(__pyx_t_3);
-      __pyx_t_12 = __Pyx_PyList_Append(__pyx_v_new_spot_bid_volume_list, __pyx_t_3); if (unlikely(__pyx_t_12 == ((int)-1))) __PYX_ERR(0, 128, __pyx_L1_error)
+      __pyx_t_12 = __Pyx_PyList_Append(__pyx_v_new_spot_bid_volume_list, __pyx_t_3); if (unlikely(__pyx_t_12 == ((int)-1))) __PYX_ERR(0, 129, __pyx_L1_error)
       __Pyx_DECREF(__pyx_t_3); __pyx_t_3 = 0;
 
-      /* "bt_api_py/functions/calculate_number/calculate_numbers.pyx":129
+      /* "bt_api_py/functions/calculate_number/calculate_numbers.pyx":130
  *             new_spot_bid_price_list.append(pre_bid_price)
  *             new_spot_bid_volume_list.append(pre_bid_volume)
  *             new_spot_bid_price_list.append(now_bid_price)             # <<<<<<<<<<<<<<
  *             new_spot_bid_volume_list.append(now_bid_volume)
  *         if now_ask_price != pre_ask_price:
 */
-      __pyx_t_3 = PyFloat_FromDouble(__pyx_v_now_bid_price); if (unlikely(!__pyx_t_3)) __PYX_ERR(0, 129, __pyx_L1_error)
+      __pyx_t_3 = PyFloat_FromDouble(__pyx_v_now_bid_price); if (unlikely(!__pyx_t_3)) __PYX_ERR(0, 130, __pyx_L1_error)
       __Pyx_GOTREF(__pyx_t_3);
-      __pyx_t_12 = __Pyx_PyList_Append(__pyx_v_new_spot_bid_price_list, __pyx_t_3); if (unlikely(__pyx_t_12 == ((int)-1))) __PYX_ERR(0, 129, __pyx_L1_error)
+      __pyx_t_12 = __Pyx_PyList_Append(__pyx_v_new_spot_bid_price_list, __pyx_t_3); if (unlikely(__pyx_t_12 == ((int)-1))) __PYX_ERR(0, 130, __pyx_L1_error)
       __Pyx_DECREF(__pyx_t_3); __pyx_t_3 = 0;
 
-      /* "bt_api_py/functions/calculate_number/calculate_numbers.pyx":130
+      /* "bt_api_py/functions/calculate_number/calculate_numbers.pyx":131
  *             new_spot_bid_volume_list.append(pre_bid_volume)
  *             new_spot_bid_price_list.append(now_bid_price)
  *             new_spot_bid_volume_list.append(now_bid_volume)             # <<<<<<<<<<<<<<
  *         if now_ask_price != pre_ask_price:
  *             #
 */
-      __pyx_t_3 = PyFloat_FromDouble(__pyx_v_now_bid_volume); if (unlikely(!__pyx_t_3)) __PYX_ERR(0, 130, __pyx_L1_error)
+      __pyx_t_3 = PyFloat_FromDouble(__pyx_v_now_bid_volume); if (unlikely(!__pyx_t_3)) __PYX_ERR(0, 131, __pyx_L1_error)
       __Pyx_GOTREF(__pyx_t_3);
-      __pyx_t_12 = __Pyx_PyList_Append(__pyx_v_new_spot_bid_volume_list, __pyx_t_3); if (unlikely(__pyx_t_12 == ((int)-1))) __PYX_ERR(0, 130, __pyx_L1_error)
+      __pyx_t_12 = __Pyx_PyList_Append(__pyx_v_new_spot_bid_volume_list, __pyx_t_3); if (unlikely(__pyx_t_12 == ((int)-1))) __PYX_ERR(0, 131, __pyx_L1_error)
       __Pyx_DECREF(__pyx_t_3); __pyx_t_3 = 0;
 
-      /* "bt_api_py/functions/calculate_number/calculate_numbers.pyx":125
+      /* "bt_api_py/functions/calculate_number/calculate_numbers.pyx":126
  *             new_spot_ask_volume_list.append(pre_ask_volume)
  *         #
  *         if now_bid_price != pre_bid_price:             # <<<<<<<<<<<<<<
@@ -3931,7 +3928,7 @@ static PyObject *__pyx_f_9bt_api_py_9functions_16calculate_number_27calculate_nu
 */
     }
 
-    /* "bt_api_py/functions/calculate_number/calculate_numbers.pyx":131
+    /* "bt_api_py/functions/calculate_number/calculate_numbers.pyx":132
  *             new_spot_bid_price_list.append(now_bid_price)
  *             new_spot_bid_volume_list.append(now_bid_volume)
  *         if now_ask_price != pre_ask_price:             # <<<<<<<<<<<<<<
@@ -3941,55 +3938,55 @@ static PyObject *__pyx_f_9bt_api_py_9functions_16calculate_number_27calculate_nu
     __pyx_t_4 = (__pyx_v_now_ask_price != __pyx_v_pre_ask_price);
     if (__pyx_t_4) {
 
-      /* "bt_api_py/functions/calculate_number/calculate_numbers.pyx":133
+      /* "bt_api_py/functions/calculate_number/calculate_numbers.pyx":134
  *         if now_ask_price != pre_ask_price:
  *             #
  *             new_spot_ask_price_list.append(pre_ask_price)             # <<<<<<<<<<<<<<
  *             new_spot_ask_volume_list.append(pre_ask_volume)
  *             new_spot_ask_price_list.append(now_ask_price)
 */
-      __pyx_t_3 = PyFloat_FromDouble(__pyx_v_pre_ask_price); if (unlikely(!__pyx_t_3)) __PYX_ERR(0, 133, __pyx_L1_error)
+      __pyx_t_3 = PyFloat_FromDouble(__pyx_v_pre_ask_price); if (unlikely(!__pyx_t_3)) __PYX_ERR(0, 134, __pyx_L1_error)
       __Pyx_GOTREF(__pyx_t_3);
-      __pyx_t_12 = __Pyx_PyList_Append(__pyx_v_new_spot_ask_price_list, __pyx_t_3); if (unlikely(__pyx_t_12 == ((int)-1))) __PYX_ERR(0, 133, __pyx_L1_error)
+      __pyx_t_12 = __Pyx_PyList_Append(__pyx_v_new_spot_ask_price_list, __pyx_t_3); if (unlikely(__pyx_t_12 == ((int)-1))) __PYX_ERR(0, 134, __pyx_L1_error)
       __Pyx_DECREF(__pyx_t_3); __pyx_t_3 = 0;
 
-      /* "bt_api_py/functions/calculate_number/calculate_numbers.pyx":134
+      /* "bt_api_py/functions/calculate_number/calculate_numbers.pyx":135
  *             #
  *             new_spot_ask_price_list.append(pre_ask_price)
  *             new_spot_ask_volume_list.append(pre_ask_volume)             # <<<<<<<<<<<<<<
  *             new_spot_ask_price_list.append(now_ask_price)
  *             new_spot_ask_volume_list.append(now_ask_volume)
 */
-      __pyx_t_3 = PyFloat_FromDouble(__pyx_v_pre_ask_volume); if (unlikely(!__pyx_t_3)) __PYX_ERR(0, 134, __pyx_L1_error)
+      __pyx_t_3 = PyFloat_FromDouble(__pyx_v_pre_ask_volume); if (unlikely(!__pyx_t_3)) __PYX_ERR(0, 135, __pyx_L1_error)
       __Pyx_GOTREF(__pyx_t_3);
-      __pyx_t_12 = __Pyx_PyList_Append(__pyx_v_new_spot_ask_volume_list, __pyx_t_3); if (unlikely(__pyx_t_12 == ((int)-1))) __PYX_ERR(0, 134, __pyx_L1_error)
+      __pyx_t_12 = __Pyx_PyList_Append(__pyx_v_new_spot_ask_volume_list, __pyx_t_3); if (unlikely(__pyx_t_12 == ((int)-1))) __PYX_ERR(0, 135, __pyx_L1_error)
       __Pyx_DECREF(__pyx_t_3); __pyx_t_3 = 0;
 
-      /* "bt_api_py/functions/calculate_number/calculate_numbers.pyx":135
+      /* "bt_api_py/functions/calculate_number/calculate_numbers.pyx":136
  *             new_spot_ask_price_list.append(pre_ask_price)
  *             new_spot_ask_volume_list.append(pre_ask_volume)
  *             new_spot_ask_price_list.append(now_ask_price)             # <<<<<<<<<<<<<<
  *             new_spot_ask_volume_list.append(now_ask_volume)
  * 
 */
-      __pyx_t_3 = PyFloat_FromDouble(__pyx_v_now_ask_price); if (unlikely(!__pyx_t_3)) __PYX_ERR(0, 135, __pyx_L1_error)
+      __pyx_t_3 = PyFloat_FromDouble(__pyx_v_now_ask_price); if (unlikely(!__pyx_t_3)) __PYX_ERR(0, 136, __pyx_L1_error)
       __Pyx_GOTREF(__pyx_t_3);
-      __pyx_t_12 = __Pyx_PyList_Append(__pyx_v_new_spot_ask_price_list, __pyx_t_3); if (unlikely(__pyx_t_12 == ((int)-1))) __PYX_ERR(0, 135, __pyx_L1_error)
+      __pyx_t_12 = __Pyx_PyList_Append(__pyx_v_new_spot_ask_price_list, __pyx_t_3); if (unlikely(__pyx_t_12 == ((int)-1))) __PYX_ERR(0, 136, __pyx_L1_error)
       __Pyx_DECREF(__pyx_t_3); __pyx_t_3 = 0;
 
-      /* "bt_api_py/functions/calculate_number/calculate_numbers.pyx":136
+      /* "bt_api_py/functions/calculate_number/calculate_numbers.pyx":137
  *             new_spot_ask_volume_list.append(pre_ask_volume)
  *             new_spot_ask_price_list.append(now_ask_price)
  *             new_spot_ask_volume_list.append(now_ask_volume)             # <<<<<<<<<<<<<<
  * 
  *         spot_bid_volume = []
 */
-      __pyx_t_3 = PyFloat_FromDouble(__pyx_v_now_ask_volume); if (unlikely(!__pyx_t_3)) __PYX_ERR(0, 136, __pyx_L1_error)
+      __pyx_t_3 = PyFloat_FromDouble(__pyx_v_now_ask_volume); if (unlikely(!__pyx_t_3)) __PYX_ERR(0, 137, __pyx_L1_error)
       __Pyx_GOTREF(__pyx_t_3);
-      __pyx_t_12 = __Pyx_PyList_Append(__pyx_v_new_spot_ask_volume_list, __pyx_t_3); if (unlikely(__pyx_t_12 == ((int)-1))) __PYX_ERR(0, 136, __pyx_L1_error)
+      __pyx_t_12 = __Pyx_PyList_Append(__pyx_v_new_spot_ask_volume_list, __pyx_t_3); if (unlikely(__pyx_t_12 == ((int)-1))) __PYX_ERR(0, 137, __pyx_L1_error)
       __Pyx_DECREF(__pyx_t_3); __pyx_t_3 = 0;
 
-      /* "bt_api_py/functions/calculate_number/calculate_numbers.pyx":131
+      /* "bt_api_py/functions/calculate_number/calculate_numbers.pyx":132
  *             new_spot_bid_price_list.append(now_bid_price)
  *             new_spot_bid_volume_list.append(now_bid_volume)
  *         if now_ask_price != pre_ask_price:             # <<<<<<<<<<<<<<
@@ -3998,19 +3995,19 @@ static PyObject *__pyx_f_9bt_api_py_9functions_16calculate_number_27calculate_nu
 */
     }
 
-    /* "bt_api_py/functions/calculate_number/calculate_numbers.pyx":138
+    /* "bt_api_py/functions/calculate_number/calculate_numbers.pyx":139
  *             new_spot_ask_volume_list.append(now_ask_volume)
  * 
  *         spot_bid_volume = []             # <<<<<<<<<<<<<<
  *         for i in range(data_len):
  *             v = new_spot_bid_volume_list[i]
 */
-    __pyx_t_3 = PyList_New(0); if (unlikely(!__pyx_t_3)) __PYX_ERR(0, 138, __pyx_L1_error)
+    __pyx_t_3 = PyList_New(0); if (unlikely(!__pyx_t_3)) __PYX_ERR(0, 139, __pyx_L1_error)
     __Pyx_GOTREF(__pyx_t_3);
     __pyx_v_spot_bid_volume = ((PyObject*)__pyx_t_3);
     __pyx_t_3 = 0;
 
-    /* "bt_api_py/functions/calculate_number/calculate_numbers.pyx":139
+    /* "bt_api_py/functions/calculate_number/calculate_numbers.pyx":140
  * 
  *         spot_bid_volume = []
  *         for i in range(data_len):             # <<<<<<<<<<<<<<
@@ -4022,17 +4019,17 @@ static PyObject *__pyx_f_9bt_api_py_9functions_16calculate_number_27calculate_nu
     for (__pyx_t_9 = 0; __pyx_t_9 < __pyx_t_8; __pyx_t_9+=1) {
       __pyx_v_i = __pyx_t_9;
 
-      /* "bt_api_py/functions/calculate_number/calculate_numbers.pyx":140
+      /* "bt_api_py/functions/calculate_number/calculate_numbers.pyx":141
  *         spot_bid_volume = []
  *         for i in range(data_len):
  *             v = new_spot_bid_volume_list[i]             # <<<<<<<<<<<<<<
  *             v = int(v * percent / base_spot_qty_unit)
  *             spot_bid_volume.append(v)
 */
-      __pyx_t_6 = __Pyx_PyFloat_AsDouble(__Pyx_PyList_GET_ITEM(__pyx_v_new_spot_bid_volume_list, __pyx_v_i)); if (unlikely((__pyx_t_6 == (double)-1) && PyErr_Occurred())) __PYX_ERR(0, 140, __pyx_L1_error)
+      __pyx_t_6 = __Pyx_PyFloat_AsDouble(__Pyx_PyList_GET_ITEM(__pyx_v_new_spot_bid_volume_list, __pyx_v_i)); if (unlikely((__pyx_t_6 == (double)-1) && PyErr_Occurred())) __PYX_ERR(0, 141, __pyx_L1_error)
       __pyx_v_v = __pyx_t_6;
 
-      /* "bt_api_py/functions/calculate_number/calculate_numbers.pyx":141
+      /* "bt_api_py/functions/calculate_number/calculate_numbers.pyx":142
  *         for i in range(data_len):
  *             v = new_spot_bid_volume_list[i]
  *             v = int(v * percent / base_spot_qty_unit)             # <<<<<<<<<<<<<<
@@ -4042,32 +4039,32 @@ static PyObject *__pyx_f_9bt_api_py_9functions_16calculate_number_27calculate_nu
       __pyx_t_6 = trunc(((__pyx_v_v * __pyx_v_percent) / __pyx_v_base_spot_qty_unit)); 
       __pyx_v_v = __pyx_t_6;
 
-      /* "bt_api_py/functions/calculate_number/calculate_numbers.pyx":142
+      /* "bt_api_py/functions/calculate_number/calculate_numbers.pyx":143
  *             v = new_spot_bid_volume_list[i]
  *             v = int(v * percent / base_spot_qty_unit)
  *             spot_bid_volume.append(v)             # <<<<<<<<<<<<<<
  *         spot_ask_volume = []
  *         for i in range(data_len):
 */
-      __pyx_t_3 = PyFloat_FromDouble(__pyx_v_v); if (unlikely(!__pyx_t_3)) __PYX_ERR(0, 142, __pyx_L1_error)
+      __pyx_t_3 = PyFloat_FromDouble(__pyx_v_v); if (unlikely(!__pyx_t_3)) __PYX_ERR(0, 143, __pyx_L1_error)
       __Pyx_GOTREF(__pyx_t_3);
-      __pyx_t_12 = __Pyx_PyList_Append(__pyx_v_spot_bid_volume, __pyx_t_3); if (unlikely(__pyx_t_12 == ((int)-1))) __PYX_ERR(0, 142, __pyx_L1_error)
+      __pyx_t_12 = __Pyx_PyList_Append(__pyx_v_spot_bid_volume, __pyx_t_3); if (unlikely(__pyx_t_12 == ((int)-1))) __PYX_ERR(0, 143, __pyx_L1_error)
       __Pyx_DECREF(__pyx_t_3); __pyx_t_3 = 0;
     }
 
-    /* "bt_api_py/functions/calculate_number/calculate_numbers.pyx":143
+    /* "bt_api_py/functions/calculate_number/calculate_numbers.pyx":144
  *             v = int(v * percent / base_spot_qty_unit)
  *             spot_bid_volume.append(v)
  *         spot_ask_volume = []             # <<<<<<<<<<<<<<
  *         for i in range(data_len):
  *             v = new_spot_ask_volume_list[i]
 */
-    __pyx_t_3 = PyList_New(0); if (unlikely(!__pyx_t_3)) __PYX_ERR(0, 143, __pyx_L1_error)
+    __pyx_t_3 = PyList_New(0); if (unlikely(!__pyx_t_3)) __PYX_ERR(0, 144, __pyx_L1_error)
     __Pyx_GOTREF(__pyx_t_3);
     __pyx_v_spot_ask_volume = ((PyObject*)__pyx_t_3);
     __pyx_t_3 = 0;
 
-    /* "bt_api_py/functions/calculate_number/calculate_numbers.pyx":144
+    /* "bt_api_py/functions/calculate_number/calculate_numbers.pyx":145
  *             spot_bid_volume.append(v)
  *         spot_ask_volume = []
  *         for i in range(data_len):             # <<<<<<<<<<<<<<
@@ -4079,17 +4076,17 @@ static PyObject *__pyx_f_9bt_api_py_9functions_16calculate_number_27calculate_nu
     for (__pyx_t_9 = 0; __pyx_t_9 < __pyx_t_8; __pyx_t_9+=1) {
       __pyx_v_i = __pyx_t_9;
 
-      /* "bt_api_py/functions/calculate_number/calculate_numbers.pyx":145
+      /* "bt_api_py/functions/calculate_number/calculate_numbers.pyx":146
  *         spot_ask_volume = []
  *         for i in range(data_len):
  *             v = new_spot_ask_volume_list[i]             # <<<<<<<<<<<<<<
  *             v = int(v * percent / base_spot_qty_unit)
  *             spot_ask_volume.append(v)
 */
-      __pyx_t_6 = __Pyx_PyFloat_AsDouble(__Pyx_PyList_GET_ITEM(__pyx_v_new_spot_ask_volume_list, __pyx_v_i)); if (unlikely((__pyx_t_6 == (double)-1) && PyErr_Occurred())) __PYX_ERR(0, 145, __pyx_L1_error)
+      __pyx_t_6 = __Pyx_PyFloat_AsDouble(__Pyx_PyList_GET_ITEM(__pyx_v_new_spot_ask_volume_list, __pyx_v_i)); if (unlikely((__pyx_t_6 == (double)-1) && PyErr_Occurred())) __PYX_ERR(0, 146, __pyx_L1_error)
       __pyx_v_v = __pyx_t_6;
 
-      /* "bt_api_py/functions/calculate_number/calculate_numbers.pyx":146
+      /* "bt_api_py/functions/calculate_number/calculate_numbers.pyx":147
  *         for i in range(data_len):
  *             v = new_spot_ask_volume_list[i]
  *             v = int(v * percent / base_spot_qty_unit)             # <<<<<<<<<<<<<<
@@ -4099,44 +4096,44 @@ static PyObject *__pyx_f_9bt_api_py_9functions_16calculate_number_27calculate_nu
       __pyx_t_6 = trunc(((__pyx_v_v * __pyx_v_percent) / __pyx_v_base_spot_qty_unit)); 
       __pyx_v_v = __pyx_t_6;
 
-      /* "bt_api_py/functions/calculate_number/calculate_numbers.pyx":147
+      /* "bt_api_py/functions/calculate_number/calculate_numbers.pyx":148
  *             v = new_spot_ask_volume_list[i]
  *             v = int(v * percent / base_spot_qty_unit)
  *             spot_ask_volume.append(v)             # <<<<<<<<<<<<<<
  *         return new_spot_bid_price_list, spot_bid_volume, new_spot_ask_price_list, spot_ask_volume
 */
-      __pyx_t_3 = PyFloat_FromDouble(__pyx_v_v); if (unlikely(!__pyx_t_3)) __PYX_ERR(0, 147, __pyx_L1_error)
+      __pyx_t_3 = PyFloat_FromDouble(__pyx_v_v); if (unlikely(!__pyx_t_3)) __PYX_ERR(0, 148, __pyx_L1_error)
       __Pyx_GOTREF(__pyx_t_3);
-      __pyx_t_12 = __Pyx_PyList_Append(__pyx_v_spot_ask_volume, __pyx_t_3); if (unlikely(__pyx_t_12 == ((int)-1))) __PYX_ERR(0, 147, __pyx_L1_error)
+      __pyx_t_12 = __Pyx_PyList_Append(__pyx_v_spot_ask_volume, __pyx_t_3); if (unlikely(__pyx_t_12 == ((int)-1))) __PYX_ERR(0, 148, __pyx_L1_error)
       __Pyx_DECREF(__pyx_t_3); __pyx_t_3 = 0;
     }
 
-    /* "bt_api_py/functions/calculate_number/calculate_numbers.pyx":148
+    /* "bt_api_py/functions/calculate_number/calculate_numbers.pyx":149
  *             v = int(v * percent / base_spot_qty_unit)
  *             spot_ask_volume.append(v)
  *         return new_spot_bid_price_list, spot_bid_volume, new_spot_ask_price_list, spot_ask_volume             # <<<<<<<<<<<<<<
 */
     __Pyx_XDECREF(__pyx_r);
-    __pyx_t_3 = PyTuple_New(4); if (unlikely(!__pyx_t_3)) __PYX_ERR(0, 148, __pyx_L1_error)
+    __pyx_t_3 = PyTuple_New(4); if (unlikely(!__pyx_t_3)) __PYX_ERR(0, 149, __pyx_L1_error)
     __Pyx_GOTREF(__pyx_t_3);
     __Pyx_INCREF(__pyx_v_new_spot_bid_price_list);
     __Pyx_GIVEREF(__pyx_v_new_spot_bid_price_list);
-    if (__Pyx_PyTuple_SET_ITEM(__pyx_t_3, 0, __pyx_v_new_spot_bid_price_list) != (0)) __PYX_ERR(0, 148, __pyx_L1_error);
+    if (__Pyx_PyTuple_SET_ITEM(__pyx_t_3, 0, __pyx_v_new_spot_bid_price_list) != (0)) __PYX_ERR(0, 149, __pyx_L1_error);
     __Pyx_INCREF(__pyx_v_spot_bid_volume);
     __Pyx_GIVEREF(__pyx_v_spot_bid_volume);
-    if (__Pyx_PyTuple_SET_ITEM(__pyx_t_3, 1, __pyx_v_spot_bid_volume) != (0)) __PYX_ERR(0, 148, __pyx_L1_error);
+    if (__Pyx_PyTuple_SET_ITEM(__pyx_t_3, 1, __pyx_v_spot_bid_volume) != (0)) __PYX_ERR(0, 149, __pyx_L1_error);
     __Pyx_INCREF(__pyx_v_new_spot_ask_price_list);
     __Pyx_GIVEREF(__pyx_v_new_spot_ask_price_list);
-    if (__Pyx_PyTuple_SET_ITEM(__pyx_t_3, 2, __pyx_v_new_spot_ask_price_list) != (0)) __PYX_ERR(0, 148, __pyx_L1_error);
+    if (__Pyx_PyTuple_SET_ITEM(__pyx_t_3, 2, __pyx_v_new_spot_ask_price_list) != (0)) __PYX_ERR(0, 149, __pyx_L1_error);
     __Pyx_INCREF(__pyx_v_spot_ask_volume);
     __Pyx_GIVEREF(__pyx_v_spot_ask_volume);
-    if (__Pyx_PyTuple_SET_ITEM(__pyx_t_3, 3, __pyx_v_spot_ask_volume) != (0)) __PYX_ERR(0, 148, __pyx_L1_error);
+    if (__Pyx_PyTuple_SET_ITEM(__pyx_t_3, 3, __pyx_v_spot_ask_volume) != (0)) __PYX_ERR(0, 149, __pyx_L1_error);
     __pyx_r = __pyx_t_3;
     __pyx_t_3 = 0;
     goto __pyx_L0;
   }
 
-  /* "bt_api_py/functions/calculate_number/calculate_numbers.pyx":26
+  /* "bt_api_py/functions/calculate_number/calculate_numbers.pyx":27
  * 
  * 
  * cpdef normalise_hedge_data_to_base(depth_data, dict params):             # <<<<<<<<<<<<<<
@@ -4208,39 +4205,39 @@ PyObject *__pyx_args, PyObject *__pyx_kwds
   {
     PyObject ** const __pyx_pyargnames[] = {&__pyx_mstate_global->__pyx_n_u_depth_data,&__pyx_mstate_global->__pyx_n_u_params,0};
     const Py_ssize_t __pyx_kwds_len = (__pyx_kwds) ? __Pyx_NumKwargs_FASTCALL(__pyx_kwds) : 0;
-    if (unlikely(__pyx_kwds_len) < 0) __PYX_ERR(0, 26, __pyx_L3_error)
+    if (unlikely(__pyx_kwds_len) < 0) __PYX_ERR(0, 27, __pyx_L3_error)
     if (__pyx_kwds_len > 0) {
       switch (__pyx_nargs) {
         case  2:
         values[1] = __Pyx_ArgRef_FASTCALL(__pyx_args, 1);
-        if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[1])) __PYX_ERR(0, 26, __pyx_L3_error)
+        if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[1])) __PYX_ERR(0, 27, __pyx_L3_error)
         CYTHON_FALLTHROUGH;
         case  1:
         values[0] = __Pyx_ArgRef_FASTCALL(__pyx_args, 0);
-        if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[0])) __PYX_ERR(0, 26, __pyx_L3_error)
+        if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[0])) __PYX_ERR(0, 27, __pyx_L3_error)
         CYTHON_FALLTHROUGH;
         case  0: break;
         default: goto __pyx_L5_argtuple_error;
       }
       const Py_ssize_t kwd_pos_args = __pyx_nargs;
-      if (__Pyx_ParseKeywords(__pyx_kwds, __pyx_kwvalues, __pyx_pyargnames, 0, values, kwd_pos_args, __pyx_kwds_len, "normalise_hedge_data_to_base", 0) < (0)) __PYX_ERR(0, 26, __pyx_L3_error)
+      if (__Pyx_ParseKeywords(__pyx_kwds, __pyx_kwvalues, __pyx_pyargnames, 0, values, kwd_pos_args, __pyx_kwds_len, "normalise_hedge_data_to_base", 0) < (0)) __PYX_ERR(0, 27, __pyx_L3_error)
       for (Py_ssize_t i = __pyx_nargs; i < 2; i++) {
-        if (unlikely(!values[i])) { __Pyx_RaiseArgtupleInvalid("normalise_hedge_data_to_base", 1, 2, 2, i); __PYX_ERR(0, 26, __pyx_L3_error) }
+        if (unlikely(!values[i])) { __Pyx_RaiseArgtupleInvalid("normalise_hedge_data_to_base", 1, 2, 2, i); __PYX_ERR(0, 27, __pyx_L3_error) }
       }
     } else if (unlikely(__pyx_nargs != 2)) {
       goto __pyx_L5_argtuple_error;
     } else {
       values[0] = __Pyx_ArgRef_FASTCALL(__pyx_args, 0);
-      if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[0])) __PYX_ERR(0, 26, __pyx_L3_error)
+      if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[0])) __PYX_ERR(0, 27, __pyx_L3_error)
       values[1] = __Pyx_ArgRef_FASTCALL(__pyx_args, 1);
-      if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[1])) __PYX_ERR(0, 26, __pyx_L3_error)
+      if (!CYTHON_ASSUME_SAFE_MACROS && unlikely(!values[1])) __PYX_ERR(0, 27, __pyx_L3_error)
     }
     __pyx_v_depth_data = values[0];
     __pyx_v_params = ((PyObject*)values[1]);
   }
   goto __pyx_L6_skip;
   __pyx_L5_argtuple_error:;
-  __Pyx_RaiseArgtupleInvalid("normalise_hedge_data_to_base", 1, 2, 2, __pyx_nargs); __PYX_ERR(0, 26, __pyx_L3_error)
+  __Pyx_RaiseArgtupleInvalid("normalise_hedge_data_to_base", 1, 2, 2, __pyx_nargs); __PYX_ERR(0, 27, __pyx_L3_error)
   __pyx_L6_skip:;
   goto __pyx_L4_argument_unpacking_done;
   __pyx_L3_error:;
@@ -4251,7 +4248,7 @@ PyObject *__pyx_args, PyObject *__pyx_kwds
   __Pyx_RefNannyFinishContext();
   return NULL;
   __pyx_L4_argument_unpacking_done:;
-  if (unlikely(!__Pyx_ArgTypeTest(((PyObject *)__pyx_v_params), (&PyDict_Type), 1, "params", 1))) __PYX_ERR(0, 26, __pyx_L1_error)
+  if (unlikely(!__Pyx_ArgTypeTest(((PyObject *)__pyx_v_params), (&PyDict_Type), 1, "params", 1))) __PYX_ERR(0, 27, __pyx_L1_error)
   __pyx_r = __pyx_pf_9bt_api_py_9functions_16calculate_number_27calculate_numbers_by_cython_2normalise_hedge_data_to_base(__pyx_self, __pyx_v_depth_data, __pyx_v_params);
 
   /* function exit code */
@@ -4280,7 +4277,7 @@ static PyObject *__pyx_pf_9bt_api_py_9functions_16calculate_number_27calculate_n
   int __pyx_clineno = 0;
   __Pyx_RefNannySetupContext("normalise_hedge_data_to_base", 0);
   __Pyx_XDECREF(__pyx_r);
-  __pyx_t_1 = __pyx_f_9bt_api_py_9functions_16calculate_number_27calculate_numbers_by_cython_normalise_hedge_data_to_base(__pyx_v_depth_data, __pyx_v_params, 1); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 26, __pyx_L1_error)
+  __pyx_t_1 = __pyx_f_9bt_api_py_9functions_16calculate_number_27calculate_numbers_by_cython_normalise_hedge_data_to_base(__pyx_v_depth_data, __pyx_v_params, 1); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 27, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_1);
   __pyx_r = __pyx_t_1;
   __pyx_t_1 = 0;
@@ -4647,58 +4644,58 @@ __Pyx_RefNannySetupContext("PyInit_calculate_numbers_by_cython", 0);
   (void)__Pyx_modinit_function_import_code(__pyx_mstate);
   /*--- Execution code ---*/
 
-  /* "bt_api_py/functions/calculate_number/calculate_numbers.pyx":14
- * # @cython.initializedcheck(False)
+  /* "bt_api_py/functions/calculate_number/calculate_numbers.pyx":15
  * import cython
+ * 
  * from bt_api_py.functions.calculate_numbers import round_number             # <<<<<<<<<<<<<<
  * 
  * 
 */
   {
     PyObject* const __pyx_imported_names[] = {__pyx_mstate_global->__pyx_n_u_round_number};
-    __pyx_t_1 = __Pyx_Import(__pyx_mstate_global->__pyx_n_u_bt_api_py_functions_calculate_nu, __pyx_imported_names, 1, NULL, 0); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 14, __pyx_L1_error)
+    __pyx_t_1 = __Pyx_Import(__pyx_mstate_global->__pyx_n_u_bt_api_py_functions_calculate_nu, __pyx_imported_names, 1, NULL, 0); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 15, __pyx_L1_error)
   }
   __pyx_t_2 = __pyx_t_1;
   __Pyx_GOTREF(__pyx_t_2);
   {
     PyObject* const __pyx_imported_names[] = {__pyx_mstate_global->__pyx_n_u_round_number};
     __pyx_t_3 = 0; {
-      __pyx_t_4 = __Pyx_ImportFrom(__pyx_t_2, __pyx_imported_names[__pyx_t_3]); if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 14, __pyx_L1_error)
+      __pyx_t_4 = __Pyx_ImportFrom(__pyx_t_2, __pyx_imported_names[__pyx_t_3]); if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 15, __pyx_L1_error)
       __Pyx_GOTREF(__pyx_t_4);
-      if (PyDict_SetItem(__pyx_mstate_global->__pyx_d, __pyx_imported_names[__pyx_t_3], __pyx_t_4) < (0)) __PYX_ERR(0, 14, __pyx_L1_error)
+      if (PyDict_SetItem(__pyx_mstate_global->__pyx_d, __pyx_imported_names[__pyx_t_3], __pyx_t_4) < (0)) __PYX_ERR(0, 15, __pyx_L1_error)
       __Pyx_DECREF(__pyx_t_4); __pyx_t_4 = 0;
     }
   }
   __Pyx_DECREF(__pyx_t_2); __pyx_t_2 = 0;
 
-  /* "bt_api_py/functions/calculate_number/calculate_numbers.pyx":17
+  /* "bt_api_py/functions/calculate_number/calculate_numbers.pyx":18
  * 
  * 
  * cpdef double cal_sum_of_key_values(dict zheng_order_dict, str key):             # <<<<<<<<<<<<<<
  *     cdef double sum_value = 0.0
  *     cdef dict value
 */
-  __pyx_t_2 = __Pyx_CyFunction_New(&__pyx_mdef_9bt_api_py_9functions_16calculate_number_27calculate_numbers_by_cython_1cal_sum_of_key_values, 0, __pyx_mstate_global->__pyx_n_u_cal_sum_of_key_values, NULL, __pyx_mstate_global->__pyx_n_u_bt_api_py_functions_calculate_nu_2, __pyx_mstate_global->__pyx_d, ((PyObject *)__pyx_mstate_global->__pyx_codeobj_tab[0])); if (unlikely(!__pyx_t_2)) __PYX_ERR(0, 17, __pyx_L1_error)
+  __pyx_t_2 = __Pyx_CyFunction_New(&__pyx_mdef_9bt_api_py_9functions_16calculate_number_27calculate_numbers_by_cython_1cal_sum_of_key_values, 0, __pyx_mstate_global->__pyx_n_u_cal_sum_of_key_values, NULL, __pyx_mstate_global->__pyx_n_u_bt_api_py_functions_calculate_nu_2, __pyx_mstate_global->__pyx_d, ((PyObject *)__pyx_mstate_global->__pyx_codeobj_tab[0])); if (unlikely(!__pyx_t_2)) __PYX_ERR(0, 18, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_2);
   #if CYTHON_COMPILING_IN_CPYTHON && PY_VERSION_HEX >= 0x030E0000
   PyUnstable_Object_EnableDeferredRefcount(__pyx_t_2);
   #endif
-  if (PyDict_SetItem(__pyx_mstate_global->__pyx_d, __pyx_mstate_global->__pyx_n_u_cal_sum_of_key_values, __pyx_t_2) < (0)) __PYX_ERR(0, 17, __pyx_L1_error)
+  if (PyDict_SetItem(__pyx_mstate_global->__pyx_d, __pyx_mstate_global->__pyx_n_u_cal_sum_of_key_values, __pyx_t_2) < (0)) __PYX_ERR(0, 18, __pyx_L1_error)
   __Pyx_DECREF(__pyx_t_2); __pyx_t_2 = 0;
 
-  /* "bt_api_py/functions/calculate_number/calculate_numbers.pyx":26
+  /* "bt_api_py/functions/calculate_number/calculate_numbers.pyx":27
  * 
  * 
  * cpdef normalise_hedge_data_to_base(depth_data, dict params):             # <<<<<<<<<<<<<<
  *     # new_percent = params['percent'] / 100 / params["base_spot_qty_unit"]
  *     cdef list spot_bid_price_list = depth_data.bid_price_list
 */
-  __pyx_t_2 = __Pyx_CyFunction_New(&__pyx_mdef_9bt_api_py_9functions_16calculate_number_27calculate_numbers_by_cython_3normalise_hedge_data_to_base, 0, __pyx_mstate_global->__pyx_n_u_normalise_hedge_data_to_base, NULL, __pyx_mstate_global->__pyx_n_u_bt_api_py_functions_calculate_nu_2, __pyx_mstate_global->__pyx_d, ((PyObject *)__pyx_mstate_global->__pyx_codeobj_tab[1])); if (unlikely(!__pyx_t_2)) __PYX_ERR(0, 26, __pyx_L1_error)
+  __pyx_t_2 = __Pyx_CyFunction_New(&__pyx_mdef_9bt_api_py_9functions_16calculate_number_27calculate_numbers_by_cython_3normalise_hedge_data_to_base, 0, __pyx_mstate_global->__pyx_n_u_normalise_hedge_data_to_base, NULL, __pyx_mstate_global->__pyx_n_u_bt_api_py_functions_calculate_nu_2, __pyx_mstate_global->__pyx_d, ((PyObject *)__pyx_mstate_global->__pyx_codeobj_tab[1])); if (unlikely(!__pyx_t_2)) __PYX_ERR(0, 27, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_2);
   #if CYTHON_COMPILING_IN_CPYTHON && PY_VERSION_HEX >= 0x030E0000
   PyUnstable_Object_EnableDeferredRefcount(__pyx_t_2);
   #endif
-  if (PyDict_SetItem(__pyx_mstate_global->__pyx_d, __pyx_mstate_global->__pyx_n_u_normalise_hedge_data_to_base, __pyx_t_2) < (0)) __PYX_ERR(0, 26, __pyx_L1_error)
+  if (PyDict_SetItem(__pyx_mstate_global->__pyx_d, __pyx_mstate_global->__pyx_n_u_normalise_hedge_data_to_base, __pyx_t_2) < (0)) __PYX_ERR(0, 27, __pyx_L1_error)
   __Pyx_DECREF(__pyx_t_2); __pyx_t_2 = 0;
 
   /* "bt_api_py/functions/calculate_number/calculate_numbers.pyx":1
@@ -4871,12 +4868,12 @@ static int __Pyx_CreateCodeObjects(__pyx_mstatetype *__pyx_mstate) {
   PyObject* tuple_dedup_map = PyDict_New();
   if (unlikely(!tuple_dedup_map)) return -1;
   {
-    const __Pyx_PyCode_New_function_description descr = {2, 0, 0, 2, (unsigned int)(CO_OPTIMIZED|CO_NEWLOCALS), 17};
+    const __Pyx_PyCode_New_function_description descr = {2, 0, 0, 2, (unsigned int)(CO_OPTIMIZED|CO_NEWLOCALS), 18};
     PyObject* const varnames[] = {__pyx_mstate->__pyx_n_u_zheng_order_dict, __pyx_mstate->__pyx_n_u_key};
     __pyx_mstate_global->__pyx_codeobj_tab[0] = __Pyx_PyCode_New(descr, varnames, __pyx_mstate->__pyx_kp_u_bt_api_py_functions_calculate_nu_3, __pyx_mstate->__pyx_n_u_cal_sum_of_key_values, __pyx_mstate->__pyx_kp_b_iso88591_A_6_U_1_1, tuple_dedup_map); if (unlikely(!__pyx_mstate_global->__pyx_codeobj_tab[0])) goto bad;
   }
   {
-    const __Pyx_PyCode_New_function_description descr = {2, 0, 0, 2, (unsigned int)(CO_OPTIMIZED|CO_NEWLOCALS), 26};
+    const __Pyx_PyCode_New_function_description descr = {2, 0, 0, 2, (unsigned int)(CO_OPTIMIZED|CO_NEWLOCALS), 27};
     PyObject* const varnames[] = {__pyx_mstate->__pyx_n_u_depth_data, __pyx_mstate->__pyx_n_u_params};
     __pyx_mstate_global->__pyx_codeobj_tab[1] = __Pyx_PyCode_New(descr, varnames, __pyx_mstate->__pyx_kp_u_bt_api_py_functions_calculate_nu_3, __pyx_mstate->__pyx_n_u_normalise_hedge_data_to_base, __pyx_mstate->__pyx_kp_b_iso88591_Ja_Zq_Ja_Zq_q_6_1A_vQa_V1A_q_E, tuple_dedup_map); if (unlikely(!__pyx_mstate_global->__pyx_codeobj_tab[1])) goto bad;
   }

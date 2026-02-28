@@ -32,27 +32,38 @@ Use production-ready utilities from `@seontechnologies/pactjs-utils` to eliminat
 npm install -D @seontechnologies/pactjs-utils
 
 # Peer dependency
-npm install -D @pact-foundation/pact
-```
 
-**Requirements**: `@pact-foundation/pact` >= 16.2.0, Node.js >= 18
+npm install -D @pact-foundation/pact
+
+```bash
+
+- *Requirements**: `@pact-foundation/pact` >= 16.2.0, Node.js >= 18
 
 ## Available Utilities
 
 | Category          | Function                          | Description                                          | Use Case                                                         |
+
 | ----------------- | --------------------------------- | ---------------------------------------------------- | ---------------------------------------------------------------- |
+
 | Consumer Helpers  | `createProviderState`             | Builds `[stateName, JsonMap]` tuple from typed input | Consumer tests: `.given(...createProviderState(input))`          |
+
 | Consumer Helpers  | `toJsonMap`                       | Converts any object to Pact-compatible `JsonMap`     | Explicit type coercion for provider state params                 |
+
 | Provider Verifier | `buildVerifierOptions`            | Assembles complete HTTP `VerifierOptions`            | Provider verification: `new Verifier(buildVerifierOptions(...))` |
+
 | Provider Verifier | `buildMessageVerifierOptions`     | Assembles message `VerifierOptions`                  | Kafka/async provider verification                                |
+
 | Provider Verifier | `handlePactBrokerUrlAndSelectors` | Resolves broker URL + selectors from env vars        | Env-aware broker configuration                                   |
+
 | Provider Verifier | `getProviderVersionTags`          | CI-aware version tag extraction                      | Provider version tagging in CI                                   |
+
 | Request Filter    | `createRequestFilter`             | Express middleware with pluggable token generator    | Auth injection for provider verification                         |
+
 | Request Filter    | `noOpRequestFilter`               | Pass-through filter (no-op)                          | Providers without auth requirements                              |
 
 ## Decision Tree: Which Flow?
 
-```
+```bash
 Is this a monorepo (consumer + provider in same repo)?
 ├── YES → Local Flow
 │   - Consumer generates pact files to ./pacts/
@@ -73,7 +84,8 @@ Is this a monorepo (consumer + provider in same repo)?
         │   - No provider verification test needed
         │
         └── NO → Start with Local Flow, migrate to Remote later
-```
+
+```bash
 
 ## Design Philosophy
 
@@ -108,7 +120,8 @@ it('should get user by id', async () => {
       expect(res.status).toBe(200);
     });
 });
-```
+
+```bash
 
 ### Example 2: Minimal Provider Verification
 
@@ -131,7 +144,8 @@ const opts = buildVerifierOptions({
 });
 
 await new Verifier(opts).verifyProvider();
-```
+
+```bash
 
 ## Key Points
 
@@ -158,21 +172,23 @@ await new Verifier(opts).verifyProvider();
 // ❌ Don't assemble VerifierOptions manually
 const opts: VerifierOptions = {
   provider: 'my-api',
-  providerBaseUrl: 'http://localhost:3001',
+  providerBaseUrl: '<http://localhost:3001',>
   pactBrokerUrl: process.env.PACT_BROKER_BASE_URL,
   pactBrokerToken: process.env.PACT_BROKER_TOKEN,
   publishVerificationResult: process.env.CI === 'true',
   providerVersion: process.env.GIT_SHA || 'dev',
+
   consumerVersionSelectors: [{ mainBranch: true }, { deployedOrReleased: true }],
   stateHandlers: {
-    /* ... */
+    /*...*/
   },
   requestFilter: (req, res, next) => {
-    /* ... */
+    /*...*/
   },
   // ... 20 more lines
 };
-```
+
+```bash
 
 ### Right: Use buildVerifierOptions
 
@@ -183,11 +199,12 @@ const opts = buildVerifierOptions({
   port: '3001',
   includeMainAndDeployed: true,
   stateHandlers: {
-    /* ... */
+    /*...*/
   },
   requestFilter: createRequestFilter({ tokenGenerator: () => 'token' }),
 });
-```
+
+```bash
 
 ### Wrong: Importing raw Pact types for JsonMap conversion
 
@@ -196,7 +213,8 @@ const opts = buildVerifierOptions({
 import type { JsonMap } from '@pact-foundation/pact';
 
 provider.given('user exists', { id: 1 as unknown as JsonMap['id'] });
-```
+
+```bash
 
 ### Right: Use createProviderState
 
@@ -205,6 +223,6 @@ provider.given('user exists', { id: 1 as unknown as JsonMap['id'] });
 import { createProviderState } from '@seontechnologies/pactjs-utils';
 
 provider.given(...createProviderState({ name: 'user exists', params: { id: 1 } }));
-```
 
+```bash
 _Source: @seontechnologies/pactjs-utils library, pactjs-utils README, pact-js-example-provider workflows_

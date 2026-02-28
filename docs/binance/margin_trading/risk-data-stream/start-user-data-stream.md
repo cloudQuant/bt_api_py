@@ -17,7 +17,7 @@ POST `/sapi/v1/margin/listen-key`
 ## Request Weight(UID)​
 
 
-**1**
+- *1**
 
 
 ## Request Parameters​
@@ -29,6 +29,7 @@ None
 ## Response Example​
 
 
-```
+```bash
 {  "listenKey": "T3ee22BIYuWqmvne0HNq2A2WsFlEtLhvWCtItw6ffhhd"}
-```
+
+```bash

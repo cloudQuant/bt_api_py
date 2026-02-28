@@ -1,6 +1,6 @@
 # Query Sub Orders (USER_DATA)
 
-> 来源: [Binance Algo Trading API](https://developers.binance.com/docs/algo/spot-algo/Query-Sub-Orders)
+> 来源: [Binance Algo Trading API](<https://developers.binance.com/docs/algo/spot-algo/Query-Sub-Orders)>
 
 ## API Description
 
@@ -8,9 +8,10 @@ Get respective sub orders for a specified algoId.
 
 ## HTTP Request
 
-```
+```bash
 GET /sapi/v1/algo/spot/subOrders
-```
+
+```bash
 
 ## Request Weight(IP)
 
@@ -19,11 +20,17 @@ GET /sapi/v1/algo/spot/subOrders
 ## Request Parameters
 
 | Name | Type | Mandatory | Description |
+
 |------|------|-----------|-------------|
+
 | algoId | LONG | YES | |
+
 | page | INT | NO | Default is 1 |
+
 | pageSize | INT | NO | MIN 1, MAX 100; Default 100 |
+
 | recvWindow | LONG | NO | |
+
 | timestamp | LONG | YES | |
 
 ## Response Example
@@ -52,4 +59,5 @@ GET /sapi/v1/algo/spot/subOrders
         }
     ]
 }
-```
+
+```bash

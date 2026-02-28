@@ -12,27 +12,26 @@ The Aggregate Trade Streams push market trade information that is aggregated for
 
 ## Update Speed
 
-**100ms**
+- *100ms**
 
 ## Response Example
-    
-    
-    {  
-      "e": "aggTrade",  // Event type  
-      "E": 123456789,   // Event time  
-      "s": "BTCUSDT",    // Symbol  
-      "a": 5933014,		// Aggregate trade ID  
-      "p": "0.001",     // Price  
-      "q": "100",       // Quantity  
-      "f": 100,         // First trade ID  
-      "l": 105,         // Last trade ID  
-      "T": 123456785,   // Trade time  
-      "m": true,        // Is the buyer the market maker?  
-    }  
-    
 
-  * [Stream Description](</docs/derivatives/usds-margined-futures/websocket-market-streams/Aggregate-Trade-Streams#stream-description>)
-  * [Stream Name](</docs/derivatives/usds-margined-futures/websocket-market-streams/Aggregate-Trade-Streams#stream-name>)
-  * [Update Speed](</docs/derivatives/usds-margined-futures/websocket-market-streams/Aggregate-Trade-Streams#update-speed>)
-  * [Response Example](</docs/derivatives/usds-margined-futures/websocket-market-streams/Aggregate-Trade-Streams#response-example>)
 
+    {
+      "e": "aggTrade",  // Event type
+      "E": 123456789,   // Event time
+      "s": "BTCUSDT",    // Symbol
+      "a": 5933014,        // Aggregate trade ID
+      "p": "0.001",     // Price
+      "q": "100",       // Quantity
+      "f": 100,         // First trade ID
+      "l": 105,         // Last trade ID
+      "T": 123456785,   // Trade time
+      "m": true,        // Is the buyer the market maker?
+    }
+
+
+  - [Stream Description](</docs/derivatives/usds-margined-futures/websocket-market-streams/Aggregate-Trade-Streams#stream-description>)
+  - [Stream Name](</docs/derivatives/usds-margined-futures/websocket-market-streams/Aggregate-Trade-Streams#stream-name>)
+  - [Update Speed](</docs/derivatives/usds-margined-futures/websocket-market-streams/Aggregate-Trade-Streams#update-speed>)
+  - [Response Example](</docs/derivatives/usds-margined-futures/websocket-market-streams/Aggregate-Trade-Streams#response-example>)

@@ -1,6 +1,6 @@
 # IBKR Web API Overview
 
-> Source: https://www.interactivebrokers.com/campus/ibkr-api-page/web-api/
+> Source: <https://www.interactivebrokers.com/campus/ibkr-api-page/web-api/>
 > Last Updated: 2024-12-12
 
 ## Introduction
@@ -16,6 +16,7 @@ The IBKR Web API is split into two key components:
 Provides solution for Introducing Brokers and Financial Advisors to preserve their current user experience and interface design while relying on IBKR's brokerage services.
 
 Advisors and brokers can integrate with the Account Management API to manage:
+
 - Client Registration
 - Client Account Maintenance
 - User Authentication
@@ -24,7 +25,8 @@ Advisors and brokers can integrate with the Account Management API to manage:
 
 ### Trading
 
-Our trading API is available to all IBKR clients **free of cost** and can be used to:
+Our trading API is available to all IBKR clients **free of cost**and can be used to:
+
 - Manage trades
 - View real-time portfolio information
 - Access market data
@@ -34,6 +36,7 @@ Our trading API is available to all IBKR clients **free of cost** and can be use
 ## Connectivity
 
 IBKR's Web API implementation follows standard HTTP verbs for communication. It employs:
+
 - A range of HTTP status codes
 - JSON-formatted messages to convey operation status and error information
 - **All API requests must use HTTPS**
@@ -42,7 +45,7 @@ Authorization and Authentication for IBKR's Web API is managed using **OAuth 2.0
 
 ## Authentication
 
-IBKR only supports `private_key_jwt` client authentication as described in [RFC 7521](https://datatracker.ietf.org/doc/html/rfc7521) and [RFC 7523](https://datatracker.ietf.org/doc/html/rfc7523).
+IBKR only supports `private_key_jwt` client authentication as described in [RFC 7521](<https://datatracker.ietf.org/doc/html/rfc7521)> and [RFC 7523](<https://datatracker.ietf.org/doc/html/rfc7523).>
 
 ### Authentication Flow
 
@@ -52,7 +55,7 @@ IBKR only supports `private_key_jwt` client authentication as described in [RFC 
 
 ## Data Transmission
 
-User requests will be sent to IBKR in **JSON format** using **HTTPS**.
+User requests will be sent to IBKR in **JSON format**using**HTTPS**.
 
 ## Documentation Resources
 
@@ -76,7 +79,7 @@ For retail and individual clients, Authentication to our WebAPI is managed using
 
 ### For Institutional or Third Party
 
-For enterprise integrations, IBKR has a designated API Solutions team. To get started, contact **api-solutions@interactivebrokers.com** with the following information:
+For enterprise integrations, IBKR has a designated API Solutions team. To get started, contact **api-solutions@interactivebrokers.com**with the following information:
 
 - Firm Name
 - Firm Type (i.e. Introducing Broker, Financial Advisor OR Third Party Service Provider)
@@ -87,21 +90,21 @@ For enterprise integrations, IBKR has a designated API Solutions team. To get st
 
 Have feedback on Web API documentation or reference material?
 
-Email: **API-Feedback@interactivebrokers.com**
+Email:**API-Feedback@interactivebrokers.com**
 
 > Note: This is an automated feedback inbox and will not have active responses. For specific answers or additional support, contact the API Support team or access general support. Current or prospective institutional clients may contact their sales representative.
 
 ## Additional Resources
 
-- [Web API Trading Documentation](https://www.interactivebrokers.com/campus/ibkr-api-page/web-api/)
-- [Web API Account Management Documentation](https://www.interactivebrokers.com/campus/ibkr-api-page/web-api/)
-- [IBKR Campus](https://www.interactivebrokers.com/campus/)
+- [Web API Trading Documentation](<https://www.interactivebrokers.com/campus/ibkr-api-page/web-api/)>
+- [Web API Account Management Documentation](<https://www.interactivebrokers.com/campus/ibkr-api-page/web-api/)>
+- [IBKR Campus](<https://www.interactivebrokers.com/campus/)>
 
 ## Related API Options
 
 IBKR also offers other API solutions:
 
-- **TWS API** - Java/Python/C++ API for desktop trading
-- **Excel API** - DDE, RTD, and ActiveX integration
-- **FIX Protocol** - Financial Information eXchange protocol for institutional trading
+- **TWS API**- Java/Python/C++ API for desktop trading
+- **Excel API**- DDE, RTD, and ActiveX integration
+- **FIX Protocol**- Financial Information eXchange protocol for institutional trading
 - **Third-Party Integrations** - Available integrations with various trading platforms

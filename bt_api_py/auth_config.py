@@ -17,14 +17,21 @@ class AuthConfig:
 
     def to_dict(self):
         """转为字典，用于传递给 feed 构造函数"""
-        return {k: v for k, v in self.__dict__.items() if not k.startswith('_')}
+        return {k: v for k, v in self.__dict__.items() if not k.startswith("_")}
 
 
 class CryptoAuthConfig(AuthConfig):
     """加密货币交易所认证配置（Binance, OKX 等）"""
 
-    def __init__(self, exchange, asset_type="SWAP",
-                 public_key=None, private_key=None, passphrase=None, **kwargs):
+    def __init__(
+        self,
+        exchange,
+        asset_type="SWAP",
+        public_key=None,
+        private_key=None,
+        passphrase=None,
+        **kwargs,
+    ):
         super().__init__(exchange, asset_type, **kwargs)
         self.public_key = public_key
         self.private_key = private_key
@@ -34,30 +41,40 @@ class CryptoAuthConfig(AuthConfig):
 class CtpAuthConfig(AuthConfig):
     """CTP 认证配置"""
 
-    def __init__(self, exchange="CTP", asset_type="FUTURE",
-                 broker_id="", user_id="", password="",
-                 auth_code="", app_id="",
-                 md_front="", td_front="",
-                 product_info="", **kwargs):
+    def __init__(
+        self,
+        exchange="CTP",
+        asset_type="FUTURE",
+        broker_id="",
+        user_id="",
+        password="",
+        auth_code="",
+        app_id="",
+        md_front="",
+        td_front="",
+        product_info="",
+        **kwargs,
+    ):
         super().__init__(exchange, asset_type, **kwargs)
         self.broker_id = broker_id
         self.user_id = user_id
         self.password = password
         self.auth_code = auth_code
         self.app_id = app_id
-        self.md_front = md_front      # 行情前置地址, 如 "tcp://180.168.146.187:10131"
-        self.td_front = td_front      # 交易前置地址, 如 "tcp://180.168.146.187:10130"
+        self.md_front = md_front  # 行情前置地址, 如 "tcp://180.168.146.187:10131"
+        self.td_front = td_front  # 交易前置地址, 如 "tcp://180.168.146.187:10130"
         self.product_info = product_info
 
 
 class IbAuthConfig(AuthConfig):
     """Interactive Brokers 认证配置"""
 
-    def __init__(self, exchange="IB", asset_type="STK",
-                 host="127.0.0.1", port=7497, client_id=1, **kwargs):
+    def __init__(
+        self, exchange="IB", asset_type="STK", host="127.0.0.1", port=7497, client_id=1, **kwargs
+    ):
         super().__init__(exchange, asset_type, **kwargs)
         self.host = host
-        self.port = port              # TWS=7497, Gateway=4001
+        self.port = port  # TWS=7497, Gateway=4001
         self.client_id = client_id
 
 
@@ -72,30 +89,34 @@ class IbWebAuthConfig(AuthConfig):
          用于访问需要浏览器会话的端点 (/portfolio/{id}/summary 等)
     """
 
-    def __init__(self, exchange="IB_WEB", asset_type="STK",
-                 base_url="https://localhost:5000",
-                 account_id=None,
-                 access_token=None,
-                 client_id=None,
-                 private_key_path=None,
-                 verify_ssl=False,
-                 proxies=None,
-                 timeout=10,
-                 cookies=None,
-                 cookie_source=None,
-                 cookie_browser="chrome",
-                 cookie_path="/sso",
-                 **kwargs):
+    def __init__(
+        self,
+        exchange="IB_WEB",
+        asset_type="STK",
+        base_url="https://localhost:5000",
+        account_id=None,
+        access_token=None,
+        client_id=None,
+        private_key_path=None,
+        verify_ssl=False,
+        proxies=None,
+        timeout=10,
+        cookies=None,
+        cookie_source=None,
+        cookie_browser="chrome",
+        cookie_path="/sso",
+        **kwargs,
+    ):
         super().__init__(exchange, asset_type, **kwargs)
-        self.base_url = base_url                  # API 基础URL
-        self.account_id = account_id              # IBKR 账户ID, 如 "U1234567"
-        self.access_token = access_token          # OAuth 2.0 access token
-        self.client_id = client_id                # OAuth 2.0 client_id
+        self.base_url = base_url  # API 基础URL
+        self.account_id = account_id  # IBKR 账户ID, 如 "U1234567"
+        self.access_token = access_token  # OAuth 2.0 access token
+        self.client_id = client_id  # OAuth 2.0 client_id
         self.private_key_path = private_key_path  # OAuth 2.0 私钥文件路径
-        self.verify_ssl = verify_ssl              # 是否验证SSL (Gateway模式设为False)
-        self.proxies = proxies                    # HTTP代理
-        self.timeout = timeout                    # 请求超时(秒)
-        self.cookies = cookies                    # Cookie 字典
-        self.cookie_source = cookie_source        # Cookie 来源配置
-        self.cookie_browser = cookie_browser      # 浏览器类型 (chrome, firefox, etc.)
-        self.cookie_path = cookie_path            # Cookie 路径，默认 "/sso"
+        self.verify_ssl = verify_ssl  # 是否验证SSL (Gateway模式设为False)
+        self.proxies = proxies  # HTTP代理
+        self.timeout = timeout  # 请求超时(秒)
+        self.cookies = cookies  # Cookie 字典
+        self.cookie_source = cookie_source  # Cookie 来源配置
+        self.cookie_browser = cookie_browser  # 浏览器类型 (chrome, firefox, etc.)
+        self.cookie_path = cookie_path  # Cookie 路径，默认 "/sso"

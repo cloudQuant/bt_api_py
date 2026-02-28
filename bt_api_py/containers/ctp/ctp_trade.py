@@ -2,15 +2,17 @@
 CTP 成交数据容器
 对应 CTP 的 CThostFtdcTradeField 结构体
 """
+
 from bt_api_py.containers.trades.trade import TradeData
-from bt_api_py.functions.utils import from_dict_get_float, from_dict_get_string, from_dict_get_int
+from bt_api_py.functions.utils import from_dict_get_float, from_dict_get_int, from_dict_get_string
 
 
 class CtpTradeData(TradeData):
     """CTP 成交数据"""
 
-    def __init__(self, trade_info, symbol_name=None, asset_type="FUTURE",
-                 has_been_json_encoded=False):
+    def __init__(
+        self, trade_info, symbol_name=None, asset_type="FUTURE", has_been_json_encoded=False
+    ):
         super().__init__(trade_info, has_been_json_encoded)
         self.symbol_name = symbol_name
         self.asset_type = asset_type
@@ -34,20 +36,20 @@ class CtpTradeData(TradeData):
             return self
         info = self.trade_info
         if isinstance(info, dict):
-            self.instrument_id = from_dict_get_string(info, 'InstrumentID')
-            self.trade_id_value = from_dict_get_string(info, 'TradeID')
-            self.order_ref = from_dict_get_string(info, 'OrderRef')
-            self.order_sys_id = from_dict_get_string(info, 'OrderSysID')
-            direction_char = from_dict_get_string(info, 'Direction', '0')
-            self.direction = 'buy' if direction_char == '0' else 'sell'
-            offset_char = from_dict_get_string(info, 'OffsetFlag', '0')
-            offset_map = {'0': 'open', '1': 'close', '3': 'close_today', '4': 'close_yesterday'}
-            self.offset = offset_map.get(offset_char, 'open')
-            self.price = from_dict_get_float(info, 'Price', 0.0)
-            self.volume = from_dict_get_int(info, 'Volume', 0)
-            self.trade_date = from_dict_get_string(info, 'TradeDate')
-            self.trade_time = from_dict_get_string(info, 'TradeTime')
-            self.exchange_id = from_dict_get_string(info, 'ExchangeID')
+            self.instrument_id = from_dict_get_string(info, "InstrumentID")
+            self.trade_id_value = from_dict_get_string(info, "TradeID")
+            self.order_ref = from_dict_get_string(info, "OrderRef")
+            self.order_sys_id = from_dict_get_string(info, "OrderSysID")
+            direction_char = from_dict_get_string(info, "Direction", "0")
+            self.direction = "buy" if direction_char == "0" else "sell"
+            offset_char = from_dict_get_string(info, "OffsetFlag", "0")
+            offset_map = {"0": "open", "1": "close", "3": "close_today", "4": "close_yesterday"}
+            self.offset = offset_map.get(offset_char, "open")
+            self.price = from_dict_get_float(info, "Price", 0.0)
+            self.volume = from_dict_get_int(info, "Volume", 0)
+            self.trade_date = from_dict_get_string(info, "TradeDate")
+            self.trade_time = from_dict_get_string(info, "TradeTime")
+            self.exchange_id = from_dict_get_string(info, "ExchangeID")
         self._initialized = True
         return self
 

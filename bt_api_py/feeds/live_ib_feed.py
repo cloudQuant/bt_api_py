@@ -11,14 +11,16 @@ IB 使用 TWS API 的 EClient/EWrapper 事件驱动模型
   - 订单类型丰富: Bracket, OCA, Trailing Stop 等
   - 支持全球多市场: 美股、港股、期货、期权、外汇等
 """
+
 import time
-from bt_api_py.feeds.feed import Feed
-from bt_api_py.feeds.base_stream import BaseDataStream, ConnectionState
-from bt_api_py.functions.log_message import SpdLogManager
+
 from bt_api_py.containers.exchanges.ib_exchange_data import (
-    IbExchangeDataStock,
     IbExchangeDataFuture,
+    IbExchangeDataStock,
 )
+from bt_api_py.feeds.base_stream import BaseDataStream, ConnectionState
+from bt_api_py.feeds.feed import Feed
+from bt_api_py.functions.log_message import SpdLogManager
 
 
 class IbRequestData(Feed):
@@ -86,15 +88,25 @@ class IbRequestData(Feed):
         # TODO: self._ib.reqMktDepth(contract, numRows=count)
         raise NotImplementedError
 
-    def get_kline(self, symbol, period, count=100, start_time=None, end_time=None,
-                  extra_data=None, **kwargs):
+    def get_kline(
+        self, symbol, period, count=100, start_time=None, end_time=None, extra_data=None, **kwargs
+    ):
         """获取历史K线"""
         # TODO: self._ib.reqHistoricalData(contract, endDateTime, durationStr, barSizeSetting, ...)
         raise NotImplementedError
 
-    def make_order(self, symbol, volume, price, order_type='buy-limit',
-                   offset='open', post_only=False, client_order_id=None,
-                   extra_data=None, **kwargs):
+    def make_order(
+        self,
+        symbol,
+        volume,
+        price,
+        order_type="buy-limit",
+        offset="open",
+        post_only=False,
+        client_order_id=None,
+        extra_data=None,
+        **kwargs,
+    ):
         """下单
         IB 特有参数:
           - sec_type: 'STK'/'FUT'/'OPT'/'CASH' 等
@@ -120,8 +132,9 @@ class IbRequestData(Feed):
         # TODO: self._ib.openOrders()
         raise NotImplementedError
 
-    def get_deals(self, symbol=None, count=100, start_time=None, end_time=None,
-                  extra_data=None, **kwargs):
+    def get_deals(
+        self, symbol=None, count=100, start_time=None, end_time=None, extra_data=None, **kwargs
+    ):
         """查询成交记录"""
         # TODO: self._ib.executions()
         raise NotImplementedError

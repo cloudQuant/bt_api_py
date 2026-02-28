@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 Binance Wallet API - 钱包接口请求类
 
@@ -10,8 +9,8 @@ Binance Wallet API - 钱包接口请求类
 - 小额资产转换 (Dust)
 """
 
-from bt_api_py.feeds.live_binance.request_base import BinanceRequestData
 from bt_api_py.containers.exchanges.binance_exchange_data import BinanceExchangeDataWallet
+from bt_api_py.feeds.live_binance.request_base import BinanceRequestData
 from bt_api_py.functions.log_message import SpdLogManager
 from bt_api_py.functions.utils import update_extra_data
 
@@ -23,16 +22,18 @@ class BinanceRequestDataWallet(BinanceRequestData):
     """
 
     def __init__(self, data_queue, **kwargs):
-        kwargs.setdefault('exchange_data', BinanceExchangeDataWallet())
-        kwargs.setdefault('exchange_name', 'binance_wallet')
-        super(BinanceRequestDataWallet, self).__init__(data_queue, **kwargs)
+        kwargs.setdefault("exchange_data", BinanceExchangeDataWallet())
+        kwargs.setdefault("exchange_name", "binance_wallet")
+        super().__init__(data_queue, **kwargs)
         self.asset_type = kwargs.get("asset_type", "WALLET")
         self.logger_name = kwargs.get("logger_name", "binance_wallet_feed.log")
-        self._params = kwargs['exchange_data']
-        self.request_logger = SpdLogManager("./logs/" + self.logger_name, "request",
-                                            0, 0, False).create_logger()
-        self.async_logger = SpdLogManager("./logs/" + self.logger_name, "async_request",
-                                          0, 0, False).create_logger()
+        self._params = kwargs["exchange_data"]
+        self.request_logger = SpdLogManager(
+            "./logs/" + self.logger_name, "request", 0, 0, False
+        ).create_logger()
+        self.async_logger = SpdLogManager(
+            "./logs/" + self.logger_name, "async_request", 0, 0, False
+        ).create_logger()
 
     # ==================== 资产查询接口 ====================
 
@@ -46,16 +47,19 @@ class BinanceRequestDataWallet(BinanceRequestData):
         Returns:
             tuple: (path, params, extra_data)
         """
-        request_type = 'get_wallet_balance'
+        request_type = "get_wallet_balance"
         path = self._params.get_rest_path(request_type)
         params = {}
-        extra_data = update_extra_data(extra_data, **{
-            "request_type": request_type,
-            "symbol_name": "ALL",
-            "asset_type": self.asset_type,
-            "exchange_name": self.exchange_name,
-            "normalize_function": None,
-        })
+        extra_data = update_extra_data(
+            extra_data,
+            **{
+                "request_type": request_type,
+                "symbol_name": "ALL",
+                "asset_type": self.asset_type,
+                "exchange_name": self.exchange_name,
+                "normalize_function": None,
+            },
+        )
         return path, params, extra_data
 
     def get_wallet_balance(self, extra_data=None, **kwargs):
@@ -78,16 +82,19 @@ class BinanceRequestDataWallet(BinanceRequestData):
         Returns:
             tuple: (path, params, extra_data)
         """
-        request_type = 'get_asset_detail'
+        request_type = "get_asset_detail"
         path = self._params.get_rest_path(request_type)
         params = {}
-        extra_data = update_extra_data(extra_data, **{
-            "request_type": request_type,
-            "symbol_name": "ALL",
-            "asset_type": self.asset_type,
-            "exchange_name": self.exchange_name,
-            "normalize_function": None,
-        })
+        extra_data = update_extra_data(
+            extra_data,
+            **{
+                "request_type": request_type,
+                "symbol_name": "ALL",
+                "asset_type": self.asset_type,
+                "exchange_name": self.exchange_name,
+                "normalize_function": None,
+            },
+        )
         return path, params, extra_data
 
     def get_asset_detail(self, extra_data=None, **kwargs):
@@ -100,8 +107,9 @@ class BinanceRequestDataWallet(BinanceRequestData):
         data = self.request(path, params=params, extra_data=extra_data, is_sign=True)
         return data
 
-    def _get_asset_ledger(self, asset=None, startTime=None, endTime=None, limit=None,
-                          extra_data=None, **kwargs):
+    def _get_asset_ledger(
+        self, asset=None, startTime=None, endTime=None, limit=None, extra_data=None, **kwargs
+    ):
         """查询资产账本
 
         Args:
@@ -115,42 +123,51 @@ class BinanceRequestDataWallet(BinanceRequestData):
         Returns:
             tuple: (path, params, extra_data)
         """
-        request_type = 'get_asset_ledger'
+        request_type = "get_asset_ledger"
         path = self._params.get_rest_path(request_type)
         params = {}
         if asset is not None:
-            params['asset'] = asset
+            params["asset"] = asset
         if startTime is not None:
-            params['startTime'] = startTime
+            params["startTime"] = startTime
         if endTime is not None:
-            params['endTime'] = endTime
+            params["endTime"] = endTime
         if limit is not None:
-            params['limit'] = limit
-        extra_data = update_extra_data(extra_data, **{
-            "request_type": request_type,
-            "symbol_name": asset or "ALL",
-            "asset_type": self.asset_type,
-            "exchange_name": self.exchange_name,
-            "normalize_function": None,
-        })
+            params["limit"] = limit
+        extra_data = update_extra_data(
+            extra_data,
+            **{
+                "request_type": request_type,
+                "symbol_name": asset or "ALL",
+                "asset_type": self.asset_type,
+                "exchange_name": self.exchange_name,
+                "normalize_function": None,
+            },
+        )
         return path, params, extra_data
 
-    def get_asset_ledger(self, asset=None, startTime=None, endTime=None, limit=None,
-                         extra_data=None, **kwargs):
+    def get_asset_ledger(
+        self, asset=None, startTime=None, endTime=None, limit=None, extra_data=None, **kwargs
+    ):
         """查询资产账本
 
         Returns:
             RequestData: 请求结果
         """
         path, params, extra_data = self._get_asset_ledger(
-            asset=asset, startTime=startTime, endTime=endTime, limit=limit,
-            extra_data=extra_data, **kwargs
+            asset=asset,
+            startTime=startTime,
+            endTime=endTime,
+            limit=limit,
+            extra_data=extra_data,
+            **kwargs,
         )
         data = self.request(path, params=params, extra_data=extra_data, is_sign=True)
         return data
 
-    def _get_asset_dividend(self, asset=None, startTime=None, endTime=None, limit=None,
-                            extra_data=None, **kwargs):
+    def _get_asset_dividend(
+        self, asset=None, startTime=None, endTime=None, limit=None, extra_data=None, **kwargs
+    ):
         """查询资产分红记录
 
         Args:
@@ -164,44 +181,60 @@ class BinanceRequestDataWallet(BinanceRequestData):
         Returns:
             tuple: (path, params, extra_data)
         """
-        request_type = 'get_asset_dividend'
+        request_type = "get_asset_dividend"
         path = self._params.get_rest_path(request_type)
         params = {}
         if asset is not None:
-            params['asset'] = asset
+            params["asset"] = asset
         if startTime is not None:
-            params['startTime'] = startTime
+            params["startTime"] = startTime
         if endTime is not None:
-            params['endTime'] = endTime
+            params["endTime"] = endTime
         if limit is not None:
-            params['limit'] = limit
-        extra_data = update_extra_data(extra_data, **{
-            "request_type": request_type,
-            "symbol_name": asset or "ALL",
-            "asset_type": self.asset_type,
-            "exchange_name": self.exchange_name,
-            "normalize_function": None,
-        })
+            params["limit"] = limit
+        extra_data = update_extra_data(
+            extra_data,
+            **{
+                "request_type": request_type,
+                "symbol_name": asset or "ALL",
+                "asset_type": self.asset_type,
+                "exchange_name": self.exchange_name,
+                "normalize_function": None,
+            },
+        )
         return path, params, extra_data
 
-    def get_asset_dividend(self, asset=None, startTime=None, endTime=None, limit=None,
-                           extra_data=None, **kwargs):
+    def get_asset_dividend(
+        self, asset=None, startTime=None, endTime=None, limit=None, extra_data=None, **kwargs
+    ):
         """查询资产分红记录
 
         Returns:
             RequestData: 请求结果
         """
         path, params, extra_data = self._get_asset_dividend(
-            asset=asset, startTime=startTime, endTime=endTime, limit=limit,
-            extra_data=extra_data, **kwargs
+            asset=asset,
+            startTime=startTime,
+            endTime=endTime,
+            limit=limit,
+            extra_data=extra_data,
+            **kwargs,
         )
         data = self.request(path, params=params, extra_data=extra_data, is_sign=True)
         return data
 
     # ==================== 资产划转接口 ====================
 
-    def _asset_transfer(self, transfer_type, asset, amount, from_symbol=None, to_symbol=None,
-                        extra_data=None, **kwargs):
+    def _asset_transfer(
+        self,
+        transfer_type,
+        asset,
+        amount,
+        from_symbol=None,
+        to_symbol=None,
+        extra_data=None,
+        **kwargs,
+    ):
         """通用资产划转
 
         Args:
@@ -216,43 +249,65 @@ class BinanceRequestDataWallet(BinanceRequestData):
         Returns:
             tuple: (path, params, extra_data)
         """
-        request_type = 'asset_transfer'
+        request_type = "asset_transfer"
         path = self._params.get_rest_path(request_type)
         params = {
-            'type': transfer_type,
-            'asset': asset,
-            'amount': amount,
+            "type": transfer_type,
+            "asset": asset,
+            "amount": amount,
         }
         if from_symbol is not None:
-            params['fromSymbol'] = from_symbol
+            params["fromSymbol"] = from_symbol
         if to_symbol is not None:
-            params['toSymbol'] = to_symbol
-        extra_data = update_extra_data(extra_data, **{
-            "request_type": request_type,
-            "symbol_name": asset,
-            "asset_type": self.asset_type,
-            "exchange_name": self.exchange_name,
-            "normalize_function": None,
-        })
+            params["toSymbol"] = to_symbol
+        extra_data = update_extra_data(
+            extra_data,
+            **{
+                "request_type": request_type,
+                "symbol_name": asset,
+                "asset_type": self.asset_type,
+                "exchange_name": self.exchange_name,
+                "normalize_function": None,
+            },
+        )
         return path, params, extra_data
 
-    def asset_transfer(self, transfer_type, asset, amount, from_symbol=None, to_symbol=None,
-                       extra_data=None, **kwargs):
+    def asset_transfer(
+        self,
+        transfer_type,
+        asset,
+        amount,
+        from_symbol=None,
+        to_symbol=None,
+        extra_data=None,
+        **kwargs,
+    ):
         """通用资产划转
 
         Returns:
             RequestData: 请求结果
         """
         path, params, extra_data = self._asset_transfer(
-            transfer_type=transfer_type, asset=asset, amount=amount,
-            from_symbol=from_symbol, to_symbol=to_symbol,
-            extra_data=extra_data, **kwargs
+            transfer_type=transfer_type,
+            asset=asset,
+            amount=amount,
+            from_symbol=from_symbol,
+            to_symbol=to_symbol,
+            extra_data=extra_data,
+            **kwargs,
         )
         data = self.request(path, params=params, extra_data=extra_data, is_sign=True)
         return data
 
-    def _get_asset_transfer(self, transfer_type=None, startTime=None, endTime=None, limit=None,
-                            extra_data=None, **kwargs):
+    def _get_asset_transfer(
+        self,
+        transfer_type=None,
+        startTime=None,
+        endTime=None,
+        limit=None,
+        extra_data=None,
+        **kwargs,
+    ):
         """查询资产划转历史
 
         Args:
@@ -266,36 +321,50 @@ class BinanceRequestDataWallet(BinanceRequestData):
         Returns:
             tuple: (path, params, extra_data)
         """
-        request_type = 'get_asset_transfer'
+        request_type = "get_asset_transfer"
         path = self._params.get_rest_path(request_type)
         params = {}
         if transfer_type is not None:
-            params['type'] = transfer_type
+            params["type"] = transfer_type
         if startTime is not None:
-            params['startTime'] = startTime
+            params["startTime"] = startTime
         if endTime is not None:
-            params['endTime'] = endTime
+            params["endTime"] = endTime
         if limit is not None:
-            params['limit'] = limit
-        extra_data = update_extra_data(extra_data, **{
-            "request_type": request_type,
-            "symbol_name": "ALL",
-            "asset_type": self.asset_type,
-            "exchange_name": self.exchange_name,
-            "normalize_function": None,
-        })
+            params["limit"] = limit
+        extra_data = update_extra_data(
+            extra_data,
+            **{
+                "request_type": request_type,
+                "symbol_name": "ALL",
+                "asset_type": self.asset_type,
+                "exchange_name": self.exchange_name,
+                "normalize_function": None,
+            },
+        )
         return path, params, extra_data
 
-    def get_asset_transfer(self, transfer_type=None, startTime=None, endTime=None, limit=None,
-                           extra_data=None, **kwargs):
+    def get_asset_transfer(
+        self,
+        transfer_type=None,
+        startTime=None,
+        endTime=None,
+        limit=None,
+        extra_data=None,
+        **kwargs,
+    ):
         """查询资产划转历史
 
         Returns:
             RequestData: 请求结果
         """
         path, params, extra_data = self._get_asset_transfer(
-            transfer_type=transfer_type, startTime=startTime, endTime=endTime, limit=limit,
-            extra_data=extra_data, **kwargs
+            transfer_type=transfer_type,
+            startTime=startTime,
+            endTime=endTime,
+            limit=limit,
+            extra_data=extra_data,
+            **kwargs,
         )
         data = self.request(path, params=params, extra_data=extra_data, is_sign=True)
         return data
@@ -312,19 +381,22 @@ class BinanceRequestDataWallet(BinanceRequestData):
         Returns:
             tuple: (path, params, extra_data)
         """
-        request_type = 'transfer_to_futures_main'
+        request_type = "transfer_to_futures_main"
         path = self._params.get_rest_path(request_type)
         params = {
-            'asset': asset,
-            'amount': amount,
+            "asset": asset,
+            "amount": amount,
         }
-        extra_data = update_extra_data(extra_data, **{
-            "request_type": request_type,
-            "symbol_name": asset,
-            "asset_type": self.asset_type,
-            "exchange_name": self.exchange_name,
-            "normalize_function": None,
-        })
+        extra_data = update_extra_data(
+            extra_data,
+            **{
+                "request_type": request_type,
+                "symbol_name": asset,
+                "asset_type": self.asset_type,
+                "exchange_name": self.exchange_name,
+                "normalize_function": None,
+            },
+        )
         return path, params, extra_data
 
     def transfer_to_futures_main(self, asset, amount, extra_data=None, **kwargs):
@@ -352,20 +424,23 @@ class BinanceRequestDataWallet(BinanceRequestData):
         Returns:
             tuple: (path, params, extra_data)
         """
-        request_type = 'transfer_to_futures_sub'
+        request_type = "transfer_to_futures_sub"
         path = self._params.get_rest_path(request_type)
         params = {
-            'email': email,
-            'asset': asset,
-            'amount': amount,
+            "email": email,
+            "asset": asset,
+            "amount": amount,
         }
-        extra_data = update_extra_data(extra_data, **{
-            "request_type": request_type,
-            "symbol_name": asset,
-            "asset_type": self.asset_type,
-            "exchange_name": self.exchange_name,
-            "normalize_function": None,
-        })
+        extra_data = update_extra_data(
+            extra_data,
+            **{
+                "request_type": request_type,
+                "symbol_name": asset,
+                "asset_type": self.asset_type,
+                "exchange_name": self.exchange_name,
+                "normalize_function": None,
+            },
+        )
         return path, params, extra_data
 
     def transfer_to_futures_sub(self, email, asset, amount, extra_data=None, **kwargs):
@@ -392,19 +467,22 @@ class BinanceRequestDataWallet(BinanceRequestData):
         Returns:
             tuple: (path, params, extra_data)
         """
-        request_type = 'transfer_to_um'
+        request_type = "transfer_to_um"
         path = self._params.get_rest_path(request_type)
         params = {
-            'asset': asset,
-            'amount': amount,
+            "asset": asset,
+            "amount": amount,
         }
-        extra_data = update_extra_data(extra_data, **{
-            "request_type": request_type,
-            "symbol_name": asset,
-            "asset_type": self.asset_type,
-            "exchange_name": self.exchange_name,
-            "normalize_function": None,
-        })
+        extra_data = update_extra_data(
+            extra_data,
+            **{
+                "request_type": request_type,
+                "symbol_name": asset,
+                "asset_type": self.asset_type,
+                "exchange_name": self.exchange_name,
+                "normalize_function": None,
+            },
+        )
         return path, params, extra_data
 
     def transfer_to_um(self, asset, amount, extra_data=None, **kwargs):
@@ -432,20 +510,23 @@ class BinanceRequestDataWallet(BinanceRequestData):
         Returns:
             tuple: (path, params, extra_data)
         """
-        request_type = 'transfer_to_isolated_margin'
+        request_type = "transfer_to_isolated_margin"
         path = self._params.get_rest_path(request_type)
         params = {
-            'asset': asset,
-            'symbol': symbol,
-            'amount': amount,
+            "asset": asset,
+            "symbol": symbol,
+            "amount": amount,
         }
-        extra_data = update_extra_data(extra_data, **{
-            "request_type": request_type,
-            "symbol_name": symbol,
-            "asset_type": self.asset_type,
-            "exchange_name": self.exchange_name,
-            "normalize_function": None,
-        })
+        extra_data = update_extra_data(
+            extra_data,
+            **{
+                "request_type": request_type,
+                "symbol_name": symbol,
+                "asset_type": self.asset_type,
+                "exchange_name": self.exchange_name,
+                "normalize_function": None,
+            },
+        )
         return path, params, extra_data
 
     def transfer_to_isolated_margin(self, asset, symbol, amount, extra_data=None, **kwargs):
@@ -474,20 +555,23 @@ class BinanceRequestDataWallet(BinanceRequestData):
         Returns:
             tuple: (path, params, extra_data)
         """
-        request_type = 'get_deposit_address'
+        request_type = "get_deposit_address"
         path = self._params.get_rest_path(request_type)
         params = {
-            'coin': coin,
+            "coin": coin,
         }
         if network is not None:
-            params['network'] = network
-        extra_data = update_extra_data(extra_data, **{
-            "request_type": request_type,
-            "symbol_name": coin,
-            "asset_type": self.asset_type,
-            "exchange_name": self.exchange_name,
-            "normalize_function": None,
-        })
+            params["network"] = network
+        extra_data = update_extra_data(
+            extra_data,
+            **{
+                "request_type": request_type,
+                "symbol_name": coin,
+                "asset_type": self.asset_type,
+                "exchange_name": self.exchange_name,
+                "normalize_function": None,
+            },
+        )
         return path, params, extra_data
 
     def get_deposit_address(self, coin, network=None, extra_data=None, **kwargs):
@@ -502,8 +586,16 @@ class BinanceRequestDataWallet(BinanceRequestData):
         data = self.request(path, params=params, extra_data=extra_data, is_sign=True)
         return data
 
-    def _get_deposit_history(self, coin=None, startTime=None, endTime=None, limit=None,
-                             offset=None, extra_data=None, **kwargs):
+    def _get_deposit_history(
+        self,
+        coin=None,
+        startTime=None,
+        endTime=None,
+        limit=None,
+        offset=None,
+        extra_data=None,
+        **kwargs,
+    ):
         """查询充值历史
 
         Args:
@@ -518,46 +610,71 @@ class BinanceRequestDataWallet(BinanceRequestData):
         Returns:
             tuple: (path, params, extra_data)
         """
-        request_type = 'get_deposit_history'
+        request_type = "get_deposit_history"
         path = self._params.get_rest_path(request_type)
         params = {}
         if coin is not None:
-            params['coin'] = coin
+            params["coin"] = coin
         if startTime is not None:
-            params['startTime'] = startTime
+            params["startTime"] = startTime
         if endTime is not None:
-            params['endTime'] = endTime
+            params["endTime"] = endTime
         if limit is not None:
-            params['limit'] = limit
+            params["limit"] = limit
         if offset is not None:
-            params['offset'] = offset
-        extra_data = update_extra_data(extra_data, **{
-            "request_type": request_type,
-            "symbol_name": coin or "ALL",
-            "asset_type": self.asset_type,
-            "exchange_name": self.exchange_name,
-            "normalize_function": None,
-        })
+            params["offset"] = offset
+        extra_data = update_extra_data(
+            extra_data,
+            **{
+                "request_type": request_type,
+                "symbol_name": coin or "ALL",
+                "asset_type": self.asset_type,
+                "exchange_name": self.exchange_name,
+                "normalize_function": None,
+            },
+        )
         return path, params, extra_data
 
-    def get_deposit_history(self, coin=None, startTime=None, endTime=None, limit=None,
-                            offset=None, extra_data=None, **kwargs):
+    def get_deposit_history(
+        self,
+        coin=None,
+        startTime=None,
+        endTime=None,
+        limit=None,
+        offset=None,
+        extra_data=None,
+        **kwargs,
+    ):
         """查询充值历史
 
         Returns:
             RequestData: 请求结果
         """
         path, params, extra_data = self._get_deposit_history(
-            coin=coin, startTime=startTime, endTime=endTime, limit=limit, offset=offset,
-            extra_data=extra_data, **kwargs
+            coin=coin,
+            startTime=startTime,
+            endTime=endTime,
+            limit=limit,
+            offset=offset,
+            extra_data=extra_data,
+            **kwargs,
         )
         data = self.request(path, params=params, extra_data=extra_data, is_sign=True)
         return data
 
     # ==================== 提现相关接口 ====================
 
-    def _withdraw(self, coin, address, amount, network=None, addressTag=None,
-                  name=None, extra_data=None, **kwargs):
+    def _withdraw(
+        self,
+        coin,
+        address,
+        amount,
+        network=None,
+        addressTag=None,
+        name=None,
+        extra_data=None,
+        **kwargs,
+    ):
         """提现申请
 
         Args:
@@ -573,44 +690,70 @@ class BinanceRequestDataWallet(BinanceRequestData):
         Returns:
             tuple: (path, params, extra_data)
         """
-        request_type = 'withdraw'
+        request_type = "withdraw"
         path = self._params.get_rest_path(request_type)
         params = {
-            'coin': coin,
-            'address': address,
-            'amount': amount,
+            "coin": coin,
+            "address": address,
+            "amount": amount,
         }
         if network is not None:
-            params['network'] = network
+            params["network"] = network
         if addressTag is not None:
-            params['addressTag'] = addressTag
+            params["addressTag"] = addressTag
         if name is not None:
-            params['name'] = name
-        extra_data = update_extra_data(extra_data, **{
-            "request_type": request_type,
-            "symbol_name": coin,
-            "asset_type": self.asset_type,
-            "exchange_name": self.exchange_name,
-            "normalize_function": None,
-        })
+            params["name"] = name
+        extra_data = update_extra_data(
+            extra_data,
+            **{
+                "request_type": request_type,
+                "symbol_name": coin,
+                "asset_type": self.asset_type,
+                "exchange_name": self.exchange_name,
+                "normalize_function": None,
+            },
+        )
         return path, params, extra_data
 
-    def withdraw(self, coin, address, amount, network=None, addressTag=None,
-                 name=None, extra_data=None, **kwargs):
+    def withdraw(
+        self,
+        coin,
+        address,
+        amount,
+        network=None,
+        addressTag=None,
+        name=None,
+        extra_data=None,
+        **kwargs,
+    ):
         """提现申请
 
         Returns:
             RequestData: 请求结果
         """
         path, params, extra_data = self._withdraw(
-            coin=coin, address=address, amount=amount, network=network,
-            addressTag=addressTag, name=name, extra_data=extra_data, **kwargs
+            coin=coin,
+            address=address,
+            amount=amount,
+            network=network,
+            addressTag=addressTag,
+            name=name,
+            extra_data=extra_data,
+            **kwargs,
         )
         data = self.request(path, params=params, extra_data=extra_data, is_sign=True)
         return data
 
-    def _get_withdraw_history(self, coin=None, startTime=None, endTime=None, limit=None,
-                              offset=None, extra_data=None, **kwargs):
+    def _get_withdraw_history(
+        self,
+        coin=None,
+        startTime=None,
+        endTime=None,
+        limit=None,
+        offset=None,
+        extra_data=None,
+        **kwargs,
+    ):
         """查询提现历史
 
         Args:
@@ -625,38 +768,54 @@ class BinanceRequestDataWallet(BinanceRequestData):
         Returns:
             tuple: (path, params, extra_data)
         """
-        request_type = 'get_withdraw_history'
+        request_type = "get_withdraw_history"
         path = self._params.get_rest_path(request_type)
         params = {}
         if coin is not None:
-            params['coin'] = coin
+            params["coin"] = coin
         if startTime is not None:
-            params['startTime'] = startTime
+            params["startTime"] = startTime
         if endTime is not None:
-            params['endTime'] = endTime
+            params["endTime"] = endTime
         if limit is not None:
-            params['limit'] = limit
+            params["limit"] = limit
         if offset is not None:
-            params['offset'] = offset
-        extra_data = update_extra_data(extra_data, **{
-            "request_type": request_type,
-            "symbol_name": coin or "ALL",
-            "asset_type": self.asset_type,
-            "exchange_name": self.exchange_name,
-            "normalize_function": None,
-        })
+            params["offset"] = offset
+        extra_data = update_extra_data(
+            extra_data,
+            **{
+                "request_type": request_type,
+                "symbol_name": coin or "ALL",
+                "asset_type": self.asset_type,
+                "exchange_name": self.exchange_name,
+                "normalize_function": None,
+            },
+        )
         return path, params, extra_data
 
-    def get_withdraw_history(self, coin=None, startTime=None, endTime=None, limit=None,
-                             offset=None, extra_data=None, **kwargs):
+    def get_withdraw_history(
+        self,
+        coin=None,
+        startTime=None,
+        endTime=None,
+        limit=None,
+        offset=None,
+        extra_data=None,
+        **kwargs,
+    ):
         """查询提现历史
 
         Returns:
             RequestData: 请求结果
         """
         path, params, extra_data = self._get_withdraw_history(
-            coin=coin, startTime=startTime, endTime=endTime, limit=limit, offset=offset,
-            extra_data=extra_data, **kwargs
+            coin=coin,
+            startTime=startTime,
+            endTime=endTime,
+            limit=limit,
+            offset=offset,
+            extra_data=extra_data,
+            **kwargs,
         )
         data = self.request(path, params=params, extra_data=extra_data, is_sign=True)
         return data
@@ -672,18 +831,21 @@ class BinanceRequestDataWallet(BinanceRequestData):
         Returns:
             tuple: (path, params, extra_data)
         """
-        request_type = 'get_withdraw_address'
+        request_type = "get_withdraw_address"
         path = self._params.get_rest_path(request_type)
         params = {}
         if coin is not None:
-            params['coin'] = coin
-        extra_data = update_extra_data(extra_data, **{
-            "request_type": request_type,
-            "symbol_name": coin or "ALL",
-            "asset_type": self.asset_type,
-            "exchange_name": self.exchange_name,
-            "normalize_function": None,
-        })
+            params["coin"] = coin
+        extra_data = update_extra_data(
+            extra_data,
+            **{
+                "request_type": request_type,
+                "symbol_name": coin or "ALL",
+                "asset_type": self.asset_type,
+                "exchange_name": self.exchange_name,
+                "normalize_function": None,
+            },
+        )
         return path, params, extra_data
 
     def get_withdraw_address(self, coin=None, extra_data=None, **kwargs):
@@ -710,16 +872,19 @@ class BinanceRequestDataWallet(BinanceRequestData):
         Returns:
             tuple: (path, params, extra_data)
         """
-        request_type = 'get_dust'
+        request_type = "get_dust"
         path = self._params.get_rest_path(request_type)
         params = {}
-        extra_data = update_extra_data(extra_data, **{
-            "request_type": request_type,
-            "symbol_name": "ALL",
-            "asset_type": self.asset_type,
-            "exchange_name": self.exchange_name,
-            "normalize_function": None,
-        })
+        extra_data = update_extra_data(
+            extra_data,
+            **{
+                "request_type": request_type,
+                "symbol_name": "ALL",
+                "asset_type": self.asset_type,
+                "exchange_name": self.exchange_name,
+                "normalize_function": None,
+            },
+        )
         return path, params, extra_data
 
     def get_dust(self, extra_data=None, **kwargs):
@@ -743,18 +908,21 @@ class BinanceRequestDataWallet(BinanceRequestData):
         Returns:
             tuple: (path, params, extra_data)
         """
-        request_type = 'dust_transfer'
+        request_type = "dust_transfer"
         path = self._params.get_rest_path(request_type)
         params = {
-            'asset': assets if isinstance(assets, str) else ','.join(assets),
+            "asset": assets if isinstance(assets, str) else ",".join(assets),
         }
-        extra_data = update_extra_data(extra_data, **{
-            "request_type": request_type,
-            "symbol_name": "DUST",
-            "asset_type": self.asset_type,
-            "exchange_name": self.exchange_name,
-            "normalize_function": None,
-        })
+        extra_data = update_extra_data(
+            extra_data,
+            **{
+                "request_type": request_type,
+                "symbol_name": "DUST",
+                "asset_type": self.asset_type,
+                "exchange_name": self.exchange_name,
+                "normalize_function": None,
+            },
+        )
         return path, params, extra_data
 
     def dust_transfer(self, assets, extra_data=None, **kwargs):

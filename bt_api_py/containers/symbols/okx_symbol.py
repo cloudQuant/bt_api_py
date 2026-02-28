@@ -1,13 +1,15 @@
-import time
 import json
-from bt_api_py.functions.utils import from_dict_get_string, from_dict_get_float, from_dict_get_bool
+import time
+
 from bt_api_py.containers.symbols.symbol import SymbolData
+from bt_api_py.functions.utils import from_dict_get_bool, from_dict_get_float, from_dict_get_string
 
 
 class OkxSymbolData(SymbolData):
     """https://www.okx.com/docs-v5/zh/#trading-account-rest-api-get-instruments"""
+
     def __init__(self, symbol_info, has_been_json_encoded):
-        super(OkxSymbolData, self).__init__(symbol_info, has_been_json_encoded)
+        super().__init__(symbol_info, has_been_json_encoded)
         self.event = "OkxSymbolEvent"
         self.local_update_time = time.time()  # 本地时间戳
         self.exchange_name = "OKX"
@@ -61,7 +63,7 @@ class OkxSymbolData(SymbolData):
     def init_data(self):
         if not self.has_been_json_encoded:
             self.symbol_info = json.loads(self.symbol_info)
-            self.symbol_data = self.symbol_info['data'][0]
+            self.symbol_data = self.symbol_info["data"][0]
             self.has_been_json_encoded = True
         if self.has_been_init_data:
             return self
@@ -73,9 +75,9 @@ class OkxSymbolData(SymbolData):
         self.contract_notional_value = from_dict_get_float(self.symbol_data, "ctVal")
         self.min_amount = from_dict_get_float(self.symbol_data, "notional")
         self.price_unit = from_dict_get_float(self.symbol_data, "tickSz")
-        self.price_digital = 1/self.price_unit
-        self.qty_unit = from_dict_get_float(self.symbol_data, 'lotSz')
-        self.qty_digital = 1/self.qty_unit
+        self.price_digital = 1 / self.price_unit
+        self.qty_unit = from_dict_get_float(self.symbol_data, "lotSz")
+        self.qty_digital = 1 / self.qty_unit
         self.max_qty = from_dict_get_float(self.symbol_data, "maxLmtAmt")
         self.min_qty = from_dict_get_float(self.symbol_data, "minSz")
         self.fee_currency = from_dict_get_string(self.symbol_data, "settleCcy")

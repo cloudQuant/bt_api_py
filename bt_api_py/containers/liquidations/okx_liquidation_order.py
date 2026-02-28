@@ -1,9 +1,10 @@
-# -*- coding: utf-8 -*-
 """OKX Liquidation Order data container."""
-import time
+
 import json
+import time
+
 from bt_api_py.containers.liquidations.liquidation import LiquidationData
-from bt_api_py.functions.utils import from_dict_get_string, from_dict_get_float
+from bt_api_py.functions.utils import from_dict_get_float, from_dict_get_string
 
 
 class OkxLiquidationOrderData(LiquidationData):
@@ -29,7 +30,7 @@ class OkxLiquidationOrderData(LiquidationData):
     """
 
     def __init__(self, liquidation_info, symbol_name, asset_type, has_been_json_encoded=False):
-        super(OkxLiquidationOrderData, self).__init__(liquidation_info, has_been_json_encoded)
+        super().__init__(liquidation_info, has_been_json_encoded)
         self.exchange_name = "OKX"
         self.symbol_name = symbol_name
         self.local_update_time = time.time()

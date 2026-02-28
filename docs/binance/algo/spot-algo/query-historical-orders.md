@@ -1,6 +1,6 @@
 # Query Historical Algo Orders (USER_DATA)
 
-> 来源: [Binance Algo Trading API](https://developers.binance.com/docs/algo/spot-algo/Query-Historical-Algo-Orders)
+> 来源: [Binance Algo Trading API](<https://developers.binance.com/docs/algo/spot-algo/Query-Historical-Algo-Orders)>
 
 ## API Description
 
@@ -8,9 +8,10 @@ Get all historical SPOT TWAP orders.
 
 ## HTTP Request
 
-```
+```bash
 GET /sapi/v1/algo/spot/historicalOrders
-```
+
+```bash
 
 ## Request Weight(IP)
 
@@ -19,14 +20,23 @@ GET /sapi/v1/algo/spot/historicalOrders
 ## Request Parameters
 
 | Name | Type | Mandatory | Description |
+
 |------|------|-----------|-------------|
+
 | symbol | STRING | NO | Trading symbol eg. BTCUSDT |
+
 | side | ENUM | NO | BUY or SELL |
+
 | startTime | LONG | NO | in milliseconds eg.1641522717552 |
+
 | endTime | LONG | NO | in milliseconds eg.1641522526562 |
+
 | page | INT | NO | Default is 1 |
+
 | pageSize | INT | NO | MIN 1, MAX 100; Default 100 |
+
 | recvWindow | LONG | NO | |
+
 | timestamp | LONG | YES | |
 
 ## Response Example
@@ -52,4 +62,5 @@ GET /sapi/v1/algo/spot/historicalOrders
         }
     ]
 }
-```
+
+```bash

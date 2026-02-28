@@ -12,21 +12,20 @@ PUT `/papi/v1/listenKey`
 
 ## Request Weight
 
-**1**
+- *1**
 
 ## Request Parameters
 
-**None**
+- *None**
 
 ## Response Example
-    
-    
-    {}  
-    
 
-  * [API Description](</docs/derivatives/portfolio-margin/user-data-streams/Keepalive-User-Data-Stream#api-description>)
-  * [HTTP Request](</docs/derivatives/portfolio-margin/user-data-streams/Keepalive-User-Data-Stream#http-request>)
-  * [Request Weight](</docs/derivatives/portfolio-margin/user-data-streams/Keepalive-User-Data-Stream#request-weight>)
-  * [Request Parameters](</docs/derivatives/portfolio-margin/user-data-streams/Keepalive-User-Data-Stream#request-parameters>)
-  * [Response Example](</docs/derivatives/portfolio-margin/user-data-streams/Keepalive-User-Data-Stream#response-example>)
 
+    {}
+
+
+  - [API Description](</docs/derivatives/portfolio-margin/user-data-streams/Keepalive-User-Data-Stream#api-description>)
+  - [HTTP Request](</docs/derivatives/portfolio-margin/user-data-streams/Keepalive-User-Data-Stream#http-request>)
+  - [Request Weight](</docs/derivatives/portfolio-margin/user-data-streams/Keepalive-User-Data-Stream#request-weight>)
+  - [Request Parameters](</docs/derivatives/portfolio-margin/user-data-streams/Keepalive-User-Data-Stream#request-parameters>)
+  - [Response Example](</docs/derivatives/portfolio-margin/user-data-streams/Keepalive-User-Data-Stream#response-example>)

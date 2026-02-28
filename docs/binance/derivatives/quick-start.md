@@ -4,16 +4,16 @@ On this page
 
 ## API Key Setup
 
-  * Some endpoints will require an API Key. Please refer to [this page](<https://www.binance.com/en/support/faq/how-to-create-api-keys-on-binance-360002502072>) regarding API key creation.
-  * Once API key is created, it is recommended to set IP restrictions on the key for security reasons.
-  * **Never share your API key/secret key to ANYONE.**
+  - Some endpoints will require an API Key. Please refer to [this page](<https://www.binance.com/en/support/faq/how-to-create-api-keys-on-binance-360002502072>) regarding API key creation.
+  - Once API key is created, it is recommended to set IP restrictions on the key for security reasons.
+  - **Never share your API key/secret key to ANYONE.**
 
-If the API keys were accidentally shared, please delete them immediately and create a new key. 
+If the API keys were accidentally shared, please delete them immediately and create a new key.
 
 ## API Key Restrictions
 
-  * After creating the API key, the default restrictions is `Enable Reading`.
-  * To **enable withdrawals via the API** , the API key restriction needs to be modified through the Binance UI.
+  - After creating the API key, the default restrictions is `Enable Reading`.
+  - To **enable withdrawals via the API** , the API key restriction needs to be modified through the Binance UI.
 
 ## Enabling Accounts
 
@@ -51,14 +51,13 @@ This is a lightweight library that works as a connector to Binance public API, w
 
 <https://github.com/binance/binance-futures-connector-java>
 
-  * [API Key Setup](</docs/derivatives/quick-start#api-key-setup>)
-  * [API Key Restrictions](</docs/derivatives/quick-start#api-key-restrictions>)
-  * [Enabling Accounts](</docs/derivatives/quick-start#enabling-accounts>)
-    * [Account](</docs/derivatives/quick-start#account>)
-    * [Futures Account](</docs/derivatives/quick-start#futures-account>)
-    * [Futures Testnet](</docs/derivatives/quick-start#futures-testnet>)
-    * [Option Account](</docs/derivatives/quick-start#option-account>)
-  * [API Library](</docs/derivatives/quick-start#api-library>)
-    * [Python connector](</docs/derivatives/quick-start#python-connector>)
-    * [Java connector](</docs/derivatives/quick-start#java-connector>)
-
+  - [API Key Setup](</docs/derivatives/quick-start#api-key-setup>)
+  - [API Key Restrictions](</docs/derivatives/quick-start#api-key-restrictions>)
+  - [Enabling Accounts](</docs/derivatives/quick-start#enabling-accounts>)
+    - [Account](</docs/derivatives/quick-start#account>)
+    - [Futures Account](</docs/derivatives/quick-start#futures-account>)
+    - [Futures Testnet](</docs/derivatives/quick-start#futures-testnet>)
+    - [Option Account](</docs/derivatives/quick-start#option-account>)
+  - [API Library](</docs/derivatives/quick-start#api-library>)
+    - [Python connector](</docs/derivatives/quick-start#python-connector>)
+    - [Java connector](</docs/derivatives/quick-start#java-connector>)

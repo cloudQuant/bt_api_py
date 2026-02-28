@@ -3,28 +3,35 @@ OKX 交易所注册模块
 将 OKX Swap/Spot 的 feed 类、流式数据类、交易所配置类注册到全局 ExchangeRegistry
 导入此模块即可完成注册
 """
-from bt_api_py.registry import ExchangeRegistry
+
+from bt_api_py.balance_utils import nested_balance_handler as _okx_balance_handler
+from bt_api_py.containers.exchanges.okx_exchange_data import (
+    OkxExchangeDataSpot,
+    OkxExchangeDataSwap,
+)
 from bt_api_py.feeds.live_okx_feed import (
-    OkxRequestDataSpot,
-    OkxRequestDataSwap,
-    OkxMarketWssDataSpot,
-    OkxMarketWssDataSwap,
     OkxAccountWssDataSpot,
     OkxAccountWssDataSwap,
     OkxKlineWssDataSpot,
     OkxKlineWssDataSwap,
+    OkxMarketWssDataSpot,
+    OkxMarketWssDataSwap,
+    OkxRequestDataSpot,
+    OkxRequestDataSwap,
 )
-from bt_api_py.containers.exchanges.okx_exchange_data import (
-    OkxExchangeDataSwap,
-    OkxExchangeDataSpot,
-)
+from bt_api_py.registry import ExchangeRegistry
 
 
-from bt_api_py.balance_utils import nested_balance_handler as _okx_balance_handler
-
-
-def _okx_subscribe_handler(data_queue, exchange_params, topics, bt_api,
-                            exchange_data_cls, market_wss_cls, account_wss_cls, kline_wss_cls):
+def _okx_subscribe_handler(
+    data_queue,
+    exchange_params,
+    topics,
+    bt_api,
+    exchange_data_cls,
+    market_wss_cls,
+    account_wss_cls,
+    kline_wss_cls,
+):
     """OKX 通用订阅处理函数
     :param data_queue: queue.Queue
     :param exchange_params: dict
@@ -35,17 +42,17 @@ def _okx_subscribe_handler(data_queue, exchange_params, topics, bt_api,
     :param account_wss_cls: Account WebSocket 类
     :param kline_wss_cls: Kline WebSocket 类
     """
-    topic_list = [i['topic'] for i in topics]
+    topic_list = [i["topic"] for i in topics]
 
     if "kline" in topic_list:
         kline_kwargs = {key: v for key, v in exchange_params.items()}
-        kline_kwargs['wss_name'] = 'okx_kline_data'
-        kline_kwargs["wss_url"] = 'wss://ws.okx.com:8443/ws/v5/business'
+        kline_kwargs["wss_name"] = "okx_kline_data"
+        kline_kwargs["wss_url"] = "wss://ws.okx.com:8443/ws/v5/business"
         kline_kwargs["exchange_data"] = exchange_data_cls()
-        kline_topics = [i for i in topics if i['topic'] == "kline"]
-        kline_kwargs['topics'] = kline_topics
+        kline_topics = [i for i in topics if i["topic"] == "kline"]
+        kline_kwargs["topics"] = kline_topics
         kline_wss_cls(data_queue, **kline_kwargs).start()
-        bt_api.log(f"kline start")
+        bt_api.log("kline start")
 
     ticker_true = "ticker" in topic_list
     depth_true = "depth" in topic_list
@@ -53,35 +60,52 @@ def _okx_subscribe_handler(data_queue, exchange_params, topics, bt_api,
     mark_price_true = "mark_price" in topic_list
     if ticker_true or depth_true or funding_rate_true or mark_price_true:
         market_kwargs = {key: v for key, v in exchange_params.items()}
-        market_kwargs['wss_name'] = 'okx_market_data'
-        market_kwargs["wss_url"] = 'wss://ws.okx.com:8443/ws/v5/public'
+        market_kwargs["wss_name"] = "okx_market_data"
+        market_kwargs["wss_url"] = "wss://ws.okx.com:8443/ws/v5/public"
         market_kwargs["exchange_data"] = exchange_data_cls()
-        market_topics = [i for i in topics if i['topic'] != "kline"]
-        market_kwargs['topics'] = market_topics
+        market_topics = [i for i in topics if i["topic"] != "kline"]
+        market_kwargs["topics"] = market_topics
         market_wss_cls(data_queue, **market_kwargs).start()
-        bt_api.log(f"market start")
+        bt_api.log("market start")
 
     account_kwargs = {key: v for key, v in exchange_params.items()}
-    account_topics = [i for i in topics if
-                      (i['topic'] == "account" or i['topic'] == "orders" or i['topic'] == "positions")]
-    account_kwargs['topics'] = account_topics
-    account_kwargs['exchange_data'] = exchange_data_cls()
+    account_topics = [
+        i
+        for i in topics
+        if (i["topic"] == "account" or i["topic"] == "orders" or i["topic"] == "positions")
+    ]
+    account_kwargs["topics"] = account_topics
+    account_kwargs["exchange_data"] = exchange_data_cls()
     account_wss_cls(data_queue, **account_kwargs).start()
-    bt_api.log(f"account start")
+    bt_api.log("account start")
 
 
 def _okx_swap_subscribe_handler(data_queue, exchange_params, topics, bt_api):
     """OKX SWAP 订阅处理函数"""
-    _okx_subscribe_handler(data_queue, exchange_params, topics, bt_api,
-                           OkxExchangeDataSwap, OkxMarketWssDataSwap,
-                           OkxAccountWssDataSwap, OkxKlineWssDataSwap)
+    _okx_subscribe_handler(
+        data_queue,
+        exchange_params,
+        topics,
+        bt_api,
+        OkxExchangeDataSwap,
+        OkxMarketWssDataSwap,
+        OkxAccountWssDataSwap,
+        OkxKlineWssDataSwap,
+    )
 
 
 def _okx_spot_subscribe_handler(data_queue, exchange_params, topics, bt_api):
     """OKX SPOT 订阅处理函数"""
-    _okx_subscribe_handler(data_queue, exchange_params, topics, bt_api,
-                           OkxExchangeDataSpot, OkxMarketWssDataSpot,
-                           OkxAccountWssDataSpot, OkxKlineWssDataSpot)
+    _okx_subscribe_handler(
+        data_queue,
+        exchange_params,
+        topics,
+        bt_api,
+        OkxExchangeDataSpot,
+        OkxMarketWssDataSpot,
+        OkxAccountWssDataSpot,
+        OkxKlineWssDataSpot,
+    )
 
 
 def register_okx():

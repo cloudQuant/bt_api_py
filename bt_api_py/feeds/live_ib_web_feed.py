@@ -8,19 +8,19 @@ Interactive Brokers Web API Feed 实现
 
 依赖: pip install httpx pyjwt cryptography
 """
-import time
-import threading
-from typing import Optional, Set
 
-from bt_api_py.feeds.feed import Feed
-from bt_api_py.feeds.base_stream import BaseDataStream, ConnectionState
+import threading
+import time
+from typing import Set
+
+from bt_api_py.containers.exchanges.ib_web_exchange_data import (
+    IbWebExchangeDataFuture,
+    IbWebExchangeDataStock,
+)
 from bt_api_py.feeds.capability import Capability
+from bt_api_py.feeds.feed import Feed
 from bt_api_py.feeds.http_client import HttpClient
 from bt_api_py.functions.log_message import SpdLogManager
-from bt_api_py.containers.exchanges.ib_web_exchange_data import (
-    IbWebExchangeDataStock,
-    IbWebExchangeDataFuture,
-)
 
 
 class IbWebRequestData(Feed):
@@ -44,8 +44,10 @@ class IbWebRequestData(Feed):
             "./logs/" + self.logger_name, "ib_web_request", 0, 0, False
         ).create_logger()
         self._http = HttpClient(
-            venue="IB_WEB", timeout=self.timeout,
-            verify=self.verify_ssl, proxies=self.proxies,
+            venue="IB_WEB",
+            timeout=self.timeout,
+            verify=self.verify_ssl,
+            proxies=self.proxies,
         )
         self._authenticated = False
         self._session_lock = threading.Lock()
@@ -64,10 +66,18 @@ class IbWebRequestData(Feed):
     @classmethod
     def _capabilities(cls) -> Set[Capability]:
         return {
-            Capability.GET_TICK, Capability.GET_DEPTH, Capability.GET_KLINE,
-            Capability.MAKE_ORDER, Capability.CANCEL_ORDER, Capability.CANCEL_ALL,
-            Capability.QUERY_ORDER, Capability.QUERY_OPEN_ORDERS, Capability.GET_DEALS,
-            Capability.GET_BALANCE, Capability.GET_ACCOUNT, Capability.GET_POSITION,
+            Capability.GET_TICK,
+            Capability.GET_DEPTH,
+            Capability.GET_KLINE,
+            Capability.MAKE_ORDER,
+            Capability.CANCEL_ORDER,
+            Capability.CANCEL_ALL,
+            Capability.QUERY_ORDER,
+            Capability.QUERY_OPEN_ORDERS,
+            Capability.GET_DEALS,
+            Capability.GET_BALANCE,
+            Capability.GET_ACCOUNT,
+            Capability.GET_POSITION,
             Capability.BATCH_ORDER,
         }
 
@@ -89,8 +99,12 @@ class IbWebRequestData(Feed):
         kwargs["cookies"] = request_cookies
 
         return self._http.request(
-            method=method, url=url, headers=headers,
-            params=params, json_data=json_data, **kwargs,
+            method=method,
+            url=url,
+            headers=headers,
+            params=params,
+            json_data=json_data,
+            **kwargs,
         )
 
     def _get(self, endpoint, params=None, **kwargs):
@@ -117,6 +131,7 @@ class IbWebRequestData(Feed):
             self._loaded_cookies = self._cookies
         elif self._cookie_source:
             from bt_api_py.functions.browser_cookies import get_ibkr_cookies
+
             self._loaded_cookies = get_ibkr_cookies(
                 base_url=self.base_url,
                 cookie_source=self._cookie_source,
@@ -187,17 +202,20 @@ class IbWebRequestData(Feed):
             import jwt as pyjwt
         except ImportError:
             raise ImportError("pyjwt required. Install: pip install pyjwt cryptography")
-        with open(private_key_path, 'r') as f:
+        with open(private_key_path) as f:
             private_key = f.read()
         now = int(time.time())
         payload = {
-            "iss": client_id, "sub": client_id,
+            "iss": client_id,
+            "sub": client_id,
             "aud": f"{self.base_url}/oauth/token",
-            "exp": now + 300, "iat": now,
+            "exp": now + 300,
+            "iat": now,
         }
         assertion = pyjwt.encode(payload, private_key, algorithm="RS256")
         data = {
-            "grant_type": "client_credentials", "client_id": client_id,
+            "grant_type": "client_credentials",
+            "client_id": client_id,
             "client_assertion": assertion,
             "client_assertion_type": "urn:ietf:params:oauth:client-assertion-type:jwt-bearer",
         }
@@ -218,19 +236,27 @@ class IbWebRequestData(Feed):
 
     def search_contract(self, symbol, sec_type="STK", extra_data=None, **kwargs):
         """GET /iserver/secdef/search"""
-        return self._get("/iserver/secdef/search",
-                         params={"symbol": symbol, "secType": sec_type})
+        return self._get("/iserver/secdef/search", params={"symbol": symbol, "secType": sec_type})
 
-    def get_option_strikes(self, conid, exchange="SMART", sec_type="OPT",
-                           month=None, extra_data=None, **kwargs):
+    def get_option_strikes(
+        self, conid, exchange="SMART", sec_type="OPT", month=None, extra_data=None, **kwargs
+    ):
         """GET /iserver/secdef/strikes"""
         params = {"conid": conid, "exchange": exchange, "sectype": sec_type}
         if month:
             params["month"] = month
         return self._get("/iserver/secdef/strikes", params=params)
 
-    def get_option_info(self, conid, exchange="SMART", sec_type="OPT",
-                        month=None, strike=None, extra_data=None, **kwargs):
+    def get_option_info(
+        self,
+        conid,
+        exchange="SMART",
+        sec_type="OPT",
+        month=None,
+        strike=None,
+        extra_data=None,
+        **kwargs,
+    ):
         """GET /iserver/secdef/info"""
         params = {"conid": conid, "exchange": exchange, "sectype": sec_type}
         if month:
@@ -272,11 +298,13 @@ class IbWebRequestData(Feed):
 
     def get_depth(self, symbol, count=5, extra_data=None, **kwargs):
         """获取买卖盘"""
-        return self.get_tick(symbol, extra_data=extra_data,
-                             fields=['84', '85', '86', '88'], **kwargs)
+        return self.get_tick(
+            symbol, extra_data=extra_data, fields=["84", "85", "86", "88"], **kwargs
+        )
 
-    def get_kline(self, symbol, period, count=100, start_time=None, end_time=None,
-                  extra_data=None, **kwargs):
+    def get_kline(
+        self, symbol, period, count=100, start_time=None, end_time=None, extra_data=None, **kwargs
+    ):
         """获取历史K线"""
         conid = self._resolve_conid_param(symbol, extra_data)
         ib_period = self._params.kline_periods.get(period, period)
@@ -292,17 +320,29 @@ class IbWebRequestData(Feed):
 
     # ── 订单管理 ──────────────────────────────────────────────
 
-    def make_order(self, symbol, volume, price, order_type='buy-limit',
-                   offset='open', post_only=False, client_order_id=None,
-                   extra_data=None, **kwargs):
+    def make_order(
+        self,
+        symbol,
+        volume,
+        price,
+        order_type="buy-limit",
+        offset="open",
+        post_only=False,
+        client_order_id=None,
+        extra_data=None,
+        **kwargs,
+    ):
         """提交订单"""
         conid = self._resolve_conid_param(symbol, extra_data)
         account_id = self._get_account_id(extra_data)
         side, ib_order_type = self._parse_order_type(order_type)
         tif = extra_data.get("tif", "DAY") if isinstance(extra_data, dict) else "DAY"
         order = {
-            "conid": conid, "side": side, "orderType": ib_order_type,
-            "quantity": volume, "tif": tif,
+            "conid": conid,
+            "side": side,
+            "orderType": ib_order_type,
+            "quantity": volume,
+            "tif": tif,
         }
         if ib_order_type in ("LMT", "STP_LMT") and price:
             order["price"] = price
@@ -316,8 +356,7 @@ class IbWebRequestData(Feed):
         response = self._post(endpoint, json_data={"orders": [order]})
         return self._handle_order_reply(response)
 
-    def place_bracket_order(self, account_id=None, orders=None,
-                            extra_data=None, **kwargs):
+    def place_bracket_order(self, account_id=None, orders=None, extra_data=None, **kwargs):
         """提交括号订单"""
         account_id = account_id or self._get_account_id(extra_data)
         endpoint = f"/iserver/account/{account_id}/orders"
@@ -339,8 +378,11 @@ class IbWebRequestData(Feed):
     def cancel_all(self, symbol=None, extra_data=None, **kwargs):
         """取消所有订单"""
         orders = self.get_open_orders(symbol, extra_data=extra_data)
-        order_list = orders.get("orders", []) if isinstance(orders, dict) else (
-            orders if isinstance(orders, list) else [])
+        order_list = (
+            orders.get("orders", [])
+            if isinstance(orders, dict)
+            else (orders if isinstance(orders, list) else [])
+        )
         results = []
         for o in order_list:
             oid = o.get("orderId")
@@ -354,8 +396,11 @@ class IbWebRequestData(Feed):
     def query_order(self, symbol, order_id, extra_data=None, **kwargs):
         """查询特定订单"""
         all_orders = self.get_open_orders(symbol, extra_data=extra_data)
-        order_list = all_orders.get("orders", []) if isinstance(all_orders, dict) else (
-            all_orders if isinstance(all_orders, list) else [])
+        order_list = (
+            all_orders.get("orders", [])
+            if isinstance(all_orders, dict)
+            else (all_orders if isinstance(all_orders, list) else [])
+        )
         for o in order_list:
             if str(o.get("orderId")) == str(order_id):
                 return o
@@ -370,15 +415,15 @@ class IbWebRequestData(Feed):
             params["filters"] = extra_data["filters"]
         return self._get("/iserver/account/orders", params=params)
 
-    def get_deals(self, symbol=None, count=100, start_time=None, end_time=None,
-                  extra_data=None, **kwargs):
+    def get_deals(
+        self, symbol=None, count=100, start_time=None, end_time=None, extra_data=None, **kwargs
+    ):
         """GET /iserver/account/trades"""
         return self._get("/iserver/account/trades")
 
     def suppress_order_messages(self, message_ids):
         """POST /iserver/questions/suppress"""
-        return self._post("/iserver/questions/suppress",
-                          json_data={"messageIds": message_ids})
+        return self._post("/iserver/questions/suppress", json_data={"messageIds": message_ids})
 
     def reset_suppress(self):
         """POST /iserver/questions/suppress/reset"""
@@ -390,8 +435,7 @@ class IbWebRequestData(Feed):
             if isinstance(first, dict) and "id" in first and "message" in first:
                 mid = first["id"]
                 self.request_logger.info(f"Order confirmation: {first.get('message')}")
-                return self._post(f"/iserver/reply/{mid}",
-                                  json_data={"confirmed": True})
+                return self._post(f"/iserver/reply/{mid}", json_data={"confirmed": True})
         return response
 
     # ── 持仓和账户 ────────────────────────────────────────────
@@ -444,8 +488,7 @@ class IbWebRequestData(Feed):
 
     # ── Account Management API (/gw/api/v1) ──────────────────
 
-    def get_accounts_list(self, status=None, limit=None, offset=None,
-                          extra_data=None, **kwargs):
+    def get_accounts_list(self, status=None, limit=None, offset=None, extra_data=None, **kwargs):
         """GET /gw/api/v1/accounts"""
         params = {}
         if status:
@@ -461,8 +504,7 @@ class IbWebRequestData(Feed):
         account_id = account_id or self._get_account_id(extra_data)
         return self._get(f"/gw/api/v1/accounts/{account_id}")
 
-    def update_account_info(self, account_id=None, update_data=None,
-                            extra_data=None, **kwargs):
+    def update_account_info(self, account_id=None, update_data=None, extra_data=None, **kwargs):
         """PATCH /gw/api/v1/accounts/{accountId}"""
         account_id = account_id or self._get_account_id(extra_data)
         return self._patch(f"/gw/api/v1/accounts/{account_id}", json_data=update_data)
@@ -470,13 +512,11 @@ class IbWebRequestData(Feed):
     def close_account(self, account_id=None, reason="", extra_data=None, **kwargs):
         """POST /gw/api/v1/accounts/{accountId}/close"""
         account_id = account_id or self._get_account_id(extra_data)
-        return self._post(f"/gw/api/v1/accounts/{account_id}/close",
-                          json_data={"reason": reason})
+        return self._post(f"/gw/api/v1/accounts/{account_id}/close", json_data={"reason": reason})
 
     # ── 资金和银行 ────────────────────────────────────────────
 
-    def get_bank_instructions(self, account_id=None, method=None,
-                              extra_data=None, **kwargs):
+    def get_bank_instructions(self, account_id=None, method=None, extra_data=None, **kwargs):
         """GET /gw/api/v1/bank-instructions/query"""
         account_id = account_id or self._get_account_id(extra_data)
         params = {"accountId": account_id}
@@ -484,9 +524,16 @@ class IbWebRequestData(Feed):
             params["method"] = method
         return self._get("/gw/api/v1/bank-instructions/query", params=params)
 
-    def create_withdraw_request(self, amount, currency="USD",
-                                instruction_id=None, account_id=None,
-                                notes=None, extra_data=None, **kwargs):
+    def create_withdraw_request(
+        self,
+        amount,
+        currency="USD",
+        instruction_id=None,
+        account_id=None,
+        notes=None,
+        extra_data=None,
+        **kwargs,
+    ):
         """POST /gw/api/v1/withdraw-request"""
         account_id = account_id or self._get_account_id(extra_data)
         data = {"accountId": account_id, "amount": amount, "currency": currency}
@@ -496,64 +543,83 @@ class IbWebRequestData(Feed):
             data["notes"] = notes
         return self._post("/gw/api/v1/withdraw-request", json_data=data)
 
-    def create_deposit_request(self, amount, currency="USD", method="CHECK",
-                               account_id=None, notes=None,
-                               extra_data=None, **kwargs):
+    def create_deposit_request(
+        self,
+        amount,
+        currency="USD",
+        method="CHECK",
+        account_id=None,
+        notes=None,
+        extra_data=None,
+        **kwargs,
+    ):
         """POST /gw/api/v1/deposit-request"""
         account_id = account_id or self._get_account_id(extra_data)
-        data = {"accountId": account_id, "amount": amount,
-                "currency": currency, "method": method}
+        data = {"accountId": account_id, "amount": amount, "currency": currency, "method": method}
         if notes:
             data["notes"] = notes
         return self._post("/gw/api/v1/deposit-request", json_data=data)
 
-    def internal_transfer_cash(self, to_account_id, amount, currency="USD",
-                               from_account_id=None, extra_data=None, **kwargs):
+    def internal_transfer_cash(
+        self, to_account_id, amount, currency="USD", from_account_id=None, extra_data=None, **kwargs
+    ):
         """POST /gw/api/v1/internal-transfer (现金)"""
         from_account_id = from_account_id or self._get_account_id(extra_data)
         data = {
-            "fromAccountId": from_account_id, "toAccountId": to_account_id,
-            "transferType": "CASH", "amount": amount, "currency": currency,
+            "fromAccountId": from_account_id,
+            "toAccountId": to_account_id,
+            "transferType": "CASH",
+            "amount": amount,
+            "currency": currency,
         }
         return self._post("/gw/api/v1/internal-transfer", json_data=data)
 
-    def internal_transfer_position(self, to_account_id, transfers,
-                                   from_account_id=None, extra_data=None, **kwargs):
+    def internal_transfer_position(
+        self, to_account_id, transfers, from_account_id=None, extra_data=None, **kwargs
+    ):
         """POST /gw/api/v1/internal-transfer (持仓)"""
         from_account_id = from_account_id or self._get_account_id(extra_data)
         data = {
-            "fromAccountId": from_account_id, "toAccountId": to_account_id,
-            "transferType": "POSITION", "transfers": transfers,
+            "fromAccountId": from_account_id,
+            "toAccountId": to_account_id,
+            "transferType": "POSITION",
+            "transfers": transfers,
         }
         return self._post("/gw/api/v1/internal-transfer", json_data=data)
 
     # ── 报告 ──────────────────────────────────────────────────
 
-    def get_statements(self, start_date, end_date, account_id=None,
-                       extra_data=None, **kwargs):
+    def get_statements(self, start_date, end_date, account_id=None, extra_data=None, **kwargs):
         """GET /gw/api/v1/statements"""
         account_id = account_id or self._get_account_id(extra_data)
-        return self._get("/gw/api/v1/statements", params={
-            "accountId": account_id, "startDate": start_date, "endDate": end_date})
+        return self._get(
+            "/gw/api/v1/statements",
+            params={"accountId": account_id, "startDate": start_date, "endDate": end_date},
+        )
 
-    def get_tax_documents(self, tax_year, account_id=None,
-                          extra_data=None, **kwargs):
+    def get_tax_documents(self, tax_year, account_id=None, extra_data=None, **kwargs):
         """GET /gw/api/v1/tax-documents/available"""
         account_id = account_id or self._get_account_id(extra_data)
-        return self._get("/gw/api/v1/tax-documents/available",
-                         params={"accountId": account_id, "taxYear": tax_year})
+        return self._get(
+            "/gw/api/v1/tax-documents/available",
+            params={"accountId": account_id, "taxYear": tax_year},
+        )
 
-    def get_trade_confirmations(self, start_date, end_date, account_id=None,
-                                extra_data=None, **kwargs):
+    def get_trade_confirmations(
+        self, start_date, end_date, account_id=None, extra_data=None, **kwargs
+    ):
         """GET /gw/api/v1/trade-confirmations"""
         account_id = account_id or self._get_account_id(extra_data)
-        return self._get("/gw/api/v1/trade-confirmations", params={
-            "accountId": account_id, "startDate": start_date, "endDate": end_date})
+        return self._get(
+            "/gw/api/v1/trade-confirmations",
+            params={"accountId": account_id, "startDate": start_date, "endDate": end_date},
+        )
 
     # ── SSO ───────────────────────────────────────────────────
 
-    def get_sso_url(self, target_url, account_id=None, show_nav_bar=None,
-                    extra_data=None, **kwargs):
+    def get_sso_url(
+        self, target_url, account_id=None, show_nav_bar=None, extra_data=None, **kwargs
+    ):
         """GET /gw/api/v1/sso/url"""
         account_id = account_id or self._get_account_id(extra_data)
         params = {"accountId": account_id, "targetUrl": target_url}
@@ -622,8 +688,10 @@ class IbWebRequestData(Feed):
 
 # ── 资产类型子类 ──────────────────────────────────────────────
 
+
 class IbWebRequestDataStock(IbWebRequestData):
     """IB Web API 股票 Feed"""
+
     def __init__(self, data_queue, **kwargs):
         super().__init__(data_queue, **kwargs)
         self.asset_type = kwargs.get("asset_type", "STK")
@@ -633,6 +701,7 @@ class IbWebRequestDataStock(IbWebRequestData):
 
 class IbWebRequestDataFuture(IbWebRequestData):
     """IB Web API 期货 Feed"""
+
     def __init__(self, data_queue, **kwargs):
         super().__init__(data_queue, **kwargs)
         self.asset_type = kwargs.get("asset_type", "FUT")

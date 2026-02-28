@@ -1,21 +1,19 @@
-"""订单类，用于确定订单的属性和方法
-"""
-import json
+"""订单类，用于确定订单的属性和方法"""
+
 from enum import Enum
 
 
 class OrderStatus(Enum):
-    SUBMITTED = 'submitted'
+    SUBMITTED = "submitted"
     ACCEPTED = "new"
-    PARTIAL = 'partially_filled'
-    COMPLETED = 'filled'
-    CANCELED = 'canceled'
-    REJECTED = 'rejected'
+    PARTIAL = "partially_filled"
+    COMPLETED = "filled"
+    CANCELED = "canceled"
+    REJECTED = "rejected"
     MARGIN = "margin"
-    EXPIRED = 'expired'
-    MMP_CANCELED = 'mmp_canceled'
+    EXPIRED = "expired"
+    MMP_CANCELED = "mmp_canceled"
     EXPIRED_IN_MATCH = "expired_in_match"
-
 
     def __str__(self):
         return self.value
@@ -24,22 +22,22 @@ class OrderStatus(Enum):
     @classmethod
     def get_static_dict(cls):
         return {
-            'submitted': cls.SUBMITTED,
-            'accepted': cls.ACCEPTED,
-            'margin': cls.MARGIN,
-            'NEW': cls.ACCEPTED,  # 'new' maps to ACCEPTED
-            'new': cls.ACCEPTED,
-            'live': cls.ACCEPTED,  # 'live' maps to ACCEPTED
-            'PARTIALLY_FILLED': cls.PARTIAL,
-            'partially_filled': cls.PARTIAL,
-            'FILLED': cls.COMPLETED,
-            'filled': cls.COMPLETED,
-            'CANCELED': cls.CANCELED,
-            'canceled': cls.CANCELED,
-            'REJECTED': cls.REJECTED,
-            'EXPIRED': cls.EXPIRED,
-            'EXPIRED_IN_MATCH': cls.EXPIRED_IN_MATCH,
-            'mmp_canceled': cls.MMP_CANCELED,
+            "submitted": cls.SUBMITTED,
+            "accepted": cls.ACCEPTED,
+            "margin": cls.MARGIN,
+            "NEW": cls.ACCEPTED,  # 'new' maps to ACCEPTED
+            "new": cls.ACCEPTED,
+            "live": cls.ACCEPTED,  # 'live' maps to ACCEPTED
+            "PARTIALLY_FILLED": cls.PARTIAL,
+            "partially_filled": cls.PARTIAL,
+            "FILLED": cls.COMPLETED,
+            "filled": cls.COMPLETED,
+            "CANCELED": cls.CANCELED,
+            "canceled": cls.CANCELED,
+            "REJECTED": cls.REJECTED,
+            "EXPIRED": cls.EXPIRED,
+            "EXPIRED_IN_MATCH": cls.EXPIRED_IN_MATCH,
+            "mmp_canceled": cls.MMP_CANCELED,
         }
 
     @classmethod
@@ -56,7 +54,7 @@ class OrderStatus(Enum):
             raise ValueError(f"Invalid order status value: {status_value}")
 
 
-class OrderData(object):
+class OrderData:
     """保存订单相关信息"""
 
     def __init__(self, order_info, has_been_json_encoded=False):

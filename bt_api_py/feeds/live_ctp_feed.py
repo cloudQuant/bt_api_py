@@ -12,37 +12,38 @@ CTP Feed 实现
   - 品种名称格式: IF2506, rb2510 等
   - CTP 查询接口有流控限制: 每秒最多1次查询
 """
+
 import time
-import threading
-from bt_api_py.feeds.feed import Feed
-from bt_api_py.feeds.capability import Capability
-from bt_api_py.error_framework import CTPErrorTranslator
-from bt_api_py.feeds.base_stream import BaseDataStream, ConnectionState
-from bt_api_py.functions.log_message import SpdLogManager
-from bt_api_py.containers.exchanges.ctp_exchange_data import CtpExchangeDataFuture
-from bt_api_py.containers.requestdatas.request_data import RequestData
+
 from bt_api_py.containers.ctp.ctp_account import CtpAccountData
 from bt_api_py.containers.ctp.ctp_order import CtpOrderData
 from bt_api_py.containers.ctp.ctp_position import CtpPositionData
-from bt_api_py.containers.ctp.ctp_trade import CtpTradeData
 from bt_api_py.containers.ctp.ctp_ticker import CtpTickerData
+from bt_api_py.containers.ctp.ctp_trade import CtpTradeData
+from bt_api_py.containers.exchanges.ctp_exchange_data import CtpExchangeDataFuture
+from bt_api_py.containers.requestdatas.request_data import RequestData
+from bt_api_py.error_framework import CTPErrorTranslator
 from bt_api_py.exceptions import ConnectionError as BtConnectionError
+from bt_api_py.feeds.base_stream import BaseDataStream, ConnectionState
+from bt_api_py.feeds.capability import Capability
+from bt_api_py.feeds.feed import Feed
+from bt_api_py.functions.log_message import SpdLogManager
 
 # CTP 开平方向映射
 CTP_OFFSET_FLAG = {
-    'open': '0',
-    'close': '1',
-    'force_close': '2',
-    'close_today': '3',
-    'close_yesterday': '4',
-    'force_close_yesterday': '5',
-    'local_force_close': '6',
+    "open": "0",
+    "close": "1",
+    "force_close": "2",
+    "close_today": "3",
+    "close_yesterday": "4",
+    "force_close_yesterday": "5",
+    "local_force_close": "6",
 }
 
 # CTP 买卖方向映射
 CTP_DIRECTION_FLAG = {
-    'buy': '0',
-    'sell': '1',
+    "buy": "0",
+    "sell": "1",
 }
 
 
@@ -55,7 +56,7 @@ def _ctp_field_to_dict(field):
     result = {}
     # 遍历对象的所有属性，排除内部属性和方法
     for attr in dir(field):
-        if attr.startswith('_') or attr == 'this' or attr == 'thisown':
+        if attr.startswith("_") or attr == "this" or attr == "thisown":
             continue
         try:
             val = getattr(field, attr)
@@ -130,17 +131,24 @@ class CtpRequestData(Feed):
         if self._trader is not None and self._trader.is_ready:
             return
         from bt_api_py.ctp.client import TraderClient
+
         self._trader = TraderClient(
-            self.td_front, self.broker_id, self.user_id, self.password,
-            app_id=self.app_id, auth_code=self.auth_code
+            self.td_front,
+            self.broker_id,
+            self.user_id,
+            self.password,
+            app_id=self.app_id,
+            auth_code=self.auth_code,
         )
         self._trader.start(block=False)
         ready = self._trader.wait_ready(timeout=self._connect_timeout)
         if ready:
             self._connected = True
-            self.request_logger.info(f"CTP TraderClient connected and ready")
+            self.request_logger.info("CTP TraderClient connected and ready")
         else:
-            self.request_logger.error(f"CTP TraderClient failed to connect within {self._connect_timeout}s")
+            self.request_logger.error(
+                f"CTP TraderClient failed to connect within {self._connect_timeout}s"
+            )
 
     def disconnect(self):
         """断开交易连接"""
@@ -149,8 +157,9 @@ class CtpRequestData(Feed):
             self._trader = None
         self._connected = False
 
-    def _make_request_data(self, data_list, request_type, symbol_name=None,
-                           extra_data=None, status=True):
+    def _make_request_data(
+        self, data_list, request_type, symbol_name=None, extra_data=None, status=True
+    ):
         """构造 RequestData 返回对象，使用正常构造函数"""
         ed = extra_data.copy() if extra_data else {}
         ed.setdefault("exchange_name", self.exchange_name)
@@ -183,7 +192,7 @@ class CtpRequestData(Feed):
         data_list = []
         for raw in raw_list:
             pos_dict = _ctp_field_to_dict(raw)
-            instrument = pos_dict.get('InstrumentID', symbol)
+            instrument = pos_dict.get("InstrumentID", symbol)
             data_list.append(CtpPositionData(pos_dict, instrument, self.asset_type, True))
         return self._make_request_data(data_list, "get_position", symbol, extra_data)
 
@@ -199,15 +208,25 @@ class CtpRequestData(Feed):
         self.request_logger.warn("CTP depth is included in tick data; use CtpMarketStream")
         return self._make_request_data([], "get_depth", symbol, extra_data, status=False)
 
-    def get_kline(self, symbol, period, count=100, start_time=None, end_time=None,
-                  extra_data=None, **kwargs):
+    def get_kline(
+        self, symbol, period, count=100, start_time=None, end_time=None, extra_data=None, **kwargs
+    ):
         """获取K线 (CTP 不直接提供，需从 tick 数据合成或从第三方获取)"""
         self.request_logger.warn("CTP does not provide kline API directly")
         return self._make_request_data([], "get_kline", symbol, extra_data, status=False)
 
-    def make_order(self, symbol, volume, price=None, order_type='buy-limit',
-                   offset='open', post_only=False, client_order_id=None,
-                   extra_data=None, **kwargs):
+    def make_order(
+        self,
+        symbol,
+        volume,
+        price=None,
+        order_type="buy-limit",
+        offset="open",
+        post_only=False,
+        client_order_id=None,
+        extra_data=None,
+        **kwargs,
+    ):
         """下单
         :param symbol: 合约代码, 如 'IF2506'
         :param volume: 数量（手数）
@@ -220,10 +239,10 @@ class CtpRequestData(Feed):
         self._ensure_connected()
         from bt_api_py.ctp.ctp_structs_order import CThostFtdcInputOrderField
 
-        side, otype = order_type.split('-')
-        direction = CTP_DIRECTION_FLAG.get(side.lower(), '0')
-        offset_flag = CTP_OFFSET_FLAG.get(offset, '0')
-        exchange_id = kwargs.get('exchange_id', '')
+        side, otype = order_type.split("-")
+        direction = CTP_DIRECTION_FLAG.get(side.lower(), "0")
+        offset_flag = CTP_OFFSET_FLAG.get(offset, "0")
+        exchange_id = kwargs.get("exchange_id", "")
 
         field = CThostFtdcInputOrderField()
         field.BrokerID = self.broker_id
@@ -233,21 +252,21 @@ class CtpRequestData(Feed):
             field.ExchangeID = exchange_id
         field.Direction = direction
         field.CombOffsetFlag = offset_flag
-        field.CombHedgeFlag = "1"          # 投机
+        field.CombHedgeFlag = "1"  # 投机
         field.VolumeTotalOriginal = int(volume)
         field.ForceCloseReason = "0"
         field.IsAutoSuspend = 0
         field.UserForceClose = 0
 
-        if otype.lower() == 'market':
-            field.OrderPriceType = "1"     # 市价
-            field.TimeCondition = "1"      # IOC
-            field.VolumeCondition = "1"    # 任意数量
+        if otype.lower() == "market":
+            field.OrderPriceType = "1"  # 市价
+            field.TimeCondition = "1"  # IOC
+            field.VolumeCondition = "1"  # 任意数量
             field.LimitPrice = 0.0
         else:
-            field.OrderPriceType = "2"     # 限价
-            field.TimeCondition = "3"      # GFD (当日有效)
-            field.VolumeCondition = "1"    # 任意数量
+            field.OrderPriceType = "2"  # 限价
+            field.TimeCondition = "3"  # GFD (当日有效)
+            field.VolumeCondition = "1"  # 任意数量
             field.LimitPrice = float(price) if price else 0.0
             field.ContingentCondition = "1"
 
@@ -257,11 +276,12 @@ class CtpRequestData(Feed):
         self._trader._req_id += 1
         ret = self._trader.api.ReqOrderInsert(field, self._trader._req_id)
         order_dict = _ctp_field_to_dict(field)
-        order_dict['_ret'] = ret
+        order_dict["_ret"] = ret
 
         if ret == 0:
-            self.request_logger.info(f"CTP order sent: {symbol} {order_type} {offset} "
-                                     f"price={price} vol={volume}")
+            self.request_logger.info(
+                f"CTP order sent: {symbol} {order_type} {offset} " f"price={price} vol={volume}"
+            )
             data_list = [CtpOrderData(order_dict, symbol, self.asset_type, True)]
             return self._make_request_data(data_list, "make_order", symbol, extra_data)
         else:
@@ -283,13 +303,13 @@ class CtpRequestData(Feed):
         field.InstrumentID = symbol
         field.ActionFlag = "0"  # 删除
 
-        exchange_id = kwargs.get('exchange_id', '')
+        exchange_id = kwargs.get("exchange_id", "")
         if exchange_id:
             field.ExchangeID = exchange_id
 
-        order_ref = kwargs.get('order_ref', '')
-        front_id = kwargs.get('front_id', 0)
-        session_id = kwargs.get('session_id', 0)
+        order_ref = kwargs.get("order_ref", "")
+        front_id = kwargs.get("front_id", 0)
+        session_id = kwargs.get("session_id", 0)
 
         if order_id:
             field.OrderSysID = str(order_id)
@@ -318,8 +338,9 @@ class CtpRequestData(Feed):
         self.request_logger.warn("CTP open orders query not implemented; use on_order callback")
         return self._make_request_data([], "get_open_orders", symbol, extra_data, status=False)
 
-    def get_deals(self, symbol=None, count=100, start_time=None, end_time=None,
-                  extra_data=None, **kwargs):
+    def get_deals(
+        self, symbol=None, count=100, start_time=None, end_time=None, extra_data=None, **kwargs
+    ):
         """查询成交记录 (CTP 暂不直接支持，返回空)"""
         self.request_logger.warn("CTP deals query not implemented; use on_trade callback")
         return self._make_request_data([], "get_deals", symbol, extra_data, status=False)
@@ -355,10 +376,9 @@ class CtpMarketStream(BaseDataStream):
     def connect(self):
         """连接 CTP 行情前置"""
         from bt_api_py.ctp.client import MdClient
+
         self.state = ConnectionState.CONNECTING
-        self._md_client = MdClient(
-            self.md_front, self.broker_id, self.user_id, self.password
-        )
+        self._md_client = MdClient(self.md_front, self.broker_id, self.user_id, self.password)
         # 设置 tick 回调 — 将 CTP field 转为 CtpTickerData 推送到队列
         self._md_client.on_tick = self._on_tick
         self._md_client.on_login = self._on_login
@@ -366,17 +386,18 @@ class CtpMarketStream(BaseDataStream):
         # 收集需要订阅的合约
         instruments = []
         for topic in self.topics:
-            if topic.get('topic') in ('tick', 'ticker', 'depth'):
-                sym = topic.get('symbol', '')
+            if topic.get("topic") in ("tick", "ticker", "depth"):
+                sym = topic.get("symbol", "")
                 if sym:
                     instruments.append(sym)
-                sym_list = topic.get('symbol_list', [])
+                sym_list = topic.get("symbol_list", [])
                 instruments.extend(sym_list)
         if instruments:
             self._md_client.subscribe(instruments)
         self._md_client.start(block=False)
-        self.logger.info(f"CTP MdClient connecting to {self.md_front}, "
-                         f"subscribing {instruments}")
+        self.logger.info(
+            f"CTP MdClient connecting to {self.md_front}, " f"subscribing {instruments}"
+        )
 
     def _on_login(self, login_field):
         self.state = ConnectionState.AUTHENTICATED
@@ -385,7 +406,7 @@ class CtpMarketStream(BaseDataStream):
     def _on_tick(self, tick_field):
         """CTP tick 回调 — 转为 CtpTickerData 推送到队列"""
         tick_dict = _ctp_field_to_dict(tick_field)
-        symbol = tick_dict.get('InstrumentID', '')
+        symbol = tick_dict.get("InstrumentID", "")
         ticker_data = CtpTickerData(tick_dict, symbol, self.asset_type, True)
         self.push_data(ticker_data)
 
@@ -405,8 +426,8 @@ class CtpMarketStream(BaseDataStream):
         """追加订阅行情"""
         instruments = []
         for topic in topics:
-            if topic.get('topic') in ('tick', 'ticker', 'depth'):
-                sym = topic.get('symbol', '')
+            if topic.get("topic") in ("tick", "ticker", "depth"):
+                sym = topic.get("symbol", "")
                 if sym:
                     instruments.append(sym)
         if instruments and self._md_client:
@@ -440,10 +461,15 @@ class CtpTradeStream(BaseDataStream):
     def connect(self):
         """连接 CTP 交易前置"""
         from bt_api_py.ctp.client import TraderClient
+
         self.state = ConnectionState.CONNECTING
         self._trader = TraderClient(
-            self.td_front, self.broker_id, self.user_id, self.password,
-            app_id=self.app_id, auth_code=self.auth_code
+            self.td_front,
+            self.broker_id,
+            self.user_id,
+            self.password,
+            app_id=self.app_id,
+            auth_code=self.auth_code,
         )
         # 设置回调 — 将 CTP field 转为 Container 对象推送到队列
         self._trader.on_order = self._on_order
@@ -460,14 +486,14 @@ class CtpTradeStream(BaseDataStream):
     def _on_order(self, order_field):
         """CTP 订单回报 — 转为 CtpOrderData 推送到队列"""
         order_dict = _ctp_field_to_dict(order_field)
-        symbol = order_dict.get('InstrumentID', '')
+        symbol = order_dict.get("InstrumentID", "")
         order_data = CtpOrderData(order_dict, symbol, self.asset_type, True)
         self.push_data(order_data)
 
     def _on_trade(self, trade_field):
         """CTP 成交回报 — 转为 CtpTradeData 推送到队列"""
         trade_dict = _ctp_field_to_dict(trade_field)
-        symbol = trade_dict.get('InstrumentID', '')
+        symbol = trade_dict.get("InstrumentID", "")
         trade_data = CtpTradeData(trade_dict, symbol, self.asset_type, True)
         self.push_data(trade_data)
 

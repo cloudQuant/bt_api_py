@@ -29,6 +29,7 @@ None
 ## Response Example​
 
 
-```
+```bash
 [  { "asset": "USDC", "riskBasedLiquidationRatio": "0.01" },  { "asset": "BUSD", "riskBasedLiquidationRatio": "0.01" }]
-```
+
+```bash

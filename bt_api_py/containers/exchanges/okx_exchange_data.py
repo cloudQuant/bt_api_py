@@ -1,9 +1,10 @@
+import copy
+import datetime
 import json
+import logging
 import os
 import time
-import copy
-import logging
-import datetime
+
 from bt_api_py.containers.exchanges.exchange_data import ExchangeData
 
 logger = logging.getLogger(__name__)
@@ -21,9 +22,11 @@ def _get_okx_config():
     _okx_config_loaded = True
     try:
         from bt_api_py.config_loader import load_exchange_config
+
         config_path = os.path.join(
             os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
-            'configs', 'okx.yaml'
+            "configs",
+            "okx.yaml",
         )
         if os.path.exists(config_path):
             _okx_config = load_exchange_config(config_path)
@@ -41,20 +44,21 @@ class OkxExchangeData(ExchangeData):
     """
 
     def __init__(self):
-        """这个类存放一些交易所用到的参数
-        """
+        """这个类存放一些交易所用到的参数"""
         super().__init__()
-        self.exchange_name = 'OkxSwap'
-        self.rest_url = 'https://www.okx.com'
-        self.account_wss_url = 'wss://ws.okx.com:8443/ws/v5/private'
-        self.wss_url = 'wss://ws.okx.com:8443/ws/v5/public'
-        self.kline_wss_url = 'wss://ws.okx.com:8443/ws/v5/business'
-        self.symbol_leverage_dict = {'BTC-USDT': 100,
-                                     'ETH-USDT': 10,
-                                     'BCH-USDT': 10,
-                                     'DOGE-USDT': 0.001,
-                                     "BNB-USDT": 10,
-                                     "OP-USDT": 1, }
+        self.exchange_name = "OkxSwap"
+        self.rest_url = "https://www.okx.com"
+        self.account_wss_url = "wss://ws.okx.com:8443/ws/v5/private"
+        self.wss_url = "wss://ws.okx.com:8443/ws/v5/public"
+        self.kline_wss_url = "wss://ws.okx.com:8443/ws/v5/business"
+        self.symbol_leverage_dict = {
+            "BTC-USDT": 100,
+            "ETH-USDT": 10,
+            "BCH-USDT": 10,
+            "DOGE-USDT": 0.001,
+            "BNB-USDT": 10,
+            "OP-USDT": 1,
+        }
 
         self.rest_paths = {}
         self.wss_paths = {}
@@ -63,7 +67,7 @@ class OkxExchangeData(ExchangeData):
         self.status_dict = {}
 
         # 从 YAML 配置加载 (默认加载 swap)
-        self._load_from_config('swap')
+        self._load_from_config("swap")
 
     def _load_from_config(self, asset_type):
         """从 YAML 配置文件加载交易所参数
@@ -86,10 +90,10 @@ class OkxExchangeData(ExchangeData):
 
         # URLs
         if config.base_urls:
-            self.rest_url = config.base_urls.rest.get('default', self.rest_url)
-            self.wss_url = config.base_urls.wss.get('public', self.wss_url)
-            self.account_wss_url = config.base_urls.wss.get('private', self.account_wss_url)
-            self.kline_wss_url = config.base_urls.wss.get('business', self.kline_wss_url)
+            self.rest_url = config.base_urls.rest.get("default", self.rest_url)
+            self.wss_url = config.base_urls.wss.get("public", self.wss_url)
+            self.account_wss_url = config.base_urls.wss.get("private", self.account_wss_url)
+            self.kline_wss_url = config.base_urls.wss.get("business", self.kline_wss_url)
 
         # rest_paths
         if asset_cfg.rest_paths:
@@ -100,9 +104,9 @@ class OkxExchangeData(ExchangeData):
             converted = {}
             for key, value in asset_cfg.wss_paths.items():
                 if isinstance(value, dict):
-                    converted[key] = {'args': [dict(value)], 'op': 'subscribe'}
+                    converted[key] = {"args": [dict(value)], "op": "subscribe"}
                 elif isinstance(value, str):
-                    converted[key] = value if value else ''
+                    converted[key] = value if value else ""
                 else:
                     converted[key] = value
             self.wss_paths = converted
@@ -121,11 +125,11 @@ class OkxExchangeData(ExchangeData):
 
     # noinspection PyMethodMayBeStatic
     def get_symbol(self, symbol):
-        return symbol.replace('/', '-').upper() + "-SWAP"
+        return symbol.replace("/", "-").upper() + "-SWAP"
 
     # noinspection PyMethodMayBeStatic
     def get_symbol_re(self, symbol):
-        return symbol.replace('-', '/').lower().rsplit("/", 1)[0]
+        return symbol.replace("-", "/").lower().rsplit("/", 1)[0]
 
     # noinspection PyMethodMayBeStatic
     def get_period(self, key):
@@ -134,7 +138,7 @@ class OkxExchangeData(ExchangeData):
         return self.kline_periods[key]
 
     def get_rest_path(self, key):
-        if key not in self.rest_paths or self.rest_paths[key] == '':
+        if key not in self.rest_paths or self.rest_paths[key] == "":
             self.raise_path_error(self.exchange_name, key)
         return self.rest_paths[key]
 
@@ -149,21 +153,21 @@ class OkxExchangeData(ExchangeData):
         Returns:
             TYPE: Description
         """
-        key = kwargs['topic']
+        key = kwargs["topic"]
         if key == "mark_price" or key == "positions":
-            if 'symbol' in kwargs:
-                kwargs['symbol'] = kwargs['symbol']
+            if "symbol" in kwargs:
+                kwargs["symbol"] = kwargs["symbol"]
         else:
-            if 'symbol' in kwargs:
-                kwargs['symbol'] = self.get_symbol(kwargs['symbol'])
-        if 'period' in kwargs:
-            kwargs['period'] = self.get_period(kwargs['period'])
-        if key not in self.wss_paths or self.wss_paths[key] == '':
+            if "symbol" in kwargs:
+                kwargs["symbol"] = self.get_symbol(kwargs["symbol"])
+        if "period" in kwargs:
+            kwargs["period"] = self.get_period(kwargs["period"])
+        if key not in self.wss_paths or self.wss_paths[key] == "":
             self.raise_path_error(self.exchange_name, key)
         # print("kwargs", kwargs)
         req = copy.deepcopy(self.wss_paths[key])
         for k, v in req["args"][0].items():
-            symbol = kwargs.get('symbol', '')
+            symbol = kwargs.get("symbol", "")
             # print("symbol", symbol, "k = ", k, "v = ", v)
             req["args"][0][k] = req["args"][0][k].replace("<symbol>", symbol)
             if "USDT" in symbol:
@@ -171,7 +175,7 @@ class OkxExchangeData(ExchangeData):
             else:
                 currency = symbol.split("-")[0]
             req["args"][0][k] = req["args"][0][k].replace("<currency>", currency)
-            req["args"][0][k] = req["args"][0][k].replace("<period>", kwargs.get('period', ''))
+            req["args"][0][k] = req["args"][0][k].replace("<period>", kwargs.get("period", ""))
         req = json.dumps(req)
         # print("req_1", req)
         return req
@@ -179,6 +183,7 @@ class OkxExchangeData(ExchangeData):
 
 class OkxExchangeDataSwap(OkxExchangeData):
     """OKX USDT-M Perpetual Swap."""
+
     pass
 
 
@@ -186,53 +191,53 @@ class OkxExchangeDataFutures(OkxExchangeData):
     """OKX Futures (expiry-based contracts)."""
 
     def __init__(self):
-        super(OkxExchangeDataFutures, self).__init__()
-        self._load_from_config('futures')
+        super().__init__()
+        self._load_from_config("futures")
         # Override instType in wss_paths for FUTURES
-        for key in ['tick', 'depth', 'books', 'bidAsk', 'orders', 'account', 'positions']:
+        for key in ["tick", "depth", "books", "bidAsk", "orders", "account", "positions"]:
             if key in self.wss_paths:
-                for arg in self.wss_paths[key]['args']:
-                    if 'instType' in arg:
-                        arg['instType'] = 'FUTURES'
+                for arg in self.wss_paths[key]["args"]:
+                    if "instType" in arg:
+                        arg["instType"] = "FUTURES"
 
     def get_symbol(self, symbol):
-        return symbol.replace('/', '-').upper()
+        return symbol.replace("/", "-").upper()
 
     def get_symbol_re(self, symbol):
-        return symbol.replace('-', '/').lower()
+        return symbol.replace("-", "/").lower()
 
 
 class OkxExchangeDataSpot(OkxExchangeData):
     """OKX Spot Trading."""
 
     def __init__(self):
-        super(OkxExchangeDataSpot, self).__init__()
-        self._load_from_config('spot')
+        super().__init__()
+        self._load_from_config("spot")
 
     def get_symbol(self, symbol):
-        return symbol.replace('/', '-').upper()
+        return symbol.replace("/", "-").upper()
 
     # noinspection PyMethodMayBeStatic
     def get_symbol_re(self, symbol):
-        return symbol.replace('-', '/').lower()
+        return symbol.replace("-", "/").lower()
 
     def get_wss_path(self, **kwargs):
         """拿wss订阅字段
         Returns:
             TYPE: Description
         """
-        key = kwargs['topic']
-        if 'symbol' in kwargs:
-            kwargs['symbol'] = self.get_symbol(kwargs['symbol'])
-        if 'period' in kwargs:
-            kwargs['period'] = self.get_period(kwargs['period'])
+        key = kwargs["topic"]
+        if "symbol" in kwargs:
+            kwargs["symbol"] = self.get_symbol(kwargs["symbol"])
+        if "period" in kwargs:
+            kwargs["period"] = self.get_period(kwargs["period"])
 
-        if key not in self.wss_paths or self.wss_paths[key] == '':
+        if key not in self.wss_paths or self.wss_paths[key] == "":
             self.raise_path_error(self.exchange_name, key)
         req = copy.deepcopy(self.wss_paths[key])
         for k, v in req["args"][0].items():
-            symbol = kwargs.get('symbol', '')
+            symbol = kwargs.get("symbol", "")
             req["args"][0][k] = req["args"][0][k].replace("<symbol>", symbol)
             req["args"][0][k] = req["args"][0][k].replace("<currency>", symbol.split("-")[0])
-            req["args"][0][k] = req["args"][0][k].replace("<period>", kwargs.get('period', ''))
+            req["args"][0][k] = req["args"][0][k].replace("<period>", kwargs.get("period", ""))
         return json.dumps(req)

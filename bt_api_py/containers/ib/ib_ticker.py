@@ -2,14 +2,16 @@
 IB Tick 数据容器
 对应 IB TWS API 的 TickData / Ticker
 """
+
 from bt_api_py.containers.tickers.ticker import TickerData
 
 
 class IbTickerData(TickerData):
     """IB Tick 行情数据"""
 
-    def __init__(self, ticker_info, symbol_name=None, asset_type="STK",
-                 has_been_json_encoded=False):
+    def __init__(
+        self, ticker_info, symbol_name=None, asset_type="STK", has_been_json_encoded=False
+    ):
         super().__init__(ticker_info, has_been_json_encoded)
         self.symbol_name = symbol_name
         self.asset_type = asset_type
@@ -33,18 +35,18 @@ class IbTickerData(TickerData):
             return self
         info = self.ticker_info
         if isinstance(info, dict):
-            self.contract_symbol = info.get('symbol', self.symbol_name)
-            self.bid_val = float(info.get('bid', 0)) if info.get('bid') else None
-            self.ask_val = float(info.get('ask', 0)) if info.get('ask') else None
-            self.bid_size_val = float(info.get('bidSize', 0))
-            self.ask_size_val = float(info.get('askSize', 0))
-            self.last_val = float(info.get('last', 0)) if info.get('last') else None
-            self.last_size_val = float(info.get('lastSize', 0))
-            self.volume_val = int(info.get('volume', 0))
-            self.high_val = float(info.get('high', 0)) if info.get('high') else None
-            self.low_val = float(info.get('low', 0)) if info.get('low') else None
-            self.close_val = float(info.get('close', 0)) if info.get('close') else None
-            self.timestamp_val = info.get('time', '')
+            self.contract_symbol = info.get("symbol", self.symbol_name)
+            self.bid_val = float(info.get("bid", 0)) if info.get("bid") else None
+            self.ask_val = float(info.get("ask", 0)) if info.get("ask") else None
+            self.bid_size_val = float(info.get("bidSize", 0))
+            self.ask_size_val = float(info.get("askSize", 0))
+            self.last_val = float(info.get("last", 0)) if info.get("last") else None
+            self.last_size_val = float(info.get("lastSize", 0))
+            self.volume_val = int(info.get("volume", 0))
+            self.high_val = float(info.get("high", 0)) if info.get("high") else None
+            self.low_val = float(info.get("low", 0)) if info.get("low") else None
+            self.close_val = float(info.get("close", 0)) if info.get("close") else None
+            self.timestamp_val = info.get("time", "")
         self._initialized = True
         return self
 

@@ -12,21 +12,20 @@ PUT `/eapi/v1/listenKey`
 
 ## Request Weight
 
-**1**
+- *1**
 
 ## Request Parameters
 
 None
 
 ## Response Example
-    
-    
-    {}  
-    
 
-  * [API Description](</docs/derivatives/option/user-data-streams/Keepalive-User-Data-Stream#api-description>)
-  * [HTTP Request](</docs/derivatives/option/user-data-streams/Keepalive-User-Data-Stream#http-request>)
-  * [Request Weight](</docs/derivatives/option/user-data-streams/Keepalive-User-Data-Stream#request-weight>)
-  * [Request Parameters](</docs/derivatives/option/user-data-streams/Keepalive-User-Data-Stream#request-parameters>)
-  * [Response Example](</docs/derivatives/option/user-data-streams/Keepalive-User-Data-Stream#response-example>)
 
+    {}
+
+
+  - [API Description](</docs/derivatives/option/user-data-streams/Keepalive-User-Data-Stream#api-description>)
+  - [HTTP Request](</docs/derivatives/option/user-data-streams/Keepalive-User-Data-Stream#http-request>)
+  - [Request Weight](</docs/derivatives/option/user-data-streams/Keepalive-User-Data-Stream#request-weight>)
+  - [Request Parameters](</docs/derivatives/option/user-data-streams/Keepalive-User-Data-Stream#request-parameters>)
+  - [Response Example](</docs/derivatives/option/user-data-streams/Keepalive-User-Data-Stream#response-example>)

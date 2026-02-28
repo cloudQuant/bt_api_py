@@ -1,19 +1,21 @@
 import asyncio
 import json
+
 # import queue
 import traceback
 from threading import Thread
 
 # import aiohttp
 # from aiohttp import ClientTimeout
-from aiohttp import TCPConnector, ClientSession, ClientTimeout
-from bt_api_py.functions.log_message import SpdLogManager
+from aiohttp import ClientSession, ClientTimeout, TCPConnector
+
 from bt_api_py.functions.calculate_time import get_string_tz_time
+from bt_api_py.functions.log_message import SpdLogManager
 
-__all__ = ['AsyncBase']
+__all__ = ["AsyncBase"]
 
 
-class AsyncBase(object):
+class AsyncBase:
 
     def __init__(self, **kwargs):
         self.loop = None
@@ -21,12 +23,10 @@ class AsyncBase(object):
         self.client_timeout = 5
         self.limit = 100
         self.session = None
-        self.async_proxy = kwargs.get('async_proxy', None)
-        self.async_base_logger = SpdLogManager("./logs/async_data.log",
-                                               "async_base",
-                                               0,
-                                               0,
-                                               False).create_logger()
+        self.async_proxy = kwargs.get("async_proxy", None)
+        self.async_base_logger = SpdLogManager(
+            "./logs/async_data.log", "async_base", 0, 0, False
+        ).create_logger()
         self.start_loop()
 
     def start_loop(self):
@@ -67,7 +67,9 @@ class AsyncBase(object):
         self.submit(self.session.close())
         self.release()
 
-    async def async_http_request(self, method: str, url, headers=None, body=None, timeout=None) -> dict:
+    async def async_http_request(
+        self, method: str, url, headers=None, body=None, timeout=None
+    ) -> dict:
         try:
             # if not hasattr(self, 'session'):
             session = self.session
@@ -76,14 +78,14 @@ class AsyncBase(object):
                 self.session = session
             params = {}
             if timeout is not None:
-                params['timeout'] = ClientTimeout(total=timeout)
+                params["timeout"] = ClientTimeout(total=timeout)
             if headers is not None:
-                params['headers'] = headers
+                params["headers"] = headers
             if body is not None:
-                params['data'] = json.dumps(body, ensure_ascii=False)
+                params["data"] = json.dumps(body, ensure_ascii=False)
             # print(f' rest _ async httpRequest params: {params}')
             if self.async_proxy:
-                params['proxy'] = self.async_proxy
+                params["proxy"] = self.async_proxy
             func = getattr(session, method.lower())
             # print(f' func: {func.__name__}')
             async with func(url, **params) as resp:
@@ -91,13 +93,17 @@ class AsyncBase(object):
             return ret
         except Exception as e:
             # print(traceback.format_exc())
-            self.async_base_logger.info(f"""rest_async错误:{get_string_tz_time()} {traceback.format_exc()}""")
+            self.async_base_logger.info(
+                f"""rest_async错误:{get_string_tz_time()} {traceback.format_exc()}"""
+            )
             raise e
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     r = AsyncBase()
     _loop = asyncio.get_event_loop()
     _loop.run_until_complete(
-        r.async_http_request('get', 'https://fapi.binance.com/fapi/v1/depth?symbol=BTCUSDT&limit=10')
+        r.async_http_request(
+            "get", "https://fapi.binance.com/fapi/v1/depth?symbol=BTCUSDT&limit=10"
+        )
     )

@@ -1,10 +1,10 @@
-# -*- coding: utf-8 -*-
 """
 Capability 机制 — 声明场所支持的功能
 
 每个 Feed 实现通过 capabilities() 返回支持的能力集合。
 上层调用前可通过 require_capability() 检查，缺失能力时抛出 NotSupportedError。
 """
+
 from enum import Enum, unique
 from typing import Set
 
@@ -103,5 +103,5 @@ class CapabilityMixin:
     def require_capability(self, cap: Capability):
         """要求指定能力，不支持时抛出 NotSupportedError"""
         if not self.has_capability(cap):
-            venue = getattr(self, 'exchange_name', self.__class__.__name__)
+            venue = getattr(self, "exchange_name", self.__class__.__name__)
             raise NotSupportedError(cap, venue)

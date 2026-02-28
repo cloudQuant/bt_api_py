@@ -1,7 +1,9 @@
----
+- --
+
 name: bmad-review-adversarial-general
 description: Execute review-adversarial-general
----
+
+- --
 
 # review-adversarial-general
 

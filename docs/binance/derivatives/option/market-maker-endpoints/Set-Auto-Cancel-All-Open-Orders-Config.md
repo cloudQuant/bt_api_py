@@ -12,34 +12,38 @@ POST `/eapi/v1/countdownCancelAll`
 
 ## Request Weight
 
-**1**
+- *1**
 
 ## Request Parameters
 
-Name| Type| Mandatory| Description  
----|---|---|---  
-underlying| STRING| YES| Option underlying, e.g BTCUSDT  
-countdownTime| LONG| YES| Countdown time in milliseconds (ex. 1,000 for 1 second). 0 to disable the timer. Negative values (ex. -10000) are not accepted. Minimum acceptable value is 5,000   
-recvWindow| LONG| NO|   
-timestamp| LONG| YES|   
-  
->   * This rest endpoint sets up the parameters to cancel your open orders in case of an outage or disconnection.
->   * Example usage: Call this endpoint with a countdownTime value of 10000 (10 seconds) to turn on the auto-cancel feature. If the corresponding countdownCancelAllHeartBeat endpoint is not called within 10 seconds with the specified underlying symbol, all open orders of the specified symbol will be automatically canceled. If this endpoint is called with an countdownTime of 0, the countdown timer will be stopped.
->   * The system will check all countdowns approximately every 1000 milliseconds, **please note that sufficient redundancy should be considered when using this function**. We do not recommend setting the countdown time to be too precise or too small.
-> 
+Name| Type| Mandatory| Description
+
+- --|---|---|---
+
+underlying| STRING| YES| Option underlying, e.g BTCUSDT
+
+countdownTime| LONG| YES| Countdown time in milliseconds (ex. 1,000 for 1 second). 0 to disable the timer. Negative values (ex. -10000) are not accepted. Minimum acceptable value is 5,000
+
+recvWindow| LONG| NO|
+
+timestamp| LONG| YES|
+
+>   *This rest endpoint sets up the parameters to cancel your open orders in case of an outage or disconnection.
+>  *Example usage: Call this endpoint with a countdownTime value of 10000 (10 seconds) to turn on the auto-cancel feature. If the corresponding countdownCancelAllHeartBeat endpoint is not called within 10 seconds with the specified underlying symbol, all open orders of the specified symbol will be automatically canceled. If this endpoint is called with an countdownTime of 0, the countdown timer will be stopped.
+>  * The system will check all countdowns approximately every 1000 milliseconds, **please note that sufficient redundancy should be considered when using this function**. We do not recommend setting the countdown time to be too precise or too small.
+>
 
 ## Response Example
-    
-    
-    {  
-      "underlying": "ETHUSDT",  
-      "countdownTime": 30000  
-    }  
-    
 
-  * [API Description](</docs/derivatives/option/market-maker-endpoints/Set-Auto-Cancel-All-Open-Orders-Config#api-description>)
-  * [HTTP Request](</docs/derivatives/option/market-maker-endpoints/Set-Auto-Cancel-All-Open-Orders-Config#http-request>)
-  * [Request Weight](</docs/derivatives/option/market-maker-endpoints/Set-Auto-Cancel-All-Open-Orders-Config#request-weight>)
-  * [Request Parameters](</docs/derivatives/option/market-maker-endpoints/Set-Auto-Cancel-All-Open-Orders-Config#request-parameters>)
-  * [Response Example](</docs/derivatives/option/market-maker-endpoints/Set-Auto-Cancel-All-Open-Orders-Config#response-example>)
 
+    {
+      "underlying": "ETHUSDT",
+      "countdownTime": 30000
+    }
+
+
+  - [API Description](</docs/derivatives/option/market-maker-endpoints/Set-Auto-Cancel-All-Open-Orders-Config#api-description>)
+  - [HTTP Request](</docs/derivatives/option/market-maker-endpoints/Set-Auto-Cancel-All-Open-Orders-Config#http-request>)
+  - [Request Weight](</docs/derivatives/option/market-maker-endpoints/Set-Auto-Cancel-All-Open-Orders-Config#request-weight>)
+  - [Request Parameters](</docs/derivatives/option/market-maker-endpoints/Set-Auto-Cancel-All-Open-Orders-Config#request-parameters>)
+  - [Response Example](</docs/derivatives/option/market-maker-endpoints/Set-Auto-Cancel-All-Open-Orders-Config#response-example>)

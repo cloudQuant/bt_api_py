@@ -6,11 +6,13 @@ bt_api_py 自定义异常体系
 
 class BtApiError(Exception):
     """bt_api_py 所有异常的基类"""
+
     pass
 
 
 class ExchangeNotFoundError(BtApiError):
     """交易所未注册或未添加"""
+
     def __init__(self, exchange_name, available=None):
         msg = f"Exchange not found: {exchange_name}"
         if available:
@@ -21,6 +23,7 @@ class ExchangeNotFoundError(BtApiError):
 
 class ExchangeConnectionError(BtApiError):
     """交易所连接失败"""
+
     def __init__(self, exchange_name, detail=""):
         msg = f"Connection failed: {exchange_name}"
         if detail:
@@ -35,11 +38,13 @@ ConnectionError = ExchangeConnectionError
 
 class AuthenticationError(ExchangeConnectionError):
     """认证失败（API Key / 密码 / 穿透式认证错误）"""
+
     pass
 
 
 class RequestTimeoutError(BtApiError):
     """REST / 查询请求超时"""
+
     def __init__(self, exchange_name, url="", timeout=0):
         msg = f"{exchange_name} request timeout ({timeout}s)"
         if url:
@@ -52,6 +57,7 @@ class RequestTimeoutError(BtApiError):
 
 class RequestError(BtApiError):
     """REST 请求失败（非超时）"""
+
     def __init__(self, exchange_name, url="", detail=""):
         msg = f"{exchange_name} request error"
         if url:
@@ -64,6 +70,7 @@ class RequestError(BtApiError):
 
 class OrderError(BtApiError):
     """下单 / 撤单操作失败"""
+
     def __init__(self, exchange_name, symbol="", detail=""):
         msg = f"{exchange_name} order error"
         if symbol:
@@ -77,6 +84,7 @@ class OrderError(BtApiError):
 
 class SubscribeError(BtApiError):
     """订阅失败"""
+
     def __init__(self, exchange_name, detail=""):
         msg = f"{exchange_name} subscribe error"
         if detail:
@@ -87,8 +95,9 @@ class SubscribeError(BtApiError):
 
 class DataParseError(BtApiError):
     """数据解析失败"""
+
     def __init__(self, container_class="", detail=""):
-        msg = f"Data parse error"
+        msg = "Data parse error"
         if container_class:
             msg += f" in {container_class}"
         if detail:

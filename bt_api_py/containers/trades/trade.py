@@ -3,7 +3,7 @@
 """
 
 
-class TradeData(object):
+class TradeData:
     """交易类，用于保存成交信息"""
 
     def __init__(self, trade_info, has_been_json_encoded=False):

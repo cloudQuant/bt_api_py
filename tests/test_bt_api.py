@@ -175,14 +175,14 @@ def test_async_bt_api():
         # data_queue = bt_api.get_data_queue(exchange_name)
         api = bt_api.get_request_api(exchange_name)
         api.async_get_tick("BTC-USDT", extra_data={"test_async_tick_data": True})
-        time.sleep(3)
         # for exchange_name in exchange_kwargs.keys():
         data_queue = bt_api.get_data_queue(exchange_name)
         try:
-            tick_data = data_queue.get(False)
+            tick_data = data_queue.get(timeout=15)
         except queue.Empty:
             tick_data = None
         # 检测tick数据
+        assert tick_data is not None, f"async_get_tick returned no data for {exchange_name}"
         print(tick_data.get_data())
         assert isinstance(tick_data, RequestData)
         assert isinstance(tick_data.get_data(), list)

@@ -20,24 +20,31 @@ PUT `/sapi/v1/margin/apiKey/ip`
 ## Request Weight​
 
 
-**1(UID)**
+- *1(UID)**
 
 
 ## Request Parameters​
 
 
 | Name | Type | Mandatory | Description |
+
 | --- | --- | --- | --- |
+
 | apiKey | STRING | YES |  |
+
 | symbol | STRING | NO | isolated margin pair |
+
 | ip | STRING | YES | Can be added in batches, separated by commas. Max 30 for an API key |
+
 | recvWindow | LONG | NO | The value cannot be greater than 60000 |
+
 | timestamp | LONG | YES |  |
 
 
 ## Response Example​
 
 
-```
+```bash
 {}
-```
+
+```bash

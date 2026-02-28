@@ -1,7 +1,7 @@
 import time
 
 
-class RequestData(object):
+class RequestData:
     """request data info"""
 
     def __init__(self, data, extra_data, status=False, normalize_func=None):

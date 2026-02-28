@@ -1,5 +1,6 @@
-import time
 import json
+import time
+
 from bt_api_py.containers.orderbooks.orderbook import OrderBookData
 from bt_api_py.functions.utils import from_dict_get_float, from_dict_get_string
 
@@ -9,7 +10,7 @@ class BinanceOrderBookData(OrderBookData):
 
     def __init__(self, order_book_info, symbol_name, asset_type, has_been_json_encoded=False):
         super().__init__(order_book_info, has_been_json_encoded)
-        self.exchange_name = 'BINANCE'  # 交易所名称
+        self.exchange_name = "BINANCE"  # 交易所名称
         self.local_update_time = time.time()  # 本地时间戳
         self.symbol_name = symbol_name
         self.asset_type = asset_type  # ticker的类型
@@ -95,10 +96,10 @@ class BinanceRequestOrderBookData(BinanceOrderBookData):
             self.has_been_json_encoded = True
         if self.has_been_init_data:
             return self
-        self.order_book_symbol_name = from_dict_get_string(self.order_book_data, 's')
-        self.server_time = from_dict_get_float(self.order_book_data, 'E')
-        bids_list = self.order_book_data['bids']
-        asks_list = self.order_book_data['asks']
+        self.order_book_symbol_name = from_dict_get_string(self.order_book_data, "s")
+        self.server_time = from_dict_get_float(self.order_book_data, "E")
+        bids_list = self.order_book_data["bids"]
+        asks_list = self.order_book_data["asks"]
         self.bid_price_list = [float(i[0]) for i in bids_list]
         self.ask_price_list = [float(i[0]) for i in asks_list]
         self.bid_volume_list = [float(i[1]) for i in bids_list]
@@ -116,11 +117,11 @@ class BinanceWssOrderBookData(BinanceOrderBookData):
             self.has_been_json_encoded = True
         if self.has_been_init_data:
             return self
-        self.order_book_symbol_name = from_dict_get_string(self.order_book_data, 's')
-        self.server_time = from_dict_get_float(self.order_book_data, 'E')
-        self.bid_price_list = [float(i[0]) for i in self.order_book_data['b']]
-        self.ask_price_list = [float(i[0]) for i in self.order_book_data['a']]
-        self.bid_volume_list = [float(i[1]) for i in self.order_book_data['b']]
-        self.ask_volume_list = [float(i[1]) for i in self.order_book_data['a']]
+        self.order_book_symbol_name = from_dict_get_string(self.order_book_data, "s")
+        self.server_time = from_dict_get_float(self.order_book_data, "E")
+        self.bid_price_list = [float(i[0]) for i in self.order_book_data["b"]]
+        self.ask_price_list = [float(i[0]) for i in self.order_book_data["a"]]
+        self.bid_volume_list = [float(i[1]) for i in self.order_book_data["b"]]
+        self.ask_volume_list = [float(i[1]) for i in self.order_book_data["a"]]
         self.has_been_init_data = True
         return self

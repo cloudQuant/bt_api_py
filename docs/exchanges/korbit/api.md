@@ -3,25 +3,29 @@
 ## 交易所信息
 
 - **交易所名称**: Korbit
-- **官方网站**: https://www.korbit.co.kr
-- **API文档**: https://docs.korbit.co.kr
-- **24h交易量排名**: #36
-- **24h交易量**: $70M+
+- **官方网站**: <https://www.korbit.co.kr>
+- **API 文档**: <https://docs.korbit.co.kr>
+- **24h 交易量排名**: #36
+- **24h 交易量**: $70M+
 - **支持的交易对**: 100+（以官方列表为准）
-- **API版本**: REST v2 / WebSocket v2
+- **API 版本**: REST v2 / WebSocket v2
 
-## API基础信息
+## API 基础信息
 
-### 基础URL
+### 基础 URL
 
 ```text
+
 # REST API
-https://api.korbit.co.kr
+
+<https://api.korbit.co.kr>
 
 # WebSocket
+
 wss://ws-api.korbit.co.kr/v2/public
 wss://ws-api.korbit.co.kr/v2/private
-```
+
+```bash
 
 ### 请求头（私有接口）
 
@@ -32,16 +36,16 @@ wss://ws-api.korbit.co.kr/v2/private
 - 私有 REST 与 WebSocket 需要 API Key 认证
 - 公共 WebSocket 无需认证
 
-## 市场数据API（示例）
+## 市场数据 API（示例）
 
 - 行情: `GET /v2/tickers?symbol=btc_krw`
 - 深度: `GET /v2/orderbook?symbol=btc_krw`
 
-## 交易API（示例）
+## 交易 API（示例）
 
 - 下单 / 撤单 / 查询订单（详见官方文档）
 
-## 账户管理API
+## 账户管理 API
 
 - 余额、订单与成交等私有接口（详见官方文档）
 
@@ -53,7 +57,7 @@ wss://ws-api.korbit.co.kr/v2/private
 - 出入金: 5 次/秒（按账户）
 - 其他私有 API: 50 次/秒（按账户）
 
-## WebSocket支持
+## WebSocket 支持
 
 - Public: 行情与订单簿（`wss://ws-api.korbit.co.kr/v2/public`）
 - Private: 订单/成交/资产（`wss://ws-api.korbit.co.kr/v2/private`）
@@ -65,9 +69,12 @@ wss://ws-api.korbit.co.kr/v2/private
 ## 代码示例
 
 ```python
+
 # REST: 获取行情
+
 import requests
 
-url = "https://api.korbit.co.kr/v2/tickers?symbol=btc_krw"
+url = "<https://api.korbit.co.kr/v2/tickers?symbol=btc_krw">
 print(requests.get(url).json())
-```
+
+```bash

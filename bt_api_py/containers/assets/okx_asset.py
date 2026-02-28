@@ -1,17 +1,18 @@
-# -*- coding: utf-8 -*-
 """
 OKX Asset/Funding Account data containers.
 """
-import time
+
 import json
-from bt_api_py.functions.utils import from_dict_get_string, from_dict_get_float, from_dict_get_int
+import time
+
+from bt_api_py.functions.utils import from_dict_get_float, from_dict_get_int, from_dict_get_string
 
 
 class OkxCurrencyData:
     """Container for currency information from OKX."""
 
     def __init__(self, currency_info, has_been_json_encoded=False):
-        super(OkxCurrencyData, self).__init__()
+        super().__init__()
         self.currency_info = currency_info if has_been_json_encoded else None
         self.raw_data = currency_info
         self.has_been_json_encoded = has_been_json_encoded
@@ -32,7 +33,9 @@ class OkxCurrencyData:
             return self
 
         if not self.has_been_json_encoded:
-            self.currency_info = self.raw_data if isinstance(self.raw_data, dict) else json.loads(self.raw_data)
+            self.currency_info = (
+                self.raw_data if isinstance(self.raw_data, dict) else json.loads(self.raw_data)
+            )
             self.has_been_json_encoded = True
 
         self.currency = from_dict_get_string(self.currency_info, "ccy")
@@ -81,16 +84,18 @@ class OkxCurrencyData:
 
     def __str__(self):
         self.init_data()
-        return json.dumps({
-            "currency": self.currency,
-            "name": self.name,
-            "chain": self.chain,
-            "min_withdrawal_amt": self.min_withdrawal_amt,
-            "withdrawal_fee": self.withdrawal_fee,
-            "can_withdraw": self.can_withdraw,
-            "can_deposit": self.can_deposit,
-            "can_internal": self.can_internal,
-        })
+        return json.dumps(
+            {
+                "currency": self.currency,
+                "name": self.name,
+                "chain": self.chain,
+                "min_withdrawal_amt": self.min_withdrawal_amt,
+                "withdrawal_fee": self.withdrawal_fee,
+                "can_withdraw": self.can_withdraw,
+                "can_deposit": self.can_deposit,
+                "can_internal": self.can_internal,
+            }
+        )
 
     def __repr__(self):
         return self.__str__()
@@ -100,7 +105,7 @@ class OkxAssetBalanceData:
     """Container for asset balance information from OKX."""
 
     def __init__(self, balance_info, has_been_json_encoded=False):
-        super(OkxAssetBalanceData, self).__init__()
+        super().__init__()
         self.balance_info = balance_info if has_been_json_encoded else None
         self.raw_data = balance_info
         self.has_been_json_encoded = has_been_json_encoded
@@ -118,7 +123,9 @@ class OkxAssetBalanceData:
             return self
 
         if not self.has_been_json_encoded:
-            self.balance_info = self.raw_data if isinstance(self.raw_data, dict) else json.loads(self.raw_data)
+            self.balance_info = (
+                self.raw_data if isinstance(self.raw_data, dict) else json.loads(self.raw_data)
+            )
             self.has_been_json_encoded = True
 
         self.currency = from_dict_get_string(self.balance_info, "ccy")
@@ -151,13 +158,15 @@ class OkxAssetBalanceData:
 
     def __str__(self):
         self.init_data()
-        return json.dumps({
-            "currency": self.currency,
-            "balance": self.balance,
-            "available_balance": self.available_balance,
-            "frozen_balance": self.frozen_balance,
-            "local_update_time": self.local_update_time,
-        })
+        return json.dumps(
+            {
+                "currency": self.currency,
+                "balance": self.balance,
+                "available_balance": self.available_balance,
+                "frozen_balance": self.frozen_balance,
+                "local_update_time": self.local_update_time,
+            }
+        )
 
     def __repr__(self):
         return self.__str__()
@@ -167,7 +176,7 @@ class OkxAssetValuationData:
     """Container for asset valuation information from OKX."""
 
     def __init__(self, valuation_info, has_been_json_encoded=False):
-        super(OkxAssetValuationData, self).__init__()
+        super().__init__()
         self.valuation_info = valuation_info if has_been_json_encoded else None
         self.raw_data = valuation_info
         self.has_been_json_encoded = has_been_json_encoded
@@ -185,7 +194,9 @@ class OkxAssetValuationData:
             return self
 
         if not self.has_been_json_encoded:
-            self.valuation_info = self.raw_data if isinstance(self.raw_data, dict) else json.loads(self.raw_data)
+            self.valuation_info = (
+                self.raw_data if isinstance(self.raw_data, dict) else json.loads(self.raw_data)
+            )
             self.has_been_json_encoded = True
 
         self.valuation_currency = from_dict_get_string(self.valuation_info, "ccy")
@@ -218,13 +229,15 @@ class OkxAssetValuationData:
 
     def __str__(self):
         self.init_data()
-        return json.dumps({
-            "valuation_currency": self.valuation_currency,
-            "total_valuation": self.total_valuation,
-            "btc_valuation": self.btc_valuation,
-            "timestamp": self.timestamp,
-            "local_update_time": self.local_update_time,
-        })
+        return json.dumps(
+            {
+                "valuation_currency": self.valuation_currency,
+                "total_valuation": self.total_valuation,
+                "btc_valuation": self.btc_valuation,
+                "timestamp": self.timestamp,
+                "local_update_time": self.local_update_time,
+            }
+        )
 
     def __repr__(self):
         return self.__str__()
@@ -234,7 +247,7 @@ class OkxTransferStateData:
     """Container for transfer state information from OKX."""
 
     def __init__(self, transfer_info, has_been_json_encoded=False):
-        super(OkxTransferStateData, self).__init__()
+        super().__init__()
         self.transfer_info = transfer_info if has_been_json_encoded else None
         self.raw_data = transfer_info
         self.has_been_json_encoded = has_been_json_encoded
@@ -255,7 +268,9 @@ class OkxTransferStateData:
             return self
 
         if not self.has_been_json_encoded:
-            self.transfer_info = self.raw_data if isinstance(self.raw_data, dict) else json.loads(self.raw_data)
+            self.transfer_info = (
+                self.raw_data if isinstance(self.raw_data, dict) else json.loads(self.raw_data)
+            )
             self.has_been_json_encoded = True
 
         self.transfer_id = from_dict_get_string(self.transfer_info, "transId")
@@ -303,16 +318,18 @@ class OkxTransferStateData:
 
     def __str__(self):
         self.init_data()
-        return json.dumps({
-            "transfer_id": self.transfer_id,
-            "currency": self.currency,
-            "amount": self.amount,
-            "from_account": self.from_account,
-            "to_account": self.to_account,
-            "status": self.status,
-            "timestamp": self.timestamp,
-            "local_update_time": self.local_update_time,
-        })
+        return json.dumps(
+            {
+                "transfer_id": self.transfer_id,
+                "currency": self.currency,
+                "amount": self.amount,
+                "from_account": self.from_account,
+                "to_account": self.to_account,
+                "status": self.status,
+                "timestamp": self.timestamp,
+                "local_update_time": self.local_update_time,
+            }
+        )
 
     def __repr__(self):
         return self.__str__()
@@ -321,8 +338,10 @@ class OkxTransferStateData:
 class OkxDepositInfoData:
     """Container for deposit information from OKX WebSocket (deposit-info channel)."""
 
-    def __init__(self, deposit_info, symbol_name="ANY", asset_type="SWAP", has_been_json_encoded=False):
-        super(OkxDepositInfoData, self).__init__()
+    def __init__(
+        self, deposit_info, symbol_name="ANY", asset_type="SWAP", has_been_json_encoded=False
+    ):
+        super().__init__()
         self.deposit_info = deposit_info if has_been_json_encoded else None
         self.raw_data = deposit_info
         self.has_been_json_encoded = has_been_json_encoded
@@ -330,7 +349,7 @@ class OkxDepositInfoData:
         self.local_update_time = time.time()
         self.symbol_name = symbol_name
         self.asset_type = asset_type
-        self.exchange_name = 'OKX'
+        self.exchange_name = "OKX"
 
         # Deposit properties
         self.currency = None  # Currency
@@ -347,7 +366,9 @@ class OkxDepositInfoData:
             return self
 
         if not self.has_been_json_encoded:
-            self.deposit_info = self.raw_data if isinstance(self.raw_data, dict) else json.loads(self.raw_data)
+            self.deposit_info = (
+                self.raw_data if isinstance(self.raw_data, dict) else json.loads(self.raw_data)
+            )
             self.has_been_json_encoded = True
 
         self.currency = from_dict_get_string(self.deposit_info, "ccy")
@@ -409,20 +430,22 @@ class OkxDepositInfoData:
 
     def __str__(self):
         self.init_data()
-        return json.dumps({
-            "exchange_name": self.exchange_name,
-            "symbol_name": self.symbol_name,
-            "asset_type": self.asset_type,
-            "currency": self.currency,
-            "deposit_id": self.deposit_id,
-            "address": self.address,
-            "amount": self.amount,
-            "status": self.status,
-            "timestamp": self.timestamp,
-            "to_address": self.to_address,
-            "tx_id": self.tx_id,
-            "local_update_time": self.local_update_time,
-        })
+        return json.dumps(
+            {
+                "exchange_name": self.exchange_name,
+                "symbol_name": self.symbol_name,
+                "asset_type": self.asset_type,
+                "currency": self.currency,
+                "deposit_id": self.deposit_id,
+                "address": self.address,
+                "amount": self.amount,
+                "status": self.status,
+                "timestamp": self.timestamp,
+                "to_address": self.to_address,
+                "tx_id": self.tx_id,
+                "local_update_time": self.local_update_time,
+            }
+        )
 
     def __repr__(self):
         return self.__str__()
@@ -431,8 +454,10 @@ class OkxDepositInfoData:
 class OkxWithdrawalInfoData:
     """Container for withdrawal information from OKX WebSocket (withdrawal-info channel)."""
 
-    def __init__(self, withdrawal_info, symbol_name="ANY", asset_type="SWAP", has_been_json_encoded=False):
-        super(OkxWithdrawalInfoData, self).__init__()
+    def __init__(
+        self, withdrawal_info, symbol_name="ANY", asset_type="SWAP", has_been_json_encoded=False
+    ):
+        super().__init__()
         self.withdrawal_info = withdrawal_info if has_been_json_encoded else None
         self.raw_data = withdrawal_info
         self.has_been_json_encoded = has_been_json_encoded
@@ -440,7 +465,7 @@ class OkxWithdrawalInfoData:
         self.local_update_time = time.time()
         self.symbol_name = symbol_name
         self.asset_type = asset_type
-        self.exchange_name = 'OKX'
+        self.exchange_name = "OKX"
 
         # Withdrawal properties
         self.currency = None  # Currency
@@ -457,7 +482,9 @@ class OkxWithdrawalInfoData:
             return self
 
         if not self.has_been_json_encoded:
-            self.withdrawal_info = self.raw_data if isinstance(self.raw_data, dict) else json.loads(self.raw_data)
+            self.withdrawal_info = (
+                self.raw_data if isinstance(self.raw_data, dict) else json.loads(self.raw_data)
+            )
             self.has_been_json_encoded = True
 
         self.currency = from_dict_get_string(self.withdrawal_info, "ccy")
@@ -519,20 +546,22 @@ class OkxWithdrawalInfoData:
 
     def __str__(self):
         self.init_data()
-        return json.dumps({
-            "exchange_name": self.exchange_name,
-            "symbol_name": self.symbol_name,
-            "asset_type": self.asset_type,
-            "currency": self.currency,
-            "withdrawal_id": self.withdrawal_id,
-            "address": self.address,
-            "amount": self.amount,
-            "status": self.status,
-            "timestamp": self.timestamp,
-            "fee": self.fee,
-            "tx_id": self.tx_id,
-            "local_update_time": self.local_update_time,
-        })
+        return json.dumps(
+            {
+                "exchange_name": self.exchange_name,
+                "symbol_name": self.symbol_name,
+                "asset_type": self.asset_type,
+                "currency": self.currency,
+                "withdrawal_id": self.withdrawal_id,
+                "address": self.address,
+                "amount": self.amount,
+                "status": self.status,
+                "timestamp": self.timestamp,
+                "fee": self.fee,
+                "tx_id": self.tx_id,
+                "local_update_time": self.local_update_time,
+            }
+        )
 
     def __repr__(self):
         return self.__str__()

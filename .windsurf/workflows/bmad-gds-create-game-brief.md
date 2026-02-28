@@ -1,7 +1,9 @@
----
+- --
+
 description: 'Game vision definition workflow through collaborative step-by-step discovery. Use when the user says ""lets create a game brief"" or ""I want to define my game vision""'
 auto_execution_mode: "iterate"
----
+
+- --
 
 # create-game-brief
 

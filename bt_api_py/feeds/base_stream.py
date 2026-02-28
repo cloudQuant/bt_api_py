@@ -2,6 +2,7 @@
 流式数据抽象基类 — 支持 WebSocket / CTP SPI / IB TWS 等不同协议
 所有流式数据连接器都应继承此类，实现 connect/disconnect/subscribe_topics/_run_loop 方法
 """
+
 import threading
 from abc import ABC, abstractmethod
 from enum import Enum
@@ -11,6 +12,7 @@ from bt_api_py.functions.log_message import SpdLogManager
 
 class ConnectionState(Enum):
     """连接状态枚举"""
+
     DISCONNECTED = "disconnected"
     CONNECTING = "connecting"
     CONNECTED = "connected"
@@ -30,11 +32,11 @@ class BaseDataStream(ABC):
 
     def __init__(self, data_queue, **kwargs):
         self.data_queue = data_queue
-        self.stream_name = kwargs.get('stream_name', self.__class__.__name__)
+        self.stream_name = kwargs.get("stream_name", self.__class__.__name__)
         self._running = False
         self._state = ConnectionState.DISCONNECTED
         self._thread = None
-        log_file = kwargs.get('log_file_name', f"./logs/{self.stream_name}.log")
+        log_file = kwargs.get("log_file_name", f"./logs/{self.stream_name}.log")
         self.logger = SpdLogManager(log_file, self.stream_name, 0, 0, False).create_logger()
 
     @property
@@ -101,6 +103,7 @@ class BaseDataStream(ABC):
         :return: True if connected, False if timeout
         """
         import time
+
         elapsed = 0.0
         while elapsed < timeout:
             if self._state in (ConnectionState.CONNECTED, ConnectionState.AUTHENTICATED):

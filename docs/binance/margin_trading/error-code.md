@@ -5,11 +5,10 @@
 > The error JSON payload:
 
 
-```
+```bash
 {  "code":-1121,  "msg":"Invalid symbol."}
-```
 
-
+```bash
 Errors consist of two parts: an error code and a message. Codes are universal, but messages can vary.
 
 
@@ -785,20 +784,35 @@ Errors consist of two parts: an error code and a message. Codes are universal, b
 
 
 | Error message | Description |
+
 | --- | --- |
+
 | "Filter failure: PRICE_FILTER" | price is too high, too low, and/or not following the tick size rule for the symbol. |
+
 | "Filter failure: PERCENT_PRICE" | price is X% too high or X% too low from the average weighted price over the last Y minutes. |
+
 | "Filter failure: PERCENT_PRICE_BY_SIDE" | price is X% too high or Y% too low from the lastPrice on that side (i.e. BUY/SELL) |
+
 | "Filter failure: LOT_SIZE" | quantity is too high, too low, and/or not following the step size rule for the symbol. |
-| "Filter failure: MIN_NOTIONAL" | price * quantity is too low to be a valid order for the symbol. |
+
+| "Filter failure: MIN_NOTIONAL" | price *quantity is too low to be a valid order for the symbol. |
+
 | "Filter failure: ICEBERG_PARTS" | ICEBERG order would break into too many parts; icebergQty is too small. |
+
 | "Filter failure: MARKET_LOT_SIZE" | MARKET order's quantity is too high, too low, and/or not following the step size rule for the symbol. |
+
 | "Filter failure: MAX_POSITION" | The account's position has reached the maximum defined limit.  This is composed of the sum of the balance of the base asset, and the sum of the quantity of all open BUYorders. |
+
 | "Filter failure: MAX_NUM_ORDERS" | Account has too many open orders on the symbol. |
+
 | "Filter failure: MAX_NUM_ALGO_ORDERS" | Account has too many open stop loss and/or take profit orders on the symbol. |
+
 | "Filter failure: MAX_NUM_ICEBERG_ORDERS" | Account has too many open iceberg orders on the symbol. |
+
 | "Filter failure: TRAILING_DELTA" | trailingDelta is not within the defined range of the filter for that order type. |
+
 | "Filter failure: EXCHANGE_MAX_NUM_ORDERS" | Account has too many open orders on the exchange. |
+
 | "Filter failure: EXCHANGE_MAX_NUM_ALGO_ORDERS" | Account has too many open stop loss and/or take profit orders on the exchange. |
 
 
@@ -1066,32 +1080,59 @@ The following messages which will indicate the specific error:
 
 
 | Error message | Description |
+
 | --- | --- |
+
 | "Unknown order sent." | The order (by either orderId, clientOrderId, origClientOrderId) could not be found. |
+
 | "Duplicate order sent." | The clientOrderId is already in use. |
+
 | "Market is closed." | The symbol is not trading. |
+
 | "Account has insufficient balance for requested action." | Not enough funds to complete the action. |
+
 | "Market orders are not supported for this symbol." | MARKET is not enabled on the symbol. |
+
 | "Iceberg orders are not supported for this symbol." | icebergQty is not enabled on the symbol |
+
 | "Stop loss orders are not supported for this symbol." | STOP_LOSS is not enabled on the symbol |
+
 | "Stop loss limit orders are not supported for this symbol." | STOP_LOSS_LIMIT is not enabled on the symbol |
+
 | "Take profit orders are not supported for this symbol." | TAKE_PROFIT is not enabled on the symbol |
+
 | "Take profit limit orders are not supported for this symbol." | TAKE_PROFIT_LIMIT is not enabled on the symbol |
-| "Price * QTY is zero or less." | price * quantity is too low |
+
+| "Price*QTY is zero or less." | price* quantity is too low |
+
 | "IcebergQty exceeds QTY." | icebergQty must be less than the order quantity |
+
 | "This action is disabled on this account." | Contact customer support; some actions have been disabled on the account. |
+
 | "This account may not place or cancel orders." | Contact customer support; the account has trading ability disabled. |
+
 | "Unsupported order combination" | The orderType, timeInForce, stopPrice, and/or icebergQty combination isn't allowed. |
+
 | "Order would trigger immediately." | The order's stop price is not valid when compared to the last traded price. |
+
 | "Cancel order is invalid. Check origClientOrderId and orderId." | No origClientOrderId or orderId was sent in. |
+
 | "Order would immediately match and take." | LIMIT_MAKER order type would immediately match and trade, and not be a pure maker order. |
+
 | "The relationship of the prices for the orders is not correct." | The prices set in the OCO is breaking the Price rules.  The rules are:  SELL Orders: Limit Price > Last Price > Stop Price BUY Orders: Limit Price < Last Price < Stop Price |
+
 | "OCO orders are not supported for this symbol" | OCO is not enabled on the symbol. |
+
 | "Quote order qty market orders are not support for this symbol." | MARKET orders using the parameter quoteOrderQty are not enabled on this symbol. |
+
 | "Trailing stop orders are not supported for this symbol." | Orders using trailingDelta are not enabled on the symbol. |
+
 | "Order cancel-replace is not supported for this symbol." | POST /api/v3/order/cancelReplace  (REST API) or order.cancelReplace (WebSocket API) is on enabled the symbol. |
+
 | "This symbol is not permitted for this account." | Account and symbol do not have the same permissions. (e.g. SPOT, MARGIN, etc) |
+
 | "This symbol is restricted for this account." | Account is unable to trade on that symbol. (e.g. An ISOLATED_MARGIN account cannot place SPOT orders.) |
+
 | "Order was not canceled due to cancel restrictions." | Either cancelRestrictions was set to ONLY_NEW but the order status was not NEW  or  cancelRestrictions was set to ONLY_PARTIALLY_FILLED but the order status was not PARTIALLY_FILLED. |
 
 

@@ -33,16 +33,13 @@ import threading
 import time
 
 from .ctp_md_api import CThostFtdcMdApi, CThostFtdcMdSpi
-from .ctp_trader_api import CThostFtdcTraderApi, CThostFtdcTraderSpi
 from .ctp_structs_common import (
-    CThostFtdcReqUserLoginField,
     CThostFtdcReqAuthenticateField,
+    CThostFtdcReqUserLoginField,
     CThostFtdcSettlementInfoConfirmField,
 )
-from .ctp_structs_query import (
-    CThostFtdcQryTradingAccountField,
-    CThostFtdcQryInvestorPositionField,
-)
+from .ctp_structs_query import CThostFtdcQryInvestorPositionField, CThostFtdcQryTradingAccountField
+from .ctp_trader_api import CThostFtdcTraderApi, CThostFtdcTraderSpi
 
 
 def _flow_dir(prefix):
@@ -56,6 +53,7 @@ def _flow_dir(prefix):
 # ===========================================================================
 #  MdClient - 行情客户端
 # ===========================================================================
+
 
 class _MdSpi(CThostFtdcMdSpi):
     def __init__(self, client):
@@ -113,9 +111,9 @@ class MdClient:
         self.user_id = user_id
         self.password = password
 
-        self.on_tick = None     # callback(CThostFtdcDepthMarketDataField)
-        self.on_login = None    # callback(CThostFtdcRspUserLoginField)
-        self.on_error = None    # callback(CThostFtdcRspInfoField)
+        self.on_tick = None  # callback(CThostFtdcDepthMarketDataField)
+        self.on_login = None  # callback(CThostFtdcRspUserLoginField)
+        self.on_error = None  # callback(CThostFtdcRspInfoField)
 
         self._connected = False
         self._loggedin = False
@@ -195,6 +193,7 @@ class MdClient:
 # ===========================================================================
 #  TraderClient - 交易客户端
 # ===========================================================================
+
 
 class _TraderSpi(CThostFtdcTraderSpi):
     def __init__(self, client):
@@ -281,8 +280,15 @@ class TraderClient:
         auth_code: 认证码
     """
 
-    def __init__(self, front, broker_id, user_id, password,
-                 app_id="simnow_client_test", auth_code="0000000000000000"):
+    def __init__(
+        self,
+        front,
+        broker_id,
+        user_id,
+        password,
+        app_id="simnow_client_test",
+        auth_code="0000000000000000",
+    ):
         self.front = front
         self.broker_id = broker_id
         self.user_id = user_id
@@ -290,10 +296,10 @@ class TraderClient:
         self.app_id = app_id
         self.auth_code = auth_code
 
-        self.on_login = None   # callback(CThostFtdcRspUserLoginField)
-        self.on_order = None   # callback(CThostFtdcOrderField)
-        self.on_trade = None   # callback(CThostFtdcTradeField)
-        self.on_error = None   # callback(CThostFtdcRspInfoField)
+        self.on_login = None  # callback(CThostFtdcRspUserLoginField)
+        self.on_order = None  # callback(CThostFtdcOrderField)
+        self.on_trade = None  # callback(CThostFtdcTradeField)
+        self.on_error = None  # callback(CThostFtdcRspInfoField)
 
         self._connected = False
         self._ready = False

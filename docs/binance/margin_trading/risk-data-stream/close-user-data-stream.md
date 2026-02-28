@@ -17,7 +17,7 @@ DELETE `/sapi/v1/margin/listen-key`
 ## Request Weight(UID)​
 
 
-**3000**
+- *3000**
 
 
 ## Request Parameters​
@@ -29,6 +29,7 @@ None
 ## Response Example​
 
 
-```
+```bash
 {}
-```
+
+```bash

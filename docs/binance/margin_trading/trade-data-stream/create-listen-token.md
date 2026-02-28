@@ -14,19 +14,23 @@ Create a listenToken that authorizes the user to access the User Data Stream of 
 ### HTTP Request​
 
 
-**POST** `/sapi/v1/userListenToken`
+- *POST** `/sapi/v1/userListenToken`
 
 
-**Request weight (UID)**: 1
+- *Request weight (UID)**: 1
 
 
 ### Request Parameters​
 
 
 | Name | Type | Required | Description |
+
 | --- | --- | --- | --- |
+
 | symbol | STRING | CONDITIONAL | Trading pair symbol; required when isIsolated is true, e.g., BNBUSDT |
+
 | isIsolated | BOOLEAN | NO | Whether it is isolated margin; true means isolated; default is cross margin |
+
 | validity | LONG | NO | Validity in milliseconds; default 24 hours, maximum 24 hours |
 
 
@@ -38,10 +42,10 @@ Create a listenToken that authorizes the user to access the User Data Stream of 
 ### Response Example​
 
 
-```
+```bash
 {  "token": "6xXxePXwZRjVSHKhzUCCGnmN3fkvMTXru+pYJS8RwijXk9Vcyr3rkwfVOTcP2OkONqciYA",  "expirationTime": 1758792204196}
-```
 
+```bash
 
 ## Subscribe to User Data Stream using listenToken (USER_STREAM)​
 
@@ -52,7 +56,7 @@ Create a listenToken that authorizes the user to access the User Data Stream of 
 Subscribe to the user data stream using listenToken.
 
 
-This method must be called on the WebSocket API. For more information about how to use the WebSocket API, see : [WebSocket API documentation](https://developers.binance.com/docs/binance-spot-api-docs/websocket-api/general-api-information)
+This method must be called on the WebSocket API. For more information about how to use the WebSocket API, see : [WebSocket API documentation](<https://developers.binance.com/docs/binance-spot-api-docs/websocket-api/general-api-information)>
 
 
 ### method​
@@ -64,10 +68,10 @@ This method must be called on the WebSocket API. For more information about how 
 ### Request Example​
 
 
-```
+```bash
 {  "id": "f3a8f7a29f2e54df796db582f3d",  "method": "userDataStream.subscribe.listenToken",  "params": {    "listenToken": "5DbylArkmImhyHkpG6s9tbiFy5uAMTFwzx9vwsFjDv9dC3GkKxSuoTCj0HvcJC0WYi8fA"  }}
-```
 
+```bash
 
 ### Request weight: 2​
 
@@ -76,7 +80,9 @@ This method must be called on the WebSocket API. For more information about how 
 
 
 | Name | Type | Required | Description |
+
 | --- | --- | --- | --- |
+
 | listenToken | STRING | YES | The listen token |
 
 
@@ -86,19 +92,20 @@ This method must be called on the WebSocket API. For more information about how 
 - If the listenToken is invalid, an error **-1209** will be returned.
 - The subscription is not automatically renewed by the WebSocket API. To extend the validity of your subscription, you must call `/sapi/v1/userListenToken` before the expiration of your current subscription, obtain a new listenToken with an updated expirationTime, and call `userDataStream.subscribe.listenToken` again passing the new listenToken. This will seamlessly extend your subscription to the new expirationDate.
 - If the subscription is not extended, it will expire and you will receive a `eventStreamTerminated` event (see example below).
-- You can receive the events in SBE instead of JSON if you require better performance. See the [Simple Binary Encoding (SBE) FAQ](https://developers.binance.com/docs/binance-spot-api-docs/faqs/sbe_faq) for more details.
+- You can receive the events in SBE instead of JSON if you require better performance. See the [Simple Binary Encoding (SBE) FAQ](<https://developers.binance.com/docs/binance-spot-api-docs/faqs/sbe_faq)> for more details.
 
 ### Response Example​
 
 
-```
+```bash
 {  "subscriptionId": 1,  "expirationTime": 1749094553955907}
-```
 
+```bash
 
 ### Subscription Expiration Example​
 
 
-```
+```bash
 {  "subscriptionId": 0,  "event": {    "e": "eventStreamTerminated",    "E": 1759089357377  }}
-```
+
+```bash

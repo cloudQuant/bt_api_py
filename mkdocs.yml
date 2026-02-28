@@ -1,0 +1,269 @@
+# MkDocs 配置文件
+# https://www.mkdocs.org/user-guide/configuration/
+
+site_name: bt_api_py 文档
+site_description: 统一的多交易所交易 API 框架
+site_author: cloudQuant
+site_url: https://cloudquant.github.io/bt_api_py/
+
+# 仓库配置
+repo_name: cloudQuant/bt_api_py
+repo_url: https://github.com/cloudQuant/bt_api_py
+
+# 版权信息
+copyright: Copyright &copy; 2024 cloudQuant
+
+# 主题配置
+theme:
+  name: material
+  language: zh
+  palette:
+    # 自动模式 - 跟随系统
+    - media: "(prefers-color-scheme)"
+      toggle:
+        icon: material/link
+        name: 切换模式
+    # 明亮模式
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/weather-sunny
+        name: 切换深色模式
+    # 深色模式
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/weather-night
+        name: 切换浅色模式
+  features:
+    - navigation.instant           # 即时加载
+    - navigation.tracking           # URL 跟踪
+    - navigation.tabs               # 顶部标签页
+    - navigation.sections           # 章节折叠
+    - navigation.expand             # 默认展开章节
+    - navigation.indexes            # 索引页面
+    - navigation.top                # 返回顶部按钮
+    - navigation.footer              # 页脚导航
+    - search.suggest                # 搜索建议
+    - search.highlight              # 搜索高亮
+    - search.share                  # 分享搜索结果
+    - content.code.copy             # 代码复制按钮
+    - content.tabs.link             # 标签同步
+    - toc.follow                    # 目录跟随
+  icon:
+    repo: fontawesome/brands/github
+    edit: material/pencil
+    view: material/eye
+    logo: material/chart-line
+    language: material/translate
+
+# 插件配置
+plugins:
+  - search:
+      lang:
+        - zh
+        - en
+      separator: '[\s\-\.]+'
+  - git-revision-date-localized:
+      enable_creation_date: true
+      type: datetime
+      timezone: Asia/Shanghai
+      enable_git_follow: false
+  - minify:
+      minify_html: true
+  # 取消注释以下插件以启用额外功能
+  # - tags:
+  #     tags_file: tags.md
+  # - blog:
+  #     blog_dir: blog
+  #     blog_toc: true
+
+# 额外配置
+extra:
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/cloudQuant/bt_api_py
+    - icon: fontawesome/brands/python
+      link: https://pypi.org/project/bt_api_py/
+
+  # Giscus 评论系统配置
+  # 使用说明：见 COMMENT_SETUP.md
+  # 首次使用请访问 https://giscus.app 获取配置参数
+  # 或者暂时留空，等后续再配置
+  # giscus:
+  #   repo: cloudQuant/bt_api_py
+  #   repo_id: R_kgDONUxxxx  # 从 giscus.app 获取
+  #   category: Announcements
+  #   category_id: DIC_kwDONUxxxx  # 从 giscus.app 获取
+  #   mapping: pathname
+  #   strict: 0
+  #   reactions_enabled: 1
+  #   emit_metadata: 0
+  #   input_position: bottom
+  #   theme: preferred_color_scheme
+  #   lang: zh-CN
+
+  # 版本管理 (使用 mike 时取消注释)
+  # version:
+  #   provider: mike
+
+# Markdown 扩展
+markdown_extensions:
+  # Python Markdown
+  - abbr                      # 缩写
+  - admonition                # 提示块
+  - attr_list                 # 属性列表
+  - def_list                  # 定义列表
+  - footnotes                 # 脚注
+  - md_in_html                # HTML 中使用 Markdown
+  - toc:
+      permalink: true         # 永久链接
+      toc_depth: 4            # 目录深度
+
+  # Python Markdown Extensions
+  - pymdownx.arithmatex:      # 数学公式
+      generic: true
+  - pymdownx.betterem:        # 改进的强调
+      smart_enable: all
+  - pymdownx.caret            # 上标
+  - pymdownx.details          # 可折叠详情
+  - pymdownx.emoji:           # 表情符号
+      emoji_index: !!python/name:material.extensions.emoji.twemoji
+      emoji_generator: !!python/name:material.extensions.emoji.to_svg
+  - pymdownx.highlight:       # 代码高亮
+      anchor_linenums: true
+      line_spans: __span
+      pygments_lang_class: true
+  - pymdownx.inlinehilite     # 行内代码高亮
+  - pymdownx.keys             # 键盘按键
+  - pymdownx.mark             # 标记
+  - pymdownx.smartsymbols     # 智能符号
+  - pymdownx.superfences:     # 改进的围栏
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
+  - pymdownx.tabbed:          # 标签组
+      alternate_style: true
+  - pymdownx.tasklist:        # 任务列表
+      custom_checkbox: true
+  - pymdownx.tilde            # 删除线
+  - attr_list
+  - pymdownx.emoji:
+
+# 额外 CSS/JS
+extra_javascript:
+  - https://polyfill.io/v3/polyfill.min.js?features=es6
+  - https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js
+  # 取消注释以下行以启用 Giscus 评论（需要先配置）
+  # - javascripts/giscus.js
+
+extra_css:
+  - stylesheets/extra.css
+
+# 导航结构
+nav:
+  - 首页: index.md
+
+  - 快速开始:
+      - 安装指南: installation.md
+      - 快速入门: quickstart.md
+      - CTP 期货指南: ctp_quickstart.md
+      - IB 指南: ib_quickstart.md
+      - 更新日志: change_log.md
+
+  - 核心文档:
+      - API 参考:
+          - 概览: api_reference/index.md
+          - BtApi 类: api_reference.md
+          - 数据容器: api_reference/data_containers.md
+          - WebSocket 订阅: api_reference/websocket.md
+          - 事件系统: api_reference/event_system.md
+          - Binance API: api_reference/binance.md
+          - OKX API: api_reference/okx.md
+          - CTP API: api_reference/ctp.md
+          - IB API: api_reference/ib.md
+      - 代码示例: examples/api_examples.md
+      - 参数说明: params.md
+      - 错误处理: error_handling.md
+      - 性能优化: performance.md
+      - 最佳实践: best_practices.md
+      - 架构设计: architecture.md
+      - 使用指南: usage_guide.md
+      - 开发者指南: developer_guide.md
+      - 多策略架构: multi_strategy_architecture.md
+
+  - Binance:
+      - 概览: binance/index.md
+      - 现货交易 (SPOT):
+          - 概览: binance/spot/README.md
+          - REST API: binance/spot/rest-api.md
+          - WebSocket 流: binance/spot/websocket-streams.md
+          - WebSocket API: binance/spot/websocket-api.md
+          - 用户数据流: binance/spot/user-data-stream.md
+          - 枚举类型: binance/spot/enums.md
+          - 错误码: binance/spot/errors.md
+          - 交易规则: binance/spot/filters.md
+          - SBE 行情流: binance/spot/sbe-market-data-streams.md
+      - 合约交易 (DERIVATIVES):
+          - 概览: binance/derivatives/index.md
+          - 快速开始: binance/derivatives/quick-start.md
+          - 更新日志: binance/derivatives/change-log.md
+      - 杠杆交易 (MARGIN):
+          - 概览: binance/margin_trading/README.md
+      - 算法交易 (ALGO):
+          - 概览: binance/algo/README.md
+          - 快速开始: binance/algo/quick-start.md
+          - 现货算法: binance/algo/spot-algo/fee-structure.md
+          - 合约算法: binance/algo/future-algo/twap-new-order.md
+
+  - OKX:
+      - 概览: okx/index.md
+      - 交易账户: okx/trading_account.md
+      - 订单交易: okx/order_book_trading_trade.md
+      - 行情数据: okx/market_data.md
+      - 公共数据: okx/public_data.md
+      - 资金账户: okx/funding_account.md
+      - 子账户: okx/sub_account.md
+      - 算法交易: okx/order_book_trading_algo.md
+      - 网格交易: okx/order_book_trading_grid.md
+      - 其他交易: okx/order_book_trading_others.md
+      - 价差交易: okx/spread_trading.md
+      - 交易统计: okx/trading_statistics.md
+      - 状态与错误: okx/status_announcement_error.md
+      - 大宗交易: okx/block_trading.md
+
+  - Interactive Brokers:
+      - 快速入门: ib_quickstart.md
+      - 概览: ib_web_api/index.md
+      - API 快速参考: ib_web_api/api_reference_quick.md
+      - 实现指南: ib_web_api/implementation_guide.md
+      - 账户管理: ib_web_api/account_management.md
+      - 交易: ib_web_api/trading.md
+
+  - CTP (中国期货):
+      - 快速入门: ctp_quickstart.md
+      - SWIG 重构计划: ctp_swig_refactoring_plan.md
+
+  - 开发参考:
+      - Binance API 状态: binance_api_implementation_status.md
+      - Binance 待实现: binance_api_missing_apis.md
+      - Binance 开发计划: binance_api_todo.md
+      - OKX 开发计划: okx_api_todo.md
+
+  # 取消注释以下部分以启用博客和标签
+  # - 博客:
+  #     - blog/index.md
+  # - 标签:
+  #     - tags.md
+
+# 排除文件
+exclude_docs: |
+  _bmad/
+  exchanges/
+  COMMENT_SETUP.md
+  I18N_SETUP.md

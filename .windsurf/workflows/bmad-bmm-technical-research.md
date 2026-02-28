@@ -1,7 +1,9 @@
----
+- --
+
 description: 'Conduct technical research on technologies and architecture. Use when the user says ""create a technical research report on [topic]"".'
 auto_execution_mode: "iterate"
----
+
+- --
 
 # technical-research
 

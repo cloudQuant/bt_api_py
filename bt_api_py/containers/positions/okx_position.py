@@ -1,14 +1,15 @@
-import time
 import json
+import time
+
 from bt_api_py.containers.positions.position import PositionData
-from bt_api_py.functions.utils import from_dict_get_string, from_dict_get_float
+from bt_api_py.functions.utils import from_dict_get_float, from_dict_get_string
 
 
 class OkxPositionData(PositionData):
     """保存持仓信息"""
 
     def __init__(self, position_info, symbol_name, asset_type, has_been_json_encoded=False):
-        super(OkxPositionData, self).__init__(position_info, has_been_json_encoded)
+        super().__init__(position_info, has_been_json_encoded)
         self.exchange_name = "OKX"
         self.local_update_time = time.time()  # 本地时间戳
         self.symbol_name = symbol_name
@@ -34,25 +35,25 @@ class OkxPositionData(PositionData):
 
     def init_data(self):
         if not self.has_been_json_encoded:
-            self.position_data = json.loads(self.position_info)['data']
+            self.position_data = json.loads(self.position_info)["data"]
             self.has_been_json_encoded = True
         if self.has_been_init_data:
             return self
-        self.server_time = from_dict_get_float(self.position_data, 'uTime')
-        self.margin_type = from_dict_get_string(self.position_data, 'mgnMode')
-        self.is_isolated = True if self.margin_type == 'isolated' else False
-        self.leverage = from_dict_get_float(self.position_data, 'lever')
-        self.position_symbol_name = from_dict_get_string(self.position_data, 'instId')
-        self.position_volume = from_dict_get_float(self.position_data, 'pos')
-        self.position_side = from_dict_get_string(self.position_data, 'posSide')
-        self.avg_price = from_dict_get_float(self.position_data, 'avgPx')
-        self.mark_price = from_dict_get_float(self.position_data, 'markPx')
-        self.initial_margin = from_dict_get_float(self.position_data, 'imr')
-        self.maintain_margin = from_dict_get_float(self.position_data, 'mmr')
-        self.position_fee = from_dict_get_float(self.position_data, 'fee')
-        self.position_realized_pnl = from_dict_get_float(self.position_data, 'realizedPnl')
-        self.position_unrealized_pnl = from_dict_get_float(self.position_data, 'upl')
-        self.position_funding_value = from_dict_get_float(self.position_data, 'fundingFee')
+        self.server_time = from_dict_get_float(self.position_data, "uTime")
+        self.margin_type = from_dict_get_string(self.position_data, "mgnMode")
+        self.is_isolated = True if self.margin_type == "isolated" else False
+        self.leverage = from_dict_get_float(self.position_data, "lever")
+        self.position_symbol_name = from_dict_get_string(self.position_data, "instId")
+        self.position_volume = from_dict_get_float(self.position_data, "pos")
+        self.position_side = from_dict_get_string(self.position_data, "posSide")
+        self.avg_price = from_dict_get_float(self.position_data, "avgPx")
+        self.mark_price = from_dict_get_float(self.position_data, "markPx")
+        self.initial_margin = from_dict_get_float(self.position_data, "imr")
+        self.maintain_margin = from_dict_get_float(self.position_data, "mmr")
+        self.position_fee = from_dict_get_float(self.position_data, "fee")
+        self.position_realized_pnl = from_dict_get_float(self.position_data, "realizedPnl")
+        self.position_unrealized_pnl = from_dict_get_float(self.position_data, "upl")
+        self.position_funding_value = from_dict_get_float(self.position_data, "fundingFee")
         self.has_been_init_data = True
         return self
 
@@ -78,7 +79,6 @@ class OkxPositionData(PositionData):
                 "position_realized_pnl": self.position_realized_pnl,
                 "position_unrealized_pnl": self.position_unrealized_pnl,
                 "position_funding_value": self.position_funding_value,
-
             }
         return self.all_data
 

@@ -6,5 +6,4 @@ On this page
 
 Please find details from [here](<https://developers.binance.com/docs/wallet/asset/user-universal-transfer>).
 
-  * [API Description](</docs/derivatives/option/account/Funds-Transfer#api-description>)
-
+  - [API Description](</docs/derivatives/option/account/Funds-Transfer#api-description>)

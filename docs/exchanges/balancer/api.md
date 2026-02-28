@@ -1,35 +1,42 @@
 # Balancer API 文档
 
 ## 文档信息
+
 - 文档版本: 1.0.0
-- API类型: GraphQL
+- API 类型: GraphQL
 - 创建日期: 2026-02-27
 - 最后更新: 2026-02-27
-- 官方文档: https://docs.balancer.fi/data-and-analytics/data-and-analytics/balancer-api/balancer-api.html
+- 官方文档: <https://docs.balancer.fi/data-and-analytics/data-and-analytics/balancer-api/balancer-api.html>
 
 ## 交易所基本信息
+
 - 官方名称: Balancer
-- 官网: https://balancer.fi
+- 官网: <https://balancer.fi>
 - 交易所类型: DEX (去中心化交易所)
 - 协议版本: v2 / v3
-- 24h交易量排名: #8 (DEX)
+- 24h 交易量排名: #8 (DEX)
 - 区块链: 多链 (Ethereum, Polygon, Arbitrum, Optimism, Gnosis, Avalanche, Base, BSC, Sonic)
 - 池类型: Weighted Pool, Stable Pool, Composable Stable Pool, Boosted Pool, Managed Pool 等
 - 治理代币: BAL
-- GitHub: https://github.com/balancer
+- GitHub: <https://github.com/balancer>
 
-## API基础URL
+## API 基础 URL
 
 Balancer 采用 GraphQL API，无传统 REST 端点。
 
 | 端点类型 | URL | 说明 |
-|---------|-----|------|
-| GraphQL API | `https://api-v3.balancer.fi` | 主端点（自带 Playground） |
-| Subgraph (Ethereum) | `https://api.thegraph.com/subgraphs/name/balancer-labs/balancer-v2` | The Graph 子图 |
-| Subgraph (Polygon) | `https://api.thegraph.com/subgraphs/name/balancer-labs/balancer-polygon-v2` | Polygon 子图 |
-| Subgraph (Arbitrum) | `https://api.thegraph.com/subgraphs/name/balancer-labs/balancer-arbitrum-v2` | Arbitrum 子图 |
 
-> **提示**: 可在浏览器直接访问 `https://api-v3.balancer.fi` 打开 GraphQL Playground 进行交互式查询。
+|---------|-----|------|
+
+| GraphQL API | `<https://api-v3.balancer.fi`> | 主端点（自带 Playground） |
+
+| Subgraph (Ethereum) | `<https://api.thegraph.com/subgraphs/name/balancer-labs/balancer-v2`> | The Graph 子图 |
+
+| Subgraph (Polygon) | `<https://api.thegraph.com/subgraphs/name/balancer-labs/balancer-polygon-v2`> | Polygon 子图 |
+
+| Subgraph (Arbitrum) | `<https://api.thegraph.com/subgraphs/name/balancer-labs/balancer-arbitrum-v2`> | Arbitrum 子图 |
+
+> **提示**: 可在浏览器直接访问 `<https://api-v3.balancer.fi`> 打开 GraphQL Playground 进行交互式查询。
 
 ## 认证方式
 
@@ -41,14 +48,23 @@ Balancer API 为**公开只读**接口，无需 API Key 或签名认证。
 ## 支持的链（Chain 枚举值）
 
 | Chain 枚举 | 网络 |
+
 |-----------|------|
+
 | MAINNET | Ethereum 主网 |
+
 | POLYGON | Polygon |
+
 | ARBITRUM | Arbitrum |
+
 | OPTIMISM | Optimism |
+
 | GNOSIS | Gnosis Chain |
+
 | AVALANCHE | Avalanche |
+
 | BASE | Base |
+
 | SEPOLIA | Sepolia 测试网 |
 
 > 多数查询需要 `chain` 参数指定网络。
@@ -58,31 +74,43 @@ Balancer API 为**公开只读**接口，无需 API Key 或签名认证。
 API 围绕以下主要域组织：
 
 | 域 | 描述 | 主要查询 |
+
 |----|------|---------|
+
 | Pools | 池子信息、TVL、APR | `poolGetPool`, `poolGetPools` |
+
 | Gauges | veBAL 投票、Gauge 信息 | `veBalGetUser`, `veBalGetUserBalance`, `veBalGetVotingList` |
+
 | Events | 池子事件（Swap/Add/Remove） | `poolGetEvents` |
+
 | Users | 用户余额、质押 | `userGetPoolBalances`, `userGetStaking` |
+
 | Tokens | Token 元数据与动态数据 | `tokenGetTokens`, `tokenGetTokenDynamicData`, `tokenGetTokensData` |
+
 | Prices | 当前/历史价格 | `tokenGetCurrentPrices`, `tokenGetHistoricalPrices` |
+
 | SOR | 智能订单路由（最优交换路径） | `sorGetSwapPaths` |
 
-## 市场数据API
+## 市场数据 API
 
 ### 1. 查询单个池子详情（含 APR）
 
-**Query**: `poolGetPool`
+- *Query**: `poolGetPool`
 
-**描述**: 获取单个池子的详细信息，包括 Token 组成、TVL、APR 等。
+- *描述**: 获取单个池子的详细信息，包括 Token 组成、TVL、APR 等。
 
-**参数**:
+- *参数**:
 
 | 参数 | 类型 | 必需 | 描述 |
+
 |------|------|------|------|
+
 | id | String | 是 | 池子 ID（合约地址+nonce） |
+
 | chain | GqlChain | 是 | 链枚举，如 MAINNET |
 
-**GraphQL 示例**:
+- *GraphQL 示例**:
+
 ```graphql
 {
   poolGetPool(
@@ -113,9 +141,11 @@ API 围绕以下主要域组织：
     }
   }
 }
-```
 
-**响应示例**:
+```bash
+
+- *响应示例**:
+
 ```json
 {
   "data": {
@@ -138,27 +168,37 @@ API 围绕以下主要域组织：
     }
   }
 }
-```
+
+```bash
 
 ### 2. 查询多个池子（按条件筛选）
 
-**Query**: `poolGetPools`
+- *Query**: `poolGetPools`
 
-**描述**: 按链、TVL 等条件批量查询池子。
+- *描述**: 按链、TVL 等条件批量查询池子。
 
-**参数**:
+- *参数**:
 
 | 参数 | 类型 | 必需 | 描述 |
+
 |------|------|------|------|
+
 | where.chainIn | [GqlChain] | 否 | 链列表，如 [MAINNET, ARBITRUM] |
+
 | where.minTvl | Float | 否 | 最低 TVL 过滤 |
+
 | where.userAddress | String | 否 | 用户地址（查询用户持仓池） |
+
 | first | Int | 否 | 返回数量限制 |
+
 | skip | Int | 否 | 分页偏移 |
+
 | orderBy | GqlPoolOrderBy | 否 | 排序字段，如 totalLiquidity |
+
 | orderDirection | GqlPoolOrderDirection | 否 | asc / desc |
 
-**GraphQL 示例 - Top 10 按 TVL 排序**:
+- *GraphQL 示例 - Top 10 按 TVL 排序**:
+
 ```graphql
 {
   poolGetPools(
@@ -177,9 +217,11 @@ API 围绕以下主要域组织：
     }
   }
 }
-```
 
-**GraphQL 示例 - TVL > $10k 的池子**:
+```bash
+
+- *GraphQL 示例 - TVL > $10k 的池子**:
+
 ```graphql
 {
   poolGetPools(
@@ -190,15 +232,17 @@ API 围绕以下主要域组织：
     name
   }
 }
-```
+
+```bash
 
 ### 3. 查询池子 Swap 事件
 
-**Query**: `poolGetEvents`
+- *Query**: `poolGetEvents`
 
-**描述**: 获取指定池子的 Swap/Add/Remove 事件历史。
+- *描述**: 获取指定池子的 Swap/Add/Remove 事件历史。
 
-**GraphQL 示例**:
+- *GraphQL 示例**:
+
 ```graphql
 {
   poolGetEvents(
@@ -213,17 +257,21 @@ API 围绕以下主要域组织：
     tx
   }
 }
-```
+
+```bash
 
 ### 4. 查询 Token 列表与价格
 
-**Query**: `tokenGetTokens`, `tokenGetCurrentPrices`
+- *Query**: `tokenGetTokens`, `tokenGetCurrentPrices`
 
-**描述**: 获取 Token 元数据及当前/历史价格。
+- *描述**: 获取 Token 元数据及当前/历史价格。
 
-**GraphQL 示例**:
+- *GraphQL 示例**:
+
 ```graphql
+
 # 获取 Token 列表
+
 {
   tokenGetTokens(chains: [MAINNET]) {
     address
@@ -234,6 +282,7 @@ API 围绕以下主要域组织：
 }
 
 # 获取 Token 动态数据（价格、市值等）
+
 {
   tokenGetTokenDynamicData(
     address: "0xba100000625a3754423978a60c9317c58a424e3d"
@@ -245,27 +294,35 @@ API 围绕以下主要域组织：
     volume24h
   }
 }
-```
 
-## 交易API（SOR - 智能订单路由）
+```bash
+
+## 交易 API（SOR - 智能订单路由）
 
 ### 查询最优 Swap 路径
 
-**Query**: `sorGetSwapPaths`
+- *Query**: `sorGetSwapPaths`
 
-**描述**: 使用智能订单路由器（SOR）查询最优交换路径。注意此接口仅返回最优路径信息，实际交换需通过链上合约完成。
+- *描述**: 使用智能订单路由器（SOR）查询最优交换路径。注意此接口仅返回最优路径信息，实际交换需通过链上合约完成。
 
-**参数**:
+- *参数**:
 
 | 参数 | 类型 | 必需 | 描述 |
+
 |------|------|------|------|
+
 | chain | GqlChain | 是 | 链枚举 |
+
 | swapAmount | String | 是 | 交换数量（human-readable，如 "1" 表示 1 ETH） |
+
 | swapType | GqlSorSwapType | 是 | EXACT_IN（精确输入）或 EXACT_OUT（精确输出） |
+
 | tokenIn | String | 是 | 输入 Token 地址 |
+
 | tokenOut | String | 是 | 输出 Token 地址 |
 
-**GraphQL 示例 - 1 WETH → USDC**:
+- *GraphQL 示例 - 1 WETH → USDC**:
+
 ```graphql
 {
   sorGetSwapPaths(
@@ -283,9 +340,11 @@ API 围绕以下主要域组织：
     }
   }
 }
-```
 
-**响应示例**:
+```bash
+
+- *响应示例**:
+
 ```json
 {
   "data": {
@@ -299,19 +358,20 @@ API 围绕以下主要域组织：
     }
   }
 }
-```
 
+```bash
 > 链上执行 Swap 需要调用 Balancer Vault 合约的 `swap()` 或通过 Balancer Router 合约。
 
-## 用户数据API
+## 用户数据 API
 
 ### 1. 查询用户池子余额
 
-**Query**: `poolGetPools` (带 userAddress)
+- *Query**: `poolGetPools` (带 userAddress)
 
-**描述**: 查询用户在各池子中的余额（包括钱包持有的 BPT 和质押在 Gauge/Aura 中的 BPT）。
+- *描述**: 查询用户在各池子中的余额（包括钱包持有的 BPT 和质押在 Gauge/Aura 中的 BPT）。
 
-**GraphQL 示例**:
+- *GraphQL 示例**:
+
 ```graphql
 {
   poolGetPools(
@@ -335,15 +395,17 @@ API 围绕以下主要域组织：
     }
   }
 }
-```
+
+```bash
 
 ### 2. 查询用户 veBAL 信息
 
-**Query**: `veBalGetUser`
+- *Query**: `veBalGetUser`
 
-**描述**: 查询用户的 veBAL 锁仓和投票信息。
+- *描述**: 查询用户的 veBAL 锁仓和投票信息。
 
-**GraphQL 示例**:
+- *GraphQL 示例**:
+
 ```graphql
 {
   veBalGetUser(address: "0xYourWalletAddress") {
@@ -351,14 +413,19 @@ API 围绕以下主要域组织：
     rank
   }
 }
-```
+
+```bash
 
 ## 速率限制
 
 | 限制类型 | 限制值 | 说明 |
+
 |---------|--------|------|
+
 | GraphQL 请求 | 无严格公开限制 | 建议合理控制请求频率 |
+
 | 复杂查询 | 可能被限流 | 避免一次查询过多数据 |
+
 | Subgraph 查询 | The Graph 免费层有限制 | 高频查询建议使用付费计划 |
 
 ### 最佳实践
@@ -368,25 +435,30 @@ API 围绕以下主要域组织：
 - SOR 查询结果有约 5 分钟的缓存周期，动态数据不实时
 - 生产环境建议使用自部署后端或 Subgraph
 
-## WebSocket支持
+## WebSocket 支持
 
 Balancer API **不提供**原生 WebSocket 实时推送。
 
 替代方案：
+
 - **轮询 GraphQL API**: 定时查询行情和池子状态
 - **监听链上事件**: 通过 Web3 Provider (如 ethers.js、web3.py) 订阅 Vault 合约的 Swap/PoolBalanceChanged 等事件
 - **The Graph Subgraph**: 使用 Subgraph 的 subscription 功能（部分支持）
 
 ```python
+
 # 监听 Balancer Vault 合约 Swap 事件示例（使用 web3.py）
+
 from web3 import Web3
 
 w3 = Web3(Web3.WebsocketProvider("wss://mainnet.infura.io/ws/v3/YOUR_KEY"))
 
 # Balancer Vault 地址 (v2)
+
 VAULT_ADDRESS = "0xBA12222222228d8Ba445958a75a0704d566BF2C8"
 
 # Swap 事件 ABI
+
 SWAP_EVENT_ABI = {
     "anonymous": False,
     "inputs": [
@@ -399,7 +471,8 @@ SWAP_EVENT_ABI = {
     "name": "Swap",
     "type": "event"
 }
-```
+
+```bash
 
 ## 错误处理
 
@@ -419,15 +492,21 @@ SWAP_EVENT_ABI = {
   ],
   "data": null
 }
-```
+
+```bash
 
 ### 常见错误
 
 | 错误 | 可能原因 | 处理建议 |
+
 |------|---------|---------|
+
 | Pool not found | 池子 ID 错误或不存在 | 检查 poolId 和 chain 参数 |
+
 | Invalid chain | chain 枚举值错误 | 使用正确的枚举值（如 MAINNET） |
+
 | Query too complex | 查询字段过多或嵌套过深 | 减少查询字段，分多次查询 |
+
 | Rate limited | 请求频率过高 | 降低请求频率，添加缓存 |
 
 ## 代码示例
@@ -438,7 +517,7 @@ SWAP_EVENT_ABI = {
 import requests
 import json
 
-API_URL = "https://api-v3.balancer.fi"
+API_URL = "<https://api-v3.balancer.fi">
 
 def graphql_query(query, variables=None):
     """执行 GraphQL 查询"""
@@ -535,12 +614,14 @@ def get_token_price(address, chain="MAINNET"):
 # ========== 使用示例 ==========
 
 # 获取 Top 10 池子
+
 pools = get_top_pools("MAINNET", 10)
 for pool in pools:
     tvl = pool["dynamicData"]["totalLiquidity"]
     print(f"{pool['name']} ({pool['type']}): TVL ${float(tvl):,.2f}")
 
 # 查询 1 WETH -> USDC 的最优路径
+
 WETH = "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2"
 USDC = "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48"
 swap = get_swap_path(WETH, USDC, "1", "MAINNET")
@@ -548,10 +629,12 @@ print(f"Swap 1 WETH -> USDC: {swap['returnAmountRaw']} raw units")
 print(f"Price impact: {swap['priceImpact']['priceImpact']}")
 
 # 获取 BAL Token 价格
+
 BAL = "0xba100000625a3754423978a60c9317c58a424e3d"
 price = get_token_price(BAL, "MAINNET")
 print(f"BAL price: ${price['price']}")
-```
+
+```bash
 
 ## 智能合约交互
 
@@ -560,9 +643,13 @@ print(f"BAL price: ${price['price']}")
 ### 核心合约地址 (Ethereum Mainnet)
 
 | 合约 | 地址 | 说明 |
+
 |------|------|------|
+
 | Vault (v2) | `0xBA12222222228d8Ba445958a75a0704d566BF2C8` | 核心 Vault，管理所有池子资产 |
+
 | BalancerQueries | `0xE39B5e3B6D74016b2F6A9673D7d7493B6DF549d5` | 只读查询合约 |
+
 | BAL Token | `0xba100000625a3754423978a60c9317c58a424e3d` | 治理代币 |
 
 ### Python Web3 Swap 示例
@@ -570,11 +657,12 @@ print(f"BAL price: ${price['price']}")
 ```python
 from web3 import Web3
 
-w3 = Web3(Web3.HTTPProvider("https://mainnet.infura.io/v3/YOUR_KEY"))
+w3 = Web3(Web3.HTTPProvider("<https://mainnet.infura.io/v3/YOUR_KEY"))>
 
 VAULT_ADDRESS = "0xBA12222222228d8Ba445958a75a0704d566BF2C8"
 
 # Vault ABI（仅 swap 函数）
+
 VAULT_ABI_SWAP = [{
     "inputs": [
         {"name": "singleSwap", "type": "tuple", "components": [
@@ -601,29 +689,32 @@ VAULT_ABI_SWAP = [{
 }]
 
 vault = w3.eth.contract(address=VAULT_ADDRESS, abi=VAULT_ABI_SWAP)
+
 # 构建交易需要：poolId, tokenIn, tokenOut, amount, 钱包私钥签名
-```
+
+```bash
 
 ## 变更历史
 
 ### 2026-02-27
+
 - 完善文档，添加详细 GraphQL 查询示例
 - 添加 SOR 智能订单路由文档
 - 添加用户数据查询文档
 - 添加智能合约交互示例
 - 添加 Python 完整代码示例
 
----
+- --
 
 ## 相关资源
 
-- [Balancer 官方文档](https://docs.balancer.fi/)
-- [Balancer API GraphQL Playground](https://api-v3.balancer.fi)
-- [Balancer GitHub](https://github.com/balancer)
-- [Balancer SDK](https://github.com/balancer/balancer-sdk)
-- [Balancer Subgraph](https://docs.balancer.fi/data-and-analytics/data-and-analytics/subgraph.html)
-- [Balancer Telegram (API Updates)](https://t.me/BalancerAPI)
+- [Balancer 官方文档](<https://docs.balancer.fi/)>
+- [Balancer API GraphQL Playground](<https://api-v3.balancer.fi)>
+- [Balancer GitHub](<https://github.com/balancer)>
+- [Balancer SDK](<https://github.com/balancer/balancer-sdk)>
+- [Balancer Subgraph](<https://docs.balancer.fi/data-and-analytics/data-and-analytics/subgraph.html)>
+- [Balancer Telegram (API Updates)](<https://t.me/BalancerAPI)>
 
----
+- --
 
-*本文档由 bt_api_py 项目维护，内容基于 Balancer 官方 API 文档整理。*
+- 本文档由 bt_api_py 项目维护，内容基于 Balancer 官方 API 文档整理。*

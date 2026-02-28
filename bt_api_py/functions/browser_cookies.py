@@ -9,12 +9,9 @@
 依赖: pip install browser-cookie3
 """
 
-import os
 import json
-import sqlite3
-import http.cookies
 from pathlib import Path
-from typing import Optional, Dict, List
+from typing import Dict, Optional
 from urllib.parse import urlparse
 
 
@@ -30,17 +27,17 @@ def extract_cookie_string(cookie_str: str) -> Dict[str, str]:
         return cookies
 
     # 简单解析
-    for part in cookie_str.split(';'):
+    for part in cookie_str.split(";"):
         part = part.strip()
-        if '=' in part:
-            key, value = part.split('=', 1)
+        if "=" in part:
+            key, value = part.split("=", 1)
             cookies[key.strip()] = value.strip()
     return cookies
 
 
-def get_cookies_from_browser(domain: str = "localhost:5000",
-                            browser: str = "chrome",
-                            path: str = None) -> Dict[str, str]:
+def get_cookies_from_browser(
+    domain: str = "localhost:5000", browser: str = "chrome", path: str = None
+) -> Dict[str, str]:
     """从浏览器提取指定域名的 cookies
 
     Args:
@@ -54,12 +51,10 @@ def get_cookies_from_browser(domain: str = "localhost:5000",
     try:
         import browser_cookie3
     except ImportError:
-        raise ImportError(
-            "browser-cookie3 is required. Install: pip install browser-cookie3"
-        )
+        raise ImportError("browser-cookie3 is required. Install: pip install browser-cookie3")
 
     cookie_jar = None
-    domain_parts = domain.split(':')[0]  # 去掉端口号
+    domain_parts = domain.split(":")[0]  # 去掉端口号
 
     try:
         if browser.lower() == "chrome":
@@ -79,7 +74,7 @@ def get_cookies_from_browser(domain: str = "localhost:5000",
                         break
                 except Exception:
                     continue
-    except Exception as e:
+    except Exception:
         # 如果失败，返回空字典
         return {}
 
@@ -114,15 +109,18 @@ def get_cookies_from_file(file_path: str) -> Dict[str, str]:
         return {}
 
     try:
-        with open(file_path, 'r') as f:
+        with open(file_path) as f:
             data = json.load(f)
             if isinstance(data, dict):
                 return data
             elif isinstance(data, list):
                 # 浏览器导出的格式可能是 list
-                return {item.get("name", item.get("key")): item.get("value")
-                        for item in data if isinstance(item, dict)}
-    except Exception as e:
+                return {
+                    item.get("name", item.get("key")): item.get("value")
+                    for item in data
+                    if isinstance(item, dict)
+                }
+    except Exception:
         return {}
 
     return {}
@@ -143,12 +141,12 @@ def get_cookies_from_netscape(file_path: str) -> Dict[str, str]:
 
     cookies = {}
     try:
-        with open(file_path, 'r') as f:
+        with open(file_path) as f:
             for line in f:
                 line = line.strip()
-                if not line or line.startswith('#'):
+                if not line or line.startswith("#"):
                     continue
-                parts = line.split('\t')
+                parts = line.split("\t")
                 if len(parts) >= 7:
                     # Netscape 格式: domain \t flag \t path \t secure \t expiration \t name \t value
                     name = parts[5]
@@ -160,10 +158,12 @@ def get_cookies_from_netscape(file_path: str) -> Dict[str, str]:
     return cookies
 
 
-def get_ibkr_cookies(base_url: str = "https://localhost:5000",
-                    cookie_source: Optional[str] = None,
-                    browser: str = "chrome",
-                    cookie_path: str = "/sso") -> Dict[str, str]:
+def get_ibkr_cookies(
+    base_url: str = "https://localhost:5000",
+    cookie_source: Optional[str] = None,
+    browser: str = "chrome",
+    cookie_path: str = "/sso",
+) -> Dict[str, str]:
     """获取 IBKR Gateway 所需的 cookies
 
     Args:
@@ -184,17 +184,16 @@ def get_ibkr_cookies(base_url: str = "https://localhost:5000",
 
     if cookie_source is None or cookie_source == "browser":
         cookies = get_cookies_from_browser(
-            domain=urlparse(base_url).netloc,
-            browser=browser,
-            path=cookie_path
+            domain=urlparse(base_url).netloc, browser=browser, path=cookie_path
         )
     elif cookie_source == "env":
         import os
+
         cookie_str = os.environ.get("IB_WEB_COOKIES", "")
         cookies = extract_cookie_string(cookie_str)
     elif cookie_source.startswith("file:"):
         file_path = cookie_source[5:]
-        if file_path.endswith('.txt'):
+        if file_path.endswith(".txt"):
             cookies = get_cookies_from_netscape(file_path)
         else:
             cookies = get_cookies_from_file(file_path)
@@ -215,13 +214,13 @@ def save_cookies_to_file(cookies: Dict[str, str], file_path: str):
     file_path = Path(file_path).expanduser()
     file_path.parent.mkdir(parents=True, exist_ok=True)
 
-    with open(file_path, 'w') as f:
+    with open(file_path, "w") as f:
         json.dump(cookies, f, indent=2)
 
 
-def export_browser_cookies_to_file(output_path: str,
-                                  domain: str = "localhost:5000",
-                                  browser: str = "chrome"):
+def export_browser_cookies_to_file(
+    output_path: str, domain: str = "localhost:5000", browser: str = "chrome"
+):
     """从浏览器导出 cookies 到文件
 
     Args:
@@ -243,7 +242,7 @@ def cookies_to_header(cookies: Dict[str, str]) -> str:
     Returns:
         str: Cookie Header 字符串，如 "key1=value1; key2=value2"
     """
-    return '; '.join(f"{k}={v}" for k, v in cookies.items())
+    return "; ".join(f"{k}={v}" for k, v in cookies.items())
 
 
 if __name__ == "__main__":

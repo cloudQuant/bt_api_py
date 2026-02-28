@@ -3,25 +3,29 @@
 ## 交易所信息
 
 - **交易所名称**: Bitget
-- **官方网站**: https://www.bitget.com
-- **API文档**: https://www.bitget.com/api-doc
-- **24h交易量排名**: #11-15
-- **24h交易量**: $2B+
+- **官方网站**: <https://www.bitget.com>
+- **API 文档**: <https://www.bitget.com/api-doc>
+- **24h 交易量排名**: #11-15
+- **24h 交易量**: $2B+
 - **支持的交易对**: 600+ 交易对
-- **API版本**: v2 (主推), v1 (旧版)
+- **API 版本**: v2 (主推), v1 (旧版)
 
-## API基础信息
+## API 基础信息
 
-### 基础URL
+### 基础 URL
 
 ```text
+
 # REST API
-https://api.bitget.com
+
+<https://api.bitget.com>
 
 # WebSocket (v3)
+
 wss://ws.bitget.com/v3/ws/public
 wss://ws.bitget.com/v3/ws/private
-```
+
+```bash
 
 ### 请求头
 
@@ -32,14 +36,15 @@ ACCESS-PASSPHRASE: {passphrase}
 ACCESS-TIMESTAMP: {timestamp}
 Content-Type: application/json
 locale: en-US
-```
+
+```bash
 
 ## 认证方式
 
-### 1. 获取API密钥
+### 1. 获取 API 密钥
 
 1. 登录 Bitget 账户
-2. 进入用户中心 -> API管理
+2. 进入用户中心 -> API 管理
 3. 创建 API Key 并设置 Passphrase
 4. 配置权限与 IP 白名单
 5. 保存 API Key / Secret / Passphrase
@@ -48,7 +53,7 @@ locale: en-US
 
 Bitget 使用 HMAC SHA256 签名算法。
 
-**签名步骤**:
+- *签名步骤**:
 
 1. 生成时间戳（毫秒字符串）
 2. 构建签名字符串: `timestamp + method + requestPath + "?" + queryString + body`
@@ -70,7 +75,7 @@ class BitgetAuth:
         self.api_key = api_key
         self.api_secret = api_secret
         self.passphrase = passphrase
-        self.base_url = "https://api.bitget.com"
+        self.base_url = "<https://api.bitget.com">
 
     def _sign(self, timestamp, method, request_path, body=""):
         message = f"{timestamp}{method.upper()}{request_path}{body}"
@@ -97,25 +102,26 @@ class BitgetAuth:
         headers = self._headers(ts, sig)
         url = f"{self.base_url}{request_path}"
         return requests.get(url, headers=headers).json()
-```
 
-## 市场数据API（Spot v2）
+```bash
+
+## 市场数据 API（Spot v2）
 
 - 服务器时间: `GET /api/v2/public/time`
 - 交易对列表: `GET /api/v2/spot/public/symbols`
 - 行情列表: `GET /api/v2/spot/market/tickers`
 - 深度: `GET /api/v2/spot/market/orderbook`
-- K线: `GET /api/v2/spot/market/candles`
+- K 线: `GET /api/v2/spot/market/candles`
 - 最新成交: `GET /api/v2/spot/market/fills-history`
 - 币种信息: `GET /api/v2/spot/public/coins`
 
-## 交易API（Spot v2）
+## 交易 API（Spot v2）
 
 - 下单: `POST /api/v2/spot/trade/place-order`
 - 撤单: `POST /api/v2/spot/trade/cancel-order`
 - 修改订单（撤单再下单）: `POST /api/v2/spot/trade/cancel-replace-order`
 
-## 账户管理API（Spot v2）
+## 账户管理 API（Spot v2）
 
 - 账户资产: `GET /api/v2/spot/account/assets`
 
@@ -124,9 +130,9 @@ class BitgetAuth:
 - 以接口说明为准（常见公共接口为 20 次/秒/IP）
 - 交易接口常见限制为 10 次/秒/UID
 
-## WebSocket支持
+## WebSocket 支持
 
-- 公共频道：行情、深度、K线、成交
+- 公共频道：行情、深度、K 线、成交
 - 私有频道：订单、资产等
 
 ## 错误代码
@@ -136,9 +142,12 @@ class BitgetAuth:
 ## 代码示例
 
 ```python
+
 # 获取服务器时间
+
 import requests
 
-url = "https://api.bitget.com/api/v2/public/time"
+url = "<https://api.bitget.com/api/v2/public/time">
 print(requests.get(url).json())
-```
+
+```bash

@@ -10,15 +10,19 @@ Retrieve the invitee's detail.
 - **Rate limit rule**: User ID
 - **Permission**: Read
 
-```
+```bash
 GET /api/v5/affiliate/invitee/detail
-```
+
+```bash
 
 | Parameter | Type | Required | Description |
+
 |-----------|------|----------|-------------|
+
 | uid | String | Yes | The invitee's User ID |
 
 Response includes:
+
 - Invitee's registration time
 - Trading volume
 - Commission earned

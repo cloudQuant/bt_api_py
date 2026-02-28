@@ -9,9 +9,6 @@ import pytest
 from bt_api_py.feeds.live_binance.margin import BinanceRequestDataMargin
 from bt_api_py.containers.requestdatas.request_data import RequestData
 
-pytestmark = pytest.mark.xdist_group("binance_api")
-
-
 def test_margin_request_init():
     """测试 Margin Request 初始化"""
     data_queue = queue.Queue()

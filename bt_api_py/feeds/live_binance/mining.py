@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 Binance Mining API - 矿池接口请求类
 
@@ -8,8 +7,8 @@ Binance Mining API - 矿池接口请求类
 - 矿工收益统计查询
 """
 
-from bt_api_py.feeds.live_binance.request_base import BinanceRequestData
 from bt_api_py.containers.exchanges.binance_exchange_data import BinanceExchangeDataMining
+from bt_api_py.feeds.live_binance.request_base import BinanceRequestData
 from bt_api_py.functions.log_message import SpdLogManager
 from bt_api_py.functions.utils import update_extra_data
 
@@ -21,16 +20,18 @@ class BinanceRequestDataMining(BinanceRequestData):
     """
 
     def __init__(self, data_queue, **kwargs):
-        kwargs.setdefault('exchange_data', BinanceExchangeDataMining())
-        kwargs.setdefault('exchange_name', 'binance_mining')
-        super(BinanceRequestDataMining, self).__init__(data_queue, **kwargs)
+        kwargs.setdefault("exchange_data", BinanceExchangeDataMining())
+        kwargs.setdefault("exchange_name", "binance_mining")
+        super().__init__(data_queue, **kwargs)
         self.asset_type = kwargs.get("asset_type", "MINING")
         self.logger_name = kwargs.get("logger_name", "binance_mining_feed.log")
-        self._params = kwargs['exchange_data']
-        self.request_logger = SpdLogManager("./logs/" + self.logger_name, "request",
-                                            0, 0, False).create_logger()
-        self.async_logger = SpdLogManager("./logs/" + self.logger_name, "async_request",
-                                          0, 0, False).create_logger()
+        self._params = kwargs["exchange_data"]
+        self.request_logger = SpdLogManager(
+            "./logs/" + self.logger_name, "request", 0, 0, False
+        ).create_logger()
+        self.async_logger = SpdLogManager(
+            "./logs/" + self.logger_name, "async_request", 0, 0, False
+        ).create_logger()
 
     # ==================== 矿池接口 ====================
 
@@ -44,16 +45,19 @@ class BinanceRequestDataMining(BinanceRequestData):
         Returns:
             tuple: (path, params, extra_data)
         """
-        request_type = 'get_mining_algo_list'
+        request_type = "get_mining_algo_list"
         path = self._params.get_rest_path(request_type)
         params = {}
-        extra_data = update_extra_data(extra_data, **{
-            "request_type": request_type,
-            "symbol_name": "ALL",
-            "asset_type": self.asset_type,
-            "exchange_name": self.exchange_name,
-            "normalize_function": None,
-        })
+        extra_data = update_extra_data(
+            extra_data,
+            **{
+                "request_type": request_type,
+                "symbol_name": "ALL",
+                "asset_type": self.asset_type,
+                "exchange_name": self.exchange_name,
+                "normalize_function": None,
+            },
+        )
         return path, params, extra_data
 
     def get_mining_algo_list(self, extra_data=None, **kwargs):
@@ -78,19 +82,22 @@ class BinanceRequestDataMining(BinanceRequestData):
         Returns:
             tuple: (path, params, extra_data)
         """
-        request_type = 'get_mining_worker_list'
+        request_type = "get_mining_worker_list"
         path = self._params.get_rest_path(request_type)
         params = {
-            'algo': algo,
-            'userName': user_name,
+            "algo": algo,
+            "userName": user_name,
         }
-        extra_data = update_extra_data(extra_data, **{
-            "request_type": request_type,
-            "symbol_name": algo,
-            "asset_type": self.asset_type,
-            "exchange_name": self.exchange_name,
-            "normalize_function": None,
-        })
+        extra_data = update_extra_data(
+            extra_data,
+            **{
+                "request_type": request_type,
+                "symbol_name": algo,
+                "asset_type": self.asset_type,
+                "exchange_name": self.exchange_name,
+                "normalize_function": None,
+            },
+        )
         return path, params, extra_data
 
     def get_mining_worker_list(self, algo, user_name, extra_data=None, **kwargs):
@@ -117,19 +124,22 @@ class BinanceRequestDataMining(BinanceRequestData):
         Returns:
             tuple: (path, params, extra_data)
         """
-        request_type = 'get_mining_statistics'
+        request_type = "get_mining_statistics"
         path = self._params.get_rest_path(request_type)
         params = {
-            'algo': algo,
-            'userName': user_name,
+            "algo": algo,
+            "userName": user_name,
         }
-        extra_data = update_extra_data(extra_data, **{
-            "request_type": request_type,
-            "symbol_name": algo,
-            "asset_type": self.asset_type,
-            "exchange_name": self.exchange_name,
-            "normalize_function": None,
-        })
+        extra_data = update_extra_data(
+            extra_data,
+            **{
+                "request_type": request_type,
+                "symbol_name": algo,
+                "asset_type": self.asset_type,
+                "exchange_name": self.exchange_name,
+                "normalize_function": None,
+            },
+        )
         return path, params, extra_data
 
     def get_mining_statistics(self, algo, user_name, extra_data=None, **kwargs):

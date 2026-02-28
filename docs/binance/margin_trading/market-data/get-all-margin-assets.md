@@ -17,20 +17,23 @@ GET `/sapi/v1/margin/allAssets`
 ## Request Weight​
 
 
-**1(IP)**
+- *1(IP)**
 
 
 ## Request Parameters​
 
 
 | Name | Type | Mandatory | Description |
+
 | --- | --- | --- | --- |
+
 | asset | STRING | NO |  |
 
 
 ## Response Example​
 
 
-```
+```bash
 [  {    "assetFullName": "USD coin",    "assetName": "USDC",    "isBorrowable": true,    "isMortgageable": true,    "userMinBorrow": "0.00000000",    "userMinRepay": "0.00000000",    "delistTime": 1704973040  }]
-```
+
+```bash

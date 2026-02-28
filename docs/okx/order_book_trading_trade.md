@@ -13,37 +13,60 @@ Place an order only if you have sufficient funds.
 - **Rate limit rule (Options only)**: User ID + Instrument Family
 - **Permission**: Trade
 
-```
+```bash
 POST /api/v5/trade/order
-```
 
+```bash
 Request Parameters:
 
 | Parameter | Type | Required | Description |
+
 |-----------|------|----------|-------------|
+
 | instId | String | Yes | Instrument ID, e.g. `BTC-USDT` |
+
 | tdMode | String | Yes | Trade mode: `cross`, `isolated`, `cash`, `spot_isolated` |
+
 | ccy | String | Conditional | Margin currency. Required for `cross` MARGIN orders in Futures mode |
+
 | clOrdId | String | No | Client Order ID (max 32 chars) |
+
 | tag | String | No | Order tag (max 16 chars) |
+
 | side | String | Yes | `buy` or `sell` |
+
 | posSide | String | Conditional | Position side: `long`, `short`, `net`. Required for long/short mode FUTURES/SWAP |
+
 | ordType | String | Yes | Order type: `market`, `limit`, `post_only`, `fok`, `ioc`, `optimal_limit_ioc`, `mmp`, `mmp_and_post_only`, `elp` |
+
 | sz | String | Yes | Quantity to buy or sell |
+
 | px | String | Conditional | Order price. Required for `limit` orders |
+
 | reduceOnly | Boolean | No | Whether reduce-only. Default `false` |
+
 | tgtCcy | String | No | Target currency for SPOT: `base_ccy` or `quote_ccy` |
+
 | banAmend | Boolean | No | Whether to ban amend. Default `false` |
+
 | stpId | String | No | Self trade prevention ID |
+
 | stpMode | String | No | Self trade prevention mode: `cancel_maker`, `cancel_taker`, `cancel_both` |
+
 | tpTriggerPx | String | No | Take-profit trigger price |
+
 | tpOrdPx | String | No | Take-profit order price (-1 for market) |
+
 | slTriggerPx | String | No | Stop-loss trigger price |
+
 | slOrdPx | String | No | Stop-loss order price (-1 for market) |
+
 | tpTriggerPxType | String | No | TP trigger price type: `last`, `index`, `mark` |
+
 | slTriggerPxType | String | No | SL trigger price type: `last`, `index`, `mark` |
 
 Python Example:
+
 ```python
 import okx.Trade as Trade
 
@@ -55,6 +78,7 @@ flag = "1"  # Production: 0, Demo: 1
 tradeAPI = Trade.TradeAPI(apikey, secretkey, passphrase, False, flag)
 
 # Spot limit order
+
 result = tradeAPI.place_order(
     instId="BTC-USDT",
     tdMode="cash",
@@ -65,9 +89,10 @@ result = tradeAPI.place_order(
     sz="2"
 )
 print(result)
-```
 
+```bash
 Response Example:
+
 ```json
 {
   "code": "0",
@@ -83,7 +108,8 @@ Response Example:
   "inTime": "1695190491421339",
   "outTime": "1695190491423240"
 }
-```
+
+```bash
 
 ### POST / Place multiple orders
 
@@ -93,9 +119,10 @@ Place orders in batches. Maximum 20 orders per request.
 - **Rate limit rule**: User ID + Instrument ID (Options: User ID + Instrument Family)
 - **Permission**: Trade
 
-```
+```bash
 POST /api/v5/trade/batch-orders
-```
+
+```bash
 
 ### POST / Cancel order
 
@@ -104,29 +131,37 @@ Cancel an incomplete order.
 - **Rate Limit**: 60 requests per 2 seconds
 - **Permission**: Trade
 
-```
+```bash
 POST /api/v5/trade/cancel-order
-```
+
+```bash
 
 | Parameter | Type | Required | Description |
+
 |-----------|------|----------|-------------|
+
 | instId | String | Yes | Instrument ID |
+
 | ordId | String | Conditional | Order ID. Either ordId or clOrdId required |
+
 | clOrdId | String | Conditional | Client Order ID |
 
 Python Example:
+
 ```python
 result = tradeAPI.cancel_order(instId="BTC-USDT", ordId="590908157585625111")
 print(result)
-```
+
+```bash
 
 ### POST / Cancel multiple orders
 
 Cancel incomplete orders in batches. Maximum 20 orders per request.
 
-```
+```bash
 POST /api/v5/trade/cancel-batch-orders
-```
+
+```bash
 
 ### POST / Amend order
 
@@ -135,31 +170,42 @@ Amend an incomplete order.
 - **Rate Limit**: 60 requests per 2 seconds
 - **Permission**: Trade
 
-```
+```bash
 POST /api/v5/trade/amend-order
-```
+
+```bash
 
 | Parameter | Type | Required | Description |
+
 |-----------|------|----------|-------------|
+
 | instId | String | Yes | Instrument ID |
+
 | cxlOnFail | Boolean | No | Cancel on fail. Default `false` |
+
 | ordId | String | Conditional | Order ID |
+
 | clOrdId | String | Conditional | Client Order ID |
+
 | reqId | String | No | Request ID for idempotency |
+
 | newSz | String | Conditional | New size |
+
 | newPx | String | Conditional | New price |
 
 ### POST / Amend multiple orders
 
-```
+```bash
 POST /api/v5/trade/amend-batch-orders
-```
+
+```bash
 
 ### POST / Close positions
 
-```
+```bash
 POST /api/v5/trade/close-position
-```
+
+```bash
 
 ### GET / Order details
 
@@ -168,45 +214,72 @@ Retrieve order details.
 - **Rate Limit**: 60 requests per 2 seconds
 - **Permission**: Read
 
-```
+```bash
 GET /api/v5/trade/order
-```
+
+```bash
 
 | Parameter | Type | Required | Description |
+
 |-----------|------|----------|-------------|
+
 | instId | String | Yes | Instrument ID |
+
 | ordId | String | Conditional | Order ID |
+
 | clOrdId | String | Conditional | Client Order ID |
 
 Python Example:
+
 ```python
 result = tradeAPI.get_order(instId="BTC-USDT", ordId="680800019749904384")
 print(result)
-```
 
+```bash
 Key Response Fields:
 
 | Field | Description |
+
 |-------|-------------|
+
 | instId | Instrument ID |
+
 | ordId | Order ID |
+
 | clOrdId | Client Order ID |
+
 | px | Order price |
+
 | sz | Order quantity |
+
 | ordType | Order type |
+
 | side | `buy` or `sell` |
+
 | posSide | Position side |
+
 | tdMode | Trade mode |
+
 | fillPx | Last filled price |
+
 | fillSz | Last filled quantity |
+
 | accFillSz | Accumulated fill quantity |
+
 | avgPx | Average filled price |
+
 | state | Order state: `canceled`, `live`, `partially_filled`, `filled`, `mmp_canceled` |
+
 | fee | Fee (negative = fee, positive = rebate) |
+
 | feeCcy | Fee currency |
+
 | pnl | Profit and loss |
+
 | lever | Leverage |
+
 | tpTriggerPx | Take profit trigger price |
+
 | slTriggerPx | Stop loss trigger price |
 
 ### GET / Order List (Pending)
@@ -216,20 +289,31 @@ Retrieve all incomplete orders under the current account.
 - **Rate Limit**: 60 requests per 2 seconds
 - **Permission**: Read
 
-```
+```bash
 GET /api/v5/trade/orders-pending
-```
+
+```bash
 
 | Parameter | Type | Required | Description |
+
 |-----------|------|----------|-------------|
+
 | instType | String | No | `SPOT`, `MARGIN`, `SWAP`, `FUTURES`, `OPTION` |
+
 | uly | String | No | Underlying |
+
 | instFamily | String | No | Instrument family |
+
 | instId | String | No | Instrument ID |
+
 | ordType | String | No | Order type filter, comma-separated |
+
 | state | String | No | `live`, `partially_filled` |
+
 | after | String | No | Pagination |
+
 | before | String | No | Pagination |
+
 | limit | String | No | Default 100, max 100 |
 
 ### GET / Order history (last 7 days)
@@ -239,15 +323,17 @@ Get completed orders placed in the last 7 days.
 - **Rate Limit**: 40 requests per 2 seconds
 - **Permission**: Read
 
-```
+```bash
 GET /api/v5/trade/orders-history
-```
+
+```bash
 
 ### GET / Order history (last 3 months)
 
-```
+```bash
 GET /api/v5/trade/orders-history-archive
-```
+
+```bash
 
 ### GET / Transaction details (last 3 days)
 
@@ -256,77 +342,89 @@ Retrieve recently-filled transaction details.
 - **Rate Limit**: 60 requests per 2 seconds
 - **Permission**: Read
 
-```
+```bash
 GET /api/v5/trade/fills
-```
+
+```bash
 
 ### GET / Transaction details (last 3 months)
 
-```
+```bash
 GET /api/v5/trade/fills-history
-```
+
+```bash
 
 ### GET / Easy convert currency list
 
-```
+```bash
 GET /api/v5/trade/easy-convert-currency-list
-```
+
+```bash
 
 ### POST / Place easy convert
 
-```
+```bash
 POST /api/v5/trade/easy-convert
-```
+
+```bash
 
 ### GET / Easy convert history
 
-```
+```bash
 GET /api/v5/trade/easy-convert-history
-```
+
+```bash
 
 ### GET / One-click repay currency list
 
-```
+```bash
 GET /api/v5/trade/one-click-repay-currency-list
-```
+
+```bash
 
 ### POST / Trade one-click repay
 
-```
+```bash
 POST /api/v5/trade/one-click-repay
-```
+
+```bash
 
 ### GET / One-click repay history
 
-```
+```bash
 GET /api/v5/trade/one-click-repay-history
-```
+
+```bash
 
 ### POST / Mass cancel order
 
-```
+```bash
 POST /api/v5/trade/mass-cancel
-```
+
+```bash
 
 ### POST / Cancel All After
 
-```
+```bash
 POST /api/v5/trade/cancel-all-after
-```
+
+```bash
 
 ### GET / Account rate limit
 
-```
+```bash
 GET /api/v5/trade/account-rate-limit
-```
+
+```bash
 
 ### POST / Order precheck
 
-```
+```bash
 POST /api/v5/trade/order-precheck
-```
 
----
+```bash
+
+- --
 
 ## WebSocket
 
@@ -338,6 +436,7 @@ Retrieve order information. Data pushed when there are new orders or order updat
 - **Channel**: `orders`
 
 Subscribe Example:
+
 ```json
 {
   "id": "1512",
@@ -348,9 +447,10 @@ Subscribe Example:
     "instId": "BTC-USD-200329"
   }]
 }
-```
 
+```bash
 Python Example:
+
 ```python
 import asyncio
 from okx.websocket.WsPrivateAsync import WsPrivateAsync
@@ -373,7 +473,8 @@ async def main():
     await ws.unsubscribe(args, callback=callbackFunc)
 
 asyncio.run(main())
-```
+
+```bash
 
 ### WS / Fills channel
 
@@ -387,6 +488,7 @@ asyncio.run(main())
 - **op**: `order`
 
 Request Example:
+
 ```json
 {
   "id": "1512",
@@ -399,7 +501,8 @@ Request Example:
     "sz": "100"
   }]
 }
-```
+
+```bash
 
 ### WS / Place multiple orders
 

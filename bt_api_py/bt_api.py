@@ -2,17 +2,19 @@
 Integrate all exchange APIs using this BtApi class
 通过 ExchangeRegistry 实现交易所的即插即用，新增交易所无需修改此文件
 """
-import queue
-import time
-from datetime import datetime, timedelta, timezone
-from bt_api_py.functions.log_message import SpdLogManager
-from bt_api_py.registry import ExchangeRegistry
-from bt_api_py.event_bus import EventBus
-from bt_api_py.exceptions import ExchangeNotFoundError
 
 # 导入注册模块，确保交易所在使用前完成注册
 # 使用 try/except 以便在缺少依赖时不阻塞其他交易所的使用
 import logging as _logging
+import queue
+import time
+from datetime import datetime, timedelta, timezone
+
+from bt_api_py.event_bus import EventBus
+from bt_api_py.exceptions import ExchangeNotFoundError
+from bt_api_py.functions.log_message import SpdLogManager
+from bt_api_py.registry import ExchangeRegistry
+
 _reg_logger = _logging.getLogger(__name__)
 
 try:
@@ -41,20 +43,19 @@ except ImportError as e:
     _reg_logger.debug(f"IB Web API register skipped: {e}")
 
 
-class BtApi(object):
+class BtApi:
     def __init__(self, exchange_kwargs, debug=True, event_bus=None):
         self.exchange_kwargs = exchange_kwargs
-        self.debug = debug                          # 是否是debug模式，默认是
-        self.data_queues = {}                       # 保存各个交易所的数据队列
-        self.exchange_feeds = {}                    # 保存各个交易所的feed接口
-        self.logger = self.init_logger()            # 初始化日志
-        self._value_dict = {}                       # 保存各个交易所账户的净值
-        self._cash_dict = {}                        # 保存各个交易所账户的现金
-        self.subscribe_bar_num = 0                  # 记录订阅了多少个品种的K线
-        self.event_bus = event_bus or EventBus()    # 事件总线，支持回调模式
-        self._subscription_flags = {}               # 跟踪各交易所账户订阅状态
-        self.init_exchange(exchange_kwargs)         # 根据提供的交易所列表进行相应的初始化
-
+        self.debug = debug  # 是否是debug模式，默认是
+        self.data_queues = {}  # 保存各个交易所的数据队列
+        self.exchange_feeds = {}  # 保存各个交易所的feed接口
+        self.logger = self.init_logger()  # 初始化日志
+        self._value_dict = {}  # 保存各个交易所账户的净值
+        self._cash_dict = {}  # 保存各个交易所账户的现金
+        self.subscribe_bar_num = 0  # 记录订阅了多少个品种的K线
+        self.event_bus = event_bus or EventBus()  # 事件总线，支持回调模式
+        self._subscription_flags = {}  # 跟踪各交易所账户订阅状态
+        self.init_exchange(exchange_kwargs)  # 根据提供的交易所列表进行相应的初始化
 
     def init_exchange(self, exchange_kwargs):
         if exchange_kwargs is None:
@@ -63,15 +64,14 @@ class BtApi(object):
             exchange_params = exchange_kwargs[exchange_name]
             self.add_exchange(exchange_name, exchange_params)
 
-
     def init_logger(self):
         if self.debug:
             print_info = True
         else:
             print_info = False
-        logger = SpdLogManager(file_name='bt_api.log',
-                               logger_name="api",
-                               print_info=print_info).create_logger()
+        logger = SpdLogManager(
+            file_name="bt_api.log", logger_name="api", print_info=print_info
+        ).create_logger()
         return logger
 
     def log(self, txt, level="info"):
@@ -90,7 +90,9 @@ class BtApi(object):
         """通过 ExchangeRegistry 创建 feed，无需硬编码交易所类型"""
         if exchange_name not in self.exchange_feeds:
             if exchange_name in self.data_queues:
-                raise ExchangeNotFoundError(exchange_name, "data_queue exists but feed does not — inconsistent state")
+                raise ExchangeNotFoundError(
+                    exchange_name, "data_queue exists but feed does not — inconsistent state"
+                )
             self.data_queues[exchange_name] = queue.Queue()
             self.log(f"adding exchange: {exchange_name}")
             data_queue = self.get_data_queue(exchange_name)
@@ -99,7 +101,6 @@ class BtApi(object):
             )
         else:
             self.log(f"exchange_name: {exchange_name} already exists")
-
 
     def get_request_api(self, exchange_name):
         api = self.exchange_feeds.get(exchange_name, None)
@@ -118,11 +119,11 @@ class BtApi(object):
 
     def subscribe(self, dataname, topics):
         """通过 ExchangeRegistry 查找订阅处理函数，无需硬编码交易所类型"""
-        exchange, asset_type, symbol = dataname.split('___')
+        exchange, asset_type, symbol = dataname.split("___")
         exchange_name = exchange + "___" + asset_type
         exchange_params = self.exchange_kwargs[exchange_name]
         for topic in topics:
-            if topic['topic'] == "kline":
+            if topic["topic"] == "kline":
                 self.subscribe_bar_num += 1
         data_queue = self.get_data_queue(exchange_name)
         if data_queue is None:
@@ -135,14 +136,22 @@ class BtApi(object):
         else:
             self.log(f"No subscribe handler registered for {exchange_name}", level="error")
 
-
     def push_bar_data_to_queue(self, exchange_name, data):
         data_queue = self.get_data_queue(exchange_name)
         bar_list = data.get_data()
         for bar in bar_list:
             data_queue.put(bar)
 
-    def download_history_bars(self, exchange_name, symbol, period, count=100, start_time=None, end_time=None, extra_data=None):
+    def download_history_bars(
+        self,
+        exchange_name,
+        symbol,
+        period,
+        count=100,
+        start_time=None,
+        end_time=None,
+        extra_data=None,
+    ):
         def calculate_time_delta(period_):
             """根据 period 计算增量时间"""
             time_deltas = {
@@ -199,11 +208,17 @@ class BtApi(object):
                     end_stamp = int(1000.0 * current_end_time.timestamp())
 
                     data = feed.get_kline(
-                        symbol, period, start_time=begin_stamp, end_time=end_stamp, extra_data=extra_data
+                        symbol,
+                        period,
+                        start_time=begin_stamp,
+                        end_time=end_stamp,
+                        extra_data=extra_data,
                     )
                     self.push_bar_data_to_queue(exchange_name, data)
-                    self.log(f"download successfully: {symbol}, period: {period}, "
-                             f"begin: {begin_time}, end: {current_end_time}")
+                    self.log(
+                        f"download successfully: {symbol}, period: {period}, "
+                        f"begin: {begin_time}, end: {current_end_time}"
+                    )
 
                     begin_time = current_end_time
 
@@ -230,7 +245,6 @@ class BtApi(object):
             else:
                 self.log(f"No balance handler registered for {exchange_name}", level="warning")
 
-
     def update_balance(self, exchange_name, currency=None):
         feed = self.exchange_feeds[exchange_name]
         balance_data = feed.get_balance()
@@ -240,12 +254,19 @@ class BtApi(object):
             account.init_data()
             if currency is not None:
                 if account.get_account_type() == currency:
-                    self._value_dict[exchange_name][currency]["value"] = account.get_margin() + account.get_unrealized_profit()
-                    self._cash_dict[exchange_name][currency]["cash"] = account.get_available_margin()
+                    self._value_dict[exchange_name][currency]["value"] = (
+                        account.get_margin() + account.get_unrealized_profit()
+                    )
+                    self._cash_dict[exchange_name][currency][
+                        "cash"
+                    ] = account.get_available_margin()
             elif currency is None:
-                self._value_dict[exchange_name][account.get_account_type()]["value"] = account.get_margin() + account.get_unrealized_profit()
-                self._cash_dict[exchange_name][account.get_account_type()]["cash"] = account.get_available_margin()
-
+                self._value_dict[exchange_name][account.get_account_type()]["value"] = (
+                    account.get_margin() + account.get_unrealized_profit()
+                )
+                self._cash_dict[exchange_name][account.get_account_type()][
+                    "cash"
+                ] = account.get_available_margin()
 
     def get_cash(self, exchange_name, currency):
         return self._cash_dict[exchange_name][currency]["cash"]
@@ -302,7 +323,9 @@ class BtApi(object):
         :param symbol: 交易对
         :param count: 深度档数
         """
-        return self._get_feed(exchange_name).get_depth(symbol, count=count, extra_data=extra_data, **kwargs)
+        return self._get_feed(exchange_name).get_depth(
+            symbol, count=count, extra_data=extra_data, **kwargs
+        )
 
     def get_kline(self, exchange_name, symbol, period, count=20, extra_data=None, **kwargs):
         """获取K线数据
@@ -311,13 +334,25 @@ class BtApi(object):
         :param period: K线周期, 如 "1m", "5m", "1H", "1D"
         :param count: K线数量
         """
-        return self._get_feed(exchange_name).get_kline(symbol, period, count=count, extra_data=extra_data, **kwargs)
+        return self._get_feed(exchange_name).get_kline(
+            symbol, period, count=count, extra_data=extra_data, **kwargs
+        )
 
     # ── 交易操作（同步）────────────────────────────────────────────
 
-    def make_order(self, exchange_name, symbol, volume, price, order_type,
-                   offset="open", post_only=False, client_order_id=None,
-                   extra_data=None, **kwargs):
+    def make_order(
+        self,
+        exchange_name,
+        symbol,
+        volume,
+        price,
+        order_type,
+        offset="open",
+        post_only=False,
+        client_order_id=None,
+        extra_data=None,
+        **kwargs,
+    ):
         """下单
         :param exchange_name: 交易所标识
         :param symbol: 交易对
@@ -329,9 +364,15 @@ class BtApi(object):
         :param client_order_id: 客户端自定义订单ID
         """
         return self._get_feed(exchange_name).make_order(
-            symbol, volume, price, order_type,
-            offset=offset, post_only=post_only, client_order_id=client_order_id,
-            extra_data=extra_data, **kwargs
+            symbol,
+            volume,
+            price,
+            order_type,
+            offset=offset,
+            post_only=post_only,
+            client_order_id=client_order_id,
+            extra_data=extra_data,
+            **kwargs,
         )
 
     def cancel_order(self, exchange_name, symbol, order_id, extra_data=None, **kwargs):
@@ -340,7 +381,9 @@ class BtApi(object):
         :param symbol: 交易对
         :param order_id: 订单ID
         """
-        return self._get_feed(exchange_name).cancel_order(symbol, order_id, extra_data=extra_data, **kwargs)
+        return self._get_feed(exchange_name).cancel_order(
+            symbol, order_id, extra_data=extra_data, **kwargs
+        )
 
     def cancel_all(self, exchange_name, symbol=None, extra_data=None, **kwargs):
         """撤销所有订单
@@ -355,14 +398,18 @@ class BtApi(object):
         :param symbol: 交易对
         :param order_id: 订单ID
         """
-        return self._get_feed(exchange_name).query_order(symbol, order_id, extra_data=extra_data, **kwargs)
+        return self._get_feed(exchange_name).query_order(
+            symbol, order_id, extra_data=extra_data, **kwargs
+        )
 
     def get_open_orders(self, exchange_name, symbol=None, extra_data=None, **kwargs):
         """查询挂单
         :param exchange_name: 交易所标识
         :param symbol: 交易对 (None 表示所有品种)
         """
-        return self._get_feed(exchange_name).get_open_orders(symbol, extra_data=extra_data, **kwargs)
+        return self._get_feed(exchange_name).get_open_orders(
+            symbol, extra_data=extra_data, **kwargs
+        )
 
     # ── 账户查询（同步）────────────────────────────────────────────
 
@@ -395,53 +442,87 @@ class BtApi(object):
 
     def async_get_depth(self, exchange_name, symbol, count=20, extra_data=None, **kwargs):
         """异步获取深度，结果推送到 data_queue"""
-        return self._get_feed(exchange_name).async_get_depth(symbol, count=count, extra_data=extra_data, **kwargs)
+        return self._get_feed(exchange_name).async_get_depth(
+            symbol, count=count, extra_data=extra_data, **kwargs
+        )
 
     def async_get_kline(self, exchange_name, symbol, period, count=20, extra_data=None, **kwargs):
         """异步获取K线，结果推送到 data_queue"""
-        return self._get_feed(exchange_name).async_get_kline(symbol, period, count=count, extra_data=extra_data, **kwargs)
+        return self._get_feed(exchange_name).async_get_kline(
+            symbol, period, count=count, extra_data=extra_data, **kwargs
+        )
 
     # ── 交易操作（异步）────────────────────────────────────────────
 
-    def async_make_order(self, exchange_name, symbol, volume, price, order_type,
-                         offset="open", post_only=False, client_order_id=None,
-                         extra_data=None, **kwargs):
+    def async_make_order(
+        self,
+        exchange_name,
+        symbol,
+        volume,
+        price,
+        order_type,
+        offset="open",
+        post_only=False,
+        client_order_id=None,
+        extra_data=None,
+        **kwargs,
+    ):
         """异步下单，结果推送到 data_queue"""
         return self._get_feed(exchange_name).async_make_order(
-            symbol, volume, price, order_type,
-            offset=offset, post_only=post_only, client_order_id=client_order_id,
-            extra_data=extra_data, **kwargs
+            symbol,
+            volume,
+            price,
+            order_type,
+            offset=offset,
+            post_only=post_only,
+            client_order_id=client_order_id,
+            extra_data=extra_data,
+            **kwargs,
         )
 
     def async_cancel_order(self, exchange_name, symbol, order_id, extra_data=None, **kwargs):
         """异步撤单，结果推送到 data_queue"""
-        return self._get_feed(exchange_name).async_cancel_order(symbol, order_id, extra_data=extra_data, **kwargs)
+        return self._get_feed(exchange_name).async_cancel_order(
+            symbol, order_id, extra_data=extra_data, **kwargs
+        )
 
     def async_cancel_all(self, exchange_name, symbol=None, extra_data=None, **kwargs):
         """异步撤销所有订单，结果推送到 data_queue"""
-        return self._get_feed(exchange_name).async_cancel_all(symbol, extra_data=extra_data, **kwargs)
+        return self._get_feed(exchange_name).async_cancel_all(
+            symbol, extra_data=extra_data, **kwargs
+        )
 
     def async_query_order(self, exchange_name, symbol, order_id, extra_data=None, **kwargs):
         """异步查询订单，结果推送到 data_queue"""
-        return self._get_feed(exchange_name).async_query_order(symbol, order_id, extra_data=extra_data, **kwargs)
+        return self._get_feed(exchange_name).async_query_order(
+            symbol, order_id, extra_data=extra_data, **kwargs
+        )
 
     def async_get_open_orders(self, exchange_name, symbol=None, extra_data=None, **kwargs):
         """异步查询挂单，结果推送到 data_queue"""
-        return self._get_feed(exchange_name).async_get_open_orders(symbol, extra_data=extra_data, **kwargs)
+        return self._get_feed(exchange_name).async_get_open_orders(
+            symbol, extra_data=extra_data, **kwargs
+        )
 
     # ── 账户查询（异步）────────────────────────────────────────────
 
     def async_get_balance(self, exchange_name, symbol=None, extra_data=None, **kwargs):
         """异步查询余额，结果推送到 data_queue"""
-        return self._get_feed(exchange_name).async_get_balance(symbol, extra_data=extra_data, **kwargs)
+        return self._get_feed(exchange_name).async_get_balance(
+            symbol, extra_data=extra_data, **kwargs
+        )
 
     def async_get_account(self, exchange_name, symbol="ALL", extra_data=None, **kwargs):
         """异步查询账户，结果推送到 data_queue"""
-        return self._get_feed(exchange_name).async_get_account(symbol, extra_data=extra_data, **kwargs)
+        return self._get_feed(exchange_name).async_get_account(
+            symbol, extra_data=extra_data, **kwargs
+        )
 
     def async_get_position(self, exchange_name, symbol=None, extra_data=None, **kwargs):
         """异步查询持仓，结果推送到 data_queue"""
-        return self._get_feed(exchange_name).async_get_position(symbol, extra_data=extra_data, **kwargs)
+        return self._get_feed(exchange_name).async_get_position(
+            symbol, extra_data=extra_data, **kwargs
+        )
 
     # ── 批量操作 ───────────────────────────────────────────────────
 
@@ -453,7 +534,9 @@ class BtApi(object):
         results = {}
         for exchange_name in self.exchange_feeds:
             try:
-                results[exchange_name] = self.get_tick(exchange_name, symbol, extra_data=extra_data, **kwargs)
+                results[exchange_name] = self.get_tick(
+                    exchange_name, symbol, extra_data=extra_data, **kwargs
+                )
             except Exception as e:
                 self.log(f"get_tick failed for {exchange_name}: {e}", level="warning")
         return results
@@ -465,7 +548,9 @@ class BtApi(object):
         results = {}
         for exchange_name in self.exchange_feeds:
             try:
-                results[exchange_name] = self.get_balance(exchange_name, symbol, extra_data=extra_data, **kwargs)
+                results[exchange_name] = self.get_balance(
+                    exchange_name, symbol, extra_data=extra_data, **kwargs
+                )
             except Exception as e:
                 self.log(f"get_balance failed for {exchange_name}: {e}", level="warning")
         return results
@@ -477,7 +562,9 @@ class BtApi(object):
         results = {}
         for exchange_name in self.exchange_feeds:
             try:
-                results[exchange_name] = self.get_position(exchange_name, symbol, extra_data=extra_data, **kwargs)
+                results[exchange_name] = self.get_position(
+                    exchange_name, symbol, extra_data=extra_data, **kwargs
+                )
             except Exception as e:
                 self.log(f"get_position failed for {exchange_name}: {e}", level="warning")
         return results
@@ -489,7 +576,9 @@ class BtApi(object):
         results = {}
         for exchange_name in self.exchange_feeds:
             try:
-                results[exchange_name] = self.cancel_all(exchange_name, symbol, extra_data=extra_data, **kwargs)
+                results[exchange_name] = self.cancel_all(
+                    exchange_name, symbol, extra_data=extra_data, **kwargs
+                )
             except Exception as e:
                 self.log(f"cancel_all failed for {exchange_name}: {e}", level="warning")
         return results

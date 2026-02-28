@@ -1,9 +1,11 @@
----
+- --
+
 name: 'step-03a-subprocess-api'
 description: 'Subprocess: Generate API tests only'
 subprocess: true
 outputFile: '/tmp/tea-automate-api-tests-{{timestamp}}.json'
----
+
+- --
 
 # Subprocess 3A: Generate API Tests
 
@@ -11,18 +13,18 @@ outputFile: '/tmp/tea-automate-api-tests-{{timestamp}}.json'
 
 This is an **isolated subprocess** running in parallel with E2E test generation.
 
-**What you have from parent workflow:**
+- *What you have from parent workflow:**
 
 - Target features/components identified in Step 2
 - Knowledge fragments loaded: api-request, data-factories, api-testing-patterns
 - Config: test framework, Playwright Utils enabled/disabled, Pact.js Utils enabled/disabled, Pact MCP mode
 - Coverage plan: which API endpoints need testing
 
-**Your task:** Generate API tests ONLY (not E2E, not fixtures, not other test types).
+- *Your task:** Generate API tests ONLY (not E2E, not fixtures, not other test types).
 
-**If `use_pactjs_utils` is enabled:** Also generate consumer contract tests and provider verification tests alongside API tests. Use the loaded pactjs-utils fragments (`pactjs-utils-overview`, `pactjs-utils-consumer-helpers`, `pactjs-utils-provider-verifier`, `pactjs-utils-request-filter`) for patterns. If `pact_mcp` is `"mcp"`, use SmartBear MCP tools (Fetch Provider States, Generate Pact Tests) to inform test generation.
+- *If `use_pactjs_utils` is enabled:** Also generate consumer contract tests and provider verification tests alongside API tests. Use the loaded pactjs-utils fragments (`pactjs-utils-overview`, `pactjs-utils-consumer-helpers`, `pactjs-utils-provider-verifier`, `pactjs-utils-request-filter`) for patterns. If `pact_mcp` is `"mcp"`, use SmartBear MCP tools (Fetch Provider States, Generate Pact Tests) to inform test generation.
 
----
+- --
 
 ## MANDATORY EXECUTION RULES
 
@@ -34,7 +36,7 @@ This is an **isolated subprocess** running in parallel with E2E test generation.
 - ❌ Do NOT run tests (that's step 4)
 - ❌ Do NOT generate fixtures yet (that's step 3C aggregation)
 
----
+- --
 
 ## SUBPROCESS TASK
 
@@ -51,7 +53,7 @@ From the coverage plan (Step 2 output), identify:
 
 For each API endpoint, create test file in `tests/api/[feature].spec.ts`:
 
-**Test Structure:**
+- *Test Structure:**
 
 ```typescript
 import { test, expect } from '@playwright/test';
@@ -64,13 +66,13 @@ test.describe('[Feature] API Tests', () => {
     // Otherwise use standard request fixture
     const response = await request.post('/api/endpoint', {
       data: {
-        /* test data */
+        /*test data*/
       },
     });
 
     expect(response.status()).toBe(200);
     expect(await response.json()).toMatchObject({
-      /* expected */
+      /*expected*/
     });
   });
 
@@ -78,9 +80,10 @@ test.describe('[Feature] API Tests', () => {
     // Test error handling
   });
 });
-```
 
-**Requirements:**
+```bash
+
+- *Requirements:**
 
 - ✅ Use `apiRequest()` helper if Playwright Utils enabled (from api-request fragment)
 - ✅ Use data factories for test data (from data-factories fragment)
@@ -90,7 +93,7 @@ test.describe('[Feature] API Tests', () => {
 - ✅ Use proper TypeScript types
 - ✅ Deterministic assertions (no timing dependencies)
 
-**If Pact.js Utils enabled (from `subprocessContext.config.use_pactjs_utils`):**
+- *If Pact.js Utils enabled (from `subprocessContext.config.use_pactjs_utils`):**
 
 - ✅ Generate consumer contract tests in `pact/http/consumer/` using `createProviderState({ name, params })` pattern
 - ✅ Generate provider verification tests in `pact/http/provider/` using `buildVerifierOptions({ provider, port, includeMainAndDeployed, stateHandlers })` pattern
@@ -106,9 +109,9 @@ Identify fixtures needed for API tests:
 - Data factories (user data, product data, etc.)
 - API client configurations
 
-**Do NOT create fixtures yet** - just track what's needed for aggregation step.
+- *Do NOT create fixtures yet** - just track what's needed for aggregation step.
 
----
+- --
 
 ## OUTPUT FORMAT
 
@@ -147,9 +150,10 @@ Write JSON to temp file: `/tmp/tea-automate-api-tests-{{timestamp}}.json`
   "test_count": 12,
   "summary": "Generated 12 API test cases covering 3 features"
 }
-```
 
-**On Error:**
+```bash
+
+- *On Error:**
 
 ```json
 {
@@ -157,12 +161,13 @@ Write JSON to temp file: `/tmp/tea-automate-api-tests-{{timestamp}}.json`
   "subprocess": "api-tests",
   "error": "Error message describing what went wrong",
   "partial_output": {
-    /* any tests generated before error */
+    /*any tests generated before error*/
   }
 }
-```
 
----
+```bash
+
+- --
 
 ## EXIT CONDITION
 
@@ -173,9 +178,9 @@ Subprocess completes when:
 - ✅ JSON output written to temp file
 - ✅ Fixture needs tracked
 
-**Subprocess terminates here.** Parent workflow will read output and proceed to aggregation.
+- *Subprocess terminates here.** Parent workflow will read output and proceed to aggregation.
 
----
+- --
 
 ## 🚨 SUBPROCESS SUCCESS METRICS
 

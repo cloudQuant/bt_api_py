@@ -12,23 +12,22 @@ GET `/eapi/v1/time`
 
 ## Request Weight
 
-**1**
+- *1**
 
 ## Request Parameters
 
 NONE
 
 ## Response Example
-    
-    
-    {  
-      "serverTime": 1499827319559  
-    }  
-    
 
-  * [API Description](</docs/derivatives/option/market-data#api-description>)
-  * [HTTP Request](</docs/derivatives/option/market-data#http-request>)
-  * [Request Weight](</docs/derivatives/option/market-data#request-weight>)
-  * [Request Parameters](</docs/derivatives/option/market-data#request-parameters>)
-  * [Response Example](</docs/derivatives/option/market-data#response-example>)
 
+    {
+      "serverTime": 1499827319559
+    }
+
+
+  - [API Description](</docs/derivatives/option/market-data#api-description>)
+  - [HTTP Request](</docs/derivatives/option/market-data#http-request>)
+  - [Request Weight](</docs/derivatives/option/market-data#request-weight>)
+  - [Request Parameters](</docs/derivatives/option/market-data#request-parameters>)
+  - [Response Example](</docs/derivatives/option/market-data#response-example>)

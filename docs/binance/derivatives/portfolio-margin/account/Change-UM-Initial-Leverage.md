@@ -12,30 +12,34 @@ POST `/papi/v1/um/leverage`
 
 ## Request Weight
 
-**1**
+- *1**
 
 ## Request Parameters
 
-Name| Type| Mandatory| Description  
----|---|---|---  
-symbol| STRING| YES|   
-leverage| INT| YES| target initial leverage: int from 1 to 125  
-recvWindow| LONG| NO|   
-timestamp| LONG| YES|   
-  
+Name| Type| Mandatory| Description
+
+- --|---|---|---
+
+symbol| STRING| YES|
+
+leverage| INT| YES| target initial leverage: int from 1 to 125
+
+recvWindow| LONG| NO|
+
+timestamp| LONG| YES|
+
 ## Response Example
-    
-    
-    {  
-        "leverage": 21,  
-        "maxNotionalValue": "1000000",  
-        "symbol": "BTCUSDT"  
-    }  
-    
 
-  * [API Description](</docs/derivatives/portfolio-margin/account/Change-UM-Initial-Leverage#api-description>)
-  * [HTTP Request](</docs/derivatives/portfolio-margin/account/Change-UM-Initial-Leverage#http-request>)
-  * [Request Weight](</docs/derivatives/portfolio-margin/account/Change-UM-Initial-Leverage#request-weight>)
-  * [Request Parameters](</docs/derivatives/portfolio-margin/account/Change-UM-Initial-Leverage#request-parameters>)
-  * [Response Example](</docs/derivatives/portfolio-margin/account/Change-UM-Initial-Leverage#response-example>)
 
+    {
+        "leverage": 21,
+        "maxNotionalValue": "1000000",
+        "symbol": "BTCUSDT"
+    }
+
+
+  - [API Description](</docs/derivatives/portfolio-margin/account/Change-UM-Initial-Leverage#api-description>)
+  - [HTTP Request](</docs/derivatives/portfolio-margin/account/Change-UM-Initial-Leverage#http-request>)
+  - [Request Weight](</docs/derivatives/portfolio-margin/account/Change-UM-Initial-Leverage#request-weight>)
+  - [Request Parameters](</docs/derivatives/portfolio-margin/account/Change-UM-Initial-Leverage#request-parameters>)
+  - [Response Example](</docs/derivatives/portfolio-margin/account/Change-UM-Initial-Leverage#response-example>)

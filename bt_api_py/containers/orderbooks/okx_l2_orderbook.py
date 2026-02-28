@@ -1,9 +1,10 @@
-# -*- coding: utf-8 -*-
 """
 OKX L2 OrderBook Data Container - 400 depth tick-by-tick orderbook.
 """
-import time
+
 import json
+import time
+
 from bt_api_py.containers.orderbooks.orderbook import OrderBookData
 from bt_api_py.functions.utils import from_dict_get_float, from_dict_get_string
 
@@ -18,7 +19,7 @@ class OkxL2OrderBookData(OrderBookData):
 
     def __init__(self, order_book_info, symbol_name, asset_type, has_been_json_encoded=False):
         super().__init__(order_book_info, has_been_json_encoded)
-        self.exchange_name = 'OKX'
+        self.exchange_name = "OKX"
         self.local_update_time = time.time()
         self.symbol_name = symbol_name
         self.asset_type = asset_type
@@ -41,21 +42,23 @@ class OkxL2OrderBookData(OrderBookData):
     def init_data(self):
         if not self.has_been_json_encoded:
             self.order_book_info = json.loads(self.order_book_info)
-            self.order_book_data = self.order_book_info['data'][0]
+            self.order_book_data = self.order_book_info["data"][0]
             self.has_been_json_encoded = True
         if self.has_been_init_data:
             return self
 
         if "arg" in self.order_book_info:
-            self.order_book_symbol_name = from_dict_get_string(self.order_book_info["arg"], "instId")
+            self.order_book_symbol_name = from_dict_get_string(
+                self.order_book_info["arg"], "instId"
+            )
 
         self.action = from_dict_get_string(self.order_book_data, "action")
         self.server_time = from_dict_get_float(self.order_book_data, "ts")
         self.checksum = from_dict_get_string(self.order_book_data, "checksum")
 
         # books-l2-tbt has bids/asks in format: [price, size, orders, liquidation]
-        bids = self.order_book_data.get('bids', [])
-        asks = self.order_book_data.get('asks', [])
+        bids = self.order_book_data.get("bids", [])
+        asks = self.order_book_data.get("asks", [])
 
         self.bid_price_list = [float(i[0]) if len(i) > 0 else None for i in bids]
         self.bid_volume_list = [float(i[1]) if len(i) > 1 else None for i in bids]

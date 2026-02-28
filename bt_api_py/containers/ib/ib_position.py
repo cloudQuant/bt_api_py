@@ -2,14 +2,16 @@
 IB 持仓数据容器
 对应 IB TWS API 的 Position
 """
+
 from bt_api_py.containers.positions.position import PositionData
 
 
 class IbPositionData(PositionData):
     """IB 持仓数据"""
 
-    def __init__(self, position_info, symbol_name=None, asset_type="STK",
-                 has_been_json_encoded=False):
+    def __init__(
+        self, position_info, symbol_name=None, asset_type="STK", has_been_json_encoded=False
+    ):
         super().__init__(position_info, has_been_json_encoded)
         self.symbol_name = symbol_name
         self.asset_type = asset_type
@@ -31,16 +33,16 @@ class IbPositionData(PositionData):
             return self
         info = self.position_info
         if isinstance(info, dict):
-            self.account = info.get('account', '')
-            self.contract_symbol = info.get('symbol', self.symbol_name)
-            self.sec_type = info.get('secType', self.asset_type)
-            self.position_val = float(info.get('position', 0))
-            self.avg_cost = float(info.get('avgCost', 0))
-            self.market_price_val = float(info.get('marketPrice', 0))
-            self.market_value = float(info.get('marketValue', 0))
-            self.unrealized_pnl_val = float(info.get('unrealizedPNL', 0))
-            self.realized_pnl_val = float(info.get('realizedPNL', 0))
-            self.currency = info.get('currency', 'USD')
+            self.account = info.get("account", "")
+            self.contract_symbol = info.get("symbol", self.symbol_name)
+            self.sec_type = info.get("secType", self.asset_type)
+            self.position_val = float(info.get("position", 0))
+            self.avg_cost = float(info.get("avgCost", 0))
+            self.market_price_val = float(info.get("marketPrice", 0))
+            self.market_value = float(info.get("marketValue", 0))
+            self.unrealized_pnl_val = float(info.get("unrealizedPNL", 0))
+            self.realized_pnl_val = float(info.get("realizedPNL", 0))
+            self.currency = info.get("currency", "USD")
         self._initialized = True
         return self
 

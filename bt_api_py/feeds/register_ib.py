@@ -5,20 +5,19 @@ Interactive Brokers 交易所注册模块
 
 注意: IB feed 目前为骨架实现，需要安装 ib_insync 并完善具体方法后才能使用
 """
-from bt_api_py.registry import ExchangeRegistry
-from bt_api_py.feeds.live_ib_feed import (
-    IbRequestDataStock,
-    IbRequestDataFuture,
-    IbDataStream,
-    IbAccountStream,
-)
-from bt_api_py.containers.exchanges.ib_exchange_data import (
-    IbExchangeDataStock,
-    IbExchangeDataFuture,
-)
-
 
 from bt_api_py.balance_utils import simple_balance_handler as _ib_balance_handler
+from bt_api_py.containers.exchanges.ib_exchange_data import (
+    IbExchangeDataFuture,
+    IbExchangeDataStock,
+)
+from bt_api_py.feeds.live_ib_feed import (
+    IbAccountStream,
+    IbDataStream,
+    IbRequestDataFuture,
+    IbRequestDataStock,
+)
+from bt_api_py.registry import ExchangeRegistry
 
 
 def _ib_subscribe_handler(data_queue, exchange_params, topics, bt_api):

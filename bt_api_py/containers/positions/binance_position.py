@@ -1,14 +1,15 @@
-import time
 import json
+import time
+
 from bt_api_py.containers.positions.position import PositionData
-from bt_api_py.functions.utils import from_dict_get_float, from_dict_get_string, from_dict_get_bool
+from bt_api_py.functions.utils import from_dict_get_bool, from_dict_get_float, from_dict_get_string
 
 
 class BinancePositionData(PositionData):
     """保存持仓信息"""
 
     def __init__(self, position_info, symbol_name, asset_type, has_been_json_encoded):
-        super(BinancePositionData, self).__init__(position_info, has_been_json_encoded)
+        super().__init__(position_info, has_been_json_encoded)
         self.position_commission = None
         self.maintenance_margin = None
         self.exchange_name = "BINANCE"
@@ -178,11 +179,11 @@ class BinanceRequestPositionData(BinancePositionData):
 
     def init_data(self):
         if not self.has_been_json_encoded:
-            self.position_data = json.loads(self.position_info)['data']
+            self.position_data = json.loads(self.position_info)["data"]
             self.has_been_json_encoded = True
         if self.has_been_init_data:
             return self
-        self.server_time = from_dict_get_float(self.position_data, 'updateTime')
+        self.server_time = from_dict_get_float(self.position_data, "updateTime")
         self.margin_type = from_dict_get_string(self.position_data, "marginType")
         self.is_isolated = True if self.margin_type == "isolated" else False
         self.is_auto_add_margin = from_dict_get_bool(self.position_data, "isAutoAddMargin")
@@ -203,12 +204,12 @@ class BinanceWssPositionData(BinancePositionData):
 
     def init_data(self):
         if not self.has_been_json_encoded:
-            self.position_data = json.loads(self.position_info)['data']
+            self.position_data = json.loads(self.position_info)["data"]
             self.has_been_json_encoded = True
         if self.has_been_init_data:
             return self
         self.server_time = None
-        self.margin_type = from_dict_get_string(self.position_data, 'mt')
+        self.margin_type = from_dict_get_string(self.position_data, "mt")
         self.is_isolated = True if self.margin_type == "isolated" else False
         self.is_auto_add_margin = None
         self.leverage = None
@@ -218,7 +219,7 @@ class BinanceWssPositionData(BinancePositionData):
         self.position_side = from_dict_get_string(self.position_data, "ps")
         self.avg_price = from_dict_get_float(self.position_data, "ep")
         self.mark_price = None
-        self.position_unrealized_pnl = from_dict_get_float(self.position_data, 'up')
-        self.position_realized_pnl = from_dict_get_float(self.position_data, 'cr')
+        self.position_unrealized_pnl = from_dict_get_float(self.position_data, "up")
+        self.position_realized_pnl = from_dict_get_float(self.position_data, "cr")
         self.has_been_init_data = True
         return self

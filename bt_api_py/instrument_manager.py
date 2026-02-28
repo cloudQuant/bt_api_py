@@ -1,21 +1,23 @@
-# -*- coding: utf-8 -*-
 """
 InstrumentManager — 统一交易标的管理器
 
 替代/增强现有 SymbolManager，提供 Instrument 注册、查询、双向映射功能。
 """
-from typing import Optional, Dict, List
 
-from bt_api_py.containers.instrument import Instrument, AssetType
+from typing import Dict, List, Optional
+
+from bt_api_py.containers.instrument import AssetType, Instrument
 
 
 class InstrumentManager:
     """Instrument 管理器"""
 
     def __init__(self):
-        self._instruments: Dict[str, Instrument] = {}                    # internal -> Instrument
-        self._by_venue: Dict[str, Dict[str, Instrument]] = {}           # venue -> {venue_symbol -> Instrument}
-        self._by_underlying: Dict[str, List[Instrument]] = {}           # underlying -> [Instrument]
+        self._instruments: Dict[str, Instrument] = {}  # internal -> Instrument
+        self._by_venue: Dict[str, Dict[str, Instrument]] = (
+            {}
+        )  # venue -> {venue_symbol -> Instrument}
+        self._by_underlying: Dict[str, List[Instrument]] = {}  # underlying -> [Instrument]
 
     def register(self, instrument: Instrument) -> None:
         """注册 Instrument"""

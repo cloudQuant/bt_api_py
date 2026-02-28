@@ -1,10 +1,12 @@
----
+- --
+
 name: 'step-03-scaffold-framework'
 description: 'Create directory structure, config, fixtures, factories, and sample tests'
 nextStepFile: './step-04-docs-and-scripts.md'
 knowledgeIndex: '{project-root}/_bmad/tea/testarch/tea-index.csv'
 outputFile: '{test_artifacts}/framework-setup-progress.md'
----
+
+- --
 
 # Step 3: Scaffold Framework
 
@@ -18,7 +20,7 @@ Generate the test directory structure, configuration files, fixtures, factories,
 - ✅ Speak in `{communication_language}`
 - ✅ Apply knowledge base patterns where required
 
----
+- --
 
 ## EXECUTION PROTOCOLS:
 
@@ -35,20 +37,20 @@ Generate the test directory structure, configuration files, fixtures, factories,
 
 ## MANDATORY SEQUENCE
 
-**CRITICAL:** Follow this sequence exactly. Do not skip, reorder, or improvise.
+- *CRITICAL:** Follow this sequence exactly. Do not skip, reorder, or improvise.
 
 ## 1. Create Directory Structure
 
 Use `{detected_stack}` from Step 1 to determine directory layout.
 
-**If {detected_stack} is `frontend` or `fullstack`:**
+- *If {detected_stack} is `frontend` or `fullstack`:**
 
 - `{test_dir}/e2e/`
 - `{test_dir}/support/fixtures/`
 - `{test_dir}/support/helpers/`
 - `{test_dir}/support/page-objects/` (optional)
 
-**If {detected_stack} is `backend` or `fullstack`:**
+- *If {detected_stack} is `backend` or `fullstack`:**
 
 Create the idiomatic test directory for the detected language:
 
@@ -59,7 +61,7 @@ Create the idiomatic test directory for the detected language:
 - **Ruby (RSpec)**: `spec/` with `spec/unit/`, `spec/integration/`, `spec/api/`, `spec/support/`
 - **Rust**: `tests/` for integration tests, inline `#[cfg(test)]` modules for unit tests
 
-**If `config.tea_use_pactjs_utils` is enabled** (and `{detected_stack}` is `backend` or `fullstack`):
+- *If `config.tea_use_pactjs_utils` is enabled** (and `{detected_stack}` is `backend` or `fullstack`):
 
 Create contract testing directory structure:
 
@@ -68,11 +70,11 @@ Create contract testing directory structure:
 - `pact/http/helpers/` — shared helpers (request filter, state constants)
 - `pact/message/` — message/Kafka contract tests (if async patterns detected)
 
----
+- --
 
 ## 2. Generate Framework Config
 
-**If {detected_stack} is `frontend` or `fullstack`:**
+- *If {detected_stack} is `frontend` or `fullstack`:**
 
 Create `playwright.config.ts` or `cypress.config.ts` with:
 
@@ -84,7 +86,7 @@ Create `playwright.config.ts` or `cypress.config.ts` with:
 
 Use TypeScript if `use_typescript: true`.
 
-**If {detected_stack} is `backend` or `fullstack`:**
+- *If {detected_stack} is `backend` or `fullstack`:**
 
 Create the idiomatic test config for the detected framework:
 
@@ -94,19 +96,19 @@ Create the idiomatic test config for the detected framework:
 - **xUnit**: `.csproj` test project with xUnit and coverlet dependencies
 - **RSpec**: `.rspec` config file with `spec_helper.rb` and `rails_helper.rb` (if Rails)
 
----
+- --
 
 ## 3. Environment Setup
 
 Create `.env.example` with `TEST_ENV`, `BASE_URL`, `API_URL`.
 
-**Stack-conditional environment files:**
+- *Stack-conditional environment files:**
 
-**If {detected_stack} is `frontend` or `fullstack` (Node.js):**
+- *If {detected_stack} is `frontend` or `fullstack` (Node.js):**
 
 - `.nvmrc` using current LTS Node (prefer Node 24+)
 
-**If {detected_stack} is `backend`:**
+- *If {detected_stack} is `backend`:**
 
 Create the idiomatic version file for the detected language:
 
@@ -116,31 +118,31 @@ Create the idiomatic version file for the detected language:
 - **C#/.NET**: `global.json` with SDK version if not already present
 - **Ruby**: `.ruby-version` with current stable Ruby
 
----
+- --
 
 ## 4. Fixtures & Factories
 
 Read `{config_source}` and use `{knowledgeIndex}` to load fragments based on `config.tea_use_playwright_utils`:
 
-**If Playwright Utils enabled:**
+- *If Playwright Utils enabled:**
 
 - `overview.md`, `fixtures-composition.md`, `auth-session.md`, `api-request.md`, `burn-in.md`, `network-error-monitor.md`, `data-factories.md`
 - Recommend installing `@seontechnologies/playwright-utils`
 
-**If disabled:**
+- *If disabled:**
 
 - `fixture-architecture.md`, `data-factories.md`, `network-first.md`, `playwright-config.md`, `test-quality.md`
 
-**If Pact.js Utils enabled** (`config.tea_use_pactjs_utils`):
+- *If Pact.js Utils enabled** (`config.tea_use_pactjs_utils`):
 
 - `pactjs-utils-overview.md`, `pactjs-utils-consumer-helpers.md`, `pactjs-utils-provider-verifier.md`, `pactjs-utils-request-filter.md`, `contract-testing.md`
 - Recommend installing `@seontechnologies/pactjs-utils` and `@pact-foundation/pact`
 
-**If Pact.js Utils disabled but contract testing relevant:**
+- *If Pact.js Utils disabled but contract testing relevant:**
 
 - `contract-testing.md`
 
-**If Pact MCP enabled** (`config.tea_pact_mcp` is `"mcp"`):
+- *If Pact MCP enabled** (`config.tea_pact_mcp` is `"mcp"`):
 
 - `pact-mcp.md`
 
@@ -150,11 +152,11 @@ Implement:
 - Auto-cleanup hooks
 - Faker-based data factories with overrides
 
----
+- --
 
 ## 5. Sample Tests & Helpers
 
-**If {detected_stack} is `frontend` or `fullstack`:**
+- *If {detected_stack} is `frontend` or `fullstack`:**
 
 Create example tests in `{test_dir}/e2e/` demonstrating:
 
@@ -163,7 +165,7 @@ Create example tests in `{test_dir}/e2e/` demonstrating:
 - Factory usage
 - Network interception pattern (if applicable)
 
-**If {detected_stack} is `backend` or `fullstack`:**
+- *If {detected_stack} is `backend` or `fullstack`:**
 
 Create example tests in the idiomatic location for the detected language:
 
@@ -180,30 +182,34 @@ Create helpers for:
 - Auth helpers
 - Test data factories (language-idiomatic patterns)
 
-**If `config.tea_use_pactjs_utils` is enabled** (and `{detected_stack}` is `backend` or `fullstack`):
+- *If `config.tea_use_pactjs_utils` is enabled**(and `{detected_stack}` is `backend` or `fullstack`):
 
 Create contract test samples in `pact/` directory:
 
 - **Consumer test**: Example using `PactV3` + `createProviderState` for type-safe provider states
 - **Provider verification test**: Example using `buildVerifierOptions` + `createRequestFilter`
 - **Helpers**: Request filter setup (`pact/http/helpers/request-filter.ts`), shared state constants (`pact/http/helpers/states.ts`)
-- **Vitest configs** (if vitest detected): `vitest.consumer.config.mts` and `vitest.provider.config.mts` for separated test execution
+- **Vitest configs**(if vitest detected): `vitest.consumer.config.mts` and `vitest.provider.config.mts` for separated test execution
 - **package.json scripts**: `test:contract:consumer`, `test:contract:provider`, `pact:publish`, `pact:can-deploy`
 
----
+- --
 
 ### 6. Save Progress
 
-**Save this step's accumulated work to `{outputFile}`.**
+- *Save this step's accumulated work to `{outputFile}`.**
 
-- **If `{outputFile}` does not exist** (first save), create it with YAML frontmatter:
+- **If `{outputFile}` does not exist**(first save), create it with YAML frontmatter:
 
   ```yaml
-  ---
+
+  - --
+
   stepsCompleted: ['step-03-scaffold-framework']
   lastStep: 'step-03-scaffold-framework'
   lastSaved: '{date}'
-  ---
+
+  - --
+
   ```
 
   Then write this step's output below the frontmatter.
@@ -225,4 +231,4 @@ Load next step: `{nextStepFile}`
 ### ❌ SYSTEM FAILURE:
 
 - Skipped sequence steps or missing outputs
-  **Master Rule:** Skipping steps is FORBIDDEN.
+  - *Master Rule:** Skipping steps is FORBIDDEN.

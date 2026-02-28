@@ -1,69 +1,77 @@
 # Binance Spot WebSocket 行情数据流
 
-> 来源: https://github.com/binance/binance-spot-api-docs/blob/master/web-socket-streams.md
+> 来源: <https://github.com/binance/binance-spot-api-docs/blob/master/web-socket-streams.md>
 
 ## General Information
 
-* Base Endpoint: **wss://stream.binance.com:9443** 或 **wss://stream.binance.com:443**
-* 纯行情数据: **wss://data-stream.binance.vision** (不支持用户数据流)
-* 单个流: `/ws/<streamName>`
-* 组合流: `/stream?streams=<streamName1>/<streamName2>/<streamName3>`
-* 组合流事件格式: `{"stream":"<streamName>","data":<rawPayload>}`
-* 所有交易对名称为**小写**
-* 单个连接最长有效 24 小时
-* 服务器每 20 秒发送 `ping frame`，1 分钟内未收到 `pong` 将断开连接
-* 所有时间字段默认为**毫秒**，可通过 `timeUnit=MICROSECOND` 切换为微秒
-  * 例: `/stream?streams=btcusdt@trade&timeUnit=MICROSECOND`
+- Base Endpoint: **wss://stream.binance.com:9443**或**wss://stream.binance.com:443**
+- 纯行情数据: **wss://data-stream.binance.vision** (不支持用户数据流)
+- 单个流: `/ws/<streamName>`
+- 组合流: `/stream?streams=<streamName1>/<streamName2>/<streamName3>`
+- 组合流事件格式: `{"stream":"<streamName>","data":<rawPayload>}`
+- 所有交易对名称为**小写**
+- 单个连接最长有效 24 小时
+- 服务器每 20 秒发送 `ping frame`，1 分钟内未收到 `pong` 将断开连接
+- 所有时间字段默认为**毫秒**，可通过 `timeUnit=MICROSECOND` 切换为微秒
+  - 例: `/stream?streams=btcusdt@trade&timeUnit=MICROSECOND`
 
 ## WebSocket 限制
 
-* 每秒最多 5 条入站消息（PING/PONG/JSON 控制消息）
-* 单个连接最多监听 **1024** 个流
-* 每 IP 每 5 分钟最多 **300** 个连接
+- 每秒最多 5 条入站消息（PING/PONG/JSON 控制消息）
+- 单个连接最多监听 **1024**个流
+- 每 IP 每 5 分钟最多**300** 个连接
 
 ## 订阅/取消订阅
 
 ### 订阅
+
 ```json
 {
   "method": "SUBSCRIBE",
   "params": ["btcusdt@aggTrade", "btcusdt@depth"],
   "id": 1
 }
-```
+
+```bash
 
 ### 取消订阅
+
 ```json
 {
   "method": "UNSUBSCRIBE",
   "params": ["btcusdt@depth"],
   "id": 312
 }
-```
+
+```bash
 
 ### 列出当前订阅
+
 ```json
 { "method": "LIST_SUBSCRIPTIONS", "id": 3 }
-```
+
+```bash
 
 ### 设置属性
+
 ```json
 {
   "method": "SET_PROPERTY",
   "params": ["combined", true],
   "id": 5
 }
-```
 
----
+```bash
+
+- --
 
 ## 数据流详情
 
 ### Aggregate Trade Streams (归集成交)
 
-**Stream Name:** `<symbol>@aggTrade`
+- *Stream Name:** `<symbol>@aggTrade`
 
-**Update Speed:** 实时
+- *Update Speed:** 实时
 
 ```json
 {
@@ -79,13 +87,14 @@
   "m": true,          // Is the buyer the market maker?
   "M": true           // Ignore
 }
-```
+
+```bash
 
 ### Trade Streams (逐笔成交)
 
-**Stream Name:** `<symbol>@trade`
+- *Stream Name:** `<symbol>@trade`
 
-**Update Speed:** 实时
+- *Update Speed:** 实时
 
 ```json
 {
@@ -99,17 +108,18 @@
   "m": true,          // Is the buyer the market maker?
   "M": true           // Ignore
 }
-```
 
-### Kline/Candlestick Streams (K线)
+```bash
 
-**Stream Name:** `<symbol>@kline_<interval>`
+### Kline/Candlestick Streams (K 线)
 
-**带时区偏移:** `<symbol>@kline_<interval>@+08:00`
+- *Stream Name:** `<symbol>@kline_<interval>`
 
-**Update Speed:** `1s` 间隔为 1000ms，其他为 2000ms
+- *带时区偏移:** `<symbol>@kline_<interval>@+08:00`
 
-**支持的间隔:** `1s`, `1m`, `3m`, `5m`, `15m`, `30m`, `1h`, `2h`, `4h`, `6h`, `8h`, `12h`, `1d`, `3d`, `1w`, `1M`
+- *Update Speed:** `1s` 间隔为 1000ms，其他为 2000ms
+
+- *支持的间隔:** `1s`, `1m`, `3m`, `5m`, `15m`, `30m`, `1h`, `2h`, `4h`, `6h`, `8h`, `12h`, `1d`, `3d`, `1w`, `1M`
 
 ```json
 {
@@ -136,13 +146,14 @@
     "B": "123456"       // Ignore
   }
 }
-```
+
+```bash
 
 ### Individual Symbol Mini Ticker Stream
 
-**Stream Name:** `<symbol>@miniTicker`
+- *Stream Name:** `<symbol>@miniTicker`
 
-**Update Speed:** 1000ms
+- *Update Speed:** 1000ms
 
 ```json
 {
@@ -156,19 +167,20 @@
   "v": "10000",   // Total traded base asset volume
   "q": "18"       // Total traded quote asset volume
 }
-```
+
+```bash
 
 ### All Market Mini Tickers Stream
 
-**Stream Name:** `!miniTicker@arr`
+- *Stream Name:** `!miniTicker@arr`
 
-**Update Speed:** 1000ms
+- *Update Speed:** 1000ms
 
 ### Individual Symbol Ticker Streams (24hr)
 
-**Stream Name:** `<symbol>@ticker`
+- *Stream Name:** `<symbol>@ticker`
 
-**Update Speed:** 1000ms
+- *Update Speed:** 1000ms
 
 ```json
 {
@@ -196,25 +208,26 @@
   "L": 18150,     // Last trade Id
   "n": 18151      // Total number of trades
 }
-```
+
+```bash
 
 ### Individual Symbol Rolling Window Statistics Streams
 
-**Stream Name:** `<symbol>@ticker_<window_size>`
+- *Stream Name:** `<symbol>@ticker_<window_size>`
 
-**Window Sizes:** `1h`, `4h`, `1d`
+- *Window Sizes:** `1h`, `4h`, `1d`
 
-**Update Speed:** 1000ms
+- *Update Speed:** 1000ms
 
 ### All Market Rolling Window Statistics Streams
 
-**Stream Name:** `!ticker_<window-size>@arr`
+- *Stream Name:** `!ticker_<window-size>@arr`
 
 ### Individual Symbol Book Ticker Streams (最优挂单)
 
-**Stream Name:** `<symbol>@bookTicker`
+- *Stream Name:** `<symbol>@bookTicker`
 
-**Update Speed:** 实时
+- *Update Speed:** 实时
 
 ```json
 {
@@ -225,13 +238,14 @@
   "a": "25.36520000", // best ask price
   "A": "40.66000000"  // best ask qty
 }
-```
+
+```bash
 
 ### Average Price (均价)
 
-**Stream Name:** `<symbol>@avgPrice`
+- *Stream Name:** `<symbol>@avgPrice`
 
-**Update Speed:** 1000ms
+- *Update Speed:** 1000ms
 
 ```json
 {
@@ -242,15 +256,16 @@
   "w": "25776.86000000",
   "T": 1693907032213
 }
-```
+
+```bash
 
 ### Partial Book Depth Streams (部分深度)
 
-**Stream Name:** `<symbol>@depth<levels>` 或 `<symbol>@depth<levels>@100ms`
+- *Stream Name:** `<symbol>@depth<levels>` 或 `<symbol>@depth<levels>@100ms`
 
-**Valid levels:** 5, 10, 20
+- *Valid levels:** 5, 10, 20
 
-**Update Speed:** 1000ms 或 100ms
+- *Update Speed:** 1000ms 或 100ms
 
 ```json
 {
@@ -258,13 +273,14 @@
   "bids": [["0.0024", "10"]],
   "asks": [["0.0026", "100"]]
 }
-```
+
+```bash
 
 ### Diff. Depth Stream (增量深度)
 
-**Stream Name:** `<symbol>@depth` 或 `<symbol>@depth@100ms`
+- *Stream Name:** `<symbol>@depth` 或 `<symbol>@depth@100ms`
 
-**Update Speed:** 1000ms 或 100ms
+- *Update Speed:** 1000ms 或 100ms
 
 ```json
 {
@@ -276,37 +292,52 @@
   "b": [["0.0024", "10"]],  // Bids
   "a": [["0.0026", "100"]]  // Asks
 }
-```
+
+```bash
 
 ## 本地维护 Order Book 的正确方法
 
 1. 打开 WebSocket 连接到 `wss://stream.binance.com:9443/ws/bnbbtc@depth`
 2. 缓存收到的事件，记录第一个事件的 `U`
-3. 获取深度快照 `https://api.binance.com/api/v3/depth?symbol=BNBBTC&limit=5000`
-4. 如果快照的 `lastUpdateId` < 步骤2的 `U`，返回步骤3
+3. 获取深度快照 `<https://api.binance.com/api/v3/depth?symbol=BNBBTC&limit=5000`>
+4. 如果快照的 `lastUpdateId` < 步骤 2 的 `U`，返回步骤 3
 5. 丢弃 `u <= lastUpdateId` 的缓存事件
 6. 将本地 order book 设置为快照，更新 ID 为 `lastUpdateId`
 7. 对所有后续事件应用更新：
-   - 如果事件的 `u < 本地更新ID`，忽略
-   - 如果事件的 `U > 本地更新ID + 1`，重新开始
+   - 如果事件的 `u < 本地更新 ID`，忽略
+   - 如果事件的 `U > 本地更新 ID + 1`，重新开始
    - 正常情况下，下一事件的 `U == 上一事件的 u + 1`
 
----
+- --
 
 ## 数据流汇总表
 
 | Stream Name | 说明 | 更新速度 |
+
 |-------------|------|----------|
+
 | `<symbol>@aggTrade` | 归集成交 | 实时 |
+
 | `<symbol>@trade` | 逐笔成交 | 实时 |
-| `<symbol>@kline_<interval>` | K线数据 | 1s/2s |
-| `<symbol>@kline_<interval>@+08:00` | K线(UTC+8) | 1s/2s |
+
+| `<symbol>@kline_<interval>` | K 线数据 | 1s/2s |
+
+| `<symbol>@kline_<interval>@+08:00` | K 线(UTC+8) | 1s/2s |
+
 | `<symbol>@miniTicker` | Mini Ticker | 1s |
+
 | `!miniTicker@arr` | 全市场 Mini Ticker | 1s |
+
 | `<symbol>@ticker` | 24hr Ticker | 1s |
+
 | `<symbol>@ticker_<window>` | 滚动窗口统计 | 1s |
+
 | `!ticker_<window>@arr` | 全市场滚动窗口 | 1s |
+
 | `<symbol>@bookTicker` | 最优挂单 | 实时 |
+
 | `<symbol>@avgPrice` | 均价 | 1s |
+
 | `<symbol>@depth<levels>` | 部分深度 | 1s/100ms |
+
 | `<symbol>@depth` | 增量深度 | 1s/100ms |

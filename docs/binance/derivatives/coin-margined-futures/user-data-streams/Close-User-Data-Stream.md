@@ -12,21 +12,20 @@ DELETE `/dapi/v1/listenKey`
 
 ## Request Weight
 
-**1**
+- *1**
 
 ## Request Parameters
 
 None
 
 ## Response Example
-    
-    
-    {}  
-    
 
-  * [API Description](</docs/derivatives/coin-margined-futures/user-data-streams/Close-User-Data-Stream#api-description>)
-  * [HTTP Request](</docs/derivatives/coin-margined-futures/user-data-streams/Close-User-Data-Stream#http-request>)
-  * [Request Weight](</docs/derivatives/coin-margined-futures/user-data-streams/Close-User-Data-Stream#request-weight>)
-  * [Request Parameters](</docs/derivatives/coin-margined-futures/user-data-streams/Close-User-Data-Stream#request-parameters>)
-  * [Response Example](</docs/derivatives/coin-margined-futures/user-data-streams/Close-User-Data-Stream#response-example>)
 
+    {}
+
+
+  - [API Description](</docs/derivatives/coin-margined-futures/user-data-streams/Close-User-Data-Stream#api-description>)
+  - [HTTP Request](</docs/derivatives/coin-margined-futures/user-data-streams/Close-User-Data-Stream#http-request>)
+  - [Request Weight](</docs/derivatives/coin-margined-futures/user-data-streams/Close-User-Data-Stream#request-weight>)
+  - [Request Parameters](</docs/derivatives/coin-margined-futures/user-data-streams/Close-User-Data-Stream#request-parameters>)
+  - [Response Example](</docs/derivatives/coin-margined-futures/user-data-streams/Close-User-Data-Stream#response-example>)

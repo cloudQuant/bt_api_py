@@ -17,22 +17,27 @@ POST `/sapi/v1/margin/isolated/account`
 ## Request Weight​
 
 
-**300(UID)**
+- *300(UID)**
 
 
 ## Request Parameters​
 
 
 | Name | Type | Mandatory | Description |
+
 | --- | --- | --- | --- |
+
 | symbol | STRING | YES |  |
+
 | recvWindow | LONG | NO | No more than 60000 |
+
 | timestamp | LONG | YES |  |
 
 
 ## Response Example​
 
 
-```
+```bash
 {  "success": true,  "symbol": "BTCUSDT"}
-```
+
+```bash

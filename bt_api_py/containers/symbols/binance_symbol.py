@@ -1,12 +1,13 @@
-import time
 import json
-from bt_api_py.functions.utils import from_dict_get_string, from_dict_get_float, from_dict_get_int
+import time
+
 from bt_api_py.containers.symbols.symbol import SymbolData
+from bt_api_py.functions.utils import from_dict_get_float, from_dict_get_int, from_dict_get_string
 
 
 class BinanceSwapSymbolData(SymbolData):
     def __init__(self, symbol_info, has_been_json_encoded):
-        super(BinanceSwapSymbolData, self).__init__(symbol_info, has_been_json_encoded)
+        super().__init__(symbol_info, has_been_json_encoded)
         self.event = "BinanceSymbolEvent"
         self.local_update_time = time.time()  # 本地时间戳
         self.exchange_name = "BINANCE"
@@ -40,14 +41,16 @@ class BinanceSwapSymbolData(SymbolData):
     def init_data(self):
         if not self.has_been_json_encoded:
             self.symbol_info = json.loads(self.symbol_info)
-            self.symbol_data = self.symbol_info['symbols']
+            self.symbol_data = self.symbol_info["symbols"]
             self.has_been_json_encoded = True
         if self.has_been_init_data:
             return self
         self.symbol_name = from_dict_get_string(self.symbol_info, "symbol")
         self.asset_type = from_dict_get_string(self.symbol_info, "contractType")
         self.maintain_margin_percent = from_dict_get_float(self.symbol_info, "maintMarginPercent")
-        self.required_margin_percent = from_dict_get_float(self.symbol_info, "requiredMarginPercent")
+        self.required_margin_percent = from_dict_get_float(
+            self.symbol_info, "requiredMarginPercent"
+        )
         self.base_asset = from_dict_get_string(self.symbol_info, "baseAsset")
         self.quote_asset = from_dict_get_string(self.symbol_info, "quoteAsset")
         self.contract_multiplier = 1
@@ -101,7 +104,7 @@ class BinanceSwapSymbolData(SymbolData):
                 "quote_asset": self.quote_asset,
                 "base_asset": self.base_asset,
                 "require_margin_percent": self.required_margin_percent,
-                "maintain_margin_percent": self.maintain_margin_percent
+                "maintain_margin_percent": self.maintain_margin_percent,
             }
         return self.all_data
 
@@ -175,7 +178,7 @@ class BinanceSwapSymbolData(SymbolData):
 
 class BinanceSpotSymbolData(SymbolData):
     def __init__(self, symbol_info, has_been_json_encoded):
-        super(BinanceSpotSymbolData, self).__init__(symbol_info, has_been_json_encoded)
+        super().__init__(symbol_info, has_been_json_encoded)
         self.event = "BinanceSymbolEvent"
         self.local_update_time = time.time()  # 本地时间戳
         self.exchange_name = "BINANCE"
@@ -209,7 +212,7 @@ class BinanceSpotSymbolData(SymbolData):
     def init_data(self):
         if not self.has_been_json_encoded:
             self.symbol_info = json.loads(self.symbol_info)
-            self.symbol_data = self.symbol_info['symbols']
+            self.symbol_data = self.symbol_info["symbols"]
             self.has_been_json_encoded = True
         if self.has_been_init_data:
             return self

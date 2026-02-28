@@ -1,8 +1,7 @@
-# -*- coding: utf-8 -*-
 """Greeks data container base class."""
 
 
-class GreeksData(object):
+class GreeksData:
     """Base class for account Greeks data."""
 
     def __init__(self, greeks_info, has_been_json_encoded=False):

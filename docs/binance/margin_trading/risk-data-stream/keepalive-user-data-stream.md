@@ -17,20 +17,23 @@ PUT `/sapi/v1/margin/listen-key`
 ## Request Weight(UID)​
 
 
-**1**
+- *1**
 
 
 ## Request Parameters​
 
 
 | Name | Type | Mandatory | Description |
+
 | --- | --- | --- | --- |
+
 | listenKey | STRING | YES |  |
 
 
 ## Response Example​
 
 
-```
+```bash
 {}
-```
+
+```bash

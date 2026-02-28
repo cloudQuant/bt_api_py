@@ -17,7 +17,7 @@ class AutoInitMixin:
 
     def _ensure_init(self):
         """如果尚未初始化，自动调用 init_data()"""
-        if not getattr(self, '_initialized', False):
+        if not getattr(self, "_initialized", False):
             self.init_data()
             self._initialized = True
         return self

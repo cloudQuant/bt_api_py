@@ -1,12 +1,13 @@
-import time
 import json
-from bt_api_py.functions.utils import from_dict_get_float, from_dict_get_bool
+import time
+
 from bt_api_py.containers.bars.bar import BarData
+from bt_api_py.functions.utils import from_dict_get_bool, from_dict_get_float
 
 
 class BinanceRequestBarData(BarData):
     def __init__(self, bar_info, symbol_name, asset_type, has_been_json_encoded=False):
-        super(BinanceRequestBarData, self).__init__(bar_info, has_been_json_encoded)
+        super().__init__(bar_info, has_been_json_encoded)
         self.exchange_name = "BINANCE"
         self.symbol_name = symbol_name
         self.asset_type = asset_type
@@ -142,7 +143,6 @@ class BinanceRequestBarData(BarData):
         return self.bar_status
 
 
-
 class BinanceWssBarData(BarData):
     def __init__(self, bar_info, symbol_name, asset_type, has_been_json_encoded=False):
         super().__init__(bar_info)
@@ -151,7 +151,7 @@ class BinanceWssBarData(BarData):
         self.asset_type = asset_type
         self.local_update_time = time.time()
         self.has_been_json_encoded = has_been_json_encoded
-        self.bar_data = bar_info['k'] if has_been_json_encoded else None
+        self.bar_data = bar_info["k"] if has_been_json_encoded else None
         self.server_time = None
         self.open_time = None
         self.open_price = None
@@ -171,23 +171,23 @@ class BinanceWssBarData(BarData):
     def init_data(self):
         if not self.has_been_json_encoded:
             self.bar_info = json.loads(self.bar_info)
-            self.bar_data = self.bar_info['k']
+            self.bar_data = self.bar_info["k"]
             self.has_been_json_encoded = True
         if self.has_been_init_data:
             return self
-        self.server_time = from_dict_get_float(self.bar_info, 'E')
-        self.open_time = from_dict_get_float(self.bar_data, 't')
-        self.open_price = from_dict_get_float(self.bar_data, 'o')
-        self.high_price = from_dict_get_float(self.bar_data, 'h')
-        self.low_price = from_dict_get_float(self.bar_data, 'l')
-        self.close_price = from_dict_get_float(self.bar_data, 'c')
-        self.volume = from_dict_get_float(self.bar_data, 'v')
-        self.amount = from_dict_get_float(self.bar_data, 'q')
-        self.close_time = from_dict_get_float(self.bar_data, 'T')
-        self.num_trades = from_dict_get_float(self.bar_data, 'n')
-        self.taker_buy_base_asset_volume = from_dict_get_float(self.bar_data, 'V')
-        self.taker_buy_quote_asset_volume = from_dict_get_float(self.bar_data, 'Q')
-        self.bar_status = from_dict_get_bool(self.bar_data, 'x')
+        self.server_time = from_dict_get_float(self.bar_info, "E")
+        self.open_time = from_dict_get_float(self.bar_data, "t")
+        self.open_price = from_dict_get_float(self.bar_data, "o")
+        self.high_price = from_dict_get_float(self.bar_data, "h")
+        self.low_price = from_dict_get_float(self.bar_data, "l")
+        self.close_price = from_dict_get_float(self.bar_data, "c")
+        self.volume = from_dict_get_float(self.bar_data, "v")
+        self.amount = from_dict_get_float(self.bar_data, "q")
+        self.close_time = from_dict_get_float(self.bar_data, "T")
+        self.num_trades = from_dict_get_float(self.bar_data, "n")
+        self.taker_buy_base_asset_volume = from_dict_get_float(self.bar_data, "V")
+        self.taker_buy_quote_asset_volume = from_dict_get_float(self.bar_data, "Q")
+        self.bar_status = from_dict_get_bool(self.bar_data, "x")
         self.has_been_init_data = True
         return self
 

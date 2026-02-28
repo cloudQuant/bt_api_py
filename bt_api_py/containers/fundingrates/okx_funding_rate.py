@@ -1,5 +1,6 @@
-import time
 import json
+import time
+
 from bt_api_py.containers.fundingrates.funding_rate import FundingRateData
 from bt_api_py.functions.utils import from_dict_get_float, from_dict_get_string
 
@@ -29,7 +30,7 @@ class OkxFundingRateData(FundingRateData):
 
     def init_data(self):
         if not self.has_been_json_encoded:
-            self.funding_rate_data = json.loads(self.funding_rate_info)['data'][0]
+            self.funding_rate_data = json.loads(self.funding_rate_info)["data"][0]
             self.has_been_json_encoded = True
         if self.has_been_init_data:
             return self
@@ -40,7 +41,9 @@ class OkxFundingRateData(FundingRateData):
         self.min_funding_rate = from_dict_get_float(self.funding_rate_data, "minFundingRate")
         self.current_funding_rate = from_dict_get_float(self.funding_rate_data, "fundingRate")
         self.current_funding_time = from_dict_get_float(self.funding_rate_data, "fundingTime")
-        self.settlement_funding_rate = from_dict_get_float(self.funding_rate_data, "settFundingRate")
+        self.settlement_funding_rate = from_dict_get_float(
+            self.funding_rate_data, "settFundingRate"
+        )
         self.settlement_status = from_dict_get_string(self.funding_rate_data, "settState")
         self.method = from_dict_get_string(self.funding_rate_data, "method")
         self.has_been_init_data = True

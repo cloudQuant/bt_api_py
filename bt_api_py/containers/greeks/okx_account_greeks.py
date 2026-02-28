@@ -1,9 +1,10 @@
-# -*- coding: utf-8 -*-
 """OKX Account Greeks data container."""
-import time
+
 import json
+import time
+
 from bt_api_py.containers.greeks.greeks import GreeksData
-from bt_api_py.functions.utils import from_dict_get_string, from_dict_get_float
+from bt_api_py.functions.utils import from_dict_get_float
 
 
 class OkxAccountGreeksData(GreeksData):
@@ -30,7 +31,7 @@ class OkxAccountGreeksData(GreeksData):
     """
 
     def __init__(self, greeks_info, symbol_name, asset_type, has_been_json_encoded=False):
-        super(OkxAccountGreeksData, self).__init__(greeks_info, has_been_json_encoded)
+        super().__init__(greeks_info, has_been_json_encoded)
         self.exchange_name = "OKX"
         self.symbol_name = symbol_name or "ANY"
         self.local_update_time = time.time()

@@ -1,7 +1,10 @@
-from bt_api_py.containers.bars.bar import BarData
-import time
 import json
+import time
+
+from bt_api_py.containers.bars.bar import BarData
+
 # from bt_api_py.functions.utils import from_dict_get_string, from_dict_get_float
+
 
 class OkxBarData(BarData):
     def __init__(self, bar_info, symbol_name, asset_type, has_been_json_encoded=False):
@@ -39,7 +42,7 @@ class OkxBarData(BarData):
         self.volume = float(self.bar_data[5])
         self.base_asset_volume = float(self.bar_data[6])
         self.quote_asset_volume = float(self.bar_data[7])
-        self.bar_status = True if float(self.bar_data[-1])==1 else False
+        self.bar_status = True if float(self.bar_data[-1]) == 1 else False
         self.has_been_init_data = True
         return self
 
@@ -70,7 +73,6 @@ class OkxBarData(BarData):
 
     def __repr__(self):
         return self.__str__()
-
 
     def get_event_type(self):
         return self.event

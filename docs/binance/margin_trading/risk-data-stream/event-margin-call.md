@@ -17,6 +17,7 @@ Margin call trigger the event
 ## Response Example​
 
 
-```
+```bash
 {   "e": "MARGIN_LEVEL_STATUS_CHANGE", // Event Type   "E": 1701949763462, // Event Time   "l": "1.1", // margin level   "s": "MARGIN_CALL" // margin call status}
-```
+
+```bash

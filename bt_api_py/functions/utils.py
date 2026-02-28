@@ -1,26 +1,27 @@
-import sys
-import os
-import yaml
 import importlib
-import requests
+import os
+import sys
 from pathlib import Path
-from dotenv import load_dotenv, find_dotenv
+
+import requests
+import yaml
+from dotenv import find_dotenv, load_dotenv
 
 
 def get_public_ip():
     try:
         # 使用一个查询公共 IP 地址的服务
-        response = requests.get('https://api.ipify.org')
+        response = requests.get("https://api.ipify.org")
         # 如果请求成功，返回响应的文本内容，即当前设备的公共 IP 地址
         if response.status_code == 200:
             return response.text
     except Exception as e:
         print(f"Error occurred: {e}")
         try:
-            response = requests.get('https://api.myip.com')
+            response = requests.get("https://api.myip.com")
             response.raise_for_status()  # 检查请求是否成功
             data = response.json()
-            return data.get('ip')
+            return data.get("ip")
         except requests.RequestException as e:
             print(f"Error fetching IP: {e}")
             return None
@@ -56,7 +57,7 @@ def read_yaml_file(file_name, data_root=None):
         file_path = package_path + "/configs/" + file_name
     else:
         file_path = data_root + "/configs/" + file_name
-    with open(file_path, 'r') as file:
+    with open(file_path) as file:
         file_content = yaml.load(file, Loader=yaml.FullLoader)
     return file_content
 
@@ -174,7 +175,7 @@ def from_dict_get_float(content, key, default=None):
     if key not in content:
         return default
     value = content[key]
-    if value == '':
+    if value == "":
         return None
     elif value is None:
         return None
@@ -188,7 +189,7 @@ def from_dict_get_int(content, key, default=None):
     if key not in content:
         return default
     value = content[key]
-    if value == '':
+    if value == "":
         return None
     elif value is None:
         return None

@@ -12,41 +12,46 @@ GET `/futures/data/topLongShortAccountRatio`
 
 ## Request Parameters
 
-Name| Type| Mandatory| Description  
----|---|---|---  
-symbol| STRING| YES|   
-period| ENUM| YES| "5m","15m","30m","1h","2h","4h","6h","12h","1d"  
-limit| LONG| NO| default 30, max 500  
-startTime| LONG| NO|   
-endTime| LONG| NO|   
-  
->   * If startTime and endTime are not sent, the most recent data is returned.
->   * Only the data of the latest 30 days is available.
-> 
+Name| Type| Mandatory| Description
+
+- --|---|---|---
+
+symbol| STRING| YES|
+
+period| ENUM| YES| "5m","15m","30m","1h","2h","4h","6h","12h","1d"
+
+limit| LONG| NO| default 30, max 500
+
+startTime| LONG| NO|
+
+endTime| LONG| NO|
+
+>   *If startTime and endTime are not sent, the most recent data is returned.
+>  * Only the data of the latest 30 days is available.
+>
 
 ## Response Example
-    
-    
-    [    
-       {  
-    	  "pair": "BTCUSD",  
-    	  "longShortRatio": "1.8105",  
-    	  "longAccount": "0.6442",  //64.42%  
-    	  "shortAccount": "0.3558",  //35.58%  
-    	  "timestamp": 1591261042378  
-       },  
-       {  
-         "pair": "BTCUSD",  
-    	  "longShortRatio": "1.1110",  
-    	  "longAccount": "0.5263",    
-    	  "shortAccount": "0.4737",    
-    	  "timestamp": 1592870400000  
-    	}  
-    ]  
-    
 
-  * [API Description](</docs/derivatives/coin-margined-futures/market-data/Top-Long-Short-Account-Ratio#api-description>)
-  * [HTTP Request](</docs/derivatives/coin-margined-futures/market-data/Top-Long-Short-Account-Ratio#http-request>)
-  * [Request Parameters](</docs/derivatives/coin-margined-futures/market-data/Top-Long-Short-Account-Ratio#request-parameters>)
-  * [Response Example](</docs/derivatives/coin-margined-futures/market-data/Top-Long-Short-Account-Ratio#response-example>)
 
+    [
+       {
+          "pair": "BTCUSD",
+          "longShortRatio": "1.8105",
+          "longAccount": "0.6442",  //64.42%
+          "shortAccount": "0.3558",  //35.58%
+          "timestamp": 1591261042378
+       },
+       {
+         "pair": "BTCUSD",
+          "longShortRatio": "1.1110",
+          "longAccount": "0.5263",
+          "shortAccount": "0.4737",
+          "timestamp": 1592870400000
+        }
+    ]
+
+
+  - [API Description](</docs/derivatives/coin-margined-futures/market-data/Top-Long-Short-Account-Ratio#api-description>)
+  - [HTTP Request](</docs/derivatives/coin-margined-futures/market-data/Top-Long-Short-Account-Ratio#http-request>)
+  - [Request Parameters](</docs/derivatives/coin-margined-futures/market-data/Top-Long-Short-Account-Ratio#request-parameters>)
+  - [Response Example](</docs/derivatives/coin-margined-futures/market-data/Top-Long-Short-Account-Ratio#response-example>)

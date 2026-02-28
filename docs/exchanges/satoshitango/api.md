@@ -3,20 +3,21 @@
 ## 交易所信息
 
 - **交易所名称**: SatoshiTango
-- **官方网站**: https://www.satoshitango.com
-- **API文档**: https://api.satoshitango.com
-- **24h交易量排名**: #52
-- **24h交易量**: $15M+
+- **官方网站**: <https://www.satoshitango.com>
+- **API 文档**: <https://api.satoshitango.com>
+- **24h 交易量排名**: #52
+- **24h 交易量**: $15M+
 - **支持的交易对**: 以官方列表为准
-- **API版本**: REST
+- **API 版本**: REST
 
-## API基础信息
+## API 基础信息
 
-### 基础URL
+### 基础 URL
 
 ```text
-https://api.satoshitango.com
-```
+<https://api.satoshitango.com>
+
+```bash
 
 ## 认证方式
 
@@ -26,7 +27,7 @@ https://api.satoshitango.com
 
 - 详见官方文档
 
-## WebSocket支持
+## WebSocket 支持
 
 - 官方文档未提供 WebSocket 说明
 
@@ -37,5 +38,7 @@ https://api.satoshitango.com
 ## 代码示例
 
 ```python
+
 # 官方文档提供示例
-```
+
+```bash

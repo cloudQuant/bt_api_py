@@ -17,6 +17,7 @@
 ## Response Example​
 
 
-```
-{  "e": "outboundAccountPosition", //Event type  "E": 1564034571105,             //Event Time  "u": 1564034571073,             //Time of last account update  "B": [                          //Balances Array    {      "a": "ETH",                 //Asset      "f": "10000.000000",        //Free      "l": "0.000000"             //Locked    }  ]}
-```
+```bash
+{  "e": "outboundAccountPosition", //Event type  "E": 1564034571105,             //Event Time  "u": 1564034571073,             //Time of last account update  "B": [//Balances Array    {      "a": "ETH",                 //Asset      "f": "10000.000000",        //Free      "l": "0.000000"             //Locked    } ]}
+
+```bash

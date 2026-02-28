@@ -3,16 +3,18 @@ CTP Tick 数据容器
 对应 CTP 的 CThostFtdcDepthMarketDataField 结构体
 包含最新价、买卖盘、涨跌停板、持仓量等
 """
-from bt_api_py.containers.tickers.ticker import TickerData
+
 from bt_api_py.containers.auto_init_mixin import AutoInitMixin
-from bt_api_py.functions.utils import from_dict_get_float, from_dict_get_string, from_dict_get_int
+from bt_api_py.containers.tickers.ticker import TickerData
+from bt_api_py.functions.utils import from_dict_get_float, from_dict_get_int, from_dict_get_string
 
 
 class CtpTickerData(AutoInitMixin, TickerData):
     """CTP Tick 行情数据"""
 
-    def __init__(self, ticker_info, symbol_name=None, asset_type="FUTURE",
-                 has_been_json_encoded=False):
+    def __init__(
+        self, ticker_info, symbol_name=None, asset_type="FUTURE", has_been_json_encoded=False
+    ):
         super().__init__(ticker_info, has_been_json_encoded)
         self.symbol_name = symbol_name
         self.asset_type = asset_type
@@ -33,8 +35,8 @@ class CtpTickerData(AutoInitMixin, TickerData):
         self.volume_val = None
         self.turnover = None
         self.open_interest = None
-        self.upper_limit_price = None    # 涨停板价
-        self.lower_limit_price = None    # 跌停板价
+        self.upper_limit_price = None  # 涨停板价
+        self.lower_limit_price = None  # 跌停板价
         self.update_time_val = None
         self.update_millisec = None
         self.trading_day = None
@@ -45,26 +47,26 @@ class CtpTickerData(AutoInitMixin, TickerData):
             return self
         info = self.ticker_info
         if isinstance(info, dict):
-            self.instrument_id = from_dict_get_string(info, 'InstrumentID')
-            self.last_price_val = from_dict_get_float(info, 'LastPrice')
-            self.pre_settlement_price = from_dict_get_float(info, 'PreSettlementPrice')
-            self.pre_close_price = from_dict_get_float(info, 'PreClosePrice')
-            self.open_price_val = from_dict_get_float(info, 'OpenPrice')
-            self.highest_price = from_dict_get_float(info, 'HighestPrice')
-            self.lowest_price = from_dict_get_float(info, 'LowestPrice')
-            self.bid_price_1 = from_dict_get_float(info, 'BidPrice1')
-            self.bid_volume_1 = from_dict_get_int(info, 'BidVolume1', 0)
-            self.ask_price_1 = from_dict_get_float(info, 'AskPrice1')
-            self.ask_volume_1 = from_dict_get_int(info, 'AskVolume1', 0)
-            self.volume_val = from_dict_get_int(info, 'Volume', 0)
-            self.turnover = from_dict_get_float(info, 'Turnover', 0.0)
-            self.open_interest = from_dict_get_float(info, 'OpenInterest', 0.0)
-            self.upper_limit_price = from_dict_get_float(info, 'UpperLimitPrice')
-            self.lower_limit_price = from_dict_get_float(info, 'LowerLimitPrice')
-            self.update_time_val = from_dict_get_string(info, 'UpdateTime')
-            self.update_millisec = from_dict_get_int(info, 'UpdateMillisec', 0)
-            self.trading_day = from_dict_get_string(info, 'TradingDay')
-            self.exchange_id = from_dict_get_string(info, 'ExchangeID')
+            self.instrument_id = from_dict_get_string(info, "InstrumentID")
+            self.last_price_val = from_dict_get_float(info, "LastPrice")
+            self.pre_settlement_price = from_dict_get_float(info, "PreSettlementPrice")
+            self.pre_close_price = from_dict_get_float(info, "PreClosePrice")
+            self.open_price_val = from_dict_get_float(info, "OpenPrice")
+            self.highest_price = from_dict_get_float(info, "HighestPrice")
+            self.lowest_price = from_dict_get_float(info, "LowestPrice")
+            self.bid_price_1 = from_dict_get_float(info, "BidPrice1")
+            self.bid_volume_1 = from_dict_get_int(info, "BidVolume1", 0)
+            self.ask_price_1 = from_dict_get_float(info, "AskPrice1")
+            self.ask_volume_1 = from_dict_get_int(info, "AskVolume1", 0)
+            self.volume_val = from_dict_get_int(info, "Volume", 0)
+            self.turnover = from_dict_get_float(info, "Turnover", 0.0)
+            self.open_interest = from_dict_get_float(info, "OpenInterest", 0.0)
+            self.upper_limit_price = from_dict_get_float(info, "UpperLimitPrice")
+            self.lower_limit_price = from_dict_get_float(info, "LowerLimitPrice")
+            self.update_time_val = from_dict_get_string(info, "UpdateTime")
+            self.update_millisec = from_dict_get_int(info, "UpdateMillisec", 0)
+            self.trading_day = from_dict_get_string(info, "TradingDay")
+            self.exchange_id = from_dict_get_string(info, "ExchangeID")
         self._initialized = True
         return self
 

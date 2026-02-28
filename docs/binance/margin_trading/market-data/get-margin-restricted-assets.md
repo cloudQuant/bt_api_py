@@ -29,6 +29,7 @@ None
 ## Response Example​
 
 
-```
+```bash
 {  "openLongRestrictedAsset": ["ADA", "CHZ", "ETH", "LTC", "XRP", "币安人生"],  "maxCollateralExceededAsset": ["ACH", "BNB", "BTC", "USDT"]}
-```
+
+```bash

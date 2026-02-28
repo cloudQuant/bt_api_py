@@ -1,28 +1,26 @@
-# -*- coding: utf-8 -*-
 """
 OKX REST API request base class.
 Handles authentication, signing, and all REST API methods.
 API methods are organized into Mixin classes under the mixins/ package.
 """
-import hmac
+
 import base64
-import time
+import hmac
 import json
+import time
 from urllib import parse
+
 from bt_api_py.containers.exchanges.okx_exchange_data import OkxExchangeDataSwap
-from bt_api_py.feeds.feed import Feed
-from bt_api_py.feeds.capability import Capability
-from bt_api_py.error_framework import OKXErrorTranslator
-from bt_api_py.rate_limiter import RateLimiter, RateLimitRule, RateLimitType, RateLimitScope
-from bt_api_py.functions.log_message import SpdLogManager
-from bt_api_py.functions.utils import update_extra_data
 from bt_api_py.containers.requestdatas.request_data import RequestData
-from bt_api_py.feeds.live_okx.mixins.normalizers import generic_normalize_function
+from bt_api_py.error_framework import OKXErrorTranslator
+from bt_api_py.feeds.capability import Capability
+from bt_api_py.feeds.feed import Feed
 from bt_api_py.feeds.live_okx.mixins.account_mixin import AccountMixin
 from bt_api_py.feeds.live_okx.mixins.copy_trading_mixin import CopyTradingMixin
 from bt_api_py.feeds.live_okx.mixins.funding_mixin import FundingMixin
 from bt_api_py.feeds.live_okx.mixins.grid_trading_mixin import GridTradingMixin
 from bt_api_py.feeds.live_okx.mixins.market_data_mixin import MarketDataMixin
+from bt_api_py.feeds.live_okx.mixins.normalizers import generic_normalize_function
 from bt_api_py.feeds.live_okx.mixins.rfq_mixin import RfqMixin
 from bt_api_py.feeds.live_okx.mixins.spread_trading_mixin import SpreadTradingMixin
 from bt_api_py.feeds.live_okx.mixins.statistics_mixin import StatisticsMixin
@@ -30,9 +28,25 @@ from bt_api_py.feeds.live_okx.mixins.status_mixin import StatusMixin
 from bt_api_py.feeds.live_okx.mixins.sub_account_mixin import SubAccountMixin
 from bt_api_py.feeds.live_okx.mixins.trade_mixin import TradeMixin
 from bt_api_py.feeds.live_okx.mixins.trading_account_mixin import TradingAccountMixin
+from bt_api_py.functions.log_message import SpdLogManager
+from bt_api_py.rate_limiter import RateLimiter, RateLimitRule, RateLimitScope, RateLimitType
 
 
-class OkxRequestData(AccountMixin, CopyTradingMixin, FundingMixin, GridTradingMixin, MarketDataMixin, RfqMixin, SpreadTradingMixin, StatisticsMixin, StatusMixin, SubAccountMixin, TradeMixin, TradingAccountMixin, Feed):
+class OkxRequestData(
+    AccountMixin,
+    CopyTradingMixin,
+    FundingMixin,
+    GridTradingMixin,
+    MarketDataMixin,
+    RfqMixin,
+    SpreadTradingMixin,
+    StatisticsMixin,
+    StatusMixin,
+    SubAccountMixin,
+    TradeMixin,
+    TradingAccountMixin,
+    Feed,
+):
     @classmethod
     def _capabilities(cls):
         return {
@@ -63,7 +77,7 @@ class OkxRequestData(AccountMixin, CopyTradingMixin, FundingMixin, GridTradingMi
         }
 
     def __init__(self, data_queue, **kwargs):
-        super(OkxRequestData, self).__init__(data_queue, **kwargs)
+        super().__init__(data_queue, **kwargs)
         self.data_queue = data_queue
         self.public_key = kwargs.get("public_key", None)
         self.private_key = kwargs.get("private_key", None)
@@ -72,10 +86,12 @@ class OkxRequestData(AccountMixin, CopyTradingMixin, FundingMixin, GridTradingMi
         self.asset_type = kwargs.get("asset_type", "SWAP")
         self.logger_name = kwargs.get("logger_name", "okx_swap_feed.log")
         self._params = OkxExchangeDataSwap()
-        self.request_logger = SpdLogManager("./logs/" + self.logger_name, "request",
-                                            0, 0, False).create_logger()
-        self.async_logger = SpdLogManager("./logs/" + self.logger_name, "async_request",
-                                          0, 0, False).create_logger()
+        self.request_logger = SpdLogManager(
+            "./logs/" + self.logger_name, "request", 0, 0, False
+        ).create_logger()
+        self.async_logger = SpdLogManager(
+            "./logs/" + self.logger_name, "async_request", 0, 0, False
+        ).create_logger()
         self._error_translator = OKXErrorTranslator()
         self._rate_limiter = kwargs.get("rate_limiter", self._create_default_rate_limiter())
 
@@ -126,26 +142,28 @@ class OkxRequestData(AccountMixin, CopyTradingMixin, FundingMixin, GridTradingMi
     # noinspection PyMethodMayBeStatic
     def signature(self, timestamp, method, request_path, secret_key, body=None):
         if body is None:
-            body = ''
+            body = ""
         else:
             body = str(body)
         message = str(timestamp) + str.upper(method) + request_path + body
-        mac = hmac.new(bytes(secret_key, encoding='utf8'), bytes(message, encoding='utf-8'), digestmod='sha256')
+        mac = hmac.new(
+            bytes(secret_key, encoding="utf8"), bytes(message, encoding="utf-8"), digestmod="sha256"
+        )
         d = mac.digest()
         return base64.b64encode(d).decode()
 
     # noinspection PyMethodMayBeStatic
     def get_header(self, api_key, sign, timestamp, passphrase):
         header = dict()
-        header['Content-Type'] = 'application/json'
-        header['OK-ACCESS-KEY'] = api_key
-        header['OK-ACCESS-SIGN'] = sign
-        header['OK-ACCESS-TIMESTAMP'] = str(timestamp)
-        header['OK-ACCESS-PASSPHRASE'] = passphrase
-        header['x-simulated-trading'] = "0"
+        header["Content-Type"] = "application/json"
+        header["OK-ACCESS-KEY"] = api_key
+        header["OK-ACCESS-SIGN"] = sign
+        header["OK-ACCESS-TIMESTAMP"] = str(timestamp)
+        header["OK-ACCESS-PASSPHRASE"] = passphrase
+        header["x-simulated-trading"] = "0"
         return header
 
-    def request(self, path, params=None, body=None, extra_data=None, timeout=3):
+    def request(self, path, params=None, body=None, extra_data=None, timeout=10):
         """http request function
         Args:
             path (TYPE): request url
@@ -156,19 +174,26 @@ class OkxRequestData(AccountMixin, CopyTradingMixin, FundingMixin, GridTradingMi
         """
         if params is None:
             params = {}
-        method, path = path.split(' ', 1)
+        method, path = path.split(" ", 1)
         req = parse.urlencode(params)
         url = f"{self._params.rest_url}{path}?{req}"  # ?{req}
         if params:
             path = f"{path}?{req}"
         timestamp = round(time.time(), 3)
-        signature_ = self.signature(timestamp, method, path, self.private_key,
-                                    json.dumps(body) if body is not None else None)
+        signature_ = self.signature(
+            timestamp,
+            method,
+            path,
+            self.private_key,
+            json.dumps(body) if body is not None else None,
+        )
         headers = self.get_header(self.public_key, signature_, timestamp, self.passphrase)
         res = self.http_request(method, url, headers, body, timeout)
         return RequestData(res, extra_data)
 
-    async def async_request(self, path, params=None, body=None, extra_data=None, timeout=5) -> RequestData:
+    async def async_request(
+        self, path, params=None, body=None, extra_data=None, timeout=5
+    ) -> RequestData:
         """http request function
         Args:
             path (TYPE): request url
@@ -179,14 +204,19 @@ class OkxRequestData(AccountMixin, CopyTradingMixin, FundingMixin, GridTradingMi
         """
         if params is None:
             params = {}
-        method, path = path.split(' ', 1)
+        method, path = path.split(" ", 1)
         req = parse.urlencode(params)
         url = f"{self._params.rest_url}{path}?{req}"  # ?{req}
         if params:
             path = f"{path}?{req}"
         timestamp = round(time.time(), 3)
-        signature_ = self.signature(timestamp, method, path, self.private_key,
-                                    json.dumps(body) if body is not None else None)
+        signature_ = self.signature(
+            timestamp,
+            method,
+            path,
+            self.private_key,
+            json.dumps(body) if body is not None else None,
+        )
         headers = self.get_header(self.public_key, signature_, timestamp, self.passphrase)
         res = await self.async_http_request(method, url, headers, body, timeout)
         return RequestData(res, extra_data)
@@ -202,7 +232,6 @@ class OkxRequestData(AccountMixin, CopyTradingMixin, FundingMixin, GridTradingMi
             self.push_data_to_queue(result)
         except Exception as e:
             self.async_logger.warn(f"async_callback::{e}")
-
 
     @staticmethod
     def _generic_normalize_function(input_data, extra_data):

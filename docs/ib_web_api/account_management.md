@@ -1,6 +1,6 @@
 # IBKR Account Management Web API
 
-> Source: https://www.interactivebrokers.com/campus/ibkr-api-page/web-api-account-management/
+> Source: <https://www.interactivebrokers.com/campus/ibkr-api-page/web-api-account-management/>
 > Last Updated: 2026-02-26
 
 ## Table of Contents
@@ -15,7 +15,7 @@
 - [Single Sign On (SSO)](#single-sign-on-sso)
 - [Error Handling](#error-handling)
 
----
+- --
 
 ## Introduction
 
@@ -26,9 +26,9 @@ The IBKR Account Management API provides programmatic access to account-related 
 - Access account statements and reports
 - Manage user authentication and permissions
 
-**Note**: This API is primarily designed for institutional use. Individual traders should use the Client Portal Gateway instead.
+- *Note**: This API is primarily designed for institutional use. Individual traders should use the Client Portal Gateway instead.
 
----
+- --
 
 ## Authentication
 
@@ -45,16 +45,20 @@ IBKR uses OAuth 2.0 with `private_key_jwt` client authentication (RFC 7521/7523)
 
 #### Token Endpoint
 
-```
+```bash
 POST /oauth/token
-```
 
-**Request Headers:**
-```
+```bash
+
+- *Request Headers:**
+
+```bash
 Content-Type: application/json
-```
 
-**Request Body:**
+```bash
+
+- *Request Body:**
+
 ```json
 {
   "grant_type": "client_credentials",
@@ -62,9 +66,11 @@ Content-Type: application/json
   "client_assertion": "SIGNED_JWT_TOKEN",
   "client_assertion_type": "urn:ietf:params:oauth:client-assertion-type:jwt-bearer"
 }
-```
 
-**Response:**
+```bash
+
+- *Response:**
+
 ```json
 {
   "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
@@ -72,18 +78,22 @@ Content-Type: application/json
   "expires_in": 3600,
   "scope": "read write"
 }
-```
 
----
+```bash
+
+- --
 
 ## Connectivity
 
 ### Base URLs
 
 | Environment | Base URL |
+
 |-------------|----------|
-| Production | `https://api.interactivebrokers.com` |
-| Testing | `https://api.test.interactivebrokers.com` |
+
+| Production | `<https://api.interactivebrokers.com`> |
+
+| Testing | `<https://api.test.interactivebrokers.com`> |
 
 ### Request Format
 
@@ -98,25 +108,37 @@ Content-Type: application/json
 - **Status Codes**: Standard HTTP status codes
 
 | Code | Meaning |
+
 |------|---------|
+
 | 200 | Success |
+
 | 400 | Bad Request |
+
 | 401 | Unauthorized |
+
 | 403 | Forbidden |
+
 | 404 | Not Found |
+
 | 429 | Rate Limit Exceeded |
+
 | 500 | Internal Server Error |
 
----
+- --
 
 ## Rate Limiting
 
 ### Global Rate Limits
 
 | Endpoint Group | Rate Limit |
+
 |----------------|------------|
+
 | Account Management | 10 requests/second |
+
 | Funding/Banking | 10 requests/second |
+
 | Reporting | 10 requests/second |
 
 When rate limits are exceeded, the API returns HTTP 429.
@@ -126,9 +148,10 @@ When rate limits are exceeded, the API returns HTTP 429.
 ```http
 X-RateLimit-Remaining: 95
 X-RateLimit-Reset: 1640000000
-```
 
----
+```bash
+
+- --
 
 ## Account Endpoints
 
@@ -136,19 +159,25 @@ X-RateLimit-Reset: 1640000000
 
 Retrieve account information for authenticated user.
 
-```
+```bash
 GET /gw/api/v1/accounts
-```
 
-**Query Parameters:**
+```bash
+
+- *Query Parameters:**
 
 | Parameter | Type | Required | Description |
+
 |-----------|------|----------|-------------|
+
 | status | string | No | Filter by account status (e.g., "A", "N", "O", "C", "P", "R", "Q", "E") |
+
 | limit | integer | No | Maximum number of results |
+
 | offset | integer | No | Pagination offset |
 
-**Response:**
+- *Response:**
+
 ```json
 {
   "accounts": [
@@ -164,36 +193,50 @@ GET /gw/api/v1/accounts
   ],
   "totalCount": 1
 }
-```
+
+```bash
 
 ### Account Status Codes
 
 | Code | Description |
+
 |------|-------------|
+
 | A | Abandoned - Application deleted due to inactivity |
+
 | N | New - Pending application with no funding details |
+
 | O | Open - Approved and active |
+
 | C | Closed - Was open, then closed |
+
 | P | Pending - Under review |
+
 | Q | Pending Approval - Awaiting approval |
+
 | R | Reopened - Previously closed, now reopened |
+
 | E | Expired - Temporary status during transition |
 
 ### Get Account Details
 
 Retrieve detailed information for a specific account.
 
-```
+```bash
 GET /gw/api/v1/accounts/{accountId}
-```
 
-**Path Parameters:**
+```bash
+
+- *Path Parameters:**
 
 | Parameter | Type | Required | Description |
+
 |-----------|------|----------|-------------|
+
 | accountId | string | Yes | IBKR Account ID |
 
-**Response:**
+- *Response:**
+
 ```json
 {
   "accountId": "U1234567",
@@ -212,41 +255,48 @@ GET /gw/api/v1/accounts/{accountId}
   },
   "beneficiaries": []
 }
-```
+
+```bash
 
 ### Update Account
 
 Update account information (requires proper permissions).
 
-```
+```bash
 PATCH /gw/api/v1/accounts/{accountId}
-```
 
-**Request Body:**
+```bash
+
+- *Request Body:**
+
 ```json
 {
   "accountAlias": "New Alias",
   "marginType": "PORT",
   "tradingPermissions": ["STK", "OPT", "FUT", "CASH"]
 }
-```
+
+```bash
 
 ### Close Account
 
 Close an account (requires cleared balance and specific conditions).
 
-```
+```bash
 POST /gw/api/v1/accounts/{accountId}/close
-```
 
-**Request Body:**
+```bash
+
+- *Request Body:**
+
 ```json
 {
   "reason": "Customer request"
 }
-```
 
----
+```bash
+
+- --
 
 ## Funding and Banking
 
@@ -254,18 +304,23 @@ POST /gw/api/v1/accounts/{accountId}/close
 
 Retrieve saved bank instructions for withdrawals and deposits.
 
-```
+```bash
 GET /gw/api/v1/bank-instructions/query
-```
 
-**Query Parameters:**
+```bash
+
+- *Query Parameters:**
 
 | Parameter | Type | Required | Description |
+
 |-----------|------|----------|-------------|
+
 | accountId | string | Yes | Account ID |
+
 | method | string | No | "WITHDRAW" or "DEPOSIT" |
 
-**Response:**
+- *Response:**
+
 ```json
 {
   "instructions": [
@@ -279,17 +334,20 @@ GET /gw/api/v1/bank-instructions/query
     }
   ]
 }
-```
+
+```bash
 
 ### Create Withdraw Request
 
 Create a request to withdraw funds.
 
-```
+```bash
 POST /gw/api/v1/withdraw-request
-```
 
-**Request Body:**
+```bash
+
+- *Request Body:**
+
 ```json
 {
   "accountId": "U1234567",
@@ -298,17 +356,20 @@ POST /gw/api/v1/withdraw-request
   "instructionId": "12345",
   "notes": "Monthly withdrawal"
 }
-```
+
+```bash
 
 ### Create Deposit Request
 
 Create a request to deposit funds (for notifications/checks).
 
-```
+```bash
 POST /gw/api/v1/deposit-request
-```
 
-**Request Body:**
+```bash
+
+- *Request Body:**
+
 ```json
 {
   "accountId": "U1234567",
@@ -317,17 +378,20 @@ POST /gw/api/v1/deposit-request
   "method": "CHECK",
   "notes": "Initial funding"
 }
-```
+
+```bash
 
 ### Internal Transfer
 
 Transfer funds or positions between accounts.
 
-```
+```bash
 POST /gw/api/v1/internal-transfer
-```
 
-**Request Body:**
+```bash
+
+- *Request Body:**
+
 ```json
 {
   "fromAccountId": "U1234567",
@@ -336,9 +400,11 @@ POST /gw/api/v1/internal-transfer
   "amount": 1000.00,
   "currency": "USD"
 }
-```
 
-**For Position Transfers:**
+```bash
+
+- *For Position Transfers:**
+
 ```json
 {
   "fromAccountId": "U1234567",
@@ -351,9 +417,10 @@ POST /gw/api/v1/internal-transfer
     }
   ]
 }
-```
 
----
+```bash
+
+- --
 
 ## Reporting
 
@@ -361,19 +428,25 @@ POST /gw/api/v1/internal-transfer
 
 Retrieve available activity statements for an account.
 
-```
+```bash
 GET /gw/api/v1/statements
-```
 
-**Query Parameters:**
+```bash
+
+- *Query Parameters:**
 
 | Parameter | Type | Required | Description |
+
 |-----------|------|----------|-------------|
+
 | accountId | string | Yes | Account ID |
+
 | startDate | string | Yes | Format: YYYY-MM-DD |
+
 | endDate | string | Yes | Format: YYYY-MM-DD |
 
-**Response:**
+- *Response:**
+
 ```json
 {
   "statements": [
@@ -381,29 +454,35 @@ GET /gw/api/v1/statements
       "statementId": "12345",
       "period": "2024-01-01 to 2024-01-31",
       "type": "ACTIVITY",
-      "url": "https://...",
+      "url": "<https://...",>
       "generatedDate": "2024-02-01"
     }
   ]
 }
-```
+
+```bash
 
 ### Get Tax Documents
 
 Retrieve available tax documents.
 
-```
+```bash
 GET /gw/api/v1/tax-documents/available
-```
 
-**Query Parameters:**
+```bash
+
+- *Query Parameters:**
 
 | Parameter | Type | Required | Description |
+
 |-----------|------|----------|-------------|
+
 | accountId | string | Yes | Account ID |
+
 | taxYear | integer | Yes | Tax year |
 
-**Response:**
+- *Response:**
+
 ```json
 {
   "documents": [
@@ -411,29 +490,35 @@ GET /gw/api/v1/tax-documents/available
       "documentType": "1099",
       "taxYear": 2023,
       "availableDate": "2024-02-15",
-      "url": "https://..."
+      "url": "<https://...">
     }
   ]
 }
-```
+
+```bash
 
 ### Trade Confirmations
 
 Generate trade confirmation PDFs for a date range.
 
-```
+```bash
 GET /gw/api/v1/trade-confirmations
-```
 
-**Query Parameters:**
+```bash
+
+- *Query Parameters:**
 
 | Parameter | Type | Required | Description |
+
 |-----------|------|----------|-------------|
+
 | accountId | string | Yes | Account ID |
+
 | startDate | string | Yes | Format: YYYY-MM-DD (max 365 day range) |
+
 | endDate | string | Yes | Format: YYYY-MM-DD |
 
----
+- --
 
 ## Single Sign On (SSO)
 
@@ -441,27 +526,34 @@ GET /gw/api/v1/trade-confirmations
 
 Generate an SSO URL to redirect users to the IBKR Portal for completing actions not supported via API.
 
-```
+```bash
 GET /gw/api/v1/sso/url
-```
 
-**Query Parameters:**
+```bash
+
+- *Query Parameters:**
 
 | Parameter | Type | Required | Description |
+
 |-----------|------|----------|-------------|
+
 | accountId | string | Yes | Account ID |
+
 | targetUrl | string | Yes | Destination URL in Portal |
+
 | showNavBar | boolean | No | Hide navigation bar (for IFRAME embedding) |
 
-**Response:**
+- *Response:**
+
 ```json
 {
-  "ssoUrl": "https://portal.interactivebrokers.com/sso/login?token=...",
+  "ssoUrl": "<https://portal.interactivebrokers.com/sso/login?token=...",>
   "expiresIn": 300
 }
-```
 
----
+```bash
+
+- --
 
 ## Error Handling
 
@@ -480,46 +572,61 @@ GET /gw/api/v1/sso/url
   "timestamp": "2024-01-15T10:30:00Z",
   "path": "/gw/api/v1/accounts/INVALID"
 }
-```
+
+```bash
 
 ### Common Error Codes
 
 | Code | Description |
+
 |------|-------------|
+
 | INVALID_REQUEST | Malformed request body or parameters |
+
 | UNAUTHORIZED | Missing or invalid authentication |
+
 | FORBIDDEN | Insufficient permissions for requested operation |
+
 | NOT_FOUND | Requested resource does not exist |
+
 | RATE_LIMIT_EXCEEDED | Request rate limit exceeded |
+
 | ACCOUNT_NOT_ELIGIBLE | Account not eligible for requested operation |
+
 | VALIDATION_ERROR | Input validation failed |
+
 | SYSTEM_ERROR | Internal server error |
 
----
+- --
 
 ## System Availability
 
 ### Maintenance Windows
 
 | Endpoint Group | Maintenance Time (ET) |
+
 |----------------|------------------------|
+
 | Account Management | Daily 6:00 PM - 6:05 PM |
+
 | Funding/Banking | Daily 11:45 PM - 12:30 AM |
+
 | Statements | Sundays & Tuesdays 6:00 PM - 6:30 PM |
 
----
+- --
 
 ## Support
 
 ### Contact Information
 
 - **Email**: am-api@interactivebrokers.com
-- **Documentation**: https://www.interactivebrokers.com/campus/ibkr-api-page/web-api-account-management/
-- **API Reference**: https://www.interactivebrokers.com/api/doc.html
+- **Documentation**: <https://www.interactivebrokers.com/campus/ibkr-api-page/web-api-account-management/>
+- **API Reference**: <https://www.interactivebrokers.com/api/doc.html>
 
 ### Troubleshooting Checklist
 
 Before contacting support:
+
 - [ ] Verify authentication credentials are valid
 - [ ] Check account status is "Open" (O)
 - [ ] Confirm request is within rate limits

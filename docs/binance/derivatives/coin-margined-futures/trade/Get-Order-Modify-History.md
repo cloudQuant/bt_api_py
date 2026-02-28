@@ -12,91 +12,99 @@ GET `/dapi/v1/orderAmendment`
 
 ## Request Weight
 
-**1**
+- *1**
 
 ## Request Parameters
 
-Name| Type| Mandatory| Description  
----|---|---|---  
-symbol| STRING| YES|   
-orderId| LONG| NO|   
-origClientOrderId| STRING| NO|   
-startTime| LONG| NO| Timestamp in ms to get modification history from INCLUSIVE  
-endTime| LONG| NO| Timestamp in ms to get modification history until INCLUSIVE  
-limit| INT| NO| Default 50; max 100  
-recvWindow| LONG| NO|   
-timestamp| LONG| YES|   
-  
+Name| Type| Mandatory| Description
+
+- --|---|---|---
+
+symbol| STRING| YES|
+
+orderId| LONG| NO|
+
+origClientOrderId| STRING| NO|
+
+startTime| LONG| NO| Timestamp in ms to get modification history from INCLUSIVE
+
+endTime| LONG| NO| Timestamp in ms to get modification history until INCLUSIVE
+
+limit| INT| NO| Default 50; max 100
+
+recvWindow| LONG| NO|
+
+timestamp| LONG| YES|
+
 >   * Either `orderId` or `origClientOrderId` must be sent, and the `orderId` will prevail if both are sent.
-> 
+>
 
 ## Response Example
-    
-    
-    [  
-        {  
-            "amendmentId": 5363,	// Order modification ID  
-            "symbol": "BTCUSD_PERP",  
-            "pair": "BTCUSD",  
-            "orderId": 20072994037,  
-            "clientOrderId": "LJ9R4QZDihCaS8UAOOLpgW",  
-            "time": 1629184560899,	// Order modification time  
-            "amendment": {  
-                "price": {  
-                    "before": "30004",  
-                    "after": "30003.2"  
-                },  
-                "origQty": {  
-                    "before": "1",  
-                    "after": "1"  
-                },  
-                "count": 3	// Order modification count, representing the number of times the order has been modified  
-            }  
-        },  
-        {  
-            "amendmentId": 5361,  
-            "symbol": "BTCUSD_PERP",  
-            "pair": "BTCUSD",  
-            "orderId": 20072994037,  
-            "clientOrderId": "LJ9R4QZDihCaS8UAOOLpgW",  
-            "time": 1629184533946,  
-            "amendment": {  
-                "price": {  
-                    "before": "30005",  
-                    "after": "30004"  
-                },  
-                "origQty": {  
-                    "before": "1",  
-                    "after": "1"  
-                },  
-                "count": 2  
-            }  
-        },  
-        {  
-            "amendmentId": 5325,  
-            "symbol": "BTCUSD_PERP",  
-            "pair": "BTCUSD",  
-            "orderId": 20072994037,  
-            "clientOrderId": "LJ9R4QZDihCaS8UAOOLpgW",  
-            "time": 1629182711787,  
-            "amendment": {  
-                "price": {  
-                    "before": "30002",  
-                    "after": "30005"  
-                },  
-                "origQty": {  
-                    "before": "1",  
-                    "after": "1"  
-                },  
-                "count": 1  
-            }  
-        }  
-    ]  
-    
 
-  * [API Description](</docs/derivatives/coin-margined-futures/trade/Get-Order-Modify-History#api-description>)
-  * [HTTP Request](</docs/derivatives/coin-margined-futures/trade/Get-Order-Modify-History#http-request>)
-  * [Request Weight](</docs/derivatives/coin-margined-futures/trade/Get-Order-Modify-History#request-weight>)
-  * [Request Parameters](</docs/derivatives/coin-margined-futures/trade/Get-Order-Modify-History#request-parameters>)
-  * [Response Example](</docs/derivatives/coin-margined-futures/trade/Get-Order-Modify-History#response-example>)
 
+    [
+        {
+            "amendmentId": 5363,    // Order modification ID
+            "symbol": "BTCUSD_PERP",
+            "pair": "BTCUSD",
+            "orderId": 20072994037,
+            "clientOrderId": "LJ9R4QZDihCaS8UAOOLpgW",
+            "time": 1629184560899,    // Order modification time
+            "amendment": {
+                "price": {
+                    "before": "30004",
+                    "after": "30003.2"
+                },
+                "origQty": {
+                    "before": "1",
+                    "after": "1"
+                },
+                "count": 3    // Order modification count, representing the number of times the order has been modified
+            }
+        },
+        {
+            "amendmentId": 5361,
+            "symbol": "BTCUSD_PERP",
+            "pair": "BTCUSD",
+            "orderId": 20072994037,
+            "clientOrderId": "LJ9R4QZDihCaS8UAOOLpgW",
+            "time": 1629184533946,
+            "amendment": {
+                "price": {
+                    "before": "30005",
+                    "after": "30004"
+                },
+                "origQty": {
+                    "before": "1",
+                    "after": "1"
+                },
+                "count": 2
+            }
+        },
+        {
+            "amendmentId": 5325,
+            "symbol": "BTCUSD_PERP",
+            "pair": "BTCUSD",
+            "orderId": 20072994037,
+            "clientOrderId": "LJ9R4QZDihCaS8UAOOLpgW",
+            "time": 1629182711787,
+            "amendment": {
+                "price": {
+                    "before": "30002",
+                    "after": "30005"
+                },
+                "origQty": {
+                    "before": "1",
+                    "after": "1"
+                },
+                "count": 1
+            }
+        }
+    ]
+
+
+  - [API Description](</docs/derivatives/coin-margined-futures/trade/Get-Order-Modify-History#api-description>)
+  - [HTTP Request](</docs/derivatives/coin-margined-futures/trade/Get-Order-Modify-History#http-request>)
+  - [Request Weight](</docs/derivatives/coin-margined-futures/trade/Get-Order-Modify-History#request-weight>)
+  - [Request Parameters](</docs/derivatives/coin-margined-futures/trade/Get-Order-Modify-History#request-parameters>)
+  - [Response Example](</docs/derivatives/coin-margined-futures/trade/Get-Order-Modify-History#response-example>)

@@ -1,6 +1,6 @@
 # Cancel Algo Order (TRADE)
 
-> 来源: [Binance Algo Trading API](https://developers.binance.com/docs/algo/spot-algo/Cancel-Algo-Order)
+> 来源: [Binance Algo Trading API](<https://developers.binance.com/docs/algo/spot-algo/Cancel-Algo-Order)>
 
 ## API Description
 
@@ -8,9 +8,10 @@ Cancel an open TWAP order.
 
 ## HTTP Request
 
-```
+```bash
 DELETE /sapi/v1/algo/spot/order
-```
+
+```bash
 
 ## Request Weight(IP)
 
@@ -19,9 +20,13 @@ DELETE /sapi/v1/algo/spot/order
 ## Request Parameters
 
 | Name | Type | Mandatory | Description |
+
 |------|------|-----------|-------------|
+
 | algoId | LONG | YES | eg. 14511 |
+
 | recvWindow | LONG | NO | |
+
 | timestamp | LONG | YES | |
 
 ## Response Example
@@ -33,4 +38,5 @@ DELETE /sapi/v1/algo/spot/order
     "code": 0,
     "msg": "OK"
 }
-```
+
+```bash

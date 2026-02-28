@@ -63,12 +63,13 @@ const opts = buildVerifierOptions({
 });
 
 await new Verifier(opts).verifyProvider();
-```
 
-**Key Points**:
+```bash
+
+- *Key Points**:
 
 - Set `PACT_BROKER_BASE_URL` and `PACT_BROKER_TOKEN` as env vars — `buildVerifierOptions` reads them automatically
-- `port` is a string (e.g., `'3001'`) — the function builds `providerBaseUrl: http://localhost:${port}` internally
+- `port` is a string (e.g., `'3001'`) — the function builds `providerBaseUrl: <http://localhost:${port}`> internally
 - `includeMainAndDeployed` is **required** — set `true` for normal flow, `false` for breaking changes
 - State handlers support both simple functions and `{ setup, teardown }` objects
 - `params` in state handlers correspond to the `JsonMap` from consumer's `createProviderState`
@@ -96,7 +97,8 @@ const opts = buildVerifierOptions({
 });
 
 await new Verifier(opts).verifyProvider();
-```
+
+```bash
 
 ### Example 3: Message Provider Verification (Kafka/Async)
 
@@ -129,9 +131,10 @@ const opts = buildMessageVerifierOptions({
 });
 
 await new Verifier(opts).verifyProvider();
-```
 
-**Key Points**:
+```bash
+
+- *Key Points**:
 
 - `buildMessageVerifierOptions` adds `messageProviders` to the verifier config
 - Each message provider function returns the expected message payload
@@ -162,14 +165,15 @@ const opts = buildVerifierOptions({
   port: '3001',
   includeMainAndDeployed: !isBreakingChange, // false during breaking changes
   stateHandlers: {
-    /* ... */
+    /*...*/
   },
 });
 // When includeMainAndDeployed is false (breaking change):
 //   selectors = [{ matchingBranch: true }]
 // When includeMainAndDeployed is true (normal):
 //   selectors = [{ matchingBranch: true }, { mainBranch: true }, { deployedOrReleased: true }]
-```
+
+```bash
 
 ### Example 5: handlePactBrokerUrlAndSelectors (Advanced)
 
@@ -180,7 +184,7 @@ import type { VerifierOptions } from '@pact-foundation/pact';
 // For advanced use cases — mutates the options object in-place (returns void)
 const options: VerifierOptions = {
   provider: 'SampleMoviesAPI',
-  providerBaseUrl: 'http://localhost:3001',
+  providerBaseUrl: '<http://localhost:3001',>
 };
 
 handlePactBrokerUrlAndSelectors({
@@ -195,9 +199,10 @@ handlePactBrokerUrlAndSelectors({
 // - options.pactBrokerUrl (from pactBrokerUrl param)
 // - options.consumerVersionSelectors (based on includeMainAndDeployed)
 // OR if pactPayloadUrl matches: options.pactUrls = [pactPayloadUrl]
-```
 
-**Note**: `handlePactBrokerUrlAndSelectors` is called internally by `buildVerifierOptions`. You rarely need it directly — use it only for advanced custom verifier assembly.
+```bash
+
+- *Note**: `handlePactBrokerUrlAndSelectors` is called internally by `buildVerifierOptions`. You rarely need it directly — use it only for advanced custom verifier assembly.
 
 ### Example 6: getProviderVersionTags
 
@@ -218,24 +223,33 @@ const tags = getProviderVersionTags();
 //
 // Locally (no CI):
 //   tags = ['local']
-```
+
+```bash
 
 ## Environment Variables Reference
 
 | Variable               | Required        | Description                                                                                                                           | Default     |
+
 | ---------------------- | --------------- | ------------------------------------------------------------------------------------------------------------------------------------- | ----------- |
+
 | `PACT_BROKER_BASE_URL` | For remote flow | Pact Broker / PactFlow URL                                                                                                            | —           |
+
 | `PACT_BROKER_TOKEN`    | For remote flow | API token for broker authentication                                                                                                   | —           |
+
 | `GITHUB_SHA`           | Recommended     | Provider version for verification result publishing (auto-set by GitHub Actions)                                                      | `'unknown'` |
-| `GITHUB_BRANCH`        | Recommended     | Branch name for provider version branch and version tags (**not auto-set** — define as `${{ github.head_ref \|\| github.ref_name }}`) | `'main'`    |
+
+| `GITHUB_BRANCH`        | Recommended     | Branch name for provider version branch and version tags (**not auto-set**— define as `${{ github.head_ref \|\| github.ref_name }}`) | `'main'`    |
+
 | `PACT_PAYLOAD_URL`     | Optional        | Webhook payload URL — triggers verification of specific pact only                                                                     | —           |
+
 | `PACT_BREAKING_CHANGE` | Optional        | Set to `"true"` to use breaking change selector strategy                                                                              | `'false'`   |
+
 | `CI`                   | Auto-detected   | When `"true"`, enables verification result publishing                                                                                 | —           |
 
 ## Key Points
 
 - **Flow auto-detection**: If `PACT_BROKER_BASE_URL` is set → remote flow; otherwise → local flow (requires `pactUrls`)
-- **`port` is a string**: Pass port number as string (e.g., `'3001'`); function builds `http://localhost:${port}` internally
+- **`port` is a string**: Pass port number as string (e.g., `'3001'`); function builds `<http://localhost:${port}`> internally
 - **`includeMainAndDeployed` is required**: `true` = verify matchingBranch + mainBranch + deployedOrReleased; `false` = verify matchingBranch only (for breaking changes)
 - **Selector strategy**: Normal flow (`includeMainAndDeployed: true`) includes all selectors; breaking change flow (`false`) includes only `matchingBranch`
 - **Webhook support**: `PACT_PAYLOAD_URL` takes precedence — verifies only the specific pact that triggered the webhook
@@ -257,26 +271,29 @@ const tags = getProviderVersionTags();
 // ❌ Manual environment variable handling
 const opts: VerifierOptions = {
   provider: 'my-api',
-  providerBaseUrl: 'http://localhost:3001',
+  providerBaseUrl: '<http://localhost:3001',>
   pactBrokerUrl: process.env.PACT_BROKER_BASE_URL,
   pactBrokerToken: process.env.PACT_BROKER_TOKEN,
   publishVerificationResult: process.env.CI === 'true',
   providerVersion: process.env.GIT_SHA || process.env.GITHUB_SHA || 'dev',
+
   providerVersionBranch: process.env.GITHUB_HEAD_REF || process.env.GITHUB_REF_NAME,
+
   consumerVersionSelectors:
     process.env.PACT_BREAKING_CHANGE === 'true'
       ? [{ matchingBranch: true }]
       : [{ matchingBranch: true }, { mainBranch: true }, { deployedOrReleased: true }],
   pactUrls: process.env.PACT_PAYLOAD_URL ? [process.env.PACT_PAYLOAD_URL] : undefined,
   stateHandlers: {
-    /* ... */
+    /*...*/
   },
   requestFilter: (req, res, next) => {
     req.headers['authorization'] = `Bearer ${process.env.TEST_TOKEN}`;
     next();
   },
 };
-```
+
+```bash
 
 ### Right: Use buildVerifierOptions
 
@@ -287,29 +304,31 @@ const opts = buildVerifierOptions({
   port: '3001',
   includeMainAndDeployed: process.env.PACT_BREAKING_CHANGE !== 'true',
   stateHandlers: {
-    /* ... */
+    /*...*/
   },
   requestFilter: createRequestFilter({
     tokenGenerator: () => process.env.TEST_TOKEN ?? 'test-token',
   }),
 });
-```
+
+```bash
 
 ### Wrong: Hardcoding consumer version selectors
 
 ```typescript
 // ❌ Hardcoded selectors — breaks when flow changes
 consumerVersionSelectors: [{ mainBranch: true }, { deployedOrReleased: true }],
-```
+
+```bash
 
 ### Right: Let buildVerifierOptions choose selectors
 
 ```typescript
 // ✅ Selector strategy adapts to PACT_BREAKING_CHANGE env var
 const opts = buildVerifierOptions({
-  /* ... */
+  /*...*/
 });
 // Selectors chosen automatically based on environment
-```
 
+```bash
 _Source: @seontechnologies/pactjs-utils provider-verifier module, pact-js-example-provider CI workflows_

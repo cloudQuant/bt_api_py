@@ -3,7 +3,7 @@ ExchangeData保存交易所数据
 """
 
 
-class ExchangeData(object):
+class ExchangeData:
 
     def __init__(self):
         self.rate_limit_type = ""  # 频率限制类型
@@ -16,10 +16,10 @@ class ExchangeData(object):
         self.rate_limits = list()  # 频率限制
         self.exchange_filters = list()  # 交易所过滤
         self.symbols = list()  # 品种信息
-        self.exchange_name = ''  # 交易所名称
-        self.rest_url = ''
-        self.acct_wss_url = ''
-        self.wss_url = ''
+        self.exchange_name = ""  # 交易所名称
+        self.rest_url = ""
+        self.acct_wss_url = ""
+        self.wss_url = ""
         self.um_rest_url = ""
         self.um_wss_Url = ""
         self.rest_paths = {}  # rest paths
@@ -70,6 +70,13 @@ class ExchangeData(object):
         return result
 
     def to_dict(self):
-        content = {key: getattr(self, key) for key in dir(self) if
-                   ((not key.startswith("__")) & (not key.startswith("update")) & (not key.startswith("to_dict")))}
+        content = {
+            key: getattr(self, key)
+            for key in dir(self)
+            if (
+                (not key.startswith("__"))
+                & (not key.startswith("update"))
+                & (not key.startswith("to_dict"))
+            )
+        }
         return content

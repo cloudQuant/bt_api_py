@@ -4,7 +4,8 @@
 # Bar的数据推送和请求频率不是特别高，传入的数据直接使用json格式
 # """
 
-class BarData(object):
+
+class BarData:
 
     def __init__(self, bar_info, has_been_json_encoded=False):
         self.event = "BarEvent"

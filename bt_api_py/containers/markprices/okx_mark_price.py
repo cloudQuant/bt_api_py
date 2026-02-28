@@ -1,5 +1,6 @@
-import time
 import json
+import time
+
 from bt_api_py.containers.markprices.mark_price import MarkPriceData
 from bt_api_py.functions.utils import from_dict_get_float, from_dict_get_string
 
@@ -28,11 +29,15 @@ class OkxMarkPriceData(MarkPriceData):
         if self.has_been_init_data:
             return self
         if "arg" in self.mark_price_info:
-            self.mark_price_symbol_name = from_dict_get_string(self.mark_price_info["arg"], "instId")
-        self.server_time = from_dict_get_float(self.mark_price_data, 'ts')
-        self.mark_price = from_dict_get_float(self.mark_price_data, 'markPx') \
-            if 'markPx' in self.mark_price_data \
-            else from_dict_get_float(self.mark_price_data, 'idxPx')
+            self.mark_price_symbol_name = from_dict_get_string(
+                self.mark_price_info["arg"], "instId"
+            )
+        self.server_time = from_dict_get_float(self.mark_price_data, "ts")
+        self.mark_price = (
+            from_dict_get_float(self.mark_price_data, "markPx")
+            if "markPx" in self.mark_price_data
+            else from_dict_get_float(self.mark_price_data, "idxPx")
+        )
         self.has_been_init_data = True
         return self
 
@@ -75,7 +80,7 @@ class OkxMarkPriceData(MarkPriceData):
         return self.asset_type
 
     def get_mark_price(self):
-        mark_price = self.mark_price_data.get('markPx', None)
+        mark_price = self.mark_price_data.get("markPx", None)
         if mark_price is None:
-            mark_price = self.mark_price_data.get('idxPx', None)
+            mark_price = self.mark_price_data.get("idxPx", None)
         return float(mark_price) if mark_price is not None else None

@@ -1,6 +1,6 @@
 # Contact Us
 
-> 来源: [Binance Algo Trading API](https://developers.binance.com/docs/algo/contact-us)
+> 来源: [Binance Algo Trading API](<https://developers.binance.com/docs/algo/contact-us)>
 
 ## Binance API Telegram Group
 

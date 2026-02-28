@@ -2,21 +2,27 @@
 
 ## 1. 概述
 
-目标是将 bt_api_py 重构为覆盖 **CEX / DEX / CTP / QMT / IB** 的统一交易框架。
+目标是将 bt_api_py 重构为覆盖 **CEX / DEX / CTP / QMT / IB**的统一交易框架。
 
 ### 1.1 设计原则
 
 | 原则 | 说明 |
+
 |------|------|
-| **统一协议** | 所有场所遵循统一接口协议（AbstractVenueFeed） |
-| **配置驱动** | 静态信息走配置，动态逻辑走代码 |
-| **能力显式** | 通过 Capability 声明能力边界 |
-| **工具辅助** | 脚手架与校验工具减少重复劳动 |
-| **重构优先** | 允许破坏性变更，以获得更好的架构 |
+
+|**统一协议**| 所有场所遵循统一接口协议（AbstractVenueFeed） |
+
+|**配置驱动**| 静态信息走配置，动态逻辑走代码 |
+
+|**能力显式**| 通过 Capability 声明能力边界 |
+
+|**工具辅助**| 脚手架与校验工具减少重复劳动 |
+
+|**重构优先**| 允许破坏性变更，以获得更好的架构 |
 
 ### 1.2 架构分层
 
-```
+```bash
 应用层 (策略/风控/回测)
         ↓
 统一接口层 (BtApi / InstrumentManager / Capability)
@@ -28,9 +34,10 @@
 适配层 (CEX/DEX/Broker Adapter)
         ↓
 实现层 (Binance / OKX / CTP / IB / QMT / ...)
-```
 
----
+```bash
+
+- --
 
 ## 2. 统一协议设计
 
@@ -48,12 +55,14 @@ class AbstractVenueFeed(Protocol):
     """统一场所协议
 
     设计原则：
-    1. 方法签名必须兼容现有 Feed 基类（extra_data + **kwargs 模式不变）
+
+    1. 方法签名必须兼容现有 Feed 基类（extra_data +**kwargs 模式不变）
     2. 异步方法提供默认 run_in_executor 包装，HTTP 场所可覆盖为真异步
     3. connect/disconnect 对 HTTP 场所默认为 no-op
+
     """
 
-    # 连接管理
+# 连接管理
     def connect(self) -> None:
         """建立连接（HTTP 场所可为 no-op）"""
         ...
@@ -66,7 +75,7 @@ class AbstractVenueFeed(Protocol):
         """检查连接状态"""
         ...
 
-    # 行情查询（同步）— 签名与现有 Feed 保持一致
+# 行情查询（同步）— 签名与现有 Feed 保持一致
     def get_tick(self, symbol: str, extra_data=None, **kwargs) -> Any:
         """获取最新价格"""
         ...
@@ -76,10 +85,10 @@ class AbstractVenueFeed(Protocol):
         ...
 
     def get_kline(self, symbol: str, period: str, count: int = 100, extra_data=None, **kwargs) -> Any:
-        """获取K线"""
+        """获取 K 线"""
         ...
 
-    # 交易操作（同步）— 签名与现有 Feed 保持一致
+# 交易操作（同步）— 签名与现有 Feed 保持一致
     def make_order(
         self,
         symbol: str,
@@ -90,7 +99,9 @@ class AbstractVenueFeed(Protocol):
         post_only: bool = False,
         client_order_id: str = None,
         extra_data=None,
-        **kwargs
+
+        - *kwargs
+
     ) -> Any:
         """下单"""
         ...
@@ -111,7 +122,7 @@ class AbstractVenueFeed(Protocol):
         """查询挂单"""
         ...
 
-    # 账户查询（同步）
+# 账户查询（同步）
     def get_balance(self, symbol=None, extra_data=None, **kwargs) -> Any:
         """查询余额"""
         ...
@@ -124,9 +135,11 @@ class AbstractVenueFeed(Protocol):
         """查询持仓（期货/期权）"""
         ...
 
-    # 异步版本
-    # HTTP 场所（CEX）应覆盖为真正的 httpx 异步实现
-    # 非 HTTP 场所（CTP/IB/QMT）使用默认的 run_in_executor 包装
+# 异步版本
+
+# HTTP 场所（CEX）应覆盖为真正的 httpx 异步实现
+
+# 非 HTTP 场所（CTP/IB/QMT）使用默认的 run_in_executor 包装
     async def async_get_tick(self, symbol: str, extra_data=None, **kwargs) -> Any:
         ...
 
@@ -140,7 +153,9 @@ class AbstractVenueFeed(Protocol):
         post_only: bool = False,
         client_order_id: str = None,
         extra_data=None,
-        **kwargs
+
+        - *kwargs
+
     ) -> Any:
         ...
 
@@ -150,7 +165,7 @@ class AbstractVenueFeed(Protocol):
     async def async_get_balance(self, symbol=None, extra_data=None, **kwargs) -> Any:
         ...
 
-    # 能力声明
+# 能力声明
     @property
     def capabilities(self) -> set:
         """返回该 Feed 支持的能力集合"""
@@ -193,9 +208,10 @@ class AsyncWrapperMixin:
         return await loop.run_in_executor(
             None, functools.partial(self.get_balance, symbol, extra_data=extra_data, **kwargs)
         )
-```
 
----
+```bash
+
+- --
 
 ### 2.2 Capability 机制（完整版）
 
@@ -208,7 +224,7 @@ from typing import Set
 class Capability(Enum):
     """完整的能力枚举"""
 
-    # === 订单相关 ===
+# === 订单相关 ===
     MAKE_ORDER = "make_order"                # 下单
     CANCEL_ORDER = "cancel_order"            # 撤单
     CANCEL_ALL = "cancel_all"                # 撤销所有（全市场）
@@ -219,38 +235,38 @@ class Capability(Enum):
     QUERY_HISTORY_ORDERS = "query_history_orders"  # 查询历史订单
     QUERY_DEALS = "query_deals"              # 查询成交记录
 
-    # === 账户相关 ===
+# === 账户相关 ===
     GET_BALANCE = "get_balance"              # 查询余额
     GET_ACCOUNT = "get_account"              # 查询账户信息
     GET_POSITION = "get_position"            # 查询持仓
     GET_MARGIN = "get_margin"                # 查询保证金
     GET_LEVERAGE = "get_leverage"            # 查询杠杆
 
-    # === 行情相关 ===
+# === 行情相关 ===
     GET_TICK = "get_tick"                    # 获取最新价格
     GET_DEPTH = "get_depth"                  # 获取深度
-    GET_KLINE = "get_kline"                  # 获取K线
+    GET_KLINE = "get_kline"                  # 获取 K 线
     GET_FUNDING_RATE = "get_funding_rate"    # 获取资金费率
     GET_MARK_PRICE = "get_mark_price"        # 获取标记价格
     GET_INDEX_PRICE = "get_index_price"      # 获取指数价格
 
-    # === 流相关 ===
+# === 流相关 ===
     MARKET_STREAM = "market_stream"          # 市场数据流
     ACCOUNT_STREAM = "account_stream"        # 账户数据流
     PRIVATE_STREAM = "private_stream"        # 私有流（综合）
 
-    # === 特殊订单类型 ===
+# === 特殊订单类型 ===
     OCO_ORDER = "oco_order"                  # 止盈止损单
     ICEBERG_ORDER = "iceberg_order"          # 冰山单
     TWAP_ORDER = "twap_order"                # 时间加权平均
     VWAP_ORDER = "vwap_order"                # 成交量加权平均
     TRAILING_STOP = "trailing_stop"          # 跟踪止损
 
-    # === 保证金模式 ===
+# === 保证金模式 ===
     CROSS_MARGIN = "cross_margin"            # 全仓保证金
     ISOLATED_MARGIN = "isolated_margin"      # 逐仓保证金
 
-    # === 其他 ===
+# === 其他 ===
     HEDGE_MODE = "hedge_mode"                # 对冲模式（同时持有多空）
     ADL_CHECK = "adl_check"                  # ADL 检查
 
@@ -279,11 +295,13 @@ class NotSupportedError(Exception):
         super().__init__(f"{capability.value} not supported by {venue}")
 
 # 使用示例
+
 class BinanceSwapFeed(AbstractVenueFeed, CapabilityProvider):
     @classmethod
     def capabilities(cls) -> Set[Capability]:
         return {
-            # Binance 支持的所有能力
+
+# Binance 支持的所有能力
             Capability.MAKE_ORDER,
             Capability.CANCEL_ORDER,
             Capability.CANCEL_ALL,
@@ -307,10 +325,12 @@ class BinanceSwapFeed(AbstractVenueFeed, CapabilityProvider):
     def cancel_all(self, symbol=None, **kwargs):
         if Capability.CANCEL_ALL not in self.capabilities():
             raise NotSupportedError(Capability.CANCEL_ALL, "BINANCE")
-        # ... 实现
-```
 
----
+# ... 实现
+
+```bash
+
+- --
 
 ## 3. 统一 Instrument 模型（完整版）
 
@@ -330,7 +350,8 @@ class Asset(str, Enum):
     BOND = "bond"           # 债券
     FX = "fx"               # 外汇
     INDEX = "index"         # 指数
-```
+
+```bash
 
 ### 3.2 Instrument 数据模型（完整版）
 
@@ -341,39 +362,40 @@ from datetime import datetime
 from decimal import Decimal
 
 @dataclass(frozen=True)  # 不可变，确保线程安全
+
 class Instrument:
     """统一交易标的模型"""
 
-    # === 基础标识 ===
+# === 基础标识 ===
     internal: str                    # 内部统一符号，如 BTC-USDT-SWAP, IF2506, 600530-STK
     venue: str                       # BINANCE___SWAP, CTP___FUTURE, IB___STK
     venue_symbol: str                # 交易所/券商原始符号，如 BTCUSDT, IF2506, APPLE-STK
     asset: Asset                     # 资产类型
 
-    # === 标的属性 ===
-    underlying: Optional[str] = None  # 标的：BTC、沪深300、Apple
+# === 标的属性 ===
+    underlying: Optional[str] = None  # 标的：BTC、沪深 300、Apple
     base_currency: Optional[str] = None   # 基础货币（现货/合约）
     quote_currency: Optional[str] = None  # 计价货币
 
-    # === 合约属性（FUTURE/OPTION）===
+# === 合约属性（FUTURE/OPTION）===
     expiry: Optional[datetime] = None         # 到期日
     strike: Optional[Decimal] = None          # 执行价（期权）
     contract_size: Optional[Decimal] = None   # 合约乘数
     option_type: Optional[str] = None         # CALL/PUT
 
-    # === 交易属性 ===
+# === 交易属性 ===
     tick_size: Optional[Decimal] = None       # 最小价格变动单位
     min_qty: Optional[Decimal] = None         # 最小下单数量
     max_qty: Optional[Decimal] = None         # 最大下单数量
     qty_step: Optional[Decimal] = None        # 数量精度
     min_notional: Optional[Decimal] = None    # 最小名义价值
 
-    # === 状态信息 ===
+# === 状态信息 ===
     status: str = "active"                    # active/suspend/expire/delist
     list_time: Optional[datetime] = None      # 上市时间
     delist_time: Optional[datetime] = None    # 摘牌时间
 
-    # === 扩展信息 ===
+# === 扩展信息 ===
     extra: Dict[str, Any] = field(default_factory=dict)  # 其他场所特定信息
 
     @property
@@ -397,6 +419,7 @@ class Instrument:
         return dataclasses.replace(self, **kwargs)
 
 # 用于创建 Instrument 的工厂
+
 class InstrumentFactory:
     """Instrument 工厂类"""
 
@@ -405,10 +428,13 @@ class InstrumentFactory:
         venue: str,
         venue_symbol: str,
         asset: Asset,
-        **kwargs
+
+        - *kwargs
+
     ) -> Instrument:
         """从交易所符号创建 Instrument"""
-        # 根据 venue 和 venue_symbol 生成 internal 符号
+
+# 根据 venue 和 venue_symbol 生成 internal 符号
         internal = InstrumentFactory._make_internal(venue, venue_symbol, asset)
 
         return Instrument(
@@ -416,10 +442,12 @@ class InstrumentFactory:
             venue=venue,
             venue_symbol=venue_symbol,
             asset=asset,
-            **kwargs
+
+            - *kwargs
+
         )
 
-    # 已知的 quote 货币列表（按长度降序排列，优先匹配长的）
+# 已知的 quote 货币列表（按长度降序排列，优先匹配长的）
     KNOWN_QUOTES = ["USDT", "USDC", "BUSD", "TUSD", "FDUSD", "USD", "BTC", "ETH", "BNB", "EUR", "GBP", "AUD", "TRY", "BRL"]
 
     @staticmethod
@@ -427,29 +455,34 @@ class InstrumentFactory:
         """生成内部统一符号
 
         解析策略：
+
         1. 如果符号包含分隔符（-/_.），直接按分隔符拆分
         2. 否则，使用已知 quote 货币列表从后往前匹配
         3. 匹配失败时返回原始符号（不抛异常，留给上层处理）
+
         """
-        # 已含分隔符的交易所（OKX, Bitget, KuCoin 等）
+
+# 已含分隔符的交易所（OKX, Bitget, KuCoin 等）
         for sep in ["-", "/", "_", "."]:
             if sep in venue_symbol:
                 parts = venue_symbol.split(sep)
-                # OKX: BTC-USDT-SWAP -> BTC-USDT-SWAP（保留原格式）
+
+# OKX: BTC-USDT-SWAP -> BTC-USDT-SWAP（保留原格式）
                 return "-".join(parts)
 
-        # 无分隔符（Binance: BTCUSDT, DOGEUSDT, SHIBUSDT）
+# 无分隔符（Binance: BTCUSDT, DOGEUSDT, SHIBUSDT）
         upper = venue_symbol.upper()
         for quote in InstrumentFactory.KNOWN_QUOTES:
             if upper.endswith(quote) and len(upper) > len(quote):
                 base = upper[:-len(quote)]
                 return f"{base}-{quote}"
 
-        # 非 crypto 场所（CTP: IF2506, IB: AAPL）直接返回
+# 非 crypto 场所（CTP: IF2506, IB: AAPL）直接返回
         return venue_symbol
-```
 
----
+```bash
+
+- --
 
 ### 3.3 InstrumentManager（新组件）
 
@@ -513,17 +546,20 @@ class InstrumentManager:
 
     def load_from_config(self, config_path: str) -> None:
         """从配置文件批量加载 Instrument"""
-        # 支持从 CSV/JSON/YAML 加载标的列表
+
+# 支持从 CSV/JSON/YAML 加载标的列表
         pass
 
 # 全局单例
+
 _instrument_manager = InstrumentManager()
 
 def get_instrument_manager() -> InstrumentManager:
     return _instrument_manager
-```
 
----
+```bash
+
+- --
 
 ## 4. 连接与传输层
 
@@ -572,7 +608,8 @@ class ConnectionMixin:
     def is_connected(self) -> bool:
         """检查是否已连接"""
         return self._conn_state in (ConnectionState.CONNECTED, ConnectionState.AUTHENTICATED)
-```
+
+```bash
 
 ### 4.2 HTTP 客户端（使用 httpx）
 
@@ -590,22 +627,26 @@ class HttpClient:
         timeout: float = 10.0,
         limits: Optional[httpx.Limits] = None,
         verify: bool = True,
-        **kwargs
+
+        - *kwargs
+
     ):
         self._venue = venue  # 场所标识，用于错误上下文
         self.timeout = timeout
         self.limits = limits or httpx.Limits(max_connections=100, max_keepalive_connections=20)
 
-        # 同步客户端
+# 同步客户端
         self._sync_client = httpx.Client(
             timeout=timeout,
             limits=self.limits,
             verify=verify,
             follow_redirects=True,
-            **kwargs
+
+            - *kwargs
+
         )
 
-        # 异步客户端（延迟初始化）
+# 异步客户端（延迟初始化）
         self._async_client: Optional[httpx.AsyncClient] = None
 
     def request(
@@ -616,7 +657,9 @@ class HttpClient:
         params: Optional[Dict[str, Any]] = None,
         json: Optional[Dict[str, Any]] = None,
         data: Optional[Any] = None,
-        **kwargs
+
+        - *kwargs
+
     ) -> Dict[str, Any]:
         """同步请求"""
         response = self._sync_client.request(
@@ -626,7 +669,9 @@ class HttpClient:
             params=params,
             json=json,
             content=data,
-            **kwargs
+
+            - *kwargs
+
         )
 
         try:
@@ -644,7 +689,9 @@ class HttpClient:
         params: Optional[Dict[str, Any]] = None,
         json: Optional[Dict[str, Any]] = None,
         data: Optional[Any] = None,
-        **kwargs
+
+        - *kwargs
+
     ) -> Dict[str, Any]:
         """异步请求"""
         if self._async_client is None:
@@ -662,7 +709,9 @@ class HttpClient:
             params=params,
             json=json,
             content=data,
-            **kwargs
+
+            - *kwargs
+
         )
 
         try:
@@ -697,7 +746,8 @@ class HttpClient:
         """关闭客户端"""
         self._sync_client.close()
         if self._async_client:
-            # 需要在 async context 中关闭
+
+# 需要在 async context 中关闭
             pass
 
     async def aclose(self):
@@ -705,9 +755,10 @@ class HttpClient:
         self._sync_client.close()
         if self._async_client:
             await self._async_client.aclose()
-```
 
----
+```bash
+
+- --
 
 ## 5. 统一限流器（完整版）
 
@@ -730,7 +781,7 @@ class RateLimitType(str, Enum):
 class RateLimitScope(str, Enum):
     GLOBAL = "global"       # 全局限流
     ENDPOINT = "endpoint"   # 端点级限流
-    IP = "ip"               # IP级限流
+    IP = "ip"               # IP 级限流
 
 @dataclass
 class RateLimitRule:
@@ -755,11 +806,13 @@ class RateLimitRule:
     def get_weight(self, method: str, path: str) -> int:
         """获取请求权重"""
         if self.weight_map:
-            # 尝试精确匹配
+
+# 尝试精确匹配
             key = f"{method} {path}"
             if key in self.weight_map:
                 return self.weight_map[key]
-            # 尝试方法匹配
+
+# 尝试方法匹配
             if method in self.weight_map:
                 return self.weight_map[method]
         return self.weight
@@ -776,12 +829,12 @@ class SlidingWindowLimiter:
         """尝试获取许可"""
         now = time.time()
 
-        # 移除窗口外的请求
+# 移除窗口外的请求
         cutoff = now - self.interval
         while self._requests and self._requests[0][0] < cutoff:
             self._requests.popleft()
 
-        # 计算当前窗口内的权重
+# 计算当前窗口内的权重
         current_weight = sum(w for _, w in self._requests)
 
         if current_weight + weight <= self.limit:
@@ -808,7 +861,7 @@ class FixedWindowLimiter:
 
     def acquire(self, weight: int = 1) -> bool:
         now = time.time()
-        window_start = int(now // self.interval) * self.interval
+        window_start = int(now // self.interval) *self.interval
 
         if window_start != self._window_start:
             self._window_start = window_start
@@ -833,14 +886,15 @@ class RateLimiter:
         self._limiters: Dict[str, Any] = {}  # {rule_name: limiter}
         self._lock = __import__('threading').Lock()  # 同步上下文用 threading.Lock
 
-        # 初始化限流器
+# 初始化限流器
         for rule in rules:
             if rule.type == RateLimitType.SLIDING_WINDOW:
                 self._limiters[rule.name] = SlidingWindowLimiter(rule.interval, rule.limit)
             elif rule.type == RateLimitType.FIXED_WINDOW:
                 self._limiters[rule.name] = FixedWindowLimiter(rule.interval, rule.limit)
             elif rule.type == RateLimitType.TOKEN_BUCKET:
-                # TODO: 实现令牌桶
+
+# TODO: 实现令牌桶
                 pass
 
     def acquire(
@@ -861,9 +915,10 @@ class RateLimiter:
             limiter = self._limiters[rule.name]
             request_weight = rule.get_weight(method, path)
 
-            if not limiter.acquire(request_weight * weight):
+            if not limiter.acquire(request_weight* weight):
                 if block:
-                    # 等待直到可以获取许可
+
+# 等待直到可以获取许可
                     wait = limiter.wait_time()
                     if timeout is not None and wait > timeout:
                         return False
@@ -896,23 +951,31 @@ class RateLimiter:
                 "current": getattr(limiter, "_window_count", 0) if hasattr(limiter, "_window_count") else len(limiter._requests)
             }
         return status
-```
+
+```bash
 
 ### 5.2 限流配置示例
 
 ```yaml
+
 # configs/exchanges/binance.yaml
+
 rate_limits:
-  # 全局滑动窗口
+
+# 全局滑动窗口
+
   - name: global_sliding
+
     type: sliding_window
     interval: 60
     limit: 12000
     scope: global
     weight: 1
 
-  # 下单端点固定窗口（更严格）
+# 下单端点固定窗口（更严格）
+
   - name: order_endpoint
+
     type: fixed_window
     interval: 1
     limit: 100
@@ -923,15 +986,18 @@ rate_limits:
       DELETE: 5  # 撤单消耗 5 倍权重
       GET: 1     # 查询消耗 1 倍权重
 
-  # 请求权重端点
+# 请求权重端点
+
   - name: request_weight
+
     type: fixed_window
     interval: 10
     limit: 2400
     scope: global
-```
 
----
+```bash
+
+- --
 
 ## 6. 配置系统设计（含 Schema 校验）
 
@@ -964,23 +1030,26 @@ class ConnectionType(str, Enum):
     RPC = "rpc"              # 区块链 RPC
 
 # 基础 URL 配置
+
 class BaseUrlsConfig(BaseModel):
     rest: Dict[str, str] = Field(default_factory=dict)
     wss: Dict[str, str] = Field(default_factory=dict)
 
 # 连接配置
+
 class ConnectionConfig(BaseModel):
     type: ConnectionType
     timeout: int = Field(default=10, ge=1, le=120)
     max_retries: int = Field(default=3, ge=0, le=10)
 
-    # SPI/本地终端 特定配置
+# SPI/本地终端 特定配置
     md_front: Optional[str] = None       # 行情前置
     td_front: Optional[str] = None       # 交易前置
     exe_path: Optional[str] = None      # 可执行文件路径
     session_id: Optional[int] = None     # 会话 ID
 
 # 认证配置
+
 class AuthConfig(BaseModel):
     type: AuthType
     header_name: Optional[str] = None
@@ -989,6 +1058,7 @@ class AuthConfig(BaseModel):
     api_key_param: Optional[str] = None
 
 # 限流规则配置
+
 class RateLimitRuleConfig(BaseModel):
     name: str
     type: Literal["sliding_window", "fixed_window", "token_bucket"]
@@ -1000,16 +1070,18 @@ class RateLimitRuleConfig(BaseModel):
     weight_map: Optional[Dict[str, int]] = None
 
 # 资产类型配置
+
 class AssetTypeConfig(BaseModel):
     symbol_format: str = Field(..., description="如 {base}{quote} 或 {base}-{quote}")
     rest_paths: Dict[str, str] = Field(default_factory=dict)
     wss_paths: Dict[str, str] = Field(default_factory=dict)
     wss_channels: Dict[str, str] = Field(default_factory=dict)
 
-    # 符号列表（可选，用于验证）
+# 符号列表（可选，用于验证）
     symbols: Optional[List[str]] = None
 
 # 主配置模型
+
 class ExchangeConfig(BaseModel):
     id: str = Field(..., min_length=2, max_length=20, regex="^[A-Z0-9_]+$")
     display_name: str
@@ -1023,12 +1095,12 @@ class ExchangeConfig(BaseModel):
     rate_limits: List[RateLimitRuleConfig] = Field(default_factory=list)
     asset_types: Dict[str, AssetTypeConfig]
 
-    # DEX 特定
+# DEX 特定
     chains: Optional[List[str]] = None      # 支持的区块链
     router_address: Optional[str] = None    # 路由合约地址
     factory_address: Optional[str] = None   # 工厂合约地址
 
-    # Broker 特定
+# Broker 特定
     broker_id: Optional[str] = None        # 券商 ID
     app_id: Optional[str] = None           # 应用 ID
 
@@ -1038,11 +1110,14 @@ class ExchangeConfig(BaseModel):
         conn_type = values.get('connection', {})
         if isinstance(conn_type, ConnectionConfig):
             conn_type = conn_type.type
-        # CEX 必须有 base_urls
+
+# CEX 必须有 base_urls
         if venue_type == VenueType.CEX and not v:
             raise ValueError("CEX must have base_urls")
-        # DEX 和 Broker 可选 base_urls（如 Hyperliquid 类CEX DEX、IB Web API）
-        # 不做强制限制
+
+# DEX 和 Broker 可选 base_urls（如 Hyperliquid 类 CEX DEX、IB Web API）
+
+# 不做强制限制
         return v
 
     @validator('connection')
@@ -1050,17 +1125,18 @@ class ExchangeConfig(BaseModel):
         venue_type = values.get('venue_type')
         conn_type = v.type
 
-        # CEX 必须使用 HTTP
+# CEX 必须使用 HTTP
         if venue_type == VenueType.CEX and conn_type not in (ConnectionType.HTTP, ConnectionType.WEBSOCKET):
             raise ValueError("CEX must use HTTP or WEBSOCKET connection")
 
-        # CTP 必须使用 SPI
+# CTP 必须使用 SPI
         if values.get('id') == 'CTP' and conn_type != ConnectionType.SPI:
             raise ValueError("CTP must use SPI connection")
 
         return v
 
 # 从 YAML 加载配置
+
 def load_exchange_config(config_path: str) -> ExchangeConfig:
     import yaml
 
@@ -1068,9 +1144,10 @@ def load_exchange_config(config_path: str) -> ExchangeConfig:
         data = yaml.safe_load(f)
 
     return ExchangeConfig(**data)
-```
 
----
+```bash
+
+- --
 
 ## 7. 统一错误框架（完整版）
 
@@ -1092,25 +1169,26 @@ class ErrorCategory(str, Enum):
 
 class UnifiedErrorCode(int, Enum):
     """统一错误码"""
-    # 网络错误 (1xxx)
+
+# 网络错误 (1xxx)
     NETWORK_TIMEOUT = 1001
     NETWORK_DISCONNECTED = 1002
     DNS_ERROR = 1003
     CONNECTION_REFUSED = 1004
 
-    # 认证错误 (2xxx)
+# 认证错误 (2xxx)
     INVALID_API_KEY = 2001
     INVALID_SIGNATURE = 2002
     EXPIRED_TIMESTAMP = 2003
     PERMISSION_DENIED = 2004
     SESSION_EXPIRED = 2005
 
-    # 限流错误 (3xxx)
+# 限流错误 (3xxx)
     RATE_LIMIT_EXCEEDED = 3001
     IP_BANNED = 3002
     TOO_MANY_REQUESTS = 3003
 
-    # 业务错误 (4xxx)
+# 业务错误 (4xxx)
     INVALID_SYMBOL = 4001
     INVALID_PRICE = 4002
     INVALID_VOLUME = 4003
@@ -1124,17 +1202,17 @@ class UnifiedErrorCode(int, Enum):
     INVALID_ORDER = 4011           # 订单被拒绝/无效
     PRECISION_ERROR = 4012         # 精度超限
 
-    # 系统错误 (5xxx)
+# 系统错误 (5xxx)
     EXCHANGE_MAINTENANCE = 5001
     EXCHANGE_OVERLOADED = 5002
     INTERNAL_ERROR = 5003
     UNSUPPORTED_OPERATION = 5004
 
-    # 能力错误 (6xxx)
+# 能力错误 (6xxx)
     NOT_SUPPORTED = 6001
     NOT_IMPLEMENTED = 6002
 
-    # 验证错误 (7xxx)
+# 验证错误 (7xxx)
     INVALID_PARAMETER = 7001
     MISSING_PARAMETER = 7002
     PARAMETER_OUT_OF_RANGE = 7003
@@ -1161,7 +1239,8 @@ class UnifiedError(Exception):
             "message": self.message,
             "context": self.context
         }
-```
+
+```bash
 
 ### 7.2 错误翻译器
 
@@ -1180,7 +1259,7 @@ class ErrorTranslator(ABC):
 class CEXErrorTranslator(ErrorTranslator):
     """CEX 通用错误翻译器（适用于大多数 HTTP API）"""
 
-    # 通用 HTTP 状态码映射
+# 通用 HTTP 状态码映射
     HTTP_STATUS_MAP = {
         400: (UnifiedErrorCode.INVALID_PARAMETER, "Invalid request parameters"),
         401: (UnifiedErrorCode.INVALID_API_KEY, "Invalid API key"),
@@ -1195,12 +1274,13 @@ class CEXErrorTranslator(ErrorTranslator):
     @classmethod
     def translate(cls, raw_error: dict, venue: str) -> UnifiedError:
         """从 HTTP 响应翻译错误"""
-        # 尝试从响应中提取错误信息
+
+# 尝试从响应中提取错误信息
         code = raw_error.get("code")
         msg = raw_error.get("msg", raw_error.get("message", ""))
         status = raw_error.get("status")
 
-        # 如果有特定错误码，使用特定映射
+# 如果有特定错误码，使用特定映射
         if hasattr(cls, 'ERROR_MAP') and code in cls.ERROR_MAP:
             unified_code, default_msg = cls.ERROR_MAP[code]
             return UnifiedError(
@@ -1212,7 +1292,7 @@ class CEXErrorTranslator(ErrorTranslator):
                 context={"raw_response": raw_error}
             )
 
-        # 否则使用 HTTP 状态码映射
+# 否则使用 HTTP 状态码映射
         if status and status in cls.HTTP_STATUS_MAP:
             unified_code, default_msg = cls.HTTP_STATUS_MAP[status]
             return UnifiedError(
@@ -1224,7 +1304,7 @@ class CEXErrorTranslator(ErrorTranslator):
                 context={"raw_response": raw_error}
             )
 
-        # 默认处理
+# 默认处理
         return UnifiedError(
             code=UnifiedErrorCode.INTERNAL_ERROR,
             category=ErrorCategory.SYSTEM,
@@ -1253,47 +1333,53 @@ class CEXErrorTranslator(ErrorTranslator):
             return ErrorCategory.VALIDATION
 
 # Binance 特定错误翻译器
+
 class BinanceErrorTranslator(CEXErrorTranslator):
     ERROR_MAP = {
-        -1000: (UnifiedErrorCode.INTERNAL_ERROR, "Unknown error"),
-        -1001: (UnifiedErrorCode.INTERNAL_ERROR, "Disconnected"),
-        -1002: (UnifiedErrorCode.PERMISSION_DENIED, "Unauthorized"),
-        -1003: (UnifiedErrorCode.RATE_LIMIT_EXCEEDED, "Too many requests"),
-        -1006: (UnifiedErrorCode.EXCHANGE_OVERLOADED, "Unexpected disconnect"),
-        -1021: (UnifiedErrorCode.EXPIRED_TIMESTAMP, "Timestamp outside recvWindow"),
-        -1022: (UnifiedErrorCode.INVALID_SIGNATURE, "Signature not valid"),
-        -1100: (UnifiedErrorCode.INVALID_PARAMETER, "Illegal characters in request"),
-        -1101: (UnifiedErrorCode.INVALID_PARAMETER, "Too many parameters"),
-        -1102: (UnifiedErrorCode.MISSING_PARAMETER, "Mandatory parameter was not sent"),
-        -1103: (UnifiedErrorCode.INVALID_PARAMETER, "Unknown parameter"),
-        -1104: (UnifiedErrorCode.INVALID_PARAMETER, "Parameter is empty"),
-        -1106: (UnifiedErrorCode.INVALID_PARAMETER, "Parameter is not supported"),
-        -1111: (UnifiedErrorCode.PRECISION_ERROR, "Precision is over the maximum defined"),
-        -1112: (UnifiedErrorCode.INVALID_VOLUME, "Invalid order quantity"),
-        -1114: (UnifiedErrorCode.INVALID_API_KEY, "Invalid API-key format"),
-        -1115: (UnifiedErrorCode.PERMISSION_DENIED, "Invalid API-key, IP, or permissions"),
-        -2010: (UnifiedErrorCode.ORDER_NOT_FOUND, "Order does not exist"),
-        -2011: (UnifiedErrorCode.ORDER_ALREADY_FILLED, "Order already filled"),
-        -2013: (UnifiedErrorCode.INVALID_ORDER, "Order rejected"),
-        -2014: (UnifiedErrorCode.INVALID_API_KEY, "API-key format invalid"),
-        -2015: (UnifiedErrorCode.PERMISSION_DENIED, "Invalid API-key, IP, or permissions for action"),
+
+        - 1000: (UnifiedErrorCode.INTERNAL_ERROR, "Unknown error"),
+        - 1001: (UnifiedErrorCode.INTERNAL_ERROR, "Disconnected"),
+        - 1002: (UnifiedErrorCode.PERMISSION_DENIED, "Unauthorized"),
+        - 1003: (UnifiedErrorCode.RATE_LIMIT_EXCEEDED, "Too many requests"),
+        - 1006: (UnifiedErrorCode.EXCHANGE_OVERLOADED, "Unexpected disconnect"),
+        - 1021: (UnifiedErrorCode.EXPIRED_TIMESTAMP, "Timestamp outside recvWindow"),
+        - 1022: (UnifiedErrorCode.INVALID_SIGNATURE, "Signature not valid"),
+        - 1100: (UnifiedErrorCode.INVALID_PARAMETER, "Illegal characters in request"),
+        - 1101: (UnifiedErrorCode.INVALID_PARAMETER, "Too many parameters"),
+        - 1102: (UnifiedErrorCode.MISSING_PARAMETER, "Mandatory parameter was not sent"),
+        - 1103: (UnifiedErrorCode.INVALID_PARAMETER, "Unknown parameter"),
+        - 1104: (UnifiedErrorCode.INVALID_PARAMETER, "Parameter is empty"),
+        - 1106: (UnifiedErrorCode.INVALID_PARAMETER, "Parameter is not supported"),
+        - 1111: (UnifiedErrorCode.PRECISION_ERROR, "Precision is over the maximum defined"),
+        - 1112: (UnifiedErrorCode.INVALID_VOLUME, "Invalid order quantity"),
+        - 1114: (UnifiedErrorCode.INVALID_API_KEY, "Invalid API-key format"),
+        - 1115: (UnifiedErrorCode.PERMISSION_DENIED, "Invalid API-key, IP, or permissions"),
+        - 2010: (UnifiedErrorCode.ORDER_NOT_FOUND, "Order does not exist"),
+        - 2011: (UnifiedErrorCode.ORDER_ALREADY_FILLED, "Order already filled"),
+        - 2013: (UnifiedErrorCode.INVALID_ORDER, "Order rejected"),
+        - 2014: (UnifiedErrorCode.INVALID_API_KEY, "API-key format invalid"),
+        - 2015: (UnifiedErrorCode.PERMISSION_DENIED, "Invalid API-key, IP, or permissions for action"),
+
     }
 
 # CTP 错误翻译器（继承 CEXErrorTranslator 以复用 _get_category）
+
 class CTPErrorTranslator(CEXErrorTranslator):
     ERROR_MAP = {
         0: (None, "成功"),  # 不是错误
-        -1: (UnifiedErrorCode.NETWORK_DISCONNECTED, "网络连接失败"),
-        -2: (UnifiedErrorCode.INTERNAL_ERROR, "未处理请求超过许可数"),
-        -3: (UnifiedErrorCode.RATE_LIMIT_EXCEEDED, "每秒发送请求数超过许可数"),
-        -4: (UnifiedErrorCode.RATE_LIMIT_EXCEEDED, "上传请求数超过许可数"),
-        -5: (UnifiedErrorCode.INTERNAL_ERROR, "发送请求失败"),
-        -6: (UnifiedErrorCode.NETWORK_TIMEOUT, "接收响应失败"),
-        -7: (UnifiedErrorCode.NETWORK_DISCONNECTED, "连接断开"),
-        -8: (UnifiedErrorCode.NETWORK_TIMEOUT, "请求处理超时"),
-        -9: (UnifiedErrorCode.NETWORK_TIMEOUT, "发送请求失败"),
-        -10: (UnifiedErrorCode.INTERNAL_ERROR, "内部错误"),
-        # ... 更多 CTP 错误码
+
+        - 1: (UnifiedErrorCode.NETWORK_DISCONNECTED, "网络连接失败"),
+        - 2: (UnifiedErrorCode.INTERNAL_ERROR, "未处理请求超过许可数"),
+        - 3: (UnifiedErrorCode.RATE_LIMIT_EXCEEDED, "每秒发送请求数超过许可数"),
+        - 4: (UnifiedErrorCode.RATE_LIMIT_EXCEEDED, "上传请求数超过许可数"),
+        - 5: (UnifiedErrorCode.INTERNAL_ERROR, "发送请求失败"),
+        - 6: (UnifiedErrorCode.NETWORK_TIMEOUT, "接收响应失败"),
+        - 7: (UnifiedErrorCode.NETWORK_DISCONNECTED, "连接断开"),
+        - 8: (UnifiedErrorCode.NETWORK_TIMEOUT, "请求处理超时"),
+        - 9: (UnifiedErrorCode.NETWORK_TIMEOUT, "发送请求失败"),
+        - 10: (UnifiedErrorCode.INTERNAL_ERROR, "内部错误"),
+
+# ... 更多 CTP 错误码
     }
 
     @classmethod
@@ -1302,7 +1388,8 @@ class CTPErrorTranslator(CEXErrorTranslator):
         error_msg = raw_error.get("ErrorMsg", "")
 
         if error_id == 0:
-            # 不是错误
+
+# 不是错误
             return None
 
         code, default_msg = cls.ERROR_MAP.get(
@@ -1321,16 +1408,19 @@ class CTPErrorTranslator(CEXErrorTranslator):
             original_error=f"[{error_id}] {error_msg}",
             context={"error_id": error_id, "raw_error": raw_error}
         )
-```
 
----
+```bash
+
+- --
 
 ## 8. QMT 特殊处理
 
 ### 8.1 QMT 配置
 
 ```yaml
+
 # configs/exchanges/qmt.yaml
+
 exchange:
   id: QMT
   display_name: QMT
@@ -1343,10 +1433,12 @@ connection:
   session_id: 0
 
 # CI/CD 环境变量支持
+
 environment:
   QMT_PATH: ""  # QMT 安装路径
   SKIP_QMT_TESTS: "true"  # CI 默认跳过
-```
+
+```bash
 
 ### 8.2 QMT 测试策略
 
@@ -1356,15 +1448,16 @@ import sys
 
 def skip_qmt_tests():
     """检查是否应该跳过 QMT 测试"""
-    # CI 环境跳过
+
+# CI 环境跳过
     if os.getenv("CI") or os.getenv("SKIP_QMT_TESTS") == "true":
         return True
 
-    # 非 Windows 跳过
+# 非 Windows 跳过
     if sys.platform != "win32":
         return True
 
-    # 检查 QMT 是否可用
+# 检查 QMT 是否可用
     qmt_path = os.getenv("QMT_PATH")
     if qmt_path and not os.path.exists(qmt_path):
         return True
@@ -1372,71 +1465,116 @@ def skip_qmt_tests():
     return False
 
 # pytest fixture
+
 @pytest.fixture
 def qmt_feed():
     if skip_qmt_tests():
         pytest.skip("QMT tests skipped (CI or non-Windows)")
-    # ... 创建真实的 QMT Feed
-```
 
----
+# ... 创建真实的 QMT Feed
+
+```bash
+
+- --
 
 ## 9. 完整接口映射表
 
 | 协议方法 | Binance | OKX | CTP | IB | QMT | 优先级 |
+
 |---------|:-------:|:---:|:---:|:---:|:---:|:------:|
-| **连接管理** ||||||||
+
+| **连接管理**||||||||
+
 | `connect` | no-op | no-op | 有 | 需实现 | 需实现 | P1 |
+
 | `disconnect` | no-op | no-op | 需新增 | 需实现 | 需实现 | P1 |
+
 | `is_connected` | 有 | 有 | 有 | 需实现 | 需实现 | P1 |
-| **行情查询** ||||||||
+
+|**行情查询**||||||||
+
 | `get_tick` | 有 | 有 | 有 | 需新增 | 需新增 | P0 |
+
 | `get_depth` | 有 | 有 | 有 | 需新增 | 需新增 | P0 |
+
 | `get_kline` | 有 | 有 | 需新增 | 需新增 | 需新增 | P1 |
+
 | `get_funding_rate` | 有 | 有 | 不适用 | 不适用 | 不适用 | P1 |
+
 | `get_mark_price` | 有 | 有 | 不适用 | 不适用 | 不适用 | P2 |
-| **交易操作** ||||||||
+
+|**交易操作**||||||||
+
 | `make_order` | 有 | 有 | 有 | 需新增 | 需新增 | P0 |
+
 | `cancel_order` | 有 | 有 | 有 | 需新增 | 需新增 | P0 |
+
 | `cancel_all` | 有 | 有 | 需新增 | 需新增 | 不适用 | P1 |
+
 | `modify_order` | 不支持 | 有 | 不适用 | 需新增 | 需新增 | P2 |
+
 | `query_order` | 有 | 有 | 有 | 需新增 | 需新增 | P0 |
+
 | `get_open_orders` | 有 | 有 | 有 | 需新增 | 需新增 | P0 |
+
 | `get_deals` | 有 | 有 | 有 | 需新增 | 需新增 | P2 |
-| **账户查询** ||||||||
+
+|**账户查询**||||||||
+
 | `get_balance` | 有 | 有 | 有 | 需新增 | 需新增 | P0 |
+
 | `get_account` | 有 | 有 | 有 | 需新增 | 需新增 | P1 |
+
 | `get_position` | 有 | 有 | 有 | 需新增 | 不适用 | P1 |
-| **异步接口** ||||||||
+
+|**异步接口**||||||||
+
 | `async_get_tick` | 需真实实现 | 需真实实现 | 不适用 | 需实现 | 不适用 | P1 |
+
 | `async_make_order` | 需真实实现 | 需真实实现 | 不适用 | 需实现 | 不适用 | P1 |
+
 | `async_cancel_order` | 需真实实现 | 需真实实现 | 不适用 | 需实现 | 不适用 | P1 |
+
 | `async_get_balance` | 需真实实现 | 需真实实现 | 不适用 | 需实现 | 不适用 | P1 |
-| **流相关** ||||||||
+
+|**流相关** ||||||||
+
 | `MARKET_STREAM` | 有 | 有 | 有 | 需新增 | 需新增 | P0 |
+
 | `ACCOUNT_STREAM` | 有 | 有 | 有 | 需新增 | 需新增 | P1 |
 
----
+- --
 
 ## 10. 目录结构（目标形态）
 
-```
+```bash
 bt_api_py/
 ├── feeds/
 │   ├── __init__.py
 │   ├── abstract_feed.py          # 统一协议定义
+
 │   ├── feed.py                   # Feed 基类（重构）
+
 │   ├── base_stream.py            # DataStream 基类（保持）
+
 │   ├── http_client.py            # HTTP 客户端
+
 │   ├── connection_mixin.py       # 连接管理混入
+
 │   │
 │   ├── live_binance/             # Binance（重构）
+
 │   ├── live_okx/                 # OKX（重构）
+
 │   ├── live_ctp_feed.py          # CTP（重构）
+
 │   ├── live_ib_feed.py           # IB（重写）
+
 │   ├── live_qmt_feed.py          # QMT（新增）
+
 │   │
 │   └── dex/                      # DEX
+
 │       ├── uniswap/
 │       ├── pancakeswap/
 │       └── ...
@@ -1444,7 +1582,9 @@ bt_api_py/
 ├── containers/
 │   ├── __init__.py
 │   ├── instrument.py              # Instrument 模型
+
 │   ├── exchanges/                # ExchangeData
+
 │   ├── orders/
 │   ├── trades/
 │   ├── positions/
@@ -1452,14 +1592,21 @@ bt_api_py/
 │   └── ...
 │
 ├── registry.py                   # ExchangeRegistry（扩展）
+
 ├── instrument_manager.py         # InstrumentManager（新增）
+
 ├── symbol_manager.py             # 符号管理器（整合）
+
 ├── config_loader.py              # 配置加载器
+
 ├── rate_limiter.py               # 限流器
+
 ├── error_framework.py            # 错误框架
+
 │
 ├── configs/
 │   └── exchanges/                # 交易所配置
+
 │       ├── binance.yaml
 │       ├── okx.yaml
 │       ├── ctp.yaml
@@ -1468,6 +1615,7 @@ bt_api_py/
 │
 ├── templates/
 │   └── exchange/                 # 脚手架模板
+
 │       ├── __init__.py.j2
 │       ├── request_base.py.j2
 │       └── ...
@@ -1478,40 +1626,54 @@ bt_api_py/
     ├── test_rate_limiter.py
     ├── test_error_framework.py
     └── ...
-```
 
----
+```bash
+
+- --
 
 ## 11. 性能基准
 
 ### 11.1 性能目标
 
 | 操作 | 目标 | 测量方式 |
+
 |------|------|----------|
+
 | Feed 初始化 | < 10ms | time.perf_counter |
+
 | HTTP 请求（不含网络） | < 5ms | httpx benchmark |
-| 符号转换 | < 0.1ms | 10万次调用平均 |
-| 错误翻译 | < 0.1ms | 10万次调用平均 |
+
+| 符号转换 | < 0.1ms | 10 万次调用平均 |
+
+| 错误翻译 | < 0.1ms | 10 万次调用平均 |
+
 | 配置加载（单个） | < 50ms | 单个文件解析 |
-| 配置加载（全部70个） | < 500ms | 批量加载 |
-| Instrument 查询 | < 0.05ms | 100万次查询 |
+
+| 配置加载（全部 70 个） | < 500ms | 批量加载 |
+
+| Instrument 查询 | < 0.05ms | 100 万次查询 |
 
 ### 11.2 资源限制
 
 | 指标 | 目标 |
+
 |------|------|
+
 | 单 Feed 内存占用 | < 10MB |
+
 | 50 个并发连接内存 | < 500MB |
+
 | CPU 空闲时 | < 1% |
+
 | 吞吐量 | > 1000 req/s |
 
----
+- --
 
 ## 12. 测试策略
 
 ### 12.1 测试分层
 
-```
+```bash
 ┌─────────────────────────────────┐
 │   E2E 测试 (少量，关键路径)      │
 │   - 使用测试网/沙盒              │
@@ -1530,20 +1692,28 @@ bt_api_py/
 │   - 每个 Translator              │
 │   - 配置加载解析                 │
 └─────────────────────────────────┘
-```
+
+```bash
 
 ### 12.2 Mock 策略
 
 | 场所类型 | Mock 工具 | 说明 |
+
 |---------|----------|------|
+
 | CEX | respx / httpx MockTransport | HTTP 响应 mock |
-| DEX (类CEX) | 同 CEX | - |
+
+| DEX (类 CEX) | 同 CEX | - |
+
 | DEX (链上) | eth-tester / anvil | 本地链 |
+
 | CTP | 模拟行情/交易回报 | 回放数据 |
+
 | IB | ib_insync paper mode | paper account |
+
 | QMT | mock 数据 | 本地模拟 |
 
----
+- --
 
 ## 13. 改造顺序与文件级清单（更新版）
 

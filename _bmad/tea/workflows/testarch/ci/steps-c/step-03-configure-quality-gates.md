@@ -1,10 +1,12 @@
----
+- --
+
 name: 'step-03-configure-quality-gates'
 description: 'Configure burn-in, quality gates, and notifications'
 nextStepFile: './step-04-validate-and-summary.md'
 knowledgeIndex: '{project-root}/_bmad/tea/testarch/tea-index.csv'
 outputFile: '{test_artifacts}/ci-pipeline-progress.md'
----
+
+- --
 
 # Step 3: Quality Gates & Notifications
 
@@ -17,7 +19,7 @@ Configure burn-in loops, quality thresholds, and notification hooks.
 - 📖 Read the entire step file before acting
 - ✅ Speak in `{communication_language}`
 
----
+- --
 
 ## EXECUTION PROTOCOLS:
 
@@ -34,7 +36,7 @@ Configure burn-in loops, quality thresholds, and notification hooks.
 
 ## MANDATORY SEQUENCE
 
-**CRITICAL:** Follow this sequence exactly. Do not skip, reorder, or improvise.
+- *CRITICAL:** Follow this sequence exactly. Do not skip, reorder, or improvise.
 
 ## 1. Burn-In Configuration
 
@@ -43,12 +45,12 @@ Use `{knowledgeIndex}` to load `ci-burn-in.md` guidance:
 - Run N-iteration burn-in for flaky detection
 - Gate promotion based on burn-in stability
 
-**Stack-conditional burn-in:**
+- *Stack-conditional burn-in:**
 
-- **Frontend or Fullstack** (`test_stack_type` is `frontend` or `fullstack`): Enable burn-in by default. Burn-in targets UI flakiness (race conditions, selector instability, timing issues).
+- **Frontend or Fullstack**(`test_stack_type` is `frontend` or `fullstack`): Enable burn-in by default. Burn-in targets UI flakiness (race conditions, selector instability, timing issues).
 - **Backend only** (`test_stack_type` is `backend`): Skip burn-in by default. Backend tests (unit, integration, API) are deterministic and rarely exhibit UI-related flakiness. If the user explicitly requests burn-in for backend, honor that override.
 
----
+- --
 
 ## 2. Quality Gates
 
@@ -58,14 +60,14 @@ Define:
 - Fail CI on critical test failures
 - Optional: require traceability or nfr-assess output before release
 
-**Contract testing gate** (if `tea_use_pactjs_utils` is enabled):
+- *Contract testing gate**(if `tea_use_pactjs_utils` is enabled):
 
 - **can-i-deploy must pass** before any deployment to staging or production
 - Block the deployment pipeline if contract verification fails
 - Treat consumer pact publishing failures as CI failures (contracts must stay up-to-date)
 - Provider verification must pass for all consumer pacts before merge
 
----
+- --
 
 ## 3. Notifications
 
@@ -74,20 +76,24 @@ Configure:
 - Failure notifications (Slack/email)
 - Artifact links
 
----
+- --
 
 ### 4. Save Progress
 
-**Save this step's accumulated work to `{outputFile}`.**
+- *Save this step's accumulated work to `{outputFile}`.**
 
-- **If `{outputFile}` does not exist** (first save), create it with YAML frontmatter:
+- **If `{outputFile}` does not exist**(first save), create it with YAML frontmatter:
 
   ```yaml
-  ---
+
+  - --
+
   stepsCompleted: ['step-03-configure-quality-gates']
   lastStep: 'step-03-configure-quality-gates'
   lastSaved: '{date}'
-  ---
+
+  - --
+
   ```
 
   Then write this step's output below the frontmatter.
@@ -109,4 +115,4 @@ Load next step: `{nextStepFile}`
 ### ❌ SYSTEM FAILURE:
 
 - Skipped sequence steps or missing outputs
-  **Master Rule:** Skipping steps is FORBIDDEN.
+  - *Master Rule:** Skipping steps is FORBIDDEN.

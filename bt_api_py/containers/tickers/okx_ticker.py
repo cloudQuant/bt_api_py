@@ -1,15 +1,16 @@
 import json
 import time
+
 from bt_api_py.containers.tickers.ticker import TickerData
-from bt_api_py.functions.utils import from_dict_get_string, from_dict_get_float
+from bt_api_py.functions.utils import from_dict_get_float, from_dict_get_string
 
 
 class OkxTickerData(TickerData):
     """保存ticker信息"""
 
     def __init__(self, ticker_info, symbol_name, asset_type, has_been_json_encoded=False):
-        super(OkxTickerData, self).__init__(ticker_info, has_been_json_encoded)
-        self.exchange_name = 'OKX'  # 交易所名称
+        super().__init__(ticker_info, has_been_json_encoded)
+        self.exchange_name = "OKX"  # 交易所名称
         self.local_update_time = time.time()  # 本地时间戳
         self.asset_type = asset_type  # ticker的类型
         self.symbol_name = symbol_name

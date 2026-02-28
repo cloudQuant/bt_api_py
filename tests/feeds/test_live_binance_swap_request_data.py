@@ -3,8 +3,6 @@ import time
 import random
 import pytest
 
-pytestmark = pytest.mark.xdist_group("binance_api")
-
 from bt_api_py.containers import TradeData
 from bt_api_py.functions.utils import read_account_config
 from bt_api_py.feeds.live_binance_feed import BinanceRequestDataSwap
@@ -747,9 +745,8 @@ def test_binance_async_agg_trades():
     data_queue = queue.Queue()
     live_binance_swap_feed = init_async_feed(data_queue)
     live_binance_swap_feed.async_get_agg_trades("BTC-USDT", count=5)
-    time.sleep(3)
     try:
-        request_data = data_queue.get(timeout=10)
+        request_data = data_queue.get(timeout=30)
     except queue.Empty:
         request_data = None
     assert request_data is not None, "async_get_agg_trades returned no data"
@@ -812,9 +809,8 @@ def test_binance_async_mark_price_kline():
     data_queue = queue.Queue()
     live_binance_swap_feed = init_async_feed(data_queue)
     live_binance_swap_feed.async_get_mark_price_kline("BTC-USDT", "1h", count=3)
-    time.sleep(3)
     try:
-        request_data = data_queue.get(timeout=10)
+        request_data = data_queue.get(timeout=30)
     except queue.Empty:
         request_data = None
     assert request_data is not None, "async_get_mark_price_kline returned no data"
@@ -925,9 +921,8 @@ def test_binance_async_get_fee():
     data_queue = queue.Queue()
     live_binance_swap_feed = init_async_feed(data_queue)
     live_binance_swap_feed.async_get_fee("BTC-USDT")
-    time.sleep(3)
     try:
-        request_data = data_queue.get(timeout=10)
+        request_data = data_queue.get(timeout=30)
     except queue.Empty:
         request_data = None
     assert request_data is not None, "async_get_fee returned no data"

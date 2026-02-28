@@ -9,14 +9,19 @@ Retrieve the latest price snapshot, best bid/ask price, and trading volume in th
 - **Rate Limit**: 20 requests per 2 seconds
 - **Rate limit rule**: IP
 
-```
+```bash
 GET /api/v5/market/tickers
-```
+
+```bash
 
 | Parameter | Type | Required | Description |
+
 |-----------|------|----------|-------------|
+
 | instType | String | Yes | `SPOT`, `SWAP`, `FUTURES`, `OPTION` |
+
 | uly | String | No | Underlying, e.g. `BTC-USD`. For `FUTURES`/`SWAP`/`OPTION` |
+
 | instFamily | String | No | Instrument family |
 
 ### GET / Ticker
@@ -25,12 +30,15 @@ Retrieve the latest price snapshot, best bid/ask price, and trading volume of an
 
 - **Rate Limit**: 20 requests per 2 seconds
 
-```
+```bash
 GET /api/v5/market/ticker
-```
+
+```bash
 
 | Parameter | Type | Required | Description |
+
 |-----------|------|----------|-------------|
+
 | instId | String | Yes | Instrument ID, e.g. `BTC-USDT` |
 
 ### GET / Order book
@@ -39,13 +47,17 @@ Retrieve order book of the instrument.
 
 - **Rate Limit**: 40 requests per 2 seconds
 
-```
+```bash
 GET /api/v5/market/books
-```
+
+```bash
 
 | Parameter | Type | Required | Description |
+
 |-----------|------|----------|-------------|
+
 | instId | String | Yes | Instrument ID |
+
 | sz | String | No | Order book depth per side (max 400, default 1) |
 
 ### GET / Full order book
@@ -54,9 +66,10 @@ Retrieve the full order book of an instrument.
 
 - **Rate Limit**: 10 requests per 2 seconds
 
-```
+```bash
 GET /api/v5/market/books-full
-```
+
+```bash
 
 ### GET / Candlesticks
 
@@ -64,25 +77,33 @@ Retrieve the candlestick charts. Maximum 1,440 data entries returned.
 
 - **Rate Limit**: 40 requests per 2 seconds
 
-```
+```bash
 GET /api/v5/market/candles
-```
+
+```bash
 
 | Parameter | Type | Required | Description |
+
 |-----------|------|----------|-------------|
+
 | instId | String | Yes | Instrument ID |
+
 | bar | String | No | Bar size, default `1m`. Options: `1m/3m/5m/15m/30m/1H/2H/4H/6H/12H/1D/1W/1M/3M` |
+
 | after | String | No | Pagination (older data) |
+
 | before | String | No | Pagination (newer data) |
+
 | limit | String | No | Default 100, max 300 |
 
 ### GET / Candlesticks history
 
 Retrieve history candlestick charts from recent years (only for Instrument type SPOT currently).
 
-```
+```bash
 GET /api/v5/market/history-candles
-```
+
+```bash
 
 ### GET / Trades
 
@@ -90,48 +111,57 @@ Retrieve the recent transactions of an instrument.
 
 - **Rate Limit**: 100 requests per 2 seconds
 
-```
+```bash
 GET /api/v5/market/trades
-```
+
+```bash
 
 | Parameter | Type | Required | Description |
+
 |-----------|------|----------|-------------|
+
 | instId | String | Yes | Instrument ID |
+
 | limit | String | No | Default 100, max 500 |
 
 ### GET / Trades history
 
 Retrieve the recent transactions of an instrument from the last 3 months with pagination.
 
-```
+```bash
 GET /api/v5/market/history-trades
-```
+
+```bash
 
 ### GET / Option trades by instrument family
 
-```
+```bash
 GET /api/v5/market/option/instrument-family-trades
-```
+
+```bash
 
 ### GET / Option trades
 
-```
+```bash
 GET /api/v5/public/option-trades
-```
+
+```bash
 
 ### GET / 24H total volume
 
-```
+```bash
 GET /api/v5/market/platform-24-volume
-```
+
+```bash
 
 ### GET / Call auction details
 
-```
+```bash
 GET /api/v5/market/call-auction-details
-```
 
----
+```bash
+
+- --
 
 ## WebSocket
 
@@ -141,6 +171,7 @@ GET /api/v5/market/call-auction-details
 - **Channel**: `tickers`
 
 Subscribe Example:
+
 ```json
 {
   "op": "subscribe",
@@ -149,7 +180,8 @@ Subscribe Example:
     "instId": "BTC-USDT"
   }]
 }
-```
+
+```bash
 
 ### WS / Candlesticks channel
 
@@ -157,6 +189,7 @@ Subscribe Example:
 - **Channel**: `candle1m`, `candle3m`, `candle5m`, `candle15m`, `candle30m`, `candle1H`, `candle2H`, `candle4H`, `candle6H`, `candle12H`, `candle1D`, `candle1W`, `candle1M`, `candle3M`
 
 Subscribe Example:
+
 ```json
 {
   "op": "subscribe",
@@ -165,7 +198,8 @@ Subscribe Example:
     "instId": "BTC-USDT"
   }]
 }
-```
+
+```bash
 
 ### WS / Trades channel
 
@@ -183,14 +217,21 @@ Subscribe Example:
 - **Channel**: `books`, `books5`, `bbo-tbt`, `books-l2-tbt`, `books50-l2-tbt`
 
 | Channel | Description |
+
 |---------|-------------|
+
 | `books` | 400 depth levels, push every 100ms |
+
 | `books5` | 5 depth levels, push every 100ms |
+
 | `bbo-tbt` | Best bid/ask, push tick-by-tick |
+
 | `books-l2-tbt` | 400 depth levels, push tick-by-tick |
+
 | `books50-l2-tbt` | 50 depth levels, push tick-by-tick |
 
 Subscribe Example:
+
 ```json
 {
   "op": "subscribe",
@@ -199,7 +240,8 @@ Subscribe Example:
     "instId": "BTC-USDT"
   }]
 }
-```
+
+```bash
 
 ### WS / Option trades channel
 
@@ -209,7 +251,7 @@ Subscribe Example:
 
 - **Channel**: `call-auction-details`
 
----
+- --
 
 ## SBE Market Data
 
@@ -228,6 +270,7 @@ SBE is a binary encoding format that provides lower latency compared to JSON. It
 ### SBE Order book
 
 Subscribe to the SBE order book for ultra-low latency market data:
+
 ```json
 {
   "op": "subscribe",
@@ -236,4 +279,5 @@ Subscribe to the SBE order book for ultra-low latency market data:
     "instId": "BTC-USDT"
   }]
 }
-```
+
+```bash

@@ -10,6 +10,7 @@ In margin trading, you can place orders with limit price. Limit price should be 
 
 - Buy order: Your order will be rejected with an error message notification if the limit price is 15% above the index price.
 - Sell order: Your order will be rejected with an error message notification if the limit price is 15% below the index price.
+
 Please review the limit price order placing strategy, backtest and calibrate the planned order size with the trading volume and order book depth to prevent trading loss.
 
 ## HTTP Request​
@@ -21,7 +22,7 @@ GET `/sapi/v1/margin/limit-price-pairs`
 ## Request Weight(IP)​
 
 
-**1**
+- *1**
 
 
 ## Request Parameters​
@@ -33,6 +34,7 @@ NA
 ## Response Example​
 
 
-```
- {  "crossMarginSymbols":   	[  "BLURUSDC",    	"SANDBTC",   	"QKCBTC",   	"SEIFDUSD",   	"NEOUSDC",   	"ARBFDUSD",   	"ORDIUSDC"  	]  }
-```
+```bash
+ {  "crossMarginSymbols":       ["BLURUSDC",        "SANDBTC",       "QKCBTC",       "SEIFDUSD",       "NEOUSDC",       "ARBFDUSD",       "ORDIUSDC"     ]  }
+
+```bash

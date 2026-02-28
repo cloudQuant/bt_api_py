@@ -1,8 +1,7 @@
-# -*- coding: utf-8 -*-
 """Liquidation warning data container base class."""
 
 
-class LiquidationData(object):
+class LiquidationData:
     """Base class for liquidation warning data."""
 
     def __init__(self, liquidation_info, has_been_json_encoded=False):

@@ -1,0 +1,141 @@
+/* 自定义样式 */
+
+/* 中文优化 */
+:root {
+  --md-primary-fg-color: #4f48eb;
+  --md-primary-fg-color--light: #7c77ff;
+  --md-primary-fg-color--dark: #3a31d9;
+  --md-accent-fg-color: #7c77ff;
+}
+
+/* 代码块样式优化 */
+.md-typeset pre {
+  border-radius: 0.5rem;
+}
+
+/* 表格样式优化 */
+.md-typeset table:not([class]) {
+  border-radius: 0.5rem;
+  font-size: 0.9rem;
+}
+
+/* 隐藏页面的编辑按钮（可选） */
+.md-content__button {
+  display: none;
+}
+
+/* 移动端导航优化 */
+@media screen and (max-width: 76.1875em) {
+  .md-nav--primary .md-nav__title--site {
+    display: none;
+  }
+}
+
+/* 标签页样式 */
+.md-typeset .tabbed-labels {
+  border-bottom: 1px solid var(--md-default-fg-color--lightest);
+}
+
+/* 提示框图标样式 */
+.md-typeset .admonition {
+  border-left: 0.25rem solid var(--md-primary-fg-color);
+}
+
+/* 搜索结果中文优化 */
+.search-result {
+  font-family: -apple-system, BlinkMacSystemFont, "Helvetica Neue", "PingFang SC", "Microsoft YaHei", sans-serif;
+}
+
+/* 代码行号样式 */
+.md-typeset .linenos {
+  color: var(--md-default-fg-color--light);
+}
+
+/* 博客文章卡片样式 */
+.blog-post-card {
+  border: 1px solid var(--md-default-fg-color--lightest);
+  border-radius: 0.5rem;
+  padding: 1rem;
+  margin-bottom: 1rem;
+  transition: box-shadow 0.2s;
+}
+
+.blog-post-card:hover {
+  box-shadow: 0 0.25rem 0.5rem rgba(0,0,0,0.1);
+}
+
+.blog-post-date {
+  color: var(--md-default-fg-color--light);
+  font-size: 0.85rem;
+}
+
+.blog-post-title {
+  margin-top: 0.5rem;
+  margin-bottom: 0.5rem;
+}
+
+/* 标签样式 */
+.md-tag {
+  display: inline-block;
+  padding: 0.25rem 0.5rem;
+  margin: 0.125rem;
+  background-color: var(--md-default-fg-color--lightest);
+  border-radius: 0.25rem;
+  font-size: 0.85rem;
+  text-decoration: none;
+  transition: background-color 0.2s;
+}
+
+.md-tag:hover {
+  background-color: var(--md-accent-fg-color);
+  color: var(--md-accent-fg-color--light);
+}
+
+/* Giscus 评论容器样式 */
+[data-giscus-container] {
+  margin-top: 3rem;
+  padding-top: 2rem;
+  border-top: 1px solid var(--md-default-fg-color--lightest);
+}
+
+[data-giscus-container]::before {
+  content: "评论";
+  display: block;
+  font-size: 1.2rem;
+  font-weight: bold;
+  margin-bottom: 1rem;
+  color: var(--md-default-fg-color);
+}
+
+/* 语言切换器样式 */
+.language-switcher {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.language-switcher a {
+  padding: 0.25rem 0.5rem;
+  border-radius: 0.25rem;
+  text-decoration: none;
+  font-size: 0.85rem;
+}
+
+.language-switcher a.active {
+  background-color: var(--md-accent-fg-color);
+  color: var(--md-accent-fg-color--light);
+}
+
+/* 页脚样式 */
+.md-footer-meta {
+  background-color: var(--md-default-fg-color--dark);
+}
+
+/* 社交链接样式 */
+.md-social__link {
+  transition: transform 0.2s;
+}
+
+.md-social__link:hover {
+  transform: scale(1.1);
+}

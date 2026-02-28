@@ -1,6 +1,6 @@
 # Query Current Algo Open Orders (USER_DATA)
 
-> 来源: [Binance Algo Trading API](https://developers.binance.com/docs/algo/future-algo/Query-Current-Algo-Open-Orders)
+> 来源: [Binance Algo Trading API](<https://developers.binance.com/docs/algo/future-algo/Query-Current-Algo-Open-Orders)>
 
 ## API Description
 
@@ -8,9 +8,10 @@ Query Current Algo Open Orders.
 
 ## HTTP Request
 
-```
+```bash
 GET /sapi/v1/algo/futures/openOrders
-```
+
+```bash
 
 ## Request Weight(IP)
 
@@ -19,14 +20,17 @@ GET /sapi/v1/algo/futures/openOrders
 ## Request Parameters
 
 | Name | Type | Mandatory | Description |
+
 |------|------|-----------|-------------|
+
 | recvWindow | LONG | NO | |
+
 | timestamp | LONG | YES | |
 
-**Notes:**
+- *Notes:**
 
 - You need to enable **Futures Trading Permission** for the api key which requests this endpoint.
-- Base URL: `https://api.binance.com`
+- Base URL: `<https://api.binance.com`>
 
 ## Response Example
 
@@ -52,4 +56,5 @@ GET /sapi/v1/algo/futures/openOrders
         }
     ]
 }
-```
+
+```bash

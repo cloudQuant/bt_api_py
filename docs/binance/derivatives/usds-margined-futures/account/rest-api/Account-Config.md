@@ -12,33 +12,35 @@ GET `/fapi/v1/accountConfig`
 
 ## Request Weight
 
-**5**
+- *5**
 
 ## Request Parameters
 
-Name| Type| Mandatory| Description  
----|---|---|---  
-recvWindow| LONG| NO|   
-timestamp| LONG| YES|   
-  
+Name| Type| Mandatory| Description
+
+- --|---|---|---
+
+recvWindow| LONG| NO|
+
+timestamp| LONG| YES|
+
 ## Response Example
-    
-    
-    {     
-        "feeTier": 0,               // account commission tier   
-        "canTrade": true,           // if can trade  
-        "canDeposit": true,         // if can transfer in asset  
-        "canWithdraw": true,        // if can transfer out asset  
-        "dualSidePosition": true,  
-        "updateTime": 0,            // reserved property, please ignore   
-        "multiAssetsMargin": false,  
-        "tradeGroupId": -1  
-    }  
-    
 
-  * [API Description](</docs/derivatives/usds-margined-futures/account/rest-api/Account-Config#api-description>)
-  * [HTTP Request](</docs/derivatives/usds-margined-futures/account/rest-api/Account-Config#http-request>)
-  * [Request Weight](</docs/derivatives/usds-margined-futures/account/rest-api/Account-Config#request-weight>)
-  * [Request Parameters](</docs/derivatives/usds-margined-futures/account/rest-api/Account-Config#request-parameters>)
-  * [Response Example](</docs/derivatives/usds-margined-futures/account/rest-api/Account-Config#response-example>)
 
+    {
+        "feeTier": 0,               // account commission tier
+        "canTrade": true,           // if can trade
+        "canDeposit": true,         // if can transfer in asset
+        "canWithdraw": true,        // if can transfer out asset
+        "dualSidePosition": true,
+        "updateTime": 0,            // reserved property, please ignore
+        "multiAssetsMargin": false,
+        "tradeGroupId": -1
+    }
+
+
+  - [API Description](</docs/derivatives/usds-margined-futures/account/rest-api/Account-Config#api-description>)
+  - [HTTP Request](</docs/derivatives/usds-margined-futures/account/rest-api/Account-Config#http-request>)
+  - [Request Weight](</docs/derivatives/usds-margined-futures/account/rest-api/Account-Config#request-weight>)
+  - [Request Parameters](</docs/derivatives/usds-margined-futures/account/rest-api/Account-Config#request-parameters>)
+  - [Response Example](</docs/derivatives/usds-margined-futures/account/rest-api/Account-Config#response-example>)

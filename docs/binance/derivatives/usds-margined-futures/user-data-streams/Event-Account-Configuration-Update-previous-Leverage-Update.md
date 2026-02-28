@@ -13,35 +13,29 @@ When the account configuration is changed, the event type will be pushed as `ACC
 ## Response Example
 
 > **Payload:**
-    
-    
-    {  
-        "e":"ACCOUNT_CONFIG_UPDATE",       // Event Type  
-        "E":1611646737479,		           // Event Time  
-        "T":1611646737476,		           // Transaction Time  
-        "ac":{								  
-        "s":"BTCUSDT",					   // symbol  
-        "l":25						       // leverage  
-           
-        }  
-    }    
-       
-    
+
+    {
+        "e":"ACCOUNT_CONFIG_UPDATE",       // Event Type
+        "E":1611646737479,                   // Event Time
+        "T":1611646737476,                   // Transaction Time
+        "ac":{
+        "s":"BTCUSDT",                       // symbol
+        "l":25                               // leverage
+
+        }
+    }
 
 > **Or**
-    
-    
-    {  
-        "e":"ACCOUNT_CONFIG_UPDATE",       // Event Type  
-        "E":1611646737479,		           // Event Time  
-        "T":1611646737476,		           // Transaction Time  
-        "ai":{							   // User's Account Configuration  
-        "j":true						   // Multi-Assets Mode  
-        }  
-    }    
-    
 
-  * [Event Description](</docs/derivatives/usds-margined-futures/user-data-streams/Event-Account-Configuration-Update-previous-Leverage-Update#event-description>)
-  * [Event Name](</docs/derivatives/usds-margined-futures/user-data-streams/Event-Account-Configuration-Update-previous-Leverage-Update#event-name>)
-  * [Response Example](</docs/derivatives/usds-margined-futures/user-data-streams/Event-Account-Configuration-Update-previous-Leverage-Update#response-example>)
+    {
+        "e":"ACCOUNT_CONFIG_UPDATE",       // Event Type
+        "E":1611646737479,                   // Event Time
+        "T":1611646737476,                   // Transaction Time
+        "ai":{                               // User's Account Configuration
+        "j":true                           // Multi-Assets Mode
+        }
+    }
 
+  - [Event Description](</docs/derivatives/usds-margined-futures/user-data-streams/Event-Account-Configuration-Update-previous-Leverage-Update#event-description>)
+  - [Event Name](</docs/derivatives/usds-margined-futures/user-data-streams/Event-Account-Configuration-Update-previous-Leverage-Update#event-name>)
+  - [Response Example](</docs/derivatives/usds-margined-futures/user-data-streams/Event-Account-Configuration-Update-previous-Leverage-Update#response-example>)

@@ -1,18 +1,18 @@
-# -*- coding: utf-8 -*-
 """
 统一限流器
 
 支持滑动窗口、固定窗口两种限流模式，以及端点级 glob 匹配和权重映射。
 对非 HTTP 场所可关闭或替换为场所内置流控。
 """
-import time
+
 import asyncio
-import threading
 import fnmatch
+import threading
+import time
 from collections import deque
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from enum import Enum, unique
-from typing import Optional, Dict, List, Any
+from typing import Any, Dict, List, Optional
 
 
 @unique
@@ -32,14 +32,15 @@ class RateLimitScope(str, Enum):
 @dataclass
 class RateLimitRule:
     """限流规则"""
+
     name: str
     type: RateLimitType
-    interval: int                              # 时间窗口（秒）
-    limit: int                                 # 限制数量
+    interval: int  # 时间窗口（秒）
+    limit: int  # 限制数量
     scope: RateLimitScope = RateLimitScope.GLOBAL
-    endpoint: Optional[str] = None             # 端点匹配（支持 glob）
+    endpoint: Optional[str] = None  # 端点匹配（支持 glob）
     weight_map: Optional[Dict[str, int]] = None  # {method_or_key: weight}
-    weight: int = 1                            # 默认权重
+    weight: int = 1  # 默认权重
 
     def match(self, method: str, path: str) -> bool:
         """判断请求是否匹配此规则"""

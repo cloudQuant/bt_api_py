@@ -1,8 +1,8 @@
-
-class BalanceData(object):
+class BalanceData:
     """
     用于保存账户的余额
     """
+
     def __init__(self, balance_info, has_been_json_encoded=False):
         self.event = "BalanceEvent"
         self.balance_info = balance_info
@@ -74,7 +74,7 @@ class BalanceData(object):
         raise NotImplementedError
 
     def get_unrealized_profit(self):
-        """# 总的未实现利润 """
+        """# 总的未实现利润"""
         raise NotImplementedError
 
     def get_interest(self):

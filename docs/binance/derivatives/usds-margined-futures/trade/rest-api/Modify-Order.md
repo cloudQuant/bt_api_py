@@ -16,63 +16,72 @@ PUT `/fapi/v1/order`
 
 ## Request Parameters
 
-Name| Type| Mandatory| Description  
----|---|---|---  
-orderId| LONG| NO|   
-origClientOrderId| STRING| NO|   
-symbol| STRING| YES|   
-side| ENUM| YES| `SELL`, `BUY`  
-quantity| DECIMAL| YES| Order quantity, cannot be sent with `closePosition=true`  
-price| DECIMAL| YES|   
-priceMatch| ENUM| NO| only avaliable for `LIMIT`/`STOP`/`TAKE_PROFIT` order; can be set to `OPPONENT`/ `OPPONENT_5`/ `OPPONENT_10`/ `OPPONENT_20`: /`QUEUE`/ `QUEUE_5`/ `QUEUE_10`/ `QUEUE_20`; Can't be passed together with `price`  
-recvWindow| LONG| NO|   
-timestamp| LONG| YES|   
-  
->   * Either `orderId` or `origClientOrderId` must be sent, and the `orderId` will prevail if both are sent.
->   * Both `quantity` and `price` must be sent, which is different from dapi modify order endpoint.
->   * When the new `quantity` or `price` doesn't satisfy PRICE_FILTER / PERCENT_FILTER / LOT_SIZE, amendment will be rejected and the order will stay as it is.
->   * However the order will be cancelled by the amendment in the following situations: 
->     * when the order is in partially filled status and the new `quantity` <= `executedQty`
->     * When the order is `GTX` and the new price will cause it to be executed immediately
->   * One order can only be modfied for less than 10000 times
->   * Modify order will set `selfTradePreventionMode` to `NONE`
-> 
+Name| Type| Mandatory| Description
+
+- --|---|---|---
+
+orderId| LONG| NO|
+
+origClientOrderId| STRING| NO|
+
+symbol| STRING| YES|
+
+side| ENUM| YES| `SELL`, `BUY`
+
+quantity| DECIMAL| YES| Order quantity, cannot be sent with `closePosition=true`
+
+price| DECIMAL| YES|
+
+priceMatch| ENUM| NO| only avaliable for `LIMIT`/`STOP`/`TAKE_PROFIT` order; can be set to `OPPONENT`/ `OPPONENT_5`/ `OPPONENT_10`/ `OPPONENT_20`: /`QUEUE`/ `QUEUE_5`/ `QUEUE_10`/ `QUEUE_20`; Can't be passed together with `price`
+
+recvWindow| LONG| NO|
+
+timestamp| LONG| YES|
+
+>   *Either `orderId` or `origClientOrderId` must be sent, and the `orderId` will prevail if both are sent.
+>  *Both `quantity` and `price` must be sent, which is different from dapi modify order endpoint.
+>  *When the new `quantity` or `price` doesn't satisfy PRICE_FILTER / PERCENT_FILTER / LOT_SIZE, amendment will be rejected and the order will stay as it is.
+>  *However the order will be cancelled by the amendment in the following situations:
+>    *when the order is in partially filled status and the new `quantity` <= `executedQty`
+>    *When the order is `GTX` and the new price will cause it to be executed immediately
+>  *One order can only be modfied for less than 10000 times
+>  * Modify order will set `selfTradePreventionMode` to `NONE`
+>
 
 ## Response Example
-    
-    
-    {  
-     	"orderId": 20072994037,  
-     	"symbol": "BTCUSDT",  
-     	"pair": "BTCUSDT",  
-     	"status": "NEW",  
-     	"clientOrderId": "LJ9R4QZDihCaS8UAOOLpgW",  
-     	"price": "30005",  
-     	"avgPrice": "0.0",  
-     	"origQty": "1",  
-     	"executedQty": "0",  
-     	"cumQty": "0",  
-     	"cumBase": "0",  
-     	"timeInForce": "GTC",  
-     	"type": "LIMIT",  
-     	"reduceOnly": false,  
-     	"closePosition": false,  
-     	"side": "BUY",  
-     	"positionSide": "LONG",  
-     	"stopPrice": "0",  
-     	"workingType": "CONTRACT_PRICE",  
-     	"priceProtect": false,  
-     	"origType": "LIMIT",  
-        "priceMatch": "NONE",              //price match mode  
-        "selfTradePreventionMode": "NONE", //self trading preventation mode  
-        "goodTillDate": 0,                 //order pre-set auot cancel time for TIF GTD order  
-     	"updateTime": 1629182711600  
-    }  
-    
 
-  * [API Description](</docs/derivatives/usds-margined-futures/trade/rest-api/Modify-Order#api-description>)
-  * [HTTP Request](</docs/derivatives/usds-margined-futures/trade/rest-api/Modify-Order#http-request>)
-  * [Request Weight](</docs/derivatives/usds-margined-futures/trade/rest-api/Modify-Order#request-weight>)
-  * [Request Parameters](</docs/derivatives/usds-margined-futures/trade/rest-api/Modify-Order#request-parameters>)
-  * [Response Example](</docs/derivatives/usds-margined-futures/trade/rest-api/Modify-Order#response-example>)
 
+    {
+         "orderId": 20072994037,
+         "symbol": "BTCUSDT",
+         "pair": "BTCUSDT",
+         "status": "NEW",
+         "clientOrderId": "LJ9R4QZDihCaS8UAOOLpgW",
+         "price": "30005",
+         "avgPrice": "0.0",
+         "origQty": "1",
+         "executedQty": "0",
+         "cumQty": "0",
+         "cumBase": "0",
+         "timeInForce": "GTC",
+         "type": "LIMIT",
+         "reduceOnly": false,
+         "closePosition": false,
+         "side": "BUY",
+         "positionSide": "LONG",
+         "stopPrice": "0",
+         "workingType": "CONTRACT_PRICE",
+         "priceProtect": false,
+         "origType": "LIMIT",
+        "priceMatch": "NONE",              //price match mode
+        "selfTradePreventionMode": "NONE", //self trading preventation mode
+        "goodTillDate": 0,                 //order pre-set auot cancel time for TIF GTD order
+         "updateTime": 1629182711600
+    }
+
+
+  - [API Description](</docs/derivatives/usds-margined-futures/trade/rest-api/Modify-Order#api-description>)
+  - [HTTP Request](</docs/derivatives/usds-margined-futures/trade/rest-api/Modify-Order#http-request>)
+  - [Request Weight](</docs/derivatives/usds-margined-futures/trade/rest-api/Modify-Order#request-weight>)
+  - [Request Parameters](</docs/derivatives/usds-margined-futures/trade/rest-api/Modify-Order#request-parameters>)
+  - [Response Example](</docs/derivatives/usds-margined-futures/trade/rest-api/Modify-Order#response-example>)

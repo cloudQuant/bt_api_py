@@ -13,14 +13,16 @@ class SymbolInfo:
     """品种元信息"""
 
     def __init__(self, internal_name, exchange, exchange_symbol, **meta):
-        self.internal_name = internal_name      # 内部统一名称, 如 "BTC-USDT"
-        self.exchange = exchange                # 交易所标识, 如 "BINANCE___SWAP"
+        self.internal_name = internal_name  # 内部统一名称, 如 "BTC-USDT"
+        self.exchange = exchange  # 交易所标识, 如 "BINANCE___SWAP"
         self.exchange_symbol = exchange_symbol  # 交易所原始品种名, 如 "BTCUSDT"
-        self.meta = meta                        # 额外元信息
+        self.meta = meta  # 额外元信息
 
     def __repr__(self):
-        return (f"SymbolInfo(internal={self.internal_name}, exchange={self.exchange}, "
-                f"symbol={self.exchange_symbol})")
+        return (
+            f"SymbolInfo(internal={self.internal_name}, exchange={self.exchange}, "
+            f"symbol={self.exchange_symbol})"
+        )
 
 
 class SymbolManager:

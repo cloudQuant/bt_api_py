@@ -1,6 +1,6 @@
 # Query Current Algo Open Orders (USER_DATA)
 
-> 来源: [Binance Algo Trading API](https://developers.binance.com/docs/algo/spot-algo/Query-Current-Algo-Open-Orders)
+> 来源: [Binance Algo Trading API](<https://developers.binance.com/docs/algo/spot-algo/Query-Current-Algo-Open-Orders)>
 
 ## API Description
 
@@ -8,9 +8,10 @@ Get all open SPOT TWAP orders.
 
 ## HTTP Request
 
-```
+```bash
 GET /sapi/v1/algo/spot/openOrders
-```
+
+```bash
 
 ## Request Weight(IP)
 
@@ -19,8 +20,11 @@ GET /sapi/v1/algo/spot/openOrders
 ## Request Parameters
 
 | Name | Type | Mandatory | Description |
+
 |------|------|-----------|-------------|
+
 | recvWindow | LONG | NO | |
+
 | timestamp | LONG | YES | |
 
 ## Response Example
@@ -46,4 +50,5 @@ GET /sapi/v1/algo/spot/openOrders
         }
     ]
 }
-```
+
+```bash

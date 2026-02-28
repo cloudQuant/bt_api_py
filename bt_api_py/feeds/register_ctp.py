@@ -5,16 +5,11 @@ CTP 交易所注册模块
 
 依赖: pip install ctp-python
 """
-from bt_api_py.registry import ExchangeRegistry
-from bt_api_py.feeds.live_ctp_feed import (
-    CtpRequestDataFuture,
-    CtpMarketStream,
-    CtpTradeStream,
-)
-from bt_api_py.containers.exchanges.ctp_exchange_data import CtpExchangeDataFuture
-
 
 from bt_api_py.balance_utils import simple_balance_handler as _ctp_balance_handler
+from bt_api_py.containers.exchanges.ctp_exchange_data import CtpExchangeDataFuture
+from bt_api_py.feeds.live_ctp_feed import CtpMarketStream, CtpRequestDataFuture, CtpTradeStream
+from bt_api_py.registry import ExchangeRegistry
 
 
 def _ctp_future_subscribe_handler(data_queue, exchange_params, topics, bt_api):
@@ -26,25 +21,25 @@ def _ctp_future_subscribe_handler(data_queue, exchange_params, topics, bt_api):
     :param topics: list of topic dicts, 如 [{"topic": "tick", "symbol": "IF2506"}, ...]
     :param bt_api: BtApi 实例
     """
-    topic_list = [t.get('topic') for t in topics]
+    topic_list = [t.get("topic") for t in topics]
 
     # 启动行情流 — 订阅 tick/ticker/depth 数据
-    has_tick = any(t in topic_list for t in ('tick', 'ticker', 'depth'))
+    has_tick = any(t in topic_list for t in ("tick", "ticker", "depth"))
     if has_tick:
         market_kwargs = {k: v for k, v in exchange_params.items()}
-        market_kwargs['stream_name'] = 'ctp_market_stream'
-        market_kwargs['topics'] = topics
+        market_kwargs["stream_name"] = "ctp_market_stream"
+        market_kwargs["topics"] = topics
         stream = CtpMarketStream(data_queue, **market_kwargs)
         stream.start()
         bt_api.log("CTP market stream started")
 
     # 启动交易流 — 接收订单/成交回报推送
-    if not bt_api._subscription_flags.get('CTP___FUTURE_account', False):
+    if not bt_api._subscription_flags.get("CTP___FUTURE_account", False):
         trade_kwargs = {k: v for k, v in exchange_params.items()}
-        trade_kwargs['stream_name'] = 'ctp_trade_stream'
+        trade_kwargs["stream_name"] = "ctp_trade_stream"
         stream = CtpTradeStream(data_queue, **trade_kwargs)
         stream.start()
-        bt_api._subscription_flags['CTP___FUTURE_account'] = True
+        bt_api._subscription_flags["CTP___FUTURE_account"] = True
         bt_api.log("CTP trade stream started")
 
 

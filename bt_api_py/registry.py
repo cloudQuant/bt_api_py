@@ -2,16 +2,19 @@
 交易所注册表 — 使用 Registry Pattern 实现交易所的即插即用
 新交易所只需注册 feed_class / stream_classes / exchange_data_class，无需修改核心代码
 """
+
 from typing import Any, Callable, Dict, List, Optional, Type
 
 
 class ExchangeRegistry:
     """全局交易所注册表，管理 feed 类、流式数据类、交易所配置类的注册与创建"""
 
-    _feed_classes: Dict[str, Type] = {}           # {"BINANCE___SWAP": BinanceRequestDataSwap, ...}
-    _stream_classes: Dict[str, Dict[str, Any]] = {}  # {"BINANCE___SWAP": {"market": cls, "account": cls}}
+    _feed_classes: Dict[str, Type] = {}  # {"BINANCE___SWAP": BinanceRequestDataSwap, ...}
+    _stream_classes: Dict[str, Dict[str, Any]] = (
+        {}
+    )  # {"BINANCE___SWAP": {"market": cls, "account": cls}}
     _exchange_data_classes: Dict[str, Type] = {}  # {"BINANCE___SWAP": BinanceExchangeDataSwap, ...}
-    _balance_handlers: Dict[str, Callable] = {}   # {"BINANCE___SWAP": handler_func, ...}
+    _balance_handlers: Dict[str, Callable] = {}  # {"BINANCE___SWAP": handler_func, ...}
 
     @classmethod
     def register_feed(cls, exchange_name: str, feed_class: Type) -> None:
@@ -56,8 +59,10 @@ class ExchangeRegistry:
         """
         feed_cls = cls._feed_classes.get(exchange_name)
         if feed_cls is None:
-            raise ValueError(f"Unknown exchange feed: {exchange_name}. "
-                             f"Available: {list(cls._feed_classes.keys())}")
+            raise ValueError(
+                f"Unknown exchange feed: {exchange_name}. "
+                f"Available: {list(cls._feed_classes.keys())}"
+            )
         return feed_cls(data_queue, **kwargs)
 
     @classmethod
@@ -68,8 +73,10 @@ class ExchangeRegistry:
         """
         ed_cls = cls._exchange_data_classes.get(exchange_name)
         if ed_cls is None:
-            raise ValueError(f"Unknown exchange data: {exchange_name}. "
-                             f"Available: {list(cls._exchange_data_classes.keys())}")
+            raise ValueError(
+                f"Unknown exchange data: {exchange_name}. "
+                f"Available: {list(cls._exchange_data_classes.keys())}"
+            )
         return ed_cls()
 
     @classmethod

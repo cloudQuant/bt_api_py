@@ -1,21 +1,22 @@
-# -*- coding: utf-8 -*-
 """
 统一 Instrument 模型
 
 用于表示所有交易标的（现货、永续、交割、期权、股票、外汇等），
 提供内部符号 ↔ 场所符号双向映射能力。
 """
+
 import dataclasses
 from dataclasses import dataclass, field
 from datetime import datetime
 from decimal import Decimal
 from enum import Enum, unique
-from typing import Optional, Dict, Any
+from typing import Any, Dict, Optional
 
 
 @unique
 class AssetType(str, Enum):
     """资产类型枚举"""
+
     SPOT = "spot"
     SWAP = "swap"
     FUTURE = "future"
@@ -32,21 +33,21 @@ class Instrument:
     """统一交易标的模型（不可变，线程安全）"""
 
     # === 基础标识 ===
-    internal: str                    # 内部统一符号，如 BTC-USDT, IF2506, AAPL
-    venue: str                       # BINANCE___SWAP, CTP___FUTURE, IB___STK
-    venue_symbol: str                # 交易所/券商原始符号，如 BTCUSDT, IF2506, AAPL
-    asset_type: AssetType            # 资产类型
+    internal: str  # 内部统一符号，如 BTC-USDT, IF2506, AAPL
+    venue: str  # BINANCE___SWAP, CTP___FUTURE, IB___STK
+    venue_symbol: str  # 交易所/券商原始符号，如 BTCUSDT, IF2506, AAPL
+    asset_type: AssetType  # 资产类型
 
     # === 标的属性 ===
-    underlying: Optional[str] = None       # 标的：BTC、沪深300、Apple
-    base_currency: Optional[str] = None    # 基础货币（现货/合约）
-    quote_currency: Optional[str] = None   # 计价货币
+    underlying: Optional[str] = None  # 标的：BTC、沪深300、Apple
+    base_currency: Optional[str] = None  # 基础货币（现货/合约）
+    quote_currency: Optional[str] = None  # 计价货币
 
     # === 合约属性（FUTURE/OPTION） ===
     expiry: Optional[datetime] = None
     strike: Optional[Decimal] = None
     contract_size: Optional[Decimal] = None
-    option_type: Optional[str] = None      # CALL / PUT
+    option_type: Optional[str] = None  # CALL / PUT
 
     # === 交易属性 ===
     tick_size: Optional[Decimal] = None
@@ -56,7 +57,7 @@ class Instrument:
     min_notional: Optional[Decimal] = None
 
     # === 状态信息 ===
-    status: str = "active"                 # active / suspend / expire / delist
+    status: str = "active"  # active / suspend / expire / delist
     list_time: Optional[datetime] = None
     delist_time: Optional[datetime] = None
 
@@ -77,7 +78,7 @@ class Instrument:
             return False
         return True
 
-    def with_params(self, **kwargs) -> 'Instrument':
+    def with_params(self, **kwargs) -> "Instrument":
         """创建带有新参数的副本"""
         return dataclasses.replace(self, **kwargs)
 
@@ -86,9 +87,20 @@ class Instrument:
 
 # 已知的 quote 货币列表（按长度降序排列，优先匹配长的）
 KNOWN_QUOTES = [
-    "USDT", "USDC", "BUSD", "TUSD", "FDUSD",
-    "USD", "BTC", "ETH", "BNB",
-    "EUR", "GBP", "AUD", "TRY", "BRL",
+    "USDT",
+    "USDC",
+    "BUSD",
+    "TUSD",
+    "FDUSD",
+    "USD",
+    "BTC",
+    "ETH",
+    "BNB",
+    "EUR",
+    "GBP",
+    "AUD",
+    "TRY",
+    "BRL",
 ]
 
 
@@ -131,7 +143,7 @@ class InstrumentFactory:
         upper = venue_symbol.upper()
         for quote in KNOWN_QUOTES:
             if upper.endswith(quote) and len(upper) > len(quote):
-                base = upper[:-len(quote)]
+                base = upper[: -len(quote)]
                 return f"{base}-{quote}"
 
         # 非 crypto 场所（CTP: IF2506, IB: AAPL）直接返回

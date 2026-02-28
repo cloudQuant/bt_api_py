@@ -1,12 +1,13 @@
-import time
 import json
+import time
+
 from bt_api_py.containers.balances.balance import BalanceData
 from bt_api_py.functions.utils import from_dict_get_float, from_dict_get_string
 
 
 class OkxBalanceData(BalanceData):
     def __init__(self, balance_info, symbol_name, asset_type, has_been_json_encoded=False):
-        super(OkxBalanceData, self).__init__(balance_info, has_been_json_encoded)
+        super().__init__(balance_info, has_been_json_encoded)
         self.exchange_name = "OKX"
         self.symbol_name = symbol_name
         self.local_update_time = time.time()  # 本地时间戳
@@ -54,7 +55,7 @@ class OkxBalanceData(BalanceData):
                 "available_margin": self.available_margin,
                 "used_margin": self.used_margin,
                 "margin": self.margin,
-                "server_time": self.server_time
+                "server_time": self.server_time,
             }
         return self.all_data
 
@@ -126,7 +127,7 @@ class OkxBalanceData(BalanceData):
         return self.position_initial_margin
 
     def get_unrealized_profit(self):
-        """# 总的未实现利润 """
+        """# 总的未实现利润"""
         return self.unrealized_profit
 
     def get_interest(self):

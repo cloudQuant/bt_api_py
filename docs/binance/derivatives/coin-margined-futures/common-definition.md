@@ -4,152 +4,152 @@ On this page
 
 ## Terminology
 
-  * `symbol` refers to the symbol name of a contract symbol
-  * `pair` refers to the underlying symbol of a contracrt symbol
-  * `base asset` refers to the asset that is the `quantity` of a symbol.
-  * `quote asset` refers to the asset that is the `price` of a symbol.
-  * `margin asset` refers to the asset that is the `margin` of a symbol
+  - `symbol` refers to the symbol name of a contract symbol
+  - `pair` refers to the underlying symbol of a contracrt symbol
+  - `base asset` refers to the asset that is the `quantity` of a symbol.
+  - `quote asset` refers to the asset that is the `price` of a symbol.
+  - `margin asset` refers to the asset that is the `margin` of a symbol
 
 ## ENUM definitions
 
-**Symbol type:**
+- *Symbol type:**
 
-  * DELIVERY_CONTRACT
-  * PERPETUAL_CONTRACT
+  - DELIVERY_CONTRACT
+  - PERPETUAL_CONTRACT
 
-**Contract type (contractType):**
+- *Contract type (contractType):**
 
-  * PERPETUAL
-  * CURRENT_QUARTER
-  * NEXT_QUARTER
-  * CURRENT_QUARTER_DELIVERING // Invalid type, only used for DELIVERING status
-  * NEXT_QUARTER_DELIVERING // Invalid type, only used for DELIVERING status
-  * PERPETUAL DELIVERING 交割結算中合約
+  - PERPETUAL
+  - CURRENT_QUARTER
+  - NEXT_QUARTER
+  - CURRENT_QUARTER_DELIVERING // Invalid type, only used for DELIVERING status
+  - NEXT_QUARTER_DELIVERING // Invalid type, only used for DELIVERING status
+  - PERPETUAL DELIVERING 交割結算中合約
 
-**Contract status (contractStatus, status):**
+- *Contract status (contractStatus, status):**
 
-  * PENDING_TRADING
-  * TRADING
-  * PRE_DELIVERING
-  * DELIVERING
-  * DELIVERED
+  - PENDING_TRADING
+  - TRADING
+  - PRE_DELIVERING
+  - DELIVERING
+  - DELIVERED
 
-**Order status (status):**
+- *Order status (status):**
 
-  * NEW
-  * PARTIALLY_FILLED
-  * FILLED
-  * CANCELED
-  * EXPIRED
+  - NEW
+  - PARTIALLY_FILLED
+  - FILLED
+  - CANCELED
+  - EXPIRED
 
-**Order types (type):**
+- *Order types (type):**
 
-  * LIMIT
-  * MARKET
-  * STOP
-  * STOP_MARKET
-  * TAKE_PROFIT
-  * TAKE_PROFIT_MARKET
-  * TRAILING_STOP_MARKET
+  - LIMIT
+  - MARKET
+  - STOP
+  - STOP_MARKET
+  - TAKE_PROFIT
+  - TAKE_PROFIT_MARKET
+  - TRAILING_STOP_MARKET
 
-**Order side (side):**
+- *Order side (side):**
 
-  * BUY
-  * SELL
+  - BUY
+  - SELL
 
-**Position side (positionSide):**
+- *Position side (positionSide):**
 
-  * BOTH
-  * LONG
-  * SHORT
+  - BOTH
+  - LONG
+  - SHORT
 
-**Time in force (timeInForce):**
+- *Time in force (timeInForce):**
 
-  * GTC - Good Till Cancel
-  * IOC - Immediate or Cancel
-  * FOK - Fill or Kill
-  * GTX - Good Till Crossing (Post Only)
+  - GTC - Good Till Cancel
+  - IOC - Immediate or Cancel
+  - FOK - Fill or Kill
+  - GTX - Good Till Crossing (Post Only)
 
-**Working Type (workingType)**
+- *Working Type (workingType)**
 
-  * MARK_PRICE
-  * CONTRACT_PRICE
+  - MARK_PRICE
+  - CONTRACT_PRICE
 
-**Response Type (newOrderRespType)**
+- *Response Type (newOrderRespType)**
 
-  * ACK
-  * RESULT
+  - ACK
+  - RESULT
 
-**Price Match Type(priceMatch)**
+- *Price Match Type(priceMatch)**
 
-  * NONE: no price match
-  * OPPONENT: counterparty best price
-  * OPPONENT_5: counterparty 5th best price
-  * OPPONENT_10: counterparty 10th best price
-  * OPPONENT_20: counterparty 20th best price
-  * QUEUE: the best price on the same side of the order book
-  * QUEUE_5: the 5th best price on the same side of the order book
-  * QUEUE_10: the 10th best price on the same side of the order book
-  * QUEUE_20: the 20th best price on the same side of the order book
+  - NONE: no price match
+  - OPPONENT: counterparty best price
+  - OPPONENT_5: counterparty 5th best price
+  - OPPONENT_10: counterparty 10th best price
+  - OPPONENT_20: counterparty 20th best price
+  - QUEUE: the best price on the same side of the order book
+  - QUEUE_5: the 5th best price on the same side of the order book
+  - QUEUE_10: the 10th best price on the same side of the order book
+  - QUEUE_20: the 20th best price on the same side of the order book
 
-**Self-Trade Prevention mode(selfTradePreventionMode)**
+- *Self-Trade Prevention mode(selfTradePreventionMode)**
 
-  * NONE: No Self-Trade Prevention
-  * EXPIRE_TAKER: expire taker order when STP trigger
-  * EXPIRE_BOTH: expire taker and maker order when STP trigger
-  * EXPIRE_MAKER: expire maker order when STP trigger
+  - NONE: No Self-Trade Prevention
+  - EXPIRE_TAKER: expire taker order when STP trigger
+  - EXPIRE_BOTH: expire taker and maker order when STP trigger
+  - EXPIRE_MAKER: expire maker order when STP trigger
 
-**Kline/Candlestick chart intervals:**
+- *Kline/Candlestick chart intervals:**
 
 m -> minutes; h -> hours; d -> days; w -> weeks; M -> months
 
-  * 1m
-  * 3m
-  * 5m
-  * 15m
-  * 30m
-  * 1h
-  * 2h
-  * 4h
-  * 6h
-  * 8h
-  * 12h
-  * 1d
-  * 3d
-  * 1w
-  * 1M
+  - 1m
+  - 3m
+  - 5m
+  - 15m
+  - 30m
+  - 1h
+  - 2h
+  - 4h
+  - 6h
+  - 8h
+  - 12h
+  - 1d
+  - 3d
+  - 1w
+  - 1M
 
-**Rate limiters (rateLimitType)**
+- *Rate limiters (rateLimitType)**
 
 > REQUEST_WEIGHT
-    
-    
-      {  
-      	"rateLimitType": "REQUEST_WEIGHT",  
-      	"interval": "MINUTE",  
-      	"intervalNum": 1,  
-      	"limit": 6000  
-      }  
-    
+
+
+      {
+          "rateLimitType": "REQUEST_WEIGHT",
+          "interval": "MINUTE",
+          "intervalNum": 1,
+          "limit": 6000
+      }
+
 
 > ORDERS
-    
-    
-      {  
-      	"rateLimitType": "ORDERS",  
-      	"interval": "MINUTE",  
-      	"intervalNum": 1,  
-      	"limit": 1200  
-       }  
-    
 
-  * REQUEST_WEIGHT
 
-  * ORDERS
+      {
+          "rateLimitType": "ORDERS",
+          "interval": "MINUTE",
+          "intervalNum": 1,
+          "limit": 1200
+       }
 
-**Rate limit intervals (interval)**
 
-  * MINUTE
+  - REQUEST_WEIGHT
+
+  - ORDERS
+
+- *Rate limit intervals (interval)**
+
+  - MINUTE
 
 # Filters
 
@@ -160,88 +160,88 @@ Filters define trading rules on a symbol or an exchange.
 ### PRICE_FILTER
 
 > **/exchangeInfo format:**
-    
-    
-      {  
-        "filterType": "PRICE_FILTER",  
-        "minPrice": "0.00000100",  
-        "maxPrice": "100000.00000000",  
-        "tickSize": "0.00000100"  
-      }  
-    
+
+
+      {
+        "filterType": "PRICE_FILTER",
+        "minPrice": "0.00000100",
+        "maxPrice": "100000.00000000",
+        "tickSize": "0.00000100"
+      }
+
 
 The `PRICE_FILTER` defines the `price` rules for a symbol. There are 3 parts:
 
-  * `minPrice` defines the minimum `price`/`stopPrice` allowed; disabled on `minPrice` == 0.
-  * `maxPrice` defines the maximum `price`/`stopPrice` allowed; disabled on `maxPrice` == 0.
-  * `tickSize` defines the intervals that a `price`/`stopPrice` can be increased/decreased by; disabled on `tickSize` == 0.
+  - `minPrice` defines the minimum `price`/`stopPrice` allowed; disabled on `minPrice` == 0.
+  - `maxPrice` defines the maximum `price`/`stopPrice` allowed; disabled on `maxPrice` == 0.
+  - `tickSize` defines the intervals that a `price`/`stopPrice` can be increased/decreased by; disabled on `tickSize` == 0.
 
 Any of the above variables can be set to 0, which disables that rule in the `price filter`. In order to pass the `price filter`, the following must be true for `price`/`stopPrice` of the enabled rules:
 
-  * `price` >= `minPrice`
-  * `price` <= `maxPrice`
-  * (`price`-`minPrice`) % `tickSize` == 0
+  - `price` >= `minPrice`
+  - `price` <= `maxPrice`
+  - (`price`-`minPrice`) % `tickSize` == 0
 
 ### LOT_SIZE
 
 > **/exchangeInfo format:**
-    
-    
-      {  
-        "filterType": "LOT_SIZE",  
-        "minQty": "0.00100000",  
-        "maxQty": "100000.00000000",  
-        "stepSize": "0.00100000"  
-      }  
-    
+
+
+      {
+        "filterType": "LOT_SIZE",
+        "minQty": "0.00100000",
+        "maxQty": "100000.00000000",
+        "stepSize": "0.00100000"
+      }
+
 
 The `LOT_SIZE` filter defines the `quantity` (aka "lots" in auction terms) rules for a symbol. There are 3 parts:
 
-  * `minQty` defines the minimum `quantity` allowed.
-  * `maxQty` defines the maximum `quantity` allowed.
-  * `stepSize` defines the intervals that a `quantity` can be increased/decreased by.
+  - `minQty` defines the minimum `quantity` allowed.
+  - `maxQty` defines the maximum `quantity` allowed.
+  - `stepSize` defines the intervals that a `quantity` can be increased/decreased by.
 
 In order to pass the `lot size`, the following must be true for `quantity`:
 
-  * `quantity` >= `minQty`
-  * `quantity` <= `maxQty`
-  * (`quantity`-`minQty`) % `stepSize` == 0
+  - `quantity` >= `minQty`
+  - `quantity` <= `maxQty`
+  - (`quantity`-`minQty`) % `stepSize` == 0
 
 ### MARKET_LOT_SIZE
 
 > **/exchangeInfo format:**
-    
-    
-      {  
-        "filterType": "MARKET_LOT_SIZE",  
-        "minQty": "0.00100000",  
-        "maxQty": "100000.00000000",  
-        "stepSize": "0.00100000"  
-      }  
-    
+
+
+      {
+        "filterType": "MARKET_LOT_SIZE",
+        "minQty": "0.00100000",
+        "maxQty": "100000.00000000",
+        "stepSize": "0.00100000"
+      }
+
 
 The `MARKET_LOT_SIZE` filter defines the `quantity` (aka "lots" in auction terms) rules for `MARKET` orders on a symbol. There are 3 parts:
 
-  * `minQty` defines the minimum `quantity` allowed.
-  * `maxQty` defines the maximum `quantity` allowed.
-  * `stepSize` defines the intervals that a `quantity` can be increased/decreased by.
+  - `minQty` defines the minimum `quantity` allowed.
+  - `maxQty` defines the maximum `quantity` allowed.
+  - `stepSize` defines the intervals that a `quantity` can be increased/decreased by.
 
 In order to pass the `market lot size`, the following must be true for `quantity`:
 
-  * `quantity` >= `minQty`
-  * `quantity` <= `maxQty`
-  * (`quantity`-`minQty`) % `stepSize` == 0
+  - `quantity` >= `minQty`
+  - `quantity` <= `maxQty`
+  - (`quantity`-`minQty`) % `stepSize` == 0
 
 ### MAX_NUM_ORDERS
 
 > **/exchangeInfo format:**
-    
-    
-      {  
-        "filterType": "MAX_NUM_ORDERS",  
-        "limit": 200  
-      }  
-    
+
+
+      {
+        "filterType": "MAX_NUM_ORDERS",
+        "limit": 200
+      }
+
 
 The `MAX_NUM_ORDERS` filter defines the maximum number of orders an account is allowed to have open on a symbol.
 
@@ -250,29 +250,28 @@ Note that both "algo" orders and normal orders are counted for this filter.
 ### PERCENT_PRICE
 
 > **/exchangeInfo format:**
-    
-    
-      {  
-        "filterType": "PERCENT_PRICE",  
-        "multiplierUp": "1.0500",  
-        "multiplierDown": "0.9500",  
-        "multiplierDecimal": 4  
-      }  
-    
+
+
+      {
+        "filterType": "PERCENT_PRICE",
+        "multiplierUp": "1.0500",
+        "multiplierDown": "0.9500",
+        "multiplierDecimal": 4
+      }
+
 
 The `PERCENT_PRICE` filter defines valid range for a price based on the mark price.
 
 In order to pass the `percent price`, the following must be true for `price`:
 
-  * BUY: `price` <= `markPrice` * `multiplierUp`
-  * SELL: `price` >= `markPrice` * `multiplierDown`
+  - BUY: `price` <= `markPrice` *`multiplierUp`
+  - SELL: `price` >= `markPrice`* `multiplierDown`
 
-  * [Terminology](</docs/derivatives/coin-margined-futures/common-definition#terminology>)
-  * [ENUM definitions](</docs/derivatives/coin-margined-futures/common-definition#enum-definitions>)
-  * [Symbol filters](</docs/derivatives/coin-margined-futures/common-definition#symbol-filters>)
-    * [PRICE_FILTER](</docs/derivatives/coin-margined-futures/common-definition#price_filter>)
-    * [LOT_SIZE](</docs/derivatives/coin-margined-futures/common-definition#lot_size>)
-    * [MARKET_LOT_SIZE](</docs/derivatives/coin-margined-futures/common-definition#market_lot_size>)
-    * [MAX_NUM_ORDERS](</docs/derivatives/coin-margined-futures/common-definition#max_num_orders>)
-    * [PERCENT_PRICE](</docs/derivatives/coin-margined-futures/common-definition#percent_price>)
-
+  - [Terminology](</docs/derivatives/coin-margined-futures/common-definition#terminology>)
+  - [ENUM definitions](</docs/derivatives/coin-margined-futures/common-definition#enum-definitions>)
+  - [Symbol filters](</docs/derivatives/coin-margined-futures/common-definition#symbol-filters>)
+    - [PRICE_FILTER](</docs/derivatives/coin-margined-futures/common-definition#price_filter>)
+    - [LOT_SIZE](</docs/derivatives/coin-margined-futures/common-definition#lot_size>)
+    - [MARKET_LOT_SIZE](</docs/derivatives/coin-margined-futures/common-definition#market_lot_size>)
+    - [MAX_NUM_ORDERS](</docs/derivatives/coin-margined-futures/common-definition#max_num_orders>)
+    - [PERCENT_PRICE](</docs/derivatives/coin-margined-futures/common-definition#percent_price>)

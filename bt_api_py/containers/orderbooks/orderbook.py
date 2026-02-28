@@ -1,9 +1,9 @@
-"""订单簿类，用于确定订单簿的属性和方法
-"""
+"""订单簿类，用于确定订单簿的属性和方法"""
+
 # import json
 
 
-class OrderBookData(object):
+class OrderBookData:
     """保存订单簿相关信息"""
 
     def __init__(self, order_book_info, has_been_json_encoded=False):

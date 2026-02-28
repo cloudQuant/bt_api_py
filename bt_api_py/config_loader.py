@@ -1,12 +1,12 @@
-# -*- coding: utf-8 -*-
 """
 配置系统 — 基于 pydantic 的 Schema 校验
 
 支持从 YAML 文件加载交易所/场所配置，自动校验字段合法性。
 """
+
 import os
 from enum import Enum, unique
-from typing import Dict, Optional, List, Any
+from typing import Any, Dict, List, Optional
 
 try:
     from pydantic import BaseModel, Field, field_validator
@@ -20,6 +20,7 @@ except ImportError:
 
 
 # ── 枚举定义 ──────────────────────────────────────────────────
+
 
 @unique
 class VenueType(str, Enum):
@@ -50,6 +51,7 @@ class ConnectionType(str, Enum):
 
 
 # ── 配置子模型 ────────────────────────────────────────────────
+
 
 class BaseUrlsConfig(BaseModel):
     rest: Dict[str, str] = Field(default_factory=dict)
@@ -94,7 +96,9 @@ class RateLimitRuleConfig(BaseModel):
 
 
 class AssetTypeConfig(BaseModel):
-    exchange_name: Optional[str] = Field(default=None, description="交易所子类型名称, 如 binance_swap")
+    exchange_name: Optional[str] = Field(
+        default=None, description="交易所子类型名称, 如 binance_swap"
+    )
     symbol_format: str = Field(..., description="如 {base}{quote} 或 {base}-{quote}")
     rest_paths: Dict[str, str] = Field(default_factory=dict)
     wss_paths: Dict[str, Any] = Field(default_factory=dict)
@@ -106,8 +110,10 @@ class AssetTypeConfig(BaseModel):
 
 # ── 主配置模型 ────────────────────────────────────────────────
 
+
 class ExchangeConfig(BaseModel):
     """交易所/场所配置"""
+
     id: str = Field(..., min_length=2, max_length=30)
     display_name: str
     venue_type: VenueType
@@ -137,30 +143,33 @@ class ExchangeConfig(BaseModel):
 
     model_config = {"extra": "ignore"}
 
-    @field_validator('base_urls')
+    @field_validator("base_urls")
     @classmethod
     def validate_base_urls(cls, v, info):
-        venue_type = info.data.get('venue_type')
+        venue_type = info.data.get("venue_type")
         # CEX 必须有 base_urls
         if venue_type == VenueType.CEX and not v:
             raise ValueError("CEX must have base_urls")
         # DEX 和 Broker 可选 base_urls（如 Hyperliquid 类CEX DEX、IB Web API）
         return v
 
-    @field_validator('connection')
+    @field_validator("connection")
     @classmethod
     def validate_connection(cls, v, info):
-        venue_type = info.data.get('venue_type')
+        venue_type = info.data.get("venue_type")
         conn_type = v.type
         # CEX 必须使用 HTTP、WEBSOCKET 或 SPI（如 CTP）
         if venue_type == VenueType.CEX and conn_type not in (
-            ConnectionType.HTTP, ConnectionType.WEBSOCKET, ConnectionType.SPI
+            ConnectionType.HTTP,
+            ConnectionType.WEBSOCKET,
+            ConnectionType.SPI,
         ):
             raise ValueError("CEX must use HTTP, WEBSOCKET or SPI connection")
         return v
 
 
 # ── 加载函数 ──────────────────────────────────────────────────
+
 
 def load_exchange_config(config_path: str) -> ExchangeConfig:
     """从 YAML 文件加载交易所配置
@@ -171,12 +180,14 @@ def load_exchange_config(config_path: str) -> ExchangeConfig:
     :raises ValueError: 配置校验失败
     """
     if yaml is None:
-        raise ImportError("PyYAML is required to load config files. Install with: pip install PyYAML")
+        raise ImportError(
+            "PyYAML is required to load config files. Install with: pip install PyYAML"
+        )
 
     if not os.path.exists(config_path):
         raise FileNotFoundError(f"Config file not found: {config_path}")
 
-    with open(config_path, 'r', encoding='utf-8') as f:
+    with open(config_path, encoding="utf-8") as f:
         data = yaml.safe_load(f)
 
     if not data:
@@ -196,13 +207,14 @@ def load_all_exchange_configs(config_dir: str) -> Dict[str, ExchangeConfig]:
         return configs
 
     for filename in os.listdir(config_dir):
-        if filename.endswith(('.yaml', '.yml')) and not filename.startswith('_'):
+        if filename.endswith((".yaml", ".yml")) and not filename.startswith("_"):
             filepath = os.path.join(config_dir, filename)
             try:
                 config = load_exchange_config(filepath)
                 configs[config.id] = config
             except Exception as e:
                 import logging
+
                 logging.getLogger(__name__).warning(f"Failed to load config {filepath}: {e}")
 
     return configs

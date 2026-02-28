@@ -1,12 +1,12 @@
-# -*- coding: utf-8 -*-
 """
 统一 HTTP 客户端 — 基于 httpx
 
 提供同步和异步 HTTP 请求能力，替代直接使用 requests 库。
 支持连接池复用、统一错误处理、代理配置。
 """
+
 import logging
-from typing import Optional, Dict, Any
+from typing import Any, Dict, Optional
 
 try:
     import httpx
@@ -14,7 +14,10 @@ except ImportError:
     httpx = None  # 非 HTTP 场所（CTP/IB/QMT）不强制依赖 httpx
 
 from bt_api_py.error_framework import (
-    RateLimitError, AuthenticationError, ServerError, RequestFailedError,
+    AuthenticationError,
+    RateLimitError,
+    RequestFailedError,
+    ServerError,
 )
 
 logger = logging.getLogger(__name__)
@@ -103,21 +106,17 @@ class HttpClient:
 
         # 将 cookies 添加到 Cookie header 以避免 httpx 警告
         if cookies:
-            cookie_header = '; '.join(f'{k}={v}' for k, v in cookies.items())
-            if 'headers' not in req_kwargs:
-                req_kwargs['headers'] = {}
-            req_kwargs['headers']['Cookie'] = cookie_header
+            cookie_header = "; ".join(f"{k}={v}" for k, v in cookies.items())
+            if "headers" not in req_kwargs:
+                req_kwargs["headers"] = {}
+            req_kwargs["headers"]["Cookie"] = cookie_header
 
         try:
             response = self._sync_client.request(method, url, **req_kwargs)
         except httpx.TimeoutException as e:
-            raise RequestFailedError(
-                venue=self._venue, message=f"Request timeout: {e}"
-            )
+            raise RequestFailedError(venue=self._venue, message=f"Request timeout: {e}")
         except httpx.ConnectError as e:
-            raise RequestFailedError(
-                venue=self._venue, message=f"Connection error: {e}"
-            )
+            raise RequestFailedError(venue=self._venue, message=f"Connection error: {e}")
 
         return self._process_response(response)
 
@@ -150,21 +149,17 @@ class HttpClient:
 
         # 将 cookies 添加到 Cookie header 以避免 httpx 警告
         if cookies:
-            cookie_header = '; '.join(f'{k}={v}' for k, v in cookies.items())
-            if 'headers' not in req_kwargs:
-                req_kwargs['headers'] = {}
-            req_kwargs['headers']['Cookie'] = cookie_header
+            cookie_header = "; ".join(f"{k}={v}" for k, v in cookies.items())
+            if "headers" not in req_kwargs:
+                req_kwargs["headers"] = {}
+            req_kwargs["headers"]["Cookie"] = cookie_header
 
         try:
             response = await client.request(method, url, **req_kwargs)
         except httpx.TimeoutException as e:
-            raise RequestFailedError(
-                venue=self._venue, message=f"Async request timeout: {e}"
-            )
+            raise RequestFailedError(venue=self._venue, message=f"Async request timeout: {e}")
         except httpx.ConnectError as e:
-            raise RequestFailedError(
-                venue=self._venue, message=f"Async connection error: {e}"
-            )
+            raise RequestFailedError(venue=self._venue, message=f"Async connection error: {e}")
 
         return self._process_response(response)
 
@@ -192,15 +187,18 @@ class HttpClient:
             return RateLimitError(venue=self._venue, response=body)
         elif status in (401, 403):
             return AuthenticationError(
-                venue=self._venue, response=body,
-                message=f"HTTP {status}: {body.get('msg', body.get('message', 'Auth error'))}"
+                venue=self._venue,
+                response=body,
+                message=f"HTTP {status}: {body.get('msg', body.get('message', 'Auth error'))}",
             )
         elif status >= 500:
             return ServerError(venue=self._venue, status=status, response=body)
         else:
             return RequestFailedError(
-                venue=self._venue, status=status, response=body,
-                message=f"HTTP {status}: {body.get('msg', body.get('message', 'Request failed'))}"
+                venue=self._venue,
+                status=status,
+                response=body,
+                message=f"HTTP {status}: {body.get('msg', body.get('message', 'Request failed'))}",
             )
 
     def close(self):

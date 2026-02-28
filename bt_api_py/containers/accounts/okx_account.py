@@ -1,5 +1,6 @@
-import time
 import json
+import time
+
 from bt_api_py.containers.accounts.account import AccountData
 from bt_api_py.containers.balances.okx_balance import OkxBalanceData
 from bt_api_py.functions.utils import from_dict_get_float
@@ -7,7 +8,7 @@ from bt_api_py.functions.utils import from_dict_get_float
 
 class OkxAccountData(AccountData):
     def __init__(self, account_info, symbol_name, asset_type, has_been_json_encoded=False):
-        super(OkxAccountData, self).__init__(account_info, has_been_json_encoded)
+        super().__init__(account_info, has_been_json_encoded)
         self.exchange_name = "OKX"
         self.symbol_name = symbol_name
         self.local_update_time = time.time()  # 本地时间戳
@@ -37,9 +38,11 @@ class OkxAccountData(AccountData):
         self.total_maintain_margin = from_dict_get_float(self.account_data, "mmr")
         self.total_open_order_initial_margin = from_dict_get_float(self.account_data, "ordFroz")
         self.total_unrealized_profit = from_dict_get_float(self.account_data, "upl")
-        self.balances = [OkxBalanceData(i, self.get_symbol_name(), self.get_asset_type(), True)
-                         for i in self.account_data["details"]]
-        self.total_wallet_balance = from_dict_get_float(self.account_data, 'totalEq')
+        self.balances = [
+            OkxBalanceData(i, self.get_symbol_name(), self.get_asset_type(), True)
+            for i in self.account_data["details"]
+        ]
+        self.total_wallet_balance = from_dict_get_float(self.account_data, "totalEq")
         self.has_been_init_data = True
         return self
 
@@ -117,7 +120,7 @@ class OkxAccountData(AccountData):
         return None
 
     def get_total_unrealized_profit(self):
-        """# 总的未实现利润 """
+        """# 总的未实现利润"""
         return self.total_unrealized_profit
 
     def get_total_wallet_balance(self):
@@ -171,10 +174,11 @@ class OkxAccountData(AccountData):
                 "total_maintain_margin": self.total_maintain_margin,
                 "total_open_order_initial_margin": self.total_open_order_initial_margin,
                 "total_unrealized_profit": self.total_unrealized_profit,
-                "balances": [OkxBalanceData(i, self.get_symbol_name(), self.get_asset_type(), True)
-                             for i in self.account_data["details"]],
-                "total_wallet_balance": self.total_wallet_balance
-
+                "balances": [
+                    OkxBalanceData(i, self.get_symbol_name(), self.get_asset_type(), True)
+                    for i in self.account_data["details"]
+                ],
+                "total_wallet_balance": self.total_wallet_balance,
             }
         return self.all_data
 

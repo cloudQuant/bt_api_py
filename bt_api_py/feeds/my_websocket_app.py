@@ -1,39 +1,38 @@
-# -*- coding: utf-8 -*-
 import datetime
 import ssl
 import threading
 import time
 import traceback
-import websocket
-from bt_api_py.functions.log_message import SpdLogManager
 
+import websocket
+
+from bt_api_py.functions.log_message import SpdLogManager
 
 # from bt_api_py.containers.exchanges.binance_swap_exchange_data import BinanceExchangeData
 # from bt_api_py.containers.exchanges.okx_swap_exchange_data import OkxSwapExchangeData
 
 
-class MyWebsocketApp(object):
+class MyWebsocketApp:
     def __init__(self, data_queue, **kwargs):
         self.ws = None
         self.data_queue = data_queue
-        self.wss_name = kwargs.get('wss_name', "default_name")
-        self._params = kwargs.get('exchange_data')
-        self.wss_url = kwargs.get('wss_url', None)
+        self.wss_name = kwargs.get("wss_name", "default_name")
+        self._params = kwargs.get("exchange_data")
+        self.wss_url = kwargs.get("wss_url", None)
         self.wss_url = self._params.get_wss_url() if self.wss_url is None else self.wss_url
-        self.ping_interval = kwargs.get('ping_interval', 10)
-        self.ping_timeout = kwargs.get('ping_timeout', 5)
-        self.sslopt = kwargs.get('sslopt', {'cert_reqs': ssl.CERT_NONE})
+        self.ping_interval = kwargs.get("ping_interval", 10)
+        self.ping_timeout = kwargs.get("ping_timeout", 5)
+        self.sslopt = kwargs.get("sslopt", {"cert_reqs": ssl.CERT_NONE})
         self.start_config = {
-
-            'ping_interval': self.ping_interval,
-            'ping_timeout': self.ping_timeout,
-            'sslopt': self.sslopt,
+            "ping_interval": self.ping_interval,
+            "ping_timeout": self.ping_timeout,
+            "sslopt": self.sslopt,
         }
-        self.restart_gap = kwargs.get('restart_gap', 0)
-        self.log_file_name = kwargs.get('log_file_name', "./logs/my_websocket_app.log")
-        self.wss_logger = SpdLogManager(self.log_file_name, self.wss_name,
-                                        0, 0, False
-                                        ).create_logger()
+        self.restart_gap = kwargs.get("restart_gap", 0)
+        self.log_file_name = kwargs.get("log_file_name", "./logs/my_websocket_app.log")
+        self.wss_logger = SpdLogManager(
+            self.log_file_name, self.wss_name, 0, 0, False
+        ).create_logger()
         self._running_flag = False  # 阻塞，防止短时间连接数超限
         self._restart_flag = True  # 默认重启
         self.process = threading.Thread(target=self.run, daemon=True)
@@ -72,7 +71,7 @@ class MyWebsocketApp(object):
 
     def on_error(self, _ws, error):
         try:
-            self.error_rsp(f'error: {error}')
+            self.error_rsp(f"error: {error}")
         except Exception as e:
             self.wss_logger.warn(f"{self.wss_name},{self.wss_url},{e},{traceback.format_exc()}")
 
@@ -88,16 +87,22 @@ class MyWebsocketApp(object):
             self.wss_logger.warn(f"{self.wss_name},{self.wss_url},{e},{traceback.format_exc()}")
 
     def on_ping(self, _ws, ping):
-        self.wss_logger.info(f"===== {time.strftime('%Y-%m-%d %H:%M:%S')} Websocket ping {ping} =====")
-        self.ws.sock.pong('pong')
+        self.wss_logger.info(
+            f"===== {time.strftime('%Y-%m-%d %H:%M:%S')} Websocket ping {ping} ====="
+        )
+        self.ws.sock.pong("pong")
 
     def on_pong(self, _ws, pong):
-        self.wss_logger.info(f"===== {time.strftime('%Y-%m-%d %H:%M:%S')} Websocket pong {pong} =====")
+        self.wss_logger.info(
+            f"===== {time.strftime('%Y-%m-%d %H:%M:%S')} Websocket pong {pong} ====="
+        )
 
     # noinspection PyMethodMayBeStatic
     def close_rsp(self, _is_restart):
         self._restart_flag = False
-        self.wss_logger.info(f"===== {time.strftime('%Y-%m-%d %H:%M:%S')} Websocket Disconnected =====")
+        self.wss_logger.info(
+            f"===== {time.strftime('%Y-%m-%d %H:%M:%S')} Websocket Disconnected ====="
+        )
 
     def run(self):
         # websocket.enableTrace(True)  # 调试
@@ -111,7 +116,7 @@ class MyWebsocketApp(object):
             on_error=self.on_error,
             on_close=self.on_close,
             on_ping=self.on_ping,
-            on_pong=self.on_pong
+            on_pong=self.on_pong,
         )
         # print("初始化run成功, self.wss_url=", self.wss_url)
         while True:
@@ -135,13 +140,17 @@ class MyWebsocketApp(object):
         self.process.start()
         _elapsed = 0
         while not self._running_flag:
-            self.wss_logger.info(f"===== {time.strftime('%Y-%m-%d %H:%M:%S')} "
-                                 f"Wait {self._params.exchange_name} Websocket Connecting... =====")
+            self.wss_logger.info(
+                f"===== {time.strftime('%Y-%m-%d %H:%M:%S')} "
+                f"Wait {self._params.exchange_name} Websocket Connecting... ====="
+            )
             time.sleep(0.5)
             _elapsed += 0.5
             if _elapsed >= connect_timeout:
-                self.wss_logger.warn(f"===== {time.strftime('%Y-%m-%d %H:%M:%S')} "
-                                     f"{self._params.exchange_name} Websocket Connect Timeout ({connect_timeout}s)! =====")
+                self.wss_logger.warn(
+                    f"===== {time.strftime('%Y-%m-%d %H:%M:%S')} "
+                    f"{self._params.exchange_name} Websocket Connect Timeout ({connect_timeout}s)! ====="
+                )
                 break
         # 重启定时器
         if self.restart_gap:
@@ -162,19 +171,19 @@ class MyWebsocketApp(object):
             self.ws = None
 
     def restart_timer(self):
-        """重启定时器
-        """
+        """重启定时器"""
         time_gap = self.restart_gap
         while True:
             time.sleep(time_gap)
             try:
-                self.wss_logger.info('restartTimer Working....')
+                self.wss_logger.info("restartTimer Working....")
                 self.restart()
             except Exception as e:
                 self.wss_logger.warn(f"{self.wss_name},{self.wss_url},{e},{traceback.format_exc()}")
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
+
     def restart(task: list, timeout1=5000, _timeout2=8000):
         while True:
             time.sleep(int(timeout1 / 1000) - 1)

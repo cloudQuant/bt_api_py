@@ -1,7 +1,7 @@
 import time
-from functools import wraps
-from typing import Callable, Any
 import warnings
+from functools import wraps
+from typing import Any, Callable
 
 
 def deprecated(msg=None, stack_level=2):
@@ -18,16 +18,19 @@ def deprecated(msg=None, stack_level=2):
     @deprecated(msg='function_a is deprecated! Use function_b instead.')
     def function_a(*args, **kwargs):
     """
+
     def deprecated_dec(fn):
         @wraps(fn)
         def wrapper(*args, **kwargs):
             warnings.warn(
                 msg or "Function %s is deprecated." % fn.__name__,
                 category=DeprecationWarning,
-                stacklevel=stack_level
+                stacklevel=stack_level,
             )
             return fn(*args, **kwargs)
+
         return wrapper
+
     return deprecated_dec
 
 
@@ -37,6 +40,7 @@ def time_this_function(func):
     :param func: functions
     :return: wrapper
     """
+
     @wraps(func)
     def wrapper(*args, **kwargs):
         start = time.perf_counter()
@@ -44,6 +48,7 @@ def time_this_function(func):
         end = time.perf_counter()
         print(f"{func.__name__}, consume: {end - start}s")
         return result
+
     return wrapper
 
 
@@ -52,6 +57,7 @@ def time_async_function():
     创建一个异步函数的装饰器，用于检测异步函数耗费时间
     :return: wrapper
     """
+
     def wrapper(func: Callable) -> Callable:
         @wraps(func)
         async def wrapped(*args, **kwargs) -> Any:
@@ -62,5 +68,7 @@ def time_async_function():
             finally:
                 end = time.perf_counter()
                 print(f"{func.__name__}, consume: {end - start}s")
+
         return wrapped
+
     return wrapper

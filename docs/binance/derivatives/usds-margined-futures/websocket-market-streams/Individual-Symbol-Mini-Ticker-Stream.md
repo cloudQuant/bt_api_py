@@ -12,26 +12,25 @@ On this page
 
 ## Update Speed
 
-**2s**
+- *2s**
 
 ## Response Example
-    
-    
-      {  
-        "e": "24hrMiniTicker",  // Event type  
-        "E": 123456789,         // Event time  
-        "s": "BTCUSDT",         // Symbol  
-        "c": "0.0025",          // Close price  
-        "o": "0.0010",          // Open price  
-        "h": "0.0025",          // High price  
-        "l": "0.0010",          // Low price  
-        "v": "10000",           // Total traded base asset volume  
-        "q": "18"               // Total traded quote asset volume  
-      }  
-    
 
-  * [Stream Description](</docs/derivatives/usds-margined-futures/websocket-market-streams/Individual-Symbol-Mini-Ticker-Stream#stream-description>)
-  * [Stream Name](</docs/derivatives/usds-margined-futures/websocket-market-streams/Individual-Symbol-Mini-Ticker-Stream#stream-name>)
-  * [Update Speed](</docs/derivatives/usds-margined-futures/websocket-market-streams/Individual-Symbol-Mini-Ticker-Stream#update-speed>)
-  * [Response Example](</docs/derivatives/usds-margined-futures/websocket-market-streams/Individual-Symbol-Mini-Ticker-Stream#response-example>)
 
+      {
+        "e": "24hrMiniTicker",  // Event type
+        "E": 123456789,         // Event time
+        "s": "BTCUSDT",         // Symbol
+        "c": "0.0025",          // Close price
+        "o": "0.0010",          // Open price
+        "h": "0.0025",          // High price
+        "l": "0.0010",          // Low price
+        "v": "10000",           // Total traded base asset volume
+        "q": "18"               // Total traded quote asset volume
+      }
+
+
+  - [Stream Description](</docs/derivatives/usds-margined-futures/websocket-market-streams/Individual-Symbol-Mini-Ticker-Stream#stream-description>)
+  - [Stream Name](</docs/derivatives/usds-margined-futures/websocket-market-streams/Individual-Symbol-Mini-Ticker-Stream#stream-name>)
+  - [Update Speed](</docs/derivatives/usds-margined-futures/websocket-market-streams/Individual-Symbol-Mini-Ticker-Stream#update-speed>)
+  - [Response Example](</docs/derivatives/usds-margined-futures/websocket-market-streams/Individual-Symbol-Mini-Ticker-Stream#response-example>)

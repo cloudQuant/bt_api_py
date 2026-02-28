@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 连接管理混入类 — 仅用于 Feed 基类
 
@@ -6,6 +5,7 @@
 此 Mixin 仅为 Feed（REST 请求类）添加统一的连接生命周期接口。
 HTTP 场所的 connect/disconnect 默认为 no-op（保持向后兼容）。
 """
+
 import threading
 from enum import Enum, unique
 
@@ -17,6 +17,7 @@ class FeedConnectionState(Enum):
     与 base_stream.py 中的 ConnectionState 同名但独立，
     避免 Feed 层和 DataStream 层的状态耦合。
     """
+
     DISCONNECTED = "disconnected"
     CONNECTING = "connecting"
     CONNECTED = "connected"
@@ -38,14 +39,14 @@ class ConnectionMixin:
 
     @property
     def connection_state(self) -> FeedConnectionState:
-        lock = getattr(self, '_conn_lock', None)
+        lock = getattr(self, "_conn_lock", None)
         if lock:
             with lock:
                 return self._conn_state
-        return getattr(self, '_conn_state', FeedConnectionState.DISCONNECTED)
+        return getattr(self, "_conn_state", FeedConnectionState.DISCONNECTED)
 
     def _set_connection_state(self, new_state: FeedConnectionState):
-        lock = getattr(self, '_conn_lock', None)
+        lock = getattr(self, "_conn_lock", None)
         if lock:
             with lock:
                 self._conn_state = new_state

@@ -12,38 +12,45 @@ POST `/eapi/v1/mmpSet`
 
 ## Request Weight
 
-**1**
+- *1**
 
 ## Request Parameters
 
-Name| Type| Mandatory| Description  
----|---|---|---  
-underlying| STRING| TRUE| underlying, e.g BTCUSDT  
-windowTimeInMilliseconds| LONG| TRUE| MMP Interval in milliseconds; Range (0,5000]  
-frozenTimeInMilliseconds| LONG| TRUE| MMP frozen time in milliseconds, if set to 0 manual reset is required  
-qtyLimit| DECIMAL| TRUE| quantity limit  
-deltaLimit| DECIMAL| TRUE| net delta limit  
-recvWindow| LONG| NO|   
-timestamp| LONG| YES|   
-  
+Name| Type| Mandatory| Description
+
+- --|---|---|---
+
+underlying| STRING| TRUE| underlying, e.g BTCUSDT
+
+windowTimeInMilliseconds| LONG| TRUE| MMP Interval in milliseconds; Range (0,5000]
+
+frozenTimeInMilliseconds| LONG| TRUE| MMP frozen time in milliseconds, if set to 0 manual reset is required
+
+qtyLimit| DECIMAL| TRUE| quantity limit
+
+deltaLimit| DECIMAL| TRUE| net delta limit
+
+recvWindow| LONG| NO|
+
+timestamp| LONG| YES|
+
 ## Response Example
-    
-    
-    {  
-        "underlyingId": 2,  
-        "underlying": "BTCUSDT",  
-        "windowTimeInMilliseconds": 3000,  
-        "frozenTimeInMilliseconds": 300000,  
-        "qtyLimit": "2",  
-        "deltaLimit": "2.3",  
-        "lastTriggerTime": 0  
-      
-    }  
-    
 
-  * [API Description](</docs/derivatives/option/market-maker-endpoints/Set-Market-Maker-Protection-Config#api-description>)
-  * [HTTP Request](</docs/derivatives/option/market-maker-endpoints/Set-Market-Maker-Protection-Config#http-request>)
-  * [Request Weight](</docs/derivatives/option/market-maker-endpoints/Set-Market-Maker-Protection-Config#request-weight>)
-  * [Request Parameters](</docs/derivatives/option/market-maker-endpoints/Set-Market-Maker-Protection-Config#request-parameters>)
-  * [Response Example](</docs/derivatives/option/market-maker-endpoints/Set-Market-Maker-Protection-Config#response-example>)
 
+    {
+        "underlyingId": 2,
+        "underlying": "BTCUSDT",
+        "windowTimeInMilliseconds": 3000,
+        "frozenTimeInMilliseconds": 300000,
+        "qtyLimit": "2",
+        "deltaLimit": "2.3",
+        "lastTriggerTime": 0
+
+    }
+
+
+  - [API Description](</docs/derivatives/option/market-maker-endpoints/Set-Market-Maker-Protection-Config#api-description>)
+  - [HTTP Request](</docs/derivatives/option/market-maker-endpoints/Set-Market-Maker-Protection-Config#http-request>)
+  - [Request Weight](</docs/derivatives/option/market-maker-endpoints/Set-Market-Maker-Protection-Config#request-weight>)
+  - [Request Parameters](</docs/derivatives/option/market-maker-endpoints/Set-Market-Maker-Protection-Config#request-parameters>)
+  - [Response Example](</docs/derivatives/option/market-maker-endpoints/Set-Market-Maker-Protection-Config#response-example>)

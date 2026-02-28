@@ -1,7 +1,9 @@
----
+- --
+
 name: bmad-shard-doc
 description: Execute shard-doc
----
+
+- --
 
 # shard-doc
 

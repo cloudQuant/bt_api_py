@@ -13,9 +13,6 @@ from bt_api_py.containers.orders.binance_order import BinanceSpotWssOrderData
 from bt_api_py.containers.trades.binance_trade import BinanceSpotWssTradeData
 from bt_api_py.containers.exchanges.binance_exchange_data import BinanceExchangeDataMargin
 
-pytestmark = pytest.mark.xdist_group("binance_api")
-
-
 def init_margin_wss():
     """初始化 Margin WSS 实例 (mock wss_author 避免网络调用)"""
     data_queue = queue.Queue()

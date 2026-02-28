@@ -3,25 +3,30 @@
 ## 交易所信息
 
 - **交易所名称**: SushiSwap
-- **官方网站**: https://www.sushi.com
-- **API文档**: https://docs.sushi.com
-- **24h交易量排名**: #7（DEX）
+- **官方网站**: <https://www.sushi.com>
+- **API 文档**: <https://docs.sushi.com>
+- **24h 交易量排名**: #7（DEX）
 - **区块链**: 多链
 
-## API基础信息
+## API 基础信息
 
-### 基础URL
+### 基础 URL
 
 ```text
+
 # Price API
-https://api.sushi.com/price/v1/{chainId}
+
+<https://api.sushi.com/price/v1/{chainId}>
 
 # Quote API
-https://api.sushi.com/quote/v7/{chainId}
+
+<https://api.sushi.com/quote/v7/{chainId}>
 
 # Swap API
-https://api.sushi.com/swap/v7/{chainId}
-```
+
+<https://api.sushi.com/swap/v7/{chainId}>
+
+```bash
 
 ### 认证方式
 
@@ -47,9 +52,10 @@ https://api.sushi.com/swap/v7/{chainId}
 
 ### 示例请求
 
-```
-GET https://api.sushi.com/quote/v7/1?tokenIn=0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE&tokenOut=0x6B3595068778DD592e39A122f4f5a5cF09C90fE2&amount=1000000000000000&maxSlippage=0.005
-```
+```bash
+GET <https://api.sushi.com/quote/v7/1?tokenIn=0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE&tokenOut=0x6B3595068778DD592e39A122f4f5a5cF09C90fE2&amount=1000000000000000&maxSlippage=0.005>
+
+```bash
 
 ## Swap API
 
@@ -67,9 +73,10 @@ GET https://api.sushi.com/quote/v7/1?tokenIn=0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeee
 
 ### 示例请求
 
-```
-GET https://api.sushi.com/swap/v7/1?tokenIn=0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE&tokenOut=0x6B3595068778DD592e39A122f4f5a5cF09C90fE2&amount=1000000000000000&maxSlippage=0.005&sender=0xYOUR_WALLET
-```
+```bash
+GET <https://api.sushi.com/swap/v7/1?tokenIn=0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE&tokenOut=0x6B3595068778DD592e39A122f4f5a5cF09C90fE2&amount=1000000000000000&maxSlippage=0.005&sender=0xYOUR_WALLET>
+
+```bash
 
 ## 错误代码（示例）
 
@@ -85,10 +92,12 @@ GET https://api.sushi.com/swap/v7/1?tokenIn=0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeee
 ## 代码示例
 
 ```python
+
 # 获取报价
+
 import requests
 
-url = "https://api.sushi.com/quote/v7/1"
+url = "<https://api.sushi.com/quote/v7/1">
 params = {
     "tokenIn": "0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE",
     "tokenOut": "0x6B3595068778DD592e39A122f4f5a5cF09C90fE2",
@@ -96,4 +105,5 @@ params = {
     "maxSlippage": "0.005",
 }
 print(requests.get(url, params=params).json())
-```
+
+```bash

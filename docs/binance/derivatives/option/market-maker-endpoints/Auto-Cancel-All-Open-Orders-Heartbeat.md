@@ -16,26 +16,29 @@ POST `/eapi/v1/countdownCancelAllHeartBeat`
 
 ## Request Parameters
 
-Name| Type| Mandatory| Description  
----|---|---|---  
-underlyings| STRING| YES| Option Underlying Symbols, e.g BTCUSDT,ETHUSDT  
-recvWindow| LONG| NO|   
-timestamp| LONG| YES|   
-  
+Name| Type| Mandatory| Description
+
+- --|---|---|---
+
+underlyings| STRING| YES| Option Underlying Symbols, e.g BTCUSDT,ETHUSDT
+
+recvWindow| LONG| NO|
+
+timestamp| LONG| YES|
+
 >   * The response will only include underlying symbols where the heartbeat has been successfully updated.
-> 
+>
 
 ## Response Example
-    
-    
-    {  
-     "underlyings":["BTCUSDT","ETHUSDT"]  
-    }  
-    
 
-  * [API Description](</docs/derivatives/option/market-maker-endpoints/Auto-Cancel-All-Open-Orders-Heartbeat#api-description>)
-  * [HTTP Request](</docs/derivatives/option/market-maker-endpoints/Auto-Cancel-All-Open-Orders-Heartbeat#http-request>)
-  * [Request Weight](</docs/derivatives/option/market-maker-endpoints/Auto-Cancel-All-Open-Orders-Heartbeat#request-weight>)
-  * [Request Parameters](</docs/derivatives/option/market-maker-endpoints/Auto-Cancel-All-Open-Orders-Heartbeat#request-parameters>)
-  * [Response Example](</docs/derivatives/option/market-maker-endpoints/Auto-Cancel-All-Open-Orders-Heartbeat#response-example>)
 
+    {
+     "underlyings":["BTCUSDT","ETHUSDT"]
+    }
+
+
+  - [API Description](</docs/derivatives/option/market-maker-endpoints/Auto-Cancel-All-Open-Orders-Heartbeat#api-description>)
+  - [HTTP Request](</docs/derivatives/option/market-maker-endpoints/Auto-Cancel-All-Open-Orders-Heartbeat#http-request>)
+  - [Request Weight](</docs/derivatives/option/market-maker-endpoints/Auto-Cancel-All-Open-Orders-Heartbeat#request-weight>)
+  - [Request Parameters](</docs/derivatives/option/market-maker-endpoints/Auto-Cancel-All-Open-Orders-Heartbeat#request-parameters>)
+  - [Response Example](</docs/derivatives/option/market-maker-endpoints/Auto-Cancel-All-Open-Orders-Heartbeat#response-example>)

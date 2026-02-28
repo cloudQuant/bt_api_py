@@ -1,17 +1,18 @@
-# -*- coding: utf-8 -*-
 """
 统一错误框架
 
 提供统一的错误码体系、错误翻译器基类，以及 Binance/OKX/CTP 的具体翻译器实现。
 每个场所将原始错误码翻译为统一的 UnifiedError，便于上层统一处理。
 """
-from enum import Enum, unique
+
 from dataclasses import dataclass, field
-from typing import Optional, Dict, Any, ClassVar
+from enum import Enum, unique
+from typing import Any, ClassVar, Dict, Optional
+
 from bt_api_py.exceptions import BtApiError
 
-
 # ── 错误分类 ─────────────────────────────────────────────────
+
 
 @unique
 class ErrorCategory(str, Enum):
@@ -25,6 +26,7 @@ class ErrorCategory(str, Enum):
 
 
 # ── 统一错误码 ────────────────────────────────────────────────
+
 
 @unique
 class UnifiedErrorCode(int, Enum):
@@ -78,9 +80,11 @@ class UnifiedErrorCode(int, Enum):
 
 # ── 统一错误 ──────────────────────────────────────────────────
 
+
 @dataclass
 class UnifiedError(BtApiError):
     """统一错误格式，继承 BtApiError 以兼容现有异常处理"""
+
     code: UnifiedErrorCode
     category: ErrorCategory
     venue: str
@@ -108,8 +112,10 @@ class UnifiedError(BtApiError):
 
 # ── 便捷异常子类 ──────────────────────────────────────────────
 
+
 class RateLimitError(UnifiedError):
     """限流错误"""
+
     def __init__(self, venue: str, response=None, message: str = "Rate limit exceeded"):
         super().__init__(
             code=UnifiedErrorCode.RATE_LIMIT_EXCEEDED,
@@ -122,6 +128,7 @@ class RateLimitError(UnifiedError):
 
 class AuthenticationError(UnifiedError):
     """认证错误"""
+
     def __init__(self, venue: str, response=None, message: str = "Authentication failed"):
         super().__init__(
             code=UnifiedErrorCode.INVALID_API_KEY,
@@ -134,6 +141,7 @@ class AuthenticationError(UnifiedError):
 
 class ServerError(UnifiedError):
     """服务器端错误"""
+
     def __init__(self, venue: str, status: int = 500, response=None, message: str = "Server error"):
         super().__init__(
             code=UnifiedErrorCode.INTERNAL_ERROR,
@@ -146,6 +154,7 @@ class ServerError(UnifiedError):
 
 class RequestFailedError(UnifiedError):
     """请求失败（通用）"""
+
     def __init__(self, venue: str, status: int = 0, response=None, message: str = "Request failed"):
         super().__init__(
             code=UnifiedErrorCode.INTERNAL_ERROR,
@@ -157,6 +166,7 @@ class RequestFailedError(UnifiedError):
 
 
 # ── 错误翻译器 ────────────────────────────────────────────────
+
 
 class ErrorTranslator:
     """错误翻译器基类"""
@@ -246,6 +256,7 @@ class ErrorTranslator:
 
 # ── Binance 错误翻译器 ────────────────────────────────────────
 
+
 class BinanceErrorTranslator(ErrorTranslator):
     ERROR_MAP = {
         -1000: (UnifiedErrorCode.INTERNAL_ERROR, "Unknown error"),
@@ -269,11 +280,15 @@ class BinanceErrorTranslator(ErrorTranslator):
         -2011: (UnifiedErrorCode.ORDER_ALREADY_FILLED, "Order already filled"),
         -2013: (UnifiedErrorCode.INVALID_ORDER, "Order rejected"),
         -2014: (UnifiedErrorCode.INVALID_API_KEY, "API-key format invalid"),
-        -2015: (UnifiedErrorCode.PERMISSION_DENIED, "Invalid API-key, IP, or permissions for action"),
+        -2015: (
+            UnifiedErrorCode.PERMISSION_DENIED,
+            "Invalid API-key, IP, or permissions for action",
+        ),
     }
 
 
 # ── OKX 错误翻译器 ────────────────────────────────────────────
+
 
 class OKXErrorTranslator(ErrorTranslator):
     ERROR_MAP = {
@@ -327,6 +342,7 @@ class OKXErrorTranslator(ErrorTranslator):
 
 # ── CTP 错误翻译器 ────────────────────────────────────────────
 
+
 class CTPErrorTranslator(ErrorTranslator):
     ERROR_MAP = {
         0: (None, "成功"),
@@ -352,6 +368,7 @@ class CTPErrorTranslator(ErrorTranslator):
 
 # ── IB Web API 错误翻译器 ────────────────────────────────────
 
+
 class IBWebErrorTranslator(ErrorTranslator):
     """IB Web API 错误翻译器
 
@@ -364,6 +381,7 @@ class IBWebErrorTranslator(ErrorTranslator):
       }
     }
     """
+
     ERROR_MAP = {
         "INVALID_REQUEST": (UnifiedErrorCode.INVALID_PARAMETER, "Invalid request"),
         "UNAUTHORIZED": (UnifiedErrorCode.INVALID_API_KEY, "Authentication failed"),

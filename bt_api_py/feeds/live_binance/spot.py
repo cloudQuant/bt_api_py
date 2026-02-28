@@ -1,58 +1,74 @@
-# -*- coding: utf-8 -*-
 import json
 import time
-from bt_api_py.feeds.live_binance.request_base import BinanceRequestData
-from bt_api_py.feeds.live_binance.market_wss_base import BinanceMarketWssData
-from bt_api_py.feeds.live_binance.account_wss_base import BinanceAccountWssData
+
+from bt_api_py.containers.accounts.binance_account import BinanceSpotWssAccountData
 from bt_api_py.containers.exchanges.binance_exchange_data import BinanceExchangeDataSpot
+from bt_api_py.containers.orders.binance_order import (
+    BinanceRequestOrderData,
+    BinanceSpotWssOrderData,
+)
+from bt_api_py.containers.trades.binance_trade import BinanceSpotWssTradeData
+from bt_api_py.feeds.live_binance.account_wss_base import BinanceAccountWssData
+from bt_api_py.feeds.live_binance.market_wss_base import BinanceMarketWssData
+from bt_api_py.feeds.live_binance.request_base import BinanceRequestData
 from bt_api_py.functions.log_message import SpdLogManager
 from bt_api_py.functions.utils import update_extra_data
-from bt_api_py.containers.orders.binance_order import (BinanceRequestOrderData,
-                                                       BinanceSpotWssOrderData)
-from bt_api_py.containers.accounts.binance_account import BinanceSpotWssAccountData
-from bt_api_py.containers.trades.binance_trade import BinanceSpotWssTradeData
 
 
 class BinanceRequestDataSpot(BinanceRequestData):
     def __init__(self, data_queue, **kwargs):
-        super(BinanceRequestDataSpot, self).__init__(data_queue, **kwargs)
+        super().__init__(data_queue, **kwargs)
         self.asset_type = kwargs.get("asset_type", "SPOT")
         self.logger_name = kwargs.get("logger_name", "binance_spot_feed.log")
         self._params = BinanceExchangeDataSpot()
-        self.request_logger = SpdLogManager("./logs/" + self.logger_name, "request",
-                                            0, 0, False).create_logger()
-        self.async_logger = SpdLogManager("./logs/" + self.logger_name, "async_request",
-                                          0, 0, False).create_logger()
+        self.request_logger = SpdLogManager(
+            "./logs/" + self.logger_name, "request", 0, 0, False
+        ).create_logger()
+        self.async_logger = SpdLogManager(
+            "./logs/" + self.logger_name, "async_request", 0, 0, False
+        ).create_logger()
 
-    def _make_order(self, symbol, vol, price=None, order_type='buy-limit',
-                    offset='open', post_only=False, client_order_id=None,
-                    extra_data=None, **kwargs):
+    def _make_order(
+        self,
+        symbol,
+        vol,
+        price=None,
+        order_type="buy-limit",
+        offset="open",
+        post_only=False,
+        client_order_id=None,
+        extra_data=None,
+        **kwargs,
+    ):
         request_symbol = self._params.get_symbol(symbol)
         request_type = "make_order"
         path = self._params.get_rest_path(request_type)
-        side, order_type = order_type.split('-')
-        time_in_force = kwargs.get('time_in_force', "GTC")
+        side, order_type = order_type.split("-")
+        time_in_force = kwargs.get("time_in_force", "GTC")
         params = {
-            'symbol': request_symbol,
-            'side': side.upper(),
-            'quantity': vol,
-            'price': price,
-            'type': order_type.upper(),
-            'timeInForce': time_in_force,
+            "symbol": request_symbol,
+            "side": side.upper(),
+            "quantity": vol,
+            "price": price,
+            "type": order_type.upper(),
+            "timeInForce": time_in_force,
         }
         if client_order_id is not None:
-            params['newClientOrderId'] = client_order_id
-        if order_type == 'market':
+            params["newClientOrderId"] = client_order_id
+        if order_type == "market":
             params.pop("timeInForce", None)
             params.pop("price", None)
-        extra_data = update_extra_data(extra_data, **{
-            "request_type": request_type,
-            "symbol_name": symbol,
-            "asset_type": self.asset_type,
-            "exchange_name": self.exchange_name,
-            "post_only": post_only,
-            "normalize_function": BinanceRequestDataSpot._make_order_normalize_function,
-        })
+        extra_data = update_extra_data(
+            extra_data,
+            **{
+                "request_type": request_type,
+                "symbol_name": symbol,
+                "asset_type": self.asset_type,
+                "exchange_name": self.exchange_name,
+                "post_only": post_only,
+                "normalize_function": BinanceRequestDataSpot._make_order_normalize_function,
+            },
+        )
         # if kwargs is not None:
         #     extra_data.update(kwargs)
         return path, params, extra_data
@@ -63,8 +79,7 @@ class BinanceRequestDataSpot(BinanceRequestData):
         symbol_name = extra_data["symbol_name"]
         asset_type = extra_data["asset_type"]
         if isinstance(input_data, list):
-            data = [BinanceRequestOrderData(i, symbol_name, asset_type, True)
-                    for i in input_data]
+            data = [BinanceRequestOrderData(i, symbol_name, asset_type, True) for i in input_data]
         elif isinstance(input_data, dict):
             data = [BinanceRequestOrderData(input_data, symbol_name, asset_type, True)]
         else:
@@ -73,7 +88,7 @@ class BinanceRequestDataSpot(BinanceRequestData):
 
     # ==================== 账户快照接口 ====================
 
-    def _get_account_snapshot(self, account_type='SPOT', extra_data=None, **kwargs):
+    def _get_account_snapshot(self, account_type="SPOT", extra_data=None, **kwargs):
         """获取账户快照
 
         Args:
@@ -84,21 +99,24 @@ class BinanceRequestDataSpot(BinanceRequestData):
         Returns:
             tuple: (path, params, extra_data)
         """
-        request_type = 'get_account_snapshot'
+        request_type = "get_account_snapshot"
         path = self._params.get_rest_path(request_type)
         params = {
-            'type': account_type,
+            "type": account_type,
         }
-        extra_data = update_extra_data(extra_data, **{
-            "request_type": request_type,
-            "symbol_name": "ALL",
-            "asset_type": self.asset_type,
-            "exchange_name": self.exchange_name,
-            "normalize_function": None,
-        })
+        extra_data = update_extra_data(
+            extra_data,
+            **{
+                "request_type": request_type,
+                "symbol_name": "ALL",
+                "asset_type": self.asset_type,
+                "exchange_name": self.exchange_name,
+                "normalize_function": None,
+            },
+        )
         return path, params, extra_data
 
-    def get_account_snapshot(self, account_type='SPOT', extra_data=None, **kwargs):
+    def get_account_snapshot(self, account_type="SPOT", extra_data=None, **kwargs):
         """获取账户快照
 
         Args:
@@ -126,19 +144,22 @@ class BinanceRequestDataSpot(BinanceRequestData):
         Returns:
             tuple: (path, params, extra_data)
         """
-        request_type = 'get_ticker_trading_day'
+        request_type = "get_ticker_trading_day"
         path = self._params.get_rest_path(request_type)
         params = {}
         if symbol is not None:
             request_symbol = self._params.get_symbol(symbol)
-            params['symbol'] = request_symbol
-        extra_data = update_extra_data(extra_data, **{
-            "request_type": request_type,
-            "symbol_name": symbol or "ALL",
-            "asset_type": self.asset_type,
-            "exchange_name": self.exchange_name,
-            "normalize_function": None,
-        })
+            params["symbol"] = request_symbol
+        extra_data = update_extra_data(
+            extra_data,
+            **{
+                "request_type": request_type,
+                "symbol_name": symbol or "ALL",
+                "asset_type": self.asset_type,
+                "exchange_name": self.exchange_name,
+                "normalize_function": None,
+            },
+        )
         return path, params, extra_data
 
     def get_ticker_trading_day(self, symbol=None, extra_data=None, **kwargs):
@@ -172,20 +193,23 @@ class BinanceRequestDataSpot(BinanceRequestData):
         Returns:
             tuple: (path, params, extra_data)
         """
-        request_type = 'futures_transfer'
-        path = self._params.get_rest_path('transfer')
+        request_type = "futures_transfer"
+        path = self._params.get_rest_path("transfer")
         params = {
-            'asset': asset,
-            'amount': amount,
-            'type': transfer_type,
+            "asset": asset,
+            "amount": amount,
+            "type": transfer_type,
         }
-        extra_data = update_extra_data(extra_data, **{
-            "request_type": request_type,
-            "symbol_name": asset,
-            "asset_type": self.asset_type,
-            "exchange_name": self.exchange_name,
-            "normalize_function": None,
-        })
+        extra_data = update_extra_data(
+            extra_data,
+            **{
+                "request_type": request_type,
+                "symbol_name": asset,
+                "asset_type": self.asset_type,
+                "exchange_name": self.exchange_name,
+                "normalize_function": None,
+            },
+        )
         return path, params, extra_data
 
     def futures_transfer(self, asset, amount, transfer_type, extra_data=None, **kwargs):
@@ -201,14 +225,21 @@ class BinanceRequestDataSpot(BinanceRequestData):
             RequestData: 请求结果
         """
         path, params, extra_data = self._futures_transfer(
-            asset=asset, amount=amount, transfer_type=transfer_type,
-            extra_data=extra_data, **kwargs
+            asset=asset, amount=amount, transfer_type=transfer_type, extra_data=extra_data, **kwargs
         )
         data = self.request(path, params=params, extra_data=extra_data, is_sign=True)
         return data
 
-    def _get_futures_transfer_history(self, asset=None, start_time=None, end_time=None,
-                                      limit=None, page=None, extra_data=None, **kwargs):
+    def _get_futures_transfer_history(
+        self,
+        asset=None,
+        start_time=None,
+        end_time=None,
+        limit=None,
+        page=None,
+        extra_data=None,
+        **kwargs,
+    ):
         """查询合约划转历史
 
         Args:
@@ -223,30 +254,41 @@ class BinanceRequestDataSpot(BinanceRequestData):
         Returns:
             tuple: (path, params, extra_data)
         """
-        request_type = 'get_futures_transfer_history'
+        request_type = "get_futures_transfer_history"
         path = self._params.get_rest_path(request_type)
         params = {}
         if asset is not None:
-            params['asset'] = asset
+            params["asset"] = asset
         if start_time is not None:
-            params['startTime'] = start_time
+            params["startTime"] = start_time
         if end_time is not None:
-            params['endTime'] = end_time
+            params["endTime"] = end_time
         if limit is not None:
-            params['limit'] = limit
+            params["limit"] = limit
         if page is not None:
-            params['page'] = page
-        extra_data = update_extra_data(extra_data, **{
-            "request_type": request_type,
-            "symbol_name": asset or "ALL",
-            "asset_type": self.asset_type,
-            "exchange_name": self.exchange_name,
-            "normalize_function": None,
-        })
+            params["page"] = page
+        extra_data = update_extra_data(
+            extra_data,
+            **{
+                "request_type": request_type,
+                "symbol_name": asset or "ALL",
+                "asset_type": self.asset_type,
+                "exchange_name": self.exchange_name,
+                "normalize_function": None,
+            },
+        )
         return path, params, extra_data
 
-    def get_futures_transfer_history(self, asset=None, start_time=None, end_time=None,
-                                     limit=None, page=None, extra_data=None, **kwargs):
+    def get_futures_transfer_history(
+        self,
+        asset=None,
+        start_time=None,
+        end_time=None,
+        limit=None,
+        page=None,
+        extra_data=None,
+        **kwargs,
+    ):
         """查询合约划转历史
 
         Args:
@@ -260,29 +302,55 @@ class BinanceRequestDataSpot(BinanceRequestData):
             RequestData: 请求结果
         """
         path, params, extra_data = self._get_futures_transfer_history(
-            asset=asset, start_time=start_time, end_time=end_time,
-            limit=limit, page=page, extra_data=extra_data, **kwargs
+            asset=asset,
+            start_time=start_time,
+            end_time=end_time,
+            limit=limit,
+            page=page,
+            extra_data=extra_data,
+            **kwargs,
         )
         data = self.request(path, params=params, extra_data=extra_data, is_sign=True)
         return data
 
     # noinspection PyBroadException
-    def make_order(self, symbol, vol, price=None, order_type='buy-limit',
-                   offset='open', post_only=False, client_order_id=None, extra_data=None, **kwargs):
+    def make_order(
+        self,
+        symbol,
+        vol,
+        price=None,
+        order_type="buy-limit",
+        offset="open",
+        post_only=False,
+        client_order_id=None,
+        extra_data=None,
+        **kwargs,
+    ):
         print("run spot make_order")
-        path, params, extra_data = self._make_order(symbol, vol, price, order_type, offset,
-                                                    post_only, client_order_id, extra_data,
-                                                    **kwargs)
+        path, params, extra_data = self._make_order(
+            symbol, vol, price, order_type, offset, post_only, client_order_id, extra_data, **kwargs
+        )
         # print("params = ", params)
         data = self.request(path, params=params, extra_data=extra_data, is_sign=True)
         return data
 
     # ==================== 高级订单接口 ====================
 
-    def _cancel_replace_order(self, symbol, cancel_order_id=None, cancel_client_order_id=None,
-                              side=None, order_type=None, quantity=None, price=None,
-                              stop_price=None, new_client_order_id=None,
-                              cancel_restrictions=None, extra_data=None, **kwargs):
+    def _cancel_replace_order(
+        self,
+        symbol,
+        cancel_order_id=None,
+        cancel_client_order_id=None,
+        side=None,
+        order_type=None,
+        quantity=None,
+        price=None,
+        stop_price=None,
+        new_client_order_id=None,
+        cancel_restrictions=None,
+        extra_data=None,
+        **kwargs,
+    ):
         """取消并替换订单 (Cancel Replace Order)
 
         Args:
@@ -302,54 +370,75 @@ class BinanceRequestDataSpot(BinanceRequestData):
         Returns:
             tuple: (path, params, extra_data)
         """
-        request_type = 'cancel_replace_order'
+        request_type = "cancel_replace_order"
         request_symbol = self._params.get_symbol(symbol)
         path = self._params.get_rest_path(request_type)
-        params = {'symbol': request_symbol}
+        params = {"symbol": request_symbol}
 
         if cancel_order_id is not None:
-            params['cancelOrderId'] = cancel_order_id
+            params["cancelOrderId"] = cancel_order_id
         if cancel_client_order_id is not None:
-            params['cancelOrigClientOrderId'] = cancel_client_order_id
+            params["cancelOrigClientOrderId"] = cancel_client_order_id
         if side is not None:
-            params['side'] = side.upper()
+            params["side"] = side.upper()
         if order_type is not None:
-            params['type'] = order_type.upper()
+            params["type"] = order_type.upper()
         if quantity is not None:
-            params['quantity'] = quantity
+            params["quantity"] = quantity
         if price is not None:
-            params['price'] = price
+            params["price"] = price
         if stop_price is not None:
-            params['stopPrice'] = stop_price
+            params["stopPrice"] = stop_price
         if new_client_order_id is not None:
-            params['newClientOrderId'] = new_client_order_id
+            params["newClientOrderId"] = new_client_order_id
         if cancel_restrictions is not None:
-            params['cancelRestrictions'] = cancel_restrictions
+            params["cancelRestrictions"] = cancel_restrictions
 
-        extra_data = update_extra_data(extra_data, **{
-            "request_type": request_type,
-            "symbol_name": symbol,
-            "asset_type": self.asset_type,
-            "exchange_name": self.exchange_name,
-            "normalize_function": BinanceRequestDataSpot._make_order_normalize_function,
-        })
+        extra_data = update_extra_data(
+            extra_data,
+            **{
+                "request_type": request_type,
+                "symbol_name": symbol,
+                "asset_type": self.asset_type,
+                "exchange_name": self.exchange_name,
+                "normalize_function": BinanceRequestDataSpot._make_order_normalize_function,
+            },
+        )
         return path, params, extra_data
 
-    def cancel_replace_order(self, symbol, cancel_order_id=None, cancel_client_order_id=None,
-                             side=None, order_type=None, quantity=None, price=None,
-                             stop_price=None, new_client_order_id=None,
-                             cancel_restrictions=None, extra_data=None, **kwargs):
+    def cancel_replace_order(
+        self,
+        symbol,
+        cancel_order_id=None,
+        cancel_client_order_id=None,
+        side=None,
+        order_type=None,
+        quantity=None,
+        price=None,
+        stop_price=None,
+        new_client_order_id=None,
+        cancel_restrictions=None,
+        extra_data=None,
+        **kwargs,
+    ):
         """取消并替换订单
 
         Returns:
             RequestData: 请求结果
         """
         path, params, extra_data = self._cancel_replace_order(
-            symbol=symbol, cancel_order_id=cancel_order_id,
-            cancel_client_order_id=cancel_client_order_id, side=side,
-            order_type=order_type, quantity=quantity, price=price,
-            stop_price=stop_price, new_client_order_id=new_client_order_id,
-            cancel_restrictions=cancel_restrictions, extra_data=extra_data, **kwargs
+            symbol=symbol,
+            cancel_order_id=cancel_order_id,
+            cancel_client_order_id=cancel_client_order_id,
+            side=side,
+            order_type=order_type,
+            quantity=quantity,
+            price=price,
+            stop_price=stop_price,
+            new_client_order_id=new_client_order_id,
+            cancel_restrictions=cancel_restrictions,
+            extra_data=extra_data,
+            **kwargs,
         )
         data = self.request(path, params=params, extra_data=extra_data, is_sign=True)
         return data
@@ -365,20 +454,23 @@ class BinanceRequestDataSpot(BinanceRequestData):
         Returns:
             tuple: (path, params, extra_data)
         """
-        request_type = 'cancel_all'
+        request_type = "cancel_all"
         path = self._params.get_rest_path(request_type)
         params = {}
         if symbol is not None:
             request_symbol = self._params.get_symbol(symbol)
-            params['symbol'] = request_symbol
+            params["symbol"] = request_symbol
 
-        extra_data = update_extra_data(extra_data, **{
-            "request_type": request_type,
-            "symbol_name": symbol or "ALL",
-            "asset_type": self.asset_type,
-            "exchange_name": self.exchange_name,
-            "normalize_function": None,
-        })
+        extra_data = update_extra_data(
+            extra_data,
+            **{
+                "request_type": request_type,
+                "symbol_name": symbol or "ALL",
+                "asset_type": self.asset_type,
+                "exchange_name": self.exchange_name,
+                "normalize_function": None,
+            },
+        )
         return path, params, extra_data
 
     def cancel_all_orders(self, symbol=None, extra_data=None, **kwargs):
@@ -396,8 +488,16 @@ class BinanceRequestDataSpot(BinanceRequestData):
         data = self.request(path, params=params, extra_data=extra_data, is_sign=True)
         return data
 
-    def _amend_keep_priority(self, symbol, order_id=None, client_order_id=None,
-                            quantity=None, price=None, extra_data=None, **kwargs):
+    def _amend_keep_priority(
+        self,
+        symbol,
+        order_id=None,
+        client_order_id=None,
+        quantity=None,
+        price=None,
+        extra_data=None,
+        **kwargs,
+    ):
         """修改订单并保持队列优先级
 
         Args:
@@ -412,39 +512,55 @@ class BinanceRequestDataSpot(BinanceRequestData):
         Returns:
             tuple: (path, params, extra_data)
         """
-        request_type = 'amend_keep_priority'
+        request_type = "amend_keep_priority"
         request_symbol = self._params.get_symbol(symbol)
         path = self._params.get_rest_path(request_type)
-        params = {'symbol': request_symbol}
+        params = {"symbol": request_symbol}
 
         if order_id is not None:
-            params['orderId'] = order_id
+            params["orderId"] = order_id
         if client_order_id is not None:
-            params['origClientOrderId'] = client_order_id
+            params["origClientOrderId"] = client_order_id
         if quantity is not None:
-            params['quantity'] = quantity
+            params["quantity"] = quantity
         if price is not None:
-            params['price'] = price
+            params["price"] = price
 
-        extra_data = update_extra_data(extra_data, **{
-            "request_type": request_type,
-            "symbol_name": symbol,
-            "asset_type": self.asset_type,
-            "exchange_name": self.exchange_name,
-            "normalize_function": BinanceRequestDataSpot._make_order_normalize_function,
-        })
+        extra_data = update_extra_data(
+            extra_data,
+            **{
+                "request_type": request_type,
+                "symbol_name": symbol,
+                "asset_type": self.asset_type,
+                "exchange_name": self.exchange_name,
+                "normalize_function": BinanceRequestDataSpot._make_order_normalize_function,
+            },
+        )
         return path, params, extra_data
 
-    def amend_keep_priority(self, symbol, order_id=None, client_order_id=None,
-                           quantity=None, price=None, extra_data=None, **kwargs):
+    def amend_keep_priority(
+        self,
+        symbol,
+        order_id=None,
+        client_order_id=None,
+        quantity=None,
+        price=None,
+        extra_data=None,
+        **kwargs,
+    ):
         """修改订单并保持队列优先级
 
         Returns:
             RequestData: 请求结果
         """
         path, params, extra_data = self._amend_keep_priority(
-            symbol=symbol, order_id=order_id, client_order_id=client_order_id,
-            quantity=quantity, price=price, extra_data=extra_data, **kwargs
+            symbol=symbol,
+            order_id=order_id,
+            client_order_id=client_order_id,
+            quantity=quantity,
+            price=price,
+            extra_data=extra_data,
+            **kwargs,
         )
         data = self.request(path, params=params, extra_data=extra_data, is_sign=True)
         return data
@@ -452,7 +568,7 @@ class BinanceRequestDataSpot(BinanceRequestData):
 
 class BinanceMarketWssDataSpot(BinanceMarketWssData):
     def __init__(self, data_queue, **kwargs):
-        super(BinanceMarketWssDataSpot, self).__init__(data_queue, **kwargs)
+        super().__init__(data_queue, **kwargs)
         self.asset_type = kwargs.get("asset_type", "SPOT")
         self._params = BinanceExchangeDataSpot()
 
@@ -460,7 +576,7 @@ class BinanceMarketWssDataSpot(BinanceMarketWssData):
 class BinanceAccountWssDataSpot(BinanceAccountWssData):
     def __init__(self, data_queue, **kwargs):
         kwargs.setdefault("exchange_data", BinanceExchangeDataSpot())
-        super(BinanceAccountWssDataSpot, self).__init__(data_queue, **kwargs)
+        super().__init__(data_queue, **kwargs)
         self._params = BinanceExchangeDataSpot()
 
     def get_listen_key(self, max_retries=3):
@@ -472,6 +588,7 @@ class BinanceAccountWssDataSpot(BinanceAccountWssData):
         """
         import ssl
         import threading
+
         import websocket as _ws
 
         result_holder = [None]
@@ -479,11 +596,15 @@ class BinanceAccountWssDataSpot(BinanceAccountWssData):
         done = threading.Event()
 
         def _on_open(ws):
-            ws.send(json.dumps({
-                "id": "start-listen-key",
-                "method": "userDataStream.start",
-                "params": {"apiKey": self.public_key}
-            }))
+            ws.send(
+                json.dumps(
+                    {
+                        "id": "start-listen-key",
+                        "method": "userDataStream.start",
+                        "params": {"apiKey": self.public_key},
+                    }
+                )
+            )
 
         def _on_message(ws, message):
             rsp = json.loads(message)
@@ -519,8 +640,10 @@ class BinanceAccountWssDataSpot(BinanceAccountWssData):
                 if result_holder[0] is not None:
                     return result_holder[0]
                 last_err = error_holder[0]
-                self.logger.warn(f"get_listen_key attempt {attempt + 1}/{max_retries} "
-                                 f"unexpected response: {last_err}")
+                self.logger.warn(
+                    f"get_listen_key attempt {attempt + 1}/{max_retries} "
+                    f"unexpected response: {last_err}"
+                )
             except Exception as e:
                 last_err = e
                 self.logger.warn(f"get_listen_key attempt {attempt + 1}/{max_retries} error: {e}")
@@ -535,12 +658,9 @@ class BinanceAccountWssDataSpot(BinanceAccountWssData):
 
     def open_rsp(self):
         self.wss_logger.info(
-            f"===== {time.strftime('%Y-%m-%d %H:%M:%S')} {self._params.exchange_name} Websocket Connected =====")
-        subscribe_msg = json.dumps({
-            "method": "SUBSCRIBE",
-            "params": [self.listen_key],
-            "id": 1
-        })
+            f"===== {time.strftime('%Y-%m-%d %H:%M:%S')} {self._params.exchange_name} Websocket Connected ====="
+        )
+        subscribe_msg = json.dumps({"method": "SUBSCRIBE", "params": [self.listen_key], "id": 1})
         self.ws.send(subscribe_msg)
 
     def handle_data(self, content):
@@ -567,14 +687,14 @@ class BinanceAccountWssDataSpot(BinanceAccountWssData):
 
     def push_order(self, content):
         # print("订阅到order数据")
-        symbol = content['s']
+        symbol = content["s"]
         order_data = BinanceSpotWssOrderData(content, symbol, self.asset_type, True)
         self.data_queue.put(order_data)
         # print("获取order成功，当前order_status 为：", order_data.get_order_status())
 
     def push_trade(self, content):
         # print("订阅到trade数据")
-        symbol = content['s']
+        symbol = content["s"]
         trade_data = BinanceSpotWssTradeData(content, symbol, self.asset_type, True)
         self.data_queue.put(trade_data)
         # print("获取trade成功，当前trade_id 为：", trade_data.get_trade_id())
@@ -591,6 +711,6 @@ class BinanceAccountWssDataSpot(BinanceAccountWssData):
             "B": "500.00000000"
         }
         """
-        symbol = content.get('s', 'ALL')
+        symbol = content.get("s", "ALL")
         balance_data = BinanceSpotWssAccountData(content, symbol, self.asset_type, True)
         self.data_queue.put(balance_data)

@@ -17,21 +17,25 @@ GET `/sapi/v1/margin/delist-schedule`
 ## Request Weight(IP)​
 
 
-**100**
+- *100**
 
 
 ## Request Parameters​
 
 
 | Name | Type | Mandatory | Description |
+
 | --- | --- | --- | --- |
+
 | recvWindow | LONG | NO |  |
+
 | timestamp | LONG | YES |  |
 
 
 ## Response Example​
 
 
-```
-[  {    "delistTime": 1686161202000,    "crossMarginAssets": [      "BTC",      "USDT"    ],    "isolatedMarginSymbols": [      "ADAUSDT",      "BNBUSDT"    ]  },  {    "delistTime": 1686222232000,    "crossMarginAssets": [      "ADA"    ],    "isolatedMarginSymbols": []  }]
-```
+```bash
+[{    "delistTime": 1686161202000,    "crossMarginAssets": ["BTC",      "USDT"  ],    "isolatedMarginSymbols": ["ADAUSDT",      "BNBUSDT"   ]  },  {    "delistTime": 1686222232000,    "crossMarginAssets": ["ADA"   ],    "isolatedMarginSymbols": []  }]
+
+```bash

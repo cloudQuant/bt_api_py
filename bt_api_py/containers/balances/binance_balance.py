@@ -1,12 +1,13 @@
-import time
 import json
+import time
+
 from bt_api_py.containers.balances.balance import BalanceData
-from bt_api_py.functions.utils import from_dict_get_string, from_dict_get_float
+from bt_api_py.functions.utils import from_dict_get_float, from_dict_get_string
 
 
 class BinanceSpotRequestBalanceData(BalanceData):
     def __init__(self, balance_info, symbol_name, asset_type, has_been_json_encoded=False):
-        super(BinanceSpotRequestBalanceData, self).__init__(balance_info, has_been_json_encoded)
+        super().__init__(balance_info, has_been_json_encoded)
         self.exchange_name = "BINANCE"
         self.account_type = "SPOT"
         self.symbol_name = symbol_name
@@ -112,7 +113,7 @@ class BinanceSpotRequestBalanceData(BalanceData):
         # return None
 
     def get_unrealized_profit(self):
-        """# 总的未实现利润 """
+        """# 总的未实现利润"""
         return None
 
     def get_interest(self):
@@ -122,7 +123,7 @@ class BinanceSpotRequestBalanceData(BalanceData):
 
 class BinanceSwapRequestBalanceData(BalanceData):
     def __init__(self, balance_info, symbol_name, asset_type, has_been_json_encoded=False):
-        super(BinanceSwapRequestBalanceData, self).__init__(balance_info, has_been_json_encoded)
+        super().__init__(balance_info, has_been_json_encoded)
         self.exchange_name = "BINANCE"
         self.symbol_name = symbol_name
         self.local_update_time = time.time()  # 本地时间戳
@@ -151,13 +152,19 @@ class BinanceSwapRequestBalanceData(BalanceData):
         self.account_id = from_dict_get_string(self.balance_data, "accountAlias")
         self.account_type = from_dict_get_string(self.balance_data, "asset")
         self.max_withdraw_amount = from_dict_get_float(self.balance_data, "maxWithdrawAmount")
-        self.margin = from_dict_get_float(self.balance_data, "marginBalance") \
-            if "marginBalance" in self.balance_data \
+        self.margin = (
+            from_dict_get_float(self.balance_data, "marginBalance")
+            if "marginBalance" in self.balance_data
             else from_dict_get_float(self.balance_data, "balance")
+        )
         self.maintain_margin = from_dict_get_float(self.balance_data, "maintMargin")
         self.available_margin = from_dict_get_float(self.balance_data, "availableBalance")
-        self.open_order_initial_margin = from_dict_get_float(self.balance_data, "openOrderInitialMargin")
-        self.position_initial_margin = from_dict_get_float(self.balance_data, "positionInitialMargin")
+        self.open_order_initial_margin = from_dict_get_float(
+            self.balance_data, "openOrderInitialMargin"
+        )
+        self.position_initial_margin = from_dict_get_float(
+            self.balance_data, "positionInitialMargin"
+        )
         self.unrealized_profit = from_dict_get_float(self.balance_data, "crossUnPnl")
         self.has_been_init_data = True
         return self
@@ -179,7 +186,6 @@ class BinanceSwapRequestBalanceData(BalanceData):
                 "position_initial_margin": self.position_initial_margin,
                 "open_order_initial_margin": self.open_order_initial_margin,
                 "unrealized_profit": self.unrealized_profit,
-
             }
         return self.all_data
 
@@ -252,7 +258,7 @@ class BinanceSwapRequestBalanceData(BalanceData):
         return self.position_initial_margin
 
     def get_unrealized_profit(self):
-        """# 总的未实现利润 """
+        """# 总的未实现利润"""
         return self.unrealized_profit
 
     def get_interest(self):
@@ -262,7 +268,7 @@ class BinanceSwapRequestBalanceData(BalanceData):
 
 class BinanceSwapWssBalanceData(BalanceData):
     def __init__(self, balance_info, symbol_name, asset_type, has_been_json_encoded=False):
-        super(BinanceSwapWssBalanceData, self).__init__(balance_info, has_been_json_encoded)
+        super().__init__(balance_info, has_been_json_encoded)
         self.exchange_name = "BINANCE"
         self.symbol_name = symbol_name
         self.local_update_time = time.time()  # 本地时间戳
@@ -280,7 +286,7 @@ class BinanceSwapWssBalanceData(BalanceData):
             self.has_been_json_encoded = True
         if self.has_been_init_data:
             return self
-        self.account_type = from_dict_get_string(self.balance_data, 'a')
+        self.account_type = from_dict_get_string(self.balance_data, "a")
         self.margin = from_dict_get_float(self.balance_data, "wb")
         self.has_been_init_data = True
         return self
@@ -293,7 +299,7 @@ class BinanceSwapWssBalanceData(BalanceData):
                 "asset_type": self.asset_type,
                 "local_update_time": self.local_update_time,
                 "account_type": self.account_type,
-                "margin": self.margin
+                "margin": self.margin,
             }
         return self.all_data
 
@@ -366,7 +372,7 @@ class BinanceSwapWssBalanceData(BalanceData):
         # return None
 
     def get_unrealized_profit(self):
-        """# 总的未实现利润 """
+        """# 总的未实现利润"""
         return None
 
     def get_interest(self):
@@ -376,7 +382,7 @@ class BinanceSwapWssBalanceData(BalanceData):
 
 class BinanceSpotWssBalanceData(BalanceData):
     def __init__(self, balance_info, symbol_name, asset_type, has_been_json_encoded=False):
-        super(BinanceSpotWssBalanceData, self).__init__(balance_info, has_been_json_encoded)
+        super().__init__(balance_info, has_been_json_encoded)
         self.exchange_name = "BINANCE"
         self.symbol_name = symbol_name
         self.local_update_time = time.time()  # 本地时间戳
@@ -480,7 +486,7 @@ class BinanceSpotWssBalanceData(BalanceData):
         return self.position_initial_margin
 
     def get_unrealized_profit(self):
-        """# 总的未实现利润 """
+        """# 总的未实现利润"""
         return None
 
     def get_interest(self):

@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 from bt_api_py.feeds.live_okx.mixins.account_mixin import AccountMixin
 from bt_api_py.feeds.live_okx.mixins.copy_trading_mixin import CopyTradingMixin
 from bt_api_py.feeds.live_okx.mixins.funding_mixin import FundingMixin

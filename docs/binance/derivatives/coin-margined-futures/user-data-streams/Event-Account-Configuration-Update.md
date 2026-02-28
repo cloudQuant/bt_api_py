@@ -11,20 +11,19 @@ When the account configuration is changed, the event type will be pushed as `ACC
 `ACCOUNT_CONFIG_UPDATE`
 
 ## Response Example
-    
-    
-    {  
-        "e":"ACCOUNT_CONFIG_UPDATE",       // Event Type  
-        "E":1611646737479,		           // Event Time  
-        "T":1611646737476,		           // Transaction Time  
-        "ac":{								  
-        "s":"BTCUSD_PERP",				   // symbol  
-        "l":25						       // leverage  
-        }  
-    }  
-    
 
-  * [Event Description](</docs/derivatives/coin-margined-futures/user-data-streams/Event-Account-Configuration-Update#event-description>)
-  * [Event Name](</docs/derivatives/coin-margined-futures/user-data-streams/Event-Account-Configuration-Update#event-name>)
-  * [Response Example](</docs/derivatives/coin-margined-futures/user-data-streams/Event-Account-Configuration-Update#response-example>)
 
+    {
+        "e":"ACCOUNT_CONFIG_UPDATE",       // Event Type
+        "E":1611646737479,                   // Event Time
+        "T":1611646737476,                   // Transaction Time
+        "ac":{
+        "s":"BTCUSD_PERP",                   // symbol
+        "l":25                               // leverage
+        }
+    }
+
+
+  - [Event Description](</docs/derivatives/coin-margined-futures/user-data-streams/Event-Account-Configuration-Update#event-description>)
+  - [Event Name](</docs/derivatives/coin-margined-futures/user-data-streams/Event-Account-Configuration-Update#event-name>)
+  - [Response Example](</docs/derivatives/coin-margined-futures/user-data-streams/Event-Account-Configuration-Update#response-example>)

@@ -1,7 +1,9 @@
----
+- --
+
 description: 'Generate AI-optimized project context file. Use when the user says ""lets create project context for game dev""'
 auto_execution_mode: "iterate"
----
+
+- --
 
 # generate-project-context
 

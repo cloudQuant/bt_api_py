@@ -12,52 +12,57 @@ GET `/futures/data/topLongShortPositionRatio`
 
 ## Request Weight
 
-**0**
+- *0**
 
 ## Request Parameters
 
-Name| Type| Mandatory| Description  
----|---|---|---  
-symbol| STRING| YES|   
-period| ENUM| YES| "5m","15m","30m","1h","2h","4h","6h","12h","1d"  
-limit| LONG| NO| default 30, max 500  
-startTime| LONG| NO|   
-endTime| LONG| NO|   
-  
->   * If startTime and endTime are not sent, the most recent data is returned.
->   * Only the data of the latest 30 days is available.
->   * IP rate limit 1000 requests/5min
-> 
+Name| Type| Mandatory| Description
+
+- --|---|---|---
+
+symbol| STRING| YES|
+
+period| ENUM| YES| "5m","15m","30m","1h","2h","4h","6h","12h","1d"
+
+limit| LONG| NO| default 30, max 500
+
+startTime| LONG| NO|
+
+endTime| LONG| NO|
+
+>   *If startTime and endTime are not sent, the most recent data is returned.
+>  *Only the data of the latest 30 days is available.
+>  * IP rate limit 1000 requests/5min
+>
 
 ## Response Example
-    
-    
-    [  
-        {   
-             "symbol":"BTCUSDT",  
-    	      "longShortRatio":"1.4342",// long/short position ratio of top traders  
-    	      "longAccount": "0.5891", // long positions ratio of top traders  
-    	      "shortAccount":"0.4108", // short positions ratio of top traders  
-    	      "timestamp":"1583139600000"  
-          
-         },  
-           
-         {  
-               
-             "symbol":"BTCUSDT",  
-    	      "longShortRatio":"1.4337",  
-    	      "longAccount": "0.3583",   
-    	      "shortAccount":"0.6417", 	                  
-    	      "timestamp":"1583139900000"  
-    	                 
-            },     
-    	      
-    ]  
-    
 
-  * [API Description](</docs/derivatives/usds-margined-futures/market-data/rest-api/Top-Trader-Long-Short-Ratio#api-description>)
-  * [HTTP Request](</docs/derivatives/usds-margined-futures/market-data/rest-api/Top-Trader-Long-Short-Ratio#http-request>)
-  * [Request Weight](</docs/derivatives/usds-margined-futures/market-data/rest-api/Top-Trader-Long-Short-Ratio#request-weight>)
-  * [Request Parameters](</docs/derivatives/usds-margined-futures/market-data/rest-api/Top-Trader-Long-Short-Ratio#request-parameters>)
-  * [Response Example](</docs/derivatives/usds-margined-futures/market-data/rest-api/Top-Trader-Long-Short-Ratio#response-example>)
 
+    [
+        {
+             "symbol":"BTCUSDT",
+              "longShortRatio":"1.4342",// long/short position ratio of top traders
+              "longAccount": "0.5891", // long positions ratio of top traders
+              "shortAccount":"0.4108", // short positions ratio of top traders
+              "timestamp":"1583139600000"
+
+         },
+
+         {
+
+             "symbol":"BTCUSDT",
+              "longShortRatio":"1.4337",
+              "longAccount": "0.3583",
+              "shortAccount":"0.6417",
+              "timestamp":"1583139900000"
+
+            },
+
+    ]
+
+
+  - [API Description](</docs/derivatives/usds-margined-futures/market-data/rest-api/Top-Trader-Long-Short-Ratio#api-description>)
+  - [HTTP Request](</docs/derivatives/usds-margined-futures/market-data/rest-api/Top-Trader-Long-Short-Ratio#http-request>)
+  - [Request Weight](</docs/derivatives/usds-margined-futures/market-data/rest-api/Top-Trader-Long-Short-Ratio#request-weight>)
+  - [Request Parameters](</docs/derivatives/usds-margined-futures/market-data/rest-api/Top-Trader-Long-Short-Ratio#request-parameters>)
+  - [Response Example](</docs/derivatives/usds-margined-futures/market-data/rest-api/Top-Trader-Long-Short-Ratio#response-example>)

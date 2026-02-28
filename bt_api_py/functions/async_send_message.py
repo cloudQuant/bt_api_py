@@ -8,8 +8,11 @@ from email.header import Header
 from email.mime.application import MIMEApplication
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
+
 import aiosmtplib
+
 from bt_api_py.functions.async_base import AsyncBase
+
 # from bt_api_py.functions.calculate_time import get_string_tz_time
 # from bt_api_py.functions.log_message import SpdLogManager
 # spd_log = SpdLogManager("./log/async_data.log", "rest_async", 0, 0, False)
@@ -26,7 +29,7 @@ class FeishuManagerAsync(AsyncBase):
     def gen_sign(self, timestamp, secret):
         # 拼接timestamp和secret
 
-        string_to_sign = "{}\n{}".format(timestamp, secret)
+        string_to_sign = f"{timestamp}\n{secret}"
         hmac_code = hmac.new(string_to_sign.encode("utf-8"), digestmod=hashlib.sha256).digest()
 
         # 对结果进行base64处理
@@ -34,13 +37,8 @@ class FeishuManagerAsync(AsyncBase):
 
         return sign
 
-    def async_send(self, content,
-                   bot="4b90880c-3015-4e98-aac5-1248c55e8730",
-                   secret=None):
-        data = {
-            "msg_type": "text",
-            "content": {"text": content}
-        }
+    def async_send(self, content, bot="4b90880c-3015-4e98-aac5-1248c55e8730", secret=None):
+        data = {"msg_type": "text", "content": {"text": content}}
         timestamp = int(time.time())
         if secret:
             sign = self.gen_sign(timestamp, secret)
@@ -77,14 +75,17 @@ class EmailManagerAsync(AsyncBase):
         if files and isinstance(files, list):
             for i in files:
                 part_attach1 = MIMEApplication(open(i, "rb").read())  # 打开附件
-                part_attach1.add_header("Content-Disposition", "attachment", filename=i)  # 为附件命名
+                part_attach1.add_header(
+                    "Content-Disposition", "attachment", filename=i
+                )  # 为附件命名
                 msg_root.attach(part_attach1)
         try:
             async with aiosmtplib.SMTP(
-                    hostname=sender.get("smtp_server"),
-                    port=465,
-                    use_tls=True, timeout=5,
-                    validate_certs=False
+                hostname=sender.get("smtp_server"),
+                port=465,
+                use_tls=True,
+                timeout=5,
+                validate_certs=False,
             ) as smtp:
                 await smtp.login(sender_mail, sender.get("sender_pass"))
                 await smtp.sendmail(sender_mail, receiver, msg_root.as_string())
@@ -104,4 +105,3 @@ if __name__ == "__main__":
     b1 = time.perf_counter()
     print(f"call feishu_function consume time is {b1 - a1}")
     time.sleep(5)
-

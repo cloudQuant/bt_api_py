@@ -1,7 +1,8 @@
-"""标记价格类，用于确定标记价格的属性和方法
-"""
-import time
+"""标记价格类，用于确定标记价格的属性和方法"""
+
 import json
+import time
+
 from bt_api_py.containers.markprices.mark_price import MarkPriceData
 from bt_api_py.functions.utils import from_dict_get_float, from_dict_get_string
 
@@ -94,9 +95,9 @@ class BinanceRequestMarkPriceData(BinanceMarkPrice):
             return self
         self.server_time = from_dict_get_float(self.mark_price_data, "time")
         self.mark_price_symbol_name = from_dict_get_string(self.mark_price_data, "symbol")
-        self.mark_price = from_dict_get_float(self.mark_price_data, 'markPrice')
-        self.index_price = from_dict_get_float(self.mark_price_data, 'indexPrice')
-        self.settlement_price = from_dict_get_float(self.mark_price_data, 'estimatedSettlePrice')
+        self.mark_price = from_dict_get_float(self.mark_price_data, "markPrice")
+        self.index_price = from_dict_get_float(self.mark_price_data, "indexPrice")
+        self.settlement_price = from_dict_get_float(self.mark_price_data, "estimatedSettlePrice")
         self.has_been_init_data = True
         return self
 
@@ -114,6 +115,6 @@ class BinanceWssMarkPriceData(BinanceMarkPrice):
         self.mark_price_symbol_name = from_dict_get_string(self.mark_price_data, "s")
         self.mark_price = from_dict_get_float(self.mark_price_data, "p")
         self.index_price = from_dict_get_float(self.mark_price_data, "i")
-        self.settlement_price = from_dict_get_float(self.mark_price_data, 'P')
+        self.settlement_price = from_dict_get_float(self.mark_price_data, "P")
         self.has_been_init_data = True
         return self

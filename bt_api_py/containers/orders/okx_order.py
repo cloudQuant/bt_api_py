@@ -1,15 +1,15 @@
 import json
 import time
+
 from bt_api_py.containers.orders.order import OrderData, OrderStatus
-from bt_api_py.functions.utils import from_dict_get_float, from_dict_get_string, from_dict_get_bool
+from bt_api_py.functions.utils import from_dict_get_bool, from_dict_get_float, from_dict_get_string
 
 
 class OkxOrderData(OrderData):
-    """ 订单类，用于确定订单的属性和方法
-    """
+    """订单类，用于确定订单的属性和方法"""
 
     def __init__(self, order_info, symbol_name, asset_type, has_been_json_encoded=False):
-        super(OkxOrderData, self).__init__(order_info, has_been_json_encoded)
+        super().__init__(order_info, has_been_json_encoded)
         self.exchange_name = "OKX"
         self.symbol_name = symbol_name
         self.local_update_time = time.time()  # 本地时间戳
@@ -41,31 +41,33 @@ class OkxOrderData(OrderData):
     def init_data(self):
         if not self.has_been_json_encoded:
             self.order_info = json.loads(self.order_info)
-            self.order_data = self.order_info['data']
+            self.order_data = self.order_info["data"]
             self.has_been_json_encoded = True
         if self.has_been_init_data:
             return self
-        self.server_time = from_dict_get_float(self.order_data, 'uTime')
+        self.server_time = from_dict_get_float(self.order_data, "uTime")
         self.trade_id = from_dict_get_float(self.order_data, "tradeId")
-        self.client_order_id = from_dict_get_string(self.order_data, 'clOrdId')
-        self.executed_qty = from_dict_get_float(self.order_data, 'accFillSz')
-        self.order_id = from_dict_get_string(self.order_data, 'ordId')
-        self.order_size = from_dict_get_float(self.order_data, 'sz')
-        self.order_price = from_dict_get_float(self.order_data, 'px')
-        self.reduce_only = from_dict_get_bool(self.order_data, 'reduceOnly')
-        self.order_side = from_dict_get_string(self.order_data, 'side')
-        okx_order_status = from_dict_get_string(self.order_data, 'state')
+        self.client_order_id = from_dict_get_string(self.order_data, "clOrdId")
+        self.executed_qty = from_dict_get_float(self.order_data, "accFillSz")
+        self.order_id = from_dict_get_string(self.order_data, "ordId")
+        self.order_size = from_dict_get_float(self.order_data, "sz")
+        self.order_price = from_dict_get_float(self.order_data, "px")
+        self.reduce_only = from_dict_get_bool(self.order_data, "reduceOnly")
+        self.order_side = from_dict_get_string(self.order_data, "side")
+        okx_order_status = from_dict_get_string(self.order_data, "state")
         self.order_status = OrderStatus.from_value(okx_order_status)
-        self.order_symbol_name = from_dict_get_string(self.order_data, 'instId')
-        self.order_type = from_dict_get_string(self.order_data, 'ordType')
-        self.order_avg_price = from_dict_get_float(self.order_data, 'avgPx')
-        self.position_side = from_dict_get_string(self.order_data, 'posSide')
-        self.take_profit_price = from_dict_get_float(self.order_data, 'tpOrdPx')
-        self.take_profit_trigger_price = from_dict_get_float(self.order_data, 'tpTriggerPx')
-        self.take_profit_trigger_price_type = from_dict_get_string(self.order_data, 'tpTriggerPxType')
-        self.stop_loss_price = from_dict_get_float(self.order_data, 'slOrdPx')
-        self.stop_loss_trigger_price = from_dict_get_float(self.order_data, 'slTriggerPx')
-        self.stop_loss_trigger_price_type = from_dict_get_string(self.order_data, 'slTriggerPxType')
+        self.order_symbol_name = from_dict_get_string(self.order_data, "instId")
+        self.order_type = from_dict_get_string(self.order_data, "ordType")
+        self.order_avg_price = from_dict_get_float(self.order_data, "avgPx")
+        self.position_side = from_dict_get_string(self.order_data, "posSide")
+        self.take_profit_price = from_dict_get_float(self.order_data, "tpOrdPx")
+        self.take_profit_trigger_price = from_dict_get_float(self.order_data, "tpTriggerPx")
+        self.take_profit_trigger_price_type = from_dict_get_string(
+            self.order_data, "tpTriggerPxType"
+        )
+        self.stop_loss_price = from_dict_get_float(self.order_data, "slOrdPx")
+        self.stop_loss_trigger_price = from_dict_get_float(self.order_data, "slTriggerPx")
+        self.stop_loss_trigger_price_type = from_dict_get_string(self.order_data, "slTriggerPxType")
         self.has_been_init_data = True
         return self
 
@@ -95,7 +97,6 @@ class OkxOrderData(OrderData):
                 "stop_loss_price": self.stop_loss_price,
                 "stop_loss_trigger_price": self.stop_loss_trigger_price,
                 "stop_loss_trigger_price_type": self.stop_loss_trigger_price_type,
-
             }
         return self.all_data
 

@@ -23,9 +23,6 @@ from bt_api_py.containers.pricelimits.okx_price_limit import OkxPriceLimitData
 from bt_api_py.containers.liquidations.okx_liquidation_order import OkxLiquidationOrderData
 from bt_api_py.containers.assets.okx_asset import OkxDepositInfoData, OkxWithdrawalInfoData
 
-pytestmark = pytest.mark.xdist_group("okx_api")
-
-
 def generate_kwargs():
     """Generate kwargs for OKX WebSocket connection."""
     data = read_account_config()

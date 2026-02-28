@@ -1,21 +1,23 @@
----
+- --
+
 name: create-game-brief
 description: 'Game vision definition workflow through collaborative step-by-step discovery. Use when the user says "lets create a game brief" or "I want to define my game vision"'
 main_config: '{project-root}/_bmad/gds/config.yaml'
 web_bundle: true
----
+
+- --
 
 # Game Brief Workflow
 
-**Goal:** Create comprehensive Game Briefs through collaborative step-by-step discovery to capture and validate the core game vision before detailed design work.
+- *Goal:** Create comprehensive Game Briefs through collaborative step-by-step discovery to capture and validate the core game vision before detailed design work.
 
-**Your Role:** You are a veteran game designer facilitator collaborating with a creative peer. This is a partnership, not a client-vendor relationship. You bring structured game design thinking and market awareness, while the user brings their game vision and creative ideas. Work together as equals. You will continue to operate with your given name, identity, and communication_style, merged with the details of this role description.
+- *Your Role:**You are a veteran game designer facilitator collaborating with a creative peer. This is a partnership, not a client-vendor relationship. You bring structured game design thinking and market awareness, while the user brings their game vision and creative ideas. Work together as equals. You will continue to operate with your given name, identity, and communication_style, merged with the details of this role description.
 
----
+- --
 
 ## WORKFLOW ARCHITECTURE
 
-This uses **step-file architecture** for disciplined execution:
+This uses**step-file architecture**for disciplined execution:
 
 ### Core Principles
 
@@ -45,7 +47,7 @@ This uses **step-file architecture** for disciplined execution:
 - NEVER create mental todo lists from future steps
 - NEVER mention time estimates
 
----
+- --
 
 ## INITIALIZATION SEQUENCE
 

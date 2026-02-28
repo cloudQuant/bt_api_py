@@ -12,45 +12,50 @@ GET `/futures/data/openInterestHist`
 
 ## Request Weight
 
-**0**
+- *0**
 
 ## Request Parameters
 
-Name| Type| Mandatory| Description  
----|---|---|---  
-symbol| STRING| YES|   
-period| ENUM| YES| "5m","15m","30m","1h","2h","4h","6h","12h","1d"  
-limit| LONG| NO| default 30, max 500  
-startTime| LONG| NO|   
-endTime| LONG| NO|   
-  
->   * If startTime and endTime are not sent, the most recent data is returned.
->   * Only the data of the latest 30 days is available.
->   * IP rate limit 1000 requests/5min
-> 
+Name| Type| Mandatory| Description
+
+- --|---|---|---
+
+symbol| STRING| YES|
+
+period| ENUM| YES| "5m","15m","30m","1h","2h","4h","6h","12h","1d"
+
+limit| LONG| NO| default 30, max 500
+
+startTime| LONG| NO|
+
+endTime| LONG| NO|
+
+>   *If startTime and endTime are not sent, the most recent data is returned.
+>  *Only the data of the latest 30 days is available.
+>  * IP rate limit 1000 requests/5min
+>
 
 ## Response Example
-    
-    
-    [  
-        {   
-             "symbol":"BTCUSDT",  
-    	      "sumOpenInterest":"20403.63700000",  // total open interest   
-    	      "sumOpenInterestValue": "150570784.07809979",   // total open interest value  
-    	      "timestamp":"1583127900000"  
-        },       
-        {   
-             "symbol":"BTCUSDT",  
-             "sumOpenInterest":"20401.36700000",  
-             "sumOpenInterestValue":"149940752.14464448",  
-             "timestamp":"1583128200000"      
-        },     
-    ]  
-    
 
-  * [API Description](</docs/derivatives/usds-margined-futures/market-data/rest-api/Open-Interest-Statistics#api-description>)
-  * [HTTP Request](</docs/derivatives/usds-margined-futures/market-data/rest-api/Open-Interest-Statistics#http-request>)
-  * [Request Weight](</docs/derivatives/usds-margined-futures/market-data/rest-api/Open-Interest-Statistics#request-weight>)
-  * [Request Parameters](</docs/derivatives/usds-margined-futures/market-data/rest-api/Open-Interest-Statistics#request-parameters>)
-  * [Response Example](</docs/derivatives/usds-margined-futures/market-data/rest-api/Open-Interest-Statistics#response-example>)
 
+    [
+        {
+             "symbol":"BTCUSDT",
+              "sumOpenInterest":"20403.63700000",  // total open interest
+              "sumOpenInterestValue": "150570784.07809979",   // total open interest value
+              "timestamp":"1583127900000"
+        },
+        {
+             "symbol":"BTCUSDT",
+             "sumOpenInterest":"20401.36700000",
+             "sumOpenInterestValue":"149940752.14464448",
+             "timestamp":"1583128200000"
+        },
+    ]
+
+
+  - [API Description](</docs/derivatives/usds-margined-futures/market-data/rest-api/Open-Interest-Statistics#api-description>)
+  - [HTTP Request](</docs/derivatives/usds-margined-futures/market-data/rest-api/Open-Interest-Statistics#http-request>)
+  - [Request Weight](</docs/derivatives/usds-margined-futures/market-data/rest-api/Open-Interest-Statistics#request-weight>)
+  - [Request Parameters](</docs/derivatives/usds-margined-futures/market-data/rest-api/Open-Interest-Statistics#request-parameters>)
+  - [Response Example](</docs/derivatives/usds-margined-futures/market-data/rest-api/Open-Interest-Statistics#response-example>)

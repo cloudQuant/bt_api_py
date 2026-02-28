@@ -3,41 +3,42 @@
 ## 交易所信息
 
 - **交易所名称**: CoW Swap (CoW Protocol)
-- **官方网站**: https://cow.fi
-- **API文档**: https://docs.cow.fi/
-- **24h交易量排名**: #10（DEX）
+- **官方网站**: <https://cow.fi>
+- **API 文档**: <https://docs.cow.fi/>
+- **24h 交易量排名**: #10（DEX）
 - **区块链**: 多链
 
-## API基础信息
+## API 基础信息
 
 ### Orderbook API (OpenAPI)
 
 OpenAPI 定义位于 CoW Protocol Services 仓库：
 
 ```text
-https://raw.githubusercontent.com/cowprotocol/services/main/crates/orderbook/openapi.yml
-```
+<https://raw.githubusercontent.com/cowprotocol/services/main/crates/orderbook/openapi.yml>
+
+```bash
 
 ### Base URLs（按链）
 
-- Mainnet: `https://api.cow.fi/mainnet`
-- Mainnet (Staging): `https://barn.api.cow.fi/mainnet`
-- Gnosis Chain: `https://api.cow.fi/xdai`
-- Gnosis Chain (Staging): `https://barn.api.cow.fi/xdai`
-- Arbitrum One: `https://api.cow.fi/arbitrum_one`
-- Arbitrum One (Staging): `https://barn.api.cow.fi/arbitrum_one`
-- Base: `https://api.cow.fi/base`
-- Base (Staging): `https://barn.api.cow.fi/base`
-- Avalanche: `https://api.cow.fi/avalanche`
-- Avalanche (Staging): `https://barn.api.cow.fi/avalanche`
-- Polygon: `https://api.cow.fi/polygon`
-- Polygon (Staging): `https://barn.api.cow.fi/polygon`
-- Lens: `https://api.cow.fi/lens`
-- Lens (Staging): `https://barn.api.cow.fi/lens`
-- BNB: `https://api.cow.fi/bnb`
-- BNB (Staging): `https://barn.api.cow.fi/bnb`
-- Sepolia: `https://api.cow.fi/sepolia`
-- Sepolia (Staging): `https://barn.api.cow.fi/sepolia`
+- Mainnet: `<https://api.cow.fi/mainnet`>
+- Mainnet (Staging): `<https://barn.api.cow.fi/mainnet`>
+- Gnosis Chain: `<https://api.cow.fi/xdai`>
+- Gnosis Chain (Staging): `<https://barn.api.cow.fi/xdai`>
+- Arbitrum One: `<https://api.cow.fi/arbitrum_one`>
+- Arbitrum One (Staging): `<https://barn.api.cow.fi/arbitrum_one`>
+- Base: `<https://api.cow.fi/base`>
+- Base (Staging): `<https://barn.api.cow.fi/base`>
+- Avalanche: `<https://api.cow.fi/avalanche`>
+- Avalanche (Staging): `<https://barn.api.cow.fi/avalanche`>
+- Polygon: `<https://api.cow.fi/polygon`>
+- Polygon (Staging): `<https://barn.api.cow.fi/polygon`>
+- Lens: `<https://api.cow.fi/lens`>
+- Lens (Staging): `<https://barn.api.cow.fi/lens`>
+- BNB: `<https://api.cow.fi/bnb`>
+- BNB (Staging): `<https://barn.api.cow.fi/bnb`>
+- Sepolia: `<https://api.cow.fi/sepolia`>
+- Sepolia (Staging): `<https://barn.api.cow.fi/sepolia`>
 
 ## 核心端点（OpenAPI 摘要）
 
@@ -84,11 +85,14 @@ https://raw.githubusercontent.com/cowprotocol/services/main/crates/orderbook/ope
 ## 代码示例
 
 ```python
+
 # 获取订单状态
+
 import requests
 
-base = "https://api.cow.fi/mainnet"
+base = "<https://api.cow.fi/mainnet">
 uid = "0x..."
 url = f"{base}/api/v1/orders/{uid}/status"
 print(requests.get(url).json())
-```
+
+```bash

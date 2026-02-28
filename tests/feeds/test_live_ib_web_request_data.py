@@ -26,8 +26,6 @@ from bt_api_py.feeds.live_ib_web_feed import IbWebRequestData, IbWebRequestDataS
 from bt_api_py.auth_config import IbWebAuthConfig
 from bt_api_py.error_framework import AuthenticationError, RequestFailedError
 
-pytestmark = pytest.mark.xdist_group("ib_web_api")
-
 # ── 配置检测 ──────────────────────────────────────────────
 
 def _get_ib_web_config():

@@ -1,7 +1,9 @@
----
+- --
+
 description: 'Create a PRD from scratch. Use when the user says ""lets create a product requirements document"" or ""I want to create a new PRD""'
 auto_execution_mode: "iterate"
----
+
+- --
 
 # create-prd
 
