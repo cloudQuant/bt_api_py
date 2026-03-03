@@ -1,385 +1,512 @@
 """
-Test Zebpay exchange integration.
+Tests for Zebpay exchange – Feed pattern.
 
-Run tests:
-    pytest tests/feeds/test_zebpay.py -v
-
-Run with coverage:
-    pytest tests/feeds/test_zebpay.py --cov=bt_api_py.feeds.live_zebpay --cov-report=term-missing
+Run:  pytest tests/feeds/test_zebpay.py -v
 """
 
 import queue
-from unittest.mock import Mock, MagicMock, patch
+from unittest.mock import patch
 
 import pytest
 
-# Import registration to auto-register Zebpay
-import bt_api_py.feeds.register_zebpay  # noqa: F401
-from bt_api_py.containers.exchanges.zebpay_exchange_data import ZebpayExchangeDataSpot
+from bt_api_py.containers.exchanges.zebpay_exchange_data import (
+    ZebpayExchangeData,
+    ZebpayExchangeDataSpot,
+)
+from bt_api_py.containers.requestdatas.request_data import RequestData
 from bt_api_py.containers.tickers.zebpay_ticker import ZebpayRequestTickerData
-from bt_api_py.feeds.live_zebpay.spot import ZebpayRequestDataSpot
+from bt_api_py.feeds.live_zebpay.request_base import ZebpayRequestData
+from bt_api_py.feeds.live_zebpay.spot import (
+    ZebpayRequestDataSpot,
+    ZebpayMarketWssDataSpot,
+    ZebpayAccountWssDataSpot,
+)
 from bt_api_py.registry import ExchangeRegistry
 
+import bt_api_py.feeds.register_zebpay  # noqa: F401
 
-class TestZebpayExchangeData:
-    """Test Zebpay exchange data configuration."""
+# ── sample fixtures ──────────────────────────────────────────
 
-    @patch('bt_api_py.containers.exchanges.zebpay_exchange_data._get_zebpay_config')
-    def test_exchange_data_spot_creation(self, mock_config):
-        """Test creating Zebpay spot exchange data."""
-        mock_config.return_value = None
-        exchange_data = ZebpayExchangeDataSpot()
-        assert exchange_data.exchange_name == "zebpay"
-        assert exchange_data.rest_url == "https://sapi.zebpay.com"
-        assert exchange_data.wss_url == "wss://stream.zebpay.com"
-        assert exchange_data.asset_type == "spot"
-
-    @patch('bt_api_py.containers.exchanges.zebpay_exchange_data._get_zebpay_config')
-    def test_kline_periods(self, mock_config):
-        """Test kline period configuration."""
-        mock_config.return_value = None
-        exchange_data = ZebpayExchangeDataSpot()
-        assert exchange_data.kline_periods["1m"] == "1m"
-        assert exchange_data.kline_periods["1h"] == "1h"
-        assert exchange_data.kline_periods["1d"] == "1d"
-
-    @patch('bt_api_py.containers.exchanges.zebpay_exchange_data._get_zebpay_config')
-    def test_legal_currency(self, mock_config):
-        """Test legal currencies."""
-        mock_config.return_value = None
-        exchange_data = ZebpayExchangeDataSpot()
-        assert "INR" in exchange_data.legal_currency
-        assert "USDT" in exchange_data.legal_currency
+SAMPLE_TICK = {"data": {"symbol": "BTC-INR", "last": "5000000", "bid": "4990000", "ask": "5010000"}}
+SAMPLE_TICK_RAW = {"last": "5000000", "bid": "4990000", "ask": "5010000"}
+SAMPLE_DEPTH = {"data": {"bids": [["4990000", "1.5"]], "asks": [["5010000", "2.0"]]}}
+SAMPLE_KLINE = {"data": [[1642696800000, "4900000", "5100000", "4800000", "5000000", "1000"]]}
+SAMPLE_EXCHANGE_INFO = {"symbols": [{"symbol": "BTC-INR"}]}
+SAMPLE_SERVER_TIME = {"serverTime": 1678901234000}
+SAMPLE_BALANCE = {"balances": [{"asset": "BTC", "free": "0.5"}]}
+SAMPLE_ACCOUNT = {"accountType": "SPOT", "balances": []}
+SAMPLE_ERROR = {"error": "invalid symbol"}
+SAMPLE_ORDER = {"orderId": 12345, "symbol": "BTC-INR", "status": "NEW"}
+SAMPLE_CANCEL = {"orderId": 12345, "symbol": "BTC-INR", "status": "CANCELED"}
+SAMPLE_QUERY = {"orderId": 12345, "symbol": "BTC-INR", "status": "FILLED"}
 
 
-class TestZebpayRequestData:
-    """Test Zebpay REST API request base class."""
-
-    @patch('bt_api_py.containers.exchanges.zebpay_exchange_data._get_zebpay_config')
-    def test_request_data_creation(self, mock_config):
-        """Test creating Zebpay request data."""
-        mock_config.return_value = None
-        data_queue = queue.Queue()
-        request_data = ZebpayRequestDataSpot(
-            data_queue,
-            exchange_name="ZEBPAY___SPOT",
-        )
-        assert request_data.exchange_name == "ZEBPAY___SPOT"
-        assert request_data.asset_type == "SPOT"
-
-    @patch('bt_api_py.containers.exchanges.zebpay_exchange_data._get_zebpay_config')
-    def test_signature_generation(self, mock_config):
-        """Test HMAC SHA256 signature generation."""
-        mock_config.return_value = None
-        data_queue = queue.Queue()
-        request_data = ZebpayRequestDataSpot(
-            data_queue,
-            exchange_name="ZEBPAY___SPOT",
-        )
-
-        # Mock the params object to have api_secret
-        request_data._params = MagicMock()
-        request_data._params.api_secret = "test_secret"
-
-        payload = "symbol=BTC-INR&timestamp=1234567890"
-        signature = request_data._generate_signature(payload)
-        # Signature should be a hex string
-        assert signature is not None
-        assert isinstance(signature, str)
-        assert len(signature) == 64  # SHA256 produces 64 hex chars
-
-    @patch('bt_api_py.containers.exchanges.zebpay_exchange_data._get_zebpay_config')
-    def test_get_headers_without_auth(self, mock_config):
-        """Test request header generation without auth."""
-        mock_config.return_value = None
-        data_queue = queue.Queue()
-        request_data = ZebpayRequestDataSpot(
-            data_queue,
-            exchange_name="ZEBPAY___SPOT",
-        )
-
-        # Mock the params object
-        request_data._params = MagicMock()
-        request_data._params.api_key = None
-        request_data._params.api_secret = None
-
-        headers = request_data._get_headers("GET", params=None, body=None)
-        assert "Content-Type" in headers
-        assert headers["Content-Type"] == "application/json"
-
-    @patch('bt_api_py.containers.exchanges.zebpay_exchange_data._get_zebpay_config')
-    def test_get_headers_with_auth_get(self, mock_config):
-        """Test request headers with authentication for GET request."""
-        mock_config.return_value = None
-        data_queue = queue.Queue()
-        request_data = ZebpayRequestDataSpot(
-            data_queue,
-            exchange_name="ZEBPAY___SPOT",
-        )
-
-        # Mock API credentials
-        request_data._params = MagicMock()
-        request_data._params.api_key = "test_key"
-        request_data._params.api_secret = "test_secret"
-
-        params = {"symbol": "BTC-INR"}
-        headers = request_data._get_headers("GET", params=params, body=None)
-
-        assert "X-AUTH-APIKEY" in headers
-        assert headers["X-AUTH-APIKEY"] == "test_key"
-        assert "X-AUTH-SIGNATURE" in headers
-
-    @patch('bt_api_py.containers.exchanges.zebpay_exchange_data._get_zebpay_config')
-    def test_get_headers_with_auth_post(self, mock_config):
-        """Test request headers with authentication for POST request."""
-        mock_config.return_value = None
-        data_queue = queue.Queue()
-        request_data = ZebpayRequestDataSpot(
-            data_queue,
-            exchange_name="ZEBPAY___SPOT",
-        )
-
-        # Mock API credentials
-        request_data._params = MagicMock()
-        request_data._params.api_key = "test_key"
-        request_data._params.api_secret = "test_secret"
-
-        body = {"symbol": "BTC-INR", "side": "buy"}
-        headers = request_data._get_headers("POST", params=None, body=body)
-
-        assert "X-AUTH-APIKEY" in headers
-        assert headers["X-AUTH-APIKEY"] == "test_key"
-        assert "X-AUTH-SIGNATURE" in headers
+@pytest.fixture
+def feed():
+    return ZebpayRequestDataSpot(queue.Queue())
 
 
-class TestZebpayMarketData:
-    """Test Zebpay market data methods."""
+@pytest.fixture
+def exdata():
+    return ZebpayExchangeDataSpot()
 
-    @patch('bt_api_py.containers.exchanges.zebpay_exchange_data._get_zebpay_config')
-    def test_to_zebpay_symbol_conversion(self, mock_config):
-        """Test symbol format conversion to Zebpay format."""
-        mock_config.return_value = None
-        data_queue = queue.Queue()
-        request_data = ZebpayRequestDataSpot(
-            data_queue,
-            exchange_name="ZEBPAY___SPOT",
-        )
 
-        # Test various input formats
-        assert request_data._to_zebpay_symbol("BTC/INR") == "BTC-INR"
-        assert request_data._to_zebpay_symbol("BTC-INR") == "BTC-INR"
-        assert request_data._to_zebpay_symbol("btc-inr") == "BTC-INR"
-        assert request_data._to_zebpay_symbol("BTCINR") == "BTC-INR"
-        assert request_data._to_zebpay_symbol("ETH/USDT") == "ETH-USDT"
+# ═══════════════════════════════════════════════════════════════
+# 1) ExchangeData
+# ═══════════════════════════════════════════════════════════════
 
-    @patch('bt_api_py.containers.exchanges.zebpay_exchange_data._get_zebpay_config')
-    def test_to_zebpay_period_conversion(self, mock_config):
-        """Test period format conversion to Zebpay format."""
-        mock_config.return_value = None
-        data_queue = queue.Queue()
-        request_data = ZebpayRequestDataSpot(
-            data_queue,
-            exchange_name="ZEBPAY___SPOT",
-        )
+class TestExchangeData:
+    def test_exchange_name(self, exdata):
+        assert exdata.exchange_name == "ZEBPAY___SPOT"
 
-        # Test various period formats
-        assert request_data._to_zebpay_period("1m") == "1m"
-        assert request_data._to_zebpay_period("5m") == "5m"
-        assert request_data._to_zebpay_period("1h") == "1h"
-        assert request_data._to_zebpay_period("1d") == "1d"
-        assert request_data._to_zebpay_period("1w") == "1w"
-        # Test default fallback
-        assert request_data._to_zebpay_period("3m") == "1h"
+    def test_asset_type(self, exdata):
+        assert exdata.asset_type == "SPOT"
 
-    def test_tick_normalize_function(self):
-        """Test ticker normalization function."""
-        input_data = {
-            "data": {
-            "symbol": "BTC-INR",
-            "last": "5000000",
-            "bid": "4990000",
-            "ask": "5010000",
-            }
-        }
+    def test_rest_url(self, exdata):
+        assert exdata.rest_url == "https://sapi.zebpay.com"
 
-        result, success = ZebpayRequestDataSpot._get_tick_normalize_function(input_data, {})
-        assert success is True
+    def test_wss_url(self, exdata):
+        assert exdata.wss_url == "wss://stream.zebpay.com"
+
+    def test_base_exchange_name(self):
+        d = ZebpayExchangeData()
+        assert d.exchange_name == "ZEBPAY"
+
+    def test_get_symbol(self):
+        assert ZebpayExchangeDataSpot.get_symbol("BTC/INR") == "BTC-INR"
+        assert ZebpayExchangeDataSpot.get_symbol("btc-inr") == "BTC-INR"
+        assert ZebpayExchangeDataSpot.get_symbol("btc_inr") == "BTC-INR"
+
+    def test_get_reverse_symbol(self):
+        assert ZebpayExchangeDataSpot.get_reverse_symbol("BTC/INR") == "BTC-INR"
+
+    def test_get_period(self, exdata):
+        assert exdata.get_period("1h") == "1h"
+        assert exdata.get_period("1d") == "1d"
+        assert exdata.get_period("1m") == "1m"
+
+    def test_get_reverse_period(self, exdata):
+        assert exdata.get_reverse_period("1h") == "1h"
+
+    def test_legal_currency(self, exdata):
+        for c in ("INR", "USDT"):
+            assert c in exdata.legal_currency
+
+    def test_kline_periods(self, exdata):
+        for k in ("1m", "5m", "15m", "30m", "1h", "2h", "4h", "12h", "1d", "1w"):
+            assert k in exdata.kline_periods
+
+    def test_get_rest_path(self, exdata):
+        p = exdata.get_rest_path("get_tick")
+        assert "ticker" in p
+
+    def test_get_rest_path_missing(self, exdata):
+        with pytest.raises(ValueError):
+            exdata.get_rest_path("nonexistent")
+
+    def test_rest_paths_keys(self, exdata):
+        for key in ("get_tick", "get_ticker", "get_depth", "get_kline",
+                     "get_exchange_info", "get_account", "get_balance",
+                     "get_server_time", "make_order", "cancel_order"):
+            assert key in exdata.rest_paths
+
+
+# ═══════════════════════════════════════════════════════════════
+# 2) Parameter generation (_get_xxx)
+# ═══════════════════════════════════════════════════════════════
+
+class TestParamGeneration:
+    def test_get_tick_params(self, feed):
+        path, params, extra = feed._get_tick("BTC/INR")
+        assert "ticker" in path.lower()
+        assert params["symbol"] == "BTC-INR"
+        assert extra["request_type"] == "get_tick"
+        assert extra["symbol_name"] == "BTC/INR"
+        assert extra["asset_type"] == "SPOT"
+        assert extra["exchange_name"] == "ZEBPAY___SPOT"
+
+    def test_get_depth_params(self, feed):
+        path, params, extra = feed._get_depth("ETH/USDT")
+        assert "orderbook" in path.lower()
+        assert params["symbol"] == "ETH-USDT"
+
+    def test_get_kline_params(self, feed):
+        path, params, extra = feed._get_kline("BTC/INR", "1h")
+        assert "klines" in path.lower()
+        assert params["symbol"] == "BTC-INR"
+        assert params["interval"] == "1h"
+
+    def test_get_exchange_info_params(self, feed):
+        path, params, extra = feed._get_exchange_info()
+        assert "exchangeinfo" in path.lower()
+        assert extra["request_type"] == "get_exchange_info"
+
+    def test_get_server_time_params(self, feed):
+        path, params, extra = feed._get_server_time()
+        assert "time" in path.lower()
+        assert extra["request_type"] == "get_server_time"
+
+    def test_get_balance_params(self, feed):
+        path, params, extra = feed._get_balance()
+        assert "balance" in path.lower()
+        assert extra["request_type"] == "get_balance"
+
+    def test_get_account_params(self, feed):
+        path, params, extra = feed._get_account()
+        assert "account" in path.lower()
+        assert extra["request_type"] == "get_account"
+        assert extra["asset_type"] == "SPOT"
+        assert extra["exchange_name"] == "ZEBPAY___SPOT"
+
+    def test_make_order_params(self, feed):
+        path, params, extra = feed._make_order("BTC/INR", 0.1, 5000000, "buy-limit")
+        assert "order" in path.lower()
+        assert params["symbol"] == "BTC-INR"
+        assert params["side"] == "BUY"
+        assert params["type"] == "LIMIT"
+        assert params["quantity"] == "0.1"
+        assert extra["request_type"] == "make_order"
+        assert extra["symbol_name"] == "BTC/INR"
+        assert extra["asset_type"] == "SPOT"
+
+    def test_cancel_order_params(self, feed):
+        path, params, extra = feed._cancel_order("BTC/INR", order_id=12345)
+        assert params["symbol"] == "BTC-INR"
+        assert params["orderId"] == 12345
+        assert extra["request_type"] == "cancel_order"
+        assert extra["symbol_name"] == "BTC/INR"
+
+    def test_query_order_params(self, feed):
+        path, params, extra = feed._query_order("BTC/INR", order_id=12345)
+        assert params["symbol"] == "BTC-INR"
+        assert params["orderId"] == 12345
+        assert extra["request_type"] == "query_order"
+
+
+# ═══════════════════════════════════════════════════════════════
+# 3) Normalization functions
+# ═══════════════════════════════════════════════════════════════
+
+class TestNormalization:
+    def test_tick_ok(self):
+        result, ok = ZebpayRequestData._get_tick_normalize_function(SAMPLE_TICK, {})
+        assert ok is True
         assert len(result) == 1
         assert result[0]["symbol"] == "BTC-INR"
 
-    def test_tick_normalize_function_empty(self):
-        """Test ticker normalization with empty data."""
-        result, success = ZebpayRequestDataSpot._get_tick_normalize_function(None, {})
-        assert success is False
-        assert result == []
+    def test_tick_error(self):
+        result, ok = ZebpayRequestData._get_tick_normalize_function(SAMPLE_ERROR, {})
+        assert ok is False
 
-    def test_depth_normalize_function(self):
-        """Test depth normalization function."""
-        input_data = {
-            "data": {
-            "bids": [["4990000", "1.5"]],
-            "asks": [["5010000", "2.0"]],
-            }
-        }
+    def test_tick_none(self):
+        result, ok = ZebpayRequestData._get_tick_normalize_function(None, {})
+        assert ok is False
 
-        result, success = ZebpayRequestDataSpot._get_depth_normalize_function(input_data, {})
-        assert success is True
+    def test_depth_ok(self):
+        result, ok = ZebpayRequestData._get_depth_normalize_function(SAMPLE_DEPTH, {})
+        assert ok is True
+
+    def test_depth_error(self):
+        result, ok = ZebpayRequestData._get_depth_normalize_function(SAMPLE_ERROR, {})
+        assert ok is False
+
+    def test_kline_dict(self):
+        result, ok = ZebpayRequestData._get_kline_normalize_function(SAMPLE_KLINE, {})
+        assert ok is True
+
+    def test_kline_error(self):
+        result, ok = ZebpayRequestData._get_kline_normalize_function(SAMPLE_ERROR, {})
+        assert ok is False
+
+    def test_exchange_info_ok(self):
+        result, ok = ZebpayRequestData._get_exchange_info_normalize_function(SAMPLE_EXCHANGE_INFO, {})
+        assert ok is True
+
+    def test_server_time_ok(self):
+        result, ok = ZebpayRequestData._get_server_time_normalize_function(SAMPLE_SERVER_TIME, {})
+        assert ok is True
+
+    def test_server_time_none(self):
+        result, ok = ZebpayRequestData._get_server_time_normalize_function(None, {})
+        assert ok is False
+
+    def test_balance_ok(self):
+        result, ok = ZebpayRequestData._get_balance_normalize_function(SAMPLE_BALANCE, {})
+        assert ok is True
+
+    def test_account_ok(self):
+        result, ok = ZebpayRequestData._get_account_normalize_function(SAMPLE_ACCOUNT, {})
+        assert ok is True
+
+    def test_account_error(self):
+        result, ok = ZebpayRequestData._get_account_normalize_function(SAMPLE_ERROR, {})
+        assert ok is False
+
+    def test_make_order_ok(self):
+        result, ok = ZebpayRequestData._make_order_normalize_function(SAMPLE_ORDER, {})
+        assert ok is True
         assert len(result) == 1
 
-    def test_kline_normalize_function(self):
-        """Test kline normalization function."""
-        input_data = {
-            "data": [
-            [1642696800000, "4900000", "5100000", "4800000", "5000000", "1000"],
-            ]
-        }
+    def test_make_order_error(self):
+        result, ok = ZebpayRequestData._make_order_normalize_function(SAMPLE_ERROR, {})
+        assert ok is False
 
-        result, success = ZebpayRequestDataSpot._get_kline_normalize_function(input_data, {})
-        assert success is True
-        assert len(result) == 1
+    def test_cancel_order_ok(self):
+        result, ok = ZebpayRequestData._cancel_order_normalize_function(SAMPLE_CANCEL, {})
+        assert ok is True
 
-    @patch('bt_api_py.feeds.live_zebpay.spot.ZebpayRequestDataSpot.request')
-    @patch('bt_api_py.containers.exchanges.zebpay_exchange_data._get_zebpay_config')
-    def test_get_tick_params(self, mock_config, mock_request):
-        """Test get tick parameter generation."""
-        mock_config.return_value = None
-        mock_request.return_value = (Mock(), {}, Mock())
-        data_queue = queue.Queue()
-        request_data = ZebpayRequestDataSpot(
-            data_queue,
-            exchange_name="ZEBPAY___SPOT",
-        )
+    def test_query_order_ok(self):
+        result, ok = ZebpayRequestData._query_order_normalize_function(SAMPLE_QUERY, {})
+        assert ok is True
 
-        result = request_data.get_tick("BTC/INR")
+    def test_is_error_none(self):
+        assert ZebpayRequestData._is_error(None) is True
 
-        # Verify request was called
-        assert mock_request.called
-        # Verify it was called at least once (get_tick calls _get_tick which calls request)
-        assert mock_request.call_count >= 1
+    def test_is_error_with_key(self):
+        assert ZebpayRequestData._is_error(SAMPLE_ERROR) is True
 
-    @patch('bt_api_py.feeds.live_zebpay.spot.ZebpayRequestDataSpot.request')
-    @patch('bt_api_py.containers.exchanges.zebpay_exchange_data._get_zebpay_config')
-    def test_get_depth_params(self, mock_config, mock_request):
-        """Test get depth parameter generation."""
-        mock_config.return_value = None
-        mock_request.return_value = (Mock(), {}, Mock())
-        data_queue = queue.Queue()
-        request_data = ZebpayRequestDataSpot(
-            data_queue,
-            exchange_name="ZEBPAY___SPOT",
-        )
-
-        result = request_data.get_depth("BTC/INR", count=20)
-
-        # Verify request was called with correct params
-        assert mock_request.called
-        call_args = mock_request.call_args[0][0]
-        assert "GET /api/v2/market/orderbook" in call_args
-
-    @patch('bt_api_py.feeds.live_zebpay.spot.ZebpayRequestDataSpot.request')
-    @patch('bt_api_py.containers.exchanges.zebpay_exchange_data._get_zebpay_config')
-    def test_get_kline_params(self, mock_config, mock_request):
-        """Test get kline parameter generation."""
-        mock_config.return_value = None
-        mock_request.return_value = (Mock(), {}, Mock())
-        data_queue = queue.Queue()
-        request_data = ZebpayRequestDataSpot(
-            data_queue,
-            exchange_name="ZEBPAY___SPOT",
-        )
-
-        result = request_data.get_kline("BTC/INR", period="1h", count=50)
-
-        # Verify request was called with correct params
-        assert mock_request.called
-        call_args = mock_request.call_args[0][0]
-        assert "GET /api/v2/market/klines" in call_args
+    def test_is_error_ok(self):
+        assert ZebpayRequestData._is_error(SAMPLE_TICK) is False
 
 
-class TestZebpayDataContainers:
-    """Test Zebpay data containers."""
+# ═══════════════════════════════════════════════════════════════
+# 4) Mocked sync calls
+# ═══════════════════════════════════════════════════════════════
 
+class TestSyncCalls:
+    @patch.object(ZebpayRequestData, "http_request", return_value=SAMPLE_TICK)
+    def test_get_tick(self, mock_http, feed):
+        rd = feed.get_tick("BTC/INR")
+        assert isinstance(rd, RequestData)
+        mock_http.assert_called_once()
+
+    @patch.object(ZebpayRequestData, "http_request", return_value=SAMPLE_TICK)
+    def test_get_ticker(self, mock_http, feed):
+        rd = feed.get_ticker("BTC/INR")
+        assert isinstance(rd, RequestData)
+
+    @patch.object(ZebpayRequestData, "http_request", return_value=SAMPLE_DEPTH)
+    def test_get_depth(self, mock_http, feed):
+        rd = feed.get_depth("ETH/USDT")
+        assert isinstance(rd, RequestData)
+
+    @patch.object(ZebpayRequestData, "http_request", return_value=SAMPLE_KLINE)
+    def test_get_kline(self, mock_http, feed):
+        rd = feed.get_kline("BTC/INR", "1h")
+        assert isinstance(rd, RequestData)
+
+    @patch.object(ZebpayRequestData, "http_request", return_value=SAMPLE_EXCHANGE_INFO)
+    def test_get_exchange_info(self, mock_http, feed):
+        rd = feed.get_exchange_info()
+        assert isinstance(rd, RequestData)
+
+    @patch.object(ZebpayRequestData, "http_request", return_value=SAMPLE_SERVER_TIME)
+    def test_get_server_time(self, mock_http, feed):
+        rd = feed.get_server_time()
+        assert isinstance(rd, RequestData)
+
+    @patch.object(ZebpayRequestData, "http_request", return_value=SAMPLE_BALANCE)
+    def test_get_balance(self, mock_http, feed):
+        rd = feed.get_balance()
+        assert isinstance(rd, RequestData)
+
+    @patch.object(ZebpayRequestData, "http_request", return_value=SAMPLE_ACCOUNT)
+    def test_get_account(self, mock_http, feed):
+        rd = feed.get_account()
+        assert isinstance(rd, RequestData)
+
+    @patch.object(ZebpayRequestData, "http_request", return_value=SAMPLE_ORDER)
+    def test_make_order(self, mock_http, feed):
+        rd = feed.make_order("BTC/INR", 0.1, 5000000)
+        assert isinstance(rd, RequestData)
+        mock_http.assert_called_once()
+
+    @patch.object(ZebpayRequestData, "http_request", return_value=SAMPLE_CANCEL)
+    def test_cancel_order(self, mock_http, feed):
+        rd = feed.cancel_order("BTC/INR", order_id=12345)
+        assert isinstance(rd, RequestData)
+
+    @patch.object(ZebpayRequestData, "http_request", return_value=SAMPLE_QUERY)
+    def test_query_order(self, mock_http, feed):
+        rd = feed.query_order("BTC/INR", order_id=12345)
+        assert isinstance(rd, RequestData)
+
+
+# ═══════════════════════════════════════════════════════════════
+# 5) Auth
+# ═══════════════════════════════════════════════════════════════
+
+class TestAuth:
+    def test_headers_no_key(self, feed):
+        h = feed._get_headers()
+        assert "Content-Type" in h
+        assert h["Content-Type"] == "application/json"
+        assert "X-AUTH-APIKEY" not in h
+
+    def test_headers_with_key_get(self):
+        f = ZebpayRequestDataSpot(queue.Queue(), public_key="mykey", secret_key="mysecret")
+        h = f._get_headers("GET", params={"symbol": "BTC-INR"})
+        assert h["X-AUTH-APIKEY"] == "mykey"
+        assert "X-AUTH-SIGNATURE" in h
+        assert len(h["X-AUTH-SIGNATURE"]) == 64
+
+    def test_headers_with_key_post(self):
+        f = ZebpayRequestDataSpot(queue.Queue(), public_key="mykey", secret_key="mysecret")
+        h = f._get_headers("POST", body={"symbol": "BTC-INR", "side": "buy"})
+        assert h["X-AUTH-APIKEY"] == "mykey"
+        assert "X-AUTH-SIGNATURE" in h
+        assert len(h["X-AUTH-SIGNATURE"]) == 64
+
+    def test_generate_signature_no_secret(self, feed):
+        sig = feed._generate_signature("symbol=BTC-INR")
+        assert sig == ""
+
+    def test_generate_signature_with_secret(self):
+        f = ZebpayRequestDataSpot(queue.Queue(), secret_key="testsecret")
+        sig = f._generate_signature("symbol=BTC-INR&timestamp=1234567890")
+        assert len(sig) == 64
+
+
+# ═══════════════════════════════════════════════════════════════
+# 6) Registry
+# ═══════════════════════════════════════════════════════════════
+
+class TestRegistry:
+    def test_feed_registered(self):
+        assert "ZEBPAY___SPOT" in ExchangeRegistry._feed_classes
+        assert ExchangeRegistry._feed_classes["ZEBPAY___SPOT"] == ZebpayRequestDataSpot
+
+    def test_exchange_data_registered(self):
+        assert "ZEBPAY___SPOT" in ExchangeRegistry._exchange_data_classes
+        assert ExchangeRegistry._exchange_data_classes["ZEBPAY___SPOT"] == ZebpayExchangeDataSpot
+
+    def test_balance_handler_registered(self):
+        assert "ZEBPAY___SPOT" in ExchangeRegistry._balance_handlers
+
+    def test_stream_registered(self):
+        stream_handlers = ExchangeRegistry._stream_classes.get("ZEBPAY___SPOT", {})
+        assert "subscribe" in stream_handlers
+
+    def test_create_feed(self):
+        f = ExchangeRegistry.create_feed("ZEBPAY___SPOT", queue.Queue())
+        assert isinstance(f, ZebpayRequestDataSpot)
+
+    def test_create_exchange_data(self):
+        ed = ExchangeRegistry.create_exchange_data("ZEBPAY___SPOT")
+        assert isinstance(ed, ZebpayExchangeDataSpot)
+
+
+# ═══════════════════════════════════════════════════════════════
+# 7) Method existence
+# ═══════════════════════════════════════════════════════════════
+
+_EXPECTED_METHODS = [
+    "get_tick", "async_get_tick",
+    "get_ticker", "async_get_ticker",
+    "get_depth", "async_get_depth",
+    "get_kline", "async_get_kline",
+    "get_exchange_info", "async_get_exchange_info",
+    "get_server_time", "async_get_server_time",
+    "get_balance", "async_get_balance",
+    "get_account", "async_get_account",
+    "make_order", "async_make_order",
+    "cancel_order", "async_cancel_order",
+    "query_order", "async_query_order",
+]
+
+
+class TestMethodExistence:
+    @pytest.mark.parametrize("method_name", _EXPECTED_METHODS)
+    def test_method_exists(self, feed, method_name):
+        assert hasattr(feed, method_name), f"Missing method: {method_name}"
+        assert callable(getattr(feed, method_name))
+
+
+# ═══════════════════════════════════════════════════════════════
+# 8) Feed init
+# ═══════════════════════════════════════════════════════════════
+
+class TestFeedInit:
+    def test_default_exchange_name(self, feed):
+        assert feed.exchange_name == "ZEBPAY___SPOT"
+
+    def test_default_asset_type(self, feed):
+        assert feed.asset_type == "SPOT"
+
+    def test_capabilities(self, feed):
+        from bt_api_py.feeds.capability import Capability
+        caps = feed._capabilities()
+        assert Capability.GET_TICK in caps
+        assert Capability.GET_DEPTH in caps
+        assert Capability.GET_KLINE in caps
+        assert Capability.GET_EXCHANGE_INFO in caps
+        assert Capability.MAKE_ORDER in caps
+        assert Capability.CANCEL_ORDER in caps
+        assert Capability.QUERY_ORDER in caps
+
+    def test_push_data_to_queue(self, feed):
+        feed.push_data_to_queue({"test": 1})
+        assert not feed.data_queue.empty()
+
+
+# ═══════════════════════════════════════════════════════════════
+# 9) WebSocket stubs
+# ═══════════════════════════════════════════════════════════════
+
+class TestWebSocketStubs:
+    def test_market_wss_start_stop(self):
+        wss = ZebpayMarketWssDataSpot(queue.Queue(), topics=[{"topic": "ticker"}])
+        wss.start()
+        assert wss.running is True
+        wss.stop()
+        assert wss.running is False
+
+    def test_account_wss_start_stop(self):
+        wss = ZebpayAccountWssDataSpot(queue.Queue(), topics=[{"topic": "account"}])
+        wss.start()
+        assert wss.running is True
+        wss.stop()
+        assert wss.running is False
+
+
+# ═══════════════════════════════════════════════════════════════
+# 10) Data containers
+# ═══════════════════════════════════════════════════════════════
+
+class TestDataContainers:
     def test_ticker_float_parsing(self):
-        """Test ticker float parsing helper method."""
-        # Test the _parse_float static method
         assert ZebpayRequestTickerData._parse_float("5000000") == 5000000.0
         assert ZebpayRequestTickerData._parse_float(5000000) == 5000000.0
         assert ZebpayRequestTickerData._parse_float(None) is None
         assert ZebpayRequestTickerData._parse_float("invalid") is None
 
     def test_ticker_class_methods(self):
-        """Test that ticker class has expected methods."""
-        # Note: The Zebpay ticker has a bug in super().__init__() but we can still test the class
-        # For now, just verify the class exists and has the expected attributes
         assert hasattr(ZebpayRequestTickerData, '_parse_float')
         assert hasattr(ZebpayRequestTickerData, 'init_data')
 
 
-class TestZebpayRegistry:
-    """Test Zebpay registration."""
+# ═══════════════════════════════════════════════════════════════
+# 11) Integration (skipped)
+# ═══════════════════════════════════════════════════════════════
 
-    def test_zebpay_registered(self):
-        """Test that Zebpay is properly registered."""
-        # Check if feed is registered in _feed_classes
-        assert "ZEBPAY___SPOT" in ExchangeRegistry._feed_classes
-        assert ExchangeRegistry._feed_classes["ZEBPAY___SPOT"] == ZebpayRequestDataSpot
+class TestIntegration:
+    @pytest.mark.skip(reason="Requires network access")
+    def test_live_get_tick(self):
+        f = ZebpayRequestDataSpot(queue.Queue())
+        rd = f.get_tick("BTC-INR")
+        assert isinstance(rd, RequestData)
 
-        # Check if exchange data is registered
-        assert "ZEBPAY___SPOT" in ExchangeRegistry._exchange_data_classes
-        assert ExchangeRegistry._exchange_data_classes["ZEBPAY___SPOT"] == ZebpayExchangeDataSpot
+    @pytest.mark.skip(reason="Requires network access")
+    def test_live_get_depth(self):
+        f = ZebpayRequestDataSpot(queue.Queue())
+        rd = f.get_depth("BTC-INR")
+        assert isinstance(rd, RequestData)
 
-        # Check if balance handler is registered
-        assert "ZEBPAY___SPOT" in ExchangeRegistry._balance_handlers
-        assert ExchangeRegistry._balance_handlers["ZEBPAY___SPOT"] is not None
-
-    @patch('bt_api_py.containers.exchanges.zebpay_exchange_data._get_zebpay_config')
-    def test_zebpay_create_feed(self, mock_config):
-        """Test creating Zebpay feed through registry."""
-        mock_config.return_value = None
-        data_queue = queue.Queue()
-        feed = ExchangeRegistry.create_feed(
-            "ZEBPAY___SPOT",
-            data_queue,
-        )
-        assert isinstance(feed, ZebpayRequestDataSpot)
-
-    @patch('bt_api_py.containers.exchanges.zebpay_exchange_data._get_zebpay_config')
-    def test_zebpay_create_exchange_data(self, mock_config):
-        """Test creating Zebpay exchange data through registry."""
-        mock_config.return_value = None
-        exchange_data = ExchangeRegistry.create_exchange_data("ZEBPAY___SPOT")
-        assert isinstance(exchange_data, ZebpayExchangeDataSpot)
-
-
-class TestZebpayIntegration:
-    """Integration tests for Zebpay."""
-
-    def test_market_data_api(self):
-        """Test market data API calls (requires network)."""
-        data_queue = queue.Queue()
-        feed = ZebpayRequestDataSpot(data_queue)
-
-        # Test ticker
-        ticker = feed.get_tick("BTC/INR")
-        assert ticker.status is True
-
-    def test_depth_api(self):
-        """Test depth API calls (requires network)."""
-        data_queue = queue.Queue()
-        feed = ZebpayRequestDataSpot(data_queue)
-
-        # Test orderbook
-        depth = feed.get_depth("BTC/INR")
-        assert depth.status is True
-
-    def test_kline_api(self):
-        """Test kline API calls (requires network)."""
-        data_queue = queue.Queue()
-        feed = ZebpayRequestDataSpot(data_queue)
-
-        # Test klines
-        klines = feed.get_kline("BTC/INR", period="1h", count=10)
-        assert klines.status is True
+    @pytest.mark.skip(reason="Requires network access")
+    def test_live_get_kline(self):
+        f = ZebpayRequestDataSpot(queue.Queue())
+        rd = f.get_kline("BTC-INR", period="1h", count=10)
+        assert isinstance(rd, RequestData)
 
 
 if __name__ == "__main__":

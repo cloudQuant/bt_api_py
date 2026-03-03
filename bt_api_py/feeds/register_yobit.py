@@ -1,5 +1,5 @@
 """
-YoBit 交易所注册模块
+YoBit Exchange Registration Module
 """
 
 from bt_api_py.balance_utils import simple_balance_handler as _yobit_balance_handler
@@ -8,17 +8,20 @@ from bt_api_py.feeds.live_yobit.spot import YobitRequestDataSpot
 from bt_api_py.registry import ExchangeRegistry
 
 
+def _yobit_spot_subscribe_handler(feed, topics):
+    """Placeholder subscribe handler for YoBit WebSocket."""
+    pass
+
+
 def register_yobit():
-    """注册 YoBit SPOT 到全局 ExchangeRegistry"""
-    # 注册 Feed 类
+    """Register YoBit SPOT to global ExchangeRegistry"""
     ExchangeRegistry.register_feed("YOBIT___SPOT", YobitRequestDataSpot)
-
-    # 注册配置类
     ExchangeRegistry.register_exchange_data("YOBIT___SPOT", YobitExchangeDataSpot)
-
-    # 注册余额处理器
     ExchangeRegistry.register_balance_handler("YOBIT___SPOT", _yobit_balance_handler)
+    ExchangeRegistry.register_stream(
+        "YOBIT___SPOT", "subscribe", _yobit_spot_subscribe_handler
+    )
 
 
-# 模块导入时自动注册
+# Auto-register on module import
 register_yobit()

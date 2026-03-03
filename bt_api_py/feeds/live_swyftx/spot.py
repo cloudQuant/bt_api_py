@@ -1,165 +1,126 @@
 """
-Swyftx Spot Feed implementation.
+Swyftx Spot Feed – three-layer sync / async wrappers + WSS stubs.
 """
 
-import json
-
-from typing import Any
-
 from bt_api_py.containers.exchanges.swyftx_exchange_data import SwyftxExchangeDataSpot
-from bt_api_py.feeds.capability import Capability
 from bt_api_py.feeds.live_swyftx.request_base import SwyftxRequestData
-from bt_api_py.functions.utils import update_extra_data
+from bt_api_py.functions.log_message import SpdLogManager
 
 
 class SwyftxRequestDataSpot(SwyftxRequestData):
-    """Swyftx Spot Feed for market data."""
-
-    @classmethod
-    def _capabilities(cls):
-        return {
-            Capability.GET_TICK,
-            Capability.GET_DEPTH,
-            Capability.GET_KLINE,
-            Capability.GET_EXCHANGE_INFO,
-        }
+    """Swyftx Spot REST Feed."""
 
     def __init__(self, data_queue, **kwargs):
         super().__init__(data_queue, **kwargs)
-        self.exchange_name = kwargs.get("exchange_name", "SWYFTX___SPOT")
 
-    def _get_tick(self, symbol, extra_data=None, **kwargs):
-        """Get ticker data."""
-        request_type = "get_tick"
-        path = f"GET /api/v1/markets/{{id}}/ticker"
-        extra_data = extra_data or {}
-        extra_data = update_extra_data(
-            extra_data,
-            **{
-                "request_type": request_type,
-                "symbol_name": symbol,
-                "normalize_function": self._get_tick_normalize_function,
-            },
-        )
-        # Use symbol as market ID
-        return path, {"id": symbol}, extra_data
+    # ── server time ─────────────────────────────────────────────
 
-    @staticmethod
-    def _get_tick_normalize_function(input_data, extra_data):
-        """Normalize ticker response."""
-        if not input_data:
-            return [], False
-        ticker = input_data if isinstance(input_data, dict) else {}
-        return [ticker], bool(ticker)
+    def get_server_time(self, extra_data=None, **kwargs):
+        path, params, extra = self._get_server_time(extra_data, **kwargs)
+        return self.request(path, params, extra_data=extra)
+
+    async def async_get_server_time(self, extra_data=None, **kwargs):
+        path, params, extra = self._get_server_time(extra_data, **kwargs)
+        return await self.async_request(path, params, extra_data=extra)
+
+    # ── market data ─────────────────────────────────────────────
 
     def get_tick(self, symbol, extra_data=None, **kwargs):
-        """Get symbol ticker."""
-        path, params, extra_data = self._get_tick(symbol, extra_data, **kwargs)
-        return self.request(path, params, extra_data=extra_data)
+        path, params, extra = self._get_tick(symbol, extra_data, **kwargs)
+        return self.request(path, params, extra_data=extra)
 
-    def async_get_tick(self, symbol, extra_data=None, **kwargs):
-        """Get symbol ticker asynchronously."""
-        path, params, extra_data = self._get_tick(symbol, extra_data, **kwargs)
-        return self.async_request(path, params, extra_data=extra_data)
+    async def async_get_tick(self, symbol, extra_data=None, **kwargs):
+        path, params, extra = self._get_tick(symbol, extra_data, **kwargs)
+        return await self.async_request(path, params, extra_data=extra)
 
-    def _get_depth(self, symbol, count=20, extra_data=None, **kwargs):
-        """Get order book depth."""
-        request_type = "get_depth"
-        path = f"GET /api/v1/markets/{{id}}/orderbook"
-        extra_data = extra_data or {}
-        extra_data = update_extra_data(
-            extra_data,
-            **{
-                "request_type": request_type,
-                "symbol_name": symbol,
-                "normalize_function": self._get_depth_normalize_function,
-            },
-        )
-        return path, {"id": symbol, "depth": count}, extra_data
+    def get_ticker(self, symbol, extra_data=None, **kwargs):
+        return self.get_tick(symbol, extra_data, **kwargs)
 
-    @staticmethod
-    def _get_depth_normalize_function(input_data, extra_data):
-        """Normalize depth response."""
-        if not input_data:
-            return [], False
-        depth = input_data if isinstance(input_data, dict) else {}
-        return [depth], bool(depth)
+    async def async_get_ticker(self, symbol, extra_data=None, **kwargs):
+        return await self.async_get_tick(symbol, extra_data, **kwargs)
 
     def get_depth(self, symbol, count=20, extra_data=None, **kwargs):
-        """Get order book."""
-        path, params, extra_data = self._get_depth(symbol, count, extra_data, **kwargs)
-        return self.request(path, params, extra_data=extra_data)
+        path, params, extra = self._get_depth(symbol, count, extra_data, **kwargs)
+        return self.request(path, params, extra_data=extra)
 
-    def async_get_depth(self, symbol, count=20, extra_data=None, **kwargs):
-        """Get order book asynchronously."""
-        path, params, extra_data = self._get_depth(symbol, count, extra_data, **kwargs)
-        return self.async_request(path, params, extra_data=extra_data)
-
-    def _get_kline(self, symbol, period, count=20, extra_data=None, **kwargs):
-        """Get kline/candlestick data."""
-        request_type = "get_kline"
-        path = f"GET /api/v1/markets/{{id}}/candles"
-        extra_data = extra_data or {}
-        extra_data = update_extra_data(
-            extra_data,
-            **{
-                "request_type": request_type,
-                "symbol_name": symbol,
-                "normalize_function": self._get_kline_normalize_function,
-            },
-        )
-        return path, {
-            "id": symbol,
-            "interval": self._params.get_period(period),
-            "limit": count,
-        }, extra_data
-
-    @staticmethod
-    def _get_kline_normalize_function(input_data, extra_data):
-        """Normalize kline response."""
-        if not input_data:
-            return [], False
-        klines = input_data if isinstance(input_data, list) else []
-        return klines, bool(klines)
+    async def async_get_depth(self, symbol, count=20, extra_data=None, **kwargs):
+        path, params, extra = self._get_depth(symbol, count, extra_data, **kwargs)
+        return await self.async_request(path, params, extra_data=extra)
 
     def get_kline(self, symbol, period, count=20, extra_data=None, **kwargs):
-        """Get kline data."""
-        path, params, extra_data = self._get_kline(symbol, period, count, extra_data, **kwargs)
-        return self.request(path, params, extra_data=extra_data)
+        path, params, extra = self._get_kline(symbol, period, count, extra_data, **kwargs)
+        return self.request(path, params, extra_data=extra)
 
-    def async_get_kline(self, symbol, period, count=20, extra_data=None, **kwargs):
-        """Get kline data asynchronously."""
-        path, params, extra_data = self._get_kline(symbol, period, count, extra_data, **kwargs)
-        return self.async_request(path, params, extra_data=extra_data)
-
-    def _get_exchange_info(self, extra_data=None, **kwargs):
-        """Get exchange information."""
-        request_type = "get_exchange_info"
-        path = f"GET /api/v1/markets"
-        extra_data = extra_data or {}
-        extra_data = update_extra_data(
-            extra_data,
-            **{
-                "request_type": request_type,
-                "normalize_function": self._get_exchange_info_normalize_function,
-            },
-        )
-        return path, {}, extra_data
-
-    @staticmethod
-    def _get_exchange_info_normalize_function(input_data, extra_data):
-        """Normalize exchange info response."""
-        if not input_data:
-            return [], False
-        # Handle both dict and list inputs
-        if isinstance(input_data, dict):
-            return [input_data], True
-        elif isinstance(input_data, list):
-            return input_data, bool(input_data)
-        else:
-            return [], False
+    async def async_get_kline(self, symbol, period, count=20, extra_data=None, **kwargs):
+        path, params, extra = self._get_kline(symbol, period, count, extra_data, **kwargs)
+        return await self.async_request(path, params, extra_data=extra)
 
     def get_exchange_info(self, extra_data=None, **kwargs):
-        """Get exchange information."""
-        path, params, extra_data = self._get_exchange_info(extra_data, **kwargs)
-        return self.request(path, params, extra_data=extra_data)
+        path, params, extra = self._get_exchange_info(extra_data, **kwargs)
+        return self.request(path, params, extra_data=extra)
+
+    async def async_get_exchange_info(self, extra_data=None, **kwargs):
+        path, params, extra = self._get_exchange_info(extra_data, **kwargs)
+        return await self.async_request(path, params, extra_data=extra)
+
+    # ── account ─────────────────────────────────────────────────
+
+    def get_balance(self, extra_data=None, **kwargs):
+        path, params, extra = self._get_balance(extra_data, **kwargs)
+        return self.request(path, params, extra_data=extra)
+
+    async def async_get_balance(self, extra_data=None, **kwargs):
+        path, params, extra = self._get_balance(extra_data, **kwargs)
+        return await self.async_request(path, params, extra_data=extra)
+
+    def get_account(self, extra_data=None, **kwargs):
+        path, params, extra = self._get_account(extra_data, **kwargs)
+        return self.request(path, params, extra_data=extra)
+
+    async def async_get_account(self, extra_data=None, **kwargs):
+        path, params, extra = self._get_account(extra_data, **kwargs)
+        return await self.async_request(path, params, extra_data=extra)
+
+
+# ── WebSocket stubs ──────────────────────────────────────────
+
+class SwyftxMarketWssDataSpot:
+    """Swyftx Spot Market WebSocket Data Handler (stub)."""
+
+    def __init__(self, data_queue, **kwargs):
+        self.data_queue = data_queue
+        self._params = SwyftxExchangeDataSpot()
+        self.logger_name = kwargs.get("logger_name", "swyftx_spot_market_wss.log")
+        self.request_logger = SpdLogManager(
+            "./logs/" + self.logger_name, "request", 0, 0, False
+        ).create_logger()
+        self.wss_url = kwargs.get("wss_url", "")
+        self.topics = kwargs.get("topics", [])
+        self.running = False
+
+    def start(self):
+        self.running = True
+
+    def stop(self):
+        self.running = False
+
+
+class SwyftxAccountWssDataSpot:
+    """Swyftx Spot Account WebSocket Data Handler (stub)."""
+
+    def __init__(self, data_queue, **kwargs):
+        self.data_queue = data_queue
+        self._params = SwyftxExchangeDataSpot()
+        self.logger_name = kwargs.get("logger_name", "swyftx_spot_account_wss.log")
+        self.request_logger = SpdLogManager(
+            "./logs/" + self.logger_name, "request", 0, 0, False
+        ).create_logger()
+        self.wss_url = kwargs.get("wss_url", "")
+        self.topics = kwargs.get("topics", [])
+        self.running = False
+
+    def start(self):
+        self.running = True
+
+    def stop(self):
+        self.running = False

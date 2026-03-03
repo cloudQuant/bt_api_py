@@ -1,8 +1,12 @@
 """
-Swyftx Exchange Data Configuration
+Swyftx Exchange Data Configuration – Feed pattern.
 """
 
 import os
+import re
+
+import yaml
+
 from bt_api_py.containers.exchanges.exchange_data import ExchangeData
 from bt_api_py.functions.log_message import SpdLogManager
 
@@ -10,28 +14,25 @@ logger = SpdLogManager(
     file_name="swyftx_exchange_data.log", logger_name="swyftx_data", print_info=False
 ).create_logger()
 
-_swyftx_config = None
-_swyftx_config_loaded = False
+_swyftx_yaml_cache = None
 
 
-def _get_swyftx_config():
-    """Load Swyftx YAML configuration."""
-    global _swyftx_config, _swyftx_config_loaded
-    if _swyftx_config_loaded:
-        return _swyftx_config
+def _load_swyftx_yaml():
+    global _swyftx_yaml_cache
+    if _swyftx_yaml_cache is not None:
+        return _swyftx_yaml_cache
     try:
-        from bt_api_py.config_loader import load_exchange_config
-        config_path = os.path.join(
+        cfg_path = os.path.join(
             os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
-            "configs",
-            "swyftx.yaml",
+            "configs", "swyftx.yaml",
         )
-        if os.path.exists(config_path):
-            _swyftx_config = load_exchange_config(config_path)
-        _swyftx_config_loaded = True
+        if os.path.exists(cfg_path):
+            with open(cfg_path, "r", encoding="utf-8") as f:
+                _swyftx_yaml_cache = yaml.safe_load(f) or {}
     except Exception as e:
-        logger.warn(f"Failed to load swyftx.yaml config: {e}")
-    return _swyftx_config
+        logger.warn(f"Failed to load swyftx.yaml: {e}")
+        _swyftx_yaml_cache = {}
+    return _swyftx_yaml_cache
 
 
 class SwyftxExchangeData(ExchangeData):
@@ -39,63 +40,37 @@ class SwyftxExchangeData(ExchangeData):
 
     def __init__(self):
         super().__init__()
-        self.exchange_name = "swyftx"
+        self.exchange_name = "SWYFTX"
         self.rest_url = "https://api.swyftx.com.au"
-        self.wss_url = "wss://api.swyftx.com.au"
+        self.wss_url = ""
         self.kline_periods = {
-            "1m": "60",
-            "5m": "300",
-            "15m": "900",
-            "30m": "1800",
-            "1h": "3600",
-            "4h": "14400",
-            "1d": "86400",
-            "1w": "604800",
+            "1m": "60", "5m": "300", "15m": "900", "30m": "1800",
+            "1h": "3600", "4h": "14400", "1d": "86400", "1w": "604800",
         }
         self.legal_currency = ["AUD", "USD", "BTC", "ETH", "USDT"]
 
+    @staticmethod
+    def get_symbol(symbol):
+        """Normalize symbol to uppercase hyphen format: BTC-AUD."""
+        s = symbol.strip()
+        s = re.sub(r"[/_]", "-", s)
+        return s.upper()
+
+    @staticmethod
+    def get_reverse_symbol(symbol):
+        """Reverse normalize: keep uppercase hyphen."""
+        s = symbol.strip()
+        s = re.sub(r"[/_]", "-", s)
+        return s.upper()
+
     def get_period(self, period):
-        """Get period format for Swyftx API.
-
-        Args:
-            period: Period name (e.g., '1m', '5m', '1h', '1d')
-
-        Returns:
-            str: Swyftx format period
-        """
         return self.kline_periods.get(period, period)
 
-    def _load_from_config(self, asset_type):
-        """Load from YAML config."""
-        config = _get_swyftx_config()
-        if config is None:
-            return False
-        asset_cfg = config.asset_types.get(asset_type)
-        if asset_cfg is None:
-            return False
-
-        if asset_cfg.exchange_name:
-            self.exchange_name = asset_cfg.exchange_name
-        if config.base_urls and config.base_urls.rest:
-            self.rest_url = config.base_urls.rest.get(asset_type, self.rest_url)
-        if config.base_urls and config.base_urls.wss:
-            self.wss_url = config.base_urls.wss.get(asset_type, self.wss_url)
-        if asset_cfg.rest_paths:
-            self.rest_paths.update(asset_cfg.rest_paths)
-        if asset_cfg.wss_paths:
-            self.wss_paths.update(asset_cfg.wss_paths)
-
-        # kline_periods - load from YAML, prefer asset-specific config
-        kp = asset_cfg.kline_periods or (config.kline_periods if config.kline_periods else None)
-        if kp:
-            self.kline_periods = dict(kp)
-
-        # legal_currency - load from YAML
-        lc = asset_cfg.legal_currency or (config.legal_currency if config.legal_currency else None)
-        if lc:
-            self.legal_currency = list(lc)
-
-        return True
+    def get_reverse_period(self, period):
+        for k, v in self.kline_periods.items():
+            if v == period:
+                return k
+        return period
 
 
 class SwyftxExchangeDataSpot(SwyftxExchangeData):
@@ -103,7 +78,49 @@ class SwyftxExchangeDataSpot(SwyftxExchangeData):
 
     def __init__(self):
         super().__init__()
-        self.asset_type = "spot"
-        self.rest_paths = {}
+        self.exchange_name = "SWYFTX___SPOT"
+        self.asset_type = "SPOT"
+        self.rest_paths = {
+            "get_server_time": "GET /api/v1/time",
+            "get_tick": "GET /api/v1/markets/{symbol}/ticker",
+            "get_ticker": "GET /api/v1/markets/{symbol}/ticker",
+            "get_all_tickers": "GET /api/v1/markets/ticker",
+            "get_depth": "GET /api/v1/markets/{symbol}/orderbook",
+            "get_kline": "GET /api/v1/markets/{symbol}/candles",
+            "get_exchange_info": "GET /api/v1/markets",
+            "get_account": "GET /api/v1/user/account",
+            "get_balance": "GET /api/v1/user/balance",
+            "make_order": "POST /api/v1/orders",
+            "cancel_order": "DELETE /api/v1/orders/{order_id}",
+            "query_order": "GET /api/v1/orders/{order_id}",
+            "get_open_orders": "GET /api/v1/orders",
+        }
         self.wss_paths = {}
-        self._load_from_config("spot")
+        self._load_yaml()
+
+    def _load_yaml(self):
+        cfg = _load_swyftx_yaml()
+        spot = cfg.get("SWYFTX___SPOT", {})
+        if not spot:
+            return
+        self.exchange_name = spot.get("exchange_name", self.exchange_name)
+        self.asset_type = spot.get("asset_type", self.asset_type)
+        self.rest_url = spot.get("rest_url", self.rest_url)
+        self.wss_url = spot.get("wss_url", self.wss_url)
+        rp = spot.get("rest_paths")
+        if rp:
+            self.rest_paths.update(rp)
+        kp = spot.get("kline_periods")
+        if kp:
+            self.kline_periods = dict(kp)
+        lc = spot.get("legal_currency")
+        if lc:
+            self.legal_currency = list(lc)
+
+    def get_rest_path(self, key, **kwargs):
+        path = self.rest_paths.get(key, "")
+        if not path:
+            raise ValueError(f"[{self.exchange_name}] REST path not found: {key}")
+        if kwargs:
+            path = path.format(**kwargs)
+        return path

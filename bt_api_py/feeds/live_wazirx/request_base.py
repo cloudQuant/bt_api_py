@@ -1,13 +1,14 @@
 """
-WazirX REST API request base class.
+WazirX REST API request base class – Feed pattern.
 """
 
-import time
-import hmac
 import hashlib
+import hmac
+import time
 from urllib.parse import urlencode
 
 from bt_api_py.containers.exchanges.wazirx_exchange_data import WazirxExchangeDataSpot
+from bt_api_py.containers.requestdatas.request_data import RequestData
 from bt_api_py.feeds.capability import Capability
 from bt_api_py.feeds.feed import Feed
 from bt_api_py.functions.log_message import SpdLogManager
@@ -30,85 +31,74 @@ class WazirxRequestData(Feed):
         self.data_queue = data_queue
         self.exchange_name = kwargs.get("exchange_name", "WAZIRX___SPOT")
         self.asset_type = kwargs.get("asset_type", "SPOT")
+        self.api_key = kwargs.get("public_key", kwargs.get("api_key", None))
+        self.api_secret = kwargs.get("secret_key", kwargs.get("api_secret", None))
         self._params = WazirxExchangeDataSpot()
         self.request_logger = SpdLogManager(
             "./logs/wazirx_feed.log", "request", 0, 0, False
         ).create_logger()
+        self.async_logger = SpdLogManager(
+            "./logs/wazirx_feed.log", "async_request", 0, 0, False
+        ).create_logger()
 
-    def _generate_signature(self, params, body=""):
-        """Generate HMAC SHA256 signature for WazirX API.
+    # ── auth ────────────────────────────────────────────────────
 
-        WazirX signature: HMAC SHA256 of query string + request body
-        """
-        secret = self._params.api_secret
-        if secret:
-            # Build totalParams: query string + request body
-            query_string = urlencode(params) if params else ""
-            total_params = query_string + body
-            signature = hmac.new(
-                secret.encode("utf-8"),
-                total_params.encode("utf-8"),
-                hashlib.sha256
+    def _generate_signature(self, query_string):
+        if self.api_secret:
+            return hmac.new(
+                self.api_secret.encode("utf-8"),
+                query_string.encode("utf-8"),
+                hashlib.sha256,
             ).hexdigest()
-            return signature
         return ""
 
-    def _get_headers(self, method, request_path, params=None, body=""):
-        """Generate request headers."""
-        headers = {
-            "Content-Type": "application/x-www-form-urlencoded",
-        }
-
-        # Add authentication headers if API key is available
-        if self._params.api_key:
-            headers["X-API-KEY"] = self._params.api_key
-
+    def _get_headers(self, **kwargs):
+        headers = {"Content-Type": "application/x-www-form-urlencoded"}
+        if self.api_key:
+            headers["X-API-KEY"] = self.api_key
         return headers
 
+    # ── request / async_request ─────────────────────────────────
+
     def request(self, path, params=None, body=None, extra_data=None, timeout=10):
-        """HTTP request for WazirX API."""
         method = path.split()[0] if " " in path else "GET"
-        request_path = "/" + path.split()[1] if " " in path else path
+        endpoint = path.split()[1] if " " in path else path
+        url = self._params.rest_url + endpoint
+        if params:
+            url = url + "?" + urlencode(params)
+        headers = self._get_headers()
+        response = self.http_request(
+            method=method, url=url, headers=headers,
+            body=body, timeout=timeout,
+        )
+        return self._process_response(response, extra_data)
 
-        headers = self._get_headers(method, request_path, params, body)
-
-        # Add timestamp and signature for authenticated requests
-        if self._params.api_key:
-            params = params or {}
-            if "timestamp" not in params:
-                params["timestamp"] = int(time.time() * 1000)
-            if "recvWindow" not in params:
-                params["recvWindow"] = 5000
-
-            # Add signature
-            signature = self._generate_signature(params, body or "")
-            params["signature"] = signature
-
-        try:
-            from bt_api_py.feeds.http_client import HttpClient
-
-            http_client = HttpClient(venue=self.exchange_name, timeout=timeout)
-            response = http_client.request(
-                method=method,
-                url=self._params.rest_url + request_path,
-                headers=headers,
-                data=body if method in ["POST", "DELETE"] else None,
-                params=params,
-            )
-            return self._process_response(response, extra_data)
-        except Exception as e:
-            self.request_logger.error(f"Request failed: {e}")
-            raise
+    async def async_request(self, path, params=None, body=None, extra_data=None, timeout=10):
+        method = path.split()[0] if " " in path else "GET"
+        endpoint = path.split()[1] if " " in path else path
+        url = self._params.rest_url + endpoint
+        if params:
+            url = url + "?" + urlencode(params)
+        headers = self._get_headers()
+        response = await self.async_http_request(
+            method=method, url=url, headers=headers,
+            body=body, timeout=timeout,
+        )
+        return self._process_response(response, extra_data)
 
     def _process_response(self, response, extra_data=None):
-        """Process API response."""
-        from bt_api_py.containers.requestdatas.request_data import RequestData
         return RequestData(response, extra_data)
 
     def push_data_to_queue(self, data):
-        """Push data to the queue."""
         if self.data_queue is not None:
             self.data_queue.put(data)
+
+    def async_callback(self, future):
+        try:
+            result = future.result()
+            self.push_data_to_queue(result)
+        except Exception as e:
+            self.async_logger.warn(f"async_callback::{e}")
 
     def connect(self):
         pass
@@ -118,3 +108,154 @@ class WazirxRequestData(Feed):
 
     def is_connected(self):
         return True
+
+    # ── error detection ─────────────────────────────────────────
+
+    @staticmethod
+    def _is_error(data):
+        if data is None:
+            return True
+        if isinstance(data, dict) and ("code" in data or "message" in data):
+            return True
+        return False
+
+    # ── _get_xxx internal methods ───────────────────────────────
+
+    def _get_server_time(self, extra_data=None, **kwargs):
+        path = self._params.get_rest_path("get_server_time")
+        extra_data = extra_data or {}
+        extra_data.update({
+            "request_type": "get_server_time",
+            "normalize_function": self._get_server_time_normalize_function,
+        })
+        return path, None, extra_data
+
+    def _get_tick(self, symbol, extra_data=None, **kwargs):
+        path = self._params.get_rest_path("get_tick")
+        params = {"symbol": symbol}
+        extra_data = extra_data or {}
+        extra_data.update({
+            "request_type": "get_tick",
+            "symbol_name": symbol,
+            "normalize_function": self._get_tick_normalize_function,
+        })
+        return path, params, extra_data
+
+    def _get_depth(self, symbol, count=20, extra_data=None, **kwargs):
+        path = self._params.get_rest_path("get_depth")
+        params = {"symbol": symbol, "limit": count}
+        extra_data = extra_data or {}
+        extra_data.update({
+            "request_type": "get_depth",
+            "symbol_name": symbol,
+            "normalize_function": self._get_depth_normalize_function,
+        })
+        return path, params, extra_data
+
+    def _get_kline(self, symbol, period, count=20, extra_data=None, **kwargs):
+        path = self._params.get_rest_path("get_kline")
+        params = {
+            "symbol": symbol,
+            "interval": self._params.get_period(period),
+            "limit": count,
+        }
+        extra_data = extra_data or {}
+        extra_data.update({
+            "request_type": "get_kline",
+            "symbol_name": symbol,
+            "normalize_function": self._get_kline_normalize_function,
+        })
+        return path, params, extra_data
+
+    def _get_exchange_info(self, extra_data=None, **kwargs):
+        path = self._params.get_rest_path("get_exchange_info")
+        extra_data = extra_data or {}
+        extra_data.update({
+            "request_type": "get_exchange_info",
+            "normalize_function": self._get_exchange_info_normalize_function,
+        })
+        return path, None, extra_data
+
+    def _get_balance(self, extra_data=None, **kwargs):
+        path = self._params.get_rest_path("get_balance")
+        extra_data = extra_data or {}
+        extra_data.update({
+            "request_type": "get_balance",
+            "normalize_function": self._get_balance_normalize_function,
+        })
+        return path, None, extra_data
+
+    def _get_account(self, extra_data=None, **kwargs):
+        path = self._params.get_rest_path("get_account")
+        extra_data = extra_data or {}
+        extra_data.update({
+            "request_type": "get_account",
+            "normalize_function": self._get_account_normalize_function,
+        })
+        return path, None, extra_data
+
+    # ── normalization functions ──────────────────────────────────
+
+    @staticmethod
+    def _get_server_time_normalize_function(data, extra_data):
+        if data is None:
+            return [], False
+        return [data] if isinstance(data, dict) else [{"serverTime": data}], True
+
+    @staticmethod
+    def _get_tick_normalize_function(data, extra_data):
+        if WazirxRequestData._is_error(data):
+            return [], False
+        if isinstance(data, dict):
+            return [data], True
+        if isinstance(data, list):
+            return data, bool(data)
+        return [], False
+
+    @staticmethod
+    def _get_depth_normalize_function(data, extra_data):
+        if WazirxRequestData._is_error(data):
+            return [], False
+        if isinstance(data, dict):
+            return [data], True
+        return [], False
+
+    @staticmethod
+    def _get_kline_normalize_function(data, extra_data):
+        if WazirxRequestData._is_error(data):
+            return [], False
+        if isinstance(data, list):
+            return data, bool(data)
+        if isinstance(data, dict):
+            return [data], True
+        return [], False
+
+    @staticmethod
+    def _get_exchange_info_normalize_function(data, extra_data):
+        if WazirxRequestData._is_error(data):
+            return [], False
+        if isinstance(data, dict):
+            return [data], True
+        if isinstance(data, list):
+            return data, bool(data)
+        return [], False
+
+    @staticmethod
+    def _get_balance_normalize_function(data, extra_data):
+        if WazirxRequestData._is_error(data):
+            return [], False
+        if isinstance(data, dict):
+            return [data], True
+        if isinstance(data, list):
+            return data, bool(data)
+        return [], False
+
+    @staticmethod
+    def _get_account_normalize_function(data, extra_data):
+        if WazirxRequestData._is_error(data):
+            return [], False
+        if isinstance(data, dict):
+            return [data], True
+        if isinstance(data, list):
+            return data, bool(data)
+        return [], False

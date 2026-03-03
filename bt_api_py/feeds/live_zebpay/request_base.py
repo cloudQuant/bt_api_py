@@ -1,13 +1,15 @@
 """
-Zebpay REST API request base class.
+Zebpay REST API request base class – Feed pattern.
 """
 
-import time
-import hmac
 import hashlib
+import hmac
 import json
+import time
+from urllib.parse import urlencode
 
 from bt_api_py.containers.exchanges.zebpay_exchange_data import ZebpayExchangeDataSpot
+from bt_api_py.containers.requestdatas.request_data import RequestData
 from bt_api_py.feeds.capability import Capability
 from bt_api_py.feeds.feed import Feed
 from bt_api_py.functions.log_message import SpdLogManager
@@ -23,6 +25,12 @@ class ZebpayRequestData(Feed):
             Capability.GET_DEPTH,
             Capability.GET_KLINE,
             Capability.GET_EXCHANGE_INFO,
+            Capability.GET_SERVER_TIME,
+            Capability.GET_BALANCE,
+            Capability.GET_ACCOUNT,
+            Capability.MAKE_ORDER,
+            Capability.CANCEL_ORDER,
+            Capability.QUERY_ORDER,
         }
 
     def __init__(self, data_queue, **kwargs):
@@ -30,88 +38,86 @@ class ZebpayRequestData(Feed):
         self.data_queue = data_queue
         self.exchange_name = kwargs.get("exchange_name", "ZEBPAY___SPOT")
         self.asset_type = kwargs.get("asset_type", "SPOT")
+        self.api_key = kwargs.get("public_key", kwargs.get("api_key", None))
+        self.api_secret = kwargs.get("secret_key", kwargs.get("api_secret", None))
         self._params = ZebpayExchangeDataSpot()
         self.request_logger = SpdLogManager(
             "./logs/zebpay_feed.log", "request", 0, 0, False
         ).create_logger()
+        self.async_logger = SpdLogManager(
+            "./logs/zebpay_feed.log", "async_request", 0, 0, False
+        ).create_logger()
+
+    # ── auth ────────────────────────────────────────────────────
 
     def _generate_signature(self, payload):
-        """Generate HMAC SHA256 signature for Zebpay API.
-
-        Zebpay signature rules:
-        - GET/DELETE: sign the URL query string
-        - POST/PUT: sign the JSON body
-        """
-        secret = self._params.api_secret
-        if secret:
-            signature = hmac.new(
-                secret.encode("utf-8"),
+        if self.api_secret:
+            return hmac.new(
+                self.api_secret.encode("utf-8"),
                 payload.encode("utf-8"),
-                hashlib.sha256
+                hashlib.sha256,
             ).hexdigest()
-            return signature
         return ""
 
-    def _get_headers(self, method, params=None, body=None):
-        """Generate request headers."""
-        headers = {
-            "Content-Type": "application/json",
-        }
-
-        # Add auth headers if credentials available
-        if self._params.api_key:
-            headers["X-AUTH-APIKEY"] = self._params.api_key
-
-        if self._params.api_secret:
+    def _get_headers(self, method="GET", params=None, body=None):
+        headers = {"Content-Type": "application/json"}
+        if self.api_key:
+            headers["X-AUTH-APIKEY"] = self.api_key
+        if self.api_secret:
             timestamp = str(int(time.time() * 1000))
-            if method in ["GET", "DELETE"]:
-                # Sign query string
-                query_params = params.copy() if params else {}
-                query_params["timestamp"] = timestamp
-                from urllib.parse import urlencode
-                query_string = urlencode(query_params)
-                headers["X-AUTH-SIGNATURE"] = self._generate_signature(query_string)
-            elif method in ["POST", "PUT"]:
-                # Sign JSON body
-                body_params = body.copy() if body else {}
-                body_params["timestamp"] = timestamp
-                json_body = json.dumps(body_params, separators=(",", ":"))
-                headers["X-AUTH-SIGNATURE"] = self._generate_signature(json_body)
-
+            if method in ("GET", "DELETE"):
+                qp = params.copy() if params else {}
+                qp["timestamp"] = timestamp
+                headers["X-AUTH-SIGNATURE"] = self._generate_signature(urlencode(qp))
+            elif method in ("POST", "PUT"):
+                bp = body.copy() if body else {}
+                bp["timestamp"] = timestamp
+                headers["X-AUTH-SIGNATURE"] = self._generate_signature(
+                    json.dumps(bp, separators=(",", ":"))
+                )
         return headers
 
+    # ── request / async_request ─────────────────────────────────
+
     def request(self, path, params=None, body=None, extra_data=None, timeout=10):
-        """HTTP request for Zebpay API."""
         method = path.split()[0] if " " in path else "GET"
-        request_path = "/" + path.split()[1] if " " in path else path
-
+        endpoint = path.split()[1] if " " in path else path
+        url = self._params.rest_url + endpoint
+        if params:
+            url = url + "?" + urlencode(params)
         headers = self._get_headers(method, params, body)
+        response = self.http_request(
+            method=method, url=url, headers=headers,
+            body=body, timeout=timeout,
+        )
+        return self._process_response(response, extra_data)
 
-        try:
-            from bt_api_py.feeds.http_client import HttpClient
-
-            http_client = HttpClient(venue=self.exchange_name, timeout=timeout)
-            response = http_client.request(
-                method=method,
-                url=self._params.rest_url + request_path,
-                headers=headers,
-                params=params,
-                json_data=body if method in ["POST", "PUT"] else None,
-            )
-            return self._process_response(response, extra_data)
-        except Exception as e:
-            self.request_logger.error(f"Request failed: {e}")
-            raise
+    async def async_request(self, path, params=None, body=None, extra_data=None, timeout=10):
+        method = path.split()[0] if " " in path else "GET"
+        endpoint = path.split()[1] if " " in path else path
+        url = self._params.rest_url + endpoint
+        if params:
+            url = url + "?" + urlencode(params)
+        headers = self._get_headers(method, params, body)
+        response = await self.async_http_request(
+            method=method, url=url, headers=headers,
+            body=body, timeout=timeout,
+        )
+        return self._process_response(response, extra_data)
 
     def _process_response(self, response, extra_data=None):
-        """Process API response."""
-        from bt_api_py.containers.requestdatas.request_data import RequestData
         return RequestData(response, extra_data)
 
     def push_data_to_queue(self, data):
-        """Push data to the queue."""
         if self.data_queue is not None:
             self.data_queue.put(data)
+
+    def async_callback(self, future):
+        try:
+            result = future.result()
+            self.push_data_to_queue(result)
+        except Exception as e:
+            self.async_logger.warn(f"async_callback::{e}")
 
     def connect(self):
         pass
@@ -121,3 +127,255 @@ class ZebpayRequestData(Feed):
 
     def is_connected(self):
         return True
+
+    # ── error detection ─────────────────────────────────────────
+
+    @staticmethod
+    def _is_error(data):
+        if data is None:
+            return True
+        if isinstance(data, dict) and ("error" in data or data.get("code", 0) != 0):
+            return True
+        return False
+
+    # ── _get_xxx internal methods ───────────────────────────────
+
+    def _get_server_time(self, extra_data=None, **kwargs):
+        path = self._params.get_rest_path("get_server_time")
+        extra_data = extra_data or {}
+        extra_data.update({
+            "request_type": "get_server_time",
+            "asset_type": self.asset_type,
+            "exchange_name": self.exchange_name,
+            "normalize_function": self._get_server_time_normalize_function,
+        })
+        return path, None, extra_data
+
+    def _get_tick(self, symbol, extra_data=None, **kwargs):
+        zbp_symbol = self._params.get_symbol(symbol)
+        path = self._params.get_rest_path("get_tick")
+        params = {"symbol": zbp_symbol}
+        extra_data = extra_data or {}
+        extra_data.update({
+            "request_type": "get_tick",
+            "symbol_name": symbol,
+            "asset_type": self.asset_type,
+            "exchange_name": self.exchange_name,
+            "normalize_function": self._get_tick_normalize_function,
+        })
+        return path, params, extra_data
+
+    def _get_depth(self, symbol, count=20, extra_data=None, **kwargs):
+        zbp_symbol = self._params.get_symbol(symbol)
+        path = self._params.get_rest_path("get_depth")
+        params = {"symbol": zbp_symbol}
+        extra_data = extra_data or {}
+        extra_data.update({
+            "request_type": "get_depth",
+            "symbol_name": symbol,
+            "asset_type": self.asset_type,
+            "exchange_name": self.exchange_name,
+            "normalize_function": self._get_depth_normalize_function,
+        })
+        return path, params, extra_data
+
+    def _get_kline(self, symbol, period, count=20, extra_data=None, **kwargs):
+        zbp_symbol = self._params.get_symbol(symbol)
+        zbp_period = self._params.get_period(period)
+        path = self._params.get_rest_path("get_kline")
+        params = {"symbol": zbp_symbol, "interval": zbp_period, "limit": count}
+        extra_data = extra_data or {}
+        extra_data.update({
+            "request_type": "get_kline",
+            "symbol_name": symbol,
+            "asset_type": self.asset_type,
+            "exchange_name": self.exchange_name,
+            "normalize_function": self._get_kline_normalize_function,
+        })
+        return path, params, extra_data
+
+    def _get_exchange_info(self, extra_data=None, **kwargs):
+        path = self._params.get_rest_path("get_exchange_info")
+        extra_data = extra_data or {}
+        extra_data.update({
+            "request_type": "get_exchange_info",
+            "asset_type": self.asset_type,
+            "exchange_name": self.exchange_name,
+            "normalize_function": self._get_exchange_info_normalize_function,
+        })
+        return path, None, extra_data
+
+    def _get_balance(self, extra_data=None, **kwargs):
+        path = self._params.get_rest_path("get_balance")
+        extra_data = extra_data or {}
+        extra_data.update({
+            "request_type": "get_balance",
+            "symbol_name": None,
+            "asset_type": self.asset_type,
+            "exchange_name": self.exchange_name,
+            "normalize_function": self._get_balance_normalize_function,
+        })
+        return path, None, extra_data
+
+    def _get_account(self, extra_data=None, **kwargs):
+        path = self._params.get_rest_path("get_account")
+        extra_data = extra_data or {}
+        extra_data.update({
+            "request_type": "get_account",
+            "symbol_name": None,
+            "asset_type": self.asset_type,
+            "exchange_name": self.exchange_name,
+            "normalize_function": self._get_account_normalize_function,
+        })
+        return path, None, extra_data
+
+    # ── trading internal methods ─────────────────────────────────
+
+    def _make_order(self, symbol, vol, price=None, order_type="buy-limit",
+                    offset="open", post_only=False, client_order_id=None,
+                    extra_data=None, **kwargs):
+        zbp_symbol = self._params.get_symbol(symbol)
+        path = self._params.get_rest_path("make_order")
+        side, otype = order_type.split("-") if "-" in order_type else (order_type, "limit")
+        body = {
+            "symbol": zbp_symbol,
+            "side": side.upper(),
+            "type": otype.upper(),
+            "quantity": str(vol),
+        }
+        if price is not None:
+            body["price"] = str(price)
+        extra_data = extra_data or {}
+        extra_data.update({
+            "request_type": "make_order",
+            "symbol_name": symbol,
+            "asset_type": self.asset_type,
+            "exchange_name": self.exchange_name,
+            "normalize_function": self._make_order_normalize_function,
+        })
+        return path, body, extra_data
+
+    def _cancel_order(self, symbol, order_id=None, extra_data=None, **kwargs):
+        zbp_symbol = self._params.get_symbol(symbol)
+        path = self._params.get_rest_path("cancel_order")
+        params = {"symbol": zbp_symbol, "orderId": order_id}
+        extra_data = extra_data or {}
+        extra_data.update({
+            "request_type": "cancel_order",
+            "symbol_name": symbol,
+            "asset_type": self.asset_type,
+            "exchange_name": self.exchange_name,
+            "normalize_function": self._cancel_order_normalize_function,
+        })
+        return path, params, extra_data
+
+    def _query_order(self, symbol, order_id=None, extra_data=None, **kwargs):
+        zbp_symbol = self._params.get_symbol(symbol)
+        path = self._params.get_rest_path("query_order")
+        params = {"symbol": zbp_symbol}
+        if order_id is not None:
+            params["orderId"] = order_id
+        extra_data = extra_data or {}
+        extra_data.update({
+            "request_type": "query_order",
+            "symbol_name": symbol,
+            "asset_type": self.asset_type,
+            "exchange_name": self.exchange_name,
+            "normalize_function": self._query_order_normalize_function,
+        })
+        return path, params, extra_data
+
+    # ── normalization functions ──────────────────────────────────
+
+    @staticmethod
+    def _get_server_time_normalize_function(data, extra_data):
+        if data is None:
+            return [], False
+        return [data] if isinstance(data, dict) else [{"serverTime": data}], True
+
+    @staticmethod
+    def _get_tick_normalize_function(data, extra_data):
+        if ZebpayRequestData._is_error(data):
+            return [], False
+        if isinstance(data, dict):
+            inner = data.get("data")
+            if inner is not None:
+                return [inner], True
+            return [data], True
+        return [], False
+
+    @staticmethod
+    def _get_depth_normalize_function(data, extra_data):
+        if ZebpayRequestData._is_error(data):
+            return [], False
+        if isinstance(data, dict):
+            inner = data.get("data")
+            if inner is not None:
+                return [inner], True
+            return [data], True
+        return [], False
+
+    @staticmethod
+    def _get_kline_normalize_function(data, extra_data):
+        if ZebpayRequestData._is_error(data):
+            return [], False
+        if isinstance(data, dict):
+            inner = data.get("data", [])
+            return [inner], inner is not None
+        if isinstance(data, list):
+            return data, bool(data)
+        return [], False
+
+    @staticmethod
+    def _get_exchange_info_normalize_function(data, extra_data):
+        if ZebpayRequestData._is_error(data):
+            return [], False
+        if isinstance(data, dict):
+            return [data], True
+        if isinstance(data, list):
+            return data, bool(data)
+        return [], False
+
+    @staticmethod
+    def _get_balance_normalize_function(data, extra_data):
+        if ZebpayRequestData._is_error(data):
+            return [], False
+        if isinstance(data, dict):
+            return [data], True
+        if isinstance(data, list):
+            return data, bool(data)
+        return [], False
+
+    @staticmethod
+    def _get_account_normalize_function(data, extra_data):
+        if ZebpayRequestData._is_error(data):
+            return [], False
+        if isinstance(data, dict):
+            return [data], True
+        if isinstance(data, list):
+            return data, bool(data)
+        return [], False
+
+    @staticmethod
+    def _make_order_normalize_function(data, extra_data):
+        if ZebpayRequestData._is_error(data):
+            return [], False
+        if isinstance(data, dict):
+            return [data], True
+        return [], False
+
+    @staticmethod
+    def _cancel_order_normalize_function(data, extra_data):
+        if ZebpayRequestData._is_error(data):
+            return [], False
+        if isinstance(data, dict):
+            return [data], True
+        return [], False
+
+    @staticmethod
+    def _query_order_normalize_function(data, extra_data):
+        if ZebpayRequestData._is_error(data):
+            return [], False
+        if isinstance(data, dict):
+            return [data], True
+        return [], False

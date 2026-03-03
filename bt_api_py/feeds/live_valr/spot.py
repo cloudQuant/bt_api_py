@@ -1,72 +1,126 @@
 """
-VALR Spot Feed implementation.
+VALR Spot Feed – three-layer sync / async wrappers + WSS stubs.
 """
 
 from bt_api_py.containers.exchanges.valr_exchange_data import ValrExchangeDataSpot
-from bt_api_py.feeds.capability import Capability
 from bt_api_py.feeds.live_valr.request_base import ValrRequestData
+from bt_api_py.functions.log_message import SpdLogManager
 
 
 class ValrRequestDataSpot(ValrRequestData):
-    """VALR Spot Feed for market data."""
-
-    @classmethod
-    def _capabilities(cls):
-        return {
-            Capability.GET_TICK,
-            Capability.GET_DEPTH,
-            Capability.GET_EXCHANGE_INFO,
-        }
+    """VALR Spot REST Feed."""
 
     def __init__(self, data_queue, **kwargs):
         super().__init__(data_queue, **kwargs)
-        self.exchange_name = kwargs.get("exchange_name", "VALR___SPOT")
 
-    def _get_tick(self, symbol, extra_data=None, **kwargs):
-        """Get ticker data.
+    # ── server time ─────────────────────────────────────────────
 
-        VALR uses currency pair format like BTCZAR, ETHUSDC, etc.
-        """
-        request_type = "get_tick"
-        path = f"GET /v1/public/{symbol}/ticker"
-        extra_data = extra_data or {}
-        extra_data.update({
-            "request_type": request_type,
-            "symbol_name": symbol,
-            "normalize_function": self._get_tick_normalize_function,
-        })
-        return self.request(path, params=None, extra_data=extra_data)
+    def get_server_time(self, extra_data=None, **kwargs):
+        path, params, extra = self._get_server_time(extra_data, **kwargs)
+        return self.request(path, params, extra_data=extra)
 
-    @staticmethod
-    def _get_tick_normalize_function(input_data, extra_data):
-        if not input_data:
-            return [], False
-        ticker = input_data
-        return [ticker], ticker is not None
+    async def async_get_server_time(self, extra_data=None, **kwargs):
+        path, params, extra = self._get_server_time(extra_data, **kwargs)
+        return await self.async_request(path, params, extra_data=extra)
+
+    # ── market data ─────────────────────────────────────────────
 
     def get_tick(self, symbol, extra_data=None, **kwargs):
-        """Get symbol ticker."""
-        return self._get_tick(symbol, extra_data, **kwargs)
+        path, params, extra = self._get_tick(symbol, extra_data, **kwargs)
+        return self.request(path, params, extra_data=extra)
 
-    def _get_depth(self, symbol, count=20, extra_data=None, **kwargs):
-        """Get order book depth."""
-        request_type = "get_depth"
-        path = f"GET /v1/public/{symbol}/orderbook"
-        extra_data = extra_data or {}
-        extra_data.update({
-            "request_type": request_type,
-            "symbol_name": symbol,
-            "normalize_function": self._get_depth_normalize_function,
-        })
-        return self.request(path, params=None, extra_data=extra_data)
+    async def async_get_tick(self, symbol, extra_data=None, **kwargs):
+        path, params, extra = self._get_tick(symbol, extra_data, **kwargs)
+        return await self.async_request(path, params, extra_data=extra)
 
-    @staticmethod
-    def _get_depth_normalize_function(input_data, extra_data):
-        if not input_data:
-            return [], False
-        depth = input_data
-        return [depth], depth is not None
+    def get_ticker(self, symbol, extra_data=None, **kwargs):
+        return self.get_tick(symbol, extra_data, **kwargs)
+
+    async def async_get_ticker(self, symbol, extra_data=None, **kwargs):
+        return await self.async_get_tick(symbol, extra_data, **kwargs)
 
     def get_depth(self, symbol, count=20, extra_data=None, **kwargs):
-        """Get order book."""
-        return self._get_depth(symbol, count, extra_data, **kwargs)
+        path, params, extra = self._get_depth(symbol, count, extra_data, **kwargs)
+        return self.request(path, params, extra_data=extra)
+
+    async def async_get_depth(self, symbol, count=20, extra_data=None, **kwargs):
+        path, params, extra = self._get_depth(symbol, count, extra_data, **kwargs)
+        return await self.async_request(path, params, extra_data=extra)
+
+    def get_kline(self, symbol, period, count=20, extra_data=None, **kwargs):
+        path, params, extra = self._get_kline(symbol, period, count, extra_data, **kwargs)
+        return self.request(path, params, extra_data=extra)
+
+    async def async_get_kline(self, symbol, period, count=20, extra_data=None, **kwargs):
+        path, params, extra = self._get_kline(symbol, period, count, extra_data, **kwargs)
+        return await self.async_request(path, params, extra_data=extra)
+
+    def get_exchange_info(self, extra_data=None, **kwargs):
+        path, params, extra = self._get_exchange_info(extra_data, **kwargs)
+        return self.request(path, params, extra_data=extra)
+
+    async def async_get_exchange_info(self, extra_data=None, **kwargs):
+        path, params, extra = self._get_exchange_info(extra_data, **kwargs)
+        return await self.async_request(path, params, extra_data=extra)
+
+    # ── account ─────────────────────────────────────────────────
+
+    def get_balance(self, extra_data=None, **kwargs):
+        path, params, extra = self._get_balance(extra_data, **kwargs)
+        return self.request(path, params, extra_data=extra)
+
+    async def async_get_balance(self, extra_data=None, **kwargs):
+        path, params, extra = self._get_balance(extra_data, **kwargs)
+        return await self.async_request(path, params, extra_data=extra)
+
+    def get_account(self, extra_data=None, **kwargs):
+        path, params, extra = self._get_account(extra_data, **kwargs)
+        return self.request(path, params, extra_data=extra)
+
+    async def async_get_account(self, extra_data=None, **kwargs):
+        path, params, extra = self._get_account(extra_data, **kwargs)
+        return await self.async_request(path, params, extra_data=extra)
+
+
+# ── WebSocket stubs ──────────────────────────────────────────
+
+class ValrMarketWssDataSpot:
+    """VALR Spot Market WebSocket Data Handler (stub)."""
+
+    def __init__(self, data_queue, **kwargs):
+        self.data_queue = data_queue
+        self._params = ValrExchangeDataSpot()
+        self.logger_name = kwargs.get("logger_name", "valr_spot_market_wss.log")
+        self.request_logger = SpdLogManager(
+            "./logs/" + self.logger_name, "request", 0, 0, False
+        ).create_logger()
+        self.wss_url = kwargs.get("wss_url", self._params.wss_url)
+        self.topics = kwargs.get("topics", [])
+        self.running = False
+
+    def start(self):
+        self.running = True
+
+    def stop(self):
+        self.running = False
+
+
+class ValrAccountWssDataSpot:
+    """VALR Spot Account WebSocket Data Handler (stub)."""
+
+    def __init__(self, data_queue, **kwargs):
+        self.data_queue = data_queue
+        self._params = ValrExchangeDataSpot()
+        self.logger_name = kwargs.get("logger_name", "valr_spot_account_wss.log")
+        self.request_logger = SpdLogManager(
+            "./logs/" + self.logger_name, "request", 0, 0, False
+        ).create_logger()
+        self.wss_url = kwargs.get("wss_url", self._params.wss_url)
+        self.topics = kwargs.get("topics", [])
+        self.running = False
+
+    def start(self):
+        self.running = True
+
+    def stop(self):
+        self.running = False

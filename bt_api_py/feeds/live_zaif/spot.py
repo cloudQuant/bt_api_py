@@ -1,133 +1,192 @@
 """
-Zaif Spot Feed implementation.
+Zaif Spot Feed – three-layer sync / async wrappers + WSS stubs.
 """
 
 from bt_api_py.containers.exchanges.zaif_exchange_data import ZaifExchangeDataSpot
-from bt_api_py.feeds.capability import Capability
 from bt_api_py.feeds.live_zaif.request_base import ZaifRequestData
+from bt_api_py.functions.log_message import SpdLogManager
 
 
 class ZaifRequestDataSpot(ZaifRequestData):
-    """Zaif Spot Feed for market data."""
-
-    @classmethod
-    def _capabilities(cls):
-        return {
-            Capability.GET_TICK,
-            Capability.GET_DEPTH,
-            Capability.GET_KLINE,
-            Capability.GET_EXCHANGE_INFO,
-        }
+    """Zaif Spot REST Feed."""
 
     def __init__(self, data_queue, **kwargs):
         super().__init__(data_queue, **kwargs)
-        self.exchange_name = kwargs.get("exchange_name", "ZAIF___SPOT")
 
-    def _get_tick(self, symbol, extra_data=None, **kwargs):
-        """Get ticker data.
+    # ── server time ─────────────────────────────────────────────
 
-        Zaif API endpoint: GET /api/1/ticker/{pair}
-        Symbol format: btc_jpy (lowercase with underscore)
-        """
-        request_type = "get_tick"
-        # Convert common symbol format to Zaif format (BTC/JPY -> btc_jpy)
-        zaif_symbol = self._to_zaif_symbol(symbol)
-        path = f"GET /api/1/ticker/{zaif_symbol}"
-        extra_data = extra_data or {}
-        extra_data.update({
-            "request_type": request_type,
-            "symbol_name": symbol,
-            "normalize_function": self._get_tick_normalize_function,
-        })
-        return self.request(path, extra_data=extra_data)
+    def get_server_time(self, extra_data=None, **kwargs):
+        path, params, extra = self._get_server_time(extra_data, **kwargs)
+        return self.request(path, params, extra_data=extra)
 
-    @staticmethod
-    def _get_tick_normalize_function(input_data, extra_data):
-        if not input_data:
-            return [], False
-        # Zaif returns ticker data directly as the response
-        return [input_data], input_data is not None
+    def async_get_server_time(self, extra_data=None, **kwargs):
+        path, params, extra = self._get_server_time(extra_data, **kwargs)
+        self.submit(
+            self.async_request(path, params, extra_data=extra),
+            callback=self.async_callback,
+        )
+
+    # ── market data ─────────────────────────────────────────────
 
     def get_tick(self, symbol, extra_data=None, **kwargs):
-        """Get symbol ticker."""
-        return self._get_tick(symbol, extra_data, **kwargs)
+        path, params, extra = self._get_tick(symbol, extra_data, **kwargs)
+        return self.request(path, params, extra_data=extra)
 
-    def _get_depth(self, symbol, count=20, extra_data=None, **kwargs):
-        """Get order book depth.
+    def async_get_tick(self, symbol, extra_data=None, **kwargs):
+        path, params, extra = self._get_tick(symbol, extra_data, **kwargs)
+        self.submit(
+            self.async_request(path, params, extra_data=extra),
+            callback=self.async_callback,
+        )
 
-        Zaif API endpoint: GET /api/1/depth/{pair}
-        """
-        request_type = "get_depth"
-        zaif_symbol = self._to_zaif_symbol(symbol)
-        path = f"GET /api/1/depth/{zaif_symbol}"
-        extra_data = extra_data or {}
-        extra_data.update({
-            "request_type": request_type,
-            "symbol_name": symbol,
-            "normalize_function": self._get_depth_normalize_function,
-        })
-        return self.request(path, extra_data=extra_data)
+    def get_ticker(self, symbol, extra_data=None, **kwargs):
+        return self.get_tick(symbol, extra_data, **kwargs)
 
-    @staticmethod
-    def _get_depth_normalize_function(input_data, extra_data):
-        if not input_data:
-            return [], False
-        depth = input_data
-        return [depth], depth is not None
+    def async_get_ticker(self, symbol, extra_data=None, **kwargs):
+        self.async_get_tick(symbol, extra_data, **kwargs)
 
     def get_depth(self, symbol, count=20, extra_data=None, **kwargs):
-        """Get order book."""
-        return self._get_depth(symbol, count, extra_data, **kwargs)
+        path, params, extra = self._get_depth(symbol, count, extra_data, **kwargs)
+        return self.request(path, params, extra_data=extra)
 
-    def _get_kline(self, symbol, period, count=20, extra_data=None, **kwargs):
-        """Get kline/candlestick data.
-
-        Zaif API endpoint: GET /api/1/trades/{pair}
-        Note: Zaif doesn't have a dedicated kline endpoint,
-        so we use trades endpoint to get recent trades.
-        """
-        request_type = "get_kline"
-        zaif_symbol = self._to_zaif_symbol(symbol)
-        path = f"GET /api/1/trades/{zaif_symbol}"
-        extra_data = extra_data or {}
-        extra_data.update({
-            "request_type": request_type,
-            "symbol_name": symbol,
-            "normalize_function": self._get_kline_normalize_function,
-        })
-        return self.request(path, extra_data=extra_data)
-
-    @staticmethod
-    def _get_kline_normalize_function(input_data, extra_data):
-        if not input_data:
-            return [], False
-        # Zaif returns an array of trades
-        trades = input_data if isinstance(input_data, list) else []
-        return [trades], trades is not None
+    def async_get_depth(self, symbol, count=20, extra_data=None, **kwargs):
+        path, params, extra = self._get_depth(symbol, count, extra_data, **kwargs)
+        self.submit(
+            self.async_request(path, params, extra_data=extra),
+            callback=self.async_callback,
+        )
 
     def get_kline(self, symbol, period, count=20, extra_data=None, **kwargs):
-        """Get kline data."""
-        return self._get_kline(symbol, period, count, extra_data, **kwargs)
+        path, params, extra = self._get_kline(symbol, period, count, extra_data, **kwargs)
+        return self.request(path, params, extra_data=extra)
 
-    def _to_zaif_symbol(self, symbol):
-        """Convert symbol to Zaif format.
+    def async_get_kline(self, symbol, period, count=20, extra_data=None, **kwargs):
+        path, params, extra = self._get_kline(symbol, period, count, extra_data, **kwargs)
+        self.submit(
+            self.async_request(path, params, extra_data=extra),
+            callback=self.async_callback,
+        )
 
-        Examples:
-            BTC/JPY -> btc_jpy
-            ETH/BTC -> eth_btc
-            btc_jpy -> btc_jpy (already in correct format)
-        """
-        if "_" in symbol:
-            return symbol.lower()
-        # Assume format like BTC/JPY or BTCJPY
-        symbol = symbol.replace("/", "").replace("-", "").upper()
-        # Common quote currencies
-        quotes = ["JPY", "BTC", "ETH", "MONA", "BCH"]
-        for quote in quotes:
-            if symbol.endswith(quote):
-                base = symbol[:-len(quote)]
-                return f"{base.lower()}_{quote.lower()}"
-        # Default: return as-is with underscore if possible
-        if len(symbol) >= 6:
-            return f"{symbol[:3].lower()}_{symbol[3:].lower()}"
-        return symbol.lower()
+    def get_exchange_info(self, extra_data=None, **kwargs):
+        path, params, extra = self._get_exchange_info(extra_data, **kwargs)
+        return self.request(path, params, extra_data=extra)
+
+    def async_get_exchange_info(self, extra_data=None, **kwargs):
+        path, params, extra = self._get_exchange_info(extra_data, **kwargs)
+        self.submit(
+            self.async_request(path, params, extra_data=extra),
+            callback=self.async_callback,
+        )
+
+    # ── account ─────────────────────────────────────────────────
+
+    def get_balance(self, extra_data=None, **kwargs):
+        path, params, extra = self._get_balance(extra_data, **kwargs)
+        return self.request(path, params, extra_data=extra)
+
+    def async_get_balance(self, extra_data=None, **kwargs):
+        path, params, extra = self._get_balance(extra_data, **kwargs)
+        self.submit(
+            self.async_request(path, params, extra_data=extra),
+            callback=self.async_callback,
+        )
+
+    def get_account(self, extra_data=None, **kwargs):
+        path, params, extra = self._get_account(extra_data, **kwargs)
+        return self.request(path, params, extra_data=extra)
+
+    def async_get_account(self, extra_data=None, **kwargs):
+        path, params, extra = self._get_account(extra_data, **kwargs)
+        self.submit(
+            self.async_request(path, params, extra_data=extra),
+            callback=self.async_callback,
+        )
+
+    # ── trading ──────────────────────────────────────────────────
+
+    def make_order(self, symbol, vol, price=None, order_type="buy-limit",
+                   offset="open", post_only=False, client_order_id=None,
+                   extra_data=None, **kwargs):
+        path, params, extra = self._make_order(
+            symbol, vol, price, order_type, offset, post_only,
+            client_order_id, extra_data, **kwargs,
+        )
+        return self.request(path, params, extra_data=extra)
+
+    def async_make_order(self, symbol, vol, price=None, order_type="buy-limit",
+                         offset="open", post_only=False, client_order_id=None,
+                         extra_data=None, **kwargs):
+        path, params, extra = self._make_order(
+            symbol, vol, price, order_type, offset, post_only,
+            client_order_id, extra_data, **kwargs,
+        )
+        self.submit(
+            self.async_request(path, params, extra_data=extra),
+            callback=self.async_callback,
+        )
+
+    def cancel_order(self, symbol, order_id=None, extra_data=None, **kwargs):
+        path, params, extra = self._cancel_order(symbol, order_id, extra_data, **kwargs)
+        return self.request(path, params, extra_data=extra)
+
+    def async_cancel_order(self, symbol, order_id=None, extra_data=None, **kwargs):
+        path, params, extra = self._cancel_order(symbol, order_id, extra_data, **kwargs)
+        self.submit(
+            self.async_request(path, params, extra_data=extra),
+            callback=self.async_callback,
+        )
+
+    def query_order(self, symbol, order_id=None, extra_data=None, **kwargs):
+        path, params, extra = self._query_order(symbol, order_id, extra_data, **kwargs)
+        return self.request(path, params, extra_data=extra)
+
+    def async_query_order(self, symbol, order_id=None, extra_data=None, **kwargs):
+        path, params, extra = self._query_order(symbol, order_id, extra_data, **kwargs)
+        self.submit(
+            self.async_request(path, params, extra_data=extra),
+            callback=self.async_callback,
+        )
+
+
+# ── WebSocket stubs ──────────────────────────────────────────
+
+class ZaifMarketWssDataSpot:
+    """Zaif Spot Market WebSocket Data Handler (stub)."""
+
+    def __init__(self, data_queue, **kwargs):
+        self.data_queue = data_queue
+        self._params = ZaifExchangeDataSpot()
+        self.logger_name = kwargs.get("logger_name", "zaif_spot_market_wss.log")
+        self.request_logger = SpdLogManager(
+            "./logs/" + self.logger_name, "request", 0, 0, False
+        ).create_logger()
+        self.wss_url = kwargs.get("wss_url", self._params.wss_url)
+        self.topics = kwargs.get("topics", [])
+        self.running = False
+
+    def start(self):
+        self.running = True
+
+    def stop(self):
+        self.running = False
+
+
+class ZaifAccountWssDataSpot:
+    """Zaif Spot Account WebSocket Data Handler (stub)."""
+
+    def __init__(self, data_queue, **kwargs):
+        self.data_queue = data_queue
+        self._params = ZaifExchangeDataSpot()
+        self.logger_name = kwargs.get("logger_name", "zaif_spot_account_wss.log")
+        self.request_logger = SpdLogManager(
+            "./logs/" + self.logger_name, "request", 0, 0, False
+        ).create_logger()
+        self.wss_url = kwargs.get("wss_url", self._params.wss_url)
+        self.topics = kwargs.get("topics", [])
+        self.running = False
+
+    def start(self):
+        self.running = True
+
+    def stop(self):
+        self.running = False

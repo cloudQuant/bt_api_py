@@ -1,296 +1,496 @@
 """
-Test Zaif exchange integration.
+Tests for Zaif exchange – Feed pattern.
 
-Run tests:
-    pytest tests/feeds/test_zaif.py -v
-
-Run with coverage:
-    pytest tests/feeds/test_zaif.py --cov=bt_api_py.feeds.live_zaif --cov-report=term-missing
+Run:  pytest tests/feeds/test_zaif.py -v
 """
 
 import queue
-from unittest.mock import Mock, MagicMock, patch, PropertyMock
+from unittest.mock import patch
 
 import pytest
 
-# Import registration to auto-register Zaif
-import bt_api_py.feeds.register_zaif  # noqa: F401
-from bt_api_py.containers.exchanges.zaif_exchange_data import ZaifExchangeDataSpot
+from bt_api_py.containers.exchanges.zaif_exchange_data import (
+    ZaifExchangeData,
+    ZaifExchangeDataSpot,
+)
+from bt_api_py.containers.requestdatas.request_data import RequestData
 from bt_api_py.containers.tickers.zaif_ticker import ZaifRequestTickerData
-from bt_api_py.feeds.live_zaif.spot import ZaifRequestDataSpot
+from bt_api_py.feeds.live_zaif.request_base import ZaifRequestData
+from bt_api_py.feeds.live_zaif.spot import (
+    ZaifRequestDataSpot,
+    ZaifMarketWssDataSpot,
+    ZaifAccountWssDataSpot,
+)
 from bt_api_py.registry import ExchangeRegistry
 
+import bt_api_py.feeds.register_zaif  # noqa: F401
 
-class TestZaifExchangeData:
-    """Test Zaif exchange data configuration."""
+# ── sample fixtures ──────────────────────────────────────────
 
-    @patch('bt_api_py.containers.exchanges.zaif_exchange_data._get_zaif_config')
-    def test_exchange_data_spot_creation(self, mock_config):
-        """Test creating Zaif spot exchange data."""
-        mock_config.return_value = None
-        exchange_data = ZaifExchangeDataSpot()
-        assert exchange_data.exchange_name == "zaif"
-        assert exchange_data.rest_url == "https://api.zaif.jp"
-        assert exchange_data.wss_url == "wss://ws.zaif.jp:8888"
-        assert exchange_data.asset_type == "spot"
-
-    @patch('bt_api_py.containers.exchanges.zaif_exchange_data._get_zaif_config')
-    def test_kline_periods(self, mock_config):
-        """Test kline period configuration."""
-        mock_config.return_value = None
-        exchange_data = ZaifExchangeDataSpot()
-        assert exchange_data.kline_periods["1m"] == "1min"
-        assert exchange_data.kline_periods["1h"] == "1hour"
-        assert exchange_data.kline_periods["1d"] == "1day"
-
-    @patch('bt_api_py.containers.exchanges.zaif_exchange_data._get_zaif_config')
-    def test_legal_currency(self, mock_config):
-        """Test legal currencies."""
-        mock_config.return_value = None
-        exchange_data = ZaifExchangeDataSpot()
-        assert "JPY" in exchange_data.legal_currency
-        assert "BTC" in exchange_data.legal_currency
-        assert "ETH" in exchange_data.legal_currency
+SAMPLE_TICK = {"last": 5000000, "high": 5100000, "low": 4900000, "vwap": 5000000, "volume": 100, "bid": 4999000, "ask": 5001000}
+SAMPLE_DEPTH = {"asks": [[5001000, 0.5]], "bids": [[4999000, 0.5]]}
+SAMPLE_KLINE = [{"date": 1678901234, "price": 5000000, "amount": 0.1, "tid": 1, "currency_pair": "btc_jpy", "trade_type": "bid"}]
+SAMPLE_EXCHANGE_INFO = [{"name": "btc_jpy", "title": "BTC/JPY"}]
+SAMPLE_SERVER_TIME = {"last_price": 5000000}
+SAMPLE_BALANCE = {"success": 1, "return": {"funds": {"btc": 0.5, "jpy": 100000}}}
+SAMPLE_ACCOUNT = {"success": 1, "return": {"funds": {"btc": 0.5}}}
+SAMPLE_ERROR = {"error": "invalid pair"}
+SAMPLE_ORDER = {"success": 1, "return": {"order_id": 12345, "received": 0.1, "remains": 0.0}}
+SAMPLE_CANCEL = {"success": 1, "return": {"order_id": 12345, "funds": {}}}
+SAMPLE_QUERY = {"success": 1, "return": {"12345": {"currency_pair": "btc_jpy", "action": "bid", "amount": 0.1}}}
 
 
-class TestZaifRequestData:
-    """Test Zaif REST API request base class."""
-
-    @patch('bt_api_py.containers.exchanges.zaif_exchange_data._get_zaif_config')
-    def test_request_data_creation(self, mock_config):
-        """Test creating Zaif request data."""
-        mock_config.return_value = None
-        data_queue = queue.Queue()
-        request_data = ZaifRequestDataSpot(
-            data_queue,
-            exchange_name="ZAIF___SPOT",
-        )
-        assert request_data.exchange_name == "ZAIF___SPOT"
-        assert request_data.asset_type == "SPOT"
-
-    @patch('bt_api_py.containers.exchanges.zaif_exchange_data._get_zaif_config')
-    def test_signature_generation(self, mock_config):
-        """Test HMAC SHA512 signature generation."""
-        mock_config.return_value = None
-        data_queue = queue.Queue()
-        request_data = ZaifRequestDataSpot(
-            data_queue,
-            exchange_name="ZAIF___SPOT",
-        )
-
-        # Mock the params object to have api_secret
-        request_data._params = MagicMock()
-        request_data._params.api_secret = "test_secret"
-
-        body = "method=trade&nonce=12345678.12345678"
-        signature = request_data._generate_signature(body)
-        # Signature should be a hex string
-        assert signature is not None
-        assert isinstance(signature, str)
-        assert len(signature) == 128  # SHA512 produces 128 hex chars
-
-    @patch('bt_api_py.containers.exchanges.zaif_exchange_data._get_zaif_config')
-    def test_get_headers(self, mock_config):
-        """Test request header generation."""
-        mock_config.return_value = None
-        data_queue = queue.Queue()
-        request_data = ZaifRequestDataSpot(
-            data_queue,
-            exchange_name="ZAIF___SPOT",
-        )
-
-        # Mock the params object
-        request_data._params = MagicMock()
-        request_data._params.api_key = None
-        request_data._params.api_secret = None
-
-        headers = request_data._get_headers("test_body")
-        assert "Content-Type" in headers
-        assert headers["Content-Type"] == "application/x-www-form-urlencoded"
-
-    @patch('bt_api_py.containers.exchanges.zaif_exchange_data._get_zaif_config')
-    def test_get_headers_with_auth(self, mock_config):
-        """Test request headers with authentication."""
-        mock_config.return_value = None
-        data_queue = queue.Queue()
-        request_data = ZaifRequestDataSpot(
-            data_queue,
-            exchange_name="ZAIF___SPOT",
-        )
-
-        # Mock API credentials
-        request_data._params = MagicMock()
-        request_data._params.api_key = "test_key"
-        request_data._params.api_secret = "test_secret"
-
-        body = "test_body"
-        headers = request_data._get_headers(body)
-
-        assert "Key" in headers
-        assert headers["Key"] == "test_key"
-        assert "Sign" in headers
+@pytest.fixture
+def feed():
+    return ZaifRequestDataSpot(queue.Queue())
 
 
-class TestZaifMarketData:
-    """Test Zaif market data methods."""
-
-    @patch('bt_api_py.containers.exchanges.zaif_exchange_data._get_zaif_config')
-    def test_to_zaif_symbol_conversion(self, mock_config):
-        """Test symbol format conversion to Zaif format."""
-        mock_config.return_value = None
-        data_queue = queue.Queue()
-        request_data = ZaifRequestDataSpot(
-            data_queue,
-            exchange_name="ZAIF___SPOT",
-        )
-
-        # Test various input formats
-        assert request_data._to_zaif_symbol("BTC/JPY") == "btc_jpy"
-        assert request_data._to_zaif_symbol("ETH/BTC") == "eth_btc"
-        assert request_data._to_zaif_symbol("btc_jpy") == "btc_jpy"
-        assert request_data._to_zaif_symbol("BTCJPY") == "btc_jpy"
-        assert request_data._to_zaif_symbol("MONA/JPY") == "mona_jpy"
-
-    @patch('bt_api_py.feeds.live_zaif.spot.ZaifRequestDataSpot.request')
-    @patch('bt_api_py.containers.exchanges.zaif_exchange_data._get_zaif_config')
-    def test_get_tick_params(self, mock_config, mock_request):
-        """Test get tick parameter generation."""
-        mock_config.return_value = None
-        mock_request.return_value = (Mock(), {}, Mock())
-        data_queue = queue.Queue()
-        request_data = ZaifRequestDataSpot(
-            data_queue,
-            exchange_name="ZAIF___SPOT",
-        )
-
-        result = request_data.get_tick("BTC/JPY")
-
-        # Verify request was called
-        assert mock_request.called
-        # Verify it was called at least once (get_tick calls _get_tick which calls request)
-        assert mock_request.call_count >= 1
-
-    @patch('bt_api_py.feeds.live_zaif.spot.ZaifRequestDataSpot.request')
-    @patch('bt_api_py.containers.exchanges.zaif_exchange_data._get_zaif_config')
-    def test_get_depth_params(self, mock_config, mock_request):
-        """Test get depth parameter generation."""
-        mock_config.return_value = None
-        mock_request.return_value = (Mock(), {}, Mock())
-        data_queue = queue.Queue()
-        request_data = ZaifRequestDataSpot(
-            data_queue,
-            exchange_name="ZAIF___SPOT",
-        )
-
-        result = request_data.get_depth("ETH/BTC", count=20)
-
-        # Verify request was called with correct path
-        assert mock_request.called
-        call_args = mock_request.call_args[0][0]
-        assert "GET /api/1/depth/eth_btc" in call_args
-
-    @patch('bt_api_py.feeds.live_zaif.spot.ZaifRequestDataSpot.request')
-    @patch('bt_api_py.containers.exchanges.zaif_exchange_data._get_zaif_config')
-    def test_get_kline_params(self, mock_config, mock_request):
-        """Test get kline parameter generation."""
-        mock_config.return_value = None
-        mock_request.return_value = (Mock(), {}, Mock())
-        data_queue = queue.Queue()
-        request_data = ZaifRequestDataSpot(
-            data_queue,
-            exchange_name="ZAIF___SPOT",
-        )
-
-        result = request_data.get_kline("BTC/JPY", period="1h")
-
-        # Verify request was called with correct path
-        assert mock_request.called
-        call_args = mock_request.call_args[0][0]
-        assert "GET /api/1/trades/btc_jpy" in call_args
+@pytest.fixture
+def exdata():
+    return ZaifExchangeDataSpot()
 
 
-class TestZaifDataContainers:
-    """Test Zaif data containers."""
+# ═══════════════════════════════════════════════════════════════
+# 1) ExchangeData
+# ═══════════════════════════════════════════════════════════════
 
+class TestExchangeData:
+    def test_exchange_name(self, exdata):
+        assert exdata.exchange_name == "ZAIF___SPOT"
+
+    def test_asset_type(self, exdata):
+        assert exdata.asset_type == "SPOT"
+
+    def test_rest_url(self, exdata):
+        assert exdata.rest_url == "https://api.zaif.jp"
+
+    def test_wss_url(self, exdata):
+        assert exdata.wss_url == "wss://ws.zaif.jp:8888"
+
+    def test_base_exchange_name(self):
+        d = ZaifExchangeData()
+        assert d.exchange_name == "ZAIF"
+
+    def test_get_symbol(self):
+        assert ZaifExchangeDataSpot.get_symbol("BTC/JPY") == "btc_jpy"
+        assert ZaifExchangeDataSpot.get_symbol("BTC-JPY") == "btc_jpy"
+        assert ZaifExchangeDataSpot.get_symbol("btc_jpy") == "btc_jpy"
+
+    def test_get_reverse_symbol(self):
+        assert ZaifExchangeDataSpot.get_reverse_symbol("BTC/JPY") == "btc_jpy"
+
+    def test_get_period(self, exdata):
+        assert exdata.get_period("1h") == "1hour"
+        assert exdata.get_period("1d") == "1day"
+        assert exdata.get_period("1m") == "1min"
+
+    def test_get_reverse_period(self, exdata):
+        assert exdata.get_reverse_period("1hour") == "1h"
+
+    def test_legal_currency(self, exdata):
+        for c in ("JPY", "BTC", "ETH"):
+            assert c in exdata.legal_currency
+
+    def test_kline_periods(self, exdata):
+        for k in ("1m", "5m", "15m", "30m", "1h", "4h", "1d", "1w"):
+            assert k in exdata.kline_periods
+
+    def test_get_rest_path_with_pair(self, exdata):
+        p = exdata.get_rest_path("get_tick", pair="btc_jpy")
+        assert "btc_jpy" in p
+        assert "ticker" in p
+
+    def test_get_rest_path_missing(self, exdata):
+        with pytest.raises(ValueError):
+            exdata.get_rest_path("nonexistent")
+
+    def test_rest_paths_keys(self, exdata):
+        for key in ("get_tick", "get_ticker", "get_depth", "get_kline",
+                     "get_exchange_info", "get_account", "get_balance",
+                     "get_server_time", "make_order", "cancel_order"):
+            assert key in exdata.rest_paths
+
+
+# ═══════════════════════════════════════════════════════════════
+# 2) Parameter generation (_get_xxx)
+# ═══════════════════════════════════════════════════════════════
+
+class TestParamGeneration:
+    def test_get_tick_params(self, feed):
+        path, params, extra = feed._get_tick("BTC/JPY")
+        assert "ticker" in path.lower()
+        assert "btc_jpy" in path
+        assert extra["request_type"] == "get_tick"
+        assert extra["symbol_name"] == "BTC/JPY"
+        assert extra["asset_type"] == "SPOT"
+        assert extra["exchange_name"] == "ZAIF___SPOT"
+
+    def test_get_depth_params(self, feed):
+        path, params, extra = feed._get_depth("ETH/BTC")
+        assert "depth" in path.lower()
+        assert "eth_btc" in path
+
+    def test_get_kline_params(self, feed):
+        path, params, extra = feed._get_kline("BTC/JPY", "1h")
+        assert "trades" in path.lower()
+        assert "btc_jpy" in path
+
+    def test_get_exchange_info_params(self, feed):
+        path, params, extra = feed._get_exchange_info()
+        assert "currency_pairs" in path.lower()
+        assert extra["request_type"] == "get_exchange_info"
+
+    def test_get_server_time_params(self, feed):
+        path, params, extra = feed._get_server_time()
+        assert "last_price" in path.lower()
+        assert extra["request_type"] == "get_server_time"
+
+    def test_get_balance_params(self, feed):
+        path, params, extra = feed._get_balance()
+        assert "tapi" in path.lower()
+        assert extra["request_type"] == "get_balance"
+
+    def test_get_account_params(self, feed):
+        path, params, extra = feed._get_account()
+        assert "tapi" in path.lower()
+        assert extra["request_type"] == "get_account"
+        assert extra["asset_type"] == "SPOT"
+        assert extra["exchange_name"] == "ZAIF___SPOT"
+
+    def test_make_order_params(self, feed):
+        path, params, extra = feed._make_order("BTC/JPY", 0.1, 5000000, "buy-limit")
+        assert "tapi" in path.lower()
+        assert params["method"] == "trade"
+        assert params["currency_pair"] == "btc_jpy"
+        assert params["action"] == "buy"
+        assert params["amount"] == 0.1
+        assert extra["request_type"] == "make_order"
+        assert extra["symbol_name"] == "BTC/JPY"
+        assert extra["asset_type"] == "SPOT"
+
+    def test_cancel_order_params(self, feed):
+        path, params, extra = feed._cancel_order("BTC/JPY", order_id=12345)
+        assert params["method"] == "cancel_order"
+        assert params["order_id"] == 12345
+        assert extra["request_type"] == "cancel_order"
+        assert extra["symbol_name"] == "BTC/JPY"
+
+    def test_query_order_params(self, feed):
+        path, params, extra = feed._query_order("BTC/JPY", order_id=12345)
+        assert params["method"] == "active_orders"
+        assert params["currency_pair"] == "btc_jpy"
+        assert extra["request_type"] == "query_order"
+
+
+# ═══════════════════════════════════════════════════════════════
+# 3) Normalization functions
+# ═══════════════════════════════════════════════════════════════
+
+class TestNormalization:
+    def test_tick_ok(self):
+        result, ok = ZaifRequestData._get_tick_normalize_function(SAMPLE_TICK, {})
+        assert ok is True
+        assert len(result) > 0
+
+    def test_tick_error(self):
+        result, ok = ZaifRequestData._get_tick_normalize_function(SAMPLE_ERROR, {})
+        assert ok is False
+
+    def test_tick_none(self):
+        result, ok = ZaifRequestData._get_tick_normalize_function(None, {})
+        assert ok is False
+
+    def test_depth_ok(self):
+        result, ok = ZaifRequestData._get_depth_normalize_function(SAMPLE_DEPTH, {})
+        assert ok is True
+
+    def test_depth_error(self):
+        result, ok = ZaifRequestData._get_depth_normalize_function(SAMPLE_ERROR, {})
+        assert ok is False
+
+    def test_kline_list(self):
+        result, ok = ZaifRequestData._get_kline_normalize_function(SAMPLE_KLINE, {})
+        assert ok is True
+
+    def test_kline_none(self):
+        result, ok = ZaifRequestData._get_kline_normalize_function(None, {})
+        assert ok is False
+
+    def test_exchange_info_list(self):
+        result, ok = ZaifRequestData._get_exchange_info_normalize_function(SAMPLE_EXCHANGE_INFO, {})
+        assert ok is True
+
+    def test_server_time_ok(self):
+        result, ok = ZaifRequestData._get_server_time_normalize_function(SAMPLE_SERVER_TIME, {})
+        assert ok is True
+
+    def test_server_time_none(self):
+        result, ok = ZaifRequestData._get_server_time_normalize_function(None, {})
+        assert ok is False
+
+    def test_balance_ok(self):
+        result, ok = ZaifRequestData._get_balance_normalize_function(SAMPLE_BALANCE, {})
+        assert ok is True
+
+    def test_account_ok(self):
+        result, ok = ZaifRequestData._get_account_normalize_function(SAMPLE_ACCOUNT, {})
+        assert ok is True
+
+    def test_account_error(self):
+        result, ok = ZaifRequestData._get_account_normalize_function(SAMPLE_ERROR, {})
+        assert ok is False
+
+    def test_make_order_ok(self):
+        result, ok = ZaifRequestData._make_order_normalize_function(SAMPLE_ORDER, {})
+        assert ok is True
+        assert len(result) == 1
+
+    def test_make_order_error(self):
+        result, ok = ZaifRequestData._make_order_normalize_function(SAMPLE_ERROR, {})
+        assert ok is False
+
+    def test_cancel_order_ok(self):
+        result, ok = ZaifRequestData._cancel_order_normalize_function(SAMPLE_CANCEL, {})
+        assert ok is True
+
+    def test_query_order_ok(self):
+        result, ok = ZaifRequestData._query_order_normalize_function(SAMPLE_QUERY, {})
+        assert ok is True
+
+    def test_is_error_none(self):
+        assert ZaifRequestData._is_error(None) is True
+
+    def test_is_error_with_key(self):
+        assert ZaifRequestData._is_error(SAMPLE_ERROR) is True
+
+    def test_is_error_ok(self):
+        assert ZaifRequestData._is_error(SAMPLE_TICK) is False
+
+
+# ═══════════════════════════════════════════════════════════════
+# 4) Mocked sync calls
+# ═══════════════════════════════════════════════════════════════
+
+class TestSyncCalls:
+    @patch.object(ZaifRequestData, "http_request", return_value=SAMPLE_TICK)
+    def test_get_tick(self, mock_http, feed):
+        rd = feed.get_tick("BTC/JPY")
+        assert isinstance(rd, RequestData)
+        mock_http.assert_called_once()
+
+    @patch.object(ZaifRequestData, "http_request", return_value=SAMPLE_TICK)
+    def test_get_ticker(self, mock_http, feed):
+        rd = feed.get_ticker("BTC/JPY")
+        assert isinstance(rd, RequestData)
+
+    @patch.object(ZaifRequestData, "http_request", return_value=SAMPLE_DEPTH)
+    def test_get_depth(self, mock_http, feed):
+        rd = feed.get_depth("ETH/BTC")
+        assert isinstance(rd, RequestData)
+
+    @patch.object(ZaifRequestData, "http_request", return_value=SAMPLE_KLINE)
+    def test_get_kline(self, mock_http, feed):
+        rd = feed.get_kline("BTC/JPY", "1h")
+        assert isinstance(rd, RequestData)
+
+    @patch.object(ZaifRequestData, "http_request", return_value=SAMPLE_EXCHANGE_INFO)
+    def test_get_exchange_info(self, mock_http, feed):
+        rd = feed.get_exchange_info()
+        assert isinstance(rd, RequestData)
+
+    @patch.object(ZaifRequestData, "http_request", return_value=SAMPLE_SERVER_TIME)
+    def test_get_server_time(self, mock_http, feed):
+        rd = feed.get_server_time()
+        assert isinstance(rd, RequestData)
+
+    @patch.object(ZaifRequestData, "http_request", return_value=SAMPLE_BALANCE)
+    def test_get_balance(self, mock_http, feed):
+        rd = feed.get_balance()
+        assert isinstance(rd, RequestData)
+
+    @patch.object(ZaifRequestData, "http_request", return_value=SAMPLE_ACCOUNT)
+    def test_get_account(self, mock_http, feed):
+        rd = feed.get_account()
+        assert isinstance(rd, RequestData)
+
+    @patch.object(ZaifRequestData, "http_request", return_value=SAMPLE_ORDER)
+    def test_make_order(self, mock_http, feed):
+        rd = feed.make_order("BTC/JPY", 0.1, 5000000)
+        assert isinstance(rd, RequestData)
+        mock_http.assert_called_once()
+
+    @patch.object(ZaifRequestData, "http_request", return_value=SAMPLE_CANCEL)
+    def test_cancel_order(self, mock_http, feed):
+        rd = feed.cancel_order("BTC/JPY", order_id=12345)
+        assert isinstance(rd, RequestData)
+
+    @patch.object(ZaifRequestData, "http_request", return_value=SAMPLE_QUERY)
+    def test_query_order(self, mock_http, feed):
+        rd = feed.query_order("BTC/JPY", order_id=12345)
+        assert isinstance(rd, RequestData)
+
+
+# ═══════════════════════════════════════════════════════════════
+# 5) Auth
+# ═══════════════════════════════════════════════════════════════
+
+class TestAuth:
+    def test_headers_no_key(self, feed):
+        h = feed._get_headers()
+        assert "Content-Type" in h
+        assert "Key" not in h
+
+    def test_headers_with_key(self):
+        f = ZaifRequestDataSpot(queue.Queue(), public_key="mykey", secret_key="mysecret")
+        h = f._get_headers("method=getInfo&nonce=1")
+        assert h["Key"] == "mykey"
+        assert "Sign" in h
+        assert len(h["Sign"]) == 128
+
+    def test_generate_signature_no_secret(self, feed):
+        sig = feed._generate_signature("method=getInfo")
+        assert sig == ""
+
+    def test_generate_signature_with_secret(self):
+        f = ZaifRequestDataSpot(queue.Queue(), secret_key="testsecret")
+        sig = f._generate_signature("method=trade&nonce=12345678.12345678")
+        assert len(sig) == 128
+
+
+# ═══════════════════════════════════════════════════════════════
+# 6) Registry
+# ═══════════════════════════════════════════════════════════════
+
+class TestRegistry:
+    def test_feed_registered(self):
+        assert "ZAIF___SPOT" in ExchangeRegistry._feed_classes
+        assert ExchangeRegistry._feed_classes["ZAIF___SPOT"] == ZaifRequestDataSpot
+
+    def test_exchange_data_registered(self):
+        assert "ZAIF___SPOT" in ExchangeRegistry._exchange_data_classes
+        assert ExchangeRegistry._exchange_data_classes["ZAIF___SPOT"] == ZaifExchangeDataSpot
+
+    def test_balance_handler_registered(self):
+        assert "ZAIF___SPOT" in ExchangeRegistry._balance_handlers
+
+    def test_stream_registered(self):
+        stream_handlers = ExchangeRegistry._stream_classes.get("ZAIF___SPOT", {})
+        assert "subscribe" in stream_handlers
+
+    def test_create_feed(self):
+        f = ExchangeRegistry.create_feed("ZAIF___SPOT", queue.Queue())
+        assert isinstance(f, ZaifRequestDataSpot)
+
+    def test_create_exchange_data(self):
+        ed = ExchangeRegistry.create_exchange_data("ZAIF___SPOT")
+        assert isinstance(ed, ZaifExchangeDataSpot)
+
+
+# ═══════════════════════════════════════════════════════════════
+# 7) Method existence
+# ═══════════════════════════════════════════════════════════════
+
+_EXPECTED_METHODS = [
+    "get_tick", "async_get_tick",
+    "get_ticker", "async_get_ticker",
+    "get_depth", "async_get_depth",
+    "get_kline", "async_get_kline",
+    "get_exchange_info", "async_get_exchange_info",
+    "get_server_time", "async_get_server_time",
+    "get_balance", "async_get_balance",
+    "get_account", "async_get_account",
+    "make_order", "async_make_order",
+    "cancel_order", "async_cancel_order",
+    "query_order", "async_query_order",
+]
+
+
+class TestMethodExistence:
+    @pytest.mark.parametrize("method_name", _EXPECTED_METHODS)
+    def test_method_exists(self, feed, method_name):
+        assert hasattr(feed, method_name), f"Missing method: {method_name}"
+        assert callable(getattr(feed, method_name))
+
+
+# ═══════════════════════════════════════════════════════════════
+# 8) Feed init
+# ═══════════════════════════════════════════════════════════════
+
+class TestFeedInit:
+    def test_default_exchange_name(self, feed):
+        assert feed.exchange_name == "ZAIF___SPOT"
+
+    def test_default_asset_type(self, feed):
+        assert feed.asset_type == "SPOT"
+
+    def test_capabilities(self, feed):
+        from bt_api_py.feeds.capability import Capability
+        caps = feed._capabilities()
+        assert Capability.GET_TICK in caps
+        assert Capability.GET_DEPTH in caps
+        assert Capability.GET_KLINE in caps
+        assert Capability.GET_EXCHANGE_INFO in caps
+        assert Capability.MAKE_ORDER in caps
+        assert Capability.CANCEL_ORDER in caps
+        assert Capability.QUERY_ORDER in caps
+
+    def test_push_data_to_queue(self, feed):
+        feed.push_data_to_queue({"test": 1})
+        assert not feed.data_queue.empty()
+
+
+# ═══════════════════════════════════════════════════════════════
+# 9) WebSocket stubs
+# ═══════════════════════════════════════════════════════════════
+
+class TestWebSocketStubs:
+    def test_market_wss_start_stop(self):
+        wss = ZaifMarketWssDataSpot(queue.Queue(), topics=[{"topic": "ticker"}])
+        wss.start()
+        assert wss.running is True
+        wss.stop()
+        assert wss.running is False
+
+    def test_account_wss_start_stop(self):
+        wss = ZaifAccountWssDataSpot(queue.Queue(), topics=[{"topic": "account"}])
+        wss.start()
+        assert wss.running is True
+        wss.stop()
+        assert wss.running is False
+
+
+# ═══════════════════════════════════════════════════════════════
+# 10) Data containers
+# ═══════════════════════════════════════════════════════════════
+
+class TestDataContainers:
     def test_ticker_float_parsing(self):
-        """Test ticker float parsing helper method."""
-        # Test the _parse_float static method
         assert ZaifRequestTickerData._parse_float("5000000") == 5000000.0
         assert ZaifRequestTickerData._parse_float(5000000) == 5000000.0
         assert ZaifRequestTickerData._parse_float(None) is None
         assert ZaifRequestTickerData._parse_float("invalid") is None
 
     def test_ticker_class_creation(self):
-        """Test that ticker class can be created with has_been_json_encoded=True."""
-        # With has_been_json_encoded=True, it won't try to parse JSON
-        # Note: The Zaif ticker has a bug in super().__init__() but we can still test the class
-        # For now, just verify the class exists and has the expected attributes
         assert hasattr(ZaifRequestTickerData, '_parse_float')
         assert hasattr(ZaifRequestTickerData, 'init_data')
 
 
-class TestZaifRegistry:
-    """Test Zaif registration."""
+# ═══════════════════════════════════════════════════════════════
+# 11) Integration (skipped)
+# ═══════════════════════════════════════════════════════════════
 
-    def test_zaif_registered(self):
-        """Test that Zaif is properly registered."""
-        # Check if feed is registered in _feed_classes
-        assert "ZAIF___SPOT" in ExchangeRegistry._feed_classes
-        assert ExchangeRegistry._feed_classes["ZAIF___SPOT"] == ZaifRequestDataSpot
+class TestIntegration:
+    @pytest.mark.skip(reason="Requires network access")
+    def test_live_get_tick(self):
+        f = ZaifRequestDataSpot(queue.Queue())
+        rd = f.get_tick("btc_jpy")
+        assert isinstance(rd, RequestData)
 
-        # Check if exchange data is registered
-        assert "ZAIF___SPOT" in ExchangeRegistry._exchange_data_classes
-        assert ExchangeRegistry._exchange_data_classes["ZAIF___SPOT"] == ZaifExchangeDataSpot
-
-        # Check if balance handler is registered
-        assert "ZAIF___SPOT" in ExchangeRegistry._balance_handlers
-        assert ExchangeRegistry._balance_handlers["ZAIF___SPOT"] is not None
-
-    @patch('bt_api_py.containers.exchanges.zaif_exchange_data._get_zaif_config')
-    def test_zaif_create_feed(self, mock_config):
-        """Test creating Zaif feed through registry."""
-        mock_config.return_value = None
-        data_queue = queue.Queue()
-        feed = ExchangeRegistry.create_feed(
-            "ZAIF___SPOT",
-            data_queue,
-        )
-        assert isinstance(feed, ZaifRequestDataSpot)
-
-    @patch('bt_api_py.containers.exchanges.zaif_exchange_data._get_zaif_config')
-    def test_zaif_create_exchange_data(self, mock_config):
-        """Test creating Zaif exchange data through registry."""
-        mock_config.return_value = None
-        exchange_data = ExchangeRegistry.create_exchange_data("ZAIF___SPOT")
-        assert isinstance(exchange_data, ZaifExchangeDataSpot)
-
-
-class TestZaifIntegration:
-    """Integration tests for Zaif."""
-
-    @pytest.mark.integration
-    def test_market_data_api(self):
-        """Test market data API calls (requires network)."""
-        data_queue = queue.Queue()
-        feed = ZaifRequestDataSpot(data_queue)
-
-        # Test ticker
-        ticker = feed.get_tick("BTC/JPY")
-        if not ticker.status:
-            pytest.skip("Zaif API returned error response")
-        assert isinstance(ticker, RequestData)
-
-    @pytest.mark.integration
-    def test_depth_api(self):
-        """Test depth API calls (requires network)."""
-        data_queue = queue.Queue()
-        feed = ZaifRequestDataSpot(data_queue)
-
-        # Test orderbook
-        depth = feed.get_depth("BTC/JPY")
-        if not depth.status:
-            pytest.skip("Zaif API returned error response")
-        assert isinstance(depth, RequestData)
+    @pytest.mark.skip(reason="Requires network access")
+    def test_live_get_depth(self):
+        f = ZaifRequestDataSpot(queue.Queue())
+        rd = f.get_depth("btc_jpy")
+        assert isinstance(rd, RequestData)
 
 
 if __name__ == "__main__":

@@ -1,154 +1,192 @@
 """
-Zebpay Spot Feed implementation.
+Zebpay Spot Feed – three-layer sync / async wrappers + WSS stubs.
 """
 
 from bt_api_py.containers.exchanges.zebpay_exchange_data import ZebpayExchangeDataSpot
-from bt_api_py.feeds.capability import Capability
 from bt_api_py.feeds.live_zebpay.request_base import ZebpayRequestData
+from bt_api_py.functions.log_message import SpdLogManager
 
 
 class ZebpayRequestDataSpot(ZebpayRequestData):
-    """Zebpay Spot Feed for market data."""
-
-    @classmethod
-    def _capabilities(cls):
-        return {
-            Capability.GET_TICK,
-            Capability.GET_DEPTH,
-            Capability.GET_KLINE,
-            Capability.GET_EXCHANGE_INFO,
-        }
+    """Zebpay Spot REST Feed."""
 
     def __init__(self, data_queue, **kwargs):
         super().__init__(data_queue, **kwargs)
-        self.exchange_name = kwargs.get("exchange_name", "ZEBPAY___SPOT")
 
-    def _get_tick(self, symbol, extra_data=None, **kwargs):
-        """Get ticker data.
+    # ── server time ─────────────────────────────────────────────
 
-        Zebpay API endpoint: GET /api/v2/market/ticker?symbol=BTC-INR
-        Symbol format: BTC-INR (dash separator)
-        """
-        request_type = "get_tick"
-        zebpay_symbol = self._to_zebpay_symbol(symbol)
-        path = "GET /api/v2/market/ticker"
-        extra_data = extra_data or {}
-        extra_data.update({
-            "request_type": request_type,
-            "symbol_name": symbol,
-            "normalize_function": self._get_tick_normalize_function,
-        })
-        return self.request(path, params={"symbol": zebpay_symbol}, extra_data=extra_data)
+    def get_server_time(self, extra_data=None, **kwargs):
+        path, params, extra = self._get_server_time(extra_data, **kwargs)
+        return self.request(path, params, extra_data=extra)
 
-    @staticmethod
-    def _get_tick_normalize_function(input_data, extra_data):
-        if not input_data:
-            return [], False
-        data = input_data.get("data")
-        return [data], data is not None
+    def async_get_server_time(self, extra_data=None, **kwargs):
+        path, params, extra = self._get_server_time(extra_data, **kwargs)
+        self.submit(
+            self.async_request(path, params, extra_data=extra),
+            callback=self.async_callback,
+        )
+
+    # ── market data ─────────────────────────────────────────────
 
     def get_tick(self, symbol, extra_data=None, **kwargs):
-        """Get symbol ticker."""
-        path, params, extra_data = self._get_tick(symbol, extra_data, **kwargs)
-        return self.request(path, params=params, extra_data=extra_data)
+        path, params, extra = self._get_tick(symbol, extra_data, **kwargs)
+        return self.request(path, params, extra_data=extra)
 
-    def _get_depth(self, symbol, count=20, extra_data=None, **kwargs):
-        """Get order book depth.
+    def async_get_tick(self, symbol, extra_data=None, **kwargs):
+        path, params, extra = self._get_tick(symbol, extra_data, **kwargs)
+        self.submit(
+            self.async_request(path, params, extra_data=extra),
+            callback=self.async_callback,
+        )
 
-        Zebpay API endpoint: GET /api/v2/market/orderbook?symbol=BTC-INR
-        """
-        request_type = "get_depth"
-        zebpay_symbol = self._to_zebpay_symbol(symbol)
-        path = "GET /api/v2/market/orderbook"
-        extra_data = extra_data or {}
-        extra_data.update({
-            "request_type": request_type,
-            "symbol_name": symbol,
-            "normalize_function": self._get_depth_normalize_function,
-        })
-        return self.request(path, params={"symbol": zebpay_symbol}, extra_data=extra_data)
+    def get_ticker(self, symbol, extra_data=None, **kwargs):
+        return self.get_tick(symbol, extra_data, **kwargs)
 
-    @staticmethod
-    def _get_depth_normalize_function(input_data, extra_data):
-        if not input_data:
-            return [], False
-        depth = input_data.get("data")
-        return [depth], depth is not None
+    def async_get_ticker(self, symbol, extra_data=None, **kwargs):
+        self.async_get_tick(symbol, extra_data, **kwargs)
 
     def get_depth(self, symbol, count=20, extra_data=None, **kwargs):
-        """Get order book."""
-        return self._get_depth(symbol, count, extra_data, **kwargs)
+        path, params, extra = self._get_depth(symbol, count, extra_data, **kwargs)
+        return self.request(path, params, extra_data=extra)
 
-    def _get_kline(self, symbol, period, count=20, extra_data=None, **kwargs):
-        """Get kline/candlestick data.
-
-        Zebpay API endpoint: GET /api/v2/market/klines?symbol=BTC-INR&interval=1m&limit=100
-        """
-        request_type = "get_kline"
-        zebpay_symbol = self._to_zebpay_symbol(symbol)
-        zebpay_period = self._to_zebpay_period(period)
-        path = "GET /api/v2/market/klines"
-        extra_data = extra_data or {}
-        extra_data.update({
-            "request_type": request_type,
-            "symbol_name": symbol,
-            "normalize_function": self._get_kline_normalize_function,
-        })
-        return self.request(path, params={
-            "symbol": zebpay_symbol,
-            "interval": zebpay_period,
-            "limit": count,
-        }, extra_data=extra_data)
-
-    @staticmethod
-    def _get_kline_normalize_function(input_data, extra_data):
-        if not input_data:
-            return [], False
-        klines = input_data.get("data", [])
-        return [klines], klines is not None
+    def async_get_depth(self, symbol, count=20, extra_data=None, **kwargs):
+        path, params, extra = self._get_depth(symbol, count, extra_data, **kwargs)
+        self.submit(
+            self.async_request(path, params, extra_data=extra),
+            callback=self.async_callback,
+        )
 
     def get_kline(self, symbol, period, count=20, extra_data=None, **kwargs):
-        """Get kline data."""
-        return self._get_kline(symbol, period, count, extra_data, **kwargs)
+        path, params, extra = self._get_kline(symbol, period, count, extra_data, **kwargs)
+        return self.request(path, params, extra_data=extra)
 
-    def _to_zebpay_symbol(self, symbol):
-        """Convert symbol to Zebpay format.
+    def async_get_kline(self, symbol, period, count=20, extra_data=None, **kwargs):
+        path, params, extra = self._get_kline(symbol, period, count, extra_data, **kwargs)
+        self.submit(
+            self.async_request(path, params, extra_data=extra),
+            callback=self.async_callback,
+        )
 
-        Examples:
-            BTC/INR -> BTC-INR
-            BTCINR -> BTC-INR
-            btc-inr -> BTC-INR
-        """
-        if "-" in symbol:
-            return symbol.upper().replace("-", "-")
-        # Assume format like BTC/INR, BTC-INR, or BTCINR
-        symbol = symbol.replace("/", "").replace("-", "").upper()
-        # Common quote currencies
-        quotes = ["INR", "USDT"]
-        for quote in quotes:
-            if symbol.endswith(quote):
-                base = symbol[:-len(quote)]
-                return f"{base}-{quote}"
-        # Default: try to split at 6 chars for common pairs
-        if len(symbol) >= 6:
-            return f"{symbol[:-3]}-{symbol[-3:]}"
-        return symbol
+    def get_exchange_info(self, extra_data=None, **kwargs):
+        path, params, extra = self._get_exchange_info(extra_data, **kwargs)
+        return self.request(path, params, extra_data=extra)
 
-    def _to_zebpay_period(self, period):
-        """Convert period to Zebpay format.
+    def async_get_exchange_info(self, extra_data=None, **kwargs):
+        path, params, extra = self._get_exchange_info(extra_data, **kwargs)
+        self.submit(
+            self.async_request(path, params, extra_data=extra),
+            callback=self.async_callback,
+        )
 
-        Zebpay supports: 1m, 5m, 15m, 30m, 1h, 2h, 4h, 12h, 1d, 1w
-        """
-        period_map = {
-            "1m": "1m",
-            "5m": "5m",
-            "15m": "15m",
-            "30m": "30m",
-            "1h": "1h",
-            "2h": "2h",
-            "4h": "4h",
-            "12h": "12h",
-            "1d": "1d",
-            "1w": "1w",
-        }
-        return period_map.get(period, "1h")
+    # ── account ─────────────────────────────────────────────────
+
+    def get_balance(self, extra_data=None, **kwargs):
+        path, params, extra = self._get_balance(extra_data, **kwargs)
+        return self.request(path, params, extra_data=extra)
+
+    def async_get_balance(self, extra_data=None, **kwargs):
+        path, params, extra = self._get_balance(extra_data, **kwargs)
+        self.submit(
+            self.async_request(path, params, extra_data=extra),
+            callback=self.async_callback,
+        )
+
+    def get_account(self, extra_data=None, **kwargs):
+        path, params, extra = self._get_account(extra_data, **kwargs)
+        return self.request(path, params, extra_data=extra)
+
+    def async_get_account(self, extra_data=None, **kwargs):
+        path, params, extra = self._get_account(extra_data, **kwargs)
+        self.submit(
+            self.async_request(path, params, extra_data=extra),
+            callback=self.async_callback,
+        )
+
+    # ── trading ──────────────────────────────────────────────────
+
+    def make_order(self, symbol, vol, price=None, order_type="buy-limit",
+                   offset="open", post_only=False, client_order_id=None,
+                   extra_data=None, **kwargs):
+        path, params, extra = self._make_order(
+            symbol, vol, price, order_type, offset, post_only,
+            client_order_id, extra_data, **kwargs,
+        )
+        return self.request(path, params, extra_data=extra)
+
+    def async_make_order(self, symbol, vol, price=None, order_type="buy-limit",
+                         offset="open", post_only=False, client_order_id=None,
+                         extra_data=None, **kwargs):
+        path, params, extra = self._make_order(
+            symbol, vol, price, order_type, offset, post_only,
+            client_order_id, extra_data, **kwargs,
+        )
+        self.submit(
+            self.async_request(path, params, extra_data=extra),
+            callback=self.async_callback,
+        )
+
+    def cancel_order(self, symbol, order_id=None, extra_data=None, **kwargs):
+        path, params, extra = self._cancel_order(symbol, order_id, extra_data, **kwargs)
+        return self.request(path, params, extra_data=extra)
+
+    def async_cancel_order(self, symbol, order_id=None, extra_data=None, **kwargs):
+        path, params, extra = self._cancel_order(symbol, order_id, extra_data, **kwargs)
+        self.submit(
+            self.async_request(path, params, extra_data=extra),
+            callback=self.async_callback,
+        )
+
+    def query_order(self, symbol, order_id=None, extra_data=None, **kwargs):
+        path, params, extra = self._query_order(symbol, order_id, extra_data, **kwargs)
+        return self.request(path, params, extra_data=extra)
+
+    def async_query_order(self, symbol, order_id=None, extra_data=None, **kwargs):
+        path, params, extra = self._query_order(symbol, order_id, extra_data, **kwargs)
+        self.submit(
+            self.async_request(path, params, extra_data=extra),
+            callback=self.async_callback,
+        )
+
+
+# ── WebSocket stubs ──────────────────────────────────────────
+
+class ZebpayMarketWssDataSpot:
+    """Zebpay Spot Market WebSocket Data Handler (stub)."""
+
+    def __init__(self, data_queue, **kwargs):
+        self.data_queue = data_queue
+        self._params = ZebpayExchangeDataSpot()
+        self.logger_name = kwargs.get("logger_name", "zebpay_spot_market_wss.log")
+        self.request_logger = SpdLogManager(
+            "./logs/" + self.logger_name, "request", 0, 0, False
+        ).create_logger()
+        self.wss_url = kwargs.get("wss_url", self._params.wss_url)
+        self.topics = kwargs.get("topics", [])
+        self.running = False
+
+    def start(self):
+        self.running = True
+
+    def stop(self):
+        self.running = False
+
+
+class ZebpayAccountWssDataSpot:
+    """Zebpay Spot Account WebSocket Data Handler (stub)."""
+
+    def __init__(self, data_queue, **kwargs):
+        self.data_queue = data_queue
+        self._params = ZebpayExchangeDataSpot()
+        self.logger_name = kwargs.get("logger_name", "zebpay_spot_account_wss.log")
+        self.request_logger = SpdLogManager(
+            "./logs/" + self.logger_name, "request", 0, 0, False
+        ).create_logger()
+        self.wss_url = kwargs.get("wss_url", self._params.wss_url)
+        self.topics = kwargs.get("topics", [])
+        self.running = False
+
+    def start(self):
+        self.running = True
+
+    def stop(self):
+        self.running = False

@@ -1,7 +1,17 @@
 """
-WazirX REST API Feed implementation.
+WazirX Feed Module
 """
 
-from bt_api_py.feeds.live_wazirx.spot import WazirxRequestDataSpot
+from bt_api_py.feeds.live_wazirx.request_base import WazirxRequestData
+from bt_api_py.feeds.live_wazirx.spot import (
+    WazirxRequestDataSpot,
+    WazirxMarketWssDataSpot,
+    WazirxAccountWssDataSpot,
+)
 
-__all__ = ["WazirxRequestDataSpot"]
+__all__ = [
+    "WazirxRequestData",
+    "WazirxRequestDataSpot",
+    "WazirxMarketWssDataSpot",
+    "WazirxAccountWssDataSpot",
+]

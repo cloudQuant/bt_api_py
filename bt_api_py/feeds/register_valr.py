@@ -1,5 +1,5 @@
 """
-VALR 交易所注册模块
+VALR Exchange Registration Module
 """
 
 from bt_api_py.balance_utils import simple_balance_handler as _valr_balance_handler
@@ -8,17 +8,20 @@ from bt_api_py.feeds.live_valr.spot import ValrRequestDataSpot
 from bt_api_py.registry import ExchangeRegistry
 
 
+def _valr_spot_subscribe_handler(feed, topics):
+    """Placeholder subscribe handler for VALR WebSocket."""
+    pass
+
+
 def register_valr():
-    """注册 VALR SPOT 到全局 ExchangeRegistry"""
-    # 注册 Feed 类
+    """Register VALR SPOT to global ExchangeRegistry"""
     ExchangeRegistry.register_feed("VALR___SPOT", ValrRequestDataSpot)
-
-    # 注册配置类
     ExchangeRegistry.register_exchange_data("VALR___SPOT", ValrExchangeDataSpot)
-
-    # 注册余额处理器
     ExchangeRegistry.register_balance_handler("VALR___SPOT", _valr_balance_handler)
+    ExchangeRegistry.register_stream(
+        "VALR___SPOT", "subscribe", _valr_spot_subscribe_handler
+    )
 
 
-# 模块导入时自动注册
+# Auto-register on module import
 register_valr()

@@ -1,477 +1,398 @@
 """
-Swyftx Exchange Integration Tests
+Tests for Swyftx exchange – Feed pattern.
 
-Tests for Swyftx spot trading implementation including:
-    pass
-- Configuration loading
-- Exchange data container
-- Request feed functionality
-- Data containers (tickers, orderbooks)
-- Registration module
-
-Run tests:
-    pytest tests/feeds/test_swyftx.py -v
-
-Run with coverage:
-    pytest tests/feeds/test_swyftx.py --cov=bt_api_py.feeds.live_swyftx --cov-report=term-missing
-
-Run only unit tests (no network):
-    pytest tests/feeds/test_swyftx.py -m "not integration" -v
+Run:  pytest tests/feeds/test_swyftx.py -v
 """
 
-import json
 import queue
-import time
+from unittest.mock import patch
+
 import pytest
 
 from bt_api_py.containers.exchanges.swyftx_exchange_data import (
     SwyftxExchangeData,
     SwyftxExchangeDataSpot,
 )
-from bt_api_py.containers.tickers.swyftx_ticker import SwyftxRequestTickerData
-from bt_api_py.feeds.live_swyftx.spot import SwyftxRequestDataSpot
-from bt_api_py.feeds.register_swyftx import register_swyftx
 from bt_api_py.containers.requestdatas.request_data import RequestData
+from bt_api_py.feeds.live_swyftx.request_base import SwyftxRequestData
+from bt_api_py.feeds.live_swyftx.spot import (
+    SwyftxRequestDataSpot,
+    SwyftxMarketWssDataSpot,
+    SwyftxAccountWssDataSpot,
+)
 from bt_api_py.registry import ExchangeRegistry
 
-# Import registration to auto-register Swyftx
 import bt_api_py.feeds.register_swyftx  # noqa: F401
 
+# ── sample fixtures ──────────────────────────────────────────
 
-class TestSwyftxExchangeData:
-    """Test Swyftx exchange data configuration."""
-
-    def test_exchange_data_base_initialization(self):
-        """Test base SwyftxExchangeData initialization."""
-        data = SwyftxExchangeData()
-        assert data.exchange_name == "swyftx"
-        assert data.rest_url == "https://api.swyftx.com.au"
-        assert data.wss_url == "wss://api.swyftx.com.au"
-        assert isinstance(data.kline_periods, dict)
-        assert "1h" in data.kline_periods
-        assert "AUD" in data.legal_currency  # Australian Dollar
-
-    def test_kline_periods(self):
-        """Test kline period configuration."""
-        data = SwyftxExchangeData()
-        assert "1m" in data.kline_periods
-        assert "5m" in data.kline_periods
-        assert "1h" in data.kline_periods
-        assert "1d" in data.kline_periods
+SAMPLE_TICK = {"market": "BTC-AUD", "lastPrice": "75000.00", "bid": "74999", "ask": "75001", "volume": "1.5"}
+SAMPLE_DEPTH = {"bids": [[74999, "1.0"]], "asks": [[75001, "1.0"]]}
+SAMPLE_KLINE = [[1672531200, "75000", "76000", "74000", "75500", "1.5"]]
+SAMPLE_EXCHANGE_INFO = [{"id": "BTC-AUD", "baseAsset": "BTC", "quoteAsset": "AUD"}]
+SAMPLE_SERVER_TIME = {"serverTime": 1678901234000}
+SAMPLE_BALANCE = [{"asset": "AUD", "available": "1000.00"}]
+SAMPLE_ACCOUNT = {"username": "testuser", "email": "test@test.com"}
+SAMPLE_ERROR = {"error": {"message": "Bad request", "code": 400}}
 
 
-class TestSwyftxRequestDataSpot:
-    """Test Swyftx spot request feed."""
+@pytest.fixture
+def feed():
+    return SwyftxRequestDataSpot(queue.Queue())
 
-    def test_request_data_initialization(self):
-        """Test request data feed initialization."""
-        data_queue = queue.Queue()
-        feed = SwyftxRequestDataSpot(data_queue)
-        assert feed.exchange_name == "SWYFTX___SPOT"
 
-    def test_capabilities(self):
-        """Test feed capabilities."""
-        from bt_api_py.feeds.capability import Capability
+@pytest.fixture
+def exdata():
+    return SwyftxExchangeDataSpot()
 
-        data_queue = queue.Queue()
-        request_data = SwyftxRequestDataSpot(data_queue)
-        capabilities = request_data._capabilities()
-        assert Capability.GET_TICK in capabilities
-        assert Capability.GET_DEPTH in capabilities
-        assert Capability.GET_KLINE in capabilities
-        assert Capability.GET_EXCHANGE_INFO in capabilities
 
-    def test_get_tick_params(self):
-        """Test get tick parameter generation."""
-        data_queue = queue.Queue()
-        request_data = SwyftxRequestDataSpot(data_queue)
+# ═══════════════════════════════════════════════════════════════
+# 1) ExchangeData
+# ═══════════════════════════════════════════════════════════════
 
-        path, params, extra_data = request_data._get_tick("BTC-AUD")
+class TestExchangeData:
+    def test_exchange_name(self, exdata):
+        assert exdata.exchange_name == "SWYFTX___SPOT"
 
+    def test_asset_type(self, exdata):
+        assert exdata.asset_type == "SPOT"
+
+    def test_rest_url(self, exdata):
+        assert exdata.rest_url == "https://api.swyftx.com.au"
+
+    def test_base_exchange_name(self):
+        d = SwyftxExchangeData()
+        assert d.exchange_name == "SWYFTX"
+
+    def test_get_symbol(self):
+        assert SwyftxExchangeDataSpot.get_symbol("btc/aud") == "BTC-AUD"
+        assert SwyftxExchangeDataSpot.get_symbol("btc_aud") == "BTC-AUD"
+        assert SwyftxExchangeDataSpot.get_symbol("BTC-AUD") == "BTC-AUD"
+
+    def test_get_reverse_symbol(self):
+        assert SwyftxExchangeDataSpot.get_reverse_symbol("btc_aud") == "BTC-AUD"
+
+    def test_get_period(self, exdata):
+        assert exdata.get_period("1h") == "3600"
+        assert exdata.get_period("1d") == "86400"
+
+    def test_get_reverse_period(self, exdata):
+        assert exdata.get_reverse_period("3600") == "1h"
+
+    def test_legal_currency(self, exdata):
+        for c in ("AUD", "USD", "BTC", "ETH", "USDT"):
+            assert c in exdata.legal_currency
+
+    def test_kline_periods(self, exdata):
+        for k in ("1m", "5m", "15m", "30m", "1h", "4h", "1d", "1w"):
+            assert k in exdata.kline_periods
+
+    def test_get_rest_path_ok(self, exdata):
+        p = exdata.get_rest_path("get_tick", symbol="BTC-AUD")
+        assert "BTC-AUD" in p
+        assert "ticker" in p
+
+    def test_get_rest_path_missing(self, exdata):
+        with pytest.raises(ValueError):
+            exdata.get_rest_path("nonexistent")
+
+    def test_rest_paths_keys(self, exdata):
+        for key in ("get_tick", "get_ticker", "get_depth", "get_kline",
+                     "get_exchange_info", "get_account", "get_balance",
+                     "get_server_time", "make_order", "cancel_order"):
+            assert key in exdata.rest_paths
+
+
+# ═══════════════════════════════════════════════════════════════
+# 2) Parameter generation (_get_xxx)
+# ═══════════════════════════════════════════════════════════════
+
+class TestParamGeneration:
+    def test_get_tick_params(self, feed):
+        path, params, extra = feed._get_tick("BTC-AUD")
         assert "ticker" in path.lower()
-        assert extra_data["request_type"] == "get_tick"
+        assert "BTC-AUD" in path
+        assert extra["request_type"] == "get_tick"
+        assert extra["symbol_name"] == "BTC-AUD"
 
-    def test_get_tick_normalize_function(self):
-        """Test ticker normalize function."""
-        data_queue = queue.Queue()
-        request_data = SwyftxRequestDataSpot(data_queue)
-
-        mock_response = {
-            "market": "BTC-AUD",
-            "lastPrice": "75000.00",
-            "bid": "74999.00",
-            "ask": "75001.00",
-            "volume": "1.5",
-        }
-
-        result, success = request_data._get_tick_normalize_function(
-            mock_response, {})
-        assert success is True
-        assert len(result) > 0
-
-    def test_get_depth_params(self):
-        """Test get depth parameter generation."""
-        data_queue = queue.Queue()
-        request_data = SwyftxRequestDataSpot(data_queue)
-
-        path, params, extra_data = request_data._get_depth("BTC-AUD", 20)
-
-        assert "orderbook" in path.lower() or "depth" in path.lower()
+    def test_get_depth_params(self, feed):
+        path, params, extra = feed._get_depth("BTC-AUD", 20)
+        assert "orderbook" in path.lower()
         assert params["depth"] == 20
 
-    def test_get_depth_normalize_function(self):
-        """Test depth normalize function."""
-        data_queue = queue.Queue()
-        request_data = SwyftxRequestDataSpot(data_queue)
-
-        mock_response = {
-            "bids": [[74999, "1.0"]],
-            "asks": [[75001, "1.0"]],
-        }
-
-        result, success = request_data._get_depth_normalize_function(
-            mock_response, {})
-        assert success is True
-        assert len(result) > 0
-
-    def test_get_kline_params(self):
-        """Test get kline parameter generation."""
-        data_queue = queue.Queue()
-        request_data = SwyftxRequestDataSpot(data_queue)
-
-        path, params, extra_data = request_data._get_kline("BTC-AUD", "1h", 10)
-
-        assert "candle" in path.lower() or "kline" in path.lower()
+    def test_get_kline_params(self, feed):
+        path, params, extra = feed._get_kline("BTC-AUD", "1h", 10)
+        assert "candle" in path.lower()
         assert params["interval"] == "3600"
+        assert params["limit"] == 10
 
-    def test_get_kline_normalize_function(self):
-        """Test kline normalize function."""
-        data_queue = queue.Queue()
-        request_data = SwyftxRequestDataSpot(data_queue)
-
-        mock_response = [
-            [1672531200, "75000", "76000", "74000", "75500", "1.5"],
-            [1672534800, "75500", "76500", "74500", "76000", "2.0"]
-        ]
-
-        result, success = request_data._get_kline_normalize_function(
-            mock_response, {})
-        assert success is True
-        assert len(result) > 0
-
-    def test_get_exchange_info_normalize_function(self):
-        """Test exchange info normalize function."""
-        data_queue = queue.Queue()
-        request_data = SwyftxRequestDataSpot(data_queue)
-
-        mock_response = [
-            {"id": "BTC-AUD", "baseAsset": "BTC", "quoteAsset": "AUD"}]
-
-        result, success = request_data._get_exchange_info_normalize_function(
-            mock_response, {})
-        assert success is True
-        assert len(result) > 0
-
-
-class TestSwyftxDataContainers:
-    """Test Swyftx data containers."""
-
-    def test_ticker_container(self):
-        """Test ticker data container."""
-        ticker_response = {
-            "market": "BTC-AUD",
-            "lastPrice": "75000.00",
-            "high": "76000.00",
-            "low": "74000.00",
-            "bid": "74999.00",
-            "ask": "75001.00",
-            "volume": "1.5",
-        }
-
-        ticker = SwyftxRequestTickerData(
-            ticker_response, "BTC-AUD", "SPOT"
-        )
-        ticker.init_data()
-
-        assert ticker.ticker_symbol_name == "BTC-AUD"
-        assert ticker.last_price == 75000.0
-        assert ticker.bid_price == 74999.0
-        assert ticker.ask_price == 75001.0
-
-
-class TestSwyftxRegistration:
-    """Test Swyftx registration module."""
-
-    def test_registration(self):
-        """Test that Swyftx registration works."""
-        # Import to trigger registration
-        from bt_api_py.feeds import register_swyftx
-
-        # Check that exchange is registered
-        assert ExchangeRegistry.has_exchange("SWYFTX___SPOT")
-
-        # Check that feed is registered
-        feed_class = ExchangeRegistry._feed_classes.get("SWYFTX___SPOT")
-        assert feed_class is not None
-        assert feed_class == SwyftxRequestDataSpot
-
-        # Check that exchange data is registered
-        data_class = ExchangeRegistry._exchange_data_classes.get(
-            "SWYFTX___SPOT")
-        assert data_class is not None
-        assert data_class == SwyftxExchangeDataSpot
-
-        # Check that balance handler is registered
-        handler = ExchangeRegistry._balance_handlers.get("SWYFTX___SPOT")
-        assert handler is not None
-
-    def test_get_registered_feed(self):
-        """Test getting registered feed class."""
-        from bt_api_py.feeds import register_swyftx
-
-        # Use create_feed to get an instance
-        data_queue = queue.Queue()
-        feed = ExchangeRegistry.create_feed(
-            "SWYFTX___SPOT",
-            data_queue,
-        )
-        assert feed is not None
-        assert isinstance(feed, SwyftxRequestDataSpot)
-
-    def test_get_registered_exchange_data(self):
-        """Test getting registered exchange data class."""
-        from bt_api_py.feeds import register_swyftx
-
-        # Use create_exchange_data to get an instance
-        data = ExchangeRegistry.create_exchange_data("SWYFTX___SPOT")
-        assert data is not None
-        assert isinstance(data, SwyftxExchangeDataSpot)
-
-
-class TestSwyftxConfig:
-    """Test Swyftx configuration loading."""
-
-    def test_legal_currencies(self):
-        """Test that legal currencies are properly configured."""
-        data = SwyftxExchangeData()
-        # Should support AUD primarily (Australian exchange)
-        assert "AUD" in data.legal_currency
-        assert "USD" in data.legal_currency
-
-
-# ==================== Live API Tests ====================
-
-class TestSwyftxTickData:
-    """Test ticker data endpoints."""
-
-    @pytest.mark.integration
-    def test_swyftx_req_spot_tick_data(self):
-        """Test getting spot ticker data from Swyftx."""
-        from bt_api_py.error_framework import AuthenticationError
-
-        data_queue = queue.Queue()
-        feed = SwyftxRequestDataSpot(data_queue)
-
-        try:
-            data = feed.get_tick("BTC-AUD")
-            assert isinstance(data, RequestData)
-
-            tick_data_list = data.get_data()
-            assert isinstance(tick_data_list, list)
-
-            if len(tick_data_list) > 0:
-                pass
-            tick_data = tick_data_list[0]
-            assert "lastPrice" in tick_data or "last" in tick_data or "price" in tick_data
-        except AuthenticationError:
-            pass
-            # Expected when no API key is configured
-        except Exception as e:
-            pass
-            # Handle other exceptions
-
-    @pytest.mark.integration
-    def test_swyftx_async_spot_tick_data(self):
-        """Test async ticker data from Swyftx."""
-        data_queue = queue.Queue()
-        feed = SwyftxRequestDataSpot(data_queue)
-
-        feed.async_get_tick(
-            "BTC-AUD",
-            extra_data={
-                "test_async_tick_data": True})
-        time.sleep(3)
-
-        tick_data = None
-        try:
-            tick_data = data_queue.get(timeout=10)
-        except queue.Empty:
-            pass  # No data received
-
-        if tick_data is not None:
-            assert isinstance(tick_data, RequestData)
-
-
-class TestSwyftxKlineData:
-    """Test kline/candlestick data endpoints."""
-
-    @pytest.mark.integration
-    def test_swyftx_req_spot_kline_data(self):
-        """Test getting kline data from Swyftx."""
-        from bt_api_py.error_framework import AuthenticationError
-
-        data_queue = queue.Queue()
-        feed = SwyftxRequestDataSpot(data_queue)
-
-        try:
-            data = feed.get_kline("BTC-AUD", "1h", count=10)
-            assert isinstance(data, RequestData)
-
-            kline_data_list = data.get_data()
-            assert isinstance(kline_data_list, list)
-        except AuthenticationError:
-            pass
-            # Expected when no API key is configured
-        except Exception as e:
-            pass
-            # Handle other exceptions
-
-    @pytest.mark.integration
-    def test_swyftx_async_spot_kline_data(self):
-        """Test async kline data from Swyftx."""
-        data_queue = queue.Queue()
-        feed = SwyftxRequestDataSpot(data_queue)
-
-        feed.async_get_kline("BTC-AUD", period="1h", count=5)
-        time.sleep(3)
-
-        kline_data = None
-        try:
-            kline_data = data_queue.get(timeout=10)
-        except queue.Empty:
-            pass  # No data received
-
-        if kline_data is not None:
-            assert isinstance(kline_data, RequestData)
-
-
-class TestSwyftxOrderBook:
-    """Test order book depth endpoints."""
-
-    @pytest.mark.integration
-    def test_swyftx_req_spot_depth_data(self):
-        """Test getting order book depth from Swyftx."""
-        from bt_api_py.error_framework import AuthenticationError
-
-        data_queue = queue.Queue()
-        feed = SwyftxRequestDataSpot(data_queue)
-
-        try:
-            data = feed.get_depth("BTC-AUD", 20)
-            assert isinstance(data, RequestData)
-
-            depth_data = data.get_data()
-            assert isinstance(depth_data, list)
-
-            if len(depth_data) > 0:
-                pass
-            orderbook = depth_data[0]
-            assert "bids" in orderbook or "asks" in orderbook
-        except AuthenticationError:
-            pass
-            # Expected when no API key is configured
-        except Exception as e:
-            pass
-            # Handle other exceptions
-
-    @pytest.mark.integration
-    def test_swyftx_async_spot_depth_data(self):
-        """Test async order book depth from Swyftx."""
-        data_queue = queue.Queue()
-        feed = SwyftxRequestDataSpot(data_queue)
-
-        feed.async_get_depth("BTC-AUD", 20)
-        time.sleep(3)
-
-        depth_data = None
-        try:
-            depth_data = data_queue.get(timeout=10)
-        except queue.Empty:
-            pass  # No data received
-
-        if depth_data is not None:
-            assert isinstance(depth_data, RequestData)
-
-
-# ==================== Mock Tests ====================
-
-class TestSwyftxMockData:
-    """Test with mock data."""
-
-    def test_swyftx_tick_with_mock(self):
-        """Test ticker with mock response."""
-        data_queue = queue.Queue()
-        feed = SwyftxRequestDataSpot(data_queue)
-
-        mock_response = {
-            "market": "BTC-AUD",
-            "lastPrice": "75000.00",
-            "bid": "74999.00",
-            "ask": "75001.00",
-        }
-
-        result, success = feed._get_tick_normalize_function(
-            mock_response, {"symbol_name": "BTC-AUD"})
-        assert success is True
-        assert len(result) > 0
-
-    def test_swyftx_depth_with_mock(self):
-        """Test order book with mock response."""
-        data_queue = queue.Queue()
-        feed = SwyftxRequestDataSpot(data_queue)
-
-        mock_response = {
-            "bids": [[74999, "1.0"], [74998, "2.0"]],
-            "asks": [[75001, "1.0"], [75002, "2.5"]]
-        }
-
-        result, success = feed._get_depth_normalize_function(
-            mock_response, {"symbol_name": "BTC-AUD"})
-        assert success is True
-        assert len(result) > 0
-
-    def test_swyftx_kline_with_mock(self):
-        """Test kline with mock response."""
-        data_queue = queue.Queue()
-        feed = SwyftxRequestDataSpot(data_queue)
-
-        mock_response = [
-            [1672531200, "75000", "76000", "74000", "75500", "1.5"],
-            [1672534800, "75500", "76500", "74500", "76000", "2.0"]
-        ]
-
-        result, success = feed._get_kline_normalize_function(
-            mock_response, {"symbol_name": "BTC-AUD"})
-        assert success is True
-        assert len(result) > 0
-
-
-class TestSwyftxIntegration:
-    """Integration tests for Swyftx."""
-
-    def test_market_data_api(self):
-        """Test market data API calls (requires network)."""
-        data_queue = queue.Queue()
-        feed = SwyftxRequestDataSpot(data_queue)
-
-        # Test ticker (would require network)
-        # ticker = feed.get_tick("BTC/AUD")
-        # assert ticker.status is True
-
-    def test_trading_api(self):
-        """Test trading API calls (requires API keys)."""
-        # This would require API keys to test
-        pass
+    def test_get_exchange_info_params(self, feed):
+        path, params, extra = feed._get_exchange_info()
+        assert "markets" in path.lower()
+        assert extra["request_type"] == "get_exchange_info"
+
+    def test_get_server_time_params(self, feed):
+        path, params, extra = feed._get_server_time()
+        assert "time" in path.lower()
+        assert extra["request_type"] == "get_server_time"
+
+    def test_get_balance_params(self, feed):
+        path, params, extra = feed._get_balance()
+        assert "balance" in path.lower()
+        assert extra["request_type"] == "get_balance"
+
+    def test_get_account_params(self, feed):
+        path, params, extra = feed._get_account()
+        assert "account" in path.lower()
+        assert extra["request_type"] == "get_account"
+
+
+# ═══════════════════════════════════════════════════════════════
+# 3) Normalization functions
+# ═══════════════════════════════════════════════════════════════
+
+class TestNormalization:
+    def test_tick_ok(self):
+        result, ok = SwyftxRequestData._get_tick_normalize_function(SAMPLE_TICK, {})
+        assert ok is True
+        assert isinstance(result, list) and len(result) > 0
+
+    def test_tick_error(self):
+        result, ok = SwyftxRequestData._get_tick_normalize_function(SAMPLE_ERROR, {})
+        assert ok is False
+
+    def test_tick_none(self):
+        result, ok = SwyftxRequestData._get_tick_normalize_function(None, {})
+        assert ok is False
+
+    def test_depth_ok(self):
+        result, ok = SwyftxRequestData._get_depth_normalize_function(SAMPLE_DEPTH, {})
+        assert ok is True
+
+    def test_depth_error(self):
+        result, ok = SwyftxRequestData._get_depth_normalize_function(SAMPLE_ERROR, {})
+        assert ok is False
+
+    def test_kline_ok(self):
+        result, ok = SwyftxRequestData._get_kline_normalize_function(SAMPLE_KLINE, {})
+        assert ok is True
+        assert len(result) == 1
+
+    def test_kline_none(self):
+        result, ok = SwyftxRequestData._get_kline_normalize_function(None, {})
+        assert ok is False
+
+    def test_exchange_info_list(self):
+        result, ok = SwyftxRequestData._get_exchange_info_normalize_function(SAMPLE_EXCHANGE_INFO, {})
+        assert ok is True
+
+    def test_exchange_info_dict(self):
+        result, ok = SwyftxRequestData._get_exchange_info_normalize_function({"markets": []}, {})
+        assert ok is True
+
+    def test_server_time_ok(self):
+        result, ok = SwyftxRequestData._get_server_time_normalize_function(SAMPLE_SERVER_TIME, {})
+        assert ok is True
+
+    def test_server_time_none(self):
+        result, ok = SwyftxRequestData._get_server_time_normalize_function(None, {})
+        assert ok is False
+
+    def test_balance_ok(self):
+        result, ok = SwyftxRequestData._get_balance_normalize_function(SAMPLE_BALANCE, {})
+        assert ok is True
+
+    def test_account_ok(self):
+        result, ok = SwyftxRequestData._get_account_normalize_function(SAMPLE_ACCOUNT, {})
+        assert ok is True
+
+    def test_account_error(self):
+        result, ok = SwyftxRequestData._get_account_normalize_function(SAMPLE_ERROR, {})
+        assert ok is False
+
+    def test_is_error_none(self):
+        assert SwyftxRequestData._is_error(None) is True
+
+    def test_is_error_with_key(self):
+        assert SwyftxRequestData._is_error(SAMPLE_ERROR) is True
+
+    def test_is_error_ok(self):
+        assert SwyftxRequestData._is_error(SAMPLE_TICK) is False
+
+
+# ═══════════════════════════════════════════════════════════════
+# 4) Mocked sync calls
+# ═══════════════════════════════════════════════════════════════
+
+class TestSyncCalls:
+    @patch.object(SwyftxRequestData, "http_request", return_value=SAMPLE_TICK)
+    def test_get_tick(self, mock_http, feed):
+        rd = feed.get_tick("BTC-AUD")
+        assert isinstance(rd, RequestData)
+        mock_http.assert_called_once()
+
+    @patch.object(SwyftxRequestData, "http_request", return_value=SAMPLE_TICK)
+    def test_get_ticker(self, mock_http, feed):
+        rd = feed.get_ticker("BTC-AUD")
+        assert isinstance(rd, RequestData)
+
+    @patch.object(SwyftxRequestData, "http_request", return_value=SAMPLE_DEPTH)
+    def test_get_depth(self, mock_http, feed):
+        rd = feed.get_depth("BTC-AUD", 20)
+        assert isinstance(rd, RequestData)
+
+    @patch.object(SwyftxRequestData, "http_request", return_value=SAMPLE_KLINE)
+    def test_get_kline(self, mock_http, feed):
+        rd = feed.get_kline("BTC-AUD", "1h", 10)
+        assert isinstance(rd, RequestData)
+
+    @patch.object(SwyftxRequestData, "http_request", return_value=SAMPLE_EXCHANGE_INFO)
+    def test_get_exchange_info(self, mock_http, feed):
+        rd = feed.get_exchange_info()
+        assert isinstance(rd, RequestData)
+
+    @patch.object(SwyftxRequestData, "http_request", return_value=SAMPLE_SERVER_TIME)
+    def test_get_server_time(self, mock_http, feed):
+        rd = feed.get_server_time()
+        assert isinstance(rd, RequestData)
+
+    @patch.object(SwyftxRequestData, "http_request", return_value=SAMPLE_BALANCE)
+    def test_get_balance(self, mock_http, feed):
+        rd = feed.get_balance()
+        assert isinstance(rd, RequestData)
+
+    @patch.object(SwyftxRequestData, "http_request", return_value=SAMPLE_ACCOUNT)
+    def test_get_account(self, mock_http, feed):
+        rd = feed.get_account()
+        assert isinstance(rd, RequestData)
+
+
+# ═══════════════════════════════════════════════════════════════
+# 5) Auth
+# ═══════════════════════════════════════════════════════════════
+
+class TestAuth:
+    def test_headers_no_key(self, feed):
+        h = feed._get_headers()
+        assert h["Content-Type"] == "application/json"
+        assert "Authorization" not in h
+
+    def test_headers_with_key(self):
+        f = SwyftxRequestDataSpot(queue.Queue(), public_key="mytoken")
+        h = f._get_headers()
+        assert h["Authorization"] == "Bearer mytoken"
+
+
+# ═══════════════════════════════════════════════════════════════
+# 6) Registry
+# ═══════════════════════════════════════════════════════════════
+
+class TestRegistry:
+    def test_feed_registered(self):
+        assert "SWYFTX___SPOT" in ExchangeRegistry._feed_classes
+
+    def test_exchange_data_registered(self):
+        assert "SWYFTX___SPOT" in ExchangeRegistry._exchange_data_classes
+
+    def test_balance_handler_registered(self):
+        assert "SWYFTX___SPOT" in ExchangeRegistry._balance_handlers
+
+    def test_stream_registered(self):
+        stream_handlers = ExchangeRegistry._stream_classes.get("SWYFTX___SPOT", {})
+        assert "subscribe" in stream_handlers
+
+    def test_create_feed(self):
+        f = ExchangeRegistry.create_feed("SWYFTX___SPOT", queue.Queue())
+        assert isinstance(f, SwyftxRequestDataSpot)
+
+    def test_create_exchange_data(self):
+        ed = ExchangeRegistry.create_exchange_data("SWYFTX___SPOT")
+        assert isinstance(ed, SwyftxExchangeDataSpot)
+
+
+# ═══════════════════════════════════════════════════════════════
+# 7) Method existence
+# ═══════════════════════════════════════════════════════════════
+
+_EXPECTED_METHODS = [
+    "get_tick", "async_get_tick",
+    "get_ticker", "async_get_ticker",
+    "get_depth", "async_get_depth",
+    "get_kline", "async_get_kline",
+    "get_exchange_info", "async_get_exchange_info",
+    "get_server_time", "async_get_server_time",
+    "get_balance", "async_get_balance",
+    "get_account", "async_get_account",
+]
+
+
+class TestMethodExistence:
+    @pytest.mark.parametrize("method_name", _EXPECTED_METHODS)
+    def test_method_exists(self, feed, method_name):
+        assert hasattr(feed, method_name), f"Missing method: {method_name}"
+        assert callable(getattr(feed, method_name))
+
+
+# ═══════════════════════════════════════════════════════════════
+# 8) Feed init
+# ═══════════════════════════════════════════════════════════════
+
+class TestFeedInit:
+    def test_default_exchange_name(self, feed):
+        assert feed.exchange_name == "SWYFTX___SPOT"
+
+    def test_default_asset_type(self, feed):
+        assert feed.asset_type == "SPOT"
+
+    def test_capabilities(self, feed):
+        from bt_api_py.feeds.capability import Capability
+        caps = feed._capabilities()
+        assert Capability.GET_TICK in caps
+        assert Capability.GET_DEPTH in caps
+        assert Capability.GET_KLINE in caps
+        assert Capability.GET_EXCHANGE_INFO in caps
+
+    def test_push_data_to_queue(self, feed):
+        feed.push_data_to_queue({"test": 1})
+        assert not feed.data_queue.empty()
+
+
+# ═══════════════════════════════════════════════════════════════
+# 9) WebSocket stubs
+# ═══════════════════════════════════════════════════════════════
+
+class TestWebSocketStubs:
+    def test_market_wss_start_stop(self):
+        wss = SwyftxMarketWssDataSpot(queue.Queue(), topics=[{"topic": "ticker"}])
+        wss.start()
+        assert wss.running is True
+        wss.stop()
+        assert wss.running is False
+
+    def test_account_wss_start_stop(self):
+        wss = SwyftxAccountWssDataSpot(queue.Queue(), topics=[{"topic": "account"}])
+        wss.start()
+        assert wss.running is True
+        wss.stop()
+        assert wss.running is False
+
+
+# ═══════════════════════════════════════════════════════════════
+# 10) Integration (skipped)
+# ═══════════════════════════════════════════════════════════════
+
+class TestIntegration:
+    @pytest.mark.skip(reason="Requires network access")
+    def test_live_get_tick(self):
+        f = SwyftxRequestDataSpot(queue.Queue())
+        rd = f.get_tick("BTC-AUD")
+        assert isinstance(rd, RequestData)
+
+    @pytest.mark.skip(reason="Requires network access")
+    def test_live_get_exchange_info(self):
+        f = SwyftxRequestDataSpot(queue.Queue())
+        rd = f.get_exchange_info()
+        assert isinstance(rd, RequestData)
 
 
 if __name__ == "__main__":

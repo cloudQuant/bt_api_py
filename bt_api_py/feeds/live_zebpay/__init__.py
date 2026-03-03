@@ -1,9 +1,17 @@
 """
-Zebpay Feed - Spot trading for Zebpay exchange
+Zebpay Feed Module
 """
 
-from bt_api_py.feeds.live_zebpay.spot import ZebpayRequestDataSpot
+from bt_api_py.feeds.live_zebpay.request_base import ZebpayRequestData
+from bt_api_py.feeds.live_zebpay.spot import (
+    ZebpayRequestDataSpot,
+    ZebpayMarketWssDataSpot,
+    ZebpayAccountWssDataSpot,
+)
 
 __all__ = [
+    "ZebpayRequestData",
     "ZebpayRequestDataSpot",
+    "ZebpayMarketWssDataSpot",
+    "ZebpayAccountWssDataSpot",
 ]

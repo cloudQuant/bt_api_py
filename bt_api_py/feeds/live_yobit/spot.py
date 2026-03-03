@@ -1,111 +1,181 @@
 """
-YoBit Spot Feed implementation.
+YoBit Spot Feed – three-layer sync / async wrappers + WSS stubs.
 """
 
 from bt_api_py.containers.exchanges.yobit_exchange_data import YobitExchangeDataSpot
-from bt_api_py.feeds.capability import Capability
 from bt_api_py.feeds.live_yobit.request_base import YobitRequestData
+from bt_api_py.functions.log_message import SpdLogManager
 
 
 class YobitRequestDataSpot(YobitRequestData):
-    """YoBit Spot Feed for market data."""
-
-    @classmethod
-    def _capabilities(cls):
-        return {
-            Capability.GET_TICK,
-            Capability.GET_DEPTH,
-            Capability.GET_EXCHANGE_INFO,
-        }
+    """YoBit Spot REST Feed."""
 
     def __init__(self, data_queue, **kwargs):
         super().__init__(data_queue, **kwargs)
-        self.exchange_name = kwargs.get("exchange_name", "YOBIT___SPOT")
 
-    def _get_tick(self, symbol, extra_data=None, **kwargs):
-        """Get ticker data.
+    # ── server time ─────────────────────────────────────────────
 
-        YoBit uses lowercase format with underscore like btc_usdt
-        """
-        # Convert symbol to YoBit format (e.g., BTCUSDT -> btc_usdt)
-        yobit_symbol = self._to_yobit_symbol(symbol)
-        request_type = "get_tick"
-        path = f"GET /api/3/ticker/{yobit_symbol}"
-        extra_data = extra_data or {}
-        extra_data.update({
-            "request_type": request_type,
-            "symbol_name": symbol,
-            "normalize_function": self._get_tick_normalize_function,
-        })
-        return self.request(path, params=None, extra_data=extra_data)
+    def get_server_time(self, extra_data=None, **kwargs):
+        path, params, extra = self._get_server_time(extra_data, **kwargs)
+        return self.request(path, params, extra_data=extra)
 
-    def _to_yobit_symbol(self, symbol):
-        """Convert symbol to YoBit format."""
-        # YoBit uses lowercase with underscore: btc_usdt
-        return symbol.lower().replace("/", "_")
+    def async_get_server_time(self, extra_data=None, **kwargs):
+        path, params, extra = self._get_server_time(extra_data, **kwargs)
+        self.submit(
+            self.async_request(path, params, extra_data=extra),
+            callback=self.async_callback,
+        )
 
-    @staticmethod
-    def _get_tick_normalize_function(input_data, extra_data):
-        if not input_data:
-            return [], False
-        # YoBit returns data in format: {"btc_usdt": {...}}
-        if isinstance(input_data, dict):
-            # Get the first key's value
-            for key, value in input_data.items():
-                if isinstance(value, dict):
-                    return [value], value is not None
-        return [input_data], input_data is not None
+    # ── market data ─────────────────────────────────────────────
 
     def get_tick(self, symbol, extra_data=None, **kwargs):
-        """Get symbol ticker."""
-        return self._get_tick(symbol, extra_data, **kwargs)
+        path, params, extra = self._get_tick(symbol, extra_data, **kwargs)
+        return self.request(path, params, extra_data=extra)
 
-    def _get_depth(self, symbol, count=20, extra_data=None, **kwargs):
-        """Get order book depth."""
-        yobit_symbol = self._to_yobit_symbol(symbol)
-        request_type = "get_depth"
-        path = f"GET /api/3/depth/{yobit_symbol}"
-        extra_data = extra_data or {}
-        extra_data.update({
-            "request_type": request_type,
-            "symbol_name": symbol,
-            "normalize_function": self._get_depth_normalize_function,
-        })
-        return self.request(path, params={"limit": count}, extra_data=extra_data)
+    def async_get_tick(self, symbol, extra_data=None, **kwargs):
+        path, params, extra = self._get_tick(symbol, extra_data, **kwargs)
+        self.submit(
+            self.async_request(path, params, extra_data=extra),
+            callback=self.async_callback,
+        )
 
-    @staticmethod
-    def _get_depth_normalize_function(input_data, extra_data):
-        if not input_data:
-            return [], False
-        # YoBit returns data in format: {"btc_usdt": {...}}
-        if isinstance(input_data, dict):
-            for key, value in input_data.items():
-                if isinstance(value, dict):
-                    return [value], value is not None
-        return [input_data], input_data is not None
+    def get_ticker(self, symbol, extra_data=None, **kwargs):
+        return self.get_tick(symbol, extra_data, **kwargs)
+
+    def async_get_ticker(self, symbol, extra_data=None, **kwargs):
+        self.async_get_tick(symbol, extra_data, **kwargs)
 
     def get_depth(self, symbol, count=20, extra_data=None, **kwargs):
-        """Get order book."""
-        return self._get_depth(symbol, count, extra_data, **kwargs)
+        path, params, extra = self._get_depth(symbol, count, extra_data, **kwargs)
+        return self.request(path, params, extra_data=extra)
 
-    def _get_info(self, extra_data=None, **kwargs):
-        """Get exchange info - all available pairs."""
-        request_type = "get_info"
-        path = "GET /api/3/info"
-        extra_data = extra_data or {}
-        extra_data.update({
-            "request_type": request_type,
-            "normalize_function": self._get_info_normalize_function,
-        })
-        return self.request(path, params=None, extra_data=extra_data)
+    def async_get_depth(self, symbol, count=20, extra_data=None, **kwargs):
+        path, params, extra = self._get_depth(symbol, count, extra_data, **kwargs)
+        self.submit(
+            self.async_request(path, params, extra_data=extra),
+            callback=self.async_callback,
+        )
 
-    @staticmethod
-    def _get_info_normalize_function(input_data, extra_data):
-        if not input_data:
-            return [], False
-        info = input_data
-        return [info], info is not None
+    def get_exchange_info(self, extra_data=None, **kwargs):
+        path, params, extra = self._get_exchange_info(extra_data, **kwargs)
+        return self.request(path, params, extra_data=extra)
 
-    def get_info(self, extra_data=None, **kwargs):
-        """Get exchange info."""
-        return self._get_info(extra_data, **kwargs)
+    def async_get_exchange_info(self, extra_data=None, **kwargs):
+        path, params, extra = self._get_exchange_info(extra_data, **kwargs)
+        self.submit(
+            self.async_request(path, params, extra_data=extra),
+            callback=self.async_callback,
+        )
+
+    # ── account ─────────────────────────────────────────────────
+
+    def get_balance(self, extra_data=None, **kwargs):
+        path, params, extra = self._get_balance(extra_data, **kwargs)
+        return self.request(path, params, extra_data=extra)
+
+    def async_get_balance(self, extra_data=None, **kwargs):
+        path, params, extra = self._get_balance(extra_data, **kwargs)
+        self.submit(
+            self.async_request(path, params, extra_data=extra),
+            callback=self.async_callback,
+        )
+
+    def get_account(self, extra_data=None, **kwargs):
+        path, params, extra = self._get_account(extra_data, **kwargs)
+        return self.request(path, params, extra_data=extra)
+
+    def async_get_account(self, extra_data=None, **kwargs):
+        path, params, extra = self._get_account(extra_data, **kwargs)
+        self.submit(
+            self.async_request(path, params, extra_data=extra),
+            callback=self.async_callback,
+        )
+
+    # ── trading ──────────────────────────────────────────────────
+
+    def make_order(self, symbol, vol, price=None, order_type="buy-limit",
+                   offset="open", post_only=False, client_order_id=None,
+                   extra_data=None, **kwargs):
+        path, params, extra = self._make_order(
+            symbol, vol, price, order_type, offset, post_only,
+            client_order_id, extra_data, **kwargs,
+        )
+        return self.request(path, params, extra_data=extra)
+
+    def async_make_order(self, symbol, vol, price=None, order_type="buy-limit",
+                         offset="open", post_only=False, client_order_id=None,
+                         extra_data=None, **kwargs):
+        path, params, extra = self._make_order(
+            symbol, vol, price, order_type, offset, post_only,
+            client_order_id, extra_data, **kwargs,
+        )
+        self.submit(
+            self.async_request(path, params, extra_data=extra),
+            callback=self.async_callback,
+        )
+
+    def cancel_order(self, symbol, order_id=None, extra_data=None, **kwargs):
+        path, params, extra = self._cancel_order(symbol, order_id, extra_data, **kwargs)
+        return self.request(path, params, extra_data=extra)
+
+    def async_cancel_order(self, symbol, order_id=None, extra_data=None, **kwargs):
+        path, params, extra = self._cancel_order(symbol, order_id, extra_data, **kwargs)
+        self.submit(
+            self.async_request(path, params, extra_data=extra),
+            callback=self.async_callback,
+        )
+
+    def query_order(self, symbol, order_id=None, extra_data=None, **kwargs):
+        path, params, extra = self._query_order(symbol, order_id, extra_data, **kwargs)
+        return self.request(path, params, extra_data=extra)
+
+    def async_query_order(self, symbol, order_id=None, extra_data=None, **kwargs):
+        path, params, extra = self._query_order(symbol, order_id, extra_data, **kwargs)
+        self.submit(
+            self.async_request(path, params, extra_data=extra),
+            callback=self.async_callback,
+        )
+
+
+# ── WebSocket stubs ──────────────────────────────────────────
+
+class YobitMarketWssDataSpot:
+    """YoBit Spot Market WebSocket Data Handler (stub)."""
+
+    def __init__(self, data_queue, **kwargs):
+        self.data_queue = data_queue
+        self._params = YobitExchangeDataSpot()
+        self.logger_name = kwargs.get("logger_name", "yobit_spot_market_wss.log")
+        self.request_logger = SpdLogManager(
+            "./logs/" + self.logger_name, "request", 0, 0, False
+        ).create_logger()
+        self.wss_url = kwargs.get("wss_url", self._params.wss_url)
+        self.topics = kwargs.get("topics", [])
+        self.running = False
+
+    def start(self):
+        self.running = True
+
+    def stop(self):
+        self.running = False
+
+
+class YobitAccountWssDataSpot:
+    """YoBit Spot Account WebSocket Data Handler (stub)."""
+
+    def __init__(self, data_queue, **kwargs):
+        self.data_queue = data_queue
+        self._params = YobitExchangeDataSpot()
+        self.logger_name = kwargs.get("logger_name", "yobit_spot_account_wss.log")
+        self.request_logger = SpdLogManager(
+            "./logs/" + self.logger_name, "request", 0, 0, False
+        ).create_logger()
+        self.wss_url = kwargs.get("wss_url", self._params.wss_url)
+        self.topics = kwargs.get("topics", [])
+        self.running = False
+
+    def start(self):
+        self.running = True
+
+    def stop(self):
+        self.running = False

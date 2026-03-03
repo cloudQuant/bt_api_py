@@ -1,8 +1,11 @@
 """
-Zaif Exchange Data Configuration
+Zaif Exchange Data Configuration – Feed pattern.
 """
 
 import os
+
+import yaml
+
 from bt_api_py.containers.exchanges.exchange_data import ExchangeData
 from bt_api_py.functions.log_message import SpdLogManager
 
@@ -10,28 +13,25 @@ logger = SpdLogManager(
     file_name="zaif_exchange_data.log", logger_name="zaif_data", print_info=False
 ).create_logger()
 
-_zaif_config = None
-_zaif_config_loaded = False
+_zaif_yaml_cache = None
 
 
-def _get_zaif_config():
-    """Load Zaif YAML configuration."""
-    global _zaif_config, _zaif_config_loaded
-    if _zaif_config_loaded:
-        return _zaif_config
+def _load_zaif_yaml():
+    global _zaif_yaml_cache
+    if _zaif_yaml_cache is not None:
+        return _zaif_yaml_cache
     try:
-        from bt_api_py.config_loader import load_exchange_config
-        config_path = os.path.join(
+        cfg_path = os.path.join(
             os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
-            "configs",
-            "zaif.yaml",
+            "configs", "zaif.yaml",
         )
-        if os.path.exists(config_path):
-            _zaif_config = load_exchange_config(config_path)
-        _zaif_config_loaded = True
+        if os.path.exists(cfg_path):
+            with open(cfg_path, "r", encoding="utf-8") as f:
+                _zaif_yaml_cache = yaml.safe_load(f) or {}
     except Exception as e:
-        logger.warn(f"Failed to load zaif.yaml config: {e}")
-    return _zaif_config
+        logger.warn(f"Failed to load zaif.yaml: {e}")
+        _zaif_yaml_cache = {}
+    return _zaif_yaml_cache
 
 
 class ZaifExchangeData(ExchangeData):
@@ -39,54 +39,35 @@ class ZaifExchangeData(ExchangeData):
 
     def __init__(self):
         super().__init__()
-        self.exchange_name = "zaif"
+        self.exchange_name = "ZAIF"
         self.rest_url = "https://api.zaif.jp"
         self.wss_url = "wss://ws.zaif.jp:8888"
         self.kline_periods = {
-            "1m": "1min",
-            "5m": "5min",
-            "15m": "15min",
-            "30m": "30min",
-            "1h": "1hour",
-            "4h": "4hour",
-            "1d": "1day",
-            "1w": "1week",
+            "1m": "1min", "5m": "5min", "15m": "15min", "30m": "30min",
+            "1h": "1hour", "4h": "4hour", "1d": "1day", "1w": "1week",
         }
         self.legal_currency = ["JPY", "BTC", "ETH"]
 
-    def _load_from_config(self, asset_type):
-        """Load from YAML config."""
-        config = _get_zaif_config()
-        if config is None:
-            return False
-        asset_cfg = config.asset_types.get(asset_type)
-        if asset_cfg is None:
-            return False
+    @staticmethod
+    def get_symbol(symbol):
+        """Normalize symbol: btc_jpy (lowercase with underscore)."""
+        s = symbol.strip().replace("-", "_")
+        if "/" in s:
+            s = s.replace("/", "_")
+        return s.lower()
 
-        if asset_cfg.exchange_name:
-            self.exchange_name = asset_cfg.exchange_name
-        if config.base_urls and config.base_urls.rest:
-            rest = config.base_urls.rest
-            self.rest_url = rest.get(asset_type, rest.get("default", self.rest_url)) if isinstance(rest, dict) else rest
-        if config.base_urls and config.base_urls.wss:
-            wss = config.base_urls.wss
-            self.wss_url = wss.get(asset_type, wss.get("default", self.wss_url)) if isinstance(wss, dict) else wss
-        if asset_cfg.rest_paths:
-            self.rest_paths.update(asset_cfg.rest_paths)
-        if asset_cfg.wss_paths:
-            self.wss_paths.update(asset_cfg.wss_paths)
+    @staticmethod
+    def get_reverse_symbol(symbol):
+        return symbol.strip().replace("/", "_").replace("-", "_").lower()
 
-        # kline_periods - load from YAML, prefer asset-specific config
-        kp = asset_cfg.kline_periods or (config.kline_periods if config.kline_periods else None)
-        if kp:
-            self.kline_periods = dict(kp)
+    def get_period(self, period):
+        return self.kline_periods.get(period, period)
 
-        # legal_currency - load from YAML
-        lc = asset_cfg.legal_currency or (config.legal_currency if config.legal_currency else None)
-        if lc:
-            self.legal_currency = list(lc)
-
-        return True
+    def get_reverse_period(self, period):
+        for k, v in self.kline_periods.items():
+            if v == period:
+                return k
+        return period
 
 
 class ZaifExchangeDataSpot(ZaifExchangeData):
@@ -94,9 +75,48 @@ class ZaifExchangeDataSpot(ZaifExchangeData):
 
     def __init__(self):
         super().__init__()
-        self.asset_type = "spot"
-        self.rest_paths = {}
+        self.exchange_name = "ZAIF___SPOT"
+        self.asset_type = "SPOT"
+        self.rest_paths = {
+            "get_tick": "GET /api/1/ticker/{pair}",
+            "get_ticker": "GET /api/1/ticker/{pair}",
+            "get_depth": "GET /api/1/depth/{pair}",
+            "get_kline": "GET /api/1/trades/{pair}",
+            "get_trades": "GET /api/1/trades/{pair}",
+            "get_exchange_info": "GET /api/1/currency_pairs/all",
+            "get_server_time": "GET /api/1/last_price/{pair}",
+            "get_account": "POST /tapi",
+            "get_balance": "POST /tapi",
+            "make_order": "POST /tapi",
+            "cancel_order": "POST /tapi",
+            "query_order": "POST /tapi",
+        }
         self.wss_paths = {}
-        self.api_key = os.getenv("ZAIF_API_KEY", "")
-        self.api_secret = os.getenv("ZAIF_API_SECRET", "")
-        self._load_from_config("spot")
+        self._load_yaml()
+
+    def _load_yaml(self):
+        cfg = _load_zaif_yaml()
+        spot = cfg.get("ZAIF___SPOT", {})
+        if not spot:
+            return
+        self.exchange_name = spot.get("exchange_name", self.exchange_name)
+        self.asset_type = spot.get("asset_type", self.asset_type)
+        self.rest_url = spot.get("rest_url", self.rest_url)
+        self.wss_url = spot.get("wss_url", self.wss_url)
+        rp = spot.get("rest_paths")
+        if rp:
+            self.rest_paths.update(rp)
+        kp = spot.get("kline_periods")
+        if kp:
+            self.kline_periods = dict(kp)
+        lc = spot.get("legal_currency")
+        if lc:
+            self.legal_currency = list(lc)
+
+    def get_rest_path(self, key, **kwargs):
+        path = self.rest_paths.get(key, "")
+        if not path:
+            raise ValueError(f"[{self.exchange_name}] REST path not found: {key}")
+        if kwargs:
+            path = path.format(**kwargs)
+        return path

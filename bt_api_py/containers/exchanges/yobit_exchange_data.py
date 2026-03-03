@@ -1,8 +1,11 @@
 """
-YoBit Exchange Data Configuration
+YoBit Exchange Data Configuration – Feed pattern.
 """
 
 import os
+
+import yaml
+
 from bt_api_py.containers.exchanges.exchange_data import ExchangeData
 from bt_api_py.functions.log_message import SpdLogManager
 
@@ -10,28 +13,25 @@ logger = SpdLogManager(
     file_name="yobit_exchange_data.log", logger_name="yobit_data", print_info=False
 ).create_logger()
 
-_yobit_config = None
-_yobit_config_loaded = False
+_yobit_yaml_cache = None
 
 
-def _get_yobit_config():
-    """Load YoBit YAML configuration."""
-    global _yobit_config, _yobit_config_loaded
-    if _yobit_config_loaded:
-        return _yobit_config
+def _load_yobit_yaml():
+    global _yobit_yaml_cache
+    if _yobit_yaml_cache is not None:
+        return _yobit_yaml_cache
     try:
-        from bt_api_py.config_loader import load_exchange_config
-        config_path = os.path.join(
+        cfg_path = os.path.join(
             os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
-            "configs",
-            "yobit.yaml",
+            "configs", "yobit.yaml",
         )
-        if os.path.exists(config_path):
-            _yobit_config = load_exchange_config(config_path)
-        _yobit_config_loaded = True
+        if os.path.exists(cfg_path):
+            with open(cfg_path, "r", encoding="utf-8") as f:
+                _yobit_yaml_cache = yaml.safe_load(f) or {}
     except Exception as e:
-        logger.warn(f"Failed to load yobit.yaml config: {e}")
-    return _yobit_config
+        logger.warn(f"Failed to load yobit.yaml: {e}")
+        _yobit_yaml_cache = {}
+    return _yobit_yaml_cache
 
 
 class YobitExchangeData(ExchangeData):
@@ -39,58 +39,36 @@ class YobitExchangeData(ExchangeData):
 
     def __init__(self):
         super().__init__()
-        self.exchange_name = "yobit"
+        self.exchange_name = "YOBIT"
         self.rest_url = "https://yobit.net"
         self.wss_url = "wss://ws.yobit.net"
         self.kline_periods = {
-            "1m": "1",
-            "3m": "3",
-            "5m": "5",
-            "15m": "15",
-            "30m": "30",
-            "1h": "60",
-            "2h": "120",
-            "4h": "240",
-            "6h": "360",
-            "12h": "720",
-            "1d": "1d",
-            "1w": "1w",
+            "1m": "1", "3m": "3", "5m": "5", "15m": "15",
+            "30m": "30", "1h": "60", "2h": "120", "4h": "240",
+            "6h": "360", "12h": "720", "1d": "1d", "1w": "1w",
         }
         self.legal_currency = ["USD", "USDT", "RUB", "BTC", "ETH", "DOGE"]
 
-    def _load_from_config(self, asset_type):
-        """Load from YAML config."""
-        config = _get_yobit_config()
-        if config is None:
-            return False
-        asset_cfg = config.asset_types.get(asset_type)
-        if asset_cfg is None:
-            return False
+    @staticmethod
+    def get_symbol(symbol):
+        """Normalize symbol: btc_usd (lowercase with underscore)."""
+        s = symbol.strip().replace("-", "_")
+        if "/" in s:
+            s = s.replace("/", "_")
+        return s.lower()
 
-        if asset_cfg.exchange_name:
-            self.exchange_name = asset_cfg.exchange_name
-        if config.base_urls and config.base_urls.rest:
-            rest = config.base_urls.rest
-            self.rest_url = rest.get(asset_type, rest.get("default", self.rest_url)) if isinstance(rest, dict) else rest
-        if config.base_urls and config.base_urls.wss:
-            wss = config.base_urls.wss
-            self.wss_url = wss.get(asset_type, wss.get("default", self.wss_url)) if isinstance(wss, dict) else wss
-        if asset_cfg.rest_paths:
-            self.rest_paths.update(asset_cfg.rest_paths)
-        if asset_cfg.wss_paths:
-            self.wss_paths.update(asset_cfg.wss_paths)
+    @staticmethod
+    def get_reverse_symbol(symbol):
+        return symbol.strip().replace("/", "_").replace("-", "_").lower()
 
-        # kline_periods - load from YAML, prefer asset-specific config
-        kp = asset_cfg.kline_periods or (config.kline_periods if config.kline_periods else None)
-        if kp:
-            self.kline_periods = dict(kp)
+    def get_period(self, period):
+        return self.kline_periods.get(period, period)
 
-        # legal_currency - load from YAML
-        lc = asset_cfg.legal_currency or (config.legal_currency if config.legal_currency else None)
-        if lc:
-            self.legal_currency = list(lc)
-
-        return True
+    def get_reverse_period(self, period):
+        for k, v in self.kline_periods.items():
+            if v == period:
+                return k
+        return period
 
 
 class YobitExchangeDataSpot(YobitExchangeData):
@@ -98,7 +76,47 @@ class YobitExchangeDataSpot(YobitExchangeData):
 
     def __init__(self):
         super().__init__()
-        self.asset_type = "spot"
-        self.rest_paths = {}
+        self.exchange_name = "YOBIT___SPOT"
+        self.asset_type = "SPOT"
+        self.rest_paths = {
+            "get_tick": "GET /api/3/ticker/{pair}",
+            "get_ticker": "GET /api/3/ticker/{pair}",
+            "get_depth": "GET /api/3/depth/{pair}",
+            "get_trades": "GET /api/3/trades/{pair}",
+            "get_exchange_info": "GET /api/3/info",
+            "get_server_time": "GET /api/3/info",
+            "get_account": "POST /tapi",
+            "get_balance": "POST /tapi",
+            "make_order": "POST /tapi",
+            "cancel_order": "POST /tapi",
+            "query_order": "POST /tapi",
+        }
         self.wss_paths = {}
-        self._load_from_config("spot")
+        self._load_yaml()
+
+    def _load_yaml(self):
+        cfg = _load_yobit_yaml()
+        spot = cfg.get("YOBIT___SPOT", {})
+        if not spot:
+            return
+        self.exchange_name = spot.get("exchange_name", self.exchange_name)
+        self.asset_type = spot.get("asset_type", self.asset_type)
+        self.rest_url = spot.get("rest_url", self.rest_url)
+        self.wss_url = spot.get("wss_url", self.wss_url)
+        rp = spot.get("rest_paths")
+        if rp:
+            self.rest_paths.update(rp)
+        kp = spot.get("kline_periods")
+        if kp:
+            self.kline_periods = dict(kp)
+        lc = spot.get("legal_currency")
+        if lc:
+            self.legal_currency = list(lc)
+
+    def get_rest_path(self, key, **kwargs):
+        path = self.rest_paths.get(key, "")
+        if not path:
+            raise ValueError(f"[{self.exchange_name}] REST path not found: {key}")
+        if kwargs:
+            path = path.format(**kwargs)
+        return path
