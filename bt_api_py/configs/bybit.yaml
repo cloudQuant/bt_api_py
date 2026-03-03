@@ -1,0 +1,562 @@
+# Bybit Exchange Configuration
+# Data source: bt_api_py/containers/exchanges/bybit_exchange_data.py
+id: bybit
+display_name: Bybit
+venue_type: cex
+website: https://www.bybit.com
+api_doc: https://bybit-exchange.github.io/docs/v5/intro
+
+base_urls:
+  rest:
+    spot: https://api.bybit.com
+    swap: https://api.bybit.com
+    inverse: https://api.bybit.com
+    option: https://api.bybit.com
+  wss:
+    spot: wss://stream.bybit.com/v5/public/spot
+    swap: wss://stream.bybit.com/v5/public/linear
+    inverse: wss://stream.bybit.com/v5/public/inverse
+    option: wss://stream.bybit.com/v5/public/option
+
+connection:
+  type: http
+  timeout: 10
+  max_retries: 3
+
+authentication:
+  type: hmac_sha256
+  header_name: X-BAPI-API-KEY
+  timestamp_key: X-BAPI-TIMESTAMP
+  signature_key: X-BAPI-SIGN
+  recv_window_key: X-BAPI-RECV-WINDOW
+
+# Shared default kline periods mapping
+kline_periods:
+  1m: "1"
+  3m: "3"
+  5m: "5"
+  15m: "15"
+  30m: "30"
+  1h: "60"
+  2h: "120"
+  4h: "240"
+  6h: "360"
+  12h: "720"
+  1d: "D"
+  1w: "W"
+  1M: "M"
+
+# Shared default legal currency list
+legal_currency: [USDT, USDC, USD, BTC, ETH]
+
+rate_limits:
+  - name: request_weight
+    type: sliding_window
+    interval: 60
+    limit: 1200
+    scope: global
+    weight: 1
+    weight_map:
+      "/v5/market/tickers": 1
+      "/v5/market/klines": 1
+      "/v5/market/orderbook": 1
+      "/v5/account/wallet-balance": 1
+      "/v5/position/list": 1
+  - name: order_rate
+    type: sliding_window
+    interval: 10
+    limit: 100
+    scope: endpoint
+    endpoint: "/v5/order/create"
+    weight: 1
+  - name: order_cancel_rate
+    type: sliding_window
+    interval: 10
+    limit: 100
+    scope: endpoint
+    endpoint: "/v5/order/cancel"
+    weight: 1
+
+# ═══════════════════════════════════════════════════════════════
+# Asset Types — Each subtype corresponds to BybitExchangeData subclass
+# ═══════════════════════════════════════════════════════════════
+asset_types:
+
+  # ─── BybitExchangeDataSpot ──────────────────────────────────
+  spot:
+    exchange_name: bybitSpot
+    symbol_format: "{base}{quote}"
+    legal_currency: [USDT, USDC, USD, BTC, ETH]
+    rest_paths:
+      # General
+      ping: "GET /v5/market/ping"
+      get_server_time: "GET /v5/market/time"
+      get_contract: "GET /v5/market/instruments-info?category=spot"
+
+      # Market Data
+      get_tick: "GET /v5/market/tickers?category=spot"
+      get_depth: "GET /v5/market/orderbook?category=spot"
+      get_incre_depth: "GET /v5/market/orderbook?category=spot"
+      get_kline: "GET /v5/market/klines?category=spot"
+      get_info: "GET /v5/market/tickers?category=spot"
+      get_new_price: "GET /v5/market/trades?category=spot"
+      get_historical_trades: "GET /v5/market/historical-trades?category=spot"
+      get_agg_trades: "GET /v5/market/historical-trades?category=spot"
+      get_market_rate: "GET /v5/market/ticker/price?category=spot"
+      get_avg_price: "GET /v5/market/mark-price-kline?category=spot"
+      get_funding_rate: "GET /v5/market/funding-rate?category=spot"
+
+      # Account
+      get_account: "GET /v5/account/wallet-balance"
+      get_balance: "GET /v5/account/wallet-balance"
+      get_fee: "GET /v5/fee-rate"
+      get_order_rate_limit: "GET /v5/account/api-key"
+
+      # Trade
+      make_order: "POST /v5/order/create"
+      make_order_test: "POST /v5/order/create/test"
+      cancel_order: "POST /v5/order/cancel"
+      cancel_all: "POST /v5/order/cancel-all"
+      query_order: "GET /v5/order"
+      get_open_orders: "GET /v5/order/active"
+      get_all_orders: "GET /v5/order/history"
+      get_deals: "GET /v5/execution/list"
+
+      # Listen Key
+      get_listen_key: "POST /v5/user/stream-key"
+      refresh_listen_key: "POST /v5/user/stream-key/refresh"
+      close_listen_key: "DELETE /v5/user/stream-key"
+
+      # Additional endpoints
+      get_symbol_info: "GET /v5/market/instruments-info?category=spot"
+      get_order_history: "GET /v5/order/history"
+      get_fills: "GET /v5/execution/list"
+
+    wss_paths:
+      # Market Streams
+      agg_trade: "spottrade.{symbol}"
+      trade: "spottrade.{symbol}"
+      kline: "spotkline.{symbol}.{period}"
+      mini_ticker: "spotmini_ticker.{symbol}"
+      ticker: "spotticker.{symbol}"
+      book_ticker: "spotbook_ticker.{symbol}"
+      depth: "spotdepth.{symbol}"
+
+      # All Market Streams
+      all_ticker: "spottickers"
+      all_book_ticker: "spotbook_tickers"
+
+      # Aliases
+      tick: "spotbook_ticker.{symbol}"
+      tick_all: "spotbook_tickers"
+      ticks: "spottickers"
+      tickers: "spottickers"
+      market: "spotbook_tickers"
+      bidAsk: "spotbook_ticker.{symbol}"
+
+      # User Data Streams
+      orders: ""
+      deals: ""
+      balance: ""
+      position: ""
+      account: ""
+      listen_key: ""
+
+  # ─── BybitExchangeDataSwap (USDT-M Futures / linear) ────────
+  swap:
+    exchange_name: bybitSwap
+    symbol_format: "{base}{quote}"
+    legal_currency: [USDT, USDC]
+    rest_paths:
+      # General
+      ping: "GET /v5/market/ping"
+      get_server_time: "GET /v5/market/time"
+      get_contract: "GET /v5/market/instruments-info?category=linear"
+
+      # Market Data
+      get_tick: "GET /v5/market/tickers?category=linear"
+      get_depth: "GET /v5/market/orderbook?category=linear"
+      get_incre_depth: "GET /v5/market/orderbook?category=linear"
+      get_kline: "GET /v5/market/klines?category=linear"
+      get_info: "GET /v5/market/tickers?category=linear"
+      get_new_price: "GET /v5/market/trades?category=linear"
+      get_historical_trades: "GET /v5/market/historical-trades?category=linear"
+      get_agg_trades: "GET /v5/market/historical-trades?category=linear"
+      get_market_rate: "GET /v5/market/ticker/price?category=linear"
+      get_avg_price: "GET /v5/market/mark-price-kline?category=linear"
+      get_funding_rate: "GET /v5/market/funding-rate?category=linear"
+      get_history_funding_rate: "GET /v5/market/funding-rate-history?category=linear"
+      get_open_interest: "GET /v5/market/open-interest?category=linear"
+      get_mark_price: "GET /v5/market/mark-price-kline?category=linear"
+
+      # Futures Data
+      get_long_short_ratio: "GET /v5/market/account-ratio?category=linear"
+      get_top_long_short_account_ratio: "GET /v5/market/top-long-short-account-ratio?category=linear"
+      get_top_long_short_position_ratio: "GET /v5/market/top-long-short-position-ratio?category=linear"
+      get_taker_buy_sell_volume: "GET /v5/market/taker-buy-sell-volume?category=linear"
+      get_open_interest_hist: "GET /v5/market/open-interest?category=linear"
+
+      # Account
+      get_account: "GET /v5/account/wallet-balance"
+      get_balance: "GET /v5/account/wallet-balance"
+      get_position: "GET /v5/position/list"
+      get_fee: "GET /v5/fee-rate"
+      get_income: "GET /v5/account/transaction-log"
+      get_adl_quantile: "GET /v5/position/adl-timestamp?category=linear"
+      get_leverage_bracket: "GET /v5/position/leverage-bracket?category=linear"
+      get_position_mode: "GET /v5/account/position-mode"
+      get_api_key_permission: "GET /v5/account/api-key"
+      get_force_orders: "GET /v5/liquidation/history?category=linear"
+
+      # Trade
+      make_order: "POST /v5/order/create"
+      make_order_test: "POST /v5/order/create/test"
+      make_orders: "POST /v5/order/create"
+      modify_order: "POST /v5/order/amend"
+      modify_orders: "POST /v5/order/amend"
+      cancel_order: "POST /v5/order/cancel"
+      cancel_orders: "POST /v5/order/cancel"
+      cancel_all: "POST /v5/order/cancel-all"
+      auto_cancel_all: "POST /v5/order/cancel-all"
+      query_order: "GET /v5/order"
+      get_open_orders: "GET /v5/order/active"
+      get_all_orders: "GET /v5/order/history"
+      get_deals: "GET /v5/execution/list"
+      change_leverage: "POST /v5/position/leverage"
+      change_margin_type: "POST /v5/position/margin-type"
+      change_position_mode: "POST /v5/account/position-mode"
+      modify_isolated_position_margin: "POST /v5/position/ isolated-margin"
+      get_position_margin_history: "GET /v5/position/isolated-margin/history"
+
+      # OCO
+      make_oco_order: "POST /v5/order/oco"
+      get_order_list: "GET /v5/order/oco"
+      get_all_order_lists: "GET /v5/order/oco"
+      get_open_order_lists: "GET /v5/order/oco/active"
+      cancel_order_list: "POST /v5/order/oco/cancel"
+
+      # Listen Key
+      get_listen_key: "POST /v5/user/stream-key"
+      refresh_listen_key: "POST /v5/user/stream-key/refresh"
+      close_listen_key: "DELETE /v5/user/stream-key"
+
+      # Additional endpoints
+      get_symbol_info: "GET /v5/market/instruments-info?category=linear"
+      get_delivery_price: "GET /v5/market/mark-price-kline?category=linear"
+      get_settlement_records: "GET /v5/position/settle-record"
+      get_funding_fee: "GET /v5/position/funding-fee"
+
+    wss_paths:
+      # Market Streams
+      agg_trade: "lineartrade.{symbol}"
+      trade: "lineartrade.{symbol}"
+      kline: "linearkline.{symbol}.{period}"
+      continuous_kline: "linearkline.{symbol}.{period}"
+      mini_ticker: "linearmini_ticker.{symbol}"
+      ticker: "linearticker.{symbol}"
+      book_ticker: "linearbook_ticker.{symbol}"
+      depth: "lineardepth.{symbol}"
+      mark_price: "linearmarkprice.{symbol}"
+      funding_rate: "linearfundingrate.{symbol}"
+
+      # All Market Streams
+      all_force_order: "liquidation"
+      all_mini_ticker: "linearmini_tickers"
+      all_ticker: "lineartickers"
+      all_mark_price: "linearmarkprices"
+      all_book_ticker: "linearbook_tickers"
+      all_funding_rate: "linearfundingrates"
+
+      # Aliases
+      tick: "linearbook_ticker.{symbol}"
+      tick_all: "linearbook_tickers"
+      ticks: "lineartickers"
+      tickers: "lineartickers"
+      market: "linearbook_tickers"
+      bidAsk: "linearbook_ticker.{symbol}"
+      clearPrice: "linearmarkprice.{symbol}"
+      liquidation: "liquidation"
+      liquidation_order: "liquidation"
+      contract_info: "linearcontractinfo"
+
+      # User Data Streams
+      orders: ""
+      deals: ""
+      balance: ""
+      position: ""
+      account: ""
+      portfolio: ""
+      listen_key: ""
+
+  # ─── BybitExchangeDataInverse (Inverse Futures) ─────────────
+  inverse:
+    exchange_name: bybitInverse
+    symbol_format: "{base}{quote}"
+    legal_currency: [BTC, ETH]
+    rest_paths:
+      # General
+      ping: "GET /v5/market/ping"
+      get_server_time: "GET /v5/market/time"
+      get_contract: "GET /v5/market/instruments-info?category=inverse"
+
+      # Market Data
+      get_tick: "GET /v5/market/tickers?category=inverse"
+      get_depth: "GET /v5/market/orderbook?category=inverse"
+      get_incre_depth: "GET /v5/market/orderbook?category=inverse"
+      get_kline: "GET /v5/market/klines?category=inverse"
+      get_info: "GET /v5/market/tickers?category=inverse"
+      get_new_price: "GET /v5/market/trades?category=inverse"
+      get_historical_trades: "GET /v5/market/historical-trades?category=inverse"
+      get_agg_trades: "GET /v5/market/historical-trades?category=inverse"
+      get_market_rate: "GET /v5/market/ticker/price?category=inverse"
+      get_avg_price: "GET /v5/market/mark-price-kline?category=inverse"
+      get_funding_rate: "GET /v5/market/funding-rate?category=inverse"
+      get_history_funding_rate: "GET /v5/market/funding-rate-history?category=inverse"
+      get_open_interest: "GET /v5/market/open-interest?category=inverse"
+      get_mark_price: "GET /v5/market/mark-price-kline?category=inverse"
+
+      # Futures Data
+      get_long_short_ratio: "GET /v5/market/account-ratio?category=inverse"
+      get_top_long_short_account_ratio: "GET /v5/market/top-long-short-account-ratio?category=inverse"
+      get_top_long_short_position_ratio: "GET /v5/market/top-long-short-position-ratio?category=inverse"
+      get_taker_buy_sell_volume: "GET /v5/market/taker-buy-sell-volume?category=inverse"
+      get_open_interest_hist: "GET /v5/market/open-interest?category=inverse"
+
+      # Account
+      get_account: "GET /v5/account/wallet-balance"
+      get_balance: "GET /v5/account/wallet-balance"
+      get_position: "GET /v5/position/list"
+      get_fee: "GET /v5/fee-rate"
+      get_income: "GET /v5/account/transaction-log"
+      get_adl_quantile: "GET /v5/position/adl-timestamp?category=inverse"
+      get_leverage_bracket: "GET /v5/position/leverage-bracket?category=inverse"
+      get_position_mode: "GET /v5/account/position-mode"
+      get_api_key_permission: "GET /v5/account/api-key"
+      get_force_orders: "GET /v5/liquidation/history?category=inverse"
+
+      # Trade
+      make_order: "POST /v5/order/create"
+      make_order_test: "POST /v5/order/create/test"
+      make_orders: "POST /v5/order/create"
+      modify_order: "POST /v5/order/amend"
+      modify_orders: "POST /v5/order/amend"
+      cancel_order: "POST /v5/order/cancel"
+      cancel_orders: "POST /v5/order/cancel"
+      cancel_all: "POST /v5/order/cancel-all"
+      auto_cancel_all: "POST /v5/order/cancel-all"
+      query_order: "GET /v5/order"
+      get_open_orders: "GET /v5/order/active"
+      get_all_orders: "GET /v5/order/history"
+      get_deals: "GET /v5/execution/list"
+      change_leverage: "POST /v5/position/leverage"
+      change_margin_type: "POST /v5/position/margin-type"
+      change_position_mode: "POST /v5/account/position-mode"
+      modify_isolated_position_margin: "POST /v5/position/isolated-margin"
+      get_position_margin_history: "GET /v5/position/isolated-margin/history"
+
+      # OCO
+      make_oco_order: "POST /v5/order/oco"
+      get_order_list: "GET /v5/order/oco"
+      get_all_order_lists: "GET /v5/order/oco"
+      get_open_order_lists: "GET /v5/order/oco/active"
+      cancel_order_list: "POST /v5/order/oco/cancel"
+
+      # Listen Key
+      get_listen_key: "POST /v5/user/stream-key"
+      refresh_listen_key: "POST /v5/user/stream-key/refresh"
+      close_listen_key: "DELETE /v5/user/stream-key"
+
+      # Additional endpoints
+      get_symbol_info: "GET /v5/market/instruments-info?category=inverse"
+      get_delivery_price: "GET /v5/market/mark-price-kline?category=inverse"
+      get_settlement_records: "GET /v5/position/settle-record"
+      get_funding_fee: "GET /v5/position/funding-fee"
+
+    wss_paths:
+      # Market Streams
+      agg_trade: "inversetrade.{symbol}"
+      trade: "inversetrade.{symbol}"
+      kline: "inversekline.{symbol}.{period}"
+      continuous_kline: "inversekline.{symbol}.{period}"
+      mini_ticker: "inversemini_ticker.{symbol}"
+      ticker: "inverseticker.{symbol}"
+      book_ticker: "inversebook_ticker.{symbol}"
+      depth: "inversedepth.{symbol}"
+      mark_price: "inversemarkprice.{symbol}"
+      funding_rate: "inversefundingrate.{symbol}"
+
+      # All Market Streams
+      all_force_order: "liquidation"
+      all_mini_ticker: "inversemini_tickers"
+      all_ticker: "inversetickers"
+      all_mark_price: "inversemarkprices"
+      all_book_ticker: "inversebook_tickers"
+      all_funding_rate: "inversefundingrates"
+
+      # Aliases
+      tick: "inversebook_ticker.{symbol}"
+      tick_all: "inversebook_tickers"
+      ticks: "inversetickers"
+      tickers: "inversetickers"
+      market: "inversebook_tickers"
+      bidAsk: "inversebook_ticker.{symbol}"
+      clearPrice: "inversemarkprice.{symbol}"
+      liquidation: "liquidation"
+      liquidation_order: "liquidation"
+      contract_info: "inversecontractinfo"
+
+      # User Data Streams
+      orders: ""
+      deals: ""
+      balance: ""
+      position: ""
+      account: ""
+      portfolio: ""
+      listen_key: ""
+
+  # ─── BybitExchangeDataOption ────────────────────────────────
+  option:
+    exchange_name: bybitOption
+    symbol_format: "{base}{quote}"
+    legal_currency: [USDT]
+    rest_paths:
+      # General
+      ping: "GET /v5/market/ping"
+      get_server_time: "GET /v5/market/time"
+      get_contract: "GET /v5/market/instruments-info?category=option"
+
+      # Market Data
+      get_tick: "GET /v5/market/tickers?category=option"
+      get_depth: "GET /v5/market/orderbook?category=option"
+      get_incre_depth: "GET /v5/market/orderbook?category=option"
+      get_kline: "GET /v5/market/klines?category=option"
+      get_info: "GET /v5/market/tickers?category=option"
+      get_new_price: "GET /v5/market/trades?category=option"
+      get_historical_trades: "GET /v5/market/historical-trades?category=option"
+      get_agg_trades: "GET /v5/market/historical-trades?category=option"
+      get_market_rate: "GET /v5/market/ticker/price?category=option"
+      get_avg_price: "GET /v5/market/mark-price-kline?category=option"
+      get_mark_price: "GET /v5/market/mark-price-kline?category=option"
+      get_index_price: "GET /v5/market/index-price-kline?category=option"
+
+      # Account
+      get_account: "GET /v5/account/wallet-balance"
+      get_balance: "GET /v5/account/wallet-balance"
+      get_position: "GET /v5/position/list"
+      get_fee: "GET /v5/fee-rate"
+      get_income: "GET /v5/account/transaction-log"
+      get_api_key_permission: "GET /v5/account/api-key"
+
+      # Trade
+      make_order: "POST /v5/order/create"
+      make_order_test: "POST /v5/order/create/test"
+      make_orders: "POST /v5/order/create"
+      modify_order: "POST /v5/order/amend"
+      modify_orders: "POST /v5/order/amend"
+      cancel_order: "POST /v5/order/cancel"
+      cancel_orders: "POST /v5/order/cancel"
+      cancel_all: "POST /v5/order/cancel-all"
+      query_order: "GET /v5/order"
+      get_open_orders: "GET /v5/order/active"
+      get_all_orders: "GET /v5/order/history"
+      get_deals: "GET /v5/execution/list"
+
+      # Listen Key
+      get_listen_key: "POST /v5/user/stream-key"
+      refresh_listen_key: "POST /v5/user/stream-key/refresh"
+      close_listen_key: "DELETE /v5/user/stream-key"
+
+      # Additional endpoints
+      get_symbol_info: "GET /v5/market/instruments-info?category=option"
+      get_settlement_records: "GET /v5/option/settle-record"
+      get_exercise_history: "GET /v5/option/exercise-history"
+      get_open_interest: "GET /v5/market/open-interest?category=option"
+
+    wss_paths:
+      # Market Streams
+      agg_trade: "optiontrade.{symbol}"
+      trade: "optiontrade.{symbol}"
+      kline: "optionkline.{symbol}.{period}"
+      mini_ticker: "optionmini_ticker.{symbol}"
+      ticker: "optionticker.{symbol}"
+      book_ticker: "optionbook_ticker.{symbol}"
+      depth: "optiondepth.{symbol}"
+      mark_price: "optionmarkprice.{symbol}"
+      index_price: "optionindexprice.{symbol}"
+
+      # All Market Streams
+      all_mini_ticker: "optionmini_tickers"
+      all_ticker: "optiontickers"
+      all_book_ticker: "optionbook_tickers"
+      all_mark_price: "optionmarkprices"
+
+      # Aliases
+      tick: "optionbook_ticker.{symbol}"
+      tick_all: "optionbook_tickers"
+      ticks: "optiontickers"
+      tickers: "optiontickers"
+      market: "optionbook_tickers"
+      bidAsk: "optionbook_ticker.{symbol}"
+
+      # User Data Streams
+      orders: ""
+      deals: ""
+      balance: ""
+      position: ""
+      account: ""
+      listen_key: ""
+
+# ═══════════════════════════════════════════════════════════════
+# Additional Configuration Sections
+# ═══════════════════════════════════════════════════════════════
+
+# Market Data Streams Configuration
+market_streams:
+  spot:
+    public:
+      - "spottrade.{symbol}"
+      - "spotkline.{symbol}.{period}"
+      - "spotticker.{symbol}"
+      - "spotmini_ticker.{symbol}"
+      - "spotdepth.{symbol}"
+    private:
+      - "spotorder"
+      - "spotposition"
+      - "spotwallet"
+  swap:
+    public:
+      - "lineartrade.{symbol}"
+      - "linearkline.{symbol}.{period}"
+      - "linearticker.{symbol}"
+      - "linearmini_ticker.{symbol}"
+      - "lineardepth.{symbol}"
+    private:
+      - "linearorder"
+      - "linearposition"
+      - "linearwallet"
+  inverse:
+    public:
+      - "inversetrade.{symbol}"
+      - "inversekline.{symbol}.{period}"
+      - "inverseticker.{symbol}"
+      - "inversemini_ticker.{symbol}"
+      - "inversedepth.{symbol}"
+    private:
+      - "inverseorder"
+      - "inverseposition"
+      - "inversewallet"
+  option:
+    public:
+      - "optiontrade.{symbol}"
+      - "optionkline.{symbol}.{period}"
+      - "optionticker.{symbol}"
+      - "optionmini_ticker.{symbol}"
+      - "optiondepth.{symbol}"
+    private:
+      - "optionorder"
+      - "optionposition"
+      - "optionwallet"
+
+# API Version Information
+api_version: v5
+api_doc_url: https://bybit-exchange.github.io/docs/v5/intro

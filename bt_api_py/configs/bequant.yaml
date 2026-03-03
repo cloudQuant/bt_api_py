@@ -1,0 +1,65 @@
+# BeQuant Exchange Configuration
+id: bequant
+display_name: BeQuant
+venue_type: cex
+website: https://bequant.io
+api_doc: https://api.bequant.io/
+
+base_urls:
+  rest:
+    default: https://api.bequant.io/api/3
+    spot: https://api.bequant.io/api/3
+  wss:
+    default: wss://api.bequant.io/api/3/ws/public
+    spot: wss://api.bequant.io/api/3/ws/public
+
+connection:
+  type: http
+  timeout: 10
+  max_retries: 3
+
+authentication:
+  type: hmac_sha256
+  header_name: Authorization
+
+kline_periods:
+  1m: "M1"
+  3m: "M3"
+  5m: "M5"
+  15m: "M15"
+  30m: "M30"
+  1h: "H1"
+  4h: "H4"
+  1d: "D1"
+  1w: "D7"
+  1M: "1M"
+
+legal_currency: [USDT, USD, BTC, ETH, EUR]
+
+rate_limits:
+  - name: public_api
+    type: sliding_window
+    interval: 1
+    limit: 30
+    scope: global
+  - name: trading_api
+    type: sliding_window
+    interval: 1
+    limit: 300
+    scope: global
+
+asset_types:
+  spot:
+    exchange_name: bequantSpot
+    symbol_format: "{base}/{quote}"
+    legal_currency: [USDT, USD, BTC, ETH, EUR]
+    rest_paths:
+      get_server_time: "GET /public/time"
+      get_ticker: "GET /public/ticker"
+      get_depth: "GET /public/orderbook"
+      get_kline: "GET /public/candles"
+      get_symbols: "GET /public/symbol"
+    wss_paths:
+      ticker: "{symbol}@ticker"
+      depth: "{symbol}@depth"
+      kline: "{symbol}@candles"

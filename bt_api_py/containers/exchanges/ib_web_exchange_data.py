@@ -36,7 +36,6 @@ def _get_ib_config():
     global _ib_config, _ib_raw_config, _ib_config_loaded
     if _ib_config_loaded:
         return _ib_config
-    _ib_config_loaded = True
     try:
         import yaml
 
@@ -48,8 +47,9 @@ def _get_ib_config():
             # 同时缓存原始 dict 以访问 pydantic 忽略的额外字段
             with open(config_path, encoding="utf-8") as f:
                 _ib_raw_config = yaml.safe_load(f)
+        _ib_config_loaded = True
     except Exception as e:
-        logger.warning("Failed to load ib.yaml config: %s", e)
+        logger.warn(f"Failed to load ib.yaml config: {e}")
     return _ib_config
 
 

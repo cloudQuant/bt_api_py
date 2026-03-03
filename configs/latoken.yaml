@@ -1,0 +1,100 @@
+# Latoken Configuration
+# Official API documentation: https://api.latoken.com
+
+id: latoken
+display_name: Latoken
+venue_type: cex
+website: https://latoken.com
+api_doc: https://api.latoken.com
+
+# Base URLs
+base_urls:
+  rest:
+    spot: https://api.latoken.com
+  wss:
+    public: ""
+
+# Connection
+connection:
+  type: http
+  timeout: 10
+  max_retries: 3
+
+# Authentication (HMAC-SHA512)
+authentication:
+  type: hmac_sha512
+  header_name: X-LA-APIKEY
+  signature_header: X-LA-SIGNATURE
+  digest_header: X-LA-DIGEST
+
+# Rate limits (based on documentation)
+rate_limits:
+  - name: rest_api
+    type: fixed_window
+    interval: 1
+    limit: 1
+    scope: global
+
+# Kline periods supported by Latoken
+kline_periods:
+  1m: "1"
+  5m: "5"
+  15m: "15"
+  30m: "30"
+  1h: "60"
+  4h: "240"
+  1d: "1D"
+  1w: "1W"
+
+# Legal currencies
+legal_currency:
+  - USDT
+  - BTC
+  - ETH
+  - LA
+
+# Asset types
+asset_types:
+  spot:
+    exchange_name: LATOKEN___SPOT
+    symbol_format: "{base}_{quote}"
+
+    # REST API paths (Latoken v2 API)
+    rest_paths:
+      base_url: "/v2"
+      get_server_time: "GET /v2/time"
+      get_ticker: "GET /v2/ticker"
+      get_ticker_symbol: "GET /v2/ticker/{base}/{quote}"
+      get_orderbook: "GET /v2/book/{currency}/{quote}"
+      get_trades: "GET /v2/trade/history/{currency}/{quote}"
+      get_pairs: "GET /v2/pair"
+      get_currencies: "GET /v2/currency"
+      get_chart_week: "GET /v2/chart/week/{currency}/{quote}"
+
+    # WebSocket paths (not fully documented, minimal support)
+    wss_paths:
+      ticker: ""
+
+    # Kline periods
+    kline_periods:
+      1m: "1"
+      5m: "5"
+      15m: "15"
+      30m: "30"
+      1h: "60"
+      4h: "240"
+      1d: "1D"
+      1w: "1W"
+
+    # Legal currencies for spot
+    legal_currency:
+      - USDT
+      - BTC
+      - ETH
+      - LA
+
+    # Trading symbols (examples)
+    symbols:
+      - "btc_usdt"
+      - "eth_usdt"
+      - "la_usdt"

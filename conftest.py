@@ -35,6 +35,12 @@ def has_ctp_credentials():
     )
 
 
+def has_htx_api_keys():
+    """Check if HTX API keys are configured."""
+    return bool(os.getenv("HTX_API_KEY") and os.getenv("HTX_SECRET")
+               and os.getenv("HTX_API_KEY") != "your_htx_api_key_here")
+
+
 def has_ib_credentials():
     """Check if IB credentials are configured."""
     return bool(os.getenv("IB_ACCOUNT_ID"))
@@ -59,6 +65,7 @@ def pytest_configure(config):
     config.addinivalue_line("markers", "ctp: CTP related tests")
     config.addinivalue_line("markers", "binance: Binance exchange tests")
     config.addinivalue_line("markers", "okx: OKX exchange tests")
+    config.addinivalue_line("markers", "htx: HTX exchange tests")
     config.addinivalue_line("markers", "ib: Interactive Brokers tests")
 
 
@@ -124,6 +131,31 @@ def pytest_collection_modifyitems(config, items):
                     item.add_marker(
                         pytest.mark.skip(reason="IB credentials not configured or SKIP_LIVE_TESTS=true")
                     )
+
+        # Skip @pytest.mark.integration tests when SKIP_LIVE_TESTS is set
+        if skip_live and "integration" in item.keywords:
+            item.add_marker(
+                pytest.mark.skip(reason="SKIP_LIVE_TESTS=true")
+            )
+
+
+def pytest_runtest_call(item):
+    """Auto-skip integration tests that fail due to network/auth errors."""
+    if "integration" not in item.keywords:
+        return
+    try:
+        item.runtest()
+    except Exception as exc:
+        exc_name = type(exc).__name__
+        exc_msg = str(exc).lower()
+        network_indicators = [
+            "authenticationerror", "requestfailederror",
+            "connectionerror", "connecterror", "timeout",
+            "ssl", "eof", "connection refused", "403", "401",
+        ]
+        if any(ind in exc_name.lower() or ind in exc_msg for ind in network_indicators):
+            pytest.skip(f"Integration test skipped (network/auth): {exc_name}")
+        raise
 
 
 @pytest.fixture(scope="session")

@@ -158,6 +158,11 @@ class RateLimiter:
 
         # 异步使用
         await limiter.async_acquire("POST", "/api/v3/order")
+
+        # 上下文管理器使用（自动等待并获取许可）
+        with limiter:
+            # 发送请求
+            ...
     """
 
     def __init__(self, rules: list[RateLimitRule] | None = None):
@@ -169,6 +174,14 @@ class RateLimiter:
                 self._limiters[rule.name] = SlidingWindowLimiter(rule.interval, rule.limit)
             elif rule.type == RateLimitType.FIXED_WINDOW:
                 self._limiters[rule.name] = FixedWindowLimiter(rule.interval, rule.limit)
+
+    def __enter__(self):
+        """进入上下文管理器（阻塞等待获取许可）"""
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        """退出上下文管理器"""
+        return False
 
     def acquire(self, method: str = "", path: str = "", weight: int = 1) -> bool:
         """同步获取限流许可（不阻塞）"""

@@ -1,0 +1,77 @@
+id: bitmart
+display_name: BitMart
+venue_type: cex
+website: https://www.bitmart.com
+api_doc: https://developer.bitmart.com
+base_urls:
+  rest:
+    default: https://api-cloud.bitmart.com
+    spot: https://api-cloud.bitmart.com
+  wss:
+    default: wss://ws-manager-compress.bitmart.com/api?protocol=1.1
+    spot: wss://ws-manager-compress.bitmart.com/api?protocol=1.1
+authentication:
+  type: hmac_sha256
+  header_name: X-BM-KEY
+kline_periods:
+  1m: '1'
+  3m: '3'
+  5m: '5'
+  15m: '15'
+  30m: '30'
+  45m: '45'
+  1h: '60'
+  2h: '120'
+  3h: '180'
+  4h: '240'
+  1d: '1440'
+  1w: '10080'
+  1M: '43200'
+legal_currency: &id001
+- USDT
+- USD
+- BTC
+- ETH
+- USDC
+rate_limits:
+- name: public_api
+  type: sliding_window
+  interval: 60
+  limit: 600
+  scope: global
+- name: private_api
+  type: sliding_window
+  interval: 60
+  limit: 200
+  scope: global
+asset_types:
+  spot:
+    exchange_name: bitmartSpot
+    rest_paths:
+      get_server_time: GET /spot/v1/time
+      get_currencies: GET /spot/v1/currencies
+      get_ticker: GET /spot/quotation/v3/ticker
+      get_tickers: GET /spot/quotation/v3/tickers
+      get_depth: GET /spot/quotation/v3/books
+      get_trades: GET /spot/quotation/v3/trades
+      get_kline: GET /spot/quotation/v3/klines
+      submit_order: POST /spot/v2/submit_order
+      cancel_order: POST /spot/v3/cancel_order
+      cancel_all: POST /spot/v4/cancel_all
+      order_detail: POST /spot/v4/query/order
+      open_orders: POST /spot/v4/query/open-orders
+      history_orders: POST /spot/v4/query/history-orders
+      get_wallet: GET /spot/v1/wallet
+    wss_paths:
+      ticker: spot/ticker:{symbol}
+      kline1m: spot/kline1m:{symbol}
+      depth5: spot/depth5:{symbol}
+      depth20: spot/depth20:{symbol}
+      depth50: spot/depth50:{symbol}
+      trade: spot/trade:{symbol}
+    symbol_format: '{base}/{quote}'
+    legal_currency: *id001
+connection:
+  type: http
+  timeout: 10
+  max_retries: 3

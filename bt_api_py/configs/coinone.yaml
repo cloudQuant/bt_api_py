@@ -1,0 +1,53 @@
+id: coinone
+display_name: Coinone
+venue_type: cex
+website: https://coinone.co.kr
+api_doc: https://docs.coinone.co.kr
+base_urls:
+  rest:
+    default: https://api.coinone.co.kr
+    spot: https://api.coinone.co.kr
+  wss:
+    default: wss://stream.coinone.co.kr
+    spot: wss://stream.coinone.co.kr
+authentication:
+  type: hmac_sha512
+  header_name: X-COINONE-SIGNATURE
+kline_periods:
+  1m: 1m
+  5m: 5m
+  15m: 15m
+  30m: 30m
+  1h: 1h
+  4h: 4h
+  1d: 1d
+  1w: 1w
+legal_currency: &id001
+- KRW
+rate_limits:
+- name: public_api
+  type: sliding_window
+  interval: 60
+  limit: 1200
+  scope: global
+- name: private_api
+  type: sliding_window
+  interval: 1
+  limit: 80
+  scope: global
+asset_types:
+  spot:
+    exchange_name: coinone
+    rest_paths:
+      get_server_time: GET /public/v2/ticker_new/KRW
+      get_ticker: GET /public/v2/ticker_new/KRW/{target_currency}
+      get_depth: GET /public/v2/orderbook/{quote_currency}/{target_currency}
+      get_kline: GET /public/v2/chart/{quote_currency}/{target_currency}
+      get_markets: GET /public/v2/markets/{quote_currency}
+      get_trades: GET /public/v2/trades/{quote_currency}/{target_currency}
+    symbol_format: '{base}/{quote}'
+    legal_currency: *id001
+connection:
+  type: http
+  timeout: 10
+  max_retries: 3

@@ -1,0 +1,63 @@
+id: coinspot
+display_name: CoinSpot
+venue_type: cex
+website: https://www.coinspot.com.au
+api_doc: https://www.coinspot.com.au/api
+base_urls:
+  rest:
+    default: https://www.coinspot.com.au
+    spot: https://www.coinspot.com.au
+  wss:
+    default: ''
+    spot: ''
+authentication:
+  type: hmac_sha512
+  header_name: key
+  signature_key: sign
+kline_periods:
+  1m: '1'
+  5m: '5'
+  15m: '15'
+  30m: '30'
+  1h: '60'
+  4h: '240'
+  1d: D
+legal_currency: &id001
+- AUD
+- USDT
+- USD
+- BTC
+- ETH
+rate_limits:
+- name: public_api
+  type: sliding_window
+  interval: 1
+  limit: 1
+  scope: global
+- name: private_api
+  type: sliding_window
+  interval: 1
+  limit: 1
+  scope: global
+asset_types:
+  spot:
+    exchange_name: coinspot
+    rest_paths:
+      get_ticker_all: GET /pubapi/v2/latest
+      get_ticker: GET /pubapi/v2/latest/{cointype}
+      get_buy_price: GET /pubapi/v2/buyprice/{cointype}
+      get_sell_price: GET /pubapi/v2/sellprice/{cointype}
+      get_orders_open: GET /pubapi/v2/orders/open/{cointype}
+      get_orders_completed: GET /pubapi/v2/orders/completed/{cointype}
+      my_balance: POST /api/v2/my/balances
+      my_buy: POST /api/v2/my/buy
+      my_sell: POST /api/v2/my/sell
+      my_buy_cancel: POST /api/v2/my/buy/cancel
+      my_sell_cancel: POST /api/v2/my/sell/cancel
+    wss_paths: {}
+    symbol_format: '{base}/{quote}'
+    legal_currency: *id001
+connection:
+  type: http
+  timeout: 10
+  max_retries: 3

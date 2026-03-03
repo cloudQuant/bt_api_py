@@ -1,0 +1,80 @@
+id: wazirx
+display_name: WazirX
+venue_type: cex
+website: https://wazirx.com
+api_doc: https://docs.wazirx.com
+base_urls:
+  rest:
+    default: https://api.wazirx.com
+    spot: https://api.wazirx.com
+  wss:
+    default: wss://stream.wazirx.com/stream
+    spot: wss://stream.wazirx.com/stream
+authentication:
+  type: hmac_sha256
+  header_name: X-API-KEY
+  timestamp_key: timestamp
+kline_periods:
+  1m: 1m
+  3m: 3m
+  5m: 5m
+  15m: 15m
+  30m: 30m
+  1h: 1h
+  2h: 2h
+  4h: 4h
+  6h: 6h
+  12h: 12h
+  1d: 1d
+  1w: 1w
+legal_currency: &id001
+- INR
+- USDT
+- WRX
+- BTC
+- ETH
+rate_limits:
+- name: request_weight
+  type: sliding_window
+  interval: 60
+  limit: 1200
+  scope: global
+  weight: 1
+asset_types:
+  spot:
+    exchange_name: wazirx
+    rest_paths:
+      ping: GET /sapi/v1/ping
+      get_server_time: GET /sapi/v1/time
+      get_system_status: GET /sapi/v1/systemStatus
+      get_exchange_info: GET /sapi/v1/exchangeInfo
+      get_ticker: GET /sapi/v1/ticker/24hr
+      get_all_tickers: GET /sapi/v1/tickers/24hr
+      get_depth: GET /sapi/v1/depth
+      get_trades: GET /sapi/v1/trades
+      get_historical_trades: GET /sapi/v1/historicalTrades
+      get_kline: GET /sapi/v1/klines
+      get_account: GET /sapi/v1/account
+      get_funds: GET /sapi/v1/funds
+      get_order: GET /sapi/v1/order
+      get_open_orders: GET /sapi/v1/openOrders
+      get_all_orders: GET /sapi/v1/allOrders
+      get_my_trades: GET /sapi/v1/myTrades
+      post_order: POST /sapi/v1/order
+      post_order_test: POST /sapi/v1/order/test
+      delete_order: DELETE /sapi/v1/order
+      delete_all_orders: DELETE /sapi/v1/openOrders
+      get_coins: GET /sapi/v1/coins
+      get_withdraw_history: GET /sapi/v1/crypto/withdraws
+      get_deposit_address: GET /sapi/v1/crypto/deposits/address
+    wss_paths:
+      ticker: '!ticker@arr'
+      depth: '{symbol}@depth'
+      trades: '{symbol}@trades'
+      kline: '{symbol}@kline_{interval}'
+    symbol_format: '{base}/{quote}'
+    legal_currency: *id001
+connection:
+  type: http
+  timeout: 10
+  max_retries: 3

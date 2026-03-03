@@ -1,0 +1,67 @@
+id: bingx
+display_name: BingX
+venue_type: cex
+website: https://bingx.com
+api_doc: https://bingx-api.github.io/docs/
+base_urls:
+  rest:
+    default: https://open-api.bingx.com
+    spot: https://open-api.bingx.com
+  wss:
+    default: wss://open-api-ws.bingx.com/market
+    spot: wss://open-api-ws.bingx.com/market
+authentication:
+  type: hmac_sha256
+  header_name: X-BX-APIKEY
+kline_periods:
+  1m: 1m
+  3m: 3m
+  5m: 5m
+  15m: 15m
+  30m: 30m
+  1h: 1h
+  2h: 2h
+  4h: 4h
+  6h: 6h
+  12h: 12h
+  1d: 1d
+  3d: 3d
+  1w: 1w
+  1M: 1M
+legal_currency: &id001
+- USDT
+- USD
+- BTC
+- ETH
+- EUR
+rate_limits:
+- name: public_api
+  type: sliding_window
+  interval: 60
+  limit: 1200
+  scope: global
+- name: private_api
+  type: sliding_window
+  interval: 60
+  limit: 600
+  scope: global
+asset_types:
+  spot:
+    exchange_name: bingxSpot
+    rest_paths:
+      get_server_time: GET /openApi/server/time
+      get_ticker: GET /openApi/spot/v1/ticker/24hr
+      get_depth: GET /openApi/spot/v1/market/depth
+      get_kline: GET /openApi/spot/v2/market/kline
+      get_symbols: GET /openApi/spot/v1/common/symbols
+    wss_paths:
+      ticker: '{symbol}@ticker'
+      depth: '{symbol}@depth'
+      kline: '{symbol}@kline'
+      trade: '{symbol}@trade'
+    symbol_format: '{base}/{quote}'
+    legal_currency: *id001
+connection:
+  type: http
+  timeout: 10
+  max_retries: 3

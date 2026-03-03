@@ -1,0 +1,143 @@
+"""HTX Ticker Data Container"""
+
+import json
+import time
+
+from bt_api_py.containers.tickers.ticker import TickerData
+from bt_api_py.functions.utils import from_dict_get_float, from_dict_get_string
+
+
+class HtxRequestTickerData(TickerData):
+    """HTX REST API ticker data."""
+
+    def __init__(self, ticker_info, symbol_name, asset_type, has_been_json_encoded=False):
+        super().__init__(ticker_info, has_been_json_encoded)
+        self.exchange_name = "HTX"
+        self.local_update_time = time.time()
+        self.symbol_name = symbol_name
+        self.asset_type = asset_type
+        self.ticker_data = ticker_info if has_been_json_encoded else None
+        self.ticker_symbol_name = None
+        self.server_time = None
+        self.bid_price = None
+        self.ask_price = None
+        self.bid_volume = None
+        self.ask_volume = None
+        self.last_price = None
+        self.all_data = None
+        self.has_been_init_data = False
+
+    def init_data(self):
+        """Initialize ticker data from HTX response.
+
+        HTX ticker response format (from /market/detail/merged):
+        {
+            "status": "ok",
+            "ch": "market.btcusdt.detail.merged",
+            "ts": 1688671955000,
+            "tick": {
+                "id": 123456789,
+                "ts": 1688671955000,
+                "close": 50000,
+                "open": 49500,
+                "high": 51000,
+                "low": 49000,
+                "amount": 1234.5678,
+                "count": 10000,
+                "vol": 61728350,
+                "ask": [50001, 1.5],
+                "bid": [49999, 2.3]
+            }
+        }
+        """
+        if self.has_been_init_data:
+            return self
+
+        if not self.has_been_json_encoded:
+            self.ticker_data = json.loads(self.ticker_info)
+
+        # Extract tick data
+        tick = self.ticker_data.get("tick", {})
+
+        self.server_time = from_dict_get_float(self.ticker_data, "ts")
+        self.ticker_symbol_name = self.symbol_name
+
+        # Best bid
+        bid = tick.get("bid", [0, 0])
+        if isinstance(bid, list) and len(bid) >= 2:
+            self.bid_price = from_dict_get_float({0: bid[0]}, "0")
+            self.bid_volume = from_dict_get_float({0: bid[1]}, "0")
+
+        # Best ask
+        ask = tick.get("ask", [0, 0])
+        if isinstance(ask, list) and len(ask) >= 2:
+            self.ask_price = from_dict_get_float({0: ask[0]}, "0")
+            self.ask_volume = from_dict_get_float({0: ask[1]}, "0")
+
+        # Last price
+        self.last_price = from_dict_get_float(tick, "close")
+
+        self.has_been_init_data = True
+        return self
+
+    def get_all_data(self):
+        if self.all_data is None:
+            self.all_data = {
+                "exchange_name": self.exchange_name,
+                "symbol_name": self.symbol_name,
+                "asset_type": self.asset_type,
+                "local_update_time": self.local_update_time,
+                "ticker_symbol_name": self.ticker_symbol_name,
+                "server_time": self.server_time,
+                "bid_price": self.bid_price,
+                "ask_price": self.ask_price,
+                "bid_volume": self.bid_volume,
+                "ask_volume": self.ask_volume,
+                "last_price": self.last_price,
+            }
+        return self.all_data
+
+    def __str__(self):
+        self.init_data()
+        return json.dumps(self.get_all_data())
+
+    def __repr__(self):
+        return self.__str__()
+
+    def get_exchange_name(self):
+        return self.exchange_name
+
+    def get_local_update_time(self):
+        return self.local_update_time
+
+    def get_symbol_name(self):
+        return self.symbol_name
+
+    def get_ticker_symbol_name(self):
+        return self.ticker_symbol_name
+
+    def get_asset_type(self):
+        return self.asset_type
+
+    def get_server_time(self):
+        return self.server_time
+
+    def get_bid_price(self):
+        self.init_data()
+        return self.bid_price
+
+    def get_ask_price(self):
+        self.init_data()
+        return self.ask_price
+
+    def get_bid_volume(self):
+        self.init_data()
+        return self.bid_volume
+
+    def get_ask_volume(self):
+        self.init_data()
+        return self.ask_volume
+
+    def get_last_price(self):
+        self.init_data()
+        return self.last_price

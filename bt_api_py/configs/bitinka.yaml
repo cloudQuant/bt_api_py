@@ -1,0 +1,58 @@
+id: bitinka
+display_name: Bitinka
+venue_type: cex
+website: https://www.bitinka.com
+api_doc: https://www.bitinka.com/bitinka/api_documentation
+base_urls:
+  rest:
+    default: https://www.bitinka.com/api
+    spot: https://www.bitinka.com/api
+  wss:
+    default: ''
+    spot: ''
+authentication:
+  type: api_key
+  header_name: X-API-KEY
+kline_periods:
+  1m: 1m
+  5m: 5m
+  15m: 15m
+  30m: 30m
+  1h: 1h
+  4h: 4h
+  1d: 1d
+  1w: 1w
+legal_currency: &id001
+- USDT
+- USD
+- EUR
+- ARS
+- BRL
+- CLP
+- COP
+- PEN
+rate_limits:
+- name: public_api
+  type: sliding_window
+  interval: 60
+  limit: 300
+  scope: global
+- name: private_api
+  type: sliding_window
+  interval: 60
+  limit: 150
+  scope: global
+asset_types:
+  spot:
+    exchange_name: bitinkaSpot
+    rest_paths:
+      get_ticker: GET /ticker
+      get_depth: GET /orderbook
+      get_trades: GET /trades
+      get_markets: GET /markets
+    symbol_format: '{base}/{quote}'
+    legal_currency: *id001
+connection:
+  type: http
+  timeout: 10
+  max_retries: 3

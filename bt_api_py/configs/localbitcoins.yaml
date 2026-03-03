@@ -1,0 +1,50 @@
+# LocalBitcoins Exchange Configuration
+# LocalBitcoins is a P2P cryptocurrency exchange
+
+id: localbitcoins
+display_name: LocalBitcoins
+venue_type: cex
+website: https://localbitcoins.com
+api_doc: https://localbitcoins.com/api-docs/
+
+base_urls:
+  rest:
+    default: https://localbitcoins.com
+    spot: https://localbitcoins.com
+  wss:
+    public: ""
+    spot: ""
+
+connection:
+  type: http
+  timeout: 30
+  max_retries: 3
+
+authentication:
+  type: hmac_sha256
+  header_name: Apiauth
+
+kline_periods:
+  1d: "1d"
+
+legal_currency: [USD, EUR, GBP, RUB, BTC]
+
+rate_limits:
+  - name: public_api
+    type: sliding_window
+    interval: 60
+    limit: 600
+    scope: global
+
+asset_types:
+  spot:
+    exchange_name: LOCALBITCOINS___SPOT
+    symbol_format: "{base}_{quote}"
+    legal_currency: [USD, EUR, GBP, RUB, BTC]
+    rest_paths:
+      get_server_time: "/api/ecjson.php"
+      get_ticker: "/api/ticker.json"
+      get_ads: "/api/ad/{id}.json"
+      get_online_ads: "/bitcoin_buy_with_cash_in/{country_code}/{currency}.json"
+    wss_paths:
+      ticker: ""

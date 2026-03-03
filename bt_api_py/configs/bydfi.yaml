@@ -1,0 +1,66 @@
+id: bydfi
+display_name: BYDFi
+venue_type: cex
+website: https://www.bydfi.com
+api_doc: https://developers.bydfi.com
+base_urls:
+  rest:
+    default: https://api.bydfi.com
+    spot: https://api.bydfi.com
+  wss:
+    default: wss://stream.bydfi.com
+    spot: wss://stream.bydfi.com
+authentication:
+  type: hmac_sha256
+  header_name: X-API-SIGNATURE
+kline_periods:
+  1m: 1m
+  5m: 5m
+  15m: 15m
+  30m: 30m
+  1h: 1h
+  4h: 4h
+  1d: 1d
+  1w: 1w
+legal_currency: &id001
+- USDT
+- USD
+- BTC
+- ETH
+- USDC
+rate_limits:
+- name: public_api
+  type: sliding_window
+  interval: 60
+  limit: 600
+  scope: global
+- name: private_api
+  type: sliding_window
+  interval: 60
+  limit: 300
+  scope: global
+- name: websocket
+  type: sliding_window
+  interval: 60
+  limit: 300
+  scope: global
+asset_types:
+  spot:
+    exchange_name: bydfiSpot
+    rest_paths:
+      get_server_time: GET /v1/public/time
+      get_ticker: GET /v1/public/ticker
+      get_depth: GET /v1/public/depth
+      get_kline: GET /v1/public/kline
+      get_exchange_info: GET /v1/public/exchange-info
+      get_trades: GET /v1/public/trades
+    wss_paths:
+      ticker: '{symbol}@ticker'
+      depth: '{symbol}@depth'
+      kline: '{symbol}@kline'
+    symbol_format: '{base}/{quote}'
+    legal_currency: *id001
+connection:
+  type: http
+  timeout: 10
+  max_retries: 3

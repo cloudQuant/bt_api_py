@@ -1,0 +1,64 @@
+# Swyftx Exchange Configuration
+id: swyftx
+display_name: Swyftx
+venue_type: cex
+website: https://www.swyftx.com
+api_doc: https://docs.swyftx.com
+
+base_urls:
+  rest:
+    default: https://api.swyftx.com.au
+    spot: https://api.swyftx.com.au
+  wss:
+    default: wss://api.swyftx.com.au
+    spot: wss://api.swyftx.com.au
+
+connection:
+  type: http
+  timeout: 10
+  max_retries: 3
+
+authentication:
+  type: api_key
+  header_name: Authorization
+
+kline_periods:
+  1m: "60"
+  5m: "300"
+  15m: "900"
+  30m: "1800"
+  1h: "3600"
+  4h: "14400"
+  1d: "86400"
+  1w: "604800"
+
+legal_currency: [AUD, USD, BTC, ETH, USDT]
+
+rate_limits:
+  - name: public_api
+    type: sliding_window
+    interval: 60
+    limit: 200
+    scope: global
+  - name: private_api
+    type: sliding_window
+    interval: 60
+    limit: 100
+    scope: global
+
+asset_types:
+  spot:
+    exchange_name: swyftx
+    symbol_format: "{base}-{quote}"
+    legal_currency: [AUD, USD, BTC, ETH, USDT]
+    rest_paths:
+      get_server_time: "GET /v1/time"
+      get_tick: "GET /markets/info"
+      get_depth: "GET /markets/orderbook"
+      get_kline: "GET /markets/candles"
+      get_exchange_info: "GET /markets/assets"
+      get_trades: "GET /markets/trades"
+    wss_paths:
+      ticker: "ticker.{assetId}"
+      depth: "orderbook.{assetId}"
+      kline: "candles.{assetId}"

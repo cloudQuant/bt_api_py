@@ -1,0 +1,56 @@
+id: zaif
+display_name: Zaif
+venue_type: cex
+website: https://zaif.jp
+api_doc: https://zaif-api-document.readthedocs.io/ja/latest/
+base_urls:
+  rest:
+    default: https://api.zaif.jp
+    spot: https://api.zaif.jp
+  wss:
+    default: wss://ws.zaif.jp:8888
+    spot: wss://ws.zaif.jp:8888
+authentication:
+  type: hmac_sha512
+  header_name: Key
+kline_periods:
+  1m: 1min
+  5m: 5min
+  15m: 15min
+  30m: 30min
+  1h: 1hour
+  4h: 4hour
+  1d: 1day
+  1w: 1week
+legal_currency: &id001
+- JPY
+- BTC
+- ETH
+rate_limits:
+- name: public_api
+  type: sliding_window
+  interval: 1
+  limit: 10
+  scope: global
+- name: private_api
+  type: sliding_window
+  interval: 1
+  limit: 2
+  scope: global
+asset_types:
+  spot:
+    exchange_name: zaifSpot
+    rest_paths:
+      get_server_time: GET /api/1/last_price/{pair}
+      get_ticker: GET /api/1/ticker/{pair}
+      get_depth: GET /api/1/depth/{pair}
+      get_kline: GET /api/1/trades/{pair}
+      get_markets: GET /api/1/currency_pairs/all
+    wss_paths:
+      tick: '{pair}@ticker'
+    symbol_format: '{base}/{quote}'
+    legal_currency: *id001
+connection:
+  type: http
+  timeout: 10
+  max_retries: 3

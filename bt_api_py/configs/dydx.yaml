@@ -1,0 +1,130 @@
+# dYdX 交易所统一配置
+# 数据来源: bt_api_py/containers/exchanges/dydx_exchange_data.py
+id: dydx
+display_name: dYdX
+venue_type: dex
+website: https://dydx.exchange
+api_doc: https://docs.dydx.exchange/
+
+base_urls:
+  rest:
+    mainnet: https://indexer.dydx.trade/v4
+    testnet: https://indexer.v4testnet.dydx.exchange/v4
+  wss:
+    mainnet: wss://indexer.dydx.trade/v4/ws
+    testnet: wss://indexer.v4testnet.dydx.exchange/v4
+
+connection:
+  type: http
+  timeout: 10
+  max_retries: 3
+
+authentication:
+  type: api_key
+  # dYdX V4 是完全去中心化的，交易通过钱包私钥签名直接提交到链上
+
+# 共享 kline 周期映射
+kline_periods:
+  1m: "1MIN"
+  5m: "5MINS"
+  15m: "15MINS"
+  30m: "30MINS"
+  1h: "1HOUR"
+  4h: "4HOURS"
+  1d: "1DAY"
+
+# 订单状态映射
+status_dict:
+  open: open
+  filled: filled
+  canceled: canceled
+  expired: expired
+
+rate_limits:
+  - name: indexer_get
+    type: sliding_window
+    interval: 10
+    limit: 100
+    scope: endpoint
+    endpoint: "/v4/*"
+    weight: 1
+
+# ═══════════════════════════════════════════════════════════════
+# 共享 REST paths (YAML 锚点, 所有 asset_type 继承)
+# ═══════════════════════════════════════════════════════════════
+_shared_rest_paths: &shared_rest_paths
+  # Market Data
+  get_ticker: "GET /v4/perpetualMarkets"
+  get_perpetual_markets: "GET /v4/perpetualMarkets"
+  get_orderbook: "GET /v4/orderbooks/perpetualMarket/<symbol>"
+  get_trades: "GET /v4/trades/perpetualMarket/<symbol>"
+  get_candles: "GET /v4/candles/perpetualMarkets/<symbol>"
+  get_historical_funding: "GET /v4/historicalFunding/<symbol>"
+  get_sparklines: "GET /v4/sparklines"
+
+  # Account Data
+  get_subaccount: "GET /v4/addresses/<address>/subaccountNumber/<subaccount_number>"
+  get_orders: "GET /v4/orders"
+  get_fills: "GET /v4/fills"
+  get_funding_payments: "GET /v4/fundingPayments"
+  get_transfers: "GET /v4/transfers"
+  get_historical_pnl: "GET /v4/historical-pnl"
+
+  # Public Data
+  get_time: "GET /v4/time"
+  get_markets: "GET /v4/markets"
+  get_exchange_info: "GET /v4/perpetualMarkets"
+
+# ═══════════════════════════════════════════════════════════════
+# Asset Types
+# ═══════════════════════════════════════════════════════════════
+asset_types:
+
+  # ─── dYdX Perpetual Swap ─────────────────────────────────────
+  swap:
+    exchange_name: DydxSwap
+    symbol_format: "{base}-{quote}"
+    rest_paths:
+      <<: *shared_rest_paths
+      # Swap specific endpoints
+      get_market_info: "GET /v4/perpetualMarkets/<symbol>"
+      get_orderbook_full: "GET /v4/orderbooks/perpetualMarket/<symbol>?full=true"
+      get_historical_funding_limit: "GET /v4/historicalFunding/<symbol>?limit=<limit>"
+
+    wss_paths:
+      # Public Market Streams
+      orderbook:
+        channel: "v4_orderbook"
+        id: "<symbol>"
+      trades:
+        channel: "v4_trades"
+        id: "<symbol>"
+      markets:
+        channel: "v4_markets"
+      candles:
+        channel: "v4_candles"
+        id: "<symbol>"
+        resolution: "<period>"
+      # Private Streams (需要地址)
+      subaccounts:
+        channel: "v4_subaccounts"
+        id: "<address>/<subaccount_number>"
+      parent_subaccounts:
+        channel: "v4_parent_subaccounts"
+        id: "<address>"
+
+  # ─── dYdX Spot (如果支持) ─────────────────────────────────────
+  spot:
+    exchange_name: DydxSpot
+    symbol_format: "{base}-{quote}"
+    rest_paths:
+      <<: *shared_rest_paths
+      # Spot specific endpoints if available
+    wss_paths:
+      # Spot specific WebSocket channels
+      spot_orderbook:
+        channel: "v4_spot_orderbook"
+        id: "<symbol>"
+      spot_trades:
+        channel: "v4_spot_trades"
+        id: "<symbol>"

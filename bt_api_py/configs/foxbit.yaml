@@ -1,0 +1,84 @@
+id: foxbit
+display_name: Foxbit
+venue_type: cex
+website: https://app.foxbit.com.br
+api_doc: https://docs.foxbit.com.br
+base_urls:
+  rest:
+    default: https://api.foxbit.com.br
+    spot: https://api.foxbit.com.br
+  wss:
+    default: wss://ws.foxbit.com.br
+    spot: wss://ws.foxbit.com.br
+authentication:
+  type: hmac_sha256
+  header_name: X-FB-ACCESS-KEY
+kline_periods:
+  1m: 1m
+  5m: 5m
+  15m: 15m
+  30m: 30m
+  1h: 1h
+  2h: 2h
+  4h: 4h
+  6h: 6h
+  12h: 12h
+  1d: 1d
+  1w: 1w
+  2w: 2w
+  1M: 1M
+legal_currency: &id001
+- BRL
+rate_limits:
+- name: public_api
+  type: sliding_window
+  interval: 10
+  limit: 300
+  scope: global
+- name: ticker_24hr
+  type: sliding_window
+  interval: 2
+  limit: 1
+  scope: global
+- name: ticker_all
+  type: sliding_window
+  interval: 2
+  limit: 1
+  scope: global
+- name: orderbook
+  type: sliding_window
+  interval: 1
+  limit: 5
+  scope: global
+- name: kline
+  type: sliding_window
+  interval: 1
+  limit: 3
+  scope: global
+- name: private_api
+  type: sliding_window
+  interval: 1
+  limit: 15
+  scope: global
+asset_types:
+  spot:
+    exchange_name: foxbitSpot
+    rest_paths:
+      get_server_time: GET /rest/v3/system/time
+      get_ticker: GET /rest/v3/markets/{market}/ticker/24hr
+      get_all_tickers: GET /rest/v3/markets/ticker/24hr
+      get_depth: GET /rest/v3/markets/{market}/orderbook
+      get_kline: GET /rest/v3/markets/{market}/candlesticks
+      get_trades: GET /rest/v3/markets/{market}/trades/history
+      get_markets: GET /rest/v3/markets
+      get_currencies: GET /rest/v3/currencies
+    wss_paths:
+      ticker: '{market}@ticker/24hr'
+      depth: '{market}@orderbook'
+      trades: '{market}@trades'
+    symbol_format: '{base}/{quote}'
+    legal_currency: *id001
+connection:
+  type: http
+  timeout: 10
+  max_retries: 3

@@ -1,0 +1,63 @@
+id: bitvavo
+display_name: Bitvavo
+venue_type: cex
+website: https://www.bitvavo.com
+api_doc: https://docs.bitvavo.com
+connection:
+  type: http
+  timeout: 10
+  max_retries: 3
+base_urls:
+  rest:
+    default: https://api.bitvavo.com/v2
+    spot: https://api.bitvavo.com/v2
+  wss:
+    default: wss://ws.bitvavo.com/v2/
+    spot: wss://ws.bitvavo.com/v2/
+authentication:
+  type: hmac_sha256
+  header_name: Bitvavo-Access-Key
+  timestamp_key: Bitvavo-Access-Timestamp
+  signature_key: Bitvavo-Access-Signature
+kline_periods:
+  1m: 1m
+  5m: 5m
+  15m: 15m
+  30m: 30m
+  1h: 1h
+  2h: 2h
+  4h: 4h
+  6h: 6h
+  8h: 8h
+  12h: 12h
+  1d: 1d
+legal_currency: &id001
+- EUR
+- USDT
+- USD
+rate_limits:
+- name: public_api
+  type: sliding_window
+  interval: 60
+  limit: 1000
+  scope: global
+- name: private_api
+  type: sliding_window
+  interval: 60
+  limit: 1000
+  scope: global
+asset_types:
+  spot:
+    exchange_name: bitvavo
+    symbol_format: '{base}-{quote}'
+    rest_paths:
+      get_server_time: GET /time
+      get_ticker: GET /ticker/24h
+      get_depth: GET /ticker/book
+      get_kline: GET /{market}/candles
+      get_markets: GET /markets
+    wss_paths:
+      ticker: ticker
+      depth: book
+      trade: trades
+    legal_currency: *id001

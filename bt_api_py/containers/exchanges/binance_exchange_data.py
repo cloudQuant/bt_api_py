@@ -18,7 +18,6 @@ def _get_binance_config():
     global _binance_config, _binance_config_loaded
     if _binance_config_loaded:
         return _binance_config
-    _binance_config_loaded = True
     try:
         from bt_api_py.config_loader import load_exchange_config
 
@@ -29,8 +28,9 @@ def _get_binance_config():
         )
         if os.path.exists(config_path):
             _binance_config = load_exchange_config(config_path)
+        _binance_config_loaded = True
     except Exception as e:
-        logger.warning("Failed to load binance.yaml config: %s", e)
+        logger.warn(f"Failed to load binance.yaml config: {e}")
     return _binance_config
 
 

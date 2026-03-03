@@ -1,0 +1,190 @@
+"""
+Bitget Account Data Container
+"""
+
+import json
+import time
+
+from bt_api_py.containers.accounts.account import AccountData
+from bt_api_py.functions.utils import from_dict_get_float, from_dict_get_string
+
+
+class BitgetAccountData(AccountData):
+    """保存Bitget账户信息"""
+
+    def __init__(self, account_info, symbol_name, asset_type, has_been_json_encoded=False):
+        super().__init__(account_info, has_been_json_encoded)
+        self.exchange_name = "BITGET"
+        self.local_update_time = time.time()
+        self.symbol_name = symbol_name
+        self.asset_type = asset_type
+        self.account_data = account_info if has_been_json_encoded else None
+        self.uid = None
+        self.account_type = None
+        self.margin_level = None
+        self.margin_ratio = None
+        self.margin_mode = None
+        self.equity = None
+        self.unrealized_pnl = None
+        self.realized_pnl = None
+        self.margin_available = None
+        self.margin_forced = None
+        self.has_been_init_data = False
+
+    def init_data(self):
+        if not self.has_been_json_encoded:
+            self.account_data = json.loads(self.account_info)
+            self.has_been_json_encoded = True
+        if self.has_been_init_data:
+            return self
+
+        self.uid = from_dict_get_string(self.account_data, "uid")
+        self.account_type = from_dict_get_string(self.account_data, "accountType")
+        self.margin_level = from_dict_get_float(self.account_data, "marginLevel")
+        self.margin_ratio = from_dict_get_float(self.account_data, "marginRatio")
+        self.margin_mode = from_dict_get_string(self.account_data, "marginMode")
+        self.equity = from_dict_get_float(self.account_data, "equity")
+        self.unrealized_pnl = from_dict_get_float(self.account_data, "unrealizedPnl")
+        self.realized_pnl = from_dict_get_float(self.account_data, "realizedPnl")
+        self.margin_available = from_dict_get_float(self.account_data, "marginAvailable")
+        self.margin_forced = from_dict_get_float(self.account_data, "marginForced")
+        self.has_been_init_data = True
+        return self
+
+    def get_all_data(self):
+        if self.all_data is None:
+            self.init_data()
+            self.all_data = {
+                "exchange_name": self.exchange_name,
+                "symbol_name": self.symbol_name,
+                "asset_type": self.asset_type,
+                "local_update_time": self.local_update_time,
+                "uid": self.uid,
+                "account_type": self.account_type,
+                "margin_level": self.margin_level,
+                "margin_ratio": self.margin_ratio,
+                "margin_mode": self.margin_mode,
+                "equity": self.equity,
+                "unrealized_pnl": self.unrealized_pnl,
+                "realized_pnl": self.realized_pnl,
+                "margin_available": self.margin_available,
+                "margin_forced": self.margin_forced,
+            }
+        return self.all_data
+
+    def __str__(self):
+        self.init_data()
+        return json.dumps(self.get_all_data())
+
+    def __repr__(self):
+        return self.__str__()
+
+    def get_exchange_name(self):
+        return self.exchange_name
+
+    def get_local_update_time(self):
+        return self.local_update_time
+
+    def get_symbol_name(self):
+        return self.symbol_name
+
+    def get_asset_type(self):
+        return self.asset_type
+
+    def get_uid(self):
+        return self.uid
+
+    def get_account_type(self):
+        return self.account_type
+
+    def get_margin_level(self):
+        return self.margin_level
+
+    def get_margin_ratio(self):
+        return self.margin_ratio
+
+    def get_margin_mode(self):
+        return self.margin_mode
+
+    def get_equity(self):
+        return self.equity
+
+    def get_unrealized_pnl(self):
+        return self.unrealized_pnl
+
+    def get_realized_pnl(self):
+        return self.realized_pnl
+
+    def get_margin_available(self):
+        return self.margin_available
+
+    def get_margin_forced(self):
+        return self.margin_forced
+
+
+class BitgetSpotWssAccountData:
+    """Bitget Spot WebSocket Account Data"""
+
+    def __init__(self, account_info, symbol_name, asset_type, has_been_json_encoded=False):
+        self.exchange_name = "BITGET"
+        self.local_update_time = time.time()
+        self.symbol_name = symbol_name
+        self.asset_type = asset_type
+        self.account_info = account_info if has_been_json_encoded else None
+        self.balances = []
+        self.has_been_init_data = False
+
+    def init_data(self):
+        if not self.has_been_json_encoded:
+            self.account_info = json.loads(self.account_info)
+            self.has_been_json_encoded = True
+        if self.has_been_init_data:
+            return self
+
+        # Process balance data
+        if "data" in self.account_info and "balances" in self.account_info["data"]:
+            for balance in self.account_info["data"]["balances"]:
+                balance_data = BitgetBalanceData(
+                    balance, self.symbol_name, self.asset_type, True
+                )
+                self.balances.append(balance_data)
+
+        self.has_been_init_data = True
+        return self
+
+    def get_balances(self):
+        """Get all balances
+
+        Returns:
+            list: List of BitgetBalanceData objects
+        """
+        self.init_data()
+        return self.balances
+
+    def get_balance(self, coin):
+        """Get balance for specific coin
+
+        Args:
+            coin: Coin symbol (e.g., "USDT", "BTC")
+
+        Returns:
+            BitgetBalanceData: Balance data or None
+        """
+        self.init_data()
+        for balance in self.balances:
+            if balance.get_coin() == coin:
+                return balance
+        return None
+
+    def get_total_equity(self):
+        """Get total equity
+
+        Returns:
+            float: Total equity
+        """
+        self.init_data()
+        total = 0.0
+        for balance in self.balances:
+            if balance.get_equity():
+                total += balance.get_equity()
+        return total

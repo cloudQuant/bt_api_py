@@ -56,11 +56,15 @@ class UnifiedErrorCode(int, Enum):
     INSUFFICIENT_MARGIN = 4005
     ORDER_NOT_FOUND = 4006
     ORDER_ALREADY_FILLED = 4007
-    MARKET_CLOSED = 4008
-    POSITION_NOT_FOUND = 4009
-    DUPLICATE_ORDER = 4010
-    INVALID_ORDER = 4011
-    PRECISION_ERROR = 4012
+    ORDER_CANCELLED = 4008
+    ORDER_TIMEOUT = 4009
+    MARKET_CLOSED = 4010
+    POSITION_NOT_FOUND = 4011
+    DUPLICATE_ORDER = 4012
+    INVALID_ORDER = 4013
+    MIN_NOTIONAL = 4014
+    MINIMUM_NOT_MET = 4015
+    PRECISION_ERROR = 4016
 
     # 系统错误 (5xxx)
     EXCHANGE_MAINTENANCE = 5001
@@ -76,6 +80,7 @@ class UnifiedErrorCode(int, Enum):
     INVALID_PARAMETER = 7001
     MISSING_PARAMETER = 7002
     PARAMETER_OUT_OF_RANGE = 7003
+
 
 
 # ── 统一错误 ──────────────────────────────────────────────────
@@ -254,6 +259,35 @@ class ErrorTranslator:
             return ErrorCategory.VALIDATION
 
 
+# ── Gemini 错误翻译器 ─────────────────────────────────────────
+
+
+class GeminiErrorTranslator(ErrorTranslator):
+    """Gemini API error translator.
+
+    Gemini API returns errors as JSON:
+    {"result": "error", "reason": "InvalidSignature", "message": "..."}
+    """
+    ERROR_MAP = {
+        "InvalidSignature": (UnifiedErrorCode.INVALID_SIGNATURE, "Invalid signature"),
+        "InvalidNonce": (UnifiedErrorCode.EXPIRED_TIMESTAMP, "Invalid nonce"),
+        "MissingPayloadHeader": (UnifiedErrorCode.MISSING_PARAMETER, "Missing payload header"),
+        "InvalidPayload": (UnifiedErrorCode.INVALID_PARAMETER, "Invalid payload"),
+        "InvalidAPIKey": (UnifiedErrorCode.INVALID_API_KEY, "Invalid API key"),
+        "RateLimit": (UnifiedErrorCode.RATE_LIMIT_EXCEEDED, "Rate limit exceeded"),
+        "InsufficientFunds": (UnifiedErrorCode.INSUFFICIENT_BALANCE, "Insufficient funds"),
+        "InvalidPrice": (UnifiedErrorCode.INVALID_PRICE, "Invalid price"),
+        "InvalidQuantity": (UnifiedErrorCode.INVALID_VOLUME, "Invalid quantity"),
+        "InvalidSide": (UnifiedErrorCode.INVALID_PARAMETER, "Invalid side"),
+        "InvalidOrderType": (UnifiedErrorCode.INVALID_ORDER, "Invalid order type"),
+        "OrderNotFound": (UnifiedErrorCode.ORDER_NOT_FOUND, "Order not found"),
+        "ClientOrderIdNotFound": (UnifiedErrorCode.ORDER_NOT_FOUND, "Client order ID not found"),
+        "SystemError": (UnifiedErrorCode.INTERNAL_ERROR, "System error"),
+        "MarketNotOpen": (UnifiedErrorCode.MARKET_CLOSED, "Market not open"),
+        "MaintenanceError": (UnifiedErrorCode.EXCHANGE_OVERLOADED, "Exchange under maintenance"),
+    }
+
+
 # ── Binance 错误翻译器 ────────────────────────────────────────
 
 
@@ -340,6 +374,129 @@ class OKXErrorTranslator(ErrorTranslator):
         return super().translate(raw_error, venue)
 
 
+# ── Kraken 错误翻译器 ────────────────────────────────────────────
+
+
+class KrakenErrorTranslator(ErrorTranslator):
+    """Kraken API 错误翻译器
+
+    Kraken API 返回的错误格式:
+    {
+      "error": ["EAPI:Invalid key", "Invalid API key"],
+      "result": {...}
+    }
+    """
+
+    ERROR_MAP = {
+        # 认证错误
+        "EAPI:Invalid key": (UnifiedErrorCode.INVALID_API_KEY, "Invalid API key"),
+        "EAPI:Invalid signature": (UnifiedErrorCode.INVALID_SIGNATURE, "Invalid signature"),
+        "EAPI:Invalid nonce": (UnifiedErrorCode.EXPIRED_TIMESTAMP, "Invalid or duplicate nonce"),
+        "EAPI:Invalid request": (UnifiedErrorCode.INVALID_PARAMETER, "Invalid request format"),
+        "EAPI:Not allowed": (UnifiedErrorCode.PERMISSION_DENIED, "Request not permitted"),
+
+        # 限流错误
+        "EAPI:Rate limit exceeded": (UnifiedErrorCode.RATE_LIMIT_EXCEEDED, "Rate limit exceeded"),
+
+        # 业务错误
+        "EOrder:Insufficient funds": (UnifiedErrorCode.INSUFFICIENT_BALANCE, "Insufficient funds"),
+        "EOrder:Invalid price": (UnifiedErrorCode.INVALID_PRICE, "Invalid price"),
+        "EOrder:Unknown order": (UnifiedErrorCode.ORDER_NOT_FOUND, "Order not found"),
+        "EOrder:Order already closed": (UnifiedErrorCode.ORDER_ALREADY_FILLED, "Order already closed"),
+        "EOrder:Order would immediately trigger": (UnifiedErrorCode.INVALID_ORDER, "Order would immediately trigger"),
+        "EOrder:Margin position too small": (UnifiedErrorCode.INSUFFICIENT_MARGIN, "Margin position too small"),
+
+        # 参数错误
+        "EInput:Invalid arguments": (UnifiedErrorCode.INVALID_PARAMETER, "Invalid arguments"),
+        "EInput:Missing arguments": (UnifiedErrorCode.MISSING_PARAMETER, "Missing arguments"),
+        "EInput:Unknown arguments": (UnifiedErrorCode.INVALID_PARAMETER, "Unknown arguments"),
+
+        # 系统错误
+        "EService:Unavailable": (UnifiedErrorCode.EXCHANGE_MAINTENANCE, "Service unavailable"),
+        "EService:Market in cancel_only mode": (UnifiedErrorCode.MARKET_CLOSED, "Market in cancel only mode"),
+        "EService:Duplicate post": (UnifiedErrorCode.DUPLICATE_ORDER, "Duplicate request"),
+        "EService:Order timeout": (UnifiedErrorCode.UNSUPPORTED_OPERATION, "Order timeout"),
+
+        # 其他错误
+        "ETrade:Invalid user transaction": (UnifiedErrorCode.INVALID_ORDER, "Invalid user transaction"),
+        "EAccount:Invalid asset": (UnifiedErrorCode.INVALID_SYMBOL, "Invalid asset"),
+        "EGeneral:Unknown asset pair": (UnifiedErrorCode.INVALID_SYMBOL, "Unknown asset pair"),
+    }
+
+    @classmethod
+    def translate(cls, raw_error: dict, venue: str) -> UnifiedError | None:
+        """Kraken API 错误码在 error 数组中"""
+        errors = raw_error.get("error", [])
+        if not errors:
+            return None  # No error
+
+        # 取第一个错误
+        error_msg = errors[0] if errors else "Unknown error"
+
+        # 尝试匹配错误码
+        for error_code, error_data in cls.ERROR_MAP.items():
+            if error_code in error_msg:
+                unified_code, default_msg = error_data
+                if unified_code is None:
+                    return None
+                return UnifiedError(
+                    code=unified_code,
+                    category=cls._get_category(unified_code),
+                    venue=venue,
+                    message=error_msg,
+                    original_error=error_msg,
+                    context={"raw_response": raw_error},
+                )
+
+        # 如果没有匹配到，尝试解析错误码模式
+        if error_msg.startswith("EAPI:"):
+            return UnifiedError(
+                code=UnifiedErrorCode.API_ERROR,
+                category=ErrorCategory.API,
+                venue=venue,
+                message=error_msg,
+                original_error=error_msg,
+                context={"raw_response": raw_error},
+            )
+        elif error_msg.startswith("EOrder:"):
+            return UnifiedError(
+                code=UnifiedErrorCode.ORDER_ERROR,
+                category=ErrorCategory.ORDER,
+                venue=venue,
+                message=error_msg,
+                original_error=error_msg,
+                context={"raw_response": raw_error},
+            )
+        elif error_msg.startswith("ETrade:"):
+            return UnifiedError(
+                code=UnifiedErrorCode.TRADE_ERROR,
+                category=ErrorCategory.TRADE,
+                venue=venue,
+                message=error_msg,
+                original_error=error_msg,
+                context={"raw_response": raw_error},
+            )
+        elif error_msg.startswith("EAccount:"):
+            return UnifiedError(
+                code=UnifiedErrorCode.ACCOUNT_ERROR,
+                category=ErrorCategory.ACCOUNT,
+                venue=venue,
+                message=error_msg,
+                original_error=error_msg,
+                context={"raw_response": raw_error},
+            )
+
+        # 默认错误
+        return UnifiedError(
+            code=UnifiedErrorCode.INTERNAL_ERROR,
+            category=ErrorCategory.SYSTEM,
+            venue=venue,
+            message=error_msg,
+            original_error=error_msg,
+            context={"raw_response": raw_error},
+        )
+
+
 # ── CTP 错误翻译器 ────────────────────────────────────────────
 
 
@@ -414,4 +571,666 @@ class IBWebErrorTranslator(ErrorTranslator):
                 context={"raw_response": raw_error},
             )
 
+        return super().translate(raw_error, venue)
+
+
+# ── Kraken 错误翻译器 ────────────────────────────────────────────
+
+
+class KrakenErrorTranslator(ErrorTranslator):
+    """Kraken API 错误翻译器
+
+    Kraken API 返回的错误格式:
+    {
+      "error": ["EAPI:Invalid key", "Invalid API key"],
+      "result": {...}
+    }
+    """
+
+    ERROR_MAP = {
+        # 认证错误
+        "EAPI:Invalid key": (UnifiedErrorCode.INVALID_API_KEY, "Invalid API key"),
+        "EAPI:Invalid signature": (UnifiedErrorCode.INVALID_SIGNATURE, "Invalid signature"),
+        "EAPI:Invalid nonce": (UnifiedErrorCode.EXPIRED_TIMESTAMP, "Invalid or duplicate nonce"),
+        "EAPI:Invalid request": (UnifiedErrorCode.INVALID_PARAMETER, "Invalid request format"),
+        "EAPI:Not allowed": (UnifiedErrorCode.PERMISSION_DENIED, "Request not permitted"),
+
+        # 限流错误
+        "EAPI:Rate limit exceeded": (UnifiedErrorCode.RATE_LIMIT_EXCEEDED, "Rate limit exceeded"),
+
+        # 业务错误
+        "EOrder:Insufficient funds": (UnifiedErrorCode.INSUFFICIENT_BALANCE, "Insufficient funds"),
+        "EOrder:Invalid price": (UnifiedErrorCode.INVALID_PRICE, "Invalid price"),
+        "EOrder:Unknown order": (UnifiedErrorCode.ORDER_NOT_FOUND, "Order not found"),
+        "EOrder:Order already closed": (UnifiedErrorCode.ORDER_ALREADY_FILLED, "Order already closed"),
+        "EOrder:Order would immediately trigger": (UnifiedErrorCode.INVALID_ORDER, "Order would immediately trigger"),
+        "EOrder:Margin position too small": (UnifiedErrorCode.INSUFFICIENT_MARGIN, "Margin position too small"),
+
+        # 参数错误
+        "EInput:Invalid arguments": (UnifiedErrorCode.INVALID_PARAMETER, "Invalid arguments"),
+        "EInput:Missing arguments": (UnifiedErrorCode.MISSING_PARAMETER, "Missing arguments"),
+        "EInput:Unknown arguments": (UnifiedErrorCode.INVALID_PARAMETER, "Unknown arguments"),
+
+        # 系统错误
+        "EService:Unavailable": (UnifiedErrorCode.EXCHANGE_MAINTENANCE, "Service unavailable"),
+        "EService:Market in cancel_only mode": (UnifiedErrorCode.MARKET_CLOSED, "Market in cancel only mode"),
+        "EService:Duplicate post": (UnifiedErrorCode.DUPLICATE_ORDER, "Duplicate request"),
+        "EService:Order timeout": (UnifiedErrorCode.UNSUPPORTED_OPERATION, "Order timeout"),
+
+        # 其他错误
+        "ETrade:Invalid user transaction": (UnifiedErrorCode.INVALID_ORDER, "Invalid user transaction"),
+        "EAccount:Invalid asset": (UnifiedErrorCode.INVALID_SYMBOL, "Invalid asset"),
+        "EGeneral:Unknown asset pair": (UnifiedErrorCode.INVALID_SYMBOL, "Unknown asset pair"),
+    }
+
+    @classmethod
+    def translate(cls, raw_error: dict, venue: str) -> UnifiedError | None:
+        """Kraken API 错误码在 error 数组中"""
+        errors = raw_error.get("error", [])
+        if not errors:
+            return None  # No error
+
+        # 取第一个错误
+        error_msg = errors[0] if errors else "Unknown error"
+
+        # 尝试匹配错误码
+        for error_code, error_data in cls.ERROR_MAP.items():
+            if error_code in error_msg:
+                unified_code, default_msg = error_data
+                if unified_code is None:
+                    return None
+                return UnifiedError(
+                    code=unified_code,
+                    category=cls._get_category(unified_code),
+                    venue=venue,
+                    message=error_msg,
+                    original_error=error_msg,
+                    context={"raw_response": raw_error},
+                )
+
+        # 如果没有匹配到，尝试解析错误码模式
+        if error_msg.startswith("EAPI:"):
+            return UnifiedError(
+                code=UnifiedErrorCode.API_ERROR,
+                category=ErrorCategory.API,
+                venue=venue,
+                message=error_msg,
+                original_error=error_msg,
+                context={"raw_response": raw_error},
+            )
+        elif error_msg.startswith("EOrder:"):
+            return UnifiedError(
+                code=UnifiedErrorCode.ORDER_ERROR,
+                category=ErrorCategory.ORDER,
+                venue=venue,
+                message=error_msg,
+                original_error=error_msg,
+                context={"raw_response": raw_error},
+            )
+        elif error_msg.startswith("ETrade:"):
+            return UnifiedError(
+                code=UnifiedErrorCode.TRADE_ERROR,
+                category=ErrorCategory.TRADE,
+                venue=venue,
+                message=error_msg,
+                original_error=error_msg,
+                context={"raw_response": raw_error},
+            )
+        elif error_msg.startswith("EAccount:"):
+            return UnifiedError(
+                code=UnifiedErrorCode.ACCOUNT_ERROR,
+                category=ErrorCategory.ACCOUNT,
+                venue=venue,
+                message=error_msg,
+                original_error=error_msg,
+                context={"raw_response": raw_error},
+            )
+
+        # 默认错误
+        return UnifiedError(
+            code=UnifiedErrorCode.INTERNAL_ERROR,
+            category=ErrorCategory.SYSTEM,
+            venue=venue,
+            message=error_msg,
+            original_error=error_msg,
+            context={"raw_response": raw_error},
+        )
+
+
+class BybitErrorTranslator(ErrorTranslator):
+    """Bybit API 错误翻译器
+
+    Bybit API 返回的错误格式:
+    {
+      "retCode": 10003,
+      "retMsg": "Invalid API key",
+      "retExtInfo": {},
+      "time": 1672304484978
+    }
+    """
+
+    ERROR_MAP = {
+        10001: (UnifiedErrorCode.INVALID_PARAMETER, "Parameter error"),
+        10003: (UnifiedErrorCode.INVALID_API_KEY, "Invalid API key"),
+        10004: (UnifiedErrorCode.INVALID_SIGNATURE, "Invalid signature"),
+        10005: (UnifiedErrorCode.PERMISSION_DENIED, "Permission denied"),
+        10006: (UnifiedErrorCode.RATE_LIMIT_EXCEEDED, "Too many requests"),
+        10016: (UnifiedErrorCode.INTERNAL_ERROR, "Server error"),
+        110001: (UnifiedErrorCode.ORDER_NOT_FOUND, "Order does not exist"),
+        110004: (UnifiedErrorCode.INSUFFICIENT_BALANCE, "Insufficient balance"),
+        110007: (UnifiedErrorCode.INVALID_PRICE, "Order price is out of range"),
+        110043: (UnifiedErrorCode.PERMISSION_DENIED, "Set margin mode first"),
+    }
+
+    @classmethod
+    def translate(cls, raw_error: dict, venue: str) -> UnifiedError | None:
+        """Bybit API 错误码是数字，在 retCode 字段中"""
+        ret_code = raw_error.get("retCode")
+        ret_msg = raw_error.get("retMsg", "")
+
+        if ret_code is not None:
+            code_str = str(ret_code)
+            if code_str in cls.ERROR_MAP:
+                unified_code, default_msg = cls.ERROR_MAP[code_str]
+                if unified_code is None:
+                    return None
+                return UnifiedError(
+                    code=unified_code,
+                    category=cls._get_category(unified_code),
+                    venue=venue,
+                    message=ret_msg or default_msg,
+                    original_error=f"{ret_code}: {ret_msg}",
+                    context={"raw_response": raw_error},
+                )
+
+        return super().translate(raw_error, venue)
+
+
+# ── Kraken 错误翻译器 ────────────────────────────────────────────
+
+
+class KrakenErrorTranslator(ErrorTranslator):
+    """Kraken API 错误翻译器
+
+    Kraken API 返回的错误格式:
+    {
+      "error": ["EAPI:Invalid key", "Invalid API key"],
+      "result": {...}
+    }
+    """
+
+    ERROR_MAP = {
+        # 认证错误
+        "EAPI:Invalid key": (UnifiedErrorCode.INVALID_API_KEY, "Invalid API key"),
+        "EAPI:Invalid signature": (UnifiedErrorCode.INVALID_SIGNATURE, "Invalid signature"),
+        "EAPI:Invalid nonce": (UnifiedErrorCode.EXPIRED_TIMESTAMP, "Invalid or duplicate nonce"),
+        "EAPI:Invalid request": (UnifiedErrorCode.INVALID_PARAMETER, "Invalid request format"),
+        "EAPI:Not allowed": (UnifiedErrorCode.PERMISSION_DENIED, "Request not permitted"),
+
+        # 限流错误
+        "EAPI:Rate limit exceeded": (UnifiedErrorCode.RATE_LIMIT_EXCEEDED, "Rate limit exceeded"),
+
+        # 业务错误
+        "EOrder:Insufficient funds": (UnifiedErrorCode.INSUFFICIENT_BALANCE, "Insufficient funds"),
+        "EOrder:Invalid price": (UnifiedErrorCode.INVALID_PRICE, "Invalid price"),
+        "EOrder:Unknown order": (UnifiedErrorCode.ORDER_NOT_FOUND, "Order not found"),
+        "EOrder:Order already closed": (UnifiedErrorCode.ORDER_ALREADY_FILLED, "Order already closed"),
+        "EOrder:Order would immediately trigger": (UnifiedErrorCode.INVALID_ORDER, "Order would immediately trigger"),
+        "EOrder:Margin position too small": (UnifiedErrorCode.INSUFFICIENT_MARGIN, "Margin position too small"),
+
+        # 参数错误
+        "EInput:Invalid arguments": (UnifiedErrorCode.INVALID_PARAMETER, "Invalid arguments"),
+        "EInput:Missing arguments": (UnifiedErrorCode.MISSING_PARAMETER, "Missing arguments"),
+        "EInput:Unknown arguments": (UnifiedErrorCode.INVALID_PARAMETER, "Unknown arguments"),
+
+        # 系统错误
+        "EService:Unavailable": (UnifiedErrorCode.EXCHANGE_MAINTENANCE, "Service unavailable"),
+        "EService:Market in cancel_only mode": (UnifiedErrorCode.MARKET_CLOSED, "Market in cancel only mode"),
+        "EService:Duplicate post": (UnifiedErrorCode.DUPLICATE_ORDER, "Duplicate request"),
+        "EService:Order timeout": (UnifiedErrorCode.UNSUPPORTED_OPERATION, "Order timeout"),
+
+        # 其他错误
+        "ETrade:Invalid user transaction": (UnifiedErrorCode.INVALID_ORDER, "Invalid user transaction"),
+        "EAccount:Invalid asset": (UnifiedErrorCode.INVALID_SYMBOL, "Invalid asset"),
+        "EGeneral:Unknown asset pair": (UnifiedErrorCode.INVALID_SYMBOL, "Unknown asset pair"),
+    }
+
+    @classmethod
+    def translate(cls, raw_error: dict, venue: str) -> UnifiedError | None:
+        """Kraken API 错误码在 error 数组中"""
+        errors = raw_error.get("error", [])
+        if not errors:
+            return None  # No error
+
+        # 取第一个错误
+        error_msg = errors[0] if errors else "Unknown error"
+
+        # 尝试匹配错误码
+        for error_code, error_data in cls.ERROR_MAP.items():
+            if error_code in error_msg:
+                unified_code, default_msg = error_data
+                if unified_code is None:
+                    return None
+                return UnifiedError(
+                    code=unified_code,
+                    category=cls._get_category(unified_code),
+                    venue=venue,
+                    message=error_msg,
+                    original_error=error_msg,
+                    context={"raw_response": raw_error},
+                )
+
+        # 如果没有匹配到，尝试解析错误码模式
+        if error_msg.startswith("EAPI:"):
+            return UnifiedError(
+                code=UnifiedErrorCode.API_ERROR,
+                category=ErrorCategory.API,
+                venue=venue,
+                message=error_msg,
+                original_error=error_msg,
+                context={"raw_response": raw_error},
+            )
+        elif error_msg.startswith("EOrder:"):
+            return UnifiedError(
+                code=UnifiedErrorCode.ORDER_ERROR,
+                category=ErrorCategory.ORDER,
+                venue=venue,
+                message=error_msg,
+                original_error=error_msg,
+                context={"raw_response": raw_error},
+            )
+        elif error_msg.startswith("ETrade:"):
+            return UnifiedError(
+                code=UnifiedErrorCode.TRADE_ERROR,
+                category=ErrorCategory.TRADE,
+                venue=venue,
+                message=error_msg,
+                original_error=error_msg,
+                context={"raw_response": raw_error},
+            )
+        elif error_msg.startswith("EAccount:"):
+            return UnifiedError(
+                code=UnifiedErrorCode.ACCOUNT_ERROR,
+                category=ErrorCategory.ACCOUNT,
+                venue=venue,
+                message=error_msg,
+                original_error=error_msg,
+                context={"raw_response": raw_error},
+            )
+
+        # 默认错误
+        return UnifiedError(
+            code=UnifiedErrorCode.INTERNAL_ERROR,
+            category=ErrorCategory.SYSTEM,
+            venue=venue,
+            message=error_msg,
+            original_error=error_msg,
+            context={"raw_response": raw_error},
+        )
+
+
+class BitgetErrorTranslator(ErrorTranslator):
+    """Bitget API error translator."""
+
+    ERROR_MAP = {
+        # 认证错误
+        "Invalid API key": (UnifiedErrorCode.INVALID_API_KEY, "Invalid API key"),
+        "Invalid signature": (UnifiedErrorCode.INVALID_SIGNATURE, "Invalid signature"),
+        "Invalid timestamp": (UnifiedErrorCode.EXPIRED_TIMESTAMP, "Invalid timestamp"),
+        "Access denied": (UnifiedErrorCode.PERMISSION_DENIED, "Access denied"),
+
+        # 限流错误
+        "Too many requests": (UnifiedErrorCode.RATE_LIMIT_EXCEEDED, "Too many requests"),
+
+        # 业务错误
+        "Insufficient balance": (UnifiedErrorCode.INSUFFICIENT_BALANCE, "Insufficient balance"),
+        "Invalid symbol": (UnifiedErrorCode.INVALID_SYMBOL, "Invalid symbol"),
+        "Invalid price": (UnifiedErrorCode.INVALID_PRICE, "Invalid price"),
+        "Invalid size": (UnifiedErrorCode.INVALID_VOLUME, "Invalid size"),
+        "Order not found": (UnifiedErrorCode.ORDER_NOT_FOUND, "Order not found"),
+        "Order already filled": (UnifiedErrorCode.ORDER_ALREADY_FILLED, "Order already filled"),
+        "Order would immediately trigger": (UnifiedErrorCode.INVALID_ORDER, "Order would immediately trigger"),
+        "Market closed": (UnifiedErrorCode.MARKET_CLOSED, "Market closed"),
+        "Duplicate order": (UnifiedErrorCode.DUPLICATE_ORDER, "Duplicate order"),
+        "Precision error": (UnifiedErrorCode.PRECISION_ERROR, "Precision error"),
+
+        # 系统错误
+        "Internal server error": (UnifiedErrorCode.INTERNAL_ERROR, "Internal server error"),
+        "Service unavailable": (UnifiedErrorCode.EXCHANGE_MAINTENANCE, "Service unavailable"),
+    }
+
+
+class KuCoinErrorTranslator(ErrorTranslator):
+    """KuCoin API error translator.
+
+    KuCoin API response format:
+    {
+        "code": "400001",
+        "msg": "Invalid KC-API-TIMESTAMP"
+    }
+    """
+
+    ERROR_MAP = {
+        # Success code
+        "200000": (None, "Success"),
+
+        # 认证错误 (4xxxx)
+        "400001": (UnifiedErrorCode.INVALID_API_KEY, "Missing authentication headers"),
+        "400002": (UnifiedErrorCode.EXPIRED_TIMESTAMP, "Invalid KC-API-TIMESTAMP"),
+        "400003": (UnifiedErrorCode.INVALID_API_KEY, "Invalid KC-API-KEY"),
+        "400004": (UnifiedErrorCode.INVALID_API_KEY, "Invalid KC-API-PASSPHRASE"),
+        "400005": (UnifiedErrorCode.INVALID_SIGNATURE, "Invalid KC-API-SIGN"),
+        "400006": (UnifiedErrorCode.PERMISSION_DENIED, "IP not in whitelist"),
+        "400007": (UnifiedErrorCode.PERMISSION_DENIED, "Access denied"),
+        "400008": (UnifiedErrorCode.INVALID_SIGNATURE, "Timestamp expired"),
+
+        # 参数错误 (4xxxx)
+        "400100": (UnifiedErrorCode.INVALID_PARAMETER, "Parameter error"),
+        "400101": (UnifiedErrorCode.MISSING_PARAMETER, "Missing required parameter"),
+        "400102": (UnifiedErrorCode.INVALID_PARAMETER, "Invalid parameter format"),
+        "400103": (UnifiedErrorCode.INVALID_PARAMETER, "Parameter out of range"),
+
+        # 业务错误 (4xxxx, 9xxxx)
+        "411100": (UnifiedErrorCode.PERMISSION_DENIED, "User is frozen"),
+        "900001": (UnifiedErrorCode.INVALID_SYMBOL, "Symbol not exists"),
+        "900002": (UnifiedErrorCode.MARKET_CLOSED, "Market is closed"),
+        "900003": (UnifiedErrorCode.INSUFFICIENT_BALANCE, "Insufficient balance"),
+        "900004": (UnifiedErrorCode.INVALID_ORDER, "Invalid order"),
+        "900005": (UnifiedErrorCode.ORDER_NOT_FOUND, "Order not found"),
+        "900006": (UnifiedErrorCode.ORDER_ALREADY_FILLED, "Order already filled"),
+        "900007": (UnifiedErrorCode.DUPLICATE_ORDER, "Duplicate client order ID"),
+        "900008": (UnifiedErrorCode.INVALID_PRICE, "Price out of range"),
+        "900009": (UnifiedErrorCode.INVALID_VOLUME, "Volume out of range"),
+        "900010": (UnifiedErrorCode.PRECISION_ERROR, "Precision error"),
+        "900011": (UnifiedErrorCode.INSUFFICIENT_BALANCE, "Insufficient funds"),
+
+        # 限流错误
+        "429000": (UnifiedErrorCode.RATE_LIMIT_EXCEEDED, "Too many requests"),
+        "400200": (UnifiedErrorCode.RATE_LIMIT_EXCEEDED, "Request limit exceeded"),
+
+        # 系统错误 (5xxxx)
+        "500000": (UnifiedErrorCode.INTERNAL_ERROR, "Internal server error"),
+        "500001": (UnifiedErrorCode.EXCHANGE_OVERLOADED, "Service overloaded"),
+        "500002": (UnifiedErrorCode.EXCHANGE_MAINTENANCE, "Service maintenance"),
+        "500003": (UnifiedErrorCode.NETWORK_TIMEOUT, "Request timeout"),
+
+        # 其他错误
+        "800001": (UnifiedErrorCode.UNSUPPORTED_OPERATION, "Operation not supported"),
+        "800002": (UnifiedErrorCode.NOT_SUPPORTED, "Feature not available"),
+    }
+
+    @classmethod
+    def translate(cls, raw_error: dict, venue: str) -> UnifiedError | None:
+        """KuCoin API 错误码是字符串，在 code 字段中"""
+        code = raw_error.get("code")
+        msg = raw_error.get("msg", "")
+
+        if code is not None:
+            code_str = str(code)
+            if code_str in cls.ERROR_MAP:
+                unified_code, default_msg = cls.ERROR_MAP[code_str]
+                if unified_code is None:
+                    return None  # Success
+                return UnifiedError(
+                    code=unified_code,
+                    category=cls._get_category(unified_code),
+                    venue=venue,
+                    message=msg or default_msg,
+                    original_error=f"{code}: {msg}",
+                    context={"raw_response": raw_error},
+                )
+
+        return super().translate(raw_error, venue)
+
+    @classmethod
+    def translate(cls, raw_error: dict, venue: str) -> UnifiedError | None:
+        """Bitget API 错误码通常在 code 和 msg 字段中"""
+        code = raw_error.get("code")
+        msg = raw_error.get("msg", "")
+
+        if not code and not msg:
+            return None
+
+        # 组合错误信息
+        error_msg = msg
+        if code:
+            error_msg = f"{code}: {msg}"
+
+        # 尝试匹配错误码
+        for error_key, error_data in cls.ERROR_MAP.items():
+            if error_key in error_msg:
+                return UnifiedError(
+                    code=error_data[0],
+                    category=ErrorCategory.API,
+                    venue=venue,
+                    message=error_data[1],
+                    original_error=error_msg,
+                    context={"raw_response": raw_error},
+                )
+
+        # 如果没有匹配到，解析错误码
+        if code:
+            try:
+                code_num = int(code)
+                if code_num >= 10000:
+                    return UnifiedError(
+                        code=UnifiedErrorCode.INVALID_PARAMETER,
+                        category=ErrorCategory.API,
+                        venue=venue,
+                        message=error_msg,
+                        original_error=error_msg,
+                        context={"raw_response": raw_error},
+                    )
+            except ValueError:
+                pass
+
+        # 默认错误
+        return UnifiedError(
+            code=UnifiedErrorCode.API_ERROR,
+            category=ErrorCategory.API,
+            venue=venue,
+            message=error_msg,
+            original_error=error_msg,
+            context={"raw_response": raw_error},
+        )
+
+
+# ── Upbit 错误翻译器 ─────────────────────────────────────────────
+
+
+class UpbitErrorTranslator(ErrorTranslator):
+    """Upbit API 错误翻译器
+
+    Upbit API 返回的错误格式:
+    {
+        "error": {
+            "name": "INVALID_QUERY_PAYLOAD",
+            "message": "Invalid query payload"
+        }
+    }
+    """
+
+    ERROR_MAP = {
+        # 认证错误
+        "UNAUTHORIZED": (UnifiedErrorCode.INVALID_API_KEY, "Authentication failed"),
+        "EXPIRED_ACCESS_KEY": (UnifiedErrorCode.INVALID_API_KEY, "API key expired"),
+        "INVALID_QUERY_PAYLOAD": (UnifiedErrorCode.INVALID_PARAMETER, "Invalid request parameters"),
+        "JWT_VERIFICATION": (UnifiedErrorCode.INVALID_SIGNATURE, "JWT verification failed"),
+        "NO_AUTHORIZATION_IP": (UnifiedErrorCode.PERMISSION_DENIED, "IP not authorized"),
+        "NONCE_USED": (UnifiedErrorCode.EXPIRED_TIMESTAMP, "Nonce already used"),
+
+        # 限流错误
+        "TOO_MANY_REQUESTS": (UnifiedErrorCode.RATE_LIMIT_EXCEEDED, "Too many requests"),
+        "REQUEST_LIMIT_EXCEEDED": (UnifiedErrorCode.RATE_LIMIT_EXCEEDED, "Request limit exceeded"),
+
+        # 业务错误
+        "INSUFFICIENT_FUNDS_BID": (UnifiedErrorCode.INSUFFICIENT_BALANCE, "Insufficient funds for buy order"),
+        "INSUFFICIENT_FUNDS_ASK": (UnifiedErrorCode.INSUFFICIENT_BALANCE, "Insufficient funds for sell order"),
+        "UNDER_MIN_TOTAL_BID": (UnifiedErrorCode.MINIMUM_NOT_MET, "Below minimum buy amount"),
+        "UNDER_MIN_TOTAL_ASK": (UnifiedErrorCode.MINIMUM_NOT_MET, "Below minimum sell amount"),
+        "INVALID_MARKET": (UnifiedErrorCode.INVALID_SYMBOL, "Invalid market symbol"),
+        "INVALID_PRICE": (UnifiedErrorCode.INVALID_PRICE, "Invalid price"),
+        "INVALID_VOLUME": (UnifiedErrorCode.INVALID_VOLUME, "Invalid volume"),
+        "ORDER_NOT_FOUND": (UnifiedErrorCode.ORDER_NOT_FOUND, "Order not found"),
+        "ORDER_ALREADY_FILLED": (UnifiedErrorCode.ORDER_ALREADY_FILLED, "Order already filled"),
+        "ORDER_CANCELLED": (UnifiedErrorCode.ORDER_CANCELLED, "Order cancelled"),
+        "DUPLICATE_ORDER": (UnifiedErrorCode.DUPLICATE_ORDER, "Duplicate order"),
+        "MARKET_CLOSED": (UnifiedErrorCode.MARKET_CLOSED, "Market is closed"),
+        "ORDER_TIMEOUT": (UnifiedErrorCode.ORDER_TIMEOUT, "Order timeout"),
+
+        # 参数错误
+        "MISSING_PARAMETER": (UnifiedErrorCode.MISSING_PARAMETER, "Missing required parameter"),
+        "INVALID_PARAMETER": (UnifiedErrorCode.INVALID_PARAMETER, "Invalid parameter value"),
+        "INVALID_PARAMETER_TYPE": (UnifiedErrorCode.INVALID_PARAMETER, "Invalid parameter type"),
+        "PARAMETER_OUT_OF_RANGE": (UnifiedErrorCode.INVALID_PARAMETER, "Parameter out of range"),
+
+        # 系统错误
+        "INTERNAL_SERVER_ERROR": (UnifiedErrorCode.INTERNAL_ERROR, "Internal server error"),
+        "SERVICE_TEMPORARILY_UNAVAILABLE": (UnifiedErrorCode.EXCHANGE_MAINTENANCE, "Service temporarily unavailable"),
+        "DATABASE_ERROR": (UnifiedErrorCode.INTERNAL_ERROR, "Database error"),
+        "NETWORK_ERROR": (UnifiedErrorCode.NETWORK_TIMEOUT, "Network error"),
+    }
+
+    @classmethod
+    def translate(cls, raw_error: dict, venue: str) -> UnifiedError | None:
+        """Upbit API 错误码通常在 error 对象中"""
+        error_obj = raw_error.get("error", raw_error)
+
+        if isinstance(error_obj, dict):
+            error_name = error_obj.get("name", "")
+            error_msg = error_obj.get("message", "")
+
+            # 组合错误信息
+            error_full_msg = f"{error_name}: {error_msg}" if error_name else error_msg
+
+            # 尝试匹配错误码
+            for error_key, error_data in cls.ERROR_MAP.items():
+                if error_key in error_name or error_key in error_full_msg:
+                    unified_code, default_msg = error_data
+                    if unified_code is None:
+                        return None  # 不是错误
+                    return UnifiedError(
+                        code=unified_code,
+                        category=cls._get_category(unified_code),
+                        venue=venue,
+                        message=error_msg or default_msg,
+                        original_error=error_full_msg,
+                        context={"raw_response": raw_error},
+                    )
+
+            # 如果没有匹配到，根据错误名称推断
+            if "UNAUTHORIZED" in error_name or "JWT" in error_name:
+                return UnifiedError(
+                    code=UnifiedErrorCode.INVALID_API_KEY,
+                    category=ErrorCategory.AUTH,
+                    venue=venue,
+                    message=error_full_msg,
+                    original_error=error_full_msg,
+                    context={"raw_response": raw_error},
+                )
+            elif "RATE" in error_name or "TOO_MANY" in error_name:
+                return UnifiedError(
+                    code=UnifiedErrorCode.RATE_LIMIT_EXCEEDED,
+                    category=ErrorCategory.RATE_LIMIT,
+                    venue=venue,
+                    message=error_full_msg,
+                    original_error=error_full_msg,
+                    context={"raw_response": raw_error},
+                )
+            elif "INSUFFICIENT" in error_name or "FUNDS" in error_name:
+                return UnifiedError(
+                    code=UnifiedErrorCode.INSUFFICIENT_BALANCE,
+                    category=ErrorCategory.BUSINESS,
+                    venue=venue,
+                    message=error_full_msg,
+                    original_error=error_full_msg,
+                    context={"raw_response": raw_error},
+                )
+            elif "INVALID" in error_name:
+                return UnifiedError(
+                    code=UnifiedErrorCode.INVALID_PARAMETER,
+                    category=ErrorCategory.VALIDATION,
+                    venue=venue,
+                    message=error_full_msg,
+                    original_error=error_full_msg,
+                    context={"raw_response": raw_error},
+                )
+
+            # 默认错误
+            return UnifiedError(
+                code=UnifiedErrorCode.INTERNAL_ERROR,
+                category=ErrorCategory.SYSTEM,
+                venue=venue,
+                message=error_full_msg,
+                original_error=error_full_msg,
+                context={"raw_response": raw_error},
+            )
+
+        # 如果 error_obj 不是字典，使用父类的翻译方法
+        return super().translate(raw_error, venue)
+
+
+class BitfinexErrorTranslator(ErrorTranslator):
+    """Bitfinex API 错误翻译器
+
+    Bitfinex API 返回的错误格式:
+    {
+        "error": "ERR_UNKNOWN_ORDER",
+        "message": "Unknown order"
+    }
+    """
+
+    ERROR_MAP = {
+        # 认证错误
+        "ERR_UNAUTHENTICATED_API_KEY": (UnifiedErrorCode.INVALID_API_KEY, "Unauthenticated API key"),
+        "ERR_INVALID_API_KEY": (UnifiedErrorCode.INVALID_API_KEY, "Invalid API key"),
+        "ERR_INVALID_SIGNATURE": (UnifiedErrorCode.INVALID_SIGNATURE, "Invalid signature"),
+        "ERR_PERMISSION_DENIED": (UnifiedErrorCode.PERMISSION_DENIED, "Permission denied"),
+
+        # 限流错误
+        "ERR_RATE_LIMIT": (UnifiedErrorCode.RATE_LIMIT_EXCEEDED, "Rate limit exceeded"),
+        "ERR_TOO_MANY_REQUESTS": (UnifiedErrorCode.RATE_LIMIT_EXCEEDED, "Too many requests"),
+
+        # 业务错误
+        "ERR_UNKNOWN_ORDER": (UnifiedErrorCode.ORDER_NOT_FOUND, "Order not found"),
+        "ERR_INVALID_ORDER": (UnifiedErrorCode.INVALID_ORDER, "Invalid order"),
+        "ERR_INVALID_ORDER_TYPE": (UnifiedErrorCode.INVALID_ORDER, "Invalid order type"),
+        "ERR_INSUFFICIENT_BALANCE": (UnifiedErrorCode.INSUFFICIENT_BALANCE, "Insufficient balance"),
+        "ERR_ORDER_NOT_FOUND": (UnifiedErrorCode.ORDER_NOT_FOUND, "Order not found"),
+        "ERR_ORDER_ALREADY_FILLED": (UnifiedErrorCode.ORDER_ALREADY_FILLED, "Order already filled"),
+        "ERR_MARKET_CLOSED": (UnifiedErrorCode.MARKET_CLOSED, "Market is closed"),
+
+        # 参数错误
+        "ERR_INVALID_SYMBOL": (UnifiedErrorCode.INVALID_SYMBOL, "Invalid symbol"),
+        "ERR_INVALID_PRICE": (UnifiedErrorCode.INVALID_PRICE, "Invalid price"),
+        "ERR_INVALID_AMOUNT": (UnifiedErrorCode.INVALID_VOLUME, "Invalid amount"),
+        "ERR_INVALID_PARAMETER": (UnifiedErrorCode.INVALID_PARAMETER, "Invalid parameter"),
+
+        # 系统错误
+        "ERR_SERVER": (UnifiedErrorCode.INTERNAL_ERROR, "Server error"),
+        "ERR_SERVICE_UNAVAILABLE": (UnifiedErrorCode.EXCHANGE_MAINTENANCE, "Service unavailable"),
+    }
+
+    @classmethod
+    def translate(cls, raw_error: dict, venue: str) -> UnifiedError | None:
+        """Bitfinex API 错误码通常在 error 或 message 字段中"""
+        error_msg = raw_error.get("error", raw_error.get("message", ""))
+        error_str = str(error_msg) if error_msg else ""
+
+        # 尝试匹配错误码
+        for error_key, error_data in cls.ERROR_MAP.items():
+            if error_key in error_str:
+                unified_code, default_msg = error_data
+                if unified_code is None:
+                    return None  # 不是错误
+                return UnifiedError(
+                    code=unified_code,
+                    category=cls._get_category(unified_code),
+                    venue=venue,
+                    message=error_str or default_msg,
+                    original_error=error_str,
+                    context={"raw_response": raw_error},
+                )
+
+        # 默认使用父类翻译方法
         return super().translate(raw_error, venue)

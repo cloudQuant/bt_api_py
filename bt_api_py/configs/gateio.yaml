@@ -1,0 +1,449 @@
+# Gate.io 交易所统一配置
+id: gateio
+display_name: Gate.io
+venue_type: cex
+website: https://www.gate.io
+api_doc: https://www.gate.io/docs/apiv4/
+
+base_urls:
+  rest:
+    spot: https://api.gateio.ws/api/v4
+    margin: https://api.gateio.ws/api/v4
+    futures: https://api.gateio.ws/api/v4
+    delivery: https://api.gateio.ws/api/v4
+    option: https://api.gateio.ws/api/v4
+  wss:
+    spot: wss://api.gateio.ws/ws/v4/
+    margin: wss://api.gateio.ws/ws/v4/
+    futures: wss://api.gateio.ws/ws/v4/
+    delivery: wss://api.gateio.ws/ws/v4/
+    option: wss://api.gateio.ws/ws/v4/
+  acct_wss:
+    spot: wss://api.gateio.ws/ws/v4/
+    margin: wss://api.gateio.ws/ws/v4/
+    futures: wss://api.gateio.ws/ws/v4/
+    delivery: wss://api.gateio.ws/ws/v4/
+    option: wss://api.gateio.ws/ws/v4/
+
+connection:
+  type: http
+  timeout: 10
+  max_retries: 3
+
+authentication:
+  type: hmac_sha512
+  header_name: KEY
+  signature_key: SIGN
+  timestamp_key: Timestamp
+
+# 共享默认 kline 周期映射
+kline_periods:
+  1m: "1m"
+  5m: "5m"
+  15m: "15m"
+  30m: "30m"
+  1h: "1h"
+  4h: "4h"
+  1d: "1d"
+  1w: "1w"
+
+# 共享默认法币列表
+legal_currency: [USDT, USD, BTC, ETH, USDC]
+
+rate_limits:
+  - name: request_limit
+    type: sliding_window
+    interval: 60
+    limit: 1200
+    scope: global
+    weight: 1
+    weight_map:
+      "/spot/currency_pairs": 1
+      "/spot/tickers": 1
+      "/spot/depth": 1
+      "/spot/trades": 1
+      "/spot/candlesticks": 1
+      "/account/balances": 1
+      "/spot/orders": 5
+      "/spot/orders/{order_id}": 1
+
+# ═══════════════════════════════════════════════════════════════
+# Asset Types — 每个子类型对应 GateioExchangeData 的一个子类
+# ═══════════════════════════════════════════════════════════════
+asset_types:
+
+  # ─── GateioExchangeDataSpot ──────────────────────────────────
+  spot:
+    exchange_name: gateio_spot
+    symbol_format: "{base}_{quote}"
+    legal_currency: [USDT, USD, BTC, ETH, USDC]
+    rest_paths:
+      # General
+      ping: "GET /spot/ping"
+      get_server_time: "GET /spot/time"
+      # Market Data
+      get_currency_pairs: "GET /spot/currency_pairs"
+      get_currency_pair_detail: "GET /spot/currency_pairs/{currency_pair}"
+      get_tick: "GET /spot/tickers"
+      get_tickers: "GET /spot/tickers"
+      get_ticker: "GET /spot/tickers/{currency_pair}"
+      get_depth: "GET /spot/depth?currency_pair={currency_pair}&limit={limit}"
+      get_trades: "GET /spot/trades?currency_pair={currency_pair}&limit={limit}"
+      get_candlesticks: "GET /spot/candlesticks?currency_pair={currency_pair}&interval={interval}&limit={limit}&start_time={start_time}&end_time={end_time}"
+      get_kline: "GET /spot/candlesticks"
+      get_mark_price: "GET /spot/mark_price"
+      get_funding_rate: "GET /spot/funding_rate"
+      get_open_interest: "GET /spot/open_interest"
+      get_price_stats: "GET /spot/price_stats"
+      get_premium_index: "GET /spot/premium_index"
+      get_delivery_price: "GET /spot/delivery_price"
+      get_index_price: "GET /spot/index_price"
+      get_contract: "GET /futures/contracts"
+      get_contract_info: "GET /futures/contracts/{contract}"
+      # Account
+      get_account: "GET /account/balances"
+      get_balances: "GET /account/balances"
+      get_balance: "GET /account/balances/{currency}"
+      get_fee: "GET /account/fees"
+      get_fee_info: "GET /account/fee_info"
+      get_deposit_address: "GET /address/{currency}"
+      get_deposit_history: "GET /deposit/address?currency={currency}"
+      get_withdraw_history: "GET /withdraw/history?currency={currency}"
+      get_withdraw_address: "GET /withdraw/address?currency={currency}"
+      # Trade
+      make_order: "POST /spot/orders"
+      make_orders: "POST /spot/orders"
+      make_order_test: "POST /spot/orders/test"
+      cancel_order: "DELETE /spot/orders/{order_id}"
+      cancel_orders: "DELETE /spot/orders"
+      cancel_all_orders: "DELETE /spot/orders"
+      query_order: "GET /spot/orders/{order_id}"
+      get_open_orders: "GET /spot/orders?currency_pair={currency_pair}&status=open"
+      get_all_orders: "GET /spot/orders?currency_pair={currency_pair}"
+      get_deals: "GET /spot/trades"
+      # Orders
+      get_order_fee: "GET /spot/orders/{order_id}/fee"
+      get_order_fills: "GET /spot/orders/{order_id}/fills"
+      get_order_ledgers: "GET /spot/orders/{order_id}/ledgers"
+      # Sub-account
+      get_sub_account_list: "GET /sub-account/list"
+      get_sub_account_balances: "GET /sub-account/balances"
+      # Futures Data
+      get_funding_rate_history: "GET /spot/funding_rate"
+      get_long_short_ratio: "GET /spot/long_short_ratio"
+      get_taker_buy_sell_volume: "GET /spot/taker_buy_sell_volume"
+      get_funding_rate_info: "GET /spot/funding_rate_info"
+    wss_paths:
+      # Market Streams
+      ticker: "<currency_pair>"
+      tickers: "all"
+      trade: "<currency_pair>"
+      trades: "all"
+      depth: "<currency_pair>"
+      depths: "all"
+      kline: "<currency_pair>"
+      klines: "all"
+      mark_price: "<currency_pair>"
+      mark_prices: "all"
+      funding_rate: "<currency_pair>"
+      funding_rates: "all"
+      # User Data Streams
+      listen_key: ""
+      orders: ""
+      deals: ""
+      balance: ""
+      position: ""
+      account: ""
+      portfolio: ""
+
+  # ─── GateioExchangeDataMargin ─────────────────────────────────
+  margin:
+    exchange_name: gateio_margin
+    symbol_format: "{base}_{quote}"
+    legal_currency: [USDT, USD, BTC, ETH, USDC]
+    rest_paths:
+      # General
+      ping: "GET /margin/ping"
+      get_server_time: "GET /margin/time"
+      # Market Data
+      get_currency_pairs: "GET /margin/currency_pairs"
+      get_tickers: "GET /margin/tickers"
+      get_ticker: "GET /margin/tickers/{currency_pair}"
+      get_depth: "GET /margin/depth?currency_pair={currency_pair}&limit={limit}"
+      get_trades: "GET /margin/trades?currency_pair={currency_pair}&limit={limit}"
+      get_candlesticks: "GET /margin/candlesticks?currency_pair={currency_pair}&interval={interval}&limit={limit}"
+      get_kline: "GET /margin/candlesticks"
+      # Account
+      get_account: "GET /margin/balances"
+      get_balances: "GET /margin/balances"
+      get_balance: "GET /margin/balances/{currency}"
+      get_loan: "GET /margin/loans"
+      get_loans: "GET /margin/loans"
+      get_loan_history: "GET /margin/loans/history"
+      get_interest_history: "GET /margin/interest/history"
+      # Trade
+      make_order: "POST /margin/orders"
+      make_orders: "POST /margin/orders"
+      make_order_test: "POST /margin/orders/test"
+      cancel_order: "DELETE /margin/orders/{order_id}"
+      cancel_orders: "DELETE /margin/orders"
+      cancel_all_orders: "DELETE /margin/orders"
+      query_order: "GET /margin/orders/{order_id}"
+      get_open_orders: "GET /margin/orders?currency_pair={currency_pair}&status=open"
+      get_all_orders: "GET /margin/orders?currency_pair={currency_pair}"
+      get_deals: "GET /margin/trades"
+      # Borrow/Repay
+      borrow: "POST /margin/loans"
+      repay: "POST /margin/loans/{loan_id}/repay"
+      get_borrow_history: "GET /margin/loans/history"
+      get_repay_history: "GET /margin/repay/history"
+      # WebSocket Streams
+    wss_paths:
+      # Market Streams
+      ticker: "<currency_pair>"
+      tickers: "all"
+      trade: "<currency_pair>"
+      trades: "all"
+      depth: "<currency_pair>"
+      depths: "all"
+      kline: "<currency_pair>"
+      klines: "all"
+      # User Data Streams
+      listen_key: ""
+      orders: ""
+      deals: ""
+      balance: ""
+      position: ""
+      account: ""
+      portfolio: ""
+
+  # ─── GateioExchangeDataFutures ─────────────────────────────────
+  futures:
+    exchange_name: gateio_futures
+    symbol_format: "{base}_{quote}"
+    legal_currency: [USDT, USD, BTC, ETH]
+    rest_paths:
+      # General
+      ping: "GET /futures/ping"
+      get_server_time: "GET /futures/time"
+      # Market Data
+      get_currency_pairs: "GET /futures/currency_pairs"
+      get_currency_pair_detail: "GET /futures/currency_pairs/{currency_pair}"
+      get_tickers: "GET /futures/tickers"
+      get_ticker: "GET /futures/tickers/{currency_pair}"
+      get_depth: "GET /futures/depth?currency_pair={currency_pair}&limit={limit}"
+      get_trades: "GET /futures/trades?currency_pair={currency_pair}&limit={limit}"
+      get_candlesticks: "GET /futures/candlesticks?currency_pair={currency_pair}&interval={interval}&limit={limit}"
+      get_kline: "GET /futures/candlesticks"
+      get_mark_price: "GET /futures/mark_price"
+      get_funding_rate: "GET /futures/funding_rate"
+      get_funding_rate_history: "GET /futures/funding_rate"
+      get_open_interest: "GET /futures/open_interest"
+      get_price_stats: "GET /futures/price_stats"
+      get_premium_index: "GET /futures/premium_index"
+      get_delivery_price: "GET /futures/delivery_price"
+      get_index_price: "GET /futures/index_price"
+      get_contract: "GET /futures/contracts"
+      get_contract_info: "GET /futures/contracts/{contract}"
+      # Account
+      get_account: "GET /account/balances"
+      get_balances: "GET /account/balances"
+      get_balance: "GET /account/balances/{currency}"
+      get_position: "GET /futures/positions"
+      get_position_risk: "GET /futures/positions/risk"
+      get_fee: "GET /account/fees"
+      get_fee_info: "GET /account/fee_info"
+      # Trade
+      make_order: "POST /futures/orders"
+      make_orders: "POST /futures/orders"
+      make_order_test: "POST /futures/orders/test"
+      cancel_order: "DELETE /futures/orders/{order_id}"
+      cancel_orders: "DELETE /futures/orders"
+      cancel_all_orders: "DELETE /futures/orders"
+      query_order: "GET /futures/orders/{order_id}"
+      get_open_orders: "GET /futures/orders?currency_pair={currency_pair}&status=open"
+      get_all_orders: "GET /futures/orders?currency_pair={currency_pair}"
+      get_deals: "GET /futures/trades"
+      # Position Management
+      set_leverage: "POST /futures/leverage"
+      get_leverage: "GET /futures/leverage?currency_pair={currency_pair}"
+      set_margin_mode: "POST /futures/margin_mode"
+      get_margin_mode: "GET /futures/margin_mode"
+      # Risk Management
+      get_position_mode: "GET /futures/position_mode"
+      set_position_mode: "POST /futures/position_mode"
+      get_max_withdrawal: "GET /futures/max_withdrawal"
+      # WebSocket Streams
+    wss_paths:
+      # Market Streams
+      ticker: "<currency_pair>"
+      tickers: "all"
+      trade: "<currency_pair>"
+      trades: "all"
+      depth: "<currency_pair>"
+      depths: "all"
+      kline: "<currency_pair>"
+      klines: "all"
+      mark_price: "<currency_pair>"
+      mark_prices: "all"
+      funding_rate: "<currency_pair>"
+      funding_rates: "all"
+      # User Data Streams
+      listen_key: ""
+      orders: ""
+      deals: ""
+      balance: ""
+      position: ""
+      account: ""
+      portfolio: ""
+
+  # ─── GateioExchangeDataDelivery ───────────────────────────────
+  delivery:
+    exchange_name: gateio_delivery
+    symbol_format: "{base}_{quote}"
+    legal_currency: [USDT, USD, BTC, ETH]
+    rest_paths:
+      # General
+      ping: "GET /delivery/ping"
+      get_server_time: "GET /delivery/time"
+      # Market Data
+      get_currency_pairs: "GET /delivery/currency_pairs"
+      get_currency_pair_detail: "GET /delivery/currency_pairs/{currency_pair}"
+      get_tickers: "GET /delivery/tickers"
+      get_ticker: "GET /delivery/tickers/{currency_pair}"
+      get_depth: "GET /delivery/depth?currency_pair={currency_pair}&limit={limit}"
+      get_trades: "GET /delivery/trades?currency_pair={currency_pair}&limit={limit}"
+      get_candlesticks: "GET /delivery/candlesticks?currency_pair={currency_pair}&interval={interval}&limit={limit}"
+      get_kline: "GET /delivery/candlesticks"
+      get_mark_price: "GET /delivery/mark_price"
+      get_funding_rate: "GET /delivery/funding_rate"
+      get_open_interest: "GET /delivery/open_interest"
+      get_price_stats: "GET /delivery/price_stats"
+      get_premium_index: "GET /delivery/premium_index"
+      get_delivery_price: "GET /delivery/delivery_price"
+      get_index_price: "GET /delivery/index_price"
+      get_contract: "GET /delivery/contracts"
+      get_contract_info: "GET /delivery/contracts/{contract}"
+      # Account
+      get_account: "GET /account/balances"
+      get_balances: "GET /account/balances"
+      get_balance: "GET /account/balances/{currency}"
+      get_position: "GET /delivery/positions"
+      get_position_risk: "GET /delivery/positions/risk"
+      get_fee: "GET /account/fees"
+      get_fee_info: "GET /account/fee_info"
+      # Trade
+      make_order: "POST /delivery/orders"
+      make_orders: "POST /delivery/orders"
+      make_order_test: "POST /delivery/orders/test"
+      cancel_order: "DELETE /delivery/orders/{order_id}"
+      cancel_orders: "DELETE /delivery/orders"
+      cancel_all_orders: "DELETE /delivery/orders"
+      query_order: "GET /delivery/orders/{order_id}"
+      get_open_orders: "GET /delivery/orders?currency_pair={currency_pair}&status=open"
+      get_all_orders: "GET /delivery/orders?currency_pair={currency_pair}"
+      get_deals: "GET /delivery/trades"
+      # Delivery Information
+      get_delivery_schedule: "GET /delivery/delivery_schedule"
+      get_delivery_history: "GET /delivery/delivery_history"
+      # Position Management
+      set_leverage: "POST /delivery/leverage"
+      get_leverage: "GET /delivery/leverage?currency_pair={currency_pair}"
+      set_margin_mode: "POST /delivery/margin_mode"
+      get_margin_mode: "GET /delivery/margin_mode"
+      # Risk Management
+      get_position_mode: "GET /delivery/position_mode"
+      set_position_mode: "POST /delivery/position_mode"
+      # WebSocket Streams
+    wss_paths:
+      # Market Streams
+      ticker: "<currency_pair>"
+      tickers: "all"
+      trade: "<currency_pair>"
+      trades: "all"
+      depth: "<currency_pair>"
+      depths: "all"
+      kline: "<currency_pair>"
+      klines: "all"
+      mark_price: "<currency_pair>"
+      mark_prices: "all"
+      funding_rate: "<currency_pair>"
+      funding_rates: "all"
+      # User Data Streams
+      listen_key: ""
+      orders: ""
+      deals: ""
+      balance: ""
+      position: ""
+      account: ""
+      portfolio: ""
+
+  # ─── GateioExchangeDataOption ──────────────────────────────────
+  option:
+    exchange_name: gateio_option
+    symbol_format: "{base}_{quote}"
+    legal_currency: [USDT, USD, BTC, ETH]
+    rest_paths:
+      # General
+      ping: "GET /option/ping"
+      get_server_time: "GET /option/time"
+      # Market Data
+      get_currency_pairs: "GET /option/currency_pairs"
+      get_currency_pair_detail: "GET /option/currency_pairs/{currency_pair}"
+      get_tickers: "GET /option/tickers"
+      get_ticker: "GET /option/tickers/{currency_pair}"
+      get_depth: "GET /option/depth?currency_pair={currency_pair}&limit={limit}"
+      get_trades: "GET /option/trades?currency_pair={currency_pair}&limit={limit}"
+      get_candlesticks: "GET /option/candlesticks?currency_pair={currency_pair}&interval={interval}&limit={limit}"
+      get_kline: "GET /option/candlesticks"
+      get_mark_price: "GET /option/mark_price"
+      get_option_info: "GET /option/options"
+      get_option_detail: "GET /option/options/{option}"
+      # Account
+      get_account: "GET /account/balances"
+      get_balances: "GET /account/balances"
+      get_balance: "GET /account/balances/{currency}"
+      get_position: "GET /option/positions"
+      get_position_risk: "GET /option/positions/risk"
+      get_fee: "GET /account/fees"
+      get_fee_info: "GET /account/fee_info"
+      # Trade
+      make_order: "POST /option/orders"
+      make_orders: "POST /option/orders"
+      make_order_test: "POST /option/orders/test"
+      cancel_order: "DELETE /option/orders/{order_id}"
+      cancel_orders: "DELETE /option/orders"
+      cancel_all_orders: "DELETE /option/orders"
+      query_order: "GET /option/orders/{order_id}"
+      get_open_orders: "GET /option/orders?currency_pair={currency_pair}&status=open"
+      get_all_orders: "GET /option/orders?currency_pair={currency_pair}"
+      get_deals: "GET /option/trades"
+      # Exercise & Settlement
+      get_exercise_history: "GET /option/exercise_history"
+      get_settlement_history: "GET /option/settlement_history"
+      # Position Management
+      set_leverage: "POST /option/leverage"
+      get_leverage: "GET /option/leverage?currency_pair={currency_pair}"
+      set_margin_mode: "POST /option/margin_mode"
+      get_margin_mode: "GET /option/margin_mode"
+      # WebSocket Streams
+    wss_paths:
+      # Market Streams
+      ticker: "<currency_pair>"
+      tickers: "all"
+      trade: "<currency_pair>"
+      trades: "all"
+      depth: "<currency_pair>"
+      depths: "all"
+      kline: "<currency_pair>"
+      klines: "all"
+      mark_price: "<currency_pair>"
+      mark_prices: "all"
+      # User Data Streams
+      listen_key: ""
+      orders: ""
+      deals: ""
+      balance: ""
+      position: ""
+      account: ""
+      portfolio: ""

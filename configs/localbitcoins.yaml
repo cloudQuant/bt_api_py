@@ -1,0 +1,84 @@
+# LocalBitcoins Configuration
+# Official API documentation: https://localbitcoins.com/api-docs/
+
+id: localbitcoins
+display_name: LocalBitcoins
+venue_type: cex
+website: https://localbitcoins.com
+api_doc: https://localbitcoins.com/api-docs/
+
+# Base URLs
+base_urls:
+  rest:
+    spot: https://localbitcoins.com
+  wss:
+    public: ""
+
+# Connection
+connection:
+  type: http
+  timeout: 30
+  max_retries: 3
+
+# Authentication (HMAC-SHA256 with Apiauth header)
+authentication:
+  type: hmac_sha256
+  header_name: Apiauth
+
+# Rate limits (not explicitly documented, using sensible defaults)
+rate_limits:
+  - name: rest_api
+    type: fixed_window
+    interval: 60
+    limit: 60
+    scope: global
+
+# Kline periods (not directly supported by LocalBitcoins P2P model)
+kline_periods:
+  1d: "1d"
+
+# Legal currencies (fiat focused)
+legal_currency:
+  - USD
+  - EUR
+  - GBP
+  - RUB
+  - BTC
+
+# Asset types
+asset_types:
+  spot:
+    exchange_name: LocalBitcoinsSpot
+    symbol_format: "{base}_{quote}"
+
+    # REST API paths (LocalBitcoins P2P API)
+    rest_paths:
+      base_url: "/api"
+      get_server_time: "GET /api/ecjson.php"
+      get_ticker: "GET /api/ecjson.php"
+      get_ads: "GET /api/ad/{id}"
+      get_ads_search: "GET /api/ads/{currency}/{country_code}"
+      get_online_ads: "GET /api/ads/{currency}/online/{country_code}"
+
+    # WebSocket paths (not supported)
+    wss_paths:
+      ticker: ""
+
+    # Kline periods (P2P exchange, limited kline support)
+    kline_periods:
+      1d: "1d"
+
+    # Legal currencies for spot
+    legal_currency:
+      - USD
+      - EUR
+      - GBP
+      - RUB
+      - BTC
+
+    # Trading symbols (P2P fiat pairs)
+    symbols:
+      - "btc_usd"
+      - "btc_eur"
+      - "btc_gbp"
+      - "btc_rub"

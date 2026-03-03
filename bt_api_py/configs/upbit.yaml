@@ -1,0 +1,120 @@
+# Upbit 交易所统一配置
+# 数据来源: bt_api_py/containers/exchanges/upbit_exchange_data.py
+id: upbit
+display_name: Upbit
+venue_type: cex
+website: https://upbit.com
+api_doc: https://global-docs.upbit.com/reference/rest-api-guide
+
+base_urls:
+  rest:
+    spot: https://api.upbit.com
+  wss:
+    spot: wss://api.upbit.com/websocket/v1
+
+connection:
+  type: http
+  timeout: 10
+  max_retries: 3
+
+authentication:
+  type: hmac_sha512
+  header_name: Authorization
+  timestamp_key: None
+  signature_key: None
+
+# kline 周期映射
+kline_periods:
+  1m: "1"
+  3m: "3"
+  5m: "5"
+  10m: "10"
+  15m: "15"
+  30m: "30"
+  1h: "60"
+  2h: "120"
+  4h: "240"
+  6h: "360"
+  8h: "480"
+  12h: "720"
+  1d: "D"
+  3d: "3D"
+  1w: "W"
+  1M: "M"
+
+# 法币列表
+legal_currency:
+  - KRW
+  - USDT
+  - BTC
+  - ETH
+
+rate_limits:
+  - name: public_request
+    type: sliding_window
+    interval: 60
+    limit: 900
+    scope: global
+    weight: 1
+  - name: private_request
+    type: sliding_window
+    interval: 60
+    limit: 30
+    scope: global
+    weight: 1
+  - name: order_request
+    type: sliding_window
+    interval: 1
+    limit: 8
+    scope: global
+    endpoint: "/v1/orders"
+    weight: 1
+  - name: quotation
+    type: sliding_window
+    interval: 60
+    limit: 1800
+    scope: global
+    weight: 1
+
+asset_types:
+  spot:
+    symbol_format: "{base}-{quote}"
+    exchange_name: "UPBIT___SPOT"
+    rest_paths:
+      market_all: "/v1/market/all"
+      ticker: "/v1/ticker"
+      orderbook: "/v1/orderbook"
+      trades_ticks: "/v1/trades/ticks"
+      candles_days: "/v1/candles/days"
+      candles_minutes: "/v1/candles/minutes/{unit}"
+      candles_weeks: "/v1/candles/weeks"
+      candles_months: "/v1/candles/months"
+      accounts: "/v1/accounts"
+      order: "/v1/order"
+      orders: "/v1/orders"
+      order_post: "/v1/orders"
+      order_delete: "/v1/order"
+      api_keys: "/v1/api_keys"
+      status_wallet: "/v1/status/wallet"
+    wss_paths:
+      ticker: {"params": ["<market>"], "method": "SUBSCRIBE", "id": 1}
+      trade: {"params": ["<market>"], "method": "SUBSCRIBE", "id": 1}
+      orderbook: {"params": ["<market>"], "method": "SUBSCRIBE", "id": 1}
+    kline_periods:
+      1m: "1"
+      3m: "3"
+      5m: "5"
+      10m: "10"
+      15m: "15"
+      30m: "30"
+      1h: "60"
+      2h: "120"
+      4h: "240"
+      6h: "360"
+      8h: "480"
+      12h: "720"
+      1d: "D"
+      3d: "3D"
+      1w: "W"
+      1M: "M"
+    legal_currency: [KRW, USDT, BTC, ETH]

@@ -1,0 +1,443 @@
+# HTX (Huobi) 交易所统一配置
+# 数据来源: bt_api_py/containers/exchanges/htx_exchange_data.py
+id: htx
+display_name: HTX (Huobi)
+venue_type: cex
+website: https://www.htx.com
+api_doc: https://huobiapi.github.io/docs/
+
+base_urls:
+  rest:
+    spot: https://api.huobi.pro
+    margin: https://api.huobi.pro
+    usdt_swap: https://api.hbdm.com
+    coin_swap: https://api.hbdm.com
+    option: https://api.hbdm.com
+  wss:
+    spot: wss://api.huobi.pro/ws
+    margin: wss://api.huobi.pro/ws
+    usdt_swap: wss://api.hbdm.com/linear-swap-ws
+    coin_swap: wss://api.hbdm.com/swap-ws
+    option: wss://api.hbdm.com/option-ws
+  acct_wss:
+    spot: wss://api.huobi.pro/ws/v2
+    margin: wss://api.huobi.pro/ws/v2
+    usdt_swap: wss://api.hbdm.com/linear-swap-notification
+    coin_swap: wss://api.hbdm.com/swap-notification
+    option: wss://api.hbdm.com/option-notification
+
+connection:
+  type: http
+  timeout: 10
+  max_retries: 3
+
+authentication:
+  type: hmac_sha256
+  header_name: AccessKeyId
+  timestamp_key: Timestamp
+  signature_key: Signature
+  signature_method: SignatureMethod
+  signature_version: SignatureVersion
+
+# 共享默认 kline 周期映射
+kline_periods:
+  1m: "1min"
+  5m: "5min"
+  15m: "15min"
+  30m: "30min"
+  1h: "60min"
+  4h: "4hour"
+  1d: "1day"
+  1w: "1week"
+  1M: "1mon"
+
+# 共享默认法币列表
+legal_currency: [USDT, USD, BTC, ETH, USDC, HTX]
+
+rate_limits:
+  - name: request_weight
+    type: sliding_window
+    interval: 60
+    limit: 3000
+    scope: global
+    weight: 1
+    weight_map:
+      "/market/depth": 1
+      "/market/detail/merged": 1
+      "/market/detail": 1
+      "/market/trade": 1
+      "/market/bbo-ticker": 1
+      "/market/ticker": 1
+      "/market/history/trade": 1
+      "/market/depth-size": 5
+      "/market/overview": 5
+      "/market/detail/merged-v2": 1
+      "/market/detail-v2": 1
+      "/market/detail/merged-v3": 1
+      "/market/detail-v3": 1
+      "/market/statistics/kline": 1
+      "/market/detail/merged-v4": 1
+      "/market/detail-v4": 1
+      "/market/leverage-info": 1
+      "/market/contract-info": 1
+      "/market/open-interest": 1
+      "/market/funding-rate": 1
+      "/market/funding-fee": 1
+      "/market/long-short-ratio": 1
+      "/market/liquidation-order": 1
+      "/market/trend-info": 1
+      "/market/optimal-price": 1
+      "/market/candlestick-depth": 1
+      "/market/sorted-investors": 1
+      "/account/accounts": 1
+      "/account/accounts/{type}/ledger": 1
+      "/account/accounts/{type}/address": 1
+      "/account/accounts/{type}/address/create": 1
+      "/account/accounts/{type}/withdraw": 1
+      "/account/accounts/{type}/withdraw-fee": 1
+      "/account/accounts/{type}/deposit": 1
+      "/account/accounts/{type}/deposit-address": 1
+      "/account/accounts/{type}/transfer": 1
+      "/account/accounts/{type}/transfer-records": 1
+      "/account/accounts/{type}/orders": 1
+      "/account/accounts/{type}/orders/{symbol}/{orderId}": 1
+      "/account/accounts/{type}/orders/{symbol}": 1
+      "/account/accounts/{type}/open-orders/{symbol}": 1
+      "/account/accounts/{type}/matches": 1
+      "/account/accounts/{type}/matches/{symbol}": 1
+      "/account/accounts/{type}/margin-info": 1
+      "/account/accounts/{type}/leverage-info": 1
+      "/account/accounts/{type}/funding-info": 1
+      "/account/accounts/{type}/risk-info": 1
+      "/account/accounts/{type}/liquidation-info": 1
+      "/account/accounts/{type}/insurance-fund": 1
+      "/account/accounts/{type}/insurance-fund-records": 1
+      "/account/accounts/{type}/adl-indicator": 1
+      "/account/accounts/{type}/adl-quantile": 1
+      "/account/accounts/{type}/adl-level": 1
+      "/account/accounts/{type}/max-withdraw": 1
+      "/account/accounts/{type}/max-borrow": 1
+      "/account/accounts/{type}/max-transfer": 1
+      "/account/accounts/{type}/max-transfer-in": 1
+      "/account/accounts/{type}/max-transfer-out": 1
+  - name: order_rate
+    type: sliding_window
+    interval: 10
+    limit: 100
+    scope: endpoint
+    endpoint: "/account/accounts/*/orders/*"
+    weight: 1
+  - name: order_rate_minute
+    type: sliding_window
+    interval: 60
+    limit: 600
+    scope: endpoint
+    endpoint: "/account/accounts/*/orders/*"
+    weight: 1
+
+# ═══════════════════════════════════════════════════════════════
+# Asset Types — 每个子类型对应 HTXExchangeData 的一个子类
+# ═══════════════════════════════════════════════════════════════
+asset_types:
+
+  # ─── HTXExchangeDataSpot ─────────────────────────────────────
+  spot:
+    exchange_name: htx_spot
+    symbol_format: "{base}{quote}"
+    legal_currency: [USDT, USD, BTC, ETH, USDC, HTX]
+    rest_paths:
+      # General
+      ping: "GET /v1/common/timestamp"
+      get_server_time: "GET /v1/common/timestamp"
+      get_symbols: "GET /v1/common/symbols"
+      get_contract: "GET /v1/common/symbols"
+      # Market Data
+      get_tick: "GET /market/detail/merged"
+      get_info: "GET /market/tickers"
+      get_new_price: "GET /market/trade"
+      get_historical_trades: "GET /market/history/trade"
+      get_depth: "GET /market/depth"
+      get_incre_depth: "GET /market/depth"
+      get_kline: "GET /market/history/kline"
+      get_ui_klines: "GET /market/detail/merged"
+      get_agg_trades: "GET /market/trade"
+      get_price_ticker: "GET /market/detail/merged"
+      get_avg_price: "GET /market/statistics/kline"
+      get_ticker: "GET /market/detail/merged"
+      # Account
+      get_account: "GET /v1/account/accounts"
+      get_accounts: "GET /v1/account/accounts"
+      get_balance: "GET /v1/account/accounts/{account-id}/balance"
+      get_fee: "GET /v1/reference/transact-fee-rate"
+      # Trade
+      make_order: "POST /v1/order/orders/place"
+      cancel_order: "POST /v1/order/orders/{order-id}/submitcancel"
+      cancel_all: "POST /v1/order/orders/batchcancel"
+      query_order: "GET /v1/order/orders/{order-id}"
+      get_order: "GET /v1/order/orders/{order-id}"
+      get_open_orders: "GET /v1/order/openOrders"
+      get_orders: "GET /v1/order/orders"
+      get_all_orders: "GET /v1/order/orders"
+      get_deals: "GET /v1/order/matchresults"
+      # Listen Key
+      get_listen_key: "POST /ws/v1/token"
+      refresh_listen_key: "POST /ws/v1/refresh"
+      close_listen_key: "DELETE /ws/v1/token"
+    wss_paths:
+      # Market Streams (HTX format: market.{symbol}.{channel})
+      agg_trade: "{symbol}.trade.detail"
+      trade: "{symbol}.trade.detail"
+      kline: "{symbol}.kline.{period}"
+      mini_ticker: "{symbol}.detail"
+      ticker: "{symbol}.ticker"
+      book_ticker: "{symbol}.bbo"
+      depth: "{symbol}.depth.{type}"
+      increDepthFlow: "{symbol}.depth.{type}"
+      # User Data Streams
+      orders: "orders"
+      deals: "matches"
+      balance: "accounts"
+      position: ""
+      account: "accounts"
+
+  # ─── HTXExchangeDataMargin ───────────────────────────────────
+  margin:
+    exchange_name: htx_margin
+    symbol_format: "{base}{quote}"
+    legal_currency: [USDT, USD, BTC, ETH, USDC, HTX]
+    rest_paths:
+      # General (margin shares spot market data endpoints)
+      ping: "GET /v1/common/timestamp"
+      get_server_time: "GET /v1/common/timestamp"
+      get_symbols: "GET /v1/common/symbols"
+      # Market Data (same as spot)
+      get_tick: "GET /market/detail/merged"
+      get_ticker: "GET /market/detail/merged"
+      get_info: "GET /market/tickers"
+      get_depth: "GET /market/depth"
+      get_kline: "GET /market/history/kline"
+      get_agg_trades: "GET /market/trade"
+      # Margin-specific
+      get_margin_loan_info: "GET /v1/margin/loan-info"
+      # Account
+      get_account: "GET /v1/account/accounts"
+      get_accounts: "GET /v1/account/accounts"
+      get_balance: "GET /v1/account/accounts/{account-id}/balance"
+      # Borrow & Repay
+      borrow: "POST /v1/margin/orders"
+      repay: "POST /v1/margin/orders/{order-id}/repay"
+      # Transfer
+      transfer: "POST /v1/dw/transfer-in/margin"
+      # Trade (margin uses same order endpoints as spot with source=margin-api)
+      make_order: "POST /v1/order/orders/place"
+      cancel_order: "POST /v1/order/orders/{order-id}/submitcancel"
+      cancel_all: "POST /v1/order/orders/batchcancel"
+      query_order: "GET /v1/order/orders/{order-id}"
+      get_order: "GET /v1/order/orders/{order-id}"
+      get_open_orders: "GET /v1/order/openOrders"
+      get_orders: "GET /v1/order/orders"
+      get_all_orders: "GET /v1/order/orders"
+      get_deals: "GET /v1/order/matchresults"
+    wss_paths:
+      agg_trade: "{symbol}.trade.detail"
+      trade: "{symbol}.trade.detail"
+      kline: "{symbol}.kline.{period}"
+      mini_ticker: "{symbol}.detail"
+      ticker: "{symbol}.ticker"
+      book_ticker: "{symbol}.bbo"
+      depth: "{symbol}.depth.{type}"
+      increDepthFlow: "{symbol}.depth.{type}"
+      orders: "orders"
+      deals: "matches"
+      balance: "accounts"
+      position: ""
+      account: "accounts"
+
+  # ─── HTXExchangeDataUsdtSwap (USDT-M Linear Swap) ───────────
+  usdt_swap:
+    exchange_name: htx_usdt_swap
+    symbol_format: "{base}-{quote}"
+    legal_currency: [USDT, USD, BTC, ETH, USDC]
+    rest_paths:
+      # General
+      ping: "GET /heartbeat/"
+      get_server_time: "GET /api/v1/timestamp"
+      get_contract: "GET /linear-swap-api/v1/swap_contract_info"
+      get_symbols: "GET /linear-swap-api/v1/swap_contract_info"
+      # Market Data
+      get_tick: "GET /linear-swap-ex/market/detail/merged"
+      get_ticker: "GET /linear-swap-ex/market/detail/merged"
+      get_info: "GET /linear-swap-ex/market/detail/merged"
+      get_new_price: "GET /linear-swap-ex/market/trade"
+      get_historical_trades: "GET /linear-swap-ex/market/history/trade"
+      get_depth: "GET /linear-swap-ex/market/depth"
+      get_incre_depth: "GET /linear-swap-ex/market/depth"
+      get_kline: "GET /linear-swap-ex/market/history/kline"
+      get_agg_trades: "GET /linear-swap-ex/market/trade"
+      get_funding_rate: "GET /linear-swap-api/v1/swap_funding_rate"
+      get_batch_funding_rate: "GET /linear-swap-api/v1/swap_batch_funding_rate"
+      get_mark_price: "GET /linear-swap-api/v1/swap_mark_price_kline"
+      get_open_interest: "GET /linear-swap-api/v1/swap_open_interest"
+      # Futures-specific
+      get_elite_account_ratio: "GET /linear-swap-api/v1/swap_elite_account_ratio"
+      get_elite_position_ratio: "GET /linear-swap-api/v1/swap_elite_position_ratio"
+      get_insurance_fund: "GET /linear-swap-api/v1/swap_insurance_fund"
+      get_adjustfactor: "GET /linear-swap-api/v1/swap_adjustfactor"
+      get_api_state: "GET /linear-swap-api/v1/swap_api_state"
+      # Account
+      get_account: "POST /linear-swap-api/v1/swap_cross_account_info"
+      get_accounts: "POST /linear-swap-api/v1/swap_cross_account_info"
+      get_balance: "POST /linear-swap-api/v1/swap_cross_account_info"
+      get_position: "POST /linear-swap-api/v1/swap_cross_position_info"
+      get_account_position: "POST /linear-swap-api/v1/swap_cross_account_position_info"
+      get_fee: "POST /linear-swap-api/v1/swap_fee"
+      # Trade
+      make_order: "POST /linear-swap-api/v1/swap_cross_order"
+      cancel_order: "POST /linear-swap-api/v1/swap_cross_cancel"
+      cancel_all: "POST /linear-swap-api/v1/swap_cross_cancelall"
+      query_order: "POST /linear-swap-api/v1/swap_cross_order_info"
+      get_order: "POST /linear-swap-api/v1/swap_cross_order_info"
+      get_open_orders: "POST /linear-swap-api/v1/swap_cross_openorders"
+      get_all_orders: "POST /linear-swap-api/v1/swap_cross_hisorders"
+      get_deals: "POST /linear-swap-api/v1/swap_cross_matchresults"
+      # Leverage
+      get_available_level_rate: "POST /linear-swap-api/v1/swap_cross_available_level_rate"
+      switch_lever_rate: "POST /linear-swap-api/v1/swap_cross_switch_lever_rate"
+    wss_paths:
+      # Market Streams (HTX format: market.{symbol}.{channel})
+      agg_trade: "{symbol}.trade.detail"
+      trade: "{symbol}.trade.detail"
+      kline: "{symbol}.kline.{period}"
+      mini_ticker: "{symbol}.detail"
+      ticker: "{symbol}.ticker"
+      book_ticker: "{symbol}.bbo"
+      depth: "{symbol}.depth.{type}"
+      increDepthFlow: "{symbol}.depth.{type}"
+      mark_price: "{symbol}.mark_price.{period}"
+      funding_rate: "{symbol}.funding_rate"
+      force_order: "{symbol}.liquidation_orders"
+      # User Data Streams
+      orders: "orders"
+      deals: "matches"
+      balance: "accounts"
+      position: "positions"
+      account: "accounts"
+
+  # ─── HTXExchangeDataCoinSwap (Coin-M Inverse Swap) ─────────
+  coin_swap:
+    exchange_name: htx_coin_swap
+    symbol_format: "{base}-{quote}"
+    legal_currency: [USD, BTC, ETH, HTX]
+    rest_paths:
+      # General
+      ping: "GET /heartbeat/"
+      get_server_time: "GET /api/v1/timestamp"
+      get_contract: "GET /swap-api/v1/swap_contract_info"
+      get_symbols: "GET /swap-api/v1/swap_contract_info"
+      # Market Data
+      get_tick: "GET /swap-ex/market/detail/merged"
+      get_ticker: "GET /swap-ex/market/detail/merged"
+      get_info: "GET /swap-ex/market/detail/merged"
+      get_depth: "GET /swap-ex/market/depth"
+      get_kline: "GET /swap-ex/market/history/kline"
+      get_agg_trades: "GET /swap-ex/market/trade"
+      get_new_price: "GET /swap-ex/market/trade"
+      get_historical_trades: "GET /swap-ex/market/history/trade"
+      get_funding_rate: "GET /swap-api/v1/swap_funding_rate"
+      get_mark_price: "GET /swap-api/v1/swap_mark_price_kline"
+      get_open_interest: "GET /swap-api/v1/swap_open_interest"
+      # Futures-specific
+      get_elite_account_ratio: "GET /swap-api/v1/swap_elite_account_ratio"
+      get_elite_position_ratio: "GET /swap-api/v1/swap_elite_position_ratio"
+      get_insurance_fund: "GET /swap-api/v1/swap_insurance_fund"
+      get_adjustfactor: "GET /swap-api/v1/swap_adjustfactor"
+      get_api_state: "GET /swap-api/v1/swap_api_state"
+      # Account
+      get_account: "POST /swap-api/v1/swap_account_info"
+      get_accounts: "POST /swap-api/v1/swap_account_info"
+      get_balance: "POST /swap-api/v1/swap_account_info"
+      get_position: "POST /swap-api/v1/swap_position_info"
+      get_account_position: "POST /swap-api/v1/swap_account_position_info"
+      get_fee: "POST /swap-api/v1/swap_fee"
+      # Trade
+      make_order: "POST /swap-api/v1/swap_order"
+      cancel_order: "POST /swap-api/v1/swap_cancel"
+      cancel_all: "POST /swap-api/v1/swap_cancelall"
+      query_order: "POST /swap-api/v1/swap_order_info"
+      get_order: "POST /swap-api/v1/swap_order_info"
+      get_open_orders: "POST /swap-api/v1/swap_openorders"
+      get_all_orders: "POST /swap-api/v1/swap_hisorders"
+      get_deals: "POST /swap-api/v1/swap_matchresults"
+      # Leverage
+      get_available_level_rate: "POST /swap-api/v1/swap_available_level_rate"
+      switch_lever_rate: "POST /swap-api/v1/swap_switch_lever_rate"
+    wss_paths:
+      agg_trade: "{symbol}.trade.detail"
+      trade: "{symbol}.trade.detail"
+      kline: "{symbol}.kline.{period}"
+      mini_ticker: "{symbol}.detail"
+      ticker: "{symbol}.ticker"
+      book_ticker: "{symbol}.bbo"
+      depth: "{symbol}.depth.{type}"
+      increDepthFlow: "{symbol}.depth.{type}"
+      mark_price: "{symbol}.mark_price.{period}"
+      funding_rate: "{symbol}.funding_rate"
+      force_order: "{symbol}.liquidation_orders"
+      orders: "orders"
+      deals: "matches"
+      balance: "accounts"
+      position: "positions"
+      account: "accounts"
+
+  # ─── HTXExchangeDataOption ──────────────────────────────────
+  option:
+    exchange_name: htx_option
+    symbol_format: "{base}-{quote}"
+    legal_currency: [USDT, USD, BTC, ETH, USDC]
+    rest_paths:
+      # General
+      ping: "GET /heartbeat/"
+      get_server_time: "GET /api/v1/timestamp"
+      get_contract: "GET /option-api/v1/option_contract_info"
+      get_symbols: "GET /option-api/v1/option_contract_info"
+      # Market Data
+      get_tick: "GET /option-ex/market/detail/merged"
+      get_ticker: "GET /option-ex/market/detail/merged"
+      get_info: "GET /option-ex/market/detail/merged"
+      get_depth: "GET /option-ex/market/depth"
+      get_kline: "GET /option-ex/market/history/kline"
+      get_new_price: "GET /option-ex/market/trade"
+      get_historical_trades: "GET /option-ex/market/history/trade"
+      get_mark_price: "GET /option-api/v1/option_mark_price"
+      get_index_price: "GET /option-api/v1/option_index"
+      get_open_interest: "GET /option-api/v1/option_open_interest"
+      # Account
+      get_account: "POST /option-api/v1/option_account_info"
+      get_accounts: "POST /option-api/v1/option_account_info"
+      get_balance: "POST /option-api/v1/option_account_info"
+      get_position: "POST /option-api/v1/option_position_info"
+      get_fee: "POST /option-api/v1/option_fee"
+      # Trade
+      make_order: "POST /option-api/v1/option_order"
+      cancel_order: "POST /option-api/v1/option_cancel"
+      cancel_all: "POST /option-api/v1/option_cancelall"
+      query_order: "POST /option-api/v1/option_order_info"
+      get_order: "POST /option-api/v1/option_order_info"
+      get_open_orders: "POST /option-api/v1/option_openorders"
+      get_all_orders: "POST /option-api/v1/option_hisorders"
+      get_deals: "POST /option-api/v1/option_matchresults"
+    wss_paths:
+      agg_trade: "{symbol}.trade.detail"
+      trade: "{symbol}.trade.detail"
+      kline: "{symbol}.kline.{period}"
+      tick: "{symbol}.detail"
+      ticker: "{symbol}.ticker"
+      depth: "{symbol}.depth.{type}"
+      mark_price: "{symbol}.mark_price.{period}"
+      index_price: "{symbol}.index.{period}"
+      book_ticker: "{symbol}.bbo"
+      orders: "orders"
+      deals: "matches"
+      balance: "accounts"
+      position: "positions"
+      account: "accounts"

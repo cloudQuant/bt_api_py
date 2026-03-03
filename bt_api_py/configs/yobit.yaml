@@ -1,0 +1,67 @@
+id: yobit
+display_name: YoBit
+venue_type: cex
+website: https://www.yobit.net
+api_doc: https://www.yobit.net/en/api/
+base_urls:
+  rest:
+    default: https://yobit.net
+    spot: https://yobit.net
+  wss:
+    default: wss://ws.yobit.net
+    spot: wss://ws.yobit.net
+authentication:
+  type: hmac_sha512
+  header_name: Key
+  signature_key: Sign
+kline_periods:
+  1m: '1'
+  3m: '3'
+  5m: '5'
+  15m: '15'
+  30m: '30'
+  1h: '60'
+  2h: '120'
+  4h: '240'
+  6h: '360'
+  12h: '720'
+  1d: 1d
+  1w: 1w
+legal_currency: &id001
+- USD
+- USDT
+- RUB
+- BTC
+- ETH
+- DOGE
+rate_limits:
+- name: public_api
+  type: sliding_window
+  interval: 60
+  limit: 120
+  scope: global
+asset_types:
+  spot:
+    exchange_name: yobit
+    rest_paths:
+      get_info: GET /api/3/info
+      get_ticker: GET /api/3/ticker/{pair}
+      get_depth: GET /api/3/depth/{pair}
+      get_trades: GET /api/3/trades/{pair}
+      get_info_account: POST /tapi
+      get_trade: POST /tapi
+      get_active_orders: POST /tapi
+      get_order_info: POST /tapi
+      get_user_trades: POST /tapi
+      get_cancel_order: POST /tapi
+      create_order: POST /tapi
+    wss_paths:
+      ticker: '{pair}@ticker'
+      depth: '{pair}@depth'
+      trades: '{pair}@trades'
+    symbol_format: '{base}/{quote}'
+    legal_currency: *id001
+connection:
+  type: http
+  timeout: 10
+  max_retries: 3

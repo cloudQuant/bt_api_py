@@ -1,0 +1,56 @@
+id: coinex
+display_name: CoinEx
+venue_type: cex
+website: https://www.coinex.com
+api_doc: https://viabtc10.gitbook.io/
+base_urls:
+  rest:
+    default: https://api.coinex.com
+    spot: https://api.coinex.com
+  wss:
+    default: wss://stream.coinex.com
+    spot: wss://stream.coinex.com
+authentication:
+  type: api_key
+  header_name: X-COINEX-KEY
+kline_periods:
+  1m: 1min
+  5m: 5min
+  15m: 15min
+  30m: 30min
+  1h: 1hour
+  4h: 4hour
+  1d: 1day
+  1w: 1week
+legal_currency: &id001
+- USDT
+- USD
+- BTC
+- ETH
+- USDC
+rate_limits:
+- name: public_api
+  type: sliding_window
+  interval: 60
+  limit: 1200
+  scope: global
+- name: private_api
+  type: sliding_window
+  interval: 60
+  limit: 600
+  scope: global
+asset_types:
+  spot:
+    exchange_name: coinexSpot
+    rest_paths:
+      get_server_time: GET /spot/time
+      get_ticker: GET /spot/ticker
+      get_depth: GET /spot/order_book
+      get_kline: GET /spot/kline
+      get_markets: GET /spot/markets
+    symbol_format: '{base}/{quote}'
+    legal_currency: *id001
+connection:
+  type: http
+  timeout: 10
+  max_retries: 3

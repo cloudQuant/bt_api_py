@@ -1,0 +1,287 @@
+# Bitfinex 交易所统一配置
+# 数据来源: bt_api_py/containers/exchanges/bitfinex_exchange_data.py
+id: bitfinex
+display_name: Bitfinex
+venue_type: cex
+website: https://www.bitfinex.com
+api_doc: https://docs.bitfinex.com/v2
+
+base_urls:
+  rest:
+    spot: https://api.bitfinex.com/v2
+    margin: https://api.bitfinex.com/v2
+    futures: https://api.bitfinex.com/v2
+    funding: https://api.bitfinex.com/v2
+  wss:
+    spot: wss://api.bitfinex.com/ws/v2
+    margin: wss://api.bitfinex.com/ws/v2
+    futures: wss://api.bitfinex.com/ws/v2
+    funding: wss://api.bitfinex.com/ws/v2
+  acct_wss:
+    spot: wss://api.bitfinex.com/ws/v2
+    margin: wss://api.bitfinex.com/ws/v2
+    futures: wss://api.bitfinex.com/ws/v2
+    funding: wss://api.bitfinex.com/ws/v2
+
+connection:
+  type: http
+  timeout: 10
+  max_retries: 3
+
+authentication:
+  type: hmac_sha512
+  header_name: X-BFX-APIKEY
+  signature_key: X-BFX-SIGNATURE
+  payload_key: X-BFX-PAYLOAD
+  signature_method: nonce + payload_json
+
+# 共享默认 kline 周期映射
+kline_periods:
+  1m: "1m"
+  5m: "5m"
+  15m: "15m"
+  30m: "30m"
+  1h: "1h"
+  3h: "3h"
+  6h: "6h"
+  12h: "12h"
+  1d: "1D"
+  7d: "7D"
+  1w: "1W"
+  1M: "1M"
+
+# 共享默认法币列表
+legal_currency: [USD, EUR, GBP, JPY, USDT, BTC, ETH]
+
+rate_limits:
+  - name: request_weight
+    type: sliding_window
+    interval: 60
+    limit: 600
+    scope: global
+    weight: 1
+    weight_map:
+      "/pub/ticker": 1
+      "/pub/orderbook": 1
+      "/pub/candles": 1
+      "/pub/trades": 1
+      "/auth/r/orders": 2
+      "/auth/r/positions": 1
+      "/auth/r/balances": 1
+  - name: order_rate
+    type: sliding_window
+    interval: 10
+    limit: 50
+    scope: endpoint
+    endpoint: "/auth/w/order/submit"
+    weight: 1
+
+# ═══════════════════════════════════════════════════════════════
+# Asset Types — 每个子类型对应 BitfinexExchangeData 的一个子类
+# ═══════════════════════════════════════════════════════════════
+asset_types:
+
+  # ─── BitfinexExchangeDataSpot ───────────────────────────────
+  spot:
+    exchange_name: bitfinex_spot
+    symbol_format: "{base}{quote}"
+    legal_currency: [USD, EUR, GBP, JPY, USDT, BTC, ETH]
+    rest_paths:
+      # General
+      ping: "GET /pub/status"
+      get_server_time: "GET /pub/time"
+      get_contract: "GET /pub/symbols"
+      # Market Data
+      get_tick: "GET /pubticker/{symbol}"
+      get_info: "GET /pub/tickers?symbols={symbol}"
+      get_new_price: "GET /trades/{symbol}?limit=1"
+      get_historical_trades: "GET /trades/{symbol}?limit={limit}"
+      get_depth: "GET /book/{symbol}?precision={precision}&len={len}"
+      get_incre_depth: "GET /book/{symbol}/p{precision}?len={len}"
+      get_kline: "GET /candles/trade:{symbol}:{period}?limit={limit}&start={start}&end={end}"
+      get_agg_trades: "GET /trades/{symbol}?limit={limit}"
+      get_price_ticker: "GET /pubticker/{symbol}"
+      get_avg_price: "GET /candles/trade:{symbol}:{period}?limit={limit}"
+      get_ticker: "GET /pub/tickers?symbols={symbol}"
+      get_funding_rate: "GET /pub/stats/{symbol}?section=deriv"
+      get_mark_price: "GET /pub/tickers?symbols={symbol}"
+      get_history_funding_rate: "GET /derivatives/historical/funding/{symbol}"
+      # Account
+      get_account: "GET /auth/r/positions"
+      get_balance: "GET /auth/r/balances"
+      get_fee: "GET /auth/r/fees"
+      get_positions: "GET /auth/r/positions"
+      # Trade
+      make_order: "POST /auth/w/order/submit"
+      make_order_test: "POST /auth/w/order/submit?validate=1"
+      modify_order: "POST /auth/w/order/submit"
+      cancel_order: "POST /auth/w/order/cancel"
+      cancel_all: "POST /auth/w/order/cancel/all"
+      query_order: "GET /auth/r/orders/{id}"
+      get_open_orders: "GET /auth/r/orders"
+      get_all_orders: "GET /auth/r/orders"
+      get_deals: "GET /auth/r/trades/hist"
+      # OCO
+      make_oco_order: "POST /auth/w/order/submit"
+      get_order_list: "GET /auth/r/orders"
+      # Listen Key
+      get_listen_key: "POST /auth/ws/notify"
+      refresh_listen_key: "POST /auth/ws/notify"
+    wss_paths:
+      # Market Streams
+      trade: "trades:{symbol}"
+      trade_raw: "trades_raw:{symbol}"
+      kline: "candle_raw_{symbol}:trade:{period}"
+      book: "book:{symbol}:{precision}:{len}"
+      book_raw: "book_raw:{symbol}:{precision}:{len}"
+      ticker: "ticker:{symbol}"
+      # User Data Streams
+      orders: "orders"
+      positions: "positions"
+      balance: "balance"
+      wallets: "wallets"
+      trades: "trades"
+
+  # ─── BitfinexExchangeDataMargin ─────────────────────────────
+  margin:
+    exchange_name: bitfinex_margin
+    symbol_format: "{base}{quote}"
+    legal_currency: [USD, EUR, GBP, JPY, USDT, BTC, ETH]
+    rest_paths:
+      # General
+      ping: "GET /pub/status"
+      get_server_time: "GET /pub/time"
+      get_contract: "GET /pub/symbols"
+      # Market Data
+      get_tick: "GET /pubticker/{symbol}"
+      get_info: "GET /pub/tickers?symbols={symbol}"
+      get_depth: "GET /book/{symbol}?precision={precision}&len={len}"
+      get_kline: "GET /candles/trade:{symbol}:{period}?limit={limit}"
+      get_ticker: "GET /pub/tickers?symbols={symbol}"
+      # Margin-specific
+      get_offers: "GET /offer/funding"
+      get_credits: "GET /credit/funding"
+      get_funding_loans: "GET /loan/funding"
+      # Account
+      get_account: "GET /auth/r/positions"
+      get_balance: "GET /auth/r/balances"
+      get_funding_info: "GET /auth/r/funding/offers"
+      # Trade
+      make_order: "POST /auth/w/order/submit"
+      make_order_test: "POST /auth/w/order/submit?validate=1"
+      modify_order: "POST /auth/w/order/submit"
+      cancel_order: "POST /auth/w/order/cancel"
+      cancel_all: "POST /auth/w/order/cancel/all"
+      query_order: "GET /auth/r/orders/{id}"
+      get_open_orders: "GET /auth/r/orders"
+      get_all_orders: "GET /auth/r/orders"
+      get_deals: "GET /auth/r/trades/hist"
+      # Funding
+      make_funding_offer: "POST /auth/w/offering/submit"
+      cancel_funding_offer: "POST /auth/w/offering/cancel"
+      claim_funding: "POST /auth/w/funding/claim"
+      # Listen Key
+      get_listen_key: "POST /auth/ws/notify"
+      refresh_listen_key: "POST /auth/ws/notify"
+    wss_paths:
+      # Market Streams
+      trade: "trades:{symbol}"
+      kline: "candle_raw_{symbol}:trade:{period}"
+      book: "book:{symbol}:{precision}:{len}"
+      ticker: "ticker:{symbol}"
+      # User Data Streams
+      orders: "orders"
+      positions: "positions"
+      balance: "balance"
+      wallets: "wallets"
+      trades: "trades"
+      funding: "funding"
+
+  # ─── BitfinexExchangeDataFutures ────────────────────────────
+  futures:
+    exchange_name: bitfinex_futures
+    symbol_format: "{symbol}"
+    legal_currency: [USD, EUR, GBP, JPY, USDT, BTC, ETH]
+    rest_paths:
+      # General
+      ping: "GET /pub/status"
+      get_server_time: "GET /pub/time"
+      get_contract: "GET /derivatives/conf/pub/status"
+      # Market Data
+      get_tick: "GET /derivatives/ticker/{symbol}"
+      get_info: "GET /derivatives/tickers?symbols={symbol}"
+      get_depth: "GET /derivatives/book/{symbol}?precision={precision}&len={len}"
+      get_kline: "GET /derivatives/candles/{symbol}/{period}?limit={limit}"
+      get_ticker: "GET /derivatives/tickers?symbols={symbol}"
+      get_funding_rate: "GET /derivatives/funding/prev_funding_rate/{symbol}"
+      get_history_funding_rate: "GET /derivatives/historical/funding/{symbol}"
+      # Account
+      get_account: "GET /derivatives/r/positions"
+      get_balance: "GET /derivatives/r/balances"
+      get_positions: "GET /derivatives/r/positions"
+      # Trade
+      make_order: "POST /derivatives/w/order/submit"
+      make_order_test: "POST /derivatives/w/order/submit?validate=1"
+      modify_order: "POST /derivatives/w/order/submit"
+      cancel_order: "POST /derivatives/w/order/cancel"
+      cancel_all: "POST /derivatives/w/order/cancel/all"
+      query_order: "GET /derivatives/r/orders/{id}"
+      get_open_orders: "GET /derivatives/r/orders"
+      get_all_orders: "GET /derivatives/r/orders"
+      get_deals: "GET /derivatives/r/trades/hist"
+      # Listen Key
+      get_listen_key: "POST /derivatives/ws/notify"
+      refresh_listen_key: "POST /derivatives/ws/notify"
+    wss_paths:
+      # Market Streams
+      trade: "trades:{symbol}"
+      kline: "candle_raw_{symbol}:trade:{period}"
+      book: "book:{symbol}:{precision}:{len}"
+      ticker: "ticker:{symbol}"
+      funding: "funding:{symbol}"
+      # User Data Streams
+      orders: "orders"
+      positions: "positions"
+      balance: "balance"
+      wallets: "wallets"
+      trades: "trades"
+
+  # ─── BitfinexExchangeDataFunding ───────────────────────────
+  funding:
+    exchange_name: bitfinex_funding
+    symbol_format: "{symbol}"
+    legal_currency: [USD, EUR, GBP, JPY, USDT, BTC, ETH]
+    rest_paths:
+      # General
+      ping: "GET /pub/status"
+      get_server_time: "GET /pub/time"
+      # Market Data
+      get_funding_loans: "GET /loan/funding"
+      get_offers: "GET /offer/funding"
+      get_credits: "GET /credit/funding"
+      get_rate: "GET /lend_summary/{symbol}"
+      # Account
+      get_account: "GET /auth/r/positions"
+      get_balance: "GET /auth/r/balances"
+      get_offers: "GET /auth/r/funding/offers"
+      get_credits: "GET /auth/r/funding/credits"
+      get_loans: "GET /auth/r/funding/loans"
+      # Funding
+      make_offer: "POST /auth/w/offering/submit"
+      cancel_offer: "POST /auth/w/offering/cancel"
+      claim: "POST /auth/w/funding/claim"
+      toggle_auto_renew: "POST /auth/w/offering/{id}/toggle_auto_renew"
+      # Listen Key
+      get_listen_key: "POST /auth/ws/notify"
+      refresh_listen_key: "POST /auth/ws/notify"
+    wss_paths:
+      # Market Streams
+      funding_loans: "funding_loans:{symbol}"
+      funding_offers: "funding_offers:{symbol}"
+      # User Data Streams
+      orders: "orders"
+      positions: "positions"
+      balance: "balance"
+      wallets: "wallets"
+      trades: "trades"
+      funding: "funding"

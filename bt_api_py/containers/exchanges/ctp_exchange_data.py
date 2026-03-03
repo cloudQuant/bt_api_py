@@ -22,7 +22,6 @@ def _get_ctp_config():
     global _ctp_config, _ctp_config_loaded
     if _ctp_config_loaded:
         return _ctp_config
-    _ctp_config_loaded = True
     try:
         from bt_api_py.config_loader import load_exchange_config
 
@@ -33,8 +32,9 @@ def _get_ctp_config():
         )
         if os.path.exists(config_path):
             _ctp_config = load_exchange_config(config_path)
+        _ctp_config_loaded = True
     except Exception as e:
-        logger.warning("Failed to load ctp.yaml config: %s", e)
+        logger.warn(f"Failed to load ctp.yaml config: {e}")
     return _ctp_config
 
 

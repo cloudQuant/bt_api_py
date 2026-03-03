@@ -1,0 +1,329 @@
+# Bitget 交易所统一配置
+# 数据来源: bt_api_py/containers/exchanges/bitget_exchange_data.py
+id: bitget
+display_name: Bitget
+venue_type: cex
+website: https://www.bitget.com
+api_doc: https://www.bitget.com/api-doc/spot
+
+base_urls:
+  rest:
+    swap: https://api.bitget.com
+    spot: https://api.bitget.com
+    margin: https://api.bitget.com
+  wss:
+    swap: wss://ws.bitget.com/swap/v1/stream
+    spot: wss://ws.bitget.com/spot/v1/stream
+    margin: wss://ws.bitget.com/margin/v1/stream
+
+connection:
+  type: http
+  timeout: 10
+  max_retries: 3
+
+authentication:
+  type: hmac_sha256
+  header_name: ACCESS-KEY
+  timestamp_key: ACCESS-TIMESTAMP
+  signature_key: ACCESS-SIGN
+  passphrase_key: ACCESS-PASSPHRASE
+
+# 共享默认 kline 周期映射
+kline_periods:
+  1m: "1min"
+  3m: "3min"
+  5m: "5min"
+  15m: "15min"
+  30m: "30min"
+  1h: "1h"
+  2h: "2h"
+  4h: "4h"
+  6h: "6h"
+  12h: "12h"
+  1d: "1day"
+  1w: "1week"
+  1M: "1M"
+
+# 共享默认法币列表
+legal_currency: [USDT, USD, BTC, ETH, USDC]
+
+rate_limits:
+  - name: request_weight
+    type: sliding_window
+    interval: 60
+    limit: 2400
+    scope: global
+    weight: 1
+    weight_map:
+      "/api/spot/v1/depth": 5
+      "/api/swap/v1/depth": 5
+      "/api/spot/v1/klines": 5
+      "/api/swap/v1/klines": 5
+      "/api/spot/v1/exchangeInfo": 40
+      "/api/swap/v1/exchangeInfo": 40
+      "/api/spot/v1/account": 5
+      "/api/spot/v1/balance": 5
+      "/api/swap/v1/account": 5
+      "/api/swapv1/positionRisk": 5
+  - name: order_rate
+    type: sliding_window
+    interval: 10
+    limit: 300
+    scope: endpoint
+    endpoint: "/api/spot/v1/order*"
+    weight: 1
+  - name: order_rate_minute
+    type: sliding_window
+    interval: 60
+    limit: 1200
+    scope: endpoint
+    endpoint: "/api/spot/v1/order*"
+    weight: 1
+
+# ═══════════════════════════════════════════════════════════════
+# Asset Types — 每个子类型对应 BitgetExchangeData 的一个子类
+# ═══════════════════════════════════════════════════════════════
+asset_types:
+
+  # ─── BitgetExchangeDataSwap (USDT-M Futures) ─────────────────
+  swap:
+    exchange_name: bitget_swap
+    symbol_format: "{base}{quote}"
+    legal_currency: [USDT, USD, BTC, ETH, USDC]
+    rest_paths:
+      # General
+      ping: "GET /api/swap/v1/ping"
+      get_server_time: "GET /api/swap/v1/time"
+      get_contract: "GET /api/swap/v1/exchangeInfo"
+      # Market Data
+      get_tick: "GET /api/swap/v1/ticker/bookTicker"
+      get_info: "GET /api/swap/v1/ticker/24hr"
+      get_new_price: "GET /api/swap/v1/trades"
+      get_historical_trades: "GET /api/swap/v1/historicalTrades"
+      get_depth: "GET /api/swap/v1/depth"
+      get_incre_depth: "GET /api/swap/v1/depth"
+      get_kline: "GET /api/swap/v1/klines"
+      get_agg_trades: "GET /api/swap/v1/aggTrades"
+      get_funding_rate: "GET /api/swap/v1/premiumIndex"
+      get_clear_price: "GET /api/swap/v1/premiumIndex"
+      get_mark_price: "GET /api/swap/v1/premiumIndex"
+      get_history_funding_rate: "GET /api/swap/v1/fundingRate"
+      get_market_rate: "GET /api/swap/v1/premiumIndex"
+      get_funding_info: "GET /api/swap/v1/fundingInfo"
+      get_price_ticker: "GET /api/swap/v2/ticker/price"
+      get_avg_price: "GET /api/swap/v1/avgPrice"
+      get_ticker: "GET /api/swap/v1/ticker"
+      get_open_interest: "GET /api/swap/v1/openInterest"
+      # Account
+      get_account: "GET /api/swap/v1/account"
+      get_balance: "GET /api/swap/v1/balance"
+      get_position: "GET /api/swap/v1/positionRisk"
+      get_fee: "GET /api/swap/v1/commissionRate"
+      get_income: "GET /api/swap/v1/income"
+      # Trade
+      make_order: "POST /api/swap/v1/order"
+      make_order_test: "POST /api/swap/v1/order/test"
+      modify_order: "PUT /api/swap/v1/order"
+      cancel_order: "DELETE /api/swap/v1/order"
+      query_order: "GET /api/swap/v1/order"
+      get_open_orders: "GET /api/swap/v1/openOrders"
+      get_all_orders: "GET /api/swap/v1/allOrders"
+      get_deals: "GET /api/swap/v1/userTrades"
+      change_leverage: "POST /api/swap/v1/leverage"
+      change_margin_type: "POST /api/swap/v1/marginType"
+      # Listen Key
+      get_listen_key: "POST /api/swap/v1/listenKey"
+      refresh_listen_key: "PUT /api/swap/v1/listenKey"
+      close_listen_key: "DELETE /api/swap/v1/listenKey"
+      # Legacy aliases
+      update_leverage: "POST /api/swap/v1/leverage"
+      set_lever: "POST /api/swap/v1/leverage"
+    wss_paths:
+      # Market Streams
+      agg_trade: "<symbol>@aggTrade"
+      trade: "<symbol>@trade"
+      kline: "<symbol>@kline_<period>"
+      mini_ticker: "<symbol>@miniTicker"
+      ticker: "<symbol>@ticker"
+      book_ticker: "<symbol>@bookTicker"
+      depth: "<symbol>@depth20@100ms"
+      mark_price: "<symbol>@markPrice@1s"
+      funding_rate: "<symbol>@fundingRate@1s"
+      force_order: "<symbol>@forceOrder"
+      # All Market Streams
+      all_mini_ticker: "!miniTicker@arr"
+      all_ticker: "!ticker@arr"
+      all_book_ticker: "!bookTicker"
+      # Aliases
+      tick: "<symbol>@bookTicker"
+      tick_all: "!bookTicker"
+      ticks: "!ticker@arr"
+      tickers: "!ticker@arr"
+      market: "!bookTicker"
+      bidAsk: "<symbol>@bookTicker"
+      clearPrice: "<symbol>@markPrice@1s"
+      liquidation: "<symbol>@forceOrder"
+      liquidation_order: "<symbol>@forceOrder"
+      contract_info: "!contractInfo"
+      # User Data Streams
+      orders: ""
+      deals: ""
+      balance: ""
+      position: ""
+      account: ""
+
+  # ─── BitgetExchangeDataSpot ───────────────────────────────
+  spot:
+    exchange_name: bitgetSpot
+    symbol_format: "{base}{quote}"
+    legal_currency: [USDT, USD, BTC, ETH, USDC]
+    rest_paths:
+      # General
+      ping: "GET /api/v2/public/time"
+      get_server_time: "GET /api/v2/public/time"
+      get_symbols: "GET /api/v2/spot/public/symbols"
+      get_contract: "GET /api/v2/spot/public/symbols"
+      # Market Data
+      get_tick: "GET /api/v2/spot/market/tickers"
+      get_tickers: "GET /api/v2/spot/market/tickers"
+      get_depth: "GET /api/v2/spot/market/orderbook"
+      get_orderbook: "GET /api/v2/spot/market/orderbook"
+      get_incre_depth: "GET /api/v2/spot/market/orderbook"
+      get_kline: "GET /api/v2/spot/market/candles"
+      get_klines: "GET /api/v2/spot/market/candles"
+      get_avg_price: "GET /api/v2/spot/market/tickers"
+      get_info: "GET /api/v2/spot/market/tickers"
+      get_market: "GET /api/v2/spot/market/tickers"
+      get_ticker: "GET /api/v2/spot/market/tickers"
+      get_new_price: "GET /api/v2/spot/market/fills"
+      get_historical_trades: "GET /api/v2/spot/market/fills"
+      get_agg_trades: "GET /api/v2/spot/market/fills"
+      # Account
+      get_account: "GET /api/v2/spot/account/info"
+      get_balances: "GET /api/v2/spot/account/assets"
+      get_balance: "GET /api/v2/spot/account/assets"
+      get_account_snapshot: "GET /api/v2/spot/account/info"
+      get_fee: "GET /api/v2/spot/account/info"
+      get_order_rate_limit: "GET /api/v2/spot/account/info"
+      # Trade
+      make_order: "POST /api/v2/spot/trade/place-order"
+      make_order_test: "POST /api/v2/spot/trade/place-order"
+      cancel_order: "POST /api/v2/spot/trade/cancel-order"
+      cancel_all_orders: "POST /api/v2/spot/trade/cancel-order"
+      query_order: "GET /api/v2/spot/trade/orderInfo"
+      get_order: "GET /api/v2/spot/trade/orderInfo"
+      get_open_orders: "GET /api/v2/spot/trade/unfilled-orders"
+      get_all_orders: "GET /api/v2/spot/trade/history-orders"
+      get_deals: "GET /api/v2/spot/trade/fills"
+      get_fills: "GET /api/v2/spot/trade/fills"
+      # OCO
+      make_oco_order: "POST /api/v2/spot/trade/place-plan-order"
+      get_order_list: "GET /api/v2/spot/trade/history-orders"
+      get_all_order_lists: "GET /api/v2/spot/trade/history-orders"
+      get_open_order_lists: "GET /api/v2/spot/trade/unfilled-orders"
+      cancel_order_list: "POST /api/v2/spot/trade/cancel-order"
+      # Listen Key
+      get_listen_key: "POST /api/v2/spot/account/listen-key"
+      refresh_listen_key: "PUT /api/v2/spot/account/listen-key"
+      close_listen_key: "DELETE /api/v2/spot/account/listen-key"
+    wss_paths:
+      # Market Streams
+      agg_trade: "<symbol>@aggTrade"
+      trade: "<symbol>@trade"
+      kline: "<symbol>@kline_<period>"
+      mini_ticker: "<symbol>@miniTicker"
+      ticker: "<symbol>@ticker"
+      book_ticker: "<symbol>@bookTicker"
+      depth: "<symbol>@depth20@100ms"
+      # All Market Streams
+      all_mini_ticker: "!miniTicker@arr"
+      all_ticker: "!ticker@arr"
+      all_book_ticker: "!bookTicker"
+      # Aliases
+      tick: "<symbol>@bookTicker"
+      tick_all: "!bookTicker"
+      ticks: "!ticker@arr"
+      tickers: "!ticker@arr"
+      market: "!bookTicker"
+      bidAsk: "<symbol>@bookTicker"
+      # User Data Streams
+      orders: ""
+      deals: ""
+      balance: ""
+      position: ""
+      account: ""
+
+  # ─── BitgetExchangeDataMargin ─────────────────────────────
+  margin:
+    exchange_name: bitget_margin
+    symbol_format: "{base}{quote}"
+    legal_currency: [USDT, USD, BTC, ETH, USDC]
+    rest_paths:
+      # General
+      ping: "GET /api/spot/v1/ping"
+      get_server_time: "GET /api/spot/v1/time"
+      get_contract: "GET /api/spot/v1/exchangeInfo"
+      # Market Data
+      get_tick: "GET /api/spot/v1/ticker/bookTicker"
+      get_info: "GET /api/spot/v1/ticker/24hr"
+      get_new_price: "GET /api/spot/v1/trades"
+      get_historical_trades: "GET /api/spot/v1/historicalTrades"
+      get_depth: "GET /api/spot/v1/depth"
+      get_incre_depth: "GET /api/spot/v1/depth"
+      get_kline: "GET /api/spot/v1/klines"
+      get_agg_trades: "GET /api/spot/v1/aggTrades"
+      # Margin-specific
+      get_all_assets: "GET /api/spot/v1/margin/allAssets"
+      get_all_pairs: "GET /api/spot/v1/margin/allPairs"
+      get_isolated_all_pairs: "GET /api/spot/v1/margin/isolated/allPairs"
+      get_price_index: "GET /api/spot/v1/margin/priceIndex"
+      get_leverage_bracket: "GET /api/spot/v1/margin/leverageBracket"
+      get_isolated_margin_tier: "GET /api/spot/v1/margin/isolatedMarginTier"
+      # Account
+      get_account: "GET /api/spot/v1/margin/account"
+      get_isolated_account: "GET /api/spot/v1/margin/isolated/account"
+      get_max_borrowable: "GET /api/spot/v1/margin/maxBorrowable"
+      get_max_transferable: "GET /api/spot/v1/margin/maxTransferable"
+      get_interest_history: "GET /api/spot/v1/margin/interestHistory"
+      # Borrow & Repay
+      borrow_repay: "POST /api/spot/v1/margin/borrow-repay"
+      get_borrow_repay_records: "GET /api/spot/v1/margin/borrow-repay"
+      borrow: "POST /api/spot/v1/margin/loan"
+      repay: "POST /api/spot/v1/margin/repay"
+      # Transfer
+      get_transfer_history: "GET /api/spot/v1/margin/transfer"
+      transfer_to_margin: "POST /api/spot/v1/margin/transfer"
+      transfer_to_spot: "POST /api/spot/v1/margin/transfer"
+      # Trade
+      make_order: "POST /api/spot/v1/margin/order"
+      make_order_test: "POST /api/spot/v1/margin/order/test"
+      make_order_oto: "POST /api/spot/v1/margin/order/oto"
+      make_order_otoco: "POST /api/spot/v1/margin/order/otoco"
+      cancel_order: "DELETE /api/spot/v1/margin/order"
+      query_order: "GET /api/spot/v1/margin/order"
+      get_open_orders: "GET /api/spot/v1/margin/openOrders"
+      get_all_orders: "GET /api/spot/v1/margin/allOrders"
+      get_deals: "GET /api/spot/v1/margin/userTrades"
+      # Listen Key
+      get_listen_key: "POST /api/spot/v1/margin/listen-key"
+      refresh_listen_key: "PUT /api/spot/v1/margin/listen-key"
+      close_listen_key: "DELETE /api/spot/v1/margin/listen-key"
+    wss_paths:
+      agg_trade: "<symbol>@aggTrade"
+      trade: "<symbol>@trade"
+      kline: "<symbol>@kline_<period>"
+      mini_ticker: "<symbol>@miniTicker"
+      ticker: "<symbol>@ticker"
+      book_ticker: "<symbol>@bookTicker"
+      depth: "<symbol>@depth20@100ms"
+      all_mini_ticker: "!miniTicker@arr"
+      all_ticker: "!ticker@arr"
+      tick: "<symbol>@bookTicker"
+      tick_all: "!bookTicker"
+      ticks: "!ticker@arr"
+      bidAsk: "<symbol>@bookTicker"
+      orders: ""
+      deals: ""
+      balance: ""
+      position: ""
+      account: ""

@@ -1,0 +1,288 @@
+# Hyperliquid Configuration
+# Official API documentation: https://hyperliquid.gitbook.io/hyperliquid-docs/for-developers/api
+
+id: hyperliquid
+display_name: Hyperliquid
+venue_type: cex
+website: https://hyperliquid.xyz
+api_doc: https://hyperliquid.gitbook.io/hyperliquid-docs/for-developers/api
+
+# Base URLs
+base_urls:
+  rest:
+    default: https://api.hyperliquid.xyz
+    testnet: https://api.hyperliquid-testnet.xyz
+  wss:
+    public: wss://api.hyperliquid.xyz/ws
+    testnet: wss://api.hyperliquid-testnet.xyz/ws
+
+# Connection
+connection:
+  type: websocket
+  timeout: 10
+  reconnect_interval: 5
+  max_reconnect_attempts: 10
+
+# Authentication (uses EIP-712 signature)
+authentication:
+  type: none  # Hyperliquid uses EIP-712 signature in request body
+  api_key_param: ""
+  secret_key_param: ""
+  passphrase_param: ""
+
+# Rate limits
+rate_limits:
+  - name: general_weight
+    limit: 1200
+    interval: 60
+    type: sliding_window
+    scope: ip
+    endpoints: ["/info"]
+  - name: exchange_weight
+    limit: 60
+    interval: 60
+    type: sliding_window
+    scope: ip
+    endpoints: ["/exchange"]
+
+# Asset types
+asset_types:
+  spot:
+    exchange_name: hyperliquid_spot
+    symbol_format: "{base}/{quote}"
+    trading_symbols:
+      "PURR/USDC": "PURR/USDC"
+    rate_limits:
+      - endpoint: "get_spot_clearinghouse_state"
+        weight: 20
+        period: 60
+      - endpoint: "make_order"
+        weight: 60
+        period: 60
+
+  swap:
+    exchange_name: hyperliquid_swap
+    symbol_format: "{base}"
+    trading_symbols:
+      "BTC": "BTC"
+      "ETH": "ETH"
+      "SOL": "SOL"
+      "LINK": "LINK"
+      "UNI": "UNI"
+      "OP": "OP"
+      "ARB": "ARB"
+    rate_limits:
+      - endpoint: "get_clearinghouse_state"
+        weight: 20
+        period: 60
+      - endpoint: "make_order"
+        weight: 60
+        period: 60
+
+# API Configuration
+api:
+  # Public endpoints (no authentication required)
+  public:
+    - method: POST
+      path: "/info"
+      endpoints:
+        - name: get_all_mids
+          description: "Get all mid prices"
+    - method: POST
+      path: "/info"
+      endpoints:
+        - name: get_meta
+          description: "Get metadata"
+    - method: POST
+      path: "/info"
+      endpoints:
+        - name: get_spot_meta
+          description: "Get spot metadata"
+    - method: POST
+      path: "/info"
+      endpoints:
+        - name: get_l2_book
+          description: "Get L2 order book"
+    - method: POST
+      path: "/info"
+      endpoints:
+        - name: get_candle_snapshot
+          description: "Get candle data"
+    - method: POST
+      path: "/info"
+      endpoints:
+        - name: get_recent_trades
+          description: "Get recent trades"
+    - method: POST
+      path: "/info"
+      endpoints:
+        - name: get_exchange_status
+          description: "Get exchange status"
+
+  # Authenticated endpoints (require EIP-712 signature)
+  authenticated:
+    - method: POST
+      path: "/info"
+      endpoints:
+        - name: get_clearinghouse_state
+          description: "Get perpetual account state"
+          auth_required: true
+    - method: POST
+      path: "/info"
+      endpoints:
+        - name: get_spot_clearinghouse_state
+          description: "Get spot account state"
+          auth_required: true
+    - method: POST
+      path: "/info"
+      endpoints:
+        - name: get_order_status
+          description: "Get order status"
+          auth_required: true
+    - method: POST
+      path: "/info"
+      endpoints:
+        - name: get_user_fills
+          description: "Get user fills"
+          auth_required: true
+    - method: POST
+      path: "/info"
+      endpoints:
+        - name: get_user_funding
+          description: "Get user funding"
+          auth_required: true
+    - method: POST
+      path: "/exchange"
+      endpoints:
+        - name: make_order
+          description: "Place order"
+          auth_required: true
+    - method: POST
+      path: "/exchange"
+      endpoints:
+        - name: cancel_order
+          description: "Cancel order"
+          auth_required: true
+    - method: POST
+      path: "/exchange"
+      endpoints:
+        - name: modify_order
+          description: "Modify order"
+          auth_required: true
+    - method: POST
+      path: "/exchange"
+      endpoints:
+        - name: update_leverage
+          description: "Update leverage"
+          auth_required: true
+    - method: POST
+      path: "/exchange"
+      endpoints:
+        - name: usdc_transfer
+          description: "Transfer USDC"
+          auth_required: true
+    - method: POST
+      path: "/exchange"
+      endpoints:
+        - name: withdraw
+          description: "Withdraw to Arbitrum"
+          auth_required: true
+
+# WebSocket Channels
+websocket:
+  public:
+    channels:
+      - name: allMids
+        description: "All mid prices"
+      - name: l2Book
+        description: "L2 order book"
+      - name: trades
+        description: "Recent trades"
+      - name: candle
+        description: "Candle data"
+  private:
+    channels:
+      - name: notification
+        description: "Account notifications"
+      - name: orderUpdates
+        description: "Order updates"
+      - name: userEvents
+        description: "User events"
+      - name: userFills
+        description: "User fills"
+      - name: userFundings
+        description: "User funding"
+      - name: userNonFundingLedgerUpdates
+        description: "User non-funding ledger updates"
+
+# Trading Configuration
+trading:
+  # Order types
+  order_types:
+    - "limit"
+    - "market"
+    - "trigger"
+
+  # Time in force
+  time_in_force:
+    - "Gtc"  # Good till canceled
+    - "Ioc"  # Immediate or cancel
+    - "PostOnly"  # Post only
+
+  # Default leverage limits
+  leverage_limits:
+    BTC: 100
+    ETH: 50
+    SOL: 50
+    LINK: 20
+    UNI: 20
+    OP: 20
+    ARB: 20
+
+  # Fees
+  fees:
+    maker: 0.001  # 0.1%
+    taker: 0.0035  # 0.35%
+
+# Data Format
+data_format:
+  # Timestamp format (milliseconds)
+  timestamp_format: "milliseconds"
+
+  # Price precision
+  price_precision: 8
+
+  # Size precision
+  size_precision: 8
+
+# Status Dictionary
+status_dict:
+  "0": "NEW"
+  "1": "PENDING_CANCEL"
+  "2": "FILLED"
+  "3": "CANCELED"
+  "4": "REJECTED"
+  "5": "EXPIRED"
+  "6": "OPEN"
+  "7": "CLOSED"
+
+# Error Codes
+error_codes:
+  - code: 1001
+    message: "Invalid signature"
+    category: "authentication"
+  - code: 2001
+    message: "Insufficient margin"
+    category: "business"
+  - code: 2002
+    message: "Order not found"
+    category: "business"
+  - code: 3001
+    message: "Rate limit exceeded"
+    category: "rate_limit"
+  - code: 4001
+    message: "Price slippage"
+    category: "business"
+  - code: 4002
+    message: "Min trade size"
+    category: "business"

@@ -1,0 +1,69 @@
+id: bitbank
+display_name: Bitbank
+venue_type: cex
+website: https://bitbank.cc
+api_doc: https://github.com/bitbankinc/bitbank-api-docs
+base_urls:
+  rest:
+    default: https://public.bitbank.cc
+    spot: https://public.bitbank.cc
+  rest_private: https://api.bitbank.cc/v1
+  wss:
+    default: wss://stream.bitbank.cc
+    spot: wss://stream.bitbank.cc
+authentication:
+  type: hmac_sha256
+  header_name: ACCESS-KEY
+  timestamp_key: ACCESS-REQUEST-TIME
+  signature_key: ACCESS-SIGNATURE
+kline_periods:
+  1m: 1min
+  5m: 5min
+  15m: 15min
+  30m: 30min
+  1h: 1hour
+  4h: 4hour
+  8h: 8hour
+  12h: 12hour
+  1d: 1day
+  1w: 1week
+  1month: 1month
+legal_currency: &id001
+- JPY
+- BTC
+- ETH
+rate_limits:
+- name: public_api
+  type: sliding_window
+  interval: 1
+  limit: 10
+  scope: global
+- name: private_query
+  type: sliding_window
+  interval: 1
+  limit: 10
+  scope: global
+- name: private_update
+  type: sliding_window
+  interval: 1
+  limit: 6
+  scope: global
+connection:
+  type: http
+  timeout: 10
+  max_retries: 3
+asset_types:
+  spot:
+    exchange_name: bitbankSpot
+    symbol_format: '{base}_{quote}'
+    rest_paths:
+      get_server_time: GET /{pair}/ticker
+      get_ticker: GET /{pair}/ticker
+      get_depth: GET /{pair}/depth
+      get_kline: GET /{pair}/candlestick/{candle-type}/{date}
+      get_trades: GET /{pair}/transactions
+    wss_paths:
+      ticker: ticker_{pair}
+      depth: depth_{pair}
+      trades: transactions_{pair}
+    legal_currency: *id001

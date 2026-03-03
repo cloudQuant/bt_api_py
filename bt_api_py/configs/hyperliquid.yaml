@@ -1,0 +1,188 @@
+# Hyperliquid 交易所统一配置
+# 数据来源: docs/exchanges/hyperliquid/api.md
+id: hyperliquid
+display_name: Hyperliquid
+venue_type: dex
+website: https://hyperliquid.xyz
+api_doc: https://hyperliquid.gitbook.io/hyperliquid-docs/for-developers/api
+
+base_urls:
+  rest:
+    default: https://api.hyperliquid.xyz
+    testnet: https://api.hyperliquid-testnet.xyz
+  wss:
+    public: wss://api.hyperliquid.xyz/ws
+    testnet: wss://api.hyperliquid-testnet.xyz/ws
+
+connection:
+  type: http
+  timeout: 10
+  max_retries: 3
+
+# Hyperliquid uses EIP-712 signatures (no standard auth type in schema)
+authentication:
+  type: none
+
+# K线周期映射 (string values)
+kline_periods:
+  1m: "1m"
+  3m: "3m"
+  5m: "5m"
+  15m: "15m"
+  30m: "30m"
+  1h: "1h"
+  2h: "2h"
+  4h: "4h"
+  8h: "8h"
+  12h: "12h"
+  1d: "1d"
+  3d: "3d"
+  1w: "1w"
+  1M: "1M"
+
+# Legal currencies
+legal_currency: [USDC]
+
+# Rate limiting (per Hyperliquid documentation)
+rate_limits:
+  - name: request_weight
+    type: sliding_window
+    interval: 60
+    limit: 1200
+    scope: ip
+    weight: 1
+    weight_map:
+      allMids: 2
+      l2Book: 2
+      clearinghouseState: 2
+      candleSnapshot: 1  # Per returned candle
+      userRole: 60
+      default: 20
+  - name: ws_connections
+    type: sliding_window
+    interval: 60
+    limit: 10
+    scope: ip
+  - name: ws_new_connections
+    type: sliding_window
+    interval: 60
+    limit: 30
+    scope: ip
+  - name: ws_messages
+    type: sliding_window
+    interval: 60
+    limit: 2000
+    scope: ip
+
+# ═══════════════════════════════════════════════════════════════
+# Asset Types — 每个子类型对应 HyperliquidExchangeData 的一个子类
+# ═══════════════════════════════════════════════════════════════
+asset_types:
+
+  # ─── HyperliquidExchangeDataSpot (Spot Trading) ──────────────
+  spot:
+    exchange_name: hyperliquid_spot
+    symbol_format: "{base}"  # Hyperliquid uses base names like BTC, ETH
+    legal_currency: [USDC]
+
+    # Trading symbols for spot
+    trading_symbols:
+      BTC/USDC: "BTC"
+      ETH/USDC: "ETH"
+      SOL/USDC: "SOL"
+      LINK/USDC: "LINK"
+      UNI/USDC: "UNI"
+      OP/USDC: "OP"
+      ARB/USDC: "ARB"
+      PURR/USDC: "PURR/USDC"  # Special case
+
+    rest_paths:
+      # Market Data
+      get_all_mids: "/info"
+      get_meta: "/info"
+      get_spot_meta: "/info"
+      get_l2_book: "/info"
+      get_candle_snapshot: "/info"
+      get_recent_trades: "/info"
+      get_exchange_status: "/info"
+      # Account Data
+      get_clearinghouse_state: "/info"
+      get_spot_clearinghouse_state: "/info"
+      get_order_status: "/info"
+      get_user_fills: "/info"
+      get_user_funding: "/info"
+      # Trading
+      make_order: "/exchange"
+      cancel_order: "/exchange"
+      modify_order: "/exchange"
+      update_leverage: "/exchange"
+      usdc_transfer: "/exchange"
+      withdraw: "/exchange"
+
+    wss_paths:
+      # Market Streams
+      all_mids: {"type": "allMids"}
+      l2_book: {"type": "l2Book", "coin": "<symbol>"}
+      trades: {"type": "trades", "coin": "<symbol>"}
+      candle: {"type": "candle", "coin": "<symbol>", "interval": "<period>"}
+      # User Streams (require user address)
+      order_updates: {"type": "orderUpdates", "user": "<address>"}
+      user_events: {"type": "userEvents", "user": "<address>"}
+      user_fills: {"type": "userFills", "user": "<address>"}
+      user_fundings: {"type": "userFunding", "user": "<address>"}
+      user_nonfunding_ledger: {"type": "userNonFundingLedgerUpdates", "user": "<address>"}
+
+  # ─── HyperliquidExchangeDataSwap (Perpetual Futures) ───────────
+  swap:
+    exchange_name: hyperliquid_swap
+    symbol_format: "{base}"  # Perps use base names like BTC, ETH
+    legal_currency: [USDC]
+
+    # Trading symbols for perps
+    trading_symbols:
+      BTC: "BTC"
+      ETH: "ETH"
+      SOL: "SOL"
+      LINK: "LINK"
+      UNI: "UNI"
+      OP: "OP"
+      ARB: "ARB"
+      DOGE: "DOGE"
+      AVAX: "AVAX"
+      MATIC: "MATIC"
+      ATOM: "ATOM"
+
+    rest_paths:
+      # Market Data
+      get_all_mids: "/info"
+      get_meta: "/info"
+      get_l2_book: "/info"
+      get_candle_snapshot: "/info"
+      get_recent_trades: "/info"
+      get_exchange_status: "/info"
+      # Account Data
+      get_clearinghouse_state: "/info"
+      get_order_status: "/info"
+      get_user_fills: "/info"
+      get_user_funding: "/info"
+      # Trading
+      make_order: "/exchange"
+      cancel_order: "/exchange"
+      modify_order: "/exchange"
+      update_leverage: "/exchange"
+      bulk_cancel: "/exchange"
+      usdc_transfer: "/exchange"
+      withdraw: "/exchange"
+
+    wss_paths:
+      # Market Streams
+      all_mids: {"type": "allMids"}
+      l2_book: {"type": "l2Book", "coin": "<symbol>"}
+      trades: {"type": "trades", "coin": "<symbol>"}
+      candle: {"type": "candle", "coin": "<symbol>", "interval": "<period>"}
+      # User Streams (require user address)
+      order_updates: {"type": "orderUpdates", "user": "<address>"}
+      user_events: {"type": "userEvents", "user": "<address>"}
+      user_fills: {"type": "userFills", "user": "<address>"}
+      user_fundings: {"type": "userFunding", "user": "<address>"}
+      user_nonfunding_ledger: {"type": "userNonFundingLedgerUpdates", "user": "<address>"}

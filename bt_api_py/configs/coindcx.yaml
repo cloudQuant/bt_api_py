@@ -1,0 +1,56 @@
+id: coindcx
+display_name: CoinDCX
+venue_type: cex
+website: https://coindcx.com
+api_doc: https://docs.coindcx.com
+base_urls:
+  rest:
+    default: https://api.coindcx.com
+    spot: https://api.coindcx.com
+  wss:
+    default: wss://stream.coindcx.com
+    spot: wss://stream.coindcx.com
+authentication:
+  type: hmac_sha256
+  header_name: X-AUTH-SIGNATURE
+kline_periods:
+  1m: 1m
+  5m: 5m
+  15m: 15m
+  30m: 30m
+  1h: 1h
+  4h: 4h
+  1d: 1d
+  1w: 1w
+legal_currency: &id001
+- INR
+- USDT
+- BTC
+- ETH
+rate_limits:
+- name: public_api
+  type: sliding_window
+  interval: 60
+  limit: 1200
+  scope: global
+- name: private_api
+  type: sliding_window
+  interval: 60
+  limit: 600
+  scope: global
+asset_types:
+  spot:
+    exchange_name: coindcx
+    rest_paths:
+      get_server_time: GET /exchange/ticker
+      get_ticker: GET /exchange/ticker
+      get_depth: GET /exchange/v1/orderbook/{symbol}
+      get_kline: GET /exchange/v1/candles/{symbol}
+      get_markets: GET /exchange/v1/markets
+      get_trades: GET /market_data/trade_history
+    symbol_format: '{base}/{quote}'
+    legal_currency: *id001
+connection:
+  type: http
+  timeout: 10
+  max_retries: 3

@@ -1,0 +1,280 @@
+# KuCoin 交易所统一配置
+# 数据来源: bt_api_py/containers/exchanges/kucoin_exchange_data.py
+id: kucoin
+display_name: KuCoin
+venue_type: cex
+website: https://www.kucoin.com
+api_doc: https://docs.kucoin.com/
+
+base_urls:
+  rest:
+    spot: https://api.kucoin.com
+    futures: https://api-futures.kucoin.com
+    margin: https://api.kucoin.com
+    swap: https://api-futures.kucoin.com
+  wss:
+    # WebSocket URLs are dynamically retrieved via /api/v1/bullet-public and /api/v1/bullet-private
+    spot: ""
+    futures: ""
+    margin: ""
+    swap: ""
+  acct_wss:
+    # Account WebSocket URLs are dynamically retrieved via POST /api/v1/bullet-private
+    spot: ""
+    futures: ""
+    margin: ""
+    swap: ""
+
+connection:
+  type: http
+  timeout: 10
+  max_retries: 3
+
+authentication:
+  type: hmac_sha256
+  header_name: KC-API-KEY
+  timestamp_key: KC-API-TIMESTAMP
+  signature_key: KC-API-SIGN
+  # KuCoin specific: requires KC-API-PASSPHRASE header
+  passphrase_header: KC-API-PASSPHRASE
+  passphrase_key: passphrase
+
+# 共享默认 kline 周期映射
+kline_periods:
+  1s: "1s"
+  1m: "1min"
+  3m: "3min"
+  5m: "5min"
+  15m: "15min"
+  30m: "30min"
+  1h: "1hour"
+  2h: "2hour"
+  4h: "4hour"
+  6h: "6hour"
+  8h: "8hour"
+  12h: "12hour"
+  1d: "1day"
+  3d: "3d"
+  1w: "1week"
+  1M: "1month"
+
+# 共享默认法币列表
+legal_currency: [USDT, USD, BTC, ETH, USDC, KCS]
+
+rate_limits:
+  - name: request_weight
+    type: sliding_window
+    interval: 60
+    limit: 6000
+    scope: global
+    weight: 1
+    weight_map:
+      "/api/v1/orders": 2
+      "/api/v1/accounts": 2
+      "/api/v1/deposit-addresses": 2
+      "/api/v1/withdrawals": 2
+      "/api/v1/limits": 1
+      "/api/v1/timestamp": 1
+      "/api/v1/currencies": 1
+      "/api/v1/markets/symbols": 1
+      "/api/v1/histories": 1
+  - name: order_rate
+    type: sliding_window
+    interval: 10
+    limit: 100
+    scope: endpoint
+    endpoint: "/api/v1/orders"
+    weight: 1
+  - name: withdrawal_rate
+    type: sliding_window
+    interval: 60
+    limit: 10
+    scope: endpoint
+    endpoint: "/api/v1/withdrawals"
+    weight: 1
+
+# ═══════════════════════════════════════════════════════════════
+# Asset Types — 每个子类型对应 KuCoinExchangeData 的一个子类
+# ═══════════════════════════════════════════════════════════════
+asset_types:
+
+  # ─── KuCoinExchangeDataSpot ──────────────────────────────────
+  spot:
+    exchange_name: KUCOIN___SPOT
+    symbol_format: "{base}-{quote}"
+    legal_currency: [USDT, USD, BTC, ETH, USDC, KCS]
+    rest_paths:
+      # General
+      ping: "GET /api/v1/timestamp"
+      get_server_time: "GET /api/v1/timestamp"
+      get_contract: "GET /api/v1/symbols"
+      # Market Data
+      get_tick: "GET /api/v1/market/orderbook/level1"
+      get_ticker: "GET /api/v1/market/orderbook/level1"
+      get_info: "GET /api/v1/market/stats"
+      get_new_price: "GET /api/v1/market/histories"
+      get_historical_trades: "GET /api/v1/market/histories"
+      get_depth: "GET /api/v1/market/orderbook/level2_100"
+      get_incre_depth: "GET /api/v1/market/orderbook/level2_100"
+      get_kline: "GET /api/v1/market/candles"
+      get_ui_klines: "GET /api/v1/market/candles"
+      get_agg_trades: "GET /api/v1/match"
+      get_market_rate: "GET /api/v1/market/price"
+      # Account
+      get_account: "GET /api/v1/accounts"
+      get_balance: "GET /api/v1/accounts"
+      get_fee: "GET /api/v1/fees"
+      # Trade
+      make_order: "POST /api/v1/orders"
+      make_order_test: "POST /api/v1/orders"
+      cancel_order: "DELETE /api/v1/orders"
+      cancel_all: "DELETE /api/v1/orders"
+      query_order: "GET /api/v1/orders"
+      get_open_orders: "GET /api/v1/orders"
+      get_all_orders: "GET /api/v1/orders"
+      get_deals: "GET /api/v1/fills"
+      # Deposit & Withdrawal
+      get_deposit_address: "GET /api/v1/deposit-addresses"
+      get_deposit_history: "GET /api/v1/deposits"
+      withdraw: "POST /api/v1/withdrawals"
+      get_withdraw_history: "GET /api/v1/withdrawals"
+      # Listen Key (for private data streams)
+      get_listen_key: "POST /api/v1/bullet-private"
+      refresh_listen_key: "POST /api/v1/bullet-private"
+    wss_paths:
+      # Market Streams
+      agg_trade: "/market/match:<symbol>"
+      trade: "/market/match:<symbol>"
+      kline: "/market/candles:<symbol>_<type>"
+      mini_ticker: "/market/ticker:<symbol>"
+      ticker: "/market/ticker:<symbol>"
+      book_ticker: "/market/ticker:<symbol>"
+      depth: "/market/level2:<symbol>"
+      depth100: "/market/level2:<symbol>"
+      incre_depth: "/market/level2:<symbol>"
+      # All Market Streams
+      all_ticker: "/market/ticker:all"
+      all_depth: "/market/level2:<symbol>"
+      # Aliases
+      tick: "/market/ticker:<symbol>"
+      tick_all: "/market/ticker:all"
+      ticks: "/market/ticker:<symbol>"
+      market: "/market/ticker:<symbol>"
+      bidAsk: "/market/orderbook/level2:<symbol>"
+      # User Data Streams
+      orders: "/spotMarket/tradeOrders"
+      balance: "/account/balance"
+      position: ""
+      account: ""
+      fills: "/account/fills"
+
+  # ─── KuCoinExchangeDataFutures ───────────────────────────────
+  futures:
+    exchange_name: kucoin_futures
+    symbol_format: "{base}-{quote}"
+    legal_currency: [USDT, USD, BTC, ETH]
+    rest_paths:
+      # General
+      ping: "GET /api/v1/timestamp"
+      get_server_time: "GET /api/v1/timestamp"
+      get_contract: "GET /api/v1/contracts/public"
+      # Market Data
+      get_tick: "GET /api/v1/ticker"
+      get_info: "GET /api/v1/contracts/public"
+      get_new_price: "GET /api/v1/trades"
+      get_historical_trades: "GET /api/v1/trades"
+      get_depth: "GET /api/v1/depth"
+      get_incre_depth: "GET /api/v1/depth"
+      get_kline: "GET /api/v1/klines"
+      get_ui_klines: "GET /api/v1/klines"
+      get_agg_trades: "GET /api/v1/aggTrades"
+      get_funding_rate: "GET /api/v1/funding/interest-rate"
+      get_clear_price: "GET /api/v1/mark-price"
+      get_mark_price: "GET /api/v1/mark-price"
+      get_history_funding_rate: "GET /api/v1/funding/history"
+      get_open_interest: "GET /api/v1/contracts/openInterest"
+      # Account
+      get_account: "GET /api/v1/account"
+      get_balance: "GET /api/v1/account"
+      get_position: "GET /api/v1/positions"
+      get_fee: "GET /api/v1/fee-rate"
+      get_income: "GET /api/v1/income"
+      # Trade
+      make_order: "POST /api/v1/orders"
+      make_order_test: "POST /api/v1/orders/test"
+      cancel_order: "DELETE /api/v1/orders"
+      cancel_all: "DELETE /api/v1/orders"
+      query_order: "GET /api/v1/orders"
+      get_open_orders: "GET /api/v1/openOrders"
+      get_all_orders: "GET /api/v1/orders"
+      get_deals: "GET /api/v1/fills"
+      change_leverage: "POST /api/v1/leverage"
+      change_margin_type: "POST /api/v1/position/margin-type"
+      # Listen Key (for private data streams)
+      get_listen_key: "POST /api/v1/bullet-private"
+      refresh_listen_key: "POST /api/v1/bullet-private"
+    wss_paths:
+      # Market Streams
+      agg_trade: "/contractMarket/execution:<symbol>"
+      trade: "/contractMarket/execution:<symbol>"
+      kline: "/contractMarket/klinedata:<symbol>_<period>"
+      ticker: "/contractMarket/level1:<symbol>"
+      book_ticker: "/contractMarket/level1:<symbol>"
+      depth: "/contractMarket/level2:<symbol>"
+      depth100: "/contractMarket/level2:<symbol>"
+      incre_depth: "/contractMarket/level2:<symbol>"
+      mark_price: "/contractMarket/markPrice:<symbol>"
+      funding_rate: "/contractMarket/fundingRate:<symbol>"
+      force_order: "/contractMarket/liquidation:<symbol>"
+      # All Market Streams
+      all_ticker: "/contractMarket/ticker:all"
+      all_depth: "/contractMarket/level2:<symbol>"
+      # User Data Streams
+      orders: "/contractMarket/execution"
+      balance: "/contractAccount/balance"
+      position: "/contractAccount/positions"
+      account: "/contractAccount"
+      fills: "/contractMarket/fills"
+
+  # ─── KuCoinExchangeDataMargin ────────────────────────────────
+  margin:
+    exchange_name: kucoin_margin
+    symbol_format: "{base}-{quote}"
+    legal_currency: [USDT, USD, BTC, ETH]
+    rest_paths:
+      # General
+      ping: "GET /api/v1/timestamp"
+      get_server_time: "GET /api/v1/timestamp"
+      # Market Data
+      get_tick: "GET /api/v1/market/orderbook/level1"
+      get_depth: "GET /api/v1/market/orderbook/level2_100"
+      get_kline: "GET /api/v1/market/candles"
+      # Account
+      get_account: "GET /api/v1/margin/accounts"
+      get_balance: "GET /api/v1/margin/accounts"
+      # Trade
+      make_order: "POST /api/v1/margin/orders"
+      cancel_order: "DELETE /api/v1/margin/orders"
+      query_order: "GET /api/v1/margin/orders"
+      get_open_orders: "GET /api/v1/margin/orders"
+      get_all_orders: "GET /api/v1/margin/orders"
+      get_deals: "GET /api/v1/margin/fills"
+      # Margin-specific
+      borrow: "POST /api/v1/margin/borrow"
+      repay: "POST /api/v1/margin/repay"
+      transfer_to_margin: "POST /api/v1/margin/transfer"
+      transfer_to_spot: "POST /api/v1/margin/transfer"
+    wss_paths:
+      # Market Streams (same as spot)
+      agg_trade: "/market/match:<symbol>"
+      trade: "/market/match:<symbol>"
+      kline: "/market/candles:<symbol>_<type>"
+      ticker: "/market/ticker:<symbol>"
+      book_ticker: "/market/ticker:<symbol>"
+      depth: "/market/level2:<symbol>"
+      # User Data Streams
+      orders: "/margin/tradeOrders"
+      balance: "/margin/balance"
+      position: ""
+      account: ""
+      fills: "/margin/fills"

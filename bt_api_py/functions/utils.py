@@ -46,6 +46,21 @@ def get_package_path(package_name="lv"):
         return package.__path__.__dict__["_path"][0]
 
 
+def get_project_log_path(log_filename):
+    """获取项目根目录下 logs/ 文件夹中的日志路径。
+    项目根目录 = bt_api_py 包的上一级目录。
+    :param log_filename: 日志文件名 (e.g. "htx_spot_feed.log")
+    :return: 完整日志路径 (e.g. "/path/to/project/logs/htx_spot_feed.log")
+    """
+    package_path = get_package_path("bt_api_py")
+    if package_path:
+        project_root = str(Path(package_path).parent)
+    else:
+        project_root = os.getcwd()
+    log_dir = os.path.join(project_root, "logs")
+    return os.path.join(log_dir, log_filename)
+
+
 def read_yaml_file(file_name, data_root=None):
     """读取放在btpy根目录中的yaml文件
     :param data_root: 文件所在目录
@@ -101,6 +116,10 @@ def read_account_config():
         "binance": {
             "public_key": os.environ.get("BINANCE_API_KEY", ""),
             "private_key": os.environ.get("BINANCE_PASSWORD", ""),
+        },
+        "htx": {
+            "public_key": os.environ.get("HTX_API_KEY", ""),
+            "private_key": os.environ.get("HTX_SECRET", ""),
         },
         "ctp": {
             "broker_id": os.environ.get("CTP_BROKER_ID", "9999"),

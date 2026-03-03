@@ -1,0 +1,141 @@
+# Poloniex 交易所统一配置
+# 数据来源: bt_api_py/containers/exchanges/poloniex_exchange_data.py
+id: poloniex
+display_name: Poloniex
+venue_type: cex
+website: https://poloniex.com
+api_doc: https://api-docs.poloniex.com/spot/api/
+
+base_urls:
+  rest:
+    default: https://api.poloniex.com
+  wss:
+    public: wss://ws.poloniex.com/ws/public
+    private: wss://ws.poloniex.com/ws/private
+  acct_wss:
+    default: wss://ws.poloniex.com/ws/private
+
+connection:
+  type: http
+  timeout: 10
+  max_retries: 3
+
+authentication:
+  type: hmac_sha256
+  key_name: key
+  timestamp_key: signTimestamp
+  signature_key: signature
+
+# 订单状态映射
+status_dict:
+  live: active
+  partially_filled: partially_filled
+  filled: filled
+  canceled: canceled
+  rejected: rejected
+  expired: expired
+  cancelled: canceled
+
+rate_limits:
+  - name: public
+    type: sliding_window
+    interval: 1
+    limit: 200
+    scope: endpoint
+    endpoint: "/*"
+    weight: 1
+  - name: private
+    type: sliding_window
+    interval: 1
+    limit: 50
+    scope: endpoint
+    endpoint: "/accounts/*"
+    weight: 1
+  - name: trade
+    type: sliding_window
+    interval: 1
+    limit: 50
+    scope: endpoint
+    endpoint: "/orders"
+    weight: 1
+
+# 共享 REST paths (YAML 锚点, 所有 asset_type 继承)
+_shared_rest_paths: &shared_rest_paths
+  # Market Data
+  get_markets: "GET /markets"
+  get_ticker: "GET /markets/{symbol}/ticker24h"
+  get_tickers: "GET /markets/ticker24h"
+  get_price: "GET /markets/{symbol}/price"
+  get_prices: "GET /markets/price"
+  get_orderbook: "GET /markets/{symbol}/orderBook"
+  get_kline: "GET /markets/{symbol}/candles"
+  get_trades: "GET /markets/{symbol}/trades"
+  get_server_time: "GET /markets/time"
+
+  # Trading
+  make_order: "POST /orders"
+  cancel_order: "DELETE /orders/{id}"
+  cancel_orders: "DELETE /orders"
+  query_order: "GET /orders/{id}"
+  get_open_orders: "GET /orders"
+  get_order_history: "GET /orders/history"
+  get_deals: "GET /trades"
+
+  # Account
+  get_balance: "GET /accounts/balances"
+  get_account: "GET /accounts/balances"
+  get_config: "GET /accounts/config"
+  set_margin: "POST /accounts/margin"
+
+# Asset Types
+asset_types:
+  # ── PoloniexExchangeDataSpot (现货) ─────────────────────────────
+  spot:
+    exchange_name: PoloniexSpot
+    symbol_format: "{base}_{quote}"
+    rest_paths:
+      <<: *shared_rest_paths
+    wss_paths:
+      # Public Streams
+      ticker:
+        channel: ticker
+        symbols: ["<symbol>"]
+      trades:
+        channel: trades
+        symbols: ["<symbol>"]
+      book:
+        channel: book
+        symbols: ["<symbol>"]
+      book_lv2:
+        channel: book_lv2
+        symbols: ["<symbol>"]
+      candles_1m:
+        channel: candles_1m
+        symbols: ["<symbol>"]
+      candles_5m:
+        channel: candles_5m
+        symbols: ["<symbol>"]
+      candles_15m:
+        channel: candles_15m
+        symbols: ["<symbol>"]
+      candles_30m:
+        channel: candles_30m
+        symbols: ["<symbol>"]
+      candles_1h:
+        channel: candles_1h
+        symbols: ["<symbol>"]
+      candles_4h:
+        channel: candles_4h
+        symbols: ["<symbol>"]
+      candles_1d:
+        channel: candles_1d
+        symbols: ["<symbol>"]
+      # Private Streams
+      orders:
+        channel: orders
+      account:
+        channel: account
+      balances:
+        channel: balances
+      positions:
+        channel: positions

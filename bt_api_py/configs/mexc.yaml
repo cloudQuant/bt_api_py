@@ -1,0 +1,397 @@
+# MEXC 交易所统一配置
+# 数据来源: bt_api_py/containers/exchanges/mexc_exchange_data.py
+id: mexc
+display_name: MEXC
+venue_type: cex
+website: https://www.mexc.com
+api_doc: https://mexcdevelop.github.io/apidocs
+
+base_urls:
+  rest:
+    swap: https://api.mexc.com
+    spot: https://api.mexc.com
+    margin: https://api.mexc.com
+  wss:
+    swap: wss://wbs.mexc.com/ws
+    spot: wss://wbs.mexc.com/ws
+    margin: wss://wbs.mexc.com/ws
+
+connection:
+  type: http
+  timeout: 10
+  max_retries: 3
+
+authentication:
+  type: hmac_sha256
+  header_name: X-MEXC-APIKEY
+  timestamp_key: X-MEXC-TIMESTAMP
+  signature_key: X-MEXC-SIGNATURE
+
+# 共享默认 kline 周期映射
+kline_periods:
+  1m: "1m"
+  3m: "3m"
+  5m: "5m"
+  15m: "15m"
+  30m: "30m"
+  1h: "1h"
+  2h: "2h"
+  4h: "4h"
+  6h: "6h"
+  12h: "12h"
+  1d: "1d"
+  1w: "1w"
+  1M: "1M"
+
+# 共享默认法币列表
+legal_currency: [USDT, USD, BTC, ETH, USDC]
+
+rate_limits:
+  - name: request_weight
+    type: sliding_window
+    interval: 60
+    limit: 2400
+    scope: global
+    weight: 1
+    weight_map:
+      "/api/v1/depth": 5
+      "/api/v1/klines": 5
+      "/api/v1/exchangeInfo": 40
+      "/api/v1/account": 5
+      "/api/v1/balance": 5
+      "/api/v1/positionRisk": 5
+  - name: order_rate
+    type: sliding_window
+    interval: 10
+    limit: 300
+    scope: endpoint
+    endpoint: "/api/v1/order*"
+    weight: 1
+  - name: order_rate_minute
+    type: sliding_window
+    interval: 60
+    limit: 1200
+    scope: endpoint
+    endpoint: "/api/v1/order*"
+    weight: 1
+
+# ═══════════════════════════════════════════════════════════════
+# Asset Types — 每个子类型对应 MEXCExchangeData 的一个子类
+# ═══════════════════════════════════════════════════════════════
+asset_types:
+
+  # ─── MEXCExchangeDataSwap (USDT-M Futures) ───────────────────
+  swap:
+    exchange_name: mexc_swap
+    symbol_format: "{base}{quote}"
+    legal_currency: [USDT, USD, BTC, ETH, USDC]
+    rest_paths:
+      # General
+      ping: "GET /api/v1/ping"
+      get_server_time: "GET /api/v1/time"
+      get_contract: "GET /api/v1/exchangeInfo"
+      # Market Data
+      get_tick: "GET /api/v1/ticker/bookTicker"
+      get_info: "GET /api/v1/ticker/24hr"
+      get_new_price: "GET /api/v1/trades"
+      get_historical_trades: "GET /api/v1/historicalTrades"
+      get_depth: "GET /api/v1/depth"
+      get_incre_depth: "GET /api/v1/depth"
+      get_kline: "GET /api/v1/klines"
+      get_agg_trades: "GET /api/v1/aggTrades"
+      get_funding_rate: "GET /api/v1/premiumIndex"
+      get_clear_price: "GET /api/v1/premiumIndex"
+      get_mark_price: "GET /api/v1/premiumIndex"
+      get_history_funding_rate: "GET /api/v1/fundingRate"
+      get_market_rate: "GET /api/v1/premiumIndex"
+      get_funding_info: "GET /api/v1/fundingInfo"
+      get_continuous_kline: "GET /api/v1/continuousKlines"
+      get_index_price_kline: "GET /api/v1/indexPriceKlines"
+      get_mark_price_kline: "GET /api/v1/markPriceKlines"
+      get_price_ticker: "GET /api/v2/ticker/price"
+      get_avg_price: "GET /api/v1/avgPrice"
+      get_ticker: "GET /api/v1/ticker"
+      get_open_interest: "GET /api/v1/openInterest"
+      get_delivery_price: "GET /api/v1/deliveryPrice"
+      # Futures Data Endpoints
+      get_long_short_ratio: "GET /futures/data/globalLongShortAccountRatio"
+      get_top_long_short_account_ratio: "GET /futures/data/topLongShortAccountRatio"
+      get_top_long_short_position_ratio: "GET /futures/data/topLongShortPositionRatio"
+      get_taker_buy_sell_volume: "GET /futures/data/takerlongshortRatio"
+      get_open_interest_hist: "GET /futures/data/openInterestHist"
+      get_index_constituents: "GET /api/v1/constituents"
+      # Account
+      get_account: "GET /api/v2/account"
+      get_balance: "GET /api/v2/balance"
+      get_position: "GET /api/v2/positionRisk"
+      get_fee: "GET /api/v1/commissionRate"
+      get_income: "GET /api/v1/income"
+      get_adl_quantile: "GET /api/v1/adlQuantile"
+      get_leverage_bracket: "GET /api/v1/leverageBracket"
+      get_position_mode: "GET /api/v1/positionSide/dual"
+      get_multi_assets_mode: "GET /api/v1/multiAssetsMargin"
+      get_api_trading_status: "GET /api/v1/apiTradingStatus"
+      get_api_key_permission: "GET /api/v1/apiKeyPermission"
+      get_order_rate_limit: "GET /api/v1/rateLimit/order"
+      get_force_orders: "GET /api/v1/forceOrders"
+      get_symbol_config: "GET /api/v1/symbolConfig"
+      get_account_config: "GET /api/v1/accountConfig"
+      # Trade
+      make_order: "POST /api/v1/order"
+      make_order_test: "POST /api/v1/order/test"
+      make_orders: "POST /api/v1/batchOrders"
+      modify_order: "PUT /api/v1/order"
+      modify_orders: "PUT /api/v1/batchOrders"
+      cancel_order: "DELETE /api/v1/order"
+      cancel_orders: "DELETE /api/v1/batchOrders"
+      cancel_all: "DELETE /api/v1/allOpenOrders"
+      auto_cancel_all: "POST /api/v1/countdownCancelAll"
+      query_order: "GET /api/v1/order"
+      get_open_orders: "GET /api/v1/openOrders"
+      get_all_orders: "GET /api/v1/allOrders"
+      get_deals: "GET /api/v1/userTrades"
+      change_leverage: "POST /api/v1/leverage"
+      change_margin_type: "POST /api/v1/marginType"
+      change_position_mode: "POST /api/v1/positionSide/dual"
+      change_multi_assets_mode: "POST /api/v1/multiAssetsMargin"
+      modify_isolated_position_margin: "POST /api/v1/positionMargin"
+      get_position_margin_history: "GET /api/v1/positionMargin/history"
+      # OCO
+      make_oco_order: "POST /api/v1/order/oco"
+      get_order_list: "GET /api/v1/orderList"
+      get_all_order_lists: "GET /api/v1/allOrderList"
+      get_open_order_lists: "GET /api/v1/openOrderList"
+      cancel_order_list: "DELETE /api/v1/orderList"
+      # Listen Key
+      get_listen_key: "POST /api/v1/listenKey"
+      refresh_listen_key: "PUT /api/v1/listenKey"
+      close_listen_key: "DELETE /api/v1/listenKey"
+    wss_paths:
+      # Market Streams
+      agg_trade: "<symbol>@aggTrade"
+      trade: "<symbol>@trade"
+      kline: "<symbol>@kline_<period>"
+      continuous_kline: "<pair>_perpetual@continuousKline_<period>"
+      mini_ticker: "<symbol>@miniTicker"
+      ticker: "<symbol>@ticker"
+      ticker_window: "<symbol>@ticker_<window>"
+      book_ticker: "<symbol>@bookTicker"
+      depth: "<symbol>@depth20@100ms"
+      depth500: "<symbol>@depth5@500ms"
+      depth_partial: "<symbol>@depth<level>@100ms"
+      increDepthFlow: "<symbol>@depth@100ms"
+      mark_price: "<symbol>@markPrice@1s"
+      funding_rate: "<symbol>@markPrice@1s"
+      force_order: "<symbol>@forceOrder"
+      # All Market Streams
+      all_force_order: "!forceOrder@arr"
+      all_mini_ticker: "!miniTicker@arr"
+      all_ticker: "!ticker@arr"
+      all_ticker_window: "!ticker_<window>@arr"
+      all_mark_price: "!markPrice@arr@1s"
+      all_book_ticker: "!bookTicker"
+      # Aliases
+      tick: "<symbol>@bookTicker"
+      tick_all: "!bookTicker"
+      ticks: "!ticker@arr"
+      tickers: "!ticker@arr"
+      market: "!bookTicker"
+      bidAsk: "<symbol>@bookTicker"
+      clearPrice: "<symbol>@markPrice@1s"
+      liquidation: "<symbol>@forceOrder"
+      liquidation_order: "<symbol>@forceOrder"
+      contract_info: "!contractInfo"
+      # User Data Streams (listen key based)
+      listen_key: ""
+      orders: ""
+      deals: ""
+      balance: ""
+      position: ""
+      account: ""
+      portfolio: ""
+
+  # ─── MEXCExchangeDataSpot ─────────────────────────────────
+  spot:
+    exchange_name: MEXC___SPOT
+    symbol_format: "{base}{quote}"
+    legal_currency: [USDT, USD, BTC, ETH, USDC]
+    rest_paths:
+      # General
+      ping: "GET /api/v3/ping"
+      get_server_time: "GET /api/v3/time"
+      get_contract: "GET /api/v3/exchangeInfo"
+      get_exchange_info: "GET /api/v3/exchangeInfo"
+      # Market Data
+      get_tick: "GET /api/v3/ticker/bookTicker"
+      get_depth: "GET /api/v3/depth"
+      get_order_book: "GET /api/v3/depth"
+      get_incre_depth: "GET /api/v1/depth"
+      get_kline: "GET /api/v3/klines"
+      get_klines: "GET /api/v3/klines"
+      get_avg_price: "GET /api/v3/avgPrice"
+      get_info: "GET /api/v3/ticker/24hr"
+      get_24hr_ticker: "GET /api/v3/ticker/24hr"
+      get_market: "GET /api/v3/ticker/price"
+      get_ticker: "GET /api/v3/ticker"
+      get_new_price: "GET /api/v3/trades"
+      get_recent_trades: "GET /api/v3/trades"
+      get_historical_trades: "GET /api/v3/historicalTrades"
+      get_agg_trades: "GET /api/v3/aggTrades"
+      # Account
+      get_account: "GET /api/v3/account"
+      get_balance: "GET /api/v3/account"
+      get_fee: "GET /sapi/v1/asset/tradeFee"
+      get_commission: "GET /api/v3/account/commission"
+      get_order_rate_limit: "GET /api/v3/rateLimit/order"
+      # Trade
+      make_order: "POST /api/v3/order"
+      make_order_test: "POST /api/v3/order/test"
+      cancel_order: "DELETE /api/v3/order"
+      cancel_all: "DELETE /api/v3/openOrders"
+      cancel_replace_order: "POST /api/v3/order/cancelReplace"
+      amend_keep_priority: "PUT /api/v3/order/amend/keepPriority"
+      query_order: "GET /api/v3/order"
+      get_order: "GET /api/v3/order"
+      get_open_orders: "GET /api/v3/openOrders"
+      get_all_orders: "GET /api/v3/allOrders"
+      get_deals: "GET /api/v3/myTrades"
+      # OCO / OTO / OTOCO
+      make_oco_order: "POST /api/v3/order/oco"
+      get_order_list: "GET /api/v3/orderList"
+      get_all_order_lists: "GET /api/v3/allOrderList"
+      get_open_order_lists: "GET /api/v3/openOrderList"
+      cancel_order_list: "DELETE /api/v3/orderList"
+      # Listen Key
+      get_listen_key: "POST /sapi/v1/userListenToken"
+      refresh_listen_key: "POST /sapi/v1/userListenToken"
+    wss_paths:
+      # Market Streams
+      agg_trade: "<symbol>@aggTrade"
+      trade: "<symbol>@trade"
+      kline: "<symbol>@kline_<period>"
+      mini_ticker: "<symbol>@miniTicker"
+      ticker: "<symbol>@ticker"
+      ticker_window: "<symbol>@ticker_<window>"
+      book_ticker: "<symbol>@bookTicker"
+      avg_price: "<symbol>@avgPrice"
+      depth: "<symbol>@depth20@100ms"
+      depth_partial: "<symbol>@depth<level>@100ms"
+      increDepthFlow: "<symbol>@depth@100ms"
+      force_order: "<symbol>@forceOrder"
+      kline_timezone: "<symbol>@kline_<period>@+08:00"
+      # All Market Streams
+      all_mini_ticker: "!miniTicker@arr"
+      all_ticker: "!ticker@arr"
+      all_ticker_window: "!ticker_<window>@arr"
+      all_book_ticker: "!bookTicker"
+      # Aliases
+      tick: "<symbol>@bookTicker"
+      tick_all: "!bookTicker"
+      ticks: "!ticker@arr"
+      market: "!bookTicker"
+      bidAsk: "<symbol>@bookTicker"
+      liquidation: "<symbol>@forceOrder"
+      liquidation_order: "<symbol>@forceOrder"
+      # User Data Streams
+      orders: ""
+      deals: ""
+      balance: ""
+      position: ""
+
+  # ─── MEXCExchangeDataMargin ────────────────────────────────
+  margin:
+    exchange_name: mexc_margin
+    symbol_format: "{base}{quote}"
+    legal_currency: [USDT, USD, BTC, ETH, USDC]
+    rest_paths:
+      # General
+      ping: "GET /api/v3/ping"
+      get_server_time: "GET /api/v3/time"
+      get_contract: "GET /api/v3/exchangeInfo"
+      # Market Data
+      get_tick: "GET /api/v3/ticker/bookTicker"
+      get_info: "GET /api/v3/ticker/24hr"
+      get_new_price: "GET /api/v3/trades"
+      get_historical_trades: "GET /api/v3/historicalTrades"
+      get_depth: "GET /api/v3/depth"
+      get_incre_depth: "GET /api/v1/depth"
+      get_kline: "GET /api/v3/klines"
+      get_ui_klines: "GET /api/v3/uiKlines"
+      get_agg_trades: "GET /api/v3/aggTrades"
+      # Margin-specific
+      get_all_assets: "GET /sapi/v1/margin/allAssets"
+      get_all_pairs: "GET /sapi/v1/margin/allPairs"
+      get_isolated_all_pairs: "GET /sapi/v1/margin/isolated/allPairs"
+      get_price_index: "GET /sapi/v1/margin/priceIndex"
+      get_cross_margin_collateral_ratio: "GET /sapi/v1/margin/crossMarginCollateralRatio"
+      get_leverage_bracket: "GET /sapi/v1/margin/leverageBracket"
+      get_isolated_margin_tier: "GET /sapi/v1/margin/isolatedMarginTier"
+      get_margin_manual_liquidation: "GET /sapi/v1/margin/liquidationBureau/assets"
+      # Account
+      get_account: "GET /sapi/v1/margin/account"
+      get_isolated_account: "GET /sapi/v1/margin/isolated/account"
+      get_isolated_account_limit: "GET /sapi/v1/margin/isolated/accountLimit"
+      get_max_borrowable: "GET /sapi/v1/margin/maxBorrowable"
+      get_max_transferable: "GET /sapi/v1/margin/maxTransferable"
+      get_interest_history: "GET /sapi/v1/margin/interestHistory"
+      get_interest_rate_history: "GET /sapi/v1/margin/interestRateHistory"
+      get_next_hourly_interest_rate: "GET /sapi/v1/margin/next-hourly-interest-rate"
+      get_cross_margin_data: "GET /sapi/v1/margin/crossMarginData"
+      get_isolated_margin_data: "GET /sapi/v1/margin/isolatedMarginData"
+      get_capital_flow: "GET /sapi/v1/margin/capital-flow"
+      get_bnb_burn: "GET /sapi/v1/bnbBurn"
+      get_bnb_burn_status: "GET /sapi/v1/bnbBurn/status"
+      toggle_bnb_burn: "POST /sapi/v1/bnbBurn"
+      get_trade_coeff: "GET /sapi/v1/margin/tradeCoeff"
+      # Borrow & Repay
+      borrow_repay: "POST /sapi/v1/margin/borrow-repay"
+      get_borrow_repay_records: "GET /sapi/v1/margin/borrow-repay"
+      borrow: "POST /sapi/v1/margin/loan"
+      repay: "POST /sapi/v1/margin/repay"
+      # Transfer
+      get_transfer_history: "GET /sapi/v1/margin/transfer"
+      transfer_to_margin: "POST /sapi/v1/margin/transfer"
+      transfer_to_spot: "POST /sapi/v1/margin/transfer"
+      # Trade
+      make_order: "POST /sapi/v1/margin/order"
+      make_order_test: "POST /sapi/v1/margin/order/test"
+      make_order_oto: "POST /sapi/v1/margin/order/oto"
+      make_order_otoco: "POST /sapi/v1/margin/order/otoco"
+      cancel_order: "DELETE /sapi/v1/margin/order"
+      cancel_all: "DELETE /sapi/v1/margin/openOrders"
+      query_order: "GET /sapi/v1/margin/order"
+      get_open_orders: "GET /sapi/v1/margin/openOrders"
+      get_all_orders: "GET /sapi/v1/margin/allOrders"
+      get_deals: "GET /sapi/v1/margin/myTrades"
+      get_order_rate_limit: "GET /sapi/v1/margin/rateLimit/order"
+      manual_liquidation: "POST /sapi/v1/margin/manual-liquidation"
+      exchange_small_liability: "POST /sapi/v1/margin/exchange-small-liability"
+      get_small_liability_history: "GET /sapi/v1/margin/exchange-small-liability-history"
+      set_max_leverage: "POST /sapi/v1/margin/max-leverage"
+      # Listen Key
+      get_listen_key: "POST /sapi/v1/margin/listen-key"
+      refresh_listen_key: "PUT /sapi/v1/margin/listen-key"
+      close_listen_key: "DELETE /sapi/v1/margin/listen-key"
+    wss_paths:
+      agg_trade: "<symbol>@aggTrade"
+      trade: "<symbol>@trade"
+      kline: "<symbol>@kline_<period>"
+      mini_ticker: "<symbol>@miniTicker"
+      ticker: "<symbol>@ticker"
+      ticker_window: "<symbol>@ticker_<window>"
+      book_ticker: "<symbol>@bookTicker"
+      depth: "<symbol>@depth20@100ms"
+      depth_partial: "<symbol>@depth<level>@100ms"
+      increDepthFlow: "<symbol>@depth@100ms"
+      all_mini_ticker: "!miniTicker@arr"
+      all_ticker: "!ticker@arr"
+      all_ticker_window: "!ticker_<window>@arr"
+      tick: "<symbol>@bookTicker"
+      tick_all: "!bookTicker"
+      ticks: "!ticker@arr"
+      bidAsk: "<symbol>@bookTicker"
+      orders: ""
+      deals: ""
+      balance: ""
+      position: ""
+      account: ""

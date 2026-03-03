@@ -1,0 +1,114 @@
+# Coinbase 交易所统一配置
+# 数据来源: bt_api_py/containers/exchanges/coinbase_exchange_data.py
+id: coinbase
+display_name: Coinbase
+venue_type: cex
+website: https://www.coinbase.com
+api_doc: https://docs.cloud.coinbase.com/
+
+base_urls:
+  rest:
+    spot: https://api.coinbase.com/api/v3
+  wss:
+    spot: wss://advanced-trade-ws.coinbase.com
+  acct_wss:
+    spot: wss://advanced-trade-ws.coinbase.com
+
+connection:
+  type: http
+  timeout: 10
+  max_retries: 3
+
+authentication:
+  type: api_key
+  header_name: Authorization
+
+# 共享 kline 周期映射
+kline_periods:
+  1m: "ONE_MINUTE"
+  5m: "FIVE_MINUTE"
+  15m: "FIFTEEN_MINUTE"
+  30m: "THIRTY_MINUTE"
+  1h: "ONE_HOUR"
+  2h: "TWO_HOUR"
+  6h: "SIX_HOUR"
+  1d: "ONE_DAY"
+
+# 共享默认法币列表
+legal_currency: [USD, USDC, BTC, ETH, GBP, EUR]
+
+rate_limits:
+  - name: public_endpoints
+    type: sliding_window
+    interval: 1
+    limit: 10
+    scope: global
+    weight: 1
+  - name: private_endpoints
+    type: sliding_window
+    interval: 1
+    limit: 15
+    scope: global
+    weight: 1
+  - name: trading_endpoints
+    type: sliding_window
+    interval: 1
+    limit: 10
+    scope: global
+    weight: 1
+
+# ═══════════════════════════════════════════════════════════════
+# Asset Types — 每个子类型对应 CoinbaseExchangeData 的一个子类
+# ═══════════════════════════════════════════════════════════════
+asset_types:
+
+  # ─── CoinbaseExchangeDataSpot ────────────────────────────────
+  spot:
+    exchange_name: COINBASE___SPOT
+    symbol_format: "{base}-{quote}"
+    legal_currency: [USD, USDC, BTC, ETH, GBP, EUR]
+    rest_paths:
+      # General
+      ping: "GET /brokerage/products"
+      get_server_time: "GET /time"
+      get_contract: "GET /brokerage/products"
+      get_exchange_info: "GET /brokerage/products"
+      # Market Data
+      get_tick: "GET /brokerage/products/{product_id}/ticker"
+      get_depth: "GET /brokerage/product_book"
+      get_kline: "GET /brokerage/products/{product_id}/candles"
+      get_candles: "GET /brokerage/products/{product_id}/candles"
+      get_order_book: "GET /brokerage/product_book"
+      get_info: "GET /brokerage/products"
+      get_market: "GET /brokerage/products"
+      get_new_price: "GET /brokerage/products/{product_id}/ticker"
+      get_ticker: "GET /brokerage/products/{product_id}/ticker"
+      get_ticker_trading_day: "GET /brokerage/products/{product_id}/ticker"
+      # Account
+      get_account: "GET /brokerage/accounts"
+      get_balance: "GET /brokerage/accounts"
+      # Trade
+      make_order: "POST /brokerage/orders"
+      cancel_order: "POST /brokerage/orders/batch_cancel"
+      cancel_all: "POST /brokerage/orders/batch_cancel"
+      query_order: "GET /brokerage/orders/historical/{order_id}"
+      get_open_orders: "GET /brokerage/orders/historical/batch"
+      get_all_orders: "GET /brokerage/orders/historical/batch"
+      get_deals: "GET /brokerage/orders/historical/fills"
+    wss_paths:
+      # Market Streams
+      ticker: "ticker"
+      ticker_batch: "ticker_batch"
+      level2: "level2"
+      market_trades: "market_trades"
+      # User Streams
+      user: "user"
+      # Aliases
+      tick: "ticker"
+      ticks: "ticker_batch"
+      depth: "level2"
+      trades: "market_trades"
+      orders: "user"
+      deals: "user"
+      balance: "user"
+      account: "user"

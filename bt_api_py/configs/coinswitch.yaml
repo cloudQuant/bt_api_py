@@ -1,0 +1,60 @@
+id: coinswitch
+display_name: CoinSwitch
+venue_type: cex
+website: https://coinswitch.co
+api_doc: https://docs.coinswitch.co/
+base_urls:
+  rest:
+    default: https://api.coinswitch.co
+    spot: https://api.coinswitch.co
+  wss:
+    default: ''
+    spot: ''
+authentication:
+  type: api_key
+  header_name: x-api-key
+kline_periods:
+  1m: '1'
+  5m: '5'
+  15m: '15'
+  30m: '30'
+  1h: '60'
+  4h: '240'
+  1d: D
+legal_currency: &id001
+- INR
+- USD
+- EUR
+- USDT
+- BTC
+- ETH
+rate_limits:
+- name: public_api
+  type: sliding_window
+  interval: 60
+  limit: 100
+  scope: global
+- name: private_api
+  type: sliding_window
+  interval: 60
+  limit: 50
+  scope: global
+asset_types:
+  spot:
+    exchange_name: coinswitchSpot
+    rest_paths:
+      get_ticker: GET /v2/tickers
+      get_ticker_symbol: GET /v2/tickers/{symbol}
+      get_markets: GET /v2/markets
+      get_trades: GET /v2/trades
+      get_balance: GET /v2/account/balance
+      create_order: POST /v2/orders
+      cancel_order: DELETE /v2/orders/{order_id}
+      get_orders: GET /v2/orders
+    wss_paths: {}
+    symbol_format: '{base}/{quote}'
+    legal_currency: *id001
+connection:
+  type: http
+  timeout: 10
+  max_retries: 3

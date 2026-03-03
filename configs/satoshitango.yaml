@@ -1,0 +1,80 @@
+# SatoshiTango Configuration
+# Argentine cryptocurrency exchange
+
+id: satoshitango
+display_name: "SatoshiTango"
+venue_type: cex
+website: "https://www.satoshitango.com"
+api_doc: "https://api.satoshitango.com"
+
+# Base URLs
+base_urls:
+  rest:
+    spot: "https://api.satoshitango.com"
+  wss:
+    spot: ""
+
+# Connection configuration
+connection:
+  type: http
+  timeout: 30
+  max_retries: 3
+
+# Authentication
+authentication:
+  type: api_key
+  header_name: "Authorization"
+
+# Rate limits (estimated - not publicly documented)
+rate_limits:
+  - name: public_api
+    type: sliding_window
+    interval: 60
+    limit: 100
+    scope: global
+  - name: private_api
+    type: sliding_window
+    interval: 60
+    limit: 60
+    scope: global
+
+# Asset types
+asset_types:
+  spot:
+    exchange_name: "SATOSHITANGO___SPOT"
+    symbol_format: "{base}-{quote}"
+    rest_paths:
+      get_server_time: "GET /v1/time"
+      get_ticker: "GET /v1/ticker"
+      get_depth: "GET /v1/orderbook"
+      get_kline: "GET /v1/klines"
+      get_exchange_info: "GET /v1/markets"
+    wss_paths: {}
+
+# Kline periods
+kline_periods:
+  "1m": "1m"
+  "5m": "5m"
+  "15m": "15m"
+  "30m": "30m"
+  "1h": "1h"
+  "4h": "4h"
+  "1d": "1d"
+  "1w": "1w"
+
+# Legal currencies
+legal_currency:
+  - "ARS"
+  - "USD"
+  - "BTC"
+  - "ETH"
+  - "USDT"
+
+# Status dictionary
+status_dict:
+  PENDING: "0"
+  OPEN: "1"
+  FILLED: "2"
+  PARTIALLY_FILLED: "3"
+  CANCELLED: "4"
+  EXPIRED: "5"

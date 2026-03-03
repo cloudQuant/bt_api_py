@@ -1,0 +1,70 @@
+id: gmx
+display_name: GMX
+venue_type: dex
+website: https://gmx.io
+api_doc: https://docs.gmx.io/docs/api/rest/
+base_urls:
+  rest:
+    arbitrum: https://arbitrum-api.gmxinfra.io
+    avalanche: https://avalanche-api.gmxinfra.io
+    botanix: https://botanix-api.gmxinfra.io
+  fallback:
+    arbitrum_1: https://arbitrum-api-fallback.gmxinfra.io
+    arbitrum_2: https://arbitrum-api-fallback.gmxinfra2.io
+    avalanche_1: https://avalanche-api-fallback.gmxinfra.io
+    avalanche_2: https://avalanche-api-fallback.gmxinfra2.io
+    botanix_1: https://botanix-api-fallback.gmxinfra.io
+    botanix_2: https://botanix-api-fallback.gmxinfra2.io
+authentication:
+  type: none
+kline_periods:
+  1m: 1m
+  5m: 5m
+  15m: 15m
+  1h: 1h
+  4h: 4h
+  1d: 1d
+legal_currency: &id001
+- USDC
+- USDT
+- USD
+- BTC
+- ETH
+- AVAX
+rate_limits:
+- name: public_api
+  type: sliding_window
+  interval: 60
+  limit: 300
+  scope: global
+asset_types:
+  spot:
+    exchange_name: gmxSpot
+    rest_paths:
+      get_server_time: GET /ping
+      get_ticker: GET /prices/tickers
+      get_signed_prices: GET /signed_prices/latest
+      get_candles: GET /prices/candles
+      get_tokens: GET /tokens
+      get_markets: GET /markets
+      get_markets_info: GET /markets/info
+      get_apy: GET /apy
+      get_performance: GET /performance/annualized
+      get_glvs: GET /glvs/
+      get_glvs_info: GET /glvs/info
+    symbol_format: '{base}/{quote}'
+    legal_currency: *id001
+  perpetual:
+    exchange_name: gmxPerpetual
+    rest_paths:
+      get_server_time: GET /ping
+      get_ticker: GET /prices/tickers
+      get_markets: GET /markets
+      get_markets_info: GET /markets/info
+      get_apy: GET /apy?period=total
+    symbol_format: '{base}/{quote}'
+    legal_currency: *id001
+connection:
+  type: http
+  timeout: 10
+  max_retries: 3

@@ -1,0 +1,279 @@
+# Kraken 交易所统一配置
+# 数据来源: bt_api_py/containers/exchanges/kraken_exchange_data.py
+id: kraken
+display_name: Kraken
+venue_type: cex
+website: https://www.kraken.com
+api_doc: https://docs.kraken.com/api
+
+base_urls:
+  rest:
+    spot: https://api.kraken.com
+    margin: https://api.kraken.com
+    futures: https://futures.kraken.com
+  wss:
+    spot: wss://ws.kraken.com
+    margin: wss://ws.kraken.com
+    futures: wss://futures.kraken.com
+  acct_wss:
+    spot: wss://ws.kraken.com
+    margin: wss://ws.kraken.com
+    futures: wss://futures.kraken.com
+
+connection:
+  type: http
+  timeout: 10
+  max_retries: 3
+
+authentication:
+  type: hmac_sha512
+  header_name: API-Key
+  signature_key: API-Sign
+
+# 共享默认 kline 周期映射
+kline_periods:
+  1m: "1"
+  5m: "5"
+  15m: "15"
+  30m: "30"
+  1h: "60"
+  2h: "120"
+  4h: "240"
+  6h: "360"
+  12h: "720"
+  1d: "1440"
+  3d: "4320"
+  1w: "10080"
+
+# 共享默认法币列表
+legal_currency: [USD, EUR, USDT, BTC, ETH]
+
+rate_limits:
+  - name: request_weight
+    type: sliding_window
+    interval: 60
+    limit: 1500
+    scope: global
+    weight: 1
+    weight_map:
+      "/0/public/Time": 1
+      "/0/public/Assets": 1
+      "/0/public/AssetPairs": 1
+      "/0/public/Ticker": 1
+      "/0/public/Depth": 1
+      "/0/public/Trades": 1
+      "/0/public/Klines": 1
+      "/0/public/Spread": 1
+      "/0/private/Balance": 4
+      "/0/private/TradeBalance": 4
+      "/0/private/OpenOrders": 4
+      "/0/private/QueryOrders": 4
+      "/0/private/QueryLedgers": 4
+      "/0/private/TradeHistory": 4
+  - name: order_rate
+    type: sliding_window
+    interval: 10
+    limit: 100
+    scope: endpoint
+    endpoint: "/0/private/AddOrder"
+    weight: 1
+  - name: order_rate_minute
+    type: sliding_window
+    interval: 60
+    limit: 300
+    scope: endpoint
+    endpoint: "/0/private/AddOrder"
+    weight: 1
+
+# ═══════════════════════════════════════════════════════════════
+# Asset Types — 每个子类型对应 KrakenExchangeData 的一个子类
+# ═══════════════════════════════════════════════════════════════
+asset_types:
+
+  # ─── KrakenExchangeDataSpot ──────────────────────────────────
+  spot:
+    exchange_name: kraken
+    symbol_format: "{base}{quote}"
+    legal_currency: [USD, EUR, USDT, BTC, ETH]
+    rest_paths:
+      # Public
+      ping: "POST /0/public/Time"
+      get_server_time: "POST /0/public/Time"
+      get_contract: "POST /0/public/AssetPairs"
+      get_assets: "POST /0/public/Assets"
+      # Market Data
+      get_tick: "POST /0/public/Ticker"
+      get_info: "POST /0/public/AssetPairs"
+      get_new_price: "POST /0/public/Trades"
+      get_historical_trades: "POST /0/public/Trades"
+      get_depth: "POST /0/public/Depth"
+      get_kline: "POST /0/public/Klines"
+      get_spread: "POST /0/public/Spread"
+      get_ohlc: "POST /0/public/OHLC"
+      get_ticker: "POST /0/public/Ticker"
+      # Account
+      get_balance: "POST /0/private/Balance"
+      get_trade_balance: "POST /0/private/TradeBalance"
+      get_open_orders: "POST /0/private/OpenOrders"
+      get_closed_orders: "POST /0/private/ClosedOrders"
+      get_query_orders: "POST /0/private/QueryOrders"
+      get_add_order: "POST /0/private/AddOrder"
+      get_cancel_order: "POST /0/private/CancelOrder"
+      get_cancel_all_orders: "POST /0/private/CancelAll"
+      get_cancel_all_orders_after: "POST /0/private/CancelAllOrdersAfter"
+      # User Data
+      get_trade_history: "POST /0/private/TradeHistory"
+      get_query_ledgers: "POST /0/private/QueryLedgers"
+      get_query_trades: "POST /0/private/QueryTrades"
+      get_open_positions: "POST /0/private/OpenPositions"
+      get_ledgers: "POST /0/private/Ledgers"
+      get_account_info: "POST /0/private/AccountInfo"
+      get_balance_info: "POST /0/private/BalanceInfo"
+      get_available_methods: "POST /0/private/AvailableMethods"
+      get_stake_status: "POST /0/private/Staking"
+      get_withdrawal_status: "POST /0/private/WithdrawStatus"
+      get_deposit_status: "POST /0/private/DepositStatus"
+      # Websockets
+      get_websocket_token: "POST /0/private/WebsocketsToken"
+    wss_paths:
+      # Market Data
+      ticker: "<pair>"
+      ohlc: "<pair>"
+      trade: "<pair>"
+      spread: "<pair>"
+      book: "<pair>"
+      # User Data (requires authentication)
+      open_orders: ""
+      closed_orders: ""
+      add_order: ""
+      cancel_order: ""
+      trades: ""
+      balance: ""
+      positions: ""
+      subscriptions: ""
+
+  # ─── KrakenExchangeDataMargin ────────────────────────────────
+  margin:
+    exchange_name: krakenMargin
+    symbol_format: "{base}{quote}"
+    legal_currency: [USD, EUR, USDT, BTC, ETH]
+    rest_paths:
+      # Public (same as spot)
+      ping: "POST /0/public/Time"
+      get_server_time: "POST /0/public/Time"
+      get_contract: "POST /0/public/AssetPairs"
+      get_assets: "POST /0/public/Assets"
+      # Market Data (same as spot)
+      get_tick: "POST /0/public/Ticker"
+      get_info: "POST /0/public/AssetPairs"
+      get_new_price: "POST /0/public/Trades"
+      get_historical_trades: "POST /0/public/Trades"
+      get_depth: "POST /0/public/Depth"
+      get_kline: "POST /0/public/Klines"
+      get_spread: "POST /0/public/Spread"
+      get_ohlc: "POST /0/public/OHLC"
+      get_ticker: "POST /0/public/Ticker"
+      # Margin-specific
+      get_margin_info: "POST /0/private/AccountInfo"
+      get_margin_status: "POST /0/private/MarginStatus"
+      get_margin_positions: "POST /0/private/OpenPositions"
+      get_margin_trade_volume: "POST /0/private/TradeVolume"
+      # Account
+      get_balance: "POST /0/private/Balance"
+      get_trade_balance: "POST /0/private/TradeBalance"
+      get_open_orders: "POST /0/private/OpenOrders"
+      get_closed_orders: "POST /0/private/ClosedOrders"
+      get_query_orders: "POST /0/private/QueryOrders"
+      get_add_order: "POST /0/private/AddOrder"
+      get_cancel_order: "POST /0/private/CancelOrder"
+      get_cancel_all_orders: "POST /0/private/CancelAll"
+      get_cancel_all_orders_after: "POST /0/private/CancelAllOrdersAfter"
+      # User Data (same as spot)
+      get_trade_history: "POST /0/private/TradeHistory"
+      get_query_ledgers: "POST /0/private/QueryLedgers"
+      get_query_trades: "POST /0/private/QueryTrades"
+      get_ledgers: "POST /0/private/Ledgers"
+      get_account_info: "POST /0/private/AccountInfo"
+      get_balance_info: "POST /0/private/BalanceInfo"
+      get_available_methods: "POST /0/private/AvailableMethods"
+      get_stake_status: "POST /0/private/Staking"
+      # Websockets (same as spot)
+      get_websocket_token: "POST /0/private/WebsocketsToken"
+    wss_paths:
+      # Market Data (same as spot)
+      ticker: "<pair>"
+      ohlc: "<pair>"
+      trade: "<pair>"
+      spread: "<pair>"
+      book: "<pair>"
+      # User Data (same as spot)
+      open_orders: ""
+      closed_orders: ""
+      add_order: ""
+      cancel_order: ""
+      trades: ""
+      balance: ""
+      positions: ""
+      subscriptions: ""
+
+  # ─── KrakenExchangeDataFutures ───────────────────────────────
+  futures:
+    exchange_name: krakenFutures
+    symbol_format: "{base}{quote}"
+    legal_currency: [USD, EUR, USDT, BTC, ETH]
+    rest_paths:
+      # Public
+      ping: "GET /derivatives/api/v3/time"
+      get_server_time: "GET /derivatives/api/v3/time"
+      get_contract: "GET /derivatives/api/v3/instruments"
+      get_markets: "GET /derivatives/api/v3/markets"
+      # Market Data
+      get_tick: "GET /derivatives/api/v3/ticker"
+      get_info: "GET /derivatives/api/v3/instruments"
+      get_new_price: "GET /derivatives/api/v3/trades"
+      get_historical_trades: "GET /derivatives/api/v3/trades"
+      get_depth: "GET /derivatives/api/v3/book"
+      get_kline: "GET /derivatives/api/v3/ohlc"
+      get_ticker: "GET /derivatives/api/v3/ticker"
+      get_instruments: "GET /derivatives/api/v3/instruments"
+      get_markets_summary: "GET /derivatives/api/v3/markets-summary"
+      get_system_status: "GET /derivatives/api/v3/system_status"
+      get_funding_rate: "GET /derivatives/api/v3/funding"
+      get_funding_rate_history: "GET /derivatives/api/v3/funding-history"
+      get_index_price: "GET /derivatives/api/v3/index"
+      get_mark_price: "GET /derivatives/api/v3/mark-price"
+      # Account
+      get_account: "POST /derivatives/api/v3/accounts"
+      get_balance: "POST /derivatives/api/v3/accounts/all"
+      get_positions: "POST /derivatives/api/v3/positions"
+      get_orders: "POST /derivatives/api/v3/orders"
+      get_closed_orders: "POST /derivatives/api/v3/orders/closed"
+      get_open_orders: "POST /derivatives/api/v3/orders/open"
+      # Trade
+      get_add_order: "POST /derivatives/api/v3/orders"
+      get_cancel_order: "DELETE /derivatives/api/v3/orders"
+      get_cancel_all_orders: "DELETE /derivatives/api/v3/orders"
+      get_cancel_all_orders_by_instrument: "DELETE /derivatives/api/v3/orders"
+      get_replace_order: "PUT /derivatives/api/v3/orders"
+      # History
+      get_fill_history: "POST /derivatives/api/v3/fills"
+      get_order_history: "POST /derivatives/api/v3/orders/history"
+      get_position_history: "POST /derivatives/api/v3/positions/history"
+      # Websockets
+      get_websocket_token: "POST /derivatives/api/v3/authenticated/token"
+    wss_paths:
+      # Market Data
+      ticker: "<instrument_name>"
+      trade: "<instrument_name>"
+      ohlc: "<instrument_name>"
+      book: "<instrument_name>"
+      funding_rate: "<instrument_name>"
+      mark_price: "<instrument_name>"
+      index_price: "<instrument_name>"
+      # User Data
+      account: ""
+      positions: ""
+      orders: ""
+      fill: ""
+      heartbeat: ""
+      subscriptions: ""

@@ -1,10 +1,25 @@
 import os
+import sys
+from pathlib import Path
 
 import spdlog
 
 
+def _get_project_logs_dir():
+    """获取项目根目录下的 logs/ 文件夹绝对路径。
+    项目根目录 = bt_api_py 包的上一级目录。
+    """
+    try:
+        import bt_api_py
+        pkg_dir = os.path.dirname(bt_api_py.__file__)
+        return os.path.join(str(Path(pkg_dir).parent), "logs")
+    except Exception:
+        return os.path.join(os.getcwd(), "logs")
+
+
 class SpdLogManager:
     _logger_cache = {}
+    _project_logs_dir = _get_project_logs_dir()
 
     def __init__(
         self,
@@ -14,6 +29,14 @@ class SpdLogManager:
         rotation_minute=0,
         print_info=False,
     ):
+        # 将所有非绝对路径的日志文件统一重定向到项目根目录 logs/ 下
+        if not os.path.isabs(file_name):
+            # 去除 ./logs/ 或 ./  前缀，提取纯文件名
+            if file_name.startswith("./logs/"):
+                file_name = file_name[len("./logs/"):]
+            elif file_name.startswith("./"):
+                file_name = file_name[len("./"):]
+            file_name = os.path.join(SpdLogManager._project_logs_dir, file_name)
         self.file_name = file_name
         self.logger_name = logger_name
         self.rotation_hour = rotation_hour

@@ -1,0 +1,62 @@
+id: bigone
+display_name: BigONE
+venue_type: cex
+website: https://big.one
+api_doc: https://open.big.one/docs/api.html
+base_urls:
+  rest:
+    default: https://big.one/api/v3
+    spot: https://big.one/api/v3
+  wss:
+    default: wss://big.one/ws/v2
+    spot: wss://big.one/ws/v2
+authentication:
+  type: hmac_sha256_jwt
+  header_name: Authorization
+kline_periods:
+  1m: min1
+  5m: min5
+  15m: min15
+  30m: min30
+  1h: hour1
+  4h: hour4
+  12h: hour12
+  1d: day1
+  1w: week1
+  1M: month1
+legal_currency: &id001
+- USDT
+- USD
+- BTC
+- ETH
+- EUR
+rate_limits:
+- name: public_api
+  type: sliding_window
+  interval: 10
+  limit: 500
+  scope: global
+- name: private_api
+  type: sliding_window
+  interval: 10
+  limit: 500
+  scope: global
+asset_types:
+  spot:
+    exchange_name: bigoneSpot
+    rest_paths:
+      get_server_time: GET /ping
+      get_ticker: GET /asset_pairs/{symbol}/ticker
+      get_depth: GET /asset_pairs/{symbol}/depth
+      get_kline: GET /asset_pairs/{symbol}/candles
+      get_symbols: GET /asset_pairs
+    wss_paths:
+      ticker: '{symbol}@ticker'
+      depth: '{symbol}@depth'
+      trade: '{symbol}@trade'
+    symbol_format: '{base}/{quote}'
+    legal_currency: *id001
+connection:
+  type: http
+  timeout: 10
+  max_retries: 3

@@ -1,0 +1,83 @@
+id: valr
+display_name: VALR
+venue_type: cex
+website: https://www.valr.com
+api_doc: https://docs.valr.com
+base_urls:
+  rest:
+    default: https://api.valr.com
+    spot: https://api.valr.com
+  wss:
+    default: wss://api.valr.com/ws
+    spot: wss://api.valr.com/ws
+authentication:
+  type: hmac_sha512
+  header_name: X-VALR-API-KEY
+  signature_key: X-VALR-SIGNATURE
+  timestamp_key: X-VALR-TIMESTAMP
+kline_periods:
+  1m: 1m
+  3m: 3m
+  5m: 5m
+  15m: 15m
+  30m: 30m
+  1h: 1h
+  2h: 2h
+  4h: 4h
+  6h: 6h
+  12h: 12h
+  1d: 1d
+  1w: 1w
+  1M: 1M
+legal_currency: &id001
+- USDC
+- ZAR
+- BTC
+- ETH
+rate_limits:
+- name: public_api
+  type: sliding_window
+  interval: 60
+  limit: 30
+  scope: endpoint
+  endpoint: /v1/public/*
+- name: global_api_key
+  type: sliding_window
+  interval: 60
+  limit: 2000
+  scope: global
+- name: global_ip
+  type: sliding_window
+  interval: 60
+  limit: 1200
+  scope: ip
+asset_types:
+  spot:
+    exchange_name: valr
+    rest_paths:
+      get_server_time: GET /v1/public/time
+      get_info: GET /v1/public/currencies
+      get_pairs: GET /v1/public/pairs
+      get_ticker: GET /v1/public/{currencyPair}/ticker
+      get_all_tickers: GET /v1/public/marketsummary
+      get_depth: GET /v1/public/{currencyPair}/orderbook
+      get_trades: GET /v1/public/{currencyPair}/trades
+      get_balance: GET /v1/account/balances
+      get_deposit_address: GET /v1/account/{currency}/deposit/address
+      get_withdrawal_history: GET /v1/account/withdrawals
+      get_order: GET /v1/order/{orderId}
+      get_orders: GET /v1/orders
+      get_open_orders: GET /v1/orders/open
+      post_order: POST /v1/orders/market
+      post_limit_order: POST /v1/orders/limit
+      cancel_order: DELETE /v1/order/{orderId}
+    wss_paths:
+      ticker: ticker
+      depth: orderbook
+      trades: trade
+    symbol_format: '{base}/{quote}'
+    legal_currency: *id001
+connection:
+  type: http
+  timeout: 10
+  max_retries: 3

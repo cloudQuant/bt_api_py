@@ -197,8 +197,7 @@ class HttpClient:
         else:
             return RequestFailedError(
                 venue=self._venue,
-                status=status,
-                response=body,
+                status_code=status,
                 message=f"HTTP {status}: {body.get('msg', body.get('message', 'Request failed'))}",
             )
 

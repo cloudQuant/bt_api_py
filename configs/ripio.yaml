@@ -1,0 +1,147 @@
+# Ripio Configuration
+# Official API documentation: https://ripio.atlassian.net/wiki/spaces/API/overview
+id: ripio
+display_name: Ripio
+venue_type: cex
+website: https://www.ripio.com
+api_doc: https://ripio.atlassian.net/wiki/spaces/API/overview
+
+# Base URLs
+base_urls:
+  rest:
+    default: https://api.exchange.ripio.com
+    argentina: https://api.exchange.ripio.com/ar
+    brazil: https://api.exchange.ripio.com/br
+    spain: https://api.exchange.ripio.com/es
+  wss:
+    default: wss://api.exchange.ripio.com/ws
+
+# Connection
+connection:
+  type: http
+  timeout: 10
+  reconnect_interval: 5
+  max_reconnect_attempts: 10
+
+# Authentication
+authentication:
+  type: hmac_sha256
+  header_name: X-API-KEY
+  signature_header: X-API-SIGNATURE
+
+# Rate limits
+rate_limits:
+  - name: public_api
+    limit: 300
+    interval: 60
+    type: sliding_window
+    scope: ip
+  - name: private_api
+    limit: 100
+    interval: 60
+    type: sliding_window
+    scope: user
+
+# Supported kline periods
+kline_periods:
+  1m: "1"
+  5m: "5"
+  15m: "15"
+  30m: "30"
+  1h: "60"
+  4h: "240"
+  1d: "1440"
+  1w: "10080"
+
+# Legal currencies (varies by region)
+legal_currency:
+  - ARS  # Argentina Peso
+  - BRL  # Brazilian Real
+  - EUR  # Euro
+  - MXN  # Mexican Peso
+  - USD  # US Dollar
+  - USDT
+  - BTC
+  - ETH
+  - UAH  # Ukrainian Hryvnia
+
+# Status dictionary
+status_dict:
+  PENDING: "0"
+  OPEN: "1"
+  FILLED: "2"
+  PARTIALLY_FILLED: "3"
+  CANCELED: "4"
+  REJECTED: "5"
+  EXPIRED: "6"
+
+# Asset types
+asset_types:
+  spot:
+    exchange_name: RIPIO___SPOT
+    symbol_format: "{base}_{quote}"
+    legal_currency: [ARS, BRL, EUR, MXN, USD, USDT, BTC, ETH, UAH]
+    rest_paths:
+      # Public endpoints
+      ping: "GET /api/v1/ping"
+      get_server_time: "GET /api/v1/time"
+      get_exchange_info: "GET /api/v1/products"
+      get_currencies: "GET /api/v1/currencies"
+      get_tick: "GET /api/v1/ticker"
+      get_ticker: "GET /api/v1/ticker"
+      get_depth: "GET /api/v1/orderbook"
+      get_kline: "GET /api/v1/klines"
+      get_trades: "GET /api/v1/trades"
+      # Account endpoints
+      get_balance: "GET /api/v1/balance"
+      get_orders: "GET /api/v1/orders"
+      get_order: "GET /api/v1/orders/:id"
+      make_order: "POST /api/v1/orders"
+      cancel_order: "DELETE /api/v1/orders/:id"
+      cancel_all_orders: "DELETE /api/v1/orders"
+      # User trades
+      get_user_trades: "GET /api/v1/trades"
+      # Deposits/Withdrawals
+      get_deposit_address: "GET /api/v1/deposit_address"
+      get_withdrawal_history: "GET /api/v1/withdrawals"
+      get_deposit_history: "GET /api/v1/deposits"
+    wss_paths:
+      ticker: "ticker.<symbol>"
+      depth: "orderbook.<symbol>"
+      trade: "trades.<symbol>"
+      kline: "klines.<symbol>"
+      account: ""
+      orders: ""
+      balances: ""
+
+# Regional configurations
+regions:
+  argentina:
+    code: ar
+    currency: ARS
+    base_url: https://api.exchange.ripio.com/ar
+  brazil:
+    code: br
+    currency: BRL
+    base_url: https://api.exchange.ripio.com/br
+  spain:
+    code: es
+    currency: EUR
+    base_url: https://api.exchange.ripio.com/es
+
+# Supported trading pairs by region
+region_pairs:
+  argentina:
+    - BTC/ARS
+    - ETH/ARS
+    - USDT/ARS
+  brazil:
+    - BTC/BRL
+    - ETH/BRL
+    - USDT/BRL
+    - SOL/BRL
+    - MATIC/BRL
+  spain:
+    - BTC/EUR
+    - ETH/EUR
+    - USDT/EUR

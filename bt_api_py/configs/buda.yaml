@@ -1,0 +1,61 @@
+id: buda
+display_name: Buda
+venue_type: cex
+website: https://www.buda.com
+api_doc: https://api.buda.com
+base_urls:
+  rest:
+    default: https://api.buda.com
+    spot: https://api.buda.com
+  wss:
+    default: wss://api.buda.com/websocket
+    spot: wss://api.buda.com/websocket
+authentication:
+  type: hmac_sha256
+  header_name: X-SBTC-SIGNATURE
+kline_periods:
+  1m: '60'
+  5m: '300'
+  15m: '900'
+  30m: '1800'
+  1h: '3600'
+  4h: '14400'
+  1d: '86400'
+  1w: '604800'
+legal_currency: &id001
+- CLP
+- COP
+- PEN
+- EUR
+- USDT
+rate_limits:
+- name: public_api
+  type: sliding_window
+  interval: 60
+  limit: 30
+  scope: global
+- name: private_api
+  type: sliding_window
+  interval: 60
+  limit: 30
+  scope: global
+asset_types:
+  spot:
+    exchange_name: budaSpot
+    rest_paths:
+      get_server_time: GET /v2/timestamp
+      get_ticker: GET /v2/markets/{market_id}/ticker
+      get_depth: GET /v2/markets/{market_id}/order_book
+      get_kline: GET /v2/markets/{market_id}/candles
+      get_exchange_info: GET /v2/markets
+      get_trades: GET /v2/markets/{market_id}/trades
+    wss_paths:
+      ticker: ticker
+      orderbook: order_book
+      trades: trades
+    symbol_format: '{base}/{quote}'
+    legal_currency: *id001
+connection:
+  type: http
+  timeout: 10
+  max_retries: 3

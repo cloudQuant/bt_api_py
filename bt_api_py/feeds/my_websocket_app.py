@@ -7,6 +7,7 @@ import traceback
 import websocket
 
 from bt_api_py.functions.log_message import SpdLogManager
+from bt_api_py.functions.utils import get_project_log_path
 
 # from bt_api_py.containers.exchanges.binance_swap_exchange_data import BinanceExchangeData
 # from bt_api_py.containers.exchanges.okx_swap_exchange_data import OkxSwapExchangeData
@@ -29,7 +30,23 @@ class MyWebsocketApp:
             "sslopt": self.sslopt,
         }
         self.restart_gap = kwargs.get("restart_gap", 0)
-        self.log_file_name = kwargs.get("log_file_name", "./logs/my_websocket_app.log")
+        self.http_proxy_host = kwargs.get("http_proxy_host")
+        self.http_proxy_port = kwargs.get("http_proxy_port")
+        if self.http_proxy_host is None:
+            try:
+                import urllib.request
+                from urllib.parse import urlparse
+                system_proxies = urllib.request.getproxies()
+                proxy_url = system_proxies.get('http') or system_proxies.get('https')
+                if proxy_url:
+                    parsed = urlparse(proxy_url)
+                    if parsed.scheme in ('http', 'https'):
+                        self.http_proxy_host = parsed.hostname
+                        self.http_proxy_port = parsed.port
+            except Exception:
+                pass
+        default_log = get_project_log_path("my_websocket_app.log")
+        self.log_file_name = kwargs.get("log_file_name", default_log)
         self.wss_logger = SpdLogManager(
             self.log_file_name, self.wss_name, 0, 0, False
         ).create_logger()
@@ -121,11 +138,17 @@ class MyWebsocketApp:
         # print("初始化run成功, self.wss_url=", self.wss_url)
         while True:
             try:
-                self.ws.run_forever(
-                    ping_interval=self.ping_interval,
-                    ping_timeout=self.ping_timeout,
-                    sslopt=self.sslopt,
-                )
+                run_kwargs = {
+                    "ping_interval": self.ping_interval,
+                    "ping_timeout": self.ping_timeout,
+                    "sslopt": self.sslopt,
+                }
+                if self.http_proxy_host:
+                    run_kwargs["http_proxy_host"] = self.http_proxy_host
+                    run_kwargs["proxy_type"] = "http"
+                    if self.http_proxy_port:
+                        run_kwargs["http_proxy_port"] = self.http_proxy_port
+                self.ws.run_forever(**run_kwargs)
                 self.wss_logger.info("----------wss running----------------")
             except Exception as e:
                 self.wss_logger.warn(f"{self.wss_name},{self.wss_url},{e},{traceback.format_exc()}")

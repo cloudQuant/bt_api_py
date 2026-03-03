@@ -1,0 +1,84 @@
+# Phemex Exchange Configuration
+id: phemex
+display_name: Phemex
+venue_type: cex
+website: https://phemex.com
+api_doc: https://github.com/phemex/phemex-api-docs
+
+base_urls:
+  rest:
+    default: https://api.phemex.com
+    spot: https://api.phemex.com
+    perpetual: https://api.phemex.com
+  wss:
+    default: wss://ws.phemex.com
+    spot: wss://ws.phemex.com
+    perpetual: wss://ws.phemex.com
+
+connection:
+  type: http
+  timeout: 10
+  max_retries: 3
+
+authentication:
+  type: api_key
+  header_name: x-phemex-access-token
+
+kline_periods:
+  1m: "60"
+  5m: "300"
+  15m: "900"
+  30m: "1800"
+  1h: "3600"
+  4h: "14400"
+  1d: "86400"
+  1w: "604800"
+
+legal_currency: [USDT, USD, BTC, ETH]
+
+rate_limits:
+  - name: public_api
+    type: sliding_window
+    interval: 60
+    limit: 300
+    scope: global
+  - name: private_api
+    type: sliding_window
+    interval: 60
+    limit: 120
+    scope: global
+
+asset_types:
+  spot:
+    exchange_name: phemex
+    symbol_format: "s{base}{quote}"
+    legal_currency: [USDT, USD, BTC, ETH]
+    rest_paths:
+      get_server_time: "/public/v1/server-time"
+      get_tick: "/md/spot/ticker/24hr"
+      get_depth: "/md/orderbook"
+      get_kline: "/exchange/public/md/v2/kline"
+      get_exchange_info: "/exchange/public/v1/products"
+      get_trades: "/md/spot/trades"
+    wss_paths:
+      ticker: "{symbol}@ticker"
+      depth: "{symbol}@depth"
+      kline: "{symbol}@kline"
+      trades: "{symbol}@trades"
+
+  perpetual:
+    exchange_name: phemexPerpetual
+    symbol_format: "{base}{quote}"
+    legal_currency: [USDT, USD, BTC]
+    rest_paths:
+      get_server_time: "/public/v1/server-time"
+      get_tick: "/exchange/public/md/v2/ticker/24hr"
+      get_depth: "/exchange/public/md/v2/orderbook"
+      get_kline: "/exchange/public/md/v2/kline"
+      get_exchange_info: "/exchange/public/v1/products"
+      get_trades: "/exchange/public/md/v2/trades"
+    wss_paths:
+      ticker: "{symbol}@ticker"
+      depth: "{symbol}@depth"
+      kline: "{symbol}@kline"
+      trades: "{symbol}@trades"

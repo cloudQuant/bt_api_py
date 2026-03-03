@@ -1,42 +1,28 @@
 okx:
-  public_key: "xxx"
-  private_key: "xxx"
-  passphrase: "xxx"
-
+  public_key: xxx
+  private_key: xxx
+  passphrase: xxx
 binance:
-  public_key: 'xxx'
-  private_key: 'xxx'
-
-# CTP 期货配置 (中国期货市场)
+  public_key: xxx
+  private_key: xxx
 ctp:
-  broker_id: "9999"                              # 期货公司代号, simnow 为 9999
-  user_id: "xxx"                                 # 资金账号
-  password: "xxx"                                # 密码
-  auth_code: "xxx"                               # 认证码
-  app_id: "simnow_client_test"                   # 产品名称
-  md_front: "tcp://180.168.146.187:10131"        # 行情前置地址
-  td_front: "tcp://180.168.146.187:10130"        # 交易前置地址
-
-# Interactive Brokers 配置 (全球多市场) - TWS/Gateway 原生API
+  broker_id: '9999'
+  user_id: xxx
+  password: xxx
+  auth_code: xxx
+  app_id: simnow_client_test
+  md_front: tcp://180.168.146.187:10131
+  td_front: tcp://180.168.146.187:10130
 ib:
-  host: "127.0.0.1"                              # TWS/Gateway 地址
-  port: 7497                                     # TWS=7497, Gateway=4001
-  client_id: 1                                   # 客户端ID (多策略需不同ID)
-
-# Interactive Brokers Web API 配置 (REST/WebSocket)
-# 方式1: Client Portal Gateway (个人客户/模拟账号)
-#   1. 下载 Client Portal Gateway: https://www.interactivebrokers.com/en/trading/ibgateway-stable.php
-#   2. 启动: cd clientportal.gw && bin/run.sh root/conf.yaml
-#   3. 浏览器打开 https://localhost:5000 并登录
-#   4. 登录后 Gateway 维持会话, 代码无需传入用户名密码
-# 方式2: OAuth 2.0 (机构客户)
-#   需要 client_id + private_key_path, 联系 api-solutions@interactivebrokers.com 获取
+  host: 127.0.0.1
+  port: 7497
+  client_id: 1
 ib_web:
-  base_url: "https://localhost:5000"             # Client Portal Gateway 默认地址
-  account_id: ""                                 # IBKR 账户ID, 如 "U1234567" 或 "DU1234567"(模拟)
-  verify_ssl: false                              # Gateway 使用自签名证书, 需设为 false
-  timeout: 10                                    # HTTP 请求超时(秒)
-  # OAuth 2.0 (机构客户, 可选)
-  # client_id: "YOUR_CLIENT_ID"
-  # private_key_path: "/path/to/private_key.pem"
-  # base_url: "https://api.interactivebrokers.com"
+  base_url: https://localhost:5000
+  account_id: ''
+  verify_ssl: false
+  timeout: 10
+connection:
+  type: http
+  timeout: 10
+  max_retries: 3

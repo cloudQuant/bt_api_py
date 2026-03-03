@@ -34,6 +34,8 @@ class AuthType(str, Enum):
     NONE = "none"
     API_KEY = "api_key"
     HMAC_SHA256 = "hmac_sha256"
+    HMAC_SHA256_JWT = "hmac_sha256_jwt"
+    HMAC_SHA384 = "hmac_sha384"
     HMAC_SHA512 = "hmac_sha512"
     OAUTH = "oauth"
     CERTIFICATE = "certificate"
@@ -106,6 +108,9 @@ class AssetTypeConfig(BaseModel):
     kline_periods: dict[str, str] | None = None
     legal_currency: list[str] | None = None
     symbols: list[str] | None = None
+    trading_symbols: dict[str, str] | None = Field(
+        default=None, description="交易符号映射，如 BTC/USDC: BTC"
+    )
 
 
 # ── 主配置模型 ────────────────────────────────────────────────

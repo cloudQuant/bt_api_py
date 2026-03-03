@@ -1,0 +1,69 @@
+id: bitflyer
+display_name: bitFlyer
+venue_type: cex
+website: https://bitflyer.com
+api_doc: https://lightning.bitflyer.com/docs
+base_urls:
+  rest:
+    default: https://api.bitflyer.com
+    spot: https://api.bitflyer.com
+  wss:
+    default: wss://ws.lightstream.bitflyer.com/json-rpc
+    spot: wss://ws.lightstream.bitflyer.com/json-rpc
+authentication:
+  type: hmac_sha256
+  header_name: ACCESS-KEY
+  timestamp_key: ACCESS-TIMESTAMP
+  signature_key: ACCESS-SIGN
+kline_periods:
+  1m: 1m
+  5m: 5m
+  15m: 15m
+  30m: 30m
+  1h: 1h
+  4h: 4h
+  1d: 1d
+  1w: 1w
+legal_currency: &id001
+- JPY
+- USD
+- EUR
+- BTC
+rate_limits:
+- name: public_api
+  type: sliding_window
+  interval: 60
+  limit: 500
+  scope: global
+- name: private_api
+  type: sliding_window
+  interval: 60
+  limit: 300
+  scope: global
+- name: private_trading
+  type: sliding_window
+  interval: 60
+  limit: 300
+  scope: global
+connection:
+  type: http
+  timeout: 10
+  max_retries: 3
+asset_types:
+  spot:
+    exchange_name: bitflyerSpot
+    symbol_format: '{base}_{quote}'
+    rest_paths:
+      get_server_time: GET /v1/getmarkets
+      get_ticker: GET /v1/ticker
+      get_depth: GET /v1/board
+      get_kline: GET /v1/getexecutions
+      get_markets: GET /v1/getmarkets
+      get_trades: GET /v1/executions
+      get_health: GET /v1/gethealth
+    wss_paths:
+      ticker: lightning_ticker_{product_code}
+      board: lightning_board_snapshot_{product_code}
+      board_update: lightning_board_{product_code}
+      executions: lightning_executions_{product_code}
+    legal_currency: *id001

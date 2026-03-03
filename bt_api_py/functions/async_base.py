@@ -24,6 +24,10 @@ class AsyncBase:
         self.limit = 100
         self.session = None
         self.async_proxy = kwargs.get("async_proxy")
+        if self.async_proxy is None:
+            import urllib.request
+            system_proxies = urllib.request.getproxies()
+            self.async_proxy = system_proxies.get('https') or system_proxies.get('http')
         self.async_base_logger = SpdLogManager(
             "./logs/async_data.log", "async_base", 0, 0, False
         ).create_logger()

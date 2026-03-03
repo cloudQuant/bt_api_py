@@ -1,0 +1,125 @@
+# Raydium DEX Configuration
+# Official API documentation: https://docs.raydium.io/raydium/for-developers/api
+# API Swagger: https://api-v3.raydium.io/docs/
+
+id: raydium
+display_name: Raydium
+venue_type: dex
+website: https://raydium.io
+api_doc: https://docs.raydium.io/raydium/for-developers/api
+
+# Base URLs
+base_urls:
+  rest:
+    default: https://api-v3.raydium.io
+  graphql:
+    default: https://api.raydium.io/v2
+
+# Connection
+connection:
+  type: http
+  timeout: 30
+  max_retries: 3
+
+# Authentication - Raydium public API doesn't require authentication
+authentication:
+  type: none
+
+# Rate limits
+rate_limits:
+  - name: general_rate
+    limit: 1000
+    interval: 60
+    type: sliding_window
+    scope: ip
+
+# Supported blockchains
+chains:
+  - SOLANA
+
+# Router addresses
+router_address:
+  SOLANA: "675kPX9MHTjS2zt1qf1WuJjEZtFcVsA3skphH2qTkqL"
+
+# Factory addresses
+factory_address:
+  SOLANA: "HWy1jotHbQeeRu7mPtoYMPeQdhiHzdPQXvRcRgU8gMR"
+
+# Asset types
+asset_types:
+  solana:
+    exchange_name: RAYDIUM___DEX
+    symbol_format: "{base}/{quote}"
+    chains_supported: [SOLANA]
+    rest_paths:
+      # Main API
+      get_chain_time: "GET /main/chain-time"
+      get_info: "GET /main/info"
+      get_clmm_config: "GET /main/clmm-config"
+      get_cpmm_config: "GET /main/cpmm-config"
+      # Pool endpoints
+      get_pool_ids: "GET /pools/info/ids"
+      get_pools: "GET /pools/info/list"
+      get_pools_v2: "GET /pools/info/list-v2"
+      get_pool_by_lp: "GET /pools/info/lps"
+      get_pool_by_mint: "GET /pools/info/mint"
+      get_pool_keys: "GET /pools/key/ids"
+      get_pool_liquidity: "GET /pools/line/liquidity"
+      # Farm endpoints
+      get_farm_ids: "GET /farms/info/ids"
+      get_farm_by_lp: "GET /farms/info/lp"
+      get_farm_keys: "GET /farms/key/ids"
+      # Mint info
+      get_mint_ids: "GET /mint/ids"
+      get_mint_list: "GET /mint/list"
+      get_mint_price: "GET /mint/price"
+      # IDO
+      get_ido_keys: "GET /ido/key/ids"
+
+# Kline periods (not directly supported, use subgraph)
+kline_periods:
+  1m: "60"
+  5m: "300"
+  15m: "900"
+  30m: "1800"
+  1h: "3600"
+  4h: "14400"
+  1d: "86400"
+  1w: "604800"
+
+# Legal currencies (SOL is the base currency)
+legal_currency:
+  - SOL
+  - USDC
+  - USDT
+  - RAY
+  - mSOL
+  - jitoSOL
+  - stSOL
+  - BSOL
+  - JUP
+
+# Status dictionary
+status_dict:
+  ACTIVE: "0"
+  STAGING: "1"
+  PAUSED: "2"
+  DEPRECATED: "3"
+
+# Pool types
+pool_types:
+  STANDARD: "Standard"
+  CONCENTRATED: "Concentrated"
+  STABLE: "Stable"
+
+# Common SOL token addresses
+token_addresses:
+  SOL: "So11111111111111111111111111111111111111112"
+  USDC: "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v"
+  USDT: "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB"
+  RAY: "4k3Dyjzvzp8eMZWUXbBCjEvwSkkk59S5iCNLY3QrkX6R"
+  mSOL: "mSoLzYCxHdYgdzU16g5QSh3i5K3z3KZK7ytfqcJm7So"
+  jitoSOL: "J1toso1uCk3RLmjorhTtrVwY9HJ7X8V9yYac6Y7kGCPn"
+  stSOL: "7dHbWXmci3dT8UFYWYZweBLXgycu7Y3iL6trKn1Y7ARj"
+  BSOL: "bSo13r4TkiE4KumL71LsHTPpL2euBYLFx6h9HP3piy1"
+  JUP: "JUPyiwrYJFskUPiHa7hkeR8VUtAeFoSYbKedZNsDvCN"

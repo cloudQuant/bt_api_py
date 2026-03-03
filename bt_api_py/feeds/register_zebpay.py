@@ -1,0 +1,24 @@
+"""
+Zebpay 交易所注册模块
+"""
+
+from bt_api_py.balance_utils import simple_balance_handler as _zebpay_balance_handler
+from bt_api_py.containers.exchanges.zebpay_exchange_data import ZebpayExchangeDataSpot
+from bt_api_py.feeds.live_zebpay.spot import ZebpayRequestDataSpot
+from bt_api_py.registry import ExchangeRegistry
+
+
+def register_zebpay():
+    """注册 Zebpay SPOT 到全局 ExchangeRegistry"""
+    # 注册 Feed 类
+    ExchangeRegistry.register_feed("ZEBPAY___SPOT", ZebpayRequestDataSpot)
+
+    # 注册配置类
+    ExchangeRegistry.register_exchange_data("ZEBPAY___SPOT", ZebpayExchangeDataSpot)
+
+    # 注册余额处理器
+    ExchangeRegistry.register_balance_handler("ZEBPAY___SPOT", _zebpay_balance_handler)
+
+
+# 模块导入时自动注册
+register_zebpay()

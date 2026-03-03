@@ -1,0 +1,150 @@
+# Phemex Configuration
+# Official API documentation: https://phemex-docs.github.io/
+id: phemex
+display_name: Phemex
+venue_type: cex
+website: https://phemex.com
+api_doc: https://phemex-docs.github.io/
+
+# Base URLs
+base_urls:
+  rest:
+    default: https://api.phemex.com
+    testnet: https://testnet-api.phemex.com
+  wss:
+    default: wss://ws.phemex.com
+    testnet: wss://testnet-api.phemex.com/ws
+
+# Connection
+connection:
+  type: http
+  timeout: 10
+  reconnect_interval: 5
+  max_reconnect_attempts: 10
+
+# Authentication (HMAC SHA256 signature)
+authentication:
+  type: hmac_sha256
+  header_name: x-phemex-access-token
+  signature_header: x-phemex-request-signature
+  expiry_header: x-phemex-request-expiry
+
+# Rate limits
+rate_limits:
+  - name: ip_rate_limit
+    limit: 5000
+    interval: 300
+    type: sliding_window
+    scope: ip
+  - name: contract_group_rate
+    limit: 5000
+    interval: 60
+    type: sliding_window
+    scope: endpoint
+  - name: symbol_group_rate
+    limit: 500
+    interval: 60
+    type: sliding_window
+    scope: symbol
+
+# Supported kline periods (resolution in seconds)
+kline_periods:
+  1m: "60"
+  5m: "300"
+  15m: "900"
+  30m: "1800"
+  1h: "3600"
+  4h: "14400"
+  1d: "86400"
+  1w: "604800"
+
+# Legal currencies
+legal_currency:
+  - USDT
+  - USD
+  - BTC
+  - ETH
+
+# Status dictionary
+status_dict:
+  PENDING: "0"
+  NEW: "1"
+  PARTIALLY_FILLED: "2"
+  FILLED: "3"
+  CANCELED: "4"
+  REJECTED: "5"
+
+# Asset types
+asset_types:
+  spot:
+    exchange_name: PHEMEX___SPOT
+    symbol_format: "s{base}{quote}"
+    legal_currency: [USDT, USD, BTC, ETH]
+    rest_paths:
+      # Public endpoints
+      ping: "GET /exchange/public/md/v2/timestamp"
+      get_server_time: "GET /exchange/public/md/v2/timestamp"
+      get_products: "GET /public/products"
+      get_exchange_info: "GET /public/products"
+      get_tick: "GET /md/v2/ticker/24hr"
+      get_ticker: "GET /md/v2/ticker/24hr"
+      get_depth: "GET /md/v2/orderbook"
+      get_kline: "GET /md/v2/kline"
+      get_trades: "GET /md/v2/trade"
+      # Account endpoints
+      get_balance: "GET /spot/wallets"
+      get_orders: "GET /spot/orders/active"
+      get_order: "GET /spot/orders"
+      make_order: "POST /spot/orders/create"
+      cancel_order: "DELETE /spot/orders"
+      cancel_all_orders: "DELETE /spot/orders"
+    wss_paths:
+      ticker: "spot_market24h.v2.<symbol>"
+      depth: "orderbook.v2.<symbol>"
+      trade: "trade.v2.<symbol>"
+      kline: "kline.v2.<resolution>.<symbol>"
+
+  perpetual:
+    exchange_name: PHEMEX___PERPETUAL
+    symbol_format: "{base}{quote}"
+    legal_currency: [USDT, USD]
+    rest_paths:
+      # Public endpoints
+      ping: "GET /exchange/public/md/v2/timestamp"
+      get_server_time: "GET /exchange/public/md/v2/timestamp"
+      get_products: "GET /public/products"
+      get_exchange_info: "GET /public/products"
+      get_tick: "GET /md/v2/ticker/24hr"
+      get_ticker: "GET /md/v2/ticker/24hr"
+      get_depth: "GET /md/v2/orderbook"
+      get_kline: "GET /md/v2/kline"
+      get_trades: "GET /md/v2/trade"
+      get_funding_rate: "GET /md/v2/funding/data"
+      # Account endpoints
+      get_balance: "GET /g-accounts/accountPositions"
+      get_positions: "GET /g-accounts/accountPositions"
+      get_orders: "GET /g-orders/activeList"
+      get_order: "GET /g-orders"
+      make_order: "POST /g-orders/create"
+      cancel_order: "DELETE /g-orders/cancel"
+      cancel_all_orders: "DELETE /g-orders/cancel"
+      modify_order: "PUT /g-orders/replace"
+      # Leverage
+      set_leverage: "POST /g-accounts/updateLeverage"
+    wss_paths:
+      ticker: "tick.v2.<symbol>"
+      depth: "orderbook.v2.<symbol>"
+      trade: "trade.v2.<symbol>"
+      kline: "kline.v2.<resolution>.<symbol>"
+      account: ""
+      orders: ""
+
+# Phemex uses scaled precision for prices and amounts
+# Ep/Ev/Er/Rp/Rq/Rv suffixes indicate scaling factor
+scaling_factors:
+  # USDT pairs typically use 1e8 scale
+  usdt_pairs: 100000000
+  # BTC pairs use 1e8 scale
+  btc_pairs: 100000000
+  # USD pairs use 1e8 scale
+  usd_pairs: 100000000

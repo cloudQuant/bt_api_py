@@ -1,0 +1,187 @@
+# Crypto.com 交易所统一配置
+# 数据来源: bt_api_py/containers/exchanges/cryptocom_exchange_data.py
+id: cryptocom
+display_name: Crypto.com
+venue_type: cex
+website: https://www.crypto.com
+api_doc: https://exchange-docs.crypto.com/spot/#/
+
+base_urls:
+  rest:
+    spot: https://exchange.crypto.com/exchange/v1
+    derivatives: https://exchange.crypto.com/exchange/v1
+  wss:
+    spot: wss://stream.crypto.com/v1/heartbeat
+    derivatives: wss://stream.crypto.com/v1/heartbeat
+  acct_wss:
+    spot: wss://stream.crypto.com/v1/heartbeat
+    derivatives: wss://stream.crypto.com/v1/heartbeat
+
+connection:
+  type: http
+  timeout: 10
+  max_retries: 3
+
+authentication:
+  type: hmac_sha256
+  header_name: Signature
+  timestamp_key: timestamp
+  signature_key: signature
+
+# 共享默认 kline 周期映射
+kline_periods:
+  1m: "1m"
+  3m: "3m"
+  5m: "5m"
+  15m: "15m"
+  30m: "30m"
+  1h: "1h"
+  2h: "2h"
+  4h: "4h"
+  6h: "6h"
+  12h: "12h"
+  1d: "1D"
+  7d: "7D"
+  14d: "14D"
+  1M: "1M"
+
+# 共享默认法币列表
+legal_currency: [USDT, USD, BTC, ETH, USDC, CRO]
+
+rate_limits:
+  - name: request_weight
+    type: sliding_window
+    interval: 60
+    limit: 2400
+    scope: global
+    weight: 1
+    weight_map:
+      "/public/v1/time": 1
+      "/public/v1/exchange_info": 1
+      "/public/v1/ticker/price": 1
+      "/public/v1/ticker/24hr": 1
+      "/public/v1/depth": 1
+      "/public/v1/klines": 1
+  - name: order_rate
+    type: sliding_window
+    interval: 10
+    limit: 300
+    scope: endpoint
+    endpoint: "/private/v1/orders"
+    weight: 1
+  - name: order_rate_minute
+    type: sliding_window
+    interval: 60
+    limit: 1200
+    scope: endpoint
+    endpoint: "/private/v1/orders"
+    weight: 1
+
+# ═══════════════════════════════════════════════════════════════
+# Asset Types — 每个子类型对应 CryptoComExchangeData 的一个子类
+# ═══════════════════════════════════════════════════════════════
+asset_types:
+
+  # ─── CryptoComExchangeDataDerivatives ─────────────────────────
+  derivatives:
+    exchange_name: cryptocom_derivatives
+    symbol_format: "{base}{quote}"
+    legal_currency: [USDT, USD, BTC, ETH, USDC, CRO]
+    rest_paths:
+      # General
+      ping: "GET /public/v1/time"
+      get_server_time: "GET /public/v1/time"
+      get_contract: "GET /public/v1/exchange_info"
+      # Market Data
+      get_tick: "GET /public/v1/ticker/price"
+      get_info: "GET /public/v1/ticker/24hr"
+      get_new_price: "GET /public/v1/trades"
+      get_historical_trades: "GET /public/v1/historical_trades"
+      get_depth: "GET /public/v1/depth"
+      get_incre_depth: "GET /public/v1/depth"
+      get_kline: "GET /public/v1/klines"
+      get_agg_trades: "GET /public/v1/agg_trades"
+      # Account
+      get_account: "GET /private/v1/account"
+      get_balance: "GET /private/v1/balance"
+      get_position: "GET /private/v1/position"
+      get_fee: "GET /private/v1/commission_rate"
+      # Trade
+      make_order: "POST /private/v1/orders"
+      make_order_test: "POST /private/v1/orders/test"
+      modify_order: "PUT /private/v1/orders"
+      cancel_order: "DELETE /private/v1/orders"
+      cancel_all: "DELETE /private/v1/orders/cancel_all"
+      query_order: "GET /private/v1/orders"
+      get_open_orders: "GET /private/v1/open_orders"
+      get_all_orders: "GET /private/v1/orders/hist"
+      get_deals: "GET /private/v1/fills"
+      # Listen Key
+      get_listen_key: "POST /private/v1/listen_key"
+      refresh_listen_key: "PUT /private/v1/listen_key"
+      close_listen_key: "DELETE /private/v1/listen_key"
+    wss_paths:
+      # Market Streams
+      trade: "<symbol>@trade"
+      kline: "<symbol>@kline_<period>"
+      ticker: "<symbol>@ticker"
+      book_ticker: "<symbol>@bookTicker"
+      depth: "<symbol>@depth20@100ms"
+      mark_price: "<symbol>@markPrice@1s"
+      funding_rate: "<symbol>@funding_rate@1s"
+      # User Data Streams (listen key based)
+      orders: ""
+      deals: ""
+      balance: ""
+      position: ""
+      account: ""
+
+  # ─── CryptoComExchangeDataSpot ────────────────────────────────
+  spot:
+    exchange_name: cryptocom_spot
+    symbol_format: "{base}{quote}"
+    legal_currency: [USDT, USD, BTC, ETH, USDC, CRO]
+    rest_paths:
+      # General
+      ping: "GET /public/v1/time"
+      get_server_time: "GET /public/v1/time"
+      get_contract: "GET /public/v1/exchange_info"
+      # Market Data
+      get_tick: "GET /public/v1/ticker/price"
+      get_info: "GET /public/v1/ticker/24hr"
+      get_new_price: "GET /public/v1/trades"
+      get_historical_trades: "GET /public/v1/historical_trades"
+      get_depth: "GET /public/v1/depth"
+      get_incre_depth: "GET /public/v1/depth"
+      get_kline: "GET /public/v1/klines"
+      get_agg_trades: "GET /public/v1/agg_trades"
+      # Account
+      get_account: "GET /private/v1/account"
+      get_balance: "GET /private/v1/balance"
+      get_fee: "GET /private/v1/commission_rate"
+      # Trade
+      make_order: "POST /private/v1/orders"
+      make_order_test: "POST /private/v1/orders/test"
+      modify_order: "PUT /private/v1/orders"
+      cancel_order: "DELETE /private/v1/orders"
+      cancel_all: "DELETE /private/v1/orders/cancel_all"
+      query_order: "GET /private/v1/orders"
+      get_open_orders: "GET /private/v1/open_orders"
+      get_all_orders: "GET /private/v1/orders/hist"
+      get_deals: "GET /private/v1/fills"
+      # Listen Key
+      get_listen_key: "POST /private/v1/listen_key"
+      refresh_listen_key: "PUT /private/v1/listen_key"
+      close_listen_key: "DELETE /private/v1/listen_key"
+    wss_paths:
+      # Market Streams
+      trade: "<symbol>@trade"
+      kline: "<symbol>@kline_<period>"
+      ticker: "<symbol>@ticker"
+      book_ticker: "<symbol>@bookTicker"
+      depth: "<symbol>@depth20@100ms"
+      # User Data Streams (listen key based)
+      orders: ""
+      deals: ""
+      balance: ""
+      account: ""
