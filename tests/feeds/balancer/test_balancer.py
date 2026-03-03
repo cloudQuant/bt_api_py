@@ -56,6 +56,10 @@ class TestBalancerRequestDataSpot:
         assert Capability.GET_DEPTH in capabilities
         assert Capability.GET_EXCHANGE_INFO in capabilities
         assert Capability.GET_KLINE in capabilities
+        assert Capability.GET_BALANCE in capabilities
+        assert Capability.GET_ACCOUNT in capabilities
+        assert Capability.MAKE_ORDER in capabilities
+        assert Capability.CANCEL_ORDER in capabilities
 
     # ==================== Pool Tests ====================
 
@@ -358,6 +362,347 @@ class TestBalancerRegistration:
         exchange_class = get_exchange_class("BALANCER___DEX")
         assert exchange_class is not None
         assert exchange_class.__name__ == "BalancerRequestDataSpot"
+
+
+class TestBalancerStandardInterfaces:
+    """Test standard Feed interface methods for Balancer."""
+
+    @pytest.fixture
+    def balancer_spot(self):
+        """Create BalancerRequestDataSpot instance with mocked request."""
+        with patch('bt_api_py.feeds.live_balancer.request_base.HttpClient', return_value=MagicMock()):
+            instance = BalancerRequestDataSpot(Mock(), chain=MockGqlChain.MAINNET)
+            instance.request = Mock(return_value=Mock(spec=RequestData))
+            return instance
+
+    # ── get_tick via request() ────────────────────────────────
+
+    def test_get_tick_calls_request(self, balancer_spot):
+        """Test get_tick calls self.request with correct extra_data."""
+        token = "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2"
+        result = balancer_spot.get_tick(token)
+        assert balancer_spot.request.called
+        call_args = balancer_spot.request.call_args
+        extra_data = call_args[1].get("extra_data") or call_args[0][2] if len(call_args[0]) > 2 else call_args[1].get("extra_data")
+        assert extra_data["request_type"] == "get_tick"
+        assert extra_data["symbol_name"] == token
+
+    # ── get_depth via request() ───────────────────────────────
+
+    def test_get_depth_calls_request(self, balancer_spot):
+        """Test get_depth calls self.request."""
+        pool_id = "0x7f2b3b7fbd3226c5be438cde49a519f442ca2eda00020000000000000000067d"
+        result = balancer_spot.get_depth(pool_id)
+        assert balancer_spot.request.called
+        call_args = balancer_spot.request.call_args
+        extra_data = call_args[1].get("extra_data") or call_args[0][2] if len(call_args[0]) > 2 else call_args[1].get("extra_data")
+        assert extra_data["request_type"] == "get_depth"
+        assert extra_data["symbol_name"] == pool_id
+
+    # ── get_kline via request() ───────────────────────────────
+
+    def test_get_kline_calls_request(self, balancer_spot):
+        """Test get_kline calls self.request."""
+        result = balancer_spot.get_kline("0xpool", "1h", 100)
+        assert balancer_spot.request.called
+        call_args = balancer_spot.request.call_args
+        extra_data = call_args[1].get("extra_data") or call_args[0][2] if len(call_args[0]) > 2 else call_args[1].get("extra_data")
+        assert extra_data["request_type"] == "get_kline"
+        assert extra_data["period"] == "1h"
+
+    # ── get_server_time ───────────────────────────────────────
+
+    def test_get_server_time(self, balancer_spot):
+        """Test get_server_time returns RequestData with server_time."""
+        # get_server_time builds its own RequestData, don't mock request
+        with patch('bt_api_py.feeds.live_balancer.request_base.HttpClient', return_value=MagicMock()):
+            inst = BalancerRequestDataSpot(Mock(), chain=MockGqlChain.MAINNET)
+            result = inst.get_server_time()
+            assert isinstance(result, RequestData)
+
+    def test_get_server_time_extra_data(self, balancer_spot):
+        """Test _get_server_time populates extra_data correctly."""
+        with patch('bt_api_py.feeds.live_balancer.request_base.HttpClient', return_value=MagicMock()):
+            inst = BalancerRequestDataSpot(Mock(), chain=MockGqlChain.MAINNET)
+            path, params, extra_data = inst._get_server_time()
+            assert extra_data["request_type"] == "get_server_time"
+            assert extra_data["exchange_name"] == "BALANCER___DEX"
+            assert "server_time" in extra_data
+
+    # ── make_order (DEX swap) ─────────────────────────────────
+
+    def test_make_order_calls_request(self, balancer_spot):
+        """Test make_order calls self.request with swap params."""
+        result = balancer_spot.make_order(
+            "WETH-USDC", 1.0, 3000, "LIMIT",
+            token_in="0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
+            token_out="0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+        )
+        assert balancer_spot.request.called
+        call_args = balancer_spot.request.call_args
+        extra_data = call_args[1].get("extra_data")
+        assert extra_data["request_type"] == "make_order"
+        assert extra_data["symbol_name"] == "WETH-USDC"
+
+    def test_make_order_parses_symbol(self, balancer_spot):
+        """Test _make_order parses tokenIn-tokenOut from symbol."""
+        path, body, extra_data = balancer_spot._make_order(
+            "0xTokenA-0xTokenB", 1.0, 100, "LIMIT"
+        )
+        assert extra_data["token_in"] == "0xTokenA"
+        assert extra_data["token_out"] == "0xTokenB"
+        assert body["amount"] == "1.0"
+
+    # ── cancel_order ──────────────────────────────────────────
+
+    def test_cancel_order_calls_request(self, balancer_spot):
+        """Test cancel_order calls self.request."""
+        result = balancer_spot.cancel_order("WETH-USDC", "tx_hash_123")
+        assert balancer_spot.request.called
+        call_args = balancer_spot.request.call_args
+        extra_data = call_args[1].get("extra_data") or call_args[0][2] if len(call_args[0]) > 2 else call_args[1].get("extra_data")
+        assert extra_data["request_type"] == "cancel_order"
+        assert extra_data["order_id"] == "tx_hash_123"
+
+    # ── query_order ───────────────────────────────────────────
+
+    def test_query_order_calls_request(self, balancer_spot):
+        """Test query_order calls self.request."""
+        result = balancer_spot.query_order("WETH-USDC", "tx_hash_123")
+        assert balancer_spot.request.called
+        call_args = balancer_spot.request.call_args
+        extra_data = call_args[1].get("extra_data") or call_args[0][2] if len(call_args[0]) > 2 else call_args[1].get("extra_data")
+        assert extra_data["request_type"] == "query_order"
+        assert extra_data["order_id"] == "tx_hash_123"
+
+    # ── get_open_orders ───────────────────────────────────────
+
+    def test_get_open_orders_calls_request(self, balancer_spot):
+        """Test get_open_orders calls self.request."""
+        result = balancer_spot.get_open_orders("WETH-USDC")
+        assert balancer_spot.request.called
+        call_args = balancer_spot.request.call_args
+        extra_data = call_args[1].get("extra_data") or call_args[0][2] if len(call_args[0]) > 2 else call_args[1].get("extra_data")
+        assert extra_data["request_type"] == "get_open_orders"
+
+    # ── get_account ───────────────────────────────────────────
+
+    def test_get_account_calls_request(self, balancer_spot):
+        """Test get_account calls self.request."""
+        result = balancer_spot.get_account("WETH")
+        assert balancer_spot.request.called
+        call_args = balancer_spot.request.call_args
+        extra_data = call_args[1].get("extra_data") or call_args[0][2] if len(call_args[0]) > 2 else call_args[1].get("extra_data")
+        assert extra_data["request_type"] == "get_account"
+        assert extra_data["chain"] == "MAINNET"
+
+    # ── get_balance ───────────────────────────────────────────
+
+    def test_get_balance_calls_request(self, balancer_spot):
+        """Test get_balance calls self.request."""
+        result = balancer_spot.get_balance("WETH")
+        assert balancer_spot.request.called
+        call_args = balancer_spot.request.call_args
+        extra_data = call_args[1].get("extra_data") or call_args[0][2] if len(call_args[0]) > 2 else call_args[1].get("extra_data")
+        assert extra_data["request_type"] == "get_balance"
+        assert extra_data["chain"] == "MAINNET"
+
+
+class TestBalancerRequestMethod:
+    """Test that request() properly handles GraphQL delegation."""
+
+    def test_request_with_graphql_query(self):
+        """Test request() delegates to _execute_graphql_query when _graphql_query present."""
+        with patch('bt_api_py.feeds.live_balancer.request_base.HttpClient', return_value=MagicMock()):
+            inst = BalancerRequestDataSpot(Mock(), chain=MockGqlChain.MAINNET)
+            inst._execute_graphql_query = Mock(return_value=Mock(spec=RequestData))
+            extra_data = {
+                "_graphql_query": "query { test }",
+                "_graphql_variables": {"var1": "val1"},
+                "request_type": "test",
+            }
+            result = inst.request("POST /graphql", extra_data=extra_data)
+            inst._execute_graphql_query.assert_called_once()
+
+    def test_request_without_graphql_returns_request_data(self):
+        """Test request() returns RequestData when no _graphql_query."""
+        with patch('bt_api_py.feeds.live_balancer.request_base.HttpClient', return_value=MagicMock()):
+            inst = BalancerRequestDataSpot(Mock(), chain=MockGqlChain.MAINNET)
+            result = inst.request("GET /test", params={"key": "val"}, extra_data={"request_type": "test"})
+            assert isinstance(result, RequestData)
+
+
+class TestBalancerBaseCapabilities:
+    """Test capabilities on the base class."""
+
+    def test_base_capabilities(self):
+        """Test that BalancerRequestData base class declares correct capabilities."""
+        from bt_api_py.feeds.capability import Capability
+        from bt_api_py.feeds.live_balancer.request_base import BalancerRequestData
+
+        caps = BalancerRequestData._capabilities()
+        assert Capability.GET_TICK in caps
+        assert Capability.GET_DEPTH in caps
+        assert Capability.GET_KLINE in caps
+        assert Capability.GET_EXCHANGE_INFO in caps
+        assert Capability.GET_BALANCE in caps
+        assert Capability.GET_ACCOUNT in caps
+        assert Capability.MAKE_ORDER in caps
+        assert Capability.CANCEL_ORDER in caps
+
+
+class TestBalancerDataContainers:
+    """Test Balancer data containers init_data() returns self."""
+
+    def test_ticker_init_data_returns_self(self):
+        """Test BalancerRequestTickerData.init_data() returns self."""
+        from bt_api_py.containers.tickers.balancer_ticker import BalancerRequestTickerData
+
+        ticker_data = {
+            "data": {
+                "tokenGetTokenDynamicData": {
+                    "price": "3000.50",
+                    "priceChange24h": "50.00",
+                    "marketCap": "100000000",
+                    "volume24h": "50000",
+                }
+            }
+        }
+        ticker = BalancerRequestTickerData(ticker_data, "WETH", "DEX", has_been_json_encoded=True)
+        result = ticker.init_data()
+        assert result is ticker
+        assert ticker.get_symbol_name() == "WETH"
+        assert ticker.get_last_price() == 3000.50
+
+    def test_ticker_init_data_idempotent(self):
+        """Test that calling init_data() twice returns self both times."""
+        from bt_api_py.containers.tickers.balancer_ticker import BalancerRequestTickerData
+
+        ticker_data = {"price": "100.0", "priceChange24h": "1.0"}
+        ticker = BalancerRequestTickerData(ticker_data, "WETH", "DEX", has_been_json_encoded=True)
+        r1 = ticker.init_data()
+        r2 = ticker.init_data()
+        assert r1 is ticker
+        assert r2 is ticker
+
+    def test_wss_ticker_init_data_returns_self(self):
+        """Test BalancerWssTickerData.init_data() returns self."""
+        from bt_api_py.containers.tickers.balancer_ticker import BalancerWssTickerData
+
+        ticker_data = {"price": "2500.0", "priceChange24h": "10.0"}
+        ticker = BalancerWssTickerData(ticker_data, "WETH", "DEX", has_been_json_encoded=True)
+        result = ticker.init_data()
+        assert result is ticker
+
+    def test_pool_init_data_returns_self(self):
+        """Test BalancerPoolData.init_data() returns self."""
+        from bt_api_py.containers.pools.balancer_pool import BalancerPoolData
+
+        pool_data = {
+            "id": "pool123",
+            "address": "0xabc",
+            "name": "Test Pool",
+            "symbol": "TP",
+            "type": "WEIGHTED",
+            "version": 2,
+            "allTokens": [
+                {"address": "0xtoken1", "symbol": "TK1", "name": "Token1", "decimals": 18},
+            ],
+            "poolTokens": [
+                {"address": "0xtoken1", "symbol": "TK1", "balance": "1000", "balanceUsd": "3000"},
+            ],
+            "dynamicData": {
+                "totalLiquidity": "1000000",
+                "totalShares": "500000",
+                "volume24h": "50000",
+                "fees24h": "150",
+                "aprItems": [
+                    {"title": "Swap APR", "type": "SWAP", "apr": "0.05"},
+                ],
+            },
+        }
+        pool = BalancerPoolData(pool_data, has_been_json_encoded=True)
+        result = pool.init_data()
+        assert result is pool
+        assert pool.get_pool_id() == "pool123"
+        assert pool.get_pool_name() == "Test Pool"
+        assert pool.get_total_liquidity() == 1000000.0
+        assert pool.get_volume_24h() == 50000.0
+
+    def test_pool_init_data_idempotent(self):
+        """Test that calling pool init_data() twice returns self both times."""
+        from bt_api_py.containers.pools.balancer_pool import BalancerPoolData
+
+        pool_data = {"id": "p1", "name": "P1"}
+        pool = BalancerPoolData(pool_data, has_been_json_encoded=True)
+        r1 = pool.init_data()
+        r2 = pool.init_data()
+        assert r1 is pool
+        assert r2 is pool
+
+    def test_wss_pool_init_data_returns_self(self):
+        """Test BalancerWssPoolData.init_data() returns self."""
+        from bt_api_py.containers.pools.balancer_pool import BalancerWssPoolData
+
+        pool_data = {"id": "p1", "name": "Pool 1"}
+        pool = BalancerWssPoolData(pool_data, has_been_json_encoded=True)
+        result = pool.init_data()
+        assert result is pool
+
+
+class TestBalancerNormalizeFunctions:
+    """Test normalize functions edge cases."""
+
+    def test_tick_normalize_with_none_input(self):
+        """Test tick normalize returns empty for None input."""
+        result, status = BalancerRequestDataSpot._get_tick_normalize_function(None, None)
+        assert result == []
+        assert status is False
+
+    def test_tick_normalize_with_missing_data(self):
+        """Test tick normalize returns empty when tokenGetTokenDynamicData is missing."""
+        input_data = {"data": {}}
+        result, status = BalancerRequestDataSpot._get_tick_normalize_function(input_data, None)
+        assert result == []
+        assert status is False
+
+    def test_pool_normalize_with_none_input(self):
+        """Test pool normalize returns empty for None input."""
+        result, status = BalancerRequestDataSpot._get_pool_normalize_function(None, None)
+        assert result == []
+        assert status is False
+
+    def test_pools_normalize_with_empty_list(self):
+        """Test pools normalize returns empty list for empty pools."""
+        input_data = {"data": {"poolGetPools": []}}
+        result, status = BalancerRequestDataSpot._get_pools_normalize_function(input_data, None)
+        assert result == []
+        assert status is True
+
+    def test_swap_path_normalize_with_none_input(self):
+        """Test swap path normalize returns empty for None input."""
+        result, status = BalancerRequestDataSpot._get_swap_path_normalize_function(None, None)
+        assert result == []
+        assert status is False
+
+    def test_pool_events_normalize_with_empty_events(self):
+        """Test pool events normalize returns empty for no events."""
+        input_data = {"data": {"poolGetEvents": []}}
+        result, status = BalancerRequestDataSpot._get_pool_events_normalize_function(input_data, None)
+        assert result == []
+        assert status is True
+
+    def test_depth_normalize_with_none_input(self):
+        """Test depth normalize returns empty for None input."""
+        result, status = BalancerRequestDataSpot._get_depth_normalize_function(None, None)
+        assert result == []
+        assert status is False
+
+    def test_kline_normalize_always_returns_empty(self):
+        """Test kline normalize always returns empty (not supported)."""
+        result, status = BalancerRequestDataSpot._get_kline_normalize_function({"data": {}}, None)
+        assert result == []
+        assert status is True
 
 
 if __name__ == "__main__":

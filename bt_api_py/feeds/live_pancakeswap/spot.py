@@ -23,25 +23,20 @@ from bt_api_py.functions.log_message import SpdLogManager
 from bt_api_py.functions.utils import update_extra_data
 
 
-class PancakeSpotRequestData(PancakeSwapRequestData, RequestData):
+class PancakeSpotRequestData(PancakeSwapRequestData):
     """PancakeSpot Spot Trading Request Data"""
 
     @classmethod
     def _capabilities(cls):
         return {
-            # Core trading capabilities
             Capability.GET_TICK,
             Capability.GET_DEPTH,
             Capability.GET_KLINE,
             Capability.GET_EXCHANGE_INFO,
-            Capability.MAKE_ORDER,
-            Capability.CANCEL_ORDER,
-            Capability.QUERY_ORDER,
-            Capability.QUERY_OPEN_ORDERS,
-            Capability.GET_DEALS,
             Capability.GET_BALANCE,
             Capability.GET_ACCOUNT,
-            Capability.GET_POSITION,
+            Capability.MAKE_ORDER,
+            Capability.CANCEL_ORDER,
         }
 
     def __init__(self, data_queue, **kwargs):
@@ -126,18 +121,17 @@ class PancakeSpotRequestData(PancakeSwapRequestData, RequestData):
         return [], False
 
     def get_tick(self, symbol: str, extra_data=None, **kwargs) -> RequestData:
-        """Get ticker information for a symbol.
-
-        Args:
-            symbol: Trading pair symbol (e.g., "BTCB/USDT")
-            extra_data: Extra data to attach
-            **kwargs: Additional parameters
-
-        Returns:
-            RequestData with ticker information
-        """
+        """Get ticker information for a symbol."""
         path, params, extra_data = self._get_tick(symbol, extra_data, **kwargs)
         return self.request("GET", path, params, extra_data)
+
+    def async_get_tick(self, symbol: str, extra_data=None, **kwargs):
+        """Async get ticker information."""
+        path, params, extra_data = self._get_tick(symbol, extra_data, **kwargs)
+        self.submit(
+            self.async_request("GET", path, params=params, extra_data=extra_data),
+            callback=self.async_callback,
+        )
 
     def get_ticker(self, symbol: str, extra_data=None, **kwargs) -> BinanceRequestTickerData:
         """Get ticker as BinanceRequestTickerData (for compatibility).
@@ -239,19 +233,19 @@ class PancakeSpotRequestData(PancakeSwapRequestData, RequestData):
     def get_depth(
         self, symbol: str, limit: int = 100, extra_data=None, **kwargs
     ) -> RequestData:
-        """Get order book depth for a symbol.
-
-        Args:
-            symbol: Trading pair symbol
-            limit: Number of depth levels
-            extra_data: Extra data to attach
-            **kwargs: Additional parameters
-
-        Returns:
-            RequestData with depth information
-        """
+        """Get order book depth for a symbol."""
         path, params, extra_data = self._get_depth(symbol, limit, extra_data, **kwargs)
         return self.request("GET", path, params, extra_data)
+
+    def async_get_depth(
+        self, symbol: str, limit: int = 100, extra_data=None, **kwargs
+    ):
+        """Async get order book depth."""
+        path, params, extra_data = self._get_depth(symbol, limit, extra_data, **kwargs)
+        self.submit(
+            self.async_request("GET", path, params=params, extra_data=extra_data),
+            callback=self.async_callback,
+        )
 
     def _get_kline(
         self, symbol: str, interval: str, limit: int = 100, extra_data=None, **kwargs
@@ -351,20 +345,19 @@ class PancakeSpotRequestData(PancakeSwapRequestData, RequestData):
     def get_kline(
         self, symbol: str, interval: str, limit: int = 100, extra_data=None, **kwargs
     ) -> RequestData:
-        """Get K-line/candlestick data.
-
-        Args:
-            symbol: Trading pair symbol
-            interval: Kline interval (1m, 5m, 15m, 30m, 1h, 4h, 1d)
-            limit: Number of klines to return
-            extra_data: Extra data to attach
-            **kwargs: Additional parameters
-
-        Returns:
-            RequestData with kline information
-        """
+        """Get K-line/candlestick data."""
         path, params, extra_data = self._get_kline(symbol, interval, limit, extra_data, **kwargs)
         return self.request("GET", path, params, extra_data)
+
+    def async_get_kline(
+        self, symbol: str, interval: str, limit: int = 100, extra_data=None, **kwargs
+    ):
+        """Async get K-line/candlestick data."""
+        path, params, extra_data = self._get_kline(symbol, interval, limit, extra_data, **kwargs)
+        self.submit(
+            self.async_request("GET", path, params=params, extra_data=extra_data),
+            callback=self.async_callback,
+        )
 
     def _get_exchange_info(
         self, extra_data=None, **kwargs
@@ -589,80 +582,130 @@ class PancakeSpotRequestData(PancakeSwapRequestData, RequestData):
         path, params, extra_data = self._get_pools(first, min_tvl, extra_data, **kwargs)
         return self.request("GET", path, params, extra_data)
 
-    # ==================== Trading Methods ====================
+    # ==================== Standard Trading Interfaces ====================
 
-    def get_trades(self, symbol: str, limit: int = 500, extra_data=None, **kwargs) -> List[BinanceRequestTradeData]:
-        """Get recent trades for a symbol."""
-        # PancakeSwap doesn't provide a direct trades endpoint
-        return []
+    def _make_order(self, symbol, volume, price, order_type, offset="open",
+                    post_only=False, client_order_id=None, extra_data=None, **kwargs):
+        """Prepare order. Returns (method, path, body, extra_data).
 
-    def place_order(self, symbol: str, side: str, order_type: str, quantity: float,
-                   price: Optional[float] = None, extra_data=None, **kwargs) -> BinanceRequestOrderData:
-        """Place a new order."""
-        order_id = f"pancake_{int(time.time() * 1000)}"
-
-        return BinanceRequestOrderData(
-            symbol=symbol,
-            order_id=order_id,
-            client_order_id=kwargs.get("client_order_id", ""),
-            side=side,
-            type=order_type,
-            quantity=quantity,
-            price=price,
-            status="NEW",
-            timestamp=int(time.time() * 1000),
-            executed_quantity=0.0,
-            cummulative_quote_quantity=0.0,
-            time_in_force=kwargs.get("time_in_force", "GTC"),
-            fills=[],
-            exchange="PANCakeswap"
-        )
-
-    def cancel_order(self, symbol: str, order_id: str, **kwargs) -> Dict:
-        """Cancel an existing order."""
-        return {
+        PancakeSwap is a DEX; trading requires on-chain transactions.
+        """
+        if extra_data is None:
+            extra_data = {}
+        extra_data.update({
+            "exchange_name": self.exchange_name,
+            "symbol_name": symbol,
+            "asset_type": self.asset_type,
+            "request_type": "make_order",
+            "quantity": volume,
+            "price": price,
+            "order_type": order_type,
+        })
+        body = {
             "symbol": symbol,
-            "order_id": order_id,
-            "status": "CANCELED",
-            "timestamp": int(time.time() * 1000)
+            "quantity": str(volume),
+            "price": str(price),
+            "orderType": order_type,
         }
+        return "POST", "/orders", body, extra_data
 
-    def get_order_status(self, symbol: str, order_id: str, **kwargs) -> BinanceRequestOrderData:
-        """Query order status."""
-        return BinanceRequestOrderData(
-            symbol=symbol,
-            order_id=order_id,
-            client_order_id="",
-            side="BUY",
-            type="MARKET",
-            quantity=0.0,
-            price=0.0,
-            status="UNKNOWN",
-            timestamp=int(time.time() * 1000),
-            executed_quantity=0.0,
-            cummulative_quote_quantity=0.0,
-            time_in_force="GTC",
-            fills=[],
-            exchange="PANCakeswap"
+    def make_order(self, symbol, volume, price, order_type, offset="open",
+                   post_only=False, client_order_id=None, extra_data=None, **kwargs):
+        """Place an order. Note: PancakeSwap requires on-chain tx."""
+        method, path, body, extra_data = self._make_order(
+            symbol, volume, price, order_type, offset, post_only,
+            client_order_id, extra_data, **kwargs
         )
+        return self.request(method, path, extra_data=extra_data, body=body)
 
-    def get_open_orders(self, symbol: Optional[str] = None, **kwargs) -> List[BinanceRequestOrderData]:
-        """Get all open orders."""
-        return []
+    def _cancel_order(self, symbol, order_id, extra_data=None, **kwargs):
+        """Cancel order. Returns (method, path, params, extra_data)."""
+        if extra_data is None:
+            extra_data = {}
+        extra_data.update({
+            "exchange_name": self.exchange_name,
+            "symbol_name": symbol,
+            "asset_type": self.asset_type,
+            "request_type": "cancel_order",
+            "order_id": order_id,
+        })
+        return "DELETE", f"/orders/{order_id}", {}, extra_data
 
-    # ==================== Account Methods ====================
+    def cancel_order(self, symbol, order_id, extra_data=None, **kwargs):
+        """Cancel order."""
+        method, path, params, extra_data = self._cancel_order(symbol, order_id, extra_data, **kwargs)
+        return self.request(method, path, params=params, extra_data=extra_data)
 
-    def get_balance(self, **kwargs) -> Dict:
-        """Get account balance."""
-        return {}
+    def _query_order(self, symbol, order_id, extra_data=None, **kwargs):
+        """Query order. Returns (method, path, params, extra_data)."""
+        if extra_data is None:
+            extra_data = {}
+        extra_data.update({
+            "exchange_name": self.exchange_name,
+            "symbol_name": symbol,
+            "asset_type": self.asset_type,
+            "request_type": "query_order",
+            "order_id": order_id,
+        })
+        return "GET", f"/orders/{order_id}", {}, extra_data
 
-    def get_account_info(self, **kwargs) -> Dict:
-        """Get account information."""
-        return {
-            "account_type": "SPOT",
-            "maker_fee_rate": 0.002,
-            "taker_fee_rate": 0.002
-        }
+    def query_order(self, symbol, order_id, extra_data=None, **kwargs):
+        """Query order status."""
+        method, path, params, extra_data = self._query_order(symbol, order_id, extra_data, **kwargs)
+        return self.request(method, path, params=params, extra_data=extra_data)
+
+    def _get_open_orders(self, symbol=None, extra_data=None, **kwargs):
+        """Get open orders. Returns (method, path, params, extra_data)."""
+        if extra_data is None:
+            extra_data = {}
+        extra_data.update({
+            "exchange_name": self.exchange_name,
+            "symbol_name": symbol or "",
+            "asset_type": self.asset_type,
+            "request_type": "get_open_orders",
+        })
+        return "GET", "/orders", {}, extra_data
+
+    def get_open_orders(self, symbol=None, extra_data=None, **kwargs):
+        """Get open orders."""
+        method, path, params, extra_data = self._get_open_orders(symbol, extra_data, **kwargs)
+        return self.request(method, path, params=params, extra_data=extra_data)
+
+    # ==================== Standard Account Interfaces ====================
+
+    def _get_account(self, symbol=None, extra_data=None, **kwargs):
+        """Get account info. Returns (method, path, params, extra_data)."""
+        if extra_data is None:
+            extra_data = {}
+        extra_data.update({
+            "exchange_name": self.exchange_name,
+            "symbol_name": symbol or "",
+            "asset_type": self.asset_type,
+            "request_type": "get_account",
+        })
+        return "GET", "/account", {}, extra_data
+
+    def get_account(self, symbol=None, extra_data=None, **kwargs):
+        """Get account info."""
+        method, path, params, extra_data = self._get_account(symbol, extra_data, **kwargs)
+        return self.request(method, path, params=params, extra_data=extra_data)
+
+    def _get_balance(self, symbol=None, extra_data=None, **kwargs):
+        """Get balance. Returns (method, path, params, extra_data)."""
+        if extra_data is None:
+            extra_data = {}
+        extra_data.update({
+            "exchange_name": self.exchange_name,
+            "symbol_name": symbol or "",
+            "asset_type": self.asset_type,
+            "request_type": "get_balance",
+        })
+        return "GET", "/balance", {}, extra_data
+
+    def get_balance(self, symbol=None, extra_data=None, **kwargs):
+        """Get token balance."""
+        method, path, params, extra_data = self._get_balance(symbol, extra_data, **kwargs)
+        return self.request(method, path, params=params, extra_data=extra_data)
 
     # ==================== Additional Methods ====================
 
@@ -687,16 +730,3 @@ class PancakeSpotRequestData(PancakeSwapRequestData, RequestData):
             "current_price": 0.0
         }
 
-    # ==================== WebSocket Methods ====================
-
-    def subscribe_ticker(self, symbol: str, callback=None):
-        """Subscribe to ticker updates."""
-        raise NotImplementedError("WebSocket ticker subscription not yet implemented")
-
-    def subscribe_depth(self, symbol: str, callback=None, limit: int = 100):
-        """Subscribe to order book updates."""
-        raise NotImplementedError("WebSocket depth subscription not yet implemented")
-
-    def subscribe_trades(self, symbol: str, callback=None):
-        """Subscribe to trade updates."""
-        raise NotImplementedError("WebSocket trades subscription not yet implemented")

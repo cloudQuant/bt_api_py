@@ -1,43 +1,24 @@
-# LocalBitcoins Configuration
-# Official API documentation: https://localbitcoins.com/api-docs/
+# ──────────────────────────────────────────────────────────────
+# LocalBitcoins – Feed-pattern configuration
+# P2P cryptocurrency exchange, HMAC-SHA256 auth
+# ──────────────────────────────────────────────────────────────
 
-id: localbitcoins
-display_name: LocalBitcoins
-venue_type: cex
-website: https://localbitcoins.com
-api_doc: https://localbitcoins.com/api-docs/
+exchange_name: "LOCALBITCOINS___SPOT"
+display_name: "LocalBitcoins"
 
-# Base URLs
-base_urls:
-  rest:
-    spot: https://localbitcoins.com
-  wss:
-    public: ""
+# ── URLs ──────────────────────────────────────────────────────
+rest_url: "https://localbitcoins.com"
+wss_url: ""
 
-# Connection
-connection:
-  type: http
-  timeout: 30
-  max_retries: 3
+# ── Symbol format ─────────────────────────────────────────────
+symbol_format: "lowercase_underscore"      # btc_usd
 
-# Authentication (HMAC-SHA256 with Apiauth header)
-authentication:
-  type: hmac_sha256
-  header_name: Apiauth
+# ── Authentication ────────────────────────────────────────────
+auth_type: "hmac_sha256"
+auth_header: "Apiauth"
+# Signature: HMAC-SHA256( nonce + api_key + endpoint + query + body )
 
-# Rate limits (not explicitly documented, using sensible defaults)
-rate_limits:
-  - name: rest_api
-    type: fixed_window
-    interval: 60
-    limit: 60
-    scope: global
-
-# Kline periods (not directly supported by LocalBitcoins P2P model)
-kline_periods:
-  1d: "1d"
-
-# Legal currencies (fiat focused)
+# ── Legal currencies ──────────────────────────────────────────
 legal_currency:
   - USD
   - EUR
@@ -45,40 +26,28 @@ legal_currency:
   - RUB
   - BTC
 
-# Asset types
-asset_types:
-  spot:
-    exchange_name: LocalBitcoinsSpot
-    symbol_format: "{base}_{quote}"
+# ── REST paths ────────────────────────────────────────────────
+rest_paths:
+  get_server_time:    "GET /api/ecjson.php"
+  get_tick:           "GET /bitcoinaverage/ticker-all-currencies/"
+  get_all_tickers:    "GET /bitcoinaverage/ticker-all-currencies/"
+  get_exchange_info:  "GET /api/currencies/"
+  get_ads:            "GET /api/ad-get/{id}/"
+  get_ads_search:     "GET /buy-bitcoins-online/{currency}/"
+  get_online_ads:     "GET /buy-bitcoins-online/{currency}/{country_code}/"
+  get_wallet:         "GET /api/wallet/"
+  get_wallet_balance: "GET /api/wallet-balance/"
+  get_account:        "GET /api/myself/"
+  get_balance:        "GET /api/wallet-balance/"
 
-    # REST API paths (LocalBitcoins P2P API)
-    rest_paths:
-      base_url: "/api"
-      get_server_time: "GET /api/ecjson.php"
-      get_ticker: "GET /api/ecjson.php"
-      get_ads: "GET /api/ad/{id}"
-      get_ads_search: "GET /api/ads/{currency}/{country_code}"
-      get_online_ads: "GET /api/ads/{currency}/online/{country_code}"
+# ── Kline periods (P2P – minimal support) ─────────────────────
+kline_periods:
+  1d: "1d"
 
-    # WebSocket paths (not supported)
-    wss_paths:
-      ticker: ""
-
-    # Kline periods (P2P exchange, limited kline support)
-    kline_periods:
-      1d: "1d"
-
-    # Legal currencies for spot
-    legal_currency:
-      - USD
-      - EUR
-      - GBP
-      - RUB
-      - BTC
-
-    # Trading symbols (P2P fiat pairs)
-    symbols:
-      - "btc_usd"
-      - "btc_eur"
-      - "btc_gbp"
-      - "btc_rub"
+# ── Rate limits ───────────────────────────────────────────────
+rate_limits:
+  - name: rest_api
+    type: fixed_window
+    interval: 60
+    limit: 60
+    scope: global

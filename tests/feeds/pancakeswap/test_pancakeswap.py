@@ -39,6 +39,10 @@ class TestPancakeSpotRequestData:
         assert Capability.GET_DEPTH in capabilities
         assert Capability.GET_KLINE in capabilities
         assert Capability.GET_EXCHANGE_INFO in capabilities
+        assert Capability.GET_BALANCE in capabilities
+        assert Capability.GET_ACCOUNT in capabilities
+        assert Capability.MAKE_ORDER in capabilities
+        assert Capability.CANCEL_ORDER in capabilities
 
     def test_feed_initialization(self, mock_feed):
         """Test feed initialization."""
@@ -49,14 +53,15 @@ class TestPancakeSpotRequestData:
     # ==================== Server Time Tests ====================
 
     def test_get_server_time(self, mock_feed):
-        """Test getting server time - DEX may not have this endpoint."""
-        try:
-            server_time = mock_feed._get_server_time()
-            # Just check that it returns a dict
-            assert isinstance(server_time, dict)
-        except Exception:
-            # It's okay if this fails in test environment
-            pass
+        """Test getting server time returns RequestData."""
+        result = mock_feed.get_server_time()
+        assert isinstance(result, RequestData)
+
+    def test_get_server_time_tuple(self, mock_feed):
+        """Test _get_server_time returns (method, path, params, extra_data)."""
+        method, path, params, extra_data = mock_feed._get_server_time()
+        assert extra_data["request_type"] == "get_server_time"
+        assert "server_time" in extra_data
 
     # ==================== Ticker Tests ====================
 
@@ -406,6 +411,123 @@ class TestPancakeSwapRegistration:
         exchange_class = get_exchange_class("PANCAKESWAP___SPOT")
         assert exchange_class is not None
         assert exchange_class.__name__ == "PancakeSpotRequestData"
+
+
+class TestPancakeStandardInterfaces:
+    """Test standard Feed interface methods for PancakeSwap."""
+
+    @pytest.fixture
+    def mock_feed(self):
+        data_queue = queue.Queue()
+        with patch('bt_api_py.feeds.http_client.HttpClient', return_value=MagicMock()):
+            feed = PancakeSpotRequestData(data_queue)
+            feed.request = Mock(return_value=Mock(spec=RequestData))
+            return feed
+
+    def test_get_tick_tuple(self, mock_feed):
+        path, params, extra_data = mock_feed._get_tick("BTCB/USDT")
+        assert extra_data["request_type"] == "get_tick"
+        assert extra_data["symbol_name"] == "BTCB/USDT"
+
+    def test_get_depth_tuple(self, mock_feed):
+        path, params, extra_data = mock_feed._get_depth("BTCB/USDT")
+        assert extra_data["request_type"] == "get_depth"
+        assert extra_data["symbol_name"] == "BTCB/USDT"
+
+    def test_get_kline_tuple(self, mock_feed):
+        path, params, extra_data = mock_feed._get_kline("BTCB/USDT", "1h", 100)
+        assert extra_data["request_type"] == "get_kline"
+        assert extra_data["interval"] == "1h"
+
+    def test_get_exchange_info_tuple(self, mock_feed):
+        path, params, extra_data = mock_feed._get_exchange_info()
+        assert extra_data["request_type"] == "get_exchange_info"
+        assert extra_data["exchange_name"] == "PANCakeswap"
+
+    def test_make_order_calls_request(self, mock_feed):
+        result = mock_feed.make_order("BTCB/USDT", 1.0, 50000, "LIMIT")
+        assert mock_feed.request.called
+        extra_data = mock_feed.request.call_args[1].get("extra_data")
+        assert extra_data["request_type"] == "make_order"
+
+    def test_cancel_order_calls_request(self, mock_feed):
+        result = mock_feed.cancel_order("BTCB/USDT", "order_123")
+        assert mock_feed.request.called
+        extra_data = mock_feed.request.call_args[1].get("extra_data")
+        assert extra_data["request_type"] == "cancel_order"
+
+    def test_query_order_calls_request(self, mock_feed):
+        result = mock_feed.query_order("BTCB/USDT", "order_123")
+        assert mock_feed.request.called
+        extra_data = mock_feed.request.call_args[1].get("extra_data")
+        assert extra_data["request_type"] == "query_order"
+
+    def test_get_open_orders_calls_request(self, mock_feed):
+        result = mock_feed.get_open_orders("BTCB/USDT")
+        assert mock_feed.request.called
+        extra_data = mock_feed.request.call_args[1].get("extra_data")
+        assert extra_data["request_type"] == "get_open_orders"
+
+    def test_get_account_calls_request(self, mock_feed):
+        result = mock_feed.get_account("BTCB")
+        assert mock_feed.request.called
+        extra_data = mock_feed.request.call_args[1].get("extra_data")
+        assert extra_data["request_type"] == "get_account"
+
+    def test_get_balance_calls_request(self, mock_feed):
+        result = mock_feed.get_balance("BTCB")
+        assert mock_feed.request.called
+        extra_data = mock_feed.request.call_args[1].get("extra_data")
+        assert extra_data["request_type"] == "get_balance"
+
+
+class TestPancakeBaseCapabilities:
+    """Test capabilities on the base class."""
+
+    def test_base_capabilities(self):
+        from bt_api_py.feeds.live_pancakeswap.request_base import PancakeSwapRequestData
+
+        caps = PancakeSwapRequestData._capabilities()
+        assert Capability.GET_TICK in caps
+        assert Capability.GET_DEPTH in caps
+        assert Capability.GET_KLINE in caps
+        assert Capability.GET_EXCHANGE_INFO in caps
+        assert Capability.MAKE_ORDER in caps
+        assert Capability.CANCEL_ORDER in caps
+
+
+class TestPancakeNormalizeFunctions:
+    """Test normalize functions edge cases."""
+
+    def test_tick_normalize_with_none(self):
+        result, status = PancakeSpotRequestData._get_tick_normalize_function(None, None)
+        assert result == []
+        assert status is False
+
+    def test_depth_normalize_with_none(self):
+        result, status = PancakeSpotRequestData._get_depth_normalize_function(None, None)
+        assert result == []
+        assert status is False
+
+    def test_kline_normalize_with_none(self):
+        result, status = PancakeSpotRequestData._get_kline_normalize_function(None, None)
+        assert result == []
+        assert status is False
+
+    def test_exchange_info_normalize_with_none(self):
+        result, status = PancakeSpotRequestData._get_exchange_info_normalize_function(None, None)
+        assert result == []
+        assert status is False
+
+    def test_pool_normalize_with_none(self):
+        result, status = PancakeSpotRequestData._get_pool_normalize_function(None, None)
+        assert result == []
+        assert status is False
+
+    def test_pools_normalize_with_none(self):
+        result, status = PancakeSpotRequestData._get_pools_normalize_function(None, None)
+        assert result == []
+        assert status is False
 
 
 if __name__ == "__main__":

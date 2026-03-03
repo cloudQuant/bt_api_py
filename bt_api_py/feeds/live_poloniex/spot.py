@@ -16,6 +16,7 @@ class PoloniexRequestDataSpot(PoloniexRequestData):
         self.asset_type = kwargs.get("asset_type", "SPOT")
         self.logger_name = kwargs.get("logger_name", "poloniex_spot_feed.log")
         self._params = PoloniexExchangeDataSpot()
+        self.exchange_name = self._params.exchange_name
         self.request_logger = SpdLogManager(
             "./logs/" + self.logger_name, "request", 0, 0, False
         ).create_logger()
@@ -23,62 +24,206 @@ class PoloniexRequestDataSpot(PoloniexRequestData):
             "./logs/" + self.logger_name, "async_request", 0, 0, False
         ).create_logger()
 
+    # ── internal _get_xxx methods ───────────────────────────────
+
+    def _get_server_time(self, extra_data=None, **kwargs):
+        request_type = "get_server_time"
+        path = self._params.get_rest_path(request_type)
+        params = {}
+        extra_data = extra_data or {}
+        extra_data.update({
+            "request_type": request_type,
+            "exchange_name": self.exchange_name,
+            "asset_type": self.asset_type,
+            "normalize_function": self._get_server_time_normalize_function,
+        })
+        return path, params, extra_data
+
+    @staticmethod
+    def _get_server_time_normalize_function(input_data, extra_data):
+        if input_data is None:
+            return [], False
+        if isinstance(input_data, dict) and "code" in input_data and input_data["code"] not in (200, 0, None):
+            return [], False
+        return [input_data], True
+
+    def _get_exchange_info(self, extra_data=None, **kwargs):
+        request_type = "get_exchange_info"
+        path = self._params.get_rest_path("get_markets")
+        params = {}
+        extra_data = extra_data or {}
+        extra_data.update({
+            "request_type": request_type,
+            "exchange_name": self.exchange_name,
+            "asset_type": self.asset_type,
+            "normalize_function": self._get_exchange_info_normalize_function,
+        })
+        return path, params, extra_data
+
+    @staticmethod
+    def _get_exchange_info_normalize_function(input_data, extra_data):
+        if input_data is None:
+            return [], False
+        if isinstance(input_data, dict) and "code" in input_data and input_data["code"] not in (200, 0, None):
+            return [], False
+        if isinstance(input_data, list):
+            return [{"symbols": input_data}], True
+        return [input_data], True
+
+    def _get_ticker(self, symbol, extra_data=None, **kwargs):
+        request_symbol = self._params.get_symbol(symbol)
+        request_type = "get_ticker"
+        path = self._params.get_rest_path(request_type).replace("{symbol}", request_symbol)
+        params = {}
+        extra_data = extra_data or {}
+        extra_data.update({
+            "request_type": request_type,
+            "symbol_name": symbol,
+            "asset_type": self.asset_type,
+            "exchange_name": self.exchange_name,
+            "normalize_function": self._get_ticker_normalize_function,
+        })
+        return path, params, extra_data
+
+    # Standard alias
+    _get_tick = _get_ticker
+
+    @staticmethod
+    def _get_ticker_normalize_function(input_data, extra_data):
+        if input_data is None:
+            return [], False
+        if isinstance(input_data, dict):
+            if "code" in input_data and input_data["code"] not in (200, 0, None):
+                return [], False
+            if "data" in input_data:
+                return input_data["data"], True
+            return [input_data], True
+        if isinstance(input_data, list):
+            return input_data, True
+        return [], False
+
+    _get_tick_normalize_function = _get_ticker_normalize_function
+
+    def _get_depth(self, symbol, limit=10, extra_data=None, **kwargs):
+        request_symbol = self._params.get_symbol(symbol)
+        request_type = "get_orderbook"
+        path = self._params.get_rest_path(request_type).replace("{symbol}", request_symbol)
+        params = {"limit": min(limit, 150)}
+        extra_data = extra_data or {}
+        extra_data.update({
+            "request_type": request_type,
+            "symbol_name": symbol,
+            "asset_type": self.asset_type,
+            "exchange_name": self.exchange_name,
+            "normalize_function": self._get_depth_normalize_function,
+        })
+        return path, params, extra_data
+
+    @staticmethod
+    def _get_depth_normalize_function(input_data, extra_data):
+        if input_data is None:
+            return [], False
+        if isinstance(input_data, dict):
+            if "code" in input_data and input_data["code"] not in (200, 0, None):
+                return [], False
+            result = {
+                "bids": input_data.get("bids", []),
+                "asks": input_data.get("asks", []),
+            }
+            return [result], True
+        if isinstance(input_data, list):
+            return input_data, True
+        return [], False
+
+    def _get_kline(self, symbol, period="1m", limit=100, extra_data=None, **kwargs):
+        request_symbol = self._params.get_symbol(symbol)
+        request_type = "get_kline"
+        path = self._params.get_rest_path(request_type).replace("{symbol}", request_symbol)
+        period_map = self._params.get_period(period)
+        params = {"interval": period_map, "limit": min(limit, 500)}
+        extra_data = extra_data or {}
+        extra_data.update({
+            "request_type": request_type,
+            "symbol_name": symbol,
+            "asset_type": self.asset_type,
+            "exchange_name": self.exchange_name,
+            "normalize_function": self._get_kline_normalize_function,
+        })
+        return path, params, extra_data
+
+    @staticmethod
+    def _get_kline_normalize_function(input_data, extra_data):
+        if input_data is None:
+            return [], False
+        if isinstance(input_data, list):
+            return input_data, bool(input_data)
+        if isinstance(input_data, dict):
+            if "code" in input_data and input_data["code"] not in (200, 0, None):
+                return [], False
+            if "data" in input_data:
+                return input_data["data"], True
+            return [input_data], True
+        return [], False
+
+    def _get_trades(self, symbol, limit=500, extra_data=None, **kwargs):
+        request_symbol = self._params.get_symbol(symbol)
+        request_type = "get_trades"
+        path = self._params.get_rest_path(request_type).replace("{symbol}", request_symbol)
+        params = {"limit": min(limit, 1000)}
+        extra_data = extra_data or {}
+        extra_data.update({
+            "request_type": request_type,
+            "symbol_name": symbol,
+            "asset_type": self.asset_type,
+            "exchange_name": self.exchange_name,
+            "normalize_function": self._get_trades_normalize_function,
+        })
+        return path, params, extra_data
+
+    # Standard alias
+    _get_trade_history = _get_trades
+
+    @staticmethod
+    def _get_trades_normalize_function(input_data, extra_data):
+        if input_data is None:
+            return [], False
+        if isinstance(input_data, list):
+            return input_data, bool(input_data)
+        if isinstance(input_data, dict):
+            if "code" in input_data and input_data["code"] not in (200, 0, None):
+                return [], False
+            if "data" in input_data:
+                return input_data["data"], True
+            return [input_data], True
+        return [], False
+
+    _get_trade_history_normalize_function = _get_trades_normalize_function
+
     def _make_order(
-        self,
-        symbol,
-        vol,
-        price=None,
-        order_type="buy-limit",
-        offset="open",
-        post_only=False,
-        client_order_id=None,
-        extra_data=None,
-        **kwargs,
+        self, symbol, vol, price=None, order_type="buy-limit",
+        offset="open", post_only=False, client_order_id=None,
+        extra_data=None, **kwargs,
     ):
-        """
-        Prepare order request parameters.
-
-        Args:
-            symbol: Trading symbol
-            vol: Order volume
-            price: Order price (required for limit orders)
-            order_type: Order type (buy-limit, sell-limit, buy-market, sell-market)
-            offset: Order offset (open, close) - not used in spot
-            post_only: Post-only flag (limit orders only)
-            client_order_id: Client-specified order ID
-            extra_data: Extra metadata
-            **kwargs: Additional parameters
-
-        Returns:
-            Tuple of (path, params, extra_data)
-        """
         request_symbol = self._params.get_symbol(symbol)
         request_type = "make_order"
         path = self._params.get_rest_path(request_type)
 
         # Parse order type
         if "-" in order_type:
-            side, order_type = order_type.split("-")
+            side, ot = order_type.split("-", 1)
         else:
             side = "BUY" if "buy" in order_type.lower() else "SELL"
-            order_type = order_type.upper()
+            ot = order_type.upper()
 
-        # Build parameters
-        params = {
-            "symbol": request_symbol,
-            "side": side.upper(),
-        }
-
-        # Set order type
-        order_type_upper = order_type.upper()
-        if "MARKET" in order_type_upper:
+        params = {"symbol": request_symbol, "side": side.upper()}
+        ot_upper = ot.upper()
+        if "MARKET" in ot_upper:
             params["type"] = "MARKET"
-            # Market buy can use amount instead of quantity
             if side.upper() == "BUY" and kwargs.get("amount"):
                 params["amount"] = str(kwargs["amount"])
             else:
                 params["quantity"] = str(vol)
-        elif "LIMIT" in order_type_upper:
+        elif "LIMIT" in ot_upper:
             params["type"] = "LIMIT"
             params["quantity"] = str(vol)
             if price is None:
@@ -86,18 +231,11 @@ class PoloniexRequestDataSpot(PoloniexRequestData):
             params["price"] = str(price)
             params["timeInForce"] = kwargs.get("time_in_force", "GTC")
             if post_only:
-                params["timeInForce"] = "GTX"  # Post-only (Good Till Crossing)
-        elif "LIMIT_MAKER" in order_type_upper:
-            params["type"] = "LIMIT_MAKER"
-            params["quantity"] = str(vol)
-            if price is None:
-                raise ValueError("Price required for limit maker orders")
-            params["price"] = str(price)
+                params["timeInForce"] = "GTX"
         else:
-            params["type"] = order_type_upper
+            params["type"] = ot_upper
             params["quantity"] = str(vol)
 
-        # Add client order ID if provided
         if client_order_id is not None:
             params["clientOrderId"] = client_order_id
 
@@ -109,138 +247,33 @@ class PoloniexRequestDataSpot(PoloniexRequestData):
             "exchange_name": self.exchange_name,
             "normalize_function": self._make_order_normalize_function,
         })
-
         return path, params, extra_data
 
     @staticmethod
     def _make_order_normalize_function(input_data, extra_data):
-        """
-        Normalize order creation response.
-
-        Args:
-            input_data: Raw API response
-            extra_data: Extra metadata
-
-        Returns:
-            Tuple of (normalized_data, status)
-        """
-        status = input_data is not None
-        symbol_name = extra_data.get("symbol_name", "")
-        asset_type = extra_data.get("asset_type", "SPOT")
-
-        if status and isinstance(input_data, dict):
-            # Return single order in list
+        if input_data is None:
+            return [], False
+        if isinstance(input_data, dict):
+            if "code" in input_data and input_data["code"] not in (200, 0, None):
+                return [], False
             return [input_data], True
-        elif status and isinstance(input_data, list):
+        if isinstance(input_data, list):
             return input_data, True
-
         return [], False
 
-    def _cancel_order(
-        self,
-        symbol,
-        order_id=None,
-        client_order_id=None,
-        extra_data=None,
-        **kwargs,
-    ):
-        """
-        Prepare cancel order request.
-
-        Args:
-            symbol: Trading symbol
-            order_id: Exchange order ID
-            client_order_id: Client order ID
-            extra_data: Extra metadata
-            **kwargs: Additional parameters
-
-        Returns:
-            Tuple of (path, params, extra_data)
-        """
-        request_symbol = self._params.get_symbol(symbol)
+    def _cancel_order(self, symbol=None, order_id=None, client_order_id=None,
+                      extra_data=None, **kwargs):
         request_type = "cancel_order"
-
         if order_id:
             path = f"DELETE /orders/{order_id}"
             params = {}
         else:
             path = self._params.get_rest_path("cancel_orders")
-            params = {
-                "symbol": request_symbol,
-            }
+            params = {}
+            if symbol:
+                params["symbol"] = self._params.get_symbol(symbol)
             if client_order_id:
                 params["clientOrderId"] = client_order_id
-
-        extra_data = extra_data or {}
-        extra_data.update({
-            "request_type": request_type,
-            "symbol_name": symbol,
-            "asset_type": self.asset_type,
-            "exchange_name": self.exchange_name,
-            "normalize_function": None,
-        })
-
-        return path, params, extra_data
-
-    def _query_order(
-        self,
-        symbol,
-        order_id,
-        extra_data=None,
-        **kwargs,
-    ):
-        """
-        Prepare query order request.
-
-        Args:
-            symbol: Trading symbol
-            order_id: Exchange order ID
-            extra_data: Extra metadata
-            **kwargs: Additional parameters
-
-        Returns:
-            Tuple of (path, params, extra_data)
-        """
-        request_symbol = self._params.get_symbol(symbol)
-        request_type = "query_order"
-        path = f"GET /orders/{order_id}"
-
-        params = {}
-        extra_data = extra_data or {}
-        extra_data.update({
-            "request_type": request_type,
-            "symbol_name": symbol,
-            "asset_type": self.asset_type,
-            "exchange_name": self.exchange_name,
-            "normalize_function": None,
-        })
-
-        return path, params, extra_data
-
-    def _get_open_orders(
-        self,
-        symbol=None,
-        extra_data=None,
-        **kwargs,
-    ):
-        """
-        Prepare get open orders request.
-
-        Args:
-            symbol: Trading symbol (optional, if None get all)
-            extra_data: Extra metadata
-            **kwargs: Additional parameters
-
-        Returns:
-            Tuple of (path, params, extra_data)
-        """
-        request_type = "get_open_orders"
-        path = self._params.get_rest_path(request_type)
-
-        params = {}
-        if symbol:
-            request_symbol = self._params.get_symbol(symbol)
-            params["symbol"] = request_symbol
 
         extra_data = extra_data or {}
         extra_data.update({
@@ -248,31 +281,75 @@ class PoloniexRequestDataSpot(PoloniexRequestData):
             "symbol_name": symbol or "ALL",
             "asset_type": self.asset_type,
             "exchange_name": self.exchange_name,
-            "normalize_function": None,
+            "normalize_function": self._cancel_order_normalize_function,
         })
-
         return path, params, extra_data
 
-    def _get_balance(
-        self,
-        currency=None,
-        extra_data=None,
-        **kwargs,
-    ):
-        """
-        Prepare get balance request.
+    @staticmethod
+    def _cancel_order_normalize_function(input_data, extra_data):
+        if input_data is None:
+            return [], False
+        if isinstance(input_data, dict):
+            if "code" in input_data and input_data["code"] not in (200, 0, None):
+                return [], False
+            return [input_data], True
+        return [], False
 
-        Args:
-            currency: Currency code (optional)
-            extra_data: Extra metadata
-            **kwargs: Additional parameters
+    def _query_order(self, symbol=None, order_id=None, extra_data=None, **kwargs):
+        request_type = "query_order"
+        path = f"GET /orders/{order_id}"
+        params = {}
+        extra_data = extra_data or {}
+        extra_data.update({
+            "request_type": request_type,
+            "symbol_name": symbol or "ALL",
+            "asset_type": self.asset_type,
+            "exchange_name": self.exchange_name,
+            "normalize_function": self._query_order_normalize_function,
+        })
+        return path, params, extra_data
 
-        Returns:
-            Tuple of (path, params, extra_data)
-        """
+    @staticmethod
+    def _query_order_normalize_function(input_data, extra_data):
+        if input_data is None:
+            return [], False
+        if isinstance(input_data, dict):
+            if "code" in input_data and input_data["code"] not in (200, 0, None):
+                return [], False
+            return [input_data], True
+        return [], False
+
+    def _get_open_orders(self, symbol=None, extra_data=None, **kwargs):
+        request_type = "get_open_orders"
+        path = self._params.get_rest_path(request_type)
+        params = {}
+        if symbol:
+            params["symbol"] = self._params.get_symbol(symbol)
+        extra_data = extra_data or {}
+        extra_data.update({
+            "request_type": request_type,
+            "symbol_name": symbol or "ALL",
+            "asset_type": self.asset_type,
+            "exchange_name": self.exchange_name,
+            "normalize_function": self._get_open_orders_normalize_function,
+        })
+        return path, params, extra_data
+
+    @staticmethod
+    def _get_open_orders_normalize_function(input_data, extra_data):
+        if input_data is None:
+            return [], False
+        if isinstance(input_data, list):
+            return input_data, True
+        if isinstance(input_data, dict):
+            if "code" in input_data and input_data["code"] not in (200, 0, None):
+                return [], False
+            return [input_data], True
+        return [], False
+
+    def _get_balance(self, currency=None, extra_data=None, **kwargs):
         request_type = "get_balance"
         path = self._params.get_rest_path(request_type)
-
         params = {}
         extra_data = extra_data or {}
         extra_data.update({
@@ -280,313 +357,186 @@ class PoloniexRequestDataSpot(PoloniexRequestData):
             "symbol_name": currency or "ALL",
             "asset_type": self.asset_type,
             "exchange_name": self.exchange_name,
-            "normalize_function": None,
+            "normalize_function": self._get_balance_normalize_function,
         })
-
         return path, params, extra_data
 
-    def _get_ticker(
-        self,
-        symbol,
-        extra_data=None,
-        **kwargs,
-    ):
-        """
-        Prepare get ticker request.
+    @staticmethod
+    def _get_balance_normalize_function(input_data, extra_data):
+        if input_data is None:
+            return [], False
+        if isinstance(input_data, dict):
+            if "code" in input_data and input_data["code"] not in (200, 0, None):
+                return [], False
+            if "balances" in input_data:
+                return input_data["balances"], True
+            return [input_data], True
+        if isinstance(input_data, list):
+            return input_data, True
+        return [], False
 
-        Args:
-            symbol: Trading symbol
-            extra_data: Extra metadata
-            **kwargs: Additional parameters
-
-        Returns:
-            Tuple of (path, params, extra_data)
-        """
-        request_symbol = self._params.get_symbol(symbol)
-        request_type = "get_ticker"
-        path = self._params.get_rest_path(request_type).replace("{symbol}", request_symbol)
-
+    def _get_account(self, extra_data=None, **kwargs):
+        request_type = "get_account"
+        path = self._params.get_rest_path(request_type)
         params = {}
         extra_data = extra_data or {}
         extra_data.update({
             "request_type": request_type,
-            "symbol_name": symbol,
-            "asset_type": self.asset_type,
             "exchange_name": self.exchange_name,
-            "normalize_function": None,
-        })
-
-        return path, params, extra_data
-
-    def _get_depth(
-        self,
-        symbol,
-        limit=10,
-        extra_data=None,
-        **kwargs,
-    ):
-        """
-        Prepare get order book request.
-
-        Args:
-            symbol: Trading symbol
-            limit: Number of levels (default 10, max 150)
-            extra_data: Extra metadata
-            **kwargs: Additional parameters
-
-        Returns:
-            Tuple of (path, params, extra_data)
-        """
-        request_symbol = self._params.get_symbol(symbol)
-        request_type = "get_orderbook"
-        path = self._params.get_rest_path(request_type).replace("{symbol}", request_symbol)
-
-        params = {
-            "limit": min(limit, 150),
-        }
-        extra_data = extra_data or {}
-        extra_data.update({
-            "request_type": request_type,
-            "symbol_name": symbol,
             "asset_type": self.asset_type,
-            "exchange_name": self.exchange_name,
-            "normalize_function": None,
+            "normalize_function": self._get_account_normalize_function,
         })
-
-        return path, params, extra_data
-
-    def _get_kline(
-        self,
-        symbol,
-        period="1m",
-        limit=100,
-        extra_data=None,
-        **kwargs,
-    ):
-        """
-        Prepare get kline request.
-
-        Args:
-            symbol: Trading symbol
-            period: Kline period (1m, 5m, 15m, 30m, 1h, 2h, 4h, 6h, 12h, 1d, 3d, 1w, 1M)
-            limit: Number of candles (default 100, max 500)
-            extra_data: Extra metadata
-            **kwargs: Additional parameters
-
-        Returns:
-            Tuple of (path, params, extra_data)
-        """
-        request_symbol = self._params.get_symbol(symbol)
-        request_type = "get_kline"
-        path = self._params.get_rest_path(request_type).replace("{symbol}", request_symbol)
-
-        period_map = self._params.get_period(period)
-
-        params = {
-            "interval": period_map,
-            "limit": min(limit, 500),
-        }
-        extra_data = extra_data or {}
-        extra_data.update({
-            "request_type": request_type,
-            "symbol_name": symbol,
-            "asset_type": self.asset_type,
-            "exchange_name": self.exchange_name,
-            "normalize_function": None,
-        })
-
-        return path, params, extra_data
-
-    def _get_trades(
-        self,
-        symbol,
-        limit=500,
-        extra_data=None,
-        **kwargs,
-    ):
-        """
-        Prepare get recent trades request.
-
-        Args:
-            symbol: Trading symbol
-            limit: Number of trades (default 500, max 1000)
-            extra_data: Extra metadata
-            **kwargs: Additional parameters
-
-        Returns:
-            Tuple of (path, params, extra_data)
-        """
-        request_symbol = self._params.get_symbol(symbol)
-        request_type = "get_trades"
-        path = self._params.get_rest_path(request_type).replace("{symbol}", request_symbol)
-
-        params = {
-            "limit": min(limit, 1000),
-        }
-        extra_data = extra_data or {}
-        extra_data.update({
-            "request_type": request_type,
-            "symbol_name": symbol,
-            "asset_type": self.asset_type,
-            "exchange_name": self.exchange_name,
-            "normalize_function": None,
-        })
-
         return path, params, extra_data
 
     @staticmethod
-    def _get_ticker_normalize_function(input_data, extra_data):
-        """
-        Normalize ticker response.
-
-        Args:
-            input_data: Raw API response
-            extra_data: Extra metadata
-
-        Returns:
-            Tuple of (normalized_data, status)
-        """
-        status = input_data is not None
-
-        if status and isinstance(input_data, dict):
-            # Extract data array if present
-            if "data" in input_data:
-                return input_data["data"], True
-            return [input_data], True
-        elif status and isinstance(input_data, list):
-            return input_data, True
-
-        return [], False
-
-    @staticmethod
-    def _get_depth_normalize_function(input_data, extra_data):
-        """
-        Normalize orderbook response.
-
-        Args:
-            input_data: Raw API response
-            extra_data: Extra metadata
-
-        Returns:
-            Tuple of (normalized_data, status)
-        """
-        status = input_data is not None
-
-        if status and isinstance(input_data, dict):
-            # Poloniex returns orderbook with bids/asks
-            result = {
-                "bids": input_data.get("bids", []),
-                "asks": input_data.get("asks", []),
-            }
-            return [result], True
-        elif status and isinstance(input_data, list):
-            return input_data, True
-
-        return [], False
-
-    @staticmethod
-    def _get_kline_normalize_function(input_data, extra_data):
-        """
-        Normalize kline response.
-
-        Args:
-            input_data: Raw API response
-            extra_data: Extra metadata
-
-        Returns:
-            Tuple of (normalized_data, status)
-        """
-        status = input_data is not None
-
-        if status and isinstance(input_data, list):
-            return input_data, True
-        elif status and isinstance(input_data, dict):
-            if "data" in input_data:
-                return input_data["data"], True
-            return [input_data], True
-
-        return [], False
-
-    @staticmethod
-    def _get_trades_normalize_function(input_data, extra_data):
-        """
-        Normalize trades response.
-
-        Args:
-            input_data: Raw API response
-            extra_data: Extra metadata
-
-        Returns:
-            Tuple of (normalized_data, status)
-        """
-        status = input_data is not None
-
-        if status and isinstance(input_data, list):
-            return input_data, True
-        elif status and isinstance(input_data, dict):
-            if "data" in input_data:
-                return input_data["data"], True
-            return [input_data], True
-
-        return [], False
-
-    @staticmethod
-    def _get_balance_normalize_function(input_data, extra_data):
-        """
-        Normalize balance response.
-
-        Args:
-            input_data: Raw API response
-            extra_data: Extra metadata
-
-        Returns:
-            Tuple of (normalized_data, status)
-        """
-        status = input_data is not None
-
-        if status and isinstance(input_data, dict):
+    def _get_account_normalize_function(input_data, extra_data):
+        if input_data is None:
+            return [], False
+        if isinstance(input_data, dict):
+            if "code" in input_data and input_data["code"] not in (200, 0, None):
+                return [], False
             if "balances" in input_data:
                 return input_data["balances"], True
             return [input_data], True
-        elif status and isinstance(input_data, list):
+        if isinstance(input_data, list):
             return input_data, True
-
         return [], False
 
-    def _get_deals(
-        self,
-        symbol,
-        limit=100,
-        extra_data=None,
-        **kwargs,
-    ):
-        """
-        Prepare get user trades request.
-
-        Args:
-            symbol: Trading symbol
-            limit: Number of trades
-            extra_data: Extra metadata
-            **kwargs: Additional parameters
-
-        Returns:
-            Tuple of (path, params, extra_data)
-        """
+    def _get_deals(self, symbol, limit=100, extra_data=None, **kwargs):
         request_symbol = self._params.get_symbol(symbol)
         request_type = "get_deals"
         path = self._params.get_rest_path(request_type)
-
-        params = {
-            "symbol": request_symbol,
-            "limit": min(limit, 1000),
-        }
+        params = {"symbol": request_symbol, "limit": min(limit, 1000)}
         extra_data = extra_data or {}
         extra_data.update({
             "request_type": request_type,
             "symbol_name": symbol,
             "asset_type": self.asset_type,
             "exchange_name": self.exchange_name,
-            "normalize_function": None,
+            "normalize_function": self._get_deals_normalize_function,
         })
-
         return path, params, extra_data
+
+    @staticmethod
+    def _get_deals_normalize_function(input_data, extra_data):
+        if input_data is None:
+            return [], False
+        if isinstance(input_data, list):
+            return input_data, True
+        if isinstance(input_data, dict):
+            if "code" in input_data and input_data["code"] not in (200, 0, None):
+                return [], False
+            return [input_data], True
+        return [], False
+
+    # ── public sync wrappers ────────────────────────────────────
+
+    def get_server_time(self, extra_data=None, **kwargs):
+        path, params, extra_data = self._get_server_time(extra_data=extra_data, **kwargs)
+        return self.request(path, params=params, extra_data=extra_data)
+
+    def get_exchange_info(self, extra_data=None, **kwargs):
+        path, params, extra_data = self._get_exchange_info(extra_data=extra_data, **kwargs)
+        return self.request(path, params=params, extra_data=extra_data)
+
+    def get_tick(self, symbol, extra_data=None, **kwargs):
+        path, params, extra_data = self._get_tick(symbol, extra_data=extra_data, **kwargs)
+        return self.request(path, params=params, extra_data=extra_data)
+
+    get_ticker = get_tick
+
+    def get_depth(self, symbol, count=10, extra_data=None, **kwargs):
+        path, params, extra_data = self._get_depth(symbol, limit=count, extra_data=extra_data, **kwargs)
+        return self.request(path, params=params, extra_data=extra_data)
+
+    def get_kline(self, symbol, period="1m", count=100, extra_data=None, **kwargs):
+        path, params, extra_data = self._get_kline(symbol, period=period, limit=count, extra_data=extra_data, **kwargs)
+        return self.request(path, params=params, extra_data=extra_data)
+
+    def get_trade_history(self, symbol, count=500, extra_data=None, **kwargs):
+        path, params, extra_data = self._get_trades(symbol, limit=count, extra_data=extra_data, **kwargs)
+        return self.request(path, params=params, extra_data=extra_data)
+
+    get_trades = get_trade_history
+
+    def make_order(self, symbol, vol, price=None, order_type="buy-limit", **kwargs):
+        path, body, extra_data = self._make_order(symbol, vol, price=price, order_type=order_type, **kwargs)
+        return self.request(path, body=body, extra_data=extra_data)
+
+    def cancel_order(self, symbol=None, order_id=None, **kwargs):
+        path, params, extra_data = self._cancel_order(symbol=symbol, order_id=order_id, **kwargs)
+        return self.request(path, params=params, extra_data=extra_data)
+
+    def query_order(self, symbol=None, order_id=None, **kwargs):
+        path, params, extra_data = self._query_order(symbol=symbol, order_id=order_id, **kwargs)
+        return self.request(path, params=params, extra_data=extra_data)
+
+    def get_open_orders(self, symbol=None, extra_data=None, **kwargs):
+        path, params, extra_data = self._get_open_orders(symbol=symbol, extra_data=extra_data, **kwargs)
+        return self.request(path, params=params, extra_data=extra_data)
+
+    def get_balance(self, currency=None, extra_data=None, **kwargs):
+        path, params, extra_data = self._get_balance(currency=currency, extra_data=extra_data, **kwargs)
+        return self.request(path, params=params, extra_data=extra_data)
+
+    def get_account(self, extra_data=None, **kwargs):
+        path, params, extra_data = self._get_account(extra_data=extra_data, **kwargs)
+        return self.request(path, params=params, extra_data=extra_data)
+
+    def get_deals(self, symbol, count=100, extra_data=None, **kwargs):
+        path, params, extra_data = self._get_deals(symbol, limit=count, extra_data=extra_data, **kwargs)
+        return self.request(path, params=params, extra_data=extra_data)
+
+    # ── async wrappers ──────────────────────────────────────────
+
+    def async_get_server_time(self, extra_data=None, **kwargs):
+        path, params, extra_data = self._get_server_time(extra_data=extra_data, **kwargs)
+        self.submit(self.async_request(path, params=params, extra_data=extra_data), callback=self.async_callback)
+
+    def async_get_exchange_info(self, extra_data=None, **kwargs):
+        path, params, extra_data = self._get_exchange_info(extra_data=extra_data, **kwargs)
+        self.submit(self.async_request(path, params=params, extra_data=extra_data), callback=self.async_callback)
+
+    def async_get_tick(self, symbol, extra_data=None, **kwargs):
+        path, params, extra_data = self._get_tick(symbol, extra_data=extra_data, **kwargs)
+        self.submit(self.async_request(path, params=params, extra_data=extra_data), callback=self.async_callback)
+
+    async_get_ticker = async_get_tick
+
+    def async_get_depth(self, symbol, count=10, extra_data=None, **kwargs):
+        path, params, extra_data = self._get_depth(symbol, limit=count, extra_data=extra_data, **kwargs)
+        self.submit(self.async_request(path, params=params, extra_data=extra_data), callback=self.async_callback)
+
+    def async_get_kline(self, symbol, period="1m", count=100, extra_data=None, **kwargs):
+        path, params, extra_data = self._get_kline(symbol, period=period, limit=count, extra_data=extra_data, **kwargs)
+        self.submit(self.async_request(path, params=params, extra_data=extra_data), callback=self.async_callback)
+
+    def async_get_trade_history(self, symbol, count=500, extra_data=None, **kwargs):
+        path, params, extra_data = self._get_trades(symbol, limit=count, extra_data=extra_data, **kwargs)
+        self.submit(self.async_request(path, params=params, extra_data=extra_data), callback=self.async_callback)
+
+    async_get_trades = async_get_trade_history
+
+    def async_make_order(self, symbol, vol, price=None, order_type="buy-limit", **kwargs):
+        path, body, extra_data = self._make_order(symbol, vol, price=price, order_type=order_type, **kwargs)
+        self.submit(self.async_request(path, body=body, extra_data=extra_data), callback=self.async_callback)
+
+    def async_cancel_order(self, symbol=None, order_id=None, **kwargs):
+        path, params, extra_data = self._cancel_order(symbol=symbol, order_id=order_id, **kwargs)
+        self.submit(self.async_request(path, params=params, extra_data=extra_data), callback=self.async_callback)
+
+    def async_query_order(self, symbol=None, order_id=None, **kwargs):
+        path, params, extra_data = self._query_order(symbol=symbol, order_id=order_id, **kwargs)
+        self.submit(self.async_request(path, params=params, extra_data=extra_data), callback=self.async_callback)
+
+    def async_get_open_orders(self, symbol=None, extra_data=None, **kwargs):
+        path, params, extra_data = self._get_open_orders(symbol=symbol, extra_data=extra_data, **kwargs)
+        self.submit(self.async_request(path, params=params, extra_data=extra_data), callback=self.async_callback)
+
+    def async_get_balance(self, currency=None, extra_data=None, **kwargs):
+        path, params, extra_data = self._get_balance(currency=currency, extra_data=extra_data, **kwargs)
+        self.submit(self.async_request(path, params=params, extra_data=extra_data), callback=self.async_callback)
+
+    def async_get_account(self, extra_data=None, **kwargs):
+        path, params, extra_data = self._get_account(extra_data=extra_data, **kwargs)
+        self.submit(self.async_request(path, params=params, extra_data=extra_data), callback=self.async_callback)

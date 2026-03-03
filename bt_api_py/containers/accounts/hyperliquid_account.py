@@ -27,7 +27,7 @@ class HyperliquidSpotWssAccountData(AccountData):
     def init_data(self):
         """初始化账户数据"""
         if self.has_been_init_data:
-            return
+            return self
 
         try:
             if not self.has_been_json_encoded:
@@ -54,6 +54,7 @@ class HyperliquidSpotWssAccountData(AccountData):
 
         except Exception as e:
             print(f"Error initializing Hyperliquid account data: {e}")
+        return self
 
     def get_all_data(self):
         """获取所有账户数据"""

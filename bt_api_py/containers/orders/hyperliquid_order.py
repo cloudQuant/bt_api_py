@@ -33,7 +33,7 @@ class HyperliquidRequestOrderData(OrderData):
     def init_data(self):
         """初始化订单数据"""
         if self.has_been_init_data:
-            return
+            return self
 
         try:
             if not self.has_been_json_encoded:
@@ -57,6 +57,7 @@ class HyperliquidRequestOrderData(OrderData):
 
         except Exception as e:
             print(f"Error initializing Hyperliquid order data: {e}")
+        return self
 
     def get_all_data(self):
         """获取所有订单数据"""
@@ -161,7 +162,7 @@ class HyperliquidSpotWssOrderData(OrderData):
     def init_data(self):
         """初始化WebSocket订单数据"""
         if self.has_been_init_data:
-            return
+            return self
 
         try:
             if not self.has_been_json_encoded:
@@ -183,6 +184,7 @@ class HyperliquidSpotWssOrderData(OrderData):
 
         except Exception as e:
             print(f"Error initializing Hyperliquid WebSocket order data: {e}")
+        return self
 
     def get_all_data(self):
         """获取所有订单数据"""

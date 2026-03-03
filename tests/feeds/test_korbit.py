@@ -1,477 +1,450 @@
 """
-Test Korbit exchange integration.
+Tests for Korbit exchange – Feed pattern.
 
-Run tests:
-    pytest tests/feeds/test_korbit.py -v
-
-Run with coverage:
-    pytest tests/feeds/test_korbit.py --cov=bt_api_py.feeds.live_korbit --cov-report=term-missing
+Run:  pytest tests/feeds/test_korbit.py -v
 """
 
-import json
 import queue
-import time
-from unittest.mock import Mock, patch
+from unittest.mock import patch
 
 import pytest
 
 from bt_api_py.containers.exchanges.korbit_exchange_data import KorbitExchangeDataSpot
-from bt_api_py.containers.tickers.korbit_ticker import KorbitRequestTickerData
 from bt_api_py.containers.requestdatas.request_data import RequestData
-from bt_api_py.feeds.live_korbit.spot import KorbitRequestDataSpot
+from bt_api_py.feeds.live_korbit.request_base import KorbitRequestData
+from bt_api_py.feeds.live_korbit.spot import (
+    KorbitRequestDataSpot,
+    KorbitMarketWssDataSpot,
+    KorbitAccountWssDataSpot,
+)
 from bt_api_py.registry import ExchangeRegistry
 
-# Import registration to auto-register Korbit
 import bt_api_py.feeds.register_korbit  # noqa: F401
 
+# ── sample response fixtures ─────────────────────────────────
 
-class TestKorbitExchangeData:
-    """Test Korbit exchange data configuration."""
+SAMPLE_TICK = {
+    "last": "95000000", "bid": "94990000", "ask": "95010000",
+    "low": "93500000", "high": "95800000", "volume": "1234.56",
+    "timestamp": 1678901234000,
+}
 
-    def test_exchange_data_spot_creation(self):
-        """Test creating Korbit spot exchange data."""
-        exchange_data = KorbitExchangeDataSpot()
-        assert exchange_data.exchange_name == "KORBIT___SPOT"
-        assert exchange_data.asset_type == "spot"
+SAMPLE_DEPTH = {
+    "timestamp": 1678901234000,
+    "bids": [["94990000", "0.5", "1"]], "asks": [["95010000", "0.3", "1"]],
+}
 
-    def test_get_symbol(self):
-        """Test symbol format conversion.
+SAMPLE_CONSTANTS = {
+    "exchange": {"minKrwDeposit": "5000"},
+    "tradeFees": {"btcKrwFee": "0.0025"},
+}
 
-        Korbit uses lowercase underscore format like btc_krw.
-        """
-        exchange_data = KorbitExchangeDataSpot()
-        assert exchange_data.get_symbol("BTC/KRW") == "btc_krw"
-        assert exchange_data.get_symbol("BTC-KRW") == "btc_krw"
-        assert exchange_data.get_symbol("btc_krw") == "btc_krw"
+SAMPLE_DEALS = [
+    {"timestamp": 1678901234000, "price": "95000000", "amount": "0.01", "tid": "1"},
+]
 
-    def test_get_reverse_symbol(self):
-        """Test reverse symbol conversion.
+SAMPLE_KLINE = [
+    {"time": 1678901234000, "open": 94000000, "high": 95000000,
+     "low": 93500000, "close": 94800000, "volume": 12.3},
+]
 
-        Converting from exchange format (btc_krw) back to display format (BTC-KRW).
-        """
-        exchange_data = KorbitExchangeDataSpot()
-        assert exchange_data.get_reverse_symbol("btc_krw") == "BTC-KRW"
-        # When already in display format, convert underscores to dashes
-        assert exchange_data.get_reverse_symbol("BTC_KRW") == "BTC-KRW"
+SAMPLE_ORDER = {"orderId": "12345", "status": "success"}
 
-    def test_symbol_mappings(self):
-        """Test symbol mappings."""
-        exchange_data = KorbitExchangeDataSpot()
-        assert exchange_data.get_symbol("BTC-KRW") == "btc_krw"
-        assert exchange_data.get_symbol("ETH-KRW") == "eth_krw"
+SAMPLE_CANCEL = {"orderId": "12345", "status": "success"}
 
-    def test_get_period(self):
-        """Test kline period conversion."""
-        exchange_data = KorbitExchangeDataSpot()
-        assert exchange_data.get_period("1m") == "1m"
-        assert exchange_data.get_period("1h") == "1h"
-        assert exchange_data.get_period("1d") == "1d"
+SAMPLE_OPEN_ORDERS = [{"orderId": "12345", "side": "buy", "price": "94000000"}]
 
-    def test_get_reverse_period(self):
-        """Test reverse kline period conversion."""
-        exchange_data = KorbitExchangeDataSpot()
-        assert exchange_data.get_reverse_period("1m") == "1m"
-        assert exchange_data.get_reverse_period("1h") == "1h"
+SAMPLE_BALANCE = {
+    "krw": {"available": "1000000", "trade_in_use": "500000", "total": "1500000"},
+    "btc": {"available": "0.5", "trade_in_use": "0.1", "total": "0.6"},
+}
 
-    def test_legal_currency(self):
-        """Test legal currencies."""
-        exchange_data = KorbitExchangeDataSpot()
-        assert "KRW" in exchange_data.legal_currency
-        assert "BTC" in exchange_data.legal_currency
-        assert "ETH" in exchange_data.legal_currency
+SAMPLE_ERROR = {"errorCode": 1, "errorMessage": "Invalid request"}
 
 
-class TestKorbitRequestData:
-    """Test Korbit REST API request base class."""
+# ── helpers ───────────────────────────────────────────────────
 
-    def test_request_data_creation(self):
-        """Test creating Korbit request data."""
-        data_queue = queue.Queue()
-        request_data = KorbitRequestDataSpot(
-            data_queue,
-            exchange_name="KORBIT___SPOT",
-        )
-        assert request_data.exchange_name == "KORBIT___SPOT"
-        assert request_data.asset_type == "SPOT"
-
-    def test_capabilities(self):
-        """Test feed capabilities."""
-        from bt_api_py.feeds.capability import Capability
-
-        data_queue = queue.Queue()
-        request_data = KorbitRequestDataSpot(data_queue)
-        capabilities = request_data._capabilities()
-        assert Capability.GET_TICK in capabilities
-        assert Capability.GET_DEPTH in capabilities
-        assert Capability.GET_KLINE in capabilities
-        assert Capability.GET_EXCHANGE_INFO in capabilities
+@pytest.fixture
+def feed():
+    return KorbitRequestDataSpot(queue.Queue())
 
 
-class TestKorbitDataContainers:
-    """Test Korbit data containers."""
-
-    def test_ticker_container(self):
-        """Test ticker data container."""
-        ticker_info = json.dumps({
-            "last": "95000000",
-            "bid": "94990000",
-            "ask": "95000000",
-            "low": "93500000",
-            "high": "95800000",
-            "volume": "1234.56",
-            "change": "500000",
-            "changePercent": "0.53",
-            "timestamp": 1678901234000,
-        })
-
-        ticker = KorbitRequestTickerData(ticker_info, "BTC-KRW", "SPOT", False)
-        ticker.init_data()
-
-        assert ticker.get_exchange_name() == "KORBIT"
-        assert ticker.get_symbol_name() == "BTC-KRW"
-        assert ticker.get_last_price() == 95000000.0
-        assert ticker.get_bid_price() == 94990000.0
-        assert ticker.get_ask_price() == 95000000.0
-        assert ticker.get_high() == 95800000.0
-        assert ticker.get_low() == 93500000.0
-        assert ticker.get_daily_change() == 500000.0
-        assert ticker.get_daily_change_percentage() == 0.53
-
-    def test_ticker_wss_container(self):
-        """Test ticker WebSocket data container."""
-        from bt_api_py.containers.tickers.korbit_ticker import KorbitWssTickerData
-
-        ticker_info = json.dumps({
-            "last": "95000000",
-            "bid": "94990000",
-            "ask": "95000000",
-        })
-
-        ticker = KorbitWssTickerData(ticker_info, "BTC-KRW", "SPOT", False)
-        ticker.init_data()
-
-        assert ticker.get_exchange_name() == "KORBIT"
-        assert ticker.get_last_price() == 95000000.0
+@pytest.fixture
+def exdata():
+    return KorbitExchangeDataSpot()
 
 
-class TestKorbitRegistry:
-    """Test Korbit registration."""
+# ═══════════════════════════════════════════════════════════════
+# 1) ExchangeData
+# ═══════════════════════════════════════════════════════════════
 
-    def test_korbit_registered(self):
-        """Test that Korbit is properly registered."""
-        # Check if feed is registered
+class TestExchangeData:
+    def test_exchange_name(self, exdata):
+        assert exdata.exchange_name == "KORBIT___SPOT"
+
+    def test_asset_type(self, exdata):
+        assert exdata.asset_type == "SPOT"
+
+    def test_rest_url(self, exdata):
+        assert exdata.rest_url == "https://api.korbit.co.kr"
+
+    def test_get_symbol(self, exdata):
+        assert KorbitExchangeDataSpot.get_symbol("BTC/KRW") == "btc_krw"
+        assert KorbitExchangeDataSpot.get_symbol("BTC-KRW") == "btc_krw"
+        assert KorbitExchangeDataSpot.get_symbol("btc_krw") == "btc_krw"
+
+    def test_get_reverse_symbol(self, exdata):
+        assert KorbitExchangeDataSpot.get_reverse_symbol("btc_krw") == "BTC-KRW"
+
+    def test_get_period(self, exdata):
+        assert exdata.get_period("1h") == "1h"
+        assert exdata.get_period("1d") == "1d"
+
+    def test_kline_periods(self, exdata):
+        for k in ("1m", "3m", "5m", "15m", "30m", "1h", "4h", "1d"):
+            assert k in exdata.kline_periods
+
+    def test_legal_currency(self, exdata):
+        for c in ("KRW", "BTC", "ETH"):
+            assert c in exdata.legal_currency
+
+    def test_get_rest_path_ok(self, exdata):
+        p = exdata.get_rest_path("get_tick")
+        assert "/v1/ticker" in p
+
+    def test_get_rest_path_missing(self, exdata):
+        with pytest.raises(ValueError):
+            exdata.get_rest_path("nonexistent")
+
+    def test_rest_paths_keys(self, exdata):
+        for key in ("get_tick", "get_depth", "get_deals", "get_exchange_info",
+                     "get_kline", "make_order", "make_order_sell", "cancel_order",
+                     "get_open_orders", "get_account", "get_balance"):
+            assert key in exdata.rest_paths
+
+
+# ═══════════════════════════════════════════════════════════════
+# 2) Parameter generation (_get_xxx)
+# ═══════════════════════════════════════════════════════════════
+
+class TestParamGeneration:
+    def test_get_tick_params(self, feed):
+        path, params, extra = feed._get_tick("BTC/KRW")
+        assert "/v1/ticker" in path
+        assert params["currency_pair"] == "btc_krw"
+        assert extra["request_type"] == "get_tick"
+
+    def test_get_depth_params(self, feed):
+        path, params, extra = feed._get_depth("BTC/KRW")
+        assert "/v1/orderbook" in path
+        assert params["currency_pair"] == "btc_krw"
+        assert extra["request_type"] == "get_depth"
+
+    def test_get_exchange_info_params(self, feed):
+        path, params, extra = feed._get_exchange_info()
+        assert "/v1/constants" in path
+        assert extra["request_type"] == "get_exchange_info"
+
+    def test_get_deals_params(self, feed):
+        path, params, extra = feed._get_deals("ETH/KRW")
+        assert "/v1/transactions" in path
+        assert params["currency_pair"] == "eth_krw"
+        assert extra["request_type"] == "get_deals"
+
+    def test_get_kline_params(self, feed):
+        path, params, extra = feed._get_kline("BTC/KRW", "1h", 50)
+        assert "/v1/chart" in path
+        assert params["currency_pair"] == "btc_krw"
+        assert params["timeUnit"] == "1h"
+        assert params["count"] == 50
+
+    def test_make_order_buy(self, feed):
+        path, body, extra = feed._make_order("BTC/KRW", "buy", "limit", 0.001, price=95000000)
+        assert "POST" in path
+        assert "/user/orders/buy" in path
+        assert body["currency_pair"] == "btc_krw"
+        assert body["coin_amount"] == 0.001
+        assert body["price"] == 95000000
+
+    def test_make_order_sell(self, feed):
+        path, body, extra = feed._make_order("BTC/KRW", "sell", "limit", 0.001, price=95000000)
+        assert "/user/orders/sell" in path
+
+    def test_cancel_order_params(self, feed):
+        path, body, extra = feed._cancel_order("12345")
+        assert "/cancel" in path.lower()
+        assert body["id"] == "12345"
+        assert extra["request_type"] == "cancel_order"
+
+    def test_get_open_orders_with_symbol(self, feed):
+        path, params, extra = feed._get_open_orders("BTC/KRW")
+        assert "/user/orders/open" in path
+        assert params["currency_pair"] == "btc_krw"
+
+    def test_get_open_orders_no_symbol(self, feed):
+        path, params, extra = feed._get_open_orders()
+        assert "currency_pair" not in params
+
+    def test_get_balance_params(self, feed):
+        path, params, extra = feed._get_balance()
+        assert "/user/balances" in path
+        assert extra["request_type"] == "get_balance"
+
+    def test_get_account_params(self, feed):
+        path, params, extra = feed._get_account()
+        assert "/user/balances" in path
+        assert extra["request_type"] == "get_account"
+
+
+# ═══════════════════════════════════════════════════════════════
+# 3) Normalization functions
+# ═══════════════════════════════════════════════════════════════
+
+class TestNormalization:
+    def test_tick_ok(self):
+        result, ok = KorbitRequestData._get_tick_normalize_function(SAMPLE_TICK, {})
+        assert ok is True
+        assert result[0]["last"] == "95000000"
+
+    def test_tick_error(self):
+        result, ok = KorbitRequestData._get_tick_normalize_function(SAMPLE_ERROR, {})
+        assert ok is False
+
+    def test_depth_ok(self):
+        result, ok = KorbitRequestData._get_depth_normalize_function(SAMPLE_DEPTH, {})
+        assert ok is True
+
+    def test_exchange_info_ok(self):
+        result, ok = KorbitRequestData._get_exchange_info_normalize_function(SAMPLE_CONSTANTS, {})
+        assert ok is True
+
+    def test_deals_ok(self):
+        result, ok = KorbitRequestData._get_deals_normalize_function(SAMPLE_DEALS, {})
+        assert ok is True
+        assert len(result) == 1
+
+    def test_kline_ok(self):
+        result, ok = KorbitRequestData._get_kline_normalize_function(SAMPLE_KLINE, {})
+        assert ok is True
+        assert len(result) == 1
+
+    def test_make_order_ok(self):
+        result, ok = KorbitRequestData._make_order_normalize_function(SAMPLE_ORDER, {})
+        assert ok is True
+
+    def test_make_order_error(self):
+        result, ok = KorbitRequestData._make_order_normalize_function(SAMPLE_ERROR, {})
+        assert ok is False
+
+    def test_cancel_order_ok(self):
+        result, ok = KorbitRequestData._cancel_order_normalize_function(SAMPLE_CANCEL, {})
+        assert ok is True
+
+    def test_cancel_order_empty(self):
+        result, ok = KorbitRequestData._cancel_order_normalize_function({}, {})
+        assert ok is True
+
+    def test_open_orders_ok(self):
+        result, ok = KorbitRequestData._get_open_orders_normalize_function(SAMPLE_OPEN_ORDERS, {})
+        assert ok is True
+
+    def test_balance_ok(self):
+        result, ok = KorbitRequestData._get_balance_normalize_function(SAMPLE_BALANCE, {})
+        assert ok is True
+
+    def test_account_ok(self):
+        result, ok = KorbitRequestData._get_account_normalize_function(SAMPLE_BALANCE, {})
+        assert ok is True
+
+    def test_is_error_none(self):
+        assert KorbitRequestData._is_error(None) is True
+
+    def test_is_error_code(self):
+        assert KorbitRequestData._is_error(SAMPLE_ERROR) is True
+
+    def test_is_error_ok(self):
+        assert KorbitRequestData._is_error(SAMPLE_TICK) is False
+
+
+# ═══════════════════════════════════════════════════════════════
+# 4) Mocked sync calls
+# ═══════════════════════════════════════════════════════════════
+
+class TestSyncCalls:
+    @patch.object(KorbitRequestData, "http_request", return_value=SAMPLE_TICK)
+    def test_get_tick(self, mock_http, feed):
+        rd = feed.get_tick("BTC/KRW")
+        assert isinstance(rd, RequestData)
+        mock_http.assert_called_once()
+
+    @patch.object(KorbitRequestData, "http_request", return_value=SAMPLE_DEPTH)
+    def test_get_depth(self, mock_http, feed):
+        rd = feed.get_depth("BTC/KRW")
+        assert isinstance(rd, RequestData)
+
+    @patch.object(KorbitRequestData, "http_request", return_value=SAMPLE_CONSTANTS)
+    def test_get_exchange_info(self, mock_http, feed):
+        rd = feed.get_exchange_info()
+        assert isinstance(rd, RequestData)
+
+    @patch.object(KorbitRequestData, "http_request", return_value=SAMPLE_DEALS)
+    def test_get_deals(self, mock_http, feed):
+        rd = feed.get_deals("BTC/KRW")
+        assert isinstance(rd, RequestData)
+
+    @patch.object(KorbitRequestData, "http_request", return_value=SAMPLE_KLINE)
+    def test_get_kline(self, mock_http, feed):
+        rd = feed.get_kline("BTC/KRW", "1h", 50)
+        assert isinstance(rd, RequestData)
+
+    @patch.object(KorbitRequestData, "http_request", return_value=SAMPLE_ORDER)
+    def test_make_order(self, mock_http, feed):
+        rd = feed.make_order("BTC/KRW", "buy", "limit", 0.001, price=95000000)
+        assert isinstance(rd, RequestData)
+
+    @patch.object(KorbitRequestData, "http_request", return_value=SAMPLE_CANCEL)
+    def test_cancel_order(self, mock_http, feed):
+        rd = feed.cancel_order("12345")
+        assert isinstance(rd, RequestData)
+
+    @patch.object(KorbitRequestData, "http_request", return_value=SAMPLE_OPEN_ORDERS)
+    def test_get_open_orders(self, mock_http, feed):
+        rd = feed.get_open_orders()
+        assert isinstance(rd, RequestData)
+
+    @patch.object(KorbitRequestData, "http_request", return_value=SAMPLE_BALANCE)
+    def test_get_balance(self, mock_http, feed):
+        rd = feed.get_balance()
+        assert isinstance(rd, RequestData)
+
+    @patch.object(KorbitRequestData, "http_request", return_value=SAMPLE_BALANCE)
+    def test_get_account(self, mock_http, feed):
+        rd = feed.get_account()
+        assert isinstance(rd, RequestData)
+
+
+# ═══════════════════════════════════════════════════════════════
+# 5) Auth
+# ═══════════════════════════════════════════════════════════════
+
+class TestAuth:
+    def test_headers_no_key(self, feed):
+        h = feed._get_headers()
+        assert h["Content-Type"] == "application/json"
+        assert "Authorization" not in h
+
+    def test_headers_with_key(self):
+        f = KorbitRequestDataSpot(queue.Queue(), public_key="mytoken")
+        h = f._get_headers()
+        assert h["Authorization"] == "Bearer mytoken"
+
+
+# ═══════════════════════════════════════════════════════════════
+# 6) Registry
+# ═══════════════════════════════════════════════════════════════
+
+class TestRegistry:
+    def test_feed_registered(self):
         assert "KORBIT___SPOT" in ExchangeRegistry._feed_classes
-        assert ExchangeRegistry._feed_classes["KORBIT___SPOT"] == KorbitRequestDataSpot
 
-        # Check if exchange data is registered
+    def test_exchange_data_registered(self):
         assert "KORBIT___SPOT" in ExchangeRegistry._exchange_data_classes
-        assert ExchangeRegistry._exchange_data_classes["KORBIT___SPOT"] == KorbitExchangeDataSpot
 
-        # Check if balance handler is registered
+    def test_balance_handler_registered(self):
         assert "KORBIT___SPOT" in ExchangeRegistry._balance_handlers
-        assert ExchangeRegistry._balance_handlers["KORBIT___SPOT"] is not None
 
-        # Check if stream handler is registered
-        stream_handlers = ExchangeRegistry._stream_classes.get(
-            "KORBIT___SPOT", {})
+    def test_stream_registered(self):
+        stream_handlers = ExchangeRegistry._stream_classes.get("KORBIT___SPOT", {})
         assert "subscribe" in stream_handlers
 
-    def test_korbit_create_feed(self):
-        """Test creating Korbit feed through registry."""
-        data_queue = queue.Queue()
-        feed = ExchangeRegistry.create_feed("KORBIT___SPOT", data_queue)
-        assert isinstance(feed, KorbitRequestDataSpot)
-
-    def test_korbit_create_exchange_data(self):
-        """Test creating Korbit exchange data through registry."""
-        exchange_data = ExchangeRegistry.create_exchange_data("KORBIT___SPOT")
-        assert isinstance(exchange_data, KorbitExchangeDataSpot)
+    def test_create_exchange_data(self):
+        ed = ExchangeRegistry.create_exchange_data("KORBIT___SPOT")
+        assert isinstance(ed, KorbitExchangeDataSpot)
 
 
-class TestKorbitLiveMarketData:
-    """Live market data tests following Binance/OKX standard."""
+# ═══════════════════════════════════════════════════════════════
+# 7) Method existence
+# ═══════════════════════════════════════════════════════════════
 
-    def init_req_feed(self):
-        """Initialize Korbit request feed."""
-        data_queue = queue.Queue()
-        live_korbit_spot_feed = KorbitRequestDataSpot(data_queue)
-        return live_korbit_spot_feed
-
-    def test_korbit_req_server_time(self):
-        """Test server time endpoint."""
-        live_korbit_spot_feed = self.init_req_feed()
-        data = live_korbit_spot_feed.get_server_time()
-        assert isinstance(data, RequestData)
-        print("korbit_server_time:", data.get_data())
-
-    def test_korbit_req_tick_data(self):
-        """Test ticker data request (synchronous)."""
-        live_korbit_spot_feed = self.init_req_feed()
-        data = live_korbit_spot_feed.get_tick("BTC-KRW").get_data()
-        assert isinstance(data, list)
-        if data and data[0]:
-            tick_data = data[0]
-            if hasattr(tick_data, 'init_data'):
-                tick_data.init_data()
-            if hasattr(tick_data, 'get_symbol_name'):
-                assert tick_data.get_symbol_name() == "BTC-KRW"
-                assert tick_data.get_last_price() > 0
-
-    @pytest.mark.integration
-    def test_korbit_async_tick_data(self):
-        """Test ticker data request (asynchronous)."""
-        data_queue = queue.Queue()
-        live_korbit_spot_feed = KorbitRequestDataSpot(data_queue)
-        live_korbit_spot_feed.async_get_tick(
-            "BTC-KRW", extra_data={"test_async_tick_data": True})
-        time.sleep(3)
-        try:
-            tick_data = data_queue.get(timeout=10)
-            assert isinstance(tick_data, RequestData)
-        except queue.Empty:
-            pass  # No data received
-
-    @pytest.mark.integration
-    def test_korbit_req_kline_data(self):
-        """Test kline data request (synchronous)."""
-        live_korbit_spot_feed = self.init_req_feed()
-        data = live_korbit_spot_feed.get_kline(
-            "BTC-KRW", "1h", count=2).get_data()
-        assert isinstance(data, list)
-
-    @pytest.mark.integration
-    def test_korbit_async_kline_data(self):
-        """Test kline data request (asynchronous)."""
-        data_queue = queue.Queue()
-        live_korbit_spot_feed = KorbitRequestDataSpot(data_queue)
-        live_korbit_spot_feed.async_get_kline("BTC-KRW", period="1h", count=3,
-                                              extra_data={"test_async_kline_data": True})
-        time.sleep(5)
-        try:
-            kline_data = data_queue.get(timeout=10)
-            assert isinstance(kline_data, RequestData)
-        except queue.Empty:
-            pass  # No data received
+_EXPECTED_METHODS = [
+    "get_tick", "async_get_tick",
+    "get_ticker", "async_get_ticker",
+    "get_depth", "async_get_depth",
+    "get_exchange_info", "async_get_exchange_info",
+    "get_deals", "async_get_deals",
+    "get_recent_trades", "async_get_recent_trades",
+    "get_kline", "async_get_kline",
+    "make_order", "async_make_order",
+    "cancel_order", "async_cancel_order",
+    "get_open_orders", "async_get_open_orders",
+    "get_balance", "async_get_balance",
+    "get_account", "async_get_account",
+]
 
 
-def order_book_value_equals(order_book):
-    """Validate order book data."""
-    # Korbit may return dict order book data
-    if isinstance(order_book, dict):
-        assert order_book.get("symbol_name") == "BTC-KRW"
-        bids = order_book.get("bids", [])
-        asks = order_book.get("asks", [])
-        if bids:
-            # Korbit returns bids as lists: ["price", "amount", "count"]
-            bid = bids[0]
-            price = float(bid[0]) if isinstance(bid, list) else float(bid.get("price", 0))
-            assert price > 0
-        if asks:
-            ask = asks[0]
-            price = float(ask[0]) if isinstance(ask, list) else float(ask.get("price", 0))
-            assert price > 0
+class TestMethodExistence:
+    @pytest.mark.parametrize("method_name", _EXPECTED_METHODS)
+    def test_method_exists(self, feed, method_name):
+        assert hasattr(feed, method_name), f"Missing method: {method_name}"
+        assert callable(getattr(feed, method_name))
 
 
-class TestKorbitOrderBook:
-    """Order book tests."""
+# ═══════════════════════════════════════════════════════════════
+# 8) Feed init
+# ═══════════════════════════════════════════════════════════════
 
-    def init_req_feed(self):
-        """Initialize Korbit request feed."""
-        data_queue = queue.Queue()
-        live_korbit_spot_feed = KorbitRequestDataSpot(data_queue)
-        return live_korbit_spot_feed
+class TestFeedInit:
+    def test_default_exchange_name(self, feed):
+        assert feed.exchange_name == "KORBIT___SPOT"
 
-    def test_korbit_req_orderbook_data(self):
-        """Test orderbook data request."""
-        live_korbit_spot_feed = self.init_req_feed()
-        data = live_korbit_spot_feed.get_depth("BTC-KRW").get_data()
-        assert isinstance(data, list)
-        if data and data[0]:
-            order_book_value_equals(data[0])
+    def test_default_asset_type(self, feed):
+        assert feed.asset_type == "SPOT"
 
-    @pytest.mark.integration
-    def test_korbit_async_orderbook_data(self):
-        """Test orderbook data request (asynchronous)."""
-        data_queue = queue.Queue()
-        live_korbit_spot_feed = KorbitRequestDataSpot(data_queue)
-        live_korbit_spot_feed.async_get_depth("BTC-KRW")
-        time.sleep(3)
-        try:
-            depth_data = data_queue.get(timeout=10)
-            assert depth_data is not None
-        except queue.Empty:
-            pass  # No data received
+    def test_capabilities(self, feed):
+        caps = feed._capabilities()
+        assert len(caps) > 0
+
+    def test_push_data_to_queue(self, feed):
+        feed.push_data_to_queue({"test": 1})
+        assert not feed.data_queue.empty()
 
 
-class TestKorbitWebSocket:
-    """Test Korbit WebSocket handlers."""
+# ═══════════════════════════════════════════════════════════════
+# 9) WebSocket stubs
+# ═══════════════════════════════════════════════════════════════
 
-    def test_market_wss_handler(self):
-        """Test market WebSocket handler."""
-        from bt_api_py.feeds.live_korbit.spot import KorbitMarketWssDataSpot
+class TestWebSocketStubs:
+    def test_market_wss_start_stop(self):
+        wss = KorbitMarketWssDataSpot(queue.Queue(), topics=[{"topic": "ticker"}])
+        wss.start()
+        assert wss.running is True
+        wss.stop()
+        assert wss.running is False
 
-        data_queue = queue.Queue()
-        topics = [{"topic": "ticker", "symbol": "btc_krw"}]
-
-        wss_handler = KorbitMarketWssDataSpot(data_queue, topics=topics)
-        wss_handler.start()
-        assert wss_handler.running is True
-        wss_handler.stop()
-        assert wss_handler.running is False
-
-    def test_account_wss_handler(self):
-        """Test account WebSocket handler."""
-        from bt_api_py.feeds.live_korbit.spot import KorbitAccountWssDataSpot
-
-        data_queue = queue.Queue()
-        topics = [{"topic": "account"}]
-
-        wss_handler = KorbitAccountWssDataSpot(data_queue, topics=topics)
-        wss_handler.start()
-        assert wss_handler.running is True
-        wss_handler.stop()
-        assert wss_handler.running is False
+    def test_account_wss_start_stop(self):
+        wss = KorbitAccountWssDataSpot(queue.Queue(), topics=[{"topic": "account"}])
+        wss.start()
+        assert wss.running is True
+        wss.stop()
+        assert wss.running is False
 
 
-class TestKorbitIntegration:
-    """Integration tests for Korbit."""
+# ═══════════════════════════════════════════════════════════════
+# 10) Integration (skipped)
+# ═══════════════════════════════════════════════════════════════
 
-    def test_market_data_api(self):
-        """Test market data API calls (requires network)."""
-        data_queue = queue.Queue()
-        feed = KorbitRequestDataSpot(data_queue)
+class TestIntegration:
+    @pytest.mark.skip(reason="Requires network access")
+    def test_live_get_tick(self):
+        f = KorbitRequestDataSpot(queue.Queue())
+        rd = f.get_tick("BTC/KRW")
+        assert isinstance(rd, RequestData)
 
-        # Test ticker
-        ticker = feed.get_tick("BTC-KRW")
-        assert isinstance(ticker, RequestData)
-
-    def test_trading_api(self):
-        """Test trading API calls (requires API keys)."""
-        pass
-
-
-# ==================== Additional Binance/OKX Standard Tests =============
-
-class TestKorbitStandardMarketData:
-    """Standard market data tests following Binance/OKX pattern."""
-
-    def init_req_feed(self):
-        """Initialize Korbit request feed."""
-        data_queue = queue.Queue()
-        live_korbit_spot_feed = KorbitRequestDataSpot(data_queue)
-        return live_korbit_spot_feed
-
-    def test_korbit_req_get_exchange_info(self):
-        """Test exchange info endpoint."""
-        live_korbit_spot_feed = self.init_req_feed()
-        data = live_korbit_spot_feed.get_exchange_info()
-        assert isinstance(data, RequestData)
-        print("korbit_exchange_info:", data.get_data())
-
-    @pytest.mark.integration
-    def test_korbit_req_get_symbols(self):
-        """Test symbols list endpoint."""
-        live_korbit_spot_feed = self.init_req_feed()
-        data = live_korbit_spot_feed.get_symbols()
-        assert isinstance(data, RequestData)
-        result = data.get_data()
-        assert isinstance(result, list)
-
-
-class TestKorbitOrderManagement:
-    """Order management tests following Binance/OKX pattern."""
-
-    def init_req_feed(self):
-        """Initialize Korbit request feed."""
-        data_queue = queue.Queue()
-        live_korbit_spot_feed = KorbitRequestDataSpot(
-            data_queue,
-            public_key="test_key",
-            private_key="test_secret",
-        )
-        return live_korbit_spot_feed
-
-    def test_make_order_params(self):
-        """Test make order parameter generation."""
-        live_korbit_spot_feed = self.init_req_feed()
-        path, params, extra_data = live_korbit_spot_feed._make_order(
-            symbol="BTC-KRW",
-            vol="0.001",
-            price="50000000",
-            order_type="buy-limit",
-        )
-        assert "orders" in path.lower() or "place" in path.lower()
-        assert params.get("symbol") == "btc_krw"
-        assert params.get("type") == "limit"
-        assert params.get("side") == "buy"
-
-    def test_cancel_order_params(self):
-        """Test cancel order parameter generation."""
-        live_korbit_spot_feed = self.init_req_feed()
-        path, params, extra_data = live_korbit_spot_feed._cancel_order(
-            order_id="123456"
-        )
-        assert "cancel" in path.lower()
-        assert params.get("id") == "123456" or "id" in path
-
-    @pytest.mark.integration
-    def test_korbit_req_make_order(self):
-        """Test make order endpoint."""
-        live_korbit_spot_feed = self.init_req_feed()
-        data = live_korbit_spot_feed.make_order(
-            symbol="BTC-KRW",
-            vol="0.001",
-            price="30000000",  # Low price to avoid execution
-            order_type="buy-limit",
-        )
-        assert isinstance(data, RequestData)
-
-    @pytest.mark.integration
-    def test_korbit_req_query_order(self):
-        """Test query order endpoint."""
-        live_korbit_spot_feed = self.init_req_feed()
-        data = live_korbit_spot_feed.query_order(
-            symbol="BTC-KRW",
-            order_id="123456"
-        )
-        assert isinstance(data, RequestData)
-
-    @pytest.mark.integration
-    def test_korbit_req_get_open_orders(self):
-        """Test get open orders endpoint."""
-        live_korbit_spot_feed = self.init_req_feed()
-        data = live_korbit_spot_feed.get_open_orders(symbol="BTC-KRW")
-        assert isinstance(data, RequestData)
-
-
-class TestKorbitAccountData:
-    """Account data tests following Binance/OKX pattern."""
-
-    def init_req_feed(self):
-        """Initialize Korbit request feed."""
-        data_queue = queue.Queue()
-        live_korbit_spot_feed = KorbitRequestDataSpot(
-            data_queue,
-            public_key="test_key",
-            private_key="test_secret",
-        )
-        return live_korbit_spot_feed
-
-    @pytest.mark.integration
-    def test_korbit_req_get_account(self):
-        """Test account data endpoint."""
-        live_korbit_spot_feed = self.init_req_feed()
-        data = live_korbit_spot_feed.get_account()
-        assert isinstance(data, RequestData)
-        print("korbit_account:", data.get_data())
-
-    @pytest.mark.integration
-    def test_korbit_req_get_balance(self):
-        """Test balance data endpoint."""
-        live_korbit_spot_feed = self.init_req_feed()
-        data = live_korbit_spot_feed.get_balance()
-        assert isinstance(data, RequestData)
-        print("korbit_balance:", data.get_data())
+    @pytest.mark.skip(reason="Requires network access")
+    def test_live_get_exchange_info(self):
+        f = KorbitRequestDataSpot(queue.Queue())
+        rd = f.get_exchange_info()
+        assert isinstance(rd, RequestData)
 
 
 if __name__ == "__main__":

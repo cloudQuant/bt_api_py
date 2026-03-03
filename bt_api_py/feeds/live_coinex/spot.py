@@ -1,100 +1,122 @@
 """
-CoinEx Spot Feed implementation.
+CoinEx Spot Feed – three-layer sync/async wrappers.
 """
 
-from bt_api_py.containers.exchanges.coinex_exchange_data import CoinExExchangeDataSpot
-from bt_api_py.feeds.capability import Capability
 from bt_api_py.feeds.live_coinex.request_base import CoinExRequestData
 
 
 class CoinExRequestDataSpot(CoinExRequestData):
-    """CoinEx Spot Feed for market data."""
-
-    @classmethod
-    def _capabilities(cls):
-        return {
-            Capability.GET_TICK,
-            Capability.GET_DEPTH,
-            Capability.GET_KLINE,
-            Capability.GET_EXCHANGE_INFO,
-        }
+    """CoinEx Spot Feed."""
 
     def __init__(self, data_queue, **kwargs):
+        kwargs.setdefault("exchange_name", "COINEX___SPOT")
+        kwargs.setdefault("asset_type", "SPOT")
         super().__init__(data_queue, **kwargs)
-        self.exchange_name = kwargs.get("exchange_name", "COINEX___SPOT")
 
-    def _get_tick(self, symbol, extra_data=None, **kwargs):
-        """Get ticker data - returns (path, params, extra_data) tuple."""
-        request_type = "get_tick"
-        path = f"GET /spot/ticker"
-        extra_data = extra_data or {}
-        extra_data.update({
-            "request_type": request_type,
-            "symbol_name": symbol,
-            "normalize_function": self._get_tick_normalize_function,
-        })
-        return path, {"market": symbol}, extra_data
+    # ── public market data ──────────────────────────────────────
 
-    @staticmethod
-    def _get_tick_normalize_function(input_data, extra_data):
-        if not input_data:
-            return [], False
-        ticker = input_data.get("data", {})
-        return [ticker], ticker is not None
+    def get_exchange_info(self, extra_data=None, **kwargs):
+        path, params, extra_data = self._get_exchange_info(extra_data, **kwargs)
+        return self.request(path, params=params, extra_data=extra_data)
+
+    def async_get_exchange_info(self, extra_data=None, **kwargs):
+        path, params, extra_data = self._get_exchange_info(extra_data, **kwargs)
+        self.submit(self.async_request(path, params=params, extra_data=extra_data), callback=self.async_callback)
 
     def get_tick(self, symbol, extra_data=None, **kwargs):
-        """Get symbol ticker."""
         path, params, extra_data = self._get_tick(symbol, extra_data, **kwargs)
-        return self.request(path, params, extra_data=extra_data)
+        return self.request(path, params=params, extra_data=extra_data)
 
-    def _get_depth(self, symbol, count=20, extra_data=None, **kwargs):
-        """Get order book depth - returns (path, params, extra_data) tuple."""
-        request_type = "get_depth"
-        path = f"GET /spot/order_book"
-        extra_data = extra_data or {}
-        extra_data.update({
-            "request_type": request_type,
-            "symbol_name": symbol,
-            "normalize_function": self._get_depth_normalize_function,
-        })
-        return path, {"market": symbol, "depth": count}, extra_data
+    def async_get_tick(self, symbol, extra_data=None, **kwargs):
+        path, params, extra_data = self._get_tick(symbol, extra_data, **kwargs)
+        self.submit(self.async_request(path, params=params, extra_data=extra_data), callback=self.async_callback)
 
-    @staticmethod
-    def _get_depth_normalize_function(input_data, extra_data):
-        if not input_data:
-            return [], False
-        depth = input_data.get("data", {})
-        return [depth], depth is not None
+    get_ticker = get_tick
+    async_get_ticker = async_get_tick
 
     def get_depth(self, symbol, count=20, extra_data=None, **kwargs):
-        """Get order book."""
         path, params, extra_data = self._get_depth(symbol, count, extra_data, **kwargs)
-        return self.request(path, params, extra_data=extra_data)
+        return self.request(path, params=params, extra_data=extra_data)
 
-    def _get_kline(self, symbol, period, count=20, extra_data=None, **kwargs):
-        """Get kline/candlestick data - returns (path, params, extra_data) tuple."""
-        request_type = "get_kline"
-        path = f"GET /spot/kline"
-        extra_data = extra_data or {}
-        extra_data.update({
-            "request_type": request_type,
-            "symbol_name": symbol,
-            "normalize_function": self._get_kline_normalize_function,
-        })
-        return path, {
-            "market": symbol,
-            "type": self._params.get_period(period),
-            "limit": count,
-        }, extra_data
+    def async_get_depth(self, symbol, count=20, extra_data=None, **kwargs):
+        path, params, extra_data = self._get_depth(symbol, count, extra_data, **kwargs)
+        self.submit(self.async_request(path, params=params, extra_data=extra_data), callback=self.async_callback)
 
-    @staticmethod
-    def _get_kline_normalize_function(input_data, extra_data):
-        if not input_data:
-            return [], False
-        klines = input_data.get("data", [])
-        return [klines], klines is not None
-
-    def get_kline(self, symbol, period, count=20, extra_data=None, **kwargs):
-        """Get kline data."""
+    def get_kline(self, symbol, period="1h", count=100, extra_data=None, **kwargs):
         path, params, extra_data = self._get_kline(symbol, period, count, extra_data, **kwargs)
-        return self.request(path, params, extra_data=extra_data)
+        return self.request(path, params=params, extra_data=extra_data)
+
+    def async_get_kline(self, symbol, period="1h", count=100, extra_data=None, **kwargs):
+        path, params, extra_data = self._get_kline(symbol, period, count, extra_data, **kwargs)
+        self.submit(self.async_request(path, params=params, extra_data=extra_data), callback=self.async_callback)
+
+    def get_trade_history(self, symbol, count=50, extra_data=None, **kwargs):
+        path, params, extra_data = self._get_trade_history(symbol, count, extra_data, **kwargs)
+        return self.request(path, params=params, extra_data=extra_data)
+
+    def async_get_trade_history(self, symbol, count=50, extra_data=None, **kwargs):
+        path, params, extra_data = self._get_trade_history(symbol, count, extra_data, **kwargs)
+        self.submit(self.async_request(path, params=params, extra_data=extra_data), callback=self.async_callback)
+
+    get_trades = get_trade_history
+    async_get_trades = async_get_trade_history
+
+    # ── private trading ─────────────────────────────────────────
+
+    def make_order(self, symbol, size, price=None, order_type="buy-limit", extra_data=None, **kwargs):
+        path, body, extra_data = self._make_order(symbol, size, price, order_type, extra_data, **kwargs)
+        return self.request(path, body=body, extra_data=extra_data, is_sign=True)
+
+    def async_make_order(self, symbol, size, price=None, order_type="buy-limit", extra_data=None, **kwargs):
+        path, body, extra_data = self._make_order(symbol, size, price, order_type, extra_data, **kwargs)
+        self.submit(self.async_request(path, body=body, extra_data=extra_data, is_sign=True), callback=self.async_callback)
+
+    def cancel_order(self, symbol=None, order_id=None, extra_data=None, **kwargs):
+        path, params, extra_data = self._cancel_order(symbol, order_id, extra_data, **kwargs)
+        return self.request(path, params=params, extra_data=extra_data, is_sign=True)
+
+    def async_cancel_order(self, symbol=None, order_id=None, extra_data=None, **kwargs):
+        path, params, extra_data = self._cancel_order(symbol, order_id, extra_data, **kwargs)
+        self.submit(self.async_request(path, params=params, extra_data=extra_data, is_sign=True), callback=self.async_callback)
+
+    def query_order(self, symbol=None, order_id=None, extra_data=None, **kwargs):
+        path, params, extra_data = self._query_order(symbol, order_id, extra_data, **kwargs)
+        return self.request(path, params=params, extra_data=extra_data, is_sign=True)
+
+    def async_query_order(self, symbol=None, order_id=None, extra_data=None, **kwargs):
+        path, params, extra_data = self._query_order(symbol, order_id, extra_data, **kwargs)
+        self.submit(self.async_request(path, params=params, extra_data=extra_data, is_sign=True), callback=self.async_callback)
+
+    def get_open_orders(self, symbol=None, extra_data=None, **kwargs):
+        path, params, extra_data = self._get_open_orders(symbol, extra_data, **kwargs)
+        return self.request(path, params=params, extra_data=extra_data, is_sign=True)
+
+    def async_get_open_orders(self, symbol=None, extra_data=None, **kwargs):
+        path, params, extra_data = self._get_open_orders(symbol, extra_data, **kwargs)
+        self.submit(self.async_request(path, params=params, extra_data=extra_data, is_sign=True), callback=self.async_callback)
+
+    def get_deals(self, symbol=None, extra_data=None, **kwargs):
+        path, params, extra_data = self._get_deals(symbol, extra_data, **kwargs)
+        return self.request(path, params=params, extra_data=extra_data, is_sign=True)
+
+    def async_get_deals(self, symbol=None, extra_data=None, **kwargs):
+        path, params, extra_data = self._get_deals(symbol, extra_data, **kwargs)
+        self.submit(self.async_request(path, params=params, extra_data=extra_data, is_sign=True), callback=self.async_callback)
+
+    # ── private account ─────────────────────────────────────────
+
+    def get_account(self, extra_data=None, **kwargs):
+        path, params, extra_data = self._get_account(extra_data, **kwargs)
+        return self.request(path, params=params, extra_data=extra_data, is_sign=True)
+
+    def async_get_account(self, extra_data=None, **kwargs):
+        path, params, extra_data = self._get_account(extra_data, **kwargs)
+        self.submit(self.async_request(path, params=params, extra_data=extra_data, is_sign=True), callback=self.async_callback)
+
+    def get_balance(self, extra_data=None, **kwargs):
+        path, params, extra_data = self._get_balance(extra_data, **kwargs)
+        return self.request(path, params=params, extra_data=extra_data, is_sign=True)
+
+    def async_get_balance(self, extra_data=None, **kwargs):
+        path, params, extra_data = self._get_balance(extra_data, **kwargs)
+        self.submit(self.async_request(path, params=params, extra_data=extra_data, is_sign=True), callback=self.async_callback)

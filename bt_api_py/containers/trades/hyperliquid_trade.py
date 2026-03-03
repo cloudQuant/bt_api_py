@@ -28,7 +28,7 @@ class HyperliquidSpotWssTradeData(TradeData):
     def init_data(self):
         """初始化成交数据"""
         if self.has_been_init_data:
-            return
+            return self
 
         try:
             if not self.has_been_json_encoded:
@@ -48,6 +48,7 @@ class HyperliquidSpotWssTradeData(TradeData):
 
         except Exception as e:
             print(f"Error initializing Hyperliquid trade data: {e}")
+        return self
 
     def get_all_data(self):
         """获取所有成交数据"""

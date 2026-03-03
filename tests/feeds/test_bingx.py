@@ -3,16 +3,12 @@ Test BingX exchange integration.
 
 Run tests:
     pytest tests/feeds/test_bingx.py -v
-
-Run with coverage:
-    pytest tests/feeds/test_bingx.py --cov=bt_api_py.feeds.live_bingx --cov-report=term-missing
 """
 
 import json
 import queue
 import time
-from unittest.mock import Mock, patch
-from unittest.mock import MagicMock
+from unittest.mock import Mock, patch, MagicMock
 
 import pytest
 
@@ -21,6 +17,7 @@ from bt_api_py.containers.exchanges.bingx_exchange_data import (
     BingXExchangeDataSpot,
 )
 from bt_api_py.feeds.live_bingx.spot import BingXRequestDataSpot
+from bt_api_py.feeds.capability import Capability
 from bt_api_py.containers.requestdatas.request_data import RequestData
 from bt_api_py.containers.tickers.bingx_ticker import BingXRequestTickerData
 from bt_api_py.registry import ExchangeRegistry
@@ -37,15 +34,23 @@ def mock_logger():
         yield mock_log
 
 
+@pytest.fixture
+def mock_feed():
+    """Create a BingX feed instance with mocked request."""
+    data_queue = queue.Queue()
+    feed = BingXRequestDataSpot(data_queue, exchange_name="BINGX___SPOT")
+    feed.request = Mock(return_value=Mock(spec=RequestData))
+    return feed
+
+
 class TestBingXExchangeData:
     """Test BingX exchange data configuration."""
 
     def test_exchange_data_spot_creation(self, mock_logger):
         """Test creating BingX spot exchange data."""
         exchange_data = BingXExchangeDataSpot()
-        # exchange_name is loaded from YAML config
         assert exchange_data.rest_url
-        assert "make_order" in exchange_data.rest_paths or "get_ticker" in exchange_data.rest_paths
+        assert "get_ticker" in exchange_data.rest_paths or "get_server_time" in exchange_data.rest_paths
 
     def test_kline_periods(self, mock_logger):
         """Test kline periods are defined."""
@@ -82,9 +87,69 @@ class TestBingXRequestDataSpot:
         assert request_data.exchange_name == "BINGX___SPOT"
         assert request_data.asset_type == "SPOT"
 
+    def test_capabilities(self):
+        """Test declared capabilities include all standard interfaces."""
+        caps = BingXRequestDataSpot._capabilities()
+        assert Capability.GET_TICK in caps
+        assert Capability.GET_DEPTH in caps
+        assert Capability.GET_KLINE in caps
+        assert Capability.GET_EXCHANGE_INFO in caps
+        assert Capability.GET_BALANCE in caps
+        assert Capability.GET_ACCOUNT in caps
+        assert Capability.MAKE_ORDER in caps
+        assert Capability.CANCEL_ORDER in caps
+
+    def test_get_tick_returns_tuple(self, mock_feed):
+        """Test _get_tick returns (path, params, extra_data) tuple."""
+        path, params, extra_data = mock_feed._get_tick("BTC-USDT")
+        assert "GET" in path
+        assert params["symbol"] == "BTC-USDT"
+        assert extra_data["request_type"] == "get_tick"
+        assert extra_data["symbol_name"] == "BTC-USDT"
+
+    def test_get_tick_calls_request(self, mock_feed):
+        """Test get_tick calls self.request."""
+        mock_feed.get_tick("BTC-USDT")
+        assert mock_feed.request.called
+
+    def test_get_depth_returns_tuple(self, mock_feed):
+        """Test _get_depth returns (path, params, extra_data) tuple."""
+        path, params, extra_data = mock_feed._get_depth("BTC-USDT", 10)
+        assert params["symbol"] == "BTC-USDT"
+        assert params["limit"] == 10
+        assert extra_data["request_type"] == "get_depth"
+
+    def test_get_depth_calls_request(self, mock_feed):
+        """Test get_depth calls self.request."""
+        mock_feed.get_depth("BTC-USDT", 10)
+        assert mock_feed.request.called
+
+    def test_get_kline_returns_tuple(self, mock_feed):
+        """Test _get_kline returns (path, params, extra_data) tuple."""
+        path, params, extra_data = mock_feed._get_kline("BTC-USDT", "1m", 5)
+        assert params["symbol"] == "BTC-USDT"
+        assert extra_data["request_type"] == "get_kline"
+
+    def test_get_kline_calls_request(self, mock_feed):
+        """Test get_kline calls self.request."""
+        mock_feed.get_kline("BTC-USDT", "1m", 5)
+        assert mock_feed.request.called
+
+    def test_get_exchange_info_returns_tuple(self, mock_feed):
+        """Test _get_exchange_info returns (path, params, extra_data) tuple."""
+        path, params, extra_data = mock_feed._get_exchange_info()
+        assert extra_data["request_type"] == "get_exchange_info"
+
+    def test_get_server_time_tuple(self):
+        """Test _get_server_time returns tuple."""
+        data_queue = queue.Queue()
+        feed = BingXRequestDataSpot(data_queue, exchange_name="BINGX___SPOT")
+        path, params, extra_data = feed._get_server_time()
+        assert extra_data["request_type"] == "get_server_time"
+        assert "server" in path.lower() or "time" in path.lower()
+
     def test_normalize_functions_exist(self):
         """Test that normalization functions exist."""
-        # Test ticker normalize function exists
         input_data = {
             "data": [
                 {
@@ -139,15 +204,12 @@ class TestBingXRegistration:
 
     def test_bingx_registered(self):
         """Test that BingX is properly registered."""
-        # Check if feed is registered in _feed_classes
         assert "BINGX___SPOT" in ExchangeRegistry._feed_classes
         assert ExchangeRegistry._feed_classes["BINGX___SPOT"] == BingXRequestDataSpot
 
-        # Check if exchange data is registered
         assert "BINGX___SPOT" in ExchangeRegistry._exchange_data_classes
         assert ExchangeRegistry._exchange_data_classes["BINGX___SPOT"] == BingXExchangeDataSpot
 
-        # Check if balance handler is registered
         assert "BINGX___SPOT" in ExchangeRegistry._balance_handlers
         assert ExchangeRegistry._balance_handlers["BINGX___SPOT"] is not None
 
@@ -157,146 +219,179 @@ class TestBingXRegistration:
         assert isinstance(exchange_data, BingXExchangeDataSpot)
 
 
-class TestBingXIntegration:
-    """Integration tests for BingX."""
+class TestBingXStandardInterfaces:
+    """Test standard Feed interface methods for BingX."""
 
-    def test_market_data_api(self):
-        """Test market data API calls (requires network)."""
-        pass
+    @pytest.fixture
+    def feed(self):
+        data_queue = queue.Queue()
+        feed = BingXRequestDataSpot(data_queue, exchange_name="BINGX___SPOT")
+        feed.request = Mock(return_value=Mock(spec=RequestData))
+        return feed
 
-    def test_trading_api(self):
-        """Test trading API calls (requires API keys)."""
-        pass
+    def test_make_order_calls_request(self, feed):
+        feed.make_order("BTC-USDT", 0.01, 50000, "LIMIT")
+        assert feed.request.called
+        extra_data = feed.request.call_args[1].get("extra_data")
+        assert extra_data["request_type"] == "make_order"
 
-# ==================== Live API Tests (Following Binance/OKX Standard) ===
+    def test_cancel_order_calls_request(self, feed):
+        feed.cancel_order("BTC-USDT", "order_123")
+        assert feed.request.called
+        extra_data = feed.request.call_args[1].get("extra_data")
+        assert extra_data["request_type"] == "cancel_order"
+
+    def test_query_order_calls_request(self, feed):
+        feed.query_order("BTC-USDT", "order_123")
+        assert feed.request.called
+        extra_data = feed.request.call_args[1].get("extra_data")
+        assert extra_data["request_type"] == "query_order"
+
+    def test_get_open_orders_calls_request(self, feed):
+        feed.get_open_orders("BTC-USDT")
+        assert feed.request.called
+        extra_data = feed.request.call_args[1].get("extra_data")
+        assert extra_data["request_type"] == "get_open_orders"
+
+    def test_get_account_calls_request(self, feed):
+        feed.get_account("BTC")
+        assert feed.request.called
+        extra_data = feed.request.call_args[1].get("extra_data")
+        assert extra_data["request_type"] == "get_account"
+
+    def test_get_balance_calls_request(self, feed):
+        feed.get_balance("BTC")
+        assert feed.request.called
+        extra_data = feed.request.call_args[1].get("extra_data")
+        assert extra_data["request_type"] == "get_balance"
+
+    def test_get_exchange_info_calls_request(self, feed):
+        feed.get_exchange_info()
+        assert feed.request.called
+        extra_data = feed.request.call_args[1].get("extra_data")
+        assert extra_data["request_type"] == "get_exchange_info"
+
+
+class TestBingXBaseCapabilities:
+    """Test capabilities on the base class."""
+
+    def test_base_capabilities(self):
+        from bt_api_py.feeds.live_bingx.request_base import BingXRequestData
+        caps = BingXRequestData._capabilities()
+        assert Capability.GET_TICK in caps
+        assert Capability.GET_DEPTH in caps
+        assert Capability.MAKE_ORDER in caps
+        assert Capability.CANCEL_ORDER in caps
+
+
+class TestBingXNormalizeFunctions:
+    """Test normalize functions edge cases."""
+
+    def test_tick_normalize_with_none(self):
+        result, status = BingXRequestDataSpot._get_tick_normalize_function(None, None)
+        assert result == []
+        assert status is False
+
+    def test_depth_normalize_with_none(self):
+        result, status = BingXRequestDataSpot._get_depth_normalize_function(None, None)
+        assert result == []
+        assert status is False
+
+    def test_kline_normalize_with_none(self):
+        result, status = BingXRequestDataSpot._get_kline_normalize_function(None, None)
+        assert result == []
+        assert status is False
+
+    def test_exchange_info_normalize_with_none(self):
+        result, status = BingXRequestDataSpot._get_exchange_info_normalize_function(None, None)
+        assert result == []
+        assert status is False
+
+    def test_tick_normalize_empty_data(self):
+        result, status = BingXRequestDataSpot._get_tick_normalize_function({"data": []}, None)
+        assert result == []
+        assert status is False
 
 
 class TestBingXLiveAPI:
-    """Test BingX live API following Binance/OKX test standards."""
+    """Live API tests - require network, marked as integration."""
 
+    @pytest.mark.integration
     def test_bingx_req_tick_data(self):
         """Test BingX ticker data (sync)."""
         data_queue = queue.Queue()
-        kwargs = {
-            "exchange_name": "BINGX___SPOT",
-        }
-        feed = BingXRequestDataSpot(data_queue, **kwargs)
+        feed = BingXRequestDataSpot(data_queue, exchange_name="BINGX___SPOT")
         data = feed.get_tick("BTC-USDT")
         assert isinstance(data, RequestData)
         data_list = data.get_data()
         assert isinstance(data_list, list)
-
-        # If we have data, validate the ticker structure
         if data_list and len(data_list) > 0:
-            pass
-        ticker = data_list[0]
-        # BingX returns dict with ticker info
-        if isinstance(ticker, dict):
-            assert isinstance(ticker, dict)
+            ticker = data_list[0]
+            if isinstance(ticker, dict):
+                assert isinstance(ticker, dict)
 
-    def test_bingx_async_tick_data(self):
-        """Test BingX ticker data (async)."""
-        data_queue = queue.Queue()
-        kwargs = {
-            "exchange_name": "BINGX___SPOT",
-        }
-        feed = BingXRequestDataSpot(data_queue, **kwargs)
-
-        # BingX may not have async_get_tick, skip if method doesn't exist
-        if not hasattr(feed, 'async_get_tick'):
-            return
-
-        feed.async_get_tick(
-            "BTC-USDT",
-            extra_data={
-                "test_async_tick_data": True})
-        time.sleep(3)
-
-        try:
-            tick_data = data_queue.get(timeout=10)
-        except queue.Empty:
-            pass
-
+    @pytest.mark.integration
     def test_bingx_req_kline_data(self):
         """Test BingX kline data (sync)."""
         data_queue = queue.Queue()
-        kwargs = {
-            "exchange_name": "BINGX___SPOT",
-        }
-        feed = BingXRequestDataSpot(data_queue, **kwargs)
+        feed = BingXRequestDataSpot(data_queue, exchange_name="BINGX___SPOT")
         data = feed.get_kline("BTC-USDT", "1m", count=2)
         assert isinstance(data, RequestData)
         data_list = data.get_data()
         assert isinstance(data_list, list)
-
-        # If we have kline data, validate structure
         if data_list and len(data_list) > 0:
-            pass
-        klines = data_list[0]
-        # BingX returns list of klines
-        assert isinstance(klines, (list, dict))
+            klines = data_list[0]
+            assert isinstance(klines, (list, dict))
 
-    def test_bingx_async_kline_data(self):
-        """Test BingX kline data (async)."""
-        data_queue = queue.Queue()
-        kwargs = {
-            "exchange_name": "BINGX___SPOT",
-        }
-        feed = BingXRequestDataSpot(data_queue, **kwargs)
-
-        # BingX may not have async_get_kline, skip if method doesn't exist
-        if not hasattr(feed, 'async_get_kline'):
-            return
-
-        feed.async_get_kline(
-            "BTC-USDT",
-            period="1m",
-            count=3,
-            extra_data={
-                "test_async_kline_data": True})
-        time.sleep(5)
-
-        try:
-            kline_data = data_queue.get(timeout=10)
-        except queue.Empty:
-            pass
-
+    @pytest.mark.integration
     def test_bingx_req_orderbook_data(self):
         """Test BingX orderbook data (sync)."""
         data_queue = queue.Queue()
-        kwargs = {
-            "exchange_name": "BINGX___SPOT",
-        }
-        feed = BingXRequestDataSpot(data_queue, **kwargs)
+        feed = BingXRequestDataSpot(data_queue, exchange_name="BINGX___SPOT")
         data = feed.get_depth("BTC-USDT", 20)
         assert isinstance(data, RequestData)
         data_list = data.get_data()
         assert isinstance(data_list, list)
-
-        # If we have depth data, validate structure
         if data_list and len(data_list) > 0:
-            pass
-        orderbook = data_list[0]
-        # BingX returns dict with bids/asks
-        if isinstance(orderbook, dict):
-            assert isinstance(orderbook, dict)
+            orderbook = data_list[0]
+            if isinstance(orderbook, dict):
+                assert "bids" in orderbook or "asks" in orderbook
 
+    @pytest.mark.integration
+    def test_bingx_async_tick_data(self):
+        """Test BingX ticker data (async)."""
+        data_queue = queue.Queue()
+        feed = BingXRequestDataSpot(data_queue, exchange_name="BINGX___SPOT")
+        feed.async_get_tick("BTC-USDT", extra_data={"test_async": True})
+        time.sleep(3)
+        try:
+            tick_data = data_queue.get(timeout=10)
+            assert tick_data is not None
+        except queue.Empty:
+            pass
+
+    @pytest.mark.integration
+    def test_bingx_async_kline_data(self):
+        """Test BingX kline data (async)."""
+        data_queue = queue.Queue()
+        feed = BingXRequestDataSpot(data_queue, exchange_name="BINGX___SPOT")
+        feed.async_get_kline("BTC-USDT", period="1m", count=3, extra_data={"test_async": True})
+        time.sleep(5)
+        try:
+            kline_data = data_queue.get(timeout=10)
+            assert kline_data is not None
+        except queue.Empty:
+            pass
+
+    @pytest.mark.integration
     def test_bingx_async_orderbook_data(self):
         """Test BingX orderbook data (async)."""
         data_queue = queue.Queue()
-        kwargs = {
-            "exchange_name": "BINGX___SPOT",
-        }
-        feed = BingXRequestDataSpot(data_queue, **kwargs)
-
-        # BingX may not have async_get_depth, skip if method doesn't exist
-        if not hasattr(feed, 'async_get_depth'):
-            return
-
+        feed = BingXRequestDataSpot(data_queue, exchange_name="BINGX___SPOT")
         feed.async_get_depth("BTC-USDT", 20)
         time.sleep(3)
-
         try:
             depth_data = data_queue.get(timeout=10)
+            assert depth_data is not None
         except queue.Empty:
             pass

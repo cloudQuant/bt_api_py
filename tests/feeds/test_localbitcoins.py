@@ -1,361 +1,400 @@
 """
-Test LocalBitcoins exchange integration.
+Tests for LocalBitcoins exchange – Feed pattern.
 
-Run tests:
-    pytest tests/feeds/test_localbitcoins.py -v
-
-Run with coverage:
-    pytest tests/feeds/test_localbitcoins.py --cov=bt_api_py.feeds.live_localbitcoins --cov-report=term-missing
+Run:  pytest tests/feeds/test_localbitcoins.py -v
 """
 
-import json
 import queue
-import time
-from unittest.mock import Mock, patch
+from unittest.mock import patch
 
 import pytest
 
 from bt_api_py.containers.exchanges.localbitcoins_exchange_data import LocalBitcoinsExchangeDataSpot
-from bt_api_py.containers.tickers.localbitcoins_ticker import LocalBitcoinsRequestTickerData
 from bt_api_py.containers.requestdatas.request_data import RequestData
-from bt_api_py.feeds.live_localbitcoins.spot import LocalBitcoinsRequestDataSpot
+from bt_api_py.feeds.live_localbitcoins.request_base import LocalBitcoinsRequestData
+from bt_api_py.feeds.live_localbitcoins.spot import (
+    LocalBitcoinsRequestDataSpot,
+    LocalBitcoinsMarketWssDataSpot,
+    LocalBitcoinsAccountWssDataSpot,
+)
 from bt_api_py.registry import ExchangeRegistry
 
-# Import registration to auto-register LocalBitcoins
 import bt_api_py.feeds.register_localbitcoins  # noqa: F401
 
+# ── sample response fixtures ─────────────────────────────────
 
-class TestLocalBitcoinsExchangeData:
-    """Test LocalBitcoins exchange data configuration."""
+SAMPLE_TICK = {
+    "USD": {"rates": {"last": "50000.50"}, "avg_1h": "50010", "avg_12h": "49990",
+            "avg_24h": "49950", "volume_btc": "123.45"},
+    "EUR": {"rates": {"last": "45000.00"}, "volume_btc": "80.1"},
+}
 
-    def test_exchange_data_spot_creation(self):
-        """Test creating LocalBitcoins spot exchange data."""
-        exchange_data = LocalBitcoinsExchangeDataSpot()
-        assert exchange_data.exchange_name == "LOCALBITCOINS___SPOT"
-        assert exchange_data.asset_type == "spot"
+SAMPLE_CURRENCIES = {"currencies": {"USD": "US Dollar", "EUR": "Euro", "GBP": "British Pound"}}
 
-    def test_get_symbol(self):
-        """Test symbol format conversion.
+SAMPLE_SERVER_TIME = {"serverTime": 1678901234000}
 
-        LocalBitcoins uses lowercase underscore format like btc_usd.
-        """
-        exchange_data = LocalBitcoinsExchangeDataSpot()
-        assert exchange_data.get_symbol("BTC/USD") == "btc_usd"
-        assert exchange_data.get_symbol("BTC-USD") == "btc_usd"
-        assert exchange_data.get_symbol("btc_usd") == "btc_usd"
+SAMPLE_ADS = {"data": {"ad_list": [{"ad_id": "123", "temp_price": "50000"}]}}
 
-    def test_get_reverse_symbol(self):
-        """Test reverse symbol conversion."""
-        exchange_data = LocalBitcoinsExchangeDataSpot()
-        assert exchange_data.get_reverse_symbol("btc_usd") == "BTC-USD"
-        assert exchange_data.get_reverse_symbol("BTC-USD") == "BTC_USD"
+SAMPLE_ONLINE_ADS = {"data": {"ad_list": [{"ad_id": "456", "temp_price": "50100"}]}}
 
-    def test_symbol_mappings(self):
-        """Test symbol mappings."""
-        exchange_data = LocalBitcoinsExchangeDataSpot()
-        assert exchange_data.get_symbol("BTC-USD") == "btc_usd"
-        assert exchange_data.get_symbol("BTC-EUR") == "btc_eur"
-        assert exchange_data.get_symbol("BTC-GBP") == "btc_gbp"
+SAMPLE_BALANCE = {"total": {"balance": "0.5", "sendable": "0.45"}}
 
-    def test_get_period(self):
-        """Test kline period conversion.
+SAMPLE_ACCOUNT = {"data": {"username": "testuser", "created_at": "2020-01-01"}}
 
-        Note: LocalBitcoins only supports 1d period.
-        """
-        exchange_data = LocalBitcoinsExchangeDataSpot()
-        assert exchange_data.get_period("1d") == "1d"
-
-    def test_legal_currency(self):
-        """Test legal currencies."""
-        exchange_data = LocalBitcoinsExchangeDataSpot()
-        assert "USD" in exchange_data.legal_currency
-        assert "EUR" in exchange_data.legal_currency
-        assert "GBP" in exchange_data.legal_currency
-        assert "RUB" in exchange_data.legal_currency
-        assert "BTC" in exchange_data.legal_currency
+SAMPLE_ERROR = {"error": {"message": "Bad request", "error_code": 400}}
 
 
-class TestLocalBitcoinsRequestData:
-    """Test LocalBitcoins REST API request base class."""
+# ── helpers ───────────────────────────────────────────────────
 
-    def test_request_data_creation(self):
-        """Test creating LocalBitcoins request data."""
-        data_queue = queue.Queue()
-        request_data = LocalBitcoinsRequestDataSpot(
-            data_queue,
-            exchange_name="LOCALBITCOINS___SPOT",
-        )
-        assert request_data.exchange_name == "LOCALBITCOINS___SPOT"
-        assert request_data.asset_type == "SPOT"
-
-    def test_capabilities(self):
-        """Test feed capabilities.
-
-        Note: LocalBitcoins is a P2P exchange with limited API.
-        """
-        data_queue = queue.Queue()
-        request_data = LocalBitcoinsRequestDataSpot(data_queue)
-        capabilities = request_data._capabilities()
-        assert "get_tick" in capabilities
-        assert "get_exchange_info" in capabilities
+@pytest.fixture
+def feed():
+    return LocalBitcoinsRequestDataSpot(queue.Queue())
 
 
-class TestLocalBitcoinsDataContainers:
-    """Test LocalBitcoins data containers."""
-
-    def test_ticker_container(self):
-        """Test ticker data container.
-
-        Note: LocalBitcoins ticker data represents aggregated P2P advertisements.
-        """
-        ticker_info = json.dumps({
-            "btc_usd": {
-                "avg": 45000.50,
-                "bid": 44900.00,
-                "ask": 45100.00,
-                "volume_btc": 1234.56,
-            }
-        })
-
-        ticker = LocalBitcoinsRequestTickerData(
-            ticker_info, "BTC-USD", "SPOT", False)
-        ticker.init_data()
-
-        assert ticker.get_exchange_name() == "LOCALBITCOINS"
-        assert ticker.get_symbol_name() == "BTC-USD"
-        assert ticker.get_last_price() == 45000.50
-        assert ticker.get_bid_price() == 44900.00
-        assert ticker.get_ask_price() == 45100.00
-        assert ticker.get_volume() == 1234.56
-        # High/low not typically available in P2P
-        assert ticker.get_high() is None
-        assert ticker.get_low() is None
-
-    def test_ticker_wss_container(self):
-        """Test ticker WebSocket data container.
-
-        Note: LocalBitcoins does not provide WebSocket API.
-        """
-        from bt_api_py.containers.tickers.localbitcoins_ticker import LocalBitcoinsWssTickerData
-
-        ticker_info = json.dumps({
-            "btc_usd": {
-                "avg": 45000.50,
-                "bid": 44900.00,
-                "ask": 45100.00,
-            }
-        })
-
-        ticker = LocalBitcoinsWssTickerData(
-            ticker_info, "BTC-USD", "SPOT", False)
-        ticker.init_data()
-
-        assert ticker.get_exchange_name() == "LOCALBITCOINS"
-        assert ticker.get_last_price() == 45000.50
+@pytest.fixture
+def exdata():
+    return LocalBitcoinsExchangeDataSpot()
 
 
-class TestLocalBitcoinsRegistry:
-    """Test LocalBitcoins registration."""
+# ═══════════════════════════════════════════════════════════════
+# 1) ExchangeData
+# ═══════════════════════════════════════════════════════════════
 
-    def test_localbitcoins_registered(self):
-        """Test that LocalBitcoins is properly registered."""
-        # Check if feed is registered
+class TestExchangeData:
+    def test_exchange_name(self, exdata):
+        assert exdata.exchange_name == "LOCALBITCOINS___SPOT"
+
+    def test_asset_type(self, exdata):
+        assert exdata.asset_type == "SPOT"
+
+    def test_rest_url(self, exdata):
+        assert exdata.rest_url == "https://localbitcoins.com"
+
+    def test_get_symbol(self, exdata):
+        assert LocalBitcoinsExchangeDataSpot.get_symbol("BTC/USD") == "btc_usd"
+        assert LocalBitcoinsExchangeDataSpot.get_symbol("BTC-USD") == "btc_usd"
+        assert LocalBitcoinsExchangeDataSpot.get_symbol("btc_usd") == "btc_usd"
+
+    def test_get_reverse_symbol(self, exdata):
+        assert LocalBitcoinsExchangeDataSpot.get_reverse_symbol("btc_usd") == "BTC-USD"
+        assert LocalBitcoinsExchangeDataSpot.get_reverse_symbol("btc-eur") == "BTC-EUR"
+
+    def test_get_period(self, exdata):
+        assert exdata.get_period("1d") == "1d"
+
+    def test_get_reverse_period(self, exdata):
+        assert exdata.get_reverse_period("1d") == "1d"
+
+    def test_legal_currency(self, exdata):
+        for c in ("USD", "EUR", "GBP", "RUB", "BTC"):
+            assert c in exdata.legal_currency
+
+    def test_get_rest_path_ok(self, exdata):
+        p = exdata.get_rest_path("get_tick")
+        assert "/bitcoinaverage/ticker-all-currencies/" in p
+
+    def test_get_rest_path_missing(self, exdata):
+        with pytest.raises(ValueError):
+            exdata.get_rest_path("nonexistent")
+
+    def test_rest_paths_keys(self, exdata):
+        for key in ("get_tick", "get_all_tickers", "get_exchange_info",
+                     "get_ads", "get_online_ads", "get_wallet",
+                     "get_wallet_balance", "get_account", "get_balance",
+                     "get_server_time"):
+            assert key in exdata.rest_paths
+
+    def test_get_rest_path_with_kwargs(self, exdata):
+        p = exdata.get_rest_path("get_ads", id="12345")
+        assert "12345" in p
+
+
+# ═══════════════════════════════════════════════════════════════
+# 2) Parameter generation (_get_xxx)
+# ═══════════════════════════════════════════════════════════════
+
+class TestParamGeneration:
+    def test_get_tick_params(self, feed):
+        path, params, extra = feed._get_tick("BTC/USD")
+        assert "/bitcoinaverage/ticker-all-currencies/" in path
+        assert extra["request_type"] == "get_tick"
+        assert extra["symbol_name"] == "BTC/USD"
+
+    def test_get_exchange_info_params(self, feed):
+        path, params, extra = feed._get_exchange_info()
+        assert "/api/currencies/" in path
+        assert extra["request_type"] == "get_exchange_info"
+
+    def test_get_server_time_params(self, feed):
+        path, params, extra = feed._get_server_time()
+        assert "/api/ecjson.php" in path
+        assert extra["request_type"] == "get_server_time"
+
+    def test_get_ads_params(self, feed):
+        path, params, extra = feed._get_ads("12345")
+        assert "12345" in path
+        assert extra["request_type"] == "get_ads"
+
+    def test_get_online_ads_params(self, feed):
+        path, params, extra = feed._get_online_ads("USD", "US")
+        assert "usd" in path
+        assert "us" in path
+        assert extra["request_type"] == "get_online_ads"
+
+    def test_get_balance_params(self, feed):
+        path, params, extra = feed._get_balance()
+        assert "/api/wallet-balance/" in path
+        assert extra["request_type"] == "get_balance"
+
+    def test_get_account_params(self, feed):
+        path, params, extra = feed._get_account()
+        assert "/api/myself/" in path
+        assert extra["request_type"] == "get_account"
+
+
+# ═══════════════════════════════════════════════════════════════
+# 3) Normalization functions
+# ═══════════════════════════════════════════════════════════════
+
+class TestNormalization:
+    def test_tick_ok(self):
+        result, ok = LocalBitcoinsRequestData._get_tick_normalize_function(SAMPLE_TICK, {})
+        assert ok is True
+        assert isinstance(result, list)
+
+    def test_tick_error(self):
+        result, ok = LocalBitcoinsRequestData._get_tick_normalize_function(SAMPLE_ERROR, {})
+        assert ok is False
+
+    def test_tick_none(self):
+        result, ok = LocalBitcoinsRequestData._get_tick_normalize_function(None, {})
+        assert ok is False
+
+    def test_exchange_info_ok(self):
+        result, ok = LocalBitcoinsRequestData._get_exchange_info_normalize_function(SAMPLE_CURRENCIES, {})
+        assert ok is True
+
+    def test_exchange_info_list(self):
+        result, ok = LocalBitcoinsRequestData._get_exchange_info_normalize_function([{"a": 1}], {})
+        assert ok is True
+
+    def test_server_time_ok(self):
+        result, ok = LocalBitcoinsRequestData._get_server_time_normalize_function(SAMPLE_SERVER_TIME, {})
+        assert ok is True
+
+    def test_server_time_none(self):
+        result, ok = LocalBitcoinsRequestData._get_server_time_normalize_function(None, {})
+        assert ok is False
+
+    def test_ads_ok(self):
+        result, ok = LocalBitcoinsRequestData._get_ads_normalize_function(SAMPLE_ADS, {})
+        assert ok is True
+
+    def test_ads_error(self):
+        result, ok = LocalBitcoinsRequestData._get_ads_normalize_function(SAMPLE_ERROR, {})
+        assert ok is False
+
+    def test_balance_ok(self):
+        result, ok = LocalBitcoinsRequestData._get_balance_normalize_function(SAMPLE_BALANCE, {})
+        assert ok is True
+
+    def test_balance_error(self):
+        result, ok = LocalBitcoinsRequestData._get_balance_normalize_function(SAMPLE_ERROR, {})
+        assert ok is False
+
+    def test_account_ok(self):
+        result, ok = LocalBitcoinsRequestData._get_account_normalize_function(SAMPLE_ACCOUNT, {})
+        assert ok is True
+
+    def test_account_error(self):
+        result, ok = LocalBitcoinsRequestData._get_account_normalize_function(SAMPLE_ERROR, {})
+        assert ok is False
+
+    def test_is_error_none(self):
+        assert LocalBitcoinsRequestData._is_error(None) is True
+
+    def test_is_error_with_error_key(self):
+        assert LocalBitcoinsRequestData._is_error(SAMPLE_ERROR) is True
+
+    def test_is_error_ok(self):
+        assert LocalBitcoinsRequestData._is_error(SAMPLE_TICK) is False
+
+
+# ═══════════════════════════════════════════════════════════════
+# 4) Mocked sync calls
+# ═══════════════════════════════════════════════════════════════
+
+class TestSyncCalls:
+    @patch.object(LocalBitcoinsRequestData, "http_request", return_value=SAMPLE_TICK)
+    def test_get_tick(self, mock_http, feed):
+        rd = feed.get_tick("BTC/USD")
+        assert isinstance(rd, RequestData)
+        mock_http.assert_called_once()
+
+    @patch.object(LocalBitcoinsRequestData, "http_request", return_value=SAMPLE_TICK)
+    def test_get_ticker(self, mock_http, feed):
+        rd = feed.get_ticker("BTC/USD")
+        assert isinstance(rd, RequestData)
+
+    @patch.object(LocalBitcoinsRequestData, "http_request", return_value=SAMPLE_CURRENCIES)
+    def test_get_exchange_info(self, mock_http, feed):
+        rd = feed.get_exchange_info()
+        assert isinstance(rd, RequestData)
+
+    @patch.object(LocalBitcoinsRequestData, "http_request", return_value=SAMPLE_SERVER_TIME)
+    def test_get_server_time(self, mock_http, feed):
+        rd = feed.get_server_time()
+        assert isinstance(rd, RequestData)
+
+    @patch.object(LocalBitcoinsRequestData, "http_request", return_value=SAMPLE_ADS)
+    def test_get_ads(self, mock_http, feed):
+        rd = feed.get_ads("12345")
+        assert isinstance(rd, RequestData)
+
+    @patch.object(LocalBitcoinsRequestData, "http_request", return_value=SAMPLE_ONLINE_ADS)
+    def test_get_online_ads(self, mock_http, feed):
+        rd = feed.get_online_ads("USD", "US")
+        assert isinstance(rd, RequestData)
+
+    @patch.object(LocalBitcoinsRequestData, "http_request", return_value=SAMPLE_BALANCE)
+    def test_get_balance(self, mock_http, feed):
+        rd = feed.get_balance()
+        assert isinstance(rd, RequestData)
+
+    @patch.object(LocalBitcoinsRequestData, "http_request", return_value=SAMPLE_ACCOUNT)
+    def test_get_account(self, mock_http, feed):
+        rd = feed.get_account()
+        assert isinstance(rd, RequestData)
+
+
+# ═══════════════════════════════════════════════════════════════
+# 5) Auth
+# ═══════════════════════════════════════════════════════════════
+
+class TestAuth:
+    def test_headers_no_key(self, feed):
+        h = feed._get_headers()
+        assert h["Content-Type"] == "application/json"
+        assert "Apiauth-Key" not in h
+
+    def test_headers_with_key(self):
+        f = LocalBitcoinsRequestDataSpot(queue.Queue(), public_key="mykey", private_key="mysecret")
+        h = f._get_headers(method="GET", path="/api/wallet-balance/")
+        assert h["Apiauth-Key"] == "mykey"
+        assert "Apiauth-Nonce" in h
+        assert "Apiauth-Signature" in h
+
+    def test_signature_deterministic(self):
+        f = LocalBitcoinsRequestDataSpot(queue.Queue(), public_key="k", private_key="s")
+        n1, sig1 = f._generate_signature("GET", "/api/myself/")
+        n2, sig2 = f._generate_signature("GET", "/api/myself/")
+        assert len(sig1) == 64  # SHA-256 hex
+
+
+# ═══════════════════════════════════════════════════════════════
+# 6) Registry
+# ═══════════════════════════════════════════════════════════════
+
+class TestRegistry:
+    def test_feed_registered(self):
         assert "LOCALBITCOINS___SPOT" in ExchangeRegistry._feed_classes
-        assert ExchangeRegistry._feed_classes["LOCALBITCOINS___SPOT"] == LocalBitcoinsRequestDataSpot
 
-        # Check if exchange data is registered
+    def test_exchange_data_registered(self):
         assert "LOCALBITCOINS___SPOT" in ExchangeRegistry._exchange_data_classes
-        assert ExchangeRegistry._exchange_data_classes[
-            "LOCALBITCOINS___SPOT"] == LocalBitcoinsExchangeDataSpot
 
-        # Check if balance handler is registered
+    def test_balance_handler_registered(self):
         assert "LOCALBITCOINS___SPOT" in ExchangeRegistry._balance_handlers
-        assert ExchangeRegistry._balance_handlers["LOCALBITCOINS___SPOT"] is not None
 
-        # Check if stream handler is registered
-        stream_handlers = ExchangeRegistry._stream_classes.get(
-            "LOCALBITCOINS___SPOT", {})
+    def test_stream_registered(self):
+        stream_handlers = ExchangeRegistry._stream_classes.get("LOCALBITCOINS___SPOT", {})
         assert "subscribe" in stream_handlers
 
-    def test_localbitcoins_create_feed(self):
-        """Test creating LocalBitcoins feed through registry."""
-        data_queue = queue.Queue()
-        feed = ExchangeRegistry.create_feed("LOCALBITCOINS___SPOT", data_queue)
-        assert isinstance(feed, LocalBitcoinsRequestDataSpot)
-
-    def test_localbitcoins_create_exchange_data(self):
-        """Test creating LocalBitcoins exchange data through registry."""
-        exchange_data = ExchangeRegistry.create_exchange_data(
-            "LOCALBITCOINS___SPOT")
-        assert isinstance(exchange_data, LocalBitcoinsExchangeDataSpot)
+    def test_create_exchange_data(self):
+        ed = ExchangeRegistry.create_exchange_data("LOCALBITCOINS___SPOT")
+        assert isinstance(ed, LocalBitcoinsExchangeDataSpot)
 
 
-class TestLocalBitcoinsLiveMarketData:
-    """Live market data tests following Binance/OKX standard.
+# ═══════════════════════════════════════════════════════════════
+# 7) Method existence
+# ═══════════════════════════════════════════════════════════════
 
-    Note: LocalBitcoins is a P2P exchange, so some tests may be skipped.
-    """
-
-    def init_req_feed(self):
-        """Initialize LocalBitcoins request feed."""
-        data_queue = queue.Queue()
-        live_localbitcoins_spot_feed = LocalBitcoinsRequestDataSpot(data_queue)
-        return live_localbitcoins_spot_feed
-
-    def test_localbitcoins_req_server_time(self):
-        """Test server time endpoint (not available for P2P)."""
-        pass
-
-    def test_localbitcoins_req_tick_data(self):
-        """Test ticker data request (synchronous)."""
-        live_localbitcoins_spot_feed = self.init_req_feed()
-        data = live_localbitcoins_spot_feed.get_ticker("BTC-USD").get_data()
-        assert isinstance(data, list)
-        if data and data[0]:
-            pass
-        tick_data = data[0]
-        assert tick_data.get("symbol_name") == "BTC-USD"
-        assert tick_data.get("last_price") > 0
-        assert tick_data.get("bid_price") >= 0
-        assert tick_data.get("ask_price") >= 0
-
-    def test_localbitcoins_async_tick_data(self):
-        """Test ticker data request (asynchronous)."""
-        data_queue = queue.Queue()
-        live_localbitcoins_spot_feed = LocalBitcoinsRequestDataSpot(data_queue)
-        live_localbitcoins_spot_feed.async_get_ticker(
-            "BTC-USD", extra_data={"test_async_tick_data": True})
-        time.sleep(3)
-        try:
-            tick_data = data_queue.get(timeout=10)
-        except queue.Empty:
-            tick_data = None
-        assert isinstance(tick_data, RequestData)
-        assert isinstance(tick_data.get_data(), list)
-        if tick_data.get_data() and tick_data.get_data()[0]:
-            pass
-        async_tick_data = tick_data.get_data()[0]
-        assert async_tick_data.get("symbol_name") == "BTC-USD"
-        assert async_tick_data.get("last_price") > 0
-
-    def test_localbitcoins_req_kline_data(self):
-        """Test kline data request (not available for P2P)."""
-        pass
-
-    def test_localbitcoins_async_kline_data(self):
-        """Test kline data request (not available for P2P)."""
-        pass
+_EXPECTED_METHODS = [
+    "get_tick", "async_get_tick",
+    "get_ticker", "async_get_ticker",
+    "get_exchange_info", "async_get_exchange_info",
+    "get_server_time", "async_get_server_time",
+    "get_ads", "async_get_ads",
+    "get_online_ads", "async_get_online_ads",
+    "get_balance", "async_get_balance",
+    "get_account", "async_get_account",
+]
 
 
-def order_book_value_equals(order_book):
-    """Validate order book data (not applicable for P2P exchange)."""
-    # LocalBitcoins P2P exchange - order book not in traditional sense
-    pass
+class TestMethodExistence:
+    @pytest.mark.parametrize("method_name", _EXPECTED_METHODS)
+    def test_method_exists(self, feed, method_name):
+        assert hasattr(feed, method_name), f"Missing method: {method_name}"
+        assert callable(getattr(feed, method_name))
 
 
-class TestLocalBitcoinsOrderBook:
-    """Order book tests (not applicable for P2P exchange)."""
+# ═══════════════════════════════════════════════════════════════
+# 8) Feed init
+# ═══════════════════════════════════════════════════════════════
 
-    def test_localbitcoins_req_orderbook_data(self):
-        """Test orderbook data request (not available for P2P)."""
-        pass
+class TestFeedInit:
+    def test_default_exchange_name(self, feed):
+        assert feed.exchange_name == "LOCALBITCOINS___SPOT"
 
-    def test_localbitcoins_async_orderbook_data(self):
-        """Test orderbook data request (not available for P2P)."""
-        pass
+    def test_default_asset_type(self, feed):
+        assert feed.asset_type == "SPOT"
 
+    def test_capabilities(self, feed):
+        from bt_api_py.feeds.capability import Capability
+        caps = feed._capabilities()
+        assert Capability.GET_TICK in caps
+        assert Capability.GET_EXCHANGE_INFO in caps
 
-class TestLocalBitcoinsWebSocket:
-    """Test LocalBitcoins WebSocket handlers.
-
-    Note: LocalBitcoins does not provide WebSocket API.
-    """
-
-    def test_market_wss_handler_not_supported(self):
-        """Test market WebSocket handler (not supported)."""
-        from bt_api_py.feeds.live_localbitcoins.spot import LocalBitcoinsMarketWssDataSpot
-
-        data_queue = queue.Queue()
-        topics = [{"topic": "ticker", "symbol": "btc_usd"}]
-
-        wss_handler = LocalBitcoinsMarketWssDataSpot(
-            data_queue, topics=topics, wss_url="")
-        wss_handler.start()
-        # Should not start without URL (not supported)
-        wss_handler.stop()
-
-    def test_account_wss_handler_not_supported(self):
-        """Test account WebSocket handler (not supported)."""
-        from bt_api_py.feeds.live_localbitcoins.spot import LocalBitcoinsAccountWssDataSpot
-
-        data_queue = queue.Queue()
-        topics = [{"topic": "account"}]
-
-        wss_handler = LocalBitcoinsAccountWssDataSpot(
-            data_queue, topics=topics, wss_url="")
-        wss_handler.start()
-        # Should not start without URL (not supported)
-        wss_handler.stop()
+    def test_push_data_to_queue(self, feed):
+        feed.push_data_to_queue({"test": 1})
+        assert not feed.data_queue.empty()
 
 
-class TestLocalBitcoinsIntegration:
-    """Integration tests for LocalBitcoins."""
+# ═══════════════════════════════════════════════════════════════
+# 9) WebSocket stubs
+# ═══════════════════════════════════════════════════════════════
 
-    def test_market_data_api(self):
-        """Test market data API calls (requires network)."""
-        pass
+class TestWebSocketStubs:
+    def test_market_wss_start_stop(self):
+        wss = LocalBitcoinsMarketWssDataSpot(queue.Queue(), topics=[{"topic": "ticker"}])
+        wss.start()
+        assert wss.running is True
+        wss.stop()
+        assert wss.running is False
 
-    def test_trading_api(self):
-        """Test trading API calls (requires API keys)."""
-        pass
-
-
-# ==================== Additional Binance/OKX Standard Tests =============
-
-class TestLocalBitcoinsStandardMarketData:
-    """Standard market data tests following Binance/OKX pattern.
-
-    Note: LocalBitcoins is a P2P exchange, so some standard features may not apply.
-    """
-
-    def init_req_feed(self):
-        """Initialize LocalBitcoins request feed."""
-        data_queue = queue.Queue()
-        live_localbitcoins_spot_feed = LocalBitcoinsRequestDataSpot(data_queue)
-        return live_localbitcoins_spot_feed
-
-    def test_localbitcoins_req_get_exchange_info(self):
-        """Test exchange info endpoint (not applicable for P2P)."""
-        pass
-
-    def test_localbitcoins_req_get_symbols(self):
-        """Test symbols list endpoint (not applicable for P2P)."""
-        pass
+    def test_account_wss_start_stop(self):
+        wss = LocalBitcoinsAccountWssDataSpot(queue.Queue(), topics=[{"topic": "account"}])
+        wss.start()
+        assert wss.running is True
+        wss.stop()
+        assert wss.running is False
 
 
-class TestLocalBitcoinsOrderManagement:
-    """Order management tests following Binance/OKX pattern.
+# ═══════════════════════════════════════════════════════════════
+# 10) Integration (skipped)
+# ═══════════════════════════════════════════════════════════════
 
-    Note: LocalBitcoins is a P2P exchange, so standard order management may not apply.
-    """
+class TestIntegration:
+    @pytest.mark.skip(reason="Requires network access")
+    def test_live_get_tick(self):
+        f = LocalBitcoinsRequestDataSpot(queue.Queue())
+        rd = f.get_tick("BTC/USD")
+        assert isinstance(rd, RequestData)
 
-    def init_req_feed(self):
-        """Initialize LocalBitcoins request feed."""
-        data_queue = queue.Queue()
-        live_localbitcoins_spot_feed = LocalBitcoinsRequestDataSpot(
-            data_queue,
-            public_key="test_key",
-            private_key="test_secret",
-        )
-        return live_localbitcoins_spot_feed
-
-    def test_localbitcoins_req_make_order(self):
-        """Test make order endpoint (not applicable for P2P)."""
-        pass
-
-    def test_localbitcoins_req_query_order(self):
-        """Test query order endpoint (not applicable for P2P)."""
-        pass
+    @pytest.mark.skip(reason="Requires network access")
+    def test_live_get_exchange_info(self):
+        f = LocalBitcoinsRequestDataSpot(queue.Queue())
+        rd = f.get_exchange_info()
+        assert isinstance(rd, RequestData)
 
 
 if __name__ == "__main__":

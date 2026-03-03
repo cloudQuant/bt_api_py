@@ -45,115 +45,197 @@ class HyperliquidRequestDataSpot(HyperliquidRequestData):
             "./logs/" + self.logger_name, "async_request", 0, 0, False
         ).create_logger()
 
-    def place_order(
-        self,
-        symbol,
-        side,
-        quantity,
-        order_type="limit",
-        price=None,
-        time_in_force=TIF_GTC,
-        client_order_id=None,
-        post_only=False,
-        **kwargs
-    ):
-        """Place spot order on Hyperliquid"""
-        if not self.account:
-            raise ValueError("Private key required for order placement")
+    # ── Standard Interface: make_order ──────────────────────────────
 
-        request_type = "make_order"
+    def _make_order(self, symbol, volume, price, order_type, offset="open",
+                    post_only=False, client_order_id=None, extra_data=None, **kwargs):
+        """Prepare order request parameters. Returns (path, body, extra_data)."""
+        if extra_data is None:
+            extra_data = {}
+        path = self._params.get_rest_path("make_order")
+        coin = self._params.get_symbol(symbol)
 
-        # Prepare order parameters
+        # Determine side from order_type or kwargs
+        side = kwargs.get("side", "buy")
+        if isinstance(order_type, str) and order_type.startswith("buy"):
+            side = "buy"
+            order_type = order_type.replace("buy_", "")
+        elif isinstance(order_type, str) and order_type.startswith("sell"):
+            side = "sell"
+            order_type = order_type.replace("sell_", "")
+
         order_params = {
-            "coin": self._params.get_symbol(symbol),
+            "coin": coin,
             "is_buy": side == "buy",
-            "sz": str(quantity),
+            "sz": str(volume),
         }
 
-        # Set order type and price
-        if order_type == "limit":
-            if not price:
-                raise ValueError("Price required for limit orders")
-            order_params["limit_px"] = str(price)
-            order_params["order_type"] = {"limit": {"tif": time_in_force}}
+        if order_type in ("limit", LIMIT_ORDER) or price:
+            order_params["limit_px"] = str(price) if price else "0"
+            tif = kwargs.get("time_in_force", TIF_GTC)
+            order_params["order_type"] = {"limit": {"tif": tif}}
             if post_only:
                 order_params["order_type"]["limit"]["postOnly"] = True
-        elif order_type == "market":
+        elif order_type in ("market", MARKET_ORDER):
             order_params["order_type"] = {"market": {}}
         else:
-            raise ValueError(f"Unsupported order type: {order_type}")
+            order_params["order_type"] = {"limit": {"tif": TIF_GTC}}
+            if price:
+                order_params["limit_px"] = str(price)
 
-        # Place order
-        result = self._make_signed_request(request_type, **order_params)
-
-        # Create RequestData object
-        extra_data = {
+        extra_data.update({
             "exchange_name": self._params.exchange_name,
             "symbol_name": symbol,
             "asset_type": self.asset_type,
-            "request_type": request_type,
+            "request_type": "make_order",
             "side": side,
-            "quantity": quantity,
+            "quantity": volume,
             "price": price,
             "order_type": order_type,
-        }
+        })
+        return path, order_params, extra_data
 
-        return self._get_request_data(result, extra_data)
+    def make_order(self, symbol, volume, price, order_type, offset="open",
+                   post_only=False, client_order_id=None, extra_data=None, **kwargs):
+        """Place order following standard Feed interface. Returns RequestData."""
+        path, body, extra_data = self._make_order(
+            symbol, volume, price, order_type, offset, post_only,
+            client_order_id, extra_data, **kwargs
+        )
+        return self.request(path, body=body, extra_data=extra_data, is_sign=True)
 
-    def cancel_order(self, symbol, order_id=None, client_order_id=None):
-        """Cancel spot order on Hyperliquid"""
-        if not self.account:
-            raise ValueError("Private key required for order cancellation")
+    def place_order(self, symbol, side, quantity, order_type="limit", price=None,
+                    time_in_force=TIF_GTC, client_order_id=None, post_only=False, **kwargs):
+        """Place order (legacy Hyperliquid-specific interface). Returns RequestData."""
+        return self.make_order(
+            symbol, quantity, price, order_type, post_only=post_only,
+            client_order_id=client_order_id, side=side, time_in_force=time_in_force, **kwargs
+        )
 
-        request_type = "cancel_order"
+    # ── Standard Interface: cancel_order ────────────────────────────
 
+    def _cancel_order(self, symbol, order_id, extra_data=None, **kwargs):
+        """Prepare cancel order request. Returns (path, body, extra_data)."""
+        if extra_data is None:
+            extra_data = {}
+        path = self._params.get_rest_path("cancel_order")
+        coin = self._params.get_symbol(symbol)
         cancel_params = {
-            "coin": self._params.get_symbol(symbol),
+            "coin": coin,
+            "oid": order_id,
         }
-
-        if order_id:
-            cancel_params["oid"] = order_id
-        elif client_order_id:
-            cancel_params["oid"] = client_order_id
-        else:
-            raise ValueError("Either order_id or client_order_id required")
-
-        # Cancel order
-        result = self._make_signed_request(request_type, **cancel_params)
-
-        # Create RequestData object
-        extra_data = {
+        extra_data.update({
             "exchange_name": self._params.exchange_name,
             "symbol_name": symbol,
             "asset_type": self.asset_type,
-            "request_type": request_type,
+            "request_type": "cancel_order",
             "order_id": order_id,
-            "client_order_id": client_order_id,
-        }
+        })
+        return path, cancel_params, extra_data
 
-        return self._get_request_data(result, extra_data)
+    def cancel_order(self, symbol, order_id, extra_data=None, **kwargs):
+        """Cancel order following standard Feed interface. Returns RequestData."""
+        path, body, extra_data = self._cancel_order(symbol, order_id, extra_data, **kwargs)
+        return self.request(path, body=body, extra_data=extra_data, is_sign=True)
 
-    def modify_order(
-        self,
-        symbol,
-        order_id,
-        side=None,
-        quantity=None,
-        price=None,
-        **kwargs
-    ):
-        """Modify spot order on Hyperliquid"""
-        if not self.account:
-            raise ValueError("Private key required for order modification")
+    # ── Standard Interface: query_order ─────────────────────────────
 
-        request_type = "modify_order"
+    def _query_order(self, symbol, order_id, extra_data=None, **kwargs):
+        """Prepare query order request. Returns (path, body, extra_data)."""
+        if extra_data is None:
+            extra_data = {}
+        path = self._params.get_rest_path("get_order_status")
+        user = kwargs.get("user", self.address or "")
+        body = {"type": "orderStatus", "user": user, "oid": order_id}
+        extra_data.update({
+            "exchange_name": self._params.exchange_name,
+            "symbol_name": symbol,
+            "asset_type": self.asset_type,
+            "request_type": "query_order",
+            "order_id": order_id,
+        })
+        return path, body, extra_data
 
+    def query_order(self, symbol, order_id, extra_data=None, **kwargs):
+        """Query order status. Returns RequestData."""
+        path, body, extra_data = self._query_order(symbol, order_id, extra_data, **kwargs)
+        return self.request(path, body=body, extra_data=extra_data)
+
+    # ── Standard Interface: get_open_orders ─────────────────────────
+
+    def _get_open_orders(self, symbol=None, extra_data=None, **kwargs):
+        """Prepare open orders request. Returns (path, body, extra_data)."""
+        if extra_data is None:
+            extra_data = {}
+        path = self._params.get_rest_path("get_order_status")
+        user = kwargs.get("user", self.address or "")
+        body = {"type": "openOrders", "user": user}
+        extra_data.update({
+            "exchange_name": self._params.exchange_name,
+            "symbol_name": symbol or "",
+            "asset_type": self.asset_type,
+            "request_type": "get_open_orders",
+        })
+        return path, body, extra_data
+
+    def get_open_orders(self, symbol=None, extra_data=None, **kwargs):
+        """Get open orders. Returns RequestData."""
+        path, body, extra_data = self._get_open_orders(symbol, extra_data, **kwargs)
+        return self.request(path, body=body, extra_data=extra_data)
+
+    # ── Standard Interface: get_account ─────────────────────────────
+
+    def _get_account(self, symbol="ALL", extra_data=None, **kwargs):
+        """Prepare account request. Returns (path, body, extra_data)."""
+        if extra_data is None:
+            extra_data = {}
+        path = self._params.get_rest_path("get_spot_clearinghouse_state")
+        user = kwargs.get("user", self.address or "")
+        body = {"type": "spotClearinghouseState", "user": user}
+        extra_data.update({
+            "exchange_name": self._params.exchange_name,
+            "symbol_name": symbol,
+            "asset_type": self.asset_type,
+            "request_type": "get_account",
+        })
+        return path, body, extra_data
+
+    def get_account(self, symbol="ALL", extra_data=None, **kwargs):
+        """Get account info. Returns RequestData."""
+        path, body, extra_data = self._get_account(symbol, extra_data, **kwargs)
+        return self.request(path, body=body, extra_data=extra_data)
+
+    # ── Standard Interface: get_balance ─────────────────────────────
+
+    def _get_balance(self, symbol=None, extra_data=None, **kwargs):
+        """Prepare balance request. Returns (path, body, extra_data)."""
+        if extra_data is None:
+            extra_data = {}
+        path = self._params.get_rest_path("get_spot_clearinghouse_state")
+        user = kwargs.get("user", self.address or "")
+        body = {"type": "spotClearinghouseState", "user": user}
+        extra_data.update({
+            "exchange_name": self._params.exchange_name,
+            "symbol_name": symbol or "",
+            "asset_type": self.asset_type,
+            "request_type": "get_balance",
+        })
+        return path, body, extra_data
+
+    def get_balance(self, symbol=None, extra_data=None, **kwargs):
+        """Get balance info. Returns RequestData."""
+        path, body, extra_data = self._get_balance(symbol, extra_data, **kwargs)
+        return self.request(path, body=body, extra_data=extra_data)
+
+    # ── Hyperliquid-specific: modify_order ──────────────────────────
+
+    def modify_order(self, symbol, order_id, side=None, quantity=None, price=None, **kwargs):
+        """Modify spot order on Hyperliquid. Returns RequestData."""
+        path = self._params.get_rest_path("modify_order")
         modify_params = {
             "coin": self._params.get_symbol(symbol),
             "oid": order_id,
         }
-
-        # Update parameters if provided
         if side:
             modify_params["is_buy"] = side == "buy"
         if quantity:
@@ -161,85 +243,14 @@ class HyperliquidRequestDataSpot(HyperliquidRequestData):
         if price:
             modify_params["limit_px"] = str(price)
 
-        # Modify order
-        result = self._make_signed_request(request_type, **modify_params)
-
-        # Create RequestData object
         extra_data = {
             "exchange_name": self._params.exchange_name,
             "symbol_name": symbol,
             "asset_type": self.asset_type,
-            "request_type": request_type,
+            "request_type": "modify_order",
             "order_id": order_id,
-            "side": side,
-            "quantity": quantity,
-            "price": price,
         }
-
-        return self._get_request_data(result, extra_data)
-
-    def get_spot_balances(self, user=None):
-        """Get spot account balances"""
-        user = user or self.address
-        if not user:
-            raise ValueError("User address required for balance query")
-
-        result = self.get_spot_clearinghouse_state(user)
-
-        # Process balance data
-        balance_data = []
-        if result.data and "balances" in result.data:
-            for balance in result.data["balances"]:
-                if float(balance.get("total", 0)) > 0:
-                    balance_data.append(balance)
-
-        # Create balance RequestData objects
-        balances = []
-        for balance in balance_data:
-            extra_data = {
-                "exchange_name": self._params.exchange_name,
-                "symbol_name": balance.get("coin"),
-                "asset_type": self.asset_type,
-                "request_type": "get_spot_balances",
-            }
-            balance_obj = HyperliquidSpotRequestBalanceData(balance, balance.get("coin"), self.asset_type)
-            balance_obj.init_data()
-            balances.append(balance_obj)
-
-        return balances
-
-    def get_open_orders(self, user=None):
-        """Get open spot orders"""
-        user = user or self.address
-        if not user:
-            raise ValueError("User address required for order query")
-
-        # Get user fills to get order history
-        fills_result = self.get_user_fills(user, limit=100)
-
-        # Extract order IDs from fills
-        order_ids = set()
-        if fills_result.data:
-            for fill in fills_result.data:
-                if "orderOid" in fill:
-                    order_ids.add(fill["orderOid"])
-
-        # Get order status for each order
-        orders = []
-        for order_id in order_ids:
-            order_result = self.get_order_status(user, order_id)
-            if order_result.data:
-                extra_data = {
-                    "exchange_name": self._params.exchange_name,
-                    "symbol_name": "",
-                    "asset_type": self.asset_type,
-                    "request_type": "get_open_orders",
-                }
-                order_obj = HyperliquidRequestOrderData(order_result.data, "", self.asset_type)
-                order_obj.init_data()
-                orders.append(order_obj)
-
-        return orders
+        return self.request(path, body=modify_params, extra_data=extra_data, is_sign=True)
 
 
 class HyperliquidMarketWssDataSpot(HyperliquidMarketWssData):

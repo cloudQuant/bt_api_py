@@ -62,6 +62,23 @@ class HyperliquidErrorTranslator(ErrorTranslator):
 class HyperliquidRequestData(Feed):
     """Base class for Hyperliquid API requests"""
 
+    @classmethod
+    def _capabilities(cls):
+        return {
+            Capability.GET_TICK,
+            Capability.GET_DEPTH,
+            Capability.GET_KLINE,
+            Capability.GET_EXCHANGE_INFO,
+            Capability.MAKE_ORDER,
+            Capability.CANCEL_ORDER,
+            Capability.QUERY_ORDER,
+            Capability.QUERY_OPEN_ORDERS,
+            Capability.GET_BALANCE,
+            Capability.GET_ACCOUNT,
+            Capability.MARKET_STREAM,
+            Capability.ACCOUNT_STREAM,
+        }
+
     def __init__(self, data_queue, **kwargs):
         super().__init__(data_queue, **kwargs)
 
@@ -111,21 +128,76 @@ class HyperliquidRequestData(Feed):
         # Error translator
         self.error_translator = HyperliquidErrorTranslator()
 
+    def request(self, path, params=None, body=None, extra_data=None, timeout=10, is_sign=False):
+        """HTTP request function following the standard pattern.
+
+        Hyperliquid uses POST for all requests with JSON body.
+
+        Args:
+            path (str): Request path (e.g. '/info' or '/exchange')
+            params (dict, optional): Not used for Hyperliquid (uses body instead)
+            body (dict, optional): JSON body for POST request
+            extra_data (dict, optional): Extra data for RequestData
+            timeout (int, optional): Request timeout in seconds
+            is_sign (bool, optional): Whether this is a signed request
+
+        Returns:
+            RequestData: Response data container
+        """
+        if extra_data is None:
+            extra_data = {}
+        if body is None:
+            body = {}
+
+        url = self._params.rest_url + path
+        headers = {
+            "Content-Type": "application/json",
+            "User-Agent": "bt_api_py/1.0"
+        }
+        if self.api_key:
+            headers["X-API-Key"] = self.api_key
+
+        response = self.http_request("POST", url, headers, body, timeout)
+        return RequestData(response, extra_data)
+
+    async def async_request(self, path, params=None, body=None, extra_data=None, timeout=10, is_sign=False):
+        """Async HTTP request function."""
+        if extra_data is None:
+            extra_data = {}
+        if body is None:
+            body = {}
+
+        url = self._params.rest_url + path
+        headers = {
+            "Content-Type": "application/json",
+            "User-Agent": "bt_api_py/1.0"
+        }
+        if self.api_key:
+            headers["X-API-Key"] = self.api_key
+
+        response = self.http_request("POST", url, headers, body, timeout)
+        self.async_logger.info(f"Async Request: POST {url}")
+        return RequestData(response, extra_data)
+
+    def async_callback(self, future):
+        """Callback function for async requests."""
+        try:
+            result = future.result()
+            self.data_queue.put(result)
+        except Exception as e:
+            self.async_logger.warn(f"async_callback::{e}")
+
     def _make_request(self, request_type, **kwargs):
-        """Make HTTP request to Hyperliquid API"""
+        """Make HTTP request to Hyperliquid API (legacy helper)"""
         headers = {
             "Content-Type": "application/json",
             "User-Agent": "bt_api_py/1.0"
         }
 
-        # Add API key if available (for some endpoints)
         if self.api_key:
             headers["X-API-Key"] = self.api_key
 
         url = self._params.rest_url + self._params.get_rest_path(request_type)
-
-        # Apply rate limiting (removed for now)
-        # self.rate_limiter.wait_if_needed(request_type)
 
         try:
             response = requests.post(
@@ -143,6 +215,136 @@ class HyperliquidRequestData(Feed):
     def _get_request_data(self, data, extra_data):
         """Create RequestData object"""
         return RequestData(data, extra_data)
+
+    # ── Standard Interface: get_tick ──────────────────────────────
+
+    def _get_tick(self, symbol, extra_data=None, **kwargs):
+        """Prepare tick request parameters. Returns (path, body, extra_data)."""
+        if extra_data is None:
+            extra_data = {}
+        path = self._params.get_rest_path("get_all_mids")
+        body = {"type": "allMids"}
+        extra_data.update({
+            "exchange_name": self._params.exchange_name,
+            "symbol_name": symbol,
+            "asset_type": self.asset_type,
+            "request_type": "get_tick",
+        })
+        return path, body, extra_data
+
+    def get_tick(self, symbol, extra_data=None, **kwargs):
+        """Get latest tick price for symbol. Returns RequestData."""
+        path, body, extra_data = self._get_tick(symbol, extra_data, **kwargs)
+        return self.request(path, body=body, extra_data=extra_data)
+
+    def async_get_tick(self, symbol, extra_data=None, **kwargs):
+        """Async get tick price for symbol."""
+        path, body, extra_data = self._get_tick(symbol, extra_data, **kwargs)
+        self.submit(
+            self.async_request(path, body=body, extra_data=extra_data),
+            callback=self.async_callback,
+        )
+
+    # ── Standard Interface: get_depth ────────────────────────────
+
+    def _get_depth(self, symbol, count=20, extra_data=None, **kwargs):
+        """Prepare depth request parameters. Returns (path, body, extra_data)."""
+        if extra_data is None:
+            extra_data = {}
+        path = self._params.get_rest_path("get_l2_book")
+        coin = self._params.get_symbol(symbol)
+        body = {"type": "l2Book", "coin": coin}
+        extra_data.update({
+            "exchange_name": self._params.exchange_name,
+            "symbol_name": symbol,
+            "asset_type": self.asset_type,
+            "request_type": "get_depth",
+        })
+        return path, body, extra_data
+
+    def get_depth(self, symbol, count=20, extra_data=None, **kwargs):
+        """Get order book depth for symbol. Returns RequestData."""
+        path, body, extra_data = self._get_depth(symbol, count, extra_data, **kwargs)
+        return self.request(path, body=body, extra_data=extra_data)
+
+    def async_get_depth(self, symbol, count=20, extra_data=None, **kwargs):
+        """Async get depth for symbol."""
+        path, body, extra_data = self._get_depth(symbol, count, extra_data, **kwargs)
+        self.submit(
+            self.async_request(path, body=body, extra_data=extra_data),
+            callback=self.async_callback,
+        )
+
+    # ── Standard Interface: get_kline ────────────────────────────
+
+    def _get_kline(self, symbol, period, count=20, extra_data=None, **kwargs):
+        """Prepare kline request parameters. Returns (path, body, extra_data)."""
+        if extra_data is None:
+            extra_data = {}
+        path = self._params.get_rest_path("get_candle_snapshot")
+        coin = self._params.get_symbol(symbol)
+        interval = self._params.kline_periods.get(period, period)
+        req = {"coin": coin, "interval": interval}
+        if "start_time" in kwargs and kwargs["start_time"]:
+            req["startTime"] = kwargs["start_time"]
+        if "end_time" in kwargs and kwargs["end_time"]:
+            req["endTime"] = kwargs["end_time"]
+        body = {"type": "candleSnapshot", "req": req}
+        extra_data.update({
+            "exchange_name": self._params.exchange_name,
+            "symbol_name": symbol,
+            "asset_type": self.asset_type,
+            "request_type": "get_kline",
+        })
+        return path, body, extra_data
+
+    def get_kline(self, symbol, period, count=20, extra_data=None, **kwargs):
+        """Get kline/candle data for symbol. Returns RequestData."""
+        path, body, extra_data = self._get_kline(symbol, period, count, extra_data, **kwargs)
+        return self.request(path, body=body, extra_data=extra_data)
+
+    def async_get_kline(self, symbol, period, count=20, extra_data=None, **kwargs):
+        """Async get kline for symbol."""
+        path, body, extra_data = self._get_kline(symbol, period, count, extra_data, **kwargs)
+        self.submit(
+            self.async_request(path, body=body, extra_data=extra_data),
+            callback=self.async_callback,
+        )
+
+    # ── Standard Interface: get_exchange_info ─────────────────────
+
+    def get_exchange_info(self, extra_data=None, **kwargs):
+        """Get exchange metadata (asset list). Returns RequestData."""
+        if extra_data is None:
+            extra_data = {}
+        path = self._params.get_rest_path("get_meta")
+        body = {"type": "meta"}
+        extra_data.update({
+            "exchange_name": self._params.exchange_name,
+            "symbol_name": "",
+            "asset_type": self.asset_type,
+            "request_type": "get_exchange_info",
+        })
+        return self.request(path, body=body, extra_data=extra_data)
+
+    # ── Standard Interface: get_server_time ───────────────────────
+
+    def get_server_time(self, extra_data=None, **kwargs):
+        """Get server time. Hyperliquid doesn't have a dedicated endpoint;
+        we use allMids as a health check and return local time."""
+        if extra_data is None:
+            extra_data = {}
+        path = self._params.get_rest_path("get_all_mids")
+        body = {"type": "allMids"}
+        extra_data.update({
+            "exchange_name": self._params.exchange_name,
+            "symbol_name": "",
+            "asset_type": self.asset_type,
+            "request_type": "get_server_time",
+        })
+        return self.request(path, body=body, extra_data=extra_data)
+
+    # ── Hyperliquid-specific: get_all_mids ───────────────────────
 
     def get_all_mids(self):
         """Get all mid prices"""

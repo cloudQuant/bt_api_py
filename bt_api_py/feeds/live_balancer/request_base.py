@@ -36,6 +36,10 @@ class BalancerRequestData(Feed):
             Capability.GET_DEPTH,
             Capability.GET_KLINE,
             Capability.GET_EXCHANGE_INFO,
+            Capability.GET_BALANCE,
+            Capability.GET_ACCOUNT,
+            Capability.MAKE_ORDER,
+            Capability.CANCEL_ORDER,
         }
 
     def __init__(self, data_queue, **kwargs):
@@ -170,24 +174,69 @@ class BalancerRequestData(Feed):
             raise
 
     def request(self, path, params=None, body=None, extra_data=None, timeout=10):
-        """HTTP request function (legacy interface).
+        """Execute a request. For Balancer, delegates to GraphQL execution.
 
-        For Balancer, use _execute_graphql_query instead.
+        If extra_data contains '_graphql_query' and '_graphql_variables',
+        executes a GraphQL query. Otherwise returns a RequestData wrapper.
         """
-        raise NotImplementedError(
-            "Use _execute_graphql_query() for Balancer GraphQL queries"
-        )
+        if extra_data and "_graphql_query" in extra_data:
+            query = extra_data.pop("_graphql_query")
+            variables = extra_data.pop("_graphql_variables", None)
+            return self._execute_graphql_query(query, variables, extra_data)
+        # Fallback: wrap body/params as RequestData directly
+        return RequestData(body or params or {}, extra_data)
 
     async def async_request(
         self, path, params=None, body=None, extra_data=None, timeout=5
     ):
-        """Async HTTP request function (legacy interface).
+        """Async request. For Balancer, delegates to async GraphQL execution.
 
-        For Balancer, use _async_execute_graphql_query instead.
+        If extra_data contains '_graphql_query' and '_graphql_variables',
+        executes an async GraphQL query.
         """
-        raise NotImplementedError(
-            "Use _async_execute_graphql_query() for Balancer GraphQL queries"
-        )
+        if extra_data and "_graphql_query" in extra_data:
+            query = extra_data.pop("_graphql_query")
+            variables = extra_data.pop("_graphql_variables", None)
+            return await self._async_execute_graphql_query(query, variables, extra_data)
+        return RequestData(body or params or {}, extra_data)
+
+    def async_callback(self, future):
+        """Callback function for async requests, push result to data_queue."""
+        try:
+            result = future.result()
+            if result is not None:
+                self.push_data_to_queue(result)
+        except Exception as e:
+            self.async_logger.error(f"Async callback error: {e}")
+
+    # ── Standard Interface: get_server_time ───────────────────────
+
+    def _get_server_time(self, extra_data=None, **kwargs):
+        """Prepare server time request. Returns (path, params, extra_data).
+
+        Note: Balancer is a DEX without a server time endpoint.
+        Returns current local time as a fallback.
+        """
+        import time
+        if extra_data is None:
+            extra_data = {}
+        extra_data.update({
+            "exchange_name": self.exchange_name,
+            "symbol_name": "",
+            "asset_type": getattr(self, 'asset_type', 'DEX'),
+            "request_type": "get_server_time",
+            "server_time": time.time(),
+        })
+        return "GET /server_time", {}, extra_data
+
+    def get_server_time(self, extra_data=None, **kwargs):
+        """Get server time. Returns RequestData.
+
+        Balancer is a DEX — returns local timestamp as proxy.
+        """
+        import time
+        path, params, extra_data = self._get_server_time(extra_data, **kwargs)
+        return RequestData({"server_time": time.time()}, extra_data)
 
     def push_data_to_queue(self, data):
         """Push data to the queue."""

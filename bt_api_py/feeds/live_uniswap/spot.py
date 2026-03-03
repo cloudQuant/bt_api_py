@@ -31,10 +31,14 @@ class UniswapRequestDataSpot(UniswapRequestData):
     def _capabilities(cls):
         """Declare supported capabilities."""
         return {
-            "GET_TICK",
-            "GET_DEPTH",
-            "GET_EXCHANGE_INFO",
-            "GET_KLINE",
+            Capability.GET_TICK,
+            Capability.GET_DEPTH,
+            Capability.GET_EXCHANGE_INFO,
+            Capability.GET_KLINE,
+            Capability.GET_BALANCE,
+            Capability.GET_ACCOUNT,
+            Capability.MAKE_ORDER,
+            Capability.CANCEL_ORDER,
         }
 
     def __init__(self, data_queue, **kwargs):
@@ -151,7 +155,17 @@ class UniswapRequestDataSpot(UniswapRequestData):
         variables = extra_data.pop("_graphql_variables")
         return self._execute_graphql_query(query, variables, extra_data)
 
-    # ==================== Pool Queries ====================
+    def async_get_tick(self, symbol: str, extra_data=None, **kwargs):
+        """Async get token price."""
+        path, params, extra_data = self._get_tick(symbol, extra_data, **kwargs)
+        query = extra_data.pop("_graphql_query")
+        variables = extra_data.pop("_graphql_variables")
+        self.submit(
+            self._async_execute_graphql_query(query, variables, extra_data),
+            callback=self.async_callback,
+        )
+
+    # ==================== Pool Queries ==
 
     def _get_pool(
         self, pool_id: str, extra_data=None, **kwargs
@@ -529,6 +543,10 @@ class UniswapRequestDataSpot(UniswapRequestData):
             extra_data,
         )
 
+    def async_get_depth(self, symbol: str, count: int = 20, extra_data=None, **kwargs):
+        """Async get liquidity depth."""
+        self.async_get_tick(symbol, extra_data, **kwargs)
+
     # ==================== Kline/Historical Data ====================
 
     def _get_kline(
@@ -583,6 +601,15 @@ class UniswapRequestDataSpot(UniswapRequestData):
             {"message": "Klines not available via Uniswap Trading API. Use pool events or external sources."},
             extra_data,
         )
+
+    def async_get_kline(
+        self, symbol: str, period: str, count: int = 20, extra_data=None, **kwargs
+    ):
+        """Async get kline data."""
+        path, params, extra_data = self._get_kline(
+            symbol, period, count, extra_data, **kwargs
+        )
+        # No-op: klines not available via Uniswap Trading API
 
     # ==================== Exchange Info ====================
 
@@ -659,3 +686,123 @@ class UniswapRequestDataSpot(UniswapRequestData):
         path, params, extra_data = self._get_exchange_info(extra_data, **kwargs)
         query = extra_data.pop("_graphql_query")
         return self._execute_graphql_query(query, {}, extra_data)
+
+    # ==================== Standard Trading Interfaces ====================
+
+    def _make_order(self, symbol, volume, price, order_type, offset="open",
+                    post_only=False, client_order_id=None, extra_data=None, **kwargs):
+        """Prepare order. Returns (path, params, extra_data).
+
+        Uniswap is a DEX; trading requires on-chain transactions.
+        """
+        if extra_data is None:
+            extra_data = {}
+        extra_data.update({
+            "exchange_name": self.exchange_name,
+            "symbol_name": symbol,
+            "asset_type": self.asset_type,
+            "request_type": "make_order",
+        })
+        params = {
+            "symbol": symbol, "quantity": str(volume),
+            "price": str(price), "orderType": order_type,
+        }
+        return "/swap", params, extra_data
+
+    def make_order(self, symbol, volume, price, order_type, offset="open",
+                   post_only=False, client_order_id=None, extra_data=None, **kwargs):
+        """Place an order. Note: Uniswap requires on-chain tx."""
+        path, params, extra_data = self._make_order(
+            symbol, volume, price, order_type, offset, post_only,
+            client_order_id, extra_data, **kwargs
+        )
+        return self.request(path, params=params, extra_data=extra_data)
+
+    def _cancel_order(self, symbol, order_id, extra_data=None, **kwargs):
+        """Cancel order. Returns (path, params, extra_data)."""
+        if extra_data is None:
+            extra_data = {}
+        extra_data.update({
+            "exchange_name": self.exchange_name,
+            "symbol_name": symbol,
+            "asset_type": self.asset_type,
+            "request_type": "cancel_order",
+            "order_id": order_id,
+        })
+        return f"/orders/{order_id}", {}, extra_data
+
+    def cancel_order(self, symbol, order_id, extra_data=None, **kwargs):
+        """Cancel order."""
+        path, params, extra_data = self._cancel_order(symbol, order_id, extra_data, **kwargs)
+        return self.request(path, params=params, extra_data=extra_data)
+
+    def _query_order(self, symbol, order_id, extra_data=None, **kwargs):
+        """Query order. Returns (path, params, extra_data)."""
+        if extra_data is None:
+            extra_data = {}
+        extra_data.update({
+            "exchange_name": self.exchange_name,
+            "symbol_name": symbol,
+            "asset_type": self.asset_type,
+            "request_type": "query_order",
+            "order_id": order_id,
+        })
+        return f"/orders/{order_id}", {}, extra_data
+
+    def query_order(self, symbol, order_id, extra_data=None, **kwargs):
+        """Query order status."""
+        path, params, extra_data = self._query_order(symbol, order_id, extra_data, **kwargs)
+        return self.request(path, params=params, extra_data=extra_data)
+
+    def _get_open_orders(self, symbol=None, extra_data=None, **kwargs):
+        """Get open orders. Returns (path, params, extra_data)."""
+        if extra_data is None:
+            extra_data = {}
+        extra_data.update({
+            "exchange_name": self.exchange_name,
+            "symbol_name": symbol or "",
+            "asset_type": self.asset_type,
+            "request_type": "get_open_orders",
+        })
+        return "/orders", {}, extra_data
+
+    def get_open_orders(self, symbol=None, extra_data=None, **kwargs):
+        """Get open orders."""
+        path, params, extra_data = self._get_open_orders(symbol, extra_data, **kwargs)
+        return self.request(path, params=params, extra_data=extra_data)
+
+    # ==================== Standard Account Interfaces ====================
+
+    def _get_account(self, symbol=None, extra_data=None, **kwargs):
+        """Get account info. Returns (path, params, extra_data)."""
+        if extra_data is None:
+            extra_data = {}
+        extra_data.update({
+            "exchange_name": self.exchange_name,
+            "symbol_name": symbol or "",
+            "asset_type": self.asset_type,
+            "request_type": "get_account",
+        })
+        return "/account", {}, extra_data
+
+    def get_account(self, symbol=None, extra_data=None, **kwargs):
+        """Get account info."""
+        path, params, extra_data = self._get_account(symbol, extra_data, **kwargs)
+        return self.request(path, params=params, extra_data=extra_data)
+
+    def _get_balance(self, symbol=None, extra_data=None, **kwargs):
+        """Get balance. Returns (path, params, extra_data)."""
+        if extra_data is None:
+            extra_data = {}
+        extra_data.update({
+            "exchange_name": self.exchange_name,
+            "symbol_name": symbol or "",
+            "asset_type": self.asset_type,
+            "request_type": "get_balance",
+        })
+        return "/balance", {}, extra_data
+
+    def get_balance(self, symbol=None, extra_data=None, **kwargs):
+        """Get token balance."""
+        path, params, extra_data = self._get_balance(symbol, extra_data, **kwargs)
+        return self.request(path, params=params, extra_data=extra_data)

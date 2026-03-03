@@ -1,26 +1,13 @@
 # BeQuant Exchange Configuration
+# BeQuant uses HitBTC V3 API (white-label) with HTTP Basic Auth
 id: bequant
 display_name: BeQuant
 venue_type: cex
 website: https://bequant.io
 api_doc: https://api.bequant.io/
 
-base_urls:
-  rest:
-    default: https://api.bequant.io/api/3
-    spot: https://api.bequant.io/api/3
-  wss:
-    default: wss://api.bequant.io/api/3/ws/public
-    spot: wss://api.bequant.io/api/3/ws/public
-
-connection:
-  type: http
-  timeout: 10
-  max_retries: 3
-
 authentication:
-  type: hmac_sha256
-  header_name: Authorization
+  type: basic_auth
 
 kline_periods:
   1m: "M1"
@@ -50,16 +37,31 @@ rate_limits:
 
 asset_types:
   spot:
-    exchange_name: bequantSpot
-    symbol_format: "{base}/{quote}"
+    exchange_name: BEQUANT___SPOT
+    rest_url: "https://api.bequant.io/api/3"
+    wss_url: "wss://api.bequant.io/api/3/ws/public"
+    symbol_format: "{base}{quote}"
     legal_currency: [USDT, USD, BTC, ETH, EUR]
     rest_paths:
+      # Public endpoints (same as HitBTC v3)
       get_server_time: "GET /public/time"
-      get_ticker: "GET /public/ticker"
-      get_depth: "GET /public/orderbook"
-      get_kline: "GET /public/candles"
-      get_symbols: "GET /public/symbol"
+      get_exchange_info: "GET /public/symbol"
+      get_tick: "GET /public/ticker/{symbol}"
+      get_tick_all: "GET /public/ticker"
+      get_depth: "GET /public/orderbook/{symbol}"
+      get_trades: "GET /public/trades/{symbol}"
+      get_kline: "GET /public/candles/{symbol}"
+      # Trading endpoints
+      make_order: "POST /spot/order"
+      cancel_order: "DELETE /spot/order/{client_order_id}"
+      cancel_all_orders: "DELETE /spot/order"
+      get_open_orders: "GET /spot/order"
+      query_order: "GET /spot/order/{client_order_id}"
+      # Account endpoints
+      get_balance: "GET /spot/balance"
+      get_account: "GET /spot/balance"
     wss_paths:
-      ticker: "{symbol}@ticker"
-      depth: "{symbol}@depth"
-      kline: "{symbol}@candles"
+      ticker: "ticker/1s"
+      orderbook: "orderbook/full"
+      trades: "trades"
+      candles: "candles"

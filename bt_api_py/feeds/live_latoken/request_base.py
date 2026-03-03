@@ -1,13 +1,13 @@
+"""
+Latoken REST Feed – base class with HMAC-SHA512 auth and _get_xxx internal methods.
+"""
+
 import hashlib
 import hmac
-import json
-import time
-from typing import Dict, List, Optional, Union
 from urllib.parse import urlencode
 
 from bt_api_py.containers.exchanges.latoken_exchange_data import LatokenExchangeDataSpot
 from bt_api_py.containers.requestdatas.request_data import RequestData
-from bt_api_py.containers.tickers.latoken_ticker import LatokenRequestTickerData
 from bt_api_py.feeds.capability import Capability
 from bt_api_py.feeds.feed import Feed
 from bt_api_py.functions.log_message import SpdLogManager
@@ -15,383 +15,359 @@ from bt_api_py.functions.utils import update_extra_data
 
 
 class LatokenRequestData(Feed):
-    """Latoken Request Data Handler
-
-    Handles REST API requests to Latoken exchange with HMAC-SHA512 authentication.
-    Latoken uses UUID-based currency identification.
-    """
+    """Latoken REST Feed base – HMAC-SHA512 auth, _get_xxx pattern."""
 
     def __init__(self, data_queue, **kwargs):
         super().__init__(data_queue, **kwargs)
-
-        # Exchange configuration
-        self.exchange_name = kwargs.get("exchange_name", "latoken")
+        self.exchange_name = kwargs.get("exchange_name", "LATOKEN___SPOT")
         self.asset_type = kwargs.get("asset_type", "SPOT")
         self.logger_name = kwargs.get("logger_name", "latoken_spot_feed.log")
-
-        # Exchange data configuration
         self._params = kwargs.get("exchange_data", LatokenExchangeDataSpot())
 
-        # Logger setup
         self.request_logger = SpdLogManager(
             "./logs/" + self.logger_name, "request", 0, 0, False
         ).create_logger()
-
         self.async_logger = SpdLogManager(
             "./logs/" + self.logger_name, "async_request", 0, 0, False
         ).create_logger()
 
-        # Rate limiting
-        self.rate_limiter = kwargs.get("rate_limiter", None)
-
-        # API credentials (HMAC-SHA512)
-        self.api_key = kwargs.get("api_key", None)
-        self.api_secret = kwargs.get("api_secret", None)
-
-        # API URLs
+        self.api_key = kwargs.get("public_key", None) or kwargs.get("api_key", None)
+        self.api_secret = kwargs.get("private_key", None) or kwargs.get("api_secret", None)
         self.rest_url = self._params.rest_url
 
-        # Default headers
-        self.default_headers = {
-            'Content-Type': 'application/json',
-            'Accept': 'application/json'
-        }
+    # ── core request helpers ────────────────────────────────────
+
+    def push_data_to_queue(self, data):
+        if self.data_queue is not None:
+            self.data_queue.put(data)
+
+    def request(self, path, params=None, body=None, extra_data=None, timeout=10):
+        """Synchronous HTTP request."""
+        if params is None:
+            params = {}
+        method, endpoint = path.split(" ", 1)
+        headers = self._get_headers(method, endpoint, params)
+
+        if method == "GET":
+            qs = urlencode(params) if params else ""
+            url = f"{self._params.rest_url}{endpoint}{'?' + qs if qs else ''}"
+            json_body = None
+        else:
+            url = f"{self._params.rest_url}{endpoint}"
+            json_body = body if body is not None else params
+            if not json_body:
+                json_body = None
+
+        res = self.http_request(method, url, headers, json_body, timeout)
+        self.request_logger.info(f"{method} {url} -> {type(res)}")
+        return RequestData(res, extra_data)
+
+    async def async_request(self, path, params=None, body=None, extra_data=None, timeout=5):
+        """Async HTTP request."""
+        if params is None:
+            params = {}
+        method, endpoint = path.split(" ", 1)
+        headers = self._get_headers(method, endpoint, params)
+
+        if method == "GET":
+            qs = urlencode(params) if params else ""
+            url = f"{self._params.rest_url}{endpoint}{'?' + qs if qs else ''}"
+            json_body = None
+        else:
+            url = f"{self._params.rest_url}{endpoint}"
+            json_body = body if body is not None else params
+            if not json_body:
+                json_body = None
+
+        res = await self.async_http_request(method, url, headers, json_body, timeout)
+        self.async_logger.info(f"async {method} {url} -> {type(res)}")
+        return RequestData(res, extra_data)
+
+    def async_callback(self, request_data):
+        if request_data is not None:
+            self.push_data_to_queue(request_data)
+
+    # ── capabilities ────────────────────────────────────────────
 
     @classmethod
     def _capabilities(cls):
-        """Return the capabilities of this feed"""
         return {
             Capability.GET_TICK,
             Capability.GET_DEPTH,
             Capability.GET_KLINE,
             Capability.GET_EXCHANGE_INFO,
+            Capability.MAKE_ORDER,
+            Capability.CANCEL_ORDER,
+            Capability.GET_BALANCE,
+            Capability.GET_ACCOUNT,
+            Capability.QUERY_OPEN_ORDERS,
         }
 
-    def _generate_signature(self, method: str, path: str, params: Optional[Dict] = None) -> str:
-        """Generate HMAC-SHA512 signature for Latoken API
+    # ── auth helpers ────────────────────────────────────────────
 
-        Args:
-            method: HTTP method (GET, POST, etc.)
-            path: API endpoint path
-            params: Query parameters
-
-        Returns:
-            Hexadecimal signature string
-        """
-        # Build query string for signature
+    def _generate_signature(self, method, path, params=None):
         query = urlencode(params) if params else ""
-
-        # Signature string: METHOD + /v2/path + query
         auth = f"{method}{path}{query}"
-
-        # Generate HMAC-SHA512
         if self.api_secret:
-            signature = hmac.new(
-                self.api_secret.encode(),
-                auth.encode(),
-                hashlib.sha512
+            return hmac.new(
+                self.api_secret.encode(), auth.encode(), hashlib.sha512
             ).hexdigest()
-            return signature
         return ""
 
-    def _get_headers(self, method: str = "GET", path: str = "", params: Optional[Dict] = None) -> Dict[str, str]:
-        """Generate authentication headers for Latoken API
-
-        Args:
-            method: HTTP method
-            path: API endpoint path
-            params: Request parameters
-
-        Returns:
-            Dictionary of headers including authentication
-        """
-        headers = self.default_headers.copy()
-
+    def _get_headers(self, method="GET", path="", params=None):
+        headers = {"Content-Type": "application/json", "Accept": "application/json"}
         if self.api_key:
-            headers['X-LA-APIKEY'] = self.api_key
-
+            headers["X-LA-APIKEY"] = self.api_key
             if self.api_secret:
-                signature = self._generate_signature(method, path, params)
-                headers['X-LA-SIGNATURE'] = signature
-                headers['X-LA-DIGEST'] = 'HMAC-SHA512'
-
+                headers["X-LA-SIGNATURE"] = self._generate_signature(method, path, params)
+                headers["X-LA-DIGEST"] = "HMAC-SHA512"
         return headers
 
-    def _get_ticker(self, symbol: str, extra_data: Optional[Dict] = None, **kwargs) -> tuple:
-        """Get ticker information
+    # ── symbol helper ───────────────────────────────────────────
 
-        Args:
-            symbol: Trading pair (e.g., 'BTC-USDT', 'btc_usdt')
-            extra_data: Additional data
-            **kwargs: Additional parameters
+    def _split_symbol(self, symbol):
+        """Return (base, quote) from any user-facing symbol."""
+        s = symbol.lower().replace("/", "_").replace("-", "_")
+        parts = s.split("_")
+        return parts[0], parts[1] if len(parts) > 1 else "usdt"
 
-        Returns:
-            tuple: (path, params, extra_data)
-        """
-        request_symbol = self._params.get_symbol(symbol)
-        request_type = "get_ticker"
+    # ── error detection ─────────────────────────────────────────
 
-        # For individual ticker, use get_ticker_symbol path
-        if "_" in request_symbol or "/" in symbol or "-" in symbol:
-            base, quote = symbol.replace("/", "_").replace("-", "_").split("_")[:2]
-            path = self._params.get_rest_path("get_ticker_symbol", base=base.lower(), quote=quote.lower())
-        else:
-            path = self._params.get_rest_path(request_type)
+    @staticmethod
+    def _is_error(data):
+        if data is None:
+            return True
+        if isinstance(data, dict) and data.get("status") == "FAILURE":
+            return True
+        if isinstance(data, dict) and "error" in data:
+            return True
+        return False
 
+    # ── internal _get_xxx methods ───────────────────────────────
+
+    def _get_tick(self, symbol, extra_data=None, **kwargs):
+        base, quote = self._split_symbol(symbol)
+        path = self._params.get_rest_path("get_tick", base=base, quote=quote)
         params = {}
-
-        extra_data = update_extra_data(
-            extra_data,
-            **{
-                "request_type": request_type,
-                "symbol_name": symbol,
-                "asset_type": self.asset_type,
-                "exchange_name": self.exchange_name,
-                "normalize_function": self._get_ticker_normalize_function,
-            }
-        )
-
+        extra_data = update_extra_data(extra_data, **{
+            "request_type": "get_tick",
+            "symbol_name": symbol,
+            "asset_type": self.asset_type,
+            "exchange_name": self.exchange_name,
+            "normalize_function": self._get_tick_normalize_function,
+        })
         return path, params, extra_data
 
     @staticmethod
-    def _get_ticker_normalize_function(input_data, extra_data):
-        """Normalize ticker response data"""
-        status = input_data is not None
-
+    def _get_tick_normalize_function(input_data, extra_data):
+        if LatokenRequestData._is_error(input_data):
+            return [input_data], False
         if isinstance(input_data, dict):
-            symbol_name = extra_data["symbol_name"]
-            asset_type = extra_data["asset_type"]
+            return [input_data], True
+        if isinstance(input_data, list):
+            return input_data, True
+        return [], False
 
-            data = [LatokenRequestTickerData(json.dumps(input_data), symbol_name, asset_type, True)]
-        elif isinstance(input_data, list):
-            # Handle list of tickers
-            symbol_name = extra_data.get("symbol_name", "")
-            asset_type = extra_data["asset_type"]
-            data = [LatokenRequestTickerData(json.dumps(ticker), symbol_name, asset_type, True) for ticker in input_data]
-        else:
-            data = []
-
-        return data, status
-
-    def _get_order_book(self, symbol: str, limit: int = 50, extra_data: Optional[Dict] = None, **kwargs) -> tuple:
-        """Get order book data
-
-        Args:
-            symbol: Trading pair
-            limit: Number of price levels
-            extra_data: Additional data
-            **kwargs: Additional parameters
-
-        Returns:
-            tuple: (path, params, extra_data)
-        """
-        request_symbol = self._params.get_symbol(symbol)
-        request_type = "get_orderbook"
-
-        # Parse base and quote from symbol
-        if "_" in request_symbol or "/" in symbol or "-" in symbol:
-            base, quote = symbol.replace("/", "_").replace("-", "_").split("_")[:2]
-            path = self._params.get_rest_path(request_type, currency=base.lower(), quote=quote.lower())
-        else:
-            path = self._params.get_rest_path(request_type, currency=request_symbol, quote="usdt")
-
+    def _get_depth(self, symbol, extra_data=None, **kwargs):
+        base, quote = self._split_symbol(symbol)
+        path = self._params.get_rest_path("get_depth", currency=base, quote=quote)
         params = {}
-        if limit:
-            params['limit'] = limit
-
-        extra_data = update_extra_data(
-            extra_data,
-            **{
-                "request_type": request_type,
-                "symbol_name": symbol,
-                "asset_type": self.asset_type,
-                "exchange_name": self.exchange_name,
-                "normalize_function": self._get_order_book_normalize_function,
-            }
-        )
-
+        extra_data = update_extra_data(extra_data, **{
+            "request_type": "get_depth",
+            "symbol_name": symbol,
+            "asset_type": self.asset_type,
+            "exchange_name": self.exchange_name,
+            "normalize_function": self._get_depth_normalize_function,
+        })
         return path, params, extra_data
 
     @staticmethod
-    def _get_order_book_normalize_function(input_data, extra_data):
-        """Normalize order book response data"""
-        status = input_data is not None
+    def _get_depth_normalize_function(input_data, extra_data):
+        if LatokenRequestData._is_error(input_data):
+            return [input_data], False
+        if isinstance(input_data, (dict, list)):
+            return [input_data], True
+        return [], False
 
-        # Latoken orderbook format varies, return raw data
+    def _get_exchange_info(self, extra_data=None, **kwargs):
+        path = self._params.get_rest_path("get_exchange_info")
+        params = {}
+        extra_data = update_extra_data(extra_data, **{
+            "request_type": "get_exchange_info",
+            "exchange_name": self.exchange_name,
+            "normalize_function": self._get_exchange_info_normalize_function,
+        })
+        return path, params, extra_data
+
+    @staticmethod
+    def _get_exchange_info_normalize_function(input_data, extra_data):
+        if LatokenRequestData._is_error(input_data):
+            return [input_data], False
+        if isinstance(input_data, list):
+            return input_data, True
         if isinstance(input_data, dict):
-            status = True
-        else:
-            input_data = {}
+            return [input_data], True
+        return [], False
 
-        return [input_data], status
-
-    def _get_trades(self, symbol: str, limit: int = 100, extra_data: Optional[Dict] = None, **kwargs) -> tuple:
-        """Get recent trades
-
-        Args:
-            symbol: Trading pair
-            limit: Number of trades
-            extra_data: Additional data
-            **kwargs: Additional parameters
-
-        Returns:
-            tuple: (path, params, extra_data)
-        """
-        request_symbol = self._params.get_symbol(symbol)
-        request_type = "get_trades"
-
-        # Parse base and quote from symbol
-        if "_" in request_symbol or "/" in symbol or "-" in symbol:
-            base, quote = symbol.replace("/", "_").replace("-", "_").split("_")[:2]
-            path = self._params.get_rest_path(request_type, currency=base.lower(), quote=quote.lower())
-        else:
-            path = self._params.get_rest_path(request_type, currency=request_symbol, quote="usdt")
-
+    def _get_deals(self, symbol, extra_data=None, **kwargs):
+        base, quote = self._split_symbol(symbol)
+        path = self._params.get_rest_path("get_deals", currency=base, quote=quote)
         params = {}
-        if limit:
-            params['limit'] = limit
-
-        extra_data = update_extra_data(
-            extra_data,
-            **{
-                "request_type": request_type,
-                "symbol_name": symbol,
-                "asset_type": self.asset_type,
-                "exchange_name": self.exchange_name,
-                "normalize_function": self._get_trades_normalize_function,
-            }
-        )
-
+        extra_data = update_extra_data(extra_data, **{
+            "request_type": "get_deals",
+            "symbol_name": symbol,
+            "asset_type": self.asset_type,
+            "exchange_name": self.exchange_name,
+            "normalize_function": self._get_deals_normalize_function,
+        })
         return path, params, extra_data
 
     @staticmethod
-    def _get_trades_normalize_function(input_data, extra_data):
-        """Normalize trades response data"""
-        status = input_data is not None
-
+    def _get_deals_normalize_function(input_data, extra_data):
+        if LatokenRequestData._is_error(input_data):
+            return [input_data], False
         if isinstance(input_data, list):
-            data = input_data
-        else:
-            data = []
+            return input_data, True
+        return [], False
 
-        return [data], status
-
-    def _get_klines(self, symbol: str, period: str = "1h", limit: int = 100, extra_data: Optional[Dict] = None, **kwargs) -> tuple:
-        """Get kline/candlestick data
-
-        Args:
-            symbol: Trading pair
-            period: Time period (1m, 5m, 15m, 30m, 1h, 4h, 1d, 1w)
-            limit: Number of candles
-            extra_data: Additional data
-            **kwargs: Additional parameters
-
-        Returns:
-            tuple: (path, params, extra_data)
-        """
-        request_symbol = self._params.get_symbol(symbol)
-        request_type = "get_chart_week"
-
-        # Parse base and quote from symbol
-        if "_" in request_symbol or "/" in symbol or "-" in symbol:
-            base, quote = symbol.replace("/", "_").replace("-", "_").split("_")[:2]
-            path = self._params.get_rest_path(request_type, currency=base.lower(), quote=quote.lower())
-        else:
-            path = self._params.get_rest_path(request_type, currency=request_symbol, quote="usdt")
-
+    def _get_kline(self, symbol, period="1h", count=100, extra_data=None, **kwargs):
+        base, quote = self._split_symbol(symbol)
+        path = self._params.get_rest_path("get_kline", currency=base, quote=quote)
         params = {}
-
-        extra_data = update_extra_data(
-            extra_data,
-            **{
-                "request_type": request_type,
-                "symbol_name": symbol,
-                "asset_type": self.asset_type,
-                "exchange_name": self.exchange_name,
-                "normalize_function": self._get_klines_normalize_function,
-            }
-        )
-
+        extra_data = update_extra_data(extra_data, **{
+            "request_type": "get_kline",
+            "symbol_name": symbol,
+            "asset_type": self.asset_type,
+            "exchange_name": self.exchange_name,
+            "normalize_function": self._get_kline_normalize_function,
+        })
         return path, params, extra_data
 
     @staticmethod
-    def _get_klines_normalize_function(input_data, extra_data):
-        """Normalize kline response data"""
-        status = input_data is not None
-
+    def _get_kline_normalize_function(input_data, extra_data):
+        if LatokenRequestData._is_error(input_data):
+            return [input_data], False
         if isinstance(input_data, list):
-            data = input_data
-        else:
-            data = []
+            return input_data, True
+        return [], False
 
-        return [data], status
-
-    def _get_server_time(self, extra_data: Optional[Dict] = None, **kwargs) -> tuple:
-        """Get server time
-
-        Returns:
-            tuple: (path, params, extra_data)
-        """
-        request_type = "get_server_time"
-        path = self._params.get_rest_path(request_type)
-
+    def _get_server_time(self, extra_data=None, **kwargs):
+        path = self._params.get_rest_path("get_server_time")
         params = {}
-
-        extra_data = update_extra_data(
-            extra_data,
-            **{
-                "request_type": request_type,
-                "exchange_name": self.exchange_name,
-                "normalize_function": self._get_server_time_normalize_function,
-            }
-        )
-
+        extra_data = update_extra_data(extra_data, **{
+            "request_type": "get_server_time",
+            "exchange_name": self.exchange_name,
+            "normalize_function": self._get_server_time_normalize_function,
+        })
         return path, params, extra_data
 
     @staticmethod
     def _get_server_time_normalize_function(input_data, extra_data):
-        """Normalize server time response"""
-        status = input_data is not None
+        if input_data is None:
+            return [], False
+        return [input_data], True
 
-        if isinstance(input_data, dict):
-            # Latoken returns {"timestamp": "..."}
-            data = [input_data]
+    # ── trading ─────────────────────────────────────────────────
+
+    def _make_order(self, symbol, side, order_type, amount, price=None, extra_data=None, **kwargs):
+        path = self._params.get_rest_path("make_order")
+        base, quote = self._split_symbol(symbol)
+        body = {
+            "baseCurrency": base,
+            "quoteCurrency": quote,
+            "side": side.upper(),
+            "type": order_type.upper(),
+            "quantity": str(amount),
+        }
+        if price is not None:
+            body["price"] = str(price)
+        extra_data = update_extra_data(extra_data, **{
+            "request_type": "make_order",
+            "symbol_name": symbol,
+            "asset_type": self.asset_type,
+            "exchange_name": self.exchange_name,
+            "normalize_function": self._make_order_normalize_function,
+        })
+        return path, body, extra_data
+
+    @staticmethod
+    def _make_order_normalize_function(input_data, extra_data):
+        if LatokenRequestData._is_error(input_data):
+            return [input_data], False
+        return [input_data], True
+
+    def _cancel_order(self, order_id, extra_data=None, **kwargs):
+        path = self._params.get_rest_path("cancel_order")
+        body = {"id": order_id}
+        extra_data = update_extra_data(extra_data, **{
+            "request_type": "cancel_order",
+            "exchange_name": self.exchange_name,
+            "normalize_function": self._cancel_order_normalize_function,
+        })
+        return path, body, extra_data
+
+    @staticmethod
+    def _cancel_order_normalize_function(input_data, extra_data):
+        if LatokenRequestData._is_error(input_data):
+            return [input_data], False
+        return [input_data], True
+
+    def _get_open_orders(self, symbol=None, extra_data=None, **kwargs):
+        if symbol:
+            base, quote = self._split_symbol(symbol)
+            path = self._params.get_rest_path("get_open_orders", currency=base, quote=quote)
         else:
-            data = []
+            path = self._params.get_rest_path("get_balance")  # fallback
+        params = {}
+        extra_data = update_extra_data(extra_data, **{
+            "request_type": "get_open_orders",
+            "exchange_name": self.exchange_name,
+            "normalize_function": self._get_open_orders_normalize_function,
+        })
+        return path, params, extra_data
 
-        return data, status
+    @staticmethod
+    def _get_open_orders_normalize_function(input_data, extra_data):
+        if LatokenRequestData._is_error(input_data):
+            return [input_data], False
+        if isinstance(input_data, list):
+            return input_data, True
+        return [input_data], True
 
-    def get_server_time(self, extra_data: Optional[Dict] = None, **kwargs):
-        """Get server time - public method"""
-        path, params, extra_data = self._get_server_time(extra_data, **kwargs)
-        return self.request(path, params, extra_data=extra_data)
+    # ── account ─────────────────────────────────────────────────
 
-    # Public methods for external use (already defined in Feed class)
-    def get_ticker(self, symbol, extra_data=None, **kwargs):
-        """Public method to get ticker data"""
-        path, params, extra_data = self._get_ticker(symbol, extra_data, **kwargs)
-        return self.request(path, params, extra_data=extra_data)
+    def _get_balance(self, extra_data=None, **kwargs):
+        path = self._params.get_rest_path("get_balance")
+        params = {}
+        extra_data = update_extra_data(extra_data, **{
+            "request_type": "get_balance",
+            "exchange_name": self.exchange_name,
+            "normalize_function": self._get_balance_normalize_function,
+        })
+        return path, params, extra_data
 
-    def get_order_book(self, symbol, limit=50, extra_data=None, **kwargs):
-        """Public method to get order book data"""
-        path, params, extra_data = self._get_order_book(symbol, limit, extra_data, **kwargs)
-        return self.request(path, params, extra_data=extra_data)
+    @staticmethod
+    def _get_balance_normalize_function(input_data, extra_data):
+        if LatokenRequestData._is_error(input_data):
+            return [input_data], False
+        if isinstance(input_data, list):
+            return input_data, True
+        return [input_data], True
 
-    def get_trades(self, symbol, limit=100, extra_data=None, **kwargs):
-        """Public method to get recent trades"""
-        path, params, extra_data = self._get_trades(symbol, limit, extra_data, **kwargs)
-        return self.request(path, params, extra_data=extra_data)
+    def _get_account(self, extra_data=None, **kwargs):
+        path = self._params.get_rest_path("get_account")
+        params = {}
+        extra_data = update_extra_data(extra_data, **{
+            "request_type": "get_account",
+            "exchange_name": self.exchange_name,
+            "normalize_function": self._get_account_normalize_function,
+        })
+        return path, params, extra_data
 
-    def get_klines(self, symbol, period="1h", limit=100, extra_data=None, **kwargs):
-        """Public method to get kline data"""
-        path, params, extra_data = self._get_klines(symbol, period, limit, extra_data, **kwargs)
-        return self.request(path, params, extra_data=extra_data)
-
-    # Alias methods for consistency with other exchanges
-    def get_depth(self, symbol, limit=50, extra_data=None, **kwargs):
-        """Alias for get_order_book"""
-        return self.get_order_book(symbol, limit, extra_data, **kwargs)
-
-    def get_kline(self, symbol, period="1h", count=100, extra_data=None, **kwargs):
-        """Alias for get_klines"""
-        return self.get_klines(symbol, period, count, extra_data, **kwargs)
+    @staticmethod
+    def _get_account_normalize_function(input_data, extra_data):
+        if LatokenRequestData._is_error(input_data):
+            return [input_data], False
+        if isinstance(input_data, list):
+            return input_data, True
+        return [input_data], True

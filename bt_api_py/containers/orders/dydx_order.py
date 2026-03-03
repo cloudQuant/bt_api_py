@@ -53,11 +53,15 @@ class DydxOrderData(OrderData):
             self.status = self.order_data["status"]
             # 将 dYdX 状态转换为标准状态
             if self.status == "OPEN":
-                self.order_status = OrderStatus.OPEN
-            elif self.status in ["FILLED", "CANCELED", "EXPIRED"]:
-                self.order_status = OrderStatus.CLOSED
+                self.order_status = OrderStatus.ACCEPTED
+            elif self.status == "FILLED":
+                self.order_status = OrderStatus.COMPLETED
+            elif self.status == "CANCELED":
+                self.order_status = OrderStatus.CANCELED
+            elif self.status == "EXPIRED":
+                self.order_status = OrderStatus.EXPIRED
             else:
-                self.order_status = OrderStatus.UNKNOWN
+                self.order_status = OrderStatus.SUBMITTED
 
         self.server_time = from_dict_get_string(self.order_data, "createdAt")
         self.order_id = from_dict_get_string(self.order_data, "id")

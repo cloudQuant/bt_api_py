@@ -5,7 +5,7 @@ Handles GraphQL queries and REST API calls to PancakeSwap.
 
 import json
 import time
-from typing import Dict, List, Optional, Union
+from typing import Any, Dict, List, Optional, Union
 
 import requests
 
@@ -13,6 +13,7 @@ from bt_api_py.containers.requestdatas.request_data import RequestData
 from bt_api_py.error_framework_pancakeswap_error_translator import PancakeSwapErrorTranslator
 from bt_api_py.feeds.capability import Capability
 from bt_api_py.feeds.feed import Feed
+from bt_api_py.feeds.http_client import HttpClient
 from bt_api_py.rate_limiter import RateLimiter, RateLimitRule, RateLimitScope, RateLimitType
 from bt_api_py.functions.log_message import SpdLogManager
 
@@ -29,10 +30,11 @@ class PancakeSwapRequestData(Feed):
             Capability.GET_TICK,
             Capability.GET_DEPTH,
             Capability.GET_KLINE,
+            Capability.GET_EXCHANGE_INFO,
             Capability.GET_BALANCE,
-            Capability.GET_POSITION,
-            # Note: GET_EXCHANGE_INFO, GET_POOL_INFO, GET_TOKEN_INFO are DEX-specific
-            #       and not part of the standard Capability enum
+            Capability.GET_ACCOUNT,
+            Capability.MAKE_ORDER,
+            Capability.CANCEL_ORDER,
         }
 
     def __init__(self, data_queue, **kwargs):
@@ -52,6 +54,7 @@ class PancakeSwapRequestData(Feed):
         ).create_logger()
         self._error_translator = PancakeSwapErrorTranslator()
         self._rate_limiter = kwargs.get("rate_limiter", self._create_default_rate_limiter())
+        self._http_client = HttpClient(venue=self.exchange_name, timeout=30)
 
     @staticmethod
     def _create_default_rate_limiter():
@@ -158,10 +161,136 @@ class PancakeSwapRequestData(Feed):
             is_graphql=True
         )
 
-    def _get_server_time(self) -> Dict:
-        """Get server time from PancakeSwap."""
-        # PancakeSwap doesn't provide a time endpoint, return current time
-        return {"serverTime": int(time.time() * 1000)}
+    def request(
+        self,
+        method: str,
+        path: str,
+        params: dict[str, Any] | None = None,
+        extra_data=None,
+        body: Any = None,
+        timeout: int = 10,
+    ):
+        """HTTP request for PancakeSwap REST API.
+
+        Args:
+            method: HTTP method (GET, POST)
+            path: REST endpoint path
+            params: Query parameters
+            extra_data: Extra data to attach to response
+            body: Request body (for POST)
+            timeout: Request timeout
+
+        Returns:
+            RequestData with parsed response
+        """
+        if not self._params:
+            base_url = "https://api.pancakeswap.org"
+        else:
+            base_url = getattr(self._params, 'rest_url', 'https://api.pancakeswap.org')
+
+        url = f"{base_url}{path}"
+        headers = {
+            'Content-Type': 'application/json',
+            'User-Agent': 'bt_api_py/1.0'
+        }
+
+        try:
+            response = self._http_client.request(
+                method=method,
+                url=url,
+                headers=headers,
+                json_data=body if method.upper() == "POST" else None,
+                params=params,
+            )
+            return RequestData(response, extra_data)
+        except Exception as e:
+            self.request_logger.error(f"PancakeSwap request failed: {e}")
+            raise
+
+    async def async_request(
+        self,
+        method: str,
+        path: str,
+        params: dict[str, Any] | None = None,
+        extra_data=None,
+        body: Any = None,
+        timeout: int = 5,
+    ):
+        """Async HTTP request for PancakeSwap REST API."""
+        if not self._params:
+            base_url = "https://api.pancakeswap.org"
+        else:
+            base_url = getattr(self._params, 'rest_url', 'https://api.pancakeswap.org')
+
+        url = f"{base_url}{path}"
+        headers = {
+            'Content-Type': 'application/json',
+            'User-Agent': 'bt_api_py/1.0'
+        }
+
+        try:
+            response = await self._http_client.async_request(
+                method=method,
+                url=url,
+                headers=headers,
+                json_data=body if method.upper() == "POST" else None,
+                params=params,
+            )
+            return RequestData(response, extra_data)
+        except Exception as e:
+            self.async_logger.error(f"PancakeSwap async request failed: {e}")
+            raise
+
+    def async_callback(self, future):
+        """Callback function for async requests, push result to data_queue."""
+        try:
+            result = future.result()
+            if result is not None:
+                self.push_data_to_queue(result)
+        except Exception as e:
+            self.async_logger.error(f"Async callback error: {e}")
+
+    # ── Standard Interface: get_server_time ───────────────────────
+
+    def _get_server_time(self, extra_data=None, **kwargs):
+        """Prepare server time request. Returns (path, params, extra_data).
+
+        PancakeSwap is a DEX — no dedicated server time endpoint.
+        """
+        if extra_data is None:
+            extra_data = {}
+        extra_data.update({
+            "exchange_name": self.exchange_name,
+            "symbol_name": "",
+            "asset_type": self.asset_type,
+            "request_type": "get_server_time",
+            "server_time": time.time(),
+        })
+        return "GET", "/api/v1/time", {}, extra_data
+
+    def get_server_time(self, extra_data=None, **kwargs):
+        """Get server time. Returns RequestData."""
+        method, path, params, extra_data = self._get_server_time(extra_data, **kwargs)
+        return RequestData({"server_time": time.time()}, extra_data)
+
+    def push_data_to_queue(self, data):
+        """Push data to the queue."""
+        if self.data_queue is not None:
+            self.data_queue.put(data)
+        else:
+            raise RuntimeError("Queue not initialized")
+
+    def connect(self) -> None:
+        """No-op for HTTP-based REST API."""
+        pass
+
+    def disconnect(self) -> None:
+        """No-op for HTTP-based REST API."""
+        pass
+
+    def is_connected(self) -> bool:
+        """Always return True for HTTP-based REST API."""
+        return True
 
     def _get_exchange_info(self) -> Dict:
         """Get exchange information including supported tokens and pairs."""
@@ -401,16 +530,3 @@ class PancakeSwapRequestData(Feed):
         # This would require querying position data
         # Placeholder implementation
         return {"positions": []}
-
-    # WebSocket placeholder methods
-    def _subscribe_websocket(self, channels: List[str], symbols: Optional[List[str]] = None):
-        """Subscribe to WebSocket channels."""
-        raise NotImplementedError("WebSocket support not yet implemented")
-
-    def _get_websocket_token(self):
-        """Get WebSocket authentication token."""
-        raise NotImplementedError("WebSocket support not yet implemented")
-
-    def _close_connection(self):
-        """Close WebSocket connection."""
-        raise NotImplementedError("WebSocket support not yet implemented")

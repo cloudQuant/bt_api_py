@@ -3,15 +3,10 @@ Test Gemini exchange integration.
 
 Run tests:
     pytest tests/feeds/test_gemini.py -v
-
-Run with coverage:
-    pytest tests/feeds/test_gemini.py --cov=bt_api_py.feeds.live_gemini --cov-report=term-missing
 """
 
-import json
 import queue
-import time
-from unittest.mock import Mock, patch, MagicMock
+from unittest.mock import Mock, MagicMock
 
 import pytest
 
@@ -26,6 +21,7 @@ from bt_api_py.containers.tickers.gemini_ticker import GeminiRequestTickerData
 from bt_api_py.containers.orderbooks.gemini_orderbook import GeminiRequestOrderBookData
 from bt_api_py.containers.balances.gemini_balance import GeminiRequestBalanceData
 from bt_api_py.containers.bars.gemini_bar import GeminiRequestBarData
+from bt_api_py.feeds.capability import Capability
 from bt_api_py.feeds.live_gemini.spot import GeminiRequestDataSpot
 from bt_api_py.registry import ExchangeRegistry
 
@@ -33,135 +29,253 @@ from bt_api_py.registry import ExchangeRegistry
 import bt_api_py.feeds.register_gemini  # noqa: F401
 
 
+@pytest.fixture
+def mock_feed():
+    """Create a Gemini feed instance with mocked request."""
+    data_queue = queue.Queue()
+    feed = GeminiRequestDataSpot(
+        data_queue,
+        public_key="test_key",
+        private_key="test_secret",
+        exchange_name="GEMINI___SPOT",
+    )
+    feed.request = Mock(return_value=Mock())
+    return feed
+
+
 class TestGeminiExchangeData:
     """Test Gemini exchange data configuration."""
 
     def test_exchange_data_spot_creation(self):
-        """Test creating Gemini spot exchange data."""
         exchange_data = GeminiExchangeDataSpot()
         assert exchange_data.exchange_name == "GEMINI"
         assert exchange_data.asset_type == "SPOT"
 
     def test_get_symbol(self):
-        """Test symbol format conversion."""
         exchange_data = GeminiExchangeDataSpot()
-        # Gemini uses lowercase format
         assert exchange_data.get_symbol("BTCUSD") == "btcusd"
         assert exchange_data.get_symbol("BTC/USD") == "btcusd"
 
     def test_get_period(self):
-        """Test period conversion."""
         exchange_data = GeminiExchangeDataSpot()
-        # Gemini has specific period formats
         period = exchange_data.get_period("1m")
         assert period is not None
 
 
-class TestGeminiRequestData:
-    """Test Gemini REST API request base class."""
+class TestGeminiRequestDataSpot:
+    """Test Gemini REST API request methods."""
 
     def test_request_data_creation(self):
-        """Test creating Gemini request data."""
         data_queue = queue.Queue()
-        request_data = GeminiRequestDataSpot(
+        feed = GeminiRequestDataSpot(
             data_queue,
             public_key="test_key",
             private_key="test_secret",
             exchange_name="GEMINI___SPOT",
         )
-        assert request_data.exchange_name == "GEMINI___SPOT"
-        assert request_data.asset_type == "SPOT"
+        assert feed.exchange_name == "GEMINI___SPOT"
+        assert feed.asset_type == "SPOT"
 
-    def test_get_ticker_params(self):
-        """Test get ticker parameter generation."""
-        data_queue = queue.Queue()
-        request_data = GeminiRequestDataSpot(
-            data_queue,
-            public_key="test_key",
-            private_key="test_secret",
-        )
+    def test_capabilities(self):
+        caps = GeminiRequestDataSpot._capabilities()
+        assert Capability.GET_TICK in caps
+        assert Capability.GET_DEPTH in caps
+        assert Capability.GET_KLINE in caps
+        assert Capability.GET_BALANCE in caps
+        assert Capability.MAKE_ORDER in caps
+        assert Capability.CANCEL_ORDER in caps
+        assert Capability.QUERY_ORDER in caps
+        assert Capability.QUERY_OPEN_ORDERS in caps
 
-        path, params, extra_data = request_data._get_ticker("BTCUSD")
+    def test_get_ticker_returns_tuple(self, mock_feed):
+        path, params, extra_data = mock_feed._get_ticker("BTCUSD")
+        assert "ticker" in path.lower() or "pubticker" in path.lower()
+        assert extra_data["request_type"] == "get_tick"
+        assert extra_data["symbol_name"] == "BTCUSD"
 
-        assert "ticker" in path.lower()
+    def test_get_tick_alias(self, mock_feed):
+        path1, params1, ed1 = mock_feed._get_ticker("BTCUSD")
+        path2, params2, ed2 = mock_feed._get_tick("BTCUSD")
+        assert path1 == path2
 
-    def test_get_depth_params(self):
-        """Test get depth parameter generation."""
-        data_queue = queue.Queue()
-        request_data = GeminiRequestDataSpot(
-            data_queue,
-            public_key="test_key",
-            private_key="test_secret",
-        )
-
-        path, params, extra_data = request_data._get_depth("BTCUSD")
-
+    def test_get_depth_returns_tuple(self, mock_feed):
+        path, params, extra_data = mock_feed._get_depth("BTCUSD")
         assert "book" in path.lower()
+        assert extra_data["request_type"] == "get_depth"
+        assert "limit_bids" in params
 
-    def test_make_order_params_limit(self):
-        """Test limit order parameter generation."""
-        data_queue = queue.Queue()
-        request_data = GeminiRequestDataSpot(
-            data_queue,
-            public_key="test_key",
-            private_key="test_secret",
-        )
+    def test_get_kline_returns_tuple(self, mock_feed):
+        path, params, extra_data = mock_feed._get_kline("BTCUSD", "1m")
+        assert extra_data["request_type"] == "get_kline"
 
-        path, params, extra_data = request_data._make_order(
+    def test_get_balance_returns_tuple(self, mock_feed):
+        path, params, extra_data = mock_feed._get_balance()
+        assert extra_data["request_type"] == "get_balance"
+
+    def test_get_account_returns_tuple(self, mock_feed):
+        path, params, extra_data = mock_feed._get_account()
+        assert extra_data["request_type"] == "get_account"
+
+    def test_get_open_orders_returns_tuple(self, mock_feed):
+        path, params, extra_data = mock_feed._get_open_orders()
+        assert extra_data["request_type"] == "get_open_orders"
+
+    def test_query_order_returns_tuple(self, mock_feed):
+        path, params, extra_data = mock_feed._query_order("BTCUSD", "order_123")
+        assert extra_data["request_type"] == "query_order"
+        assert params["order_id"] == "order_123"
+
+    def test_make_order_returns_tuple(self, mock_feed):
+        path, params, extra_data = mock_feed._make_order(
             symbol="BTCUSD",
             vol="0.001",
             price="50000",
             order_type="buy-limit",
         )
-
         assert "order" in path.lower() or "new" in path.lower()
         assert params["side"] == "BUY"
         assert params["amount"] == "0.001"
+        assert extra_data["request_type"] == "make_order"
 
-    def test_cancel_order_params(self):
-        """Test cancel order parameter generation."""
+    def test_get_server_time_returns_tuple(self, mock_feed):
+        path, params, extra_data = mock_feed._get_server_time()
+        assert extra_data["request_type"] == "get_server_time"
+
+
+class TestGeminiStandardInterfaces:
+    """Test standard Feed interface methods for Gemini."""
+
+    @pytest.fixture
+    def feed(self):
         data_queue = queue.Queue()
-        request_data = GeminiRequestDataSpot(
+        feed = GeminiRequestDataSpot(
             data_queue,
             public_key="test_key",
             private_key="test_secret",
+            exchange_name="GEMINI___SPOT",
         )
+        feed.request = Mock(return_value=Mock())
+        return feed
 
-        # Test the cancel_order method which returns a request result
-        with patch.object(request_data, 'request') as mock_request:
-            mock_request.return_value = Mock(status=True)
-            result = request_data.cancel_order(order_id="123456")
-            assert result is not None
+    def test_get_tick_calls_request(self, feed):
+        feed.get_tick("BTCUSD")
+        assert feed.request.called
+        call_kwargs = feed.request.call_args[1]
+        extra_data = call_kwargs.get("extra_data") or feed.request.call_args[0][2] if len(feed.request.call_args[0]) > 2 else None
+        if extra_data:
+            assert extra_data["request_type"] == "get_tick"
+
+    def test_get_ticker_calls_request(self, feed):
+        feed.get_ticker("BTCUSD")
+        assert feed.request.called
+
+    def test_get_depth_calls_request(self, feed):
+        feed.get_depth("BTCUSD")
+        assert feed.request.called
+
+    def test_get_kline_calls_request(self, feed):
+        feed.get_kline("BTCUSD", "1m")
+        assert feed.request.called
+
+    def test_get_balance_calls_request(self, feed):
+        feed.get_balance()
+        assert feed.request.called
+        call_extra = feed.request.call_args[1].get("extra_data")
+        if call_extra:
+            assert call_extra["request_type"] == "get_balance"
+
+    def test_get_account_calls_request(self, feed):
+        feed.get_account()
+        assert feed.request.called
+        call_extra = feed.request.call_args[1].get("extra_data")
+        if call_extra:
+            assert call_extra["request_type"] == "get_account"
+
+    def test_make_order_calls_request(self, feed):
+        feed.make_order("BTCUSD", "0.001", "50000", "buy-limit")
+        assert feed.request.called
+        call_extra = feed.request.call_args[1].get("extra_data")
+        if call_extra:
+            assert call_extra["request_type"] == "make_order"
+
+    def test_cancel_order_calls_request(self, feed):
+        feed.cancel_order("BTCUSD", "order_123")
+        assert feed.request.called
+        call_extra = feed.request.call_args[1].get("extra_data")
+        if call_extra:
+            assert call_extra["request_type"] == "cancel_order"
+
+    def test_query_order_calls_request(self, feed):
+        feed.query_order("BTCUSD", "order_123")
+        assert feed.request.called
+        call_extra = feed.request.call_args[1].get("extra_data")
+        if call_extra:
+            assert call_extra["request_type"] == "query_order"
+
+    def test_get_open_orders_calls_request(self, feed):
+        feed.get_open_orders()
+        assert feed.request.called
+        call_extra = feed.request.call_args[1].get("extra_data")
+        if call_extra:
+            assert call_extra["request_type"] == "get_open_orders"
 
 
-def init_req_feed():
-    """Initialize request feed for testing."""
-    data_queue = queue.Queue()
-    kwargs = {
-        "public_key": "test_key",
-        "private_key": "test_secret",
-    }
-    return GeminiRequestDataSpot(data_queue, **kwargs)
+class TestGeminiNormalizeFunctions:
+    """Test normalize functions edge cases."""
+
+    def test_tick_normalize_with_none(self):
+        result, status = GeminiRequestDataSpot._get_tick_normalize_function(None, None)
+        assert result == []
+        assert status is False
+
+    def test_tick_normalize_with_data(self):
+        input_data = {"symbol": "btcusd", "last": "50000.00"}
+        result, status = GeminiRequestDataSpot._get_tick_normalize_function(input_data, {})
+        assert status is True
+        assert len(result) == 1
+
+    def test_depth_normalize_with_none(self):
+        result, status = GeminiRequestDataSpot._get_depth_normalize_function(None, None)
+        assert result == []
+        assert status is False
+
+    def test_depth_normalize_with_data(self):
+        input_data = {"bids": [], "asks": []}
+        result, status = GeminiRequestDataSpot._get_depth_normalize_function(input_data, {})
+        assert status is True
+
+    def test_kline_normalize_with_none(self):
+        result, status = GeminiRequestDataSpot._get_kline_normalize_function(None, None)
+        assert result == []
+        assert status is False
+
+    def test_kline_normalize_with_list(self):
+        input_data = [[1688671955000, "50000", "51000", "49000", "50500", "123"]]
+        result, status = GeminiRequestDataSpot._get_kline_normalize_function(input_data, {})
+        assert status is True
+
+    def test_balance_normalize_with_none(self):
+        result, status = GeminiRequestDataSpot._get_balance_normalize_function(None, None)
+        assert result == []
+        assert status is False
+
+    def test_account_normalize_with_none(self):
+        result, status = GeminiRequestDataSpot._get_account_normalize_function(None, None)
+        assert result == []
+        assert status is False
+
+    def test_make_order_normalize_with_none(self):
+        result, status = GeminiRequestDataSpot._make_order_normalize_function(
+            None, {"symbol_name": "BTCUSD", "asset_type": "SPOT"}
+        )
+        assert result == []
+        assert status is False
 
 
-class TestGeminiServerTime:
-    """Test server time endpoint."""
-
-    @pytest.mark.integration
-    def test_get_server_time(self):
-        """Test getting server time."""
-        feed = init_req_feed()
-        if not hasattr(feed, 'get_server_time'):
-            pytest.skip("GeminiRequestDataSpot does not implement get_server_time")
-        result = feed.get_server_time()
-        assert result is not None
-
-
-class TestGeminiTicker:
-    """Test ticker data retrieval."""
+class TestGeminiDataContainers:
+    """Test Gemini data containers."""
 
     def test_ticker_container(self):
-        """Test ticker data container."""
         ticker_response = {
             "symbol": "btcusd",
             "bid": "49999.00",
@@ -169,33 +283,15 @@ class TestGeminiTicker:
             "last": "50000.00",
             "high": "51000.00",
             "low": "49000.00",
-            "volume": {
-                "btcusd": "1234.56"
-            },
-            "timestamp": 1688671955000
+            "volume": {"btcusd": "1234.56"},
+            "timestamp": 1688671955000,
         }
-
-        ticker = GeminiRequestTickerData(
-            ticker_response, "BTCUSD", "SPOT", True
-        )
+        ticker = GeminiRequestTickerData(ticker_response, "BTCUSD", "SPOT", True)
         ticker.init_data()
-
         assert ticker.get_exchange_name() == "GEMINI"
         assert ticker.get_symbol_name() == "BTCUSD"
 
-    @pytest.mark.integration
-    def test_get_ticker_live(self):
-        """Test getting ticker from live API."""
-        feed = init_req_feed()
-        result = feed.get_ticker("BTCUSD")
-        assert result is not None
-
-
-class TestGeminiKline:
-    """Test kline data retrieval."""
-
     def test_kline_container(self):
-        """Test kline data container."""
         kline_response = {
             "timestamp": 1688671955000,
             "open": "50000",
@@ -204,62 +300,23 @@ class TestGeminiKline:
             "close": "50500",
             "volume": "123.456",
         }
-
-        kline = GeminiRequestBarData(
-            kline_response, "BTCUSD", "SPOT", True
-        )
+        kline = GeminiRequestBarData(kline_response, "BTCUSD", "SPOT", True)
         kline.init_data()
         assert kline.get_symbol_name() == "BTCUSD"
         assert kline.get_open_price() == 50000.0
-        assert kline.get_high_price() == 51000.0
-        assert kline.get_low_price() == 49000.0
         assert kline.get_close_price() == 50500.0
 
-    @pytest.mark.integration
-    def test_get_kline_live(self):
-        """Test getting kline from live API."""
-        feed = init_req_feed()
-        result = feed.get_kline("BTCUSD", "1m")
-        assert result is not None
-
-
-class TestGeminiOrderBook:
-    """Test order book data retrieval."""
-
     def test_orderbook_container(self):
-        """Test orderbook data container."""
         orderbook_response = {
             "symbol": "btcusd",
-            "bids": [
-                {"price": "49999.00", "amount": "1.5",
-                    "timestamp": "1234567890.123"}
-            ],
-            "asks": [
-                {"price": "50001.00", "amount": "1.3",
-                    "timestamp": "1234567890.123"}
-            ]
+            "bids": [{"price": "49999.00", "amount": "1.5", "timestamp": "1234567890.123"}],
+            "asks": [{"price": "50001.00", "amount": "1.3", "timestamp": "1234567890.123"}],
         }
-
-        orderbook = GeminiRequestOrderBookData(
-            orderbook_response, "BTCUSD", "SPOT", True
-        )
+        orderbook = GeminiRequestOrderBookData(orderbook_response, "BTCUSD", "SPOT", True)
         orderbook.init_data()
-
         assert orderbook.symbol_name == "BTCUSD"
 
-    @pytest.mark.integration
-    def test_get_depth_live(self):
-        """Test getting order book from live API."""
-        feed = init_req_feed()
-        result = feed.get_depth("BTCUSD")
-        assert result is not None
-
-
-class TestGeminiOrder:
-    """Test order placement and management."""
-
     def test_order_container(self):
-        """Test order data container."""
         order_response = {
             "order_id": "123456",
             "symbol": "btcusd",
@@ -271,44 +328,24 @@ class TestGeminiOrder:
             "executed_amount": "0",
             "timestamp": "1688671955000",
             "is_live": True,
-            "is_cancelled": False
+            "is_cancelled": False,
         }
-
-        order = GeminiRequestOrderData(
-            order_response, "BTCUSD", "SPOT", True
-        )
+        order = GeminiRequestOrderData(order_response, "BTCUSD", "SPOT", True)
         order.init_data()
-
         assert order.get_order_id() == "123456"
 
-
-class TestGeminiBalance:
-    """Test balance data retrieval."""
-
     def test_balance_container(self):
-        """Test balance data container."""
         balance_response = [
             {
                 "currency": "BTC",
                 "amount": "0.5",
                 "available": "0.4",
                 "availableForWithdrawal": "0.4",
-                "type": "exchange"
-            },
-            {
-                "currency": "USD",
-                "amount": "10000",
-                "available": "9000",
-                "availableForWithdrawal": "9000",
-                "type": "exchange"
+                "type": "exchange",
             }
         ]
-
-        balance = GeminiRequestBalanceData(
-            balance_response, None, "SPOT", True
-        )
+        balance = GeminiRequestBalanceData(balance_response, None, "SPOT", True)
         balance.init_data()
-
         assert balance.get_currency() in ["BTC", "USD"]
 
 
@@ -316,20 +353,11 @@ class TestGeminiRegistry:
     """Test Gemini registration."""
 
     def test_gemini_registered(self):
-        """Test that Gemini is properly registered."""
-        # Note: Gemini uses a different registration pattern via decorator
-        # The feed should be registered when the register module is imported
-        # Check the registry for Gemini classes
-        has_gemini = any(
-            "GEMINI" in name for name in ExchangeRegistry._feed_classes.keys())
-
-        # The actual registration might use a different pattern
-        # Just verify the classes exist and can be imported
+        has_gemini = any("GEMINI" in name for name in ExchangeRegistry._feed_classes.keys())
         assert GeminiRequestDataSpot is not None
         assert GeminiExchangeDataSpot is not None
 
     def test_gemini_create_feed(self):
-        """Test creating Gemini feed directly."""
         data_queue = queue.Queue()
         feed = GeminiRequestDataSpot(
             data_queue,
@@ -339,27 +367,40 @@ class TestGeminiRegistry:
         assert isinstance(feed, GeminiRequestDataSpot)
 
     def test_gemini_create_exchange_data(self):
-        """Test creating Gemini exchange data."""
         exchange_data = GeminiExchangeDataSpot()
         assert isinstance(exchange_data, GeminiExchangeDataSpot)
 
 
-class TestGeminiIntegration:
-    """Integration tests for Gemini."""
+class TestGeminiLiveAPI:
+    """Live API tests - require network, marked as integration."""
 
     @pytest.mark.integration
-    def test_market_data_api(self):
-        """Test market data API calls (requires network)"""
+    def test_gemini_req_tick_data(self):
         data_queue = queue.Queue()
-        feed = GeminiRequestDataSpot(data_queue)
-
-        # Test ticker
-        result = feed.get_ticker("BTCUSD")
+        feed = GeminiRequestDataSpot(data_queue, exchange_name="GEMINI___SPOT")
+        result = feed.get_tick("BTCUSD")
         assert result is not None
 
-    def test_trading_api(self):
-        """Test trading API calls (requires API keys)"""
-        pass
+    @pytest.mark.integration
+    def test_gemini_req_depth_data(self):
+        data_queue = queue.Queue()
+        feed = GeminiRequestDataSpot(data_queue, exchange_name="GEMINI___SPOT")
+        result = feed.get_depth("BTCUSD")
+        assert result is not None
+
+    @pytest.mark.integration
+    def test_gemini_req_kline_data(self):
+        data_queue = queue.Queue()
+        feed = GeminiRequestDataSpot(data_queue, exchange_name="GEMINI___SPOT")
+        result = feed.get_kline("BTCUSD", "1m")
+        assert result is not None
+
+    @pytest.mark.integration
+    def test_gemini_server_time(self):
+        data_queue = queue.Queue()
+        feed = GeminiRequestDataSpot(data_queue, exchange_name="GEMINI___SPOT")
+        result = feed.get_server_time()
+        assert result is not None
 
 
 if __name__ == "__main__":

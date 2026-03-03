@@ -1,86 +1,24 @@
 """
-HitBTC Feed Registration
-
-This module registers HitBTC exchange feeds with the bt_api_py framework.
-Provides registration for both spot trading feeds.
-
-Usage:
-    from bt_api_py.feeds.register_hitbtc import register_hitbtc
-
-    # Register HitBTC spot trading
-    register_hitbtc()
+HitBTC 交易所注册模块
+将 HitBTC 的 feed 类、交易所配置类注册到全局 ExchangeRegistry
+导入此模块即可完成注册
 """
 
-from bt_api_py.containers.exchanges.hitbtc_exchange_data import HitBtcSpotExchangeData
-from bt_api_py.feeds.registry import register
+from bt_api_py.balance_utils import simple_balance_handler as _hitbtc_balance_handler
+from bt_api_py.containers.exchanges.hitbtc_exchange_data import (
+    HitBtcExchangeDataSpot,
+)
 from bt_api_py.feeds.live_hitbtc.spot import HitBtcSpotRequestData
-
-
-@register("HITBTC_SPOT")
-class HitBtcSpotFeedRegistration:
-    """HitBTC Spot Trading Feed Registration"""
-
-    @classmethod
-    def get_feed_class(cls):
-        """Return the HitBTC Spot feed class"""
-        return HitBtcSpotRequestData
-
-    @classmethod
-    def get_exchange_data_class(cls):
-        """Return the HitBTC Spot exchange data class"""
-        return HitBtcSpotExchangeData
-
-    @classmethod
-    def get_asset_type(cls):
-        """Return the asset type"""
-        return "SPOT"
-
-
-# For backward compatibility
-@register("HITBTC")
-class HitBtcFeedRegistration:
-    """Legacy HitBTC Feed Registration (for backward compatibility)"""
-
-    @classmethod
-    def get_feed_class(cls):
-        """Return the HitBTC feed class"""
-        return HitBtcSpotRequestData
-
-    @classmethod
-    def get_exchange_data_class(cls):
-        """Return the HitBTC exchange data class"""
-        return HitBtcSpotExchangeData
-
-    @classmethod
-    def get_asset_type(cls):
-        """Return the asset type"""
-        return "SPOT"
+from bt_api_py.registry import ExchangeRegistry
 
 
 def register_hitbtc():
-    """
-    Register HitBTC feeds with the framework.
-
-    This function registers all available HitBTC feed implementations:
-    - HitBTC Spot Trading
-
-    Returns:
-        None
-    """
-    # Import and register all HitBTC feeds
-    from bt_api_py.feeds.registry import _registry
-
-    # Register HitBTC Spot
-    _registry["HITBTC_SPOT"] = HitBtcSpotFeedRegistration
-
-    # Register legacy name
-    _registry["HITBTC"] = HitBtcFeedRegistration
-
-    print("HitBTC feeds registered successfully!")
-    print("Available feeds:")
-    print("- HITBTC_SPOT: HitBTC Spot Trading")
-    print("- HITBTC: Legacy HitBTC Spot Trading (backward compatibility)")
+    """注册 HitBTC 到全局 ExchangeRegistry"""
+    # Spot
+    ExchangeRegistry.register_feed("HITBTC___SPOT", HitBtcSpotRequestData)
+    ExchangeRegistry.register_exchange_data("HITBTC___SPOT", HitBtcExchangeDataSpot)
+    ExchangeRegistry.register_balance_handler("HITBTC___SPOT", _hitbtc_balance_handler)
 
 
-if __name__ == "__main__":
-    register_hitbtc()
+# 模块导入时自动注册
+register_hitbtc()

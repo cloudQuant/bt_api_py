@@ -7,8 +7,10 @@ import hmac
 import hashlib
 
 from bt_api_py.containers.exchanges.coincheck_exchange_data import CoincheckExchangeDataSpot
+from bt_api_py.containers.requestdatas.request_data import RequestData
 from bt_api_py.feeds.capability import Capability
 from bt_api_py.feeds.feed import Feed
+from bt_api_py.feeds.http_client import HttpClient
 from bt_api_py.functions.log_message import SpdLogManager
 
 
@@ -20,7 +22,12 @@ class CoincheckRequestData(Feed):
         return {
             Capability.GET_TICK,
             Capability.GET_DEPTH,
+            Capability.GET_KLINE,
             Capability.GET_EXCHANGE_INFO,
+            Capability.GET_BALANCE,
+            Capability.GET_ACCOUNT,
+            Capability.MAKE_ORDER,
+            Capability.CANCEL_ORDER,
         }
 
     def __init__(self, data_queue, **kwargs):
@@ -32,6 +39,10 @@ class CoincheckRequestData(Feed):
         self.request_logger = SpdLogManager(
             "./logs/coincheck_feed.log", "request", 0, 0, False
         ).create_logger()
+        self.async_logger = SpdLogManager(
+            "./logs/coincheck_feed.log", "async_request", 0, 0, False
+        ).create_logger()
+        self._http_client = HttpClient(venue=self.exchange_name, timeout=10)
 
     def _generate_signature(self, nonce, url, body=""):
         """Generate HMAC SHA256 signature for Coincheck API."""
@@ -80,10 +91,7 @@ class CoincheckRequestData(Feed):
         headers = self._get_headers(method, request_path, params, body)
 
         try:
-            from bt_api_py.feeds.http_client import HttpClient
-
-            http_client = HttpClient(venue=self.exchange_name, timeout=timeout)
-            response = http_client.request(
+            response = self._http_client.request(
                 method=method,
                 url=self._params.rest_url + request_path,
                 headers=headers,
@@ -94,13 +102,57 @@ class CoincheckRequestData(Feed):
             self.request_logger.error(f"Request failed: {e}")
             raise
 
+    async def async_request(self, path, params=None, body=None, extra_data=None, timeout=5):
+        """Async HTTP request for Coincheck API."""
+        method = path.split()[0] if " " in path else "GET"
+        request_path = "/" + path.split()[1] if " " in path else path
+
+        headers = self._get_headers(method, request_path, params, body)
+
+        try:
+            response = await self._http_client.async_request(
+                method=method,
+                url=self._params.rest_url + request_path,
+                headers=headers,
+                params=params,
+            )
+            return self._process_response(response, extra_data)
+        except Exception as e:
+            self.async_logger.error(f"Async request failed: {e}")
+            raise
+
+    def async_callback(self, future):
+        """Callback for async requests, push result to data_queue."""
+        try:
+            result = future.result()
+            if result is not None:
+                self.push_data_to_queue(result)
+        except Exception as e:
+            self.async_logger.error(f"Async callback error: {e}")
+
     def _process_response(self, response, extra_data=None):
         """Process API response."""
-        from bt_api_py.containers.requestdatas.request_data import RequestData
-        # Determine if the request was successful
-        # A successful response should be a non-empty dict
+        if extra_data is None:
+            extra_data = {}
         status = response is not None and (isinstance(response, dict) and len(response) > 0)
         return RequestData(response, extra_data, status=status)
+
+    def _get_server_time(self, extra_data=None, **kwargs):
+        """Prepare server time request. Returns (path, params, extra_data)."""
+        if extra_data is None:
+            extra_data = {}
+        extra_data.update({
+            "exchange_name": self.exchange_name,
+            "symbol_name": "",
+            "asset_type": self.asset_type,
+            "request_type": "get_server_time",
+        })
+        return "GET /api/ticker", {}, extra_data
+
+    def get_server_time(self, extra_data=None, **kwargs):
+        """Get server time. Returns RequestData."""
+        path, params, extra_data = self._get_server_time(extra_data, **kwargs)
+        return self.request(path, params=params, extra_data=extra_data)
 
     def push_data_to_queue(self, data):
         """Push data to the queue."""

@@ -1,16 +1,21 @@
 """
 Independent Reserve REST API request base class.
 
-Independent Reserve is an Australian cryptocurrency exchange.
-Authentication uses HMAC SHA256 signature.
-Documentation: https://www.independentreserve.com/API
+API doc: https://www.independentreserve.com/API
+Auth: HMAC-SHA256 signature in POST JSON body (apiKey, nonce, signature)
+Public: GET /Public/...  Private: POST /Private/...
+Symbol: primaryCurrencyCode + secondaryCurrencyCode (e.g. Xbt, Aud)
 """
 
 import hmac
 import hashlib
 import time
+from urllib.parse import urlencode
 
-from bt_api_py.containers.exchanges.independent_reserve_exchange_data import IndependentReserveExchangeDataSpot
+from bt_api_py.containers.exchanges.independent_reserve_exchange_data import (
+    IndependentReserveExchangeDataSpot,
+)
+from bt_api_py.containers.requestdatas.request_data import RequestData
 from bt_api_py.feeds.capability import Capability
 from bt_api_py.feeds.feed import Feed
 from bt_api_py.functions.log_message import SpdLogManager
@@ -25,139 +30,356 @@ class IndependentReserveRequestData(Feed):
             Capability.GET_TICK,
             Capability.GET_DEPTH,
             Capability.GET_EXCHANGE_INFO,
+            Capability.GET_DEALS,
+            Capability.MAKE_ORDER,
+            Capability.CANCEL_ORDER,
+            Capability.GET_BALANCE,
+            Capability.GET_ACCOUNT,
+            Capability.QUERY_OPEN_ORDERS,
         }
 
     def __init__(self, data_queue, **kwargs):
         super().__init__(data_queue, **kwargs)
         self.data_queue = data_queue
-        self.exchange_name = kwargs.get("exchange_name", "INDEPENDENT_RESERVE___SPOT")
+        self._api_key = kwargs.get("public_key") or kwargs.get("api_key") or ""
+        self._api_secret = kwargs.get("private_key") or kwargs.get("api_secret") or ""
         self.asset_type = kwargs.get("asset_type", "SPOT")
+        self.exchange_name = kwargs.get("exchange_name", "INDEPENDENT_RESERVE___SPOT")
         self._params = IndependentReserveExchangeDataSpot()
         self.request_logger = SpdLogManager(
             "./logs/independent_reserve_feed.log", "request", 0, 0, False
         ).create_logger()
+        self.async_logger = SpdLogManager(
+            "./logs/independent_reserve_feed.log", "async_request", 0, 0, False
+        ).create_logger()
+
+    @property
+    def api_key(self):
+        return self._api_key
+
+    # ── auth helpers ────────────────────────────────────────────
 
     def _generate_signature(self, url, nonce, params=None):
-        """Generate HMAC SHA256 signature for Independent Reserve API.
-
-        Independent Reserve signature format:
-        url,apiKey={key},nonce={nonce},param1=val1,param2=val2
-
-        Args:
-            url: Full URL of the endpoint
-            nonce: Nonce value (timestamp in milliseconds)
-            params: Dictionary of parameters to include in signature
-
-        Returns:
-            Hex signature string (uppercase)
-        """
-        secret = self._params.api_secret if hasattr(self._params, "api_secret") else None
-        if not secret:
+        """HMAC-SHA256: message = url,apiKey={key},nonce={nonce},k=v,..."""
+        if not self._api_secret:
             return ""
-
-        api_key = self._params.api_key if hasattr(self._params, "api_key") else ""
-
-        # Build signature string: url,apiKey={key},nonce={nonce},params
-        auth_parts = [url, f"apiKey={api_key}", f"nonce={nonce}"]
-
-        # Add parameters to signature string
+        auth_parts = [url, f"apiKey={self._api_key}", f"nonce={nonce}"]
         if params:
-            for key, value in params.items():
-                auth_parts.append(f"{key}={value}")
-
+            for k, v in params.items():
+                if k not in ("apiKey", "nonce", "signature"):
+                    auth_parts.append(f"{k}={v}")
         message = ",".join(auth_parts)
-
-        # Generate HMAC SHA256 signature
-        signature = hmac.new(
-            secret.encode("utf-8"),
+        return hmac.new(
+            self._api_secret.encode("utf-8"),
             message.encode("utf-8"),
-            hashlib.sha256
+            hashlib.sha256,
         ).hexdigest().upper()
 
-        return signature
-
-    def _get_headers(self, method="GET", request_path="", params=None, body=""):
-        """Generate request headers for Independent Reserve API.
-
-        For public endpoints, no special headers needed.
-        For private endpoints, signature is included in the JSON body.
-        """
-        headers = {
+    def _get_headers(self):
+        return {
             "Content-Type": "application/json",
             "User-Agent": "bt_api_py/1.0",
         }
 
-        return headers
+    def _sign_body(self, url, body):
+        """Add apiKey, nonce, signature to *body* dict for private endpoints."""
+        nonce = int(time.time() * 1000)
+        body["apiKey"] = self._api_key
+        body["nonce"] = nonce
+        sig = self._generate_signature(url, nonce, body)
+        if sig:
+            body["signature"] = sig
+        return body
 
-    def request(self, path, params=None, body=None, extra_data=None, timeout=10, is_private=False):
-        """HTTP request for Independent Reserve API.
-
-        Args:
-            path: REST path (e.g., "GET /Public/GetMarketSummary")
-            params: Query parameters for GET requests
-            body: Request body for POST requests
-            extra_data: Extra data to attach to response
-            timeout: Request timeout
-            is_private: Whether this is a private API request
-
-        Returns:
-            RequestData with parsed response
-        """
-        method = path.split()[0] if " " in path else "GET"
-        raw_path = path.split()[1] if " " in path else path
-        request_path = raw_path if raw_path.startswith("/") else "/" + raw_path
-
-        headers = self._get_headers(method, request_path, params, body)
-
-        # For private endpoints, add signature to body
-        if is_private and method == "POST":
-            if body is None:
-                body = {}
-
-            url = self._params.rest_url + request_path
-            nonce = int(time.time() * 1000)
-
-            # Add API key and nonce to body
-            if hasattr(self._params, "api_key") and self._params.api_key:
-                body["apiKey"] = self._params.api_key
-            body["nonce"] = nonce
-
-            # Generate and add signature
-            signature = self._generate_signature(url, nonce, body)
-            if signature:
-                body["signature"] = signature
-
-        try:
-            from bt_api_py.feeds.http_client import HttpClient
-
-            http_client = HttpClient(venue=self.exchange_name, timeout=timeout)
-            response = http_client.request(
-                method=method,
-                url=self._params.rest_url + request_path,
-                headers=headers,
-                json_data=body if method == "POST" else None,
-                params=params if method == "GET" else None,
-            )
-            return self._process_response(response, extra_data)
-        except Exception as e:
-            self.request_logger.error(f"Request failed: {e}")
-            raise
-
-    def _process_response(self, response, extra_data=None):
-        """Process API response."""
-        from bt_api_py.containers.requestdatas.request_data import RequestData
-        return RequestData(response, extra_data)
+    # ── core request helpers ────────────────────────────────────
 
     def push_data_to_queue(self, data):
-        """Push data to the queue."""
         if self.data_queue is not None:
             self.data_queue.put(data)
 
-    def connect(self):
-        pass
+    def request(self, path, params=None, body=None, extra_data=None, timeout=10):
+        """Synchronous HTTP request."""
+        if params is None:
+            params = {}
+        method, endpoint = path.split(" ", 1)
+        headers = self._get_headers()
 
-    def disconnect(self):
-        pass
+        if method == "GET":
+            qs = urlencode(params) if params else ""
+            url = f"{self._params.rest_url}{endpoint}{'?' + qs if qs else ''}"
+            json_body = None
+        else:
+            url = f"{self._params.rest_url}{endpoint}"
+            json_body = body if body is not None else {}
+            if self._api_key:
+                json_body = self._sign_body(url, dict(json_body))
 
-    def is_connected(self):
-        return True
+        res = self.http_request(method, url, headers, json_body, timeout)
+        self.request_logger.info(f"{method} {url} -> {type(res)}")
+        return RequestData(res, extra_data)
+
+    async def async_request(self, path, params=None, body=None, extra_data=None, timeout=5):
+        """Async HTTP request."""
+        if params is None:
+            params = {}
+        method, endpoint = path.split(" ", 1)
+        headers = self._get_headers()
+
+        if method == "GET":
+            qs = urlencode(params) if params else ""
+            url = f"{self._params.rest_url}{endpoint}{'?' + qs if qs else ''}"
+            json_body = None
+        else:
+            url = f"{self._params.rest_url}{endpoint}"
+            json_body = body if body is not None else {}
+            if self._api_key:
+                json_body = self._sign_body(url, dict(json_body))
+
+        res = await self.async_http_request(method, url, headers, json_body, timeout)
+        self.async_logger.info(f"async {method} {url} -> {type(res)}")
+        return RequestData(res, extra_data)
+
+    def async_callback(self, request_data):
+        if request_data is not None:
+            self.push_data_to_queue(request_data)
+
+    # ── _get_xxx internal methods ───────────────────────────────
+
+    def _get_tick(self, symbol, extra_data=None, **kwargs):
+        path = self._params.get_rest_path("get_tick")
+        primary, secondary = self._params.get_symbol(symbol)
+        params = {"primaryCurrencyCode": primary, "secondaryCurrencyCode": secondary}
+        extra_data = extra_data or {}
+        extra_data.update({
+            "request_type": "get_tick",
+            "symbol_name": symbol,
+            "asset_type": self.asset_type,
+            "exchange_name": self.exchange_name,
+            "normalize_function": self._get_tick_normalize_function,
+        })
+        return path, params, extra_data
+
+    def _get_depth(self, symbol, extra_data=None, **kwargs):
+        path = self._params.get_rest_path("get_depth")
+        primary, secondary = self._params.get_symbol(symbol)
+        params = {"primaryCurrencyCode": primary, "secondaryCurrencyCode": secondary}
+        extra_data = extra_data or {}
+        extra_data.update({
+            "request_type": "get_depth",
+            "symbol_name": symbol,
+            "asset_type": self.asset_type,
+            "exchange_name": self.exchange_name,
+            "normalize_function": self._get_depth_normalize_function,
+        })
+        return path, params, extra_data
+
+    def _get_exchange_info(self, extra_data=None, **kwargs):
+        path = self._params.get_rest_path("get_exchange_info")
+        params = {}
+        extra_data = extra_data or {}
+        extra_data.update({
+            "request_type": "get_exchange_info",
+            "symbol_name": None,
+            "asset_type": self.asset_type,
+            "exchange_name": self.exchange_name,
+            "normalize_function": self._get_exchange_info_normalize_function,
+        })
+        return path, params, extra_data
+
+    def _get_deals(self, symbol, extra_data=None, **kwargs):
+        path = self._params.get_rest_path("get_deals")
+        primary, secondary = self._params.get_symbol(symbol)
+        params = {
+            "primaryCurrencyCode": primary,
+            "secondaryCurrencyCode": secondary,
+            "numberOfRecentTradesToRetrieve": kwargs.get("count", 50),
+        }
+        extra_data = extra_data or {}
+        extra_data.update({
+            "request_type": "get_deals",
+            "symbol_name": symbol,
+            "asset_type": self.asset_type,
+            "exchange_name": self.exchange_name,
+            "normalize_function": self._get_deals_normalize_function,
+        })
+        return path, params, extra_data
+
+    def _make_order(self, symbol, side, order_type, amount, price=None, extra_data=None, **kwargs):
+        if "market" in order_type.lower():
+            path = self._params.get_rest_path("make_order_market")
+        else:
+            path = self._params.get_rest_path("make_order_limit")
+        primary, secondary = self._params.get_symbol(symbol)
+        ir_type = "LimitBid" if side.lower() == "buy" else "LimitOffer"
+        if "market" in order_type.lower():
+            ir_type = "MarketBid" if side.lower() == "buy" else "MarketOffer"
+        body = {
+            "primaryCurrencyCode": primary,
+            "secondaryCurrencyCode": secondary,
+            "orderType": ir_type,
+            "volume": amount,
+        }
+        if price is not None and "limit" in order_type.lower():
+            body["price"] = price
+        extra_data = extra_data or {}
+        extra_data.update({
+            "request_type": "make_order",
+            "symbol_name": symbol,
+            "asset_type": self.asset_type,
+            "exchange_name": self.exchange_name,
+            "normalize_function": self._make_order_normalize_function,
+        })
+        return path, body, extra_data
+
+    def _cancel_order(self, order_id, extra_data=None, **kwargs):
+        path = self._params.get_rest_path("cancel_order")
+        body = {"orderGuid": order_id}
+        extra_data = extra_data or {}
+        extra_data.update({
+            "request_type": "cancel_order",
+            "symbol_name": None,
+            "asset_type": self.asset_type,
+            "exchange_name": self.exchange_name,
+            "normalize_function": self._cancel_order_normalize_function,
+        })
+        return path, body, extra_data
+
+    def _get_open_orders(self, symbol=None, extra_data=None, **kwargs):
+        path = self._params.get_rest_path("get_open_orders")
+        body = {}
+        if symbol:
+            primary, secondary = self._params.get_symbol(symbol)
+            body["primaryCurrencyCode"] = primary
+            body["secondaryCurrencyCode"] = secondary
+        extra_data = extra_data or {}
+        extra_data.update({
+            "request_type": "get_open_orders",
+            "symbol_name": symbol,
+            "asset_type": self.asset_type,
+            "exchange_name": self.exchange_name,
+            "normalize_function": self._get_open_orders_normalize_function,
+        })
+        return path, body, extra_data
+
+    def _get_balance(self, extra_data=None, **kwargs):
+        path = self._params.get_rest_path("get_balance")
+        body = {}
+        extra_data = extra_data or {}
+        extra_data.update({
+            "request_type": "get_balance",
+            "symbol_name": None,
+            "asset_type": self.asset_type,
+            "exchange_name": self.exchange_name,
+            "normalize_function": self._get_balance_normalize_function,
+        })
+        return path, body, extra_data
+
+    def _get_account(self, extra_data=None, **kwargs):
+        path = self._params.get_rest_path("get_account")
+        body = {}
+        extra_data = extra_data or {}
+        extra_data.update({
+            "request_type": "get_account",
+            "symbol_name": None,
+            "asset_type": self.asset_type,
+            "exchange_name": self.exchange_name,
+            "normalize_function": self._get_account_normalize_function,
+        })
+        return path, body, extra_data
+
+    # ── normalize helpers ───────────────────────────────────────
+    # IR returns direct JSON; errors have "Message" key
+
+    @staticmethod
+    def _is_error(input_data):
+        if input_data is None:
+            return True
+        if isinstance(input_data, dict) and "Message" in input_data:
+            return True
+        return False
+
+    @staticmethod
+    def _get_tick_normalize_function(input_data, extra_data):
+        if IndependentReserveRequestData._is_error(input_data):
+            return [], False
+        if isinstance(input_data, dict) and input_data:
+            return [input_data], True
+        return [], False
+
+    @staticmethod
+    def _get_depth_normalize_function(input_data, extra_data):
+        if IndependentReserveRequestData._is_error(input_data):
+            return [], False
+        if isinstance(input_data, dict) and input_data:
+            return [input_data], True
+        return [], False
+
+    @staticmethod
+    def _get_exchange_info_normalize_function(input_data, extra_data):
+        if IndependentReserveRequestData._is_error(input_data):
+            return [], False
+        if isinstance(input_data, list):
+            return [input_data], True
+        if isinstance(input_data, dict) and input_data:
+            return [input_data], True
+        return [], False
+
+    @staticmethod
+    def _get_deals_normalize_function(input_data, extra_data):
+        if IndependentReserveRequestData._is_error(input_data):
+            return [], False
+        if isinstance(input_data, dict) and "Trades" in input_data:
+            return input_data["Trades"], True
+        if isinstance(input_data, list):
+            return input_data, True
+        if isinstance(input_data, dict) and input_data:
+            return [input_data], True
+        return [], False
+
+    @staticmethod
+    def _make_order_normalize_function(input_data, extra_data):
+        if IndependentReserveRequestData._is_error(input_data):
+            return [], False
+        if isinstance(input_data, dict) and input_data:
+            return [input_data], True
+        return [], False
+
+    @staticmethod
+    def _cancel_order_normalize_function(input_data, extra_data):
+        if IndependentReserveRequestData._is_error(input_data):
+            return [], False
+        if isinstance(input_data, dict) and input_data:
+            return [input_data], True
+        return [{}], True
+
+    @staticmethod
+    def _get_open_orders_normalize_function(input_data, extra_data):
+        if IndependentReserveRequestData._is_error(input_data):
+            return [], False
+        if isinstance(input_data, list):
+            return input_data, True
+        if isinstance(input_data, dict) and "Data" in input_data:
+            return input_data["Data"], True
+        if isinstance(input_data, dict) and input_data:
+            return [input_data], True
+        return [], False
+
+    @staticmethod
+    def _get_balance_normalize_function(input_data, extra_data):
+        if IndependentReserveRequestData._is_error(input_data):
+            return [], False
+        if isinstance(input_data, list):
+            return input_data, True
+        if isinstance(input_data, dict) and input_data:
+            return [input_data], True
+        return [], False
+
+    @staticmethod
+    def _get_account_normalize_function(input_data, extra_data):
+        if IndependentReserveRequestData._is_error(input_data):
+            return [], False
+        if isinstance(input_data, list):
+            return input_data, True
+        if isinstance(input_data, dict) and input_data:
+            return [input_data], True
+        return [], False

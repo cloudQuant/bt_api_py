@@ -29,7 +29,7 @@ class HyperliquidTickerData(TickerData):
     def init_data(self):
         """初始化ticker数据"""
         if self.has_been_init_data:
-            return
+            return self
 
         try:
             if not self.has_been_json_encoded:
@@ -64,6 +64,7 @@ class HyperliquidTickerData(TickerData):
 
         except Exception as e:
             print(f"Error initializing Hyperliquid ticker data: {e}")
+        return self
 
     def get_all_data(self):
         """获取所有ticker数据"""

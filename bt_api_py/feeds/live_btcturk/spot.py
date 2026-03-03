@@ -2,6 +2,8 @@
 BTCTurk Spot Feed implementation.
 """
 
+import time as _time
+
 from bt_api_py.containers.exchanges.btcturk_exchange_data import BTCTurkExchangeDataSpot
 from bt_api_py.feeds.capability import Capability
 from bt_api_py.feeds.live_btcturk.request_base import BTCTurkRequestData
@@ -17,37 +19,38 @@ class BTCTurkRequestDataSpot(BTCTurkRequestData):
             Capability.GET_DEPTH,
             Capability.GET_KLINE,
             Capability.GET_EXCHANGE_INFO,
+            Capability.GET_BALANCE,
+            Capability.GET_ACCOUNT,
+            Capability.MAKE_ORDER,
+            Capability.CANCEL_ORDER,
         }
 
     def __init__(self, data_queue, **kwargs):
         super().__init__(data_queue, **kwargs)
         self.exchange_name = kwargs.get("exchange_name", "BTCTURK___SPOT")
 
+    # ==================== Market Data ====================
+
     def _get_tick(self, symbol, extra_data=None, **kwargs):
-        """Get ticker data.
-
-        BTCTurk API endpoint: /api/v2/ticker?pairSymbol={symbol}
-
-        Returns:
-            tuple: (path, params, extra_data)
-        """
-        request_type = "get_tick"
+        """Get ticker data. Returns (path, params, extra_data)."""
         path = "GET /api/v2/ticker"
-        extra_data = extra_data or {}
+        if extra_data is None:
+            extra_data = {}
         extra_data.update({
-            "request_type": request_type,
+            "request_type": "get_tick",
             "symbol_name": symbol,
+            "asset_type": self.asset_type,
+            "exchange_name": self.exchange_name,
             "normalize_function": self._get_tick_normalize_function,
         })
-        return path, {"pairSymbol": symbol}, extra_data
+        params = {"pairSymbol": symbol}
+        return path, params, extra_data
 
     @staticmethod
     def _get_tick_normalize_function(input_data, extra_data):
-        """Normalize BTCTurk ticker response."""
         if not input_data:
             return [], False
         data = input_data.get("data", [])
-        # BTCTurk returns an array of tickers or single ticker
         if isinstance(data, list) and len(data) > 0:
             return [data[0]], True
         return [data], data is not None
@@ -55,27 +58,34 @@ class BTCTurkRequestDataSpot(BTCTurkRequestData):
     def get_tick(self, symbol, extra_data=None, **kwargs):
         """Get symbol ticker."""
         path, params, extra_data = self._get_tick(symbol, extra_data, **kwargs)
-        return self.request(path, params, extra_data=extra_data)
+        return self.request(path, params=params, extra_data=extra_data)
+
+    def async_get_tick(self, symbol, extra_data=None, **kwargs):
+        """Async get ticker."""
+        path, params, extra_data = self._get_tick(symbol, extra_data, **kwargs)
+        self.submit(
+            self.async_request(path, params=params, extra_data=extra_data),
+            callback=self.async_callback,
+        )
 
     def _get_depth(self, symbol, count=20, extra_data=None, **kwargs):
-        """Get order book depth.
-
-        BTCTurk API endpoint: /api/v2/orderbook?pairSymbol={symbol}&limit={count}
-        """
-        request_type = "get_depth"
+        """Get order book depth. Returns (path, params, extra_data)."""
         path = "GET /api/v2/orderbook"
-        extra_data = extra_data or {}
+        if extra_data is None:
+            extra_data = {}
         extra_data.update({
-            "request_type": request_type,
+            "request_type": "get_depth",
             "symbol_name": symbol,
+            "asset_type": self.asset_type,
+            "exchange_name": self.exchange_name,
             "normalize_function": self._get_depth_normalize_function,
         })
-        limit = min(count, 1000)  # BTCTurk max limit is 1000
-        return self.request(path, params={"pairSymbol": symbol, "limit": limit}, extra_data=extra_data)
+        limit = min(count, 1000)
+        params = {"pairSymbol": symbol, "limit": limit}
+        return path, params, extra_data
 
     @staticmethod
     def _get_depth_normalize_function(input_data, extra_data):
-        """Normalize BTCTurk orderbook response."""
         if not input_data:
             return [], False
         depth = input_data.get("data", {})
@@ -83,40 +93,41 @@ class BTCTurkRequestDataSpot(BTCTurkRequestData):
 
     def get_depth(self, symbol, count=20, extra_data=None, **kwargs):
         """Get order book."""
-        return self._get_depth(symbol, count, extra_data, **kwargs)
+        path, params, extra_data = self._get_depth(symbol, count, extra_data, **kwargs)
+        return self.request(path, params=params, extra_data=extra_data)
+
+    def async_get_depth(self, symbol, count=20, extra_data=None, **kwargs):
+        """Async get depth."""
+        path, params, extra_data = self._get_depth(symbol, count, extra_data, **kwargs)
+        self.submit(
+            self.async_request(path, params=params, extra_data=extra_data),
+            callback=self.async_callback,
+        )
 
     def _get_kline(self, symbol, period, count=20, extra_data=None, **kwargs):
-        """Get kline/candlestick data.
+        """Get kline/candlestick data. Returns (path, params, extra_data).
 
-        BTCTurk API endpoint: /api/v2/ohlcs?pair={symbol}&from={timestamp}&to={timestamp}
-
-        Note: BTCTurk OHLC requires from/to timestamps, not count.
-        We'll calculate from based on period and count.
+        BTCTurk OHLC requires from/to timestamps.
+        kline_periods maps period names to minutes (e.g. '1h' -> '60').
         """
-        import time as t
-        request_type = "get_kline"
         path = "GET /api/v2/ohlcs"
-
-        # Convert period to minutes
-        period_minutes = self._params.get_period(period)
-        to_timestamp = int(t.time())
-        from_timestamp = to_timestamp - (period_minutes * 60 * count)
-
-        extra_data = extra_data or {}
+        if extra_data is None:
+            extra_data = {}
         extra_data.update({
-            "request_type": request_type,
+            "request_type": "get_kline",
             "symbol_name": symbol,
+            "asset_type": self.asset_type,
+            "exchange_name": self.exchange_name,
             "normalize_function": self._get_kline_normalize_function,
         })
-        return self.request(path, params={
-            "pair": symbol,
-            "from": from_timestamp,
-            "to": to_timestamp,
-        }, extra_data=extra_data)
+        period_minutes = int(self._params.kline_periods.get(period, period))
+        to_timestamp = int(_time.time())
+        from_timestamp = to_timestamp - (period_minutes * 60 * count)
+        params = {"pair": symbol, "from": from_timestamp, "to": to_timestamp}
+        return path, params, extra_data
 
     @staticmethod
     def _get_kline_normalize_function(input_data, extra_data):
-        """Normalize BTCTurk kline response."""
         if not input_data:
             return [], False
         klines = input_data.get("data", [])
@@ -124,25 +135,33 @@ class BTCTurkRequestDataSpot(BTCTurkRequestData):
 
     def get_kline(self, symbol, period, count=20, extra_data=None, **kwargs):
         """Get kline data."""
-        return self._get_kline(symbol, period, count, extra_data, **kwargs)
+        path, params, extra_data = self._get_kline(symbol, period, count, extra_data, **kwargs)
+        return self.request(path, params=params, extra_data=extra_data)
+
+    def async_get_kline(self, symbol, period, count=20, extra_data=None, **kwargs):
+        """Async get kline."""
+        path, params, extra_data = self._get_kline(symbol, period, count, extra_data, **kwargs)
+        self.submit(
+            self.async_request(path, params=params, extra_data=extra_data),
+            callback=self.async_callback,
+        )
 
     def _get_exchange_info(self, extra_data=None, **kwargs):
-        """Get exchange trading rules.
-
-        BTCTurk API endpoint: /api/v2/server/exchangeinfo
-        """
-        request_type = "get_exchange_info"
+        """Get exchange configuration. Returns (path, params, extra_data)."""
         path = "GET /api/v2/server/exchangeinfo"
-        extra_data = extra_data or {}
+        if extra_data is None:
+            extra_data = {}
         extra_data.update({
-            "request_type": request_type,
+            "request_type": "get_exchange_info",
+            "symbol_name": "",
+            "asset_type": self.asset_type,
+            "exchange_name": self.exchange_name,
             "normalize_function": self._get_exchange_info_normalize_function,
         })
-        return self.request(path, params={}, extra_data=extra_data)
+        return path, {}, extra_data
 
     @staticmethod
     def _get_exchange_info_normalize_function(input_data, extra_data):
-        """Normalize BTCTurk exchange info response."""
         if not input_data:
             return [], False
         data = input_data.get("data", {})
@@ -151,26 +170,26 @@ class BTCTurkRequestDataSpot(BTCTurkRequestData):
 
     def get_exchange_info(self, extra_data=None, **kwargs):
         """Get exchange information."""
-        return self._get_exchange_info(extra_data, **kwargs)
+        path, params, extra_data = self._get_exchange_info(extra_data, **kwargs)
+        return self.request(path, params=params, extra_data=extra_data)
 
     def _get_trades(self, symbol, count=10, extra_data=None, **kwargs):
-        """Get recent trades.
-
-        BTCTurk API endpoint: /api/v2/trades?pairSymbol={symbol}&last={count}
-        """
-        request_type = "get_trades"
+        """Get recent trades. Returns (path, params, extra_data)."""
         path = "GET /api/v2/trades"
-        extra_data = extra_data or {}
+        if extra_data is None:
+            extra_data = {}
         extra_data.update({
-            "request_type": request_type,
+            "request_type": "get_trades",
             "symbol_name": symbol,
+            "asset_type": self.asset_type,
+            "exchange_name": self.exchange_name,
             "normalize_function": self._get_trades_normalize_function,
         })
-        return self.request(path, params={"pairSymbol": symbol, "last": count}, extra_data=extra_data)
+        params = {"pairSymbol": symbol, "last": count}
+        return path, params, extra_data
 
     @staticmethod
     def _get_trades_normalize_function(input_data, extra_data):
-        """Normalize BTCTurk trades response."""
         if not input_data:
             return [], False
         trades = input_data.get("data", [])
@@ -178,4 +197,164 @@ class BTCTurkRequestDataSpot(BTCTurkRequestData):
 
     def get_trades(self, symbol, count=10, extra_data=None, **kwargs):
         """Get recent trades."""
-        return self._get_trades(symbol, count, extra_data, **kwargs)
+        path, params, extra_data = self._get_trades(symbol, count, extra_data, **kwargs)
+        return self.request(path, params=params, extra_data=extra_data)
+
+    # ==================== Account Interfaces ====================
+
+    def _get_account(self, extra_data=None, **kwargs):
+        """Get account information. Returns (path, params, extra_data)."""
+        path = "GET /api/v1/users/balances"
+        if extra_data is None:
+            extra_data = {}
+        extra_data.update({
+            "request_type": "get_account",
+            "symbol_name": "",
+            "asset_type": self.asset_type,
+            "exchange_name": self.exchange_name,
+            "normalize_function": self._get_account_normalize_function,
+        })
+        return path, {}, extra_data
+
+    @staticmethod
+    def _get_account_normalize_function(input_data, extra_data):
+        if not input_data:
+            return [], False
+        data = input_data.get("data", {})
+        return [data], data is not None
+
+    def get_account(self, symbol="ALL", extra_data=None, **kwargs):
+        """Get account information."""
+        path, params, extra_data = self._get_account(extra_data, **kwargs)
+        return self.request(path, params=params, extra_data=extra_data)
+
+    def async_get_account(self, symbol="ALL", extra_data=None, **kwargs):
+        """Get account information asynchronously."""
+        path, params, extra_data = self._get_account(extra_data, **kwargs)
+        self.submit(
+            self.async_request(path, params=params, extra_data=extra_data),
+            callback=self.async_callback,
+        )
+
+    def _get_balance(self, symbol=None, extra_data=None, **kwargs):
+        """Get account balance. Returns (path, params, extra_data)."""
+        path = "GET /api/v1/users/balances"
+        if extra_data is None:
+            extra_data = {}
+        extra_data.update({
+            "request_type": "get_balance",
+            "symbol_name": symbol or "",
+            "asset_type": self.asset_type,
+            "exchange_name": self.exchange_name,
+            "normalize_function": self._get_balance_normalize_function,
+        })
+        return path, {}, extra_data
+
+    @staticmethod
+    def _get_balance_normalize_function(input_data, extra_data):
+        if not input_data:
+            return [], False
+        data = input_data.get("data", [])
+        return [data], data is not None
+
+    def get_balance(self, symbol=None, extra_data=None, **kwargs):
+        """Get account balance."""
+        path, params, extra_data = self._get_balance(symbol, extra_data, **kwargs)
+        return self.request(path, params=params, extra_data=extra_data)
+
+    # ==================== Trading Interfaces ====================
+
+    def _make_order(self, symbol, volume, price, order_type, offset="open",
+                    post_only=False, client_order_id=None, extra_data=None, **kwargs):
+        """Prepare order. Returns (path, params, extra_data)."""
+        path = "POST /api/v1/order"
+        if extra_data is None:
+            extra_data = {}
+        extra_data.update({
+            "exchange_name": self.exchange_name,
+            "symbol_name": symbol,
+            "asset_type": self.asset_type,
+            "request_type": "make_order",
+        })
+        order_method = 1 if order_type.lower() == "limit" else 0  # 0=market, 1=limit
+        side = 0 if offset.upper() in ("BUY", "OPEN") else 1  # 0=buy, 1=sell
+        params = {
+            "pairSymbol": symbol,
+            "orderMethod": order_method,
+            "orderType": side,
+            "quantity": str(volume),
+            "price": str(price),
+        }
+        if client_order_id:
+            params["newClientOrderId"] = client_order_id
+        return path, params, extra_data
+
+    def make_order(self, symbol, volume, price, order_type, offset="open",
+                   post_only=False, client_order_id=None, extra_data=None, **kwargs):
+        """Place an order."""
+        path, params, extra_data = self._make_order(
+            symbol, volume, price, order_type, offset, post_only,
+            client_order_id, extra_data, **kwargs
+        )
+        return self.request(path, body=params, extra_data=extra_data)
+
+    def _cancel_order(self, symbol, order_id, extra_data=None, **kwargs):
+        """Cancel order. Returns (path, params, extra_data)."""
+        path = "DELETE /api/v1/order"
+        if extra_data is None:
+            extra_data = {}
+        extra_data.update({
+            "exchange_name": self.exchange_name,
+            "symbol_name": symbol,
+            "asset_type": self.asset_type,
+            "request_type": "cancel_order",
+            "order_id": order_id,
+        })
+        params = {"id": order_id}
+        return path, params, extra_data
+
+    def cancel_order(self, symbol, order_id, extra_data=None, **kwargs):
+        """Cancel order."""
+        path, params, extra_data = self._cancel_order(symbol, order_id, extra_data, **kwargs)
+        return self.request(path, body=params, extra_data=extra_data)
+
+    def _query_order(self, symbol, order_id, extra_data=None, **kwargs):
+        """Query order. Returns (path, params, extra_data)."""
+        path = "GET /api/v1/order"
+        if extra_data is None:
+            extra_data = {}
+        extra_data.update({
+            "exchange_name": self.exchange_name,
+            "symbol_name": symbol,
+            "asset_type": self.asset_type,
+            "request_type": "query_order",
+            "order_id": order_id,
+        })
+        params = {"id": order_id}
+        return path, params, extra_data
+
+    def query_order(self, symbol, order_id, extra_data=None, **kwargs):
+        """Query order status."""
+        path, params, extra_data = self._query_order(symbol, order_id, extra_data, **kwargs)
+        return self.request(path, params=params, extra_data=extra_data)
+
+    def _get_open_orders(self, symbol=None, extra_data=None, **kwargs):
+        """Get open orders. Returns (path, params, extra_data)."""
+        path = "GET /api/v1/openOrders"
+        if extra_data is None:
+            extra_data = {}
+        extra_data.update({
+            "exchange_name": self.exchange_name,
+            "symbol_name": symbol or "",
+            "asset_type": self.asset_type,
+            "request_type": "get_open_orders",
+        })
+        params = {}
+        if symbol:
+            params["pairSymbol"] = symbol
+        return path, params, extra_data
+
+    def get_open_orders(self, symbol=None, extra_data=None, **kwargs):
+        """Get open orders."""
+        path, params, extra_data = self._get_open_orders(symbol, extra_data, **kwargs)
+        return self.request(path, params=params, extra_data=extra_data)

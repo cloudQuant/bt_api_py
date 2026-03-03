@@ -240,7 +240,32 @@ class PhemexExchangeDataSpot(PhemexExchangeData):
     def __init__(self):
         super().__init__()
         self.asset_type = "SPOT"
-        self._load_from_config("spot")
+        if not self._load_from_config("spot"):
+            self.exchange_name = "PHEMEX___SPOT"
+            self.rest_url = "https://api.phemex.com"
+            self.wss_url = "wss://ws.phemex.com"
+
+        # Fallback defaults for REST paths
+        _defaults = {
+            "get_server_time": "GET /exchange/public/md/v2/timestamp",
+            "get_exchange_info": "GET /public/products",
+            "get_tick": "GET /md/spot/ticker/24hr",
+            "get_depth": "GET /md/v2/orderbook",
+            "get_kline": "GET /md/v2/kline",
+            "get_trades": "GET /md/v2/trade",
+            "get_account": "GET /spot/wallets",
+            "get_balance": "GET /spot/wallets",
+            "make_order": "POST /spot/orders/create",
+            "cancel_order": "DELETE /spot/orders",
+            "query_order": "GET /spot/orders/active",
+            "get_open_orders": "GET /spot/orders/active",
+        }
+        for k, v in _defaults.items():
+            self.rest_paths.setdefault(k, v)
+
+        # Ensure exchange_name is correct even if YAML loaded old value
+        if self.exchange_name in ("phemex", "phemex_spot", "phemexSpot"):
+            self.exchange_name = "PHEMEX___SPOT"
 
     def get_symbol(self, symbol):
         """将交易对名称转换为 Phemex Spot 格式.

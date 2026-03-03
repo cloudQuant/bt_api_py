@@ -31,6 +31,10 @@ class RipioRequestDataSpot(RipioRequestData):
             Capability.GET_DEPTH,
             Capability.GET_KLINE,
             Capability.GET_EXCHANGE_INFO,
+            Capability.GET_BALANCE,
+            Capability.GET_ACCOUNT,
+            Capability.MAKE_ORDER,
+            Capability.CANCEL_ORDER,
         }
 
     def __init__(self, data_queue, **kwargs):
@@ -399,19 +403,123 @@ class RipioRequestDataSpot(RipioRequestData):
         path, params, extra_data = self._get_trades(symbol, limit, extra_data, **kwargs)
         return self.request(path, params=params, extra_data=extra_data)
 
+    # ==================== Account / Trading ====================
+
+    def _get_balance(self, symbol=None, extra_data=None, **kwargs):
+        """Get account balance. Returns (path, params, extra_data)."""
+        path = "/api/v1/balances"
+        extra_data = update_extra_data(
+            extra_data,
+            **{
+                "request_type": "get_balance",
+                "symbol_name": symbol or "",
+                "asset_type": self.asset_type,
+                "exchange_name": self.exchange_name,
+                "normalize_function": RipioRequestDataSpot._get_balance_normalize_function,
+            },
+        )
+        return path, {}, extra_data
+
+    @staticmethod
+    def _get_balance_normalize_function(input_data, extra_data):
+        if not input_data:
+            return [], False
+        if isinstance(input_data, dict) and not input_data.get("success", True):
+            return [], False
+        data = input_data.get("data", input_data) if isinstance(input_data, dict) else input_data
+        return [data], True
+
+    def get_balance(self, symbol=None, extra_data=None, **kwargs):
+        """Get account balance."""
+        path, params, extra_data = self._get_balance(symbol, extra_data, **kwargs)
+        return self.request(path, params=params, extra_data=extra_data, is_sign=True)
+
+    def _get_account(self, extra_data=None, **kwargs):
+        """Get account information. Returns (path, params, extra_data)."""
+        path = "/api/v1/balances"
+        extra_data = update_extra_data(
+            extra_data,
+            **{
+                "request_type": "get_account",
+                "symbol_name": "",
+                "asset_type": self.asset_type,
+                "exchange_name": self.exchange_name,
+                "normalize_function": RipioRequestDataSpot._get_account_normalize_function,
+            },
+        )
+        return path, {}, extra_data
+
+    @staticmethod
+    def _get_account_normalize_function(input_data, extra_data):
+        if not input_data:
+            return [], False
+        data = input_data.get("data", input_data) if isinstance(input_data, dict) else input_data
+        return [data], True
+
+    def get_account(self, symbol="ALL", extra_data=None, **kwargs):
+        """Get account information."""
+        path, params, extra_data = self._get_account(extra_data, **kwargs)
+        return self.request(path, params=params, extra_data=extra_data, is_sign=True)
+
+    def _make_order(self, symbol, volume, price, order_type, offset="open",
+                    extra_data=None, **kwargs):
+        """Prepare make order request. Returns (path, params, extra_data)."""
+        ripio_symbol = self._params.get_symbol(symbol)
+        path = "/api/v1/order"
+        params = {
+            "pair": ripio_symbol,
+            "amount": str(volume),
+            "price": str(price),
+            "side": "buy" if "buy" in order_type.lower() else "sell",
+            "type": "limit",
+        }
+        extra_data = update_extra_data(
+            extra_data,
+            **{
+                "request_type": "make_order",
+                "symbol_name": symbol,
+                "asset_type": self.asset_type,
+                "exchange_name": self.exchange_name,
+                "normalize_function": RipioRequestDataSpot._make_order_normalize_function,
+            },
+        )
+        return path, params, extra_data
+
+    @staticmethod
+    def _make_order_normalize_function(input_data, extra_data):
+        if not input_data:
+            return [], False
+        return [input_data], True
+
+    def make_order(self, symbol, volume, price, order_type, offset="open",
+                   extra_data=None, **kwargs):
+        """Place an order."""
+        path, params, extra_data = self._make_order(
+            symbol, volume, price, order_type, offset, extra_data, **kwargs
+        )
+        return self.request(path, body=params, extra_data=extra_data, is_sign=True)
+
+    def _cancel_order(self, symbol, order_id, extra_data=None, **kwargs):
+        """Prepare cancel order request. Returns (path, params, extra_data)."""
+        path = f"/api/v1/order/{order_id}"
+        extra_data = update_extra_data(
+            extra_data,
+            **{
+                "request_type": "cancel_order",
+                "symbol_name": symbol,
+                "asset_type": self.asset_type,
+                "exchange_name": self.exchange_name,
+                "order_id": order_id,
+            },
+        )
+        return path, {}, extra_data
+
+    def cancel_order(self, symbol, order_id, extra_data=None, **kwargs):
+        """Cancel an order."""
+        path, params, extra_data = self._cancel_order(symbol, order_id, extra_data, **kwargs)
+        return self.request(path, params=params, extra_data=extra_data, is_sign=True)
+
     # ==================== Async Methods ====================
-
-    def async_callback(self, future):
-        """Callback function for async requests, push result to data_queue.
-
-        Args:
-            future: asyncio future object
-        """
-        try:
-            result = future.result()
-            self.push_data_to_queue(result)
-        except Exception as e:
-            self.async_logger.warn(f"async_callback::{e}")
 
     def async_get_tick(self, symbol, extra_data=None, **kwargs):
         """Async get ticker information.

@@ -63,8 +63,12 @@ class TestGmxRequestDataSpot:
         capabilities = gmx_spot._capabilities()
         assert Capability.GET_TICK in capabilities
         assert Capability.GET_DEPTH in capabilities
-        assert Capability.GET_EXCHANGE_INFO in capabilities
         assert Capability.GET_KLINE in capabilities
+        assert Capability.GET_EXCHANGE_INFO in capabilities
+        assert Capability.GET_BALANCE in capabilities
+        assert Capability.GET_ACCOUNT in capabilities
+        assert Capability.MAKE_ORDER in capabilities
+        assert Capability.CANCEL_ORDER in capabilities
 
     # ==================== Ticker Tests ====================
 
@@ -294,6 +298,166 @@ class TestGmxRegistration:
         exchange_class = get_exchange_class("GMX___DEX")
         assert exchange_class is not None
         assert exchange_class.__name__ == "GmxRequestDataSpot"
+
+
+class TestGmxStandardInterfaces:
+    """Test standard Feed interface methods for GMX."""
+
+    @pytest.fixture
+    def gmx_spot(self):
+        with patch('bt_api_py.feeds.http_client.HttpClient', return_value=MagicMock()):
+            instance = GmxRequestDataSpot(Mock())
+            instance.request = Mock(return_value=Mock(spec=RequestData))
+            return instance
+
+    def test_get_tick_calls_request(self, gmx_spot):
+        path, params, extra_data = gmx_spot._get_tick("BTC")
+        assert extra_data["request_type"] == "get_tick"
+        assert extra_data["symbol_name"] == "BTC"
+
+    def test_get_depth_calls_request(self, gmx_spot):
+        result = gmx_spot.get_depth("BTC")
+        assert gmx_spot.request.called
+        extra_data = gmx_spot.request.call_args[1].get("extra_data") or gmx_spot.request.call_args[0][2] if len(gmx_spot.request.call_args[0]) > 2 else None
+
+    def test_get_kline_calls_request(self, gmx_spot):
+        result = gmx_spot.get_kline("BTC", "1h")
+        assert gmx_spot.request.called
+
+    def test_get_server_time(self):
+        with patch('bt_api_py.feeds.http_client.HttpClient', return_value=MagicMock()):
+            inst = GmxRequestDataSpot(Mock())
+            result = inst.get_server_time()
+            assert isinstance(result, RequestData)
+
+    def test_get_server_time_extra_data(self):
+        with patch('bt_api_py.feeds.http_client.HttpClient', return_value=MagicMock()):
+            inst = GmxRequestDataSpot(Mock())
+            path, params, extra_data = inst._get_server_time()
+            assert extra_data["request_type"] == "get_server_time"
+            assert "server_time" in extra_data
+
+    def test_make_order_calls_request(self, gmx_spot):
+        result = gmx_spot.make_order("BTC", 1.0, 50000, "LIMIT")
+        assert gmx_spot.request.called
+        extra_data = gmx_spot.request.call_args[1].get("extra_data")
+        assert extra_data["request_type"] == "make_order"
+
+    def test_cancel_order_calls_request(self, gmx_spot):
+        result = gmx_spot.cancel_order("BTC", "order_123")
+        assert gmx_spot.request.called
+        extra_data = gmx_spot.request.call_args[1].get("extra_data")
+        assert extra_data["request_type"] == "cancel_order"
+
+    def test_query_order_calls_request(self, gmx_spot):
+        result = gmx_spot.query_order("BTC", "order_123")
+        assert gmx_spot.request.called
+        extra_data = gmx_spot.request.call_args[1].get("extra_data")
+        assert extra_data["request_type"] == "query_order"
+
+    def test_get_open_orders_calls_request(self, gmx_spot):
+        result = gmx_spot.get_open_orders("BTC")
+        assert gmx_spot.request.called
+        extra_data = gmx_spot.request.call_args[1].get("extra_data")
+        assert extra_data["request_type"] == "get_open_orders"
+
+    def test_get_account_calls_request(self, gmx_spot):
+        result = gmx_spot.get_account("BTC")
+        assert gmx_spot.request.called
+        extra_data = gmx_spot.request.call_args[1].get("extra_data")
+        assert extra_data["request_type"] == "get_account"
+
+    def test_get_balance_calls_request(self, gmx_spot):
+        result = gmx_spot.get_balance("BTC")
+        assert gmx_spot.request.called
+        extra_data = gmx_spot.request.call_args[1].get("extra_data")
+        assert extra_data["request_type"] == "get_balance"
+
+
+class TestGmxBaseCapabilities:
+    """Test capabilities on the base class."""
+
+    def test_base_capabilities(self):
+        from bt_api_py.feeds.capability import Capability
+        from bt_api_py.feeds.live_gmx.request_base import GmxRequestData
+
+        caps = GmxRequestData._capabilities()
+        assert Capability.GET_TICK in caps
+        assert Capability.GET_DEPTH in caps
+        assert Capability.GET_KLINE in caps
+        assert Capability.GET_EXCHANGE_INFO in caps
+        assert Capability.MAKE_ORDER in caps
+        assert Capability.CANCEL_ORDER in caps
+
+
+class TestGmxDataContainers:
+    """Test GMX data containers init_data() returns self."""
+
+    def test_ticker_init_data_returns_self(self):
+        from bt_api_py.containers.tickers.gmx_ticker import GmxRequestTickerData
+
+        ticker_data = {"BTC": {"minPrice": "49000", "maxPrice": "51000"}}
+        ticker = GmxRequestTickerData(ticker_data, "BTC", "SPOT", has_been_json_encoded=True)
+        result = ticker.init_data()
+        assert result is ticker
+        assert ticker.get_symbol_name() == "BTC"
+        assert ticker.get_last_price() == 49000.0
+
+    def test_ticker_init_data_idempotent(self):
+        from bt_api_py.containers.tickers.gmx_ticker import GmxRequestTickerData
+
+        ticker_data = {"ETH": {"minPrice": "3000"}}
+        ticker = GmxRequestTickerData(ticker_data, "ETH", "SPOT", has_been_json_encoded=True)
+        r1 = ticker.init_data()
+        r2 = ticker.init_data()
+        assert r1 is ticker
+        assert r2 is ticker
+
+    def test_ticker_symbol_name_preserved(self):
+        from bt_api_py.containers.tickers.gmx_ticker import GmxRequestTickerData
+
+        ticker = GmxRequestTickerData({}, "SOL", "SPOT", has_been_json_encoded=True)
+        ticker.init_data()
+        assert ticker.get_symbol_name() == "SOL"
+
+
+class TestGmxNormalizeFunctions:
+    """Test normalize functions edge cases."""
+
+    def test_tick_normalize_with_none(self):
+        result, status = GmxRequestDataSpot._get_tick_normalize_function(None, None)
+        assert result == []
+        assert status is False
+
+    def test_kline_normalize_with_none(self):
+        result, status = GmxRequestDataSpot._get_kline_normalize_function(None, None)
+        assert result == []
+        assert status is False
+
+    def test_exchange_info_normalize_with_none(self):
+        result, status = GmxRequestDataSpot._get_exchange_info_normalize_function(None, None)
+        assert result == []
+        assert status is False
+
+    def test_depth_normalize_with_none(self):
+        result, status = GmxRequestDataSpot._get_depth_normalize_function(None, None)
+        assert result == []
+        assert status is False
+
+    def test_signed_prices_normalize_with_none(self):
+        result, status = GmxRequestDataSpot._get_signed_prices_normalize_function(None, None)
+        assert result == []
+        assert status is False
+
+    def test_tokens_normalize_with_none(self):
+        result, status = GmxRequestDataSpot._get_tokens_normalize_function(None, None)
+        assert result == []
+        assert status is False
+
+    def test_markets_info_normalize_with_none(self):
+        result, status = GmxRequestDataSpot._get_markets_info_normalize_function(None, None)
+        assert result == []
+        assert status is False
 
 
 if __name__ == "__main__":

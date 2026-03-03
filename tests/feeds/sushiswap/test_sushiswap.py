@@ -56,6 +56,21 @@ class TestSushiSwapRequestDataSpot:
         assert Capability.GET_DEPTH in capabilities
         assert Capability.GET_EXCHANGE_INFO in capabilities
         assert Capability.GET_KLINE in capabilities
+        assert Capability.GET_BALANCE in capabilities
+        assert Capability.GET_ACCOUNT in capabilities
+        assert Capability.MAKE_ORDER in capabilities
+        assert Capability.CANCEL_ORDER in capabilities
+
+    def test_get_server_time(self, sushiswap_spot):
+        """Test get_server_time returns RequestData."""
+        result = sushiswap_spot.get_server_time()
+        assert isinstance(result, RequestData)
+
+    def test_get_server_time_tuple(self, sushiswap_spot):
+        """Test _get_server_time returns tuple."""
+        path, params, extra_data = sushiswap_spot._get_server_time()
+        assert extra_data["request_type"] == "get_server_time"
+        assert "server_time" in extra_data
 
     def test_get_tick(self, sushiswap_spot):
         """Test get_tick method."""
@@ -332,6 +347,112 @@ class TestSushiSwapRegistration:
         exchange_class = get_exchange_class("SUSHISWAP___DEX")
         assert exchange_class is not None
         assert exchange_class.__name__ == "SushiSwapRequestDataSpot"
+
+
+class TestSushiStandardInterfaces:
+    """Test standard Feed interface methods for SushiSwap."""
+
+    @pytest.fixture
+    def sushiswap_spot(self):
+        with patch('bt_api_py.feeds.http_client.HttpClient', return_value=MagicMock()):
+            instance = SushiSwapRequestDataSpot(Mock())
+            instance.request = Mock(return_value=Mock(spec=RequestData))
+            return instance
+
+    def test_make_order_calls_request(self, sushiswap_spot):
+        result = sushiswap_spot.make_order("WETH/USDC", 1.0, 3000, "LIMIT")
+        assert sushiswap_spot.request.called
+        extra_data = sushiswap_spot.request.call_args[1].get("extra_data")
+        assert extra_data["request_type"] == "make_order"
+
+    def test_cancel_order_calls_request(self, sushiswap_spot):
+        result = sushiswap_spot.cancel_order("WETH/USDC", "order_123")
+        assert sushiswap_spot.request.called
+        extra_data = sushiswap_spot.request.call_args[1].get("extra_data")
+        assert extra_data["request_type"] == "cancel_order"
+
+    def test_query_order_calls_request(self, sushiswap_spot):
+        result = sushiswap_spot.query_order("WETH/USDC", "order_123")
+        assert sushiswap_spot.request.called
+        extra_data = sushiswap_spot.request.call_args[1].get("extra_data")
+        assert extra_data["request_type"] == "query_order"
+
+    def test_get_open_orders_calls_request(self, sushiswap_spot):
+        result = sushiswap_spot.get_open_orders("WETH/USDC")
+        assert sushiswap_spot.request.called
+        extra_data = sushiswap_spot.request.call_args[1].get("extra_data")
+        assert extra_data["request_type"] == "get_open_orders"
+
+    def test_get_account_calls_request(self, sushiswap_spot):
+        result = sushiswap_spot.get_account("WETH")
+        assert sushiswap_spot.request.called
+        extra_data = sushiswap_spot.request.call_args[1].get("extra_data")
+        assert extra_data["request_type"] == "get_account"
+
+    def test_get_balance_calls_request(self, sushiswap_spot):
+        result = sushiswap_spot.get_balance("WETH")
+        assert sushiswap_spot.request.called
+        extra_data = sushiswap_spot.request.call_args[1].get("extra_data")
+        assert extra_data["request_type"] == "get_balance"
+
+
+class TestSushiBaseCapabilities:
+    """Test capabilities on the base class."""
+
+    def test_base_capabilities(self):
+        from bt_api_py.feeds.capability import Capability
+        from bt_api_py.feeds.live_sushiswap.request_base import SushiSwapRequestData
+
+        caps = SushiSwapRequestData._capabilities()
+        assert Capability.GET_TICK in caps
+        assert Capability.GET_DEPTH in caps
+        assert Capability.GET_EXCHANGE_INFO in caps
+        assert Capability.MAKE_ORDER in caps
+        assert Capability.CANCEL_ORDER in caps
+
+
+class TestSushiNormalizeFunctions:
+    """Test normalize functions edge cases."""
+
+    def test_tick_normalize_with_none(self):
+        result, status = SushiSwapRequestDataSpot._get_tick_normalize_function(None, None)
+        assert result == []
+        assert status is False
+
+    def test_depth_normalize_with_none(self):
+        result, status = SushiSwapRequestDataSpot._get_depth_normalize_function(None, None)
+        assert result == []
+        assert status is False
+
+    def test_kline_normalize_with_none(self):
+        result, status = SushiSwapRequestDataSpot._get_kline_normalize_function(None, None)
+        assert result == []
+        assert status is False
+
+    def test_exchange_info_normalize_with_none(self):
+        result, status = SushiSwapRequestDataSpot._get_exchange_info_normalize_function(None, None)
+        assert result == []
+        assert status is False
+
+    def test_pool_normalize_with_none(self):
+        result, status = SushiSwapRequestDataSpot._get_pool_normalize_function(None, None)
+        assert result == []
+        assert status is False
+
+    def test_swap_quote_normalize_with_none(self):
+        result, status = SushiSwapRequestDataSpot._get_swap_quote_normalize_function(None, None)
+        assert result == []
+        assert status is False
+
+    def test_token_info_normalize_with_none(self):
+        result, status = SushiSwapRequestDataSpot._get_token_info_normalize_function(None, None)
+        assert result == []
+        assert status is False
+
+    def test_tokens_normalize_with_none(self):
+        result, status = SushiSwapRequestDataSpot._get_tokens_normalize_function(None, None)
+        assert result == []
+        assert status is False
 
 
 if __name__ == "__main__":

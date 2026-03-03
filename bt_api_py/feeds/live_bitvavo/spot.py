@@ -17,49 +17,67 @@ class BitvavoRequestDataSpot(BitvavoRequestData):
             Capability.GET_DEPTH,
             Capability.GET_KLINE,
             Capability.GET_EXCHANGE_INFO,
+            Capability.GET_BALANCE,
+            Capability.GET_ACCOUNT,
+            Capability.MAKE_ORDER,
+            Capability.CANCEL_ORDER,
         }
 
     def __init__(self, data_queue, **kwargs):
         super().__init__(data_queue, **kwargs)
         self.exchange_name = kwargs.get("exchange_name", "BITVAVO___SPOT")
 
+    # ==================== Market Data ====================
+
     def _get_tick(self, symbol, extra_data=None, **kwargs):
-        """Get ticker data."""
-        request_type = "get_tick"
+        """Get ticker data. Returns (path, params, extra_data)."""
         path = "GET /ticker/24h"
-        extra_data = extra_data or {}
+        if extra_data is None:
+            extra_data = {}
         extra_data.update({
-            "request_type": request_type,
+            "request_type": "get_tick",
             "symbol_name": symbol,
+            "asset_type": self.asset_type,
+            "exchange_name": self.exchange_name,
             "normalize_function": self._get_tick_normalize_function,
         })
-        return self.request(path, params={"market": symbol}, extra_data=extra_data)
+        params = {"market": symbol}
+        return path, params, extra_data
 
     @staticmethod
     def _get_tick_normalize_function(input_data, extra_data):
         if not input_data:
             return [], False
-        # Bitvavo returns ticker object directly for single market
         ticker = input_data if isinstance(input_data, dict) else {}
         return [ticker], bool(ticker)
 
     def get_tick(self, symbol, extra_data=None, **kwargs):
         """Get symbol ticker."""
         path, params, extra_data = self._get_tick(symbol, extra_data, **kwargs)
-        return self.request(path, params, extra_data=extra_data)
+        return self.request(path, params=params, extra_data=extra_data)
+
+    def async_get_tick(self, symbol, extra_data=None, **kwargs):
+        """Async get ticker."""
+        path, params, extra_data = self._get_tick(symbol, extra_data, **kwargs)
+        self.submit(
+            self.async_request(path, params=params, extra_data=extra_data),
+            callback=self.async_callback,
+        )
 
     def _get_depth(self, symbol, count=20, extra_data=None, **kwargs):
-        """Get order book depth."""
-        request_type = "get_depth"
-        # Bitvavo uses GET /{market}/book
+        """Get order book depth. Returns (path, params, extra_data)."""
         path = f"GET /{symbol}/book"
-        extra_data = extra_data or {}
+        if extra_data is None:
+            extra_data = {}
         extra_data.update({
-            "request_type": request_type,
+            "request_type": "get_depth",
             "symbol_name": symbol,
+            "asset_type": self.asset_type,
+            "exchange_name": self.exchange_name,
             "normalize_function": self._get_depth_normalize_function,
         })
-        return self.request(path, params={"depth": count}, extra_data=extra_data)
+        params = {"depth": count}
+        return path, params, extra_data
 
     @staticmethod
     def _get_depth_normalize_function(input_data, extra_data):
@@ -70,25 +88,32 @@ class BitvavoRequestDataSpot(BitvavoRequestData):
 
     def get_depth(self, symbol, count=20, extra_data=None, **kwargs):
         """Get order book."""
-        return self._get_depth(symbol, count, extra_data, **kwargs)
+        path, params, extra_data = self._get_depth(symbol, count, extra_data, **kwargs)
+        return self.request(path, params=params, extra_data=extra_data)
+
+    def async_get_depth(self, symbol, count=20, extra_data=None, **kwargs):
+        """Async get depth."""
+        path, params, extra_data = self._get_depth(symbol, count, extra_data, **kwargs)
+        self.submit(
+            self.async_request(path, params=params, extra_data=extra_data),
+            callback=self.async_callback,
+        )
 
     def _get_kline(self, symbol, period, count=20, extra_data=None, **kwargs):
-        """Get kline/candlestick data."""
-        request_type = "get_kline"
-        # Bitvavo uses GET /{market}/candles
+        """Get kline/candlestick data. Returns (path, params, extra_data)."""
         path = f"GET /{symbol}/candles"
-        extra_data = extra_data or {}
+        if extra_data is None:
+            extra_data = {}
         extra_data.update({
-            "request_type": request_type,
+            "request_type": "get_kline",
             "symbol_name": symbol,
+            "asset_type": self.asset_type,
+            "exchange_name": self.exchange_name,
             "normalize_function": self._get_kline_normalize_function,
         })
-        # Map period to exchange format
-        interval = self._params.get_period(period, period)
-        return self.request(path, params={
-            "interval": interval,
-            "limit": count,
-        }, extra_data=extra_data)
+        interval = self._params.kline_periods.get(period, period)
+        params = {"interval": interval, "limit": count}
+        return path, params, extra_data
 
     @staticmethod
     def _get_kline_normalize_function(input_data, extra_data):
@@ -99,4 +124,201 @@ class BitvavoRequestDataSpot(BitvavoRequestData):
 
     def get_kline(self, symbol, period, count=20, extra_data=None, **kwargs):
         """Get kline data."""
-        return self._get_kline(symbol, period, count, extra_data, **kwargs)
+        path, params, extra_data = self._get_kline(symbol, period, count, extra_data, **kwargs)
+        return self.request(path, params=params, extra_data=extra_data)
+
+    def async_get_kline(self, symbol, period, count=20, extra_data=None, **kwargs):
+        """Async get kline."""
+        path, params, extra_data = self._get_kline(symbol, period, count, extra_data, **kwargs)
+        self.submit(
+            self.async_request(path, params=params, extra_data=extra_data),
+            callback=self.async_callback,
+        )
+
+    def _get_exchange_info(self, extra_data=None, **kwargs):
+        """Get exchange configuration. Returns (path, params, extra_data)."""
+        path = "GET /markets"
+        if extra_data is None:
+            extra_data = {}
+        extra_data.update({
+            "request_type": "get_exchange_info",
+            "symbol_name": "",
+            "asset_type": self.asset_type,
+            "exchange_name": self.exchange_name,
+            "normalize_function": self._get_exchange_info_normalize_function,
+        })
+        return path, {}, extra_data
+
+    @staticmethod
+    def _get_exchange_info_normalize_function(input_data, extra_data):
+        if not input_data:
+            return [], False
+        info = input_data if isinstance(input_data, list) else [input_data]
+        return [info], True
+
+    def get_exchange_info(self, extra_data=None, **kwargs):
+        """Get exchange info."""
+        path, params, extra_data = self._get_exchange_info(extra_data, **kwargs)
+        return self.request(path, params=params, extra_data=extra_data)
+
+    # ==================== Account Interfaces ====================
+
+    def _get_account(self, extra_data=None, **kwargs):
+        """Get account information. Returns (path, params, extra_data)."""
+        path = "GET /account"
+        if extra_data is None:
+            extra_data = {}
+        extra_data.update({
+            "request_type": "get_account",
+            "symbol_name": "",
+            "asset_type": self.asset_type,
+            "exchange_name": self.exchange_name,
+            "normalize_function": self._get_account_normalize_function,
+        })
+        return path, {}, extra_data
+
+    @staticmethod
+    def _get_account_normalize_function(input_data, extra_data):
+        if not input_data:
+            return [], False
+        account = input_data if isinstance(input_data, dict) else {}
+        return [account], bool(account)
+
+    def get_account(self, symbol="ALL", extra_data=None, **kwargs):
+        """Get account information."""
+        path, params, extra_data = self._get_account(extra_data, **kwargs)
+        return self.request(path, params=params, extra_data=extra_data)
+
+    def async_get_account(self, symbol="ALL", extra_data=None, **kwargs):
+        """Get account information asynchronously."""
+        path, params, extra_data = self._get_account(extra_data, **kwargs)
+        self.submit(
+            self.async_request(path, params=params, extra_data=extra_data),
+            callback=self.async_callback,
+        )
+
+    def _get_balance(self, symbol=None, extra_data=None, **kwargs):
+        """Get account balance. Returns (path, params, extra_data)."""
+        path = "GET /balance"
+        if extra_data is None:
+            extra_data = {}
+        extra_data.update({
+            "request_type": "get_balance",
+            "symbol_name": symbol or "",
+            "asset_type": self.asset_type,
+            "exchange_name": self.exchange_name,
+            "normalize_function": self._get_balance_normalize_function,
+        })
+        params = {}
+        if symbol:
+            params["symbol"] = symbol
+        return path, params, extra_data
+
+    @staticmethod
+    def _get_balance_normalize_function(input_data, extra_data):
+        if not input_data:
+            return [], False
+        balance = input_data if isinstance(input_data, (dict, list)) else {}
+        return [balance], bool(balance)
+
+    def get_balance(self, symbol=None, extra_data=None, **kwargs):
+        """Get account balance."""
+        path, params, extra_data = self._get_balance(symbol, extra_data, **kwargs)
+        return self.request(path, params=params, extra_data=extra_data)
+
+    # ==================== Trading Interfaces ====================
+
+    def _make_order(self, symbol, volume, price, order_type, offset="open",
+                    post_only=False, client_order_id=None, extra_data=None, **kwargs):
+        """Prepare order. Returns (path, params, extra_data)."""
+        path = "POST /order"
+        if extra_data is None:
+            extra_data = {}
+        extra_data.update({
+            "exchange_name": self.exchange_name,
+            "symbol_name": symbol,
+            "asset_type": self.asset_type,
+            "request_type": "make_order",
+        })
+        params = {
+            "market": symbol,
+            "side": offset.lower() if offset in ("BUY", "SELL", "buy", "sell") else "buy",
+            "orderType": order_type.lower(),
+            "amount": str(volume),
+            "price": str(price),
+        }
+        if post_only:
+            params["postOnly"] = True
+        if client_order_id:
+            params["clientOrderId"] = client_order_id
+        return path, params, extra_data
+
+    def make_order(self, symbol, volume, price, order_type, offset="open",
+                   post_only=False, client_order_id=None, extra_data=None, **kwargs):
+        """Place an order."""
+        path, params, extra_data = self._make_order(
+            symbol, volume, price, order_type, offset, post_only,
+            client_order_id, extra_data, **kwargs
+        )
+        return self.request(path, body=params, extra_data=extra_data)
+
+    def _cancel_order(self, symbol, order_id, extra_data=None, **kwargs):
+        """Cancel order. Returns (path, params, extra_data)."""
+        path = "DELETE /order"
+        if extra_data is None:
+            extra_data = {}
+        extra_data.update({
+            "exchange_name": self.exchange_name,
+            "symbol_name": symbol,
+            "asset_type": self.asset_type,
+            "request_type": "cancel_order",
+            "order_id": order_id,
+        })
+        params = {"market": symbol, "orderId": order_id}
+        return path, params, extra_data
+
+    def cancel_order(self, symbol, order_id, extra_data=None, **kwargs):
+        """Cancel order."""
+        path, params, extra_data = self._cancel_order(symbol, order_id, extra_data, **kwargs)
+        return self.request(path, body=params, extra_data=extra_data)
+
+    def _query_order(self, symbol, order_id, extra_data=None, **kwargs):
+        """Query order. Returns (path, params, extra_data)."""
+        path = "GET /order"
+        if extra_data is None:
+            extra_data = {}
+        extra_data.update({
+            "exchange_name": self.exchange_name,
+            "symbol_name": symbol,
+            "asset_type": self.asset_type,
+            "request_type": "query_order",
+            "order_id": order_id,
+        })
+        params = {"market": symbol, "orderId": order_id}
+        return path, params, extra_data
+
+    def query_order(self, symbol, order_id, extra_data=None, **kwargs):
+        """Query order status."""
+        path, params, extra_data = self._query_order(symbol, order_id, extra_data, **kwargs)
+        return self.request(path, params=params, extra_data=extra_data)
+
+    def _get_open_orders(self, symbol=None, extra_data=None, **kwargs):
+        """Get open orders. Returns (path, params, extra_data)."""
+        path = "GET /ordersOpen"
+        if extra_data is None:
+            extra_data = {}
+        extra_data.update({
+            "exchange_name": self.exchange_name,
+            "symbol_name": symbol or "",
+            "asset_type": self.asset_type,
+            "request_type": "get_open_orders",
+        })
+        params = {}
+        if symbol:
+            params["market"] = symbol
+        return path, params, extra_data
+
+    def get_open_orders(self, symbol=None, extra_data=None, **kwargs):
+        """Get open orders."""
+        path, params, extra_data = self._get_open_orders(symbol, extra_data, **kwargs)
+        return self.request(path, params=params, extra_data=extra_data)

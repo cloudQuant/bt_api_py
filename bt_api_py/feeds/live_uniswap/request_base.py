@@ -7,6 +7,7 @@ response parsing.
 """
 
 import json
+import time
 from typing import Any
 
 from bt_api_py.containers.exchanges.uniswap_exchange_data import (
@@ -32,10 +33,14 @@ class UniswapRequestData(Feed):
     def _capabilities(cls):
         """Declare supported capabilities for Uniswap."""
         return {
-            "GET_TICK",
-            "GET_DEPTH",
-            "GET_EXCHANGE_INFO",
-            "GET_KLINE",
+            Capability.GET_TICK,
+            Capability.GET_DEPTH,
+            Capability.GET_EXCHANGE_INFO,
+            Capability.GET_KLINE,
+            Capability.GET_BALANCE,
+            Capability.GET_ACCOUNT,
+            Capability.MAKE_ORDER,
+            Capability.CANCEL_ORDER,
         }
 
     def __init__(self, data_queue, **kwargs):
@@ -172,24 +177,74 @@ class UniswapRequestData(Feed):
             raise
 
     def request(self, path, params=None, body=None, extra_data=None, timeout=10):
-        """HTTP request function (legacy interface).
+        """HTTP request function.
 
-        For Uniswap, use _execute_graphql_query instead.
+        For Uniswap GraphQL, path is ignored; use _execute_graphql_query directly.
+        This fallback wraps a simple GET for non-GraphQL endpoints.
         """
-        raise NotImplementedError(
-            "Use _execute_graphql_query() for Uniswap GraphQL queries"
-        )
+        url = f"{self._params.get_rest_url()}{path}"
+        headers = {
+            "Content-Type": "application/json",
+            "x-api-key": self._params.get_api_key(),
+        }
+        try:
+            response = self._http_client.request(
+                method="GET", url=url, headers=headers, params=params,
+            )
+            return RequestData(response, extra_data)
+        except Exception as e:
+            self.request_logger.error(f"Request failed: {e}")
+            raise
 
     async def async_request(
         self, path, params=None, body=None, extra_data=None, timeout=5
     ):
-        """Async HTTP request function (legacy interface).
+        """Async HTTP request function."""
+        url = f"{self._params.get_rest_url()}{path}"
+        headers = {
+            "Content-Type": "application/json",
+            "x-api-key": self._params.get_api_key(),
+        }
+        try:
+            response = await self._http_client.async_request(
+                method="GET", url=url, headers=headers, params=params,
+            )
+            return RequestData(response, extra_data)
+        except Exception as e:
+            self.async_logger.error(f"Async request failed: {e}")
+            raise
 
-        For Uniswap, use _async_execute_graphql_query instead.
+    def async_callback(self, future):
+        """Callback function for async requests, push result to data_queue."""
+        try:
+            result = future.result()
+            if result is not None:
+                self.push_data_to_queue(result)
+        except Exception as e:
+            self.async_logger.error(f"Async callback error: {e}")
+
+    # ── Standard Interface: get_server_time ───────────────────────
+
+    def _get_server_time(self, extra_data=None, **kwargs):
+        """Prepare server time request. Returns (path, params, extra_data).
+
+        Uniswap is a DEX — no dedicated server time endpoint.
         """
-        raise NotImplementedError(
-            "Use _async_execute_graphql_query() for Uniswap GraphQL queries"
-        )
+        if extra_data is None:
+            extra_data = {}
+        extra_data.update({
+            "exchange_name": self.exchange_name,
+            "symbol_name": "",
+            "asset_type": "DEX",
+            "request_type": "get_server_time",
+            "server_time": time.time(),
+        })
+        return "/time", {}, extra_data
+
+    def get_server_time(self, extra_data=None, **kwargs):
+        """Get server time. Returns RequestData."""
+        path, params, extra_data = self._get_server_time(extra_data, **kwargs)
+        return RequestData({"server_time": time.time()}, extra_data)
 
     def push_data_to_queue(self, data):
         """Push data to the queue."""

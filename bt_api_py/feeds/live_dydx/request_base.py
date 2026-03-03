@@ -346,6 +346,141 @@ class DydxRequestData(Feed):
         data = input_data.get("markets", {}).get(symbol_name, {})
         return data, status
 
+    # ── Standard Interface: get_tick ──────────────────────────────
+
+    def _get_tick(self, symbol, extra_data=None, **kwargs):
+        """Prepare tick request parameters. Returns (path, params, extra_data)."""
+        if extra_data is None:
+            extra_data = {}
+        request_symbol = self._params.get_symbol(symbol)
+        path = self._params.get_rest_path("get_perpetual_markets")
+        extra_data.update({
+            "exchange_name": self.exchange_name,
+            "symbol_name": request_symbol,
+            "asset_type": self.asset_type,
+            "request_type": "get_tick",
+            "normalize_function": self._get_ticker_normalize_function,
+        })
+        return path, {}, extra_data
+
+    def get_tick(self, symbol, extra_data=None, **kwargs):
+        """Get latest tick price for symbol. Returns RequestData."""
+        path, params, extra_data = self._get_tick(symbol, extra_data, **kwargs)
+        return self.request(path, params=params, extra_data=extra_data)
+
+    def async_get_tick(self, symbol, extra_data=None, **kwargs):
+        """Async get tick price for symbol."""
+        path, params, extra_data = self._get_tick(symbol, extra_data, **kwargs)
+        self.submit(
+            self.async_request(path, params=params, extra_data=extra_data),
+            callback=self.async_callback,
+        )
+
+    # ── Standard Interface: get_depth ────────────────────────────
+
+    def _get_depth(self, symbol, count=20, extra_data=None, **kwargs):
+        """Prepare depth request parameters. Returns (path, params, extra_data)."""
+        if extra_data is None:
+            extra_data = {}
+        request_symbol = self._params.get_symbol(symbol)
+        path = self._params.get_rest_path("get_orderbook")
+        path = path.replace("<placeholder>", request_symbol)
+        extra_data.update({
+            "exchange_name": self.exchange_name,
+            "symbol_name": request_symbol,
+            "asset_type": self.asset_type,
+            "request_type": "get_depth",
+            "normalize_function": self._get_orderbook_normalize_function,
+        })
+        return path, {}, extra_data
+
+    def get_depth(self, symbol, count=20, extra_data=None, **kwargs):
+        """Get order book depth for symbol. Returns RequestData."""
+        path, params, extra_data = self._get_depth(symbol, count, extra_data, **kwargs)
+        return self.request(path, params=params, extra_data=extra_data)
+
+    def async_get_depth(self, symbol, count=20, extra_data=None, **kwargs):
+        """Async get depth for symbol."""
+        path, params, extra_data = self._get_depth(symbol, count, extra_data, **kwargs)
+        self.submit(
+            self.async_request(path, params=params, extra_data=extra_data),
+            callback=self.async_callback,
+        )
+
+    # ── Standard Interface: get_kline ────────────────────────────
+
+    def _get_kline(self, symbol, period, count=20, extra_data=None, **kwargs):
+        """Prepare kline request parameters. Returns (path, params, extra_data)."""
+        if extra_data is None:
+            extra_data = {}
+        request_symbol = self._params.get_symbol(symbol)
+        exchange_period = self._params.get_period(period)
+        path = self._params.get_rest_path("get_candles")
+        path = path.replace("<placeholder>", request_symbol)
+        params = {"resolution": exchange_period, "limit": count}
+        extra_data.update({
+            "exchange_name": self.exchange_name,
+            "symbol_name": request_symbol,
+            "asset_type": self.asset_type,
+            "request_type": "get_kline",
+            "period": period,
+            "normalize_function": self._get_candles_normalize_function,
+        })
+        return path, params, extra_data
+
+    def get_kline(self, symbol, period, count=20, extra_data=None, **kwargs):
+        """Get kline/candle data for symbol. Returns RequestData."""
+        path, params, extra_data = self._get_kline(symbol, period, count, extra_data, **kwargs)
+        return self.request(path, params=params, extra_data=extra_data)
+
+    def async_get_kline(self, symbol, period, count=20, extra_data=None, **kwargs):
+        """Async get kline for symbol."""
+        path, params, extra_data = self._get_kline(symbol, period, count, extra_data, **kwargs)
+        self.submit(
+            self.async_request(path, params=params, extra_data=extra_data),
+            callback=self.async_callback,
+        )
+
+    # ── Standard Interface: get_exchange_info ─────────────────────
+
+    def _get_exchange_info(self, extra_data=None, **kwargs):
+        """Prepare exchange info request. Returns (path, params, extra_data)."""
+        if extra_data is None:
+            extra_data = {}
+        path = self._params.get_rest_path("get_exchange_info")
+        extra_data.update({
+            "exchange_name": self.exchange_name,
+            "symbol_name": "",
+            "asset_type": self.asset_type,
+            "request_type": "get_exchange_info",
+        })
+        return path, {}, extra_data
+
+    def get_exchange_info(self, extra_data=None, **kwargs):
+        """Get exchange metadata. Returns RequestData."""
+        path, params, extra_data = self._get_exchange_info(extra_data, **kwargs)
+        return self.request(path, params=params, extra_data=extra_data)
+
+    # ── Standard Interface: get_server_time ───────────────────────
+
+    def _get_server_time(self, extra_data=None, **kwargs):
+        """Prepare server time request. Returns (path, params, extra_data)."""
+        if extra_data is None:
+            extra_data = {}
+        path = self._params.get_rest_path("get_time")
+        extra_data.update({
+            "exchange_name": self.exchange_name,
+            "symbol_name": "",
+            "asset_type": self.asset_type,
+            "request_type": "get_server_time",
+        })
+        return path, {}, extra_data
+
+    def get_server_time(self, extra_data=None, **kwargs):
+        """Get server time. Returns RequestData."""
+        path, params, extra_data = self._get_server_time(extra_data, **kwargs)
+        return self.request(path, params=params, extra_data=extra_data)
+
     # Account Data Methods (require authentication)
 
     def get_subaccount(self, address, subaccount_number=0, extra_data=None, **kwargs):

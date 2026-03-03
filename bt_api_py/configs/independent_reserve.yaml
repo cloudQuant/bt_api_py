@@ -1,75 +1,87 @@
+# Independent Reserve Exchange Configuration
+# API doc: https://www.independentreserve.com/API
+# Auth: HMAC-SHA256 signature in POST JSON body (apiKey, nonce, signature)
+# Public: GET /Public/...  Private: POST /Private/...
+# Symbol: primaryCurrencyCode + secondaryCurrencyCode (e.g. Xbt, Aud)
 id: independent_reserve
 display_name: Independent Reserve
 venue_type: cex
 website: https://www.independentreserve.com
 api_doc: https://www.independentreserve.com/API
-base_urls:
-  rest:
-    default: https://api.independentreserve.com
-    spot: https://api.independentreserve.com
-  wss:
-    default: wss://api.independentreserve.com
-    spot: wss://api.independentreserve.com
-authentication:
-  type: hmac_sha256
-  header_name: None
-kline_periods:
-  1m: 1m
-  5m: 5m
-  15m: 15m
-  30m: 30m
-  1h: 1h
-  4h: 4h
-  1d: 1d
-  1w: 1w
-legal_currency: &id001
-- AUD
-- NZD
-- USD
-- SGD
-- USDT
-- BTC
-- ETH
-rate_limits:
-- name: public_api
-  type: sliding_window
-  interval: 1
-  limit: 1
-  scope: global
-- name: private_api
-  type: sliding_window
-  interval: 1
-  limit: 1
-  scope: global
-asset_types:
-  spot:
-    exchange_name: INDEPENDENT_RESERVE___SPOT
-    rest_paths:
-      get_server_time: GET /Public/GetTime
-      get_ticker: GET /Public/GetMarketSummary
-      get_depth: GET /Public/GetOrderBook
-      get_recent_trades: GET /Public/GetRecentTrades
-      get_markets: GET /Public/GetValidPrimaryCurrencyCodes
-      get_valid_secondary_currencies: GET /Public/GetValidSecondaryCurrencyCodes
-      get_order_minimum_volumes: GET /Public/GetOrderMinimumVolumes
-      get_networks: GET /Public/GetNetworks
-      get_primary_currency_config: GET /Public/GetPrimaryCurrencyConfig2
-      get_crypto_withdrawal_fees: GET /Public/GetCryptoWithdrawalFees2
-      place_limit_order: POST /Private/PlaceLimitOrder
-      place_market_order: POST /Private/PlaceMarketOrder
-      cancel_order: POST /Private/CancelOrder
-      get_open_orders: POST /Private/GetOpenOrders
-      get_closed_orders: POST /Private/GetClosedOrders
-      get_order_details: POST /Private/GetOrderDetails
-      get_accounts: POST /Private/GetAccounts
-      get_transactions: POST /Private/GetTransactions
-      get_digital_currency_deposit_address: POST /Private/GetDigitalCurrencyDepositAddress2
-      withdraw_crypto: POST /Private/WithdrawCrypto
-      withdraw_fiat: POST /Private/WithdrawFiatCurrency
-      get_fiat_bank_accounts: POST /Private/GetFiatBankAccounts
-    symbol_format: '{base}/{quote}'
-    legal_currency: *id001
+
 connection:
   type: http
   timeout: 10
   max_retries: 3
+
+authentication:
+  type: hmac_sha256
+  header_name: None
+
+kline_periods:
+  1m: "1m"
+  5m: "5m"
+  15m: "15m"
+  30m: "30m"
+  1h: "1h"
+  4h: "4h"
+  1d: "1d"
+  1w: "1w"
+
+legal_currency: &lc
+  - AUD
+  - NZD
+  - USD
+  - SGD
+  - USDT
+  - BTC
+  - ETH
+
+rate_limits:
+  - name: public_api
+    type: sliding_window
+    interval: 1
+    limit: 1
+    scope: global
+  - name: private_api
+    type: sliding_window
+    interval: 1
+    limit: 1
+    scope: global
+
+asset_types:
+  spot:
+    exchange_name: INDEPENDENT_RESERVE___SPOT
+    rest_url: "https://api.independentreserve.com"
+    wss_url: ""
+    symbol_format: "{base}/{quote}"
+    legal_currency: *lc
+    rest_paths:
+      # Public (GET, no auth)
+      get_tick: "GET /Public/GetMarketSummary"
+      get_depth: "GET /Public/GetOrderBook"
+      get_deals: "GET /Public/GetRecentTrades"
+      get_exchange_info: "GET /Public/GetValidPrimaryCurrencyCodes"
+      get_secondary_currencies: "GET /Public/GetValidSecondaryCurrencyCodes"
+      get_order_minimum_volumes: "GET /Public/GetOrderMinimumVolumes"
+      get_fx_rates: "GET /Public/GetFxRates"
+      # Private (POST, auth required)
+      make_order_limit: "POST /Private/PlaceLimitOrder"
+      make_order_market: "POST /Private/PlaceMarketOrder"
+      cancel_order: "POST /Private/CancelOrder"
+      get_open_orders: "POST /Private/GetOpenOrders"
+      get_closed_orders: "POST /Private/GetClosedOrders"
+      get_order_details: "POST /Private/GetOrderDetails"
+      get_account: "POST /Private/GetAccounts"
+      get_balance: "POST /Private/GetAccounts"
+      get_trades: "POST /Private/GetTrades"
+      get_brokerage_fees: "POST /Private/GetBrokerageFees"
+    kline_periods:
+      1m: "1m"
+      5m: "5m"
+      15m: "15m"
+      30m: "30m"
+      1h: "1h"
+      4h: "4h"
+      1d: "1d"
+      1w: "1w"

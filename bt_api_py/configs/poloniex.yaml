@@ -91,7 +91,7 @@ _shared_rest_paths: &shared_rest_paths
 asset_types:
   # ── PoloniexExchangeDataSpot (现货) ─────────────────────────────
   spot:
-    exchange_name: PoloniexSpot
+    exchange_name: POLONIEX___SPOT
     symbol_format: "{base}_{quote}"
     rest_paths:
       <<: *shared_rest_paths

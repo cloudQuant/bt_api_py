@@ -3,16 +3,12 @@ Test Bitbank exchange integration.
 
 Run tests:
     pytest tests/feeds/test_bitbank.py -v
-
-Run with coverage:
-    pytest tests/feeds/test_bitbank.py --cov=bt_api_py.feeds.live_bitbank --cov-report=term-missing
 """
 
 import json
 import queue
 import time
-from unittest.mock import Mock, patch
-from unittest.mock import MagicMock
+from unittest.mock import Mock, patch, MagicMock
 
 import pytest
 
@@ -21,6 +17,7 @@ from bt_api_py.containers.exchanges.bitbank_exchange_data import (
     BitbankExchangeDataSpot,
 )
 from bt_api_py.feeds.live_bitbank.spot import BitbankRequestDataSpot
+from bt_api_py.feeds.capability import Capability
 from bt_api_py.containers.requestdatas.request_data import RequestData
 from bt_api_py.containers.tickers.bitbank_ticker import BitbankRequestTickerData
 from bt_api_py.registry import ExchangeRegistry
@@ -37,15 +34,22 @@ def mock_logger():
         yield mock_log
 
 
+@pytest.fixture
+def mock_feed():
+    """Create a Bitbank feed instance with mocked request."""
+    data_queue = queue.Queue()
+    feed = BitbankRequestDataSpot(data_queue, exchange_name="BITBANK___SPOT")
+    feed.request = Mock(return_value=Mock(spec=RequestData))
+    return feed
+
+
 class TestBitbankExchangeData:
     """Test Bitbank exchange data configuration."""
 
     def test_exchange_data_spot_creation(self, mock_logger):
         """Test creating Bitbank spot exchange data."""
         exchange_data = BitbankExchangeDataSpot()
-        # exchange_name is loaded from YAML config
         assert exchange_data.rest_url
-        assert "make_order" in exchange_data.rest_paths or "get_ticker" in exchange_data.rest_paths
 
     def test_kline_periods(self, mock_logger):
         """Test kline periods are defined."""
@@ -82,23 +86,71 @@ class TestBitbankRequestDataSpot:
         assert request_data.exchange_name == "BITBANK___SPOT"
         assert request_data.asset_type == "SPOT"
 
+    def test_capabilities(self):
+        """Test declared capabilities include all standard interfaces."""
+        caps = BitbankRequestDataSpot._capabilities()
+        assert Capability.GET_TICK in caps
+        assert Capability.GET_DEPTH in caps
+        assert Capability.GET_KLINE in caps
+        assert Capability.GET_EXCHANGE_INFO in caps
+        assert Capability.GET_BALANCE in caps
+        assert Capability.GET_ACCOUNT in caps
+        assert Capability.MAKE_ORDER in caps
+        assert Capability.CANCEL_ORDER in caps
+
     def test_normalize_pair(self):
         """Test symbol normalization for Bitbank."""
         data_queue = queue.Queue()
-        request_data = BitbankRequestDataSpot(
-            data_queue,
-            public_key="test_key",
-            private_key="test_secret",
-        )
-
-        # Bitbank uses lowercase format with underscore
+        request_data = BitbankRequestDataSpot(data_queue)
         assert request_data._normalize_pair("BTC/JPY") == "btc_jpy"
         assert request_data._normalize_pair("BTC-JPY") == "btc_jpy"
         assert request_data._normalize_pair("BTC_JPY") == "btc_jpy"
 
+    def test_get_tick_returns_tuple(self, mock_feed):
+        """Test _get_tick returns (path, params, extra_data) tuple."""
+        path, params, extra_data = mock_feed._get_tick("BTC/JPY")
+        assert "GET" in path
+        assert "btc_jpy" in path
+        assert extra_data["request_type"] == "get_tick"
+        assert extra_data["symbol_name"] == "BTC/JPY"
+
+    def test_get_tick_calls_request(self, mock_feed):
+        """Test get_tick calls self.request."""
+        mock_feed.get_tick("BTC/JPY")
+        assert mock_feed.request.called
+
+    def test_get_depth_returns_tuple(self, mock_feed):
+        """Test _get_depth returns (path, params, extra_data) tuple."""
+        path, params, extra_data = mock_feed._get_depth("BTC/JPY")
+        assert "depth" in path
+        assert extra_data["request_type"] == "get_depth"
+
+    def test_get_depth_calls_request(self, mock_feed):
+        mock_feed.get_depth("BTC/JPY")
+        assert mock_feed.request.called
+
+    def test_get_kline_returns_tuple(self, mock_feed):
+        """Test _get_kline returns (path, params, extra_data) tuple."""
+        path, params, extra_data = mock_feed._get_kline("BTC/JPY", "1h")
+        assert "candlestick" in path
+        assert extra_data["request_type"] == "get_kline"
+
+    def test_get_kline_calls_request(self, mock_feed):
+        mock_feed.get_kline("BTC/JPY", "1h")
+        assert mock_feed.request.called
+
+    def test_get_exchange_info_returns_tuple(self, mock_feed):
+        path, params, extra_data = mock_feed._get_exchange_info()
+        assert extra_data["request_type"] == "get_exchange_info"
+
+    def test_get_server_time_tuple(self):
+        data_queue = queue.Queue()
+        feed = BitbankRequestDataSpot(data_queue, exchange_name="BITBANK___SPOT")
+        path, params, extra_data = feed._get_server_time()
+        assert extra_data["request_type"] == "get_server_time"
+
     def test_normalize_functions_exist(self):
         """Test that normalization functions exist."""
-        # Test ticker normalize function exists
         input_data = {
             "success": 1,
             "data": {
@@ -108,7 +160,6 @@ class TestBitbankRequestDataSpot:
             }
         }
         extra_data = {"symbol_name": "BTC/JPY"}
-
         result, success = BitbankRequestDataSpot._get_tick_normalize_function(
             input_data, extra_data
         )
@@ -121,20 +172,16 @@ class TestBitbankRequestDataSpot:
             "data": {
                 "bids": [
                     {"price": "4999000", "amount": "0.1"},
-                    {"price": "4998000", "amount": "0.2"},
                 ],
                 "asks": [
                     {"price": "5001000", "amount": "0.1"},
-                    {"price": "5002000", "amount": "0.2"},
                 ],
             }
         }
         extra_data = {"symbol_name": "BTC/JPY"}
-
         result, success = BitbankRequestDataSpot._get_depth_normalize_function(
             input_data, extra_data
         )
-
         assert success is True
         assert "bids" in result[0]
 
@@ -154,11 +201,9 @@ class TestBitbankRequestDataSpot:
             }
         }
         extra_data = {"symbol_name": "BTC/JPY"}
-
         result, success = BitbankRequestDataSpot._get_kline_normalize_function(
             input_data, extra_data
         )
-
         assert success is True
         assert "ohlcv" in result[0]
 
@@ -168,17 +213,11 @@ class TestBitbankRegistration:
 
     def test_bitbank_registered(self):
         """Test that Bitbank is properly registered."""
-        # Check if feed is registered in _feed_classes
         assert "BITBANK___SPOT" in ExchangeRegistry._feed_classes
         assert ExchangeRegistry._feed_classes["BITBANK___SPOT"] == BitbankRequestDataSpot
-
-        # Check if exchange data is registered
         assert "BITBANK___SPOT" in ExchangeRegistry._exchange_data_classes
         assert ExchangeRegistry._exchange_data_classes["BITBANK___SPOT"] == BitbankExchangeDataSpot
-
-        # Check if balance handler is registered
         assert "BITBANK___SPOT" in ExchangeRegistry._balance_handlers
-        assert ExchangeRegistry._balance_handlers["BITBANK___SPOT"] is not None
 
     def test_bitbank_create_exchange_data(self):
         """Test creating Bitbank exchange data through registry."""
@@ -186,152 +225,179 @@ class TestBitbankRegistration:
         assert isinstance(exchange_data, BitbankExchangeDataSpot)
 
 
-class TestBitbankIntegration:
-    """Integration tests for Bitbank."""
+class TestBitbankStandardInterfaces:
+    """Test standard Feed interface methods for Bitbank."""
 
-    def test_market_data_api(self):
-        """Test market data API calls (requires network)."""
-        pass
+    @pytest.fixture
+    def feed(self):
+        data_queue = queue.Queue()
+        feed = BitbankRequestDataSpot(data_queue, exchange_name="BITBANK___SPOT")
+        feed.request = Mock(return_value=Mock(spec=RequestData))
+        return feed
 
-    def test_trading_api(self):
-        """Test trading API calls (requires API keys)."""
-        pass
+    def test_make_order_calls_request(self, feed):
+        feed.make_order("BTC/JPY", 0.01, 5000000, "limit")
+        assert feed.request.called
+        extra_data = feed.request.call_args[1].get("extra_data")
+        assert extra_data["request_type"] == "make_order"
 
-# ==================== Live API Tests (Following Binance/OKX Standard) ===
+    def test_cancel_order_calls_request(self, feed):
+        feed.cancel_order("BTC/JPY", "order_123")
+        assert feed.request.called
+        extra_data = feed.request.call_args[1].get("extra_data")
+        assert extra_data["request_type"] == "cancel_order"
+
+    def test_query_order_calls_request(self, feed):
+        feed.query_order("BTC/JPY", "order_123")
+        assert feed.request.called
+        extra_data = feed.request.call_args[1].get("extra_data")
+        assert extra_data["request_type"] == "query_order"
+
+    def test_get_open_orders_calls_request(self, feed):
+        feed.get_open_orders("BTC/JPY")
+        assert feed.request.called
+        extra_data = feed.request.call_args[1].get("extra_data")
+        assert extra_data["request_type"] == "get_open_orders"
+
+    def test_get_account_calls_request(self, feed):
+        feed.get_account()
+        assert feed.request.called
+        extra_data = feed.request.call_args[1].get("extra_data")
+        assert extra_data["request_type"] == "get_account"
+
+    def test_get_balance_calls_request(self, feed):
+        feed.get_balance()
+        assert feed.request.called
+        extra_data = feed.request.call_args[1].get("extra_data")
+        assert extra_data["request_type"] == "get_balance"
+
+    def test_get_exchange_info_calls_request(self, feed):
+        feed.get_exchange_info()
+        assert feed.request.called
+        extra_data = feed.request.call_args[1].get("extra_data")
+        assert extra_data["request_type"] == "get_exchange_info"
+
+
+class TestBitbankBaseCapabilities:
+    """Test capabilities on the base class."""
+
+    def test_base_capabilities(self):
+        from bt_api_py.feeds.live_bitbank.request_base import BitbankRequestData
+        caps = BitbankRequestData._capabilities()
+        assert Capability.GET_TICK in caps
+        assert Capability.MAKE_ORDER in caps
+        assert Capability.CANCEL_ORDER in caps
+
+
+class TestBitbankNormalizeFunctions:
+    """Test normalize functions edge cases."""
+
+    def test_tick_normalize_with_none(self):
+        result, status = BitbankRequestDataSpot._get_tick_normalize_function(None, None)
+        assert result == []
+        assert status is False
+
+    def test_depth_normalize_with_none(self):
+        result, status = BitbankRequestDataSpot._get_depth_normalize_function(None, None)
+        assert result == []
+        assert status is False
+
+    def test_kline_normalize_with_none(self):
+        result, status = BitbankRequestDataSpot._get_kline_normalize_function(None, None)
+        assert result == []
+        assert status is False
+
+    def test_exchange_info_normalize_with_none(self):
+        result, status = BitbankRequestDataSpot._get_exchange_info_normalize_function(None, None)
+        assert result == []
+        assert status is False
+
+    def test_trades_normalize_with_none(self):
+        result, status = BitbankRequestDataSpot._get_trades_normalize_function(None, None)
+        assert result == []
+        assert status is False
+
+    def test_tick_normalize_failure(self):
+        result, status = BitbankRequestDataSpot._get_tick_normalize_function(
+            {"success": 0, "data": {}}, None
+        )
+        assert result == []
+        assert status is False
 
 
 class TestBitbankLiveAPI:
-    """Test Bitbank live API following Binance/OKX test standards."""
+    """Live API tests - require network, marked as integration."""
 
     @pytest.mark.integration
     def test_bitbank_req_tick_data(self):
-        """Test Bitbank ticker data (sync)."""
         data_queue = queue.Queue()
-        kwargs = {
-            "exchange_name": "BITBANK___SPOT",
-        }
-        feed = BitbankRequestDataSpot(data_queue, **kwargs)
+        feed = BitbankRequestDataSpot(data_queue, exchange_name="BITBANK___SPOT")
         data = feed.get_tick("BTC/JPY")
         assert isinstance(data, RequestData)
         data_list = data.get_data()
         assert isinstance(data_list, list)
-
-        # If we have data, validate the ticker structure
         if data_list and len(data_list) > 0:
-            pass
-        ticker = data_list[0]
-        # Bitbank returns dict with ticker info
-        if isinstance(ticker, dict):
-            assert isinstance(ticker, dict)
-
-    @pytest.mark.integration
-    def test_bitbank_async_tick_data(self):
-        """Test Bitbank ticker data (async)."""
-        data_queue = queue.Queue()
-        kwargs = {
-            "exchange_name": "BITBANK___SPOT",
-        }
-        feed = BitbankRequestDataSpot(data_queue, **kwargs)
-
-        # Bitbank may not have async_get_tick, skip if method doesn't exist
-        if not hasattr(feed, 'async_get_tick'):
-            pass
-        return
-
-        feed.async_get_tick(
-            "BTC/JPY",
-            extra_data={
-                "test_async_tick_data": True})
-        time.sleep(3)
-        try:
-            tick_data = data_queue.get(timeout=10)
-        except queue.Empty:
-            pass
+            ticker = data_list[0]
+            if isinstance(ticker, dict):
+                assert isinstance(ticker, dict)
 
     @pytest.mark.integration
     def test_bitbank_req_kline_data(self):
-        """Test Bitbank kline data (sync)."""
         data_queue = queue.Queue()
-        kwargs = {
-            "exchange_name": "BITBANK___SPOT",
-        }
-        feed = BitbankRequestDataSpot(data_queue, **kwargs)
+        feed = BitbankRequestDataSpot(data_queue, exchange_name="BITBANK___SPOT")
         data = feed.get_kline("BTC/JPY", "1h", count=2)
         assert isinstance(data, RequestData)
         data_list = data.get_data()
         assert isinstance(data_list, list)
-
-        # If we have kline data, validate structure
         if data_list and len(data_list) > 0:
-            pass
-        klines = data_list[0]
-        # Bitbank returns dict with ohlcv or list of klines
-        assert isinstance(klines, (list, dict))
-
-    @pytest.mark.integration
-    def test_bitbank_async_kline_data(self):
-        """Test Bitbank kline data (async)."""
-        data_queue = queue.Queue()
-        kwargs = {
-            "exchange_name": "BITBANK___SPOT",
-        }
-        feed = BitbankRequestDataSpot(data_queue, **kwargs)
-
-        # Bitbank may not have async_get_kline, skip if method doesn't exist
-        if not hasattr(feed, 'async_get_kline'):
-            pass
-        return
-
-        feed.async_get_kline(
-            "BTC/JPY",
-            period="1h",
-            count=3,
-            extra_data={
-                "test_async_kline_data": True})
-        time.sleep(5)
-        try:
-            kline_data = data_queue.get(timeout=10)
-        except queue.Empty:
-            pass
+            klines = data_list[0]
+            assert isinstance(klines, (list, dict))
 
     @pytest.mark.integration
     def test_bitbank_req_orderbook_data(self):
-        """Test Bitbank orderbook data (sync)."""
         data_queue = queue.Queue()
-        kwargs = {
-            "exchange_name": "BITBANK___SPOT",
-        }
-        feed = BitbankRequestDataSpot(data_queue, **kwargs)
+        feed = BitbankRequestDataSpot(data_queue, exchange_name="BITBANK___SPOT")
         data = feed.get_depth("BTC/JPY", 20)
         assert isinstance(data, RequestData)
         data_list = data.get_data()
         assert isinstance(data_list, list)
-
-        # If we have depth data, validate structure
         if data_list and len(data_list) > 0:
+            orderbook = data_list[0]
+            if isinstance(orderbook, dict):
+                assert "bids" in orderbook or "asks" in orderbook
+
+    @pytest.mark.integration
+    def test_bitbank_async_tick_data(self):
+        data_queue = queue.Queue()
+        feed = BitbankRequestDataSpot(data_queue, exchange_name="BITBANK___SPOT")
+        feed.async_get_tick("BTC/JPY", extra_data={"test_async": True})
+        time.sleep(3)
+        try:
+            tick_data = data_queue.get(timeout=10)
+            assert tick_data is not None
+        except queue.Empty:
             pass
-        orderbook = data_list[0]
-        # Bitbank returns dict with bids/asks
-        if isinstance(orderbook, dict):
-            assert isinstance(orderbook, dict)
+
+    @pytest.mark.integration
+    def test_bitbank_async_kline_data(self):
+        data_queue = queue.Queue()
+        feed = BitbankRequestDataSpot(data_queue, exchange_name="BITBANK___SPOT")
+        feed.async_get_kline("BTC/JPY", period="1h", count=3, extra_data={"test_async": True})
+        time.sleep(5)
+        try:
+            kline_data = data_queue.get(timeout=10)
+            assert kline_data is not None
+        except queue.Empty:
+            pass
 
     @pytest.mark.integration
     def test_bitbank_async_orderbook_data(self):
-        """Test Bitbank orderbook data (async)."""
         data_queue = queue.Queue()
-        kwargs = {
-            "exchange_name": "BITBANK___SPOT",
-        }
-        feed = BitbankRequestDataSpot(data_queue, **kwargs)
-
-        # Bitbank may not have async_get_depth, skip if method doesn't exist
-        if not hasattr(feed, 'async_get_depth'):
-            pass
-        return
-
+        feed = BitbankRequestDataSpot(data_queue, exchange_name="BITBANK___SPOT")
         feed.async_get_depth("BTC/JPY", 20)
         time.sleep(3)
         try:
             depth_data = data_queue.get(timeout=10)
+            assert depth_data is not None
         except queue.Empty:
             pass

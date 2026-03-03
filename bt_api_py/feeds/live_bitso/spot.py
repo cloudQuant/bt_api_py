@@ -1,140 +1,131 @@
 """
-Bitso Spot Feed implementation.
+Bitso Spot Feed – three-layer sync/async wrappers.
+
+Public:  get_tick, get_depth, get_kline, get_trade_history, get_server_time, get_exchange_info
+Private: make_order, cancel_order, query_order, get_open_orders, get_deals, get_account, get_balance
 """
 
-from bt_api_py.containers.exchanges.bitso_exchange_data import BitsoExchangeDataSpot
-from bt_api_py.feeds.capability import Capability
 from bt_api_py.feeds.live_bitso.request_base import BitsoRequestData
 
 
 class BitsoRequestDataSpot(BitsoRequestData):
-    """Bitso Spot Feed for market data."""
-
-    @classmethod
-    def _capabilities(cls):
-        return {
-            Capability.GET_TICK,
-            Capability.GET_DEPTH,
-            Capability.GET_KLINE,
-            Capability.GET_EXCHANGE_INFO,
-        }
+    """Bitso Spot Feed with three-layer method wrappers."""
 
     def __init__(self, data_queue, **kwargs):
+        kwargs.setdefault("exchange_name", "BITSO___SPOT")
+        kwargs.setdefault("asset_type", "SPOT")
         super().__init__(data_queue, **kwargs)
-        self.exchange_name = kwargs.get("exchange_name", "BITSO___SPOT")
-        self._params = BitsoExchangeDataSpot()
-        self.rest_url = self._params.rest_url
 
-    def _get_tick(self, symbol, extra_data=None, **kwargs):
-        """Get ticker data."""
-        request_type = "get_tick"
-        path = self._params.get_rest_path(request_type)
-        request_symbol = self._params.get_symbol(symbol)
-        extra_data = extra_data or {}
-        extra_data.update({
-            "request_type": request_type,
-            "symbol_name": symbol,
-            "normalize_function": self._get_tick_normalize_function,
-        })
-        return self.request(path, params={"book": request_symbol}, extra_data=extra_data)
+    # ── public endpoints ────────────────────────────────────────
 
-    @staticmethod
-    def _get_tick_normalize_function(input_data, extra_data):
-        if not input_data:
-            return [], False
-        # Bitso returns {success: true, payload: ticker}
-        if isinstance(input_data, dict):
-            payload = input_data.get("payload", {})
-            return [payload], payload is not None
-        return [], False
+    def get_server_time(self, extra_data=None, **kwargs):
+        path, params, ed = self._get_server_time(extra_data, **kwargs)
+        return self.request(path, params=params, extra_data=ed)
 
-    def get_tick(self, symbol, extra_data=None, **kwargs):
-        """Get symbol ticker."""
-        return self._get_tick(symbol, extra_data, **kwargs)
-
-    def _get_depth(self, symbol, count=20, extra_data=None, **kwargs):
-        """Get order book depth."""
-        request_type = "get_depth"
-        path = self._params.get_rest_path(request_type)
-        request_symbol = self._params.get_symbol(symbol)
-        extra_data = extra_data or {}
-        extra_data.update({
-            "request_type": request_type,
-            "symbol_name": symbol,
-            "normalize_function": self._get_depth_normalize_function,
-        })
-        return self.request(path, params={"book": request_symbol, "aggregate": True}, extra_data=extra_data)
-
-    @staticmethod
-    def _get_depth_normalize_function(input_data, extra_data):
-        if not input_data:
-            return [], False
-        # Bitso returns {success: true, payload: {bids: [], asks: []}}
-        if isinstance(input_data, dict):
-            payload = input_data.get("payload", {})
-            return [payload], payload is not None
-        return [], False
-
-    def get_depth(self, symbol, count=20, extra_data=None, **kwargs):
-        """Get order book."""
-        return self._get_depth(symbol, count, extra_data, **kwargs)
-
-    def _get_kline(self, symbol, period, count=20, extra_data=None, **kwargs):
-        """Get OHLC/kline data."""
-        request_type = "get_kline"
-        path = self._params.get_rest_path(request_type)
-        request_symbol = self._params.get_symbol(symbol)
-        request_period = self._params.get_period(period)
-        extra_data = extra_data or {}
-        extra_data.update({
-            "request_type": request_type,
-            "symbol_name": symbol,
-            "normalize_function": self._get_kline_normalize_function,
-        })
-        # Bitso OHLC API uses 'time_bucket' parameter (in seconds)
-        return self.request(path, params={
-            "book": request_symbol,
-            "time_bucket": request_period,
-        }, extra_data=extra_data)
-
-    @staticmethod
-    def _get_kline_normalize_function(input_data, extra_data):
-        if not input_data:
-            return [], False
-        # Bitso returns {success: true, "payload": [...]}
-        # where payload is a list of OHLC objects
-        if isinstance(input_data, dict):
-            payload = input_data.get("payload", [])
-            # payload is already a list of OHLC candles
-            return [payload], payload is not None and len(payload) > 0
-        return [], False
-
-    def get_kline(self, symbol, period, count=20, extra_data=None, **kwargs):
-        """Get kline data."""
-        return self._get_kline(symbol, period, count, extra_data, **kwargs)
-
-    def _get_exchange_info(self, extra_data=None, **kwargs):
-        """Get available trading pairs."""
-        request_type = "get_contract"
-        path = self._params.get_rest_path(request_type)
-        extra_data = extra_data or {}
-        extra_data.update({
-            "request_type": request_type,
-            "symbol_name": "ALL",
-            "normalize_function": self._get_exchange_info_normalize_function,
-        })
-        return self.request(path, extra_data=extra_data)
-
-    @staticmethod
-    def _get_exchange_info_normalize_function(input_data, extra_data):
-        if not input_data:
-            return [], False
-        # Bitso returns {success: true, payload: [books]}
-        if isinstance(input_data, dict):
-            payload = input_data.get("payload", [])
-            return [payload], payload is not None
-        return [], False
+    async def async_get_server_time(self, extra_data=None, **kwargs):
+        path, params, ed = self._get_server_time(extra_data, **kwargs)
+        return await self.async_request(path, params=params, extra_data=ed)
 
     def get_exchange_info(self, extra_data=None, **kwargs):
-        """Get exchange info."""
-        return self._get_exchange_info(extra_data, **kwargs)
+        path, params, ed = self._get_exchange_info(extra_data, **kwargs)
+        return self.request(path, params=params, extra_data=ed)
+
+    async def async_get_exchange_info(self, extra_data=None, **kwargs):
+        path, params, ed = self._get_exchange_info(extra_data, **kwargs)
+        return await self.async_request(path, params=params, extra_data=ed)
+
+    def get_tick(self, symbol, extra_data=None, **kwargs):
+        path, params, ed = self._get_tick(symbol, extra_data, **kwargs)
+        return self.request(path, params=params, extra_data=ed)
+
+    async def async_get_tick(self, symbol, extra_data=None, **kwargs):
+        path, params, ed = self._get_tick(symbol, extra_data, **kwargs)
+        return await self.async_request(path, params=params, extra_data=ed)
+
+    get_ticker = get_tick
+    async_get_ticker = async_get_tick
+
+    def get_depth(self, symbol, count=50, extra_data=None, **kwargs):
+        path, params, ed = self._get_depth(symbol, count, extra_data, **kwargs)
+        return self.request(path, params=params, extra_data=ed)
+
+    async def async_get_depth(self, symbol, count=50, extra_data=None, **kwargs):
+        path, params, ed = self._get_depth(symbol, count, extra_data, **kwargs)
+        return await self.async_request(path, params=params, extra_data=ed)
+
+    def get_kline(self, symbol, period="1h", count=100, extra_data=None, **kwargs):
+        path, params, ed = self._get_kline(symbol, period, count, extra_data, **kwargs)
+        return self.request(path, params=params, extra_data=ed)
+
+    async def async_get_kline(self, symbol, period="1h", count=100, extra_data=None, **kwargs):
+        path, params, ed = self._get_kline(symbol, period, count, extra_data, **kwargs)
+        return await self.async_request(path, params=params, extra_data=ed)
+
+    def get_trade_history(self, symbol, count=50, extra_data=None, **kwargs):
+        path, params, ed = self._get_trade_history(symbol, count, extra_data, **kwargs)
+        return self.request(path, params=params, extra_data=ed)
+
+    async def async_get_trade_history(self, symbol, count=50, extra_data=None, **kwargs):
+        path, params, ed = self._get_trade_history(symbol, count, extra_data, **kwargs)
+        return await self.async_request(path, params=params, extra_data=ed)
+
+    get_trades = get_trade_history
+    async_get_trades = async_get_trade_history
+
+    # ── private endpoints (signed) ──────────────────────────────
+
+    def make_order(self, symbol, size, price=None, order_type="buy-limit", extra_data=None, **kwargs):
+        path, body, ed = self._make_order(symbol, size, price, order_type, extra_data, **kwargs)
+        return self.request(path, body=body, extra_data=ed, is_sign=True)
+
+    async def async_make_order(self, symbol, size, price=None, order_type="buy-limit", extra_data=None, **kwargs):
+        path, body, ed = self._make_order(symbol, size, price, order_type, extra_data, **kwargs)
+        return await self.async_request(path, body=body, extra_data=ed, is_sign=True)
+
+    def cancel_order(self, symbol=None, order_id=None, extra_data=None, **kwargs):
+        path, params, ed = self._cancel_order(symbol, order_id, extra_data, **kwargs)
+        return self.request(path, params=params, extra_data=ed, is_sign=True)
+
+    async def async_cancel_order(self, symbol=None, order_id=None, extra_data=None, **kwargs):
+        path, params, ed = self._cancel_order(symbol, order_id, extra_data, **kwargs)
+        return await self.async_request(path, params=params, extra_data=ed, is_sign=True)
+
+    def query_order(self, symbol=None, order_id=None, extra_data=None, **kwargs):
+        path, params, ed = self._query_order(symbol, order_id, extra_data, **kwargs)
+        return self.request(path, params=params, extra_data=ed, is_sign=True)
+
+    async def async_query_order(self, symbol=None, order_id=None, extra_data=None, **kwargs):
+        path, params, ed = self._query_order(symbol, order_id, extra_data, **kwargs)
+        return await self.async_request(path, params=params, extra_data=ed, is_sign=True)
+
+    def get_open_orders(self, symbol=None, extra_data=None, **kwargs):
+        path, params, ed = self._get_open_orders(symbol, extra_data, **kwargs)
+        return self.request(path, params=params, extra_data=ed, is_sign=True)
+
+    async def async_get_open_orders(self, symbol=None, extra_data=None, **kwargs):
+        path, params, ed = self._get_open_orders(symbol, extra_data, **kwargs)
+        return await self.async_request(path, params=params, extra_data=ed, is_sign=True)
+
+    def get_deals(self, symbol=None, extra_data=None, **kwargs):
+        path, params, ed = self._get_deals(symbol, extra_data, **kwargs)
+        return self.request(path, params=params, extra_data=ed, is_sign=True)
+
+    async def async_get_deals(self, symbol=None, extra_data=None, **kwargs):
+        path, params, ed = self._get_deals(symbol, extra_data, **kwargs)
+        return await self.async_request(path, params=params, extra_data=ed, is_sign=True)
+
+    def get_account(self, extra_data=None, **kwargs):
+        path, params, ed = self._get_account(extra_data, **kwargs)
+        return self.request(path, params=params, extra_data=ed, is_sign=True)
+
+    async def async_get_account(self, extra_data=None, **kwargs):
+        path, params, ed = self._get_account(extra_data, **kwargs)
+        return await self.async_request(path, params=params, extra_data=ed, is_sign=True)
+
+    def get_balance(self, extra_data=None, **kwargs):
+        path, params, ed = self._get_balance(extra_data, **kwargs)
+        return self.request(path, params=params, extra_data=ed, is_sign=True)
+
+    async def async_get_balance(self, extra_data=None, **kwargs):
+        path, params, ed = self._get_balance(extra_data, **kwargs)
+        return await self.async_request(path, params=params, extra_data=ed, is_sign=True)

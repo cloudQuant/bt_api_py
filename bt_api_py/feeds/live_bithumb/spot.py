@@ -17,6 +17,10 @@ class BithumbRequestDataSpot(BithumbRequestData):
             Capability.GET_DEPTH,
             Capability.GET_KLINE,
             Capability.GET_EXCHANGE_INFO,
+            Capability.GET_BALANCE,
+            Capability.GET_ACCOUNT,
+            Capability.MAKE_ORDER,
+            Capability.CANCEL_ORDER,
         }
 
     def __init__(self, data_queue, **kwargs):
@@ -32,10 +36,13 @@ class BithumbRequestDataSpot(BithumbRequestData):
         path = f"GET /spot/ticker"
         # Convert common formats to Bithumb format
         bithumb_symbol = self._convert_symbol(symbol)
-        extra_data = extra_data or {}
+        if extra_data is None:
+            extra_data = {}
         extra_data.update({
             "request_type": request_type,
             "symbol_name": bithumb_symbol,
+            "asset_type": self.asset_type,
+            "exchange_name": self.exchange_name,
             "normalize_function": self._get_tick_normalize_function,
         })
         params = {"symbol": bithumb_symbol}
@@ -95,6 +102,14 @@ class BithumbRequestDataSpot(BithumbRequestData):
         path, params, extra_data = self._get_tick(symbol, extra_data, **kwargs)
         return self.request(path, params=params, extra_data=extra_data)
 
+    def async_get_tick(self, symbol, extra_data=None, **kwargs):
+        """Async get ticker."""
+        path, params, extra_data = self._get_tick(symbol, extra_data, **kwargs)
+        self.submit(
+            self.async_request(path, params=params, extra_data=extra_data),
+            callback=self.async_callback,
+        )
+
     def _get_depth(self, symbol, count=20, extra_data=None, **kwargs):
         """Get order book depth parameters.
 
@@ -112,10 +127,13 @@ class BithumbRequestDataSpot(BithumbRequestData):
         request_type = "get_depth"
         path = f"GET /spot/orderBook"
         bithumb_symbol = self._convert_symbol(symbol)
-        extra_data = extra_data or {}
+        if extra_data is None:
+            extra_data = {}
         extra_data.update({
             "request_type": request_type,
             "symbol_name": bithumb_symbol,
+            "asset_type": self.asset_type,
+            "exchange_name": self.exchange_name,
             "normalize_function": self._get_depth_normalize_function,
         })
         params = {"symbol": bithumb_symbol, "limit": count}
@@ -134,6 +152,14 @@ class BithumbRequestDataSpot(BithumbRequestData):
         path, params, extra_data = self._get_depth(symbol, count, extra_data, **kwargs)
         return self.request(path, params=params, extra_data=extra_data)
 
+    def async_get_depth(self, symbol, count=20, extra_data=None, **kwargs):
+        """Async get depth."""
+        path, params, extra_data = self._get_depth(symbol, count, extra_data, **kwargs)
+        self.submit(
+            self.async_request(path, params=params, extra_data=extra_data),
+            callback=self.async_callback,
+        )
+
     def _get_kline(self, symbol, period, count=20, extra_data=None, **kwargs):
         """Get kline/candlestick data parameters.
 
@@ -151,10 +177,13 @@ class BithumbRequestDataSpot(BithumbRequestData):
         end_time = int(time.time())
         start_time = end_time - (3600 * 24)  # Default 24 hours
 
-        extra_data = extra_data or {}
+        if extra_data is None:
+            extra_data = {}
         extra_data.update({
             "request_type": request_type,
             "symbol_name": bithumb_symbol,
+            "asset_type": self.asset_type,
+            "exchange_name": self.exchange_name,
             "normalize_function": self._get_kline_normalize_function,
         })
         params = {
@@ -194,15 +223,26 @@ class BithumbRequestDataSpot(BithumbRequestData):
         path, params, extra_data = self._get_kline(symbol, period, count, extra_data, **kwargs)
         return self.request(path, params=params, extra_data=extra_data)
 
+    def async_get_kline(self, symbol, period="1m", count=20, extra_data=None, **kwargs):
+        """Async get kline."""
+        path, params, extra_data = self._get_kline(symbol, period, count, extra_data, **kwargs)
+        self.submit(
+            self.async_request(path, params=params, extra_data=extra_data),
+            callback=self.async_callback,
+        )
+
     def _get_trades(self, symbol, count=50, extra_data=None, **kwargs):
         """Get recent trades parameters."""
         request_type = "get_trades"
         path = f"GET /spot/trades"
         bithumb_symbol = self._convert_symbol(symbol)
-        extra_data = extra_data or {}
+        if extra_data is None:
+            extra_data = {}
         extra_data.update({
             "request_type": request_type,
             "symbol_name": bithumb_symbol,
+            "asset_type": self.asset_type,
+            "exchange_name": self.exchange_name,
             "normalize_function": self._get_trades_normalize_function,
         })
         params = {"symbol": bithumb_symbol, "limit": count}
@@ -238,11 +278,15 @@ class BithumbRequestDataSpot(BithumbRequestData):
 
     def _get_exchange_info(self, extra_data=None, **kwargs):
         """Get exchange configuration (trading pairs info) parameters."""
-        request_type = "get_config"
-        path = f"GET /spot/config"
-        extra_data = extra_data or {}
+        request_type = "get_exchange_info"
+        path = "GET /spot/config"
+        if extra_data is None:
+            extra_data = {}
         extra_data.update({
             "request_type": request_type,
+            "symbol_name": "",
+            "asset_type": self.asset_type,
+            "exchange_name": self.exchange_name,
             "normalize_function": self._get_exchange_info_normalize_function,
         })
         return path, {}, extra_data
@@ -267,10 +311,14 @@ class BithumbRequestDataSpot(BithumbRequestData):
         Returns user account information including balances.
         """
         request_type = "get_account"
-        path = f"GET /spot/account"
-        extra_data = extra_data or {}
+        path = "GET /spot/account"
+        if extra_data is None:
+            extra_data = {}
         extra_data.update({
             "request_type": request_type,
+            "symbol_name": "",
+            "asset_type": self.asset_type,
+            "exchange_name": self.exchange_name,
             "normalize_function": self._get_account_normalize_function,
         })
         return path, {}, extra_data
@@ -307,28 +355,34 @@ class BithumbRequestDataSpot(BithumbRequestData):
         return self.request(path, params=params, extra_data=extra_data)
 
     def async_get_account(self, symbol="ALL", extra_data=None, **kwargs):
-        """Get account information asynchronously.
+        """Get account information asynchronously."""
+        path, params, extra_data = self._get_account(extra_data, **kwargs)
+        self.submit(
+            self.async_request(path, params=params, extra_data=extra_data),
+            callback=self.async_callback,
+        )
 
-        Note: Bithumb doesn't have async implementation yet.
-        Falls back to synchronous call.
-        """
-        return self.get_account(symbol, extra_data, **kwargs)
-
-    def _get_balance(self, symbol, extra_data=None, **kwargs):
+    def _get_balance(self, symbol=None, extra_data=None, **kwargs):
         """Get account balance for a specific currency.
 
         Args:
             symbol: Currency symbol (e.g., "BTC", "USDT")
         """
         request_type = "get_balance"
-        path = f"GET /spot/balance"
-        extra_data = extra_data or {}
+        path = "GET /spot/balance"
+        if extra_data is None:
+            extra_data = {}
         extra_data.update({
             "request_type": request_type,
-            "symbol_name": symbol,
+            "symbol_name": symbol or "",
+            "asset_type": self.asset_type,
+            "exchange_name": self.exchange_name,
             "normalize_function": self._get_balance_normalize_function,
         })
-        return path, {"currency": symbol}, extra_data
+        params = {}
+        if symbol:
+            params["currency"] = symbol
+        return path, params, extra_data
 
     @staticmethod
     def _get_balance_normalize_function(input_data, extra_data):
@@ -349,13 +403,106 @@ class BithumbRequestDataSpot(BithumbRequestData):
         balance = input_data.get("data", {})
         return [balance], balance is not None
 
-    def get_balance(self, symbol, extra_data=None, **kwargs):
-        """Get balance for a specific currency.
-
-        Args:
-            symbol: Currency symbol (e.g., "BTC", "USDT")
-        """
+    def get_balance(self, symbol=None, extra_data=None, **kwargs):
+        """Get balance for a specific currency."""
         path, params, extra_data = self._get_balance(symbol, extra_data, **kwargs)
+        return self.request(path, params=params, extra_data=extra_data)
+
+    # ==================== Trading Interfaces ====================
+
+    def _make_order(self, symbol, volume, price, order_type, offset="open",
+                    post_only=False, client_order_id=None, extra_data=None, **kwargs):
+        """Prepare order. Returns (path, params, extra_data)."""
+        bithumb_symbol = self._convert_symbol(symbol)
+        path = "POST /spot/placeOrder"
+        if extra_data is None:
+            extra_data = {}
+        extra_data.update({
+            "exchange_name": self.exchange_name,
+            "symbol_name": bithumb_symbol,
+            "asset_type": self.asset_type,
+            "request_type": "make_order",
+        })
+        params = {
+            "symbol": bithumb_symbol,
+            "side": offset.upper() if offset in ("BUY", "SELL", "buy", "sell") else "BUY",
+            "type": order_type.upper(),
+            "quantity": str(volume),
+            "price": str(price),
+        }
+        return path, params, extra_data
+
+    def make_order(self, symbol, volume, price, order_type, offset="open",
+                   post_only=False, client_order_id=None, extra_data=None, **kwargs):
+        """Place an order."""
+        path, params, extra_data = self._make_order(
+            symbol, volume, price, order_type, offset, post_only,
+            client_order_id, extra_data, **kwargs
+        )
+        return self.request(path, body=params, extra_data=extra_data)
+
+    def _cancel_order(self, symbol, order_id, extra_data=None, **kwargs):
+        """Cancel order. Returns (path, params, extra_data)."""
+        bithumb_symbol = self._convert_symbol(symbol)
+        path = "POST /spot/cancelOrder"
+        if extra_data is None:
+            extra_data = {}
+        extra_data.update({
+            "exchange_name": self.exchange_name,
+            "symbol_name": bithumb_symbol,
+            "asset_type": self.asset_type,
+            "request_type": "cancel_order",
+            "order_id": order_id,
+        })
+        params = {"symbol": bithumb_symbol, "orderId": order_id}
+        return path, params, extra_data
+
+    def cancel_order(self, symbol, order_id, extra_data=None, **kwargs):
+        """Cancel order."""
+        path, params, extra_data = self._cancel_order(symbol, order_id, extra_data, **kwargs)
+        return self.request(path, body=params, extra_data=extra_data)
+
+    def _query_order(self, symbol, order_id, extra_data=None, **kwargs):
+        """Query order. Returns (path, params, extra_data)."""
+        bithumb_symbol = self._convert_symbol(symbol)
+        path = "GET /spot/singleOrder"
+        if extra_data is None:
+            extra_data = {}
+        extra_data.update({
+            "exchange_name": self.exchange_name,
+            "symbol_name": bithumb_symbol,
+            "asset_type": self.asset_type,
+            "request_type": "query_order",
+            "order_id": order_id,
+        })
+        params = {"symbol": bithumb_symbol, "orderId": order_id}
+        return path, params, extra_data
+
+    def query_order(self, symbol, order_id, extra_data=None, **kwargs):
+        """Query order status."""
+        path, params, extra_data = self._query_order(symbol, order_id, extra_data, **kwargs)
+        return self.request(path, params=params, extra_data=extra_data)
+
+    def _get_open_orders(self, symbol=None, extra_data=None, **kwargs):
+        """Get open orders. Returns (path, params, extra_data)."""
+        path = "GET /spot/orderList"
+        if extra_data is None:
+            extra_data = {}
+        extra_data.update({
+            "exchange_name": self.exchange_name,
+            "symbol_name": symbol or "",
+            "asset_type": self.asset_type,
+            "request_type": "get_open_orders",
+        })
+        params = {}
+        if symbol:
+            bithumb_symbol = self._convert_symbol(symbol)
+            params["symbol"] = bithumb_symbol
+        return path, params, extra_data
+
+    def get_open_orders(self, symbol=None, extra_data=None, **kwargs):
+        """Get open orders."""
+        path, params, extra_data = self._get_open_orders(symbol, extra_data, **kwargs)
         return self.request(path, params=params, extra_data=extra_data)
 
     def _get_deals(self, symbol, count=100, start_time=None, end_time=None, extra_data=None, **kwargs):
@@ -370,10 +517,13 @@ class BithumbRequestDataSpot(BithumbRequestData):
         request_type = "get_deals"
         path = f"GET /spot/trades"
         bithumb_symbol = self._convert_symbol(symbol)
-        extra_data = extra_data or {}
+        if extra_data is None:
+            extra_data = {}
         extra_data.update({
             "request_type": request_type,
             "symbol_name": bithumb_symbol,
+            "asset_type": self.asset_type,
+            "exchange_name": self.exchange_name,
             "normalize_function": self._get_deals_normalize_function,
         })
         params = {"symbol": bithumb_symbol, "limit": count}
@@ -419,9 +569,9 @@ class BithumbRequestDataSpot(BithumbRequestData):
         return self.request(path, params=params, extra_data=extra_data)
 
     def async_get_deals(self, symbol, count=100, start_time=None, end_time=None, extra_data=None, **kwargs):
-        """Get trade history asynchronously.
-
-        Note: Bithumb doesn't have async implementation yet.
-        Falls back to synchronous call.
-        """
-        return self.get_deals(symbol, count, start_time, end_time, extra_data, **kwargs)
+        """Get trade history asynchronously."""
+        path, params, extra_data = self._get_deals(symbol, count, start_time, end_time, extra_data, **kwargs)
+        self.submit(
+            self.async_request(path, params=params, extra_data=extra_data),
+            callback=self.async_callback,
+        )

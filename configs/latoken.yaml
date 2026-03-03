@@ -1,41 +1,24 @@
-# Latoken Configuration
-# Official API documentation: https://api.latoken.com
-
+# Latoken Exchange Configuration
+# API doc: https://api.latoken.com
+# Auth: HMAC-SHA512 (X-LA-APIKEY / X-LA-SIGNATURE / X-LA-DIGEST)
+# Symbol: UUID-based internally; user-facing {base}_{quote} lowercase
 id: latoken
 display_name: Latoken
 venue_type: cex
 website: https://latoken.com
 api_doc: https://api.latoken.com
 
-# Base URLs
-base_urls:
-  rest:
-    spot: https://api.latoken.com
-  wss:
-    public: ""
-
-# Connection
 connection:
   type: http
   timeout: 10
   max_retries: 3
 
-# Authentication (HMAC-SHA512)
 authentication:
   type: hmac_sha512
   header_name: X-LA-APIKEY
   signature_header: X-LA-SIGNATURE
   digest_header: X-LA-DIGEST
 
-# Rate limits (based on documentation)
-rate_limits:
-  - name: rest_api
-    type: fixed_window
-    interval: 1
-    limit: 1
-    scope: global
-
-# Kline periods supported by Latoken
 kline_periods:
   1m: "1"
   5m: "5"
@@ -46,36 +29,42 @@ kline_periods:
   1d: "1D"
   1w: "1W"
 
-# Legal currencies
-legal_currency:
+legal_currency: &lc
   - USDT
   - BTC
   - ETH
   - LA
 
-# Asset types
+rate_limits:
+  - name: rest_api
+    type: fixed_window
+    interval: 1
+    limit: 1
+    scope: global
+
 asset_types:
   spot:
     exchange_name: LATOKEN___SPOT
+    rest_url: "https://api.latoken.com"
+    wss_url: ""
     symbol_format: "{base}_{quote}"
-
-    # REST API paths (Latoken v2 API)
+    legal_currency: *lc
     rest_paths:
-      base_url: "/v2"
+      # Public (GET, no auth)
       get_server_time: "GET /v2/time"
-      get_ticker: "GET /v2/ticker"
-      get_ticker_symbol: "GET /v2/ticker/{base}/{quote}"
-      get_orderbook: "GET /v2/book/{currency}/{quote}"
-      get_trades: "GET /v2/trade/history/{currency}/{quote}"
-      get_pairs: "GET /v2/pair"
+      get_tick: "GET /v2/ticker/{base}/{quote}"
+      get_all_tickers: "GET /v2/ticker"
+      get_depth: "GET /v2/book/{currency}/{quote}"
+      get_deals: "GET /v2/trade/history/{currency}/{quote}"
+      get_exchange_info: "GET /v2/pair"
       get_currencies: "GET /v2/currency"
-      get_chart_week: "GET /v2/chart/week/{currency}/{quote}"
-
-    # WebSocket paths (not fully documented, minimal support)
-    wss_paths:
-      ticker: ""
-
-    # Kline periods
+      get_kline: "GET /v2/chart/week/{currency}/{quote}"
+      # Private (POST/GET, auth required)
+      make_order: "POST /v2/auth/order/place"
+      cancel_order: "POST /v2/auth/order/cancel"
+      get_open_orders: "GET /v2/auth/order/pair/{currency}/{quote}/active"
+      get_balance: "GET /v2/auth/account"
+      get_account: "GET /v2/auth/account"
     kline_periods:
       1m: "1"
       5m: "5"
@@ -85,16 +74,3 @@ asset_types:
       4h: "240"
       1d: "1D"
       1w: "1W"
-
-    # Legal currencies for spot
-    legal_currency:
-      - USDT
-      - BTC
-      - ETH
-      - LA
-
-    # Trading symbols (examples)
-    symbols:
-      - "btc_usdt"
-      - "eth_usdt"
-      - "la_usdt"

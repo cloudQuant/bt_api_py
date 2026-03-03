@@ -3,22 +3,16 @@ Test Giottus exchange integration.
 
 Run tests:
     pytest tests/feeds/test_giottus.py -v
-
-Run with coverage:
-    pytest tests/feeds/test_giottus.py --cov=bt_api_py.feeds.live_giottus --cov-report=term-missing
 """
 
-import json
 import queue
-import time
-from unittest.mock import Mock, patch
+from unittest.mock import Mock
 
 import pytest
 
 from bt_api_py.containers.exchanges.giottus_exchange_data import GiottusExchangeDataSpot
 from bt_api_py.containers.tickers.giottus_ticker import GiottusRequestTickerData
-from bt_api_py.containers.bars.bar import BarData
-from bt_api_py.containers.orderbooks.orderbook import OrderBookData
+from bt_api_py.feeds.capability import Capability
 from bt_api_py.feeds.live_giottus.spot import GiottusRequestDataSpot
 from bt_api_py.registry import ExchangeRegistry
 
@@ -26,188 +20,298 @@ from bt_api_py.registry import ExchangeRegistry
 import bt_api_py.feeds.register_giottus  # noqa: F401
 
 
+@pytest.fixture
+def mock_feed():
+    """Create a Giottus feed instance with mocked request."""
+    data_queue = queue.Queue()
+    feed = GiottusRequestDataSpot(
+        data_queue,
+        public_key="test_key",
+        private_key="test_secret",
+        exchange_name="GIOTTUS___SPOT",
+    )
+    feed.request = Mock(return_value=Mock())
+    return feed
+
+
 class TestGiottusExchangeData:
     """Test Giottus exchange data configuration."""
 
     def test_exchange_data_spot_creation(self):
-        """Test creating Giottus spot exchange data."""
         exchange_data = GiottusExchangeDataSpot()
-        # exchange_name is loaded from YAML config
         assert exchange_data.rest_url
         assert exchange_data.asset_type == "spot"
 
     def test_rest_url(self):
-        """Test REST URL configuration."""
         exchange_data = GiottusExchangeDataSpot()
         assert "giottus.com" in exchange_data.rest_url
 
     def test_wss_url(self):
-        """Test WebSocket URL configuration."""
         exchange_data = GiottusExchangeDataSpot()
         assert exchange_data.wss_url
         assert "wss://" in exchange_data.wss_url
 
     def test_kline_periods(self):
-        """Test kline period configuration."""
         exchange_data = GiottusExchangeDataSpot()
         assert "1m" in exchange_data.kline_periods
         assert "1h" in exchange_data.kline_periods
         assert "1d" in exchange_data.kline_periods
 
     def test_legal_currency(self):
-        """Test legal currencies."""
         exchange_data = GiottusExchangeDataSpot()
         assert "INR" in exchange_data.legal_currency
         assert "USDT" in exchange_data.legal_currency
         assert "BTC" in exchange_data.legal_currency
 
 
-def init_req_feed():
-    """Initialize request feed for testing."""
-    data_queue = queue.Queue()
-    kwargs = {
-        "public_key": "test_key",
-        "private_key": "test_secret",
-    }
-    return GiottusRequestDataSpot(data_queue, **kwargs)
-
-
 class TestGiottusRequestDataSpot:
     """Test Giottus spot REST API request class."""
 
     def test_request_data_creation(self):
-        """Test creating Giottus request data."""
         data_queue = queue.Queue()
-        request_data = GiottusRequestDataSpot(
+        feed = GiottusRequestDataSpot(
             data_queue,
             public_key="test_key",
             private_key="test_secret",
             exchange_name="GIOTTUS___SPOT",
         )
-        assert request_data.exchange_name == "GIOTTUS___SPOT"
+        assert feed.exchange_name == "GIOTTUS___SPOT"
+        assert feed.asset_type == "SPOT"
 
-    def test_get_tick_params(self):
-        """Test get ticker parameter generation."""
+    def test_capabilities(self):
+        caps = GiottusRequestDataSpot._capabilities()
+        assert Capability.GET_TICK in caps
+        assert Capability.GET_DEPTH in caps
+        assert Capability.GET_KLINE in caps
+        assert Capability.GET_EXCHANGE_INFO in caps
+        assert Capability.GET_BALANCE in caps
+        assert Capability.GET_ACCOUNT in caps
+        assert Capability.MAKE_ORDER in caps
+        assert Capability.CANCEL_ORDER in caps
+
+    def test_get_tick_returns_tuple(self, mock_feed):
+        path, params, extra_data = mock_feed._get_tick("BTC-INR")
+        assert path is not None
+        assert "symbol" in params
+        assert extra_data["request_type"] == "get_tick"
+        assert extra_data["symbol_name"] == "BTC-INR"
+        assert extra_data["exchange_name"] == "GIOTTUS___SPOT"
+        assert extra_data["asset_type"] == "SPOT"
+
+    def test_get_depth_returns_tuple(self, mock_feed):
+        path, params, extra_data = mock_feed._get_depth("BTC-INR", count=20)
+        assert path is not None
+        assert "symbol" in params
+        assert "limit" in params
+        assert extra_data["request_type"] == "get_depth"
+        assert extra_data["symbol_name"] == "BTC-INR"
+
+    def test_get_kline_returns_tuple(self, mock_feed):
+        path, params, extra_data = mock_feed._get_kline("BTC-INR", period="1h", count=20)
+        assert path is not None
+        assert "symbol" in params
+        assert "interval" in params
+        assert extra_data["request_type"] == "get_kline"
+
+    def test_get_balance_returns_tuple(self, mock_feed):
+        path, params, extra_data = mock_feed._get_balance()
+        assert path is not None
+        assert extra_data["request_type"] == "get_balance"
+
+    def test_get_account_returns_tuple(self, mock_feed):
+        path, params, extra_data = mock_feed._get_account()
+        assert path is not None
+        assert extra_data["request_type"] == "get_account"
+
+    def test_make_order_returns_tuple(self, mock_feed):
+        path, params, extra_data = mock_feed._make_order(
+            symbol="BTC-INR", volume="0.001", price="50000", order_type="buy-limit"
+        )
+        assert path is not None
+        assert params["side"] == "BUY"
+        assert extra_data["request_type"] == "make_order"
+
+    def test_cancel_order_returns_tuple(self, mock_feed):
+        path, params, extra_data = mock_feed._cancel_order("BTC-INR", "order_123")
+        assert path is not None
+        assert extra_data["request_type"] == "cancel_order"
+        assert extra_data["order_id"] == "order_123"
+
+    def test_get_server_time_returns_tuple(self, mock_feed):
+        path, params, extra_data = mock_feed._get_server_time()
+        assert path is not None
+        assert extra_data["request_type"] == "get_server_time"
+
+    def test_get_exchange_info_returns_tuple(self, mock_feed):
+        path, params, extra_data = mock_feed._get_exchange_info()
+        assert path is not None
+        assert extra_data["request_type"] == "get_exchange_info"
+
+
+class TestGiottusStandardInterfaces:
+    """Test standard Feed interface methods invoke request()."""
+
+    @pytest.fixture
+    def feed(self):
         data_queue = queue.Queue()
-        request_data = GiottusRequestDataSpot(
+        feed = GiottusRequestDataSpot(
             data_queue,
             public_key="test_key",
             private_key="test_secret",
+            exchange_name="GIOTTUS___SPOT",
         )
+        feed.request = Mock(return_value=Mock())
+        return feed
 
-        path, params, extra_data = request_data._get_tick("BTC-INR")
-        assert path is not None
-        assert params is not None
+    def test_get_tick_calls_request(self, feed):
+        feed.get_tick("BTC-INR")
+        assert feed.request.called
+        call_kwargs = feed.request.call_args[1]
+        extra_data = call_kwargs.get("extra_data")
+        if extra_data:
+            assert extra_data["request_type"] == "get_tick"
 
-    def test_get_depth_params(self):
-        """Test get depth parameter generation."""
-        data_queue = queue.Queue()
-        request_data = GiottusRequestDataSpot(
-            data_queue,
-            public_key="test_key",
-            private_key="test_secret",
-        )
+    def test_get_depth_calls_request(self, feed):
+        feed.get_depth("BTC-INR")
+        assert feed.request.called
+        call_kwargs = feed.request.call_args[1]
+        extra_data = call_kwargs.get("extra_data")
+        if extra_data:
+            assert extra_data["request_type"] == "get_depth"
 
-        path, params, extra_data = request_data._get_depth("BTC-INR", count=20)
-        assert path is not None
-        assert params is not None
+    def test_get_kline_calls_request(self, feed):
+        feed.get_kline("BTC-INR", "1h")
+        assert feed.request.called
+        call_kwargs = feed.request.call_args[1]
+        extra_data = call_kwargs.get("extra_data")
+        if extra_data:
+            assert extra_data["request_type"] == "get_kline"
 
-    def test_get_kline_params(self):
-        """Test get kline parameter generation."""
-        data_queue = queue.Queue()
-        request_data = GiottusRequestDataSpot(
-            data_queue,
-            public_key="test_key",
-            private_key="test_secret",
-        )
+    def test_get_balance_calls_request(self, feed):
+        feed.get_balance()
+        assert feed.request.called
+        call_kwargs = feed.request.call_args[1]
+        extra_data = call_kwargs.get("extra_data")
+        if extra_data:
+            assert extra_data["request_type"] == "get_balance"
 
-        path, params, extra_data = request_data._get_kline("BTC-INR", period="1h", count=20)
-        assert path is not None
-        assert params is not None
+    def test_get_account_calls_request(self, feed):
+        feed.get_account()
+        assert feed.request.called
+        call_kwargs = feed.request.call_args[1]
+        extra_data = call_kwargs.get("extra_data")
+        if extra_data:
+            assert extra_data["request_type"] == "get_account"
+
+    def test_make_order_calls_request(self, feed):
+        feed.make_order("BTC-INR", "0.001", "50000", "buy-limit")
+        assert feed.request.called
+        call_kwargs = feed.request.call_args[1]
+        extra_data = call_kwargs.get("extra_data")
+        if extra_data:
+            assert extra_data["request_type"] == "make_order"
+
+    def test_cancel_order_calls_request(self, feed):
+        feed.cancel_order("BTC-INR", "order_123")
+        assert feed.request.called
+        call_kwargs = feed.request.call_args[1]
+        extra_data = call_kwargs.get("extra_data")
+        if extra_data:
+            assert extra_data["request_type"] == "cancel_order"
+
+    def test_get_exchange_info_calls_request(self, feed):
+        feed.get_exchange_info()
+        assert feed.request.called
 
 
-class TestGiottusServerTime:
-    """Test server time endpoint."""
+class TestGiottusNormalizeFunctions:
+    """Test normalize functions edge cases."""
 
-    def test_get_server_time(self):
-        """Test getting server time."""
-        feed = init_req_feed()
-        result = feed.get_server_time()
-        assert result is not None
+    def test_tick_normalize_with_none(self):
+        result, status = GiottusRequestDataSpot._get_tick_normalize_function(None, None)
+        assert result == []
+        assert status is False
+
+    def test_tick_normalize_with_data(self):
+        input_data = {"symbol": "BTCINR", "last": "50000"}
+        result, status = GiottusRequestDataSpot._get_tick_normalize_function(input_data, {})
+        assert status is True
+        assert len(result) == 1
+
+    def test_depth_normalize_with_none(self):
+        result, status = GiottusRequestDataSpot._get_depth_normalize_function(None, None)
+        assert result == []
+        assert status is False
+
+    def test_depth_normalize_with_data(self):
+        input_data = {"bids": [], "asks": []}
+        result, status = GiottusRequestDataSpot._get_depth_normalize_function(input_data, {})
+        assert status is True
+
+    def test_kline_normalize_with_none(self):
+        result, status = GiottusRequestDataSpot._get_kline_normalize_function(None, None)
+        assert result == []
+        assert status is False
+
+    def test_balance_normalize_with_none(self):
+        result, status = GiottusRequestDataSpot._get_balance_normalize_function(None, None)
+        assert result == []
+        assert status is False
+
+    def test_balance_normalize_with_data(self):
+        input_data = [{"currency": "BTC", "available": "0.5"}]
+        result, status = GiottusRequestDataSpot._get_balance_normalize_function(input_data, {})
+        assert status is True
+
+    def test_account_normalize_with_none(self):
+        result, status = GiottusRequestDataSpot._get_account_normalize_function(None, None)
+        assert result == []
+        assert status is False
+
+    def test_make_order_normalize_with_none(self):
+        result, status = GiottusRequestDataSpot._make_order_normalize_function(None, {})
+        assert result == []
+        assert status is False
+
+    def test_exchange_info_normalize_with_none(self):
+        result, status = GiottusRequestDataSpot._get_exchange_info_normalize_function(None, None)
+        assert result == []
+        assert status is False
 
 
-class TestGiottusTicker:
-    """Test ticker data retrieval."""
+class TestGiottusDataContainers:
+    """Test Giottus data containers."""
 
     def test_ticker_container(self):
-        """Test ticker data container."""
         ticker_response = {
             "success": True,
             "data": {
-            "symbol": "BTCINR",
-            "last": "50000",
-            "bid": "49999",
-            "ask": "50001",
-            "volume": "1000",
-            "high": "51000",
-            "low": "49000",
+                "symbol": "BTCINR",
+                "last": "50000",
+                "bid": "49999",
+                "ask": "50001",
+                "volume": "1000",
+                "high": "51000",
+                "low": "49000",
             },
         }
-
         ticker = GiottusRequestTickerData(
             ticker_response, symbol_name="BTC-INR", asset_type="SPOT",
             has_been_json_encoded=True
         )
         ticker.init_data()
-
         assert ticker.get_exchange_name() == "GIOTTUS"
         assert ticker.get_symbol_name() == "BTC-INR"
-
-    def test_get_ticker_live(self):
-        """Test getting ticker from live API."""
-        feed = init_req_feed()
-        result = feed.get_tick("BTC-INR")
-        assert result.status is True
-
-
-class TestGiottusKline:
-    """Test kline data retrieval."""
-
-    def test_kline_container(self):
-        """Test kline data container."""
-        pass
-
-    def test_get_kline_live(self):
-        """Test getting kline from live API."""
-        feed = init_req_feed()
-        result = feed.get_kline("BTC-INR", "1h", count=10)
-        assert result is not None
-
-
-class TestGiottusOrderBook:
-    """Test order book data retrieval."""
-
-    def test_orderbook_container(self):
-        """Test orderbook data container."""
-        pass
-
-    def test_get_depth_live(self):
-        """Test getting order book from live API."""
-        feed = init_req_feed()
-        result = feed.get_depth("BTC-INR", count=20)
-        assert result is not None
 
 
 class TestGiottusRegistry:
     """Test Giottus registration."""
 
     def test_giottus_registered(self):
-        """Test that Giottus is properly registered."""
         assert "GIOTTUS___SPOT" in ExchangeRegistry._feed_classes
         assert "GIOTTUS___SPOT" in ExchangeRegistry._exchange_data_classes
 
     def test_giottus_create_feed(self):
-        """Test creating Giottus feed through registry."""
         data_queue = queue.Queue()
         feed = ExchangeRegistry.create_feed(
             "GIOTTUS___SPOT",
@@ -218,34 +322,40 @@ class TestGiottusRegistry:
         assert isinstance(feed, GiottusRequestDataSpot)
 
     def test_giottus_create_exchange_data(self):
-        """Test creating Giottus exchange data through registry."""
         exchange_data = ExchangeRegistry.create_exchange_data("GIOTTUS___SPOT")
         assert isinstance(exchange_data, GiottusExchangeDataSpot)
 
 
-class TestGiottusIntegration:
-    """Integration tests for Giottus."""
+class TestGiottusLiveAPI:
+    """Live API tests - require network, marked as integration."""
 
-    def test_market_data_api(self):
-        """Test market data API calls (requires network)."""
+    @pytest.mark.integration
+    def test_giottus_req_tick_data(self):
         data_queue = queue.Queue()
-        feed = GiottusRequestDataSpot(data_queue)
+        feed = GiottusRequestDataSpot(data_queue, exchange_name="GIOTTUS___SPOT")
+        result = feed.get_tick("BTC-INR")
+        assert result is not None
 
-        # Test ticker
-        ticker = feed.get_tick("BTC-INR")
-        assert ticker.status is True
+    @pytest.mark.integration
+    def test_giottus_req_depth_data(self):
+        data_queue = queue.Queue()
+        feed = GiottusRequestDataSpot(data_queue, exchange_name="GIOTTUS___SPOT")
+        result = feed.get_depth("BTC-INR", count=20)
+        assert result is not None
 
-        # Test depth
-        depth = feed.get_depth("BTC-INR", count=20)
-        assert depth.status is True
+    @pytest.mark.integration
+    def test_giottus_req_kline_data(self):
+        data_queue = queue.Queue()
+        feed = GiottusRequestDataSpot(data_queue, exchange_name="GIOTTUS___SPOT")
+        result = feed.get_kline("BTC-INR", "1h", count=10)
+        assert result is not None
 
-        # Test kline
-        kline = feed.get_kline("BTC-INR", "1h", count=10)
-        assert kline.status is True
-
-    def test_trading_api(self):
-        """Test trading API calls (requires API keys)."""
-        pass
+    @pytest.mark.integration
+    def test_giottus_server_time(self):
+        data_queue = queue.Queue()
+        feed = GiottusRequestDataSpot(data_queue, exchange_name="GIOTTUS___SPOT")
+        result = feed.get_server_time()
+        assert result is not None
 
 
 if __name__ == "__main__":

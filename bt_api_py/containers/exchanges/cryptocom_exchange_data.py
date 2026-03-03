@@ -190,7 +190,32 @@ class CryptoComExchangeDataSpot(CryptoComExchangeData):
 
     def __init__(self):
         super().__init__()
-        self._load_from_config("spot")
+        self.asset_type = "spot"
+        if not self._load_from_config("spot"):
+            self.exchange_name = "CRYPTOCOM___SPOT"
+            self.rest_url = "https://api.crypto.com/exchange/v1"
+            self.wss_url = "wss://stream.crypto.com/exchange/v1/market"
+            self.acct_wss_url = "wss://stream.crypto.com/exchange/v1/user"
+
+        # Fallback REST paths — don't override YAML
+        _defaults = {
+            "get_server_time": "GET /public/get-ticker",
+            "get_exchange_info": "GET /public/get-instruments",
+            "get_tick": "GET /public/get-tickers",
+            "get_ticker": "GET /public/get-tickers",
+            "get_depth": "GET /public/get-book",
+            "get_kline": "GET /public/get-candlestick",
+            "get_trade_history": "GET /public/get-trades",
+            "get_account": "POST /private/get-account-summary",
+            "get_balance": "POST /private/get-account-summary",
+            "make_order": "POST /private/create-order",
+            "cancel_order": "POST /private/cancel-order",
+            "query_order": "POST /private/get-order-detail",
+            "get_order": "POST /private/get-order-detail",
+            "get_open_orders": "POST /private/get-open-orders",
+        }
+        for k, v in _defaults.items():
+            self.rest_paths.setdefault(k, v)
 
         # Status mapping
         self.status_dict = {
@@ -239,7 +264,9 @@ class CryptoComExchangeDataSpot(CryptoComExchangeData):
 
     def get_rest_path(self, endpoint):
         """Get REST API path for endpoint."""
-        return self.rest_paths.get(endpoint)
+        if endpoint not in self.rest_paths or self.rest_paths[endpoint] == "":
+            self.raise_path_error(self.exchange_name, endpoint)
+        return self.rest_paths[endpoint]
 
     def get_wss_path(self, channel_type, **kwargs):
         """Get WebSocket path for channel type."""

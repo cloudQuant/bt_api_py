@@ -10,6 +10,7 @@ from bt_api_py.containers.exchanges.balancer_exchange_data import (
     BalancerExchangeDataSpot,
     GqlChain,
 )
+from bt_api_py.containers.requestdatas.request_data import RequestData
 from bt_api_py.feeds.capability import Capability
 from bt_api_py.feeds.live_balancer.request_base import BalancerRequestData
 from bt_api_py.functions.log_message import SpdLogManager
@@ -34,6 +35,10 @@ class BalancerRequestDataSpot(BalancerRequestData):
             Capability.GET_DEPTH,
             Capability.GET_KLINE,
             Capability.GET_EXCHANGE_INFO,
+            Capability.GET_BALANCE,
+            Capability.GET_ACCOUNT,
+            Capability.MAKE_ORDER,
+            Capability.CANCEL_ORDER,
         }
 
     def __init__(self, data_queue, **kwargs):
@@ -156,9 +161,7 @@ class BalancerRequestDataSpot(BalancerRequestData):
             RequestData with pool information
         """
         path, params, extra_data = self._get_pool(pool_id, extra_data, **kwargs)
-        query = extra_data.pop("_graphql_query")
-        variables = extra_data.pop("_graphql_variables")
-        return self._execute_graphql_query(query, variables, extra_data)
+        return self.request(path, params=params, extra_data=extra_data)
 
     def _get_pools(
         self,
@@ -265,9 +268,7 @@ class BalancerRequestDataSpot(BalancerRequestData):
         path, params, extra_data = self._get_pools(
             extra_data, first, min_tvl, **kwargs
         )
-        query = extra_data.pop("_graphql_query")
-        variables = extra_data.pop("_graphql_variables")
-        return self._execute_graphql_query(query, variables, extra_data)
+        return self.request(path, params=params, extra_data=extra_data)
 
     # ==================== Token Price Queries ====================
 
@@ -342,9 +343,15 @@ class BalancerRequestDataSpot(BalancerRequestData):
             RequestData with token price data
         """
         path, params, extra_data = self._get_tick(symbol, extra_data, **kwargs)
-        query = extra_data.pop("_graphql_query")
-        variables = extra_data.pop("_graphql_variables")
-        return self._execute_graphql_query(query, variables, extra_data)
+        return self.request(path, params=params, extra_data=extra_data)
+
+    def async_get_tick(self, symbol: str, extra_data=None, **kwargs):
+        """Async get token price."""
+        path, params, extra_data = self._get_tick(symbol, extra_data, **kwargs)
+        self.submit(
+            self.async_request(path, params=params, extra_data=extra_data),
+            callback=self.async_callback,
+        )
 
     # ==================== Swap Path (SOR) Queries ====================
 
@@ -456,9 +463,7 @@ class BalancerRequestDataSpot(BalancerRequestData):
         path, params, extra_data = self._get_swap_path(
             token_in, token_out, amount, swap_type, extra_data, **kwargs
         )
-        query = extra_data.pop("_graphql_query")
-        variables = extra_data.pop("_graphql_variables")
-        return self._execute_graphql_query(query, variables, extra_data)
+        return self.request(path, params=params, extra_data=extra_data)
 
     # ==================== Depth/Liquidity ====================
 
@@ -513,13 +518,14 @@ class BalancerRequestDataSpot(BalancerRequestData):
         consider using get_pool() to get full pool liquidity info.
         """
         path, params, extra_data = self._get_depth(symbol, count, extra_data, **kwargs)
-        # For pools, use get_pool instead
-        if symbol.startswith("0x") and len(symbol) == 66:
-            return self.get_pool(symbol, extra_data, **kwargs)
-        # Otherwise return a message about AMM pools
-        return RequestData(
-            {"message": "Balancer is an AMM, use get_pool() for pool liquidity"},
-            extra_data,
+        return self.request(path, params=params, extra_data=extra_data)
+
+    def async_get_depth(self, symbol: str, count: int = 20, extra_data=None, **kwargs):
+        """Async get liquidity depth."""
+        path, params, extra_data = self._get_depth(symbol, count, extra_data, **kwargs)
+        self.submit(
+            self.async_request(path, params=params, extra_data=extra_data),
+            callback=self.async_callback,
         )
 
     # ==================== Kline/Historical Data ====================
@@ -575,9 +581,18 @@ class BalancerRequestDataSpot(BalancerRequestData):
         path, params, extra_data = self._get_kline(
             symbol, period, count, extra_data, **kwargs
         )
-        return RequestData(
-            {"message": "Klines not available via Balancer GraphQL. Use pool events or subgraph."},
-            extra_data,
+        return self.request(path, params=params, extra_data=extra_data)
+
+    def async_get_kline(
+        self, symbol: str, period: str, count: int = 20, extra_data=None, **kwargs
+    ):
+        """Async get kline data."""
+        path, params, extra_data = self._get_kline(
+            symbol, period, count, extra_data, **kwargs
+        )
+        self.submit(
+            self.async_request(path, params=params, extra_data=extra_data),
+            callback=self.async_callback,
         )
 
     # ==================== Exchange Info ====================
@@ -729,6 +744,177 @@ class BalancerRequestDataSpot(BalancerRequestData):
         path, params, extra_data = self._get_pool_events(
             pool_id, event_type, start_time, end_time, extra_data, **kwargs
         )
-        query = extra_data.pop("_graphql_query")
-        variables = extra_data.pop("_graphql_variables")
-        return self._execute_graphql_query(query, variables, extra_data)
+        return self.request(path, params=params, extra_data=extra_data)
+
+    # ==================== Standard Trading Interfaces ====================
+    # Note: Balancer is a DEX. Trading is done via on-chain transactions.
+    # These methods prepare swap parameters using SOR (Smart Order Router).
+
+    def _make_order(self, symbol, volume, price, order_type, offset="open",
+                    post_only=False, client_order_id=None, extra_data=None, **kwargs):
+        """Prepare swap order parameters. Returns (path, body, extra_data).
+
+        For Balancer DEX, 'making an order' means preparing a swap path.
+        symbol should be 'tokenIn-tokenOut' format or kwargs should contain
+        token_in and token_out addresses.
+        """
+        if extra_data is None:
+            extra_data = {}
+        token_in = kwargs.get("token_in", "")
+        token_out = kwargs.get("token_out", "")
+        if not token_in and "-" in symbol:
+            parts = symbol.split("-", 1)
+            token_in, token_out = parts[0], parts[1]
+
+        extra_data.update({
+            "exchange_name": self.exchange_name,
+            "symbol_name": symbol,
+            "asset_type": self.asset_type,
+            "request_type": "make_order",
+            "side": kwargs.get("side", "BUY"),
+            "quantity": volume,
+            "price": price,
+            "order_type": order_type,
+            "token_in": token_in,
+            "token_out": token_out,
+        })
+        body = {
+            "token_in": token_in,
+            "token_out": token_out,
+            "amount": str(volume),
+            "swap_type": "EXACT_IN",
+        }
+        return "POST /swap", body, extra_data
+
+    def make_order(self, symbol, volume, price, order_type, offset="open",
+                   post_only=False, client_order_id=None, extra_data=None, **kwargs):
+        """Place a swap order following standard Feed interface. Returns RequestData.
+
+        Note: Balancer swaps require on-chain transaction signing.
+        This method prepares the swap parameters.
+        """
+        path, body, extra_data = self._make_order(
+            symbol, volume, price, order_type, offset, post_only,
+            client_order_id, extra_data, **kwargs
+        )
+        return self.request(path, body=body, extra_data=extra_data)
+
+    def _cancel_order(self, symbol, order_id, extra_data=None, **kwargs):
+        """Prepare cancel order parameters. Returns (path, params, extra_data).
+
+        Note: Balancer is a DEX — on-chain swaps cannot be cancelled
+        once submitted. This is a no-op placeholder.
+        """
+        if extra_data is None:
+            extra_data = {}
+        extra_data.update({
+            "exchange_name": self.exchange_name,
+            "symbol_name": symbol,
+            "asset_type": self.asset_type,
+            "request_type": "cancel_order",
+            "order_id": order_id,
+        })
+        return "DELETE /order", {}, extra_data
+
+    def cancel_order(self, symbol, order_id, extra_data=None, **kwargs):
+        """Cancel order. Returns RequestData.
+
+        Note: DEX swaps are atomic and cannot be cancelled once on-chain.
+        """
+        path, params, extra_data = self._cancel_order(symbol, order_id, extra_data, **kwargs)
+        return self.request(path, params=params, extra_data=extra_data)
+
+    def _query_order(self, symbol, order_id, extra_data=None, **kwargs):
+        """Prepare query order parameters. Returns (path, params, extra_data).
+
+        For DEX, this queries transaction status on-chain.
+        """
+        if extra_data is None:
+            extra_data = {}
+        extra_data.update({
+            "exchange_name": self.exchange_name,
+            "symbol_name": symbol,
+            "asset_type": self.asset_type,
+            "request_type": "query_order",
+            "order_id": order_id,
+        })
+        return "GET /order", {}, extra_data
+
+    def query_order(self, symbol, order_id, extra_data=None, **kwargs):
+        """Query order status. Returns RequestData."""
+        path, params, extra_data = self._query_order(symbol, order_id, extra_data, **kwargs)
+        return self.request(path, params=params, extra_data=extra_data)
+
+    def _get_open_orders(self, symbol=None, extra_data=None, **kwargs):
+        """Prepare get open orders parameters. Returns (path, params, extra_data).
+
+        Note: DEX has no open orders concept — swaps are atomic.
+        """
+        if extra_data is None:
+            extra_data = {}
+        extra_data.update({
+            "exchange_name": self.exchange_name,
+            "symbol_name": symbol or "",
+            "asset_type": self.asset_type,
+            "request_type": "get_open_orders",
+        })
+        return "GET /open_orders", {}, extra_data
+
+    def get_open_orders(self, symbol=None, extra_data=None, **kwargs):
+        """Get open orders. Returns RequestData.
+
+        Note: DEX swaps are atomic; no pending orders.
+        """
+        path, params, extra_data = self._get_open_orders(symbol, extra_data, **kwargs)
+        return self.request(path, params=params, extra_data=extra_data)
+
+    # ==================== Standard Account Interfaces ====================
+    # Note: Balancer is a DEX. Account/balance queries require Web3/on-chain.
+
+    def _get_account(self, symbol=None, extra_data=None, **kwargs):
+        """Prepare get account parameters. Returns (path, params, extra_data).
+
+        For DEX, account info is the wallet address and connected chain.
+        """
+        if extra_data is None:
+            extra_data = {}
+        extra_data.update({
+            "exchange_name": self.exchange_name,
+            "symbol_name": symbol or "",
+            "asset_type": self.asset_type,
+            "request_type": "get_account",
+            "chain": self.chain.value,
+        })
+        return "GET /account", {}, extra_data
+
+    def get_account(self, symbol=None, extra_data=None, **kwargs):
+        """Get account info. Returns RequestData.
+
+        Note: DEX account info is chain/wallet-based.
+        """
+        path, params, extra_data = self._get_account(symbol, extra_data, **kwargs)
+        return self.request(path, params=params, extra_data=extra_data)
+
+    def _get_balance(self, symbol=None, extra_data=None, **kwargs):
+        """Prepare get balance parameters. Returns (path, params, extra_data).
+
+        For DEX, balance queries require Web3 connection to read on-chain data.
+        """
+        if extra_data is None:
+            extra_data = {}
+        extra_data.update({
+            "exchange_name": self.exchange_name,
+            "symbol_name": symbol or "",
+            "asset_type": self.asset_type,
+            "request_type": "get_balance",
+            "chain": self.chain.value,
+        })
+        return "GET /balance", {}, extra_data
+
+    def get_balance(self, symbol=None, extra_data=None, **kwargs):
+        """Get token balance. Returns RequestData.
+
+        Note: DEX balance requires Web3/on-chain query.
+        """
+        path, params, extra_data = self._get_balance(symbol, extra_data, **kwargs)
+        return self.request(path, params=params, extra_data=extra_data)

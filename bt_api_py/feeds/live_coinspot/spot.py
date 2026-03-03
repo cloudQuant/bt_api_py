@@ -1,74 +1,96 @@
 """
-CoinSpot Spot Feed implementation.
+CoinSpot Spot Feed – three-layer sync / async wrappers.
 """
 
-from bt_api_py.containers.exchanges.coinspot_exchange_data import CoinSpotExchangeDataSpot
-from bt_api_py.feeds.capability import Capability
 from bt_api_py.feeds.live_coinspot.request_base import CoinSpotRequestData
 
 
 class CoinSpotRequestDataSpot(CoinSpotRequestData):
-    """CoinSpot Spot Feed for market data."""
-
-    @classmethod
-    def _capabilities(cls):
-        return {
-            Capability.GET_TICK,
-            Capability.GET_EXCHANGE_INFO,
-        }
+    """CoinSpot Spot REST Feed."""
 
     def __init__(self, data_queue, **kwargs):
         super().__init__(data_queue, **kwargs)
-        self.exchange_name = kwargs.get("exchange_name", "COINSPOT___SPOT")
 
-    def _get_tick(self, symbol, extra_data=None, **kwargs):
-        """Build ticker request parameters for a specific coin."""
-        request_type = "get_tick"
-        # CoinSpot uses coin shortname as path parameter
-        path = f"GET /pubapi/v2/latest/{symbol}"
-        extra_data = extra_data or {}
-        extra_data.update({
-            "request_type": request_type,
-            "symbol_name": symbol,
-            "normalize_function": self._get_tick_normalize_function,
-        })
-        return path, None, extra_data
+    # ── market data (public GET) ────────────────────────────────
 
-    @staticmethod
-    def _get_tick_normalize_function(input_data, extra_data):
-        """Normalize ticker data from CoinSpot API response."""
-        if not input_data:
-            return [], False
-        # CoinSpot returns status and prices fields
-        data = input_data.get("prices", {})
-        if input_data.get("status") != "ok":
-            return [], False
-        return [data], data is not None
+    def get_exchange_info(self, extra_data=None, **kwargs):
+        path, params, extra = self._get_exchange_info(extra_data, **kwargs)
+        return self.request(path, params, extra_data=extra)
+
+    async def async_get_exchange_info(self, extra_data=None, **kwargs):
+        path, params, extra = self._get_exchange_info(extra_data, **kwargs)
+        return await self.async_request(path, params, extra_data=extra)
 
     def get_tick(self, symbol, extra_data=None, **kwargs):
-        """Get symbol ticker."""
-        path, params, extra_data = self._get_tick(symbol, extra_data, **kwargs)
-        return self.request(path, params, extra_data=extra_data)
+        path, params, extra = self._get_tick(symbol, extra_data, **kwargs)
+        return self.request(path, params, extra_data=extra)
 
-    def _get_all_tickers(self, extra_data=None, **kwargs):
-        """Build all tickers request parameters."""
-        request_type = "get_ticker_all"
-        path = "GET /pubapi/v2/latest"
-        extra_data = extra_data or {}
-        extra_data.update({
-            "request_type": request_type,
-            "normalize_function": self._get_all_tickers_normalize_function,
-        })
-        return path, None, extra_data
+    async def async_get_tick(self, symbol, extra_data=None, **kwargs):
+        path, params, extra = self._get_tick(symbol, extra_data, **kwargs)
+        return await self.async_request(path, params, extra_data=extra)
 
-    @staticmethod
-    def _get_all_tickers_normalize_function(input_data, extra_data):
-        """Normalize all tickers data from CoinSpot API response."""
-        if not input_data:
-            return [], False
-        prices = input_data.get("prices", {})
-        if input_data.get("status") != "ok":
-            return [], False
-        # Convert to list format
-        result = [{"prices": prices, "status": "ok"}]
-        return result, prices is not None
+    def get_ticker(self, symbol, extra_data=None, **kwargs):
+        return self.get_tick(symbol, extra_data, **kwargs)
+
+    async def async_get_ticker(self, symbol, extra_data=None, **kwargs):
+        return await self.async_get_tick(symbol, extra_data, **kwargs)
+
+    def get_all_tickers(self, extra_data=None, **kwargs):
+        path, params, extra = self._get_all_tickers(extra_data, **kwargs)
+        return self.request(path, params, extra_data=extra)
+
+    async def async_get_all_tickers(self, extra_data=None, **kwargs):
+        path, params, extra = self._get_all_tickers(extra_data, **kwargs)
+        return await self.async_request(path, params, extra_data=extra)
+
+    def get_depth(self, symbol, extra_data=None, **kwargs):
+        path, params, extra = self._get_depth(symbol, extra_data, **kwargs)
+        return self.request(path, params, extra_data=extra)
+
+    async def async_get_depth(self, symbol, extra_data=None, **kwargs):
+        path, params, extra = self._get_depth(symbol, extra_data, **kwargs)
+        return await self.async_request(path, params, extra_data=extra)
+
+    def get_deals(self, symbol, extra_data=None, **kwargs):
+        path, params, extra = self._get_deals(symbol, extra_data, **kwargs)
+        return self.request(path, params, extra_data=extra)
+
+    async def async_get_deals(self, symbol, extra_data=None, **kwargs):
+        path, params, extra = self._get_deals(symbol, extra_data, **kwargs)
+        return await self.async_request(path, params, extra_data=extra)
+
+    # ── trading (private POST) ──────────────────────────────────
+
+    def make_order(self, symbol, amount, rate, side="buy", extra_data=None, **kwargs):
+        path, body, extra = self._make_order(symbol, amount, rate, side, extra_data, **kwargs)
+        return self.request(path, body=body, extra_data=extra, is_sign=True)
+
+    async def async_make_order(self, symbol, amount, rate, side="buy", extra_data=None, **kwargs):
+        path, body, extra = self._make_order(symbol, amount, rate, side, extra_data, **kwargs)
+        return await self.async_request(path, body=body, extra_data=extra, is_sign=True)
+
+    def cancel_order(self, order_id, side="buy", extra_data=None, **kwargs):
+        path, body, extra = self._cancel_order(order_id, side, extra_data, **kwargs)
+        return self.request(path, body=body, extra_data=extra, is_sign=True)
+
+    async def async_cancel_order(self, order_id, side="buy", extra_data=None, **kwargs):
+        path, body, extra = self._cancel_order(order_id, side, extra_data, **kwargs)
+        return await self.async_request(path, body=body, extra_data=extra, is_sign=True)
+
+    # ── account (private POST) ──────────────────────────────────
+
+    def get_balance(self, extra_data=None, **kwargs):
+        path, body, extra = self._get_balance(extra_data, **kwargs)
+        return self.request(path, body=body, extra_data=extra, is_sign=True)
+
+    async def async_get_balance(self, extra_data=None, **kwargs):
+        path, body, extra = self._get_balance(extra_data, **kwargs)
+        return await self.async_request(path, body=body, extra_data=extra, is_sign=True)
+
+    def get_account(self, extra_data=None, **kwargs):
+        path, body, extra = self._get_account(extra_data, **kwargs)
+        return self.request(path, body=body, extra_data=extra, is_sign=True)
+
+    async def async_get_account(self, extra_data=None, **kwargs):
+        path, body, extra = self._get_account(extra_data, **kwargs)
+        return await self.async_request(path, body=body, extra_data=extra, is_sign=True)

@@ -1,21 +1,12 @@
-# Bitrue 交易所统一配置
-# 数据来源: https://github.com/Bitrue-exchange/Spot-official-api-docs
+# Bitrue Exchange Configuration
+# Binance-compatible HMAC SHA256 authentication
+# Signature: HMAC-SHA256(query_string, secret_key)
+# Header: X-MBX-APIKEY
 id: bitrue
 display_name: Bitrue
 venue_type: cex
 website: https://www.bitrue.com
 api_doc: https://github.com/Bitrue-exchange/Spot-official-api-docs
-
-base_urls:
-  rest:
-    spot: https://www.bitrue.com
-  wss:
-    spot: wss://ws.bitrue.com/kline-api/ws
-
-connection:
-  type: http
-  timeout: 10
-  max_retries: 3
 
 authentication:
   type: hmac_sha256
@@ -23,7 +14,6 @@ authentication:
   timestamp_key: timestamp
   signature_key: signature
 
-# K线周期映射 (根据API文档使用正确的格式)
 kline_periods:
   1m: "1m"
   5m: "5m"
@@ -46,36 +36,35 @@ rate_limits:
     scope: ip
 
 asset_types:
-  # ─── Spot Trading ────────────────────────────────────────
   spot:
-    exchange_name: bitrueSpot
+    exchange_name: BITRUE___SPOT
+    rest_url: "https://www.bitrue.com"
+    wss_url: "wss://ws.bitrue.com/kline-api/ws"
     symbol_format: "{base}{quote}"
     legal_currency: [USDT, BTC, ETH, XRP]
     rest_paths:
       # General
       ping: "GET /api/v1/ping"
       get_server_time: "GET /api/v1/time"
-      get_contract: "GET /api/v1/exchangeInfo"
+      get_exchange_info: "GET /api/v1/exchangeInfo"
       # Market Data
       get_tick: "GET /api/v1/ticker/24hr"
       get_depth: "GET /api/v1/depth"
       get_kline: "GET /api/v1/market/kline"
-      get_new_price: "GET /api/v1/trades"
-      get_historical_trades: "GET /api/v1/trades"
-      # Account
+      get_trades: "GET /api/v1/trades"
+      # Account (signed)
       get_account: "GET /api/v1/account"
       get_balance: "GET /api/v1/account"
-      # Trade
+      # Trading (signed)
       make_order: "POST /api/v1/order"
       cancel_order: "DELETE /api/v1/order"
-      cancel_all: "DELETE /api/v1/openOrders"
+      cancel_all_orders: "DELETE /api/v1/openOrders"
       query_order: "GET /api/v1/order"
       get_open_orders: "GET /api/v1/openOrders"
       get_all_orders: "GET /api/v1/allOrders"
       get_deals: "GET /api/v1/myTrades"
     wss_paths:
-      # Market Streams
-      tick: "market_<symbol>_ticker"
-      depth: "market_<symbol>_depth_step0"
-      trade: "market_<symbol>_trade_ticker"
-      kline: "market_<symbol>_kline_<period>"
+      ticker: "market_{symbol}_ticker"
+      depth: "market_{symbol}_depth_step0"
+      trade: "market_{symbol}_trade_ticker"
+      kline: "market_{symbol}_kline_{period}"

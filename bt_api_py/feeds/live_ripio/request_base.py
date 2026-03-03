@@ -34,6 +34,10 @@ class RipioRequestData(Feed):
             Capability.GET_DEPTH,
             Capability.GET_KLINE,
             Capability.GET_EXCHANGE_INFO,
+            Capability.GET_BALANCE,
+            Capability.GET_ACCOUNT,
+            Capability.MAKE_ORDER,
+            Capability.CANCEL_ORDER,
         }
 
     def __init__(self, data_queue, **kwargs):
@@ -236,12 +240,49 @@ class RipioRequestData(Feed):
             self.async_logger.error(f"Async request failed: {e}")
             raise
 
+    def async_callback(self, future):
+        """Callback for async requests, push result to data_queue."""
+        try:
+            result = future.result()
+            if result is not None:
+                self.push_data_to_queue(result)
+        except Exception as e:
+            self.async_logger.error(f"Async callback error: {e}")
+
+    def _get_server_time(self, extra_data=None, **kwargs):
+        """Prepare server time request. Returns (path, params, extra_data)."""
+        path = self._params.get_rest_path("get_tick").replace(":symbol", "BTC_USDT")
+        if extra_data is None:
+            extra_data = {}
+        extra_data.update({
+            "exchange_name": self.exchange_name,
+            "symbol_name": "",
+            "asset_type": self.asset_type,
+            "request_type": "get_server_time",
+            "normalize_function": self._get_server_time_normalize_function,
+        })
+        return path, {}, extra_data
+
+    def get_server_time(self, extra_data=None, **kwargs):
+        """Get server time."""
+        path, params, extra_data = self._get_server_time(extra_data, **kwargs)
+        return self.request(path, params=params, extra_data=extra_data)
+
+    @staticmethod
+    def _get_server_time_normalize_function(input_data, extra_data):
+        if not input_data:
+            return None, False
+        if isinstance(input_data, dict):
+            data = input_data.get("data", input_data)
+            if isinstance(data, dict):
+                ts = data.get("timestamp") or data.get("time")
+                return ts, True
+        return input_data, True
+
     def push_data_to_queue(self, data):
         """Push data to the queue."""
         if self.data_queue is not None:
             self.data_queue.put(data)
-        else:
-            raise RuntimeError("Queue not initialized")
 
     def connect(self) -> None:
         """No-op for HTTP-based API."""

@@ -5,11 +5,7 @@ This module provides HitBTC-specific configuration and path management.
 Loads configuration from YAML file and provides REST/WSS endpoints.
 """
 
-import copy
-import datetime
-import json
 import os
-import time
 
 from bt_api_py.containers.exchanges.exchange_data import ExchangeData
 from bt_api_py.functions.log_message import SpdLogManager
@@ -53,32 +49,11 @@ class HitBtcExchangeData(ExchangeData):
     """
 
     def __init__(self):
-        """Initialize exchange data with configuration"""
         super().__init__()
-
-        # Load YAML config
-        config = _get_hitbtc_config()
-        if config:
-            self.rest_url = config.get("rest_url", "https://api.hitbtc.com/api/3")
-            self.ws_url = config.get("ws_url", "wss://api.hitbtc.com/api/3/ws/public")
-            self.ws_trading_url = config.get("ws_trading_url", "wss://api.hitbtc.com/api/3/ws/trading")
-            self.ws_wallet_url = config.get("ws_wallet_url", "wss://api.hitbtc.com/api/3/ws/wallet")
-            self.timeout = config.get("timeout", 10)
-            self.rate_limits = config.get("rate_limits", {})
-        else:
-            # Default values
-            self.rest_url = "https://api.hitbtc.com/api/3"
-            self.ws_url = "wss://api.hitbtc.com/api/3/ws/public"
-            self.ws_trading_url = "wss://api.hitbtc.com/api/3/ws/trading"
-            self.ws_wallet_url = "wss://api.hitbtc.com/api/3/ws/wallet"
-            self.timeout = 10
-            self.rate_limits = {}
-
-        # Exchange-specific settings
         self.exchange_name = "HITBTC"
-        self.asset_type = "SPOT"
-
-        # Standard kline periods (matching HitBTC API)
+        self.rest_url = "https://api.hitbtc.com/api/3"
+        self.wss_url = "wss://api.hitbtc.com/api/3/ws/public"
+        self.legal_currency = ["USDT", "BTC", "ETH"]
         self.kline_periods = {
             "1m": "M1",
             "3m": "M3",
@@ -92,95 +67,104 @@ class HitBtcExchangeData(ExchangeData):
             "1w": "D7",
             "1M": "1M",
         }
+        self.rest_paths = {}
+        self.wss_paths = {}
 
-        # REST API paths
-        self.rest_paths = {
-            # Public endpoints
-            "get_server_time": "/public/time",
-            "get_exchange_info": "/public/symbol",
-            "get_ticker": "/public/ticker/{symbol}",
-            "get_ticker_all": "/public/ticker",
-            "get_orderbook": "/public/orderbook/{symbol}",
-            "get_trades": "/public/trades/{symbol}",
-            "get_candles": "/public/candles/{symbol}",
+    def _load_from_config(self, asset_type):
+        config = _get_hitbtc_config()
+        if config is None:
+            return False
+        try:
+            asset_cfg = config.asset_types.get(asset_type)
+            if asset_cfg is None:
+                return False
+            if getattr(asset_cfg, "exchange_name", None):
+                self.exchange_name = asset_cfg.exchange_name
+            if getattr(asset_cfg, "rest_url", None):
+                self.rest_url = asset_cfg.rest_url
+            if getattr(asset_cfg, "wss_url", None):
+                self.wss_url = asset_cfg.wss_url
+            if getattr(asset_cfg, "rest_paths", None):
+                self.rest_paths.update(dict(asset_cfg.rest_paths))
+            if getattr(asset_cfg, "wss_paths", None):
+                self.wss_paths.update(dict(asset_cfg.wss_paths))
+            return True
+        except Exception as e:
+            logger.warn(f"Failed to load hitbtc config for {asset_type}: {e}")
+            return False
 
-            # Trading endpoints
-            "place_order": "/spot/order",
-            "cancel_order": "/spot/order/{client_order_id}",
-            "cancel_all_orders": "/spot/order",
-            "get_order": "/spot/order/{client_order_id}",
-            "get_open_orders": "/spot/order",
-            "get_order_history": "/spot/history/order",
-            "get_trades_history": "/spot/history/trade",
-
-            # Account endpoints
-            "get_balance": "/spot/balance",
-            "get_account": "/account",
-        }
-
-        # WebSocket paths/channels
-        self.wss_paths = {
-            "ticker": "ticker",
-            "orderbook": "orderbook/full",
-            "trades": "trades",
-            "candles": "candles",
-        }
-
-    def get_rest_path(self, request_type, symbol=None):
-        """Get REST API path for request type"""
-        path = self.rest_paths.get(request_type)
+    def get_rest_path(self, key):
+        """Get REST API path for request type (returns 'METHOD /path' format)."""
+        path = self.rest_paths.get(key)
         if path is None:
-            raise ValueError(f"Unknown request type: {request_type}")
-
-        # Replace symbol placeholder
-        if symbol and "{symbol}" in path:
-            path = path.replace("{symbol}", symbol)
-
-        # Replace client_order_id placeholder
-        if symbol and "{client_order_id}" in path:
-            path = path.replace("{client_order_id}", symbol)
-
+            raise ValueError(f"Unknown REST path key: {key}")
         return path
 
-    def get_wss_path(self, channel, symbol=None):
-        """Get WebSocket channel path"""
-        if channel not in self.wss_paths:
-            raise ValueError(f"Unknown channel: {channel}")
-
-        if symbol:
-            return f"{self.wss_paths[channel]}/{symbol}"
-        return self.wss_paths[channel]
+    def get_wss_path(self, channel):
+        """Get WebSocket channel path."""
+        path = self.wss_paths.get(channel)
+        if path is None:
+            raise ValueError(f"Unknown WSS channel: {channel}")
+        return path
 
     def get_symbol(self, symbol):
-        """Normalize symbol format for HitBTC"""
-        # HitBTC uses uppercase symbols without separator
-        return symbol.upper().replace("/", "")
+        """Normalize symbol format for HitBTC (uppercase, no separator)."""
+        return symbol.upper().replace("/", "").replace("-", "")
 
     def get_period(self, period):
-        """Convert period to HitBTC format"""
-        # kline_periods uses lowercase keys like "1m", "5m", "1h", "1d"
+        """Convert period to HitBTC format (e.g. '1h' -> 'H1')."""
         return self.kline_periods.get(period.lower(), period.upper())
 
-    def get_rate_limit(self, endpoint_type="market_data"):
-        """Get rate limit for endpoint type"""
-        return self.rate_limits.get(endpoint_type, {"calls": 100, "seconds": 1})
-
-    def get_timeframe(self, timeframe):
-        """Convert timeframe to HitBTC format"""
-        return self.kline_periods.get(timeframe, timeframe)
-
     def __str__(self):
-        return f"{self.exchange_name} {self.asset_type} Exchange Data"
+        return f"{self.exchange_name} Exchange Data"
 
     def __repr__(self):
-        return f"<HitBtcExchangeData exchange='{self.exchange_name}' asset_type='{self.asset_type}'>"
+        return f"<HitBtcExchangeData exchange='{self.exchange_name}'>"
 
 
-class HitBtcSpotExchangeData(HitBtcExchangeData):
+class HitBtcExchangeDataSpot(HitBtcExchangeData):
     """HitBTC Spot Trading exchange data"""
 
     def __init__(self):
         super().__init__()
-        self.exchange_name = "HITBTC_SPOT"
         self.asset_type = "SPOT"
-        self.rest_url = _get_hitbtc_config().get("rest_url", "https://api.hitbtc.com/api/3") if _get_hitbtc_config() else "https://api.hitbtc.com/api/3"
+        if not self._load_from_config("spot"):
+            self.exchange_name = "HITBTC___SPOT"
+            self.rest_url = "https://api.hitbtc.com/api/3"
+            self.wss_url = "wss://api.hitbtc.com/api/3/ws/public"
+        # Fallback defaults for REST paths
+        _defaults = {
+            "get_server_time": "GET /public/time",
+            "get_exchange_info": "GET /public/symbol",
+            "get_tick": "GET /public/ticker/{symbol}",
+            "get_tick_all": "GET /public/ticker",
+            "get_depth": "GET /public/orderbook/{symbol}",
+            "get_trades": "GET /public/trades/{symbol}",
+            "get_kline": "GET /public/candles/{symbol}",
+            "make_order": "POST /spot/order",
+            "cancel_order": "DELETE /spot/order/{client_order_id}",
+            "cancel_all_orders": "DELETE /spot/order",
+            "get_open_orders": "GET /spot/order",
+            "query_order": "GET /spot/order/{client_order_id}",
+            "get_order_history": "GET /spot/history/order",
+            "get_trades_history": "GET /spot/history/trade",
+            "get_balance": "GET /spot/balance",
+            "get_account": "GET /spot/balance",
+        }
+        for k, v in _defaults.items():
+            self.rest_paths.setdefault(k, v)
+        _wss_defaults = {
+            "ticker": "ticker/1s",
+            "orderbook": "orderbook/full",
+            "trades": "trades",
+            "candles": "candles",
+        }
+        for k, v in _wss_defaults.items():
+            self.wss_paths.setdefault(k, v)
+        # Normalize exchange_name
+        if self.exchange_name in ("HITBTC", "HITBTC_SPOT", "HitBTC"):
+            self.exchange_name = "HITBTC___SPOT"
+
+
+# Backward-compatible alias
+HitBtcSpotExchangeData = HitBtcExchangeDataSpot

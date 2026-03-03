@@ -3,9 +3,12 @@ SatoshiTango REST API request base class.
 """
 
 import time
+
 from bt_api_py.containers.exchanges.satoshitango_exchange_data import SatoshiTangoExchangeDataSpot
+from bt_api_py.containers.requestdatas.request_data import RequestData
 from bt_api_py.feeds.capability import Capability
 from bt_api_py.feeds.feed import Feed
+from bt_api_py.feeds.http_client import HttpClient
 from bt_api_py.functions.log_message import SpdLogManager
 
 
@@ -19,6 +22,10 @@ class SatoshiTangoRequestData(Feed):
             Capability.GET_DEPTH,
             Capability.GET_KLINE,
             Capability.GET_EXCHANGE_INFO,
+            Capability.GET_BALANCE,
+            Capability.GET_ACCOUNT,
+            Capability.MAKE_ORDER,
+            Capability.CANCEL_ORDER,
         }
 
     def __init__(self, data_queue, **kwargs):
@@ -33,6 +40,7 @@ class SatoshiTangoRequestData(Feed):
         self.async_logger = SpdLogManager(
             "./logs/satoshitango_feed.log", "async_request", 0, 0, False
         ).create_logger()
+        self._http_client = HttpClient(venue=self.exchange_name, timeout=10)
 
     def _get_headers(self, method=None, request_path=None, params=None, body=""):
         """Generate request headers."""
@@ -40,7 +48,6 @@ class SatoshiTangoRequestData(Feed):
             "Content-Type": "application/json",
             "User-Agent": "bt_api_py/1.0",
         }
-        # Add API key if available
         api_key = self._params.api_key if hasattr(self._params, 'api_key') else None
         if api_key:
             headers["Authorization"] = f"Bearer {api_key}"
@@ -54,10 +61,7 @@ class SatoshiTangoRequestData(Feed):
         headers = self._get_headers(method, request_path, params, body)
 
         try:
-            from bt_api_py.feeds.http_client import HttpClient
-
-            http_client = HttpClient(venue=self.exchange_name, timeout=timeout)
-            response = http_client.request(
+            response = self._http_client.request(
                 method=method,
                 url=self._params.rest_url + request_path,
                 headers=headers,
@@ -69,33 +73,68 @@ class SatoshiTangoRequestData(Feed):
             self.request_logger.error(f"Request failed: {e}")
             raise
 
-    def _process_response(self, response, extra_data=None):
-        """Process API response."""
-        from bt_api_py.containers.requestdatas.request_data import RequestData
-        return RequestData(response, extra_data)
-
-    async def async_request(self, path, params=None, body=None, extra_data=None, timeout=10):
-        """Async HTTP request for SatoshiTango API - returns coroutine."""
+    async def async_request(self, path, params=None, body=None, extra_data=None, timeout=5):
+        """Async HTTP request for SatoshiTango API."""
         method = path.split()[0] if " " in path else "GET"
         request_path = path.split()[1] if " " in path else path
 
         headers = self._get_headers(method, request_path, params, body)
 
         try:
-            response = await self.async_http_request(
+            response = await self._http_client.async_request(
                 method=method,
                 url=self._params.rest_url + request_path,
                 headers=headers,
-                body=body,
-                timeout=timeout,
-            )
-            self.async_logger.info(
-                f"Async request: {method} {request_path} - Success"
+                json_data=body if method == "POST" else None,
+                params=params,
             )
             return self._process_response(response, extra_data)
         except Exception as e:
             self.async_logger.error(f"Async request failed: {e}")
             raise
+
+    def async_callback(self, future):
+        """Callback for async requests, push result to data_queue."""
+        try:
+            result = future.result()
+            if result is not None:
+                self.push_data_to_queue(result)
+        except Exception as e:
+            self.async_logger.error(f"Async callback error: {e}")
+
+    def _process_response(self, response, extra_data=None):
+        """Process API response."""
+        if extra_data is None:
+            extra_data = {}
+        return RequestData(response, extra_data)
+
+    def _get_server_time(self, extra_data=None, **kwargs):
+        """Prepare server time request. Returns (path, params, extra_data)."""
+        path = "GET /v1/ticker"
+        if extra_data is None:
+            extra_data = {}
+        extra_data.update({
+            "exchange_name": self.exchange_name,
+            "symbol_name": "",
+            "asset_type": self.asset_type,
+            "request_type": "get_server_time",
+            "normalize_function": self._get_server_time_normalize_function,
+        })
+        return path, {"symbol": "BTC/ARS"}, extra_data
+
+    def get_server_time(self, extra_data=None, **kwargs):
+        """Get server time."""
+        path, params, extra_data = self._get_server_time(extra_data, **kwargs)
+        return self.request(path, params=params, extra_data=extra_data)
+
+    @staticmethod
+    def _get_server_time_normalize_function(input_data, extra_data):
+        if not input_data:
+            return None, False
+        if isinstance(input_data, dict):
+            ts = input_data.get("timestamp") or input_data.get("time")
+            return ts, True
+        return input_data, True
 
     def push_data_to_queue(self, data):
         """Push data to the queue."""

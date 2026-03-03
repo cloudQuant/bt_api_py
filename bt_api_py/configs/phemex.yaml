@@ -50,35 +50,47 @@ rate_limits:
 
 asset_types:
   spot:
-    exchange_name: phemex
+    exchange_name: PHEMEX___SPOT
     symbol_format: "s{base}{quote}"
     legal_currency: [USDT, USD, BTC, ETH]
     rest_paths:
-      get_server_time: "/public/v1/server-time"
-      get_tick: "/md/spot/ticker/24hr"
-      get_depth: "/md/orderbook"
-      get_kline: "/exchange/public/md/v2/kline"
-      get_exchange_info: "/exchange/public/v1/products"
-      get_trades: "/md/spot/trades"
+      get_server_time: "GET /exchange/public/md/v2/timestamp"
+      get_exchange_info: "GET /public/products"
+      get_tick: "GET /md/spot/ticker/24hr"
+      get_depth: "GET /md/v2/orderbook"
+      get_kline: "GET /md/v2/kline"
+      get_trades: "GET /md/v2/trade"
+      get_account: "GET /spot/wallets"
+      get_balance: "GET /spot/wallets"
+      make_order: "POST /spot/orders/create"
+      cancel_order: "DELETE /spot/orders"
+      query_order: "GET /spot/orders/active"
+      get_open_orders: "GET /spot/orders/active"
     wss_paths:
-      ticker: "{symbol}@ticker"
-      depth: "{symbol}@depth"
-      kline: "{symbol}@kline"
-      trades: "{symbol}@trades"
+      ticker: "spot_market24h.v2.{symbol}"
+      depth: "orderbook.v2.{symbol}"
+      kline: "kline.v2.{resolution}.{symbol}"
+      trades: "trade.v2.{symbol}"
 
   perpetual:
-    exchange_name: phemexPerpetual
+    exchange_name: PHEMEX___PERPETUAL
     symbol_format: "{base}{quote}"
     legal_currency: [USDT, USD, BTC]
     rest_paths:
-      get_server_time: "/public/v1/server-time"
-      get_tick: "/exchange/public/md/v2/ticker/24hr"
-      get_depth: "/exchange/public/md/v2/orderbook"
-      get_kline: "/exchange/public/md/v2/kline"
-      get_exchange_info: "/exchange/public/v1/products"
-      get_trades: "/exchange/public/md/v2/trades"
+      get_server_time: "GET /exchange/public/md/v2/timestamp"
+      get_exchange_info: "GET /public/products"
+      get_tick: "GET /md/v2/ticker/24hr"
+      get_depth: "GET /md/v2/orderbook"
+      get_kline: "GET /md/v2/kline"
+      get_trades: "GET /md/v2/trade"
+      get_account: "GET /g-accounts/accountPositions"
+      get_balance: "GET /g-accounts/accountPositions"
+      make_order: "POST /g-orders/create"
+      cancel_order: "DELETE /g-orders/cancel"
+      query_order: "GET /g-orders/activeList"
+      get_open_orders: "GET /g-orders/activeList"
     wss_paths:
-      ticker: "{symbol}@ticker"
-      depth: "{symbol}@depth"
-      kline: "{symbol}@kline"
-      trades: "{symbol}@trades"
+      ticker: "tick.v2.{symbol}"
+      depth: "orderbook.v2.{symbol}"
+      kline: "kline.v2.{resolution}.{symbol}"
+      trades: "trade.v2.{symbol}"

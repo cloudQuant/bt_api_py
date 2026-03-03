@@ -1,5 +1,10 @@
 """
 BitMart Exchange Data Configuration
+
+BitMart API V2/V3 with HMAC SHA256 authentication.
+Signature: timestamp + "#" + memo + "#" + body
+Symbol format: BTC_USDT (underscore separated).
+Response format: {"code": 1000, "message": "OK", "data": {...}}
 """
 
 import os
@@ -39,47 +44,18 @@ class BitmartExchangeData(ExchangeData):
 
     def __init__(self):
         super().__init__()
-        self.exchange_name = "bitmart"
+        self.exchange_name = "BITMART___SPOT"
         self.rest_url = "https://api-cloud.bitmart.com"
         self.wss_url = "wss://ws-manager-compress.bitmart.com/api?protocol=1.1"
         self.rest_paths = {}
         self.wss_paths = {}
         self.kline_periods = {
-            "1m": "1",
-            "3m": "3",
-            "5m": "5",
-            "15m": "15",
-            "30m": "30",
-            "45m": "45",
-            "1h": "60",
-            "2h": "120",
-            "3h": "180",
-            "4h": "240",
-            "1d": "1440",
-            "1w": "10080",
-            "1M": "43200",
+            "1m": "1", "3m": "3", "5m": "5", "15m": "15",
+            "30m": "30", "45m": "45", "1h": "60", "2h": "120",
+            "3h": "180", "4h": "240", "1d": "1440",
+            "1w": "10080", "1M": "43200",
         }
         self.legal_currency = ["USDT", "USD", "BTC", "ETH", "USDC"]
-
-    def get_symbol(self, symbol):
-        """Convert symbol to BitMart format.
-
-        BitMart uses underscore separator: BTC_USDT
-        Converts:
-        - BTC/USDT -> BTC_USDT
-        - BTC-USDT -> BTC_USDT
-        """
-        if "/" in symbol:
-            return symbol.replace("/", "_")
-        elif "-" in symbol:
-            return symbol.replace("-", "_")
-        return symbol
-
-    def get_rest_path(self, key):
-        """Get REST API path for given key."""
-        if key not in self.rest_paths or self.rest_paths[key] == "":
-            self.raise_path_error(self.exchange_name, key)
-        return self.rest_paths[key]
 
     def _load_from_config(self, asset_type):
         """Load from YAML config."""
@@ -92,41 +68,59 @@ class BitmartExchangeData(ExchangeData):
 
         if asset_cfg.exchange_name:
             self.exchange_name = asset_cfg.exchange_name
-
-        # Handle rest_url - try asset_type specific, then default
-        if config.base_urls and config.base_urls.rest:
-            rest_urls = config.base_urls.rest
-            if isinstance(rest_urls, dict):
-                # Try asset_type specific, then default
-                self.rest_url = rest_urls.get(asset_type) or rest_urls.get("default", self.rest_url)
-            else:
-                self.rest_url = rest_urls
-
-        # Handle wss_url - try asset_type specific, then default
-        if config.base_urls and config.base_urls.wss:
-            wss_urls = config.base_urls.wss
-            if isinstance(wss_urls, dict):
-                # Try asset_type specific, then default
-                self.wss_url = wss_urls.get(asset_type) or wss_urls.get("default", self.wss_url)
-            else:
-                self.wss_url = wss_urls
+        if hasattr(asset_cfg, "rest_url") and asset_cfg.rest_url:
+            self.rest_url = asset_cfg.rest_url
+        elif config.base_urls and config.base_urls.rest:
+            rest = config.base_urls.rest
+            self.rest_url = rest.get(asset_type, rest.get("default", self.rest_url)) if isinstance(rest, dict) else rest
+        if hasattr(asset_cfg, "wss_url") and asset_cfg.wss_url:
+            self.wss_url = asset_cfg.wss_url
+        elif config.base_urls and config.base_urls.wss:
+            wss = config.base_urls.wss
+            self.wss_url = wss.get(asset_type, wss.get("default", self.wss_url)) if isinstance(wss, dict) else wss
 
         if asset_cfg.rest_paths:
             self.rest_paths.update(asset_cfg.rest_paths)
         if asset_cfg.wss_paths:
             self.wss_paths.update(asset_cfg.wss_paths)
 
-        # kline_periods - load from YAML, prefer asset-specific config
         kp = asset_cfg.kline_periods or (config.kline_periods if config.kline_periods else None)
         if kp:
             self.kline_periods = dict(kp)
 
-        # legal_currency - load from YAML
         lc = asset_cfg.legal_currency or (config.legal_currency if config.legal_currency else None)
         if lc:
             self.legal_currency = list(lc)
 
         return True
+
+    def get_symbol(self, symbol):
+        """Convert symbol to BitMart format (underscore separated, uppercase).
+        e.g. 'BTC/USDT' -> 'BTC_USDT', 'BTC-USDT' -> 'BTC_USDT'
+        """
+        s = symbol.upper().replace("/", "_").replace("-", "_")
+        return s
+
+    def get_period(self, period):
+        """Map standard period to BitMart kline step (minutes string)."""
+        return self.kline_periods.get(period, period)
+
+    def get_rest_path(self, request_type):
+        """Get REST path for request_type. Raises ValueError if not found."""
+        path = self.rest_paths.get(request_type)
+        if path is None:
+            raise ValueError(
+                f"Unknown rest path: {request_type}. "
+                f"Available: {list(self.rest_paths.keys())}"
+            )
+        return path
+
+    def get_wss_path(self, channel_type, symbol=None):
+        """Get WebSocket subscription path."""
+        path = self.wss_paths.get(channel_type, "")
+        if symbol and "{symbol}" in str(path):
+            path = str(path).replace("{symbol}", self.get_symbol(symbol))
+        return path
 
 
 class BitmartExchangeDataSpot(BitmartExchangeData):
@@ -135,21 +129,29 @@ class BitmartExchangeDataSpot(BitmartExchangeData):
     def __init__(self):
         super().__init__()
         self.asset_type = "SPOT"
-        self.rest_paths = {}
-        self.wss_paths = {}
-        # API credentials (for private endpoints)
-        self.api_key = None
-        self.api_secret = None
-        self.api_memo = None
-        self._load_from_config("spot")
+        if not self._load_from_config("spot"):
+            # Fallback defaults
+            self.exchange_name = "BITMART___SPOT"
+            self.rest_url = "https://api-cloud.bitmart.com"
+            self.wss_url = "wss://ws-manager-compress.bitmart.com/api?protocol=1.1"
+            self.rest_paths = {
+                "get_server_time": "GET /spot/v1/time",
+                "get_exchange_info": "GET /spot/v1/currencies",
+                "get_tick": "GET /spot/quotation/v3/ticker",
+                "get_tick_all": "GET /spot/quotation/v3/tickers",
+                "get_depth": "GET /spot/quotation/v3/books",
+                "get_trades": "GET /spot/quotation/v3/trades",
+                "get_kline": "GET /spot/quotation/v3/klines",
+                "make_order": "POST /spot/v2/submit_order",
+                "cancel_order": "POST /spot/v3/cancel_order",
+                "cancel_all_orders": "POST /spot/v4/cancel_all",
+                "query_order": "POST /spot/v4/query/order",
+                "get_open_orders": "POST /spot/v4/query/open-orders",
+                "get_deals": "POST /spot/v4/query/history-orders",
+                "get_balance": "GET /spot/v1/wallet",
+                "get_account": "GET /spot/v1/wallet",
+            }
 
-    def get_period(self, period):
-        """Convert period string to BitMart format (minutes).
 
-        Args:
-            period: Period string like '1m', '5m', '1h', '1d'
-
-        Returns:
-            str: Period in minutes format
-        """
-        return self.kline_periods.get(period, period)
+# Backward compatibility alias
+BitmartSpotExchangeData = BitmartExchangeDataSpot

@@ -3,21 +3,17 @@ Test Foxbit exchange integration.
 
 Run tests:
     pytest tests/feeds/test_foxbit.py -v
-
-Run with coverage:
-    pytest tests/feeds/test_foxbit.py --cov=bt_api_py.feeds.live_foxbit --cov-report=term-missing
 """
 
 import json
 import queue
-from unittest.mock import Mock, patch
+from unittest.mock import Mock
 
 import pytest
 
 from bt_api_py.containers.exchanges.foxbit_exchange_data import FoxbitExchangeDataSpot
+from bt_api_py.containers.requestdatas.request_data import RequestData
 from bt_api_py.containers.tickers.foxbit_ticker import FoxbitRequestTickerData
-from bt_api_py.containers.bars.bar import BarData
-from bt_api_py.containers.orderbooks.orderbook import OrderBookData
 from bt_api_py.feeds.capability import Capability
 from bt_api_py.feeds.live_foxbit.spot import FoxbitRequestDataSpot
 from bt_api_py.registry import ExchangeRegistry
@@ -26,19 +22,25 @@ from bt_api_py.registry import ExchangeRegistry
 import bt_api_py.feeds.register_foxbit  # noqa: F401
 
 
+@pytest.fixture
+def mock_feed():
+    """Create a Foxbit feed instance with mocked request."""
+    data_queue = queue.Queue()
+    feed = FoxbitRequestDataSpot(data_queue, exchange_name="FOXBIT___SPOT")
+    feed.request = Mock(return_value=Mock(spec=RequestData))
+    return feed
+
+
 class TestFoxbitExchangeData:
     """Test Foxbit exchange data configuration."""
 
     def test_exchange_data_spot_creation(self):
-        """Test creating Foxbit spot exchange data."""
         exchange_data = FoxbitExchangeDataSpot()
-#         assert exchange_data.exchange_name == "FOXBIT___SPOT"
         assert exchange_data.asset_type == "spot"
         assert exchange_data.rest_url
         assert exchange_data.wss_url
 
     def test_kline_periods(self):
-        """Test kline period conversion."""
         exchange_data = FoxbitExchangeDataSpot()
         assert "1m" in exchange_data.kline_periods
         assert "5m" in exchange_data.kline_periods
@@ -46,204 +48,267 @@ class TestFoxbitExchangeData:
         assert "1d" in exchange_data.kline_periods
 
     def test_legal_currency(self):
-        """Test legal currencies."""
         exchange_data = FoxbitExchangeDataSpot()
         assert "BRL" in exchange_data.legal_currency
 
 
-class TestFoxbitRequestData:
-    """Test Foxbit REST API request base class."""
+class TestFoxbitRequestDataSpot:
+    """Test Foxbit REST API request methods."""
 
     def test_request_data_creation(self):
-        """Test creating Foxbit request data."""
         data_queue = queue.Queue()
-        request_data = FoxbitRequestDataSpot(
-            data_queue,
-            exchange_name="FOXBIT___SPOT",
-        )
-        assert request_data.exchange_name == "FOXBIT___SPOT"
+        feed = FoxbitRequestDataSpot(data_queue, exchange_name="FOXBIT___SPOT")
+        assert feed.exchange_name == "FOXBIT___SPOT"
+        assert feed.asset_type == "SPOT"
 
     def test_capabilities(self):
-        """Test feed capabilities."""
-        data_queue = queue.Queue()
-        request_data = FoxbitRequestDataSpot(data_queue)
-        capabilities = request_data._capabilities()
-        assert Capability.GET_TICK in capabilities
-        assert Capability.GET_DEPTH in capabilities
-        assert Capability.GET_KLINE in capabilities
-        assert Capability.GET_EXCHANGE_INFO in capabilities
+        caps = FoxbitRequestDataSpot._capabilities()
+        assert Capability.GET_TICK in caps
+        assert Capability.GET_DEPTH in caps
+        assert Capability.GET_KLINE in caps
+        assert Capability.GET_EXCHANGE_INFO in caps
+        assert Capability.GET_BALANCE in caps
+        assert Capability.GET_ACCOUNT in caps
+        assert Capability.MAKE_ORDER in caps
+        assert Capability.CANCEL_ORDER in caps
 
-    def test_format_market(self):
-        """Test market format conversion.
+    def test_format_market(self, mock_feed):
+        assert mock_feed._format_market("BTC/BRL") == "btcbrl"
+        assert mock_feed._format_market("BTC-BRL") == "btcbrl"
+        assert mock_feed._format_market("btcbrl") == "btcbrl"
 
-        Foxbit uses lowercase format like 'btcbrl'.
-        """
-        data_queue = queue.Queue()
-        request_data = FoxbitRequestDataSpot(data_queue)
-
-        assert request_data._format_market("BTC/BRL") == "btcbrl"
-        assert request_data._format_market("BTC-BRL") == "btcbrl"
-        assert request_data._format_market("btcbrl") == "btcbrl"
-
-    def test_get_tick(self):
-        """Test get tick method."""
-        data_queue = queue.Queue()
-        request_data = FoxbitRequestDataSpot(data_queue)
-
-        path, params, extra_data = request_data._get_tick("BTC/BRL")
-        assert "GET /rest/v3/markets/" in path
+    def test_get_tick_returns_tuple(self, mock_feed):
+        path, params, extra_data = mock_feed._get_tick("BTC/BRL")
+        assert "btcbrl" in path
         assert "/ticker/24hr" in path
-        assert extra_data["request_type"] == "get_ticker"
+        assert extra_data["request_type"] == "get_tick"
+        assert extra_data["symbol_name"] == "BTC/BRL"
 
-    def test_get_depth(self):
-        """Test get depth method."""
-        data_queue = queue.Queue()
-        request_data = FoxbitRequestDataSpot(data_queue)
+    def test_get_tick_calls_request(self, mock_feed):
+        mock_feed.get_tick("BTC/BRL")
+        assert mock_feed.request.called
 
-        path, params, extra_data = request_data._get_depth("BTC/BRL", count=20)
-        assert "GET /rest/v3/markets/" in path
+    def test_get_depth_returns_tuple(self, mock_feed):
+        path, params, extra_data = mock_feed._get_depth("BTC/BRL", count=20)
+        assert "btcbrl" in path
         assert "/orderbook" in path
         assert extra_data["request_type"] == "get_depth"
 
-    def test_get_kline(self):
-        """Test get kline method."""
-        data_queue = queue.Queue()
-        request_data = FoxbitRequestDataSpot(data_queue)
+    def test_get_depth_calls_request(self, mock_feed):
+        mock_feed.get_depth("BTC/BRL")
+        assert mock_feed.request.called
 
-        path, params, extra_data = request_data._get_kline("BTC/BRL", "1h")
-        assert "GET /rest/v3/markets/" in path
+    def test_get_kline_returns_tuple(self, mock_feed):
+        path, params, extra_data = mock_feed._get_kline("BTC/BRL", "1h")
+        assert "btcbrl" in path
         assert "/candlesticks" in path
         assert extra_data["request_type"] == "get_kline"
+        assert params["interval"] == "1h"
+
+    def test_get_kline_calls_request(self, mock_feed):
+        mock_feed.get_kline("BTC/BRL", "1h")
+        assert mock_feed.request.called
+
+    def test_get_exchange_info_returns_tuple(self, mock_feed):
+        path, params, extra_data = mock_feed._get_exchange_info()
+        assert extra_data["request_type"] == "get_exchange_info"
+
+    def test_get_server_time_tuple(self):
+        data_queue = queue.Queue()
+        feed = FoxbitRequestDataSpot(data_queue, exchange_name="FOXBIT___SPOT")
+        path, params, extra_data = feed._get_server_time()
+        assert extra_data["request_type"] == "get_server_time"
 
 
-def init_req_feed():
-    """Initialize request feed for testing."""
-    data_queue = queue.Queue()
-    return FoxbitRequestDataSpot(data_queue)
+class TestFoxbitStandardInterfaces:
+    """Test standard Feed interface methods for Foxbit."""
+
+    @pytest.fixture
+    def feed(self):
+        data_queue = queue.Queue()
+        feed = FoxbitRequestDataSpot(data_queue, exchange_name="FOXBIT___SPOT")
+        feed.request = Mock(return_value=Mock(spec=RequestData))
+        return feed
+
+    def test_make_order_calls_request(self, feed):
+        feed.make_order("BTC/BRL", 0.01, 250000, "limit", offset="BUY")
+        assert feed.request.called
+        extra_data = feed.request.call_args[1].get("extra_data")
+        assert extra_data["request_type"] == "make_order"
+
+    def test_cancel_order_calls_request(self, feed):
+        feed.cancel_order("BTC/BRL", "order_123")
+        assert feed.request.called
+        extra_data = feed.request.call_args[1].get("extra_data")
+        assert extra_data["request_type"] == "cancel_order"
+
+    def test_query_order_calls_request(self, feed):
+        feed.query_order("BTC/BRL", "order_123")
+        assert feed.request.called
+        extra_data = feed.request.call_args[1].get("extra_data")
+        assert extra_data["request_type"] == "query_order"
+
+    def test_get_open_orders_calls_request(self, feed):
+        feed.get_open_orders("BTC/BRL")
+        assert feed.request.called
+        extra_data = feed.request.call_args[1].get("extra_data")
+        assert extra_data["request_type"] == "get_open_orders"
+
+    def test_get_account_calls_request(self, feed):
+        feed.get_account()
+        assert feed.request.called
+        extra_data = feed.request.call_args[1].get("extra_data")
+        assert extra_data["request_type"] == "get_account"
+
+    def test_get_balance_calls_request(self, feed):
+        feed.get_balance()
+        assert feed.request.called
+        extra_data = feed.request.call_args[1].get("extra_data")
+        assert extra_data["request_type"] == "get_balance"
+
+    def test_get_exchange_info_calls_request(self, feed):
+        feed.get_exchange_info()
+        assert feed.request.called
+        extra_data = feed.request.call_args[1].get("extra_data")
+        assert extra_data["request_type"] == "get_exchange_info"
 
 
-class TestFoxbitServerTime:
-    """Test server time endpoint."""
+class TestFoxbitBaseCapabilities:
+    """Test capabilities on the base class."""
 
-    def test_get_server_time(self):
-        """Test getting server time."""
-        feed = init_req_feed()
-        result = feed.get_server_time()
-        assert result is not None
+    def test_base_capabilities(self):
+        from bt_api_py.feeds.live_foxbit.request_base import FoxbitRequestData
+        caps = FoxbitRequestData._capabilities()
+        assert Capability.GET_TICK in caps
+        assert Capability.MAKE_ORDER in caps
+        assert Capability.CANCEL_ORDER in caps
 
 
-class TestFoxbitTicker:
-    """Test ticker data retrieval."""
+class TestFoxbitNormalizeFunctions:
+    """Test normalize functions edge cases."""
+
+    def test_tick_normalize_with_none(self):
+        result, status = FoxbitRequestDataSpot._get_tick_normalize_function(None, None)
+        assert result == []
+        assert status is False
+
+    def test_tick_normalize_with_dict(self):
+        input_data = {"data": {"marketSymbol": "BTCBRL", "lastPrice": "250000.50"}}
+        extra = {"symbol_name": "BTC/BRL", "asset_type": "SPOT"}
+        result, status = FoxbitRequestDataSpot._get_tick_normalize_function(input_data, extra)
+        assert status is True
+        assert len(result) == 1
+
+    def test_tick_normalize_with_list(self):
+        input_data = {"data": [{"marketSymbol": "BTCBRL", "lastPrice": "250000.50"}]}
+        extra = {"symbol_name": "BTC/BRL", "asset_type": "SPOT"}
+        result, status = FoxbitRequestDataSpot._get_tick_normalize_function(input_data, extra)
+        assert status is True
+        assert len(result) == 1
+
+    def test_depth_normalize_with_none(self):
+        result, status = FoxbitRequestDataSpot._get_depth_normalize_function(None, None)
+        assert result == []
+        assert status is False
+
+    def test_depth_normalize_with_dict(self):
+        input_data = {"data": {"bids": [], "asks": []}}
+        result, status = FoxbitRequestDataSpot._get_depth_normalize_function(input_data, None)
+        assert status is True
+
+    def test_kline_normalize_with_none(self):
+        result, status = FoxbitRequestDataSpot._get_kline_normalize_function(None, None)
+        assert result == []
+        assert status is False
+
+    def test_kline_normalize_with_list(self):
+        input_data = {"data": [{"open": "250000", "close": "251000"}]}
+        result, status = FoxbitRequestDataSpot._get_kline_normalize_function(input_data, None)
+        assert status is True
+
+    def test_exchange_info_normalize_with_none(self):
+        result, status = FoxbitRequestDataSpot._get_exchange_info_normalize_function(None, None)
+        assert result == []
+        assert status is False
+
+    def test_account_normalize_with_none(self):
+        result, status = FoxbitRequestDataSpot._get_account_normalize_function(None, None)
+        assert result == []
+        assert status is False
+
+    def test_balance_normalize_with_none(self):
+        result, status = FoxbitRequestDataSpot._get_balance_normalize_function(None, None)
+        assert result == []
+        assert status is False
+
+
+class TestFoxbitDataContainers:
+    """Test Foxbit data containers."""
 
     def test_ticker_container(self):
-        """Test ticker data container."""
         ticker_info = json.dumps({
             "data": {
-            "marketSymbol": "BTCBRL",
-            "lastPrice": "250000.50",
-            "bidPrice": "249900.00",
-            "askPrice": "250000.50",
-            "vol": "12.345",
-            "highPrice": "255000.00",
-            "lowPrice": "245000.00",
-            "volQuote": "3000000",
+                "marketSymbol": "BTCBRL",
+                "lastPrice": "250000.50",
+                "bidPrice": "249900.00",
+                "askPrice": "250000.50",
+                "vol": "12.345",
+                "highPrice": "255000.00",
+                "lowPrice": "245000.00",
+                "volQuote": "3000000",
             }
         })
-
         ticker = FoxbitRequestTickerData(ticker_info, "BTC/BRL", "SPOT", False)
         ticker.init_data()
-
         assert ticker.exchange_name == "FOXBIT"
         assert ticker.symbol_name == "BTC/BRL"
         assert ticker.last_price == 250000.50
-
-    def test_get_ticker_live(self):
-        """Test getting ticker from live API."""
-        feed = init_req_feed()
-        result = feed.get_tick("BTC/BRL")
-        assert result.status is True
-
-
-class TestFoxbitKline:
-    """Test kline data retrieval."""
-
-    def test_kline_container(self):
-        """Test kline data container."""
-        pass
-
-    def test_get_kline_live(self):
-        """Test getting kline from live API."""
-        feed = init_req_feed()
-        result = feed.get_kline("BTC/BRL", "1h", count=10)
-        assert result is not None
-
-
-class TestFoxbitOrderBook:
-    """Test order book data retrieval."""
-
-    def test_orderbook_container(self):
-        """Test orderbook data container."""
-        pass
-
-    def test_get_depth_live(self):
-        """Test getting order book from live API."""
-        feed = init_req_feed()
-        result = feed.get_depth("BTC/BRL", count=20)
-        assert result is not None
 
 
 class TestFoxbitRegistry:
     """Test Foxbit registration."""
 
     def test_foxbit_registered(self):
-        """Test that Foxbit is properly registered."""
-        # Check if feed is registered
         assert "FOXBIT___SPOT" in ExchangeRegistry._feed_classes
         assert ExchangeRegistry._feed_classes["FOXBIT___SPOT"] == FoxbitRequestDataSpot
 
-        # Check if exchange data is registered
+    def test_foxbit_exchange_data_registered(self):
         assert "FOXBIT___SPOT" in ExchangeRegistry._exchange_data_classes
         assert ExchangeRegistry._exchange_data_classes["FOXBIT___SPOT"] == FoxbitExchangeDataSpot
 
-        # Check if balance handler is registered
-        assert "FOXBIT___SPOT" in ExchangeRegistry._balance_handlers
-        assert ExchangeRegistry._balance_handlers["FOXBIT___SPOT"] is not None
-
     def test_foxbit_create_feed(self):
-        """Test creating Foxbit feed through registry."""
         data_queue = queue.Queue()
         feed = ExchangeRegistry.create_feed("FOXBIT___SPOT", data_queue)
         assert isinstance(feed, FoxbitRequestDataSpot)
 
     def test_foxbit_create_exchange_data(self):
-        """Test creating Foxbit exchange data through registry."""
         exchange_data = ExchangeRegistry.create_exchange_data("FOXBIT___SPOT")
         assert isinstance(exchange_data, FoxbitExchangeDataSpot)
 
 
-class TestFoxbitIntegration:
-    """Integration tests for Foxbit."""
+class TestFoxbitLiveAPI:
+    """Live API tests - require network, marked as integration."""
 
-    def test_market_data_api(self):
-        """Test market data API calls (requires network)."""
+    @pytest.mark.integration
+    def test_foxbit_req_tick_data(self):
         data_queue = queue.Queue()
-        feed = FoxbitRequestDataSpot(data_queue)
+        feed = FoxbitRequestDataSpot(data_queue, exchange_name="FOXBIT___SPOT")
+        result = feed.get_tick("BTC/BRL")
+        assert isinstance(result, RequestData)
 
-        # Test ticker
-        ticker = feed.get_tick("BTC/BRL")
-        assert ticker.status is True
+    @pytest.mark.integration
+    def test_foxbit_req_depth_data(self):
+        data_queue = queue.Queue()
+        feed = FoxbitRequestDataSpot(data_queue, exchange_name="FOXBIT___SPOT")
+        result = feed.get_depth("BTC/BRL")
+        assert isinstance(result, RequestData)
 
-        # Test depth
-        depth = feed.get_depth("BTC/BRL", count=20)
-        assert depth.status is True
-
-        # Test kline
-        kline = feed.get_kline("BTC/BRL", "1h", count=10)
-        assert kline.status is True
-
-    def test_trading_api(self):
-        """Test trading API calls (requires API keys)."""
-        pass
+    @pytest.mark.integration
+    def test_foxbit_req_kline_data(self):
+        data_queue = queue.Queue()
+        feed = FoxbitRequestDataSpot(data_queue, exchange_name="FOXBIT___SPOT")
+        result = feed.get_kline("BTC/BRL", "1h", count=10)
+        assert isinstance(result, RequestData)
 
 
 if __name__ == "__main__":

@@ -6,8 +6,10 @@ CoW Swap is a DEX (Decentralized Exchange) that uses Ethereum smart contracts.
 import time
 
 from bt_api_py.containers.exchanges.cow_swap_exchange_data import CowSwapExchangeDataSpot
+from bt_api_py.containers.requestdatas.request_data import RequestData
 from bt_api_py.feeds.capability import Capability
 from bt_api_py.feeds.feed import Feed
+from bt_api_py.feeds.http_client import HttpClient
 from bt_api_py.functions.log_message import SpdLogManager
 
 
@@ -17,7 +19,14 @@ class CowSwapRequestData(Feed):
     @classmethod
     def _capabilities(cls):
         return {
+            Capability.GET_TICK,
+            Capability.GET_DEPTH,
+            Capability.GET_KLINE,
             Capability.GET_EXCHANGE_INFO,
+            Capability.GET_BALANCE,
+            Capability.GET_ACCOUNT,
+            Capability.MAKE_ORDER,
+            Capability.CANCEL_ORDER,
         }
 
     def __init__(self, data_queue, **kwargs):
@@ -30,6 +39,10 @@ class CowSwapRequestData(Feed):
         self.request_logger = SpdLogManager(
             "./logs/cow_swap_feed.log", "request", 0, 0, False
         ).create_logger()
+        self.async_logger = SpdLogManager(
+            "./logs/cow_swap_feed.log", "async_request", 0, 0, False
+        ).create_logger()
+        self._http_client = HttpClient(venue=self.exchange_name, timeout=10)
 
     def _get_headers(self):
         """Generate request headers."""
@@ -52,30 +65,80 @@ class CowSwapRequestData(Feed):
         headers = self._get_headers()
 
         try:
-            from bt_api_py.feeds.http_client import HttpClient
-
-            http_client = HttpClient(venue=self.exchange_name, timeout=timeout)
-            response = http_client.request(
+            response = self._http_client.request(
                 method=method,
                 url=self._get_base_url() + request_path,
                 headers=headers,
                 json_data=body if method == "POST" else None,
                 params=params,
             )
-            return self._process_response(response, extra_data)
+            return RequestData(response, extra_data)
         except Exception as e:
             self.request_logger.error(f"Request failed: {e}")
             raise
 
-    def _process_response(self, response, extra_data=None):
-        """Process API response."""
-        from bt_api_py.containers.requestdatas.request_data import RequestData
-        return RequestData(response, extra_data)
+    async def async_request(self, path, params=None, body=None, extra_data=None, timeout=5):
+        """Async HTTP request for CoW Swap API."""
+        method = path.split()[0] if " " in path else "GET"
+        request_path = "/" + path.split()[1] if " " in path else path
+
+        headers = self._get_headers()
+
+        try:
+            response = await self._http_client.async_request(
+                method=method,
+                url=self._get_base_url() + request_path,
+                headers=headers,
+                json_data=body if method == "POST" else None,
+                params=params,
+            )
+            return RequestData(response, extra_data)
+        except Exception as e:
+            self.async_logger.error(f"Async request failed: {e}")
+            raise
+
+    def async_callback(self, future):
+        """Callback function for async requests, push result to data_queue."""
+        try:
+            result = future.result()
+            if result is not None:
+                self.push_data_to_queue(result)
+        except Exception as e:
+            self.async_logger.error(f"Async callback error: {e}")
+
+    # ── Standard Interface: get_server_time ───────────────────────
+
+    def _get_server_time(self, extra_data=None, **kwargs):
+        """Prepare server time request. Returns (path, params, extra_data).
+
+        CoW Swap provides a version endpoint but no dedicated server time.
+        Returns local time as fallback.
+        """
+        if extra_data is None:
+            extra_data = {}
+        extra_data.update({
+            "exchange_name": self.exchange_name,
+            "symbol_name": "",
+            "asset_type": self.asset_type,
+            "request_type": "get_server_time",
+            "server_time": time.time(),
+        })
+        return "GET /api/v1/version", {}, extra_data
+
+    def get_server_time(self, extra_data=None, **kwargs):
+        """Get server time. Returns RequestData.
+
+        CoW Swap is a DEX — returns local timestamp as proxy.
+        """
+        path, params, extra_data = self._get_server_time(extra_data, **kwargs)
+        return RequestData({"server_time": time.time()}, extra_data)
 
     def push_data_to_queue(self, data):
         """Push data to the queue."""
         if self.data_queue is not None:
             self.data_queue.put(data)
+        else:
+            raise RuntimeError("Queue not initialized")
 
     def connect(self):
         pass

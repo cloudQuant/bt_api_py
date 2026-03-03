@@ -1,16 +1,12 @@
-# Bitstamp 交易所统一配置
-# 数据来源: https://www.bitstamp.net/api/
+# Bitstamp Exchange Configuration
+# Auth: HMAC SHA256 v2 with X-Auth headers
+# Symbol format: lowercase concatenated (btcusd)
+# Endpoints use /{pair}/ suffix
 id: bitstamp
 display_name: Bitstamp
 venue_type: cex
 website: https://www.bitstamp.net
 api_doc: https://www.bitstamp.net/api/
-
-base_urls:
-  rest:
-    spot: https://www.bitstamp.net/api/v2
-  wss:
-    spot: wss://ws.bitstamp.net
 
 connection:
   type: http
@@ -27,7 +23,6 @@ authentication:
     X-Auth-Timestamp: timestamp
     X-Auth-Version: "v2"
 
-# K线周期映射 - OHLC step (秒)
 kline_periods:
   1m: "60"
   3m: "180"
@@ -57,9 +52,10 @@ rate_limits:
     scope: ip
 
 asset_types:
-  # ─── Spot Trading ────────────────────────────────────────
   spot:
-    exchange_name: bitstampSpot
+    exchange_name: BITSTAMP___SPOT
+    rest_url: "https://www.bitstamp.net/api/v2"
+    wss_url: "wss://ws.bitstamp.net"
     symbol_format: "{base}{quote}"
     symbol_lower: true
     legal_currency: [USD, EUR, GBP, USDC]
@@ -67,25 +63,24 @@ asset_types:
       # General
       ping: "GET /ping"
       get_server_time: "GET /server_time_utc"
-      get_contract: "GET /trading-pairs-info/"
+      get_exchange_info: "GET /trading-pairs-info/"
       # Market Data
       get_tick: "GET /ticker"
       get_depth: "GET /order_book"
       get_kline: "GET /ohlc"
-      get_new_price: "GET /transactions"
-      # Account
+      get_trades: "GET /transactions"
+      # Account (signed)
       get_account: "POST /balance/"
       get_balance: "POST /balance/"
-      # Trade
+      # Trading (signed)
       make_order: "POST /buy"
-      cancel_order: "POST /cancel_order"
-      cancel_all: "POST /cancel_all_orders"
-      query_order: "POST /order_status"
-      get_open_orders: "POST /open_orders/all"
-      get_deals: "POST /user_transactions"
+      cancel_order: "POST /cancel_order/"
+      cancel_all_orders: "POST /cancel_all_orders/"
+      query_order: "POST /order_status/"
+      get_open_orders: "POST /open_orders/all/"
+      get_deals: "POST /user_transactions/"
     wss_paths:
-      # Market Streams
-      tick: "live_trades_<pair>"
-      depth: "order_book_<pair>"
-      diff_depth: "diff_order_book_<pair>"
-      detail_depth: "detail_order_book_<pair>"
+      ticker: "live_trades_{pair}"
+      depth: "order_book_{pair}"
+      diff_depth: "diff_order_book_{pair}"
+      detail_depth: "detail_order_book_{pair}"

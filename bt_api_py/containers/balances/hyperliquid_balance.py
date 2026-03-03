@@ -31,7 +31,7 @@ class HyperliquidSwapRequestBalanceData(BalanceData):
     def init_data(self):
         """初始化余额数据"""
         if self.has_been_init_data:
-            return
+            return self
 
         try:
             if not self.has_been_json_encoded:
@@ -66,6 +66,7 @@ class HyperliquidSwapRequestBalanceData(BalanceData):
 
         except Exception as e:
             print(f"Error initializing Hyperliquid balance data: {e}")
+        return self
 
     def get_all_data(self):
         """获取所有余额数据"""
@@ -154,7 +155,7 @@ class HyperliquidSpotRequestBalanceData(BalanceData):
     def init_data(self):
         """初始化现货余额数据"""
         if self.has_been_init_data:
-            return
+            return self
 
         try:
             if not self.has_been_json_encoded:
@@ -174,6 +175,7 @@ class HyperliquidSpotRequestBalanceData(BalanceData):
 
         except Exception as e:
             print(f"Error initializing Hyperliquid spot balance data: {e}")
+        return self
 
     def get_all_data(self):
         """获取所有余额数据"""

@@ -1,348 +1,504 @@
 """
-Test Coinone exchange integration.
+Tests for Coinone exchange – Feed pattern.
 
-Run tests:
-    pytest tests/feeds/test_coinone.py -v
-
-Run with coverage:
-    pytest tests/feeds/test_coinone.py --cov=bt_api_py.feeds.live_coinone --cov-report=term-missing
+Run:  pytest tests/feeds/test_coinone.py -v
 """
 
-import json
 import queue
-import time
+from unittest.mock import patch
 
 import pytest
 
-from bt_api_py.containers.exchanges.coinone_exchange_data import (
-    CoinoneExchangeDataSpot,
-)
+from bt_api_py.containers.exchanges.coinone_exchange_data import CoinoneExchangeDataSpot
 from bt_api_py.containers.requestdatas.request_data import RequestData
-from bt_api_py.containers.tickers.coinone_ticker import CoinoneRequestTickerData
+from bt_api_py.feeds.live_coinone.request_base import CoinoneRequestData
 from bt_api_py.feeds.live_coinone.spot import CoinoneRequestDataSpot
 from bt_api_py.registry import ExchangeRegistry
 
-# Import registration to auto-register Coinone
 import bt_api_py.feeds.register_coinone  # noqa: F401
 
+# ── sample response fixtures ─────────────────────────────────
 
-def init_req_feed():
-    """Initialize Coinone request feed for testing."""
-    data_queue = queue.Queue()
-    kwargs = {
-        "exchange_name": "COINONE___SPOT",
-    }
-    live_coinone_spot_feed = CoinoneRequestDataSpot(data_queue, **kwargs)
-    return live_coinone_spot_feed
+SAMPLE_TICK = {"result": "success", "errorCode": "0",
+    "tickers": [{"target_currency": "BTC", "last": "50000000",
+                  "high": "51000000", "low": "49000000", "volume": "123.4"}]}
 
+SAMPLE_TICK_SINGLE = {"result": "success", "errorCode": "0",
+    "last": "50000000", "high": "51000000", "low": "49000000"}
 
-def init_async_feed(data_queue):
-    """Initialize Coinone async feed for testing."""
-    kwargs = {
-        "exchange_name": "COINONE___SPOT",
-    }
-    live_coinone_spot_feed = CoinoneRequestDataSpot(data_queue, **kwargs)
-    return live_coinone_spot_feed
+SAMPLE_DEPTH = {"result": "success", "errorCode": "0",
+    "asks": [{"price": "51000000", "qty": "0.1"}],
+    "bids": [{"price": "49000000", "qty": "0.5"}]}
 
+SAMPLE_KLINE = {"result": "success", "errorCode": "0",
+    "chart": [
+        {"open": "49000000", "high": "51000000", "low": "48000000", "close": "50000000"},
+        {"open": "50000000", "high": "52000000", "low": "49000000", "close": "51000000"},
+    ]}
 
-class TestCoinoneExchangeData:
-    """Test Coinone exchange data configuration."""
+SAMPLE_TRADES = {"result": "success", "errorCode": "0",
+    "trades": [{"price": "50000000", "qty": "0.01", "is_seller_maker": False, "timestamp": "1700000000"}]}
 
-    def test_exchange_data_spot_creation(self):
-        """Test creating Coinone spot exchange data."""
-        exchange_data = CoinoneExchangeDataSpot()
-        assert exchange_data.exchange_name == "coinone"
-        assert exchange_data.asset_type == "spot"
-        assert exchange_data.rest_url == "https://api.coinone.co.kr"
-        assert exchange_data.wss_url == "wss://stream.coinone.co.kr"
+SAMPLE_EXCHANGE_INFO = {"result": "success", "errorCode": "0",
+    "markets": [
+        {"target_currency": "BTC", "min_qty": "0.0001", "max_qty": "100"},
+        {"target_currency": "ETH", "min_qty": "0.001", "max_qty": "1000"},
+    ]}
 
-    def test_kline_periods(self):
-        """Test kline period conversion."""
-        exchange_data = CoinoneExchangeDataSpot()
-        assert "1m" in exchange_data.kline_periods
-        assert "1h" in exchange_data.kline_periods
-        assert "1d" in exchange_data.kline_periods
-        assert exchange_data.kline_periods["1m"] == "1m"
-        assert exchange_data.kline_periods["1h"] == "1h"
+SAMPLE_ORDER = {"result": "success", "errorCode": "0",
+    "orderId": "abc-123", "status": "live"}
 
-    def test_legal_currencies(self):
-        """Test legal currencies."""
-        exchange_data = CoinoneExchangeDataSpot()
-        assert "KRW" in exchange_data.legal_currency
+SAMPLE_OPEN_ORDERS = {"result": "success", "errorCode": "0",
+    "limitOrders": [
+        {"orderId": "abc-123", "price": "50000000", "qty": "0.001", "type": "bid"},
+    ]}
 
-    def test_rest_url(self):
-        """Test REST URL is configured."""
-        exchange_data = CoinoneExchangeDataSpot()
-        assert exchange_data.rest_url == "https://api.coinone.co.kr"
+SAMPLE_DEALS = {"result": "success", "errorCode": "0",
+    "completeOrders": [
+        {"orderId": "abc-456", "price": "50000000", "qty": "0.001", "type": "bid"},
+    ]}
 
-    def test_wss_url(self):
-        """Test WebSocket URL is configured."""
-        exchange_data = CoinoneExchangeDataSpot()
-        assert exchange_data.wss_url == "wss://stream.coinone.co.kr"
+SAMPLE_ACCOUNT = {"result": "success", "errorCode": "0",
+    "balances": {"BTC": {"available": "1.5", "limit": "0.0"},
+                 "KRW": {"available": "1000000", "limit": "0"}}}
+
+SAMPLE_ERROR = {"result": "error", "error_code": "107", "error_msg": "Parameter value is wrong"}
 
 
-class TestCoinoneRequestData:
-    """Test Coinone REST API request base class."""
+# ── helpers ───────────────────────────────────────────────────
 
-    def test_request_data_creation(self):
-        """Test creating Coinone request data."""
-        data_queue = queue.Queue()
-        request_data = CoinoneRequestDataSpot(
-            data_queue,
-            exchange_name="COINONE___SPOT",
-        )
-        assert request_data.exchange_name == "COINONE___SPOT"
-
-    def test_has_get_tick_method(self):
-        """Test that get_tick method exists."""
-        live_coinone_spot_feed = init_req_feed()
-        assert hasattr(live_coinone_spot_feed, 'get_tick')
-        assert hasattr(live_coinone_spot_feed, '_get_tick')
-
-    def test_has_get_depth_method(self):
-        """Test that get_depth method exists."""
-        live_coinone_spot_feed = init_req_feed()
-        assert hasattr(live_coinone_spot_feed, 'get_depth')
-        assert hasattr(live_coinone_spot_feed, '_get_depth')
-
-    def test_has_get_kline_method(self):
-        """Test that get_kline method exists."""
-        live_coinone_spot_feed = init_req_feed()
-        assert hasattr(live_coinone_spot_feed, 'get_kline')
-        assert hasattr(live_coinone_spot_feed, '_get_kline')
-
-    def test_parse_symbol(self):
-        """Test symbol parsing functionality."""
-        live_coinone_spot_feed = init_req_feed()
-        quote, target = live_coinone_spot_feed._parse_symbol("KRW-BTC")
-        assert quote == "KRW"
-        assert target == "BTC"
-
-        quote, target = live_coinone_spot_feed._parse_symbol("btckrw")
-        assert quote == "KRW"
-        assert target == "btckrw"
+@pytest.fixture
+def feed():
+    return CoinoneRequestDataSpot(queue.Queue())
 
 
-class TestCoinoneDataContainers:
-    """Test Coinone data containers."""
-
-    def test_ticker_container(self):
-        """Test ticker data container."""
-        ticker_response = json.dumps({
-            "last": "50000000",
-            "bid": "49900000",
-            "ask": "50100000",
-            "volume": "100.50",
-            "high": "51000000",
-            "low": "48000000",
-        })
-
-        ticker = CoinoneRequestTickerData(
-            ticker_response, "btckrw", "SPOT", False
-        )
-        ticker.init_data()
-
-        assert ticker.get_exchange_name() == "COINONE"
-        assert ticker.symbol_name == "btckrw"
-        assert ticker.last_price == 50000000
-        assert ticker.bid_price == 49900000
-        assert ticker.ask_price == 50100000
-        assert ticker.volume_24h == 100.50
-        assert ticker.high_24h == 51000000
-        assert ticker.low_24h == 48000000
-
-    def test_ticker_container_with_json_string(self):
-        """Test ticker data container with JSON string input."""
-        ticker_data = {
-            "last": "3000000",
-            "bid": "2990000",
-            "ask": "3010000",
-        }
-        ticker_response = json.dumps(ticker_data)
-
-        ticker = CoinoneRequestTickerData(
-            ticker_response, "ethkrw", "SPOT", False
-        )
-        ticker.init_data()
-
-        assert ticker.last_price == 3000000
-        assert ticker.bid_price == 2990000
-        assert ticker.ask_price == 3010000
+@pytest.fixture
+def exdata():
+    return CoinoneExchangeDataSpot()
 
 
-class TestCoinoneRegistry:
-    """Test Coinone registration."""
+# ═══════════════════════════════════════════════════════════════
+# 1) ExchangeData
+# ═══════════════════════════════════════════════════════════════
 
-    def test_coinone_registered(self):
-        """Test that Coinone is properly registered."""
-        # Check if feed is registered in _feed_classes
-        assert "COINONE___SPOT" in ExchangeRegistry._feed_classes
-        assert ExchangeRegistry._feed_classes["COINONE___SPOT"] == CoinoneRequestDataSpot
+class TestExchangeData:
+    def test_exchange_name(self, exdata):
+        assert exdata.exchange_name == "COINONE___SPOT"
 
-        # Check if exchange data is registered
-        assert "COINONE___SPOT" in ExchangeRegistry._exchange_data_classes
-        assert ExchangeRegistry._exchange_data_classes["COINONE___SPOT"] == CoinoneExchangeDataSpot
+    def test_asset_type(self, exdata):
+        assert exdata.asset_type == "SPOT"
 
-        # Check if balance handler is registered
-        assert "COINONE___SPOT" in ExchangeRegistry._balance_handlers
-        assert ExchangeRegistry._balance_handlers["COINONE___SPOT"] is not None
+    def test_rest_url(self, exdata):
+        assert exdata.rest_url == "https://api.coinone.co.kr"
 
-    def test_coinone_create_feed(self):
-        """Test creating Coinone feed through registry."""
-        data_queue = queue.Queue()
-        feed = ExchangeRegistry.create_feed(
-            "COINONE___SPOT",
-            data_queue,
-        )
-        assert isinstance(feed, CoinoneRequestDataSpot)
+    def test_wss_url(self, exdata):
+        assert "coinone.co.kr" in exdata.wss_url
 
-    def test_coinone_create_exchange_data(self):
-        """Test creating Coinone exchange data through registry."""
-        exchange_data = ExchangeRegistry.create_exchange_data("COINONE___SPOT")
-        assert isinstance(exchange_data, CoinoneExchangeDataSpot)
+    def test_get_symbol(self, exdata):
+        assert exdata.get_symbol("KRW-BTC") == "KRW-BTC"
 
+    def test_parse_symbol(self, exdata):
+        q, t = CoinoneExchangeDataSpot.parse_symbol("KRW-BTC")
+        assert q == "KRW" and t == "BTC"
+        q, t = CoinoneExchangeDataSpot.parse_symbol("BTC")
+        assert q == "KRW" and t == "BTC"
 
-class TestCoinoneServerTime:
-    """Test Coinone server time endpoint."""
+    def test_get_period(self, exdata):
+        assert exdata.get_period("1m") == "1m"
+        assert exdata.get_period("1h") == "1h"
+        assert exdata.get_period("1d") == "1d"
 
-    def test_coinone_req_server_time(self):
-        """Test getting server time from Coinone."""
-        # Coinone doesn't provide a server time endpoint
-        pass
+    def test_kline_periods(self, exdata):
+        for k in ("1m", "5m", "15m", "1h", "4h", "1d", "1w"):
+            assert k in exdata.kline_periods
 
+    def test_legal_currency(self, exdata):
+        assert "KRW" in exdata.legal_currency
 
-class TestCoinoneTickerData:
-    """Test Coinone ticker data retrieval."""
+    def test_get_rest_path_ok(self, exdata):
+        p = exdata.get_rest_path("get_tick")
+        assert "/public/v2/ticker_new" in p
 
-    def test_coinone_req_tick_data(self):
-        """Test getting ticker data synchronously."""
-        live_coinone_spot_feed = init_req_feed()
-        data = live_coinone_spot_feed.get_tick("KRW-BTC")
-        assert isinstance(data, RequestData)
-        if data.get_status():
-            pass
-        tick_data_list = data.get_data()
-        if tick_data_list:
-            tick_data = tick_data_list[0]
-            if hasattr(tick_data, 'init_data'):
-                pass
-            tick_data = tick_data.init_data()
-            assert tick_data.get_exchange_name() == "COINONE"
-            assert tick_data.get_symbol_name() == "KRW-BTC"
-            assert tick_data.get_last_price() > 0
+    def test_get_rest_path_missing(self, exdata):
+        with pytest.raises(ValueError):
+            exdata.get_rest_path("nonexistent_endpoint")
 
-    def test_coinone_async_tick_data(self):
-        """Test getting ticker data asynchronously."""
-        # Note: Coinone implementation doesn't have async_get_tick in base
-        # class
-        pass
-
-    def test_get_tick_params(self):
-        """Test get_tick parameter generation."""
-        live_coinone_spot_feed = init_req_feed()
-        path, params, extra_data = live_coinone_spot_feed._get_tick("KRW-BTC")
-
-        assert path == "GET /public/v2/ticker_new/KRW/BTC"
-        assert extra_data["request_type"] == "get_tick"
-        assert extra_data["symbol_name"] == "KRW-BTC"
+    def test_rest_paths_keys(self, exdata):
+        for key in ("get_tick", "get_depth", "get_kline", "get_exchange_info",
+                     "get_trades", "get_account", "get_balance", "make_order",
+                     "cancel_order", "query_order", "get_open_orders", "get_deals"):
+            assert key in exdata.rest_paths
 
 
-class TestCoinoneKlineData:
-    """Test Coinone kline/candlestick data retrieval."""
+# ═══════════════════════════════════════════════════════════════
+# 2) Parameter generation (_get_xxx)
+# ═══════════════════════════════════════════════════════════════
 
-    def test_coinone_req_kline_data(self):
-        """Test getting kline data synchronously."""
-        live_coinone_spot_feed = init_req_feed()
-        data = live_coinone_spot_feed.get_kline("KRW-BTC", "1m", count=2)
-        assert isinstance(data, RequestData)
-        if data.get_status():
-            pass
-        kline_data_list = data.get_data()
-        if kline_data_list:
-            # Validate kline data structure
-            pass
+class TestParamGeneration:
+    def test_get_tick_params(self, feed):
+        path, params, extra = feed._get_tick("KRW-BTC")
+        assert "GET" in path
+        assert "/public/v2/ticker_new/KRW/BTC" in path
+        assert extra["request_type"] == "get_tick"
+        assert extra["symbol_name"] == "KRW-BTC"
 
-    def test_coinone_async_kline_data(self):
-        """Test getting kline data asynchronously."""
-        # Note: Coinone implementation doesn't have async_get_kline in base
-        # class
-        pass
-
-    def test_get_kline_params(self):
-        """Test get_kline parameter generation."""
-        live_coinone_spot_feed = init_req_feed()
-        path, params, extra_data = live_coinone_spot_feed._get_kline(
-            "KRW-BTC", "1m", 2)
-
-        assert path == "GET /public/v2/chart/KRW/BTC"
-        assert "interval" in params
-        assert "limit" in params
-        assert params["limit"] == 2
-        assert extra_data["request_type"] == "get_kline"
-        assert extra_data["symbol_name"] == "KRW-BTC"
-
-
-class TestCoinoneOrderBook:
-    """Test Coinone order book data retrieval."""
-
-    def test_coinone_req_orderbook_data(self):
-        """Test getting order book data synchronously."""
-        live_coinone_spot_feed = init_req_feed()
-        data = live_coinone_spot_feed.get_depth("KRW-BTC", 20)
-        assert isinstance(data, RequestData)
-        # Validate order book structure
-        result_data = data.get_data()
-        assert isinstance(result_data, dict) or isinstance(result_data, list)
-
-    def test_coinone_async_orderbook_data(self):
-        """Test getting order book data asynchronously."""
-        # Note: Coinone implementation doesn't have async_get_depth in base
-        # class
-        pass
-
-    def test_get_depth_params(self):
-        """Test get_depth parameter generation."""
-        live_coinone_spot_feed = init_req_feed()
-        path, params, extra_data = live_coinone_spot_feed._get_depth(
-            "KRW-BTC", 20)
-
-        assert path == "GET /public/v2/orderbook/KRW/BTC"
-        assert "size" in params
+    def test_get_depth_params(self, feed):
+        path, params, extra = feed._get_depth("KRW-BTC", 20)
+        assert "/public/v2/orderbook/KRW/BTC" in path
         assert params["size"] == 20
-        assert extra_data["request_type"] == "get_depth"
-        assert extra_data["symbol_name"] == "KRW-BTC"
+
+    def test_get_kline_params(self, feed):
+        path, params, extra = feed._get_kline("KRW-BTC", "1h", 50)
+        assert "/public/v2/chart/KRW/BTC" in path
+        assert params["interval"] == "1h"
+        assert params["limit"] == 50
+
+    def test_get_trade_history_params(self, feed):
+        path, params, extra = feed._get_trade_history("KRW-BTC")
+        assert "/public/v2/trades/KRW/BTC" in path
+        assert extra["request_type"] == "get_trades"
+
+    def test_get_exchange_info_params(self, feed):
+        path, params, extra = feed._get_exchange_info()
+        assert "/public/v2/markets/KRW" in path
+        assert extra["request_type"] == "get_exchange_info"
+
+    def test_make_order_params(self, feed):
+        path, body, extra = feed._make_order("KRW-BTC", 0.001, price=50000000, order_type="bid")
+        assert "POST" in path
+        assert body["quote_currency"] == "KRW"
+        assert body["target_currency"] == "BTC"
+        assert body["type"] == "bid"
+        assert body["qty"] == "0.001"
+        assert body["price"] == "50000000"
+
+    def test_cancel_order_params(self, feed):
+        path, body, extra = feed._cancel_order(symbol="KRW-BTC", order_id="abc-123")
+        assert "POST" in path
+        assert body["order_id"] == "abc-123"
+        assert body["quote_currency"] == "KRW"
+
+    def test_query_order_params(self, feed):
+        path, body, extra = feed._query_order(symbol="KRW-BTC", order_id="abc-123")
+        assert "POST" in path
+        assert body["order_id"] == "abc-123"
+
+    def test_get_open_orders_params(self, feed):
+        path, body, extra = feed._get_open_orders(symbol="KRW-BTC")
+        assert body["quote_currency"] == "KRW"
+        assert body["target_currency"] == "BTC"
+
+    def test_get_deals_params(self, feed):
+        path, body, extra = feed._get_deals(symbol="KRW-BTC")
+        assert body["quote_currency"] == "KRW"
+
+    def test_get_account_params(self, feed):
+        path, body, extra = feed._get_account()
+        assert "/v2.1/account/balance/all" in path
+        assert extra["request_type"] == "get_account"
+
+    def test_get_balance_params(self, feed):
+        path, body, extra = feed._get_balance()
+        assert "/v2.1/account/balance/all" in path
+        assert extra["request_type"] == "get_balance"
 
 
-class TestCoinoneCapabilities:
-    """Test Coinone feed capabilities."""
+# ═══════════════════════════════════════════════════════════════
+# 3) Normalization functions
+# ═══════════════════════════════════════════════════════════════
 
-    def test_feed_capabilities(self):
-        """Test that feed has expected capabilities."""
-        from bt_api_py.feeds.capability import Capability
+class TestNormalization:
+    def test_tick_ok(self):
+        result, ok = CoinoneRequestData._get_tick_normalize_function(SAMPLE_TICK, {})
+        assert ok is True
+        assert len(result) == 1
 
-        capabilities = CoinoneRequestDataSpot._capabilities()
+    def test_tick_single_ok(self):
+        result, ok = CoinoneRequestData._get_tick_normalize_function(SAMPLE_TICK_SINGLE, {})
+        assert ok is True
+        assert "last" in result[0]
 
-        assert Capability.GET_TICK in capabilities
-        assert Capability.GET_DEPTH in capabilities
-        assert Capability.GET_KLINE in capabilities
-        assert Capability.GET_EXCHANGE_INFO in capabilities
+    def test_tick_error(self):
+        result, ok = CoinoneRequestData._get_tick_normalize_function(SAMPLE_ERROR, {})
+        assert ok is False
+
+    def test_depth_ok(self):
+        result, ok = CoinoneRequestData._get_depth_normalize_function(SAMPLE_DEPTH, {})
+        assert ok is True
+
+    def test_depth_error(self):
+        result, ok = CoinoneRequestData._get_depth_normalize_function(SAMPLE_ERROR, {})
+        assert ok is False
+
+    def test_kline_ok(self):
+        result, ok = CoinoneRequestData._get_kline_normalize_function(SAMPLE_KLINE, {})
+        assert ok is True
+        assert len(result) == 2
+
+    def test_kline_error(self):
+        result, ok = CoinoneRequestData._get_kline_normalize_function(SAMPLE_ERROR, {})
+        assert ok is False
+
+    def test_trades_ok(self):
+        result, ok = CoinoneRequestData._get_trade_history_normalize_function(SAMPLE_TRADES, {})
+        assert ok is True
+
+    def test_trades_error(self):
+        result, ok = CoinoneRequestData._get_trade_history_normalize_function(SAMPLE_ERROR, {})
+        assert ok is False
+
+    def test_exchange_info_ok(self):
+        result, ok = CoinoneRequestData._get_exchange_info_normalize_function(SAMPLE_EXCHANGE_INFO, {})
+        assert ok is True
+        assert "markets" in result[0]
+
+    def test_make_order_ok(self):
+        result, ok = CoinoneRequestData._make_order_normalize_function(SAMPLE_ORDER, {})
+        assert ok is True
+
+    def test_make_order_error(self):
+        result, ok = CoinoneRequestData._make_order_normalize_function(SAMPLE_ERROR, {})
+        assert ok is False
+
+    def test_cancel_order_ok(self):
+        result, ok = CoinoneRequestData._cancel_order_normalize_function(SAMPLE_ORDER, {})
+        assert ok is True
+
+    def test_query_order_ok(self):
+        result, ok = CoinoneRequestData._query_order_normalize_function(SAMPLE_ORDER, {})
+        assert ok is True
+
+    def test_query_order_error(self):
+        result, ok = CoinoneRequestData._query_order_normalize_function(SAMPLE_ERROR, {})
+        assert ok is False
+
+    def test_open_orders_ok(self):
+        result, ok = CoinoneRequestData._get_open_orders_normalize_function(SAMPLE_OPEN_ORDERS, {})
+        assert ok is True
+        assert len(result) == 1
+
+    def test_deals_ok(self):
+        result, ok = CoinoneRequestData._get_deals_normalize_function(SAMPLE_DEALS, {})
+        assert ok is True
+        assert len(result) == 1
+
+    def test_account_ok(self):
+        result, ok = CoinoneRequestData._get_account_normalize_function(SAMPLE_ACCOUNT, {})
+        assert ok is True
+
+    def test_account_error(self):
+        result, ok = CoinoneRequestData._get_account_normalize_function(SAMPLE_ERROR, {})
+        assert ok is False
+
+    def test_balance_ok(self):
+        result, ok = CoinoneRequestData._get_balance_normalize_function(SAMPLE_ACCOUNT, {})
+        assert ok is True
+        assert "BTC" in result[0]
+
+    def test_balance_error(self):
+        result, ok = CoinoneRequestData._get_balance_normalize_function(SAMPLE_ERROR, {})
+        assert ok is False
+
+    def test_is_error_none(self):
+        assert CoinoneRequestData._is_error(None) is True
+
+    def test_is_error_error_result(self):
+        assert CoinoneRequestData._is_error(SAMPLE_ERROR) is True
+
+    def test_is_error_ok(self):
+        assert CoinoneRequestData._is_error(SAMPLE_TICK) is False
 
 
-class TestCoinoneIntegration:
-    """Integration tests for Coinone."""
+# ═══════════════════════════════════════════════════════════════
+# 4) Mocked sync calls
+# ═══════════════════════════════════════════════════════════════
 
-    def test_market_data_api(self):
-        """Test market data API calls (requires network)."""
-        data_queue = queue.Queue()
-        feed = CoinoneRequestDataSpot(data_queue)
+class TestSyncCalls:
+    @patch.object(CoinoneRequestData, "http_request", return_value=SAMPLE_TICK)
+    def test_get_tick(self, mock_http, feed):
+        rd = feed.get_tick("KRW-BTC")
+        assert isinstance(rd, RequestData)
+        mock_http.assert_called_once()
 
-        # Test ticker
-        ticker = feed.get_tick("btckrw")
-        assert ticker.status is True
+    @patch.object(CoinoneRequestData, "http_request", return_value=SAMPLE_DEPTH)
+    def test_get_depth(self, mock_http, feed):
+        rd = feed.get_depth("KRW-BTC")
+        assert isinstance(rd, RequestData)
 
-    def test_trading_api(self):
-        """Test trading API calls (requires API keys)."""
-        pass
+    @patch.object(CoinoneRequestData, "http_request", return_value=SAMPLE_KLINE)
+    def test_get_kline(self, mock_http, feed):
+        rd = feed.get_kline("KRW-BTC", "1h", 10)
+        assert isinstance(rd, RequestData)
+
+    @patch.object(CoinoneRequestData, "http_request", return_value=SAMPLE_TRADES)
+    def test_get_trade_history(self, mock_http, feed):
+        rd = feed.get_trade_history("KRW-BTC")
+        assert isinstance(rd, RequestData)
+
+    @patch.object(CoinoneRequestData, "http_request", return_value=SAMPLE_EXCHANGE_INFO)
+    def test_get_exchange_info(self, mock_http, feed):
+        rd = feed.get_exchange_info()
+        assert isinstance(rd, RequestData)
+
+    @patch.object(CoinoneRequestData, "http_request", return_value=SAMPLE_ACCOUNT)
+    def test_get_account(self, mock_http, feed):
+        rd = feed.get_account()
+        assert isinstance(rd, RequestData)
+
+    @patch.object(CoinoneRequestData, "http_request", return_value=SAMPLE_ACCOUNT)
+    def test_get_balance(self, mock_http, feed):
+        rd = feed.get_balance()
+        assert isinstance(rd, RequestData)
+
+    @patch.object(CoinoneRequestData, "http_request", return_value=SAMPLE_ORDER)
+    def test_make_order(self, mock_http, feed):
+        rd = feed.make_order("KRW-BTC", 0.001, price=50000000)
+        assert isinstance(rd, RequestData)
+
+    @patch.object(CoinoneRequestData, "http_request", return_value=SAMPLE_ORDER)
+    def test_cancel_order(self, mock_http, feed):
+        rd = feed.cancel_order(symbol="KRW-BTC", order_id="abc-123")
+        assert isinstance(rd, RequestData)
+
+    @patch.object(CoinoneRequestData, "http_request", return_value=SAMPLE_ORDER)
+    def test_query_order(self, mock_http, feed):
+        rd = feed.query_order(symbol="KRW-BTC", order_id="abc-123")
+        assert isinstance(rd, RequestData)
+
+    @patch.object(CoinoneRequestData, "http_request", return_value=SAMPLE_OPEN_ORDERS)
+    def test_get_open_orders(self, mock_http, feed):
+        rd = feed.get_open_orders(symbol="KRW-BTC")
+        assert isinstance(rd, RequestData)
+
+    @patch.object(CoinoneRequestData, "http_request", return_value=SAMPLE_DEALS)
+    def test_get_deals(self, mock_http, feed):
+        rd = feed.get_deals(symbol="KRW-BTC")
+        assert isinstance(rd, RequestData)
+
+
+# ═══════════════════════════════════════════════════════════════
+# 5) Auth
+# ═══════════════════════════════════════════════════════════════
+
+class TestAuth:
+    def test_no_auth_without_keys(self, feed):
+        headers, payload = feed._generate_auth_headers()
+        assert headers == {}
+
+    def test_api_key_property(self, feed):
+        assert feed.api_key == ""
+        assert feed.api_secret == ""
+
+    def test_auth_with_keys(self):
+        f = CoinoneRequestDataSpot(queue.Queue(), api_key="mykey", api_secret="mysecret")
+        headers, payload = f._generate_auth_headers({"test": 1})
+        assert "X-COINONE-PAYLOAD" in headers
+        assert "X-COINONE-SIGNATURE" in headers
+        assert len(headers["X-COINONE-SIGNATURE"]) == 128  # SHA-512 hex
+
+    def test_signature_deterministic(self):
+        f = CoinoneRequestDataSpot(queue.Queue(), api_key="k", api_secret="s")
+        sig1 = f._generate_signature("testpayload")
+        sig2 = f._generate_signature("testpayload")
+        assert sig1 == sig2
+        assert len(sig1) == 128
+
+
+# ═══════════════════════════════════════════════════════════════
+# 6) Registry
+# ═══════════════════════════════════════════════════════════════
+
+class TestRegistry:
+    def test_feed_registered(self):
+        assert "COINONE___SPOT" in ExchangeRegistry._feed_classes
+
+    def test_exchange_data_registered(self):
+        assert "COINONE___SPOT" in ExchangeRegistry._exchange_data_classes
+
+    def test_balance_handler_registered(self):
+        assert "COINONE___SPOT" in ExchangeRegistry._balance_handlers
+
+    def test_create_exchange_data(self):
+        ed = ExchangeRegistry.create_exchange_data("COINONE___SPOT")
+        assert isinstance(ed, CoinoneExchangeDataSpot)
+
+
+# ═══════════════════════════════════════════════════════════════
+# 7) Method existence
+# ═══════════════════════════════════════════════════════════════
+
+_EXPECTED_METHODS = [
+    "get_tick", "async_get_tick",
+    "get_ticker", "async_get_ticker",
+    "get_depth", "async_get_depth",
+    "get_kline", "async_get_kline",
+    "get_trade_history", "async_get_trade_history",
+    "get_trades", "async_get_trades",
+    "make_order", "async_make_order",
+    "cancel_order", "async_cancel_order",
+    "query_order", "async_query_order",
+    "get_open_orders", "async_get_open_orders",
+    "get_deals", "async_get_deals",
+    "get_account", "async_get_account",
+    "get_balance", "async_get_balance",
+    "get_exchange_info", "async_get_exchange_info",
+]
+
+
+class TestMethodExistence:
+    @pytest.mark.parametrize("method_name", _EXPECTED_METHODS)
+    def test_method_exists(self, feed, method_name):
+        assert hasattr(feed, method_name), f"Missing method: {method_name}"
+        assert callable(getattr(feed, method_name))
+
+
+# ═══════════════════════════════════════════════════════════════
+# 8) Feed init
+# ═══════════════════════════════════════════════════════════════
+
+class TestFeedInit:
+    def test_default_exchange_name(self, feed):
+        assert feed.exchange_name == "COINONE___SPOT"
+
+    def test_default_asset_type(self, feed):
+        assert feed.asset_type == "SPOT"
+
+    def test_api_keys(self):
+        f = CoinoneRequestDataSpot(queue.Queue(), api_key="ak", api_secret="sk")
+        assert f.api_key == "ak"
+        assert f.api_secret == "sk"
+
+    def test_capabilities(self, feed):
+        caps = feed._capabilities()
+        assert len(caps) > 0
+
+    def test_push_data_to_queue(self, feed):
+        feed.push_data_to_queue({"test": 1})
+        assert not feed.data_queue.empty()
+
+
+# ═══════════════════════════════════════════════════════════════
+# 9) Integration (skipped)
+# ═══════════════════════════════════════════════════════════════
+
+class TestIntegration:
+    @pytest.mark.skip(reason="Requires network access")
+    def test_live_get_tick(self):
+        f = CoinoneRequestDataSpot(queue.Queue())
+        rd = f.get_tick("KRW-BTC")
+        assert isinstance(rd, RequestData)
+
+    @pytest.mark.skip(reason="Requires network access")
+    def test_live_get_depth(self):
+        f = CoinoneRequestDataSpot(queue.Queue())
+        rd = f.get_depth("KRW-BTC")
+        assert isinstance(rd, RequestData)
+
+    @pytest.mark.skip(reason="Requires network access")
+    def test_live_get_kline(self):
+        f = CoinoneRequestDataSpot(queue.Queue())
+        rd = f.get_kline("KRW-BTC", "1h", 5)
+        assert isinstance(rd, RequestData)
 
 
 if __name__ == "__main__":

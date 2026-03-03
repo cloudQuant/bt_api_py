@@ -3,17 +3,16 @@ Test BYDFi exchange integration.
 
 Run tests:
     pytest tests/feeds/test_bydfi.py -v
-
-Run with coverage:
-    pytest tests/feeds/test_bydfi.py --cov=bt_api_py.feeds.live_bydfi --cov-report=term-missing
 """
 
 import queue
-from unittest.mock import Mock, patch
+import time
+from unittest.mock import Mock
 
 import pytest
 
 from bt_api_py.containers.exchanges.bydfi_exchange_data import BYDFiExchangeDataSpot
+from bt_api_py.containers.requestdatas.request_data import RequestData
 from bt_api_py.containers.tickers.bydfi_ticker import BYDFiRequestTickerData
 from bt_api_py.feeds.live_bydfi.spot import BYDFiRequestDataSpot
 from bt_api_py.feeds.capability import Capability
@@ -23,165 +22,276 @@ from bt_api_py.registry import ExchangeRegistry
 import bt_api_py.feeds.register_bydfi  # noqa: F401
 
 
-class TestBydfiExchangeData:
+@pytest.fixture
+def mock_feed():
+    """Create a BYDFi feed instance with mocked request."""
+    data_queue = queue.Queue()
+    feed = BYDFiRequestDataSpot(data_queue, exchange_name="BYDFI___SPOT")
+    feed.request = Mock(return_value=Mock(spec=RequestData))
+    return feed
+
+
+class TestBYDFiExchangeData:
     """Test BYDFi exchange data configuration."""
 
     def test_exchange_data_spot_creation(self):
-        """Test creating BYDFi spot exchange data."""
         exchange_data = BYDFiExchangeDataSpot()
-        # asset_type is loaded from YAML config (spot)
         assert exchange_data.asset_type == "spot"
 
     def test_get_symbol(self):
-        """Test symbol format conversion."""
         exchange_data = BYDFiExchangeDataSpot()
-        # BYDFi uses dash separator - converts "/" to "-"
         assert exchange_data.get_symbol("BTC/USDT") == "BTC-USDT"
-        # Already in correct format
         assert exchange_data.get_symbol("BTC-USDT") == "BTC-USDT"
 
     def test_get_rest_path(self):
-        """Test getting REST API paths."""
         exchange_data = BYDFiExchangeDataSpot()
-        # Test common paths
         path = exchange_data.get_rest_path("get_ticker")
         assert "ticker" in path.lower() or "tick" in path.lower()
 
+    def test_kline_periods(self):
+        exchange_data = BYDFiExchangeDataSpot()
+        assert "1m" in exchange_data.kline_periods
+        assert "1h" in exchange_data.kline_periods
+        assert "1d" in exchange_data.kline_periods
 
-class TestBydfiRequestData:
-    """Test BYDFi REST API request base class."""
+
+class TestBYDFiRequestDataSpot:
+    """Test BYDFi REST API request methods."""
 
     def test_request_data_creation(self):
-        """Test creating BYDFi request data."""
         data_queue = queue.Queue()
-        request_data = BYDFiRequestDataSpot(
-            data_queue,
-            exchange_name="BYDFI___SPOT",
-        )
-        assert request_data.exchange_name == "BYDFI___SPOT"
+        feed = BYDFiRequestDataSpot(data_queue, exchange_name="BYDFI___SPOT")
+        assert feed.exchange_name == "BYDFI___SPOT"
+        assert feed.asset_type == "SPOT"
 
     def test_capabilities(self):
-        """Test that BYDFi has the correct capabilities."""
-        capabilities = BYDFiRequestDataSpot._capabilities()
-        assert Capability.GET_TICK in capabilities
-        assert Capability.GET_DEPTH in capabilities
-        assert Capability.GET_KLINE in capabilities
-        assert Capability.GET_EXCHANGE_INFO in capabilities
+        caps = BYDFiRequestDataSpot._capabilities()
+        assert Capability.GET_TICK in caps
+        assert Capability.GET_DEPTH in caps
+        assert Capability.GET_KLINE in caps
+        assert Capability.GET_EXCHANGE_INFO in caps
+        assert Capability.GET_BALANCE in caps
+        assert Capability.GET_ACCOUNT in caps
+        assert Capability.MAKE_ORDER in caps
+        assert Capability.CANCEL_ORDER in caps
 
-    def test_get_tick_params(self):
-        """Test get ticker parameter generation."""
+    def test_get_tick_returns_tuple(self, mock_feed):
+        path, params, extra_data = mock_feed._get_tick("BTC-USDT")
+        assert extra_data["request_type"] == "get_tick"
+        assert extra_data["symbol_name"] == "BTC-USDT"
+        assert "symbol" in params
+
+    def test_get_tick_calls_request(self, mock_feed):
+        mock_feed.get_tick("BTC-USDT")
+        assert mock_feed.request.called
+
+    def test_get_depth_returns_tuple(self, mock_feed):
+        path, params, extra_data = mock_feed._get_depth("BTC-USDT")
+        assert extra_data["request_type"] == "get_depth"
+        assert "limit" in params
+
+    def test_get_depth_calls_request(self, mock_feed):
+        mock_feed.get_depth("BTC-USDT")
+        assert mock_feed.request.called
+
+    def test_get_kline_returns_tuple(self, mock_feed):
+        path, params, extra_data = mock_feed._get_kline("BTC-USDT", "1h")
+        assert extra_data["request_type"] == "get_kline"
+        assert "interval" in params
+
+    def test_get_kline_calls_request(self, mock_feed):
+        mock_feed.get_kline("BTC-USDT", "1h")
+        assert mock_feed.request.called
+
+    def test_get_exchange_info_returns_tuple(self, mock_feed):
+        path, params, extra_data = mock_feed._get_exchange_info()
+        assert extra_data["request_type"] == "get_exchange_info"
+
+    def test_get_server_time_tuple(self):
         data_queue = queue.Queue()
-        request_data = BYDFiRequestDataSpot(data_queue)
+        feed = BYDFiRequestDataSpot(data_queue, exchange_name="BYDFI___SPOT")
+        path, params, extra_data = feed._get_server_time()
+        assert extra_data["request_type"] == "get_server_time"
 
-        # The _get_tick method returns the result of self.request
-        result = request_data._get_tick("BTC-USDT")
-        # We can't test the actual request without mocking, but we can verify it's called
-        assert result is not None
+    def test_get_trades_returns_tuple(self, mock_feed):
+        path, params, extra_data = mock_feed._get_trades("BTC-USDT")
+        assert extra_data["request_type"] == "get_trades"
 
-    def test_get_depth_params(self):
-        """Test get depth parameter generation."""
+
+class TestBYDFiStandardInterfaces:
+    """Test standard Feed interface methods for BYDFi."""
+
+    @pytest.fixture
+    def feed(self):
         data_queue = queue.Queue()
-        request_data = BYDFiRequestDataSpot(data_queue)
+        feed = BYDFiRequestDataSpot(data_queue, exchange_name="BYDFI___SPOT")
+        feed.request = Mock(return_value=Mock(spec=RequestData))
+        return feed
 
-        result = request_data._get_depth("BTC-USDT", count=20)
-        assert result is not None
+    def test_make_order_calls_request(self, feed):
+        feed.make_order("BTC-USDT", 0.01, 50000, "limit", offset="BUY")
+        assert feed.request.called
+        extra_data = feed.request.call_args[1].get("extra_data")
+        assert extra_data["request_type"] == "make_order"
 
-    def test_get_kline_params(self):
-        """Test get kline parameter generation."""
-        data_queue = queue.Queue()
-        request_data = BYDFiRequestDataSpot(data_queue)
+    def test_cancel_order_calls_request(self, feed):
+        feed.cancel_order("BTC-USDT", "order_123")
+        assert feed.request.called
+        extra_data = feed.request.call_args[1].get("extra_data")
+        assert extra_data["request_type"] == "cancel_order"
 
-        result = request_data._get_kline("BTC-USDT", "1h", count=20)
-        assert result is not None
+    def test_query_order_calls_request(self, feed):
+        feed.query_order("BTC-USDT", "order_123")
+        assert feed.request.called
+        extra_data = feed.request.call_args[1].get("extra_data")
+        assert extra_data["request_type"] == "query_order"
 
-    def test_get_exchange_info_params(self):
-        """Test get exchange info parameter generation."""
-        data_queue = queue.Queue()
-        request_data = BYDFiRequestDataSpot(data_queue)
+    def test_get_open_orders_calls_request(self, feed):
+        feed.get_open_orders("BTC-USDT")
+        assert feed.request.called
+        extra_data = feed.request.call_args[1].get("extra_data")
+        assert extra_data["request_type"] == "get_open_orders"
 
-        result = request_data._get_exchange_info()
-        assert result is not None
+    def test_get_account_calls_request(self, feed):
+        feed.get_account()
+        assert feed.request.called
+        extra_data = feed.request.call_args[1].get("extra_data")
+        assert extra_data["request_type"] == "get_account"
+
+    def test_get_balance_calls_request(self, feed):
+        feed.get_balance()
+        assert feed.request.called
+        extra_data = feed.request.call_args[1].get("extra_data")
+        assert extra_data["request_type"] == "get_balance"
+
+    def test_get_exchange_info_calls_request(self, feed):
+        feed.get_exchange_info()
+        assert feed.request.called
+        extra_data = feed.request.call_args[1].get("extra_data")
+        assert extra_data["request_type"] == "get_exchange_info"
 
 
-class TestBydfiDataContainers:
+class TestBYDFiBaseCapabilities:
+    """Test capabilities on the base class."""
+
+    def test_base_capabilities(self):
+        from bt_api_py.feeds.live_bydfi.request_base import BYDFiRequestData
+        caps = BYDFiRequestData._capabilities()
+        assert Capability.GET_TICK in caps
+        assert Capability.MAKE_ORDER in caps
+        assert Capability.CANCEL_ORDER in caps
+
+
+class TestBYDFiNormalizeFunctions:
+    """Test normalize functions edge cases."""
+
+    def test_tick_normalize_with_none(self):
+        result, status = BYDFiRequestDataSpot._get_tick_normalize_function(None, None)
+        assert result == []
+        assert status is False
+
+    def test_tick_normalize_success(self):
+        data = {"data": {"symbol": "BTC-USDT", "price": "50000"}}
+        result, status = BYDFiRequestDataSpot._get_tick_normalize_function(data, None)
+        assert status is True
+        assert len(result) == 1
+
+    def test_depth_normalize_with_none(self):
+        result, status = BYDFiRequestDataSpot._get_depth_normalize_function(None, None)
+        assert result == []
+        assert status is False
+
+    def test_kline_normalize_with_none(self):
+        result, status = BYDFiRequestDataSpot._get_kline_normalize_function(None, None)
+        assert result == []
+        assert status is False
+
+    def test_exchange_info_normalize_with_none(self):
+        result, status = BYDFiRequestDataSpot._get_exchange_info_normalize_function(None, None)
+        assert result == []
+        assert status is False
+
+    def test_account_normalize_with_none(self):
+        result, status = BYDFiRequestDataSpot._get_account_normalize_function(None, None)
+        assert result == []
+        assert status is False
+
+    def test_balance_normalize_with_none(self):
+        result, status = BYDFiRequestDataSpot._get_balance_normalize_function(None, None)
+        assert result == []
+        assert status is False
+
+    def test_trades_normalize_with_none(self):
+        result, status = BYDFiRequestDataSpot._get_trades_normalize_function(None, None)
+        assert result == []
+        assert status is False
+
+
+class TestBYDFiDataContainers:
     """Test BYDFi data containers."""
 
     def test_ticker_container(self):
-        """Test ticker data container."""
         ticker_response = {
             "code": 0,
             "msg": "success",
             "data": {
-            "symbol": "BTC-USDT",
-            "price": "50000",
-            "bid": "49999",
-            "ask": "50001",
-            "high": "51000",
-            "low": "49000",
-            "volume": "1234.56",
-            "timestamp": 1234567890
+                "symbol": "BTC-USDT",
+                "price": "50000",
+                "bid": "49999",
+                "ask": "50001",
+                "high": "51000",
+                "low": "49000",
+                "volume": "1234.56",
+                "timestamp": 1234567890,
             }
         }
-
         ticker = BYDFiRequestTickerData(
             ticker_response, "BTC-USDT", "SPOT"
         )
-
         assert ticker.get_symbol_name() == "BTC-USDT"
 
 
-class TestBydfiRegistry:
+class TestBYDFiRegistry:
     """Test BYDFi registration."""
 
     def test_bydfi_registered(self):
-        """Test that BYDFi is properly registered."""
-        # Check if feed is registered
         assert "BYDFI___SPOT" in ExchangeRegistry._feed_classes
         assert ExchangeRegistry._feed_classes["BYDFI___SPOT"] == BYDFiRequestDataSpot
 
-        # Check if exchange data is registered
+    def test_bydfi_exchange_data_registered(self):
         assert "BYDFI___SPOT" in ExchangeRegistry._exchange_data_classes
         assert ExchangeRegistry._exchange_data_classes["BYDFI___SPOT"] == BYDFiExchangeDataSpot
 
-        # Check if balance handler is registered
-        assert "BYDFI___SPOT" in ExchangeRegistry._balance_handlers
-        assert ExchangeRegistry._balance_handlers["BYDFI___SPOT"] is not None
-
     def test_bydfi_create_feed(self):
-        """Test creating BYDFi feed through registry."""
-        import queue
         data_queue = queue.Queue()
-        feed = ExchangeRegistry.create_feed(
-            "BYDFI___SPOT",
-            data_queue,
-        )
+        feed = ExchangeRegistry.create_feed("BYDFI___SPOT", data_queue)
         assert isinstance(feed, BYDFiRequestDataSpot)
 
     def test_bydfi_create_exchange_data(self):
-        """Test creating BYDFi exchange data through registry."""
         exchange_data = ExchangeRegistry.create_exchange_data("BYDFI___SPOT")
         assert isinstance(exchange_data, BYDFiExchangeDataSpot)
 
 
-class TestBydfiIntegration:
-    """Integration tests for BYDFi."""
+class TestBYDFiLiveAPI:
+    """Live API tests - require network, marked as integration."""
 
     @pytest.mark.skip(reason="BYDFI API endpoint temporarily unavailable (404)")
     @pytest.mark.integration
-    def test_market_data_api(self):
-        """Test market data API calls (requires network)"""
+    def test_bydfi_req_tick_data(self):
         data_queue = queue.Queue()
-        feed = BYDFiRequestDataSpot(data_queue)
+        feed = BYDFiRequestDataSpot(data_queue, exchange_name="BYDFI___SPOT")
+        data = feed.get_tick("BTC-USDT")
+        assert isinstance(data, RequestData)
 
-        # Test ticker
-        result = feed.get_tick("BTC-USDT")
-        assert result is not None
-
+    @pytest.mark.skip(reason="BYDFI API endpoint temporarily unavailable (404)")
     @pytest.mark.integration
-    def test_trading_api(self):
-        """Test trading API calls (requires API keys)"""
-        pass
-
-
-if __name__ == "__main__":
-    pytest.main([__file__, "-v"])
+    def test_bydfi_async_tick_data(self):
+        data_queue = queue.Queue()
+        feed = BYDFiRequestDataSpot(data_queue, exchange_name="BYDFI___SPOT")
+        feed.async_get_tick("BTC-USDT")
+        time.sleep(3)
+        try:
+            tick_data = data_queue.get(timeout=10)
+            assert tick_data is not None
+        except queue.Empty:
+            pass

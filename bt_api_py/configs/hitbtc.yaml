@@ -1,0 +1,35 @@
+# HitBTC Configuration
+#
+# HitBTC API V3 configuration for bt_api_py framework
+# For more information: https://api.hitbtc.com/
+
+asset_types:
+  spot:
+    exchange_name: HITBTC___SPOT
+    rest_url: "https://api.hitbtc.com/api/3"
+    wss_url: "wss://api.hitbtc.com/api/3/ws/public"
+    rest_paths:
+      # Public endpoints
+      get_server_time: "GET /public/time"
+      get_exchange_info: "GET /public/symbol"
+      get_tick: "GET /public/ticker/{symbol}"
+      get_tick_all: "GET /public/ticker"
+      get_depth: "GET /public/orderbook/{symbol}"
+      get_trades: "GET /public/trades/{symbol}"
+      get_kline: "GET /public/candles/{symbol}"
+      # Trading endpoints
+      make_order: "POST /spot/order"
+      cancel_order: "DELETE /spot/order/{client_order_id}"
+      cancel_all_orders: "DELETE /spot/order"
+      get_open_orders: "GET /spot/order"
+      query_order: "GET /spot/order/{client_order_id}"
+      get_order_history: "GET /spot/history/order"
+      get_trades_history: "GET /spot/history/trade"
+      # Account endpoints
+      get_balance: "GET /spot/balance"
+      get_account: "GET /spot/balance"
+    wss_paths:
+      ticker: "ticker/1s"
+      orderbook: "orderbook/full"
+      trades: "trades"
+      candles: "candles"

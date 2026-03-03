@@ -6,6 +6,7 @@ instead of GraphQL for most operations.
 """
 
 import os
+import time
 from typing import Any
 
 from bt_api_py.containers.exchanges.sushiswap_exchange_data import (
@@ -35,6 +36,10 @@ class SushiSwapRequestData(Feed):
             Capability.GET_DEPTH,
             Capability.GET_EXCHANGE_INFO,
             Capability.GET_KLINE,
+            Capability.GET_BALANCE,
+            Capability.GET_ACCOUNT,
+            Capability.MAKE_ORDER,
+            Capability.CANCEL_ORDER,
         }
 
     def __init__(self, data_queue, **kwargs):
@@ -54,6 +59,9 @@ class SushiSwapRequestData(Feed):
         self._params = SushiSwapExchangeData(self.chain)
         self.request_logger = SpdLogManager(
             "./logs/" + self.logger_name, "request", 0, 0, False
+        ).create_logger()
+        self.async_logger = SpdLogManager(
+            "./logs/" + self.logger_name, "async_request", 0, 0, False
         ).create_logger()
 
         # Use HttpClient for REST requests
@@ -147,6 +155,38 @@ class SushiSwapRequestData(Feed):
         except Exception as e:
             self.request_logger.error(f"Async REST query failed: {e}")
             raise
+
+    def async_callback(self, future):
+        """Callback function for async requests, push result to data_queue."""
+        try:
+            result = future.result()
+            if result is not None:
+                self.push_data_to_queue(result)
+        except Exception as e:
+            self.async_logger.error(f"Async callback error: {e}")
+
+    # ── Standard Interface: get_server_time ───────────────────────
+
+    def _get_server_time(self, extra_data=None, **kwargs):
+        """Prepare server time request. Returns (path, params, extra_data).
+
+        SushiSwap is a DEX — no dedicated server time endpoint.
+        """
+        if extra_data is None:
+            extra_data = {}
+        extra_data.update({
+            "exchange_name": self.exchange_name,
+            "symbol_name": "",
+            "asset_type": "DEX",
+            "request_type": "get_server_time",
+            "server_time": time.time(),
+        })
+        return "/time", {}, extra_data
+
+    def get_server_time(self, extra_data=None, **kwargs):
+        """Get server time. Returns RequestData."""
+        path, params, extra_data = self._get_server_time(extra_data, **kwargs)
+        return RequestData({"server_time": time.time()}, extra_data)
 
     def push_data_to_queue(self, data):
         """Push data to the queue."""

@@ -156,10 +156,10 @@ class TestDydxRequestDataSpot:
     # ==================== Exchange Info Tests ====================
 
     def test_get_exchange_info(self, dydx_spot):
-        """Test get_exchange_info method."""
-        path, params, extra_data = dydx_spot.get_exchange_info()
-
-        assert extra_data['request_type'] == "get_exchange_info"
+        """Test get_exchange_info method returns RequestData."""
+        dydx_spot.request = Mock(return_value=Mock(spec=RequestData))
+        result = dydx_spot.get_exchange_info()
+        assert dydx_spot.request.called
 
     def test_get_exchange_info_normalize_function(self):
         """Test exchange info normalize function."""
@@ -192,6 +192,96 @@ class TestDydxRequestDataSpot:
         result = dydx_spot.get_balance("0x123", 0)
         assert dydx_spot.request.called
 
+    # ==================== Standard Interface Tests ====================
+
+    def test_get_tick(self, dydx_spot):
+        """Test get_tick returns RequestData."""
+        dydx_spot.request = Mock(return_value=Mock(spec=RequestData))
+        result = dydx_spot.get_tick("BTC-USD")
+        assert dydx_spot.request.called
+        call_args = dydx_spot.request.call_args
+        extra_data = call_args[1].get("extra_data") or call_args[0][2] if len(call_args[0]) > 2 else call_args[1].get("extra_data")
+        assert extra_data["request_type"] == "get_tick"
+        assert extra_data["symbol_name"] == "BTC-USD"
+
+    def test_get_depth(self, dydx_spot):
+        """Test get_depth returns RequestData."""
+        dydx_spot.request = Mock(return_value=Mock(spec=RequestData))
+        result = dydx_spot.get_depth("BTC-USD", count=10)
+        assert dydx_spot.request.called
+        call_args = dydx_spot.request.call_args
+        extra_data = call_args[1].get("extra_data")
+        assert extra_data["request_type"] == "get_depth"
+        assert extra_data["symbol_name"] == "BTC-USD"
+
+    def test_get_kline(self, dydx_spot):
+        """Test get_kline returns RequestData."""
+        dydx_spot.request = Mock(return_value=Mock(spec=RequestData))
+        result = dydx_spot.get_kline("BTC-USD", "1m", count=20)
+        assert dydx_spot.request.called
+        call_args = dydx_spot.request.call_args
+        extra_data = call_args[1].get("extra_data")
+        assert extra_data["request_type"] == "get_kline"
+        assert extra_data["symbol_name"] == "BTC-USD"
+
+    def test_get_server_time(self, dydx_spot):
+        """Test get_server_time returns RequestData."""
+        dydx_spot.request = Mock(return_value=Mock(spec=RequestData))
+        result = dydx_spot.get_server_time()
+        assert dydx_spot.request.called
+        call_args = dydx_spot.request.call_args
+        extra_data = call_args[1].get("extra_data")
+        assert extra_data["request_type"] == "get_server_time"
+
+    def test_make_order(self, dydx_spot):
+        """Test make_order returns RequestData."""
+        dydx_spot.request = Mock(return_value=Mock(spec=RequestData))
+        result = dydx_spot.make_order("BTC-USD", 0.1, 50000.0, "limit", side="BUY")
+        assert dydx_spot.request.called
+        call_args = dydx_spot.request.call_args
+        extra_data = call_args[1].get("extra_data")
+        assert extra_data["request_type"] == "make_order"
+        assert extra_data["symbol_name"] == "BTC-USD"
+
+    def test_cancel_order(self, dydx_spot):
+        """Test cancel_order returns RequestData."""
+        dydx_spot.request = Mock(return_value=Mock(spec=RequestData))
+        result = dydx_spot.cancel_order("BTC-USD", "order123")
+        assert dydx_spot.request.called
+        call_args = dydx_spot.request.call_args
+        extra_data = call_args[1].get("extra_data")
+        assert extra_data["request_type"] == "cancel_order"
+        assert extra_data["order_id"] == "order123"
+
+    def test_query_order(self, dydx_spot):
+        """Test query_order returns RequestData."""
+        dydx_spot.request = Mock(return_value=Mock(spec=RequestData))
+        result = dydx_spot.query_order("BTC-USD", "order123")
+        assert dydx_spot.request.called
+        call_args = dydx_spot.request.call_args
+        extra_data = call_args[1].get("extra_data")
+        assert extra_data["request_type"] == "query_order"
+        assert extra_data["order_id"] == "order123"
+
+    def test_get_open_orders(self, dydx_spot):
+        """Test get_open_orders returns RequestData."""
+        dydx_spot.request = Mock(return_value=Mock(spec=RequestData))
+        result = dydx_spot.get_open_orders("BTC-USD")
+        assert dydx_spot.request.called
+        call_args = dydx_spot.request.call_args
+        extra_data = call_args[1].get("extra_data")
+        assert extra_data["request_type"] == "get_open_orders"
+
+    def test_get_account(self, dydx_spot):
+        """Test get_account returns RequestData."""
+        dydx_spot.request = Mock(return_value=Mock(spec=RequestData))
+        result = dydx_spot.get_account("ALL", address="0xabc", subaccount_number=0)
+        assert dydx_spot.request.called
+        call_args = dydx_spot.request.call_args
+        extra_data = call_args[1].get("extra_data")
+        assert extra_data["request_type"] == "get_account"
+        assert extra_data["symbol_name"] == "ALL"
+
     @pytest.mark.skip(reason="Requires actual API call")
     def test_integration_get_ticker(self, dydx_spot):
         """Integration test for get_ticker - skipped."""
@@ -206,6 +296,126 @@ class TestDydxRequestDataSpot:
     def test_integration_get_orderbook(self, dydx_spot):
         """Integration test for get_orderbook - skipped."""
         pass
+
+
+class TestDydxStandardCapabilities:
+    """Test standard Feed capabilities."""
+
+    def test_capabilities_complete(self):
+        """Test that all expected capabilities are declared."""
+        from bt_api_py.feeds.capability import Capability
+        from bt_api_py.feeds.live_dydx.request_base import DydxRequestData
+
+        caps = DydxRequestData._capabilities()
+        assert Capability.GET_TICK in caps
+        assert Capability.GET_DEPTH in caps
+        assert Capability.GET_KLINE in caps
+        assert Capability.MAKE_ORDER in caps
+        assert Capability.CANCEL_ORDER in caps
+        assert Capability.QUERY_ORDER in caps
+        assert Capability.GET_BALANCE in caps
+        assert Capability.GET_ACCOUNT in caps
+        assert Capability.GET_EXCHANGE_INFO in caps
+
+
+class TestDydxDataContainers:
+    """Test dYdX data containers init_data() returns self."""
+
+    def test_order_init_data_returns_self(self):
+        """Test DydxOrderData.init_data() returns self."""
+        from bt_api_py.containers.orders.dydx_order import DydxOrderData
+
+        order_data = {
+            "id": "order123",
+            "clientId": "client456",
+            "status": "OPEN",
+            "side": "BUY",
+            "type": "LIMIT",
+            "size": "0.1",
+            "price": "50000",
+            "createdAt": "2024-01-01T00:00:00Z",
+            "filledSize": "0",
+            "remainingSize": "0.1",
+        }
+        order = DydxOrderData(order_data, "BTC-USD", "swap", has_been_json_encoded=True)
+        result = order.init_data()
+        assert result is order
+        assert order.get_order_id() == "order123"
+        assert order.get_symbol_name() == "BTC-USD"
+
+    def test_balance_init_data_returns_self(self):
+        """Test DydxBalanceData.init_data() returns self."""
+        from bt_api_py.containers.balances.dydx_balance import DydxBalanceData
+
+        balance_data = {
+            "subaccount": {
+                "equity": "10000",
+                "freeCollateral": "5000",
+                "openPnl": "100",
+                "initialMarginRequirement": "200",
+                "marginBalance": "8000",
+                "availableMargin": "3000",
+                "positionMargin": "2000",
+                "accountValue": "10100",
+            }
+        }
+        balance = DydxBalanceData(balance_data, "USD", "swap", has_been_json_encoded=True)
+        result = balance.init_data()
+        assert result is balance
+        assert balance.get_equity() == 10000.0
+        assert balance.get_symbol_name() == "USD"
+
+    def test_request_ticker_init_data_returns_self(self):
+        """Test DydxRequestTickerData.init_data() returns self."""
+        from bt_api_py.containers.tickers.dydx_ticker import DydxRequestTickerData
+
+        ticker_data = {
+            "markets": {
+                "BTC-USD": {
+                    "snapshotAt": "2024-01-01T00:00:00Z",
+                    "oraclePrice": "50000",
+                    "volume24H": "1000",
+                    "high24H": "51000",
+                    "low24H": "49000",
+                    "markPrice": "50001",
+                }
+            }
+        }
+        ticker = DydxRequestTickerData(ticker_data, "BTC-USD", "swap", has_been_json_encoded=True)
+        result = ticker.init_data()
+        assert result is ticker
+        assert ticker.get_symbol_name() == "BTC-USD"
+        assert ticker.get_last_price() == 50000.0
+
+    def test_wss_ticker_init_data_returns_self(self):
+        """Test DydxWssTickerData.init_data() returns self."""
+        from bt_api_py.containers.tickers.dydx_ticker import DydxWssTickerData
+
+        ticker_data = {
+            "markets": {
+                "ETH-USD": {
+                    "oraclePrice": "3000",
+                    "volume24H": "500",
+                    "currentFundingRate": "0.0001",
+                }
+            }
+        }
+        ticker = DydxWssTickerData(ticker_data, "ETH-USD", "swap", has_been_json_encoded=True)
+        result = ticker.init_data()
+        assert result is ticker
+        assert ticker.get_symbol_name() == "ETH-USD"
+
+    def test_order_init_data_idempotent(self):
+        """Test that calling init_data() twice returns self both times."""
+        from bt_api_py.containers.orders.dydx_order import DydxOrderData
+
+        order_data = {"id": "o1", "status": "OPEN", "side": "BUY", "type": "LIMIT",
+                      "size": "1", "price": "100", "createdAt": "2024-01-01T00:00:00Z"}
+        order = DydxOrderData(order_data, "BTC-USD", "swap", has_been_json_encoded=True)
+        r1 = order.init_data()
+        r2 = order.init_data()
+        assert r1 is order
+        assert r2 is order
 
 
 class TestDydxExchangeDataSwap:
@@ -272,6 +482,47 @@ class TestDydxRegistration:
         exchange_class = get_exchange_class("DYDX___SWAP")
         assert exchange_class is not None
         assert exchange_class.__name__ == "DydxRequestDataSpot"
+
+
+class TestDydxNormalizeFunctions:
+    """Test normalize functions produce correct (data, status) tuples."""
+
+    def test_ticker_normalize_with_missing_symbol(self):
+        """Test ticker normalize returns None for missing symbol."""
+        input_data = {"code": 0, "markets": {"ETH-USD": {}}}
+        extra_data = {"symbol_name": "BTC-USD"}
+        result, status = DydxRequestDataSpot._get_ticker_spot_normalize_function(input_data, extra_data)
+        assert result is None
+        assert status is False
+
+    def test_orderbook_normalize(self):
+        """Test orderbook normalize includes symbol."""
+        input_data = {"bids": [["50000", "1"]], "asks": [["50001", "2"]]}
+        extra_data = {"symbol_name": "BTC-USD"}
+        result, status = DydxRequestDataSpot._get_orderbook_normalize_function(input_data, extra_data)
+        assert status is True
+        assert result[0]["symbol"] == "BTC-USD"
+
+    def test_exchange_info_normalize_empty(self):
+        """Test exchange info normalize with empty markets."""
+        input_data = {"markets": {}}
+        result, status = DydxRequestDataSpot._get_exchange_info_normalize_function(input_data, None)
+        assert status is True
+        assert result == []
+
+    def test_kline_normalize_empty(self):
+        """Test kline normalize with no candles."""
+        input_data = {"candles": []}
+        result, status = DydxRequestDataSpot._get_kline_normalize_function(input_data, None)
+        assert status is True
+        assert result == []
+
+    def test_balance_normalize_empty_subaccount(self):
+        """Test balance normalize with empty subaccount."""
+        input_data = {"subaccount": {}}
+        result, status = DydxRequestDataSpot._get_balance_spot_normalize_function(input_data, None)
+        assert status is True
+        assert result == []
 
 
 if __name__ == "__main__":

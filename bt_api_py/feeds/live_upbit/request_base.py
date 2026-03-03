@@ -1,366 +1,483 @@
 """
 Upbit REST API request base class.
-Handles JWT authentication, signing, and all REST API methods.
+
+Auth: JWT (HS256) with SHA512 query hash.
+Symbol format: KRW-BTC (quote-base with dash).
+Kline: separate endpoints for minutes/days/weeks/months.
+Response: direct JSON array/object. Errors: {"error": {"name": ..., "message": ...}}.
 """
 
 import hashlib
-import hmac
-import json
-import time
-import uuid
+import uuid as _uuid
 from urllib.parse import urlencode, unquote
 
-import jwt
+try:
+    import jwt as _jwt
+except ImportError:
+    _jwt = None
 
 from bt_api_py.containers.exchanges.upbit_exchange_data import UpbitExchangeDataSpot
 from bt_api_py.containers.requestdatas.request_data import RequestData
-from bt_api_py.error_framework import UpbitErrorTranslator
 from bt_api_py.feeds.capability import Capability
 from bt_api_py.feeds.feed import Feed
 from bt_api_py.functions.log_message import SpdLogManager
-from bt_api_py.rate_limiter import RateLimiter, RateLimitRule, RateLimitScope, RateLimitType
-
-logger = SpdLogManager(
-    file_name="upbit_request_base.log", logger_name="upbit_request", print_info=False
-).create_logger()
 
 
-class UpbitRequestDataSpot(RequestData):
-    """Upbit Spot Trading Request Data
+class UpbitRequestData(Feed):
+    """Upbit REST API Feed base class."""
 
-    Handles JWT authentication, request signing, and rate limiting for Upbit API calls.
-    """
-
-    # ── 类属性 ─────────────────────────────────────────────────────
-    exchange_name = "UPBIT___SPOT"
-    asset_type = "spot"
-    capabilities = [
-        Capability.GET_TICK,
-        Capability.GET_DEPTH,
-        Capability.GET_KLINE,
-        Capability.MAKE_ORDER,
-        Capability.CANCEL_ORDER,
-        Capability.QUERY_ORDER,
-        Capability.QUERY_OPEN_ORDERS,
-        Capability.GET_BALANCE,
-        Capability.GET_ACCOUNT,
-        Capability.GET_EXCHANGE_INFO,
-        Capability.GET_SERVER_TIME,
-    ]
-
-    def __init__(self, config: dict = None):
-        # Initialize with empty data and extra_data
-        extra_data = {
-            "exchange_name": self.exchange_name,
-            "symbol_name": "",
-            "asset_type": self.asset_type,
-            "request_type": ""
+    @classmethod
+    def _capabilities(cls):
+        return {
+            Capability.GET_TICK,
+            Capability.GET_DEPTH,
+            Capability.GET_KLINE,
+            Capability.GET_DEALS,
+            Capability.MAKE_ORDER,
+            Capability.CANCEL_ORDER,
+            Capability.QUERY_ORDER,
+            Capability.QUERY_OPEN_ORDERS,
+            Capability.GET_BALANCE,
+            Capability.GET_ACCOUNT,
+            Capability.GET_EXCHANGE_INFO,
         }
-        super().__init__([], extra_data)
-        self.exchange_data = UpbitExchangeDataSpot()
-        self.error_translator = UpbitErrorTranslator()
 
-        # Initialize rate limiter
-        self._init_rate_limiter()
+    # ── minute-value → period key mapping ───────────────────────
+    _MINUTE_PERIODS = {"1", "3", "5", "10", "15", "30", "60", "120", "240", "360", "480", "720"}
 
-        # JWT credentials
-        self.access_key = None
-        self.secret_key = None
-        self._load_credentials()
+    def __init__(self, data_queue, **kwargs):
+        super().__init__(data_queue, **kwargs)
+        self.data_queue = data_queue
+        self._api_key = kwargs.get("public_key") or kwargs.get("api_key") or kwargs.get("access_key") or ""
+        self._api_secret = kwargs.get("private_key") or kwargs.get("api_secret") or kwargs.get("secret_key") or ""
+        self.asset_type = kwargs.get("asset_type", "SPOT")
+        self.exchange_name = kwargs.get("exchange_name", "UPBIT___SPOT")
+        self._params = UpbitExchangeDataSpot()
+        self.request_logger = SpdLogManager(
+            "./logs/upbit_feed.log", "request", 0, 0, False
+        ).create_logger()
+        self.async_logger = SpdLogManager(
+            "./logs/upbit_feed.log", "async_request", 0, 0, False
+        ).create_logger()
 
-    def _init_rate_limiter(self):
-        """Initialize Upbit-specific rate limiter"""
-        rules = [
-            # Public requests: 900 requests/second per IP
-            RateLimitRule(
-                name="public_requests",
-                limit=900,
-                interval=60,
-                scope=RateLimitScope.GLOBAL,
-                weight=1,
-            ),
-            # Private requests: 30 requests/second per API key
-            RateLimitRule(
-                name="private_requests",
-                limit=30,
-                interval=60,
-                scope=RateLimitScope.ACCOUNT,
-                weight=1,
-            ),
-            # Order requests: 8 requests/second per API key
-            RateLimitRule(
-                name="order_requests",
-                limit=8,
-                interval=1,
-                scope=RateLimitScope.ACCOUNT,
-                weight=1,
-                endpoint_pattern=r"/v1/orders",
-            ),
-            # Quotation API: 1800 requests/minute per IP
-            RateLimitRule(
-                name="quotation",
-                limit=1800,
-                interval=60,
-                scope=RateLimitScope.GLOBAL,
-                weight=1,
-            ),
-        ]
-        self.rate_limiter = RateLimiter(rules=rules)
+    @property
+    def api_key(self):
+        return self._api_key
 
-    def _load_credentials(self):
-        """Load API credentials from config"""
-        if self.config:
-            self.access_key = self.config.get("access_key")
-            self.secret_key = self.config.get("secret_key")
+    @property
+    def api_secret(self):
+        return self._api_secret
+
+    # ── JWT authentication ──────────────────────────────────────
 
     def _generate_jwt_token(self, params=None):
-        """Generate JWT token for authentication"""
-        if not self.access_key or not self.secret_key:
-            raise ValueError("API credentials not provided")
-
-        nonce = str(uuid.uuid4())
-
+        """Generate JWT token for Upbit authentication."""
+        if not self._api_key or not self._api_secret:
+            return None
+        if _jwt is None:
+            return None
+        nonce = str(_uuid.uuid4())
         if params:
-            # For requests with parameters
             query_string = unquote(urlencode(params, doseq=True))
             query_hash = hashlib.sha512(query_string.encode()).hexdigest()
             payload = {
-                "access_key": self.access_key,
+                "access_key": self._api_key,
                 "nonce": nonce,
                 "query_hash": query_hash,
                 "query_hash_alg": "SHA512",
             }
         else:
-            # For requests without parameters
             payload = {
-                "access_key": self.access_key,
+                "access_key": self._api_key,
                 "nonce": nonce,
             }
+        return _jwt.encode(payload, self._api_secret, algorithm="HS256")
 
-        return jwt.encode(payload, self.secret_key, algorithm="HS256")
+    def _generate_auth_headers(self, params=None):
+        """Return Authorization header dict."""
+        token = self._generate_jwt_token(params)
+        if token:
+            return {"Authorization": f"Bearer {token}"}
+        return {}
 
-    def _make_request(self, method, path, params=None, data=None):
-        """Make authenticated request to Upbit API"""
-        url = f"{self.exchange_data.rest_url}{path}"
+    # ── core request helpers ────────────────────────────────────
 
-        # Set headers
+    def push_data_to_queue(self, data):
+        if self.data_queue is not None:
+            self.data_queue.put(data)
+
+    def request(self, path, params=None, body=None, extra_data=None, timeout=10, is_sign=False):
+        """Synchronous HTTP request using Feed.http_request()."""
+        if params is None:
+            params = {}
+        method, endpoint = path.split(" ", 1)
         headers = {}
-        if self.access_key:
-            token = self._generate_jwt_token(params)
-            headers["Authorization"] = f"Bearer {token}"
 
-        # Apply rate limiting
-        if self.access_key:
-            if path.startswith("/v1/orders"):
-                self.rate_limiter.wait("order_requests")
-            else:
-                self.rate_limiter.wait("private_requests")
+        if method == "GET":
+            qs = urlencode(params) if params else ""
+            url = f"{self._params.rest_url}{endpoint}"
+            if qs:
+                url = f"{url}?{qs}"
+            json_body = None
+            if is_sign:
+                headers.update(self._generate_auth_headers(params or None))
+        elif method == "DELETE":
+            qs = urlencode(params) if params else ""
+            url = f"{self._params.rest_url}{endpoint}"
+            if qs:
+                url = f"{url}?{qs}"
+            json_body = None
+            if is_sign:
+                headers.update(self._generate_auth_headers(params or None))
         else:
-            self.rate_limiter.wait("public_requests")
+            url = f"{self._params.rest_url}{endpoint}"
+            json_body = body or params
+            headers["Content-Type"] = "application/json"
+            if is_sign:
+                headers.update(self._generate_auth_headers(json_body or None))
 
-        # Make request
-        try:
-            if method == "GET":
-                response = self._session.get(url, headers=headers, params=params)
-            elif method == "POST":
-                response = self._session.post(url, headers=headers, json=data)
-            elif method == "DELETE":
-                response = self._session.delete(url, headers=headers, params=params)
-            else:
-                raise ValueError(f"Unsupported method: {method}")
+        res = self.http_request(method, url, headers, json_body, timeout)
+        self.request_logger.info(f"{method} {url} -> {type(res)}")
+        return RequestData(res, extra_data)
 
-            response.raise_for_status()
-            return response.json()
+    async def async_request(self, path, params=None, body=None, extra_data=None, timeout=5, is_sign=False):
+        """Async HTTP request using Feed.async_http_request()."""
+        if params is None:
+            params = {}
+        method, endpoint = path.split(" ", 1)
+        headers = {}
 
-        except Exception as e:
-            logger.error(f"Request failed: {method} {path} - {e}")
-            self._handle_error(e)
-            raise
+        if method in ("GET", "DELETE"):
+            qs = urlencode(params) if params else ""
+            url = f"{self._params.rest_url}{endpoint}"
+            if qs:
+                url = f"{url}?{qs}"
+            json_body = None
+            if is_sign:
+                headers.update(self._generate_auth_headers(params or None))
+        else:
+            url = f"{self._params.rest_url}{endpoint}"
+            json_body = body or params
+            headers["Content-Type"] = "application/json"
+            if is_sign:
+                headers.update(self._generate_auth_headers(json_body or None))
 
-    def _handle_error(self, error):
-        """Handle and translate errors"""
-        # Implement error translation based on Upbit error codes
-        if hasattr(error, 'response') and error.response is not None:
-            error_data = error.response.json()
-            if "error" in error_data:
-                error_info = error_data["error"]
-                raise self.error_translator.translate_error(error_info)
-        raise error
+        res = await self.async_http_request(method, url, headers, json_body, timeout)
+        self.async_logger.info(f"async {method} {url} -> {type(res)}")
+        return RequestData(res, extra_data)
 
-    # ── 市场数据 API ────────────────────────────────────────────────
+    def async_callback(self, request_data):
+        if request_data is not None:
+            self.push_data_to_queue(request_data)
 
-    @RateLimiter.ratelimit("quotation")
-    def get_market_all(self, is_details=True):
-        """Get all market information"""
-        params = {"isDetails": "true"} if is_details else None
-        return self._make_request("GET", self.exchange_data.get_rest_path("market_all"), params)
+    # ── _get_xxx internal methods ───────────────────────────────
 
-    @RateLimiter.ratelimit("quotation")
-    def get_ticker(self, markets):
-        """Get ticker information for specified markets"""
-        if isinstance(markets, str):
-            markets = markets.split(",")
-        params = {"markets": ",".join(markets)}
-        return self._make_request("GET", self.exchange_data.get_rest_path("ticker"), params)
+    def _get_exchange_info(self, extra_data=None, **kwargs):
+        path = self._params.get_rest_path("get_exchange_info")
+        params = {"isDetails": "true"}
+        extra_data = extra_data or {}
+        extra_data.update({
+            "request_type": "get_exchange_info",
+            "symbol_name": None,
+            "asset_type": self.asset_type,
+            "exchange_name": self.exchange_name,
+            "normalize_function": self._get_exchange_info_normalize_function,
+        })
+        return path, params, extra_data
 
-    @RateLimiter.ratelimit("quotation")
-    def get_orderbook(self, markets):
-        """Get orderbook information for specified markets"""
-        if isinstance(markets, str):
-            markets = markets.split(",")
-        params = {"markets": ",".join(markets)}
-        return self._make_request("GET", self.exchange_data.get_rest_path("orderbook"), params)
+    def _get_tick(self, symbol, extra_data=None, **kwargs):
+        path = self._params.get_rest_path("get_tick")
+        market = self._params.get_symbol(symbol)
+        params = {"markets": market}
+        extra_data = extra_data or {}
+        extra_data.update({
+            "request_type": "get_tick",
+            "symbol_name": symbol,
+            "asset_type": self.asset_type,
+            "exchange_name": self.exchange_name,
+            "normalize_function": self._get_tick_normalize_function,
+        })
+        return path, params, extra_data
 
-    @RateLimiter.ratelimit("quotation")
-    def get_trades_ticks(self, market, count=1, to=None):
-        """Get recent trade ticks"""
+    def _get_depth(self, symbol, count=50, extra_data=None, **kwargs):
+        path = self._params.get_rest_path("get_depth")
+        market = self._params.get_symbol(symbol)
+        params = {"markets": market}
+        extra_data = extra_data or {}
+        extra_data.update({
+            "request_type": "get_depth",
+            "symbol_name": symbol,
+            "asset_type": self.asset_type,
+            "exchange_name": self.exchange_name,
+            "normalize_function": self._get_depth_normalize_function,
+        })
+        return path, params, extra_data
+
+    def _get_kline(self, symbol, period="1h", count=200, extra_data=None, **kwargs):
+        """Route to the correct kline endpoint based on period."""
+        market = self._params.get_symbol(symbol)
+        period_val = self._params.get_period(period)
+
+        if period_val in self._MINUTE_PERIODS:
+            base_path = self._params.get_rest_path("get_kline_minutes")
+            # Replace {unit} placeholder
+            base_path = base_path.replace("{unit}", period_val)
+        elif period_val == "D":
+            base_path = self._params.get_rest_path("get_kline_days")
+        elif period_val == "3D":
+            base_path = self._params.get_rest_path("get_kline_days")
+        elif period_val == "W":
+            base_path = self._params.get_rest_path("get_kline_weeks")
+        elif period_val == "M":
+            base_path = self._params.get_rest_path("get_kline_months")
+        else:
+            base_path = self._params.get_rest_path("get_kline_minutes")
+            base_path = base_path.replace("{unit}", period_val)
+
+        params = {"market": market, "count": min(count, 200)}
+        extra_data = extra_data or {}
+        extra_data.update({
+            "request_type": "get_kline",
+            "symbol_name": symbol,
+            "period": period,
+            "asset_type": self.asset_type,
+            "exchange_name": self.exchange_name,
+            "normalize_function": self._get_kline_normalize_function,
+        })
+        return base_path, params, extra_data
+
+    def _get_trade_history(self, symbol, count=50, extra_data=None, **kwargs):
+        path = self._params.get_rest_path("get_trades")
+        market = self._params.get_symbol(symbol)
         params = {"market": market, "count": min(count, 500)}
-        if to:
-            params["to"] = to
-        return self._make_request("GET", self.exchange_data.get_rest_path("trades_ticks"), params)
+        extra_data = extra_data or {}
+        extra_data.update({
+            "request_type": "get_trades",
+            "symbol_name": symbol,
+            "asset_type": self.asset_type,
+            "exchange_name": self.exchange_name,
+            "normalize_function": self._get_trade_history_normalize_function,
+        })
+        return path, params, extra_data
 
-    @RateLimiter.ratelimit("quotation")
-    def get_candles_days(self, market, count=200):
-        """Get daily candles"""
-        params = {"market": market, "count": min(count, 200)}
-        return self._make_request("GET", self.exchange_data.get_rest_path("candles_days"), params)
+    def _make_order(self, symbol, size, price=None, order_type="bid-limit", extra_data=None, **kwargs):
+        path = self._params.get_rest_path("make_order")
+        market = self._params.get_symbol(symbol)
+        parts = order_type.lower().replace("-", " ").split()
+        side = parts[0] if parts else "bid"  # Upbit: "bid" for buy, "ask" for sell
+        ord_type = parts[1] if len(parts) > 1 else "limit"
+        body = {"market": market, "side": side, "ord_type": ord_type}
+        if size is not None:
+            body["volume"] = str(size)
+        if price is not None:
+            body["price"] = str(price)
+        extra_data = extra_data or {}
+        extra_data.update({
+            "request_type": "make_order",
+            "symbol_name": symbol,
+            "asset_type": self.asset_type,
+            "exchange_name": self.exchange_name,
+            "normalize_function": self._make_order_normalize_function,
+        })
+        return path, body, extra_data
 
-    @RateLimiter.ratelimit("quotation")
-    def get_candles_minutes(self, market, unit, count=200):
-        """Get minute candles"""
-        unit_map = {
-            "1m": 1, "3m": 3, "5m": 5, "10m": 10, "15m": 15, "30m": 30,
-            "1h": 60, "2h": 120, "4h": 240, "6h": 360, "8h": 480, "12h": 720,
-            "1d": 1440  # Daily candles using minutes endpoint
-        }
-
-        actual_unit = unit_map.get(unit, unit)
-        path = self.exchange_data.get_rest_path("candles_minutes").format(unit=actual_unit)
-        params = {"market": market, "count": min(count, 200)}
-        return self._make_request("GET", path, params)
-
-    @RateLimiter.ratelimit("quotation")
-    def get_candles_weeks(self, market, count=200):
-        """Get weekly candles"""
-        params = {"market": market, "count": min(count, 200)}
-        return self._make_request("GET", self.exchange_data.get_rest_path("candles_weeks"), params)
-
-    @RateLimiter.ratelimit("quotation")
-    def get_candles_months(self, market, count=200):
-        """Get monthly candles"""
-        params = {"market": market, "count": min(count, 200)}
-        return self._make_request("GET", self.exchange_data.get_rest_path("candles_months"), params)
-
-    # ── 交易 API ──────────────────────────────────────────────────
-
-    @RateLimiter.ratelimit("order_requests")
-    def place_order(self, market, side, ord_type, volume=None, price=None, identifier=None):
-        """Place an order"""
-        params = {
-            "market": market,
-            "side": side,  # "bid" for buy, "ask" for sell
-            "ord_type": ord_type,  # "limit", "market", "price", "best"
-        }
-
-        # Conditionally add parameters based on order type
-        if ord_type in ["limit", "market"]:
-            if not volume:
-                raise ValueError("Volume is required for limit/market orders")
-            params["volume"] = str(volume)
-
-        if ord_type in ["limit", "price"]:
-            if not price:
-                raise ValueError("Price is required for limit/price orders")
-            params["price"] = str(price)
-
-        if identifier:
-            params["identifier"] = identifier
-
-        return self._make_request("POST", self.exchange_data.get_rest_path("order_post"), data=params)
-
-    @RateLimiter.ratelimit("order_requests")
-    def cancel_order(self, uuid=None, identifier=None):
-        """Cancel an order"""
-        if not uuid and not identifier:
-            raise ValueError("Either uuid or identifier must be provided")
-
+    def _cancel_order(self, symbol=None, order_id=None, extra_data=None, **kwargs):
+        path = self._params.get_rest_path("cancel_order")
         params = {}
-        if uuid:
-            params["uuid"] = uuid
-        if identifier:
-            params["identifier"] = identifier
+        if order_id:
+            params["uuid"] = str(order_id)
+        extra_data = extra_data or {}
+        extra_data.update({
+            "request_type": "cancel_order",
+            "symbol_name": symbol,
+            "asset_type": self.asset_type,
+            "exchange_name": self.exchange_name,
+            "normalize_function": self._cancel_order_normalize_function,
+        })
+        return path, params, extra_data
 
-        return self._make_request("DELETE", self.exchange_data.get_rest_path("order_delete"), params)
-
-    @RateLimiter.ratelimit("private_requests")
-    def get_order(self, uuid=None, identifier=None):
-        """Get order information"""
+    def _query_order(self, symbol=None, order_id=None, extra_data=None, **kwargs):
+        path = self._params.get_rest_path("query_order")
         params = {}
-        if uuid:
-            params["uuid"] = uuid
-        if identifier:
-            params["identifier"] = identifier
+        if order_id:
+            params["uuid"] = str(order_id)
+        extra_data = extra_data or {}
+        extra_data.update({
+            "request_type": "query_order",
+            "symbol_name": symbol,
+            "asset_type": self.asset_type,
+            "exchange_name": self.exchange_name,
+            "normalize_function": self._query_order_normalize_function,
+        })
+        return path, params, extra_data
 
-        return self._make_request("GET", self.exchange_data.get_rest_path("order"), params)
+    def _get_open_orders(self, symbol=None, extra_data=None, **kwargs):
+        path = self._params.get_rest_path("get_open_orders")
+        params = {"state": "wait"}
+        if symbol:
+            params["market"] = self._params.get_symbol(symbol)
+        extra_data = extra_data or {}
+        extra_data.update({
+            "request_type": "get_open_orders",
+            "symbol_name": symbol,
+            "asset_type": self.asset_type,
+            "exchange_name": self.exchange_name,
+            "normalize_function": self._get_open_orders_normalize_function,
+        })
+        return path, params, extra_data
 
-    @RateLimiter.ratelimit("private_requests")
-    def get_orders(self, market=None, state=None, page=None, limit=100, order_by="desc"):
-        """Get order list"""
+    def _get_deals(self, symbol=None, extra_data=None, **kwargs):
+        path = self._params.get_rest_path("get_open_orders")
+        params = {"state": "done"}
+        if symbol:
+            params["market"] = self._params.get_symbol(symbol)
+        extra_data = extra_data or {}
+        extra_data.update({
+            "request_type": "get_deals",
+            "symbol_name": symbol,
+            "asset_type": self.asset_type,
+            "exchange_name": self.exchange_name,
+            "normalize_function": self._get_deals_normalize_function,
+        })
+        return path, params, extra_data
+
+    def _get_account(self, extra_data=None, **kwargs):
+        path = self._params.get_rest_path("get_account")
         params = {}
-        if market:
-            params["market"] = market
-        if state:
-            params["state"] = state  # "wait", "watch", "done", "cancel"
-        if page:
-            params["page"] = str(page)
-        params["limit"] = str(limit)
-        params["order_by"] = order_by
+        extra_data = extra_data or {}
+        extra_data.update({
+            "request_type": "get_account",
+            "symbol_name": None,
+            "asset_type": self.asset_type,
+            "exchange_name": self.exchange_name,
+            "normalize_function": self._get_account_normalize_function,
+        })
+        return path, params, extra_data
 
-        return self._make_request("GET", self.exchange_data.get_rest_path("orders"), params)
+    def _get_balance(self, extra_data=None, **kwargs):
+        path = self._params.get_rest_path("get_balance")
+        params = {}
+        extra_data = extra_data or {}
+        extra_data.update({
+            "request_type": "get_balance",
+            "symbol_name": None,
+            "asset_type": self.asset_type,
+            "exchange_name": self.exchange_name,
+            "normalize_function": self._get_balance_normalize_function,
+        })
+        return path, params, extra_data
 
-    # ── 账户管理 API ──────────────────────────────────────────────
+    # ── normalize functions ─────────────────────────────────────
+    # Upbit: direct JSON. Errors: {"error": {"name": ..., "message": ...}}
 
-    @RateLimiter.ratelimit("private_requests")
-    def get_accounts(self):
-        """Get account information"""
-        return self._make_request("GET", self.exchange_data.get_rest_path("accounts"))
+    @staticmethod
+    def _is_error(input_data):
+        if input_data is None:
+            return True
+        if isinstance(input_data, dict) and "error" in input_data:
+            return True
+        return False
 
-    @RateLimiter.ratelimit("private_requests")
-    def get_api_keys(self):
-        """Get API key information"""
-        return self._make_request("GET", self.exchange_data.get_rest_path("api_keys"))
+    @staticmethod
+    def _get_exchange_info_normalize_function(input_data, extra_data):
+        if UpbitRequestData._is_error(input_data):
+            return [], False
+        if isinstance(input_data, list):
+            return [{"markets": input_data}], True
+        return [input_data], True
 
-    @RateLimiter.ratelimit("private_requests")
-    def get_wallet_status(self):
-        """Get deposit/withdrawal status"""
-        return self._make_request("GET", self.exchange_data.get_rest_path("status_wallet"))
+    @staticmethod
+    def _get_tick_normalize_function(input_data, extra_data):
+        if UpbitRequestData._is_error(input_data):
+            return [], False
+        if isinstance(input_data, list) and len(input_data) > 0:
+            return input_data, True
+        if isinstance(input_data, dict):
+            return [input_data], True
+        return [], False
 
-    # ── 便捷方法 ──────────────────────────────────────────────────
+    @staticmethod
+    def _get_depth_normalize_function(input_data, extra_data):
+        if UpbitRequestData._is_error(input_data):
+            return [], False
+        if isinstance(input_data, list) and len(input_data) > 0:
+            return input_data, True
+        if isinstance(input_data, dict):
+            return [input_data], True
+        return [], False
 
-    def get_symbol_info(self):
-        """Get all symbol information"""
-        return self.get_market_all(is_details=True)
+    @staticmethod
+    def _get_kline_normalize_function(input_data, extra_data):
+        if UpbitRequestData._is_error(input_data):
+            return [], False
+        if isinstance(input_data, list) and len(input_data) > 0:
+            return input_data, True
+        return [], False
 
-    def get_kline(self, symbol, timeframe, count=200):
-        """Get kline data with timeframe alias support"""
-        timeframe_map = {
-            "1m": "1m", "3m": "3m", "5m": "5m", "10m": "10m", "15m": "15m", "30m": "30m",
-            "1h": "1h", "2h": "2h", "4h": "4h", "6h": "6h", "8h": "8h", "12h": "12h",
-            "1d": "1d", "3d": "3d", "1w": "1w", "1M": "1M"
-        }
+    @staticmethod
+    def _get_trade_history_normalize_function(input_data, extra_data):
+        if UpbitRequestData._is_error(input_data):
+            return [], False
+        if isinstance(input_data, list) and len(input_data) > 0:
+            return input_data, True
+        return [], False
 
-        actual_tf = timeframe_map.get(timeframe, timeframe)
+    @staticmethod
+    def _make_order_normalize_function(input_data, extra_data):
+        if UpbitRequestData._is_error(input_data):
+            return [], False
+        if not input_data:
+            return [], False
+        return [input_data], True
 
-        if actual_tf.endswith("m"):
-            unit = int(actual_tf[:-1])
-            return self.get_candles_minutes(symbol, unit, count)
-        elif actual_tf == "1d":
-            return self.get_candles_days(symbol, count)
-        elif actual_tf == "3d":
-            return self.get_candles_days(symbol, count * 3)  # Approximate
-        elif actual_tf == "1w":
-            return self.get_candles_weeks(symbol, count)
-        elif actual_tf == "1M":
-            return self.get_candles_months(symbol, count)
-        else:
-            raise ValueError(f"Unsupported timeframe: {timeframe}")
+    @staticmethod
+    def _cancel_order_normalize_function(input_data, extra_data):
+        if UpbitRequestData._is_error(input_data):
+            return [], False
+        if not input_data:
+            return [], False
+        return [input_data], True
+
+    @staticmethod
+    def _query_order_normalize_function(input_data, extra_data):
+        if UpbitRequestData._is_error(input_data):
+            return [], False
+        if not input_data:
+            return [], False
+        return [input_data], True
+
+    @staticmethod
+    def _get_open_orders_normalize_function(input_data, extra_data):
+        if isinstance(input_data, list):
+            return input_data, True
+        if UpbitRequestData._is_error(input_data):
+            return [], False
+        return [], False
+
+    @staticmethod
+    def _get_deals_normalize_function(input_data, extra_data):
+        if isinstance(input_data, list):
+            return input_data, True
+        if UpbitRequestData._is_error(input_data):
+            return [], False
+        return [], False
+
+    @staticmethod
+    def _get_account_normalize_function(input_data, extra_data):
+        if UpbitRequestData._is_error(input_data):
+            return [], False
+        if isinstance(input_data, list):
+            return input_data, True
+        if isinstance(input_data, dict):
+            return [input_data], True
+        return [], False
+
+    @staticmethod
+    def _get_balance_normalize_function(input_data, extra_data):
+        if UpbitRequestData._is_error(input_data):
+            return [], False
+        if isinstance(input_data, list):
+            return input_data, True
+        if isinstance(input_data, dict):
+            return [input_data], True
+        return [], False

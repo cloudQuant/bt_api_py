@@ -95,8 +95,8 @@ class PoloniexRequestData(Feed):
     def __init__(self, data_queue, **kwargs):
         super().__init__(data_queue, **kwargs)
         self.data_queue = data_queue
-        self.public_key = kwargs.get("public_key")
-        self.private_key = kwargs.get("private_key")
+        self.public_key = kwargs.get("public_key") or kwargs.get("api_key")
+        self.private_key = kwargs.get("private_key") or kwargs.get("api_secret")
         self.topics = kwargs.get("topics", {})
         self.asset_type = kwargs.get("asset_type", "SPOT")
         self.logger_name = kwargs.get("logger_name", "poloniex_feed.log")
@@ -109,6 +109,14 @@ class PoloniexRequestData(Feed):
         ).create_logger()
         self._error_translator = PoloniexErrorTranslator()
         self._rate_limiter = kwargs.get("rate_limiter", self._create_default_rate_limiter())
+
+    @property
+    def api_key(self):
+        return self.public_key
+
+    @property
+    def api_secret(self):
+        return self.private_key
 
     @staticmethod
     def _create_default_rate_limiter():

@@ -148,8 +148,14 @@ class PoloniexExchangeData(ExchangeData):
         Returns:
             Poloniex format symbol (e.g., "BTC_USDT")
         """
-        # Remove common separators and replace with underscore
-        symbol = symbol.replace("/", "").replace("-", "").upper()
+        symbol = symbol.upper().replace("/", "_").replace("-", "_")
+        # If already has underscore, return as-is
+        if "_" in symbol:
+            return symbol
+        # Try to split by known quote currencies
+        for lc in sorted(self.legal_currency, key=len, reverse=True):
+            if symbol.endswith(lc) and len(symbol) > len(lc):
+                return f"{symbol[:-len(lc)]}_{lc}"
         return symbol
 
     def account_wss_symbol(self, symbol):
@@ -189,8 +195,16 @@ class PoloniexExchangeData(ExchangeData):
 
         Returns:
             REST API path (e.g., "GET /markets/{symbol}/ticker24h")
+
+        Raises:
+            ValueError: If request_type is not found in rest_paths
         """
-        path = self.rest_paths.get(request_type, "")
+        path = self.rest_paths.get(request_type)
+        if path is None:
+            raise ValueError(
+                f"Unknown rest path: {request_type}. "
+                f"Available: {list(self.rest_paths.keys())}"
+            )
         return path
 
     def get_wss_path(self, channel_type, symbol=None):
@@ -227,7 +241,7 @@ class PoloniexExchangeDataSpot(PoloniexExchangeData):
         # Load from YAML config
         if not self._load_from_config("spot"):
             # Fallback defaults if config loading fails
-            self.exchange_name = "PoloniexSpot"
+            self.exchange_name = "POLONIEX___SPOT"
             self.rest_url = "https://api.poloniex.com"
             self.wss_url = "wss://ws.poloniex.com/ws/public"
             self.acct_wss_url = "wss://ws.poloniex.com/ws/private"
@@ -274,3 +288,7 @@ class PoloniexExchangeDataSpot(PoloniexExchangeData):
                 "candles_4h": {"params": ["candles_4h"], "method": "SUBSCRIBE", "id": 10},
                 "candles_1d": {"params": ["candles_1d"], "method": "SUBSCRIBE", "id": 11},
             }
+
+
+# Backward compatibility alias
+PoloniexSpotExchangeData = PoloniexExchangeDataSpot

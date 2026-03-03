@@ -46,7 +46,7 @@ class BitfinexExchangeData(ExchangeData):
 
     def __init__(self):
         super().__init__()
-        self.exchange_name = "bitfinex"
+        self.exchange_name = "BITFINEX"
         self.rest_url = ""
         self.acct_wss_url = ""
         self.wss_url = ""
@@ -265,25 +265,34 @@ class BitfinexExchangeDataSpot(BitfinexExchangeData):
     def __init__(self):
         super().__init__()
         self.asset_type = "spot"
-        self._load_from_config("spot")
+        if not self._load_from_config("spot"):
+            self.exchange_name = "BITFINEX___SPOT"
+            self.rest_url = "https://api-pub.bitfinex.com/v2"
+            self.wss_url = "wss://api.bitfinex.com/ws/v2"
+            self.acct_wss_url = "wss://api.bitfinex.com/ws/v2"
 
-        # Bitfinex specific REST paths
-        self.rest_paths.update({
-            "base_url": ["https://api.bitfinex.com/v2"],
-            "ticker": ["/ticker/<symbol>"],
-            "orderbook": ["/book/<symbol>/<precision>"],
-            "klines": ["/candles/trade:<timeframe>:<symbol>/hist"],
-            "trade_history": ["/trades/<symbol>/hist"],
-            "account_balance": ["/auth/r/wallets"],
-            "open_orders": ["/auth/r/orders"],
-            "make_order": ["/auth/w/order/submit"],
-            "cancel_order": ["/auth/w/order/cancel"],
-            "order_status": ["/auth/r/orders/<symbol>"],
-            "trade_history_auth": ["/auth/r/trades/<symbol>/hist"],
-            "platform_status": ["/platform/status"],
-            "symbols": ["/conf/pub:list:pair:exchange"],
-            "currencies": ["/conf/pub:list:currency"],
-        })
+        # Bitfinex specific REST paths (fallback only — don't override YAML)
+        _defaults = {
+            "base_url": "https://api-pub.bitfinex.com/v2",
+            "ticker": "GET /ticker/{symbol}",
+            "orderbook": "GET /book/{symbol}/{precision}",
+            "klines": "GET /candles/trade:{timeframe}:{symbol}/hist",
+            "trade_history": "GET /trades/{symbol}/hist",
+            "account_balance": "POST /auth/r/wallets",
+            "open_orders": "POST /auth/r/orders",
+            "make_order": "POST /auth/w/order/submit",
+            "cancel_order": "POST /auth/w/order/cancel",
+            "order_status": "POST /auth/r/orders/{symbol}",
+            "query_order": "GET /auth/r/orders/{id}",
+            "get_order": "GET /auth/r/orders/{id}",
+            "get_exchange_info": "GET /pub/symbols",
+            "trade_history_auth": "POST /auth/r/trades/{symbol}/hist",
+            "platform_status": "GET /platform/status",
+            "symbols": "GET /conf/pub:list:pair:exchange",
+            "currencies": "GET /conf/pub:list:currency",
+        }
+        for k, v in _defaults.items():
+            self.rest_paths.setdefault(k, v)
 
         # Bitfinex specific WebSocket paths
         self.wss_paths.update({

@@ -151,6 +151,114 @@ class TestHyperliquidRequestData:
         assert result.get_input_data()[0]["name"] == "BTC"
 
 
+class TestHyperliquidStandardInterfaces:
+    """Test standard Feed interface methods on HyperliquidRequestData"""
+
+    def _make_request_data(self):
+        from bt_api_py.containers.exchanges.hyperliquid_exchange_data import HyperliquidExchangeDataSpot
+        from bt_api_py.feeds.live_hyperliquid.request_base import HyperliquidRequestData
+        data_queue = Mock()
+        return HyperliquidRequestData(data_queue, asset_type="SPOT", exchange_data=HyperliquidExchangeDataSpot())
+
+    @patch('bt_api_py.feeds.feed.requests.request')
+    def test_get_tick(self, mock_request):
+        """Test get_tick returns RequestData with correct extra_data"""
+        mock_resp = Mock()
+        mock_resp.json.return_value = {"BTC": "50000.0", "ETH": "3000.0"}
+        mock_resp.raise_for_status = Mock()
+        mock_request.return_value = mock_resp
+
+        rd = self._make_request_data()
+        result = rd.get_tick("BTC")
+
+        from bt_api_py.containers.requestdatas.request_data import RequestData
+        assert isinstance(result, RequestData)
+        assert result.symbol_name == "BTC"
+        assert result.request_type == "get_tick"
+        assert result.get_input_data()["BTC"] == "50000.0"
+
+    @patch('bt_api_py.feeds.feed.requests.request')
+    def test_get_depth(self, mock_request):
+        """Test get_depth returns RequestData with correct extra_data"""
+        mock_resp = Mock()
+        mock_resp.json.return_value = {"levels": [[{"px": "50000", "sz": "1.0", "n": 1}], []]}
+        mock_resp.raise_for_status = Mock()
+        mock_request.return_value = mock_resp
+
+        rd = self._make_request_data()
+        result = rd.get_depth("BTC", count=10)
+
+        from bt_api_py.containers.requestdatas.request_data import RequestData
+        assert isinstance(result, RequestData)
+        assert result.symbol_name == "BTC"
+        assert result.request_type == "get_depth"
+
+    @patch('bt_api_py.feeds.feed.requests.request')
+    def test_get_kline(self, mock_request):
+        """Test get_kline returns RequestData with correct extra_data"""
+        mock_resp = Mock()
+        mock_resp.json.return_value = [
+            {"t": 1700000000000, "T": 1700000060000, "s": "BTC", "i": "1m",
+             "o": "50000", "c": "50100", "h": "50200", "l": "49900", "v": "10.5", "n": 100}
+        ]
+        mock_resp.raise_for_status = Mock()
+        mock_request.return_value = mock_resp
+
+        rd = self._make_request_data()
+        result = rd.get_kline("BTC", "1m", count=20)
+
+        from bt_api_py.containers.requestdatas.request_data import RequestData
+        assert isinstance(result, RequestData)
+        assert result.symbol_name == "BTC"
+        assert result.request_type == "get_kline"
+
+    @patch('bt_api_py.feeds.feed.requests.request')
+    def test_get_exchange_info(self, mock_request):
+        """Test get_exchange_info returns RequestData"""
+        mock_resp = Mock()
+        mock_resp.json.return_value = {"universe": [{"name": "BTC", "szDecimals": 3}]}
+        mock_resp.raise_for_status = Mock()
+        mock_request.return_value = mock_resp
+
+        rd = self._make_request_data()
+        result = rd.get_exchange_info()
+
+        from bt_api_py.containers.requestdatas.request_data import RequestData
+        assert isinstance(result, RequestData)
+        assert result.request_type == "get_exchange_info"
+
+    @patch('bt_api_py.feeds.feed.requests.request')
+    def test_get_server_time(self, mock_request):
+        """Test get_server_time returns RequestData"""
+        mock_resp = Mock()
+        mock_resp.json.return_value = {"BTC": "50000.0"}
+        mock_resp.raise_for_status = Mock()
+        mock_request.return_value = mock_resp
+
+        rd = self._make_request_data()
+        result = rd.get_server_time()
+
+        from bt_api_py.containers.requestdatas.request_data import RequestData
+        assert isinstance(result, RequestData)
+        assert result.request_type == "get_server_time"
+
+    def test_capabilities(self):
+        """Test capabilities declaration"""
+        from bt_api_py.feeds.live_hyperliquid.request_base import HyperliquidRequestData
+        from bt_api_py.feeds.capability import Capability
+
+        caps = HyperliquidRequestData._capabilities()
+        assert Capability.GET_TICK in caps
+        assert Capability.GET_DEPTH in caps
+        assert Capability.GET_KLINE in caps
+        assert Capability.MAKE_ORDER in caps
+        assert Capability.CANCEL_ORDER in caps
+        assert Capability.QUERY_ORDER in caps
+        assert Capability.GET_BALANCE in caps
+        assert Capability.GET_ACCOUNT in caps
+        assert Capability.GET_EXCHANGE_INFO in caps
+
+
 class TestHyperliquidRequestDataSpot:
     """Test Hyperliquid spot trading request data"""
 
@@ -166,6 +274,103 @@ class TestHyperliquidRequestDataSpot:
 
         assert request_data.asset_type == "SPOT"
         assert request_data._params.exchange_name == "hyperliquid_spot"
+
+    def _make_spot_request(self):
+        from bt_api_py.feeds.live_hyperliquid.spot import HyperliquidRequestDataSpot
+        data_queue = Mock()
+        return HyperliquidRequestDataSpot(data_queue, asset_type="SPOT")
+
+    @patch('bt_api_py.feeds.feed.requests.request')
+    def test_make_order(self, mock_request):
+        """Test make_order returns RequestData with correct extra_data"""
+        mock_resp = Mock()
+        mock_resp.json.return_value = {"status": "ok", "response": {"type": "order"}}
+        mock_resp.raise_for_status = Mock()
+        mock_request.return_value = mock_resp
+
+        rd = self._make_spot_request()
+        result = rd.make_order("BTC", 0.1, 50000.0, "limit", side="buy")
+
+        from bt_api_py.containers.requestdatas.request_data import RequestData
+        assert isinstance(result, RequestData)
+        assert result.symbol_name == "BTC"
+        assert result.request_type == "make_order"
+
+    @patch('bt_api_py.feeds.feed.requests.request')
+    def test_cancel_order(self, mock_request):
+        """Test cancel_order returns RequestData"""
+        mock_resp = Mock()
+        mock_resp.json.return_value = {"status": "ok"}
+        mock_resp.raise_for_status = Mock()
+        mock_request.return_value = mock_resp
+
+        rd = self._make_spot_request()
+        result = rd.cancel_order("BTC", "12345")
+
+        from bt_api_py.containers.requestdatas.request_data import RequestData
+        assert isinstance(result, RequestData)
+        assert result.request_type == "cancel_order"
+
+    @patch('bt_api_py.feeds.feed.requests.request')
+    def test_query_order(self, mock_request):
+        """Test query_order returns RequestData"""
+        mock_resp = Mock()
+        mock_resp.json.return_value = {"order": {"oid": "12345", "status": "filled"}}
+        mock_resp.raise_for_status = Mock()
+        mock_request.return_value = mock_resp
+
+        rd = self._make_spot_request()
+        result = rd.query_order("BTC", "12345", user="0xabc")
+
+        from bt_api_py.containers.requestdatas.request_data import RequestData
+        assert isinstance(result, RequestData)
+        assert result.request_type == "query_order"
+
+    @patch('bt_api_py.feeds.feed.requests.request')
+    def test_get_open_orders(self, mock_request):
+        """Test get_open_orders returns RequestData"""
+        mock_resp = Mock()
+        mock_resp.json.return_value = [{"oid": "123", "coin": "BTC", "side": "B"}]
+        mock_resp.raise_for_status = Mock()
+        mock_request.return_value = mock_resp
+
+        rd = self._make_spot_request()
+        result = rd.get_open_orders("BTC", user="0xabc")
+
+        from bt_api_py.containers.requestdatas.request_data import RequestData
+        assert isinstance(result, RequestData)
+        assert result.request_type == "get_open_orders"
+
+    @patch('bt_api_py.feeds.feed.requests.request')
+    def test_get_account(self, mock_request):
+        """Test get_account returns RequestData"""
+        mock_resp = Mock()
+        mock_resp.json.return_value = {"balances": [{"coin": "USDC", "total": "1000"}]}
+        mock_resp.raise_for_status = Mock()
+        mock_request.return_value = mock_resp
+
+        rd = self._make_spot_request()
+        result = rd.get_account("ALL", user="0xabc")
+
+        from bt_api_py.containers.requestdatas.request_data import RequestData
+        assert isinstance(result, RequestData)
+        assert result.request_type == "get_account"
+
+    @patch('bt_api_py.feeds.feed.requests.request')
+    def test_get_balance(self, mock_request):
+        """Test get_balance returns RequestData"""
+        mock_resp = Mock()
+        mock_resp.json.return_value = {"balances": [{"coin": "USDC", "total": "1000"}]}
+        mock_resp.raise_for_status = Mock()
+        mock_request.return_value = mock_resp
+
+        rd = self._make_spot_request()
+        result = rd.get_balance("USDC", user="0xabc")
+
+        from bt_api_py.containers.requestdatas.request_data import RequestData
+        assert isinstance(result, RequestData)
+        assert result.request_type == "get_balance"
+        assert result.symbol_name == "USDC"
 
 
 class TestHyperliquidMarketWssData:
@@ -298,25 +503,33 @@ class TestHyperliquidDataContainers:
         """Test ticker data container"""
         from bt_api_py.containers.tickers.hyperliquid_ticker import HyperliquidTickerData
 
-        # Pass has_been_json_encoded=True since we're passing a dict
-        # that's already been parsed
         ticker_data = {
             "last": "50000.0",
             "symbol": "BTC"
         }
 
         ticker = HyperliquidTickerData(ticker_data, "BTC", "SPOT", has_been_json_encoded=True)
-        ticker.init_data()
+        result = ticker.init_data()
 
+        assert result is ticker
         assert ticker.get_symbol_name() == "BTC"
-        # The SPOT ticker should read "last" field as float
         assert ticker.get_last_price() == 50000.0
+
+    def test_ticker_init_data_idempotent(self):
+        """Test that calling init_data() twice returns self both times"""
+        from bt_api_py.containers.tickers.hyperliquid_ticker import HyperliquidTickerData
+
+        ticker_data = {"last": "50000.0", "symbol": "BTC"}
+        ticker = HyperliquidTickerData(ticker_data, "BTC", "SPOT", has_been_json_encoded=True)
+        result1 = ticker.init_data()
+        result2 = ticker.init_data()
+        assert result1 is ticker
+        assert result2 is ticker
 
     def test_order_container(self):
         """Test order data container"""
         from bt_api_py.containers.orders.hyperliquid_order import HyperliquidRequestOrderData
 
-        # Order placement response format from Hyperliquid
         order_data = {
             "statuses": [
                 {
@@ -332,16 +545,36 @@ class TestHyperliquidDataContainers:
         }
 
         order = HyperliquidRequestOrderData(order_data, "BTC", "SPOT", has_been_json_encoded=True)
-        order.init_data()
+        result = order.init_data()
 
+        assert result is order
         assert order.get_symbol_name() == "BTC"
         assert order.get_order_id() == 12345
+
+    def test_wss_order_container_init_data_returns_self(self):
+        """Test WebSocket order init_data returns self"""
+        from bt_api_py.containers.orders.hyperliquid_order import HyperliquidSpotWssOrderData
+
+        order_data = {
+            "oid": "99999",
+            "status": "open",
+            "side": "B",
+            "type": "limit",
+            "sz": "0.5",
+            "limit_px": "30000.0",
+            "filledSz": "0",
+            "remainingSz": "0.5",
+            "time": 1700000000000,
+        }
+
+        order = HyperliquidSpotWssOrderData(order_data, "ETH", "SPOT", has_been_json_encoded=True)
+        result = order.init_data()
+        assert result is order
 
     def test_balance_container(self):
         """Test balance data container"""
         from bt_api_py.containers.balances.hyperliquid_balance import HyperliquidSpotRequestBalanceData
 
-        # Spot clearinghouse state response format
         balance_data = {
             "balances": [
                 {
@@ -354,10 +587,58 @@ class TestHyperliquidDataContainers:
         }
 
         balance = HyperliquidSpotRequestBalanceData(balance_data, "USDC", "SPOT", has_been_json_encoded=True)
-        balance.init_data()
+        result = balance.init_data()
 
+        assert result is balance
         assert balance.get_symbol_name() == "USDC"
         assert balance.get_coin() == "USDC"
+
+    def test_swap_balance_container_init_data_returns_self(self):
+        """Test swap balance init_data returns self"""
+        from bt_api_py.containers.balances.hyperliquid_balance import HyperliquidSwapRequestBalanceData
+
+        balance_data = {
+            "assetPositions": [],
+            "marginSummary": {"accountValue": "10000", "totalMarginUsed": "500", "initialMargin": "200"}
+        }
+        balance = HyperliquidSwapRequestBalanceData(balance_data, "BTC", "SWAP", has_been_json_encoded=True)
+        result = balance.init_data()
+        assert result is balance
+
+    def test_account_container_init_data_returns_self(self):
+        """Test account init_data returns self"""
+        from bt_api_py.containers.accounts.hyperliquid_account import HyperliquidSpotWssAccountData
+
+        account_data = {
+            "user": "0xabc123",
+            "accountValue": "5000.0",
+            "totalMarginUsed": "100.0",
+            "initialMargin": "50.0",
+            "positions": [],
+            "balances": [{"coin": "USDC", "total": "5000"}],
+        }
+        account = HyperliquidSpotWssAccountData(account_data, "ALL", "SPOT", has_been_json_encoded=True)
+        result = account.init_data()
+        assert result is account
+        assert account.get_symbol_name() == "ALL"
+
+    def test_trade_container_init_data_returns_self(self):
+        """Test trade init_data returns self"""
+        from bt_api_py.containers.trades.hyperliquid_trade import HyperliquidSpotWssTradeData
+
+        trade_data = {
+            "tid": "trade123",
+            "orderOid": "order456",
+            "side": "B",
+            "px": "50000.0",
+            "sz": "0.1",
+            "time": 1700000000000,
+            "fee": "0.5",
+        }
+        trade = HyperliquidSpotWssTradeData(trade_data, "BTC", "SPOT", has_been_json_encoded=True)
+        result = trade.init_data()
+        assert result is trade
+        assert trade.get_symbol_name() == "BTC"
 
 
 if __name__ == "__main__":

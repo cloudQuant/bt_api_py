@@ -1,16 +1,12 @@
-# Bitso 交易所统一配置
-# 数据来源: https://docs.bitso.com/bitso-api/
+# Bitso Exchange Configuration
+# Auth: Authorization: Bitso {key}:{nonce}:{signature}
+# Signature: nonce + method + requestPath + body
+# Symbol format: lowercase underscore (btc_mxn)
 id: bitso
 display_name: Bitso
 venue_type: cex
 website: https://bitso.com
 api_doc: https://docs.bitso.com/bitso-api/
-
-base_urls:
-  rest:
-    spot: https://bitso.com/api/v3
-  wss:
-    spot: wss://ws.bitso.com
 
 connection:
   type: http
@@ -22,7 +18,6 @@ authentication:
   header_name: Authorization
   header_format: "Bitso {key}:{nonce}:{signature}"
 
-# K线周期映射 - Bitso不支持REST K线，通过OHLC端点
 kline_periods:
   1m: "60"
   3m: "180"
@@ -52,34 +47,34 @@ rate_limits:
     scope: endpoint
 
 asset_types:
-  # ─── Spot Trading ────────────────────────────────────────
   spot:
-    exchange_name: bitsoSpot
+    exchange_name: BITSO___SPOT
+    rest_url: "https://bitso.com/api/v3"
+    wss_url: "wss://ws.bitso.com"
     symbol_format: "{base}_{quote}"
     legal_currency: [MXN, USD, BTC, ETH, USDC]
     rest_paths:
       # General
       ping: "GET /ping"
       get_server_time: "GET /time"
-      get_contract: "GET /available_books"
+      get_exchange_info: "GET /available_books"
       # Market Data
       get_tick: "GET /ticker"
       get_depth: "GET /order_book"
       get_kline: "GET /ohlc"
-      get_new_price: "GET /trades"
-      # Account
+      get_trades: "GET /trades"
+      # Account (signed)
       get_account: "GET /balance"
       get_balance: "GET /balance"
-      # Trade
+      # Trading (signed)
       make_order: "POST /orders"
       cancel_order: "DELETE /orders"
-      cancel_all: "DELETE /orders/all"
+      cancel_all_orders: "DELETE /orders/all"
       query_order: "GET /orders"
       get_open_orders: "GET /open_orders"
       get_deals: "GET /user_trades"
     wss_paths:
-      # Market Streams
-      tick: "<book>@ticker"
-      depth: "<book>@orders"
-      trade: "<book>@trades"
-      diff_depth: "<book>@diff-orders"
+      ticker: "{book}@ticker"
+      depth: "{book}@orders"
+      trade: "{book}@trades"
+      diff_depth: "{book}@diff-orders"

@@ -1,5 +1,9 @@
 """
 BigONE Exchange Data Configuration
+
+BigONE API v3 with JWT (HS256) authentication.
+Symbol format: BTC-USDT (dash separated).
+Responses wrapped in {"data": ...}.
 """
 
 import os
@@ -39,25 +43,17 @@ class BigONEExchangeData(ExchangeData):
 
     def __init__(self):
         super().__init__()
-        self.exchange_name = "bigone"
+        self.exchange_name = "BIGONE___SPOT"
         self.rest_url = "https://big.one/api/v3"
         self.wss_url = "wss://big.one/ws/v2"
+        self.rest_paths = {}
+        self.wss_paths = {}
         self.kline_periods = {
-            "1m": "min1",
-            "5m": "min5",
-            "15m": "min15",
-            "30m": "min30",
-            "1h": "hour1",
-            "4h": "hour4",
-            "12h": "hour12",
-            "1d": "day1",
-            "1w": "week1",
-            "1M": "month1",
+            "1m": "min1", "5m": "min5", "15m": "min15", "30m": "min30",
+            "1h": "hour1", "4h": "hour4", "12h": "hour12",
+            "1d": "day1", "1w": "week1", "1M": "month1",
         }
         self.legal_currency = ["USDT", "USD", "BTC", "ETH", "EUR"]
-        # API credentials (for authenticated requests)
-        self.api_key = os.getenv("BIGONE_API_KEY", "")
-        self.api_secret = os.getenv("BIGONE_API_SECRET", "")
 
     def _load_from_config(self, asset_type):
         """Load from YAML config."""
@@ -70,28 +66,60 @@ class BigONEExchangeData(ExchangeData):
 
         if asset_cfg.exchange_name:
             self.exchange_name = asset_cfg.exchange_name
-        if config.base_urls and config.base_urls.rest:
+        if hasattr(asset_cfg, "rest_url") and asset_cfg.rest_url:
+            self.rest_url = asset_cfg.rest_url
+        elif config.base_urls and config.base_urls.rest:
             rest = config.base_urls.rest
             self.rest_url = rest.get(asset_type, rest.get("default", self.rest_url)) if isinstance(rest, dict) else rest
-        if config.base_urls and config.base_urls.wss:
+
+        if hasattr(asset_cfg, "wss_url") and asset_cfg.wss_url:
+            self.wss_url = asset_cfg.wss_url
+        elif config.base_urls and config.base_urls.wss:
             wss = config.base_urls.wss
             self.wss_url = wss.get(asset_type, wss.get("default", self.wss_url)) if isinstance(wss, dict) else wss
+
         if asset_cfg.rest_paths:
             self.rest_paths.update(asset_cfg.rest_paths)
         if asset_cfg.wss_paths:
             self.wss_paths.update(asset_cfg.wss_paths)
 
-        # kline_periods - load from YAML, prefer asset-specific config
         kp = asset_cfg.kline_periods or (config.kline_periods if config.kline_periods else None)
         if kp:
             self.kline_periods = dict(kp)
 
-        # legal_currency - load from YAML
         lc = asset_cfg.legal_currency or (config.legal_currency if config.legal_currency else None)
         if lc:
             self.legal_currency = list(lc)
 
         return True
+
+    def get_symbol(self, symbol):
+        """Convert symbol to BigONE format (dash separated, uppercase).
+        e.g. 'BTC/USDT' -> 'BTC-USDT', 'BTCUSDT' kept as-is if already has dash.
+        """
+        s = symbol.upper().replace("/", "-").replace("_", "-")
+        return s
+
+    def get_period(self, period):
+        """Map standard period to BigONE kline period."""
+        return self.kline_periods.get(period, period)
+
+    def get_rest_path(self, request_type):
+        """Get REST path for request_type. Raises ValueError if not found."""
+        path = self.rest_paths.get(request_type)
+        if path is None:
+            raise ValueError(
+                f"Unknown rest path: {request_type}. "
+                f"Available: {list(self.rest_paths.keys())}"
+            )
+        return path
+
+    def get_wss_path(self, channel_type, symbol=None):
+        """Get WebSocket subscription path."""
+        path = self.wss_paths.get(channel_type, "")
+        if symbol and "{symbol}" in str(path):
+            path = str(path).replace("{symbol}", self.get_symbol(symbol))
+        return path
 
 
 class BigONEExchangeDataSpot(BigONEExchangeData):
@@ -100,6 +128,29 @@ class BigONEExchangeDataSpot(BigONEExchangeData):
     def __init__(self):
         super().__init__()
         self.asset_type = "spot"
-        self.rest_paths = {}
-        self.wss_paths = {}
-        self._load_from_config("spot")
+        if not self._load_from_config("spot"):
+            # Fallback defaults
+            self.exchange_name = "BIGONE___SPOT"
+            self.rest_url = "https://big.one/api/v3"
+            self.wss_url = "wss://big.one/ws/v2"
+            self.rest_paths = {
+                "get_server_time": "GET /ping",
+                "get_exchange_info": "GET /asset_pairs",
+                "get_tick": "GET /asset_pairs/{symbol}/ticker",
+                "get_tick_all": "GET /asset_pairs/tickers",
+                "get_depth": "GET /asset_pairs/{symbol}/depth",
+                "get_trades": "GET /asset_pairs/{symbol}/trades",
+                "get_kline": "GET /asset_pairs/{symbol}/candles",
+                "make_order": "POST /viewer/orders",
+                "cancel_order": "POST /viewer/orders/{order_id}/cancel",
+                "cancel_all_orders": "POST /viewer/orders/cancel",
+                "get_open_orders": "GET /viewer/orders",
+                "query_order": "GET /viewer/orders/{order_id}",
+                "get_deals": "GET /viewer/trades",
+                "get_balance": "GET /viewer/accounts",
+                "get_account": "GET /viewer/accounts",
+            }
+
+
+# Backward compatibility alias
+BigONESpotExchangeData = BigONEExchangeDataSpot

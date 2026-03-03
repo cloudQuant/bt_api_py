@@ -11,6 +11,7 @@ from bt_api_py.containers.exchanges.gmx_exchange_data import (
     GmxChain,
     GmxExchangeDataSpot,
 )
+from bt_api_py.containers.requestdatas.request_data import RequestData
 from bt_api_py.feeds.capability import Capability
 from bt_api_py.feeds.live_gmx.request_base import GmxRequestData
 from bt_api_py.functions.log_message import SpdLogManager
@@ -32,8 +33,12 @@ class GmxRequestDataSpot(GmxRequestData):
         return {
             Capability.GET_TICK,
             Capability.GET_DEPTH,
-            Capability.GET_EXCHANGE_INFO,
             Capability.GET_KLINE,
+            Capability.GET_EXCHANGE_INFO,
+            Capability.GET_BALANCE,
+            Capability.GET_ACCOUNT,
+            Capability.MAKE_ORDER,
+            Capability.CANCEL_ORDER,
         }
 
     def __init__(self, data_queue, **kwargs):
@@ -125,6 +130,14 @@ class GmxRequestDataSpot(GmxRequestData):
                 response.data = {symbol: tickers[symbol]}
 
         return response
+
+    def async_get_tick(self, symbol: str, extra_data=None, **kwargs):
+        """Async get token price/ticker."""
+        path, params, extra_data = self._get_tick(symbol, extra_data, **kwargs)
+        self.submit(
+            self.async_request(path, params=params, extra_data=extra_data),
+            callback=self.async_callback,
+        )
 
     # ==================== Candlestick/Kline Data ====================
 
@@ -218,6 +231,18 @@ class GmxRequestDataSpot(GmxRequestData):
             symbol, period, count, extra_data, **kwargs
         )
         return self.request(path, params, extra_data=extra_data)
+
+    def async_get_kline(
+        self, symbol: str, period: str, count: int = 1000, extra_data=None, **kwargs
+    ):
+        """Async get candlestick/kline data."""
+        path, params, extra_data = self._get_kline(
+            symbol, period, count, extra_data, **kwargs
+        )
+        self.submit(
+            self.async_request(path, params=params, extra_data=extra_data),
+            callback=self.async_callback,
+        )
 
     # ==================== Exchange/Market Info ====================
 
@@ -460,3 +485,139 @@ class GmxRequestDataSpot(GmxRequestData):
         """
         path, params, extra_data = self._get_depth(symbol, count, extra_data, **kwargs)
         return self.request(path, params, extra_data=extra_data)
+
+    def async_get_depth(self, symbol: str, count: int = 20, extra_data=None, **kwargs):
+        """Async get liquidity depth."""
+        path, params, extra_data = self._get_depth(symbol, count, extra_data, **kwargs)
+        self.submit(
+            self.async_request(path, params=params, extra_data=extra_data),
+            callback=self.async_callback,
+        )
+
+    # ==================== Standard Trading Interfaces ====================
+
+    def _make_order(self, symbol, volume, price, order_type, offset="open",
+                    post_only=False, client_order_id=None, extra_data=None, **kwargs):
+        """Prepare order. Returns (path, body, extra_data).
+
+        GMX is a DEX; trading requires on-chain transactions.
+        """
+        if extra_data is None:
+            extra_data = {}
+        extra_data.update({
+            "exchange_name": self.exchange_name,
+            "symbol_name": symbol,
+            "asset_type": self.asset_type,
+            "request_type": "make_order",
+            "quantity": volume,
+            "price": price,
+            "order_type": order_type,
+            "chain": self.chain.value,
+        })
+        body = {
+            "market": symbol,
+            "size": str(volume),
+            "price": str(price),
+            "orderType": order_type,
+        }
+        return "POST /orders", body, extra_data
+
+    def make_order(self, symbol, volume, price, order_type, offset="open",
+                   post_only=False, client_order_id=None, extra_data=None, **kwargs):
+        """Place an order. Note: GMX requires on-chain tx."""
+        path, body, extra_data = self._make_order(
+            symbol, volume, price, order_type, offset, post_only,
+            client_order_id, extra_data, **kwargs
+        )
+        return self.request(path, body=body, extra_data=extra_data)
+
+    def _cancel_order(self, symbol, order_id, extra_data=None, **kwargs):
+        """Cancel order. Returns (path, params, extra_data)."""
+        if extra_data is None:
+            extra_data = {}
+        extra_data.update({
+            "exchange_name": self.exchange_name,
+            "symbol_name": symbol,
+            "asset_type": self.asset_type,
+            "request_type": "cancel_order",
+            "order_id": order_id,
+        })
+        return f"DELETE /orders/{order_id}", {}, extra_data
+
+    def cancel_order(self, symbol, order_id, extra_data=None, **kwargs):
+        """Cancel order."""
+        path, params, extra_data = self._cancel_order(symbol, order_id, extra_data, **kwargs)
+        return self.request(path, params=params, extra_data=extra_data)
+
+    def _query_order(self, symbol, order_id, extra_data=None, **kwargs):
+        """Query order. Returns (path, params, extra_data)."""
+        if extra_data is None:
+            extra_data = {}
+        extra_data.update({
+            "exchange_name": self.exchange_name,
+            "symbol_name": symbol,
+            "asset_type": self.asset_type,
+            "request_type": "query_order",
+            "order_id": order_id,
+        })
+        return f"GET /orders/{order_id}", {}, extra_data
+
+    def query_order(self, symbol, order_id, extra_data=None, **kwargs):
+        """Query order status."""
+        path, params, extra_data = self._query_order(symbol, order_id, extra_data, **kwargs)
+        return self.request(path, params=params, extra_data=extra_data)
+
+    def _get_open_orders(self, symbol=None, extra_data=None, **kwargs):
+        """Get open orders. Returns (path, params, extra_data)."""
+        if extra_data is None:
+            extra_data = {}
+        extra_data.update({
+            "exchange_name": self.exchange_name,
+            "symbol_name": symbol or "",
+            "asset_type": self.asset_type,
+            "request_type": "get_open_orders",
+        })
+        return "GET /orders", {}, extra_data
+
+    def get_open_orders(self, symbol=None, extra_data=None, **kwargs):
+        """Get open orders."""
+        path, params, extra_data = self._get_open_orders(symbol, extra_data, **kwargs)
+        return self.request(path, params=params, extra_data=extra_data)
+
+    # ==================== Standard Account Interfaces ====================
+
+    def _get_account(self, symbol=None, extra_data=None, **kwargs):
+        """Get account info. Returns (path, params, extra_data)."""
+        if extra_data is None:
+            extra_data = {}
+        extra_data.update({
+            "exchange_name": self.exchange_name,
+            "symbol_name": symbol or "",
+            "asset_type": self.asset_type,
+            "request_type": "get_account",
+            "chain": self.chain.value,
+        })
+        return self._params.get_rest_path("get_markets"), {}, extra_data
+
+    def get_account(self, symbol=None, extra_data=None, **kwargs):
+        """Get account info."""
+        path, params, extra_data = self._get_account(symbol, extra_data, **kwargs)
+        return self.request(path, params=params, extra_data=extra_data)
+
+    def _get_balance(self, symbol=None, extra_data=None, **kwargs):
+        """Get balance. Returns (path, params, extra_data)."""
+        if extra_data is None:
+            extra_data = {}
+        extra_data.update({
+            "exchange_name": self.exchange_name,
+            "symbol_name": symbol or "",
+            "asset_type": self.asset_type,
+            "request_type": "get_balance",
+            "chain": self.chain.value,
+        })
+        return self._params.get_rest_path("get_markets"), {}, extra_data
+
+    def get_balance(self, symbol=None, extra_data=None, **kwargs):
+        """Get token balance. Note: DEX balance requires Web3/on-chain query."""
+        path, params, extra_data = self._get_balance(symbol, extra_data, **kwargs)
+        return self.request(path, params=params, extra_data=extra_data)

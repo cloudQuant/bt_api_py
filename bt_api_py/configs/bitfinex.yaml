@@ -83,7 +83,7 @@ asset_types:
 
   # ─── BitfinexExchangeDataSpot ───────────────────────────────
   spot:
-    exchange_name: bitfinex_spot
+    exchange_name: BITFINEX___SPOT
     symbol_format: "{base}{quote}"
     legal_currency: [USD, EUR, GBP, JPY, USDT, BTC, ETH]
     rest_paths:
@@ -91,6 +91,7 @@ asset_types:
       ping: "GET /pub/status"
       get_server_time: "GET /pub/time"
       get_contract: "GET /pub/symbols"
+      get_exchange_info: "GET /pub/symbols"
       # Market Data
       get_tick: "GET /pubticker/{symbol}"
       get_info: "GET /pub/tickers?symbols={symbol}"
@@ -118,6 +119,7 @@ asset_types:
       cancel_order: "POST /auth/w/order/cancel"
       cancel_all: "POST /auth/w/order/cancel/all"
       query_order: "GET /auth/r/orders/{id}"
+      get_order: "GET /auth/r/orders/{id}"
       get_open_orders: "GET /auth/r/orders"
       get_all_orders: "GET /auth/r/orders"
       get_deals: "GET /auth/r/trades/hist"

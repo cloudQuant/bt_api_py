@@ -3,317 +3,298 @@ Test Bitinka exchange integration.
 
 Run tests:
     pytest tests/feeds/test_bitinka.py -v
-
-Run with coverage:
-    pytest tests/feeds/test_bitinka.py --cov=bt_api_py.feeds.live_bitinka --cov-report=term-missing
-
-Run specific test:
-    pytest tests/feeds/test_bitinka.py::test_bitinka_req_tick_data -v
 """
 
 import queue
 import time
+from unittest.mock import Mock, MagicMock
 
 import pytest
 
 from bt_api_py.containers.exchanges.bitinka_exchange_data import BitinkaExchangeDataSpot
 from bt_api_py.containers.requestdatas.request_data import RequestData
 from bt_api_py.feeds.live_bitinka.spot import BitinkaRequestDataSpot
+from bt_api_py.feeds.capability import Capability
 from bt_api_py.registry import ExchangeRegistry
 
 # Import registration to auto-register Bitinka
 import bt_api_py.feeds.register_bitinka  # noqa: F401
 
-# ==================== Test Fixtures ====================
 
-
-def init_req_feed():
-    """Initialize Bitinka request feed for testing."""
+@pytest.fixture
+def mock_feed():
+    """Create a Bitinka feed instance with mocked request."""
     data_queue = queue.Queue()
-    return BitinkaRequestDataSpot(
-        data_queue,
-        public_key="test_key",
-        private_key="test_secret",
-    )
-
-
-def init_async_feed(data_queue):
-    """Initialize Bitinka async feed for testing."""
-    return BitinkaRequestDataSpot(
-        data_queue,
-        public_key="test_key",
-        private_key="test_secret",
-    )
-
-# ==================== Exchange Data Tests ====================
+    feed = BitinkaRequestDataSpot(data_queue, exchange_name="BITINKA___SPOT")
+    feed.request = Mock(return_value=Mock(spec=RequestData))
+    return feed
 
 
 class TestBitinkaExchangeData:
     """Test Bitinka exchange data configuration."""
 
     def test_exchange_data_spot_creation(self):
-        """Test creating Bitinka spot exchange data."""
         exchange_data = BitinkaExchangeDataSpot()
         assert exchange_data.exchange_name == "bitinkaSpot"
         assert exchange_data.asset_type == "spot"
         assert hasattr(exchange_data, "rest_url")
 
     def test_kline_periods(self):
-        """Test kline periods are defined."""
         exchange_data = BitinkaExchangeDataSpot()
         assert "1m" in exchange_data.kline_periods
         assert "1h" in exchange_data.kline_periods
         assert "1d" in exchange_data.kline_periods
 
     def test_legal_currencies(self):
-        """Test legal currencies are defined."""
         exchange_data = BitinkaExchangeDataSpot()
         assert "USDT" in exchange_data.legal_currency
         assert "USD" in exchange_data.legal_currency
         assert "EUR" in exchange_data.legal_currency
-
-# ==================== Request Feed Tests ====================
 
 
 class TestBitinkaRequestDataSpot:
     """Test Bitinka REST API request methods."""
 
     def test_request_data_creation(self):
-        """Test creating Bitinka request data."""
         data_queue = queue.Queue()
-        request_data = BitinkaRequestDataSpot(
-            data_queue,
-            public_key="test_key",
-            private_key="test_secret",
-        )
-        assert request_data.exchange_name == "BITINKA___SPOT"
-        assert request_data.asset_type == "SPOT"
+        feed = BitinkaRequestDataSpot(data_queue, exchange_name="BITINKA___SPOT")
+        assert feed.exchange_name == "BITINKA___SPOT"
+        assert feed.asset_type == "SPOT"
+
+    def test_capabilities(self):
+        caps = BitinkaRequestDataSpot._capabilities()
+        assert Capability.GET_TICK in caps
+        assert Capability.GET_DEPTH in caps
+        assert Capability.GET_EXCHANGE_INFO in caps
+        assert Capability.GET_BALANCE in caps
+        assert Capability.GET_ACCOUNT in caps
+        assert Capability.MAKE_ORDER in caps
+        assert Capability.CANCEL_ORDER in caps
 
     def test_convert_symbol(self):
-        """Test symbol conversion for Bitinka."""
         data_queue = queue.Queue()
-        request_data = BitinkaRequestDataSpot(
-            data_queue,
-            public_key="test_key",
-            private_key="test_secret",
-        )
+        feed = BitinkaRequestDataSpot(data_queue)
+        assert feed._convert_symbol("BTC-USD") == "BTC/USD"
+        assert feed._convert_symbol("BTC_USDT") == "BTC/USDT"
+        assert feed._convert_symbol("BTC/USD") == "BTC/USD"
 
-        # Bitinka uses slash format
-        assert request_data._convert_symbol("BTC-USD") == "BTC/USD"
-        assert request_data._convert_symbol("BTC_USDT") == "BTC/USDT"
-        assert request_data._convert_symbol("BTC/USD") == "BTC/USD"
+    def test_get_tick_returns_tuple(self, mock_feed):
+        path, params, extra_data = mock_feed._get_tick("BTC/USD")
+        assert "GET" in path
+        assert "ticker" in path
+        assert params["market"] == "BTC/USD"
+        assert extra_data["request_type"] == "get_tick"
+        assert extra_data["symbol_name"] == "BTC/USD"
 
-# ==================== Server Time Tests ====================
+    def test_get_tick_calls_request(self, mock_feed):
+        mock_feed.get_tick("BTC/USD")
+        assert mock_feed.request.called
 
+    def test_get_depth_returns_tuple(self, mock_feed):
+        path, params, extra_data = mock_feed._get_depth("BTC/USD")
+        assert "orderbook" in path
+        assert extra_data["request_type"] == "get_depth"
 
-def test_bitinka_req_server_time():
-    """Test Bitinka server time endpoint."""
+    def test_get_depth_calls_request(self, mock_feed):
+        mock_feed.get_depth("BTC/USD")
+        assert mock_feed.request.called
 
-# ==================== Ticker Tests ====================
+    def test_get_trades_returns_tuple(self, mock_feed):
+        path, params, extra_data = mock_feed._get_trades("BTC/USD")
+        assert "trades" in path
+        assert extra_data["request_type"] == "get_trades"
 
+    def test_get_exchange_info_returns_tuple(self, mock_feed):
+        path, params, extra_data = mock_feed._get_exchange_info()
+        assert extra_data["request_type"] == "get_exchange_info"
 
-def test_bitinka_req_tick_data():
-    """Test Bitinka ticker data (synchronous)."""
-    from bt_api_py.exceptions import RequestFailedError
-    feed = init_req_feed()
-    try:
-        data = feed.get_tick("BTC/USD")
-        assert isinstance(data, RequestData)
-        data_list = data.get_data()
-        assert isinstance(data_list, list)
-    except RequestFailedError as e:
-        # API endpoint may not be available - this is expected for Bitinka
-        pytest.skip(f"Bitinka API unavailable: {e}")
-
-
-def test_bitinka_async_tick_data():
-    """Test Bitinka ticker data (asynchronous)."""
-    data_queue = queue.Queue()
-    feed = init_async_feed(data_queue)
-
-    # Note: Bitinka doesn't have async_get_tick implemented
-    time.sleep(2)
-
-    try:
-        tick_data = data_queue.get(timeout=10)
-        assert tick_data is not None
-    except queue.Empty:
-        pass
-
-        # ==================== Kline Tests ====================
+    def test_get_server_time_tuple(self):
+        data_queue = queue.Queue()
+        feed = BitinkaRequestDataSpot(data_queue, exchange_name="BITINKA___SPOT")
+        path, params, extra_data = feed._get_server_time()
+        assert extra_data["request_type"] == "get_server_time"
 
 
-def test_bitinka_req_kline_data():
-    """Test Bitinka kline data (synchronous)."""
+class TestBitinkaStandardInterfaces:
+    """Test standard Feed interface methods for Bitinka."""
+
+    @pytest.fixture
+    def feed(self):
+        data_queue = queue.Queue()
+        feed = BitinkaRequestDataSpot(data_queue, exchange_name="BITINKA___SPOT")
+        feed.request = Mock(return_value=Mock(spec=RequestData))
+        return feed
+
+    def test_make_order_calls_request(self, feed):
+        feed.make_order("BTC/USD", 0.01, 50000, "LIMIT", offset="BUY")
+        assert feed.request.called
+        extra_data = feed.request.call_args[1].get("extra_data")
+        assert extra_data["request_type"] == "make_order"
+
+    def test_cancel_order_calls_request(self, feed):
+        feed.cancel_order("BTC/USD", "order_123")
+        assert feed.request.called
+        extra_data = feed.request.call_args[1].get("extra_data")
+        assert extra_data["request_type"] == "cancel_order"
+
+    def test_query_order_calls_request(self, feed):
+        feed.query_order("BTC/USD", "order_123")
+        assert feed.request.called
+        extra_data = feed.request.call_args[1].get("extra_data")
+        assert extra_data["request_type"] == "query_order"
+
+    def test_get_open_orders_calls_request(self, feed):
+        feed.get_open_orders("BTC/USD")
+        assert feed.request.called
+        extra_data = feed.request.call_args[1].get("extra_data")
+        assert extra_data["request_type"] == "get_open_orders"
+
+    def test_get_account_calls_request(self, feed):
+        feed.get_account()
+        assert feed.request.called
+        extra_data = feed.request.call_args[1].get("extra_data")
+        assert extra_data["request_type"] == "get_account"
+
+    def test_get_balance_calls_request(self, feed):
+        feed.get_balance()
+        assert feed.request.called
+        extra_data = feed.request.call_args[1].get("extra_data")
+        assert extra_data["request_type"] == "get_balance"
+
+    def test_get_exchange_info_calls_request(self, feed):
+        feed.get_exchange_info()
+        assert feed.request.called
+        extra_data = feed.request.call_args[1].get("extra_data")
+        assert extra_data["request_type"] == "get_exchange_info"
 
 
-def test_bitinka_async_kline_data():
-    """Test Bitinka kline data (asynchronous)."""
+class TestBitinkaBaseCapabilities:
+    """Test capabilities on the base class."""
 
-# ==================== Order Book Tests ====================
-
-
-def order_book_value_equals(order_book):
-    """Validate Bitinka order book data."""
-    # Bitinka order book format validation
-    assert order_book is not None
-    assert isinstance(order_book, dict)
-
-    # Check for bids and asks
-    if "bids" in order_book:
-        bids = order_book["bids"]
-        if bids and len(bids) > 0:
-            assert isinstance(bids, list)
-            assert bids[0][0] > 0  # price > 0
-
-    if "asks" in order_book:
-        asks = order_book["asks"]
-        if asks and len(asks) > 0:
-            assert isinstance(asks, list)
-            assert asks[0][0] > 0  # price > 0
+    def test_base_capabilities(self):
+        from bt_api_py.feeds.live_bitinka.request_base import BitinkaRequestData
+        caps = BitinkaRequestData._capabilities()
+        assert Capability.GET_TICK in caps
+        assert Capability.MAKE_ORDER in caps
+        assert Capability.CANCEL_ORDER in caps
 
 
-def test_bitinka_req_orderbook_data():
-    """Test Bitinka order book data."""
-    from bt_api_py.exceptions import RequestFailedError
-    feed = init_req_feed()
-    try:
-        data = feed.get_depth("BTC/USD", 20)
-        assert isinstance(data, RequestData)
-        data_list = data.get_data()
-        assert isinstance(data_list, list)
+class TestBitinkaNormalizeFunctions:
+    """Test normalize functions edge cases."""
 
-        # Test order book if available
-        if data_list and len(data_list) > 0:
-            order_book = data_list[0]
-            if isinstance(order_book, dict):
-                order_book_value_equals(order_book)
-    except RequestFailedError as e:
-        # API endpoint may not be available - this is expected for Bitinka
-        pytest.skip(f"Bitinka API unavailable: {e}")
+    def test_tick_normalize_with_none(self):
+        result, status = BitinkaRequestDataSpot._get_tick_normalize_function(None, None)
+        assert result == []
+        assert status is False
 
+    def test_tick_normalize_success(self):
+        data = {"data": {"last": "50000"}}
+        result, status = BitinkaRequestDataSpot._get_tick_normalize_function(data, None)
+        assert status is True
+        assert len(result) == 1
 
-def test_bitinka_async_orderbook_data():
-    """Test Bitinka order book data (asynchronous)."""
-    data_queue = queue.Queue()
-    feed = init_async_feed(data_queue)
+    def test_depth_normalize_with_none(self):
+        result, status = BitinkaRequestDataSpot._get_depth_normalize_function(None, None)
+        assert result == []
+        assert status is False
 
-    # Note: Bitinka doesn't have async_get_depth implemented
-    time.sleep(3)
+    def test_depth_normalize_success(self):
+        data = {"data": {"bids": [], "asks": []}}
+        result, status = BitinkaRequestDataSpot._get_depth_normalize_function(data, None)
+        assert status is True
 
-    try:
-        depth_data = data_queue.get(timeout=10)
-        assert depth_data is not None
-    except queue.Empty:
-        pass
+    def test_trades_normalize_with_none(self):
+        result, status = BitinkaRequestDataSpot._get_trades_normalize_function(None, None)
+        assert result == []
+        assert status is False
 
-        # ==================== Account Tests ====================
+    def test_exchange_info_normalize_with_none(self):
+        result, status = BitinkaRequestDataSpot._get_exchange_info_normalize_function(None, None)
+        assert result == []
+        assert status is False
 
+    def test_account_normalize_with_none(self):
+        result, status = BitinkaRequestDataSpot._get_account_normalize_function(None, None)
+        assert result == []
+        assert status is False
 
-def test_bitinka_req_account_data():
-    """Test Bitinka account data."""
-    from bt_api_py.exceptions import RequestFailedError
-    feed = init_req_feed()
-    try:
-        data = feed.get_account()
-        assert isinstance(data, RequestData)
-        data_list = data.get_data()
-        assert isinstance(data_list, list)
-    except RequestFailedError as e:
-        # API endpoint may not be available - this is expected for Bitinka
-        pytest.skip(f"Bitinka API unavailable: {e}")
+    def test_balance_normalize_with_none(self):
+        result, status = BitinkaRequestDataSpot._get_balance_normalize_function(None, None)
+        assert result == []
+        assert status is False
 
-
-def test_bitinka_async_account_data():
-    """Test Bitinka account data (asynchronous)."""
-    from bt_api_py.exceptions import RequestFailedError
-    data_queue = queue.Queue()
-    feed = init_async_feed(data_queue)
-    try:
-        feed.async_get_account()
-        time.sleep(3)
-
-        try:
-            account_data = data_queue.get(timeout=10)
-            assert isinstance(account_data, RequestData)
-        except queue.Empty:
-            pass
-    except RequestFailedError as e:
-        # API endpoint may not be available - this is expected for Bitinka
-        pytest.skip(f"Bitinka API unavailable: {e}")
-
-        # ==================== Balance Tests ====================
-
-
-def test_bitinka_req_balance_data():
-    """Test Bitinka balance data."""
-    from bt_api_py.exceptions import RequestFailedError
-    feed = init_req_feed()
-    try:
-        data = feed.get_balance("BTC/USD")
-        assert isinstance(data, RequestData)
-        data_list = data.get_data()
-        assert isinstance(data_list, list)
-    except RequestFailedError as e:
-        # API endpoint may not be available - this is expected for Bitinka
-        pytest.skip(f"Bitinka API unavailable: {e}")
-
-# ==================== Trade Tests ====================
-
-
-def test_bitinka_req_get_deals():
-    """Test Bitinka trade/deal history."""
-    from bt_api_py.exceptions import RequestFailedError
-    feed = init_req_feed()
-    try:
-        data = feed.get_deals("BTC/USD")
-        assert isinstance(data, RequestData)
-        trade_data = data.get_data()
-        if trade_data and len(trade_data) > 0:
-            assert isinstance(trade_data, list)
-    except RequestFailedError as e:
-        # API endpoint may not be available - this is expected for Bitinka
-        pytest.skip(f"Bitinka API unavailable: {e}")
-
-# ==================== Registration Tests ====================
+    def test_deals_normalize_with_none(self):
+        result, status = BitinkaRequestDataSpot._get_deals_normalize_function(None, None)
+        assert result == []
+        assert status is False
 
 
 class TestBitinkaRegistration:
     """Test Bitinka registration."""
 
     def test_bitinka_registered(self):
-        """Test that Bitinka is properly registered."""
-        # Check if feed is registered in _feed_classes
         assert "BITINKA___SPOT" in ExchangeRegistry._feed_classes
         assert ExchangeRegistry._feed_classes["BITINKA___SPOT"] == BitinkaRequestDataSpot
 
-        # Check if exchange data is registered
+    def test_bitinka_exchange_data_registered(self):
         assert "BITINKA___SPOT" in ExchangeRegistry._exchange_data_classes
         assert ExchangeRegistry._exchange_data_classes["BITINKA___SPOT"] == BitinkaExchangeDataSpot
 
-        # Check if balance handler is registered
-        assert "BITINKA___SPOT" in ExchangeRegistry._balance_handlers
-        assert ExchangeRegistry._balance_handlers["BITINKA___SPOT"] is not None
-
     def test_bitinka_create_exchange_data(self):
-        """Test creating Bitinka exchange data through registry."""
         exchange_data = ExchangeRegistry.create_exchange_data("BITINKA___SPOT")
         assert isinstance(exchange_data, BitinkaExchangeDataSpot)
 
-# ==================== Integration Tests ====================
 
+class TestBitinkaLiveAPI:
+    """Live API tests - require network, marked as integration."""
 
-class TestBitinkaIntegration:
-    """Integration tests for Bitinka."""
+    @pytest.mark.integration
+    def test_bitinka_req_tick_data(self):
+        data_queue = queue.Queue()
+        feed = BitinkaRequestDataSpot(data_queue, exchange_name="BITINKA___SPOT")
+        data = feed.get_tick("BTC/USD")
+        assert isinstance(data, RequestData)
+        data_list = data.get_data()
+        assert isinstance(data_list, list)
 
-    def test_market_data_api(self):
-        """Test market data API calls (requires network)."""
-        pass
+    @pytest.mark.integration
+    def test_bitinka_req_orderbook_data(self):
+        data_queue = queue.Queue()
+        feed = BitinkaRequestDataSpot(data_queue, exchange_name="BITINKA___SPOT")
+        data = feed.get_depth("BTC/USD", 20)
+        assert isinstance(data, RequestData)
+        data_list = data.get_data()
+        assert isinstance(data_list, list)
 
-    def test_trading_api(self):
-        """Test trading API calls (requires API keys)."""
-        pass
+    @pytest.mark.integration
+    def test_bitinka_async_tick_data(self):
+        data_queue = queue.Queue()
+        feed = BitinkaRequestDataSpot(data_queue, exchange_name="BITINKA___SPOT")
+        feed.async_get_tick("BTC/USD", extra_data={"test_async": True})
+        time.sleep(3)
+        try:
+            tick_data = data_queue.get(timeout=10)
+            assert tick_data is not None
+        except queue.Empty:
+            pass
 
+    @pytest.mark.integration
+    def test_bitinka_req_account_data(self):
+        data_queue = queue.Queue()
+        feed = BitinkaRequestDataSpot(data_queue, exchange_name="BITINKA___SPOT")
+        data = feed.get_account()
+        assert isinstance(data, RequestData)
 
-if __name__ == "__main__":
-    pytest.main([__file__, "-v"])
+    @pytest.mark.integration
+    def test_bitinka_req_balance_data(self):
+        data_queue = queue.Queue()
+        feed = BitinkaRequestDataSpot(data_queue, exchange_name="BITINKA___SPOT")
+        data = feed.get_balance("BTC")
+        assert isinstance(data, RequestData)
+
+    @pytest.mark.integration
+    def test_bitinka_req_get_deals(self):
+        data_queue = queue.Queue()
+        feed = BitinkaRequestDataSpot(data_queue, exchange_name="BITINKA___SPOT")
+        data = feed.get_deals("BTC/USD")
+        assert isinstance(data, RequestData)

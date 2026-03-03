@@ -19,7 +19,6 @@ class CowSwapRequestTickerData(TickerData):
         self.exchange_name = "COW_SWAP"
         self.local_update_time = time.time()
         self.ticker_data = ticker_info if has_been_json_encoded else None
-        self.ticker_symbol_name = None
         self.has_been_init_data = False
 
     def init_data(self):
@@ -47,6 +46,38 @@ class CowSwapRequestTickerData(TickerData):
 
         self.has_been_init_data = True
         return self
+
+    # ── Standard getters ────────────────────────────────────────
+
+    def get_symbol_name(self):
+        return self.ticker_symbol_name
+
+    def get_ticker_symbol_name(self):
+        return self.ticker_symbol_name
+
+    def get_last_price(self):
+        return getattr(self, "last_price", None)
+
+    def get_exchange_name(self):
+        return self.exchange_name
+
+    def get_local_update_time(self):
+        return self.local_update_time
+
+    def get_asset_type(self):
+        return self.asset_type
+
+    def get_all_data(self):
+        return self.ticker_data
+
+    def get_server_time(self):
+        return self.local_update_time
+
+    def get_bid_price(self):
+        return getattr(self, "last_price", None)
+
+    def get_ask_price(self):
+        return getattr(self, "last_price", None)
 
     @staticmethod
     def _parse_float(value):

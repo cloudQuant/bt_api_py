@@ -189,24 +189,6 @@ class DydxRequestDataSpot(DydxRequestData):
 
     # ==================== Exchange Info Methods ====================
 
-    def get_exchange_info(self, extra_data=None, **kwargs):
-        """Get exchange trading rules and symbol information"""
-        request_type = "get_exchange_info"
-        path = self._params.get_rest_path(request_type)
-
-        extra_data = update_extra_data(
-            extra_data,
-            **{
-                "request_type": request_type,
-                "exchange_name": self.exchange_name,
-                "asset_type": self.asset_type,
-                "normalize_function": DydxRequestDataSpot._get_exchange_info_normalize_function,
-            },
-        )
-        if kwargs is not None:
-            extra_data.update(kwargs)
-        return path, {}, extra_data
-
     @staticmethod
     def _get_exchange_info_normalize_function(input_data, extra_data):
         """Normalize exchange info response"""
@@ -221,3 +203,162 @@ class DydxRequestDataSpot(DydxRequestData):
             })
 
         return exchange_info, status
+
+    # ── Standard Interface: make_order ──────────────────────────────
+
+    def _make_order(self, symbol, volume, price, order_type, offset="open",
+                    post_only=False, client_order_id=None, extra_data=None, **kwargs):
+        """Prepare order request parameters. Returns (path, body, extra_data).
+        Note: dYdX V4 trading requires wallet signature (on-chain tx).
+        This method prepares the request data structure."""
+        if extra_data is None:
+            extra_data = {}
+        request_symbol = self._params.get_symbol(symbol)
+        side = kwargs.get("side", "BUY")
+        body = {
+            "market": request_symbol,
+            "side": side.upper(),
+            "type": order_type.upper() if isinstance(order_type, str) else "LIMIT",
+            "size": str(volume),
+            "price": str(price) if price else "0",
+            "postOnly": post_only,
+        }
+        if client_order_id:
+            body["clientId"] = client_order_id
+        extra_data.update({
+            "exchange_name": self.exchange_name,
+            "symbol_name": request_symbol,
+            "asset_type": self.asset_type,
+            "request_type": "make_order",
+            "side": side,
+            "quantity": volume,
+            "price": price,
+            "order_type": order_type,
+        })
+        return "POST /v4/orders", body, extra_data
+
+    def make_order(self, symbol, volume, price, order_type, offset="open",
+                   post_only=False, client_order_id=None, extra_data=None, **kwargs):
+        """Place order following standard Feed interface. Returns RequestData."""
+        path, body, extra_data = self._make_order(
+            symbol, volume, price, order_type, offset, post_only,
+            client_order_id, extra_data, **kwargs
+        )
+        return self.request(path, body=body, extra_data=extra_data)
+
+    # ── Standard Interface: cancel_order ────────────────────────────
+
+    def _cancel_order(self, symbol, order_id, extra_data=None, **kwargs):
+        """Prepare cancel order request. Returns (path, body, extra_data)."""
+        if extra_data is None:
+            extra_data = {}
+        request_symbol = self._params.get_symbol(symbol)
+        extra_data.update({
+            "exchange_name": self.exchange_name,
+            "symbol_name": request_symbol,
+            "asset_type": self.asset_type,
+            "request_type": "cancel_order",
+            "order_id": order_id,
+        })
+        return f"DELETE /v4/orders/{order_id}", None, extra_data
+
+    def cancel_order(self, symbol, order_id, extra_data=None, **kwargs):
+        """Cancel order following standard Feed interface. Returns RequestData."""
+        path, body, extra_data = self._cancel_order(symbol, order_id, extra_data, **kwargs)
+        return self.request(path, body=body, extra_data=extra_data)
+
+    # ── Standard Interface: query_order ─────────────────────────────
+
+    def _query_order(self, symbol, order_id, extra_data=None, **kwargs):
+        """Prepare query order request. Returns (path, params, extra_data)."""
+        if extra_data is None:
+            extra_data = {}
+        request_symbol = self._params.get_symbol(symbol)
+        path = self._params.get_rest_path("get_orders")
+        params = {"orderId": order_id}
+        extra_data.update({
+            "exchange_name": self.exchange_name,
+            "symbol_name": request_symbol,
+            "asset_type": self.asset_type,
+            "request_type": "query_order",
+            "order_id": order_id,
+        })
+        return path, params, extra_data
+
+    def query_order(self, symbol, order_id, extra_data=None, **kwargs):
+        """Query order status. Returns RequestData."""
+        path, params, extra_data = self._query_order(symbol, order_id, extra_data, **kwargs)
+        return self.request(path, params=params, extra_data=extra_data)
+
+    # ── Standard Interface: get_open_orders ─────────────────────────
+
+    def _get_open_orders(self, symbol=None, extra_data=None, **kwargs):
+        """Prepare open orders request. Returns (path, params, extra_data)."""
+        if extra_data is None:
+            extra_data = {}
+        path = self._params.get_rest_path("get_orders")
+        params = {"status": "OPEN"}
+        if symbol:
+            params["market"] = self._params.get_symbol(symbol)
+        address = kwargs.get("address", self.address or "")
+        if address:
+            params["address"] = address
+        subaccount_number = kwargs.get("subaccount_number", self.subaccount_number)
+        if subaccount_number is not None:
+            params["subaccountNumber"] = subaccount_number
+        extra_data.update({
+            "exchange_name": self.exchange_name,
+            "symbol_name": symbol or "",
+            "asset_type": self.asset_type,
+            "request_type": "get_open_orders",
+        })
+        return path, params, extra_data
+
+    def get_open_orders(self, symbol=None, extra_data=None, **kwargs):
+        """Get open orders. Returns RequestData."""
+        path, params, extra_data = self._get_open_orders(symbol, extra_data, **kwargs)
+        return self.request(path, params=params, extra_data=extra_data)
+
+    # ── Standard Interface: get_account ─────────────────────────────
+
+    def _get_account(self, symbol="ALL", extra_data=None, **kwargs):
+        """Prepare account request. Returns (path, params, extra_data)."""
+        if extra_data is None:
+            extra_data = {}
+        address = kwargs.get("address", self.address or "")
+        subaccount_number = kwargs.get("subaccount_number", self.subaccount_number)
+        path = self._params.get_rest_path("get_subaccount")
+        path = path.replace("<placeholder>", address, 1)
+        path = path.replace("<placeholder>", str(subaccount_number), 1)
+        extra_data.update({
+            "exchange_name": self.exchange_name,
+            "symbol_name": symbol,
+            "asset_type": self.asset_type,
+            "request_type": "get_account",
+        })
+        return path, {}, extra_data
+
+    def get_account(self, symbol="ALL", extra_data=None, **kwargs):
+        """Get account info. Returns RequestData."""
+        path, params, extra_data = self._get_account(symbol, extra_data, **kwargs)
+        return self.request(path, params=params, extra_data=extra_data)
+
+    # ── Standard Interface: get_balance (standard signature) ────────
+
+    def _get_balance_std(self, symbol=None, extra_data=None, **kwargs):
+        """Prepare balance request with standard signature. Returns (path, params, extra_data)."""
+        if extra_data is None:
+            extra_data = {}
+        address = kwargs.get("address", self.address or "")
+        subaccount_number = kwargs.get("subaccount_number", self.subaccount_number)
+        path = self._params.get_rest_path("get_subaccount")
+        path = path.replace("<placeholder>", address, 1)
+        path = path.replace("<placeholder>", str(subaccount_number), 1)
+        extra_data.update({
+            "exchange_name": self.exchange_name,
+            "symbol_name": symbol or "",
+            "asset_type": self.asset_type,
+            "request_type": "get_balance",
+            "normalize_function": DydxRequestDataSpot._get_balance_spot_normalize_function,
+        })
+        return path, {}, extra_data
