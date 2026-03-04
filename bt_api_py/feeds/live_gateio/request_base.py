@@ -13,8 +13,8 @@ from bt_api_py.containers.exchanges.gateio_exchange_data import GateioExchangeDa
 from bt_api_py.containers.requestdatas.request_data import RequestData
 from bt_api_py.feeds.capability import Capability
 from bt_api_py.feeds.feed import Feed
-from bt_api_py.functions.log_message import SpdLogManager
 from bt_api_py.rate_limiter import RateLimiter, RateLimitRule
+from bt_api_py.logging_factory import get_logger
 
 
 class GateioRequestData(Feed, RequestData):
@@ -45,12 +45,8 @@ class GateioRequestData(Feed, RequestData):
         self.exchange_name = "GATEIO"
         self.logger_name = kwargs.get("logger_name", "gateio_feed.log")
         self._params = GateioExchangeDataSpot()
-        self.request_logger = SpdLogManager(
-            self.logger_name, "request", 0, 0, False
-        ).create_logger()
-        self.async_logger = SpdLogManager(
-            self.logger_name, "async_request", 0, 0, False
-        ).create_logger()
+        self.request_logger = get_logger("request")
+        self.async_logger = get_logger("async_request")
         self._rate_limiter = kwargs.get("rate_limiter", self._create_default_rate_limiter())
 
     @staticmethod

@@ -1,4 +1,7 @@
-class BalanceData:
+from bt_api_py.containers.auto_init_mixin import AutoInitMixin
+
+
+class BalanceData(AutoInitMixin):
     """
     用于保存账户的余额
     """

@@ -23,7 +23,7 @@ from bt_api_py.feeds.live_yobit.spot import YobitRequestDataSpot
 from bt_api_py.registry import ExchangeRegistry
 
 # Import registration to auto-register YoBit
-import bt_api_py.feeds.register_yobit  # noqa: F401
+import bt_api_py.exchange_registers.register_yobit  # noqa: F401
 
 
 # ==================== Fixtures ====================

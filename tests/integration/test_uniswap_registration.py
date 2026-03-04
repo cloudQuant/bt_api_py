@@ -9,7 +9,7 @@ import pytest
 from unittest.mock import Mock, patch, MagicMock
 
 # Import the registration module to ensure Uniswap is registered
-import bt_api_py.feeds.register_uniswap  # noqa: F401 - module import triggers registration
+import bt_api_py.exchange_registers.register_uniswap  # noqa: F401 - module import triggers registration
 
 from bt_api_py.registry import ExchangeRegistry
 from bt_api_py.feeds.live_uniswap.spot import UniswapRequestDataSpot
@@ -33,7 +33,7 @@ class TestUniswapRegistration:
     def test_uniswap_feed_class_correct(self):
         """Test that the registered feed class is correct."""
         # Access the internal registry to verify the class
-        from bt_api_py.feeds.register_uniswap import UniswapRequestDataSpot as RegisteredSpot
+        from bt_api_py.exchange_registers.register_uniswap import UniswapRequestDataSpot as RegisteredSpot
 
         # The class in registry should match the imported class
         assert ExchangeRegistry._feed_classes.get("UNISWAP___DEX") == UniswapRequestDataSpot

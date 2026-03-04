@@ -454,7 +454,7 @@ class TestAuth:
 class TestRegistry:
     def test_poloniex_spot_registered(self):
         from bt_api_py.registry import ExchangeRegistry
-        import bt_api_py.feeds.register_poloniex  # noqa: F401
+        import bt_api_py.exchange_registers.register_poloniex  # noqa: F401
         assert ExchangeRegistry.has_exchange("POLONIEX___SPOT")
         assert ExchangeRegistry._feed_classes["POLONIEX___SPOT"] is PoloniexRequestDataSpot
 

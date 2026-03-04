@@ -19,7 +19,7 @@ from bt_api_py.feeds.live_bitmart.spot import BitmartRequestDataSpot
 from bt_api_py.feeds.capability import Capability
 from bt_api_py.registry import ExchangeRegistry
 
-import bt_api_py.feeds.register_bitmart  # noqa: F401
+import bt_api_py.exchange_registers.register_bitmart  # noqa: F401
 
 
 # ── fixtures ────────────────────────────────────────────────────

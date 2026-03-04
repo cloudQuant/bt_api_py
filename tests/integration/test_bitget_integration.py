@@ -98,7 +98,7 @@ def test_bitget_feed_instantiation():
 def test_bitget_registration():
     """Test Bitget registration module"""
     try:
-        from bt_api_py.feeds.register_bitget import register_bitget, _bitget_spot_subscribe_handler
+        from bt_api_py.exchange_registers.register_bitget import register_bitget, _bitget_spot_subscribe_handler
         print("✓ Bitget registration module imported successfully")
 
         # Test registration function exists

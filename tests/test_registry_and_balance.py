@@ -68,7 +68,7 @@ class TestExchangeRegistry:
 
     def test_binance_registered(self):
         """验证 Binance 在 import 后已注册"""
-        import bt_api_py.feeds.register_binance  # noqa: F401
+        import bt_api_py.exchange_registers.register_binance  # noqa: F401
         assert ExchangeRegistry.has_exchange("BINANCE___SWAP")
         assert ExchangeRegistry.has_exchange("BINANCE___SPOT")
         assert ExchangeRegistry.get_balance_handler("BINANCE___SWAP") is not None
@@ -76,7 +76,7 @@ class TestExchangeRegistry:
 
     def test_okx_registered(self):
         """验证 OKX 在 import 后已注册"""
-        import bt_api_py.feeds.register_okx  # noqa: F401
+        import bt_api_py.exchange_registers.register_okx  # noqa: F401
         assert ExchangeRegistry.has_exchange("OKX___SWAP")
         assert ExchangeRegistry.has_exchange("OKX___SPOT")
         assert ExchangeRegistry.get_balance_handler("OKX___SWAP") is not None

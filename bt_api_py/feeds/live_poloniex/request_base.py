@@ -12,11 +12,11 @@ from urllib.parse import urlencode
 
 from bt_api_py.containers.exchanges.poloniex_exchange_data import PoloniexExchangeDataSpot
 from bt_api_py.containers.requestdatas.request_data import RequestData
-from bt_api_py.error_framework import ErrorTranslator
+from bt_api_py.error import ErrorTranslator
 from bt_api_py.feeds.capability import Capability
 from bt_api_py.feeds.feed import Feed
-from bt_api_py.functions.log_message import SpdLogManager
 from bt_api_py.rate_limiter import RateLimiter, RateLimitRule, RateLimitScope, RateLimitType
+from bt_api_py.logging_factory import get_logger
 
 
 class PoloniexErrorTranslator(ErrorTranslator):
@@ -101,12 +101,8 @@ class PoloniexRequestData(Feed):
         self.asset_type = kwargs.get("asset_type", "SPOT")
         self.logger_name = kwargs.get("logger_name", "poloniex_feed.log")
         self._params = PoloniexExchangeDataSpot()
-        self.request_logger = SpdLogManager(
-            "./logs/" + self.logger_name, "request", 0, 0, False
-        ).create_logger()
-        self.async_logger = SpdLogManager(
-            "./logs/" + self.logger_name, "async_request", 0, 0, False
-        ).create_logger()
+        self.request_logger = get_logger("poloniex_feed")
+        self.async_logger = get_logger("poloniex_feed")
         self._error_translator = PoloniexErrorTranslator()
         self._rate_limiter = kwargs.get("rate_limiter", self._create_default_rate_limiter())
 

@@ -14,8 +14,8 @@ from bt_api_py.containers.tickers.htx_ticker import HtxRequestTickerData
 from bt_api_py.containers.trades.htx_trade import HtxRequestTradeData
 from bt_api_py.feeds.live_htx.request_base import HtxRequestData
 from bt_api_py.feeds.my_websocket_app import MyWebsocketApp
-from bt_api_py.functions.log_message import SpdLogManager
-from bt_api_py.functions.utils import get_project_log_path, update_extra_data
+from bt_api_py.functions.utils import update_extra_data
+from bt_api_py.logging_factory import get_logger
 
 
 class HtxRequestDataSpot(HtxRequestData):
@@ -26,12 +26,8 @@ class HtxRequestDataSpot(HtxRequestData):
         self.asset_type = kwargs.get("asset_type", "SPOT")
         self.logger_name = kwargs.get("logger_name", "htx_spot_feed.log")
         self._params = HtxExchangeDataSpot()
-        self.request_logger = SpdLogManager(
-            get_project_log_path(self.logger_name), "request", 0, 0, False
-        ).create_logger()
-        self.async_logger = SpdLogManager(
-            get_project_log_path(self.logger_name), "async_request", 0, 0, False
-        ).create_logger()
+        self.request_logger = get_logger("request")
+        self.async_logger = get_logger("async_request")
 
     # ==================== Market Data Methods ====================
 
@@ -709,9 +705,7 @@ class HtxMarketWssDataSpot(MyWebsocketApp):
         self.asset_type = kwargs.get("asset_type", "SPOT")
         self.exchange_name = kwargs.get("exchange_name", "HTX")
         self._params = kwargs.get("exchange_data", HtxExchangeDataSpot())
-        self.logger = SpdLogManager(
-            get_project_log_path("htx_market_wss.log"), "htx_market_wss", 0, 0, False
-        ).create_logger()
+        self.logger = get_logger("htx_market_wss")
 
     def open_rsp(self):
         self.wss_logger.info(
@@ -833,9 +827,7 @@ class HtxAccountWssDataSpot(MyWebsocketApp):
         self.public_key = kwargs.get("public_key", "")
         self.private_key = kwargs.get("private_key", "")
         self._params = params
-        self.logger = SpdLogManager(
-            get_project_log_path("htx_account_wss.log"), "htx_account_wss", 0, 0, False
-        ).create_logger()
+        self.logger = get_logger("htx_account_wss")
 
     def _build_auth_params(self):
         """Build authentication message for HTX v2 WebSocket."""

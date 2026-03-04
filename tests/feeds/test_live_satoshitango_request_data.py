@@ -17,7 +17,7 @@ from bt_api_py.feeds.live_satoshitango.spot import SatoshiTangoRequestDataSpot
 from bt_api_py.registry import ExchangeRegistry
 
 # Import registration to auto-register SatoshiTango
-import bt_api_py.feeds.register_satoshitango  # noqa: F401
+import bt_api_py.exchange_registers.register_satoshitango  # noqa: F401
 
 
 def init_req_feed():

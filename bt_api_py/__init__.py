@@ -9,4 +9,4 @@ from bt_api_py.balance_utils import nested_balance_handler, simple_balance_handl
 from bt_api_py.event_bus import EventBus
 from bt_api_py.exceptions import BtApiError, ExchangeNotFoundError
 from bt_api_py.registry import ExchangeRegistry
-from bt_api_py.symbol_manager import SymbolManager
+from bt_api_py.instrument_manager import InstrumentManager, get_instrument_manager

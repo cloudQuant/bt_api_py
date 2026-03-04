@@ -19,8 +19,8 @@ from bt_api_py.containers.trades.hyperliquid_trade import HyperliquidSpotWssTrad
 from bt_api_py.feeds.live_hyperliquid.market_wss_base import HyperliquidMarketWssData
 from bt_api_py.feeds.live_hyperliquid.account_wss_base import HyperliquidAccountWssData
 from bt_api_py.feeds.live_hyperliquid.request_base import HyperliquidRequestData
-from bt_api_py.functions.log_message import SpdLogManager
 from bt_api_py.functions.utils import update_extra_data
+from bt_api_py.logging_factory import get_logger
 from bt_api_py.utils.hyperliquid_types import (
     LIMIT_ORDER,
     MARKET_ORDER,
@@ -38,12 +38,8 @@ class HyperliquidRequestDataSpot(HyperliquidRequestData):
         self.asset_type = kwargs.get("asset_type", "SPOT")
         self.logger_name = kwargs.get("logger_name", "hyperliquid_spot_feed.log")
         self._params = HyperliquidExchangeDataSpot()
-        self.request_logger = SpdLogManager(
-            "./logs/" + self.logger_name, "request", 0, 0, False
-        ).create_logger()
-        self.async_logger = SpdLogManager(
-            "./logs/" + self.logger_name, "async_request", 0, 0, False
-        ).create_logger()
+        self.request_logger = get_logger("hyperliquid_spot_feed")
+        self.async_logger = get_logger("hyperliquid_spot_feed")
 
     # ── Standard Interface: make_order ──────────────────────────────
 
@@ -262,12 +258,8 @@ class HyperliquidMarketWssDataSpot(HyperliquidMarketWssData):
         self.symbols = kwargs.get("symbols", [])
         self.logger_name = kwargs.get("logger_name", "hyperliquid_spot_market_wss.log")
         self._params = HyperliquidExchangeDataSpot()
-        self.request_logger = SpdLogManager(
-            "./logs/" + self.logger_name, "request", 0, 0, False
-        ).create_logger()
-        self.async_logger = SpdLogManager(
-            "./logs/" + self.logger_name, "async_request", 0, 0, False
-        ).create_logger()
+        self.request_logger = get_logger("hyperliquid_spot_market_wss")
+        self.async_logger = get_logger("hyperliquid_spot_market_wss")
 
     def subscribe_ticker(self, symbol):
         """Subscribe to ticker data for symbol"""
@@ -389,12 +381,8 @@ class HyperliquidAccountWssDataSpot(HyperliquidAccountWssData):
         self.user_address = kwargs.get("user_address", "")
         self.logger_name = kwargs.get("logger_name", "hyperliquid_spot_account_wss.log")
         self._params = HyperliquidExchangeDataSpot()
-        self.request_logger = SpdLogManager(
-            "./logs/" + self.logger_name, "request", 0, 0, False
-        ).create_logger()
-        self.async_logger = SpdLogManager(
-            "./logs/" + self.logger_name, "async_request", 0, 0, False
-        ).create_logger()
+        self.request_logger = get_logger("hyperliquid_spot_account_wss")
+        self.async_logger = get_logger("hyperliquid_spot_account_wss")
 
     def subscribe_order_updates(self):
         """Subscribe to order updates"""

@@ -11,7 +11,7 @@ from bt_api_py.containers.requestdatas.request_data import RequestData
 from bt_api_py.feeds.capability import Capability
 from bt_api_py.feeds.feed import Feed
 from bt_api_py.feeds.http_client import HttpClient
-from bt_api_py.functions.log_message import SpdLogManager
+from bt_api_py.logging_factory import get_logger
 
 
 class BitbankRequestData(Feed):
@@ -36,12 +36,8 @@ class BitbankRequestData(Feed):
         self.exchange_name = kwargs.get("exchange_name", "BITBANK___SPOT")
         self.asset_type = kwargs.get("asset_type", "SPOT")
         self._params = BitbankExchangeDataSpot()
-        self.request_logger = SpdLogManager(
-            "./logs/bitbank_feed.log", "request", 0, 0, False
-        ).create_logger()
-        self.async_logger = SpdLogManager(
-            "./logs/bitbank_feed.log", "async_request", 0, 0, False
-        ).create_logger()
+        self.request_logger = get_logger("bitbank_feed")
+        self.async_logger = get_logger("bitbank_feed")
         self._http_client = HttpClient(venue=self.exchange_name, timeout=10)
 
     def _generate_signature(self, timestamp, time_window, message):

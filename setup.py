@@ -237,11 +237,8 @@ setup(
     long_description_content_type="text/markdown",
     url="https://github.com/cloudQuant/bt_api_py",
     python_requires=">=3.11",
-    install_requires=[
-        "cython",
-        "numpy",
-        "python-dotenv",
-    ],
+    # Dependencies are defined in pyproject.toml [project.dependencies]
+    # install_requires is intentionally omitted to avoid duplication
     ext_modules=[CYTHON_EXT, CTP_EXT],
     cmdclass={
         "build_ext": _BuildExt,

@@ -14,8 +14,8 @@ from bt_api_py.containers.exchanges.gmx_exchange_data import (
 from bt_api_py.containers.requestdatas.request_data import RequestData
 from bt_api_py.feeds.capability import Capability
 from bt_api_py.feeds.live_gmx.request_base import GmxRequestData
-from bt_api_py.functions.log_message import SpdLogManager
 from bt_api_py.functions.utils import update_extra_data
+from bt_api_py.logging_factory import get_logger
 
 
 class GmxRequestDataSpot(GmxRequestData):
@@ -57,9 +57,7 @@ class GmxRequestDataSpot(GmxRequestData):
             self.chain = chain_value
 
         self._params = GmxExchangeDataSpot(self.chain)
-        self.request_logger = SpdLogManager(
-            "./logs/gmx_feed.log", "request", 0, 0, False
-        ).create_logger()
+        self.request_logger = get_logger("gmx_feed")
 
     # ==================== Ticker/Price Queries ====================
 

@@ -7,8 +7,8 @@ from bt_api_py.containers.orders.bybit_order import BybitSwapOrderData
 from bt_api_py.containers.balances.bybit_balance import BybitSwapBalanceData
 from bt_api_py.containers.requestdatas.request_data import RequestData
 from bt_api_py.feeds.live_bybit.request_base import BybitRequestData
-from bt_api_py.functions.log_message import SpdLogManager
 from bt_api_py.functions.utils import update_extra_data
+from bt_api_py.logging_factory import get_logger
 
 
 class BybitRequestDataSwap(BybitRequestData):
@@ -19,12 +19,8 @@ class BybitRequestDataSwap(BybitRequestData):
         kwargs.setdefault("logger_name", "bybit_swap_feed.log")
         super().__init__(data_queue, **kwargs)
         self._params = BybitExchangeDataSwap()
-        self.request_logger = SpdLogManager(
-            self.logger_name, "request", 0, 0, False
-        ).create_logger()
-        self.async_logger = SpdLogManager(
-            self.logger_name, "async_request", 0, 0, False
-        ).create_logger()
+        self.request_logger = get_logger("request")
+        self.async_logger = get_logger("async_request")
 
     # ==================== Market Data Methods ====================
 

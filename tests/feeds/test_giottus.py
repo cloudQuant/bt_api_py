@@ -17,7 +17,7 @@ from bt_api_py.feeds.live_giottus.spot import GiottusRequestDataSpot
 from bt_api_py.registry import ExchangeRegistry
 
 # Import registration to auto-register Giottus
-import bt_api_py.feeds.register_giottus  # noqa: F401
+import bt_api_py.exchange_registers.register_giottus  # noqa: F401
 
 
 @pytest.fixture

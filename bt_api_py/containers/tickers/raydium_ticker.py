@@ -7,7 +7,7 @@ import time
 from typing import Optional, Dict, Any
 
 from bt_api_py.containers.tickers.ticker import TickerData
-from bt_api_py.functions.log_message import SpdLogManager
+from bt_api_py.logging_factory import get_logger
 
 
 class RaydiumRequestTickerData(TickerData):
@@ -25,9 +25,7 @@ class RaydiumRequestTickerData(TickerData):
             asset_type: Asset type (e.g., 'DEX')
         """
         super().__init__(data, symbol, asset_type)
-        self.logger = SpdLogManager(
-            "./logs/raydium_ticker.log", "ticker", 0, 0, False
-        ).create_logger()
+        self.logger = get_logger("raydium_ticker")
         self._parse_data(data)
 
     def _parse_data(self, data: Dict[str, Any]):

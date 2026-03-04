@@ -10,11 +10,9 @@ IB Web API 分为两大组件:
 import os
 
 from bt_api_py.containers.exchanges.exchange_data import ExchangeData
-from bt_api_py.functions.log_message import SpdLogManager
+from bt_api_py.logging_factory import get_logger
 
-logger = SpdLogManager(
-    file_name="ib_web_exchange_data.log", logger_name="ib_web_data", print_info=False
-).create_logger()
+logger = get_logger("ib_web_exchange_data")
 
 # ── 配置加载缓存 ──────────────────────────────────────────────
 _ib_config = None  # pydantic ExchangeConfig 对象

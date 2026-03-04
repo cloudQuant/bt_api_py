@@ -15,7 +15,7 @@ from bt_api_py.containers.exchanges.kraken_exchange_data import KrakenExchangeDa
 from bt_api_py.containers.requestdatas.request_data import RequestData
 from bt_api_py.feeds.capability import Capability
 from bt_api_py.feeds.feed import Feed
-from bt_api_py.functions.log_message import SpdLogManager
+from bt_api_py.logging_factory import get_logger
 
 
 class KrakenRequestData(Feed):
@@ -51,12 +51,8 @@ class KrakenRequestData(Feed):
         self.exchange_name = kwargs.get("exchange_name", "KRAKEN")
         self.logger_name = kwargs.get("logger_name", "kraken_feed.log")
         self._params = KrakenExchangeDataSpot()
-        self.request_logger = SpdLogManager(
-            self.logger_name, "request", 0, 0, False
-        ).create_logger()
-        self.async_logger = SpdLogManager(
-            self.logger_name, "async_request", 0, 0, False
-        ).create_logger()
+        self.request_logger = get_logger("request")
+        self.async_logger = get_logger("async_request")
         self._nonce = int(time.time() * 1000)
 
     def _generate_nonce(self):

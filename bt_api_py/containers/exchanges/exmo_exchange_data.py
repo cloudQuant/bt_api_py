@@ -4,11 +4,9 @@ EXMO Exchange Data Configuration
 
 import os
 from bt_api_py.containers.exchanges.exchange_data import ExchangeData
-from bt_api_py.functions.log_message import SpdLogManager
+from bt_api_py.logging_factory import get_logger
 
-logger = SpdLogManager(
-    file_name="exmo_exchange_data.log", logger_name="exmo_data", print_info=False
-).create_logger()
+logger = get_logger("exmo_exchange_data")
 
 _exmo_config = None
 _exmo_config_loaded = False

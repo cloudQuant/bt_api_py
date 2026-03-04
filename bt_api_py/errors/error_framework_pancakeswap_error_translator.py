@@ -4,7 +4,7 @@ PancakeSwap Error Translator
 Translate PancakeSwap-specific errors to unified error codes
 """
 
-from bt_api_py.error_framework import ErrorTranslator
+from bt_api_py.error import ErrorTranslator
 
 
 class PancakeSwapErrorTranslator(ErrorTranslator):

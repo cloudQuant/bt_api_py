@@ -7,11 +7,9 @@ Endpoints use /{pair}/ suffix for market data.
 
 import os
 from bt_api_py.containers.exchanges.exchange_data import ExchangeData
-from bt_api_py.functions.log_message import SpdLogManager
+from bt_api_py.logging_factory import get_logger
 
-logger = SpdLogManager(
-    file_name="bitstamp_exchange_data.log", logger_name="bitstamp_data", print_info=False
-).create_logger()
+logger = get_logger("bitstamp_exchange_data")
 
 _bitstamp_config = None
 _bitstamp_config_loaded = False

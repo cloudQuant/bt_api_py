@@ -41,13 +41,13 @@ from bt_api_py.containers.tickers.binance_ticker import (
 from bt_api_py.containers.trades.binance_trade import (
     BinanceRequestTradeData,
 )
-from bt_api_py.error_framework import BinanceErrorTranslator
+from bt_api_py.error import BinanceErrorTranslator
 from bt_api_py.feeds.capability import Capability
 from bt_api_py.feeds.feed import Feed
 from bt_api_py.functions.calculate_time import datetime2timestamp
-from bt_api_py.functions.log_message import SpdLogManager
 from bt_api_py.functions.utils import update_extra_data
 from bt_api_py.rate_limiter import RateLimiter, RateLimitRule, RateLimitScope, RateLimitType
+from bt_api_py.logging_factory import get_logger
 
 # session = requests.Session()
 # session.keep_alive = False
@@ -96,12 +96,8 @@ class BinanceRequestData(Feed):
         self.asset_type = kwargs.get("asset_type", "SWAP")
         self.logger_name = kwargs.get("logger_name", "binance_swap_feed.log")
         self._params = kwargs.get("exchange_data", BinanceExchangeDataSwap())
-        self.request_logger = SpdLogManager(
-            "./logs/" + self.logger_name, "request", 0, 0, False
-        ).create_logger()
-        self.async_logger = SpdLogManager(
-            "./logs/" + self.logger_name, "async_request", 0, 0, False
-        ).create_logger()
+        self.request_logger = get_logger("binance_swap_feed")
+        self.async_logger = get_logger("binance_swap_feed")
         self._error_translator = BinanceErrorTranslator()
         self._rate_limiter = kwargs.get("rate_limiter", self._create_default_rate_limiter())
         # self.start_loop()  # 在开始订阅数据的时候启动

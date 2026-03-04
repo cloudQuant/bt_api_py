@@ -7,7 +7,7 @@ import time
 from typing import Optional, Dict, Any, List, Tuple
 
 from bt_api_py.containers.orderbooks.orderbook import OrderBookData
-from bt_api_py.functions.log_message import SpdLogManager
+from bt_api_py.logging_factory import get_logger
 
 
 class KrakenRequestOrderBookData(OrderBookData):
@@ -26,9 +26,7 @@ class KrakenRequestOrderBookData(OrderBookData):
         # Store symbol and asset_type before parsing
         self.symbol = symbol
         self.asset_type = asset_type
-        self.logger = SpdLogManager(
-            "./logs/kraken_orderbook.log", "orderbook", 0, 0, False
-        ).create_logger()
+        self.logger = get_logger("kraken_orderbook")
         self._parse_data(data)
 
     def init_data(self):

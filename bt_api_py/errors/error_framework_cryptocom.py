@@ -2,7 +2,7 @@
 Crypto.com Error Translator
 """
 
-from bt_api_py.error_framework import ErrorTranslator, UnifiedErrorCode
+from bt_api_py.error import ErrorTranslator, UnifiedErrorCode
 
 
 class CryptoComErrorTranslator(ErrorTranslator):

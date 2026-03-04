@@ -4,8 +4,8 @@ Kraken Futures Trading Feed Implementation
 
 from bt_api_py.containers.exchanges.kraken_exchange_data import KrakenExchangeDataFutures
 from bt_api_py.feeds.live_kraken.request_base import KrakenRequestData
-from bt_api_py.functions.log_message import SpdLogManager
 from bt_api_py.functions.utils import update_extra_data
+from bt_api_py.logging_factory import get_logger
 
 
 class KrakenRequestDataFutures(KrakenRequestData):
@@ -17,12 +17,8 @@ class KrakenRequestDataFutures(KrakenRequestData):
         super().__init__(data_queue, **kwargs)
         self._params = KrakenExchangeDataFutures()
         self.asset_type = "FUTURES"
-        self.request_logger = SpdLogManager(
-            self.logger_name, "request", 0, 0, False
-        ).create_logger()
-        self.async_logger = SpdLogManager(
-            self.logger_name, "async_request", 0, 0, False
-        ).create_logger()
+        self.request_logger = get_logger("request")
+        self.async_logger = get_logger("async_request")
 
     # ==================== Market Data Methods ====================
 

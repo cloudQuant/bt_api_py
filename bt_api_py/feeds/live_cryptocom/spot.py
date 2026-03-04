@@ -4,7 +4,7 @@ Crypto.com Spot trading feed implementation.
 
 from bt_api_py.containers.exchanges.cryptocom_exchange_data import CryptoComExchangeDataSpot
 from bt_api_py.feeds.live_cryptocom.request_base import CryptoComRequestData
-from bt_api_py.functions.log_message import SpdLogManager
+from bt_api_py.logging_factory import get_logger
 
 
 class CryptoComRequestDataSpot(CryptoComRequestData):
@@ -22,12 +22,8 @@ class CryptoComRequestDataSpot(CryptoComRequestData):
         self.exchange_name = kwargs.get("exchange_name", "CRYPTOCOM___SPOT")
         self.logger_name = kwargs.get("logger_name", "cryptocom_spot_feed.log")
         self._params = CryptoComExchangeDataSpot()
-        self.request_logger = SpdLogManager(
-            "./logs/" + self.logger_name, "request", 0, 0, False
-        ).create_logger()
-        self.async_logger = SpdLogManager(
-            "./logs/" + self.logger_name, "async_request", 0, 0, False
-        ).create_logger()
+        self.request_logger = get_logger("cryptocom_spot_feed")
+        self.async_logger = get_logger("cryptocom_spot_feed")
 
     # ==================== Public — Server Time ====================
 

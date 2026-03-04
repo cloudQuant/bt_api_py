@@ -10,10 +10,11 @@ from urllib.parse import urlencode
 
 from bt_api_py.containers.exchanges.dydx_exchange_data import DydxExchangeDataSwap
 from bt_api_py.containers.requestdatas.request_data import RequestData
-from bt_api_py.error_framework import ErrorTranslator
+from bt_api_py.error import ErrorTranslator
 from bt_api_py.feeds.capability import Capability
 from bt_api_py.feeds.feed import Feed
 from bt_api_py.rate_limiter import RateLimiter, RateLimitRule, RateLimitScope, RateLimitType
+from bt_api_py.logging_factory import get_logger
 
 
 class DydxErrorTranslator(ErrorTranslator):
@@ -82,13 +83,8 @@ class DydxRequestData(Feed):
             self._params.wss_url = self._params.testnet_wss_url
 
         # Logging
-        from bt_api_py.functions.log_message import SpdLogManager
-        self.request_logger = SpdLogManager(
-            "./logs/" + self.logger_name, "request", 0, 0, False
-        ).create_logger()
-        self.async_logger = SpdLogManager(
-            "./logs/" + self.logger_name, "async_request", 0, 0, False
-        ).create_logger()
+        self.request_logger = get_logger("dydx_swap_feed")
+        self.async_logger = get_logger("dydx_swap_feed")
 
         # Error handling and rate limiting
         self._error_translator = DydxErrorTranslator()

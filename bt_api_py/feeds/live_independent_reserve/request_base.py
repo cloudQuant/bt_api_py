@@ -18,7 +18,7 @@ from bt_api_py.containers.exchanges.independent_reserve_exchange_data import (
 from bt_api_py.containers.requestdatas.request_data import RequestData
 from bt_api_py.feeds.capability import Capability
 from bt_api_py.feeds.feed import Feed
-from bt_api_py.functions.log_message import SpdLogManager
+from bt_api_py.logging_factory import get_logger
 
 
 class IndependentReserveRequestData(Feed):
@@ -46,12 +46,8 @@ class IndependentReserveRequestData(Feed):
         self.asset_type = kwargs.get("asset_type", "SPOT")
         self.exchange_name = kwargs.get("exchange_name", "INDEPENDENT_RESERVE___SPOT")
         self._params = IndependentReserveExchangeDataSpot()
-        self.request_logger = SpdLogManager(
-            "./logs/independent_reserve_feed.log", "request", 0, 0, False
-        ).create_logger()
-        self.async_logger = SpdLogManager(
-            "./logs/independent_reserve_feed.log", "async_request", 0, 0, False
-        ).create_logger()
+        self.request_logger = get_logger("independent_reserve_feed")
+        self.async_logger = get_logger("independent_reserve_feed")
 
     @property
     def api_key(self):

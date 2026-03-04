@@ -95,7 +95,7 @@ class TestCtpImports:
     def test_ctp_registry(self):
         """验证 CTP 在 ExchangeRegistry 中已注册"""
         from bt_api_py.registry import ExchangeRegistry
-        import bt_api_py.feeds.register_ctp  # noqa: F401
+        import bt_api_py.exchange_registers.register_ctp  # noqa: F401
         assert ExchangeRegistry.has_exchange("CTP___FUTURE")
         assert ExchangeRegistry.get_balance_handler("CTP___FUTURE") is not None
         assert ExchangeRegistry.get_stream_class("CTP___FUTURE", "subscribe") is not None
@@ -264,7 +264,7 @@ class TestCtpContainerParsing:
     def test_balance_handler(self):
         from bt_api_py.registry import ExchangeRegistry
         from bt_api_py.containers.ctp.ctp_account import CtpAccountData
-        import bt_api_py.feeds.register_ctp  # noqa: F401
+        import bt_api_py.exchange_registers.register_ctp  # noqa: F401
 
         account = CtpAccountData({
             'AccountID': 'TEST', 'Balance': 100000.0,

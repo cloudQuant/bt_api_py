@@ -19,8 +19,8 @@ from bt_api_py.containers.tickers.binance_ticker import BinanceRequestTickerData
 from bt_api_py.containers.trades.binance_trade import BinanceRequestTradeData
 from bt_api_py.feeds.capability import Capability
 from bt_api_py.feeds.live_pancakeswap.request_base import PancakeSwapRequestData
-from bt_api_py.functions.log_message import SpdLogManager
 from bt_api_py.functions.utils import update_extra_data
+from bt_api_py.logging_factory import get_logger
 
 
 class PancakeSpotRequestData(PancakeSwapRequestData):
@@ -43,9 +43,7 @@ class PancakeSpotRequestData(PancakeSwapRequestData):
         super().__init__(data_queue, **kwargs)
         self.asset_type = kwargs.get("asset_type", "SPOT")
         self.logger_name = kwargs.get("logger_name", "pancakeswap_spot.log")
-        self.request_logger = SpdLogManager(
-            "./logs/" + self.logger_name, "request", 0, 0, False
-        ).create_logger()
+        self.request_logger = get_logger("pancakeswap_spot")
 
     # ==================== Market Data Methods ====================
 

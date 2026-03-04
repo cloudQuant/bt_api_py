@@ -17,7 +17,7 @@ from bt_api_py.feeds.live_ripio.spot import RipioRequestDataSpot
 from bt_api_py.registry import ExchangeRegistry
 
 # Import registration to auto-register Ripio
-import bt_api_py.feeds.register_ripio  # noqa: F401
+import bt_api_py.exchange_registers.register_ripio  # noqa: F401
 
 
 def init_req_feed():

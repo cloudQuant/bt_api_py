@@ -19,7 +19,7 @@ from bt_api_py.feeds.live_latoken.spot import (
 )
 from bt_api_py.registry import ExchangeRegistry
 
-import bt_api_py.feeds.register_latoken  # noqa: F401
+import bt_api_py.exchange_registers.register_latoken  # noqa: F401
 
 # ── sample response fixtures ─────────────────────────────────
 

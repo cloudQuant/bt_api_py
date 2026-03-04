@@ -175,7 +175,7 @@ def test_gemini_error_handling():
     print("\n=== Testing Error Handling ===")
 
     try:
-        from bt_api_py.error_framework_gemini import GeminiErrorTranslator
+        from bt_api_py.errors.error_framework_gemini import GeminiErrorTranslator
 
         # Test error translation
         test_errors = [

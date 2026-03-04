@@ -15,7 +15,7 @@ from bt_api_py.feeds.live_coinex.request_base import CoinExRequestData
 from bt_api_py.feeds.live_coinex.spot import CoinExRequestDataSpot
 from bt_api_py.registry import ExchangeRegistry
 
-import bt_api_py.feeds.register_coinex  # noqa: F401
+import bt_api_py.exchange_registers.register_coinex  # noqa: F401
 
 # ── sample V2 response fixtures ──────────────────────────────
 

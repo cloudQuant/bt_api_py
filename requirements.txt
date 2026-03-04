@@ -1,28 +1,39 @@
-requests
-numpy==1.26.4
-websocket-client
-pyyaml
-pandas
-aiohttp
-spdlog
-matplotlib
-pyecharts
-cython
-setuptools
-pytz
-aiosmtplib
-ntplib
-pytest
-pytest_benchmark
-pytest-sugar
-pytest-cov
-pytest-picked
-pytest-xdist
-pytest-html
-pytest-rerunfailures
-python-rapidjson
-python-dotenv
-backports.tarfile
-ruff
-mypy
-pre-commit
+# Core dependencies (matching pyproject.toml)
+cython>=3.0.0
+numpy>=1.26.0,<2.0.0
+python-dotenv>=1.0.0
+requests>=2.31.0
+websocket-client>=1.6.0
+pyyaml>=6.0
+pandas>=2.0.0
+aiohttp>=3.9.0
+spdlog>=2.0.0
+pytz>=2023.3
+python-rapidjson>=1.10
+httpx>=0.27.0
+
+# Optional: visualization
+matplotlib>=3.7.0
+pyecharts>=2.0.0
+
+# Optional: email
+aiosmtplib>=2.0.0
+
+# Optional: time sync
+ntplib>=0.4.0
+
+# Build
+setuptools>=64
+
+# Dev dependencies
+pytest>=7.0
+pytest-benchmark>=4.0.0
+pytest-sugar>=1.0.0
+pytest-cov>=4.0.0
+pytest-picked>=0.5.0
+pytest-xdist>=3.0.0
+pytest-html>=4.0.0
+pytest-rerunfailures>=12.0
+ruff>=0.1.0
+mypy>=1.0
+pre-commit>=3.0.0

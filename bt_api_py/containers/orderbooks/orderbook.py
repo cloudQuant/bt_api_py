@@ -2,8 +2,10 @@
 
 # import json
 
+from bt_api_py.containers.auto_init_mixin import AutoInitMixin
 
-class OrderBookData:
+
+class OrderBookData(AutoInitMixin):
     """保存订单簿相关信息"""
 
     def __init__(self, order_book_info, has_been_json_encoded=False):

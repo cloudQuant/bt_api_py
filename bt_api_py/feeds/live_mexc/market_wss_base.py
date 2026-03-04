@@ -1,3 +1,4 @@
+from bt_api_py.logging_factory import get_logger
 """
 MEXC Market WebSocket Base Class
 
@@ -38,10 +39,7 @@ class MexcMarketWssData:
 
     def _setup_logger(self):
         """Setup logger for the WebSocket connection"""
-        from bt_api_py.functions.log_message import SpdLogManager
-        self.request_logger = SpdLogManager(
-            "./logs/" + self.logger_name, "request", 0, 0, False
-        ).create_logger()
+                self.request_logger = get_logger("mexc_market_wss")
 
     def start(self):
         """Start the WebSocket connection"""

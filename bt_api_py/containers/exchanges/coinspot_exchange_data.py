@@ -10,11 +10,9 @@ No WebSocket support.
 
 import os
 from bt_api_py.containers.exchanges.exchange_data import ExchangeData
-from bt_api_py.functions.log_message import SpdLogManager
+from bt_api_py.logging_factory import get_logger
 
-logger = SpdLogManager(
-    file_name="coinspot_exchange_data.log", logger_name="coinspot_data", print_info=False
-).create_logger()
+logger = get_logger("coinspot_exchange_data")
 
 _coinspot_config = None
 _coinspot_config_loaded = False

@@ -4,11 +4,10 @@ CTP 账户数据容器
 """
 
 from bt_api_py.containers.accounts.account import AccountData
-from bt_api_py.containers.auto_init_mixin import AutoInitMixin
 from bt_api_py.functions.utils import from_dict_get_float, from_dict_get_string
 
 
-class CtpAccountData(AutoInitMixin, AccountData):
+class CtpAccountData(AccountData):
     """CTP 账户资金数据"""
 
     def __init__(

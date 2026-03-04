@@ -6,7 +6,7 @@
 import traceback
 from collections import defaultdict
 
-from bt_api_py.functions.log_message import SpdLogManager
+from bt_api_py.logging_factory import get_logger
 
 
 class EventBus:
@@ -14,10 +14,7 @@ class EventBus:
 
     def __init__(self, logger=None):
         self._handlers = defaultdict(list)  # event_type -> [callback_func, ...]
-        self.logger = (
-            logger
-            or SpdLogManager("./logs/event_bus.log", "event_bus", 0, 0, False).create_logger()
-        )
+        self.logger = logger or get_logger("event_bus")
 
     def on(self, event_type, handler):
         """注册事件处理函数

@@ -12,7 +12,7 @@ from bt_api_py.containers.exchanges.zebpay_exchange_data import ZebpayExchangeDa
 from bt_api_py.containers.requestdatas.request_data import RequestData
 from bt_api_py.feeds.capability import Capability
 from bt_api_py.feeds.feed import Feed
-from bt_api_py.functions.log_message import SpdLogManager
+from bt_api_py.logging_factory import get_logger
 
 
 class ZebpayRequestData(Feed):
@@ -41,12 +41,8 @@ class ZebpayRequestData(Feed):
         self.api_key = kwargs.get("public_key", kwargs.get("api_key", None))
         self.api_secret = kwargs.get("secret_key", kwargs.get("api_secret", None))
         self._params = ZebpayExchangeDataSpot()
-        self.request_logger = SpdLogManager(
-            "./logs/zebpay_feed.log", "request", 0, 0, False
-        ).create_logger()
-        self.async_logger = SpdLogManager(
-            "./logs/zebpay_feed.log", "async_request", 0, 0, False
-        ).create_logger()
+        self.request_logger = get_logger("zebpay_feed")
+        self.async_logger = get_logger("zebpay_feed")
 
     # ── auth ────────────────────────────────────────────────────
 

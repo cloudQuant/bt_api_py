@@ -45,7 +45,7 @@ from bt_api_py.feeds.live_gateio.swap import GateioRequestDataSwap
 from bt_api_py.registry import ExchangeRegistry
 
 # Import registration to auto-register Gate.io
-import bt_api_py.feeds.register_gateio  # noqa: F401
+import bt_api_py.exchange_registers.register_gateio  # noqa: F401
 
 SKIP_LIVE = os.environ.get("SKIP_LIVE_TESTS", "true").lower() == "true"
 

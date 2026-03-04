@@ -11,7 +11,7 @@ import websocket
 
 from bt_api_py.containers.requestdatas.request_data import RequestData
 from bt_api_py.feeds.feed import Feed
-from bt_api_py.functions.log_message import SpdLogManager
+from bt_api_py.logging_factory import get_logger
 
 
 class HyperliquidMarketWssData(Feed):
@@ -22,12 +22,8 @@ class HyperliquidMarketWssData(Feed):
         self.asset_type = kwargs.get("asset_type", "SPOT")
         self.logger_name = kwargs.get("logger_name", "hyperliquid_market_wss.log")
         self._params = kwargs.get("exchange_data", None)
-        self.request_logger = SpdLogManager(
-            "./logs/" + self.logger_name, "request", 0, 0, False
-        ).create_logger()
-        self.async_logger = SpdLogManager(
-            "./logs/" + self.logger_name, "async_request", 0, 0, False
-        ).create_logger()
+        self.request_logger = get_logger("hyperliquid_market_wss")
+        self.async_logger = get_logger("hyperliquid_market_wss")
 
         self.ws_url = kwargs.get("ws_url", self._params.wss_url if self._params else "wss://api.hyperliquid.xyz/ws")
         self.subscriptions = []

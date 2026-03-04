@@ -33,7 +33,6 @@ from bt_api_py.containers.trades.coinbase_trade import (
 from bt_api_py.containers.accounts.coinbase_account import CoinbaseSpotWssAccountData
 from bt_api_py.containers.balances.coinbase_balance import CoinbaseBalanceData
 from bt_api_py.feeds.live_coinbase.spot import CoinbaseRequestDataSpot
-from bt_api_py.feeds.register_coinbase import register_coinbase
 from bt_api_py.registry import ExchangeRegistry
 
 
@@ -43,7 +42,7 @@ class TestCoinbaseExchangeData:
     def test_exchange_data_base_initialization(self):
         """Test base CoinbaseExchangeData initialization"""
         data = CoinbaseExchangeData()
-        assert data.exchange_name == "coinbase"
+        assert data.exchange_name == "COINBASE___SPOT"
         assert data.rest_url == "https://api.coinbase.com/api/v3"
         assert isinstance(data.kline_periods, dict)
         assert "1m" in data.kline_periods
@@ -52,16 +51,16 @@ class TestCoinbaseExchangeData:
     def test_exchange_data_spot_initialization(self):
         """Test CoinbaseExchangeDataSpot initialization"""
         data = CoinbaseExchangeDataSpot()
-        assert data.exchange_name == "coinbase_spot"
-        assert "BTC-USD" in data.legal_currency or "USD" in data.legal_currency
+        assert data.exchange_name == "COINBASE___SPOT"
+        assert "USD" in data.legal_currency
 
     def test_get_symbol_conversion(self):
         """Test symbol format conversion"""
         data = CoinbaseExchangeDataSpot()
-        # Coinbase uses BASE-QUOTE format
+        # Coinbase uses BASE-QUOTE format natively
         symbol = data.get_symbol("BTC-USD")
-        # Should remove the dash for API calls
-        assert "-" not in symbol
+        # Coinbase keeps the dash in symbol format
+        assert symbol == "BTC-USD"
 
     def test_get_period_conversion(self):
         """Test kline period conversion"""
@@ -313,7 +312,7 @@ class TestCoinbaseRegistration:
     def test_registration(self):
         """Test that Coinbase registration works"""
         # Import to trigger registration
-        from bt_api_py.feeds import register_coinbase
+        import bt_api_py.exchange_registers.register_coinbase  # noqa: F401
 
         # Check that exchange is registered
         assert ExchangeRegistry.has_exchange("COINBASE___SPOT")
@@ -333,7 +332,7 @@ class TestCoinbaseRegistration:
 
     def test_get_registered_feed(self):
         """Test getting registered feed class"""
-        from bt_api_py.feeds import register_coinbase
+        import bt_api_py.exchange_registers.register_coinbase  # noqa: F401
 
         # Use create_feed to get an instance
         data_queue = Queue()
@@ -348,7 +347,7 @@ class TestCoinbaseRegistration:
 
     def test_get_registered_exchange_data(self):
         """Test getting registered exchange data class"""
-        from bt_api_py.feeds import register_coinbase
+        import bt_api_py.exchange_registers.register_coinbase  # noqa: F401
 
         # Use create_exchange_data to get an instance
         data = ExchangeRegistry.create_exchange_data("COINBASE___SPOT")
@@ -363,7 +362,7 @@ class TestCoinbaseConfig:
         """Test that config can be loaded"""
         data = CoinbaseExchangeDataSpot()
         # After loading from config
-        assert data.exchange_name == "coinbase_spot"
+        assert data.exchange_name == "COINBASE___SPOT"
         assert isinstance(data.rest_paths, dict)
         assert len(data.rest_paths) > 0
 

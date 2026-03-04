@@ -7,8 +7,8 @@ from bt_api_py.containers.orders.bitget_order import BitgetOrderData
 from bt_api_py.containers.balances.bitget_balance import BitgetBalanceData
 from bt_api_py.containers.requestdatas.request_data import RequestData
 from bt_api_py.feeds.live_bitget.request_base import BitgetRequestData
-from bt_api_py.functions.log_message import SpdLogManager
 from bt_api_py.functions.utils import update_extra_data
+from bt_api_py.logging_factory import get_logger
 
 
 class BitgetRequestDataSwap(BitgetRequestData):
@@ -19,12 +19,8 @@ class BitgetRequestDataSwap(BitgetRequestData):
         kwargs.setdefault("logger_name", "bitget_swap_feed.log")
         super().__init__(data_queue, **kwargs)
         self._params = BitgetExchangeDataSwap()
-        self.request_logger = SpdLogManager(
-            self.logger_name, "request", 0, 0, False
-        ).create_logger()
-        self.async_logger = SpdLogManager(
-            self.logger_name, "async_request", 0, 0, False
-        ).create_logger()
+        self.request_logger = get_logger("request")
+        self.async_logger = get_logger("async_request")
 
     # ==================== Market Data Methods ====================
 

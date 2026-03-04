@@ -4,44 +4,33 @@ Integrate all exchange APIs using this BtApi class
 """
 
 # 导入注册模块，确保交易所在使用前完成注册
-# 使用 try/except 以便在缺少依赖时不阻塞其他交易所的使用
+# 自动扫描 exchange_registers/ 下所有模块，无需手动维护 import 列表
+import importlib
+import pkgutil
 import queue
 import time
 from datetime import UTC, datetime, timedelta
 
 from bt_api_py.event_bus import EventBus
-from bt_api_py.exceptions import ExchangeNotFoundError
-from bt_api_py.functions.log_message import SpdLogManager
+from bt_api_py.exceptions import (
+    BtApiError,
+    ExchangeNotFoundError,
+    RequestError,
+    RequestFailedError,
+    RequestTimeoutError,
+)
+from bt_api_py.logging_factory import get_logger
 from bt_api_py.registry import ExchangeRegistry
 
-_reg_logger = SpdLogManager(
-    file_name="bt_api_registry.log", logger_name="registry", print_info=False
-).create_logger()
+_reg_logger = get_logger("registry")
 
-try:
-    import bt_api_py.feeds.register_binance  # noqa: F401
-except ImportError as e:
-    _reg_logger.debug(f"Binance register skipped: {e}")
+import bt_api_py.exchange_registers as _exchange_reg_pkg  # noqa: E402
 
-try:
-    import bt_api_py.feeds.register_okx  # noqa: F401
-except ImportError as e:
-    _reg_logger.debug(f"OKX register skipped: {e}")
-
-try:
-    import bt_api_py.feeds.register_ctp  # noqa: F401
-except ImportError as e:
-    _reg_logger.debug(f"CTP register skipped (install ctp-python to enable): {e}")
-
-try:
-    import bt_api_py.feeds.register_ib  # noqa: F401
-except ImportError as e:
-    _reg_logger.debug(f"IB register skipped (install ib_insync to enable): {e}")
-
-try:
-    import bt_api_py.feeds.register_ib_web  # noqa: F401
-except ImportError as e:
-    _reg_logger.debug(f"IB Web API register skipped: {e}")
+for _finder, _name, _ispkg in pkgutil.iter_modules(_exchange_reg_pkg.__path__):
+    try:
+        importlib.import_module(f"bt_api_py.exchange_registers.{_name}")
+    except ImportError as e:
+        _reg_logger.debug(f"{_name} register skipped: {e}")
 
 
 class BtApi:
@@ -66,11 +55,7 @@ class BtApi:
             self.add_exchange(exchange_name, exchange_params)
 
     def init_logger(self):
-        print_info = bool(self.debug)
-        logger = SpdLogManager(
-            file_name="bt_api.log", logger_name="api", print_info=print_info
-        ).create_logger()
-        return logger
+        return get_logger("api", print_info=bool(self.debug))
 
     def log(self, txt, level="info"):
         if level == "info":
@@ -222,7 +207,7 @@ class BtApi:
 
                     if begin_time >= stop_time:
                         break
-                except Exception as e:
+                except (RequestError, RequestTimeoutError, RequestFailedError, ValueError, KeyError) as e:
                     self.log(f"download fail, retry: {e}", level="warning")
                     time.sleep(3)
             self.log(f"download all data completely: {symbol}, period: {period}")
@@ -432,95 +417,27 @@ class BtApi:
         """
         return self._get_feed(exchange_name).get_position(symbol, extra_data=extra_data, **kwargs)
 
-    # ── 行情查询（异步）────────────────────────────────────────────
+    # ── 异步接口（自动代理）──────────────────────────────────────────
+    # async_get_tick / async_make_order / async_cancel_order 等异步方法
+    # 通过 __getattr__ 自动生成，调用对应 feed 的 async_* 方法。
+    # 用法与手写版完全一致:
+    #   bt_api.async_get_tick("BINANCE___SWAP", "BTC-USDT")
+    #   bt_api.async_make_order("OKX___SWAP", "BTC-USDT", 0.001, 50000, "limit")
 
-    def async_get_tick(self, exchange_name, symbol, extra_data=None, **kwargs):
-        """异步获取行情，结果推送到 data_queue"""
-        return self._get_feed(exchange_name).async_get_tick(symbol, extra_data=extra_data, **kwargs)
-
-    def async_get_depth(self, exchange_name, symbol, count=20, extra_data=None, **kwargs):
-        """异步获取深度，结果推送到 data_queue"""
-        return self._get_feed(exchange_name).async_get_depth(
-            symbol, count=count, extra_data=extra_data, **kwargs
-        )
-
-    def async_get_kline(self, exchange_name, symbol, period, count=20, extra_data=None, **kwargs):
-        """异步获取K线，结果推送到 data_queue"""
-        return self._get_feed(exchange_name).async_get_kline(
-            symbol, period, count=count, extra_data=extra_data, **kwargs
-        )
-
-    # ── 交易操作（异步）────────────────────────────────────────────
-
-    def async_make_order(
-        self,
-        exchange_name,
-        symbol,
-        volume,
-        price,
-        order_type,
-        offset="open",
-        post_only=False,
-        client_order_id=None,
-        extra_data=None,
-        **kwargs,
-    ):
-        """异步下单，结果推送到 data_queue"""
-        return self._get_feed(exchange_name).async_make_order(
-            symbol,
-            volume,
-            price,
-            order_type,
-            offset=offset,
-            post_only=post_only,
-            client_order_id=client_order_id,
-            extra_data=extra_data,
-            **kwargs,
-        )
-
-    def async_cancel_order(self, exchange_name, symbol, order_id, extra_data=None, **kwargs):
-        """异步撤单，结果推送到 data_queue"""
-        return self._get_feed(exchange_name).async_cancel_order(
-            symbol, order_id, extra_data=extra_data, **kwargs
-        )
-
-    def async_cancel_all(self, exchange_name, symbol=None, extra_data=None, **kwargs):
-        """异步撤销所有订单，结果推送到 data_queue"""
-        return self._get_feed(exchange_name).async_cancel_all(
-            symbol, extra_data=extra_data, **kwargs
-        )
-
-    def async_query_order(self, exchange_name, symbol, order_id, extra_data=None, **kwargs):
-        """异步查询订单，结果推送到 data_queue"""
-        return self._get_feed(exchange_name).async_query_order(
-            symbol, order_id, extra_data=extra_data, **kwargs
-        )
-
-    def async_get_open_orders(self, exchange_name, symbol=None, extra_data=None, **kwargs):
-        """异步查询挂单，结果推送到 data_queue"""
-        return self._get_feed(exchange_name).async_get_open_orders(
-            symbol, extra_data=extra_data, **kwargs
-        )
-
-    # ── 账户查询（异步）────────────────────────────────────────────
-
-    def async_get_balance(self, exchange_name, symbol=None, extra_data=None, **kwargs):
-        """异步查询余额，结果推送到 data_queue"""
-        return self._get_feed(exchange_name).async_get_balance(
-            symbol, extra_data=extra_data, **kwargs
-        )
-
-    def async_get_account(self, exchange_name, symbol="ALL", extra_data=None, **kwargs):
-        """异步查询账户，结果推送到 data_queue"""
-        return self._get_feed(exchange_name).async_get_account(
-            symbol, extra_data=extra_data, **kwargs
-        )
-
-    def async_get_position(self, exchange_name, symbol=None, extra_data=None, **kwargs):
-        """异步查询持仓，结果推送到 data_queue"""
-        return self._get_feed(exchange_name).async_get_position(
-            symbol, extra_data=extra_data, **kwargs
-        )
+    def __getattr__(self, name):
+        if name.startswith("async_"):
+            def _async_proxy(exchange_name, *args, **kwargs):
+                feed = self._get_feed(exchange_name)
+                feed_method = getattr(feed, name, None)
+                if feed_method is None:
+                    raise AttributeError(
+                        f"Feed for {exchange_name} has no method {name!r}"
+                    )
+                return feed_method(*args, **kwargs)
+            _async_proxy.__name__ = name
+            _async_proxy.__doc__ = f"异步代理 → feed.{name}()，结果推送到 data_queue"
+            return _async_proxy
+        raise AttributeError(f"'BtApi' object has no attribute {name!r}")
 
     # ── 批量操作 ───────────────────────────────────────────────────
 
@@ -535,7 +452,7 @@ class BtApi:
                 results[exchange_name] = self.get_tick(
                     exchange_name, symbol, extra_data=extra_data, **kwargs
                 )
-            except Exception as e:
+            except BtApiError as e:
                 self.log(f"get_tick failed for {exchange_name}: {e}", level="warning")
         return results
 
@@ -549,7 +466,7 @@ class BtApi:
                 results[exchange_name] = self.get_balance(
                     exchange_name, symbol, extra_data=extra_data, **kwargs
                 )
-            except Exception as e:
+            except BtApiError as e:
                 self.log(f"get_balance failed for {exchange_name}: {e}", level="warning")
         return results
 
@@ -563,7 +480,7 @@ class BtApi:
                 results[exchange_name] = self.get_position(
                     exchange_name, symbol, extra_data=extra_data, **kwargs
                 )
-            except Exception as e:
+            except BtApiError as e:
                 self.log(f"get_position failed for {exchange_name}: {e}", level="warning")
         return results
 
@@ -577,6 +494,6 @@ class BtApi:
                 results[exchange_name] = self.cancel_all(
                     exchange_name, symbol, extra_data=extra_data, **kwargs
                 )
-            except Exception as e:
+            except BtApiError as e:
                 self.log(f"cancel_all failed for {exchange_name}: {e}", level="warning")
         return results

@@ -54,7 +54,10 @@ class OrderStatus(Enum):
             raise ValueError(f"Invalid order status value: {status_value}")
 
 
-class OrderData:
+from bt_api_py.containers.auto_init_mixin import AutoInitMixin
+
+
+class OrderData(AutoInitMixin):
     """保存订单相关信息"""
 
     def __init__(self, order_info, has_been_json_encoded=False):

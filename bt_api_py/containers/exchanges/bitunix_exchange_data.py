@@ -4,11 +4,9 @@ Bitunix Exchange Data Configuration
 
 import os
 from bt_api_py.containers.exchanges.exchange_data import ExchangeData
-from bt_api_py.functions.log_message import SpdLogManager
+from bt_api_py.logging_factory import get_logger
 
-logger = SpdLogManager(
-    file_name="bitunix_exchange_data.log", logger_name="bitunix_data", print_info=False
-).create_logger()
+logger = get_logger("bitunix_exchange_data")
 
 _bitunix_config = None
 _bitunix_config_loaded = False

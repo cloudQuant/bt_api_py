@@ -5,7 +5,7 @@ Implements spot trading functionality for Poloniex exchange.
 
 from bt_api_py.containers.exchanges.poloniex_exchange_data import PoloniexExchangeDataSpot
 from bt_api_py.feeds.live_poloniex.request_base import PoloniexRequestData
-from bt_api_py.functions.log_message import SpdLogManager
+from bt_api_py.logging_factory import get_logger
 
 
 class PoloniexRequestDataSpot(PoloniexRequestData):
@@ -17,12 +17,8 @@ class PoloniexRequestDataSpot(PoloniexRequestData):
         self.logger_name = kwargs.get("logger_name", "poloniex_spot_feed.log")
         self._params = PoloniexExchangeDataSpot()
         self.exchange_name = self._params.exchange_name
-        self.request_logger = SpdLogManager(
-            "./logs/" + self.logger_name, "request", 0, 0, False
-        ).create_logger()
-        self.async_logger = SpdLogManager(
-            "./logs/" + self.logger_name, "async_request", 0, 0, False
-        ).create_logger()
+        self.request_logger = get_logger("poloniex_spot_feed")
+        self.async_logger = get_logger("poloniex_spot_feed")
 
     # ── internal _get_xxx methods ───────────────────────────────
 

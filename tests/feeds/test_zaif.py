@@ -23,7 +23,7 @@ from bt_api_py.feeds.live_zaif.spot import (
 )
 from bt_api_py.registry import ExchangeRegistry
 
-import bt_api_py.feeds.register_zaif  # noqa: F401
+import bt_api_py.exchange_registers.register_zaif  # noqa: F401
 
 # ── sample fixtures ──────────────────────────────────────────
 

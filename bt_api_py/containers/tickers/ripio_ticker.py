@@ -7,7 +7,7 @@ import time
 from typing import Optional, Dict, Any
 
 from bt_api_py.containers.tickers.ticker import TickerData
-from bt_api_py.functions.log_message import SpdLogManager
+from bt_api_py.logging_factory import get_logger
 
 
 class RipioRequestTickerData(TickerData):
@@ -25,9 +25,7 @@ class RipioRequestTickerData(TickerData):
         super().__init__(data, has_been_json_encoded)
         self.symbol_name = symbol
         self.asset_type = asset_type
-        self.logger = SpdLogManager(
-            "./logs/ripio_ticker.log", "ticker", 0, 0, False
-        ).create_logger()
+        self.logger = get_logger("ripio_ticker")
         self._parse_data(data)
 
     def _parse_data(self, data: Dict[str, Any]):

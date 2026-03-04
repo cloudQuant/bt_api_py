@@ -4,7 +4,7 @@ YoBit Spot Feed – three-layer sync / async wrappers + WSS stubs.
 
 from bt_api_py.containers.exchanges.yobit_exchange_data import YobitExchangeDataSpot
 from bt_api_py.feeds.live_yobit.request_base import YobitRequestData
-from bt_api_py.functions.log_message import SpdLogManager
+from bt_api_py.logging_factory import get_logger
 
 
 class YobitRequestDataSpot(YobitRequestData):
@@ -146,9 +146,7 @@ class YobitMarketWssDataSpot:
         self.data_queue = data_queue
         self._params = YobitExchangeDataSpot()
         self.logger_name = kwargs.get("logger_name", "yobit_spot_market_wss.log")
-        self.request_logger = SpdLogManager(
-            "./logs/" + self.logger_name, "request", 0, 0, False
-        ).create_logger()
+        self.request_logger = get_logger("yobit_spot_market_wss")
         self.wss_url = kwargs.get("wss_url", self._params.wss_url)
         self.topics = kwargs.get("topics", [])
         self.running = False
@@ -167,9 +165,7 @@ class YobitAccountWssDataSpot:
         self.data_queue = data_queue
         self._params = YobitExchangeDataSpot()
         self.logger_name = kwargs.get("logger_name", "yobit_spot_account_wss.log")
-        self.request_logger = SpdLogManager(
-            "./logs/" + self.logger_name, "request", 0, 0, False
-        ).create_logger()
+        self.request_logger = get_logger("yobit_spot_account_wss")
         self.wss_url = kwargs.get("wss_url", self._params.wss_url)
         self.topics = kwargs.get("topics", [])
         self.running = False

@@ -12,8 +12,8 @@ from bt_api_py.containers.orderbooks.mexc_orderbook import MexcRequestOrderBookD
 from bt_api_py.containers.balances.mexc_balance import MexcRequestBalanceData
 from bt_api_py.containers.trades.mexc_trade import MexcRequestTradeData
 from bt_api_py.feeds.live_mexc.request_base import MexcRequestData
-from bt_api_py.functions.log_message import SpdLogManager
 from bt_api_py.functions.utils import update_extra_data
+from bt_api_py.logging_factory import get_logger
 
 
 class MexcRequestDataSpot(MexcRequestData):
@@ -22,12 +22,8 @@ class MexcRequestDataSpot(MexcRequestData):
         self.asset_type = kwargs.get("asset_type", "SPOT")
         self.logger_name = kwargs.get("logger_name", "mexc_spot_feed.log")
         self._params = kwargs.get("exchange_data", MexcExchangeDataSpot())
-        self.request_logger = SpdLogManager(
-            "./logs/" + self.logger_name, "request", 0, 0, False
-        ).create_logger()
-        self.async_logger = SpdLogManager(
-            "./logs/" + self.logger_name, "async_request", 0, 0, False
-        ).create_logger()
+        self.request_logger = get_logger("mexc_spot_feed")
+        self.async_logger = get_logger("mexc_spot_feed")
 
     def _make_order(
         self,

@@ -4,7 +4,7 @@ Gemini Error Translator
 Translate Gemini API error codes to unified error codes
 """
 
-from bt_api_py.error_framework import ErrorTranslator
+from bt_api_py.error import ErrorTranslator
 
 
 class GeminiErrorTranslator(ErrorTranslator):
@@ -231,7 +231,7 @@ class GeminiErrorTranslator(ErrorTranslator):
     @classmethod
     def _create_unified_error(cls, code, message, venue, original_error):
         """Create a unified error instance"""
-        from bt_api_py.error_framework import UnifiedError, UnifiedErrorCode, ErrorCategory
+        from bt_api_py.error import UnifiedError, UnifiedErrorCode, ErrorCategory
 
         # Map Gemini codes to unified codes
         code_mapping = {

@@ -312,7 +312,7 @@ class TestInstrumentManager:
 
 class TestErrorFramework:
     def test_unified_error_str(self):
-        from bt_api_py.error_framework import UnifiedError, UnifiedErrorCode, ErrorCategory
+        from bt_api_py.error import UnifiedError, UnifiedErrorCode, ErrorCategory
         err = UnifiedError(
             code=UnifiedErrorCode.RATE_LIMIT_EXCEEDED,
             category=ErrorCategory.RATE_LIMIT,
@@ -323,7 +323,7 @@ class TestErrorFramework:
         assert "RATE_LIMIT_EXCEEDED" in str(err)
 
     def test_unified_error_to_dict(self):
-        from bt_api_py.error_framework import UnifiedError, UnifiedErrorCode, ErrorCategory
+        from bt_api_py.error import UnifiedError, UnifiedErrorCode, ErrorCategory
         err = UnifiedError(
             code=UnifiedErrorCode.INVALID_API_KEY,
             category=ErrorCategory.AUTH,
@@ -336,7 +336,7 @@ class TestErrorFramework:
         assert d["venue"] == "OKX"
 
     def test_unified_error_is_exception(self):
-        from bt_api_py.error_framework import UnifiedError, UnifiedErrorCode, ErrorCategory
+        from bt_api_py.error import UnifiedError, UnifiedErrorCode, ErrorCategory
         from bt_api_py.exceptions import BtApiError
         err = UnifiedError(
             code=UnifiedErrorCode.INTERNAL_ERROR,
@@ -348,13 +348,13 @@ class TestErrorFramework:
         assert isinstance(err, Exception)
 
     def test_rate_limit_error(self):
-        from bt_api_py.error_framework import RateLimitError, UnifiedErrorCode
-        err = RateLimitError(venue="BINANCE")
+        from bt_api_py.error import UnifiedRateLimitError, UnifiedErrorCode
+        err = UnifiedRateLimitError(venue="BINANCE")
         assert err.code == UnifiedErrorCode.RATE_LIMIT_EXCEEDED
         assert err.venue == "BINANCE"
 
     def test_binance_translator(self):
-        from bt_api_py.error_framework import BinanceErrorTranslator, UnifiedErrorCode
+        from bt_api_py.error import BinanceErrorTranslator, UnifiedErrorCode
         # -1003: rate limit
         err = BinanceErrorTranslator.translate(
             {"code": -1003, "msg": "Too many requests"}, "BINANCE"
@@ -386,7 +386,7 @@ class TestErrorFramework:
         assert err.code == UnifiedErrorCode.INVALID_API_KEY
 
     def test_okx_translator(self):
-        from bt_api_py.error_framework import OKXErrorTranslator, UnifiedErrorCode
+        from bt_api_py.error import OKXErrorTranslator, UnifiedErrorCode
         # Success returns None
         result = OKXErrorTranslator.translate({"code": "0", "msg": "OK"}, "OKX")
         assert result is None
@@ -396,7 +396,7 @@ class TestErrorFramework:
         assert err.code == UnifiedErrorCode.RATE_LIMIT_EXCEEDED
 
     def test_ctp_translator(self):
-        from bt_api_py.error_framework import CTPErrorTranslator, UnifiedErrorCode
+        from bt_api_py.error import CTPErrorTranslator, UnifiedErrorCode
         # Success returns None
         result = CTPErrorTranslator.translate({"code": 0, "msg": "成功"}, "CTP")
         assert result is None
@@ -406,7 +406,7 @@ class TestErrorFramework:
         assert err.code == UnifiedErrorCode.NETWORK_DISCONNECTED
 
     def test_http_status_fallback(self):
-        from bt_api_py.error_framework import BinanceErrorTranslator, UnifiedErrorCode
+        from bt_api_py.error import BinanceErrorTranslator, UnifiedErrorCode
         err = BinanceErrorTranslator.translate(
             {"status": 429, "msg": "Rate limited"}, "BINANCE"
         )

@@ -22,7 +22,7 @@ from bt_api_py.feeds.live_valr.spot import (
 )
 from bt_api_py.registry import ExchangeRegistry
 
-import bt_api_py.feeds.register_valr  # noqa: F401
+import bt_api_py.exchange_registers.register_valr  # noqa: F401
 
 # ── sample fixtures ──────────────────────────────────────────
 

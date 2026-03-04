@@ -4,11 +4,9 @@ Bitbns Exchange Data Configuration
 
 import os
 from bt_api_py.containers.exchanges.exchange_data import ExchangeData
-from bt_api_py.functions.log_message import SpdLogManager
+from bt_api_py.logging_factory import get_logger
 
-logger = SpdLogManager(
-    file_name="bitbns_exchange_data.log", logger_name="bitbns_data", print_info=False
-).create_logger()
+logger = get_logger("bitbns_exchange_data")
 
 _bitbns_config = None
 _bitbns_config_loaded = False

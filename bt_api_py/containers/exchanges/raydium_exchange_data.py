@@ -7,11 +7,9 @@ import os
 from enum import Enum
 
 from bt_api_py.containers.exchanges.exchange_data import ExchangeData
-from bt_api_py.functions.log_message import SpdLogManager
+from bt_api_py.logging_factory import get_logger
 
-logger = SpdLogManager(
-    file_name="raydium_exchange_data.log", logger_name="raydium_data", print_info=False
-).create_logger()
+logger = get_logger("raydium_exchange_data")
 
 # ── 配置加载缓存 ──────────────────────────────────────────────
 _raydium_config = None

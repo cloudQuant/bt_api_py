@@ -1,14 +1,13 @@
 """feed类, 用于处理数据、获取数据、向交易所传递数据"""
 
-import json
+import time as _time
 
-import requests
-
-from bt_api_py.exceptions import RequestError, RequestTimeoutError
+from bt_api_py.exceptions import RequestError, RequestFailedError, RequestTimeoutError
 from bt_api_py.feeds.capability import CapabilityMixin
 from bt_api_py.feeds.connection_mixin import ConnectionMixin
+from bt_api_py.feeds.http_client import HttpClient
 from bt_api_py.functions.async_base import AsyncBase
-from bt_api_py.functions.log_message import SpdLogManager
+from bt_api_py.logging_factory import get_logger
 
 
 class Feed(AsyncBase, ConnectionMixin, CapabilityMixin):
@@ -23,9 +22,12 @@ class Feed(AsyncBase, ConnectionMixin, CapabilityMixin):
         self.data_queue = data_queue
         self.exchange_name = kwargs.get("exchange_name", "")
         self.proxies = kwargs.get("proxies")
-        self.logger = SpdLogManager(
-            "./logs/feed_data.log", "base_feed", 0, 0, False
-        ).create_logger()
+        self.logger = get_logger("feed")
+        self._http_client = HttpClient(
+            venue=self.exchange_name,
+            timeout=kwargs.get("timeout", 10.0),
+            proxies=self.proxies,
+        )
 
     def handle_timeout_exception(self, url, method, body, timeout, e):
         """
@@ -58,13 +60,13 @@ class Feed(AsyncBase, ConnectionMixin, CapabilityMixin):
         """
         self.logger.warn(
             f"exchange -> {self.exchange_name}\n "
-            f"rest timeout or error -> \n "
+            f"rest error -> \n "
             f"URL -> {url}\n"
             f"METHOD -> {method}\n"
             f"BODY -> {body}\n"
             f"ERROR: {exception}"
         )
-        self.raise_timeout(0, self.exchange_name)
+        raise exception
 
     def handle_json_decode_error(self, url, headers, body, e):
         """
@@ -126,59 +128,42 @@ class Feed(AsyncBase, ConnectionMixin, CapabilityMixin):
         """
         if headers is None:
             headers = {}
-        if body is None:
-            body = {}
-        # print(f"url: {url}, method: {method}, headers: {headers}, body: {body}")
         for attempt in range(max_retries):
             try:
-                req_kwargs = {"headers": headers, "timeout": timeout}
-                if self.proxies:
-                    req_kwargs["proxies"] = self.proxies
-                if body:
-                    req_kwargs["json"] = body
-                res = requests.request(method, url, **req_kwargs)
-                # print(f"response: {res.text}")
-                # print(res)
-                try:
-                    res.raise_for_status()  # raise error if HTTP code not equals 200
-                except Exception as e:
-                    self.logger.warn(f"response: {res.text}, status: {res.status_code}, error: {e}")
-                    if res.status_code in (410, 404):
-                        raise RequestError(
-                            self.exchange_name,
-                            detail=f"endpoint gone/not found ({res.status_code}): {url}",
-                        )
-                return res.json()
-
-            except requests.exceptions.Timeout as e:
-                if attempt < max_retries - 1:
-                    import time as _time
-
-                    _time.sleep(1)
-                    continue
-                self.handle_timeout_exception(url, method, body, timeout, e)
-
-            except (requests.exceptions.ConnectionError, requests.exceptions.SSLError) as e:
-                if attempt < max_retries - 1:
-                    self.logger.warn(f"Retry {attempt + 1}/{max_retries} for {url}: {e}")
-                    import time as _time
-
-                    _time.sleep(1)
-                    continue
-                self.handle_request_exception(url, method, body, e)
-
-            except (json.JSONDecodeError, requests.exceptions.JSONDecodeError) as e:
+                return self._http_client.request(
+                    method=method,
+                    url=url,
+                    headers=headers,
+                    json_data=body,
+                    timeout=timeout,
+                )
+            except RequestFailedError as e:
+                msg = str(e)
+                # Non-retryable: 404/410 endpoint errors
+                if "404" in msg or "410" in msg:
+                    raise RequestError(
+                        self.exchange_name,
+                        detail=f"endpoint gone/not found: {url}",
+                    )
+                # Retryable errors (timeout, connection, etc.)
                 if attempt < max_retries - 1:
                     self.logger.warn(
-                        f"Retry {attempt + 1}/{max_retries} JSON decode for {url}: {e}"
+                        f"Retry {attempt + 1}/{max_retries} for {url}: {e}"
                     )
-                    import time as _time
-
                     _time.sleep(1)
                     continue
-                self.handle_json_decode_error(url, headers, body, e)
-
-            except requests.exceptions.RequestException as e:
+                # Final attempt failed
+                if "timeout" in msg.lower():
+                    self.handle_timeout_exception(url, method, body, timeout, e)
+                else:
+                    self.handle_request_exception(url, method, body, e)
+            except Exception as e:
+                if attempt < max_retries - 1:
+                    self.logger.warn(
+                        f"Retry {attempt + 1}/{max_retries} unexpected error for {url}: {e}"
+                    )
+                    _time.sleep(1)
+                    continue
                 self.handle_request_exception(url, method, body, e)
 
     def cancel_all(self, symbol, extra_data=None, **kwargs):

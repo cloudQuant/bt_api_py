@@ -10,12 +10,12 @@ from typing import Any, Dict, List, Optional, Union
 import requests
 
 from bt_api_py.containers.requestdatas.request_data import RequestData
-from bt_api_py.error_framework_pancakeswap_error_translator import PancakeSwapErrorTranslator
+from bt_api_py.errors.error_framework_pancakeswap_error_translator import PancakeSwapErrorTranslator
 from bt_api_py.feeds.capability import Capability
 from bt_api_py.feeds.feed import Feed
 from bt_api_py.feeds.http_client import HttpClient
 from bt_api_py.rate_limiter import RateLimiter, RateLimitRule, RateLimitScope, RateLimitType
-from bt_api_py.functions.log_message import SpdLogManager
+from bt_api_py.logging_factory import get_logger
 
 
 class PancakeSwapRequestData(Feed):
@@ -46,12 +46,8 @@ class PancakeSwapRequestData(Feed):
         self.asset_type = kwargs.get("asset_type", "SPOT")
         self.logger_name = kwargs.get("logger_name", "pancakeswap_feed.log")
         self._params = kwargs.get("exchange_data")
-        self.request_logger = SpdLogManager(
-            "./logs/" + self.logger_name, "request", 0, 0, False
-        ).create_logger()
-        self.async_logger = SpdLogManager(
-            "./logs/" + self.logger_name, "async_request", 0, 0, False
-        ).create_logger()
+        self.request_logger = get_logger("pancakeswap_feed")
+        self.async_logger = get_logger("pancakeswap_feed")
         self._error_translator = PancakeSwapErrorTranslator()
         self._rate_limiter = kwargs.get("rate_limiter", self._create_default_rate_limiter())
         self._http_client = HttpClient(venue=self.exchange_name, timeout=30)

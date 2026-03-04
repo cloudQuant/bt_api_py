@@ -22,7 +22,7 @@ from bt_api_py.feeds.live_wazirx.spot import (
 )
 from bt_api_py.registry import ExchangeRegistry
 
-import bt_api_py.feeds.register_wazirx  # noqa: F401
+import bt_api_py.exchange_registers.register_wazirx  # noqa: F401
 
 # ── sample fixtures ──────────────────────────────────────────
 

@@ -160,13 +160,10 @@ class TestHyperliquidStandardInterfaces:
         data_queue = Mock()
         return HyperliquidRequestData(data_queue, asset_type="SPOT", exchange_data=HyperliquidExchangeDataSpot())
 
-    @patch('bt_api_py.feeds.feed.requests.request')
+    @patch('bt_api_py.feeds.http_client.HttpClient.request')
     def test_get_tick(self, mock_request):
         """Test get_tick returns RequestData with correct extra_data"""
-        mock_resp = Mock()
-        mock_resp.json.return_value = {"BTC": "50000.0", "ETH": "3000.0"}
-        mock_resp.raise_for_status = Mock()
-        mock_request.return_value = mock_resp
+        mock_request.return_value = {"BTC": "50000.0", "ETH": "3000.0"}
 
         rd = self._make_request_data()
         result = rd.get_tick("BTC")
@@ -177,13 +174,10 @@ class TestHyperliquidStandardInterfaces:
         assert result.request_type == "get_tick"
         assert result.get_input_data()["BTC"] == "50000.0"
 
-    @patch('bt_api_py.feeds.feed.requests.request')
+    @patch('bt_api_py.feeds.http_client.HttpClient.request')
     def test_get_depth(self, mock_request):
         """Test get_depth returns RequestData with correct extra_data"""
-        mock_resp = Mock()
-        mock_resp.json.return_value = {"levels": [[{"px": "50000", "sz": "1.0", "n": 1}], []]}
-        mock_resp.raise_for_status = Mock()
-        mock_request.return_value = mock_resp
+        mock_request.return_value = {"levels": [[{"px": "50000", "sz": "1.0", "n": 1}], []]}
 
         rd = self._make_request_data()
         result = rd.get_depth("BTC", count=10)
@@ -193,16 +187,13 @@ class TestHyperliquidStandardInterfaces:
         assert result.symbol_name == "BTC"
         assert result.request_type == "get_depth"
 
-    @patch('bt_api_py.feeds.feed.requests.request')
+    @patch('bt_api_py.feeds.http_client.HttpClient.request')
     def test_get_kline(self, mock_request):
         """Test get_kline returns RequestData with correct extra_data"""
-        mock_resp = Mock()
-        mock_resp.json.return_value = [
+        mock_request.return_value = [
             {"t": 1700000000000, "T": 1700000060000, "s": "BTC", "i": "1m",
              "o": "50000", "c": "50100", "h": "50200", "l": "49900", "v": "10.5", "n": 100}
         ]
-        mock_resp.raise_for_status = Mock()
-        mock_request.return_value = mock_resp
 
         rd = self._make_request_data()
         result = rd.get_kline("BTC", "1m", count=20)
@@ -212,13 +203,10 @@ class TestHyperliquidStandardInterfaces:
         assert result.symbol_name == "BTC"
         assert result.request_type == "get_kline"
 
-    @patch('bt_api_py.feeds.feed.requests.request')
+    @patch('bt_api_py.feeds.http_client.HttpClient.request')
     def test_get_exchange_info(self, mock_request):
         """Test get_exchange_info returns RequestData"""
-        mock_resp = Mock()
-        mock_resp.json.return_value = {"universe": [{"name": "BTC", "szDecimals": 3}]}
-        mock_resp.raise_for_status = Mock()
-        mock_request.return_value = mock_resp
+        mock_request.return_value = {"universe": [{"name": "BTC", "szDecimals": 3}]}
 
         rd = self._make_request_data()
         result = rd.get_exchange_info()
@@ -227,13 +215,10 @@ class TestHyperliquidStandardInterfaces:
         assert isinstance(result, RequestData)
         assert result.request_type == "get_exchange_info"
 
-    @patch('bt_api_py.feeds.feed.requests.request')
+    @patch('bt_api_py.feeds.http_client.HttpClient.request')
     def test_get_server_time(self, mock_request):
         """Test get_server_time returns RequestData"""
-        mock_resp = Mock()
-        mock_resp.json.return_value = {"BTC": "50000.0"}
-        mock_resp.raise_for_status = Mock()
-        mock_request.return_value = mock_resp
+        mock_request.return_value = {"BTC": "50000.0"}
 
         rd = self._make_request_data()
         result = rd.get_server_time()
@@ -280,13 +265,10 @@ class TestHyperliquidRequestDataSpot:
         data_queue = Mock()
         return HyperliquidRequestDataSpot(data_queue, asset_type="SPOT")
 
-    @patch('bt_api_py.feeds.feed.requests.request')
+    @patch('bt_api_py.feeds.http_client.HttpClient.request')
     def test_make_order(self, mock_request):
         """Test make_order returns RequestData with correct extra_data"""
-        mock_resp = Mock()
-        mock_resp.json.return_value = {"status": "ok", "response": {"type": "order"}}
-        mock_resp.raise_for_status = Mock()
-        mock_request.return_value = mock_resp
+        mock_request.return_value = {"status": "ok", "response": {"type": "order"}}
 
         rd = self._make_spot_request()
         result = rd.make_order("BTC", 0.1, 50000.0, "limit", side="buy")
@@ -296,13 +278,10 @@ class TestHyperliquidRequestDataSpot:
         assert result.symbol_name == "BTC"
         assert result.request_type == "make_order"
 
-    @patch('bt_api_py.feeds.feed.requests.request')
+    @patch('bt_api_py.feeds.http_client.HttpClient.request')
     def test_cancel_order(self, mock_request):
         """Test cancel_order returns RequestData"""
-        mock_resp = Mock()
-        mock_resp.json.return_value = {"status": "ok"}
-        mock_resp.raise_for_status = Mock()
-        mock_request.return_value = mock_resp
+        mock_request.return_value = {"status": "ok"}
 
         rd = self._make_spot_request()
         result = rd.cancel_order("BTC", "12345")
@@ -311,13 +290,10 @@ class TestHyperliquidRequestDataSpot:
         assert isinstance(result, RequestData)
         assert result.request_type == "cancel_order"
 
-    @patch('bt_api_py.feeds.feed.requests.request')
+    @patch('bt_api_py.feeds.http_client.HttpClient.request')
     def test_query_order(self, mock_request):
         """Test query_order returns RequestData"""
-        mock_resp = Mock()
-        mock_resp.json.return_value = {"order": {"oid": "12345", "status": "filled"}}
-        mock_resp.raise_for_status = Mock()
-        mock_request.return_value = mock_resp
+        mock_request.return_value = {"order": {"oid": "12345", "status": "filled"}}
 
         rd = self._make_spot_request()
         result = rd.query_order("BTC", "12345", user="0xabc")
@@ -326,13 +302,10 @@ class TestHyperliquidRequestDataSpot:
         assert isinstance(result, RequestData)
         assert result.request_type == "query_order"
 
-    @patch('bt_api_py.feeds.feed.requests.request')
+    @patch('bt_api_py.feeds.http_client.HttpClient.request')
     def test_get_open_orders(self, mock_request):
         """Test get_open_orders returns RequestData"""
-        mock_resp = Mock()
-        mock_resp.json.return_value = [{"oid": "123", "coin": "BTC", "side": "B"}]
-        mock_resp.raise_for_status = Mock()
-        mock_request.return_value = mock_resp
+        mock_request.return_value = [{"oid": "123", "coin": "BTC", "side": "B"}]
 
         rd = self._make_spot_request()
         result = rd.get_open_orders("BTC", user="0xabc")
@@ -341,13 +314,10 @@ class TestHyperliquidRequestDataSpot:
         assert isinstance(result, RequestData)
         assert result.request_type == "get_open_orders"
 
-    @patch('bt_api_py.feeds.feed.requests.request')
+    @patch('bt_api_py.feeds.http_client.HttpClient.request')
     def test_get_account(self, mock_request):
         """Test get_account returns RequestData"""
-        mock_resp = Mock()
-        mock_resp.json.return_value = {"balances": [{"coin": "USDC", "total": "1000"}]}
-        mock_resp.raise_for_status = Mock()
-        mock_request.return_value = mock_resp
+        mock_request.return_value = {"balances": [{"coin": "USDC", "total": "1000"}]}
 
         rd = self._make_spot_request()
         result = rd.get_account("ALL", user="0xabc")
@@ -356,13 +326,10 @@ class TestHyperliquidRequestDataSpot:
         assert isinstance(result, RequestData)
         assert result.request_type == "get_account"
 
-    @patch('bt_api_py.feeds.feed.requests.request')
+    @patch('bt_api_py.feeds.http_client.HttpClient.request')
     def test_get_balance(self, mock_request):
         """Test get_balance returns RequestData"""
-        mock_resp = Mock()
-        mock_resp.json.return_value = {"balances": [{"coin": "USDC", "total": "1000"}]}
-        mock_resp.raise_for_status = Mock()
-        mock_request.return_value = mock_resp
+        mock_request.return_value = {"balances": [{"coin": "USDC", "total": "1000"}]}
 
         rd = self._make_spot_request()
         result = rd.get_balance("USDC", user="0xabc")
@@ -452,7 +419,7 @@ class TestHyperliquidRegistration:
     def test_registration_exists(self):
         """Test that Hyperliquid is registered"""
         # Import to ensure registration happens
-        from bt_api_py.feeds.register_hyperliquid import register_hyperliquid
+        from bt_api_py.exchange_registers.register_hyperliquid import register_hyperliquid
         from bt_api_py.registry import ExchangeRegistry
 
         # Ensure registration
@@ -468,7 +435,7 @@ class TestHyperliquidRegistration:
 
     def test_create_spot_feed(self):
         """Test creating Hyperliquid spot feed"""
-        from bt_api_py.feeds.register_hyperliquid import register_hyperliquid
+        from bt_api_py.exchange_registers.register_hyperliquid import register_hyperliquid
         from bt_api_py.registry import ExchangeRegistry
 
         # Ensure registration
@@ -483,7 +450,7 @@ class TestHyperliquidRegistration:
 
     def test_create_spot_exchange_data(self):
         """Test creating Hyperliquid spot exchange data"""
-        from bt_api_py.feeds.register_hyperliquid import register_hyperliquid
+        from bt_api_py.exchange_registers.register_hyperliquid import register_hyperliquid
         from bt_api_py.registry import ExchangeRegistry
 
         # Ensure registration

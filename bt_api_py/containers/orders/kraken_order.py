@@ -7,7 +7,7 @@ import time
 from typing import Optional, Dict, Any, List
 
 from bt_api_py.containers.orders.order import OrderData
-from bt_api_py.functions.log_message import SpdLogManager
+from bt_api_py.logging_factory import get_logger
 
 
 class KrakenRequestOrderData(OrderData):
@@ -27,9 +27,7 @@ class KrakenRequestOrderData(OrderData):
         # Store symbol and asset_type before parsing
         self.symbol = symbol
         self.asset_type = asset_type
-        self.logger = SpdLogManager(
-            "./logs/kraken_order.log", "order", 0, 0, False
-        ).create_logger()
+        self.logger = get_logger("kraken_order")
         self.is_response_data = is_response_data
         self._parse_data(data)
 
@@ -459,9 +457,7 @@ class KrakenSpotWssOrderData(OrderData):
         # Store symbol and asset_type before parsing
         self.symbol = symbol
         self.asset_type = asset_type
-        self.logger = SpdLogManager(
-            "./logs/kraken_wss_order.log", "wss_order", 0, 0, False
-        ).create_logger()
+        self.logger = get_logger("kraken_wss_order")
         self._parse_wss_data(data)
 
     def _parse_wss_data(self, data: Dict[str, Any]):

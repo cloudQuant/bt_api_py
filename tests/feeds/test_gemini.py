@@ -11,7 +11,7 @@ from unittest.mock import Mock, MagicMock
 import pytest
 
 # Mock the missing GeminiErrorTranslator before any Gemini imports
-import bt_api_py.error_framework as error_module
+import bt_api_py.error as error_module
 if not hasattr(error_module, 'GeminiErrorTranslator'):
     error_module.GeminiErrorTranslator = MagicMock
 
@@ -26,7 +26,7 @@ from bt_api_py.feeds.live_gemini.spot import GeminiRequestDataSpot
 from bt_api_py.registry import ExchangeRegistry
 
 # Import registration to auto-register Gemini
-import bt_api_py.feeds.register_gemini  # noqa: F401
+import bt_api_py.exchange_registers.register_gemini  # noqa: F401
 
 
 @pytest.fixture

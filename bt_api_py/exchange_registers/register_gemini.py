@@ -4,7 +4,7 @@ Register Gemini exchange feeds
 
 from bt_api_py.feeds.live_gemini.spot import GeminiRequestDataSpot
 from bt_api_py.feeds.registry import register
-from bt_api_py.functions.log_message import SpdLogManager
+from bt_api_py.logging_factory import get_logger
 
 # Register Gemini Spot feed
 @register("GEMINI___SPOT")
@@ -38,12 +38,8 @@ class GeminiSpotFeed(GeminiRequestDataSpot):
 
         # Set up logger
         self.logger_name = kwargs.get("logger_name", "gemini_spot_feed.log")
-        self.request_logger = SpdLogManager(
-            "./logs/" + self.logger_name, "request", 0, 0, False
-        ).create_logger()
-        self.async_logger = SpdLogManager(
-            "./logs/" + self.logger_name, "async_request", 0, 0, False
-        ).create_logger()
+        self.request_logger = get_logger("gemini_spot_feed")
+        self.async_logger = get_logger("gemini_spot_feed")
 
 
 # Create WebSocket classes for future implementation

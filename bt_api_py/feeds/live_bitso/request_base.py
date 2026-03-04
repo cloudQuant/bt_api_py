@@ -17,7 +17,7 @@ from bt_api_py.containers.exchanges.bitso_exchange_data import BitsoExchangeData
 from bt_api_py.containers.requestdatas.request_data import RequestData
 from bt_api_py.feeds.capability import Capability
 from bt_api_py.feeds.feed import Feed
-from bt_api_py.functions.log_message import SpdLogManager
+from bt_api_py.logging_factory import get_logger
 
 
 class BitsoRequestData(Feed):
@@ -48,12 +48,8 @@ class BitsoRequestData(Feed):
         self.asset_type = kwargs.get("asset_type", "SPOT")
         self.exchange_name = kwargs.get("exchange_name", "BITSO___SPOT")
         self._params = BitsoExchangeDataSpot()
-        self.request_logger = SpdLogManager(
-            "./logs/bitso_feed.log", "request", 0, 0, False
-        ).create_logger()
-        self.async_logger = SpdLogManager(
-            "./logs/bitso_feed.log", "async_request", 0, 0, False
-        ).create_logger()
+        self.request_logger = get_logger("bitso_feed")
+        self.async_logger = get_logger("bitso_feed")
 
     @property
     def api_key(self):

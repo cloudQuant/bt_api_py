@@ -9,7 +9,7 @@ from bt_api_py.containers.requestdatas.request_data import RequestData
 from bt_api_py.feeds.capability import Capability
 from bt_api_py.feeds.feed import Feed
 from bt_api_py.feeds.http_client import HttpClient
-from bt_api_py.functions.log_message import SpdLogManager
+from bt_api_py.logging_factory import get_logger
 
 
 class BitinkaRequestData(Feed):
@@ -40,12 +40,8 @@ class BitinkaRequestData(Feed):
         if "private_key" in kwargs:
             self._params.api_secret = kwargs["private_key"]
 
-        self.request_logger = SpdLogManager(
-            "./logs/bitinka_feed.log", "request", 0, 0, False
-        ).create_logger()
-        self.async_logger = SpdLogManager(
-            "./logs/bitinka_feed.log", "async_request", 0, 0, False
-        ).create_logger()
+        self.request_logger = get_logger("bitinka_feed")
+        self.async_logger = get_logger("bitinka_feed")
         self._http_client = HttpClient(venue=self.exchange_name, timeout=10)
 
     def _get_headers(self, method, request_path, params=None, body=""):

@@ -42,10 +42,8 @@ def _get_curve_config():
         _curve_config_loaded = True
     except Exception as e:
         # Import logger here to avoid circular imports
-        from bt_api_py.functions.log_message import SpdLogManager
-        logger = SpdLogManager(
-            file_name="curve_exchange_data.log", logger_name="curve_data", print_info=False
-        ).create_logger()
+        from bt_api_py.logging_factory import get_logger
+        logger = get_logger("curve_exchange_data")
         logger.warn(f"Failed to load curve.yaml config: {e}")
     return _curve_config
 

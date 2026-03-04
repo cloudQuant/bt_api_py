@@ -6,7 +6,10 @@
 # import json
 
 
-class AccountData:
+from bt_api_py.containers.auto_init_mixin import AutoInitMixin
+
+
+class AccountData(AutoInitMixin):
     def __init__(self, account_info, has_been_json_encoded=False):
         self.event = "AccountEvent"
         self.account_info = account_info

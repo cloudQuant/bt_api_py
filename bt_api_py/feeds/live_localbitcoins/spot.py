@@ -4,7 +4,7 @@ LocalBitcoins Spot Feed – three-layer sync / async wrappers + WSS stubs.
 
 from bt_api_py.containers.exchanges.localbitcoins_exchange_data import LocalBitcoinsExchangeDataSpot
 from bt_api_py.feeds.live_localbitcoins.request_base import LocalBitcoinsRequestData
-from bt_api_py.functions.log_message import SpdLogManager
+from bt_api_py.logging_factory import get_logger
 
 
 class LocalBitcoinsRequestDataSpot(LocalBitcoinsRequestData):
@@ -93,9 +93,7 @@ class LocalBitcoinsMarketWssDataSpot:
         self.data_queue = data_queue
         self._params = LocalBitcoinsExchangeDataSpot()
         self.logger_name = kwargs.get("logger_name", "localbitcoins_spot_market_wss.log")
-        self.request_logger = SpdLogManager(
-            "./logs/" + self.logger_name, "request", 0, 0, False
-        ).create_logger()
+        self.request_logger = get_logger("localbitcoins_spot_market_wss")
         self.wss_url = kwargs.get("wss_url", "")
         self.topics = kwargs.get("topics", [])
         self.running = False
@@ -114,9 +112,7 @@ class LocalBitcoinsAccountWssDataSpot:
         self.data_queue = data_queue
         self._params = LocalBitcoinsExchangeDataSpot()
         self.logger_name = kwargs.get("logger_name", "localbitcoins_spot_account_wss.log")
-        self.request_logger = SpdLogManager(
-            "./logs/" + self.logger_name, "request", 0, 0, False
-        ).create_logger()
+        self.request_logger = get_logger("localbitcoins_spot_account_wss")
         self.wss_url = kwargs.get("wss_url", "")
         self.topics = kwargs.get("topics", [])
         self.running = False

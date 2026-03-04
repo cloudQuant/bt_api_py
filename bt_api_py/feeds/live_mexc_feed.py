@@ -9,6 +9,7 @@ from bt_api_py.containers.orders.mexc_order import MexcWssOrderData
 from bt_api_py.containers.trades.mexc_trade import MexcWssTradeData
 from bt_api_py.feeds.live_mexc.market_wss_base import MexcMarketWssData
 from bt_api_py.feeds.live_mexc.account_wss_base import MexcAccountWssData
+from bt_api_py.logging_factory import get_logger
 
 
 class MexcMarketWssData(MexcMarketWssData):
@@ -27,10 +28,7 @@ class MexcMarketWssData(MexcMarketWssData):
 
         # 创建日志记录器
         self.logger_name = kwargs.get("logger_name", "mexc_market_wss.log")
-        from bt_api_py.functions.log_message import SpdLogManager
-        self.request_logger = SpdLogManager(
-            "./logs/" + self.logger_name, "request", 0, 0, False
-        ).create_logger()
+        self.request_logger = get_logger("mexc_market_wss")
 
 
 class MexcAccountWssData(MexcAccountWssData):
@@ -49,10 +47,7 @@ class MexcAccountWssData(MexcAccountWssData):
 
         # 创建日志记录器
         self.logger_name = kwargs.get("logger_name", "mexc_account_wss.log")
-        from bt_api_py.functions.log_message import SpdLogManager
-        self.request_logger = SpdLogManager(
-            "./logs/" + self.logger_name, "request", 0, 0, False
-        ).create_logger()
+        self.request_logger = get_logger("mexc_account_wss")
 
 
 class MexcMarketWssDataSpot(MexcMarketWssData):

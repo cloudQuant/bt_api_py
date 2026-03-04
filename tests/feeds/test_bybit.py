@@ -35,7 +35,7 @@ from bt_api_py.containers.balances.bybit_balance import (
 from bt_api_py.registry import ExchangeRegistry
 
 # Import registration to auto-register Bybit
-import bt_api_py.feeds.register_bybit  # noqa: F401
+import bt_api_py.exchange_registers.register_bybit  # noqa: F401
 
 
 # ===================== Exchange Data Tests =====================

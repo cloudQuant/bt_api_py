@@ -20,7 +20,7 @@ from bt_api_py.feeds.capability import Capability
 from bt_api_py.registry import ExchangeRegistry
 
 # Import registration to auto-register Bitunix
-import bt_api_py.feeds.register_bitunix  # noqa: F401
+import bt_api_py.exchange_registers.register_bitunix  # noqa: F401
 
 
 @pytest.fixture

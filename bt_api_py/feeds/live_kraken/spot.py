@@ -10,8 +10,8 @@ from bt_api_py.containers.orderbooks.kraken_orderbook import KrakenRequestOrderB
 from bt_api_py.containers.orders.kraken_order import KrakenRequestOrderData
 from bt_api_py.containers.balances.kraken_balance import KrakenSpotWssBalanceData
 from bt_api_py.feeds.live_kraken.request_base import KrakenRequestData
-from bt_api_py.functions.log_message import SpdLogManager
 from bt_api_py.functions.utils import update_extra_data
+from bt_api_py.logging_factory import get_logger
 
 
 class KrakenRequestDataSpot(KrakenRequestData):
@@ -23,12 +23,8 @@ class KrakenRequestDataSpot(KrakenRequestData):
         super().__init__(data_queue, **kwargs)
         self._params = KrakenExchangeDataSpot()
         self.asset_type = "SPOT"
-        self.request_logger = SpdLogManager(
-            self.logger_name, "request", 0, 0, False
-        ).create_logger()
-        self.async_logger = SpdLogManager(
-            self.logger_name, "async_request", 0, 0, False
-        ).create_logger()
+        self.request_logger = get_logger("request")
+        self.async_logger = get_logger("async_request")
 
     # ==================== Market Data Methods ====================
 

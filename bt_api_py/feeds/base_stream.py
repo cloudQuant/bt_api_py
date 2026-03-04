@@ -7,7 +7,7 @@ import threading
 from abc import ABC, abstractmethod
 from enum import Enum
 
-from bt_api_py.functions.log_message import SpdLogManager
+from bt_api_py.logging_factory import get_logger
 
 
 class ConnectionState(Enum):
@@ -37,7 +37,7 @@ class BaseDataStream(ABC):
         self._state = ConnectionState.DISCONNECTED
         self._thread = None
         log_file = kwargs.get("log_file_name", f"./logs/{self.stream_name}.log")
-        self.logger = SpdLogManager(log_file, self.stream_name, 0, 0, False).create_logger()
+        self.logger = get_logger("unknown")
 
     @property
     def state(self):

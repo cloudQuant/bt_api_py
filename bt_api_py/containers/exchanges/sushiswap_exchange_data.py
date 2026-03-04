@@ -39,12 +39,8 @@ def _get_sushiswap_config():
             _sushiswap_config._raw_config = _sushiswap_config_raw
         _sushiswap_config_loaded = True
     except Exception as e:
-        from bt_api_py.functions.log_message import SpdLogManager
-        logger = SpdLogManager(
-            file_name="sushiswap_exchange_data.log",
-            logger_name="sushiswap_data",
-            print_info=False
-        ).create_logger()
+        from bt_api_py.logging_factory import get_logger
+        logger = get_logger("sushiswap_exchange_data")
         logger.warn(f"Failed to load sushiswap.yaml config: {e}")
     return _sushiswap_config
 

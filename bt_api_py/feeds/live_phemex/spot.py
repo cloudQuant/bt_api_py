@@ -5,7 +5,7 @@ Provides market data and trading access for Phemex spot trading.
 
 from bt_api_py.containers.exchanges.phemex_exchange_data import PhemexExchangeDataSpot
 from bt_api_py.feeds.live_phemex.request_base import PhemexRequestData
-from bt_api_py.functions.log_message import SpdLogManager
+from bt_api_py.logging_factory import get_logger
 
 
 class PhemexRequestDataSpot(PhemexRequestData):
@@ -16,9 +16,7 @@ class PhemexRequestDataSpot(PhemexRequestData):
         self.exchange_name = kwargs.get("exchange_name", "PHEMEX___SPOT")
         self.asset_type = kwargs.get("asset_type", "SPOT")
         self._params = PhemexExchangeDataSpot()
-        self.request_logger = SpdLogManager(
-            "./logs/" + self.logger_name, "request", 0, 0, False
-        ).create_logger()
+        self.request_logger = get_logger("phemex_spot")
 
     # ── public sync ─────────────────────────────────────────────
 

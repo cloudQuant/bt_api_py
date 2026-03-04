@@ -17,7 +17,7 @@ from bt_api_py.feeds.live_phemex.spot import PhemexRequestDataSpot
 from bt_api_py.registry import ExchangeRegistry
 
 # Import registration to auto-register Phemex
-import bt_api_py.feeds.register_phemex  # noqa: F401
+import bt_api_py.exchange_registers.register_phemex  # noqa: F401
 
 
 def init_req_feed():

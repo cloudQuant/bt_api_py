@@ -6,11 +6,9 @@ BeQuant uses HitBTC V3 API (white-label). Same endpoints, HTTP Basic Auth.
 
 import os
 from bt_api_py.containers.exchanges.exchange_data import ExchangeData
-from bt_api_py.functions.log_message import SpdLogManager
+from bt_api_py.logging_factory import get_logger
 
-logger = SpdLogManager(
-    file_name="bequant_exchange_data.log", logger_name="bequant_data", print_info=False
-).create_logger()
+logger = get_logger("bequant_exchange_data")
 
 _bequant_config = None
 _bequant_config_loaded = False

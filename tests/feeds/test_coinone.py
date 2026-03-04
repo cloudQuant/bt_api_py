@@ -15,7 +15,7 @@ from bt_api_py.feeds.live_coinone.request_base import CoinoneRequestData
 from bt_api_py.feeds.live_coinone.spot import CoinoneRequestDataSpot
 from bt_api_py.registry import ExchangeRegistry
 
-import bt_api_py.feeds.register_coinone  # noqa: F401
+import bt_api_py.exchange_registers.register_coinone  # noqa: F401
 
 # ── sample response fixtures ─────────────────────────────────
 

@@ -31,11 +31,11 @@ def test_imports():
         print("✓ Successfully imported Kraken data containers")
 
         # Test registration
-        from bt_api_py.feeds.register_kraken import KrakenSpotFeed, get_kraken_exchange_info
+        from bt_api_py.exchange_registers.register_kraken import KrakenSpotFeed, get_kraken_exchange_info
         print("✓ Successfully imported KrakenSpotFeed and registration functions")
 
         # Test error translator
-        from bt_api_py.error_framework import KrakenErrorTranslator
+        from bt_api_py.error import KrakenErrorTranslator
         print("✓ Successfully imported KrakenErrorTranslator")
 
         return True

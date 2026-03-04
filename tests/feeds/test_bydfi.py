@@ -19,7 +19,7 @@ from bt_api_py.feeds.capability import Capability
 from bt_api_py.registry import ExchangeRegistry
 
 # Import registration to auto-register BYDFi
-import bt_api_py.feeds.register_bydfi  # noqa: F401
+import bt_api_py.exchange_registers.register_bydfi  # noqa: F401
 
 
 @pytest.fixture
@@ -246,7 +246,7 @@ class TestBYDFiDataContainers:
             }
         }
         ticker = BYDFiRequestTickerData(
-            ticker_response, "BTC-USDT", "SPOT"
+            ticker_response, "BTC-USDT", "SPOT", has_been_json_encoded=True
         )
         assert ticker.get_symbol_name() == "BTC-USDT"
 

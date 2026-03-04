@@ -9,11 +9,9 @@ Symbol: KRW-BTC  (quote-target, dash separated)
 
 import os
 from bt_api_py.containers.exchanges.exchange_data import ExchangeData
-from bt_api_py.functions.log_message import SpdLogManager
+from bt_api_py.logging_factory import get_logger
 
-logger = SpdLogManager(
-    file_name="coinone_exchange_data.log", logger_name="coinone_data", print_info=False
-).create_logger()
+logger = get_logger("coinone_exchange_data")
 
 _coinone_config = None
 _coinone_config_loaded = False

@@ -24,7 +24,7 @@ from bt_api_py.feeds.live_kucoin.futures import KuCoinRequestDataFutures
 from bt_api_py.registry import ExchangeRegistry
 
 # Import registration to auto-register KuCoin
-import bt_api_py.feeds.register_kucoin  # noqa: F401
+import bt_api_py.exchange_registers.register_kucoin  # noqa: F401
 
 
 # ── Sample KuCoin API responses ──────────────────────────────────────────
@@ -209,13 +209,12 @@ def _make_futures_feed():
     )
 
 
+MOCK_PATH = "bt_api_py.feeds.http_client.HttpClient.request"
+
+
 def _setup_mock(mock_request, resp_json):
-    """Configure a mock for requests.request that returns resp_json."""
-    mock_resp = MagicMock()
-    mock_resp.json.return_value = resp_json
-    mock_resp.status_code = 200
-    mock_resp.raise_for_status = MagicMock()
-    mock_request.return_value = mock_resp
+    """Configure a mock for HttpClient.request that returns resp_json dict."""
+    mock_request.return_value = resp_json
 
 
 # ══════════════════════════════════════════════════════════════════════════
@@ -508,7 +507,7 @@ class TestKuCoinDataContainers:
 
 class TestKuCoinSyncCalls:
 
-    @patch("bt_api_py.feeds.feed.requests.request")
+    @patch(MOCK_PATH)
     def test_get_ticker(self, mock_req):
         _setup_mock(mock_req, SAMPLE_TICKER_RESP)
         feed = _make_spot_feed()
@@ -519,14 +518,14 @@ class TestKuCoinSyncCalls:
         assert len(data) == 1
         assert isinstance(data[0], KuCoinRequestTickerData)
 
-    @patch("bt_api_py.feeds.feed.requests.request")
+    @patch(MOCK_PATH)
     def test_get_tick_alias(self, mock_req):
         _setup_mock(mock_req, SAMPLE_TICKER_RESP)
         feed = _make_spot_feed()
         rd = feed.get_tick("BTC-USDT")
         assert isinstance(rd, RequestData)
 
-    @patch("bt_api_py.feeds.feed.requests.request")
+    @patch(MOCK_PATH)
     def test_get_depth(self, mock_req):
         _setup_mock(mock_req, SAMPLE_DEPTH_RESP)
         feed = _make_spot_feed()
@@ -539,7 +538,7 @@ class TestKuCoinSyncCalls:
         ob.init_data()
         assert ob.get_bid_price_list()[0] == 49999.0
 
-    @patch("bt_api_py.feeds.feed.requests.request")
+    @patch(MOCK_PATH)
     def test_get_kline(self, mock_req):
         _setup_mock(mock_req, SAMPLE_KLINE_RESP)
         feed = _make_spot_feed()
@@ -552,14 +551,14 @@ class TestKuCoinSyncCalls:
         bar.init_data()
         assert bar.get_open_price() == 50000.0
 
-    @patch("bt_api_py.feeds.feed.requests.request")
+    @patch(MOCK_PATH)
     def test_get_server_time(self, mock_req):
         _setup_mock(mock_req, SAMPLE_SERVER_TIME_RESP)
         feed = _make_spot_feed()
         rd = feed.get_server_time()
         assert isinstance(rd, RequestData)
 
-    @patch("bt_api_py.feeds.feed.requests.request")
+    @patch(MOCK_PATH)
     def test_get_exchange_info(self, mock_req):
         _setup_mock(mock_req, SAMPLE_EXCHANGE_INFO_RESP)
         feed = _make_spot_feed()
@@ -569,14 +568,14 @@ class TestKuCoinSyncCalls:
         assert isinstance(data, list)
         assert len(data) == 1
 
-    @patch("bt_api_py.feeds.feed.requests.request")
+    @patch(MOCK_PATH)
     def test_get_symbols_alias(self, mock_req):
         _setup_mock(mock_req, SAMPLE_EXCHANGE_INFO_RESP)
         feed = _make_spot_feed()
         rd = feed.get_symbols()
         assert isinstance(rd, RequestData)
 
-    @patch("bt_api_py.feeds.feed.requests.request")
+    @patch(MOCK_PATH)
     def test_make_order(self, mock_req):
         _setup_mock(mock_req, SAMPLE_MAKE_ORDER_RESP)
         feed = _make_spot_feed()
@@ -586,21 +585,21 @@ class TestKuCoinSyncCalls:
         assert len(data) == 1
         assert isinstance(data[0], KuCoinRequestOrderData)
 
-    @patch("bt_api_py.feeds.feed.requests.request")
+    @patch(MOCK_PATH)
     def test_cancel_order(self, mock_req):
         _setup_mock(mock_req, SAMPLE_CANCEL_ORDER_RESP)
         feed = _make_spot_feed()
         rd = feed.cancel_order(order_id="5bd6e9286d99522a52e458de")
         assert isinstance(rd, RequestData)
 
-    @patch("bt_api_py.feeds.feed.requests.request")
+    @patch(MOCK_PATH)
     def test_cancel_all_orders(self, mock_req):
         _setup_mock(mock_req, SAMPLE_CANCEL_ORDER_RESP)
         feed = _make_spot_feed()
         rd = feed.cancel_all_orders(symbol="BTC-USDT")
         assert isinstance(rd, RequestData)
 
-    @patch("bt_api_py.feeds.feed.requests.request")
+    @patch(MOCK_PATH)
     def test_get_order(self, mock_req):
         _setup_mock(mock_req, SAMPLE_QUERY_ORDER_RESP)
         feed = _make_spot_feed()
@@ -610,14 +609,14 @@ class TestKuCoinSyncCalls:
         assert len(data) == 1
         assert isinstance(data[0], KuCoinRequestOrderData)
 
-    @patch("bt_api_py.feeds.feed.requests.request")
+    @patch(MOCK_PATH)
     def test_query_order_alias(self, mock_req):
         _setup_mock(mock_req, SAMPLE_QUERY_ORDER_RESP)
         feed = _make_spot_feed()
         rd = feed.query_order(order_id="5bd6e9286d99522a52e458de")
         assert isinstance(rd, RequestData)
 
-    @patch("bt_api_py.feeds.feed.requests.request")
+    @patch(MOCK_PATH)
     def test_get_open_orders(self, mock_req):
         _setup_mock(mock_req, SAMPLE_OPEN_ORDERS_RESP)
         feed = _make_spot_feed()
@@ -626,21 +625,21 @@ class TestKuCoinSyncCalls:
         data = rd.get_data()
         assert len(data) == 1
 
-    @patch("bt_api_py.feeds.feed.requests.request")
+    @patch(MOCK_PATH)
     def test_get_account(self, mock_req):
         _setup_mock(mock_req, SAMPLE_ACCOUNT_RESP)
         feed = _make_spot_feed()
         rd = feed.get_account()
         assert isinstance(rd, RequestData)
 
-    @patch("bt_api_py.feeds.feed.requests.request")
+    @patch(MOCK_PATH)
     def test_get_balance(self, mock_req):
         _setup_mock(mock_req, SAMPLE_ACCOUNT_RESP)
         feed = _make_spot_feed()
         rd = feed.get_balance()
         assert isinstance(rd, RequestData)
 
-    @patch("bt_api_py.feeds.feed.requests.request")
+    @patch(MOCK_PATH)
     def test_get_deals(self, mock_req):
         _setup_mock(mock_req, SAMPLE_DEALS_RESP)
         feed = _make_spot_feed()
@@ -713,11 +712,11 @@ class TestKuCoinSigning:
 
     def test_signed_request_has_headers(self):
         feed = _make_spot_feed()
-        with patch("bt_api_py.feeds.feed.requests.request") as mock_req:
+        with patch(MOCK_PATH) as mock_req:
             _setup_mock(mock_req, SAMPLE_ACCOUNT_RESP)
             feed.get_account()
             call_kwargs = mock_req.call_args
-            headers = call_kwargs[1]["headers"] if "headers" in call_kwargs[1] else call_kwargs[0][2] if len(call_kwargs[0]) > 2 else {}
+            headers = call_kwargs.kwargs.get("headers", call_kwargs[1].get("headers", {})) if call_kwargs else {}
             assert "KC-API-KEY" in headers
 
 

@@ -34,7 +34,7 @@ from bt_api_py.feeds.live_binance.spot import BinanceRequestDataSpot
 from bt_api_py.registry import ExchangeRegistry
 
 # Import registration to auto-register Binance
-import bt_api_py.feeds.register_binance  # noqa: F401
+import bt_api_py.exchange_registers.register_binance  # noqa: F401
 
 
 class TestBinanceExchangeData:

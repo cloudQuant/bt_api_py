@@ -4,12 +4,11 @@ CTP Tick 数据容器
 包含最新价、买卖盘、涨跌停板、持仓量等
 """
 
-from bt_api_py.containers.auto_init_mixin import AutoInitMixin
 from bt_api_py.containers.tickers.ticker import TickerData
 from bt_api_py.functions.utils import from_dict_get_float, from_dict_get_int, from_dict_get_string
 
 
-class CtpTickerData(AutoInitMixin, TickerData):
+class CtpTickerData(TickerData):
     """CTP Tick 行情数据"""
 
     def __init__(

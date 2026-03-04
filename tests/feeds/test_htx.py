@@ -28,7 +28,7 @@ from bt_api_py.feeds.live_htx.spot import HtxRequestDataSpot
 from bt_api_py.registry import ExchangeRegistry
 
 # Import registration to auto-register HTX
-import bt_api_py.feeds.register_htx  # noqa: F401
+import bt_api_py.exchange_registers.register_htx  # noqa: F401
 
 # Load .env from project root
 load_dotenv(Path(__file__).resolve().parent.parent.parent / ".env")
@@ -664,22 +664,22 @@ class TestHtxRegistryMultiAsset:
 
     def test_htx_margin_registered(self):
         """Test HTX margin is registered."""
-        import bt_api_py.feeds.register_htx  # noqa: F401
+        import bt_api_py.exchange_registers.register_htx  # noqa: F401
         assert ExchangeRegistry.has_exchange("HTX___MARGIN")
 
     def test_htx_usdt_swap_registered(self):
         """Test HTX USDT swap is registered."""
-        import bt_api_py.feeds.register_htx  # noqa: F401
+        import bt_api_py.exchange_registers.register_htx  # noqa: F401
         assert ExchangeRegistry.has_exchange("HTX___USDT_SWAP")
 
     def test_htx_coin_swap_registered(self):
         """Test HTX coin swap is registered."""
-        import bt_api_py.feeds.register_htx  # noqa: F401
+        import bt_api_py.exchange_registers.register_htx  # noqa: F401
         assert ExchangeRegistry.has_exchange("HTX___COIN_SWAP")
 
     def test_htx_option_registered(self):
         """Test HTX option is registered."""
-        import bt_api_py.feeds.register_htx  # noqa: F401
+        import bt_api_py.exchange_registers.register_htx  # noqa: F401
         assert ExchangeRegistry.has_exchange("HTX___OPTION")
 
 

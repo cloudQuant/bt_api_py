@@ -8,8 +8,8 @@ from bt_api_py.containers.exchanges.ripio_exchange_data import RipioExchangeData
 from bt_api_py.containers.tickers.ripio_ticker import RipioRequestTickerData
 from bt_api_py.feeds.capability import Capability
 from bt_api_py.feeds.live_ripio.request_base import RipioRequestData
-from bt_api_py.functions.log_message import SpdLogManager
 from bt_api_py.functions.utils import update_extra_data
+from bt_api_py.logging_factory import get_logger
 
 
 class RipioRequestDataSpot(RipioRequestData):
@@ -42,9 +42,7 @@ class RipioRequestDataSpot(RipioRequestData):
         self.exchange_name = kwargs.get("exchange_name", "RIPIO___SPOT")
         self.asset_type = kwargs.get("asset_type", "SPOT")
         self._params = RipioExchangeDataSpot()
-        self.request_logger = SpdLogManager(
-            "./logs/" + self.logger_name, "request", 0, 0, False
-        ).create_logger()
+        self.request_logger = get_logger("ripio_spot")
 
     # ==================== Ticker ====================
 

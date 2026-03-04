@@ -9,8 +9,8 @@ from bt_api_py.containers.exchanges.htx_exchange_data import HtxExchangeDataUsdt
 from bt_api_py.containers.requestdatas.request_data import RequestData
 from bt_api_py.feeds.live_htx.request_base import HtxRequestData
 from bt_api_py.feeds.live_htx.spot import HtxAccountWssDataSpot, HtxMarketWssDataSpot
-from bt_api_py.functions.log_message import SpdLogManager
-from bt_api_py.functions.utils import get_project_log_path, update_extra_data
+from bt_api_py.functions.utils import update_extra_data
+from bt_api_py.logging_factory import get_logger
 
 
 class HtxRequestDataUsdtSwap(HtxRequestData):
@@ -26,12 +26,8 @@ class HtxRequestDataUsdtSwap(HtxRequestData):
         self.asset_type = kwargs.get("asset_type", "USDT_SWAP")
         self.logger_name = kwargs.get("logger_name", "htx_usdt_swap_feed.log")
         self._params = HtxExchangeDataUsdtSwap()
-        self.request_logger = SpdLogManager(
-            get_project_log_path(self.logger_name), "request", 0, 0, False
-        ).create_logger()
-        self.async_logger = SpdLogManager(
-            get_project_log_path(self.logger_name), "async_request", 0, 0, False
-        ).create_logger()
+        self.request_logger = get_logger("request")
+        self.async_logger = get_logger("async_request")
 
     # ==================== Market Data ====================
 

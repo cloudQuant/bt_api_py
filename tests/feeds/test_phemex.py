@@ -26,7 +26,7 @@ from bt_api_py.feeds.live_phemex.spot import PhemexRequestDataSpot
 from bt_api_py.registry import ExchangeRegistry
 
 # Import registration to auto-register Phemex
-import bt_api_py.feeds.register_phemex  # noqa: F401
+import bt_api_py.exchange_registers.register_phemex  # noqa: F401
 
 SKIP_LIVE = os.environ.get("SKIP_LIVE_TESTS", "true").lower() in ("1", "true", "yes")
 

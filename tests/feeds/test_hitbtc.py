@@ -571,7 +571,7 @@ class TestTickerContainer:
 class TestRegistry:
     def test_hitbtc_spot_registered(self):
         from bt_api_py.registry import ExchangeRegistry
-        import bt_api_py.feeds.register_hitbtc  # noqa: F401
+        import bt_api_py.exchange_registers.register_hitbtc  # noqa: F401
         assert ExchangeRegistry.has_exchange("HITBTC___SPOT")
         assert ExchangeRegistry._feed_classes["HITBTC___SPOT"] is HitBtcSpotRequestData
 

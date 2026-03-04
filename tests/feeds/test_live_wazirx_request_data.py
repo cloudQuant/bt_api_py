@@ -23,7 +23,7 @@ from bt_api_py.feeds.live_wazirx.spot import WazirxRequestDataSpot
 from bt_api_py.registry import ExchangeRegistry
 
 # Import registration to auto-register WazirX
-import bt_api_py.feeds.register_wazirx  # noqa: F401
+import bt_api_py.exchange_registers.register_wazirx  # noqa: F401
 
 
 # ==================== Fixtures ====================

@@ -1,7 +1,9 @@
 """收入类，用于确定收入的属性和方法"""
 
+from bt_api_py.containers.auto_init_mixin import AutoInitMixin
 
-class IncomeData:
+
+class IncomeData(AutoInitMixin):
     """保存收入信息"""
 
     def __init__(self, income_info, has_been_json_encoded):

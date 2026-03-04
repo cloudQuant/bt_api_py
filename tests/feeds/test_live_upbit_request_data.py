@@ -19,7 +19,7 @@ from bt_api_py.containers.tickers.upbit_ticker import UpbitTickerData
 from bt_api_py.registry import ExchangeRegistry
 
 # Import registration to auto-register Upbit
-import bt_api_py.feeds.register_upbit  # noqa: F401
+import bt_api_py.exchange_registers.register_upbit  # noqa: F401
 
 # Upbit feed has implementation issues with RateLimiter, so we'll skip it
 # in unit tests

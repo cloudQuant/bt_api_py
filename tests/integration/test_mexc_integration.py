@@ -59,7 +59,7 @@ def test_mexc_registration():
     """Test if MEXC registration works"""
     try:
         # This should register the feed without errors
-        import bt_api_py.feeds.register_mexc
+        import bt_api_py.exchange_registers.register_mexc
         print("✓ Successfully imported MEXC registration module")
         return True
     except Exception as e:

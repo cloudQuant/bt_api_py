@@ -4,7 +4,7 @@ Swyftx Spot Feed – three-layer sync / async wrappers + WSS stubs.
 
 from bt_api_py.containers.exchanges.swyftx_exchange_data import SwyftxExchangeDataSpot
 from bt_api_py.feeds.live_swyftx.request_base import SwyftxRequestData
-from bt_api_py.functions.log_message import SpdLogManager
+from bt_api_py.logging_factory import get_logger
 
 
 class SwyftxRequestDataSpot(SwyftxRequestData):
@@ -91,9 +91,7 @@ class SwyftxMarketWssDataSpot:
         self.data_queue = data_queue
         self._params = SwyftxExchangeDataSpot()
         self.logger_name = kwargs.get("logger_name", "swyftx_spot_market_wss.log")
-        self.request_logger = SpdLogManager(
-            "./logs/" + self.logger_name, "request", 0, 0, False
-        ).create_logger()
+        self.request_logger = get_logger("swyftx_spot_market_wss")
         self.wss_url = kwargs.get("wss_url", "")
         self.topics = kwargs.get("topics", [])
         self.running = False
@@ -112,9 +110,7 @@ class SwyftxAccountWssDataSpot:
         self.data_queue = data_queue
         self._params = SwyftxExchangeDataSpot()
         self.logger_name = kwargs.get("logger_name", "swyftx_spot_account_wss.log")
-        self.request_logger = SpdLogManager(
-            "./logs/" + self.logger_name, "request", 0, 0, False
-        ).create_logger()
+        self.request_logger = get_logger("swyftx_spot_account_wss")
         self.wss_url = kwargs.get("wss_url", "")
         self.topics = kwargs.get("topics", [])
         self.running = False

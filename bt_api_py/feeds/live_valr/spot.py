@@ -4,7 +4,7 @@ VALR Spot Feed – three-layer sync / async wrappers + WSS stubs.
 
 from bt_api_py.containers.exchanges.valr_exchange_data import ValrExchangeDataSpot
 from bt_api_py.feeds.live_valr.request_base import ValrRequestData
-from bt_api_py.functions.log_message import SpdLogManager
+from bt_api_py.logging_factory import get_logger
 
 
 class ValrRequestDataSpot(ValrRequestData):
@@ -91,9 +91,7 @@ class ValrMarketWssDataSpot:
         self.data_queue = data_queue
         self._params = ValrExchangeDataSpot()
         self.logger_name = kwargs.get("logger_name", "valr_spot_market_wss.log")
-        self.request_logger = SpdLogManager(
-            "./logs/" + self.logger_name, "request", 0, 0, False
-        ).create_logger()
+        self.request_logger = get_logger("valr_spot_market_wss")
         self.wss_url = kwargs.get("wss_url", self._params.wss_url)
         self.topics = kwargs.get("topics", [])
         self.running = False
@@ -112,9 +110,7 @@ class ValrAccountWssDataSpot:
         self.data_queue = data_queue
         self._params = ValrExchangeDataSpot()
         self.logger_name = kwargs.get("logger_name", "valr_spot_account_wss.log")
-        self.request_logger = SpdLogManager(
-            "./logs/" + self.logger_name, "request", 0, 0, False
-        ).create_logger()
+        self.request_logger = get_logger("valr_spot_account_wss")
         self.wss_url = kwargs.get("wss_url", self._params.wss_url)
         self.topics = kwargs.get("topics", [])
         self.running = False

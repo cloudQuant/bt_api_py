@@ -1,23 +1,50 @@
 """
 Auto-init mixin for Container classes
-提供 _ensure_init() 方法，在访问解析后的字段时自动触发 init_data()
-避免用户忘记手动调用 init_data() 导致返回 None
+在访问 get_* 方法时自动触发 init_data()，避免用户忘记手动调用导致返回 None
 
 用法:
-  在子类的 get_xxx() 方法中调用 self._ensure_init()
-  或在基类的抽象 get 方法中统一调用
+  让基类继承 AutoInitMixin，所有 get_* 方法会自动在首次调用前触发 init_data()
+
+  class AccountData(AutoInitMixin):
+      ...
+
+  # 以下两种写法等价:
+  account.init_data()
+  account.get_balance()
+  # 等价于:
+  account.get_balance()  # 自动触发 init_data()
 """
 
 
 class AutoInitMixin:
-    """自动初始化 mixin，确保 init_data() 在数据访问前被调用"""
+    """自动初始化 mixin，确保 init_data() 在数据访问前被调用
 
-    def __init_subclass__(cls, **kwargs):
-        super().__init_subclass__(**kwargs)
+    通过 __getattribute__ 拦截 get_* 方法调用，在首次访问时自动调用 init_data()。
+    直接调用 init_data() 仍然有效，不会重复执行。
+    """
 
     def _ensure_init(self):
         """如果尚未初始化，自动调用 init_data()"""
         if not getattr(self, "_initialized", False):
-            self.init_data()
+            # Guard against re-entrant calls: init_data() may call get_*
+            # methods on self, which would trigger _ensure_init() again.
             self._initialized = True
+            self.init_data()
         return self
+
+    def __getattribute__(self, name):
+        # 对 get_* 方法（排除 get_event/get_event_type/get_data 等无需解析的方法）
+        # 自动触发 _ensure_init()
+        attr = super().__getattribute__(name)
+        if (
+            name.startswith("get_")
+            and name not in ("get_event", "get_event_type", "get_data")
+            and callable(attr)
+        ):
+            try:
+                initialized = object.__getattribute__(self, "_initialized")
+            except AttributeError:
+                initialized = False
+            if not initialized:
+                self._ensure_init()
+        return attr

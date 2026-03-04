@@ -10,7 +10,7 @@ from threading import Thread
 from aiohttp import ClientSession, ClientTimeout, TCPConnector
 
 from bt_api_py.functions.calculate_time import get_string_tz_time
-from bt_api_py.functions.log_message import SpdLogManager
+from bt_api_py.logging_factory import get_logger
 
 __all__ = ["AsyncBase"]
 
@@ -28,9 +28,7 @@ class AsyncBase:
             import urllib.request
             system_proxies = urllib.request.getproxies()
             self.async_proxy = system_proxies.get('https') or system_proxies.get('http')
-        self.async_base_logger = SpdLogManager(
-            "./logs/async_data.log", "async_base", 0, 0, False
-        ).create_logger()
+        self.async_base_logger = get_logger("async_data")
         self.start_loop()
 
     def start_loop(self):

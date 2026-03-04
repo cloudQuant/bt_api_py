@@ -32,11 +32,11 @@ def test_bitfinex_import():
         print("✓ Successfully imported Bitfinex data containers")
 
         # Test importing registration
-        from bt_api_py.feeds.register_bitfinex import register_bitfinex
+        from bt_api_py.exchange_registers.register_bitfinex import register_bitfinex
         print("✓ Successfully imported Bitfinex registration")
 
         # Test importing error translator
-        from bt_api_py.error_framework import BitfinexErrorTranslator
+        from bt_api_py.error import BitfinexErrorTranslator
         print("✓ Successfully imported Bitfinex error translator")
 
         return True
@@ -140,7 +140,7 @@ def test_bitfinex_registration():
 
     try:
         # Test registration function
-        from bt_api_py.feeds.register_bitfinex import register_bitfinex
+        from bt_api_py.exchange_registers.register_bitfinex import register_bitfinex
         print("✓ Successfully imported register_bitfinex function")
 
         # Note: We won't actually call register() as it modifies global state

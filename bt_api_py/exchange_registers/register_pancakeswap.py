@@ -61,7 +61,7 @@ class PancakeSpotFeed(PancakeSpotRequestData):
 
 
 # Register error translator
-from bt_api_py.error_framework_pancakeswap_error_translator import PancakeSwapErrorTranslator
+from bt_api_py.errors.error_framework_pancakeswap_error_translator import PancakeSwapErrorTranslator
 
 # The error translator is automatically imported and can be used by the feed
 # No separate registration needed for error translators

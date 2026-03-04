@@ -41,10 +41,8 @@ def _get_balancer_config():
         _balancer_config_loaded = True
     except Exception as e:
         # Import logger here to avoid circular imports
-        from bt_api_py.functions.log_message import SpdLogManager
-        logger = SpdLogManager(
-            file_name="balancer_exchange_data.log", logger_name="balancer_data", print_info=False
-        ).create_logger()
+        from bt_api_py.logging_factory import get_logger
+        logger = get_logger("balancer_exchange_data")
         logger.warn(f"Failed to load balancer.yaml config: {e}")
     return _balancer_config
 

@@ -9,7 +9,7 @@ import pytest
 import queue
 from unittest.mock import Mock, patch
 
-from bt_api_py.feeds.register_hitbtc import register_hitbtc, HitBtcSpotFeedRegistration
+from bt_api_py.exchange_registers.register_hitbtc import register_hitbtc, HitBtcSpotFeedRegistration
 from bt_api_py.containers.exchanges.hitbtc_exchange_data import HitBtcSpotExchangeData
 from bt_api_py.containers.tickers.hitbtc_ticker import HitBtcRequestTickerData
 from bt_api_py.containers.orderbooks.hitbtc_orderbook import HitBtcRequestOrderBookData

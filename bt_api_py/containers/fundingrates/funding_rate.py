@@ -2,8 +2,10 @@
 # fundingRate的数据推送和请求频率不是特别高，传入的数据直接使用json格式
 """
 
+from bt_api_py.containers.auto_init_mixin import AutoInitMixin
 
-class FundingRateData:
+
+class FundingRateData(AutoInitMixin):
     """保存资金费率信息"""
 
     def __init__(self, funding_rate_info, has_been_json_encoded):

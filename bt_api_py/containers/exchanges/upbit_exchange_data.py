@@ -8,11 +8,9 @@ Auth: JWT (HS256) with SHA512 query hash.
 
 import os
 from bt_api_py.containers.exchanges.exchange_data import ExchangeData
-from bt_api_py.functions.log_message import SpdLogManager
+from bt_api_py.logging_factory import get_logger
 
-logger = SpdLogManager(
-    file_name="upbit_exchange_data.log", logger_name="upbit_data", print_info=False
-).create_logger()
+logger = get_logger("upbit_exchange_data")
 
 _upbit_config = None
 _upbit_config_loaded = False

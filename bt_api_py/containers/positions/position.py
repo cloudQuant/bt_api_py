@@ -1,7 +1,9 @@
 """持仓类，用于保存各个品种的持仓信息，分析当前策略持有某个品种多少的仓位，平均成本是多少，和总体账户有一定的区别"""
 
+from bt_api_py.containers.auto_init_mixin import AutoInitMixin
 
-class PositionData:
+
+class PositionData(AutoInitMixin):
     """保存持仓信息"""
 
     def __init__(self, position_info, has_been_json_encoded=False):

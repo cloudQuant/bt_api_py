@@ -3,8 +3,10 @@
 标记价格，更新频率比较低，mark_price参数直接使用json格式
 """
 
+from bt_api_py.containers.auto_init_mixin import AutoInitMixin
 
-class MarkPriceData:
+
+class MarkPriceData(AutoInitMixin):
     """保存标记价格信息"""
 
     def __init__(self, mark_price_info, has_been_json_encoded=False):

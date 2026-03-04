@@ -19,7 +19,7 @@ from bt_api_py.feeds.live_mexc.spot import MexcRequestDataSpot
 from bt_api_py.registry import ExchangeRegistry
 
 # Import registration to auto-register MEXC
-import bt_api_py.feeds.register_mexc  # noqa: F401
+import bt_api_py.exchange_registers.register_mexc  # noqa: F401
 
 
 def init_req_feed():

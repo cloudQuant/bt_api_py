@@ -23,7 +23,7 @@ from bt_api_py.containers.tickers.bitbank_ticker import BitbankRequestTickerData
 from bt_api_py.registry import ExchangeRegistry
 
 # Import registration to auto-register Bitbank
-import bt_api_py.feeds.register_bitbank  # noqa: F401
+import bt_api_py.exchange_registers.register_bitbank  # noqa: F401
 
 
 @pytest.fixture

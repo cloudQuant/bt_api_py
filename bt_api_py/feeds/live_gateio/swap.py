@@ -8,8 +8,8 @@ from bt_api_py.containers.orderbooks.gateio_orderbook import GateioOrderBookData
 from bt_api_py.containers.orders.gateio_order import GateioOrderData
 from bt_api_py.containers.balances.gateio_balance import GateioBalanceData
 from bt_api_py.feeds.live_gateio.request_base import GateioRequestData
-from bt_api_py.functions.log_message import SpdLogManager
 from bt_api_py.functions.utils import update_extra_data
+from bt_api_py.logging_factory import get_logger
 
 
 class GateioRequestDataSwap(GateioRequestData):
@@ -20,12 +20,8 @@ class GateioRequestDataSwap(GateioRequestData):
         kwargs.setdefault("logger_name", "gateio_swap_feed.log")
         super().__init__(data_queue, **kwargs)
         self._params = GateioExchangeDataSwap()
-        self.request_logger = SpdLogManager(
-            self.logger_name, "request", 0, 0, False
-        ).create_logger()
-        self.async_logger = SpdLogManager(
-            self.logger_name, "async_request", 0, 0, False
-        ).create_logger()
+        self.request_logger = get_logger("request")
+        self.async_logger = get_logger("async_request")
 
     # ==================== Market Data Methods ====================
 

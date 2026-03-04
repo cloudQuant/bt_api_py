@@ -23,7 +23,7 @@ from bt_api_py.containers.tickers.bingx_ticker import BingXRequestTickerData
 from bt_api_py.registry import ExchangeRegistry
 
 # Import registration to auto-register BingX
-import bt_api_py.feeds.register_bingx  # noqa: F401
+import bt_api_py.exchange_registers.register_bingx  # noqa: F401
 
 
 @pytest.fixture

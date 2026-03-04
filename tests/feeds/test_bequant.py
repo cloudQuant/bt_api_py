@@ -18,7 +18,7 @@ from bt_api_py.feeds.live_bequant.spot import BeQuantRequestDataSpot
 from bt_api_py.containers.requestdatas.request_data import RequestData
 
 # Import registration to auto-register BeQuant
-import bt_api_py.feeds.register_bequant  # noqa: F401
+import bt_api_py.exchange_registers.register_bequant  # noqa: F401
 
 # ── Sample API responses ─────────────────────────────────────
 

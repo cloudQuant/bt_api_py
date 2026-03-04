@@ -1,7 +1,9 @@
 """品种信息类，用于控制品种的属性和信息, 很长时间才会更新一次，配置型文件,可以采用这种方式进行初始化"""
 
+from bt_api_py.containers.auto_init_mixin import AutoInitMixin
 
-class SymbolData:
+
+class SymbolData(AutoInitMixin):
 
     def __init__(self, symbol_info, has_been_json_encoded):
         self.event = "SymbolEvent"

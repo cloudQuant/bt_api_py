@@ -19,7 +19,7 @@ from bt_api_py.containers.requestdatas.request_data import RequestData
 from bt_api_py.feeds.live_mexc.spot import MexcRequestDataSpot
 from bt_api_py.registry import ExchangeRegistry
 
-import bt_api_py.feeds.register_mexc  # noqa: F401
+import bt_api_py.exchange_registers.register_mexc  # noqa: F401
 
 
 # ── Sample MEXC API responses ────────────────────────────────────────
@@ -149,7 +149,7 @@ SAMPLE_ACCOUNT_RESP = {
 
 # ── Helper ───────────────────────────────────────────────────────────────
 
-MOCK_PATH = "bt_api_py.feeds.feed.requests.request"
+MOCK_PATH = "bt_api_py.feeds.http_client.HttpClient.request"
 
 
 def _make_spot_feed():
@@ -163,11 +163,8 @@ def _make_spot_feed():
 
 
 def _setup_mock(mock_req, resp_json, status_code=200):
-    """Configure a mock for requests.request that returns resp_json."""
-    mock_resp = MagicMock()
-    mock_resp.json.return_value = resp_json
-    mock_resp.status_code = status_code
-    mock_req.return_value = mock_resp
+    """Configure a mock for HttpClient.request that returns resp_json dict."""
+    mock_req.return_value = resp_json
 
 
 # ══════════════════════════════════════════════════════════════════════════

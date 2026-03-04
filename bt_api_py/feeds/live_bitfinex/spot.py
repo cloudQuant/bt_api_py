@@ -5,7 +5,7 @@ Three-layer pattern: _get_xxx() -> get_xxx() / async_get_xxx()
 
 from bt_api_py.containers.exchanges.bitfinex_exchange_data import BitfinexExchangeDataSpot
 from bt_api_py.feeds.live_bitfinex.request_base import BitfinexRequestData
-from bt_api_py.functions.log_message import SpdLogManager
+from bt_api_py.logging_factory import get_logger
 
 
 class BitfinexRequestDataSpot(BitfinexRequestData):
@@ -17,12 +17,8 @@ class BitfinexRequestDataSpot(BitfinexRequestData):
         self.exchange_name = kwargs.get("exchange_name", "BITFINEX___SPOT")
         self.logger_name = kwargs.get("logger_name", "bitfinex_spot_feed.log")
         self._params = BitfinexExchangeDataSpot()
-        self.request_logger = SpdLogManager(
-            "./logs/" + self.logger_name, "request", 0, 0, False
-        ).create_logger()
-        self.async_logger = SpdLogManager(
-            "./logs/" + self.logger_name, "async_request", 0, 0, False
-        ).create_logger()
+        self.request_logger = get_logger("bitfinex_spot_feed")
+        self.async_logger = get_logger("bitfinex_spot_feed")
 
     # ==================== Market Data Public Methods ====================
 

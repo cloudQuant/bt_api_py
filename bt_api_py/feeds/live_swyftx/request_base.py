@@ -8,7 +8,7 @@ from bt_api_py.containers.exchanges.swyftx_exchange_data import SwyftxExchangeDa
 from bt_api_py.containers.requestdatas.request_data import RequestData
 from bt_api_py.feeds.capability import Capability
 from bt_api_py.feeds.feed import Feed
-from bt_api_py.functions.log_message import SpdLogManager
+from bt_api_py.logging_factory import get_logger
 
 
 class SwyftxRequestData(Feed):
@@ -30,12 +30,8 @@ class SwyftxRequestData(Feed):
         self.asset_type = kwargs.get("asset_type", "SPOT")
         self.api_key = kwargs.get("public_key", kwargs.get("api_key", None))
         self._params = SwyftxExchangeDataSpot()
-        self.request_logger = SpdLogManager(
-            "./logs/swyftx_feed.log", "request", 0, 0, False
-        ).create_logger()
-        self.async_logger = SpdLogManager(
-            "./logs/swyftx_feed.log", "async_request", 0, 0, False
-        ).create_logger()
+        self.request_logger = get_logger("swyftx_feed")
+        self.async_logger = get_logger("swyftx_feed")
 
     # ── auth ────────────────────────────────────────────────────
 

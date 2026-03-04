@@ -15,7 +15,7 @@ from bt_api_py.feeds.live_coinswitch.request_base import CoinSwitchRequestData
 from bt_api_py.feeds.live_coinswitch.spot import CoinSwitchRequestDataSpot
 from bt_api_py.registry import ExchangeRegistry
 
-import bt_api_py.feeds.register_coinswitch  # noqa: F401
+import bt_api_py.exchange_registers.register_coinswitch  # noqa: F401
 
 # ── sample response fixtures ─────────────────────────────────
 

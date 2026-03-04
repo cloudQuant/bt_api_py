@@ -2,8 +2,10 @@
 # 参考接口：https://binance-docs.github.io/apidocs/futures/cn/#060a012f0b
 """
 
+from bt_api_py.containers.auto_init_mixin import AutoInitMixin
 
-class TradeData:
+
+class TradeData(AutoInitMixin):
     """交易类，用于保存成交信息"""
 
     def __init__(self, trade_info, has_been_json_encoded=False):

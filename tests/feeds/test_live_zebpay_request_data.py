@@ -23,7 +23,7 @@ from bt_api_py.feeds.live_zebpay.spot import ZebpayRequestDataSpot
 from bt_api_py.registry import ExchangeRegistry
 
 # Import registration to auto-register Zebpay
-import bt_api_py.feeds.register_zebpay  # noqa: F401
+import bt_api_py.exchange_registers.register_zebpay  # noqa: F401
 
 
 # ==================== Fixtures ====================

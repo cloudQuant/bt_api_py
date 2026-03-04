@@ -21,7 +21,7 @@ from bt_api_py.feeds.live_uniswap.spot import UniswapRequestDataSpot
 from bt_api_py.registry import ExchangeRegistry
 
 # Import registration to auto-register Uniswap
-import bt_api_py.feeds.register_uniswap  # noqa: F401
+import bt_api_py.exchange_registers.register_uniswap  # noqa: F401
 
 
 class TestUniswapExchangeData:

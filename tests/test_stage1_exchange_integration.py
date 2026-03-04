@@ -196,19 +196,19 @@ class TestCtpCapabilities:
 class TestBinanceErrorTranslator:
     def test_translator_exists(self):
         from bt_api_py.feeds.live_binance.request_base import BinanceRequestData
-        from bt_api_py.error_framework import BinanceErrorTranslator
+        from bt_api_py.error import BinanceErrorTranslator
         # Can't instantiate without queue, just verify class has the attribute setup
         assert hasattr(BinanceRequestData, 'translate_error')
 
     def test_translator_translates_error(self):
-        from bt_api_py.error_framework import BinanceErrorTranslator
+        from bt_api_py.error import BinanceErrorTranslator
         t = BinanceErrorTranslator()
         err = t.translate({"code": -1003, "msg": "Too many requests"}, "binance")
         assert err is not None
         assert err.venue == "binance"
 
     def test_translator_no_error(self):
-        from bt_api_py.error_framework import BinanceErrorTranslator
+        from bt_api_py.error import BinanceErrorTranslator
         t = BinanceErrorTranslator()
         err = t.translate({"code": 0, "msg": "ok"}, "binance")
         # code=0 means success for Binance
@@ -221,7 +221,7 @@ class TestOkxErrorTranslator:
         assert hasattr(OkxRequestData, 'translate_error')
 
     def test_translator_translates_error(self):
-        from bt_api_py.error_framework import OKXErrorTranslator
+        from bt_api_py.error import OKXErrorTranslator
         t = OKXErrorTranslator()
         err = t.translate({"code": "50011", "msg": "Rate limit reached"}, "okx")
         assert err is not None
@@ -234,7 +234,7 @@ class TestCtpErrorTranslator:
         assert hasattr(CtpRequestData, 'translate_error')
 
     def test_translator_translates_error(self):
-        from bt_api_py.error_framework import CTPErrorTranslator
+        from bt_api_py.error import CTPErrorTranslator
         t = CTPErrorTranslator()
         err = t.translate({"ErrorID": 3, "ErrorMsg": "认证失败"}, "CTP")
         assert err is not None

@@ -11,11 +11,9 @@ import os
 from enum import Enum
 from typing import Any
 
-from bt_api_py.functions.log_message import SpdLogManager
+from bt_api_py.logging_factory import get_logger
 
-logger = SpdLogManager(
-    file_name="gmx_exchange_data.log", logger_name="gmx_data", print_info=False
-).create_logger()
+logger = get_logger("gmx_exchange_data")
 
 _gmx_config = None
 _gmx_config_loaded = False

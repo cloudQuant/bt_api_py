@@ -3,8 +3,8 @@ from bt_api_py.containers.tickers.dydx_ticker import DydxRequestTickerData
 from bt_api_py.containers.orders.dydx_order import DydxOrderData
 from bt_api_py.containers.balances.dydx_balance import DydxBalanceData
 from bt_api_py.feeds.live_dydx.request_base import DydxRequestData
-from bt_api_py.functions.log_message import SpdLogManager
 from bt_api_py.functions.utils import update_extra_data
+from bt_api_py.logging_factory import get_logger
 
 
 class DydxRequestDataSpot(DydxRequestData):
@@ -15,12 +15,8 @@ class DydxRequestDataSpot(DydxRequestData):
         self.asset_type = kwargs.get("asset_type", "swap")
         self.logger_name = kwargs.get("logger_name", "dydx_spot_feed.log")
         self._params = DydxExchangeDataSwap()
-        self.request_logger = SpdLogManager(
-            "./logs/" + self.logger_name, "request", 0, 0, False
-        ).create_logger()
-        self.async_logger = SpdLogManager(
-            "./logs/" + self.logger_name, "async_request", 0, 0, False
-        ).create_logger()
+        self.request_logger = get_logger("dydx_spot_feed")
+        self.async_logger = get_logger("dydx_spot_feed")
 
     def get_ticker_spot(self, symbol, extra_data=None, **kwargs):
         """Get spot ticker information"""

@@ -10,8 +10,7 @@ from bt_api_py.feeds.live_htx.spot import (
     HtxMarketWssDataSpot,
     HtxRequestDataSpot,
 )
-from bt_api_py.functions.log_message import SpdLogManager
-from bt_api_py.functions.utils import get_project_log_path
+from bt_api_py.logging_factory import get_logger
 
 
 class HtxRequestDataMargin(HtxRequestDataSpot):
@@ -26,12 +25,8 @@ class HtxRequestDataMargin(HtxRequestDataSpot):
         self.asset_type = kwargs.get("asset_type", "MARGIN")
         self.logger_name = kwargs.get("logger_name", "htx_margin_feed.log")
         self._params = HtxExchangeDataMargin()
-        self.request_logger = SpdLogManager(
-            get_project_log_path(self.logger_name), "request", 0, 0, False
-        ).create_logger()
-        self.async_logger = SpdLogManager(
-            get_project_log_path(self.logger_name), "async_request", 0, 0, False
-        ).create_logger()
+        self.request_logger = get_logger("request")
+        self.async_logger = get_logger("async_request")
 
 
 class HtxMarketWssDataMargin(HtxMarketWssDataSpot):

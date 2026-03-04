@@ -24,7 +24,7 @@ from bt_api_py.feeds.live_kraken import KrakenRequestData, KrakenRequestDataSpot
 from bt_api_py.feeds.live_kraken.futures import KrakenRequestDataFutures
 from bt_api_py.registry import ExchangeRegistry
 
-import bt_api_py.feeds.register_kraken  # noqa: F401
+import bt_api_py.exchange_registers.register_kraken  # noqa: F401
 
 
 # ── Sample Kraken API responses ──────────────────────────────────────────

@@ -5,13 +5,9 @@ import os
 import yaml
 
 from bt_api_py.containers.exchanges.exchange_data import ExchangeData
-from bt_api_py.functions.log_message import SpdLogManager
+from bt_api_py.logging_factory import get_logger
 
-logger = SpdLogManager(
-    file_name="localbitcoins_exchange_data.log",
-    logger_name="localbitcoins_data",
-    print_info=False,
-).create_logger()
+logger = get_logger("localbitcoins_exchange_data")
 
 # ── YAML config cache ────────────────────────────────────────
 _config_cache = None

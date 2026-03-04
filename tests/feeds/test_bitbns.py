@@ -23,7 +23,7 @@ from bt_api_py.containers.tickers.bitbns_ticker import BitbnsRequestTickerData
 from bt_api_py.registry import ExchangeRegistry
 
 # Import registration to auto-register Bitbns
-import bt_api_py.feeds.register_bitbns  # noqa: F401
+import bt_api_py.exchange_registers.register_bitbns  # noqa: F401
 
 
 @pytest.fixture

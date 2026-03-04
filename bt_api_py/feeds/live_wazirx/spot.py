@@ -4,7 +4,7 @@ WazirX Spot Feed – three-layer sync / async wrappers + WSS stubs.
 
 from bt_api_py.containers.exchanges.wazirx_exchange_data import WazirxExchangeDataSpot
 from bt_api_py.feeds.live_wazirx.request_base import WazirxRequestData
-from bt_api_py.functions.log_message import SpdLogManager
+from bt_api_py.logging_factory import get_logger
 
 
 class WazirxRequestDataSpot(WazirxRequestData):
@@ -91,9 +91,7 @@ class WazirxMarketWssDataSpot:
         self.data_queue = data_queue
         self._params = WazirxExchangeDataSpot()
         self.logger_name = kwargs.get("logger_name", "wazirx_spot_market_wss.log")
-        self.request_logger = SpdLogManager(
-            "./logs/" + self.logger_name, "request", 0, 0, False
-        ).create_logger()
+        self.request_logger = get_logger("wazirx_spot_market_wss")
         self.wss_url = kwargs.get("wss_url", self._params.wss_url)
         self.topics = kwargs.get("topics", [])
         self.running = False
@@ -112,9 +110,7 @@ class WazirxAccountWssDataSpot:
         self.data_queue = data_queue
         self._params = WazirxExchangeDataSpot()
         self.logger_name = kwargs.get("logger_name", "wazirx_spot_account_wss.log")
-        self.request_logger = SpdLogManager(
-            "./logs/" + self.logger_name, "request", 0, 0, False
-        ).create_logger()
+        self.request_logger = get_logger("wazirx_spot_account_wss")
         self.wss_url = kwargs.get("wss_url", self._params.wss_url)
         self.topics = kwargs.get("topics", [])
         self.running = False

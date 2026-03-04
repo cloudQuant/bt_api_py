@@ -22,7 +22,7 @@ from bt_api_py.feeds.capability import Capability
 from bt_api_py.registry import ExchangeRegistry
 
 # Import registration to auto-register BTC Markets
-import bt_api_py.feeds.register_btc_markets  # noqa: F401
+import bt_api_py.exchange_registers.register_btc_markets  # noqa: F401
 
 
 @pytest.fixture

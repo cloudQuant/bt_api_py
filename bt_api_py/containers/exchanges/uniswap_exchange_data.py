@@ -42,10 +42,8 @@ def _get_uniswap_config():
         _uniswap_config_loaded = True
     except Exception as e:
         # Import logger here to avoid circular imports
-        from bt_api_py.functions.log_message import SpdLogManager
-        logger = SpdLogManager(
-            file_name="uniswap_exchange_data.log", logger_name="uniswap_data", print_info=False
-        ).create_logger()
+        from bt_api_py.logging_factory import get_logger
+        logger = get_logger("uniswap_exchange_data")
         logger.warn(f"Failed to load uniswap.yaml config: {e}")
     return _uniswap_config
 

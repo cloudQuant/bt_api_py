@@ -218,11 +218,8 @@ def load_all_exchange_configs(config_dir: str) -> dict[str, ExchangeConfig]:
                 config = load_exchange_config(filepath)
                 configs[config.id] = config
             except Exception as e:
-                from bt_api_py.functions.log_message import SpdLogManager
-
-                logger = SpdLogManager(
-                    file_name="config_loader.log", logger_name="config_loader", print_info=False
-                ).create_logger()
+                from bt_api_py.logging_factory import get_logger
+                logger = get_logger("config_loader")
                 logger.warning(f"Failed to load config {filepath}: {e}")
 
     return configs

@@ -22,12 +22,12 @@ from bt_api_py.containers.ctp.ctp_ticker import CtpTickerData
 from bt_api_py.containers.ctp.ctp_trade import CtpTradeData
 from bt_api_py.containers.exchanges.ctp_exchange_data import CtpExchangeDataFuture
 from bt_api_py.containers.requestdatas.request_data import RequestData
-from bt_api_py.error_framework import CTPErrorTranslator
+from bt_api_py.error import CTPErrorTranslator
 from bt_api_py.exceptions import ConnectionError as BtConnectionError
 from bt_api_py.feeds.base_stream import BaseDataStream, ConnectionState
 from bt_api_py.feeds.capability import Capability
 from bt_api_py.feeds.feed import Feed
-from bt_api_py.functions.log_message import SpdLogManager
+from bt_api_py.logging_factory import get_logger
 
 # CTP 开平方向映射
 CTP_OFFSET_FLAG = {
@@ -100,9 +100,7 @@ class CtpRequestData(Feed):
         self.exchange_name = "CTP"
         self._params = CtpExchangeDataFuture()
         self.logger_name = kwargs.get("logger_name", "ctp_feed.log")
-        self.request_logger = SpdLogManager(
-            "./logs/" + self.logger_name, "ctp_request", 0, 0, False
-        ).create_logger()
+        self.request_logger = get_logger("ctp_feed")
         self._error_translator = CTPErrorTranslator()
         # TraderClient 实例 — 负责交易查询和下单
         self._trader = None

@@ -8,11 +8,9 @@ Symbol: {base}_{quote} lowercase (e.g. btc_krw)
 
 import os
 from bt_api_py.containers.exchanges.exchange_data import ExchangeData
-from bt_api_py.functions.log_message import SpdLogManager
+from bt_api_py.logging_factory import get_logger
 
-logger = SpdLogManager(
-    file_name="korbit_exchange_data.log", logger_name="korbit_data", print_info=False
-).create_logger()
+logger = get_logger("korbit_exchange_data")
 
 _korbit_config = None
 _korbit_config_loaded = False

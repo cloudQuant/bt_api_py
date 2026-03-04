@@ -13,7 +13,7 @@ from urllib import parse
 from bt_api_py.containers.exchanges.coinbase_exchange_data import CoinbaseExchangeDataSpot
 from bt_api_py.containers.requestdatas.request_data import RequestData
 from bt_api_py.feeds.feed import Feed
-from bt_api_py.functions.log_message import SpdLogManager
+from bt_api_py.logging_factory import get_logger
 
 
 class CoinbaseRequestData(Feed):
@@ -35,12 +35,8 @@ class CoinbaseRequestData(Feed):
         self.logger_name = kwargs.get("logger_name", "coinbase_feed.log")
         self._params = CoinbaseExchangeDataSpot()
 
-        self.request_logger = SpdLogManager(
-            "./logs/" + self.logger_name, "request", 0, 0, False
-        ).create_logger()
-        self.async_logger = SpdLogManager(
-            "./logs/" + self.logger_name, "async_request", 0, 0, False
-        ).create_logger()
+        self.request_logger = get_logger("coinbase_feed")
+        self.async_logger = get_logger("coinbase_feed")
 
     # ── authentication ──────────────────────────────────────────
 

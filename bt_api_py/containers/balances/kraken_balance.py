@@ -7,7 +7,7 @@ import time
 from typing import Optional, Dict, Any, List
 
 from bt_api_py.containers.balances.balance import BalanceData
-from bt_api_py.functions.log_message import SpdLogManager
+from bt_api_py.logging_factory import get_logger
 
 
 class KrakenRequestBalanceData(BalanceData):
@@ -24,9 +24,7 @@ class KrakenRequestBalanceData(BalanceData):
         super().__init__(data, has_been_json_encoded)
         # Store asset_type before parsing
         self.asset_type = asset_type
-        self.logger = SpdLogManager(
-            "./logs/kraken_balance.log", "balance", 0, 0, False
-        ).create_logger()
+        self.logger = get_logger("kraken_balance")
         self._parse_data(data)
 
     def _parse_data(self, data: Dict[str, Any]):
@@ -389,9 +387,7 @@ class KrakenSpotWssBalanceData(BalanceData):
         super().__init__(data, has_been_json_encoded)
         # Store asset_type before parsing
         self.asset_type = asset_type
-        self.logger = SpdLogManager(
-            "./logs/kraken_wss_balance.log", "wss_balance", 0, 0, False
-        ).create_logger()
+        self.logger = get_logger("kraken_wss_balance")
         self._parse_wss_data(data)
 
     def _parse_wss_data(self, data: Dict[str, Any]):

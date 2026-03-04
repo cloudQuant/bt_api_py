@@ -8,11 +8,9 @@ Loads configuration from YAML file and provides REST/WSS endpoints.
 import os
 
 from bt_api_py.containers.exchanges.exchange_data import ExchangeData
-from bt_api_py.functions.log_message import SpdLogManager
+from bt_api_py.logging_factory import get_logger
 
-logger = SpdLogManager(
-    file_name="hitbtc_exchange_data.log", logger_name="hitbtc_data", print_info=False
-).create_logger()
+logger = get_logger("hitbtc_exchange_data")
 
 # ── 配置加载缓存 ──────────────────────────────────────────────
 _hitbtc_config = None

@@ -12,7 +12,7 @@ from bt_api_py.containers.tickers.binance_ticker import BinanceWssTickerData
 from bt_api_py.containers.trades.binance_trade import BinanceAggTradeData, BinanceSwapWssTradeData
 from bt_api_py.feeds.live_binance.request_base import BinanceRequestData
 from bt_api_py.feeds.my_websocket_app import MyWebsocketApp
-from bt_api_py.functions.log_message import SpdLogManager
+from bt_api_py.logging_factory import get_logger
 
 
 class BinanceMarketWssData(MyWebsocketApp, BinanceRequestData):
@@ -29,9 +29,7 @@ class BinanceMarketWssData(MyWebsocketApp, BinanceRequestData):
         self.proxies = kwargs.get("proxies")
         self.async_proxy = kwargs.get("async_proxy")
         self.exchange_name = kwargs.get("exchange_name", "BINANCE")
-        self.logger = SpdLogManager(
-            "./logs/binance_market_wss.log", "market_wss", 0, 0, False
-        ).create_logger()
+        self.logger = get_logger("binance_market_wss")
         # ping = threading.Thread(target=self.ping)
         # ping.start()
         # print("初始化成功")

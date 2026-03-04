@@ -19,7 +19,7 @@ from bt_api_py.feeds.live_bigone.spot import BigONERequestDataSpot
 from bt_api_py.containers.requestdatas.request_data import RequestData
 
 # Import registration to auto-register BigONE
-import bt_api_py.feeds.register_bigone  # noqa: F401
+import bt_api_py.exchange_registers.register_bigone  # noqa: F401
 
 # ── Sample API responses (BigONE wraps in {"data": ...}) ─────
 

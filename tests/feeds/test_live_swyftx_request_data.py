@@ -17,7 +17,7 @@ from bt_api_py.feeds.live_swyftx.spot import SwyftxRequestDataSpot
 from bt_api_py.registry import ExchangeRegistry
 
 # Import registration to auto-register Swyftx
-import bt_api_py.feeds.register_swyftx  # noqa: F401
+import bt_api_py.exchange_registers.register_swyftx  # noqa: F401
 
 
 def init_req_feed():

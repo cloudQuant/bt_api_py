@@ -1,7 +1,9 @@
 """tick类，用于确定ticker的属性和方法"""
 
+from bt_api_py.containers.auto_init_mixin import AutoInitMixin
 
-class TickerData:
+
+class TickerData(AutoInitMixin):
     """保存ticker信息"""
 
     def __init__(self, ticker_info, has_been_json_encoded=False):

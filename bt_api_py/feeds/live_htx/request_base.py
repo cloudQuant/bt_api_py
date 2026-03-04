@@ -12,12 +12,11 @@ import urllib.parse
 from datetime import datetime
 
 from bt_api_py.containers.requestdatas.request_data import RequestData
-from bt_api_py.error_framework_htx import HtxErrorTranslator
+from bt_api_py.errors.error_framework_htx import HtxErrorTranslator
 from bt_api_py.feeds.capability import Capability
 from bt_api_py.feeds.feed import Feed
-from bt_api_py.functions.log_message import SpdLogManager
-from bt_api_py.functions.utils import get_project_log_path
 from bt_api_py.rate_limiter import RateLimiter, RateLimitRule, RateLimitScope, RateLimitType
+from bt_api_py.logging_factory import get_logger
 
 
 class HtxRequestData(Feed):
@@ -51,12 +50,8 @@ class HtxRequestData(Feed):
         self.logger_name = kwargs.get("logger_name", "htx_feed.log")
         from bt_api_py.containers.exchanges.htx_exchange_data import HtxExchangeData
         self._params = HtxExchangeData()
-        self.request_logger = SpdLogManager(
-            get_project_log_path(self.logger_name), "request", 0, 0, False
-        ).create_logger()
-        self.async_logger = SpdLogManager(
-            get_project_log_path(self.logger_name), "async_request", 0, 0, False
-        ).create_logger()
+        self.request_logger = get_logger("request")
+        self.async_logger = get_logger("async_request")
         self._error_translator = HtxErrorTranslator()
         self._rate_limiter = kwargs.get("rate_limiter", self._create_default_rate_limiter())
 

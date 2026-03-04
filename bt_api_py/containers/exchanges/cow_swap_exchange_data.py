@@ -5,11 +5,9 @@ CoW Swap is a DEX (Decentralized Exchange) on Ethereum and other chains.
 
 import os
 from bt_api_py.containers.exchanges.exchange_data import ExchangeData
-from bt_api_py.functions.log_message import SpdLogManager
+from bt_api_py.logging_factory import get_logger
 
-logger = SpdLogManager(
-    file_name="cow_swap_exchange_data.log", logger_name="cow_swap_data", print_info=False
-).create_logger()
+logger = get_logger("cow_swap_exchange_data")
 
 _cow_swap_config = None
 _cow_swap_config_loaded = False

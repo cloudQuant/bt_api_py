@@ -1,7 +1,7 @@
 """
 InstrumentManager — 统一交易标的管理器
 
-替代/增强现有 SymbolManager，提供 Instrument 注册、查询、双向映射功能。
+提供 Instrument 注册、查询、双向映射功能。
 """
 
 

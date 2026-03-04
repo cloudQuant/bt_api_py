@@ -11,17 +11,15 @@ try:
 except ImportError:
     httpx = None
 
-from bt_api_py.error_framework import (
-    AuthenticationError,
-    RateLimitError,
+from bt_api_py.error import (
+    UnifiedAuthError,
+    UnifiedRateLimitError,
     ServerError,
 )
 from bt_api_py.exceptions import RequestFailedError
-from bt_api_py.functions.log_message import SpdLogManager
+from bt_api_py.logging_factory import get_logger
 
-logger = SpdLogManager(
-    file_name="http_client.log", logger_name="http_client", print_info=False
-).create_logger()
+logger = get_logger("http_client")
 
 
 class HttpClient:
@@ -50,9 +48,18 @@ class HttpClient:
             max_keepalive_connections=max_keepalive_connections,
         )
 
-        transport_kwargs = {}
+        # httpx expects proxy as a URL string, but callers may pass a
+        # requests-style dict like {"http": "...", "https": "..."}.
+        proxy_url = None
         if proxies:
-            transport_kwargs["proxy"] = proxies
+            if isinstance(proxies, dict):
+                proxy_url = proxies.get("https") or proxies.get("http") or proxies.get("all")
+            else:
+                proxy_url = proxies
+
+        transport_kwargs = {}
+        if proxy_url:
+            transport_kwargs["proxy"] = proxy_url
 
         # 同步客户端
         self._sync_client = httpx.Client(
@@ -71,8 +78,8 @@ class HttpClient:
             "verify": verify,
             "follow_redirects": True,
         }
-        if proxies:
-            self._async_kwargs["proxy"] = proxies
+        if proxy_url:
+            self._async_kwargs["proxy"] = proxy_url
 
     def _get_async_client(self) -> "httpx.AsyncClient":
         """延迟初始化异步客户端"""
@@ -173,7 +180,7 @@ class HttpClient:
 
         try:
             return response.json()
-        except Exception:
+        except (ValueError, UnicodeDecodeError):
             return {"text": response.text, "status_code": response.status_code}
 
     def _handle_error(self, response: "httpx.Response") -> Exception:
@@ -181,13 +188,13 @@ class HttpClient:
         status = response.status_code
         try:
             body = response.json()
-        except Exception:
+        except (ValueError, UnicodeDecodeError):
             body = {"text": response.text}
 
         if status == 429:
-            return RateLimitError(venue=self._venue, response=body)
+            return UnifiedRateLimitError(venue=self._venue, response=body)
         elif status in (401, 403):
-            return AuthenticationError(
+            return UnifiedAuthError(
                 venue=self._venue,
                 response=body,
                 message=f"HTTP {status}: {body.get('msg', body.get('message', 'Auth error'))}",

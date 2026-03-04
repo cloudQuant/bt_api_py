@@ -24,7 +24,7 @@ import pytest
 from bt_api_py.functions.utils import read_account_config
 from bt_api_py.feeds.live_ib_web_feed import IbWebRequestData, IbWebRequestDataStock
 from bt_api_py.auth_config import IbWebAuthConfig
-from bt_api_py.error_framework import AuthenticationError, RequestFailedError
+from bt_api_py.error import UnifiedAuthError, UnifiedRequestFailedError
 
 # ── 配置检测 ──────────────────────────────────────────────
 

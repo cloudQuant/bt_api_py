@@ -9,11 +9,9 @@ Response format: {"code": 1000, "message": "OK", "data": {...}}
 
 import os
 from bt_api_py.containers.exchanges.exchange_data import ExchangeData
-from bt_api_py.functions.log_message import SpdLogManager
+from bt_api_py.logging_factory import get_logger
 
-logger = SpdLogManager(
-    file_name="bitmart_exchange_data.log", logger_name="bitmart_data", print_info=False
-).create_logger()
+logger = get_logger("bitmart_exchange_data")
 
 _bitmart_config = None
 _bitmart_config_loaded = False

@@ -17,8 +17,8 @@ from bt_api_py.containers.requestdatas.request_data import RequestData
 from bt_api_py.containers.tickers.cryptocom_ticker import CryptoComTicker
 from bt_api_py.feeds.capability import Capability
 from bt_api_py.feeds.feed import Feed
-from bt_api_py.functions.log_message import SpdLogManager
 from bt_api_py.functions.utils import update_extra_data
+from bt_api_py.logging_factory import get_logger
 
 
 class CryptoComRequestData(Feed):
@@ -55,12 +55,8 @@ class CryptoComRequestData(Feed):
         self.asset_type = kwargs.get("asset_type", "SPOT")
         self.exchange_name = kwargs.get("exchange_name", "CRYPTOCOM___SPOT")
         self._params = CryptoComExchangeDataSpot()
-        self.request_logger = SpdLogManager(
-            "./logs/" + self.logger_name, "request", 0, 0, False
-        ).create_logger()
-        self.async_logger = SpdLogManager(
-            "./logs/" + self.logger_name, "async_request", 0, 0, False
-        ).create_logger()
+        self.request_logger = get_logger("cryptocom_spot_feed")
+        self.async_logger = get_logger("cryptocom_spot_feed")
 
     # ── authentication ──────────────────────────────────────────
 

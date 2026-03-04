@@ -25,7 +25,7 @@ from bt_api_py.feeds.live_cryptocom.spot import CryptoComRequestDataSpot
 from bt_api_py.registry import ExchangeRegistry
 
 # Import registration to auto-register Crypto.com
-import bt_api_py.feeds.register_cryptocom  # noqa: F401
+import bt_api_py.exchange_registers.register_cryptocom  # noqa: F401
 
 
 # ── Sample API responses ─────────────────────────────────────────────────
