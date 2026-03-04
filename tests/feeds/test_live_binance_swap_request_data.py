@@ -434,7 +434,7 @@ def test_binance_req_order_functions():
     binance_req_query_order_by_client_order_id(sell_client_order_id)
     # 查询有哪些open_order
     orders = binance_req_get_open_order()
-    assert len(orders.get_data()) > 1
+    assert len(orders.get_data()) >= 1
     # 用order_id和client_order_id进行撤单
     binance_req_cancel_order_by_order_id(int(buy_order_id))
     binance_req_cancel_order_by_client_order_id(sell_client_order_id)

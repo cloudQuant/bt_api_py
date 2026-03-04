@@ -1614,7 +1614,7 @@ class TradeMixin:
     def _cancel_all_after(self, time_slug, extra_data=None, **kwargs):
         """Cancel all orders after time"""
         request_type = "cancel_all_after"
-        params = {"timeSlug": time_slug}
+        params = {"timeOut": str(time_slug)}
         path = self._params.get_rest_path(request_type)
         extra_data = update_extra_data(
             extra_data,
@@ -1780,13 +1780,15 @@ class TradeMixin:
         )
 
     def _get_algo_orders_pending(
-        self, inst_type=None, uly=None, inst_id=None, algo_id=None, extra_data=None, **kwargs
+        self, inst_type=None, ord_type=None, uly=None, inst_id=None, algo_id=None, extra_data=None, **kwargs
     ):
         """Get pending algo orders"""
         request_type = "get_algo_orders_pending"
         params = {}
         if inst_type:
             params["instType"] = inst_type
+        if ord_type:
+            params["ordType"] = ord_type
         if uly:
             params["uly"] = uly
         if inst_id:
@@ -1810,21 +1812,21 @@ class TradeMixin:
         return path, params, extra_data
 
     def get_algo_orders_pending(
-        self, inst_type=None, uly=None, inst_id=None, algo_id=None, extra_data=None, **kwargs
+        self, inst_type=None, ord_type=None, uly=None, inst_id=None, algo_id=None, extra_data=None, **kwargs
     ):
         """Get pending algo orders"""
         path, params, extra_data = self._get_algo_orders_pending(
-            inst_type, uly, inst_id, algo_id, extra_data, **kwargs
+            inst_type, ord_type, uly, inst_id, algo_id, extra_data, **kwargs
         )
         data = self.request(path, params=params, extra_data=extra_data)
         return data
 
     def async_get_algo_orders_pending(
-        self, inst_type=None, uly=None, inst_id=None, algo_id=None, extra_data=None, **kwargs
+        self, inst_type=None, ord_type=None, uly=None, inst_id=None, algo_id=None, extra_data=None, **kwargs
     ):
         """Async get pending algo orders"""
         path, params, extra_data = self._get_algo_orders_pending(
-            inst_type, uly, inst_id, algo_id, extra_data, **kwargs
+            inst_type, ord_type, uly, inst_id, algo_id, extra_data, **kwargs
         )
         self.submit(
             self.async_request(path, params=params, extra_data=extra_data),
@@ -1965,12 +1967,11 @@ class TradeMixin:
     def _cancel_all(self, inst_type, uly=None, inst_id=None, extra_data=None, **kwargs):
         """Cancel all orders"""
         request_type = "cancel_all"
-        params = {"instType": inst_type}
-        if uly:
-            params["uly"] = uly
+        order_item = {"instType": inst_type}
         if inst_id:
             request_symbol = self._params.get_symbol(inst_id)
-            params["instId"] = request_symbol
+            order_item["instId"] = request_symbol
+        params = [order_item]
         path = self._params.get_rest_path(request_type)
         extra_data = update_extra_data(
             extra_data,
@@ -2287,12 +2288,12 @@ class TradeMixin:
     def _mass_cancel(self, inst_type, uly=None, inst_id=None, extra_data=None, **kwargs):
         """Mass cancel orders"""
         request_type = "mass_cancel"
-        params = {"instType": inst_type}
-        if uly:
-            params["uly"] = uly
+        params = {}
         if inst_id:
             request_symbol = self._params.get_symbol(inst_id)
             params["instId"] = request_symbol
+        if uly:
+            params["instFamily"] = uly
         path = self._params.get_rest_path(request_type)
         extra_data = update_extra_data(
             extra_data,

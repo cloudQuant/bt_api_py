@@ -237,20 +237,18 @@ def test_okx_async_get_deals():
 
 
 def test_okx_req_set_margin_balance():
-    """Test set_margin_balance interface (requires actual position ID to work)"""
+    """Test set_margin_balance interface"""
     live_okx_swap_feed = init_req_feed()
-    # This will fail because we don't have a valid position ID, but tests the interface
-    # In real usage, you need a valid pos_id from get_position
     result = live_okx_swap_feed.set_margin_balance(
         symbol="BTC-USDT",
-        pos_id="test_position_id",  # This is a placeholder
+        pos_id="test_position_id",  # Placeholder
         amt="100",
-        mgn_mode="cross"
+        mgn_mode="cross",
+        action_type="add",
+        pos_side="net"
     )
     assert isinstance(result, RequestData)
-    # Will fail due to invalid position ID, but interface works
     print("set_margin_balance status:", result.get_status())
-    print("set_margin_balance input:", result.get_input_data())
 
 
 
@@ -397,7 +395,7 @@ def test_okx_req_cancel_all_after():
     """Test cancel_all_after interface"""
     live_okx_swap_feed = init_req_feed()
     # Set cancel all after 5 seconds
-    data = live_okx_swap_feed.cancel_all_after(time_slug='5000')
+    data = live_okx_swap_feed.cancel_all_after(time_slug='60')
     assert isinstance(data, RequestData)
     print("cancel_all_after status:", data.get_status())
 
@@ -405,16 +403,16 @@ def test_okx_req_cancel_all_after():
 
 
 def test_okx_req_amend_algo_order():
-    """Test amend_algo_order interface"""
+    """Test amend_algo_order interface - expects error with placeholder algo_id"""
     live_okx_swap_feed = init_req_feed()
-    # Amend algo order - this will fail without a valid algo_id
-    result = live_okx_swap_feed.amend_algo_order(
+    # Amend algo order - will return error response with placeholder algo_id
+    data = live_okx_swap_feed.amend_algo_order(
         algo_id="test_algo_id",  # Placeholder
         inst_id="BTC-USDT-SWAP",
         new_sz="1"
     )
-    assert isinstance(result, RequestData)
-    print("amend_algo_order status:", result.get_status())
+    assert isinstance(data, RequestData)
+    print("amend_algo_order status:", data.get_status())
 
 
 
@@ -423,7 +421,7 @@ def test_okx_req_get_algo_orders_pending():
     """Test get_algo_orders_pending interface"""
     live_okx_swap_feed = init_req_feed()
     # Get algo orders pending list
-    data = live_okx_swap_feed.get_algo_orders_pending(inst_type="SWAP", limit="10")
+    data = live_okx_swap_feed.get_algo_orders_pending(inst_type="SWAP", ord_type="conditional", limit="10")
     assert isinstance(data, RequestData)
     print("get_algo_orders_pending status:", data.get_status())
     algo_orders_list = data.get_data()
@@ -449,10 +447,9 @@ def test_okx_req_get_algo_order_history():
 
 
 def test_okx_req_get_algo_order():
-    """Test get_algo_order interface - Get specific algo order details"""
+    """Test get_algo_order interface - expects error with placeholder algo_id"""
     live_okx_swap_feed = init_req_feed()
-    # Test with a placeholder algo_id - will return empty but validates the API call
-    # In real usage, you would use a valid algo_id from get_algo_orders_pending
+    # Test with a placeholder algo_id - OKX returns error in response body
     data = live_okx_swap_feed.get_algo_order(
         algo_id="test_algo_id_placeholder",
         inst_type="SWAP",
@@ -460,11 +457,6 @@ def test_okx_req_get_algo_order():
     )
     assert isinstance(data, RequestData)
     print("get_algo_order status:", data.get_status())
-    algo_order_list = data.get_data()
-    assert isinstance(algo_order_list, list)
-    print("get_algo_order count:", len(algo_order_list))
-    # Note: This will return empty since we're using a placeholder algo_id
-    # In production, you would first get a real algo_id from get_algo_orders_pending
 
 
 

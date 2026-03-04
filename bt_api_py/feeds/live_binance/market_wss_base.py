@@ -20,6 +20,9 @@ class BinanceMarketWssData(MyWebsocketApp, BinanceRequestData):
 
     def __init__(self, data_queue, **kwargs):
         super().__init__(data_queue, **kwargs)
+        # Explicitly init BinanceRequestData/Feed chain to create _http_client
+        # (MyWebsocketApp.__init__ does not call super().__init__, so MRO chain stops)
+        BinanceRequestData.__init__(self, data_queue, **kwargs)
         self.topics = kwargs.get("topics", {})
         self.public_key = kwargs.get("public_key")
         self.private_key = kwargs.get("private_key")

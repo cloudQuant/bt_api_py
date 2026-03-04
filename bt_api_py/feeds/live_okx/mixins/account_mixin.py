@@ -558,7 +558,7 @@ class AccountMixin:
         )
 
     def _set_margin_balance(
-        self, symbol, pos_id, amt, mgn_mode, ccy=None, extra_data=None, **kwargs
+        self, symbol, pos_id, amt, mgn_mode, action_type="add", pos_side="net", ccy=None, extra_data=None, **kwargs
     ):
         """
         Set margin balance (add/reduce margin)
@@ -566,6 +566,8 @@ class AccountMixin:
         :param pos_id: Position ID
         :param amt: Amount to add/reduce
         :param mgn_mode: Margin mode, cross or isolated
+        :param action_type: add or reduce, default is add
+        :param pos_side: Position side, long/short/net, default is net
         :param ccy: Currency (for isolated margin mode)
         :param extra_data: extra_data, default is None, can be a dict passed by user
         :param kwargs: pass key-worded, variable-length arguments.
@@ -575,6 +577,8 @@ class AccountMixin:
         request_symbol = self._params.get_symbol(symbol)
         body = {
             "instId": request_symbol,
+            "posSide": pos_side,
+            "type": action_type,
             "posId": pos_id,
             "amt": str(amt),
             "mgnMode": mgn_mode,
@@ -597,21 +601,21 @@ class AccountMixin:
         return path, body, extra_data
 
     def set_margin_balance(
-        self, symbol, pos_id, amt, mgn_mode, ccy=None, extra_data=None, **kwargs
+        self, symbol, pos_id, amt, mgn_mode, action_type="add", pos_side="net", ccy=None, extra_data=None, **kwargs
     ):
         """Set margin balance (add/reduce margin)"""
         path, body, extra_data = self._set_margin_balance(
-            symbol, pos_id, amt, mgn_mode, ccy, extra_data, **kwargs
+            symbol, pos_id, amt, mgn_mode, action_type, pos_side, ccy, extra_data, **kwargs
         )
         data = self.request(path, body=body, extra_data=extra_data)
         return data
 
     def async_set_margin_balance(
-        self, symbol, pos_id, amt, mgn_mode, ccy=None, extra_data=None, **kwargs
+        self, symbol, pos_id, amt, mgn_mode, action_type="add", pos_side="net", ccy=None, extra_data=None, **kwargs
     ):
         """Async set margin balance (add/reduce margin)"""
         path, body, extra_data = self._set_margin_balance(
-            symbol, pos_id, amt, mgn_mode, ccy, extra_data, **kwargs
+            symbol, pos_id, amt, mgn_mode, action_type, pos_side, ccy, extra_data, **kwargs
         )
         self.submit(
             self.async_request(path, body=body, extra_data=extra_data), callback=self.async_callback

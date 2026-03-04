@@ -103,11 +103,11 @@ class HttpClient:
         req_kwargs = {}
         if headers:
             req_kwargs["headers"] = headers
-        if params:
+        if params is not None:
             req_kwargs["params"] = params
-        if json_data:
+        if json_data is not None:
             req_kwargs["json"] = json_data
-        if data:
+        if data is not None:
             req_kwargs["content"] = data
         if timeout is not None:
             req_kwargs["timeout"] = timeout
@@ -146,11 +146,11 @@ class HttpClient:
         req_kwargs = {}
         if headers:
             req_kwargs["headers"] = headers
-        if params:
+        if params is not None:
             req_kwargs["params"] = params
-        if json_data:
+        if json_data is not None:
             req_kwargs["json"] = json_data
-        if data:
+        if data is not None:
             req_kwargs["content"] = data
         if timeout is not None:
             req_kwargs["timeout"] = timeout
@@ -173,15 +173,30 @@ class HttpClient:
 
     def _process_response(self, response: "httpx.Response") -> dict[str, Any]:
         """处理响应，统一错误转换"""
-        try:
-            response.raise_for_status()
-        except httpx.HTTPStatusError:
-            raise self._handle_error(response)
+        status = response.status_code
 
-        try:
-            return response.json()
-        except (ValueError, UnicodeDecodeError):
-            return {"text": response.text, "status_code": response.status_code}
+        # 2xx success
+        if response.is_success:
+            try:
+                return response.json()
+            except (ValueError, UnicodeDecodeError):
+                return {"text": response.text, "status_code": status}
+
+        # 4xx client errors: return JSON body for exchange-specific handling.
+        # Many exchanges (OKX, Binance, etc.) return structured error info in
+        # 4xx responses that exchange-specific code handles via RequestData.
+        # This matches the old requests-based behavior where only 404/410 raised.
+        if 400 <= status < 500 and status not in (404, 410):
+            logger.warn(
+                f"HTTP {status} response from {response.url}: {response.text[:200]}"
+            )
+            try:
+                return response.json()
+            except (ValueError, UnicodeDecodeError):
+                pass  # fall through to raise
+
+        # 5xx server errors, 404/410, and non-JSON 4xx: raise
+        raise self._handle_error(response)
 
     def _handle_error(self, response: "httpx.Response") -> Exception:
         """统一错误处理"""

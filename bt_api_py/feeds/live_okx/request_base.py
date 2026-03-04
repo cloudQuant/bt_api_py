@@ -173,12 +173,13 @@ class OkxRequestData(
         if params:
             path = f"{path}?{req}"
         timestamp = round(time.time(), 3)
+        body_str = json.dumps(body, separators=(',', ':')) if body is not None else None
         signature_ = self.signature(
             timestamp,
             method,
             path,
             self.private_key,
-            json.dumps(body) if body is not None else None,
+            body_str,
         )
         headers = self.get_header(self.public_key, signature_, timestamp, self.passphrase)
         res = self.http_request(method, url, headers, body, timeout)
@@ -203,15 +204,16 @@ class OkxRequestData(
         if params:
             path = f"{path}?{req}"
         timestamp = round(time.time(), 3)
+        body_str = json.dumps(body, separators=(',', ':')) if body is not None else None
         signature_ = self.signature(
             timestamp,
             method,
             path,
             self.private_key,
-            json.dumps(body) if body is not None else None,
+            body_str,
         )
         headers = self.get_header(self.public_key, signature_, timestamp, self.passphrase)
-        res = await self.async_http_request(method, url, headers, body, timeout)
+        res = await self.async_http_request(method, url, headers, body_str, timeout)
         return RequestData(res, extra_data)
 
     def async_callback(self, future):

@@ -84,7 +84,7 @@ class AsyncBase:
             if headers is not None:
                 params["headers"] = headers
             if body is not None:
-                params["data"] = json.dumps(body, ensure_ascii=False)
+                params["data"] = body if isinstance(body, str) else json.dumps(body, ensure_ascii=False)
             # print(f' rest _ async httpRequest params: {params}')
             if self.async_proxy:
                 params["proxy"] = self.async_proxy
