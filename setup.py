@@ -86,6 +86,10 @@ elif sys.platform.startswith("linux"):
     ctp_compile_args = []
     ctp_package_data = ["api/%s/linux/*.so" % CTP_API_VER]
     _CTP_RUNTIME_LIBS = API_LIBS
+    # Add libiconv if available (needed by CTP libraries)
+    if os.path.exists(os.path.join(sys.prefix, "lib", "libiconv.so")):
+        ctp_lib_names.append("iconv")
+        ctp_lib_dirs.append(os.path.join(sys.prefix, "lib"))
 
 elif sys.platform.startswith("win"):
     # ---- Windows: 使用 .dll + .lib ----

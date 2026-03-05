@@ -53,6 +53,21 @@ def should_skip_live_tests():
 
 def pytest_configure(config):
     """Configure pytest with custom settings."""
+    # Set LD_LIBRARY_PATH for CTP libraries
+    ctp_lib_path = Path(__file__).parent / "bt_api_py" / "ctp" / "api" / "6.7.7" / "linux"
+    if ctp_lib_path.exists():
+        current_ld_path = os.environ.get("LD_LIBRARY_PATH", "")
+        if str(ctp_lib_path) not in current_ld_path:
+            os.environ["LD_LIBRARY_PATH"] = f"{ctp_lib_path}:{current_ld_path}"
+
+    # Preload libiconv if available (needed by CTP libraries on Linux)
+    anaconda_lib = os.path.join(sys.prefix, "lib")
+    iconv_lib = os.path.join(anaconda_lib, "libiconv.so.2")
+    if os.path.exists(iconv_lib):
+        current_preload = os.environ.get("LD_PRELOAD", "")
+        if iconv_lib not in current_preload:
+            os.environ["LD_PRELOAD"] = f"{iconv_lib}:{current_preload}" if current_preload else iconv_lib
+
     # Register custom markers
     config.addinivalue_line(
         "markers", "unit: Unit tests (fast, no external dependencies)"
