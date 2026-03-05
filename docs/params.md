@@ -9,7 +9,7 @@
 - [CTP](#ctp)
 - [Interactive Brokers](#interactive-brokers)
 
-- --
+---
 
 ## Binance
 
@@ -36,7 +36,7 @@ exchange_kwargs = {
     }
 }
 
-```bash
+```
 
 ### 现货/合约通用参数
 
@@ -96,7 +96,7 @@ exchange_kwargs = {
 
 | 测试 | `<https://testnet.binance.vision`> | `wss://testnet.binance.vision` | `<https://testnet.binancefuture.com`> | `wss://stream.testnet.binancefuture.com` |
 
-- --
+---
 
 ## OKX
 
@@ -131,7 +131,7 @@ exchange_kwargs = {
     }
 }
 
-```bash
+```
 
 ### 签名方法
 
@@ -163,7 +163,7 @@ OKX 使用 HMAC-SHA256 签名，需要包含 timestamp。
 
 | 模拟 | `<https://www.okx.com`> | `wss://wspap.okx.com:8443/ws/v5/public` |
 
-- --
+---
 
 ## CTP
 
@@ -204,7 +204,7 @@ exchange_kwargs = {
     }
 }
 
-```bash
+```
 
 ### 前置地址
 
@@ -240,7 +240,7 @@ exchange_kwargs = {
 
 | 商品期货 | 代码 + 年份(后 2 位) + 月份 | AU2506 (黄金 2025 年 6 月) |
 
-- --
+---
 
 ## Interactive Brokers
 
@@ -268,7 +268,7 @@ exchange_kwargs = {
     }
 }
 
-```bash
+```
 
 ### 股票代码格式
 
@@ -306,7 +306,7 @@ exchange_kwargs = {
 
 | 测试 | `<https://api.test.interactivebrokers.com`> |
 
-- --
+---
 
 ## 参数对比表
 
@@ -354,7 +354,7 @@ exchange_kwargs = {
 
 | 平昨 | - | `close_yesterday` | - |
 
-- --
+---
 
 ## 参数校验
 
@@ -374,7 +374,7 @@ def validate_binance_period(period: str) -> bool:
         raise ValueError(f"Invalid period. Must be one of {valid_periods}")
     return True
 
-```bash
+```
 
 ### OKX 参数校验
 
@@ -385,7 +385,7 @@ def validate_okx_symbol(symbol: str) -> bool:
         raise ValueError("OKX symbol must contain '-'")
     return True
 
-```bash
+```
 
 ### CTP 参数校验
 
@@ -397,9 +397,9 @@ def validate_ctp_offset(offset: str) -> bool:
         raise ValueError(f"Invalid offset. Must be one of {valid_offsets}")
     return True
 
-```bash
+```
 
-- --
+---
 
 ## 完整示例
 
@@ -419,7 +419,7 @@ binance_config = {
     }
 }
 
-```bash
+```
 
 ### OKX 完整配置
 
@@ -438,7 +438,7 @@ okx_config = {
     }
 }
 
-```bash
+```
 
 ### CTP 完整配置
 
@@ -457,7 +457,7 @@ ctp_config = {
     }
 }
 
-```bash
+```
 
 ### IB 完整配置
 
@@ -476,9 +476,9 @@ ib_config = {
     }
 }
 
-```bash
+```
 
-- --
+---
 
 ## 相关文档
 

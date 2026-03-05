@@ -21,7 +21,7 @@ api.subscribe("BINANCE___SPOT___BTCUSDT", [
     {"topic": "depth", "symbol": "BTCUSDT"},
 ])
 
-```bash
+```
 
 ### 方式二：使用便捷方法
 
@@ -39,7 +39,7 @@ api.subscribe_kline("BINANCE___SPOT", "BTCUSDT", "1m", callback=on_kline)
 
 api.subscribe_depth("BINANCE___SPOT", "BTCUSDT", callback=on_depth)
 
-```bash
+```
 
 ## 主题类型
 
@@ -52,7 +52,7 @@ api.subscribe("BINANCE___SPOT___BTCUSDT", [
     {"topic": "kline", "symbol": "BTCUSDT", "period": "1m"},
 ])
 
-```bash
+```
 支持的周期：`1m`, `3m`, `5m`, `15m`, `30m`, `1H`, `1D`
 
 ### depth (深度)
@@ -64,7 +64,7 @@ api.subscribe("BINANCE___SPOT___BTCUSDT", [
     {"topic": "depth", "symbol": "BTCUSDT"},
 ])
 
-```bash
+```
 
 ### ticker (行情快照)
 
@@ -75,7 +75,7 @@ api.subscribe("BINANCE___SPOT___BTCUSDT", [
     {"topic": "ticker", "symbol": "BTCUSDT"},
 ])
 
-```bash
+```
 
 ### trade (实时成交)
 
@@ -86,7 +86,7 @@ api.subscribe("BINANCE___SPOT___BTCUSDT", [
     {"topic": "trade", "symbol": "BTCUSDT"},
 ])
 
-```bash
+```
 
 ## 接收推送数据
 
@@ -101,7 +101,7 @@ while True:
     print(f"事件: {data.get_event()}")
     print(f"数据: {data}")
 
-```bash
+```
 
 ### 使用回调函数
 
@@ -119,7 +119,7 @@ api.event_bus.subscribe("ticker", on_ticker)
 api.subscribe_ticker("BINANCE___SPOT", "BTCUSDT", callback=on_ticker)
 api.run()
 
-```bash
+```
 
 ## 事件类型
 
@@ -148,7 +148,7 @@ api.run()
 ```python
 api.run()  # 阻塞，保持 WebSocket 连接
 
-```bash
+```
 
 ### 后台运行
 
@@ -168,7 +168,7 @@ while True:
 
 # ...
 
-```bash
+```
 
 ### 使用 asyncio
 
@@ -188,7 +188,7 @@ async def main():
 
 asyncio.run(main())
 
-```bash
+```
 
 ## 心跳保持
 
@@ -276,7 +276,7 @@ api.subscribe_kline("BINANCE___SPOT", "BTCUSDT", "1m")
 
 api.run()
 
-```bash
+```
 
 ## 断线重连
 
@@ -301,4 +301,4 @@ exchange_kwargs = {
     }
 }
 
-```bash
+```

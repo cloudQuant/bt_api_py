@@ -9,7 +9,7 @@ CTP (Comprehensive Transaction Platform) 是中国期货市场专用的交易接
 ```bash
 pip install ctp-python
 
-```bash
+```
 
 ### 获取仿真账户
 
@@ -48,7 +48,7 @@ exchange_kwargs = {
 
 api = BtApi(exchange_kwargs=exchange_kwargs)
 
-```bash
+```
 
 ### 2. 查询行情
 
@@ -61,7 +61,7 @@ print(f"最新价: {ticker.last_price}")
 print(f"买一: {ticker.bid_price1}, 卖一: {ticker.ask_price1}")
 print(f"成交量: {ticker.volume}")
 
-```bash
+```
 
 ### 3. 下单交易
 
@@ -78,7 +78,7 @@ order = api.limit_order(
 )
 print(f"订单 ID: {order.order_id}")
 
-```bash
+```
 
 ### 4. 查询持仓
 
@@ -87,7 +87,7 @@ positions = api.get_positions("CTP___FUTURE")
 for pos in positions:
     print(f"{pos.symbol}: {pos.position} 手")
 
-```bash
+```
 
 ### 5. 查询账户
 
@@ -96,7 +96,7 @@ balance = api.get_balance("CTP___FUTURE")
 print(f"可用资金: {balance.available}")
 print(f"保证金: {balance.margin}")
 
-```bash
+```
 
 ## WebSocket 订阅
 
@@ -112,7 +112,7 @@ def on_order(order):
 api.subscribe_ticker("CTP___FUTURE", "IF2506", on_tick)
 api.run()
 
-```bash
+```
 
 ## 合约代码
 
@@ -141,7 +141,7 @@ instruments = api.get_instruments("CTP___FUTURE")
 for inst in instruments:
     print(f"{inst.symbol}: {inst.name} - {inst.volume_multiple} 手/手")
 
-```bash
+```
 
 ### 查询手续费率
 
@@ -150,7 +150,7 @@ commission = api.get_commission("CTP___FUTURE", "IF2506")
 print(f"开仓手续费: {commission.open_commission}")
 print(f"平仓手续费: {commission.close_commission}")
 
-```bash
+```
 
 ## 注意事项
 

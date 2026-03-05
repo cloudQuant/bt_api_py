@@ -2,27 +2,7 @@
 
 本文档提供从安装配置到实际交易的完整使用教程。
 
-- --
-
-## 目录
-
-- [环境准备](#环境准备)
-- [账户配置](#账户配置)
-- [初始化 BtApi](#初始化-btapi)
-- [统一接口（推荐）](#统一接口推荐)
-- [REST 同步请求（Feed 模式）](#rest-同步请求 feed-模式)
-- [异步请求](#异步请求)
-- [WebSocket 实时订阅](#websocket-实时订阅)
-- [余额与持仓管理](#余额与持仓管理)
-- [历史数据下载](#历史数据下载)
-- [事件总线回调模式](#事件总线回调模式)
-- [多交易所同时使用](#多交易所同时使用)
-- [CTP 期货使用](#ctp-期货使用)
-- [Interactive Brokers 使用](#interactive-brokers-使用)
-- [错误处理](#错误处理)
-- [代理配置](#代理配置)
-
-- --
+---
 
 ## 环境准备
 
@@ -33,7 +13,7 @@
 
 ### 安装
 
-```bash
+```
 
 # 从 PyPI 安装
 
@@ -46,7 +26,7 @@ cd bt_api_py
 pip install -r requirements.txt
 pip install .
 
-```bash
+```
 
 ### 可选依赖
 
@@ -54,7 +34,7 @@ pip install .
 - **Interactive Brokers TWS**：需要安装 `ib_insync` 并运行 TWS/Gateway
 - **IB Web API**：需要运行 Client Portal Gateway 或配置 OAuth 2.0
 
-- --
+---
 
 ## 账户配置
 
@@ -62,10 +42,10 @@ pip install .
 
 复制示例文件并编辑：
 
-```bash
+```
 cp bt_api_py/configs/account_config_example.yaml bt_api_py/configs/account_config.yaml
 
-```bash
+```
 完整配置示例：
 
 ```yaml
@@ -107,7 +87,7 @@ ib_web:
   verify_ssl: false
   timeout: 10
 
-```bash
+```
 
 ### 方式二：代码中直接传参
 
@@ -119,7 +99,7 @@ exchange_kwargs = {
     },
 }
 
-```bash
+```
 
 ### 方式三：使用 AuthConfig 类
 
@@ -137,9 +117,9 @@ exchange_kwargs = {
     config.get_exchange_name(): config.to_dict(),
 }
 
-```bash
+```
 
-- --
+---
 
 ## 初始化 BtApi
 
@@ -176,7 +156,7 @@ print(BtApi.list_available_exchanges())
 
 # 输出: ['BINANCE___SWAP', 'BINANCE___SPOT', 'OKX___SWAP', 'OKX___SPOT', ...]
 
-```bash
+```
 
 ### 动态添加交易所
 
@@ -189,9 +169,9 @@ bt_api.add_exchange("BINANCE___SPOT", {
     "private_key": "YOUR_SECRET_KEY",
 })
 
-```bash
+```
 
-- --
+---
 
 ## 统一接口（推荐）
 
@@ -217,7 +197,7 @@ print(f"买一价: {depth.get_bid_price(0)}")
 
 kline = bt_api.get_kline("BINANCE___SWAP", "BTC-USDT", "1m", count=100)
 
-```bash
+```
 
 ### 交易操作
 
@@ -246,7 +226,7 @@ order = bt_api.query_order("BINANCE___SWAP", "BTC-USDT", order_id="123456789")
 
 open_orders = bt_api.get_open_orders("BINANCE___SWAP", "BTC-USDT")
 
-```bash
+```
 
 ### 账户查询
 
@@ -264,7 +244,7 @@ account = bt_api.get_account("BINANCE___SWAP")
 
 position = bt_api.get_position("BINANCE___SWAP", "BTC-USDT")
 
-```bash
+```
 
 ### 异步统一接口
 
@@ -276,7 +256,7 @@ bt_api.async_make_order("OKX___SWAP", "BTC-USDT", 0.001, 50000.0, "limit")
 bt_api.async_cancel_order("BINANCE___SWAP", "BTC-USDT", "123456789")
 bt_api.async_get_balance("OKX___SWAP")
 
-```bash
+```
 
 ### 批量操作（跨交易所）
 
@@ -300,7 +280,7 @@ all_positions = bt_api.get_all_positions("BTC-USDT")
 
 bt_api.cancel_all_orders("BTC-USDT")
 
-```bash
+```
 
 ### 统一接口完整方法列表
 
@@ -316,7 +296,7 @@ bt_api.cancel_all_orders("BTC-USDT")
 
 | 批量 | `get_all_ticks`, `get_all_balances`, `get_all_positions`, `cancel_all_orders` | — |
 
-- --
+---
 
 ## REST 同步请求（Feed 模式）
 
@@ -330,7 +310,7 @@ bt_api.cancel_all_orders("BTC-USDT")
 
 api = bt_api.get_request_api("BINANCE___SWAP")
 
-```bash
+```
 
 ### 获取行情
 
@@ -350,7 +330,7 @@ depth.init_data()
 print(f"买一价: {depth.get_bid_price(0)}")
 print(f"卖一价: {depth.get_ask_price(0)}")
 
-```bash
+```
 
 ### 获取 K 线
 
@@ -366,7 +346,7 @@ for bar in bars:
     print(f"时间: {bar.get_datetime()}, 开: {bar.get_open()}, "
           f"高: {bar.get_high()}, 低: {bar.get_low()}, 收: {bar.get_close()}")
 
-```bash
+```
 
 ### 下单
 
@@ -395,7 +375,7 @@ order = api.make_order(
     offset="open",
 )
 
-```bash
+```
 
 ### 撤单
 
@@ -409,7 +389,7 @@ result = api.cancel_order("BTC-USDT", order_id="123456789")
 
 result = api.cancel_all("BTC-USDT")
 
-```bash
+```
 
 ### 查询订单
 
@@ -425,9 +405,9 @@ print(f"状态: {order.get_order_status()}")
 
 open_orders = api.get_open_orders("BTC-USDT")
 
-```bash
+```
 
-- --
+---
 
 ## 异步请求
 
@@ -454,7 +434,7 @@ try:
 except queue.Empty:
     print("请求超时")
 
-```bash
+```
 
 ### 异步下单
 
@@ -474,9 +454,9 @@ result = data_queue.get(timeout=10)
 result.init_data()
 print(f"异步下单结果: {result.get_order_id()}")
 
-```bash
+```
 
-- --
+---
 
 ## WebSocket 实时订阅
 
@@ -492,7 +472,7 @@ bt_api.subscribe("BINANCE___SWAP___BTC-USDT", [
     {"topic": "ticker", "symbol": "BTC-USDT"},
 ])
 
-```bash
+```
 
 ### 消费推送数据
 
@@ -521,13 +501,13 @@ while True:
     except queue.Empty:
         print("等待数据中...")
 
-```bash
+```
 
 ### 订阅账户数据
 
 订阅行情时，系统会自动订阅账户和订单流（account/order/trade），无需单独处理。
 
-- --
+---
 
 ## 余额与持仓管理
 
@@ -554,7 +534,7 @@ print(f"账户净值: {value}")
 all_cash = bt_api.get_total_cash()
 all_value = bt_api.get_total_value()
 
-```bash
+```
 
 ### 更新单个交易所余额
 
@@ -564,7 +544,7 @@ all_value = bt_api.get_total_value()
 
 bt_api.update_balance("BINANCE___SWAP", currency="USDT")
 
-```bash
+```
 
 ### 查询持仓
 
@@ -578,9 +558,9 @@ for pos in positions:
     print(f"品种: {pos.get_symbol()}, 方向: {pos.get_position_side()}, "
           f"数量: {pos.get_position_amount()}, 盈亏: {pos.get_unrealized_profit()}")
 
-```bash
+```
 
-- --
+---
 
 ## 历史数据下载
 
@@ -600,7 +580,7 @@ while not data_queue.empty():
     bar.init_data()
     print(f"{bar.get_datetime()}: O={bar.get_open()} C={bar.get_close()}")
 
-```bash
+```
 
 ### 按时间范围下载
 
@@ -617,10 +597,10 @@ bt_api.download_history_bars(
     end_time="2025-01-02T00:00:00+08:00",
 )
 
-```bash
+```
 支持的周期：`1m`, `3m`, `5m`, `15m`, `30m`, `1H`, `1D`
 
-- --
+---
 
 ## 事件总线回调模式
 
@@ -655,9 +635,9 @@ event_bus.off("BarEvent", on_bar)
 
 event_bus.off("OrderEvent")
 
-```bash
+```
 
-- --
+---
 
 ## 多交易所同时使用
 
@@ -691,9 +671,9 @@ for exchange_name in bt_api.list_exchanges():
     tick.init_data()
     print(f"{exchange_name}: BTC-USDT = {tick.get_last_price()}")
 
-```bash
+```
 
-- --
+---
 
 ## CTP 期货使用
 
@@ -733,10 +713,10 @@ order = api.make_order(
 
 )
 
-```bash
+```
 > **注意**：CTP 需要平台特定的 SWIG 绑定：macOS (.framework)、Linux (.so)、Windows (.dll)
 
-- --
+---
 
 ## Interactive Brokers 使用
 
@@ -757,7 +737,7 @@ exchange_kwargs = {
 
 bt_api = BtApi(exchange_kwargs)
 
-```bash
+```
 
 ### IB Web API
 
@@ -777,9 +757,9 @@ exchange_kwargs = {
 
 bt_api = BtApi(exchange_kwargs)
 
-```bash
+```
 
-- --
+---
 
 ## 错误处理
 
@@ -812,9 +792,9 @@ except ExchangeConnectionError as e:
 except BtApiError as e:
     print(f"API 错误: {e}")
 
-```bash
+```
 
-- --
+---
 
 ## 代理配置
 
@@ -833,8 +813,8 @@ exchange_kwargs = {
     },
 }
 
-```bash
+```
 
-- --
+---
 
 - 最后更新: 2026-02-28*

@@ -2,26 +2,11 @@
 
 本文档描述 bt_api_py 的核心架构设计、关键设计模式和数据流。
 
-- --
-
-## 目录
-
-- [整体架构](#整体架构)
-- [核心组件](#核心组件)
-- [Registry 模式](#registry-模式)
-- [Container 数据容器](#container-数据容器)
-- [Feed 交易所适配层](#feed-交易所适配层)
-- [Stream 流式数据](#stream-流式数据)
-- [数据队列与事件总线](#数据队列与事件总线)
-- [认证配置体系](#认证配置体系)
-- [异常体系](#异常体系)
-- [交易所命名规范](#交易所命名规范)
-
-- --
+---
 
 ## 整体架构
 
-```bash
+```
 ┌─────────────────────────────────────────────────────────┐
 │                      用户代码                            │
 │                  bt_api = BtApi(...)                     │
@@ -56,9 +41,9 @@
 │  Trade  │ Symbol │ FundingRate │ MarkPrice │ Income     │
 └─────────────────────────────────────────────────────────┘
 
-```bash
+```
 
-- --
+---
 
 ## 核心组件
 
@@ -76,7 +61,7 @@
 ```python
 bt_api = BtApi(exchange_kwargs, debug=True, event_bus=None)
 
-```bash
+```
 
 ### ExchangeRegistry — 全局注册表
 
@@ -103,10 +88,10 @@ event_bus = EventBus()
 event_bus.on("BarEvent", lambda data: print(data))
 event_bus.emit("BarEvent", bar_data)
 
-```bash
+```
 支持的事件类型包括：`BarEvent`、`OrderEvent`、`TradeEvent`、`TickEvent` 等。
 
-- --
+---
 
 ## Registry 模式
 
@@ -140,7 +125,7 @@ def register_binance():
 
 register_binance()
 
-```bash
+```
 
 ### 自动注册机制
 
@@ -153,7 +138,7 @@ try:
 except ImportError as e:
     _reg_logger.debug(f"Binance register skipped: {e}")
 
-```bash
+```
 
 ### 使用注册表
 
@@ -175,9 +160,9 @@ ExchangeRegistry.has_exchange("OKX___SPOT")  # True/False
 
 ExchangeRegistry.list_exchanges()  # ["BINANCE___SWAP", "BINANCE___SPOT", ...]
 
-```bash
+```
 
-- --
+---
 
 ## Container 数据容器
 
@@ -223,7 +208,7 @@ ExchangeRegistry.list_exchanges()  # ["BINANCE___SWAP", "BINANCE___SPOT", ...]
 
 ### 容器层次结构
 
-```bash
+```
 containers/{type}/
 ├── {type}.py                # 抽象基类 (定义 get_*() 方法)
 
@@ -235,7 +220,7 @@ containers/{type}/
 
 └── ib/                      # IB 子目录实现
 
-```bash
+```
 
 ### 使用模式
 
@@ -255,7 +240,7 @@ price = data.get_last_price()
 volume = data.get_volume()
 symbol = data.get_symbol()
 
-```bash
+```
 
 ### AutoInitMixin
 
@@ -269,7 +254,7 @@ class AutoInitMixin:
             self._initialized = True
         return self
 
-```bash
+```
 
 ### has_been_json_encoded 标志
 
@@ -278,7 +263,7 @@ class AutoInitMixin:
 - `False` — 数据来自交易所 REST/WebSocket 原始响应
 - `True` — 数据来自 JSON 序列化后的重建
 
-- --
+---
 
 ## Feed 交易所适配层
 
@@ -320,12 +305,12 @@ class CtpFeed(Feed, AsyncWrapperMixin):
 
 # async_get_tick 自动由 AsyncWrapperMixin 提供
 
-```bash
+```
 HTTP 场所（Binance/OKX）应覆盖为真正的异步实现。
 
 ### Feed 目录结构
 
-```bash
+```
 feeds/
 ├── abstract_feed.py          # 统一场所协议
 
@@ -363,9 +348,9 @@ feeds/
 
 └── register_ib_web.py        # IB Web API 注册模块
 
-```bash
+```
 
-- --
+---
 
 ## Stream 流式数据
 
@@ -393,16 +378,16 @@ class MyStream(BaseDataStream):
         """主循环，在独立 daemon 线程中运行"""
         ...
 
-```bash
+```
 
 ### 连接状态机
 
-```bash
+```
 DISCONNECTED → CONNECTING → CONNECTED → AUTHENTICATED
                                 ↓
                               ERROR
 
-```bash
+```
 状态由 `ConnectionState` 枚举管理，状态变化时触发 `on_state_change()` 回调。
 
 ### 线程模型
@@ -411,7 +396,7 @@ DISCONNECTED → CONNECTING → CONNECTED → AUTHENTICATED
 - 通过 `push_data()` 将数据推送到共享的 `queue.Queue`
 - `wait_connected(timeout=30)` 可阻塞等待连接建立
 
-- --
+---
 
 ## 数据队列与事件总线
 
@@ -425,7 +410,7 @@ data = data_queue.get(timeout=10)  # 阻塞等待数据
 
 data.init_data()
 
-```bash
+```
 
 ### Callback 模式（EventBus）
 
@@ -436,11 +421,11 @@ event_bus = bt_api.get_event_bus()
 event_bus.on("BarEvent", my_bar_handler)
 event_bus.on("OrderEvent", my_order_handler)
 
-```bash
+```
 
 ### 数据流示意
 
-```bash
+```
 交易所 API ──→ Feed/Stream ──→ Container (init_data) ──→ data_queue.put()
                                                               │
                                                     ┌────────┴────────┐
@@ -448,9 +433,9 @@ event_bus.on("OrderEvent", my_order_handler)
                                               data_queue.get()  EventBus.emit()
                                               (轮询模式)         (回调模式)
 
-```bash
+```
 
-- --
+---
 
 ## 认证配置体系
 
@@ -470,11 +455,11 @@ event_bus.on("OrderEvent", my_order_handler)
 
 所有配置类都提供 `get_exchange_name()` 和 `to_dict()` 方法。
 
-- --
+---
 
 ## 异常体系
 
-```bash
+```
 BtApiError (基类)
 ├── ExchangeNotFoundError     # 交易所未注册
 
@@ -492,11 +477,11 @@ BtApiError (基类)
 
 └── DataParseError            # 数据解析失败
 
-```bash
+```
 
 - *规则**：始终使用自定义异常，禁止使用 `Exception` 或 `assert` 处理错误。
 
-- --
+---
 
 ## 交易所命名规范
 
@@ -522,7 +507,7 @@ BtApiError (基类)
 
 此命名贯穿整个系统：Registry 键、配置段、数据队列标识。
 
-- --
+---
 
 ## 标准化符号格式
 
@@ -536,6 +521,6 @@ BtApiError (基类)
 
 | IB 股票 | `{SYMBOL}-{TYPE}-{EXCHANGE}` | `AAPL-STK-SMART` |
 
-- --
+---
 
 - 最后更新: 2026-02-28*

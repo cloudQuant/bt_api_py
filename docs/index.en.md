@@ -2,10 +2,10 @@
 
 - *bt_api_py**is a unified multi-exchange trading API framework supporting spot, futures, and derivatives trading with synchronous, asynchronous, and WebSocket interfaces.
 
-[![Python 3.11+](<https://img.shields.io/badge/python-3.11%2B-blue.svg)](<https://www.python.org/downloads/>)>
-[![License: MIT](<https://img.shields.io/badge/License-MIT-green.svg)](<https://opensource.org/licenses/MIT>)>
-[![PyPI](<https://img.shields.io/pypi/v/bt_api_py.svg)](<https://pypi.org/project/bt_api_py/>)>
-[![Documentation](<https://img.shields.io/badge/docs-latest-blue.svg)](<https://cloudquant.github.io/bt_api_py/>)>
+[![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-blue.svg)](https://www.python.org/downloads/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](https://opensource.org/licenses/MIT)
+[![PyPI](https://img.shields.io/pypi/v/bt_api_py.svg)](https://pypi.org/project/bt_api_py/)
+[![Documentation](https://img.shields.io/badge/docs-latest-blue.svg)](https://cloudquant.github.io/bt_api_py/)
 
 ## Core Features
 
@@ -91,7 +91,7 @@ order = api.limit_order(
 - **License**: MIT
 - **Documentation**: <https://cloudquant.github.io/bt_api_py/>
 
-- --
+---
 
 !!! tip "Tip"
     Start with the [Quick Start](quickstart.en.md) guide to learn the basics.

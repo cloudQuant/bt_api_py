@@ -2,19 +2,7 @@
 
 本文档面向希望扩展 bt_api_py 的开发者，介绍如何添加新交易所、新数据容器、编写测试等。
 
-- --
-
-## 目录
-
-- [开发环境搭建](#开发环境搭建)
-- [添加新交易所](#添加新交易所)
-- [添加新数据容器](#添加新数据容器)
-- [编写测试](#编写测试)
-- [代码规范](#代码规范)
-- [目录结构约定](#目录结构约定)
-- [常见问题](#常见问题)
-
-- --
+---
 
 ## 开发环境搭建
 
@@ -34,9 +22,9 @@ pip install -e ".[dev]"
 
 pytest tests -n 4
 
-```bash
+```
 
-- --
+---
 
 ## 添加新交易所
 
@@ -79,7 +67,7 @@ class MyExExchangeDataSwap(ExchangeData):
 
 # - 订单类型映射
 
-```bash
+```
 
 ### 步骤 2：创建 Feed 类
 
@@ -160,7 +148,7 @@ class MyExRequestDataSwap(Feed):
         """查询持仓"""
         ...
 
-```bash
+```
 
 - *关键规则**：
 - 方法签名必须与 `AbstractVenueFeed` 协议一致
@@ -236,7 +224,7 @@ class MyExMarketWssData(BaseDataStream):
 # 根据消息类型返回对应的 Container
         ...
 
-```bash
+```
 
 ### 步骤 4：创建注册模块
 
@@ -275,7 +263,7 @@ def register_myex():
 
 register_myex()
 
-```bash
+```
 
 ### 步骤 5：在 bt_api.py 中添加自动导入
 
@@ -288,10 +276,10 @@ try:
 except ImportError as e:
     _reg_logger.debug(f"MyEx register skipped: {e}")
 
-```bash
+```
 完成！现在用户可以使用 `"MYEX___SWAP"` 标识来连接新交易所了。
 
-- --
+---
 
 ## 添加新数据容器
 
@@ -337,7 +325,7 @@ class MyData(AutoInitMixin):
         self._ensure_init()
         return self._field2
 
-```bash
+```
 
 ### 步骤 2：创建交易所实现
 
@@ -360,7 +348,7 @@ class BinanceMyData(MyData):
         self._field2 = data.get("field2")
         self._initialized = True
 
-```bash
+```
 
 ### 关键规则
 
@@ -369,7 +357,7 @@ class BinanceMyData(MyData):
 - 使用 `has_been_json_encoded` 标志区分数据来源
 - 使用 `AutoInitMixin` 的 `_ensure_init()` 实现延迟初始化
 
-- --
+---
 
 ## 编写测试
 
@@ -377,7 +365,7 @@ class BinanceMyData(MyData):
 
 测试文件镜像包结构：
 
-```bash
+```
 tests/
 ├── containers/
 │   ├── orders/test_binance_order.py
@@ -393,7 +381,7 @@ tests/
 ├── test_registry_and_balance.py
 └── test_stage0_infrastructure.py
 
-```bash
+```
 
 ### 命名规范
 
@@ -436,7 +424,7 @@ class TestMyExSwapRequestData:
         bars = result.get_data()
         assert len(bars) > 0
 
-```bash
+```
 
 ### 运行测试
 
@@ -458,7 +446,7 @@ pytest tests -n 4 --picked
 
 pytest tests --cov=bt_api_py --cov-report=html
 
-```bash
+```
 
 ### 测试标记
 
@@ -469,9 +457,9 @@ pytest tests --cov=bt_api_py --cov-report=html
 def test_live_api():
     ...
 
-```bash
+```
 
-- --
+---
 
 ## 代码规范
 
@@ -507,11 +495,11 @@ def test_live_api():
 - 使用三下划线格式：`EXCHANGE___ASSET_TYPE`
 - 示例：`BINANCE___SWAP`、`OKX___SPOT`、`CTP___FUTURE`
 
-- --
+---
 
 ## 目录结构约定
 
-```bash
+```
 bt_api_py/
 ├── containers/
 │   └── {type}/
@@ -537,7 +525,7 @@ bt_api_py/
 
 └── ctp/                           # CTP 专用（SWIG 绑定）
 
-```bash
+```
 
 ### 添加新文件的检查清单
 
@@ -549,7 +537,7 @@ bt_api_py/
 - [ ] 创建对应的测试文件
 - [ ] 异常使用自定义异常类
 
-- --
+---
 
 ## 常见问题
 
@@ -562,7 +550,7 @@ bt_api = BtApi(exchange_kwargs, debug=True)
 
 # 日志默认保存在 ./logs/ 目录下
 
-```bash
+```
 
 ### Q: 如何处理交易所 API 限速？
 
@@ -573,7 +561,7 @@ from bt_api_py.rate_limiter import RateLimiter
 limiter = RateLimiter(max_requests=10, interval=1.0)
 limiter.wait()  # 等待直到可以发送请求
 
-```bash
+```
 
 ### Q: 为什么 Container 数据返回 None？
 
@@ -585,7 +573,7 @@ data.init_data()       # 必须调用！
 
 price = data.get_last_price()
 
-```bash
+```
 或者使用 `AutoInitMixin` 的 `_ensure_init()` 方法在 `get_*()` 中自动初始化。
 
 ### Q: 如何验证 Feed 是否符合协议？
@@ -601,8 +589,8 @@ if missing:
 else:
     print("完全符合协议")
 
-```bash
+```
 
-- --
+---
 
 - 最后更新: 2026-02-28*

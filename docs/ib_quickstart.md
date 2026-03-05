@@ -44,7 +44,7 @@ exchange_kwargs = {
 
 api = BtApi(exchange_kwargs=exchange_kwargs)
 
-```bash
+```
 
 ### 2. 获取股票行情
 
@@ -61,7 +61,7 @@ print(f"买一: {ticker.bid_price1}, 卖一: {ticker.ask_price1}")
 ticker_hk = api.get_ticker("IB_WEB___STK", "700.HK")
 print(f"腾讯控股: {ticker_hk.last_price}")
 
-```bash
+```
 
 ### 3. 查询账户
 
@@ -74,7 +74,7 @@ print(f"账户净值: {balance.net_value}")
 print(f"可用资金: {balance.available_funds}")
 print(f"购买力: {balance.buying_power}")
 
-```bash
+```
 
 ### 4. 下单交易
 
@@ -91,7 +91,7 @@ order = api.limit_order(
 )
 print(f"订单 ID: {order.order_id}")
 
-```bash
+```
 
 ### 5. 查询持仓
 
@@ -100,7 +100,7 @@ positions = api.get_positions("IB_WEB___STK")
 for pos in positions:
     print(f"{pos.symbol}: {pos.position} 股")
 
-```bash
+```
 
 ## 期货交易
 
@@ -121,7 +121,7 @@ ticker = api.get_ticker("IB_WEB___FUT", "ES2025")  # E-mini S&P 500
 
 print(f"ES 价格: {ticker.last_price}")
 
-```bash
+```
 
 ## 常用股票代码
 
@@ -154,7 +154,7 @@ def on_ticker(ticker):
 api.subscribe_ticker("IB_WEB___STK", "AAPL", on_ticker)
 api.run()
 
-```bash
+```
 
 ## IB 特有功能
 
@@ -165,7 +165,7 @@ order = api.get_order("IB_WEB___STK", "AAPL", order_id="123456")
 print(f"订单状态: {order.status}")
 print(f"成交数量: {order.filled_quantity}")
 
-```bash
+```
 
 ### 获取账户历史
 
@@ -177,7 +177,7 @@ trades = api.get_trades("IB_WEB___STK")
 for trade in trades:
     print(f"{trade.symbol}: {trade.side} {trade.quantity} @ {trade.price}")
 
-```bash
+```
 
 ## 注意事项
 
@@ -189,6 +189,6 @@ for trade in trades:
 
 ## 相关文档
 
-- [IB Web API 概览](ib_web_api/overview.md)
+- [IB Web API 文档](ib_web_api/index.md)
 - [IB API 快速参考](ib_web_api/api_reference_quick.md)
 - [IB 实现指南](ib_web_api/implementation_guide.md)

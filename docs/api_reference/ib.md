@@ -26,7 +26,7 @@ exchange_kwargs = {
     }
 }
 
-```bash
+```
 
 ## API 端点
 
@@ -81,21 +81,21 @@ exchange_kwargs = {
 ```python
 ticker = api.get_tick("IB_WEB___STK", "AAPL")
 
-```bash
+```
 
 ### 查询账户
 
 ```python
 account = api.get_account("IB_WEB___STK")
 
-```bash
+```
 
 ### 查询持仓
 
 ```python
 positions = api.get_position("IB_WEB___STK")
 
-```bash
+```
 
 ### 下单
 
@@ -108,7 +108,7 @@ order = api.make_order(
     order_type="limit"
 )
 
-```bash
+```
 
 ## 订单类型
 
@@ -156,6 +156,6 @@ order = api.make_order(
 
 ## 相关文档
 
-- [IB Web API 概览](../ib_web_api/overview.md)
+- [IB Web API 文档](../ib_web_api/index.md)
 - [IB API 快速参考](../ib_web_api/api_reference_quick.md)
 - [IB 快速入门](../ib_quickstart.md)

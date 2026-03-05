@@ -9,7 +9,7 @@
 
 ## 解决方案
 
-```bash
+```
 ┌────────────────────────────────────────────────────────────────────────┐
 │                          数据源进程 (data_feed.py)                      │
 │                                                                         │
@@ -66,9 +66,9 @@
 │   └──────────────────────────────────────────────────────────────────┘  │
 └────────────────────────────────────────────────────────────────────────┘
 
-```bash
+```
 
-- --
+---
 
 ## 核心组件
 
@@ -164,9 +164,9 @@ def run_data_feed():
             print(f"[数据源] 错误: {e}")
             continue
 
-```bash
+```
 
-- --
+---
 
 ### 2. 策略基类 (strategy.py)
 
@@ -274,9 +274,9 @@ class StrategyBase:
                 print(f"[{self.strategy_id}] 错误: {e}")
                 continue
 
-```bash
+```
 
-- --
+---
 
 ### 3. 订单网关 (order_gateway.py)
 
@@ -411,9 +411,9 @@ class OrderGateway:
                 print(f"[订单网关] 错误: {e}")
                 continue
 
-```bash
+```
 
-- --
+---
 
 ### 4. 突破策略实现示例
 
@@ -465,9 +465,9 @@ class BreakoutStrategy(StrategyBase):
             self.send_order("OP-USDT", "sell", self.volume, current_close, "limit")
             self.position = -1
 
-```bash
+```
 
-- --
+---
 
 ### 5. 启动脚本 (run_all.py)
 
@@ -546,9 +546,9 @@ if __name__ == "__main__":
         for p in processes:
             p.terminate()
 
-```bash
+```
 
-- --
+---
 
 ## ZeroMQ Topic 设计
 
@@ -564,7 +564,7 @@ if __name__ == "__main__":
 
 | `order.strategy_b` | `order.strategy_a` | 只接收策略 A 的订单 |
 
-- --
+---
 
 ## 问题解决方案总结
 
@@ -580,7 +580,7 @@ if __name__ == "__main__":
 
 | 统一风控 | 订单网关集中管理所有策略的订单和风险 |
 
-- --
+---
 
 ## 性能指标
 
@@ -596,7 +596,7 @@ if __name__ == "__main__":
 
 | 订单识别 | 通过 strategy_id 精确匹配 |
 
-- --
+---
 
 ## 扩展方向
 

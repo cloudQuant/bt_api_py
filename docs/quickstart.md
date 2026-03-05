@@ -25,7 +25,7 @@ exchange_kwargs = {
 
 api = BtApi(exchange_kwargs=exchange_kwargs)
 
-```bash
+```
 
 ### 支持的交易所
 
@@ -47,7 +47,7 @@ api = BtApi(exchange_kwargs=exchange_kwargs)
 
 |**IB Web 期货** | `IB_WEB___FUT` | 全球期货市场 |
 
-- --
+---
 
 ## 加密货币交易 (Binance/OKX)
 
@@ -65,7 +65,7 @@ print(f"BTC 价格: {ticker.last_price}")
 orderbook = api.get_orderbook("BINANCE___SPOT", "BTCUSDT", limit=20)
 print(f"买一: {orderbook.bids[0]}")
 
-```bash
+```
 
 ### 下单交易
 
@@ -82,7 +82,7 @@ order = api.limit_order(
 )
 print(f"订单 ID: {order.order_id}")
 
-```bash
+```
 
 ### WebSocket 订阅
 
@@ -95,9 +95,9 @@ def on_ticker(ticker):
 api.subscribe_ticker("BINANCE___SPOT", "BTCUSDT", on_ticker)
 api.run()
 
-```bash
+```
 
-- --
+---
 
 ## CTP 期货交易
 
@@ -135,9 +135,9 @@ order = api.limit_order(
     price=3500.0
 )
 
-```bash
+```
 
-- --
+---
 
 ## Interactive Brokers 股票/期货交易
 
@@ -175,9 +175,9 @@ order = api.limit_order(
     price=150.0
 )
 
-```bash
+```
 
-- --
+---
 
 ## 多交易所统一操作
 
@@ -195,9 +195,9 @@ for exchange in exchanges:
 order = api.get_order("BINANCE___SPOT", "BTCUSDT", order_id="123456")
 print(f"订单状态: {order.status}")
 
-```bash
+```
 
-- --
+---
 
 ## 更多示例
 

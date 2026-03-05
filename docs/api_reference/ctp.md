@@ -29,7 +29,7 @@ exchange_kwargs = {
     }
 }
 
-```bash
+```
 
 ## SimNow 仿真环境
 
@@ -107,21 +107,21 @@ CTP 下单必须指定开平方向：
 api = api.get_request_api("CTP___FUTURE")
 instruments = api.get_instruments()
 
-```bash
+```
 
 ### 查询投资者持仓
 
 ```python
 positions = api.get_position()
 
-```bash
+```
 
 ### 查询资金账户
 
 ```python
 account = api.get_account()
 
-```bash
+```
 
 ## CTP 特有功能
 
@@ -130,21 +130,21 @@ account = api.get_account()
 ```python
 margin_rate = api.get_margin_rate("IF2506")
 
-```bash
+```
 
 ### 查询合约手续费率
 
 ```python
 commission_rate = api.get_commission_rate("IF2506")
 
-```bash
+```
 
 ### 查询行情
 
 ```python
 tick = api.get_tick("CTP___FUTURE", "IF2506")
 
-```bash
+```
 
 ## 交易时间
 

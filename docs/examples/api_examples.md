@@ -2,18 +2,7 @@
 
 本文档提供 bt_api_py 的实际使用示例。
 
-## 目录
-
-- [基础示例](#基础示例)
-- [行情数据](#行情数据)
-- [交易操作](#交易操作)
-- [账户管理](#账户管理)
-- [WebSocket 订阅](#websocket-订阅)
-- [多交易所操作](#多交易所操作)
-- [策略开发](#策略开发)
-- [数据处理](#数据处理)
-
-- --
+---
 
 ## 基础示例
 
@@ -53,7 +42,7 @@ with open("config.yaml") as f:
     config = yaml.safe_load(f)
 api = BtApi(exchange_kwargs=config["exchanges"])
 
-```bash
+```
 
 ### 基础查询
 
@@ -78,9 +67,9 @@ for bar in klines:
     bar.init_data()
     print(f"时间: {bar.get_open_time()}, 收盘: {bar.get_close_price()}")
 
-```bash
+```
 
-- --
+---
 
 ## 行情数据
 
@@ -94,7 +83,7 @@ for symbol in symbols:
     ticker.init_data()
     print(f"{symbol}: {ticker.get_last_price()}")
 
-```bash
+```
 
 ### 监控价格变化
 
@@ -124,7 +113,7 @@ def monitor_price(symbol, interval=5):
 
 monitor_price("BTCUSDT")
 
-```bash
+```
 
 ### 批量获取历史 K 线
 
@@ -157,7 +146,7 @@ def download_bars(symbol, period, days=7):
 bars = download_bars("BTCUSDT", "1H", days=30)
 print(f"下载了 {len(bars)} 根 K 线")
 
-```bash
+```
 
 ### 计算技术指标
 
@@ -212,9 +201,9 @@ rsi_14 = calculate_rsi(klines, 14)
 print(f"最新 MA20: {ma_20[-1]:.2f}")
 print(f"最新 RSI14: {rsi_14[-1]:.2f}")
 
-```bash
+```
 
-- --
+---
 
 ## 交易操作
 
@@ -236,7 +225,7 @@ order.init_data()
 print(f"订单 ID: {order.get_order_id()}")
 print(f"订单状态: {order.get_order_status()}")
 
-```bash
+```
 
 ### 下市价单
 
@@ -252,7 +241,7 @@ order = api.make_order(
     order_type="market"
 )
 
-```bash
+```
 
 ### 下条件单（只做 maker）
 
@@ -270,7 +259,7 @@ order = api.make_order(
 
 )
 
-```bash
+```
 
 ### CTP 下单（指定开平）
 
@@ -288,7 +277,7 @@ order = api.make_order(
 
 )
 
-```bash
+```
 
 ### 查询订单状态
 
@@ -324,7 +313,7 @@ result = wait_order_filled(
     order.get_order_id()
 )
 
-```bash
+```
 
 ### 撤销所有订单
 
@@ -343,9 +332,9 @@ api.cancel_all("BINANCE___SPOT")
 for exchange in api.list_exchanges():
     api.cancel_all(exchange)
 
-```bash
+```
 
-- --
+---
 
 ## 账户管理
 
@@ -366,7 +355,7 @@ def print_balance(api, exchange_name):
 
 print_balance(api, "BINANCE___SPOT")
 
-```bash
+```
 
 ### 查询持仓
 
@@ -392,7 +381,7 @@ def print_positions(api, exchange_name):
 
 print_positions(api, "BINANCE___SWAP")
 
-```bash
+```
 
 ### 更新账户净值
 
@@ -413,9 +402,9 @@ for exchange, value in total_value.items():
     for currency, val in value.items():
         print(f"  {exchange} {currency}: 净值={val:.2f}, 现金={cash[currency]:.2f}")
 
-```bash
+```
 
-- --
+---
 
 ## WebSocket 订阅
 
@@ -440,7 +429,7 @@ while True:
     bar.init_data()
     print(f"K 线更新: {bar.get_close_price()} - {bar.get_volume()}")
 
-```bash
+```
 
 ### 使用回调模式
 
@@ -466,7 +455,7 @@ event_bus.subscribe("order", on_order)
 api.subscribe_kline("BINANCE___SPOT", "BTCUSDT", "1m")
 api.run()
 
-```bash
+```
 
 ### 简单量化策略
 
@@ -510,9 +499,9 @@ strategy.event_bus.subscribe("ticker", strategy.on_tick)
 api.subscribe_ticker("BINANCE___SPOT", "BTCUSDT")
 api.run()
 
-```bash
+```
 
-- --
+---
 
 ## 多交易所操作
 
@@ -556,7 +545,7 @@ arbitrage = find_arbitrage(api, "BTCUSDT")
 if arbitrage:
     print(f"套利机会: 买入 {arbitrage['buy']}, 卖出 {arbitrage['sell']}")
 
-```bash
+```
 
 ### 获取最优价格
 
@@ -587,7 +576,7 @@ def get_best_price(api, symbol, side="buy"):
 exchange, price = get_best_price(api, "BTCUSDT", side="buy")
 print(f"最优买入: {exchange} @ {price}")
 
-```bash
+```
 
 ### 跨交易所价差监控
 
@@ -626,9 +615,9 @@ def monitor_spread(api, symbol, interval=5):
 
 monitor_spread(api, "BTCUSDT")
 
-```bash
+```
 
-- --
+---
 
 ## 策略开发
 
@@ -687,7 +676,7 @@ class GridStrategy:
         )
         print(f"网格订单: {side} @ {price}")
 
-```bash
+```
 
 ### 动量策略
 
@@ -721,9 +710,9 @@ class MomentumStrategy:
             elif momentum < -2 and self.position > 0:
                 self.sell()
 
-```bash
+```
 
-- --
+---
 
 ## 数据处理
 
@@ -760,7 +749,7 @@ def save_klines_to_csv(api, symbol, period, count, filename):
 
 save_klines_to_csv(api, "BTCUSDT", "1H", 1000, "btc_klines.csv")
 
-```bash
+```
 
 ### 数据库存储
 
@@ -810,9 +799,9 @@ conn = init_db()
 ticker = api.get_tick("BINANCE___SPOT", "BTCUSDT")
 save_tick(conn, "BINANCE___SPOT", ticker)
 
-```bash
+```
 
-- --
+---
 
 ## 错误处理
 
@@ -838,12 +827,12 @@ ticker = safe_get_tick(api, "BINANCE___SPOT", "BTCUSDT")
 if ticker:
     print(ticker.get_last_price())
 
-```bash
+```
 
-- --
+---
 
 ## 更多示例
 
-- [错误处理指南](error_handling.md)
-- [最佳实践](best_practices.md)
-- [性能优化](performance.md)
+- [错误处理指南](../error_handling.md)
+- [最佳实践](../best_practices.md)
+- [性能优化](../performance.md)

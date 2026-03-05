@@ -7,7 +7,7 @@ bt_api_py 支持 Python 3.11 及以上版本。
 ```bash
 pip install bt_api_py
 
-```bash
+```
 
 ## 从源码安装
 
@@ -17,7 +17,7 @@ cd bt_api_py
 pip install -r requirements.txt
 pip install .
 
-```bash
+```
 
 ## 安装开发依赖
 
@@ -26,7 +26,7 @@ pip install .
 ```bash
 pip install -r requirements-dev.txt
 
-```bash
+```
 
 ## 验证安装
 
@@ -36,7 +36,7 @@ pip install -r requirements-dev.txt
 import bt_api_py
 print(bt_api_py.__version__)
 
-```bash
+```
 
 ## 支持的平台
 
@@ -61,14 +61,14 @@ print(bt_api_py.__version__)
 ```bash
 pip install websockets
 
-```bash
+```
 
 ### 异步 HTTP 支持
 
 ```bash
 pip install httpx
 
-```bash
+```
 
 ### CTP 交易支持
 
@@ -88,4 +88,4 @@ sudo apt-get install swig
 
 # 从 <https://www.swig.org/download.html> 下载安装
 
-```bash
+```

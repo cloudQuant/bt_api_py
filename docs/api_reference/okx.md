@@ -26,7 +26,7 @@ exchange_kwargs = {
     }
 }
 
-```bash
+```
 
 ## API 端点
 
@@ -62,14 +62,14 @@ OKX 需要 API Key 的 passphrase，在创建 API Key 时设置。
 api = api.get_request_api("OKX___SPOT")
 instruments = api.get_instruments("SPOT", "BTC-USDT")
 
-```bash
+```
 
 ### 获取账户配置
 
 ```python
 account_config = api.get_account_config()
 
-```bash
+```
 
 ## 错误码
 

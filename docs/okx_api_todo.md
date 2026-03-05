@@ -5,7 +5,7 @@
 > 更新时间: 2026-02-27 (持续更新中...)
 > 基于: `docs/okx/` 文档和 `bt_api_py/feeds/live_okx/` 实现对比
 
-- --
+---
 
 ## ✅ 最近已实现的接口 (2026-02-27 第 12 批 - RFQ/Block Trading 完整实现)
 
@@ -51,7 +51,7 @@
 - `public_block_trades` - 公开大宗交易推送频道 ✅
 - `block_tickers` - 大宗行情推送频道 ✅
 
-- --
+---
 
 ## ✅ 最近已实现的接口 (2026-02-27 第 11 批 - WebSocket 网格/价差频道)
 
@@ -67,7 +67,7 @@
 - `sprd_orders` - 价差订单推送 ✅
 - `sprd_tickers` - 价差行情推送 ✅
 
-- --
+---
 
 ## ✅ 最近已实现的接口 (2026-02-27 第 10 批 - 10 代理并行完成)
 
@@ -144,7 +144,7 @@
 - `deposit_info` - 充值信息推送 ✅
 - `withdrawal_info` - 提币信息推送 ✅
 
-- --
+---
 
 ## ✅ 最近已实现的接口 (2026-02-26 第 9 批)
 
@@ -216,7 +216,7 @@
 - Fixed `get_support_coin` data format handling
 - Fixed `get_adjust_leverage_info` parameters
 
-- --
+---
 
 ## ✅ 最近已实现的接口 (2026-02-26 第 8 批)
 
@@ -292,7 +292,7 @@
 - `get_option_oi_volume_strike` / `async_get_option_oi_volume_strike` - 获取期权持仓量及交易量(行权价) ✅
 - `get_option_taker_flow` / `async_get_option_taker_flow` - 获取期权主动买卖笔数 ✅
 
-- --
+---
 
 ## ✅ 最近已实现的接口 (2026-02-26 第 7 批)
 
@@ -306,7 +306,7 @@
 - `get_contract_long_short_ratio` / `async_get_contract_long_short_ratio` - 获取合约持仓量及交易量 ✅
 - `get_put_call_ratio` / `async_get_put_call_ratio` - 获取看涨/看跌期权比率 ✅
 
-- --
+---
 
 ## ✅ 最近已实现的接口 (2026-02-26 第 6 批)
 
@@ -321,7 +321,7 @@
 - `get_greeks` / `async_get_greeks` - 获取 Greeks ✅
 - `get_position_tiers` / `async_get_position_tiers` - 获取持仓档位 ✅
 
-- --
+---
 
 ## ✅ 最近已实现的接口 (2026-02-26 第 5 批)
 
@@ -334,7 +334,7 @@
 - `transfer` / `async_transfer` - 资金划转 ✅
 - `get_transfer_state` / `async_get_transfer_state` - 获取划转状态 ✅
 
-- --
+---
 
 ## ✅ 最近已实现的接口 (2026-02-26 第 4 批)
 
@@ -349,7 +349,7 @@
 - `get_sub_account_funding_balance` / `async_get_sub_account_funding_balance` - 获取子账户资金余额 ✅
 - `get_sub_account_max_withdrawal` / `async_get_sub_account_max_withdrawal` - 获取子账户最大可划转数量 ✅
 
-- --
+---
 
 ## ✅ 最近已实现的接口 (2026-02-26 第 3 批)
 
@@ -372,7 +372,7 @@
 
 - `get_system_time` / `async_get_system_time` - 获取系统时间 ✅
 
-- --
+---
 
 ## ✅ 最近已实现的接口 (2026-02-26 第 2 批)
 
@@ -387,7 +387,7 @@
 - `get_order_history_archive` / `async_get_order_history_archive` - 获取历史订单(近 3 月) ✅
 - `cancel_all_after` / `async_cancel_all_after` - 时间条件撤单 ✅
 
-- --
+---
 
 ## ✅ 最近已实现的接口 (2026-02-26 第 1 批)
 
@@ -410,7 +410,7 @@
 
 - `set_margin_balance` / `async_set_margin_balance` - 增加/减少保证金 ✅
 
-- --
+---
 
 ## 已实现的接口 (live_okx)
 
@@ -599,7 +599,7 @@
 - `algo_orders` - 策略订单推送 ✅
 - `algo_advance` - 高级策略订单推送 ✅
 
-- --
+---
 
 ## 未实现的 REST API 接口
 
@@ -1124,7 +1124,7 @@
 
 | ~~`get_announcement_types`~~ | GET /api/v5/support/announcement-types | 获取公告类型 ✅ |
 
-- --
+---
 
 ## 未实现的 WebSocket 接口
 
@@ -1228,7 +1228,7 @@
 
 | ~~`sprd_tickers`~~ | 价差行情推送 ✅ |
 
-- --
+---
 
 ## 实现建议
 
@@ -1260,7 +1260,7 @@
 2. **价差交易**: 实现价差交易接口
 3. **大宗交易**: 实现 RFQ 接口
 
-- --
+---
 
 ## 注意事项
 
@@ -1270,7 +1270,7 @@
 4. **错误处理**: 确保正确处理 OKX API 的错误码和响应格式
 5. **测试覆盖**: 每个新接口都需要添加对应的单元测试
 
-- --
+---
 
 ## 相关文件
 

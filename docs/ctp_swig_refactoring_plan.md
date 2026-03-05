@@ -10,7 +10,7 @@
 
 当前 `bt_api_py/ctp/` 目录：
 
-```bash
+```
 bt_api_py/ctp/
 ├── __init__.py                           # from ._ctp import *; from .ctp import*
 
@@ -28,7 +28,7 @@ bt_api_py/ctp/
     ├── darwin/                            # macOS framework
     └── linux/                             # Linux .so
 
-```bash
+```
 
 ### 1.2 ctp.py 内部结构
 
@@ -72,7 +72,7 @@ bt_api_py/ctp/
 
 ### 1.4 构建管道
 
-```bash
+```
 ctp.i  ──SWIG──>  ctp.py (Python 包装) + ctp_wrap.cpp (C++ 包装)
                                            │
                                       gcc/clang
@@ -80,7 +80,7 @@ ctp.i  ──SWIG──>  ctp.py (Python 包装) + ctp_wrap.cpp (C++ 包装)
                                            v
                                    _ctp.cpython-311-darwin.so
 
-```bash
+```
 关键约束：
 
 - `ctp.i` 使用 `%feature("director")` 使 MdSpi/TraderSpi 可被 Python 子类继承
@@ -136,7 +136,7 @@ Python 模块。`__init__.py` 将所有符号重新导出，**100% 向后兼容*
 
 ### 3.1 重构后目标结构
 
-```bash
+```
 bt_api_py/ctp/
 ├── __init__.py                  # 兼容层：重新导出所有符号（不变）
 
@@ -182,7 +182,7 @@ bt_api_py/ctp/
 │
 └── api/6.7.7/                   # CTP SDK（不动）
 
-```bash
+```
 
 ### 3.2 关键设计决策
 
@@ -230,7 +230,7 @@ __all__ = [
 
 ]
 
-```bash
+```
 这样做的好处：
 
 - **零风险**：类对象仍是 `ctp.py` 中原始的那个，`isinstance` / `pickle` 完全兼容
@@ -247,7 +247,7 @@ __all__ = [
 from ._ctp import *
 from .ctp import *
 
-```bash
+```
 现有代码 `from bt_api_py.ctp import CThostFtdcXxxField` **无需任何修改**。
 
 新代码可以选择更精确的导入路径：
@@ -260,7 +260,7 @@ from bt_api_py.ctp.ctp_structs_order import CThostFtdcInputOrderField
 from bt_api_py.ctp.ctp_trader_api import CThostFtdcTraderApi
 from bt_api_py.ctp.ctp_constants import THOST_TERT_RESTART
 
-```bash
+```
 
 ### 3.3 类分类规则
 
@@ -565,7 +565,7 @@ def main():
 if __name__ == "__main__":
     main()
 
-```bash
+```
 
 ### 3.5 对 `__init__.py` 的改进（可选）
 
@@ -594,7 +594,7 @@ def __getattr__(name):
         return importlib.import_module(f'.{name}', __package__)
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
-```bash
+```
 
 ### 3.6 对 `client.py` 的改进（可选）
 
@@ -619,7 +619,7 @@ from .ctp_structs_common import CThostFtdcSettlementInfoConfirmField
 from .ctp_structs_query import CThostFtdcQryTradingAccountField
 from .ctp_structs_position import CThostFtdcQryInvestorPositionField
 
-```bash
+```
 
 ## 4. 实施步骤
 
@@ -629,14 +629,14 @@ from .ctp_structs_position import CThostFtdcQryInvestorPositionField
 2. 运行脚本，生成所有子模块
 3. 检查输出：确认无遗漏、无重复
 
-```bash
+```
 cd bt_api_py/ctp
 python scripts/split_ctp_wrapper.py
 
-```bash
+```
 预期输出：
 
-```bash
+```
 Parsed: 127 constants, 476 classes
   Generated: ctp_constants.py (127 constants)
   Generated: ctp_md_api.py (2 classes)
@@ -654,7 +654,7 @@ Parsed: 127 constants, 476 classes
 Total: 476 classes classified into 12 modules
 Validation OK: all classes classified, no duplicates
 
-```bash
+```
 
 ### 阶段 2：验证（半天）
 
@@ -679,14 +679,14 @@ assert A is B, "Must be the same object!"
 
 print("All imports OK")
 
-```bash
+```
 
 1. **回归测试**：运行现有测试套件
 
-```bash
+```
 pytest tests/ -x -v
 
-```bash
+```
 
 1. **功能验证**：确认 `client.py` 和 `live_ctp_feed.py` 无影响
 
@@ -773,13 +773,13 @@ pytest tests/ -x -v
 
 - *采用 v2 方案**。半天即可完成，零风险，完全可逆。
 
-- --
+---
 
 ## 附录
 
 ### A. 参考资源
 
-- [SWIG 官方文档](<https://www.swig.org/Doc4.0/SWIGDocumentation.html)>
-- [CTP API 文档](<http://www.sfit.com.cn/DocumentDown/api_3/index.htm)>
+- [SWIG 官方文档](https://www.swig.org/Doc4.0/SWIGDocumentation.html)
+- [CTP API 文档](http://www.sfit.com.cn/DocumentDown/api_3/index.htm)
 - [openctp 项目](<https://github.com/openctp/openctp)>
-- [SWIG Director 机制文档](<https://www.swig.org/Doc4.0/Python.html#Python_nn36)>
+- [SWIG Director 机制文档](https://www.swig.org/Doc4.0/Python.html#Python_nn36)

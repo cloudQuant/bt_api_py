@@ -2,19 +2,6 @@
 
 本文档提供 `BtApi` 类的完整 API 参考。
 
-## 目录
-
-- [概述](#概述)
-- [初始化](#初始化)
-- [交易所管理](#交易所管理)
-- [行情查询](#行情查询)
-- [交易操作](#交易操作)
-- [账户查询](#账户查询)
-- [异步方法](#异步方法)
-- [批量操作](#批量操作)
-- [WebSocket 订阅](#websocket-订阅)
-- [事件系统](#事件系统)
-
 ## 详细文档
 
 - [数据容器详解](api_reference/data_containers.md) - Ticker、Order、Bar 等数据容器
@@ -25,7 +12,7 @@
 - [CTP API](api_reference/ctp.md) - CTP 期货专用接口
 - [IB API](api_reference/ib.md) - Interactive Brokers 专用接口
 
-- --
+---
 
 ## 概述
 
@@ -39,9 +26,9 @@ api = BtApi(exchange_kwargs={
     "OKX___SPOT": {"api_key": "...", "secret": "...", "passphrase": "..."},
 })
 
-```bash
+```
 
-- --
+---
 
 ## 初始化
 
@@ -95,9 +82,9 @@ exchange_kwargs = {
 
 api = BtApi(exchange_kwargs=exchange_kwargs, debug=True)
 
-```bash
+```
 
-- --
+---
 
 ## 交易所管理
 
@@ -123,9 +110,9 @@ print(BtApi.list_available_exchanges())
 
 # ['BINANCE___SPOT', 'BINANCE___SWAP', 'OKX___SPOT', 'OKX___SWAP', 'CTP___FUTURE', 'IB_WEB___STK', 'IB_WEB___FUT']
 
-```bash
+```
 
-- --
+---
 
 ## 行情查询
 
@@ -142,7 +129,7 @@ ticker = api.get_tick("BINANCE___SPOT", "BTCUSDT")
 ticker.init_data()
 print(f"最新价: {ticker.get_last_price()}")
 
-```bash
+```
 
 ### `get_depth(exchange_name, symbol, count=20, extra_data=None, **kwargs)`
 
@@ -162,9 +149,9 @@ for bar in klines:
     bar.init_data()
     print(f"{bar.get_close_price()} - {bar.get_volume()}")
 
-```bash
+```
 
-- --
+---
 
 ## 交易操作
 
@@ -210,7 +197,7 @@ for bar in klines:
 
 查询挂单。
 
-- --
+---
 
 ## 账户查询
 
@@ -234,9 +221,9 @@ for pos in positions:
     pos.init_data()
     print(f"{pos.get_symbol_name()}: {pos.get_position()} 手")
 
-```bash
+```
 
-- --
+---
 
 ## 异步方法
 
@@ -247,16 +234,16 @@ for pos in positions:
 ```python
 api.async_get_tick("BINANCE___SPOT", "BTCUSDT")
 
-```bash
+```
 
 ### 异步交易
 
 ```python
 api.async_make_order("BINANCE___SPOT", "BTCUSDT", 0.001, 50000, "limit")
 
-```bash
+```
 
-- --
+---
 
 ## 批量操作
 
@@ -278,7 +265,7 @@ api.async_make_order("BINANCE___SPOT", "BTCUSDT", 0.001, 50000, "limit")
 
 撤销所有交易所的所有订单。
 
-- --
+---
 
 ## WebSocket 订阅
 
@@ -308,7 +295,7 @@ api.subscribe("BINANCE___SPOT___BTCUSDT", [
     {"topic": "depth", "symbol": "BTCUSDT"},
 ])
 
-```bash
+```
 
 ### `run()`
 
@@ -325,9 +312,9 @@ api.event_bus.subscribe("ticker", on_ticker)
 api.subscribe("BINANCE___SPOT___BTCUSDT", [{"topic": "ticker", "symbol": "BTCUSDT"}])
 api.run()
 
-```bash
+```
 
-- --
+---
 
 ## 事件系统
 
@@ -370,9 +357,9 @@ def on_order_update(order):
 
 event_bus.subscribe("order", on_order_update)
 
-```bash
+```
 
-- --
+---
 
 ## 交易所标识
 
@@ -384,9 +371,21 @@ event_bus.subscribe("order", on_order_update)
 
 | Binance 合约 | `BINANCE___SWAP` | USDT 本位合约 |
 
+| Binance 期权 | `BINANCE___OPTION` | 欧式期权 |
+
 | OKX 现货 | `OKX___SPOT` | 加密货币现货 |
 
 | OKX 合约 | `OKX___SWAP` | 永续合约 |
+
+| HTX 现货 | `HTX___SPOT` | 加密货币现货 |
+
+| HTX 杠杆 | `HTX___MARGIN` | 杠杆交易 |
+
+| HTX U本位合约 | `HTX___USDT_SWAP` | USDT 永续合约 |
+
+| HTX 币本位合约 | `HTX___COIN_SWAP` | 反向永续合约 |
+
+| HTX 期权 | `HTX___OPTION` | 期权交易 |
 
 | CTP 期货 | `CTP___FUTURE` | 中国期货 |
 
@@ -394,7 +393,7 @@ event_bus.subscribe("order", on_order_update)
 
 | IB Web 期货 | `IB_WEB___FUT` | 全球期货 |
 
-- --
+---
 
 ## 错误处理
 
@@ -408,9 +407,9 @@ except ExchangeNotFoundError as e:
 except Exception as e:
     print(f"请求失败: {e}")
 
-```bash
+```
 
-- --
+---
 
 ## 更多文档
 

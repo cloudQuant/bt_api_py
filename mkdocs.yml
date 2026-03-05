@@ -237,6 +237,10 @@ nav:
       - 状态与错误: okx/status_announcement_error.md
       - 大宗交易: okx/block_trading.md
 
+  - HTX (Huobi):
+      - 概览: htx/index.md
+      - API 参考: htx/api_reference.md
+
   - Interactive Brokers:
       - 快速入门: ib_quickstart.md
       - 概览: ib_web_api/index.md

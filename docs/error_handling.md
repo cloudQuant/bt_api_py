@@ -2,16 +2,7 @@
 
 bt_api_py 的错误处理和异常管理最佳实践。
 
-## 目录
-
-- [异常类型](#异常类型)
-- [错误捕获](#错误捕获)
-- [重试机制](#重试机制)
-- [日志记录](#日志记录)
-- [常见错误](#常见错误)
-- [最佳实践](#最佳实践)
-
-- --
+---
 
 ## 异常类型
 
@@ -51,7 +42,7 @@ bt_api_py 的错误处理和异常管理最佳实践。
 
 | `expired` | 已过期 | 重新下单 |
 
-- --
+---
 
 ## 错误捕获
 
@@ -72,7 +63,7 @@ except BtApiError as e:
 except Exception as e:
     print(f"未知错误: {e}")
 
-```bash
+```
 
 ### 精细化错误处理
 
@@ -106,7 +97,7 @@ ticker = safe_api_call(api.get_tick, "BINANCE___SPOT", "BTCUSDT")
 if ticker:
     print(ticker.get_last_price())
 
-```bash
+```
 
 ### 上下文管理器
 
@@ -130,9 +121,9 @@ with error_handler(api, "BINANCE___SPOT"):
     ticker = api.get_tick("BINANCE___SPOT", "BTCUSDT")
     ticker.init_data()
 
-```bash
+```
 
-- --
+---
 
 ## 重试机制
 
@@ -175,7 +166,7 @@ def get_ticker_with_retry(symbol):
     ticker.init_data()
     return ticker
 
-```bash
+```
 
 ### 条件重试
 
@@ -206,9 +197,9 @@ order = retry_until_success(
     check_order_filled
 )
 
-```bash
+```
 
-- --
+---
 
 ## 日志记录
 
@@ -233,7 +224,7 @@ logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
 
-```bash
+```
 
 ### 结构化日志
 
@@ -272,7 +263,7 @@ try:
 except Exception as e:
     logger.log_error(e, context={"exchange": "BINANCE___SPOT", "symbol": "BTCUSDT"})
 
-```bash
+```
 
 ### 性能日志
 
@@ -302,9 +293,9 @@ def log_performance(func):
 def get_ticker(symbol):
     return api.get_tick("BINANCE___SPOT", symbol)
 
-```bash
+```
 
-- --
+---
 
 ## 常见错误
 
@@ -330,7 +321,7 @@ def handle_network_error():
             else:
                 raise
 
-```bash
+```
 
 ### 认证错误
 
@@ -352,7 +343,7 @@ def check_auth_config(api, exchange_name):
         print(f"认证失败，请检查 {exchange_name} 的 API Key 配置")
         return False
 
-```bash
+```
 
 ### 频率限制
 
@@ -397,7 +388,7 @@ def rate_limited_get_tick(symbol):
     limiter.acquire()
     return api.get_tick("BINANCE___SPOT", symbol)
 
-```bash
+```
 
 ### 订单错误
 
@@ -420,7 +411,7 @@ def handle_order_error(order_response):
     else:
         print(f"订单错误: {order_response.get('msg')}")
 
-```bash
+```
 
 ### 数据初始化错误
 
@@ -448,9 +439,9 @@ class SafeDataAccess:
 ticker = api.get_tick("BINANCE___SPOT", "BTCUSDT")
 price = SafeDataAccess.get_price(ticker)
 
-```bash
+```
 
-- --
+---
 
 ## 最佳实践
 
@@ -513,7 +504,7 @@ class ApiErrorHandler:
 handler = ApiErrorHandler(api)
 ticker = handler.call(api.get_tick, "BINANCE___SPOT", "BTCUSDT")
 
-```bash
+```
 
 ### 2. 断路器模式
 
@@ -584,7 +575,7 @@ breaker = CircuitBreaker(failure_threshold=5, timeout=60)
 def protected_call(symbol):
     return breaker.call(api.get_tick, "BINANCE___SPOT", symbol)
 
-```bash
+```
 
 ### 3. 错误通知
 
@@ -614,9 +605,9 @@ class ErrorNotifier:
         """发送告警（可扩展为邮件、钉钉等）"""
         print(f"⚠️ 告警: {error_info}")
 
-```bash
+```
 
-- --
+---
 
 ## 完整示例
 
@@ -662,7 +653,7 @@ class SafeBtApi:
 safe_api = SafeBtApi(exchange_kwargs={...})
 ticker = safe_api.get_tick("BINANCE___SPOT", "BTCUSDT")
 
-```bash
+```
 
 ## 相关文档
 

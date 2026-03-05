@@ -1,5 +1,13 @@
 ### 修改日志
 
+- [x] 2026-02-28 文档质量大幅提升
+  - 修复所有文档中 ` ```bash ` 代码围栏错误关闭的问题（影响 50+ 个文件）
+  - 重写 docs/index.md：更新首页内容，修复示例代码匹配实际 BtApi 构造函数，添加 HTX 到交易所表格
+  - 新增 HTX (Huobi) 交易所文档：docs/htx/index.md（概览、5 种产品线使用示例）+ docs/htx/api_reference.md（完整 API 端点参考）
+  - 更新 docs/api_reference.md：修复代码围栏，新增 HTX 全部 5 种交易所标识到标识表
+  - 修复 docs/examples/api_examples.md：修复 15+ 处代码块格式错误
+  - 更新 mkdocs.yml 导航结构：新增 HTX (Huobi) 文档区
+
 - [x] 2026-02-28 完善项目文档体系
   - 重写 README.md：新增项目特性、支持交易所表格、架构概览、快速开始指南、项目结构说明
   - 新增 docs/architecture.md：核心架构设计文档，包含 Registry 模式、Container 模式、Feed/Stream 系统、数据队列、事件总线、异常体系等

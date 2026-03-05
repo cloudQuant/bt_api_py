@@ -2,16 +2,7 @@
 
 bt_api_py 开发和使用的最佳实践。
 
-## 目录
-
-- [代码规范](#代码规范)
-- [API 使用](#api-使用)
-- [性能优化](#性能优化)
-- [安全实践](#安全实践)
-- [测试策略](#测试策略)
-- [部署建议](#部署建议)
-
-- --
+---
 
 ## 代码规范
 
@@ -30,7 +21,7 @@ def get_current_price(api: BtApi, exchange: str, symbol: str) -> Optional[float]
     except Exception:
         return None
 
-```bash
+```
 
 ### 使用常量定义
 
@@ -56,7 +47,7 @@ ORDER_SIDE_SELL = "sell"
 
 ticker = api.get_tick(EXCHANGE_BINANCE_SPOT, "BTCUSDT")
 
-```bash
+```
 
 ### 配置管理
 
@@ -89,9 +80,9 @@ def load_config(config_file: str) -> dict:
 exchange_kwargs = load_config("config.yaml")
 api = BtApi(exchange_kwargs=exchange_kwargs)
 
-```bash
+```
 
-- --
+---
 
 ## API 使用
 
@@ -116,7 +107,7 @@ def get_price():
     ticker.init_data()
     return ticker
 
-```bash
+```
 
 ### 连接池管理
 
@@ -144,7 +135,7 @@ class ExchangePool:
 pool = ExchangePool()
 binance_api = pool.get_api("BINANCE___SPOT")
 
-```bash
+```
 
 ### 批量操作优化
 
@@ -164,7 +155,7 @@ for exchange, ticker in ticks.items():
     ticker.init_data()
     print(f"{exchange}: {ticker.get_last_price()}")
 
-```bash
+```
 
 ### 资源清理
 
@@ -192,9 +183,9 @@ with api_context({...}) as api:
     ticker = api.get_tick("BINANCE___SPOT", "BTCUSDT")
     print(ticker.get_last_price())
 
-```bash
+```
 
-- --
+---
 
 ## 性能优化
 
@@ -225,7 +216,7 @@ async def get_multiple_prices(api, symbols):
 
 asyncio.run(get_multiple_prices(api, ["BTCUSDT", "ETHUSDT"]))
 
-```bash
+```
 
 ### 数据缓存
 
@@ -261,7 +252,7 @@ class CachedTicker:
 cached_ticker = CachedTicker(api, ttl=5)
 ticker = cached_ticker.get_tick("BINANCE___SPOT", "BTCUSDT")
 
-```bash
+```
 
 ### WebSocket 代替轮询
 
@@ -285,9 +276,9 @@ api.event_bus.subscribe("ticker", on_ticker)
 api.subscribe_ticker("BINANCE___SPOT", "BTCUSDT")
 api.run()
 
-```bash
+```
 
-- --
+---
 
 ## 安全实践
 
@@ -325,7 +316,7 @@ api = BtApi(exchange_kwargs={
 
 # secret: xyz789...
 
-```bash
+```
 
 ### 使用测试网络
 
@@ -345,7 +336,7 @@ api = BtApi(exchange_kwargs={
 
 TESTNET = os.getenv("TESTNET", "true").lower() == "true"
 
-```bash
+```
 
 ### 订单金额限制
 
@@ -371,9 +362,9 @@ def validate_order(symbol, volume, price):
 if validate_order("BTCUSDT", 0.001, 50000):
     api.make_order("BINANCE___SPOT", "BTCUSDT", 0.001, 50000, "limit")
 
-```bash
+```
 
-- --
+---
 
 ## 测试策略
 
@@ -404,7 +395,7 @@ def test_api_error_handling(test_api):
     with pytest.raises(ExchangeNotFoundError):
         test_api.get_tick("INVALID_EXCHANGE", "BTCUSDT")
 
-```bash
+```
 
 ### Mock 测试
 
@@ -422,9 +413,9 @@ def test_with_mock():
         ticker = api.get_tick("BINANCE___SPOT", "BTCUSDT")
         assert ticker.get_last_price() == 50000
 
-```bash
+```
 
-- --
+---
 
 ## 部署建议
 
@@ -445,7 +436,7 @@ COPY . .
 ENV PYTHONUNBUFFERED=1
 CMD ["python", "main.py"]
 
-```bash
+```
 
 ### 健康检查
 
@@ -480,7 +471,7 @@ def run_health_check():
 import threading
 threading.Thread(target=run_health_check, daemon=True).start()
 
-```bash
+```
 
 ### 日志轮转
 
@@ -500,15 +491,15 @@ logger = logging.getLogger("bt_api")
 logger.addHandler(handler)
 logger.setLevel(logging.INFO)
 
-```bash
+```
 
-- --
+---
 
 ## 代码组织
 
 ### 项目结构
 
-```bash
+```
 project/
 ├── config/
 │   ├── __init__.py
@@ -528,7 +519,7 @@ project/
 
 └── main.py                 # 主程序
 
-```bash
+```
 
 ### 策略基类
 
@@ -569,9 +560,9 @@ class BaseStrategy:
         """订单回调（子类实现）"""
         pass
 
-```bash
+```
 
-- --
+---
 
 ## 相关文档
 

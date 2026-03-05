@@ -2,16 +2,7 @@
 
 bt_api_py 的性能优化建议和最佳实践。
 
-## 目录
-
-- [网络优化](#网络优化)
-- [数据缓存](#数据缓存)
-- [并发处理](#并发处理)
-- [内存管理](#内存管理)
-- [数据库优化](#数据库优化)
-- [监控工具](#监控工具)
-
-- --
+---
 
 ## 网络优化
 
@@ -41,7 +32,7 @@ api.event_bus.subscribe("ticker", on_ticker)
 api.subscribe_ticker("BINANCE___SPOT", "BTCUSDT")
 api.run()
 
-```bash
+```
 
 - *性能对比：**
 
@@ -72,7 +63,7 @@ def get_price():
     ticker = api.get_tick("BINANCE___SPOT", "BTCUSDT")
     return ticker
 
-```bash
+```
 
 ### 批量请求合并
 
@@ -87,9 +78,9 @@ for symbol in symbols:
 
 ticks = api.get_all_ticks("BTCUSDT")  # 一次获取所有交易所价格
 
-```bash
+```
 
-- --
+---
 
 ## 数据缓存
 
@@ -125,7 +116,7 @@ class CachedApi:
 
 # 性能提升：避免频繁 API 调用，减少 90% 重复请求
 
-```bash
+```
 
 ### Redis 缓存
 
@@ -162,9 +153,9 @@ class RedisCachedApi:
 
         return ticker
 
-```bash
+```
 
-- --
+---
 
 ## 并发处理
 
@@ -196,7 +187,7 @@ def get_all_prices_concurrent(exchanges, symbol):
 
 # 性能提升：10 个交易所 5 秒获取完，串行需要 50 秒
 
-```bash
+```
 
 ### 异步处理
 
@@ -228,7 +219,7 @@ async def get_all_prices_async(exchanges, symbol):
 
 asyncio.run(get_all_prices_async(["BINANCE___SPOT", "OKX___SPOT"], "BTCUSDT"))
 
-```bash
+```
 
 ### 批量数据处理
 
@@ -254,9 +245,9 @@ def process_klines_batch(klines):
 
 # 性能提升：批量处理比逐条处理快 3-5 倍
 
-```bash
+```
 
-- --
+---
 
 ## 内存管理
 
@@ -291,7 +282,7 @@ class CircularBuffer:
 
 klines_buffer = CircularBuffer(1000)
 
-```bash
+```
 
 ### 使用生成器
 
@@ -321,7 +312,7 @@ def get_klines_generator(count):
 for bar in get_klines_generator(100):
     process(bar)
 
-```bash
+```
 
 ### 数据分片处理
 
@@ -344,9 +335,9 @@ def process_large_dataset(data, chunk_size=1000):
 for result in process_large_dataset(large_dataset):
     save_to_db(result)
 
-```bash
+```
 
-- --
+---
 
 ## 数据库优化
 
@@ -376,7 +367,7 @@ def batch_insert(cursor, bars, batch_size=1000):
 
 # 性能提升：批量插入比逐条插入快 10-100 倍
 
-```bash
+```
 
 ### 索引优化
 
@@ -391,7 +382,7 @@ CREATE INDEX idx_price ON ticks(price);
 
 DELETE FROM klines WHERE open_time < NOW() - INTERVAL '30 DAY';
 
-```bash
+```
 
 ### 连接池
 
@@ -411,9 +402,9 @@ pool = QueuePool(
 with pool.connect() as conn:
     process_data(conn)
 
-```bash
+```
 
-- --
+---
 
 ## 监控工具
 
@@ -448,7 +439,7 @@ def test_function():
     ticker = api.get_tick("BINANCE___SPOT", "BTCUSDT")
     return ticker
 
-```bash
+```
 
 ### 性能监控装饰器
 
@@ -482,7 +473,7 @@ def get_memory_usage():
     import psutil
     return psutil.Process().memory_info().rss / 1024 / 1024
 
-```bash
+```
 
 ### 实时性能监控
 
@@ -530,9 +521,9 @@ monitor = PerformanceMonitor(api)
 ticker = monitor.track_call(api.get_tick, "BINANCE___SPOT", "BTCUSDT")
 print(monitor.get_stats())
 
-```bash
+```
 
-- --
+---
 
 ## 性能优化清单
 
@@ -571,7 +562,7 @@ print(monitor.get_stats())
 - [ ] 设置告警阈值
 - [ ] 定期分析性能瓶颈
 
-- --
+---
 
 ## 性能基准
 
@@ -607,7 +598,7 @@ print(monitor.get_stats())
 
 | 20 | 500 | 300ms |
 
-- --
+---
 
 ## 相关文档
 

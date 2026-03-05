@@ -47,7 +47,7 @@ api = BtApi(exchange_kwargs=exchange_kwargs)
 
 |**IB Web Futures** | `IB_WEB___FUT` | Global futures markets |
 
-- --
+---
 
 ## Crypto Trading (Binance/OKX)
 
@@ -97,7 +97,7 @@ api.run()
 
 ```bash
 
-- --
+---
 
 ## CTP Futures Trading
 
@@ -137,7 +137,7 @@ order = api.limit_order(
 
 ```bash
 
-- --
+---
 
 ## Interactive Brokers Stock/Futures Trading
 
@@ -177,7 +177,7 @@ order = api.limit_order(
 
 ```bash
 
-- --
+---
 
 ## Multi-Exchange Unified Operations
 
@@ -197,7 +197,7 @@ print(f"Order Status: {order.status}")
 
 ```bash
 
-- --
+---
 
 ## More Examples
 
