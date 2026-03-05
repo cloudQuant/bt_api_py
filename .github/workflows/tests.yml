@@ -2,9 +2,9 @@ name: Tests
 
 on:
   push:
-    branches: [ main, master, develop ]
+    branches: [main, master, develop]
   pull_request:
-    branches: [ main, master, develop ]
+    branches: [main, master, develop]
   workflow_dispatch:
 
 jobs:
@@ -19,35 +19,35 @@ jobs:
     steps:
     - uses: actions/checkout@v4
 
-    - name: Set up Python ${{ matrix.python-version }}
-      uses: actions/setup-python@v5
+    - uses: actions/setup-python@v5
       with:
         python-version: ${{ matrix.python-version }}
-        cache: 'pip'
+        cache: pip
 
-    - name: Install dependencies
+    - name: Install build tools (Linux)
+      if: runner.os == 'Linux'
+      run: sudo apt-get update && sudo apt-get install -y build-essential
+
+    - name: Install package + dev deps
       run: |
         python -m pip install --upgrade pip
         pip install -e ".[dev]"
 
-    - name: Run unit tests (no API keys required)
-      run: |
-        pytest tests -v -m "unit" --cov=bt_api_py --cov-report=xml --cov-report=html
-      continue-on-error: false
+    - name: Unit tests
+      run: pytest tests -v -m "unit" --cov=bt_api_py --cov-report=xml
 
-    - name: Run integration tests (skip if no API keys)
-      run: |
-        pytest tests -v -m "not unit" --cov=bt_api_py --cov-append --cov-report=xml --cov-report=html || echo "Integration tests skipped (no API keys)"
+    - name: Integration tests (best-effort)
+      run: pytest tests -v -m "not unit" --cov=bt_api_py --cov-append --cov-report=xml || true
       continue-on-error: true
       env:
         SKIP_LIVE_TESTS: "true"
 
-    - name: Upload coverage to Codecov
-      uses: codecov/codecov-action@v4
+    - name: Upload coverage
+      if: always()
+      uses: codecov/codecov-action@v5
       with:
-        file: ./coverage.xml
-        flags: unittests
-        name: codecov-${{ matrix.os }}-py${{ matrix.python-version }}
+        files: ./coverage.xml
+        flags: ${{ matrix.os }}-py${{ matrix.python-version }}
         fail_ci_if_error: false
 
   lint:
@@ -55,47 +55,35 @@ jobs:
     steps:
     - uses: actions/checkout@v4
 
-    - name: Set up Python
-      uses: actions/setup-python@v5
+    - uses: actions/setup-python@v5
       with:
         python-version: '3.11'
-        cache: 'pip'
+        cache: pip
 
-    - name: Install dependencies
-      run: |
-        python -m pip install --upgrade pip
-        pip install ruff mypy
+    - name: Install linters
+      run: pip install ruff mypy
 
-    - name: Run Ruff
-      run: |
-        ruff check bt_api_py --output-format=github
+    - name: Ruff
+      run: ruff check bt_api_py --output-format=github
 
-    - name: Run MyPy
-      run: |
-        mypy bt_api_py --ignore-missing-imports
-      continue-on-error: true
+    - name: MyPy
+      run: mypy bt_api_py --ignore-missing-imports
 
   security:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v4
 
-    - name: Set up Python
-      uses: actions/setup-python@v5
+    - uses: actions/setup-python@v5
       with:
         python-version: '3.11'
 
-    - name: Install dependencies
-      run: |
-        python -m pip install --upgrade pip
-        pip install bandit safety
+    - name: Install tools
+      run: pip install bandit pip-audit
 
-    - name: Run Bandit security check
-      run: |
-        bandit -r bt_api_py -ll
-      continue-on-error: true
+    - name: Bandit
+      run: bandit -r bt_api_py -ll
 
-    - name: Check dependencies for vulnerabilities
-      run: |
-        safety check --json
+    - name: Dependency audit
+      run: pip-audit
       continue-on-error: true

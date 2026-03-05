@@ -42,7 +42,7 @@ class MexcAccountWssData:
 
     def _setup_logger(self):
         """Setup logger for the WebSocket connection"""
-                self.request_logger = get_logger("mexc_account_wss")
+        self.request_logger = get_logger("mexc_account_wss")
 
     def start(self):
         """Start the WebSocket connection"""

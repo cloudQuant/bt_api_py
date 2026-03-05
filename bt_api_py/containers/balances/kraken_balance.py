@@ -95,7 +95,7 @@ class KrakenRequestBalanceData(BalanceData):
                             self.total_crypto_balance += balance_info['crypto_amount']
 
                 except ValueError as e:
-                    self.logger.warning(f"Error parsing balance for {currency}: {e}")
+                    self.logger.warn(f"Error parsing balance for {currency}: {e}")
 
             self.total_value_usd = total_value_usd
             self.currency_balances = self._group_by_currency()
@@ -354,7 +354,7 @@ class KrakenRequestBalanceData(BalanceData):
                 # Update currency balances
                 self.currency_balances = self._group_by_currency()
             else:
-                self.logger.warning(f"Cannot update balance for {currency}: would be negative")
+                self.logger.warn(f"Cannot update balance for {currency}: would be negative")
 
     def _update_totals(self):
         """Update total value calculations."""

@@ -127,6 +127,6 @@ class BithumbExchangeDataSpot(BithumbExchangeData):
             API period string (e.g., 'm1', 'h1', 'd1')
         """
         if period not in self.kline_periods:
-            logger.warning(f"Unknown period '{period}', returning as-is")
+            logger.warn(f"Unknown period '{period}', returning as-is")
             return period
         return self.kline_periods[period]

@@ -28,7 +28,7 @@ def _get_luno_config():
             _luno_config = load_exchange_config(config_path)
         _luno_config_loaded = True
     except Exception as e:
-        logger.warning("Failed to load luno.yaml config: %s", e)
+        logger.warn("Failed to load luno.yaml config: %s", e)
     return _luno_config
 
 

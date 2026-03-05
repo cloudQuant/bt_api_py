@@ -220,6 +220,6 @@ def load_all_exchange_configs(config_dir: str) -> dict[str, ExchangeConfig]:
             except Exception as e:
                 from bt_api_py.logging_factory import get_logger
                 logger = get_logger("config_loader")
-                logger.warning(f"Failed to load config {filepath}: {e}")
+                logger.warn(f"Failed to load config {filepath}: {e}")
 
     return configs

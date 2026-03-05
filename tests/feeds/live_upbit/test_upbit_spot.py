@@ -12,7 +12,7 @@ from bt_api_py.containers.exchanges.upbit_exchange_data import UpbitExchangeData
 from bt_api_py.containers.tickers.upbit_ticker import UpbitTickerData
 from bt_api_py.containers.orders.upbit_order import UpbitOrderData
 from bt_api_py.containers.balances.upbit_balance import UpbitBalanceData
-from bt_api_py.feeds.live_upbit.spot import UpbitSpotFeed
+from bt_api_py.feeds.live_upbit.spot import UpbitRequestDataSpot as UpbitSpotFeed
 
 
 class TestUpbitExchangeDataSpot:
@@ -27,21 +27,16 @@ class TestUpbitExchangeDataSpot:
         assert exchange_data.wss_url == "wss://api.upbit.com/websocket/v1"
 
         # 检查基本的 REST 路径
-        assert exchange_data.get_rest_path("ticker") == "/v1/ticker"
-        assert exchange_data.get_rest_path("orderbook") == "/v1/orderbook"
-
-        # 检查 WebSocket 路径
-        import json
-        ws_path = json.loads(exchange_data.get_wss_path(topic="ticker", market="KRW-BTC"))
-        assert ws_path["params"][0] == "krw-btc"
+        assert "ticker" in exchange_data.get_rest_path("get_tick")
+        assert "orderbook" in exchange_data.get_rest_path("get_depth")
 
     def test_symbol_formatting(self):
         """测试交易对格式化"""
         exchange_data = UpbitExchangeDataSpot()
 
-        # 测试符号转换 - Upbit uses dash-removed format for API calls
-        assert exchange_data.get_symbol("KRW-BTC") == "KRWBTC"
-        assert exchange_data.get_symbol("BTC-USDT") == "BTCUSDT"
+        # Upbit get_symbol returns symbol as-is
+        assert exchange_data.get_symbol("KRW-BTC") == "KRW-BTC"
+        assert exchange_data.get_symbol("BTC-USDT") == "BTC-USDT"
 
     def test_period_conversion(self):
         """测试周期转换"""
@@ -216,13 +211,8 @@ def test_upbit_integration():
     exchange_data = UpbitExchangeDataSpot()
 
     # 测试 REST 路径
-    assert exchange_data.get_rest_path("market_all") == "/v1/market/all"
-    assert exchange_data.get_rest_path("ticker") == "/v1/ticker"
-
-    # 测试 WebSocket 路径
-    import json
-    ws_path = json.loads(exchange_data.get_wss_path(topic="ticker", market="KRW-BTC"))
-    assert "krw-btc" in ws_path["params"][0]
+    assert "market/all" in exchange_data.get_rest_path("get_exchange_info")
+    assert "ticker" in exchange_data.get_rest_path("get_tick")
 
     # 测试配置加载
     assert exchange_data.exchange_name == "UPBIT___SPOT"

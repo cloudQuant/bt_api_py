@@ -33,7 +33,8 @@ class ExchangeConnectionError(BtApiError):
 
 
 # 向后兼容别名（已弃用，请使用 ExchangeConnectionError）
-ConnectionError = ExchangeConnectionError
+# 注意：不再直接赋值给 ConnectionError，避免遮蔽 Python 内置异常
+ExchangeConnectionAlias = ExchangeConnectionError
 
 
 class AuthenticationError(ExchangeConnectionError):

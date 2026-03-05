@@ -9,8 +9,8 @@ import pytest
 import queue
 from unittest.mock import Mock, patch
 
-from bt_api_py.exchange_registers.register_hitbtc import register_hitbtc, HitBtcSpotFeedRegistration
-from bt_api_py.containers.exchanges.hitbtc_exchange_data import HitBtcSpotExchangeData
+from bt_api_py.exchange_registers.register_hitbtc import register_hitbtc
+from bt_api_py.containers.exchanges.hitbtc_exchange_data import HitBtcExchangeDataSpot
 from bt_api_py.containers.tickers.hitbtc_ticker import HitBtcRequestTickerData
 from bt_api_py.containers.orderbooks.hitbtc_orderbook import HitBtcRequestOrderBookData
 from bt_api_py.containers.orders.hitbtc_order import HitBtcRequestOrderData
@@ -22,21 +22,12 @@ class TestHitBtcFeedRegistration:
 
     def test_register_hitbtc(self):
         """Test that HitBTC feeds are registered correctly"""
+        from bt_api_py.registry import ExchangeRegistry
+
         register_hitbtc()
 
-        from bt_api_py.feeds.registry import _registry
-
-        # Check that HITBTC_SPOT is registered
-        assert "HITBTC_SPOT" in _registry
-
-        # Check that legacy HITBTC is registered
-        assert "HITBTC" in _registry
-
-    def test_feed_registration_classes(self):
-        """Test that registration returns correct classes"""
-        assert HitBtcSpotFeedRegistration.get_feed_class() is not None
-        assert HitBtcSpotFeedRegistration.get_exchange_data_class() is not None
-        assert HitBtcSpotFeedRegistration.get_asset_type() == "SPOT"
+        # Check that HITBTC___SPOT is registered
+        assert ExchangeRegistry.has_exchange("HITBTC___SPOT")
 
 
 class TestHitBtcExchangeData:
@@ -44,7 +35,7 @@ class TestHitBtcExchangeData:
 
     def test_exchange_data_initialization(self):
         """Test exchange data initialization"""
-        data = HitBtcSpotExchangeData()
+        data = HitBtcExchangeDataSpot()
 
         assert data.exchange_name == "HITBTC_SPOT"
         assert data.asset_type == "SPOT"
@@ -53,7 +44,7 @@ class TestHitBtcExchangeData:
 
     def test_get_rest_path(self):
         """Test REST path generation"""
-        data = HitBtcSpotExchangeData()
+        data = HitBtcExchangeDataSpot()
 
         # Test ticker path
         path = data.get_rest_path("get_ticker", "BTCUSDT")
@@ -69,7 +60,7 @@ class TestHitBtcExchangeData:
 
     def test_get_period_conversion(self):
         """Test period conversion"""
-        data = HitBtcSpotExchangeData()
+        data = HitBtcExchangeDataSpot()
 
         assert data.get_period("1m") == "M1"
         assert data.get_period("5m") == "M5"

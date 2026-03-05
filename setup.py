@@ -221,36 +221,16 @@ pkg_data = {
 
 # ---------------------------------------------------------------------------
 #  setup()
+#  Metadata (name, author, classifiers, dependencies, …) lives in
+#  pyproject.toml — the single source of truth.  setup.py only provides
+#  version (dynamic) + build-time artefacts that pyproject.toml cannot express.
 # ---------------------------------------------------------------------------
-with open("README.md", encoding="utf-8") as f:
-    long_desc = f.read()
-
 setup(
-    name="bt_api_py",
     version=VERSION,
     packages=find_packages(include=["bt_api_py", "bt_api_py.*"], exclude=["tests"]),
     package_data=pkg_data,
-    author="cloudQuant",
-    author_email="yunjinqi@gmail.com",
-    description="implement backtesting and trading of quantitative strategy",
-    long_description=long_desc,
-    long_description_content_type="text/markdown",
-    url="https://github.com/cloudQuant/bt_api_py",
-    python_requires=">=3.11",
-    # Dependencies are defined in pyproject.toml [project.dependencies]
-    # install_requires is intentionally omitted to avoid duplication
     ext_modules=[CYTHON_EXT, CTP_EXT],
     cmdclass={
         "build_ext": _BuildExt,
     },
-    classifiers=[
-        "Programming Language :: Python :: 3",
-        "Programming Language :: Python :: 3.11",
-        "Programming Language :: Python :: 3.12",
-        "Programming Language :: Python :: 3.13",
-        "License :: OSI Approved :: MIT License",
-        "Operating System :: POSIX :: Linux",
-        "Operating System :: Microsoft :: Windows",
-        "Operating System :: MacOS",
-    ],
 )

@@ -116,7 +116,7 @@ class MyWebsocketApp:
 
     # noinspection PyMethodMayBeStatic
     def message_rsp(self, message):
-        print(message)
+        self.wss_logger.debug(message)
 
     def on_error(self, _ws, error):
         try:

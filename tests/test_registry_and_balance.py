@@ -6,7 +6,7 @@ import pytest
 from bt_api_py.registry import ExchangeRegistry
 from bt_api_py.balance_utils import simple_balance_handler, nested_balance_handler
 from bt_api_py.exceptions import (
-    BtApiError, ExchangeNotFoundError, ConnectionError as BtConnectionError,
+    BtApiError, ExchangeNotFoundError, ExchangeConnectionAlias as BtConnectionError,
     RequestTimeoutError, OrderError, SubscribeError, DataParseError,
 )
 

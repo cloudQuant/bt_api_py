@@ -159,7 +159,7 @@ class IbWebRequestData(Feed):
             if not self._authenticated:
                 self.reauthenticate()
         except Exception as e:
-            self.request_logger.warning(f"IB Web connect failed: {e}")
+            self.request_logger.warn(f"IB Web connect failed: {e}")
             self._authenticated = False
 
     def disconnect(self):
@@ -180,7 +180,7 @@ class IbWebRequestData(Feed):
                         if not self._authenticated:
                             self.reauthenticate()
                     except Exception as e:
-                        self.request_logger.warning(f"Session check failed: {e}")
+                        self.request_logger.warn(f"Session check failed: {e}")
                     self._last_session_check = now
 
     # ── 会话管理 ──────────────────────────────────────────────
@@ -387,7 +387,7 @@ class IbWebRequestData(Feed):
                 try:
                     results.append(self.cancel_order(symbol, oid, extra_data=extra_data))
                 except Exception as e:
-                    self.request_logger.warning(f"Failed to cancel order {oid}: {e}")
+                    self.request_logger.warn(f"Failed to cancel order {oid}: {e}")
         return results
 
     def query_order(self, symbol, order_id, extra_data=None, **kwargs):

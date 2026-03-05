@@ -112,7 +112,7 @@ class IbWebDataStream(BaseDataStream):
                 self._subscribed_conids.discard(conid)
                 self.logger.info(f"Unsubscribed market data: conid={conid}")
             except Exception as e:
-                self.logger.warning(f"Unsubscribe failed for conid={conid}: {e}")
+                self.logger.warn(f"Unsubscribe failed for conid={conid}: {e}")
 
     def _subscribe_market_data(self, conid, fields=None):
         """发送市场数据订阅消息"""
@@ -126,7 +126,7 @@ class IbWebDataStream(BaseDataStream):
                 self._subscribed_conids.add(conid)
                 self.logger.info(f"Subscribed market data: conid={conid}, fields={fields}")
             except Exception as e:
-                self.logger.warning(f"Subscribe failed for conid={conid}: {e}")
+                self.logger.warn(f"Subscribe failed for conid={conid}: {e}")
 
     def _on_open(self, ws):
         """WebSocket 连接建立回调"""
@@ -155,7 +155,7 @@ class IbWebDataStream(BaseDataStream):
         except json.JSONDecodeError:
             self.logger.debug(f"Non-JSON WS message: {message[:100]}")
         except Exception as e:
-            self.logger.warning(f"WS message processing error: {e}")
+            self.logger.warn(f"WS message processing error: {e}")
 
     def _process_message(self, data):
         """处理解析后的 JSON 消息"""
@@ -207,7 +207,7 @@ class IbWebDataStream(BaseDataStream):
 
     def _on_error(self, ws, error):
         """WebSocket 错误回调"""
-        self.logger.warning(f"IB WebSocket error: {error}")
+        self.logger.warn(f"IB WebSocket error: {error}")
         self.state = ConnectionState.ERROR
 
     def _on_close(self, ws, close_status_code, close_msg):
@@ -226,7 +226,7 @@ class IbWebDataStream(BaseDataStream):
                 for conid in list(self._subscribed_conids):
                     self._subscribe_market_data(conid)
             except Exception as e:
-                self.logger.warning(f"Reconnect failed: {e}")
+                self.logger.warn(f"Reconnect failed: {e}")
 
     def _start_heartbeat(self):
         """启动心跳发送线程"""
@@ -339,7 +339,7 @@ class IbWebAccountStream(BaseDataStream):
                 self._ws.send(msg)
                 self.logger.info(f"Sent WS message: {msg}")
             except Exception as e:
-                self.logger.warning(f"WS send failed: {e}")
+                self.logger.warn(f"WS send failed: {e}")
 
     def _on_open(self, ws):
         self.state = ConnectionState.CONNECTED
@@ -360,7 +360,7 @@ class IbWebAccountStream(BaseDataStream):
         except json.JSONDecodeError:
             self.logger.debug(f"Non-JSON account WS message: {message[:100]}")
         except Exception as e:
-            self.logger.warning(f"Account WS message error: {e}")
+            self.logger.warn(f"Account WS message error: {e}")
 
     def _process_message(self, data):
         if isinstance(data, dict):
@@ -407,7 +407,7 @@ class IbWebAccountStream(BaseDataStream):
                 )
 
     def _on_error(self, ws, error):
-        self.logger.warning(f"IB Account WebSocket error: {error}")
+        self.logger.warn(f"IB Account WebSocket error: {error}")
         self.state = ConnectionState.ERROR
 
     def _on_close(self, ws, close_status_code, close_msg):
@@ -420,7 +420,7 @@ class IbWebAccountStream(BaseDataStream):
             try:
                 self.connect()
             except Exception as e:
-                self.logger.warning(f"Account WS reconnect failed: {e}")
+                self.logger.warn(f"Account WS reconnect failed: {e}")
 
     def _start_heartbeat(self):
         def heartbeat_loop():

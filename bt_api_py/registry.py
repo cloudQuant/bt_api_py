@@ -10,6 +10,8 @@
 from collections.abc import Callable
 from typing import Any
 
+from bt_api_py.exceptions import ExchangeNotFoundError
+
 
 class _RegistryMeta(type):
     """元类：将 ExchangeRegistry.method() 类级调用委托到全局默认实例，
@@ -98,9 +100,8 @@ class ExchangeRegistry(metaclass=_RegistryMeta):
         """
         feed_cls = self._feed_classes.get(exchange_name)
         if feed_cls is None:
-            raise ValueError(
-                f"Unknown exchange feed: {exchange_name}. "
-                f"Available: {list(self._feed_classes.keys())}"
+            raise ExchangeNotFoundError(
+                exchange_name, list(self._feed_classes.keys())
             )
         return feed_cls(data_queue, **kwargs)
 
@@ -111,9 +112,8 @@ class ExchangeRegistry(metaclass=_RegistryMeta):
         """
         ed_cls = self._exchange_data_classes.get(exchange_name)
         if ed_cls is None:
-            raise ValueError(
-                f"Unknown exchange data: {exchange_name}. "
-                f"Available: {list(self._exchange_data_classes.keys())}"
+            raise ExchangeNotFoundError(
+                exchange_name, list(self._exchange_data_classes.keys())
             )
         return ed_cls()
 

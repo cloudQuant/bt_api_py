@@ -61,7 +61,7 @@ class BtApi:
         if level == "info":
             self.logger.info(txt)
         elif level == "warning":
-            self.logger.warning(txt)
+            self.logger.warn(txt)
         elif level == "error":
             self.logger.error(txt)
         elif level == "debug":

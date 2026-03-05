@@ -243,7 +243,7 @@ class KrakenRequestTickerData(TickerData):
         # Validate price change
         if self.price_change is not None and self.open_price:
             if abs(self.price_change_percentage) > 100:  # Unusual percentage change
-                self.logger.warning(f"Unusual price change: {self.price_change_percentage}%")
+                self.logger.warn(f"Unusual price change: {self.price_change_percentage}%")
 
         return True
 
