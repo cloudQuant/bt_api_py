@@ -23,7 +23,7 @@ from bt_api_py.containers.ctp.ctp_trade import CtpTradeData
 from bt_api_py.containers.exchanges.ctp_exchange_data import CtpExchangeDataFuture
 from bt_api_py.containers.requestdatas.request_data import RequestData
 from bt_api_py.error import CTPErrorTranslator
-from bt_api_py.exceptions import ConnectionError as BtConnectionError
+from bt_api_py.exceptions import ExchangeConnectionAlias as BtConnectionError
 from bt_api_py.feeds.base_stream import BaseDataStream, ConnectionState
 from bt_api_py.feeds.capability import Capability
 from bt_api_py.feeds.feed import Feed

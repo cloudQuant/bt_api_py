@@ -37,22 +37,22 @@ class TestHitBtcExchangeData:
         """Test exchange data initialization"""
         data = HitBtcExchangeDataSpot()
 
-        assert data.exchange_name == "HITBTC_SPOT"
+        assert data.exchange_name == "HITBTC___SPOT"
         assert data.asset_type == "SPOT"
         assert data.rest_url == "https://api.hitbtc.com/api/3"
-        assert data.ws_url == "wss://api.hitbtc.com/api/3/ws/public"
+        assert data.wss_url == "wss://api.hitbtc.com/api/3/ws/public"
 
     def test_get_rest_path(self):
         """Test REST path generation"""
         data = HitBtcExchangeDataSpot()
 
-        # Test ticker path
-        path = data.get_rest_path("get_ticker", "BTCUSDT")
-        assert path == "/public/ticker/BTCUSDT"
+        # Test ticker path (returns 'METHOD /path' format)
+        path = data.get_rest_path("get_tick")
+        assert "/public/ticker/" in path
 
         # Test order path
-        path = data.get_rest_path("place_order")
-        assert path == "/spot/order"
+        path = data.get_rest_path("make_order")
+        assert "/spot/order" in path
 
         # Test symbol normalization
         assert data.get_symbol("BTC/USDT") == "BTCUSDT"

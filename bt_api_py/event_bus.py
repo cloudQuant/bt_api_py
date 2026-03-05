@@ -45,7 +45,7 @@ class EventBus:
             try:
                 handler(data)
             except Exception as e:
-                self.logger.warning(
+                self.logger.warn(
                     f"EventBus handler error: event={event_type}, "
                     f"handler={handler.__name__}, error={e}\n"
                     f"{traceback.format_exc()}"

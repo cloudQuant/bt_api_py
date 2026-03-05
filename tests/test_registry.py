@@ -2,6 +2,7 @@
 
 import pytest
 
+from bt_api_py.exceptions import ExchangeNotFoundError
 from bt_api_py.registry import ExchangeRegistry
 
 
@@ -40,7 +41,7 @@ class TestRegistryInstance:
         assert feed.kwargs["key"] == "val"
 
     def test_create_feed_unknown_raises(self):
-        with pytest.raises(ValueError, match="Unknown exchange feed"):
+        with pytest.raises(ExchangeNotFoundError):
             self.reg.create_feed("NONEXISTENT", data_queue="q")
 
     def test_register_and_create_exchange_data(self):
@@ -49,7 +50,7 @@ class TestRegistryInstance:
         assert isinstance(ed, _MockExchangeData)
 
     def test_create_exchange_data_unknown_raises(self):
-        with pytest.raises(ValueError, match="Unknown exchange data"):
+        with pytest.raises(ExchangeNotFoundError):
             self.reg.create_exchange_data("NONEXISTENT")
 
     def test_register_stream(self):

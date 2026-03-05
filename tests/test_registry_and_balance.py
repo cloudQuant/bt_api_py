@@ -43,7 +43,7 @@ class TestExchangeRegistry:
         assert feed.kw["key1"] == "val1"
 
     def test_create_feed_unknown_raises(self):
-        with pytest.raises(ValueError, match="Unknown exchange feed"):
+        with pytest.raises(ExchangeNotFoundError):
             ExchangeRegistry.create_feed("NONEXISTENT___X", None)
 
     def test_register_stream(self):

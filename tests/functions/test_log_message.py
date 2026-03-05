@@ -10,7 +10,9 @@ class TestSpdLogManager:
     def test_initialization_default_values(self):
         """测试默认初始化值"""
         manager = SpdLogManager()
-        assert manager.file_name == "log_strategy_info.log"
+        # SpdLogManager resolves relative paths to project logs/ dir
+        assert manager.file_name.endswith("log_strategy_info.log")
+        assert "logs" in manager.file_name
         assert manager.logger_name == "hello"
         assert manager.rotation_hour == 0
         assert manager.rotation_minute == 0
@@ -25,7 +27,8 @@ class TestSpdLogManager:
             rotation_minute=30,
             print_info=True
         )
-        assert manager.file_name == "custom.log"
+        # SpdLogManager resolves relative paths to project logs/ dir
+        assert manager.file_name.endswith("custom.log")
         assert manager.logger_name == "custom_logger"
         assert manager.rotation_hour == 12
         assert manager.rotation_minute == 30
@@ -146,9 +149,9 @@ class TestSpdLogManager:
         logger.info("Log before rotation")
         logger.flush()
 
-        # 模拟日志轮换
-        new_file_name = "rotated_log2.log"
-        rotated_manager = SpdLogManager(file_name=new_file_name, logger_name="rotated_logger3")
+        # 模拟日志轮换 — use absolute path to avoid logs/ redirect
+        rotated_log_path = os.path.join(current_directory, "rotated_log2.log")
+        rotated_manager = SpdLogManager(file_name=rotated_log_path, logger_name="rotated_logger3")
         rotated_logger = rotated_manager.create_logger()
         rotated_logger.info("Log after rotation")
         rotated_logger.flush()
@@ -159,7 +162,7 @@ class TestSpdLogManager:
         file_name = f"test_log6_{today_date}.log"  # 在文件名后添加日期
         new_file_name = os.path.join(current_directory, file_name)  # 拼接日志文件路径
         assert os.path.exists(new_file_name)
-        new_file_name2 = os.path.join(current_directory, f"rotated_log2_{today_date}.log")
+        new_file_name2 = os.path.join(os.path.dirname(rotated_log_path), f"rotated_log2_{today_date}.log")
         assert os.path.exists(new_file_name2)
 
         # 关闭日志器
