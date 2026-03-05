@@ -1,14 +1,19 @@
-name: Deploy Docs to GitHub Pages
+name: Deploy Docs
 
 on:
   push:
-    branches:
-      - master
-      - main
+    branches: [master, main]
     paths:
       - 'docs/**'
       - 'mkdocs.yml'
+      - '.readthedocs.yaml'
+      - 'docs/requirements.txt'
       - '.github/workflows/docs.yml'
+  pull_request:
+    paths:
+      - 'docs/**'
+      - 'mkdocs.yml'
+      - 'docs/requirements.txt'
   workflow_dispatch:
 
 permissions:
@@ -17,36 +22,39 @@ permissions:
   id-token: write
 
 concurrency:
-  group: "pages"
+  group: pages
   cancel-in-progress: false
 
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      - name: Setup Python
-        uses: actions/setup-python@v5
+      - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
+          cache: pip
 
-      - name: Install dependencies
-        run: |
-          pip install mkdocs-material mkdocs-minify-plugin pymdown-extensions
+      - name: Install doc dependencies
+        run: pip install --upgrade pip -r docs/requirements.txt
 
-      - name: Build docs
+      - name: Install package (needed by mkdocstrings)
+        run: pip install --no-build-isolation -e . || pip install --no-deps -e .
+
+      - name: Build docs (strict)
         run: mkdocs build --strict
 
       - name: Upload artifact
+        if: github.event_name != 'pull_request'
         uses: actions/upload-pages-artifact@v3
         with:
           path: site/
 
   deploy:
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/master' || github.ref == 'refs/heads/main')
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
