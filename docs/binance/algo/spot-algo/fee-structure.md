@@ -1,6 +1,6 @@
 # Algo Fee Structure
 
-> 来源: [Binance Algo Trading API](<https://developers.binance.com/docs/algo/spot-algo)>
+> 来源: [Binance Algo Trading API](https://developers.binance.com/docs/algo/spot-algo)
 
 ## Fee Rate
 

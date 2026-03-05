@@ -79,6 +79,5 @@ order = api.limit_order(
 
 ## 相关文档
 
-- [BtApi 统一接口](../api_reference.md) — BtApi 类 API 参考
-- [Binance API 参考](../api_reference/binance.md) — bt_api_py 中 Binance 适配层文档
+- [BtApi 统一接口](../reference/bt_api.md) — BtApi 类 API 参考
 - [WebSocket 订阅](../api_reference/websocket.md) — WebSocket 使用指南

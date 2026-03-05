@@ -187,7 +187,6 @@ HTX 返回的数据会被自动转换为标准化数据容器：
 
 ## 相关文档
 
-- [BtApi 统一接口](../api_reference.md) — BtApi 类完整 API 参考
-- [HTX 官方原始 API](api_reference.md) — HTX 官方 API 端点文档
+- [BtApi 统一接口](../reference/bt_api.md) — BtApi 类完整 API 参考
 - [WebSocket 订阅](../api_reference/websocket.md) — WebSocket 使用指南
 - [代码示例](../examples/api_examples.md) — 更多实战示例

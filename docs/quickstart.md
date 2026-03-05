@@ -194,5 +194,5 @@ print(f"订单状态: {order.status}")
 ## 更多示例
 
 - [使用指南](usage_guide.md) - 完整使用教程
-- [CTP 文档](ctp_swig_refactoring_plan.md) - CTP 绑定说明
+- [CTP 快速入门](ctp_quickstart.md) - CTP 快速入门
 - [IB Web API 文档](ib_web_api/) - IB 接口详细说明

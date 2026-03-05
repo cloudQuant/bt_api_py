@@ -1,6 +1,6 @@
 # Time-Weighted Average Price(Twap) New Order (TRADE)
 
-> 来源: [Binance Algo Trading API](<https://developers.binance.com/docs/algo/future-algo/Time-Weighted-Average-Price-New-Order)>
+> 来源: [Binance Algo Trading API](https://developers.binance.com/docs/algo/future-algo/Time-Weighted-Average-Price-New-Order)
 
 ## API Description
 

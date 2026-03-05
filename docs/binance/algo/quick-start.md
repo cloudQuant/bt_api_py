@@ -1,10 +1,10 @@
 # Quick Start
 
-> 来源: [Binance Algo Trading API](<https://developers.binance.com/docs/algo/quick-start)>
+> 来源: [Binance Algo Trading API](https://developers.binance.com/docs/algo/quick-start)
 
 ## API Key Setup
 
-- Some endpoints will require an API Key. Please refer to [this page](<https://www.binance.com/en/support/articles/360002502072)> regarding API key creation.
+- Some endpoints will require an API Key. Please refer to [this page](https://www.binance.com/en/support/articles/360002502072) regarding API key creation.
 - Once API key is created, it is recommended to set IP restrictions on the key for security reasons.
 - **Never share your API key/secret key to ANYONE.**
 
@@ -23,7 +23,7 @@ A `SPOT` account is provided by default upon creation of a Binance Account.
 
 ### Margin Account
 
-To enable a `MARGIN` account for Margin Trading, please refer to the [Margin Trading Guide](<https://www.binance.vision/tutorials/binance-margin-trading-guide)>
+To enable a `MARGIN` account for Margin Trading, please refer to the [Margin Trading Guide](https://www.binance.vision/tutorials/binance-margin-trading-guide)
 
 ## API Library
 
@@ -63,7 +63,7 @@ There is now a Postman collection containing the API endpoints for quick and eas
 
 This is recommended for new users who want to get a quick-start into using the API.
 
-For more information please refer to this page: [Binance API Postman](<https://github.com/binance/binance-api-postman)>
+For more information please refer to this page: [Binance API Postman](https://github.com/binance/binance-api-postman)
 
 ### Swagger
 

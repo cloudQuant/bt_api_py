@@ -151,5 +151,5 @@ print(f"平仓手续费: {commission.close_commission}")
 
 ## 相关文档
 
-- [CTP SWIG 重构计划](ctp_swig_refactoring_plan.md)
+- [CTP 快速入门](ctp_quickstart.md)
 - [交易所列表](exchanges/) - 更多 CTP 相关文档

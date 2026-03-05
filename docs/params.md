@@ -384,8 +384,7 @@ ib_config = {
 
 ## 相关文档
 
-- [API 参考](api_reference.md)
-- [Binance API](api_reference/binance.md)
-- [OKX API](api_reference/okx.md)
-- [CTP API](api_reference/ctp.md)
-- [IB API](api_reference/ib.md)
+- [API 参考](reference/index.md)
+- [BtApi 核心类](reference/bt_api.md)
+- [认证配置](reference/auth_config.md)
+- [数据容器](api_reference/data_containers.md)

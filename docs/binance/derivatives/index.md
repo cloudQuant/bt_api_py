@@ -69,5 +69,4 @@ order = api.limit_order(
 ## 相关链接
 
 - [Binance 合约官方文档](https://developers.binance.com/docs/derivatives)
-- [BtApi 统一接口](../../api_reference.md)
-- [Binance API 参考](../../api_reference/binance.md)
+- [BtApi 统一接口](../../reference/bt_api.md)
