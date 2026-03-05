@@ -33,10 +33,10 @@ bt_api_py/
 ## 1. Naming Conventions
 
 ### Exchange Name Format
-- **Registry Key**: `<EXCHANGE>___<ASSET_TYPE>` (e.g., `BINANCE___SPOT`, `OKX___SWAP`)
-- **Directory**: `live_<exchange_lowercase>` (e.g., `live_binance`, `live_okx`)
-- **Class Names**: `<Exchange><Request/Wss><DataType>` (e.g., `BinanceRequestTickerData`, `OkxWssOrderData`)
-- **Config File**: `<exchange>.yaml` (e.g., `binance.yaml`, `okx.yaml`)
+- ***Registry Key**: `<EXCHANGE>___<ASSET_TYPE>` (e.g., `BINANCE___SPOT`, `OKX___SWAP`)
+- ***Directory**: `live_<exchange_lowercase>` (e.g., `live_binance`, `live_okx`)
+- ***Class Names**: `<Exchange><Request/Wss><DataType>` (e.g., `BinanceRequestTickerData`, `OkxWssOrderData`)
+- ***Config File**: `<exchange>.yaml` (e.g., `binance.yaml`, `okx.yaml`)
 
 ### Asset Types
 Common asset types:
@@ -251,11 +251,11 @@ class <Exchange>ExchangeDataSwap(<Exchange>ExchangeData):
 
 ### Key Points
 
-1. **Lazy Config Loading**: Use module-level cache and only load when needed
-2. **Asset Type Priority**: Asset-level config overrides exchange-level config
-3. **Flexible URL Handling**: Support both dict and string formats for base_urls
-4. **Template Substitution**: wss_paths use `<symbol>`, `<period>` templates
-5. **Override Hooks**: Subclasses override `get_symbol()`, `get_wss_path()` etc.
+1. ***Lazy Config Loading**: Use module-level cache and only load when needed
+2. ***Asset Type Priority**: Asset-level config overrides exchange-level config
+3. ***Flexible URL Handling**: Support both dict and string formats for base_urls
+4. ***Template Substitution**: wss_paths use `<symbol>`, `<period>` templates
+5. ***Override Hooks**: Subclasses override `get_symbol()`, `get_wss_path()` etc.
 
 ## 3. YAML Configuration Pattern
 
@@ -705,11 +705,11 @@ class <Exchange>RequestData(Feed):
 
 ### Key Points
 
-1. **Private Methods**: Use `_` prefix for internal methods that return `(path, params, extra_data)`
-2. **Public Methods**: Call private methods and invoke `self.request()`
-3. **Normalization**: Each endpoint has a normalize function to convert response to data containers
-4. **Rate Limiting**: Use `_rate_limiter` decorator or check before requests
-5. **Authentication**: Set `is_sign=True` for endpoints requiring signatures
+1. ***Private Methods**: Use `_` prefix for internal methods that return `(path, params, extra_data)`
+2. ***Public Methods**: Call private methods and invoke `self.request()`
+3. ***Normalization**: Each endpoint has a normalize function to convert response to data containers
+4. ***Rate Limiting**: Use `_rate_limiter` decorator or check before requests
+5. ***Authentication**: Set `is_sign=True` for endpoints requiring signatures
 
 ## 5. Data Container Pattern
 
@@ -1190,11 +1190,11 @@ if __name__ == "__main__":
 
 ### Test Categories
 
-1. **Configuration Tests**: Verify exchange data class loads correctly
-2. **Registration Tests**: Verify registry registration works
-3. **Container Tests**: Verify data containers parse responses correctly
-4. **Capability Tests**: Verify declared capabilities
-5. **Integration Tests**: Live API tests (marked with `@pytest.mark.skip`)
+1. ***Configuration Tests**: Verify exchange data class loads correctly
+2. ***Registration Tests**: Verify registry registration works
+3. ***Container Tests**: Verify data containers parse responses correctly
+4. ***Capability Tests**: Verify declared capabilities
+5. ***Integration Tests**: Live API tests (marked with `@pytest.mark.skip`)
 
 ## 8. Special Exchange Types
 
@@ -1364,13 +1364,13 @@ def request(self, path, params=None, extra_data=None, is_sign=False):
 
 ## 11. Common Pitfalls to Avoid
 
-1. **Missing `asset_type` attribute**: Always set `self.asset_type` in subclass `__init__`
-2. **Incorrect logger format**: spdlog doesn't support `%s` formatting, use f-strings
-3. **Missing `type` field in rate_limits**: All rate_limits entries must have a `type` field
-4. **Hardcoded URLs**: Always load from YAML config
-5. **Incorrect constructor signature**: Data containers must use `(data, symbol_name, asset_type, has_been_json_encoded)`
-6. **Forgetting registration**: Always create `register_<exchange>.py` module
-7. **Mocking config in tests**: Avoid module-level mocking that affects other tests
+1. ***Missing `asset_type` attribute**: Always set `self.asset_type` in subclass `__init__`
+2. ***Incorrect logger format**: spdlog doesn't support `%s` formatting, use f-strings
+3. ***Missing `type` field in rate_limits**: All rate_limits entries must have a `type` field
+4. ***Hardcoded URLs**: Always load from YAML config
+5. ***Incorrect constructor signature**: Data containers must use `(data, symbol_name, asset_type, has_been_json_encoded)`
+6. ***Forgetting registration**: Always create `register_<exchange>.py` module
+7. ***Mocking config in tests**: Avoid module-level mocking that affects other tests
 
 ## 12. Checklist for New Exchange Integration
 
@@ -1428,14 +1428,14 @@ def request(self, path, params=None, extra_data=None, is_sign=False):
 
 This pattern document provides a comprehensive guide for implementing new exchanges in bt_api_py. By following these patterns:
 
-1. **Consistency**: All exchanges follow the same structure
-2. **Pluggability**: New exchanges can be added without modifying core code
-3. **Configurability**: All settings are externalized to YAML
-4. **Testability**: Standardized test structure for all exchanges
-5. **Maintainability**: Clear separation of concerns between components
+1. ***Consistency**: All exchanges follow the same structure
+2. ***Pluggability**: New exchanges can be added without modifying core code
+3. ***Configurability**: All settings are externalized to YAML
+4. ***Testability**: Standardized test structure for all exchanges
+5. ***Maintainability**: Clear separation of concerns between components
 
 For reference implementations, study:
-- **Binance**: Most complete implementation with multiple asset types
-- **OKX**: Good example of mixin-based organization
-- **IB**: Example of broker-style integration
-- **CTP**: Example of SPI/callback-based integration
+- ***Binance**: Most complete implementation with multiple asset types
+- ***OKX**: Good example of mixin-based organization
+- ***IB**: Example of broker-style integration
+- ***CTP**: Example of SPI/callback-based integration

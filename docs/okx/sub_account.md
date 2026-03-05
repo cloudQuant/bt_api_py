@@ -8,9 +8,9 @@ Sub-account management APIs require authentication.
 
 Retrieve sub-account list.
 
-- **Rate Limit**: 2 requests per 2 seconds
-- **Rate limit rule**: User ID
-- **Permission**: Read
+- ***Rate Limit**: 2 requests per 2 seconds
+- ***Rate limit rule**: User ID
+- ***Permission**: Read
 
 ```
 GET /api/v5/users/subaccount/list
@@ -18,17 +18,11 @@ GET /api/v5/users/subaccount/list
 ```
 
 | Parameter | Type | Required | Description |
-
 |-----------|------|----------|-------------|
-
 | enable | String | No | Sub-account status |
-
 | subAcct | String | No | Sub-account name |
-
 | after | String | No | Pagination |
-
 | before | String | No | Pagination |
-
 | limit | String | No | Default 100, max 100 |
 
 ### POST / Create sub-account
@@ -70,8 +64,8 @@ POST /api/v5/users/subaccount/delete-apikey
 
 Retrieve the trading balance of a sub-account.
 
-- **Rate Limit**: 6 requests per 2 seconds
-- **Permission**: Read
+- ***Rate Limit**: 6 requests per 2 seconds
+- ***Permission**: Read
 
 ```
 GET /api/v5/account/subaccount/balances
@@ -79,9 +73,7 @@ GET /api/v5/account/subaccount/balances
 ```
 
 | Parameter | Type | Required | Description |
-
 |-----------|------|----------|-------------|
-
 | subAcct | String | Yes | Sub-account name |
 
 ### GET / Get sub-account funding balance
@@ -120,19 +112,12 @@ POST /api/v5/asset/subaccount/transfer
 ```
 
 | Parameter | Type | Required | Description |
-
 |-----------|------|----------|-------------|
-
 | ccy | String | Yes | Currency |
-
 | amt | String | Yes | Transfer amount |
-
 | from | String | Yes | `6` Funding, `18` Trading |
-
 | to | String | Yes | `6` Funding, `18` Trading |
-
 | fromSubAccount | String | Yes | Source sub-account name |
-
 | toSubAccount | String | Yes | Target sub-account name |
 
 ### POST / Set permission of transfer out

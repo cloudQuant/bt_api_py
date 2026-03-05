@@ -1,6 +1,6 @@
 # IBKR Account Management Web API
 
-> Source: <https://www.interactivebrokers.com/campus/ibkr-api-page/web-api-account-management/>
+> Source: https://www.interactivebrokers.com/campus/ibkr-api-page/web-api-account-management/
 > Last Updated: 2026-02-26
 
 ## Table of Contents
@@ -26,7 +26,7 @@ The IBKR Account Management API provides programmatic access to account-related 
 - Access account statements and reports
 - Manage user authentication and permissions
 
-- *Note**: This API is primarily designed for institutional use. Individual traders should use the Client Portal Gateway instead.
+***Note**: This API is primarily designed for institutional use. Individual traders should use the Client Portal Gateway instead.
 
 ---
 
@@ -50,15 +50,13 @@ POST /oauth/token
 
 ```
 
-- *Request Headers:**
-
+**Request Headers:**
 ```
 Content-Type: application/json
 
 ```
 
-- *Request Body:**
-
+**Request Body:**
 ```json
 {
   "grant_type": "client_credentials",
@@ -69,8 +67,7 @@ Content-Type: application/json
 
 ```
 
-- *Response:**
-
+**Response:**
 ```json
 {
   "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
@@ -88,41 +85,30 @@ Content-Type: application/json
 ### Base URLs
 
 | Environment | Base URL |
-
 |-------------|----------|
-
-| Production | `<https://api.interactivebrokers.com`> |
-
-| Testing | `<https://api.test.interactivebrokers.com`> |
+| Production | `https://api.interactivebrokers.com` |
+| Testing | `https://api.test.interactivebrokers.com` |
 
 ### Request Format
 
-- **Protocol**: HTTPS only
-- **Method**: RESTful HTTP verbs (GET, POST, PUT, PATCH, DELETE)
-- **Content-Type**: `application/json`
-- **Encoding**: UTF-8
+- ***Protocol**: HTTPS only
+- ***Method**: RESTful HTTP verbs (GET, POST, PUT, PATCH, DELETE)
+- ***Content-Type**: `application/json`
+- ***Encoding**: UTF-8
 
 ### Response Format
 
-- **Content-Type**: `application/json`
-- **Status Codes**: Standard HTTP status codes
+- ***Content-Type**: `application/json`
+- ***Status Codes**: Standard HTTP status codes
 
 | Code | Meaning |
-
 |------|---------|
-
 | 200 | Success |
-
 | 400 | Bad Request |
-
 | 401 | Unauthorized |
-
 | 403 | Forbidden |
-
 | 404 | Not Found |
-
 | 429 | Rate Limit Exceeded |
-
 | 500 | Internal Server Error |
 
 ---
@@ -132,13 +118,9 @@ Content-Type: application/json
 ### Global Rate Limits
 
 | Endpoint Group | Rate Limit |
-
 |----------------|------------|
-
 | Account Management | 10 requests/second |
-
 | Funding/Banking | 10 requests/second |
-
 | Reporting | 10 requests/second |
 
 When rate limits are exceeded, the API returns HTTP 429.
@@ -164,20 +146,14 @@ GET /gw/api/v1/accounts
 
 ```
 
-- *Query Parameters:**
-
+**Query Parameters:**
 | Parameter | Type | Required | Description |
-
 |-----------|------|----------|-------------|
-
 | status | string | No | Filter by account status (e.g., "A", "N", "O", "C", "P", "R", "Q", "E") |
-
 | limit | integer | No | Maximum number of results |
-
 | offset | integer | No | Pagination offset |
 
-- *Response:**
-
+**Response:**
 ```json
 {
   "accounts": [
@@ -199,23 +175,14 @@ GET /gw/api/v1/accounts
 ### Account Status Codes
 
 | Code | Description |
-
 |------|-------------|
-
 | A | Abandoned - Application deleted due to inactivity |
-
 | N | New - Pending application with no funding details |
-
 | O | Open - Approved and active |
-
 | C | Closed - Was open, then closed |
-
 | P | Pending - Under review |
-
 | Q | Pending Approval - Awaiting approval |
-
 | R | Reopened - Previously closed, now reopened |
-
 | E | Expired - Temporary status during transition |
 
 ### Get Account Details
@@ -227,16 +194,12 @@ GET /gw/api/v1/accounts/{accountId}
 
 ```
 
-- *Path Parameters:**
-
+**Path Parameters:**
 | Parameter | Type | Required | Description |
-
 |-----------|------|----------|-------------|
-
 | accountId | string | Yes | IBKR Account ID |
 
-- *Response:**
-
+**Response:**
 ```json
 {
   "accountId": "U1234567",
@@ -267,8 +230,7 @@ PATCH /gw/api/v1/accounts/{accountId}
 
 ```
 
-- *Request Body:**
-
+**Request Body:**
 ```json
 {
   "accountAlias": "New Alias",
@@ -287,8 +249,7 @@ POST /gw/api/v1/accounts/{accountId}/close
 
 ```
 
-- *Request Body:**
-
+**Request Body:**
 ```json
 {
   "reason": "Customer request"
@@ -309,18 +270,13 @@ GET /gw/api/v1/bank-instructions/query
 
 ```
 
-- *Query Parameters:**
-
+**Query Parameters:**
 | Parameter | Type | Required | Description |
-
 |-----------|------|----------|-------------|
-
 | accountId | string | Yes | Account ID |
-
 | method | string | No | "WITHDRAW" or "DEPOSIT" |
 
-- *Response:**
-
+**Response:**
 ```json
 {
   "instructions": [
@@ -346,8 +302,7 @@ POST /gw/api/v1/withdraw-request
 
 ```
 
-- *Request Body:**
-
+**Request Body:**
 ```json
 {
   "accountId": "U1234567",
@@ -368,8 +323,7 @@ POST /gw/api/v1/deposit-request
 
 ```
 
-- *Request Body:**
-
+**Request Body:**
 ```json
 {
   "accountId": "U1234567",
@@ -390,8 +344,7 @@ POST /gw/api/v1/internal-transfer
 
 ```
 
-- *Request Body:**
-
+**Request Body:**
 ```json
 {
   "fromAccountId": "U1234567",
@@ -403,8 +356,7 @@ POST /gw/api/v1/internal-transfer
 
 ```
 
-- *For Position Transfers:**
-
+**For Position Transfers:**
 ```json
 {
   "fromAccountId": "U1234567",
@@ -433,20 +385,14 @@ GET /gw/api/v1/statements
 
 ```
 
-- *Query Parameters:**
-
+**Query Parameters:**
 | Parameter | Type | Required | Description |
-
 |-----------|------|----------|-------------|
-
 | accountId | string | Yes | Account ID |
-
 | startDate | string | Yes | Format: YYYY-MM-DD |
-
 | endDate | string | Yes | Format: YYYY-MM-DD |
 
-- *Response:**
-
+**Response:**
 ```json
 {
   "statements": [
@@ -471,18 +417,13 @@ GET /gw/api/v1/tax-documents/available
 
 ```
 
-- *Query Parameters:**
-
+**Query Parameters:**
 | Parameter | Type | Required | Description |
-
 |-----------|------|----------|-------------|
-
 | accountId | string | Yes | Account ID |
-
 | taxYear | integer | Yes | Tax year |
 
-- *Response:**
-
+**Response:**
 ```json
 {
   "documents": [
@@ -506,16 +447,11 @@ GET /gw/api/v1/trade-confirmations
 
 ```
 
-- *Query Parameters:**
-
+**Query Parameters:**
 | Parameter | Type | Required | Description |
-
 |-----------|------|----------|-------------|
-
 | accountId | string | Yes | Account ID |
-
 | startDate | string | Yes | Format: YYYY-MM-DD (max 365 day range) |
-
 | endDate | string | Yes | Format: YYYY-MM-DD |
 
 ---
@@ -531,20 +467,14 @@ GET /gw/api/v1/sso/url
 
 ```
 
-- *Query Parameters:**
-
+**Query Parameters:**
 | Parameter | Type | Required | Description |
-
 |-----------|------|----------|-------------|
-
 | accountId | string | Yes | Account ID |
-
 | targetUrl | string | Yes | Destination URL in Portal |
-
 | showNavBar | boolean | No | Hide navigation bar (for IFRAME embedding) |
 
-- *Response:**
-
+**Response:**
 ```json
 {
   "ssoUrl": "<https://portal.interactivebrokers.com/sso/login?token=...",>
@@ -578,23 +508,14 @@ GET /gw/api/v1/sso/url
 ### Common Error Codes
 
 | Code | Description |
-
 |------|-------------|
-
 | INVALID_REQUEST | Malformed request body or parameters |
-
 | UNAUTHORIZED | Missing or invalid authentication |
-
 | FORBIDDEN | Insufficient permissions for requested operation |
-
 | NOT_FOUND | Requested resource does not exist |
-
 | RATE_LIMIT_EXCEEDED | Request rate limit exceeded |
-
 | ACCOUNT_NOT_ELIGIBLE | Account not eligible for requested operation |
-
 | VALIDATION_ERROR | Input validation failed |
-
 | SYSTEM_ERROR | Internal server error |
 
 ---
@@ -604,13 +525,9 @@ GET /gw/api/v1/sso/url
 ### Maintenance Windows
 
 | Endpoint Group | Maintenance Time (ET) |
-
 |----------------|------------------------|
-
 | Account Management | Daily 6:00 PM - 6:05 PM |
-
 | Funding/Banking | Daily 11:45 PM - 12:30 AM |
-
 | Statements | Sundays & Tuesdays 6:00 PM - 6:30 PM |
 
 ---
@@ -619,9 +536,9 @@ GET /gw/api/v1/sso/url
 
 ### Contact Information
 
-- **Email**: am-api@interactivebrokers.com
-- **Documentation**: <https://www.interactivebrokers.com/campus/ibkr-api-page/web-api-account-management/>
-- **API Reference**: <https://www.interactivebrokers.com/api/doc.html>
+- ***Email**: am-api@interactivebrokers.com
+- ***Documentation**: https://www.interactivebrokers.com/campus/ibkr-api-page/web-api-account-management/
+- ***API Reference**: https://www.interactivebrokers.com/api/doc.html
 
 ### Troubleshooting Checklist
 

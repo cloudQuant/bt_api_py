@@ -21,11 +21,8 @@ GET /api/v5/rubik/stat/contracts/open-interest-history
 ```
 
 | Parameter | Type | Required | Description |
-
 |-----------|------|----------|-------------|
-
 | instId | String | Yes | Instrument ID, e.g. `BTC-USDT-SWAP` |
-
 | period | String | No | `5m`, `1H`, `1D` (default `5m`) |
 
 ### GET / Get taker volume
@@ -38,17 +35,11 @@ GET /api/v5/rubik/stat/taker-volume
 ```
 
 | Parameter | Type | Required | Description |
-
 |-----------|------|----------|-------------|
-
 | ccy | String | Yes | Currency |
-
 | instType | String | Yes | `SPOT` |
-
 | begin | String | No | Begin timestamp |
-
 | end | String | No | End timestamp |
-
 | period | String | No | `5m`, `1H`, `1D` |
 
 ### GET / Get contract taker volume
@@ -66,15 +57,10 @@ GET /api/v5/rubik/stat/margin/loan-ratio
 ```
 
 | Parameter | Type | Required | Description |
-
 |-----------|------|----------|-------------|
-
 | ccy | String | Yes | Currency, e.g. `BTC` |
-
 | begin | String | No | Begin timestamp |
-
 | end | String | No | End timestamp |
-
 | period | String | No | `5m`, `1H`, `1D` |
 
 ### GET / Get top traders contract long/short ratio

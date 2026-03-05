@@ -10,11 +10,11 @@
 
 ### 账户要求
 
-1. **个人客户**:
+1. ***个人客户**:
    - IBKR Pro 账户（已开户并注资）
    - 使用 Client Portal Gateway 进行认证
 
-1. **机构客户**:
+1. ***机构客户**:
    - 联系 api-solutions@interactivebrokers.com
    - 获取 OAuth 2.0 凭证
    - 完成合规审批（约 8-14 周）
@@ -31,9 +31,7 @@
 
 ### 方式 1: Client Portal Gateway（个人客户）
 
-- *步骤**:
-
-1. 下载 Client Portal Gateway
+***步骤**: 1. 下载 Client Portal Gateway
 
    ```bash
 
@@ -65,9 +63,7 @@
 
 ### 方式 2: OAuth 2.0（机构客户）
 
-- *步骤**:
-
-1. 生成 JWT Token
+***步骤**: 1. 生成 JWT Token
 
    ```python
    import jwt
@@ -337,14 +333,14 @@ from functools import wraps
 def retry_on_rate_limit(max_retries: int = 3, backoff: float = 1.0):
     def decorator(func):
         @wraps(func)
-        def wrapper(*args, **kwargs):
+        def wrapper(**args, **kwargs):
             for attempt in range(max_retries):
                 try:
-                    return func(*args, **kwargs)
+                    return func(**args, **kwargs)
                 except requests.HTTPError as e:
                     if e.response.status_code == 429:
                         if attempt < max_retries - 1:
-                            wait_time = backoff * (2 **attempt)
+                            wait_time = backoff ** (2 **attempt)
                             print(f"Rate limit hit, waiting {wait_time}s...")
                             time.sleep(wait_time)
                             continue
@@ -555,5 +551,5 @@ print(f"Positions: {positions}")
 
 如有问题，请联系：
 
-- **Email**: api@interactivebrokers.com
-- **文档**: <https://www.interactivebrokers.com/campus/ibkr-api-page/>
+- ***Email**: api@interactivebrokers.com
+- ***文档**: https://www.interactivebrokers.com/campus/ibkr-api-page/

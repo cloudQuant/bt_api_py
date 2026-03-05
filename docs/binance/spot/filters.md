@@ -1,6 +1,6 @@
 # Filters (交易过滤器)
 
-> 来源: <https://github.com/binance/binance-spot-api-docs/blob/master/filters.md>
+> 来源: https://github.com/binance/binance-spot-api-docs/blob/master/filters.md
 
 过滤器定义了交易对或交易所的交易规则，分为三种：`symbol filters`、`exchange filters` 和 `asset filters`。
 

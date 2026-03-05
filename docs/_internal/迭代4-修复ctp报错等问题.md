@@ -283,9 +283,9 @@ Results (0.99s):
 
 ### 1. CTP MRO 错误修复
 
-**根因**：`CtpAccountData(AutoInitMixin, AccountData)` 和 `CtpTickerData(AutoInitMixin, TickerData)` 中，`AutoInitMixin` 既作为直接基类又通过 `AccountData`/`TickerData` 间接继承，导致 Python C3 线性化算法无法解析 MRO。
+***根因**：`CtpAccountData(AutoInitMixin, AccountData)` 和 `CtpTickerData(AutoInitMixin, TickerData)` 中，`AutoInitMixin` 既作为直接基类又通过 `AccountData`/`TickerData` 间接继承，导致 Python C3 线性化算法无法解析 MRO。
 
-**修复**：
+***修复**：
 - `ctp_account.py`：`class CtpAccountData(AutoInitMixin, AccountData)` → `class CtpAccountData(AccountData)`，删除多余 import
 - `ctp_ticker.py`：`class CtpTickerData(AutoInitMixin, TickerData)` → `class CtpTickerData(TickerData)`，删除多余 import
 

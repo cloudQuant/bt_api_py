@@ -8,8 +8,8 @@ Public data endpoints do not require authentication.
 
 Retrieve a list of instruments with open contracts.
 
-- **Rate Limit**: 20 requests per 2 seconds
-- **Rate limit rule**: IP + Instrument Type
+- ***Rate Limit**: 20 requests per 2 seconds
+- ***Rate limit rule**: IP + Instrument Type
 
 ```
 GET /api/v5/public/instruments
@@ -17,15 +17,10 @@ GET /api/v5/public/instruments
 ```
 
 | Parameter | Type | Required | Description |
-
 |-----------|------|----------|-------------|
-
 | instType | String | Yes | `SPOT`, `MARGIN`, `SWAP`, `FUTURES`, `OPTION` |
-
 | uly | String | Conditional | Underlying. Required for `FUTURES`/`SWAP`/`OPTION` |
-
 | instFamily | String | No | Instrument family |
-
 | instId | String | No | Instrument ID |
 
 ### GET / Get estimated delivery/exercise price
@@ -60,7 +55,7 @@ GET /api/v5/public/settlement-history
 
 Retrieve funding rate.
 
-- **Rate Limit**: 20 requests per 2 seconds
+- ***Rate Limit**: 20 requests per 2 seconds
 
 ```
 GET /api/v5/public/funding-rate
@@ -68,9 +63,7 @@ GET /api/v5/public/funding-rate
 ```
 
 | Parameter | Type | Required | Description |
-
 |-----------|------|----------|-------------|
-
 | instId | String | Yes | Instrument ID, e.g. `BTC-USDT-SWAP` |
 
 ### GET / Get funding rate history
@@ -81,15 +74,10 @@ GET /api/v5/public/funding-rate-history
 ```
 
 | Parameter | Type | Required | Description |
-
 |-----------|------|----------|-------------|
-
 | instId | String | Yes | Instrument ID |
-
 | before | String | No | Pagination |
-
 | after | String | No | Pagination |
-
 | limit | String | No | Default 100, max 100 |
 
 ### GET / Get open interest
@@ -100,15 +88,10 @@ GET /api/v5/public/open-interest
 ```
 
 | Parameter | Type | Required | Description |
-
 |-----------|------|----------|-------------|
-
 | instType | String | Yes | `SWAP`, `FUTURES`, `OPTION` |
-
 | uly | String | No | Underlying |
-
 | instFamily | String | No | Instrument family |
-
 | instId | String | No | Instrument ID |
 
 ### GET / Get limit price
@@ -147,15 +130,10 @@ GET /api/v5/public/mark-price
 ```
 
 | Parameter | Type | Required | Description |
-
 |-----------|------|----------|-------------|
-
 | instType | String | Yes | `MARGIN`, `SWAP`, `FUTURES`, `OPTION` |
-
 | uly | String | No | Underlying |
-
 | instFamily | String | No | Instrument family |
-
 | instId | String | No | Instrument ID |
 
 ### GET / Get position tiers
@@ -215,11 +193,8 @@ GET /api/v5/market/index-tickers
 ```
 
 | Parameter | Type | Required | Description |
-
 |-----------|------|----------|-------------|
-
 | quoteCcy | String | Conditional | Quote currency (e.g. `USD`) |
-
 | instId | String | Conditional | Index, e.g. `BTC-USD` |
 
 ### GET / Get index candlesticks
@@ -284,57 +259,57 @@ GET /api/v5/market/history-candles
 
 ### Instruments channel
 
-- **URL Path**: `/ws/v5/public`
-- **Channel**: `instruments`
+- ***URL Path**: `/ws/v5/public`
+- ***Channel**: `instruments`
 
 ### Open interest channel
 
-- **Channel**: `open-interest`
+- ***Channel**: `open-interest`
 
 ### Funding rate channel
 
-- **Channel**: `funding-rate`
+- ***Channel**: `funding-rate`
 
 ### Price limit channel
 
-- **Channel**: `price-limit`
+- ***Channel**: `price-limit`
 
 ### Option summary channel
 
-- **Channel**: `opt-summary`
+- ***Channel**: `opt-summary`
 
 ### Estimated delivery/exercise/settlement price channel
 
-- **Channel**: `estimated-price`
+- ***Channel**: `estimated-price`
 
 ### Mark price channel
 
-- **Channel**: `mark-price`
+- ***Channel**: `mark-price`
 
 ### Index tickers channel
 
-- **Channel**: `index-tickers`
+- ***Channel**: `index-tickers`
 
 ### Mark price candlesticks channel
 
-- **URL Path**: `/ws/v5/business`
-- **Channel**: `mark-price-candle1m`, etc.
+- ***URL Path**: `/ws/v5/business`
+- ***Channel**: `mark-price-candle1m`, etc.
 
 ### Index candlesticks channel
 
-- **URL Path**: `/ws/v5/business`
-- **Channel**: `index-candle1m`, etc.
+- ***URL Path**: `/ws/v5/business`
+- ***Channel**: `index-candle1m`, etc.
 
 ### Liquidation orders channel
 
-- **URL Path**: `/ws/v5/public`
-- **Channel**: `liquidation-orders`
+- ***URL Path**: `/ws/v5/public`
+- ***Channel**: `liquidation-orders`
 
 ### ADL warning channel
 
-- **Channel**: `adl-warning`
+- ***Channel**: `adl-warning`
 
 ### Economic calendar channel
 
-- **URL Path**: `/ws/v5/business`
-- **Channel**: `economic-calendar`
+- ***URL Path**: `/ws/v5/business`
+- ***Channel**: `economic-calendar`

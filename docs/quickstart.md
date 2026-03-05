@@ -30,21 +30,13 @@ api = BtApi(exchange_kwargs=exchange_kwargs)
 ### 支持的交易所
 
 | 交易所 | 代码 | 说明 |
-
 |--------|------|------|
-
 | **Binance 现货**| `BINANCE___SPOT` | 加密货币现货 |
-
 |**Binance 合约**| `BINANCE___SWAP` | USDT 本位合约 |
-
 |**OKX 现货**| `OKX___SPOT` | 加密货币现货 |
-
 |**OKX 合约**| `OKX___SWAP` | 永续合约 |
-
 |**CTP 期货**| `CTP___FUTURE` | 中国期货市场 |
-
 |**IB Web 股票**| `IB_WEB___STK` | 全球股票市场 |
-
 |**IB Web 期货** | `IB_WEB___FUT` | 全球期货市场 |
 
 ---
@@ -148,7 +140,7 @@ exchange_kwargs = {
     "IB_WEB___STK": {
         "auth_config": IbWebAuthConfig(
             account_id="your_account_id",
-            base_url="<https://api.interactivebrokers.com">
+            base_url="https://api.interactivebrokers.com"
         )
     }
 }

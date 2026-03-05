@@ -62,7 +62,7 @@ manager = SecureCredentialManager()
 credentials = manager.get_exchange_credentials("BINANCE")
 ```
 
-**重要**: 永远不要将 API 密钥硬编码在代码中或提交到 Git！
+***重要**: 永远不要将 API 密钥硬编码在代码中或提交到 Git！
 
 ### Q: 测试时如何跳过需要 API 密钥的测试？
 

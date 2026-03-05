@@ -6,12 +6,12 @@
 - API 版本: v1
 - 创建日期: 2026-02-27
 - 最后更新: 2026-02-27
-- 官方文档: <https://www.htx.com/en-us/opend/newApiPages/>
+- 官方文档: https://www.htx.com/en-us/opend/newApiPages/
 
 ## 交易所基本信息
 
 - 官方名称: HTX (原 Huobi)
-- 官网: <https://www.htx.com>
+- 官网: https://www.htx.com
 - 交易所类型: CEX (中心化交易所)
 - 24h 交易量排名: #6 ($2.4B+)
 - 支持的交易对类型: 现货、杠杆、合约、期权
@@ -21,15 +21,10 @@
 ## API 基础 URL
 
 | 端点类型 | URL | 说明 |
-
 |---------|-----|------|
-
-| REST API | `<https://api.huobi.pro`> | 主端点 |
-
-| REST API (AWS) | `<https://api-aws.huobi.pro`> | AWS 区域 |
-
+| REST API | `https://api.huobi.pro` | 主端点 |
+| REST API (AWS) | `https://api-aws.huobi.pro` | AWS 区域 |
 | WebSocket (市场) | `wss://api.huobi.pro/ws` | 市场数据 |
-
 | WebSocket (账户) | `wss://api.huobi.pro/ws/v2` | 账户数据 |
 
 ## 认证方式
@@ -50,16 +45,12 @@
 
 HTX 使用 HMAC SHA256 签名算法。
 
-- *签名步骤**:
-
-1. 构建规范化请求字符串
+***签名步骤**: 1. 构建规范化请求字符串
 2. 按字母顺序排序参数
 3. 使用 Secret Key 进行 HMAC SHA256 签名
 4. 将签名进行 Base64 编码
 
-- *必需的参数**:
-
-```
+***必需的参数**: ```
 AccessKeyId: Access Key
 SignatureMethod: HmacSHA256
 SignatureVersion: 2
@@ -68,9 +59,7 @@ Signature: 签名
 
 ```
 
-- *Python 示例**:
-
-```python
+***Python 示例**: ```python
 import time
 import hmac
 import hashlib
@@ -151,15 +140,13 @@ def htx_request(method, endpoint, params=None, data=None):
 
 ### 1. 获取交易对信息
 
-- *端点**: `GET /v1/common/symbols`
+***端点**: `GET /v1/common/symbols`
 
-- *描述**: 获取所有交易对信息
+***描述**: 获取所有交易对信息
 
-- *参数**: 无
+***参数**: 无
 
-- *响应示例**:
-
-```json
+***响应示例**: ```json
 {
   "status": "ok",
   "data": [
@@ -187,9 +174,7 @@ def htx_request(method, endpoint, params=None, data=None):
 
 ```
 
-- *Python 示例**:
-
-```python
+***Python 示例**: ```python
 def get_symbols():
     """获取交易对信息"""
     endpoint = '/v1/common/symbols'
@@ -210,21 +195,15 @@ if symbols['status'] == 'ok':
 
 ### 2. 获取行情数据
 
-- *端点**: `GET /market/detail/merged`
+***端点**: `GET /market/detail/merged`
 
-- *描述**: 获取聚合行情（Ticker）
+***描述**: 获取聚合行情（Ticker）
 
-- *参数**:
-
-| 参数 | 类型 | 必需 | 描述 |
-
+***参数**: | 参数 | 类型 | 必需 | 描述 |
 |------|------|------|------|
-
 | symbol | String | 是 | 交易对，如 btcusdt |
 
-- *响应示例**:
-
-```json
+***响应示例**: ```json
 {
   "status": "ok",
   "ch": "market.btcusdt.detail.merged",
@@ -246,9 +225,7 @@ if symbols['status'] == 'ok':
 
 ```
 
-- *Python 示例**:
-
-```python
+***Python 示例**: ```python
 def get_ticker(symbol):
     """获取行情数据"""
     endpoint = '/market/detail/merged'
@@ -270,25 +247,17 @@ if ticker['status'] == 'ok':
 
 ### 3. 获取深度数据
 
-- *端点**: `GET /market/depth`
+***端点**: `GET /market/depth`
 
-- *描述**: 获取市场深度数据
+***描述**: 获取市场深度数据
 
-- *参数**:
-
-| 参数 | 类型 | 必需 | 描述 |
-
+***参数**: | 参数 | 类型 | 必需 | 描述 |
 |------|------|------|------|
-
 | symbol | String | 是 | 交易对 |
-
 | depth | Integer | 否 | 深度档位：5, 10, 20 |
-
 | type | String | 是 | 深度类型：step0, step1, step2, step3, step4, step5 |
 
-- *响应示例**:
-
-```json
+***响应示例**: ```json
 {
   "status": "ok",
   "ch": "market.btcusdt.depth.step0",
@@ -309,9 +278,7 @@ if ticker['status'] == 'ok':
 
 ```
 
-- *Python 示例**:
-
-```python
+***Python 示例**: ```python
 def get_depth(symbol, depth_type='step0'):
     """获取深度数据"""
     endpoint = '/market/depth'
@@ -336,25 +303,17 @@ if depth['status'] == 'ok':
 
 ### 4. 获取 K 线数据
 
-- *端点**: `GET /market/history/kline`
+***端点**: `GET /market/history/kline`
 
-- *描述**: 获取 K 线数据
+***描述**: 获取 K 线数据
 
-- *参数**:
-
-| 参数 | 类型 | 必需 | 描述 |
-
+***参数**: | 参数 | 类型 | 必需 | 描述 |
 |------|------|------|------|
-
 | symbol | String | 是 | 交易对 |
-
 | period | String | 是 | K 线周期：1min, 5min, 15min, 30min, 60min, 4hour, 1day, 1mon, 1week, 1year |
-
 | size | Integer | 否 | 返回数量，最大 2000 |
 
-- *响应示例**:
-
-```json
+***响应示例**: ```json
 {
   "status": "ok",
   "ch": "market.btcusdt.kline.1min",
@@ -375,9 +334,7 @@ if depth['status'] == 'ok':
 
 ```
 
-- *Python 示例**:
-
-```python
+***Python 示例**: ```python
 def get_klines(symbol, period='60min', size=100):
     """获取 K 线数据"""
     endpoint = '/market/history/kline'
@@ -402,23 +359,16 @@ if klines['status'] == 'ok':
 
 ### 5. 获取最近成交
 
-- *端点**: `GET /market/history/trade`
+***端点**: `GET /market/history/trade`
 
-- *描述**: 获取最近的成交记录
+***描述**: 获取最近的成交记录
 
-- *参数**:
-
-| 参数 | 类型 | 必需 | 描述 |
-
+***参数**: | 参数 | 类型 | 必需 | 描述 |
 |------|------|------|------|
-
 | symbol | String | 是 | 交易对 |
-
 | size | Integer | 否 | 返回数量，最大 2000 |
 
-- *响应示例**:
-
-```json
+***响应示例**: ```json
 {
   "status": "ok",
   "ch": "market.btcusdt.trade.detail",
@@ -447,17 +397,15 @@ if klines['status'] == 'ok':
 
 ### 1. 获取账户 ID
 
-- *端点**: `GET /v1/account/accounts`
+***端点**: `GET /v1/account/accounts`
 
-- *描述**: 获取账户列表（下单前需要先获取账户 ID）
+***描述**: 获取账户列表（下单前需要先获取账户 ID）
 
-- *权限**: 需要读取权限
+***权限**: 需要读取权限
 
-- *参数**: 无
+***参数**: 无
 
-- *响应示例**:
-
-```json
+***响应示例**: ```json
 {
   "status": "ok",
   "data": [
@@ -472,9 +420,7 @@ if klines['status'] == 'ok':
 
 ```
 
-- *Python 示例**:
-
-```python
+***Python 示例**: ```python
 def get_accounts():
     """获取账户列表"""
     endpoint = '/v1/account/accounts'
@@ -499,35 +445,23 @@ if accounts and accounts['status'] == 'ok':
 
 ### 2. 下单
 
-- *端点**: `POST /v1/order/orders/place`
+***端点**: `POST /v1/order/orders/place`
 
-- *描述**: 创建新订单
+***描述**: 创建新订单
 
-- *权限**: 需要交易权限
+***权限**: 需要交易权限
 
-- *参数**:
-
-| 参数 | 类型 | 必需 | 描述 |
-
+***参数**: | 参数 | 类型 | 必需 | 描述 |
 |------|------|------|------|
-
 | account-id | String | 是 | 账户 ID |
-
 | symbol | String | 是 | 交易对 |
-
 | type | String | 是 | 订单类型：buy-market, sell-market, buy-limit, sell-limit |
-
 | amount | String | 是 | 订单数量 |
-
 | price | String | 否 | 订单价格（限价单必需） |
-
 | client-order-id | String | 否 | 客户自定义订单 ID |
-
 | source | String | 否 | 订单来源：spot-api, margin-api |
 
-- *响应示例**:
-
-```json
+***响应示例**: ```json
 {
   "status": "ok",
   "data": "123456789"
@@ -535,9 +469,7 @@ if accounts and accounts['status'] == 'ok':
 
 ```
 
-- *Python 示例**:
-
-```python
+***Python 示例**: ```python
 def place_order(account_id, symbol, order_type, amount, price=None):
     """下单"""
     endpoint = '/v1/order/orders/place'
@@ -584,23 +516,17 @@ print(f"Order placed: {order}")
 
 ### 3. 撤销订单
 
-- *端点**: `POST /v1/order/orders/{order-id}/submitcancel`
+***端点**: `POST /v1/order/orders/{order-id}/submitcancel`
 
-- *描述**: 撤销单个订单
+***描述**: 撤销单个订单
 
-- *权限**: 需要交易权限
+***权限**: 需要交易权限
 
-- *参数**:
-
-| 参数 | 类型 | 必需 | 描述 |
-
+***参数**: | 参数 | 类型 | 必需 | 描述 |
 |------|------|------|------|
-
 | order-id | String | 是 | 订单 ID（路径参数） |
 
-- *响应示例**:
-
-```json
+***响应示例**: ```json
 {
   "status": "ok",
   "data": "123456789"
@@ -608,9 +534,7 @@ print(f"Order placed: {order}")
 
 ```
 
-- *Python 示例**:
-
-```python
+***Python 示例**: ```python
 def cancel_order(order_id):
     """撤销订单"""
     endpoint = f'/v1/order/orders/{order_id}/submitcancel'
@@ -631,23 +555,17 @@ print(f"Order canceled: {result}")
 
 ### 4. 批量撤销订单
 
-- *端点**: `POST /v1/order/orders/batchcancel`
+***端点**: `POST /v1/order/orders/batchcancel`
 
-- *描述**: 批量撤销订单
+***描述**: 批量撤销订单
 
-- *权限**: 需要交易权限
+***权限**: 需要交易权限
 
-- *参数**:
-
-| 参数 | 类型 | 必需 | 描述 |
-
+***参数**: | 参数 | 类型 | 必需 | 描述 |
 |------|------|------|------|
-
 | order-ids | Array | 是 | 订单 ID 列表（最多 50 个） |
 
-- *响应示例**:
-
-```json
+***响应示例**: ```json
 {
   "status": "ok",
   "data": {
@@ -658,9 +576,7 @@ print(f"Order canceled: {result}")
 
 ```
 
-- *Python 示例**:
-
-```python
+***Python 示例**: ```python
 def batch_cancel_orders(order_ids):
     """批量撤销订单"""
     endpoint = '/v1/order/orders/batchcancel'
@@ -682,23 +598,17 @@ print(f"Batch cancel result: {result}")
 
 ### 5. 查询订单详情
 
-- *端点**: `GET /v1/order/orders/{order-id}`
+***端点**: `GET /v1/order/orders/{order-id}`
 
-- *描述**: 查询订单详情
+***描述**: 查询订单详情
 
-- *权限**: 需要读取权限
+***权限**: 需要读取权限
 
-- *参数**:
-
-| 参数 | 类型 | 必需 | 描述 |
-
+***参数**: | 参数 | 类型 | 必需 | 描述 |
 |------|------|------|------|
-
 | order-id | String | 是 | 订单 ID（路径参数） |
 
-- *响应示例**:
-
-```json
+***响应示例**: ```json
 {
   "status": "ok",
   "data": {
@@ -723,39 +633,26 @@ print(f"Batch cancel result: {result}")
 
 ### 6. 查询订单列表
 
-- *端点**: `GET /v1/order/orders`
+***端点**: `GET /v1/order/orders`
 
-- *描述**: 查询订单列表
+***描述**: 查询订单列表
 
-- *权限**: 需要读取权限
+***权限**: 需要读取权限
 
-- *参数**:
-
-| 参数 | 类型 | 必需 | 描述 |
-
+***参数**: | 参数 | 类型 | 必需 | 描述 |
 |------|------|------|------|
-
 | symbol | String | 是 | 交易对 |
-
 | states | String | 是 | 订单状态：submitted, partial-filled, filled, canceled, partial-canceled |
-
 | types | String | 否 | 订单类型 |
-
 | start-date | String | 否 | 开始日期（yyyy-mm-dd） |
-
 | end-date | String | 否 | 结束日期 |
-
 | from | String | 否 | 起始订单 ID |
-
 | direct | String | 否 | 查询方向：prev, next |
-
 | size | Integer | 否 | 返回数量 |
 
-- *响应示例**: 返回订单数组，格式同订单详情
+***响应示例**: 返回订单数组，格式同订单详情
 
-- *Python 示例**:
-
-```python
+***Python 示例**: ```python
 def get_orders(symbol, states='submitted,partial-filled'):
     """查询订单列表"""
     endpoint = '/v1/order/orders'
@@ -785,23 +682,17 @@ if orders and orders['status'] == 'ok':
 
 ### 1. 查询账户余额
 
-- *端点**: `GET /v1/account/accounts/{account-id}/balance`
+***端点**: `GET /v1/account/accounts/{account-id}/balance`
 
-- *描述**: 获取账户余额
+***描述**: 获取账户余额
 
-- *权限**: 需要读取权限
+***权限**: 需要读取权限
 
-- *参数**:
-
-| 参数 | 类型 | 必需 | 描述 |
-
+***参数**: | 参数 | 类型 | 必需 | 描述 |
 |------|------|------|------|
-
 | account-id | String | 是 | 账户 ID（路径参数） |
 
-- *响应示例**:
-
-```json
+***响应示例**: ```json
 {
   "status": "ok",
   "data": {
@@ -835,9 +726,7 @@ if orders and orders['status'] == 'ok':
 
 ```
 
-- *Python 示例**:
-
-```python
+***Python 示例**: ```python
 def get_balance(account_id):
     """获取账户余额"""
     endpoint = f'/v1/account/accounts/{account_id}/balance'
@@ -869,23 +758,17 @@ if balance and balance['status'] == 'ok':
 
 ### 2. 查询成交记录
 
-- *端点**: `GET /v1/order/orders/{order-id}/matchresults`
+***端点**: `GET /v1/order/orders/{order-id}/matchresults`
 
-- *描述**: 查询订单的成交记录
+***描述**: 查询订单的成交记录
 
-- *权限**: 需要读取权限
+***权限**: 需要读取权限
 
-- *参数**:
-
-| 参数 | 类型 | 必需 | 描述 |
-
+***参数**: | 参数 | 类型 | 必需 | 描述 |
 |------|------|------|------|
-
 | order-id | String | 是 | 订单 ID（路径参数） |
 
-- *响应示例**:
-
-```json
+***响应示例**: ```json
 {
   "status": "ok",
   "data": [
@@ -908,37 +791,25 @@ if balance and balance['status'] == 'ok':
 
 ### 3. 查询历史成交
 
-- *端点**: `GET /v1/order/matchresults`
+***端点**: `GET /v1/order/matchresults`
 
-- *描述**: 查询历史成交记录
+***描述**: 查询历史成交记录
 
-- *权限**: 需要读取权限
+***权限**: 需要读取权限
 
-- *参数**:
-
-| 参数 | 类型 | 必需 | 描述 |
-
+***参数**: | 参数 | 类型 | 必需 | 描述 |
 |------|------|------|------|
-
 | symbol | String | 是 | 交易对 |
-
 | types | String | 否 | 订单类型 |
-
 | start-date | String | 否 | 开始日期 |
-
 | end-date | String | 否 | 结束日期 |
-
 | from | String | 否 | 起始 ID |
-
 | direct | String | 否 | 查询方向 |
-
 | size | Integer | 否 | 返回数量 |
 
-- *响应示例**: 同查询订单成交记录
+***响应示例**: 同查询订单成交记录
 
-- *Python 示例**:
-
-```python
+***Python 示例**: ```python
 def get_match_results(symbol, size=100):
     """获取成交记录"""
     endpoint = '/v1/order/matchresults'
@@ -971,35 +842,22 @@ if matches and matches['status'] == 'ok':
 HTX 实施基于 IP 和 UID 的速率限制：
 
 | 限制类型 | 限制值 | 时间窗口 | 说明 |
-
 |---------|--------|----------|------|
-
 | REST API (公共) | 100 次 | 10 秒 | 每个 IP |
-
 | REST API (私有) | 100 次 | 10 秒 | 每个 UID |
-
 | 交易端点 | 100 次 | 2 秒 | 每个 UID |
-
 | WebSocket 连接 | 50 个 | - | 每个 UID |
 
 ### 不同端点的速率限制
 
 | 端点类别 | 限制 |
-
 |---------|------|
-
 | 获取交易对 | 10 次/秒 |
-
 | 获取行情 | 10 次/秒 |
-
 | 获取深度 | 10 次/秒 |
-
 | 查询账户 | 10 次/秒 |
-
 | 下单 | 100 次/2 秒 |
-
 | 撤单 | 100 次/2 秒 |
-
 | 查询订单 | 10 次/秒 |
 
 ### 响应头
@@ -1015,7 +873,7 @@ ratelimit-reset: 重置时间戳
 
 ### 触发限制后的行为
 
-- **HTTP 429**: Too Many Requests
+- ***HTTP 429**: Too Many Requests
 - 响应体包含错误信息
 - 建议等待重置时间后重试
 
@@ -1028,18 +886,18 @@ from functools import wraps
 def rate_limit_handler(func):
     """速率限制处理装饰器"""
     @wraps(func)
-    def wrapper(*args, **kwargs):
+    def wrapper(**args, **kwargs):
         max_retries = 3
         retry_delay = 1
 
         for attempt in range(max_retries):
             try:
-                response = func(*args, **kwargs)
+                response = func(**args, **kwargs)
 
 # 检查速率限制
                 if isinstance(response, dict) and response.get('err-code') == 'api-signature-not-valid':
                     if attempt < max_retries - 1:
-                        wait_time = retry_delay * (2 **attempt)
+                        wait_time = retry_delay ** (2 **attempt)
                         print(f"Rate limit hit, waiting {wait_time}s...")
                         time.sleep(wait_time)
                         continue
@@ -1065,11 +923,8 @@ def api_call_with_retry(method, endpoint,**kwargs):
 ### WebSocket 端点
 
 | 端点类型 | URL | 说明 |
-
 |---------|-----|------|
-
 | 市场数据 | `wss://api.huobi.pro/ws` | 市场行情 |
-
 | 账户数据 | `wss://api.huobi.pro/ws/v2` | 账户和订单 |
 
 ### 认证方法
@@ -1115,14 +970,12 @@ def authenticate_websocket(ws):
 
 ### 可订阅频道
 
-- *公共频道**:
-- `market.{symbol}.ticker` - 行情 ticker
+***公共频道**: - `market.{symbol}.ticker` - 行情 ticker
 - `market.{symbol}.depth.{type}` - 市场深度
 - `market.{symbol}.trade.detail` - 成交明细
 - `market.{symbol}.kline.{period}` - K 线数据
 
-- *私有频道**:
-- `orders#{symbol}` - 订单更新
+***私有频道**: - `orders#{symbol}` - 订单更新
 - `accounts.update#2` - 账户变动
 
 ### 订阅格式
@@ -1223,31 +1076,18 @@ ws_thread.start()
 ### 常见错误代码
 
 | 错误代码 | 错误消息 | 可能原因 | 处理建议 |
-
 |---------|---------|---------|---------|
-
 | base-msg | Success | 成功 | - |
-
 | api-signature-not-valid | Signature not valid | 签名错误 | 检查签名算法 |
-
 | api-signature-check-failed | Signature check failed | 签名验证失败 | 检查密钥和参数 |
-
 | api-key-invalid | API key invalid | API 密钥无效 | 检查 API 密钥 |
-
 | api-key-expired | API key expired | API 密钥过期 | 更新 API 密钥 |
-
 | api-key-ip-invalid | IP invalid | IP 不在白名单 | 添加 IP 到白名单 |
-
 | api-key-permission-invalid | Permission invalid | 权限不足 | 检查 API 权限 |
-
 | gateway-internal-error | Internal error | 服务器错误 | 稍后重试 |
-
 | account-frozen-balance-insufficient-error | Insufficient balance | 余额不足 | 检查账户余额 |
-
 | order-orderstate-error | Order state error | 订单状态错误 | 检查订单状态 |
-
 | order-queryorder-invalid | Order not found | 订单不存在 | 检查订单 ID |
-
 | order-update-error | Order update error | 订单更新失败 | 重试或联系客服 |
 
 ### 错误处理示例

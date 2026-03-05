@@ -42,23 +42,14 @@ event_bus.unsubscribe("ticker", handler)
 ## 内置事件类型
 
 | 事件名称 | 触发时机 | 数据类型 |
-
 |----------|----------|----------|
-
 | `ticker` | 行情更新时 | `TickerData` |
-
 | `kline` | K 线更新时 | `BarData` |
-
 | `depth` | 深度更新时 | `OrderBookData` |
-
 | `trade` | 有新成交时 | `TradeData` |
-
 | `order` | 订单状态变化时 | `OrderData` |
-
 | `account` | 账户变化时 | `AccountData` |
-
 | `position` | 持仓变化时 | `PositionData` |
-
 | `error` | 发生错误时 | `Exception` |
 
 ## 事件数据

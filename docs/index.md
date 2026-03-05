@@ -85,9 +85,9 @@ print(BtApi.list_available_exchanges())
 
 ## 项目信息
 
-- **GitHub**: <https://github.com/cloudQuant/bt_api_py>
-- **PyPI**: <https://pypi.org/project/bt_api_py/>
-- **License**: MIT
+- ***GitHub**: https://github.com/cloudQuant/bt_api_py
+- ***PyPI**: https://pypi.org/project/bt_api_py/
+- ***License**: MIT
 
 ---
 

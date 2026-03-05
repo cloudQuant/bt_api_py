@@ -21,7 +21,7 @@ pip install bt_api_py
 
 # 或从源码安装
 
-git clone <https://github.com/cloudQuant/bt_api_py>
+git clone https://github.com/cloudQuant/bt_api_py
 cd bt_api_py
 pip install -r requirements.txt
 pip install .
@@ -30,9 +30,9 @@ pip install .
 
 ### 可选依赖
 
-- **CTP 期货**：需要在对应平台编译 CTP SWIG 绑定
-- **Interactive Brokers TWS**：需要安装 `ib_insync` 并运行 TWS/Gateway
-- **IB Web API**：需要运行 Client Portal Gateway 或配置 OAuth 2.0
+- ***CTP 期货**：需要在对应平台编译 CTP SWIG 绑定
+- ***Interactive Brokers TWS**：需要安装 `ib_insync` 并运行 TWS/Gateway
+- ***IB Web API**：需要运行 Client Portal Gateway 或配置 OAuth 2.0
 
 ---
 
@@ -82,7 +82,7 @@ ib:
 # IB Web API
 
 ib_web:
-  base_url: "<https://localhost:5000">
+  base_url: "https://localhost:5000"
   account_id: "U1234567"
   verify_ssl: false
   timeout: 10
@@ -285,22 +285,17 @@ bt_api.cancel_all_orders("BTC-USDT")
 ### 统一接口完整方法列表
 
 | 分类 | 同步方法 | 异步方法 |
-
 |------|---------|---------|
-
 | 行情 | `get_tick`, `get_depth`, `get_kline` | `async_get_tick`, `async_get_depth`, `async_get_kline` |
-
 | 交易 | `make_order`, `cancel_order`, `cancel_all`, `query_order`, `get_open_orders` | `async_make_order`, `async_cancel_order`, `async_cancel_all`, `async_query_order`, `async_get_open_orders` |
-
 | 账户 | `get_balance`, `get_account`, `get_position` | `async_get_balance`, `async_get_account`, `async_get_position` |
-
 | 批量 | `get_all_ticks`, `get_all_balances`, `get_all_positions`, `cancel_all_orders` | — |
 
 ---
 
 ## REST 同步请求（Feed 模式）
 
-> **注意**: 推荐使用上面的统一接口。Feed 模式保留向后兼容。
+> ***注意**: 推荐使用上面的统一接口。Feed 模式保留向后兼容。
 
 ### 获取 Feed API
 
@@ -714,7 +709,7 @@ order = api.make_order(
 )
 
 ```
-> **注意**：CTP 需要平台特定的 SWIG 绑定：macOS (.framework)、Linux (.so)、Windows (.dll)
+> ***注意**：CTP 需要平台特定的 SWIG 绑定：macOS (.framework)、Linux (.so)、Windows (.dll)
 
 ---
 
@@ -745,7 +740,7 @@ bt_api = BtApi(exchange_kwargs)
 from bt_api_py.auth_config import IbWebAuthConfig
 
 ib_web_config = IbWebAuthConfig(
-    base_url="<https://localhost:5000",>
+    base_url="https://localhost:5000",
     account_id="U1234567",
     verify_ssl=False,
     timeout=10,
@@ -806,10 +801,10 @@ exchange_kwargs = {
         "public_key": "YOUR_KEY",
         "private_key": "YOUR_SECRET",
         "proxies": {
-            "http": "<http://127.0.0.1:7890",>
-            "https": "<http://127.0.0.1:7890",>
+            "http": "http://127.0.0.1:7890",
+            "https": "http://127.0.0.1:7890",
         },
-        "async_proxy": "<http://127.0.0.1:7890",>
+        "async_proxy": "http://127.0.0.1:7890",
     },
 }
 
@@ -817,4 +812,4 @@ exchange_kwargs = {
 
 ---
 
-- 最后更新: 2026-02-28*
+- 最后更新: 2026-02-28

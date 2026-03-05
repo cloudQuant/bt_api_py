@@ -41,15 +41,10 @@ print(bt_api_py.__version__)
 ## 支持的平台
 
 | 平台 | 架构 | 状态 |
-
 |------|------|------|
-
 | Linux | x86_64 | ✅ 完全支持 |
-
 | macOS | arm64 (Apple Silicon) | ✅ 完全支持 |
-
 | macOS | x86_64 (Intel) | ✅ 完全支持 |
-
 | Windows | x64 | ✅ 完全支持 |
 
 ## 可选依赖

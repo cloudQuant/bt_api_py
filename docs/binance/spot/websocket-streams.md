@@ -1,6 +1,6 @@
 # Binance Spot WebSocket 行情数据流
 
-> 来源: <https://github.com/binance/binance-spot-api-docs/blob/master/web-socket-streams.md>
+> 来源: https://github.com/binance/binance-spot-api-docs/blob/master/web-socket-streams.md
 
 ## General Information
 
@@ -69,9 +69,9 @@
 
 ### Aggregate Trade Streams (归集成交)
 
-- *Stream Name:** `<symbol>@aggTrade`
+- **Stream Name:** `<symbol>@aggTrade`
 
-- *Update Speed:** 实时
+- **Update Speed:** 实时
 
 ```json
 {
@@ -92,9 +92,9 @@
 
 ### Trade Streams (逐笔成交)
 
-- *Stream Name:** `<symbol>@trade`
+- **Stream Name:** `<symbol>@trade`
 
-- *Update Speed:** 实时
+- **Update Speed:** 实时
 
 ```json
 {
@@ -113,13 +113,13 @@
 
 ### Kline/Candlestick Streams (K 线)
 
-- *Stream Name:** `<symbol>@kline_<interval>`
+- **Stream Name:** `<symbol>@kline_<interval>`
 
-- *带时区偏移:** `<symbol>@kline_<interval>@+08:00`
+- **带时区偏移:** `<symbol>@kline_<interval>@+08:00`
 
-- *Update Speed:** `1s` 间隔为 1000ms，其他为 2000ms
+- **Update Speed:** `1s` 间隔为 1000ms，其他为 2000ms
 
-- *支持的间隔:** `1s`, `1m`, `3m`, `5m`, `15m`, `30m`, `1h`, `2h`, `4h`, `6h`, `8h`, `12h`, `1d`, `3d`, `1w`, `1M`
+- **支持的间隔:** `1s`, `1m`, `3m`, `5m`, `15m`, `30m`, `1h`, `2h`, `4h`, `6h`, `8h`, `12h`, `1d`, `3d`, `1w`, `1M`
 
 ```json
 {
@@ -151,9 +151,9 @@
 
 ### Individual Symbol Mini Ticker Stream
 
-- *Stream Name:** `<symbol>@miniTicker`
+- **Stream Name:** `<symbol>@miniTicker`
 
-- *Update Speed:** 1000ms
+- **Update Speed:** 1000ms
 
 ```json
 {
@@ -172,15 +172,15 @@
 
 ### All Market Mini Tickers Stream
 
-- *Stream Name:** `!miniTicker@arr`
+- **Stream Name:** `!miniTicker@arr`
 
-- *Update Speed:** 1000ms
+- **Update Speed:** 1000ms
 
 ### Individual Symbol Ticker Streams (24hr)
 
-- *Stream Name:** `<symbol>@ticker`
+- **Stream Name:** `<symbol>@ticker`
 
-- *Update Speed:** 1000ms
+- **Update Speed:** 1000ms
 
 ```json
 {
@@ -213,21 +213,21 @@
 
 ### Individual Symbol Rolling Window Statistics Streams
 
-- *Stream Name:** `<symbol>@ticker_<window_size>`
+- **Stream Name:** `<symbol>@ticker_<window_size>`
 
-- *Window Sizes:** `1h`, `4h`, `1d`
+- **Window Sizes:** `1h`, `4h`, `1d`
 
-- *Update Speed:** 1000ms
+- **Update Speed:** 1000ms
 
 ### All Market Rolling Window Statistics Streams
 
-- *Stream Name:** `!ticker_<window-size>@arr`
+- **Stream Name:** `!ticker_<window-size>@arr`
 
 ### Individual Symbol Book Ticker Streams (最优挂单)
 
-- *Stream Name:** `<symbol>@bookTicker`
+- **Stream Name:** `<symbol>@bookTicker`
 
-- *Update Speed:** 实时
+- **Update Speed:** 实时
 
 ```json
 {
@@ -243,9 +243,9 @@
 
 ### Average Price (均价)
 
-- *Stream Name:** `<symbol>@avgPrice`
+- **Stream Name:** `<symbol>@avgPrice`
 
-- *Update Speed:** 1000ms
+- **Update Speed:** 1000ms
 
 ```json
 {
@@ -261,11 +261,11 @@
 
 ### Partial Book Depth Streams (部分深度)
 
-- *Stream Name:** `<symbol>@depth<levels>` 或 `<symbol>@depth<levels>@100ms`
+- **Stream Name:** `<symbol>@depth<levels>` 或 `<symbol>@depth<levels>@100ms`
 
-- *Valid levels:** 5, 10, 20
+- **Valid levels:** 5, 10, 20
 
-- *Update Speed:** 1000ms 或 100ms
+- **Update Speed:** 1000ms 或 100ms
 
 ```json
 {
@@ -278,9 +278,9 @@
 
 ### Diff. Depth Stream (增量深度)
 
-- *Stream Name:** `<symbol>@depth` 或 `<symbol>@depth@100ms`
+- **Stream Name:** `<symbol>@depth` 或 `<symbol>@depth@100ms`
 
-- *Update Speed:** 1000ms 或 100ms
+- **Update Speed:** 1000ms 或 100ms
 
 ```json
 {
@@ -299,7 +299,7 @@
 
 1. 打开 WebSocket 连接到 `wss://stream.binance.com:9443/ws/bnbbtc@depth`
 2. 缓存收到的事件，记录第一个事件的 `U`
-3. 获取深度快照 `<https://api.binance.com/api/v3/depth?symbol=BNBBTC&limit=5000`>
+3. 获取深度快照 `https://api.binance.com/api/v3/depth?symbol=BNBBTC&limit=5000`
 4. 如果快照的 `lastUpdateId` < 步骤 2 的 `U`，返回步骤 3
 5. 丢弃 `u <= lastUpdateId` 的缓存事件
 6. 将本地 order book 设置为快照，更新 ID 为 `lastUpdateId`
@@ -313,31 +313,17 @@
 ## 数据流汇总表
 
 | Stream Name | 说明 | 更新速度 |
-
 |-------------|------|----------|
-
 | `<symbol>@aggTrade` | 归集成交 | 实时 |
-
 | `<symbol>@trade` | 逐笔成交 | 实时 |
-
 | `<symbol>@kline_<interval>` | K 线数据 | 1s/2s |
-
 | `<symbol>@kline_<interval>@+08:00` | K 线(UTC+8) | 1s/2s |
-
 | `<symbol>@miniTicker` | Mini Ticker | 1s |
-
 | `!miniTicker@arr` | 全市场 Mini Ticker | 1s |
-
 | `<symbol>@ticker` | 24hr Ticker | 1s |
-
 | `<symbol>@ticker_<window>` | 滚动窗口统计 | 1s |
-
 | `!ticker_<window>@arr` | 全市场滚动窗口 | 1s |
-
 | `<symbol>@bookTicker` | 最优挂单 | 实时 |
-
 | `<symbol>@avgPrice` | 均价 | 1s |
-
 | `<symbol>@depth<levels>` | 部分深度 | 1s/100ms |
-
 | `<symbol>@depth` | 增量深度 | 1s/100ms |

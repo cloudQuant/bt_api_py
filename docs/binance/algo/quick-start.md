@@ -31,31 +31,31 @@ To enable a `MARGIN` account for Margin Trading, please refer to the [Margin Tra
 
 This is a lightweight library that works as a connector to Binance public API, written in Python.
 
-<https://github.com/binance/binance-connector-python>
+https://github.com/binance/binance-connector-python
 
 ### Javascript connector
 
 This is a lightweight library that works as a connector to Binance public API, written for JavaScript users.
 
-<https://github.com/binance/binance-connector-js>
+https://github.com/binance/binance-connector-js
 
 ### Ruby connector
 
 This is a lightweight library that works as a connector to Binance public API, written for Ruby users.
 
-<https://github.com/binance/binance-connector-ruby>
+https://github.com/binance/binance-connector-ruby
 
 ### DotNET connector
 
 This is a lightweight library that works as a connector to Binance public API, written for C# users.
 
-<https://github.com/binance/binance-connector-dotnet>
+https://github.com/binance/binance-connector-dotnet
 
 ### Java connector
 
 This is a lightweight library that works as a connector to Binance public API, written for Java users.
 
-<https://github.com/binance/binance-connector-java>
+https://github.com/binance/binance-connector-java
 
 ### Postman Collections
 
@@ -69,4 +69,4 @@ For more information please refer to this page: [Binance API Postman](<https://g
 
 A YAML file with OpenAPI specification on the RESTful API is available to be used, as well as a Swagger UI page for the consulting.
 
-<https://github.com/binance/binance-api-swagger>
+https://github.com/binance/binance-api-swagger

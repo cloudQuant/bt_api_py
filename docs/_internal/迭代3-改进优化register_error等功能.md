@@ -48,7 +48,7 @@
 2. `error.py` 作为**统一错误翻译层**保留，`UnifiedError` 继续继承 `BtApiError`
 4. 或者反过来：**重命名 `error.py` 中的同名类**加前缀，如 `UnifiedAuthError`、`UnifiedRateLimitError`
 
-**不推荐合并**：`error.py` 已有 1237 行，且依赖 `exceptions.py` 基类，强行合并会使文件过大且破坏继承链。
+***不推荐合并**：`error.py` 已有 1237 行，且依赖 `exceptions.py` 基类，强行合并会使文件过大且破坏继承链。
 
 ---
 
@@ -77,8 +77,8 @@
 
 ### 使用情况
 
-- **`SymbolManager`**：仅被 `__init__.py`（导出）和 `tests/test_symbol_manager.py`（测试）引用 — **实际业务代码中未使用**
-- **`InstrumentManager`**：仅被 `tests/test_stage0_infrastructure.py`（测试）引用 — **实际业务代码中也未使用**
+- ***`SymbolManager`**：仅被 `__init__.py`（导出）和 `tests/test_symbol_manager.py`（测试）引用 — **实际业务代码中未使用**
+- ***`InstrumentManager`**：仅被 `tests/test_stage0_infrastructure.py`（测试）引用 — **实际业务代码中也未使用**
 
 ### 优化建议
 
@@ -148,4 +148,4 @@
 
 ---
 
-**测试结果**：355 passed, 1 failed（CTP MRO 预存 bug，与本次修改无关）
+***测试结果**：355 passed, 1 failed（CTP MRO 预存 bug，与本次修改无关）

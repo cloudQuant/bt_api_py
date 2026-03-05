@@ -1,6 +1,6 @@
 # bt_api_py Documentation
 
-- *bt_api_py**is a unified multi-exchange trading API framework supporting spot, futures, and derivatives trading with synchronous, asynchronous, and WebSocket interfaces.
+- **bt_api_py**is a unified multi-exchange trading API framework supporting spot, futures, and derivatives trading with synchronous, asynchronous, and WebSocket interfaces.
 
 [![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](https://opensource.org/licenses/MIT)
@@ -10,33 +10,21 @@
 ## Core Features
 
 | Feature | Description |
-
 |---------|-------------|
-
 |**Unified Multi-Exchange API**| Manage Binance, OKX, CTP, Interactive Brokers through a single `BtApi` class |
-
 |**Three API Modes**| Synchronous REST, Asynchronous REST, WebSocket real-time streaming |
-
 |**Plug-and-Play**| Registry-based architecture, add exchanges without modifying core code |
-
 |**Event-Driven**| Built-in EventBus for callback-based event handling |
-
 |**Standardized Data**| Unified Ticker, OrderBook, Bar, Order, Position data types |
-
 |**Cross-Platform**| Linux, Windows, macOS support |
 
 ## Supported Exchanges
 
 | Exchange | Code | Spot (SPOT) | Perpetual (SWAP) | Futures (FUTURE) | Stocks (STK) |
-
 |----------|------|:-----------:|:----------------:|:----------------:|:------------:|
-
 |**Binance**| `BINANCE___SPOT` / `BINANCE___SWAP` | ✅ | ✅ | — | — |
-
 |**OKX**| `OKX___SPOT` / `OKX___SWAP` | ✅ | ✅ | — | — |
-
 |**CTP**(China Futures) | `CTP___FUTURE` | — | — | ✅ | — |
-
 |**Interactive Brokers**| `IB_WEB___STK` / `IB_WEB___FUT` | — | — | — | ✅ |
 
 ## Quick Links
@@ -86,10 +74,10 @@ order = api.limit_order(
 
 ## Project Information
 
-- **GitHub**: <https://github.com/cloudQuant/bt_api_py>
-- **PyPI**: <https://pypi.org/project/bt_api_py/>
-- **License**: MIT
-- **Documentation**: <https://cloudquant.github.io/bt_api_py/>
+- ***GitHub**: https://github.com/cloudQuant/bt_api_py
+- ***PyPI**: https://pypi.org/project/bt_api_py/
+- ***License**: MIT
+- ***Documentation**: https://cloudquant.github.io/bt_api_py/
 
 ---
 

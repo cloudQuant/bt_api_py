@@ -30,21 +30,13 @@ api = BtApi(exchange_kwargs=exchange_kwargs)
 ### Supported Exchanges
 
 | Exchange | Code | Description |
-
 |----------|------|-------------|
-
 | **Binance Spot**| `BINANCE___SPOT` | Crypto spot trading |
-
 |**Binance Perpetual**| `BINANCE___SWAP` | USDT-margined futures |
-
 |**OKX Spot**| `OKX___SPOT` | Crypto spot trading |
-
 |**OKX Perpetual**| `OKX___SWAP` | Perpetual swaps |
-
 |**CTP Futures**| `CTP___FUTURE` | China futures market |
-
 |**IB Web Stocks**| `IB_WEB___STK` | Global stock markets |
-
 |**IB Web Futures** | `IB_WEB___FUT` | Global futures markets |
 
 ---

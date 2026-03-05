@@ -39,15 +39,10 @@ print(bt_api_py.__version__)
 ## Supported Platforms
 
 | Platform | Architecture | Status |
-
 |----------|--------------|--------|
-
 | Linux | x86_64 | ✅ Fully Supported |
-
 | macOS | arm64 (Apple Silicon) | ✅ Fully Supported |
-
 | macOS | x86_64 (Intel) | ✅ Fully Supported |
-
 | Windows | x64 | ✅ Fully Supported |
 
 ## Optional Dependencies

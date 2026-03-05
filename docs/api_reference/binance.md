@@ -5,13 +5,9 @@ Binance 交易所的 API 接口文档。
 ## 交易所标识
 
 | 市场 | 标识 | 说明 |
-
 |------|------|------|
-
 | 现货 | `BINANCE___SPOT` | 加密货币现货交易 |
-
 | 合约 | `BINANCE___SWAP` | USDT 本位永续合约 |
-
 | 杠杆 | `BINANCE___MARGIN` | 杠杆交易 |
 
 ## 认证配置
@@ -32,22 +28,16 @@ exchange_kwargs = {
 ### 现货端点
 
 | 环境 | REST Base URL | WebSocket |
-
 |------|---------------|-----------|
-
-| 生产环境 | `<https://api.binance.com`> | `wss://stream.binance.com:9443` |
-
-| 测试环境 | `<https://testnet.binance.vision`> | `wss://testnet.binance.vision` |
+| 生产环境 | `https://api.binance.com` | `wss://stream.binance.com:9443` |
+| 测试环境 | `https://testnet.binance.vision` | `wss://testnet.binance.vision` |
 
 ### 合约端点
 
 | 环境 | REST Base URL | WebSocket |
-
 |------|---------------|-----------|
-
-| 生产环境 | `<https://fapi.binance.com`> | `wss://fstream.binance.com` |
-
-| 测试环境 | `<https://testnet.binancefuture.com`> | `wss://stream.binancefuture.com` |
+| 生产环境 | `https://fapi.binance.com` | `wss://fstream.binance.com` |
+| 测试环境 | `https://testnet.binancefuture.com` | `wss://stream.binancefuture.com` |
 
 ## 特殊参数
 
@@ -84,57 +74,31 @@ server_time = api.get_server_time()
 ## 错误码
 
 | 代码 | 说明 |
-
 |------|------|
-
 | -1000 | 未知错误 |
-
 | -1001 | 断开连接 |
-
 | -1002 | 未授权 |
-
 | -1003 | 请求过多 |
-
 | -1006 | 过于频繁 |
-
 | -1007 | 已封禁 IP |
-
 | -1013 | 无效的 API Key |
-
 | -1014 | 无效的签名 |
-
 | -1021 | 时间戳超出范围 |
-
 | -1100 | 非法字符 |
-
 | -1101 | 非法参数 |
-
 | -1102 | 强制参数为空 |
-
 | -1103 | 非法参数值 |
-
 | -1104 | 未读的参数 |
-
 | -1105 | 参数过长 |
-
 | -1106 | 无效的参数 |
-
 | -1112 | 无效的量 |
-
 | -1114 | 不可用的 API |
-
 | -1115 | taker 过多 |
-
 | -1116 | 订单过多 |
-
 | -1120 | 无效的 interval |
-
 | -1121 | 无效的 K 线 |
-
 | -1128 | 余额不足 |
-
 | -1130 | 无效的订单类型 |
-
 | -1131 | 无效的订单状态 |
 
 ## 更多信息

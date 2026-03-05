@@ -4,9 +4,9 @@
 
 ### POST / Place grid algo order
 
-- **Rate Limit**: 20 requests per 2 seconds
-- **Rate limit rule**: User ID + Instrument ID
-- **Permission**: Trade
+- ***Rate Limit**: 20 requests per 2 seconds
+- ***Rate limit rule**: User ID + Instrument ID
+- ***Permission**: Trade
 
 ```
 POST /api/v5/tradingBot/grid/order-algo
@@ -63,21 +63,13 @@ GET /api/v5/tradingBot/grid/orders-algo-pending
 ```
 
 | Parameter | Type | Required | Description |
-
 |-----------|------|----------|-------------|
-
 | algoOrdType | String | Yes | `grid` (Spot grid), `contract_grid` (Contract grid) |
-
 | algoId | String | No | Algo ID |
-
 | instId | String | No | Instrument ID |
-
 | instType | String | No | Instrument type |
-
 | after | String | No | Pagination |
-
 | before | String | No | Pagination |
-
 | limit | String | No | Default 100, max 100 |
 
 ### GET / Grid algo order history
@@ -170,17 +162,17 @@ GET /api/v5/tradingBot/grid/max-grid-quantity
 
 ### WS / Spot grid algo orders channel
 
-- **URL Path**: `/ws/v5/business` (requires login)
-- **Channel**: `grid-orders-spot`
+- ***URL Path**: `/ws/v5/business` (requires login)
+- ***Channel**: `grid-orders-spot`
 
 ### WS / Contract grid algo orders channel
 
-- **Channel**: `grid-orders-contract`
+- ***Channel**: `grid-orders-contract`
 
 ### WS / Grid positions channel
 
-- **Channel**: `grid-positions`
+- ***Channel**: `grid-positions`
 
 ### WS / Grid sub orders channel
 
-- **Channel**: `grid-sub-orders`
+- ***Channel**: `grid-sub-orders`

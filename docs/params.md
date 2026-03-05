@@ -2,27 +2,14 @@
 
 各交易所的特定参数说明。
 
-## 目录
-
-- [Binance](#binance)
-- [OKX](#okx)
-- [CTP](#ctp)
-- [Interactive Brokers](#interactive-brokers)
-
----
-
 ## Binance
 
 ### 基础参数
 
 | 参数 | 类型 | 必需 | 默认值 | 说明 |
-
 |------|------|------|--------|------|
-
 | `api_key` | str | ✅ | - | API Key |
-
 | `secret` | str | ✅ | - | Secret Key |
-
 | `testnet` | bool | ❌ | `False` | 是否使用测试网络 |
 
 ### 测试网络配置
@@ -41,60 +28,39 @@ exchange_kwargs = {
 ### 现货/合约通用参数
 
 | 参数 | 类型 | 说明 |
-
 |------|------|------|
-
 | `recvWindow` | int | 请求有效期，默认 5000ms |
-
 | `timestamp` | int | 请求时间戳 |
 
 ### 订单参数
 
 | 参数 | 类型 | 说明 |
-
 |------|------|------|
-
 | `newClientOrderId` | str | 客户端自定义订单 ID |
-
 | `postOnly` | bool | 是否只做 maker |
-
 | `reduceOnly` | bool | 是否只减仓 |
-
 | `icebergQty` | float | 冰山订单数量 |
-
 | `timeInForce` | str | 订单有效期: GTC/IOC/FOK |
 
 ### 时间周期
 
 | 周期 | 说明 |
-
 |------|------|
-
 | `1m` | 1 分钟 |
-
 | `3m` | 3 分钟 |
-
 | `5m` | 5 分钟 |
-
 | `15m` | 15 分钟 |
-
 | `30m` | 30 分钟 |
-
 | `1h` / `1H` | 1 小时 |
-
 | `4h` | 4 小时 |
-
 | `1d` / `1D` | 1 天 |
 
 ### API 端点
 
 | 环境 | Spot REST | Spot WebSocket | Futures REST | Futures WebSocket |
-
 |------|-----------|----------------|-------------|-------------------|
-
-| 生产 | `<https://api.binance.com`> | `wss://stream.binance.com:9443` | `<https://fapi.binance.com`> | `wss://fstream.binance.com` |
-
-| 测试 | `<https://testnet.binance.vision`> | `wss://testnet.binance.vision` | `<https://testnet.binancefuture.com`> | `wss://stream.testnet.binancefuture.com` |
+| 生产 | `https://api.binance.com` | `wss://stream.binance.com:9443` | `https://fapi.binance.com` | `wss://fstream.binance.com` |
+| 测试 | `https://testnet.binance.vision` | `wss://testnet.binance.vision` | `https://testnet.binancefuture.com` | `wss://stream.testnet.binancefuture.com` |
 
 ---
 
@@ -103,15 +69,10 @@ exchange_kwargs = {
 ### 基础参数
 
 | 参数 | 类型 | 必需 | 默认值 | 说明 |
-
 |------|------|------|--------|------|
-
 | `api_key` | str | ✅ | - | API Key |
-
 | `secret` | str | ✅ | - | Secret Key |
-
 | `passphrase` | str | ✅ | - | API Key Passphrase |
-
 | `testnet` | bool | ❌ | `False` | 是否使用测试网络 |
 
 ### 特殊说明
@@ -140,28 +101,19 @@ OKX 使用 HMAC-SHA256 签名，需要包含 timestamp。
 ### 订单参数
 
 | 参数 | 类型 | 说明 |
-
 |------|------|------|
-
 | `clientOrderId` | str | 客户端订单 ID |
-
 | `tag` | str | 订单标签 |
-
 | `reduceOnly` | bool | 是否只减仓 |
-
 | `tpTriggerPx` | str | 止盈触发价 |
-
 | `slTriggerPx` | str | 止损触发价 |
 
 ### API 端点
 
 | 环境 | REST | WebSocket |
-
 |------|------|-----------|
-
-| 生产 | `<https://www.okx.com`> | `wss://ws.okx.com:8443/ws/v5/public` |
-
-| 模拟 | `<https://www.okx.com`> | `wss://wspap.okx.com:8443/ws/v5/public` |
+| 生产 | `https://www.okx.com` | `wss://ws.okx.com:8443/ws/v5/public` |
+| 模拟 | `https://www.okx.com` | `wss://wspap.okx.com:8443/ws/v5/public` |
 
 ---
 
@@ -170,21 +122,13 @@ OKX 使用 HMAC-SHA256 签名，需要包含 timestamp。
 ### 基础参数 (CtpAuthConfig)
 
 | 参数 | 类型 | 必需 | 说明 |
-
 |------|------|------|------|
-
 | `broker_id` | str | ✅ | 经纪商代码 (如 SimNow 为 "9999") |
-
 | `user_id` | str | ✅ | 用户 ID |
-
 | `password` | str | ✅ | 密码 |
-
 | `md_front` | str | ✅ | 行情前置地址 |
-
 | `td_front` | str | ✅ | 交易前置地址 |
-
 | `app_id` | str | ❌ | 应用 ID (生产环境) |
-
 | `auth_code` | str | ❌ | 认证码 (生产环境) |
 
 ### SimNow 配置
@@ -209,35 +153,24 @@ exchange_kwargs = {
 ### 前置地址
 
 | 环境 | 电信行情 | 电信交易 | 移动/联通行情 | 移动/联通交易 |
-
 |------|----------|----------|--------------|--------------|
-
 | SimNow | tcp://180.168.146.187:10211 | tcp://180.168.146.187:10201 | tcp://180.168.146.187:10212 | tcp://180.168.146.187:10202 |
 
 ### 订单参数
 
 | 参数 | 类型 | 说明 |
-
 |------|------|------|
-
 | `offset` | str | **必需** | 开平方向: `open` / `close` / `close_today` / `close_yesterday` |
-
 | `priceType` | str | 价格类型: `limit_price` / `market_price` |
-
 | `volume` | float | 数量 (手数) |
-
 | `minVolume` | float | 最小成交量 |
-
 | `condition` | dict | 条单触发条件 |
 
 ### 合约代码格式
 
 | 合约类型 | 格式 | 示例 |
-
 |----------|------|------|
-
 | 股指期货 | 品种 + 年份(后 2 位) + 月份 | IF2506 (沪深 300 2025 年 6 月) |
-
 | 商品期货 | 代码 + 年份(后 2 位) + 月份 | AU2506 (黄金 2025 年 6 月) |
 
 ---
@@ -247,11 +180,8 @@ exchange_kwargs = {
 ### 基础参数 (IbWebAuthConfig)
 
 | 参数 | 类型 | 必需 | 说明 |
-
 |------|------|------|------|
-
 | `account_id` | str | ✅ | IB 账户 ID |
-
 | `base_url` | str | ❌ | API 基础 URL |
 
 ### 配置示例
@@ -263,7 +193,7 @@ exchange_kwargs = {
     "IB_WEB___STK": {
         "auth_config": IbWebAuthConfig(
             account_id="DU1234567",  # IB 账户 ID
-            base_url="<https://api.interactivebrokers.com">
+            base_url="https://api.interactivebrokers.com"
         )
     }
 }
@@ -273,38 +203,26 @@ exchange_kwargs = {
 ### 股票代码格式
 
 | 市场 | 格式 | 示例 |
-
 |------|------|------|
-
 | 美股 | 交易对符号 | `AAPL`, `TSLA`, `NVDA` |
-
 | 港股 | 代码 + `.HK` | `700.HK` (腾讯), `9988.HK` (阿里巴巴) |
-
 | A 股 | 代码 + `.STK` | `600519.STK` (贵州茅台) |
-
 | 加密货币 | 交易对 | `BTCUSD` |
 
 ### 订单参数
 
 | 参数 | 类型 | 说明 |
-
 |------|------|------|
-
 | `orderType` | str | 订单类型: `LMT` / `MKT` / `STP` |
-
 | `outsideRth` | bool | 是否允许常规交易时间外下单 |
-
 | `hidden | bool | 是否隐藏订单 |
 
 ### API 端点
 
 | 环境 | URL |
-
 |------|-----|
-
-| 生产 | `<https://api.interactivebrokers.com`> |
-
-| 测试 | `<https://api.test.interactivebrokers.com`> |
+| 生产 | `https://api.interactivebrokers.com` |
+| 测试 | `https://api.test.interactivebrokers.com` |
 
 ---
 
@@ -313,45 +231,29 @@ exchange_kwargs = {
 ### 订单类型映射
 
 | 概念 | Binance | OKX | CTP | IB |
-
 |------|---------|-----|-----|-----|
-
 | 限价单 | `limit` | `limit` | `limit_price` | `LMT` |
-
 | 市价单 | `market` | `market` | `market_price` | `MKT` |
-
 | 止损单 | - | - | - | `STP` |
-
 | 冰山单 | - | `iceberg` | - | - |
 
 ### 订单状态映射
 
 | 状态 | Binance | OKX | CTP | IB |
-
 |------|---------|-----|-----|-----|
-
 | 新建 | `new` | `live` | - | `PendingSubmit` |
-
 | 部分成交 | `partially_filled` | `partially_filled` | - | `PartiallyFilled` |
-
 | 完全成交 | `filled` | `filled` | - | `Filled` |
-
 | 已撤销 | `canceled` | `canceled` | - | `Cancelled` |
-
 | 被拒绝 | `rejected` | - | - | - |
 
 ### 开平方向
 
 | 概念 | OKX | CTP | IB |
-
 |------|-----|-----|-----|
-
 | 开仓 | `open` | `open` | - |
-
 | 平仓 | `close` | `close` | - |
-
 | 平今 | - | `close_today` | - |
-
 | 平昨 | - | `close_yesterday` | - |
 
 ---
@@ -466,7 +368,7 @@ ib_config = {
     "IB_WEB___STK": {
         "auth_config": IbWebAuthConfig(
             account_id=os.getenv("IB_ACCOUNT_ID"),
-            base_url="<https://api.interactivebrokers.com">
+            base_url="https://api.interactivebrokers.com"
         )
     },
     "IB_WEB___FUT": {

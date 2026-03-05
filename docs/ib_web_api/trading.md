@@ -1,6 +1,6 @@
 # IBKR Trading Web API
 
-> Source: <https://www.interactivebrokers.com/campus/ibkr-api-page/web-api-trading/>
+> Source: https://www.interactivebrokers.com/campus/ibkr-api-page/web-api-trading/
 > Last Updated: 2026-02-26
 
 ## Table of Contents
@@ -38,13 +38,9 @@ The Web API's Trading functionality is accessible via several authentication met
 Enterprise and Institutional clients have several authorization methods:
 
 | Method | First-Party | Third-Party | Features |
-
 |--------|-------------|-------------|----------|
-
 | OAuth 2.0 (beta) | Yes | Yes | Account management + Trading |
-
 | OAuth 1.0a | Yes | Yes | Trading only |
-
 | SSO | Yes | No | Account management + Trading |
 
 ### For Individuals
@@ -91,41 +87,29 @@ The Web API is accessible **24 hours a day during weekdays**, with maintenance o
 Brokerage functionality (`/iserver` endpoints) is briefly unavailable each evening:
 
 | Region | Maintenance Onset |
-
 |--------|-------------------|
-
 | North America (NY, Chicago) | 01:00 US/Eastern |
-
 | Europe | 01:00 CEST |
-
 | Asia | 01:00 HKT |
 
 ### Pacing Limitations
 
-- *Global rate limit**: 50 requests per second per authenticated username
+***Global rate limit**: 50 requests per second per authenticated username
 
-- *CP Gateway users**: 10 requests per second
+***CP Gateway users**: 10 requests per second
 
 When rate limits are exceeded, the API returns `429 Too Many Requests`. Violator IPs may be penalized for 10 minutes.
 
 #### Per-Endpoint Request Rate Limits
 
 | Endpoint | Method | Limit |
-
 |----------|--------|-------|
-
 | `/iserver/marketdata/snapshot` | GET | 10 req/s |
-
 | `/iserver/scanner/params` | GET | 1 req/15 min |
-
 | `/iserver/scanner/run` | POST | 1 req/sec |
-
 | `/iserver/trades` | GET | 1 req/5 sec |
-
 | `/iserver/orders` | GET | 1 req/5 sec |
-
 | `/portfolio/accounts` | GET | 1 req/5 sec |
-
 | `/pa/performance` | POST | 1 req/15 min |
 
 ---
@@ -187,14 +171,14 @@ GET /trsrv/futures?symbols=ES
 
 ### Finding Options Chains
 
-- *Step 1**: Get underlier conid and contract months
+***Step 1**: Get underlier conid and contract months
 
 ```
 GET /iserver/secdef/search?symbol=AAPL&secType=STK
 
 ```
 
-- *Step 2**: Get valid strike values
+***Step 2**: Get valid strike values
 
 ```
 GET /iserver/secdef/strikes?conid=265598&exchange=SMART&sectype=OPT&month=OCT24
@@ -210,7 +194,7 @@ Response:
 
 ```
 
-- *Step 3**: Get option contract conids
+***Step 3**: Get option contract conids
 
 ```
 GET /iserver/secdef/info?conid=265598&exchange=SMART&sectype=OPT&month=OCT24&strike=217.5
@@ -251,7 +235,7 @@ Required:
 - Username with market data subscriptions
 - Brokerage session
 
-- *Pre-flight request** (must be made first to start streaming):
+- **Pre-flight request** (must be made first to start streaming):
 
 ```
 GET /iserver/marketdata/snapshot?conids=265598,8314&fields=31,7059,84,88,86,85
@@ -283,8 +267,7 @@ Subsequent requests return data:
 
 ```
 
-- *Common field tags**:
-- `31` - Last price
+***Common field tags**: - `31` - Last price
 - `84` - Bid
 - `85` - Bid size
 - `86` - Ask
@@ -318,8 +301,7 @@ umd+CONID+{}
 
 ### New Order
 
-- *Required values**:
-- Account ID
+***Required values**: - Account ID
 - Contract ID (`conid`)
 - Order type (`orderType`)
 - Side (`BUY` or `SELL`)
@@ -401,7 +383,7 @@ POST /iserver/account/{accountId}/order/{orderId}
 
 ```
 
-- *Important**: Must include ALL original order attributes with modified values:
+***Important**: Must include ALL original order attributes with modified values:
 
 ```json
 {
@@ -475,22 +457,13 @@ Use `conidex` field instead of `conid`:
 
 Format: `{spread_conid};;;{leg_conid1}/{ratio},{leg_conid2}/{ratio}`
 
-- *Currency Spread ConIDs**:
-
-| Currency | Spread ConID |
-
+***Currency Spread ConIDs**: | Currency | Spread ConID |
 |----------|--------------|
-
 | USD | 28812380 |
-
 | EUR | 61227069 |
-
 | GBP | 58666491 |
-
 | JPY | 61227069 |
-
 | CAD | 61227082 |
-
 | AUD | 61227077 |
 
 Example for US stock combo:

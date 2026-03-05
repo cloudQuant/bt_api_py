@@ -9,37 +9,23 @@ bt_api_py 的错误处理和异常管理最佳实践。
 ### 内置异常类
 
 | 异常类 | 继承自 | 说明 |
-
 |--------|--------|------|
-
 | `BtApiError` | `Exception` | 所有 bt_api_py 异常的基类 |
-
 | `ExchangeNotFoundError` | `BtApiError` | 交易所不存在或未初始化 |
-
 | `ConnectionError` | `BtApiError` | 连接错误 |
-
 | `RateLimitError` | `BtApiError` | 请求频率限制 |
-
 | `OrderError` | `BtApiError` | 订单操作错误 |
-
 | `AuthenticationError` | `BtApiError` | 认证失败 |
 
 ### 订单状态
 
 | 状态 | 说明 | 处理建议 |
-
 |------|------|----------|
-
 | `new` | 订单已接受 | 等待成交 |
-
 | `partially_filled` | 部分成交 | 可继续等待或撤销 |
-
 | `filled` | 完全成交 | 订单完成 |
-
 | `canceled` | 已撤销 | 订单已取消 |
-
 | `rejected` | 已拒绝 | 检查订单参数 |
-
 | `expired` | 已过期 | 重新下单 |
 
 ---
@@ -68,10 +54,10 @@ except Exception as e:
 ### 精细化错误处理
 
 ```python
-def safe_api_call(func, *args, **kwargs):
+def safe_api_call(func, **args, **kwargs):
     """安全的 API 调用包装器"""
     try:
-        result = func(*args, **kwargs)
+        result = func(**args, **kwargs)
         if hasattr(result, 'init_data'):
             result.init_data()
         return result
@@ -134,13 +120,13 @@ import time
 
 def retry_api_call(func, max_retries=3, initial_delay=1, backoff_factor=2):
     """带指数退避的重试装饰器"""
-    def wrapper(*args, **kwargs):
+    def wrapper(**args, **kwargs):
         delay = initial_delay
         last_exception = None
 
         for attempt in range(max_retries):
             try:
-                return func(*args, **kwargs)
+                return func(**args, **kwargs)
             except (ConnectionError, RateLimitError) as e:
                 last_exception = e
                 if attempt < max_retries - 1:
@@ -274,10 +260,10 @@ from functools import wraps
 def log_performance(func):
     """记录函数执行时间"""
     @wraps(func)
-    def wrapper(*args, **kwargs):
+    def wrapper(**args, **kwargs):
         start_time = time.time()
         try:
-            result = func(*args, **kwargs)
+            result = func(**args, **kwargs)
             elapsed = time.time() - start_time
             api.log(f"{func.__name__} 成功，耗时: {elapsed:.3f}秒")
             return result
@@ -456,13 +442,13 @@ class ApiErrorHandler:
         self.error_count = {}
         self.max_retries = 3
 
-    def call(self, func, *args, **kwargs):
+    def call(self, func, **args, **kwargs):
         """统一的 API 调用入口"""
         exchange = kwargs.get('exchange_name') or args[0] if args else None
 
         for attempt in range(self.max_retries):
             try:
-                result = func(*args, **kwargs)
+                result = func(**args, **kwargs)
                 if hasattr(result, 'init_data'):
                     result.init_data()
 
@@ -518,7 +504,7 @@ class CircuitBreaker:
         self.failures = {}
         self.last_failure_time = {}
 
-    def call(self, func, exchange, *args, **kwargs):
+    def call(self, func, exchange, **args, **kwargs):
         """通过断路器调用函数"""
 
 # 检查断路器状态
@@ -526,7 +512,7 @@ class CircuitBreaker:
             raise Exception(f"断路器开启: {exchange}")
 
         try:
-            result = func(*args, **kwargs)
+            result = func(**args, **kwargs)
             if hasattr(result, 'init_data'):
                 result.init_data()
             self.on_success(exchange)

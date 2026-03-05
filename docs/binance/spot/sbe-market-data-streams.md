@@ -1,11 +1,11 @@
 # SBE Market Data Streams
 
-> 来源: <https://github.com/binance/binance-spot-api-docs/blob/master/sbe-market-data-streams.md>
+> 来源: https://github.com/binance/binance-spot-api-docs/blob/master/sbe-market-data-streams.md
 
 ## General Information
 
 - Base Endpoint: **stream-sbe.binance.com**或**stream-sbe.binance.com:9443**
-- SBE schema: <https://github.com/binance/binance-spot-api-docs/blob/master/sbe/schemas/stream_1_0.xml>
+- SBE schema: https://github.com/binance/binance-spot-api-docs/blob/master/sbe/schemas/stream_1_0.xml
 - 所有交易对名称为**小写**
 - 单个流: `/ws/<streamName>`
 - 组合流: `/stream?streams=<streamName1>/<streamName2>/<streamName3>`
@@ -29,56 +29,49 @@
 
 ### Trades Streams (逐笔成交)
 
-- *SBE Message Name:** `TradesStreamEvent`
+- **SBE Message Name:** `TradesStreamEvent`
 
-- *Stream Name:** `<symbol>@trade`
+- **Stream Name:** `<symbol>@trade`
 
-- *Update Speed:** 实时
+- **Update Speed:** 实时
 
 ### Best Bid/Ask Streams (最优买卖)
 
-- *SBE Message Name:** `BestBidAskStreamEvent`
+- **SBE Message Name:** `BestBidAskStreamEvent`
 
-- *Stream Name:** `<symbol>@bestBidAsk`
+- **Stream Name:** `<symbol>@bestBidAsk`
 
-- *Update Speed:** 实时
+- **Update Speed:** 实时
 
 > 注: SBE 的 bestBidAsk 流等同于 JSON 的 bookTicker 流，但支持 auto-culling 并包含 `eventTime` 字段。
 
-- *Auto-culling:** 系统高负载时，可能会丢弃过时事件而只推送最新事件（按交易对维度）。
+- **Auto-culling:** 系统高负载时，可能会丢弃过时事件而只推送最新事件（按交易对维度）。
 
 ### Diff. Depth Streams (增量深度)
 
-- *SBE Message Name:** `DepthDiffStreamEvent`
+- **SBE Message Name:** `DepthDiffStreamEvent`
 
-- *Stream Name:** `<symbol>@depth`
+- **Stream Name:** `<symbol>@depth`
 
-- *Update Speed:** 50ms
+- **Update Speed:** 50ms
 
 ### Partial Book Depth Streams (部分深度快照)
 
-- *SBE Message Name:** `DepthSnapshotStreamEvent`
+- **SBE Message Name:** `DepthSnapshotStreamEvent`
 
-- *Stream Name:** `<symbol>@depth20`
+- **Stream Name:** `<symbol>@depth20`
 
-- *Update Speed:** 50ms
+- **Update Speed:** 50ms
 
 ---
 
 ## SBE vs JSON 数据流对比
 
 | 特性 | SBE | JSON |
-
 |------|-----|------|
-
 | 时间精度 | 微秒 | 毫秒(可选微秒) |
-
 | 数据格式 | Binary (SBE) | Text (JSON) |
-
 | 认证要求 | 需要 Ed25519 API Key | 不需要 |
-
 | 深度更新速度 | 50ms | 100ms/1000ms |
-
 | Best Bid/Ask | 支持 auto-culling | 不支持 |
-
 | 可用流 | trade, bestBidAsk, depth, depth20 | 更多流类型 |

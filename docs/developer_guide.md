@@ -150,7 +150,7 @@ class MyExRequestDataSwap(Feed):
 
 ```
 
-- *关键规则**：
+关键规则**：
 - 方法签名必须与 `AbstractVenueFeed` 协议一致
 - 返回值为 Container 对象（如 `TickerData`、`OrderData`）
 - 异步方法以 `async_` 为前缀，可通过 `AsyncWrapperMixin` 自动包装
@@ -385,9 +385,9 @@ tests/
 
 ### 命名规范
 
-- **文件命名**：`test_{exchange}_{feature}.py`
-- **类命名**：`Test{Exchange}{Feature}`
-- **方法命名**：`test_{exchange}_{method_name}`
+- ***文件命名**：`test_{exchange}_{feature}.py`
+- ***类命名**：`Test{Exchange}{Feature}`
+- ***方法命名**：`test_{exchange}_{method_name}`
 
 ### 测试示例
 
@@ -482,8 +482,8 @@ def test_live_api():
 
 ### 注释语言
 
-- **内部注释**：中文
-- **API 文档**：英文
+- ***内部注释**：中文
+- ***API 文档**：英文
 
 ### 异常处理
 
@@ -593,4 +593,4 @@ else:
 
 ---
 
-- 最后更新: 2026-02-28*
+- 最后更新: 2026-02-28

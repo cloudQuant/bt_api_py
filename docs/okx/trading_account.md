@@ -8,9 +8,9 @@ The API endpoints of Trading Account require authentication.
 
 Retrieve available instruments info of current account.
 
-- **Rate Limit**: 20 requests per 2 seconds
-- **Rate limit rule**: User ID + Instrument Type
-- **Permission**: Read
+- ***Rate Limit**: 20 requests per 2 seconds
+- ***Rate limit rule**: User ID + Instrument Type
+- ***Permission**: Read
 
 ```
 GET /api/v5/account/instruments
@@ -19,15 +19,10 @@ GET /api/v5/account/instruments
 Request Parameters:
 
 | Parameter | Type | Required | Description |
-
 |-----------|------|----------|-------------|
-
 | instType | String | Yes | Instrument type: `SPOT`, `MARGIN`, `SWAP`, `FUTURES`, `OPTION` |
-
 | uly | String | No | Underlying. Required for `FUTURES`/`SWAP`/`OPTION` |
-
 | instFamily | String | No | Instrument family. Required for `OPTION` |
-
 | instId | String | No | Instrument ID |
 
 Python Example:
@@ -50,9 +45,9 @@ print(result)
 
 Retrieve a list of assets (with non-zero balance), remaining balance, and available amount in the trading account.
 
-- **Rate Limit**: 10 requests per 2 seconds
-- **Rate limit rule**: User ID
-- **Permission**: Read
+- ***Rate Limit**: 10 requests per 2 seconds
+- ***Rate limit rule**: User ID
+- ***Permission**: Read
 
 ```
 GET /api/v5/account/balance
@@ -61,9 +56,7 @@ GET /api/v5/account/balance
 Request Parameters:
 
 | Parameter | Type | Required | Description |
-
 |-----------|------|----------|-------------|
-
 | ccy | String | No | Currency, e.g. `BTC` or `BTC,ETH` |
 
 Python Example:
@@ -107,9 +100,9 @@ Response Example:
 
 Retrieve information on your positions.
 
-- **Rate Limit**: 10 requests per 2 seconds
-- **Rate limit rule**: User ID
-- **Permission**: Read
+- ***Rate Limit**: 10 requests per 2 seconds
+- ***Rate limit rule**: User ID
+- ***Permission**: Read
 
 ```
 GET /api/v5/account/positions
@@ -118,13 +111,9 @@ GET /api/v5/account/positions
 Request Parameters:
 
 | Parameter | Type | Required | Description |
-
 |-----------|------|----------|-------------|
-
 | instType | String | No | `MARGIN`, `SWAP`, `FUTURES`, `OPTION` |
-
 | instId | String | No | Instrument ID, e.g. `BTC-USDT-SWAP` |
-
 | posId | String | No | Position ID |
 
 Python Example:
@@ -140,9 +129,9 @@ print(result)
 
 Retrieve the updated position data for the last 3 months.
 
-- **Rate Limit**: 10 requests per 2 seconds
-- **Rate limit rule**: User ID
-- **Permission**: Read
+- ***Rate Limit**: 10 requests per 2 seconds
+- ***Rate limit rule**: User ID
+- ***Permission**: Read
 
 ```
 GET /api/v5/account/positions-history
@@ -151,28 +140,20 @@ GET /api/v5/account/positions-history
 Request Parameters:
 
 | Parameter | Type | Required | Description |
-
 |-----------|------|----------|-------------|
-
 | instType | String | No | `MARGIN`, `SWAP`, `FUTURES`, `OPTION` |
-
 | instId | String | No | Instrument ID |
-
 | mgnMode | String | No | `cross`, `isolated` |
-
 | type | String | No | Close type: `1` Partially closed, `2` Fully closed, `3` Liquidation, `4` Partial liquidation, `5` ADL, `6` Auto-deleveraging |
-
 | after | String | No | Pagination |
-
 | before | String | No | Pagination |
-
 | limit | String | No | Default 100, max 100 |
 
 ### Get account and position risk
 
-- **Rate Limit**: 10 requests per 2 seconds
-- **Rate limit rule**: User ID
-- **Permission**: Read
+- ***Rate Limit**: 10 requests per 2 seconds
+- ***Rate limit rule**: User ID
+- ***Permission**: Read
 
 ```
 GET /api/v5/account/account-position-risk
@@ -183,9 +164,9 @@ GET /api/v5/account/account-position-risk
 
 Retrieve the bills of the account. Pagination supported, sorted with most recent first.
 
-- **Rate Limit**: 5 requests per second
-- **Rate limit rule**: User ID
-- **Permission**: Read
+- ***Rate Limit**: 5 requests per second
+- ***Rate limit rule**: User ID
+- ***Permission**: Read
 
 ```
 GET /api/v5/account/bills
@@ -194,9 +175,9 @@ GET /api/v5/account/bills
 
 ### Get bills details (last 3 months)
 
-- **Rate Limit**: 5 requests per 2 seconds
-- **Rate limit rule**: User ID
-- **Permission**: Read
+- ***Rate Limit**: 5 requests per 2 seconds
+- ***Rate limit rule**: User ID
+- ***Permission**: Read
 
 ```
 GET /api/v5/account/bills-archive
@@ -221,9 +202,9 @@ GET /api/v5/account/bills-history-archive
 
 Retrieve current account configuration.
 
-- **Rate Limit**: 5 requests per 2 seconds
-- **Rate limit rule**: User ID
-- **Permission**: Read
+- ***Rate Limit**: 5 requests per 2 seconds
+- ***Rate limit rule**: User ID
+- ***Permission**: Read
 
 ```
 GET /api/v5/account/config
@@ -240,27 +221,19 @@ print(result)
 Key Response Fields:
 
 | Field | Description |
-
 |-------|-------------|
-
 | acctLv | Account level: `1` Spot mode, `2` Futures mode, `3` Multi-currency margin, `4` Portfolio margin |
-
 | posMode | Position mode: `long_short_mode`, `net_mode` |
-
 | autoLoan | Auto-loan: `true`, `false` |
-
 | greeksType | Greeks display: `PA` (price), `BS` (Black-Scholes) |
-
 | uid | User ID |
-
 | mainUid | Main account UID |
-
 | level | Fee level, e.g. `Lv1` |
 
 ### Set position mode
 
-- **Rate Limit**: 5 requests per 2 seconds
-- **Permission**: Trade
+- ***Rate Limit**: 5 requests per 2 seconds
+- ***Permission**: Trade
 
 ```
 POST /api/v5/account/set-position-mode
@@ -268,15 +241,13 @@ POST /api/v5/account/set-position-mode
 ```
 
 | Parameter | Type | Required | Description |
-
 |-----------|------|----------|-------------|
-
 | posMode | String | Yes | `long_short_mode` or `net_mode` |
 
 ### Set leverage
 
-- **Rate limit**: 20 requests per 2 seconds
-- **Permission**: Trade
+- ***Rate limit**: 20 requests per 2 seconds
+- ***Permission**: Trade
 
 ```
 POST /api/v5/account/set-leverage
@@ -284,23 +255,17 @@ POST /api/v5/account/set-leverage
 ```
 
 | Parameter | Type | Required | Description |
-
 |-----------|------|----------|-------------|
-
 | instId | String | Conditional | Instrument ID |
-
 | ccy | String | Conditional | Currency |
-
 | lever | String | Yes | Leverage |
-
 | mgnMode | String | Yes | `cross` or `isolated` |
-
 | posSide | String | Conditional | `long`, `short` (required for isolated long/short mode) |
 
 ### Get maximum order quantity
 
-- **Rate Limit**: 20 requests per 2 seconds
-- **Permission**: Read
+- ***Rate Limit**: 20 requests per 2 seconds
+- ***Permission**: Read
 
 ```
 GET /api/v5/account/max-size
@@ -323,8 +288,8 @@ POST /api/v5/account/position/margin-balance
 
 ### Get leverage
 
-- **Rate Limit**: 20 requests per 2 seconds
-- **Permission**: Read
+- ***Rate Limit**: 20 requests per 2 seconds
+- ***Permission**: Read
 
 ```
 GET /api/v5/account/leverage-info
@@ -347,8 +312,8 @@ GET /api/v5/account/max-loan
 
 ### Get fee rates
 
-- **Rate Limit**: 5 requests per 2 seconds
-- **Permission**: Read
+- ***Rate Limit**: 5 requests per 2 seconds
+- ***Permission**: Read
 
 ```
 GET /api/v5/account/trade-fee
@@ -356,15 +321,10 @@ GET /api/v5/account/trade-fee
 ```
 
 | Parameter | Type | Required | Description |
-
 |-----------|------|----------|-------------|
-
 | instType | String | Yes | `SPOT`, `MARGIN`, `SWAP`, `FUTURES`, `OPTION` |
-
 | instId | String | No | Instrument ID |
-
 | uly | String | No | Underlying |
-
 | instFamily | String | No | Instrument family |
 
 ### Get interest accrued data
@@ -603,8 +563,8 @@ POST /api/v5/account/set-delta-neutral-precheck
 
 Retrieve account information. Data pushed on events (placing/canceling/execution).
 
-- **URL Path**: `/ws/v5/private` (requires login)
-- **Channel**: `account`
+- ***URL Path**: `/ws/v5/private` (requires login)
+- ***Channel**: `account`
 
 Subscribe Example:
 
@@ -650,20 +610,20 @@ asyncio.run(main())
 
 Retrieve position information. Data pushed on events.
 
-- **URL Path**: `/ws/v5/private`
-- **Channel**: `positions`
+- ***URL Path**: `/ws/v5/private`
+- ***Channel**: `positions`
 
 ### Balance and position channel
 
-- **URL Path**: `/ws/v5/private`
-- **Channel**: `balance_and_position`
+- ***URL Path**: `/ws/v5/private`
+- ***Channel**: `balance_and_position`
 
 ### Position risk warning
 
-- **URL Path**: `/ws/v5/private`
-- **Channel**: `liquidation-warning`
+- ***URL Path**: `/ws/v5/private`
+- ***Channel**: `liquidation-warning`
 
 ### Account greeks channel
 
-- **URL Path**: `/ws/v5/private`
-- **Channel**: `account-greeks`
+- ***URL Path**: `/ws/v5/private`
+- ***Channel**: `account-greeks`

@@ -68,15 +68,10 @@ bt_api = BtApi(exchange_kwargs, debug=True, event_bus=None)
 注册表是整个系统的核心枢纽，实现交易所的即插即用：
 
 | 注册类型 | 方法 | 说明 |
-
 |----------|------|------|
-
 | Feed 类 | `register_feed()` | REST API 适配类 |
-
 | Stream 类 | `register_stream()` | WebSocket / 回调适配类 |
-
 | ExchangeData 类 | `register_exchange_data()` | 交易所配置数据类 |
-
 | Balance Handler | `register_balance_handler()` | 余额解析函数 |
 
 ### EventBus — 事件总线
@@ -171,39 +166,22 @@ ExchangeRegistry.list_exchanges()  # ["BINANCE___SWAP", "BINANCE___SPOT", ...]
 ### 容器类型一览
 
 | 容器类 | 目录 | 说明 |
-
 |--------|------|------|
-
 | `AccountData` | `containers/accounts/` | 账户信息 |
-
 | `BalanceData` | `containers/balances/` | 余额信息 |
-
 | `BarData` | `containers/bars/` | K 线数据 |
-
 | `ExchangeData` | `containers/exchanges/` | 交易所配置 |
-
 | `FundingRateData` | `containers/fundingrates/` | 资金费率 |
-
 | `IncomeData` | `containers/incomes/` | 收益记录 |
-
 | `LiquidationData` | `containers/liquidations/` | 强平数据 |
-
 | `MarkPriceData` | `containers/markprices/` | 标记价格 |
-
 | `OrderBookData` | `containers/orderbooks/` | 深度数据 |
-
 | `OrderData` | `containers/orders/` | 订单数据 |
-
 | `PositionData` | `containers/positions/` | 持仓数据 |
-
 | `SymbolData` | `containers/symbols/` | 合约信息 |
-
 | `TickerData` | `containers/tickers/` | 行情快照 |
-
 | `TradeData` | `containers/trades/` | 成交数据 |
-
 | `TimerData` | `containers/timers/` | 定时器 |
-
 | `RequestData` | `containers/requestdatas/` | 请求数据 |
 
 ### 容器层次结构
@@ -271,24 +249,24 @@ class AutoInitMixin:
 
 所有交易所 Feed 必须满足 `AbstractVenueFeed` 协议，定义统一的方法签名：
 
-- *行情查询**：
+行情查询**：
 - `get_tick(symbol)` — 获取最新价格
 - `get_depth(symbol, count)` — 获取深度
 - `get_kline(symbol, period, count)` — 获取 K 线
 
-- *交易操作**：
+交易操作**：
 - `make_order(symbol, volume, price, order_type, ...)` — 下单
 - `cancel_order(symbol, order_id)` — 撤单
 - `cancel_all(symbol)` — 撤销所有订单
 - `query_order(symbol, order_id)` — 查询订单
 - `get_open_orders(symbol)` — 查询挂单
 
-- *账户查询**：
+账户查询**：
 - `get_balance(symbol)` — 查询余额
 - `get_account(symbol)` — 查询账户
 - `get_position(symbol)` — 查询持仓
 
-- *异步版本**：
+异步版本**：
 - 所有同步方法都有对应的 `async_` 前缀异步版本
 - 异步方法将结果推送到数据队列而非直接返回
 
@@ -442,15 +420,10 @@ event_bus.on("OrderEvent", my_order_handler)
 认证配置通过继承 `AuthConfig` 基类实现不同交易所的认证方式：
 
 | 配置类 | 交易所 | 认证方式 |
-
 |--------|--------|----------|
-
 | `CryptoAuthConfig` | Binance, OKX | API Key + Secret + Passphrase(OKX) |
-
 | `CtpAuthConfig` | CTP | Broker ID + User ID + Password + Auth Code |
-
 | `IbAuthConfig` | IB TWS | Host + Port + Client ID |
-
 | `IbWebAuthConfig` | IB Web API | Base URL + Account ID + OAuth/Cookie |
 
 所有配置类都提供 `get_exchange_name()` 和 `to_dict()` 方法。
@@ -479,7 +452,7 @@ BtApiError (基类)
 
 ```
 
-- *规则**：始终使用自定义异常，禁止使用 `Exception` 或 `assert` 处理错误。
+规则**：始终使用自定义异常，禁止使用 `Exception` 或 `assert` 处理错误。
 
 ---
 
@@ -488,21 +461,13 @@ BtApiError (基类)
 使用 **三下划线** 格式：`EXCHANGE___ASSET_TYPE`
 
 | 标识 | 说明 |
-
 |------|------|
-
 | `BINANCE___SPOT` | Binance 现货 |
-
 | `BINANCE___SWAP` | Binance 永续合约 |
-
 | `OKX___SPOT` | OKX 现货 |
-
 | `OKX___SWAP` | OKX 永续合约 |
-
 | `CTP___FUTURE` | CTP 期货 (中国) |
-
 | `IB___STK` | Interactive Brokers 股票 |
-
 | `IB_WEB___STK` | IB Web API 股票 |
 
 此命名贯穿整个系统：Registry 键、配置段、数据队列标识。
@@ -512,15 +477,11 @@ BtApiError (基类)
 ## 标准化符号格式
 
 | 市场 | 格式 | 示例 |
-
 |------|------|------|
-
 | 加密货币 | `{BASE}-{QUOTE}` | `BTC-USDT`, `ETH-USDT` |
-
 | CTP 期货 | 交易所合约代码 | `au2506`, `IF2503` |
-
 | IB 股票 | `{SYMBOL}-{TYPE}-{EXCHANGE}` | `AAPL-STK-SMART` |
 
 ---
 
-- 最后更新: 2026-02-28*
+- 最后更新: 2026-02-28

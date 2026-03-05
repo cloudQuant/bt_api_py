@@ -145,7 +145,7 @@ USDⓈ-M Futures
 
 COIN-M Futures
 
-  - **Self-Trade Prevention**:
+  - ***Self-Trade Prevention**:
 
   - Self-Trade Prevention (aka STP) is added to the system. This prevents orders from matching with orders from the same account, or accounts under the same `tradeGroupId`(currently only support same account). For more detail, please check [FAQ](<https://www.binance.com/zh-CN/support/faq/what-is-self-trade-prevention-0941126f6413485b9a3df964a9aa2306>)
 
@@ -377,8 +377,7 @@ USDⓈ-M Futures
     - `v2/account.balance`: Query user account balance.
     - `v2/account.position`: Compared to `account.position`, this endpoint only returns symbols that the user has positions or open orders in. Configuration-related fields have been removed and can now be queried from `GET /fapi/v1/symbolConfig`. The V2 endpoint also offers better performance.
 
-- *Deprecation Notice:**
-
+**Deprecation Notice:**
   - The following endpoints will be deprecated in the coming months (exact date to be announced later). Please switch to the new endpoints listed above:
     - REST API:
       - `GET /fapi/v2/balance`
@@ -907,8 +906,7 @@ USDⓈ-M Futures
 
 Portfolio Margin
 
-- *Expect 2023-09-07 Release**
-
+**Expect 2023-09-07 Release**
   - Overall papi order ratelimit change from 2400 orders/min to 1200 orders/min, impacted endpoints are:
     - POST `/papi/v1/um/order`
     - POST `/papi/v1/cm/order`
@@ -1205,8 +1203,7 @@ REST
 
 USDⓈ-M Futures
 
-- *Notice:**
-
+**Notice:**
 REST
 
   - The following endpoints will no longer be supported from 2023-07-15:
@@ -1224,8 +1221,7 @@ REST
 
 COIN-M Futures
 
-- *Notice:**
-
+**Notice:**
 WEBSOCKET
 
   - Raw stream like **/ws? <streamName>** is not supported, for example `wss://dstream.binance.com/ws?btcusd@depth` is invalid.
@@ -1237,8 +1233,7 @@ WEBSOCKET
 
 USDⓈ-M Futures
 
-- *Notice:**
-
+**Notice:**
 WEBSOCKET
 
   - Raw stream like **/ws? <streamName>** is not supported, for example `wss://fstream.binance.com/ws?btcusdt@depth` is invalid.
@@ -1260,8 +1255,7 @@ REST
 
 USDⓈ-M Futures
 
-- *Notice:**
-
+**Notice:**
   - It is recommended to use standard HTTP request formats, non-standard request formats will not be supported in fapi, below are some examples for correct code practice:
 
     - Escaping (") with '\x22' is no longer supported, please use the standard '%22' instead. It is necessary to URL encode the square brackets [] and the double quotes（"）inside the square brackets.
@@ -1415,8 +1409,7 @@ Portfolio Margin
 
 COIN-M Futures
 
-- *RELEASE DATE TBD**
-
+**RELEASE DATE TBD**
 The `recvWindow` check will also be performed when orders reach matching engine. The `recvWindow` will be checked more precisely on order placing endpoints.
 
     {
@@ -1424,12 +1417,10 @@ The `recvWindow` check will also be performed when orders reach matching engine.
         "msg": "Timestamp for this request is outside of the ME recvWindow"
     }
 
-- *recvWindow Logic Before Release:**
-
+**recvWindow Logic Before Release:**
   - The order placing requests are valid if `recvWindow` \+ `timestamp` => REST API service server `timestamp`
 
-- *recvWindow Logic After Release:**
-
+**recvWindow Logic After Release:**
   - Add new recwWindow check: the order placing requests are valid if `recvWindow` \+ `timestamp` => matching engine `timestamp`
 
   - Impacted Endpoints:
@@ -1445,8 +1436,7 @@ The `recvWindow` check will also be performed when orders reach matching engine.
 
 USDⓈ-M Futures
 
-- *RELEASE DATE 2023-04-18**
-
+**RELEASE DATE 2023-04-18**
 The `recvWindow` check will also be performed when orders reach matching engine. The `recvWindow` will be checked more precisely on order placing endpoints.
 
     {
@@ -1454,12 +1444,10 @@ The `recvWindow` check will also be performed when orders reach matching engine.
         "msg": "Timestamp for this request is outside of the ME recvWindow"
     }
 
-- *recvWindow Logic Before Release:**
-
+**recvWindow Logic Before Release:**
   - The order placing requests are valid if `recvWindow` \+ `timestamp` => REST API service server `timestamp`
 
-- *recvWindow Logic After Release:**
-
+**recvWindow Logic After Release:**
   - Add new recwWindow check: the order placing requests are valid if `recvWindow` \+ `timestamp` => matching engine `timestamp`
 
   - Impacted Endpoints:
@@ -1475,8 +1463,7 @@ The `recvWindow` check will also be performed when orders reach matching engine.
 
 USDⓈ-M Futures
 
-- *Referal Rebate Logic Before Release**
-
+**Referal Rebate Logic Before Release**
   - For every trade，the referal rebate balance change will be reflected in `ACCOUNT_UPDATE` event of USER-DATA-STREAM in real time：
 
     {
@@ -1497,8 +1484,7 @@ USDⓈ-M Futures
       }
     }
 
-- *Referal Rebate Logic After Release**
-
+**Referal Rebate Logic After Release**
   - Referral rebates are aggregated every 20 minutes and reflected as a single push in the `ACCOUNT_UPDATE` event of the USER-DATA-STREAM, showing the total sum of rebates earned from multiple referrals.
 
 - * *
@@ -1507,10 +1493,8 @@ USDⓈ-M Futures
 
 USDⓈ-M Futures
 
-- *RELEASE DATE 2023-03-22**
-
-- *Order Logic Before Release:**
-
+**RELEASE DATE 2023-03-22**
+**Order Logic Before Release:**
   - When placing order with `timeInForce` `FOK` or `GTX`(Post-only), user will get order response with `status` = “NEW“ and corresponding `order_trade_update` with `x` = “NEW”, `X` = “NEW”. If the orders can't meet execution criteria, user will receive another websocket `order_trade_update` message `x` = “EXPIRED”, `X` = “EXPIRED”. The order can be found in `GET /fapi/v1/order` or `GET /fapi/v1/allOrders`.
 
     {
@@ -1518,8 +1502,7 @@ USDⓈ-M Futures
         "msg": "Due to the order could not be filled immediately, the FOK order has been rejected. The order will not be recorded in the order history"
     }
 
-- *Order Logic After Release:**
-
+**Order Logic After Release:**
   - When placing order with `timeInForce` `FOK` or `GTX`(Post-only), if the order can't meet execution criteria, order will get rejected directly and receive error response, no `order_trade_update` message in websocket. The order can't be found in `GET /fapi/v1/order` or `GET /fapi/v1/allOrders`.
 
     {
@@ -1670,16 +1653,15 @@ REST
 
 COIN-M Futures
 
-- *Note:** This change will be effictive on 2022-10-17
+- **Note:** This change will be effictive on 2022-10-17
 
 REST RATE LIMIT WEIGHT
 
 Endpoint `GET /dapi/v1/ticker/bookTicker`
 
-- *Weight Update:**
-
-- *2** for a single symbol;
-- *5** when the symbol parameter is omitted
+**Weight Update:**
+- **2** for a single symbol;
+- **5** when the symbol parameter is omitted
 
 - * *
 
@@ -1687,16 +1669,15 @@ Endpoint `GET /dapi/v1/ticker/bookTicker`
 
 USDⓈ-M Futures
 
-- *Note:** This change will be effictive on 2022-10-17
+- **Note:** This change will be effictive on 2022-10-17
 
 REST RATE LIMIT WEIGHT
 
 Endpoint `GET /fapi/v1/ticker/bookTicker`
 
-- *Weight Update:**
-
-- *2** for a single symbol;
-- *5** when the symbol parameter is omitted
+**Weight Update:**
+- **2** for a single symbol;
+- **5** when the symbol parameter is omitted
 
 - * *
 

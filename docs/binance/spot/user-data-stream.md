@@ -1,6 +1,6 @@
 # Binance Spot 用户数据流 (User Data Stream)
 
-> 来源: <https://github.com/binance/binance-spot-api-docs/blob/master/user-data-stream.md>
+> 来源: https://github.com/binance/binance-spot-api-docs/blob/master/user-data-stream.md
 
 ## General Information
 
@@ -99,66 +99,40 @@
 
 ```
 
-- *Note:** 平均价 = `Z / z`
+- **Note:** 平均价 = `Z / z`
 
 #### Conditional Fields in Execution Report
 
 | 字段 | 名称 | 说明 |
-
 |------|------|------|
-
 | `d` | Trailing Delta | 仅追踪止损订单 |
-
 | `D` | Trailing Time | 仅追踪止损订单 |
-
 | `j` | Strategy Id | 仅在下单时提供 strategyId |
-
 | `J` | Strategy Type | 仅在下单时提供 strategyType |
-
 | `v` | Prevented Match Id | 仅 STP 过期的订单 |
-
 | `A` | Prevented Quantity | 仅 STP 过期的订单 |
-
 | `B` | Last Prevented Quantity | 仅 STP 过期的订单 |
-
 | `u` | Trade Group Id | 仅 STP 过期的订单 |
-
 | `U` | Counter Order Id | 仅 STP 过期的订单 |
-
 | `Cs` | Counter Symbol | 仅 STP 过期的订单 |
-
 | `W` | Working Time | 订单在 book 上时出现 |
-
 | `b` | Match Type | 有分配的订单 |
-
 | `a` | Allocation ID | 有分配的订单 |
-
 | `k` | Working Floor | 可能有分配的订单 |
-
 | `uS` | UsedSor | 使用 SOR 的订单 |
-
 | `gP` | Pegged Price Type | 仅挂钩订单 |
-
 | `gOT` | Pegged Offset Type | 仅挂钩订单 |
-
 | `gOV` | Pegged Offset Value | 仅挂钩订单 |
-
 | `gp` | Pegged Price | 仅挂钩订单 |
 
 #### Order Reject Reason
 
 | Rejection Reason (`r`) | Error Message |
-
 |-------------------------|---------------|
-
 | `NONE` | N/A (订单未被拒绝) |
-
 | `INSUFFICIENT_BALANCES` | 账户余额不足 |
-
 | `STOP_PRICE_WOULD_TRIGGER_IMMEDIATELY` | 订单会立即触发 |
-
 | `WOULD_MATCH_IMMEDIATELY` | 订单会立即匹配 |
-
 | `OCO_BAD_PRICES` | OCO 订单价格关系不正确 |
 
 ### List Status (订单列表状态)
@@ -191,21 +165,13 @@
 ### Execution Types
 
 | Type | Description |
-
 |------|-------------|
-
 | `NEW` | 订单已被引擎接受 |
-
 | `CANCELED` | 被用户取消 |
-
 | `REPLACED` | 订单已被修改 |
-
 | `REJECTED` | 订单被拒绝（如 CancelReplace 中新单被拒但取消成功） |
-
 | `TRADE` | 部分或全部成交 |
-
 | `EXPIRED` | 订单按规则过期或被交易所取消 |
-
 | `TRADE_PREVENTION` | 因 STP 过期 |
 
 ### Event Stream Terminated

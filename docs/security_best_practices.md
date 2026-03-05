@@ -4,13 +4,13 @@
 
 ### 1. 永远不要硬编码 API 密钥
 
-❌ **错误做法**:
+❌ ***错误做法**:
 ```python
 api_key = "abcd1234efgh5678"  # 不要这样做！
 secret = "xyz9876543210"
 ```
 
-✅ **正确做法**:
+✅ ***正确做法**:
 ```python
 import os
 api_key = os.getenv("BINANCE_API_KEY")
@@ -27,7 +27,7 @@ BINANCE_API_KEY=your_api_key_here
 BINANCE_SECRET=your_secret_here
 ```
 
-**重要**: 将 `.env` 添加到 `.gitignore`：
+***重要**: 将 `.env` 添加到 `.gitignore`：
 
 ```bash
 echo ".env" >> .gitignore
@@ -106,12 +106,12 @@ exchange_kwargs = {
 
 ### 1. 不要记录敏感信息
 
-❌ **错误做法**:
+❌ ***错误做法**:
 ```python
 logger.info(f"API Key: {api_key}")  # 不要记录密钥！
 ```
 
-✅ **正确做法**:
+✅ ***正确做法**:
 ```python
 from bt_api_py.security import SecureCredentialManager
 

@@ -8,8 +8,8 @@
 
 ### 1. Binance USDT-M Futures (Swap)
 
-- *基 URL**: `<https://fapi.binance.com`>
-- *已实现 API 数量**: 68 个
+***基 URL**: `https://fapi.binance.com`
+***已实现 API 数量**: 68 个
 
 #### 已实现模块：
 
@@ -31,8 +31,8 @@
 
 ### 2. Binance 现货交易 (Spot)
 
-- *基 URL**: `<https://api.binance.com`>
-- *已实现 API 数量**: 56 个
+***基 URL**: `https://api.binance.com`
+***已实现 API 数量**: 56 个
 
 #### 已实现模块：
 
@@ -56,8 +56,8 @@
 
 ### 3. Binance 币本位合约 (Coin-M)
 
-- *基 URL**: `<https://dapi.binance.com`>
-- *已实现 API 数量**: 55 个
+***基 URL**: `https://dapi.binance.com`
+***已实现 API 数量**: 55 个
 
 #### 已实现模块：
 
@@ -79,8 +79,8 @@
 
 ### 4. Binance 期权 (Option)
 
-- *基 URL**: `<https://eapi.binance.com`>
-- *已实现 API 数量**: 19 个
+***基 URL**: `https://eapi.binance.com`
+***已实现 API 数量**: 19 个
 
 #### 已实现模块：
 
@@ -98,8 +98,8 @@
 
 ### 5. Binance 杠杆交易 (Margin)
 
-- *基 URL**: `<https://api.binance.com`>
-- *已实现 API 数量**: 60 个
+***基 URL**: `https://api.binance.com`
+***已实现 API 数量**: 60 个
 
 #### 已实现模块：
 
@@ -126,13 +126,13 @@
 
 #### Binance 算法交易 (Algo)
 
-- *已实现 API 数量**: 14 个
+***已实现 API 数量**: 14 个
 - 现货 TWAP/VWAP 订单 (7 个)
 - 期货 TWAP/VP 订单 (7 个)
 
 #### Binance 钱包 (Wallet)
 
-- *已实现 API 数量**: 14 个
+***已实现 API 数量**: 14 个
 - 资产查询 (4 个)
 - 资产划转 (5 个)
 - 充值提现 (3 个)
@@ -140,7 +140,7 @@
 
 #### Binance 子账户 (Sub-Account)
 
-- *已实现 API 数量**: 15 个
+***已实现 API 数量**: 15 个
 - 子账户管理 (3 个)
 - 资金划转 (5 个)
 - 资产查询 (4 个)
@@ -148,27 +148,27 @@
 
 #### Binance 组合保证金 (Portfolio)
 
-- *已实现 API 数量**: 5 个
+***已实现 API 数量**: 5 个
 - 基础组合保证金功能
 
 #### Binance 网格交易 (Grid)
 
-- *已实现 API 数量**: 5 个
+***已实现 API 数量**: 5 个
 - 合约网格交易功能
 
 #### Binance 质押理财 (Staking)
 
-- *已实现 API 数量**: 8 个
+***已实现 API 数量**: 8 个
 - 质押产品管理
 
 #### Binance 矿池 (Mining)
 
-- *已实现 API 数量**: 5 个
+***已实现 API 数量**: 5 个
 - 矿池基本信息
 
 #### Binance VIP 借贷 (VIP Loan)
 
-- *已实现 API 数量**: 6 个
+***已实现 API 数量**: 6 个
 - VIP 借贷功能
 
 ## 未实现 API 分析

@@ -8,9 +8,9 @@ bt_api_py 的性能优化建议和最佳实践。
 
 ### 使用 WebSocket 代替轮询
 
-- *问题：** 轮询会增加网络延迟和服务器负载
+- **问题：** 轮询会增加网络延迟和服务器负载
 
-- *解决：** 使用 WebSocket 订阅实时数据
+- **解决：** 使用 WebSocket 订阅实时数据
 
 ```python
 
@@ -34,14 +34,10 @@ api.run()
 
 ```
 
-- *性能对比：**
-
+**性能对比：**
 | 方式 | 延迟 | CPU | 网络 |
-
 |------|------|-----|------|
-
 | 轮询 (1 秒) | 0-1000ms | 高 | 高 |
-
 | WebSocket | 0-50ms | 低 | 低 |
 
 ### 连接复用
@@ -450,12 +446,12 @@ from functools import wraps
 def monitor_performance(func):
     """性能监控装饰器"""
     @wraps(func)
-    def wrapper(*args, **kwargs):
+    def wrapper(**args, **kwargs):
         start_time = time.time()
         start_memory = get_memory_usage()
 
         try:
-            result = func(*args, **kwargs)
+            result = func(**args, **kwargs)
             return result
         finally:
             elapsed = time.time() - start_time
@@ -489,12 +485,12 @@ class PerformanceMonitor:
             "latencies": [],
         }
 
-    def track_call(self, func, *args, **kwargs):
+    def track_call(self, func, **args, **kwargs):
         """跟踪 API 调用"""
         start_time = time.time()
 
         try:
-            result = func(*args, **kwargs)
+            result = func(**args, **kwargs)
             self.metrics["api_calls"] += 1
             return result
         except Exception:
@@ -569,33 +565,21 @@ print(monitor.get_stats())
 ### 操作性能参考
 
 | 操作 | 预期耗时 | 优化后 |
-
 |------|----------|--------|
-
 | 获取单个 ticker | 50-200ms | 30-100ms |
-
 | 获取深度 (20 档) | 100-300ms | 50-150ms |
-
 | 获取 K 线 (100 根) | 200-500ms | 100-300ms |
-
 | 下单 | 100-400ms | 50-200ms |
-
 | 撤单 | 50-200ms | 30-100ms |
-
 | 查询订单 | 50-200ms | 30-100ms |
 
 ### 并发性能参考
 
 | 并发数 | 吞吐量 (QPS) | 延迟 (P99) |
-
 |--------|--------------|----------|
-
 | 1 | 50 | 100ms |
-
 | 5 | 200 | 150ms |
-
 | 10 | 350 | 200ms |
-
 | 20 | 500 | 300ms |
 
 ---

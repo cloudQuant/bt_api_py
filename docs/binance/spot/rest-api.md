@@ -1,14 +1,14 @@
 # Binance Spot REST API
 
-> 来源: <https://github.com/binance/binance-spot-api-docs/blob/master/rest-api.md>
+> 来源: https://github.com/binance/binance-spot-api-docs/blob/master/rest-api.md
 
 ## General API Information
 
 - Base Endpoints:
-  - **<https://api.binance.com**>
-  - **<https://api-gcp.binance.com**>
+  - **https://api.binance.com**
+  - **https://api-gcp.binance.com**
   - **<https://api1.binance.com**~**<https://api4.binance.com**(性能更好但稳定性稍低>)>
-  - 纯行情数据:**<https://data-api.binance.vision**>
+  - 纯行情数据:**https://data-api.binance.vision**
 - 默认返回 JSON 格式，支持 SBE 格式
 - 数据按时间顺序返回（除非另有说明）
 - 所有时间戳字段默认为**毫秒**，可通过 `X-MBX-TIME-UNIT:MICROSECOND` header 切换为微秒
@@ -49,15 +49,10 @@
 ## Request Security
 
 | 安全类型 | 说明 |
-
 |----------|------|
-
 | `NONE` | 公开行情数据 |
-
 | `TRADE` | 交易操作 |
-
 | `USER_DATA` | 私有账户信息 |
-
 | `USER_STREAM` | 管理数据流订阅 |
 
 ### SIGNED 请求
@@ -80,10 +75,9 @@ GET /api/v3/ping
 ```
 测试 REST API 连通性。
 
-- *Weight:**1 |**Security:** NONE
+- **Weight:**1 |**Security:** NONE
 
-- *Response:**
-
+**Response:**
 ```json
 {}
 
@@ -97,10 +91,9 @@ GET /api/v3/time
 ```
 获取服务器当前时间。
 
-- *Weight:**1 |**Security:** NONE
+- **Weight:**1 |**Security:** NONE
 
-- *Response:**
-
+**Response:**
 ```json
 { "serverTime": 1499827319559 }
 
@@ -114,26 +107,18 @@ GET /api/v3/exchangeInfo
 ```
 获取交易规则和交易对信息。
 
-- *Weight:**20 |**Security:** NONE
+- **Weight:**20 |**Security:** NONE
 
-- *Parameters:**
-
+**Parameters:**
 | Name | Type | Mandatory | Description |
-
 |------|------|-----------|-------------|
-
 | symbol | STRING | NO | 单个交易对 |
-
 | symbols | ARRAY OF STRING | NO | 多个交易对 |
-
 | permissions | ENUM | NO | 按权限筛选，不能与 symbol/symbols 同时使用 |
-
 | showPermissionSets | BOOLEAN | NO | 是否填充 permissionSets 字段，默认 true |
-
 | symbolStatus | ENUM | NO | 按交易状态筛选: `TRADING`, `HALT`, `BREAK` |
 
-- *Response:**
-
+**Response:**
 ```json
 {
   "timezone": "UTC",
@@ -181,18 +166,14 @@ GET /api/v3/depth
 
 ```
 
-- *Weight:** 按 limit 调整: 1-100=5, 101-500=25, 501-1000=50, 1001-5000=250
+- **Weight:** 按 limit 调整: 1-100=5, 101-500=25, 501-1000=50, 1001-5000=250
 
 | Name | Type | Mandatory | Description |
-
 |------|------|-----------|-------------|
-
 | symbol | STRING | YES | |
-
 | limit | INT | NO | 默认 100，最大 5000 |
 
-- *Response:**
-
+**Response:**
 ```json
 {
   "lastUpdateId": 1027024,
@@ -209,18 +190,14 @@ GET /api/v3/trades
 
 ```
 
-- *Weight:**25 |**Security:** NONE
+- **Weight:**25 |**Security:** NONE
 
 | Name | Type | Mandatory | Description |
-
 |------|------|-----------|-------------|
-
 | symbol | STRING | YES | |
-
 | limit | INT | NO | 默认 500，最大 1000 |
 
-- *Response:**
-
+**Response:**
 ```json
 [
   {
@@ -243,16 +220,12 @@ GET /api/v3/historicalTrades
 
 ```
 
-- *Weight:** 25
+- **Weight:** 25
 
 | Name | Type | Mandatory | Description |
-
 |------|------|-----------|-------------|
-
 | symbol | STRING | YES | |
-
 | limit | INT | NO | 默认 500，最大 1000 |
-
 | fromId | LONG | NO | 从该 TradeId 开始获取 |
 
 ### Compressed/Aggregate Trades List
@@ -262,24 +235,17 @@ GET /api/v3/aggTrades
 
 ```
 
-- *Weight:** 4
+- **Weight:** 4
 
 | Name | Type | Mandatory | Description |
-
 |------|------|-----------|-------------|
-
 | symbol | STRING | YES | |
-
 | fromId | LONG | NO | 起始聚合交易 ID (INCLUSIVE) |
-
 | startTime | LONG | NO | 起始时间戳 (INCLUSIVE) |
-
 | endTime | LONG | NO | 结束时间戳 (INCLUSIVE) |
-
 | limit | INT | NO | 默认 500，最大 1000 |
 
-- *Response:**
-
+**Response:**
 ```json
 [
   {
@@ -303,44 +269,28 @@ GET /api/v3/klines
 
 ```
 
-- *Weight:** 2
+- **Weight:** 2
 
 | Name | Type | Mandatory | Description |
-
 |------|------|-----------|-------------|
-
 | symbol | STRING | YES | |
-
 | interval | ENUM | YES | 见下方 |
-
 | startTime | LONG | NO | |
-
 | endTime | LONG | NO | |
-
 | timeZone | STRING | NO | 默认 0 (UTC)，范围 [-12:00, +14:00] |
-
 | limit | INT | NO | 默认 500，最大 1000 |
 
-- *支持的 Kline 间隔:**
-
+**支持的 Kline 间隔:**
 | 周期 | 值 |
-
 |------|-----|
-
 | 秒 | `1s` |
-
 | 分钟 | `1m`, `3m`, `5m`, `15m`, `30m` |
-
 | 小时 | `1h`, `2h`, `4h`, `6h`, `8h`, `12h` |
-
 | 天 | `1d`, `3d` |
-
 | 周 | `1w` |
-
 | 月 | `1M` |
 
-- *Response:**
-
+**Response:**
 ```json
 [
   [
@@ -369,7 +319,7 @@ GET /api/v3/uiKlines
 ```
 与 klines 参数和响应相同，返回优化的 K 线数据用于图表展示。
 
-- *Weight:** 2
+- **Weight:** 2
 
 ### Current Average Price
 
@@ -378,16 +328,13 @@ GET /api/v3/avgPrice
 
 ```
 
-- *Weight:** 2
+- **Weight:** 2
 
 | Name | Type | Mandatory | Description |
-
 |------|------|-----------|-------------|
-
 | symbol | STRING | YES | |
 
-- *Response:**
-
+**Response:**
 ```json
 {
   "mins": 5,
@@ -404,20 +351,15 @@ GET /api/v3/ticker/24hr
 
 ```
 
-- *Weight:** symbol=1 时为 2，省略时为 80
+- **Weight:** symbol=1 时为 2，省略时为 80
 
 | Name | Type | Mandatory | Description |
-
 |------|------|-----------|-------------|
-
 | symbol | STRING | NO | 不能与 symbols 同时使用 |
-
 | symbols | STRING | NO | 不能与 symbol 同时使用 |
-
 | type | ENUM | NO | `FULL` (默认) 或 `MINI` |
 
-- *Response (FULL):**
-
+**Response (FULL):**
 ```json
 {
   "symbol": "BNBBTC",
@@ -452,18 +394,14 @@ GET /api/v3/ticker/price
 
 ```
 
-- *Weight:** symbol=1 时为 2，省略时为 4
+- **Weight:** symbol=1 时为 2，省略时为 4
 
 | Name | Type | Mandatory | Description |
-
 |------|------|-----------|-------------|
-
 | symbol | STRING | NO | |
-
 | symbols | STRING | NO | |
 
-- *Response:**
-
+**Response:**
 ```json
 { "symbol": "LTCBTC", "price": "4.00000200" }
 
@@ -476,18 +414,14 @@ GET /api/v3/ticker/bookTicker
 
 ```
 
-- *Weight:** symbol=1 时为 2，省略时为 4
+- **Weight:** symbol=1 时为 2，省略时为 4
 
 | Name | Type | Mandatory | Description |
-
 |------|------|-----------|-------------|
-
 | symbol | STRING | NO | |
-
 | symbols | STRING | NO | |
 
-- *Response:**
-
+**Response:**
 ```json
 {
   "symbol": "LTCBTC",
@@ -508,15 +442,10 @@ GET /api/v3/ticker
 滚动窗口价格变化统计。
 
 | Name | Type | Mandatory | Description |
-
 |------|------|-----------|-------------|
-
 | symbol | STRING | NO | |
-
 | symbols | STRING | NO | |
-
 | windowSize | ENUM | NO | `1m`~`59m`, `1h`~`23h`, `1d`~`7d` 默认 `1d` |
-
 | type | ENUM | NO | `FULL` 或 `MINI` |
 
 ---
@@ -530,76 +459,44 @@ POST /api/v3/order
 
 ```
 
-- *Weight:**1 |**Unfilled Order Count:** 1
+- **Weight:**1 |**Unfilled Order Count:** 1
 
-- *Parameters:**
-
+**Parameters:**
 | Name | Type | Mandatory | Description |
-
 |------|------|-----------|-------------|
-
 | symbol | STRING | YES | |
-
 | side | ENUM | YES | `BUY` / `SELL` |
-
 | type | ENUM | YES | 订单类型 |
-
 | timeInForce | ENUM | NO | `GTC` / `IOC` / `FOK` |
-
 | quantity | DECIMAL | NO | |
-
 | quoteOrderQty | DECIMAL | NO | |
-
 | price | DECIMAL | NO | |
-
 | newClientOrderId | STRING | NO | 自定义订单 ID |
-
 | strategyId | LONG | NO | |
-
 | strategyType | INT | NO | 不能小于 1000000 |
-
 | stopPrice | DECIMAL | NO | 用于 STOP_LOSS, TAKE_PROFIT 等 |
-
 | trailingDelta | LONG | NO | 追踪止损 |
-
 | icebergQty | DECIMAL | NO | 冰山订单数量 |
-
 | newOrderRespType | ENUM | NO | `ACK`, `RESULT`, `FULL` |
-
 | selfTradePreventionMode | ENUM | NO | STP 模式 |
-
 | pegPriceType | ENUM | NO | `PRIMARY_PEG` / `MARKET_PEG` |
-
 | pegOffsetValue | INT | NO | 挂钩价格偏移 (max: 100) |
-
 | pegOffsetType | ENUM | NO | 仅支持 `PRICE_LEVEL` |
-
 | recvWindow | DECIMAL | NO | 最大 60000 |
-
 | timestamp | LONG | YES | |
 
-- *各订单类型必需参数:**
-
+**各订单类型必需参数:**
 | Type | 必需参数 | 说明 |
-
 |------|----------|------|
-
 | `LIMIT` | `timeInForce`, `quantity`, `price` | |
-
 | `MARKET` | `quantity` 或 `quoteOrderQty` | 按市价买卖 |
-
 | `STOP_LOSS` | `quantity`, `stopPrice`/`trailingDelta` | 达到条件时执行 MARKET 订单 |
-
 | `STOP_LOSS_LIMIT` | `timeInForce`, `quantity`, `price`, `stopPrice`/`trailingDelta` | |
-
 | `TAKE_PROFIT` | `quantity`, `stopPrice`/`trailingDelta` | 达到条件时执行 MARKET 订单 |
-
 | `TAKE_PROFIT_LIMIT` | `timeInForce`, `quantity`, `price`, `stopPrice`/`trailingDelta` | |
-
 | `LIMIT_MAKER` | `quantity`, `price` | POST-ONLY 订单 |
 
-- *Response (FULL):**
-
+**Response (FULL):**
 ```json
 {
   "symbol": "BTCUSDT",
@@ -638,7 +535,7 @@ POST /api/v3/order/test
 ```
 测试下单（不实际执行）。参数同 `POST /api/v3/order`，额外支持 `computeCommissionRates` 参数。
 
-- *Weight:** 无 computeCommissionRates 时为 1，有时为 20
+- **Weight:** 无 computeCommissionRates 时为 1，有时为 20
 
 ### Cancel Order (TRADE)
 
@@ -647,24 +544,16 @@ DELETE /api/v3/order
 
 ```
 
-- *Weight:** 1
+- **Weight:** 1
 
 | Name | Type | Mandatory | Description |
-
 |------|------|-----------|-------------|
-
 | symbol | STRING | YES | |
-
 | orderId | LONG | NO | orderId 或 origClientOrderId 必须发送一个 |
-
 | origClientOrderId | STRING | NO | |
-
 | newClientOrderId | STRING | NO | |
-
 | cancelRestrictions | ENUM | NO | `ONLY_NEW` / `ONLY_PARTIALLY_FILLED` |
-
 | recvWindow | DECIMAL | NO | |
-
 | timestamp | LONG | YES | |
 
 ### Cancel All Open Orders on a Symbol (TRADE)
@@ -675,16 +564,12 @@ DELETE /api/v3/openOrders
 ```
 取消交易对上所有活跃订单（包括订单列表中的）。
 
-- *Weight:** 1
+- **Weight:** 1
 
 | Name | Type | Mandatory | Description |
-
 |------|------|-----------|-------------|
-
 | symbol | STRING | YES | |
-
 | recvWindow | DECIMAL | NO | |
-
 | timestamp | LONG | YES | |
 
 ### Cancel Replace Order (TRADE)
@@ -695,26 +580,17 @@ POST /api/v3/order/cancelReplace
 ```
 取消现有订单并下新单。
 
-- *Weight:** 1
+- **Weight:** 1
 
 | Name | Type | Mandatory | Description |
-
 |------|------|-----------|-------------|
-
 | symbol | STRING | YES | |
-
 | side | ENUM | YES | |
-
 | type | ENUM | YES | |
-
 | cancelReplaceMode | ENUM | YES | `STOP_ON_FAILURE` / `ALLOW_FAILURE` |
-
 | cancelOrderId | LONG | NO | |
-
 | cancelOrigClientOrderId | STRING | NO | |
-
 | cancelRestrictions | ENUM | NO | `ONLY_NEW` / `ONLY_PARTIALLY_FILLED` |
-
 | (其他同 New Order 参数) | | | |
 
 ### Order Amend Keep Priority (TRADE)
@@ -725,24 +601,16 @@ PUT /api/v3/order/amend/keepPriority
 ```
 减少现有挂单的数量（保持队列优先级）。
 
-- *Weight:**4 |**Unfilled Order Count:** 0
+- **Weight:**4 |**Unfilled Order Count:** 0
 
 | Name | Type | Mandatory | Description |
-
 |------|------|-----------|-------------|
-
 | symbol | STRING | YES | |
-
 | orderId | LONG | NO* | orderId 或 origClientOrderId 必须发送一个 |
-
 | origClientOrderId | STRING | NO*| |
-
 | newClientOrderId | STRING | NO | |
-
 | newQty | DECIMAL | YES | 必须 > 0 且 < 当前订单数量 |
-
 | recvWindow | DECIMAL | NO | |
-
 | timestamp | LONG | YES | |
 
 ### New Order using SOR (TRADE)
@@ -753,7 +621,7 @@ POST /api/v3/sor/order
 ```
 使用智能订单路由 (SOR) 下单。仅支持 `LIMIT` 和 `MARKET`。
 
-- *Weight:** 1
+- **Weight:** 1
 
 ### Test New Order using SOR (TRADE)
 
@@ -774,20 +642,15 @@ GET /api/v3/account
 
 ```
 
-- *Weight:** 20
+- **Weight:** 20
 
 | Name | Type | Mandatory | Description |
-
 |------|------|-----------|-------------|
-
 | omitZeroBalances | BOOLEAN | NO | 设为 true 仅返回非零余额，默认 false |
-
 | recvWindow | DECIMAL | NO | |
-
 | timestamp | LONG | YES | |
 
-- *Response:**
-
+**Response:**
 ```json
 {
   "makerCommission": 15,
@@ -819,20 +682,14 @@ GET /api/v3/order
 
 ```
 
-- *Weight:** 4
+- **Weight:** 4
 
 | Name | Type | Mandatory | Description |
-
 |------|------|-----------|-------------|
-
 | symbol | STRING | YES | |
-
 | orderId | LONG | NO | orderId 或 origClientOrderId 必须发送一个 |
-
 | origClientOrderId | STRING | NO | |
-
 | recvWindow | DECIMAL | NO | |
-
 | timestamp | LONG | YES | |
 
 ### Current Open Orders (USER_DATA)
@@ -842,16 +699,12 @@ GET /api/v3/openOrders
 
 ```
 
-- *Weight:** 单交易对为 6，省略为 80
+- **Weight:** 单交易对为 6，省略为 80
 
 | Name | Type | Mandatory | Description |
-
 |------|------|-----------|-------------|
-
 | symbol | STRING | NO | |
-
 | recvWindow | DECIMAL | NO | |
-
 | timestamp | LONG | YES | |
 
 ### All Orders (USER_DATA)
@@ -862,24 +715,16 @@ GET /api/v3/allOrders
 ```
 获取所有订单（活跃、已取消、已成交）。
 
-- *Weight:** 20
+- **Weight:** 20
 
 | Name | Type | Mandatory | Description |
-
 |------|------|-----------|-------------|
-
 | symbol | STRING | YES | |
-
 | orderId | LONG | NO | |
-
 | startTime | LONG | NO | |
-
 | endTime | LONG | NO | startTime 和 endTime 间隔不超过 24 小时 |
-
 | limit | INT | NO | 默认 500，最大 1000 |
-
 | recvWindow | DECIMAL | NO | |
-
 | timestamp | LONG | YES | |
 
 ### Query Order List (USER_DATA)
@@ -889,7 +734,7 @@ GET /api/v3/orderList
 
 ```
 
-- *Weight:** 4
+- **Weight:** 4
 
 ### Query All Order Lists (USER_DATA)
 
@@ -898,7 +743,7 @@ GET /api/v3/allOrderList
 
 ```
 
-- *Weight:** 20
+- **Weight:** 20
 
 ### Query Open Order Lists (USER_DATA)
 
@@ -907,7 +752,7 @@ GET /api/v3/openOrderList
 
 ```
 
-- *Weight:** 6
+- **Weight:** 6
 
 ### Account Trade List (USER_DATA)
 
@@ -916,30 +761,20 @@ GET /api/v3/myTrades
 
 ```
 
-- *Weight:** 无 orderId 为 20，有 orderId 为 5
+- **Weight:** 无 orderId 为 20，有 orderId 为 5
 
 | Name | Type | Mandatory | Description |
-
 |------|------|-----------|-------------|
-
 | symbol | STRING | YES | |
-
 | orderId | LONG | NO | |
-
 | startTime | LONG | NO | |
-
 | endTime | LONG | NO | startTime 和 endTime 间隔不超过 24 小时 |
-
 | fromId | LONG | NO | 从该 TradeId 开始 |
-
 | limit | INT | NO | 默认 500，最大 1000 |
-
 | recvWindow | DECIMAL | NO | |
-
 | timestamp | LONG | YES | |
 
-- *Response:**
-
+**Response:**
 ```json
 [
   {
@@ -968,7 +803,7 @@ GET /api/v3/rateLimit/order
 
 ```
 
-- *Weight:** 40
+- **Weight:** 40
 
 ### Query Prevented Matches (USER_DATA)
 
@@ -978,7 +813,7 @@ GET /api/v3/myPreventedMatches
 ```
 查询因 STP 过期的订单列表。
 
-- *Weight:** 按 preventedMatchId 查询为 2，按 orderId 查询为 20
+- **Weight:** 按 preventedMatchId 查询为 2，按 orderId 查询为 20
 
 ### Query Allocations (USER_DATA)
 
@@ -988,7 +823,7 @@ GET /api/v3/myAllocations
 ```
 获取 SOR 订单的分配结果。
 
-- *Weight:** 20
+- **Weight:** 20
 
 ### Query Commission Rates (USER_DATA)
 
@@ -997,16 +832,13 @@ GET /api/v3/account/commission
 
 ```
 
-- *Weight:** 20
+- **Weight:** 20
 
 | Name | Type | Mandatory | Description |
-
 |------|------|-----------|-------------|
-
 | symbol | STRING | YES | |
 
-- *Response:**
-
+**Response:**
 ```json
 {
   "symbol": "BTCUSDT",
@@ -1030,22 +862,15 @@ GET /api/v3/order/amendments
 ```
 查询单个订单的所有修改记录。
 
-- *Weight:** 4
+- **Weight:** 4
 
 | Name | Type | Mandatory | Description |
-
 |------|------|-----------|-------------|
-
 | symbol | STRING | YES | |
-
 | orderId | LONG | YES | |
-
 | fromExecutionId | LONG | NO | |
-
 | limit | LONG | NO | 默认 500，最大 1000 |
-
 | recvWindow | DECIMAL | NO | |
-
 | timestamp | LONG | YES | |
 
 ### Query Relevant Filters (USER_DATA)
@@ -1056,16 +881,12 @@ GET /api/v3/myFilters
 ```
 获取账户在指定交易对上的相关过滤器（唯一可查看 MAX_ASSET 过滤器的接口）。
 
-- *Weight:** 40
+- **Weight:** 40
 
 | Name | Type | Mandatory | Description |
-
 |------|------|-----------|-------------|
-
 | symbol | STRING | YES | |
-
 | recvWindow | DECIMAL | NO | |
-
 | timestamp | LONG | YES | |
 
 ---
@@ -1073,77 +894,40 @@ GET /api/v3/myFilters
 ## API Endpoints 汇总表
 
 | Method | Endpoint | Security | Weight | Description |
-
 |--------|----------|----------|--------|-------------|
-
 | GET | `/api/v3/ping` | NONE | 1 | 测试连通性 |
-
 | GET | `/api/v3/time` | NONE | 1 | 服务器时间 |
-
 | GET | `/api/v3/exchangeInfo` | NONE | 20 | 交易规则和交易对信息 |
-
 | GET | `/api/v3/depth` | NONE | 5-250 | 深度数据 |
-
 | GET | `/api/v3/trades` | NONE | 25 | 最近成交 |
-
 | GET | `/api/v3/historicalTrades` | NONE | 25 | 历史成交 |
-
 | GET | `/api/v3/aggTrades` | NONE | 4 | 归集成交 |
-
 | GET | `/api/v3/klines` | NONE | 2 | K 线数据 |
-
 | GET | `/api/v3/uiKlines` | NONE | 2 | UI 优化 K 线 |
-
 | GET | `/api/v3/avgPrice` | NONE | 2 | 当前均价 |
-
 | GET | `/api/v3/ticker/24hr` | NONE | 2-80 | 24 小时价格变动 |
-
 | GET | `/api/v3/ticker/price` | NONE | 2-4 | 最新价格 |
-
 | GET | `/api/v3/ticker/bookTicker` | NONE | 2-4 | 最优挂单 |
-
 | GET | `/api/v3/ticker` | NONE | 2-200 | 滚动窗口统计 |
-
 | POST | `/api/v3/order` | TRADE | 1 | 下单 |
-
 | POST | `/api/v3/order/test` | TRADE | 1/20 | 测试下单 |
-
 | DELETE | `/api/v3/order` | TRADE | 1 | 撤单 |
-
 | DELETE | `/api/v3/openOrders` | TRADE | 1 | 撤销全部挂单 |
-
 | POST | `/api/v3/order/cancelReplace` | TRADE | 1 | 撤单并下新单 |
-
 | PUT | `/api/v3/order/amend/keepPriority` | TRADE | 4 | 修改订单(保持优先级) |
-
 | POST | `/api/v3/sor/order` | TRADE | 1 | SOR 下单 |
-
 | POST | `/api/v3/sor/order/test` | TRADE | 1/20 | 测试 SOR 下单 |
-
 | GET | `/api/v3/account` | USER_DATA | 20 | 账户信息 |
-
 | GET | `/api/v3/order` | USER_DATA | 4 | 查询订单 |
-
 | GET | `/api/v3/openOrders` | USER_DATA | 6/80 | 当前挂单 |
-
 | GET | `/api/v3/allOrders` | USER_DATA | 20 | 所有订单 |
-
 | GET | `/api/v3/orderList` | USER_DATA | 4 | 查询订单列表 |
-
 | GET | `/api/v3/allOrderList` | USER_DATA | 20 | 所有订单列表 |
-
 | GET | `/api/v3/openOrderList` | USER_DATA | 6 | 当前挂单列表 |
-
 | GET | `/api/v3/myTrades` | USER_DATA | 5/20 | 成交记录 |
-
 | GET | `/api/v3/rateLimit/order` | USER_DATA | 40 | 未成交订单计数 |
-
 | GET | `/api/v3/myPreventedMatches` | USER_DATA | 2/20 | STP 匹配记录 |
-
 | GET | `/api/v3/myAllocations` | USER_DATA | 20 | SOR 分配记录 |
-
 | GET | `/api/v3/account/commission` | USER_DATA | 20 | 佣金费率 |
-
 | GET | `/api/v3/order/amendments` | USER_DATA | 4 | 订单修改记录 |
-
 | GET | `/api/v3/myFilters` | USER_DATA | 40 | 相关过滤器 |

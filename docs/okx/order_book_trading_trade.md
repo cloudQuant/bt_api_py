@@ -8,10 +8,10 @@ All Trade API endpoints require authentication.
 
 Place an order only if you have sufficient funds.
 
-- **Rate Limit**: 60 requests per 2 seconds
-- **Rate limit rule (except Options)**: User ID + Instrument ID
-- **Rate limit rule (Options only)**: User ID + Instrument Family
-- **Permission**: Trade
+- ***Rate Limit**: 60 requests per 2 seconds
+- ***Rate limit rule (except Options)**: User ID + Instrument ID
+- ***Rate limit rule (Options only)**: User ID + Instrument Family
+- ***Permission**: Trade
 
 ```
 POST /api/v5/trade/order
@@ -20,49 +20,27 @@ POST /api/v5/trade/order
 Request Parameters:
 
 | Parameter | Type | Required | Description |
-
 |-----------|------|----------|-------------|
-
 | instId | String | Yes | Instrument ID, e.g. `BTC-USDT` |
-
 | tdMode | String | Yes | Trade mode: `cross`, `isolated`, `cash`, `spot_isolated` |
-
 | ccy | String | Conditional | Margin currency. Required for `cross` MARGIN orders in Futures mode |
-
 | clOrdId | String | No | Client Order ID (max 32 chars) |
-
 | tag | String | No | Order tag (max 16 chars) |
-
 | side | String | Yes | `buy` or `sell` |
-
 | posSide | String | Conditional | Position side: `long`, `short`, `net`. Required for long/short mode FUTURES/SWAP |
-
 | ordType | String | Yes | Order type: `market`, `limit`, `post_only`, `fok`, `ioc`, `optimal_limit_ioc`, `mmp`, `mmp_and_post_only`, `elp` |
-
 | sz | String | Yes | Quantity to buy or sell |
-
 | px | String | Conditional | Order price. Required for `limit` orders |
-
 | reduceOnly | Boolean | No | Whether reduce-only. Default `false` |
-
 | tgtCcy | String | No | Target currency for SPOT: `base_ccy` or `quote_ccy` |
-
 | banAmend | Boolean | No | Whether to ban amend. Default `false` |
-
 | stpId | String | No | Self trade prevention ID |
-
 | stpMode | String | No | Self trade prevention mode: `cancel_maker`, `cancel_taker`, `cancel_both` |
-
 | tpTriggerPx | String | No | Take-profit trigger price |
-
 | tpOrdPx | String | No | Take-profit order price (-1 for market) |
-
 | slTriggerPx | String | No | Stop-loss trigger price |
-
 | slOrdPx | String | No | Stop-loss order price (-1 for market) |
-
 | tpTriggerPxType | String | No | TP trigger price type: `last`, `index`, `mark` |
-
 | slTriggerPxType | String | No | SL trigger price type: `last`, `index`, `mark` |
 
 Python Example:
@@ -115,9 +93,9 @@ Response Example:
 
 Place orders in batches. Maximum 20 orders per request.
 
-- **Rate Limit**: 300 orders per 2 seconds
-- **Rate limit rule**: User ID + Instrument ID (Options: User ID + Instrument Family)
-- **Permission**: Trade
+- ***Rate Limit**: 300 orders per 2 seconds
+- ***Rate limit rule**: User ID + Instrument ID (Options: User ID + Instrument Family)
+- ***Permission**: Trade
 
 ```
 POST /api/v5/trade/batch-orders
@@ -128,8 +106,8 @@ POST /api/v5/trade/batch-orders
 
 Cancel an incomplete order.
 
-- **Rate Limit**: 60 requests per 2 seconds
-- **Permission**: Trade
+- ***Rate Limit**: 60 requests per 2 seconds
+- ***Permission**: Trade
 
 ```
 POST /api/v5/trade/cancel-order
@@ -137,13 +115,9 @@ POST /api/v5/trade/cancel-order
 ```
 
 | Parameter | Type | Required | Description |
-
 |-----------|------|----------|-------------|
-
 | instId | String | Yes | Instrument ID |
-
 | ordId | String | Conditional | Order ID. Either ordId or clOrdId required |
-
 | clOrdId | String | Conditional | Client Order ID |
 
 Python Example:
@@ -167,8 +141,8 @@ POST /api/v5/trade/cancel-batch-orders
 
 Amend an incomplete order.
 
-- **Rate Limit**: 60 requests per 2 seconds
-- **Permission**: Trade
+- ***Rate Limit**: 60 requests per 2 seconds
+- ***Permission**: Trade
 
 ```
 POST /api/v5/trade/amend-order
@@ -176,21 +150,13 @@ POST /api/v5/trade/amend-order
 ```
 
 | Parameter | Type | Required | Description |
-
 |-----------|------|----------|-------------|
-
 | instId | String | Yes | Instrument ID |
-
 | cxlOnFail | Boolean | No | Cancel on fail. Default `false` |
-
 | ordId | String | Conditional | Order ID |
-
 | clOrdId | String | Conditional | Client Order ID |
-
 | reqId | String | No | Request ID for idempotency |
-
 | newSz | String | Conditional | New size |
-
 | newPx | String | Conditional | New price |
 
 ### POST / Amend multiple orders
@@ -211,8 +177,8 @@ POST /api/v5/trade/close-position
 
 Retrieve order details.
 
-- **Rate Limit**: 60 requests per 2 seconds
-- **Permission**: Read
+- ***Rate Limit**: 60 requests per 2 seconds
+- ***Permission**: Read
 
 ```
 GET /api/v5/trade/order
@@ -220,13 +186,9 @@ GET /api/v5/trade/order
 ```
 
 | Parameter | Type | Required | Description |
-
 |-----------|------|----------|-------------|
-
 | instId | String | Yes | Instrument ID |
-
 | ordId | String | Conditional | Order ID |
-
 | clOrdId | String | Conditional | Client Order ID |
 
 Python Example:
@@ -239,55 +201,34 @@ print(result)
 Key Response Fields:
 
 | Field | Description |
-
 |-------|-------------|
-
 | instId | Instrument ID |
-
 | ordId | Order ID |
-
 | clOrdId | Client Order ID |
-
 | px | Order price |
-
 | sz | Order quantity |
-
 | ordType | Order type |
-
 | side | `buy` or `sell` |
-
 | posSide | Position side |
-
 | tdMode | Trade mode |
-
 | fillPx | Last filled price |
-
 | fillSz | Last filled quantity |
-
 | accFillSz | Accumulated fill quantity |
-
 | avgPx | Average filled price |
-
 | state | Order state: `canceled`, `live`, `partially_filled`, `filled`, `mmp_canceled` |
-
 | fee | Fee (negative = fee, positive = rebate) |
-
 | feeCcy | Fee currency |
-
 | pnl | Profit and loss |
-
 | lever | Leverage |
-
 | tpTriggerPx | Take profit trigger price |
-
 | slTriggerPx | Stop loss trigger price |
 
 ### GET / Order List (Pending)
 
 Retrieve all incomplete orders under the current account.
 
-- **Rate Limit**: 60 requests per 2 seconds
-- **Permission**: Read
+- ***Rate Limit**: 60 requests per 2 seconds
+- ***Permission**: Read
 
 ```
 GET /api/v5/trade/orders-pending
@@ -295,33 +236,23 @@ GET /api/v5/trade/orders-pending
 ```
 
 | Parameter | Type | Required | Description |
-
 |-----------|------|----------|-------------|
-
 | instType | String | No | `SPOT`, `MARGIN`, `SWAP`, `FUTURES`, `OPTION` |
-
 | uly | String | No | Underlying |
-
 | instFamily | String | No | Instrument family |
-
 | instId | String | No | Instrument ID |
-
 | ordType | String | No | Order type filter, comma-separated |
-
 | state | String | No | `live`, `partially_filled` |
-
 | after | String | No | Pagination |
-
 | before | String | No | Pagination |
-
 | limit | String | No | Default 100, max 100 |
 
 ### GET / Order history (last 7 days)
 
 Get completed orders placed in the last 7 days.
 
-- **Rate Limit**: 40 requests per 2 seconds
-- **Permission**: Read
+- ***Rate Limit**: 40 requests per 2 seconds
+- ***Permission**: Read
 
 ```
 GET /api/v5/trade/orders-history
@@ -339,8 +270,8 @@ GET /api/v5/trade/orders-history-archive
 
 Retrieve recently-filled transaction details.
 
-- **Rate Limit**: 60 requests per 2 seconds
-- **Permission**: Read
+- ***Rate Limit**: 60 requests per 2 seconds
+- ***Permission**: Read
 
 ```
 GET /api/v5/trade/fills
@@ -432,8 +363,8 @@ POST /api/v5/trade/order-precheck
 
 Retrieve order information. Data pushed when there are new orders or order updates.
 
-- **URL Path**: `/ws/v5/private` (requires login)
-- **Channel**: `orders`
+- ***URL Path**: `/ws/v5/private` (requires login)
+- ***Channel**: `orders`
 
 Subscribe Example:
 
@@ -478,14 +409,14 @@ asyncio.run(main())
 
 ### WS / Fills channel
 
-- **URL Path**: `/ws/v5/private`
-- **Channel**: `fills`
+- ***URL Path**: `/ws/v5/private`
+- ***Channel**: `fills`
 
 ### WS / Place order
 
-- **URL Path**: `/ws/v5/private` (requires login)
-- **Rate Limit**: 60 requests per 2 seconds
-- **op**: `order`
+- ***URL Path**: `/ws/v5/private` (requires login)
+- ***Rate Limit**: 60 requests per 2 seconds
+- ***op**: `order`
 
 Request Example:
 
@@ -506,24 +437,24 @@ Request Example:
 
 ### WS / Place multiple orders
 
-- **op**: `batch-orders`
+- ***op**: `batch-orders`
 
 ### WS / Cancel order
 
-- **op**: `cancel-order`
+- ***op**: `cancel-order`
 
 ### WS / Cancel multiple orders
 
-- **op**: `batch-cancel-orders`
+- ***op**: `batch-cancel-orders`
 
 ### WS / Amend order
 
-- **op**: `amend-order`
+- ***op**: `amend-order`
 
 ### WS / Amend multiple orders
 
-- **op**: `batch-amend-orders`
+- ***op**: `batch-amend-orders`
 
 ### WS / Mass cancel order
 
-- **op**: `mass-cancel`
+- ***op**: `mass-cancel`

@@ -22,11 +22,11 @@ Settings → General → Features → Discussions
 
 ### 2. 安装 Giscus App
 
-访问 <https://github.com/apps/giscus> 并安装到你的仓库。
+访问 https://github.com/apps/giscus 并安装到你的仓库。
 
 ### 3. 获取配置参数
 
-访问 <https://giscus.app，输入你的仓库信息：>
+访问 https://giscus.app，输入你的仓库信息：
 
 - 仓库: `cloudQuant/bt_api_py`
 - 页面 ↔️ 讨论 映射: `pathname`
@@ -69,17 +69,11 @@ mkdocs build
 ## 配置选项
 
 | 参数 | 说明 | 默认值 |
-
 |------|------|--------|
-
 | `mapping` | 页面映射方式 | `pathname` |
-
 | `theme` | 主题 | `preferred_color_scheme` |
-
 | `lang` | 语言 | `zh-CN` |
-
 | `reactions_enabled` | 启用反应 | `1` |
-
 | `input_position` | 输入框位置 | `bottom` |
 
 ## 主题切换
