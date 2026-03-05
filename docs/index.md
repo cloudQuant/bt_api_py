@@ -25,7 +25,7 @@
 
     基于 Registry 模式，新增交易所无需修改任何核心代码，只需注册 Feed 类即可。完全符合**开闭原则**。
 
-    [:octicons-arrow-right-24: 了解架构设计](architecture.md)
+    [:octicons-arrow-right-24: 了解架构设计](explanation/architecture.md)
 
 -   :material-swap-horizontal:{ .lg .middle } **统一多交易所接口**
 
@@ -33,7 +33,7 @@
 
     `BtApi` 一个类统一管理 Binance、OKX、HTX、CTP、Interactive Brokers 等 **73 个交易所**，同一套代码，多平台部署。
 
-    [:octicons-arrow-right-24: 查看支持的交易所](#_3)
+    [:octicons-arrow-right-24: 查看支持的交易所](#_2)
 
 -   :material-lightning-bolt:{ .lg .middle } **三种 API 模式**
 
@@ -41,7 +41,7 @@
 
     同步 REST、异步 REST、WebSocket 实时推送。按场景自由选择，满足从策略回测到高频交易的全部需求。
 
-    [:octicons-arrow-right-24: 使用指南](usage_guide.md)
+    [:octicons-arrow-right-24: 使用指南](guides/usage_guide.md)
 
 -   :material-package-variant:{ .lg .middle } **标准化数据容器**
 
@@ -49,7 +49,7 @@
 
     20+ 种标准化数据类型：Ticker、OrderBook、Bar、Order、Position 等，屏蔽各交易所数据格式差异。
 
-    [:octicons-arrow-right-24: 数据容器参考](api_reference/data_containers.md)
+    [:octicons-arrow-right-24: 数据容器参考](reference/data_containers.md)
 
 -   :material-broadcast:{ .lg .middle } **事件驱动架构**
 
@@ -65,7 +65,7 @@
 
     核心计算模块使用 Cython 和 C++ 实现，关键路径深度优化，适合高频交易场景。支持 Linux/Windows/macOS。
 
-    [:octicons-arrow-right-24: 性能优化指南](performance.md)
+    [:octicons-arrow-right-24: 性能优化指南](guides/performance.md)
 
 </div>
 
@@ -106,8 +106,8 @@ order = api.make_order(
 all_tickers = api.get_all_ticks("BTCUSDT")
 ```
 
-[:octicons-arrow-right-24: 查看完整快速入门](quickstart.md){ .md-button .md-button--primary }
-[:octicons-arrow-right-24: 安装说明](installation.md){ .md-button }
+[:octicons-arrow-right-24: 查看完整快速入门](getting-started/quickstart.md){ .md-button .md-button--primary }
+[:octicons-arrow-right-24: 安装说明](getting-started/installation.md){ .md-button }
 
 ## 支持的交易所
 
@@ -129,8 +129,8 @@ all_tickers = api.get_all_ticks("BTCUSDT")
 
 | 类型 | 目的 | 入口 |
 |------|------|------|
-| **入门** | 安装和基本使用 | [快速入门](quickstart.md) |
-| **使用指南** | 解决特定问题的步骤 | [使用指南](usage_guide.md) |
+| **入门** | 安装和基本使用 | [快速入门](getting-started/quickstart.md) |
+| **使用指南** | 解决特定问题的步骤 | [使用指南](guides/usage_guide.md) |
 | **API 参考** | 完整的 Python API 文档 | [API 参考](reference/index.md) |
-| **交易所** | 各交易所原始 API 文档 | [交易所](binance/index.md) |
-| **深度解读** | 架构设计和原理解释 | [架构设计](architecture.md) |
+| **交易所** | 各交易所原始 API 文档 | [交易所](exchanges/binance/index.md) |
+| **深度解读** | 架构设计和原理解释 | [架构设计](explanation/architecture.md) |
