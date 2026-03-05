@@ -68,11 +68,12 @@ plugins:
         - zh
         - en
       separator: '[\s\-\.]+'
-  - git-revision-date-localized:
-      enable_creation_date: true
-      type: datetime
-      timezone: Asia/Shanghai
-      enable_git_follow: false
+  # git-revision-date-localized plugin disabled: v1.5.1 always warns on docs_dir query, breaking --strict mode
+  # - git-revision-date-localized:
+  #     enable_creation_date: true
+  #     type: datetime
+  #     timezone: Asia/Shanghai
+  #     enable_git_follow: false
   - minify:
       minify_html: true
   # 取消注释以下插件以启用额外功能
@@ -170,104 +171,102 @@ nav:
   - 首页: index.md
 
   - 快速开始:
-      - 安装指南: installation.md
+      - 安装: installation.md
       - 快速入门: quickstart.md
-      - CTP 期货指南: ctp_quickstart.md
-      - IB 指南: ib_quickstart.md
+      - 常见问题: faq.md
       - 更新日志: change_log.md
 
-  - 核心文档:
-      - API 参考:
-          - 概览: api_reference/index.md
-          - BtApi 类: api_reference.md
-          - 数据容器: api_reference/data_containers.md
-          - WebSocket 订阅: api_reference/websocket.md
-          - 事件系统: api_reference/event_system.md
-          - Binance API: api_reference/binance.md
-          - OKX API: api_reference/okx.md
-          - CTP API: api_reference/ctp.md
-          - IB API: api_reference/ib.md
+  - 使用指南:
+      - 基础用法: usage_guide.md
       - 代码示例: examples/api_examples.md
       - 参数说明: params.md
       - 错误处理: error_handling.md
-      - 性能优化: performance.md
       - 最佳实践: best_practices.md
+      - 安全实践: security_best_practices.md
+      - 性能优化: performance.md
+
+  - API 参考:
+      - BtApi 核心类: api_reference.md
+      - 数据容器: api_reference/data_containers.md
+      - WebSocket 订阅: api_reference/websocket.md
+      - 事件系统: api_reference/event_system.md
+      - Binance API: api_reference/binance.md
+      - OKX API: api_reference/okx.md
+      - CTP API: api_reference/ctp.md
+      - IB API: api_reference/ib.md
+
+  - 交易所集成:
+      - Binance:
+          - 概览: binance/index.md
+          - 现货 (SPOT):
+              - 快速参考: binance/spot/README.md
+              - REST API: binance/spot/rest-api.md
+              - WebSocket 流: binance/spot/websocket-streams.md
+              - WebSocket API: binance/spot/websocket-api.md
+              - 用户数据流: binance/spot/user-data-stream.md
+              - 枚举类型: binance/spot/enums.md
+              - 错误码: binance/spot/errors.md
+              - 交易规则: binance/spot/filters.md
+          - 合约 (DERIVATIVES):
+              - 概览: binance/derivatives/index.md
+              - 快速开始: binance/derivatives/quick-start.md
+          - 杠杆 (MARGIN):
+              - 接口索引: binance/margin_trading/README.md
+          - 算法交易 (ALGO):
+              - 接口索引: binance/algo/README.md
+              - 快速开始: binance/algo/quick-start.md
+      - OKX:
+          - 概览: okx/index.md
+          - 交易账户: okx/trading_account.md
+          - 订单交易: okx/order_book_trading_trade.md
+          - 行情数据: okx/market_data.md
+          - 公共数据: okx/public_data.md
+          - 资金账户: okx/funding_account.md
+          - 子账户: okx/sub_account.md
+          - 算法交易: okx/order_book_trading_algo.md
+          - 网格交易: okx/order_book_trading_grid.md
+          - 价差交易: okx/spread_trading.md
+          - 大宗交易: okx/block_trading.md
+          - 状态与错误: okx/status_announcement_error.md
+      - HTX (Huobi):
+          - 概览: htx/index.md
+          - API 参考: htx/api_reference.md
+      - CTP (中国期货):
+          - 快速入门: ctp_quickstart.md
+      - Interactive Brokers:
+          - 快速入门: ib_quickstart.md
+          - 概览: ib_web_api/index.md
+          - API 快速参考: ib_web_api/api_reference_quick.md
+          - 实现指南: ib_web_api/implementation_guide.md
+          - 交易 API: ib_web_api/trading.md
+          - 账户管理: ib_web_api/account_management.md
+
+  - 进阶开发:
       - 架构设计: architecture.md
-      - 使用指南: usage_guide.md
-      - 开发者指南: developer_guide.md
       - 多策略架构: multi_strategy_architecture.md
+      - 开发者指南: developer_guide.md
+      - 交易所集成模式: exchange_integration_patterns.md
 
-  - Binance:
-      - 概览: binance/index.md
-      - 现货交易 (SPOT):
-          - 概览: binance/spot/README.md
-          - REST API: binance/spot/rest-api.md
-          - WebSocket 流: binance/spot/websocket-streams.md
-          - WebSocket API: binance/spot/websocket-api.md
-          - 用户数据流: binance/spot/user-data-stream.md
-          - 枚举类型: binance/spot/enums.md
-          - 错误码: binance/spot/errors.md
-          - 交易规则: binance/spot/filters.md
-          - SBE 行情流: binance/spot/sbe-market-data-streams.md
-      - 合约交易 (DERIVATIVES):
-          - 概览: binance/derivatives/index.md
-          - 快速开始: binance/derivatives/quick-start.md
-          - 更新日志: binance/derivatives/change-log.md
-      - 杠杆交易 (MARGIN):
-          - 概览: binance/margin_trading/README.md
-      - 算法交易 (ALGO):
-          - 概览: binance/algo/README.md
-          - 快速开始: binance/algo/quick-start.md
-          - 现货算法: binance/algo/spot-algo/fee-structure.md
-          - 合约算法: binance/algo/future-algo/twap-new-order.md
-
-  - OKX:
-      - 概览: okx/index.md
-      - 交易账户: okx/trading_account.md
-      - 订单交易: okx/order_book_trading_trade.md
-      - 行情数据: okx/market_data.md
-      - 公共数据: okx/public_data.md
-      - 资金账户: okx/funding_account.md
-      - 子账户: okx/sub_account.md
-      - 算法交易: okx/order_book_trading_algo.md
-      - 网格交易: okx/order_book_trading_grid.md
-      - 其他交易: okx/order_book_trading_others.md
-      - 价差交易: okx/spread_trading.md
-      - 交易统计: okx/trading_statistics.md
-      - 状态与错误: okx/status_announcement_error.md
-      - 大宗交易: okx/block_trading.md
-
-  - HTX (Huobi):
-      - 概览: htx/index.md
-      - API 参考: htx/api_reference.md
-
-  - Interactive Brokers:
-      - 快速入门: ib_quickstart.md
-      - 概览: ib_web_api/index.md
-      - API 快速参考: ib_web_api/api_reference_quick.md
-      - 实现指南: ib_web_api/implementation_guide.md
-      - 账户管理: ib_web_api/account_management.md
-      - 交易: ib_web_api/trading.md
-
-  - CTP (中国期货):
-      - 快速入门: ctp_quickstart.md
-      - SWIG 重构计划: ctp_swig_refactoring_plan.md
-
-  - 开发参考:
-      - Binance API 状态: binance_api_implementation_status.md
-      - Binance 待实现: binance_api_missing_apis.md
-      - Binance 开发计划: binance_api_todo.md
-      - OKX 开发计划: okx_api_todo.md
-
-  # 取消注释以下部分以启用博客和标签
-  # - 博客:
-  #     - blog/index.md
-  # - 标签:
-  #     - tags.md
-
-# 排除文件
+# 排除文件（不在导航中显示，不参与构建）
 exclude_docs: |
   _bmad/
+  _internal/
   exchanges/
+  archived/
+  blog/
   COMMENT_SETUP.md
   I18N_SETUP.md
+  index.en.md
+  installation.en.md
+  quickstart.en.md
+  tags.md
+  binance_api_implementation_status.md
+  binance_api_missing_apis.md
+  binance_api_todo.md
+  okx_api_todo.md
+  okx/trading_statistics.md
+  okx/order_book_trading_others.md
+  okx/sub_account.md
+  ctp_swig_refactoring_plan.md
+  exchange_integration_skill_design.md
+  修复失败的测试用例.md
