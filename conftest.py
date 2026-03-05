@@ -74,6 +74,16 @@ def pytest_collection_modifyitems(config, items):
     skip_live = should_skip_live_tests()
 
     for item in items:
+        # Group network-heavy tests by exchange for xdist so parallel workers
+        # don't overwhelm the same exchange API simultaneously.
+        fspath = str(item.fspath).lower()
+        for exchange in (
+            "okx", "binance", "ctp", "htx", "bitfinex", "coinbase",
+            "kucoin", "mexc", "bybit", "upbit", "hyperliquid",
+        ):
+            if exchange in fspath:
+                item.add_marker(pytest.mark.xdist_group(name=exchange))
+                break
         # Auto-mark slow tests based on timeout or explicit markers
         if "slow" not in item.keywords:
             # Check if test file or function name suggests it's slow

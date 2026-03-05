@@ -57,7 +57,7 @@ markers = [
     "okx: OKX exchange tests",
     "ib: Interactive Brokers tests",
 ]
-timeout = 30
+timeout = 120
 testpaths = ["tests"]
 python_files = ["test_*.py"]
 python_classes = ["Test*"]

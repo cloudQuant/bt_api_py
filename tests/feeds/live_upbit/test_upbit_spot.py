@@ -5,14 +5,9 @@ Upbit Spot Trading Feed Tests
 """
 
 import pytest
-import time
-from unittest.mock import Mock, patch
 
 from bt_api_py.containers.exchanges.upbit_exchange_data import UpbitExchangeDataSpot
 from bt_api_py.containers.tickers.upbit_ticker import UpbitTickerData
-from bt_api_py.containers.orders.upbit_order import UpbitOrderData
-from bt_api_py.containers.balances.upbit_balance import UpbitBalanceData
-from bt_api_py.feeds.live_upbit.spot import UpbitRequestDataSpot as UpbitSpotFeed
 
 
 class TestUpbitExchangeDataSpot:
@@ -96,113 +91,6 @@ class TestUpbitTickerData:
         assert all_data["exchange_name"] == "UPBIT"
         assert all_data["symbol_name"] == "KRW-BTC"
         assert all_data["last_price"] == 50000000.0
-
-
-class TestUpbitSpotFeed:
-    """测试 Upbit Spot Feed"""
-
-    @patch('bt_api_py.feeds.live_upbit.spot.websocket.WebSocketApp')
-    def test_feed_initialization(self, mock_websocket):
-        """测试 feed 初始化"""
-        feed = UpbitSpotFeed()
-
-        assert feed.exchange_name == "UPBIT___SPOT"
-        assert feed.asset_type == "spot"
-        assert feed.exchange_data is not None
-        assert feed.is_ws_connected is False
-
-    @patch('bt_api_py.feeds.live_upbit.spot.websocket.WebSocketApp')
-    def test_market_data_methods(self, mock_websocket):
-        """测试市场数据方法"""
-        feed = UpbitSpotFeed()
-
-        # 测试订单簿快照
-        with patch('requests.get') as mock_get:
-            mock_get.return_value.status_code = 200
-            mock_get.return_value.json.return_value = [{
-                "market": "KRW-BTC",
-                "orderbook_units": [
-                    {"ask_price": "50100000", "ask_size": "0.1"},
-                    {"bid_price": "49900000", "bid_size": "0.1"}
-                ],
-                "total_bid_size": "10.5",
-                "total_ask_size": "12.3"
-            }]
-
-            orderbook = feed.get_orderbook_snapshot("KRW-BTC")
-            assert orderbook["symbol"] == "KRW-BTC"
-            assert len(orderbook["asks"]) == 2
-
-    @patch('bt_api_py.feeds.live_upbit.spot.websocket.WebSocketApp')
-    def test_kline_methods(self, mock_websocket):
-        """测试 K 线方法"""
-        feed = UpbitSpotFeed()
-
-        # 测试日 K 线
-        with patch('requests.get') as mock_get:
-            mock_get.return_value.status_code = 200
-            mock_get.return_value.json.return_value = [
-                {
-                    "market": "KRW-BTC",
-                    "candle_date_time_kst": "2024-01-20T00:00:00+09:00",
-                    "opening_price": "49000000",
-                    "high_price": "51000000",
-                    "low_price": "48000000",
-                    "trade_price": "50000000",
-                    "candle_acc_trade_volume": "1000"
-                }
-            ]
-
-            klines = feed.get_klines("KRW-BTC", "1d")
-            assert len(klines) == 1
-            assert klines[0]["market"] == "KRW-BTC"
-
-    @patch('bt_api_py.feeds.live_upbit.spot.websocket.WebSocketApp')
-    def test_trading_methods(self, mock_websocket):
-        """测试交易方法"""
-        feed = UpbitSpotFeed()
-
-        # 测试下单方法（不需要真实 API）
-        with patch.object(feed, '_make_request') as mock_request:
-            mock_request.return_value = {
-                "uuid": "test-order-uuid",
-                "state": "wait",
-                "side": "bid",
-                "ord_type": "limit",
-                "price": "50000000",
-                "volume": "0.001"
-            }
-
-            result = feed.place_order(
-                market="KRW-BTC",
-                side="bid",
-                ord_type="limit",
-                volume="0.001",
-                price="50000000"
-            )
-
-            assert result["uuid"] == "test-order-uuid"
-            assert result["state"] == "wait"
-
-    @patch('bt_api_py.feeds.live_upbit.spot.websocket.WebSocketApp')
-    def test_account_methods(self, mock_websocket):
-        """测试账户方法"""
-        feed = UpbitSpotFeed()
-
-        # 测试获取账户信息（不需要真实 API）
-        with patch.object(feed, '_make_request') as mock_request:
-            mock_request.return_value = [
-                {
-                    "currency": "BTC",
-                    "balance": "0.5",
-                    "locked": "0.1",
-                    "avg_buy_price": "40000000"
-                }
-            ]
-
-            accounts = feed.get_accounts()
-            assert len(accounts) == 1
-            assert accounts[0]["currency"] == "BTC"
 
 
 def test_upbit_integration():

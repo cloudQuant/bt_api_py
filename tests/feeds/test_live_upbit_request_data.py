@@ -42,11 +42,10 @@ def data_queue():
 def upbit_feed(data_queue):
     """Create an Upbit feed instance for testing."""
     if not UPBIT_FEED_AVAILABLE:
-        pass
-    with patch('bt_api_py.feeds.live_upbit.request_base.requests.Session'):
-        feed = UpbitRequestDataSpot()
-        feed.data_queue = data_queue
-        return feed
+        pytest.skip("UpbitRequestDataSpot not available")
+    feed = UpbitRequestDataSpot()
+    feed.data_queue = data_queue
+    return feed
 
 # ==================== ServerTime Tests ====================
 
