@@ -3,6 +3,8 @@ import time
 
 import pytest
 
+pytestmark = [pytest.mark.integration, pytest.mark.network]
+
 from bt_api_py.containers.exchanges.okx_exchange_data import OkxExchangeDataSwap
 from bt_api_py.containers.requestdatas.request_data import RequestData
 from bt_api_py.containers.symbols.okx_symbol import OkxSymbolData
@@ -234,6 +236,7 @@ def test_okx_async_get_opt_summary():
     assert isinstance(summary_list, list)
 
 
+@pytest.mark.auth_position
 def test_okx_req_get_position_tiers_public():
     """Test get_position_tiers_public interface"""
     live_okx_swap_feed = init_req_feed()
@@ -246,6 +249,7 @@ def test_okx_req_get_position_tiers_public():
     print("get_position_tiers_public count:", len(tiers_list))
 
 
+@pytest.mark.auth_position
 def test_okx_async_get_position_tiers_public():
     """Test async_get_position_tiers_public interface"""
     data_queue = queue.Queue()
@@ -450,6 +454,7 @@ def test_okx_async_get_underlying():
         print("async_get_underlying status:", result.get_status())
 
 
+@pytest.mark.auth_account
 def test_okx_req_get_insurance_fund():
     """Test get_insurance_fund interface - Get insurance fund balance"""
     live_okx_swap_feed = init_req_feed()
@@ -508,6 +513,7 @@ def test_okx_async_convert_contract_coin():
         print("async_convert_contract_coin status:", result.get_status())
 
 
+@pytest.mark.ticker
 def test_okx_req_get_instrument_tick_bands():
     """Test get_instrument_tick_bands interface - Get instrument minimum tick size"""
     live_okx_swap_feed = init_req_feed()
@@ -520,6 +526,8 @@ def test_okx_req_get_instrument_tick_bands():
         print("get_instrument_tick_bands:", tick_bands_list[0])
 
 
+@pytest.mark.ticker
+@pytest.mark.auth_account
 def test_okx_async_get_instrument_tick_bands():
     """Test async_get_instrument_tick_bands interface"""
     data_queue = queue.Queue()

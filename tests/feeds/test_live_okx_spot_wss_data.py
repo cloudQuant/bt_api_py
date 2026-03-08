@@ -1,6 +1,9 @@
+import pytest
 import queue
 import random
 import time
+
+pytestmark = [pytest.mark.integration, pytest.mark.network]
 
 # from bt_api_py.containers.fundingrates.okx_funding_rate import OkxFundingRateData
 from bt_api_py.containers.accounts.okx_account import OkxAccountData
@@ -45,6 +48,7 @@ def init_req_feed():
     return live_okx_spot_feed
 
 
+@pytest.mark.auth_account
 def test_okx_wss_data_feed():
     data_queue = queue.Queue()
     data = read_account_config()
@@ -109,6 +113,7 @@ def test_okx_wss_data_feed():
     assert receive_okx_mark_price_data is True
 
 
+@pytest.mark.auth_order
 def test_get_okx_account_data_feed():
     data_queue = queue.Queue()
     data = read_account_config()

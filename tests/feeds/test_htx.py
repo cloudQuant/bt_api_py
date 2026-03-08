@@ -155,6 +155,7 @@ class TestHtxRequestData:
 class TestHtxDataContainers:
     """Test HTX data containers."""
 
+    @pytest.mark.ticker
     def test_ticker_container(self):
         """Test ticker data container."""
         ticker_response = {
@@ -259,6 +260,7 @@ class TestHtxLiveMarketData:
         assert isinstance(data, RequestData)
         print("htx_server_time:", data.get_data())
 
+    @pytest.mark.ticker
     def test_htx_req_tick_data(self):
         """Test ticker data request (synchronous)."""
         live_htx_spot_feed = self.init_req_feed()
@@ -269,6 +271,7 @@ class TestHtxLiveMarketData:
         assert tick_data.get_symbol_name() == "BTCUSDT"
         assert tick_data.get_last_price() > 0
 
+    @pytest.mark.ticker
     def test_htx_req_get_tick(self):
         """Test get_tick standard interface alias."""
         live_htx_spot_feed = self.init_req_feed()
@@ -296,6 +299,7 @@ class TestHtxLiveMarketData:
         except queue.Empty:
             pytest.fail("No async tick data received within timeout")
 
+    @pytest.mark.kline
     def test_htx_req_kline_data(self):
         """Test kline data request (synchronous)."""
         live_htx_spot_feed = self.init_req_feed()
@@ -361,6 +365,7 @@ class TestHtxOrderBook:
         )
         return live_htx_spot_feed
 
+    @pytest.mark.orderbook
     def test_htx_req_orderbook_data(self):
         """Test orderbook data request."""
         live_htx_spot_feed = self.init_req_feed()
@@ -738,18 +743,21 @@ class TestHtxUsdtSwapMarketData:
         assert result.get("status") == "ok"
         assert len(result.get("data", [])) > 0
 
+    @pytest.mark.ticker
     def test_usdt_swap_ticker(self):
         """Test USDT swap ticker."""
         feed = self.init_req_feed()
         data = feed.get_ticker("BTC-USDT")
         assert isinstance(data, RequestData)
 
+    @pytest.mark.orderbook
     def test_usdt_swap_depth(self):
         """Test USDT swap depth."""
         feed = self.init_req_feed()
         data = feed.get_depth("BTC-USDT")
         assert isinstance(data, RequestData)
 
+    @pytest.mark.kline
     def test_usdt_swap_kline(self):
         """Test USDT swap kline."""
         feed = self.init_req_feed()
@@ -776,12 +784,14 @@ class TestHtxCoinSwapMarketData:
         assert result.get("status") == "ok"
         assert len(result.get("data", [])) > 0
 
+    @pytest.mark.ticker
     def test_coin_swap_ticker(self):
         """Test coin swap ticker."""
         feed = self.init_req_feed()
         data = feed.get_ticker("BTC-USD")
         assert isinstance(data, RequestData)
 
+    @pytest.mark.orderbook
     def test_coin_swap_depth(self):
         """Test coin swap depth."""
         feed = self.init_req_feed()

@@ -47,6 +47,7 @@ class TestRaydiumBasic:
         """Test get_pools method"""
         assert hasattr(raydium_feed, "get_pools")
 
+    @pytest.mark.ticker
     def test_get_ticker(self, raydium_feed):
         """Test get_ticker method"""
         assert hasattr(raydium_feed, "get_ticker")
@@ -65,6 +66,7 @@ class TestRaydiumNormalize:
         }
         assert "poolId" in mock_pool_data
 
+    @pytest.mark.ticker
     def test_ticker_normalize_function(self):
         """Test ticker data normalization"""
         mock_ticker_data = {"symbol": "SOL", "price": "150", "volume24h": "5000000"}

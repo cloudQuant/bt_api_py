@@ -11,6 +11,7 @@ from bt_api_py.containers.exchanges.binance_exchange_data import (
 )
 
 
+@pytest.mark.kline
 def test_spot_wss_kline_timezone():
     """测试 Spot WebSocket kline_timezone 路径"""
     spot = BinanceExchangeDataSpot()

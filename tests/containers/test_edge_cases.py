@@ -18,6 +18,7 @@ from bt_api_py.containers.tickers.binance_ticker import (
 class TestTickerEdgeCases:
     """Test edge cases for ticker data containers"""
 
+    @pytest.mark.ticker
     def test_ticker_zero_prices(self):
         """Ticker should handle zero prices"""
         data = {
@@ -35,6 +36,7 @@ class TestTickerEdgeCases:
         assert ticker.bid_price == 0.0
         assert ticker.ask_price == 0.0
 
+    @pytest.mark.ticker
     def test_ticker_max_prices(self):
         """Ticker should handle very large prices"""
         data = {
@@ -52,6 +54,7 @@ class TestTickerEdgeCases:
         assert ticker.bid_price >= 1e12
         assert ticker.ask_price >= 1e12
 
+    @pytest.mark.ticker
     def test_ticker_negative_prices(self):
         """Ticker should handle negative prices (invalid but should not crash)"""
         data = {
@@ -69,6 +72,7 @@ class TestTickerEdgeCases:
         assert ticker.bid_price == -100.0
         assert ticker.ask_price == -101.0
 
+    @pytest.mark.ticker
     def test_ticker_missing_fields(self):
         """Ticker should handle missing optional fields"""
         data = {"s": "BTCUSDT", "E": 1234567890.123}
@@ -79,6 +83,7 @@ class TestTickerEdgeCases:
         assert ticker.ticker_symbol_name == "BTCUSDT"
         assert ticker.server_time == 1234567890.123
 
+    @pytest.mark.ticker
     def test_ticker_empty_strings(self):
         """Ticker should handle empty string values"""
         data = {
@@ -94,6 +99,7 @@ class TestTickerEdgeCases:
         )
         ticker.init_data()
 
+    @pytest.mark.ticker
     def test_ticker_invalid_numeric_strings(self):
         """Ticker should handle invalid numeric strings"""
         data = {
@@ -109,6 +115,7 @@ class TestTickerEdgeCases:
         )
         ticker.init_data()
 
+    @pytest.mark.ticker
     def test_ticker_extreme_precision(self):
         """Ticker should handle extreme decimal precision"""
         data = {
@@ -126,6 +133,7 @@ class TestTickerEdgeCases:
         assert ticker.bid_price > 50000
         assert ticker.ask_price > 50001
 
+    @pytest.mark.ticker
     def test_ticker_scientific_notation(self):
         """Ticker should handle scientific notation"""
         data = {
@@ -143,6 +151,7 @@ class TestTickerEdgeCases:
         assert ticker.bid_price == 50000.0
         assert ticker.ask_price == 50010.0
 
+    @pytest.mark.ticker
     def test_ticker_unicode_symbol(self):
         """Ticker should handle unicode in symbol names"""
         data = {
@@ -159,6 +168,7 @@ class TestTickerEdgeCases:
         ticker.init_data()
         assert ticker.ticker_symbol_name == "测试USDT"
 
+    @pytest.mark.ticker
     def test_ticker_special_characters_symbol(self):
         """Ticker should handle special characters in symbol"""
         data = {
@@ -175,6 +185,7 @@ class TestTickerEdgeCases:
         ticker.init_data()
         assert ticker.ticker_symbol_name == "BTC-USDT@123"
 
+    @pytest.mark.ticker
     def test_ticker_very_long_symbol(self):
         """Ticker should handle very long symbol names"""
         long_symbol = "A" * 1000
@@ -485,6 +496,7 @@ class TestJSONParsingEdgeCases:
 class TestRequestTickerEdgeCases:
     """Test edge cases for request ticker data"""
 
+    @pytest.mark.ticker
     def test_request_ticker_zero_prices(self):
         """Request ticker should handle zero prices"""
         data = {
@@ -502,6 +514,7 @@ class TestRequestTickerEdgeCases:
         assert ticker.bid_price == 0.0
         assert ticker.ask_price == 0.0
 
+    @pytest.mark.ticker
     def test_request_ticker_missing_fields(self):
         """Request ticker should handle missing fields"""
         data = {"symbol": "BTCUSDT"}
@@ -511,6 +524,7 @@ class TestRequestTickerEdgeCases:
         ticker.init_data()
         assert ticker.ticker_symbol_name == "BTCUSDT"
 
+    @pytest.mark.ticker
     def test_request_ticker_invalid_numeric_strings(self):
         """Request ticker should handle invalid numeric strings"""
         data = {

@@ -62,6 +62,7 @@ class TestBitgetExchangeData:
         path = exchange_data.get_rest_path("get_kline")
         assert path != ""
 
+    @pytest.mark.kline
     def test_kline_periods(self):
         exchange_data = BitgetExchangeDataSpot()
         assert "1m" in exchange_data.kline_periods
@@ -78,6 +79,7 @@ class TestBitgetExchangeData:
 class TestBitgetDataContainers:
     """Test Bitget data containers."""
 
+    @pytest.mark.ticker
     def test_ticker_container(self):
         ticker_data = {
             "symbol": "BTCUSDT",
@@ -105,11 +107,13 @@ class TestBitgetDataContainers:
         assert ticker.ask_volume == 2.0
         assert ticker.has_been_init_data is True
 
+    @pytest.mark.ticker
     def test_ticker_init_data_returns_self(self):
         ticker_data = {"symbol": "BTCUSDT", "last": "50000"}
         ticker = BitgetTickerData(ticker_data, "BTC-USDT", "spot", True)
         assert ticker.init_data() is ticker
 
+    @pytest.mark.orderbook
     def test_orderbook_container(self):
         orderbook_data = {
             "bids": [["49990", "1.5"], ["49980", "2.0"]],
@@ -126,6 +130,7 @@ class TestBitgetDataContainers:
         assert ob.bids[0][0] == 49990.0
         assert ob.asks[0][0] == 50010.0
 
+    @pytest.mark.orderbook
     def test_orderbook_init_data_returns_self(self):
         ob_data = {"bids": [], "asks": [], "ts": "123"}
         ob = BitgetOrderBookData(ob_data, "BTC-USDT", "spot", True)
@@ -293,6 +298,7 @@ class TestBitgetThreeLayerPattern:
             passphrase="test_pass",
         )
 
+    @pytest.mark.ticker
     def test_get_ticker_layer1(self):
         path, params, extra_data = self.feed._get_ticker("BTC-USDT")
         assert "tickers" in path.lower() or "market" in path.lower()
@@ -301,12 +307,14 @@ class TestBitgetThreeLayerPattern:
         assert extra_data["symbol_name"] == "BTC-USDT"
         assert extra_data["normalize_function"] is not None
 
+    @pytest.mark.orderbook
     def test_get_depth_layer1(self):
         path, params, extra_data = self.feed._get_depth("BTC-USDT", limit=20)
         assert params["symbol"] == "BTCUSDT"
         assert params["limit"] == 20
         assert extra_data["request_type"] == "get_depth"
 
+    @pytest.mark.kline
     def test_get_kline_layer1(self):
         path, params, extra_data = self.feed._get_kline("BTC-USDT", period="1h", limit=100)
         assert params["symbol"] == "BTCUSDT"
@@ -363,6 +371,7 @@ class TestBitgetThreeLayerPattern:
 class TestBitgetNormalizeFunctions:
     """Test normalize functions produce correct data containers."""
 
+    @pytest.mark.ticker
     def test_ticker_normalize(self):
         from bt_api_py.feeds.live_bitget.spot import BitgetRequestDataSpot
 
@@ -376,6 +385,7 @@ class TestBitgetNormalizeFunctions:
         assert len(data) == 1
         assert isinstance(data[0], BitgetTickerData)
 
+    @pytest.mark.ticker
     def test_ticker_normalize_error(self):
         from bt_api_py.feeds.live_bitget.spot import BitgetRequestDataSpot
 
@@ -384,6 +394,7 @@ class TestBitgetNormalizeFunctions:
         data, status = BitgetRequestDataSpot._get_ticker_normalize_function(input_data, extra_data)
         assert status is False
 
+    @pytest.mark.ticker
     def test_ticker_normalize_none(self):
         from bt_api_py.feeds.live_bitget.spot import BitgetRequestDataSpot
 
@@ -392,6 +403,7 @@ class TestBitgetNormalizeFunctions:
         assert status is False
         assert data == []
 
+    @pytest.mark.orderbook
     def test_depth_normalize(self):
         from bt_api_py.feeds.live_bitget.spot import BitgetRequestDataSpot
 
@@ -448,6 +460,7 @@ class TestBitgetNormalizeFunctions:
         assert len(data) == 1
         assert isinstance(data[0], BitgetOrderData)
 
+    @pytest.mark.kline
     def test_kline_normalize(self):
         from bt_api_py.feeds.live_bitget.spot import BitgetRequestDataSpot
 

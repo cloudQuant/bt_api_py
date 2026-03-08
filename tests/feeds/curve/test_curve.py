@@ -203,6 +203,7 @@ class TestCurveRequestDataSpot:
 
     # ==================== Ticker Tests (via pools) ====================
 
+    @pytest.mark.ticker
     def test_get_tick(self, curve_spot):
         """Test get_tick method - Curve uses pool data."""
         pool_address = "0xbEbc44782C7dB0a1A60Cb6fe97d0b483032FF1C7"
@@ -212,6 +213,7 @@ class TestCurveRequestDataSpot:
         assert extra_data["request_type"] == "get_tick"
         assert extra_data["symbol_name"] == pool_address
 
+    @pytest.mark.ticker
     def test_get_tick_normalize_function(self):
         """Test tick normalize function - uses pool summary."""
         input_data = {"data": {"poolData": {"name": "3pool", "virtualPrice": "1.01"}}}
@@ -304,6 +306,7 @@ class TestCurveExchangeDataSpot:
             assert hasattr(CurveExchangeDataSpot, "FACTORY_ADDRESSES")
             assert CurveChain.ETHEREUM in exchange_data.FACTORY_ADDRESSES
 
+    @pytest.mark.kline
     def test_kline_periods(self):
         """Test kline periods are defined."""
         with patch(
@@ -351,6 +354,7 @@ class TestCurveStandardInterfaces:
             instance.request = Mock(return_value=Mock(spec=RequestData))
             return instance
 
+    @pytest.mark.ticker
     def test_get_tick_calls_request(self, curve_spot):
         """Test get_tick calls self.request."""
         result = curve_spot.get_tick("0xPool")
@@ -358,12 +362,14 @@ class TestCurveStandardInterfaces:
         extra_data = curve_spot.request.call_args[1].get("extra_data")
         assert extra_data["request_type"] == "get_tick"
 
+    @pytest.mark.orderbook
     def test_get_depth_tuple(self, curve_spot):
         """Test _get_depth returns tuple."""
         path, params, extra_data = curve_spot._get_depth("0xPool")
         assert extra_data["request_type"] == "get_depth"
         assert extra_data["symbol_name"] == "0xPool"
 
+    @pytest.mark.orderbook
     def test_get_depth_calls_request(self, curve_spot):
         """Test get_depth calls self.request."""
         result = curve_spot.get_depth("0xPool")
@@ -371,12 +377,14 @@ class TestCurveStandardInterfaces:
         extra_data = curve_spot.request.call_args[1].get("extra_data")
         assert extra_data["request_type"] == "get_depth"
 
+    @pytest.mark.kline
     def test_get_kline_tuple(self, curve_spot):
         """Test _get_kline returns tuple."""
         path, params, extra_data = curve_spot._get_kline("0xPool", "1h", 100)
         assert extra_data["request_type"] == "get_kline"
         assert extra_data["period"] == "1h"
 
+    @pytest.mark.kline
     def test_get_kline_calls_request(self, curve_spot):
         """Test get_kline calls self.request."""
         result = curve_spot.get_kline("0xPool", "1h")
@@ -460,6 +468,7 @@ class TestCurveBaseCapabilities:
 class TestCurveDataContainers:
     """Test Curve data containers init_data() returns self."""
 
+    @pytest.mark.ticker
     def test_ticker_init_data_returns_self(self):
         """Test CurveRequestTickerData.init_data() returns self."""
         from bt_api_py.containers.tickers.curve_ticker import CurveRequestTickerData
@@ -471,6 +480,7 @@ class TestCurveDataContainers:
         assert ticker.get_symbol_name() == "3pool"
         assert ticker.get_last_price() == 1.01
 
+    @pytest.mark.ticker
     def test_ticker_init_data_idempotent(self):
         """Test that calling init_data() twice returns self both times."""
         from bt_api_py.containers.tickers.curve_ticker import CurveRequestTickerData
@@ -482,6 +492,7 @@ class TestCurveDataContainers:
         assert r1 is ticker
         assert r2 is ticker
 
+    @pytest.mark.ticker
     def test_ticker_symbol_name_preserved(self):
         """Test that symbol_name is preserved after init_data."""
         from bt_api_py.containers.tickers.curve_ticker import CurveRequestTickerData
@@ -494,16 +505,19 @@ class TestCurveDataContainers:
 class TestCurveNormalizeFunctions:
     """Test normalize functions edge cases."""
 
+    @pytest.mark.ticker
     def test_tick_normalize_with_none(self):
         result, status = CurveRequestDataSpot._get_tick_normalize_function(None, None)
         assert result == []
         assert status is False
 
+    @pytest.mark.orderbook
     def test_depth_normalize_with_none(self):
         result, status = CurveRequestDataSpot._get_depth_normalize_function(None, None)
         assert result == []
         assert status is False
 
+    @pytest.mark.kline
     def test_kline_normalize_always_empty(self):
         result, status = CurveRequestDataSpot._get_kline_normalize_function({}, None)
         assert result == []

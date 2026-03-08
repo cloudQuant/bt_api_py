@@ -66,6 +66,7 @@ class TestPancakeSpotRequestData:
 
     # ==================== Ticker Tests ====================
 
+    @pytest.mark.ticker
     def test_get_tick(self, mock_feed):
         """Test get_tick method."""
         # Mock the request method
@@ -74,6 +75,7 @@ class TestPancakeSpotRequestData:
         result = mock_feed.get_tick("BTCB/USDT")
         assert mock_feed.request.called
 
+    @pytest.mark.ticker
     def test_get_tick_normalize_function(self):
         """Test ticker normalize function."""
         input_data = {"price": "50000.0", "symbol": "BTCB/USDT"}
@@ -83,6 +85,7 @@ class TestPancakeSpotRequestData:
 
     # ==================== Depth Tests ====================
 
+    @pytest.mark.orderbook
     def test_get_depth(self, mock_feed):
         """Test get_depth method."""
         # Mock the request method
@@ -91,6 +94,7 @@ class TestPancakeSpotRequestData:
         result = mock_feed.get_depth("BTCB/USDT", 20)
         assert mock_feed.request.called
 
+    @pytest.mark.orderbook
     def test_get_depth_normalize_function(self):
         """Test depth normalize function."""
         input_data = {
@@ -103,6 +107,7 @@ class TestPancakeSpotRequestData:
 
     # ==================== Kline Tests ====================
 
+    @pytest.mark.kline
     def test_get_kline(self, mock_feed):
         """Test get_kline method."""
         # Mock the request method
@@ -111,6 +116,7 @@ class TestPancakeSpotRequestData:
         result = mock_feed.get_kline("BTCB/USDT", "1h", 100)
         assert mock_feed.request.called
 
+    @pytest.mark.kline
     def test_get_kline_normalize_function(self):
         """Test kline normalize function."""
         input_data = [
@@ -223,6 +229,7 @@ class TestPancakeSwapExchangeData:
         capabilities = exchange_data.get_capabilities("spot")
         assert isinstance(capabilities, list)
 
+    @pytest.mark.kline
     def test_kline_periods(self, exchange_data):
         """Test kline periods are defined."""
         assert "1m" in exchange_data.kline_periods
@@ -239,6 +246,7 @@ class TestPancakeSwapExchangeData:
 class TestPancakeSwapTickerData:
     """Test PancakeSwap ticker data container."""
 
+    @pytest.mark.ticker
     def test_ticker_creation(self):
         """Test creating ticker data."""
         ticker = PancakeSwapRequestTickerData(
@@ -256,6 +264,7 @@ class TestPancakeSwapTickerData:
         assert ticker.volume == 1.5
         assert ticker.quote_volume == 75000.0
 
+    @pytest.mark.ticker
     def test_ticker_calculations(self):
         """Test ticker calculation properties."""
         ticker = PancakeSwapRequestTickerData(
@@ -276,6 +285,7 @@ class TestPancakeSwapTickerData:
         assert "symbol" in ticker_dict
         assert "price" in ticker_dict
 
+    @pytest.mark.ticker
     def test_ticker_from_dict(self):
         """Test creating ticker from dictionary."""
         data = {
@@ -418,16 +428,19 @@ class TestPancakeStandardInterfaces:
             feed.request = Mock(return_value=Mock(spec=RequestData))
             return feed
 
+    @pytest.mark.ticker
     def test_get_tick_tuple(self, mock_feed):
         path, params, extra_data = mock_feed._get_tick("BTCB/USDT")
         assert extra_data["request_type"] == "get_tick"
         assert extra_data["symbol_name"] == "BTCB/USDT"
 
+    @pytest.mark.orderbook
     def test_get_depth_tuple(self, mock_feed):
         path, params, extra_data = mock_feed._get_depth("BTCB/USDT")
         assert extra_data["request_type"] == "get_depth"
         assert extra_data["symbol_name"] == "BTCB/USDT"
 
+    @pytest.mark.kline
     def test_get_kline_tuple(self, mock_feed):
         path, params, extra_data = mock_feed._get_kline("BTCB/USDT", "1h", 100)
         assert extra_data["request_type"] == "get_kline"
@@ -493,16 +506,19 @@ class TestPancakeBaseCapabilities:
 class TestPancakeNormalizeFunctions:
     """Test normalize functions edge cases."""
 
+    @pytest.mark.ticker
     def test_tick_normalize_with_none(self):
         result, status = PancakeSpotRequestData._get_tick_normalize_function(None, None)
         assert result == []
         assert status is False
 
+    @pytest.mark.orderbook
     def test_depth_normalize_with_none(self):
         result, status = PancakeSpotRequestData._get_depth_normalize_function(None, None)
         assert result == []
         assert status is False
 
+    @pytest.mark.kline
     def test_kline_normalize_with_none(self):
         result, status = PancakeSpotRequestData._get_kline_normalize_function(None, None)
         assert result == []

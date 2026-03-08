@@ -1,6 +1,9 @@
+import pytest
 import queue
 import random
 import time
+
+pytestmark = [pytest.mark.integration, pytest.mark.network]
 
 from bt_api_py.containers.accounts.okx_account import OkxAccountData
 from bt_api_py.containers.bars.okx_bar import OkxBarData
@@ -49,6 +52,7 @@ def test_okx_req_get_index_price():
     print("index_price_data", data.get_data())
 
 
+@pytest.mark.ticker
 def test_okx_req_spot_tick_data():
     live_okx_spot_feed = init_req_feed()
     data_list = live_okx_spot_feed.get_tick("BTC-USDT").get_data()
@@ -65,6 +69,7 @@ def test_okx_req_spot_tick_data():
     assert tick_data.get_last_volume() >= 0
 
 
+@pytest.mark.ticker
 def test_okx_async_spot_tick_data():
     data_queue = queue.Queue()
     live_okx_spot_feed = init_async_feed(data_queue)
@@ -87,6 +92,7 @@ def test_okx_async_spot_tick_data():
     assert async_tick_data.get_last_price() > 0
 
 
+@pytest.mark.kline
 def test_okx_req_spot_kline_data():
     live_okx_spot_feed = init_req_feed()
     data_list = live_okx_spot_feed.get_kline("BTC-USDT", "1m", count=2).get_data()
@@ -106,6 +112,7 @@ def test_okx_req_spot_kline_data():
     assert kline_data.get_bar_status() in [0.0, 1.0]
 
 
+@pytest.mark.kline
 def test_okx_async_spot_kline_data():
     data_queue = queue.Queue()
     live_okx_spot_feed = init_async_feed(data_queue)
@@ -150,6 +157,7 @@ def order_book_value_equals(order_book):
     assert len(order_book.get_bid_price_list()) == 20
 
 
+@pytest.mark.orderbook
 def test_okx_req_spot_depth_data():
     live_okx_spot_feed = init_req_feed()
     data = live_okx_spot_feed.get_depth("BTC-USDT", 20).get_data()
@@ -158,6 +166,7 @@ def test_okx_req_spot_depth_data():
     order_book_value_equals(data[0].init_data())
 
 
+@pytest.mark.orderbook
 def test_okx_async_spot_depth_data():
     data_queue = queue.Queue()
     live_okx_spot_feed = init_async_feed(data_queue)
@@ -214,6 +223,7 @@ def assert_account_data_value(bp):
     assert bp.get_event() == "AccountEvent"
 
 
+@pytest.mark.auth_account
 def test_okx_req_spot_account_data():
     live_okx_spot_feed = init_req_feed()
     data = live_okx_spot_feed.get_account().get_data()
@@ -222,6 +232,7 @@ def test_okx_req_spot_account_data():
     assert_account_data_value(data[0].init_data())
 
 
+@pytest.mark.auth_account
 def test_okx_async_spot_account_data():
     data_queue = queue.Queue()
     live_okx_spot_feed = init_async_feed(data_queue)
@@ -294,6 +305,7 @@ def cleanup_open_orders(feed):
         pass
 
 
+@pytest.mark.auth_order
 def test_okx_req_spot_order_functions():
     live_okx_spot_feed = init_req_feed()
     cleanup_open_orders(live_okx_spot_feed)
@@ -371,6 +383,7 @@ def test_okx_req_spot_order_functions():
     # assert orders.get_data() is None
 
 
+@pytest.mark.auth_order
 def test_okx_async_spot_order_functions():
     data_queue = queue.Queue()
     live_okx_spot_feed = init_async_feed(data_queue)
@@ -441,6 +454,7 @@ def test_okx_async_spot_order_functions():
 # #     print(sell_data.get_data())
 #
 #
+@pytest.mark.auth_private_trade
 def test_okx_req_spot_get_deals():
     live_okx_spot_feed = init_req_feed()
     price_data = live_okx_spot_feed.get_deals()
@@ -454,6 +468,7 @@ def test_okx_req_spot_get_deals():
         assert first_trade.get_trade_volume() > 0, "如果账户没有交易过，忽略此报错"
 
 
+@pytest.mark.auth_private_trade
 def test_okx_async_spot_get_deals():
     data_queue = queue.Queue()
     live_okx_spot_feed = init_async_feed(data_queue)
@@ -487,6 +502,7 @@ def test_okx_req_spot_get_config():
     assert public_ip in api_ip, "需要绑定当前ip地址到okx的API当中"
 
 
+@pytest.mark.auth_position
 def test_okx_req_spot_get_position():
     live_okx_spot_feed = init_req_feed()
     data = live_okx_spot_feed.get_position(symbol="OP-USDT")
@@ -494,6 +510,7 @@ def test_okx_req_spot_get_position():
     print("position_data", data.get_data())
 
 
+@pytest.mark.auth_position
 def test_okx_async_spot_get_position():
     data_queue = queue.Queue()
     live_okx_spot_feed = init_async_feed(data_queue)
@@ -510,6 +527,7 @@ def test_okx_async_spot_get_position():
         assert isinstance(target_data, OkxPositionData)
 
 
+@pytest.mark.auth_order
 def test_cancel_all_orders():
     live_feed = init_req_feed()
     data = live_feed.get_open_orders("OP-USDT")

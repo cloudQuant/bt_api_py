@@ -39,6 +39,7 @@ class TestBithumbExchangeData:
         assert exchange_data.rest_url != ""
         assert "bithumb" in exchange_data.rest_url.lower()
 
+    @pytest.mark.kline
     def test_kline_periods(self):
         exchange_data = BithumbExchangeDataSpot()
         assert "1m" in exchange_data.kline_periods
@@ -87,6 +88,7 @@ class TestBithumbRequestDataSpot:
         assert feed._convert_symbol("BTC_USDT") == "BTC-USDT"
         assert feed._convert_symbol("BTC-USDT") == "BTC-USDT"
 
+    @pytest.mark.ticker
     def test_get_tick_returns_tuple(self, mock_feed):
         path, params, extra_data = mock_feed._get_tick("BTC/USDT")
         assert "GET" in path
@@ -94,24 +96,29 @@ class TestBithumbRequestDataSpot:
         assert params["symbol"] == "BTC-USDT"
         assert extra_data["request_type"] == "get_tick"
 
+    @pytest.mark.ticker
     def test_get_tick_calls_request(self, mock_feed):
         mock_feed.get_tick("BTC/USDT")
         assert mock_feed.request.called
 
+    @pytest.mark.orderbook
     def test_get_depth_returns_tuple(self, mock_feed):
         path, params, extra_data = mock_feed._get_depth("BTC/USDT")
         assert "orderBook" in path
         assert extra_data["request_type"] == "get_depth"
 
+    @pytest.mark.orderbook
     def test_get_depth_calls_request(self, mock_feed):
         mock_feed.get_depth("BTC/USDT")
         assert mock_feed.request.called
 
+    @pytest.mark.kline
     def test_get_kline_returns_tuple(self, mock_feed):
         path, params, extra_data = mock_feed._get_kline("BTC/USDT", "1h")
         assert "kline" in path
         assert extra_data["request_type"] == "get_kline"
 
+    @pytest.mark.kline
     def test_get_kline_calls_request(self, mock_feed):
         mock_feed.get_kline("BTC/USDT", "1h")
         assert mock_feed.request.called
@@ -130,6 +137,7 @@ class TestBithumbRequestDataSpot:
 class TestBithumbDataContainers:
     """Test Bithumb data containers."""
 
+    @pytest.mark.ticker
     def test_ticker_container(self):
         ticker_data = {
             "s": "BTC-USDT",
@@ -218,27 +226,32 @@ class TestBithumbBaseCapabilities:
 class TestBithumbNormalizeFunctions:
     """Test normalize functions edge cases."""
 
+    @pytest.mark.ticker
     def test_tick_normalize_with_none(self):
         result, status = BithumbRequestDataSpot._get_tick_normalize_function(None, None)
         assert result == []
         assert status is False
 
+    @pytest.mark.ticker
     def test_tick_normalize_success(self):
         data = {"data": [{"s": "BTC-USDT", "c": "50000"}]}
         result, status = BithumbRequestDataSpot._get_tick_normalize_function(data, None)
         assert status is True
         assert len(result) == 1
 
+    @pytest.mark.orderbook
     def test_depth_normalize_with_none(self):
         result, status = BithumbRequestDataSpot._get_depth_normalize_function(None, None)
         assert result == []
         assert status is False
 
+    @pytest.mark.orderbook
     def test_depth_normalize_success(self):
         data = {"data": {"b": [], "s": []}}
         result, status = BithumbRequestDataSpot._get_depth_normalize_function(data, None)
         assert status is True
 
+    @pytest.mark.kline
     def test_kline_normalize_with_none(self):
         result, status = BithumbRequestDataSpot._get_kline_normalize_function(None, None)
         assert result == []
@@ -283,6 +296,7 @@ class TestBithumbLiveAPI:
     """Live API tests - require network, marked as integration."""
 
     @pytest.mark.integration
+    @pytest.mark.ticker
     def test_bithumb_req_tick_data(self):
         data_queue = queue.Queue()
         feed = BithumbRequestDataSpot(data_queue, exchange_name="BITHUMB___SPOT")
@@ -296,6 +310,7 @@ class TestBithumbLiveAPI:
                 assert isinstance(ticker, dict)
 
     @pytest.mark.integration
+    @pytest.mark.kline
     def test_bithumb_req_kline_data(self):
         data_queue = queue.Queue()
         feed = BithumbRequestDataSpot(data_queue, exchange_name="BITHUMB___SPOT")
@@ -308,6 +323,7 @@ class TestBithumbLiveAPI:
             assert isinstance(kline, (list, dict))
 
     @pytest.mark.integration
+    @pytest.mark.orderbook
     def test_bithumb_req_orderbook_data(self):
         data_queue = queue.Queue()
         feed = BithumbRequestDataSpot(data_queue, exchange_name="BITHUMB___SPOT")
@@ -321,6 +337,7 @@ class TestBithumbLiveAPI:
                 assert isinstance(orderbook, dict)
 
     @pytest.mark.integration
+    @pytest.mark.ticker
     def test_bithumb_async_tick_data(self):
         data_queue = queue.Queue()
         feed = BithumbRequestDataSpot(data_queue, exchange_name="BITHUMB___SPOT")
@@ -333,6 +350,7 @@ class TestBithumbLiveAPI:
             pass
 
     @pytest.mark.integration
+    @pytest.mark.kline
     def test_bithumb_async_kline_data(self):
         data_queue = queue.Queue()
         feed = BithumbRequestDataSpot(data_queue, exchange_name="BITHUMB___SPOT")
@@ -345,6 +363,7 @@ class TestBithumbLiveAPI:
             pass
 
     @pytest.mark.integration
+    @pytest.mark.orderbook
     def test_bithumb_async_orderbook_data(self):
         data_queue = queue.Queue()
         feed = BithumbRequestDataSpot(data_queue, exchange_name="BITHUMB___SPOT")

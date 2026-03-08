@@ -1,9 +1,12 @@
+import pytest
+
 from bt_api_py.containers.tickers.binance_ticker import (
     BinanceRequestTickerData,
     BinanceWssTickerData,
 )
 
 
+@pytest.mark.ticker
 def test_binance_request_ticker():
     data = {
         "lastUpdateId": 1027024,
@@ -28,6 +31,7 @@ def test_binance_request_ticker():
     assert bt.get_last_volume() is None
 
 
+@pytest.mark.ticker
 def test_binance_ticker():
     data = {
         "e": "bookTicker",  # 事件类型

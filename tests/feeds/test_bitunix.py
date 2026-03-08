@@ -48,6 +48,7 @@ class TestBitunixExchangeData:
         assert exchange_data.asset_type == "spot"
         assert hasattr(exchange_data, "rest_url")
 
+    @pytest.mark.kline
     def test_kline_periods(self, mock_logger):
         exchange_data = BitunixExchangeDataSpot()
         assert "1m" in exchange_data.kline_periods
@@ -85,6 +86,7 @@ class TestBitunixRequestDataSpot:
         assert Capability.MAKE_ORDER in caps
         assert Capability.CANCEL_ORDER in caps
 
+    @pytest.mark.ticker
     def test_get_tick_returns_tuple(self, mock_feed):
         path, params, extra_data = mock_feed._get_tick("BTCUSDT")
         assert "GET" in path
@@ -92,24 +94,29 @@ class TestBitunixRequestDataSpot:
         assert params["symbol"] == "BTCUSDT"
         assert extra_data["request_type"] == "get_tick"
 
+    @pytest.mark.ticker
     def test_get_tick_calls_request(self, mock_feed):
         mock_feed.get_tick("BTCUSDT")
         assert mock_feed.request.called
 
+    @pytest.mark.orderbook
     def test_get_depth_returns_tuple(self, mock_feed):
         path, params, extra_data = mock_feed._get_depth("BTCUSDT")
         assert "depth" in path
         assert extra_data["request_type"] == "get_depth"
 
+    @pytest.mark.orderbook
     def test_get_depth_calls_request(self, mock_feed):
         mock_feed.get_depth("BTCUSDT")
         assert mock_feed.request.called
 
+    @pytest.mark.kline
     def test_get_kline_returns_tuple(self, mock_feed):
         path, params, extra_data = mock_feed._get_kline("BTCUSDT", "1h")
         assert "klines" in path
         assert extra_data["request_type"] == "get_kline"
 
+    @pytest.mark.kline
     def test_get_kline_calls_request(self, mock_feed):
         mock_feed.get_kline("BTCUSDT", "1h")
         assert mock_feed.request.called
@@ -193,33 +200,39 @@ class TestBitunixBaseCapabilities:
 class TestBitunixNormalizeFunctions:
     """Test normalize functions edge cases."""
 
+    @pytest.mark.ticker
     def test_tick_normalize_with_none(self):
         result, status = BitunixRequestDataSpot._get_tick_normalize_function(None, None)
         assert result == []
         assert status is False
 
+    @pytest.mark.ticker
     def test_tick_normalize_success(self):
         data = {"code": 0, "data": [{"symbol": "BTCUSDT", "lastPrice": "50000"}]}
         result, status = BitunixRequestDataSpot._get_tick_normalize_function(data, None)
         assert status is True
         assert len(result) == 1
 
+    @pytest.mark.orderbook
     def test_depth_normalize_with_none(self):
         result, status = BitunixRequestDataSpot._get_depth_normalize_function(None, None)
         assert result == []
         assert status is False
 
+    @pytest.mark.orderbook
     def test_depth_normalize_success(self):
         data = {"code": 0, "data": {"bids": [["49990", "1.0"]], "asks": [["50010", "1.0"]]}}
         result, status = BitunixRequestDataSpot._get_depth_normalize_function(data, None)
         assert status is True
         assert "bids" in result[0]
 
+    @pytest.mark.kline
     def test_kline_normalize_with_none(self):
         result, status = BitunixRequestDataSpot._get_kline_normalize_function(None, None)
         assert result == []
         assert status is False
 
+    @pytest.mark.kline
     def test_kline_normalize_success(self):
         data = {"code": 0, "data": [[1640995200, "49500", "51000", "49000", "50000", "1234.56"]]}
         result, status = BitunixRequestDataSpot._get_kline_normalize_function(data, None)
@@ -262,6 +275,7 @@ class TestBitunixLiveAPI:
     """Live API tests - require network, marked as integration."""
 
     @pytest.mark.integration
+    @pytest.mark.ticker
     def test_bitunix_req_tick_data(self):
         data_queue = queue.Queue()
         feed = BitunixRequestDataSpot(data_queue, exchange_name="BITUNIX___SPOT")
@@ -269,6 +283,7 @@ class TestBitunixLiveAPI:
         assert isinstance(data, RequestData)
 
     @pytest.mark.integration
+    @pytest.mark.orderbook
     def test_bitunix_req_depth_data(self):
         data_queue = queue.Queue()
         feed = BitunixRequestDataSpot(data_queue, exchange_name="BITUNIX___SPOT")
@@ -276,6 +291,7 @@ class TestBitunixLiveAPI:
         assert isinstance(data, RequestData)
 
     @pytest.mark.integration
+    @pytest.mark.kline
     def test_bitunix_req_kline_data(self):
         data_queue = queue.Queue()
         feed = BitunixRequestDataSpot(data_queue, exchange_name="BITUNIX___SPOT")
@@ -283,6 +299,7 @@ class TestBitunixLiveAPI:
         assert isinstance(data, RequestData)
 
     @pytest.mark.integration
+    @pytest.mark.ticker
     def test_bitunix_async_tick_data(self):
         data_queue = queue.Queue()
         feed = BitunixRequestDataSpot(data_queue, exchange_name="BITUNIX___SPOT")

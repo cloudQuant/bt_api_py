@@ -56,12 +56,14 @@ class TestZaifServerTime:
 class TestZaifTickerData:
     """Test ticker data functionality."""
 
+    @pytest.mark.ticker
     def test_zaif_req_tick_data(self, zaif_feed):
         """Test getting ticker data from Zaif API."""
         # Zaif uses format like "btc_jpy"
         data = zaif_feed.get_tick("BTC/JPY")
         assert data is not None
 
+    @pytest.mark.ticker
     def test_zaif_tick_data_validation(self, zaif_feed):
         """Test ticker data structure and values."""
         data = zaif_feed.get_tick("BTC/JPY")
@@ -74,6 +76,7 @@ class TestZaifTickerData:
 
         assert isinstance(data, (dict, list, RequestData))
 
+    @pytest.mark.ticker
     def test_zaif_multiple_tickers(self, zaif_feed):
         """Test getting multiple tickers."""
         # Test with different pairs
@@ -90,6 +93,7 @@ class TestZaifTickerData:
 class TestZaifKlineData:
     """Test kline/candlestick data functionality."""
 
+    @pytest.mark.kline
     def test_zaif_req_kline_data(self, zaif_feed):
         """Test getting kline/trades data from Zaif API."""
         # Zaif doesn't have a dedicated kline endpoint
@@ -116,6 +120,7 @@ class TestZaifKlineData:
 class TestZaifOrderBook:
     """Test order book depth functionality."""
 
+    @pytest.mark.orderbook
     def test_zaif_req_depth_data(self, zaif_feed):
         """Test getting order book data."""
         data = zaif_feed.get_depth("BTC/JPY", count=20)
@@ -126,6 +131,7 @@ class TestZaifOrderBook:
 
         assert isinstance(data, (dict, list, RequestData))
 
+    @pytest.mark.orderbook
     def test_zaif_orderbook_bids_asks(self, zaif_feed):
         """Test orderbook has bids and asks."""
         data = zaif_feed.get_depth("BTC/JPY", count=20)
@@ -139,6 +145,7 @@ class TestZaifOrderBook:
                 pass
             assert isinstance(data["asks"], list)
 
+    @pytest.mark.orderbook
     def test_zaif_depth_multiple_pairs(self, zaif_feed):
         """Test depth for multiple pairs."""
         pairs = ["BTC/JPY", "ETH/BTC", "MONA/JPY"]
@@ -176,6 +183,7 @@ class TestZaifExchangeData:
         assert exchange_data.rest_url == "https://api.zaif.jp"
         assert exchange_data.wss_url == "wss://ws.zaif.jp:8888"
 
+    @pytest.mark.kline
     def test_kline_periods(self):
         """Test kline period configuration."""
         exchange_data = ZaifExchangeDataSpot()
@@ -235,6 +243,7 @@ class TestZaifRegistry:
 class TestZaifTickerContainer:
     """Test Zaif ticker data container."""
 
+    @pytest.mark.ticker
     def test_ticker_float_parsing(self):
         """Test ticker float parsing helper method."""
         # Test the _parse_float static method
@@ -251,6 +260,7 @@ class TestZaifIntegration:
     """Integration tests for Zaif."""
 
     @pytest.mark.integration
+    @pytest.mark.ticker
     def test_get_ticker_live(self):
         """Test getting ticker from live API."""
         data_queue = queue.Queue()
@@ -259,6 +269,7 @@ class TestZaifIntegration:
         assert data is not None
 
     @pytest.mark.integration
+    @pytest.mark.orderbook
     def test_get_orderbook_live(self):
         """Test getting orderbook from live API."""
         data_queue = queue.Queue()

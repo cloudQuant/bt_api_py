@@ -45,6 +45,7 @@ class TestDydxRequestDataSpot:
 
     # ==================== Ticker Tests ====================
 
+    @pytest.mark.ticker
     def test_get_ticker_spot(self, dydx_spot):
         """Test get_ticker_spot method."""
         symbol = "BTC-USD"
@@ -54,6 +55,7 @@ class TestDydxRequestDataSpot:
         assert extra_data["symbol_name"] == symbol
         assert extra_data["exchange_name"] == "DYDX___SWAP"
 
+    @pytest.mark.ticker
     def test_get_ticker_normalize_function(self):
         """Test ticker normalize function."""
         input_data = {
@@ -80,6 +82,7 @@ class TestDydxRequestDataSpot:
         assert len(result) == 9
         assert result[1] == 50000.0  # oraclePrice
 
+    @pytest.mark.ticker
     def test_get_ticker_normalize_function_error(self):
         """Test ticker normalize function with error."""
         input_data = {"code": 1, "markets": {}}
@@ -122,6 +125,7 @@ class TestDydxRequestDataSpot:
 
     # ==================== Kline Tests ====================
 
+    @pytest.mark.kline
     def test_get_kline_normalize_function(self):
         """Test kline normalize function."""
         input_data = {
@@ -151,6 +155,7 @@ class TestDydxRequestDataSpot:
 
     # ==================== OrderBook Tests ====================
 
+    @pytest.mark.orderbook
     def test_get_orderbook_normalize_function(self):
         """Test orderbook normalize function."""
         input_data = {
@@ -182,6 +187,7 @@ class TestDydxRequestDataSpot:
 
     # ==================== Method Wrappers ====================
 
+    @pytest.mark.ticker
     def test_get_ticker(self, dydx_spot):
         """Test get_ticker method."""
         # Mock the request method
@@ -200,6 +206,7 @@ class TestDydxRequestDataSpot:
 
     # ==================== Standard Interface Tests ====================
 
+    @pytest.mark.ticker
     def test_get_tick(self, dydx_spot):
         """Test get_tick returns RequestData."""
         dydx_spot.request = Mock(return_value=Mock(spec=RequestData))
@@ -214,6 +221,7 @@ class TestDydxRequestDataSpot:
         assert extra_data["request_type"] == "get_tick"
         assert extra_data["symbol_name"] == "BTC-USD"
 
+    @pytest.mark.orderbook
     def test_get_depth(self, dydx_spot):
         """Test get_depth returns RequestData."""
         dydx_spot.request = Mock(return_value=Mock(spec=RequestData))
@@ -224,6 +232,7 @@ class TestDydxRequestDataSpot:
         assert extra_data["request_type"] == "get_depth"
         assert extra_data["symbol_name"] == "BTC-USD"
 
+    @pytest.mark.kline
     def test_get_kline(self, dydx_spot):
         """Test get_kline returns RequestData."""
         dydx_spot.request = Mock(return_value=Mock(spec=RequestData))
@@ -293,6 +302,7 @@ class TestDydxRequestDataSpot:
         assert extra_data["symbol_name"] == "ALL"
 
     @pytest.mark.skip(reason="Requires actual API call")
+    @pytest.mark.ticker
     def test_integration_get_ticker(self, dydx_spot):
         """Integration test for get_ticker - skipped."""
         pass
@@ -303,6 +313,7 @@ class TestDydxRequestDataSpot:
         pass
 
     @pytest.mark.skip(reason="Requires actual API call")
+    @pytest.mark.orderbook
     def test_integration_get_orderbook(self, dydx_spot):
         """Integration test for get_orderbook - skipped."""
         pass
@@ -375,6 +386,7 @@ class TestDydxDataContainers:
         assert balance.get_equity() == 10000.0
         assert balance.get_symbol_name() == "USD"
 
+    @pytest.mark.ticker
     def test_request_ticker_init_data_returns_self(self):
         """Test DydxRequestTickerData.init_data() returns self."""
         from bt_api_py.containers.tickers.dydx_ticker import DydxRequestTickerData
@@ -397,6 +409,7 @@ class TestDydxDataContainers:
         assert ticker.get_symbol_name() == "BTC-USD"
         assert ticker.get_last_price() == 50000.0
 
+    @pytest.mark.ticker
     def test_wss_ticker_init_data_returns_self(self):
         """Test DydxWssTickerData.init_data() returns self."""
         from bt_api_py.containers.tickers.dydx_ticker import DydxWssTickerData
@@ -474,6 +487,7 @@ class TestDydxExchangeDataSwap:
         exchange_data = DydxExchangeDataSwap()
         assert exchange_data.wss_url == "wss://indexer.dydx.trade/v4/ws"
 
+    @pytest.mark.kline
     def test_kline_periods(self):
         """Test kline periods are defined."""
         exchange_data = DydxExchangeDataSwap()
@@ -504,6 +518,7 @@ class TestDydxRegistration:
 class TestDydxNormalizeFunctions:
     """Test normalize functions produce correct (data, status) tuples."""
 
+    @pytest.mark.ticker
     def test_ticker_normalize_with_missing_symbol(self):
         """Test ticker normalize returns None for missing symbol."""
         input_data = {"code": 0, "markets": {"ETH-USD": {}}}
@@ -514,6 +529,7 @@ class TestDydxNormalizeFunctions:
         assert result is None
         assert status is False
 
+    @pytest.mark.orderbook
     def test_orderbook_normalize(self):
         """Test orderbook normalize includes symbol."""
         input_data = {"bids": [["50000", "1"]], "asks": [["50001", "2"]]}
@@ -531,6 +547,7 @@ class TestDydxNormalizeFunctions:
         assert status is True
         assert result == []
 
+    @pytest.mark.kline
     def test_kline_normalize_empty(self):
         """Test kline normalize with no candles."""
         input_data = {"candles": []}

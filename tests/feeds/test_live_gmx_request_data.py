@@ -47,6 +47,7 @@ class TestGmxBasic:
         """Test get_pools method"""
         assert hasattr(gmx_feed, "get_pools")
 
+    @pytest.mark.ticker
     def test_get_ticker(self, gmx_feed):
         """Test get_ticker method"""
         assert hasattr(gmx_feed, "get_ticker")
@@ -60,6 +61,7 @@ class TestGmxNormalize:
         mock_pool_data = {"pool": "GLP Pool", "aum": "500000000", "glpPrice": "1.5"}
         assert "pool" in mock_pool_data
 
+    @pytest.mark.ticker
     def test_ticker_normalize_function(self):
         """Test ticker data normalization"""
         mock_ticker_data = {"symbol": "BTC", "markPrice": "50000", "indexPrice": "50001"}

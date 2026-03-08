@@ -3,6 +3,8 @@ import time
 
 import pytest
 
+pytestmark = [pytest.mark.integration, pytest.mark.network]
+
 from bt_api_py.containers.exchanges.okx_exchange_data import OkxExchangeDataSwap
 from bt_api_py.containers.requestdatas.request_data import RequestData
 
@@ -37,6 +39,7 @@ def init_async_feed(data_queue):
     return live_okx_swap_feed
 
 
+@pytest.mark.auth_position
 def test_okx_grid_positions():
     """Test grid_positions interface - 获取网格委托持仓"""
     live_okx_swap_feed = init_req_feed()
@@ -45,6 +48,7 @@ def test_okx_grid_positions():
     print("grid_positions status:", data.get_status())
 
 
+@pytest.mark.auth_position
 def test_okx_async_grid_positions():
     """Test async_grid_positions interface"""
     data_queue = queue.Queue()
@@ -194,6 +198,7 @@ def test_okx_async_grid_max_grid_quantity():
         print("async_grid_max_grid_quantity status:", result.get_status())
 
 
+@pytest.mark.auth_account
 def test_okx_grid_compute_margin_balance():
     """Test grid_compute_margin_balance interface - 计算保证金余额"""
     live_okx_swap_feed = init_req_feed()
@@ -211,6 +216,7 @@ def test_okx_grid_compute_margin_balance():
     print("grid_compute_margin_balance status:", data.get_status())
 
 
+@pytest.mark.auth_account
 def test_okx_async_grid_compute_margin_balance():
     """Test async_grid_compute_margin_balance interface"""
     data_queue = queue.Queue()
@@ -266,6 +272,7 @@ def test_okx_async_grid_amend_order_algo_basic_params():
         print("async_grid_amend_order_algo_basic status:", result.get_status())
 
 
+@pytest.mark.auth_position
 def test_okx_grid_close_position_params():
     """Test grid_close_position interface parameter validation - 合约网格平仓"""
     live_okx_swap_feed = init_req_feed()
@@ -274,6 +281,7 @@ def test_okx_grid_close_position_params():
     print("grid_close_position status:", data.get_status())
 
 
+@pytest.mark.auth_position
 def test_okx_async_grid_close_position_params():
     """Test async_grid_close_position interface parameter validation"""
     data_queue = queue.Queue()
@@ -420,6 +428,7 @@ def test_okx_async_grid_withdraw_income_params():
         print("async_grid_withdraw_income status:", result.get_status())
 
 
+@pytest.mark.auth_account
 def test_okx_grid_margin_balance_params():
     """Test grid_margin_balance interface parameter validation - 调整保证金"""
     live_okx_swap_feed = init_req_feed()
@@ -430,6 +439,7 @@ def test_okx_grid_margin_balance_params():
     print("grid_margin_balance status:", data.get_status())
 
 
+@pytest.mark.auth_account
 def test_okx_async_grid_margin_balance_params():
     """Test async_grid_margin_balance interface parameter validation"""
     data_queue = queue.Queue()

@@ -1,3 +1,5 @@
+import pytest
+
 """
 SatoshiTango Exchange Live Request Data Tests
 
@@ -38,6 +40,7 @@ def test_satoshitango_req_server_time():
     pass
 
 
+@pytest.mark.ticker
 def test_satoshitango_req_tick_data():
     """Test SatoshiTango ticker data retrieval (synchronous)."""
     live_satoshitango_spot_feed = init_req_feed()
@@ -50,6 +53,7 @@ def test_satoshitango_req_tick_data():
     assert params["symbol"] == "btcars"
 
 
+@pytest.mark.ticker
 def test_satoshitango_tick_normalize_function():
     """Test SatoshiTango ticker normalize function."""
     # SatoshiTango ticker response format
@@ -79,6 +83,7 @@ def test_satoshitango_tick_normalize_function():
     assert ticker["ask"] == "9600000.00"
 
 
+@pytest.mark.ticker
 def test_satoshitango_async_tick_data():
     """Test SatoshiTango ticker data retrieval (asynchronous)."""
     data_queue = queue.Queue()
@@ -89,6 +94,7 @@ def test_satoshitango_async_tick_data():
     pass
 
 
+@pytest.mark.kline
 def test_satoshitango_req_kline_data():
     """Test SatoshiTango kline/candlestick data retrieval (synchronous)."""
     live_satoshitango_spot_feed = init_req_feed()
@@ -101,6 +107,7 @@ def test_satoshitango_req_kline_data():
     assert params["limit"] == 100
 
 
+@pytest.mark.kline
 def test_satoshitango_kline_normalize_function():
     """Test SatoshiTango kline normalize function."""
     # SatoshiTango kline response format
@@ -136,6 +143,7 @@ def test_satoshitango_kline_normalize_function():
         assert volume >= 0
 
 
+@pytest.mark.kline
 def test_satoshitango_async_kline_data():
     """Test SatoshiTango kline data retrieval (asynchronous)."""
     data_queue = queue.Queue()
@@ -173,6 +181,7 @@ def order_book_value_equals(order_book):
         assert ask_volume >= 0, "Ask volume should be non-negative"
 
 
+@pytest.mark.orderbook
 def test_satoshitango_req_orderbook_data():
     """Test SatoshiTango orderbook data retrieval."""
     live_satoshitango_spot_feed = init_req_feed()
@@ -185,6 +194,7 @@ def test_satoshitango_req_orderbook_data():
     assert params["depth"] == 20
 
 
+@pytest.mark.orderbook
 def test_satoshitango_depth_normalize_function():
     """Test SatoshiTango depth normalize function."""
     # SatoshiTango orderbook response format

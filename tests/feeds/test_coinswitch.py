@@ -89,6 +89,7 @@ class TestExchangeData:
         assert exdata.get_period("1h") == "60"
         assert exdata.get_period("1d") == "D"
 
+    @pytest.mark.kline
     def test_kline_periods(self, exdata):
         for k in ("1m", "5m", "15m", "30m", "1h", "4h", "1d"):
             assert k in exdata.kline_periods
@@ -125,6 +126,7 @@ class TestExchangeData:
 
 
 class TestParamGeneration:
+    @pytest.mark.ticker
     def test_get_tick_params(self, feed):
         path, params, extra = feed._get_tick("BTCINR")
         assert "GET" in path
@@ -132,6 +134,7 @@ class TestParamGeneration:
         assert extra["request_type"] == "get_tick"
         assert extra["symbol_name"] == "BTCINR"
 
+    @pytest.mark.ticker
     def test_get_all_tickers_params(self, feed):
         path, params, extra = feed._get_all_tickers()
         assert "/v2/tickers" in path
@@ -189,15 +192,18 @@ class TestParamGeneration:
 
 
 class TestNormalization:
+    @pytest.mark.ticker
     def test_tick_ok(self):
         result, ok = CoinSwitchRequestData._get_tick_normalize_function(SAMPLE_TICK, {})
         assert ok is True
         assert result[0]["symbol"] == "BTCINR"
 
+    @pytest.mark.ticker
     def test_tick_error(self):
         result, ok = CoinSwitchRequestData._get_tick_normalize_function(SAMPLE_ERROR, {})
         assert ok is False
 
+    @pytest.mark.ticker
     def test_all_tickers_ok(self):
         result, ok = CoinSwitchRequestData._get_all_tickers_normalize_function(
             SAMPLE_ALL_TICKERS, {}
@@ -266,12 +272,14 @@ class TestNormalization:
 
 class TestSyncCalls:
     @patch.object(CoinSwitchRequestData, "http_request", return_value=SAMPLE_TICK)
+    @pytest.mark.ticker
     def test_get_tick(self, mock_http, feed):
         rd = feed.get_tick("BTCINR")
         assert isinstance(rd, RequestData)
         mock_http.assert_called_once()
 
     @patch.object(CoinSwitchRequestData, "http_request", return_value=SAMPLE_ALL_TICKERS)
+    @pytest.mark.ticker
     def test_get_all_tickers(self, mock_http, feed):
         rd = feed.get_all_tickers()
         assert isinstance(rd, RequestData)
@@ -421,6 +429,7 @@ class TestFeedInit:
 
 class TestIntegration:
     @pytest.mark.skip(reason="Requires network access and API key")
+    @pytest.mark.ticker
     def test_live_get_tick(self):
         f = CoinSwitchRequestDataSpot(queue.Queue(), api_key="test")
         rd = f.get_tick("BTCINR")

@@ -345,6 +345,7 @@ class TestMexcParamGeneration:
 
 
 class TestMexcNormalize:
+    @pytest.mark.ticker
     def test_ticker_normalize(self):
         extra = {"symbol_name": "BTCUSDT", "asset_type": "SPOT"}
         tickers, ok = MexcRequestDataSpot._get_ticker_normalize_function(SAMPLE_TICKER_RESP, extra)
@@ -352,12 +353,14 @@ class TestMexcNormalize:
         assert len(tickers) == 1
         assert isinstance(tickers[0], MexcRequestTickerData)
 
+    @pytest.mark.ticker
     def test_ticker_normalize_none(self):
         extra = {"symbol_name": "BTCUSDT", "asset_type": "SPOT"}
         tickers, ok = MexcRequestDataSpot._get_ticker_normalize_function(None, extra)
         assert ok is False
         assert tickers == []
 
+    @pytest.mark.orderbook
     def test_depth_normalize(self):
         extra = {"symbol_name": "BTCUSDT", "asset_type": "SPOT"}
         books, ok = MexcRequestDataSpot._get_order_book_normalize_function(SAMPLE_DEPTH_RESP, extra)
@@ -369,12 +372,14 @@ class TestMexcNormalize:
         assert b.get_bids()[0][0] == 49999.0
         assert b.get_asks()[0][0] == 50001.0
 
+    @pytest.mark.orderbook
     def test_depth_normalize_none(self):
         extra = {"symbol_name": "BTCUSDT", "asset_type": "SPOT"}
         books, ok = MexcRequestDataSpot._get_order_book_normalize_function(None, extra)
         assert ok is False
         assert books == []
 
+    @pytest.mark.kline
     def test_kline_normalize(self):
         extra = {"symbol_name": "BTCUSDT", "asset_type": "SPOT", "interval": "1h"}
         bars, ok = MexcRequestDataSpot._get_klines_normalize_function(SAMPLE_KLINE_RESP, extra)
@@ -386,6 +391,7 @@ class TestMexcNormalize:
         assert klines[0]["open"] == 50000.0
         assert klines[0]["close"] == 50500.0
 
+    @pytest.mark.kline
     def test_kline_normalize_none(self):
         extra = {"symbol_name": "BTCUSDT", "asset_type": "SPOT", "interval": "1h"}
         bars, ok = MexcRequestDataSpot._get_klines_normalize_function(None, extra)
@@ -546,6 +552,7 @@ class TestMexcSyncCalls:
 
 
 class TestMexcContainers:
+    @pytest.mark.ticker
     def test_ticker_container(self):
         t = MexcRequestTickerData(SAMPLE_TICKER_RESP, "BTCUSDT", "SPOT")
         t.init_data()
@@ -555,11 +562,13 @@ class TestMexcContainers:
         assert t.get_bid_price() == 49999.0
         assert t.get_ask_price() == 50001.0
 
+    @pytest.mark.ticker
     def test_ticker_init_returns_self(self):
         t = MexcRequestTickerData(SAMPLE_TICKER_RESP, "BTCUSDT", "SPOT")
         result = t.init_data()
         assert result is t
 
+    @pytest.mark.orderbook
     def test_orderbook_container(self):
         ob = MexcRequestOrderBookData(SAMPLE_DEPTH_RESP, "BTCUSDT", "SPOT")
         ob.init_data()
@@ -570,6 +579,7 @@ class TestMexcContainers:
         assert ob.get_best_bid() == 49999.0
         assert ob.get_best_ask() == 50001.0
 
+    @pytest.mark.orderbook
     def test_orderbook_init_returns_self(self):
         ob = MexcRequestOrderBookData(SAMPLE_DEPTH_RESP, "BTCUSDT", "SPOT")
         result = ob.init_data()

@@ -346,6 +346,7 @@ class TestParameterGeneration:
 
 
 class TestNormalization:
+    @pytest.mark.ticker
     def test_tick_normalize_success(self):
         result, ok = PhemexRequestData._get_tick_normalize_function(
             SAMPLE_TICKER_RESP, {"symbol_name": "BTC/USDT", "asset_type": "SPOT"}
@@ -355,15 +356,18 @@ class TestNormalization:
         assert isinstance(result[0], PhemexRequestTickerData)
         assert result[0].last_price == 50000.0
 
+    @pytest.mark.ticker
     def test_tick_normalize_error(self):
         result, ok = PhemexRequestData._get_tick_normalize_function(SAMPLE_ERROR_RESP, {})
         assert ok is False
         assert result == []
 
+    @pytest.mark.ticker
     def test_tick_normalize_empty(self):
         result, ok = PhemexRequestData._get_tick_normalize_function(None, {})
         assert ok is False
 
+    @pytest.mark.orderbook
     def test_depth_normalize_success(self):
         result, ok = PhemexRequestData._get_depth_normalize_function(SAMPLE_DEPTH_RESP, {})
         assert ok is True
@@ -371,15 +375,18 @@ class TestNormalization:
         assert "bids" in result[0]
         assert "asks" in result[0]
 
+    @pytest.mark.orderbook
     def test_depth_normalize_error(self):
         result, ok = PhemexRequestData._get_depth_normalize_function(SAMPLE_ERROR_RESP, {})
         assert ok is False
 
+    @pytest.mark.kline
     def test_kline_normalize_success(self):
         result, ok = PhemexRequestData._get_kline_normalize_function(SAMPLE_KLINE_RESP, {})
         assert ok is True
         assert len(result) == 2
 
+    @pytest.mark.kline
     def test_kline_normalize_error(self):
         result, ok = PhemexRequestData._get_kline_normalize_function(SAMPLE_ERROR_RESP, {})
         assert ok is False
@@ -557,6 +564,7 @@ class TestMockedSyncCalls:
 
 
 class TestContainers:
+    @pytest.mark.ticker
     def test_ticker_container_parse(self):
         ticker = PhemexRequestTickerData(SAMPLE_TICKER_RESP, "BTC/USDT", "SPOT")
         assert ticker.symbol == "sBTCUSDT"
@@ -566,10 +574,12 @@ class TestContainers:
         assert ticker.bid_price == 49999.0
         assert ticker.ask_price == 50001.0
 
+    @pytest.mark.ticker
     def test_ticker_validate(self):
         ticker = PhemexRequestTickerData(SAMPLE_TICKER_RESP, "BTC/USDT", "SPOT")
         assert ticker.validate() is True
 
+    @pytest.mark.ticker
     def test_ticker_to_dict(self):
         ticker = PhemexRequestTickerData(SAMPLE_TICKER_RESP, "BTC/USDT", "SPOT")
         d = ticker.to_dict()

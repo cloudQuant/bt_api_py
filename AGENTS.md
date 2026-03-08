@@ -53,7 +53,62 @@ make test-integration   # Integration tests only
 # or: make test-html
 ```
 
-### Linting and Formatting
+#### 细粒度测试标记
+
+bt_api_py 支持细粒度的测试标记，方便运行特定类型的测试：
+
+**公开行情数据测试（不需要鉴权）：**
+```bash
+# Ticker/Tick 行情数据
+pytest tests -m ticker -v
+
+# K线/Bar 数据
+pytest tests -m kline -v
+
+# 订单簿/深度数据
+pytest tests -m orderbook -v
+
+# 公开成交记录
+pytest tests -m public_trade -v
+
+# 所有公开行情数据
+pytest tests -m "ticker or kline or orderbook or public_trade" -v
+```
+
+**需要鉴权的测试：**
+```bash
+# 账户和余额测试
+pytest tests -m auth_account -v
+
+# 订单管理测试
+pytest tests -m auth_order -v
+
+# 持仓管理测试
+pytest tests -m auth_position -v
+
+# 私有成交记录测试
+pytest tests -m auth_private_trade -v
+
+# 所有鉴权测试
+pytest tests -m "auth_account or auth_order or auth_position or auth_private_trade" -v
+```
+
+**便捷脚本：**
+```bash
+# 使用行情测试脚本
+./scripts/run_market_tests.sh ticker      # 只测ticker
+./scripts/run_market_tests.sh kline       # 只测kline
+./scripts/run_market_tests.sh all         # 测所有行情数据
+
+# 使用鉴权测试脚本
+./scripts/run_auth_tests.sh account       # 只测账户
+./scripts/run_auth_tests.sh order         # 只测订单
+./scripts/run_auth_tests.sh all           # 测所有鉴权功能
+```
+
+详见 [docs/test-markers-guide.md](docs/test-markers-guide.md)
+
+### Linting and Formatting### Linting and Formatting
 
 ```bash
 # Format code (auto-fix)

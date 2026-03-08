@@ -4,6 +4,8 @@ import time
 
 import pytest
 
+pytestmark = [pytest.mark.integration, pytest.mark.network]
+
 from bt_api_py.containers.accounts.binance_account import BinanceSpotWssAccountData
 from bt_api_py.containers.bars.binance_bar import BinanceWssBarData
 from bt_api_py.containers.exchanges.binance_exchange_data import BinanceExchangeDataSpot
@@ -41,6 +43,7 @@ def init_req_feed():
 
 
 @pytest.mark.timeout(60)
+@pytest.mark.auth_account
 def test_binance_wss_data_feed():
     data_queue = queue.Queue()
     data = read_account_config()
@@ -85,6 +88,7 @@ def test_binance_wss_data_feed():
     assert receive_binance_order_book_data is True
 
 
+@pytest.mark.auth_order
 def test_get_binance_account_data_feed():
     data_queue = queue.Queue()
     data = read_account_config()

@@ -43,6 +43,7 @@ class TestBybitServerTime:
 class TestBybitTickData:
     """Test Bybit ticker data."""
 
+    @pytest.mark.ticker
     def test_bybit_req_tick_data(self):
         """Test getting ticker data (synchronous)."""
         live_bybit_spot_feed = init_req_feed()
@@ -52,6 +53,7 @@ class TestBybitTickData:
 
         assert isinstance(data, (dict, RequestData))
 
+    @pytest.mark.ticker
     def test_bybit_async_tick_data(self):
         """Test getting ticker data (asynchronous)."""
         data_queue = queue.Queue()
@@ -70,6 +72,7 @@ class TestBybitTickData:
 class TestBybitKlineData:
     """Test Bybit kline/candlestick data."""
 
+    @pytest.mark.kline
     def test_bybit_req_kline_data(self):
         """Test getting kline data (synchronous)."""
         live_bybit_spot_feed = init_req_feed()
@@ -79,6 +82,7 @@ class TestBybitKlineData:
 
         assert isinstance(data, (dict, list, RequestData))
 
+    @pytest.mark.kline
     def test_bybit_async_kline_data(self):
         """Test getting kline data (asynchronous)."""
         data_queue = queue.Queue()
@@ -99,6 +103,7 @@ class TestBybitKlineData:
 class TestBybitOrderBook:
     """Test Bybit order book data."""
 
+    @pytest.mark.orderbook
     def test_bybit_req_orderbook_data(self):
         """Test getting order book data."""
         live_bybit_spot_feed = init_req_feed()
@@ -151,6 +156,7 @@ class TestBybitOrderBook:
                     f"best_bid ({best_bid}) should be <= best_ask ({best_ask})"
                 )
 
+    @pytest.mark.orderbook
     def test_bybit_async_orderbook_data(self):
         """Test getting order book data (asynchronous)."""
         data_queue = queue.Queue()

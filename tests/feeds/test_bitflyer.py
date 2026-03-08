@@ -46,6 +46,7 @@ class TestBitflyerExchangeData:
         assert exchange_data.rest_url != ""
         assert len(exchange_data.kline_periods) > 0
 
+    @pytest.mark.kline
     def test_kline_periods(self):
         """Test kline periods are defined."""
         exchange_data = BitflyerExchangeDataSpot()
@@ -99,6 +100,7 @@ class TestBitflyerRequestDataSpot:
         assert feed._normalize_product_code("BTC-JPY") == "BTC_JPY"
         assert feed._normalize_product_code("BTC_JPY") == "BTC_JPY"
 
+    @pytest.mark.ticker
     def test_get_tick_returns_tuple(self, mock_feed):
         path, params, extra_data = mock_feed._get_tick("BTC_JPY")
         assert "GET" in path
@@ -107,24 +109,29 @@ class TestBitflyerRequestDataSpot:
         assert extra_data["request_type"] == "get_tick"
         assert extra_data["symbol_name"] == "BTC_JPY"
 
+    @pytest.mark.ticker
     def test_get_tick_calls_request(self, mock_feed):
         mock_feed.get_tick("BTC_JPY")
         assert mock_feed.request.called
 
+    @pytest.mark.orderbook
     def test_get_depth_returns_tuple(self, mock_feed):
         path, params, extra_data = mock_feed._get_depth("BTC_JPY")
         assert "board" in path
         assert extra_data["request_type"] == "get_depth"
 
+    @pytest.mark.orderbook
     def test_get_depth_calls_request(self, mock_feed):
         mock_feed.get_depth("BTC_JPY")
         assert mock_feed.request.called
 
+    @pytest.mark.kline
     def test_get_kline_returns_tuple(self, mock_feed):
         path, params, extra_data = mock_feed._get_kline("BTC_JPY", "1h")
         assert "executions" in path
         assert extra_data["request_type"] == "get_kline"
 
+    @pytest.mark.kline
     def test_get_kline_calls_request(self, mock_feed):
         mock_feed.get_kline("BTC_JPY", "1h")
         assert mock_feed.request.called
@@ -143,6 +150,7 @@ class TestBitflyerRequestDataSpot:
 class TestBitflyerDataContainers:
     """Test bitFlyer data containers."""
 
+    @pytest.mark.ticker
     def test_ticker_container(self):
         """Test ticker data container."""
         ticker_data = {
@@ -249,33 +257,39 @@ class TestBitflyerBaseCapabilities:
 class TestBitflyerNormalizeFunctions:
     """Test normalize functions edge cases."""
 
+    @pytest.mark.ticker
     def test_tick_normalize_with_none(self):
         result, status = BitflyerRequestDataSpot._get_tick_normalize_function(None, None)
         assert result == []
         assert status is False
 
+    @pytest.mark.ticker
     def test_tick_normalize_success(self):
         data = {"product_code": "BTC_JPY", "ltp": 5000000}
         result, status = BitflyerRequestDataSpot._get_tick_normalize_function(data, None)
         assert result == [data]
         assert status is True
 
+    @pytest.mark.orderbook
     def test_depth_normalize_with_none(self):
         result, status = BitflyerRequestDataSpot._get_depth_normalize_function(None, None)
         assert result == []
         assert status is False
 
+    @pytest.mark.orderbook
     def test_depth_normalize_success(self):
         data = {"bids": [], "asks": [], "mid_price": 5000000}
         result, status = BitflyerRequestDataSpot._get_depth_normalize_function(data, None)
         assert result == [data]
         assert status is True
 
+    @pytest.mark.kline
     def test_kline_normalize_with_none(self):
         result, status = BitflyerRequestDataSpot._get_kline_normalize_function(None, None)
         assert result == []
         assert status is False
 
+    @pytest.mark.kline
     def test_kline_normalize_list(self):
         data = [{"id": 1}, {"id": 2}]
         result, status = BitflyerRequestDataSpot._get_kline_normalize_function(data, None)
@@ -302,6 +316,7 @@ class TestBitflyerLiveAPI:
     """Live API tests - require network, marked as integration."""
 
     @pytest.mark.integration
+    @pytest.mark.ticker
     def test_bitflyer_req_tick_data(self):
         data_queue = queue.Queue()
         feed = BitflyerRequestDataSpot(data_queue, exchange_name="BITFLYER___SPOT")
@@ -315,6 +330,7 @@ class TestBitflyerLiveAPI:
                 assert isinstance(ticker, dict)
 
     @pytest.mark.integration
+    @pytest.mark.kline
     def test_bitflyer_req_kline_data(self):
         data_queue = queue.Queue()
         feed = BitflyerRequestDataSpot(data_queue, exchange_name="BITFLYER___SPOT")
@@ -327,6 +343,7 @@ class TestBitflyerLiveAPI:
             assert isinstance(klines, (list, dict))
 
     @pytest.mark.integration
+    @pytest.mark.orderbook
     def test_bitflyer_req_orderbook_data(self):
         data_queue = queue.Queue()
         feed = BitflyerRequestDataSpot(data_queue, exchange_name="BITFLYER___SPOT")
@@ -340,6 +357,7 @@ class TestBitflyerLiveAPI:
                 assert "bids" in orderbook or "asks" in orderbook
 
     @pytest.mark.integration
+    @pytest.mark.ticker
     def test_bitflyer_async_tick_data(self):
         data_queue = queue.Queue()
         feed = BitflyerRequestDataSpot(data_queue, exchange_name="BITFLYER___SPOT")
@@ -352,6 +370,7 @@ class TestBitflyerLiveAPI:
             pass
 
     @pytest.mark.integration
+    @pytest.mark.kline
     def test_bitflyer_async_kline_data(self):
         data_queue = queue.Queue()
         feed = BitflyerRequestDataSpot(data_queue, exchange_name="BITFLYER___SPOT")
@@ -364,6 +383,7 @@ class TestBitflyerLiveAPI:
             pass
 
     @pytest.mark.integration
+    @pytest.mark.orderbook
     def test_bitflyer_async_orderbook_data(self):
         data_queue = queue.Queue()
         feed = BitflyerRequestDataSpot(data_queue, exchange_name="BITFLYER___SPOT")

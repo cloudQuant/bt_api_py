@@ -4,6 +4,8 @@ import time
 
 import pytest
 
+pytestmark = [pytest.mark.integration, pytest.mark.network]
+
 # from bt_api_py.containers.positions.binance_position import BinanceWssPositionData
 from test_live_binance_swap_request_data import init_req_feed
 
@@ -100,6 +102,7 @@ def test_binance_wss_data_feed():
     # assert receive_binance_force_order_data is True
 
 
+@pytest.mark.ticker
 def test_binance_wss_mini_ticker():
     data_queue = queue.Queue()
     kwargs = _make_wss_kwargs(
@@ -113,6 +116,7 @@ def test_binance_wss_mini_ticker():
     assert len(items) > 0, "mini_ticker should receive data within 10s"
 
 
+@pytest.mark.ticker
 def test_binance_wss_all_mini_ticker():
     data_queue = queue.Queue()
     kwargs = _make_wss_kwargs(
@@ -126,6 +130,7 @@ def test_binance_wss_all_mini_ticker():
     assert len(items) > 0, "all_mini_ticker should receive data within 10s"
 
 
+@pytest.mark.ticker
 def test_binance_wss_all_book_ticker():
     data_queue = queue.Queue()
     kwargs = _make_wss_kwargs(
@@ -141,6 +146,7 @@ def test_binance_wss_all_book_ticker():
 
 
 @pytest.mark.timeout(120)
+@pytest.mark.kline
 def test_binance_wss_continuous_kline():
     data_queue = queue.Queue()
     kwargs = _make_wss_kwargs(
@@ -198,6 +204,7 @@ def test_binance_wss_all_mark_price():
     assert received_mark is True, "all_mark_price should push BinanceWssMarkPriceData"
 
 
+@pytest.mark.ticker
 def test_binance_wss_all_ticker():
     data_queue = queue.Queue()
     kwargs = _make_wss_kwargs(
@@ -227,6 +234,7 @@ def test_binance_wss_all_force_order():
     print(f"all_force_order received {len(items)} items, has_force_order={received}")
 
 
+@pytest.mark.orderbook
 def test_binance_wss_depth_with_symbol_list():
     data_queue = queue.Queue()
     kwargs = _make_wss_kwargs(
@@ -255,6 +263,7 @@ def test_binance_wss_agg_trade_with_symbol_list():
     assert received_agg is True, "agg_trade with symbol_list should push BinanceAggTradeData"
 
 
+@pytest.mark.auth_order
 def test_get_binance_account_data_feed():
     data_queue = queue.Queue()
     data = read_account_config()

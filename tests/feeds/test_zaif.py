@@ -111,6 +111,7 @@ class TestExchangeData:
         for c in ("JPY", "BTC", "ETH"):
             assert c in exdata.legal_currency
 
+    @pytest.mark.kline
     def test_kline_periods(self, exdata):
         for k in ("1m", "5m", "15m", "30m", "1h", "4h", "1d", "1w"):
             assert k in exdata.kline_periods
@@ -146,6 +147,7 @@ class TestExchangeData:
 
 
 class TestParamGeneration:
+    @pytest.mark.ticker
     def test_get_tick_params(self, feed):
         path, params, extra = feed._get_tick("BTC/JPY")
         assert "ticker" in path.lower()
@@ -155,11 +157,13 @@ class TestParamGeneration:
         assert extra["asset_type"] == "SPOT"
         assert extra["exchange_name"] == "ZAIF___SPOT"
 
+    @pytest.mark.orderbook
     def test_get_depth_params(self, feed):
         path, params, extra = feed._get_depth("ETH/BTC")
         assert "depth" in path.lower()
         assert "eth_btc" in path
 
+    @pytest.mark.kline
     def test_get_kline_params(self, feed):
         path, params, extra = feed._get_kline("BTC/JPY", "1h")
         assert "trades" in path.lower()
@@ -218,31 +222,38 @@ class TestParamGeneration:
 
 
 class TestNormalization:
+    @pytest.mark.ticker
     def test_tick_ok(self):
         result, ok = ZaifRequestData._get_tick_normalize_function(SAMPLE_TICK, {})
         assert ok is True
         assert len(result) > 0
 
+    @pytest.mark.ticker
     def test_tick_error(self):
         result, ok = ZaifRequestData._get_tick_normalize_function(SAMPLE_ERROR, {})
         assert ok is False
 
+    @pytest.mark.ticker
     def test_tick_none(self):
         result, ok = ZaifRequestData._get_tick_normalize_function(None, {})
         assert ok is False
 
+    @pytest.mark.orderbook
     def test_depth_ok(self):
         result, ok = ZaifRequestData._get_depth_normalize_function(SAMPLE_DEPTH, {})
         assert ok is True
 
+    @pytest.mark.orderbook
     def test_depth_error(self):
         result, ok = ZaifRequestData._get_depth_normalize_function(SAMPLE_ERROR, {})
         assert ok is False
 
+    @pytest.mark.kline
     def test_kline_list(self):
         result, ok = ZaifRequestData._get_kline_normalize_function(SAMPLE_KLINE, {})
         assert ok is True
 
+    @pytest.mark.kline
     def test_kline_none(self):
         result, ok = ZaifRequestData._get_kline_normalize_function(None, {})
         assert ok is False
@@ -305,22 +316,26 @@ class TestNormalization:
 
 class TestSyncCalls:
     @patch.object(ZaifRequestData, "http_request", return_value=SAMPLE_TICK)
+    @pytest.mark.ticker
     def test_get_tick(self, mock_http, feed):
         rd = feed.get_tick("BTC/JPY")
         assert isinstance(rd, RequestData)
         mock_http.assert_called_once()
 
     @patch.object(ZaifRequestData, "http_request", return_value=SAMPLE_TICK)
+    @pytest.mark.ticker
     def test_get_ticker(self, mock_http, feed):
         rd = feed.get_ticker("BTC/JPY")
         assert isinstance(rd, RequestData)
 
     @patch.object(ZaifRequestData, "http_request", return_value=SAMPLE_DEPTH)
+    @pytest.mark.orderbook
     def test_get_depth(self, mock_http, feed):
         rd = feed.get_depth("ETH/BTC")
         assert isinstance(rd, RequestData)
 
     @patch.object(ZaifRequestData, "http_request", return_value=SAMPLE_KLINE)
+    @pytest.mark.kline
     def test_get_kline(self, mock_http, feed):
         rd = feed.get_kline("BTC/JPY", "1h")
         assert isinstance(rd, RequestData)
@@ -513,12 +528,14 @@ class TestWebSocketStubs:
 
 
 class TestDataContainers:
+    @pytest.mark.ticker
     def test_ticker_float_parsing(self):
         assert ZaifRequestTickerData._parse_float("5000000") == 5000000.0
         assert ZaifRequestTickerData._parse_float(5000000) == 5000000.0
         assert ZaifRequestTickerData._parse_float(None) is None
         assert ZaifRequestTickerData._parse_float("invalid") is None
 
+    @pytest.mark.ticker
     def test_ticker_class_creation(self):
         assert hasattr(ZaifRequestTickerData, "_parse_float")
         assert hasattr(ZaifRequestTickerData, "init_data")
@@ -531,12 +548,14 @@ class TestDataContainers:
 
 class TestIntegration:
     @pytest.mark.skip(reason="Requires network access")
+    @pytest.mark.ticker
     def test_live_get_tick(self):
         f = ZaifRequestDataSpot(queue.Queue())
         rd = f.get_tick("btc_jpy")
         assert isinstance(rd, RequestData)
 
     @pytest.mark.skip(reason="Requires network access")
+    @pytest.mark.orderbook
     def test_live_get_depth(self):
         f = ZaifRequestDataSpot(queue.Queue())
         rd = f.get_depth("btc_jpy")

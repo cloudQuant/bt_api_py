@@ -47,6 +47,7 @@ class TestBitbankExchangeData:
         exchange_data = BitbankExchangeDataSpot()
         assert exchange_data.rest_url
 
+    @pytest.mark.kline
     def test_kline_periods(self, mock_logger):
         """Test kline periods are defined."""
         exchange_data = BitbankExchangeDataSpot()
@@ -102,6 +103,7 @@ class TestBitbankRequestDataSpot:
         assert request_data._normalize_pair("BTC-JPY") == "btc_jpy"
         assert request_data._normalize_pair("BTC_JPY") == "btc_jpy"
 
+    @pytest.mark.ticker
     def test_get_tick_returns_tuple(self, mock_feed):
         """Test _get_tick returns (path, params, extra_data) tuple."""
         path, params, extra_data = mock_feed._get_tick("BTC/JPY")
@@ -110,27 +112,32 @@ class TestBitbankRequestDataSpot:
         assert extra_data["request_type"] == "get_tick"
         assert extra_data["symbol_name"] == "BTC/JPY"
 
+    @pytest.mark.ticker
     def test_get_tick_calls_request(self, mock_feed):
         """Test get_tick calls self.request."""
         mock_feed.get_tick("BTC/JPY")
         assert mock_feed.request.called
 
+    @pytest.mark.orderbook
     def test_get_depth_returns_tuple(self, mock_feed):
         """Test _get_depth returns (path, params, extra_data) tuple."""
         path, params, extra_data = mock_feed._get_depth("BTC/JPY")
         assert "depth" in path
         assert extra_data["request_type"] == "get_depth"
 
+    @pytest.mark.orderbook
     def test_get_depth_calls_request(self, mock_feed):
         mock_feed.get_depth("BTC/JPY")
         assert mock_feed.request.called
 
+    @pytest.mark.kline
     def test_get_kline_returns_tuple(self, mock_feed):
         """Test _get_kline returns (path, params, extra_data) tuple."""
         path, params, extra_data = mock_feed._get_kline("BTC/JPY", "1h")
         assert "candlestick" in path
         assert extra_data["request_type"] == "get_kline"
 
+    @pytest.mark.kline
     def test_get_kline_calls_request(self, mock_feed):
         mock_feed.get_kline("BTC/JPY", "1h")
         assert mock_feed.request.called
@@ -161,6 +168,7 @@ class TestBitbankRequestDataSpot:
         )
         assert success is True
 
+    @pytest.mark.orderbook
     def test_depth_normalize_function(self):
         """Test depth normalization function."""
         input_data = {
@@ -181,6 +189,7 @@ class TestBitbankRequestDataSpot:
         assert success is True
         assert "bids" in result[0]
 
+    @pytest.mark.kline
     def test_kline_normalize_function(self):
         """Test kline normalization function."""
         input_data = {
@@ -294,16 +303,19 @@ class TestBitbankBaseCapabilities:
 class TestBitbankNormalizeFunctions:
     """Test normalize functions edge cases."""
 
+    @pytest.mark.ticker
     def test_tick_normalize_with_none(self):
         result, status = BitbankRequestDataSpot._get_tick_normalize_function(None, None)
         assert result == []
         assert status is False
 
+    @pytest.mark.orderbook
     def test_depth_normalize_with_none(self):
         result, status = BitbankRequestDataSpot._get_depth_normalize_function(None, None)
         assert result == []
         assert status is False
 
+    @pytest.mark.kline
     def test_kline_normalize_with_none(self):
         result, status = BitbankRequestDataSpot._get_kline_normalize_function(None, None)
         assert result == []
@@ -319,6 +331,7 @@ class TestBitbankNormalizeFunctions:
         assert result == []
         assert status is False
 
+    @pytest.mark.ticker
     def test_tick_normalize_failure(self):
         result, status = BitbankRequestDataSpot._get_tick_normalize_function(
             {"success": 0, "data": {}}, None
@@ -331,6 +344,7 @@ class TestBitbankLiveAPI:
     """Live API tests - require network, marked as integration."""
 
     @pytest.mark.integration
+    @pytest.mark.ticker
     def test_bitbank_req_tick_data(self):
         data_queue = queue.Queue()
         feed = BitbankRequestDataSpot(data_queue, exchange_name="BITBANK___SPOT")
@@ -344,6 +358,7 @@ class TestBitbankLiveAPI:
                 assert isinstance(ticker, dict)
 
     @pytest.mark.integration
+    @pytest.mark.kline
     def test_bitbank_req_kline_data(self):
         data_queue = queue.Queue()
         feed = BitbankRequestDataSpot(data_queue, exchange_name="BITBANK___SPOT")
@@ -356,6 +371,7 @@ class TestBitbankLiveAPI:
             assert isinstance(klines, (list, dict))
 
     @pytest.mark.integration
+    @pytest.mark.orderbook
     def test_bitbank_req_orderbook_data(self):
         data_queue = queue.Queue()
         feed = BitbankRequestDataSpot(data_queue, exchange_name="BITBANK___SPOT")
@@ -369,6 +385,7 @@ class TestBitbankLiveAPI:
                 assert "bids" in orderbook or "asks" in orderbook
 
     @pytest.mark.integration
+    @pytest.mark.ticker
     def test_bitbank_async_tick_data(self):
         data_queue = queue.Queue()
         feed = BitbankRequestDataSpot(data_queue, exchange_name="BITBANK___SPOT")
@@ -381,6 +398,7 @@ class TestBitbankLiveAPI:
             pass
 
     @pytest.mark.integration
+    @pytest.mark.kline
     def test_bitbank_async_kline_data(self):
         data_queue = queue.Queue()
         feed = BitbankRequestDataSpot(data_queue, exchange_name="BITBANK___SPOT")
@@ -393,6 +411,7 @@ class TestBitbankLiveAPI:
             pass
 
     @pytest.mark.integration
+    @pytest.mark.orderbook
     def test_bitbank_async_orderbook_data(self):
         data_queue = queue.Queue()
         feed = BitbankRequestDataSpot(data_queue, exchange_name="BITBANK___SPOT")

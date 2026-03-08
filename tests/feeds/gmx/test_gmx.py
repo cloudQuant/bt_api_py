@@ -73,6 +73,7 @@ class TestGmxRequestDataSpot:
 
     # ==================== Ticker Tests ====================
 
+    @pytest.mark.ticker
     def test_get_tick(self, gmx_spot):
         """Test get_tick method."""
         symbol = "BTC"
@@ -83,6 +84,7 @@ class TestGmxRequestDataSpot:
         assert extra_data["exchange_name"] == "GMX___DEX"
         assert extra_data["chain"] == "arbitrum"
 
+    @pytest.mark.ticker
     def test_get_tick_normalize_function(self):
         """Test ticker normalize function."""
         input_data = {
@@ -98,6 +100,7 @@ class TestGmxRequestDataSpot:
         assert status == True
         assert len(result) == 1
 
+    @pytest.mark.ticker
     def test_get_tick_with_symbol_filter(self, gmx_spot):
         """Test get_tick with symbol filtering."""
         # Mock the request method to return multiple tickers
@@ -110,6 +113,7 @@ class TestGmxRequestDataSpot:
 
     # ==================== Kline Tests ====================
 
+    @pytest.mark.kline
     def test_get_kline(self, gmx_spot):
         """Test get_kline method."""
         symbol = "BTC"
@@ -124,6 +128,7 @@ class TestGmxRequestDataSpot:
         assert params["tokenSymbol"] == symbol
         assert params["period"] == "1h"
 
+    @pytest.mark.kline
     def test_get_kline_normalize_function(self):
         """Test kline normalize function."""
         input_data = {
@@ -138,6 +143,7 @@ class TestGmxRequestDataSpot:
         assert len(result) == 1
         assert len(result[0]) == 2  # Two candles
 
+    @pytest.mark.kline
     def test_get_kline_period_mapping(self, gmx_spot):
         """Test kline period mapping."""
         # Test various periods
@@ -170,6 +176,7 @@ class TestGmxRequestDataSpot:
 
     # ==================== Depth Tests ====================
 
+    @pytest.mark.orderbook
     def test_get_depth(self, gmx_spot):
         """Test get_depth method."""
         symbol = "BTC"
@@ -205,11 +212,13 @@ class TestGmxRequestDataSpot:
         assert len(result) == 1
 
     @pytest.mark.skip(reason="Requires actual API call")
+    @pytest.mark.ticker
     def test_integration_get_ticker(self, gmx_spot):
         """Integration test for get_ticker - skipped."""
         pass
 
     @pytest.mark.skip(reason="Requires actual API call")
+    @pytest.mark.kline
     def test_integration_get_kline(self, gmx_spot):
         """Integration test for get_kline - skipped."""
         pass
@@ -261,6 +270,7 @@ class TestGmxExchangeDataSpot:
         assert GmxChain.ARBITRUM in GmxExchangeDataSpot.API_URLS
         assert GmxChain.AVALANCHE in GmxExchangeDataSpot.API_URLS
 
+    @pytest.mark.kline
     def test_kline_periods(self):
         """Test kline periods are defined."""
         with patch(
@@ -314,11 +324,13 @@ class TestGmxStandardInterfaces:
             instance.request = Mock(return_value=Mock(spec=RequestData))
             return instance
 
+    @pytest.mark.ticker
     def test_get_tick_calls_request(self, gmx_spot):
         path, params, extra_data = gmx_spot._get_tick("BTC")
         assert extra_data["request_type"] == "get_tick"
         assert extra_data["symbol_name"] == "BTC"
 
+    @pytest.mark.orderbook
     def test_get_depth_calls_request(self, gmx_spot):
         result = gmx_spot.get_depth("BTC")
         assert gmx_spot.request.called
@@ -328,6 +340,7 @@ class TestGmxStandardInterfaces:
             else None
         )
 
+    @pytest.mark.kline
     def test_get_kline_calls_request(self, gmx_spot):
         result = gmx_spot.get_kline("BTC", "1h")
         assert gmx_spot.request.called
@@ -401,6 +414,7 @@ class TestGmxBaseCapabilities:
 class TestGmxDataContainers:
     """Test GMX data containers init_data() returns self."""
 
+    @pytest.mark.ticker
     def test_ticker_init_data_returns_self(self):
         from bt_api_py.containers.tickers.gmx_ticker import GmxRequestTickerData
 
@@ -411,6 +425,7 @@ class TestGmxDataContainers:
         assert ticker.get_symbol_name() == "BTC"
         assert ticker.get_last_price() == 49000.0
 
+    @pytest.mark.ticker
     def test_ticker_init_data_idempotent(self):
         from bt_api_py.containers.tickers.gmx_ticker import GmxRequestTickerData
 
@@ -421,6 +436,7 @@ class TestGmxDataContainers:
         assert r1 is ticker
         assert r2 is ticker
 
+    @pytest.mark.ticker
     def test_ticker_symbol_name_preserved(self):
         from bt_api_py.containers.tickers.gmx_ticker import GmxRequestTickerData
 
@@ -432,11 +448,13 @@ class TestGmxDataContainers:
 class TestGmxNormalizeFunctions:
     """Test normalize functions edge cases."""
 
+    @pytest.mark.ticker
     def test_tick_normalize_with_none(self):
         result, status = GmxRequestDataSpot._get_tick_normalize_function(None, None)
         assert result == []
         assert status is False
 
+    @pytest.mark.kline
     def test_kline_normalize_with_none(self):
         result, status = GmxRequestDataSpot._get_kline_normalize_function(None, None)
         assert result == []
@@ -447,6 +465,7 @@ class TestGmxNormalizeFunctions:
         assert result == []
         assert status is False
 
+    @pytest.mark.orderbook
     def test_depth_normalize_with_none(self):
         result, status = GmxRequestDataSpot._get_depth_normalize_function(None, None)
         assert result == []

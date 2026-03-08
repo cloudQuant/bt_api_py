@@ -87,23 +87,27 @@ class TestGeminiRequestDataSpot:
         assert Capability.QUERY_ORDER in caps
         assert Capability.QUERY_OPEN_ORDERS in caps
 
+    @pytest.mark.ticker
     def test_get_ticker_returns_tuple(self, mock_feed):
         path, params, extra_data = mock_feed._get_ticker("BTCUSD")
         assert "ticker" in path.lower() or "pubticker" in path.lower()
         assert extra_data["request_type"] == "get_tick"
         assert extra_data["symbol_name"] == "BTCUSD"
 
+    @pytest.mark.ticker
     def test_get_tick_alias(self, mock_feed):
         path1, params1, ed1 = mock_feed._get_ticker("BTCUSD")
         path2, params2, ed2 = mock_feed._get_tick("BTCUSD")
         assert path1 == path2
 
+    @pytest.mark.orderbook
     def test_get_depth_returns_tuple(self, mock_feed):
         path, params, extra_data = mock_feed._get_depth("BTCUSD")
         assert "book" in path.lower()
         assert extra_data["request_type"] == "get_depth"
         assert "limit_bids" in params
 
+    @pytest.mark.kline
     def test_get_kline_returns_tuple(self, mock_feed):
         path, params, extra_data = mock_feed._get_kline("BTCUSD", "1m")
         assert extra_data["request_type"] == "get_kline"
@@ -157,6 +161,7 @@ class TestGeminiStandardInterfaces:
         feed.request = Mock(return_value=Mock())
         return feed
 
+    @pytest.mark.ticker
     def test_get_tick_calls_request(self, feed):
         feed.get_tick("BTCUSD")
         assert feed.request.called
@@ -169,14 +174,17 @@ class TestGeminiStandardInterfaces:
         if extra_data:
             assert extra_data["request_type"] == "get_tick"
 
+    @pytest.mark.ticker
     def test_get_ticker_calls_request(self, feed):
         feed.get_ticker("BTCUSD")
         assert feed.request.called
 
+    @pytest.mark.orderbook
     def test_get_depth_calls_request(self, feed):
         feed.get_depth("BTCUSD")
         assert feed.request.called
 
+    @pytest.mark.kline
     def test_get_kline_calls_request(self, feed):
         feed.get_kline("BTCUSD", "1m")
         assert feed.request.called
@@ -227,32 +235,38 @@ class TestGeminiStandardInterfaces:
 class TestGeminiNormalizeFunctions:
     """Test normalize functions edge cases."""
 
+    @pytest.mark.ticker
     def test_tick_normalize_with_none(self):
         result, status = GeminiRequestDataSpot._get_tick_normalize_function(None, None)
         assert result == []
         assert status is False
 
+    @pytest.mark.ticker
     def test_tick_normalize_with_data(self):
         input_data = {"symbol": "btcusd", "last": "50000.00"}
         result, status = GeminiRequestDataSpot._get_tick_normalize_function(input_data, {})
         assert status is True
         assert len(result) == 1
 
+    @pytest.mark.orderbook
     def test_depth_normalize_with_none(self):
         result, status = GeminiRequestDataSpot._get_depth_normalize_function(None, None)
         assert result == []
         assert status is False
 
+    @pytest.mark.orderbook
     def test_depth_normalize_with_data(self):
         input_data = {"bids": [], "asks": []}
         result, status = GeminiRequestDataSpot._get_depth_normalize_function(input_data, {})
         assert status is True
 
+    @pytest.mark.kline
     def test_kline_normalize_with_none(self):
         result, status = GeminiRequestDataSpot._get_kline_normalize_function(None, None)
         assert result == []
         assert status is False
 
+    @pytest.mark.kline
     def test_kline_normalize_with_list(self):
         input_data = [[1688671955000, "50000", "51000", "49000", "50500", "123"]]
         result, status = GeminiRequestDataSpot._get_kline_normalize_function(input_data, {})
@@ -279,6 +293,7 @@ class TestGeminiNormalizeFunctions:
 class TestGeminiDataContainers:
     """Test Gemini data containers."""
 
+    @pytest.mark.ticker
     def test_ticker_container(self):
         ticker_response = {
             "symbol": "btcusd",
@@ -295,6 +310,7 @@ class TestGeminiDataContainers:
         assert ticker.get_exchange_name() == "GEMINI"
         assert ticker.get_symbol_name() == "BTCUSD"
 
+    @pytest.mark.kline
     def test_kline_container(self):
         kline_response = {
             "timestamp": 1688671955000,
@@ -310,6 +326,7 @@ class TestGeminiDataContainers:
         assert kline.get_open_price() == 50000.0
         assert kline.get_close_price() == 50500.0
 
+    @pytest.mark.orderbook
     def test_orderbook_container(self):
         orderbook_response = {
             "symbol": "btcusd",
@@ -379,6 +396,7 @@ class TestGeminiLiveAPI:
     """Live API tests - require network, marked as integration."""
 
     @pytest.mark.integration
+    @pytest.mark.ticker
     def test_gemini_req_tick_data(self):
         data_queue = queue.Queue()
         feed = GeminiRequestDataSpot(data_queue, exchange_name="GEMINI___SPOT")
@@ -386,6 +404,7 @@ class TestGeminiLiveAPI:
         assert result is not None
 
     @pytest.mark.integration
+    @pytest.mark.orderbook
     def test_gemini_req_depth_data(self):
         data_queue = queue.Queue()
         feed = GeminiRequestDataSpot(data_queue, exchange_name="GEMINI___SPOT")
@@ -393,6 +412,7 @@ class TestGeminiLiveAPI:
         assert result is not None
 
     @pytest.mark.integration
+    @pytest.mark.kline
     def test_gemini_req_kline_data(self):
         data_queue = queue.Queue()
         feed = GeminiRequestDataSpot(data_queue, exchange_name="GEMINI___SPOT")

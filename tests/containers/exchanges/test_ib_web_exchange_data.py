@@ -76,6 +76,7 @@ class TestYamlConfigLoading:
         assert auth is not None
         assert auth.type.value == "oauth"
 
+    @pytest.mark.kline
     def test_config_kline_periods(self):
         kp = _get_ib_config().kline_periods
         assert kp is not None
@@ -186,6 +187,7 @@ class TestAllFieldsFromYaml:
     def stk(self):
         return IbWebExchangeDataStock()
 
+    @pytest.mark.kline
     def test_kline_periods_match_yaml(self, stk, yaml_data):
         for k, v in yaml_data["kline_periods"].items():
             assert stk.kline_periods[k] == v, f"kline_periods[{k}] mismatch"
@@ -262,13 +264,16 @@ class TestIbWebExchangeDataBase:
         assert base.rest_url == "https://localhost:5000"
 
     # kline_periods
+    @pytest.mark.kline
     def test_kline_periods_not_empty(self, base):
         assert len(base.kline_periods) > 0
 
+    @pytest.mark.kline
     def test_kline_periods_keys(self, base):
         for k in ("1m", "5m", "15m", "30m", "1h", "2h", "4h", "1d", "1w", "1M"):
             assert k in base.kline_periods
 
+    @pytest.mark.kline
     def test_reverse_kline_periods(self, base):
         for v, k in base.reverse_kline_periods.items():
             assert base.kline_periods[k] == v
@@ -422,12 +427,15 @@ class TestRestPaths:
     def test_path_market_history(self, stk):
         assert stk.rest_paths["market_history"] == "GET /iserver/marketdata/history"
 
+    @pytest.mark.ticker
     def test_path_get_tick(self, stk):
         assert stk.rest_paths["get_tick"] == "GET /iserver/marketdata/snapshot"
 
+    @pytest.mark.orderbook
     def test_path_get_depth(self, stk):
         assert stk.rest_paths["get_depth"] == "GET /iserver/marketdata/snapshot"
 
+    @pytest.mark.kline
     def test_path_get_kline(self, stk):
         assert stk.rest_paths["get_kline"] == "GET /iserver/marketdata/history"
 
@@ -667,6 +675,7 @@ class TestSubclassConsistency:
         urls = {v.wss_url for v in all_instances.values()}
         assert len(urls) == 1
 
+    @pytest.mark.kline
     def test_same_kline_periods(self, all_instances):
         ref = list(all_instances.values())[0].kline_periods
         for v in all_instances.values():

@@ -71,6 +71,7 @@ class TestOkxExchangeData:
         path = exchange_data.get_rest_path("make_order")
         assert path  # Should return a valid path
 
+    @pytest.mark.kline
     def test_kline_periods(self):
         """Test kline period configuration."""
         exchange_data = OkxExchangeDataSpot()
@@ -99,6 +100,7 @@ class TestOkxRequestDataSpot:
 class TestOkxDataContainers:
     """Test OKX data containers."""
 
+    @pytest.mark.ticker
     def test_ticker_container(self):
         """Test ticker data container."""
         ticker_response = {
@@ -203,11 +205,13 @@ class TestOkxIntegration:
     """Integration tests for OKX (marked as integration)."""
 
     @pytest.mark.integration
+    @pytest.mark.ticker
     def test_get_ticker_live(self):
         """Test getting ticker from live API."""
         pass
 
     @pytest.mark.integration
+    @pytest.mark.orderbook
     def test_get_orderbook_live(self):
         """Test getting orderbook from live API."""
         pass

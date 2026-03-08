@@ -43,6 +43,7 @@ class TestBTCTurkExchangeData:
         assert exchange_data.rest_url == "https://api.btcturk.com"
         assert exchange_data.wss_url == "wss://ws-feed-pro.btcturk.com"
 
+    @pytest.mark.kline
     def test_kline_periods(self):
         exchange_data = BTCTurkExchangeDataSpot()
         assert "1m" in exchange_data.kline_periods
@@ -78,6 +79,7 @@ class TestBTCTurkRequestDataSpot:
         assert Capability.MAKE_ORDER in caps
         assert Capability.CANCEL_ORDER in caps
 
+    @pytest.mark.ticker
     def test_get_tick_returns_tuple(self, mock_feed):
         path, params, extra_data = mock_feed._get_tick("BTCUSDT")
         assert "ticker" in path
@@ -85,19 +87,23 @@ class TestBTCTurkRequestDataSpot:
         assert extra_data["request_type"] == "get_tick"
         assert extra_data["symbol_name"] == "BTCUSDT"
 
+    @pytest.mark.ticker
     def test_get_tick_calls_request(self, mock_feed):
         mock_feed.get_tick("BTCUSDT")
         assert mock_feed.request.called
 
+    @pytest.mark.orderbook
     def test_get_depth_returns_tuple(self, mock_feed):
         path, params, extra_data = mock_feed._get_depth("BTCUSDT")
         assert "orderbook" in path
         assert extra_data["request_type"] == "get_depth"
 
+    @pytest.mark.orderbook
     def test_get_depth_calls_request(self, mock_feed):
         mock_feed.get_depth("BTCUSDT")
         assert mock_feed.request.called
 
+    @pytest.mark.kline
     def test_get_kline_returns_tuple(self, mock_feed):
         path, params, extra_data = mock_feed._get_kline("BTCUSDT", "1h")
         assert "ohlcs" in path
@@ -105,6 +111,7 @@ class TestBTCTurkRequestDataSpot:
         assert "from" in params
         assert "to" in params
 
+    @pytest.mark.kline
     def test_get_kline_calls_request(self, mock_feed):
         mock_feed.get_kline("BTCUSDT", "1h")
         assert mock_feed.request.called
@@ -193,32 +200,38 @@ class TestBTCTurkBaseCapabilities:
 class TestBTCTurkNormalizeFunctions:
     """Test normalize functions edge cases."""
 
+    @pytest.mark.ticker
     def test_tick_normalize_with_none(self):
         result, status = BTCTurkRequestDataSpot._get_tick_normalize_function(None, None)
         assert result == []
         assert status is False
 
+    @pytest.mark.ticker
     def test_tick_normalize_success(self):
         data = {"data": [{"pairSymbol": "BTCUSDT", "last": "50000"}]}
         result, status = BTCTurkRequestDataSpot._get_tick_normalize_function(data, None)
         assert status is True
         assert len(result) == 1
 
+    @pytest.mark.orderbook
     def test_depth_normalize_with_none(self):
         result, status = BTCTurkRequestDataSpot._get_depth_normalize_function(None, None)
         assert result == []
         assert status is False
 
+    @pytest.mark.orderbook
     def test_depth_normalize_success(self):
         data = {"data": {"bids": [["49990", "1.0"]], "asks": [["50010", "1.0"]]}}
         result, status = BTCTurkRequestDataSpot._get_depth_normalize_function(data, None)
         assert status is True
 
+    @pytest.mark.kline
     def test_kline_normalize_with_none(self):
         result, status = BTCTurkRequestDataSpot._get_kline_normalize_function(None, None)
         assert result == []
         assert status is False
 
+    @pytest.mark.kline
     def test_kline_normalize_success(self):
         data = {"data": [[1640995200000, "49500", "51000", "49000", "50000"]]}
         result, status = BTCTurkRequestDataSpot._get_kline_normalize_function(data, None)
@@ -248,6 +261,7 @@ class TestBTCTurkNormalizeFunctions:
 class TestBTCTurkDataContainers:
     """Test BTCTurk data containers."""
 
+    @pytest.mark.ticker
     def test_ticker_container(self):
         ticker_response = json.dumps(
             {
@@ -274,6 +288,7 @@ class TestBTCTurkDataContainers:
         assert ticker.ask_price == 50100.00
         assert ticker.volume_24h == 100.50
 
+    @pytest.mark.ticker
     def test_ticker_container_with_dict_data(self):
         ticker_response = json.dumps(
             {
@@ -317,6 +332,7 @@ class TestBTCTurkLiveAPI:
     """Live API tests - require network, marked as integration."""
 
     @pytest.mark.integration
+    @pytest.mark.ticker
     def test_btcturk_req_tick_data(self):
         data_queue = queue.Queue()
         feed = BTCTurkRequestDataSpot(data_queue, exchange_name="BTCTURK___SPOT")
@@ -324,6 +340,7 @@ class TestBTCTurkLiveAPI:
         assert isinstance(data, RequestData)
 
     @pytest.mark.integration
+    @pytest.mark.orderbook
     def test_btcturk_req_depth_data(self):
         data_queue = queue.Queue()
         feed = BTCTurkRequestDataSpot(data_queue, exchange_name="BTCTURK___SPOT")
@@ -331,6 +348,7 @@ class TestBTCTurkLiveAPI:
         assert isinstance(data, RequestData)
 
     @pytest.mark.integration
+    @pytest.mark.ticker
     def test_btcturk_async_tick_data(self):
         data_queue = queue.Queue()
         feed = BTCTurkRequestDataSpot(data_queue, exchange_name="BTCTURK___SPOT")

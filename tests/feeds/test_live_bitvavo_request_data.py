@@ -47,6 +47,7 @@ class TestBitvavoServerTime:
 class TestBitvavoTickData:
     """Test Bitvavo ticker data."""
 
+    @pytest.mark.ticker
     def test_bitvavo_req_tick_data(self):
         """Test getting ticker data (synchronous)."""
         live_bitvavo_spot_feed = init_req_feed()
@@ -79,6 +80,7 @@ class TestBitvavoTickData:
 
         print("tick_data:", tick_data)
 
+    @pytest.mark.ticker
     def test_bitvavo_async_tick_data(self):
         """Test getting ticker data (asynchronous)."""
         data_queue = queue.Queue()
@@ -98,6 +100,7 @@ class TestBitvavoTickData:
 class TestBitvavoKlineData:
     """Test Bitvavo kline/candlestick data."""
 
+    @pytest.mark.kline
     def test_bitvavo_req_kline_data(self):
         """Test getting kline data (synchronous)."""
         live_bitvavo_spot_feed = init_req_feed()
@@ -132,6 +135,7 @@ class TestBitvavoKlineData:
 
                 print("kline_data:", kline_list)
 
+    @pytest.mark.kline
     def test_bitvavo_async_kline_data(self):
         """Test getting kline data (asynchronous)."""
         data_queue = queue.Queue()
@@ -153,6 +157,7 @@ class TestBitvavoKlineData:
 class TestBitvavoOrderBook:
     """Test Bitvavo order book data."""
 
+    @pytest.mark.orderbook
     def test_bitvavo_req_orderbook_data(self):
         """Test getting order book data."""
         live_bitvavo_spot_feed = init_req_feed()
@@ -205,6 +210,7 @@ class TestBitvavoOrderBook:
                         f"best_bid ({best_bid}) should be <= best_ask ({best_ask})"
                     )
 
+    @pytest.mark.orderbook
     def test_bitvavo_async_orderbook_data(self):
         """Test getting order book data (asynchronous)."""
         data_queue = queue.Queue()

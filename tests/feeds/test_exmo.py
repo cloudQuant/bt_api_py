@@ -39,6 +39,7 @@ class TestExmoExchangeData:
         assert exchange_data.rest_url
         assert exchange_data.wss_url
 
+    @pytest.mark.kline
     def test_kline_periods(self):
         exchange_data = ExmoExchangeDataSpot()
         assert "1m" in exchange_data.kline_periods
@@ -75,32 +76,38 @@ class TestExmoRequestDataSpot:
         assert Capability.MAKE_ORDER in caps
         assert Capability.CANCEL_ORDER in caps
 
+    @pytest.mark.ticker
     def test_get_tick_returns_tuple(self, mock_feed):
         path, params, extra_data = mock_feed._get_tick("BTC/USDT")
         assert path == "GET /ticker"
         assert extra_data["request_type"] == "get_tick"
         assert extra_data["symbol_name"] == "BTC/USDT"
 
+    @pytest.mark.ticker
     def test_get_tick_calls_request(self, mock_feed):
         mock_feed.get_tick("BTC/USDT")
         assert mock_feed.request.called
 
+    @pytest.mark.orderbook
     def test_get_depth_returns_tuple(self, mock_feed):
         path, params, extra_data = mock_feed._get_depth("BTC/USDT", count=20)
         assert path == "GET /order_book"
         assert extra_data["request_type"] == "get_depth"
         assert params["pair"] == "BTC_USDT"
 
+    @pytest.mark.orderbook
     def test_get_depth_calls_request(self, mock_feed):
         mock_feed.get_depth("BTC/USDT")
         assert mock_feed.request.called
 
+    @pytest.mark.kline
     def test_get_kline_returns_tuple(self, mock_feed):
         path, params, extra_data = mock_feed._get_kline("BTC/USDT", "1h")
         assert path == "GET /candles_history"
         assert extra_data["request_type"] == "get_kline"
         assert params["symbol"] == "BTC_USDT"
 
+    @pytest.mark.kline
     def test_get_kline_calls_request(self, mock_feed):
         mock_feed.get_kline("BTC/USDT", "1h")
         assert mock_feed.request.called
@@ -190,11 +197,13 @@ class TestExmoBaseCapabilities:
 class TestExmoNormalizeFunctions:
     """Test normalize functions edge cases."""
 
+    @pytest.mark.ticker
     def test_tick_normalize_with_none(self):
         result, status = ExmoRequestDataSpot._get_tick_normalize_function(None, None)
         assert result == []
         assert status is False
 
+    @pytest.mark.ticker
     def test_tick_normalize_symbol_match(self):
         input_data = {"BTC_USDT": {"buy_price": "50000.0", "last_trade": "50050.0"}}
         extra_data = {"symbol_name": "BTC/USDT"}
@@ -203,6 +212,7 @@ class TestExmoNormalizeFunctions:
         assert len(result) == 1
         assert result[0]["symbol"] == "BTC/USDT"
 
+    @pytest.mark.ticker
     def test_tick_normalize_no_match(self):
         input_data = {"ETH_USDT": {"buy_price": "3000.0"}}
         extra_data = {"symbol_name": "BTC/USDT"}
@@ -210,11 +220,13 @@ class TestExmoNormalizeFunctions:
         assert result == []
         assert status is True  # API succeeded, just symbol not found
 
+    @pytest.mark.orderbook
     def test_depth_normalize_with_none(self):
         result, status = ExmoRequestDataSpot._get_depth_normalize_function(None, None)
         assert result == []
         assert status is False
 
+    @pytest.mark.orderbook
     def test_depth_normalize_symbol_match(self):
         input_data = {"BTC_USDT": {"ask_quantity": "1.0", "bid_quantity": "1.0"}}
         extra_data = {"symbol_name": "BTC/USDT"}
@@ -222,11 +234,13 @@ class TestExmoNormalizeFunctions:
         assert status is True
         assert len(result) == 1
 
+    @pytest.mark.kline
     def test_kline_normalize_with_none(self):
         result, status = ExmoRequestDataSpot._get_kline_normalize_function(None, None)
         assert result == []
         assert status is False
 
+    @pytest.mark.kline
     def test_kline_normalize_list(self):
         input_data = [{"t": 1000, "o": "50000"}]
         result, status = ExmoRequestDataSpot._get_kline_normalize_function(input_data, None)
@@ -251,6 +265,7 @@ class TestExmoNormalizeFunctions:
 class TestExmoDataContainers:
     """Test EXMO data containers."""
 
+    @pytest.mark.ticker
     def test_ticker_container(self):
         ticker_info = json.dumps(
             {
@@ -295,6 +310,7 @@ class TestExmoLiveAPI:
     """Live API tests - require network, marked as integration."""
 
     @pytest.mark.integration
+    @pytest.mark.ticker
     def test_exmo_req_tick_data(self):
         data_queue = queue.Queue()
         feed = ExmoRequestDataSpot(data_queue, exchange_name="EXMO___SPOT")
@@ -302,6 +318,7 @@ class TestExmoLiveAPI:
         assert isinstance(result, RequestData)
 
     @pytest.mark.integration
+    @pytest.mark.orderbook
     def test_exmo_req_depth_data(self):
         data_queue = queue.Queue()
         feed = ExmoRequestDataSpot(data_queue, exchange_name="EXMO___SPOT")
@@ -309,6 +326,7 @@ class TestExmoLiveAPI:
         assert isinstance(result, RequestData)
 
     @pytest.mark.integration
+    @pytest.mark.kline
     def test_exmo_req_kline_data(self):
         data_queue = queue.Queue()
         feed = ExmoRequestDataSpot(data_queue, exchange_name="EXMO___SPOT")

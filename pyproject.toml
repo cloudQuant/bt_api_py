@@ -60,6 +60,17 @@ markers = [
     "binance: Binance exchange tests",
     "okx: OKX exchange tests",
     "ib: Interactive Brokers tests",
+    # 行情数据测试（不需要鉴权）
+    "ticker: Public ticker/tick data tests (no auth required)",
+    "kline: Public kline/bar/candle data tests (no auth required)",
+    "orderbook: Public orderbook/depth data tests (no auth required)",
+    "public_trade: Public market trade data tests (no auth required)",
+    "server_time: Server time tests (no auth required)",
+    # 需要鉴权的测试
+    "auth_account: Account and balance tests (auth required)",
+    "auth_order: Order management tests (auth required)",
+    "auth_position: Position management tests (auth required)",
+    "auth_private_trade: Private trade history tests (auth required)",
 ]
 timeout = 120
 asyncio_default_fixture_loop_scope = "function"

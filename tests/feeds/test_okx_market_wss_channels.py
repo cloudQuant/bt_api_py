@@ -10,8 +10,11 @@ Tests for the following channels:
 - liquidation_orders - 爆仓单推送
 """
 
+import pytest
 import queue
 import time
+
+pytestmark = [pytest.mark.integration, pytest.mark.network]
 
 from bt_api_py.containers.assets.okx_asset import OkxDepositInfoData, OkxWithdrawalInfoData
 from bt_api_py.containers.exchanges.okx_exchange_data import OkxExchangeDataSwap
@@ -36,6 +39,7 @@ def generate_kwargs():
     }
 
 
+@pytest.mark.orderbook
 def test_okx_books_l2_tbt_channel():
     """Test books-l2-tbt channel (400 depth tick-by-tbt)."""
     data_queue = queue.Queue()

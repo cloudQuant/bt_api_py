@@ -70,12 +70,14 @@ class TestUpbitServerTime:
 class TestUpbitTickerData:
     """Test ticker data functionality."""
 
+    @pytest.mark.ticker
     def test_upbit_req_tick_data(self, upbit_feed):
         """Test getting ticker data from Upbit API."""
         # Upbit uses market format like "KRW-BTC" or "USDT-BTC"
         data = upbit_feed.get_ticker("KRW-BTC")
         assert data is not None
 
+    @pytest.mark.ticker
     def test_upbit_tick_data_validation(self, upbit_feed):
         """Test ticker data structure and values."""
         from bt_api_py.containers.requestdatas.request_data import RequestData
@@ -83,12 +85,14 @@ class TestUpbitTickerData:
         data = upbit_feed.get_ticker("KRW-BTC")
         assert isinstance(data, (list, dict, RequestData))
 
+    @pytest.mark.ticker
     def test_upbit_multiple_tickers(self, upbit_feed):
         """Test getting multiple tickers at once."""
         markets = ["KRW-BTC", "KRW-ETH", "USDT-BTC"]
         data = upbit_feed.get_ticker(markets)
         assert data is not None
 
+    @pytest.mark.ticker
     def test_upbit_usdt_pair_ticker(self, upbit_feed):
         """Test ticker for USDT pairs."""
         data = upbit_feed.get_ticker("USDT-BTC")
@@ -101,26 +105,31 @@ class TestUpbitTickerData:
 class TestUpbitKlineData:
     """Test kline/candlestick data functionality."""
 
+    @pytest.mark.kline
     def test_upbit_req_kline_data_1m(self, upbit_feed):
         """Test getting 1-minute kline data."""
         data = upbit_feed.get_kline("KRW-BTC", "1m", count=2)
         assert data is not None
 
+    @pytest.mark.kline
     def test_upbit_req_kline_data_1h(self, upbit_feed):
         """Test getting 1-hour kline data."""
         data = upbit_feed.get_kline("KRW-BTC", "1h", count=2)
         assert data is not None
 
+    @pytest.mark.kline
     def test_upbit_req_kline_data_1d(self, upbit_feed):
         """Test getting daily kline data."""
         data = upbit_feed.get_kline("KRW-BTC", "1d", count=2)
         assert data is not None
 
+    @pytest.mark.kline
     def test_upbit_kline_convenience_method(self, upbit_feed):
         """Test the convenience method for getting klines."""
         data = upbit_feed.get_kline("KRW-BTC", "1h", count=5)
         assert data is not None
 
+    @pytest.mark.kline
     def test_upbit_kline_multiple_timeframes(self, upbit_feed):
         """Test kline data for multiple timeframes."""
         timeframes = ["1m", "5m", "15m", "1h", "1d"]
@@ -137,16 +146,19 @@ class TestUpbitKlineData:
 class TestUpbitOrderBook:
     """Test order book depth functionality."""
 
+    @pytest.mark.orderbook
     def test_upbit_req_depth_data(self, upbit_feed):
         """Test getting order book data."""
         data = upbit_feed.get_depth("KRW-BTC")
         assert data is not None
 
+    @pytest.mark.orderbook
     def test_upbit_orderbook_units(self, upbit_feed):
         """Test orderbook returns valid data."""
         data = upbit_feed.get_depth("KRW-BTC")
         assert data is not None
 
+    @pytest.mark.orderbook
     def test_upbit_multiple_orderbooks(self, upbit_feed):
         """Test getting depth for different markets."""
         data = upbit_feed.get_depth("KRW-ETH")
@@ -159,11 +171,13 @@ class TestUpbitOrderBook:
 class TestUpbitTradeTicks:
     """Test trade ticks functionality."""
 
+    @pytest.mark.ticker
     def test_upbit_trade_ticks(self, upbit_feed):
         """Test getting recent trade history."""
         data = upbit_feed.get_trade_history("KRW-BTC", count=10)
         assert data is not None
 
+    @pytest.mark.ticker
     def test_upbit_trade_ticks_with_params(self, upbit_feed):
         """Test trade history with parameters."""
         data = upbit_feed.get_trade_history("KRW-BTC", count=5)
@@ -212,6 +226,7 @@ class TestUpbitExchangeData:
         # Upbit uses format like "KRW-BTC" or "USDT-BTC"
         assert exchange_data.get_symbol("KRW-BTC") == "KRW-BTC"
 
+    @pytest.mark.kline
     def test_kline_periods(self):
         """Test kline period configuration."""
         exchange_data = UpbitExchangeDataSpot()
@@ -250,6 +265,7 @@ class TestUpbitIntegration:
     """Integration tests for Upbit."""
 
     @pytest.mark.integration
+    @pytest.mark.ticker
     def test_get_ticker_live(self):
         """Test getting ticker from live API."""
         data_queue = queue.Queue()
@@ -258,6 +274,7 @@ class TestUpbitIntegration:
         assert data is not None
 
     @pytest.mark.integration
+    @pytest.mark.orderbook
     def test_get_orderbook_live(self):
         """Test getting orderbook from live API."""
         data_queue = queue.Queue()
@@ -266,6 +283,7 @@ class TestUpbitIntegration:
         assert data is not None
 
     @pytest.mark.integration
+    @pytest.mark.kline
     def test_get_kline_live(self):
         """Test getting klines from live API."""
         data_queue = queue.Queue()

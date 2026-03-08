@@ -46,7 +46,6 @@ def test_okx_req_get_max_withdrawal():
     assert data.get_status()
     max_withdrawal_list = data.get_data()
     assert isinstance(max_withdrawal_list, list)
-    print("get_max_withdrawal:", max_withdrawal_list)
 
 
 def test_okx_req_get_currencies():
@@ -55,18 +54,14 @@ def test_okx_req_get_currencies():
     # Get all currencies
     data = live_okx_swap_feed.get_currencies()
     assert isinstance(data, RequestData)
-    print("get_currencies status:", data.get_status())
     currencies_list = data.get_data()
     assert isinstance(currencies_list, list)
-    print("get_currencies count:", len(currencies_list))
     if len(currencies_list) > 0:
         currency = currencies_list[0]
         if hasattr(currency, "init_data"):
             currency.init_data()
-            print("First currency:", currency.get_currency())
         else:
             assert isinstance(currency, dict)
-            print("First currency (raw):", currency.get("ccy", currency))
 
 
 def test_okx_async_get_currencies():
@@ -81,7 +76,6 @@ def test_okx_async_get_currencies():
         currencies_data = None
     assert currencies_data is not None
     assert isinstance(currencies_data, RequestData)
-    print("async_get_currencies status:", currencies_data.get_status())
     currencies_list = currencies_data.get_data()
     assert isinstance(currencies_list, list)
 
@@ -92,7 +86,6 @@ def test_okx_req_get_currencies_single():
     # Get BTC currency info
     data = live_okx_swap_feed.get_currencies(ccy="BTC")
     assert isinstance(data, RequestData)
-    print("get_currencies(BTC) status:", data.get_status())
     currencies_list = data.get_data()
     assert isinstance(currencies_list, list)
     if len(currencies_list) > 0:
@@ -111,18 +104,14 @@ def test_okx_req_get_asset_balances():
     # Get all asset balances
     data = live_okx_swap_feed.get_asset_balances()
     assert isinstance(data, RequestData)
-    print("get_asset_balances status:", data.get_status())
     balances_list = data.get_data()
     assert isinstance(balances_list, list)
-    print("get_asset_balances count:", len(balances_list))
     if len(balances_list) > 0:
         balance = balances_list[0]
         if hasattr(balance, "init_data"):
             balance.init_data()
-            print("First balance currency:", balance.get_currency())
         else:
             assert isinstance(balance, dict)
-            print("First balance (raw):", balance.get("ccy", balance))
 
 
 def test_okx_async_get_asset_balances():
@@ -136,7 +125,6 @@ def test_okx_async_get_asset_balances():
         balances_data = None
     assert balances_data is not None
     assert isinstance(balances_data, RequestData)
-    print("async_get_asset_balances status:", balances_data.get_status())
     balances_list = balances_data.get_data()
     assert isinstance(balances_list, list)
 
@@ -147,7 +135,6 @@ def test_okx_req_get_asset_balances_single():
     # Get USDT balance
     data = live_okx_swap_feed.get_asset_balances(ccy="USDT")
     assert isinstance(data, RequestData)
-    print("get_asset_balances(USDT) status:", data.get_status())
     balances_list = data.get_data()
     assert isinstance(balances_list, list)
     if len(balances_list) > 0:
@@ -155,11 +142,9 @@ def test_okx_req_get_asset_balances_single():
         if hasattr(balance, "init_data"):
             balance.init_data()
             assert balance.get_currency() == "USDT"
-            print("USDT balance:", balance.get_balance())
         else:
             assert isinstance(balance, dict)
             assert balance.get("ccy") == "USDT"
-            print("USDT balance (raw):", balance.get("bal", balance))
 
 
 def test_okx_req_get_non_tradable_assets():
@@ -168,10 +153,8 @@ def test_okx_req_get_non_tradable_assets():
     # Get non-tradable assets
     data = live_okx_swap_feed.get_non_tradable_assets()
     assert isinstance(data, RequestData)
-    print("get_non_tradable_assets status:", data.get_status())
     assets_list = data.get_data()
     assert isinstance(assets_list, list)
-    print("get_non_tradable_assets count:", len(assets_list))
 
 
 def test_okx_async_get_non_tradable_assets():
@@ -186,7 +169,6 @@ def test_okx_async_get_non_tradable_assets():
         assets_data = None
     assert assets_data is not None
     assert isinstance(assets_data, RequestData)
-    print("async_get_non_tradable_assets status:", assets_data.get_status())
     assets_list = assets_data.get_data()
     assert isinstance(assets_list, list)
 
@@ -197,18 +179,14 @@ def test_okx_req_get_asset_valuation():
     # Get asset valuation in USD
     data = live_okx_swap_feed.get_asset_valuation(ccy="USD")
     assert isinstance(data, RequestData)
-    print("get_asset_valuation status:", data.get_status())
     valuation_list = data.get_data()
     assert isinstance(valuation_list, list)
     if len(valuation_list) > 0:
         valuation = valuation_list[0]
         if hasattr(valuation, "init_data"):
             valuation.init_data()
-            print("Total valuation:", valuation.get_total_valuation())
-            print("BTC valuation:", valuation.get_btc_valuation())
         else:
             assert isinstance(valuation, dict)
-            print("Valuation (raw):", valuation)
 
 
 def test_okx_async_get_asset_valuation():
@@ -222,7 +200,6 @@ def test_okx_async_get_asset_valuation():
         valuation_data = None
     assert valuation_data is not None
     assert isinstance(valuation_data, RequestData)
-    print("async_get_asset_valuation status:", valuation_data.get_status())
     valuation_list = valuation_data.get_data()
     assert isinstance(valuation_list, list)
 
@@ -240,8 +217,6 @@ def test_okx_req_transfer():
         type="0",  # Within account
     )
     assert isinstance(result, RequestData)
-    print("transfer status:", result.get_status())
-    print("transfer data:", result.get_data())
 
 
 def test_okx_async_transfer():
@@ -262,7 +237,6 @@ def test_okx_async_transfer():
         transfer_data = None
     assert transfer_data is not None
     assert isinstance(transfer_data, RequestData)
-    print("async_transfer status:", transfer_data.get_status())
 
 
 def test_okx_req_get_transfer_state():
@@ -271,15 +245,11 @@ def test_okx_req_get_transfer_state():
     # Get transfer state for USDT
     data = live_okx_swap_feed.get_transfer_state(ccy="USDT")
     assert isinstance(data, RequestData)
-    print("get_transfer_state status:", data.get_status())
     transfers_list = data.get_data()
     assert isinstance(transfers_list, list)
-    print("get_transfer_state count:", len(transfers_list))
     if len(transfers_list) > 0:
         transfer = transfers_list[0]
         transfer.init_data()
-        print("First transfer currency:", transfer.get_currency())
-        print("First transfer amount:", transfer.get_amount())
 
 
 def test_okx_async_get_transfer_state():
@@ -293,7 +263,6 @@ def test_okx_async_get_transfer_state():
         transfer_state_data = None
     assert transfer_state_data is not None
     assert isinstance(transfer_state_data, RequestData)
-    print("async_get_transfer_state status:", transfer_state_data.get_status())
     transfers_list = transfer_state_data.get_data()
     assert isinstance(transfers_list, list)
 
@@ -307,10 +276,8 @@ def test_okx_req_get_asset_bills():
     # Get asset bills for USDT (last 3 months)
     data = live_okx_swap_feed.get_asset_bills(ccy="USDT", limit="10")
     assert isinstance(data, RequestData)
-    print("get_asset_bills status:", data.get_status())
     bills_list = data.get_data()
     assert isinstance(bills_list, list)
-    print("get_asset_bills count:", len(bills_list))
 
 
 def test_okx_async_get_asset_bills():
@@ -325,11 +292,9 @@ def test_okx_async_get_asset_bills():
         bills_data = None
     assert bills_data is not None
     assert isinstance(bills_data, RequestData)
-    print("async_get_asset_bills status:", bills_data.get_status())
     assert bills_data.get_status()
     bills_list = bills_data.get_data()
     assert isinstance(bills_list, list)
-    print("async_get_asset_bills count:", len(bills_list))
 
 
 def test_okx_req_get_asset_bills_history():
@@ -338,10 +303,8 @@ def test_okx_req_get_asset_bills_history():
     # Get asset bills history for USDT (last 3 months)
     data = live_okx_swap_feed.get_asset_bills_history(ccy="USDT", limit="10")
     assert isinstance(data, RequestData)
-    print("get_asset_bills_history status:", data.get_status())
     bills_list = data.get_data()
     assert isinstance(bills_list, list)
-    print("get_asset_bills_history count:", len(bills_list))
 
 
 def test_okx_async_get_asset_bills_history():
@@ -356,7 +319,6 @@ def test_okx_async_get_asset_bills_history():
         bills_data = None
     assert bills_data is not None
     assert isinstance(bills_data, RequestData)
-    print("async_get_asset_bills_history status:", bills_data.get_status())
 
 
 def test_okx_req_get_deposit_address():
@@ -365,12 +327,10 @@ def test_okx_req_get_deposit_address():
     # Get deposit address for USDT
     data = live_okx_swap_feed.get_deposit_address(ccy="USDT")
     assert isinstance(data, RequestData)
-    print("get_deposit_address status:", data.get_status())
     address_list = data.get_data()
     assert isinstance(address_list, list)
-    print("get_deposit_address count:", len(address_list))
     if len(address_list) > 0:
-        print("deposit_address:", address_list[0])
+        pass
 
 
 def test_okx_async_get_deposit_address():
@@ -385,7 +345,6 @@ def test_okx_async_get_deposit_address():
         address_data = None
     assert address_data is not None
     assert isinstance(address_data, RequestData)
-    print("async_get_deposit_address status:", address_data.get_status())
     address_list = address_data.get_data()
     assert isinstance(address_list, list)
 
@@ -396,10 +355,8 @@ def test_okx_req_get_deposit_history():
     # Get deposit history for USDT
     data = live_okx_swap_feed.get_deposit_history(ccy="USDT", limit="10")
     assert isinstance(data, RequestData)
-    print("get_deposit_history status:", data.get_status())
     deposit_list = data.get_data()
     assert isinstance(deposit_list, list)
-    print("get_deposit_history count:", len(deposit_list))
 
 
 def test_okx_async_get_deposit_history():
@@ -414,7 +371,6 @@ def test_okx_async_get_deposit_history():
         deposit_data = None
     assert deposit_data is not None
     assert isinstance(deposit_data, RequestData)
-    print("async_get_deposit_history status:", deposit_data.get_status())
     deposit_list = deposit_data.get_data()
     assert isinstance(deposit_list, list)
 
@@ -425,7 +381,6 @@ def test_okx_req_get_deposit_withdraw_status():
     # Get deposit/withdraw status for USDT
     data = live_okx_swap_feed.get_deposit_withdraw_status(ccy="USDT")
     assert isinstance(data, RequestData)
-    print("get_deposit_withdraw_status status:", data.get_status())
     status_list = data.get_data()
     assert isinstance(status_list, list)
 
@@ -442,7 +397,6 @@ def test_okx_async_get_deposit_withdraw_status():
         status_data = None
     assert status_data is not None
     assert isinstance(status_data, RequestData)
-    print("async_get_deposit_withdraw_status status:", status_data.get_status())
 
 
 def test_okx_req_withdrawal():
@@ -457,8 +411,6 @@ def test_okx_req_withdrawal():
         fee="0.1",
     )
     assert isinstance(result, RequestData)
-    print("withdrawal status:", result.get_status())
-    print("withdrawal input:", result.get_input_data())
 
 
 def test_okx_async_withdrawal():
@@ -480,7 +432,6 @@ def test_okx_async_withdrawal():
         withdraw_data = None
     assert withdraw_data is not None
     assert isinstance(withdraw_data, RequestData)
-    print("async_withdrawal status:", withdraw_data.get_status())
 
 
 def test_okx_req_cancel_withdrawal():
@@ -489,8 +440,6 @@ def test_okx_req_cancel_withdrawal():
     # This will fail because we don't have a valid withdrawal ID, but tests the interface
     result = live_okx_swap_feed.cancel_withdrawal(wd_id="test_withdrawal_id")
     assert isinstance(result, RequestData)
-    print("cancel_withdrawal status:", result.get_status())
-    print("cancel_withdrawal input:", result.get_input_data())
 
 
 def test_okx_async_cancel_withdrawal():
@@ -506,7 +455,6 @@ def test_okx_async_cancel_withdrawal():
         cancel_data = None
     assert cancel_data is not None
     assert isinstance(cancel_data, RequestData)
-    print("async_cancel_withdrawal status:", cancel_data.get_status())
 
 
 def test_okx_req_get_withdrawal_history():
@@ -515,10 +463,8 @@ def test_okx_req_get_withdrawal_history():
     # Get withdrawal history for USDT
     data = live_okx_swap_feed.get_withdrawal_history(ccy="USDT", limit="10")
     assert isinstance(data, RequestData)
-    print("get_withdrawal_history status:", data.get_status())
     withdraw_list = data.get_data()
     assert isinstance(withdraw_list, list)
-    print("get_withdrawal_history count:", len(withdraw_list))
 
 
 def test_okx_async_get_withdrawal_history():
@@ -533,7 +479,6 @@ def test_okx_async_get_withdrawal_history():
         withdraw_data = None
     assert withdraw_data is not None
     assert isinstance(withdraw_data, RequestData)
-    print("async_get_withdrawal_history status:", withdraw_data.get_status())
     withdraw_list = withdraw_data.get_data()
     assert isinstance(withdraw_list, list)
 
@@ -547,10 +492,8 @@ def test_okx_req_get_easy_convert_currency_list():
     # Get easy convert currency list
     data = live_okx_swap_feed.get_easy_convert_currency_list()
     assert isinstance(data, RequestData)
-    print("get_easy_convert_currency_list status:", data.get_status())
     currency_list = data.get_data()
     assert isinstance(currency_list, list)
-    print("get_easy_convert_currency_list count:", len(currency_list))
 
 
 def test_okx_async_get_easy_convert_currency_list():
@@ -564,10 +507,8 @@ def test_okx_async_get_easy_convert_currency_list():
     except queue.Empty:
         currency_data = None
     if currency_data is None:
-        print("Warning: currency_data is None (async timeout)")
         return  # Skip assertion on timeout
     assert isinstance(currency_data, RequestData)
-    print("async_get_easy_convert_currency_list status:", currency_data.get_status())
 
 
 def test_okx_req_easy_convert():
@@ -576,8 +517,6 @@ def test_okx_req_easy_convert():
     # Try easy convert (may fail without sufficient balance, but tests the interface)
     data = live_okx_swap_feed.easy_convert(from_ccy="USDT", to_ccy="BTC", amt="10")
     assert isinstance(data, RequestData)
-    print("easy_convert status:", data.get_status())
-    print("easy_convert input:", data.get_input_data())
 
 
 def test_okx_async_easy_convert():
@@ -591,10 +530,8 @@ def test_okx_async_easy_convert():
     except queue.Empty:
         convert_data = None
     if convert_data is None:
-        print("Warning: convert_data is None (async timeout)")
         return  # Skip assertion on timeout
     assert isinstance(convert_data, RequestData)
-    print("async_easy_convert status:", convert_data.get_status())
 
 
 def test_okx_req_get_easy_convert_history():
@@ -603,10 +540,8 @@ def test_okx_req_get_easy_convert_history():
     # Get easy convert history
     data = live_okx_swap_feed.get_easy_convert_history(limit="10")
     assert isinstance(data, RequestData)
-    print("get_easy_convert_history status:", data.get_status())
     history_list = data.get_data()
     assert isinstance(history_list, list)
-    print("get_easy_convert_history count:", len(history_list))
 
 
 def test_okx_async_get_easy_convert_history():
@@ -620,10 +555,8 @@ def test_okx_async_get_easy_convert_history():
     except queue.Empty:
         history_data = None
     if history_data is None:
-        print("Warning: history_data is None (async timeout)")
         return  # Skip assertion on timeout
     assert isinstance(history_data, RequestData)
-    print("async_get_easy_convert_history status:", history_data.get_status())
 
 
 def test_okx_req_get_one_click_repay_currency_list():
@@ -632,10 +565,8 @@ def test_okx_req_get_one_click_repay_currency_list():
     # Get one-click repay currency list
     data = live_okx_swap_feed.get_one_click_repay_currency_list()
     assert isinstance(data, RequestData)
-    print("get_one_click_repay_currency_list status:", data.get_status())
     currency_list = data.get_data()
     assert isinstance(currency_list, list)
-    print("get_one_click_repay_currency_list count:", len(currency_list))
 
 
 def test_okx_async_get_one_click_repay_currency_list():
@@ -649,10 +580,8 @@ def test_okx_async_get_one_click_repay_currency_list():
     except queue.Empty:
         currency_data = None
     if currency_data is None:
-        print("Warning: currency_data is None (async timeout)")
         return  # Skip assertion on timeout
     assert isinstance(currency_data, RequestData)
-    print("async_get_one_click_repay_currency_list status:", currency_data.get_status())
 
 
 def test_okx_req_one_click_repay():
@@ -661,8 +590,6 @@ def test_okx_req_one_click_repay():
     # Try one-click repay (may fail without debt, but tests the interface)
     data = live_okx_swap_feed.one_click_repay(ccy="USDT", amt="0")
     assert isinstance(data, RequestData)
-    print("one_click_repay status:", data.get_status())
-    print("one_click_repay input:", data.get_input_data())
 
 
 def test_okx_async_one_click_repay():
@@ -676,10 +603,8 @@ def test_okx_async_one_click_repay():
     except queue.Empty:
         repay_data = None
     if repay_data is None:
-        print("Warning: repay_data is None (async timeout)")
         return  # Skip assertion on timeout
     assert isinstance(repay_data, RequestData)
-    print("async_one_click_repay status:", repay_data.get_status())
 
 
 def test_okx_req_get_one_click_repay_history():
@@ -688,10 +613,8 @@ def test_okx_req_get_one_click_repay_history():
     # Get one-click repay history
     data = live_okx_swap_feed.get_one_click_repay_history(limit="10")
     assert isinstance(data, RequestData)
-    print("get_one_click_repay_history status:", data.get_status())
     history_list = data.get_data()
     assert isinstance(history_list, list)
-    print("get_one_click_repay_history count:", len(history_list))
 
 
 def test_okx_async_get_one_click_repay_history():
@@ -705,10 +628,8 @@ def test_okx_async_get_one_click_repay_history():
     except queue.Empty:
         history_data = None
     if history_data is None:
-        print("Warning: history_data is None (async timeout)")
         return  # Skip assertion on timeout
     assert isinstance(history_data, RequestData)
-    print("async_get_one_click_repay_history status:", history_data.get_status())
 
 
 def test_okx_get_exchange_list():
@@ -716,7 +637,6 @@ def test_okx_get_exchange_list():
     live_okx_swap_feed = init_req_feed()
     data = live_okx_swap_feed.get_exchange_list(ccy="BTC")
     assert isinstance(data, RequestData)
-    print("get_exchange_list status:", data.get_status())
 
 
 def test_okx_async_get_exchange_list():
@@ -731,7 +651,6 @@ def test_okx_async_get_exchange_list():
         result = None
     if result is not None:
         assert isinstance(result, RequestData)
-        print("async_get_exchange_list status:", result.get_status())
 
 
 def test_okx_get_convert_currencies():
@@ -739,7 +658,6 @@ def test_okx_get_convert_currencies():
     live_okx_swap_feed = init_req_feed()
     data = live_okx_swap_feed.get_convert_currencies()
     assert isinstance(data, RequestData)
-    print("get_convert_currencies status:", data.get_status())
 
 
 def test_okx_async_get_convert_currencies():
@@ -754,7 +672,6 @@ def test_okx_async_get_convert_currencies():
         result = None
     if result is not None:
         assert isinstance(result, RequestData)
-        print("async_get_convert_currencies status:", result.get_status())
 
 
 def test_okx_get_convert_currency_pair():
@@ -762,7 +679,6 @@ def test_okx_get_convert_currency_pair():
     live_okx_swap_feed = init_req_feed()
     data = live_okx_swap_feed.get_convert_currency_pair(from_ccy="BTC", to_ccy="USDT")
     assert isinstance(data, RequestData)
-    print("get_convert_currency_pair status:", data.get_status())
 
 
 def test_okx_async_get_convert_currency_pair():
@@ -777,7 +693,6 @@ def test_okx_async_get_convert_currency_pair():
         result = None
     if result is not None:
         assert isinstance(result, RequestData)
-        print("async_get_convert_currency_pair status:", result.get_status())
 
 
 def test_okx_get_convert_history():
@@ -785,7 +700,6 @@ def test_okx_get_convert_history():
     live_okx_swap_feed = init_req_feed()
     data = live_okx_swap_feed.get_convert_history(limit="10")
     assert isinstance(data, RequestData)
-    print("get_convert_history status:", data.get_status())
 
 
 def test_okx_async_get_convert_history():
@@ -800,7 +714,6 @@ def test_okx_async_get_convert_history():
         result = None
     if result is not None:
         assert isinstance(result, RequestData)
-        print("async_get_convert_history status:", result.get_status())
 
 
 @pytest.mark.skip(reason="OKX API endpoint deprecated/removed (404)")
@@ -809,7 +722,6 @@ def test_okx_get_deposit_payment_methods():
     live_okx_swap_feed = init_req_feed()
     data = live_okx_swap_feed.get_deposit_payment_methods(ccy="BTC")
     assert isinstance(data, RequestData)
-    print("get_deposit_payment_methods status:", data.get_status())
 
 
 @pytest.mark.skip(reason="OKX API endpoint deprecated/removed (404)")
@@ -825,7 +737,6 @@ def test_okx_async_get_deposit_payment_methods():
         result = None
     if result is not None:
         assert isinstance(result, RequestData)
-        print("async_get_deposit_payment_methods status:", result.get_status())
 
 
 @pytest.mark.skip(reason="OKX API endpoint deprecated/removed (404)")
@@ -834,7 +745,6 @@ def test_okx_get_withdrawal_payment_methods():
     live_okx_swap_feed = init_req_feed()
     data = live_okx_swap_feed.get_withdrawal_payment_methods(ccy="BTC")
     assert isinstance(data, RequestData)
-    print("get_withdrawal_payment_methods status:", data.get_status())
 
 
 @pytest.mark.skip(reason="OKX API endpoint deprecated/removed (404)")
@@ -850,7 +760,6 @@ def test_okx_async_get_withdrawal_payment_methods():
         result = None
     if result is not None:
         assert isinstance(result, RequestData)
-        print("async_get_withdrawal_payment_methods status:", result.get_status())
 
 
 @pytest.mark.skip(reason="OKX API endpoint deprecated/removed (404)")
@@ -859,7 +768,6 @@ def test_okx_get_withdrawal_order_history():
     live_okx_swap_feed = init_req_feed()
     data = live_okx_swap_feed.get_withdrawal_order_history(ccy="BTC", limit="10")
     assert isinstance(data, RequestData)
-    print("get_withdrawal_order_history status:", data.get_status())
 
 
 @pytest.mark.skip(reason="OKX API endpoint deprecated/removed (404)")
@@ -875,7 +783,6 @@ def test_okx_async_get_withdrawal_order_history():
         result = None
     if result is not None:
         assert isinstance(result, RequestData)
-        print("async_get_withdrawal_order_history status:", result.get_status())
 
 
 @pytest.mark.skip(reason="OKX API endpoint deprecated/removed (404)")
@@ -884,7 +791,6 @@ def test_okx_get_deposit_order_history():
     live_okx_swap_feed = init_req_feed()
     data = live_okx_swap_feed.get_deposit_order_history(ccy="BTC", limit="10")
     assert isinstance(data, RequestData)
-    print("get_deposit_order_history status:", data.get_status())
 
 
 @pytest.mark.skip(reason="OKX API endpoint deprecated/removed (404)")
@@ -900,7 +806,6 @@ def test_okx_async_get_deposit_order_history():
         result = None
     if result is not None:
         assert isinstance(result, RequestData)
-        print("async_get_deposit_order_history status:", result.get_status())
 
 
 @pytest.mark.skip(reason="OKX API endpoint deprecated/removed (404)")
@@ -909,7 +814,6 @@ def test_okx_get_buy_sell_currencies():
     live_okx_swap_feed = init_req_feed()
     data = live_okx_swap_feed.get_buy_sell_currencies()
     assert isinstance(data, RequestData)
-    print("get_buy_sell_currencies status:", data.get_status())
 
 
 @pytest.mark.skip(reason="OKX API endpoint deprecated/removed (404)")
@@ -925,7 +829,6 @@ def test_okx_async_get_buy_sell_currencies():
         result = None
     if result is not None:
         assert isinstance(result, RequestData)
-        print("async_get_buy_sell_currencies status:", result.get_status())
 
 
 @pytest.mark.skip(reason="OKX API endpoint deprecated/removed (404)")
@@ -934,7 +837,6 @@ def test_okx_get_buy_sell_currency_pair():
     live_okx_swap_feed = init_req_feed()
     data = live_okx_swap_feed.get_buy_sell_currency_pair()
     assert isinstance(data, RequestData)
-    print("get_buy_sell_currency_pair status:", data.get_status())
 
 
 @pytest.mark.skip(reason="OKX API endpoint deprecated/removed (404)")
@@ -950,7 +852,6 @@ def test_okx_async_get_buy_sell_currency_pair():
         result = None
     if result is not None:
         assert isinstance(result, RequestData)
-        print("async_get_buy_sell_currency_pair status:", result.get_status())
 
 
 @pytest.mark.skip(reason="OKX API endpoint deprecated/removed (404)")
@@ -959,7 +860,6 @@ def test_okx_get_buy_sell_history():
     live_okx_swap_feed = init_req_feed()
     data = live_okx_swap_feed.get_buy_sell_history(limit="10")
     assert isinstance(data, RequestData)
-    print("get_buy_sell_history status:", data.get_status())
 
 
 @pytest.mark.skip(reason="OKX API endpoint deprecated/removed (404)")
@@ -975,7 +875,6 @@ def test_okx_async_get_buy_sell_history():
         result = None
     if result is not None:
         assert isinstance(result, RequestData)
-        print("async_get_buy_sell_history status:", result.get_status())
 
 
 # ==================== Sub-account (P2) Tests ====================

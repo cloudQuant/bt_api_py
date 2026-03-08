@@ -86,6 +86,7 @@ class TestExchangeData:
         assert exdata.get_period("1h") == "60"
         assert exdata.get_period("1d") == "D"
 
+    @pytest.mark.kline
     def test_kline_periods(self, exdata):
         for k in ("1m", "5m", "15m", "30m", "1h", "4h", "1d"):
             assert k in exdata.kline_periods
@@ -124,6 +125,7 @@ class TestExchangeData:
 
 
 class TestParamGeneration:
+    @pytest.mark.ticker
     def test_get_tick_params(self, feed):
         path, params, extra = feed._get_tick("BTC")
         assert "GET" in path
@@ -131,6 +133,7 @@ class TestParamGeneration:
         assert extra["request_type"] == "get_tick"
         assert extra["symbol_name"] == "BTC"
 
+    @pytest.mark.ticker
     def test_get_all_tickers_params(self, feed):
         path, params, extra = feed._get_all_tickers()
         assert "/pubapi/v2/latest" in path
@@ -141,6 +144,7 @@ class TestParamGeneration:
         assert "/pubapi/v2/latest" in path
         assert extra["request_type"] == "get_exchange_info"
 
+    @pytest.mark.orderbook
     def test_get_depth_params(self, feed):
         path, params, extra = feed._get_depth("BTC")
         assert "/pubapi/v2/orders/open/BTC" in path
@@ -189,15 +193,18 @@ class TestParamGeneration:
 
 
 class TestNormalization:
+    @pytest.mark.ticker
     def test_tick_ok(self):
         result, ok = CoinSpotRequestData._get_tick_normalize_function(SAMPLE_TICK, {})
         assert ok is True
         assert "bid" in result[0]
 
+    @pytest.mark.ticker
     def test_tick_error(self):
         result, ok = CoinSpotRequestData._get_tick_normalize_function(SAMPLE_ERROR, {})
         assert ok is False
 
+    @pytest.mark.ticker
     def test_all_tickers_ok(self):
         result, ok = CoinSpotRequestData._get_all_tickers_normalize_function(SAMPLE_ALL_TICKERS, {})
         assert ok is True
@@ -209,11 +216,13 @@ class TestNormalization:
         )
         assert ok is True
 
+    @pytest.mark.orderbook
     def test_depth_ok(self):
         result, ok = CoinSpotRequestData._get_depth_normalize_function(SAMPLE_DEPTH, {})
         assert ok is True
         assert "buyorders" in result[0]
 
+    @pytest.mark.orderbook
     def test_depth_error(self):
         result, ok = CoinSpotRequestData._get_depth_normalize_function(SAMPLE_ERROR, {})
         assert ok is False
@@ -263,12 +272,14 @@ class TestNormalization:
 
 class TestSyncCalls:
     @patch.object(CoinSpotRequestData, "http_request", return_value=SAMPLE_TICK)
+    @pytest.mark.ticker
     def test_get_tick(self, mock_http, feed):
         rd = feed.get_tick("BTC")
         assert isinstance(rd, RequestData)
         mock_http.assert_called_once()
 
     @patch.object(CoinSpotRequestData, "http_request", return_value=SAMPLE_ALL_TICKERS)
+    @pytest.mark.ticker
     def test_get_all_tickers(self, mock_http, feed):
         rd = feed.get_all_tickers()
         assert isinstance(rd, RequestData)
@@ -279,6 +290,7 @@ class TestSyncCalls:
         assert isinstance(rd, RequestData)
 
     @patch.object(CoinSpotRequestData, "http_request", return_value=SAMPLE_DEPTH)
+    @pytest.mark.orderbook
     def test_get_depth(self, mock_http, feed):
         rd = feed.get_depth("BTC")
         assert isinstance(rd, RequestData)
@@ -425,12 +437,14 @@ class TestFeedInit:
 
 class TestIntegration:
     @pytest.mark.skip(reason="Requires network access")
+    @pytest.mark.ticker
     def test_live_get_tick(self):
         f = CoinSpotRequestDataSpot(queue.Queue())
         rd = f.get_tick("BTC")
         assert isinstance(rd, RequestData)
 
     @pytest.mark.skip(reason="Requires network access")
+    @pytest.mark.ticker
     def test_live_get_all_tickers(self):
         f = CoinSpotRequestDataSpot(queue.Queue())
         rd = f.get_all_tickers()

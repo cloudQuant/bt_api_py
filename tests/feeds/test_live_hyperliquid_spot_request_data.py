@@ -9,6 +9,8 @@ from unittest.mock import Mock, patch
 
 import pytest
 
+pytestmark = [pytest.mark.integration, pytest.mark.network]
+
 from bt_api_py.containers.accounts.hyperliquid_account import HyperliquidSpotWssAccountData
 from bt_api_py.containers.balances.hyperliquid_balance import HyperliquidSpotRequestBalanceData
 from bt_api_py.containers.exchanges.hyperliquid_exchange_data import HyperliquidExchangeDataSpot
@@ -97,6 +99,7 @@ def test_hyperliquid_req_get_all_mids():
     print("all_mids_data", data.get_data())
 
 
+@pytest.mark.ticker
 def test_hyperliquid_req_tick_data():
     """Test getting ticker data for a symbol."""
     live_hyperliquid_spot_feed = init_req_feed()
@@ -114,6 +117,7 @@ def test_hyperliquid_req_tick_data():
         print(f"BTC price: {btc_price}")
 
 
+@pytest.mark.ticker
 def test_hyperliquid_ticker_container():
     """Test ticker data container initialization."""
     ticker_data = {"last": "50000.0", "bid": "49999.0", "ask": "50001.0", "volume": "1000.0"}
@@ -132,6 +136,7 @@ def test_hyperliquid_ticker_container():
 # ==================== Order Book Tests ====================
 
 
+@pytest.mark.orderbook
 def test_hyperliquid_req_depth_data():
     """Test getting L2 order book data."""
     live_hyperliquid_spot_feed = init_req_feed()
@@ -158,6 +163,7 @@ def test_hyperliquid_req_depth_data():
 # ==================== Kline/Candle Tests ====================
 
 
+@pytest.mark.kline
 def test_hyperliquid_req_kline_data():
     """Test getting candle/kline data."""
     live_hyperliquid_spot_feed = init_req_feed()
@@ -181,6 +187,7 @@ def test_hyperliquid_req_kline_data():
 # ==================== Recent Trades Tests ====================
 
 
+@pytest.mark.auth_account
 def test_hyperliquid_req_recent_trades():
     """Test getting recent trades."""
     live_hyperliquid_spot_feed = init_req_feed()
@@ -201,6 +208,7 @@ def test_hyperliquid_req_recent_trades():
 # ==================== Account/Balance Tests ====================
 
 
+@pytest.mark.auth_account
 def test_hyperliquid_req_spot_balances():
     """Test getting spot account balances."""
     live_hyperliquid_spot_feed = init_req_feed()
@@ -208,6 +216,7 @@ def test_hyperliquid_req_spot_balances():
     assert balances is not None
 
 
+@pytest.mark.auth_account
 def test_hyperliquid_req_spot_clearinghouse_state():
     """Test getting spot clearinghouse state."""
     live_hyperliquid_spot_feed = init_req_feed()
@@ -225,6 +234,7 @@ def test_hyperliquid_req_spot_clearinghouse_state():
         assert "balances" in result
 
 
+@pytest.mark.auth_account
 def test_hyperliquid_balance_container():
     """Test balance data container initialization."""
     balance_data = {
@@ -245,6 +255,7 @@ def test_hyperliquid_balance_container():
 # ==================== Order Tests ====================
 
 
+@pytest.mark.auth_order
 def test_hyperliquid_place_order():
     """Test placing a limit order."""
     live_hyperliquid_spot_feed = init_req_feed()
@@ -263,6 +274,7 @@ def test_hyperliquid_place_order():
     print("place_order_result", result.get_data())
 
 
+@pytest.mark.auth_order
 def test_hyperliquid_cancel_order():
     """Test canceling an order."""
     live_hyperliquid_spot_feed = init_req_feed()
@@ -344,6 +356,7 @@ def test_hyperliquid_get_user_fills():
 # ==================== Order Status Tests ====================
 
 
+@pytest.mark.auth_account
 def test_hyperliquid_get_order_status():
     """Test getting order status."""
     live_hyperliquid_spot_feed = init_req_feed()
@@ -359,6 +372,7 @@ def test_hyperliquid_get_order_status():
 # ==================== Account Container Tests ====================
 
 
+@pytest.mark.auth_account
 def test_hyperliquid_account_container():
     """Test account data container initialization."""
     account_data = {
@@ -403,6 +417,7 @@ class TestHyperliquidMockRequests:
         assert result.get_input_data()["ETH"] == "3000.0"
 
     @patch("bt_api_py.feeds.live_hyperliquid.request_base.requests.post")
+    @pytest.mark.orderbook
     def test_mock_get_l2_book(self, mock_post):
         """Test get_l2_book with mocked response."""
         # Mock response
@@ -434,6 +449,7 @@ class TestHyperliquidMockRequests:
         assert len(levels[1]) == 2  # 2 bids
 
     @patch("bt_api_py.feeds.live_hyperliquid.request_base.requests.post")
+    @pytest.mark.kline
     def test_mock_get_candle_snapshot(self, mock_post):
         """Test get_candle_snapshot with mocked response."""
         # Mock response
@@ -510,6 +526,7 @@ class TestHyperliquidExchangeData:
         assert exchange_data.get_symbol("BTC/USDC") == "BTC"
         assert exchange_data.get_symbol("ETH/USDC") == "ETH"
 
+    @pytest.mark.auth_order
     def test_get_rest_path(self):
         """Test REST path retrieval."""
         exchange_data = HyperliquidExchangeDataSpot()
@@ -526,6 +543,7 @@ class TestHyperliquidExchangeData:
 class TestHyperliquidWebSocket:
     """Test Hyperliquid WebSocket subscriptions."""
 
+    @pytest.mark.ticker
     def test_subscribe_ticker(self):
         """Test ticker subscription format."""
         from bt_api_py.feeds.live_hyperliquid.spot import HyperliquidMarketWssDataSpot
@@ -537,6 +555,7 @@ class TestHyperliquidWebSocket:
         assert subscription["method"] == "subscribe"
         assert subscription["subscription"]["type"] == "allMids"
 
+    @pytest.mark.orderbook
     def test_subscribe_orderbook(self):
         """Test orderbook subscription format."""
         from bt_api_py.feeds.live_hyperliquid.spot import HyperliquidMarketWssDataSpot
@@ -569,6 +588,7 @@ class TestHyperliquidWebSocket:
 class TestHyperliquidIntegration:
     """Integration tests that require network and credentials."""
 
+    @pytest.mark.auth_order
     def test_full_order_workflow(self):
         """Test complete order workflow: place, query, cancel."""
         live_hyperliquid_spot_feed = init_req_feed()
@@ -604,6 +624,7 @@ class TestHyperliquidIntegration:
                 )
                 assert isinstance(cancel_result, RequestData)
 
+    @pytest.mark.auth_account
     def test_account_data_workflow(self):
         """Test getting complete account data."""
         live_hyperliquid_spot_feed = init_req_feed()
@@ -649,6 +670,7 @@ class TestHyperliquidErrorHandling:
         # Error should be in the response data
         assert "error" in result.get_input_data()
 
+    @pytest.mark.auth_order
     def test_place_order_without_credentials(self):
         """Test placing order without private key."""
         data_queue = queue.Queue()
@@ -667,6 +689,7 @@ class TestHyperliquidErrorHandling:
                     symbol="BTC", side="buy", quantity=0.001, order_type="limit", price=50000.0
                 )
 
+    @pytest.mark.auth_order
     def test_cancel_order_without_order_id(self):
         """Test canceling order without providing order_id."""
         data_queue = queue.Queue()

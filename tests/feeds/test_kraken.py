@@ -283,6 +283,7 @@ class TestKrakenParamGeneration:
 
 
 class TestKrakenNormalize:
+    @pytest.mark.ticker
     def test_ticker_normalize(self):
         from bt_api_py.feeds.live_kraken.spot import KrakenRequestDataSpot
 
@@ -298,6 +299,7 @@ class TestKrakenNormalize:
         assert t.bid_price == 49999.0
         assert t.ask_price == 50001.0
 
+    @pytest.mark.ticker
     def test_ticker_normalize_error(self):
         from bt_api_py.feeds.live_kraken.spot import KrakenRequestDataSpot
 
@@ -307,6 +309,7 @@ class TestKrakenNormalize:
         assert ok is False
         assert tickers == []
 
+    @pytest.mark.ticker
     def test_ticker_normalize_none(self):
         from bt_api_py.feeds.live_kraken.spot import KrakenRequestDataSpot
 
@@ -314,6 +317,7 @@ class TestKrakenNormalize:
         tickers, ok = KrakenRequestDataSpot._get_ticker_normalize_function(None, extra)
         assert ok is False
 
+    @pytest.mark.orderbook
     def test_depth_normalize(self):
         from bt_api_py.feeds.live_kraken.spot import KrakenRequestDataSpot
 
@@ -386,6 +390,7 @@ class TestKrakenNormalize:
 
 
 class TestKrakenDataContainers:
+    @pytest.mark.ticker
     def test_ticker_container(self):
         ticker = KrakenRequestTickerData(SAMPLE_TICKER_RESP, "BTC/USD", "SPOT")
         assert ticker.symbol == "BTC/USD"
@@ -395,6 +400,7 @@ class TestKrakenDataContainers:
         assert ticker.ask_price == 50001.0
         assert ticker.init_data() is ticker
 
+    @pytest.mark.orderbook
     def test_orderbook_container(self):
         ob = KrakenRequestOrderBookData(SAMPLE_DEPTH_RESP, "BTC/USD", "SPOT")
         assert ob.init_data() is ob

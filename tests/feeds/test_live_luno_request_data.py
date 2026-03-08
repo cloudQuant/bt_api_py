@@ -42,6 +42,7 @@ def test_luno_req_server_time():
 
 
 @pytest.mark.integration
+@pytest.mark.ticker
 def test_luno_req_tick_data():
     """Test Luno ticker data retrieval (synchronous)."""
     live_luno_spot_feed = init_req_feed()
@@ -75,6 +76,7 @@ def test_luno_req_tick_data():
     assert ask_price >= bid_price, "Ask price should be >= bid price"
 
 
+@pytest.mark.ticker
 def test_luno_async_tick_data():
     """Test Luno ticker data retrieval (asynchronous)."""
     data_queue = queue.Queue()
@@ -86,6 +88,7 @@ def test_luno_async_tick_data():
 
 
 @pytest.mark.integration
+@pytest.mark.kline
 def test_luno_req_kline_data():
     """Test Luno kline/candlestick data retrieval (synchronous)."""
     live_luno_spot_feed = init_req_feed()
@@ -126,6 +129,7 @@ def test_luno_req_kline_data():
             assert volume >= 0, "Volume should be non-negative"
 
 
+@pytest.mark.kline
 def test_luno_async_kline_data():
     """Test Luno kline data retrieval (asynchronous)."""
     data_queue = queue.Queue()
@@ -137,6 +141,7 @@ def test_luno_async_kline_data():
 
 
 @pytest.mark.integration
+@pytest.mark.orderbook
 def test_luno_req_orderbook_data():
     """Test Luno orderbook data retrieval."""
     live_luno_spot_feed = init_req_feed()

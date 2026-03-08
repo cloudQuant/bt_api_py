@@ -1,3 +1,5 @@
+import pytest
+
 # import json
 from bt_api_py.containers.orderbooks.binance_orderbook import (
     BinanceRequestOrderBookData,
@@ -5,6 +7,7 @@ from bt_api_py.containers.orderbooks.binance_orderbook import (
 )
 
 
+@pytest.mark.orderbook
 def test_binance_request_orderbook():
     data = {
         "lastUpdateId": 1027024,
@@ -35,6 +38,7 @@ def test_binance_request_orderbook():
     assert bo.get_ask_volume_list()[-1] == 12.0
 
 
+@pytest.mark.orderbook
 def test_binance_orderbook():
     data = {
         "e": "depthUpdate",  # 事件类型

@@ -388,6 +388,7 @@ class TestHyperliquidMarketWssData:
         assert market_wss.asset_type == "SPOT"
         assert market_wss._params is not None
 
+    @pytest.mark.ticker
     def test_subscribe_ticker(self):
         """Test ticker subscription"""
         from bt_api_py.containers.exchanges.hyperliquid_exchange_data import (
@@ -404,6 +405,7 @@ class TestHyperliquidMarketWssData:
         assert subscription["method"] == "subscribe"
         assert subscription["subscription"]["type"] == "allMids"
 
+    @pytest.mark.orderbook
     def test_subscribe_orderbook(self):
         """Test orderbook subscription"""
         from bt_api_py.containers.exchanges.hyperliquid_exchange_data import (
@@ -492,6 +494,7 @@ class TestHyperliquidRegistration:
 class TestHyperliquidDataContainers:
     """Test Hyperliquid data containers"""
 
+    @pytest.mark.ticker
     def test_ticker_container(self):
         """Test ticker data container"""
         from bt_api_py.containers.tickers.hyperliquid_ticker import HyperliquidTickerData
@@ -505,6 +508,7 @@ class TestHyperliquidDataContainers:
         assert ticker.get_symbol_name() == "BTC"
         assert ticker.get_last_price() == 50000.0
 
+    @pytest.mark.ticker
     def test_ticker_init_data_idempotent(self):
         """Test that calling init_data() twice returns self both times"""
         from bt_api_py.containers.tickers.hyperliquid_ticker import HyperliquidTickerData

@@ -154,6 +154,7 @@ class TestGateioExchangeData:
         result = ed.get_rest_path("nonexistent_key")
         assert result == ""
 
+    @pytest.mark.kline
     def test_kline_periods(self):
         ed = GateioExchangeDataSpot()
         assert "1m" in ed.kline_periods
@@ -179,6 +180,7 @@ class TestGateioExchangeData:
 class TestGateioDataContainers:
     """Test Gate.io data container classes."""
 
+    @pytest.mark.ticker
     def test_ticker_container(self):
         ticker = GateioTickerData(SAMPLE_TICKER, "BTC-USDT", "SPOT", True)
         ticker.init_data()
@@ -186,11 +188,13 @@ class TestGateioDataContainers:
         assert ticker.get_symbol_name() == "BTC-USDT"
         assert ticker.get_last_price() is not None
 
+    @pytest.mark.ticker
     def test_ticker_init_data_returns_self(self):
         ticker = GateioTickerData(SAMPLE_TICKER, "BTC-USDT", "SPOT", True)
         result = ticker.init_data()
         assert result is ticker
 
+    @pytest.mark.ticker
     def test_request_ticker_container(self):
         ticker = GateioRequestTickerData(SAMPLE_TICKER, "BTC-USDT", "SPOT", True)
         ticker.init_data()
@@ -201,6 +205,7 @@ class TestGateioDataContainers:
         assert ticker.get_low_24h() == 49000.0
         assert ticker.get_base_volume() == 1234.56
 
+    @pytest.mark.orderbook
     def test_orderbook_container(self):
         ob = GateioOrderBookData(SAMPLE_ORDERBOOK, "BTC-USDT", "SPOT", True)
         ob.init_data()
@@ -209,6 +214,7 @@ class TestGateioDataContainers:
         assert len(ob.get_bids()) == 2
         assert len(ob.get_asks()) == 2
 
+    @pytest.mark.orderbook
     def test_orderbook_init_data_returns_self(self):
         ob = GateioOrderBookData(SAMPLE_ORDERBOOK, "BTC-USDT", "SPOT", True)
         result = ob.init_data()
@@ -415,6 +421,7 @@ class TestGateioThreeLayerPattern:
 class TestGateioNormalizeFunctions:
     """Test normalization functions for each data type."""
 
+    @pytest.mark.ticker
     def test_ticker_normalize(self):
         extra = {"symbol_name": "BTC-USDT", "asset_type": "SPOT"}
         result, status = GateioRequestDataSpot._get_ticker_normalize_function(
@@ -424,12 +431,14 @@ class TestGateioNormalizeFunctions:
         assert len(result) == 1
         assert isinstance(result[0], GateioTickerData)
 
+    @pytest.mark.ticker
     def test_ticker_normalize_dict(self):
         extra = {"symbol_name": "BTC-USDT", "asset_type": "SPOT"}
         result, status = GateioRequestDataSpot._get_ticker_normalize_function(SAMPLE_TICKER, extra)
         assert status is True
         assert len(result) == 1
 
+    @pytest.mark.ticker
     def test_ticker_normalize_error(self):
         extra = {"symbol_name": "BTC-USDT", "asset_type": "SPOT"}
         result, status = GateioRequestDataSpot._get_ticker_normalize_function(
@@ -438,12 +447,14 @@ class TestGateioNormalizeFunctions:
         assert status is False
         assert len(result) == 0
 
+    @pytest.mark.ticker
     def test_ticker_normalize_none(self):
         extra = {"symbol_name": "BTC-USDT", "asset_type": "SPOT"}
         result, status = GateioRequestDataSpot._get_ticker_normalize_function(None, extra)
         assert status is False
         assert len(result) == 0
 
+    @pytest.mark.orderbook
     def test_depth_normalize(self):
         extra = {"symbol_name": "BTC-USDT", "asset_type": "SPOT"}
         result, status = GateioRequestDataSpot._get_depth_normalize_function(
@@ -453,6 +464,7 @@ class TestGateioNormalizeFunctions:
         assert len(result) == 1
         assert isinstance(result[0], GateioOrderBookData)
 
+    @pytest.mark.orderbook
     def test_depth_normalize_error(self):
         extra = {"symbol_name": "BTC-USDT", "asset_type": "SPOT"}
         result, status = GateioRequestDataSpot._get_depth_normalize_function(
@@ -491,6 +503,7 @@ class TestGateioNormalizeFunctions:
         assert len(result) == 1
         assert isinstance(result[0], GateioOrderData)
 
+    @pytest.mark.kline
     def test_kline_normalize(self):
         extra = {"symbol_name": "BTC-USDT", "asset_type": "SPOT"}
         result, status = GateioRequestDataSpot._get_kline_normalize_function(SAMPLE_KLINE, extra)
@@ -513,6 +526,7 @@ class TestGateioNormalizeFunctions:
         assert status is False
 
     # Swap normalize tests
+    @pytest.mark.ticker
     def test_swap_ticker_normalize(self):
         extra = {"symbol_name": "BTC-USDT", "asset_type": "swap"}
         result, status = GateioRequestDataSwap._get_ticker_normalize_function(

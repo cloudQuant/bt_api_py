@@ -85,6 +85,7 @@ class TestRipioRequestDataSpot:
         assert Capability.MAKE_ORDER in caps
         assert Capability.CANCEL_ORDER in caps
 
+    @pytest.mark.ticker
     def test_get_tick_returns_tuple(self, mock_feed):
         path, params, extra_data = mock_feed._get_tick("BTC/USDT")
         assert "ticker" in path.lower()
@@ -93,6 +94,7 @@ class TestRipioRequestDataSpot:
         assert extra_data["exchange_name"] == "RIPIO___SPOT"
         assert extra_data["asset_type"] == "SPOT"
 
+    @pytest.mark.orderbook
     def test_get_depth_returns_tuple(self, mock_feed):
         path, params, extra_data = mock_feed._get_depth("BTC/USDT", 20)
         assert "orderbook" in path.lower() or "depth" in path.lower()
@@ -100,6 +102,7 @@ class TestRipioRequestDataSpot:
         assert extra_data["request_type"] == "get_depth"
         assert extra_data["exchange_name"] == "RIPIO___SPOT"
 
+    @pytest.mark.kline
     def test_get_kline_returns_tuple(self, mock_feed):
         path, params, extra_data = mock_feed._get_kline("BTC/USDT", "1h", 10)
         assert "candle" in path.lower() or "kline" in path.lower()
@@ -154,14 +157,17 @@ class TestRipioStandardInterfaces:
         feed.request = Mock(return_value=Mock())
         return feed
 
+    @pytest.mark.ticker
     def test_get_tick_calls_request(self, feed):
         feed.get_tick("BTC/USDT")
         assert feed.request.called
 
+    @pytest.mark.orderbook
     def test_get_depth_calls_request(self, feed):
         feed.get_depth("BTC/USDT")
         assert feed.request.called
 
+    @pytest.mark.kline
     def test_get_kline_calls_request(self, feed):
         feed.get_kline("BTC/USDT", "1h")
         assert feed.request.called
@@ -198,38 +204,45 @@ class TestRipioStandardInterfaces:
 class TestRipioNormalizeFunctions:
     """Test normalize functions edge cases."""
 
+    @pytest.mark.ticker
     def test_tick_normalize_with_none(self):
         result, status = RipioRequestDataSpot._get_tick_normalize_function(None, None)
         assert result == []
         assert status is False
 
+    @pytest.mark.ticker
     def test_tick_normalize_with_data(self):
         input_data = {"success": True, "data": {"lastPrice": "50000.00"}}
         result, status = RipioRequestDataSpot._get_tick_normalize_function(input_data, {})
         assert status is True
         assert result[0]["lastPrice"] == "50000.00"
 
+    @pytest.mark.ticker
     def test_tick_normalize_failure(self):
         input_data = {"success": False, "data": {}}
         result, status = RipioRequestDataSpot._get_tick_normalize_function(input_data, {})
         assert result == []
         assert status is False
 
+    @pytest.mark.orderbook
     def test_depth_normalize_with_none(self):
         result, status = RipioRequestDataSpot._get_depth_normalize_function(None, None)
         assert result == []
         assert status is False
 
+    @pytest.mark.orderbook
     def test_depth_normalize_with_data(self):
         input_data = {"success": True, "data": {"bids": [], "asks": []}}
         result, status = RipioRequestDataSpot._get_depth_normalize_function(input_data, {})
         assert status is True
 
+    @pytest.mark.kline
     def test_kline_normalize_with_none(self):
         result, status = RipioRequestDataSpot._get_kline_normalize_function(None, None)
         assert result == []
         assert status is False
 
+    @pytest.mark.kline
     def test_kline_normalize_with_data(self):
         input_data = {"success": True, "data": [[1672531200, "50000", "51000"]]}
         result, status = RipioRequestDataSpot._get_kline_normalize_function(input_data, {})
@@ -274,6 +287,7 @@ class TestRipioNormalizeFunctions:
 class TestRipioDataContainers:
     """Test Ripio data containers."""
 
+    @pytest.mark.ticker
     def test_ticker_container(self):
         ticker_response = {
             "success": True,
@@ -316,6 +330,7 @@ class TestRipioLiveAPI:
     """Live API tests - require network, marked as integration."""
 
     @pytest.mark.integration
+    @pytest.mark.ticker
     def test_ripio_req_tick_data(self):
         data_queue = queue.Queue()
         feed = RipioRequestDataSpot(data_queue)
@@ -323,6 +338,7 @@ class TestRipioLiveAPI:
         assert isinstance(data, RequestData)
 
     @pytest.mark.integration
+    @pytest.mark.orderbook
     def test_ripio_req_depth_data(self):
         data_queue = queue.Queue()
         feed = RipioRequestDataSpot(data_queue)
@@ -330,6 +346,7 @@ class TestRipioLiveAPI:
         assert isinstance(data, RequestData)
 
     @pytest.mark.integration
+    @pytest.mark.kline
     def test_ripio_req_kline_data(self):
         data_queue = queue.Queue()
         feed = RipioRequestDataSpot(data_queue)

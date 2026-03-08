@@ -42,6 +42,7 @@ def test_mercado_bitcoin_req_server_time():
 
 
 @pytest.mark.integration
+@pytest.mark.ticker
 def test_mercado_bitcoin_req_tick_data():
     """Test Mercado Bitcoin ticker data retrieval (synchronous)."""
     live_mercado_bitcoin_spot_feed = init_req_feed()
@@ -74,6 +75,7 @@ def test_mercado_bitcoin_req_tick_data():
     assert sell_price > 0, "Sell price should be positive"
 
 
+@pytest.mark.ticker
 def test_mercado_bitcoin_async_tick_data():
     """Test Mercado Bitcoin ticker data retrieval (asynchronous)."""
     data_queue = queue.Queue()
@@ -85,6 +87,7 @@ def test_mercado_bitcoin_async_tick_data():
 
 
 @pytest.mark.integration
+@pytest.mark.kline
 def test_mercado_bitcoin_req_kline_data():
     """Test Mercado Bitcoin kline/candlestick data retrieval (synchronous)."""
     live_mercado_bitcoin_spot_feed = init_req_feed()
@@ -123,6 +126,7 @@ def test_mercado_bitcoin_req_kline_data():
         assert volume >= 0, "Volume should be non-negative"
 
 
+@pytest.mark.kline
 def test_mercado_bitcoin_async_kline_data():
     """Test Mercado Bitcoin kline data retrieval (asynchronous)."""
     data_queue = queue.Queue()
@@ -161,6 +165,7 @@ def order_book_value_equals(order_book):
 
 
 @pytest.mark.integration
+@pytest.mark.orderbook
 def test_mercado_bitcoin_req_orderbook_data():
     """Test Mercado Bitcoin orderbook data retrieval."""
     live_mercado_bitcoin_spot_feed = init_req_feed()

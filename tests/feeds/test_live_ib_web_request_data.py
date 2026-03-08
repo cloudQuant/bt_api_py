@@ -96,7 +96,6 @@ class TestAuthAndSession:
         """检查认证状态"""
         feed = _init_feed()
         result = feed.check_auth_status()
-        print(f"Auth status: {result}")
         assert isinstance(result, dict)
         assert "authenticated" in result or "connected" in result
 
@@ -122,7 +121,6 @@ class TestAuthAndSession:
         """测试重新认证"""
         feed = _init_feed()
         result = feed.reauthenticate()
-        print(f"Reauthenticate: {result}")
         assert isinstance(result, dict)
 
 
@@ -188,12 +186,10 @@ class TestAccountInfo:
         feed = _init_feed()
         feed.connect()
         result = feed.get_portfolio_accounts()
-        print(f"Portfolio accounts: {result}")
         assert result is not None
         # 返回应为 list
         if isinstance(result, list):
             assert len(result) > 0
-            print(f"Account IDs: {[a.get('id', a) for a in result if isinstance(a, dict)]}")
 
     def test_get_account_summary(self):
         """获取账户摘要"""
@@ -207,7 +203,6 @@ class TestAccountInfo:
         feed.get_portfolio_accounts()
         time.sleep(1)
         result = feed.get_account(extra_data={"account_id": account_id})
-        print(f"Account summary: {json.dumps(result, indent=2, default=str)[:500]}")
         assert result is not None
         # 验证返回包含余额信息
         assert "balance" in result or "availableFunds" in result
@@ -224,7 +219,6 @@ class TestAccountInfo:
         feed.get_portfolio_accounts()
         time.sleep(1)
         result = feed.get_balance(extra_data={"account_id": account_id})
-        print(f"Balance: {json.dumps(result, indent=2, default=str)[:500]}")
         assert result is not None
         # 验证返回包含余额信息
         assert "balance" in result or "availableFunds" in result
@@ -242,7 +236,6 @@ class TestContractSearch:
         feed = _init_feed()
         feed.connect()
         result = feed.search_stocks("AAPL")
-        print(f"Search AAPL: {json.dumps(result, indent=2, default=str)[:500]}")
         assert result is not None
         # 预期包含 AAPL key
         if isinstance(result, dict):
@@ -253,7 +246,6 @@ class TestContractSearch:
         feed = _init_feed()
         feed.connect()
         result = feed.search_contract("AAPL", "STK")
-        print(f"Search contract AAPL/STK: {json.dumps(result, indent=2, default=str)[:500]}")
         assert result is not None
         if isinstance(result, list):
             assert len(result) > 0
@@ -263,7 +255,6 @@ class TestContractSearch:
         feed = _init_feed()
         feed.connect()
         conid = feed.resolve_conid("AAPL", "STK")
-        print(f"AAPL conid: {conid}")
         assert conid is not None
         assert isinstance(conid, int)
         # AAPL 的 conid 通常是 265598
@@ -274,7 +265,6 @@ class TestContractSearch:
         feed = _init_feed()
         feed.connect()
         result = feed.search_futures("ES")
-        print(f"Search ES futures: {json.dumps(result, indent=2, default=str)[:500]}")
         assert result is not None
 
 
@@ -287,6 +277,7 @@ class TestMarketData:
 
     AAPL_CONID = 265598  # AAPL 的 conid
 
+    @pytest.mark.ticker
     def test_get_tick_by_conid(self):
         """通过 conid 获取快照数据"""
         feed = _init_feed()
@@ -295,12 +286,12 @@ class TestMarketData:
             self.AAPL_CONID,
             extra_data={"conid": self.AAPL_CONID},
         )
-        print(f"AAPL tick: {json.dumps(result, indent=2, default=str)[:500]}")
         assert result is not None
         if isinstance(result, dict):
             # 至少应包含 conid
             assert "conid" in result or "conidEx" in result or "server_id" in result
 
+    @pytest.mark.ticker
     def test_get_tick_fields(self):
         """验证快照字段"""
         feed = _init_feed()
@@ -317,12 +308,12 @@ class TestMarketData:
             extra_data={"conid": self.AAPL_CONID},
             fields=["31", "84", "85", "86", "88"],
         )
-        print(f"AAPL tick fields: {result}")
         if isinstance(result, dict):
             # field 31 = last price, 84 = bid, 86 = ask
             has_data = any(k in result for k in ["31", "84", "86", "conid"])
             assert has_data, f"Expected market data fields in: {list(result.keys())}"
 
+    @pytest.mark.orderbook
     def test_get_depth(self):
         """获取买卖盘"""
         feed = _init_feed()
@@ -331,9 +322,9 @@ class TestMarketData:
             self.AAPL_CONID,
             extra_data={"conid": self.AAPL_CONID},
         )
-        print(f"AAPL depth: {result}")
         assert result is not None
 
+    @pytest.mark.kline
     def test_get_kline(self):
         """获取历史 K 线"""
         feed = _init_feed()
@@ -344,7 +335,6 @@ class TestMarketData:
             count=5,
             extra_data={"conid": self.AAPL_CONID},
         )
-        print(f"AAPL kline: {json.dumps(result, indent=2, default=str)[:500]}")
         assert result is not None
         if isinstance(result, dict):
             # IB 返回 {"data": [...], "serverId": ...}
@@ -352,7 +342,6 @@ class TestMarketData:
                 bars = result["data"]
                 assert len(bars) > 0
                 first_bar = bars[0]
-                print(f"First bar: {first_bar}")
                 # 验证 bar 字段
                 has_ohlc = any(k in first_bar for k in ["o", "h", "l", "c", "v"])
                 assert has_ohlc, f"Expected OHLC in: {list(first_bar.keys())}"
@@ -372,7 +361,6 @@ class TestMarketData:
             feed.unsubscribe_market_data(self.AAPL_CONID)
         except Exception as e:
             # 405/500 等非致命错误可忽略
-            print(f"Unsubscribe returned: {e}")
             assert "connect" not in str(e).lower(), f"Connection error: {e}"
 
 
@@ -411,7 +399,6 @@ class TestWebSocketStream:
         )
 
         stream.connect()
-        print("WebSocket connected, waiting for data...")
 
         received = []
         deadline = time.time() + 15  # 最多等15秒
@@ -419,7 +406,6 @@ class TestWebSocketStream:
             try:
                 msg = data_queue.get(timeout=1)
                 received.append(msg)
-                print(f"WS message: {msg}")
                 if len(received) >= 3:
                     break
             except queue.Empty:
@@ -427,7 +413,6 @@ class TestWebSocketStream:
 
         stream.disconnect()
 
-        print(f"Received {len(received)} messages")
         # 至少收到一条消息 (可能是心跳或数据)
         if len(received) > 0:
             first = received[0]
@@ -459,7 +444,6 @@ class TestWebSocketStream:
         )
 
         stream.connect()
-        print("Account WebSocket connected, waiting for data...")
 
         received = []
         deadline = time.time() + 10
@@ -467,12 +451,10 @@ class TestWebSocketStream:
             try:
                 msg = data_queue.get(timeout=1)
                 received.append(msg)
-                print(f"Account WS message: {msg}")
             except queue.Empty:
                 continue
 
         stream.disconnect()
-        print(f"Received {len(received)} account messages")
 
 
 # ── 持仓和订单查询测试 ────────────────────────────────────
@@ -500,7 +482,6 @@ class TestPositionAndOrders:
             feed.get_portfolio_accounts()
             time.sleep(1)
             result = feed.get_position(extra_data={"account_id": account_id})
-            print(f"Positions: {json.dumps(result, indent=2, default=str)[:500]}")
             assert result is not None
 
     def test_get_open_orders(self):
@@ -508,7 +489,6 @@ class TestPositionAndOrders:
         feed = _init_feed()
         feed.connect()
         result = feed.get_open_orders()
-        print(f"Open orders: {json.dumps(result, indent=2, default=str)[:500]}")
         assert result is not None
 
     def test_get_deals(self):
@@ -516,7 +496,6 @@ class TestPositionAndOrders:
         feed = _init_feed()
         feed.connect()
         result = feed.get_deals()
-        print(f"Deals: {json.dumps(result, indent=2, default=str)[:500]}")
         assert result is not None
 
 
@@ -604,21 +583,9 @@ class TestCookieFunctionality:
 
 
 if __name__ == "__main__":
-    print("=" * 60)
-    print("IB Web API 实时测试")
-    print("=" * 60)
 
     # 先检查 Gateway 是否可用
     if not _gateway_available():
-        print("\n❌ Client Portal Gateway 不可用!")
-        print("\n请按以下步骤操作:")
-        print("1. 下载 Client Portal Gateway:")
-        print("   https://www.interactivebrokers.com/en/trading/ibgateway-stable.php")
-        print("2. 启动 Gateway:")
-        print("   cd clientportal.gw && bin/run.sh root/conf.yaml")
-        print("3. 在浏览器打开 https://localhost:5000 并登录")
-        print("4. 配置 .env 文件中的 IB_WEB_ACCOUNT_ID")
-        print("5. 重新运行此测试")
+        pass
     else:
-        print("\n✅ Gateway 可用, 开始测试...")
         pytest.main([__file__, "-v", "-s"])

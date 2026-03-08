@@ -1,5 +1,8 @@
+import pytest
 import queue
 import time
+
+pytestmark = [pytest.mark.integration, pytest.mark.network]
 
 from bt_api_py.containers.bars.okx_bar import OkxBarData
 from bt_api_py.containers.exchanges.okx_exchange_data import OkxExchangeDataSwap
@@ -40,6 +43,7 @@ def init_async_feed(data_queue):
     return live_okx_swap_feed
 
 
+@pytest.mark.auth_account
 def test_get_okx_key():
     data = read_account_config()
     public_key = data["okx"]["public_key"]
@@ -60,6 +64,7 @@ def test_okx_req_symbol_data():
     assert isinstance(symbol_data.get_symbol_name(), str)
 
 
+@pytest.mark.ticker
 def test_okx_req_tick_data():
     live_okx_swap_feed = init_req_feed()
     data_list = live_okx_swap_feed.get_tick("BTC-USDT").get_data()
@@ -76,6 +81,7 @@ def test_okx_req_tick_data():
     assert swap_tick_data.get_last_volume() >= 0
 
 
+@pytest.mark.ticker
 def test_okx_async_tick_data():
     data_queue = queue.Queue()
     live_okx_swap_feed = init_async_feed(data_queue)
@@ -98,6 +104,7 @@ def test_okx_async_tick_data():
         assert swap_async_tick_data.get_last_price() > 0
 
 
+@pytest.mark.kline
 def test_okx_req_kline_data():
     live_okx_swap_feed = init_req_feed()
     data_list = live_okx_swap_feed.get_kline("BTC-USDT", "1m", count=2).get_data()
@@ -117,6 +124,7 @@ def test_okx_req_kline_data():
     assert swap_kline_data.get_bar_status() in [0.0, 1.0]
 
 
+@pytest.mark.kline
 def test_okx_async_kline_data():
     data_queue = queue.Queue()
     live_okx_swap_feed = init_async_feed(data_queue)
@@ -160,6 +168,7 @@ def order_book_value_equals(order_book):
     assert len(order_book.get_bid_price_list()) == 20
 
 
+@pytest.mark.orderbook
 def test_okx_req_depth_data():
     live_okx_swap_feed = init_req_feed()
     data = live_okx_swap_feed.get_depth("BTC-USDT", 20).get_data()
@@ -167,6 +176,7 @@ def test_okx_req_depth_data():
     order_book_value_equals(data[0].init_data())
 
 
+@pytest.mark.orderbook
 def test_okx_async_depth_data():
     data_queue = queue.Queue()
     live_okx_swap_feed = init_async_feed(data_queue)
@@ -257,6 +267,7 @@ def test_okx_async_mark_price_data():
     assert_mark_price_data_value(target_data[0].init_data())
 
 
+@pytest.mark.ticker
 def test_okx_req_get_tickers():
     """Test get_tickers interface"""
     live_okx_swap_feed = init_req_feed()

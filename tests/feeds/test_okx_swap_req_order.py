@@ -4,6 +4,8 @@ import time
 
 import pytest
 
+pytestmark = [pytest.mark.integration, pytest.mark.network]
+
 from bt_api_py.containers.exchanges.okx_exchange_data import OkxExchangeDataSwap
 from bt_api_py.containers.requestdatas.request_data import RequestData
 
@@ -72,6 +74,7 @@ def okx_req_cancel_order_by_client_order_id(client_order_id):
     return data
 
 
+@pytest.mark.auth_order
 def test_okx_req_order_functions():
     live_okx_swap_feed = init_req_feed()
     price_data = live_okx_swap_feed.get_tick("OP-USDT")
@@ -114,6 +117,7 @@ def test_okx_req_order_functions():
     # assert orders.get_data() is None
 
 
+@pytest.mark.auth_order
 def test_okx_async_order_functions():
     data_queue = queue.Queue()
     live_okx_swap_feed = init_async_feed(data_queue)
@@ -181,6 +185,7 @@ def test_okx_async_order_functions():
 #     print(sell_data.get_data())
 
 
+@pytest.mark.auth_private_trade
 def test_okx_req_get_deals():
     live_okx_swap_feed = init_req_feed()
     price_data = live_okx_swap_feed.get_deals()
@@ -193,6 +198,7 @@ def test_okx_req_get_deals():
         assert first_trade.get_trade_volume() > 0
 
 
+@pytest.mark.auth_private_trade
 def test_okx_async_get_deals():
     data_queue = queue.Queue()
     live_okx_swap_feed = init_async_feed(data_queue)
@@ -213,6 +219,7 @@ def test_okx_async_get_deals():
             assert first_trade.get_trade_volume() > 0
 
 
+@pytest.mark.auth_account
 def test_okx_req_set_margin_balance():
     """Test set_margin_balance interface"""
     live_okx_swap_feed = init_req_feed()
@@ -228,6 +235,7 @@ def test_okx_req_set_margin_balance():
     print("set_margin_balance status:", result.get_status())
 
 
+@pytest.mark.auth_order
 def test_okx_req_make_orders():
     """Test make_orders batch order interface"""
     live_okx_swap_feed = init_req_feed()
@@ -254,6 +262,7 @@ def test_okx_req_make_orders():
     print("make_orders data:", result.get_data())
 
 
+@pytest.mark.auth_order
 def test_okx_req_cancel_orders():
     """Test cancel_orders batch cancel interface"""
     live_okx_swap_feed = init_req_feed()
@@ -309,6 +318,7 @@ def test_okx_req_get_fills():
         print("fill_data:", fill_data)
 
 
+@pytest.mark.auth_position
 def test_okx_req_close_position():
     """Test close_position market close all interface"""
     live_okx_swap_feed = init_req_feed()

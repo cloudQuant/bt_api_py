@@ -98,6 +98,7 @@ class TestBybitExchangeData:
         path = exchange_data.get_rest_path("nonexistent")
         assert path == ""
 
+    @pytest.mark.kline
     def test_kline_periods(self):
         """Test kline periods are defined."""
         exchange_data = BybitExchangeDataSpot()
@@ -118,6 +119,7 @@ class TestBybitExchangeData:
 class TestBybitDataContainers:
     """Test Bybit data containers."""
 
+    @pytest.mark.ticker
     def test_spot_ticker_container(self):
         """Test spot ticker data container."""
         ticker_data = {
@@ -157,6 +159,7 @@ class TestBybitDataContainers:
         assert ticker.volume_24h == 1234.56
         assert ticker.has_been_init_data is True
 
+    @pytest.mark.ticker
     def test_spot_ticker_get_all_data(self):
         """Test ticker get_all_data method."""
         ticker_data = {
@@ -178,6 +181,7 @@ class TestBybitDataContainers:
         assert all_data["exchange_name"] == "BYBIT"
         assert all_data["symbol_name"] == "BTCUSDT"
 
+    @pytest.mark.ticker
     def test_swap_ticker_container(self):
         """Test swap ticker data container."""
         ticker_data = {
@@ -199,6 +203,7 @@ class TestBybitDataContainers:
         assert ticker.asset_type == "swap"
         assert ticker.last_price == 50000.0
 
+    @pytest.mark.orderbook
     def test_orderbook_container(self):
         """Test orderbook data container."""
         orderbook_data = {
@@ -430,6 +435,7 @@ class TestBybitThreeLayerPattern:
             private_key="test_secret",
         )
 
+    @pytest.mark.ticker
     def test_get_ticker_layer1(self):
         """Test _get_ticker returns correct tuple."""
         path, params, extra_data = self.feed._get_ticker("BTCUSDT")
@@ -439,6 +445,7 @@ class TestBybitThreeLayerPattern:
         assert extra_data["symbol_name"] == "BTCUSDT"
         assert extra_data["normalize_function"] is not None
 
+    @pytest.mark.orderbook
     def test_get_depth_layer1(self):
         """Test _get_depth returns correct tuple."""
         path, params, extra_data = self.feed._get_depth("BTCUSDT", limit=25)
@@ -446,6 +453,7 @@ class TestBybitThreeLayerPattern:
         assert params["limit"] == 25
         assert extra_data["request_type"] == "get_depth"
 
+    @pytest.mark.kline
     def test_get_kline_layer1(self):
         """Test _get_kline returns correct tuple."""
         path, params, extra_data = self.feed._get_kline("BTCUSDT", period="1h", limit=100)
@@ -495,6 +503,7 @@ class TestBybitThreeLayerPattern:
 class TestBybitNormalizeFunctions:
     """Test normalize functions produce correct data containers."""
 
+    @pytest.mark.ticker
     def test_ticker_normalize(self):
         """Test ticker normalize function."""
         from bt_api_py.feeds.live_bybit.spot import BybitRequestDataSpot
@@ -518,6 +527,7 @@ class TestBybitNormalizeFunctions:
         assert len(data) == 1
         assert isinstance(data[0], BybitSpotTickerData)
 
+    @pytest.mark.ticker
     def test_ticker_normalize_error(self):
         """Test ticker normalize with retCode != 0."""
         from bt_api_py.feeds.live_bybit.spot import BybitRequestDataSpot
@@ -527,6 +537,7 @@ class TestBybitNormalizeFunctions:
         data, status = BybitRequestDataSpot._get_ticker_normalize_function(input_data, extra_data)
         assert status is False
 
+    @pytest.mark.ticker
     def test_ticker_normalize_none(self):
         """Test ticker normalize with None input."""
         from bt_api_py.feeds.live_bybit.spot import BybitRequestDataSpot
@@ -536,6 +547,7 @@ class TestBybitNormalizeFunctions:
         assert status is False
         assert data == []
 
+    @pytest.mark.orderbook
     def test_depth_normalize(self):
         """Test depth normalize function."""
         from bt_api_py.feeds.live_bybit.spot import BybitRequestDataSpot
@@ -568,6 +580,7 @@ class TestBybitNormalizeFunctions:
         assert len(data) == 1
         assert isinstance(data[0], BybitSpotBalanceData)
 
+    @pytest.mark.kline
     def test_kline_normalize(self):
         """Test kline normalize function."""
         from bt_api_py.feeds.live_bybit.spot import BybitRequestDataSpot

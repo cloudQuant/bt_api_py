@@ -1,6 +1,9 @@
+import pytest
+
 from bt_api_py.containers.tickers.okx_ticker import OkxTickerData
 
 
+@pytest.mark.ticker
 def test_okx_ticker():
     data = {
         "instType": "SWAP",

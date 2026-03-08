@@ -72,6 +72,7 @@ class TestSushiSwapRequestDataSpot:
         assert extra_data["request_type"] == "get_server_time"
         assert "server_time" in extra_data
 
+    @pytest.mark.ticker
     def test_get_tick(self, sushiswap_spot):
         """Test get_tick method."""
         symbol = "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2"
@@ -82,6 +83,7 @@ class TestSushiSwapRequestDataSpot:
         assert extra_data["exchange_name"] == "SUSHISWAP___DEX"
         assert extra_data["chain"] == "ETHEREUM"
 
+    @pytest.mark.ticker
     def test_get_tick_normalize_function(self):
         """Test tick normalize function."""
         input_data = {"price": "3000.50"}
@@ -95,6 +97,7 @@ class TestSushiSwapRequestDataSpot:
         assert result[0]["symbol"] == "0x..."
         assert result[0]["price"] == "3000.50"
 
+    @pytest.mark.ticker
     def test_get_tick_normalize_with_price_dict(self):
         """Test tick normalize with price dict."""
         input_data = {"price": 3000.50}
@@ -204,6 +207,7 @@ class TestSushiSwapRequestDataSpot:
         assert result[0]["tokens"] == input_data
         assert result[0]["count"] == 2
 
+    @pytest.mark.orderbook
     def test_get_depth(self, sushiswap_spot):
         """Test get_depth method."""
         symbol = "0x7f2b3b7fbd3226c5be438cde49a519f442ca2eda"
@@ -212,6 +216,7 @@ class TestSushiSwapRequestDataSpot:
         assert extra_data["request_type"] == "get_depth"
         assert extra_data["symbol_name"] == symbol
 
+    @pytest.mark.kline
     def test_get_kline(self, sushiswap_spot):
         """Test get_kline method."""
         symbol = "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2"
@@ -223,6 +228,7 @@ class TestSushiSwapRequestDataSpot:
         assert extra_data["symbol_name"] == symbol
         assert extra_data["period"] == period
 
+    @pytest.mark.kline
     def test_get_kline_normalize_function(self):
         """Test kline normalize function."""
         input_data = [
@@ -245,6 +251,7 @@ class TestSushiSwapRequestDataSpot:
         assert status == True
         assert len(result) == 2
 
+    @pytest.mark.orderbook
     def test_get_depth_normalize_function(self):
         """Test depth normalize function."""
         input_data = {"liquidity": "1000000", "reserve0": "100", "reserve1": "1000"}
@@ -260,6 +267,7 @@ class TestSushiSwapRequestDataSpot:
         assert len(result) == 2
 
     @pytest.mark.skip(reason="Requires actual API call")
+    @pytest.mark.ticker
     def test_integration_get_tick(self, sushiswap_spot):
         """Integration test for get_tick - skipped."""
         pass
@@ -340,6 +348,7 @@ class TestSushiSwapExchangeDataSpot:
         assert SushiSwapChain.ETHEREUM in SushiSwapExchangeDataSpot.CHAIN_IDS
         assert SushiSwapChain.ARBITRUM in SushiSwapExchangeDataSpot.CHAIN_IDS
 
+    @pytest.mark.kline
     def test_kline_periods(self):
         """Test kline periods are defined."""
         with patch(
@@ -456,16 +465,19 @@ class TestSushiBaseCapabilities:
 class TestSushiNormalizeFunctions:
     """Test normalize functions edge cases."""
 
+    @pytest.mark.ticker
     def test_tick_normalize_with_none(self):
         result, status = SushiSwapRequestDataSpot._get_tick_normalize_function(None, None)
         assert result == []
         assert status is False
 
+    @pytest.mark.orderbook
     def test_depth_normalize_with_none(self):
         result, status = SushiSwapRequestDataSpot._get_depth_normalize_function(None, None)
         assert result == []
         assert status is False
 
+    @pytest.mark.kline
     def test_kline_normalize_with_none(self):
         result, status = SushiSwapRequestDataSpot._get_kline_normalize_function(None, None)
         assert result == []

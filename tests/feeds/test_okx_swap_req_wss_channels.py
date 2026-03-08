@@ -3,6 +3,8 @@ import time
 
 import pytest
 
+pytestmark = [pytest.mark.integration, pytest.mark.network]
+
 from bt_api_py.containers.assets.okx_asset import (
     OkxDepositInfoData,
     OkxWithdrawalInfoData,
@@ -125,6 +127,7 @@ def test_okx_wss_deposit_info():
     assert True, "deposit-info channel subscription test completed"
 
 
+@pytest.mark.auth_position
 def test_okx_wss_withdrawal_info():
     """Test WebSocket withdrawal-info channel (提币信息推送)."""
     from bt_api_py.feeds.live_okx_feed import OkxMarketWssDataSwap
@@ -173,6 +176,7 @@ def test_okx_wss_withdrawal_info():
 # ==================== Position Builder Tests ====================
 
 
+@pytest.mark.auth_position
 def test_okx_position_builder():
     """Test position_builder interface"""
     live_okx_swap_feed = init_req_feed()
@@ -186,6 +190,7 @@ def test_okx_position_builder():
         print("Position builder data:", data_list[:1] if data_list else "No data")
 
 
+@pytest.mark.auth_position
 def test_okx_async_position_builder():
     """Test async_position_builder interface"""
     data_queue = queue.Queue()
@@ -204,6 +209,7 @@ def test_okx_async_position_builder():
 
 
 @pytest.mark.skip(reason="OKX API endpoint deprecated/removed (404)")
+@pytest.mark.auth_position
 def test_okx_position_builder_trend():
     """Test position_builder_trend interface"""
     live_okx_swap_feed = init_req_feed()
@@ -218,6 +224,7 @@ def test_okx_position_builder_trend():
 
 
 @pytest.mark.skip(reason="OKX API endpoint deprecated/removed (404)")
+@pytest.mark.auth_position
 def test_okx_async_position_builder_trend():
     """Test async_position_builder_trend interface"""
     data_queue = queue.Queue()

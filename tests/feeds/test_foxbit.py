@@ -39,6 +39,7 @@ class TestFoxbitExchangeData:
         assert exchange_data.rest_url
         assert exchange_data.wss_url
 
+    @pytest.mark.kline
     def test_kline_periods(self):
         exchange_data = FoxbitExchangeDataSpot()
         assert "1m" in exchange_data.kline_periods
@@ -76,6 +77,7 @@ class TestFoxbitRequestDataSpot:
         assert mock_feed._format_market("BTC-BRL") == "btcbrl"
         assert mock_feed._format_market("btcbrl") == "btcbrl"
 
+    @pytest.mark.ticker
     def test_get_tick_returns_tuple(self, mock_feed):
         path, params, extra_data = mock_feed._get_tick("BTC/BRL")
         assert "btcbrl" in path
@@ -83,20 +85,24 @@ class TestFoxbitRequestDataSpot:
         assert extra_data["request_type"] == "get_tick"
         assert extra_data["symbol_name"] == "BTC/BRL"
 
+    @pytest.mark.ticker
     def test_get_tick_calls_request(self, mock_feed):
         mock_feed.get_tick("BTC/BRL")
         assert mock_feed.request.called
 
+    @pytest.mark.orderbook
     def test_get_depth_returns_tuple(self, mock_feed):
         path, params, extra_data = mock_feed._get_depth("BTC/BRL", count=20)
         assert "btcbrl" in path
         assert "/orderbook" in path
         assert extra_data["request_type"] == "get_depth"
 
+    @pytest.mark.orderbook
     def test_get_depth_calls_request(self, mock_feed):
         mock_feed.get_depth("BTC/BRL")
         assert mock_feed.request.called
 
+    @pytest.mark.kline
     def test_get_kline_returns_tuple(self, mock_feed):
         path, params, extra_data = mock_feed._get_kline("BTC/BRL", "1h")
         assert "btcbrl" in path
@@ -104,6 +110,7 @@ class TestFoxbitRequestDataSpot:
         assert extra_data["request_type"] == "get_kline"
         assert params["interval"] == "1h"
 
+    @pytest.mark.kline
     def test_get_kline_calls_request(self, mock_feed):
         mock_feed.get_kline("BTC/BRL", "1h")
         assert mock_feed.request.called
@@ -187,11 +194,13 @@ class TestFoxbitBaseCapabilities:
 class TestFoxbitNormalizeFunctions:
     """Test normalize functions edge cases."""
 
+    @pytest.mark.ticker
     def test_tick_normalize_with_none(self):
         result, status = FoxbitRequestDataSpot._get_tick_normalize_function(None, None)
         assert result == []
         assert status is False
 
+    @pytest.mark.ticker
     def test_tick_normalize_with_dict(self):
         input_data = {"data": {"marketSymbol": "BTCBRL", "lastPrice": "250000.50"}}
         extra = {"symbol_name": "BTC/BRL", "asset_type": "SPOT"}
@@ -199,6 +208,7 @@ class TestFoxbitNormalizeFunctions:
         assert status is True
         assert len(result) == 1
 
+    @pytest.mark.ticker
     def test_tick_normalize_with_list(self):
         input_data = {"data": [{"marketSymbol": "BTCBRL", "lastPrice": "250000.50"}]}
         extra = {"symbol_name": "BTC/BRL", "asset_type": "SPOT"}
@@ -206,21 +216,25 @@ class TestFoxbitNormalizeFunctions:
         assert status is True
         assert len(result) == 1
 
+    @pytest.mark.orderbook
     def test_depth_normalize_with_none(self):
         result, status = FoxbitRequestDataSpot._get_depth_normalize_function(None, None)
         assert result == []
         assert status is False
 
+    @pytest.mark.orderbook
     def test_depth_normalize_with_dict(self):
         input_data = {"data": {"bids": [], "asks": []}}
         result, status = FoxbitRequestDataSpot._get_depth_normalize_function(input_data, None)
         assert status is True
 
+    @pytest.mark.kline
     def test_kline_normalize_with_none(self):
         result, status = FoxbitRequestDataSpot._get_kline_normalize_function(None, None)
         assert result == []
         assert status is False
 
+    @pytest.mark.kline
     def test_kline_normalize_with_list(self):
         input_data = {"data": [{"open": "250000", "close": "251000"}]}
         result, status = FoxbitRequestDataSpot._get_kline_normalize_function(input_data, None)
@@ -245,6 +259,7 @@ class TestFoxbitNormalizeFunctions:
 class TestFoxbitDataContainers:
     """Test Foxbit data containers."""
 
+    @pytest.mark.ticker
     def test_ticker_container(self):
         ticker_info = json.dumps(
             {
@@ -292,6 +307,7 @@ class TestFoxbitLiveAPI:
     """Live API tests - require network, marked as integration."""
 
     @pytest.mark.integration
+    @pytest.mark.ticker
     def test_foxbit_req_tick_data(self):
         data_queue = queue.Queue()
         feed = FoxbitRequestDataSpot(data_queue, exchange_name="FOXBIT___SPOT")
@@ -299,6 +315,7 @@ class TestFoxbitLiveAPI:
         assert isinstance(result, RequestData)
 
     @pytest.mark.integration
+    @pytest.mark.orderbook
     def test_foxbit_req_depth_data(self):
         data_queue = queue.Queue()
         feed = FoxbitRequestDataSpot(data_queue, exchange_name="FOXBIT___SPOT")
@@ -306,6 +323,7 @@ class TestFoxbitLiveAPI:
         assert isinstance(result, RequestData)
 
     @pytest.mark.integration
+    @pytest.mark.kline
     def test_foxbit_req_kline_data(self):
         data_queue = queue.Queue()
         feed = FoxbitRequestDataSpot(data_queue, exchange_name="FOXBIT___SPOT")

@@ -134,6 +134,7 @@ class TestUniswapTickerData:
         data = uniswap_feed.get_tick(token)
         assert data is not None
 
+    @pytest.mark.ticker
     def test_uniswap_get_tick_params(self, uniswap_feed):
         """Test get tick parameter generation."""
         path, params, extra_data = uniswap_feed._get_tick(WETH_ADDRESS)
@@ -265,6 +266,7 @@ class TestUniswapSwappableTokens:
 class TestUniswapKlineData:
     """Test kline/candlestick data functionality."""
 
+    @pytest.mark.kline
     def test_uniswap_req_kline_data(self, uniswap_feed):
         """Test getting kline data - not supported directly."""
         # Uniswap doesn't provide direct kline data
@@ -280,6 +282,7 @@ class TestUniswapKlineData:
 class TestUniswapDepth:
     """Test liquidity depth functionality."""
 
+    @pytest.mark.orderbook
     def test_uniswap_req_depth_as_pool(self, uniswap_feed):
         """Test getting depth - returns pool info for Uniswap."""
         # For Uniswap, depth is pool liquidity
@@ -288,6 +291,7 @@ class TestUniswapDepth:
         # Should either return pool data or message about AMM
         assert data is not None
 
+    @pytest.mark.orderbook
     def test_uniswap_get_depth_params(self, uniswap_feed):
         """Test get depth parameter generation."""
         path, params, extra_data = uniswap_feed._get_depth(WETH_ADDRESS, count=20)
@@ -379,6 +383,7 @@ class TestUniswapExchangeData:
         token_address = "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2"
         assert exchange_data.get_symbol(token_address) == token_address
 
+    @pytest.mark.kline
     def test_kline_periods(self):
         """Test kline period configuration."""
         exchange_data = UniswapExchangeDataSpot()
@@ -421,6 +426,7 @@ class TestUniswapRegistry:
 class TestUniswapNormalization:
     """Test data normalization functions."""
 
+    @pytest.mark.ticker
     def test_get_tick_normalize_function(self):
         """Test ticker normalization function."""
         input_data = {
@@ -502,6 +508,7 @@ class TestUniswapNormalization:
         assert status is True
         assert isinstance(result, list)
 
+    @pytest.mark.orderbook
     def test_get_depth_normalize_function(self):
         """Test depth normalization function."""
         # Uniswap pools don't have order books
@@ -515,6 +522,7 @@ class TestUniswapNormalization:
         assert status is True
         assert result is not None
 
+    @pytest.mark.kline
     def test_get_kline_normalize_function(self):
         """Test kline normalization function."""
         # Uniswap doesn't have direct kline data

@@ -1,5 +1,8 @@
+import pytest
 import queue
 import time
+
+pytestmark = [pytest.mark.integration, pytest.mark.network]
 
 from bt_api_py.containers.exchanges.okx_exchange_data import OkxExchangeDataSwap
 from bt_api_py.containers.requestdatas.request_data import RequestData

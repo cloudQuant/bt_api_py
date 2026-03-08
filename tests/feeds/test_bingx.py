@@ -51,6 +51,7 @@ class TestBingXExchangeData:
             or "get_server_time" in exchange_data.rest_paths
         )
 
+    @pytest.mark.kline
     def test_kline_periods(self, mock_logger):
         """Test kline periods are defined."""
         exchange_data = BingXExchangeDataSpot()
@@ -98,6 +99,7 @@ class TestBingXRequestDataSpot:
         assert Capability.MAKE_ORDER in caps
         assert Capability.CANCEL_ORDER in caps
 
+    @pytest.mark.ticker
     def test_get_tick_returns_tuple(self, mock_feed):
         """Test _get_tick returns (path, params, extra_data) tuple."""
         path, params, extra_data = mock_feed._get_tick("BTC-USDT")
@@ -106,11 +108,13 @@ class TestBingXRequestDataSpot:
         assert extra_data["request_type"] == "get_tick"
         assert extra_data["symbol_name"] == "BTC-USDT"
 
+    @pytest.mark.ticker
     def test_get_tick_calls_request(self, mock_feed):
         """Test get_tick calls self.request."""
         mock_feed.get_tick("BTC-USDT")
         assert mock_feed.request.called
 
+    @pytest.mark.orderbook
     def test_get_depth_returns_tuple(self, mock_feed):
         """Test _get_depth returns (path, params, extra_data) tuple."""
         path, params, extra_data = mock_feed._get_depth("BTC-USDT", 10)
@@ -118,17 +122,20 @@ class TestBingXRequestDataSpot:
         assert params["limit"] == 10
         assert extra_data["request_type"] == "get_depth"
 
+    @pytest.mark.orderbook
     def test_get_depth_calls_request(self, mock_feed):
         """Test get_depth calls self.request."""
         mock_feed.get_depth("BTC-USDT", 10)
         assert mock_feed.request.called
 
+    @pytest.mark.kline
     def test_get_kline_returns_tuple(self, mock_feed):
         """Test _get_kline returns (path, params, extra_data) tuple."""
         path, params, extra_data = mock_feed._get_kline("BTC-USDT", "1m", 5)
         assert params["symbol"] == "BTC-USDT"
         assert extra_data["request_type"] == "get_kline"
 
+    @pytest.mark.kline
     def test_get_kline_calls_request(self, mock_feed):
         """Test get_kline calls self.request."""
         mock_feed.get_kline("BTC-USDT", "1m", 5)
@@ -162,6 +169,7 @@ class TestBingXRequestDataSpot:
         result, success = BingXRequestDataSpot._get_tick_normalize_function(input_data, extra_data)
         assert success is True
 
+    @pytest.mark.orderbook
     def test_depth_normalize_function(self):
         """Test depth normalization function."""
         input_data = {
@@ -177,6 +185,7 @@ class TestBingXRequestDataSpot:
         assert success is True
         assert "bids" in result[0]
 
+    @pytest.mark.kline
     def test_kline_normalize_function(self):
         """Test kline normalization function."""
         input_data = {"data": [[1640995200, "49500", "51000", "49000", "50000", "1234.56"]]}
@@ -277,16 +286,19 @@ class TestBingXBaseCapabilities:
 class TestBingXNormalizeFunctions:
     """Test normalize functions edge cases."""
 
+    @pytest.mark.ticker
     def test_tick_normalize_with_none(self):
         result, status = BingXRequestDataSpot._get_tick_normalize_function(None, None)
         assert result == []
         assert status is False
 
+    @pytest.mark.orderbook
     def test_depth_normalize_with_none(self):
         result, status = BingXRequestDataSpot._get_depth_normalize_function(None, None)
         assert result == []
         assert status is False
 
+    @pytest.mark.kline
     def test_kline_normalize_with_none(self):
         result, status = BingXRequestDataSpot._get_kline_normalize_function(None, None)
         assert result == []
@@ -297,6 +309,7 @@ class TestBingXNormalizeFunctions:
         assert result == []
         assert status is False
 
+    @pytest.mark.ticker
     def test_tick_normalize_empty_data(self):
         result, status = BingXRequestDataSpot._get_tick_normalize_function({"data": []}, None)
         assert result == []
@@ -307,6 +320,7 @@ class TestBingXLiveAPI:
     """Live API tests - require network, marked as integration."""
 
     @pytest.mark.integration
+    @pytest.mark.ticker
     def test_bingx_req_tick_data(self):
         """Test BingX ticker data (sync)."""
         data_queue = queue.Queue()
@@ -321,6 +335,7 @@ class TestBingXLiveAPI:
                 assert isinstance(ticker, dict)
 
     @pytest.mark.integration
+    @pytest.mark.kline
     def test_bingx_req_kline_data(self):
         """Test BingX kline data (sync)."""
         data_queue = queue.Queue()
@@ -334,6 +349,7 @@ class TestBingXLiveAPI:
             assert isinstance(klines, (list, dict))
 
     @pytest.mark.integration
+    @pytest.mark.orderbook
     def test_bingx_req_orderbook_data(self):
         """Test BingX orderbook data (sync)."""
         data_queue = queue.Queue()
@@ -348,6 +364,7 @@ class TestBingXLiveAPI:
                 assert "bids" in orderbook or "asks" in orderbook
 
     @pytest.mark.integration
+    @pytest.mark.ticker
     def test_bingx_async_tick_data(self):
         """Test BingX ticker data (async)."""
         data_queue = queue.Queue()
@@ -361,6 +378,7 @@ class TestBingXLiveAPI:
             pass
 
     @pytest.mark.integration
+    @pytest.mark.kline
     def test_bingx_async_kline_data(self):
         """Test BingX kline data (async)."""
         data_queue = queue.Queue()
@@ -374,6 +392,7 @@ class TestBingXLiveAPI:
             pass
 
     @pytest.mark.integration
+    @pytest.mark.orderbook
     def test_bingx_async_orderbook_data(self):
         """Test BingX orderbook data (async)."""
         data_queue = queue.Queue()

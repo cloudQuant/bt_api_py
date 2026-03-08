@@ -54,6 +54,7 @@ class TestLunoRequestDataSpot:
         assert Capability.MAKE_ORDER in caps
         assert Capability.CANCEL_ORDER in caps
 
+    @pytest.mark.ticker
     def test_get_tick_returns_tuple(self, mock_feed):
         path, params, extra_data = mock_feed._get_tick("XBTZAR")
         assert path is not None
@@ -63,12 +64,14 @@ class TestLunoRequestDataSpot:
         assert extra_data["exchange_name"] == "LUNO___SPOT"
         assert extra_data["asset_type"] == "SPOT"
 
+    @pytest.mark.orderbook
     def test_get_depth_returns_tuple(self, mock_feed):
         path, params, extra_data = mock_feed._get_depth("XBTZAR")
         assert path is not None
         assert params["pair"] == "XBTZAR"
         assert extra_data["request_type"] == "get_depth"
 
+    @pytest.mark.kline
     def test_get_kline_returns_tuple(self, mock_feed):
         path, params, extra_data = mock_feed._get_kline("XBTZAR", period="1h")
         assert path is not None
@@ -121,6 +124,7 @@ class TestLunoStandardInterfaces:
         feed.request = Mock(return_value=Mock())
         return feed
 
+    @pytest.mark.ticker
     def test_get_tick_calls_request(self, feed):
         feed.get_tick("XBTZAR")
         assert feed.request.called
@@ -129,10 +133,12 @@ class TestLunoStandardInterfaces:
         if extra_data:
             assert extra_data["request_type"] == "get_tick"
 
+    @pytest.mark.orderbook
     def test_get_depth_calls_request(self, feed):
         feed.get_depth("XBTZAR")
         assert feed.request.called
 
+    @pytest.mark.kline
     def test_get_kline_calls_request(self, feed):
         feed.get_kline("XBTZAR", "1h")
         assert feed.request.called
@@ -161,32 +167,38 @@ class TestLunoStandardInterfaces:
 class TestLunoNormalizeFunctions:
     """Test normalize functions edge cases."""
 
+    @pytest.mark.ticker
     def test_tick_normalize_with_none(self):
         result, status = LunoRequestDataSpot._get_tick_normalize_function(None, None)
         assert result == []
         assert status is False
 
+    @pytest.mark.ticker
     def test_tick_normalize_with_data(self):
         input_data = {"pair": "XBTZAR", "last_trade": "95000000"}
         result, status = LunoRequestDataSpot._get_tick_normalize_function(input_data, {})
         assert status is True
         assert len(result) == 1
 
+    @pytest.mark.orderbook
     def test_depth_normalize_with_none(self):
         result, status = LunoRequestDataSpot._get_depth_normalize_function(None, None)
         assert result == []
         assert status is False
 
+    @pytest.mark.orderbook
     def test_depth_normalize_with_data(self):
         input_data = {"bids": [], "asks": []}
         result, status = LunoRequestDataSpot._get_depth_normalize_function(input_data, {})
         assert status is True
 
+    @pytest.mark.kline
     def test_kline_normalize_with_none(self):
         result, status = LunoRequestDataSpot._get_kline_normalize_function(None, None)
         assert result == []
         assert status is False
 
+    @pytest.mark.kline
     def test_kline_normalize_with_data(self):
         input_data = {"candles": [{"open": 100}]}
         result, status = LunoRequestDataSpot._get_kline_normalize_function(input_data, {})
@@ -227,6 +239,7 @@ class TestLunoNormalizeFunctions:
 class TestLunoDataContainers:
     """Test Luno data containers."""
 
+    @pytest.mark.ticker
     def test_ticker_container(self):
         ticker_info = json.dumps(
             {
@@ -269,6 +282,7 @@ class TestLunoLiveAPI:
     """Live API tests - require network, marked as integration."""
 
     @pytest.mark.integration
+    @pytest.mark.ticker
     def test_luno_req_tick_data(self):
         data_queue = queue.Queue()
         feed = LunoRequestDataSpot(data_queue, exchange_name="LUNO___SPOT")
@@ -276,6 +290,7 @@ class TestLunoLiveAPI:
         assert result is not None
 
     @pytest.mark.integration
+    @pytest.mark.orderbook
     def test_luno_req_depth_data(self):
         data_queue = queue.Queue()
         feed = LunoRequestDataSpot(data_queue, exchange_name="LUNO___SPOT")
@@ -283,6 +298,7 @@ class TestLunoLiveAPI:
         assert result is not None
 
     @pytest.mark.integration
+    @pytest.mark.kline
     def test_luno_req_kline_data(self):
         data_queue = queue.Queue()
         feed = LunoRequestDataSpot(data_queue, exchange_name="LUNO___SPOT")

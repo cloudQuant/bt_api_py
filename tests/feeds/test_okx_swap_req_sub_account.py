@@ -3,6 +3,8 @@ import time
 
 import pytest
 
+pytestmark = [pytest.mark.integration, pytest.mark.network]
+
 from bt_api_py.containers.exchanges.okx_exchange_data import OkxExchangeDataSwap
 from bt_api_py.containers.requestdatas.request_data import RequestData
 
@@ -37,6 +39,7 @@ def init_async_feed(data_queue):
     return live_okx_swap_feed
 
 
+@pytest.mark.auth_account
 def test_okx_req_get_sub_account_list():
     """Test get_sub_account_list interface"""
     live_okx_swap_feed = init_req_feed()
@@ -49,6 +52,7 @@ def test_okx_req_get_sub_account_list():
     print("get_sub_account_list count:", len(sub_account_list))
 
 
+@pytest.mark.auth_account
 def test_okx_async_get_sub_account_list():
     """Test async_get_sub_account_list interface"""
     data_queue = queue.Queue()
@@ -66,6 +70,7 @@ def test_okx_async_get_sub_account_list():
     assert isinstance(sub_account_list, list)
 
 
+@pytest.mark.auth_account
 def test_okx_req_create_sub_account():
     """Test create_sub_account interface (requires actual API call)"""
     live_okx_swap_feed = init_req_feed()
@@ -78,6 +83,7 @@ def test_okx_req_create_sub_account():
     print("create_sub_account input:", result.get_input_data())
 
 
+@pytest.mark.auth_account
 def test_okx_req_create_sub_account_api_key():
     """Test create_sub_account_api_key interface"""
     live_okx_swap_feed = init_req_feed()
@@ -90,6 +96,7 @@ def test_okx_req_create_sub_account_api_key():
     print("create_sub_account_api_key status:", result.get_status())
 
 
+@pytest.mark.auth_account
 def test_okx_req_get_sub_account_api_key():
     """Test get_sub_account_api_key interface"""
     live_okx_swap_feed = init_req_feed()
@@ -101,6 +108,7 @@ def test_okx_req_get_sub_account_api_key():
     print("get_sub_account_api_key status:", result.get_status())
 
 
+@pytest.mark.auth_account
 def test_okx_req_reset_sub_account_api_key():
     """Test reset_sub_account_api_key interface"""
     live_okx_swap_feed = init_req_feed()
@@ -113,6 +121,7 @@ def test_okx_req_reset_sub_account_api_key():
     print("reset_sub_account_api_key status:", result.get_status())
 
 
+@pytest.mark.auth_account
 def test_okx_req_delete_sub_account_api_key():
     """Test delete_sub_account_api_key interface"""
     live_okx_swap_feed = init_req_feed()
@@ -125,6 +134,7 @@ def test_okx_req_delete_sub_account_api_key():
     print("delete_sub_account_api_key status:", result.get_status())
 
 
+@pytest.mark.auth_account
 def test_okx_req_get_sub_account_funding_balance():
     """Test get_sub_account_funding_balance interface"""
     live_okx_swap_feed = init_req_feed()
@@ -136,6 +146,7 @@ def test_okx_req_get_sub_account_funding_balance():
     print("get_sub_account_funding_balance status:", result.get_status())
 
 
+@pytest.mark.auth_account
 def test_okx_req_get_sub_account_max_withdrawal():
     """Test get_sub_account_max_withdrawal interface"""
     live_okx_swap_feed = init_req_feed()
@@ -151,6 +162,7 @@ def test_okx_req_get_sub_account_max_withdrawal():
 # ==================== Funding Account Tests ====================
 
 
+@pytest.mark.auth_account
 def test_okx_get_sub_account_transfer_history():
     """Test get_sub_account_transfer_history interface"""
     live_okx_swap_feed = init_req_feed()
@@ -159,6 +171,7 @@ def test_okx_get_sub_account_transfer_history():
     print("get_sub_account_transfer_history status:", data.get_status())
 
 
+@pytest.mark.auth_account
 def test_okx_async_get_sub_account_transfer_history():
     """Test async_get_sub_account_transfer_history interface"""
     data_queue = queue.Queue()
@@ -174,6 +187,7 @@ def test_okx_async_get_sub_account_transfer_history():
         print("async_get_sub_account_transfer_history status:", result.get_status())
 
 
+@pytest.mark.auth_account
 def test_okx_get_managed_sub_account_bills():
     """Test get_managed_sub_account_bills interface"""
     live_okx_swap_feed = init_req_feed()
@@ -182,6 +196,7 @@ def test_okx_get_managed_sub_account_bills():
     print("get_managed_sub_account_bills status:", data.get_status())
 
 
+@pytest.mark.auth_account
 def test_okx_async_get_managed_sub_account_bills():
     """Test async_get_managed_sub_account_bills interface"""
     data_queue = queue.Queue()
@@ -198,6 +213,7 @@ def test_okx_async_get_managed_sub_account_bills():
 
 
 @pytest.mark.skip(reason="OKX API endpoint deprecated/removed (404)")
+@pytest.mark.auth_account
 def test_okx_get_custody_sub_account_list():
     """Test get_custody_sub_account_list interface"""
     live_okx_swap_feed = init_req_feed()
@@ -207,6 +223,7 @@ def test_okx_get_custody_sub_account_list():
 
 
 @pytest.mark.skip(reason="OKX API endpoint deprecated/removed (404)")
+@pytest.mark.auth_account
 def test_okx_async_get_custody_sub_account_list():
     """Test async_get_custody_sub_account_list interface"""
     data_queue = queue.Queue()

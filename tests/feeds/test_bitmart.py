@@ -158,6 +158,7 @@ class TestExchangeData:
         assert exchange_data.get_period("1h") == "60"
         assert exchange_data.get_period("1d") == "1440"
 
+    @pytest.mark.kline
     def test_kline_periods(self, exchange_data):
         for k in ("1m", "5m", "15m", "1h", "4h", "1d"):
             assert k in exchange_data.kline_periods
@@ -165,10 +166,12 @@ class TestExchangeData:
     def test_legal_currencies(self, exchange_data):
         assert "USDT" in exchange_data.legal_currency
 
+    @pytest.mark.ticker
     def test_get_rest_path_tick(self, exchange_data):
         path = exchange_data.get_rest_path("get_tick")
         assert "ticker" in path.lower()
 
+    @pytest.mark.orderbook
     def test_get_rest_path_depth(self, exchange_data):
         path = exchange_data.get_rest_path("get_depth")
         assert "books" in path.lower()
@@ -192,6 +195,7 @@ class TestExchangeData:
 
 
 class TestParameterGeneration:
+    @pytest.mark.ticker
     def test_get_tick_params(self, feed):
         path, params, ed = feed._get_tick("BTC/USDT")
         assert "GET" in path
@@ -199,15 +203,18 @@ class TestParameterGeneration:
         assert ed["request_type"] == "get_tick"
         assert callable(ed["normalize_function"])
 
+    @pytest.mark.orderbook
     def test_get_depth_params(self, feed):
         path, params, ed = feed._get_depth("BTC/USDT", 20)
         assert params["symbol"] == "BTC_USDT"
         assert params["limit"] == 20
 
+    @pytest.mark.orderbook
     def test_get_depth_max_limit(self, feed):
         _, params, _ = feed._get_depth("BTC/USDT", 100)
         assert params["limit"] == 50
 
+    @pytest.mark.kline
     def test_get_kline_params(self, feed):
         path, params, ed = feed._get_kline("BTC/USDT", "1h", 50)
         assert params["symbol"] == "BTC_USDT"
@@ -264,34 +271,41 @@ class TestParameterGeneration:
 
 
 class TestNormalization:
+    @pytest.mark.ticker
     def test_tick_ok(self):
         result, ok = BitmartRequestData._get_tick_normalize_function(SAMPLE_TICK, {})
         assert ok is True
         assert result[0]["symbol"] == "BTC_USDT"
 
+    @pytest.mark.ticker
     def test_tick_error(self):
         result, ok = BitmartRequestData._get_tick_normalize_function(SAMPLE_ERROR, {})
         assert ok is False
 
+    @pytest.mark.ticker
     def test_tick_empty(self):
         result, ok = BitmartRequestData._get_tick_normalize_function({}, {})
         assert ok is False  # {} has no 'data' key, unwrap returns {}, which is falsy
 
+    @pytest.mark.ticker
     def test_tick_none(self):
         result, ok = BitmartRequestData._get_tick_normalize_function(None, {})
         assert ok is False
 
+    @pytest.mark.orderbook
     def test_depth_ok(self):
         result, ok = BitmartRequestData._get_depth_normalize_function(SAMPLE_DEPTH, {})
         assert ok is True
         assert "buys" in result[0]
         assert "sells" in result[0]
 
+    @pytest.mark.kline
     def test_kline_ok(self):
         result, ok = BitmartRequestData._get_kline_normalize_function(SAMPLE_KLINE, {})
         assert ok is True
         assert len(result) == 2
 
+    @pytest.mark.kline
     def test_kline_empty(self):
         empty = {"code": 1000, "message": "OK", "data": {"klines": []}}
         result, ok = BitmartRequestData._get_kline_normalize_function(empty, {})
@@ -356,17 +370,20 @@ class TestNormalization:
 
 class TestSyncCalls:
     @patch.object(BitmartRequestDataSpot, "http_request", return_value=SAMPLE_TICK)
+    @pytest.mark.ticker
     def test_get_tick(self, mock_req, feed):
         rd = feed.get_tick("BTC/USDT")
         assert isinstance(rd, RequestData)
         mock_req.assert_called_once()
 
     @patch.object(BitmartRequestDataSpot, "http_request", return_value=SAMPLE_DEPTH)
+    @pytest.mark.orderbook
     def test_get_depth(self, mock_req, feed):
         rd = feed.get_depth("BTC/USDT", 20)
         assert isinstance(rd, RequestData)
 
     @patch.object(BitmartRequestDataSpot, "http_request", return_value=SAMPLE_KLINE)
+    @pytest.mark.kline
     def test_get_kline(self, mock_req, feed):
         rd = feed.get_kline("BTC/USDT", "1h", 50)
         assert isinstance(rd, RequestData)
@@ -533,6 +550,7 @@ class TestFeedInit:
 
 class TestIntegration:
     @pytest.mark.skip(reason="requires network")
+    @pytest.mark.ticker
     def test_live_get_tick(self):
         q = queue.Queue()
         f = BitmartRequestDataSpot(q)
@@ -540,6 +558,7 @@ class TestIntegration:
         assert isinstance(rd, RequestData)
 
     @pytest.mark.skip(reason="requires network")
+    @pytest.mark.orderbook
     def test_live_get_depth(self):
         q = queue.Queue()
         f = BitmartRequestDataSpot(q)
@@ -547,6 +566,7 @@ class TestIntegration:
         assert isinstance(rd, RequestData)
 
     @pytest.mark.skip(reason="requires network")
+    @pytest.mark.kline
     def test_live_get_kline(self):
         q = queue.Queue()
         f = BitmartRequestDataSpot(q)

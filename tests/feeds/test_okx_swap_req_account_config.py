@@ -43,12 +43,10 @@ def test_okx_req_get_mmp_config():
     # Get MMP config for SWAP instruments
     data = live_okx_swap_feed.get_mmp_config(inst_type="SWAP")
     assert isinstance(data, RequestData)
-    print("get_mmp_config status:", data.get_status())
     config_list = data.get_data()
     assert isinstance(config_list, list)
-    print("get_mmp_config count:", len(config_list))
     if config_list:
-        print("get_mmp_config sample:", config_list[0])
+        pass
 
 
 def test_okx_async_get_mmp_config():
@@ -62,10 +60,8 @@ def test_okx_async_get_mmp_config():
     except queue.Empty:
         config_data = None
     if config_data is None:
-        print("Warning: config_data is None (async timeout)")
         return  # Skip assertion on timeout
     assert isinstance(config_data, RequestData)
-    print("async_get_mmp_config status:", config_data.get_status())
 
 
 def test_okx_req_set_mmp_config():
@@ -77,7 +73,6 @@ def test_okx_req_set_mmp_config():
         inst_type="SWAP", symbol="BTC-USDT-SWAP", time_interval_frozen=1000, algo_orders_frozen=True
     )
     assert isinstance(data, RequestData)
-    print("set_mmp_config status:", data.get_status())
 
 
 def test_okx_async_set_mmp_config():
@@ -93,10 +88,8 @@ def test_okx_async_set_mmp_config():
     except queue.Empty:
         config_data = None
     if config_data is None:
-        print("Warning: config_data is None (async timeout)")
         return  # Skip assertion on timeout
     assert isinstance(config_data, RequestData)
-    print("async_set_mmp_config status:", config_data.get_status())
 
 
 def test_okx_req_mmp_reset():
@@ -106,7 +99,6 @@ def test_okx_req_mmp_reset():
     # Note: This may fail if MMP is not configured for the account
     data = live_okx_swap_feed.mmp_reset(inst_type="SWAP", symbol="BTC-USDT-SWAP")
     assert isinstance(data, RequestData)
-    print("mmp_reset status:", data.get_status())
 
 
 def test_okx_async_mmp_reset():
@@ -120,10 +112,8 @@ def test_okx_async_mmp_reset():
     except queue.Empty:
         reset_data = None
     if reset_data is None:
-        print("Warning: reset_data is None (async timeout)")
         return  # Skip assertion on timeout
     assert isinstance(reset_data, RequestData)
-    print("async_mmp_reset status:", reset_data.get_status())
 
 
 # ==================== Bills History Archive API Tests ====================
@@ -136,7 +126,6 @@ def test_okx_req_apply_bills_history_archive():
     # Note: This may fail if the archive is already generated
     data = live_okx_swap_feed.apply_bills_history_archive(year="2024")
     assert isinstance(data, RequestData)
-    print("apply_bills_history_archive status:", data.get_status())
 
 
 def test_okx_async_apply_bills_history_archive():
@@ -150,10 +139,8 @@ def test_okx_async_apply_bills_history_archive():
     except queue.Empty:
         archive_data = None
     if archive_data is None:
-        print("Warning: archive_data is None (async timeout)")
         return  # Skip assertion on timeout
     assert isinstance(archive_data, RequestData)
-    print("async_apply_bills_history_archive status:", archive_data.get_status())
 
 
 def test_okx_req_get_bills_history_archive():
@@ -163,10 +150,8 @@ def test_okx_req_get_bills_history_archive():
     # Note: This may fail if the archive has not been generated yet
     data = live_okx_swap_feed.get_bills_history_archive(year="2024")
     assert isinstance(data, RequestData)
-    print("get_bills_history_archive status:", data.get_status())
     bills_list = data.get_data()
     assert isinstance(bills_list, list)
-    print("get_bills_history_archive count:", len(bills_list))
 
 
 def test_okx_async_get_bills_history_archive():
@@ -180,10 +165,8 @@ def test_okx_async_get_bills_history_archive():
     except queue.Empty:
         bills_data = None
     if bills_data is None:
-        print("Warning: bills_data is None (async timeout)")
         return  # Skip assertion on timeout
     assert isinstance(bills_data, RequestData)
-    print("async_get_bills_history_archive status:", bills_data.get_status())
 
 
 def test_okx_req_get_bills_history_archive_with_ccy():
@@ -192,10 +175,8 @@ def test_okx_req_get_bills_history_archive_with_ccy():
     # Get bills history archive for 2024 filtered by USDT
     data = live_okx_swap_feed.get_bills_history_archive(year="2024", ccy="USDT")
     assert isinstance(data, RequestData)
-    print("get_bills_history_archive (with ccy) status:", data.get_status())
     bills_list = data.get_data()
     assert isinstance(bills_list, list)
-    print("get_bills_history_archive (with ccy) count:", len(bills_list))
 
 
 def test_okx_async_get_bills_history_archive_with_ccy():
@@ -209,10 +190,8 @@ def test_okx_async_get_bills_history_archive_with_ccy():
     except queue.Empty:
         bills_data = None
     if bills_data is None:
-        print("Warning: bills_data is None (async timeout)")
         return  # Skip assertion on timeout
     assert isinstance(bills_data, RequestData)
-    print("async_get_bills_history_archive (with ccy) status:", bills_data.get_status())
 
 
 # ==================== Option Instrument Family Trades API Tests ====================
@@ -227,8 +206,6 @@ def test_okx_req_set_auto_loan():
         auto_loan=False, iso_mode="automatic", mgn_mode="cross"
     )
     assert isinstance(result, RequestData)
-    print("set_auto_loan status:", result.get_status())
-    print("set_auto_loan input:", result.get_input_data())
 
 
 def test_okx_async_set_auto_loan():
@@ -243,7 +220,6 @@ def test_okx_async_set_auto_loan():
         result = None
     if result is not None:
         assert isinstance(result, RequestData)
-        print("async_set_auto_loan status:", result.get_status())
 
 
 def test_okx_req_set_account_level():
@@ -253,8 +229,6 @@ def test_okx_req_set_account_level():
     # acct_lv: 1=Simple, 2=Single-currency margin, 3=Multi-currency margin, 4=Portfolio margin
     result = live_okx_swap_feed.set_account_level(acct_lv=2, inst_type="SWAP")
     assert isinstance(result, RequestData)
-    print("set_account_level status:", result.get_status())
-    print("set_account_level input:", result.get_input_data())
 
 
 def test_okx_async_set_account_level():
@@ -269,7 +243,6 @@ def test_okx_async_set_account_level():
         result = None
     if result is not None:
         assert isinstance(result, RequestData)
-        print("async_set_account_level status:", result.get_status())
 
 
 def test_okx_req_account_level_switch_preset():
@@ -280,8 +253,6 @@ def test_okx_req_account_level_switch_preset():
         acct_lv=3, pos_side="long", inst_type="SWAP"
     )
     assert isinstance(result, RequestData)
-    print("account_level_switch_preset status:", result.get_status())
-    print("account_level_switch_preset input:", result.get_input_data())
 
 
 def test_okx_async_account_level_switch_preset():
@@ -298,7 +269,6 @@ def test_okx_async_account_level_switch_preset():
         result = None
     if result is not None:
         assert isinstance(result, RequestData)
-        print("async_account_level_switch_preset status:", result.get_status())
 
 
 @pytest.mark.skip(reason="OKX API endpoint deprecated/removed (404)")
@@ -308,10 +278,9 @@ def test_okx_req_account_level_switch_precheck():
     # Precheck before switching to Multi-currency margin (level 3)
     result = live_okx_swap_feed.account_level_switch_precheck(acct_lv=3, inst_type="SWAP")
     assert isinstance(result, RequestData)
-    print("account_level_switch_precheck status:", result.get_status())
     data = result.get_data()
     if data:
-        print("account_level_switch_precheck data:", data)
+        pass
 
 
 @pytest.mark.skip(reason="OKX API endpoint deprecated/removed (404)")
@@ -327,7 +296,6 @@ def test_okx_async_account_level_switch_precheck():
         result = None
     if result is not None:
         assert isinstance(result, RequestData)
-        print("async_account_level_switch_precheck status:", result.get_status())
 
 
 def test_okx_req_set_collateral_assets():
@@ -336,8 +304,6 @@ def test_okx_req_set_collateral_assets():
     # Set BTC and USDT as collateral assets
     result = live_okx_swap_feed.set_collateral_assets(ccy_list="BTC,USDT,ETH", auto_loan=False)
     assert isinstance(result, RequestData)
-    print("set_collateral_assets status:", result.get_status())
-    print("set_collateral_assets input:", result.get_input_data())
 
 
 def test_okx_async_set_collateral_assets():
@@ -352,7 +318,6 @@ def test_okx_async_set_collateral_assets():
         result = None
     if result is not None:
         assert isinstance(result, RequestData)
-        print("async_set_collateral_assets status:", result.get_status())
 
 
 def test_okx_req_get_collateral_assets():
@@ -364,9 +329,8 @@ def test_okx_req_get_collateral_assets():
     assert result.get_status()
     data = result.get_data()
     assert isinstance(data, list)
-    print("get_collateral_assets count:", len(data))
     if data:
-        print("get_collateral_assets first item:", data[0])
+        pass
 
 
 def test_okx_async_get_collateral_assets():
@@ -382,10 +346,9 @@ def test_okx_async_get_collateral_assets():
     if result is not None:
         assert isinstance(result, RequestData)
         assert result.get_status()
-        print("async_get_collateral_assets status:", result.get_status())
         data = result.get_data()
         if data:
-            print("async_get_collateral_assets count:", len(data))
+            pass
 
 
 def test_okx_req_get_collateral_assets_single_currency():
@@ -394,10 +357,9 @@ def test_okx_req_get_collateral_assets_single_currency():
     # Get collateral assets for BTC only
     result = live_okx_swap_feed.get_collateral_assets(ccy="BTC")
     assert isinstance(result, RequestData)
-    print("get_collateral_assets (BTC) status:", result.get_status())
     data = result.get_data()
     if data:
-        print("get_collateral_assets (BTC) data:", data)
+        pass
 
 
 def test_okx_req_set_risk_offset_amt():
@@ -410,8 +372,6 @@ def test_okx_req_set_risk_offset_amt():
         offset_amt="100",
     )
     assert isinstance(result, RequestData)
-    print("set_risk_offset_amt status:", result.get_status())
-    print("set_risk_offset_amt input:", result.get_input_data())
 
 
 def test_okx_async_set_risk_offset_amt():
@@ -430,7 +390,6 @@ def test_okx_async_set_risk_offset_amt():
         result = None
     if result is not None:
         assert isinstance(result, RequestData)
-        print("async_set_risk_offset_amt status:", result.get_status())
 
 
 def test_okx_req_set_risk_offset_amt_with_instrument():
@@ -445,8 +404,6 @@ def test_okx_req_set_risk_offset_amt_with_instrument():
         offset_amt="50",
     )
     assert isinstance(result, RequestData)
-    print("set_risk_offset_amt (with instrument) status:", result.get_status())
-    print("set_risk_offset_amt (with instrument) input:", result.get_input_data())
 
 
 # ==================== Trading Account REST API Tests ====================
@@ -459,8 +416,6 @@ def test_okx_req_set_fee_type():
     # Note: This may fail if the account doesn't have the required permissions
     result = live_okx_swap_feed.set_fee_type(fee_type="1")
     assert isinstance(result, RequestData)
-    print("set_fee_type status:", result.get_status())
-    print("set_fee_type input:", result.get_input_data())
 
 
 def test_okx_async_set_fee_type():
@@ -475,7 +430,6 @@ def test_okx_async_set_fee_type():
         result = None
     if result is not None:
         assert isinstance(result, RequestData)
-        print("async_set_fee_type status:", result.get_status())
 
 
 def test_okx_req_set_isolated_mode():
@@ -484,8 +438,6 @@ def test_okx_req_set_isolated_mode():
     # Test setting isolated margin mode to automatic
     result = live_okx_swap_feed.set_isolated_mode(symbol="BTC-USDT", iso_mode="automatic")
     assert isinstance(result, RequestData)
-    print("set_isolated_mode status:", result.get_status())
-    print("set_isolated_mode input:", result.get_input_data())
 
 
 def test_okx_async_set_isolated_mode():
@@ -500,7 +452,6 @@ def test_okx_async_set_isolated_mode():
         result = None
     if result is not None:
         assert isinstance(result, RequestData)
-        print("async_set_isolated_mode status:", result.get_status())
 
 
 def test_okx_req_borrow_repay():
@@ -514,8 +465,6 @@ def test_okx_req_borrow_repay():
         mgn_mode="cross",
     )
     assert isinstance(result, RequestData)
-    print("borrow_repay status:", result.get_status())
-    print("borrow_repay input:", result.get_input_data())
 
 
 def test_okx_async_borrow_repay():
@@ -530,7 +479,6 @@ def test_okx_async_borrow_repay():
         result = None
     if result is not None:
         assert isinstance(result, RequestData)
-        print("async_borrow_repay status:", result.get_status())
 
 
 def test_okx_req_set_auto_repay():
@@ -539,8 +487,6 @@ def test_okx_req_set_auto_repay():
     # Test enabling auto repayment
     result = live_okx_swap_feed.set_auto_repay(auto_repay="true")
     assert isinstance(result, RequestData)
-    print("set_auto_repay status:", result.get_status())
-    print("set_auto_repay input:", result.get_input_data())
 
 
 def test_okx_async_set_auto_repay():
@@ -555,7 +501,6 @@ def test_okx_async_set_auto_repay():
         result = None
     if result is not None:
         assert isinstance(result, RequestData)
-        print("async_set_auto_repay status:", result.get_status())
 
 
 def test_okx_req_get_borrow_repay_history():
@@ -563,10 +508,8 @@ def test_okx_req_get_borrow_repay_history():
     live_okx_swap_feed = init_req_feed()
     data = live_okx_swap_feed.get_borrow_repay_history(ccy="USDT", limit="10")
     assert isinstance(data, RequestData)
-    print("get_borrow_repay_history status:", data.get_status())
     history_list = data.get_data()
     assert isinstance(history_list, list)
-    print("get_borrow_repay_history count:", len(history_list))
 
 
 def test_okx_async_get_borrow_repay_history():
@@ -581,7 +524,6 @@ def test_okx_async_get_borrow_repay_history():
         history_data = None
     if history_data is not None:
         assert isinstance(history_data, RequestData)
-        print("async_get_borrow_repay_history status:", history_data.get_status())
 
 
 # ==================== Additional Trading Account API Tests ====================
@@ -595,8 +537,6 @@ def test_okx_req_activate_option():
         uly="BTC-USD", inst_id="BTC-USD-240127-50000-C", cnt="1"
     )
     assert isinstance(result, RequestData)
-    print("activate_option status:", result.get_status())
-    print("activate_option input:", result.get_input_data())
 
 
 def test_okx_async_activate_option():
@@ -613,7 +553,6 @@ def test_okx_async_activate_option():
         result = None
     if result is not None:
         assert isinstance(result, RequestData)
-        print("async_activate_option status:", result.get_status())
 
 
 @pytest.mark.skip(reason="OKX API endpoint deprecated/removed (404)")
@@ -627,8 +566,6 @@ def test_okx_req_move_positions():
         ccy="USDT",
     )
     assert isinstance(result, RequestData)
-    print("move_positions status:", result.get_status())
-    print("move_positions input:", result.get_input_data())
 
 
 @pytest.mark.skip(reason="OKX API endpoint deprecated/removed (404)")
@@ -648,7 +585,6 @@ def test_okx_async_move_positions():
         result = None
     if result is not None:
         assert isinstance(result, RequestData)
-        print("async_move_positions status:", result.get_status())
 
 
 @pytest.mark.skip(reason="OKX API endpoint deprecated/removed (404)")
@@ -657,10 +593,8 @@ def test_okx_req_get_move_positions_history():
     live_okx_swap_feed = init_req_feed()
     result = live_okx_swap_feed.get_move_positions_history(symbol="BTC-USDT", limit="10")
     assert isinstance(result, RequestData)
-    print("get_move_positions_history status:", result.get_status())
     history_list = result.get_data()
     assert isinstance(history_list, list)
-    print("get_move_positions_history count:", len(history_list))
 
 
 @pytest.mark.skip(reason="OKX API endpoint deprecated/removed (404)")
@@ -676,7 +610,6 @@ def test_okx_async_get_move_positions_history():
         result = None
     if result is not None:
         assert isinstance(result, RequestData)
-        print("async_get_move_positions_history status:", result.get_status())
 
 
 def test_okx_req_set_auto_earn():
@@ -685,8 +618,6 @@ def test_okx_req_set_auto_earn():
     # This may fail depending on account settings, but tests the interface
     result = live_okx_swap_feed.set_auto_earn(ccy="USDT", auto_earn="true")
     assert isinstance(result, RequestData)
-    print("set_auto_earn status:", result.get_status())
-    print("set_auto_earn input:", result.get_input_data())
 
 
 def test_okx_async_set_auto_earn():
@@ -701,7 +632,6 @@ def test_okx_async_set_auto_earn():
         result = None
     if result is not None:
         assert isinstance(result, RequestData)
-        print("async_set_auto_earn status:", result.get_status())
 
 
 def test_okx_req_set_settle_currency():
@@ -710,8 +640,6 @@ def test_okx_req_set_settle_currency():
     # This will fail without proper multi-currency margin setup, but tests the interface
     result = live_okx_swap_feed.set_settle_currency(symbol="BTC-USDT", ccy="USDT")
     assert isinstance(result, RequestData)
-    print("set_settle_currency status:", result.get_status())
-    print("set_settle_currency input:", result.get_input_data())
 
 
 def test_okx_async_set_settle_currency():
@@ -726,7 +654,6 @@ def test_okx_async_set_settle_currency():
         result = None
     if result is not None:
         assert isinstance(result, RequestData)
-        print("async_set_settle_currency status:", result.get_status())
 
 
 def test_okx_req_set_trading_config():
@@ -735,8 +662,6 @@ def test_okx_req_set_trading_config():
     # This will fail depending on account settings, but tests the interface
     result = live_okx_swap_feed.set_trading_config(symbol="BTC-USDT", auto_loan="false")
     assert isinstance(result, RequestData)
-    print("set_trading_config status:", result.get_status())
-    print("set_trading_config input:", result.get_input_data())
 
 
 def test_okx_async_set_trading_config():
@@ -751,7 +676,6 @@ def test_okx_async_set_trading_config():
         result = None
     if result is not None:
         assert isinstance(result, RequestData)
-        print("async_set_trading_config status:", result.get_status())
 
 
 @pytest.mark.skip(reason="OKX API endpoint deprecated/removed (404)")
@@ -763,8 +687,6 @@ def test_okx_req_set_delta_neutral_precheck():
         symbol="BTC-USDT", delta_neutral_precheck="true"
     )
     assert isinstance(result, RequestData)
-    print("set_delta_neutral_precheck status:", result.get_status())
-    print("set_delta_neutral_precheck input:", result.get_input_data())
 
 
 @pytest.mark.skip(reason="OKX API endpoint deprecated/removed (404)")
@@ -782,7 +704,6 @@ def test_okx_async_set_delta_neutral_precheck():
         result = None
     if result is not None:
         assert isinstance(result, RequestData)
-        print("async_set_delta_neutral_precheck status:", result.get_status())
 
 
 # ==================== Public Data APIs Tests (Additional) ====================

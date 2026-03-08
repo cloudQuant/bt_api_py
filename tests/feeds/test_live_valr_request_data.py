@@ -57,6 +57,7 @@ class TestValrServerTime:
 class TestValrTickerData:
     """Test ticker data functionality."""
 
+    @pytest.mark.ticker
     def test_valr_req_tick_data(self, valr_feed):
         """Test getting ticker data from Valr API."""
         # Valr uses currency pair format like "BTCZAR"
@@ -77,6 +78,7 @@ class TestValrTickerData:
 
         assert isinstance(data, (dict, list, RequestData))
 
+    @pytest.mark.ticker
     def test_valr_multiple_tickers(self, valr_feed):
         """Test getting multiple tickers."""
         # Test with different pairs
@@ -93,15 +95,18 @@ class TestValrTickerData:
 class TestValrKlineData:
     """Test kline/candlestick data functionality."""
 
+    @pytest.mark.kline
     def test_valr_req_kline_data_1m(self, valr_feed):
         """Test getting 1-minute kline data."""
         # Valr API kline support needs to be verified
         pass
 
+    @pytest.mark.kline
     def test_valr_req_kline_data_1h(self, valr_feed):
         """Test getting 1-hour kline data."""
         pass
 
+    @pytest.mark.kline
     def test_valr_req_kline_data_1d(self, valr_feed):
         """Test getting daily kline data."""
         pass
@@ -113,6 +118,7 @@ class TestValrKlineData:
 class TestValrOrderBook:
     """Test order book depth functionality."""
 
+    @pytest.mark.orderbook
     def test_valr_req_depth_data(self, valr_feed):
         """Test getting order book data."""
         data = valr_feed.get_depth("BTCZAR")
@@ -122,6 +128,7 @@ class TestValrOrderBook:
 
         assert isinstance(data, (dict, list, RequestData))
 
+    @pytest.mark.orderbook
     def test_valr_orderbook_bids_asks(self, valr_feed):
         """Test orderbook has bids and asks."""
         data = valr_feed.get_depth("BTCZAR")
@@ -171,6 +178,7 @@ class TestValrExchangeData:
         assert exchange_data.exchange_name == "VALR___SPOT"
         assert exchange_data.asset_type == "SPOT"
 
+    @pytest.mark.kline
     def test_kline_periods(self):
         """Test kline period configuration."""
         exchange_data = ValrExchangeData()
@@ -210,6 +218,7 @@ class TestValrIntegration:
     """Integration tests for Valr."""
 
     @pytest.mark.integration
+    @pytest.mark.ticker
     def test_get_ticker_live(self):
         """Test getting ticker from live API."""
         data_queue = queue.Queue()
@@ -218,6 +227,7 @@ class TestValrIntegration:
         assert data is not None
 
     @pytest.mark.integration
+    @pytest.mark.orderbook
     def test_get_orderbook_live(self):
         """Test getting orderbook from live API."""
         data_queue = queue.Queue()

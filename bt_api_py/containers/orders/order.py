@@ -2,6 +2,8 @@
 
 from enum import Enum
 
+from bt_api_py.containers.auto_init_mixin import AutoInitMixin
+
 
 class OrderStatus(Enum):
     SUBMITTED = "submitted"
@@ -48,13 +50,9 @@ class OrderStatus(Enum):
         if status_value is None:
             return cls.REJECTED
         try:
-            # Correct the method call to get_static_dict
             return cls.get_static_dict()[status_value]
-        except KeyError:
-            raise ValueError(f"Invalid order status value: {status_value}")
-
-
-from bt_api_py.containers.auto_init_mixin import AutoInitMixin
+        except KeyError as err:
+            raise ValueError(f"Invalid order status value: {status_value}") from err
 
 
 class OrderData(AutoInitMixin):

@@ -43,6 +43,7 @@ class TestBtcMarketsExchangeData:
         assert exchange_data.rest_url == "https://api.btcmarkets.net"
         assert exchange_data.wss_url == "wss://socket.btcmarkets.net/v3"
 
+    @pytest.mark.kline
     def test_kline_periods(self):
         exchange_data = BtcMarketsExchangeDataSpot()
         assert "1m" in exchange_data.kline_periods
@@ -77,6 +78,7 @@ class TestBtcMarketsRequestDataSpot:
         assert Capability.MAKE_ORDER in caps
         assert Capability.CANCEL_ORDER in caps
 
+    @pytest.mark.ticker
     def test_get_tick_returns_tuple(self, mock_feed):
         path, params, extra_data = mock_feed._get_tick("BTC-AUD")
         assert "GET" in path
@@ -85,24 +87,29 @@ class TestBtcMarketsRequestDataSpot:
         assert extra_data["request_type"] == "get_tick"
         assert extra_data["symbol_name"] == "BTC-AUD"
 
+    @pytest.mark.ticker
     def test_get_tick_calls_request(self, mock_feed):
         mock_feed.get_tick("BTC-AUD")
         assert mock_feed.request.called
 
+    @pytest.mark.orderbook
     def test_get_depth_returns_tuple(self, mock_feed):
         path, params, extra_data = mock_feed._get_depth("BTC-AUD")
         assert "orderbook" in path
         assert extra_data["request_type"] == "get_depth"
 
+    @pytest.mark.orderbook
     def test_get_depth_calls_request(self, mock_feed):
         mock_feed.get_depth("BTC-AUD")
         assert mock_feed.request.called
 
+    @pytest.mark.kline
     def test_get_kline_returns_tuple(self, mock_feed):
         path, params, extra_data = mock_feed._get_kline("BTC-AUD", "1h")
         assert "candles" in path
         assert extra_data["request_type"] == "get_kline"
 
+    @pytest.mark.kline
     def test_get_kline_calls_request(self, mock_feed):
         mock_feed.get_kline("BTC-AUD", "1h")
         assert mock_feed.request.called
@@ -186,33 +193,39 @@ class TestBtcMarketsBaseCapabilities:
 class TestBtcMarketsNormalizeFunctions:
     """Test normalize functions edge cases."""
 
+    @pytest.mark.ticker
     def test_tick_normalize_with_none(self):
         result, status = BtcMarketsRequestDataSpot._get_tick_normalize_function(None, None)
         assert result == []
         assert status is False
 
+    @pytest.mark.ticker
     def test_tick_normalize_success(self):
         data = {"marketId": "BTC-AUD", "lastPrice": "50000.00"}
         result, status = BtcMarketsRequestDataSpot._get_tick_normalize_function(data, None)
         assert status is True
         assert len(result) == 1
 
+    @pytest.mark.orderbook
     def test_depth_normalize_with_none(self):
         result, status = BtcMarketsRequestDataSpot._get_depth_normalize_function(None, None)
         assert result == []
         assert status is False
 
+    @pytest.mark.orderbook
     def test_depth_normalize_success(self):
         data = {"bids": [["49990", "1.0"]], "asks": [["50010", "1.0"]]}
         result, status = BtcMarketsRequestDataSpot._get_depth_normalize_function(data, None)
         assert status is True
         assert "bids" in result[0]
 
+    @pytest.mark.kline
     def test_kline_normalize_with_none(self):
         result, status = BtcMarketsRequestDataSpot._get_kline_normalize_function(None, None)
         assert result == []
         assert status is False
 
+    @pytest.mark.kline
     def test_kline_normalize_success(self):
         data = [[1640995200000, "49500", "51000", "49000", "50000", "1234.56"]]
         result, status = BtcMarketsRequestDataSpot._get_kline_normalize_function(data, None)
@@ -237,6 +250,7 @@ class TestBtcMarketsNormalizeFunctions:
 class TestBtcMarketsDataContainers:
     """Test BTC Markets data containers."""
 
+    @pytest.mark.ticker
     def test_ticker_container(self):
         ticker_response = json.dumps(
             {
@@ -260,6 +274,7 @@ class TestBtcMarketsDataContainers:
         assert ticker.high_24h == 51000.00
         assert ticker.low_24h == 48000.00
 
+    @pytest.mark.ticker
     def test_ticker_container_with_json_string(self):
         ticker_data = {
             "marketId": "ETH-AUD",
@@ -303,6 +318,7 @@ class TestBtcMarketsLiveAPI:
     """Live API tests - require network, marked as integration."""
 
     @pytest.mark.integration
+    @pytest.mark.ticker
     def test_btc_markets_req_tick_data(self):
         data_queue = queue.Queue()
         feed = BtcMarketsRequestDataSpot(data_queue, exchange_name="BTC_MARKETS___SPOT")
@@ -310,6 +326,7 @@ class TestBtcMarketsLiveAPI:
         assert isinstance(data, RequestData)
 
     @pytest.mark.integration
+    @pytest.mark.orderbook
     def test_btc_markets_req_depth_data(self):
         data_queue = queue.Queue()
         feed = BtcMarketsRequestDataSpot(data_queue, exchange_name="BTC_MARKETS___SPOT")
@@ -317,6 +334,7 @@ class TestBtcMarketsLiveAPI:
         assert isinstance(data, RequestData)
 
     @pytest.mark.integration
+    @pytest.mark.ticker
     def test_btc_markets_async_tick_data(self):
         data_queue = queue.Queue()
         feed = BtcMarketsRequestDataSpot(data_queue, exchange_name="BTC_MARKETS___SPOT")

@@ -56,12 +56,14 @@ class TestWazirXServerTime:
 class TestWazirXTickerData:
     """Test ticker data functionality."""
 
+    @pytest.mark.ticker
     def test_wazirx_req_tick_data(self, wazirx_feed):
         """Test getting ticker data from WazirX API."""
         # WazirX uses format like "btcinr" or "btcusdt"
         data = wazirx_feed.get_tick("BTCINR")
         assert data is not None
 
+    @pytest.mark.ticker
     def test_wazirx_tick_data_validation(self, wazirx_feed):
         """Test ticker data structure and values."""
         data = wazirx_feed.get_tick("BTCINR")
@@ -74,6 +76,7 @@ class TestWazirXTickerData:
 
         assert isinstance(data, (dict, list, RequestData))
 
+    @pytest.mark.ticker
     def test_wazirx_usdt_pair_ticker(self, wazirx_feed):
         """Test ticker for USDT pairs."""
         data = wazirx_feed.get_tick("BTCUSDT")
@@ -86,21 +89,25 @@ class TestWazirXTickerData:
 class TestWazirXKlineData:
     """Test kline/candlestick data functionality."""
 
+    @pytest.mark.kline
     def test_wazirx_req_kline_data_1m(self, wazirx_feed):
         """Test getting 1-minute kline data."""
         data = wazirx_feed.get_kline("BTCINR", "1m", count=2)
         assert data is not None
 
+    @pytest.mark.kline
     def test_wazirx_req_kline_data_1h(self, wazirx_feed):
         """Test getting 1-hour kline data."""
         data = wazirx_feed.get_kline("BTCINR", "1h", count=2)
         assert data is not None
 
+    @pytest.mark.kline
     def test_wazirx_req_kline_data_1d(self, wazirx_feed):
         """Test getting daily kline data."""
         data = wazirx_feed.get_kline("BTCINR", "1d", count=2)
         assert data is not None
 
+    @pytest.mark.kline
     def test_wazirx_kline_multiple_timeframes(self, wazirx_feed):
         """Test kline data for multiple timeframes."""
         timeframes = ["1m", "5m", "15m", "1h", "1d"]
@@ -117,6 +124,7 @@ class TestWazirXKlineData:
 class TestWazirXOrderBook:
     """Test order book depth functionality."""
 
+    @pytest.mark.orderbook
     def test_wazirx_req_depth_data(self, wazirx_feed):
         """Test getting order book data."""
         data = wazirx_feed.get_depth("BTCINR", count=20)
@@ -126,6 +134,7 @@ class TestWazirXOrderBook:
 
         assert isinstance(data, (dict, list, RequestData))
 
+    @pytest.mark.orderbook
     def test_wazirx_orderbook_bids_asks(self, wazirx_feed):
         """Test orderbook has bids and asks."""
         data = wazirx_feed.get_depth("BTCINR", count=20)
@@ -139,6 +148,7 @@ class TestWazirXOrderBook:
                 pass
             assert isinstance(data["asks"], list)
 
+    @pytest.mark.orderbook
     def test_wazirx_depth_count_parameter(self, wazirx_feed):
         """Test depth count parameter."""
         data = wazirx_feed.get_depth("BTCINR", count=10)
@@ -179,6 +189,7 @@ class TestWazirXExchangeData:
         assert exchange_data.exchange_name == "WAZIRX___SPOT"
         assert exchange_data.asset_type == "SPOT"
 
+    @pytest.mark.kline
     def test_kline_periods(self):
         """Test kline period configuration."""
         exchange_data = WazirxExchangeData()
@@ -218,6 +229,7 @@ class TestWazirXIntegration:
     """Integration tests for WazirX."""
 
     @pytest.mark.integration
+    @pytest.mark.ticker
     def test_get_ticker_live(self):
         """Test getting ticker from live API."""
         data_queue = queue.Queue()
@@ -226,6 +238,7 @@ class TestWazirXIntegration:
         assert data is not None
 
     @pytest.mark.integration
+    @pytest.mark.orderbook
     def test_get_orderbook_live(self):
         """Test getting orderbook from live API."""
         data_queue = queue.Queue()
@@ -234,6 +247,7 @@ class TestWazirXIntegration:
         assert data is not None
 
     @pytest.mark.integration
+    @pytest.mark.kline
     def test_get_kline_live(self):
         """Test getting klines from live API."""
         data_queue = queue.Queue()

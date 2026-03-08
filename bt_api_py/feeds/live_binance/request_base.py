@@ -284,7 +284,6 @@ class BinanceRequestData(Feed):
         status = input_data is not None
         symbol_name = extra_data["symbol_name"]
         asset_type = extra_data["asset_type"]
-        print("symbol_name", symbol_name, "asset_type", asset_type)
         if isinstance(input_data, list) and asset_type == "SWAP":
             data = [
                 BinanceSwapRequestBalanceData(i, symbol_name, asset_type, True) for i in input_data
@@ -578,7 +577,6 @@ class BinanceRequestData(Feed):
     def get_funding_rate(self, symbol, extra_data=None, **kwargs):
         path, params, extra_data = self._get_funding_rate(symbol, extra_data, **kwargs)
         data = self.request(path, params=params, extra_data=extra_data)
-        print("funding rate data = ", data)
         return data
 
     def _get_history_funding_rate(
@@ -764,7 +762,6 @@ class BinanceRequestData(Feed):
             "type": order_type.upper(),
             "timeInForce": time_in_force,
         }
-        print(f"offset = {offset}")
         if self.asset_type == "SWAP":
             params["reduceOnly"] = (
                 "false" if offset == "open" else "true" if offset == "close" else None

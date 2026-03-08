@@ -1,5 +1,8 @@
+import pytest
 import queue
 import time
+
+pytestmark = [pytest.mark.integration, pytest.mark.network]
 
 from bt_api_py.containers.bars.okx_bar import OkxBarData
 from bt_api_py.containers.exchanges.okx_exchange_data import OkxExchangeDataSwap
@@ -38,6 +41,7 @@ def init_async_feed(data_queue):
     return live_okx_swap_feed
 
 
+@pytest.mark.orderbook
 def test_okx_req_get_depth_full():
     """Test get_depth_full interface"""
     live_okx_swap_feed = init_req_feed()
@@ -57,6 +61,7 @@ def test_okx_req_get_depth_full():
         )
 
 
+@pytest.mark.orderbook
 def test_okx_async_get_depth_full():
     """Test async_get_depth_full interface"""
     data_queue = queue.Queue()
@@ -78,6 +83,7 @@ def test_okx_async_get_depth_full():
         order_book.init_data()
 
 
+@pytest.mark.kline
 def test_okx_req_get_kline_his():
     """Test get_kline_his interface (history candles for SPOT)"""
     live_okx_swap_feed = init_req_feed()
@@ -96,6 +102,7 @@ def test_okx_req_get_kline_his():
         assert kline.get_open_price() > 0
 
 
+@pytest.mark.kline
 def test_okx_async_get_kline_his():
     """Test async_get_kline_his interface"""
     data_queue = queue.Queue()
@@ -113,6 +120,7 @@ def test_okx_async_get_kline_his():
     print("async_get_kline_his count:", len(kline_list))
 
 
+@pytest.mark.public_trade
 def test_okx_req_get_trades():
     """Test get_trades interface (recent 600 trades)"""
     live_okx_swap_feed = init_req_feed()
@@ -134,6 +142,7 @@ def test_okx_req_get_trades():
             print("Trade (raw):", list(trade.keys())[:5])
 
 
+@pytest.mark.public_trade
 def test_okx_async_get_trades():
     """Test async_get_trades interface"""
     data_queue = queue.Queue()
@@ -157,6 +166,7 @@ def test_okx_async_get_trades():
             assert isinstance(trade, dict)
 
 
+@pytest.mark.public_trade
 def test_okx_req_get_trades_history():
     """Test get_trades_history interface (last 3 months)"""
     live_okx_swap_feed = init_req_feed()
@@ -169,6 +179,7 @@ def test_okx_req_get_trades_history():
     print("get_trades_history count:", len(trades_list))
 
 
+@pytest.mark.public_trade
 def test_okx_async_get_trades_history():
     """Test async_get_trades_history interface"""
     data_queue = queue.Queue()
@@ -186,6 +197,7 @@ def test_okx_async_get_trades_history():
     assert isinstance(trades_list, list)
 
 
+@pytest.mark.kline
 def test_okx_req_get_index_candles():
     """Test get_index_candles interface"""
     live_okx_swap_feed = init_req_feed()
@@ -203,6 +215,7 @@ def test_okx_req_get_index_candles():
         assert kline.get_open_price() > 0
 
 
+@pytest.mark.kline
 def test_okx_async_get_index_candles():
     """Test async_get_index_candles interface"""
     data_queue = queue.Queue()
@@ -220,6 +233,7 @@ def test_okx_async_get_index_candles():
     assert isinstance(kline_list, list)
 
 
+@pytest.mark.kline
 def test_okx_req_get_mark_price_candles():
     """Test get_mark_price_candles interface"""
     live_okx_swap_feed = init_req_feed()
@@ -237,6 +251,7 @@ def test_okx_req_get_mark_price_candles():
         assert kline.get_open_price() > 0
 
 
+@pytest.mark.kline
 def test_okx_async_get_mark_price_candles():
     """Test async_get_mark_price_candles interface"""
     data_queue = queue.Queue()

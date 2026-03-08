@@ -3,6 +3,8 @@ import time
 
 import pytest
 
+pytestmark = [pytest.mark.integration, pytest.mark.network]
+
 from bt_api_py.containers.exchanges.okx_exchange_data import OkxExchangeDataSwap
 from bt_api_py.containers.requestdatas.request_data import RequestData
 
@@ -37,6 +39,7 @@ def init_async_feed(data_queue):
     return live_okx_swap_feed
 
 
+@pytest.mark.auth_account
 def test_okx_copytrading_get_config():
     """Test getting copy trading account configuration"""
     live_okx_swap_feed = init_req_feed()
@@ -70,6 +73,7 @@ def test_okx_copytrading_get_instruments():
     print("copytrading_get_instruments status:", data.get_status())
 
 
+@pytest.mark.auth_position
 def test_okx_copytrading_get_current_subpositions():
     """Test getting existing lead positions"""
     live_okx_swap_feed = init_req_feed()
@@ -78,6 +82,7 @@ def test_okx_copytrading_get_current_subpositions():
     print("copytrading_get_current_subpositions status:", data.get_status())
 
 
+@pytest.mark.auth_position
 def test_okx_copytrading_get_subpositions_history():
     """Test getting lead position history"""
     live_okx_swap_feed = init_req_feed()
@@ -143,6 +148,7 @@ def test_okx_copytrading_public_stats():
     print("copytrading_public_stats status:", data.get_status())
 
 
+@pytest.mark.auth_account
 def test_async_copytrading_get_config():
     """Test async getting copy trading account configuration"""
     data_queue = queue.Queue()
@@ -192,6 +198,7 @@ def test_async_copytrading_get_instruments():
         print("async_copytrading_get_instruments status:", result.get_status())
 
 
+@pytest.mark.auth_position
 def test_async_copytrading_get_current_subpositions():
     """Test async getting existing lead positions"""
     data_queue = queue.Queue()

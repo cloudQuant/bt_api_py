@@ -56,12 +56,14 @@ class TestYoBitServerTime:
 class TestYoBitTickerData:
     """Test ticker data functionality."""
 
+    @pytest.mark.ticker
     def test_yobit_req_tick_data(self, yobit_feed):
         """Test getting ticker data from YoBit API."""
         # YoBit uses lowercase format with underscore like btc_usdt
         data = yobit_feed.get_tick("BTC/USDT")
         assert data is not None
 
+    @pytest.mark.ticker
     def test_yobit_tick_data_validation(self, yobit_feed):
         """Test ticker data structure and values."""
         data = yobit_feed.get_tick("BTC/USDT")
@@ -74,6 +76,7 @@ class TestYoBitTickerData:
 
         assert isinstance(data, (dict, list, RequestData))
 
+    @pytest.mark.ticker
     def test_yobit_multiple_tickers(self, yobit_feed):
         """Test getting multiple tickers."""
         # Test with different pairs
@@ -90,16 +93,19 @@ class TestYoBitTickerData:
 class TestYoBitKlineData:
     """Test kline/candlestick data functionality."""
 
+    @pytest.mark.kline
     def test_yobit_req_kline_data_1m(self, yobit_feed):
         """Test getting 1-minute kline data."""
         # YoBit doesn't have a dedicated kline endpoint
         pass
 
+    @pytest.mark.kline
     def test_yobit_req_kline_data_1h(self, yobit_feed):
         """Test getting 1-hour kline data."""
         # YoBit doesn't have a dedicated kline endpoint
         pass
 
+    @pytest.mark.kline
     def test_yobit_req_kline_data_1d(self, yobit_feed):
         """Test getting daily kline data."""
         # YoBit doesn't have a dedicated kline endpoint
@@ -112,6 +118,7 @@ class TestYoBitKlineData:
 class TestYoBitOrderBook:
     """Test order book depth functionality."""
 
+    @pytest.mark.orderbook
     def test_yobit_req_depth_data(self, yobit_feed):
         """Test getting order book data."""
         data = yobit_feed.get_depth("BTC/USDT", count=20)
@@ -121,6 +128,7 @@ class TestYoBitOrderBook:
 
         assert isinstance(data, (dict, list, RequestData))
 
+    @pytest.mark.orderbook
     def test_yobit_orderbook_bids_asks(self, yobit_feed):
         """Test orderbook has bids and asks."""
         data = yobit_feed.get_depth("BTC/USDT", count=20)
@@ -134,11 +142,13 @@ class TestYoBitOrderBook:
                 pass
             assert isinstance(data["asks"], list)
 
+    @pytest.mark.orderbook
     def test_yobit_depth_count_parameter(self, yobit_feed):
         """Test depth count parameter."""
         data = yobit_feed.get_depth("BTC/USDT", count=10)
         assert data is not None
 
+    @pytest.mark.orderbook
     def test_yobit_depth_limit_parameter(self, yobit_feed):
         """Test depth with different limits."""
         for limit in [5, 10, 20, 50]:
@@ -186,6 +196,7 @@ class TestYoBitExchangeData:
         assert exchange_data.exchange_name == "YOBIT___SPOT"
         assert exchange_data.asset_type == "SPOT"
 
+    @pytest.mark.kline
     def test_kline_periods(self):
         """Test kline period configuration."""
         exchange_data = YobitExchangeData()
@@ -248,6 +259,7 @@ class TestYoBitIntegration:
     """Integration tests for YoBit."""
 
     @pytest.mark.integration
+    @pytest.mark.ticker
     def test_get_ticker_live(self):
         """Test getting ticker from live API."""
         data_queue = queue.Queue()
@@ -256,6 +268,7 @@ class TestYoBitIntegration:
         assert data is not None
 
     @pytest.mark.integration
+    @pytest.mark.orderbook
     def test_get_orderbook_live(self):
         """Test getting orderbook from live API."""
         data_queue = queue.Queue()

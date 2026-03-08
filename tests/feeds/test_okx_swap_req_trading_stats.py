@@ -3,6 +3,8 @@ import time
 
 import pytest
 
+pytestmark = [pytest.mark.integration, pytest.mark.network]
+
 from bt_api_py.containers.exchanges.okx_exchange_data import OkxExchangeDataSwap
 from bt_api_py.containers.requestdatas.request_data import RequestData
 
@@ -475,6 +477,7 @@ def test_okx_req_get_option_taker_flow():
     print("get_option_taker_flow count:", len(flow_list))
 
 
+@pytest.mark.auth_account
 def test_okx_async_get_option_taker_flow():
     """Test async_get_option_taker_flow interface"""
     data_queue = queue.Queue()

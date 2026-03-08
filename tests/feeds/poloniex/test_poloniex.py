@@ -183,6 +183,7 @@ class TestExchangeData:
         assert ed.get_period("1h") == "HOUR_1"
         assert ed.get_period("1d") == "DAY_1"
 
+    @pytest.mark.kline
     def test_kline_periods_complete(self):
         ed = PoloniexExchangeDataSpot()
         for k in ("1m", "5m", "15m", "30m", "1h", "4h", "1d", "1w"):
@@ -342,29 +343,35 @@ class TestParameterGeneration:
 
 
 class TestNormalization:
+    @pytest.mark.ticker
     def test_ticker_dict(self):
         data, ok = PoloniexRequestDataSpot._get_ticker_normalize_function(SAMPLE_TICKER, {})
         assert ok is True
         assert len(data) == 1
 
+    @pytest.mark.ticker
     def test_ticker_none(self):
         data, ok = PoloniexRequestDataSpot._get_ticker_normalize_function(None, {})
         assert ok is False
 
+    @pytest.mark.ticker
     def test_ticker_error(self):
         data, ok = PoloniexRequestDataSpot._get_ticker_normalize_function(SAMPLE_ERROR, {})
         assert ok is False
 
+    @pytest.mark.orderbook
     def test_depth_dict(self):
         data, ok = PoloniexRequestDataSpot._get_depth_normalize_function(SAMPLE_ORDERBOOK, {})
         assert ok is True
         assert "bids" in data[0] and "asks" in data[0]
 
+    @pytest.mark.kline
     def test_kline_list(self):
         data, ok = PoloniexRequestDataSpot._get_kline_normalize_function(SAMPLE_KLINES, {})
         assert ok is True
         assert len(data) == 2
 
+    @pytest.mark.kline
     def test_kline_empty(self):
         data, ok = PoloniexRequestDataSpot._get_kline_normalize_function([], {})
         assert ok is False
@@ -438,12 +445,15 @@ class TestSyncCalls:
             assert isinstance(result, RequestData)
             return result
 
+    @pytest.mark.ticker
     def test_get_tick(self):
         self._call("get_tick", SAMPLE_TICKER, "BTC/USDT")
 
+    @pytest.mark.orderbook
     def test_get_depth(self):
         self._call("get_depth", SAMPLE_ORDERBOOK, "BTC/USDT", count=10)
 
+    @pytest.mark.kline
     def test_get_kline(self):
         self._call("get_kline", SAMPLE_KLINES, "BTC/USDT", period="1h", count=100)
 

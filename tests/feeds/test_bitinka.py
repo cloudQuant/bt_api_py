@@ -38,6 +38,7 @@ class TestBitinkaExchangeData:
         assert exchange_data.asset_type == "spot"
         assert hasattr(exchange_data, "rest_url")
 
+    @pytest.mark.kline
     def test_kline_periods(self):
         exchange_data = BitinkaExchangeDataSpot()
         assert "1m" in exchange_data.kline_periods
@@ -77,6 +78,7 @@ class TestBitinkaRequestDataSpot:
         assert feed._convert_symbol("BTC_USDT") == "BTC/USDT"
         assert feed._convert_symbol("BTC/USD") == "BTC/USD"
 
+    @pytest.mark.ticker
     def test_get_tick_returns_tuple(self, mock_feed):
         path, params, extra_data = mock_feed._get_tick("BTC/USD")
         assert "GET" in path
@@ -85,15 +87,18 @@ class TestBitinkaRequestDataSpot:
         assert extra_data["request_type"] == "get_tick"
         assert extra_data["symbol_name"] == "BTC/USD"
 
+    @pytest.mark.ticker
     def test_get_tick_calls_request(self, mock_feed):
         mock_feed.get_tick("BTC/USD")
         assert mock_feed.request.called
 
+    @pytest.mark.orderbook
     def test_get_depth_returns_tuple(self, mock_feed):
         path, params, extra_data = mock_feed._get_depth("BTC/USD")
         assert "orderbook" in path
         assert extra_data["request_type"] == "get_depth"
 
+    @pytest.mark.orderbook
     def test_get_depth_calls_request(self, mock_feed):
         mock_feed.get_depth("BTC/USD")
         assert mock_feed.request.called
@@ -182,22 +187,26 @@ class TestBitinkaBaseCapabilities:
 class TestBitinkaNormalizeFunctions:
     """Test normalize functions edge cases."""
 
+    @pytest.mark.ticker
     def test_tick_normalize_with_none(self):
         result, status = BitinkaRequestDataSpot._get_tick_normalize_function(None, None)
         assert result == []
         assert status is False
 
+    @pytest.mark.ticker
     def test_tick_normalize_success(self):
         data = {"data": {"last": "50000"}}
         result, status = BitinkaRequestDataSpot._get_tick_normalize_function(data, None)
         assert status is True
         assert len(result) == 1
 
+    @pytest.mark.orderbook
     def test_depth_normalize_with_none(self):
         result, status = BitinkaRequestDataSpot._get_depth_normalize_function(None, None)
         assert result == []
         assert status is False
 
+    @pytest.mark.orderbook
     def test_depth_normalize_success(self):
         data = {"data": {"bids": [], "asks": []}}
         result, status = BitinkaRequestDataSpot._get_depth_normalize_function(data, None)
@@ -249,6 +258,7 @@ class TestBitinkaLiveAPI:
     """Live API tests - require network, marked as integration."""
 
     @pytest.mark.integration
+    @pytest.mark.ticker
     def test_bitinka_req_tick_data(self):
         data_queue = queue.Queue()
         feed = BitinkaRequestDataSpot(data_queue, exchange_name="BITINKA___SPOT")
@@ -258,6 +268,7 @@ class TestBitinkaLiveAPI:
         assert isinstance(data_list, list)
 
     @pytest.mark.integration
+    @pytest.mark.orderbook
     def test_bitinka_req_orderbook_data(self):
         data_queue = queue.Queue()
         feed = BitinkaRequestDataSpot(data_queue, exchange_name="BITINKA___SPOT")
@@ -267,6 +278,7 @@ class TestBitinkaLiveAPI:
         assert isinstance(data_list, list)
 
     @pytest.mark.integration
+    @pytest.mark.ticker
     def test_bitinka_async_tick_data(self):
         data_queue = queue.Queue()
         feed = BitinkaRequestDataSpot(data_queue, exchange_name="BITINKA___SPOT")

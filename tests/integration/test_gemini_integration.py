@@ -26,39 +26,26 @@ logger = logging.getLogger(__name__)
 
 def test_gemini_config():
     """Test Gemini YAML configuration loading"""
-    print("\n=== Testing Gemini Configuration ===")
 
     try:
         config = load_exchange_config("bt_api_py/configs/gemini.yaml")
         if config:
-            print("✓ Configuration loaded successfully")
-            print(f"  Exchange ID: {config.id}")
-            print(f"  Display Name: {config.display_name}")
-            print(f"  Website: {config.website}")
 
             # Check asset types
             if hasattr(config, 'asset_types') and config.asset_types:
-                print(f"  Asset Types: {list(config.asset_types.keys())}")
 
                 # Check spot configuration
                 if 'spot' in config.asset_types:
                     spot = config.asset_types['spot']
-                    print(f"    Spot Exchange Name: {spot.exchange_name}")
-                    print(f"    Symbol Format: {spot.symbol_format}")
-                    print(f"    REST Paths Count: {len(spot.rest_paths) if hasattr(spot, 'rest_paths') else 0}")
-                    print(f"    WSS Paths Count: {len(spot.wss_paths) if hasattr(spot, 'wss_paths') else 0}")
             pass
         else:
-            print("✗ Failed to load configuration")
             pass
     except Exception as e:
-        print(f"✗ Configuration test failed: {e}")
         pass
 
 
 def test_gemini_feed_initialization():
     """Test Gemini feed initialization"""
-    print("\n=== Testing Gemini Feed Initialization ===")
 
     try:
         # Create mock data queue
@@ -73,26 +60,17 @@ def test_gemini_feed_initialization():
             logger_name="test_gemini_feed.log"
         )
 
-        print("✓ Feed initialized successfully")
-        print(f"  Exchange Name: {feed.exchange_name}")
-        print(f"  Asset Type: {feed.asset_type}")
-        print(f"  REST URL: {feed._params.rest_url}")
-        print(f"  WSS URL: {feed._params.wss_url}")
 
         # Test capabilities
         capabilities = feed._capabilities()
-        print(f"  Capabilities: {len(capabilities)}")
-        print(f"    {list(capabilities)[:5]}...")  # Show first 5
 
         pass
     except Exception as e:
-        print(f"✗ Feed initialization test failed: {e}")
         pass
 
 
 def test_gemini_symbol_handling():
     """Test Gemini symbol handling"""
-    print("\n=== Testing Symbol Handling ===")
 
     try:
         data_queue = MagicMock()
@@ -103,25 +81,20 @@ def test_gemini_symbol_handling():
 
         for symbol in test_symbols:
             formatted = feed._params.get_symbol(symbol)
-            print(f"  {symbol} -> {formatted}")
 
         # Test rest path retrieval
         path = feed._params.get_rest_path("get_ticker")
-        print(f"  Ticker Path: {path}")
 
         # Test period mapping
         period = feed._params.get_period("1h")
-        print(f"  1h -> {period}")
 
         pass
     except Exception as e:
-        print(f"✗ Symbol handling test failed: {e}")
         pass
 
 
 def test_gemini_api_methods():
     """Test Gemini API method calls"""
-    print("\n=== Testing API Method Calls ===")
 
     try:
         data_queue = MagicMock()
@@ -143,9 +116,8 @@ def test_gemini_api_methods():
         for method_name, method_call in methods_to_test:
             try:
                 response = method_call()
-                print(f"  ✓ {method_name}: OK (mocked)")
             except Exception as e:
-                print(f"  ✗ {method_name}: Failed - {e}")
+                pass
 
         # Restore original request method
         feed.request = original_request
@@ -160,19 +132,16 @@ def test_gemini_api_methods():
         for method_name, method_call in private_methods:
             try:
                 response = method_call()
-                print(f"  ✓ {method_name}: OK (should not reach here)")
             except Exception as e:
-                print(f"  ✓ {method_name}: Expected failure - {str(e)[:100]}...")
+                pass
 
         pass
     except Exception as e:
-        print(f"✗ API methods test failed: {e}")
         pass
 
 
 def test_gemini_error_handling():
     """Test Gemini error handling"""
-    print("\n=== Testing Error Handling ===")
 
     try:
         from bt_api_py.errors.error_framework_gemini import GeminiErrorTranslator  # noqa: F401
@@ -191,21 +160,19 @@ def test_gemini_error_handling():
             try:
                 unified_error = translator.translate(error, "Gemini")
                 if unified_error:
-                    print(f"  ✓ Error translated: {unified_error.code.name} - {unified_error.message}")
+                    pass
                 else:
-                    print(f"  ✗ Error not translated: {error}")
+                    pass
             except Exception as e:
-                print(f"  ✗ Translation failed for {error}: {e}")
+                pass
 
         pass
     except Exception as e:
-        print(f"✗ Error handling test failed: {e}")
         pass
 
 
 def main():
     """Run all tests"""
-    print("Starting Gemini Exchange Integration Tests...")
 
     tests = [
         test_gemini_config,
@@ -225,19 +192,12 @@ def main():
             else:
                 failed += 1
         except Exception as e:
-            print(f"✗ Test {test.__name__} crashed: {e}")
             failed += 1
 
-    print("\n=== Test Results ===")
-    print(f"Passed: {passed}")
-    print(f"Failed: {failed}")
-    print(f"Total: {passed + failed}")
 
     if failed == 0:
-        print("🎉 All tests passed!")
         pass
     else:
-        print("❌ Some tests failed!")
         pass
 
 

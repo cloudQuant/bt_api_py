@@ -249,6 +249,7 @@ class TestKuCoinExchangeData:
         with pytest.raises(Exception):
             ed.get_rest_path("invalid_path")
 
+    @pytest.mark.kline
     def test_kline_periods(self):
         ed = KuCoinExchangeDataSpot()
         assert len(ed.kline_periods) > 0
@@ -387,6 +388,7 @@ class TestKuCoinParamGeneration:
 
 
 class TestKuCoinNormalize:
+    @pytest.mark.ticker
     def test_ticker_normalize(self):
         extra = {"symbol_name": "BTC-USDT", "asset_type": "SPOT", "exchange_name": "KUCOIN"}
         tickers, ok = KuCoinRequestDataSpot._get_ticker_normalize_function(
@@ -397,11 +399,13 @@ class TestKuCoinNormalize:
         t = tickers[0]
         assert isinstance(t, KuCoinRequestTickerData)
 
+    @pytest.mark.ticker
     def test_ticker_normalize_none(self):
         extra = {"symbol_name": "BTC-USDT", "asset_type": "SPOT"}
         tickers, ok = KuCoinRequestDataSpot._get_ticker_normalize_function(None, extra)
         assert tickers == []
 
+    @pytest.mark.orderbook
     def test_depth_normalize(self):
         extra = {"symbol_name": "BTC-USDT", "asset_type": "SPOT"}
         books, ok = KuCoinRequestDataSpot._get_depth_normalize_function(SAMPLE_DEPTH_RESP, extra)
@@ -409,6 +413,7 @@ class TestKuCoinNormalize:
         assert len(books) == 1
         assert isinstance(books[0], KuCoinRequestOrderBookData)
 
+    @pytest.mark.kline
     def test_kline_normalize(self):
         extra = {"symbol_name": "BTC-USDT", "asset_type": "SPOT"}
         bars, ok = KuCoinRequestDataSpot._get_kline_normalize_function(SAMPLE_KLINE_RESP, extra)
@@ -458,6 +463,7 @@ class TestKuCoinNormalize:
 
 
 class TestKuCoinDataContainers:
+    @pytest.mark.ticker
     def test_ticker_container(self):
         ticker = KuCoinRequestTickerData(SAMPLE_TICKER_RESP, "BTC-USDT", "SPOT", True)
         assert ticker.init_data() is ticker
@@ -467,12 +473,14 @@ class TestKuCoinDataContainers:
         assert ticker.get_bid_price() == 49999
         assert ticker.get_ask_price() == 50001
 
+    @pytest.mark.ticker
     def test_ticker_container_idempotent(self):
         ticker = KuCoinRequestTickerData(SAMPLE_TICKER_RESP, "BTC-USDT", "SPOT", True)
         ticker.init_data()
         ticker.init_data()  # Second call should be safe
         assert ticker.get_last_price() == 50000
 
+    @pytest.mark.orderbook
     def test_orderbook_container(self):
         ob = KuCoinRequestOrderBookData(SAMPLE_DEPTH_RESP, "BTC-USDT", "SPOT", True)
         assert ob.init_data() is ob
@@ -485,6 +493,7 @@ class TestKuCoinDataContainers:
         assert bids[0] == 49999.0
         assert asks[0] == 50001.0
 
+    @pytest.mark.kline
     def test_bar_container(self):
         kline = ["1688671800", "50000", "50200", "50500", "49500", "1000.12", "50100000"]
         bar = KuCoinRequestBarData(kline, "BTC-USDT", "SPOT", True)

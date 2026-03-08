@@ -292,6 +292,7 @@ class TestCtpContainerParsing:
         assert trade.get_trade_offset() == "open"
         assert trade.get_trade_price() == 3500.0
 
+    @pytest.mark.ticker
     def test_ticker_data(self):
         from bt_api_py.containers.ctp.ctp_ticker import CtpTickerData
 
@@ -491,6 +492,7 @@ class TestCtpMdIntegration:
         pytest tests/test_ctp_feed.py::TestCtpMdIntegration -v -s
     """
 
+    @pytest.mark.ticker
     def test_md_connect_receive_tick_and_convert(self):
         """通过 MdClient 连接行情，收到原始 tick，并验证 CtpTickerData 转换"""
         _ensure_ctp_atexit()

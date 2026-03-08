@@ -47,6 +47,7 @@ class TestCowSwapBasic:
         """Test get_quote method"""
         assert hasattr(cow_swap_feed, "get_quote")
 
+    @pytest.mark.ticker
     def test_get_ticker(self, cow_swap_feed):
         """Test get_ticker method"""
         assert hasattr(cow_swap_feed, "get_ticker")
@@ -65,6 +66,7 @@ class TestCowSwapNormalize:
         }
         assert "sellToken" in mock_quote_data
 
+    @pytest.mark.ticker
     def test_ticker_normalize_function(self):
         """Test ticker data normalization"""
         mock_ticker_data = {"symbol": "WETH-USDC", "price": "3000", "volume24h": "10000000"}

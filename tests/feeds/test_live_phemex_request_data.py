@@ -1,3 +1,5 @@
+import pytest
+
 """
 Phemex Exchange Live Request Data Tests
 
@@ -38,6 +40,7 @@ def test_phemex_req_server_time():
     pass
 
 
+@pytest.mark.ticker
 def test_phemex_req_tick_data():
     """Test Phemex ticker data retrieval (synchronous)."""
     live_phemex_spot_feed = init_req_feed()
@@ -49,6 +52,7 @@ def test_phemex_req_tick_data():
     assert extra_data["symbol_name"] == "BTC/USDT"
 
 
+@pytest.mark.ticker
 def test_phemex_tick_normalize_function():
     """Test Phemex ticker normalize function."""
     # Phemex API response format
@@ -73,6 +77,7 @@ def test_phemex_tick_normalize_function():
     assert ticker is not None
 
 
+@pytest.mark.ticker
 def test_phemex_async_tick_data():
     """Test Phemex ticker data retrieval (asynchronous)."""
     data_queue = queue.Queue()
@@ -83,6 +88,7 @@ def test_phemex_async_tick_data():
     pass
 
 
+@pytest.mark.kline
 def test_phemex_req_kline_data():
     """Test Phemex kline/candlestick data retrieval (synchronous)."""
     live_phemex_spot_feed = init_req_feed()
@@ -95,6 +101,7 @@ def test_phemex_req_kline_data():
     assert params["limit"] == 100
 
 
+@pytest.mark.kline
 def test_phemex_kline_normalize_function():
     """Test Phemex kline normalize function."""
     # Phemex API response format for klines
@@ -135,6 +142,7 @@ def test_phemex_kline_normalize_function():
         assert volume >= 0
 
 
+@pytest.mark.kline
 def test_phemex_async_kline_data():
     """Test Phemex kline data retrieval (asynchronous)."""
     data_queue = queue.Queue()
@@ -172,6 +180,7 @@ def order_book_value_equals(order_book):
         assert ask_volume >= 0, "Ask volume should be non-negative"
 
 
+@pytest.mark.orderbook
 def test_phemex_req_orderbook_data():
     """Test Phemex orderbook data retrieval."""
     live_phemex_spot_feed = init_req_feed()
@@ -183,6 +192,7 @@ def test_phemex_req_orderbook_data():
     assert "symbol" in params
 
 
+@pytest.mark.orderbook
 def test_phemex_depth_normalize_function():
     """Test Phemex depth normalize function."""
     # Phemex API response format for orderbook

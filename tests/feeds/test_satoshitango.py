@@ -44,6 +44,7 @@ class TestSatoshiTangoExchangeData:
         assert "1h" in data.kline_periods
         assert "ARS" in data.legal_currency
 
+    @pytest.mark.kline
     def test_kline_periods(self):
         data = SatoshiTangoExchangeData()
         assert "1m" in data.kline_periods
@@ -77,6 +78,7 @@ class TestSatoshiTangoRequestDataSpot:
         assert Capability.MAKE_ORDER in caps
         assert Capability.CANCEL_ORDER in caps
 
+    @pytest.mark.ticker
     def test_get_tick_returns_tuple(self, mock_feed):
         path, params, extra_data = mock_feed._get_tick("BTC/ARS")
         assert "ticker" in path.lower()
@@ -85,6 +87,7 @@ class TestSatoshiTangoRequestDataSpot:
         assert extra_data["exchange_name"] == "SATOSHITANGO___SPOT"
         assert extra_data["asset_type"] == "SPOT"
 
+    @pytest.mark.orderbook
     def test_get_depth_returns_tuple(self, mock_feed):
         path, params, extra_data = mock_feed._get_depth("BTC/ARS", 20)
         assert "orderbook" in path.lower()
@@ -92,6 +95,7 @@ class TestSatoshiTangoRequestDataSpot:
         assert extra_data["request_type"] == "get_depth"
         assert extra_data["exchange_name"] == "SATOSHITANGO___SPOT"
 
+    @pytest.mark.kline
     def test_get_kline_returns_tuple(self, mock_feed):
         path, params, extra_data = mock_feed._get_kline("BTC/ARS", "1h", 10)
         assert "kline" in path.lower()
@@ -140,14 +144,17 @@ class TestSatoshiTangoStandardInterfaces:
         feed.request = Mock(return_value=Mock())
         return feed
 
+    @pytest.mark.ticker
     def test_get_tick_calls_request(self, feed):
         feed.get_tick("BTC/ARS")
         assert feed.request.called
 
+    @pytest.mark.orderbook
     def test_get_depth_calls_request(self, feed):
         feed.get_depth("BTC/ARS")
         assert feed.request.called
 
+    @pytest.mark.kline
     def test_get_kline_calls_request(self, feed):
         feed.get_kline("BTC/ARS", "1h")
         assert feed.request.called
@@ -180,32 +187,38 @@ class TestSatoshiTangoStandardInterfaces:
 class TestSatoshiTangoNormalizeFunctions:
     """Test normalize functions edge cases."""
 
+    @pytest.mark.ticker
     def test_tick_normalize_with_none(self):
         result, status = SatoshiTangoRequestDataSpot._get_tick_normalize_function(None, None)
         assert result == []
         assert status is False
 
+    @pytest.mark.ticker
     def test_tick_normalize_with_data(self):
         input_data = {"last": "9500000", "bid": "9490000"}
         result, status = SatoshiTangoRequestDataSpot._get_tick_normalize_function(input_data, {})
         assert status is True
         assert result[0]["last"] == "9500000"
 
+    @pytest.mark.orderbook
     def test_depth_normalize_with_none(self):
         result, status = SatoshiTangoRequestDataSpot._get_depth_normalize_function(None, None)
         assert result == []
         assert status is False
 
+    @pytest.mark.orderbook
     def test_depth_normalize_with_data(self):
         input_data = {"bids": [], "asks": []}
         result, status = SatoshiTangoRequestDataSpot._get_depth_normalize_function(input_data, {})
         assert status is True
 
+    @pytest.mark.kline
     def test_kline_normalize_with_none(self):
         result, status = SatoshiTangoRequestDataSpot._get_kline_normalize_function(None, None)
         assert result == []
         assert status is False
 
+    @pytest.mark.kline
     def test_kline_normalize_with_data(self):
         input_data = [[1672531200, "9500000", "9600000"]]
         result, status = SatoshiTangoRequestDataSpot._get_kline_normalize_function(input_data, {})
@@ -256,6 +269,7 @@ class TestSatoshiTangoNormalizeFunctions:
 class TestSatoshiTangoDataContainers:
     """Test SatoshiTango data containers."""
 
+    @pytest.mark.ticker
     def test_ticker_container(self):
         ticker_response = {
             "symbol": "BTCARS",
@@ -298,6 +312,7 @@ class TestSatoshiTangoLiveAPI:
     """Live API tests - require network, marked as integration."""
 
     @pytest.mark.integration
+    @pytest.mark.ticker
     def test_satoshitango_req_tick_data(self):
         data_queue = queue.Queue()
         feed = SatoshiTangoRequestDataSpot(data_queue)
@@ -305,6 +320,7 @@ class TestSatoshiTangoLiveAPI:
         assert isinstance(data, RequestData)
 
     @pytest.mark.integration
+    @pytest.mark.orderbook
     def test_satoshitango_req_depth_data(self):
         data_queue = queue.Queue()
         feed = SatoshiTangoRequestDataSpot(data_queue)
@@ -312,6 +328,7 @@ class TestSatoshiTangoLiveAPI:
         assert isinstance(data, RequestData)
 
     @pytest.mark.integration
+    @pytest.mark.kline
     def test_satoshitango_req_kline_data(self):
         data_queue = queue.Queue()
         feed = SatoshiTangoRequestDataSpot(data_queue)

@@ -1,4 +1,7 @@
+import pytest
 import os.path
+
+pytestmark = [pytest.mark.integration, pytest.mark.network]
 
 from bt_api_py.functions.utils import get_package_path, read_account_config, read_yaml_file
 
@@ -10,6 +13,7 @@ def test_get_package_path():
     assert "bt_api_py" in path2
 
 
+@pytest.mark.auth_account
 def test_read_yaml_file():
     path = get_package_path("bt_api_py")
     config_path = os.path.join(path, "configs", "account_config.yaml")
@@ -18,6 +22,7 @@ def test_read_yaml_file():
         assert content is not None
 
 
+@pytest.mark.auth_account
 def test_read_account_config():
     config = read_account_config()
     assert config is not None

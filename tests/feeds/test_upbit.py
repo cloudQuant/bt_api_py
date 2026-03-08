@@ -125,6 +125,7 @@ class TestExchangeData:
         assert exdata.get_period("1w") == "W"
         assert exdata.get_period("1M") == "M"
 
+    @pytest.mark.kline
     def test_kline_periods(self, exdata):
         for k in ("1m", "5m", "1h", "4h", "1d", "1w", "1M"):
             assert k in exdata.kline_periods
@@ -164,17 +165,20 @@ class TestExchangeData:
 
 
 class TestParamGeneration:
+    @pytest.mark.ticker
     def test_get_tick_params(self, feed):
         path, params, extra = feed._get_tick("KRW-BTC")
         assert "GET" in path
         assert params["markets"] == "KRW-BTC"
         assert extra["request_type"] == "get_tick"
 
+    @pytest.mark.orderbook
     def test_get_depth_params(self, feed):
         path, params, extra = feed._get_depth("KRW-BTC")
         assert "GET" in path
         assert params["markets"] == "KRW-BTC"
 
+    @pytest.mark.kline
     def test_get_kline_minutes(self, feed):
         path, params, extra = feed._get_kline("KRW-BTC", "1h", 100)
         assert "GET" in path
@@ -182,14 +186,17 @@ class TestParamGeneration:
         assert params["market"] == "KRW-BTC"
         assert params["count"] == 100
 
+    @pytest.mark.kline
     def test_get_kline_days(self, feed):
         path, params, extra = feed._get_kline("KRW-BTC", "1d", 50)
         assert "/candles/days" in path
 
+    @pytest.mark.kline
     def test_get_kline_weeks(self, feed):
         path, params, extra = feed._get_kline("KRW-BTC", "1w", 10)
         assert "/candles/weeks" in path
 
+    @pytest.mark.kline
     def test_get_kline_months(self, feed):
         path, params, extra = feed._get_kline("KRW-BTC", "1M", 10)
         assert "/candles/months" in path
@@ -250,33 +257,40 @@ class TestParamGeneration:
 
 
 class TestNormalization:
+    @pytest.mark.ticker
     def test_tick_ok(self):
         result, ok = UpbitRequestData._get_tick_normalize_function(SAMPLE_TICK, {})
         assert ok is True
         assert result[0]["market"] == "KRW-BTC"
 
+    @pytest.mark.ticker
     def test_tick_error(self):
         result, ok = UpbitRequestData._get_tick_normalize_function(SAMPLE_ERROR, {})
         assert ok is False
 
+    @pytest.mark.ticker
     def test_tick_empty(self):
         result, ok = UpbitRequestData._get_tick_normalize_function([], {})
         assert ok is False
 
+    @pytest.mark.orderbook
     def test_depth_ok(self):
         result, ok = UpbitRequestData._get_depth_normalize_function(SAMPLE_DEPTH, {})
         assert ok is True
         assert "orderbook_units" in result[0]
 
+    @pytest.mark.orderbook
     def test_depth_error(self):
         result, ok = UpbitRequestData._get_depth_normalize_function(SAMPLE_ERROR, {})
         assert ok is False
 
+    @pytest.mark.kline
     def test_kline_ok(self):
         result, ok = UpbitRequestData._get_kline_normalize_function(SAMPLE_KLINE, {})
         assert ok is True
         assert len(result) == 2
 
+    @pytest.mark.kline
     def test_kline_empty(self):
         result, ok = UpbitRequestData._get_kline_normalize_function([], {})
         assert ok is False
@@ -376,17 +390,20 @@ class TestNormalization:
 
 class TestSyncCalls:
     @patch.object(UpbitRequestData, "http_request", return_value=SAMPLE_TICK)
+    @pytest.mark.ticker
     def test_get_tick(self, mock_http, feed):
         rd = feed.get_tick("KRW-BTC")
         assert isinstance(rd, RequestData)
         mock_http.assert_called_once()
 
     @patch.object(UpbitRequestData, "http_request", return_value=SAMPLE_DEPTH)
+    @pytest.mark.orderbook
     def test_get_depth(self, mock_http, feed):
         rd = feed.get_depth("KRW-BTC")
         assert isinstance(rd, RequestData)
 
     @patch.object(UpbitRequestData, "http_request", return_value=SAMPLE_KLINE)
+    @pytest.mark.kline
     def test_get_kline(self, mock_http, feed):
         rd = feed.get_kline("KRW-BTC", "1h", 10)
         assert isinstance(rd, RequestData)
@@ -568,6 +585,7 @@ class TestFeedInit:
 
 class TestIntegration:
     @pytest.mark.skip(reason="Requires network access")
+    @pytest.mark.ticker
     def test_live_get_tick(self):
         q = queue.Queue()
         feed = UpbitRequestDataSpot(q)
@@ -575,6 +593,7 @@ class TestIntegration:
         assert isinstance(rd, RequestData)
 
     @pytest.mark.skip(reason="Requires network access")
+    @pytest.mark.orderbook
     def test_live_get_depth(self):
         q = queue.Queue()
         feed = UpbitRequestDataSpot(q)
@@ -582,6 +601,7 @@ class TestIntegration:
         assert isinstance(rd, RequestData)
 
     @pytest.mark.skip(reason="Requires network access")
+    @pytest.mark.kline
     def test_live_get_kline(self):
         q = queue.Queue()
         feed = UpbitRequestDataSpot(q)

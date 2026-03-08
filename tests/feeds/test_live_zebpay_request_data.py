@@ -56,12 +56,14 @@ class TestZebpayServerTime:
 class TestZebpayTickerData:
     """Test ticker data functionality."""
 
+    @pytest.mark.ticker
     def test_zebpay_req_tick_data(self, zebpay_feed):
         """Test getting ticker data from Zebpay API."""
         # Zebpay uses format like "BTC-INR"
         data = zebpay_feed.get_tick("BTC/INR")
         assert data is not None
 
+    @pytest.mark.ticker
     def test_zebpay_tick_data_validation(self, zebpay_feed):
         """Test ticker data structure and values."""
         data = zebpay_feed.get_tick("BTC/INR")
@@ -74,6 +76,7 @@ class TestZebpayTickerData:
 
         assert isinstance(data, (dict, list, RequestData))
 
+    @pytest.mark.ticker
     def test_zebpay_multiple_tickers(self, zebpay_feed):
         """Test getting multiple tickers."""
         # Test with different pairs
@@ -83,6 +86,7 @@ class TestZebpayTickerData:
         data = zebpay_feed.get_tick(symbol)
         assert data is not None
 
+    @pytest.mark.ticker
     def test_zebpay_usdt_pair_ticker(self, zebpay_feed):
         """Test ticker for USDT pairs."""
         data = zebpay_feed.get_tick("BTC/USDT")
@@ -95,6 +99,7 @@ class TestZebpayTickerData:
 class TestZebpayKlineData:
     """Test kline/candlestick data functionality."""
 
+    @pytest.mark.kline
     def test_zebpay_req_kline_data_1m(self, zebpay_feed):
         """Test getting 1-minute kline data."""
         data = zebpay_feed.get_kline("BTC/INR", "1m", count=2)
@@ -107,16 +112,19 @@ class TestZebpayKlineData:
 
         assert isinstance(data, (dict, list, RequestData))
 
+    @pytest.mark.kline
     def test_zebpay_req_kline_data_1h(self, zebpay_feed):
         """Test getting 1-hour kline data."""
         data = zebpay_feed.get_kline("BTC/INR", "1h", count=2)
         assert data is not None
 
+    @pytest.mark.kline
     def test_zebpay_req_kline_data_1d(self, zebpay_feed):
         """Test getting daily kline data."""
         data = zebpay_feed.get_kline("BTC/INR", "1d", count=2)
         assert data is not None
 
+    @pytest.mark.kline
     def test_zebpay_kline_multiple_timeframes(self, zebpay_feed):
         """Test kline data for multiple timeframes."""
         timeframes = ["1m", "5m", "15m", "1h", "1d"]
@@ -133,6 +141,7 @@ class TestZebpayKlineData:
 class TestZebpayOrderBook:
     """Test order book depth functionality."""
 
+    @pytest.mark.orderbook
     def test_zebpay_req_depth_data(self, zebpay_feed):
         """Test getting order book data."""
         data = zebpay_feed.get_depth("BTC/INR", count=20)
@@ -142,6 +151,7 @@ class TestZebpayOrderBook:
 
         assert isinstance(data, (dict, list, RequestData))
 
+    @pytest.mark.orderbook
     def test_zebpay_orderbook_bids_asks(self, zebpay_feed):
         """Test orderbook has bids and asks."""
         data = zebpay_feed.get_depth("BTC/INR", count=20)
@@ -155,6 +165,7 @@ class TestZebpayOrderBook:
                 pass
             assert isinstance(data["asks"], list)
 
+    @pytest.mark.orderbook
     def test_zebpay_depth_count_parameter(self, zebpay_feed):
         """Test depth count parameter."""
         data = zebpay_feed.get_depth("BTC/INR", count=10)
@@ -189,6 +200,7 @@ class TestZebpayExchangeData:
         assert exchange_data.rest_url == "https://sapi.zebpay.com"
         assert exchange_data.wss_url == "wss://stream.zebpay.com"
 
+    @pytest.mark.kline
     def test_kline_periods(self):
         """Test kline period configuration."""
         exchange_data = ZebpayExchangeDataSpot()
@@ -252,6 +264,7 @@ class TestZebpayRegistry:
 class TestZebpayTickerContainer:
     """Test Zebpay ticker data container."""
 
+    @pytest.mark.ticker
     def test_ticker_float_parsing(self):
         """Test ticker float parsing helper method."""
         # Test the _parse_float static method
@@ -267,6 +280,7 @@ class TestZebpayTickerContainer:
 class TestZebpayNormalization:
     """Test data normalization functions."""
 
+    @pytest.mark.ticker
     def test_tick_normalize_function(self):
         """Test ticker normalization function."""
         input_data = {
@@ -283,12 +297,14 @@ class TestZebpayNormalization:
         assert len(result) == 1
         assert result[0]["symbol"] == "BTC-INR"
 
+    @pytest.mark.ticker
     def test_tick_normalize_function_empty(self):
         """Test ticker normalization with empty data."""
         result, success = ZebpayRequestDataSpot._get_tick_normalize_function(None, {})
         assert success is False
         assert result == []
 
+    @pytest.mark.orderbook
     def test_depth_normalize_function(self):
         """Test depth normalization function."""
         input_data = {
@@ -302,6 +318,7 @@ class TestZebpayNormalization:
         assert success is True
         assert len(result) == 1
 
+    @pytest.mark.kline
     def test_kline_normalize_function(self):
         """Test kline normalization function."""
         input_data = {
@@ -322,6 +339,7 @@ class TestZebpayIntegration:
     """Integration tests for Zebpay."""
 
     @pytest.mark.integration
+    @pytest.mark.ticker
     def test_get_ticker_live(self):
         """Test getting ticker from live API."""
         data_queue = queue.Queue()
@@ -330,6 +348,7 @@ class TestZebpayIntegration:
         assert data is not None
 
     @pytest.mark.integration
+    @pytest.mark.orderbook
     def test_get_orderbook_live(self):
         """Test getting orderbook from live API."""
         data_queue = queue.Queue()
@@ -338,6 +357,7 @@ class TestZebpayIntegration:
         assert data is not None
 
     @pytest.mark.integration
+    @pytest.mark.kline
     def test_get_kline_live(self):
         """Test getting klines from live API."""
         data_queue = queue.Queue()

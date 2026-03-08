@@ -3,7 +3,11 @@ import traceback
 
 import pytest
 
-pytestmark = pytest.mark.xdist_group("mixed_exchange_api")
+pytestmark = [
+    pytest.mark.integration,
+    pytest.mark.network,
+    pytest.mark.xdist_group("mixed_exchange_api"),
+]
 
 from bt_api_py.bt_api import BtApi
 from bt_api_py.containers.requestdatas.request_data import RequestData

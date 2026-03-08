@@ -147,6 +147,7 @@ class TestExchangeData:
         assert exdata.get_period("1d") == "1day"
         assert exdata.get_period("1w") == "1week"
 
+    @pytest.mark.kline
     def test_kline_periods(self, exdata):
         for k in ("1m", "5m", "15m", "1h", "4h", "1d", "1w"):
             assert k in exdata.kline_periods
@@ -187,6 +188,7 @@ class TestExchangeData:
 
 
 class TestParamGeneration:
+    @pytest.mark.ticker
     def test_get_tick_params(self, feed):
         path, params, extra = feed._get_tick("BTCUSDT")
         assert "GET" in path
@@ -194,12 +196,14 @@ class TestParamGeneration:
         assert params["market"] == "BTCUSDT"
         assert extra["request_type"] == "get_tick"
 
+    @pytest.mark.orderbook
     def test_get_depth_params(self, feed):
         path, params, extra = feed._get_depth("BTCUSDT", 10)
         assert "/v2/spot/depth" in path
         assert params["market"] == "BTCUSDT"
         assert params["limit"] == 10
 
+    @pytest.mark.kline
     def test_get_kline_params(self, feed):
         path, params, extra = feed._get_kline("BTCUSDT", "1h", 50)
         assert "/v2/spot/kline" in path
@@ -263,29 +267,35 @@ class TestParamGeneration:
 
 
 class TestNormalization:
+    @pytest.mark.ticker
     def test_tick_ok(self):
         result, ok = CoinExRequestData._get_tick_normalize_function(SAMPLE_TICK, {})
         assert ok is True
         assert len(result) > 0
 
+    @pytest.mark.ticker
     def test_tick_error(self):
         result, ok = CoinExRequestData._get_tick_normalize_function(SAMPLE_ERROR, {})
         assert ok is False
 
+    @pytest.mark.orderbook
     def test_depth_ok(self):
         result, ok = CoinExRequestData._get_depth_normalize_function(SAMPLE_DEPTH, {})
         assert ok is True
         assert "depth" in result[0]
 
+    @pytest.mark.orderbook
     def test_depth_error(self):
         result, ok = CoinExRequestData._get_depth_normalize_function(SAMPLE_ERROR, {})
         assert ok is False
 
+    @pytest.mark.kline
     def test_kline_ok(self):
         result, ok = CoinExRequestData._get_kline_normalize_function(SAMPLE_KLINE, {})
         assert ok is True
         assert len(result) == 2
 
+    @pytest.mark.kline
     def test_kline_error(self):
         result, ok = CoinExRequestData._get_kline_normalize_function(SAMPLE_ERROR, {})
         assert ok is False
@@ -373,17 +383,20 @@ class TestNormalization:
 
 class TestSyncCalls:
     @patch.object(CoinExRequestData, "http_request", return_value=SAMPLE_TICK)
+    @pytest.mark.ticker
     def test_get_tick(self, mock_http, feed):
         rd = feed.get_tick("BTCUSDT")
         assert isinstance(rd, RequestData)
         mock_http.assert_called_once()
 
     @patch.object(CoinExRequestData, "http_request", return_value=SAMPLE_DEPTH)
+    @pytest.mark.orderbook
     def test_get_depth(self, mock_http, feed):
         rd = feed.get_depth("BTCUSDT")
         assert isinstance(rd, RequestData)
 
     @patch.object(CoinExRequestData, "http_request", return_value=SAMPLE_KLINE)
+    @pytest.mark.kline
     def test_get_kline(self, mock_http, feed):
         rd = feed.get_kline("BTCUSDT", "1h", 10)
         assert isinstance(rd, RequestData)
@@ -560,6 +573,7 @@ class TestFeedInit:
 
 class TestIntegration:
     @pytest.mark.skip(reason="Requires network access")
+    @pytest.mark.ticker
     def test_live_get_tick(self):
         q = queue.Queue()
         feed = CoinExRequestDataSpot(q)
@@ -567,6 +581,7 @@ class TestIntegration:
         assert isinstance(rd, RequestData)
 
     @pytest.mark.skip(reason="Requires network access")
+    @pytest.mark.orderbook
     def test_live_get_depth(self):
         q = queue.Queue()
         feed = CoinExRequestDataSpot(q)
@@ -574,6 +589,7 @@ class TestIntegration:
         assert isinstance(rd, RequestData)
 
     @pytest.mark.skip(reason="Requires network access")
+    @pytest.mark.kline
     def test_live_get_kline(self):
         q = queue.Queue()
         feed = CoinExRequestDataSpot(q)

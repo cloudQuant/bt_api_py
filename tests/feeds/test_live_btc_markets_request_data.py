@@ -47,6 +47,7 @@ class TestBtcMarketsServerTime:
 class TestBtcMarketsTickData:
     """Test BTC Markets ticker data."""
 
+    @pytest.mark.ticker
     def test_btc_markets_req_tick_data(self):
         """Test getting ticker data (synchronous)."""
         live_btc_markets_spot_feed = init_req_feed()
@@ -78,6 +79,7 @@ class TestBtcMarketsTickData:
 
         print("tick_data:", tick_data)
 
+    @pytest.mark.ticker
     def test_btc_markets_async_tick_data(self):
         """Test getting ticker data (asynchronous)."""
         data_queue = queue.Queue()
@@ -143,6 +145,7 @@ class TestBtcMarketsKlineData:
 
                 print("kline_data:", kline_list)
 
+    @pytest.mark.kline
     def test_btc_markets_async_kline_data(self):
         """Test getting kline data (asynchronous)."""
         data_queue = queue.Queue()
@@ -164,6 +167,7 @@ class TestBtcMarketsKlineData:
 class TestBtcMarketsOrderBook:
     """Test BTC Markets order book data."""
 
+    @pytest.mark.orderbook
     def test_btc_markets_req_orderbook_data(self):
         """Test getting order book data."""
         live_btc_markets_spot_feed = init_req_feed()
@@ -219,6 +223,7 @@ class TestBtcMarketsOrderBook:
                     assert ask_price > 0, f"Invalid ask_price: {ask_price}"
                     assert ask_volume >= 0, f"Invalid ask_volume: {ask_volume}"
 
+    @pytest.mark.orderbook
     def test_btc_markets_async_orderbook_data(self):
         """Test getting order book data (asynchronous)."""
         data_queue = queue.Queue()

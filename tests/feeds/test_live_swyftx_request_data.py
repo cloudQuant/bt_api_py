@@ -1,3 +1,5 @@
+import pytest
+
 """
 Swyftx Exchange Live Request Data Tests
 
@@ -38,6 +40,7 @@ def test_swyftx_req_server_time():
     pass
 
 
+@pytest.mark.ticker
 def test_swyftx_req_tick_data():
     """Test Swyftx ticker data retrieval (synchronous)."""
     live_swyftx_spot_feed = init_req_feed()
@@ -50,6 +53,7 @@ def test_swyftx_req_tick_data():
     assert params is None  # _get_tick returns no params
 
 
+@pytest.mark.ticker
 def test_swyftx_tick_normalize_function():
     """Test Swyftx ticker normalize function."""
     # Swyftx ticker response format
@@ -78,6 +82,7 @@ def test_swyftx_tick_normalize_function():
     assert "lastPrice" in ticker or "price" in ticker
 
 
+@pytest.mark.ticker
 def test_swyftx_async_tick_data():
     """Test Swyftx ticker data retrieval (asynchronous)."""
     data_queue = queue.Queue()
@@ -88,6 +93,7 @@ def test_swyftx_async_tick_data():
     pass
 
 
+@pytest.mark.kline
 def test_swyftx_req_kline_data():
     """Test Swyftx kline/candlestick data retrieval (synchronous)."""
     live_swyftx_spot_feed = init_req_feed()
@@ -99,6 +105,7 @@ def test_swyftx_req_kline_data():
     assert params["limit"] == 100
 
 
+@pytest.mark.kline
 def test_swyftx_kline_normalize_function():
     """Test Swyftx kline normalize function."""
     # Swyftx kline response format
@@ -134,6 +141,7 @@ def test_swyftx_kline_normalize_function():
         assert volume >= 0
 
 
+@pytest.mark.kline
 def test_swyftx_async_kline_data():
     """Test Swyftx kline data retrieval (asynchronous)."""
     data_queue = queue.Queue()
@@ -178,6 +186,7 @@ def order_book_value_equals(order_book):
         assert ask_volume >= 0, "Ask volume should be non-negative"
 
 
+@pytest.mark.orderbook
 def test_swyftx_req_orderbook_data():
     """Test Swyftx orderbook data retrieval."""
     live_swyftx_spot_feed = init_req_feed()
@@ -189,6 +198,7 @@ def test_swyftx_req_orderbook_data():
     assert params["depth"] == 20
 
 
+@pytest.mark.orderbook
 def test_swyftx_depth_normalize_function():
     """Test Swyftx depth normalize function."""
     # Swyftx orderbook response format

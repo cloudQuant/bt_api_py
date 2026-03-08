@@ -73,6 +73,7 @@ class TestCoinbaseExchangeData:
 class TestCoinbaseTickerData:
     """Test Coinbase ticker data container"""
 
+    @pytest.mark.ticker
     def test_request_ticker_data_init(self):
         """Test REST API ticker data initialization"""
         ticker_response = {
@@ -103,6 +104,7 @@ class TestCoinbaseTickerData:
                 pass
             assert ask_price == 50001.00
 
+    @pytest.mark.ticker
     def test_wss_ticker_data_init(self):
         """Test WebSocket ticker data initialization"""
         ticker_response = {

@@ -1,3 +1,5 @@
+import pytest
+
 import time
 
 import rapidjson
@@ -6,6 +8,7 @@ import requests
 from bt_api_py.containers.bars.okx_bar import OkxBarData
 
 
+@pytest.mark.kline
 def test_get_history_bar():
     url = (
         "https://www.okx.com/api/v5/market/history-candles?instId=BTC-USDT-SWAP&bar=1m&after=1696089720000&before"
@@ -50,6 +53,7 @@ def test_get_history_bar():
     # print(f"get_json_time: {get_json_time} ms, get_text_time: {get_text_time}")
 
 
+@pytest.mark.kline
 def test_ok_bar_functions():
     # {"code":"0","msg":"","data":[["1696089660000","26990.4","27004.5","26990.3","27004.5","4794","47.94","1294336.087","1"]]}
     sample_bar = [

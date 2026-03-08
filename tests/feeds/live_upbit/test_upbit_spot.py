@@ -46,6 +46,7 @@ class TestUpbitExchangeDataSpot:
 class TestUpbitTickerData:
     """测试 Upbit Ticker 数据"""
 
+    @pytest.mark.ticker
     def test_ticker_initialization(self):
         """测试 ticker 初始化"""
         ticker_data = {
@@ -76,6 +77,7 @@ class TestUpbitTickerData:
         assert ticker.change == "RISE"
         assert ticker.change_rate == 0.0325
 
+    @pytest.mark.ticker
     def test_ticker_all_data(self):
         """测试 ticker 所有数据获取"""
         ticker_data = {"market": "KRW-BTC", "trade_price": "50000000", "timestamp": 1642696800000}

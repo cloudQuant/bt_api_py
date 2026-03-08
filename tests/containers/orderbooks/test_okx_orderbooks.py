@@ -1,8 +1,11 @@
+import pytest
+
 import json
 
 from bt_api_py.containers.orderbooks.okx_orderbook import OkxOrderBookData
 
 
+@pytest.mark.orderbook
 def test_okx_swap_req_orderbook():
     data = {
         "code": "0",
@@ -29,6 +32,7 @@ def test_okx_swap_req_orderbook():
     assert bo.get_ask_trade_nums()[-1] == 1.0
 
 
+@pytest.mark.orderbook
 def test_okx_swap_wss_orderbook():
     data = {
         "arg": {"channel": "books", "instId": "BTC-USDT"},

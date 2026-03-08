@@ -213,6 +213,7 @@ class TestCoinbaseExchangeData:
         assert ed.get_period("1h") == "ONE_HOUR"
         assert ed.get_period("1d") == "ONE_DAY"
 
+    @pytest.mark.kline
     def test_kline_periods(self):
         ed = CoinbaseExchangeDataSpot()
         assert "1m" in ed.kline_periods
@@ -342,6 +343,7 @@ class TestCoinbaseParamGeneration:
 
 
 class TestCoinbaseNormalize:
+    @pytest.mark.ticker
     def test_ticker_normalize(self):
         extra = {"symbol_name": "BTC-USD", "asset_type": "SPOT", "exchange_name": "COINBASE___SPOT"}
         tickers, ok = CoinbaseRequestDataSpot._get_ticker_normalize_function(
@@ -351,12 +353,14 @@ class TestCoinbaseNormalize:
         assert len(tickers) == 1
         assert isinstance(tickers[0], CoinbaseRequestTickerData)
 
+    @pytest.mark.ticker
     def test_ticker_normalize_none(self):
         extra = {"symbol_name": "BTC-USD", "asset_type": "SPOT"}
         tickers, ok = CoinbaseRequestDataSpot._get_ticker_normalize_function(None, extra)
         assert ok is False
         assert tickers == []
 
+    @pytest.mark.orderbook
     def test_depth_normalize(self):
         extra = {"symbol_name": "BTC-USD", "asset_type": "SPOT"}
         books, ok = CoinbaseRequestDataSpot._get_depth_normalize_function(SAMPLE_DEPTH_RESP, extra)
@@ -368,12 +372,14 @@ class TestCoinbaseNormalize:
         assert b.get_bid_price_list()[0] == 49999.0
         assert b.get_ask_price_list()[0] == 50001.0
 
+    @pytest.mark.orderbook
     def test_depth_normalize_none(self):
         extra = {"symbol_name": "BTC-USD", "asset_type": "SPOT"}
         books, ok = CoinbaseRequestDataSpot._get_depth_normalize_function(None, extra)
         assert ok is False
         assert books == []
 
+    @pytest.mark.kline
     def test_kline_normalize(self):
         extra = {"symbol_name": "BTC-USD", "asset_type": "SPOT"}
         bars, ok = CoinbaseRequestDataSpot._get_kline_normalize_function(SAMPLE_KLINE_RESP, extra)
@@ -385,6 +391,7 @@ class TestCoinbaseNormalize:
         assert bar.get_open() == 50000.0
         assert bar.get_close() == 50200.0
 
+    @pytest.mark.kline
     def test_kline_normalize_none(self):
         extra = {"symbol_name": "BTC-USD", "asset_type": "SPOT"}
         bars, ok = CoinbaseRequestDataSpot._get_kline_normalize_function(None, extra)
@@ -540,12 +547,14 @@ class TestCoinbaseSyncCalls:
 
 
 class TestCoinbaseContainers:
+    @pytest.mark.ticker
     def test_ticker_container(self):
         t = CoinbaseRequestTickerData(SAMPLE_TICKER_RESP, "BTC-USD", "SPOT", True)
         t.init_data()
         assert t.get_exchange_name() == "COINBASE"
         assert t.get_symbol_name() == "BTC-USD"
 
+    @pytest.mark.orderbook
     def test_orderbook_container(self):
         ob = CoinbaseRequestOrderBookData(SAMPLE_DEPTH_RESP, "BTC-USD", "SPOT", True)
         ob.init_data()
@@ -556,6 +565,7 @@ class TestCoinbaseContainers:
         assert ob.get_bid_price_list()[0] == 49999.0
         assert ob.get_ask_price_list()[0] == 50001.0
 
+    @pytest.mark.kline
     def test_bar_container(self):
         candle = SAMPLE_KLINE_RESP["candles"][0]
         bar = CoinbaseRequestBarData(candle, "BTC-USD", "SPOT", True)
@@ -581,11 +591,13 @@ class TestCoinbaseContainers:
         a.init_data()
         assert a.get_exchange_name() == "COINBASE"
 
+    @pytest.mark.orderbook
     def test_orderbook_init_returns_self(self):
         ob = CoinbaseRequestOrderBookData(SAMPLE_DEPTH_RESP, "BTC-USD", "SPOT", True)
         result = ob.init_data()
         assert result is ob
 
+    @pytest.mark.kline
     def test_bar_init_returns_self(self):
         candle = SAMPLE_KLINE_RESP["candles"][0]
         bar = CoinbaseRequestBarData(candle, "BTC-USD", "SPOT", True)

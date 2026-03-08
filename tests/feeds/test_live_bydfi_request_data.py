@@ -47,6 +47,7 @@ class TestBydfiServerTime:
 class TestBydfiTickData:
     """Test BYDFi ticker data."""
 
+    @pytest.mark.ticker
     def test_bydfi_req_tick_data(self):
         """Test getting ticker data (synchronous)."""
         live_bydfi_spot_feed = init_req_feed()
@@ -79,6 +80,7 @@ class TestBydfiTickData:
 
         print("tick_data:", tick_data)
 
+    @pytest.mark.ticker
     def test_bydfi_async_tick_data(self):
         """Test getting ticker data (asynchronous)."""
         data_queue = queue.Queue()
@@ -99,6 +101,7 @@ class TestBydfiTickData:
 class TestBydfiKlineData:
     """Test BYDFi kline/candlestick data."""
 
+    @pytest.mark.kline
     def test_bydfi_req_kline_data(self):
         """Test getting kline data (synchronous)."""
         live_bydfi_spot_feed = init_req_feed()
@@ -131,6 +134,7 @@ class TestBydfiKlineData:
 
             print("kline_data:", kline_list)
 
+    @pytest.mark.kline
     def test_bydfi_async_kline_data(self):
         """Test getting kline data (asynchronous)."""
         data_queue = queue.Queue()
@@ -152,6 +156,7 @@ class TestBydfiKlineData:
 class TestBydfiOrderBook:
     """Test BYDFi order book data."""
 
+    @pytest.mark.orderbook
     def test_bydfi_req_orderbook_data(self):
         """Test getting order book data."""
         live_bydfi_spot_feed = init_req_feed()
@@ -207,6 +212,7 @@ class TestBydfiOrderBook:
                     f"best_bid ({best_bid}) should be <= best_ask ({best_ask})"
                 )
 
+    @pytest.mark.orderbook
     def test_bydfi_async_orderbook_data(self):
         """Test getting order book data (asynchronous)."""
         data_queue = queue.Queue()

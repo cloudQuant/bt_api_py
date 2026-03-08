@@ -1,5 +1,8 @@
+import pytest
 import queue
 import time
+
+pytestmark = [pytest.mark.integration, pytest.mark.network]
 
 from bt_api_py.containers.accounts.okx_account import OkxAccountData
 from bt_api_py.containers.exchanges.okx_exchange_data import OkxExchangeDataSwap
@@ -45,6 +48,7 @@ def assert_account_data_value(bp):
     assert bp.get_event() == "AccountEvent"
 
 
+@pytest.mark.auth_account
 def test_okx_req_account_data():
     live_okx_swap_feed = init_req_feed()
     data = live_okx_swap_feed.get_account().get_data()
@@ -53,6 +57,7 @@ def test_okx_req_account_data():
     assert_account_data_value(data[0].init_data())
 
 
+@pytest.mark.auth_account
 def test_okx_async_account_data():
     data_queue = queue.Queue()
     live_okx_swap_feed = init_async_feed(data_queue)
@@ -85,6 +90,7 @@ def test_okx_req_get_config():
     assert public_ip in api_ip, "需要绑定当前ip地址到okx的API当中"
 
 
+@pytest.mark.auth_position
 def test_okx_req_get_position():
     live_okx_swap_feed = init_req_feed()
     data = live_okx_swap_feed.get_position(symbol="OP-USDT")
@@ -92,6 +98,7 @@ def test_okx_req_get_position():
     print("position_data", data.get_data())
 
 
+@pytest.mark.auth_position
 def test_okx_async_get_position():
     data_queue = queue.Queue()
     live_okx_swap_feed = init_async_feed(data_queue)
@@ -109,6 +116,7 @@ def test_okx_async_get_position():
         assert isinstance(target_data, OkxPositionData)
 
 
+@pytest.mark.auth_position
 def test_okx_req_get_positions_history():
     live_okx_swap_feed = init_req_feed()
     data = live_okx_swap_feed.get_positions_history(inst_type="SWAP", limit="10")
@@ -123,6 +131,7 @@ def test_okx_req_get_positions_history():
         position_data.init_data()
 
 
+@pytest.mark.auth_position
 def test_okx_async_get_positions_history():
     data_queue = queue.Queue()
     live_okx_swap_feed = init_async_feed(data_queue)
@@ -142,6 +151,7 @@ def test_okx_async_get_positions_history():
         position_data.init_data()
 
 
+@pytest.mark.auth_position
 def test_okx_req_get_fee():
     live_okx_swap_feed = init_req_feed()
     # Get fee rates for SWAP instruments
@@ -174,6 +184,7 @@ def test_okx_async_get_fee():
     assert isinstance(fee_data_list, list)
 
 
+@pytest.mark.auth_position
 def test_okx_req_get_max_size():
     live_okx_swap_feed = init_req_feed()
     data = live_okx_swap_feed.get_max_size(symbol="BTC-USDT", td_mode="cross")
@@ -203,6 +214,7 @@ def test_okx_async_get_max_size():
     assert isinstance(max_size_list, list)
 
 
+@pytest.mark.auth_position
 def test_okx_req_get_max_avail_size():
     live_okx_swap_feed = init_req_feed()
     data = live_okx_swap_feed.get_max_avail_size(symbol="BTC-USDT", td_mode="cross")
@@ -232,6 +244,7 @@ def test_okx_async_get_max_avail_size():
     assert isinstance(max_avail_size_list, list)
 
 
+@pytest.mark.auth_account
 def test_okx_req_get_risk_state():
     """Test get_risk_state interface"""
     live_okx_swap_feed = init_req_feed()
@@ -242,6 +255,7 @@ def test_okx_req_get_risk_state():
     print("get_risk_state input:", data.get_input_data())
 
 
+@pytest.mark.auth_account
 def test_okx_req_get_bills():
     """Test get_bills interface"""
     live_okx_swap_feed = init_req_feed()
@@ -266,6 +280,7 @@ def test_okx_req_get_lever():
     print("get_lever data:", lever_list)
 
 
+@pytest.mark.auth_account
 def test_okx_req_get_account_position_risk():
     """Test get_account_position_risk interface"""
     live_okx_swap_feed = init_req_feed()
@@ -278,6 +293,7 @@ def test_okx_req_get_account_position_risk():
     print("get_account_position_risk count:", len(risk_list))
 
 
+@pytest.mark.auth_account
 def test_okx_async_get_account_position_risk():
     """Test async_get_account_position_risk interface"""
     data_queue = queue.Queue()
@@ -293,6 +309,7 @@ def test_okx_async_get_account_position_risk():
     print("async_get_account_position_risk status:", risk_data.get_status())
 
 
+@pytest.mark.auth_account
 def test_okx_req_get_bills_archive():
     """Test get_bills_archive interface"""
     live_okx_swap_feed = init_req_feed()
@@ -460,6 +477,7 @@ def test_okx_async_get_greeks():
     print("async_get_greeks status:", greeks_data.get_status())
 
 
+@pytest.mark.auth_position
 def test_okx_req_get_position_tiers():
     """Test get_position_tiers interface"""
     live_okx_swap_feed = init_req_feed()
@@ -472,6 +490,7 @@ def test_okx_req_get_position_tiers():
     print("get_position_tiers count:", len(tiers_list))
 
 
+@pytest.mark.auth_account
 def test_okx_async_get_position_tiers():
     """Test async_get_position_tiers interface"""
     data_queue = queue.Queue()
@@ -490,6 +509,7 @@ def test_okx_async_get_position_tiers():
 # ==================== Funding Account Tests ====================
 
 
+@pytest.mark.auth_account
 def test_okx_req_get_account_rate_limit():
     """Test get_account_rate_limit interface - get account trading rate limit"""
     live_okx_swap_feed = init_req_feed()
@@ -511,6 +531,7 @@ def test_okx_req_get_account_rate_limit():
             print(f"Rule: {rate_limit['rule']}")
 
 
+@pytest.mark.auth_account
 def test_okx_async_get_account_rate_limit():
     """Test async_get_account_rate_limit interface"""
     data_queue = queue.Queue()

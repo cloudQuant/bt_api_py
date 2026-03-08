@@ -1,6 +1,9 @@
+import pytest
+
 from bt_api_py.containers.bars.binance_bar import BinanceRequestBarData, BinanceWssBarData
 
 
+@pytest.mark.kline
 def test_binance_wss_bar_functions():
     # {"code":"0","msg":"","data":[["1696089660000","26990.4","27004.5","26990.3","27004.5","4794","47.94","1294336.087","1"]]}
     data = {
@@ -44,6 +47,7 @@ def test_binance_wss_bar_functions():
     assert binance_bar_data.get_taker_buy_base_asset_volume() == 184.769
 
 
+@pytest.mark.kline
 def test_binance_req_bar_functions():
     # {"code":"0","msg":"","data":[["1696089660000","26990.4","27004.5","26990.3","27004.5","4794","47.94","1294336.087","1"]]}
     data = [

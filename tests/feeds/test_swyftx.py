@@ -89,6 +89,7 @@ class TestExchangeData:
         for c in ("AUD", "USD", "BTC", "ETH", "USDT"):
             assert c in exdata.legal_currency
 
+    @pytest.mark.kline
     def test_kline_periods(self, exdata):
         for k in ("1m", "5m", "15m", "30m", "1h", "4h", "1d", "1w"):
             assert k in exdata.kline_periods
@@ -124,6 +125,7 @@ class TestExchangeData:
 
 
 class TestParamGeneration:
+    @pytest.mark.ticker
     def test_get_tick_params(self, feed):
         path, params, extra = feed._get_tick("BTC-AUD")
         assert "ticker" in path.lower()
@@ -131,11 +133,13 @@ class TestParamGeneration:
         assert extra["request_type"] == "get_tick"
         assert extra["symbol_name"] == "BTC-AUD"
 
+    @pytest.mark.orderbook
     def test_get_depth_params(self, feed):
         path, params, extra = feed._get_depth("BTC-AUD", 20)
         assert "orderbook" in path.lower()
         assert params["depth"] == 20
 
+    @pytest.mark.kline
     def test_get_kline_params(self, feed):
         path, params, extra = feed._get_kline("BTC-AUD", "1h", 10)
         assert "candle" in path.lower()
@@ -169,32 +173,39 @@ class TestParamGeneration:
 
 
 class TestNormalization:
+    @pytest.mark.ticker
     def test_tick_ok(self):
         result, ok = SwyftxRequestData._get_tick_normalize_function(SAMPLE_TICK, {})
         assert ok is True
         assert isinstance(result, list) and len(result) > 0
 
+    @pytest.mark.ticker
     def test_tick_error(self):
         result, ok = SwyftxRequestData._get_tick_normalize_function(SAMPLE_ERROR, {})
         assert ok is False
 
+    @pytest.mark.ticker
     def test_tick_none(self):
         result, ok = SwyftxRequestData._get_tick_normalize_function(None, {})
         assert ok is False
 
+    @pytest.mark.orderbook
     def test_depth_ok(self):
         result, ok = SwyftxRequestData._get_depth_normalize_function(SAMPLE_DEPTH, {})
         assert ok is True
 
+    @pytest.mark.orderbook
     def test_depth_error(self):
         result, ok = SwyftxRequestData._get_depth_normalize_function(SAMPLE_ERROR, {})
         assert ok is False
 
+    @pytest.mark.kline
     def test_kline_ok(self):
         result, ok = SwyftxRequestData._get_kline_normalize_function(SAMPLE_KLINE, {})
         assert ok is True
         assert len(result) == 1
 
+    @pytest.mark.kline
     def test_kline_none(self):
         result, ok = SwyftxRequestData._get_kline_normalize_function(None, {})
         assert ok is False
@@ -246,22 +257,26 @@ class TestNormalization:
 
 class TestSyncCalls:
     @patch.object(SwyftxRequestData, "http_request", return_value=SAMPLE_TICK)
+    @pytest.mark.ticker
     def test_get_tick(self, mock_http, feed):
         rd = feed.get_tick("BTC-AUD")
         assert isinstance(rd, RequestData)
         mock_http.assert_called_once()
 
     @patch.object(SwyftxRequestData, "http_request", return_value=SAMPLE_TICK)
+    @pytest.mark.ticker
     def test_get_ticker(self, mock_http, feed):
         rd = feed.get_ticker("BTC-AUD")
         assert isinstance(rd, RequestData)
 
     @patch.object(SwyftxRequestData, "http_request", return_value=SAMPLE_DEPTH)
+    @pytest.mark.orderbook
     def test_get_depth(self, mock_http, feed):
         rd = feed.get_depth("BTC-AUD", 20)
         assert isinstance(rd, RequestData)
 
     @patch.object(SwyftxRequestData, "http_request", return_value=SAMPLE_KLINE)
+    @pytest.mark.kline
     def test_get_kline(self, mock_http, feed):
         rd = feed.get_kline("BTC-AUD", "1h", 10)
         assert isinstance(rd, RequestData)
@@ -417,6 +432,7 @@ class TestWebSocketStubs:
 
 class TestIntegration:
     @pytest.mark.skip(reason="Requires network access")
+    @pytest.mark.ticker
     def test_live_get_tick(self):
         f = SwyftxRequestDataSpot(queue.Queue())
         rd = f.get_tick("BTC-AUD")

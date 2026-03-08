@@ -76,6 +76,7 @@ class TestDydxSpotInit:
 class TestDydxTicker:
     """Test dYdX ticker functionality"""
 
+    @pytest.mark.ticker
     def test_get_ticker_spot(self, dydx_spot):
         """Test get_ticker_spot method returns correct path and params"""
         symbol = "BTC-USD"
@@ -88,6 +89,7 @@ class TestDydxTicker:
         assert extra_data["exchange_name"] == "DYDX___SWAP"
         assert "normalize_function" in extra_data
 
+    @pytest.mark.ticker
     def test_ticker_normalize_function_valid_data(self):
         """Test ticker normalize function with valid data"""
         input_data = {
@@ -118,6 +120,7 @@ class TestDydxTicker:
         assert result[2] == 50001  # markPrice
         assert result[3] == 50002  # lastPrice
 
+    @pytest.mark.ticker
     def test_ticker_normalize_function_missing_symbol(self):
         """Test ticker normalize function with missing symbol"""
         input_data = {
@@ -137,6 +140,7 @@ class TestDydxTicker:
         assert result is None
         assert status is False
 
+    @pytest.mark.ticker
     def test_ticker_normalize_function_error_code(self):
         """Test ticker normalize function with error response"""
         input_data = {"code": 1, "message": "Invalid symbol"}
@@ -202,6 +206,7 @@ class TestDydxBalance:
 class TestDydxKline:
     """Test dYdX kline/candlestick functionality"""
 
+    @pytest.mark.kline
     def test_get_kline_spot(self, dydx_spot):
         """Test get_kline_spot method"""
         symbol = "BTC-USD"
@@ -215,6 +220,7 @@ class TestDydxKline:
         assert extra_data["symbol_name"] == "BTC-USD"
         assert "normalize_function" in extra_data
 
+    @pytest.mark.kline
     def test_kline_normalize_function_valid_data(self):
         """Test kline normalize function with valid data"""
         input_data = {
@@ -301,6 +307,7 @@ class TestDydxOrder:
 class TestDydxOrderbook:
     """Test dYdX orderbook functionality"""
 
+    @pytest.mark.orderbook
     def test_orderbook_normalize_function(self):
         """Test orderbook normalize function"""
         input_data = {
@@ -356,6 +363,7 @@ class TestDydxIntegration:
     """Integration tests for dYdX (marked to skip in CI)"""
 
     @pytest.mark.skip(reason="Integration test - requires API credentials")
+    @pytest.mark.ticker
     def test_get_ticker_live(self, dydx_spot):
         """Test live ticker request (requires network)"""
         pass

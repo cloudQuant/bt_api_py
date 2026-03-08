@@ -228,6 +228,7 @@ class TestCowSwapExchangeDataSpot:
             assert exchange_data.asset_type == "spot"
             assert exchange_data.rest_url == "https://api.cow.fi"
 
+    @pytest.mark.kline
     def test_kline_periods(self):
         """Test kline periods are defined."""
         with patch(
@@ -317,6 +318,7 @@ class TestCowSwapStandardInterfaces:
 
     # ── get_tick ───────────────────────────────────────
 
+    @pytest.mark.ticker
     def test_get_tick_tuple(self, cow_swap_spot):
         """Test _get_tick returns (path, params, extra_data)."""
         token = "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2"
@@ -326,6 +328,7 @@ class TestCowSwapStandardInterfaces:
         assert extra_data["exchange_name"] == "COW_SWAP___SPOT"
         assert token in path
 
+    @pytest.mark.ticker
     def test_get_tick_calls_request(self, cow_swap_spot):
         """Test get_tick calls self.request."""
         result = cow_swap_spot.get_tick("0xWETH")
@@ -336,12 +339,14 @@ class TestCowSwapStandardInterfaces:
 
     # ── get_depth ─────────────────────────────────────
 
+    @pytest.mark.orderbook
     def test_get_depth_tuple(self, cow_swap_spot):
         """Test _get_depth returns (path, params, extra_data)."""
         path, params, extra_data = cow_swap_spot._get_depth("WETH")
         assert extra_data["request_type"] == "get_depth"
         assert extra_data["symbol_name"] == "WETH"
 
+    @pytest.mark.orderbook
     def test_get_depth_calls_request(self, cow_swap_spot):
         """Test get_depth calls self.request."""
         result = cow_swap_spot.get_depth("WETH")
@@ -351,6 +356,7 @@ class TestCowSwapStandardInterfaces:
 
     # ── get_kline ─────────────────────────────────────
 
+    @pytest.mark.kline
     def test_get_kline_tuple(self, cow_swap_spot):
         """Test _get_kline returns (path, params, extra_data)."""
         path, params, extra_data = cow_swap_spot._get_kline("WETH", "1h", 100)
@@ -358,6 +364,7 @@ class TestCowSwapStandardInterfaces:
         assert extra_data["symbol_name"] == "WETH"
         assert extra_data["period"] == "1h"
 
+    @pytest.mark.kline
     def test_get_kline_calls_request(self, cow_swap_spot):
         """Test get_kline calls self.request."""
         result = cow_swap_spot.get_kline("WETH", "1h")
@@ -478,6 +485,7 @@ class TestCowSwapBaseCapabilities:
 class TestCowSwapDataContainers:
     """Test CoW Swap data containers init_data() returns self."""
 
+    @pytest.mark.ticker
     def test_ticker_init_data_returns_self(self):
         """Test CowSwapRequestTickerData.init_data() returns self."""
         from bt_api_py.containers.tickers.cow_swap_ticker import CowSwapRequestTickerData
@@ -489,6 +497,7 @@ class TestCowSwapDataContainers:
         assert ticker.get_symbol_name() == "WETH"
         assert ticker.get_last_price() == 3000.50
 
+    @pytest.mark.ticker
     def test_ticker_init_data_idempotent(self):
         """Test that calling init_data() twice returns self both times."""
         from bt_api_py.containers.tickers.cow_swap_ticker import CowSwapRequestTickerData
@@ -500,6 +509,7 @@ class TestCowSwapDataContainers:
         assert r1 is ticker
         assert r2 is ticker
 
+    @pytest.mark.ticker
     def test_ticker_symbol_name_preserved(self):
         """Test that symbol_name is preserved after init_data."""
         from bt_api_py.containers.tickers.cow_swap_ticker import CowSwapRequestTickerData
@@ -514,11 +524,13 @@ class TestCowSwapDataContainers:
 class TestCowSwapNormalizeFunctions:
     """Test normalize functions edge cases."""
 
+    @pytest.mark.ticker
     def test_tick_normalize_with_none_input(self):
         result, status = CowSwapRequestDataSpot._get_tick_normalize_function(None, None)
         assert result == []
         assert status is False
 
+    @pytest.mark.ticker
     def test_tick_normalize_with_data(self):
         result, status = CowSwapRequestDataSpot._get_tick_normalize_function(
             {"price": "3000.0"}, None
@@ -526,11 +538,13 @@ class TestCowSwapNormalizeFunctions:
         assert status is True
         assert len(result) == 1
 
+    @pytest.mark.orderbook
     def test_depth_normalize_with_none_input(self):
         result, status = CowSwapRequestDataSpot._get_depth_normalize_function(None, None)
         assert result == []
         assert status is False
 
+    @pytest.mark.kline
     def test_kline_normalize_always_empty(self):
         result, status = CowSwapRequestDataSpot._get_kline_normalize_function({"data": {}}, None)
         assert result == []

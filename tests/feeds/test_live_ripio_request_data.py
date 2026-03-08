@@ -1,3 +1,5 @@
+import pytest
+
 """
 Ripio Exchange Live Request Data Tests
 
@@ -38,6 +40,7 @@ def test_ripio_req_server_time():
     pass
 
 
+@pytest.mark.ticker
 def test_ripio_req_tick_data():
     """Test Ripio ticker data retrieval (synchronous)."""
     live_ripio_spot_feed = init_req_feed()
@@ -49,6 +52,7 @@ def test_ripio_req_tick_data():
     assert extra_data["symbol_name"] == "BTC/USDT"
 
 
+@pytest.mark.ticker
 def test_ripio_tick_normalize_function():
     """Test Ripio ticker normalize function."""
     # Ripio wraps response in {'success': true, 'data': {...}}
@@ -81,6 +85,7 @@ def test_ripio_tick_normalize_function():
     assert ticker["askPrice"] == "50001.00"
 
 
+@pytest.mark.ticker
 def test_ripio_async_tick_data():
     """Test Ripio ticker data retrieval (asynchronous)."""
     data_queue = queue.Queue()
@@ -91,6 +96,7 @@ def test_ripio_async_tick_data():
     pass
 
 
+@pytest.mark.kline
 def test_ripio_req_kline_data():
     """Test Ripio kline/candlestick data retrieval (synchronous)."""
     live_ripio_spot_feed = init_req_feed()
@@ -103,6 +109,7 @@ def test_ripio_req_kline_data():
     assert params["limit"] == 100
 
 
+@pytest.mark.kline
 def test_ripio_kline_normalize_function():
     """Test Ripio kline normalize function."""
     # Ripio wraps response in {'success': true, 'data': [...]}
@@ -141,6 +148,7 @@ def test_ripio_kline_normalize_function():
         assert volume >= 0
 
 
+@pytest.mark.kline
 def test_ripio_async_kline_data():
     """Test Ripio kline data retrieval (asynchronous)."""
     data_queue = queue.Queue()
@@ -178,6 +186,7 @@ def order_book_value_equals(order_book):
         assert ask_volume >= 0, "Ask volume should be non-negative"
 
 
+@pytest.mark.orderbook
 def test_ripio_req_orderbook_data():
     """Test Ripio orderbook data retrieval."""
     live_ripio_spot_feed = init_req_feed()
@@ -189,6 +198,7 @@ def test_ripio_req_orderbook_data():
     assert params["limit"] == 20
 
 
+@pytest.mark.orderbook
 def test_ripio_depth_normalize_function():
     """Test Ripio depth normalize function."""
     # Ripio wraps response in {'success': true, 'data': {...}}

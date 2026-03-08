@@ -47,6 +47,7 @@ class TestBudaServerTime:
 class TestBudaTickData:
     """Test Buda ticker data."""
 
+    @pytest.mark.ticker
     def test_buda_req_tick_data(self):
         """Test getting ticker data (synchronous)."""
         live_buda_spot_feed = init_req_feed()
@@ -81,6 +82,7 @@ class TestBudaTickData:
 
         print("tick_data:", tick_data)
 
+    @pytest.mark.ticker
     def test_buda_async_tick_data(self):
         """Test getting ticker data (asynchronous)."""
         data_queue = queue.Queue()
@@ -101,6 +103,7 @@ class TestBudaTickData:
 class TestBudaKlineData:
     """Test Buda kline/candlestick data."""
 
+    @pytest.mark.kline
     def test_buda_req_kline_data(self):
         """Test getting kline data (synchronous)."""
         live_buda_spot_feed = init_req_feed()
@@ -133,6 +136,7 @@ class TestBudaKlineData:
 
             print("kline_data:", kline_list)
 
+    @pytest.mark.kline
     def test_buda_async_kline_data(self):
         """Test getting kline data (asynchronous)."""
         data_queue = queue.Queue()
@@ -154,6 +158,7 @@ class TestBudaKlineData:
 class TestBudaOrderBook:
     """Test Buda order book data."""
 
+    @pytest.mark.orderbook
     def test_buda_req_orderbook_data(self):
         """Test getting order book data."""
         live_buda_spot_feed = init_req_feed()
@@ -213,6 +218,7 @@ class TestBudaOrderBook:
                     f"best_bid ({best_bid}) should be <= best_ask ({best_ask})"
                 )
 
+    @pytest.mark.orderbook
     def test_buda_async_orderbook_data(self):
         """Test getting order book data (asynchronous)."""
         data_queue = queue.Queue()

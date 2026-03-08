@@ -47,6 +47,7 @@ class TestBtcturkServerTime:
 class TestBtcturkTickData:
     """Test BTCTurk ticker data."""
 
+    @pytest.mark.ticker
     def test_btcturk_req_tick_data(self):
         """Test getting ticker data (synchronous)."""
         live_btcturk_spot_feed = init_req_feed()
@@ -79,6 +80,7 @@ class TestBtcturkTickData:
 
         print("tick_data:", tick_data)
 
+    @pytest.mark.ticker
     def test_btcturk_async_tick_data(self):
         """Test getting ticker data (asynchronous)."""
         data_queue = queue.Queue()
@@ -98,6 +100,7 @@ class TestBtcturkTickData:
 class TestBtcturkKlineData:
     """Test BTCTurk kline/candlestick data."""
 
+    @pytest.mark.kline
     def test_btcturk_req_kline_data(self):
         """Test getting kline data (synchronous)."""
         live_btcturk_spot_feed = init_req_feed()
@@ -132,6 +135,7 @@ class TestBtcturkKlineData:
 
                 print("kline_data:", kline_list)
 
+    @pytest.mark.kline
     def test_btcturk_async_kline_data(self):
         """Test getting kline data (asynchronous)."""
         data_queue = queue.Queue()
@@ -153,6 +157,7 @@ class TestBtcturkKlineData:
 class TestBtcturkOrderBook:
     """Test BTCTurk order book data."""
 
+    @pytest.mark.orderbook
     def test_btcturk_req_orderbook_data(self):
         """Test getting order book data."""
         live_btcturk_spot_feed = init_req_feed()
@@ -211,6 +216,7 @@ class TestBtcturkOrderBook:
                     f"best_bid ({best_bid}) should be <= best_ask ({best_ask})"
                 )
 
+    @pytest.mark.orderbook
     def test_btcturk_async_orderbook_data(self):
         """Test getting order book data (asynchronous)."""
         data_queue = queue.Queue()

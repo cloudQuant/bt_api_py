@@ -15,7 +15,6 @@ from bt_api_py.functions.log_message import SpdLogManager
 
 def test_market_data_queries():
     """Test market data queries that don't require authentication"""
-    print("\nTesting market data queries...")
 
     try:
         # Create data queue and request data instance
@@ -23,43 +22,29 @@ def test_market_data_queries():
         request_data = HyperliquidRequestDataSpot(data_queue)
 
         # Test public endpoints (these should work without authentication)
-        print("  Testing get_all_mids...")
         result = request_data.get_all_mids()
-        print(f"    ✓ get_all_mids returned status: {result.status}")
 
-        print("  Testing get_meta...")
         result = request_data.get_meta()
-        print(f"    ✓ get_meta returned status: {result.status}")
 
         # Test with a specific coin
-        print("  Testing get_l2_book for BTC...")
         result = request_data.get_l2_book("BTC")
-        print(f"    ✓ get_l2_book returned status: {result.status}")
 
-        print("  Testing get_recent_trades for BTC...")
         result = request_data.get_recent_trades("BTC", limit=5)
-        print(f"    ✓ get_recent_trades returned status: {result.status}")
 
-        print("  Testing get_candle_snapshot for BTC...")
         end_time = int(time.time() * 1000)
         start_time = end_time - 24 * 60 * 60 * 1000  # 24 hours ago
         result = request_data.get_candle_snapshot("BTC", "1h", start_time, end_time)
-        print(f"    ✓ get_candle_snapshot returned status: {result.status}")
 
-        print("  Testing get_exchange_status...")
         result = request_data.get_exchange_status()
-        print(f"    ✓ get_exchange_status returned status: {result.status}")
 
         pass
 
     except Exception as e:
-        print(f"  ✗ Market data query test failed: {e}")
         pass
 
 
 def test_authenticated_queries():
     """Test authenticated queries (will fail without proper credentials)"""
-    print("\nTesting authenticated queries...")
 
     try:
         # Create data queue and request data instance
@@ -69,15 +54,12 @@ def test_authenticated_queries():
         request_data = HyperliquidRequestDataSpot(data_queue, private_key="0x1234567890abcdef")
 
         # Try to get clearinghouse state (requires valid address)
-        print("  Testing get_clearinghouse_state (should fail without valid address)...")
         try:
             result = request_data.get_clearinghouse_state()
-            print(f"    Result: {result.status}")
         except ValueError as e:
-            print(f"    ✓ Expected error caught: {e}")
+            pass
 
         # Try to place an order (should fail without valid credentials)
-        print("  Testing place_order (should fail without valid credentials)...")
         try:
             result = request_data.place_order(
                 symbol="BTC",
@@ -86,20 +68,17 @@ def test_authenticated_queries():
                 price=40000,
                 order_type="limit"
             )
-            print(f"    Result: {result.status}")
         except Exception as e:
-            print(f"    ✓ Expected error caught: {e}")
+            pass
 
         pass
 
     except Exception as e:
-        print(f"  ✗ Authenticated query test failed: {e}")
         pass
 
 
 def test_websocket_subscription():
     """Test WebSocket subscription functionality"""
-    print("\nTesting WebSocket subscription functionality...")
 
     try:
         from bt_api_py.feeds.live_hyperliquid import HyperliquidMarketWssDataSpot
@@ -109,20 +88,13 @@ def test_websocket_subscription():
         wss_data = HyperliquidMarketWssDataSpot(data_queue, symbols=["BTC"])
 
         # Test subscription methods
-        print("  Testing ticker subscription...")
         ticker_subscription = wss_data.subscribe_ticker("BTC")
-        print(f"    Ticker subscription: {ticker_subscription}")
 
-        print("  Testing orderbook subscription...")
         orderbook_subscription = wss_data.subscribe_orderbook("BTC")
-        print(f"    Orderbook subscription: {orderbook_subscription}")
 
-        print("  Testing trades subscription...")
         trades_subscription = wss_data.subscribe_trades("BTC")
-        print(f"    Trades subscription: {trades_subscription}")
 
         # Test message processing
-        print("  Testing message processing...")
 
         # Mock ticker message
         ticker_message = {
@@ -135,7 +107,6 @@ def test_websocket_subscription():
             }
         }
         wss_data.process_ticker_message(ticker_message)
-        print("    ✓ Ticker message processed")
 
         # Mock orderbook message
         orderbook_message = {
@@ -149,7 +120,6 @@ def test_websocket_subscription():
             }
         }
         wss_data.process_orderbook_message(orderbook_message)
-        print("    ✓ Orderbook message processed")
 
         # Mock trades message
         trades_message = {
@@ -165,18 +135,15 @@ def test_websocket_subscription():
             ]
         }
         wss_data.process_trades_message(trades_message)
-        print("    ✓ Trades message processed")
 
         pass
 
     except Exception as e:
-        print(f"  ✗ WebSocket subscription test failed: {e}")
         pass
 
 
 def test_config_loading():
     """Test configuration loading from YAML"""
-    print("\nTesting configuration loading...")
 
     try:
         from bt_api_py.config_loader import load_exchange_config
@@ -185,34 +152,21 @@ def test_config_loading():
         config_path = "configs/hyperliquid.yaml"
         config = load_exchange_config(config_path)
 
-        print("  ✓ Configuration loaded successfully")
-        print(f"    Exchange name: {config.exchange}")
-        print(f"    Name: {config.name}")
-        print(f"    Description: {config.description}")
-        print(f"    Testnet: {config.testnet}")
 
         # Check asset types
-        print("  Checking asset types...")
         for asset_type, asset_config in config.asset_types.items():
-            print(f"    {asset_type}: {asset_config.name}")
+            pass
 
         # Check API endpoints
-        print("  Checking API endpoints...")
-        print(f"    Public endpoints: {len(config.api.public)}")
-        print(f"    Authenticated endpoints: {len(config.api.authenticated)}")
 
         pass
 
     except Exception as e:
-        print(f"  ✗ Configuration loading test failed: {e}")
         pass
 
 
 def main():
     """Run all integration tests"""
-    print("=" * 70)
-    print("Comprehensive Hyperliquid Integration Test")
-    print("=" * 70)
 
     # Set up logging
     logger = SpdLogManager(
@@ -235,24 +189,15 @@ def main():
     total = len(tests)
 
     for test_name, test_func in tests:
-        print(f"\n{'-' * 70}")
-        print(f"Running: {test_name}")
-        print(f"{'-' * 70}")
 
         if test_func():
             passed += 1
 
-    print(f"\n{'=' * 70}")
-    print(f"Integration Test Results: {passed}/{total} tests passed")
 
     if passed == total:
-        print("🎉 All integration tests passed! Hyperliquid implementation is ready.")
-        print("\nNext steps:")
-        print("1. Set up your Hyperliquid API credentials")
-        print("2. Test with real API calls using valid credentials")
-        print("3. Implement WebSocket connections for real-time data")
+        pass
     else:
-        print("❌ Some integration tests failed. Please check the implementation.")
+        pass
 
     return passed == total
 

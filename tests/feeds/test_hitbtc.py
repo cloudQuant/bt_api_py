@@ -246,6 +246,7 @@ class TestParameterGeneration:
         assert "/public/symbol" in path
         assert extra["request_type"] == "get_exchange_info"
 
+    @pytest.mark.ticker
     def test_get_tick_params(self):
         path, params, extra = self.feed._get_tick("BTC/USDT")
         assert "GET" in path
@@ -254,12 +255,14 @@ class TestParameterGeneration:
         assert extra["symbol_name"] == "BTC/USDT"
         assert extra["request_type"] == "get_tick"
 
+    @pytest.mark.orderbook
     def test_get_depth_params(self):
         path, params, extra = self.feed._get_depth("BTC/USDT", count=10)
         assert "/public/orderbook/BTCUSDT" in path
         assert params["depth"] == 10
         assert extra["request_type"] == "get_depth"
 
+    @pytest.mark.kline
     def test_get_kline_params(self):
         path, params, extra = self.feed._get_kline("BTC/USDT", period="1h", count=50)
         assert "/public/candles/BTCUSDT" in path
@@ -267,6 +270,7 @@ class TestParameterGeneration:
         assert params["limit"] == 50
         assert extra["request_type"] == "get_kline"
 
+    @pytest.mark.kline
     def test_get_kline_limit_capped(self):
         _, params, _ = self.feed._get_kline("BTC/USDT", count=5000)
         assert params["limit"] == 1000
@@ -359,6 +363,7 @@ class TestNormalizeFunctions:
         data, ok = HitBtcRequestData._get_exchange_info_normalize_function(SAMPLE_ERROR, {})
         assert ok is False
 
+    @pytest.mark.ticker
     def test_tick_ok(self):
         extra = {"symbol_name": "BTC/USDT", "asset_type": "SPOT"}
         data, ok = HitBtcRequestData._get_tick_normalize_function(SAMPLE_TICKER, extra)
@@ -369,29 +374,35 @@ class TestNormalizeFunctions:
         assert ticker.get_symbol_name() == "BTC/USDT"
         assert ticker.get_last_price() == 50000.0
 
+    @pytest.mark.ticker
     def test_tick_error(self):
         data, ok = HitBtcRequestData._get_tick_normalize_function(SAMPLE_ERROR, {})
         assert ok is False
 
+    @pytest.mark.ticker
     def test_tick_none(self):
         data, ok = HitBtcRequestData._get_tick_normalize_function(None, {})
         assert ok is False
 
+    @pytest.mark.orderbook
     def test_depth_ok(self):
         data, ok = HitBtcRequestData._get_depth_normalize_function(SAMPLE_ORDERBOOK, {})
         assert ok is True
         assert "ask" in data[0]
         assert "bid" in data[0]
 
+    @pytest.mark.orderbook
     def test_depth_error(self):
         data, ok = HitBtcRequestData._get_depth_normalize_function(SAMPLE_ERROR, {})
         assert ok is False
 
+    @pytest.mark.kline
     def test_kline_ok(self):
         data, ok = HitBtcRequestData._get_kline_normalize_function(SAMPLE_KLINES, {})
         assert ok is True
         assert len(data) == 2
 
+    @pytest.mark.kline
     def test_kline_empty(self):
         data, ok = HitBtcRequestData._get_kline_normalize_function([], {})
         assert ok is False
@@ -481,6 +492,7 @@ class TestSyncCallsMocked:
             assert rd is not None
             assert rd.extra_data["request_type"] == "get_exchange_info"
 
+    @pytest.mark.ticker
     def test_get_tick(self):
         with self._mock_http(SAMPLE_TICKER) as mock:
             rd = self.feed.get_tick("BTC/USDT")
@@ -491,6 +503,7 @@ class TestSyncCallsMocked:
             url = call_args[0][1]
             assert "/public/ticker/BTCUSDT" in url
 
+    @pytest.mark.orderbook
     def test_get_depth(self):
         with self._mock_http(SAMPLE_ORDERBOOK) as mock:
             rd = self.feed.get_depth("ETH/USDT", count=5)
@@ -498,6 +511,7 @@ class TestSyncCallsMocked:
             assert "/public/orderbook/ETHUSDT" in url
             assert "depth=5" in url
 
+    @pytest.mark.kline
     def test_get_kline(self):
         with self._mock_http(SAMPLE_KLINES) as mock:
             rd = self.feed.get_kline("BTC/USDT", period="1h", count=24)
@@ -739,14 +753,17 @@ class TestIntegration:
     def setup_method(self):
         self.feed = _make_feed()
 
+    @pytest.mark.ticker
     def test_live_get_tick(self):
         rd = self.feed.get_tick("BTCUSDT")
         assert rd is not None
 
+    @pytest.mark.orderbook
     def test_live_get_depth(self):
         rd = self.feed.get_depth("BTCUSDT", count=5)
         assert rd is not None
 
+    @pytest.mark.kline
     def test_live_get_kline(self):
         rd = self.feed.get_kline("BTCUSDT", period="1h", count=5)
         assert rd is not None

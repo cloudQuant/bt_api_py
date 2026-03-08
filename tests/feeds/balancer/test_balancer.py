@@ -113,6 +113,7 @@ class TestBalancerRequestDataSpot:
 
     # ==================== Ticker Tests ====================
 
+    @pytest.mark.ticker
     def test_get_tick(self, balancer_spot):
         """Test get_tick method."""
         token_address = "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2"
@@ -122,6 +123,7 @@ class TestBalancerRequestDataSpot:
         assert extra_data["symbol_name"] == token_address
         assert extra_data["exchange_name"] == "BALANCER___DEX"
 
+    @pytest.mark.ticker
     def test_get_tick_normalize_function(self):
         """Test tick normalize function."""
         input_data = {
@@ -139,6 +141,7 @@ class TestBalancerRequestDataSpot:
 
     # ==================== Depth/OrderBook Tests ====================
 
+    @pytest.mark.orderbook
     def test_get_depth(self, balancer_spot):
         """Test get_depth method."""
         pool_id = "0x7f2b3b7fbd3226c5be438cde49a519f442ca2eda00020000000000000000067d"
@@ -148,6 +151,7 @@ class TestBalancerRequestDataSpot:
         assert extra_data["symbol_name"] == pool_id
         assert extra_data["exchange_name"] == "BALANCER___DEX"
 
+    @pytest.mark.orderbook
     def test_get_depth_normalize_function(self):
         """Test depth normalize function."""
         input_data = {
@@ -223,6 +227,7 @@ class TestBalancerRequestDataSpot:
 
     # ==================== Kline Tests ====================
 
+    @pytest.mark.kline
     def test_get_kline(self, balancer_spot):
         """Test get_kline method - DEX uses pool snapshots."""
         pool_id = "0x7f2b3b7fbd3226c5be438cde49a519f442ca2eda00020000000000000000067d"
@@ -235,6 +240,7 @@ class TestBalancerRequestDataSpot:
         assert extra_data["symbol_name"] == pool_id
         assert extra_data["period"] == period
 
+    @pytest.mark.kline
     def test_get_kline_normalize_function(self):
         """Test kline normalize function."""
         input_data = {
@@ -268,11 +274,13 @@ class TestBalancerRequestDataSpot:
         pass
 
     @pytest.mark.skip(reason="Requires actual API call")
+    @pytest.mark.ticker
     def test_integration_get_tick(self, balancer_spot):
         """Integration test for get_tick - skipped."""
         pass
 
     @pytest.mark.skip(reason="Requires actual API call")
+    @pytest.mark.orderbook
     def test_integration_get_depth(self, balancer_spot):
         """Integration test for get_depth - skipped."""
         pass
@@ -349,6 +357,7 @@ class TestBalancerExchangeDataSpot:
             exchange_data = BalancerExchangeDataSpot(chain=MockGqlChain.MAINNET)
             assert exchange_data.get_rest_url() == "https://api-v3.balancer.fi"
 
+    @pytest.mark.kline
     def test_kline_periods(self):
         """Test kline periods are defined."""
         with patch(
@@ -400,6 +409,7 @@ class TestBalancerStandardInterfaces:
 
     # ── get_tick via request() ────────────────────────────────
 
+    @pytest.mark.ticker
     def test_get_tick_calls_request(self, balancer_spot):
         """Test get_tick calls self.request with correct extra_data."""
         token = "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2"
@@ -416,6 +426,7 @@ class TestBalancerStandardInterfaces:
 
     # ── get_depth via request() ───────────────────────────────
 
+    @pytest.mark.orderbook
     def test_get_depth_calls_request(self, balancer_spot):
         """Test get_depth calls self.request."""
         pool_id = "0x7f2b3b7fbd3226c5be438cde49a519f442ca2eda00020000000000000000067d"
@@ -432,6 +443,7 @@ class TestBalancerStandardInterfaces:
 
     # ── get_kline via request() ───────────────────────────────
 
+    @pytest.mark.kline
     def test_get_kline_calls_request(self, balancer_spot):
         """Test get_kline calls self.request."""
         result = balancer_spot.get_kline("0xpool", "1h", 100)
@@ -620,6 +632,7 @@ class TestBalancerBaseCapabilities:
 class TestBalancerDataContainers:
     """Test Balancer data containers init_data() returns self."""
 
+    @pytest.mark.ticker
     def test_ticker_init_data_returns_self(self):
         """Test BalancerRequestTickerData.init_data() returns self."""
         from bt_api_py.containers.tickers.balancer_ticker import BalancerRequestTickerData
@@ -640,6 +653,7 @@ class TestBalancerDataContainers:
         assert ticker.get_symbol_name() == "WETH"
         assert ticker.get_last_price() == 3000.50
 
+    @pytest.mark.ticker
     def test_ticker_init_data_idempotent(self):
         """Test that calling init_data() twice returns self both times."""
         from bt_api_py.containers.tickers.balancer_ticker import BalancerRequestTickerData
@@ -651,6 +665,7 @@ class TestBalancerDataContainers:
         assert r1 is ticker
         assert r2 is ticker
 
+    @pytest.mark.ticker
     def test_wss_ticker_init_data_returns_self(self):
         """Test BalancerWssTickerData.init_data() returns self."""
         from bt_api_py.containers.tickers.balancer_ticker import BalancerWssTickerData
@@ -719,12 +734,14 @@ class TestBalancerDataContainers:
 class TestBalancerNormalizeFunctions:
     """Test normalize functions edge cases."""
 
+    @pytest.mark.ticker
     def test_tick_normalize_with_none_input(self):
         """Test tick normalize returns empty for None input."""
         result, status = BalancerRequestDataSpot._get_tick_normalize_function(None, None)
         assert result == []
         assert status is False
 
+    @pytest.mark.ticker
     def test_tick_normalize_with_missing_data(self):
         """Test tick normalize returns empty when tokenGetTokenDynamicData is missing."""
         input_data = {"data": {}}
@@ -760,12 +777,14 @@ class TestBalancerNormalizeFunctions:
         assert result == []
         assert status is True
 
+    @pytest.mark.orderbook
     def test_depth_normalize_with_none_input(self):
         """Test depth normalize returns empty for None input."""
         result, status = BalancerRequestDataSpot._get_depth_normalize_function(None, None)
         assert result == []
         assert status is False
 
+    @pytest.mark.kline
     def test_kline_normalize_always_returns_empty(self):
         """Test kline normalize always returns empty (not supported)."""
         result, status = BalancerRequestDataSpot._get_kline_normalize_function({"data": {}}, None)

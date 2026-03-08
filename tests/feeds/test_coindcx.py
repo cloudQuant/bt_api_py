@@ -42,6 +42,7 @@ class TestCoinDCXExchangeData:
         assert exchange_data.rest_url == "https://api.coindcx.com"
         assert exchange_data.wss_url == "wss://stream.coindcx.com"
 
+    @pytest.mark.kline
     def test_kline_periods(self):
         exchange_data = CoinDCXExchangeDataSpot()
         assert "1m" in exchange_data.kline_periods
@@ -74,31 +75,37 @@ class TestCoinDCXRequestDataSpot:
         assert Capability.MAKE_ORDER in caps
         assert Capability.CANCEL_ORDER in caps
 
+    @pytest.mark.ticker
     def test_get_tick_returns_tuple(self, mock_feed):
         path, params, extra_data = mock_feed._get_tick("BTCINR")
         assert path == "GET /exchange/ticker"
         assert extra_data["request_type"] == "get_tick"
         assert extra_data["symbol_name"] == "BTCINR"
 
+    @pytest.mark.ticker
     def test_get_tick_calls_request(self, mock_feed):
         mock_feed.get_tick("BTCINR")
         assert mock_feed.request.called
 
+    @pytest.mark.orderbook
     def test_get_depth_returns_tuple(self, mock_feed):
         path, params, extra_data = mock_feed._get_depth("BTCINR")
         assert "BTCINR" in path
         assert extra_data["request_type"] == "get_depth"
 
+    @pytest.mark.orderbook
     def test_get_depth_calls_request(self, mock_feed):
         mock_feed.get_depth("BTCINR")
         assert mock_feed.request.called
 
+    @pytest.mark.kline
     def test_get_kline_returns_tuple(self, mock_feed):
         path, params, extra_data = mock_feed._get_kline("BTCINR", "1m", 2)
         assert path == "GET /market_data/candles"
         assert params["pair"] == "BTCINR"
         assert extra_data["request_type"] == "get_kline"
 
+    @pytest.mark.kline
     def test_get_kline_calls_request(self, mock_feed):
         mock_feed.get_kline("BTCINR", "1m")
         assert mock_feed.request.called
@@ -182,11 +189,13 @@ class TestCoinDCXBaseCapabilities:
 class TestCoinDCXNormalizeFunctions:
     """Test normalize functions edge cases."""
 
+    @pytest.mark.ticker
     def test_tick_normalize_with_none(self):
         result, status = CoinDCXRequestDataSpot._get_tick_normalize_function(None, None)
         assert result == []
         assert status is False
 
+    @pytest.mark.ticker
     def test_tick_normalize_no_match(self):
         data = [{"market": "ETHINR", "last_price": "300000"}]
         extra = {"symbol_name": "BTCINR"}
@@ -194,6 +203,7 @@ class TestCoinDCXNormalizeFunctions:
         assert result == []
         assert status is False
 
+    @pytest.mark.ticker
     def test_tick_normalize_success(self):
         data = [{"market": "BTCINR", "last_price": "5000000"}]
         extra = {"symbol_name": "BTCINR"}
@@ -201,11 +211,13 @@ class TestCoinDCXNormalizeFunctions:
         assert status is True
         assert len(result) == 1
 
+    @pytest.mark.orderbook
     def test_depth_normalize_with_none(self):
         result, status = CoinDCXRequestDataSpot._get_depth_normalize_function(None, None)
         assert result == []
         assert status is False
 
+    @pytest.mark.kline
     def test_kline_normalize_with_none(self):
         result, status = CoinDCXRequestDataSpot._get_kline_normalize_function(None, None)
         assert result == []
@@ -230,6 +242,7 @@ class TestCoinDCXNormalizeFunctions:
 class TestCoinDCXDataContainers:
     """Test CoinDCX data containers."""
 
+    @pytest.mark.ticker
     def test_ticker_container(self):
         ticker_response = json.dumps(
             {
@@ -250,6 +263,7 @@ class TestCoinDCXDataContainers:
         assert ticker.symbol_name == "BTCINR"
         assert ticker.last_price == 5000000
 
+    @pytest.mark.ticker
     def test_ticker_container_with_json_string(self):
         ticker_data = {
             "data": {
@@ -290,6 +304,7 @@ class TestCoinDCXLiveAPI:
     """Live API tests - require network, marked as integration."""
 
     @pytest.mark.integration
+    @pytest.mark.ticker
     def test_coindcx_req_tick_data(self):
         data_queue = queue.Queue()
         feed = CoinDCXRequestDataSpot(data_queue, exchange_name="COINDCX___SPOT")
@@ -297,6 +312,7 @@ class TestCoinDCXLiveAPI:
         assert isinstance(data, RequestData)
 
     @pytest.mark.integration
+    @pytest.mark.orderbook
     def test_coindcx_req_depth_data(self):
         data_queue = queue.Queue()
         feed = CoinDCXRequestDataSpot(data_queue, exchange_name="COINDCX___SPOT")

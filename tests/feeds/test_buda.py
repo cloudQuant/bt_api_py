@@ -43,6 +43,7 @@ class TestBudaExchangeData:
         assert exchange_data.rest_url == "https://api.buda.com"
         assert exchange_data.wss_url == "wss://api.buda.com/websocket"
 
+    @pytest.mark.kline
     def test_kline_periods(self):
         exchange_data = BudaExchangeDataSpot()
         assert "1m" in exchange_data.kline_periods
@@ -80,31 +81,37 @@ class TestBudaRequestDataSpot:
         assert Capability.MAKE_ORDER in caps
         assert Capability.CANCEL_ORDER in caps
 
+    @pytest.mark.ticker
     def test_get_tick_returns_tuple(self, mock_feed):
         path, params, extra_data = mock_feed._get_tick("btc-clp")
         assert "ticker" in path
         assert extra_data["request_type"] == "get_tick"
         assert extra_data["symbol_name"] == "btc-clp"
 
+    @pytest.mark.ticker
     def test_get_tick_calls_request(self, mock_feed):
         mock_feed.get_tick("btc-clp")
         assert mock_feed.request.called
 
+    @pytest.mark.orderbook
     def test_get_depth_returns_tuple(self, mock_feed):
         path, params, extra_data = mock_feed._get_depth("btc-clp")
         assert "order_book" in path
         assert extra_data["request_type"] == "get_depth"
 
+    @pytest.mark.orderbook
     def test_get_depth_calls_request(self, mock_feed):
         mock_feed.get_depth("btc-clp")
         assert mock_feed.request.called
 
+    @pytest.mark.kline
     def test_get_kline_returns_tuple(self, mock_feed):
         path, params, extra_data = mock_feed._get_kline("btc-clp", "1h")
         assert "candles" in path
         assert extra_data["request_type"] == "get_kline"
         assert "time_frame" in params
 
+    @pytest.mark.kline
     def test_get_kline_calls_request(self, mock_feed):
         mock_feed.get_kline("btc-clp", "1h")
         assert mock_feed.request.called
@@ -193,32 +200,38 @@ class TestBudaBaseCapabilities:
 class TestBudaNormalizeFunctions:
     """Test normalize functions edge cases."""
 
+    @pytest.mark.ticker
     def test_tick_normalize_with_none(self):
         result, status = BudaRequestDataSpot._get_tick_normalize_function(None, None)
         assert result == []
         assert status is False
 
+    @pytest.mark.ticker
     def test_tick_normalize_success(self):
         data = {"ticker": {"market_id": "btc-clp", "last_price": [50000000]}}
         result, status = BudaRequestDataSpot._get_tick_normalize_function(data, None)
         assert status is True
         assert len(result) == 1
 
+    @pytest.mark.orderbook
     def test_depth_normalize_with_none(self):
         result, status = BudaRequestDataSpot._get_depth_normalize_function(None, None)
         assert result == []
         assert status is False
 
+    @pytest.mark.orderbook
     def test_depth_normalize_success(self):
         data = {"order_book": {"bids": [], "asks": []}}
         result, status = BudaRequestDataSpot._get_depth_normalize_function(data, None)
         assert status is True
 
+    @pytest.mark.kline
     def test_kline_normalize_with_none(self):
         result, status = BudaRequestDataSpot._get_kline_normalize_function(None, None)
         assert result == []
         assert status is False
 
+    @pytest.mark.kline
     def test_kline_normalize_success(self):
         data = {"candles": [[1640995200, "49500", "51000", "49000", "50000"]]}
         result, status = BudaRequestDataSpot._get_kline_normalize_function(data, None)
@@ -248,6 +261,7 @@ class TestBudaNormalizeFunctions:
 class TestBudaDataContainers:
     """Test Buda data containers."""
 
+    @pytest.mark.ticker
     def test_ticker_container(self):
         ticker_response = json.dumps(
             {
@@ -274,6 +288,7 @@ class TestBudaDataContainers:
         assert ticker.high_24h == 51000000
         assert ticker.low_24h == 48000000
 
+    @pytest.mark.ticker
     def test_ticker_container_with_empty_data(self):
         ticker_response = json.dumps({"ticker": {}})
         ticker = BudaRequestTickerData(ticker_response, "btc-clp", "SPOT", False)
@@ -306,6 +321,7 @@ class TestBudaLiveAPI:
     """Live API tests - require network, marked as integration."""
 
     @pytest.mark.integration
+    @pytest.mark.ticker
     def test_buda_req_tick_data(self):
         data_queue = queue.Queue()
         feed = BudaRequestDataSpot(data_queue, exchange_name="BUDA___SPOT")
@@ -313,6 +329,7 @@ class TestBudaLiveAPI:
         assert isinstance(data, RequestData)
 
     @pytest.mark.integration
+    @pytest.mark.orderbook
     def test_buda_req_depth_data(self):
         data_queue = queue.Queue()
         feed = BudaRequestDataSpot(data_queue, exchange_name="BUDA___SPOT")
@@ -320,6 +337,7 @@ class TestBudaLiveAPI:
         assert isinstance(data, RequestData)
 
     @pytest.mark.integration
+    @pytest.mark.ticker
     def test_buda_async_tick_data(self):
         data_queue = queue.Queue()
         feed = BudaRequestDataSpot(data_queue, exchange_name="BUDA___SPOT")

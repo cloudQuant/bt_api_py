@@ -93,6 +93,7 @@ class TestExchangeData:
         for c in ("USD", "USDT", "RUB", "BTC", "ETH", "DOGE"):
             assert c in exdata.legal_currency
 
+    @pytest.mark.kline
     def test_kline_periods(self, exdata):
         for k in ("1m", "3m", "5m", "15m", "30m", "1h", "2h", "4h", "6h", "12h", "1d", "1w"):
             assert k in exdata.kline_periods
@@ -127,6 +128,7 @@ class TestExchangeData:
 
 
 class TestParamGeneration:
+    @pytest.mark.ticker
     def test_get_tick_params(self, feed):
         path, params, extra = feed._get_tick("BTC/USD")
         assert "ticker" in path.lower()
@@ -136,6 +138,7 @@ class TestParamGeneration:
         assert extra["asset_type"] == "SPOT"
         assert extra["exchange_name"] == "YOBIT___SPOT"
 
+    @pytest.mark.orderbook
     def test_get_depth_params(self, feed):
         path, params, extra = feed._get_depth("BTC/USD", 10)
         assert "depth" in path.lower()
@@ -195,23 +198,28 @@ class TestParamGeneration:
 
 
 class TestNormalization:
+    @pytest.mark.ticker
     def test_tick_ok(self):
         result, ok = YobitRequestData._get_tick_normalize_function(SAMPLE_TICK, {})
         assert ok is True
         assert len(result) > 0
 
+    @pytest.mark.ticker
     def test_tick_error(self):
         result, ok = YobitRequestData._get_tick_normalize_function(SAMPLE_ERROR, {})
         assert ok is False
 
+    @pytest.mark.ticker
     def test_tick_none(self):
         result, ok = YobitRequestData._get_tick_normalize_function(None, {})
         assert ok is False
 
+    @pytest.mark.orderbook
     def test_depth_ok(self):
         result, ok = YobitRequestData._get_depth_normalize_function(SAMPLE_DEPTH, {})
         assert ok is True
 
+    @pytest.mark.orderbook
     def test_depth_error(self):
         result, ok = YobitRequestData._get_depth_normalize_function(SAMPLE_ERROR, {})
         assert ok is False
@@ -276,17 +284,20 @@ class TestNormalization:
 
 class TestSyncCalls:
     @patch.object(YobitRequestData, "http_request", return_value=SAMPLE_TICK)
+    @pytest.mark.ticker
     def test_get_tick(self, mock_http, feed):
         rd = feed.get_tick("BTC/USD")
         assert isinstance(rd, RequestData)
         mock_http.assert_called_once()
 
     @patch.object(YobitRequestData, "http_request", return_value=SAMPLE_TICK)
+    @pytest.mark.ticker
     def test_get_ticker(self, mock_http, feed):
         rd = feed.get_ticker("BTC/USD")
         assert isinstance(rd, RequestData)
 
     @patch.object(YobitRequestData, "http_request", return_value=SAMPLE_DEPTH)
+    @pytest.mark.orderbook
     def test_get_depth(self, mock_http, feed):
         rd = feed.get_depth("BTC/USD", 20)
         assert isinstance(rd, RequestData)
@@ -475,6 +486,7 @@ class TestWebSocketStubs:
 
 class TestIntegration:
     @pytest.mark.skip(reason="Requires network access")
+    @pytest.mark.ticker
     def test_live_get_tick(self):
         f = YobitRequestDataSpot(queue.Queue())
         rd = f.get_tick("btc_usd")

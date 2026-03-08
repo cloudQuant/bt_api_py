@@ -162,6 +162,7 @@ class TestExchangeData:
         assert exchange_data.get_period("1h") == "3600"
         assert exchange_data.get_period("1d") == "86400"
 
+    @pytest.mark.kline
     def test_kline_periods(self, exchange_data):
         assert "1m" in exchange_data.kline_periods
         assert "1h" in exchange_data.kline_periods
@@ -173,10 +174,12 @@ class TestExchangeData:
         assert "GBP" in exchange_data.legal_currency
         assert "USDC" in exchange_data.legal_currency
 
+    @pytest.mark.ticker
     def test_get_rest_path_tick(self, exchange_data):
         path = exchange_data.get_rest_path("get_tick")
         assert "ticker" in path.lower()
 
+    @pytest.mark.orderbook
     def test_get_rest_path_depth(self, exchange_data):
         path = exchange_data.get_rest_path("get_depth")
         assert "order_book" in path.lower()
@@ -194,18 +197,21 @@ class TestExchangeData:
 
 
 class TestParameterGeneration:
+    @pytest.mark.ticker
     def test_get_tick_params(self, feed):
         path, params, ed = feed._get_tick("BTC-USD")
         assert "GET" in path
         assert "btcusd" in path
         assert ed["request_type"] == "get_tick"
 
+    @pytest.mark.orderbook
     def test_get_depth_params(self, feed):
         path, params, ed = feed._get_depth("BTC-USD", 50)
         assert "GET" in path
         assert "btcusd" in path
         assert ed["request_type"] == "get_depth"
 
+    @pytest.mark.kline
     def test_get_kline_params(self, feed):
         path, params, ed = feed._get_kline("BTC-USD", "1h", 100)
         assert "GET" in path
@@ -280,38 +286,46 @@ class TestParameterGeneration:
 
 
 class TestNormalization:
+    @pytest.mark.ticker
     def test_tick_ok(self):
         result, ok = BitstampRequestData._get_tick_normalize_function(SAMPLE_TICK, {})
         assert ok is True
         assert result[0]["last"] == "50000"
 
+    @pytest.mark.ticker
     def test_tick_error(self):
         result, ok = BitstampRequestData._get_tick_normalize_function(SAMPLE_ERROR, {})
         assert ok is False
 
+    @pytest.mark.ticker
     def test_tick_empty(self):
         result, ok = BitstampRequestData._get_tick_normalize_function({}, {})
         assert ok is False
 
+    @pytest.mark.ticker
     def test_tick_none(self):
         result, ok = BitstampRequestData._get_tick_normalize_function(None, {})
         assert ok is False
 
+    @pytest.mark.orderbook
     def test_depth_ok(self):
         result, ok = BitstampRequestData._get_depth_normalize_function(SAMPLE_DEPTH, {})
         assert ok is True
         assert "bids" in result[0]
         assert "asks" in result[0]
 
+    @pytest.mark.orderbook
     def test_depth_error(self):
         result, ok = BitstampRequestData._get_depth_normalize_function(SAMPLE_ERROR, {})
         assert ok is False
 
+    @pytest.mark.kline
     def test_kline_ok(self):
         result, ok = BitstampRequestData._get_kline_normalize_function(SAMPLE_KLINE, {})
         assert ok is True
         assert len(result) == 2
 
+    @pytest.mark.kline
     def test_kline_empty(self):
         result, ok = BitstampRequestData._get_kline_normalize_function({"data": {"ohlc": []}}, {})
         assert ok is False
@@ -405,17 +419,20 @@ class TestSyncCalls:
         feed.http_request = MagicMock(return_value=mock_response)
         return feed
 
+    @pytest.mark.ticker
     def test_get_tick(self):
         feed = self._mock_feed(SAMPLE_TICK)
         rd = feed.get_tick("BTC-USD")
         assert isinstance(rd, RequestData)
         feed.http_request.assert_called_once()
 
+    @pytest.mark.orderbook
     def test_get_depth(self):
         feed = self._mock_feed(SAMPLE_DEPTH)
         rd = feed.get_depth("BTC-USD", 20)
         assert isinstance(rd, RequestData)
 
+    @pytest.mark.kline
     def test_get_kline(self):
         feed = self._mock_feed(SAMPLE_KLINE)
         rd = feed.get_kline("BTC-USD", "1h", 50)
@@ -587,6 +604,7 @@ class TestFeedInit:
 
 class TestIntegration:
     @pytest.mark.skip(reason="Requires network access")
+    @pytest.mark.ticker
     def test_live_get_tick(self):
         q = queue.Queue()
         feed = BitstampRequestDataSpot(q)
@@ -594,6 +612,7 @@ class TestIntegration:
         assert isinstance(rd, RequestData)
 
     @pytest.mark.skip(reason="Requires network access")
+    @pytest.mark.orderbook
     def test_live_get_depth(self):
         q = queue.Queue()
         feed = BitstampRequestDataSpot(q)
@@ -601,6 +620,7 @@ class TestIntegration:
         assert isinstance(rd, RequestData)
 
     @pytest.mark.skip(reason="Requires network access")
+    @pytest.mark.kline
     def test_live_get_kline(self):
         q = queue.Queue()
         feed = BitstampRequestDataSpot(q)

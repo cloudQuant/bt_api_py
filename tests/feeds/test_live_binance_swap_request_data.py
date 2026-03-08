@@ -1,6 +1,9 @@
+import pytest
 import queue
 import random
 import time
+
+pytestmark = [pytest.mark.integration, pytest.mark.network]
 
 from bt_api_py.containers.accounts.binance_account import BinanceSwapRequestAccountData
 from bt_api_py.containers.balances.binance_balance import BinanceSwapRequestBalanceData
@@ -45,6 +48,7 @@ def init_async_feed(data_queue):
     return live_binance_swap_feed
 
 
+@pytest.mark.server_time
 def test_binance_req_server_time():
     live_binance_swap_feed = init_req_feed()
     data = live_binance_swap_feed.get_server_time()
@@ -57,6 +61,7 @@ def test_binance_req_server_time():
     assert abs(server_time / 1000 - current_timestamp) < 3, "服务器时间和本地时间超过3s"
 
 
+@pytest.mark.ticker
 def test_binance_req_tick_data():
     live_binance_swap_feed = init_req_feed()
     data = live_binance_swap_feed.get_tick("BTC-USDT").get_data()
@@ -73,6 +78,7 @@ def test_binance_req_tick_data():
     assert tick_data.get_last_volume() is None
 
 
+@pytest.mark.ticker
 def test_binance_async_tick_data():
     data_queue = queue.Queue()
     live_binance_swap_feed = init_async_feed(data_queue)
@@ -97,6 +103,7 @@ def test_binance_async_tick_data():
     assert async_tick_data.get_last_volume() is None
 
 
+@pytest.mark.kline
 def test_binance_req_kline_data():
     live_binance_swap_feed = init_req_feed()
     data = live_binance_swap_feed.get_kline("BTC-USDT", "1m", count=2).get_data()
@@ -115,6 +122,7 @@ def test_binance_req_kline_data():
     assert kline_data.get_bar_status() is True
 
 
+@pytest.mark.kline
 def test_binance_async_kline_data():
     data_queue = queue.Queue()
     live_binance_swap_feed = init_async_feed(data_queue)
@@ -158,6 +166,7 @@ def order_book_value_equals(order_book):
     assert len(order_book.get_bid_price_list()) == 20
 
 
+@pytest.mark.orderbook
 def test_binance_req_depth_data():
     live_binance_swap_feed = init_req_feed()
     data = live_binance_swap_feed.get_depth("BTC-USDT", 20).get_data()
@@ -165,6 +174,7 @@ def test_binance_req_depth_data():
     order_book_value_equals(data[0].init_data())
 
 
+@pytest.mark.orderbook
 def test_binance_async_depth_data():
     data_queue = queue.Queue()
     live_binance_swap_feed = init_async_feed(data_queue)
@@ -279,6 +289,7 @@ def assert_account_data_value(bp):
     assert bp.get_event() == "AccountEvent"
 
 
+@pytest.mark.auth_account
 def test_binance_req_account_data():
     live_binance_swap_feed = init_req_feed()
     data = live_binance_swap_feed.get_account().get_data()
@@ -287,6 +298,7 @@ def test_binance_req_account_data():
     assert_account_data_value(data[0].init_data())
 
 
+@pytest.mark.auth_account
 def test_binance_async_account_data():
     data_queue = queue.Queue()
     live_binance_swap_feed = init_async_feed(data_queue)
@@ -304,6 +316,7 @@ def test_binance_async_account_data():
     assert_account_data_value(target_data[0].init_data())
 
 
+@pytest.mark.auth_account
 def test_binance_req_get_balance():
     live_binance_swap_feed = init_req_feed()
     data = live_binance_swap_feed.get_balance()
@@ -313,6 +326,7 @@ def test_binance_req_get_balance():
     # assert_account_data_value(data[0])
 
 
+@pytest.mark.auth_account
 def test_binance_async_get_balance():
     data_queue = queue.Queue()
     live_binance_swap_feed = init_async_feed(data_queue)
@@ -395,6 +409,7 @@ def binance_make_order_and_cancel_order():
     # print("cancel_order info", cancel_order_data.get_data())
 
 
+@pytest.mark.auth_order
 def test_binance_req_order_functions():
     live_binance_swap_feed = init_req_feed()
     price_data = live_binance_swap_feed.get_tick("OP-USDT")
@@ -468,6 +483,7 @@ def test_binance_req_order_functions():
     # assert orders.get_data() is None
 
 
+@pytest.mark.auth_order
 def test_binance_async_order_functions():
     data_queue = queue.Queue()
     live_binance_swap_feed = init_async_feed(data_queue)
@@ -549,6 +565,7 @@ def get_my_positions():
     print("position: ", data.get_data())
 
 
+@pytest.mark.auth_private_trade
 def test_binance_req_get_deals():
     live_binance_swap_feed = init_req_feed()
     request_data = live_binance_swap_feed.get_deals(symbol="MOVRUSDT")
@@ -563,6 +580,7 @@ def test_binance_req_get_deals():
         assert first_trade.get_trade_volume() > 0
 
 
+@pytest.mark.auth_private_trade
 def test_binance_async_get_deals():
     data_queue = queue.Queue()
     live_binance_swap_feed = init_async_feed(data_queue)
@@ -583,6 +601,7 @@ def test_binance_async_get_deals():
         assert first_trade.get_trade_volume() > 0
 
 
+@pytest.mark.auth_position
 def test_binance_req_get_position():
     live_binance_swap_feed = init_req_feed()
     data = live_binance_swap_feed.get_position(symbol="OP-USDT")
@@ -590,6 +609,7 @@ def test_binance_req_get_position():
     assert isinstance(data.get_data()[0], BinanceRequestPositionData)
 
 
+@pytest.mark.auth_position
 def test_binance_async_get_position():
     data_queue = queue.Queue()
     live_binance_swap_feed = init_async_feed(data_queue)
@@ -607,6 +627,7 @@ def test_binance_async_get_position():
     assert isinstance(target_data[0], BinanceRequestPositionData)
 
 
+@pytest.mark.auth_order
 def test_cancel_all_orders():
     print("Cancelling all orders")
     live_feed = init_req_feed()
@@ -646,6 +667,7 @@ def test_binance_req_open_interest():
     assert float(result["openInterest"]) > 0
 
 
+@pytest.mark.kline
 def test_binance_req_continuous_kline():
     live_binance_swap_feed = init_req_feed()
     data = live_binance_swap_feed.get_continuous_kline("BTC-USDT", "1h", count=3)
@@ -662,6 +684,7 @@ def test_binance_req_continuous_kline():
         assert len(kline) >= 6
 
 
+@pytest.mark.kline
 def test_binance_req_index_price_kline():
     live_binance_swap_feed = init_req_feed()
     data = live_binance_swap_feed.get_index_price_kline("BTC-USDT", "1h", count=3)
@@ -671,6 +694,7 @@ def test_binance_req_index_price_kline():
     assert len(result) == 3
 
 
+@pytest.mark.kline
 def test_binance_req_mark_price_kline():
     live_binance_swap_feed = init_req_feed()
     data = live_binance_swap_feed.get_mark_price_kline("BTC-USDT", "1h", count=3)
@@ -692,6 +716,7 @@ def test_binance_req_funding_info():
     assert "fundingIntervalHours" in first
 
 
+@pytest.mark.auth_account
 def test_binance_req_long_short_ratio():
     live_binance_swap_feed = init_req_feed()
     data = live_binance_swap_feed.get_long_short_ratio("BTC-USDT", period="1h", count=5)
@@ -722,6 +747,7 @@ def test_binance_req_taker_buy_sell_volume():
 # ===== Tests for new trade endpoints =====
 
 
+@pytest.mark.auth_account
 def test_binance_req_get_all_orders():
     live_binance_swap_feed = init_req_feed()
     data = live_binance_swap_feed.get_all_orders("BTC-USDT", count=5)
@@ -746,6 +772,7 @@ def test_binance_req_get_leverage_bracket():
     assert len(first["brackets"]) > 0
 
 
+@pytest.mark.auth_position
 def test_binance_req_get_position_mode():
     live_binance_swap_feed = init_req_feed()
     data = live_binance_swap_feed.get_position_mode()
@@ -809,6 +836,7 @@ def test_binance_async_open_interest():
     assert float(result["openInterest"]) > 0
 
 
+@pytest.mark.kline
 def test_binance_async_continuous_kline():
     data_queue = queue.Queue()
     live_binance_swap_feed = init_async_feed(data_queue)
@@ -825,6 +853,7 @@ def test_binance_async_continuous_kline():
     assert len(result) == 3
 
 
+@pytest.mark.kline
 def test_binance_async_index_price_kline():
     data_queue = queue.Queue()
     live_binance_swap_feed = init_async_feed(data_queue)
@@ -841,6 +870,7 @@ def test_binance_async_index_price_kline():
     assert len(result) == 3
 
 
+@pytest.mark.kline
 def test_binance_async_mark_price_kline():
     data_queue = queue.Queue()
     live_binance_swap_feed = init_async_feed(data_queue)
@@ -888,6 +918,7 @@ def test_binance_async_long_short_ratio():
     assert len(result) > 0
 
 
+@pytest.mark.auth_account
 def test_binance_async_taker_buy_sell_volume():
     data_queue = queue.Queue()
     live_binance_swap_feed = init_async_feed(data_queue)
@@ -923,6 +954,7 @@ def test_binance_async_get_leverage_bracket():
     assert len(result) > 0
 
 
+@pytest.mark.auth_position
 def test_binance_async_get_position_mode():
     data_queue = queue.Queue()
     live_binance_swap_feed = init_async_feed(data_queue)
@@ -954,6 +986,7 @@ def test_binance_async_get_income():
     assert isinstance(result, list)
 
 
+@pytest.mark.auth_order
 def test_binance_async_get_fee():
     data_queue = queue.Queue()
     live_binance_swap_feed = init_async_feed(data_queue)
@@ -972,6 +1005,7 @@ def test_binance_async_get_fee():
 # ===== Trade mutation tests (modify_order, cancel_orders, change_leverage, change_margin_type) =====
 
 
+@pytest.mark.auth_order
 def test_binance_req_modify_order_flow():
     live_binance_swap_feed = init_req_feed()
     price_data = live_binance_swap_feed.get_tick("OP-USDT").get_data()[0].init_data()
@@ -1004,6 +1038,7 @@ def test_binance_req_modify_order_flow():
     assert isinstance(cancel_result, RequestData)
 
 
+@pytest.mark.auth_order
 def test_binance_req_cancel_orders_batch():
     live_binance_swap_feed = init_req_feed()
     price_data = live_binance_swap_feed.get_tick("OP-USDT").get_data()[0].init_data()
@@ -1032,6 +1067,7 @@ def test_binance_req_cancel_orders_batch():
     print("cancel_orders batch result:", cancel_data.get_data())
 
 
+@pytest.mark.auth_order
 def test_binance_req_cancel_all_orders_new():
     live_binance_swap_feed = init_req_feed()
     price_data = live_binance_swap_feed.get_tick("OP-USDT").get_data()[0].init_data()
@@ -1079,6 +1115,7 @@ def test_binance_req_change_margin_type():
 # ===== Additional coverage: agg_trades with time range, open_interest_hist, price_ticker =====
 
 
+@pytest.mark.server_time
 def test_binance_req_agg_trades_with_time():
     live_binance_swap_feed = init_req_feed()
     server_time_data = live_binance_swap_feed.get_server_time().get_data()
@@ -1095,6 +1132,7 @@ def test_binance_req_agg_trades_with_time():
         assert "p" in result[0]
 
 
+@pytest.mark.server_time
 def test_binance_req_long_short_ratio_with_time():
     live_binance_swap_feed = init_req_feed()
     data = live_binance_swap_feed.get_long_short_ratio("BTC-USDT", period="5m", count=10)
@@ -1140,6 +1178,7 @@ def test_binance_req_get_all_orders_with_time():
 # ===== Tests for new futures advanced data endpoints =====
 
 
+@pytest.mark.auth_account
 def test_binance_has_top_long_short_methods():
     """测试有大户多空比方法"""
     live_binance_swap_feed = init_req_feed()
@@ -1147,6 +1186,7 @@ def test_binance_has_top_long_short_methods():
     assert hasattr(live_binance_swap_feed, "get_top_long_short_position_ratio")
 
 
+@pytest.mark.auth_account
 def test_binance_req_top_long_short_account_ratio():
     """测试获取大户多空比 (账户)"""
     live_binance_swap_feed = init_req_feed()
@@ -1161,6 +1201,7 @@ def test_binance_req_top_long_short_account_ratio():
     assert "shortPosition" in first or "shortAccount" in first
 
 
+@pytest.mark.auth_position
 def test_binance_req_top_long_short_position_ratio():
     """测试获取大户多空比 (持仓)"""
     live_binance_swap_feed = init_req_feed()
@@ -1215,6 +1256,7 @@ def test_binance_req_open_interest_hist():
     assert "timestamp" in first
 
 
+@pytest.mark.auth_account
 def test_binance_req_top_long_short_params():
     """测试大户多空比参数构建"""
     live_binance_swap_feed = init_req_feed()
@@ -1236,6 +1278,7 @@ def test_binance_req_force_orders_params():
     assert params["limit"] == 20
 
 
+@pytest.mark.auth_order
 def test_binance_req_open_interest_hist_params():
     """测试持仓量历史参数构建"""
     live_binance_swap_feed = init_req_feed()

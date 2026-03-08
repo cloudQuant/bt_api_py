@@ -197,6 +197,7 @@ class TestBitfinexExchangeData:
         assert ed.get_period("1h") == "1h"
         assert ed.get_period("1d") == "1D"
 
+    @pytest.mark.kline
     def test_kline_periods(self):
         ed = BitfinexExchangeDataSpot()
         assert "1m" in ed.kline_periods
@@ -307,6 +308,7 @@ class TestBitfinexParamGeneration:
 
 
 class TestBitfinexNormalize:
+    @pytest.mark.ticker
     def test_ticker_normalize(self):
         extra = {"symbol_name": "BTC-USD", "asset_type": "SPOT", "exchange_name": "BITFINEX___SPOT"}
         tickers, ok = BitfinexRequestDataSpot._get_ticker_normalize_function(
@@ -316,12 +318,14 @@ class TestBitfinexNormalize:
         assert len(tickers) == 1
         assert isinstance(tickers[0], BitfinexRequestTickerData)
 
+    @pytest.mark.ticker
     def test_ticker_normalize_none(self):
         extra = {"symbol_name": "BTC-USD", "asset_type": "SPOT"}
         tickers, ok = BitfinexRequestDataSpot._get_ticker_normalize_function(None, extra)
         assert ok is False
         assert tickers == []
 
+    @pytest.mark.orderbook
     def test_orderbook_normalize(self):
         extra = {"symbol_name": "BTC-USD", "asset_type": "SPOT"}
         books, ok = BitfinexRequestDataSpot._get_order_book_normalize_function(
@@ -331,12 +335,14 @@ class TestBitfinexNormalize:
         assert len(books) == 1
         assert isinstance(books[0], BitfinexRequestOrderBookData)
 
+    @pytest.mark.orderbook
     def test_orderbook_normalize_none(self):
         extra = {"symbol_name": "BTC-USD", "asset_type": "SPOT"}
         books, ok = BitfinexRequestDataSpot._get_order_book_normalize_function(None, extra)
         assert ok is False
         assert books == []
 
+    @pytest.mark.kline
     def test_kline_normalize(self):
         extra = {"symbol_name": "BTC-USD", "asset_type": "SPOT"}
         bars, ok = BitfinexRequestDataSpot._get_klines_normalize_function(SAMPLE_KLINE_RESP, extra)
@@ -344,6 +350,7 @@ class TestBitfinexNormalize:
         assert len(bars) == 1
         assert isinstance(bars[0], BitfinexRequestBarData)
 
+    @pytest.mark.kline
     def test_kline_normalize_none(self):
         extra = {"symbol_name": "BTC-USD", "asset_type": "SPOT"}
         bars, ok = BitfinexRequestDataSpot._get_klines_normalize_function(None, extra)
@@ -519,6 +526,7 @@ class TestBitfinexSyncCalls:
 
 
 class TestBitfinexContainers:
+    @pytest.mark.ticker
     def test_ticker_container(self):
         ticker_data = [
             "tBTCUSD",
@@ -544,6 +552,7 @@ class TestBitfinexContainers:
         assert t.get_high() == 51000.0
         assert t.get_low() == 49000.0
 
+    @pytest.mark.orderbook
     def test_orderbook_container(self):
         orderbook_data = {
             "bids": [[49900.0, 0.5], [49800.0, 1.0]],

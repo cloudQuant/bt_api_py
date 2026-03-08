@@ -129,6 +129,7 @@ class TestExchangeData:
 
 
 class TestParamGeneration:
+    @pytest.mark.ticker
     def test_get_tick_params(self, feed):
         path, params, extra = feed._get_tick("BTC/USD")
         assert "/bitcoinaverage/ticker-all-currencies/" in path
@@ -173,15 +174,18 @@ class TestParamGeneration:
 
 
 class TestNormalization:
+    @pytest.mark.ticker
     def test_tick_ok(self):
         result, ok = LocalBitcoinsRequestData._get_tick_normalize_function(SAMPLE_TICK, {})
         assert ok is True
         assert isinstance(result, list)
 
+    @pytest.mark.ticker
     def test_tick_error(self):
         result, ok = LocalBitcoinsRequestData._get_tick_normalize_function(SAMPLE_ERROR, {})
         assert ok is False
 
+    @pytest.mark.ticker
     def test_tick_none(self):
         result, ok = LocalBitcoinsRequestData._get_tick_normalize_function(None, {})
         assert ok is False
@@ -247,12 +251,14 @@ class TestNormalization:
 
 class TestSyncCalls:
     @patch.object(LocalBitcoinsRequestData, "http_request", return_value=SAMPLE_TICK)
+    @pytest.mark.ticker
     def test_get_tick(self, mock_http, feed):
         rd = feed.get_tick("BTC/USD")
         assert isinstance(rd, RequestData)
         mock_http.assert_called_once()
 
     @patch.object(LocalBitcoinsRequestData, "http_request", return_value=SAMPLE_TICK)
+    @pytest.mark.ticker
     def test_get_ticker(self, mock_http, feed):
         rd = feed.get_ticker("BTC/USD")
         assert isinstance(rd, RequestData)
@@ -420,6 +426,7 @@ class TestWebSocketStubs:
 
 class TestIntegration:
     @pytest.mark.skip(reason="Requires network access")
+    @pytest.mark.ticker
     def test_live_get_tick(self):
         f = LocalBitcoinsRequestDataSpot(queue.Queue())
         rd = f.get_tick("BTC/USD")

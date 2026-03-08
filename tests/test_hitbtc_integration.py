@@ -71,6 +71,7 @@ class TestHitBtcExchangeData:
 class TestHitBtcDataContainers:
     """Test HitBTC data containers"""
 
+    @pytest.mark.ticker
     def test_ticker_data(self):
         """Test ticker data container"""
         ticker_info = {
@@ -96,6 +97,7 @@ class TestHitBtcDataContainers:
         assert ticker.high_price == 51000.0
         assert ticker.low_price == 48000.0
 
+    @pytest.mark.orderbook
     def test_orderbook_data(self):
         """Test orderbook data container"""
         orderbook_info = {

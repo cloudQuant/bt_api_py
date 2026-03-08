@@ -115,6 +115,7 @@ class TestRaydiumRequestDataSpot:
 
     # ==================== Ticker Tests ====================
 
+    @pytest.mark.ticker
     def test_get_tick(self, raydium_spot):
         """Test get_tick method."""
         symbol = "SOL/USDC"
@@ -125,6 +126,7 @@ class TestRaydiumRequestDataSpot:
         assert params["mint1"] == "SOL"
         assert params["mint2"] == "USDC"
 
+    @pytest.mark.ticker
     def test_get_tick_normalize_function(self):
         """Test tick normalize function."""
         input_data = {"success": True, "data": [{"id": "pool1", "name": "SOL/USDC", "price": 100}]}
@@ -134,6 +136,7 @@ class TestRaydiumRequestDataSpot:
 
     # ==================== Depth Tests ====================
 
+    @pytest.mark.orderbook
     def test_get_depth(self, raydium_spot):
         """Test get_depth method."""
         symbol = "SOL/USDC"
@@ -142,6 +145,7 @@ class TestRaydiumRequestDataSpot:
         assert extra_data["request_type"] == "get_pool_by_mint"
         assert extra_data["symbol_name"] == symbol
 
+    @pytest.mark.orderbook
     def test_get_depth_normalize_function(self):
         """Test depth normalize function."""
         input_data = {"success": True, "data": [{"id": "pool1", "liquidity": "1000000"}]}
@@ -183,6 +187,7 @@ class TestRaydiumRequestDataSpot:
         pass
 
     @pytest.mark.skip(reason="Requires actual API call")
+    @pytest.mark.ticker
     def test_integration_get_tick(self, raydium_spot):
         """Integration test for get_tick - skipped."""
         pass
@@ -230,6 +235,7 @@ class TestRaydiumExchangeDataSpot:
             assert exchange_data.get_period("1m") == "60"
             assert exchange_data.get_period("1h") == "3600"
 
+    @pytest.mark.kline
     def test_kline_periods(self):
         """Test kline periods are defined."""
         with patch(
@@ -331,11 +337,13 @@ class TestRaydiumBaseCapabilities:
 class TestRaydiumNormalizeFunctions:
     """Test normalize functions edge cases."""
 
+    @pytest.mark.ticker
     def test_tick_normalize_with_none(self):
         result, status = RaydiumRequestDataSpot._get_tick_normalize_function(None, None)
         assert result == []
         assert status is False
 
+    @pytest.mark.orderbook
     def test_depth_normalize_with_none(self):
         result, status = RaydiumRequestDataSpot._get_depth_normalize_function(None, None)
         assert result == []

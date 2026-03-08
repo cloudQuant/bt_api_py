@@ -47,6 +47,7 @@ class TestBYDFiExchangeData:
         path = exchange_data.get_rest_path("get_ticker")
         assert "ticker" in path.lower() or "tick" in path.lower()
 
+    @pytest.mark.kline
     def test_kline_periods(self):
         exchange_data = BYDFiExchangeDataSpot()
         assert "1m" in exchange_data.kline_periods
@@ -74,30 +75,36 @@ class TestBYDFiRequestDataSpot:
         assert Capability.MAKE_ORDER in caps
         assert Capability.CANCEL_ORDER in caps
 
+    @pytest.mark.ticker
     def test_get_tick_returns_tuple(self, mock_feed):
         path, params, extra_data = mock_feed._get_tick("BTC-USDT")
         assert extra_data["request_type"] == "get_tick"
         assert extra_data["symbol_name"] == "BTC-USDT"
         assert "symbol" in params
 
+    @pytest.mark.ticker
     def test_get_tick_calls_request(self, mock_feed):
         mock_feed.get_tick("BTC-USDT")
         assert mock_feed.request.called
 
+    @pytest.mark.orderbook
     def test_get_depth_returns_tuple(self, mock_feed):
         path, params, extra_data = mock_feed._get_depth("BTC-USDT")
         assert extra_data["request_type"] == "get_depth"
         assert "limit" in params
 
+    @pytest.mark.orderbook
     def test_get_depth_calls_request(self, mock_feed):
         mock_feed.get_depth("BTC-USDT")
         assert mock_feed.request.called
 
+    @pytest.mark.kline
     def test_get_kline_returns_tuple(self, mock_feed):
         path, params, extra_data = mock_feed._get_kline("BTC-USDT", "1h")
         assert extra_data["request_type"] == "get_kline"
         assert "interval" in params
 
+    @pytest.mark.kline
     def test_get_kline_calls_request(self, mock_feed):
         mock_feed.get_kline("BTC-USDT", "1h")
         assert mock_feed.request.called
@@ -185,22 +192,26 @@ class TestBYDFiBaseCapabilities:
 class TestBYDFiNormalizeFunctions:
     """Test normalize functions edge cases."""
 
+    @pytest.mark.ticker
     def test_tick_normalize_with_none(self):
         result, status = BYDFiRequestDataSpot._get_tick_normalize_function(None, None)
         assert result == []
         assert status is False
 
+    @pytest.mark.ticker
     def test_tick_normalize_success(self):
         data = {"data": {"symbol": "BTC-USDT", "price": "50000"}}
         result, status = BYDFiRequestDataSpot._get_tick_normalize_function(data, None)
         assert status is True
         assert len(result) == 1
 
+    @pytest.mark.orderbook
     def test_depth_normalize_with_none(self):
         result, status = BYDFiRequestDataSpot._get_depth_normalize_function(None, None)
         assert result == []
         assert status is False
 
+    @pytest.mark.kline
     def test_kline_normalize_with_none(self):
         result, status = BYDFiRequestDataSpot._get_kline_normalize_function(None, None)
         assert result == []
@@ -230,6 +241,7 @@ class TestBYDFiNormalizeFunctions:
 class TestBYDFiDataContainers:
     """Test BYDFi data containers."""
 
+    @pytest.mark.ticker
     def test_ticker_container(self):
         ticker_response = {
             "code": 0,
@@ -277,6 +289,7 @@ class TestBYDFiLiveAPI:
 
     @pytest.mark.skip(reason="BYDFI API endpoint temporarily unavailable (404)")
     @pytest.mark.integration
+    @pytest.mark.ticker
     def test_bydfi_req_tick_data(self):
         data_queue = queue.Queue()
         feed = BYDFiRequestDataSpot(data_queue, exchange_name="BYDFI___SPOT")
@@ -285,6 +298,7 @@ class TestBYDFiLiveAPI:
 
     @pytest.mark.skip(reason="BYDFI API endpoint temporarily unavailable (404)")
     @pytest.mark.integration
+    @pytest.mark.ticker
     def test_bydfi_async_tick_data(self):
         data_queue = queue.Queue()
         feed = BYDFiRequestDataSpot(data_queue, exchange_name="BYDFI___SPOT")

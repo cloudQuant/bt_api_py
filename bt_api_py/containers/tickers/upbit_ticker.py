@@ -81,7 +81,7 @@ class UpbitTickerData(TickerData):
                     self.timestamp = datetime.datetime.strptime(
                         time_str, "%Y-%m-%d %H:%M:%S"
                     ).timestamp()
-                except:
+                except (ValueError, KeyError):
                     self.timestamp = time.time()
 
             self.has_been_init_data = True

@@ -50,6 +50,7 @@ class TestGiottusExchangeData:
         assert exchange_data.wss_url
         assert "wss://" in exchange_data.wss_url
 
+    @pytest.mark.kline
     def test_kline_periods(self):
         exchange_data = GiottusExchangeDataSpot()
         assert "1m" in exchange_data.kline_periods
@@ -88,6 +89,7 @@ class TestGiottusRequestDataSpot:
         assert Capability.MAKE_ORDER in caps
         assert Capability.CANCEL_ORDER in caps
 
+    @pytest.mark.ticker
     def test_get_tick_returns_tuple(self, mock_feed):
         path, params, extra_data = mock_feed._get_tick("BTC-INR")
         assert path is not None
@@ -97,6 +99,7 @@ class TestGiottusRequestDataSpot:
         assert extra_data["exchange_name"] == "GIOTTUS___SPOT"
         assert extra_data["asset_type"] == "SPOT"
 
+    @pytest.mark.orderbook
     def test_get_depth_returns_tuple(self, mock_feed):
         path, params, extra_data = mock_feed._get_depth("BTC-INR", count=20)
         assert path is not None
@@ -105,6 +108,7 @@ class TestGiottusRequestDataSpot:
         assert extra_data["request_type"] == "get_depth"
         assert extra_data["symbol_name"] == "BTC-INR"
 
+    @pytest.mark.kline
     def test_get_kline_returns_tuple(self, mock_feed):
         path, params, extra_data = mock_feed._get_kline("BTC-INR", period="1h", count=20)
         assert path is not None
@@ -162,6 +166,7 @@ class TestGiottusStandardInterfaces:
         feed.request = Mock(return_value=Mock())
         return feed
 
+    @pytest.mark.ticker
     def test_get_tick_calls_request(self, feed):
         feed.get_tick("BTC-INR")
         assert feed.request.called
@@ -170,6 +175,7 @@ class TestGiottusStandardInterfaces:
         if extra_data:
             assert extra_data["request_type"] == "get_tick"
 
+    @pytest.mark.orderbook
     def test_get_depth_calls_request(self, feed):
         feed.get_depth("BTC-INR")
         assert feed.request.called
@@ -178,6 +184,7 @@ class TestGiottusStandardInterfaces:
         if extra_data:
             assert extra_data["request_type"] == "get_depth"
 
+    @pytest.mark.kline
     def test_get_kline_calls_request(self, feed):
         feed.get_kline("BTC-INR", "1h")
         assert feed.request.called
@@ -226,27 +233,32 @@ class TestGiottusStandardInterfaces:
 class TestGiottusNormalizeFunctions:
     """Test normalize functions edge cases."""
 
+    @pytest.mark.ticker
     def test_tick_normalize_with_none(self):
         result, status = GiottusRequestDataSpot._get_tick_normalize_function(None, None)
         assert result == []
         assert status is False
 
+    @pytest.mark.ticker
     def test_tick_normalize_with_data(self):
         input_data = {"symbol": "BTCINR", "last": "50000"}
         result, status = GiottusRequestDataSpot._get_tick_normalize_function(input_data, {})
         assert status is True
         assert len(result) == 1
 
+    @pytest.mark.orderbook
     def test_depth_normalize_with_none(self):
         result, status = GiottusRequestDataSpot._get_depth_normalize_function(None, None)
         assert result == []
         assert status is False
 
+    @pytest.mark.orderbook
     def test_depth_normalize_with_data(self):
         input_data = {"bids": [], "asks": []}
         result, status = GiottusRequestDataSpot._get_depth_normalize_function(input_data, {})
         assert status is True
 
+    @pytest.mark.kline
     def test_kline_normalize_with_none(self):
         result, status = GiottusRequestDataSpot._get_kline_normalize_function(None, None)
         assert result == []
@@ -281,6 +293,7 @@ class TestGiottusNormalizeFunctions:
 class TestGiottusDataContainers:
     """Test Giottus data containers."""
 
+    @pytest.mark.ticker
     def test_ticker_container(self):
         ticker_response = {
             "success": True,
@@ -328,6 +341,7 @@ class TestGiottusLiveAPI:
     """Live API tests - require network, marked as integration."""
 
     @pytest.mark.integration
+    @pytest.mark.ticker
     def test_giottus_req_tick_data(self):
         data_queue = queue.Queue()
         feed = GiottusRequestDataSpot(data_queue, exchange_name="GIOTTUS___SPOT")
@@ -335,6 +349,7 @@ class TestGiottusLiveAPI:
         assert result is not None
 
     @pytest.mark.integration
+    @pytest.mark.orderbook
     def test_giottus_req_depth_data(self):
         data_queue = queue.Queue()
         feed = GiottusRequestDataSpot(data_queue, exchange_name="GIOTTUS___SPOT")
@@ -342,6 +357,7 @@ class TestGiottusLiveAPI:
         assert result is not None
 
     @pytest.mark.integration
+    @pytest.mark.kline
     def test_giottus_req_kline_data(self):
         data_queue = queue.Queue()
         feed = GiottusRequestDataSpot(data_queue, exchange_name="GIOTTUS___SPOT")

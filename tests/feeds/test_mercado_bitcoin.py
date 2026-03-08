@@ -47,6 +47,7 @@ class TestMercadoBitcoinExchangeData:
         assert "1h" in data.kline_periods
         assert "BRL" in data.legal_currency
 
+    @pytest.mark.kline
     def test_kline_periods(self):
         data = MercadoBitcoinExchangeData()
         assert "1h" in data.kline_periods
@@ -78,6 +79,7 @@ class TestMercadoBitcoinRequestDataSpot:
         assert Capability.MAKE_ORDER in caps
         assert Capability.CANCEL_ORDER in caps
 
+    @pytest.mark.ticker
     def test_get_tick_returns_tuple(self, mock_feed):
         path, params, extra_data = mock_feed._get_tick("BTC-BRL")
         assert "BTC" in path
@@ -86,12 +88,14 @@ class TestMercadoBitcoinRequestDataSpot:
         assert extra_data["exchange_name"] == "MERCADO_BITCOIN___SPOT"
         assert extra_data["asset_type"] == "SPOT"
 
+    @pytest.mark.orderbook
     def test_get_depth_returns_tuple(self, mock_feed):
         path, params, extra_data = mock_feed._get_depth("BTC-BRL")
         assert "BTC" in path
         assert extra_data["request_type"] == "get_depth"
         assert extra_data["exchange_name"] == "MERCADO_BITCOIN___SPOT"
 
+    @pytest.mark.kline
     def test_get_kline_returns_tuple(self, mock_feed):
         path, params, extra_data = mock_feed._get_kline("BTC-BRL", "1h")
         assert "candles" in path
@@ -135,14 +139,17 @@ class TestMercadoBitcoinStandardInterfaces:
         feed.request = Mock(return_value=Mock())
         return feed
 
+    @pytest.mark.ticker
     def test_get_tick_calls_request(self, feed):
         feed.get_tick("BTC-BRL")
         assert feed.request.called
 
+    @pytest.mark.orderbook
     def test_get_depth_calls_request(self, feed):
         feed.get_depth("BTC-BRL")
         assert feed.request.called
 
+    @pytest.mark.kline
     def test_get_kline_calls_request(self, feed):
         feed.get_kline("BTC-BRL", "1h")
         assert feed.request.called
@@ -171,32 +178,38 @@ class TestMercadoBitcoinStandardInterfaces:
 class TestMercadoBitcoinNormalizeFunctions:
     """Test normalize functions edge cases."""
 
+    @pytest.mark.ticker
     def test_tick_normalize_with_none(self):
         result, status = MercadoBitcoinRequestDataSpot._get_tick_normalize_function(None, None)
         assert result == []
         assert status is False
 
+    @pytest.mark.ticker
     def test_tick_normalize_with_data(self):
         input_data = {"ticker": {"last": "50000.00", "buy": "49999.00", "sell": "50001.00"}}
         result, status = MercadoBitcoinRequestDataSpot._get_tick_normalize_function(input_data, {})
         assert status is True
         assert result[0]["last"] == "50000.00"
 
+    @pytest.mark.orderbook
     def test_depth_normalize_with_none(self):
         result, status = MercadoBitcoinRequestDataSpot._get_depth_normalize_function(None, None)
         assert result == []
         assert status is False
 
+    @pytest.mark.orderbook
     def test_depth_normalize_with_data(self):
         input_data = {"bids": [["49999", "1.0"]], "asks": [["50001", "1.0"]]}
         result, status = MercadoBitcoinRequestDataSpot._get_depth_normalize_function(input_data, {})
         assert status is True
 
+    @pytest.mark.kline
     def test_kline_normalize_with_none(self):
         result, status = MercadoBitcoinRequestDataSpot._get_kline_normalize_function(None, None)
         assert result == []
         assert status is False
 
+    @pytest.mark.kline
     def test_kline_normalize_with_list(self):
         input_data = [[1672531200, "50000", "51000", "49000", "50500", "100"]]
         result, status = MercadoBitcoinRequestDataSpot._get_kline_normalize_function(input_data, {})
@@ -235,6 +248,7 @@ class TestMercadoBitcoinNormalizeFunctions:
 class TestMercadoBitcoinDataContainers:
     """Test Mercado Bitcoin data containers."""
 
+    @pytest.mark.ticker
     def test_ticker_container(self):
         ticker_info = json.dumps(
             {
@@ -281,6 +295,7 @@ class TestMercadoBitcoinLiveAPI:
     """Live API tests - require network, marked as integration."""
 
     @pytest.mark.integration
+    @pytest.mark.ticker
     def test_mercado_bitcoin_req_tick_data(self):
         data_queue = queue.Queue()
         feed = MercadoBitcoinRequestDataSpot(data_queue)
@@ -288,6 +303,7 @@ class TestMercadoBitcoinLiveAPI:
         assert isinstance(data, RequestData)
 
     @pytest.mark.integration
+    @pytest.mark.orderbook
     def test_mercado_bitcoin_req_depth_data(self):
         data_queue = queue.Queue()
         feed = MercadoBitcoinRequestDataSpot(data_queue)
@@ -295,6 +311,7 @@ class TestMercadoBitcoinLiveAPI:
         assert isinstance(data, RequestData)
 
     @pytest.mark.integration
+    @pytest.mark.kline
     def test_mercado_bitcoin_req_kline_data(self):
         data_queue = queue.Queue()
         feed = MercadoBitcoinRequestDataSpot(data_queue)

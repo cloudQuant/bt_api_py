@@ -244,15 +244,18 @@ class TestCryptoComExchangeData:
         assert ed.validate_symbol("BTC_USDT") is True
         assert ed.validate_symbol("") is False
 
+    @pytest.mark.kline
     def test_get_kline_period(self):
         ed = CryptoComExchangeDataSpot()
         assert ed.get_kline_period("1m") == "1m"
         assert ed.get_kline_period("1d") == "1D"
 
+    @pytest.mark.kline
     def test_get_period_from_kline(self):
         ed = CryptoComExchangeDataSpot()
         assert ed.get_period_from_kline("1D") == "1d"
 
+    @pytest.mark.orderbook
     def test_get_depth_levels(self):
         ed = CryptoComExchangeDataSpot()
         assert ed.get_depth_levels(50) == 50
@@ -399,6 +402,7 @@ class TestNormalization:
         assert len(data) == 1
         assert len(data[0]["symbols"]) == 1
 
+    @pytest.mark.ticker
     def test_tick_normalize(self):
         extra = {
             "symbol_name": "BTC/USDT",
@@ -410,6 +414,7 @@ class TestNormalization:
         assert len(data) == 1
         assert isinstance(data[0], CryptoComTicker)
 
+    @pytest.mark.orderbook
     def test_depth_normalize(self):
         extra = {
             "symbol_name": "BTC/USDT",
@@ -423,6 +428,7 @@ class TestNormalization:
         assert len(data) == 1
         assert isinstance(data[0], CryptoComOrderBook)
 
+    @pytest.mark.kline
     def test_kline_normalize(self):
         extra = {
             "symbol_name": "BTC/USDT",
@@ -628,6 +634,7 @@ class TestSyncCalls:
 class TestContainers:
     """Test data containers init_data returns self and parses correctly."""
 
+    @pytest.mark.ticker
     def test_ticker_container(self):
         ticker = CryptoComTicker.from_api_response(
             {
@@ -651,6 +658,7 @@ class TestContainers:
         assert ticker.low_24h == 48000.0
         assert ticker.volume_24h == 1234.56
 
+    @pytest.mark.orderbook
     def test_orderbook_container(self):
         ob = CryptoComOrderBook.from_api_response(
             {

@@ -101,6 +101,7 @@ class TestExchangeData:
         assert exdata.get_period("1h") == "1h"
         assert exdata.get_period("1d") == "1d"
 
+    @pytest.mark.kline
     def test_kline_periods(self, exdata):
         for k in ("1m", "5m", "15m", "30m", "1h", "4h", "1d", "1w"):
             assert k in exdata.kline_periods
@@ -139,6 +140,7 @@ class TestExchangeData:
 
 
 class TestParamGeneration:
+    @pytest.mark.ticker
     def test_get_tick_params(self, feed):
         path, params, extra = feed._get_tick("BTC/AUD")
         assert "/Public/GetMarketSummary" in path
@@ -146,6 +148,7 @@ class TestParamGeneration:
         assert params["secondaryCurrencyCode"] == "Aud"
         assert extra["request_type"] == "get_tick"
 
+    @pytest.mark.orderbook
     def test_get_depth_params(self, feed):
         path, params, extra = feed._get_depth("BTC/AUD")
         assert "/Public/GetOrderBook" in path
@@ -211,15 +214,18 @@ class TestParamGeneration:
 
 
 class TestNormalization:
+    @pytest.mark.ticker
     def test_tick_ok(self):
         result, ok = IndependentReserveRequestData._get_tick_normalize_function(SAMPLE_TICK, {})
         assert ok is True
         assert result[0]["LastPrice"] == 50000.0
 
+    @pytest.mark.ticker
     def test_tick_error(self):
         result, ok = IndependentReserveRequestData._get_tick_normalize_function(SAMPLE_ERROR, {})
         assert ok is False
 
+    @pytest.mark.orderbook
     def test_depth_ok(self):
         result, ok = IndependentReserveRequestData._get_depth_normalize_function(SAMPLE_DEPTH, {})
         assert ok is True
@@ -283,12 +289,14 @@ class TestNormalization:
 
 class TestSyncCalls:
     @patch.object(IndependentReserveRequestData, "http_request", return_value=SAMPLE_TICK)
+    @pytest.mark.ticker
     def test_get_tick(self, mock_http, feed):
         rd = feed.get_tick("BTC/AUD")
         assert isinstance(rd, RequestData)
         mock_http.assert_called_once()
 
     @patch.object(IndependentReserveRequestData, "http_request", return_value=SAMPLE_DEPTH)
+    @pytest.mark.orderbook
     def test_get_depth(self, mock_http, feed):
         rd = feed.get_depth("BTC/AUD")
         assert isinstance(rd, RequestData)
@@ -452,6 +460,7 @@ class TestFeedInit:
 
 class TestIntegration:
     @pytest.mark.skip(reason="Requires network access and API key")
+    @pytest.mark.ticker
     def test_live_get_tick(self):
         f = IndependentReserveRequestDataSpot(queue.Queue())
         rd = f.get_tick("BTC/AUD")

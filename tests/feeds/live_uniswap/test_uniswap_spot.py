@@ -74,6 +74,7 @@ class TestUniswapRequestDataSpot:
         assert extra_data["request_type"] == "get_server_time"
         assert "server_time" in extra_data
 
+    @pytest.mark.ticker
     def test_get_tick(self, uniswap_spot, mock_http_client):
         """Test get_tick method."""
         # Mock response
@@ -246,6 +247,7 @@ class TestUniswapRequestDataSpot:
         assert result.input_data == mock_response
         assert len(result.input_data["data"]["swappableTokens"]) == 2
 
+    @pytest.mark.orderbook
     def test_get_depth(self, uniswap_spot, mock_http_client):
         """Test get_depth method."""
         # Mock response for pool
@@ -270,6 +272,7 @@ class TestUniswapRequestDataSpot:
         assert result.input_data == mock_response
         assert result.extra_data is not None
 
+    @pytest.mark.kline
     def test_get_kline(self, uniswap_spot, mock_http_client):
         """Test get_kline method."""
         # Call method - kline returns a message without making HTTP request
@@ -660,11 +663,13 @@ class TestUniswapBaseCapabilities:
 class TestUniswapNormalizeFunctions:
     """Test normalize functions edge cases."""
 
+    @pytest.mark.ticker
     def test_tick_normalize_with_none(self):
         result, status = UniswapRequestDataSpot._get_tick_normalize_function(None, None)
         assert result == []
         assert status is False
 
+    @pytest.mark.orderbook
     def test_depth_normalize_with_none(self):
         result, status = UniswapRequestDataSpot._get_depth_normalize_function(None, None)
         assert result == []

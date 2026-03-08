@@ -93,10 +93,10 @@ class UpbitBalanceData(BalanceData):
         if self.balance is None:
             return 0.0
 
-        if self.unit_currency == currency:
+        if self.unit_currency == currency_rate:
             return self.balance
 
-        if currency_rate and currency_rate > 0:
+        if currency_rate and isinstance(currency_rate, (int, float)) and currency_rate > 0:
             return self.balance * currency_rate
 
         return 0.0

@@ -4,6 +4,8 @@ import time
 
 import pytest
 
+pytestmark = [pytest.mark.integration, pytest.mark.network]
+
 from bt_api_py.containers.accounts.binance_account import (
     BinanceSpotRequestAccountData,
 )
@@ -19,6 +21,7 @@ from bt_api_py.feeds.live_binance_feed import BinanceRequestDataSpot
 from bt_api_py.functions.utils import read_account_config
 
 
+@pytest.mark.auth_account
 def test_get_binance_key():
     data = read_account_config()
     public_key = data["binance"]["public_key"]
@@ -51,6 +54,7 @@ def init_async_feed(data_queue):
     return live_binance_spot_feed
 
 
+@pytest.mark.server_time
 def test_binance_req_server_time():
     live_binance_swap_feed = init_req_feed()
     data = live_binance_swap_feed.get_server_time()
@@ -58,6 +62,7 @@ def test_binance_req_server_time():
     print(data.get_data())
 
 
+@pytest.mark.ticker
 def test_binance_req_tick_data():
     live_binance_spot_feed = init_req_feed()
     data = live_binance_spot_feed.get_tick("BTC-USDT").get_data()
@@ -74,6 +79,7 @@ def test_binance_req_tick_data():
     assert tick_data.get_last_volume() is None
 
 
+@pytest.mark.ticker
 def test_binance_async_tick_data():
     data_queue = queue.Queue()
     live_binance_spot_feed = init_async_feed(data_queue)
@@ -98,6 +104,7 @@ def test_binance_async_tick_data():
     assert async_tick_data.get_last_volume() is None
 
 
+@pytest.mark.kline
 def test_binance_req_kline_data():
     live_binance_spot_feed = init_req_feed()
     data = live_binance_spot_feed.get_kline("BTC-USDT", "1m", count=2).get_data()
@@ -115,6 +122,7 @@ def test_binance_req_kline_data():
     assert data[0].init_data().get_bar_status() is True
 
 
+@pytest.mark.kline
 def test_binance_async_kline_data():
     data_queue = queue.Queue()
     live_binance_spot_feed = init_async_feed(data_queue)
@@ -158,6 +166,7 @@ def order_book_value_equals(order_book):
     assert len(order_book.get_bid_price_list()) == 20
 
 
+@pytest.mark.orderbook
 def test_binance_req_depth_data():
     live_binance_spot_feed = init_req_feed()
     data = live_binance_spot_feed.get_depth("BTC-USDT", 20).get_data()
@@ -165,6 +174,7 @@ def test_binance_req_depth_data():
     order_book_value_equals(data[0].init_data())
 
 
+@pytest.mark.orderbook
 def test_binance_async_depth_data():
     data_queue = queue.Queue()
     live_binance_spot_feed = init_async_feed(data_queue)
@@ -189,6 +199,7 @@ def assert_account_data_value(bp):
     assert bp.get_event() == "AccountEvent"
 
 
+@pytest.mark.auth_account
 def test_binance_req_account_data():
     live_binance_spot_feed = init_req_feed()
     data = live_binance_spot_feed.get_account().get_data()
@@ -197,6 +208,7 @@ def test_binance_req_account_data():
     assert_account_data_value(data[0].init_data())
 
 
+@pytest.mark.auth_account
 def test_binance_async_account_data():
     data_queue = queue.Queue()
     live_binance_spot_feed = init_async_feed(data_queue)
@@ -214,6 +226,7 @@ def test_binance_async_account_data():
     assert_account_data_value(target_data[0].init_data())
 
 
+@pytest.mark.auth_account
 def test_binance_req_get_balance():
     live_binance_spot_feed = init_req_feed()
     data = live_binance_spot_feed.get_balance()
@@ -227,6 +240,7 @@ def test_binance_req_get_balance():
     print("data.get_data()", balance_data.init_data())
 
 
+@pytest.mark.auth_account
 def test_binance_async_get_balance():
     data_queue = queue.Queue()
     live_binance_spot_feed = init_async_feed(data_queue)
@@ -277,6 +291,7 @@ def binance_req_cancel_order_by_client_order_id(client_order_id):
     return data
 
 
+@pytest.mark.auth_order
 def test_binance_make_order_and_cancel_order():
     live_binance_spot_feed = init_req_feed()
     price_data = live_binance_spot_feed.get_tick("OP-USDT")
@@ -307,6 +322,7 @@ def test_binance_make_order_and_cancel_order():
     print("cancel_order info", cancel_order_data.get_data()[0].init_data())
 
 
+@pytest.mark.auth_order
 def test_binance_req_order_functions():
     live_binance_spot_feed = init_req_feed()
     price_data = live_binance_spot_feed.get_tick("OP-USDT")
@@ -369,6 +385,7 @@ def test_binance_req_order_functions():
 
 
 @pytest.mark.timeout(120)
+@pytest.mark.auth_order
 def test_binance_async_order_functions():
     data_queue = queue.Queue()
     live_binance_spot_feed = init_async_feed(data_queue)
@@ -446,6 +463,7 @@ def test_binance_async_order_functions():
 #     print(sell_data.get_data()[0].init_data())
 
 
+@pytest.mark.auth_order
 def test_cancel_all_orders():
     print("cancel_all_orders")
     live_feed = init_req_feed()
@@ -462,6 +480,7 @@ def get_my_positions():
     print("position: ", data.get_data()[0].init_data())
 
 
+@pytest.mark.auth_private_trade
 def test_binance_req_get_deals():
     live_binance_spot_feed = init_req_feed()
     price_data = live_binance_spot_feed.get_deals(symbol="OP-USDT")
@@ -474,6 +493,7 @@ def test_binance_req_get_deals():
         assert first_trade.init_data().get_trade_volume() > 0
 
 
+@pytest.mark.auth_private_trade
 def test_binance_async_get_deals():
     data_queue = queue.Queue()
     live_binance_spot_feed = init_async_feed(data_queue)
@@ -496,6 +516,7 @@ def test_binance_async_get_deals():
 # ==================== 新增测试用例 ====================
 
 
+@pytest.mark.auth_account
 def test_binance_get_account_snapshot():
     """测试获取账户快照"""
     live_binance_spot_feed = init_req_feed()
@@ -508,6 +529,7 @@ def test_binance_get_account_snapshot():
         assert isinstance(result, dict) or isinstance(result, list)
 
 
+@pytest.mark.auth_account
 def test_binance_get_account_snapshot_margin():
     """测试获取杠杆账户快照"""
     live_binance_spot_feed = init_req_feed()
@@ -517,6 +539,7 @@ def test_binance_get_account_snapshot_margin():
     print("margin_snapshot:", result)
 
 
+@pytest.mark.ticker
 def test_binance_get_ticker_trading_day():
     """测试获取交易日统计数据"""
     live_binance_spot_feed = init_req_feed()
@@ -552,6 +575,7 @@ def test_binance_futures_transfer_history():
 # ==================== 高级订单接口测试 ====================
 
 
+@pytest.mark.auth_order
 def test_spot_has_cancel_replace_order():
     """测试有 cancel_replace_order 方法"""
     live_binance_spot_feed = init_req_feed()
@@ -559,6 +583,7 @@ def test_spot_has_cancel_replace_order():
     assert hasattr(live_binance_spot_feed, "_cancel_replace_order")
 
 
+@pytest.mark.auth_order
 def test_spot_cancel_replace_order_params():
     """测试 cancel_replace_order 参数构建"""
     live_binance_spot_feed = init_req_feed()
@@ -581,6 +606,7 @@ def test_spot_cancel_replace_order_params():
     assert extra_data["request_type"] == "cancel_replace_order"
 
 
+@pytest.mark.auth_order
 def test_spot_cancel_replace_order_with_client_id():
     """测试使用 client_order_id 的 cancel_replace_order"""
     live_binance_spot_feed = init_req_feed()
@@ -647,6 +673,7 @@ def test_spot_amend_keep_priority_params():
     assert extra_data["request_type"] == "amend_keep_priority"
 
 
+@pytest.mark.auth_order
 def test_spot_amend_keep_priority_with_client_id():
     """测试使用 client_order_id 的 amend_keep_priority"""
     live_binance_spot_feed = init_req_feed()

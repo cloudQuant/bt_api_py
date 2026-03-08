@@ -1,5 +1,8 @@
+import pytest
 import queue
 import time
+
+pytestmark = [pytest.mark.integration, pytest.mark.network]
 
 from bt_api_py.containers.exchanges.okx_exchange_data import OkxExchangeDataSwap
 from bt_api_py.containers.requestdatas.request_data import RequestData
@@ -141,6 +144,7 @@ def test_okx_req_get_index_price_all():
 # ==================== Index Candles History API Tests ====================
 
 
+@pytest.mark.kline
 def test_okx_req_get_index_candles_history():
     """Test get_index_candles_history interface - Get historical index candlestick charts"""
     live_okx_swap_feed = init_req_feed()
@@ -153,6 +157,7 @@ def test_okx_req_get_index_candles_history():
     print("get_index_candles_history data count:", len(candles_data))
 
 
+@pytest.mark.kline
 def test_okx_async_get_index_candles_history():
     """Test async_get_index_candles_history interface"""
     data_queue = queue.Queue()
@@ -170,6 +175,7 @@ def test_okx_async_get_index_candles_history():
     print("async_get_index_candles_history status:", candles_data.get_status())
 
 
+@pytest.mark.kline
 def test_okx_req_get_index_candles_history_with_pagination():
     """Test get_index_candles_history interface with pagination"""
     live_okx_swap_feed = init_req_feed()
@@ -181,6 +187,7 @@ def test_okx_req_get_index_candles_history_with_pagination():
 # ==================== Mark Price Candles History API Tests ====================
 
 
+@pytest.mark.kline
 def test_okx_req_get_mark_price_candles_history():
     """Test get_mark_price_candles_history interface - Get historical mark price candlestick charts"""
     live_okx_swap_feed = init_req_feed()
@@ -195,6 +202,7 @@ def test_okx_req_get_mark_price_candles_history():
     print("get_mark_price_candles_history data count:", len(candles_data))
 
 
+@pytest.mark.kline
 def test_okx_async_get_mark_price_candles_history():
     """Test async_get_mark_price_candles_history interface"""
     data_queue = queue.Queue()
@@ -214,6 +222,7 @@ def test_okx_async_get_mark_price_candles_history():
     print("async_get_mark_price_candles_history status:", candles_data.get_status())
 
 
+@pytest.mark.kline
 def test_okx_req_get_mark_price_candles_history_with_pagination():
     """Test get_mark_price_candles_history interface with pagination"""
     live_okx_swap_feed = init_req_feed()

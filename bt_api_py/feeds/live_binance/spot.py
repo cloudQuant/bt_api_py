@@ -322,7 +322,6 @@ class BinanceRequestDataSpot(BinanceRequestData):
         extra_data=None,
         **kwargs,
     ):
-        print("run spot make_order")
         path, params, extra_data = self._make_order(
             symbol, vol, price, order_type, offset, post_only, client_order_id, extra_data, **kwargs
         )

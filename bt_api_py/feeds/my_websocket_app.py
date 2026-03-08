@@ -261,4 +261,4 @@ if __name__ == "__main__":
                     # print(exc.wss_name, "begin_to_run")
                     exc.start()
             except Exception as e:
-                print(e)
+                pass

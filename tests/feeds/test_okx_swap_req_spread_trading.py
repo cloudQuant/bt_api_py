@@ -1,6 +1,9 @@
+import pytest
 import queue
 import random
 import time
+
+pytestmark = [pytest.mark.integration, pytest.mark.network]
 
 from bt_api_py.containers.exchanges.okx_exchange_data import OkxExchangeDataSwap
 from bt_api_py.containers.requestdatas.request_data import RequestData
@@ -90,6 +93,7 @@ def test_okx_async_sprd_get_orders_history():
         print("async_sprd_get_orders_history status:", result.get_status())
 
 
+@pytest.mark.public_trade
 def test_okx_req_sprd_get_trades():
     """Test sprd_get_trades interface - Get spread trade history"""
     live_okx_swap_feed = init_req_feed()
@@ -102,6 +106,7 @@ def test_okx_req_sprd_get_trades():
     print("sprd_get_trades count:", len(trades_list))
 
 
+@pytest.mark.public_trade
 def test_okx_async_sprd_get_trades():
     """Test async_sprd_get_trades interface"""
     data_queue = queue.Queue()
@@ -173,6 +178,7 @@ def test_okx_async_sprd_order():
         print("async_sprd_order status:", result.get_status())
 
 
+@pytest.mark.auth_order
 def test_okx_req_sprd_cancel_order():
     """Test sprd_cancel_order interface - Cancel spread order"""
     live_okx_swap_feed = init_req_feed()
@@ -185,6 +191,7 @@ def test_okx_req_sprd_cancel_order():
     print("sprd_cancel_order result:", cancel_result)
 
 
+@pytest.mark.auth_order
 def test_okx_async_sprd_cancel_order():
     """Test async_sprd_cancel_order interface"""
     data_queue = queue.Queue()
@@ -200,6 +207,7 @@ def test_okx_async_sprd_cancel_order():
         print("async_sprd_cancel_order status:", result.get_status())
 
 
+@pytest.mark.auth_order
 def test_okx_sprd_trading_with_client_order_id():
     """Test spread trading with client order ID"""
     live_okx_swap_feed = init_req_feed()
@@ -260,6 +268,7 @@ def test_okx_sprd_get_orders_history_with_state():
     assert isinstance(orders_list, list)
 
 
+@pytest.mark.public_trade
 def test_okx_sprd_get_trades_with_instrument():
     """Test sprd_get_trades with specific spread instrument"""
     live_okx_swap_feed = init_req_feed()

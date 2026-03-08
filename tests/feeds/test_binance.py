@@ -65,6 +65,7 @@ class TestBinanceExchangeData:
         path = exchange_data.get_rest_path("make_order")
         assert "POST" in path or "order" in path
 
+    @pytest.mark.kline
     def test_kline_periods(self):
         """Test kline period configuration."""
         exchange_data = BinanceExchangeDataSpot()
@@ -135,6 +136,7 @@ class TestBinanceRequestDataSpot:
 class TestBinanceDataContainers:
     """Test Binance data containers."""
 
+    @pytest.mark.ticker
     def test_ticker_container(self):
         """Test ticker data container."""
         ticker_response = {
@@ -230,11 +232,13 @@ class TestBinanceIntegration:
     """Integration tests for Binance (marked as integration)."""
 
     @pytest.mark.integration
+    @pytest.mark.ticker
     def test_get_ticker_live(self):
         """Test getting ticker from live API."""
         pass
 
     @pytest.mark.integration
+    @pytest.mark.orderbook
     def test_get_orderbook_live(self):
         """Test getting orderbook from live API."""
         pass

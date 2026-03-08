@@ -92,6 +92,7 @@ class TestExchangeData:
         for c in ("INR", "USDT"):
             assert c in exdata.legal_currency
 
+    @pytest.mark.kline
     def test_kline_periods(self, exdata):
         for k in ("1m", "5m", "15m", "30m", "1h", "2h", "4h", "12h", "1d", "1w"):
             assert k in exdata.kline_periods
@@ -126,6 +127,7 @@ class TestExchangeData:
 
 
 class TestParamGeneration:
+    @pytest.mark.ticker
     def test_get_tick_params(self, feed):
         path, params, extra = feed._get_tick("BTC/INR")
         assert "ticker" in path.lower()
@@ -135,11 +137,13 @@ class TestParamGeneration:
         assert extra["asset_type"] == "SPOT"
         assert extra["exchange_name"] == "ZEBPAY___SPOT"
 
+    @pytest.mark.orderbook
     def test_get_depth_params(self, feed):
         path, params, extra = feed._get_depth("ETH/USDT")
         assert "orderbook" in path.lower()
         assert params["symbol"] == "ETH-USDT"
 
+    @pytest.mark.kline
     def test_get_kline_params(self, feed):
         path, params, extra = feed._get_kline("BTC/INR", "1h")
         assert "klines" in path.lower()
@@ -199,32 +203,39 @@ class TestParamGeneration:
 
 
 class TestNormalization:
+    @pytest.mark.ticker
     def test_tick_ok(self):
         result, ok = ZebpayRequestData._get_tick_normalize_function(SAMPLE_TICK, {})
         assert ok is True
         assert len(result) == 1
         assert result[0]["symbol"] == "BTC-INR"
 
+    @pytest.mark.ticker
     def test_tick_error(self):
         result, ok = ZebpayRequestData._get_tick_normalize_function(SAMPLE_ERROR, {})
         assert ok is False
 
+    @pytest.mark.ticker
     def test_tick_none(self):
         result, ok = ZebpayRequestData._get_tick_normalize_function(None, {})
         assert ok is False
 
+    @pytest.mark.orderbook
     def test_depth_ok(self):
         result, ok = ZebpayRequestData._get_depth_normalize_function(SAMPLE_DEPTH, {})
         assert ok is True
 
+    @pytest.mark.orderbook
     def test_depth_error(self):
         result, ok = ZebpayRequestData._get_depth_normalize_function(SAMPLE_ERROR, {})
         assert ok is False
 
+    @pytest.mark.kline
     def test_kline_dict(self):
         result, ok = ZebpayRequestData._get_kline_normalize_function(SAMPLE_KLINE, {})
         assert ok is True
 
+    @pytest.mark.kline
     def test_kline_error(self):
         result, ok = ZebpayRequestData._get_kline_normalize_function(SAMPLE_ERROR, {})
         assert ok is False
@@ -289,22 +300,26 @@ class TestNormalization:
 
 class TestSyncCalls:
     @patch.object(ZebpayRequestData, "http_request", return_value=SAMPLE_TICK)
+    @pytest.mark.ticker
     def test_get_tick(self, mock_http, feed):
         rd = feed.get_tick("BTC/INR")
         assert isinstance(rd, RequestData)
         mock_http.assert_called_once()
 
     @patch.object(ZebpayRequestData, "http_request", return_value=SAMPLE_TICK)
+    @pytest.mark.ticker
     def test_get_ticker(self, mock_http, feed):
         rd = feed.get_ticker("BTC/INR")
         assert isinstance(rd, RequestData)
 
     @patch.object(ZebpayRequestData, "http_request", return_value=SAMPLE_DEPTH)
+    @pytest.mark.orderbook
     def test_get_depth(self, mock_http, feed):
         rd = feed.get_depth("ETH/USDT")
         assert isinstance(rd, RequestData)
 
     @patch.object(ZebpayRequestData, "http_request", return_value=SAMPLE_KLINE)
+    @pytest.mark.kline
     def test_get_kline(self, mock_http, feed):
         rd = feed.get_kline("BTC/INR", "1h")
         assert isinstance(rd, RequestData)
@@ -505,12 +520,14 @@ class TestWebSocketStubs:
 
 
 class TestDataContainers:
+    @pytest.mark.ticker
     def test_ticker_float_parsing(self):
         assert ZebpayRequestTickerData._parse_float("5000000") == 5000000.0
         assert ZebpayRequestTickerData._parse_float(5000000) == 5000000.0
         assert ZebpayRequestTickerData._parse_float(None) is None
         assert ZebpayRequestTickerData._parse_float("invalid") is None
 
+    @pytest.mark.ticker
     def test_ticker_class_methods(self):
         assert hasattr(ZebpayRequestTickerData, "_parse_float")
         assert hasattr(ZebpayRequestTickerData, "init_data")
@@ -523,18 +540,21 @@ class TestDataContainers:
 
 class TestIntegration:
     @pytest.mark.skip(reason="Requires network access")
+    @pytest.mark.ticker
     def test_live_get_tick(self):
         f = ZebpayRequestDataSpot(queue.Queue())
         rd = f.get_tick("BTC-INR")
         assert isinstance(rd, RequestData)
 
     @pytest.mark.skip(reason="Requires network access")
+    @pytest.mark.orderbook
     def test_live_get_depth(self):
         f = ZebpayRequestDataSpot(queue.Queue())
         rd = f.get_depth("BTC-INR")
         assert isinstance(rd, RequestData)
 
     @pytest.mark.skip(reason="Requires network access")
+    @pytest.mark.kline
     def test_live_get_kline(self):
         f = ZebpayRequestDataSpot(queue.Queue())
         rd = f.get_kline("BTC-INR", period="1h", count=10)

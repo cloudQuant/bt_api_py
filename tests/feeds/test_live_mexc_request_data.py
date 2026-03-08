@@ -1,3 +1,5 @@
+import pytest
+
 """
 MEXC Exchange Live Request Data Tests
 
@@ -40,6 +42,7 @@ def test_mexc_req_server_time():
     assert "time" in path.lower() or "server" in path.lower()
 
 
+@pytest.mark.ticker
 def test_mexc_req_tick_data():
     """Test MEXC ticker data retrieval (synchronous)."""
     live_mexc_spot_feed = init_req_feed()
@@ -51,6 +54,7 @@ def test_mexc_req_tick_data():
     assert extra_data["request_type"] in ["get_24hr_ticker", "get_ticker"]
 
 
+@pytest.mark.ticker
 def test_mexc_async_tick_data():
     """Test MEXC ticker data retrieval (asynchronous)."""
     data_queue = queue.Queue()
@@ -61,6 +65,7 @@ def test_mexc_async_tick_data():
     pass
 
 
+@pytest.mark.kline
 def test_mexc_req_kline_data():
     """Test MEXC kline/candlestick data retrieval (synchronous)."""
     live_mexc_spot_feed = init_req_feed()
@@ -73,6 +78,7 @@ def test_mexc_req_kline_data():
     assert extra_data["request_type"] == "get_klines"
 
 
+@pytest.mark.kline
 def test_mexc_async_kline_data():
     """Test MEXC kline data retrieval (asynchronous)."""
     data_queue = queue.Queue()
@@ -121,6 +127,7 @@ def order_book_value_equals(order_book):
         assert ask_volume >= 0, "Ask volume should be non-negative"
 
 
+@pytest.mark.orderbook
 def test_mexc_req_orderbook_data():
     """Test MEXC orderbook data retrieval."""
     live_mexc_spot_feed = init_req_feed()
@@ -132,6 +139,7 @@ def test_mexc_req_orderbook_data():
     assert extra_data["request_type"] == "get_order_book"
 
 
+@pytest.mark.ticker
 def test_mexc_ticker_normalize_function():
     """Test MEXC ticker normalize function."""
     ticker_response = {
@@ -174,6 +182,7 @@ def test_mexc_ticker_normalize_function():
     assert ticker.get_ask_price() == 50001.0
 
 
+@pytest.mark.orderbook
 def test_mexc_orderbook_normalize_function():
     """Test MEXC orderbook normalize function."""
     orderbook_response = {

@@ -264,6 +264,7 @@ class TestDataContracts:
     @pytest.mark.contract
     @pytest.mark.unit
     @given(data=binance_ticker_data())
+    @pytest.mark.ticker
     def test_ticker_data_contract(self, data):
         """Test ticker data contract invariants."""
         # Property: Required fields should exist
