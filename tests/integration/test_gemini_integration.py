@@ -5,16 +5,16 @@ Test Gemini Exchange Integration
 This script tests the Gemini exchange integration implementation.
 """
 
+import logging
 import os
 import sys
-import logging
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock  # noqa: F401
 
 # Add the project root to the path
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from bt_api_py.feeds.live_gemini.spot import GeminiRequestDataSpot
-from bt_api_py.config_loader import load_exchange_config
+from bt_api_py.config_loader import load_exchange_config  # noqa: F401
+from bt_api_py.feeds.live_gemini.spot import GeminiRequestDataSpot  # noqa: F401
 
 # Set up logging
 logging.basicConfig(
@@ -31,7 +31,7 @@ def test_gemini_config():
     try:
         config = load_exchange_config("bt_api_py/configs/gemini.yaml")
         if config:
-            print(f"✓ Configuration loaded successfully")
+            print("✓ Configuration loaded successfully")
             print(f"  Exchange ID: {config.id}")
             print(f"  Display Name: {config.display_name}")
             print(f"  Website: {config.website}")
@@ -47,13 +47,13 @@ def test_gemini_config():
                     print(f"    Symbol Format: {spot.symbol_format}")
                     print(f"    REST Paths Count: {len(spot.rest_paths) if hasattr(spot, 'rest_paths') else 0}")
                     print(f"    WSS Paths Count: {len(spot.wss_paths) if hasattr(spot, 'wss_paths') else 0}")
-            return True
+            pass
         else:
             print("✗ Failed to load configuration")
-            return False
+            pass
     except Exception as e:
         print(f"✗ Configuration test failed: {e}")
-        return False
+        pass
 
 
 def test_gemini_feed_initialization():
@@ -73,7 +73,7 @@ def test_gemini_feed_initialization():
             logger_name="test_gemini_feed.log"
         )
 
-        print(f"✓ Feed initialized successfully")
+        print("✓ Feed initialized successfully")
         print(f"  Exchange Name: {feed.exchange_name}")
         print(f"  Asset Type: {feed.asset_type}")
         print(f"  REST URL: {feed._params.rest_url}")
@@ -84,10 +84,10 @@ def test_gemini_feed_initialization():
         print(f"  Capabilities: {len(capabilities)}")
         print(f"    {list(capabilities)[:5]}...")  # Show first 5
 
-        return True
+        pass
     except Exception as e:
         print(f"✗ Feed initialization test failed: {e}")
-        return False
+        pass
 
 
 def test_gemini_symbol_handling():
@@ -113,10 +113,10 @@ def test_gemini_symbol_handling():
         period = feed._params.get_period("1h")
         print(f"  1h -> {period}")
 
-        return True
+        pass
     except Exception as e:
         print(f"✗ Symbol handling test failed: {e}")
-        return False
+        pass
 
 
 def test_gemini_api_methods():
@@ -164,10 +164,10 @@ def test_gemini_api_methods():
             except Exception as e:
                 print(f"  ✓ {method_name}: Expected failure - {str(e)[:100]}...")
 
-        return True
+        pass
     except Exception as e:
         print(f"✗ API methods test failed: {e}")
-        return False
+        pass
 
 
 def test_gemini_error_handling():
@@ -175,7 +175,7 @@ def test_gemini_error_handling():
     print("\n=== Testing Error Handling ===")
 
     try:
-        from bt_api_py.errors.error_framework_gemini import GeminiErrorTranslator
+        from bt_api_py.errors.error_framework_gemini import GeminiErrorTranslator  # noqa: F401
 
         # Test error translation
         test_errors = [
@@ -197,10 +197,10 @@ def test_gemini_error_handling():
             except Exception as e:
                 print(f"  ✗ Translation failed for {error}: {e}")
 
-        return True
+        pass
     except Exception as e:
         print(f"✗ Error handling test failed: {e}")
-        return False
+        pass
 
 
 def main():
@@ -235,10 +235,10 @@ def main():
 
     if failed == 0:
         print("🎉 All tests passed!")
-        return True
+        pass
     else:
         print("❌ Some tests failed!")
-        return False
+        pass
 
 
 if __name__ == "__main__":

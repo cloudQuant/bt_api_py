@@ -52,12 +52,17 @@ markers = [
     "integration: Integration tests (may require external services)",
     "slow: Slow tests (> 1s)",
     "network: Tests requiring network access",
+    "contract: Contract tests for API and feed behavior",
+    "performance: Performance and benchmark tests",
+    "e2e: End-to-end workflow tests",
+    "flaky: Tests known to be timing-sensitive or environment-sensitive",
     "ctp: CTP related tests",
     "binance: Binance exchange tests",
     "okx: OKX exchange tests",
     "ib: Interactive Brokers tests",
 ]
 timeout = 120
+asyncio_default_fixture_loop_scope = "function"
 testpaths = ["tests"]
 python_files = ["test_*.py"]
 python_classes = ["Test*"]
@@ -80,6 +85,7 @@ parallel = true
 precision = 2
 show_missing = true
 skip_covered = false
+fail_under = 60
 exclude_lines = [
     "pragma: no cover",
     "def __repr__",
@@ -179,6 +185,10 @@ visualization = [
     "matplotlib>=3.7.0",
     "pyecharts>=2.0.0",
 ]
+monitoring = [
+    "psutil>=5.9.0",
+    "aiohttp>=3.9.0",
+]
 email = [
     "aiosmtplib>=2.0.0",
 ]
@@ -196,5 +206,5 @@ cookies = [
     "browser-cookie3>=0.19.0",
 ]
 all = [
-    "bt_api_py[dev,visualization,email,time,ib,ib_web,cookies]",
+    "bt_api_py[dev,visualization,email,time,ib,ib_web,cookies,monitoring]",
 ]

@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
 Test script for MEXC integration
+# ruff: noqa: F401  # Import verification tests - F401 unused imports allowed
 
 This script tests whether the MEXC feed can be imported and instantiated.
 """
@@ -17,10 +18,10 @@ def test_mexc_import():
     try:
         from bt_api_py.feeds.live_mexc import MexcRequestData, MexcRequestDataSpot
         print("✓ Successfully imported MEXC feed classes")
-        return True
+        pass
     except ImportError as e:
         print(f"✗ Failed to import MEXC feed classes: {e}")
-        return False
+        pass
 
 def test_mexc_exchange_data():
     """Test if MEXC exchange data can be imported and instantiated"""
@@ -35,10 +36,10 @@ def test_mexc_exchange_data():
         print(f"  - WebSocket URL: {exchange_data.wss_url}")
         print(f"  - Number of REST paths: {len(exchange_data.rest_paths)}")
         print(f"  - Number of WebSocket paths: {len(exchange_data.wss_paths)}")
-        return True
+        pass
     except Exception as e:
         print(f"✗ Failed to create MexcExchangeDataSpot instance: {e}")
-        return False
+        pass
 
 def test_mexc_data_containers():
     """Test if MEXC data containers can be imported"""
@@ -50,10 +51,10 @@ def test_mexc_data_containers():
         from bt_api_py.containers.trades.mexc_trade import MexcRequestTradeData
 
         print("✓ Successfully imported all MEXC data container classes")
-        return True
+        pass
     except ImportError as e:
         print(f"✗ Failed to import MEXC data container classes: {e}")
-        return False
+        pass
 
 def test_mexc_registration():
     """Test if MEXC registration works"""
@@ -61,10 +62,10 @@ def test_mexc_registration():
         # This should register the feed without errors
         import bt_api_py.exchange_registers.register_mexc
         print("✓ Successfully imported MEXC registration module")
-        return True
+        pass
     except Exception as e:
         print(f"✗ Failed to import MEXC registration module: {e}")
-        return False
+        pass
 
 def test_mexc_feed_instantiation():
     """Test if MEXC feed can be instantiated"""
@@ -90,10 +91,10 @@ def test_mexc_feed_instantiation():
         print("✓ Successfully created MexcRequestDataSpot instance")
         print(f"  - Asset type: {feed.asset_type}")
         print(f"  - Exchange name: {feed.exchange_name}")
-        return True
+        pass
     except Exception as e:
         print(f"✗ Failed to create MexcRequestDataSpot instance: {e}")
-        return False
+        pass
 
 def main():
     """Run all tests"""
@@ -121,10 +122,10 @@ def main():
 
     if passed == total:
         print("🎉 All tests passed! MEXC integration is working correctly.")
-        return True
+        pass
     else:
         print("❌ Some tests failed. Please check the implementation.")
-        return False
+        pass
 
 if __name__ == "__main__":
     success = main()

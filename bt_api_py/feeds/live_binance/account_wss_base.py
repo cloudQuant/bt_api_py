@@ -29,7 +29,7 @@ class BinanceAccountWssData(MyWebsocketApp, BinanceRequestData):
         self.wss_author()
         # ping = threading.Thread(target=self.ping)
         # ping.start()
-        # print("初始化成功")
+        # self.logger.info("初始化成功")
 
     def get_listen_key(self, max_retries=3):
         path = self._params.get_rest_path("get_listen_key")
@@ -77,12 +77,12 @@ class BinanceAccountWssData(MyWebsocketApp, BinanceRequestData):
             try:
                 self.refresh_listen_key()
             except Exception as e:
-                print(e)
+                self.logger.info(e)
 
     def wss_author(self):
         self.listen_key = self.get_listen_key()["listenKey"]
         self.wss_url = f"{self._params.wss_url}/{self.listen_key}"
-        # print("wss_author", self.wss_url)
+        # self.logger.info("wss_author", self.wss_url)
 
     def open_rsp(self):
         self.wss_logger.info(
@@ -123,28 +123,28 @@ class BinanceAccountWssData(MyWebsocketApp, BinanceRequestData):
 
     def push_account(self, content):
         # 推送account数据并添加到事件中
-        # print("订阅到账户数据")
+        # self.logger.info("订阅到账户数据")
         symbol = "ALL"
         account_data = BinanceSwapWssAccountData(content, symbol, self.asset_type, True)
         self.data_queue.put(account_data)
-        # print("获取account数据成功，当前账户净值为：", account_data.get_balances()[0].get_margin())
+        # self.logger.info("获取account数据成功，当前账户净值为：", account_data.get_balances()[0].get_margin())
 
     def push_order(self, content):
-        # print("订阅到order数据")
+        # self.logger.info("订阅到order数据")
         symbol = content["o"]["s"]
         order_data = BinanceSwapWssOrderData(content, symbol, self.asset_type, True)
         self.data_queue.put(order_data)
-        # print("获取order成功，当前order_status 为：", order_data.get_order_status())
+        # self.logger.info("获取order成功，当前order_status 为：", order_data.get_order_status())
 
     def push_trade(self, content):
         symbol = content["o"]["s"]
         trade_data = BinanceSwapWssTradeData(content, symbol, self.asset_type, True)
         self.data_queue.put(trade_data)
-        # print("获取trade成功，当前trade_id 为：", trade_data.get_trade_id())
+        # self.logger.info("获取trade成功，当前trade_id 为：", trade_data.get_trade_id())
 
     def message_rsp(self, message):
         rsp = json.loads(message)
-        # print("message received:", rsp)
+        # self.logger.info("message received:", rsp)
         if "e" in rsp:
             self.handle_data(rsp)
         else:

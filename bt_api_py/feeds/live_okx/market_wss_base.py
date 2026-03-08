@@ -28,6 +28,7 @@ from bt_api_py.containers.tickers.okx_ticker import OkxTickerData
 from bt_api_py.containers.trades.okx_market_trade import OkxMarketTradeData
 from bt_api_py.containers.trades.okx_trade import OkxWssFillsData, OkxWssTradeData
 from bt_api_py.feeds.my_websocket_app import MyWebsocketApp
+from bt_api_py.logging_factory import get_logger
 
 
 class OkxWssData(MyWebsocketApp):
@@ -41,6 +42,7 @@ class OkxWssData(MyWebsocketApp):
         self.passphrase = kwargs.get("passphrase")
         self.wss_url = kwargs.get("wss_url")
         self.asset_type = kwargs.get("asset_type", "SWAP")
+        self.logger = get_logger("okx_market_wss")
 
     def sign(self, content):
         """签名
@@ -86,54 +88,70 @@ class OkxWssData(MyWebsocketApp):
             if "orders" in topics["topic"]:
                 symbol = topics.get("symbol", "BTC—USDT")
                 self.subscribe(topic="orders", symbol=symbol)
-                print(f"subscribe {self.count} data, OKX, {self.asset_type}, {symbol}, orders")
+                self.logger.info(
+                    f"subscribe {self.count} data, OKX, {self.asset_type}, {symbol}, orders"
+                )
 
             # Algo order channels - check specific ones first
             if topics["topic"] == "algo_orders" or "algo_orders" in topics["topic"]:
                 symbol = topics.get("symbol", "BTC-USDT-SWAP")
                 self.subscribe(topic="algo_orders", symbol=symbol)
-                print(f"subscribe {self.count} data, OKX, {self.asset_type}, {symbol}, algo_orders")
+                self.logger.info(
+                    f"subscribe {self.count} data, OKX, {self.asset_type}, {symbol}, algo_orders"
+                )
 
             if topics["topic"] == "algo_advance" or "algo_advance" in topics["topic"]:
                 symbol = topics.get("symbol", "BTC-USDT-SWAP")
                 self.subscribe(topic="algo_advance", symbol=symbol)
-                print(
+                self.logger.info(
                     f"subscribe {self.count} data, OKX, {self.asset_type}, {symbol}, algo_advance"
                 )
 
             if "fills" in topics["topic"]:
                 symbol = topics.get("symbol", "BTC—USDT")
                 self.subscribe(topic="fills", symbol=symbol)
-                print(f"subscribe {self.count} data, OKX, {self.asset_type}, {symbol}, fills")
+                self.logger.info(
+                    f"subscribe {self.count} data, OKX, {self.asset_type}, {symbol}, fills"
+                )
 
             if "liquidation_warning" in topics["topic"]:
                 self.subscribe(topic="liquidation_warning")
-                print(f"subscribe {self.count} data, OKX, {self.asset_type}, liquidation_warning")
+                self.logger.info(
+                    f"subscribe {self.count} data, OKX, {self.asset_type}, liquidation_warning"
+                )
 
             if "account_greeks" in topics["topic"]:
                 self.subscribe(topic="account_greeks")
-                print(f"subscribe {self.count} data, OKX, {self.asset_type}, account_greeks")
+                self.logger.info(
+                    f"subscribe {self.count} data, OKX, {self.asset_type}, account_greeks"
+                )
 
             if "account" in topics["topic"]:
                 symbol = topics.get("symbol", "BTC—USDT")
                 currency = topics.get("currency", "USDT")
                 self.subscribe(topic="account", symbol=symbol, currency=currency)
-                print(f"subscribe {self.count} data, OKX, {self.asset_type}, {symbol}, account")
+                self.logger.info(
+                    f"subscribe {self.count} data, OKX, {self.asset_type}, {symbol}, account"
+                )
 
             if "positions" in topics["topic"]:
                 symbol = topics.get("symbol", "BTC—USDT")
                 self.subscribe(topic="positions", symbol=symbol)
-                print(f"subscribe {self.count} data, OKX, {self.asset_type}, {symbol}, positions")
+                self.logger.info(
+                    f"subscribe {self.count} data, OKX, {self.asset_type}, {symbol}, positions"
+                )
 
             if "balance_position" in self.topics:
                 self.subscribe(topic="balance_position")
-                print(f"subscribe {self.count} data, OKX, {self.asset_type}, balance_position")
+                self.logger.info(
+                    f"subscribe {self.count} data, OKX, {self.asset_type}, balance_position"
+                )
 
             # Orderbook channels - check specific ones first to avoid substring conflicts
             if topics["topic"] == "books_l2_tbt" or topics["topic"] == "books_l2_tbt":
                 symbol = topics.get("symbol", "BTC—USDT")
                 self.subscribe(topic="books_l2_tbt", symbol=symbol)
-                print(
+                self.logger.info(
                     f"subscribe {self.count} data, OKX, {self.asset_type}, {symbol}, books_l2_tbt"
                 )
             elif (
@@ -144,88 +162,110 @@ class OkxWssData(MyWebsocketApp):
             ):
                 symbol = topics.get("symbol", "BTC—USDT")
                 self.subscribe(topic="books", symbol=symbol, type="step0")
-                print(f"subscribe {self.count} data, OKX, {self.asset_type}, {symbol}, orderbook")
+                self.logger.info(
+                    f"subscribe {self.count} data, OKX, {self.asset_type}, {symbol}, orderbook"
+                )
 
             if topics["topic"] == "ticker" or "ticker" in topics["topic"]:
                 symbol = topics.get("symbol", "BTC—USDT")
                 self.subscribe(topic="tick", symbol=symbol)
-                print(f"subscribe {self.count} data, OKX, {self.asset_type}, {symbol}, ticker")
+                self.logger.info(
+                    f"subscribe {self.count} data, OKX, {self.asset_type}, {symbol}, ticker"
+                )
 
             if topics["topic"] == "depth" or "depth" in topics["topic"]:
                 symbol = topics.get("symbol", "BTC—USDT")
                 self.subscribe(topic="depth", symbol=symbol, type="step0")
-                print(f"subscribe {self.count} data, OKX, {self.asset_type}, {symbol}, depth")
+                self.logger.info(
+                    f"subscribe {self.count} data, OKX, {self.asset_type}, {symbol}, depth"
+                )
 
             if topics["topic"] == "bidAsk" or "bidAsk" in topics["topic"]:
                 symbol = topics.get("symbol", "BTC—USDT")
                 self.subscribe(topic="bidAsk", symbol=symbol, type="step0")
-                print(f"subscribe {self.count} data, OKX, {self.asset_type}, {symbol}, bidAsk")
+                self.logger.info(
+                    f"subscribe {self.count} data, OKX, {self.asset_type}, {symbol}, bidAsk"
+                )
 
             if topics["topic"] == "funding_rate" or "funding_rate" in topics["topic"]:
                 symbol = topics.get("symbol", "BTC—USDT")
                 self.subscribe(topic="funding_rate", symbol=symbol)
-                print(
+                self.logger.info(
                     f"subscribe {self.count} data, OKX, {self.asset_type}, {symbol}, funding_rate"
                 )
 
             if topics["topic"] == "mark_price" or "mark_price" in topics["topic"]:
                 symbol = topics.get("symbol", "BTC—USDT")
                 self.subscribe(topic="mark_price", symbol=symbol)
-                print(f"subscribe {self.count} data, OKX, {self.asset_type}, {symbol}, mark_price")
+                self.logger.info(
+                    f"subscribe {self.count} data, OKX, {self.asset_type}, {symbol}, mark_price"
+                )
 
             if topics["topic"] == "kline" or "kline" in topics["topic"]:
                 period = topics.get("period", "1m")
                 symbol = topics.get("symbol", "BTC—USDT")
                 self.subscribe(topic="kline", symbol=symbol, period=period)
-                print(f"subscribe {self.count} data, OKX, {self.asset_type}, {symbol}, kline")
+                self.logger.info(
+                    f"subscribe {self.count} data, OKX, {self.asset_type}, {symbol}, kline"
+                )
 
             if topics["topic"] == "trades" or (
                 "trades" in topics["topic"] and "trades_all" not in topics["topic"]
             ):
                 symbol = topics.get("symbol", "BTC—USDT")
                 self.subscribe(topic="trades", symbol=symbol)
-                print(f"subscribe {self.count} data, OKX, {self.asset_type}, {symbol}, trades")
+                self.logger.info(
+                    f"subscribe {self.count} data, OKX, {self.asset_type}, {symbol}, trades"
+                )
 
             if topics["topic"] == "trades_all" or "trades_all" in topics["topic"]:
                 symbol = topics.get("symbol", "BTC—USDT")
                 self.subscribe(topic="trades_all", symbol=symbol)
-                print(f"subscribe {self.count} data, OKX, {self.asset_type}, {symbol}, trades_all")
+                self.logger.info(
+                    f"subscribe {self.count} data, OKX, {self.asset_type}, {symbol}, trades_all"
+                )
 
             if topics["topic"] == "open_interest" or "open_interest" in topics["topic"]:
                 symbol = topics.get("symbol", "BTC—USDT")
                 self.subscribe(topic="open_interest", symbol=symbol)
-                print(
+                self.logger.info(
                     f"subscribe {self.count} data, OKX, {self.asset_type}, {symbol}, open_interest"
                 )
 
             if topics["topic"] == "price_limit" or "price_limit" in topics["topic"]:
                 symbol = topics.get("symbol", "BTC—USDT")
                 self.subscribe(topic="price_limit", symbol=symbol)
-                print(f"subscribe {self.count} data, OKX, {self.asset_type}, {symbol}, price_limit")
+                self.logger.info(
+                    f"subscribe {self.count} data, OKX, {self.asset_type}, {symbol}, price_limit"
+                )
 
             if topics["topic"] == "liquidation_orders" or "liquidation_orders" in topics["topic"]:
                 self.subscribe(topic="liquidation_orders")
-                print(f"subscribe {self.count} data, OKX, {self.asset_type}, liquidation_orders")
+                self.logger.info(
+                    f"subscribe {self.count} data, OKX, {self.asset_type}, liquidation_orders"
+                )
 
             # Additional market channels
             if topics["topic"] == "books_sbe_tbt" or "books_sbe_tbt" in topics["topic"]:
                 symbol = topics.get("symbol", "BTC-USDT-SWAP")
                 self.subscribe(topic="books_sbe_tbt", symbol=symbol)
-                print(
+                self.logger.info(
                     f"subscribe {self.count} data, OKX, {self.asset_type}, {symbol}, books_sbe_tbt"
                 )
 
             if topics["topic"] == "increDepthFlow" or "increDepthFlow" in topics["topic"]:
                 symbol = topics.get("symbol", "BTC-USDT-SWAP")
                 self.subscribe(topic="increDepthFlow", symbol=symbol)
-                print(
+                self.logger.info(
                     f"subscribe {self.count} data, OKX, {self.asset_type}, {symbol}, increDepthFlow"
                 )
 
             if topics["topic"] == "opt_trades" or "opt_trades" in topics["topic"]:
                 symbol = topics.get("symbol", "BTC-USD")
                 self.subscribe(topic="opt_trades", symbol=symbol)
-                print(f"subscribe {self.count} data, OKX, {self.asset_type}, {symbol}, opt_trades")
+                self.logger.info(
+                    f"subscribe {self.count} data, OKX, {self.asset_type}, {symbol}, opt_trades"
+                )
 
             if (
                 topics["topic"] == "call_auction_details"
@@ -233,71 +273,85 @@ class OkxWssData(MyWebsocketApp):
             ):
                 symbol = topics.get("symbol", "BTC-USDT-SWAP")
                 self.subscribe(topic="call_auction_details", symbol=symbol)
-                print(
+                self.logger.info(
                     f"subscribe {self.count} data, OKX, {self.asset_type}, {symbol}, call_auction_details"
                 )
 
             if topics["topic"] == "opt_summary" or "opt_summary" in topics["topic"]:
                 self.subscribe(topic="opt_summary")
-                print(f"subscribe {self.count} data, OKX, {self.asset_type}, opt_summary")
+                self.logger.info(
+                    f"subscribe {self.count} data, OKX, {self.asset_type}, opt_summary"
+                )
 
             if topics["topic"] == "estimated_price" or "estimated_price" in topics["topic"]:
                 symbol = topics.get("symbol", "BTC-USDT-SWAP")
                 self.subscribe(topic="estimated_price", symbol=symbol)
-                print(
+                self.logger.info(
                     f"subscribe {self.count} data, OKX, {self.asset_type}, {symbol}, estimated_price"
                 )
 
             if topics["topic"] == "index_tickers" or "index_tickers" in topics["topic"]:
                 symbol = topics.get("symbol", "BTC-USD")
                 self.subscribe(topic="index_tickers", symbol=symbol)
-                print(
+                self.logger.info(
                     f"subscribe {self.count} data, OKX, {self.asset_type}, {symbol}, index_tickers"
                 )
 
             if topics["topic"] == "instruments" or "instruments" in topics["topic"]:
                 self.subscribe(topic="instruments")
-                print(f"subscribe {self.count} data, OKX, {self.asset_type}, instruments")
+                self.logger.info(
+                    f"subscribe {self.count} data, OKX, {self.asset_type}, instruments"
+                )
 
             if topics["topic"] == "adl_warning" or "adl_warning" in topics["topic"]:
                 self.subscribe(topic="adl_warning")
-                print(f"subscribe {self.count} data, OKX, {self.asset_type}, adl_warning")
+                self.logger.info(
+                    f"subscribe {self.count} data, OKX, {self.asset_type}, adl_warning"
+                )
 
             if topics["topic"] == "status" or "status" in topics["topic"]:
                 self.subscribe(topic="status")
-                print(f"subscribe {self.count} data, OKX, {self.asset_type}, status")
+                self.logger.info(f"subscribe {self.count} data, OKX, {self.asset_type}, status")
 
             if topics["topic"] == "kline_index" or "kline_index" in topics["topic"]:
                 period = topics.get("period", "1m")
                 symbol = topics.get("symbol", "BTC-USD")
                 self.subscribe(topic="kline_index", symbol=symbol, period=period)
-                print(f"subscribe {self.count} data, OKX, {self.asset_type}, {symbol}, kline_index")
+                self.logger.info(
+                    f"subscribe {self.count} data, OKX, {self.asset_type}, {symbol}, kline_index"
+                )
 
             if topics["topic"] == "kline_mark_price" or "kline_mark_price" in topics["topic"]:
                 period = topics.get("period", "1m")
                 symbol = topics.get("symbol", "BTC-USDT-SWAP")
                 self.subscribe(topic="kline_mark_price", symbol=symbol, period=period)
-                print(
+                self.logger.info(
                     f"subscribe {self.count} data, OKX, {self.asset_type}, {symbol}, kline_mark_price"
                 )
 
             if topics["topic"] == "economic_calendar" or "economic_calendar" in topics["topic"]:
                 self.subscribe(topic="economic_calendar")
-                print(f"subscribe {self.count} data, OKX, {self.asset_type}, economic_calendar")
+                self.logger.info(
+                    f"subscribe {self.count} data, OKX, {self.asset_type}, economic_calendar"
+                )
 
             if topics["topic"] == "deposit_info" or "deposit_info" in topics["topic"]:
                 self.subscribe(topic="deposit_info")
-                print(f"subscribe {self.count} data, OKX, {self.asset_type}, deposit_info")
+                self.logger.info(
+                    f"subscribe {self.count} data, OKX, {self.asset_type}, deposit_info"
+                )
 
             if topics["topic"] == "withdrawal_info" or "withdrawal_info" in topics["topic"]:
                 self.subscribe(topic="withdrawal_info")
-                print(f"subscribe {self.count} data, OKX, {self.asset_type}, withdrawal_info")
+                self.logger.info(
+                    f"subscribe {self.count} data, OKX, {self.asset_type}, withdrawal_info"
+                )
 
             # Grid trading channels
             if topics["topic"] == "grid_orders_spot" or "grid_orders_spot" in topics["topic"]:
                 symbol = topics.get("symbol", "BTC-USDT")
                 self.subscribe(topic="grid-orders-spot", instId=symbol)
-                print(
+                self.logger.info(
                     f"subscribe {self.count} data, OKX, {self.asset_type}, {symbol}, grid-orders-spot"
                 )
 
@@ -308,7 +362,7 @@ class OkxWssData(MyWebsocketApp):
                 symbol = topics.get("symbol", "BTC-USDT-SWAP")
                 ccy = topics.get("ccy", "BTC")
                 self.subscribe(topic="grid-orders-contract", instId=symbol, ccy=ccy)
-                print(
+                self.logger.info(
                     f"subscribe {self.count} data, OKX, {self.asset_type}, {symbol}, grid-orders-contract"
                 )
 
@@ -316,14 +370,14 @@ class OkxWssData(MyWebsocketApp):
                 inst_type = topics.get("instType", "SWAP")
                 symbol = topics.get("symbol", "BTC-USDT-SWAP")
                 self.subscribe(topic="grid-positions", instType=inst_type, instId=symbol)
-                print(
+                self.logger.info(
                     f"subscribe {self.count} data, OKX, {self.asset_type}, {symbol}, grid-positions"
                 )
 
             if topics["topic"] == "grid_sub_orders" or "grid_sub_orders" in topics["topic"]:
                 symbol = topics.get("symbol", "BTC-USDT-SWAP")
                 self.subscribe(topic="grid-sub-orders", instId=symbol)
-                print(
+                self.logger.info(
                     f"subscribe {self.count} data, OKX, {self.asset_type}, {symbol}, grid-sub-orders"
                 )
 
@@ -331,14 +385,14 @@ class OkxWssData(MyWebsocketApp):
             if topics["topic"] == "sprd_orders" or "sprd_orders" in topics["topic"]:
                 sprd_id = topics.get("sprdId", "")
                 self.subscribe(topic="sprd-orders", sprdId=sprd_id)
-                print(
+                self.logger.info(
                     f"subscribe {self.count} data, OKX, {self.asset_type}, sprd-orders, sprdId={sprd_id}"
                 )
 
             if topics["topic"] == "sprd_tickers" or "sprd_tickers" in topics["topic"]:
                 sprd_id = topics.get("sprdId", "")
                 self.subscribe(topic="sprd-tickers", sprdId=sprd_id)
-                print(
+                self.logger.info(
                     f"subscribe {self.count} data, OKX, {self.asset_type}, sprd-tickers, sprdId={sprd_id}"
                 )
 
@@ -346,17 +400,21 @@ class OkxWssData(MyWebsocketApp):
             if topics["topic"] == "rfqs" or "rfqs" in topics["topic"]:
                 symbol = topics.get("symbol", "BTC-USDT-SWAP")
                 self.subscribe(topic="rfqs", symbol=symbol)
-                print(f"subscribe {self.count} data, OKX, {self.asset_type}, {symbol}, rfqs")
+                self.logger.info(
+                    f"subscribe {self.count} data, OKX, {self.asset_type}, {symbol}, rfqs"
+                )
 
             if topics["topic"] == "quotes" or "quotes" in topics["topic"]:
                 symbol = topics.get("symbol", "BTC-USDT-SWAP")
                 self.subscribe(topic="quotes", symbol=symbol)
-                print(f"subscribe {self.count} data, OKX, {self.asset_type}, {symbol}, quotes")
+                self.logger.info(
+                    f"subscribe {self.count} data, OKX, {self.asset_type}, {symbol}, quotes"
+                )
 
             if topics["topic"] == "struc_block_trades" or "struc_block_trades" in topics["topic"]:
                 symbol = topics.get("symbol", "BTC-USDT-SWAP")
                 self.subscribe(topic="struc-block-trades", symbol=symbol)
-                print(
+                self.logger.info(
                     f"subscribe {self.count} data, OKX, {self.asset_type}, {symbol}, struc-block-trades"
                 )
 
@@ -365,17 +423,21 @@ class OkxWssData(MyWebsocketApp):
                 or "public_struc_block_trades" in topics["topic"]
             ):
                 self.subscribe(topic="public-struc-block-trades")
-                print(
+                self.logger.info(
                     f"subscribe {self.count} data, OKX, {self.asset_type}, public-struc-block-trades"
                 )
 
             if topics["topic"] == "public_block_trades" or "public_block_trades" in topics["topic"]:
                 self.subscribe(topic="public-block-trades")
-                print(f"subscribe {self.count} data, OKX, {self.asset_type}, public-block-trades")
+                self.logger.info(
+                    f"subscribe {self.count} data, OKX, {self.asset_type}, public-block-trades"
+                )
 
             if topics["topic"] == "block_tickers" or "block_tickers" in topics["topic"]:
                 self.subscribe(topic="block-tickers")
-                print(f"subscribe {self.count} data, OKX, {self.asset_type}, block-tickers")
+                self.logger.info(
+                    f"subscribe {self.count} data, OKX, {self.asset_type}, block-tickers"
+                )
 
     def handle_data(self, content):
         arg = content.get("arg", None)
@@ -531,12 +593,12 @@ class OkxWssData(MyWebsocketApp):
         self.data_queue.put(account_data)
 
     def push_order(self, content):
-        print("订阅到order数据")
+        self.logger.info("订阅到order数据")
         order_info = content["data"][0]
         symbol = content["arg"]["instId"]
         order_data = OkxOrderData(order_info, symbol, self.asset_type, True)
         self.data_queue.put(order_data)
-        print("获取order成功，当前order_status 为：", order_data.get_order_status())
+        self.logger.info("获取order成功，当前order_status 为：", order_data.get_order_status())
 
     def push_trade(self, content):
         trade_info = content["data"][0]

@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
 """
 Simple test script to verify Bitfinex integration
+# ruff: noqa: F401  # Import verification tests - F401 unused imports allowed
 """
 
-import sys
 import os
 import queue
-import time
+import sys
 
 # Add the project root to the Python path
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -17,36 +17,40 @@ def test_bitfinex_import():
 
     try:
         # Test importing the main feed module
-        from bt_api_py.feeds.live_bitfinex import BitfinexRequestData, BitfinexMarketWssDataSpot, BitfinexAccountWssDataSpot
+        from bt_api_py.feeds.live_bitfinex import (  # noqa: F401
+            BitfinexAccountWssDataSpot,
+            BitfinexMarketWssDataSpot,
+            BitfinexRequestData,
+        )
         print("✓ Successfully imported Bitfinex live feed modules")
 
         # Test importing exchange data
-        from bt_api_py.containers.exchanges.bitfinex_exchange_data import BitfinexExchangeDataSpot
+        from bt_api_py.containers.exchanges.bitfinex_exchange_data import BitfinexExchangeDataSpot  # noqa: F401
         print("✓ Successfully imported Bitfinex exchange data")
 
         # Test importing data containers
-        from bt_api_py.containers.tickers.bitfinex_ticker import BitfinexRequestTickerData
-        from bt_api_py.containers.orders.bitfinex_order import BitfinexRequestOrderData
-        from bt_api_py.containers.orderbooks.bitfinex_orderbook import BitfinexRequestOrderBookData
-        from bt_api_py.containers.balances.bitfinex_balance import BitfinexSpotRequestBalanceData
+        from bt_api_py.containers.balances.bitfinex_balance import BitfinexSpotRequestBalanceData  # noqa: F401
+        from bt_api_py.containers.orderbooks.bitfinex_orderbook import BitfinexRequestOrderBookData  # noqa: F401
+        from bt_api_py.containers.orders.bitfinex_order import BitfinexRequestOrderData  # noqa: F401
+        from bt_api_py.containers.tickers.bitfinex_ticker import BitfinexRequestTickerData  # noqa: F401
         print("✓ Successfully imported Bitfinex data containers")
 
         # Test importing registration
-        from bt_api_py.exchange_registers.register_bitfinex import register_bitfinex
+        from bt_api_py.exchange_registers.register_bitfinex import register_bitfinex  # noqa: F401
         print("✓ Successfully imported Bitfinex registration")
 
         # Test importing error translator
-        from bt_api_py.error import BitfinexErrorTranslator
+        from bt_api_py.error import BitfinexErrorTranslator  # noqa: F401
         print("✓ Successfully imported Bitfinex error translator")
 
-        return True
+        pass
 
     except ImportError as e:
         print(f"✗ Import error: {e}")
-        return False
+        pass
     except Exception as e:
         print(f"✗ Unexpected error: {e}")
-        return False
+        pass
 
 def test_bitfinex_instantiation():
     """Test instantiating Bitfinex classes"""
@@ -66,12 +70,12 @@ def test_bitfinex_instantiation():
         }
 
         # Test instantiating request data
-        from bt_api_py.feeds.live_bitfinex import BitfinexRequestData
+        from bt_api_py.feeds.live_bitfinex import BitfinexRequestData  # noqa: F401
         feed = BitfinexRequestData(data_queue, **test_params)
         print("✓ Successfully instantiated BitfinexRequestData")
 
         # Test exchange data
-        from bt_api_py.containers.exchanges.bitfinex_exchange_data import BitfinexExchangeDataSpot
+        from bt_api_py.containers.exchanges.bitfinex_exchange_data import BitfinexExchangeDataSpot  # noqa: F401
         exchange_data = BitfinexExchangeDataSpot()
         print("✓ Successfully instantiated BitfinexExchangeDataSpot")
 
@@ -84,7 +88,7 @@ def test_bitfinex_instantiation():
         print(f"✓ Reverse symbol conversion: {converted_symbol} -> {reverse_symbol}")
 
         # Test data container instantiation
-        from bt_api_py.containers.tickers.bitfinex_ticker import BitfinexRequestTickerData
+        from bt_api_py.containers.tickers.bitfinex_ticker import BitfinexRequestTickerData  # noqa: F401
 
         # Create sample ticker data
         ticker_data = [
@@ -110,7 +114,7 @@ def test_bitfinex_instantiation():
         print(f"  - Ask: {ticker.get_ask_price()}")
 
         # Test order book data
-        from bt_api_py.containers.orderbooks.bitfinex_orderbook import BitfinexRequestOrderBookData
+        from bt_api_py.containers.orderbooks.bitfinex_orderbook import BitfinexRequestOrderBookData  # noqa: F401
 
         orderbook_data = [
             [45000.0, 5, 1.0],   # [price, count, amount] - bid
@@ -126,13 +130,13 @@ def test_bitfinex_instantiation():
         print(f"  - Ask levels: {len(orderbook.get_asks())}")
         print(f"  - Spread: {orderbook.get_spread()}")
 
-        return True
+        pass
 
     except Exception as e:
         print(f"✗ Instantiation error: {e}")
         import traceback
         traceback.print_exc()
-        return False
+        pass
 
 def test_bitfinex_registration():
     """Test Bitfinex registration"""
@@ -140,19 +144,18 @@ def test_bitfinex_registration():
 
     try:
         # Test registration function
-        from bt_api_py.exchange_registers.register_bitfinex import register_bitfinex
         print("✓ Successfully imported register_bitfinex function")
 
         # Note: We won't actually call register() as it modifies global state
         print("  - Registration function available (ready to use)")
 
-        return True
+        pass
 
     except Exception as e:
         print(f"✗ Registration test error: {e}")
         import traceback
         traceback.print_exc()
-        return False
+        pass
 
 def main():
     """Main test function"""

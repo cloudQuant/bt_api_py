@@ -1,5 +1,13 @@
 """
 Coinbase Trade Data Container
+
+This module uses a template pattern for parsing trade data across different sources:
+- CoinbaseTradeData: Base template for REST API data
+- CoinbaseWssTradeData: WebSocket data variant (field name differences)
+- CoinbaseRequestTradeData: REST API historical fills variant
+
+Pattern: Subclasses override init_data() to handle source-specific field mappings,
+while reusing common initialization logic from the parent class.
 """
 
 import json
@@ -7,10 +15,13 @@ import time
 
 from bt_api_py.containers.trades.trade import TradeData
 from bt_api_py.functions.utils import from_dict_get_float, from_dict_get_string
+from bt_api_py.logging_factory import get_logger
+
+_logger = get_logger("coinbase_trade")
 
 
 class CoinbaseTradeData(TradeData):
-    """保存Coinbase成交信息"""
+    """保存Coinbase成交信息（模板基类，REST API数据格式）"""
 
     def __init__(self, trade_info, symbol_name, asset_type, has_been_json_encoded=False):
         super().__init__(trade_info, has_been_json_encoded)
@@ -59,9 +70,11 @@ class CoinbaseTradeData(TradeData):
                 self.commission = from_dict_get_float(self.trade_data, "commission")
 
                 self.trade_time = from_dict_get_string(self.trade_data, "trade_time")
-                self.liquidity_indicator = from_dict_get_string(self.trade_data, "liquidity_indicator")
+                self.liquidity_indicator = from_dict_get_string(
+                    self.trade_data, "liquidity_indicator"
+                )
         except Exception as e:
-            print(f"Error parsing trade data: {e}")
+            _logger.error(f"Error parsing trade data: {e}")
             self.trade_data = {}
         self.has_been_init_data = True
         return self
@@ -148,7 +161,7 @@ class CoinbaseTradeData(TradeData):
 
 
 class CoinbaseWssTradeData(CoinbaseTradeData):
-    """保存WebSocket成交信息"""
+    """保存WebSocket成交信息（字段映射差异：trade_id而非entry_id，time而非trade_time）"""
 
     def init_data(self):
         if not self.has_been_json_encoded:
@@ -172,16 +185,18 @@ class CoinbaseWssTradeData(CoinbaseTradeData):
                 self.commission = from_dict_get_float(self.trade_data, "commission")
 
                 self.trade_time = from_dict_get_string(self.trade_data, "time")
-                self.liquidity_indicator = from_dict_get_string(self.trade_data, "liquidity_indicator")
+                self.liquidity_indicator = from_dict_get_string(
+                    self.trade_data, "liquidity_indicator"
+                )
         except Exception as e:
-            print(f"Error parsing WebSocket trade data: {e}")
+            _logger.error(f"Error parsing WebSocket trade data: {e}")
             self.trade_data = {}
         self.has_been_init_data = True
         return self
 
 
 class CoinbaseRequestTradeData(CoinbaseTradeData):
-    """保存REST API成交信息"""
+    """保存REST API成交信息（REST API历史成交，字段映射与基类相同）"""
 
     def init_data(self):
         if not self.has_been_json_encoded:
@@ -206,9 +221,11 @@ class CoinbaseRequestTradeData(CoinbaseTradeData):
                 self.commission = from_dict_get_float(self.trade_data, "commission")
 
                 self.trade_time = from_dict_get_string(self.trade_data, "trade_time")
-                self.liquidity_indicator = from_dict_get_string(self.trade_data, "liquidity_indicator")
+                self.liquidity_indicator = from_dict_get_string(
+                    self.trade_data, "liquidity_indicator"
+                )
         except Exception as e:
-            print(f"Error parsing REST trade data: {e}")
+            _logger.error(f"Error parsing REST trade data: {e}")
             self.trade_data = {}
         self.has_been_init_data = True
         return self

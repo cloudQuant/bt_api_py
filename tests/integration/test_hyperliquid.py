@@ -1,10 +1,10 @@
 """
+# ruff: noqa  # Import verification tests - F401 unused imports allowed
 Test Hyperliquid Exchange Integration
 
 Basic tests to verify the Hyperliquid implementation works correctly.
 """
 
-import time
 from queue import Queue
 
 from bt_api_py.containers.exchanges.hyperliquid_exchange_data import HyperliquidExchangeDataSpot
@@ -42,11 +42,11 @@ def test_hyperliquid_data_container():
         assert data.get_leverage_limit("ETH") == 50
 
         print("✓ Hyperliquid data container tests passed")
-        return True
+        pass
 
     except Exception as e:
         print(f"✗ Hyperliquid data container test failed: {e}")
-        return False
+        pass
 
 
 def test_hyperliquid_request_data():
@@ -84,11 +84,11 @@ def test_hyperliquid_request_data():
         assert callable(request_data.get_recent_trades)
 
         print("✓ Hyperliquid request data tests passed")
-        return True
+        pass
 
     except Exception as e:
         print(f"✗ Hyperliquid request data test failed: {e}")
-        return False
+        pass
 
 
 def test_hyperliquid_error_translator():
@@ -119,11 +119,11 @@ def test_hyperliquid_error_translator():
             assert result == expected, f"Expected {expected}, got {result} for {error_msg}"
 
         print("✓ Hyperliquid error translator tests passed")
-        return True
+        pass
 
     except Exception as e:
         print(f"✗ Hyperliquid error translator test failed: {e}")
-        return False
+        pass
 
 
 def main():

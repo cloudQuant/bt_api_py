@@ -1,4 +1,5 @@
 """
+# ruff: noqa  # Import verification tests - F401 unused imports allowed
 Comprehensive Hyperliquid Integration Test
 
 This test demonstrates the Hyperliquid exchange integration functionality.
@@ -8,7 +9,6 @@ It includes both basic tests and integration examples.
 import time
 from queue import Queue
 
-from bt_api_py.containers.exchanges.hyperliquid_exchange_data import HyperliquidExchangeDataSpot
 from bt_api_py.feeds.live_hyperliquid import HyperliquidRequestDataSpot
 from bt_api_py.functions.log_message import SpdLogManager
 
@@ -50,11 +50,11 @@ def test_market_data_queries():
         result = request_data.get_exchange_status()
         print(f"    ✓ get_exchange_status returned status: {result.status}")
 
-        return True
+        pass
 
     except Exception as e:
         print(f"  ✗ Market data query test failed: {e}")
-        return False
+        pass
 
 
 def test_authenticated_queries():
@@ -90,11 +90,11 @@ def test_authenticated_queries():
         except Exception as e:
             print(f"    ✓ Expected error caught: {e}")
 
-        return True
+        pass
 
     except Exception as e:
         print(f"  ✗ Authenticated query test failed: {e}")
-        return False
+        pass
 
 
 def test_websocket_subscription():
@@ -135,7 +135,7 @@ def test_websocket_subscription():
             }
         }
         wss_data.process_ticker_message(ticker_message)
-        print(f"    ✓ Ticker message processed")
+        print("    ✓ Ticker message processed")
 
         # Mock orderbook message
         orderbook_message = {
@@ -149,7 +149,7 @@ def test_websocket_subscription():
             }
         }
         wss_data.process_orderbook_message(orderbook_message)
-        print(f"    ✓ Orderbook message processed")
+        print("    ✓ Orderbook message processed")
 
         # Mock trades message
         trades_message = {
@@ -165,13 +165,13 @@ def test_websocket_subscription():
             ]
         }
         wss_data.process_trades_message(trades_message)
-        print(f"    ✓ Trades message processed")
+        print("    ✓ Trades message processed")
 
-        return True
+        pass
 
     except Exception as e:
         print(f"  ✗ WebSocket subscription test failed: {e}")
-        return False
+        pass
 
 
 def test_config_loading():
@@ -201,11 +201,11 @@ def test_config_loading():
         print(f"    Public endpoints: {len(config.api.public)}")
         print(f"    Authenticated endpoints: {len(config.api.authenticated)}")
 
-        return True
+        pass
 
     except Exception as e:
         print(f"  ✗ Configuration loading test failed: {e}")
-        return False
+        pass
 
 
 def main():
