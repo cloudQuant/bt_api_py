@@ -28,9 +28,11 @@
 
 import hashlib
 import os
+import queue
 import tempfile
 import threading
 import time
+from contextlib import suppress
 
 from .ctp_md_api import CThostFtdcMdApi, CThostFtdcMdSpi
 from .ctp_structs_common import (
@@ -48,6 +50,29 @@ def _flow_dir(prefix):
     path = os.path.join(tempfile.gettempdir(), "ctp_client", h) + os.sep
     os.makedirs(path, exist_ok=True)
     return path
+
+
+def _snapshot_ctp_field(field):
+    """Create a plain dict snapshot from a SWIG field.
+
+    Order / trade callbacks arrive on CTP's background thread. Converting the
+    field to a plain dict inside the callback avoids leaking thread-bound SWIG
+    objects to other threads or test assertions.
+    """
+    if field is None:
+        return {}
+
+    result = {}
+    for attr in dir(field):
+        if attr.startswith("_") or attr in {"this", "thisown"}:
+            continue
+        try:
+            value = getattr(field, attr)
+        except Exception:
+            continue
+        if not callable(value):
+            result[attr] = value
+    return result
 
 
 # ===========================================================================
@@ -174,14 +199,12 @@ class MdClient:
         api = self._api
         self._api = None
         self._spi = None
-        if api is not None:
-            # 只在没有后台 Join 线程时才 Release
-            if self._thread is None or not self._thread.is_alive():
-                try:
-                    api.RegisterSpi(None)
-                    api.Release()
-                except Exception:
-                    pass
+        if api is not None and (self._thread is None or not self._thread.is_alive()):
+            try:
+                api.RegisterSpi(None)
+                api.Release()
+            except Exception:
+                pass
             # 如果 daemon thread 还活着，不调用 Release，
             # daemon=True 线程会在进程退出时自动终止
 
@@ -229,6 +252,11 @@ class _TraderSpi(CThostFtdcTraderSpi):
         if pRspInfo and pRspInfo.ErrorID == 0:
             self._c._front_id = pRspUserLogin.FrontID
             self._c._session_id = pRspUserLogin.SessionID
+            with suppress(TypeError, ValueError):
+                self._c._max_order_ref = max(
+                    self._c._max_order_ref,
+                    int(getattr(pRspUserLogin, "MaxOrderRef", "") or 0),
+                )
             field = CThostFtdcSettlementInfoConfirmField()
             field.BrokerID = self._c.broker_id
             field.InvestorID = self._c.user_id
@@ -256,16 +284,32 @@ class _TraderSpi(CThostFtdcTraderSpi):
             self._c._query_done.set()
 
     def OnRtnOrder(self, pOrder):
-        if self._c.on_order:
-            self._c.on_order(pOrder)
+        self._c._push_order_event(pOrder)
 
     def OnRtnTrade(self, pTrade):
-        if self._c.on_trade:
-            self._c.on_trade(pTrade)
+        self._c._push_trade_event(pTrade)
+
+    def OnRspOrderInsert(self, pInputOrder, pRspInfo, nRequestID, bIsLast):
+        self._c._push_error_event(
+            event_type="order_insert_response",
+            rsp_info=pRspInfo,
+            field=pInputOrder,
+            request_id=nRequestID,
+        )
+
+    def OnErrRtnOrderInsert(self, pInputOrder, pRspInfo):
+        self._c._push_error_event(
+            event_type="order_insert_error",
+            rsp_info=pRspInfo,
+            field=pInputOrder,
+        )
 
     def OnRspError(self, pRspInfo, nRequestID, bIsLast):
-        if self._c.on_error:
-            self._c.on_error(pRspInfo)
+        self._c._push_error_event(
+            event_type="response_error",
+            rsp_info=pRspInfo,
+            request_id=nRequestID,
+        )
 
 
 class TraderClient:
@@ -312,6 +356,11 @@ class TraderClient:
         self._query_done = threading.Event()
         self._last_account = None
         self._last_positions = []
+        self._max_order_ref = 0
+        self._order_ref_lock = threading.Lock()
+        self._order_events = queue.Queue()
+        self._trade_events = queue.Queue()
+        self._error_events = queue.Queue()
 
     def start(self, block=False):
         """启动连接（默认后台运行）"""
@@ -371,6 +420,62 @@ class TraderClient:
         self._api.ReqQryInvestorPosition(field, self._req_id)
         self._query_done.wait(timeout)
         return self._last_positions
+
+    def next_order_ref(self) -> str:
+        """Return the next monotonic CTP OrderRef.
+
+        CTP expects OrderRef to be unique and increasing during a session.
+        """
+        with self._order_ref_lock:
+            self._max_order_ref += 1
+            return str(self._max_order_ref)
+
+    def wait_order_event(self, timeout=5):
+        """Wait for the next order callback snapshot."""
+        try:
+            return self._order_events.get(timeout=timeout)
+        except queue.Empty:
+            return None
+
+    def wait_trade_event(self, timeout=5):
+        """Wait for the next trade callback snapshot."""
+        try:
+            return self._trade_events.get(timeout=timeout)
+        except queue.Empty:
+            return None
+
+    def wait_error_event(self, timeout=5):
+        """Wait for the next error callback snapshot."""
+        try:
+            return self._error_events.get(timeout=timeout)
+        except queue.Empty:
+            return None
+
+    def _push_order_event(self, order_field) -> None:
+        snapshot = _snapshot_ctp_field(order_field)
+        if snapshot:
+            self._order_events.put(snapshot)
+        if self.on_order:
+            self.on_order(order_field)
+
+    def _push_trade_event(self, trade_field) -> None:
+        snapshot = _snapshot_ctp_field(trade_field)
+        if snapshot:
+            self._trade_events.put(snapshot)
+        if self.on_trade:
+            self.on_trade(trade_field)
+
+    def _push_error_event(self, event_type, rsp_info=None, field=None, request_id=None) -> None:
+        payload = {
+            "event": event_type,
+            "request_id": request_id,
+            "error_id": getattr(rsp_info, "ErrorID", 0) if rsp_info is not None else 0,
+            "error_msg": getattr(rsp_info, "ErrorMsg", "") if rsp_info is not None else "",
+            "field": _snapshot_ctp_field(field),
+        }
+        self._error_events.put(payload)
+        if self.on_error and rsp_info is not None:
+            self.on_error(rsp_info)
 
     @property
     def api(self):

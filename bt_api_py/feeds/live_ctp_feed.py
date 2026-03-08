@@ -245,6 +245,7 @@ class CtpRequestData(Feed):
         field = CThostFtdcInputOrderField()
         field.BrokerID = self.broker_id
         field.InvestorID = self.user_id
+        field.UserID = self.user_id
         field.InstrumentID = symbol
         if exchange_id:
             field.ExchangeID = exchange_id
@@ -252,9 +253,11 @@ class CtpRequestData(Feed):
         field.CombOffsetFlag = offset_flag
         field.CombHedgeFlag = "1"  # 投机
         field.VolumeTotalOriginal = int(volume)
+        field.MinVolume = 1
         field.ForceCloseReason = "0"
         field.IsAutoSuspend = 0
         field.UserForceClose = 0
+        field.ContingentCondition = "1"
 
         if otype.lower() == "market":
             field.OrderPriceType = "1"  # 市价
@@ -266,15 +269,21 @@ class CtpRequestData(Feed):
             field.TimeCondition = "3"  # GFD (当日有效)
             field.VolumeCondition = "1"  # 任意数量
             field.LimitPrice = float(price) if price else 0.0
-            field.ContingentCondition = "1"
-
-        if client_order_id:
+        if client_order_id is not None:
             field.OrderRef = str(client_order_id)
+        elif hasattr(self._trader, "next_order_ref"):
+            field.OrderRef = self._trader.next_order_ref()
+        else:
+            field.OrderRef = str(self._trader._req_id + 1)
 
-        self._trader._req_id += 1
-        ret = self._trader.api.ReqOrderInsert(field, self._trader._req_id)
+        next_req_id = self._trader._req_id + 1
+        field.RequestID = next_req_id
+        self._trader._req_id = next_req_id
+        ret = self._trader.api.ReqOrderInsert(field, next_req_id)
         order_dict = _ctp_field_to_dict(field)
         order_dict["_ret"] = ret
+        order_dict["FrontID"] = getattr(self._trader, "_front_id", 0)
+        order_dict["SessionID"] = getattr(self._trader, "_session_id", 0)
 
         if ret == 0:
             self.request_logger.info(

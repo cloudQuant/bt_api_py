@@ -16,6 +16,7 @@ CTP Feed 集成测试
 import atexit
 import os
 import queue
+import threading
 import time
 from pathlib import Path
 
@@ -352,6 +353,157 @@ class TestCtpContainerParsing:
         value_result, cash_result = handler([account])
         assert value_result["TEST"]["value"] == 103000.0  # balance + position_profit
         assert cash_result["TEST"]["cash"] == 80000.0
+
+
+class TestCtpOrderThreadingRegression:
+    """回归测试：验证下单回报在线程之间安全传递。"""
+
+    def test_trader_client_next_order_ref_is_thread_safe(self):
+        from bt_api_py.ctp.client import TraderClient
+
+        client = TraderClient("tcp://test", "9999", "demo", "secret")
+        client._max_order_ref = 100
+
+        refs = []
+        refs_lock = threading.Lock()
+
+        def worker():
+            order_ref = int(client.next_order_ref())
+            with refs_lock:
+                refs.append(order_ref)
+
+        threads = [threading.Thread(target=worker) for _ in range(12)]
+        for thread in threads:
+            thread.start()
+        for thread in threads:
+            thread.join()
+
+        assert sorted(refs) == list(range(101, 113))
+
+    def test_trader_client_snapshots_order_and_trade_callbacks(self):
+        from bt_api_py.ctp.client import TraderClient, _TraderSpi
+
+        class MockOrderField:
+            def __init__(self):
+                self.InstrumentID = "IF2506"
+                self.OrderRef = "101"
+                self.OrderSysID = "SYS001"
+                self.Direction = "0"
+                self.CombOffsetFlag = "0"
+
+        class MockTradeField:
+            def __init__(self):
+                self.InstrumentID = "IF2506"
+                self.TradeID = "TRADE001"
+                self.OrderRef = "101"
+                self.OrderSysID = "SYS001"
+                self.Direction = "0"
+                self.OffsetFlag = "0"
+                self.Price = 3500.0
+                self.Volume = 1
+                self.ExchangeID = "CFFEX"
+
+        client = TraderClient("tcp://test", "9999", "demo", "secret")
+        seen_order_refs = []
+        client.on_order = lambda order_field: seen_order_refs.append(order_field.OrderRef)
+        spi = _TraderSpi(client)
+
+        spi.OnRtnOrder(MockOrderField())
+        spi.OnRtnTrade(MockTradeField())
+
+        order_event = client.wait_order_event(timeout=0.01)
+        trade_event = client.wait_trade_event(timeout=0.01)
+
+        assert order_event["OrderRef"] == "101"
+        assert order_event["InstrumentID"] == "IF2506"
+        assert trade_event["TradeID"] == "TRADE001"
+        assert trade_event["Price"] == 3500.0
+        assert seen_order_refs == ["101"]
+
+    def test_trader_client_snapshots_order_insert_errors(self):
+        from bt_api_py.ctp.client import TraderClient, _TraderSpi
+
+        class MockInputOrder:
+            def __init__(self):
+                self.InstrumentID = "IF2506"
+                self.OrderRef = "105"
+
+        class MockRspInfo:
+            def __init__(self):
+                self.ErrorID = 32
+                self.ErrorMsg = "order rejected"
+
+        client = TraderClient("tcp://test", "9999", "demo", "secret")
+        seen_errors = []
+        client.on_error = lambda rsp_info: seen_errors.append((rsp_info.ErrorID, rsp_info.ErrorMsg))
+        spi = _TraderSpi(client)
+
+        spi.OnErrRtnOrderInsert(MockInputOrder(), MockRspInfo())
+
+        error_event = client.wait_error_event(timeout=0.01)
+        assert error_event["event"] == "order_insert_error"
+        assert error_event["error_id"] == 32
+        assert error_event["error_msg"] == "order rejected"
+        assert error_event["field"]["OrderRef"] == "105"
+        assert seen_errors == [(32, "order rejected")]
+
+    def test_make_order_sets_required_ctp_fields(self):
+        from bt_api_py.feeds.live_ctp_feed import CtpRequestDataFuture
+
+        class FakeApi:
+            def __init__(self):
+                self.field = None
+                self.req_id = None
+
+            def ReqOrderInsert(self, field, req_id):
+                self.field = field
+                self.req_id = req_id
+                return 0
+
+        class FakeTrader:
+            def __init__(self):
+                self.api = FakeApi()
+                self.is_ready = True
+                self._req_id = 7
+                self._front_id = 11
+                self._session_id = 22
+
+            def next_order_ref(self):
+                return "108"
+
+        feed = CtpRequestDataFuture(
+            queue.Queue(),
+            broker_id="9999",
+            user_id="demo",
+            password="secret",
+            td_front="tcp://test",
+        )
+        feed._trader = FakeTrader()
+        feed._connected = True
+
+        result = feed.make_order(
+            symbol="IF2506",
+            volume=1,
+            price=3500.0,
+            order_type="buy-limit",
+            offset="open",
+            exchange_id="CFFEX",
+        )
+
+        sent_field = feed._trader.api.field
+        assert sent_field is not None
+        assert sent_field.OrderRef == "108"
+        assert sent_field.UserID == "demo"
+        assert sent_field.MinVolume == 1
+        assert sent_field.RequestID == 8
+        assert feed._trader.api.req_id == 8
+        assert result.get_status() is True
+
+        order = result.get_data()[0]
+        order.init_data()
+        assert order.get_client_order_id() == "108"
+        assert order.front_id == 11
+        assert order.session_id == 22
 
 
 # ========================================================================
