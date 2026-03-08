@@ -11,6 +11,7 @@ class GeminiErrorTranslator(ErrorTranslator):
     Gemini API returns errors as JSON:
     {"result": "error", "reason": "InvalidSignature", "message": "..."}
     """
+
     ERROR_MAP = {
         "InvalidSignature": (UnifiedErrorCode.INVALID_SIGNATURE, "Invalid signature"),
         "InvalidNonce": (UnifiedErrorCode.EXPIRED_TIMESTAMP, "Invalid nonce"),

@@ -7,10 +7,10 @@ Response envelope: {success: true/false, payload: ...}
 Symbol format: lowercase underscore (btc_mxn).
 """
 
-import time
-import hmac
 import hashlib
+import hmac
 import json
+import time
 from urllib.parse import urlencode
 
 from bt_api_py.containers.exchanges.bitso_exchange_data import BitsoExchangeDataSpot
@@ -112,7 +112,9 @@ class BitsoRequestData(Feed):
         self.request_logger.info(f"{method} {url} -> {type(res)}")
         return RequestData(res, extra_data)
 
-    async def async_request(self, path, params=None, body=None, extra_data=None, timeout=5, is_sign=False):
+    async def async_request(
+        self, path, params=None, body=None, extra_data=None, timeout=5, is_sign=False
+    ):
         """Async HTTP request using Feed.async_http_request()."""
         if params is None:
             params = {}
@@ -154,26 +156,30 @@ class BitsoRequestData(Feed):
         path = self._params.get_rest_path("get_server_time")
         params = {}
         extra_data = extra_data or {}
-        extra_data.update({
-            "request_type": "get_server_time",
-            "symbol_name": None,
-            "asset_type": self.asset_type,
-            "exchange_name": self.exchange_name,
-            "normalize_function": self._get_server_time_normalize_function,
-        })
+        extra_data.update(
+            {
+                "request_type": "get_server_time",
+                "symbol_name": None,
+                "asset_type": self.asset_type,
+                "exchange_name": self.exchange_name,
+                "normalize_function": self._get_server_time_normalize_function,
+            }
+        )
         return path, params, extra_data
 
     def _get_exchange_info(self, extra_data=None, **kwargs):
         path = self._params.get_rest_path("get_exchange_info")
         params = {}
         extra_data = extra_data or {}
-        extra_data.update({
-            "request_type": "get_exchange_info",
-            "symbol_name": None,
-            "asset_type": self.asset_type,
-            "exchange_name": self.exchange_name,
-            "normalize_function": self._get_exchange_info_normalize_function,
-        })
+        extra_data.update(
+            {
+                "request_type": "get_exchange_info",
+                "symbol_name": None,
+                "asset_type": self.asset_type,
+                "exchange_name": self.exchange_name,
+                "normalize_function": self._get_exchange_info_normalize_function,
+            }
+        )
         return path, params, extra_data
 
     def _get_tick(self, symbol, extra_data=None, **kwargs):
@@ -181,13 +187,15 @@ class BitsoRequestData(Feed):
         path = self._params.get_rest_path("get_tick")
         params = {"book": book}
         extra_data = extra_data or {}
-        extra_data.update({
-            "request_type": "get_tick",
-            "symbol_name": symbol,
-            "asset_type": self.asset_type,
-            "exchange_name": self.exchange_name,
-            "normalize_function": self._get_tick_normalize_function,
-        })
+        extra_data.update(
+            {
+                "request_type": "get_tick",
+                "symbol_name": symbol,
+                "asset_type": self.asset_type,
+                "exchange_name": self.exchange_name,
+                "normalize_function": self._get_tick_normalize_function,
+            }
+        )
         return path, params, extra_data
 
     def _get_depth(self, symbol, count=50, extra_data=None, **kwargs):
@@ -195,13 +203,15 @@ class BitsoRequestData(Feed):
         path = self._params.get_rest_path("get_depth")
         params = {"book": book, "aggregate": "true"}
         extra_data = extra_data or {}
-        extra_data.update({
-            "request_type": "get_depth",
-            "symbol_name": symbol,
-            "asset_type": self.asset_type,
-            "exchange_name": self.exchange_name,
-            "normalize_function": self._get_depth_normalize_function,
-        })
+        extra_data.update(
+            {
+                "request_type": "get_depth",
+                "symbol_name": symbol,
+                "asset_type": self.asset_type,
+                "exchange_name": self.exchange_name,
+                "normalize_function": self._get_depth_normalize_function,
+            }
+        )
         return path, params, extra_data
 
     def _get_kline(self, symbol, period="1h", count=100, extra_data=None, **kwargs):
@@ -210,14 +220,16 @@ class BitsoRequestData(Feed):
         bucket = self._params.get_period(period)
         params = {"book": book, "time_bucket": bucket}
         extra_data = extra_data or {}
-        extra_data.update({
-            "request_type": "get_kline",
-            "symbol_name": symbol,
-            "period": period,
-            "asset_type": self.asset_type,
-            "exchange_name": self.exchange_name,
-            "normalize_function": self._get_kline_normalize_function,
-        })
+        extra_data.update(
+            {
+                "request_type": "get_kline",
+                "symbol_name": symbol,
+                "period": period,
+                "asset_type": self.asset_type,
+                "exchange_name": self.exchange_name,
+                "normalize_function": self._get_kline_normalize_function,
+            }
+        )
         return path, params, extra_data
 
     def _get_trade_history(self, symbol, count=50, extra_data=None, **kwargs):
@@ -225,16 +237,20 @@ class BitsoRequestData(Feed):
         path = self._params.get_rest_path("get_trades")
         params = {"book": book, "limit": min(count, 100)}
         extra_data = extra_data or {}
-        extra_data.update({
-            "request_type": "get_trades",
-            "symbol_name": symbol,
-            "asset_type": self.asset_type,
-            "exchange_name": self.exchange_name,
-            "normalize_function": self._get_trade_history_normalize_function,
-        })
+        extra_data.update(
+            {
+                "request_type": "get_trades",
+                "symbol_name": symbol,
+                "asset_type": self.asset_type,
+                "exchange_name": self.exchange_name,
+                "normalize_function": self._get_trade_history_normalize_function,
+            }
+        )
         return path, params, extra_data
 
-    def _make_order(self, symbol, size, price=None, order_type="buy-limit", extra_data=None, **kwargs):
+    def _make_order(
+        self, symbol, size, price=None, order_type="buy-limit", extra_data=None, **kwargs
+    ):
         path = self._params.get_rest_path("make_order")
         book = self._params.get_symbol(symbol)
         parts = order_type.lower().replace("-", " ").split()
@@ -249,13 +265,15 @@ class BitsoRequestData(Feed):
         if price is not None and otype == "limit":
             body["price"] = str(price)
         extra_data = extra_data or {}
-        extra_data.update({
-            "request_type": "make_order",
-            "symbol_name": symbol,
-            "asset_type": self.asset_type,
-            "exchange_name": self.exchange_name,
-            "normalize_function": self._make_order_normalize_function,
-        })
+        extra_data.update(
+            {
+                "request_type": "make_order",
+                "symbol_name": symbol,
+                "asset_type": self.asset_type,
+                "exchange_name": self.exchange_name,
+                "normalize_function": self._make_order_normalize_function,
+            }
+        )
         return path, body, extra_data
 
     def _cancel_order(self, symbol=None, order_id=None, extra_data=None, **kwargs):
@@ -266,13 +284,15 @@ class BitsoRequestData(Feed):
             method_path = f"{base}/{order_id}"
         params = {}
         extra_data = extra_data or {}
-        extra_data.update({
-            "request_type": "cancel_order",
-            "symbol_name": symbol,
-            "asset_type": self.asset_type,
-            "exchange_name": self.exchange_name,
-            "normalize_function": self._cancel_order_normalize_function,
-        })
+        extra_data.update(
+            {
+                "request_type": "cancel_order",
+                "symbol_name": symbol,
+                "asset_type": self.asset_type,
+                "exchange_name": self.exchange_name,
+                "normalize_function": self._cancel_order_normalize_function,
+            }
+        )
         return method_path, params, extra_data
 
     def _query_order(self, symbol=None, order_id=None, extra_data=None, **kwargs):
@@ -283,13 +303,15 @@ class BitsoRequestData(Feed):
             method_path = f"{base}/{order_id}"
         params = {}
         extra_data = extra_data or {}
-        extra_data.update({
-            "request_type": "query_order",
-            "symbol_name": symbol,
-            "asset_type": self.asset_type,
-            "exchange_name": self.exchange_name,
-            "normalize_function": self._query_order_normalize_function,
-        })
+        extra_data.update(
+            {
+                "request_type": "query_order",
+                "symbol_name": symbol,
+                "asset_type": self.asset_type,
+                "exchange_name": self.exchange_name,
+                "normalize_function": self._query_order_normalize_function,
+            }
+        )
         return method_path, params, extra_data
 
     def _get_open_orders(self, symbol=None, extra_data=None, **kwargs):
@@ -298,13 +320,15 @@ class BitsoRequestData(Feed):
         if symbol:
             params["book"] = self._params.get_symbol(symbol)
         extra_data = extra_data or {}
-        extra_data.update({
-            "request_type": "get_open_orders",
-            "symbol_name": symbol,
-            "asset_type": self.asset_type,
-            "exchange_name": self.exchange_name,
-            "normalize_function": self._get_open_orders_normalize_function,
-        })
+        extra_data.update(
+            {
+                "request_type": "get_open_orders",
+                "symbol_name": symbol,
+                "asset_type": self.asset_type,
+                "exchange_name": self.exchange_name,
+                "normalize_function": self._get_open_orders_normalize_function,
+            }
+        )
         return path, params, extra_data
 
     def _get_deals(self, symbol=None, extra_data=None, **kwargs):
@@ -314,39 +338,45 @@ class BitsoRequestData(Feed):
             params["book"] = self._params.get_symbol(symbol)
         params["limit"] = kwargs.get("limit", 25)
         extra_data = extra_data or {}
-        extra_data.update({
-            "request_type": "get_deals",
-            "symbol_name": symbol,
-            "asset_type": self.asset_type,
-            "exchange_name": self.exchange_name,
-            "normalize_function": self._get_deals_normalize_function,
-        })
+        extra_data.update(
+            {
+                "request_type": "get_deals",
+                "symbol_name": symbol,
+                "asset_type": self.asset_type,
+                "exchange_name": self.exchange_name,
+                "normalize_function": self._get_deals_normalize_function,
+            }
+        )
         return path, params, extra_data
 
     def _get_account(self, extra_data=None, **kwargs):
         path = self._params.get_rest_path("get_account")
         params = {}
         extra_data = extra_data or {}
-        extra_data.update({
-            "request_type": "get_account",
-            "symbol_name": None,
-            "asset_type": self.asset_type,
-            "exchange_name": self.exchange_name,
-            "normalize_function": self._get_account_normalize_function,
-        })
+        extra_data.update(
+            {
+                "request_type": "get_account",
+                "symbol_name": None,
+                "asset_type": self.asset_type,
+                "exchange_name": self.exchange_name,
+                "normalize_function": self._get_account_normalize_function,
+            }
+        )
         return path, params, extra_data
 
     def _get_balance(self, extra_data=None, **kwargs):
         path = self._params.get_rest_path("get_balance")
         params = {}
         extra_data = extra_data or {}
-        extra_data.update({
-            "request_type": "get_balance",
-            "symbol_name": None,
-            "asset_type": self.asset_type,
-            "exchange_name": self.exchange_name,
-            "normalize_function": self._get_balance_normalize_function,
-        })
+        extra_data.update(
+            {
+                "request_type": "get_balance",
+                "symbol_name": None,
+                "asset_type": self.asset_type,
+                "exchange_name": self.exchange_name,
+                "normalize_function": self._get_balance_normalize_function,
+            }
+        )
         return path, params, extra_data
 
     # ── normalize functions ─────────────────────────────────────

@@ -1,11 +1,9 @@
-- --
-
+---
 name: 'step-02-discover-tests'
 description: 'Find and parse test files'
 nextStepFile: './step-03-quality-evaluation.md'
 outputFile: '{test_artifacts}/test-review.md'
-
-- --
+---
 
 # Step 2: Discover & Parse Tests
 
@@ -18,7 +16,7 @@ Collect test files in scope and parse structure/metadata.
 - 📖 Read the entire step file before acting
 - ✅ Speak in `{communication_language}`
 
-- --
+---
 
 ## EXECUTION PROTOCOLS:
 
@@ -35,7 +33,7 @@ Collect test files in scope and parse structure/metadata.
 
 ## MANDATORY SEQUENCE
 
-- *CRITICAL:**Follow this sequence exactly. Do not skip, reorder, or improvise.
+**CRITICAL:** Follow this sequence exactly. Do not skip, reorder, or improvise.
 
 ## 1. Discover Test Files
 
@@ -45,7 +43,7 @@ Collect test files in scope and parse structure/metadata.
 
 Halt if no tests are found.
 
-- --
+---
 
 ## 2. Parse Metadata (per file)
 
@@ -58,14 +56,13 @@ Collect:
 - Imports, fixtures, factories, network interception
 - Waits/timeouts and control flow (if/try/catch)
 
-- --
+---
 
 ## 3. Evidence Collection (if `tea_browser_automation` is `cli` or `auto`)
 
 > **Fallback:** If CLI is not installed, fall back to MCP (if available) or skip evidence collection.
 
-- *CLI Evidence Collection:**
-
+**CLI Evidence Collection:**
 All commands use the same named session to target the correct browser:
 
 1. `playwright-cli -s=tea-review open <target_url>`
@@ -78,24 +75,20 @@ All commands use the same named session to target the correct browser:
 
 > **Session Hygiene:** Always close sessions using `playwright-cli -s=tea-review close`. Do NOT use `close-all` — it kills every session on the machine and breaks parallel execution.
 
-- --
+---
 
 ## 4. Save Progress
 
-- *Save this step's accumulated work to `{outputFile}`.**
+**Save this step's accumulated work to `{outputFile}`.**
 
-- **If `{outputFile}` does not exist**(first save), create it using the workflow template (if available) with YAML frontmatter:
+- **If `{outputFile}` does not exist** (first save), create it using the workflow template (if available) with YAML frontmatter:
 
   ```yaml
-
-  - --
-
+  ---
   stepsCompleted: ['step-02-discover-tests']
   lastStep: 'step-02-discover-tests'
   lastSaved: '{date}'
-
-  - --
-
+  ---
   ```
 
   Then write this step's output below the frontmatter.
@@ -117,4 +110,4 @@ Load next step: `{nextStepFile}`
 ### ❌ SYSTEM FAILURE:
 
 - Skipped sequence steps or missing outputs
-  - *Master Rule:** Skipping steps is FORBIDDEN.
+  **Master Rule:** Skipping steps is FORBIDDEN.

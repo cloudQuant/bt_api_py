@@ -3,6 +3,7 @@ Mercado Bitcoin Exchange Data Configuration
 """
 
 import os
+
 from bt_api_py.containers.exchanges.exchange_data import ExchangeData
 from bt_api_py.logging_factory import get_logger
 
@@ -19,6 +20,7 @@ def _get_mercado_bitcoin_config():
         return _mercado_bitcoin_config
     try:
         from bt_api_py.config_loader import load_exchange_config
+
         config_path = os.path.join(
             os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
             "configs",
@@ -71,14 +73,17 @@ class MercadoBitcoinExchangeData(ExchangeData):
                 # rest can be a dict (like {'spot': '...', 'default': '...'}) or a string
                 if isinstance(rest_url, dict):
                     # Try asset_type first, then default
-                    self.rest_url = rest_url.get(asset_type, rest_url.get('default', str(rest_url.get(asset_type, self.rest_url))))
+                    self.rest_url = rest_url.get(
+                        asset_type,
+                        rest_url.get("default", str(rest_url.get(asset_type, self.rest_url))),
+                    )
                 else:
                     self.rest_url = str(rest_url)
 
-            if hasattr(config.base_urls, 'rest_private') and config.base_urls.rest_private:
+            if hasattr(config.base_urls, "rest_private") and config.base_urls.rest_private:
                 self.rest_private_url = config.base_urls.rest_private
 
-            if hasattr(config.base_urls, 'rest_v4') and config.base_urls.rest_v4:
+            if hasattr(config.base_urls, "rest_v4") and config.base_urls.rest_v4:
                 self.rest_v4_url = config.base_urls.rest_v4
 
             if config.base_urls.wss:
@@ -86,7 +91,10 @@ class MercadoBitcoinExchangeData(ExchangeData):
                 # wss can be a dict or a string
                 if isinstance(wss_url, dict):
                     # Try asset_type first, then default
-                    self.wss_url = wss_url.get(asset_type, wss_url.get('default', str(wss_url.get(asset_type, self.wss_url))))
+                    self.wss_url = wss_url.get(
+                        asset_type,
+                        wss_url.get("default", str(wss_url.get(asset_type, self.wss_url))),
+                    )
                 else:
                     self.wss_url = str(wss_url)
 

@@ -3,6 +3,7 @@ bitFlyer Exchange Data Configuration
 """
 
 import os
+
 from bt_api_py.containers.exchanges.exchange_data import ExchangeData
 from bt_api_py.logging_factory import get_logger
 
@@ -19,6 +20,7 @@ def _get_bitflyer_config():
         return _bitflyer_config
     try:
         from bt_api_py.config_loader import load_exchange_config
+
         config_path = os.path.join(
             os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
             "configs",
@@ -69,12 +71,16 @@ class BitflyerExchangeData(ExchangeData):
             wss_urls = config.base_urls.wss
             if isinstance(rest_urls, dict):
                 # Try to get asset_type specific URL, then 'default', then first value
-                self.rest_url = rest_urls.get(asset_type, rest_urls.get('default', list(rest_urls.values())[0]))
+                self.rest_url = rest_urls.get(
+                    asset_type, rest_urls.get("default", list(rest_urls.values())[0])
+                )
             else:
                 self.rest_url = rest_urls
             if isinstance(wss_urls, dict):
                 # Try to get asset_type specific URL, then 'default', then first value
-                self.wss_url = wss_urls.get(asset_type, wss_urls.get('default', list(wss_urls.values())[0]))
+                self.wss_url = wss_urls.get(
+                    asset_type, wss_urls.get("default", list(wss_urls.values())[0])
+                )
             else:
                 self.wss_url = wss_urls
         if asset_cfg.rest_paths:

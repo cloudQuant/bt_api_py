@@ -50,9 +50,17 @@ class BitfinexTickerData(TickerData):
             self.daily_change = from_dict_get_float(self.ticker_data[5], 0.0)
             self.daily_change_percentage = from_dict_get_float(self.ticker_data[6], 0.0)
             self.last_price = from_dict_get_float(self.ticker_data[7], 0.0)
-            self.volume = from_dict_get_float(self.ticker_data[8], 0.0) if len(self.ticker_data) > 8 else None
-            self.high = from_dict_get_float(self.ticker_data[9], 0.0) if len(self.ticker_data) > 9 else None
-            self.low = from_dict_get_float(self.ticker_data[10], 0.0) if len(self.ticker_data) > 10 else None
+            self.volume = (
+                from_dict_get_float(self.ticker_data[8], 0.0) if len(self.ticker_data) > 8 else None
+            )
+            self.high = (
+                from_dict_get_float(self.ticker_data[9], 0.0) if len(self.ticker_data) > 9 else None
+            )
+            self.low = (
+                from_dict_get_float(self.ticker_data[10], 0.0)
+                if len(self.ticker_data) > 10
+                else None
+            )
             self.server_time = time.time()  # Bitfinex 不提供服务器时间，使用本地时间
 
         self.has_been_init_data = True
@@ -161,7 +169,9 @@ class BitfinexWssTickerData(BitfinexTickerData):
             self.volume = float(self.ticker_data[8]) if len(self.ticker_data) > 8 else None
             self.high = float(self.ticker_data[9]) if len(self.ticker_data) > 9 else None
             self.low = float(self.ticker_data[10]) if len(self.ticker_data) > 10 else None
-            self.server_time = float(self.ticker_data[11]) / 1000 if len(self.ticker_data) > 11 else time.time()
+            self.server_time = (
+                float(self.ticker_data[11]) / 1000 if len(self.ticker_data) > 11 else time.time()
+            )
 
         self.has_been_init_data = True
         return self

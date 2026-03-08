@@ -2,20 +2,18 @@
 
 <narrative-workflow-recommended>
 This game type is **narrative-important**. Consider running the Narrative Design workflow after completing the GDD to create:
-
 - Detailed story structure and scares
 - Character backstories and motivations
 - World lore and mythology
 - Environmental storytelling
 - Tension pacing and narrative beats
-
 </narrative-workflow-recommended>
 
 ### Atmosphere and Tension Building
 
 {{atmosphere}}
 
-- *Horror atmosphere:**
+**Horror atmosphere:**
 
 - Visual design (lighting, shadows, color palette)
 - Audio design (soundscape, silence, music cues)
@@ -28,7 +26,7 @@ This game type is **narrative-important**. Consider running the Narrative Design
 
 {{fear_mechanics}}
 
-- *Core horror systems:**
+**Core horror systems:**
 
 - Visibility/darkness mechanics
 - Limited resources (ammo, health, light)
@@ -41,7 +39,7 @@ This game type is **narrative-important**. Consider running the Narrative Design
 
 {{enemy_threat}}
 
-- *Threat systems:**
+**Threat systems:**
 
 - Enemy types (stalker, environmental, psychological)
 - Enemy behavior (patrol, hunt, ambush)
@@ -54,7 +52,7 @@ This game type is **narrative-important**. Consider running the Narrative Design
 
 {{resource_scarcity}}
 
-- *Limited resources:**
+**Limited resources:**
 
 - Ammo/weapon durability
 - Health items
@@ -67,7 +65,7 @@ This game type is **narrative-important**. Consider running the Narrative Design
 
 {{safe_zones}}
 
-- *Tension management:**
+**Tension management:**
 
 - Safe room design
 - Save point placement
@@ -79,7 +77,7 @@ This game type is **narrative-important**. Consider running the Narrative Design
 
 {{puzzles}}
 
-- *Environmental puzzles:**
+**Environmental puzzles:**
 
 - Puzzle types (locks, codes, environmental)
 - Difficulty balance (accessibility vs. challenge)

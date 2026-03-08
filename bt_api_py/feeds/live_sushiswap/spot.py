@@ -8,7 +8,6 @@ from typing import Any
 
 from bt_api_py.containers.exchanges.sushiswap_exchange_data import (
     SushiSwapExchangeDataSpot,
-    SushiSwapChain,
 )
 from bt_api_py.containers.requestdatas.request_data import RequestData
 from bt_api_py.feeds.capability import Capability
@@ -51,9 +50,7 @@ class SushiSwapRequestDataSpot(SushiSwapRequestData):
 
     # ==================== Token Price/Ticker Queries ====================
 
-    def _get_tick(
-        self, symbol: str, extra_data=None, **kwargs
-    ) -> tuple[str, dict[str, Any], Any]:
+    def _get_tick(self, symbol: str, extra_data=None, **kwargs) -> tuple[str, dict[str, Any], Any]:
         """Get token price/ticker.
 
         Args:
@@ -524,55 +521,80 @@ class SushiSwapRequestDataSpot(SushiSwapRequestData):
         kline_data = input_data if isinstance(input_data, list) else []
         return kline_data, True
 
-    def get_kline(
-        self, symbol: str, period: str, count: int = 20, extra_data=None, **kwargs
-    ):
+    def get_kline(self, symbol: str, period: str, count: int = 20, extra_data=None, **kwargs):
         """Get kline data. SushiSwap API doesn't provide direct kline data."""
-        path, params, extra_data = self._get_kline(
-            symbol, period, count, extra_data, **kwargs
-        )
+        path, params, extra_data = self._get_kline(symbol, period, count, extra_data, **kwargs)
         return RequestData(
-            {"message": "Klines not available via SushiSwap API. Use pool events or external sources."},
+            {
+                "message": "Klines not available via SushiSwap API. Use pool events or external sources."
+            },
             extra_data,
         )
 
-    def async_get_kline(
-        self, symbol: str, period: str, count: int = 20, extra_data=None, **kwargs
-    ):
+    def async_get_kline(self, symbol: str, period: str, count: int = 20, extra_data=None, **kwargs):
         """Async get kline data."""
-        path, params, extra_data = self._get_kline(
-            symbol, period, count, extra_data, **kwargs
-        )
+        path, params, extra_data = self._get_kline(symbol, period, count, extra_data, **kwargs)
         # No-op: klines not available via SushiSwap API
 
     # ==================== Standard Trading Interfaces ====================
 
-    def _make_order(self, symbol, volume, price, order_type, offset="open",
-                    post_only=False, client_order_id=None, extra_data=None, **kwargs):
+    def _make_order(
+        self,
+        symbol,
+        volume,
+        price,
+        order_type,
+        offset="open",
+        post_only=False,
+        client_order_id=None,
+        extra_data=None,
+        **kwargs,
+    ):
         """Prepare order. Returns (path, params, extra_data).
 
         SushiSwap is a DEX; trading requires on-chain transactions.
         """
         if extra_data is None:
             extra_data = {}
-        extra_data.update({
-            "exchange_name": self.exchange_name,
-            "symbol_name": symbol,
-            "asset_type": self.asset_type,
-            "request_type": "make_order",
-        })
+        extra_data.update(
+            {
+                "exchange_name": self.exchange_name,
+                "symbol_name": symbol,
+                "asset_type": self.asset_type,
+                "request_type": "make_order",
+            }
+        )
         params = {
-            "symbol": symbol, "quantity": str(volume),
-            "price": str(price), "orderType": order_type,
+            "symbol": symbol,
+            "quantity": str(volume),
+            "price": str(price),
+            "orderType": order_type,
         }
         return "/swap", params, extra_data
 
-    def make_order(self, symbol, volume, price, order_type, offset="open",
-                   post_only=False, client_order_id=None, extra_data=None, **kwargs):
+    def make_order(
+        self,
+        symbol,
+        volume,
+        price,
+        order_type,
+        offset="open",
+        post_only=False,
+        client_order_id=None,
+        extra_data=None,
+        **kwargs,
+    ):
         """Place an order. Note: SushiSwap requires on-chain tx."""
         path, params, extra_data = self._make_order(
-            symbol, volume, price, order_type, offset, post_only,
-            client_order_id, extra_data, **kwargs
+            symbol,
+            volume,
+            price,
+            order_type,
+            offset,
+            post_only,
+            client_order_id,
+            extra_data,
+            **kwargs,
         )
         return self.request(path, params=params, extra_data=extra_data)
 
@@ -580,13 +602,15 @@ class SushiSwapRequestDataSpot(SushiSwapRequestData):
         """Cancel order. Returns (path, params, extra_data)."""
         if extra_data is None:
             extra_data = {}
-        extra_data.update({
-            "exchange_name": self.exchange_name,
-            "symbol_name": symbol,
-            "asset_type": self.asset_type,
-            "request_type": "cancel_order",
-            "order_id": order_id,
-        })
+        extra_data.update(
+            {
+                "exchange_name": self.exchange_name,
+                "symbol_name": symbol,
+                "asset_type": self.asset_type,
+                "request_type": "cancel_order",
+                "order_id": order_id,
+            }
+        )
         return f"/orders/{order_id}", {}, extra_data
 
     def cancel_order(self, symbol, order_id, extra_data=None, **kwargs):
@@ -598,13 +622,15 @@ class SushiSwapRequestDataSpot(SushiSwapRequestData):
         """Query order. Returns (path, params, extra_data)."""
         if extra_data is None:
             extra_data = {}
-        extra_data.update({
-            "exchange_name": self.exchange_name,
-            "symbol_name": symbol,
-            "asset_type": self.asset_type,
-            "request_type": "query_order",
-            "order_id": order_id,
-        })
+        extra_data.update(
+            {
+                "exchange_name": self.exchange_name,
+                "symbol_name": symbol,
+                "asset_type": self.asset_type,
+                "request_type": "query_order",
+                "order_id": order_id,
+            }
+        )
         return f"/orders/{order_id}", {}, extra_data
 
     def query_order(self, symbol, order_id, extra_data=None, **kwargs):
@@ -616,12 +642,14 @@ class SushiSwapRequestDataSpot(SushiSwapRequestData):
         """Get open orders. Returns (path, params, extra_data)."""
         if extra_data is None:
             extra_data = {}
-        extra_data.update({
-            "exchange_name": self.exchange_name,
-            "symbol_name": symbol or "",
-            "asset_type": self.asset_type,
-            "request_type": "get_open_orders",
-        })
+        extra_data.update(
+            {
+                "exchange_name": self.exchange_name,
+                "symbol_name": symbol or "",
+                "asset_type": self.asset_type,
+                "request_type": "get_open_orders",
+            }
+        )
         return "/orders", {}, extra_data
 
     def get_open_orders(self, symbol=None, extra_data=None, **kwargs):
@@ -635,12 +663,14 @@ class SushiSwapRequestDataSpot(SushiSwapRequestData):
         """Get account info. Returns (path, params, extra_data)."""
         if extra_data is None:
             extra_data = {}
-        extra_data.update({
-            "exchange_name": self.exchange_name,
-            "symbol_name": symbol or "",
-            "asset_type": self.asset_type,
-            "request_type": "get_account",
-        })
+        extra_data.update(
+            {
+                "exchange_name": self.exchange_name,
+                "symbol_name": symbol or "",
+                "asset_type": self.asset_type,
+                "request_type": "get_account",
+            }
+        )
         return "/account", {}, extra_data
 
     def get_account(self, symbol=None, extra_data=None, **kwargs):
@@ -652,12 +682,14 @@ class SushiSwapRequestDataSpot(SushiSwapRequestData):
         """Get balance. Returns (path, params, extra_data)."""
         if extra_data is None:
             extra_data = {}
-        extra_data.update({
-            "exchange_name": self.exchange_name,
-            "symbol_name": symbol or "",
-            "asset_type": self.asset_type,
-            "request_type": "get_balance",
-        })
+        extra_data.update(
+            {
+                "exchange_name": self.exchange_name,
+                "symbol_name": symbol or "",
+                "asset_type": self.asset_type,
+                "request_type": "get_balance",
+            }
+        )
         return "/balance", {}, extra_data
 
     def get_balance(self, symbol=None, extra_data=None, **kwargs):

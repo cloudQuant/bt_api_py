@@ -76,11 +76,15 @@ class BitmartRequestDataSpot(BitmartRequestData):
 
     # ── private endpoints (signed) ──────────────────────────────
 
-    def make_order(self, symbol, size, price=None, order_type="buy-limit", extra_data=None, **kwargs):
+    def make_order(
+        self, symbol, size, price=None, order_type="buy-limit", extra_data=None, **kwargs
+    ):
         path, body, ed = self._make_order(symbol, size, price, order_type, extra_data, **kwargs)
         return self.request(path, body=body, extra_data=ed, is_sign=True)
 
-    async def async_make_order(self, symbol, size, price=None, order_type="buy-limit", extra_data=None, **kwargs):
+    async def async_make_order(
+        self, symbol, size, price=None, order_type="buy-limit", extra_data=None, **kwargs
+    ):
         path, body, ed = self._make_order(symbol, size, price, order_type, extra_data, **kwargs)
         return await self.async_request(path, body=body, extra_data=ed, is_sign=True)
 

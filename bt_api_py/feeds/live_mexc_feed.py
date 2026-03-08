@@ -5,19 +5,20 @@ Provides WebSocket feed implementations for MEXC exchange.
 """
 
 from bt_api_py.containers.exchanges.mexc_exchange_data import MexcExchangeDataSpot
+from bt_api_py.containers.orderbooks.mexc_orderbook import MexcWssOrderBookData
 from bt_api_py.containers.orders.mexc_order import MexcWssOrderData
 from bt_api_py.containers.trades.mexc_trade import MexcWssTradeData
-from bt_api_py.feeds.live_mexc.market_wss_base import MexcMarketWssData
-from bt_api_py.feeds.live_mexc.account_wss_base import MexcAccountWssData
+from bt_api_py.feeds.live_mexc.account_wss_base import MexcAccountWssData as MexcAccountWssDataBase
+from bt_api_py.feeds.live_mexc.market_wss_base import MexcMarketWssData as MexcMarketWssDataBase
 from bt_api_py.logging_factory import get_logger
 
 
-class MexcMarketWssData(MexcMarketWssData):
+class MexcMarketWssFeed(MexcMarketWssDataBase):
     """MEXC 市场数据 WebSocket 实现"""
 
-    def __init__(self, data_queue, **kwargs):
+    def __init__(self, data_queue, exchange_data=None, **kwargs):
         super().__init__(data_queue, **kwargs)
-        self.exchange_data = kwargs.get("exchange_data", MexcExchangeDataSpot())
+        self.exchange_data = exchange_data if exchange_data is not None else MexcExchangeDataSpot()
         self.topics = kwargs.get("topics", [])
 
         # 设置 WebSocket URL
@@ -31,12 +32,12 @@ class MexcMarketWssData(MexcMarketWssData):
         self.request_logger = get_logger("mexc_market_wss")
 
 
-class MexcAccountWssData(MexcAccountWssData):
+class MexcAccountWssFeed(MexcAccountWssDataBase):
     """MEXC 账户数据 WebSocket 实现"""
 
-    def __init__(self, data_queue, **kwargs):
+    def __init__(self, data_queue, exchange_data=None, **kwargs):
         super().__init__(data_queue, **kwargs)
-        self.exchange_data = kwargs.get("exchange_data", MexcExchangeDataSpot())
+        self.exchange_data = exchange_data if exchange_data is not None else MexcExchangeDataSpot()
         self.topics = kwargs.get("topics", [])
 
         # 设置 WebSocket URL
@@ -50,7 +51,7 @@ class MexcAccountWssData(MexcAccountWssData):
         self.request_logger = get_logger("mexc_account_wss")
 
 
-class MexcMarketWssDataSpot(MexcMarketWssData):
+class MexcMarketWssDataSpot(MexcMarketWssFeed):
     """MEXC Spot 市场数据 WebSocket 实现"""
 
     def __init__(self, data_queue, **kwargs):
@@ -75,7 +76,7 @@ class MexcMarketWssDataSpot(MexcMarketWssData):
                 ticker_data = MexcWssTradeData(data, symbol, self.asset_type)
                 self.data_queue.put(ticker_data)
         except Exception as e:
-            self.logger.error(f"Error handling ticker data: {e}")
+            self.request_logger.error(f"Error handling ticker data: {e}")
 
     def _handle_trade(self, data):
         """处理成交数据"""
@@ -87,7 +88,7 @@ class MexcMarketWssDataSpot(MexcMarketWssData):
                         trade_data = MexcWssTradeData(trade, symbol, self.asset_type)
                         self.data_queue.put(trade_data)
         except Exception as e:
-            self.logger.error(f"Error handling trade data: {e}")
+            self.request_logger.error(f"Error handling trade data: {e}")
 
     def _handle_orderbook(self, data):
         """处理订单簿数据"""
@@ -98,13 +99,12 @@ class MexcMarketWssDataSpot(MexcMarketWssData):
                     "symbol": symbol,
                     "bids": data["data"].get("bids", []),
                     "asks": data["data"].get("asks", []),
-                    "time": data["data"].get("time")
+                    "time": data["data"].get("time"),
                 }
-                from bt_api_py.containers.orderbooks.mexc_orderbook import MexcWssOrderBookData
                 orderbook = MexcWssOrderBookData(orderbook_data, symbol, self.asset_type)
                 self.data_queue.put(orderbook)
         except Exception as e:
-            self.logger.error(f"Error handling orderbook data: {e}")
+            self.request_logger.error(f"Error handling orderbook data: {e}")
 
     def _handle_kline(self, data):
         """处理 K 线数据"""
@@ -113,16 +113,12 @@ class MexcMarketWssDataSpot(MexcMarketWssData):
                 symbol = data["data"]["symbol"]
                 kline_data = data["data"]
                 # 处理 K 线数据，这里可以根据需要扩展
-                self.data_queue.put({
-                    "type": "kline",
-                    "symbol": symbol,
-                    "data": kline_data
-                })
+                self.data_queue.put({"type": "kline", "symbol": symbol, "data": kline_data})
         except Exception as e:
-            self.logger.error(f"Error handling kline data: {e}")
+            self.request_logger.error(f"Error handling kline data: {e}")
 
 
-class MexcAccountWssDataSpot(MexcAccountWssData):
+class MexcAccountWssDataSpot(MexcAccountWssFeed):
     """MEXC Spot 账户数据 WebSocket 实现"""
 
     def __init__(self, data_queue, **kwargs):
@@ -142,12 +138,9 @@ class MexcAccountWssDataSpot(MexcAccountWssData):
             if "data" in data:
                 account_data = data["data"]
                 # 处理账户数据，这里可以根据需要扩展
-                self.data_queue.put({
-                    "type": "account",
-                    "data": account_data
-                })
+                self.data_queue.put({"type": "account", "data": account_data})
         except Exception as e:
-            self.logger.error(f"Error handling account data: {e}")
+            self.request_logger.error(f"Error handling account data: {e}")
 
     def _handle_order(self, data):
         """处理订单数据"""
@@ -157,7 +150,7 @@ class MexcAccountWssDataSpot(MexcAccountWssData):
                 order_data = MexcWssOrderData(data, symbol, self.asset_type)
                 self.data_queue.put(order_data)
         except Exception as e:
-            self.logger.error(f"Error handling order data: {e}")
+            self.request_logger.error(f"Error handling order data: {e}")
 
     def _handle_trade(self, data):
         """处理成交数据"""
@@ -167,4 +160,4 @@ class MexcAccountWssDataSpot(MexcAccountWssData):
                 trade_data = MexcWssTradeData(data, symbol, self.asset_type)
                 self.data_queue.put(trade_data)
         except Exception as e:
-            self.logger.error(f"Error handling trade data: {e}")
+            self.request_logger.error(f"Error handling trade data: {e}")

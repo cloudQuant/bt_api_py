@@ -19,6 +19,7 @@ Run with coverage:
 
 import queue
 import time
+
 import pytest
 
 from bt_api_py.containers.requestdatas.request_data import RequestData
@@ -64,21 +65,17 @@ class TestBtcturkTickData:
 
         # Verify price fields
         last_price = tick_data.get("last")
-        assert last_price is None or float(
-            last_price) > 0, f"Invalid last_price: {last_price}"
+        assert last_price is None or float(last_price) > 0, f"Invalid last_price: {last_price}"
 
         bid_price = tick_data.get("bid")
-        assert bid_price is None or float(
-            bid_price) >= 0, f"Invalid bid_price: {bid_price}"
+        assert bid_price is None or float(bid_price) >= 0, f"Invalid bid_price: {bid_price}"
 
         ask_price = tick_data.get("ask")
-        assert ask_price is None or float(
-            ask_price) >= 0, f"Invalid ask_price: {ask_price}"
+        assert ask_price is None or float(ask_price) >= 0, f"Invalid ask_price: {ask_price}"
 
         # Verify volume
         volume = tick_data.get("volume")
-        assert volume is None or float(
-            volume) >= 0, f"Invalid volume: {volume}"
+        assert volume is None or float(volume) >= 0, f"Invalid volume: {volume}"
 
         print("tick_data:", tick_data)
 
@@ -86,9 +83,7 @@ class TestBtcturkTickData:
         """Test getting ticker data (asynchronous)."""
         data_queue = queue.Queue()
         live_btcturk_spot_feed = BTCTurkRequestDataSpot(data_queue)
-        live_btcturk_spot_feed.async_get_tick(
-            "BTCUSDT", extra_data={
-                "test_async_tick_data": True})
+        live_btcturk_spot_feed.async_get_tick("BTCUSDT", extra_data={"test_async_tick_data": True})
         time.sleep(3)
 
         try:
@@ -106,8 +101,7 @@ class TestBtcturkKlineData:
     def test_btcturk_req_kline_data(self):
         """Test getting kline data (synchronous)."""
         live_btcturk_spot_feed = init_req_feed()
-        data = live_btcturk_spot_feed.get_kline(
-            "BTCUSDT", "1h", count=2).get_data()
+        data = live_btcturk_spot_feed.get_kline("BTCUSDT", "1h", count=2).get_data()
         assert isinstance(data, list)
 
         if len(data) > 0 and data[0] is not None:
@@ -118,10 +112,8 @@ class TestBtcturkKlineData:
 
                 # BTCTurk candle format: [timestamp, open, high, low, close,
                 # volume]
-                assert isinstance(
-                    first_kline, list), f"Expected list, got {type(first_kline)}"
-                assert len(
-                    first_kline) >= 6, f"Expected at least 6 fields, got {len(first_kline)}"
+                assert isinstance(first_kline, list), f"Expected list, got {type(first_kline)}"
+                assert len(first_kline) >= 6, f"Expected at least 6 fields, got {len(first_kline)}"
 
                 timestamp = int(first_kline[0])
                 open_price = float(first_kline[1])
@@ -132,7 +124,9 @@ class TestBtcturkKlineData:
 
                 assert timestamp > 0, f"Invalid timestamp: {timestamp}"
                 assert open_price > 0, f"Invalid open_price: {open_price}"
-                assert high_price >= low_price, f"high ({high_price}) should be >= low ({low_price})"
+                assert high_price >= low_price, (
+                    f"high ({high_price}) should be >= low ({low_price})"
+                )
                 assert close_price > 0, f"Invalid close_price: {close_price}"
                 assert volume >= 0, f"Invalid volume: {volume}"
 
@@ -142,8 +136,9 @@ class TestBtcturkKlineData:
         """Test getting kline data (asynchronous)."""
         data_queue = queue.Queue()
         live_btcturk_spot_feed = BTCTurkRequestDataSpot(data_queue)
-        live_btcturk_spot_feed.async_get_kline("BTCUSDT", period="1h", count=3,
-                                               extra_data={"test_async_kline_data": True})
+        live_btcturk_spot_feed.async_get_kline(
+            "BTCUSDT", period="1h", count=3, extra_data={"test_async_kline_data": True}
+        )
         time.sleep(5)
 
         try:
@@ -174,21 +169,19 @@ class TestBtcturkOrderBook:
         assert order_book_data is not None
 
         # BTCTurk returns dict with bids/asks
-        assert isinstance(
-            order_book_data, dict), f"Expected dict, got {type(order_book_data)}"
+        assert isinstance(order_book_data, dict), f"Expected dict, got {type(order_book_data)}"
 
         # Check for bids
         if "bids" in order_book_data:
             bids = order_book_data["bids"]
-            assert isinstance(
-                bids, list), f"bids should be list, got {type(bids)}"
+            assert isinstance(bids, list), f"bids should be list, got {type(bids)}"
             if len(bids) > 0:
                 first_bid = bids[0]
                 # BTCTurk bid format: [price, volume, total_orders]
-                assert isinstance(
-                    first_bid, list), f"bid should be list, got {type(first_bid)}"
-                assert len(
-                    first_bid) >= 2, f"bid should have at least price and volume, got {first_bid}"
+                assert isinstance(first_bid, list), f"bid should be list, got {type(first_bid)}"
+                assert len(first_bid) >= 2, (
+                    f"bid should have at least price and volume, got {first_bid}"
+                )
                 bid_price = float(first_bid[0])
                 bid_volume = float(first_bid[1])
                 assert bid_price > 0, f"Invalid bid_price: {bid_price}"
@@ -197,14 +190,13 @@ class TestBtcturkOrderBook:
         # Check for asks
         if "asks" in order_book_data:
             asks = order_book_data["asks"]
-            assert isinstance(
-                asks, list), f"asks should be list, got {type(asks)}"
+            assert isinstance(asks, list), f"asks should be list, got {type(asks)}"
             if len(asks) > 0:
                 first_ask = asks[0]
-                assert isinstance(
-                    first_ask, list), f"ask should be list, got {type(first_ask)}"
-                assert len(
-                    first_ask) >= 2, f"ask should have at least price and volume, got {first_ask}"
+                assert isinstance(first_ask, list), f"ask should be list, got {type(first_ask)}"
+                assert len(first_ask) >= 2, (
+                    f"ask should have at least price and volume, got {first_ask}"
+                )
                 ask_price = float(first_ask[0])
                 ask_volume = float(first_ask[1])
                 assert ask_price > 0, f"Invalid ask_price: {ask_price}"
@@ -212,11 +204,12 @@ class TestBtcturkOrderBook:
 
         # Verify bids[0][0] <= asks[0][0] (best bid <= best ask)
         if "bids" in order_book_data and "asks" in order_book_data:
-            if len(order_book_data["bids"]) > 0 and len(
-                    order_book_data["asks"]) > 0:
+            if len(order_book_data["bids"]) > 0 and len(order_book_data["asks"]) > 0:
                 best_bid = float(order_book_data["bids"][0][0])
                 best_ask = float(order_book_data["asks"][0][0])
-                assert best_bid <= best_ask, f"best_bid ({best_bid}) should be <= best_ask ({best_ask})"
+                assert best_bid <= best_ask, (
+                    f"best_bid ({best_bid}) should be <= best_ask ({best_ask})"
+                )
 
     def test_btcturk_async_orderbook_data(self):
         """Test getting order book data (asynchronous)."""

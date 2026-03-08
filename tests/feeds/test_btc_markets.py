@@ -8,21 +8,20 @@ Run tests:
 import json
 import queue
 import time
-from unittest.mock import Mock, MagicMock
+from unittest.mock import Mock
 
 import pytest
 
+# Import registration to auto-register BTC Markets
+import bt_api_py.exchange_registers.register_btc_markets  # noqa: F401
 from bt_api_py.containers.exchanges.btc_markets_exchange_data import (
     BtcMarketsExchangeDataSpot,
 )
 from bt_api_py.containers.requestdatas.request_data import RequestData
 from bt_api_py.containers.tickers.btc_markets_ticker import BtcMarketsRequestTickerData
-from bt_api_py.feeds.live_btc_markets.spot import BtcMarketsRequestDataSpot
 from bt_api_py.feeds.capability import Capability
+from bt_api_py.feeds.live_btc_markets.spot import BtcMarketsRequestDataSpot
 from bt_api_py.registry import ExchangeRegistry
-
-# Import registration to auto-register BTC Markets
-import bt_api_py.exchange_registers.register_btc_markets  # noqa: F401
 
 
 @pytest.fixture
@@ -177,6 +176,7 @@ class TestBtcMarketsBaseCapabilities:
 
     def test_base_capabilities(self):
         from bt_api_py.feeds.live_btc_markets.request_base import BtcMarketsRequestData
+
         caps = BtcMarketsRequestData._capabilities()
         assert Capability.GET_TICK in caps
         assert Capability.MAKE_ORDER in caps
@@ -238,18 +238,18 @@ class TestBtcMarketsDataContainers:
     """Test BTC Markets data containers."""
 
     def test_ticker_container(self):
-        ticker_response = json.dumps({
-            "marketId": "BTC-AUD",
-            "lastPrice": "50000.00",
-            "bestBid": "49900.00",
-            "bestAsk": "50100.00",
-            "volume24h": "100.50",
-            "high24h": "51000.00",
-            "low24h": "48000.00",
-        })
-        ticker = BtcMarketsRequestTickerData(
-            ticker_response, "BTC-AUD", "SPOT", False
+        ticker_response = json.dumps(
+            {
+                "marketId": "BTC-AUD",
+                "lastPrice": "50000.00",
+                "bestBid": "49900.00",
+                "bestAsk": "50100.00",
+                "volume24h": "100.50",
+                "high24h": "51000.00",
+                "low24h": "48000.00",
+            }
         )
+        ticker = BtcMarketsRequestTickerData(ticker_response, "BTC-AUD", "SPOT", False)
         ticker.init_data()
         assert ticker.get_exchange_name() == "BTC_MARKETS"
         assert ticker.symbol_name == "BTC-AUD"
@@ -268,9 +268,7 @@ class TestBtcMarketsDataContainers:
             "bestAsk": "3010.00",
         }
         ticker_response = json.dumps(ticker_data)
-        ticker = BtcMarketsRequestTickerData(
-            ticker_response, "ETH-AUD", "SPOT", False
-        )
+        ticker = BtcMarketsRequestTickerData(ticker_response, "ETH-AUD", "SPOT", False)
         ticker.init_data()
         assert ticker.last_price == 3000.00
         assert ticker.bid_price == 2990.00
@@ -286,7 +284,10 @@ class TestBtcMarketsRegistry:
 
     def test_btc_markets_exchange_data_registered(self):
         assert "BTC_MARKETS___SPOT" in ExchangeRegistry._exchange_data_classes
-        assert ExchangeRegistry._exchange_data_classes["BTC_MARKETS___SPOT"] == BtcMarketsExchangeDataSpot
+        assert (
+            ExchangeRegistry._exchange_data_classes["BTC_MARKETS___SPOT"]
+            == BtcMarketsExchangeDataSpot
+        )
 
     def test_btc_markets_create_feed(self):
         data_queue = queue.Queue()

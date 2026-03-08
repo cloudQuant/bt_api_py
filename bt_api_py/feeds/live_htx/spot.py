@@ -1,7 +1,7 @@
 """HTX Spot Trading Feed"""
 
 import json
-import time
+from datetime import UTC
 
 from bt_api_py.containers.accounts.htx_account import HtxSpotRequestAccountData
 from bt_api_py.containers.balances.htx_balance import HtxRequestBalanceData
@@ -9,7 +9,6 @@ from bt_api_py.containers.bars.htx_bar import HtxRequestBarData
 from bt_api_py.containers.exchanges.htx_exchange_data import HtxExchangeDataSpot
 from bt_api_py.containers.orderbooks.htx_orderbook import HtxRequestOrderBookData
 from bt_api_py.containers.orders.htx_order import HtxRequestOrderData
-from bt_api_py.containers.requestdatas.request_data import RequestData
 from bt_api_py.containers.tickers.htx_ticker import HtxRequestTickerData
 from bt_api_py.containers.trades.htx_trade import HtxRequestTradeData
 from bt_api_py.feeds.live_htx.request_base import HtxRequestData
@@ -65,7 +64,11 @@ class HtxRequestDataSpot(HtxRequestData):
         if input_data is None:
             return [], False
         status = input_data.get("status") == "ok"
-        data = [HtxRequestTickerData(input_data, extra_data["symbol_name"], extra_data["asset_type"], True)]
+        data = [
+            HtxRequestTickerData(
+                input_data, extra_data["symbol_name"], extra_data["asset_type"], True
+            )
+        ]
         return data, status
 
     def get_ticker(self, symbol, extra_data=None, **kwargs):
@@ -120,7 +123,11 @@ class HtxRequestDataSpot(HtxRequestData):
         if input_data is None:
             return [], False
         status = input_data.get("status") == "ok"
-        data = [HtxRequestOrderBookData(input_data, extra_data["symbol_name"], extra_data["asset_type"], True)]
+        data = [
+            HtxRequestOrderBookData(
+                input_data, extra_data["symbol_name"], extra_data["asset_type"], True
+            )
+        ]
         return data, status
 
     def get_depth(self, symbol, depth_type="step0", extra_data=None, **kwargs):
@@ -347,7 +354,11 @@ class HtxRequestDataSpot(HtxRequestData):
         if input_data is None:
             return [], False
         status = input_data.get("status") == "ok"
-        data = [HtxRequestBalanceData(input_data, extra_data["symbol_name"], extra_data["asset_type"], True)]
+        data = [
+            HtxRequestBalanceData(
+                input_data, extra_data["symbol_name"], extra_data["asset_type"], True
+            )
+        ]
         return data, status
 
     def get_balance(self, account_id=None, extra_data=None, **kwargs):
@@ -532,7 +543,11 @@ class HtxRequestDataSpot(HtxRequestData):
             return [], False
         status = input_data.get("status") == "ok"
         data = input_data.get("data", {})
-        order_data = [HtxRequestOrderData(data, extra_data.get("symbol_name", ""), extra_data["asset_type"], True)]
+        order_data = [
+            HtxRequestOrderData(
+                data, extra_data.get("symbol_name", ""), extra_data["asset_type"], True
+            )
+        ]
         return order_data, status
 
     def get_order(self, order_id, extra_data=None, **kwargs):
@@ -547,12 +562,7 @@ class HtxRequestDataSpot(HtxRequestData):
         path, params, extra_data = self._get_order(order_id, extra_data, **kwargs)
         return self.request(path, params=params, extra_data=extra_data)
 
-    def _get_orders(
-        self,
-        symbol,
-        states="submitted,partial-filled",
-        **kwargs
-    ):
+    def _get_orders(self, symbol, states="submitted,partial-filled", **kwargs):
         """Get order list.
 
         Args:
@@ -590,7 +600,10 @@ class HtxRequestDataSpot(HtxRequestData):
             return [], False
         status = input_data.get("status") == "ok"
         data = input_data.get("data", [])
-        orders = [HtxRequestOrderData(order, extra_data["symbol_name"], extra_data["asset_type"], True) for order in data]
+        orders = [
+            HtxRequestOrderData(order, extra_data["symbol_name"], extra_data["asset_type"], True)
+            for order in data
+        ]
         return orders, status
 
     def get_orders(self, symbol, states="submitted,partial-filled", extra_data=None, **kwargs):
@@ -708,9 +721,7 @@ class HtxMarketWssDataSpot(MyWebsocketApp):
         self.logger = get_logger("htx_market_wss")
 
     def open_rsp(self):
-        self.wss_logger.info(
-            f"===== {self.exchange_name} Market Websocket Connected ====="
-        )
+        self.wss_logger.info(f"===== {self.exchange_name} Market Websocket Connected =====")
         self._init()
 
     def _init(self):
@@ -738,6 +749,7 @@ class HtxMarketWssDataSpot(MyWebsocketApp):
         Must respond to ping with pong to keep connection alive.
         """
         import gzip
+
         # Decompress gzip binary message
         try:
             if isinstance(message, bytes):
@@ -834,9 +846,9 @@ class HtxAccountWssDataSpot(MyWebsocketApp):
         import base64
         import hashlib
         import hmac
-        from datetime import datetime, timezone
+        from datetime import datetime
 
-        timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S")
+        timestamp = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%S")
         params = {
             "accessKey": self.public_key,
             "signatureMethod": "HmacSHA256",
@@ -870,9 +882,7 @@ class HtxAccountWssDataSpot(MyWebsocketApp):
         }
 
     def open_rsp(self):
-        self.wss_logger.info(
-            f"===== {self.exchange_name} Account Websocket Connected ====="
-        )
+        self.wss_logger.info(f"===== {self.exchange_name} Account Websocket Connected =====")
         # Send authentication
         auth_msg = json.dumps(self._build_auth_params())
         self.ws.send(auth_msg)
@@ -942,13 +952,14 @@ class HtxAccountWssDataSpot(MyWebsocketApp):
         data = content.get("data", {})
         symbol = data.get("symbol", "UNKNOWN")
         from bt_api_py.containers.orders.htx_order import HtxRequestOrderData
+
         order_data = HtxRequestOrderData(data, symbol, self.asset_type, True)
         self.data_queue.put(order_data)
 
     def push_account(self, content):
         data = content.get("data", {})
         symbol = "ALL"
-        from bt_api_py.containers.accounts.htx_account import HtxSpotRequestAccountData
+
         account_data = HtxSpotRequestAccountData(data, symbol, self.asset_type, True)
         self.data_queue.put(account_data)
 

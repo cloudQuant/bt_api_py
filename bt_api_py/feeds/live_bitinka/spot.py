@@ -2,7 +2,6 @@
 Bitinka Spot Feed implementation.
 """
 
-from bt_api_py.containers.exchanges.bitinka_exchange_data import BitinkaExchangeDataSpot
 from bt_api_py.feeds.capability import Capability
 from bt_api_py.feeds.live_bitinka.request_base import BitinkaRequestData
 
@@ -47,13 +46,15 @@ class BitinkaRequestDataSpot(BitinkaRequestData):
         bitinka_symbol = self._convert_symbol(symbol)
         if extra_data is None:
             extra_data = {}
-        extra_data.update({
-            "request_type": request_type,
-            "symbol_name": bitinka_symbol,
-            "asset_type": self.asset_type,
-            "exchange_name": self.exchange_name,
-            "normalize_function": self._get_tick_normalize_function,
-        })
+        extra_data.update(
+            {
+                "request_type": request_type,
+                "symbol_name": bitinka_symbol,
+                "asset_type": self.asset_type,
+                "exchange_name": self.exchange_name,
+                "normalize_function": self._get_tick_normalize_function,
+            }
+        )
         params = {"market": bitinka_symbol}
         return path, params, extra_data
 
@@ -85,13 +86,15 @@ class BitinkaRequestDataSpot(BitinkaRequestData):
         bitinka_symbol = self._convert_symbol(symbol)
         if extra_data is None:
             extra_data = {}
-        extra_data.update({
-            "request_type": request_type,
-            "symbol_name": bitinka_symbol,
-            "asset_type": self.asset_type,
-            "exchange_name": self.exchange_name,
-            "normalize_function": self._get_depth_normalize_function,
-        })
+        extra_data.update(
+            {
+                "request_type": request_type,
+                "symbol_name": bitinka_symbol,
+                "asset_type": self.asset_type,
+                "exchange_name": self.exchange_name,
+                "normalize_function": self._get_depth_normalize_function,
+            }
+        )
         params = {"market": bitinka_symbol}
         return path, params, extra_data
 
@@ -123,13 +126,15 @@ class BitinkaRequestDataSpot(BitinkaRequestData):
         bitinka_symbol = self._convert_symbol(symbol)
         if extra_data is None:
             extra_data = {}
-        extra_data.update({
-            "request_type": request_type,
-            "symbol_name": bitinka_symbol,
-            "asset_type": self.asset_type,
-            "exchange_name": self.exchange_name,
-            "normalize_function": self._get_trades_normalize_function,
-        })
+        extra_data.update(
+            {
+                "request_type": request_type,
+                "symbol_name": bitinka_symbol,
+                "asset_type": self.asset_type,
+                "exchange_name": self.exchange_name,
+                "normalize_function": self._get_trades_normalize_function,
+            }
+        )
         params = {"market": bitinka_symbol}
         return path, params, extra_data
 
@@ -152,13 +157,15 @@ class BitinkaRequestDataSpot(BitinkaRequestData):
         path = "GET /markets"
         if extra_data is None:
             extra_data = {}
-        extra_data.update({
-            "request_type": request_type,
-            "symbol_name": "",
-            "asset_type": self.asset_type,
-            "exchange_name": self.exchange_name,
-            "normalize_function": self._get_exchange_info_normalize_function,
-        })
+        extra_data.update(
+            {
+                "request_type": request_type,
+                "symbol_name": "",
+                "asset_type": self.asset_type,
+                "exchange_name": self.exchange_name,
+                "normalize_function": self._get_exchange_info_normalize_function,
+            }
+        )
         return path, {}, extra_data
 
     @staticmethod
@@ -182,13 +189,15 @@ class BitinkaRequestDataSpot(BitinkaRequestData):
         path = "GET /account"
         if extra_data is None:
             extra_data = {}
-        extra_data.update({
-            "request_type": request_type,
-            "symbol_name": "",
-            "asset_type": self.asset_type,
-            "exchange_name": self.exchange_name,
-            "normalize_function": self._get_account_normalize_function,
-        })
+        extra_data.update(
+            {
+                "request_type": request_type,
+                "symbol_name": "",
+                "asset_type": self.asset_type,
+                "exchange_name": self.exchange_name,
+                "normalize_function": self._get_account_normalize_function,
+            }
+        )
         return path, {}, extra_data
 
     @staticmethod
@@ -218,13 +227,15 @@ class BitinkaRequestDataSpot(BitinkaRequestData):
         path = "GET /balance"
         if extra_data is None:
             extra_data = {}
-        extra_data.update({
-            "request_type": request_type,
-            "symbol_name": symbol or "",
-            "asset_type": self.asset_type,
-            "exchange_name": self.exchange_name,
-            "normalize_function": self._get_balance_normalize_function,
-        })
+        extra_data.update(
+            {
+                "request_type": request_type,
+                "symbol_name": symbol or "",
+                "asset_type": self.asset_type,
+                "exchange_name": self.exchange_name,
+                "normalize_function": self._get_balance_normalize_function,
+            }
+        )
         params = {}
         if symbol:
             params["currency"] = symbol
@@ -245,19 +256,31 @@ class BitinkaRequestDataSpot(BitinkaRequestData):
 
     # ==================== Trading Interfaces ====================
 
-    def _make_order(self, symbol, volume, price, order_type, offset="open",
-                    post_only=False, client_order_id=None, extra_data=None, **kwargs):
+    def _make_order(
+        self,
+        symbol,
+        volume,
+        price,
+        order_type,
+        offset="open",
+        post_only=False,
+        client_order_id=None,
+        extra_data=None,
+        **kwargs,
+    ):
         """Prepare order. Returns (path, params, extra_data)."""
         bitinka_symbol = self._convert_symbol(symbol)
         path = "POST /order"
         if extra_data is None:
             extra_data = {}
-        extra_data.update({
-            "exchange_name": self.exchange_name,
-            "symbol_name": bitinka_symbol,
-            "asset_type": self.asset_type,
-            "request_type": "make_order",
-        })
+        extra_data.update(
+            {
+                "exchange_name": self.exchange_name,
+                "symbol_name": bitinka_symbol,
+                "asset_type": self.asset_type,
+                "request_type": "make_order",
+            }
+        )
         params = {
             "market": bitinka_symbol,
             "side": offset.upper() if offset in ("BUY", "SELL", "buy", "sell") else "BUY",
@@ -267,12 +290,29 @@ class BitinkaRequestDataSpot(BitinkaRequestData):
         }
         return path, params, extra_data
 
-    def make_order(self, symbol, volume, price, order_type, offset="open",
-                   post_only=False, client_order_id=None, extra_data=None, **kwargs):
+    def make_order(
+        self,
+        symbol,
+        volume,
+        price,
+        order_type,
+        offset="open",
+        post_only=False,
+        client_order_id=None,
+        extra_data=None,
+        **kwargs,
+    ):
         """Place an order."""
         path, params, extra_data = self._make_order(
-            symbol, volume, price, order_type, offset, post_only,
-            client_order_id, extra_data, **kwargs
+            symbol,
+            volume,
+            price,
+            order_type,
+            offset,
+            post_only,
+            client_order_id,
+            extra_data,
+            **kwargs,
         )
         return self.request(path, body=params, extra_data=extra_data)
 
@@ -282,13 +322,15 @@ class BitinkaRequestDataSpot(BitinkaRequestData):
         path = "POST /cancelOrder"
         if extra_data is None:
             extra_data = {}
-        extra_data.update({
-            "exchange_name": self.exchange_name,
-            "symbol_name": bitinka_symbol,
-            "asset_type": self.asset_type,
-            "request_type": "cancel_order",
-            "order_id": order_id,
-        })
+        extra_data.update(
+            {
+                "exchange_name": self.exchange_name,
+                "symbol_name": bitinka_symbol,
+                "asset_type": self.asset_type,
+                "request_type": "cancel_order",
+                "order_id": order_id,
+            }
+        )
         params = {"market": bitinka_symbol, "orderId": order_id}
         return path, params, extra_data
 
@@ -303,13 +345,15 @@ class BitinkaRequestDataSpot(BitinkaRequestData):
         path = "GET /orderStatus"
         if extra_data is None:
             extra_data = {}
-        extra_data.update({
-            "exchange_name": self.exchange_name,
-            "symbol_name": bitinka_symbol,
-            "asset_type": self.asset_type,
-            "request_type": "query_order",
-            "order_id": order_id,
-        })
+        extra_data.update(
+            {
+                "exchange_name": self.exchange_name,
+                "symbol_name": bitinka_symbol,
+                "asset_type": self.asset_type,
+                "request_type": "query_order",
+                "order_id": order_id,
+            }
+        )
         params = {"market": bitinka_symbol, "orderId": order_id}
         return path, params, extra_data
 
@@ -323,12 +367,14 @@ class BitinkaRequestDataSpot(BitinkaRequestData):
         path = "GET /openOrders"
         if extra_data is None:
             extra_data = {}
-        extra_data.update({
-            "exchange_name": self.exchange_name,
-            "symbol_name": symbol or "",
-            "asset_type": self.asset_type,
-            "request_type": "get_open_orders",
-        })
+        extra_data.update(
+            {
+                "exchange_name": self.exchange_name,
+                "symbol_name": symbol or "",
+                "asset_type": self.asset_type,
+                "request_type": "get_open_orders",
+            }
+        )
         params = {}
         if symbol:
             bitinka_symbol = self._convert_symbol(symbol)
@@ -342,20 +388,24 @@ class BitinkaRequestDataSpot(BitinkaRequestData):
 
     # ==================== Deals ====================
 
-    def _get_deals(self, symbol, count=100, start_time=None, end_time=None, extra_data=None, **kwargs):
+    def _get_deals(
+        self, symbol, count=100, start_time=None, end_time=None, extra_data=None, **kwargs
+    ):
         """Get trade history/deals. Returns (path, params, extra_data)."""
         request_type = "get_deals"
         path = "GET /trades"
         bitinka_symbol = self._convert_symbol(symbol)
         if extra_data is None:
             extra_data = {}
-        extra_data.update({
-            "request_type": request_type,
-            "symbol_name": bitinka_symbol,
-            "asset_type": self.asset_type,
-            "exchange_name": self.exchange_name,
-            "normalize_function": self._get_deals_normalize_function,
-        })
+        extra_data.update(
+            {
+                "request_type": request_type,
+                "symbol_name": bitinka_symbol,
+                "asset_type": self.asset_type,
+                "exchange_name": self.exchange_name,
+                "normalize_function": self._get_deals_normalize_function,
+            }
+        )
         params = {"market": bitinka_symbol, "limit": count}
         if start_time:
             params["start_time"] = start_time
@@ -371,14 +421,22 @@ class BitinkaRequestDataSpot(BitinkaRequestData):
         deals = input_data.get("data", input_data)
         return [deals], deals is not None
 
-    def get_deals(self, symbol="BTC/USD", count=100, start_time=None, end_time=None, extra_data=None, **kwargs):
+    def get_deals(
+        self, symbol="BTC/USD", count=100, start_time=None, end_time=None, extra_data=None, **kwargs
+    ):
         """Get trade history."""
-        path, params, extra_data = self._get_deals(symbol, count, start_time, end_time, extra_data, **kwargs)
+        path, params, extra_data = self._get_deals(
+            symbol, count, start_time, end_time, extra_data, **kwargs
+        )
         return self.request(path, params=params, extra_data=extra_data)
 
-    def async_get_deals(self, symbol, count=100, start_time=None, end_time=None, extra_data=None, **kwargs):
+    def async_get_deals(
+        self, symbol, count=100, start_time=None, end_time=None, extra_data=None, **kwargs
+    ):
         """Get trade history asynchronously."""
-        path, params, extra_data = self._get_deals(symbol, count, start_time, end_time, extra_data, **kwargs)
+        path, params, extra_data = self._get_deals(
+            symbol, count, start_time, end_time, extra_data, **kwargs
+        )
         self.submit(
             self.async_request(path, params=params, extra_data=extra_data),
             callback=self.async_callback,

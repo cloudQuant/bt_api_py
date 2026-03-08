@@ -17,7 +17,10 @@ def _get_latoken_config():
         return _latoken_config
     try:
         from bt_api_py.config_loader import load_exchange_config
-        package_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+
+        package_root = os.path.dirname(
+            os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+        )
         config_path = os.path.join(package_root, "configs", "latoken.yaml")
         if os.path.exists(config_path):
             _latoken_config = load_exchange_config(config_path)
@@ -39,8 +42,14 @@ class LatokenExchangeData(ExchangeData):
         self.rest_paths = {}
 
         self.kline_periods = {
-            "1m": "1", "5m": "5", "15m": "15", "30m": "30",
-            "1h": "60", "4h": "240", "1d": "1D", "1w": "1W",
+            "1m": "1",
+            "5m": "5",
+            "15m": "15",
+            "30m": "30",
+            "1h": "60",
+            "4h": "240",
+            "1d": "1D",
+            "1w": "1W",
         }
         self.reverse_kline_periods = {v: k for k, v in self.kline_periods.items()}
         self.legal_currency = ["USDT", "BTC", "ETH", "LA"]

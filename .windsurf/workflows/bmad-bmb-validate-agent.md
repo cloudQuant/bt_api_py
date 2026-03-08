@@ -1,9 +1,7 @@
-- --
-
+---
 description: 'Validate existing BMAD agents and offer to improve deficiencies'
 auto_execution_mode: "iterate"
-
-- --
+---
 
 # validate-agent
 

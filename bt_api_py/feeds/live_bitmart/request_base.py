@@ -6,10 +6,10 @@ Signature: timestamp + "#" + memo + "#" + body_or_query
 Response format: {"code": 1000, "message": "OK", "data": {...}}
 """
 
-import time
-import hmac
 import hashlib
+import hmac
 import json
+import time
 from urllib.parse import urlencode
 
 from bt_api_py.containers.exchanges.bitmart_exchange_data import BitmartExchangeDataSpot
@@ -115,7 +115,9 @@ class BitmartRequestData(Feed):
         self.request_logger.info(f"{method} {url} -> {type(res)}")
         return RequestData(res, extra_data)
 
-    async def async_request(self, path, params=None, body=None, extra_data=None, timeout=5, is_sign=False):
+    async def async_request(
+        self, path, params=None, body=None, extra_data=None, timeout=5, is_sign=False
+    ):
         """Async HTTP request using Feed.async_http_request()."""
         if params is None:
             params = {}
@@ -158,26 +160,30 @@ class BitmartRequestData(Feed):
         path = self._params.get_rest_path("get_server_time")
         params = {}
         extra_data = extra_data or {}
-        extra_data.update({
-            "request_type": "get_server_time",
-            "symbol_name": None,
-            "asset_type": self.asset_type,
-            "exchange_name": self.exchange_name,
-            "normalize_function": self._get_server_time_normalize_function,
-        })
+        extra_data.update(
+            {
+                "request_type": "get_server_time",
+                "symbol_name": None,
+                "asset_type": self.asset_type,
+                "exchange_name": self.exchange_name,
+                "normalize_function": self._get_server_time_normalize_function,
+            }
+        )
         return path, params, extra_data
 
     def _get_exchange_info(self, extra_data=None, **kwargs):
         path = self._params.get_rest_path("get_exchange_info")
         params = {}
         extra_data = extra_data or {}
-        extra_data.update({
-            "request_type": "get_exchange_info",
-            "symbol_name": None,
-            "asset_type": self.asset_type,
-            "exchange_name": self.exchange_name,
-            "normalize_function": self._get_exchange_info_normalize_function,
-        })
+        extra_data.update(
+            {
+                "request_type": "get_exchange_info",
+                "symbol_name": None,
+                "asset_type": self.asset_type,
+                "exchange_name": self.exchange_name,
+                "normalize_function": self._get_exchange_info_normalize_function,
+            }
+        )
         return path, params, extra_data
 
     def _get_tick(self, symbol, extra_data=None, **kwargs):
@@ -185,13 +191,15 @@ class BitmartRequestData(Feed):
         path = self._params.get_rest_path("get_tick")
         params = {"symbol": bm_symbol}
         extra_data = extra_data or {}
-        extra_data.update({
-            "request_type": "get_tick",
-            "symbol_name": symbol,
-            "asset_type": self.asset_type,
-            "exchange_name": self.exchange_name,
-            "normalize_function": self._get_tick_normalize_function,
-        })
+        extra_data.update(
+            {
+                "request_type": "get_tick",
+                "symbol_name": symbol,
+                "asset_type": self.asset_type,
+                "exchange_name": self.exchange_name,
+                "normalize_function": self._get_tick_normalize_function,
+            }
+        )
         return path, params, extra_data
 
     def _get_depth(self, symbol, count=35, extra_data=None, **kwargs):
@@ -199,13 +207,15 @@ class BitmartRequestData(Feed):
         path = self._params.get_rest_path("get_depth")
         params = {"symbol": bm_symbol, "limit": min(count, 50)}
         extra_data = extra_data or {}
-        extra_data.update({
-            "request_type": "get_depth",
-            "symbol_name": symbol,
-            "asset_type": self.asset_type,
-            "exchange_name": self.exchange_name,
-            "normalize_function": self._get_depth_normalize_function,
-        })
+        extra_data.update(
+            {
+                "request_type": "get_depth",
+                "symbol_name": symbol,
+                "asset_type": self.asset_type,
+                "exchange_name": self.exchange_name,
+                "normalize_function": self._get_depth_normalize_function,
+            }
+        )
         return path, params, extra_data
 
     def _get_kline(self, symbol, period="1h", count=100, extra_data=None, **kwargs):
@@ -214,14 +224,16 @@ class BitmartRequestData(Feed):
         bm_step = self._params.get_period(period)
         params = {"symbol": bm_symbol, "step": bm_step, "limit": count}
         extra_data = extra_data or {}
-        extra_data.update({
-            "request_type": "get_kline",
-            "symbol_name": symbol,
-            "period": period,
-            "asset_type": self.asset_type,
-            "exchange_name": self.exchange_name,
-            "normalize_function": self._get_kline_normalize_function,
-        })
+        extra_data.update(
+            {
+                "request_type": "get_kline",
+                "symbol_name": symbol,
+                "period": period,
+                "asset_type": self.asset_type,
+                "exchange_name": self.exchange_name,
+                "normalize_function": self._get_kline_normalize_function,
+            }
+        )
         return path, params, extra_data
 
     def _get_trade_history(self, symbol, count=50, extra_data=None, **kwargs):
@@ -229,16 +241,20 @@ class BitmartRequestData(Feed):
         path = self._params.get_rest_path("get_trades")
         params = {"symbol": bm_symbol, "limit": min(count, 50)}
         extra_data = extra_data or {}
-        extra_data.update({
-            "request_type": "get_trades",
-            "symbol_name": symbol,
-            "asset_type": self.asset_type,
-            "exchange_name": self.exchange_name,
-            "normalize_function": self._get_trade_history_normalize_function,
-        })
+        extra_data.update(
+            {
+                "request_type": "get_trades",
+                "symbol_name": symbol,
+                "asset_type": self.asset_type,
+                "exchange_name": self.exchange_name,
+                "normalize_function": self._get_trade_history_normalize_function,
+            }
+        )
         return path, params, extra_data
 
-    def _make_order(self, symbol, size, price=None, order_type="buy-limit", extra_data=None, **kwargs):
+    def _make_order(
+        self, symbol, size, price=None, order_type="buy-limit", extra_data=None, **kwargs
+    ):
         path = self._params.get_rest_path("make_order")
         bm_symbol = self._params.get_symbol(symbol)
         parts = order_type.lower().replace("-", " ").split()
@@ -257,13 +273,15 @@ class BitmartRequestData(Feed):
         if kwargs.get("client_order_id"):
             body["client_order_id"] = kwargs["client_order_id"]
         extra_data = extra_data or {}
-        extra_data.update({
-            "request_type": "make_order",
-            "symbol_name": symbol,
-            "asset_type": self.asset_type,
-            "exchange_name": self.exchange_name,
-            "normalize_function": self._make_order_normalize_function,
-        })
+        extra_data.update(
+            {
+                "request_type": "make_order",
+                "symbol_name": symbol,
+                "asset_type": self.asset_type,
+                "exchange_name": self.exchange_name,
+                "normalize_function": self._make_order_normalize_function,
+            }
+        )
         return path, body, extra_data
 
     def _cancel_order(self, symbol=None, order_id=None, extra_data=None, **kwargs):
@@ -276,13 +294,15 @@ class BitmartRequestData(Feed):
         if kwargs.get("client_order_id"):
             body["client_order_id"] = kwargs["client_order_id"]
         extra_data = extra_data or {}
-        extra_data.update({
-            "request_type": "cancel_order",
-            "symbol_name": symbol,
-            "asset_type": self.asset_type,
-            "exchange_name": self.exchange_name,
-            "normalize_function": self._cancel_order_normalize_function,
-        })
+        extra_data.update(
+            {
+                "request_type": "cancel_order",
+                "symbol_name": symbol,
+                "asset_type": self.asset_type,
+                "exchange_name": self.exchange_name,
+                "normalize_function": self._cancel_order_normalize_function,
+            }
+        )
         return path, body, extra_data
 
     def _query_order(self, symbol=None, order_id=None, extra_data=None, **kwargs):
@@ -293,13 +313,15 @@ class BitmartRequestData(Feed):
         if order_id:
             body["orderId"] = str(order_id)
         extra_data = extra_data or {}
-        extra_data.update({
-            "request_type": "query_order",
-            "symbol_name": symbol,
-            "asset_type": self.asset_type,
-            "exchange_name": self.exchange_name,
-            "normalize_function": self._query_order_normalize_function,
-        })
+        extra_data.update(
+            {
+                "request_type": "query_order",
+                "symbol_name": symbol,
+                "asset_type": self.asset_type,
+                "exchange_name": self.exchange_name,
+                "normalize_function": self._query_order_normalize_function,
+            }
+        )
         return path, body, extra_data
 
     def _get_open_orders(self, symbol=None, extra_data=None, **kwargs):
@@ -309,13 +331,15 @@ class BitmartRequestData(Feed):
             body["symbol"] = self._params.get_symbol(symbol)
         body["limit"] = kwargs.get("limit", 50)
         extra_data = extra_data or {}
-        extra_data.update({
-            "request_type": "get_open_orders",
-            "symbol_name": symbol,
-            "asset_type": self.asset_type,
-            "exchange_name": self.exchange_name,
-            "normalize_function": self._get_open_orders_normalize_function,
-        })
+        extra_data.update(
+            {
+                "request_type": "get_open_orders",
+                "symbol_name": symbol,
+                "asset_type": self.asset_type,
+                "exchange_name": self.exchange_name,
+                "normalize_function": self._get_open_orders_normalize_function,
+            }
+        )
         return path, body, extra_data
 
     def _get_deals(self, symbol=None, extra_data=None, **kwargs):
@@ -325,39 +349,45 @@ class BitmartRequestData(Feed):
             body["symbol"] = self._params.get_symbol(symbol)
         body["limit"] = kwargs.get("limit", 50)
         extra_data = extra_data or {}
-        extra_data.update({
-            "request_type": "get_deals",
-            "symbol_name": symbol,
-            "asset_type": self.asset_type,
-            "exchange_name": self.exchange_name,
-            "normalize_function": self._get_deals_normalize_function,
-        })
+        extra_data.update(
+            {
+                "request_type": "get_deals",
+                "symbol_name": symbol,
+                "asset_type": self.asset_type,
+                "exchange_name": self.exchange_name,
+                "normalize_function": self._get_deals_normalize_function,
+            }
+        )
         return path, body, extra_data
 
     def _get_account(self, extra_data=None, **kwargs):
         path = self._params.get_rest_path("get_account")
         params = {}
         extra_data = extra_data or {}
-        extra_data.update({
-            "request_type": "get_account",
-            "symbol_name": None,
-            "asset_type": self.asset_type,
-            "exchange_name": self.exchange_name,
-            "normalize_function": self._get_account_normalize_function,
-        })
+        extra_data.update(
+            {
+                "request_type": "get_account",
+                "symbol_name": None,
+                "asset_type": self.asset_type,
+                "exchange_name": self.exchange_name,
+                "normalize_function": self._get_account_normalize_function,
+            }
+        )
         return path, params, extra_data
 
     def _get_balance(self, extra_data=None, **kwargs):
         path = self._params.get_rest_path("get_balance")
         params = {}
         extra_data = extra_data or {}
-        extra_data.update({
-            "request_type": "get_balance",
-            "symbol_name": None,
-            "asset_type": self.asset_type,
-            "exchange_name": self.exchange_name,
-            "normalize_function": self._get_balance_normalize_function,
-        })
+        extra_data.update(
+            {
+                "request_type": "get_balance",
+                "symbol_name": None,
+                "asset_type": self.asset_type,
+                "exchange_name": self.exchange_name,
+                "normalize_function": self._get_balance_normalize_function,
+            }
+        )
         return path, params, extra_data
 
     # ── normalize functions ─────────────────────────────────────

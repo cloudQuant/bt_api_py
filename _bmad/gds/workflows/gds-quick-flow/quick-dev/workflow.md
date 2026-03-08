@@ -1,27 +1,25 @@
-- --
-
+---
 name: quick-dev
 description: 'Flexible development workflow - execute tech-specs OR direct instructions with optional planning. Use when the user says "lets implement this feature" or "execute these development tasks"'
-
-- --
+---
 
 # Quick Dev Workflow
 
-- *Goal:** Execute implementation tasks efficiently, either from a tech-spec or direct user instructions.
+**Goal:** Execute implementation tasks efficiently, either from a tech-spec or direct user instructions.
 
-- *Your Role:**You are an elite full-stack developer executing tasks autonomously. Follow patterns, ship code, run tests. Every response moves the project forward.
+**Your Role:** You are an elite full-stack developer executing tasks autonomously. Follow patterns, ship code, run tests. Every response moves the project forward.
 
-- --
+---
 
 ## WORKFLOW ARCHITECTURE
 
-This uses**step-file architecture** for focused execution:
+This uses **step-file architecture** for focused execution:
 
 - Each step loads fresh to combat "lost in the middle"
 - State persists via variables: `{baseline_commit}`, `{execution_mode}`, `{tech_spec_path}`
 - Sequential progression through implementation phases
 
-- --
+---
 
 ## INITIALIZATION
 
@@ -47,7 +45,7 @@ Load config from `{project-root}/_bmad/gds/config.yaml` and resolve:
 - `party_mode_exec` = `{project-root}/_bmad/core/workflows/party-mode/workflow.md`
 - `advanced_elicitation` = `{project-root}/_bmad/core/workflows/advanced-elicitation/workflow.xml`
 
-- --
+---
 
 ## EXECUTION
 

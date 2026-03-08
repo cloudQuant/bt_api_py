@@ -12,13 +12,14 @@ CTP Feed 集成测试
 注意: CTP C++ API 在 macOS 上进程退出时可能产生 segfault (exit code 139)，
       这是 SWIG 对象 GC 清理的已知问题，不影响测试结果。
 """
+
 import atexit
 import os
-import sys
-import time
 import queue
-import pytest
+import time
 from pathlib import Path
+
+import pytest
 from dotenv import load_dotenv
 
 # macOS 上 CTP C++ SWIG 对象在进程退出时 GC 清理会导致 Bus Error / Segfault。
@@ -37,11 +38,13 @@ def _ensure_ctp_atexit():
         atexit.register(_ctp_atexit_handler)
         _CTP_ATEXIT_REGISTERED = True
 
+
 # 加载 .env 配置
 load_dotenv(Path(__file__).resolve().parent.parent / ".env")
 
 # 自动选择 CTP 环境
 from bt_api_py.ctp_env_selector import apply_ctp_env
+
 _td, _md, _env_name = apply_ctp_env()
 
 # ========== SimNow 配置 ==========
@@ -78,45 +81,49 @@ EXCHANGE_PARAMS = {
 #  1. 单元测试 — 不需要网络连接
 # ========================================================================
 
+
 class TestCtpImports:
     """测试 CTP 子模块导入"""
 
     def test_internal_ctp_module_import(self):
         """验证 bt_api_py.ctp 子模块可以正常导入"""
         from bt_api_py.ctp import CThostFtdcMdApi, CThostFtdcTraderApi
+
         assert CThostFtdcMdApi is not None
         assert CThostFtdcTraderApi is not None
 
     def test_ctp_client_import(self):
         """验证 MdClient / TraderClient 可以正常导入"""
         from bt_api_py.ctp.client import MdClient, TraderClient
+
         assert MdClient is not None
         assert TraderClient is not None
 
     def test_ctp_feed_import(self):
         """验证 CTP Feed 类可以正常导入"""
         from bt_api_py.feeds.live_ctp_feed import (
-            CtpRequestData, CtpRequestDataFuture,
-            CtpMarketStream, CtpTradeStream,
-            _ctp_field_to_dict, CTP_OFFSET_FLAG, CTP_DIRECTION_FLAG,
+            CTP_DIRECTION_FLAG,
+            CTP_OFFSET_FLAG,
         )
-        assert CTP_OFFSET_FLAG['open'] == '0'
-        assert CTP_OFFSET_FLAG['close_today'] == '3'
-        assert CTP_DIRECTION_FLAG['buy'] == '0'
-        assert CTP_DIRECTION_FLAG['sell'] == '1'
+
+        assert CTP_OFFSET_FLAG["open"] == "0"
+        assert CTP_OFFSET_FLAG["close_today"] == "3"
+        assert CTP_DIRECTION_FLAG["buy"] == "0"
+        assert CTP_DIRECTION_FLAG["sell"] == "1"
 
     def test_ctp_containers_import(self):
         """验证 CTP 容器类可以正常导入"""
         from bt_api_py.containers.ctp import (
-            CtpAccountData, CtpOrderData, CtpPositionData,
-            CtpTradeData, CtpBarData, CtpTickerData,
+            CtpAccountData,
         )
+
         assert CtpAccountData is not None
 
     def test_ctp_registry(self):
         """验证 CTP 在 ExchangeRegistry 中已注册"""
-        from bt_api_py.registry import ExchangeRegistry
         import bt_api_py.exchange_registers.register_ctp  # noqa: F401
+        from bt_api_py.registry import ExchangeRegistry
+
         assert ExchangeRegistry.has_exchange("CTP___FUTURE")
         assert ExchangeRegistry.get_balance_handler("CTP___FUTURE") is not None
         assert ExchangeRegistry.get_stream_class("CTP___FUTURE", "subscribe") is not None
@@ -124,20 +131,16 @@ class TestCtpImports:
     def test_btapi_includes_ctp(self):
         """验证 BtApi 可用交易所列表包含 CTP"""
         from bt_api_py.bt_api import BtApi
+
         available = BtApi.list_available_exchanges()
         assert "CTP___FUTURE" in available
 
     def test_split_submodule_imports(self):
         """验证拆分后的子模块可以独立导入"""
-        from bt_api_py.ctp.ctp_md_api import CThostFtdcMdApi, CThostFtdcMdSpi
-        from bt_api_py.ctp.ctp_trader_api import CThostFtdcTraderApi, CThostFtdcTraderSpi
-        from bt_api_py.ctp.ctp_structs_common import CThostFtdcReqUserLoginField
-        from bt_api_py.ctp.ctp_structs_order import CThostFtdcInputOrderField
-        from bt_api_py.ctp.ctp_structs_query import CThostFtdcQryTradingAccountField
-        from bt_api_py.ctp.ctp_structs_market import CThostFtdcDepthMarketDataField
-        from bt_api_py.ctp.ctp_structs_account import CThostFtdcTradingAccountField
-        from bt_api_py.ctp.ctp_structs_position import CThostFtdcInvestorPositionField
         from bt_api_py.ctp.ctp_constants import THOST_TERT_RESTART
+        from bt_api_py.ctp.ctp_md_api import CThostFtdcMdApi
+        from bt_api_py.ctp.ctp_trader_api import CThostFtdcTraderSpi
+
         assert CThostFtdcMdApi is not None
         assert CThostFtdcTraderSpi is not None
         assert THOST_TERT_RESTART is not None
@@ -146,15 +149,18 @@ class TestCtpImports:
         """验证拆分子模块与原始包导入返回相同对象 (向后兼容)"""
         from bt_api_py.ctp import CThostFtdcMdApi as via_init
         from bt_api_py.ctp.ctp_md_api import CThostFtdcMdApi as via_submod
+
         assert via_init is via_submod
 
         from bt_api_py.ctp import CThostFtdcInputOrderField as via_init2
         from bt_api_py.ctp.ctp_structs_order import CThostFtdcInputOrderField as via_submod2
+
         assert via_init2 is via_submod2
 
     def test_split_submodule_field_instantiation(self):
         """验证通过拆分子模块导入的 Field 可正常实例化和赋值"""
         from bt_api_py.ctp.ctp_structs_order import CThostFtdcInputOrderField
+
         field = CThostFtdcInputOrderField()
         field.InstrumentID = "IF2506"
         field.VolumeTotalOriginal = 1
@@ -164,6 +170,7 @@ class TestCtpImports:
     def test_split_submodule_all_modules_importable(self):
         """验证所有 12 个拆分子模块都可以导入"""
         import importlib
+
         modules = [
             "bt_api_py.ctp.ctp_constants",
             "bt_api_py.ctp.ctp_md_api",
@@ -189,79 +196,121 @@ class TestCtpContainerParsing:
 
     def test_account_data(self):
         from bt_api_py.containers.ctp.ctp_account import CtpAccountData
-        account = CtpAccountData({
-            'BrokerID': '9999', 'AccountID': '123456',
-            'Balance': 500000.0, 'Available': 300000.0,
-            'CurrMargin': 150000.0, 'PositionProfit': 5000.0,
-            'CloseProfit': 1000.0, 'Commission': 200.0,
-            'PreBalance': 495000.0, 'FrozenMargin': 10000.0,
-        })
+
+        account = CtpAccountData(
+            {
+                "BrokerID": "9999",
+                "AccountID": "123456",
+                "Balance": 500000.0,
+                "Available": 300000.0,
+                "CurrMargin": 150000.0,
+                "PositionProfit": 5000.0,
+                "CloseProfit": 1000.0,
+                "Commission": 200.0,
+                "PreBalance": 495000.0,
+                "FrozenMargin": 10000.0,
+            }
+        )
         account.init_data()
-        assert account.get_exchange_name() == 'CTP'
+        assert account.get_exchange_name() == "CTP"
         assert account.get_margin() == 500000.0
         assert account.get_available_margin() == 300000.0
         assert account.get_unrealized_profit() == 5000.0
-        assert account.get_account_type() == '123456'
+        assert account.get_account_type() == "123456"
         all_data = account.get_all_data()
-        assert all_data['balance'] == 500000.0
-        assert all_data['risk_degree'] == 150000.0 / 500000.0
+        assert all_data["balance"] == 500000.0
+        assert all_data["risk_degree"] == 150000.0 / 500000.0
 
     def test_order_data(self):
         from bt_api_py.containers.ctp.ctp_order import CtpOrderData
-        order = CtpOrderData({
-            'InstrumentID': 'IF2506', 'OrderRef': '1', 'OrderSysID': '123',
-            'Direction': '0', 'CombOffsetFlag': '0',
-            'LimitPrice': 3500.0, 'VolumeTotalOriginal': 1,
-            'VolumeTraded': 0, 'VolumeTotal': 1,
-            'OrderStatus': '3', 'InsertTime': '09:30:01',
-            'ExchangeID': 'CFFEX',
-        })
+
+        order = CtpOrderData(
+            {
+                "InstrumentID": "IF2506",
+                "OrderRef": "1",
+                "OrderSysID": "123",
+                "Direction": "0",
+                "CombOffsetFlag": "0",
+                "LimitPrice": 3500.0,
+                "VolumeTotalOriginal": 1,
+                "VolumeTraded": 0,
+                "VolumeTotal": 1,
+                "OrderStatus": "3",
+                "InsertTime": "09:30:01",
+                "ExchangeID": "CFFEX",
+            }
+        )
         order.init_data()
-        assert order.get_symbol_name() == 'IF2506'
-        assert order.get_order_side() == 'buy'
-        assert order.get_order_offset() == 'open'
-        assert order.get_order_exchange_id() == 'CFFEX'
+        assert order.get_symbol_name() == "IF2506"
+        assert order.get_order_side() == "buy"
+        assert order.get_order_offset() == "open"
+        assert order.get_order_exchange_id() == "CFFEX"
         assert order.get_order_price() == 3500.0
         assert order.get_order_size() == 1
 
     def test_position_data(self):
         from bt_api_py.containers.ctp.ctp_position import CtpPositionData
-        pos = CtpPositionData({
-            'InstrumentID': 'IF2506', 'PosiDirection': '2',
-            'Position': 5, 'TodayPosition': 3, 'YdPosition': 2,
-            'UseMargin': 100000.0, 'PositionProfit': 2500.0,
-            'SettlementPrice': 3550.0, 'ExchangeID': 'CFFEX',
-        })
+
+        pos = CtpPositionData(
+            {
+                "InstrumentID": "IF2506",
+                "PosiDirection": "2",
+                "Position": 5,
+                "TodayPosition": 3,
+                "YdPosition": 2,
+                "UseMargin": 100000.0,
+                "PositionProfit": 2500.0,
+                "SettlementPrice": 3550.0,
+                "ExchangeID": "CFFEX",
+            }
+        )
         pos.init_data()
-        assert pos.get_position_direction() == 'long'
+        assert pos.get_position_direction() == "long"
         assert pos.get_position_volume() == 5
         assert pos.get_today_position() == 3
         assert pos.get_yesterday_position() == 2
 
     def test_trade_data(self):
         from bt_api_py.containers.ctp.ctp_trade import CtpTradeData
-        trade = CtpTradeData({
-            'InstrumentID': 'IF2506', 'TradeID': 'T001',
-            'OrderSysID': '123', 'Direction': '0', 'OffsetFlag': '0',
-            'Price': 3500.0, 'Volume': 1,
-            'TradeDate': '20250226', 'TradeTime': '09:30:01',
-            'ExchangeID': 'CFFEX',
-        })
+
+        trade = CtpTradeData(
+            {
+                "InstrumentID": "IF2506",
+                "TradeID": "T001",
+                "OrderSysID": "123",
+                "Direction": "0",
+                "OffsetFlag": "0",
+                "Price": 3500.0,
+                "Volume": 1,
+                "TradeDate": "20250226",
+                "TradeTime": "09:30:01",
+                "ExchangeID": "CFFEX",
+            }
+        )
         trade.init_data()
-        assert trade.get_trade_side() == 'buy'
-        assert trade.get_trade_offset() == 'open'
+        assert trade.get_trade_side() == "buy"
+        assert trade.get_trade_offset() == "open"
         assert trade.get_trade_price() == 3500.0
 
     def test_ticker_data(self):
         from bt_api_py.containers.ctp.ctp_ticker import CtpTickerData
-        tick = CtpTickerData({
-            'InstrumentID': 'IF2506', 'LastPrice': 3550.0,
-            'BidPrice1': 3549.0, 'BidVolume1': 10,
-            'AskPrice1': 3551.0, 'AskVolume1': 8,
-            'Volume': 50000, 'OpenInterest': 120000.0,
-            'UpperLimitPrice': 3700.0, 'LowerLimitPrice': 3400.0,
-            'UpdateTime': '09:30:01', 'UpdateMillisec': 500,
-        })
+
+        tick = CtpTickerData(
+            {
+                "InstrumentID": "IF2506",
+                "LastPrice": 3550.0,
+                "BidPrice1": 3549.0,
+                "BidVolume1": 10,
+                "AskPrice1": 3551.0,
+                "AskVolume1": 8,
+                "Volume": 50000,
+                "OpenInterest": 120000.0,
+                "UpperLimitPrice": 3700.0,
+                "LowerLimitPrice": 3400.0,
+                "UpdateTime": "09:30:01",
+                "UpdateMillisec": 500,
+            }
+        )
         tick.init_data()
         assert tick.get_last_price() == 3550.0
         assert tick.get_bid_price() == 3549.0
@@ -272,30 +321,36 @@ class TestCtpContainerParsing:
         from bt_api_py.feeds.live_ctp_feed import _ctp_field_to_dict
 
         class MockField:
-            InstrumentID = 'rb2510'
+            InstrumentID = "rb2510"
             LastPrice = 3800.0
             Volume = 1000
-            def _internal(self): pass
+
+            def _internal(self):
+                pass
 
         d = _ctp_field_to_dict(MockField())
-        assert d['InstrumentID'] == 'rb2510'
-        assert d['LastPrice'] == 3800.0
-        assert '_internal' not in d
+        assert d["InstrumentID"] == "rb2510"
+        assert d["LastPrice"] == 3800.0
+        assert "_internal" not in d
 
     def test_balance_handler(self):
-        from bt_api_py.registry import ExchangeRegistry
-        from bt_api_py.containers.ctp.ctp_account import CtpAccountData
         import bt_api_py.exchange_registers.register_ctp  # noqa: F401
+        from bt_api_py.containers.ctp.ctp_account import CtpAccountData
+        from bt_api_py.registry import ExchangeRegistry
 
-        account = CtpAccountData({
-            'AccountID': 'TEST', 'Balance': 100000.0,
-            'Available': 80000.0, 'PositionProfit': 3000.0,
-        })
+        account = CtpAccountData(
+            {
+                "AccountID": "TEST",
+                "Balance": 100000.0,
+                "Available": 80000.0,
+                "PositionProfit": 3000.0,
+            }
+        )
         account.init_data()
         handler = ExchangeRegistry.get_balance_handler("CTP___FUTURE")
         value_result, cash_result = handler([account])
-        assert value_result['TEST']['value'] == 103000.0  # balance + position_profit
-        assert cash_result['TEST']['cash'] == 80000.0
+        assert value_result["TEST"]["value"] == 103000.0  # balance + position_profit
+        assert cash_result["TEST"]["cash"] == 80000.0
 
 
 # ========================================================================
@@ -311,6 +366,7 @@ class TestCtpContainerParsing:
 
 
 @skip_if_no_creds
+@pytest.mark.network
 class TestCtpTraderIntegration:
     """TraderApi 集成测试 — 连接、查询账户、查询持仓、下单、Feed层、BtApi层
 
@@ -355,9 +411,11 @@ class TestCtpTraderIntegration:
         account.init_data()
         assert account.get_exchange_name() == "CTP"
         assert account.get_margin() >= 0
-        print(f"\n[TD] Balance={account.get_margin():.2f}, "
-              f"Available={account.get_available_margin():.2f}, "
-              f"UnrealizedPnL={account.get_unrealized_profit():.2f}")
+        print(
+            f"\n[TD] Balance={account.get_margin():.2f}, "
+            f"Available={account.get_available_margin():.2f}, "
+            f"UnrealizedPnL={account.get_unrealized_profit():.2f}"
+        )
 
     def test_03_query_positions(self):
         """查询持仓"""
@@ -369,16 +427,22 @@ class TestCtpTraderIntegration:
         print(f"\n[TD] Positions: {len(data_list)} records")
         for pos in data_list:
             pos.init_data()
-            print(f"  {pos.get_symbol_name()} {pos.get_position_direction()} "
-                  f"{pos.get_position_volume()}手")
+            print(
+                f"  {pos.get_symbol_name()} {pos.get_position_direction()} "
+                f"{pos.get_position_volume()}手"
+            )
 
     def test_04_make_order(self):
         """下单测试 — 使用极低价格的限价单，验证 API 可调用"""
         time.sleep(1)  # CTP 流控
         print(f"\n[TD] Sending limit buy-open: {INSTRUMENT} @ 1.0")
         result = self.feed.make_order(
-            symbol=INSTRUMENT, volume=1, price=1.0,
-            order_type="buy-limit", offset="open", exchange_id=EXCHANGE,
+            symbol=INSTRUMENT,
+            volume=1,
+            price=1.0,
+            order_type="buy-limit",
+            offset="open",
+            exchange_id=EXCHANGE,
         )
         assert result is not None
         # make_order 返回 RequestData; 即使余额不足被拒，API 调用本身应该成功
@@ -414,6 +478,7 @@ class TestCtpTraderIntegration:
 
 
 @skip_if_no_creds
+@pytest.mark.network
 class TestCtpMdIntegration:
     """MdApi 集成测试 — 行情连接和 tick 接收
 
@@ -429,9 +494,9 @@ class TestCtpMdIntegration:
     def test_md_connect_receive_tick_and_convert(self):
         """通过 MdClient 连接行情，收到原始 tick，并验证 CtpTickerData 转换"""
         _ensure_ctp_atexit()
+        from bt_api_py.containers.ctp.ctp_ticker import CtpTickerData
         from bt_api_py.ctp.client import MdClient
         from bt_api_py.feeds.live_ctp_feed import _ctp_field_to_dict
-        from bt_api_py.containers.ctp.ctp_ticker import CtpTickerData
 
         ticks_received = []
 
@@ -458,22 +523,26 @@ class TestCtpMdIntegration:
 
         # 1) 验证原始 tick
         raw_tick = ticks_received[0]
-        print(f"[MD] Raw tick: {raw_tick.InstrumentID} "
-              f"Last={raw_tick.LastPrice} Bid={raw_tick.BidPrice1} Ask={raw_tick.AskPrice1}")
+        print(
+            f"[MD] Raw tick: {raw_tick.InstrumentID} "
+            f"Last={raw_tick.LastPrice} Bid={raw_tick.BidPrice1} Ask={raw_tick.AskPrice1}"
+        )
         assert raw_tick.InstrumentID.strip() != ""
 
         # 2) 验证 _ctp_field_to_dict 转换
         tick_dict = _ctp_field_to_dict(raw_tick)
-        assert 'InstrumentID' in tick_dict
-        assert 'LastPrice' in tick_dict
-        assert tick_dict['LastPrice'] == raw_tick.LastPrice
+        assert "InstrumentID" in tick_dict
+        assert "LastPrice" in tick_dict
+        assert tick_dict["LastPrice"] == raw_tick.LastPrice
 
         # 3) 验证 CtpTickerData 容器解析 (模拟 CtpMarketStream 的处理流程)
         ticker = CtpTickerData(tick_dict)
         ticker.init_data()
-        print(f"[MD] CtpTickerData: symbol={ticker.get_symbol_name()} "
-              f"last={ticker.get_last_price()} "
-              f"bid={ticker.get_bid_price()} ask={ticker.get_ask_price()}")
+        print(
+            f"[MD] CtpTickerData: symbol={ticker.get_symbol_name()} "
+            f"last={ticker.get_last_price()} "
+            f"bid={ticker.get_bid_price()} ask={ticker.get_ask_price()}"
+        )
         assert ticker.get_symbol_name().strip() != ""
         assert ticker.get_last_price() == raw_tick.LastPrice
 

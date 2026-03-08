@@ -1,5 +1,5 @@
-# -*- coding: utf-8 -*-
 """Tests for OKX liquidation warning data container."""
+
 from bt_api_py.containers.liquidations.okx_liquidation_warning import OkxLiquidationWarningData
 
 
@@ -12,7 +12,7 @@ def test_okx_liquidation_warning_data():
         "posCcy": "BTC",
         "liqPx": "20000",
         "markPx": "25000",
-        "tz": "0"
+        "tz": "0",
     }
 
     lw = OkxLiquidationWarningData(data, "BTC-USDT-SWAP", "SWAP", True)
@@ -49,7 +49,7 @@ def test_okx_liquidation_warning_with_pos_side():
         "posCcy": "ETH",
         "liqPx": "1500",
         "markPx": "1800",
-        "tz": "0"
+        "tz": "0",
     }
 
     lw = OkxLiquidationWarningData(data, "ETH-USDT-SWAP", "SWAP", True)

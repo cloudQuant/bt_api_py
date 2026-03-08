@@ -2,12 +2,14 @@
 Mercado Bitcoin REST API request base class.
 """
 
-import hmac
 import hashlib
+import hmac
 import time
 from urllib.parse import urlencode
 
-from bt_api_py.containers.exchanges.mercado_bitcoin_exchange_data import MercadoBitcoinExchangeDataSpot
+from bt_api_py.containers.exchanges.mercado_bitcoin_exchange_data import (
+    MercadoBitcoinExchangeDataSpot,
+)
 from bt_api_py.containers.requestdatas.request_data import RequestData
 from bt_api_py.feeds.capability import Capability
 from bt_api_py.feeds.feed import Feed
@@ -55,9 +57,7 @@ class MercadoBitcoinRequestData(Feed):
             body = urlencode(body_params)
             auth = f"/tapi/v3/?{body}"
             signature = hmac.new(
-                secret.encode("utf-8"),
-                auth.encode("utf-8"),
-                hashlib.sha512
+                secret.encode("utf-8"), auth.encode("utf-8"), hashlib.sha512
             ).hexdigest()
             return signature, body
         return "", ""
@@ -80,9 +80,9 @@ class MercadoBitcoinRequestData(Feed):
         """Resolve base URL based on request path."""
         base_url = self._params.rest_url
         if "candles" in request_path or "v4" in request_path:
-            base_url = getattr(self._params, 'rest_v4_url', self._params.rest_url)
+            base_url = getattr(self._params, "rest_v4_url", self._params.rest_url)
         elif "tapi" in original_path.lower():
-            base_url = getattr(self._params, 'rest_private_url', self._params.rest_url)
+            base_url = getattr(self._params, "rest_private_url", self._params.rest_url)
         return base_url
 
     def request(self, path, params=None, body=None, extra_data=None, timeout=10):
@@ -149,13 +149,15 @@ class MercadoBitcoinRequestData(Feed):
         path = "GET /BTC/ticker/"
         if extra_data is None:
             extra_data = {}
-        extra_data.update({
-            "exchange_name": self.exchange_name,
-            "symbol_name": "",
-            "asset_type": self.asset_type,
-            "request_type": "get_server_time",
-            "normalize_function": self._get_server_time_normalize_function,
-        })
+        extra_data.update(
+            {
+                "exchange_name": self.exchange_name,
+                "symbol_name": "",
+                "asset_type": self.asset_type,
+                "request_type": "get_server_time",
+                "normalize_function": self._get_server_time_normalize_function,
+            }
+        )
         return path, {}, extra_data
 
     def get_server_time(self, extra_data=None, **kwargs):

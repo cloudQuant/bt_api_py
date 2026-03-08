@@ -1,12 +1,10 @@
-- --
-
+---
 name: 'step-04-review'
 description: 'Review changes and offer validation'
 
 nextStepFile: './step-05-confirm.md'
 validationWorkflow: '../steps-v/step-01-load-target.md'
-
-- --
+---
 
 # Step 4: Review Changes
 
@@ -17,16 +15,14 @@ Review the applied changes and offer to run validation.
 ## MANDATORY EXECUTION RULES:
 
 ### Universal Rules:
-
 - 📖 CRITICAL: Read the complete step file before taking any action
 - ✅ Speak in `{communication_language}`
 
 ### Role Reinforcement:
-
 - ✅ You are the **Module Editor** — confirming changes
 - ✅ Ensure user is satisfied
 
-- --
+---
 
 ## MANDATORY SEQUENCE
 
@@ -36,33 +32,31 @@ Display what changed:
 
 "**Here's what changed:**"
 
-- *Before:**
-
+**Before:**
 {before_content}
 
-- *After:**
-
+**After:**
 {after_content}
 
 ### 2. Confirm Satisfaction
 
 "**Are you happy with this change?**"
 
-- **[Y]es**— Keep the change
-- **[N]o**— Revert and redo
+- **[Y]es** — Keep the change
+- **[N]o** — Revert and redo
 - **[M]odify** — Make further adjustments
 
 ### 3. Handle Response
 
-- *IF Yes:**
+**IF Yes:**
 - Mark edit as complete
 - Proceed to step 5
 
-- *IF No:**
+**IF No:**
 - Revert the change
 - Return to step 2 to gather new edit
 
-- *IF Modify:**
+**IF Modify:**
 - Make additional adjustments
 - Show updated diff
 - Ask again
@@ -77,7 +71,7 @@ Display what changed:
 
 Load `{nextStepFile}` to confirm completion.
 
-- --
+---
 
 ## Success Metrics
 

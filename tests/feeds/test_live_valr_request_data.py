@@ -10,23 +10,20 @@ Run with coverage:
 """
 
 import queue
-import time
-import pytest
-from unittest.mock import Mock, MagicMock
 
+import pytest
+
+# Import registration to auto-register Valr
+import bt_api_py.exchange_registers.register_valr  # noqa: F401
 from bt_api_py.containers.exchanges.valr_exchange_data import (
     ValrExchangeData,
     ValrExchangeDataSpot,
 )
-from bt_api_py.containers.tickers.valr_ticker import ValrRequestTickerData
 from bt_api_py.feeds.live_valr.spot import ValrRequestDataSpot
 from bt_api_py.registry import ExchangeRegistry
 
-# Import registration to auto-register Valr
-import bt_api_py.exchange_registers.register_valr  # noqa: F401
-
-
 # ==================== Fixtures ====================
+
 
 @pytest.fixture
 def data_queue():
@@ -43,6 +40,7 @@ def valr_feed(data_queue):
 
 # ==================== ServerTime Tests ====================
 
+
 class TestValrServerTime:
     """Test server time functionality."""
 
@@ -54,6 +52,7 @@ class TestValrServerTime:
 
 
 # ==================== Ticker Tests ====================
+
 
 class TestValrTickerData:
     """Test ticker data functionality."""
@@ -75,6 +74,7 @@ class TestValrTickerData:
             # Valr ticker structure: {symbol, lastPrice, bidPrice, askPrice,
             # ...}
         from bt_api_py.containers.requestdatas.request_data import RequestData
+
         assert isinstance(data, (dict, list, RequestData))
 
     def test_valr_multiple_tickers(self, valr_feed):
@@ -88,6 +88,7 @@ class TestValrTickerData:
 
 
 # ==================== Kline Tests ====================
+
 
 class TestValrKlineData:
     """Test kline/candlestick data functionality."""
@@ -108,6 +109,7 @@ class TestValrKlineData:
 
 # ==================== OrderBook Tests ====================
 
+
 class TestValrOrderBook:
     """Test order book depth functionality."""
 
@@ -117,6 +119,7 @@ class TestValrOrderBook:
         assert data is not None
 
         from bt_api_py.containers.requestdatas.request_data import RequestData
+
         assert isinstance(data, (dict, list, RequestData))
 
     def test_valr_orderbook_bids_asks(self, valr_feed):
@@ -136,6 +139,7 @@ class TestValrOrderBook:
 
 # ==================== Market Info Tests ====================
 
+
 class TestValrMarketInfo:
     """Test market information functionality."""
 
@@ -149,6 +153,7 @@ class TestValrMarketInfo:
 
 
 # ==================== Exchange Data Tests ====================
+
 
 class TestValrExchangeData:
     """Test Valr exchange data configuration."""
@@ -183,6 +188,7 @@ class TestValrExchangeData:
 
 # ==================== Registry Tests ====================
 
+
 class TestValrRegistry:
     """Test Valr registration."""
 
@@ -198,6 +204,7 @@ class TestValrRegistry:
 
 
 # ==================== Integration Tests ====================
+
 
 class TestValrIntegration:
     """Integration tests for Valr."""

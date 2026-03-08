@@ -2,7 +2,7 @@ import json
 import time
 
 from bt_api_py.containers.orders.order import OrderData
-from bt_api_py.functions.utils import from_dict_get_float, from_dict_get_string, from_dict_get_int
+from bt_api_py.functions.utils import from_dict_get_float, from_dict_get_int, from_dict_get_string
 
 
 class BitfinexOrderData(OrderData):
@@ -247,7 +247,11 @@ class BitfinexOrderData(OrderData):
 
     def get_filled_amount(self):
         """获取已成交数量"""
-        return self.amount_orig - self.amount if self.amount_orig is not None and self.amount is not None else 0
+        return (
+            self.amount_orig - self.amount
+            if self.amount_orig is not None and self.amount is not None
+            else 0
+        )
 
     def get_fill_percentage(self):
         """获取成交百分比"""
@@ -259,9 +263,11 @@ class BitfinexOrderData(OrderData):
 
 class BitfinexWssOrderData(BitfinexOrderData):
     """保存 Bitfinex WebSocket 订单信息"""
+
     pass  # WebSocket 订单格式与 REST API 相同
 
 
 class BitfinexRequestOrderData(BitfinexOrderData):
     """保存 Bitfinex REST API 订单信息"""
+
     pass  # REST API 订单格式直接处理

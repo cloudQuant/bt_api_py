@@ -1,12 +1,14 @@
 import os
-import pytest
-import spdlog
 from datetime import datetime
+
+import spdlog
+
 from bt_api_py.functions.log_message import SpdLogManager  # 替换为实际模块路径
 
 
 class TestSpdLogManager:
     """测试 SpdLogManager 类"""
+
     def test_initialization_default_values(self):
         """测试默认初始化值"""
         manager = SpdLogManager()
@@ -25,7 +27,7 @@ class TestSpdLogManager:
             logger_name="custom_logger",
             rotation_hour=12,
             rotation_minute=30,
-            print_info=True
+            print_info=True,
         )
         # SpdLogManager resolves relative paths to project logs/ dir
         assert manager.file_name.endswith("custom.log")
@@ -38,7 +40,9 @@ class TestSpdLogManager:
         """测试多个日志输出目标(文件和控制台)"""
         current_directory = os.getcwd()  # 获取当前工作目录
         log_file_name = os.path.join(current_directory, "test_log2.log")  # 拼接日志文件路径
-        manager = SpdLogManager(file_name=log_file_name, logger_name="multi_sink_logger", print_info=True)
+        manager = SpdLogManager(
+            file_name=log_file_name, logger_name="multi_sink_logger", print_info=True
+        )
         logger = manager.create_logger()
         test_message = "This is a test log message"
         logger.info(test_message)
@@ -54,7 +58,7 @@ class TestSpdLogManager:
         assert os.path.exists(new_file_name)
 
         # 检查日志文件内容
-        with open(new_file_name, "r") as f:
+        with open(new_file_name) as f:
             log_content = f.read()
             assert test_message in log_content
 
@@ -67,7 +71,9 @@ class TestSpdLogManager:
         """测试创建日志器（print_info=True）"""
         current_directory = os.getcwd()  # 获取当前工作目录
         log_file_name = os.path.join(current_directory, "test_log3.log")  # 拼接日志文件路径
-        logger_manager = SpdLogManager(file_name=log_file_name, logger_name="test_logger", print_info=True)
+        logger_manager = SpdLogManager(
+            file_name=log_file_name, logger_name="test_logger", print_info=True
+        )
         logger = logger_manager.create_logger()
         assert isinstance(logger, spdlog.SinkLogger)
         assert logger.name() == "test_logger"
@@ -85,7 +91,9 @@ class TestSpdLogManager:
         """测试创建日志器（print_info=False）"""
         current_directory = os.getcwd()  # 获取当前工作目录
         log_file_name = os.path.join(current_directory, "test_log4.log")  # 拼接日志文件路径
-        manager = SpdLogManager(file_name=log_file_name, logger_name="test_logger", print_info=False)
+        manager = SpdLogManager(
+            file_name=log_file_name, logger_name="test_logger", print_info=False
+        )
         logger = manager.create_logger()
         assert isinstance(logger, spdlog.SinkLogger)
         assert logger.name() == "test_logger"
@@ -103,7 +111,9 @@ class TestSpdLogManager:
         """测试日志输出到文件"""
         current_directory = os.getcwd()  # 获取当前工作目录
         log_file_name = os.path.join(current_directory, "test_log5.log")  # 拼接日志文件路径
-        logger_manager = SpdLogManager(file_name=log_file_name, logger_name="test_logger", print_info=True)
+        logger_manager = SpdLogManager(
+            file_name=log_file_name, logger_name="test_logger", print_info=True
+        )
         logger = logger_manager.create_logger()
         test_message = "This is a test log message"
         logger.info(test_message)
@@ -117,7 +127,7 @@ class TestSpdLogManager:
         assert os.path.exists(new_file_name), f"new file name = {new_file_name}"
 
         # 检查日志文件内容
-        with open(new_file_name, "r") as f:
+        with open(new_file_name) as f:
             log_content = f.read()
             assert test_message in log_content
 
@@ -144,7 +154,12 @@ class TestSpdLogManager:
         """测试日志文件轮换"""
         current_directory = os.getcwd()  # 获取当前工作目录
         log_file_name = os.path.join(current_directory, "test_log6.log")  # 拼接日志文件路径
-        manager = SpdLogManager(file_name=log_file_name, logger_name="rotation_logger2", rotation_hour=0, rotation_minute=0)
+        manager = SpdLogManager(
+            file_name=log_file_name,
+            logger_name="rotation_logger2",
+            rotation_hour=0,
+            rotation_minute=0,
+        )
         logger = manager.create_logger()
         logger.info("Log before rotation")
         logger.flush()
@@ -162,7 +177,9 @@ class TestSpdLogManager:
         file_name = f"test_log6_{today_date}.log"  # 在文件名后添加日期
         new_file_name = os.path.join(current_directory, file_name)  # 拼接日志文件路径
         assert os.path.exists(new_file_name)
-        new_file_name2 = os.path.join(os.path.dirname(rotated_log_path), f"rotated_log2_{today_date}.log")
+        new_file_name2 = os.path.join(
+            os.path.dirname(rotated_log_path), f"rotated_log2_{today_date}.log"
+        )
         assert os.path.exists(new_file_name2)
 
         # 关闭日志器
@@ -180,7 +197,9 @@ class TestSpdLogManager:
         """测试日志级别"""
         current_directory = os.getcwd()  # 获取当前工作目录
         log_file_name = os.path.join(current_directory, "test_log7.log")  # 拼接日志文件路径
-        logger_manager = SpdLogManager(file_name=log_file_name, logger_name="test_logger", print_info=True)
+        logger_manager = SpdLogManager(
+            file_name=log_file_name, logger_name="test_logger", print_info=True
+        )
         logger = logger_manager.create_logger()
         logger.set_level(spdlog.LogLevel.INFO)
         assert logger.level() == spdlog.LogLevel.INFO
@@ -198,7 +217,9 @@ class TestSpdLogManager:
         """测试日志器名称"""
         current_directory = os.getcwd()  # 获取当前工作目录
         log_file_name = os.path.join(current_directory, "test_log8.log")  # 拼接日志文件路径
-        logger_manager = SpdLogManager(file_name=log_file_name, logger_name="test_logger", print_info=True)
+        logger_manager = SpdLogManager(
+            file_name=log_file_name, logger_name="test_logger", print_info=True
+        )
         logger = logger_manager.create_logger()
         assert logger.name() == "test_logger"
         # 检查日志文件内容
@@ -215,7 +236,9 @@ class TestSpdLogManager:
         """测试日志刷新"""
         current_directory = os.getcwd()  # 获取当前工作目录
         log_file_name = os.path.join(current_directory, "test_log9.log")  # 拼接日志文件路径
-        logger_manager = SpdLogManager(file_name=log_file_name, logger_name="test_logger", print_info=True)
+        logger_manager = SpdLogManager(
+            file_name=log_file_name, logger_name="test_logger", print_info=True
+        )
         logger = logger_manager.create_logger()
         test_message = "This is a test log message"
         logger.info(test_message)
@@ -227,11 +250,10 @@ class TestSpdLogManager:
         file_name = f"test_log9_{today_date}.log"  # 在文件名后添加日期
         new_file_name = os.path.join(current_directory, file_name)  # 拼接日志文件路径
 
-        with open(new_file_name, "r") as f:
+        with open(new_file_name) as f:
             log_content = f.read()
             assert test_message in log_content
         logger.close()
         # 清理测试生成的文件
         if os.path.exists(new_file_name):
             os.remove(new_file_name)
-

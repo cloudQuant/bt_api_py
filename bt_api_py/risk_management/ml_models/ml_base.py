@@ -1,0 +1,479 @@
+"""机器学习模型基类
+
+定义机器学习模型的基础接口和通用功能
+"""
+
+import pickle
+import time
+from abc import ABC, abstractmethod
+from decimal import Decimal
+from typing import Any, Dict, List, Optional, Tuple
+
+import numpy as np
+from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score
+
+from bt_api_py.logging_factory import get_logger
+
+
+class BaseMLModel(ABC):
+    """机器学习模型基类
+
+    定义所有ML模型的通用接口和基础功能
+    """
+
+    def __init__(self, model_name: str, config: Optional[Dict[str, Any]] = None):
+        """初始化ML模型
+
+        Args:
+            model_name: 模型名称
+            config: 模型配置
+        """
+        self.model_name = model_name
+        self.config = config or {}
+        self.logger = get_logger(f"ml_model_{model_name}")
+
+        # 模型状态
+        self.model = None
+        self.is_trained = False
+        self.training_time = 0
+        self.last_training_time = 0
+
+        # 性能指标
+        self.metrics = {
+            "accuracy": 0.0,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1_score": 0.0,
+            "training_samples": 0,
+            "validation_samples": 0,
+            "features_count": 0,
+        }
+
+        # 模型版本
+        self.model_version = "1.0.0"
+        self.data_version = "1.0.0"
+
+        # 训练历史
+        self.training_history: List[Dict[str, Any]] = []
+
+        # 特征信息
+        self.feature_names: List[str] = []
+        self.feature_importance: Dict[str, float] = {}
+
+        self.logger.info(f"ML model {model_name} initialized")
+
+    @abstractmethod
+    def train(
+        self,
+        X: np.ndarray,
+        y: np.ndarray,
+        validation_data: Optional[Tuple[np.ndarray, np.ndarray]] = None,
+    ) -> Dict[str, Any]:
+        """训练模型
+
+        Args:
+            X: 特征矩阵
+            y: 目标变量
+            validation_data: 验证数据 (X_val, y_val)
+
+        Returns:
+            Dict[str, Any]: 训练结果
+        """
+        pass
+
+    @abstractmethod
+    def predict(self, X: np.ndarray) -> np.ndarray:
+        """预测
+
+        Args:
+            X: 特征矩阵
+
+        Returns:
+            np.ndarray: 预测结果
+        """
+        pass
+
+    @abstractmethod
+    def predict_proba(self, X: np.ndarray) -> np.ndarray:
+        """预测概率
+
+        Args:
+            X: 特征矩阵
+
+        Returns:
+            np.ndarray: 预测概率
+        """
+        pass
+
+    def evaluate(self, X: np.ndarray, y: np.ndarray) -> Dict[str, float]:
+        """评估模型性能
+
+        Args:
+            X: 测试特征
+            y: 测试目标
+
+        Returns:
+            Dict[str, float]: 评估指标
+        """
+        if not self.is_trained:
+            self.logger.warning("Model not trained yet")
+            return {}
+
+        try:
+            y_pred = self.predict(X)
+
+            metrics = {
+                "accuracy": accuracy_score(y, y_pred),
+                "precision": precision_score(y, y_pred, average="weighted", zero_division=0),
+                "recall": recall_score(y, y_pred, average="weighted", zero_division=0),
+                "f1_score": f1_score(y, y_pred, average="weighted", zero_division=0),
+            }
+
+            # 更新模型指标
+            self.metrics.update(metrics)
+
+            return metrics
+
+        except Exception as e:
+            self.logger.error(f"Error evaluating model: {e}")
+            return {}
+
+    def save_model(self, file_path: str) -> bool:
+        """保存模型
+
+        Args:
+            file_path: 保存路径
+
+        Returns:
+            bool: 保存是否成功
+        """
+        try:
+            model_data = {
+                "model": self.model,
+                "model_name": self.model_name,
+                "model_version": self.model_version,
+                "data_version": self.data_version,
+                "config": self.config,
+                "metrics": self.metrics,
+                "feature_names": self.feature_names,
+                "feature_importance": self.feature_importance,
+                "is_trained": self.is_trained,
+                "training_time": self.training_time,
+                "last_training_time": self.last_training_time,
+            }
+
+            with open(file_path, "wb") as f:
+                pickle.dump(model_data, f)
+
+            self.logger.info(f"Model saved to {file_path}")
+            return True
+
+        except Exception as e:
+            self.logger.error(f"Error saving model: {e}")
+            return False
+
+    def load_model(self, file_path: str) -> bool:
+        """加载模型
+
+        Args:
+            file_path: 模型文件路径
+
+        Returns:
+            bool: 加载是否成功
+        """
+        try:
+            with open(file_path, "rb") as f:
+                model_data = pickle.load(f)
+
+            self.model = model_data.get("model")
+            self.model_name = model_data.get("model_name", self.model_name)
+            self.model_version = model_data.get("model_version", "1.0.0")
+            self.data_version = model_data.get("data_version", "1.0.0")
+            self.config = model_data.get("config", {})
+            self.metrics = model_data.get("metrics", {})
+            self.feature_names = model_data.get("feature_names", [])
+            self.feature_importance = model_data.get("feature_importance", {})
+            self.is_trained = model_data.get("is_trained", False)
+            self.training_time = model_data.get("training_time", 0)
+            self.last_training_time = model_data.get("last_training_time", 0)
+
+            self.logger.info(f"Model loaded from {file_path}")
+            return True
+
+        except Exception as e:
+            self.logger.error(f"Error loading model: {e}")
+            return False
+
+    def get_feature_importance(self) -> Dict[str, float]:
+        """获取特征重要性
+
+        Returns:
+            Dict[str, float]: 特征重要性
+        """
+        return self.feature_importance
+
+    def update_feature_names(self, feature_names: List[str]) -> None:
+        """更新特征名称
+
+        Args:
+            feature_names: 特征名称列表
+        """
+        self.feature_names = feature_names
+        self.metrics["features_count"] = len(feature_names)
+
+    def get_model_info(self) -> Dict[str, Any]:
+        """获取模型信息
+
+        Returns:
+            Dict[str, Any]: 模型信息
+        """
+        return {
+            "model_name": self.model_name,
+            "model_version": self.model_version,
+            "data_version": self.data_version,
+            "is_trained": self.is_trained,
+            "training_time": self.training_time,
+            "last_training_time": self.last_training_time,
+            "metrics": self.metrics,
+            "config": self.config,
+            "features_count": len(self.feature_names),
+        }
+
+    def _record_training_step(self, step_data: Dict[str, Any]) -> None:
+        """记录训练步骤
+
+        Args:
+            step_data: 训练步骤数据
+        """
+        step_data["timestamp"] = int(time.time())
+        self.training_history.append(step_data)
+
+        # 限制历史记录大小
+        if len(self.training_history) > 1000:
+            self.training_history = self.training_history[-500:]
+
+    def _preprocess_features(self, X: np.ndarray) -> np.ndarray:
+        """预处理特征
+
+        Args:
+            X: 原始特征矩阵
+
+        Returns:
+            np.ndarray: 预处理后的特征矩阵
+        """
+        # 基础预处理：处理NaN、标准化等
+        if np.isnan(X).any():
+            X = np.nan_to_num(X, nan=0.0)
+
+        return X
+
+    def _validate_input(self, X: np.ndarray, y: Optional[np.ndarray] = None) -> bool:
+        """验证输入数据
+
+        Args:
+            X: 特征矩阵
+            y: 目标变量 (可选)
+
+        Returns:
+            bool: 验证是否通过
+        """
+        if X.size == 0:
+            self.logger.error("Empty feature matrix")
+            return False
+
+        if y is not None and len(X) != len(y):
+            self.logger.error("Feature matrix and target have different lengths")
+            return False
+
+        if len(self.feature_names) > 0 and X.shape[1] != len(self.feature_names):
+            self.logger.error(
+                f"Feature count mismatch: expected {len(self.feature_names)}, got {X.shape[1]}"
+            )
+            return False
+
+        return True
+
+    def __str__(self) -> str:
+        """字符串表示"""
+        return f"{self.__class__.__name__}(name={self.model_name}, trained={self.is_trained})"
+
+    def __repr__(self) -> str:
+        """详细字符串表示"""
+        return (
+            f"{self.__class__.__name__}(name={self.model_name}, "
+            f"version={self.model_version}, trained={self.is_trained}, "
+            f"accuracy={self.metrics['accuracy']:.3f})"
+        )
+
+
+class RiskPredictionResult:
+    """风险预测结果"""
+
+    def __init__(
+        self,
+        prediction: Any,
+        probability: float,
+        confidence: float,
+        model_name: str,
+        timestamp: int,
+        features_used: List[str],
+    ):
+        self.prediction = prediction
+        self.probability = probability
+        self.confidence = confidence
+        self.model_name = model_name
+        self.timestamp = timestamp
+        self.features_used = features_used
+
+    def to_dict(self) -> Dict[str, Any]:
+        """转换为字典格式"""
+        return {
+            "prediction": self.prediction,
+            "probability": self.probability,
+            "confidence": self.confidence,
+            "model_name": self.model_name,
+            "timestamp": self.timestamp,
+            "features_used": self.features_used,
+        }
+
+
+class ModelMetrics:
+    """模型性能指标"""
+
+    def __init__(self):
+        self.accuracy = 0.0
+        self.precision = 0.0
+        self.recall = 0.0
+        self.f1_score = 0.0
+        self.roc_auc = 0.0
+        self.confusion_matrix = None
+        self.classification_report = {}
+        self.feature_importance = {}
+        self.training_time = 0.0
+        self.prediction_time = 0.0
+
+    def update_from_sklearn_metrics(
+        self, y_true: np.ndarray, y_pred: np.ndarray, y_proba: Optional[np.ndarray] = None
+    ) -> None:
+        """从scikit-learn指标更新"""
+        from sklearn.metrics import (
+            accuracy_score,
+            precision_score,
+            recall_score,
+            f1_score,
+            roc_auc_score,
+            confusion_matrix,
+            classification_report,
+        )
+
+        self.accuracy = accuracy_score(y_true, y_pred)
+        self.precision = precision_score(y_true, y_pred, average="weighted", zero_division=0)
+        self.recall = recall_score(y_true, y_pred, average="weighted", zero_division=0)
+        self.f1_score = f1_score(y_true, y_pred, average="weighted", zero_division=0)
+        self.confusion_matrix = confusion_matrix(y_true, y_pred).tolist()
+        self.classification_report = classification_report(
+            y_true, y_pred, output_dict=True, zero_division=0
+        )
+
+        if y_proba is not None and len(np.unique(y_true)) == 2:
+            try:
+                self.roc_auc = roc_auc_score(y_true, y_proba[:, 1])
+            except Exception:
+                self.roc_auc = 0.0
+
+    def to_dict(self) -> Dict[str, Any]:
+        """转换为字典格式"""
+        return {
+            "accuracy": self.accuracy,
+            "precision": self.precision,
+            "recall": self.recall,
+            "f1_score": self.f1_score,
+            "roc_auc": self.roc_auc,
+            "confusion_matrix": self.confusion_matrix,
+            "classification_report": self.classification_report,
+            "feature_importance": self.feature_importance,
+            "training_time": self.training_time,
+            "prediction_time": self.prediction_time,
+        }
+
+
+class ModelComparator:
+    """模型比较器"""
+
+    def __init__(self):
+        self.models: Dict[str, BaseMLModel] = {}
+        self.test_results: Dict[str, Dict[str, float]] = {}
+
+    def add_model(self, name: str, model: BaseMLModel) -> None:
+        """添加模型
+
+        Args:
+            name: 模型名称
+            model: 模型实例
+        """
+        self.models[name] = model
+
+    def compare_models(self, X_test: np.ndarray, y_test: np.ndarray) -> Dict[str, Dict[str, float]]:
+        """比较模型性能
+
+        Args:
+            X_test: 测试特征
+            y_test: 测试目标
+
+        Returns:
+            Dict[str, Dict[str, float]]: 各模型的性能指标
+        """
+        results = {}
+
+        for name, model in self.models.items():
+            if model.is_trained:
+                metrics = model.evaluate(X_test, y_test)
+                results[name] = metrics
+            else:
+                results[name] = {"error": "Model not trained"}
+
+        self.test_results = results
+        return results
+
+    def get_best_model(self, metric: str = "f1_score") -> Tuple[str, BaseMLModel]:
+        """获取最佳模型
+
+        Args:
+            metric: 评估指标
+
+        Returns:
+            Tuple[str, BaseMLModel]: (模型名称, 模型实例)
+        """
+        best_name = None
+        best_score = -1
+        best_model = None
+
+        for name, model in self.models.items():
+            if model.is_trained and name in self.test_results:
+                score = self.test_results[name].get(metric, 0)
+                if score > best_score:
+                    best_score = score
+                    best_name = name
+                    best_model = model
+
+        return best_name, best_model
+
+    def get_comparison_report(self) -> Dict[str, Any]:
+        """获取比较报告"""
+        if not self.test_results:
+            return {"error": "No test results available"}
+
+        # 计算各指标的最佳模型
+        best_models = {}
+        metrics = ["accuracy", "precision", "recall", "f1_score"]
+
+        for metric in metrics:
+            best_model, _ = self.get_best_model(metric)
+            best_models[metric] = best_model
+
+        return {
+            "test_results": self.test_results,
+            "best_models": best_models,
+            "model_count": len(self.models),
+            "comparison_timestamp": int(time.time()),
+        }

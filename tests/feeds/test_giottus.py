@@ -10,14 +10,13 @@ from unittest.mock import Mock
 
 import pytest
 
+# Import registration to auto-register Giottus
+import bt_api_py.exchange_registers.register_giottus  # noqa: F401
 from bt_api_py.containers.exchanges.giottus_exchange_data import GiottusExchangeDataSpot
 from bt_api_py.containers.tickers.giottus_ticker import GiottusRequestTickerData
 from bt_api_py.feeds.capability import Capability
 from bt_api_py.feeds.live_giottus.spot import GiottusRequestDataSpot
 from bt_api_py.registry import ExchangeRegistry
-
-# Import registration to auto-register Giottus
-import bt_api_py.exchange_registers.register_giottus  # noqa: F401
 
 
 @pytest.fixture
@@ -296,8 +295,7 @@ class TestGiottusDataContainers:
             },
         }
         ticker = GiottusRequestTickerData(
-            ticker_response, symbol_name="BTC-INR", asset_type="SPOT",
-            has_been_json_encoded=True
+            ticker_response, symbol_name="BTC-INR", asset_type="SPOT", has_been_json_encoded=True
         )
         ticker.init_data()
         assert ticker.get_exchange_name() == "GIOTTUS"

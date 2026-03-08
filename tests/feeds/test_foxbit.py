@@ -11,15 +11,14 @@ from unittest.mock import Mock
 
 import pytest
 
+# Import registration to auto-register Foxbit
+import bt_api_py.exchange_registers.register_foxbit  # noqa: F401
 from bt_api_py.containers.exchanges.foxbit_exchange_data import FoxbitExchangeDataSpot
 from bt_api_py.containers.requestdatas.request_data import RequestData
 from bt_api_py.containers.tickers.foxbit_ticker import FoxbitRequestTickerData
 from bt_api_py.feeds.capability import Capability
 from bt_api_py.feeds.live_foxbit.spot import FoxbitRequestDataSpot
 from bt_api_py.registry import ExchangeRegistry
-
-# Import registration to auto-register Foxbit
-import bt_api_py.exchange_registers.register_foxbit  # noqa: F401
 
 
 @pytest.fixture
@@ -178,6 +177,7 @@ class TestFoxbitBaseCapabilities:
 
     def test_base_capabilities(self):
         from bt_api_py.feeds.live_foxbit.request_base import FoxbitRequestData
+
         caps = FoxbitRequestData._capabilities()
         assert Capability.GET_TICK in caps
         assert Capability.MAKE_ORDER in caps
@@ -246,18 +246,20 @@ class TestFoxbitDataContainers:
     """Test Foxbit data containers."""
 
     def test_ticker_container(self):
-        ticker_info = json.dumps({
-            "data": {
-                "marketSymbol": "BTCBRL",
-                "lastPrice": "250000.50",
-                "bidPrice": "249900.00",
-                "askPrice": "250000.50",
-                "vol": "12.345",
-                "highPrice": "255000.00",
-                "lowPrice": "245000.00",
-                "volQuote": "3000000",
+        ticker_info = json.dumps(
+            {
+                "data": {
+                    "marketSymbol": "BTCBRL",
+                    "lastPrice": "250000.50",
+                    "bidPrice": "249900.00",
+                    "askPrice": "250000.50",
+                    "vol": "12.345",
+                    "highPrice": "255000.00",
+                    "lowPrice": "245000.00",
+                    "volQuote": "3000000",
+                }
             }
-        })
+        )
         ticker = FoxbitRequestTickerData(ticker_info, "BTC/BRL", "SPOT", False)
         ticker.init_data()
         assert ticker.exchange_name == "FOXBIT"

@@ -10,43 +10,38 @@ Run with coverage:
 
 import json
 import queue
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pytest
 
-from bt_api_py.containers.exchanges.bitfinex_exchange_data import (
-    BitfinexExchangeData,
-    BitfinexExchangeDataSpot,
-)
-from bt_api_py.containers.tickers.bitfinex_ticker import (
-    BitfinexRequestTickerData,
-)
-from bt_api_py.containers.orderbooks.bitfinex_orderbook import (
-    BitfinexRequestOrderBookData,
+# Import registration to auto-register Bitfinex
+import bt_api_py.exchange_registers.register_bitfinex  # noqa: F401
+from bt_api_py.containers.balances.bitfinex_balance import (
+    BitfinexSpotRequestBalanceData,
 )
 from bt_api_py.containers.bars.bitfinex_bar import (
     BitfinexRequestBarData,
 )
+from bt_api_py.containers.exchanges.bitfinex_exchange_data import (
+    BitfinexExchangeDataSpot,
+)
+from bt_api_py.containers.orderbooks.bitfinex_orderbook import (
+    BitfinexRequestOrderBookData,
+)
 from bt_api_py.containers.orders.bitfinex_order import (
     BitfinexRequestOrderData,
 )
-from bt_api_py.containers.balances.bitfinex_balance import (
-    BitfinexSpotRequestBalanceData,
-)
 from bt_api_py.containers.requestdatas.request_data import RequestData
-from bt_api_py.registry import ExchangeRegistry
+from bt_api_py.containers.tickers.bitfinex_ticker import (
+    BitfinexRequestTickerData,
+)
 from bt_api_py.feeds.live_bitfinex import BitfinexRequestDataSpot
-
-# Import registration to auto-register Bitfinex
-import bt_api_py.exchange_registers.register_bitfinex  # noqa: F401
-
+from bt_api_py.registry import ExchangeRegistry
 
 # ── Sample API responses ─────────────────────────────────────────────────
 
 # Bitfinex ticker: [BID, BID_SIZE, ASK, ASK_SIZE, DAILY_CHANGE, DAILY_CHANGE_PERC, LAST_PRICE, VOLUME, HIGH, LOW]
-SAMPLE_TICKER_RESP = [
-    49950.0, 1.5, 50050.0, 2.3, 100.5, 0.002, 50000.0, 1234.56, 51000.0, 49000.0
-]
+SAMPLE_TICKER_RESP = [49950.0, 1.5, 50050.0, 2.3, 100.5, 0.002, 50000.0, 1234.56, 51000.0, 49000.0]
 
 # Bitfinex orderbook: list of [PRICE, COUNT, AMOUNT]
 SAMPLE_ORDERBOOK_RESP = [
@@ -70,17 +65,58 @@ SAMPLE_TRADES_RESP = [
 
 # Bitfinex order submit response
 SAMPLE_MAKE_ORDER_RESP = [
-    1234567890, None, 111, "tBTCUSD", 1640995200000, 1640995200000,
-    0.001, 0.001, "EXCHANGE LIMIT", None, 0, "ACTIVE",
-    50000.0, 0.0, None, None, None, None, 0, 0, None, None, None, 0, 0, None, None, None,
-    "API>BFX", None, None, None,
+    1234567890,
+    None,
+    111,
+    "tBTCUSD",
+    1640995200000,
+    1640995200000,
+    0.001,
+    0.001,
+    "EXCHANGE LIMIT",
+    None,
+    0,
+    "ACTIVE",
+    50000.0,
+    0.0,
+    None,
+    None,
+    None,
+    None,
+    0,
+    0,
+    None,
+    None,
+    None,
+    0,
+    0,
+    None,
+    None,
+    None,
+    "API>BFX",
+    None,
+    None,
+    None,
 ]
 
 # Bitfinex cancel order response
 SAMPLE_CANCEL_ORDER_RESP = [
-    1234567890, None, 111, "tBTCUSD", 1640995200000, 1640995200000,
-    0.0, 0.001, "EXCHANGE LIMIT", None, 0, "CANCELED",
-    50000.0, 0.0, None, None,
+    1234567890,
+    None,
+    111,
+    "tBTCUSD",
+    1640995200000,
+    1640995200000,
+    0.0,
+    0.001,
+    "EXCHANGE LIMIT",
+    None,
+    0,
+    "CANCELED",
+    50000.0,
+    0.0,
+    None,
+    None,
 ]
 
 # Bitfinex open orders response
@@ -130,8 +166,8 @@ def _setup_mock(mock_req, resp_json, status_code=200):
 # 1. ExchangeData tests
 # ══════════════════════════════════════════════════════════════════════════
 
-class TestBitfinexExchangeData:
 
+class TestBitfinexExchangeData:
     def test_spot_creation(self):
         ed = BitfinexExchangeDataSpot()
         assert ed.exchange_name == "BITFINEX___SPOT"
@@ -175,9 +211,19 @@ class TestBitfinexExchangeData:
 
     def test_rest_paths_present(self):
         ed = BitfinexExchangeDataSpot()
-        for key in ("get_tick", "get_depth", "get_kline", "get_exchange_info",
-                     "make_order", "cancel_order", "get_order", "get_open_orders",
-                     "get_account", "get_balance", "get_server_time"):
+        for key in (
+            "get_tick",
+            "get_depth",
+            "get_kline",
+            "get_exchange_info",
+            "make_order",
+            "cancel_order",
+            "get_order",
+            "get_open_orders",
+            "get_account",
+            "get_balance",
+            "get_server_time",
+        ):
             path = ed.get_rest_path(key)
             assert path, f"rest_path '{key}' should not be empty"
 
@@ -186,8 +232,8 @@ class TestBitfinexExchangeData:
 # 2. Layer-1 parameter generation
 # ══════════════════════════════════════════════════════════════════════════
 
-class TestBitfinexParamGeneration:
 
+class TestBitfinexParamGeneration:
     def test_get_ticker_params(self):
         feed = _make_spot_feed()
         path, params, extra = feed._get_ticker("BTC-USD")
@@ -259,12 +305,13 @@ class TestBitfinexParamGeneration:
 # 3. Normalize functions
 # ══════════════════════════════════════════════════════════════════════════
 
-class TestBitfinexNormalize:
 
+class TestBitfinexNormalize:
     def test_ticker_normalize(self):
         extra = {"symbol_name": "BTC-USD", "asset_type": "SPOT", "exchange_name": "BITFINEX___SPOT"}
         tickers, ok = BitfinexRequestDataSpot._get_ticker_normalize_function(
-            SAMPLE_TICKER_RESP, extra)
+            SAMPLE_TICKER_RESP, extra
+        )
         assert ok is True
         assert len(tickers) == 1
         assert isinstance(tickers[0], BitfinexRequestTickerData)
@@ -278,7 +325,8 @@ class TestBitfinexNormalize:
     def test_orderbook_normalize(self):
         extra = {"symbol_name": "BTC-USD", "asset_type": "SPOT"}
         books, ok = BitfinexRequestDataSpot._get_order_book_normalize_function(
-            SAMPLE_ORDERBOOK_RESP, extra)
+            SAMPLE_ORDERBOOK_RESP, extra
+        )
         assert ok is True
         assert len(books) == 1
         assert isinstance(books[0], BitfinexRequestOrderBookData)
@@ -291,8 +339,7 @@ class TestBitfinexNormalize:
 
     def test_kline_normalize(self):
         extra = {"symbol_name": "BTC-USD", "asset_type": "SPOT"}
-        bars, ok = BitfinexRequestDataSpot._get_klines_normalize_function(
-            SAMPLE_KLINE_RESP, extra)
+        bars, ok = BitfinexRequestDataSpot._get_klines_normalize_function(SAMPLE_KLINE_RESP, extra)
         assert ok is True
         assert len(bars) == 1
         assert isinstance(bars[0], BitfinexRequestBarData)
@@ -306,7 +353,8 @@ class TestBitfinexNormalize:
     def test_make_order_normalize(self):
         extra = {"symbol_name": "BTC-USD", "asset_type": "SPOT", "exchange_name": "BITFINEX___SPOT"}
         orders, ok = BitfinexRequestDataSpot._make_order_normalize_function(
-            SAMPLE_MAKE_ORDER_RESP, extra)
+            SAMPLE_MAKE_ORDER_RESP, extra
+        )
         assert ok is True
         assert len(orders) > 0
 
@@ -319,21 +367,24 @@ class TestBitfinexNormalize:
     def test_cancel_order_normalize(self):
         extra = {"order_id": 12345, "asset_type": "SPOT"}
         orders, ok = BitfinexRequestDataSpot._cancel_order_normalize_function(
-            SAMPLE_CANCEL_ORDER_RESP, extra)
+            SAMPLE_CANCEL_ORDER_RESP, extra
+        )
         assert ok is True
         assert len(orders) == 1
 
     def test_open_orders_normalize(self):
         extra = {"symbol_name": "BTC-USD", "asset_type": "SPOT"}
         orders, ok = BitfinexRequestDataSpot._get_open_orders_normalize_function(
-            SAMPLE_OPEN_ORDERS_RESP, extra)
+            SAMPLE_OPEN_ORDERS_RESP, extra
+        )
         assert ok is True
         assert len(orders) == 1
 
     def test_account_normalize(self):
         extra = {"asset_type": "SPOT"}
         balances, ok = BitfinexRequestDataSpot._get_account_normalize_function(
-            SAMPLE_ACCOUNT_RESP, extra)
+            SAMPLE_ACCOUNT_RESP, extra
+        )
         assert ok is True
         assert len(balances) == 1
         assert isinstance(balances[0], BitfinexSpotRequestBalanceData)
@@ -341,20 +392,23 @@ class TestBitfinexNormalize:
     def test_server_time_normalize(self):
         extra = {"asset_type": "SPOT"}
         data, ok = BitfinexRequestDataSpot._get_server_time_normalize_function(
-            SAMPLE_SERVER_TIME_RESP, extra)
+            SAMPLE_SERVER_TIME_RESP, extra
+        )
         assert ok is True
         assert data[0]["server_time"] == 1640995200000
 
     def test_exchange_info_normalize(self):
         extra = {"symbol_name": None, "asset_type": "SPOT"}
         data, ok = BitfinexRequestDataSpot._get_exchange_info_normalize_function(
-            SAMPLE_EXCHANGE_INFO_RESP, extra)
+            SAMPLE_EXCHANGE_INFO_RESP, extra
+        )
         assert ok is True
 
     def test_trade_history_normalize(self):
         extra = {"symbol_name": "BTC-USD", "asset_type": "SPOT"}
         trades, ok = BitfinexRequestDataSpot._get_trade_history_normalize_function(
-            SAMPLE_TRADES_RESP, extra)
+            SAMPLE_TRADES_RESP, extra
+        )
         assert ok is True
         assert len(trades) == 1
 
@@ -363,8 +417,8 @@ class TestBitfinexNormalize:
 # 4. Synchronous API calls (mocked HTTP)
 # ══════════════════════════════════════════════════════════════════════════
 
-class TestBitfinexSyncCalls:
 
+class TestBitfinexSyncCalls:
     @patch(MOCK_PATH)
     def test_get_ticker(self, mock_req):
         _setup_mock(mock_req, SAMPLE_TICKER_RESP)
@@ -418,8 +472,9 @@ class TestBitfinexSyncCalls:
     def test_make_order(self, mock_req):
         _setup_mock(mock_req, SAMPLE_MAKE_ORDER_RESP)
         feed = _make_spot_feed()
-        result = feed.make_order(symbol="BTC-USD", vol="0.001", price="50000",
-                                 order_type="buy-limit")
+        result = feed.make_order(
+            symbol="BTC-USD", vol="0.001", price="50000", order_type="buy-limit"
+        )
         assert isinstance(result, RequestData)
 
     @patch(MOCK_PATH)
@@ -462,12 +517,21 @@ class TestBitfinexSyncCalls:
 # 5. Container tests
 # ══════════════════════════════════════════════════════════════════════════
 
-class TestBitfinexContainers:
 
+class TestBitfinexContainers:
     def test_ticker_container(self):
         ticker_data = [
-            "tBTCUSD", 49950.0, 1.5, 50050.0, 2.3,
-            100.5, 0.2, 50000.0, 1234.56, 51000.0, 49000.0,
+            "tBTCUSD",
+            49950.0,
+            1.5,
+            50050.0,
+            2.3,
+            100.5,
+            0.2,
+            50000.0,
+            1234.56,
+            51000.0,
+            49000.0,
         ]
         t = BitfinexRequestTickerData(json.dumps(ticker_data), "BTC-USD", "SPOT", False)
         result = t.init_data()
@@ -492,13 +556,27 @@ class TestBitfinexContainers:
 
     def test_order_container(self):
         order_data = {
-            "id": 123456789, "gid": None, "cid": 123456, "symbol": "tBTCUSD",
-            "mts_create": 1640995200000, "mts_update": 1640995200000,
-            "amount": 0.001, "amount_orig": 0.001, "type": "EXCHANGE LIMIT",
-            "type_prev": None, "flags": 0, "status": "ACTIVE",
-            "price": 50000.0, "price_avg": 50000.0,
-            "price_trailing": None, "price_aux_limit": None,
-            "notify": 0, "hidden": 0, "placed_id": None, "routing": None, "meta": None,
+            "id": 123456789,
+            "gid": None,
+            "cid": 123456,
+            "symbol": "tBTCUSD",
+            "mts_create": 1640995200000,
+            "mts_update": 1640995200000,
+            "amount": 0.001,
+            "amount_orig": 0.001,
+            "type": "EXCHANGE LIMIT",
+            "type_prev": None,
+            "flags": 0,
+            "status": "ACTIVE",
+            "price": 50000.0,
+            "price_avg": 50000.0,
+            "price_trailing": None,
+            "price_aux_limit": None,
+            "notify": 0,
+            "hidden": 0,
+            "placed_id": None,
+            "routing": None,
+            "meta": None,
         }
         o = BitfinexRequestOrderData(json.dumps(order_data), "BTC-USD", "SPOT")
         result = o.init_data()
@@ -508,7 +586,9 @@ class TestBitfinexContainers:
 
     def test_balance_container(self):
         balance_data = ["BTC", 0.5, 0.1, None]
-        b = BitfinexSpotRequestBalanceData(json.dumps(balance_data), "SPOT", has_been_json_encoded=False)
+        b = BitfinexSpotRequestBalanceData(
+            json.dumps(balance_data), "SPOT", has_been_json_encoded=False
+        )
         result = b.init_data()
         assert result is b
         assert b.get_exchange_name() == "BITFINEX"
@@ -519,12 +599,14 @@ class TestBitfinexContainers:
 # 6. Registry tests
 # ══════════════════════════════════════════════════════════════════════════
 
-class TestBitfinexRegistry:
 
+class TestBitfinexRegistry:
     def test_bitfinex_registered(self):
         assert "BITFINEX___SPOT" in ExchangeRegistry._feed_classes
         assert "BITFINEX___SPOT" in ExchangeRegistry._exchange_data_classes
-        assert ExchangeRegistry._exchange_data_classes["BITFINEX___SPOT"] == BitfinexExchangeDataSpot
+        assert (
+            ExchangeRegistry._exchange_data_classes["BITFINEX___SPOT"] == BitfinexExchangeDataSpot
+        )
 
     def test_bitfinex_balance_handler(self):
         assert "BITFINEX___SPOT" in ExchangeRegistry._balance_handlers
@@ -549,27 +631,50 @@ class TestBitfinexRegistry:
 # 7. Method existence checks
 # ══════════════════════════════════════════════════════════════════════════
 
-class TestBitfinexMethodExistence:
 
+class TestBitfinexMethodExistence:
     def test_has_standard_methods(self):
         feed = _make_spot_feed()
         for method_name in (
-            "get_ticker", "get_tick", "get_depth", "get_kline",
-            "get_server_time", "get_exchange_info", "get_trade_history",
-            "make_order", "cancel_order", "query_order", "get_open_orders",
-            "get_account", "get_balance",
-            "async_get_ticker", "async_get_tick", "async_get_depth", "async_get_kline",
-            "async_make_order", "async_cancel_order", "async_query_order",
-            "async_get_open_orders", "async_get_account", "async_get_balance",
+            "get_ticker",
+            "get_tick",
+            "get_depth",
+            "get_kline",
+            "get_server_time",
+            "get_exchange_info",
+            "get_trade_history",
+            "make_order",
+            "cancel_order",
+            "query_order",
+            "get_open_orders",
+            "get_account",
+            "get_balance",
+            "async_get_ticker",
+            "async_get_tick",
+            "async_get_depth",
+            "async_get_kline",
+            "async_make_order",
+            "async_cancel_order",
+            "async_query_order",
+            "async_get_open_orders",
+            "async_get_account",
+            "async_get_balance",
         ):
             assert hasattr(feed, method_name), f"Missing method: {method_name}"
 
     def test_has_internal_methods(self):
         feed = _make_spot_feed()
         for method_name in (
-            "_get_ticker", "_get_order_book", "_get_klines", "_get_trade_history",
-            "_get_server_time", "_get_exchange_info",
-            "_make_order", "_cancel_order", "_get_order", "_get_open_orders",
+            "_get_ticker",
+            "_get_order_book",
+            "_get_klines",
+            "_get_trade_history",
+            "_get_server_time",
+            "_get_exchange_info",
+            "_make_order",
+            "_cancel_order",
+            "_get_order",
+            "_get_open_orders",
             "_get_account",
         ):
             assert hasattr(feed, method_name), f"Missing internal method: {method_name}"

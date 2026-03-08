@@ -1,4 +1,5 @@
 from bt_api_py.logging_factory import get_logger
+
 """
 MEXC Account WebSocket Base Class
 
@@ -8,7 +9,6 @@ Provides base functionality for MEXC account data WebSocket connections.
 import json
 import threading
 import time
-from queue import Queue
 
 import websocket
 
@@ -19,7 +19,7 @@ class MexcAccountWssData:
     def __init__(self, data_queue, **kwargs):
         self.data_queue = data_queue
         self.wss_url = kwargs.get("wss_url", "")
-        self.exchange_data = kwargs.get("exchange_data", None)
+        self.exchange_data = kwargs.get("exchange_data")
         self.topics = kwargs.get("topics", [])
         self.logger_name = kwargs.get("logger_name", "mexc_account_wss.log")
         self.request_logger = None
@@ -80,7 +80,7 @@ class MexcAccountWssData:
                         on_open=self._on_open,
                         on_message=self._on_message,
                         on_error=self._on_error,
-                        on_close=self._on_close
+                        on_close=self._on_close,
                     )
 
                     # Run the WebSocket connection
@@ -133,10 +133,7 @@ class MexcAccountWssData:
     def _subscribe_topic(self, topic):
         """Subscribe to a specific topic"""
         try:
-            subscription = {
-                "method": "SUBSCRIPTION",
-                "params": [topic]
-            }
+            subscription = {"method": "SUBSCRIPTION", "params": [topic]}
 
             message = json.dumps(subscription)
             self.ws.send(message)
@@ -185,6 +182,7 @@ class MexcAccountWssData:
 
     def _start_ping_thread(self):
         """Start a background thread to send ping messages"""
+
         def ping_worker():
             while self.is_running:
                 time.sleep(30)  # Send ping every 30 seconds

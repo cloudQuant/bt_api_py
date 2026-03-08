@@ -1,11 +1,10 @@
 """Bybit Swap (Linear Futures) Trading Feed"""
 
+from bt_api_py.containers.balances.bybit_balance import BybitSwapBalanceData
 from bt_api_py.containers.exchanges.bybit_exchange_data import BybitExchangeDataSwap
-from bt_api_py.containers.tickers.bybit_ticker import BybitSwapTickerData
 from bt_api_py.containers.orderbooks.bybit_orderbook import BybitSwapOrderBookData
 from bt_api_py.containers.orders.bybit_order import BybitSwapOrderData
-from bt_api_py.containers.balances.bybit_balance import BybitSwapBalanceData
-from bt_api_py.containers.requestdatas.request_data import RequestData
+from bt_api_py.containers.tickers.bybit_ticker import BybitSwapTickerData
 from bt_api_py.feeds.live_bybit.request_base import BybitRequestData
 from bt_api_py.functions.utils import update_extra_data
 from bt_api_py.logging_factory import get_logger
@@ -56,8 +55,10 @@ class BybitRequestDataSwap(BybitRequestData):
 
     def async_get_ticker(self, symbol, extra_data=None, **kwargs):
         path, params, extra_data = self._get_ticker(symbol, extra_data, **kwargs)
-        self.submit(self.async_request(path, params=params, extra_data=extra_data),
-                    callback=self.async_callback)
+        self.submit(
+            self.async_request(path, params=params, extra_data=extra_data),
+            callback=self.async_callback,
+        )
 
     # ==================== Depth Methods ====================
 
@@ -195,8 +196,17 @@ class BybitRequestDataSwap(BybitRequestData):
 
     # ==================== Trading Methods ====================
 
-    def _make_order(self, symbol, qty, side="Buy", order_type="Limit",
-                    price=None, time_in_force="GTC", extra_data=None, **kwargs):
+    def _make_order(
+        self,
+        symbol,
+        qty,
+        side="Buy",
+        order_type="Limit",
+        price=None,
+        time_in_force="GTC",
+        extra_data=None,
+        **kwargs,
+    ):
         request_symbol = self._params.get_symbol(symbol)
         request_type = "make_order"
         path = self._params.get_rest_path(request_type)
@@ -229,8 +239,17 @@ class BybitRequestDataSwap(BybitRequestData):
         data = [BybitSwapOrderData(input_data, extra_data["symbol_name"], True)]
         return data, status
 
-    def make_order(self, symbol, qty, side="Buy", order_type="Limit",
-                   price=None, time_in_force="GTC", extra_data=None, **kwargs):
+    def make_order(
+        self,
+        symbol,
+        qty,
+        side="Buy",
+        order_type="Limit",
+        price=None,
+        time_in_force="GTC",
+        extra_data=None,
+        **kwargs,
+    ):
         path, body, extra_data = self._make_order(
             symbol, qty, side, order_type, price, time_in_force, extra_data, **kwargs
         )
@@ -256,7 +275,9 @@ class BybitRequestDataSwap(BybitRequestData):
         return path, body, extra_data
 
     def cancel_order(self, symbol, order_id=None, order_link_id=None, extra_data=None, **kwargs):
-        path, body, extra_data = self._cancel_order(symbol, order_id, order_link_id, extra_data, **kwargs)
+        path, body, extra_data = self._cancel_order(
+            symbol, order_id, order_link_id, extra_data, **kwargs
+        )
         return self.request(path, params={}, body=body, extra_data=extra_data)
 
     def _query_order(self, symbol, order_id=None, order_link_id=None, extra_data=None, **kwargs):
@@ -287,7 +308,9 @@ class BybitRequestDataSwap(BybitRequestData):
         return data, status
 
     def query_order(self, symbol, order_id=None, order_link_id=None, extra_data=None, **kwargs):
-        path, params, extra_data = self._query_order(symbol, order_id, order_link_id, extra_data, **kwargs)
+        path, params, extra_data = self._query_order(
+            symbol, order_id, order_link_id, extra_data, **kwargs
+        )
         return self.request(path, params=params, extra_data=extra_data)
 
     def _get_deals(self, symbol=None, limit=50, extra_data=None, **kwargs):

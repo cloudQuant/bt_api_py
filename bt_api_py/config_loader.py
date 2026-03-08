@@ -11,12 +11,28 @@ from typing import Any
 try:
     from pydantic import BaseModel, Field, field_validator
 except ImportError:
-    raise ImportError("pydantic is required for config_loader. Install with: pip install pydantic")
+    raise ImportError(
+        "pydantic is required for config_loader. Install with: pip install pydantic"
+    ) from None
 
 try:
     import yaml
 except ImportError:
     yaml = None
+
+__all__ = [
+    "VenueType",
+    "AuthType",
+    "ConnectionType",
+    "BaseUrlsConfig",
+    "ConnectionConfig",
+    "AuthConfig",
+    "RateLimitRuleConfig",
+    "AssetTypeConfig",
+    "ExchangeConfig",
+    "load_exchange_config",
+    "load_all_exchange_configs",
+]
 
 
 # ── 枚举定义 ──────────────────────────────────────────────────
@@ -98,9 +114,7 @@ class RateLimitRuleConfig(BaseModel):
 
 
 class AssetTypeConfig(BaseModel):
-    exchange_name: str | None = Field(
-        default=None, description="交易所子类型名称, 如 binance_swap"
-    )
+    exchange_name: str | None = Field(default=None, description="交易所子类型名称, 如 binance_swap")
     symbol_format: str = Field(..., description="如 {base}{quote} 或 {base}-{quote}")
     rest_paths: dict[str, str] = Field(default_factory=dict)
     wss_paths: dict[str, Any] = Field(default_factory=dict)
@@ -219,7 +233,8 @@ def load_all_exchange_configs(config_dir: str) -> dict[str, ExchangeConfig]:
                 configs[config.id] = config
             except Exception as e:
                 from bt_api_py.logging_factory import get_logger
+
                 logger = get_logger("config_loader")
-                logger.warn(f"Failed to load config {filepath}: {e}")
+                logger.warning(f"Failed to load config {filepath}: {e}")
 
     return configs

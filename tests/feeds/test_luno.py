@@ -11,13 +11,12 @@ from unittest.mock import Mock
 
 import pytest
 
+# Import registration to auto-register Luno
+import bt_api_py.exchange_registers.register_luno  # noqa: F401
 from bt_api_py.containers.tickers.luno_ticker import LunoRequestTickerData
 from bt_api_py.feeds.capability import Capability
 from bt_api_py.feeds.live_luno.spot import LunoRequestDataSpot
 from bt_api_py.registry import ExchangeRegistry
-
-# Import registration to auto-register Luno
-import bt_api_py.exchange_registers.register_luno  # noqa: F401
 
 
 @pytest.fixture
@@ -229,16 +228,18 @@ class TestLunoDataContainers:
     """Test Luno data containers."""
 
     def test_ticker_container(self):
-        ticker_info = json.dumps({
-            "pair": "XBTZAR",
-            "last_trade": "95000000",
-            "bid": "94990000",
-            "ask": "95000000",
-            "rolling_24_hour_volume": "123.45",
-            "rolling_24_hour_high": "95800000",
-            "rolling_24_hour_low": "93500000",
-            "timestamp": 1678901234000,
-        })
+        ticker_info = json.dumps(
+            {
+                "pair": "XBTZAR",
+                "last_trade": "95000000",
+                "bid": "94990000",
+                "ask": "95000000",
+                "rolling_24_hour_volume": "123.45",
+                "rolling_24_hour_high": "95800000",
+                "rolling_24_hour_low": "93500000",
+                "timestamp": 1678901234000,
+            }
+        )
         ticker = LunoRequestTickerData(ticker_info, "XBTZAR", "SPOT", False)
         ticker.init_data()
         assert ticker.exchange_name == "LUNO"

@@ -17,10 +17,10 @@ data = {
             "nextFundingTime": "1703116800000",
             "settFundingRate": "0.0001418433662153",
             "settState": "settled",
-            "ts": "1703070685309"
+            "ts": "1703070685309",
         }
     ],
-    "msg": ""
+    "msg": "",
 }
 
 
@@ -41,7 +41,7 @@ def assert_value(bf):
 
 
 def test_okx_req_funding_rate():
-    bf = OkxFundingRateData(data['data'][0], "BTC-USDT", "SWAP", True)
+    bf = OkxFundingRateData(data["data"][0], "BTC-USDT", "SWAP", True)
     bf.init_data()
     assert_value(bf)
 

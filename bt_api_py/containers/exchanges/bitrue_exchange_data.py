@@ -8,6 +8,7 @@ Symbol format: BTCUSDT (concatenated uppercase, no separator).
 """
 
 import os
+
 from bt_api_py.containers.exchanges.exchange_data import ExchangeData
 from bt_api_py.logging_factory import get_logger
 
@@ -24,6 +25,7 @@ def _get_bitrue_config():
         return _bitrue_config
     try:
         from bt_api_py.config_loader import load_exchange_config
+
         config_path = os.path.join(
             os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
             "configs",
@@ -48,9 +50,16 @@ class BitrueExchangeData(ExchangeData):
         self.rest_paths = {}
         self.wss_paths = {}
         self.kline_periods = {
-            "1m": "1m", "5m": "5m", "15m": "15m", "30m": "30m",
-            "1h": "1h", "2h": "2h", "4h": "4h", "12h": "12h",
-            "1d": "1d", "1w": "1w",
+            "1m": "1m",
+            "5m": "5m",
+            "15m": "15m",
+            "30m": "30m",
+            "1h": "1h",
+            "2h": "2h",
+            "4h": "4h",
+            "12h": "12h",
+            "1d": "1d",
+            "1w": "1w",
         }
         self.legal_currency = ["USDT", "BTC", "ETH", "XRP"]
 
@@ -69,12 +78,20 @@ class BitrueExchangeData(ExchangeData):
             self.rest_url = asset_cfg.rest_url
         elif config.base_urls and config.base_urls.rest:
             rest = config.base_urls.rest
-            self.rest_url = rest.get(asset_type, rest.get("default", self.rest_url)) if isinstance(rest, dict) else rest
+            self.rest_url = (
+                rest.get(asset_type, rest.get("default", self.rest_url))
+                if isinstance(rest, dict)
+                else rest
+            )
         if hasattr(asset_cfg, "wss_url") and asset_cfg.wss_url:
             self.wss_url = asset_cfg.wss_url
         elif config.base_urls and config.base_urls.wss:
             wss = config.base_urls.wss
-            self.wss_url = wss.get(asset_type, wss.get("default", self.wss_url)) if isinstance(wss, dict) else wss
+            self.wss_url = (
+                wss.get(asset_type, wss.get("default", self.wss_url))
+                if isinstance(wss, dict)
+                else wss
+            )
 
         if asset_cfg.rest_paths:
             self.rest_paths.update(asset_cfg.rest_paths)
@@ -106,8 +123,7 @@ class BitrueExchangeData(ExchangeData):
         path = self.rest_paths.get(request_type)
         if path is None:
             raise ValueError(
-                f"Unknown rest path: {request_type}. "
-                f"Available: {list(self.rest_paths.keys())}"
+                f"Unknown rest path: {request_type}. Available: {list(self.rest_paths.keys())}"
             )
         return path
 

@@ -1,9 +1,7 @@
-- --
-
-description: 'Validate PRD, UX, Architecture and Epics specs are complete. Use when the user says ""check implementation readiness"".'
+---
+description: 'Validate PRD, UX, Architecture and Epics specs are complete. Use when the user says "check implementation readiness".'
 auto_execution_mode: "iterate"
-
-- --
+---
 
 # check-implementation-readiness
 

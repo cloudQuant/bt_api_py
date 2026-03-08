@@ -1,6 +1,6 @@
 import json
 import time
-import pytest
+
 from bt_api_py.containers.symbols.okx_symbol import OkxSymbolData
 
 # 测试用OKX品种数据
@@ -38,11 +38,12 @@ json_info = {
             "ruleType": "normal",
             "stk": "",
             "tickSz": "1",
-            "uly": ""
+            "uly": "",
         }
     ],
-    "msg": ""
+    "msg": "",
 }
+
 
 def test_symbol_instance():
     # 模拟API返回的原始数据（JSON字符串）
@@ -67,8 +68,10 @@ def test_symbol_instance():
     assert symbol_instance.get_max_leverage() == 125.0
     assert symbol_instance.get_symbol_status() == "live"
     assert symbol_instance.get_symbol_trading_type() == "normal"
-    assert symbol_instance.get_contract_type() is ""  # SWAP合约没有ctType
+    assert symbol_instance.get_contract_type() == ""  # SWAP合约没有ctType
     # 验证时间相关属性
     assert isinstance(symbol_instance.get_local_update_time(), float)
     assert time.time() - symbol_instance.get_local_update_time() < 5  # 5秒内更新
+
+
 # 运行测试的命令：pytest tests/containers/symbols/test_okx_symbol.py -v

@@ -104,4 +104,6 @@ class HyperliquidSpotWssAccountData(AccountData):
         return self.balances
 
     def __str__(self):
-        return f"HyperliquidSpotWssAccountData(user={self.user_address}, value={self.account_value})"
+        return (
+            f"HyperliquidSpotWssAccountData(user={self.user_address}, value={self.account_value})"
+        )

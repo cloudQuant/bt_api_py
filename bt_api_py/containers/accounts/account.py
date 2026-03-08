@@ -5,7 +5,6 @@
 
 # import json
 
-
 from bt_api_py.containers.auto_init_mixin import AutoInitMixin
 
 

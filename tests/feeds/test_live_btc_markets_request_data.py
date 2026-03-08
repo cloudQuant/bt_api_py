@@ -19,6 +19,7 @@ Run with coverage:
 
 import queue
 import time
+
 import pytest
 
 from bt_api_py.containers.requestdatas.request_data import RequestData
@@ -63,21 +64,17 @@ class TestBtcMarketsTickData:
 
         # Verify price fields
         last_price = tick_data.get("lastPrice")
-        assert last_price is None or float(
-            last_price) > 0, f"Invalid last_price: {last_price}"
+        assert last_price is None or float(last_price) > 0, f"Invalid last_price: {last_price}"
 
         best_bid = tick_data.get("bestBid")
-        assert best_bid is None or float(
-            best_bid) >= 0, f"Invalid best_bid: {best_bid}"
+        assert best_bid is None or float(best_bid) >= 0, f"Invalid best_bid: {best_bid}"
 
         best_ask = tick_data.get("bestAsk")
-        assert best_ask is None or float(
-            best_ask) >= 0, f"Invalid best_ask: {best_ask}"
+        assert best_ask is None or float(best_ask) >= 0, f"Invalid best_ask: {best_ask}"
 
         # Verify volume
         volume = tick_data.get("volume24h")
-        assert volume is None or float(
-            volume) >= 0, f"Invalid volume: {volume}"
+        assert volume is None or float(volume) >= 0, f"Invalid volume: {volume}"
 
         print("tick_data:", tick_data)
 
@@ -86,7 +83,8 @@ class TestBtcMarketsTickData:
         data_queue = queue.Queue()
         live_btc_markets_spot_feed = BtcMarketsRequestDataSpot(data_queue)
         live_btc_markets_spot_feed.async_get_tick(
-            "BTC-AUD", extra_data={"test_async_tick_data": True})
+            "BTC-AUD", extra_data={"test_async_tick_data": True}
+        )
         time.sleep(3)
 
         try:
@@ -104,8 +102,7 @@ class TestBtcMarketsKlineData:
     def test_btc_markets_req_kline_data(self):
         """Test getting kline data (synchronous)."""
         live_btc_markets_spot_feed = init_req_feed()
-        data = live_btc_markets_spot_feed.get_kline(
-            "BTC-AUD", "1m", count=2).get_data()
+        data = live_btc_markets_spot_feed.get_kline("BTC-AUD", "1m", count=2).get_data()
         assert isinstance(data, list)
 
         if len(data) > 0 and data[0] is not None:
@@ -116,17 +113,20 @@ class TestBtcMarketsKlineData:
 
                 # BTC Markets candle format: [timestamp, open, high, low, close,
                 # volume]
-                assert isinstance(
-                    first_kline, list), f"Expected list, got {type(first_kline)}"
-                assert len(
-                    first_kline) >= 6, f"Expected at least 6 fields, got {len(first_kline)}"
+                assert isinstance(first_kline, list), f"Expected list, got {type(first_kline)}"
+                assert len(first_kline) >= 6, f"Expected at least 6 fields, got {len(first_kline)}"
 
                 try:
                     timestamp = int(first_kline[0])
                 except (ValueError, TypeError):
                     # BTC Markets returns ISO date strings
                     from datetime import datetime
-                    timestamp = int(datetime.fromisoformat(str(first_kline[0]).replace('Z', '+00:00')).timestamp())
+
+                    timestamp = int(
+                        datetime.fromisoformat(
+                            str(first_kline[0]).replace("Z", "+00:00")
+                        ).timestamp()
+                    )
                 open_price = float(first_kline[1])
                 high_price = float(first_kline[2])
                 low_price = float(first_kline[3])
@@ -135,7 +135,9 @@ class TestBtcMarketsKlineData:
 
                 assert timestamp > 0, f"Invalid timestamp: {timestamp}"
                 assert open_price > 0, f"Invalid open_price: {open_price}"
-                assert high_price >= low_price, f"high ({high_price}) should be >= low ({low_price})"
+                assert high_price >= low_price, (
+                    f"high ({high_price}) should be >= low ({low_price})"
+                )
                 assert close_price > 0, f"Invalid close_price: {close_price}"
                 assert volume >= 0, f"Invalid volume: {volume}"
 
@@ -145,8 +147,9 @@ class TestBtcMarketsKlineData:
         """Test getting kline data (asynchronous)."""
         data_queue = queue.Queue()
         live_btc_markets_spot_feed = BtcMarketsRequestDataSpot(data_queue)
-        live_btc_markets_spot_feed.async_get_kline("BTC-AUD", period="1m", count=3,
-                                                   extra_data={"test_async_kline_data": True})
+        live_btc_markets_spot_feed.async_get_kline(
+            "BTC-AUD", period="1m", count=3, extra_data={"test_async_kline_data": True}
+        )
         time.sleep(5)
 
         try:
@@ -177,20 +180,17 @@ class TestBtcMarketsOrderBook:
         assert order_book_data is not None
 
         # BTC Markets returns dict with bids/asks
-        assert isinstance(
-            order_book_data, dict), f"Expected dict, got {type(order_book_data)}"
+        assert isinstance(order_book_data, dict), f"Expected dict, got {type(order_book_data)}"
 
         # Check for bids
         if "bids" in order_book_data:
             bids = order_book_data["bids"]
-            assert isinstance(
-                bids, list), f"bids should be list, got {type(bids)}"
+            assert isinstance(bids, list), f"bids should be list, got {type(bids)}"
             if len(bids) > 0:
                 first_bid = bids[0]
                 # BTC Markets bid format: [price, volume]
                 if isinstance(first_bid, list):
-                    assert len(
-                        first_bid) >= 2, f"bid should have price and volume, got {first_bid}"
+                    assert len(first_bid) >= 2, f"bid should have price and volume, got {first_bid}"
                     bid_price = float(first_bid[0])
                     bid_volume = float(first_bid[1])
                     assert bid_price > 0, f"Invalid bid_price: {bid_price}"
@@ -204,13 +204,11 @@ class TestBtcMarketsOrderBook:
         # Check for asks
         if "asks" in order_book_data:
             asks = order_book_data["asks"]
-            assert isinstance(
-                asks, list), f"asks should be list, got {type(asks)}"
+            assert isinstance(asks, list), f"asks should be list, got {type(asks)}"
             if len(asks) > 0:
                 first_ask = asks[0]
                 if isinstance(first_ask, list):
-                    assert len(
-                        first_ask) >= 2, f"ask should have price and volume, got {first_ask}"
+                    assert len(first_ask) >= 2, f"ask should have price and volume, got {first_ask}"
                     ask_price = float(first_ask[0])
                     ask_volume = float(first_ask[1])
                     assert ask_price > 0, f"Invalid ask_price: {ask_price}"

@@ -161,11 +161,14 @@ nav:
       - 安装: getting-started/installation.md
       - 快速入门: getting-started/quickstart.md
       - 常见问题: getting-started/faq.md
+      - 交互式示例: examples/gallery.md
       - 更新日志: getting-started/change_log.md
 
   # ── 使用指南 (How-to Guides) ──────────────────────────────────
   - 使用指南:
       - 基础用法: guides/usage_guide.md
+      - API模式: guides/api-patterns.md
+      - WebSocket流式传输: guides/websocket-streaming.md
       - 参数说明: guides/params.md
       - 错误处理: guides/error_handling.md
       - 最佳实践: guides/best_practices.md
@@ -176,6 +179,7 @@ nav:
   # ── API 参考 (Reference) — 自动生成自源代码 ───────────────────
   - API 参考:
       - 概览: reference/index.md
+      - 核心API: reference/core-api.md
       - BtApi: reference/bt_api.md
       - 认证配置: reference/auth_config.md
       - 异常体系: reference/exceptions.md
@@ -187,6 +191,7 @@ nav:
   # ── 交易所原生 API 文档 ────────────────────────────────────────
   - 交易所:
       - Binance:
+          - 集成指南: exchanges/binance.md
           - 概览: exchanges/binance/index.md
           - 现货 (SPOT):
               - 快速参考: exchanges/binance/spot/README.md
@@ -229,12 +234,16 @@ nav:
           - 交易 API: exchanges/ib/trading.md
           - 账户管理: exchanges/ib/account_management.md
 
-  # ── 深度解读 (Explanation) ────────────────────────────────────
+   # ── 深度解读 (Explanation) ────────────────────────────────────
   - 深度解读:
       - 架构设计: explanation/architecture.md
       - 多策略架构: explanation/multi_strategy_architecture.md
       - 交易所集成模式: explanation/exchange_integration_patterns.md
       - 开发者指南: explanation/developer_guide.md
+
+  # ── 支持与帮助 ───────────────────────────────────────────────
+  - 支持与帮助:
+      - 常见问题: support/faq.md
 
 # 排除不在导航中的残留文件
 exclude_docs: |

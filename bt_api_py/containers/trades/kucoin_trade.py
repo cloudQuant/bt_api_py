@@ -119,7 +119,9 @@ class KuCoinRequestTradeData(KuCoinTradeData):
 
         self.trade_symbol_name = self.symbol_name
         self.server_time = from_dict_get_float(data, "time")
-        self.trade_id = from_dict_get_string(data, "sequence") or str(from_dict_get_float(data, "time"))
+        self.trade_id = from_dict_get_string(data, "sequence") or str(
+            from_dict_get_float(data, "time")
+        )
         self.trade_price = from_dict_get_float(data, "price")
         self.trade_size = from_dict_get_float(data, "size")
         self.trade_side = from_dict_get_string(data, "side")
@@ -163,7 +165,9 @@ class KuCoinWssTradeData(KuCoinTradeData):
 
         self.trade_symbol_name = self.symbol_name
         self.server_time = from_dict_get_float(data, "time")
-        self.trade_id = from_dict_get_string(data, "tradeId") or from_dict_get_string(data, "sequence")
+        self.trade_id = from_dict_get_string(data, "tradeId") or from_dict_get_string(
+            data, "sequence"
+        )
         self.trade_price = from_dict_get_float(data, "price")
         self.trade_size = from_dict_get_float(data, "size")
         self.trade_side = from_dict_get_string(data, "side")

@@ -1,11 +1,10 @@
 """Bitget Spot Trading Feed"""
 
+from bt_api_py.containers.balances.bitget_balance import BitgetBalanceData
 from bt_api_py.containers.exchanges.bitget_exchange_data import BitgetExchangeDataSpot
-from bt_api_py.containers.tickers.bitget_ticker import BitgetTickerData
 from bt_api_py.containers.orderbooks.bitget_orderbook import BitgetOrderBookData
 from bt_api_py.containers.orders.bitget_order import BitgetOrderData
-from bt_api_py.containers.balances.bitget_balance import BitgetBalanceData
-from bt_api_py.containers.requestdatas.request_data import RequestData
+from bt_api_py.containers.tickers.bitget_ticker import BitgetTickerData
 from bt_api_py.feeds.live_bitget.request_base import BitgetRequestData
 from bt_api_py.functions.utils import update_extra_data
 from bt_api_py.logging_factory import get_logger
@@ -49,7 +48,9 @@ class BitgetRequestDataSpot(BitgetRequestData):
             data_list = [data_list]
         result = []
         for item in data_list:
-            result.append(BitgetTickerData(item, extra_data["symbol_name"], extra_data["asset_type"], True))
+            result.append(
+                BitgetTickerData(item, extra_data["symbol_name"], extra_data["asset_type"], True)
+            )
         return result, status
 
     def get_ticker(self, symbol, extra_data=None, **kwargs):
@@ -61,8 +62,10 @@ class BitgetRequestDataSpot(BitgetRequestData):
 
     def async_get_ticker(self, symbol, extra_data=None, **kwargs):
         path, params, extra_data = self._get_ticker(symbol, extra_data, **kwargs)
-        self.submit(self.async_request(path, params=params, extra_data=extra_data),
-                    callback=self.async_callback)
+        self.submit(
+            self.async_request(path, params=params, extra_data=extra_data),
+            callback=self.async_callback,
+        )
 
     def async_get_tick(self, symbol, extra_data=None, **kwargs):
         self.async_get_ticker(symbol, extra_data=extra_data, **kwargs)
@@ -92,7 +95,9 @@ class BitgetRequestDataSpot(BitgetRequestData):
         data = input_data.get("data", {}) if isinstance(input_data, dict) else {}
         if not data:
             return [], status
-        result = [BitgetOrderBookData(data, extra_data["symbol_name"], extra_data["asset_type"], True)]
+        result = [
+            BitgetOrderBookData(data, extra_data["symbol_name"], extra_data["asset_type"], True)
+        ]
         return result, status
 
     def get_depth(self, symbol, limit=50, extra_data=None, **kwargs):
@@ -104,8 +109,10 @@ class BitgetRequestDataSpot(BitgetRequestData):
 
     def async_get_depth(self, symbol, limit=50, extra_data=None, **kwargs):
         path, params, extra_data = self._get_depth(symbol, limit, extra_data, **kwargs)
-        self.submit(self.async_request(path, params=params, extra_data=extra_data),
-                    callback=self.async_callback)
+        self.submit(
+            self.async_request(path, params=params, extra_data=extra_data),
+            callback=self.async_callback,
+        )
 
     # ==================== Kline Methods ====================
 
@@ -144,8 +151,10 @@ class BitgetRequestDataSpot(BitgetRequestData):
 
     def async_get_kline(self, symbol, period="1m", limit=200, extra_data=None, **kwargs):
         path, params, extra_data = self._get_kline(symbol, period, limit, extra_data, **kwargs)
-        self.submit(self.async_request(path, params=params, extra_data=extra_data),
-                    callback=self.async_callback)
+        self.submit(
+            self.async_request(path, params=params, extra_data=extra_data),
+            callback=self.async_callback,
+        )
 
     # ==================== Server Time & Exchange Info ====================
 
@@ -231,16 +240,26 @@ class BitgetRequestDataSpot(BitgetRequestData):
 
     def async_get_balance(self, extra_data=None, **kwargs):
         path, params, extra_data = self._get_balance(extra_data, **kwargs)
-        self.submit(self.async_request(path, params=params, extra_data=extra_data),
-                    callback=self.async_callback)
+        self.submit(
+            self.async_request(path, params=params, extra_data=extra_data),
+            callback=self.async_callback,
+        )
 
     def async_get_account(self, extra_data=None, **kwargs):
         self.async_get_balance(extra_data=extra_data, **kwargs)
 
     # ==================== Trading Methods ====================
 
-    def _make_order(self, symbol, vol, price=None, order_type="buy-limit",
-                    client_order_id=None, extra_data=None, **kwargs):
+    def _make_order(
+        self,
+        symbol,
+        vol,
+        price=None,
+        order_type="buy-limit",
+        client_order_id=None,
+        extra_data=None,
+        **kwargs,
+    ):
         request_symbol = self._params.get_symbol(symbol)
         request_type = "make_order"
         path = self._params.get_rest_path(request_type)
@@ -280,28 +299,50 @@ class BitgetRequestDataSpot(BitgetRequestData):
         if not data:
             return [], status
         if isinstance(data, list):
-            result = [BitgetOrderData(d, extra_data["symbol_name"], extra_data["asset_type"], True) for d in data]
+            result = [
+                BitgetOrderData(d, extra_data["symbol_name"], extra_data["asset_type"], True)
+                for d in data
+            ]
         else:
-            result = [BitgetOrderData(data, extra_data["symbol_name"], extra_data["asset_type"], True)]
+            result = [
+                BitgetOrderData(data, extra_data["symbol_name"], extra_data["asset_type"], True)
+            ]
         return result, status
 
-    def make_order(self, symbol, vol, price=None, order_type="buy-limit",
-                   client_order_id=None, extra_data=None, **kwargs):
+    def make_order(
+        self,
+        symbol,
+        vol,
+        price=None,
+        order_type="buy-limit",
+        client_order_id=None,
+        extra_data=None,
+        **kwargs,
+    ):
         path, body, extra_data = self._make_order(
             symbol, vol, price, order_type, client_order_id, extra_data, **kwargs
         )
         return self.request(path, params={}, body=body, extra_data=extra_data)
 
-    def async_make_order(self, symbol, vol, price=None, order_type="buy-limit",
-                         client_order_id=None, extra_data=None, **kwargs):
+    def async_make_order(
+        self,
+        symbol,
+        vol,
+        price=None,
+        order_type="buy-limit",
+        client_order_id=None,
+        extra_data=None,
+        **kwargs,
+    ):
         path, body, extra_data = self._make_order(
             symbol, vol, price, order_type, client_order_id, extra_data, **kwargs
         )
-        self.submit(self.async_request(path, params={}, body=body, extra_data=extra_data),
-                    callback=self.async_callback)
+        self.submit(
+            self.async_request(path, params={}, body=body, extra_data=extra_data),
+            callback=self.async_callback,
+        )
 
-    def _cancel_order(self, symbol, order_id=None, client_order_id=None,
-                      extra_data=None, **kwargs):
+    def _cancel_order(self, symbol, order_id=None, client_order_id=None, extra_data=None, **kwargs):
         request_symbol = self._params.get_symbol(symbol)
         request_type = "cancel_order"
         path = self._params.get_rest_path(request_type)
@@ -320,15 +361,13 @@ class BitgetRequestDataSpot(BitgetRequestData):
         )
         return path, body, extra_data
 
-    def cancel_order(self, symbol, order_id=None, client_order_id=None,
-                     extra_data=None, **kwargs):
+    def cancel_order(self, symbol, order_id=None, client_order_id=None, extra_data=None, **kwargs):
         path, body, extra_data = self._cancel_order(
             symbol, order_id, client_order_id, extra_data, **kwargs
         )
         return self.request(path, params={}, body=body, extra_data=extra_data)
 
-    def _query_order(self, symbol, order_id=None, client_order_id=None,
-                     extra_data=None, **kwargs):
+    def _query_order(self, symbol, order_id=None, client_order_id=None, extra_data=None, **kwargs):
         request_symbol = self._params.get_symbol(symbol)
         request_type = "query_order"
         path = self._params.get_rest_path(request_type)
@@ -356,13 +395,17 @@ class BitgetRequestDataSpot(BitgetRequestData):
         if not data:
             return [], status
         if isinstance(data, list):
-            result = [BitgetOrderData(d, extra_data["symbol_name"], extra_data["asset_type"], True) for d in data]
+            result = [
+                BitgetOrderData(d, extra_data["symbol_name"], extra_data["asset_type"], True)
+                for d in data
+            ]
         else:
-            result = [BitgetOrderData(data, extra_data["symbol_name"], extra_data["asset_type"], True)]
+            result = [
+                BitgetOrderData(data, extra_data["symbol_name"], extra_data["asset_type"], True)
+            ]
         return result, status
 
-    def query_order(self, symbol, order_id=None, client_order_id=None,
-                    extra_data=None, **kwargs):
+    def query_order(self, symbol, order_id=None, client_order_id=None, extra_data=None, **kwargs):
         path, params, extra_data = self._query_order(
             symbol, order_id, client_order_id, extra_data, **kwargs
         )
@@ -391,11 +434,14 @@ class BitgetRequestDataSpot(BitgetRequestData):
 
 # ==================== WebSocket Placeholder Classes ====================
 
+
 class BitgetMarketWssDataSpot:
     """Placeholder for Bitget Spot Market WebSocket data handler."""
+
     pass
 
 
 class BitgetAccountWssDataSpot:
     """Placeholder for Bitget Spot Account WebSocket data handler."""
+
     pass

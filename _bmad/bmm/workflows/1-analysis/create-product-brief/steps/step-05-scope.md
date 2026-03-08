@@ -1,19 +1,15 @@
-- --
-
+---
 name: 'step-05-scope'
 description: 'Define MVP scope with clear boundaries and outline future vision while managing scope creep'
 
 # File References
-
 nextStepFile: '{project-root}/_bmad/bmm/workflows/1-analysis/create-product-brief/steps/step-06-complete.md'
 outputFile: '{planning_artifacts}/product-brief-{{project_name}}-{{date}}.md'
 
 # Task References
-
 advancedElicitationTask: '{project-root}/_bmad/core/workflows/advanced-elicitation/workflow.xml'
 partyModeWorkflow: '{project-root}/_bmad/core/workflows/party-mode/workflow.md'
-
-- --
+---
 
 # Step 5: MVP Scope Definition
 
@@ -64,11 +60,10 @@ Define MVP scope with clear boundaries and outline future vision through collabo
 
 ### 1. Begin Scope Definition
 
-- *Opening Exploration:**
-
+**Opening Exploration:**
 "Now that we understand what {{project_name}} does, who it serves, and how we'll measure success, let's define what we need to build first.
 
-- *Scope Discovery:**
+**Scope Discovery:**
 
 - What's the absolute minimum we need to deliver to solve the core problem?
 - What features would make users say 'this solves my problem'?
@@ -78,8 +73,7 @@ Let's start with the MVP mindset: what's the smallest version that creates real 
 
 ### 2. MVP Core Features Definition
 
-- *MVP Feature Questions:**
-
+**MVP Feature Questions:**
 Define essential features for minimum viable product:
 
 - "What's the core functionality that must work?"
@@ -87,17 +81,16 @@ Define essential features for minimum viable product:
 - "What would users consider 'incomplete' if it was missing?"
 - "What features create the 'aha!' moment we discussed earlier?"
 
-- *MVP Criteria:**
+**MVP Criteria:**
 
-- **Solves Core Problem:**Addresses the main pain point effectively
-- **User Value:**Creates meaningful outcome for target users
-- **Feasible:**Achievable with available resources and timeline
+- **Solves Core Problem:** Addresses the main pain point effectively
+- **User Value:** Creates meaningful outcome for target users
+- **Feasible:** Achievable with available resources and timeline
 - **Testable:** Allows learning and iteration based on user feedback
 
 ### 3. Out of Scope Boundaries
 
-- *Out of Scope Exploration:**
-
+**Out of Scope Exploration:**
 Define what explicitly won't be in MVP:
 
 - "What features would be nice to have but aren't essential?"
@@ -105,7 +98,7 @@ Define what explicitly won't be in MVP:
 - "What are we intentionally saying 'no' to for now?"
 - "How do we communicate these boundaries to stakeholders?"
 
-- *Boundary Setting:**
+**Boundary Setting:**
 
 - Clear communication about what's not included
 - Rationale for deferring certain features
@@ -114,8 +107,7 @@ Define what explicitly won't be in MVP:
 
 ### 4. MVP Success Criteria
 
-- *Success Validation:**
-
+**Success Validation:**
 Define what makes the MVP successful:
 
 - "How will we know the MVP is successful?"
@@ -123,7 +115,7 @@ Define what makes the MVP successful:
 - "What user feedback signals validate our approach?"
 - "What's the decision point for scaling beyond MVP?"
 
-- *Success Gates:**
+**Success Gates:**
 
 - User adoption metrics
 - Problem validation evidence
@@ -132,8 +124,7 @@ Define what makes the MVP successful:
 
 ### 5. Future Vision Exploration
 
-- *Vision Questions:**
-
+**Vision Questions:**
 Define the longer-term product vision:
 
 - "If this is wildly successful, what does it become in 2-3 years?"
@@ -141,7 +132,7 @@ Define the longer-term product vision:
 - "How does the MVP evolve into the full product vision?"
 - "What markets or user segments could we expand to?"
 
-- *Future Features:**
+**Future Features:**
 
 - Post-MVP enhancements that build on core functionality
 - Scale considerations and growth capabilities
@@ -150,12 +141,10 @@ Define the longer-term product vision:
 
 ### 6. Generate MVP Scope Content
 
-- *Content to Append:**
-
+**Content to Append:**
 Prepare the following structure for document append:
 
 ```markdown
-
 ## MVP Scope
 
 ### Core Features
@@ -173,20 +162,17 @@ Prepare the following structure for document append:
 ### Future Vision
 
 [Future vision content based on conversation, or N/A if not discussed]
-
-```bash
+```
 
 ### 7. Present MENU OPTIONS
 
-- *Content Presentation:**
-
+**Content Presentation:**
 "I've defined the MVP scope for {{project_name}} that balances delivering real value with realistic boundaries. This gives us a clear path forward while keeping our options open for future growth.
 
-- *Here's what I'll add to the document:**
-
+**Here's what I'll add to the document:**
 [Show the complete markdown content from step 6]
 
-- *Select an Option:** [A] Advanced Elicitation [P] Party Mode [C] Continue"
+**Select an Option:** [A] Advanced Elicitation [P] Party Mode [C] Continue"
 
 #### Menu Handling Logic:
 
@@ -206,7 +192,7 @@ Prepare the following structure for document append:
 
 ONLY WHEN [C continue option] is selected and [MVP scope finalized and saved to document with frontmatter updated], will you then read fully and follow: `{nextStepFile}` to complete the product brief workflow.
 
-- --
+---
 
 ## 🚨 SYSTEM SUCCESS/FAILURE METRICS
 
@@ -230,4 +216,4 @@ ONLY WHEN [C continue option] is selected and [MVP scope finalized and saved to 
 - Appending content without user selecting 'C'
 - Not updating frontmatter properly
 
-- *Master Rule:** Skipping steps, optimizing sequences, or not following exact instructions is FORBIDDEN and constitutes SYSTEM FAILURE.
+**Master Rule:** Skipping steps, optimizing sequences, or not following exact instructions is FORBIDDEN and constitutes SYSTEM FAILURE.

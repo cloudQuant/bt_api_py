@@ -40,7 +40,9 @@ class CoinbaseTickerData(TickerData):
         self.asset_type = asset_type  # ticker的类型
         # If already JSON encoded, parse it to dict; otherwise store raw
         if has_been_json_encoded:
-            self.ticker_data = json.loads(ticker_info) if isinstance(ticker_info, str) else ticker_info
+            self.ticker_data = (
+                json.loads(ticker_info) if isinstance(ticker_info, str) else ticker_info
+            )
         else:
             self.ticker_data = None
         self.ticker_symbol_name = None
@@ -76,7 +78,9 @@ class CoinbaseTickerData(TickerData):
                 self.ask_price = from_dict_get_float(self.ticker_data, "best_ask")
                 self.last_price = from_dict_get_float(self.ticker_data, "last_trade")
                 self.volume_24h = from_dict_get_float(self.ticker_data, "volume_24h")
-                self.price_24h_change_percent = from_dict_get_float(self.ticker_data, "price_percentage_change_24h")
+                self.price_24h_change_percent = from_dict_get_float(
+                    self.ticker_data, "price_percentage_change_24h"
+                )
 
                 # Calculate bid/ask volumes (if available)
                 if "bids" in self.ticker_data and isinstance(self.ticker_data["bids"], list):
@@ -204,7 +208,9 @@ class CoinbaseWssTickerData(CoinbaseTickerData):
                 self.server_time = parse_iso_time_to_timestamp(time_str)
                 self.last_price = from_dict_get_float(self.ticker_data, "price")
                 self.volume_24h = from_dict_get_float(self.ticker_data, "volume_24h")
-                self.price_24h_change_percent = from_dict_get_float(self.ticker_data, "price_percentage_change_24h")
+                self.price_24h_change_percent = from_dict_get_float(
+                    self.ticker_data, "price_percentage_change_24h"
+                )
         except Exception as e:
             print(f"Error parsing WebSocket ticker data: {e}")
             self.ticker_data = {}
@@ -232,9 +238,13 @@ class CoinbaseRequestTickerData(CoinbaseTickerData):
                 time_str = from_dict_get_string(self.ticker_data, "time")
                 self.server_time = parse_iso_time_to_timestamp(time_str)
                 # Try "last_trade" first, fall back to "price"
-                self.last_price = from_dict_get_float(self.ticker_data, "last_trade") or from_dict_get_float(self.ticker_data, "price")
+                self.last_price = from_dict_get_float(
+                    self.ticker_data, "last_trade"
+                ) or from_dict_get_float(self.ticker_data, "price")
                 self.volume_24h = from_dict_get_float(self.ticker_data, "volume_24h")
-                self.price_24h_change_percent = from_dict_get_float(self.ticker_data, "price_percentage_change_24h")
+                self.price_24h_change_percent = from_dict_get_float(
+                    self.ticker_data, "price_percentage_change_24h"
+                )
                 # Also try to get bid/ask from best_bid/best_ask
                 self.bid_price = from_dict_get_float(self.ticker_data, "best_bid")
                 self.ask_price = from_dict_get_float(self.ticker_data, "best_ask")

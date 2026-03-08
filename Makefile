@@ -1,4 +1,4 @@
-.PHONY: help install test test-cov test-fast test-unit test-integration clean lint format type-check docs
+.PHONY: help install test test-cov test-fast test-unit test-integration test-performance test-contracts test-e2e clean lint format type-check docs analyze-coverage optimized-test
 
 # Default target
 help:
@@ -14,8 +14,13 @@ help:
 	@echo "  make test-fast        Run only fast tests (exclude slow/network)"
 	@echo "  make test-unit        Run only unit tests"
 	@echo "  make test-integration Run only integration tests"
+	@echo "  make test-performance Run performance tests"
+	@echo "  make test-contracts   Run property-based tests"
+	@echo "  make test-e2e         Run end-to-end tests"
 	@echo "  make test-ctp         Run CTP tests"
 	@echo "  make test-html        Run tests and generate HTML report"
+	@echo "  make optimized-test   Run optimized test suite"
+	@echo "  make analyze-coverage Analyze test coverage gaps"
 	@echo ""
 	@echo "Code Quality:"
 	@echo "  make lint             Run ruff linter"
@@ -59,6 +64,27 @@ test-ctp:
 
 test-html:
 	./run_tests.sh --html --cov
+
+test-performance:
+	@echo "Running performance tests..."
+	pytest tests/performance/ --tb=short -v
+
+test-contracts:
+	@echo "Running property-based tests..."
+	pytest tests/contracts/ --tb=short -v
+
+test-e2e:
+	@echo "Running end-to-end tests..."
+	pytest tests/e2e/ --tb=short -v
+
+optimized-test:
+	@echo "Running optimized test suite..."
+	chmod +x scripts/run_optimized_tests.sh
+	./scripts/run_optimized_tests.sh
+
+analyze-coverage:
+	@echo "Analyzing test coverage..."
+	python scripts/analyze_coverage.py
 
 # Code Quality
 lint:

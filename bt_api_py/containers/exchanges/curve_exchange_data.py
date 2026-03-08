@@ -6,7 +6,6 @@ Defines API endpoints, chain enums, and path configurations for Curve DEX.
 
 import os
 from enum import Enum
-from typing import Any
 
 # Config loading cache
 _curve_config = None
@@ -20,8 +19,9 @@ def _get_curve_config():
     if _curve_config_loaded:
         return _curve_config
     try:
-        from bt_api_py.config_loader import load_exchange_config
         import yaml
+
+        from bt_api_py.config_loader import load_exchange_config
 
         config_path = os.path.join(
             os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
@@ -43,6 +43,7 @@ def _get_curve_config():
     except Exception as e:
         # Import logger here to avoid circular imports
         from bt_api_py.logging_factory import get_logger
+
         logger = get_logger("curve_exchange_data")
         logger.warn(f"Failed to load curve.yaml config: {e}")
     return _curve_config
@@ -136,25 +137,25 @@ class CurveExchangeData:
             return False
 
         # Load REST API URL
-        if hasattr(self.config, '_raw_config') and self.config._raw_config:
-            raw_base_urls = self.config._raw_config.get('base_urls', {})
-            if raw_base_urls and raw_base_urls.get('rest'):
-                self.rest_url = raw_base_urls['rest']
+        if hasattr(self.config, "_raw_config") and self.config._raw_config:
+            raw_base_urls = self.config._raw_config.get("base_urls", {})
+            if raw_base_urls and raw_base_urls.get("rest"):
+                self.rest_url = raw_base_urls["rest"]
         else:
             self.rest_url = self.REST_API_URL
 
         # Load factory address
-        if hasattr(self.config, '_raw_config') and self.config._raw_config:
-            factory_addresses = self.config._raw_config.get('factory_address', {})
+        if hasattr(self.config, "_raw_config") and self.config._raw_config:
+            factory_addresses = self.config._raw_config.get("factory_address", {})
             if factory_addresses and self.chain.value in factory_addresses:
                 self.factory_address = factory_addresses[self.chain.value]
             else:
                 self.factory_address = self.FACTORY_ADDRESSES.get(self.chain)
 
         # Load supported chains
-        asset_config_dict = asset_cfg.__dict__ if hasattr(asset_cfg, '__dict__') else {}
-        if 'chains_supported' in asset_config_dict and asset_config_dict['chains_supported']:
-            self.chains_supported = list(asset_config_dict['chains_supported'])
+        asset_config_dict = asset_cfg.__dict__ if hasattr(asset_cfg, "__dict__") else {}
+        if "chains_supported" in asset_config_dict and asset_config_dict["chains_supported"]:
+            self.chains_supported = list(asset_config_dict["chains_supported"])
         else:
             self.chains_supported = [self.chain.value]
 
@@ -182,7 +183,7 @@ class CurveExchangeData:
             String in format "GET /endpoint"
         """
         # If config has rest_paths and this request_type is defined
-        if self.config and hasattr(self, 'asset_type') and self.asset_type:
+        if self.config and hasattr(self, "asset_type") and self.asset_type:
             asset_cfg = self.config.asset_types.get(self.asset_type)
             if asset_cfg and asset_cfg.rest_paths:
                 path = asset_cfg.rest_paths.get(request_type)
@@ -207,7 +208,11 @@ class CurveExchangeDataSpot(CurveExchangeData):
     Inherits from base CurveExchangeData with spot-specific settings.
     """
 
-    def __init__(self, chain: CurveChain | str = CurveExchangeData.DEFAULT_CHAIN, asset_type: str | None = None):
+    def __init__(
+        self,
+        chain: CurveChain | str = CurveExchangeData.DEFAULT_CHAIN,
+        asset_type: str | None = None,
+    ):
         # Convert string to enum if needed
         if isinstance(chain, str):
             try:
@@ -248,12 +253,12 @@ class CurveExchangeDataSpot(CurveExchangeData):
             return False
 
         # Use raw config data to get rest_paths
-        if hasattr(self, '_raw_config') and self._raw_config:
-            raw_asset_types = self._raw_config.get('asset_types', {})
+        if hasattr(self, "_raw_config") and self._raw_config:
+            raw_asset_types = self._raw_config.get("asset_types", {})
             asset_config = raw_asset_types.get(asset_type, {})
 
             # Load rest_paths if available
-            self.rest_paths = asset_config.get('rest_paths', {})
+            self.rest_paths = asset_config.get("rest_paths", {})
         else:
             self.rest_paths = {}
 

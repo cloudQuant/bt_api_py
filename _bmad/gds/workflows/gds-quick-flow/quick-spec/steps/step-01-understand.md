@@ -1,5 +1,4 @@
-- --
-
+---
 name: 'step-01-understand'
 description: 'Analyze the requirement delta between current state and what user wants to build'
 
@@ -8,12 +7,11 @@ nextStepFile: './step-02-investigate.md'
 skipToStepFile: './step-03-generate.md'
 templateFile: '{workflow_path}/tech-spec-template.md'
 wipFile: '{implementation_artifacts}/tech-spec-wip.md'
-
-- --
+---
 
 # Step 1: Analyze Requirement Delta
 
-- *Progress: Step 1 of 4**- Next: Deep Investigation
+**Progress: Step 1 of 4** - Next: Deep Investigation
 
 ## RULES:
 
@@ -34,7 +32,7 @@ wipFile: '{implementation_artifacts}/tech-spec-wip.md'
 
 ### 0. Check for Work in Progress
 
-a)**Before anything else, check if `{wipFile}` exists:**
+a) **Before anything else, check if `{wipFile}` exists:**
 
 b) **IF WIP FILE EXISTS:**
 
@@ -42,18 +40,18 @@ b) **IF WIP FILE EXISTS:**
 2. Calculate progress: `lastStep = max(stepsCompleted)`
 3. Present to user:
 
-```bash
+```
 Hey {user_name}! Found a tech-spec in progress:
 
-- *{title}**- Step {lastStep} of 4 complete
+**{title}** - Step {lastStep} of 4 complete
 
 Is this what you're here to continue?
 
 [y] Yes, pick up where I left off
 [n] No, archive it and start something new
+```
 
-```bash
-4.**HALT and wait for user selection.**
+4. **HALT and wait for user selection.**
 
 a) **Menu Handling:**
 
@@ -71,11 +69,11 @@ a) **Greet the user briefly:**
 
 "Hey {user_name}! What are we building today?"
 
-b) **Get their initial description.**Don't ask detailed questions yet - just understand enough to know where to look.
+b) **Get their initial description.** Don't ask detailed questions yet - just understand enough to know where to look.
 
 ### 2. Quick Orient Scan
 
-a)**Before asking detailed questions, do a rapid scan to understand the landscape:**
+a) **Before asking detailed questions, do a rapid scan to understand the landscape:**
 
 b) **Check for existing context docs:**
 
@@ -95,21 +93,20 @@ d) **Build mental model:**
 - What's the likely scope based on what you found?
 - What questions do you NOW have, informed by the code?
 
-- *This scan should take < 30 seconds. Just enough to ask smart questions.**
+**This scan should take < 30 seconds. Just enough to ask smart questions.**
 
 ### 3. Ask Informed Questions
 
 a) **Now ask clarifying questions - but make them INFORMED by what you found:**
 
 Instead of generic questions like "What's the scope?", ask specific ones like:
-
 - "`AuthService` handles validation in the controller — should the new field follow that pattern or move it to a dedicated validator?"
 - "`NavigationSidebar` component uses local state for the 'collapsed' toggle — should we stick with that or move it to the global store?"
 - "The epics doc mentions X - is this related?"
 
-- *Adapt to {game_dev_experience}.**Technical users want technical questions. Non-technical users need translation.
+**Adapt to {game_dev_experience}.** Technical users want technical questions. Non-technical users need translation.
 
-b)**If no existing code is found:**
+b) **If no existing code is found:**
 
 - Ask about intended architecture, patterns, constraints
 - Ask what similar systems they'd like to emulate
@@ -134,11 +131,8 @@ a) **Create the tech-spec WIP file:**
 1. Copy template from `{templateFile}`
 2. Write to `{wipFile}`
 3. Update frontmatter with captured values:
-
    ```yaml
-
-   - --
-
+   ---
    title: '{title}'
    slug: '{slug}'
    created: '{date}'
@@ -148,20 +142,17 @@ a) **Create the tech-spec WIP file:**
    files_to_modify: []
    code_patterns: []
    test_patterns: []
-
-   - --
-
+   ---
    ```
-
-1. Fill in Overview section with Problem Statement, Solution, and Scope
-2. Fill in Context for Development section with any technical preferences or constraints gathered during informed discovery.
-3. Write the file
+4. Fill in Overview section with Problem Statement, Solution, and Scope
+5. Fill in Context for Development section with any technical preferences or constraints gathered during informed discovery.
+6. Write the file
 
 b) **Report to user:**
 
 "Created: `{wipFile}`
 
-- *Captured:**
+**Captured:**
 
 - Title: {title}
 - Problem: {problem_statement_summary}
@@ -171,12 +162,12 @@ b) **Report to user:**
 
 a) **Display menu:**
 
-```bash
+```
 [a] Advanced Elicitation - dig deeper into requirements
 [c] Continue - proceed to next step
 [p] Party Mode - bring in other experts
+```
 
-```bash
 b) **HALT and wait for user selection.**
 
 #### Menu Handling:
@@ -185,7 +176,7 @@ b) **HALT and wait for user selection.**
 - **[c]**: Load and execute `{nextStepFile}` (Map Technical Constraints)
 - **[p]**: Load and execute `{party_mode_exec}`, then return here and redisplay menu
 
-- --
+---
 
 ## REQUIRED OUTPUTS:
 

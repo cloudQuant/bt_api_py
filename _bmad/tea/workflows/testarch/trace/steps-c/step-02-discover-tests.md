@@ -1,11 +1,9 @@
-- --
-
+---
 name: 'step-02-discover-tests'
 description: 'Discover and catalog tests by level'
 nextStepFile: './step-03-map-criteria.md'
 outputFile: '{test_artifacts}/traceability-report.md'
-
-- --
+---
 
 # Step 2: Discover & Catalog Tests
 
@@ -18,7 +16,7 @@ Identify tests relevant to the requirements and classify by test level.
 - 📖 Read the entire step file before acting
 - ✅ Speak in `{communication_language}`
 
-- --
+---
 
 ## EXECUTION PROTOCOLS:
 
@@ -35,7 +33,7 @@ Identify tests relevant to the requirements and classify by test level.
 
 ## MANDATORY SEQUENCE
 
-- *CRITICAL:** Follow this sequence exactly. Do not skip, reorder, or improvise.
+**CRITICAL:** Follow this sequence exactly. Do not skip, reorder, or improvise.
 
 ## 1. Discover Tests
 
@@ -45,7 +43,7 @@ Search `{test_dir}` for:
 - Feature name matches
 - Spec patterns (`*.spec.*`, `*.test.*`)
 
-- --
+---
 
 ## 2. Categorize by Level
 
@@ -58,7 +56,7 @@ Classify as:
 
 Record test IDs, describe blocks, and priority markers if present.
 
-- --
+---
 
 ## 3. Build Coverage Heuristics Inventory
 
@@ -76,24 +74,20 @@ Capture explicit coverage signals so Phase 1 can detect common blind spots:
 
 Record these findings in step output as `coverage_heuristics` for Step 3/4.
 
-- --
+---
 
 ### 4. Save Progress
 
-- *Save this step's accumulated work to `{outputFile}`.**
+**Save this step's accumulated work to `{outputFile}`.**
 
-- **If `{outputFile}` does not exist**(first save), create it using the workflow template (if available) with YAML frontmatter:
+- **If `{outputFile}` does not exist** (first save), create it using the workflow template (if available) with YAML frontmatter:
 
   ```yaml
-
-  - --
-
+  ---
   stepsCompleted: ['step-02-discover-tests']
   lastStep: 'step-02-discover-tests'
   lastSaved: '{date}'
-
-  - --
-
+  ---
   ```
 
   Then write this step's output below the frontmatter.
@@ -115,4 +109,4 @@ Load next step: `{nextStepFile}`
 ### ❌ SYSTEM FAILURE:
 
 - Skipped sequence steps or missing outputs
-  - *Master Rule:** Skipping steps is FORBIDDEN.
+  **Master Rule:** Skipping steps is FORBIDDEN.

@@ -1,11 +1,9 @@
-- --
-
+---
 name: 'step-e-02-apply-edits'
 description: 'Apply modifications to the teaching workflow based on edit plan'
 
 workflowPath: '../'
-
-- --
+---
 
 # Edit Step 2: Apply Edits
 
@@ -51,7 +49,7 @@ Let me apply these changes systematically."
 
 ### 2. Apply Edits by Category
 
-- *For each file to be edited:**
+**For each file to be edited:**
 
 1. Load the current file
 2. Show the proposed changes (before/after)
@@ -64,7 +62,7 @@ Let me apply these changes systematically."
 
 After all edits applied:
 
-- *Check:**
+**Check:**
 
 - Frontmatter still valid
 - File references still correct
@@ -88,17 +86,15 @@ Checking integrity:
 
 "**Edit Summary:**
 
-- *Files Modified:** {count}
-
+**Files Modified:** {count}
 {List each file with changes made}
 
-- *Changes Applied:**
-
+**Changes Applied:**
 {Summarize what was changed}
 
-- *Workflow Status:** ✅ Edits complete, workflow intact
+**Workflow Status:** ✅ Edits complete, workflow intact
 
-- *Next:** You can run the workflow to test your changes, or run validation mode to check quality."
+**Next:** You can run the workflow to test your changes, or run validation mode to check quality."
 
 ### 5. Completion
 
@@ -106,22 +102,21 @@ Checking integrity:
 
 The teach-me-testing workflow has been updated.
 
-- *Modified files:**
-
+**Modified files:**
 {List paths to modified files}
 
-- *Recommended next steps:**
+**Recommended next steps:**
 
 1. Run validation: `bmad run teach-me-testing -v`
 2. Test the workflow: `bmad run teach-me-testing`
 3. Make additional edits if needed"
 
-- *This is the final edit step - workflow ends here.**
+**This is the final edit step - workflow ends here.**
 
-- --
+---
 
 ## 🚨 SUCCESS METRICS
 
 ✅ Edits applied to approved files only, changes validated, workflow integrity maintained, user informed of modifications.
 
-- *Master Rule:** Show changes, get approval, apply edits, validate integrity.
+**Master Rule:** Show changes, get approval, apply edits, validate integrity.

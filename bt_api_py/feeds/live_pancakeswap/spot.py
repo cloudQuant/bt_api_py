@@ -4,19 +4,11 @@ PancakeSpot Spot Trading Implementation
 Implements spot trading functionality for PancakeSwap using the request_base.py
 """
 
-import asyncio
 import time
-from typing import Any, Dict, List, Optional, Union
+from typing import Any
 
-from bt_api_py.containers.bars.binance_bar import BinanceRequestBarData
-from bt_api_py.containers.fundingrates.binance_funding_rate import BinanceRequestFundingRateData
-from bt_api_py.containers.markprices.binance_mark_price import BinanceRequestMarkPriceData
-from bt_api_py.containers.orderbooks.binance_orderbook import BinanceRequestOrderBookData
-from bt_api_py.containers.orders.binance_order import BinanceRequestOrderData
-from bt_api_py.containers.positions.binance_position import BinanceRequestPositionData
 from bt_api_py.containers.requestdatas.request_data import RequestData
 from bt_api_py.containers.tickers.binance_ticker import BinanceRequestTickerData
-from bt_api_py.containers.trades.binance_trade import BinanceRequestTradeData
 from bt_api_py.feeds.capability import Capability
 from bt_api_py.feeds.live_pancakeswap.request_base import PancakeSwapRequestData
 from bt_api_py.functions.utils import update_extra_data
@@ -47,9 +39,7 @@ class PancakeSpotRequestData(PancakeSwapRequestData):
 
     # ==================== Market Data Methods ====================
 
-    def _get_tick(
-        self, symbol: str, extra_data=None, **kwargs
-    ) -> tuple[str, dict[str, Any], Any]:
+    def _get_tick(self, symbol: str, extra_data=None, **kwargs) -> tuple[str, dict[str, Any], Any]:
         """Internal get tick method for ticker data.
 
         Args:
@@ -74,10 +64,16 @@ class PancakeSpotRequestData(PancakeSwapRequestData):
         )
 
         # Get symbol for API
-        api_symbol = self._params.get_symbol(symbol) if hasattr(self._params, 'get_symbol') else symbol
+        api_symbol = (
+            self._params.get_symbol(symbol) if hasattr(self._params, "get_symbol") else symbol
+        )
 
         params = {"symbol": api_symbol}
-        path = self._params.get_rest_path(request_type) if hasattr(self._params, 'get_rest_path') else "/ticker"
+        path = (
+            self._params.get_rest_path(request_type)
+            if hasattr(self._params, "get_rest_path")
+            else "/ticker"
+        )
 
         return path, params, extra_data
 
@@ -156,7 +152,7 @@ class PancakeSpotRequestData(PancakeSwapRequestData):
                 low=ticker_data.get("low"),
                 bid=ticker_data.get("bid"),
                 ask=ticker_data.get("ask"),
-                count=0
+                count=0,
             )
         return BinanceRequestTickerData(
             symbol=symbol,
@@ -191,9 +187,15 @@ class PancakeSpotRequestData(PancakeSwapRequestData):
             },
         )
 
-        api_symbol = self._params.get_symbol(symbol) if hasattr(self._params, 'get_symbol') else symbol
+        api_symbol = (
+            self._params.get_symbol(symbol) if hasattr(self._params, "get_symbol") else symbol
+        )
         params = {"symbol": api_symbol, "limit": limit}
-        path = self._params.get_rest_path(request_type) if hasattr(self._params, 'get_rest_path') else "/depth"
+        path = (
+            self._params.get_rest_path(request_type)
+            if hasattr(self._params, "get_rest_path")
+            else "/depth"
+        )
 
         return path, params, extra_data
 
@@ -228,16 +230,12 @@ class PancakeSpotRequestData(PancakeSwapRequestData):
 
         return [], False
 
-    def get_depth(
-        self, symbol: str, limit: int = 100, extra_data=None, **kwargs
-    ) -> RequestData:
+    def get_depth(self, symbol: str, limit: int = 100, extra_data=None, **kwargs) -> RequestData:
         """Get order book depth for a symbol."""
         path, params, extra_data = self._get_depth(symbol, limit, extra_data, **kwargs)
         return self.request("GET", path, params, extra_data)
 
-    def async_get_depth(
-        self, symbol: str, limit: int = 100, extra_data=None, **kwargs
-    ):
+    def async_get_depth(self, symbol: str, limit: int = 100, extra_data=None, **kwargs):
         """Async get order book depth."""
         path, params, extra_data = self._get_depth(symbol, limit, extra_data, **kwargs)
         self.submit(
@@ -274,9 +272,15 @@ class PancakeSpotRequestData(PancakeSwapRequestData):
             },
         )
 
-        api_symbol = self._params.get_symbol(symbol) if hasattr(self._params, 'get_symbol') else symbol
+        api_symbol = (
+            self._params.get_symbol(symbol) if hasattr(self._params, "get_symbol") else symbol
+        )
         params = {"symbol": api_symbol, "interval": interval, "limit": limit}
-        path = self._params.get_rest_path(request_type) if hasattr(self._params, 'get_rest_path') else "/kline"
+        path = (
+            self._params.get_rest_path(request_type)
+            if hasattr(self._params, "get_rest_path")
+            else "/kline"
+        )
 
         return path, params, extra_data
 
@@ -357,9 +361,7 @@ class PancakeSpotRequestData(PancakeSwapRequestData):
             callback=self.async_callback,
         )
 
-    def _get_exchange_info(
-        self, extra_data=None, **kwargs
-    ) -> tuple[str, dict[str, Any], Any]:
+    def _get_exchange_info(self, extra_data=None, **kwargs) -> tuple[str, dict[str, Any], Any]:
         """Internal get exchange info method.
 
         Args:
@@ -382,7 +384,11 @@ class PancakeSpotRequestData(PancakeSwapRequestData):
         )
 
         params = {}
-        path = self._params.get_rest_path(request_type) if hasattr(self._params, 'get_rest_path') else "/exchangeInfo"
+        path = (
+            self._params.get_rest_path(request_type)
+            if hasattr(self._params, "get_rest_path")
+            else "/exchangeInfo"
+        )
 
         return path, params, extra_data
 
@@ -449,7 +455,11 @@ class PancakeSpotRequestData(PancakeSwapRequestData):
         )
 
         params = {"address": pool_address}
-        path = self._params.get_rest_path(request_type) if hasattr(self._params, 'get_rest_path') else "/pool"
+        path = (
+            self._params.get_rest_path(request_type)
+            if hasattr(self._params, "get_rest_path")
+            else "/pool"
+        )
 
         return path, params, extra_data
 
@@ -475,7 +485,9 @@ class PancakeSpotRequestData(PancakeSwapRequestData):
                 input_data = input_data["pair"]
 
             pool_data = {
-                "pool_address": input_data.get("id", extra_data.get("pool_address", "") if extra_data else ""),
+                "pool_address": input_data.get(
+                    "id", extra_data.get("pool_address", "") if extra_data else ""
+                ),
                 "symbol": input_data.get("symbol", ""),
                 "tvl": float(input_data.get("reserveUSD", 0)),
                 "volume_24h": float(input_data.get("volumeUSD", 0)),
@@ -525,7 +537,11 @@ class PancakeSpotRequestData(PancakeSwapRequestData):
         )
 
         params = {"first": first, "min_tvl": min_tvl}
-        path = self._params.get_rest_path(request_type) if hasattr(self._params, 'get_rest_path') else "/pools"
+        path = (
+            self._params.get_rest_path(request_type)
+            if hasattr(self._params, "get_rest_path")
+            else "/pools"
+        )
 
         return path, params, extra_data
 
@@ -565,7 +581,9 @@ class PancakeSpotRequestData(PancakeSwapRequestData):
 
         return result, len(result) > 0
 
-    def get_pools(self, first: int = 10, min_tvl: int = 0, extra_data=None, **kwargs) -> RequestData:
+    def get_pools(
+        self, first: int = 10, min_tvl: int = 0, extra_data=None, **kwargs
+    ) -> RequestData:
         """Get list of pools.
 
         Args:
@@ -582,23 +600,35 @@ class PancakeSpotRequestData(PancakeSwapRequestData):
 
     # ==================== Standard Trading Interfaces ====================
 
-    def _make_order(self, symbol, volume, price, order_type, offset="open",
-                    post_only=False, client_order_id=None, extra_data=None, **kwargs):
+    def _make_order(
+        self,
+        symbol,
+        volume,
+        price,
+        order_type,
+        offset="open",
+        post_only=False,
+        client_order_id=None,
+        extra_data=None,
+        **kwargs,
+    ):
         """Prepare order. Returns (method, path, body, extra_data).
 
         PancakeSwap is a DEX; trading requires on-chain transactions.
         """
         if extra_data is None:
             extra_data = {}
-        extra_data.update({
-            "exchange_name": self.exchange_name,
-            "symbol_name": symbol,
-            "asset_type": self.asset_type,
-            "request_type": "make_order",
-            "quantity": volume,
-            "price": price,
-            "order_type": order_type,
-        })
+        extra_data.update(
+            {
+                "exchange_name": self.exchange_name,
+                "symbol_name": symbol,
+                "asset_type": self.asset_type,
+                "request_type": "make_order",
+                "quantity": volume,
+                "price": price,
+                "order_type": order_type,
+            }
+        )
         body = {
             "symbol": symbol,
             "quantity": str(volume),
@@ -607,12 +637,29 @@ class PancakeSpotRequestData(PancakeSwapRequestData):
         }
         return "POST", "/orders", body, extra_data
 
-    def make_order(self, symbol, volume, price, order_type, offset="open",
-                   post_only=False, client_order_id=None, extra_data=None, **kwargs):
+    def make_order(
+        self,
+        symbol,
+        volume,
+        price,
+        order_type,
+        offset="open",
+        post_only=False,
+        client_order_id=None,
+        extra_data=None,
+        **kwargs,
+    ):
         """Place an order. Note: PancakeSwap requires on-chain tx."""
         method, path, body, extra_data = self._make_order(
-            symbol, volume, price, order_type, offset, post_only,
-            client_order_id, extra_data, **kwargs
+            symbol,
+            volume,
+            price,
+            order_type,
+            offset,
+            post_only,
+            client_order_id,
+            extra_data,
+            **kwargs,
         )
         return self.request(method, path, extra_data=extra_data, body=body)
 
@@ -620,31 +667,37 @@ class PancakeSpotRequestData(PancakeSwapRequestData):
         """Cancel order. Returns (method, path, params, extra_data)."""
         if extra_data is None:
             extra_data = {}
-        extra_data.update({
-            "exchange_name": self.exchange_name,
-            "symbol_name": symbol,
-            "asset_type": self.asset_type,
-            "request_type": "cancel_order",
-            "order_id": order_id,
-        })
+        extra_data.update(
+            {
+                "exchange_name": self.exchange_name,
+                "symbol_name": symbol,
+                "asset_type": self.asset_type,
+                "request_type": "cancel_order",
+                "order_id": order_id,
+            }
+        )
         return "DELETE", f"/orders/{order_id}", {}, extra_data
 
     def cancel_order(self, symbol, order_id, extra_data=None, **kwargs):
         """Cancel order."""
-        method, path, params, extra_data = self._cancel_order(symbol, order_id, extra_data, **kwargs)
+        method, path, params, extra_data = self._cancel_order(
+            symbol, order_id, extra_data, **kwargs
+        )
         return self.request(method, path, params=params, extra_data=extra_data)
 
     def _query_order(self, symbol, order_id, extra_data=None, **kwargs):
         """Query order. Returns (method, path, params, extra_data)."""
         if extra_data is None:
             extra_data = {}
-        extra_data.update({
-            "exchange_name": self.exchange_name,
-            "symbol_name": symbol,
-            "asset_type": self.asset_type,
-            "request_type": "query_order",
-            "order_id": order_id,
-        })
+        extra_data.update(
+            {
+                "exchange_name": self.exchange_name,
+                "symbol_name": symbol,
+                "asset_type": self.asset_type,
+                "request_type": "query_order",
+                "order_id": order_id,
+            }
+        )
         return "GET", f"/orders/{order_id}", {}, extra_data
 
     def query_order(self, symbol, order_id, extra_data=None, **kwargs):
@@ -656,12 +709,14 @@ class PancakeSpotRequestData(PancakeSwapRequestData):
         """Get open orders. Returns (method, path, params, extra_data)."""
         if extra_data is None:
             extra_data = {}
-        extra_data.update({
-            "exchange_name": self.exchange_name,
-            "symbol_name": symbol or "",
-            "asset_type": self.asset_type,
-            "request_type": "get_open_orders",
-        })
+        extra_data.update(
+            {
+                "exchange_name": self.exchange_name,
+                "symbol_name": symbol or "",
+                "asset_type": self.asset_type,
+                "request_type": "get_open_orders",
+            }
+        )
         return "GET", "/orders", {}, extra_data
 
     def get_open_orders(self, symbol=None, extra_data=None, **kwargs):
@@ -675,12 +730,14 @@ class PancakeSpotRequestData(PancakeSwapRequestData):
         """Get account info. Returns (method, path, params, extra_data)."""
         if extra_data is None:
             extra_data = {}
-        extra_data.update({
-            "exchange_name": self.exchange_name,
-            "symbol_name": symbol or "",
-            "asset_type": self.asset_type,
-            "request_type": "get_account",
-        })
+        extra_data.update(
+            {
+                "exchange_name": self.exchange_name,
+                "symbol_name": symbol or "",
+                "asset_type": self.asset_type,
+                "request_type": "get_account",
+            }
+        )
         return "GET", "/account", {}, extra_data
 
     def get_account(self, symbol=None, extra_data=None, **kwargs):
@@ -692,12 +749,14 @@ class PancakeSpotRequestData(PancakeSwapRequestData):
         """Get balance. Returns (method, path, params, extra_data)."""
         if extra_data is None:
             extra_data = {}
-        extra_data.update({
-            "exchange_name": self.exchange_name,
-            "symbol_name": symbol or "",
-            "asset_type": self.asset_type,
-            "request_type": "get_balance",
-        })
+        extra_data.update(
+            {
+                "exchange_name": self.exchange_name,
+                "symbol_name": symbol or "",
+                "asset_type": self.asset_type,
+                "request_type": "get_balance",
+            }
+        )
         return "GET", "/balance", {}, extra_data
 
     def get_balance(self, symbol=None, extra_data=None, **kwargs):
@@ -711,7 +770,7 @@ class PancakeSpotRequestData(PancakeSwapRequestData):
         """Get detailed information about a liquidity pool."""
         return self.get_pool(pool_address, extra_data, **kwargs)
 
-    def get_token_info(self, token_address: str, extra_data=None, **kwargs) -> Dict:
+    def get_token_info(self, token_address: str, extra_data=None, **kwargs) -> dict:
         """Get information about a token."""
         return {}
 
@@ -719,12 +778,6 @@ class PancakeSpotRequestData(PancakeSwapRequestData):
         """Get list of all liquidity pools."""
         return self.get_pools(first=limit, extra_data=extra_data, **kwargs)
 
-    def get_price_impact(self, symbol: str, amount: float) -> Dict:
+    def get_price_impact(self, symbol: str, amount: float) -> dict:
         """Calculate price impact for a trade."""
-        return {
-            "symbol": symbol,
-            "amount": amount,
-            "price_impact": 0.0,
-            "current_price": 0.0
-        }
-
+        return {"symbol": symbol, "amount": amount, "price_impact": 0.0, "current_price": 0.0}

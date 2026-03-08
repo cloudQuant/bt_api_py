@@ -11,18 +11,17 @@ from unittest.mock import Mock
 
 import pytest
 
+# Import registration to auto-register Mercado Bitcoin
+import bt_api_py.exchange_registers.register_mercado_bitcoin  # noqa: F401
 from bt_api_py.containers.exchanges.mercado_bitcoin_exchange_data import (
     MercadoBitcoinExchangeData,
     MercadoBitcoinExchangeDataSpot,
 )
+from bt_api_py.containers.requestdatas.request_data import RequestData
 from bt_api_py.containers.tickers.mercado_bitcoin_ticker import MercadoBitcoinRequestTickerData
 from bt_api_py.feeds.capability import Capability
 from bt_api_py.feeds.live_mercado_bitcoin.spot import MercadoBitcoinRequestDataSpot
-from bt_api_py.containers.requestdatas.request_data import RequestData
 from bt_api_py.registry import ExchangeRegistry
-
-# Import registration to auto-register Mercado Bitcoin
-import bt_api_py.exchange_registers.register_mercado_bitcoin  # noqa: F401
 
 
 @pytest.fixture
@@ -110,9 +109,7 @@ class TestMercadoBitcoinRequestDataSpot:
         assert extra_data["request_type"] == "get_account"
 
     def test_make_order_returns_tuple(self, mock_feed):
-        path, params, extra_data = mock_feed._make_order(
-            "BTC-BRL", "0.001", "50000", "buy-limit"
-        )
+        path, params, extra_data = mock_feed._make_order("BTC-BRL", "0.001", "50000", "buy-limit")
         assert path is not None
         assert extra_data["request_type"] == "make_order"
 
@@ -221,13 +218,17 @@ class TestMercadoBitcoinNormalizeFunctions:
         assert status is False
 
     def test_server_time_normalize_with_none(self):
-        result, status = MercadoBitcoinRequestDataSpot._get_server_time_normalize_function(None, None)
+        result, status = MercadoBitcoinRequestDataSpot._get_server_time_normalize_function(
+            None, None
+        )
         assert result is None
         assert status is False
 
     def test_server_time_normalize_with_data(self):
         input_data = {"ticker": {"date": 1678901234}}
-        result, status = MercadoBitcoinRequestDataSpot._get_server_time_normalize_function(input_data, {})
+        result, status = MercadoBitcoinRequestDataSpot._get_server_time_normalize_function(
+            input_data, {}
+        )
         assert status is True
 
 
@@ -235,16 +236,18 @@ class TestMercadoBitcoinDataContainers:
     """Test Mercado Bitcoin data containers."""
 
     def test_ticker_container(self):
-        ticker_info = json.dumps({
-            "ticker": {
-                "last": "50000.00",
-                "buy": "49999.00",
-                "sell": "50001.00",
-                "high": "51000.00",
-                "low": "49000.00",
-                "vol": "100.50",
+        ticker_info = json.dumps(
+            {
+                "ticker": {
+                    "last": "50000.00",
+                    "buy": "49999.00",
+                    "sell": "50001.00",
+                    "high": "51000.00",
+                    "low": "49000.00",
+                    "vol": "100.50",
+                }
             }
-        })
+        )
         ticker = MercadoBitcoinRequestTickerData(ticker_info, "BTC-BRL", "SPOT", False)
         ticker.init_data()
         assert ticker.exchange_name == "MERCADO_BITCOIN"

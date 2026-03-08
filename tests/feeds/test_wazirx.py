@@ -9,6 +9,7 @@ from unittest.mock import patch
 
 import pytest
 
+import bt_api_py.exchange_registers.register_wazirx  # noqa: F401
 from bt_api_py.containers.exchanges.wazirx_exchange_data import (
     WazirxExchangeData,
     WazirxExchangeDataSpot,
@@ -16,17 +17,20 @@ from bt_api_py.containers.exchanges.wazirx_exchange_data import (
 from bt_api_py.containers.requestdatas.request_data import RequestData
 from bt_api_py.feeds.live_wazirx.request_base import WazirxRequestData
 from bt_api_py.feeds.live_wazirx.spot import (
-    WazirxRequestDataSpot,
-    WazirxMarketWssDataSpot,
     WazirxAccountWssDataSpot,
+    WazirxMarketWssDataSpot,
+    WazirxRequestDataSpot,
 )
 from bt_api_py.registry import ExchangeRegistry
 
-import bt_api_py.exchange_registers.register_wazirx  # noqa: F401
-
 # ── sample fixtures ──────────────────────────────────────────
 
-SAMPLE_TICK = {"symbol": "btcinr", "lastPrice": "5000000", "bidPrice": "4999000", "askPrice": "5001000"}
+SAMPLE_TICK = {
+    "symbol": "btcinr",
+    "lastPrice": "5000000",
+    "bidPrice": "4999000",
+    "askPrice": "5001000",
+}
 SAMPLE_DEPTH = {"asks": [["5001000", "0.5"]], "bids": [["4999000", "0.5"]]}
 SAMPLE_KLINE = [["1678901234000", "5000000", "5010000", "4990000", "5005000", "100"]]
 SAMPLE_EXCHANGE_INFO = {"symbols": [{"symbol": "btcinr", "baseAsset": "btc", "quoteAsset": "inr"}]}
@@ -49,6 +53,7 @@ def exdata():
 # ═══════════════════════════════════════════════════════════════
 # 1) ExchangeData
 # ═══════════════════════════════════════════════════════════════
+
 
 class TestExchangeData:
     def test_exchange_name(self, exdata):
@@ -100,15 +105,25 @@ class TestExchangeData:
             exdata.get_rest_path("nonexistent")
 
     def test_rest_paths_keys(self, exdata):
-        for key in ("get_tick", "get_ticker", "get_depth", "get_kline",
-                     "get_exchange_info", "get_account", "get_balance",
-                     "get_server_time", "make_order", "cancel_order"):
+        for key in (
+            "get_tick",
+            "get_ticker",
+            "get_depth",
+            "get_kline",
+            "get_exchange_info",
+            "get_account",
+            "get_balance",
+            "get_server_time",
+            "make_order",
+            "cancel_order",
+        ):
             assert key in exdata.rest_paths
 
 
 # ═══════════════════════════════════════════════════════════════
 # 2) Parameter generation (_get_xxx)
 # ═══════════════════════════════════════════════════════════════
+
 
 class TestParamGeneration:
     def test_get_tick_params(self, feed):
@@ -155,6 +170,7 @@ class TestParamGeneration:
 # 3) Normalization functions
 # ═══════════════════════════════════════════════════════════════
 
+
 class TestNormalization:
     def test_tick_ok(self):
         result, ok = WazirxRequestData._get_tick_normalize_function(SAMPLE_TICK, {})
@@ -186,7 +202,9 @@ class TestNormalization:
         assert ok is False
 
     def test_exchange_info_dict(self):
-        result, ok = WazirxRequestData._get_exchange_info_normalize_function(SAMPLE_EXCHANGE_INFO, {})
+        result, ok = WazirxRequestData._get_exchange_info_normalize_function(
+            SAMPLE_EXCHANGE_INFO, {}
+        )
         assert ok is True
 
     def test_server_time_ok(self):
@@ -222,6 +240,7 @@ class TestNormalization:
 # ═══════════════════════════════════════════════════════════════
 # 4) Mocked sync calls
 # ═══════════════════════════════════════════════════════════════
+
 
 class TestSyncCalls:
     @patch.object(WazirxRequestData, "http_request", return_value=SAMPLE_TICK)
@@ -270,6 +289,7 @@ class TestSyncCalls:
 # 5) Auth
 # ═══════════════════════════════════════════════════════════════
 
+
 class TestAuth:
     def test_headers_no_key(self, feed):
         h = feed._get_headers()
@@ -294,6 +314,7 @@ class TestAuth:
 # ═══════════════════════════════════════════════════════════════
 # 6) Registry
 # ═══════════════════════════════════════════════════════════════
+
 
 class TestRegistry:
     def test_feed_registered(self):
@@ -323,14 +344,22 @@ class TestRegistry:
 # ═══════════════════════════════════════════════════════════════
 
 _EXPECTED_METHODS = [
-    "get_tick", "async_get_tick",
-    "get_ticker", "async_get_ticker",
-    "get_depth", "async_get_depth",
-    "get_kline", "async_get_kline",
-    "get_exchange_info", "async_get_exchange_info",
-    "get_server_time", "async_get_server_time",
-    "get_balance", "async_get_balance",
-    "get_account", "async_get_account",
+    "get_tick",
+    "async_get_tick",
+    "get_ticker",
+    "async_get_ticker",
+    "get_depth",
+    "async_get_depth",
+    "get_kline",
+    "async_get_kline",
+    "get_exchange_info",
+    "async_get_exchange_info",
+    "get_server_time",
+    "async_get_server_time",
+    "get_balance",
+    "async_get_balance",
+    "get_account",
+    "async_get_account",
 ]
 
 
@@ -345,6 +374,7 @@ class TestMethodExistence:
 # 8) Feed init
 # ═══════════════════════════════════════════════════════════════
 
+
 class TestFeedInit:
     def test_default_exchange_name(self, feed):
         assert feed.exchange_name == "WAZIRX___SPOT"
@@ -354,6 +384,7 @@ class TestFeedInit:
 
     def test_capabilities(self, feed):
         from bt_api_py.feeds.capability import Capability
+
         caps = feed._capabilities()
         assert Capability.GET_TICK in caps
         assert Capability.GET_DEPTH in caps
@@ -368,6 +399,7 @@ class TestFeedInit:
 # ═══════════════════════════════════════════════════════════════
 # 9) WebSocket stubs
 # ═══════════════════════════════════════════════════════════════
+
 
 class TestWebSocketStubs:
     def test_market_wss_start_stop(self):
@@ -388,6 +420,7 @@ class TestWebSocketStubs:
 # ═══════════════════════════════════════════════════════════════
 # 10) Integration (skipped)
 # ═══════════════════════════════════════════════════════════════
+
 
 class TestIntegration:
     @pytest.mark.skip(reason="Requires network access")

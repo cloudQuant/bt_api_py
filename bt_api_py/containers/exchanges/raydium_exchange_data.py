@@ -39,6 +39,7 @@ def _get_raydium_config():
 
 class RaydiumChain(Enum):
     """Supported blockchain networks for Raydium"""
+
     SOLANA = "SOLANA"
 
 
@@ -155,7 +156,9 @@ class RaydiumExchangeData(ExchangeData):
 
         This method is provided for compatibility but raises NotImplementedError.
         """
-        raise NotImplementedError("Raydium public API doesn't support WebSocket. Use REST endpoints.")
+        raise NotImplementedError(
+            "Raydium public API doesn't support WebSocket. Use REST endpoints."
+        )
 
 
 class RaydiumExchangeDataSpot(RaydiumExchangeData):

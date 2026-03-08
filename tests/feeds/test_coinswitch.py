@@ -9,31 +9,36 @@ from unittest.mock import patch
 
 import pytest
 
+import bt_api_py.exchange_registers.register_coinswitch  # noqa: F401
 from bt_api_py.containers.exchanges.coinswitch_exchange_data import CoinSwitchExchangeDataSpot
 from bt_api_py.containers.requestdatas.request_data import RequestData
 from bt_api_py.feeds.live_coinswitch.request_base import CoinSwitchRequestData
 from bt_api_py.feeds.live_coinswitch.spot import CoinSwitchRequestDataSpot
 from bt_api_py.registry import ExchangeRegistry
 
-import bt_api_py.exchange_registers.register_coinswitch  # noqa: F401
-
 # ── sample response fixtures ─────────────────────────────────
 
 SAMPLE_TICK = {"data": {"symbol": "BTCINR", "last": "5500000", "bid": "5490000", "ask": "5510000"}}
 
-SAMPLE_ALL_TICKERS = {"data": [
-    {"symbol": "BTCINR", "last": "5500000"},
-    {"symbol": "ETHINR", "last": "250000"},
-]}
+SAMPLE_ALL_TICKERS = {
+    "data": [
+        {"symbol": "BTCINR", "last": "5500000"},
+        {"symbol": "ETHINR", "last": "250000"},
+    ]
+}
 
-SAMPLE_EXCHANGE_INFO = {"data": [
-    {"symbol": "BTCINR", "base": "BTC", "quote": "INR"},
-    {"symbol": "ETHINR", "base": "ETH", "quote": "INR"},
-]}
+SAMPLE_EXCHANGE_INFO = {
+    "data": [
+        {"symbol": "BTCINR", "base": "BTC", "quote": "INR"},
+        {"symbol": "ETHINR", "base": "ETH", "quote": "INR"},
+    ]
+}
 
-SAMPLE_TRADES = {"data": [
-    {"id": "t1", "price": "5500000", "amount": "0.01", "side": "buy"},
-]}
+SAMPLE_TRADES = {
+    "data": [
+        {"id": "t1", "price": "5500000", "amount": "0.01", "side": "buy"},
+    ]
+}
 
 SAMPLE_ORDER = {"data": {"orderId": "ord123", "status": "open"}}
 
@@ -48,6 +53,7 @@ SAMPLE_ERROR = {"error": {"code": 400, "message": "Bad request"}}
 
 # ── helpers ───────────────────────────────────────────────────
 
+
 @pytest.fixture
 def feed():
     return CoinSwitchRequestDataSpot(queue.Queue())
@@ -61,6 +67,7 @@ def exdata():
 # ═══════════════════════════════════════════════════════════════
 # 1) ExchangeData
 # ═══════════════════════════════════════════════════════════════
+
 
 class TestExchangeData:
     def test_exchange_name(self, exdata):
@@ -99,15 +106,23 @@ class TestExchangeData:
             exdata.get_rest_path("nonexistent")
 
     def test_rest_paths_keys(self, exdata):
-        for key in ("get_tick", "get_exchange_info", "get_trade_history",
-                     "get_balance", "get_account", "make_order",
-                     "cancel_order", "get_open_orders"):
+        for key in (
+            "get_tick",
+            "get_exchange_info",
+            "get_trade_history",
+            "get_balance",
+            "get_account",
+            "make_order",
+            "cancel_order",
+            "get_open_orders",
+        ):
             assert key in exdata.rest_paths
 
 
 # ═══════════════════════════════════════════════════════════════
 # 2) Parameter generation (_get_xxx)
 # ═══════════════════════════════════════════════════════════════
+
 
 class TestParamGeneration:
     def test_get_tick_params(self, feed):
@@ -172,6 +187,7 @@ class TestParamGeneration:
 # 3) Normalization functions
 # ═══════════════════════════════════════════════════════════════
 
+
 class TestNormalization:
     def test_tick_ok(self):
         result, ok = CoinSwitchRequestData._get_tick_normalize_function(SAMPLE_TICK, {})
@@ -183,11 +199,15 @@ class TestNormalization:
         assert ok is False
 
     def test_all_tickers_ok(self):
-        result, ok = CoinSwitchRequestData._get_all_tickers_normalize_function(SAMPLE_ALL_TICKERS, {})
+        result, ok = CoinSwitchRequestData._get_all_tickers_normalize_function(
+            SAMPLE_ALL_TICKERS, {}
+        )
         assert ok is True
 
     def test_exchange_info_ok(self):
-        result, ok = CoinSwitchRequestData._get_exchange_info_normalize_function(SAMPLE_EXCHANGE_INFO, {})
+        result, ok = CoinSwitchRequestData._get_exchange_info_normalize_function(
+            SAMPLE_EXCHANGE_INFO, {}
+        )
         assert ok is True
 
     def test_trade_history_ok(self):
@@ -208,7 +228,9 @@ class TestNormalization:
         assert ok is True
 
     def test_open_orders_ok(self):
-        result, ok = CoinSwitchRequestData._get_open_orders_normalize_function(SAMPLE_OPEN_ORDERS, {})
+        result, ok = CoinSwitchRequestData._get_open_orders_normalize_function(
+            SAMPLE_OPEN_ORDERS, {}
+        )
         assert ok is True
 
     def test_balance_ok(self):
@@ -240,6 +262,7 @@ class TestNormalization:
 # ═══════════════════════════════════════════════════════════════
 # 4) Mocked sync calls
 # ═══════════════════════════════════════════════════════════════
+
 
 class TestSyncCalls:
     @patch.object(CoinSwitchRequestData, "http_request", return_value=SAMPLE_TICK)
@@ -293,6 +316,7 @@ class TestSyncCalls:
 # 5) Auth headers
 # ═══════════════════════════════════════════════════════════════
 
+
 class TestAuth:
     def test_no_api_key(self, feed):
         headers = feed._get_headers()
@@ -311,6 +335,7 @@ class TestAuth:
 # ═══════════════════════════════════════════════════════════════
 # 6) Registry
 # ═══════════════════════════════════════════════════════════════
+
 
 class TestRegistry:
     def test_feed_registered(self):
@@ -332,17 +357,28 @@ class TestRegistry:
 # ═══════════════════════════════════════════════════════════════
 
 _EXPECTED_METHODS = [
-    "get_tick", "async_get_tick",
-    "get_ticker", "async_get_ticker",
-    "get_all_tickers", "async_get_all_tickers",
-    "get_exchange_info", "async_get_exchange_info",
-    "get_trade_history", "async_get_trade_history",
-    "get_trades", "async_get_trades",
-    "make_order", "async_make_order",
-    "cancel_order", "async_cancel_order",
-    "get_open_orders", "async_get_open_orders",
-    "get_balance", "async_get_balance",
-    "get_account", "async_get_account",
+    "get_tick",
+    "async_get_tick",
+    "get_ticker",
+    "async_get_ticker",
+    "get_all_tickers",
+    "async_get_all_tickers",
+    "get_exchange_info",
+    "async_get_exchange_info",
+    "get_trade_history",
+    "async_get_trade_history",
+    "get_trades",
+    "async_get_trades",
+    "make_order",
+    "async_make_order",
+    "cancel_order",
+    "async_cancel_order",
+    "get_open_orders",
+    "async_get_open_orders",
+    "get_balance",
+    "async_get_balance",
+    "get_account",
+    "async_get_account",
 ]
 
 
@@ -356,6 +392,7 @@ class TestMethodExistence:
 # ═══════════════════════════════════════════════════════════════
 # 8) Feed init
 # ═══════════════════════════════════════════════════════════════
+
 
 class TestFeedInit:
     def test_default_exchange_name(self, feed):
@@ -380,6 +417,7 @@ class TestFeedInit:
 # ═══════════════════════════════════════════════════════════════
 # 9) Integration (skipped)
 # ═══════════════════════════════════════════════════════════════
+
 
 class TestIntegration:
     @pytest.mark.skip(reason="Requires network access and API key")

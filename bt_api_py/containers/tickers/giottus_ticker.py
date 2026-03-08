@@ -91,7 +91,7 @@ class GiottusRequestTickerData(TickerData):
         return self.asset_type
 
     def get_server_time(self):
-        return getattr(self, 'timestamp', None)
+        return getattr(self, "timestamp", None)
 
     def get_bid_price(self):
         return self.bid_price
@@ -113,18 +113,18 @@ class GiottusRequestTickerData(TickerData):
 
     def get_all_data(self):
         return {
-            'exchange_name': self.exchange_name,
-            'symbol_name': self.symbol_name,
-            'ticker_symbol_name': self.ticker_symbol_name,
-            'asset_type': self.asset_type,
-            'last_price': self.last_price,
-            'bid_price': self.bid_price,
-            'ask_price': self.ask_price,
-            'volume_24h': self.volume_24h,
-            'high_24h': self.high_24h,
-            'low_24h': self.low_24h,
-            'price_change_24h': self.price_change_24h,
-            'local_update_time': self.local_update_time,
+            "exchange_name": self.exchange_name,
+            "symbol_name": self.symbol_name,
+            "ticker_symbol_name": self.ticker_symbol_name,
+            "asset_type": self.asset_type,
+            "last_price": self.last_price,
+            "bid_price": self.bid_price,
+            "ask_price": self.ask_price,
+            "volume_24h": self.volume_24h,
+            "high_24h": self.high_24h,
+            "low_24h": self.low_24h,
+            "price_change_24h": self.price_change_24h,
+            "local_update_time": self.local_update_time,
         }
 
     def __str__(self):

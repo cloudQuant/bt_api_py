@@ -26,30 +26,25 @@ class HtxErrorTranslator(ErrorTranslator):
         "api-key-expired": (1007, "API key expired"),
         "api-key-ip-invalid": (1008, "IP not in whitelist"),
         "api-key-permission-invalid": (1004, "Permission denied"),
-
         # Account errors
         "account-frozen-balance-insufficient-error": (1008, "Insufficient balance"),
         "account-api-trading-banned": (1011, "API trading banned for account"),
         "account-invalid": (1015, "Invalid account"),
-
         # Order errors
         "order-orderstate-error": (1015, "Invalid order state"),
         "order-queryorder-invalid": (1006, "Order not found"),
         "order-update-error": (1017, "Order update failed"),
         "order-place-error": (1016, "Order placement failed"),
         "order-cancel-error": (1017, "Order cancellation failed"),
-
         # Trading errors
         "base-symbol-error": (1007, "Invalid trading pair"),
         "base-amount-error": (1018, "Invalid amount"),
         "base-price-error": (1018, "Invalid price"),
         "base-symbol-trading-banned": (1011, "Trading disabled for symbol"),
-
         # System errors
         "gateway-internal-error": (5003, "Internal server error"),
         "system-busy": (5002, "System busy"),
         "maintenance": (5001, "System under maintenance"),
-
         # Rate limiting
         "too-many-requests": (3001, "Rate limit exceeded"),
     }
@@ -124,10 +119,7 @@ class HtxErrorTranslator(ErrorTranslator):
         if err_code in cls.ERROR_MAP:
             unified_code, default_msg = cls.ERROR_MAP[err_code]
             return cls._create_unified_error(
-                unified_code,
-                err_msg or default_msg,
-                venue,
-                f"{err_code}: {err_msg}"
+                unified_code, err_msg or default_msg, venue, f"{err_code}: {err_msg}"
             )
 
         # Check for specific error patterns in message
@@ -136,16 +128,13 @@ class HtxErrorTranslator(ErrorTranslator):
 
         # Fallback for unknown error codes
         return cls._create_unified_error(
-            5003,
-            err_msg or f"Unknown error code: {err_code}",
-            venue,
-            f"{err_code}: {err_msg}"
+            5003, err_msg or f"Unknown error code: {err_code}", venue, f"{err_code}: {err_msg}"
         )
 
     @classmethod
     def _create_unified_error(cls, code, message, venue, original_error):
         """Create a unified error instance"""
-        from bt_api_py.error import UnifiedError, UnifiedErrorCode, ErrorCategory
+        from bt_api_py.error import ErrorCategory, UnifiedError, UnifiedErrorCode
 
         # Map HTX codes to unified codes
         code_mapping = {
@@ -186,15 +175,12 @@ class HtxErrorTranslator(ErrorTranslator):
             venue=venue,
             message=message,
             original_error=original_error,
-            context={"raw_response": original_error}
+            context={"raw_response": original_error},
         )
 
     @classmethod
     def _translate_fallback(cls, raw_error, venue: str):
         """Fallback translation for unknown error formats"""
         return cls._create_unified_error(
-            UnifiedErrorCode.INTERNAL_ERROR,
-            "Unknown error",
-            venue,
-            str(raw_error)
+            UnifiedErrorCode.INTERNAL_ERROR, "Unknown error", venue, str(raw_error)
         )

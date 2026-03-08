@@ -1,5 +1,7 @@
-import json
-from bt_api_py.containers.tickers.binance_ticker import BinanceWssTickerData, BinanceRequestTickerData
+from bt_api_py.containers.tickers.binance_ticker import (
+    BinanceRequestTickerData,
+    BinanceWssTickerData,
+)
 
 
 def test_binance_request_ticker():
@@ -10,7 +12,7 @@ def test_binance_request_ticker():
         "bidQty": "431.00000000",  # 挂单量
         "askPrice": "4.00000200",  # 最优卖单价
         "askQty": "9.00000000",  # 挂单量
-        "time": 1589437530011  # 撮合引擎时间
+        "time": 1589437530011,  # 撮合引擎时间
     }
     bt = BinanceRequestTickerData(data, "BTC-USDT", "PERPETUAL", True)
     bt.init_data()
@@ -36,7 +38,7 @@ def test_binance_ticker():
         "b": "25.35190000",  # 买单最优挂单价格
         "B": "31.21000000",  # 买单最优挂单数量
         "a": "25.36520000",  # 卖单最优挂单价格
-        "A": "40.66000000"  # 卖单最优挂单数量
+        "A": "40.66000000",  # 卖单最优挂单数量
     }
     bt = BinanceWssTickerData(data, "BNB-USDT", "PERPETUAL", True)
     bt.init_data()

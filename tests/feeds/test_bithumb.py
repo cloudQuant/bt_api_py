@@ -7,19 +7,17 @@ Run tests:
 
 import queue
 import time
-from unittest.mock import Mock, MagicMock
+from unittest.mock import Mock
 
 import pytest
 
-from bt_api_py.containers.exchanges.bithumb_exchange_data import BithumbExchangeDataSpot
-from bt_api_py.containers.tickers.bithumb_ticker import BithumbRequestTickerData
-from bt_api_py.containers.requestdatas.request_data import RequestData
-from bt_api_py.feeds.live_bithumb.spot import BithumbRequestDataSpot
-from bt_api_py.feeds.capability import Capability
-from bt_api_py.registry import ExchangeRegistry
-
 # Import registration to auto-register Bithumb
 import bt_api_py.exchange_registers.register_bithumb  # noqa: F401
+from bt_api_py.containers.exchanges.bithumb_exchange_data import BithumbExchangeDataSpot
+from bt_api_py.containers.requestdatas.request_data import RequestData
+from bt_api_py.containers.tickers.bithumb_ticker import BithumbRequestTickerData
+from bt_api_py.feeds.capability import Capability
+from bt_api_py.feeds.live_bithumb.spot import BithumbRequestDataSpot
 
 
 @pytest.fixture
@@ -139,7 +137,7 @@ class TestBithumbDataContainers:
             "h": "51000",
             "l": "49000",
             "v": "1234.56",
-            "p": "2.5"
+            "p": "2.5",
         }
         ticker = BithumbRequestTickerData(
             ticker_data, "BTC-USDT", "SPOT", has_been_json_encoded=True
@@ -210,6 +208,7 @@ class TestBithumbBaseCapabilities:
 
     def test_base_capabilities(self):
         from bt_api_py.feeds.live_bithumb.request_base import BithumbRequestData
+
         caps = BithumbRequestData._capabilities()
         assert Capability.GET_TICK in caps
         assert Capability.MAKE_ORDER in caps

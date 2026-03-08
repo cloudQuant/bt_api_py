@@ -39,7 +39,9 @@ class BitgetTradeData(TradeData):
         if self.has_been_init_data:
             return self
 
-        self.trade_id = from_dict_get_string(self.trade_data, "tradeId") or from_dict_get_string(self.trade_data, "id")
+        self.trade_id = from_dict_get_string(self.trade_data, "tradeId") or from_dict_get_string(
+            self.trade_data, "id"
+        )
         self.order_id = from_dict_get_string(self.trade_data, "orderId")
         self.symbol = from_dict_get_string(self.trade_data, "symbol")
         self.side = from_dict_get_string(self.trade_data, "side")
@@ -48,7 +50,9 @@ class BitgetTradeData(TradeData):
         self.size = from_dict_get_float(self.trade_data, "size")
         self.fee = from_dict_get_float(self.trade_data, "fee")
         self.fee_currency = from_dict_get_string(self.trade_data, "feeCurrency")
-        self.time = from_dict_get_float(self.trade_data, "time") or from_dict_get_float(self.trade_data, "ts")
+        self.time = from_dict_get_float(self.trade_data, "time") or from_dict_get_float(
+            self.trade_data, "ts"
+        )
         self.is_maker = from_dict_get_string(self.trade_data, "isMaker")
         self.has_been_init_data = True
         return self

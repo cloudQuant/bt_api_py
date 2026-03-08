@@ -278,7 +278,7 @@ class CtpRequestData(Feed):
 
         if ret == 0:
             self.request_logger.info(
-                f"CTP order sent: {symbol} {order_type} {offset} " f"price={price} vol={volume}"
+                f"CTP order sent: {symbol} {order_type} {offset} price={price} vol={volume}"
             )
             data_list = [CtpOrderData(order_dict, symbol, self.asset_type, True)]
             return self._make_request_data(data_list, "make_order", symbol, extra_data)
@@ -393,9 +393,7 @@ class CtpMarketStream(BaseDataStream):
         if instruments:
             self._md_client.subscribe(instruments)
         self._md_client.start(block=False)
-        self.logger.info(
-            f"CTP MdClient connecting to {self.md_front}, " f"subscribing {instruments}"
-        )
+        self.logger.info(f"CTP MdClient connecting to {self.md_front}, subscribing {instruments}")
 
     def _on_login(self, login_field):
         self.state = ConnectionState.AUTHENTICATED

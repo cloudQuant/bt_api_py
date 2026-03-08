@@ -6,8 +6,6 @@ Handles authentication, signing, and all REST API methods.
 import base64
 import hashlib
 import hmac
-import json
-import time
 import urllib.parse
 from datetime import datetime
 
@@ -15,8 +13,8 @@ from bt_api_py.containers.requestdatas.request_data import RequestData
 from bt_api_py.errors.error_framework_htx import HtxErrorTranslator
 from bt_api_py.feeds.capability import Capability
 from bt_api_py.feeds.feed import Feed
-from bt_api_py.rate_limiter import RateLimiter, RateLimitRule, RateLimitScope, RateLimitType
 from bt_api_py.logging_factory import get_logger
+from bt_api_py.rate_limiter import RateLimiter, RateLimitRule, RateLimitScope, RateLimitType
 
 
 class HtxRequestData(Feed):
@@ -49,6 +47,7 @@ class HtxRequestData(Feed):
         self.asset_type = kwargs.get("asset_type", "SPOT")
         self.logger_name = kwargs.get("logger_name", "htx_feed.log")
         from bt_api_py.containers.exchanges.htx_exchange_data import HtxExchangeData
+
         self._params = HtxExchangeData()
         self.request_logger = get_logger("request")
         self.async_logger = get_logger("async_request")
@@ -124,9 +123,7 @@ class HtxRequestData(Feed):
 
         # HMAC SHA256 signature
         signature = hmac.new(
-            self.private_key.encode('utf-8'),
-            payload.encode('utf-8'),
-            hashlib.sha256
+            self.private_key.encode("utf-8"), payload.encode("utf-8"), hashlib.sha256
         ).digest()
 
         # Base64 encoding
@@ -149,18 +146,20 @@ class HtxRequestData(Feed):
             params = {}
 
         # Add required authentication parameters
-        timestamp = datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%S')
-        params.update({
-            'AccessKeyId': self.public_key,
-            'SignatureMethod': 'HmacSHA256',
-            'SignatureVersion': '2',
-            'Timestamp': timestamp
-        })
+        timestamp = datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%S")
+        params.update(
+            {
+                "AccessKeyId": self.public_key,
+                "SignatureMethod": "HmacSHA256",
+                "SignatureVersion": "2",
+                "Timestamp": timestamp,
+            }
+        )
 
         # Generate signature
-        host = self._params.rest_url.replace('https://', '').replace('http://', '')
+        host = self._params.rest_url.replace("https://", "").replace("http://", "")
         signature = self.create_signature(method, host, path, params)
-        params['Signature'] = signature
+        params["Signature"] = signature
 
         return params
 
@@ -193,12 +192,12 @@ class HtxRequestData(Feed):
 
         # Determine if request needs authentication
         is_public = (
-            '/market' in request_path
-            or request_path.startswith('/v1/common')
-            or request_path.startswith('/heartbeat')
-            or request_path.endswith('_contract_info')
-            or request_path.endswith('_index')
-            or request_path.endswith('_open_interest')
+            "/market" in request_path
+            or request_path.startswith("/v1/common")
+            or request_path.startswith("/heartbeat")
+            or request_path.endswith("_contract_info")
+            or request_path.endswith("_index")
+            or request_path.endswith("_open_interest")
         )
 
         if not is_public:
@@ -257,12 +256,12 @@ class HtxRequestData(Feed):
 
         # Determine if request needs authentication
         is_public = (
-            '/market' in request_path
-            or request_path.startswith('/v1/common')
-            or request_path.startswith('/heartbeat')
-            or request_path.endswith('_contract_info')
-            or request_path.endswith('_index')
-            or request_path.endswith('_open_interest')
+            "/market" in request_path
+            or request_path.startswith("/v1/common")
+            or request_path.startswith("/heartbeat")
+            or request_path.endswith("_contract_info")
+            or request_path.endswith("_index")
+            or request_path.endswith("_open_interest")
         )
 
         if not is_public:

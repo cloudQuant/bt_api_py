@@ -1,9 +1,7 @@
-- --
-
+---
 description: 'Create product brief for BMAD module development'
 auto_execution_mode: "iterate"
-
-- --
+---
 
 # create-module-brief
 

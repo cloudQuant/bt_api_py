@@ -5,9 +5,9 @@ Supports spot trading via REST API.
 
 from bt_api_py.feeds.live_coinbase.request_base import CoinbaseRequestData
 from bt_api_py.feeds.live_coinbase.spot import (
-    CoinbaseRequestDataSpot,
-    CoinbaseMarketWssData,
     CoinbaseAccountWssData,
+    CoinbaseMarketWssData,
+    CoinbaseRequestDataSpot,
 )
 
 __all__ = [

@@ -81,7 +81,9 @@ class HtxRequestOrderData(OrderData):
         # Price and quantity
         self.order_price = from_dict_get_float(self.order_data, "price")
         self.order_qty = from_dict_get_float(self.order_data, "amount")
-        self.order_avg_price = from_dict_get_float(self.order_data, "field-amount")  # field-cash-amount / field-amount
+        self.order_avg_price = from_dict_get_float(
+            self.order_data, "field-amount"
+        )  # field-cash-amount / field-amount
         self.order_filled_qty = from_dict_get_float(self.order_data, "field-amount")
 
         # Order status

@@ -34,7 +34,7 @@ for _finder, _name, _ispkg in pkgutil.iter_modules(_exchange_reg_pkg.__path__):
 
 
 class BtApi:
-    def __init__(self, exchange_kwargs, debug=True, event_bus=None):
+    def __init__(self, exchange_kwargs=None, debug=True, event_bus=None):
         self.exchange_kwargs = exchange_kwargs
         self.debug = debug  # 是否是debug模式，默认是
         self.data_queues = {}  # 保存各个交易所的数据队列
@@ -61,13 +61,13 @@ class BtApi:
         if level == "info":
             self.logger.info(txt)
         elif level == "warning":
-            self.logger.warn(txt)
+            self.logger.warning(txt)
         elif level == "error":
             self.logger.error(txt)
         elif level == "debug":
             self.logger.debug(txt)
         else:
-            pass
+            self.logger.warning(f"Unknown log level '{level}', message: {txt}")
 
     def add_exchange(self, exchange_name, exchange_params):
         """通过 ExchangeRegistry 创建 feed，无需硬编码交易所类型"""
@@ -207,7 +207,13 @@ class BtApi:
 
                     if begin_time >= stop_time:
                         break
-                except (RequestError, RequestTimeoutError, RequestFailedError, ValueError, KeyError) as e:
+                except (
+                    RequestError,
+                    RequestTimeoutError,
+                    RequestFailedError,
+                    ValueError,
+                    KeyError,
+                ) as e:
                     self.log(f"download fail, retry: {e}", level="warning")
                     time.sleep(3)
             self.log(f"download all data completely: {symbol}, period: {period}")
@@ -240,16 +246,16 @@ class BtApi:
                     self._value_dict[exchange_name][currency]["value"] = (
                         account.get_margin() + account.get_unrealized_profit()
                     )
-                    self._cash_dict[exchange_name][currency][
-                        "cash"
-                    ] = account.get_available_margin()
+                    self._cash_dict[exchange_name][currency]["cash"] = (
+                        account.get_available_margin()
+                    )
             elif currency is None:
                 self._value_dict[exchange_name][account.get_account_type()]["value"] = (
                     account.get_margin() + account.get_unrealized_profit()
                 )
-                self._cash_dict[exchange_name][account.get_account_type()][
-                    "cash"
-                ] = account.get_available_margin()
+                self._cash_dict[exchange_name][account.get_account_type()]["cash"] = (
+                    account.get_available_margin()
+                )
 
     def get_cash(self, exchange_name, currency):
         return self._cash_dict[exchange_name][currency]["cash"]
@@ -266,6 +272,13 @@ class BtApi:
     def get_event_bus(self):
         """获取事件总线实例"""
         return self.event_bus
+
+    def put_ticker(self, ticker_data, exchange_name=None):
+        """Push a simulated ticker update into the event bus and optional exchange queue."""
+        self.event_bus.emit("ticker", ticker_data)
+        if exchange_name is not None and exchange_name in self.data_queues:
+            self.data_queues[exchange_name].put(ticker_data)
+        return ticker_data
 
     def list_exchanges(self):
         """列出所有已添加的交易所"""
@@ -426,14 +439,14 @@ class BtApi:
 
     def __getattr__(self, name):
         if name.startswith("async_"):
+
             def _async_proxy(exchange_name, *args, **kwargs):
                 feed = self._get_feed(exchange_name)
                 feed_method = getattr(feed, name, None)
                 if feed_method is None:
-                    raise AttributeError(
-                        f"Feed for {exchange_name} has no method {name!r}"
-                    )
+                    raise AttributeError(f"Feed for {exchange_name} has no method {name!r}")
                 return feed_method(*args, **kwargs)
+
             _async_proxy.__name__ = name
             _async_proxy.__doc__ = f"异步代理 → feed.{name}()，结果推送到 data_queue"
             return _async_proxy

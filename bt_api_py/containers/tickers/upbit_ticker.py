@@ -77,7 +77,10 @@ class UpbitTickerData(TickerData):
                 time_str = f"{date_str} {time_str}"
                 try:
                     import datetime
-                    self.timestamp = datetime.datetime.strptime(time_str, "%Y-%m-%d %H:%M:%S").timestamp()
+
+                    self.timestamp = datetime.datetime.strptime(
+                        time_str, "%Y-%m-%d %H:%M:%S"
+                    ).timestamp()
                 except:
                     self.timestamp = time.time()
 
@@ -131,7 +134,9 @@ class UpbitTickerData(TickerData):
         if not self.has_been_init_data:
             self.init_data()
 
-        return (f"UpbitTicker(symbol={self.symbol_name}, "
-                f"last={self.last_price}, "
-                f"bid={self.bid_price}, ask={self.ask_price}, "
-                f"change={self.change_rate:.4f}%)")
+        return (
+            f"UpbitTicker(symbol={self.symbol_name}, "
+            f"last={self.last_price}, "
+            f"bid={self.bid_price}, ask={self.ask_price}, "
+            f"change={self.change_rate:.4f}%)"
+        )

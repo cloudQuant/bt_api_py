@@ -61,7 +61,9 @@ class CoinoneRequestTickerData(TickerData):
             else:
                 self.ask_price = self._parse_float(data.get("ask"))
             # Use quote_volume for volume
-            self.volume_24h = self._parse_float(data.get("quote_volume")) or self._parse_float(data.get("volume"))
+            self.volume_24h = self._parse_float(data.get("quote_volume")) or self._parse_float(
+                data.get("volume")
+            )
             self.high_24h = self._parse_float(data.get("high"))
             self.low_24h = self._parse_float(data.get("low"))
 
@@ -93,7 +95,7 @@ class CoinoneRequestTickerData(TickerData):
         return self.asset_type
 
     def get_server_time(self):
-        return getattr(self, 'timestamp', None)
+        return getattr(self, "timestamp", None)
 
     def get_bid_price(self):
         return self.bid_price

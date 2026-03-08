@@ -1,16 +1,13 @@
-- --
-
+---
 name: 'step-e-04-direct-edit'
 description: 'Apply direct user-requested changes to workflow'
 
 # File References
-
 nextStepFile: './step-e-05-apply-edit.md'
 editPlan: '{bmb_creations_output_folder}/edit-plan-{workflow_name}.md'
 targetWorkflowPath: '{targetWorkflowPath}'
 
 # Standards References
-
 architecture: '../data/architecture.md'
 stepFileRules: '../data/step-file-rules.md'
 frontmatterStandards: '../data/frontmatter-standards.md'
@@ -21,8 +18,7 @@ workflowTypeCriteria: '../data/workflow-type-criteria.md'
 inputDiscoveryStandards: '../data/input-discovery-standards.md'
 csvDataFileStandards: '../data/csv-data-file-standards.md'
 intentVsPrescriptive: '../data/intent-vs-prescriptive-spectrum.md'
-
-- --
+---
 
 # Edit Step 4: Direct Edit
 
@@ -61,72 +57,69 @@ Apply direct user-requested changes to the workflow, loading relevant standards 
 
 ## MANDATORY SEQUENCE
 
-- *CRITICAL:** Follow this sequence exactly. Do not skip or shortcut.
+**CRITICAL:** Follow this sequence exactly. Do not skip or shortcut.
 
 ### 1. Read Edit Plan
 
-- *Load the editPlan:**
-
+**Load the editPlan:**
 Read `{editPlan}` to review direct change goals from step 2.
 
 ### 2. For Each Direct Change Goal
 
-- *Work through each change systematically:**
+**Work through each change systematically:**
 
 #### A. Identify Change Type and Load Standards
 
-- *For workflow.md changes:**
+**For workflow.md changes:**
 - Load {architecture}
 
-- *For step file changes:**
+**For step file changes:**
 - Load {stepFileRules}
 - Load {stepTypePatterns}
 - Load {intentVsPrescriptive}
 
-- *For frontmatter changes:**
+**For frontmatter changes:**
 - Load {frontmatterStandards}
 
-- *For menu changes:**
+**For menu changes:**
 - Load {menuHandlingStandards}
 
-- *For output/template changes:**
+**For output/template changes:**
 - Load {outputFormatStandards}
 
-- *For data file changes:**
+**For data file changes:**
 - Load {csvDataFileStandards}
 
-- *For workflow type changes:**
+**For workflow type changes:**
 - Load {workflowTypeCriteria}
 
-- *For discovery/input changes:**
+**For discovery/input changes:**
 - Load {inputDiscoveryStandards}
 
 #### B. Load Target File and Check Compliance
 
-- *Load the file to be edited and review against standards:**
+**Load the file to be edited and review against standards:**
 
 "**Loading: {filename}**
+**Standard: {standard file loaded}**
 
-- *Standard: {standard file loaded}**
+**Checking file against standards before making your change...**"
 
-- *Checking file against standards before making your change...**"
-
-- *IF NON-COMPLIANCE FOUND:**
+**IF NON-COMPLIANCE FOUND:**
 
 "**⚠️ Compliance Issue Detected**
 
 Before I apply your change, I noticed this file is not fully compliant with {standard}:
 
-- *Issue:** {describe the non-compliance}
+**Issue:** {describe the non-compliance}
 
-- *This could cause:** {explain impact}
+**This could cause:** {explain impact}
 
-- *Should I fix this compliance issue before applying your change?**
+**Should I fix this compliance issue before applying your change?**
 
-1. **[F]ix first**- Fix compliance, then apply your change
-
-2.**[C]ontinue anyway**- Apply your change without fixing
-3.**[E]xplain more** - More details about the issue
+1. **[F]ix first** - Fix compliance, then apply your change
+2. **[C]ontinue anyway** - Apply your change without fixing
+3. **[E]xplain more** - More details about the issue
 
 #### Menu Handling Logic:
 
@@ -135,7 +128,7 @@ Before I apply your change, I noticed this file is not fully compliant with {sta
 - IF E: Provide more details, then redisplay menu
 - IF Any other: help user, then redisplay menu"
 
-- *IF COMPLIANT:**
+**IF COMPLIANT:**
 
 "**File is compliant.** Proceeding with your change."
 
@@ -145,50 +138,41 @@ Before I apply your change, I noticed this file is not fully compliant with {sta
 
 {show relevant section}
 
-- *Your requested change:**
-
+**Your requested change:**
 {summarize the change from edit plan}
 
-- *Proposed modification:**
-
+**Proposed modification:**
 {show how the change will be made}
 
-- *Should I apply this change?**"
+**Should I apply this change?**"
 
 Wait for user approval.
 
 #### D. Apply Change (If Approved)
 
-- *Load the file, make the change:**
+**Load the file, make the change:**
 
 ```markdown
+**Applying change to: {filename}**
 
-- *Applying change to: {filename}**
-
-- *Before:**
-
+**Before:**
 {show relevant section}
 
-- *After:**
-
+**After:**
 {show modified section}
 
-- *Change applied.** ✅"
+**Change applied.** ✅"
+```
 
-```bash
-
-- *Update editPlan:**
-
+**Update editPlan:**
 ```markdown
-
 ### Direct Changes Applied
 
-- *[{change type}]** {filename}
+**[{change type}]** {filename}
 - ✅ Changed: {description}
 - User approved: Yes
 - Compliance check: Passed/Fixed/Accepted risk
-
-```bash
+```
 
 ### 3. Handle Common Change Patterns
 
@@ -235,20 +219,20 @@ Wait for user approval.
 
 ### 4. After All Changes Complete
 
-- *Present summary:**
+**Present summary:**
 
 "**Direct Edit Summary:**
 
-- *Total Changes Requested:** {count}
-- *Applied:** {count}
-- *Skipped:** {count}
-- *Modified:** {count}
+**Total Changes Requested:** {count}
+**Applied:** {count}
+**Skipped:** {count}
+**Modified:** {count}
 
-- *Compliance Issues Found During Editing:** {count}
+**Compliance Issues Found During Editing:** {count}
 - Fixed: {count}
 - User accepted risk: {count}
 
-- *Files Modified:**
+**Files Modified:**
 - {file1}
 - {file2}
 - etc."
@@ -266,7 +250,7 @@ Display: "**Direct Edits Applied. Select an Option:** [C] Continue"
 
 ONLY WHEN all direct changes are applied (or documented) and user confirms, will you then load and read fully `{nextStepFile}` to execute.
 
-- --
+---
 
 ## 🚨 SYSTEM SUCCESS/FAILURE METRICS
 
@@ -288,4 +272,4 @@ ONLY WHEN all direct changes are applied (or documented) and user confirms, will
 - Missing non-compliance issues
 - Not documenting changes
 
-- *Master Rule:** Load standards for each change type. Check compliance BEFORE applying changes. Offer to fix non-compliance when found.
+**Master Rule:** Load standards for each change type. Check compliance BEFORE applying changes. Offer to fix non-compliance when found.

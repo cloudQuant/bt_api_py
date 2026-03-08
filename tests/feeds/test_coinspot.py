@@ -9,41 +9,47 @@ from unittest.mock import patch
 
 import pytest
 
+import bt_api_py.exchange_registers.register_coinspot  # noqa: F401
 from bt_api_py.containers.exchanges.coinspot_exchange_data import CoinSpotExchangeDataSpot
 from bt_api_py.containers.requestdatas.request_data import RequestData
 from bt_api_py.feeds.live_coinspot.request_base import CoinSpotRequestData
 from bt_api_py.feeds.live_coinspot.spot import CoinSpotRequestDataSpot
 from bt_api_py.registry import ExchangeRegistry
 
-import bt_api_py.exchange_registers.register_coinspot  # noqa: F401
-
 # ── sample response fixtures ─────────────────────────────────
 
-SAMPLE_TICK = {"status": "ok",
-    "prices": {"bid": "95000", "ask": "96000", "last": "95500"}}
+SAMPLE_TICK = {"status": "ok", "prices": {"bid": "95000", "ask": "96000", "last": "95500"}}
 
-SAMPLE_ALL_TICKERS = {"status": "ok",
-    "prices": {"BTC": {"bid": "95000", "ask": "96000", "last": "95500"},
-               "ETH": {"bid": "3000", "ask": "3100", "last": "3050"}}}
+SAMPLE_ALL_TICKERS = {
+    "status": "ok",
+    "prices": {
+        "BTC": {"bid": "95000", "ask": "96000", "last": "95500"},
+        "ETH": {"bid": "3000", "ask": "3100", "last": "3050"},
+    },
+}
 
-SAMPLE_DEPTH = {"status": "ok",
+SAMPLE_DEPTH = {
+    "status": "ok",
     "buyorders": [{"amount": "0.1", "rate": "95000"}],
-    "sellorders": [{"amount": "0.2", "rate": "96000"}]}
+    "sellorders": [{"amount": "0.2", "rate": "96000"}],
+}
 
-SAMPLE_DEALS = {"status": "ok",
-    "buyorders": [{"amount": "0.1", "rate": "95000", "total": "9500"}]}
+SAMPLE_DEALS = {"status": "ok", "buyorders": [{"amount": "0.1", "rate": "95000", "total": "9500"}]}
 
 SAMPLE_ORDER = {"status": "ok", "id": "order123"}
 
 SAMPLE_CANCEL = {"status": "ok"}
 
-SAMPLE_BALANCE = {"status": "ok",
-    "balances": [{"BTC": {"balance": "1.5", "audbalance": "142500", "rate": "95000"}}]}
+SAMPLE_BALANCE = {
+    "status": "ok",
+    "balances": [{"BTC": {"balance": "1.5", "audbalance": "142500", "rate": "95000"}}],
+}
 
 SAMPLE_ERROR = {"status": "error", "message": "Invalid coin type"}
 
 
 # ── helpers ───────────────────────────────────────────────────
+
 
 @pytest.fixture
 def feed():
@@ -58,6 +64,7 @@ def exdata():
 # ═══════════════════════════════════════════════════════════════
 # 1) ExchangeData
 # ═══════════════════════════════════════════════════════════════
+
 
 class TestExchangeData:
     def test_exchange_name(self, exdata):
@@ -96,15 +103,25 @@ class TestExchangeData:
             exdata.get_rest_path("nonexistent")
 
     def test_rest_paths_keys(self, exdata):
-        for key in ("get_tick", "get_depth", "get_deals", "get_exchange_info",
-                     "get_balance", "get_account", "make_order_buy",
-                     "make_order_sell", "cancel_order_buy", "cancel_order_sell"):
+        for key in (
+            "get_tick",
+            "get_depth",
+            "get_deals",
+            "get_exchange_info",
+            "get_balance",
+            "get_account",
+            "make_order_buy",
+            "make_order_sell",
+            "cancel_order_buy",
+            "cancel_order_sell",
+        ):
             assert key in exdata.rest_paths
 
 
 # ═══════════════════════════════════════════════════════════════
 # 2) Parameter generation (_get_xxx)
 # ═══════════════════════════════════════════════════════════════
+
 
 class TestParamGeneration:
     def test_get_tick_params(self, feed):
@@ -170,6 +187,7 @@ class TestParamGeneration:
 # 3) Normalization functions
 # ═══════════════════════════════════════════════════════════════
 
+
 class TestNormalization:
     def test_tick_ok(self):
         result, ok = CoinSpotRequestData._get_tick_normalize_function(SAMPLE_TICK, {})
@@ -186,7 +204,9 @@ class TestNormalization:
         assert "prices" in result[0]
 
     def test_exchange_info_ok(self):
-        result, ok = CoinSpotRequestData._get_exchange_info_normalize_function(SAMPLE_ALL_TICKERS, {})
+        result, ok = CoinSpotRequestData._get_exchange_info_normalize_function(
+            SAMPLE_ALL_TICKERS, {}
+        )
         assert ok is True
 
     def test_depth_ok(self):
@@ -240,6 +260,7 @@ class TestNormalization:
 # 4) Mocked sync calls
 # ═══════════════════════════════════════════════════════════════
 
+
 class TestSyncCalls:
     @patch.object(CoinSpotRequestData, "http_request", return_value=SAMPLE_TICK)
     def test_get_tick(self, mock_http, feed):
@@ -292,6 +313,7 @@ class TestSyncCalls:
 # 5) Auth
 # ═══════════════════════════════════════════════════════════════
 
+
 class TestAuth:
     def test_no_auth_without_keys(self, feed):
         headers, body_str = feed._generate_auth_headers()
@@ -319,6 +341,7 @@ class TestAuth:
 # 6) Registry
 # ═══════════════════════════════════════════════════════════════
 
+
 class TestRegistry:
     def test_feed_registered(self):
         assert "COINSPOT___SPOT" in ExchangeRegistry._feed_classes
@@ -339,16 +362,26 @@ class TestRegistry:
 # ═══════════════════════════════════════════════════════════════
 
 _EXPECTED_METHODS = [
-    "get_tick", "async_get_tick",
-    "get_ticker", "async_get_ticker",
-    "get_all_tickers", "async_get_all_tickers",
-    "get_depth", "async_get_depth",
-    "get_deals", "async_get_deals",
-    "make_order", "async_make_order",
-    "cancel_order", "async_cancel_order",
-    "get_balance", "async_get_balance",
-    "get_account", "async_get_account",
-    "get_exchange_info", "async_get_exchange_info",
+    "get_tick",
+    "async_get_tick",
+    "get_ticker",
+    "async_get_ticker",
+    "get_all_tickers",
+    "async_get_all_tickers",
+    "get_depth",
+    "async_get_depth",
+    "get_deals",
+    "async_get_deals",
+    "make_order",
+    "async_make_order",
+    "cancel_order",
+    "async_cancel_order",
+    "get_balance",
+    "async_get_balance",
+    "get_account",
+    "async_get_account",
+    "get_exchange_info",
+    "async_get_exchange_info",
 ]
 
 
@@ -362,6 +395,7 @@ class TestMethodExistence:
 # ═══════════════════════════════════════════════════════════════
 # 8) Feed init
 # ═══════════════════════════════════════════════════════════════
+
 
 class TestFeedInit:
     def test_default_exchange_name(self, feed):
@@ -387,6 +421,7 @@ class TestFeedInit:
 # ═══════════════════════════════════════════════════════════════
 # 9) Integration (skipped)
 # ═══════════════════════════════════════════════════════════════
+
 
 class TestIntegration:
     @pytest.mark.skip(reason="Requires network access")

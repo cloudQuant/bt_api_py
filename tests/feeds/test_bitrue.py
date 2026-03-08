@@ -6,23 +6,22 @@ Run tests:
 """
 
 import queue
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock
 
 import pytest
 
+import bt_api_py.exchange_registers.register_bitrue  # noqa: F401
 from bt_api_py.containers.exchanges.bitrue_exchange_data import (
     BitrueExchangeDataSpot,
 )
 from bt_api_py.containers.requestdatas.request_data import RequestData
+from bt_api_py.feeds.capability import Capability
 from bt_api_py.feeds.live_bitrue.request_base import BitrueRequestData
 from bt_api_py.feeds.live_bitrue.spot import BitrueRequestDataSpot
-from bt_api_py.feeds.capability import Capability
 from bt_api_py.registry import ExchangeRegistry
 
-import bt_api_py.exchange_registers.register_bitrue  # noqa: F401
-
-
 # ── fixtures ────────────────────────────────────────────────────
+
 
 @pytest.fixture
 def exchange_data():
@@ -38,9 +37,7 @@ def feed():
 @pytest.fixture
 def feed_with_keys():
     q = queue.Queue()
-    return BitrueRequestDataSpot(
-        q, api_key="test_key", api_secret="test_secret"
-    )
+    return BitrueRequestDataSpot(q, api_key="test_key", api_secret="test_secret")
 
 
 # ── sample API responses ────────────────────────────────────────
@@ -101,8 +98,8 @@ SAMPLE_ERROR = {"code": -1002, "msg": "Unauthorized"}
 
 # ── TestExchangeData ────────────────────────────────────────────
 
-class TestExchangeData:
 
+class TestExchangeData:
     def test_exchange_name(self, exchange_data):
         assert exchange_data.exchange_name == "BITRUE___SPOT"
 
@@ -162,6 +159,7 @@ class TestExchangeData:
 
 
 # ── TestParameterGeneration ─────────────────────────────────────
+
 
 class TestParameterGeneration:
     def test_get_tick_params(self, feed):
@@ -246,8 +244,8 @@ class TestParameterGeneration:
 
 # ── TestNormalization ───────────────────────────────────────────
 
-class TestNormalization:
 
+class TestNormalization:
     def test_tick_ok(self):
         result, ok = BitrueRequestData._get_tick_normalize_function(SAMPLE_TICK, {})
         assert ok is True
@@ -295,7 +293,9 @@ class TestNormalization:
         assert result[0]["server_time"] == 1700000000000
 
     def test_exchange_info_ok(self):
-        result, ok = BitrueRequestData._get_exchange_info_normalize_function(SAMPLE_EXCHANGE_INFO, {})
+        result, ok = BitrueRequestData._get_exchange_info_normalize_function(
+            SAMPLE_EXCHANGE_INFO, {}
+        )
         assert ok is True
         assert "symbols" in result[0]
 
@@ -354,8 +354,8 @@ class TestNormalization:
 
 # ── TestSyncCalls (mocked) ──────────────────────────────────────
 
-class TestSyncCalls:
 
+class TestSyncCalls:
     def _mock_feed(self, mock_response):
         q = queue.Queue()
         feed = BitrueRequestDataSpot(q)
@@ -421,8 +421,8 @@ class TestSyncCalls:
 
 # ── TestAuth ────────────────────────────────────────────────────
 
-class TestAuth:
 
+class TestAuth:
     def test_signature_generation(self, feed_with_keys):
         sig = feed_with_keys._generate_signature("timestamp=1234567890&symbol=BTCUSDT")
         assert isinstance(sig, str)
@@ -439,8 +439,8 @@ class TestAuth:
 
 # ── TestRegistry ────────────────────────────────────────────────
 
-class TestRegistry:
 
+class TestRegistry:
     def test_bitrue_spot_registered(self):
         assert "BITRUE___SPOT" in ExchangeRegistry._feed_classes
         assert ExchangeRegistry._feed_classes["BITRUE___SPOT"] == BitrueRequestDataSpot
@@ -460,24 +460,43 @@ class TestRegistry:
 
 # ── TestMethodExistence ─────────────────────────────────────────
 
+
 class TestMethodExistence:
-    @pytest.mark.parametrize("method_name", [
-        "get_tick", "async_get_tick",
-        "get_ticker", "async_get_ticker",
-        "get_depth", "async_get_depth",
-        "get_kline", "async_get_kline",
-        "get_trade_history", "async_get_trade_history",
-        "get_trades", "async_get_trades",
-        "make_order", "async_make_order",
-        "cancel_order", "async_cancel_order",
-        "query_order", "async_query_order",
-        "get_open_orders", "async_get_open_orders",
-        "get_deals", "async_get_deals",
-        "get_account", "async_get_account",
-        "get_balance", "async_get_balance",
-        "get_server_time", "async_get_server_time",
-        "get_exchange_info", "async_get_exchange_info",
-    ])
+    @pytest.mark.parametrize(
+        "method_name",
+        [
+            "get_tick",
+            "async_get_tick",
+            "get_ticker",
+            "async_get_ticker",
+            "get_depth",
+            "async_get_depth",
+            "get_kline",
+            "async_get_kline",
+            "get_trade_history",
+            "async_get_trade_history",
+            "get_trades",
+            "async_get_trades",
+            "make_order",
+            "async_make_order",
+            "cancel_order",
+            "async_cancel_order",
+            "query_order",
+            "async_query_order",
+            "get_open_orders",
+            "async_get_open_orders",
+            "get_deals",
+            "async_get_deals",
+            "get_account",
+            "async_get_account",
+            "get_balance",
+            "async_get_balance",
+            "get_server_time",
+            "async_get_server_time",
+            "get_exchange_info",
+            "async_get_exchange_info",
+        ],
+    )
     def test_method_exists(self, feed, method_name):
         assert hasattr(feed, method_name)
         assert callable(getattr(feed, method_name))
@@ -485,8 +504,8 @@ class TestMethodExistence:
 
 # ── TestFeedInit ────────────────────────────────────────────────
 
-class TestFeedInit:
 
+class TestFeedInit:
     def test_default_exchange_name(self, feed):
         assert feed.exchange_name == "BITRUE___SPOT"
 
@@ -516,8 +535,8 @@ class TestFeedInit:
 
 # ── TestIntegration (skipped, need network / keys) ──────────────
 
-class TestIntegration:
 
+class TestIntegration:
     @pytest.mark.skip(reason="Requires network access")
     def test_live_get_tick(self):
         q = queue.Queue()

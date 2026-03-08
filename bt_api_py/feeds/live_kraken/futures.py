@@ -46,8 +46,10 @@ class KrakenRequestDataFutures(KrakenRequestData):
 
     def async_get_ticker(self, symbol, extra_data=None, **kwargs):
         path, params, extra_data = self._get_ticker(symbol, extra_data, **kwargs)
-        self.submit(self.async_request(path, params=params, extra_data=extra_data),
-                    callback=self.async_callback)
+        self.submit(
+            self.async_request(path, params=params, extra_data=extra_data),
+            callback=self.async_callback,
+        )
 
     # ==================== Depth Methods ====================
 
@@ -72,8 +74,10 @@ class KrakenRequestDataFutures(KrakenRequestData):
 
     def async_get_depth(self, symbol, count=20, extra_data=None, **kwargs):
         path, params, extra_data = self._get_depth(symbol, count, extra_data, **kwargs)
-        self.submit(self.async_request(path, params=params, extra_data=extra_data),
-                    callback=self.async_callback)
+        self.submit(
+            self.async_request(path, params=params, extra_data=extra_data),
+            callback=self.async_callback,
+        )
 
     # ==================== Server Time & Exchange Info ====================
 
@@ -133,8 +137,16 @@ class KrakenRequestDataFutures(KrakenRequestData):
 
     # ==================== Trading Methods ====================
 
-    def _make_order(self, symbol, vol, price=None, order_type="buy-limit",
-                    client_order_id=None, extra_data=None, **kwargs):
+    def _make_order(
+        self,
+        symbol,
+        vol,
+        price=None,
+        order_type="buy-limit",
+        client_order_id=None,
+        extra_data=None,
+        **kwargs,
+    ):
         request_symbol = self._params.get_symbol(symbol)
         request_type = "make_order"
         path = self._params.get_rest_path(request_type)
@@ -164,8 +176,16 @@ class KrakenRequestDataFutures(KrakenRequestData):
         )
         return path, body, extra_data
 
-    def make_order(self, symbol, vol, price=None, order_type="buy-limit",
-                   client_order_id=None, extra_data=None, **kwargs):
+    def make_order(
+        self,
+        symbol,
+        vol,
+        price=None,
+        order_type="buy-limit",
+        client_order_id=None,
+        extra_data=None,
+        **kwargs,
+    ):
         path, body, extra_data = self._make_order(
             symbol, vol, price, order_type, client_order_id, extra_data, **kwargs
         )
@@ -193,11 +213,14 @@ class KrakenRequestDataFutures(KrakenRequestData):
 
 # ==================== WebSocket Placeholder Classes ====================
 
+
 class KrakenMarketWssDataFutures:
     """Placeholder for Kraken Futures Market WebSocket data handler."""
+
     pass
 
 
 class KrakenAccountWssDataFutures:
     """Placeholder for Kraken Futures Account WebSocket data handler."""
+
     pass

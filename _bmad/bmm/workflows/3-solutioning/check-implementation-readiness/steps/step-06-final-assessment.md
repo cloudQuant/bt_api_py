@@ -1,11 +1,9 @@
-- --
-
+---
 name: 'step-06-final-assessment'
 description: 'Compile final assessment and polish the readiness report'
 
 outputFile: '{planning_artifacts}/implementation-readiness-report-{{date}}.md'
-
-- --
+---
 
 # Step 6: Final Assessment
 
@@ -70,7 +68,6 @@ Check the {outputFile} for sections added by previous steps:
 Append to {outputFile}:
 
 ```markdown
-
 ## Summary and Recommendations
 
 ### Overall Readiness Status
@@ -90,8 +87,7 @@ Append to {outputFile}:
 ### Final Note
 
 This assessment identified [X] issues across [Y] categories. Address the critical issues before proceeding to implementation. These findings can be used to improve the artifacts or you may choose to proceed as-is.
-
-```bash
+```
 
 ### 4. Complete the Report
 
@@ -115,7 +111,7 @@ The implementation readiness workflow is now complete. The report contains all f
 
 Implementation Readiness complete. Read fully and follow: `{project-root}/_bmad/core/tasks/help.md`
 
-- --
+---
 
 ## 🚨 SYSTEM SUCCESS/FAILURE METRICS
 

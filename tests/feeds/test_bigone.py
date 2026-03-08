@@ -8,18 +8,17 @@ Responses wrapped in {"data": ...}.
 """
 
 import queue
-import pytest
 from unittest.mock import patch
 
-from bt_api_py.containers.exchanges.bigone_exchange_data import (
-    BigONEExchangeData,
-    BigONEExchangeDataSpot,
-)
-from bt_api_py.feeds.live_bigone.spot import BigONERequestDataSpot
-from bt_api_py.containers.requestdatas.request_data import RequestData
+import pytest
 
 # Import registration to auto-register BigONE
 import bt_api_py.exchange_registers.register_bigone  # noqa: F401
+from bt_api_py.containers.exchanges.bigone_exchange_data import (
+    BigONEExchangeDataSpot,
+)
+from bt_api_py.containers.requestdatas.request_data import RequestData
+from bt_api_py.feeds.live_bigone.spot import BigONERequestDataSpot
 
 # ── Sample API responses (BigONE wraps in {"data": ...}) ─────
 
@@ -28,8 +27,11 @@ SAMPLE_TICKER = {
         "asset_pair_name": "BTC-USDT",
         "bid": {"price": "49999.00", "quantity": "0.5"},
         "ask": {"price": "50001.00", "quantity": "0.3"},
-        "open": "49500.00", "high": "51000.00", "low": "49000.00",
-        "close": "50000.50", "volume": "1234.56",
+        "open": "49500.00",
+        "high": "51000.00",
+        "low": "49000.00",
+        "close": "50000.50",
+        "volume": "1234.56",
     }
 }
 
@@ -43,19 +45,41 @@ SAMPLE_ORDERBOOK = {
 
 SAMPLE_KLINES = {
     "data": [
-        {"time": "2024-01-01T00:00:00Z", "open": "50000", "high": "51000",
-         "low": "49000", "close": "50500", "volume": "1000"},
-        {"time": "2024-01-01T01:00:00Z", "open": "50500", "high": "51500",
-         "low": "50000", "close": "51000", "volume": "1500"},
+        {
+            "time": "2024-01-01T00:00:00Z",
+            "open": "50000",
+            "high": "51000",
+            "low": "49000",
+            "close": "50500",
+            "volume": "1000",
+        },
+        {
+            "time": "2024-01-01T01:00:00Z",
+            "open": "50500",
+            "high": "51500",
+            "low": "50000",
+            "close": "51000",
+            "volume": "1500",
+        },
     ]
 }
 
 SAMPLE_TRADES = {
     "data": [
-        {"id": "1001", "price": "50000", "amount": "0.01", "side": "BID",
-         "created_at": "2024-01-01T00:00:00Z"},
-        {"id": "1002", "price": "50001", "amount": "0.02", "side": "ASK",
-         "created_at": "2024-01-01T00:00:01Z"},
+        {
+            "id": "1001",
+            "price": "50000",
+            "amount": "0.01",
+            "side": "BID",
+            "created_at": "2024-01-01T00:00:00Z",
+        },
+        {
+            "id": "1002",
+            "price": "50001",
+            "amount": "0.02",
+            "side": "ASK",
+            "created_at": "2024-01-01T00:00:01Z",
+        },
     ]
 }
 
@@ -68,17 +92,28 @@ SAMPLE_BALANCE = {
 
 SAMPLE_ORDER = {
     "data": {
-        "id": "12345678", "asset_pair_name": "BTC-USDT", "side": "BID",
-        "type": "LIMIT", "price": "50000", "amount": "0.001",
-        "filled_amount": "0", "state": "PENDING",
+        "id": "12345678",
+        "asset_pair_name": "BTC-USDT",
+        "side": "BID",
+        "type": "LIMIT",
+        "price": "50000",
+        "amount": "0.001",
+        "filled_amount": "0",
+        "state": "PENDING",
         "created_at": "2024-01-01T00:00:00Z",
     }
 }
 
 SAMPLE_OPEN_ORDERS = {
     "data": [
-        {"id": "12345678", "asset_pair_name": "BTC-USDT", "side": "BID",
-         "state": "PENDING", "price": "50000", "amount": "0.001"},
+        {
+            "id": "12345678",
+            "asset_pair_name": "BTC-USDT",
+            "side": "BID",
+            "state": "PENDING",
+            "price": "50000",
+            "amount": "0.001",
+        },
     ]
 }
 
@@ -86,10 +121,20 @@ SAMPLE_SERVER_TIME = {"data": {"timestamp": "2024-01-01T00:00:00Z"}}
 
 SAMPLE_SYMBOLS = {
     "data": [
-        {"name": "BTC-USDT", "base_asset": {"symbol": "BTC"},
-         "quote_asset": {"symbol": "USDT"}, "base_scale": 8, "quote_scale": 2},
-        {"name": "ETH-USDT", "base_asset": {"symbol": "ETH"},
-         "quote_asset": {"symbol": "USDT"}, "base_scale": 8, "quote_scale": 2},
+        {
+            "name": "BTC-USDT",
+            "base_asset": {"symbol": "BTC"},
+            "quote_asset": {"symbol": "USDT"},
+            "base_scale": 8,
+            "quote_scale": 2,
+        },
+        {
+            "name": "ETH-USDT",
+            "base_asset": {"symbol": "ETH"},
+            "quote_asset": {"symbol": "USDT"},
+            "base_scale": 8,
+            "quote_scale": 2,
+        },
     ]
 }
 
@@ -98,6 +143,7 @@ SAMPLE_CANCEL_OK = {"data": {"id": "12345678", "state": "CANCELLED"}}
 
 
 # ── Helpers ──────────────────────────────────────────────────
+
 
 def _make_feed(**kwargs):
     q = kwargs.pop("data_queue", queue.Queue())
@@ -162,9 +208,20 @@ class TestExchangeData:
 
     def test_rest_paths_complete(self):
         ed = BigONEExchangeDataSpot()
-        required = ["get_server_time", "get_exchange_info", "get_tick", "get_depth",
-                     "get_kline", "get_trades", "make_order", "cancel_order",
-                     "query_order", "get_open_orders", "get_balance", "get_account"]
+        required = [
+            "get_server_time",
+            "get_exchange_info",
+            "get_tick",
+            "get_depth",
+            "get_kline",
+            "get_trades",
+            "make_order",
+            "cancel_order",
+            "query_order",
+            "get_open_orders",
+            "get_balance",
+            "get_account",
+        ]
         for key in required:
             assert key in ed.rest_paths, f"Missing rest_path: {key}"
 
@@ -446,20 +503,24 @@ class TestAuth:
 class TestRegistry:
     def test_bigone_spot_registered(self):
         from bt_api_py.registry import ExchangeRegistry
+
         assert ExchangeRegistry.has_exchange("BIGONE___SPOT")
         assert ExchangeRegistry._feed_classes["BIGONE___SPOT"] is BigONERequestDataSpot
 
     def test_exchange_data_registered(self):
         from bt_api_py.registry import ExchangeRegistry
+
         assert ExchangeRegistry._exchange_data_classes["BIGONE___SPOT"] is BigONEExchangeDataSpot
 
     def test_balance_handler_registered(self):
         from bt_api_py.registry import ExchangeRegistry
+
         handler = ExchangeRegistry.get_balance_handler("BIGONE___SPOT")
         assert callable(handler)
 
     def test_create_exchange_data(self):
         from bt_api_py.registry import ExchangeRegistry
+
         ed = ExchangeRegistry.create_exchange_data("BIGONE___SPOT")
         assert isinstance(ed, BigONEExchangeDataSpot)
 
@@ -469,20 +530,34 @@ class TestRegistry:
 
 class TestMethodExistence:
     METHODS = [
-        "get_tick", "async_get_tick",
-        "get_ticker", "async_get_ticker",
-        "get_depth", "async_get_depth",
-        "get_kline", "async_get_kline",
-        "get_trade_history", "async_get_trade_history",
-        "get_trades", "async_get_trades",
-        "make_order", "async_make_order",
-        "cancel_order", "async_cancel_order",
-        "query_order", "async_query_order",
-        "get_open_orders", "async_get_open_orders",
-        "get_account", "async_get_account",
-        "get_balance", "async_get_balance",
-        "get_server_time", "async_get_server_time",
-        "get_exchange_info", "async_get_exchange_info",
+        "get_tick",
+        "async_get_tick",
+        "get_ticker",
+        "async_get_ticker",
+        "get_depth",
+        "async_get_depth",
+        "get_kline",
+        "async_get_kline",
+        "get_trade_history",
+        "async_get_trade_history",
+        "get_trades",
+        "async_get_trades",
+        "make_order",
+        "async_make_order",
+        "cancel_order",
+        "async_cancel_order",
+        "query_order",
+        "async_query_order",
+        "get_open_orders",
+        "async_get_open_orders",
+        "get_account",
+        "async_get_account",
+        "get_balance",
+        "async_get_balance",
+        "get_server_time",
+        "async_get_server_time",
+        "get_exchange_info",
+        "async_get_exchange_info",
     ]
 
     @pytest.mark.parametrize("method_name", METHODS, ids=METHODS)
@@ -516,6 +591,7 @@ class TestFeedInit:
 
     def test_capabilities(self):
         from bt_api_py.feeds.capability import Capability
+
         caps = BigONERequestDataSpot._capabilities()
         assert Capability.GET_TICK in caps
         assert Capability.GET_DEPTH in caps

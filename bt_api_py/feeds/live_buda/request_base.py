@@ -2,9 +2,9 @@
 Buda REST API request base class.
 """
 
-import time
-import hmac
 import hashlib
+import hmac
+import time
 
 from bt_api_py.containers.exchanges.buda_exchange_data import BudaExchangeDataSpot
 from bt_api_py.containers.requestdatas.request_data import RequestData
@@ -54,9 +54,7 @@ class BudaRequestData(Feed):
             else:
                 sign_str = f"{timestamp}{method}{request_path}"
             signature = hmac.new(
-                secret.encode("utf-8"),
-                sign_str.encode("utf-8"),
-                hashlib.sha256
+                secret.encode("utf-8"), sign_str.encode("utf-8"), hashlib.sha256
             ).hexdigest()
             return signature
         return ""
@@ -137,12 +135,14 @@ class BudaRequestData(Feed):
         """Prepare server time request. Returns (path, params, extra_data)."""
         if extra_data is None:
             extra_data = {}
-        extra_data.update({
-            "exchange_name": self.exchange_name,
-            "symbol_name": "",
-            "asset_type": self.asset_type,
-            "request_type": "get_server_time",
-        })
+        extra_data.update(
+            {
+                "exchange_name": self.exchange_name,
+                "symbol_name": "",
+                "asset_type": self.asset_type,
+                "request_type": "get_server_time",
+            }
+        )
         return "GET /v2/markets", {}, extra_data
 
     def get_server_time(self, extra_data=None, **kwargs):

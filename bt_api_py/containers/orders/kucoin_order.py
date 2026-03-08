@@ -269,13 +269,19 @@ class KuCoinWssOrderData(KuCoinOrderData):
         data = self.order_info.get("data", {})
         self.order_data = data
 
-        self.server_time = from_dict_get_float(data, "createdAt") or from_dict_get_float(data, "timestamp")
-        self.trade_id = from_dict_get_string(data, "tradeId") or from_dict_get_string(data, "orderId")
+        self.server_time = from_dict_get_float(data, "createdAt") or from_dict_get_float(
+            data, "timestamp"
+        )
+        self.trade_id = from_dict_get_string(data, "tradeId") or from_dict_get_string(
+            data, "orderId"
+        )
         self.client_order_id = from_dict_get_string(data, "clientOid")
         self.order_id = from_dict_get_string(data, "orderId")
         self.order_size = from_dict_get_float(data, "size")
         self.order_price = from_dict_get_float(data, "price")
-        self.executed_qty = from_dict_get_float(data, "filledSize") or from_dict_get_float(data, "dealSize")
+        self.executed_qty = from_dict_get_float(data, "filledSize") or from_dict_get_float(
+            data, "dealSize"
+        )
         self.reduce_only = from_dict_get_bool(data, "reduceOnly", False)
         self.order_side = from_dict_get_string(data, "side")
         self.order_symbol_name = from_dict_get_string(data, "symbol")

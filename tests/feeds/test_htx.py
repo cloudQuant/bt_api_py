@@ -14,21 +14,19 @@ import queue
 import time
 import unittest
 from pathlib import Path
-from unittest.mock import Mock, patch
 
 import pytest
 from dotenv import load_dotenv
 
-from bt_api_py.containers.exchanges.htx_exchange_data import HtxExchangeDataSpot
-from bt_api_py.containers.orders.htx_order import HtxRequestOrderData
-from bt_api_py.containers.tickers.htx_ticker import HtxRequestTickerData
-from bt_api_py.containers.orderbooks.htx_orderbook import HtxRequestOrderBookData
-from bt_api_py.containers.requestdatas.request_data import RequestData
-from bt_api_py.feeds.live_htx.spot import HtxRequestDataSpot
-from bt_api_py.registry import ExchangeRegistry
-
 # Import registration to auto-register HTX
 import bt_api_py.exchange_registers.register_htx  # noqa: F401
+from bt_api_py.containers.exchanges.htx_exchange_data import HtxExchangeDataSpot
+from bt_api_py.containers.orderbooks.htx_orderbook import HtxRequestOrderBookData
+from bt_api_py.containers.orders.htx_order import HtxRequestOrderData
+from bt_api_py.containers.requestdatas.request_data import RequestData
+from bt_api_py.containers.tickers.htx_ticker import HtxRequestTickerData
+from bt_api_py.feeds.live_htx.spot import HtxRequestDataSpot
+from bt_api_py.registry import ExchangeRegistry
 
 # Load .env from project root
 load_dotenv(Path(__file__).resolve().parent.parent.parent / ".env")
@@ -112,8 +110,7 @@ class TestHtxRequestData:
             private_key="test_secret",
         )
 
-        path, params, extra_data = request_data._get_depth(
-            "BTCUSDT", depth_type="step0")
+        path, params, extra_data = request_data._get_depth("BTCUSDT", depth_type="step0")
 
         assert "depth" in path.lower()
         assert params["symbol"] == "btcusdt"
@@ -148,8 +145,7 @@ class TestHtxRequestData:
             private_key="test_secret",
         )
 
-        path, params, extra_data = request_data._cancel_order(
-            order_id="123456")
+        path, params, extra_data = request_data._cancel_order(order_id="123456")
 
         # The path should contain POST method and the order ID in the URL
         assert "POST" in path or "order" in path.lower()
@@ -176,13 +172,11 @@ class TestHtxDataContainers:
                 "count": 10000,
                 "vol": 61728350,
                 "ask": [50001, 1.5],
-                "bid": [49999, 2.3]
-            }
+                "bid": [49999, 2.3],
+            },
         }
 
-        ticker = HtxRequestTickerData(
-            ticker_response, "BTCUSDT", "SPOT", True
-        )
+        ticker = HtxRequestTickerData(ticker_response, "BTCUSDT", "SPOT", True)
         ticker.init_data()
 
         assert ticker.get_exchange_name() == "HTX"
@@ -202,12 +196,10 @@ class TestHtxDataContainers:
                 "created-at": 1688671955000,
                 "price": "50000",
                 "amount": "0.001",
-            }
+            },
         }
 
-        order = HtxRequestOrderData(
-            order_response, "BTCUSDT", "SPOT", True
-        )
+        order = HtxRequestOrderData(order_response, "BTCUSDT", "SPOT", True)
         order.init_data()
 
         assert order.get_symbol_name() == "BTCUSDT"
@@ -295,9 +287,7 @@ class TestHtxLiveMarketData:
             public_key="test_key",
             private_key="test_secret",
         )
-        live_htx_spot_feed.async_get_ticker(
-            "BTCUSDT", extra_data={
-                "test_async_tick_data": True})
+        live_htx_spot_feed.async_get_ticker("BTCUSDT", extra_data={"test_async_tick_data": True})
         time.sleep(5)
         try:
             tick_data = data_queue.get(timeout=20)
@@ -309,8 +299,7 @@ class TestHtxLiveMarketData:
     def test_htx_req_kline_data(self):
         """Test kline data request (synchronous)."""
         live_htx_spot_feed = self.init_req_feed()
-        data = live_htx_spot_feed.get_kline(
-            "BTCUSDT", "1m", count=2).get_data()
+        data = live_htx_spot_feed.get_kline("BTCUSDT", "1m", count=2).get_data()
         assert isinstance(data, list)
         if data and data[0]:
             kline_data = data[0].init_data()
@@ -332,8 +321,9 @@ class TestHtxLiveMarketData:
             public_key="test_key",
             private_key="test_secret",
         )
-        live_htx_spot_feed.async_get_kline("BTCUSDT", period="1min", count=3,
-                                           extra_data={"test_async_kline_data": True})
+        live_htx_spot_feed.async_get_kline(
+            "BTCUSDT", period="1min", count=3, extra_data={"test_async_kline_data": True}
+        )
         time.sleep(5)
         try:
             kline_data = data_queue.get(timeout=10)
@@ -415,6 +405,7 @@ class TestHtxIntegration:
 
 
 # ==================== Additional Binance/OKX Standard Tests =============
+
 
 class TestHtxStandardMarketData:
     """Standard market data tests following Binance/OKX pattern."""
@@ -510,8 +501,9 @@ class TestHtxAccountData:
         accounts_data = live_htx_spot_feed.get_accounts()
         assert isinstance(accounts_data, RequestData)
         accounts = accounts_data.get_data()
-        assert isinstance(accounts, list) and len(accounts) > 0, \
+        assert isinstance(accounts, list) and len(accounts) > 0, (
             f"get_accounts returned no data: {accounts}"
+        )
         account_id = accounts[0].get("id") if isinstance(accounts[0], dict) else None
         assert account_id is not None, f"No account_id found in: {accounts[0]}"
         data = live_htx_spot_feed.get_balance(account_id=account_id)
@@ -550,8 +542,7 @@ class TestHtxOrderManagement:
     def test_cancel_order_params(self):
         """Test cancel order parameter generation."""
         live_htx_spot_feed = self.init_req_feed()
-        path, params, extra_data = live_htx_spot_feed._cancel_order(
-            order_id="123456")
+        path, params, extra_data = live_htx_spot_feed._cancel_order(order_id="123456")
         assert "POST" in path or "cancel" in path.lower()
         assert params == {}
 
@@ -560,7 +551,7 @@ class TestHtxOrderManagement:
         """Test make order endpoint."""
         live_htx_spot_feed = self.init_req_feed()
         # Return early if method doesn't exist (avoid making actual API call in tests)
-        if not hasattr(live_htx_spot_feed, 'make_order'):
+        if not hasattr(live_htx_spot_feed, "make_order"):
             return
         data = live_htx_spot_feed.make_order(
             symbol="BTCUSDT",
@@ -575,10 +566,9 @@ class TestHtxOrderManagement:
         """Test query order endpoint."""
         live_htx_spot_feed = self.init_req_feed()
         # Return early if method doesn't exist (avoid making actual API call in tests)
-        if not hasattr(live_htx_spot_feed, 'query_order'):
+        if not hasattr(live_htx_spot_feed, "query_order"):
             return
-        data = live_htx_spot_feed.query_order(
-            symbol="BTCUSDT", order_id="123456")
+        data = live_htx_spot_feed.query_order(symbol="BTCUSDT", order_id="123456")
         assert isinstance(data, RequestData)
 
     @pytest.mark.integration
@@ -586,7 +576,7 @@ class TestHtxOrderManagement:
         """Test get open orders endpoint."""
         live_htx_spot_feed = self.init_req_feed()
         # Return early if method doesn't exist (avoid making actual API call in tests)
-        if not hasattr(live_htx_spot_feed, 'get_open_orders'):
+        if not hasattr(live_htx_spot_feed, "get_open_orders"):
             return
         data = live_htx_spot_feed.get_open_orders(symbol="BTCUSDT")
         assert isinstance(data, RequestData)
@@ -596,10 +586,9 @@ class TestHtxOrderManagement:
         """Test cancel order endpoint."""
         live_htx_spot_feed = self.init_req_feed()
         # Return early if method doesn't exist (avoid making actual API call in tests)
-        if not hasattr(live_htx_spot_feed, 'cancel_order'):
+        if not hasattr(live_htx_spot_feed, "cancel_order"):
             return
-        data = live_htx_spot_feed.cancel_order(
-            order_id="123456")
+        data = live_htx_spot_feed.cancel_order(order_id="123456")
         assert isinstance(data, RequestData)
 
 
@@ -607,12 +596,14 @@ class TestHtxOrderManagement:
 # Multi-Asset-Type Tests
 # ═══════════════════════════════════════════════════════════════
 
+
 class TestHtxExchangeDataMultiAsset:
     """Test exchange data classes for all HTX asset types."""
 
     def test_margin_exchange_data(self):
         """Test margin exchange data creation and config loading."""
         from bt_api_py.containers.exchanges.htx_exchange_data import HtxExchangeDataMargin
+
         data = HtxExchangeDataMargin()
         assert data.exchange_name == "htx_margin"
         assert data.asset_type == "MARGIN"
@@ -625,6 +616,7 @@ class TestHtxExchangeDataMultiAsset:
     def test_usdt_swap_exchange_data(self):
         """Test USDT swap exchange data creation and config loading."""
         from bt_api_py.containers.exchanges.htx_exchange_data import HtxExchangeDataUsdtSwap
+
         data = HtxExchangeDataUsdtSwap()
         assert data.exchange_name == "htx_usdt_swap"
         assert data.asset_type == "USDT_SWAP"
@@ -638,17 +630,21 @@ class TestHtxExchangeDataMultiAsset:
     def test_coin_swap_exchange_data(self):
         """Test coin swap exchange data creation and config loading."""
         from bt_api_py.containers.exchanges.htx_exchange_data import HtxExchangeDataCoinSwap
+
         data = HtxExchangeDataCoinSwap()
         assert data.exchange_name == "htx_coin_swap"
         assert data.asset_type == "COIN_SWAP"
         assert data.rest_url == "https://api.hbdm.com"
-        assert "swap-ex" in data.get_rest_path("get_tick") or "swap-api" in data.get_rest_path("get_tick")
+        assert "swap-ex" in data.get_rest_path("get_tick") or "swap-api" in data.get_rest_path(
+            "get_tick"
+        )
         # Coin swap symbol format
         assert data.get_symbol("BTCUSD") == "BTC-USD"
 
     def test_option_exchange_data(self):
         """Test option exchange data creation and config loading."""
         from bt_api_py.containers.exchanges.htx_exchange_data import HtxExchangeDataOption
+
         data = HtxExchangeDataOption()
         assert data.exchange_name == "htx_option"
         assert data.asset_type == "OPTION"
@@ -664,22 +660,22 @@ class TestHtxRegistryMultiAsset:
 
     def test_htx_margin_registered(self):
         """Test HTX margin is registered."""
-        import bt_api_py.exchange_registers.register_htx  # noqa: F401
+
         assert ExchangeRegistry.has_exchange("HTX___MARGIN")
 
     def test_htx_usdt_swap_registered(self):
         """Test HTX USDT swap is registered."""
-        import bt_api_py.exchange_registers.register_htx  # noqa: F401
+
         assert ExchangeRegistry.has_exchange("HTX___USDT_SWAP")
 
     def test_htx_coin_swap_registered(self):
         """Test HTX coin swap is registered."""
-        import bt_api_py.exchange_registers.register_htx  # noqa: F401
+
         assert ExchangeRegistry.has_exchange("HTX___COIN_SWAP")
 
     def test_htx_option_registered(self):
         """Test HTX option is registered."""
-        import bt_api_py.exchange_registers.register_htx  # noqa: F401
+
         assert ExchangeRegistry.has_exchange("HTX___OPTION")
 
 
@@ -689,6 +685,7 @@ class TestHtxFeedCreationMultiAsset:
     def test_margin_feed_creation(self):
         """Test margin feed can be instantiated."""
         from bt_api_py.feeds.live_htx.margin import HtxRequestDataMargin
+
         data_queue = queue.Queue()
         feed = HtxRequestDataMargin(data_queue)
         assert feed.asset_type == "MARGIN"
@@ -697,6 +694,7 @@ class TestHtxFeedCreationMultiAsset:
     def test_usdt_swap_feed_creation(self):
         """Test USDT swap feed can be instantiated."""
         from bt_api_py.feeds.live_htx.usdt_swap import HtxRequestDataUsdtSwap
+
         data_queue = queue.Queue()
         feed = HtxRequestDataUsdtSwap(data_queue)
         assert feed.asset_type == "USDT_SWAP"
@@ -705,6 +703,7 @@ class TestHtxFeedCreationMultiAsset:
     def test_coin_swap_feed_creation(self):
         """Test coin swap feed can be instantiated."""
         from bt_api_py.feeds.live_htx.coin_swap import HtxRequestDataCoinSwap
+
         data_queue = queue.Queue()
         feed = HtxRequestDataCoinSwap(data_queue)
         assert feed.asset_type == "COIN_SWAP"
@@ -713,6 +712,7 @@ class TestHtxFeedCreationMultiAsset:
     def test_option_feed_creation(self):
         """Test option feed can be instantiated."""
         from bt_api_py.feeds.live_htx.option import HtxRequestDataOption
+
         data_queue = queue.Queue()
         feed = HtxRequestDataOption(data_queue)
         assert feed.asset_type == "OPTION"
@@ -724,6 +724,7 @@ class TestHtxUsdtSwapMarketData:
 
     def init_req_feed(self):
         from bt_api_py.feeds.live_htx.usdt_swap import HtxRequestDataUsdtSwap
+
         data_queue = queue.Queue()
         return HtxRequestDataUsdtSwap(data_queue)
 
@@ -761,6 +762,7 @@ class TestHtxCoinSwapMarketData:
 
     def init_req_feed(self):
         from bt_api_py.feeds.live_htx.coin_swap import HtxRequestDataCoinSwap
+
         data_queue = queue.Queue()
         return HtxRequestDataCoinSwap(data_queue)
 
@@ -793,6 +795,7 @@ class TestHtxWebSocket(unittest.TestCase):
     def test_market_wss_instantiation(self):
         """Test market WSS class can be instantiated."""
         from bt_api_py.feeds.live_htx.spot import HtxMarketWssDataSpot
+
         data_queue = queue.Queue()
         wss = HtxMarketWssDataSpot(
             data_queue,
@@ -805,6 +808,7 @@ class TestHtxWebSocket(unittest.TestCase):
     def test_account_wss_instantiation(self):
         """Test account WSS class can be instantiated."""
         from bt_api_py.feeds.live_htx.spot import HtxAccountWssDataSpot
+
         data_queue = queue.Queue()
         wss = HtxAccountWssDataSpot(
             data_queue,
@@ -819,7 +823,9 @@ class TestHtxWebSocket(unittest.TestCase):
     def test_market_wss_message_parsing(self):
         """Test gzip message decompression and ping/pong handling."""
         import gzip
+
         from bt_api_py.feeds.live_htx.spot import HtxMarketWssDataSpot
+
         data_queue = queue.Queue()
         wss = HtxMarketWssDataSpot(
             data_queue,
@@ -829,16 +835,23 @@ class TestHtxWebSocket(unittest.TestCase):
         ping_msg = gzip.compress(json.dumps({"ping": 1234567890}).encode("utf-8"))
         # We can't test ws.send directly without a connection, but we can test parsing
         # Test that data messages get pushed to queue
-        tick_msg = gzip.compress(json.dumps({
-            "ch": "market.btcusdt.ticker",
-            "ts": 1234567890,
-            "tick": {"close": 50000.0, "open": 49000.0}
-        }).encode("utf-8"))
+        tick_msg = gzip.compress(
+            json.dumps(
+                {
+                    "ch": "market.btcusdt.ticker",
+                    "ts": 1234567890,
+                    "tick": {"close": 50000.0, "open": 49000.0},
+                }
+            ).encode("utf-8")
+        )
+
         # Mock ws to capture pong
         class MockWs:
             sent = []
+
             def send(self, msg):
                 self.sent.append(msg)
+
         wss.ws = MockWs()
         wss.message_rsp(ping_msg)
         assert len(MockWs.sent) == 1
@@ -847,24 +860,27 @@ class TestHtxWebSocket(unittest.TestCase):
     def test_market_wss_data_push(self):
         """Test that market data messages are pushed to queue."""
         import gzip
+
         from bt_api_py.feeds.live_htx.spot import HtxMarketWssDataSpot
+
         data_queue = queue.Queue()
         wss = HtxMarketWssDataSpot(
             data_queue,
             topics=[],
         )
         wss.ws = type("MockWs", (), {"send": lambda self, msg: None})()
-        tick_msg = gzip.compress(json.dumps({
-            "ch": "market.btcusdt.ticker",
-            "ts": 1234567890,
-            "tick": {"close": 50000.0}
-        }).encode("utf-8"))
+        tick_msg = gzip.compress(
+            json.dumps(
+                {"ch": "market.btcusdt.ticker", "ts": 1234567890, "tick": {"close": 50000.0}}
+            ).encode("utf-8")
+        )
         wss.message_rsp(tick_msg)
         assert not data_queue.empty()
 
     def test_account_wss_auth_params(self):
         """Test auth params building."""
         from bt_api_py.feeds.live_htx.spot import HtxAccountWssDataSpot
+
         data_queue = queue.Queue()
         wss = HtxAccountWssDataSpot(
             data_queue,
@@ -882,6 +898,7 @@ class TestHtxWebSocket(unittest.TestCase):
     def test_margin_wss_inherits_spot(self):
         """Test margin WSS classes properly inherit from spot."""
         from bt_api_py.feeds.live_htx.margin import HtxMarketWssDataMargin
+
         data_queue = queue.Queue()
         wss = HtxMarketWssDataMargin(data_queue, topics=[])
         assert wss.asset_type == "MARGIN"
@@ -889,6 +906,7 @@ class TestHtxWebSocket(unittest.TestCase):
     def test_usdt_swap_wss_inherits_spot(self):
         """Test USDT swap WSS classes properly inherit from spot."""
         from bt_api_py.feeds.live_htx.usdt_swap import HtxMarketWssDataUsdtSwap
+
         data_queue = queue.Queue()
         wss = HtxMarketWssDataUsdtSwap(data_queue, topics=[])
         assert wss.asset_type == "USDT_SWAP"
@@ -897,6 +915,7 @@ class TestHtxWebSocket(unittest.TestCase):
     def test_market_wss_live_connection(self):
         """Test live market WSS connection and data reception."""
         from bt_api_py.feeds.live_htx.spot import HtxMarketWssDataSpot
+
         data_queue = queue.Queue()
         wss = HtxMarketWssDataSpot(
             data_queue,

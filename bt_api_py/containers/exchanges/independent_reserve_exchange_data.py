@@ -8,6 +8,7 @@ Symbol: primaryCurrencyCode + secondaryCurrencyCode (e.g. Xbt, Aud)
 """
 
 import os
+
 from bt_api_py.containers.exchanges.exchange_data import ExchangeData
 from bt_api_py.logging_factory import get_logger
 
@@ -24,6 +25,7 @@ def _get_independent_reserve_config():
         return _independent_reserve_config
     try:
         from bt_api_py.config_loader import load_exchange_config
+
         config_path = os.path.join(
             os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
             "configs",
@@ -39,11 +41,26 @@ def _get_independent_reserve_config():
 
 # ── currency code mapping ───────────────────────────────────
 _CODE_MAP = {
-    "BTC": "Xbt", "ETH": "Eth", "USDT": "Usdt", "USDC": "Usdc",
-    "LTC": "Ltc", "XRP": "Xrp", "BCH": "Bch", "EOS": "Eos",
-    "XLM": "Xlm", "BAT": "Bat", "ETC": "Etc", "LINK": "Link",
-    "GNT": "Gnt", "OMG": "Omg", "ZRX": "Zrx", "PMGT": "Pmgt",
-    "AUD": "Aud", "NZD": "Nzd", "USD": "Usd", "SGD": "Sgd",
+    "BTC": "Xbt",
+    "ETH": "Eth",
+    "USDT": "Usdt",
+    "USDC": "Usdc",
+    "LTC": "Ltc",
+    "XRP": "Xrp",
+    "BCH": "Bch",
+    "EOS": "Eos",
+    "XLM": "Xlm",
+    "BAT": "Bat",
+    "ETC": "Etc",
+    "LINK": "Link",
+    "GNT": "Gnt",
+    "OMG": "Omg",
+    "ZRX": "Zrx",
+    "PMGT": "Pmgt",
+    "AUD": "Aud",
+    "NZD": "Nzd",
+    "USD": "Usd",
+    "SGD": "Sgd",
 }
 
 # ── fallback rest_paths ─────────────────────────────────────
@@ -75,8 +92,14 @@ class IndependentReserveExchangeData(ExchangeData):
         self.rest_paths = dict(_FALLBACK_REST_PATHS)
         self.wss_paths = {}
         self.kline_periods = {
-            "1m": "1m", "5m": "5m", "15m": "15m", "30m": "30m",
-            "1h": "1h", "4h": "4h", "1d": "1d", "1w": "1w",
+            "1m": "1m",
+            "5m": "5m",
+            "15m": "15m",
+            "30m": "30m",
+            "1h": "1h",
+            "4h": "4h",
+            "1d": "1d",
+            "1w": "1w",
         }
         self.reverse_kline_periods = {v: k for k, v in self.kline_periods.items()}
         self.legal_currency = ["AUD", "NZD", "USD", "SGD", "USDT", "BTC", "ETH"]

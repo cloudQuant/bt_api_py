@@ -5,16 +5,16 @@ This module provides basic tests for HitBTC exchange integration.
 Tests basic functionality without requiring API keys.
 """
 
-import pytest
 import queue
-from unittest.mock import Mock, patch
 
-from bt_api_py.exchange_registers.register_hitbtc import register_hitbtc
+import pytest
+
+from bt_api_py.containers.balances.hitbtc_balance import HitBtcRequestBalanceData
 from bt_api_py.containers.exchanges.hitbtc_exchange_data import HitBtcExchangeDataSpot
-from bt_api_py.containers.tickers.hitbtc_ticker import HitBtcRequestTickerData
 from bt_api_py.containers.orderbooks.hitbtc_orderbook import HitBtcRequestOrderBookData
 from bt_api_py.containers.orders.hitbtc_order import HitBtcRequestOrderData
-from bt_api_py.containers.balances.hitbtc_balance import HitBtcRequestBalanceData
+from bt_api_py.containers.tickers.hitbtc_ticker import HitBtcRequestTickerData
+from bt_api_py.exchange_registers.register_hitbtc import register_hitbtc
 
 
 class TestHitBtcFeedRegistration:
@@ -83,7 +83,7 @@ class TestHitBtcDataContainers:
             "low": "48000.0",
             "open": "49000.0",
             "timestamp": 1640995200000,
-            "count": 100
+            "count": 100,
         }
 
         ticker = HitBtcRequestTickerData(ticker_info, "BTC/USDT", "SPOT")
@@ -101,14 +101,8 @@ class TestHitBtcDataContainers:
         orderbook_info = {
             "symbol": "BTCUSDT",
             "timestamp": 1640995200000,
-            "bid": [
-                ["49900.0", "0.5"],
-                ["49800.0", "1.0"]
-            ],
-            "ask": [
-                ["50100.0", "0.3"],
-                ["50200.0", "0.8"]
-            ]
+            "bid": [["49900.0", "0.5"], ["49800.0", "1.0"]],
+            "ask": [["50100.0", "0.3"], ["50200.0", "0.8"]],
         }
 
         orderbook = HitBtcRequestOrderBookData(orderbook_info, "BTC/USDT", "SPOT")
@@ -135,7 +129,7 @@ class TestHitBtcDataContainers:
             "price_filled": "0.0",
             "time_in_force": "GTC",
             "created_at": 1640995200000,
-            "updated_at": 1640995200000
+            "updated_at": 1640995200000,
         }
 
         order = HitBtcRequestOrderData(order_info, "BTC/USDT", "SPOT")
@@ -155,7 +149,7 @@ class TestHitBtcDataContainers:
             "currency": "BTC",
             "available": "0.5",
             "reserved": "0.1",
-            "timestamp": 1640995200000
+            "timestamp": 1640995200000,
         }
 
         balance = HitBtcRequestBalanceData(balance_info, None, "SPOT")

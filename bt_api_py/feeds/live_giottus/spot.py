@@ -2,7 +2,6 @@
 Giottus Spot Feed implementation.
 """
 
-from bt_api_py.containers.exchanges.giottus_exchange_data import GiottusExchangeDataSpot
 from bt_api_py.feeds.capability import Capability
 from bt_api_py.feeds.live_giottus.request_base import GiottusRequestData
 from bt_api_py.functions.utils import update_extra_data
@@ -221,8 +220,9 @@ class GiottusRequestDataSpot(GiottusRequestData):
         path, params, extra_data = self._get_account(extra_data, **kwargs)
         return self.request(path, params=params, extra_data=extra_data)
 
-    def _make_order(self, symbol, volume, price, order_type, offset="open",
-                    extra_data=None, **kwargs):
+    def _make_order(
+        self, symbol, volume, price, order_type, offset="open", extra_data=None, **kwargs
+    ):
         """Prepare make order request. Returns (path, params, extra_data)."""
         path = self._params.rest_paths.get("make_order", "POST /v1/order")
         side = "BUY" if "buy" in order_type.lower() else "SELL"
@@ -251,8 +251,9 @@ class GiottusRequestDataSpot(GiottusRequestData):
             return [], False
         return [input_data], True
 
-    def make_order(self, symbol, volume, price, order_type, offset="open",
-                   extra_data=None, **kwargs):
+    def make_order(
+        self, symbol, volume, price, order_type, offset="open", extra_data=None, **kwargs
+    ):
         """Place an order."""
         path, params, extra_data = self._make_order(
             symbol, volume, price, order_type, offset, extra_data, **kwargs

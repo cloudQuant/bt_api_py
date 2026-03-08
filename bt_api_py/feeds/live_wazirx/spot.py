@@ -84,6 +84,7 @@ class WazirxRequestDataSpot(WazirxRequestData):
 
 # ── WebSocket stubs ──────────────────────────────────────────
 
+
 class WazirxMarketWssDataSpot:
     """WazirX Spot Market WebSocket Data Handler (stub)."""
 

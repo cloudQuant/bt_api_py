@@ -11,27 +11,26 @@ Tests for Coinbase spot trading implementation including:
 """
 
 import json
-import pytest
 from queue import Queue
 
+import pytest
+
+from bt_api_py.containers.balances.coinbase_balance import CoinbaseBalanceData
 from bt_api_py.containers.exchanges.coinbase_exchange_data import (
     CoinbaseExchangeData,
     CoinbaseExchangeDataSpot,
-)
-from bt_api_py.containers.tickers.coinbase_ticker import (
-    CoinbaseRequestTickerData,
-    CoinbaseWssTickerData,
 )
 from bt_api_py.containers.orders.coinbase_order import (
     CoinbaseRequestOrderData,
     CoinbaseWssOrderData,
 )
+from bt_api_py.containers.tickers.coinbase_ticker import (
+    CoinbaseRequestTickerData,
+    CoinbaseWssTickerData,
+)
 from bt_api_py.containers.trades.coinbase_trade import (
     CoinbaseRequestTradeData,
-    CoinbaseWssTradeData,
 )
-from bt_api_py.containers.accounts.coinbase_account import CoinbaseSpotWssAccountData
-from bt_api_py.containers.balances.coinbase_balance import CoinbaseBalanceData
 from bt_api_py.feeds.live_coinbase.spot import CoinbaseRequestDataSpot
 from bt_api_py.registry import ExchangeRegistry
 
@@ -83,14 +82,9 @@ class TestCoinbaseTickerData:
             "best_ask": "50001.00",
             "volume_24h": "1000.00",
             "price_percentage_change_24h": "2.5",
-            "time": "2023-07-06T12:34:56Z"
+            "time": "2023-07-06T12:34:56Z",
         }
-        ticker = CoinbaseRequestTickerData(
-            json.dumps(ticker_response),
-            "BTC-USD",
-            "SPOT",
-            True
-        )
+        ticker = CoinbaseRequestTickerData(json.dumps(ticker_response), "BTC-USD", "SPOT", True)
         assert ticker.get_exchange_name() == "COINBASE"
         assert ticker.get_symbol_name() == "BTC-USD"
         ticker.init_data()
@@ -116,14 +110,9 @@ class TestCoinbaseTickerData:
             "product_id": "BTC-USD",
             "price": "50000.00",
             "volume_24h": "1000.00",
-            "time": "2023-07-06T12:34:56Z"
+            "time": "2023-07-06T12:34:56Z",
         }
-        ticker = CoinbaseWssTickerData(
-            json.dumps(ticker_response),
-            "BTC-USD",
-            "SPOT",
-            True
-        )
+        ticker = CoinbaseWssTickerData(json.dumps(ticker_response), "BTC-USD", "SPOT", True)
         ticker.init_data()
         assert ticker.get_last_price() == 50000.00
 
@@ -141,14 +130,9 @@ class TestCoinbaseOrderData:
             "price": "50000.00",
             "size": "0.001",
             "filled_size": "0.001",
-            "created_time": "2023-07-06T12:34:56Z"
+            "created_time": "2023-07-06T12:34:56Z",
         }
-        order = CoinbaseRequestOrderData(
-            json.dumps(order_response),
-            "BTC-USD",
-            "SPOT",
-            True
-        )
+        order = CoinbaseRequestOrderData(json.dumps(order_response), "BTC-USD", "SPOT", True)
         assert order.get_exchange_name() == "COINBASE"
         order.init_data()
         assert order.get_order_id() == "11111111-1111-1111-1111-111111111111"
@@ -165,14 +149,9 @@ class TestCoinbaseOrderData:
             "type": "limit",
             "status": "OPEN",
             "price": "51000.00",
-            "size": "0.002"
+            "size": "0.002",
         }
-        order = CoinbaseWssOrderData(
-            json.dumps(order_response),
-            "BTC-USD",
-            "SPOT",
-            True
-        )
+        order = CoinbaseWssOrderData(json.dumps(order_response), "BTC-USD", "SPOT", True)
         order.init_data()
         assert order.get_order_id() == "22222222-2222-2222-2222-222222222222"
         assert order.get_order_type() == "limit"
@@ -193,14 +172,9 @@ class TestCoinbaseTradeData:
             "size": "0.001",
             "commission": "0.50",
             "trade_time": "2023-07-06T12:34:56Z",
-            "liquidity_indicator": "TAKER"
+            "liquidity_indicator": "TAKER",
         }
-        trade = CoinbaseRequestTradeData(
-            json.dumps(trade_response),
-            "BTC-USD",
-            "SPOT",
-            True
-        )
+        trade = CoinbaseRequestTradeData(json.dumps(trade_response), "BTC-USD", "SPOT", True)
         assert trade.get_exchange_name() == "COINBASE"
         trade.init_data()
         assert trade.get_trade_id() == "fill-id-1"
@@ -217,20 +191,10 @@ class TestCoinbaseBalanceData:
         balance_response = {
             "uuid": "account-uuid-1",
             "currency": "BTC",
-            "available_balance": {
-                "value": "1.00000000",
-                "currency": "BTC"
-            },
-            "hold": {
-                "value": "0.00000000",
-                "currency": "BTC"
-            }
+            "available_balance": {"value": "1.00000000", "currency": "BTC"},
+            "hold": {"value": "0.00000000", "currency": "BTC"},
         }
-        balance = CoinbaseBalanceData(
-            json.dumps(balance_response),
-            "SPOT",
-            True
-        )
+        balance = CoinbaseBalanceData(json.dumps(balance_response), "SPOT", True)
         assert balance.get_exchange_name() == "COINBASE"
         balance.init_data()
         assert balance.get_currency() == "BTC"
@@ -243,28 +207,17 @@ class TestCoinbaseRequestDataSpot:
     def test_request_data_initialization(self):
         """Test request data feed initialization"""
         data_queue = Queue()
-        feed = CoinbaseRequestDataSpot(
-            data_queue,
-            api_key="test_key",
-            private_key="test_secret"
-        )
+        feed = CoinbaseRequestDataSpot(data_queue, api_key="test_key", private_key="test_secret")
         assert feed.exchange_name == "COINBASE___SPOT"
         assert feed.asset_type == "SPOT"
 
     def test_make_order_limit(self):
         """Test limit order creation"""
         data_queue = Queue()
-        feed = CoinbaseRequestDataSpot(
-            data_queue,
-            api_key="test_key",
-            private_key="test_secret"
-        )
+        feed = CoinbaseRequestDataSpot(data_queue, api_key="test_key", private_key="test_secret")
         # Test _make_order method (internal)
         path, params, extra_data = feed._make_order(
-            symbol="BTC-USD",
-            vol="0.001",
-            price="50000",
-            order_type="buy-limit"
+            symbol="BTC-USD", vol="0.001", price="50000", order_type="buy-limit"
         )
         assert path is not None
         assert params["side"] == "BUY"
@@ -274,15 +227,9 @@ class TestCoinbaseRequestDataSpot:
     def test_make_order_market(self):
         """Test market order creation"""
         data_queue = Queue()
-        feed = CoinbaseRequestDataSpot(
-            data_queue,
-            api_key="test_key",
-            private_key="test_secret"
-        )
+        feed = CoinbaseRequestDataSpot(data_queue, api_key="test_key", private_key="test_secret")
         path, params, extra_data = feed._make_order(
-            symbol="BTC-USD",
-            vol="100",
-            order_type="buy-market"
+            symbol="BTC-USD", vol="100", order_type="buy-market"
         )
         assert params["side"] == "BUY"
         assert "order_configuration" in params
@@ -290,15 +237,8 @@ class TestCoinbaseRequestDataSpot:
     def test_cancel_order(self):
         """Test order cancellation"""
         data_queue = Queue()
-        feed = CoinbaseRequestDataSpot(
-            data_queue,
-            api_key="test_key",
-            private_key="test_secret"
-        )
-        path, params, extra_data = feed._cancel_order(
-            symbol="BTC-USD",
-            order_id="test-order-id"
-        )
+        feed = CoinbaseRequestDataSpot(data_queue, api_key="test_key", private_key="test_secret")
+        path, params, extra_data = feed._cancel_order(symbol="BTC-USD", order_id="test-order-id")
         assert "order_ids" in params
         assert "test-order-id" in params["order_ids"]
 
@@ -319,8 +259,7 @@ class TestCoinbaseRegistration:
         assert feed_class is not None
 
         # Check that exchange data is registered
-        data_class = ExchangeRegistry._exchange_data_classes.get(
-            "COINBASE___SPOT")
+        data_class = ExchangeRegistry._exchange_data_classes.get("COINBASE___SPOT")
         assert data_class is not None
 
         # Check that balance handler is registered
@@ -334,10 +273,7 @@ class TestCoinbaseRegistration:
         # Use create_feed to get an instance
         data_queue = Queue()
         feed = ExchangeRegistry.create_feed(
-            "COINBASE___SPOT",
-            data_queue,
-            api_key="test_key",
-            private_key="test_secret"
+            "COINBASE___SPOT", data_queue, api_key="test_key", private_key="test_secret"
         )
         assert feed is not None
         assert isinstance(feed, CoinbaseRequestDataSpot)

@@ -75,11 +75,9 @@ class BitfinexRequestData(Feed):
         Returns:
             Hexadecimal signature string
         """
-        signature_payload = f'/api{path}{nonce}{body}'
+        signature_payload = f"/api{path}{nonce}{body}"
         signature = hmac.new(
-            self.api_secret.encode(),
-            signature_payload.encode(),
-            hashlib.sha384
+            self.api_secret.encode(), signature_payload.encode(), hashlib.sha384
         ).hexdigest()
         return signature
 
@@ -121,18 +119,22 @@ class BitfinexRequestData(Feed):
             nonce = str(int(time.time() * 1000000))
             body_str = json.dumps(body) if body else ""
             sig = self.sign(endpoint, nonce, body_str)
-            headers.update({
-                "bfx-apikey": self.api_key,
-                "bfx-nonce": nonce,
-                "bfx-signature": sig,
-            })
+            headers.update(
+                {
+                    "bfx-apikey": self.api_key,
+                    "bfx-nonce": nonce,
+                    "bfx-signature": sig,
+                }
+            )
 
         # Make HTTP request via Feed.http_request()
         response = self.http_request(method, url, headers, body, timeout)
 
         return RequestData(response, extra_data)
 
-    async def async_request(self, path, params=None, body=None, extra_data=None, timeout=10, is_sign=False):
+    async def async_request(
+        self, path, params=None, body=None, extra_data=None, timeout=10, is_sign=False
+    ):
         """Async HTTP request function.
 
         Args:
@@ -162,11 +164,13 @@ class BitfinexRequestData(Feed):
             nonce = str(int(time.time() * 1000000))
             body_str = json.dumps(body) if body else ""
             sig = self.sign(endpoint, nonce, body_str)
-            headers.update({
-                "bfx-apikey": self.api_key,
-                "bfx-nonce": nonce,
-                "bfx-signature": sig,
-            })
+            headers.update(
+                {
+                    "bfx-apikey": self.api_key,
+                    "bfx-nonce": nonce,
+                    "bfx-signature": sig,
+                }
+            )
 
         # Make async HTTP request
         response = await self._http_client.async_request(
@@ -397,9 +401,18 @@ class BitfinexRequestData(Feed):
 
     # ==================== Private APIs ====================
 
-    def _make_order(self, symbol, vol, price=None, order_type="buy-limit",
-                    offset="open", post_only=False, client_order_id=None,
-                    extra_data=None, **kwargs):
+    def _make_order(
+        self,
+        symbol,
+        vol,
+        price=None,
+        order_type="buy-limit",
+        offset="open",
+        post_only=False,
+        client_order_id=None,
+        extra_data=None,
+        **kwargs,
+    ):
         """Create an order"""
         request_symbol = self._params.get_symbol(symbol)
         request_type = "make_order"
@@ -410,20 +423,20 @@ class BitfinexRequestData(Feed):
 
         # Prepare body parameters
         params = {
-            'type': order_type_subtype.upper(),
-            'symbol': request_symbol,
-            'amount': str(vol),
-            'flags': 64 if post_only else 0,
+            "type": order_type_subtype.upper(),
+            "symbol": request_symbol,
+            "amount": str(vol),
+            "flags": 64 if post_only else 0,
         }
 
-        if price is not None and order_type_subtype != 'market':
-            params['price'] = str(price)
+        if price is not None and order_type_subtype != "market":
+            params["price"] = str(price)
 
         if client_order_id is not None:
-            params['cid'] = int(client_order_id)
+            params["cid"] = int(client_order_id)
 
-        if 'lev' in kwargs:
-            params['lev'] = kwargs['lev']
+        if "lev" in kwargs:
+            params["lev"] = kwargs["lev"]
 
         extra_data = update_extra_data(
             extra_data,
@@ -455,17 +468,18 @@ class BitfinexRequestData(Feed):
 
         return data, status
 
-    def _cancel_order(self, symbol=None, order_id=None, client_order_id=None,
-                      extra_data=None, **kwargs):
+    def _cancel_order(
+        self, symbol=None, order_id=None, client_order_id=None, extra_data=None, **kwargs
+    ):
         """Cancel an order"""
         request_type = "cancel_order"
         path = self._params.get_rest_path(request_type)
 
         params = {}
         if order_id is not None:
-            params['id'] = order_id
+            params["id"] = order_id
         if client_order_id is not None:
-            params['cid'] = client_order_id
+            params["cid"] = client_order_id
 
         extra_data = update_extra_data(
             extra_data,
@@ -496,8 +510,9 @@ class BitfinexRequestData(Feed):
 
         return data, status
 
-    def _get_order(self, symbol=None, order_id=None, client_order_id=None,
-                   extra_data=None, **kwargs):
+    def _get_order(
+        self, symbol=None, order_id=None, client_order_id=None, extra_data=None, **kwargs
+    ):
         """Query an order"""
         request_type = "get_order"
         path = self._params.get_rest_path(request_type)
@@ -527,9 +542,7 @@ class BitfinexRequestData(Feed):
         symbol_name = extra_data.get("symbol_name")
         asset_type = extra_data["asset_type"]
 
-        if isinstance(input_data, list):
-            data = [BitfinexRequestOrderData(input_data, symbol_name, asset_type, True)]
-        elif isinstance(input_data, dict):
+        if isinstance(input_data, list) or isinstance(input_data, dict):
             data = [BitfinexRequestOrderData(input_data, symbol_name, asset_type, True)]
         else:
             data = []

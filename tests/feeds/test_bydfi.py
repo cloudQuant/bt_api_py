@@ -11,15 +11,14 @@ from unittest.mock import Mock
 
 import pytest
 
+# Import registration to auto-register BYDFi
+import bt_api_py.exchange_registers.register_bydfi  # noqa: F401
 from bt_api_py.containers.exchanges.bydfi_exchange_data import BYDFiExchangeDataSpot
 from bt_api_py.containers.requestdatas.request_data import RequestData
 from bt_api_py.containers.tickers.bydfi_ticker import BYDFiRequestTickerData
-from bt_api_py.feeds.live_bydfi.spot import BYDFiRequestDataSpot
 from bt_api_py.feeds.capability import Capability
+from bt_api_py.feeds.live_bydfi.spot import BYDFiRequestDataSpot
 from bt_api_py.registry import ExchangeRegistry
-
-# Import registration to auto-register BYDFi
-import bt_api_py.exchange_registers.register_bydfi  # noqa: F401
 
 
 @pytest.fixture
@@ -176,6 +175,7 @@ class TestBYDFiBaseCapabilities:
 
     def test_base_capabilities(self):
         from bt_api_py.feeds.live_bydfi.request_base import BYDFiRequestData
+
         caps = BYDFiRequestData._capabilities()
         assert Capability.GET_TICK in caps
         assert Capability.MAKE_ORDER in caps
@@ -243,7 +243,7 @@ class TestBYDFiDataContainers:
                 "low": "49000",
                 "volume": "1234.56",
                 "timestamp": 1234567890,
-            }
+            },
         }
         ticker = BYDFiRequestTickerData(
             ticker_response, "BTC-USDT", "SPOT", has_been_json_encoded=True

@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 Tests for IB Web API Exchange Data
 测试 IB Web API 交易所配置数据类
@@ -7,15 +6,16 @@ Tests for IB Web API Exchange Data
 """
 
 import os
+
 import pytest
 import yaml
 
 from bt_api_py.containers.exchanges.ib_web_exchange_data import (
     IbWebExchangeData,
-    IbWebExchangeDataStock,
+    IbWebExchangeDataForex,
     IbWebExchangeDataFuture,
     IbWebExchangeDataOption,
-    IbWebExchangeDataForex,
+    IbWebExchangeDataStock,
     _get_ib_config,
     _get_ib_raw_config,
     _get_ib_yaml_path,
@@ -28,13 +28,14 @@ def yaml_data():
     """加载原始 ib.yaml 作为测试基准"""
     path = _get_ib_yaml_path()
     assert os.path.exists(path), f"ib.yaml not found at {path}"
-    with open(path, 'r', encoding='utf-8') as f:
+    with open(path, encoding="utf-8") as f:
         return yaml.safe_load(f)
 
 
 # ═══════════════════════════════════════════════════════════════
 # 1. YAML 配置加载 (pydantic ExchangeConfig)
 # ═══════════════════════════════════════════════════════════════
+
 
 class TestYamlConfigLoading:
     """测试 ib.yaml 配置文件通过 pydantic 正确加载"""
@@ -96,8 +97,13 @@ class TestYamlConfigLoading:
 
     def test_config_rate_limit_names(self):
         names = {r.name for r in _get_ib_config().rate_limits}
-        for expected in ("global_trading", "cp_gateway", "account_management",
-                         "market_snapshot", "orders_query"):
+        for expected in (
+            "global_trading",
+            "cp_gateway",
+            "account_management",
+            "market_snapshot",
+            "orders_query",
+        ):
             assert expected in names
 
     def test_config_asset_types_keys(self):
@@ -128,6 +134,7 @@ class TestYamlConfigLoading:
 # ═══════════════════════════════════════════════════════════════
 # 2. 原始 YAML dict 加载 (pydantic 忽略的额外字段)
 # ═══════════════════════════════════════════════════════════════
+
 
 class TestRawYamlConfig:
     """测试 _get_ib_raw_config 返回完整 yaml dict (含 pydantic 忽略的字段)"""
@@ -170,6 +177,7 @@ class TestRawYamlConfig:
 # ═══════════════════════════════════════════════════════════════
 # 3. Python 值 == YAML 值 (验证无硬编码残留)
 # ═══════════════════════════════════════════════════════════════
+
 
 class TestAllFieldsFromYaml:
     """逐字段交叉校验: Python 对象的值 == ib.yaml 中的值"""
@@ -227,13 +235,15 @@ class TestAllFieldsFromYaml:
         for rule in yaml_data["rate_limits"]:
             name = rule["name"]
             expected = rule["limit"] / rule["interval"]
-            assert stk.rate_limits_config[name] == pytest.approx(expected), \
+            assert stk.rate_limits_config[name] == pytest.approx(expected), (
                 f"rate_limits_config[{name}] mismatch"
+            )
 
 
 # ═══════════════════════════════════════════════════════════════
 # 4. 基类 IbWebExchangeData
 # ═══════════════════════════════════════════════════════════════
+
 
 class TestIbWebExchangeDataBase:
     """测试 IbWebExchangeData 基类属性和方法"""
@@ -368,6 +378,7 @@ class TestIbWebExchangeDataBase:
 # 5. REST 路径
 # ═══════════════════════════════════════════════════════════════
 
+
 class TestRestPaths:
     """测试 REST 端点路径"""
 
@@ -428,7 +439,9 @@ class TestRestPaths:
         assert stk.rest_paths["modify_order"] == "POST /iserver/account/{accountId}/order/{orderId}"
 
     def test_path_cancel_order(self, stk):
-        assert stk.rest_paths["cancel_order"] == "DELETE /iserver/account/{accountId}/order/{orderId}"
+        assert (
+            stk.rest_paths["cancel_order"] == "DELETE /iserver/account/{accountId}/order/{orderId}"
+        )
 
     def test_path_get_open_orders(self, stk):
         assert stk.rest_paths["get_open_orders"] == "GET /iserver/account/orders"
@@ -509,6 +522,7 @@ class TestRestPaths:
 # 6. get_rest_url 方法
 # ═══════════════════════════════════════════════════════════════
 
+
 class TestGetRestUrl:
     """测试 get_rest_url 解析 METHOD + 路径 + 参数替换"""
 
@@ -527,9 +541,7 @@ class TestGetRestUrl:
         assert url == "https://localhost:5000/portfolio/U1234567/positions"
 
     def test_delete_with_two_params(self, stk):
-        method, url = stk.get_rest_url(
-            "cancel_order", accountId="U1234567", orderId="99999"
-        )
+        method, url = stk.get_rest_url("cancel_order", accountId="U1234567", orderId="99999")
         assert method == "DELETE"
         assert url == "https://localhost:5000/iserver/account/U1234567/order/99999"
 
@@ -539,9 +551,7 @@ class TestGetRestUrl:
         assert url == "https://localhost:5000/iserver/account/U1234567/orders"
 
     def test_post_modify_order(self, stk):
-        method, url = stk.get_rest_url(
-            "modify_order", accountId="U1234567", orderId="12345"
-        )
+        method, url = stk.get_rest_url("modify_order", accountId="U1234567", orderId="12345")
         assert method == "POST"
         assert url == "https://localhost:5000/iserver/account/U1234567/order/12345"
 
@@ -574,6 +584,7 @@ class TestGetRestUrl:
 # ═══════════════════════════════════════════════════════════════
 # 7. WebSocket 路径
 # ═══════════════════════════════════════════════════════════════
+
 
 class TestWssPaths:
     """测试 WebSocket 路径模板"""
@@ -614,6 +625,7 @@ class TestWssPaths:
 # 8. 子类 exchange_name
 # ═══════════════════════════════════════════════════════════════
 
+
 class TestSubclassExchangeNames:
     """测试各子类正确设置 exchange_name"""
 
@@ -633,6 +645,7 @@ class TestSubclassExchangeNames:
 # ═══════════════════════════════════════════════════════════════
 # 9. 子类共享配置一致性
 # ═══════════════════════════════════════════════════════════════
+
 
 class TestSubclassConsistency:
     """测试各子类共享相同的基础配置 (全部来自 yaml)"""
@@ -713,6 +726,7 @@ class TestSubclassConsistency:
 # 10. 速率限制
 # ═══════════════════════════════════════════════════════════════
 
+
 class TestRateLimits:
     """测试速率限制配置 (从 yaml rate_limits 转换而来)"""
 
@@ -743,13 +757,19 @@ class TestRateLimits:
 # 11. ExchangeData 继承
 # ═══════════════════════════════════════════════════════════════
 
+
 class TestExchangeDataInheritance:
     """测试与 ExchangeData 基类的兼容性"""
 
     def test_is_exchange_data_instance(self):
         from bt_api_py.containers.exchanges.exchange_data import ExchangeData
-        for cls in (IbWebExchangeDataStock, IbWebExchangeDataFuture,
-                    IbWebExchangeDataOption, IbWebExchangeDataForex):
+
+        for cls in (
+            IbWebExchangeDataStock,
+            IbWebExchangeDataFuture,
+            IbWebExchangeDataOption,
+            IbWebExchangeDataForex,
+        ):
             assert isinstance(cls(), ExchangeData)
 
     def test_to_dict(self):

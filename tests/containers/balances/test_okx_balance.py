@@ -1,6 +1,5 @@
 from bt_api_py.containers.balances.okx_balance import OkxBalanceData
 
-
 balance_data = {
     "availBal": "4834.317093622894",
     "availEq": "4834.3170936228935",
@@ -30,7 +29,7 @@ balance_data = {
     "twap": "0",
     "uTime": "1705449605015",
     "upl": "-7.545600000000006",
-    "uplLiab": "0"
+    "uplLiab": "0",
 }
 
 

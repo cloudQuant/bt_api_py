@@ -7,8 +7,6 @@ Latoken 交易所注册模块
 from bt_api_py.balance_utils import simple_balance_handler as _latoken_balance_handler
 from bt_api_py.containers.exchanges.latoken_exchange_data import LatokenExchangeDataSpot
 from bt_api_py.feeds.live_latoken import (
-    LatokenAccountWssDataSpot,
-    LatokenMarketWssDataSpot,
     LatokenRequestDataSpot,
 )
 from bt_api_py.registry import ExchangeRegistry

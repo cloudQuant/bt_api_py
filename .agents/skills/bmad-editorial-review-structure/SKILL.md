@@ -1,9 +1,7 @@
-- --
-
+---
 name: bmad-editorial-review-structure
 description: Execute editorial-review-structure
-
-- --
+---
 
 # editorial-review-structure
 

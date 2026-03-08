@@ -2,15 +2,17 @@ from bt_api_py.containers.incomes.binance_income import BinanceIncomeData
 
 
 def test_binance_income():
-    data = {"symbol": "BTCUSDT",
-            "incomeType": "COMMISSION",
-            "income": "-0.01000000",
-            "asset": "USDT",
-            "info": "COMMISSION",
-            "time": 1570636800000,
-            "tranId": "9689322392",
-            "tradeId": 2059192}
-    bi = BinanceIncomeData(data, "Binance", data['symbol'], "PERPETUAL", True)
+    data = {
+        "symbol": "BTCUSDT",
+        "incomeType": "COMMISSION",
+        "income": "-0.01000000",
+        "asset": "USDT",
+        "info": "COMMISSION",
+        "time": 1570636800000,
+        "tranId": "9689322392",
+        "tradeId": 2059192,
+    }
+    bi = BinanceIncomeData(data, "Binance", data["symbol"], "PERPETUAL", True)
     bi.init_data()
     assert bi.get_event_type() == "IncomeEvent"
     assert bi.get_server_time() == 1570636800000.0

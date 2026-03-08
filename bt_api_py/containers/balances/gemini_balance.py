@@ -5,8 +5,16 @@ from bt_api_py.utils.time import convert_utc_timestamp
 class GeminiRequestBalanceData(RequestData):
     """Gemini Balance Data Container"""
 
-    def __init__(self, data, extra_data=None, status=False, normalize_func=None,
-                 symbol=None, asset_type=None, is_rest=True):
+    def __init__(
+        self,
+        data,
+        extra_data=None,
+        status=False,
+        normalize_func=None,
+        symbol=None,
+        asset_type=None,
+        is_rest=True,
+    ):
         if extra_data is None:
             extra_data = {}
         # Set exchange_name and symbol_name in extra_data for RequestData
@@ -79,8 +87,10 @@ class GeminiRequestBalanceData(RequestData):
 
     def __str__(self):
         """String representation"""
-        return (f"GeminiBalance(currency={self.currency}, amount={self.amount}, "
-                f"available={self.available})")
+        return (
+            f"GeminiBalance(currency={self.currency}, amount={self.amount}, "
+            f"available={self.available})"
+        )
 
 
 class GeminiSpotWssBalanceData(GeminiRequestBalanceData):

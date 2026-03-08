@@ -5,25 +5,21 @@ Run tests:
     pytest tests/feeds/test_bitbns.py -v
 """
 
-import json
 import queue
 import time
-from unittest.mock import Mock, patch, MagicMock
+from unittest.mock import MagicMock, Mock, patch
 
 import pytest
 
-from bt_api_py.containers.exchanges.bitbns_exchange_data import (
-    BitbnsExchangeData,
-    BitbnsExchangeDataSpot,
-)
-from bt_api_py.feeds.live_bitbns.spot import BitbnsRequestDataSpot
-from bt_api_py.feeds.capability import Capability
-from bt_api_py.containers.requestdatas.request_data import RequestData
-from bt_api_py.containers.tickers.bitbns_ticker import BitbnsRequestTickerData
-from bt_api_py.registry import ExchangeRegistry
-
 # Import registration to auto-register Bitbns
 import bt_api_py.exchange_registers.register_bitbns  # noqa: F401
+from bt_api_py.containers.exchanges.bitbns_exchange_data import (
+    BitbnsExchangeDataSpot,
+)
+from bt_api_py.containers.requestdatas.request_data import RequestData
+from bt_api_py.feeds.capability import Capability
+from bt_api_py.feeds.live_bitbns.spot import BitbnsRequestDataSpot
+from bt_api_py.registry import ExchangeRegistry
 
 
 @pytest.fixture
@@ -171,12 +167,10 @@ class TestBitbnsRequestDataSpot:
                     "highest_buy_bid": "49990",
                     "lowest_sell_bid": "50010",
                 }
-            }
+            },
         }
         extra_data = {"symbol_name": "BTC/USDT"}
-        result, success = BitbnsRequestDataSpot._get_tick_normalize_function(
-            input_data, extra_data
-        )
+        result, success = BitbnsRequestDataSpot._get_tick_normalize_function(input_data, extra_data)
         assert success is True
 
     def test_depth_normalize_function(self):
@@ -186,7 +180,7 @@ class TestBitbnsRequestDataSpot:
             "data": {
                 "bids": [["49990", "1.0"]],
                 "asks": [["50010", "1.0"]],
-            }
+            },
         }
         extra_data = {"symbol_name": "BTC/USDT"}
         result, success = BitbnsRequestDataSpot._get_depth_normalize_function(
@@ -199,9 +193,7 @@ class TestBitbnsRequestDataSpot:
         """Test kline normalization function."""
         input_data = {
             "status": 1,
-            "data": [
-                [1640995200, "49500", "51000", "49000", "50000", "1234.56"]
-            ]
+            "data": [[1640995200, "49500", "51000", "49000", "50000", "1234.56"]],
         }
         extra_data = {"symbol_name": "BTC/USDT", "period": "1h"}
         result, success = BitbnsRequestDataSpot._get_kline_normalize_function(
@@ -286,6 +278,7 @@ class TestBitbnsBaseCapabilities:
 
     def test_base_capabilities(self):
         from bt_api_py.feeds.live_bitbns.request_base import BitbnsRequestData
+
         caps = BitbnsRequestData._capabilities()
         assert Capability.GET_TICK in caps
         assert Capability.MAKE_ORDER in caps

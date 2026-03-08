@@ -144,9 +144,7 @@ class BitgetSpotWssAccountData:
         # Process balance data
         if "data" in self.account_info and "balances" in self.account_info["data"]:
             for balance in self.account_info["data"]["balances"]:
-                balance_data = BitgetBalanceData(
-                    balance, self.symbol_name, self.asset_type, True
-                )
+                balance_data = BitgetBalanceData(balance, self.symbol_name, self.asset_type, True)
                 self.balances.append(balance_data)
 
         self.has_been_init_data = True

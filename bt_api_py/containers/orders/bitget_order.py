@@ -6,7 +6,7 @@ import json
 import time
 
 from bt_api_py.containers.orders.order import OrderData
-from bt_api_py.functions.utils import from_dict_get_float, from_dict_get_string, from_dict_get_int
+from bt_api_py.functions.utils import from_dict_get_float, from_dict_get_string
 
 
 class BitgetOrderData(OrderData):
@@ -52,7 +52,9 @@ class BitgetOrderData(OrderData):
         if self.has_been_init_data:
             return self
 
-        self.order_id = from_dict_get_string(self.order_data, "orderId") or from_dict_get_string(self.order_data, "id")
+        self.order_id = from_dict_get_string(self.order_data, "orderId") or from_dict_get_string(
+            self.order_data, "id"
+        )
         self.client_order_id = from_dict_get_string(self.order_data, "clientOid")
         self.symbol = from_dict_get_string(self.order_data, "symbol")
         self.side = from_dict_get_string(self.order_data, "side")
@@ -62,9 +64,15 @@ class BitgetOrderData(OrderData):
         self.filled_size = from_dict_get_float(self.order_data, "filledSize")
         self.remaining_size = from_dict_get_float(self.order_data, "remainingSize")
         self.price = from_dict_get_float(self.order_data, "price")
-        self.avg_price = from_dict_get_float(self.order_data, "avgPrice") or from_dict_get_float(self.order_data, "avgFillPrice")
-        self.create_time = from_dict_get_float(self.order_data, "cTime") or from_dict_get_float(self.order_data, "createTime")
-        self.update_time = from_dict_get_float(self.order_data, "uTime") or from_dict_get_float(self.order_data, "updateTime")
+        self.avg_price = from_dict_get_float(self.order_data, "avgPrice") or from_dict_get_float(
+            self.order_data, "avgFillPrice"
+        )
+        self.create_time = from_dict_get_float(self.order_data, "cTime") or from_dict_get_float(
+            self.order_data, "createTime"
+        )
+        self.update_time = from_dict_get_float(self.order_data, "uTime") or from_dict_get_float(
+            self.order_data, "updateTime"
+        )
         self.done_at = from_dict_get_float(self.order_data, "doneAt")
         self.fee = from_dict_get_float(self.order_data, "fee")
         self.fee_currency = from_dict_get_string(self.order_data, "feeCurrency")

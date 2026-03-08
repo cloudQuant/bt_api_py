@@ -5,8 +5,16 @@ from bt_api_py.utils.time import convert_utc_timestamp
 class GeminiRequestTickerData(RequestData):
     """Gemini Ticker Data Container"""
 
-    def __init__(self, data, symbol=None, asset_type=None, is_rest=True,
-                 extra_data=None, status=False, normalize_func=None):
+    def __init__(
+        self,
+        data,
+        symbol=None,
+        asset_type=None,
+        is_rest=True,
+        extra_data=None,
+        status=False,
+        normalize_func=None,
+    ):
         # Handle positional arguments from test
         if extra_data is None:
             extra_data = {}
@@ -63,7 +71,13 @@ class GeminiRequestTickerData(RequestData):
                 self.low = float(data.get("low", 0))
                 volume_val = data.get("volume", 0)
                 if isinstance(volume_val, dict):
-                    self.volume = float(volume_val.get(self.symbol or "btcusd", 0) if self.symbol else list(volume_val.values())[0] if volume_val else 0)
+                    self.volume = float(
+                        volume_val.get(self.symbol or "btcusd", 0)
+                        if self.symbol
+                        else list(volume_val.values())[0]
+                        if volume_val
+                        else 0
+                    )
                 else:
                     self.volume = float(volume_val)
                 self.bid = float(data.get("bid", 0))
@@ -106,8 +120,10 @@ class GeminiRequestTickerData(RequestData):
 
     def __str__(self):
         """String representation"""
-        return (f"GeminiTicker(symbol={self.symbol}, last={self.last_price}, "
-                f"bid={self.bid}, ask={self.ask})")
+        return (
+            f"GeminiTicker(symbol={self.symbol}, last={self.last_price}, "
+            f"bid={self.bid}, ask={self.ask})"
+        )
 
 
 class GeminiSpotWssTickerData(GeminiRequestTickerData):

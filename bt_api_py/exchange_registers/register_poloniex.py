@@ -8,7 +8,7 @@ from bt_api_py.balance_utils import nested_balance_handler as _poloniex_balance_
 from bt_api_py.containers.exchanges.poloniex_exchange_data import (
     PoloniexExchangeDataSpot,
 )
-from bt_api_py.feeds.live_poloniex import PoloniexRequestData, PoloniexRequestDataSpot
+from bt_api_py.feeds.live_poloniex import PoloniexRequestDataSpot
 from bt_api_py.registry import ExchangeRegistry
 
 
@@ -50,7 +50,9 @@ def register_poloniex():
     ExchangeRegistry.register_balance_handler("POLONIEX___SPOT", _poloniex_balance_handler)
 
     # 注册流处理器
-    ExchangeRegistry.register_stream("POLONIEX___SPOT", "subscribe", _poloniex_spot_subscribe_handler)
+    ExchangeRegistry.register_stream(
+        "POLONIEX___SPOT", "subscribe", _poloniex_spot_subscribe_handler
+    )
 
 
 # 模块导入时自动注册

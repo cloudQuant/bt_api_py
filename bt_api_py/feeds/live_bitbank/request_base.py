@@ -2,9 +2,9 @@
 Bitbank REST API request base class.
 """
 
-import time
-import hmac
 import hashlib
+import hmac
+import time
 
 from bt_api_py.containers.exchanges.bitbank_exchange_data import BitbankExchangeDataSpot
 from bt_api_py.containers.requestdatas.request_data import RequestData
@@ -42,12 +42,10 @@ class BitbankRequestData(Feed):
 
     def _generate_signature(self, timestamp, time_window, message):
         """Generate HMAC SHA256 signature for Bitbank API."""
-        secret = getattr(self._params, 'api_secret', None)
+        secret = getattr(self._params, "api_secret", None)
         if secret:
             signature = hmac.new(
-                secret.encode("utf-8"),
-                message.encode("utf-8"),
-                hashlib.sha256
+                secret.encode("utf-8"), message.encode("utf-8"), hashlib.sha256
             ).hexdigest()
             return signature
         return ""
@@ -59,7 +57,7 @@ class BitbankRequestData(Feed):
         }
 
         # Add auth headers if API key is configured
-        api_key = getattr(self._params, 'api_key', None)
+        api_key = getattr(self._params, "api_key", None)
         if api_key:
             timestamp = str(int(time.time() * 1000))
             time_window = "5000"
@@ -76,12 +74,14 @@ class BitbankRequestData(Feed):
 
             signature = self._generate_signature(timestamp, time_window, message)
 
-            headers.update({
-                "ACCESS-KEY": api_key,
-                "ACCESS-SIGNATURE": signature,
-                "ACCESS-REQUEST-TIME": timestamp,
-                "ACCESS-TIME-WINDOW": time_window,
-            })
+            headers.update(
+                {
+                    "ACCESS-KEY": api_key,
+                    "ACCESS-SIGNATURE": signature,
+                    "ACCESS-REQUEST-TIME": timestamp,
+                    "ACCESS-TIME-WINDOW": time_window,
+                }
+            )
 
         return headers
 
@@ -144,12 +144,14 @@ class BitbankRequestData(Feed):
         """Prepare server time request. Returns (path, params, extra_data)."""
         if extra_data is None:
             extra_data = {}
-        extra_data.update({
-            "exchange_name": self.exchange_name,
-            "symbol_name": "",
-            "asset_type": self.asset_type,
-            "request_type": "get_server_time",
-        })
+        extra_data.update(
+            {
+                "exchange_name": self.exchange_name,
+                "symbol_name": "",
+                "asset_type": self.asset_type,
+                "request_type": "get_server_time",
+            }
+        )
         return "GET /api/v1/spot/status", {}, extra_data
 
     def get_server_time(self, extra_data=None, **kwargs):

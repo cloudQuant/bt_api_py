@@ -1,39 +1,26 @@
 import queue
-import time
 import random
+import time
+
 import pytest
-from bt_api_py.functions.utils import read_account_config, get_public_ip
-from bt_api_py.feeds.live_okx_feed import OkxRequestDataSwap
 
 from bt_api_py.containers.exchanges.okx_exchange_data import OkxExchangeDataSwap
 from bt_api_py.containers.requestdatas.request_data import RequestData
-from bt_api_py.containers.tickers.okx_ticker import OkxTickerData
-from bt_api_py.containers.bars.okx_bar import OkxBarData
-from bt_api_py.containers.orderbooks.okx_orderbook import OkxOrderBookData
-from bt_api_py.containers.fundingrates.okx_funding_rate import OkxFundingRateData
-from bt_api_py.containers.markprices.okx_mark_price import OkxMarkPriceData
-from bt_api_py.containers.accounts.okx_account import OkxAccountData
+
 # from bt_api_py.containers.orders.okx_order import OkxOrderData
-from bt_api_py.containers.trades.okx_trade import OkxRequestTradeData, OkxWssTradeData
-from bt_api_py.containers.positions.okx_position import OkxPositionData
-from bt_api_py.containers.orders.order import OrderStatus
-from bt_api_py.containers.symbols.okx_symbol import OkxSymbolData
-from bt_api_py.containers.assets.okx_asset import OkxCurrencyData, OkxAssetBalanceData, OkxAssetValuationData, OkxTransferStateData, OkxDepositInfoData, OkxWithdrawalInfoData
-
-
-
-
+from bt_api_py.feeds.live_okx_feed import OkxRequestDataSwap
+from bt_api_py.functions.utils import read_account_config
 
 
 def generate_kwargs(exchange=OkxExchangeDataSwap):
     data = read_account_config()
     kwargs = {
-        "public_key": data['okx']['public_key'],
-        "private_key": data['okx']['private_key'],
-        "passphrase": data['okx']["passphrase"],
+        "public_key": data["okx"]["public_key"],
+        "private_key": data["okx"]["private_key"],
+        "passphrase": data["okx"]["passphrase"],
         "topics": {"tick": {"symbol": "BTC-USDT"}},
-        "proxies": data.get('proxies'),
-        "async_proxy": data.get('async_proxy'),
+        "proxies": data.get("proxies"),
+        "async_proxy": data.get("async_proxy"),
     }
     return kwargs
 
@@ -50,6 +37,7 @@ def init_async_feed(data_queue):
     live_okx_swap_feed = OkxRequestDataSwap(data_queue, **kwargs)
     return live_okx_swap_feed
 
+
 def okx_req_query_order_by_client_order_id(client_order_id):
     live_okx_swap_feed = init_req_feed()
     kwargs = {"client_order_id": client_order_id}
@@ -61,15 +49,11 @@ def okx_req_query_order_by_client_order_id(client_order_id):
     return data
 
 
-
-
 def okx_req_get_open_order():
     live_okx_swap_feed = init_req_feed()
     data = live_okx_swap_feed.get_open_orders()
     assert isinstance(data, RequestData)
     return data.get_data()
-
-
 
 
 def okx_req_cancel_order_by_order_id(order_id):
@@ -80,8 +64,6 @@ def okx_req_cancel_order_by_order_id(order_id):
     return data
 
 
-
-
 def okx_req_cancel_order_by_client_order_id(client_order_id):
     live_okx_swap_feed = init_req_feed()
     data = live_okx_swap_feed.cancel_order("OP-USDT", client_order_id=client_order_id)
@@ -90,18 +72,17 @@ def okx_req_cancel_order_by_client_order_id(client_order_id):
     return data
 
 
-
-
 def test_okx_req_order_functions():
     live_okx_swap_feed = init_req_feed()
     price_data = live_okx_swap_feed.get_tick("OP-USDT")
     price_data = price_data.get_data()[0].init_data()
     bid_price = round(price_data.get_bid_price() * 0.9, 2)
     ask_price = round(price_data.get_ask_price() * 1.1, 2)
-    random_number = random.randint(10 ** 17, 10 ** 18 - 1)
+    random_number = random.randint(10**17, 10**18 - 1)
     buy_client_order_id = str(random_number)
-    buy_data = live_okx_swap_feed.make_order("OP-USDT", 2, bid_price, "buy-limit",
-                                             client_order_id=buy_client_order_id)
+    buy_data = live_okx_swap_feed.make_order(
+        "OP-USDT", 2, bid_price, "buy-limit", client_order_id=buy_client_order_id
+    )
     # 测试买单和卖单
     assert isinstance(buy_data, RequestData)
     buy_info = buy_data.get_data()[0]
@@ -133,22 +114,22 @@ def test_okx_req_order_functions():
     # assert orders.get_data() is None
 
 
-
-
 def test_okx_async_order_functions():
     data_queue = queue.Queue()
     live_okx_swap_feed = init_async_feed(data_queue)
     price_data = live_okx_swap_feed.get_tick("OP-USDT").get_data()[0].init_data()
     bid_price = round(price_data.get_bid_price() * 0.9, 2)
     # ask_price = round(price_data.get_ask_price() * 1.1, 2)
-    random_number = random.randint(10 ** 17, 10 ** 18 - 1)
+    random_number = random.randint(10**17, 10**18 - 1)
     buy_client_order_id = str(random_number)
     # sell_client_order_id = str(random_number + 1)
     make_order_func = False
     query_order_func = False
     cancel_order_func = False
     open_order_func = False
-    live_okx_swap_feed.async_make_order("OP-USDT", 1, bid_price, "buy-limit", client_order_id=buy_client_order_id)
+    live_okx_swap_feed.async_make_order(
+        "OP-USDT", 1, bid_price, "buy-limit", client_order_id=buy_client_order_id
+    )
     time.sleep(5)
     live_okx_swap_feed.async_query_order("OP-USDT", **{"client_order_id": buy_client_order_id})
     live_okx_swap_feed.async_get_open_orders()
@@ -172,13 +153,15 @@ def test_okx_async_order_functions():
         if event_type == "RequestEvent" and request_type == "query_order":
             assert target_data.get_status()
             print("QueryOrderRequestEvent", event_data)
-            assert target_data.get_data()[0].init_data().get_client_order_id() == buy_client_order_id
+            assert (
+                target_data.get_data()[0].init_data().get_client_order_id() == buy_client_order_id
+            )
             query_order_func = True
-        if event_type == "RequestEvent" and request_type == 'cancel_order':
+        if event_type == "RequestEvent" and request_type == "cancel_order":
             assert target_data.get_status()
             print("CancelOrderRequestEvent", event_data)
             cancel_order_func = True
-        if event_type == "RequestEvent" and request_type == 'get_open_orders':
+        if event_type == "RequestEvent" and request_type == "get_open_orders":
             assert target_data.get_status()
             print("GetOpenOrdersRequestEvent", event_data)
             assert target_data.get_data() is not None
@@ -198,8 +181,6 @@ def test_okx_async_order_functions():
 #     print(sell_data.get_data())
 
 
-
-
 def test_okx_req_get_deals():
     live_okx_swap_feed = init_req_feed()
     price_data = live_okx_swap_feed.get_deals()
@@ -210,8 +191,6 @@ def test_okx_req_get_deals():
         assert isinstance(trade_data, list)
         assert first_trade.get_trade_price() > 0
         assert first_trade.get_trade_volume() > 0
-
-
 
 
 def test_okx_async_get_deals():
@@ -234,8 +213,6 @@ def test_okx_async_get_deals():
             assert first_trade.get_trade_volume() > 0
 
 
-
-
 def test_okx_req_set_margin_balance():
     """Test set_margin_balance interface"""
     live_okx_swap_feed = init_req_feed()
@@ -245,12 +222,10 @@ def test_okx_req_set_margin_balance():
         amt="100",
         mgn_mode="cross",
         action_type="add",
-        pos_side="net"
+        pos_side="net",
     )
     assert isinstance(result, RequestData)
     print("set_margin_balance status:", result.get_status())
-
-
 
 
 def test_okx_req_make_orders():
@@ -259,26 +234,24 @@ def test_okx_req_make_orders():
     # Prepare order list
     order_list = [
         {
-            'symbol': 'OP-USDT',
-            'vol': 1,
-            'price': 0.1,
-            'order_type': 'buy-limit',
-            'client_order_id': 'test_batch_1',
+            "symbol": "OP-USDT",
+            "vol": 1,
+            "price": 0.1,
+            "order_type": "buy-limit",
+            "client_order_id": "test_batch_1",
         },
         {
-            'symbol': 'OP-USDT',
-            'vol': 1,
-            'price': 0.05,
-            'order_type': 'buy-limit',
-            'client_order_id': 'test_batch_2',
-        }
+            "symbol": "OP-USDT",
+            "vol": 1,
+            "price": 0.05,
+            "order_type": "buy-limit",
+            "client_order_id": "test_batch_2",
+        },
     ]
     result = live_okx_swap_feed.make_orders(order_list)
     assert isinstance(result, RequestData)
     print("make_orders status:", result.get_status())
     print("make_orders data:", result.get_data())
-
-
 
 
 def test_okx_req_cancel_orders():
@@ -287,19 +260,17 @@ def test_okx_req_cancel_orders():
     # Prepare order list to cancel
     order_list = [
         {
-            'symbol': 'OP-USDT',
-            'order_id': 'test_order_1',  # Placeholder
+            "symbol": "OP-USDT",
+            "order_id": "test_order_1",  # Placeholder
         },
         {
-            'symbol': 'OP-USDT',
-            'client_order_id': 'test_client_1',  # Placeholder
-        }
+            "symbol": "OP-USDT",
+            "client_order_id": "test_client_1",  # Placeholder
+        },
     ]
     result = live_okx_swap_feed.cancel_orders(order_list)
     assert isinstance(result, RequestData)
     print("cancel_orders status:", result.get_status())
-
-
 
 
 def test_okx_req_amend_orders():
@@ -308,21 +279,19 @@ def test_okx_req_amend_orders():
     # Prepare order list to amend
     order_list = [
         {
-            'symbol': 'OP-USDT',
-            'order_id': 'test_order_1',  # Placeholder
-            'new_sz': 2,
+            "symbol": "OP-USDT",
+            "order_id": "test_order_1",  # Placeholder
+            "new_sz": 2,
         },
         {
-            'symbol': 'OP-USDT',
-            'client_order_id': 'test_client_1',  # Placeholder
-            'new_px': 0.5,
-        }
+            "symbol": "OP-USDT",
+            "client_order_id": "test_client_1",  # Placeholder
+            "new_px": 0.5,
+        },
     ]
     result = live_okx_swap_feed.amend_orders(order_list)
     assert isinstance(result, RequestData)
     print("amend_orders status:", result.get_status())
-
-
 
 
 def test_okx_req_get_fills():
@@ -340,22 +309,14 @@ def test_okx_req_get_fills():
         print("fill_data:", fill_data)
 
 
-
-
 def test_okx_req_close_position():
     """Test close_position market close all interface"""
     live_okx_swap_feed = init_req_feed()
     # Close position for BTC-USDT-SWAP
     # This may fail if there's no position, but tests the interface
-    result = live_okx_swap_feed.close_position(
-        symbol="BTC-USDT",
-        pos_side="net",
-        mgn_mode="cross"
-    )
+    result = live_okx_swap_feed.close_position(symbol="BTC-USDT", pos_side="net", mgn_mode="cross")
     assert isinstance(result, RequestData)
     print("close_position status:", result.get_status())
-
-
 
 
 def test_okx_req_get_fills_history():
@@ -370,17 +331,12 @@ def test_okx_req_get_fills_history():
     print("get_fills_history count:", len(fills_list))
 
 
-
-
 def test_okx_req_get_order_history_archive():
     """Test get_order_history_archive interface"""
     live_okx_swap_feed = init_req_feed()
     # Get order history archive (last 3 months) - need instType
     data = live_okx_swap_feed.get_order_history_archive(
-        symbol="BTC-USDT",
-        state="filled",
-        limit="10",
-        inst_type="SWAP"
+        symbol="BTC-USDT", state="filled", limit="10", inst_type="SWAP"
     )
     assert isinstance(data, RequestData)
     print("get_order_history_archive status:", data.get_status())
@@ -389,17 +345,13 @@ def test_okx_req_get_order_history_archive():
     print("get_order_history_archive count:", len(orders_list))
 
 
-
-
 def test_okx_req_cancel_all_after():
     """Test cancel_all_after interface"""
     live_okx_swap_feed = init_req_feed()
     # Set cancel all after 5 seconds
-    data = live_okx_swap_feed.cancel_all_after(time_slug='60')
+    data = live_okx_swap_feed.cancel_all_after(time_slug="60")
     assert isinstance(data, RequestData)
     print("cancel_all_after status:", data.get_status())
-
-
 
 
 def test_okx_req_amend_algo_order():
@@ -409,26 +361,24 @@ def test_okx_req_amend_algo_order():
     data = live_okx_swap_feed.amend_algo_order(
         algo_id="test_algo_id",  # Placeholder
         inst_id="BTC-USDT-SWAP",
-        new_sz="1"
+        new_sz="1",
     )
     assert isinstance(data, RequestData)
     print("amend_algo_order status:", data.get_status())
-
-
 
 
 def test_okx_req_get_algo_orders_pending():
     """Test get_algo_orders_pending interface"""
     live_okx_swap_feed = init_req_feed()
     # Get algo orders pending list
-    data = live_okx_swap_feed.get_algo_orders_pending(inst_type="SWAP", ord_type="conditional", limit="10")
+    data = live_okx_swap_feed.get_algo_orders_pending(
+        inst_type="SWAP", ord_type="conditional", limit="10"
+    )
     assert isinstance(data, RequestData)
     print("get_algo_orders_pending status:", data.get_status())
     algo_orders_list = data.get_data()
     assert isinstance(algo_orders_list, list)
     print("get_algo_orders_pending count:", len(algo_orders_list))
-
-
 
 
 @pytest.mark.skip(reason="OKX API endpoint deprecated/removed (404)")
@@ -444,21 +394,15 @@ def test_okx_req_get_algo_order_history():
     print("get_algo_order_history count:", len(algo_history_list))
 
 
-
-
 def test_okx_req_get_algo_order():
     """Test get_algo_order interface - expects error with placeholder algo_id"""
     live_okx_swap_feed = init_req_feed()
     # Test with a placeholder algo_id - OKX returns error in response body
     data = live_okx_swap_feed.get_algo_order(
-        algo_id="test_algo_id_placeholder",
-        inst_type="SWAP",
-        symbol="BTC-USDT"
+        algo_id="test_algo_id_placeholder", inst_type="SWAP", symbol="BTC-USDT"
     )
     assert isinstance(data, RequestData)
     print("get_algo_order status:", data.get_status())
-
-
 
 
 def test_okx_async_get_algo_order():
@@ -470,7 +414,7 @@ def test_okx_async_get_algo_order():
         algo_id="test_algo_id_placeholder",
         inst_type="SWAP",
         symbol="BTC-USDT",
-        extra_data={"test_async_algo_order": True}
+        extra_data={"test_async_algo_order": True},
     )
     time.sleep(5)
     try:
@@ -484,19 +428,16 @@ def test_okx_async_get_algo_order():
     assert isinstance(algo_order_list, list)
 
 
-
-
 def cancel_all_orders():
     live_feed = init_req_feed()
-    data = live_feed.get_open_orders('OP-USDT')
+    data = live_feed.get_open_orders("OP-USDT")
     order_data_list = data.get_data()
     for d in order_data_list:
-        info = live_feed.cancel_order('OP-USDT', d.get_order_id())
+        info = live_feed.cancel_order("OP-USDT", d.get_order_id())
         print(info.get_data())
 
 
 # ==================== Sub Account Tests ====================
-
 
 
 def test_okx_req_cancel_all():
@@ -509,8 +450,6 @@ def test_okx_req_cancel_all():
     result_list = data.get_data()
     assert isinstance(result_list, list)
     print("cancel_all data:", result_list)
-
-
 
 
 def test_okx_async_cancel_all():
@@ -530,8 +469,6 @@ def test_okx_async_cancel_all():
     print("async_cancel_all status:", cancel_data.get_status())
 
 
-
-
 def test_okx_req_mass_cancel():
     """Test mass_cancel interface - cancel all advanced limit orders"""
     live_okx_swap_feed = init_req_feed()
@@ -542,8 +479,6 @@ def test_okx_req_mass_cancel():
     result_list = data.get_data()
     assert isinstance(result_list, list)
     print("mass_cancel data:", result_list)
-
-
 
 
 def test_okx_async_mass_cancel():
@@ -561,8 +496,6 @@ def test_okx_async_mass_cancel():
     print("async_mass_cancel status:", cancel_data.get_status())
 
 
-
-
 def test_okx_req_order_precheck():
     """Test order_precheck interface"""
     live_okx_swap_feed = init_req_feed()
@@ -574,7 +507,7 @@ def test_okx_req_order_precheck():
         side="buy",
         order_type="limit",
         sz="1",
-        px="100"  # Very low price to avoid actual execution
+        px="100",  # Very low price to avoid actual execution
     )
     assert isinstance(data, RequestData)
     print("order_precheck status:", data.get_status())
@@ -583,19 +516,12 @@ def test_okx_req_order_precheck():
     print("order_precheck data:", precheck_list)
 
 
-
-
 def test_okx_async_order_precheck():
     """Test async_order_precheck interface"""
     data_queue = queue.Queue()
     live_okx_swap_feed = init_async_feed(data_queue)
     live_okx_swap_feed.async_order_precheck(
-        symbol="BTC-USDT",
-        td_mode="cross",
-        side="buy",
-        ord_type="limit",
-        sz="1",
-        px="100"
+        symbol="BTC-USDT", td_mode="cross", side="buy", ord_type="limit", sz="1", px="100"
     )
     time.sleep(5)
     try:
@@ -610,7 +536,6 @@ def test_okx_async_order_precheck():
 # ==================== Public Data API Tests ====================
 
 
-
 def test_okx_cancel_all():
     """Test cancel_all interface"""
     live_okx_swap_feed = init_req_feed()
@@ -620,14 +545,13 @@ def test_okx_cancel_all():
     print("cancel_all status:", data.get_status())
 
 
-
-
 def test_okx_async_cancel_all():
     """Test async_cancel_all interface"""
     data_queue = queue.Queue()
     live_okx_swap_feed = init_async_feed(data_queue)
-    live_okx_swap_feed.async_cancel_all(inst_type="SWAP", inst_id="BTC-USDT-SWAP",
-                                         extra_data={"test_async_cancel_all": True})
+    live_okx_swap_feed.async_cancel_all(
+        inst_type="SWAP", inst_id="BTC-USDT-SWAP", extra_data={"test_async_cancel_all": True}
+    )
     time.sleep(5)
     try:
         result = data_queue.get(False)
@@ -641,18 +565,12 @@ def test_okx_async_cancel_all():
 # ==================== Order Precheck Tests ====================
 
 
-
 def test_okx_order_precheck():
     """Test order_precheck interface"""
     live_okx_swap_feed = init_req_feed()
     # Test order precheck for a potential swap order
     data = live_okx_swap_feed.order_precheck(
-        symbol="BTC-USDT-SWAP",
-        td_mode="cross",
-        ccy="USDT",
-        side="buy",
-        order_type="market",
-        sz="1"
+        symbol="BTC-USDT-SWAP", td_mode="cross", ccy="USDT", side="buy", order_type="market", sz="1"
     )
     assert isinstance(data, RequestData)
     print("order_precheck status:", data.get_status())
@@ -660,8 +578,6 @@ def test_okx_order_precheck():
         data_list = data.get_data()
         assert isinstance(data_list, list)
         print("Order precheck data:", data_list[:1] if data_list else "No data")
-
-
 
 
 def test_okx_async_order_precheck():
@@ -675,7 +591,7 @@ def test_okx_async_order_precheck():
         side="buy",
         order_type="market",
         sz="1",
-        extra_data={"test_async_order_precheck": True}
+        extra_data={"test_async_order_precheck": True},
     )
     time.sleep(5)
     try:
@@ -688,5 +604,3 @@ def test_okx_async_order_precheck():
 
 
 # ==================== Open Interest Tests ====================
-
-

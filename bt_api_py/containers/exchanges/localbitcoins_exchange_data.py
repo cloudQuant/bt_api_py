@@ -19,12 +19,14 @@ def _load_yaml():
         return _config_cache
     try:
         cfg_path = os.path.join(
-            os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(
-                os.path.abspath(__file__))))),
-            "configs", "localbitcoins.yaml",
+            os.path.dirname(
+                os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+            ),
+            "configs",
+            "localbitcoins.yaml",
         )
         if os.path.exists(cfg_path):
-            with open(cfg_path, "r", encoding="utf-8") as f:
+            with open(cfg_path, encoding="utf-8") as f:
                 _config_cache = yaml.safe_load(f)
     except Exception as e:
         logger.warn(f"Failed to load localbitcoins.yaml: {e}")
@@ -32,6 +34,7 @@ def _load_yaml():
 
 
 # ── Base class ────────────────────────────────────────────────
+
 
 class LocalBitcoinsExchangeData(ExchangeData):
     """Base exchange data for LocalBitcoins (P2P, HMAC-SHA256)."""
@@ -44,17 +47,17 @@ class LocalBitcoinsExchangeData(ExchangeData):
         self.wss_url = ""
 
         self.rest_paths = {
-            "get_server_time":    "GET /api/ecjson.php",
-            "get_tick":           "GET /bitcoinaverage/ticker-all-currencies/",
-            "get_all_tickers":    "GET /bitcoinaverage/ticker-all-currencies/",
-            "get_exchange_info":  "GET /api/currencies/",
-            "get_ads":            "GET /api/ad-get/{id}/",
-            "get_ads_search":     "GET /buy-bitcoins-online/{currency}/",
-            "get_online_ads":     "GET /buy-bitcoins-online/{currency}/{country_code}/",
-            "get_wallet":         "GET /api/wallet/",
+            "get_server_time": "GET /api/ecjson.php",
+            "get_tick": "GET /bitcoinaverage/ticker-all-currencies/",
+            "get_all_tickers": "GET /bitcoinaverage/ticker-all-currencies/",
+            "get_exchange_info": "GET /api/currencies/",
+            "get_ads": "GET /api/ad-get/{id}/",
+            "get_ads_search": "GET /buy-bitcoins-online/{currency}/",
+            "get_online_ads": "GET /buy-bitcoins-online/{currency}/{country_code}/",
+            "get_wallet": "GET /api/wallet/",
             "get_wallet_balance": "GET /api/wallet-balance/",
-            "get_account":        "GET /api/myself/",
-            "get_balance":        "GET /api/wallet-balance/",
+            "get_account": "GET /api/myself/",
+            "get_balance": "GET /api/wallet-balance/",
         }
 
         self.kline_periods = {"1d": "1d"}
@@ -95,6 +98,7 @@ class LocalBitcoinsExchangeData(ExchangeData):
 
 
 # ── Spot class ────────────────────────────────────────────────
+
 
 class LocalBitcoinsExchangeDataSpot(LocalBitcoinsExchangeData):
     """LocalBitcoins Spot (P2P) exchange data."""

@@ -1,8 +1,7 @@
-import json
 import time
 
 from bt_api_py.containers.tickers.ticker import TickerData
-from bt_api_py.functions.utils import from_dict_get_float, from_dict_get_string
+from bt_api_py.functions.utils import from_dict_get_float
 
 
 class BybitTickerData(TickerData):
@@ -108,11 +107,13 @@ class BybitTickerData(TickerData):
     def __str__(self):
         """返回 ticker 的字符串表示"""
         self.init_data()
-        return (f"BybitTicker(symbol={self.symbol_name}, "
-                f"last={self.last_price}, "
-                f"bid={self.bid_price}, "
-                f"ask={self.ask_price}, "
-                f"volume={self.volume_24h})")
+        return (
+            f"BybitTicker(symbol={self.symbol_name}, "
+            f"last={self.last_price}, "
+            f"bid={self.bid_price}, "
+            f"ask={self.ask_price}, "
+            f"volume={self.volume_24h})"
+        )
 
 
 class BybitSpotTickerData(BybitTickerData):

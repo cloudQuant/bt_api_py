@@ -3,8 +3,6 @@ CoW Swap Spot Feed implementation.
 CoW Swap is a DEX - market data is primarily obtained through on-chain events and subgraphs.
 """
 
-from bt_api_py.containers.exchanges.cow_swap_exchange_data import CowSwapExchangeDataSpot
-from bt_api_py.containers.requestdatas.request_data import RequestData
 from bt_api_py.feeds.capability import Capability
 from bt_api_py.feeds.live_cow_swap.request_base import CowSwapRequestData
 from bt_api_py.functions.utils import update_extra_data
@@ -298,15 +296,27 @@ class CowSwapRequestDataSpot(CowSwapRequestData):
 
     def get_quote(self, sell_token, buy_token, amount, extra_data=None, **kwargs):
         """Get swap quote. Returns RequestData."""
-        path, params, extra_data = self._get_quote(sell_token, buy_token, amount, extra_data, **kwargs)
+        path, params, extra_data = self._get_quote(
+            sell_token, buy_token, amount, extra_data, **kwargs
+        )
         return self.request(path, params=params, extra_data=extra_data)
 
     # ==================== Standard Trading Interfaces ====================
     # Note: CoW Swap is a batch auction DEX. Orders are signed off-chain
     # and submitted to solvers.
 
-    def _make_order(self, symbol, volume, price, order_type, offset="open",
-                    post_only=False, client_order_id=None, extra_data=None, **kwargs):
+    def _make_order(
+        self,
+        symbol,
+        volume,
+        price,
+        order_type,
+        offset="open",
+        post_only=False,
+        client_order_id=None,
+        extra_data=None,
+        **kwargs,
+    ):
         """Prepare swap order parameters. Returns (path, body, extra_data).
 
         For CoW Swap, 'making an order' means submitting a signed order
@@ -320,18 +330,20 @@ class CowSwapRequestDataSpot(CowSwapRequestData):
             parts = symbol.split("-", 1)
             sell_token, buy_token = parts[0], parts[1]
 
-        extra_data.update({
-            "exchange_name": self.exchange_name,
-            "symbol_name": symbol,
-            "asset_type": self.asset_type,
-            "request_type": "make_order",
-            "side": kwargs.get("side", "sell"),
-            "quantity": volume,
-            "price": price,
-            "order_type": order_type,
-            "sell_token": sell_token,
-            "buy_token": buy_token,
-        })
+        extra_data.update(
+            {
+                "exchange_name": self.exchange_name,
+                "symbol_name": symbol,
+                "asset_type": self.asset_type,
+                "request_type": "make_order",
+                "side": kwargs.get("side", "sell"),
+                "quantity": volume,
+                "price": price,
+                "order_type": order_type,
+                "sell_token": sell_token,
+                "buy_token": buy_token,
+            }
+        )
         body = {
             "sellToken": sell_token,
             "buyToken": buy_token,
@@ -340,16 +352,33 @@ class CowSwapRequestDataSpot(CowSwapRequestData):
         }
         return "POST /api/v1/orders", body, extra_data
 
-    def make_order(self, symbol, volume, price, order_type, offset="open",
-                   post_only=False, client_order_id=None, extra_data=None, **kwargs):
+    def make_order(
+        self,
+        symbol,
+        volume,
+        price,
+        order_type,
+        offset="open",
+        post_only=False,
+        client_order_id=None,
+        extra_data=None,
+        **kwargs,
+    ):
         """Place a swap order. Returns RequestData.
 
         Note: CoW Swap orders require off-chain EIP-712 signing.
         This method prepares the order parameters.
         """
         path, body, extra_data = self._make_order(
-            symbol, volume, price, order_type, offset, post_only,
-            client_order_id, extra_data, **kwargs
+            symbol,
+            volume,
+            price,
+            order_type,
+            offset,
+            post_only,
+            client_order_id,
+            extra_data,
+            **kwargs,
         )
         return self.request(path, body=body, extra_data=extra_data)
 
@@ -357,13 +386,15 @@ class CowSwapRequestDataSpot(CowSwapRequestData):
         """Prepare cancel order parameters. Returns (path, params, extra_data)."""
         if extra_data is None:
             extra_data = {}
-        extra_data.update({
-            "exchange_name": self.exchange_name,
-            "symbol_name": symbol,
-            "asset_type": self.asset_type,
-            "request_type": "cancel_order",
-            "order_id": order_id,
-        })
+        extra_data.update(
+            {
+                "exchange_name": self.exchange_name,
+                "symbol_name": symbol,
+                "asset_type": self.asset_type,
+                "request_type": "cancel_order",
+                "order_id": order_id,
+            }
+        )
         return f"DELETE /api/v1/orders/{order_id}", {}, extra_data
 
     def cancel_order(self, symbol, order_id, extra_data=None, **kwargs):
@@ -375,14 +406,16 @@ class CowSwapRequestDataSpot(CowSwapRequestData):
         """Prepare query order parameters. Returns (path, params, extra_data)."""
         if extra_data is None:
             extra_data = {}
-        extra_data.update({
-            "exchange_name": self.exchange_name,
-            "symbol_name": symbol,
-            "asset_type": self.asset_type,
-            "request_type": "query_order",
-            "order_id": order_id,
-            "normalize_function": self._get_order_normalize_function,
-        })
+        extra_data.update(
+            {
+                "exchange_name": self.exchange_name,
+                "symbol_name": symbol,
+                "asset_type": self.asset_type,
+                "request_type": "query_order",
+                "order_id": order_id,
+                "normalize_function": self._get_order_normalize_function,
+            }
+        )
         return f"GET /api/v1/orders/{order_id}", {}, extra_data
 
     def query_order(self, symbol, order_id, extra_data=None, **kwargs):
@@ -394,13 +427,15 @@ class CowSwapRequestDataSpot(CowSwapRequestData):
         """Prepare get open orders parameters. Returns (path, params, extra_data)."""
         if extra_data is None:
             extra_data = {}
-        extra_data.update({
-            "exchange_name": self.exchange_name,
-            "symbol_name": symbol or "",
-            "asset_type": self.asset_type,
-            "request_type": "get_open_orders",
-            "normalize_function": self._get_account_orders_normalize_function,
-        })
+        extra_data.update(
+            {
+                "exchange_name": self.exchange_name,
+                "symbol_name": symbol or "",
+                "asset_type": self.asset_type,
+                "request_type": "get_open_orders",
+                "normalize_function": self._get_account_orders_normalize_function,
+            }
+        )
         return "GET /api/v1/orders", {}, extra_data
 
     def get_open_orders(self, symbol=None, extra_data=None, **kwargs):
@@ -417,13 +452,15 @@ class CowSwapRequestDataSpot(CowSwapRequestData):
         """
         if extra_data is None:
             extra_data = {}
-        extra_data.update({
-            "exchange_name": self.exchange_name,
-            "symbol_name": symbol or "",
-            "asset_type": self.asset_type,
-            "request_type": "get_account",
-            "chain": self.chain,
-        })
+        extra_data.update(
+            {
+                "exchange_name": self.exchange_name,
+                "symbol_name": symbol or "",
+                "asset_type": self.asset_type,
+                "request_type": "get_account",
+                "chain": self.chain,
+            }
+        )
         return "GET /api/v1/version", {}, extra_data
 
     def get_account(self, symbol=None, extra_data=None, **kwargs):
@@ -438,13 +475,15 @@ class CowSwapRequestDataSpot(CowSwapRequestData):
         """
         if extra_data is None:
             extra_data = {}
-        extra_data.update({
-            "exchange_name": self.exchange_name,
-            "symbol_name": symbol or "",
-            "asset_type": self.asset_type,
-            "request_type": "get_balance",
-            "chain": self.chain,
-        })
+        extra_data.update(
+            {
+                "exchange_name": self.exchange_name,
+                "symbol_name": symbol or "",
+                "asset_type": self.asset_type,
+                "request_type": "get_balance",
+                "chain": self.chain,
+            }
+        )
         return "GET /api/v1/version", {}, extra_data
 
     def get_balance(self, symbol=None, extra_data=None, **kwargs):

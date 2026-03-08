@@ -1,9 +1,7 @@
-- --
-
+---
 description: 'Run validation checks in MAX-PARALLEL mode against a workflow requires a tool that supports Parallel Sub-Processes'
 auto_execution_mode: "iterate"
-
-- --
+---
 
 # validate-max-parallel-workflow
 

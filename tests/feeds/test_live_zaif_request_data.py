@@ -10,23 +10,20 @@ Run with coverage:
 """
 
 import queue
-import time
-import pytest
-from unittest.mock import Mock, patch, MagicMock
 
+import pytest
+
+# Import registration to auto-register Zaif
+import bt_api_py.exchange_registers.register_zaif  # noqa: F401
 from bt_api_py.containers.exchanges.zaif_exchange_data import (
-    ZaifExchangeData,
     ZaifExchangeDataSpot,
 )
 from bt_api_py.containers.tickers.zaif_ticker import ZaifRequestTickerData
 from bt_api_py.feeds.live_zaif.spot import ZaifRequestDataSpot
 from bt_api_py.registry import ExchangeRegistry
 
-# Import registration to auto-register Zaif
-import bt_api_py.exchange_registers.register_zaif  # noqa: F401
-
-
 # ==================== Fixtures ====================
+
 
 @pytest.fixture
 def data_queue():
@@ -43,6 +40,7 @@ def zaif_feed(data_queue):
 
 # ==================== ServerTime Tests ====================
 
+
 class TestZaifServerTime:
     """Test server time functionality."""
 
@@ -53,6 +51,7 @@ class TestZaifServerTime:
 
 
 # ==================== Ticker Tests ====================
+
 
 class TestZaifTickerData:
     """Test ticker data functionality."""
@@ -72,6 +71,7 @@ class TestZaifTickerData:
             pass
             # Zaif ticker response structure
         from bt_api_py.containers.requestdatas.request_data import RequestData
+
         assert isinstance(data, (dict, list, RequestData))
 
     def test_zaif_multiple_tickers(self, zaif_feed):
@@ -85,6 +85,7 @@ class TestZaifTickerData:
 
 
 # ==================== Kline Tests ====================
+
 
 class TestZaifKlineData:
     """Test kline/candlestick data functionality."""
@@ -100,6 +101,7 @@ class TestZaifKlineData:
             pass
             # Zaif returns an array of trades
         from bt_api_py.containers.requestdatas.request_data import RequestData
+
         assert isinstance(data, (dict, list, RequestData))
 
     def test_zaif_trades_data(self, zaif_feed):
@@ -109,6 +111,7 @@ class TestZaifKlineData:
 
 
 # ==================== OrderBook Tests ====================
+
 
 class TestZaifOrderBook:
     """Test order book depth functionality."""
@@ -120,6 +123,7 @@ class TestZaifOrderBook:
 
         # get_depth returns RequestData, not raw dict
         from bt_api_py.containers.requestdatas.request_data import RequestData
+
         assert isinstance(data, (dict, list, RequestData))
 
     def test_zaif_orderbook_bids_asks(self, zaif_feed):
@@ -146,6 +150,7 @@ class TestZaifOrderBook:
 
 # ==================== Market Info Tests ====================
 
+
 class TestZaifMarketInfo:
     """Test market information functionality."""
 
@@ -159,6 +164,7 @@ class TestZaifMarketInfo:
 
 
 # ==================== Exchange Data Tests ====================
+
 
 class TestZaifExchangeData:
     """Test Zaif exchange data configuration."""
@@ -188,6 +194,7 @@ class TestZaifExchangeData:
 
 # ==================== Symbol Format Tests ====================
 
+
 class TestZaifSymbolFormat:
     """Test Zaif symbol format conversion."""
 
@@ -200,6 +207,7 @@ class TestZaifSymbolFormat:
 
 
 # ==================== Registry Tests ====================
+
 
 class TestZaifRegistry:
     """Test Zaif registration."""
@@ -223,6 +231,7 @@ class TestZaifRegistry:
 
 # ==================== Ticker Container Tests ====================
 
+
 class TestZaifTickerContainer:
     """Test Zaif ticker data container."""
 
@@ -236,6 +245,7 @@ class TestZaifTickerContainer:
 
 
 # ==================== Integration Tests ====================
+
 
 class TestZaifIntegration:
     """Integration tests for Zaif."""

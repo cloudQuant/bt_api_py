@@ -5,7 +5,6 @@ Provides standardized ticker data structure for PancakeSwap
 """
 
 from dataclasses import dataclass
-from typing import Optional
 
 
 @dataclass
@@ -17,11 +16,11 @@ class PancakeSwapRequestTickerData:
     timestamp: int
     volume: float
     quote_volume: float
-    high: Optional[float] = None
-    low: Optional[float] = None
-    bid: Optional[float] = None
-    ask: Optional[float] = None
-    count: Optional[int] = None
+    high: float | None = None
+    low: float | None = None
+    bid: float | None = None
+    ask: float | None = None
+    count: int | None = None
 
     def __post_init__(self):
         """Validate and normalize data after initialization"""
@@ -43,28 +42,28 @@ class PancakeSwapRequestTickerData:
             self.count = 0
 
     @property
-    def price_change(self) -> Optional[float]:
+    def price_change(self) -> float | None:
         """Calculate price change if high and low are available"""
         if self.high is not None and self.low is not None:
             return self.high - self.low
         return None
 
     @property
-    def price_change_percent(self) -> Optional[float]:
+    def price_change_percent(self) -> float | None:
         """Calculate price change percentage if high and low are available"""
         if self.high is not None and self.low is not None and self.low > 0:
             return (self.high - self.low) / self.low * 100
         return None
 
     @property
-    def spread(self) -> Optional[float]:
+    def spread(self) -> float | None:
         """Calculate bid-ask spread if available"""
         if self.bid is not None and self.ask is not None:
             return self.ask - self.bid
         return None
 
     @property
-    def spread_percent(self) -> Optional[float]:
+    def spread_percent(self) -> float | None:
         """Calculate bid-ask spread percentage if available"""
         if self.bid is not None and self.ask is not None and self.bid > 0:
             return (self.ask - self.bid) / self.bid * 100
@@ -86,22 +85,24 @@ class PancakeSwapRequestTickerData:
             "price_change": self.price_change,
             "price_change_percent": self.price_change_percent,
             "spread": self.spread,
-            "spread_percent": self.spread_percent
+            "spread_percent": self.spread_percent,
         }
 
     def to_json(self) -> str:
         """Convert to JSON string"""
         import json
+
         return json.dumps(self.to_dict())
 
     @classmethod
-    def from_dict(cls, data: dict) -> 'PancakeSwapRequestTickerData':
+    def from_dict(cls, data: dict) -> "PancakeSwapRequestTickerData":
         """Create from dictionary"""
         return cls(**data)
 
     @classmethod
-    def from_json(cls, json_str: str) -> 'PancakeSwapRequestTickerData':
+    def from_json(cls, json_str: str) -> "PancakeSwapRequestTickerData":
         """Create from JSON string"""
         import json
+
         data = json.loads(json_str)
         return cls.from_dict(data)

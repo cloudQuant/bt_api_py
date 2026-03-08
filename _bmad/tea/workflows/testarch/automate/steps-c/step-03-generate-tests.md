@@ -1,316 +1,392 @@
-- --
-
+---
 name: 'step-03-generate-tests'
-description: 'Orchestrate parallel test generation via subprocesses'
+description: 'Orchestrate adaptive test generation (agent-team, subagent, or sequential)'
 nextStepFile: './step-03c-aggregate.md'
+---
 
-- --
-
-# Step 3: Orchestrate Parallel Test Generation
+# Step 3: Orchestrate Adaptive Test Generation
 
 ## STEP GOAL
 
-Launch parallel subprocesses to generate tests simultaneously for maximum performance. Subprocess selection depends on `{detected_stack}`.
+Select execution mode deterministically, then generate tests using agent-team, subagent, or sequential execution while preserving the same output contract. Worker selection depends on `{detected_stack}`.
 
 ## MANDATORY EXECUTION RULES
 
 - 📖 Read the entire step file before acting
 - ✅ Speak in `{communication_language}`
-- ✅ Launch subprocesses in PARALLEL based on `{detected_stack}`
-- ✅ Wait for ALL launched subprocesses to complete
-- ❌ Do NOT generate tests sequentially (use subprocesses)
-- ❌ Do NOT proceed until all subprocesses finish
+- ✅ Resolve execution mode from config (`tea_execution_mode`, `tea_capability_probe`)
+- ✅ Apply fallback rules deterministically when requested mode is unsupported
+- ✅ Preserve output schema and temp file naming across all modes
+- ❌ Do NOT skip capability checks when probing is enabled
+- ❌ Do NOT change output paths or JSON schema by mode
 
-- --
+---
 
 ## EXECUTION PROTOCOLS:
 
 - 🎯 Follow the MANDATORY SEQUENCE exactly
-- 💾 Wait for subprocess outputs
+- 💾 Wait for subagent outputs
 - 📖 Load the next step only when instructed
 
 ## CONTEXT BOUNDARIES:
 
 - Available context: config, coverage plan from Step 2, knowledge fragments
-- Focus: subprocess orchestration only
-- Limits: do not generate tests directly (delegate to subprocesses)
+- Focus: orchestration only (mode selection + worker dispatch)
+- Limits: do not generate tests directly (delegate to worker steps)
 - Dependencies: Step 2 outputs (coverage plan, target features)
 
-- --
+---
 
 ## MANDATORY SEQUENCE
 
-- *CRITICAL:** Follow this sequence exactly. Do not skip, reorder, or improvise.
+**CRITICAL:** Follow this sequence exactly. Do not skip, reorder, or improvise.
 
-### 1. Prepare Subprocess Inputs
+### 1. Prepare Execution Context
 
-- *Generate unique timestamp** for temp file naming:
+**Generate unique timestamp** for temp file naming:
 
 ```javascript
 const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+```
 
-```bash
-
-- *Prepare input context for subprocesses:**
+**Prepare input context for subagents:**
 
 ```javascript
-const subprocessContext = {
-  features: /*from Step 2 coverage plan*/,
-  knowledge_fragments_loaded: /*list of fragments*/,
+const parseBooleanFlag = (value, defaultValue = true) => {
+  if (typeof value === 'string') {
+    const normalized = value.trim().toLowerCase();
+    if (['false', '0', 'off', 'no'].includes(normalized)) return false;
+    if (['true', '1', 'on', 'yes'].includes(normalized)) return true;
+  }
+  if (value === undefined || value === null) return defaultValue;
+  return Boolean(value);
+};
+
+const subagentContext = {
+  features: /* from Step 2 coverage plan */,
+  knowledge_fragments_loaded: /* list of fragments */,
   config: {
     test_framework: config.test_framework,
     use_playwright_utils: config.tea_use_playwright_utils,
     use_pactjs_utils: config.tea_use_pactjs_utils,
     pact_mcp: config.tea_pact_mcp,  // "mcp" | "none"
-
     browser_automation: config.tea_browser_automation,  // "auto" | "cli" | "mcp" | "none"
-
-    detected_stack: '{detected_stack}'  // "frontend" | "backend" | "fullstack"
-
+    detected_stack: '{detected_stack}',  // "frontend" | "backend" | "fullstack"
+    execution_mode: config.tea_execution_mode || 'auto',  // "auto" | "subagent" | "agent-team" | "sequential"
+    capability_probe: parseBooleanFlag(config.tea_capability_probe, true),  // supports booleans and "false"/"true" strings
   },
   timestamp: timestamp
 };
+```
 
-```bash
+---
 
-- --
+### 2. Resolve Execution Mode with Capability Probe
 
-### 2. Subprocess Dispatch Matrix
+```javascript
+const normalizeUserExecutionMode = (mode) => {
+  if (typeof mode !== 'string') return null;
+  const normalized = mode.trim().toLowerCase().replace(/[-_]/g, ' ').replace(/\s+/g, ' ');
 
-- *Select subprocesses based on `{detected_stack}`:**
+  if (normalized === 'auto') return 'auto';
+  if (normalized === 'sequential') return 'sequential';
+  if (normalized === 'subagent' || normalized === 'sub agent' || normalized === 'subagents' || normalized === 'sub agents') {
+    return 'subagent';
+  }
+  if (normalized === 'agent team' || normalized === 'agent teams' || normalized === 'agentteam') {
+    return 'agent-team';
+  }
 
-| `{detected_stack}` | Subprocess A (API) | Subprocess B (E2E) | Subprocess B-backend |
+  return null;
+};
 
-| ------------------ | ------------------ | ------------------ | -------------------- |
+const normalizeConfigExecutionMode = (mode) => {
+  if (mode === 'subagent') return 'subagent';
+  if (mode === 'auto' || mode === 'sequential' || mode === 'subagent' || mode === 'agent-team') {
+    return mode;
+  }
+  return null;
+};
 
-| `frontend`         | Launch             | Launch             | Skip                 |
+// Explicit user instruction in the active run takes priority over config.
+const explicitModeFromUser = normalizeUserExecutionMode(runtime.getExplicitExecutionModeHint?.() || null);
 
-| `backend`          | Launch             | Skip               | Launch               |
+const requestedMode = explicitModeFromUser || normalizeConfigExecutionMode(subagentContext.config.execution_mode) || 'auto';
+const probeEnabled = subagentContext.config.capability_probe;
 
-| `fullstack`        | Launch             | Launch             | Launch               |
+const supports = {
+  subagent: false,
+  agentTeam: false,
+};
 
-- --
+if (probeEnabled) {
+  // Probe using runtime-native capability checks or a no-op launch test.
+  supports.subagent = runtime.canLaunchSubagents?.() === true;
+  supports.agentTeam = runtime.canLaunchAgentTeams?.() === true;
+}
+
+let resolvedMode = requestedMode;
+
+if (requestedMode === 'auto') {
+  if (supports.agentTeam) resolvedMode = 'agent-team';
+  else if (supports.subagent) resolvedMode = 'subagent';
+  else resolvedMode = 'sequential';
+} else if (probeEnabled && requestedMode === 'agent-team' && !supports.agentTeam) {
+  resolvedMode = supports.subagent ? 'subagent' : 'sequential';
+} else if (probeEnabled && requestedMode === 'subagent' && !supports.subagent) {
+  resolvedMode = 'sequential';
+}
+
+subagentContext.execution = {
+  requestedMode,
+  resolvedMode,
+  probeEnabled,
+  supports,
+};
+```
+
+Resolution precedence:
+
+1. Explicit user request in this run (`agent team` => `agent-team`; `subagent` => `subagent`; `sequential`; `auto`)
+2. `tea_execution_mode` from config
+3. Runtime capability fallback (when probing enabled)
+
+If probing is disabled, honor the requested mode strictly. If that mode cannot be executed at runtime, fail with explicit error instead of silent fallback.
+
+Report selected mode before dispatch:
+
+```
+⚙️ Execution Mode Resolution:
+- Requested: {requestedMode}
+- Probe Enabled: {probeEnabled}
+- Supports agent-team: {supports.agentTeam}
+- Supports subagent: {supports.subagent}
+- Resolved: {resolvedMode}
+```
+
+---
+
+### 3. Subagent Dispatch Matrix
+
+**Select subagents based on `{detected_stack}`:**
+
+| `{detected_stack}` | Subagent A (API) | Subagent B (E2E) | Subagent B-backend |
+| ------------------ | ---------------- | ---------------- | ------------------ |
+| `frontend`         | Launch           | Launch           | Skip               |
+| `backend`          | Launch           | Skip             | Launch             |
+| `fullstack`        | Launch           | Launch           | Launch             |
+
+### 3A. Runtime-Managed Parallelism
+
+When `resolvedMode` is `agent-team` or `subagent`, let the runtime decide concurrency and scheduling. TEA does not impose an additional worker ceiling.
+
+---
 
 ### Contract Test Generation Note
 
-When `use_pactjs_utils` is enabled, the API test generation subprocess (step-03a) also generates:
+When `use_pactjs_utils` is enabled, the API test generation subagent (step-03a) also generates:
 
 - **Consumer contract tests**: Using `createProviderState` for type-safe provider states
 - **Provider verification tests**: Using `buildVerifierOptions` for one-call verifier setup
 - **Message contract tests**: Using `buildMessageVerifierOptions` if async/Kafka patterns detected
 - **Helper files**: Request filter setup with `createRequestFilter`, shared state constants
 
-When `pact_mcp` is `"mcp"`, the subprocess can use SmartBear MCP tools to fetch existing provider states and generate tests informed by broker data.
+When `pact_mcp` is `"mcp"`, the subagent can use SmartBear MCP tools to fetch existing provider states and generate tests informed by broker data.
 
-- --
+---
 
-### 3. Launch Subprocess A: API Test Generation (always)
+### 4. Dispatch Worker A: API Test Generation (always)
 
-- *Launch subprocess in parallel:**
+**Dispatch worker:**
 
-- **Subprocess File:**`./step-03a-subprocess-api.md`
-- **Output File:**`/tmp/tea-automate-api-tests-${timestamp}.json`
-- **Context:**Pass `subprocessContext`
-- **Execution:** PARALLEL (non-blocking)
+- **Subagent File:** `./step-03a-subagent-api.md`
+- **Output File:** `/tmp/tea-automate-api-tests-${timestamp}.json`
+- **Context:** Pass `subagentContext`
+- **Execution:**
+  - `agent-team` or `subagent`: launch non-blocking
+  - `sequential`: run blocking and wait before next dispatch
 
-- *System Action:**
+**System Action:**
 
-```bash
-🚀 Launching Subprocess A: API Test Generation
+```
+🚀 Launching Subagent A: API Test Generation
 📝 Output: /tmp/tea-automate-api-tests-${timestamp}.json
-⏳ Status: Running in parallel...
+⚙️ Mode: ${resolvedMode}
+⏳ Status: Running...
+```
 
-```bash
+---
 
-- --
+### 5. Dispatch Worker B: E2E Test Generation (frontend/fullstack only)
 
-### 4. Launch Subprocess B: E2E Test Generation (frontend/fullstack only)
+**If {detected_stack} is `frontend` or `fullstack`:**
 
-- *If {detected_stack} is `frontend` or `fullstack`:**
+**Dispatch worker:**
 
-- *Launch subprocess in parallel:**
+- **Subagent File:** `./step-03b-subagent-e2e.md`
+- **Output File:** `/tmp/tea-automate-e2e-tests-${timestamp}.json`
+- **Context:** Pass `subagentContext`
+- **Execution:**
+  - `agent-team` or `subagent`: launch non-blocking
+  - `sequential`: run blocking and wait before next dispatch
 
-- **Subprocess File:**`./step-03b-subprocess-e2e.md`
-- **Output File:**`/tmp/tea-automate-e2e-tests-${timestamp}.json`
-- **Context:**Pass `subprocessContext`
-- **Execution:** PARALLEL (non-blocking)
+**System Action:**
 
-- *System Action:**
-
-```bash
-🚀 Launching Subprocess B: E2E Test Generation
+```
+🚀 Launching Subagent B: E2E Test Generation
 📝 Output: /tmp/tea-automate-e2e-tests-${timestamp}.json
-⏳ Status: Running in parallel...
+⚙️ Mode: ${resolvedMode}
+⏳ Status: Running...
+```
 
-```bash
+**If {detected_stack} is `backend`:** Skip this subagent.
 
-- *If {detected_stack} is `backend`:** Skip this subprocess.
+---
 
-- --
+### 6. Dispatch Worker B-backend: Backend Test Generation (backend/fullstack only)
 
-### 5. Launch Subprocess B-backend: Backend Test Generation (backend/fullstack only)
+**If {detected_stack} is `backend` or `fullstack`:**
 
-- *If {detected_stack} is `backend` or `fullstack`:**
+**Dispatch worker:**
 
-- *Launch subprocess in parallel:**
+- **Subagent File:** `./step-03b-subagent-backend.md`
+- **Output File:** `/tmp/tea-automate-backend-tests-${timestamp}.json`
+- **Context:** Pass `subagentContext`
+- **Execution:**
+  - `agent-team` or `subagent`: launch non-blocking
+  - `sequential`: run blocking and wait before next dispatch
 
-- **Subprocess File:**`./step-03b-subprocess-backend.md`
-- **Output File:**`/tmp/tea-automate-backend-tests-${timestamp}.json`
-- **Context:**Pass `subprocessContext`
-- **Execution:** PARALLEL (non-blocking)
+**System Action:**
 
-- *System Action:**
-
-```bash
-🚀 Launching Subprocess B-backend: Backend Test Generation
+```
+🚀 Launching Subagent B-backend: Backend Test Generation
 📝 Output: /tmp/tea-automate-backend-tests-${timestamp}.json
-⏳ Status: Running in parallel...
+⚙️ Mode: ${resolvedMode}
+⏳ Status: Running...
+```
 
-```bash
+**If {detected_stack} is `frontend`:** Skip this subagent.
 
-- *If {detected_stack} is `frontend`:** Skip this subprocess.
+---
 
-- --
+### 7. Wait for Expected Worker Completion
 
-### 6. Wait for All Subprocesses to Complete
+**If `resolvedMode` is `agent-team` or `subagent`:**
 
-- *Monitor subprocess execution based on `{detected_stack}`:**
-
-```bash
-⏳ Waiting for subprocesses to complete...
-  ├── Subprocess A (API): Running... ⟳
-  ├── Subprocess B (E2E): Running... ⟳       [if frontend/fullstack]
-  └── Subprocess B-backend: Running... ⟳     [if backend/fullstack]
+```
+⏳ Waiting for subagents to complete...
+  ├── Subagent A (API): Running... ⟳
+  ├── Subagent B (E2E): Running... ⟳       [if frontend/fullstack]
+  └── Subagent B-backend: Running... ⟳     [if backend/fullstack]
 
 [... time passes ...]
 
-  ├── Subprocess A (API): Complete ✅
-  ├── Subprocess B (E2E): Complete ✅         [if frontend/fullstack]
-  └── Subprocess B-backend: Complete ✅       [if backend/fullstack]
+  ├── Subagent A (API): Complete ✅
+  ├── Subagent B (E2E): Complete ✅         [if frontend/fullstack]
+  └── Subagent B-backend: Complete ✅       [if backend/fullstack]
 
-✅ All subprocesses completed successfully!
+✅ All subagents completed successfully!
+```
 
-```bash
+**If `resolvedMode` is `sequential`:**
 
-- *Verify outputs exist (based on `{detected_stack}`):**
+```
+✅ Sequential mode: each worker already completed during dispatch.
+```
+
+**Verify outputs exist (based on `{detected_stack}`):**
 
 ```javascript
 const apiOutputExists = fs.existsSync(`/tmp/tea-automate-api-tests-${timestamp}.json`);
 
 // Check based on detected_stack
 if (detected_stack === 'frontend' || detected_stack === 'fullstack') {
-
   const e2eOutputExists = fs.existsSync(`/tmp/tea-automate-e2e-tests-${timestamp}.json`);
-  if (!e2eOutputExists) throw new Error('E2E subprocess output missing!');
+  if (!e2eOutputExists) throw new Error('E2E subagent output missing!');
 }
 if (detected_stack === 'backend' || detected_stack === 'fullstack') {
-
   const backendOutputExists = fs.existsSync(`/tmp/tea-automate-backend-tests-${timestamp}.json`);
-  if (!backendOutputExists) throw new Error('Backend subprocess output missing!');
+  if (!backendOutputExists) throw new Error('Backend subagent output missing!');
 }
-if (!apiOutputExists) throw new Error('API subprocess output missing!');
+if (!apiOutputExists) throw new Error('API subagent output missing!');
+```
 
-```bash
+---
 
-- --
+### Subagent Output Schema Contract
 
-### Subprocess Output Schema Contract
+The aggregate step expects both outputs to include `success`, but the payload shapes are intentionally different:
 
-Both `step-03b-subprocess-e2e.md` and `step-03b-subprocess-backend.md` MUST write JSON to their output file with identical schema:
+- `step-03b-subagent-e2e.md` output includes `success`, `subagent`, `tests`, `fixture_needs`, `knowledge_fragments_used`, `test_count`, and `summary`.
+- `step-03b-subagent-backend.md` output includes `success`, `subagent`, `subagentType`, `testsGenerated`, `coverageSummary` (with `fixtureNeeds`), `status`, `knowledge_fragments_used`, and `summary`.
 
-```json
-{
-  "subprocessType": "e2e | backend",
+The aggregate step reads whichever output file(s) exist based on `{detected_stack}` and must use the matching schema per subagent type.
 
-  "testsGenerated": [
-    {
-      "file": "path/to/test-file",
-      "content": "[full test file content]",
-      "description": "Test description",
-      "priority_coverage": { "P0": 0, "P1": 0, "P2": 0, "P3": 0 }
-    }
-  ],
-  "coverageSummary": {
-    "totalTests": 0,
-    "testLevels": ["unit", "integration", "api", "e2e"],
-    "fixtureNeeds": []
-  },
-  "status": "complete | partial"
+---
 
-}
+### 8. Execution Report
 
-```bash
-The aggregate step reads whichever output file(s) exist based on `{detected_stack}`.
+**Display performance metrics:**
 
-- --
-
-### 7. Performance Report
-
-- *Display performance metrics:**
-
-```bash
+```
 🚀 Performance Report:
-
-- Execution Mode: PARALLEL (subprocesses based on {detected_stack})
+- Execution Mode: {resolvedMode}
 - Stack Type: {detected_stack}
 - API Test Generation: ~X minutes
 - E2E Test Generation: ~Y minutes       [if frontend/fullstack]
 - Backend Test Generation: ~Z minutes    [if backend/fullstack]
-- Total Elapsed: ~max(X, Y, Z) minutes
-- Sequential Would Take: ~(X + Y + Z) minutes
-- Performance Gain: ~40-70% faster!
+- Total Elapsed: ~mode-dependent
+- Parallel Gain: ~40-70% faster when mode is subagent/agent-team
+```
 
-```bash
+---
 
-- --
+### 9. Proceed to Aggregation
 
-### 8. Proceed to Aggregation
-
-- *Load aggregation step:**
-
+**Load aggregation step:**
 Load next step: `{nextStepFile}`
 
 The aggregation step (3C) will:
 
-- Read all subprocess outputs (based on `{detected_stack}`)
+- Read all subagent outputs (based on `{detected_stack}`)
 - Write all test files to disk
 - Generate shared fixtures and helpers
 - Calculate summary statistics
 
-- --
+---
 
 ## EXIT CONDITION
 
 Proceed to Step 3C (Aggregation) when:
 
-- ✅ Subprocess A (API tests) completed successfully
-- ✅ Subprocess B (E2E tests) completed successfully [if frontend/fullstack]
-- ✅ Subprocess B-backend (Backend tests) completed successfully [if backend/fullstack]
+- ✅ Subagent A (API tests) completed successfully
+- ✅ Subagent B (E2E tests) completed successfully [if frontend/fullstack]
+- ✅ Subagent B-backend (Backend tests) completed successfully [if backend/fullstack]
 - ✅ All expected output files exist and are valid JSON
-- ✅ Performance metrics displayed
+- ✅ Execution metrics displayed
 
-- *Do NOT proceed if:**
+**Do NOT proceed if:**
 
-- ❌ Any launched subprocess failed
+- ❌ Any launched subagent failed
 - ❌ Output files missing or corrupted
-- ❌ Timeout occurred (subprocesses took too long)
+- ❌ Timeout occurred (parallel mode only)
 
-- --
+---
 
 ## 🚨 SYSTEM SUCCESS/FAILURE METRICS:
 
 ### ✅ SUCCESS:
 
-- All required subprocesses launched successfully (based on `{detected_stack}`)
-- All subprocesses completed without errors
+- All required subagents launched successfully (based on `{detected_stack}`)
+- All required worker steps completed without errors
 - Output files generated and valid
-- Parallel execution achieved ~40-70% performance gain
+- Fallback behavior respected configuration and capability probe rules
 
 ### ❌ SYSTEM FAILURE:
 
-- Failed to launch subprocesses
-- One or more subprocesses failed
+- Failed to launch subagents
+- One or more subagents failed
 - Output files missing or invalid
-- Attempted sequential generation instead of parallel
+- Unsupported requested mode with probing disabled
 
-- *Master Rule:** Parallel subprocess execution is MANDATORY for performance.
+**Master Rule:** Deterministic mode selection + stable output contract. Use the best supported mode, then aggregate normally.

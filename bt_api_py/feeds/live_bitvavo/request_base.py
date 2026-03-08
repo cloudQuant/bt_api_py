@@ -2,9 +2,9 @@
 Bitvavo REST API request base class.
 """
 
-import time
-import hmac
 import hashlib
+import hmac
+import time
 
 from bt_api_py.containers.exchanges.bitvavo_exchange_data import BitvavoExchangeDataSpot
 from bt_api_py.containers.requestdatas.request_data import RequestData
@@ -51,9 +51,7 @@ class BitvavoRequestData(Feed):
 
         sign_str = timestamp + method.upper() + url_path + body
         signature = hmac.new(
-            secret.encode('utf-8'),
-            sign_str.encode('utf-8'),
-            hashlib.sha256
+            secret.encode("utf-8"), sign_str.encode("utf-8"), hashlib.sha256
         ).hexdigest()
         return signature
 
@@ -72,7 +70,9 @@ class BitvavoRequestData(Feed):
         headers = {
             "Content-Type": "application/json",
             "Bitvavo-Access-Key": self._params.api_key if self._params.api_key else "",
-            "Bitvavo-Access-Signature": self._generate_signature(timestamp, method, url_path, body_str),
+            "Bitvavo-Access-Signature": self._generate_signature(
+                timestamp, method, url_path, body_str
+            ),
             "Bitvavo-Access-Timestamp": timestamp,
             "Bitvavo-Access-Window": "10000",
         }
@@ -137,12 +137,14 @@ class BitvavoRequestData(Feed):
         """Prepare server time request. Returns (path, params, extra_data)."""
         if extra_data is None:
             extra_data = {}
-        extra_data.update({
-            "exchange_name": self.exchange_name,
-            "symbol_name": "",
-            "asset_type": self.asset_type,
-            "request_type": "get_server_time",
-        })
+        extra_data.update(
+            {
+                "exchange_name": self.exchange_name,
+                "symbol_name": "",
+                "asset_type": self.asset_type,
+                "request_type": "get_server_time",
+            }
+        )
         return "GET /time", {}, extra_data
 
     def get_server_time(self, extra_data=None, **kwargs):

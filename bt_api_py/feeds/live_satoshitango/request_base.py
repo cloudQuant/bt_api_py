@@ -2,7 +2,6 @@
 SatoshiTango REST API request base class.
 """
 
-import time
 
 from bt_api_py.containers.exchanges.satoshitango_exchange_data import SatoshiTangoExchangeDataSpot
 from bt_api_py.containers.requestdatas.request_data import RequestData
@@ -44,7 +43,7 @@ class SatoshiTangoRequestData(Feed):
             "Content-Type": "application/json",
             "User-Agent": "bt_api_py/1.0",
         }
-        api_key = self._params.api_key if hasattr(self._params, 'api_key') else None
+        api_key = self._params.api_key if hasattr(self._params, "api_key") else None
         if api_key:
             headers["Authorization"] = f"Bearer {api_key}"
         return headers
@@ -109,13 +108,15 @@ class SatoshiTangoRequestData(Feed):
         path = "GET /v1/ticker"
         if extra_data is None:
             extra_data = {}
-        extra_data.update({
-            "exchange_name": self.exchange_name,
-            "symbol_name": "",
-            "asset_type": self.asset_type,
-            "request_type": "get_server_time",
-            "normalize_function": self._get_server_time_normalize_function,
-        })
+        extra_data.update(
+            {
+                "exchange_name": self.exchange_name,
+                "symbol_name": "",
+                "asset_type": self.asset_type,
+                "request_type": "get_server_time",
+                "normalize_function": self._get_server_time_normalize_function,
+            }
+        )
         return path, {"symbol": "BTC/ARS"}, extra_data
 
     def get_server_time(self, extra_data=None, **kwargs):

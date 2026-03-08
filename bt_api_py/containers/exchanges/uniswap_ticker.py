@@ -5,7 +5,6 @@ Standardized container for Uniswap token price and market data.
 """
 
 from dataclasses import dataclass
-from typing import Optional
 
 
 @dataclass
@@ -19,23 +18,23 @@ class UniswapTicker:
     decimals: int
 
     # Price data
-    price: Optional[float] = None
-    price_change_24h: Optional[float] = None
-    price_change_percentage_24h: Optional[float] = None
+    price: float | None = None
+    price_change_24h: float | None = None
+    price_change_percentage_24h: float | None = None
 
     # Volume data
-    volume_24h: Optional[float] = None
-    volume_24h_usd: Optional[float] = None
+    volume_24h: float | None = None
+    volume_24h_usd: float | None = None
 
     # Market cap
-    market_cap: Optional[float] = None
+    market_cap: float | None = None
 
     # Liquidity
-    total_liquidity_usd: Optional[float] = None
+    total_liquidity_usd: float | None = None
 
     # Timestamps
-    timestamp: Optional[float] = None
-    last_updated: Optional[float] = None
+    timestamp: float | None = None
+    last_updated: float | None = None
 
     # Trading information
     is_trading: bool = True
@@ -70,11 +69,12 @@ class UniswapTicker:
         # Set timestamp if not provided
         if self.timestamp is None:
             import time
+
             self.timestamp = time.time()
             self.last_updated = self.timestamp
 
     @classmethod
-    def from_graphql_data(cls, data: dict) -> 'UniswapTicker':
+    def from_graphql_data(cls, data: dict) -> "UniswapTicker":
         """Create ticker from GraphQL response data.
 
         Args:
@@ -84,24 +84,28 @@ class UniswapTicker:
             UniswapTicker instance
         """
         # Extract token basic info
-        token_info = data.get('token', {}) or {}
-        symbol = token_info.get('symbol', '')
-        name = token_info.get('name', '')
-        address = token_info.get('id', '')  # GraphQL 'id' is the address
-        decimals = token_info.get('decimals', 0)
+        token_info = data.get("token", {}) or {}
+        symbol = token_info.get("symbol", "")
+        name = token_info.get("name", "")
+        address = token_info.get("id", "")  # GraphQL 'id' is the address
+        decimals = token_info.get("decimals", 0)
 
         # Extract price data
-        price_data = token_info.get('price', {}) or {}
-        price = float(price_data.get('USD', 0)) if price_data.get('USD') else None
-        price_change_24h = float(token_info.get('priceChange24h', {}).get('USD', 0)) if token_info.get('priceChange24h', {}).get('USD') else None
+        price_data = token_info.get("price", {}) or {}
+        price = float(price_data.get("USD", 0)) if price_data.get("USD") else None
+        price_change_24h = (
+            float(token_info.get("priceChange24h", {}).get("USD", 0))
+            if token_info.get("priceChange24h", {}).get("USD")
+            else None
+        )
 
         # Extract volume data
-        volume_data = token_info.get('volume', {}) or {}
-        volume_24h = float(volume_data.get('USD', 0)) if volume_data.get('USD') else None
+        volume_data = token_info.get("volume", {}) or {}
+        volume_24h = float(volume_data.get("USD", 0)) if volume_data.get("USD") else None
 
         # Extract market cap
-        market_cap_data = token_info.get('marketCap', {}) or {}
-        market_cap = float(market_cap_data.get('USD', 0)) if market_cap_data.get('USD') else None
+        market_cap_data = token_info.get("marketCap", {}) or {}
+        market_cap = float(market_cap_data.get("USD", 0)) if market_cap_data.get("USD") else None
 
         return cls(
             symbol=symbol,
@@ -121,24 +125,24 @@ class UniswapTicker:
             Dictionary representation of ticker
         """
         return {
-            'symbol': self.symbol,
-            'name': self.name,
-            'address': self.address,
-            'decimals': self.decimals,
-            'price': self.price,
-            'price_change_24h': self.price_change_24h,
-            'price_change_percentage_24h': self.price_change_percentage_24h,
-            'volume_24h': self.volume_24h,
-            'volume_24h_usd': self.volume_24h_usd,
-            'market_cap': self.market_cap,
-            'total_liquidity_usd': self.total_liquidity_usd,
-            'timestamp': self.timestamp,
-            'last_updated': self.last_updated,
-            'is_trading': self.is_trading,
-            'trading_pairs_count': self.trading_pairs_count,
-            'is_valid_price': self.is_valid_price,
-            'is_valid_volume': self.is_valid_volume,
-            'has_liquidity': self.has_liquidity,
+            "symbol": self.symbol,
+            "name": self.name,
+            "address": self.address,
+            "decimals": self.decimals,
+            "price": self.price,
+            "price_change_24h": self.price_change_24h,
+            "price_change_percentage_24h": self.price_change_percentage_24h,
+            "volume_24h": self.volume_24h,
+            "volume_24h_usd": self.volume_24h_usd,
+            "market_cap": self.market_cap,
+            "total_liquidity_usd": self.total_liquidity_usd,
+            "timestamp": self.timestamp,
+            "last_updated": self.last_updated,
+            "is_trading": self.is_trading,
+            "trading_pairs_count": self.trading_pairs_count,
+            "is_valid_price": self.is_valid_price,
+            "is_valid_volume": self.is_valid_volume,
+            "has_liquidity": self.has_liquidity,
         }
 
     def is_price_valid(self) -> bool:
@@ -175,5 +179,6 @@ class UniswapTicker:
 
         self.last_updated = None
         import time
+
         self.timestamp = time.time()
         self.last_updated = self.timestamp

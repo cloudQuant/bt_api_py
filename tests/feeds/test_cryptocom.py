@@ -5,28 +5,24 @@ Run tests:
     SKIP_LIVE_TESTS=true pytest tests/feeds/test_cryptocom.py -q --tb=short -o "addopts="
 """
 
-import json
 import queue
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pytest
 
+# Import registration to auto-register Crypto.com
+import bt_api_py.exchange_registers.register_cryptocom  # noqa: F401
 from bt_api_py.containers.exchanges.cryptocom_exchange_data import (
-    CryptoComExchangeData,
     CryptoComExchangeDataSpot,
 )
-from bt_api_py.containers.tickers.cryptocom_ticker import CryptoComTicker
 from bt_api_py.containers.orderbooks.cryptocom_orderbook import CryptoComOrderBook
 from bt_api_py.containers.orders.cryptocom_order import CryptoComOrder
 from bt_api_py.containers.requestdatas.request_data import RequestData
+from bt_api_py.containers.tickers.cryptocom_ticker import CryptoComTicker
 from bt_api_py.feeds.capability import Capability
 from bt_api_py.feeds.live_cryptocom.request_base import CryptoComRequestData
 from bt_api_py.feeds.live_cryptocom.spot import CryptoComRequestDataSpot
 from bt_api_py.registry import ExchangeRegistry
-
-# Import registration to auto-register Crypto.com
-import bt_api_py.exchange_registers.register_cryptocom  # noqa: F401
-
 
 # ── Sample API responses ─────────────────────────────────────────────────
 
@@ -71,8 +67,22 @@ SAMPLE_KLINE_RESP = {
     "code": 0,
     "result": {
         "data": [
-            {"t": 1640995200000, "o": "50000", "h": "50500", "l": "49500", "c": "50200", "v": "1000"},
-            {"t": 1640998800000, "o": "50200", "h": "50600", "l": "50100", "c": "50400", "v": "800"},
+            {
+                "t": 1640995200000,
+                "o": "50000",
+                "h": "50500",
+                "l": "49500",
+                "c": "50200",
+                "v": "1000",
+            },
+            {
+                "t": 1640998800000,
+                "o": "50200",
+                "h": "50600",
+                "l": "50100",
+                "c": "50400",
+                "v": "800",
+            },
         ]
     },
 }
@@ -188,6 +198,7 @@ SAMPLE_BALANCE_RESP = SAMPLE_ACCOUNT_RESP
 
 # ── Helper ────────────────────────────────────────────────────────────────
 
+
 def _make_feed():
     """Create a CryptoComRequestDataSpot feed for testing."""
     data_queue = queue.Queue()
@@ -201,6 +212,7 @@ def _make_feed():
 # ══════════════════════════════════════════════════════════════════════════
 # 1. Exchange Data
 # ══════════════════════════════════════════════════════════════════════════
+
 
 class TestCryptoComExchangeData:
     """Test Crypto.com exchange data configuration."""
@@ -250,9 +262,17 @@ class TestCryptoComExchangeData:
     def test_rest_paths_present(self):
         ed = CryptoComExchangeDataSpot()
         for key in [
-            "get_server_time", "get_exchange_info", "get_tick", "get_depth",
-            "get_kline", "get_account", "get_balance", "make_order",
-            "cancel_order", "query_order", "get_open_orders",
+            "get_server_time",
+            "get_exchange_info",
+            "get_tick",
+            "get_depth",
+            "get_kline",
+            "get_account",
+            "get_balance",
+            "make_order",
+            "cancel_order",
+            "query_order",
+            "get_open_orders",
         ]:
             assert ed.get_rest_path(key) is not None, f"Missing rest_path: {key}"
 
@@ -260,6 +280,7 @@ class TestCryptoComExchangeData:
 # ══════════════════════════════════════════════════════════════════════════
 # 2. Parameter Generation (_get_xxx)
 # ══════════════════════════════════════════════════════════════════════════
+
 
 class TestParameterGeneration:
     """Verify _get_xxx returns correct (path, params, extra_data) tuples."""
@@ -356,6 +377,7 @@ class TestParameterGeneration:
 # 3. Normalization Functions
 # ══════════════════════════════════════════════════════════════════════════
 
+
 class TestNormalization:
     """Verify normalize functions return (data_list, status)."""
 
@@ -378,16 +400,22 @@ class TestNormalization:
         assert len(data[0]["symbols"]) == 1
 
     def test_tick_normalize(self):
-        extra = {"symbol_name": "BTC/USDT", "asset_type": "SPOT", "exchange_name": "CRYPTOCOM___SPOT"}
-        data, status = CryptoComRequestData._get_tick_normalize_function(
-            SAMPLE_TICKER_RESP, extra
-        )
+        extra = {
+            "symbol_name": "BTC/USDT",
+            "asset_type": "SPOT",
+            "exchange_name": "CRYPTOCOM___SPOT",
+        }
+        data, status = CryptoComRequestData._get_tick_normalize_function(SAMPLE_TICKER_RESP, extra)
         assert status is True
         assert len(data) == 1
         assert isinstance(data[0], CryptoComTicker)
 
     def test_depth_normalize(self):
-        extra = {"symbol_name": "BTC/USDT", "asset_type": "SPOT", "exchange_name": "CRYPTOCOM___SPOT"}
+        extra = {
+            "symbol_name": "BTC/USDT",
+            "asset_type": "SPOT",
+            "exchange_name": "CRYPTOCOM___SPOT",
+        }
         data, status = CryptoComRequestData._get_depth_normalize_function(
             SAMPLE_ORDERBOOK_RESP, extra
         )
@@ -396,16 +424,22 @@ class TestNormalization:
         assert isinstance(data[0], CryptoComOrderBook)
 
     def test_kline_normalize(self):
-        extra = {"symbol_name": "BTC/USDT", "asset_type": "SPOT", "exchange_name": "CRYPTOCOM___SPOT"}
-        data, status = CryptoComRequestData._get_kline_normalize_function(
-            SAMPLE_KLINE_RESP, extra
-        )
+        extra = {
+            "symbol_name": "BTC/USDT",
+            "asset_type": "SPOT",
+            "exchange_name": "CRYPTOCOM___SPOT",
+        }
+        data, status = CryptoComRequestData._get_kline_normalize_function(SAMPLE_KLINE_RESP, extra)
         assert status is True
         assert len(data) == 2
         assert data[0]["open"] == 50000.0
 
     def test_trade_history_normalize(self):
-        extra = {"symbol_name": "BTC/USDT", "asset_type": "SPOT", "exchange_name": "CRYPTOCOM___SPOT"}
+        extra = {
+            "symbol_name": "BTC/USDT",
+            "asset_type": "SPOT",
+            "exchange_name": "CRYPTOCOM___SPOT",
+        }
         data, status = CryptoComRequestData._get_trade_history_normalize_function(
             SAMPLE_TRADES_RESP, extra
         )
@@ -413,7 +447,11 @@ class TestNormalization:
         assert len(data) == 2
 
     def test_make_order_normalize(self):
-        extra = {"symbol_name": "BTC/USDT", "asset_type": "SPOT", "exchange_name": "CRYPTOCOM___SPOT"}
+        extra = {
+            "symbol_name": "BTC/USDT",
+            "asset_type": "SPOT",
+            "exchange_name": "CRYPTOCOM___SPOT",
+        }
         data, status = CryptoComRequestData._make_order_normalize_function(
             SAMPLE_MAKE_ORDER_RESP, extra
         )
@@ -422,7 +460,11 @@ class TestNormalization:
         assert isinstance(data[0], CryptoComOrder)
 
     def test_cancel_order_normalize(self):
-        extra = {"symbol_name": "BTC/USDT", "asset_type": "SPOT", "exchange_name": "CRYPTOCOM___SPOT"}
+        extra = {
+            "symbol_name": "BTC/USDT",
+            "asset_type": "SPOT",
+            "exchange_name": "CRYPTOCOM___SPOT",
+        }
         data, status = CryptoComRequestData._cancel_order_normalize_function(
             SAMPLE_CANCEL_ORDER_RESP, extra
         )
@@ -430,7 +472,11 @@ class TestNormalization:
         assert data[0]["success"] is True
 
     def test_query_order_normalize(self):
-        extra = {"symbol_name": "BTC/USDT", "asset_type": "SPOT", "exchange_name": "CRYPTOCOM___SPOT"}
+        extra = {
+            "symbol_name": "BTC/USDT",
+            "asset_type": "SPOT",
+            "exchange_name": "CRYPTOCOM___SPOT",
+        }
         data, status = CryptoComRequestData._query_order_normalize_function(
             SAMPLE_QUERY_ORDER_RESP, extra
         )
@@ -438,7 +484,11 @@ class TestNormalization:
         assert len(data) == 1
 
     def test_open_orders_normalize(self):
-        extra = {"symbol_name": "BTC/USDT", "asset_type": "SPOT", "exchange_name": "CRYPTOCOM___SPOT"}
+        extra = {
+            "symbol_name": "BTC/USDT",
+            "asset_type": "SPOT",
+            "exchange_name": "CRYPTOCOM___SPOT",
+        }
         data, status = CryptoComRequestData._get_open_orders_normalize_function(
             SAMPLE_OPEN_ORDERS_RESP, extra
         )
@@ -462,7 +512,11 @@ class TestNormalization:
         assert len(data) == 2
 
     def test_normalize_with_none_input(self):
-        extra = {"symbol_name": "BTC/USDT", "asset_type": "SPOT", "exchange_name": "CRYPTOCOM___SPOT"}
+        extra = {
+            "symbol_name": "BTC/USDT",
+            "asset_type": "SPOT",
+            "exchange_name": "CRYPTOCOM___SPOT",
+        }
         data, status = CryptoComRequestData._get_tick_normalize_function(None, extra)
         assert status is False
         assert data == []
@@ -471,6 +525,7 @@ class TestNormalization:
 # ══════════════════════════════════════════════════════════════════════════
 # 4. Synchronous Calls (mocked HTTP)
 # ══════════════════════════════════════════════════════════════════════════
+
 
 class TestSyncCalls:
     """Test synchronous API calls with mocked HTTP."""
@@ -569,13 +624,22 @@ class TestSyncCalls:
 # 5. Container Tests
 # ══════════════════════════════════════════════════════════════════════════
 
+
 class TestContainers:
     """Test data containers init_data returns self and parses correctly."""
 
     def test_ticker_container(self):
         ticker = CryptoComTicker.from_api_response(
-            {"a": "50000.0", "b": "49900.0", "k": "50100.0", "h": "51000.0",
-             "l": "48000.0", "v": "1234.56", "vv": "60000000", "t": 1640995200000},
+            {
+                "a": "50000.0",
+                "b": "49900.0",
+                "k": "50100.0",
+                "h": "51000.0",
+                "l": "48000.0",
+                "v": "1234.56",
+                "vv": "60000000",
+                "t": 1640995200000,
+            },
             "BTC_USDT",
         )
         result = ticker.init_data()
@@ -605,10 +669,16 @@ class TestContainers:
     def test_order_container(self):
         order = CryptoComOrder.from_api_response(
             {
-                "instrument_name": "BTC_USDT", "order_id": "123456",
-                "client_oid": "c_123", "side": "BUY", "type": "LIMIT",
-                "quantity": "0.001", "price": "50000", "status": "ACTIVE",
-                "filled_quantity": "0.0005", "remaining_quantity": "0.0005",
+                "instrument_name": "BTC_USDT",
+                "order_id": "123456",
+                "client_oid": "c_123",
+                "side": "BUY",
+                "type": "LIMIT",
+                "quantity": "0.001",
+                "price": "50000",
+                "status": "ACTIVE",
+                "filled_quantity": "0.0005",
+                "remaining_quantity": "0.0005",
             },
             "BTC_USDT",
         )
@@ -623,10 +693,17 @@ class TestContainers:
 
     def test_order_to_dict(self):
         order = CryptoComOrder.from_api_response(
-            {"instrument_name": "BTC_USDT", "order_id": "123456",
-             "side": "SELL", "type": "MARKET", "quantity": "0.01",
-             "price": "0", "status": "FILLED", "filled_quantity": "0.01",
-             "remaining_quantity": "0"},
+            {
+                "instrument_name": "BTC_USDT",
+                "order_id": "123456",
+                "side": "SELL",
+                "type": "MARKET",
+                "quantity": "0.01",
+                "price": "0",
+                "status": "FILLED",
+                "filled_quantity": "0.01",
+                "remaining_quantity": "0",
+            },
             "BTC_USDT",
         )
         d = order.to_dict()
@@ -639,6 +716,7 @@ class TestContainers:
 # 6. Registry
 # ══════════════════════════════════════════════════════════════════════════
 
+
 class TestRegistry:
     """Test Crypto.com registry."""
 
@@ -648,7 +726,9 @@ class TestRegistry:
 
     def test_exchange_data_registered(self):
         assert "CRYPTOCOM___SPOT" in ExchangeRegistry._exchange_data_classes
-        assert ExchangeRegistry._exchange_data_classes["CRYPTOCOM___SPOT"] is CryptoComExchangeDataSpot
+        assert (
+            ExchangeRegistry._exchange_data_classes["CRYPTOCOM___SPOT"] is CryptoComExchangeDataSpot
+        )
 
     def test_balance_handler_registered(self):
         assert "CRYPTOCOM___SPOT" in ExchangeRegistry._balance_handlers
@@ -667,48 +747,90 @@ class TestRegistry:
 # 7. Method Existence & Capabilities
 # ══════════════════════════════════════════════════════════════════════════
 
+
 class TestMethodExistence:
     """Verify all expected public / async methods exist."""
 
     def test_capabilities(self):
         caps = CryptoComRequestData._capabilities()
         for c in [
-            Capability.GET_TICK, Capability.GET_DEPTH, Capability.GET_KLINE, Capability.GET_DEALS,
-            Capability.MAKE_ORDER, Capability.CANCEL_ORDER, Capability.QUERY_ORDER,
-            Capability.QUERY_OPEN_ORDERS, Capability.GET_BALANCE, Capability.GET_ACCOUNT,
-            Capability.GET_EXCHANGE_INFO, Capability.GET_SERVER_TIME,
+            Capability.GET_TICK,
+            Capability.GET_DEPTH,
+            Capability.GET_KLINE,
+            Capability.GET_DEALS,
+            Capability.MAKE_ORDER,
+            Capability.CANCEL_ORDER,
+            Capability.QUERY_ORDER,
+            Capability.QUERY_OPEN_ORDERS,
+            Capability.GET_BALANCE,
+            Capability.GET_ACCOUNT,
+            Capability.GET_EXCHANGE_INFO,
+            Capability.GET_SERVER_TIME,
         ]:
             assert c in caps, f"Missing capability: {c}"
 
-    @pytest.mark.parametrize("method_name", [
-        "get_server_time", "get_exchange_info", "get_tick", "get_ticker",
-        "get_depth", "get_kline", "get_trade_history",
-        "make_order", "cancel_order", "query_order", "get_open_orders",
-        "get_account", "get_balance",
-    ])
+    @pytest.mark.parametrize(
+        "method_name",
+        [
+            "get_server_time",
+            "get_exchange_info",
+            "get_tick",
+            "get_ticker",
+            "get_depth",
+            "get_kline",
+            "get_trade_history",
+            "make_order",
+            "cancel_order",
+            "query_order",
+            "get_open_orders",
+            "get_account",
+            "get_balance",
+        ],
+    )
     def test_sync_methods_exist(self, method_name):
         feed = _make_feed()
         assert hasattr(feed, method_name), f"Missing method: {method_name}"
         assert callable(getattr(feed, method_name))
 
-    @pytest.mark.parametrize("method_name", [
-        "async_get_server_time", "async_get_exchange_info",
-        "async_get_tick", "async_get_depth", "async_get_kline",
-        "async_get_trade_history",
-        "async_make_order", "async_cancel_order", "async_query_order",
-        "async_get_open_orders", "async_get_account", "async_get_balance",
-    ])
+    @pytest.mark.parametrize(
+        "method_name",
+        [
+            "async_get_server_time",
+            "async_get_exchange_info",
+            "async_get_tick",
+            "async_get_depth",
+            "async_get_kline",
+            "async_get_trade_history",
+            "async_make_order",
+            "async_cancel_order",
+            "async_query_order",
+            "async_get_open_orders",
+            "async_get_account",
+            "async_get_balance",
+        ],
+    )
     def test_async_methods_exist(self, method_name):
         feed = _make_feed()
         assert hasattr(feed, method_name), f"Missing method: {method_name}"
         assert callable(getattr(feed, method_name))
 
-    @pytest.mark.parametrize("method_name", [
-        "_get_server_time", "_get_exchange_info", "_get_tick", "_get_depth",
-        "_get_kline", "_get_trade_history",
-        "_make_order", "_cancel_order", "_query_order", "_get_open_orders",
-        "_get_account", "_get_balance",
-    ])
+    @pytest.mark.parametrize(
+        "method_name",
+        [
+            "_get_server_time",
+            "_get_exchange_info",
+            "_get_tick",
+            "_get_depth",
+            "_get_kline",
+            "_get_trade_history",
+            "_make_order",
+            "_cancel_order",
+            "_query_order",
+            "_get_open_orders",
+            "_get_account",
+            "_get_balance",
+        ],
+    )
     def test_internal_methods_exist(self, method_name):
         feed = _make_feed()
         assert hasattr(feed, method_name), f"Missing method: {method_name}"
@@ -717,6 +839,7 @@ class TestMethodExistence:
 # ══════════════════════════════════════════════════════════════════════════
 # 8. Signature
 # ══════════════════════════════════════════════════════════════════════════
+
 
 class TestSignature:
     """Test HMAC-SHA256 signature generation."""

@@ -2,10 +2,9 @@
 bitFlyer REST API request base class.
 """
 
-import time
-import hmac
 import hashlib
-import json
+import hmac
+import time
 
 from bt_api_py.containers.exchanges.bitflyer_exchange_data import BitflyerExchangeDataSpot
 from bt_api_py.containers.requestdatas.request_data import RequestData
@@ -50,9 +49,7 @@ class BitflyerRequestData(Feed):
         if secret:
             text = str(timestamp) + method + request_path + body
             signature = hmac.new(
-                secret.encode("utf-8"),
-                text.encode("utf-8"),
-                hashlib.sha256
+                secret.encode("utf-8"), text.encode("utf-8"), hashlib.sha256
             ).hexdigest()
             return signature
         return ""
@@ -64,17 +61,19 @@ class BitflyerRequestData(Feed):
         }
 
         # Add auth headers if API key is configured
-        if self._params.api_key and hasattr(self._params, 'api_secret') and self._params.api_secret:
+        if self._params.api_key and hasattr(self._params, "api_secret") and self._params.api_secret:
             timestamp = time.time()
             body_str = body if body else ""
 
             signature = self._generate_signature(timestamp, method, request_path, body_str)
 
-            headers.update({
-                "ACCESS-KEY": self._params.api_key,
-                "ACCESS-TIMESTAMP": str(timestamp),
-                "ACCESS-SIGN": signature,
-            })
+            headers.update(
+                {
+                    "ACCESS-KEY": self._params.api_key,
+                    "ACCESS-TIMESTAMP": str(timestamp),
+                    "ACCESS-SIGN": signature,
+                }
+            )
 
         return headers
 
@@ -144,12 +143,14 @@ class BitflyerRequestData(Feed):
         """Prepare server time request. Returns (path, params, extra_data)."""
         if extra_data is None:
             extra_data = {}
-        extra_data.update({
-            "exchange_name": self.exchange_name,
-            "symbol_name": "",
-            "asset_type": self.asset_type,
-            "request_type": "get_server_time",
-        })
+        extra_data.update(
+            {
+                "exchange_name": self.exchange_name,
+                "symbol_name": "",
+                "asset_type": self.asset_type,
+                "request_type": "get_server_time",
+            }
+        )
         return "GET /v1/gethealth", {}, extra_data
 
     def get_server_time(self, extra_data=None, **kwargs):

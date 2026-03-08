@@ -18,9 +18,7 @@ def register_zaif():
     ExchangeRegistry.register_feed("ZAIF___SPOT", ZaifRequestDataSpot)
     ExchangeRegistry.register_exchange_data("ZAIF___SPOT", ZaifExchangeDataSpot)
     ExchangeRegistry.register_balance_handler("ZAIF___SPOT", _zaif_balance_handler)
-    ExchangeRegistry.register_stream(
-        "ZAIF___SPOT", "subscribe", _zaif_spot_subscribe_handler
-    )
+    ExchangeRegistry.register_stream("ZAIF___SPOT", "subscribe", _zaif_spot_subscribe_handler)
 
 
 # Auto-register on module import

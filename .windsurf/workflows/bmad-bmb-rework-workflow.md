@@ -1,9 +1,7 @@
-- --
-
+---
 description: 'Rework a Workflow to a V6 Compliant Version'
 auto_execution_mode: "iterate"
-
-- --
+---
 
 # rework-workflow
 

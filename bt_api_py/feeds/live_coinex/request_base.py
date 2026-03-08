@@ -42,8 +42,12 @@ class CoinExRequestData(Feed):
     def __init__(self, data_queue, **kwargs):
         super().__init__(data_queue, **kwargs)
         self.data_queue = data_queue
-        self._api_key = kwargs.get("public_key") or kwargs.get("api_key") or kwargs.get("access_id") or ""
-        self._api_secret = kwargs.get("private_key") or kwargs.get("api_secret") or kwargs.get("secret_key") or ""
+        self._api_key = (
+            kwargs.get("public_key") or kwargs.get("api_key") or kwargs.get("access_id") or ""
+        )
+        self._api_secret = (
+            kwargs.get("private_key") or kwargs.get("api_secret") or kwargs.get("secret_key") or ""
+        )
         self.asset_type = kwargs.get("asset_type", "SPOT")
         self.exchange_name = kwargs.get("exchange_name", "COINEX___SPOT")
         self._params = CoinExExchangeDataSpot()
@@ -65,11 +69,15 @@ class CoinExRequestData(Feed):
         if not self._api_secret:
             return ""
         prepared = f"{method}{request_path}{body_str}{timestamp}"
-        return hmac.new(
-            self._api_secret.encode("latin-1"),
-            prepared.encode("latin-1"),
-            hashlib.sha256,
-        ).hexdigest().lower()
+        return (
+            hmac.new(
+                self._api_secret.encode("latin-1"),
+                prepared.encode("latin-1"),
+                hashlib.sha256,
+            )
+            .hexdigest()
+            .lower()
+        )
 
     def _generate_auth_headers(self, method, request_path, body_str=""):
         """Return CoinEx auth headers dict."""
@@ -116,7 +124,9 @@ class CoinExRequestData(Feed):
         self.request_logger.info(f"{method} {url} -> {type(res)}")
         return RequestData(res, extra_data)
 
-    async def async_request(self, path, params=None, body=None, extra_data=None, timeout=5, is_sign=False):
+    async def async_request(
+        self, path, params=None, body=None, extra_data=None, timeout=5, is_sign=False
+    ):
         """Async HTTP request."""
         if params is None:
             params = {}
@@ -152,13 +162,15 @@ class CoinExRequestData(Feed):
         path = self._params.get_rest_path("get_exchange_info")
         params = {}
         extra_data = extra_data or {}
-        extra_data.update({
-            "request_type": "get_exchange_info",
-            "symbol_name": None,
-            "asset_type": self.asset_type,
-            "exchange_name": self.exchange_name,
-            "normalize_function": self._get_exchange_info_normalize_function,
-        })
+        extra_data.update(
+            {
+                "request_type": "get_exchange_info",
+                "symbol_name": None,
+                "asset_type": self.asset_type,
+                "exchange_name": self.exchange_name,
+                "normalize_function": self._get_exchange_info_normalize_function,
+            }
+        )
         return path, params, extra_data
 
     def _get_tick(self, symbol, extra_data=None, **kwargs):
@@ -166,13 +178,15 @@ class CoinExRequestData(Feed):
         market = self._params.get_symbol(symbol)
         params = {"market": market}
         extra_data = extra_data or {}
-        extra_data.update({
-            "request_type": "get_tick",
-            "symbol_name": symbol,
-            "asset_type": self.asset_type,
-            "exchange_name": self.exchange_name,
-            "normalize_function": self._get_tick_normalize_function,
-        })
+        extra_data.update(
+            {
+                "request_type": "get_tick",
+                "symbol_name": symbol,
+                "asset_type": self.asset_type,
+                "exchange_name": self.exchange_name,
+                "normalize_function": self._get_tick_normalize_function,
+            }
+        )
         return path, params, extra_data
 
     def _get_depth(self, symbol, count=20, extra_data=None, **kwargs):
@@ -180,13 +194,15 @@ class CoinExRequestData(Feed):
         market = self._params.get_symbol(symbol)
         params = {"market": market, "limit": count}
         extra_data = extra_data or {}
-        extra_data.update({
-            "request_type": "get_depth",
-            "symbol_name": symbol,
-            "asset_type": self.asset_type,
-            "exchange_name": self.exchange_name,
-            "normalize_function": self._get_depth_normalize_function,
-        })
+        extra_data.update(
+            {
+                "request_type": "get_depth",
+                "symbol_name": symbol,
+                "asset_type": self.asset_type,
+                "exchange_name": self.exchange_name,
+                "normalize_function": self._get_depth_normalize_function,
+            }
+        )
         return path, params, extra_data
 
     def _get_kline(self, symbol, period="1h", count=100, extra_data=None, **kwargs):
@@ -195,14 +211,16 @@ class CoinExRequestData(Feed):
         period_val = self._params.get_period(period)
         params = {"market": market, "period": period_val, "limit": count}
         extra_data = extra_data or {}
-        extra_data.update({
-            "request_type": "get_kline",
-            "symbol_name": symbol,
-            "period": period,
-            "asset_type": self.asset_type,
-            "exchange_name": self.exchange_name,
-            "normalize_function": self._get_kline_normalize_function,
-        })
+        extra_data.update(
+            {
+                "request_type": "get_kline",
+                "symbol_name": symbol,
+                "period": period,
+                "asset_type": self.asset_type,
+                "exchange_name": self.exchange_name,
+                "normalize_function": self._get_kline_normalize_function,
+            }
+        )
         return path, params, extra_data
 
     def _get_trade_history(self, symbol, count=50, extra_data=None, **kwargs):
@@ -210,16 +228,20 @@ class CoinExRequestData(Feed):
         market = self._params.get_symbol(symbol)
         params = {"market": market, "limit": count}
         extra_data = extra_data or {}
-        extra_data.update({
-            "request_type": "get_trades",
-            "symbol_name": symbol,
-            "asset_type": self.asset_type,
-            "exchange_name": self.exchange_name,
-            "normalize_function": self._get_trade_history_normalize_function,
-        })
+        extra_data.update(
+            {
+                "request_type": "get_trades",
+                "symbol_name": symbol,
+                "asset_type": self.asset_type,
+                "exchange_name": self.exchange_name,
+                "normalize_function": self._get_trade_history_normalize_function,
+            }
+        )
         return path, params, extra_data
 
-    def _make_order(self, symbol, size, price=None, order_type="buy-limit", extra_data=None, **kwargs):
+    def _make_order(
+        self, symbol, size, price=None, order_type="buy-limit", extra_data=None, **kwargs
+    ):
         path = self._params.get_rest_path("make_order")
         market = self._params.get_symbol(symbol)
         parts = order_type.lower().replace("-", " ").split()
@@ -236,13 +258,15 @@ class CoinExRequestData(Feed):
         if price is not None:
             body["price"] = str(price)
         extra_data = extra_data or {}
-        extra_data.update({
-            "request_type": "make_order",
-            "symbol_name": symbol,
-            "asset_type": self.asset_type,
-            "exchange_name": self.exchange_name,
-            "normalize_function": self._make_order_normalize_function,
-        })
+        extra_data.update(
+            {
+                "request_type": "make_order",
+                "symbol_name": symbol,
+                "asset_type": self.asset_type,
+                "exchange_name": self.exchange_name,
+                "normalize_function": self._make_order_normalize_function,
+            }
+        )
         return path, body, extra_data
 
     def _cancel_order(self, symbol=None, order_id=None, extra_data=None, **kwargs):
@@ -253,13 +277,15 @@ class CoinExRequestData(Feed):
         if order_id:
             params["order_id"] = str(order_id)
         extra_data = extra_data or {}
-        extra_data.update({
-            "request_type": "cancel_order",
-            "symbol_name": symbol,
-            "asset_type": self.asset_type,
-            "exchange_name": self.exchange_name,
-            "normalize_function": self._cancel_order_normalize_function,
-        })
+        extra_data.update(
+            {
+                "request_type": "cancel_order",
+                "symbol_name": symbol,
+                "asset_type": self.asset_type,
+                "exchange_name": self.exchange_name,
+                "normalize_function": self._cancel_order_normalize_function,
+            }
+        )
         return path, params, extra_data
 
     def _query_order(self, symbol=None, order_id=None, extra_data=None, **kwargs):
@@ -270,13 +296,15 @@ class CoinExRequestData(Feed):
         if order_id:
             params["order_id"] = str(order_id)
         extra_data = extra_data or {}
-        extra_data.update({
-            "request_type": "query_order",
-            "symbol_name": symbol,
-            "asset_type": self.asset_type,
-            "exchange_name": self.exchange_name,
-            "normalize_function": self._query_order_normalize_function,
-        })
+        extra_data.update(
+            {
+                "request_type": "query_order",
+                "symbol_name": symbol,
+                "asset_type": self.asset_type,
+                "exchange_name": self.exchange_name,
+                "normalize_function": self._query_order_normalize_function,
+            }
+        )
         return path, params, extra_data
 
     def _get_open_orders(self, symbol=None, extra_data=None, **kwargs):
@@ -285,13 +313,15 @@ class CoinExRequestData(Feed):
         if symbol:
             params["market"] = self._params.get_symbol(symbol)
         extra_data = extra_data or {}
-        extra_data.update({
-            "request_type": "get_open_orders",
-            "symbol_name": symbol,
-            "asset_type": self.asset_type,
-            "exchange_name": self.exchange_name,
-            "normalize_function": self._get_open_orders_normalize_function,
-        })
+        extra_data.update(
+            {
+                "request_type": "get_open_orders",
+                "symbol_name": symbol,
+                "asset_type": self.asset_type,
+                "exchange_name": self.exchange_name,
+                "normalize_function": self._get_open_orders_normalize_function,
+            }
+        )
         return path, params, extra_data
 
     def _get_deals(self, symbol=None, extra_data=None, **kwargs):
@@ -300,39 +330,45 @@ class CoinExRequestData(Feed):
         if symbol:
             params["market"] = self._params.get_symbol(symbol)
         extra_data = extra_data or {}
-        extra_data.update({
-            "request_type": "get_deals",
-            "symbol_name": symbol,
-            "asset_type": self.asset_type,
-            "exchange_name": self.exchange_name,
-            "normalize_function": self._get_deals_normalize_function,
-        })
+        extra_data.update(
+            {
+                "request_type": "get_deals",
+                "symbol_name": symbol,
+                "asset_type": self.asset_type,
+                "exchange_name": self.exchange_name,
+                "normalize_function": self._get_deals_normalize_function,
+            }
+        )
         return path, params, extra_data
 
     def _get_account(self, extra_data=None, **kwargs):
         path = self._params.get_rest_path("get_account")
         params = {}
         extra_data = extra_data or {}
-        extra_data.update({
-            "request_type": "get_account",
-            "symbol_name": None,
-            "asset_type": self.asset_type,
-            "exchange_name": self.exchange_name,
-            "normalize_function": self._get_account_normalize_function,
-        })
+        extra_data.update(
+            {
+                "request_type": "get_account",
+                "symbol_name": None,
+                "asset_type": self.asset_type,
+                "exchange_name": self.exchange_name,
+                "normalize_function": self._get_account_normalize_function,
+            }
+        )
         return path, params, extra_data
 
     def _get_balance(self, extra_data=None, **kwargs):
         path = self._params.get_rest_path("get_balance")
         params = {}
         extra_data = extra_data or {}
-        extra_data.update({
-            "request_type": "get_balance",
-            "symbol_name": None,
-            "asset_type": self.asset_type,
-            "exchange_name": self.exchange_name,
-            "normalize_function": self._get_balance_normalize_function,
-        })
+        extra_data.update(
+            {
+                "request_type": "get_balance",
+                "symbol_name": None,
+                "asset_type": self.asset_type,
+                "exchange_name": self.exchange_name,
+                "normalize_function": self._get_balance_normalize_function,
+            }
+        )
         return path, params, extra_data
 
     # ── normalize functions ─────────────────────────────────────

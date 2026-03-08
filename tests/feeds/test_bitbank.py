@@ -5,25 +5,21 @@ Run tests:
     pytest tests/feeds/test_bitbank.py -v
 """
 
-import json
 import queue
 import time
-from unittest.mock import Mock, patch, MagicMock
+from unittest.mock import MagicMock, Mock, patch
 
 import pytest
 
-from bt_api_py.containers.exchanges.bitbank_exchange_data import (
-    BitbankExchangeData,
-    BitbankExchangeDataSpot,
-)
-from bt_api_py.feeds.live_bitbank.spot import BitbankRequestDataSpot
-from bt_api_py.feeds.capability import Capability
-from bt_api_py.containers.requestdatas.request_data import RequestData
-from bt_api_py.containers.tickers.bitbank_ticker import BitbankRequestTickerData
-from bt_api_py.registry import ExchangeRegistry
-
 # Import registration to auto-register Bitbank
 import bt_api_py.exchange_registers.register_bitbank  # noqa: F401
+from bt_api_py.containers.exchanges.bitbank_exchange_data import (
+    BitbankExchangeDataSpot,
+)
+from bt_api_py.containers.requestdatas.request_data import RequestData
+from bt_api_py.feeds.capability import Capability
+from bt_api_py.feeds.live_bitbank.spot import BitbankRequestDataSpot
+from bt_api_py.registry import ExchangeRegistry
 
 
 @pytest.fixture
@@ -157,7 +153,7 @@ class TestBitbankRequestDataSpot:
                 "last": "5000000",
                 "buy": "4999000",
                 "sell": "5001000",
-            }
+            },
         }
         extra_data = {"symbol_name": "BTC/JPY"}
         result, success = BitbankRequestDataSpot._get_tick_normalize_function(
@@ -176,7 +172,7 @@ class TestBitbankRequestDataSpot:
                 "asks": [
                     {"price": "5001000", "amount": "0.1"},
                 ],
-            }
+            },
         }
         extra_data = {"symbol_name": "BTC/JPY"}
         result, success = BitbankRequestDataSpot._get_depth_normalize_function(
@@ -194,11 +190,16 @@ class TestBitbankRequestDataSpot:
                     {
                         "type": "1hour",
                         "ohlcv": [
-                            "4950000", "5100000", "4900000", "5000000", "123.456", "1640995200000"
-                        ]
+                            "4950000",
+                            "5100000",
+                            "4900000",
+                            "5000000",
+                            "123.456",
+                            "1640995200000",
+                        ],
                     }
                 ]
-            }
+            },
         }
         extra_data = {"symbol_name": "BTC/JPY"}
         result, success = BitbankRequestDataSpot._get_kline_normalize_function(
@@ -283,6 +284,7 @@ class TestBitbankBaseCapabilities:
 
     def test_base_capabilities(self):
         from bt_api_py.feeds.live_bitbank.request_base import BitbankRequestData
+
         caps = BitbankRequestData._capabilities()
         assert Capability.GET_TICK in caps
         assert Capability.MAKE_ORDER in caps

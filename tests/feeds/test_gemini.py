@@ -6,27 +6,27 @@ Run tests:
 """
 
 import queue
-from unittest.mock import Mock, MagicMock
+from unittest.mock import MagicMock, Mock
 
 import pytest
 
 # Mock the missing GeminiErrorTranslator before any Gemini imports
 import bt_api_py.error as error_module
-if not hasattr(error_module, 'GeminiErrorTranslator'):
-    error_module.GeminiErrorTranslator = MagicMock
 
-from bt_api_py.containers.exchanges.gemini_exchange_data import GeminiExchangeDataSpot
-from bt_api_py.containers.orders.gemini_order import GeminiRequestOrderData
-from bt_api_py.containers.tickers.gemini_ticker import GeminiRequestTickerData
-from bt_api_py.containers.orderbooks.gemini_orderbook import GeminiRequestOrderBookData
-from bt_api_py.containers.balances.gemini_balance import GeminiRequestBalanceData
-from bt_api_py.containers.bars.gemini_bar import GeminiRequestBarData
-from bt_api_py.feeds.capability import Capability
-from bt_api_py.feeds.live_gemini.spot import GeminiRequestDataSpot
-from bt_api_py.registry import ExchangeRegistry
+if not hasattr(error_module, "GeminiErrorTranslator"):
+    error_module.GeminiErrorTranslator = MagicMock
 
 # Import registration to auto-register Gemini
 import bt_api_py.exchange_registers.register_gemini  # noqa: F401
+from bt_api_py.containers.balances.gemini_balance import GeminiRequestBalanceData
+from bt_api_py.containers.bars.gemini_bar import GeminiRequestBarData
+from bt_api_py.containers.exchanges.gemini_exchange_data import GeminiExchangeDataSpot
+from bt_api_py.containers.orderbooks.gemini_orderbook import GeminiRequestOrderBookData
+from bt_api_py.containers.orders.gemini_order import GeminiRequestOrderData
+from bt_api_py.containers.tickers.gemini_ticker import GeminiRequestTickerData
+from bt_api_py.feeds.capability import Capability
+from bt_api_py.feeds.live_gemini.spot import GeminiRequestDataSpot
+from bt_api_py.registry import ExchangeRegistry
 
 
 @pytest.fixture
@@ -161,7 +161,11 @@ class TestGeminiStandardInterfaces:
         feed.get_tick("BTCUSD")
         assert feed.request.called
         call_kwargs = feed.request.call_args[1]
-        extra_data = call_kwargs.get("extra_data") or feed.request.call_args[0][2] if len(feed.request.call_args[0]) > 2 else None
+        extra_data = (
+            call_kwargs.get("extra_data") or feed.request.call_args[0][2]
+            if len(feed.request.call_args[0]) > 2
+            else None
+        )
         if extra_data:
             assert extra_data["request_type"] == "get_tick"
 

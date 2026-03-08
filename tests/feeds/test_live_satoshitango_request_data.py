@@ -9,15 +9,11 @@ Tests for SatoshiTango spot trading implementation following Binance/OKX standar
 """
 
 import queue
-import time
-import pytest
-
-from bt_api_py.containers.requestdatas.request_data import RequestData
-from bt_api_py.feeds.live_satoshitango.spot import SatoshiTangoRequestDataSpot
-from bt_api_py.registry import ExchangeRegistry
 
 # Import registration to auto-register SatoshiTango
 import bt_api_py.exchange_registers.register_satoshitango  # noqa: F401
+from bt_api_py.feeds.live_satoshitango.spot import SatoshiTangoRequestDataSpot
+from bt_api_py.registry import ExchangeRegistry
 
 
 def init_req_feed():
@@ -193,14 +189,8 @@ def test_satoshitango_depth_normalize_function():
     """Test SatoshiTango depth normalize function."""
     # SatoshiTango orderbook response format
     input_data = {
-        "bids": [
-            ["9400000.00", "1.5"],
-            ["9300000.00", "2.0"]
-        ],
-        "asks": [
-            ["9600000.00", "1.3"],
-            ["9700000.00", "2.5"]
-        ]
+        "bids": [["9400000.00", "1.5"], ["9300000.00", "2.0"]],
+        "asks": [["9600000.00", "1.3"], ["9700000.00", "2.5"]],
     }
 
     result, status = SatoshiTangoRequestDataSpot._get_depth_normalize_function(
@@ -217,7 +207,9 @@ def test_satoshitango_depth_normalize_function():
 
 def test_satoshitango_exchange_data():
     """Test SatoshiTango exchange data configuration."""
-    from bt_api_py.containers.exchanges.satoshitango_exchange_data import SatoshiTangoExchangeDataSpot
+    from bt_api_py.containers.exchanges.satoshitango_exchange_data import (
+        SatoshiTangoExchangeDataSpot,
+    )
 
     exchange_data = SatoshiTangoExchangeDataSpot()
     assert exchange_data.exchange_name == "satoshitango"
@@ -234,7 +226,10 @@ def test_satoshitango_registration():
     assert feed_class == SatoshiTangoRequestDataSpot
 
     # Check exchange data class
-    from bt_api_py.containers.exchanges.satoshitango_exchange_data import SatoshiTangoExchangeDataSpot
+    from bt_api_py.containers.exchanges.satoshitango_exchange_data import (
+        SatoshiTangoExchangeDataSpot,
+    )
+
     data_class = ExchangeRegistry._exchange_data_classes.get("SATOSHITANGO___SPOT")
     assert data_class is not None
     assert data_class == SatoshiTangoExchangeDataSpot

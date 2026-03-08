@@ -2,10 +2,10 @@
 BTCTurk REST API request base class.
 """
 
-import time
-import hmac
-import hashlib
 import base64
+import hashlib
+import hmac
+import time
 
 from bt_api_py.containers.exchanges.btcturk_exchange_data import BTCTurkExchangeDataSpot
 from bt_api_py.containers.requestdatas.request_data import RequestData
@@ -59,11 +59,7 @@ class BTCTurkRequestData(Feed):
             private_key_bytes = base64.b64decode(private_key)
             # HMAC SHA256
             signature = base64.b64encode(
-                hmac.new(
-                    private_key_bytes,
-                    message.encode("utf-8"),
-                    hashlib.sha256
-                ).digest()
+                hmac.new(private_key_bytes, message.encode("utf-8"), hashlib.sha256).digest()
             ).decode("utf-8")
             return signature
         return ""
@@ -142,12 +138,14 @@ class BTCTurkRequestData(Feed):
         """Prepare server time request. Returns (path, params, extra_data)."""
         if extra_data is None:
             extra_data = {}
-        extra_data.update({
-            "exchange_name": self.exchange_name,
-            "symbol_name": "",
-            "asset_type": self.asset_type,
-            "request_type": "get_server_time",
-        })
+        extra_data.update(
+            {
+                "exchange_name": self.exchange_name,
+                "symbol_name": "",
+                "asset_type": self.asset_type,
+                "request_type": "get_server_time",
+            }
+        )
         return "GET /api/v2/server/time", {}, extra_data
 
     def get_server_time(self, extra_data=None, **kwargs):

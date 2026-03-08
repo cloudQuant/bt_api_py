@@ -2,8 +2,8 @@
 Bitbns REST API request base class.
 """
 
-import hmac
 import hashlib
+import hmac
 import time
 
 from bt_api_py.containers.exchanges.bitbns_exchange_data import BitbnsExchangeDataSpot
@@ -47,9 +47,7 @@ class BitbnsRequestData(Feed):
             # Bitbns uses HMAC SHA512
             message = str(timestamp) + body
             signature = hmac.new(
-                secret.encode("utf-8"),
-                message.encode("utf-8"),
-                hashlib.sha512
+                secret.encode("utf-8"), message.encode("utf-8"), hashlib.sha512
             ).hexdigest()
             return signature
         return ""
@@ -67,18 +65,20 @@ class BitbnsRequestData(Feed):
 
             signature = self._generate_signature(timestamp, body_str)
 
-            headers.update({
-                "X-API-KEY": self._params.api_key,
-                "X-API-SIGNATURE": signature,
-                "X-API-TIMESTAMP": str(timestamp),
-            })
+            headers.update(
+                {
+                    "X-API-KEY": self._params.api_key,
+                    "X-API-SIGNATURE": signature,
+                    "X-API-TIMESTAMP": str(timestamp),
+                }
+            )
 
         return headers
 
     def _get_base_url(self, path):
         """Get base URL based on endpoint type."""
-        if path.startswith("GET /") and not getattr(self._params, 'api_key', None):
-            return getattr(self._params, 'rest_public_url', self._params.rest_url)
+        if path.startswith("GET /") and not getattr(self._params, "api_key", None):
+            return getattr(self._params, "rest_public_url", self._params.rest_url)
         return self._params.rest_url
 
     def request(self, path, params=None, body=None, extra_data=None, timeout=10):
@@ -142,12 +142,14 @@ class BitbnsRequestData(Feed):
         """Prepare server time request. Returns (path, params, extra_data)."""
         if extra_data is None:
             extra_data = {}
-        extra_data.update({
-            "exchange_name": self.exchange_name,
-            "symbol_name": "",
-            "asset_type": self.asset_type,
-            "request_type": "get_server_time",
-        })
+        extra_data.update(
+            {
+                "exchange_name": self.exchange_name,
+                "symbol_name": "",
+                "asset_type": self.asset_type,
+                "request_type": "get_server_time",
+            }
+        )
         return "GET /api/v1/serverTime", {}, extra_data
 
     def get_server_time(self, extra_data=None, **kwargs):

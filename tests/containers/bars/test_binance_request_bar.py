@@ -1,25 +1,33 @@
-from bt_api_py.containers.bars.binance_bar import BinanceWssBarData, BinanceRequestBarData
+from bt_api_py.containers.bars.binance_bar import BinanceRequestBarData, BinanceWssBarData
 
 
 def test_binance_wss_bar_functions():
     # {"code":"0","msg":"","data":[["1696089660000","26990.4","27004.5","26990.3","27004.5","4794","47.94","1294336.087","1"]]}
-    data = {'e': 'continuous_kline', 'E': 1607443058651, 'ps': 'BTCUSDT', 'ct': 'PERPETUAL', 'k': {'t': 1607443020000,
-                                                                                                   'T': 1607443079999,
-                                                                                                   'i': '1m',
-                                                                                                   'f': 116467658886,
-                                                                                                   'L': 116468012423,
-                                                                                                   'o': '18787.00',
-                                                                                                   'c': '18804.04',
-                                                                                                   'h': '18804.04',
-                                                                                                   'l': '18786.54',
-                                                                                                   'v': '197.664',
-                                                                                                   'n': 543,
-                                                                                                   'x': 'false',
-                                                                                                   'q': '3715253.19494',
-                                                                                                   'V': '184.769',
-                                                                                                   'Q': '3472925.84746',
-                                                                                                   'B': '0'}}
-    binance_bar_data = BinanceWssBarData(data, data['ps'], data['ct'], True)
+    data = {
+        "e": "continuous_kline",
+        "E": 1607443058651,
+        "ps": "BTCUSDT",
+        "ct": "PERPETUAL",
+        "k": {
+            "t": 1607443020000,
+            "T": 1607443079999,
+            "i": "1m",
+            "f": 116467658886,
+            "L": 116468012423,
+            "o": "18787.00",
+            "c": "18804.04",
+            "h": "18804.04",
+            "l": "18786.54",
+            "v": "197.664",
+            "n": 543,
+            "x": "false",
+            "q": "3715253.19494",
+            "V": "184.769",
+            "Q": "3472925.84746",
+            "B": "0",
+        },
+    }
+    binance_bar_data = BinanceWssBarData(data, data["ps"], data["ct"], True)
     binance_bar_data.init_data()
     assert binance_bar_data.get_bar_status() == 0
     assert binance_bar_data.get_amount() == 3715253.19494
@@ -50,7 +58,7 @@ def test_binance_req_bar_functions():
         1874,
         "385.983",
         "7292402.33267",
-        "0"
+        "0",
     ]
     symbol = "BTCUSDT"
     asset_type = "PERPETUAL"

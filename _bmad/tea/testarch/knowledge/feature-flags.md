@@ -12,20 +12,18 @@ Poorly managed feature flags become technical debt: untested variations ship bro
 
 ### Example 1: Feature Flag Enum Pattern with Type Safety
 
-- *Context**: Centralized flag management with TypeScript type safety and runtime validation.
+**Context**: Centralized flag management with TypeScript type safety and runtime validation.
 
-- *Implementation**:
+**Implementation**:
 
 ```typescript
 // src/utils/feature-flags.ts
 /**
-
- - Centralized feature flag definitions
- - - Object.freeze prevents runtime modifications
- - - TypeScript ensures compile-time type safety
- - - Single source of truth for all flag keys
- - /
-
+ * Centralized feature flag definitions
+ * - Object.freeze prevents runtime modifications
+ * - TypeScript ensures compile-time type safety
+ * - Single source of truth for all flag keys
+ */
 export const FLAGS = Object.freeze({
   // User-facing features
   NEW_CHECKOUT_FLOW: 'new-checkout-flow',
@@ -46,18 +44,14 @@ export const FLAGS = Object.freeze({
 } as const);
 
 /**
-
- - Type-safe flag keys
- - Prevents typos and ensures autocomplete in IDEs
- - /
-
+ * Type-safe flag keys
+ * Prevents typos and ensures autocomplete in IDEs
+ */
 export type FlagKey = (typeof FLAGS)[keyof typeof FLAGS];
 
 /**
-
- - Flag metadata for governance
- - /
-
+ * Flag metadata for governance
+ */
 type FlagMetadata = {
   key: FlagKey;
   name: string;
@@ -71,11 +65,9 @@ type FlagMetadata = {
 };
 
 /**
-
- - Flag registry with governance metadata
- - Used for flag lifecycle tracking and cleanup alerts
- - /
-
+ * Flag registry with governance metadata
+ * Used for flag lifecycle tracking and cleanup alerts
+ */
 export const FLAG_REGISTRY: Record<FlagKey, FlagMetadata> = {
   [FLAGS.NEW_CHECKOUT_FLOW]: {
     key: FLAGS.NEW_CHECKOUT_FLOW,
@@ -100,11 +92,9 @@ export const FLAG_REGISTRY: Record<FlagKey, FlagMetadata> = {
 };
 
 /**
-
- - Validate flag exists in registry
- - Throws at runtime if flag is unregistered
- - /
-
+ * Validate flag exists in registry
+ * Throws at runtime if flag is unregistered
+ */
 export function validateFlag(flag: string): asserts flag is FlagKey {
   if (!Object.values(FLAGS).includes(flag as FlagKey)) {
     throw new Error(`Unregistered feature flag: ${flag}`);
@@ -112,10 +102,8 @@ export function validateFlag(flag: string): asserts flag is FlagKey {
 }
 
 /**
-
- - Check if flag is expired (needs removal)
- - /
-
+ * Check if flag is expired (needs removal)
+ */
 export function isFlagExpired(flag: FlagKey): boolean {
   const metadata = FLAG_REGISTRY[flag];
   if (!metadata.expiryDate) return false;
@@ -125,17 +113,14 @@ export function isFlagExpired(flag: FlagKey): boolean {
 }
 
 /**
-
- - Get all expired flags requiring cleanup
- - /
-
+ * Get all expired flags requiring cleanup
+ */
 export function getExpiredFlags(): FlagMetadata[] {
   return Object.values(FLAG_REGISTRY).filter((meta) => isFlagExpired(meta.key));
 }
+```
 
-```bash
-
-- *Usage in application code**:
+**Usage in application code**:
 
 ```typescript
 // components/Checkout.tsx
@@ -147,10 +132,9 @@ export function Checkout() {
 
   return isNewFlow ? <NewCheckoutFlow /> : <LegacyCheckoutFlow />;
 }
+```
 
-```bash
-
-- *Key Points**:
+**Key Points**:
 
 - **Type safety**: TypeScript catches typos at compile time
 - **Runtime validation**: validateFlag ensures only registered flags used
@@ -158,13 +142,13 @@ export function Checkout() {
 - **Expiry alerts**: Automated detection of stale flags
 - **Single source of truth**: All flags defined in one place
 
-- --
+---
 
 ### Example 2: Feature Flag Testing Pattern (Both States)
 
-- *Context**: Comprehensive testing of feature flag variations with proper cleanup.
+**Context**: Comprehensive testing of feature flag variations with proper cleanup.
 
-- *Implementation**:
+**Implementation**:
 
 ```typescript
 // tests/e2e/checkout-feature-flag.spec.ts
@@ -172,13 +156,12 @@ import { test, expect } from '@playwright/test';
 import { FLAGS } from '@/utils/feature-flags';
 
 /**
-
- - Feature Flag Testing Strategy:
- - 1. Test BOTH enabled and disabled states
- - 2. Clean up targeting after each test
- - 3. Use dedicated test users (not production data)
- - 4. Verify telemetry events fire correctly
- - /
+ * Feature Flag Testing Strategy:
+ * 1. Test BOTH enabled and disabled states
+ * 2. Clean up targeting after each test
+ * 3. Use dedicated test users (not production data)
+ * 4. Verify telemetry events fire correctly
+ */
 
 test.describe('Checkout Flow - Feature Flag Variations', () => {
   let testUserId: string;
@@ -225,7 +208,6 @@ test.describe('Checkout Flow - Feature Flag Variations', () => {
 
     // Assert: Telemetry event fired
     const analyticsEvents = await page.evaluate(() => (window as any).__ANALYTICS_EVENTS__ || []);
-
     expect(analyticsEvents).toContainEqual(
       expect.objectContaining({
         event: 'checkout_started',
@@ -263,7 +245,6 @@ test.describe('Checkout Flow - Feature Flag Variations', () => {
 
     // Assert: Telemetry event fired with correct variant
     const analyticsEvents = await page.evaluate(() => (window as any).__ANALYTICS_EVENTS__ || []);
-
     expect(analyticsEvents).toContainEqual(
       expect.objectContaining({
         event: 'checkout_started',
@@ -296,10 +277,9 @@ test.describe('Checkout Flow - Feature Flag Variations', () => {
     expect(consoleErrors).toContain(expect.stringContaining('Feature flag evaluation failed'));
   });
 });
+```
 
-```bash
-
-- *Cypress equivalent**:
+**Cypress equivalent**:
 
 ```javascript
 // cypress/e2e/checkout-feature-flag.cy.ts
@@ -356,10 +336,9 @@ describe('Checkout Flow - Feature Flag Variations', () => {
     cy.get('[data-testid="checkout-v2-container"]').should('not.exist');
   });
 });
+```
 
-```bash
-
-- *Key Points**:
+**Key Points**:
 
 - **Test both states**: Enabled AND disabled variations
 - **Automatic cleanup**: afterEach removes targeting (prevent pollution)
@@ -367,13 +346,13 @@ describe('Checkout Flow - Feature Flag Variations', () => {
 - **Telemetry validation**: Verify analytics events fire correctly
 - **Graceful degradation**: Test fallback behavior on errors
 
-- --
+---
 
 ### Example 3: Feature Flag Targeting Helper Pattern
 
-- *Context**: Reusable helpers for programmatic flag control via LaunchDarkly/Split.io API.
+**Context**: Reusable helpers for programmatic flag control via LaunchDarkly/Split.io API.
 
-- *Implementation**:
+**Implementation**:
 
 ```typescript
 // tests/support/feature-flag-helpers.ts
@@ -381,22 +360,18 @@ import { request as playwrightRequest } from '@playwright/test';
 import { FLAGS, FlagKey } from '@/utils/feature-flags';
 
 /**
-
- - LaunchDarkly API client configuration
- - Use test project SDK key (NOT production)
- - /
-
+ * LaunchDarkly API client configuration
+ * Use test project SDK key (NOT production)
+ */
 const LD_SDK_KEY = process.env.LD_SDK_KEY_TEST;
-const LD_API_BASE = '<https://app.launchdarkly.com/api/v2';>
+const LD_API_BASE = 'https://app.launchdarkly.com/api/v2';
 
 type FlagVariation = boolean | string | number | object;
 
 /**
-
- - Set flag variation for specific user
- - Uses LaunchDarkly API to create user target
- - /
-
+ * Set flag variation for specific user
+ * Uses LaunchDarkly API to create user target
+ */
 export async function setFlagForUser(flagKey: FlagKey, userId: string, variation: FlagVariation): Promise<void> {
   const response = await playwrightRequest.newContext().then((ctx) =>
     ctx.post(`${LD_API_BASE}/flags/${flagKey}/targeting`, {
@@ -421,11 +396,9 @@ export async function setFlagForUser(flagKey: FlagKey, userId: string, variation
 }
 
 /**
-
- - Remove user from flag targeting
- - CRITICAL for test cleanup
- - /
-
+ * Remove user from flag targeting
+ * CRITICAL for test cleanup
+ */
 export async function removeFlagTarget(flagKey: FlagKey, userId: string): Promise<void> {
   const response = await playwrightRequest.newContext().then((ctx) =>
     ctx.delete(`${LD_API_BASE}/flags/${flagKey}/targeting/users/${userId}`, {
@@ -442,14 +415,11 @@ export async function removeFlagTarget(flagKey: FlagKey, userId: string): Promis
 }
 
 /**
-
- - Percentage rollout helper
- - Enable flag for N% of users
- - /
-
+ * Percentage rollout helper
+ * Enable flag for N% of users
+ */
 export async function setFlagRolloutPercentage(flagKey: FlagKey, percentage: number): Promise<void> {
   if (percentage < 0 || percentage > 100) {
-
     throw new Error('Percentage must be between 0 and 100');
   }
 
@@ -476,39 +446,32 @@ export async function setFlagRolloutPercentage(flagKey: FlagKey, percentage: num
 }
 
 /**
-
- - Enable flag globally (100% rollout)
- - /
-
+ * Enable flag globally (100% rollout)
+ */
 export async function enableFlagGlobally(flagKey: FlagKey): Promise<void> {
   await setFlagRolloutPercentage(flagKey, 100);
 }
 
 /**
-
- - Disable flag globally (0% rollout)
- - /
-
+ * Disable flag globally (0% rollout)
+ */
 export async function disableFlagGlobally(flagKey: FlagKey): Promise<void> {
   await setFlagRolloutPercentage(flagKey, 0);
 }
 
 /**
-
- - Stub feature flags in local/test environments
- - Bypasses LaunchDarkly entirely
- - /
-
+ * Stub feature flags in local/test environments
+ * Bypasses LaunchDarkly entirely
+ */
 export function stubFeatureFlags(flags: Record<FlagKey, FlagVariation>): void {
   // Set flags in localStorage or inject into window
   if (typeof window !== 'undefined') {
     (window as any).__STUBBED_FLAGS__ = flags;
   }
 }
+```
 
-```bash
-
-- *Usage in Playwright fixture**:
+**Usage in Playwright fixture**:
 
 ```typescript
 // playwright/fixtures/feature-flag-fixture.ts
@@ -548,10 +511,9 @@ export const test = base.extend<FeatureFlagFixture>({
     }
   },
 });
+```
 
-```bash
-
-- *Key Points**:
+**Key Points**:
 
 - **API-driven control**: No manual UI clicks required
 - **Auto-cleanup**: Fixture tracks and removes targeting
@@ -559,25 +521,24 @@ export const test = base.extend<FeatureFlagFixture>({
 - **Stubbing option**: Local development without LaunchDarkly
 - **Type-safe**: FlagKey prevents typos
 
-- --
+---
 
 ### Example 4: Feature Flag Lifecycle Checklist & Cleanup Strategy
 
-- *Context**: Governance checklist and automated cleanup detection for stale flags.
+**Context**: Governance checklist and automated cleanup detection for stale flags.
 
-- *Implementation**:
+**Implementation**:
 
 ```typescript
 // scripts/feature-flag-audit.ts
 /**
-
- - Feature Flag Lifecycle Audit Script
- - Run weekly to detect stale flags requiring cleanup
- - /
+ * Feature Flag Lifecycle Audit Script
+ * Run weekly to detect stale flags requiring cleanup
+ */
 
 import { FLAG_REGISTRY, FLAGS, getExpiredFlags, FlagKey } from '../src/utils/feature-flags';
-import *as fs from 'fs';
-import* as path from 'path';
+import * as fs from 'fs';
+import * as path from 'path';
 
 type AuditResult = {
   totalFlags: number;
@@ -589,16 +550,14 @@ type AuditResult = {
 };
 
 /**
-
- - Audit all feature flags for governance compliance
- - /
-
+ * Audit all feature flags for governance compliance
+ */
 function auditFeatureFlags(): AuditResult {
   const allFlags = Object.keys(FLAG_REGISTRY) as FlagKey[];
   const expiredFlags = getExpiredFlags().map((meta) => meta.key);
 
   // Flags expiring in next 30 days
-  const thirtyDaysFromNow = Date.now() + 30 *24*60*60* 1000;
+  const thirtyDaysFromNow = Date.now() + 30 * 24 * 60 * 60 * 1000;
   const flagsNearingExpiry = allFlags.filter((flag) => {
     const meta = FLAG_REGISTRY[flag];
     if (!meta.expiryDate) return false;
@@ -627,10 +586,8 @@ function auditFeatureFlags(): AuditResult {
 }
 
 /**
-
- - Generate markdown report
- - /
-
+ * Generate markdown report
+ */
 function generateReport(audit: AuditResult): string {
   let report = `# Feature Flag Audit Report\n\n`;
   report += `**Date**: ${new Date().toISOString()}\n`;
@@ -640,7 +597,7 @@ function generateReport(audit: AuditResult): string {
     report += `## ⚠️ EXPIRED FLAGS - IMMEDIATE CLEANUP REQUIRED\n\n`;
     audit.expiredFlags.forEach((flag) => {
       const meta = FLAG_REGISTRY[flag];
-      report += `- **${meta.name}**(\`${flag}\`)\n`;
+      report += `- **${meta.name}** (\`${flag}\`)\n`;
       report += `  - Owner: ${meta.owner}\n`;
       report += `  - Expired: ${meta.expiryDate}\n`;
       report += `  - Action: Remove flag code, update tests, deploy\n\n`;
@@ -651,7 +608,7 @@ function generateReport(audit: AuditResult): string {
     report += `## ⏰ FLAGS EXPIRING SOON (Next 30 Days)\n\n`;
     audit.flagsNearingExpiry.forEach((flag) => {
       const meta = FLAG_REGISTRY[flag];
-      report += `-**${meta.name}**(\`${flag}\`)\n`;
+      report += `- **${meta.name}** (\`${flag}\`)\n`;
       report += `  - Owner: ${meta.owner}\n`;
       report += `  - Expires: ${meta.expiryDate}\n`;
       report += `  - Action: Plan cleanup or extend expiry\n\n`;
@@ -662,13 +619,12 @@ function generateReport(audit: AuditResult): string {
     report += `## 🔄 PERMANENT FLAGS (No Expiry)\n\n`;
     audit.permanentFlags.forEach((flag) => {
       const meta = FLAG_REGISTRY[flag];
-      report += `-**${meta.name}** (\`${flag}\`) - Owner: ${meta.owner}\n`;
+      report += `- **${meta.name}** (\`${flag}\`) - Owner: ${meta.owner}\n`;
     });
     report += `\n`;
   }
 
   if (audit.missingOwners.length > 0 || audit.missingDates.length > 0) {
-
     report += `## ❌ GOVERNANCE ISSUES\n\n`;
     if (audit.missingOwners.length > 0) {
       report += `**Missing Owners**: ${audit.missingOwners.join(', ')}\n`;
@@ -683,12 +639,9 @@ function generateReport(audit: AuditResult): string {
 }
 
 /**
-
- - Feature Flag Lifecycle Checklist
- - /
-
+ * Feature Flag Lifecycle Checklist
+ */
 const FLAG_LIFECYCLE_CHECKLIST = `
-
 # Feature Flag Lifecycle Checklist
 
 ## Before Creating a New Flag
@@ -731,7 +684,6 @@ const FLAG_LIFECYCLE_CHECKLIST = `
 - [ ] **Delete Flag Config**: Remove from LaunchDarkly/registry
 - [ ] **Update Documentation**: Remove references
 - [ ] **Deploy**: Ship cleanup changes
-
 `;
 
 // Run audit
@@ -753,23 +705,20 @@ if (audit.expiredFlags.length > 0) {
   console.error(`\n❌ EXPIRED FLAGS DETECTED - CLEANUP REQUIRED`);
   process.exit(1);
 }
+```
 
-```bash
-
-- *package.json scripts**:
+**package.json scripts**:
 
 ```json
 {
   "scripts": {
     "feature-flags:audit": "ts-node scripts/feature-flag-audit.ts",
     "feature-flags:audit:ci": "npm run feature-flags:audit || true"
-
   }
 }
+```
 
-```bash
-
-- *Key Points**:
+**Key Points**:
 
 - **Automated detection**: Weekly audit catches stale flags
 - **Lifecycle checklist**: Comprehensive governance guide
@@ -777,7 +726,7 @@ if (audit.expiredFlags.length > 0) {
 - **CI integration**: Audit runs in pipeline, warns on expiry
 - **Ownership clarity**: Every flag has assigned owner
 
-- --
+---
 
 ## Feature Flag Testing Checklist
 

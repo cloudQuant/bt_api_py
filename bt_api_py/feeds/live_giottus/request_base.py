@@ -5,7 +5,6 @@ Giottus is an Indian cryptocurrency exchange.
 API documentation: https://api.giottus.com/
 """
 
-import time
 
 from bt_api_py.containers.exchanges.giottus_exchange_data import GiottusExchangeDataSpot
 from bt_api_py.containers.requestdatas.request_data import RequestData
@@ -112,13 +111,15 @@ class GiottusRequestData(Feed):
         path = self._params.rest_paths.get("get_server_time", "GET /v1/time")
         if extra_data is None:
             extra_data = {}
-        extra_data.update({
-            "exchange_name": self.exchange_name,
-            "symbol_name": "",
-            "asset_type": self.asset_type,
-            "request_type": "get_server_time",
-            "normalize_function": self._get_server_time_normalize_function,
-        })
+        extra_data.update(
+            {
+                "exchange_name": self.exchange_name,
+                "symbol_name": "",
+                "asset_type": self.asset_type,
+                "request_type": "get_server_time",
+                "normalize_function": self._get_server_time_normalize_function,
+            }
+        )
         return path, {}, extra_data
 
     def get_server_time(self, extra_data=None, **kwargs):

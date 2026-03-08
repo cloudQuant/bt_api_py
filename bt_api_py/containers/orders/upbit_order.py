@@ -48,7 +48,9 @@ class UpbitOrderData(OrderData):
             self.identifier = from_dict_get_string(self.order_data, "identifier")
             self.state = from_dict_get_string(self.order_data, "state")
             self.side = from_dict_get_string(self.order_data, "side")  # "bid" or "ask"
-            self.ord_type = from_dict_get_string(self.order_data, "ord_type")  # "limit", "market", etc.
+            self.ord_type = from_dict_get_string(
+                self.order_data, "ord_type"
+            )  # "limit", "market", etc.
             self.market = from_dict_get_string(self.order_data, "market")
 
             # 价格和数量
@@ -139,11 +141,13 @@ class UpbitOrderData(OrderData):
         if not self.has_been_init_data:
             self.init_data()
 
-        return (f"UpbitOrder(id={self.order_uuid or self.identifier}, "
-                f"symbol={self.symbol_name}, "
-                f"type={self.type}, "
-                f"side={self.side}, "
-                f"price={self.price}, "
-                f"vol={self.volume}, "
-                f"filled={self.fill_percentage():.1f}%, "
-                f"status={self.state})")
+        return (
+            f"UpbitOrder(id={self.order_uuid or self.identifier}, "
+            f"symbol={self.symbol_name}, "
+            f"type={self.type}, "
+            f"side={self.side}, "
+            f"price={self.price}, "
+            f"vol={self.volume}, "
+            f"filled={self.fill_percentage():.1f}%, "
+            f"status={self.state})"
+        )

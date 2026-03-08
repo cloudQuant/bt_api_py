@@ -5,19 +5,18 @@ Follows the same testing standards as Binance/OKX test files.
 """
 
 import queue
-import time
-import random
-import pytest
-from unittest.mock import Mock, patch, MagicMock
+from unittest.mock import Mock, patch
 
-from bt_api_py.functions.utils import read_account_config
-from bt_api_py.feeds.live_hyperliquid_feed import HyperliquidRequestDataSpot
+import pytest
+
+from bt_api_py.containers.accounts.hyperliquid_account import HyperliquidSpotWssAccountData
+from bt_api_py.containers.balances.hyperliquid_balance import HyperliquidSpotRequestBalanceData
 from bt_api_py.containers.exchanges.hyperliquid_exchange_data import HyperliquidExchangeDataSpot
+from bt_api_py.containers.orders.hyperliquid_order import HyperliquidRequestOrderData
 from bt_api_py.containers.requestdatas.request_data import RequestData
 from bt_api_py.containers.tickers.hyperliquid_ticker import HyperliquidTickerData
-from bt_api_py.containers.orders.hyperliquid_order import HyperliquidRequestOrderData
-from bt_api_py.containers.balances.hyperliquid_balance import HyperliquidSpotRequestBalanceData
-from bt_api_py.containers.accounts.hyperliquid_account import HyperliquidSpotWssAccountData
+from bt_api_py.feeds.live_hyperliquid_feed import HyperliquidRequestDataSpot
+from bt_api_py.functions.utils import read_account_config
 
 
 def generate_kwargs():
@@ -28,9 +27,9 @@ def generate_kwargs():
     """
     data = read_account_config()
     kwargs = {
-        "private_key": data.get('hyperliquid', {}).get('private_key', ''),
-        "proxies": data.get('proxies'),
-        "async_proxy": data.get('async_proxy'),
+        "private_key": data.get("hyperliquid", {}).get("private_key", ""),
+        "proxies": data.get("proxies"),
+        "async_proxy": data.get("async_proxy"),
     }
     return kwargs
 
@@ -39,20 +38,19 @@ def init_req_feed():
     """Initialize Hyperliquid request feed for testing."""
     data_queue = queue.Queue()
     kwargs = generate_kwargs()
-    live_hyperliquid_spot_feed = HyperliquidRequestDataSpot(
-        data_queue, **kwargs)
+    live_hyperliquid_spot_feed = HyperliquidRequestDataSpot(data_queue, **kwargs)
     return live_hyperliquid_spot_feed
 
 
 def init_async_feed(data_queue):
     """Initialize Hyperliquid async feed for testing."""
     kwargs = generate_kwargs()
-    live_hyperliquid_spot_feed = HyperliquidRequestDataSpot(
-        data_queue, **kwargs)
+    live_hyperliquid_spot_feed = HyperliquidRequestDataSpot(data_queue, **kwargs)
     return live_hyperliquid_spot_feed
 
 
 # ==================== Exchange Status Tests ====================
+
 
 def test_hyperliquid_get_exchange_status():
     """Test getting exchange status."""
@@ -63,6 +61,7 @@ def test_hyperliquid_get_exchange_status():
 
 
 # ==================== Meta Data Tests ====================
+
 
 def test_hyperliquid_get_meta():
     """Test getting metadata for all assets."""
@@ -88,6 +87,7 @@ def test_hyperliquid_get_spot_meta():
 
 
 # ==================== Ticker Tests ====================
+
 
 def test_hyperliquid_req_get_all_mids():
     """Test getting all mid prices."""
@@ -116,15 +116,9 @@ def test_hyperliquid_req_tick_data():
 
 def test_hyperliquid_ticker_container():
     """Test ticker data container initialization."""
-    ticker_data = {
-        "last": "50000.0",
-        "bid": "49999.0",
-        "ask": "50001.0",
-        "volume": "1000.0"
-    }
+    ticker_data = {"last": "50000.0", "bid": "49999.0", "ask": "50001.0", "volume": "1000.0"}
 
-    ticker = HyperliquidTickerData(
-        ticker_data, "BTC", "SPOT", has_been_json_encoded=True)
+    ticker = HyperliquidTickerData(ticker_data, "BTC", "SPOT", has_been_json_encoded=True)
     ticker.init_data()
 
     assert ticker.get_exchange_name() == "HYPERLIQUID"
@@ -136,6 +130,7 @@ def test_hyperliquid_ticker_container():
 
 
 # ==================== Order Book Tests ====================
+
 
 def test_hyperliquid_req_depth_data():
     """Test getting L2 order book data."""
@@ -162,6 +157,7 @@ def test_hyperliquid_req_depth_data():
 
 # ==================== Kline/Candle Tests ====================
 
+
 def test_hyperliquid_req_kline_data():
     """Test getting candle/kline data."""
     live_hyperliquid_spot_feed = init_req_feed()
@@ -184,6 +180,7 @@ def test_hyperliquid_req_kline_data():
 
 # ==================== Recent Trades Tests ====================
 
+
 def test_hyperliquid_req_recent_trades():
     """Test getting recent trades."""
     live_hyperliquid_spot_feed = init_req_feed()
@@ -202,6 +199,7 @@ def test_hyperliquid_req_recent_trades():
 
 
 # ==================== Account/Balance Tests ====================
+
 
 def test_hyperliquid_req_spot_balances():
     """Test getting spot account balances."""
@@ -230,18 +228,12 @@ def test_hyperliquid_req_spot_clearinghouse_state():
 def test_hyperliquid_balance_container():
     """Test balance data container initialization."""
     balance_data = {
-        "balances": [
-            {
-                "coin": "USDC",
-                "total": "1000.0",
-                "free": "900.0",
-                "hold": "100.0"
-            }
-        ]
+        "balances": [{"coin": "USDC", "total": "1000.0", "free": "900.0", "hold": "100.0"}]
     }
 
     balance = HyperliquidSpotRequestBalanceData(
-        balance_data, "USDC", "SPOT", has_been_json_encoded=True)
+        balance_data, "USDC", "SPOT", has_been_json_encoded=True
+    )
     balance.init_data()
 
     assert balance.get_exchange_name() == "HYPERLIQUID"
@@ -251,6 +243,7 @@ def test_hyperliquid_balance_container():
 
 
 # ==================== Order Tests ====================
+
 
 def test_hyperliquid_place_order():
     """Test placing a limit order."""
@@ -263,7 +256,7 @@ def test_hyperliquid_place_order():
         quantity=0.001,
         order_type="limit",
         price=1000.0,  # Far below market
-        time_in_force="GTC"
+        time_in_force="GTC",
     )
 
     assert isinstance(result, RequestData)
@@ -274,10 +267,7 @@ def test_hyperliquid_cancel_order():
     """Test canceling an order."""
     live_hyperliquid_spot_feed = init_req_feed()
 
-    result = live_hyperliquid_spot_feed.cancel_order(
-        symbol="BTC",
-        order_id=12345
-    )
+    result = live_hyperliquid_spot_feed.cancel_order(symbol="BTC", order_id=12345)
 
     assert isinstance(result, RequestData)
     print("cancel_order_result", result.get_data())
@@ -288,10 +278,7 @@ def test_hyperliquid_modify_order():
     live_hyperliquid_spot_feed = init_req_feed()
 
     result = live_hyperliquid_spot_feed.modify_order(
-        symbol="BTC",
-        order_id=12345,
-        quantity=0.002,
-        price=2000.0
+        symbol="BTC", order_id=12345, quantity=0.002, price=2000.0
     )
 
     assert isinstance(result, RequestData)
@@ -308,14 +295,13 @@ def test_hyperliquid_order_container():
                     "side": "B",
                     "type": "limit",
                     "sz": "0.1",
-                    "limit_px": "50000.0"
+                    "limit_px": "50000.0",
                 }
             }
         ]
     }
 
-    order = HyperliquidRequestOrderData(
-        order_data, "BTC", "SPOT", has_been_json_encoded=True)
+    order = HyperliquidRequestOrderData(order_data, "BTC", "SPOT", has_been_json_encoded=True)
     order.init_data()
 
     assert order.get_exchange_name() == "HYPERLIQUID"
@@ -336,12 +322,12 @@ def test_hyperliquid_get_open_orders():
 
 # ==================== User Fills Tests ====================
 
+
 def test_hyperliquid_get_user_fills():
     """Test getting user fills/trade history."""
     live_hyperliquid_spot_feed = init_req_feed()
 
-    data = live_hyperliquid_spot_feed.get_user_fills(
-        live_hyperliquid_spot_feed.address, limit=10)
+    data = live_hyperliquid_spot_feed.get_user_fills(live_hyperliquid_spot_feed.address, limit=10)
 
     assert isinstance(data, RequestData)
 
@@ -357,13 +343,13 @@ def test_hyperliquid_get_user_fills():
 
 # ==================== Order Status Tests ====================
 
+
 def test_hyperliquid_get_order_status():
     """Test getting order status."""
     live_hyperliquid_spot_feed = init_req_feed()
 
     data = live_hyperliquid_spot_feed.get_order_status(
-        user=live_hyperliquid_spot_feed.address,
-        oid=12345
+        user=live_hyperliquid_spot_feed.address, oid=12345
     )
 
     assert isinstance(data, RequestData)
@@ -372,6 +358,7 @@ def test_hyperliquid_get_order_status():
 
 # ==================== Account Container Tests ====================
 
+
 def test_hyperliquid_account_container():
     """Test account data container initialization."""
     account_data = {
@@ -379,13 +366,10 @@ def test_hyperliquid_account_container():
         "accountValue": "10000.0",
         "totalMarginUsed": "100.0",
         "initialMargin": "1000.0",
-        "balances": [
-            {"coin": "USDC", "total": "1000.0", "free": "900.0", "hold": "100.0"}
-        ]
+        "balances": [{"coin": "USDC", "total": "1000.0", "free": "900.0", "hold": "100.0"}],
     }
 
-    account = HyperliquidSpotWssAccountData(
-        account_data, "", "SPOT", has_been_json_encoded=True)
+    account = HyperliquidSpotWssAccountData(account_data, "", "SPOT", has_been_json_encoded=True)
     account.init_data()
 
     assert account.get_exchange_name() == "HYPERLIQUID"
@@ -396,19 +380,16 @@ def test_hyperliquid_account_container():
 
 # ==================== Mock Tests (No Network) ====================
 
+
 class TestHyperliquidMockRequests:
     """Tests using mocks to avoid network calls."""
 
-    @patch('bt_api_py.feeds.live_hyperliquid.request_base.requests.post')
+    @patch("bt_api_py.feeds.live_hyperliquid.request_base.requests.post")
     def test_mock_get_all_mids(self, mock_post):
         """Test get_all_mids with mocked response."""
         # Mock response
         mock_response = Mock()
-        mock_response.json.return_value = {
-            "BTC": "50000.0",
-            "ETH": "3000.0",
-            "SOL": "100.0"
-        }
+        mock_response.json.return_value = {"BTC": "50000.0", "ETH": "3000.0", "SOL": "100.0"}
         mock_response.raise_for_status = Mock()
         mock_post.return_value = mock_response
 
@@ -421,7 +402,7 @@ class TestHyperliquidMockRequests:
         assert result.get_input_data()["BTC"] == "50000.0"
         assert result.get_input_data()["ETH"] == "3000.0"
 
-    @patch('bt_api_py.feeds.live_hyperliquid.request_base.requests.post')
+    @patch("bt_api_py.feeds.live_hyperliquid.request_base.requests.post")
     def test_mock_get_l2_book(self, mock_post):
         """Test get_l2_book with mocked response."""
         # Mock response
@@ -431,13 +412,13 @@ class TestHyperliquidMockRequests:
             "levels": [
                 [  # asks
                     {"px": "50010.0", "sz": "1.0", "n": 1},
-                    {"px": "50020.0", "sz": "2.0", "n": 1}
+                    {"px": "50020.0", "sz": "2.0", "n": 1},
                 ],
                 [  # bids
                     {"px": "49990.0", "sz": "1.0", "n": 1},
-                    {"px": "49980.0", "sz": "2.0", "n": 1}
-                ]
-            ]
+                    {"px": "49980.0", "sz": "2.0", "n": 1},
+                ],
+            ],
         }
         mock_response.raise_for_status = Mock()
         mock_post.return_value = mock_response
@@ -452,7 +433,7 @@ class TestHyperliquidMockRequests:
         assert len(levels[0]) == 2  # 2 asks
         assert len(levels[1]) == 2  # 2 bids
 
-    @patch('bt_api_py.feeds.live_hyperliquid.request_base.requests.post')
+    @patch("bt_api_py.feeds.live_hyperliquid.request_base.requests.post")
     def test_mock_get_candle_snapshot(self, mock_post):
         """Test get_candle_snapshot with mocked response."""
         # Mock response
@@ -460,11 +441,11 @@ class TestHyperliquidMockRequests:
         mock_response.json.return_value = [
             {
                 "t": 1234567890000,  # timestamp
-                "o": "50000.0",      # open
-                "h": "50100.0",      # high
-                "l": "49900.0",      # low
-                "c": "50050.0",      # close
-                "v": "100.0"         # volume
+                "o": "50000.0",  # open
+                "h": "50100.0",  # high
+                "l": "49900.0",  # low
+                "c": "50050.0",  # close
+                "v": "100.0",  # volume
             }
         ]
         mock_response.raise_for_status = Mock()
@@ -480,19 +461,13 @@ class TestHyperliquidMockRequests:
         assert len(candles) >= 1
         assert candles[0]["o"] == "50000.0"
 
-    @patch('bt_api_py.feeds.live_hyperliquid.request_base.requests.post')
+    @patch("bt_api_py.feeds.live_hyperliquid.request_base.requests.post")
     def test_mock_get_recent_trades(self, mock_post):
         """Test get_recent_trades with mocked response."""
         # Mock response
         mock_response = Mock()
         mock_response.json.return_value = [
-            {
-                "coin": "BTC",
-                "px": "50000.0",
-                "sz": "0.1",
-                "side": "B",
-                "time": 1234567890000
-            }
+            {"coin": "BTC", "px": "50000.0", "sz": "0.1", "side": "B", "time": 1234567890000}
         ]
         mock_response.raise_for_status = Mock()
         mock_post.return_value = mock_response
@@ -509,6 +484,7 @@ class TestHyperliquidMockRequests:
 
 
 # ==================== Exchange Data Tests ====================
+
 
 class TestHyperliquidExchangeData:
     """Test Hyperliquid exchange data container."""
@@ -545,6 +521,7 @@ class TestHyperliquidExchangeData:
 
 
 # ==================== WebSocket Tests ====================
+
 
 class TestHyperliquidWebSocket:
     """Test Hyperliquid WebSocket subscriptions."""
@@ -587,6 +564,7 @@ class TestHyperliquidWebSocket:
 
 # ==================== Integration Test ====================
 
+
 @pytest.mark.integration
 class TestHyperliquidIntegration:
     """Integration tests that require network and credentials."""
@@ -601,7 +579,7 @@ class TestHyperliquidIntegration:
             side="buy",
             quantity=0.001,
             order_type="limit",
-            price=1000.0  # Very low price, unlikely to fill
+            price=1000.0,  # Very low price, unlikely to fill
         )
 
         assert isinstance(place_result, RequestData)
@@ -609,23 +587,20 @@ class TestHyperliquidIntegration:
 
         # Get order ID
         order_id = None
-        if place_data and "statuses" in place_data and len(
-                place_data["statuses"]) > 0:
+        if place_data and "statuses" in place_data and len(place_data["statuses"]) > 0:
             if "resting" in place_data["statuses"][0]:
                 order_id = place_data["statuses"][0]["resting"].get("oid")
 
             if order_id:
                 # Step 2: Query order status
                 status_result = live_hyperliquid_spot_feed.get_order_status(
-                    user=live_hyperliquid_spot_feed.address,
-                    oid=order_id
+                    user=live_hyperliquid_spot_feed.address, oid=order_id
                 )
                 assert isinstance(status_result, RequestData)
 
                 # Step 3: Cancel the order
                 cancel_result = live_hyperliquid_spot_feed.cancel_order(
-                    symbol="BTC",
-                    order_id=order_id
+                    symbol="BTC", order_id=order_id
                 )
                 assert isinstance(cancel_result, RequestData)
 
@@ -646,25 +621,23 @@ class TestHyperliquidIntegration:
 
         # Get user fills (trade history)
         fills_result = live_hyperliquid_spot_feed.get_user_fills(
-            user=live_hyperliquid_spot_feed.address,
-            limit=10
+            user=live_hyperliquid_spot_feed.address, limit=10
         )
         assert isinstance(fills_result, RequestData)
 
 
 # ==================== Error Handling Tests ====================
 
+
 class TestHyperliquidErrorHandling:
     """Test error handling scenarios."""
 
-    @patch('bt_api_py.feeds.live_hyperliquid.request_base.requests.post')
+    @patch("bt_api_py.feeds.live_hyperliquid.request_base.requests.post")
     def test_error_response_handling(self, mock_post):
         """Test API error response handling."""
         # Mock error response
         mock_response = Mock()
-        mock_response.json.return_value = {
-            "error": "Invalid signature"
-        }
+        mock_response.json.return_value = {"error": "Invalid signature"}
         mock_response.raise_for_status = Mock()
         mock_post.return_value = mock_response
 
@@ -682,24 +655,16 @@ class TestHyperliquidErrorHandling:
         feed = HyperliquidRequestDataSpot(data_queue)  # No private key
 
         # Check if account exists and is None/falsy
-        if hasattr(feed, 'account') and feed.account is None:
+        if hasattr(feed, "account") and feed.account is None:
             with pytest.raises(ValueError, match="Private key required"):
                 feed.place_order(
-                    symbol="BTC",
-                    side="buy",
-                    quantity=0.001,
-                    order_type="limit",
-                    price=50000.0
+                    symbol="BTC", side="buy", quantity=0.001, order_type="limit", price=50000.0
                 )
-        elif not hasattr(feed, 'account') or not feed.account:
+        elif not hasattr(feed, "account") or not feed.account:
             # If no account attribute or account is falsy, expect error
             with pytest.raises((ValueError, AttributeError)):
                 feed.place_order(
-                    symbol="BTC",
-                    side="buy",
-                    quantity=0.001,
-                    order_type="limit",
-                    price=50000.0
+                    symbol="BTC", side="buy", quantity=0.001, order_type="limit", price=50000.0
                 )
 
     def test_cancel_order_without_order_id(self):

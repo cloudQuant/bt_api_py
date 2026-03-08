@@ -10,23 +10,20 @@ Run with coverage:
 """
 
 import queue
-import time
-import pytest
-from unittest.mock import Mock, patch, MagicMock
 
+import pytest
+
+# Import registration to auto-register Zebpay
+import bt_api_py.exchange_registers.register_zebpay  # noqa: F401
 from bt_api_py.containers.exchanges.zebpay_exchange_data import (
-    ZebpayExchangeData,
     ZebpayExchangeDataSpot,
 )
 from bt_api_py.containers.tickers.zebpay_ticker import ZebpayRequestTickerData
 from bt_api_py.feeds.live_zebpay.spot import ZebpayRequestDataSpot
 from bt_api_py.registry import ExchangeRegistry
 
-# Import registration to auto-register Zebpay
-import bt_api_py.exchange_registers.register_zebpay  # noqa: F401
-
-
 # ==================== Fixtures ====================
+
 
 @pytest.fixture
 def data_queue():
@@ -43,6 +40,7 @@ def zebpay_feed(data_queue):
 
 # ==================== ServerTime Tests ====================
 
+
 class TestZebpayServerTime:
     """Test server time functionality."""
 
@@ -53,6 +51,7 @@ class TestZebpayServerTime:
 
 
 # ==================== Ticker Tests ====================
+
 
 class TestZebpayTickerData:
     """Test ticker data functionality."""
@@ -72,6 +71,7 @@ class TestZebpayTickerData:
             pass
             # Zebpay ticker response structure
         from bt_api_py.containers.requestdatas.request_data import RequestData
+
         assert isinstance(data, (dict, list, RequestData))
 
     def test_zebpay_multiple_tickers(self, zebpay_feed):
@@ -91,6 +91,7 @@ class TestZebpayTickerData:
 
 # ==================== Kline Tests ====================
 
+
 class TestZebpayKlineData:
     """Test kline/candlestick data functionality."""
 
@@ -103,6 +104,7 @@ class TestZebpayKlineData:
             pass
             # Zebpay kline structure
         from bt_api_py.containers.requestdatas.request_data import RequestData
+
         assert isinstance(data, (dict, list, RequestData))
 
     def test_zebpay_req_kline_data_1h(self, zebpay_feed):
@@ -127,6 +129,7 @@ class TestZebpayKlineData:
 
 # ==================== OrderBook Tests ====================
 
+
 class TestZebpayOrderBook:
     """Test order book depth functionality."""
 
@@ -136,6 +139,7 @@ class TestZebpayOrderBook:
         assert data is not None
 
         from bt_api_py.containers.requestdatas.request_data import RequestData
+
         assert isinstance(data, (dict, list, RequestData))
 
     def test_zebpay_orderbook_bids_asks(self, zebpay_feed):
@@ -159,6 +163,7 @@ class TestZebpayOrderBook:
 
 # ==================== Market Info Tests ====================
 
+
 class TestZebpayMarketInfo:
     """Test market information functionality."""
 
@@ -172,6 +177,7 @@ class TestZebpayMarketInfo:
 
 
 # ==================== Exchange Data Tests ====================
+
 
 class TestZebpayExchangeData:
     """Test Zebpay exchange data configuration."""
@@ -199,6 +205,7 @@ class TestZebpayExchangeData:
 
 # ==================== Symbol Format Tests ====================
 
+
 class TestZebpaySymbolFormat:
     """Test Zebpay symbol format conversion."""
 
@@ -217,6 +224,7 @@ class TestZebpaySymbolFormat:
 
 
 # ==================== Registry Tests ====================
+
 
 class TestZebpayRegistry:
     """Test Zebpay registration."""
@@ -240,6 +248,7 @@ class TestZebpayRegistry:
 
 # ==================== Ticker Container Tests ====================
 
+
 class TestZebpayTickerContainer:
     """Test Zebpay ticker data container."""
 
@@ -253,6 +262,7 @@ class TestZebpayTickerContainer:
 
 
 # ==================== Normalization Tests ====================
+
 
 class TestZebpayNormalization:
     """Test data normalization functions."""
@@ -268,16 +278,14 @@ class TestZebpayNormalization:
             }
         }
 
-        result, success = ZebpayRequestDataSpot._get_tick_normalize_function(
-            input_data, {})
+        result, success = ZebpayRequestDataSpot._get_tick_normalize_function(input_data, {})
         assert success is True
         assert len(result) == 1
         assert result[0]["symbol"] == "BTC-INR"
 
     def test_tick_normalize_function_empty(self):
         """Test ticker normalization with empty data."""
-        result, success = ZebpayRequestDataSpot._get_tick_normalize_function(None, {
-        })
+        result, success = ZebpayRequestDataSpot._get_tick_normalize_function(None, {})
         assert success is False
         assert result == []
 
@@ -290,8 +298,7 @@ class TestZebpayNormalization:
             }
         }
 
-        result, success = ZebpayRequestDataSpot._get_depth_normalize_function(
-            input_data, {})
+        result, success = ZebpayRequestDataSpot._get_depth_normalize_function(input_data, {})
         assert success is True
         assert len(result) == 1
 
@@ -299,18 +306,17 @@ class TestZebpayNormalization:
         """Test kline normalization function."""
         input_data = {
             "data": [
-                [1642696800000, "4900000", "5100000",
-                    "4800000", "5000000", "1000"],
+                [1642696800000, "4900000", "5100000", "4800000", "5000000", "1000"],
             ]
         }
 
-        result, success = ZebpayRequestDataSpot._get_kline_normalize_function(
-            input_data, {})
+        result, success = ZebpayRequestDataSpot._get_kline_normalize_function(input_data, {})
         assert success is True
         assert len(result) == 1
 
 
 # ==================== Integration Tests ====================
+
 
 class TestZebpayIntegration:
     """Integration tests for Zebpay."""

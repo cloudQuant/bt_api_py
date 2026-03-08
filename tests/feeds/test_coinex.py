@@ -9,60 +9,104 @@ from unittest.mock import patch
 
 import pytest
 
+import bt_api_py.exchange_registers.register_coinex  # noqa: F401
 from bt_api_py.containers.exchanges.coinex_exchange_data import CoinExExchangeDataSpot
 from bt_api_py.containers.requestdatas.request_data import RequestData
 from bt_api_py.feeds.live_coinex.request_base import CoinExRequestData
 from bt_api_py.feeds.live_coinex.spot import CoinExRequestDataSpot
 from bt_api_py.registry import ExchangeRegistry
 
-import bt_api_py.exchange_registers.register_coinex  # noqa: F401
-
 # ── sample V2 response fixtures ──────────────────────────────
 
-SAMPLE_TICK = {"code": 0, "data": [
-    {"market": "BTCUSDT", "last": "50000", "volume": "1234", "high": "51000", "low": "49000"}
-], "message": "OK"}
+SAMPLE_TICK = {
+    "code": 0,
+    "data": [
+        {"market": "BTCUSDT", "last": "50000", "volume": "1234", "high": "51000", "low": "49000"}
+    ],
+    "message": "OK",
+}
 
-SAMPLE_DEPTH = {"code": 0, "data": {
-    "depth": {"asks": [["50010", "1"]], "bids": [["49990", "0.5"]]},
-    "market": "BTCUSDT",
-}, "message": "OK"}
+SAMPLE_DEPTH = {
+    "code": 0,
+    "data": {
+        "depth": {"asks": [["50010", "1"]], "bids": [["49990", "0.5"]]},
+        "market": "BTCUSDT",
+    },
+    "message": "OK",
+}
 
-SAMPLE_KLINE = {"code": 0, "data": [
-    {"open": "49000", "high": "51000", "low": "48000", "close": "50000", "volume": "100"},
-    {"open": "50000", "high": "52000", "low": "49000", "close": "51000", "volume": "120"},
-], "message": "OK"}
+SAMPLE_KLINE = {
+    "code": 0,
+    "data": [
+        {"open": "49000", "high": "51000", "low": "48000", "close": "50000", "volume": "100"},
+        {"open": "50000", "high": "52000", "low": "49000", "close": "51000", "volume": "120"},
+    ],
+    "message": "OK",
+}
 
-SAMPLE_TRADES = {"code": 0, "data": [
-    {"price": "50000", "amount": "0.01", "side": "buy", "created_at": 1700000000},
-], "message": "OK"}
+SAMPLE_TRADES = {
+    "code": 0,
+    "data": [
+        {"price": "50000", "amount": "0.01", "side": "buy", "created_at": 1700000000},
+    ],
+    "message": "OK",
+}
 
-SAMPLE_EXCHANGE_INFO = {"code": 0, "data": [
-    {"market": "BTCUSDT", "base_ccy": "BTC", "quote_ccy": "USDT"},
-    {"market": "ETHUSDT", "base_ccy": "ETH", "quote_ccy": "USDT"},
-], "message": "OK"}
+SAMPLE_EXCHANGE_INFO = {
+    "code": 0,
+    "data": [
+        {"market": "BTCUSDT", "base_ccy": "BTC", "quote_ccy": "USDT"},
+        {"market": "ETHUSDT", "base_ccy": "ETH", "quote_ccy": "USDT"},
+    ],
+    "message": "OK",
+}
 
 SAMPLE_ACCOUNT = {"code": 0, "data": {"user_id": 12345}, "message": "OK"}
 
-SAMPLE_BALANCE = {"code": 0, "data": [
-    {"ccy": "BTC", "available": "1.5", "frozen": "0.0"},
-    {"ccy": "USDT", "available": "10000", "frozen": "0.0"},
-], "message": "OK"}
+SAMPLE_BALANCE = {
+    "code": 0,
+    "data": [
+        {"ccy": "BTC", "available": "1.5", "frozen": "0.0"},
+        {"ccy": "USDT", "available": "10000", "frozen": "0.0"},
+    ],
+    "message": "OK",
+}
 
-SAMPLE_ORDER = {"code": 0, "data": {
-    "order_id": 12345, "market": "BTCUSDT", "side": "buy", "type": "limit",
-    "amount": "0.001", "price": "50000", "status": "done",
-}, "message": "OK"}
+SAMPLE_ORDER = {
+    "code": 0,
+    "data": {
+        "order_id": 12345,
+        "market": "BTCUSDT",
+        "side": "buy",
+        "type": "limit",
+        "amount": "0.001",
+        "price": "50000",
+        "status": "done",
+    },
+    "message": "OK",
+}
 
-SAMPLE_OPEN_ORDERS = {"code": 0, "data": [
-    {"order_id": 11111, "market": "BTCUSDT", "side": "buy", "type": "limit",
-     "amount": "0.01", "price": "40000", "status": "open"},
-], "message": "OK"}
+SAMPLE_OPEN_ORDERS = {
+    "code": 0,
+    "data": [
+        {
+            "order_id": 11111,
+            "market": "BTCUSDT",
+            "side": "buy",
+            "type": "limit",
+            "amount": "0.01",
+            "price": "40000",
+            "status": "open",
+        },
+    ],
+    "message": "OK",
+}
 
 SAMPLE_ERROR = {"code": 2, "data": {}, "message": "invalid parameter"}
 
 
 # ── helpers ───────────────────────────────────────────────────
+
 
 @pytest.fixture
 def feed():
@@ -120,9 +164,20 @@ class TestExchangeData:
             exdata.get_rest_path("nonexistent_endpoint")
 
     def test_rest_paths_keys(self, exdata):
-        for key in ("get_tick", "get_depth", "get_kline", "get_exchange_info",
-                     "get_trades", "get_account", "get_balance", "make_order",
-                     "cancel_order", "query_order", "get_open_orders", "get_deals"):
+        for key in (
+            "get_tick",
+            "get_depth",
+            "get_kline",
+            "get_exchange_info",
+            "get_trades",
+            "get_account",
+            "get_balance",
+            "make_order",
+            "cancel_order",
+            "query_order",
+            "get_open_orders",
+            "get_deals",
+        ):
             assert key in exdata.rest_paths
 
 
@@ -244,7 +299,9 @@ class TestNormalization:
         assert ok is False
 
     def test_exchange_info_ok(self):
-        result, ok = CoinExRequestData._get_exchange_info_normalize_function(SAMPLE_EXCHANGE_INFO, {})
+        result, ok = CoinExRequestData._get_exchange_info_normalize_function(
+            SAMPLE_EXCHANGE_INFO, {}
+        )
         assert ok is True
         assert "markets" in result[0]
 
@@ -431,20 +488,34 @@ class TestRegistry:
 
 
 _EXPECTED_METHODS = [
-    "get_tick", "async_get_tick",
-    "get_ticker", "async_get_ticker",
-    "get_depth", "async_get_depth",
-    "get_kline", "async_get_kline",
-    "get_trade_history", "async_get_trade_history",
-    "get_trades", "async_get_trades",
-    "make_order", "async_make_order",
-    "cancel_order", "async_cancel_order",
-    "query_order", "async_query_order",
-    "get_open_orders", "async_get_open_orders",
-    "get_deals", "async_get_deals",
-    "get_account", "async_get_account",
-    "get_balance", "async_get_balance",
-    "get_exchange_info", "async_get_exchange_info",
+    "get_tick",
+    "async_get_tick",
+    "get_ticker",
+    "async_get_ticker",
+    "get_depth",
+    "async_get_depth",
+    "get_kline",
+    "async_get_kline",
+    "get_trade_history",
+    "async_get_trade_history",
+    "get_trades",
+    "async_get_trades",
+    "make_order",
+    "async_make_order",
+    "cancel_order",
+    "async_cancel_order",
+    "query_order",
+    "async_query_order",
+    "get_open_orders",
+    "async_get_open_orders",
+    "get_deals",
+    "async_get_deals",
+    "get_account",
+    "async_get_account",
+    "get_balance",
+    "async_get_balance",
+    "get_exchange_info",
+    "async_get_exchange_info",
 ]
 
 

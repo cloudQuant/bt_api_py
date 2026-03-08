@@ -7,20 +7,19 @@ Run tests:
 
 import queue
 import time
-from unittest.mock import Mock, MagicMock, patch
+from unittest.mock import MagicMock, Mock, patch
 
 import pytest
 
+# Import registration to auto-register Bitunix
+import bt_api_py.exchange_registers.register_bitunix  # noqa: F401
 from bt_api_py.containers.exchanges.bitunix_exchange_data import (
     BitunixExchangeDataSpot,
 )
 from bt_api_py.containers.requestdatas.request_data import RequestData
-from bt_api_py.feeds.live_bitunix.spot import BitunixRequestDataSpot
 from bt_api_py.feeds.capability import Capability
+from bt_api_py.feeds.live_bitunix.spot import BitunixRequestDataSpot
 from bt_api_py.registry import ExchangeRegistry
-
-# Import registration to auto-register Bitunix
-import bt_api_py.exchange_registers.register_bitunix  # noqa: F401
 
 
 @pytest.fixture
@@ -184,6 +183,7 @@ class TestBitunixBaseCapabilities:
 
     def test_base_capabilities(self):
         from bt_api_py.feeds.live_bitunix.request_base import BitunixRequestData
+
         caps = BitunixRequestData._capabilities()
         assert Capability.GET_TICK in caps
         assert Capability.MAKE_ORDER in caps

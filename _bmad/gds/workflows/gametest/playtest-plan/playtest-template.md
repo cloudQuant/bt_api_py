@@ -1,10 +1,10 @@
 # Playtest Plan: {BUILD_NAME}
 
-- *Version**: {BUILD_VERSION}
-- *Created**: {DATE}
-- *Session Date(s)**: {PLAYTEST_DATES}
+**Version**: {BUILD_VERSION}
+**Created**: {DATE}
+**Session Date(s)**: {PLAYTEST_DATES}
 
-- --
+---
 
 ## Overview
 
@@ -23,7 +23,7 @@
 
 {How will we know the playtest was successful?}
 
-- --
+---
 
 ## Participants
 
@@ -40,7 +40,7 @@
 - **Source**: {internal/external/panel}
 - **Compensation**: {if applicable}
 
-- --
+---
 
 ## Session Structure
 
@@ -51,13 +51,13 @@
    - Explain what they'll be doing
    - Emphasize: "We're testing the game, not you"
 
-1. **Consent & Setup (5 min)**
+2. **Consent & Setup (5 min)**
    - Recording consent: {yes/no}
    - NDA: {yes/no}
    - Collect demographic info: {yes/no}
    - Hardware preferences
 
-1. **Instructions (5 min)**
+3. **Instructions (5 min)**
    - "Play as you normally would"
    - "Think out loud if you're comfortable"
    - "Ask questions anytime"
@@ -105,25 +105,19 @@ Only intervene when:
 2. "Anything else you'd like to share?"
 3. "Questions for us?"
 
-- --
+---
 
 ## Observation Guide
 
 ### What to Watch For
 
 | Signal          | Examples                               | Action                    |
-
 | --------------- | -------------------------------------- | ------------------------- |
-
-| **Confusion**| Pausing, circling, re-reading          | Note location, duration   |
-
-|**Frustration**| Sighing, repeated attempts, quitting   | Note cause, frequency     |
-
-|**Engagement**| Leaning in, exclaiming, "one more try" | Note feature              |
-
-|**Boredom**| Checking phone, rushing, disengaging   | Note when drop-off begins |
-
-|**Discovery**| "Oh!", trying things                   | Note what triggered it    |
+| **Confusion**   | Pausing, circling, re-reading          | Note location, duration   |
+| **Frustration** | Sighing, repeated attempts, quitting   | Note cause, frequency     |
+| **Engagement**  | Leaning in, exclaiming, "one more try" | Note feature              |
+| **Boredom**     | Checking phone, rushing, disengaging   | Note when drop-off begins |
+| **Discovery**   | "Oh!", trying things                   | Note what triggered it    |
 
 ### Metrics to Collect
 
@@ -133,21 +127,17 @@ Only intervene when:
 - [ ] Total session duration
 - [ ] Completion rate
 
-- --
+---
 
 ## Note-Taking Template
 
-```bash
+```
 Participant: ___  Date: ___  Observer: ___
 
 TIME | LOCATION | OBSERVATION | REACTION | NOTES
-
-- ----|----------|-------------|----------|------
-
+-----|----------|-------------|----------|------
      |          |             |          |
-
      |          |             |          |
-
      |          |             |          |
 
 Key Moments:
@@ -157,23 +147,19 @@ Key Moments:
 
 Overall Impression:
 
-```bash
+```
 
-- --
+---
 
 ## Team Roles
 
 | Role             | Responsibilities                  | Assigned To |
-
 | ---------------- | --------------------------------- | ----------- |
+| **Facilitator**  | Welcome, instructions, interview  | {name}      |
+| **Note-taker**   | Observations, timestamps          | {name}      |
+| **Tech Support** | Build, recording, troubleshooting | {name}      |
 
-|**Facilitator**| Welcome, instructions, interview  | {name}      |
-
-|**Note-taker**| Observations, timestamps          | {name}      |
-
-|**Tech Support**| Build, recording, troubleshooting | {name}      |
-
-- --
+---
 
 ## Logistics
 
@@ -193,7 +179,7 @@ Overall Impression:
 - [ ] Water/snacks available
 - [ ] Clock/timer visible
 
-- --
+---
 
 ## Post-Playtest Process
 
@@ -215,7 +201,7 @@ Overall Impression:
 - **Distribution**: {team/stakeholders}
 - **Format**: {document/presentation}
 
-- --
+---
 
 ## Notes
 

@@ -33,8 +33,12 @@ class SwyftxRequestTickerData(TickerData):
 
         data = self.ticker_data if isinstance(self.ticker_data, dict) else {}
         if data:
-            self.ticker_symbol_name = data.get("symbol") or data.get("market") or data.get("instrument")
-            self.last_price = self._parse_float(data.get("last") or data.get("lastPrice") or data.get("price"))
+            self.ticker_symbol_name = (
+                data.get("symbol") or data.get("market") or data.get("instrument")
+            )
+            self.last_price = self._parse_float(
+                data.get("last") or data.get("lastPrice") or data.get("price")
+            )
             self.bid_price = self._parse_float(data.get("bid"))
             self.ask_price = self._parse_float(data.get("ask"))
             self.volume_24h = self._parse_float(data.get("volume") or data.get("volume_24h"))

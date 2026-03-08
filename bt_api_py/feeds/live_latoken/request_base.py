@@ -27,8 +27,8 @@ class LatokenRequestData(Feed):
         self.request_logger = get_logger("latoken_spot_feed")
         self.async_logger = get_logger("latoken_spot_feed")
 
-        self.api_key = kwargs.get("public_key", None) or kwargs.get("api_key", None)
-        self.api_secret = kwargs.get("private_key", None) or kwargs.get("api_secret", None)
+        self.api_key = kwargs.get("public_key") or kwargs.get("api_key")
+        self.api_secret = kwargs.get("private_key") or kwargs.get("api_secret")
         self.rest_url = self._params.rest_url
 
     # ── core request helpers ────────────────────────────────────
@@ -105,9 +105,7 @@ class LatokenRequestData(Feed):
         query = urlencode(params) if params else ""
         auth = f"{method}{path}{query}"
         if self.api_secret:
-            return hmac.new(
-                self.api_secret.encode(), auth.encode(), hashlib.sha512
-            ).hexdigest()
+            return hmac.new(self.api_secret.encode(), auth.encode(), hashlib.sha512).hexdigest()
         return ""
 
     def _get_headers(self, method="GET", path="", params=None):
@@ -145,13 +143,16 @@ class LatokenRequestData(Feed):
         base, quote = self._split_symbol(symbol)
         path = self._params.get_rest_path("get_tick", base=base, quote=quote)
         params = {}
-        extra_data = update_extra_data(extra_data, **{
-            "request_type": "get_tick",
-            "symbol_name": symbol,
-            "asset_type": self.asset_type,
-            "exchange_name": self.exchange_name,
-            "normalize_function": self._get_tick_normalize_function,
-        })
+        extra_data = update_extra_data(
+            extra_data,
+            **{
+                "request_type": "get_tick",
+                "symbol_name": symbol,
+                "asset_type": self.asset_type,
+                "exchange_name": self.exchange_name,
+                "normalize_function": self._get_tick_normalize_function,
+            },
+        )
         return path, params, extra_data
 
     @staticmethod
@@ -168,13 +169,16 @@ class LatokenRequestData(Feed):
         base, quote = self._split_symbol(symbol)
         path = self._params.get_rest_path("get_depth", currency=base, quote=quote)
         params = {}
-        extra_data = update_extra_data(extra_data, **{
-            "request_type": "get_depth",
-            "symbol_name": symbol,
-            "asset_type": self.asset_type,
-            "exchange_name": self.exchange_name,
-            "normalize_function": self._get_depth_normalize_function,
-        })
+        extra_data = update_extra_data(
+            extra_data,
+            **{
+                "request_type": "get_depth",
+                "symbol_name": symbol,
+                "asset_type": self.asset_type,
+                "exchange_name": self.exchange_name,
+                "normalize_function": self._get_depth_normalize_function,
+            },
+        )
         return path, params, extra_data
 
     @staticmethod
@@ -188,11 +192,14 @@ class LatokenRequestData(Feed):
     def _get_exchange_info(self, extra_data=None, **kwargs):
         path = self._params.get_rest_path("get_exchange_info")
         params = {}
-        extra_data = update_extra_data(extra_data, **{
-            "request_type": "get_exchange_info",
-            "exchange_name": self.exchange_name,
-            "normalize_function": self._get_exchange_info_normalize_function,
-        })
+        extra_data = update_extra_data(
+            extra_data,
+            **{
+                "request_type": "get_exchange_info",
+                "exchange_name": self.exchange_name,
+                "normalize_function": self._get_exchange_info_normalize_function,
+            },
+        )
         return path, params, extra_data
 
     @staticmethod
@@ -209,13 +216,16 @@ class LatokenRequestData(Feed):
         base, quote = self._split_symbol(symbol)
         path = self._params.get_rest_path("get_deals", currency=base, quote=quote)
         params = {}
-        extra_data = update_extra_data(extra_data, **{
-            "request_type": "get_deals",
-            "symbol_name": symbol,
-            "asset_type": self.asset_type,
-            "exchange_name": self.exchange_name,
-            "normalize_function": self._get_deals_normalize_function,
-        })
+        extra_data = update_extra_data(
+            extra_data,
+            **{
+                "request_type": "get_deals",
+                "symbol_name": symbol,
+                "asset_type": self.asset_type,
+                "exchange_name": self.exchange_name,
+                "normalize_function": self._get_deals_normalize_function,
+            },
+        )
         return path, params, extra_data
 
     @staticmethod
@@ -230,13 +240,16 @@ class LatokenRequestData(Feed):
         base, quote = self._split_symbol(symbol)
         path = self._params.get_rest_path("get_kline", currency=base, quote=quote)
         params = {}
-        extra_data = update_extra_data(extra_data, **{
-            "request_type": "get_kline",
-            "symbol_name": symbol,
-            "asset_type": self.asset_type,
-            "exchange_name": self.exchange_name,
-            "normalize_function": self._get_kline_normalize_function,
-        })
+        extra_data = update_extra_data(
+            extra_data,
+            **{
+                "request_type": "get_kline",
+                "symbol_name": symbol,
+                "asset_type": self.asset_type,
+                "exchange_name": self.exchange_name,
+                "normalize_function": self._get_kline_normalize_function,
+            },
+        )
         return path, params, extra_data
 
     @staticmethod
@@ -250,11 +263,14 @@ class LatokenRequestData(Feed):
     def _get_server_time(self, extra_data=None, **kwargs):
         path = self._params.get_rest_path("get_server_time")
         params = {}
-        extra_data = update_extra_data(extra_data, **{
-            "request_type": "get_server_time",
-            "exchange_name": self.exchange_name,
-            "normalize_function": self._get_server_time_normalize_function,
-        })
+        extra_data = update_extra_data(
+            extra_data,
+            **{
+                "request_type": "get_server_time",
+                "exchange_name": self.exchange_name,
+                "normalize_function": self._get_server_time_normalize_function,
+            },
+        )
         return path, params, extra_data
 
     @staticmethod
@@ -277,13 +293,16 @@ class LatokenRequestData(Feed):
         }
         if price is not None:
             body["price"] = str(price)
-        extra_data = update_extra_data(extra_data, **{
-            "request_type": "make_order",
-            "symbol_name": symbol,
-            "asset_type": self.asset_type,
-            "exchange_name": self.exchange_name,
-            "normalize_function": self._make_order_normalize_function,
-        })
+        extra_data = update_extra_data(
+            extra_data,
+            **{
+                "request_type": "make_order",
+                "symbol_name": symbol,
+                "asset_type": self.asset_type,
+                "exchange_name": self.exchange_name,
+                "normalize_function": self._make_order_normalize_function,
+            },
+        )
         return path, body, extra_data
 
     @staticmethod
@@ -295,11 +314,14 @@ class LatokenRequestData(Feed):
     def _cancel_order(self, order_id, extra_data=None, **kwargs):
         path = self._params.get_rest_path("cancel_order")
         body = {"id": order_id}
-        extra_data = update_extra_data(extra_data, **{
-            "request_type": "cancel_order",
-            "exchange_name": self.exchange_name,
-            "normalize_function": self._cancel_order_normalize_function,
-        })
+        extra_data = update_extra_data(
+            extra_data,
+            **{
+                "request_type": "cancel_order",
+                "exchange_name": self.exchange_name,
+                "normalize_function": self._cancel_order_normalize_function,
+            },
+        )
         return path, body, extra_data
 
     @staticmethod
@@ -315,11 +337,14 @@ class LatokenRequestData(Feed):
         else:
             path = self._params.get_rest_path("get_balance")  # fallback
         params = {}
-        extra_data = update_extra_data(extra_data, **{
-            "request_type": "get_open_orders",
-            "exchange_name": self.exchange_name,
-            "normalize_function": self._get_open_orders_normalize_function,
-        })
+        extra_data = update_extra_data(
+            extra_data,
+            **{
+                "request_type": "get_open_orders",
+                "exchange_name": self.exchange_name,
+                "normalize_function": self._get_open_orders_normalize_function,
+            },
+        )
         return path, params, extra_data
 
     @staticmethod
@@ -335,11 +360,14 @@ class LatokenRequestData(Feed):
     def _get_balance(self, extra_data=None, **kwargs):
         path = self._params.get_rest_path("get_balance")
         params = {}
-        extra_data = update_extra_data(extra_data, **{
-            "request_type": "get_balance",
-            "exchange_name": self.exchange_name,
-            "normalize_function": self._get_balance_normalize_function,
-        })
+        extra_data = update_extra_data(
+            extra_data,
+            **{
+                "request_type": "get_balance",
+                "exchange_name": self.exchange_name,
+                "normalize_function": self._get_balance_normalize_function,
+            },
+        )
         return path, params, extra_data
 
     @staticmethod
@@ -353,11 +381,14 @@ class LatokenRequestData(Feed):
     def _get_account(self, extra_data=None, **kwargs):
         path = self._params.get_rest_path("get_account")
         params = {}
-        extra_data = update_extra_data(extra_data, **{
-            "request_type": "get_account",
-            "exchange_name": self.exchange_name,
-            "normalize_function": self._get_account_normalize_function,
-        })
+        extra_data = update_extra_data(
+            extra_data,
+            **{
+                "request_type": "get_account",
+                "exchange_name": self.exchange_name,
+                "normalize_function": self._get_account_normalize_function,
+            },
+        )
         return path, params, extra_data
 
     @staticmethod

@@ -4,21 +4,22 @@ Tests for PancakeSwap DEX Spot Feed implementation.
 Following Binance/OKX test standards with DEX-specific adaptations.
 """
 
-import queue
-import pytest
-import sys
 import os
-from unittest.mock import Mock, patch, MagicMock
+import queue
+import sys
+from unittest.mock import MagicMock, Mock, patch
+
+import pytest
 
 # Add the project root to Python path
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', '..'))
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", ".."))
 
 from bt_api_py.containers.exchanges.pancakeswap_exchange_data import PancakeSwapExchangeData
 from bt_api_py.containers.pools.pancakeswap_pool import PancakeSwapPoolData, PancakeSwapPoolList
-from bt_api_py.containers.tickers.pancakeswap_ticker import PancakeSwapRequestTickerData
-from bt_api_py.feeds.live_pancakeswap.spot import PancakeSpotRequestData
-from bt_api_py.feeds.capability import Capability
 from bt_api_py.containers.requestdatas.request_data import RequestData
+from bt_api_py.containers.tickers.pancakeswap_ticker import PancakeSwapRequestTickerData
+from bt_api_py.feeds.capability import Capability
+from bt_api_py.feeds.live_pancakeswap.spot import PancakeSpotRequestData
 
 
 class TestPancakeSpotRequestData:
@@ -28,7 +29,7 @@ class TestPancakeSpotRequestData:
     def mock_feed(self):
         """Fixture to create a mock PancakeSpot feed."""
         data_queue = queue.Queue()
-        with patch('bt_api_py.feeds.http_client.HttpClient', return_value=MagicMock()):
+        with patch("bt_api_py.feeds.http_client.HttpClient", return_value=MagicMock()):
             feed = PancakeSpotRequestData(data_queue)
             return feed
 
@@ -46,9 +47,9 @@ class TestPancakeSpotRequestData:
 
     def test_feed_initialization(self, mock_feed):
         """Test feed initialization."""
-        assert mock_feed.exchange_name == "PANCakeswap"
+        assert mock_feed.exchange_name == "PANCAKESWAP___DEX"
         assert mock_feed.asset_type == "SPOT"
-        assert hasattr(mock_feed, 'request_logger')
+        assert hasattr(mock_feed, "request_logger")
 
     # ==================== Server Time Tests ====================
 
@@ -75,10 +76,7 @@ class TestPancakeSpotRequestData:
 
     def test_get_tick_normalize_function(self):
         """Test ticker normalize function."""
-        input_data = {
-            "price": "50000.0",
-            "symbol": "BTCB/USDT"
-        }
+        input_data = {"price": "50000.0", "symbol": "BTCB/USDT"}
         result, status = PancakeSpotRequestData._get_tick_normalize_function(input_data, None)
         assert status == True
         assert len(result) == 1
@@ -97,7 +95,7 @@ class TestPancakeSpotRequestData:
         """Test depth normalize function."""
         input_data = {
             "bids": [["50000", "1.0"], ["49999", "2.0"]],
-            "asks": [["50001", "1.0"], ["50002", "2.0"]]
+            "asks": [["50001", "1.0"], ["50002", "2.0"]],
         }
         result, status = PancakeSpotRequestData._get_depth_normalize_function(input_data, None)
         assert status == True
@@ -117,7 +115,7 @@ class TestPancakeSpotRequestData:
         """Test kline normalize function."""
         input_data = [
             [1234567890, "50000", "51000", "49000", "50500", "1000"],
-            [1234567900, "50500", "51500", "50000", "51000", "1500"]
+            [1234567900, "50500", "51500", "50000", "51000", "1500"],
         ]
         result, status = PancakeSpotRequestData._get_kline_normalize_function(input_data, None)
         assert status == True
@@ -154,12 +152,7 @@ class TestPancakeSpotRequestData:
 
     def test_get_pool_normalize_function(self):
         """Test pool normalize function."""
-        input_data = {
-            "id": "0x...",
-            "symbol": "BTCB/USDT",
-            "tvl": "1000000",
-            "volume24h": "50000"
-        }
+        input_data = {"id": "0x...", "symbol": "BTCB/USDT", "tvl": "1000000", "volume24h": "50000"}
         result, status = PancakeSpotRequestData._get_pool_normalize_function(input_data, None)
         assert status == True
         assert len(result) == 1
@@ -193,7 +186,7 @@ class TestPancakeSwapExchangeData:
 
     def test_load_from_config(self, exchange_data):
         """Test loading configuration from YAML."""
-        result = exchange_data._load_from_config('spot')
+        result = exchange_data._load_from_config("spot")
         assert isinstance(result, bool)
 
     def test_get_supported_tokens(self, exchange_data):
@@ -208,10 +201,10 @@ class TestPancakeSwapExchangeData:
 
     def test_get_fee_config(self, exchange_data):
         """Test getting fee configuration."""
-        fees = exchange_data.get_fee_config('spot')
+        fees = exchange_data.get_fee_config("spot")
         if fees:
-            assert 'maker' in fees
-            assert 'taker' in fees
+            assert "maker" in fees
+            assert "taker" in fees
 
     def test_symbol_address_conversion(self, exchange_data):
         """Test symbol to address conversion."""
@@ -227,7 +220,7 @@ class TestPancakeSwapExchangeData:
 
     def test_get_capabilities(self, exchange_data):
         """Test getting exchange capabilities."""
-        capabilities = exchange_data.get_capabilities('spot')
+        capabilities = exchange_data.get_capabilities("spot")
         assert isinstance(capabilities, list)
 
     def test_kline_periods(self, exchange_data):
@@ -255,7 +248,7 @@ class TestPancakeSwapTickerData:
             volume=1.5,
             quote_volume=75000.0,
             high=51000.0,
-            low=49000.0
+            low=49000.0,
         )
 
         assert ticker.symbol == "BTCB/USDT"
@@ -272,7 +265,7 @@ class TestPancakeSwapTickerData:
             volume=1.5,
             quote_volume=75000.0,
             high=51000.0,
-            low=49000.0
+            low=49000.0,
         )
 
         # Test price change
@@ -290,7 +283,7 @@ class TestPancakeSwapTickerData:
             "price": 3000.0,
             "timestamp": 1640995200000,
             "volume": 2.0,
-            "quote_volume": 6000.0
+            "quote_volume": 6000.0,
         }
 
         ticker = PancakeSwapRequestTickerData.from_dict(data)
@@ -313,7 +306,7 @@ class TestPancakeSwapPoolData:
             token0_address="0x55d398326f99059fF775485246999027B3197955",
             token1_address="0x58F876857a02D6762EeFA1aF755FEE1271A3ACaC",
             token0_decimals=18,
-            token1_decimals=18
+            token1_decimals=18,
         )
 
         pool = PancakeSwapPoolData(
@@ -322,7 +315,7 @@ class TestPancakeSwapPoolData:
             liquidity_data=liquidity_data,
             volume_24h=10000.0,
             volume_24h_usd=500000000.0,
-            tvl=1000000000.0
+            tvl=1000000000.0,
         )
 
         assert pool.symbol == "BTCB/USDT"
@@ -341,10 +334,10 @@ class TestPancakeSwapPoolData:
                 token1_reserve=5000.0 * (i + 1),
                 token0_symbol="TOKEN",
                 token1_symbol="USDT",
-                token0_address=f"0x{'0'*40}",
-                token1_address=f"0x{'1'*40}",
+                token0_address=f"0x{'0' * 40}",
+                token1_address=f"0x{'1' * 40}",
                 token0_decimals=18,
-                token1_decimals=18
+                token1_decimals=18,
             )
             pool = PancakeSwapPoolData(
                 pool_address=f"0x{i:40x}",
@@ -352,12 +345,13 @@ class TestPancakeSwapPoolData:
                 liquidity_data=liquidity_data,
                 volume_24h=1000 * (i + 1),
                 volume_24h_usd=1000000 * (i + 1),
-                tvl=10000000 * (i + 1)
+                tvl=10000000 * (i + 1),
             )
             pools.append(pool)
 
-        pool_list = PancakeSwapPoolList(pools=pools, total_pools=5,
-                                      total_liquidity_usd=0, total_volume_24h_usd=0)
+        pool_list = PancakeSwapPoolList(
+            pools=pools, total_pools=5, total_liquidity_usd=0, total_volume_24h_usd=0
+        )
 
         # Test filtering
         filtered = pool_list.filter_by_volume(2000000)
@@ -379,7 +373,7 @@ class TestPancakeSwapPoolData:
             token0_address="0x55d398326f99059fF775485246999027B3197955",
             token1_address="0x58F876857a02D6762EeFA1aF755FEE1271A3ACaC",
             token0_decimals=18,
-            token1_decimals=18
+            token1_decimals=18,
         )
 
         pool = PancakeSwapPoolData(
@@ -388,7 +382,7 @@ class TestPancakeSwapPoolData:
             liquidity_data=liquidity_data,
             volume_24h=10000.0,
             volume_24h_usd=500000000.0,
-            tvl=1000000000.0
+            tvl=1000000000.0,
         )
 
         # Test JSON serialization
@@ -408,7 +402,7 @@ class TestPancakeSwapRegistration:
         """Test that PancakeSwap is registered in the exchange registry."""
         from bt_api_py.registry import get_exchange_class
 
-        exchange_class = get_exchange_class("PANCAKESWAP___SPOT")
+        exchange_class = get_exchange_class("PANCAKESWAP___DEX")
         assert exchange_class is not None
         assert exchange_class.__name__ == "PancakeSpotRequestData"
 
@@ -419,7 +413,7 @@ class TestPancakeStandardInterfaces:
     @pytest.fixture
     def mock_feed(self):
         data_queue = queue.Queue()
-        with patch('bt_api_py.feeds.http_client.HttpClient', return_value=MagicMock()):
+        with patch("bt_api_py.feeds.http_client.HttpClient", return_value=MagicMock()):
             feed = PancakeSpotRequestData(data_queue)
             feed.request = Mock(return_value=Mock(spec=RequestData))
             return feed
@@ -442,7 +436,7 @@ class TestPancakeStandardInterfaces:
     def test_get_exchange_info_tuple(self, mock_feed):
         path, params, extra_data = mock_feed._get_exchange_info()
         assert extra_data["request_type"] == "get_exchange_info"
-        assert extra_data["exchange_name"] == "PANCakeswap"
+        assert extra_data["exchange_name"] == "PANCAKESWAP___DEX"
 
     def test_make_order_calls_request(self, mock_feed):
         result = mock_feed.make_order("BTCB/USDT", 1.0, 50000, "LIMIT")

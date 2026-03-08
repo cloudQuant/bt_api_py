@@ -1,6 +1,7 @@
-import ntplib
-from datetime import datetime, timezone
 import socket
+from datetime import UTC, datetime
+
+import ntplib
 
 
 def get_network_time():
@@ -11,22 +12,22 @@ def get_network_time():
 
         # 尝试使用多个 NTP 服务器
         ntp_servers = [
-            'time.windows.com',  # Windows 时间服务器
-            'time.apple.com',  # Apple 时间服务器
-            'pool.ntp.org',  # 公共 NTP 服务器池
-            'time.google.com',  # Google 时间服务器
-            'ntp.aliyun.com',  # 阿里云 NTP 服务器
-            'ntp.tencent.com',  # 腾讯云 NTP 服务器
-            'ntp1.aliyun.com',  # 阿里云备用 NTP 服务器
-            'ntp2.aliyun.com',  # 阿里云备用 NTP 服务器
+            "time.windows.com",  # Windows 时间服务器
+            "time.apple.com",  # Apple 时间服务器
+            "pool.ntp.org",  # 公共 NTP 服务器池
+            "time.google.com",  # Google 时间服务器
+            "ntp.aliyun.com",  # 阿里云 NTP 服务器
+            "ntp.tencent.com",  # 腾讯云 NTP 服务器
+            "ntp1.aliyun.com",  # 阿里云备用 NTP 服务器
+            "ntp2.aliyun.com",  # 阿里云备用 NTP 服务器
         ]
 
         for server in ntp_servers:
             try:
                 response = client.request(server, timeout=0.5)  # 设置请求超时
                 # 将时间戳转换为 UTC 时间
-                return datetime.fromtimestamp(response.tx_time, tz=timezone.utc)
-            except (ntplib.NTPException, OSError, socket.timeout) as e:
+                return datetime.fromtimestamp(response.tx_time, tz=UTC)
+            except (TimeoutError, ntplib.NTPException, OSError) as e:
                 print(f"无法从 {server} 获取时间: {e}")
                 continue
 
@@ -36,7 +37,7 @@ def get_network_time():
 
 
 def get_system_time():
-    return datetime.now(timezone.utc)  # 返回 UTC 时间，确保与网络时间一致
+    return datetime.now(UTC)  # 返回 UTC 时间，确保与网络时间一致
 
 
 def test_compare_times():

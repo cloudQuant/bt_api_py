@@ -12,14 +12,14 @@ Components:
 
 from bt_api_py.feeds.live_gateio.request_base import GateioRequestData
 from bt_api_py.feeds.live_gateio.spot import (
-    GateioRequestDataSpot,
-    GateioMarketWssDataSpot,
     GateioAccountWssDataSpot,
+    GateioMarketWssDataSpot,
+    GateioRequestDataSpot,
 )
 from bt_api_py.feeds.live_gateio.swap import (
-    GateioRequestDataSwap,
-    GateioMarketWssDataSwap,
     GateioAccountWssDataSwap,
+    GateioMarketWssDataSwap,
+    GateioRequestDataSwap,
 )
 
 __all__ = [

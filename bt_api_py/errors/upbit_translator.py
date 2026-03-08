@@ -25,14 +25,18 @@ class UpbitErrorTranslator(ErrorTranslator):
         "JWT_VERIFICATION": (UnifiedErrorCode.INVALID_SIGNATURE, "JWT verification failed"),
         "NO_AUTHORIZATION_IP": (UnifiedErrorCode.PERMISSION_DENIED, "IP not authorized"),
         "NONCE_USED": (UnifiedErrorCode.EXPIRED_TIMESTAMP, "Nonce already used"),
-
         # 限流错误
         "TOO_MANY_REQUESTS": (UnifiedErrorCode.RATE_LIMIT_EXCEEDED, "Too many requests"),
         "REQUEST_LIMIT_EXCEEDED": (UnifiedErrorCode.RATE_LIMIT_EXCEEDED, "Request limit exceeded"),
-
         # 业务错误
-        "INSUFFICIENT_FUNDS_BID": (UnifiedErrorCode.INSUFFICIENT_BALANCE, "Insufficient funds for buy order"),
-        "INSUFFICIENT_FUNDS_ASK": (UnifiedErrorCode.INSUFFICIENT_BALANCE, "Insufficient funds for sell order"),
+        "INSUFFICIENT_FUNDS_BID": (
+            UnifiedErrorCode.INSUFFICIENT_BALANCE,
+            "Insufficient funds for buy order",
+        ),
+        "INSUFFICIENT_FUNDS_ASK": (
+            UnifiedErrorCode.INSUFFICIENT_BALANCE,
+            "Insufficient funds for sell order",
+        ),
         "UNDER_MIN_TOTAL_BID": (UnifiedErrorCode.MINIMUM_NOT_MET, "Below minimum buy amount"),
         "UNDER_MIN_TOTAL_ASK": (UnifiedErrorCode.MINIMUM_NOT_MET, "Below minimum sell amount"),
         "INVALID_MARKET": (UnifiedErrorCode.INVALID_SYMBOL, "Invalid market symbol"),
@@ -44,16 +48,17 @@ class UpbitErrorTranslator(ErrorTranslator):
         "DUPLICATE_ORDER": (UnifiedErrorCode.DUPLICATE_ORDER, "Duplicate order"),
         "MARKET_CLOSED": (UnifiedErrorCode.MARKET_CLOSED, "Market is closed"),
         "ORDER_TIMEOUT": (UnifiedErrorCode.ORDER_TIMEOUT, "Order timeout"),
-
         # 参数错误
         "MISSING_PARAMETER": (UnifiedErrorCode.MISSING_PARAMETER, "Missing required parameter"),
         "INVALID_PARAMETER": (UnifiedErrorCode.INVALID_PARAMETER, "Invalid parameter value"),
         "INVALID_PARAMETER_TYPE": (UnifiedErrorCode.INVALID_PARAMETER, "Invalid parameter type"),
         "PARAMETER_OUT_OF_RANGE": (UnifiedErrorCode.INVALID_PARAMETER, "Parameter out of range"),
-
         # 系统错误
         "INTERNAL_SERVER_ERROR": (UnifiedErrorCode.INTERNAL_ERROR, "Internal server error"),
-        "SERVICE_TEMPORARILY_UNAVAILABLE": (UnifiedErrorCode.EXCHANGE_MAINTENANCE, "Service temporarily unavailable"),
+        "SERVICE_TEMPORARILY_UNAVAILABLE": (
+            UnifiedErrorCode.EXCHANGE_MAINTENANCE,
+            "Service temporarily unavailable",
+        ),
         "DATABASE_ERROR": (UnifiedErrorCode.INTERNAL_ERROR, "Database error"),
         "NETWORK_ERROR": (UnifiedErrorCode.NETWORK_TIMEOUT, "Network error"),
     }

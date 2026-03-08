@@ -77,9 +77,7 @@ class Feed(AsyncBase, ConnectionMixin, CapabilityMixin):
         :param e: exception type, exception value, exception traceback
         :return: None
         """
-        self.logger.warn(
-            f"url -> {url},\n " f"headers -> {headers},\n " f"body:{body},\n " f"e:{e}"
-        )
+        self.logger.warn(f"url -> {url},\n headers -> {headers},\n body:{body},\n e:{e}")
         self.raise400(self.exchange_name)
 
     def raise_path_error(self, *args):
@@ -147,9 +145,7 @@ class Feed(AsyncBase, ConnectionMixin, CapabilityMixin):
                     )
                 # Retryable errors (timeout, connection, etc.)
                 if attempt < max_retries - 1:
-                    self.logger.warn(
-                        f"Retry {attempt + 1}/{max_retries} for {url}: {e}"
-                    )
+                    self.logger.warn(f"Retry {attempt + 1}/{max_retries} for {url}: {e}")
                     _time.sleep(1)
                     continue
                 # Final attempt failed

@@ -1,13 +1,11 @@
-- --
-
+---
 name: 'step-v-01-validate'
 description: 'Validate teach-me-testing workflow quality against BMAD standards'
 
 workflowPath: '../'
 checklistFile: '../checklist.md'
 validationReport: '{test_artifacts}/workflow-validation/teach-me-testing-validation-{date}.md'
-
-- --
+---
 
 # Validate Step 1: Quality Validation
 
@@ -59,11 +57,11 @@ This will validate:
 - State management
 - Documentation
 
-- *Starting validation...**"
+**Starting validation...**"
 
 ### 2. Foundation Structure Validation
 
-- *Check:**
+**Check:**
 
 - [ ] workflow.md exists with proper frontmatter
 - [ ] Tri-modal routing logic present
@@ -75,7 +73,7 @@ Report findings: Pass/Fail for each check.
 
 ### 3. Template Validation
 
-- *Check templates/:**
+**Check templates/:**
 
 - [ ] progress-template.yaml has complete schema
 - [ ] All 7 sessions defined
@@ -88,7 +86,7 @@ Report findings.
 
 ### 4. Step File Validation (CREATE Mode)
 
-- *For each of 12 steps in steps-c/:**
+**For each of 12 steps in steps-c/:**
 
 - [ ] Frontmatter valid (name, description present)
 - [ ] All frontmatter variables used in body
@@ -103,7 +101,7 @@ Report findings per step.
 
 ### 5. Data File Validation
 
-- *Check data/:**
+**Check data/:**
 
 - [ ] curriculum.yaml defines all 7 sessions
 - [ ] role-paths.yaml has all 4 roles (QA/Dev/Lead/VP)
@@ -115,7 +113,7 @@ Report findings.
 
 ### 6. Content Quality Validation
 
-- *Check session steps:**
+**Check session steps:**
 
 - [ ] Teaching content present and comprehensive
 - [ ] Role-adapted examples present
@@ -128,7 +126,7 @@ Report findings.
 
 ### 7. State Management Validation
 
-- *Check continuable workflow features:**
+**Check continuable workflow features:**
 
 - [ ] step-01-init checks for existing progress
 - [ ] step-01b-continue loads and displays progress
@@ -141,7 +139,7 @@ Report findings.
 
 ### 8. User Experience Validation
 
-- *Check UX:**
+**Check UX:**
 
 - [ ] Clear navigation instructions
 - [ ] Progress visibility (percentage, indicators)
@@ -157,34 +155,31 @@ Report findings.
 Create {validationReport}:
 
 ```markdown
-
-- --
-
+---
 workflow: teach-me-testing
 validation_date: { current_date }
 validator: TEA Validation Workflow
 overall_status: PASS / FAIL / PASS_WITH_WARNINGS
-
-- --
+---
 
 # Teach Me Testing - Validation Report
 
-- *Date:** {current_date}
-- *Workflow Version:** 1.0.0
-- *Overall Status:** {status}
+**Date:** {current_date}
+**Workflow Version:** 1.0.0
+**Overall Status:** {status}
 
-- --
+---
 
 ## Validation Summary
 
-- *Total Checks:** {count}
-- *Passed:** {pass_count}
-- *Failed:** {fail_count}
-- *Warnings:** {warning_count}
+**Total Checks:** {count}
+**Passed:** {pass_count}
+**Failed:** {fail_count}
+**Warnings:** {warning_count}
 
-- *Overall Quality Score:** {score}/100
+**Overall Quality Score:** {score}/100
 
-- --
+---
 
 ## Foundation Structure
 
@@ -214,39 +209,38 @@ overall_status: PASS / FAIL / PASS_WITH_WARNINGS
 
 {Report findings}
 
-- --
+---
 
 ## Issues Found
 
 {List all failures and warnings}
 
-- --
+---
 
 ## Remediation Recommendations
 
 {For each issue, provide fix guidance}
 
-- --
+---
 
 ## Conclusion
 
 {Overall assessment}
 
-- *Status:** {READY_FOR_PRODUCTION / NEEDS_FIXES / PASS_WITH_MINOR_ISSUES}
-
-```bash
+**Status:** {READY_FOR_PRODUCTION / NEEDS_FIXES / PASS_WITH_MINOR_ISSUES}
+```
 
 ### 10. Display Results
 
 "**Validation Complete!**
 
-- *Overall Status:** {status}
-- *Quality Score:** {score}/100
+**Overall Status:** {status}
+**Quality Score:** {score}/100
 
-- *Report saved:**{validationReport}
+**Report saved:** {validationReport}
 
 {If PASS:}
-✅**Workflow is ready for production!**
+✅ **Workflow is ready for production!**
 
 {If FAIL:}
 ❌ **Issues found that need fixing.**
@@ -256,14 +250,14 @@ See report for details: {validationReport}
 ⚠️ **Minor issues found.**
 Workflow is usable but could be improved.
 
-- *Validation report generated.**"
+**Validation report generated.**"
 
-- *This is the final validation step - workflow ends here.**
+**This is the final validation step - workflow ends here.**
 
-- --
+---
 
 ## 🚨 SUCCESS METRICS
 
 ✅ All validation checks run, comprehensive report generated, issues identified with remediation guidance, overall status determined.
 
-- *Master Rule:** Check everything systematically, report findings clearly, provide actionable remediation.
+**Master Rule:** Check everything systematically, report findings clearly, provide actionable remediation.

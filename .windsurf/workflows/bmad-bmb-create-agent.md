@@ -1,9 +1,7 @@
-- --
-
+---
 description: 'Create a new BMAD agent with best practices and compliance'
 auto_execution_mode: "iterate"
-
-- --
+---
 
 # create-agent
 

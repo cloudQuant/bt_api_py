@@ -4,16 +4,16 @@ Comprehensive coverage: parameter generation, normalization, mocked HTTP sync
 calls, registry, method existence, feed init, auth, and integration tests.
 """
 
-import json
 import queue
-import pytest
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock, patch
 
-from bt_api_py.feeds.live_poloniex.spot import PoloniexRequestDataSpot
+import pytest
+
 from bt_api_py.containers.exchanges.poloniex_exchange_data import (
     PoloniexExchangeDataSpot,
 )
 from bt_api_py.containers.requestdatas.request_data import RequestData
+from bt_api_py.feeds.live_poloniex.spot import PoloniexRequestDataSpot
 
 # ── Sample API responses ─────────────────────────────────────
 
@@ -39,13 +39,49 @@ SAMPLE_ORDERBOOK = {
 }
 
 SAMPLE_KLINES = [
-    ["50000", "51000", "49000", "50500", "1000", "50000000", "1234", 1704067200000, 1704070800000, 0],
-    ["50500", "51500", "50000", "51000", "1500", "75000000", "2345", 1704070800000, 1704074400000, 0],
+    [
+        "50000",
+        "51000",
+        "49000",
+        "50500",
+        "1000",
+        "50000000",
+        "1234",
+        1704067200000,
+        1704070800000,
+        0,
+    ],
+    [
+        "50500",
+        "51500",
+        "50000",
+        "51000",
+        "1500",
+        "75000000",
+        "2345",
+        1704070800000,
+        1704074400000,
+        0,
+    ],
 ]
 
 SAMPLE_TRADES = [
-    {"id": "1001", "price": "50000", "quantity": "0.01", "takerSide": "buy", "ts": 1704067200000, "createTime": 1704067200000},
-    {"id": "1002", "price": "50001", "quantity": "0.02", "takerSide": "sell", "ts": 1704067201000, "createTime": 1704067201000},
+    {
+        "id": "1001",
+        "price": "50000",
+        "quantity": "0.01",
+        "takerSide": "buy",
+        "ts": 1704067200000,
+        "createTime": 1704067200000,
+    },
+    {
+        "id": "1002",
+        "price": "50001",
+        "quantity": "0.02",
+        "takerSide": "sell",
+        "ts": 1704067201000,
+        "createTime": 1704067201000,
+    },
 ]
 
 SAMPLE_BALANCE = [
@@ -85,6 +121,7 @@ SAMPLE_ERROR = {"code": 21304, "message": "Insufficient balance"}
 
 
 # ── Helpers ──────────────────────────────────────────────────
+
 
 def _make_feed(**kwargs):
     q = kwargs.pop("data_queue", queue.Queue())
@@ -254,13 +291,15 @@ class TestParameterGeneration:
 
     def test_make_order_post_only(self):
         feed = _make_feed()
-        _, params, _ = feed._make_order("BTC/USDT", "1.0", "50000", order_type="buy-limit", post_only=True)
+        _, params, _ = feed._make_order(
+            "BTC/USDT", "1.0", "50000", order_type="buy-limit", post_only=True
+        )
         assert params["timeInForce"] == "GTX"
 
     def test_cancel_order_by_id(self):
         feed = _make_feed()
         path, params, ed = feed._cancel_order(order_id="123456")
-        assert "DELETE /orders/123456" == path
+        assert path == "DELETE /orders/123456"
         assert params == {}
 
     def test_cancel_order_by_symbol(self):
@@ -341,7 +380,9 @@ class TestNormalization:
         assert len(data) == 2
 
     def test_balance_dict_with_balances(self):
-        data, ok = PoloniexRequestDataSpot._get_balance_normalize_function({"balances": SAMPLE_BALANCE}, {})
+        data, ok = PoloniexRequestDataSpot._get_balance_normalize_function(
+            {"balances": SAMPLE_BALANCE}, {}
+        )
         assert ok is True
         assert len(data) == 2
 
@@ -355,7 +396,9 @@ class TestNormalization:
         assert ok is False
 
     def test_server_time(self):
-        data, ok = PoloniexRequestDataSpot._get_server_time_normalize_function(SAMPLE_SERVER_TIME, {})
+        data, ok = PoloniexRequestDataSpot._get_server_time_normalize_function(
+            SAMPLE_SERVER_TIME, {}
+        )
         assert ok is True
 
     def test_exchange_info_list(self):
@@ -373,7 +416,9 @@ class TestNormalization:
         assert len(data) == 1
 
     def test_cancel_order_dict(self):
-        data, ok = PoloniexRequestDataSpot._cancel_order_normalize_function({"orderId": "123", "state": "CANCELED"}, {})
+        data, ok = PoloniexRequestDataSpot._cancel_order_normalize_function(
+            {"orderId": "123", "state": "CANCELED"}, {}
+        )
         assert ok is True
 
     def test_query_order_dict(self):
@@ -453,17 +498,22 @@ class TestAuth:
 
 class TestRegistry:
     def test_poloniex_spot_registered(self):
-        from bt_api_py.registry import ExchangeRegistry
         import bt_api_py.exchange_registers.register_poloniex  # noqa: F401
+        from bt_api_py.registry import ExchangeRegistry
+
         assert ExchangeRegistry.has_exchange("POLONIEX___SPOT")
         assert ExchangeRegistry._feed_classes["POLONIEX___SPOT"] is PoloniexRequestDataSpot
 
     def test_exchange_data_registered(self):
         from bt_api_py.registry import ExchangeRegistry
-        assert ExchangeRegistry._exchange_data_classes["POLONIEX___SPOT"] is PoloniexExchangeDataSpot
+
+        assert (
+            ExchangeRegistry._exchange_data_classes["POLONIEX___SPOT"] is PoloniexExchangeDataSpot
+        )
 
     def test_balance_handler_registered(self):
         from bt_api_py.registry import ExchangeRegistry
+
         handler = ExchangeRegistry.get_balance_handler("POLONIEX___SPOT")
         assert callable(handler)
 
@@ -473,20 +523,34 @@ class TestRegistry:
 
 class TestMethodExistence:
     METHODS = [
-        "get_tick", "async_get_tick",
-        "get_ticker", "async_get_ticker",
-        "get_depth", "async_get_depth",
-        "get_kline", "async_get_kline",
-        "get_trade_history", "async_get_trade_history",
-        "get_trades", "async_get_trades",
-        "make_order", "async_make_order",
-        "cancel_order", "async_cancel_order",
-        "query_order", "async_query_order",
-        "get_open_orders", "async_get_open_orders",
-        "get_account", "async_get_account",
-        "get_balance", "async_get_balance",
-        "get_server_time", "async_get_server_time",
-        "get_exchange_info", "async_get_exchange_info",
+        "get_tick",
+        "async_get_tick",
+        "get_ticker",
+        "async_get_ticker",
+        "get_depth",
+        "async_get_depth",
+        "get_kline",
+        "async_get_kline",
+        "get_trade_history",
+        "async_get_trade_history",
+        "get_trades",
+        "async_get_trades",
+        "make_order",
+        "async_make_order",
+        "cancel_order",
+        "async_cancel_order",
+        "query_order",
+        "async_query_order",
+        "get_open_orders",
+        "async_get_open_orders",
+        "get_account",
+        "async_get_account",
+        "get_balance",
+        "async_get_balance",
+        "get_server_time",
+        "async_get_server_time",
+        "get_exchange_info",
+        "async_get_exchange_info",
         "get_deals",
     ]
 
@@ -521,6 +585,7 @@ class TestFeedInit:
 
     def test_capabilities(self):
         from bt_api_py.feeds.capability import Capability
+
         caps = PoloniexRequestDataSpot._capabilities()
         assert Capability.GET_TICK in caps
         assert Capability.GET_DEPTH in caps

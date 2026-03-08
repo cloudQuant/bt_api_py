@@ -8,24 +8,22 @@ Run tests:
 import json
 import queue
 import time
-from unittest.mock import Mock, patch, MagicMock
+from unittest.mock import Mock
 
 import pytest
 
+# Import registration to auto-register bitFlyer
+import bt_api_py.exchange_registers.register_bitflyer  # noqa: F401
 from bt_api_py.containers.exchanges.bitflyer_exchange_data import (
-    BitflyerExchangeData,
     BitflyerExchangeDataSpot,
 )
+from bt_api_py.containers.requestdatas.request_data import RequestData
 from bt_api_py.containers.tickers.bitflyer_ticker import (
     BitflyerRequestTickerData,
 )
-from bt_api_py.containers.requestdatas.request_data import RequestData
-from bt_api_py.feeds.live_bitflyer import BitflyerRequestDataSpot
 from bt_api_py.feeds.capability import Capability
+from bt_api_py.feeds.live_bitflyer import BitflyerRequestDataSpot
 from bt_api_py.registry import ExchangeRegistry
-
-# Import registration to auto-register bitFlyer
-import bt_api_py.exchange_registers.register_bitflyer  # noqa: F401
 
 
 @pytest.fixture
@@ -161,9 +159,7 @@ class TestBitflyerDataContainers:
             "volume": 1234.56,
             "volume_by_product": 1234567.89,
         }
-        ticker = BitflyerRequestTickerData(
-            json.dumps(ticker_data), "BTC-JPY", "SPOT", False
-        )
+        ticker = BitflyerRequestTickerData(json.dumps(ticker_data), "BTC-JPY", "SPOT", False)
         ticker.init_data()
         assert ticker.get_exchange_name() == "BITFLYER"
         assert ticker.last_price == 5000500.0
@@ -243,6 +239,7 @@ class TestBitflyerBaseCapabilities:
 
     def test_base_capabilities(self):
         from bt_api_py.feeds.live_bitflyer.request_base import BitflyerRequestData
+
         caps = BitflyerRequestData._capabilities()
         assert Capability.GET_TICK in caps
         assert Capability.MAKE_ORDER in caps

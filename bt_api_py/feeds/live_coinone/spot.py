@@ -71,7 +71,9 @@ class CoinoneRequestDataSpot(CoinoneRequestData):
         path, body, extra = self._make_order(symbol, size, price, order_type, extra_data, **kwargs)
         return self.request(path, body=body, extra_data=extra, is_sign=True)
 
-    async def async_make_order(self, symbol, size, price=None, order_type="bid", extra_data=None, **kwargs):
+    async def async_make_order(
+        self, symbol, size, price=None, order_type="bid", extra_data=None, **kwargs
+    ):
         path, body, extra = self._make_order(symbol, size, price, order_type, extra_data, **kwargs)
         return await self.async_request(path, body=body, extra_data=extra, is_sign=True)
 

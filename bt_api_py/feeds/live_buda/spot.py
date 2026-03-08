@@ -2,7 +2,6 @@
 Buda Spot Feed implementation.
 """
 
-from bt_api_py.containers.exchanges.buda_exchange_data import BudaExchangeDataSpot
 from bt_api_py.feeds.capability import Capability
 from bt_api_py.feeds.live_buda.request_base import BudaRequestData
 
@@ -34,13 +33,15 @@ class BudaRequestDataSpot(BudaRequestData):
         path = f"GET /v2/markets/{symbol}/ticker"
         if extra_data is None:
             extra_data = {}
-        extra_data.update({
-            "request_type": "get_tick",
-            "symbol_name": symbol,
-            "asset_type": self.asset_type,
-            "exchange_name": self.exchange_name,
-            "normalize_function": self._get_tick_normalize_function,
-        })
+        extra_data.update(
+            {
+                "request_type": "get_tick",
+                "symbol_name": symbol,
+                "asset_type": self.asset_type,
+                "exchange_name": self.exchange_name,
+                "normalize_function": self._get_tick_normalize_function,
+            }
+        )
         return path, {}, extra_data
 
     @staticmethod
@@ -68,13 +69,15 @@ class BudaRequestDataSpot(BudaRequestData):
         path = f"GET /v2/markets/{symbol}/order_book"
         if extra_data is None:
             extra_data = {}
-        extra_data.update({
-            "request_type": "get_depth",
-            "symbol_name": symbol,
-            "asset_type": self.asset_type,
-            "exchange_name": self.exchange_name,
-            "normalize_function": self._get_depth_normalize_function,
-        })
+        extra_data.update(
+            {
+                "request_type": "get_depth",
+                "symbol_name": symbol,
+                "asset_type": self.asset_type,
+                "exchange_name": self.exchange_name,
+                "normalize_function": self._get_depth_normalize_function,
+            }
+        )
         return path, {}, extra_data
 
     @staticmethod
@@ -102,13 +105,15 @@ class BudaRequestDataSpot(BudaRequestData):
         path = f"GET /v2/markets/{symbol}/candles"
         if extra_data is None:
             extra_data = {}
-        extra_data.update({
-            "request_type": "get_kline",
-            "symbol_name": symbol,
-            "asset_type": self.asset_type,
-            "exchange_name": self.exchange_name,
-            "normalize_function": self._get_kline_normalize_function,
-        })
+        extra_data.update(
+            {
+                "request_type": "get_kline",
+                "symbol_name": symbol,
+                "asset_type": self.asset_type,
+                "exchange_name": self.exchange_name,
+                "normalize_function": self._get_kline_normalize_function,
+            }
+        )
         period_str = self._params.kline_periods.get(period, period)
         params = {"time_frame": period_str}
         return path, params, extra_data
@@ -138,13 +143,15 @@ class BudaRequestDataSpot(BudaRequestData):
         path = "GET /v2/markets"
         if extra_data is None:
             extra_data = {}
-        extra_data.update({
-            "request_type": "get_exchange_info",
-            "symbol_name": "",
-            "asset_type": self.asset_type,
-            "exchange_name": self.exchange_name,
-            "normalize_function": self._get_exchange_info_normalize_function,
-        })
+        extra_data.update(
+            {
+                "request_type": "get_exchange_info",
+                "symbol_name": "",
+                "asset_type": self.asset_type,
+                "exchange_name": self.exchange_name,
+                "normalize_function": self._get_exchange_info_normalize_function,
+            }
+        )
         return path, {}, extra_data
 
     @staticmethod
@@ -164,13 +171,15 @@ class BudaRequestDataSpot(BudaRequestData):
         path = f"GET /v2/markets/{symbol}/trades"
         if extra_data is None:
             extra_data = {}
-        extra_data.update({
-            "request_type": "get_trades",
-            "symbol_name": symbol,
-            "asset_type": self.asset_type,
-            "exchange_name": self.exchange_name,
-            "normalize_function": self._get_trades_normalize_function,
-        })
+        extra_data.update(
+            {
+                "request_type": "get_trades",
+                "symbol_name": symbol,
+                "asset_type": self.asset_type,
+                "exchange_name": self.exchange_name,
+                "normalize_function": self._get_trades_normalize_function,
+            }
+        )
         params = {"limit": count}
         return path, params, extra_data
 
@@ -193,13 +202,15 @@ class BudaRequestDataSpot(BudaRequestData):
         path = "GET /v2/balances"
         if extra_data is None:
             extra_data = {}
-        extra_data.update({
-            "request_type": "get_account",
-            "symbol_name": "",
-            "asset_type": self.asset_type,
-            "exchange_name": self.exchange_name,
-            "normalize_function": self._get_account_normalize_function,
-        })
+        extra_data.update(
+            {
+                "request_type": "get_account",
+                "symbol_name": "",
+                "asset_type": self.asset_type,
+                "exchange_name": self.exchange_name,
+                "normalize_function": self._get_account_normalize_function,
+            }
+        )
         return path, {}, extra_data
 
     @staticmethod
@@ -230,13 +241,15 @@ class BudaRequestDataSpot(BudaRequestData):
             path = "GET /v2/balances"
         if extra_data is None:
             extra_data = {}
-        extra_data.update({
-            "request_type": "get_balance",
-            "symbol_name": symbol or "",
-            "asset_type": self.asset_type,
-            "exchange_name": self.exchange_name,
-            "normalize_function": self._get_balance_normalize_function,
-        })
+        extra_data.update(
+            {
+                "request_type": "get_balance",
+                "symbol_name": symbol or "",
+                "asset_type": self.asset_type,
+                "exchange_name": self.exchange_name,
+                "normalize_function": self._get_balance_normalize_function,
+            }
+        )
         return path, {}, extra_data
 
     @staticmethod
@@ -253,18 +266,30 @@ class BudaRequestDataSpot(BudaRequestData):
 
     # ==================== Trading Interfaces ====================
 
-    def _make_order(self, symbol, volume, price, order_type, offset="open",
-                    post_only=False, client_order_id=None, extra_data=None, **kwargs):
+    def _make_order(
+        self,
+        symbol,
+        volume,
+        price,
+        order_type,
+        offset="open",
+        post_only=False,
+        client_order_id=None,
+        extra_data=None,
+        **kwargs,
+    ):
         """Prepare order. Returns (path, params, extra_data)."""
         path = f"POST /v2/markets/{symbol}/orders"
         if extra_data is None:
             extra_data = {}
-        extra_data.update({
-            "exchange_name": self.exchange_name,
-            "symbol_name": symbol,
-            "asset_type": self.asset_type,
-            "request_type": "make_order",
-        })
+        extra_data.update(
+            {
+                "exchange_name": self.exchange_name,
+                "symbol_name": symbol,
+                "asset_type": self.asset_type,
+                "request_type": "make_order",
+            }
+        )
         side = "Bid" if offset.upper() in ("BUY", "OPEN") else "Ask"
         params = {
             "type": side,
@@ -274,12 +299,29 @@ class BudaRequestDataSpot(BudaRequestData):
         }
         return path, params, extra_data
 
-    def make_order(self, symbol, volume, price, order_type, offset="open",
-                   post_only=False, client_order_id=None, extra_data=None, **kwargs):
+    def make_order(
+        self,
+        symbol,
+        volume,
+        price,
+        order_type,
+        offset="open",
+        post_only=False,
+        client_order_id=None,
+        extra_data=None,
+        **kwargs,
+    ):
         """Place an order."""
         path, params, extra_data = self._make_order(
-            symbol, volume, price, order_type, offset, post_only,
-            client_order_id, extra_data, **kwargs
+            symbol,
+            volume,
+            price,
+            order_type,
+            offset,
+            post_only,
+            client_order_id,
+            extra_data,
+            **kwargs,
         )
         return self.request(path, body=params, extra_data=extra_data)
 
@@ -288,13 +330,15 @@ class BudaRequestDataSpot(BudaRequestData):
         path = f"PUT /v2/orders/{order_id}"
         if extra_data is None:
             extra_data = {}
-        extra_data.update({
-            "exchange_name": self.exchange_name,
-            "symbol_name": symbol,
-            "asset_type": self.asset_type,
-            "request_type": "cancel_order",
-            "order_id": order_id,
-        })
+        extra_data.update(
+            {
+                "exchange_name": self.exchange_name,
+                "symbol_name": symbol,
+                "asset_type": self.asset_type,
+                "request_type": "cancel_order",
+                "order_id": order_id,
+            }
+        )
         params = {"state": "canceling"}
         return path, params, extra_data
 
@@ -308,13 +352,15 @@ class BudaRequestDataSpot(BudaRequestData):
         path = f"GET /v2/orders/{order_id}"
         if extra_data is None:
             extra_data = {}
-        extra_data.update({
-            "exchange_name": self.exchange_name,
-            "symbol_name": symbol,
-            "asset_type": self.asset_type,
-            "request_type": "query_order",
-            "order_id": order_id,
-        })
+        extra_data.update(
+            {
+                "exchange_name": self.exchange_name,
+                "symbol_name": symbol,
+                "asset_type": self.asset_type,
+                "request_type": "query_order",
+                "order_id": order_id,
+            }
+        )
         return path, {}, extra_data
 
     def query_order(self, symbol, order_id, extra_data=None, **kwargs):
@@ -330,12 +376,14 @@ class BudaRequestDataSpot(BudaRequestData):
             path = "GET /v2/orders"
         if extra_data is None:
             extra_data = {}
-        extra_data.update({
-            "exchange_name": self.exchange_name,
-            "symbol_name": symbol or "",
-            "asset_type": self.asset_type,
-            "request_type": "get_open_orders",
-        })
+        extra_data.update(
+            {
+                "exchange_name": self.exchange_name,
+                "symbol_name": symbol or "",
+                "asset_type": self.asset_type,
+                "request_type": "get_open_orders",
+            }
+        )
         params = {"state": "pending"}
         return path, params, extra_data
 

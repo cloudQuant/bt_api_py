@@ -18,6 +18,8 @@ import queue
 
 import pytest
 
+# Import registration to auto-register Binance
+import bt_api_py.exchange_registers.register_binance  # noqa: F401
 from bt_api_py.containers.balances.binance_balance import (
     BinanceSpotWssBalanceData,
 )
@@ -27,14 +29,10 @@ from bt_api_py.containers.exchanges.binance_exchange_data import (
 )
 from bt_api_py.containers.orders.binance_order import (
     BinanceRequestOrderData,
-    BinanceSpotWssOrderData,
 )
 from bt_api_py.containers.tickers.binance_ticker import BinanceRequestTickerData
 from bt_api_py.feeds.live_binance.spot import BinanceRequestDataSpot
 from bt_api_py.registry import ExchangeRegistry
-
-# Import registration to auto-register Binance
-import bt_api_py.exchange_registers.register_binance  # noqa: F401
 
 
 class TestBinanceExchangeData:
@@ -151,9 +149,7 @@ class TestBinanceDataContainers:
             "lowPrice": "49000",
         }
 
-        ticker = BinanceRequestTickerData(
-            ticker_response, "BTC-USDT", "SPOT", True
-        )
+        ticker = BinanceRequestTickerData(ticker_response, "BTC-USDT", "SPOT", True)
         ticker.init_data()
 
         assert ticker.get_exchange_name() == "BINANCE"
@@ -179,9 +175,7 @@ class TestBinanceDataContainers:
             "time": 1688671955000,
         }
 
-        order = BinanceRequestOrderData(
-            order_response, "BTC-USDT", "SPOT", True
-        )
+        order = BinanceRequestOrderData(order_response, "BTC-USDT", "SPOT", True)
         order.init_data()
 
         assert order.get_exchange_name() == "BINANCE"

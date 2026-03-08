@@ -1,5 +1,5 @@
-from itertools import chain
 from collections import ChainMap
+from itertools import chain
 
 
 def method_1():

@@ -10,10 +10,10 @@ from bt_api_py.containers.exchanges.hyperliquid_exchange_data import (
     HyperliquidExchangeDataSwap,
 )
 from bt_api_py.feeds.live_hyperliquid import (
+    HyperliquidAccountWssDataSpot,
+    HyperliquidMarketWssDataSpot,
     HyperliquidRequestData,
     HyperliquidRequestDataSpot,
-    HyperliquidMarketWssDataSpot,
-    HyperliquidAccountWssDataSpot,
 )
 from bt_api_py.registry import ExchangeRegistry
 
@@ -74,13 +74,17 @@ def register_hyperliquid():
     ExchangeRegistry.register_feed("HYPERLIQUID___SWAP", HyperliquidRequestData)
     ExchangeRegistry.register_exchange_data("HYPERLIQUID___SWAP", HyperliquidExchangeDataSwap)
     ExchangeRegistry.register_balance_handler("HYPERLIQUID___SWAP", _hyperliquid_balance_handler)
-    ExchangeRegistry.register_stream("HYPERLIQUID___SWAP", "subscribe", _hyperliquid_swap_subscribe_handler)
+    ExchangeRegistry.register_stream(
+        "HYPERLIQUID___SWAP", "subscribe", _hyperliquid_swap_subscribe_handler
+    )
 
     # Spot
     ExchangeRegistry.register_feed("HYPERLIQUID___SPOT", HyperliquidRequestDataSpot)
     ExchangeRegistry.register_exchange_data("HYPERLIQUID___SPOT", HyperliquidExchangeDataSpot)
     ExchangeRegistry.register_balance_handler("HYPERLIQUID___SPOT", _hyperliquid_balance_handler)
-    ExchangeRegistry.register_stream("HYPERLIQUID___SPOT", "subscribe", _hyperliquid_spot_subscribe_handler)
+    ExchangeRegistry.register_stream(
+        "HYPERLIQUID___SPOT", "subscribe", _hyperliquid_spot_subscribe_handler
+    )
 
 
 # 模块导入时自动注册

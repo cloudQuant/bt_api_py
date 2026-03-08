@@ -6,7 +6,7 @@ import json
 import time
 
 from bt_api_py.containers.trades.trade import TradeData
-from bt_api_py.functions.utils import from_dict_get_float, from_dict_get_string, from_dict_get_int
+from bt_api_py.functions.utils import from_dict_get_float, from_dict_get_string
 
 
 class GateioTradeData(TradeData):
@@ -231,10 +231,7 @@ class GateioTradeHistory:
 
     def get_trades_by_time_range(self, start_time, end_time):
         """Get trades within time range"""
-        return [
-            trade for trade in self.trades
-            if start_time <= trade.get_create_time() <= end_time
-        ]
+        return [trade for trade in self.trades if start_time <= trade.get_create_time() <= end_time]
 
     def __str__(self):
         return json.dumps(self.get_all_trades())

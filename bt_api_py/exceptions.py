@@ -195,7 +195,7 @@ class RequestFailedError(BtApiError):
     """通用请求失败错误（用于 HTTP 客户端）"""
 
     def __init__(self, venue="", message="", status_code=None):
-        msg = f"Request failed"
+        msg = "Request failed"
         if venue:
             msg = f"{venue} request failed"
         if message:

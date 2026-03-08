@@ -128,13 +128,15 @@ class BybitOrderData(OrderData):
     def __str__(self):
         """返回订单的字符串表示"""
         self.init_data()
-        return (f"BybitOrder(id={self.order_id}, "
-                f"symbol={self.symbol_name}, "
-                f"side={self.side}, "
-                f"type={self.order_type}, "
-                f"status={self.status}, "
-                f"qty={self.qty}, "
-                f"filled={self.filled_qty})")
+        return (
+            f"BybitOrder(id={self.order_id}, "
+            f"symbol={self.symbol_name}, "
+            f"side={self.side}, "
+            f"type={self.order_type}, "
+            f"status={self.status}, "
+            f"qty={self.qty}, "
+            f"filled={self.filled_qty})"
+        )
 
 
 class BybitSpotOrderData(BybitOrderData):

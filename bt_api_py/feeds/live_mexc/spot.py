@@ -4,12 +4,11 @@ MEXC Spot Trading Feed
 Implements spot trading functionality for MEXC exchange.
 """
 
-import time
+from bt_api_py.containers.balances.mexc_balance import MexcRequestBalanceData
 from bt_api_py.containers.exchanges.mexc_exchange_data import MexcExchangeDataSpot
+from bt_api_py.containers.orderbooks.mexc_orderbook import MexcRequestOrderBookData
 from bt_api_py.containers.orders.mexc_order import MexcRequestOrderData
 from bt_api_py.containers.tickers.mexc_ticker import MexcRequestTickerData
-from bt_api_py.containers.orderbooks.mexc_orderbook import MexcRequestOrderBookData
-from bt_api_py.containers.balances.mexc_balance import MexcRequestBalanceData
 from bt_api_py.containers.trades.mexc_trade import MexcRequestTradeData
 from bt_api_py.feeds.live_mexc.request_base import MexcRequestData
 from bt_api_py.functions.utils import update_extra_data
@@ -168,10 +167,7 @@ class MexcRequestDataSpot(MexcRequestData):
         request_symbol = self._params.get_symbol(symbol)
         request_type = "get_order_book"
         path = self._params.get_rest_path(request_type)
-        params = {
-            "symbol": request_symbol,
-            "limit": limit
-        }
+        params = {"symbol": request_symbol, "limit": limit}
 
         extra_data = update_extra_data(
             extra_data,
@@ -214,10 +210,7 @@ class MexcRequestDataSpot(MexcRequestData):
         request_symbol = self._params.get_symbol(symbol)
         request_type = "get_recent_trades"
         path = self._params.get_rest_path(request_type)
-        params = {
-            "symbol": request_symbol,
-            "limit": limit
-        }
+        params = {"symbol": request_symbol, "limit": limit}
 
         extra_data = update_extra_data(
             extra_data,
@@ -261,11 +254,7 @@ class MexcRequestDataSpot(MexcRequestData):
         request_symbol = self._params.get_symbol(symbol)
         request_type = "get_klines"
         path = self._params.get_rest_path(request_type)
-        params = {
-            "symbol": request_symbol,
-            "interval": interval,
-            "limit": limit
-        }
+        params = {"symbol": request_symbol, "interval": interval, "limit": limit}
 
         extra_data = update_extra_data(
             extra_data,
@@ -392,8 +381,7 @@ class MexcRequestDataSpot(MexcRequestData):
 
     # ==================== Trading Methods ====================
 
-    def _cancel_order(self, symbol, order_id=None, client_order_id=None,
-                     extra_data=None, **kwargs):
+    def _cancel_order(self, symbol, order_id=None, client_order_id=None, extra_data=None, **kwargs):
         """Cancel an existing order
 
         Args:
@@ -441,8 +429,7 @@ class MexcRequestDataSpot(MexcRequestData):
         else:
             return [], status
 
-    def _get_order(self, symbol, order_id=None, client_order_id=None,
-                   extra_data=None, **kwargs):
+    def _get_order(self, symbol, order_id=None, client_order_id=None, extra_data=None, **kwargs):
         """Query an order's status
 
         Args:
@@ -549,10 +536,7 @@ class MexcRequestDataSpot(MexcRequestData):
         request_symbol = self._params.get_symbol(symbol)
         request_type = "get_all_orders"
         path = self._params.get_rest_path(request_type)
-        params = {
-            "symbol": request_symbol,
-            "limit": limit
-        }
+        params = {"symbol": request_symbol, "limit": limit}
 
         extra_data = update_extra_data(
             extra_data,
@@ -651,10 +635,7 @@ class MexcRequestDataSpot(MexcRequestData):
         request_symbol = self._params.get_symbol(symbol)
         request_type = "get_my_trades"
         path = self._params.get_rest_path(request_type)
-        params = {
-            "symbol": request_symbol,
-            "limit": limit
-        }
+        params = {"symbol": request_symbol, "limit": limit}
 
         extra_data = update_extra_data(
             extra_data,
@@ -681,6 +662,7 @@ class MexcRequestDataSpot(MexcRequestData):
             return [trades], status
         else:
             return [], status
+
     # ==================== Public API Methods ====================
 
     def get_server_time(self, extra_data=None, **kwargs):
@@ -722,7 +704,9 @@ class MexcRequestDataSpot(MexcRequestData):
         Returns:
             RequestData: Response data container
         """
-        path, params, extra_data = self._get_order_book(symbol, limit=count, extra_data=extra_data, **kwargs)
+        path, params, extra_data = self._get_order_book(
+            symbol, limit=count, extra_data=extra_data, **kwargs
+        )
         return self.request(path, params=params, extra_data=extra_data, is_sign=False)
 
     def get_kline(self, symbol, period="1h", count=20, extra_data=None, **kwargs):
@@ -738,7 +722,9 @@ class MexcRequestDataSpot(MexcRequestData):
         Returns:
             RequestData: Response data container
         """
-        path, params, extra_data = self._get_klines(symbol, interval=period, limit=count, extra_data=extra_data, **kwargs)
+        path, params, extra_data = self._get_klines(
+            symbol, interval=period, limit=count, extra_data=extra_data, **kwargs
+        )
         return self.request(path, params=params, extra_data=extra_data, is_sign=False)
 
     def async_get_tick(self, symbol, extra_data=None, **kwargs):
@@ -764,7 +750,9 @@ class MexcRequestDataSpot(MexcRequestData):
             extra_data: Extra data for processing
             **kwargs: Additional parameters
         """
-        path, params, extra_data = self._get_order_book(symbol, limit=count, extra_data=extra_data, **kwargs)
+        path, params, extra_data = self._get_order_book(
+            symbol, limit=count, extra_data=extra_data, **kwargs
+        )
         self.submit(
             self.async_request(path, params=params, extra_data=extra_data, is_sign=False),
             callback=self.async_callback,
@@ -780,7 +768,9 @@ class MexcRequestDataSpot(MexcRequestData):
             extra_data: Extra data for processing
             **kwargs: Additional parameters
         """
-        path, params, extra_data = self._get_klines(symbol, interval=period, limit=count, extra_data=extra_data, **kwargs)
+        path, params, extra_data = self._get_klines(
+            symbol, interval=period, limit=count, extra_data=extra_data, **kwargs
+        )
         self.submit(
             self.async_request(path, params=params, extra_data=extra_data, is_sign=False),
             callback=self.async_callback,
@@ -797,14 +787,25 @@ class MexcRequestDataSpot(MexcRequestData):
         Returns:
             RequestData: Response data container
         """
-        path, params, extra_data = self._get_exchange_info(symbol=symbol, extra_data=extra_data, **kwargs)
+        path, params, extra_data = self._get_exchange_info(
+            symbol=symbol, extra_data=extra_data, **kwargs
+        )
         return self.request(path, params=params, extra_data=extra_data, is_sign=False)
 
     # ==================== Trading Public Methods ====================
 
-    def make_order(self, symbol, vol, price=None, order_type="buy-limit",
-                   offset="open", post_only=False, client_order_id=None,
-                   extra_data=None, **kwargs):
+    def make_order(
+        self,
+        symbol,
+        vol,
+        price=None,
+        order_type="buy-limit",
+        offset="open",
+        post_only=False,
+        client_order_id=None,
+        extra_data=None,
+        **kwargs,
+    ):
         """Place a new order
 
         Args:
@@ -822,14 +823,19 @@ class MexcRequestDataSpot(MexcRequestData):
             RequestData: Response data container
         """
         path, params, extra_data = self._make_order(
-            symbol=symbol, vol=vol, price=price, order_type=order_type,
-            offset=offset, post_only=post_only, client_order_id=client_order_id,
-            extra_data=extra_data, **kwargs
+            symbol=symbol,
+            vol=vol,
+            price=price,
+            order_type=order_type,
+            offset=offset,
+            post_only=post_only,
+            client_order_id=client_order_id,
+            extra_data=extra_data,
+            **kwargs,
         )
         return self.request(path, params=params, extra_data=extra_data, is_sign=True)
 
-    def cancel_order(self, symbol, order_id=None, client_order_id=None,
-                     extra_data=None, **kwargs):
+    def cancel_order(self, symbol, order_id=None, client_order_id=None, extra_data=None, **kwargs):
         """Cancel an existing order
 
         Args:
@@ -843,13 +849,15 @@ class MexcRequestDataSpot(MexcRequestData):
             RequestData: Response data container
         """
         path, params, extra_data = self._cancel_order(
-            symbol=symbol, order_id=order_id, client_order_id=client_order_id,
-            extra_data=extra_data, **kwargs
+            symbol=symbol,
+            order_id=order_id,
+            client_order_id=client_order_id,
+            extra_data=extra_data,
+            **kwargs,
         )
         return self.request(path, params=params, extra_data=extra_data, is_sign=True)
 
-    def query_order(self, symbol, order_id=None, client_order_id=None,
-                    extra_data=None, **kwargs):
+    def query_order(self, symbol, order_id=None, client_order_id=None, extra_data=None, **kwargs):
         """Query an order's status
 
         Args:
@@ -863,8 +871,11 @@ class MexcRequestDataSpot(MexcRequestData):
             RequestData: Response data container
         """
         path, params, extra_data = self._get_order(
-            symbol=symbol, order_id=order_id, client_order_id=client_order_id,
-            extra_data=extra_data, **kwargs
+            symbol=symbol,
+            order_id=order_id,
+            client_order_id=client_order_id,
+            extra_data=extra_data,
+            **kwargs,
         )
         return self.request(path, params=params, extra_data=extra_data, is_sign=True)
 
@@ -917,44 +928,69 @@ class MexcRequestDataSpot(MexcRequestData):
 
     def async_get_exchange_info(self, symbol=None, extra_data=None, **kwargs):
         """Get exchange information asynchronously"""
-        path, params, extra_data = self._get_exchange_info(symbol=symbol, extra_data=extra_data, **kwargs)
+        path, params, extra_data = self._get_exchange_info(
+            symbol=symbol, extra_data=extra_data, **kwargs
+        )
         self.submit(
             self.async_request(path, params=params, extra_data=extra_data, is_sign=False),
             callback=self.async_callback,
         )
 
-    def async_make_order(self, symbol, vol, price=None, order_type="buy-limit",
-                         offset="open", post_only=False, client_order_id=None,
-                         extra_data=None, **kwargs):
+    def async_make_order(
+        self,
+        symbol,
+        vol,
+        price=None,
+        order_type="buy-limit",
+        offset="open",
+        post_only=False,
+        client_order_id=None,
+        extra_data=None,
+        **kwargs,
+    ):
         """Place a new order asynchronously"""
         path, params, extra_data = self._make_order(
-            symbol=symbol, vol=vol, price=price, order_type=order_type,
-            offset=offset, post_only=post_only, client_order_id=client_order_id,
-            extra_data=extra_data, **kwargs
+            symbol=symbol,
+            vol=vol,
+            price=price,
+            order_type=order_type,
+            offset=offset,
+            post_only=post_only,
+            client_order_id=client_order_id,
+            extra_data=extra_data,
+            **kwargs,
         )
         self.submit(
             self.async_request(path, params=params, extra_data=extra_data, is_sign=True),
             callback=self.async_callback,
         )
 
-    def async_cancel_order(self, symbol, order_id=None, client_order_id=None,
-                           extra_data=None, **kwargs):
+    def async_cancel_order(
+        self, symbol, order_id=None, client_order_id=None, extra_data=None, **kwargs
+    ):
         """Cancel an order asynchronously"""
         path, params, extra_data = self._cancel_order(
-            symbol=symbol, order_id=order_id, client_order_id=client_order_id,
-            extra_data=extra_data, **kwargs
+            symbol=symbol,
+            order_id=order_id,
+            client_order_id=client_order_id,
+            extra_data=extra_data,
+            **kwargs,
         )
         self.submit(
             self.async_request(path, params=params, extra_data=extra_data, is_sign=True),
             callback=self.async_callback,
         )
 
-    def async_query_order(self, symbol, order_id=None, client_order_id=None,
-                          extra_data=None, **kwargs):
+    def async_query_order(
+        self, symbol, order_id=None, client_order_id=None, extra_data=None, **kwargs
+    ):
         """Query an order asynchronously"""
         path, params, extra_data = self._get_order(
-            symbol=symbol, order_id=order_id, client_order_id=client_order_id,
-            extra_data=extra_data, **kwargs
+            symbol=symbol,
+            order_id=order_id,
+            client_order_id=client_order_id,
+            extra_data=extra_data,
+            **kwargs,
         )
         self.submit(
             self.async_request(path, params=params, extra_data=extra_data, is_sign=True),

@@ -16,17 +16,19 @@ IB Web API 实时行情测试
   或选择性运行:
   pytest tests/feeds/test_live_ib_web_request_data.py -v -s -k "test_auth_status"
 """
+
+import json
 import queue
 import time
-import json
+
 import pytest
 
-from bt_api_py.functions.utils import read_account_config
-from bt_api_py.feeds.live_ib_web_feed import IbWebRequestData, IbWebRequestDataStock
 from bt_api_py.auth_config import IbWebAuthConfig
-from bt_api_py.error import UnifiedAuthError, UnifiedRequestFailedError
+from bt_api_py.feeds.live_ib_web_feed import IbWebRequestDataStock
+from bt_api_py.functions.utils import read_account_config
 
 # ── 配置检测 ──────────────────────────────────────────────
+
 
 def _get_ib_web_config():
     """读取 ib_web 配置"""
@@ -41,10 +43,12 @@ def _gateway_available():
     try:
         import requests
         import urllib3
+
         urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
         resp = requests.post(
             f"{base_url}/iserver/auth/status",
-            verify=False, timeout=5,
+            verify=False,
+            timeout=5,
             proxies={"http": None, "https": None},
         )
         if resp.status_code == 200:
@@ -60,7 +64,7 @@ gateway_is_up = _gateway_available()
 skip_if_no_gateway = pytest.mark.skipif(
     not gateway_is_up,
     reason="IB Client Portal Gateway not running or not authenticated. "
-           "Start gateway and login at https://localhost:5000 first."
+    "Start gateway and login at https://localhost:5000 first.",
 )
 
 
@@ -83,6 +87,7 @@ def _init_feed():
 
 # ── 认证和连接测试 ────────────────────────────────────────
 
+
 @skip_if_no_gateway
 class TestAuthAndSession:
     """认证和会话管理测试"""
@@ -101,8 +106,9 @@ class TestAuthAndSession:
         result = feed.check_auth_status()
         is_auth = result.get("authenticated", False)
         if not is_auth:
-            pytest.skip("Gateway is running but not authenticated. "
-                        "Please login at https://localhost:5000")
+            pytest.skip(
+                "Gateway is running but not authenticated. Please login at https://localhost:5000"
+            )
         assert is_auth is True
 
     def test_connect(self):
@@ -121,6 +127,7 @@ class TestAuthAndSession:
 
 
 # ── IbWebAuthConfig 测试 ──────────────────────────────────
+
 
 class TestIbWebAuthConfig:
     """IbWebAuthConfig 配置类测试 (不需要 Gateway)"""
@@ -170,6 +177,7 @@ class TestIbWebAuthConfig:
 
 
 # ── 账户信息测试 ──────────────────────────────────────────
+
 
 @skip_if_no_gateway
 class TestAccountInfo:
@@ -224,6 +232,7 @@ class TestAccountInfo:
 
 # ── 合约搜索测试 ──────────────────────────────────────────
 
+
 @skip_if_no_gateway
 class TestContractSearch:
     """合约搜索测试"""
@@ -270,6 +279,7 @@ class TestContractSearch:
 
 
 # ── 市场数据测试 ──────────────────────────────────────────
+
 
 @skip_if_no_gateway
 class TestMarketData:
@@ -344,9 +354,7 @@ class TestMarketData:
                 first_bar = bars[0]
                 print(f"First bar: {first_bar}")
                 # 验证 bar 字段
-                has_ohlc = any(
-                    k in first_bar for k in ["o", "h", "l", "c", "v"]
-                )
+                has_ohlc = any(k in first_bar for k in ["o", "h", "l", "c", "v"])
                 assert has_ohlc, f"Expected OHLC in: {list(first_bar.keys())}"
 
     def test_unsubscribe_market_data(self):
@@ -369,6 +377,7 @@ class TestMarketData:
 
 
 # ── WebSocket 流式数据测试 ────────────────────────────────
+
 
 @skip_if_no_gateway
 class TestWebSocketStream:
@@ -393,8 +402,11 @@ class TestWebSocketStream:
             base_url=cfg.get("base_url", "https://localhost:5000"),
             verify_ssl=cfg.get("verify_ssl", False),
             topics=[
-                {"topic": "market_data", "conid": self.AAPL_CONID,
-                 "fields": ["31", "84", "85", "86", "88"]},
+                {
+                    "topic": "market_data",
+                    "conid": self.AAPL_CONID,
+                    "fields": ["31", "84", "85", "86", "88"],
+                },
             ],
         )
 
@@ -465,6 +477,7 @@ class TestWebSocketStream:
 
 # ── 持仓和订单查询测试 ────────────────────────────────────
 
+
 @skip_if_no_gateway
 class TestPositionAndOrders:
     """持仓和订单查询测试"""
@@ -509,6 +522,7 @@ class TestPositionAndOrders:
 
 # ── 配置加载验证测试 (不需要 Gateway) ─────────────────────
 
+
 class TestConfigLoading:
     """验证 read_account_config 正确加载 ib_web 配置"""
 
@@ -543,6 +557,7 @@ class TestConfigLoading:
 
 # ── Cookie 功能测试 ────────────────────────────────────────────
 
+
 class TestCookieFunctionality:
     """Cookie 功能测试 (不需要 Gateway)"""
 
@@ -570,10 +585,7 @@ class TestCookieFunctionality:
     def test_feed_has_cookies_method(self):
         """测试 Feed 的 cookie 方法"""
         data_queue = queue.Queue()
-        feed = IbWebRequestDataStock(
-            data_queue,
-            cookies={"test_key": "test_value"}
-        )
+        feed = IbWebRequestDataStock(data_queue, cookies={"test_key": "test_value"})
 
         assert feed.has_cookies() is True
         cookies = feed.get_cookies()

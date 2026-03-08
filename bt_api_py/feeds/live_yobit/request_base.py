@@ -36,8 +36,8 @@ class YobitRequestData(Feed):
         self.data_queue = data_queue
         self.exchange_name = kwargs.get("exchange_name", "YOBIT___SPOT")
         self.asset_type = kwargs.get("asset_type", "SPOT")
-        self.api_key = kwargs.get("public_key", kwargs.get("api_key", None))
-        self.api_secret = kwargs.get("secret_key", kwargs.get("api_secret", None))
+        self.api_key = kwargs.get("public_key", kwargs.get("api_key"))
+        self.api_secret = kwargs.get("secret_key", kwargs.get("api_secret"))
         self._params = YobitExchangeDataSpot()
         self.request_logger = get_logger("yobit_feed")
         self.async_logger = get_logger("yobit_feed")
@@ -73,8 +73,11 @@ class YobitRequestData(Feed):
             url = url + "?" + urlencode(params)
         headers = self._get_headers(request_path=endpoint, body=body or "")
         response = self.http_request(
-            method=method, url=url, headers=headers,
-            body=body, timeout=timeout,
+            method=method,
+            url=url,
+            headers=headers,
+            body=body,
+            timeout=timeout,
         )
         return self._process_response(response, extra_data)
 
@@ -86,8 +89,11 @@ class YobitRequestData(Feed):
             url = url + "?" + urlencode(params)
         headers = self._get_headers(request_path=endpoint, body=body or "")
         response = await self.async_http_request(
-            method=method, url=url, headers=headers,
-            body=body, timeout=timeout,
+            method=method,
+            url=url,
+            headers=headers,
+            body=body,
+            timeout=timeout,
         )
         return self._process_response(response, extra_data)
 
@@ -120,7 +126,9 @@ class YobitRequestData(Feed):
     def _is_error(data):
         if data is None:
             return True
-        if isinstance(data, dict) and ("error" in data or "success" in data and data.get("success") == 0):
+        if isinstance(data, dict) and (
+            "error" in data or "success" in data and data.get("success") == 0
+        ):
             return True
         return False
 
@@ -129,25 +137,29 @@ class YobitRequestData(Feed):
     def _get_server_time(self, extra_data=None, **kwargs):
         path = self._params.get_rest_path("get_server_time")
         extra_data = extra_data or {}
-        extra_data.update({
-            "request_type": "get_server_time",
-            "asset_type": self.asset_type,
-            "exchange_name": self.exchange_name,
-            "normalize_function": self._get_server_time_normalize_function,
-        })
+        extra_data.update(
+            {
+                "request_type": "get_server_time",
+                "asset_type": self.asset_type,
+                "exchange_name": self.exchange_name,
+                "normalize_function": self._get_server_time_normalize_function,
+            }
+        )
         return path, None, extra_data
 
     def _get_tick(self, symbol, extra_data=None, **kwargs):
         pair = self._params.get_symbol(symbol)
         path = self._params.get_rest_path("get_tick", pair=pair)
         extra_data = extra_data or {}
-        extra_data.update({
-            "request_type": "get_tick",
-            "symbol_name": symbol,
-            "asset_type": self.asset_type,
-            "exchange_name": self.exchange_name,
-            "normalize_function": self._get_tick_normalize_function,
-        })
+        extra_data.update(
+            {
+                "request_type": "get_tick",
+                "symbol_name": symbol,
+                "asset_type": self.asset_type,
+                "exchange_name": self.exchange_name,
+                "normalize_function": self._get_tick_normalize_function,
+            }
+        )
         return path, None, extra_data
 
     def _get_depth(self, symbol, count=20, extra_data=None, **kwargs):
@@ -155,24 +167,28 @@ class YobitRequestData(Feed):
         path = self._params.get_rest_path("get_depth", pair=pair)
         params = {"limit": count}
         extra_data = extra_data or {}
-        extra_data.update({
-            "request_type": "get_depth",
-            "symbol_name": symbol,
-            "asset_type": self.asset_type,
-            "exchange_name": self.exchange_name,
-            "normalize_function": self._get_depth_normalize_function,
-        })
+        extra_data.update(
+            {
+                "request_type": "get_depth",
+                "symbol_name": symbol,
+                "asset_type": self.asset_type,
+                "exchange_name": self.exchange_name,
+                "normalize_function": self._get_depth_normalize_function,
+            }
+        )
         return path, params, extra_data
 
     def _get_exchange_info(self, extra_data=None, **kwargs):
         path = self._params.get_rest_path("get_exchange_info")
         extra_data = extra_data or {}
-        extra_data.update({
-            "request_type": "get_exchange_info",
-            "asset_type": self.asset_type,
-            "exchange_name": self.exchange_name,
-            "normalize_function": self._get_exchange_info_normalize_function,
-        })
+        extra_data.update(
+            {
+                "request_type": "get_exchange_info",
+                "asset_type": self.asset_type,
+                "exchange_name": self.exchange_name,
+                "normalize_function": self._get_exchange_info_normalize_function,
+            }
+        )
         return path, None, extra_data
 
     def _get_balance(self, extra_data=None, **kwargs):
@@ -180,32 +196,45 @@ class YobitRequestData(Feed):
         nonce = int(time.time())
         body = urlencode({"method": "getInfo", "nonce": nonce})
         extra_data = extra_data or {}
-        extra_data.update({
-            "request_type": "get_balance",
-            "symbol_name": None,
-            "asset_type": self.asset_type,
-            "exchange_name": self.exchange_name,
-            "normalize_function": self._get_balance_normalize_function,
-        })
+        extra_data.update(
+            {
+                "request_type": "get_balance",
+                "symbol_name": None,
+                "asset_type": self.asset_type,
+                "exchange_name": self.exchange_name,
+                "normalize_function": self._get_balance_normalize_function,
+            }
+        )
         return path, None, extra_data
 
     def _get_account(self, extra_data=None, **kwargs):
         path = self._params.get_rest_path("get_account")
         extra_data = extra_data or {}
-        extra_data.update({
-            "request_type": "get_account",
-            "symbol_name": None,
-            "asset_type": self.asset_type,
-            "exchange_name": self.exchange_name,
-            "normalize_function": self._get_account_normalize_function,
-        })
+        extra_data.update(
+            {
+                "request_type": "get_account",
+                "symbol_name": None,
+                "asset_type": self.asset_type,
+                "exchange_name": self.exchange_name,
+                "normalize_function": self._get_account_normalize_function,
+            }
+        )
         return path, None, extra_data
 
     # ── trading internal methods ─────────────────────────────────
 
-    def _make_order(self, symbol, vol, price=None, order_type="buy-limit",
-                    offset="open", post_only=False, client_order_id=None,
-                    extra_data=None, **kwargs):
+    def _make_order(
+        self,
+        symbol,
+        vol,
+        price=None,
+        order_type="buy-limit",
+        offset="open",
+        post_only=False,
+        client_order_id=None,
+        extra_data=None,
+        **kwargs,
+    ):
         pair = self._params.get_symbol(symbol)
         path = self._params.get_rest_path("make_order")
         side, otype = order_type.split("-") if "-" in order_type else (order_type, "limit")
@@ -219,13 +248,15 @@ class YobitRequestData(Feed):
             "amount": vol,
         }
         extra_data = extra_data or {}
-        extra_data.update({
-            "request_type": "make_order",
-            "symbol_name": symbol,
-            "asset_type": self.asset_type,
-            "exchange_name": self.exchange_name,
-            "normalize_function": self._make_order_normalize_function,
-        })
+        extra_data.update(
+            {
+                "request_type": "make_order",
+                "symbol_name": symbol,
+                "asset_type": self.asset_type,
+                "exchange_name": self.exchange_name,
+                "normalize_function": self._make_order_normalize_function,
+            }
+        )
         return path, params, extra_data
 
     def _cancel_order(self, symbol, order_id=None, extra_data=None, **kwargs):
@@ -237,13 +268,15 @@ class YobitRequestData(Feed):
             "order_id": order_id,
         }
         extra_data = extra_data or {}
-        extra_data.update({
-            "request_type": "cancel_order",
-            "symbol_name": symbol,
-            "asset_type": self.asset_type,
-            "exchange_name": self.exchange_name,
-            "normalize_function": self._cancel_order_normalize_function,
-        })
+        extra_data.update(
+            {
+                "request_type": "cancel_order",
+                "symbol_name": symbol,
+                "asset_type": self.asset_type,
+                "exchange_name": self.exchange_name,
+                "normalize_function": self._cancel_order_normalize_function,
+            }
+        )
         return path, params, extra_data
 
     def _query_order(self, symbol, order_id=None, extra_data=None, **kwargs):
@@ -255,13 +288,15 @@ class YobitRequestData(Feed):
             "order_id": order_id,
         }
         extra_data = extra_data or {}
-        extra_data.update({
-            "request_type": "query_order",
-            "symbol_name": symbol,
-            "asset_type": self.asset_type,
-            "exchange_name": self.exchange_name,
-            "normalize_function": self._query_order_normalize_function,
-        })
+        extra_data.update(
+            {
+                "request_type": "query_order",
+                "symbol_name": symbol,
+                "asset_type": self.asset_type,
+                "exchange_name": self.exchange_name,
+                "normalize_function": self._query_order_normalize_function,
+            }
+        )
         return path, params, extra_data
 
     # ── normalization functions ──────────────────────────────────

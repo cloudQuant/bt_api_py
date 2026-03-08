@@ -6,7 +6,7 @@ import json
 import time
 
 from bt_api_py.containers.orderbooks.orderbook import OrderBookData
-from bt_api_py.functions.utils import from_dict_get_float, from_dict_get_string, from_dict_get_int
+from bt_api_py.functions.utils import from_dict_get_float, from_dict_get_int, from_dict_get_string
 
 
 class BitgetOrderBookData(OrderBookData):
@@ -34,7 +34,9 @@ class BitgetOrderBookData(OrderBookData):
             return self
 
         self.symbol = from_dict_get_string(self.orderbook_data, "symbol")
-        self.time = from_dict_get_float(self.orderbook_data, "ts") or from_dict_get_float(self.orderbook_data, "time")
+        self.time = from_dict_get_float(self.orderbook_data, "ts") or from_dict_get_float(
+            self.orderbook_data, "time"
+        )
         self.level = from_dict_get_int(self.orderbook_data, "level")
 
         # Process bids

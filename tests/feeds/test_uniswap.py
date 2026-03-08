@@ -12,6 +12,8 @@ import queue
 
 import pytest
 
+# Import registration to auto-register Uniswap
+import bt_api_py.exchange_registers.register_uniswap  # noqa: F401
 from bt_api_py.containers.exchanges.uniswap_exchange_data import (
     UniswapChain,
     UniswapExchangeData,
@@ -19,9 +21,6 @@ from bt_api_py.containers.exchanges.uniswap_exchange_data import (
 )
 from bt_api_py.feeds.live_uniswap.spot import UniswapRequestDataSpot
 from bt_api_py.registry import ExchangeRegistry
-
-# Import registration to auto-register Uniswap
-import bt_api_py.exchange_registers.register_uniswap  # noqa: F401
 
 
 class TestUniswapExchangeData:
@@ -173,20 +172,18 @@ class TestUniswapDataContainers:
 
         input_data = {
             "data": {
-            "token": {
-                "id": "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
-                "symbol": "WETH",
-                "name": "Wrapped Ether",
-                "decimals": 18,
-                "price": {"USD": "3000"},
-            }
+                "token": {
+                    "id": "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
+                    "symbol": "WETH",
+                    "name": "Wrapped Ether",
+                    "decimals": 18,
+                    "price": {"USD": "3000"},
+                }
             }
         }
 
         extra_data = {"symbol_name": "WETH"}
-        result, status = UniswapRequestDataSpot._get_tick_normalize_function(
-            input_data, extra_data
-        )
+        result, status = UniswapRequestDataSpot._get_tick_normalize_function(input_data, extra_data)
 
         assert status is True
         assert result is not None
@@ -195,19 +192,17 @@ class TestUniswapDataContainers:
         """Test pool normalization function."""
         input_data = {
             "data": {
-            "pool": {
-                "id": "0x8ad599c3A0ff1De082011EFDDc58f1908eb6e6D8",
-                "token0": {"symbol": "USDC"},
-                "token1": {"symbol": "WETH"},
-                "totalValueLockedUSD": "1000000",
-            }
+                "pool": {
+                    "id": "0x8ad599c3A0ff1De082011EFDDc58f1908eb6e6D8",
+                    "token0": {"symbol": "USDC"},
+                    "token1": {"symbol": "WETH"},
+                    "totalValueLockedUSD": "1000000",
+                }
             }
         }
 
         extra_data = {"pool_id": "test_pool"}
-        result, status = UniswapRequestDataSpot._get_pool_normalize_function(
-            input_data, extra_data
-        )
+        result, status = UniswapRequestDataSpot._get_pool_normalize_function(input_data, extra_data)
 
         assert status is True
         assert result is not None

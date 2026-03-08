@@ -1,4 +1,7 @@
-from bt_api_py.containers.positions.binance_position import BinanceWssPositionData, BinanceRequestPositionData
+from bt_api_py.containers.positions.binance_position import (
+    BinanceRequestPositionData,
+    BinanceWssPositionData,
+)
 
 
 def test_binance_position():
@@ -11,7 +14,7 @@ def test_binance_position():
         "up": "0",  # 持仓未实现盈亏
         "mt": "isolated",  # 保证金模式
         "iw": "0.00000000",  # 若为逐仓，仓位保证金
-        "ps": "BOTH"  # 持仓方向
+        "ps": "BOTH",  # 持仓方向
     }
     bo = BinanceWssPositionData(data, "BTC-USDT", "PERPETUAL", True)
     bo.init_data()
@@ -60,7 +63,7 @@ def test_binance_req_position():
         "symbol": "BTCUSDT",  # 交易对
         "unRealizedProfit": "0.00000000",  # 持仓未实现盈亏
         "positionSide": "BOTH",  # 持仓方向
-        "updateTime": 1625474304765  # 更新时间
+        "updateTime": 1625474304765,  # 更新时间
     }
     bo = BinanceRequestPositionData(data, "BTC-USDT", "PERPETUAL", True)
     bo.init_data()

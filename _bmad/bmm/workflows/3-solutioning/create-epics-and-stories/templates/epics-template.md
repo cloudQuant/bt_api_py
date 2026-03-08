@@ -1,9 +1,7 @@
-- --
-
+---
 stepsCompleted: []
 inputDocuments: []
-
-- --
+---
 
 # {{project_name}} - Epic Breakdown
 
@@ -47,13 +45,13 @@ As a {{user_type}},
 I want {{capability}},
 So that {{value_benefit}}.
 
-- *Acceptance Criteria:**
+**Acceptance Criteria:**
 
 <!-- for each AC on this story -->
 
-- *Given** {{precondition}}
-- *When** {{action}}
-- *Then** {{expected_outcome}}
-- *And** {{additional_criteria}}
+**Given** {{precondition}}
+**When** {{action}}
+**Then** {{expected_outcome}}
+**And** {{additional_criteria}}
 
 <!-- End story repeat -->

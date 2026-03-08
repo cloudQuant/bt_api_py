@@ -5,6 +5,40 @@ from bt_api_py.containers.balances.balance import BalanceData
 from bt_api_py.functions.utils import from_dict_get_float, from_dict_get_string
 
 
+class BinanceWssBalanceData:
+    """Backward-compatible container for Binance account update payloads."""
+
+    def __init__(self, balance_info, asset_type, has_been_json_encoded=False):
+        self.balance_info = balance_info
+        self.asset_type = asset_type
+        self.has_been_json_encoded = has_been_json_encoded
+        self.balance_data = balance_info if has_been_json_encoded else None
+        self.accounts = []
+
+    def init_balance_data(self):
+        if not self.has_been_json_encoded:
+            self.balance_data = json.loads(self.balance_info)
+            self.has_been_json_encoded = True
+
+        balances = self.balance_data.get("a", {}).get("B", [])
+        self.accounts = [
+            {
+                "asset": from_dict_get_string(item, "a"),
+                "free": from_dict_get_float(item, "f"),
+                "locked": from_dict_get_float(item, "l"),
+                "asset_type": self.asset_type,
+            }
+            for item in balances
+        ]
+        return self
+
+    def init_data(self):
+        return self.init_balance_data()
+
+    def get_data(self):
+        return self.accounts
+
+
 class BinanceSpotRequestBalanceData(BalanceData):
     def __init__(self, balance_info, symbol_name, asset_type, has_been_json_encoded=False):
         super().__init__(balance_info, has_been_json_encoded)
@@ -417,6 +451,7 @@ class BinanceSpotWssBalanceData(BalanceData):
                 "used_margin": self.used_margin,
                 "available_margin": self.available_margin,
             }
+        return self.all_data
 
     def __str__(self):
         self.init_data()

@@ -60,7 +60,7 @@ class TestUpbitTickerData:
             "prev_closing_price": "48500000",
             "change": "RISE",
             "signed_change_rate": "0.0325",
-            "timestamp": 1642696800000
+            "timestamp": 1642696800000,
         }
 
         ticker = UpbitTickerData(ticker_data, "KRW-BTC", "spot")
@@ -78,11 +78,7 @@ class TestUpbitTickerData:
 
     def test_ticker_all_data(self):
         """测试 ticker 所有数据获取"""
-        ticker_data = {
-            "market": "KRW-BTC",
-            "trade_price": "50000000",
-            "timestamp": 1642696800000
-        }
+        ticker_data = {"market": "KRW-BTC", "trade_price": "50000000", "timestamp": 1642696800000}
 
         ticker = UpbitTickerData(ticker_data, "KRW-BTC", "spot")
         ticker.init_data()  # Initialize data first

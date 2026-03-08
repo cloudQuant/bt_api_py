@@ -93,21 +93,53 @@ class YobitRequestDataSpot(YobitRequestData):
 
     # ── trading ──────────────────────────────────────────────────
 
-    def make_order(self, symbol, vol, price=None, order_type="buy-limit",
-                   offset="open", post_only=False, client_order_id=None,
-                   extra_data=None, **kwargs):
+    def make_order(
+        self,
+        symbol,
+        vol,
+        price=None,
+        order_type="buy-limit",
+        offset="open",
+        post_only=False,
+        client_order_id=None,
+        extra_data=None,
+        **kwargs,
+    ):
         path, params, extra = self._make_order(
-            symbol, vol, price, order_type, offset, post_only,
-            client_order_id, extra_data, **kwargs,
+            symbol,
+            vol,
+            price,
+            order_type,
+            offset,
+            post_only,
+            client_order_id,
+            extra_data,
+            **kwargs,
         )
         return self.request(path, params, extra_data=extra)
 
-    def async_make_order(self, symbol, vol, price=None, order_type="buy-limit",
-                         offset="open", post_only=False, client_order_id=None,
-                         extra_data=None, **kwargs):
+    def async_make_order(
+        self,
+        symbol,
+        vol,
+        price=None,
+        order_type="buy-limit",
+        offset="open",
+        post_only=False,
+        client_order_id=None,
+        extra_data=None,
+        **kwargs,
+    ):
         path, params, extra = self._make_order(
-            symbol, vol, price, order_type, offset, post_only,
-            client_order_id, extra_data, **kwargs,
+            symbol,
+            vol,
+            price,
+            order_type,
+            offset,
+            post_only,
+            client_order_id,
+            extra_data,
+            **kwargs,
         )
         self.submit(
             self.async_request(path, params, extra_data=extra),
@@ -138,6 +170,7 @@ class YobitRequestDataSpot(YobitRequestData):
 
 
 # ── WebSocket stubs ──────────────────────────────────────────
+
 
 class YobitMarketWssDataSpot:
     """YoBit Spot Market WebSocket Data Handler (stub)."""

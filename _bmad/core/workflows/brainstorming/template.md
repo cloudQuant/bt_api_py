@@ -1,5 +1,4 @@
-- --
-
+---
 stepsCompleted: []
 inputDocuments: []
 session_topic: ''
@@ -8,10 +7,9 @@ selected_approach: ''
 techniques_used: []
 ideas_generated: []
 context_file: ''
-
-- --
+---
 
 # Brainstorming Session Results
 
-- *Facilitator:** {{user_name}}
-- *Date:** {{date}}
+**Facilitator:** {{user_name}}
+**Date:** {{date}}

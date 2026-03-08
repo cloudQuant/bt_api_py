@@ -1,33 +1,31 @@
-- --
-
+---
 name: 'step-04e-aggregate-nfr'
 description: 'Aggregate NFR domain assessments into executive summary'
 nextStepFile: './step-05-generate-report.md'
 outputFile: '{test_artifacts}/nfr-assessment.md'
-
-- --
+---
 
 # Step 4E: Aggregate NFR Assessment Results
 
 ## STEP GOAL
 
-Read outputs from 4 parallel NFR subprocesses, calculate overall risk level, aggregate compliance status, and identify cross-domain risks.
+Read outputs from 4 parallel NFR subagents, calculate overall risk level, aggregate compliance status, and identify cross-domain risks.
 
-- --
+---
 
 ## MANDATORY EXECUTION RULES
 
 - 📖 Read the entire step file before acting
 - ✅ Speak in `{communication_language}`
-- ✅ Read all 4 subprocess outputs
+- ✅ Read all 4 subagent outputs
 - ✅ Calculate overall risk level
-- ❌ Do NOT re-assess NFRs (use subprocess outputs)
+- ❌ Do NOT re-assess NFRs (use subagent outputs)
 
-- --
+---
 
 ## MANDATORY SEQUENCE
 
-### 1. Read All Subprocess Outputs
+### 1. Read All Subagent Outputs
 
 ```javascript
 const domains = ['security', 'performance', 'reliability', 'scalability'];
@@ -37,30 +35,28 @@ domains.forEach((domain) => {
   const outputPath = `/tmp/tea-nfr-${domain}-{{timestamp}}.json`;
   assessments[domain] = JSON.parse(fs.readFileSync(outputPath, 'utf8'));
 });
+```
 
-```bash
-
-- --
+---
 
 ### 2. Calculate Overall Risk Level
 
-- *Risk hierarchy:** HIGH > MEDIUM > LOW > NONE
+**Risk hierarchy:** HIGH > MEDIUM > LOW > NONE
 
 ```javascript
 const riskLevels = { HIGH: 3, MEDIUM: 2, LOW: 1, NONE: 0 };
 const domainRisks = domains.map((d) => assessments[d].risk_level);
 const maxRiskValue = Math.max(...domainRisks.map((r) => riskLevels[r]));
 const overallRisk = Object.keys(riskLevels).find((k) => riskLevels[k] === maxRiskValue);
+```
 
-```bash
-
-- *Risk assessment:**
+**Risk assessment:**
 
 - If ANY domain is HIGH → overall is HIGH
 - If ANY domain is MEDIUM (and none HIGH) → overall is MEDIUM
 - If ALL domains are LOW/NONE → overall is LOW
 
-- --
+---
 
 ### 3. Aggregate Compliance Status
 
@@ -85,14 +81,13 @@ Object.entries(allCompliance).forEach(([standard, statuses]) => {
 
   complianceSummary[standard] = hasFail ? 'FAIL' : hasPartial ? 'PARTIAL' : 'PASS';
 });
+```
 
-```bash
-
-- --
+---
 
 ### 4. Identify Cross-Domain Risks
 
-- *Look for risks that span multiple domains:**
+**Look for risks that span multiple domains:**
 
 ```javascript
 const crossDomainRisks = [];
@@ -118,10 +113,9 @@ if (securityFails.length > 0 && reliabilityConcerns.length > 0) {
     impact: 'CRITICAL',
   });
 }
+```
 
-```bash
-
-- --
+---
 
 ### 5. Aggregate Priority Actions
 
@@ -136,14 +130,30 @@ const allPriorityActions = domains.flatMap((domain) =>
 
 // Sort by urgency
 const prioritizedActions = allPriorityActions.sort((a, b) => (a.urgency === 'URGENT' ? -1 : 1));
+```
 
-```bash
-
-- --
+---
 
 ### 6. Generate Executive Summary
 
 ```javascript
+const resolvedMode = subagentContext?.execution?.resolvedMode ?? 'unknown';
+const subagentExecutionLabel =
+  resolvedMode === 'sequential'
+    ? 'SEQUENTIAL (4 NFR domains)'
+    : resolvedMode === 'agent-team'
+      ? 'AGENT-TEAM (4 NFR domains)'
+      : resolvedMode === 'subagent'
+        ? 'SUBAGENT (4 NFR domains)'
+        : 'MODE-DEPENDENT (4 NFR domains)';
+
+const performanceGainLabel =
+  resolvedMode === 'sequential'
+    ? 'baseline (no parallel speedup)'
+    : resolvedMode === 'agent-team' || resolvedMode === 'subagent'
+      ? '~67% faster than sequential'
+      : 'mode-dependent';
+
 const executiveSummary = {
   overall_risk: overallRisk,
   assessment_date: new Date().toISOString(),
@@ -163,26 +173,24 @@ const executiveSummary = {
     scalability: assessments.scalability.risk_level,
   },
 
-  subprocess_execution: 'PARALLEL (4 NFR domains)',
-  performance_gain: '~67% faster than sequential',
+  subagent_execution: subagentExecutionLabel,
+  performance_gain: performanceGainLabel,
 };
 
 // Save for Step 5 (report generation)
 fs.writeFileSync('/tmp/tea-nfr-summary-{{timestamp}}.json', JSON.stringify(executiveSummary, null, 2), 'utf8');
+```
 
-```bash
-
-- --
+---
 
 ### 7. Display Summary to User
 
-```bash
-✅ NFR Assessment Complete (Parallel Execution)
+```
+✅ NFR Assessment Complete ({subagentExecutionLabel})
 
 🎯 Overall Risk Level: {overallRisk}
 
 📊 Domain Risk Breakdown:
-
 - Security:      {security_risk}
 - Performance:   {performance_risk}
 - Reliability:   {reliability_risk}
@@ -195,32 +203,27 @@ fs.writeFileSync('/tmp/tea-nfr-summary-{{timestamp}}.json', JSON.stringify(execu
 
 🎯 Priority Actions: {priority_action_count}
 
-🚀 Performance: Parallel execution ~67% faster
+🚀 Performance: {performanceGainLabel}
 
 ✅ Ready for report generation (Step 5)
+```
 
-```bash
+---
 
-- --
-
-- --
+---
 
 ### 8. Save Progress
 
-- *Save this step's accumulated work to `{outputFile}`.**
+**Save this step's accumulated work to `{outputFile}`.**
 
-- **If `{outputFile}` does not exist**(first save), create it using the workflow template (if available) with YAML frontmatter:
+- **If `{outputFile}` does not exist** (first save), create it using the workflow template (if available) with YAML frontmatter:
 
   ```yaml
-
-  - --
-
+  ---
   stepsCompleted: ['step-04e-aggregate-nfr']
   lastStep: 'step-04e-aggregate-nfr'
   lastSaved: '{date}'
-
-  - --
-
+  ---
   ```
 
   Then write this step's output below the frontmatter.
@@ -231,13 +234,13 @@ fs.writeFileSync('/tmp/tea-nfr-summary-{{timestamp}}.json', JSON.stringify(execu
   - Set `lastSaved: '{date}'`
   - Append this step's output to the appropriate section of the document.
 
-- --
+---
 
 ## EXIT CONDITION
 
 Proceed to Step 5 when:
 
-- ✅ All subprocess outputs read
+- ✅ All subagent outputs read
 - ✅ Overall risk calculated
 - ✅ Compliance aggregated
 - ✅ Summary saved
@@ -245,7 +248,7 @@ Proceed to Step 5 when:
 
 Load next step: `{nextStepFile}`
 
-- --
+---
 
 ## 🚨 SYSTEM SUCCESS METRICS
 
@@ -257,5 +260,5 @@ Load next step: `{nextStepFile}`
 
 ### ❌ FAILURE:
 
-- Failed to read subprocess outputs
+- Failed to read subagent outputs
 - Risk calculation incorrect

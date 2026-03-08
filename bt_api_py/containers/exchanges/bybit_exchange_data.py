@@ -1,4 +1,3 @@
-import json
 import os
 
 from bt_api_py.containers.exchanges.exchange_data import ExchangeData

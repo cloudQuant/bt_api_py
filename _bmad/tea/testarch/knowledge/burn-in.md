@@ -25,9 +25,9 @@ The `burn-in` utility provides:
 
 ### Example 1: Basic Burn-in Setup
 
-- *Context**: Run burn-in on changed files compared to main branch.
+**Context**: Run burn-in on changed files compared to main branch.
 
-- *Implementation**:
+**Implementation**:
 
 ```typescript
 // Step 1: Create burn-in script
@@ -75,10 +75,9 @@ export default config
     "test:pw:burn-in-changed": "tsx playwright/scripts/burn-in-changed.ts"
   }
 }
+```
 
-```bash
-
-- *Key Points**:
+**Key Points**:
 
 - Two-stage filtering: skip patterns, then volume control
 - `skipBurnInPatterns` eliminates irrelevant files
@@ -87,14 +86,12 @@ export default config
 
 ### Example 2: CI Integration
 
-- *Context**: Use burn-in in GitHub Actions for efficient CI runs.
+**Context**: Use burn-in in GitHub Actions for efficient CI runs.
 
-- *Implementation**:
+**Implementation**:
 
 ```yaml
-
 # .github/workflows/burn-in.yml
-
 name: Burn-in Changed Tests
 
 on:
@@ -105,35 +102,28 @@ jobs:
   burn-in:
     runs-on: ubuntu-latest
     steps:
-
       - uses: actions/checkout@v4
-
         with:
           fetch-depth: 0 # Need git history
 
       - name: Setup Node
-
         uses: actions/setup-node@v4
 
       - name: Install dependencies
-
         run: npm ci
 
       - name: Run burn-in on changed tests
-
         run: npm run test:pw:burn-in-changed -- --base-branch=origin/main
 
       - name: Upload artifacts
-
         if: failure()
         uses: actions/upload-artifact@v4
         with:
           name: burn-in-failures
           path: test-results/
+```
 
-```bash
-
-- *Key Points**:
+**Key Points**:
 
 - `fetch-depth: 0` for full git history
 - Pass `--base-branch=origin/main` for PR comparison
@@ -142,11 +132,11 @@ jobs:
 
 ### Example 3: How It Works (Process of Elimination)
 
-- *Context**: Understanding the filtering pipeline.
+**Context**: Understanding the filtering pipeline.
 
-- *Scenario:**
+**Scenario:**
 
-```bash
+```
 Git diff finds: 21 changed files
 ├─ Step 1: Skip patterns filter
 │  Removed: 6 files (*.md, config/*, *types*)
@@ -159,10 +149,9 @@ Git diff finds: 21 changed files
    Final tests to run: 14 tests (30% of 45)
 
 Result: Run 14 targeted tests instead of 147 with --only-changed!
+```
 
-```bash
-
-- *Key Points**:
+**Key Points**:
 
 - Three-stage pipeline: skip → analyze → control
 - Custom dependency analysis (not just imports)
@@ -171,9 +160,9 @@ Result: Run 14 targeted tests instead of 147 with --only-changed!
 
 ### Example 4: Environment-Specific Configuration
 
-- *Context**: Different settings for local vs CI environments.
+**Context**: Different settings for local vs CI environments.
 
-- *Implementation**:
+**Implementation**:
 
 ```typescript
 import type { BurnInConfig } from '@seontechnologies/playwright-utils/burn-in';
@@ -191,10 +180,9 @@ const config: BurnInConfig = {
 };
 
 export default config;
+```
 
-```bash
-
-- *Key Points**:
+**Key Points**:
 
 - `process.env.CI` for environment detection
 - Lower percentage in CI (20% vs 30%)
@@ -203,9 +191,9 @@ export default config;
 
 ### Example 5: Sharding Support
 
-- *Context**: Distribute burn-in tests across multiple CI workers.
+**Context**: Distribute burn-in tests across multiple CI workers.
 
-- *Implementation**:
+**Implementation**:
 
 ```typescript
 // burn-in-changed.ts with sharding
@@ -222,25 +210,20 @@ async function main() {
     configPath: 'playwright/config/.burn-in.config.ts',
   });
 }
-
-```bash
+```
 
 ```yaml
-
 # GitHub Actions with sharding
-
 jobs:
   burn-in:
     strategy:
       matrix:
         shard: [1/3, 2/3, 3/3]
     steps:
-
       - run: npm run test:pw:burn-in-changed -- --shard=${{ matrix.shard }}
+```
 
-```bash
-
-- *Key Points**:
+**Key Points**:
 
 - Pass `--shard=1/3` for parallel execution
 - Burn-in respects Playwright sharding
@@ -263,32 +246,28 @@ When setting up CI with `*ci` workflow, recommend burn-in for:
 
 ## Anti-Patterns
 
-- *❌ Over-aggressive skip patterns:**
+**❌ Over-aggressive skip patterns:**
 
 ```typescript
 skipBurnInPatterns: [
   '**/*', // Skips everything!
 ];
+```
 
-```bash
-
-- *✅ Targeted skip patterns:**
+**✅ Targeted skip patterns:**
 
 ```typescript
 skipBurnInPatterns: ['**/config/**', '**/*types*', '**/*.md', '**/*constants*'];
+```
 
-```bash
-
-- *❌ Too low percentage (false confidence):**
+**❌ Too low percentage (false confidence):**
 
 ```typescript
 burnInTestPercentage: 0.05; // Only 5% - might miss issues
+```
 
-```bash
-
-- *✅ Balanced percentage:**
+**✅ Balanced percentage:**
 
 ```typescript
 burnInTestPercentage: 0.2; // 20% in CI, provides good coverage
-
-```bash
+```

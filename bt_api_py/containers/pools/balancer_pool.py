@@ -97,9 +97,7 @@ class BalancerPoolData:
                 }
                 for item in apr_items
             ]
-            self.total_apr = sum(
-                item.get("apr", 0) for item in self.apr_items if item.get("apr")
-            )
+            self.total_apr = sum(item.get("apr", 0) for item in self.apr_items if item.get("apr"))
 
         self.has_been_init_data = True
         return self

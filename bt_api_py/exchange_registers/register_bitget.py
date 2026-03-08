@@ -10,10 +10,10 @@ from bt_api_py.containers.exchanges.bitget_exchange_data import (
 )
 from bt_api_py.feeds.live_bitget import (
     BitgetAccountWssDataSpot,
-    BitgetMarketWssDataSpot,
-    BitgetRequestDataSpot,
     BitgetAccountWssDataSwap,
+    BitgetMarketWssDataSpot,
     BitgetMarketWssDataSwap,
+    BitgetRequestDataSpot,
     BitgetRequestDataSwap,
 )
 from bt_api_py.registry import ExchangeRegistry

@@ -1,30 +1,28 @@
-- --
-
+---
 name: 'step-03f-aggregate-scores'
 description: 'Aggregate quality dimension scores into overall 0-100 score'
 nextStepFile: './step-04-generate-report.md'
 outputFile: '{test_artifacts}/test-review.md'
-
-- --
+---
 
 # Step 3F: Aggregate Quality Scores
 
 ## STEP GOAL
 
-Read outputs from 4 quality subprocesses, calculate weighted overall score (0-100), and aggregate violations for report generation.
+Read outputs from 4 quality subagents, calculate weighted overall score (0-100), and aggregate violations for report generation.
 
-- --
+---
 
 ## MANDATORY EXECUTION RULES
 
 - 📖 Read the entire step file before acting
 - ✅ Speak in `{communication_language}`
-- ✅ Read all 4 subprocess outputs
+- ✅ Read all 4 subagent outputs
 - ✅ Calculate weighted overall score
 - ✅ Aggregate violations by severity
-- ❌ Do NOT re-evaluate quality (use subprocess outputs)
+- ❌ Do NOT re-evaluate quality (use subagent outputs)
 
-- --
+---
 
 ## EXECUTION PROTOCOLS:
 
@@ -32,15 +30,15 @@ Read outputs from 4 quality subprocesses, calculate weighted overall score (0-10
 - 💾 Record outputs before proceeding
 - 📖 Load the next step only when instructed
 
-- --
+---
 
 ## MANDATORY SEQUENCE
 
-### 1. Read All Subprocess Outputs
+### 1. Read All Subagent Outputs
 
 ```javascript
 // Use the SAME timestamp generated in Step 3 (do not regenerate).
-const timestamp = subprocessContext?.timestamp;
+const timestamp = subagentContext?.timestamp;
 if (!timestamp) {
   throw new Error('Missing timestamp from Step 3 context. Pass Step 3 timestamp into Step 3F.');
 }
@@ -51,24 +49,22 @@ dimensions.forEach((dim) => {
   const outputPath = `/tmp/tea-test-review-${dim}-${timestamp}.json`;
   results[dim] = JSON.parse(fs.readFileSync(outputPath, 'utf8'));
 });
+```
 
-```bash
-
-- *Verify all succeeded:**
+**Verify all succeeded:**
 
 ```javascript
 const allSucceeded = dimensions.every((dim) => results[dim].score !== undefined);
 if (!allSucceeded) {
-  throw new Error('One or more quality subprocesses failed!');
+  throw new Error('One or more quality subagents failed!');
 }
+```
 
-```bash
-
-- --
+---
 
 ### 2. Calculate Weighted Overall Score
 
-- *Dimension Weights** (based on TEA quality priorities):
+**Dimension Weights** (based on TEA quality priorities):
 
 ```javascript
 const weights = {
@@ -77,21 +73,19 @@ const weights = {
   maintainability: 0.25, // 25% - Readability and long-term health
   performance: 0.15, // 15% - Speed and execution efficiency
 };
+```
 
-```bash
-
-- *Calculate overall score:**
+**Calculate overall score:**
 
 ```javascript
 const overallScore = dimensions.reduce((sum, dim) => {
-  return sum + results[dim].score *weights[dim];
+  return sum + results[dim].score * weights[dim];
 }, 0);
 
 const roundedScore = Math.round(overallScore);
+```
 
-```bash
-
-- *Determine grade:**
+**Determine grade:**
 
 ```javascript
 const getGrade = (score) => {
@@ -103,14 +97,13 @@ const getGrade = (score) => {
 };
 
 const overallGrade = getGrade(roundedScore);
+```
 
-```bash
-
-- --
+---
 
 ### 3. Aggregate Violations by Severity
 
-- *Collect all violations from all dimensions:**
+**Collect all violations from all dimensions:**
 
 ```javascript
 const allViolations = dimensions.flatMap((dim) =>
@@ -131,14 +124,13 @@ const violationSummary = {
   MEDIUM: mediumSeverity.length,
   LOW: lowSeverity.length,
 };
+```
 
-```bash
-
-- --
+---
 
 ### 4. Prioritize Recommendations
 
-- *Extract recommendations from all dimensions:**
+**Extract recommendations from all dimensions:**
 
 ```javascript
 const allRecommendations = dimensions.flatMap((dim) =>
@@ -151,14 +143,13 @@ const allRecommendations = dimensions.flatMap((dim) =>
 
 // Sort by impact (HIGH first)
 const prioritizedRecommendations = allRecommendations.sort((a, b) => (a.impact === 'HIGH' ? -1 : 1)).slice(0, 10); // Top 10 recommendations
+```
 
-```bash
-
-- --
+---
 
 ### 5. Create Review Summary Object
 
-- *Aggregate all results:**
+**Aggregate all results:**
 
 ```javascript
 const reviewSummary = {
@@ -188,26 +179,24 @@ const reviewSummary = {
 
   top_10_recommendations: prioritizedRecommendations,
 
-  subprocess_execution: 'PARALLEL (4 quality dimensions)',
+  subagent_execution: 'PARALLEL (4 quality dimensions)',
   performance_gain: '~60% faster than sequential',
 };
 
 // Save for Step 4 (report generation)
 fs.writeFileSync(`/tmp/tea-test-review-summary-${timestamp}.json`, JSON.stringify(reviewSummary, null, 2), 'utf8');
+```
 
-```bash
-
-- --
+---
 
 ### 6. Display Summary to User
 
-```bash
+```
 ✅ Quality Evaluation Complete (Parallel Execution)
 
 📊 Overall Quality Score: {roundedScore}/100 (Grade: {overallGrade})
 
 📈 Dimension Scores:
-
 - Determinism:      {determinism_score}/100 ({determinism_grade})
 - Isolation:        {isolation_score}/100 ({isolation_grade})
 - Maintainability:  {maintainability_score}/100 ({maintainability_grade})
@@ -216,7 +205,6 @@ fs.writeFileSync(`/tmp/tea-test-review-summary-${timestamp}.json`, JSON.stringif
 ℹ️ Coverage is excluded from `test-review` scoring. Use `trace` for coverage analysis and gates.
 
 ⚠️ Violations Found:
-
 - HIGH:   {high_count} violations
 - MEDIUM: {medium_count} violations
 - LOW:    {low_count} violations
@@ -225,29 +213,24 @@ fs.writeFileSync(`/tmp/tea-test-review-summary-${timestamp}.json`, JSON.stringif
 🚀 Performance: Parallel execution ~60% faster than sequential
 
 ✅ Ready for report generation (Step 4)
+```
 
-```bash
+---
 
-- --
-
-- --
+---
 
 ### 7. Save Progress
 
-- *Save this step's accumulated work to `{outputFile}`.**
+**Save this step's accumulated work to `{outputFile}`.**
 
-- **If `{outputFile}` does not exist**(first save), create it using the workflow template (if available) with YAML frontmatter:
+- **If `{outputFile}` does not exist** (first save), create it using the workflow template (if available) with YAML frontmatter:
 
   ```yaml
-
-  - --
-
+  ---
   stepsCompleted: ['step-03f-aggregate-scores']
   lastStep: 'step-03f-aggregate-scores'
   lastSaved: '{date}'
-
-  - --
-
+  ---
   ```
 
   Then write this step's output below the frontmatter.
@@ -258,13 +241,13 @@ fs.writeFileSync(`/tmp/tea-test-review-summary-${timestamp}.json`, JSON.stringif
   - Set `lastSaved: '{date}'`
   - Append this step's output to the appropriate section of the document.
 
-- --
+---
 
 ## EXIT CONDITION
 
 Proceed to Step 4 when:
 
-- ✅ All subprocess outputs read successfully
+- ✅ All subagent outputs read successfully
 - ✅ Overall score calculated
 - ✅ Violations aggregated
 - ✅ Recommendations prioritized
@@ -274,21 +257,21 @@ Proceed to Step 4 when:
 
 Load next step: `{nextStepFile}`
 
-- --
+---
 
 ## 🚨 SYSTEM SUCCESS METRICS
 
 ### ✅ SUCCESS:
 
-- All 4 subprocess outputs read and parsed
+- All 4 subagent outputs read and parsed
 - Overall score calculated with proper weights
 - Violations aggregated correctly
 - Summary complete and saved
 
 ### ❌ FAILURE:
 
-- Failed to read one or more subprocess outputs
+- Failed to read one or more subagent outputs
 - Score calculation incorrect
 - Summary missing or incomplete
 
-- *Master Rule:** Aggregate determinism, isolation, maintainability, and performance only.
+**Master Rule:** Aggregate determinism, isolation, maintainability, and performance only.

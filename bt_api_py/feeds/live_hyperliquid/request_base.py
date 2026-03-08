@@ -5,9 +5,6 @@ Handles authentication, signing, and all REST API methods for Hyperliquid.
 Hyperliquid uses EIP-712 signatures for authenticated requests.
 """
 
-import json
-import time
-from urllib.parse import urlencode
 
 import requests
 from eth_account import Account
@@ -22,13 +19,6 @@ from bt_api_py.feeds.capability import Capability
 from bt_api_py.feeds.feed import Feed
 from bt_api_py.logging_factory import get_logger
 from bt_api_py.rate_limiter import RateLimiter, RateLimitRule, RateLimitScope, RateLimitType
-from bt_api_py.utils.hyperliquid_types import (
-    LIMIT_ORDER,
-    MARKET_ORDER,
-    TIF_GTC,
-    TIF_IOC,
-    TIF_POST_ONLY,
-)
 
 
 class HyperliquidErrorTranslator(ErrorTranslator):
@@ -84,7 +74,7 @@ class HyperliquidRequestData(Feed):
 
         self.asset_type = kwargs.get("asset_type", "SPOT")
         self.logger_name = kwargs.get("logger_name", "hyperliquid_feed.log")
-        self._params = kwargs.get("exchange_data", None)
+        self._params = kwargs.get("exchange_data")
 
         if self._params is None:
             if self.asset_type == "SPOT":
@@ -104,7 +94,7 @@ class HyperliquidRequestData(Feed):
                     interval=60,
                     type=RateLimitType.SLIDING_WINDOW,
                     scope=RateLimitScope.IP,
-                    endpoint="/info"
+                    endpoint="/info",
                 )
             ]
         )
@@ -146,17 +136,16 @@ class HyperliquidRequestData(Feed):
             body = {}
 
         url = self._params.rest_url + path
-        headers = {
-            "Content-Type": "application/json",
-            "User-Agent": "bt_api_py/1.0"
-        }
+        headers = {"Content-Type": "application/json", "User-Agent": "bt_api_py/1.0"}
         if self.api_key:
             headers["X-API-Key"] = self.api_key
 
         response = self.http_request("POST", url, headers, body, timeout)
         return RequestData(response, extra_data)
 
-    async def async_request(self, path, params=None, body=None, extra_data=None, timeout=10, is_sign=False):
+    async def async_request(
+        self, path, params=None, body=None, extra_data=None, timeout=10, is_sign=False
+    ):
         """Async HTTP request function."""
         if extra_data is None:
             extra_data = {}
@@ -164,10 +153,7 @@ class HyperliquidRequestData(Feed):
             body = {}
 
         url = self._params.rest_url + path
-        headers = {
-            "Content-Type": "application/json",
-            "User-Agent": "bt_api_py/1.0"
-        }
+        headers = {"Content-Type": "application/json", "User-Agent": "bt_api_py/1.0"}
         if self.api_key:
             headers["X-API-Key"] = self.api_key
 
@@ -185,10 +171,7 @@ class HyperliquidRequestData(Feed):
 
     def _make_request(self, request_type, **kwargs):
         """Make HTTP request to Hyperliquid API (legacy helper)"""
-        headers = {
-            "Content-Type": "application/json",
-            "User-Agent": "bt_api_py/1.0"
-        }
+        headers = {"Content-Type": "application/json", "User-Agent": "bt_api_py/1.0"}
 
         if self.api_key:
             headers["X-API-Key"] = self.api_key
@@ -196,12 +179,7 @@ class HyperliquidRequestData(Feed):
         url = self._params.rest_url + self._params.get_rest_path(request_type)
 
         try:
-            response = requests.post(
-                url,
-                json=kwargs,
-                headers=headers,
-                timeout=10
-            )
+            response = requests.post(url, json=kwargs, headers=headers, timeout=10)
             response.raise_for_status()
             return response.json()
         except requests.exceptions.RequestException as e:
@@ -220,12 +198,14 @@ class HyperliquidRequestData(Feed):
             extra_data = {}
         path = self._params.get_rest_path("get_all_mids")
         body = {"type": "allMids"}
-        extra_data.update({
-            "exchange_name": self._params.exchange_name,
-            "symbol_name": symbol,
-            "asset_type": self.asset_type,
-            "request_type": "get_tick",
-        })
+        extra_data.update(
+            {
+                "exchange_name": self._params.exchange_name,
+                "symbol_name": symbol,
+                "asset_type": self.asset_type,
+                "request_type": "get_tick",
+            }
+        )
         return path, body, extra_data
 
     def get_tick(self, symbol, extra_data=None, **kwargs):
@@ -250,12 +230,14 @@ class HyperliquidRequestData(Feed):
         path = self._params.get_rest_path("get_l2_book")
         coin = self._params.get_symbol(symbol)
         body = {"type": "l2Book", "coin": coin}
-        extra_data.update({
-            "exchange_name": self._params.exchange_name,
-            "symbol_name": symbol,
-            "asset_type": self.asset_type,
-            "request_type": "get_depth",
-        })
+        extra_data.update(
+            {
+                "exchange_name": self._params.exchange_name,
+                "symbol_name": symbol,
+                "asset_type": self.asset_type,
+                "request_type": "get_depth",
+            }
+        )
         return path, body, extra_data
 
     def get_depth(self, symbol, count=20, extra_data=None, **kwargs):
@@ -286,12 +268,14 @@ class HyperliquidRequestData(Feed):
         if "end_time" in kwargs and kwargs["end_time"]:
             req["endTime"] = kwargs["end_time"]
         body = {"type": "candleSnapshot", "req": req}
-        extra_data.update({
-            "exchange_name": self._params.exchange_name,
-            "symbol_name": symbol,
-            "asset_type": self.asset_type,
-            "request_type": "get_kline",
-        })
+        extra_data.update(
+            {
+                "exchange_name": self._params.exchange_name,
+                "symbol_name": symbol,
+                "asset_type": self.asset_type,
+                "request_type": "get_kline",
+            }
+        )
         return path, body, extra_data
 
     def get_kline(self, symbol, period, count=20, extra_data=None, **kwargs):
@@ -315,12 +299,14 @@ class HyperliquidRequestData(Feed):
             extra_data = {}
         path = self._params.get_rest_path("get_meta")
         body = {"type": "meta"}
-        extra_data.update({
-            "exchange_name": self._params.exchange_name,
-            "symbol_name": "",
-            "asset_type": self.asset_type,
-            "request_type": "get_exchange_info",
-        })
+        extra_data.update(
+            {
+                "exchange_name": self._params.exchange_name,
+                "symbol_name": "",
+                "asset_type": self.asset_type,
+                "request_type": "get_exchange_info",
+            }
+        )
         return self.request(path, body=body, extra_data=extra_data)
 
     # ── Standard Interface: get_server_time ───────────────────────
@@ -332,12 +318,14 @@ class HyperliquidRequestData(Feed):
             extra_data = {}
         path = self._params.get_rest_path("get_all_mids")
         body = {"type": "allMids"}
-        extra_data.update({
-            "exchange_name": self._params.exchange_name,
-            "symbol_name": "",
-            "asset_type": self.asset_type,
-            "request_type": "get_server_time",
-        })
+        extra_data.update(
+            {
+                "exchange_name": self._params.exchange_name,
+                "symbol_name": "",
+                "asset_type": self.asset_type,
+                "request_type": "get_server_time",
+            }
+        )
         return self.request(path, body=body, extra_data=extra_data)
 
     # ── Hyperliquid-specific: get_all_mids ───────────────────────
@@ -348,12 +336,15 @@ class HyperliquidRequestData(Feed):
         body = {"type": "allMids"}
 
         result = self._make_request(request_type, **body)
-        return self._get_request_data(result, {
-            "exchange_name": self._params.exchange_name,
-            "symbol_name": "",
-            "asset_type": self.asset_type,
-            "request_type": request_type
-        })
+        return self._get_request_data(
+            result,
+            {
+                "exchange_name": self._params.exchange_name,
+                "symbol_name": "",
+                "asset_type": self.asset_type,
+                "request_type": request_type,
+            },
+        )
 
     def get_meta(self):
         """Get metadata for all assets"""
@@ -361,12 +352,15 @@ class HyperliquidRequestData(Feed):
         body = {"type": "meta"}
 
         result = self._make_request(request_type, **body)
-        return self._get_request_data(result, {
-            "exchange_name": self._params.exchange_name,
-            "symbol_name": "",
-            "asset_type": self.asset_type,
-            "request_type": request_type
-        })
+        return self._get_request_data(
+            result,
+            {
+                "exchange_name": self._params.exchange_name,
+                "symbol_name": "",
+                "asset_type": self.asset_type,
+                "request_type": request_type,
+            },
+        )
 
     def get_spot_meta(self):
         """Get spot metadata"""
@@ -374,12 +368,15 @@ class HyperliquidRequestData(Feed):
         body = {"type": "spotMeta"}
 
         result = self._make_request(request_type, **body)
-        return self._get_request_data(result, {
-            "exchange_name": self._params.exchange_name,
-            "symbol_name": "",
-            "asset_type": self.asset_type,
-            "request_type": request_type
-        })
+        return self._get_request_data(
+            result,
+            {
+                "exchange_name": self._params.exchange_name,
+                "symbol_name": "",
+                "asset_type": self.asset_type,
+                "request_type": request_type,
+            },
+        )
 
     def get_l2_book(self, coin, depth=5):
         """Get L2 order book"""
@@ -387,12 +384,15 @@ class HyperliquidRequestData(Feed):
         body = {"type": "l2Book", "coin": coin, "level": 2}
 
         result = self._make_request(request_type, **body)
-        return self._get_request_data(result, {
-            "exchange_name": self._params.exchange_name,
-            "symbol_name": coin,
-            "asset_type": self.asset_type,
-            "request_type": request_type
-        })
+        return self._get_request_data(
+            result,
+            {
+                "exchange_name": self._params.exchange_name,
+                "symbol_name": coin,
+                "asset_type": self.asset_type,
+                "request_type": request_type,
+            },
+        )
 
     def get_candle_snapshot(self, coin, interval, start_time=None, end_time=None):
         """Get candle data"""
@@ -407,12 +407,15 @@ class HyperliquidRequestData(Feed):
         body = {"type": "candleSnapshot", "req": req}
 
         result = self._make_request(request_type, **body)
-        return self._get_request_data(result, {
-            "exchange_name": self._params.exchange_name,
-            "symbol_name": coin,
-            "asset_type": self.asset_type,
-            "request_type": request_type
-        })
+        return self._get_request_data(
+            result,
+            {
+                "exchange_name": self._params.exchange_name,
+                "symbol_name": coin,
+                "asset_type": self.asset_type,
+                "request_type": request_type,
+            },
+        )
 
     def get_recent_trades(self, coin, limit=100):
         """Get recent trades"""
@@ -420,12 +423,15 @@ class HyperliquidRequestData(Feed):
         body = {"type": "recentTrades", "coin": coin, "limit": limit}
 
         result = self._make_request(request_type, **body)
-        return self._get_request_data(result, {
-            "exchange_name": self._params.exchange_name,
-            "symbol_name": coin,
-            "asset_type": self.asset_type,
-            "request_type": request_type
-        })
+        return self._get_request_data(
+            result,
+            {
+                "exchange_name": self._params.exchange_name,
+                "symbol_name": coin,
+                "asset_type": self.asset_type,
+                "request_type": request_type,
+            },
+        )
 
     def get_exchange_status(self):
         """Get exchange status"""
@@ -433,12 +439,15 @@ class HyperliquidRequestData(Feed):
         body = {"type": "exchangeStatus"}
 
         result = self._make_request(request_type, **body)
-        return self._get_request_data(result, {
-            "exchange_name": self._params.exchange_name,
-            "symbol_name": "",
-            "asset_type": self.asset_type,
-            "request_type": request_type
-        })
+        return self._get_request_data(
+            result,
+            {
+                "exchange_name": self._params.exchange_name,
+                "symbol_name": "",
+                "asset_type": self.asset_type,
+                "request_type": request_type,
+            },
+        )
 
     def get_clearinghouse_state(self, user=None):
         """Get perpetual account state"""
@@ -451,12 +460,15 @@ class HyperliquidRequestData(Feed):
         body = {"type": "clearinghouseState", "user": user}
 
         result = self._make_request(request_type, **body)
-        return self._get_request_data(result, {
-            "exchange_name": self._params.exchange_name,
-            "symbol_name": "",
-            "asset_type": self.asset_type,
-            "request_type": request_type
-        })
+        return self._get_request_data(
+            result,
+            {
+                "exchange_name": self._params.exchange_name,
+                "symbol_name": "",
+                "asset_type": self.asset_type,
+                "request_type": request_type,
+            },
+        )
 
     def get_spot_clearinghouse_state(self, user=None):
         """Get spot account state"""
@@ -469,12 +481,15 @@ class HyperliquidRequestData(Feed):
         body = {"type": "spotClearinghouseState", "user": user}
 
         result = self._make_request(request_type, **body)
-        return self._get_request_data(result, {
-            "exchange_name": self._params.exchange_name,
-            "symbol_name": "",
-            "asset_type": self.asset_type,
-            "request_type": request_type
-        })
+        return self._get_request_data(
+            result,
+            {
+                "exchange_name": self._params.exchange_name,
+                "symbol_name": "",
+                "asset_type": self.asset_type,
+                "request_type": request_type,
+            },
+        )
 
     def get_order_status(self, user, oid):
         """Get order status"""
@@ -482,12 +497,15 @@ class HyperliquidRequestData(Feed):
         body = {"type": "orderStatus", "user": user, "oid": oid}
 
         result = self._make_request(request_type, **body)
-        return self._get_request_data(result, {
-            "exchange_name": self._params.exchange_name,
-            "symbol_name": "",
-            "asset_type": self.asset_type,
-            "request_type": request_type
-        })
+        return self._get_request_data(
+            result,
+            {
+                "exchange_name": self._params.exchange_name,
+                "symbol_name": "",
+                "asset_type": self.asset_type,
+                "request_type": request_type,
+            },
+        )
 
     def get_user_fills(self, user, limit=100):
         """Get user fills"""
@@ -495,12 +513,15 @@ class HyperliquidRequestData(Feed):
         body = {"type": "userFills", "user": user, "limit": limit}
 
         result = self._make_request(request_type, **body)
-        return self._get_request_data(result, {
-            "exchange_name": self._params.exchange_name,
-            "symbol_name": "",
-            "asset_type": self.asset_type,
-            "request_type": request_type
-        })
+        return self._get_request_data(
+            result,
+            {
+                "exchange_name": self._params.exchange_name,
+                "symbol_name": "",
+                "asset_type": self.asset_type,
+                "request_type": request_type,
+            },
+        )
 
     def get_user_funding(self, user):
         """Get user funding payments"""
@@ -508,22 +529,22 @@ class HyperliquidRequestData(Feed):
         body = {"type": "userFunding", "user": user}
 
         result = self._make_request(request_type, **body)
-        return self._get_request_data(result, {
-            "exchange_name": self._params.exchange_name,
-            "symbol_name": "",
-            "asset_type": self.asset_type,
-            "request_type": request_type
-        })
+        return self._get_request_data(
+            result,
+            {
+                "exchange_name": self._params.exchange_name,
+                "symbol_name": "",
+                "asset_type": self.asset_type,
+                "request_type": request_type,
+            },
+        )
 
     def _make_signed_request(self, request_type, **kwargs):
         """Make signed request to /exchange endpoint"""
         if not self.account:
             raise ValueError("Private key required for signed requests")
 
-        headers = {
-            "Content-Type": "application/json",
-            "User-Agent": "bt_api_py/1.0"
-        }
+        headers = {"Content-Type": "application/json", "User-Agent": "bt_api_py/1.0"}
 
         url = self._params.rest_url + self._params.get_rest_path(request_type)
 
@@ -531,12 +552,7 @@ class HyperliquidRequestData(Feed):
         # self.rate_limiter.wait_if_needed(request_type)
 
         try:
-            response = requests.post(
-                url,
-                json=kwargs,
-                headers=headers,
-                timeout=10
-            )
+            response = requests.post(url, json=kwargs, headers=headers, timeout=10)
             response.raise_for_status()
             return response.json()
         except requests.exceptions.RequestException as e:

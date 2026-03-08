@@ -18,9 +18,7 @@ def register_wazirx():
     ExchangeRegistry.register_feed("WAZIRX___SPOT", WazirxRequestDataSpot)
     ExchangeRegistry.register_exchange_data("WAZIRX___SPOT", WazirxExchangeDataSpot)
     ExchangeRegistry.register_balance_handler("WAZIRX___SPOT", _wazirx_balance_handler)
-    ExchangeRegistry.register_stream(
-        "WAZIRX___SPOT", "subscribe", _wazirx_spot_subscribe_handler
-    )
+    ExchangeRegistry.register_stream("WAZIRX___SPOT", "subscribe", _wazirx_spot_subscribe_handler)
 
 
 # Auto-register on module import

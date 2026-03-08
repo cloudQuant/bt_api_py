@@ -9,6 +9,7 @@ from unittest.mock import patch
 
 import pytest
 
+import bt_api_py.exchange_registers.register_yobit  # noqa: F401
 from bt_api_py.containers.exchanges.yobit_exchange_data import (
     YobitExchangeData,
     YobitExchangeDataSpot,
@@ -16,17 +17,17 @@ from bt_api_py.containers.exchanges.yobit_exchange_data import (
 from bt_api_py.containers.requestdatas.request_data import RequestData
 from bt_api_py.feeds.live_yobit.request_base import YobitRequestData
 from bt_api_py.feeds.live_yobit.spot import (
-    YobitRequestDataSpot,
-    YobitMarketWssDataSpot,
     YobitAccountWssDataSpot,
+    YobitMarketWssDataSpot,
+    YobitRequestDataSpot,
 )
 from bt_api_py.registry import ExchangeRegistry
 
-import bt_api_py.exchange_registers.register_yobit  # noqa: F401
-
 # ── sample fixtures ──────────────────────────────────────────
 
-SAMPLE_TICK = {"btc_usd": {"high": 30000, "low": 29000, "last": 29500, "buy": 29400, "sell": 29600, "vol": 100}}
+SAMPLE_TICK = {
+    "btc_usd": {"high": 30000, "low": 29000, "last": 29500, "buy": 29400, "sell": 29600, "vol": 100}
+}
 SAMPLE_DEPTH = {"btc_usd": {"asks": [[29600, 1.0]], "bids": [[29400, 1.0]]}}
 SAMPLE_EXCHANGE_INFO = {"server_time": 1678901234, "pairs": {"btc_usd": {"decimal_places": 8}}}
 SAMPLE_SERVER_TIME = {"server_time": 1678901234, "pairs": {}}
@@ -35,7 +36,10 @@ SAMPLE_ACCOUNT = {"return": {"funds": {"btc": 0.5}}, "success": 1}
 SAMPLE_ERROR = {"error": "Invalid pair name"}
 SAMPLE_ORDER = {"return": {"order_id": 12345, "received": 0.1}, "success": 1}
 SAMPLE_CANCEL = {"return": {"order_id": 12345, "funds": {}}, "success": 1}
-SAMPLE_QUERY = {"return": {"12345": {"pair": "btc_usd", "type": "buy", "amount": 0.1}}, "success": 1}
+SAMPLE_QUERY = {
+    "return": {"12345": {"pair": "btc_usd", "type": "buy", "amount": 0.1}},
+    "success": 1,
+}
 
 
 @pytest.fixture
@@ -51,6 +55,7 @@ def exdata():
 # ═══════════════════════════════════════════════════════════════
 # 1) ExchangeData
 # ═══════════════════════════════════════════════════════════════
+
 
 class TestExchangeData:
     def test_exchange_name(self, exdata):
@@ -102,15 +107,24 @@ class TestExchangeData:
             exdata.get_rest_path("nonexistent")
 
     def test_rest_paths_keys(self, exdata):
-        for key in ("get_tick", "get_ticker", "get_depth",
-                     "get_exchange_info", "get_account", "get_balance",
-                     "get_server_time", "make_order", "cancel_order"):
+        for key in (
+            "get_tick",
+            "get_ticker",
+            "get_depth",
+            "get_exchange_info",
+            "get_account",
+            "get_balance",
+            "get_server_time",
+            "make_order",
+            "cancel_order",
+        ):
             assert key in exdata.rest_paths
 
 
 # ═══════════════════════════════════════════════════════════════
 # 2) Parameter generation (_get_xxx)
 # ═══════════════════════════════════════════════════════════════
+
 
 class TestParamGeneration:
     def test_get_tick_params(self, feed):
@@ -179,6 +193,7 @@ class TestParamGeneration:
 # 3) Normalization functions
 # ═══════════════════════════════════════════════════════════════
 
+
 class TestNormalization:
     def test_tick_ok(self):
         result, ok = YobitRequestData._get_tick_normalize_function(SAMPLE_TICK, {})
@@ -202,7 +217,9 @@ class TestNormalization:
         assert ok is False
 
     def test_exchange_info_ok(self):
-        result, ok = YobitRequestData._get_exchange_info_normalize_function(SAMPLE_EXCHANGE_INFO, {})
+        result, ok = YobitRequestData._get_exchange_info_normalize_function(
+            SAMPLE_EXCHANGE_INFO, {}
+        )
         assert ok is True
 
     def test_server_time_ok(self):
@@ -255,6 +272,7 @@ class TestNormalization:
 # ═══════════════════════════════════════════════════════════════
 # 4) Mocked sync calls
 # ═══════════════════════════════════════════════════════════════
+
 
 class TestSyncCalls:
     @patch.object(YobitRequestData, "http_request", return_value=SAMPLE_TICK)
@@ -314,6 +332,7 @@ class TestSyncCalls:
 # 5) Auth
 # ═══════════════════════════════════════════════════════════════
 
+
 class TestAuth:
     def test_headers_no_key(self, feed):
         h = feed._get_headers()
@@ -340,6 +359,7 @@ class TestAuth:
 # ═══════════════════════════════════════════════════════════════
 # 6) Registry
 # ═══════════════════════════════════════════════════════════════
+
 
 class TestRegistry:
     def test_feed_registered(self):
@@ -369,16 +389,26 @@ class TestRegistry:
 # ═══════════════════════════════════════════════════════════════
 
 _EXPECTED_METHODS = [
-    "get_tick", "async_get_tick",
-    "get_ticker", "async_get_ticker",
-    "get_depth", "async_get_depth",
-    "get_exchange_info", "async_get_exchange_info",
-    "get_server_time", "async_get_server_time",
-    "get_balance", "async_get_balance",
-    "get_account", "async_get_account",
-    "make_order", "async_make_order",
-    "cancel_order", "async_cancel_order",
-    "query_order", "async_query_order",
+    "get_tick",
+    "async_get_tick",
+    "get_ticker",
+    "async_get_ticker",
+    "get_depth",
+    "async_get_depth",
+    "get_exchange_info",
+    "async_get_exchange_info",
+    "get_server_time",
+    "async_get_server_time",
+    "get_balance",
+    "async_get_balance",
+    "get_account",
+    "async_get_account",
+    "make_order",
+    "async_make_order",
+    "cancel_order",
+    "async_cancel_order",
+    "query_order",
+    "async_query_order",
 ]
 
 
@@ -393,6 +423,7 @@ class TestMethodExistence:
 # 8) Feed init
 # ═══════════════════════════════════════════════════════════════
 
+
 class TestFeedInit:
     def test_default_exchange_name(self, feed):
         assert feed.exchange_name == "YOBIT___SPOT"
@@ -402,6 +433,7 @@ class TestFeedInit:
 
     def test_capabilities(self, feed):
         from bt_api_py.feeds.capability import Capability
+
         caps = feed._capabilities()
         assert Capability.GET_TICK in caps
         assert Capability.GET_DEPTH in caps
@@ -418,6 +450,7 @@ class TestFeedInit:
 # ═══════════════════════════════════════════════════════════════
 # 9) WebSocket stubs
 # ═══════════════════════════════════════════════════════════════
+
 
 class TestWebSocketStubs:
     def test_market_wss_start_stop(self):
@@ -438,6 +471,7 @@ class TestWebSocketStubs:
 # ═══════════════════════════════════════════════════════════════
 # 10) Integration (skipped)
 # ═══════════════════════════════════════════════════════════════
+
 
 class TestIntegration:
     @pytest.mark.skip(reason="Requires network access")

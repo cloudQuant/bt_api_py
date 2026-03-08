@@ -8,7 +8,6 @@ from bt_api_py.containers.auto_init_mixin import AutoInitMixin
 
 
 class BarData(AutoInitMixin):
-
     def __init__(self, bar_info, has_been_json_encoded=False):
         self.event = "BarEvent"
         self.bar_info = bar_info

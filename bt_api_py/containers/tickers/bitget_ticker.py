@@ -45,7 +45,9 @@ class BitgetTickerData(TickerData):
             return self
 
         self.ticker_symbol_name = from_dict_get_string(self.ticker_data, "symbol")
-        self.server_time = from_dict_get_float(self.ticker_data, "ts") or from_dict_get_float(self.ticker_data, "time")
+        self.server_time = from_dict_get_float(self.ticker_data, "ts") or from_dict_get_float(
+            self.ticker_data, "time"
+        )
         self.last_price = from_dict_get_float(self.ticker_data, "last")
         self.last_volume = from_dict_get_float(self.ticker_data, "volume")
         self.bid_price = from_dict_get_float(self.ticker_data, "bidPx")
@@ -181,7 +183,9 @@ class BitgetRequestTickerData(BitgetTickerData):
             return self
 
         self.ticker_symbol_name = from_dict_get_string(self.ticker_data, "symbol")
-        self.server_time = from_dict_get_float(self.ticker_data, "ts") or from_dict_get_float(self.ticker_data, "time")
+        self.server_time = from_dict_get_float(self.ticker_data, "ts") or from_dict_get_float(
+            self.ticker_data, "time"
+        )
         self.last_price = from_dict_get_float(self.ticker_data, "last")
         self.last_volume = from_dict_get_float(self.ticker_data, "volume")
         self.bid_price = from_dict_get_float(self.ticker_data, "bidPx")

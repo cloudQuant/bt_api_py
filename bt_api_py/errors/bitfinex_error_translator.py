@@ -17,15 +17,16 @@ class BitfinexErrorTranslator(ErrorTranslator):
 
     ERROR_MAP = {
         # 认证错误
-        "ERR_UNAUTHENTICATED_API_KEY": (UnifiedErrorCode.INVALID_API_KEY, "Unauthenticated API key"),
+        "ERR_UNAUTHENTICATED_API_KEY": (
+            UnifiedErrorCode.INVALID_API_KEY,
+            "Unauthenticated API key",
+        ),
         "ERR_INVALID_API_KEY": (UnifiedErrorCode.INVALID_API_KEY, "Invalid API key"),
         "ERR_INVALID_SIGNATURE": (UnifiedErrorCode.INVALID_SIGNATURE, "Invalid signature"),
         "ERR_PERMISSION_DENIED": (UnifiedErrorCode.PERMISSION_DENIED, "Permission denied"),
-
         # 限流错误
         "ERR_RATE_LIMIT": (UnifiedErrorCode.RATE_LIMIT_EXCEEDED, "Rate limit exceeded"),
         "ERR_TOO_MANY_REQUESTS": (UnifiedErrorCode.RATE_LIMIT_EXCEEDED, "Too many requests"),
-
         # 业务错误
         "ERR_UNKNOWN_ORDER": (UnifiedErrorCode.ORDER_NOT_FOUND, "Order not found"),
         "ERR_INVALID_ORDER": (UnifiedErrorCode.INVALID_ORDER, "Invalid order"),
@@ -34,13 +35,11 @@ class BitfinexErrorTranslator(ErrorTranslator):
         "ERR_ORDER_NOT_FOUND": (UnifiedErrorCode.ORDER_NOT_FOUND, "Order not found"),
         "ERR_ORDER_ALREADY_FILLED": (UnifiedErrorCode.ORDER_ALREADY_FILLED, "Order already filled"),
         "ERR_MARKET_CLOSED": (UnifiedErrorCode.MARKET_CLOSED, "Market is closed"),
-
         # 参数错误
         "ERR_INVALID_SYMBOL": (UnifiedErrorCode.INVALID_SYMBOL, "Invalid symbol"),
         "ERR_INVALID_PRICE": (UnifiedErrorCode.INVALID_PRICE, "Invalid price"),
         "ERR_INVALID_AMOUNT": (UnifiedErrorCode.INVALID_VOLUME, "Invalid amount"),
         "ERR_INVALID_PARAMETER": (UnifiedErrorCode.INVALID_PARAMETER, "Invalid parameter"),
-
         # 系统错误
         "ERR_SERVER": (UnifiedErrorCode.INTERNAL_ERROR, "Server error"),
         "ERR_SERVICE_UNAVAILABLE": (UnifiedErrorCode.EXCHANGE_MAINTENANCE, "Service unavailable"),

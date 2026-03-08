@@ -4,8 +4,8 @@
 
 Unreal Engine provides a comprehensive automation system for testing games, including:
 
-- **Automation Framework**- Low-level test infrastructure
-- **Functional Tests**- In-game scenario testing
+- **Automation Framework** - Low-level test infrastructure
+- **Functional Tests** - In-game scenario testing
 - **Gauntlet** - Extended testing and automation
 
 ## Automation Framework
@@ -13,29 +13,22 @@ Unreal Engine provides a comprehensive automation system for testing games, incl
 ### Test Types
 
 | Type          | Flag            | Use Case                   |
-
 | ------------- | --------------- | -------------------------- |
-
 | Unit Tests    | `SmokeFilter`   | Fast, isolated logic tests |
-
 | Feature Tests | `ProductFilter` | Feature validation         |
-
 | Stress Tests  | `StressFilter`  | Performance under load     |
-
 | Perf Tests    | `PerfFilter`    | Benchmark comparisons      |
 
 ### Basic Test Structure
 
 ```cpp
 // MyGameTests.cpp
-
-# include "Misc/AutomationTest.h"
+#include "Misc/AutomationTest.h"
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(
     FDamageCalculationTest,
     "MyGame.Combat.DamageCalculation",
     EAutomationTestFlags::ApplicationContextMask |
-
     EAutomationTestFlags::ProductFilter
 )
 
@@ -53,8 +46,7 @@ bool FDamageCalculationTest::RunTest(const FString& Parameters)
 
     return true;
 }
-
-```bash
+```
 
 ### Complex Test with Setup/Teardown
 
@@ -63,7 +55,6 @@ IMPLEMENT_COMPLEX_AUTOMATION_TEST(
     FInventorySystemTest,
     "MyGame.Systems.Inventory",
     EAutomationTestFlags::ApplicationContextMask |
-
     EAutomationTestFlags::ProductFilter
 )
 
@@ -107,8 +98,7 @@ bool FInventorySystemTest::RunTest(const FString& Parameters)
 
     return true;
 }
-
-```bash
+```
 
 ### Latent Actions (Async Tests)
 
@@ -121,13 +111,13 @@ DEFINE_LATENT_AUTOMATION_COMMAND_ONE_PARAMETER(
 bool FWaitForActorSpawn::Update()
 {
     UWorld* World = GEngine->GetWorldContexts()[0].World();
-    AActor*Actor = nullptr;
+    AActor* Actor = nullptr;
 
     for (TActorIterator<AActor> It(World); It; ++It)
     {
         if (It->GetName() == ActorName)
         {
-            Actor =*It;
+            Actor = *It;
             break;
         }
     }
@@ -148,8 +138,7 @@ bool FSpawnTest::RunTest(const FString& Parameters)
 
     return true;
 }
-
-```bash
+```
 
 ## Functional Tests
 
@@ -168,8 +157,7 @@ Functional tests run inside the game world and can test gameplay scenarios.
 // 1. Create child of AFunctionalTest
 // 2. Override "Start Test" event
 // 3. Call "Finish Test" when complete
-
-```bash
+```
 
 ### C++ Functional Test
 
@@ -220,8 +208,7 @@ void APlayerCombatTest::OnEnemyDamaged(float Damage)
                 ExpectedDamage, Damage));
     }
 }
-
-```bash
+```
 
 ## Gauntlet Framework
 
@@ -249,21 +236,16 @@ namespace MyGame.Automation
         }
     }
 }
-
-```bash
+```
 
 ### Running Gauntlet
 
 ```bash
-
 # Run performance test
-
 RunUAT.bat RunUnreal -project=MyGame -platform=Win64 \
-
-  - configuration=Development -build=local \
-  - test=MyGame.PerformanceTest -Duration=300
-
-```bash
+  -configuration=Development -build=local \
+  -test=MyGame.PerformanceTest -Duration=300
+```
 
 ## Blueprint Testing
 
@@ -290,8 +272,7 @@ public:
         TSubclassOf<AActor> ActorClass,
         FVector Location);
 };
-
-```bash
+```
 
 ## Performance Testing
 
@@ -317,8 +298,7 @@ bool FFrameTimeTest::RunTest(const FString& Parameters)
 
     return true;
 }
-
-```bash
+```
 
 ### Memory Tracking
 
@@ -330,7 +310,7 @@ bool FMemoryLeakTest::RunTest(const FString& Parameters)
     // Perform operations
     for (int i = 0; i < 100; i++)
     {
-        UObject*Obj = NewObject<UMyObject>();
+        UObject* Obj = NewObject<UMyObject>();
         // ... use object
         Obj->MarkAsGarbage();  // UE5 API (was MarkPendingKill in UE4)
     }
@@ -340,37 +320,30 @@ bool FMemoryLeakTest::RunTest(const FString& Parameters)
     SIZE_T FinalMemory = FPlatformMemory::GetStats().UsedPhysical;
     SIZE_T Leaked = FinalMemory - BaselineMemory;
 
-    TestTrue("No significant leak", Leaked < 1024* 1024); // 1MB tolerance
+    TestTrue("No significant leak", Leaked < 1024 * 1024); // 1MB tolerance
 
     return true;
 }
-
-```bash
+```
 
 ## CI Integration
 
 ### Command Line
 
 ```bash
-
 # Run all tests (UE5)
-
 UnrealEditor.exe MyGame -ExecCmds="Automation RunTests Now" -unattended -nopause
 
 # Run specific test
-
 UnrealEditor.exe MyGame -ExecCmds="Automation RunTests MyGame.Combat" -unattended
 
 # Run with report
-
 UnrealEditor.exe MyGame \
-
-  - ExecCmds="Automation RunTests Now; Automation ReportResults" \
-  - ReportOutputPath=TestResults.xml
+  -ExecCmds="Automation RunTests Now; Automation ReportResults" \
+  -ReportOutputPath=TestResults.xml
 
 # Note: For UE4, use UE4Editor.exe instead of UnrealEditor.exe
-
-```bash
+```
 
 ### GitHub Actions
 
@@ -378,19 +351,14 @@ UnrealEditor.exe MyGame \
 test:
   runs-on: [self-hosted, windows, unreal]
   steps:
-
     - name: Run Tests
-
       run: |
-
-# UE5: UnrealEditor-Cmd.exe, UE4: UE4Editor-Cmd.exe
+        # UE5: UnrealEditor-Cmd.exe, UE4: UE4Editor-Cmd.exe
         & "$env:UE_ROOT/Engine/Binaries/Win64/UnrealEditor-Cmd.exe" `
           "${{ github.workspace }}/MyGame.uproject" `
-
-          - ExecCmds="Automation RunTests Now" `
-          - unattended -nopause -nullrhi
-
-```bash
+          -ExecCmds="Automation RunTests Now" `
+          -unattended -nopause -nullrhi
+```
 
 ## Best Practices
 
@@ -413,15 +381,10 @@ test:
 ## Troubleshooting
 
 | Issue          | Cause           | Fix                          |
-
 | -------------- | --------------- | ---------------------------- |
-
 | Test not found | Wrong flags     | Check `EAutomationTestFlags` |
-
 | Crash in test  | Missing world   | Use proper test context      |
-
 | Flaky results  | Timing issues   | Use latent commands          |
-
 | Slow tests     | Too many actors | Optimize test setup          |
 
 ## End-to-End Testing
@@ -435,7 +398,7 @@ E2E tests in Unreal leverage Functional Tests with custom infrastructure for sce
 
 #### Project Structure
 
-```bash
+```
 Source/
 ├── MyGame/
 │   └── ... (game code)
@@ -458,8 +421,7 @@ Source/
     └── TestMaps/
         ├── E2E_Combat.umap
         └── E2E_TurnCycle.umap
-
-```bash
+```
 
 #### Test Module Build File
 
@@ -489,38 +451,31 @@ public class MyGameTests : ModuleRules
 
         // Only include in editor/test builds
         if (Target.bBuildDeveloperTools || Target.Configuration == UnrealTargetConfiguration.Debug)
-
         {
             PrecompileForTargets = PrecompileTargetsType.Any;
         }
     }
 }
-
-```bash
+```
 
 #### GameE2ETestBase (Base Class)
 
 ```cpp
 // GameE2ETestBase.h
+#pragma once
 
-# pragma once
-
-# include "CoreMinimal.h"
-
-# include "FunctionalTest.h"
-
-# include "GameE2ETestBase.generated.h"
+#include "CoreMinimal.h"
+#include "FunctionalTest.h"
+#include "GameE2ETestBase.generated.h"
 
 class UScenarioBuilder;
 class UInputSimulator;
 class UGameStateManager;
 
 /**
-
- - Base class for all E2E functional tests.
- - Provides scenario setup, input simulation, and async assertion utilities.
- - /
-
+ * Base class for all E2E functional tests.
+ * Provides scenario setup, input simulation, and async assertion utilities.
+ */
 UCLASS(Abstract)
 class MYGAMETESTS_API AGameE2ETestBase : public AFunctionalTest
 {
@@ -555,11 +510,9 @@ protected:
     virtual TSubclassOf<UGameStateManager> GetGameStateClass() const;
 
     /**
-
-     - Wait until game state reports ready.
-     - Calls OnGameReady() when complete or fails test on timeout.
-     - /
-
+     * Wait until game state reports ready.
+     * Calls OnGameReady() when complete or fails test on timeout.
+     */
     UFUNCTION(BlueprintCallable, Category = "E2E")
     void WaitForGameReady();
 
@@ -567,36 +520,28 @@ protected:
     virtual void OnGameReady();
 
     /**
-
-     - Wait until condition is true, then call callback.
-     - Fails test if timeout exceeded.
-     - /
-
+     * Wait until condition is true, then call callback.
+     * Fails test if timeout exceeded.
+     */
     void WaitUntil(TFunction<bool()> Condition, const FString& Description,
                    TFunction<void()> OnComplete, float Timeout = -1.0f);
 
     /**
-
-     - Wait for a specific value, then call callback.
-     - /
-
+     * Wait for a specific value, then call callback.
+     */
     template<typename T>
     void WaitForValue(TFunction<T()> Getter, T Expected,
                       const FString& Description, TFunction<void()> OnComplete,
                       float Timeout = -1.0f);
 
     /**
-
-     - Assert condition and fail test with message if false.
-     - /
-
+     * Assert condition and fail test with message if false.
+     */
     void AssertTrue(bool Condition, const FString& Message);
 
     /**
-
-     - Assert values are equal within tolerance.
-     - /
-
+     * Assert values are equal within tolerance.
+     */
     void AssertNearlyEqual(float Actual, float Expected,
                            const FString& Message, float Tolerance = 0.0001f);
 
@@ -610,25 +555,17 @@ private:
 
     void TickWaitCondition();
 };
-
-```bash
+```
 
 ```cpp
 // GameE2ETestBase.cpp
-
-# include "GameE2ETestBase.h"
-
-# include "ScenarioBuilder.h"
-
-# include "InputSimulator.h"
-
-# include "GameStateManager.h"
-
-# include "Engine/World.h"
-
-# include "TimerManager.h"
-
-# include "Kismet/GameplayStatics.h"
+#include "GameE2ETestBase.h"
+#include "ScenarioBuilder.h"
+#include "InputSimulator.h"
+#include "GameStateManager.h"
+#include "Engine/World.h"
+#include "TimerManager.h"
+#include "Kismet/GameplayStatics.h"
 
 AGameE2ETestBase::AGameE2ETestBase()
 {
@@ -775,34 +712,26 @@ void AGameE2ETestBase::AssertNearlyEqual(
     {
         FinishTest(EFunctionalTestResult::Failed,
             FString::Printf(TEXT("%s: Expected ~%f, got %f"),
-
-                - Message, Expected, Actual));
-
+                *Message, Expected, Actual));
     }
 }
-
-```bash
+```
 
 #### ScenarioBuilder
 
 ```cpp
 // ScenarioBuilder.h
+#pragma once
 
-# pragma once
-
-# include "CoreMinimal.h"
-
-# include "UObject/NoExportTypes.h"
-
-# include "ScenarioBuilder.generated.h"
+#include "CoreMinimal.h"
+#include "UObject/NoExportTypes.h"
+#include "ScenarioBuilder.generated.h"
 
 class UGameStateManager;
 
 /**
-
- - Fluent API for configuring E2E test scenarios.
- - /
-
+ * Fluent API for configuring E2E test scenarios.
+ */
 UCLASS(BlueprintType)
 class MYGAMETESTS_API UScenarioBuilder : public UObject
 {
@@ -813,56 +742,44 @@ public:
     void Initialize(UGameStateManager* InGameState);
 
     /**
-
-     - Load scenario from save file.
-     - @param FileName Save file name (without path)
-     - /
-
+     * Load scenario from save file.
+     * @param FileName Save file name (without path)
+     */
     UFUNCTION(BlueprintCallable, Category = "Scenario")
     UScenarioBuilder* FromSaveFile(const FString& FileName);
 
     /**
-
-     - Set the current turn number.
-     - /
-
+     * Set the current turn number.
+     */
     UFUNCTION(BlueprintCallable, Category = "Scenario")
     UScenarioBuilder* OnTurn(int32 TurnNumber);
 
     /**
-
-     - Set the active faction.
-     - /
-
+     * Set the active faction.
+     */
     UFUNCTION(BlueprintCallable, Category = "Scenario")
     UScenarioBuilder* WithActiveFaction(EFaction Faction);
 
     /**
-
-     - Spawn a unit at position.
-     - @param Faction Unit's faction
-     - @param Position World position
-     - @param MovementPoints Starting movement points
-     - /
-
+     * Spawn a unit at position.
+     * @param Faction Unit's faction
+     * @param Position World position
+     * @param MovementPoints Starting movement points
+     */
     UFUNCTION(BlueprintCallable, Category = "Scenario")
     UScenarioBuilder* WithUnit(EFaction Faction, FVector Position,
                                int32 MovementPoints = 6);
 
     /**
-
-     - Set terrain at position.
-     - /
-
+     * Set terrain at position.
+     */
     UFUNCTION(BlueprintCallable, Category = "Scenario")
     UScenarioBuilder* WithTerrain(FVector Position, ETerrainType Terrain);
 
     /**
-
-     - Execute all queued setup actions.
-     - @param OnComplete Called when all actions complete
-     - /
-
+     * Execute all queued setup actions.
+     * @param OnComplete Called when all actions complete
+     */
     void Build(TFunction<void()> OnComplete);
 
     /** Clear pending actions without executing. */
@@ -877,15 +794,12 @@ private:
 
     void ExecuteNextAction(int32 Index, TFunction<void()> FinalCallback);
 };
-
-```bash
+```
 
 ```cpp
 // ScenarioBuilder.cpp
-
-# include "ScenarioBuilder.h"
-
-# include "GameStateManager.h"
+#include "ScenarioBuilder.h"
+#include "GameStateManager.h"
 
 void UScenarioBuilder::Initialize(UGameStateManager* InGameState)
 {
@@ -893,10 +807,10 @@ void UScenarioBuilder::Initialize(UGameStateManager* InGameState)
     SetupActions.Empty();
 }
 
-UScenarioBuilder*UScenarioBuilder::FromSaveFile(const FString& FileName)
+UScenarioBuilder* UScenarioBuilder::FromSaveFile(const FString& FileName)
 {
     SetupActions.Add([this, FileName](TFunction<void()> Done) {
-        FString Path = FString::Printf(TEXT("TestData/%s"),*FileName);
+        FString Path = FString::Printf(TEXT("TestData/%s"), *FileName);
         GameState->LoadGame(Path, FOnLoadComplete::CreateLambda([Done](bool bSuccess) {
             Done();
         }));
@@ -976,31 +890,24 @@ void UScenarioBuilder::ExecuteNextAction(
         ExecuteNextAction(Index + 1, FinalCallback);
     });
 }
-
-```bash
+```
 
 #### InputSimulator
 
 ```cpp
 // InputSimulator.h
+#pragma once
 
-# pragma once
-
-# include "CoreMinimal.h"
-
-# include "UObject/NoExportTypes.h"
-
-# include "InputCoreTypes.h"
-
-# include "InputSimulator.generated.h"
+#include "CoreMinimal.h"
+#include "UObject/NoExportTypes.h"
+#include "InputCoreTypes.h"
+#include "InputSimulator.generated.h"
 
 class APlayerController;
 
 /**
-
- - Simulates player input for E2E tests.
- - /
-
+ * Simulates player input for E2E tests.
+ */
 UCLASS(BlueprintType)
 class MYGAMETESTS_API UInputSimulator : public UObject
 {
@@ -1008,50 +915,38 @@ class MYGAMETESTS_API UInputSimulator : public UObject
 
 public:
     /**
-
-     - Click at a world position.
-     - @param WorldPos Position in world space
-     - @param OnComplete Called when click completes
-     - /
-
+     * Click at a world position.
+     * @param WorldPos Position in world space
+     * @param OnComplete Called when click completes
+     */
     void ClickWorldPosition(FVector WorldPos, TFunction<void()> OnComplete);
 
     /**
-
-     - Click at screen coordinates.
-     - /
-
+     * Click at screen coordinates.
+     */
     void ClickScreenPosition(FVector2D ScreenPos, TFunction<void()> OnComplete);
 
     /**
-
-     - Click a UI button by name.
-     - @param ButtonName Name of the button widget
-     - @param OnComplete Called when click completes
-     - /
-
+     * Click a UI button by name.
+     * @param ButtonName Name of the button widget
+     * @param OnComplete Called when click completes
+     */
     UFUNCTION(BlueprintCallable, Category = "Input")
     void ClickButton(const FString& ButtonName, TFunction<void()> OnComplete);
 
     /**
-
-     - Press and release a key.
-     - /
-
+     * Press and release a key.
+     */
     void PressKey(FKey Key, TFunction<void()> OnComplete);
 
     /**
-
-     - Trigger an input action.
-     - /
-
+     * Trigger an input action.
+     */
     void TriggerAction(FName ActionName, TFunction<void()> OnComplete);
 
     /**
-
-     - Drag from one position to another.
-     - /
-
+     * Drag from one position to another.
+     */
     void DragFromTo(FVector From, FVector To, float Duration,
                     TFunction<void()> OnComplete);
 
@@ -1063,29 +958,19 @@ private:
     APlayerController* GetPlayerController() const;
     void SimulateMouseClick(FVector2D ScreenPos, TFunction<void()> OnComplete);
 };
-
-```bash
+```
 
 ```cpp
 // InputSimulator.cpp
-
-# include "InputSimulator.h"
-
-# include "GameFramework/PlayerController.h"
-
-# include "Blueprint/UserWidget.h"
-
-# include "Components/Button.h"
-
-# include "Blueprint/WidgetBlueprintLibrary.h"
-
-# include "Kismet/GameplayStatics.h"
-
-# include "Engine/World.h"
-
-# include "TimerManager.h"
-
-# include "Framework/Application/SlateApplication.h"
+#include "InputSimulator.h"
+#include "GameFramework/PlayerController.h"
+#include "Blueprint/UserWidget.h"
+#include "Components/Button.h"
+#include "Blueprint/WidgetBlueprintLibrary.h"
+#include "Kismet/GameplayStatics.h"
+#include "Engine/World.h"
+#include "TimerManager.h"
+#include "Framework/Application/SlateApplication.h"
 
 void UInputSimulator::ClickWorldPosition(
     FVector WorldPos, TFunction<void()> OnComplete)
@@ -1328,25 +1213,20 @@ void UInputSimulator::SimulateMouseClick(
         OnComplete();
     }
 }
-
-```bash
+```
 
 #### AsyncTestHelpers
 
 ```cpp
 // AsyncTestHelpers.h
+#pragma once
 
-# pragma once
-
-# include "CoreMinimal.h"
-
-# include "Misc/AutomationTest.h"
+#include "CoreMinimal.h"
+#include "Misc/AutomationTest.h"
 
 /**
-
- - Latent command to wait for a condition.
- - /
-
+ * Latent command to wait for a condition.
+ */
 DEFINE_LATENT_AUTOMATION_COMMAND_THREE_PARAMETER(
     FWaitUntilCondition,
     TFunction<bool()>, Condition,
@@ -1355,10 +1235,8 @@ DEFINE_LATENT_AUTOMATION_COMMAND_THREE_PARAMETER(
 );
 
 /**
-
- - Latent command to wait for a value to equal expected.
- - /
-
+ * Latent command to wait for a value to equal expected.
+ */
 template<typename T>
 class FWaitForValue : public IAutomationLatentCommand
 {
@@ -1401,10 +1279,8 @@ private:
 };
 
 /**
-
- - Latent command to wait for float value within tolerance.
- - /
-
+ * Latent command to wait for float value within tolerance.
+ */
 class FWaitForValueApprox : public IAutomationLatentCommand
 {
 public:
@@ -1449,10 +1325,8 @@ private:
 };
 
 /**
-
- - Latent command to assert condition never becomes true.
- - /
-
+ * Latent command to assert condition never becomes true.
+ */
 DEFINE_LATENT_AUTOMATION_COMMAND_THREE_PARAMETER(
     FAssertNeverTrue,
     TFunction<bool()>, Condition,
@@ -1461,36 +1335,28 @@ DEFINE_LATENT_AUTOMATION_COMMAND_THREE_PARAMETER(
 );
 
 /** Helper macros for E2E tests */
-
-# define E2E_WAIT_UNTIL(Cond, Desc, Timeout) \
+#define E2E_WAIT_UNTIL(Cond, Desc, Timeout) \
     ADD_LATENT_AUTOMATION_COMMAND(FWaitUntilCondition(Cond, Desc, Timeout))
 
-# define E2E_WAIT_FOR_VALUE(Getter, Expected, Desc, Timeout) \
+#define E2E_WAIT_FOR_VALUE(Getter, Expected, Desc, Timeout) \
     ADD_LATENT_AUTOMATION_COMMAND(FWaitForValue<decltype(Expected)>(Getter, Expected, Desc, Timeout))
 
-# define E2E_WAIT_FOR_FLOAT(Getter, Expected, Desc, Tolerance, Timeout) \
+#define E2E_WAIT_FOR_FLOAT(Getter, Expected, Desc, Tolerance, Timeout) \
     ADD_LATENT_AUTOMATION_COMMAND(FWaitForValueApprox(Getter, Expected, Desc, Tolerance, Timeout))
-
-```bash
+```
 
 ### Example E2E Test
 
 ```cpp
 // CombatE2ETests.cpp
-
-# include "GameE2ETestBase.h"
-
-# include "ScenarioBuilder.h"
-
-# include "InputSimulator.h"
-
-# include "AsyncTestHelpers.h"
+#include "GameE2ETestBase.h"
+#include "ScenarioBuilder.h"
+#include "InputSimulator.h"
+#include "AsyncTestHelpers.h"
 
 /**
-
- - E2E test: Player can attack enemy and deal damage.
- - /
-
+ * E2E test: Player can attack enemy and deal damage.
+ */
 UCLASS()
 class AE2E_PlayerAttacksEnemy : public AGameE2ETestBase
 {
@@ -1501,12 +1367,10 @@ protected:
     {
         // GIVEN: Player and enemy units in combat range
         Scenario
-
-            - >WithUnit(EFaction::Player, FVector(100, 100, 0), 6)
-            - >WithUnit(EFaction::Enemy, FVector(200, 100, 0), 6)
-            - >WithActiveFaction(EFaction::Player)
-            - >Build([this]() { OnScenarioReady(); });
-
+            ->WithUnit(EFaction::Player, FVector(100, 100, 0), 6)
+            ->WithUnit(EFaction::Enemy, FVector(200, 100, 0), 6)
+            ->WithActiveFaction(EFaction::Player)
+            ->Build([this]() { OnScenarioReady(); });
     }
 
 private:
@@ -1551,10 +1415,8 @@ private:
 };
 
 /**
-
- - E2E test: Full turn cycle completes correctly.
- - /
-
+ * E2E test: Full turn cycle completes correctly.
+ */
 UCLASS()
 class AE2E_TurnCycleCompletes : public AGameE2ETestBase
 {
@@ -1567,11 +1429,9 @@ protected:
     {
         // GIVEN: Game in progress
         Scenario
-
-            - >OnTurn(1)
-            - >WithActiveFaction(EFaction::Player)
-            - >Build([this]() { OnScenarioReady(); });
-
+            ->OnTurn(1)
+            ->WithActiveFaction(EFaction::Player)
+            ->Build([this]() { OnScenarioReady(); });
     }
 
 private:
@@ -1621,35 +1481,26 @@ private:
         }
     }
 };
-
-```bash
+```
 
 ### Running E2E Tests
 
 ```bash
-
 # Run all E2E tests
-
 UnrealEditor-Cmd.exe MyGame.uproject \
-
-    - ExecCmds="Automation RunTests MyGame.E2E" \
-    - unattended -nopause -nullrhi
+    -ExecCmds="Automation RunTests MyGame.E2E" \
+    -unattended -nopause -nullrhi
 
 # Run specific E2E test
-
 UnrealEditor-Cmd.exe MyGame.uproject \
-
-    - ExecCmds="Automation RunTests MyGame.E2E.Combat.PlayerAttacksEnemy" \
-    - unattended -nopause
+    -ExecCmds="Automation RunTests MyGame.E2E.Combat.PlayerAttacksEnemy" \
+    -unattended -nopause
 
 # Run with detailed logging
-
 UnrealEditor-Cmd.exe MyGame.uproject \
-
-    - ExecCmds="Automation RunTests MyGame.E2E" \
-    - unattended -nopause -log=E2ETests.log
-
-```bash
+    -ExecCmds="Automation RunTests MyGame.E2E" \
+    -unattended -nopause -log=E2ETests.log
+```
 
 ### Quick E2E Checklist for Unreal
 

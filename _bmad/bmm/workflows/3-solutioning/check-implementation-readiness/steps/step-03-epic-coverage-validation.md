@@ -1,12 +1,10 @@
-- --
-
+---
 name: 'step-03-epic-coverage-validation'
 description: 'Validate that all PRD FRs are covered in epics and stories'
 
 nextStepFile: './step-04-ux-alignment.md'
 outputFile: '{planning_artifacts}/implementation-readiness-report-{{date}}.md'
-
-- --
+---
 
 # Step 3: Epic Coverage Validation
 
@@ -76,8 +74,7 @@ From the epics document:
 
 Format as:
 
-```bash
-
+```
 ## Epic FR Coverage Extracted
 
 FR1: Covered in Epic X
@@ -85,8 +82,7 @@ FR2: Covered in Epic Y
 FR3: Covered in Epic Z
 ...
 Total FRs in epics: [count]
-
-```bash
+```
 
 ### 4. Compare Coverage Against PRD
 
@@ -98,49 +94,39 @@ Using the PRD FR list from step 2:
 
 Create coverage matrix:
 
-```bash
-
+```
 ## FR Coverage Analysis
 
 | FR Number | PRD Requirement | Epic Coverage  | Status    |
-
 | --------- | --------------- | -------------- | --------- |
-
 | FR1       | [PRD text]      | Epic X Story Y | ✓ Covered |
-
 | FR2       | [PRD text]      | **NOT FOUND**  | ❌ MISSING |
-
 | FR3       | [PRD text]      | Epic Z Story A | ✓ Covered |
-
-```bash
+```
 
 ### 5. Document Missing Coverage
 
 List all FRs not covered:
 
-```bash
-
+```
 ## Missing FR Coverage
 
 ### Critical Missing FRs
 
 FR#: [Full requirement text from PRD]
-
 - Impact: [Why this is critical]
 - Recommendation: [Which epic should include this]
 
 ### High Priority Missing FRs
 
 [List any other uncovered FRs]
-
-```bash
+```
 
 ### 6. Add to Assessment Report
 
 Append to {outputFile}:
 
 ```markdown
-
 ## Epic Coverage Validation
 
 ### Coverage Matrix
@@ -156,8 +142,7 @@ Append to {outputFile}:
 - Total PRD FRs: [count]
 - FRs covered in epics: [count]
 - Coverage percentage: [percentage]
-
-```bash
+```
 
 ### 7. Auto-Proceed to Next Step
 
@@ -167,7 +152,7 @@ After coverage validation complete, immediately load next step.
 
 Epic coverage validation complete. Loading next step for UX alignment.
 
-- --
+---
 
 ## 🚨 SYSTEM SUCCESS/FAILURE METRICS
 
@@ -185,4 +170,4 @@ Epic coverage validation complete. Loading next step for UX alignment.
 - Not documenting uncovered requirements
 - Incomplete coverage analysis
 
-- *Master Rule:** Every FR must have a traceable implementation path.
+**Master Rule:** Every FR must have a traceable implementation path.

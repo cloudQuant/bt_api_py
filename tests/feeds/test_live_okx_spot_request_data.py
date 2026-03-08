@@ -1,33 +1,30 @@
 import queue
-import time
 import random
-import pytest
+import time
 
-from bt_api_py.functions.utils import read_account_config, get_public_ip
-from bt_api_py.feeds.live_okx_feed import OkxRequestDataSpot
-from bt_api_py.containers.exchanges.okx_exchange_data import OkxExchangeDataSpot
-from bt_api_py.containers.requestdatas.request_data import RequestData
-from bt_api_py.containers.tickers.okx_ticker import OkxTickerData
-from bt_api_py.containers.bars.okx_bar import OkxBarData
-from bt_api_py.containers.orderbooks.okx_orderbook import OkxOrderBookData
-from bt_api_py.containers.fundingrates.okx_funding_rate import OkxFundingRateData
-from bt_api_py.containers.markprices.okx_mark_price import OkxMarkPriceData
 from bt_api_py.containers.accounts.okx_account import OkxAccountData
+from bt_api_py.containers.bars.okx_bar import OkxBarData
+from bt_api_py.containers.markprices.okx_mark_price import OkxMarkPriceData
+from bt_api_py.containers.orderbooks.okx_orderbook import OkxOrderBookData
+
 # from bt_api_py.containers.orders.okx_order import OkxOrderData
 # from bt_api_py.containers.trades.okx_trade import OkxRequestTradeData, OkxWssTradeData
 from bt_api_py.containers.positions.okx_position import OkxPositionData
-from bt_api_py.containers.orders.order import OrderStatus
+from bt_api_py.containers.requestdatas.request_data import RequestData
+from bt_api_py.containers.tickers.okx_ticker import OkxTickerData
+from bt_api_py.feeds.live_okx_feed import OkxRequestDataSpot
+from bt_api_py.functions.utils import get_public_ip, read_account_config
 
 
 def generate_kwargs():
     data = read_account_config()
     kwargs = {
-        "public_key": data['okx']['public_key'],
-        "private_key": data['okx']['private_key'],
-        "passphrase": data['okx']["passphrase"],
+        "public_key": data["okx"]["public_key"],
+        "private_key": data["okx"]["private_key"],
+        "passphrase": data["okx"]["passphrase"],
         "topics": {"tick": {"symbol": "BTC-USDT"}},
-        "proxies": data.get('proxies'),
-        "async_proxy": data.get('async_proxy'),
+        "proxies": data.get("proxies"),
+        "async_proxy": data.get("async_proxy"),
     }
     return kwargs
 
@@ -112,8 +109,9 @@ def test_okx_req_spot_kline_data():
 def test_okx_async_spot_kline_data():
     data_queue = queue.Queue()
     live_okx_spot_feed = init_async_feed(data_queue)
-    live_okx_spot_feed.async_get_kline("BTC-USDT", period="1m", count=3,
-                                       extra_data={"test_async_kline_data": True})
+    live_okx_spot_feed.async_get_kline(
+        "BTC-USDT", period="1m", count=3, extra_data={"test_async_kline_data": True}
+    )
 
     time.sleep(5)
     try:
@@ -303,7 +301,7 @@ def test_okx_req_spot_order_functions():
     price_data = price_data.get_data()[0].init_data()
     bid_price = round(price_data.get_bid_price() * 0.9, 2)
     ask_price = round(price_data.get_ask_price() * 1.1, 2)
-    random_number = random.randint(10 ** 17, 10 ** 18 - 1)
+    random_number = random.randint(10**17, 10**18 - 1)
     buy_client_order_id = str(random_number)
     sell_client_order_id = str(random_number + 1)
     lots = 0
@@ -311,8 +309,9 @@ def test_okx_req_spot_order_functions():
         lots += 1
     try:
         # 测试买单: 下单 -> 查询 -> 查open_orders -> 用order_id撤单
-        buy_data = live_okx_spot_feed.make_order("OP-USDT", lots, bid_price, "buy-limit",
-                                                 client_order_id=buy_client_order_id)
+        buy_data = live_okx_spot_feed.make_order(
+            "OP-USDT", lots, bid_price, "buy-limit", client_order_id=buy_client_order_id
+        )
         assert buy_data.get_status(), f"make buy order failed: {buy_data.get_input_data()}"
         buy_info = buy_data.get_data()[0]
         assert isinstance(buy_data, RequestData)
@@ -339,8 +338,9 @@ def test_okx_req_spot_order_functions():
         okx_req_spot_cancel_order_by_order_id(buy_order_id)
 
         # 测试卖单: 下单 -> 查询 -> 用client_order_id撤单
-        sell_data = live_okx_spot_feed.make_order("OP-USDT", lots, ask_price, "sell-limit",
-                                                  client_order_id=sell_client_order_id)
+        sell_data = live_okx_spot_feed.make_order(
+            "OP-USDT", lots, ask_price, "sell-limit", client_order_id=sell_client_order_id
+        )
         assert sell_data.get_status(), f"make sell order failed: {sell_data.get_input_data()}"
         sell_info = sell_data.get_data()[0]
         assert isinstance(sell_data, RequestData)
@@ -378,7 +378,7 @@ def test_okx_async_spot_order_functions():
     price_data = live_okx_spot_feed.get_tick("OP-USDT").get_data()[0].init_data()
     bid_price = round(price_data.get_bid_price() * 0.9, 2)
     # ask_price = round(price_data.get_ask_price() * 1.1, 2)
-    random_number = random.randint(10 ** 17, 10 ** 18 - 1)
+    random_number = random.randint(10**17, 10**18 - 1)
     buy_client_order_id = str(random_number)
     # sell_client_order_id = str(random_number + 1)
     make_order_func = False
@@ -388,7 +388,9 @@ def test_okx_async_spot_order_functions():
     lots = 0
     while lots * bid_price < 1:
         lots += 1
-    live_okx_spot_feed.async_make_order("OP-USDT", lots, bid_price, "buy-limit", client_order_id=buy_client_order_id)
+    live_okx_spot_feed.async_make_order(
+        "OP-USDT", lots, bid_price, "buy-limit", client_order_id=buy_client_order_id
+    )
     time.sleep(3)
     live_okx_spot_feed.async_query_order("OP-USDT", **{"client_order_id": buy_client_order_id})
     live_okx_spot_feed.async_get_open_orders()
@@ -412,13 +414,15 @@ def test_okx_async_spot_order_functions():
         if event_type == "RequestEvent" and request_type == "query_order":
             assert target_data.get_status()
             print("QueryOrderRequestEvent", target_data.get_data())
-            assert target_data.get_data()[0].init_data().get_client_order_id() == buy_client_order_id
+            assert (
+                target_data.get_data()[0].init_data().get_client_order_id() == buy_client_order_id
+            )
             query_order_func = True
-        if event_type == "RequestEvent" and request_type == 'cancel_order':
+        if event_type == "RequestEvent" and request_type == "cancel_order":
             assert target_data.get_status()
             print("CancelOrderRequestEvent", target_data.get_data())
             cancel_order_func = True
-        if event_type == "RequestEvent" and request_type == 'get_open_orders':
+        if event_type == "RequestEvent" and request_type == "get_open_orders":
             assert target_data.get_status()
             print("GetOpenOrdersRequestEvent", target_data.get_data())
             assert target_data.get_data() is not None
@@ -477,7 +481,7 @@ def test_okx_req_spot_get_config():
     public_ip = get_public_ip()
     assert isinstance(public_ip, str)
     config_data = data.get_data()[0]
-    print('config_data', config_data)
+    print("config_data", config_data)
     api_ip = config_data.get("ip")
     print(public_ip, api_ip)
     assert public_ip in api_ip, "需要绑定当前ip地址到okx的API当中"
@@ -508,7 +512,7 @@ def test_okx_async_spot_get_position():
 
 def test_cancel_all_orders():
     live_feed = init_req_feed()
-    data = live_feed.get_open_orders('OP-USDT')
+    data = live_feed.get_open_orders("OP-USDT")
     order_data_list = data.get_data()
     for d in order_data_list:
         d = d.init_data()
@@ -516,7 +520,7 @@ def test_cancel_all_orders():
         order_id = d.get_order_id()
         print("order_id", order_id)
         if order_id is not None:
-            info = live_feed.cancel_order('OP-USDT', order_id=order_id)
+            info = live_feed.cancel_order("OP-USDT", order_id=order_id)
             print(info.get_data())
     assert 1
 

@@ -10,19 +10,18 @@ from unittest.mock import MagicMock
 
 import pytest
 
+import bt_api_py.exchange_registers.register_bitstamp  # noqa: F401
 from bt_api_py.containers.exchanges.bitstamp_exchange_data import (
     BitstampExchangeDataSpot,
 )
 from bt_api_py.containers.requestdatas.request_data import RequestData
+from bt_api_py.feeds.capability import Capability
 from bt_api_py.feeds.live_bitstamp.request_base import BitstampRequestData
 from bt_api_py.feeds.live_bitstamp.spot import BitstampRequestDataSpot
-from bt_api_py.feeds.capability import Capability
 from bt_api_py.registry import ExchangeRegistry
 
-import bt_api_py.exchange_registers.register_bitstamp  # noqa: F401
-
-
 # ── fixtures ────────────────────────────────────────────────────
+
 
 @pytest.fixture
 def exchange_data():
@@ -38,17 +37,20 @@ def feed():
 @pytest.fixture
 def feed_with_keys():
     q = queue.Queue()
-    return BitstampRequestDataSpot(
-        q, api_key="test_key", api_secret="test_secret"
-    )
+    return BitstampRequestDataSpot(q, api_key="test_key", api_secret="test_secret")
 
 
 # ── sample API responses (Bitstamp direct JSON) ────────────────
 
 SAMPLE_TICK = {
-    "last": "50000", "bid": "49990", "ask": "50010",
-    "volume": "1234.56", "high": "51000", "low": "49000",
-    "open": "49500", "timestamp": "1704067200",
+    "last": "50000",
+    "bid": "49990",
+    "ask": "50010",
+    "volume": "1234.56",
+    "high": "51000",
+    "low": "49000",
+    "open": "49500",
+    "timestamp": "1704067200",
 }
 
 SAMPLE_DEPTH = {
@@ -61,10 +63,22 @@ SAMPLE_KLINE = {
     "data": {
         "pair": "BTC/USD",
         "ohlc": [
-            {"timestamp": "1704067200", "open": "49500", "close": "50000",
-             "high": "51000", "low": "49000", "volume": "100.5"},
-            {"timestamp": "1704070800", "open": "50000", "close": "50500",
-             "high": "50800", "low": "49800", "volume": "80.3"},
+            {
+                "timestamp": "1704067200",
+                "open": "49500",
+                "close": "50000",
+                "high": "51000",
+                "low": "49000",
+                "volume": "100.5",
+            },
+            {
+                "timestamp": "1704070800",
+                "open": "50000",
+                "close": "50500",
+                "high": "50800",
+                "low": "49800",
+                "volume": "80.3",
+            },
         ],
     }
 }
@@ -77,24 +91,42 @@ SAMPLE_TRADES = [
 SAMPLE_SERVER_TIME = "1704067200"
 
 SAMPLE_EXCHANGE_INFO = [
-    {"name": "BTC/USD", "url_symbol": "btcusd", "base_decimals": 8,
-     "counter_decimals": 2, "trading": "Enabled"},
+    {
+        "name": "BTC/USD",
+        "url_symbol": "btcusd",
+        "base_decimals": 8,
+        "counter_decimals": 2,
+        "trading": "Enabled",
+    },
 ]
 
 SAMPLE_MAKE_ORDER = {
-    "id": "12345", "datetime": "2024-01-01 00:00:00",
-    "type": "0", "price": "50000", "amount": "0.01",
+    "id": "12345",
+    "datetime": "2024-01-01 00:00:00",
+    "type": "0",
+    "price": "50000",
+    "amount": "0.01",
 }
 
 SAMPLE_ACCOUNT = {
-    "btc_balance": "0.5", "btc_available": "0.4", "btc_reserved": "0.1",
-    "usd_balance": "10000", "usd_available": "9000", "usd_reserved": "1000",
+    "btc_balance": "0.5",
+    "btc_available": "0.4",
+    "btc_reserved": "0.1",
+    "usd_balance": "10000",
+    "usd_available": "9000",
+    "usd_reserved": "1000",
     "fee": "0.50",
 }
 
 SAMPLE_OPEN_ORDERS = [
-    {"id": "111", "datetime": "2024-01-01", "type": "0",
-     "price": "49000", "amount": "0.01", "currency_pair": "BTC/USD"},
+    {
+        "id": "111",
+        "datetime": "2024-01-01",
+        "type": "0",
+        "price": "49000",
+        "amount": "0.01",
+        "currency_pair": "BTC/USD",
+    },
 ]
 
 SAMPLE_ERROR = {"status": "error", "reason": "Invalid API key"}
@@ -102,8 +134,8 @@ SAMPLE_ERROR = {"status": "error", "reason": "Invalid API key"}
 
 # ── TestExchangeData ────────────────────────────────────────────
 
-class TestExchangeData:
 
+class TestExchangeData:
     def test_exchange_name(self, exchange_data):
         assert exchange_data.exchange_name == "BITSTAMP___SPOT"
 
@@ -160,8 +192,8 @@ class TestExchangeData:
 
 # ── TestParameterGeneration ─────────────────────────────────────
 
-class TestParameterGeneration:
 
+class TestParameterGeneration:
     def test_get_tick_params(self, feed):
         path, params, ed = feed._get_tick("BTC-USD")
         assert "GET" in path
@@ -246,8 +278,8 @@ class TestParameterGeneration:
 
 # ── TestNormalization ───────────────────────────────────────────
 
-class TestNormalization:
 
+class TestNormalization:
     def test_tick_ok(self):
         result, ok = BitstampRequestData._get_tick_normalize_function(SAMPLE_TICK, {})
         assert ok is True
@@ -281,9 +313,7 @@ class TestNormalization:
         assert len(result) == 2
 
     def test_kline_empty(self):
-        result, ok = BitstampRequestData._get_kline_normalize_function(
-            {"data": {"ohlc": []}}, {}
-        )
+        result, ok = BitstampRequestData._get_kline_normalize_function({"data": {"ohlc": []}}, {})
         assert ok is False
 
     def test_trades_ok(self):
@@ -301,7 +331,9 @@ class TestNormalization:
         assert "server_time" in result[0]
 
     def test_exchange_info_ok(self):
-        result, ok = BitstampRequestData._get_exchange_info_normalize_function(SAMPLE_EXCHANGE_INFO, {})
+        result, ok = BitstampRequestData._get_exchange_info_normalize_function(
+            SAMPLE_EXCHANGE_INFO, {}
+        )
         assert ok is True
         assert "pairs" in result[0]
 
@@ -365,8 +397,8 @@ class TestNormalization:
 
 # ── TestSyncCalls (mocked) ──────────────────────────────────────
 
-class TestSyncCalls:
 
+class TestSyncCalls:
     def _mock_feed(self, mock_response):
         q = queue.Queue()
         feed = BitstampRequestDataSpot(q)
@@ -432,8 +464,8 @@ class TestSyncCalls:
 
 # ── TestAuth ────────────────────────────────────────────────────
 
-class TestAuth:
 
+class TestAuth:
     def test_auth_headers_generation(self, feed_with_keys):
         headers = feed_with_keys._generate_auth_headers("POST", "/balance/")
         assert "X-Auth" in headers
@@ -455,15 +487,17 @@ class TestAuth:
 
 # ── TestRegistry ────────────────────────────────────────────────
 
-class TestRegistry:
 
+class TestRegistry:
     def test_bitstamp_spot_registered(self):
         assert "BITSTAMP___SPOT" in ExchangeRegistry._feed_classes
         assert ExchangeRegistry._feed_classes["BITSTAMP___SPOT"] == BitstampRequestDataSpot
 
     def test_exchange_data_registered(self):
         assert "BITSTAMP___SPOT" in ExchangeRegistry._exchange_data_classes
-        assert ExchangeRegistry._exchange_data_classes["BITSTAMP___SPOT"] == BitstampExchangeDataSpot
+        assert (
+            ExchangeRegistry._exchange_data_classes["BITSTAMP___SPOT"] == BitstampExchangeDataSpot
+        )
 
     def test_balance_handler_registered(self):
         assert "BITSTAMP___SPOT" in ExchangeRegistry._balance_handlers
@@ -475,24 +509,43 @@ class TestRegistry:
 
 # ── TestMethodExistence ─────────────────────────────────────────
 
+
 class TestMethodExistence:
-    @pytest.mark.parametrize("method_name", [
-        "get_tick", "async_get_tick",
-        "get_ticker", "async_get_ticker",
-        "get_depth", "async_get_depth",
-        "get_kline", "async_get_kline",
-        "get_trade_history", "async_get_trade_history",
-        "get_trades", "async_get_trades",
-        "make_order", "async_make_order",
-        "cancel_order", "async_cancel_order",
-        "query_order", "async_query_order",
-        "get_open_orders", "async_get_open_orders",
-        "get_deals", "async_get_deals",
-        "get_account", "async_get_account",
-        "get_balance", "async_get_balance",
-        "get_server_time", "async_get_server_time",
-        "get_exchange_info", "async_get_exchange_info",
-    ])
+    @pytest.mark.parametrize(
+        "method_name",
+        [
+            "get_tick",
+            "async_get_tick",
+            "get_ticker",
+            "async_get_ticker",
+            "get_depth",
+            "async_get_depth",
+            "get_kline",
+            "async_get_kline",
+            "get_trade_history",
+            "async_get_trade_history",
+            "get_trades",
+            "async_get_trades",
+            "make_order",
+            "async_make_order",
+            "cancel_order",
+            "async_cancel_order",
+            "query_order",
+            "async_query_order",
+            "get_open_orders",
+            "async_get_open_orders",
+            "get_deals",
+            "async_get_deals",
+            "get_account",
+            "async_get_account",
+            "get_balance",
+            "async_get_balance",
+            "get_server_time",
+            "async_get_server_time",
+            "get_exchange_info",
+            "async_get_exchange_info",
+        ],
+    )
     def test_method_exists(self, feed, method_name):
         assert hasattr(feed, method_name)
         assert callable(getattr(feed, method_name))
@@ -500,8 +553,8 @@ class TestMethodExistence:
 
 # ── TestFeedInit ────────────────────────────────────────────────
 
-class TestFeedInit:
 
+class TestFeedInit:
     def test_default_exchange_name(self, feed):
         assert feed.exchange_name == "BITSTAMP___SPOT"
 
@@ -531,8 +584,8 @@ class TestFeedInit:
 
 # ── TestIntegration (skipped) ───────────────────────────────────
 
-class TestIntegration:
 
+class TestIntegration:
     @pytest.mark.skip(reason="Requires network access")
     def test_live_get_tick(self):
         q = queue.Queue()

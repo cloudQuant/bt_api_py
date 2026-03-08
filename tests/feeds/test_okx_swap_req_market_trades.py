@@ -1,35 +1,26 @@
 import queue
 import time
-import random
-import pytest
-from bt_api_py.functions.utils import read_account_config, get_public_ip
-from bt_api_py.feeds.live_okx_feed import OkxRequestDataSwap
 
-from bt_api_py.containers.exchanges.okx_exchange_data import OkxExchangeDataSwap
-from bt_api_py.containers.requestdatas.request_data import RequestData
-from bt_api_py.containers.tickers.okx_ticker import OkxTickerData
 from bt_api_py.containers.bars.okx_bar import OkxBarData
+from bt_api_py.containers.exchanges.okx_exchange_data import OkxExchangeDataSwap
 from bt_api_py.containers.orderbooks.okx_orderbook import OkxOrderBookData
-from bt_api_py.containers.fundingrates.okx_funding_rate import OkxFundingRateData
-from bt_api_py.containers.markprices.okx_mark_price import OkxMarkPriceData
-from bt_api_py.containers.accounts.okx_account import OkxAccountData
+from bt_api_py.containers.requestdatas.request_data import RequestData
+
 # from bt_api_py.containers.orders.okx_order import OkxOrderData
-from bt_api_py.containers.trades.okx_trade import OkxRequestTradeData, OkxWssTradeData
-from bt_api_py.containers.positions.okx_position import OkxPositionData
-from bt_api_py.containers.orders.order import OrderStatus
-from bt_api_py.containers.symbols.okx_symbol import OkxSymbolData
-from bt_api_py.containers.assets.okx_asset import OkxCurrencyData, OkxAssetBalanceData, OkxAssetValuationData, OkxTransferStateData, OkxDepositInfoData, OkxWithdrawalInfoData
+from bt_api_py.containers.trades.okx_trade import OkxRequestTradeData
+from bt_api_py.feeds.live_okx_feed import OkxRequestDataSwap
+from bt_api_py.functions.utils import read_account_config
 
 
 def generate_kwargs(exchange=OkxExchangeDataSwap):
     data = read_account_config()
     kwargs = {
-        "public_key": data['okx']['public_key'],
-        "private_key": data['okx']['private_key'],
-        "passphrase": data['okx']["passphrase"],
+        "public_key": data["okx"]["public_key"],
+        "private_key": data["okx"]["private_key"],
+        "passphrase": data["okx"]["passphrase"],
         "topics": {"tick": {"symbol": "BTC-USDT"}},
-        "proxies": data.get('proxies'),
-        "async_proxy": data.get('async_proxy'),
+        "proxies": data.get("proxies"),
+        "async_proxy": data.get("async_proxy"),
     }
     return kwargs
 
@@ -47,7 +38,6 @@ def init_async_feed(data_queue):
     return live_okx_swap_feed
 
 
-
 def test_okx_req_get_depth_full():
     """Test get_depth_full interface"""
     live_okx_swap_feed = init_req_feed()
@@ -62,14 +52,9 @@ def test_okx_req_get_depth_full():
         assert isinstance(order_book, OkxOrderBookData)
         order_book.init_data()
         assert order_book.get_symbol_name() == "BTC-USDT"
-        print("get_depth_full: bids = {}, asks = {}".format(
-            len(order_book.get_bid_price_list()),
-            len(order_book.get_ask_price_list())
-        ))
-
-
-
-
+        print(
+            f"get_depth_full: bids = {len(order_book.get_bid_price_list())}, asks = {len(order_book.get_ask_price_list())}"
+        )
 
 
 def test_okx_async_get_depth_full():
@@ -93,10 +78,6 @@ def test_okx_async_get_depth_full():
         order_book.init_data()
 
 
-
-
-
-
 def test_okx_req_get_kline_his():
     """Test get_kline_his interface (history candles for SPOT)"""
     live_okx_swap_feed = init_req_feed()
@@ -115,10 +96,6 @@ def test_okx_req_get_kline_his():
         assert kline.get_open_price() > 0
 
 
-
-
-
-
 def test_okx_async_get_kline_his():
     """Test async_get_kline_his interface"""
     data_queue = queue.Queue()
@@ -134,10 +111,6 @@ def test_okx_async_get_kline_his():
     kline_list = kline_data.get_data()
     assert isinstance(kline_list, list)
     print("async_get_kline_his count:", len(kline_list))
-
-
-
-
 
 
 def test_okx_req_get_trades():
@@ -159,10 +132,6 @@ def test_okx_req_get_trades():
         else:
             assert isinstance(trade, dict)
             print("Trade (raw):", list(trade.keys())[:5])
-
-
-
-
 
 
 def test_okx_async_get_trades():
@@ -188,10 +157,6 @@ def test_okx_async_get_trades():
             assert isinstance(trade, dict)
 
 
-
-
-
-
 def test_okx_req_get_trades_history():
     """Test get_trades_history interface (last 3 months)"""
     live_okx_swap_feed = init_req_feed()
@@ -202,10 +167,6 @@ def test_okx_req_get_trades_history():
     trades_list = data.get_data()
     assert isinstance(trades_list, list)
     print("get_trades_history count:", len(trades_list))
-
-
-
-
 
 
 def test_okx_async_get_trades_history():
@@ -225,10 +186,6 @@ def test_okx_async_get_trades_history():
     assert isinstance(trades_list, list)
 
 
-
-
-
-
 def test_okx_req_get_index_candles():
     """Test get_index_candles interface"""
     live_okx_swap_feed = init_req_feed()
@@ -244,10 +201,6 @@ def test_okx_req_get_index_candles():
         assert isinstance(kline, OkxBarData)
         kline.init_data()
         assert kline.get_open_price() > 0
-
-
-
-
 
 
 def test_okx_async_get_index_candles():
@@ -267,10 +220,6 @@ def test_okx_async_get_index_candles():
     assert isinstance(kline_list, list)
 
 
-
-
-
-
 def test_okx_req_get_mark_price_candles():
     """Test get_mark_price_candles interface"""
     live_okx_swap_feed = init_req_feed()
@@ -286,10 +235,6 @@ def test_okx_req_get_mark_price_candles():
         assert isinstance(kline, OkxBarData)
         kline.init_data()
         assert kline.get_open_price() > 0
-
-
-
-
 
 
 def test_okx_async_get_mark_price_candles():
@@ -309,10 +254,6 @@ def test_okx_async_get_mark_price_candles():
     assert isinstance(kline_list, list)
 
 
-
-
-
-
 def test_okx_req_get_exchange_rate():
     """Test get_exchange_rate interface - Get exchange rate"""
     live_okx_swap_feed = init_req_feed()
@@ -325,10 +266,6 @@ def test_okx_req_get_exchange_rate():
     print("get_exchange_rate count:", len(rate_list))
     if rate_list:
         print("get_exchange_rate sample:", rate_list[0])
-
-
-
-
 
 
 def test_okx_async_get_exchange_rate():
@@ -348,10 +285,6 @@ def test_okx_async_get_exchange_rate():
     print("async_get_exchange_rate status:", rate_data.get_status())
 
 
-
-
-
-
 def test_okx_req_get_index_components():
     """Test get_index_components interface - Get index components"""
     live_okx_swap_feed = init_req_feed()
@@ -363,12 +296,8 @@ def test_okx_req_get_index_components():
     # The API returns a dict with 'components', 'index', 'last', 'ts' keys
     assert isinstance(components_data, dict)
     print("get_index_components keys:", components_data.keys())
-    if 'components' in components_data:
-        print("get_index_components count:", len(components_data['components']))
-
-
-
-
+    if "components" in components_data:
+        print("get_index_components count:", len(components_data["components"]))
 
 
 def test_okx_async_get_index_components():
@@ -391,9 +320,6 @@ def test_okx_async_get_index_components():
 # ==================== MMP (Market Maker Protection) API Tests ====================
 
 
-
-
-
 def test_okx_req_get_option_instrument_family_trades():
     """Test get_option_instrument_family_trades interface - Get option instrument family trades data"""
     live_okx_swap_feed = init_req_feed()
@@ -404,10 +330,6 @@ def test_okx_req_get_option_instrument_family_trades():
     trades_list = data.get_data()
     assert isinstance(trades_list, list)
     print("get_option_instrument_family_trades count:", len(trades_list))
-
-
-
-
 
 
 def test_okx_async_get_option_instrument_family_trades():
@@ -427,10 +349,6 @@ def test_okx_async_get_option_instrument_family_trades():
     print("async_get_option_instrument_family_trades status:", trades_data.get_status())
 
 
-
-
-
-
 def test_okx_req_get_option_instrument_family_trades_with_limit():
     """Test get_option_instrument_family_trades interface with limit"""
     live_okx_swap_feed = init_req_feed()
@@ -440,9 +358,6 @@ def test_okx_req_get_option_instrument_family_trades_with_limit():
 
 
 # ==================== Option Trades API Tests ====================
-
-
-
 
 
 def test_okx_req_get_option_trades():
@@ -455,8 +370,8 @@ def test_okx_req_get_option_trades():
         inst_list = instruments.get_data()
         if inst_list and len(inst_list) > 0:
             first = inst_list[0]
-            inst_id = first.get_inst_id() if hasattr(first, 'get_inst_id') else first.get('instId')
-    
+            inst_id = first.get_inst_id() if hasattr(first, "get_inst_id") else first.get("instId")
+
     if inst_id:
         data = live_okx_swap_feed.get_option_trades(inst_id=inst_id)
         assert isinstance(data, RequestData)
@@ -466,10 +381,6 @@ def test_okx_req_get_option_trades():
         print("get_option_trades count:", len(trades_list))
     else:
         print("Warning: No valid option instrument found, skipping get_option_trades test")
-
-
-
-
 
 
 def test_okx_async_get_option_trades():
@@ -483,8 +394,8 @@ def test_okx_async_get_option_trades():
         inst_list = instruments.get_data()
         if inst_list and len(inst_list) > 0:
             first = inst_list[0]
-            inst_id = first.get_inst_id() if hasattr(first, 'get_inst_id') else first.get('instId')
-    
+            inst_id = first.get_inst_id() if hasattr(first, "get_inst_id") else first.get("instId")
+
     if inst_id:
         live_okx_swap_feed.async_get_option_trades(inst_id=inst_id)
         try:
@@ -498,4 +409,3 @@ def test_okx_async_get_option_trades():
         print("async_get_option_trades status:", trades_data.get_status())
     else:
         print("Warning: No valid option instrument found, skipping async_get_option_trades test")
-

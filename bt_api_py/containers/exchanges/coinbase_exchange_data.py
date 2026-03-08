@@ -3,7 +3,6 @@ Coinbase Exchange Data Container
 Handles configuration loading and data structures for Coinbase exchange
 """
 
-import json
 import os
 
 from bt_api_py.containers.exchanges.exchange_data import ExchangeData
@@ -104,8 +103,8 @@ class CoinbaseExchangeData(ExchangeData):
 
         # rest_url
         if config.base_urls:
-            if hasattr(config.base_urls, 'rest'):
-                self.rest_url = getattr(config.base_urls, 'rest', {}).get(asset_type, self.rest_url)
+            if hasattr(config.base_urls, "rest"):
+                self.rest_url = getattr(config.base_urls, "rest", {}).get(asset_type, self.rest_url)
 
         # rest_paths
         if asset_cfg.rest_paths:

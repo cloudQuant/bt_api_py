@@ -1,7 +1,4 @@
 from bt_api_py.containers.exchanges.dydx_exchange_data import DydxExchangeDataSwap
-from bt_api_py.containers.tickers.dydx_ticker import DydxRequestTickerData
-from bt_api_py.containers.orders.dydx_order import DydxOrderData
-from bt_api_py.containers.balances.dydx_balance import DydxBalanceData
 from bt_api_py.feeds.live_dydx.request_base import DydxRequestData
 from bt_api_py.functions.utils import update_extra_data
 from bt_api_py.logging_factory import get_logger
@@ -75,7 +72,9 @@ class DydxRequestDataSpot(DydxRequestData):
         """Get spot balance information"""
         request_type = "get_subaccount"
         path = self._params.get_rest_path(request_type)
-        path = path.replace("<address>", address).replace("<subaccount_number>", str(subaccount_number))
+        path = path.replace("<address>", address).replace(
+            "<subaccount_number>", str(subaccount_number)
+        )
         extra_data = update_extra_data(
             extra_data,
             **{
@@ -99,21 +98,25 @@ class DydxRequestDataSpot(DydxRequestData):
 
         # Extract balance information - check if subaccount has data
         if subaccount:
-            balance_info.append({
-                "symbol": "USD",
-                "equity": float(subaccount.get("equity", 0)),
-                "free_collateral": float(subaccount.get("freeCollateral", 0)),
-                "available_margin": float(subaccount.get("availableMargin", 0)),
-                "position_margin": float(subaccount.get("positionMargin", 0)),
-                "margin_balance": float(subaccount.get("marginBalance", 0)),
-            })
+            balance_info.append(
+                {
+                    "symbol": "USD",
+                    "equity": float(subaccount.get("equity", 0)),
+                    "free_collateral": float(subaccount.get("freeCollateral", 0)),
+                    "available_margin": float(subaccount.get("availableMargin", 0)),
+                    "position_margin": float(subaccount.get("positionMargin", 0)),
+                    "margin_balance": float(subaccount.get("marginBalance", 0)),
+                }
+            )
 
         data = balance_info
         return data, status
 
     def get_balance(self, address, subaccount_number, extra_data=None, **kwargs):
         """Get balance information"""
-        path, params, extra_data = self.get_balance_spot(address, subaccount_number, extra_data, **kwargs)
+        path, params, extra_data = self.get_balance_spot(
+            address, subaccount_number, extra_data, **kwargs
+        )
         data = self.request(path, params=params, extra_data=extra_data)
         return data
 
@@ -156,14 +159,16 @@ class DydxRequestDataSpot(DydxRequestData):
         kline_info = []
 
         for candle in candles:
-            kline_info.append({
-                "timestamp": candle.get("startedAt", ""),
-                "open": float(candle.get("open", 0)),
-                "high": float(candle.get("high", 0)),
-                "low": float(candle.get("low", 0)),
-                "close": float(candle.get("close", 0)),
-                "volume": float(candle.get("volume", 0)),
-            })
+            kline_info.append(
+                {
+                    "timestamp": candle.get("startedAt", ""),
+                    "open": float(candle.get("open", 0)),
+                    "high": float(candle.get("high", 0)),
+                    "low": float(candle.get("low", 0)),
+                    "close": float(candle.get("close", 0)),
+                    "volume": float(candle.get("volume", 0)),
+                }
+            )
 
         return kline_info, status
 
@@ -193,17 +198,29 @@ class DydxRequestDataSpot(DydxRequestData):
         exchange_info = []
 
         for symbol, market_data in markets.items():
-            exchange_info.append({
-                "symbol": symbol,
-                "status": market_data.get("status", "ACTIVE"),
-            })
+            exchange_info.append(
+                {
+                    "symbol": symbol,
+                    "status": market_data.get("status", "ACTIVE"),
+                }
+            )
 
         return exchange_info, status
 
     # ── Standard Interface: make_order ──────────────────────────────
 
-    def _make_order(self, symbol, volume, price, order_type, offset="open",
-                    post_only=False, client_order_id=None, extra_data=None, **kwargs):
+    def _make_order(
+        self,
+        symbol,
+        volume,
+        price,
+        order_type,
+        offset="open",
+        post_only=False,
+        client_order_id=None,
+        extra_data=None,
+        **kwargs,
+    ):
         """Prepare order request parameters. Returns (path, body, extra_data).
         Note: dYdX V4 trading requires wallet signature (on-chain tx).
         This method prepares the request data structure."""
@@ -221,24 +238,43 @@ class DydxRequestDataSpot(DydxRequestData):
         }
         if client_order_id:
             body["clientId"] = client_order_id
-        extra_data.update({
-            "exchange_name": self.exchange_name,
-            "symbol_name": request_symbol,
-            "asset_type": self.asset_type,
-            "request_type": "make_order",
-            "side": side,
-            "quantity": volume,
-            "price": price,
-            "order_type": order_type,
-        })
+        extra_data.update(
+            {
+                "exchange_name": self.exchange_name,
+                "symbol_name": request_symbol,
+                "asset_type": self.asset_type,
+                "request_type": "make_order",
+                "side": side,
+                "quantity": volume,
+                "price": price,
+                "order_type": order_type,
+            }
+        )
         return "POST /v4/orders", body, extra_data
 
-    def make_order(self, symbol, volume, price, order_type, offset="open",
-                   post_only=False, client_order_id=None, extra_data=None, **kwargs):
+    def make_order(
+        self,
+        symbol,
+        volume,
+        price,
+        order_type,
+        offset="open",
+        post_only=False,
+        client_order_id=None,
+        extra_data=None,
+        **kwargs,
+    ):
         """Place order following standard Feed interface. Returns RequestData."""
         path, body, extra_data = self._make_order(
-            symbol, volume, price, order_type, offset, post_only,
-            client_order_id, extra_data, **kwargs
+            symbol,
+            volume,
+            price,
+            order_type,
+            offset,
+            post_only,
+            client_order_id,
+            extra_data,
+            **kwargs,
         )
         return self.request(path, body=body, extra_data=extra_data)
 
@@ -249,13 +285,15 @@ class DydxRequestDataSpot(DydxRequestData):
         if extra_data is None:
             extra_data = {}
         request_symbol = self._params.get_symbol(symbol)
-        extra_data.update({
-            "exchange_name": self.exchange_name,
-            "symbol_name": request_symbol,
-            "asset_type": self.asset_type,
-            "request_type": "cancel_order",
-            "order_id": order_id,
-        })
+        extra_data.update(
+            {
+                "exchange_name": self.exchange_name,
+                "symbol_name": request_symbol,
+                "asset_type": self.asset_type,
+                "request_type": "cancel_order",
+                "order_id": order_id,
+            }
+        )
         return f"DELETE /v4/orders/{order_id}", None, extra_data
 
     def cancel_order(self, symbol, order_id, extra_data=None, **kwargs):
@@ -272,13 +310,15 @@ class DydxRequestDataSpot(DydxRequestData):
         request_symbol = self._params.get_symbol(symbol)
         path = self._params.get_rest_path("get_orders")
         params = {"orderId": order_id}
-        extra_data.update({
-            "exchange_name": self.exchange_name,
-            "symbol_name": request_symbol,
-            "asset_type": self.asset_type,
-            "request_type": "query_order",
-            "order_id": order_id,
-        })
+        extra_data.update(
+            {
+                "exchange_name": self.exchange_name,
+                "symbol_name": request_symbol,
+                "asset_type": self.asset_type,
+                "request_type": "query_order",
+                "order_id": order_id,
+            }
+        )
         return path, params, extra_data
 
     def query_order(self, symbol, order_id, extra_data=None, **kwargs):
@@ -302,12 +342,14 @@ class DydxRequestDataSpot(DydxRequestData):
         subaccount_number = kwargs.get("subaccount_number", self.subaccount_number)
         if subaccount_number is not None:
             params["subaccountNumber"] = subaccount_number
-        extra_data.update({
-            "exchange_name": self.exchange_name,
-            "symbol_name": symbol or "",
-            "asset_type": self.asset_type,
-            "request_type": "get_open_orders",
-        })
+        extra_data.update(
+            {
+                "exchange_name": self.exchange_name,
+                "symbol_name": symbol or "",
+                "asset_type": self.asset_type,
+                "request_type": "get_open_orders",
+            }
+        )
         return path, params, extra_data
 
     def get_open_orders(self, symbol=None, extra_data=None, **kwargs):
@@ -326,12 +368,14 @@ class DydxRequestDataSpot(DydxRequestData):
         path = self._params.get_rest_path("get_subaccount")
         path = path.replace("<placeholder>", address, 1)
         path = path.replace("<placeholder>", str(subaccount_number), 1)
-        extra_data.update({
-            "exchange_name": self.exchange_name,
-            "symbol_name": symbol,
-            "asset_type": self.asset_type,
-            "request_type": "get_account",
-        })
+        extra_data.update(
+            {
+                "exchange_name": self.exchange_name,
+                "symbol_name": symbol,
+                "asset_type": self.asset_type,
+                "request_type": "get_account",
+            }
+        )
         return path, {}, extra_data
 
     def get_account(self, symbol="ALL", extra_data=None, **kwargs):
@@ -350,11 +394,13 @@ class DydxRequestDataSpot(DydxRequestData):
         path = self._params.get_rest_path("get_subaccount")
         path = path.replace("<placeholder>", address, 1)
         path = path.replace("<placeholder>", str(subaccount_number), 1)
-        extra_data.update({
-            "exchange_name": self.exchange_name,
-            "symbol_name": symbol or "",
-            "asset_type": self.asset_type,
-            "request_type": "get_balance",
-            "normalize_function": DydxRequestDataSpot._get_balance_spot_normalize_function,
-        })
+        extra_data.update(
+            {
+                "exchange_name": self.exchange_name,
+                "symbol_name": symbol or "",
+                "asset_type": self.asset_type,
+                "request_type": "get_balance",
+                "normalize_function": DydxRequestDataSpot._get_balance_spot_normalize_function,
+            }
+        )
         return path, {}, extra_data

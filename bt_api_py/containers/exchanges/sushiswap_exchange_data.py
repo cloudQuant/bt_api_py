@@ -19,8 +19,9 @@ def _get_sushiswap_config():
     if _sushiswap_config_loaded:
         return _sushiswap_config
     try:
-        from bt_api_py.config_loader import load_exchange_config
         import yaml
+
+        from bt_api_py.config_loader import load_exchange_config
 
         config_path = os.path.join(
             os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
@@ -40,6 +41,7 @@ def _get_sushiswap_config():
         _sushiswap_config_loaded = True
     except Exception as e:
         from bt_api_py.logging_factory import get_logger
+
         logger = get_logger("sushiswap_exchange_data")
         logger.warn(f"Failed to load sushiswap.yaml config: {e}")
     return _sushiswap_config
@@ -120,17 +122,17 @@ class SushiSwapExchangeData:
             return False
 
         # Load API URL from raw config
-        if hasattr(self.config, '_raw_config') and self.config._raw_config:
-            raw_base_urls = self.config._raw_config.get('base_urls', {})
-            if raw_base_urls and raw_base_urls.get('rest'):
-                self.rest_url = raw_base_urls['rest'].get(asset_type, self.API_BASE_URL)
+        if hasattr(self.config, "_raw_config") and self.config._raw_config:
+            raw_base_urls = self.config._raw_config.get("base_urls", {})
+            if raw_base_urls and raw_base_urls.get("rest"):
+                self.rest_url = raw_base_urls["rest"].get(asset_type, self.API_BASE_URL)
         else:
             self.rest_url = self.API_BASE_URL
 
         # Load supported chains
-        asset_config_dict = asset_cfg.__dict__ if hasattr(asset_cfg, '__dict__') else {}
-        if 'chains_supported' in asset_config_dict and asset_config_dict['chains_supported']:
-            self.chains_supported = list(asset_config_dict['chains_supported'])
+        asset_config_dict = asset_cfg.__dict__ if hasattr(asset_cfg, "__dict__") else {}
+        if "chains_supported" in asset_config_dict and asset_config_dict["chains_supported"]:
+            self.chains_supported = list(asset_config_dict["chains_supported"])
         else:
             self.chains_supported = [self.chain.value]
 
@@ -174,7 +176,7 @@ class SushiSwapExchangeData:
             String in format "GET /endpoint" or "POST /endpoint"
         """
         # If config has rest_paths and this request_type is defined
-        if self.config and hasattr(self, 'asset_type') and self.asset_type:
+        if self.config and hasattr(self, "asset_type") and self.asset_type:
             asset_cfg = self.config.asset_types.get(self.asset_type)
             if asset_cfg and asset_cfg.rest_paths:
                 path = asset_cfg.rest_paths.get(request_type)
@@ -209,7 +211,11 @@ class SushiSwapExchangeDataSpot(SushiSwapExchangeData):
     # Legal currencies (stablecoins and native tokens)
     legal_currency = ["USDT", "USDC", "DAI", "ETH", "MATIC", "ARB"]
 
-    def __init__(self, chain: SushiSwapChain | str = SushiSwapExchangeData.DEFAULT_CHAIN, asset_type: str | None = None):
+    def __init__(
+        self,
+        chain: SushiSwapChain | str = SushiSwapExchangeData.DEFAULT_CHAIN,
+        asset_type: str | None = None,
+    ):
         # Convert string to enum if needed
         if isinstance(chain, str):
             try:
@@ -232,10 +238,10 @@ class SushiSwapExchangeDataSpot(SushiSwapExchangeData):
             return False
 
         # Use raw config data to get rest_paths
-        if hasattr(self.config, '_raw_config') and self.config._raw_config:
-            raw_asset_types = self.config._raw_config.get('asset_types', {})
+        if hasattr(self.config, "_raw_config") and self.config._raw_config:
+            raw_asset_types = self.config._raw_config.get("asset_types", {})
             asset_config = raw_asset_types.get(asset_type, {})
-            self.rest_paths = asset_config.get('rest_paths', {})
+            self.rest_paths = asset_config.get("rest_paths", {})
         else:
             self.rest_paths = {}
 

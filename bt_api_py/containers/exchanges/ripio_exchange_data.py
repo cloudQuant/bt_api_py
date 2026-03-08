@@ -171,6 +171,7 @@ class RipioExchangeData(ExchangeData):
             self.raise_path_error(self.exchange_name, key)
 
         import json
+
         req = self.wss_paths[key].copy()
         req_key = list(req.keys())[0]
         for k, v in kwargs.items():

@@ -37,8 +37,7 @@ workflowType: 'architecture'
 lastStep: 8
 status: 'complete'
 completedAt: '{{current_date}}'
-
-```bash
+```
 
 ### 3. Next Steps Guidance
 

@@ -5,11 +5,9 @@ Handles authentication, signing, and all REST API methods.
 
 import hashlib
 import hmac
-import json
 import time
 from urllib.parse import urlencode
 
-from bt_api_py.containers.balances.balance import BalanceData
 from bt_api_py.containers.exchanges.cryptocom_exchange_data import CryptoComExchangeDataSpot
 from bt_api_py.containers.orderbooks.cryptocom_orderbook import CryptoComOrderBook
 from bt_api_py.containers.orders.cryptocom_order import CryptoComOrder
@@ -145,7 +143,9 @@ class CryptoComRequestData(Feed):
 
         return RequestData(res, extra_data)
 
-    async def async_request(self, path, params=None, body=None, extra_data=None, timeout=10, is_sign=False):
+    async def async_request(
+        self, path, params=None, body=None, extra_data=None, timeout=10, is_sign=False
+    ):
         """Async HTTP request function.
 
         Args:
@@ -422,9 +422,18 @@ class CryptoComRequestData(Feed):
 
     # ==================== Private APIs ====================
 
-    def _make_order(self, symbol, vol, price=None, order_type="buy-limit",
-                    offset="open", post_only=False, client_order_id=None,
-                    extra_data=None, **kwargs):
+    def _make_order(
+        self,
+        symbol,
+        vol,
+        price=None,
+        order_type="buy-limit",
+        offset="open",
+        post_only=False,
+        client_order_id=None,
+        extra_data=None,
+        **kwargs,
+    ):
         """Create an order internal method."""
         request_symbol = self._params.get_symbol(symbol)
         request_type = "make_order"
@@ -493,8 +502,9 @@ class CryptoComRequestData(Feed):
             return [CryptoComOrder(order_data, symbol_name, asset_type, True)], True
         return [], False
 
-    def _cancel_order(self, symbol=None, order_id=None, client_order_id=None,
-                      extra_data=None, **kwargs):
+    def _cancel_order(
+        self, symbol=None, order_id=None, client_order_id=None, extra_data=None, **kwargs
+    ):
         """Cancel an order internal method."""
         request_type = "cancel_order"
         path = self._params.get_rest_path(request_type)

@@ -1,39 +1,25 @@
 import queue
 import time
-import random
+
 import pytest
-from bt_api_py.functions.utils import read_account_config, get_public_ip
-from bt_api_py.feeds.live_okx_feed import OkxRequestDataSwap
 
 from bt_api_py.containers.exchanges.okx_exchange_data import OkxExchangeDataSwap
 from bt_api_py.containers.requestdatas.request_data import RequestData
-from bt_api_py.containers.tickers.okx_ticker import OkxTickerData
-from bt_api_py.containers.bars.okx_bar import OkxBarData
-from bt_api_py.containers.orderbooks.okx_orderbook import OkxOrderBookData
-from bt_api_py.containers.fundingrates.okx_funding_rate import OkxFundingRateData
-from bt_api_py.containers.markprices.okx_mark_price import OkxMarkPriceData
-from bt_api_py.containers.accounts.okx_account import OkxAccountData
+
 # from bt_api_py.containers.orders.okx_order import OkxOrderData
-from bt_api_py.containers.trades.okx_trade import OkxRequestTradeData, OkxWssTradeData
-from bt_api_py.containers.positions.okx_position import OkxPositionData
-from bt_api_py.containers.orders.order import OrderStatus
-from bt_api_py.containers.symbols.okx_symbol import OkxSymbolData
-from bt_api_py.containers.assets.okx_asset import OkxCurrencyData, OkxAssetBalanceData, OkxAssetValuationData, OkxTransferStateData, OkxDepositInfoData, OkxWithdrawalInfoData
-
-
-
-
+from bt_api_py.feeds.live_okx_feed import OkxRequestDataSwap
+from bt_api_py.functions.utils import read_account_config
 
 
 def generate_kwargs(exchange=OkxExchangeDataSwap):
     data = read_account_config()
     kwargs = {
-        "public_key": data['okx']['public_key'],
-        "private_key": data['okx']['private_key'],
-        "passphrase": data['okx']["passphrase"],
+        "public_key": data["okx"]["public_key"],
+        "private_key": data["okx"]["private_key"],
+        "passphrase": data["okx"]["passphrase"],
         "topics": {"tick": {"symbol": "BTC-USDT"}},
-        "proxies": data.get('proxies'),
-        "async_proxy": data.get('async_proxy'),
+        "proxies": data.get("proxies"),
+        "async_proxy": data.get("async_proxy"),
     }
     return kwargs
 
@@ -50,6 +36,7 @@ def init_async_feed(data_queue):
     live_okx_swap_feed = OkxRequestDataSwap(data_queue, **kwargs)
     return live_okx_swap_feed
 
+
 def test_okx_req_get_support_coin():
     """Test get_support_coin interface"""
     live_okx_swap_feed = init_req_feed()
@@ -63,8 +50,6 @@ def test_okx_req_get_support_coin():
     print("get_support_coin keys:", list(coin_data.keys()))
     for key, value in coin_data.items():
         print(f"get_support_coin {key} count: {len(value) if isinstance(value, list) else 0}")
-
-
 
 
 def test_okx_async_get_support_coin():
@@ -85,8 +70,6 @@ def test_okx_async_get_support_coin():
     assert isinstance(coin_dict, dict)
 
 
-
-
 def test_okx_req_get_contract_oi_history():
     """Test get_contract_oi_history interface"""
     live_okx_swap_feed = init_req_feed()
@@ -97,8 +80,6 @@ def test_okx_req_get_contract_oi_history():
     oi_list = data.get_data()
     assert isinstance(oi_list, list)
     print("get_contract_oi_history count:", len(oi_list))
-
-
 
 
 def test_okx_async_get_contract_oi_history():
@@ -116,8 +97,6 @@ def test_okx_async_get_contract_oi_history():
     print("async_get_contract_oi_history status:", oi_data.get_status())
 
 
-
-
 def test_okx_req_get_taker_volume():
     """Test get_taker_volume interface"""
     live_okx_swap_feed = init_req_feed()
@@ -128,8 +107,6 @@ def test_okx_req_get_taker_volume():
     volume_list = data.get_data()
     assert isinstance(volume_list, list)
     print("get_taker_volume count:", len(volume_list))
-
-
 
 
 def test_okx_async_get_taker_volume():
@@ -147,8 +124,6 @@ def test_okx_async_get_taker_volume():
     print("async_get_taker_volume status:", volume_data.get_status())
 
 
-
-
 def test_okx_req_get_long_short_ratio():
     """Test get_long_short_ratio interface"""
     live_okx_swap_feed = init_req_feed()
@@ -159,8 +134,6 @@ def test_okx_req_get_long_short_ratio():
     ratio_list = data.get_data()
     assert isinstance(ratio_list, list)
     print("get_long_short_ratio count:", len(ratio_list))
-
-
 
 
 def test_okx_async_get_long_short_ratio():
@@ -178,8 +151,6 @@ def test_okx_async_get_long_short_ratio():
     print("async_get_long_short_ratio status:", ratio_data.get_status())
 
 
-
-
 def test_okx_req_get_long_short_ratio_top_trader():
     """Test get_long_short_ratio_top_trader interface"""
     live_okx_swap_feed = init_req_feed()
@@ -190,8 +161,6 @@ def test_okx_req_get_long_short_ratio_top_trader():
     ratio_list = data.get_data()
     assert isinstance(ratio_list, list)
     print("get_long_short_ratio_top_trader count:", len(ratio_list))
-
-
 
 
 def test_okx_async_get_long_short_ratio_top_trader():
@@ -209,9 +178,9 @@ def test_okx_async_get_long_short_ratio_top_trader():
     print("async_get_long_short_ratio_top_trader status:", ratio_data.get_status())
 
 
-
-
-@pytest.mark.skip(reason="OKX API endpoint /api/v5/rubik/stat/contracts/open-interest-volume-ratio returns 404, endpoint may be deprecated")
+@pytest.mark.skip(
+    reason="OKX API endpoint /api/v5/rubik/stat/contracts/open-interest-volume-ratio returns 404, endpoint may be deprecated"
+)
 def test_okx_req_get_contract_long_short_ratio():
     """Test get_contract_long_short_ratio interface"""
     live_okx_swap_feed = init_req_feed()
@@ -224,9 +193,9 @@ def test_okx_req_get_contract_long_short_ratio():
     print("get_contract_long_short_ratio count:", len(ratio_list))
 
 
-
-
-@pytest.mark.skip(reason="OKX API endpoint /api/v5/rubik/stat/contracts/open-interest-volume-ratio returns 404, endpoint may be deprecated")
+@pytest.mark.skip(
+    reason="OKX API endpoint /api/v5/rubik/stat/contracts/open-interest-volume-ratio returns 404, endpoint may be deprecated"
+)
 def test_okx_async_get_contract_long_short_ratio():
     """Test async_get_contract_long_short_ratio interface"""
     data_queue = queue.Queue()
@@ -242,8 +211,6 @@ def test_okx_async_get_contract_long_short_ratio():
     print("async_get_contract_long_short_ratio status:", ratio_data.get_status())
 
 
-
-
 def test_okx_req_get_put_call_ratio():
     """Test get_put_call_ratio interface"""
     live_okx_swap_feed = init_req_feed()
@@ -254,8 +221,6 @@ def test_okx_req_get_put_call_ratio():
     ratio_list = data.get_data()
     assert isinstance(ratio_list, list)
     print("get_put_call_ratio count:", len(ratio_list))
-
-
 
 
 def test_okx_async_get_put_call_ratio():
@@ -273,13 +238,13 @@ def test_okx_async_get_put_call_ratio():
     print("async_get_put_call_ratio status:", ratio_data.get_status())
 
 
-
-
 def test_okx_req_get_taker_volume_contract():
     """Test get_taker_volume_contract interface"""
     live_okx_swap_feed = init_req_feed()
     # Get contract taker volume
-    data = live_okx_swap_feed.get_taker_volume_contract(ccy="BTC", inst_type="SWAP", period="1H", limit="10")
+    data = live_okx_swap_feed.get_taker_volume_contract(
+        ccy="BTC", inst_type="SWAP", period="1H", limit="10"
+    )
     assert isinstance(data, RequestData)
     print("get_taker_volume_contract status:", data.get_status())
     volume_list = data.get_data()
@@ -287,13 +252,13 @@ def test_okx_req_get_taker_volume_contract():
     print("get_taker_volume_contract count:", len(volume_list))
 
 
-
-
 def test_okx_async_get_taker_volume_contract():
     """Test async_get_taker_volume_contract interface"""
     data_queue = queue.Queue()
     live_okx_swap_feed = init_async_feed(data_queue)
-    live_okx_swap_feed.async_get_taker_volume_contract(ccy="BTC", inst_type="SWAP", period="1H", limit="10")
+    live_okx_swap_feed.async_get_taker_volume_contract(
+        ccy="BTC", inst_type="SWAP", period="1H", limit="10"
+    )
     time.sleep(5)
     try:
         volume_data = data_queue.get(False)
@@ -306,8 +271,6 @@ def test_okx_async_get_taker_volume_contract():
     print("async_get_taker_volume_contract status:", volume_data.get_status())
 
 
-
-
 def test_okx_req_get_margin_loan_ratio():
     """Test get_margin_loan_ratio interface"""
     live_okx_swap_feed = init_req_feed()
@@ -318,8 +281,6 @@ def test_okx_req_get_margin_loan_ratio():
     ratio_list = data.get_data()
     assert isinstance(ratio_list, list)
     print("get_margin_loan_ratio count:", len(ratio_list))
-
-
 
 
 def test_okx_async_get_margin_loan_ratio():
@@ -339,13 +300,13 @@ def test_okx_async_get_margin_loan_ratio():
     print("async_get_margin_loan_ratio status:", ratio_data.get_status())
 
 
-
-
 def test_okx_req_get_option_long_short_ratio():
     """Test get_option_long_short_ratio interface"""
     live_okx_swap_feed = init_req_feed()
     # Get option long/short ratio
-    data = live_okx_swap_feed.get_option_long_short_ratio(ccy="BTC-USD", currency="USD", period="8H", limit="10")
+    data = live_okx_swap_feed.get_option_long_short_ratio(
+        ccy="BTC-USD", currency="USD", period="8H", limit="10"
+    )
     assert isinstance(data, RequestData)
     print("get_option_long_short_ratio status:", data.get_status())
     ratio_list = data.get_data()
@@ -353,13 +314,13 @@ def test_okx_req_get_option_long_short_ratio():
     print("get_option_long_short_ratio count:", len(ratio_list))
 
 
-
-
 def test_okx_async_get_option_long_short_ratio():
     """Test async_get_option_long_short_ratio interface"""
     data_queue = queue.Queue()
     live_okx_swap_feed = init_async_feed(data_queue)
-    live_okx_swap_feed.async_get_option_long_short_ratio(ccy="BTC-USD", currency="USD", period="8H", limit="10")
+    live_okx_swap_feed.async_get_option_long_short_ratio(
+        ccy="BTC-USD", currency="USD", period="8H", limit="10"
+    )
     time.sleep(5)
     try:
         ratio_data = data_queue.get(False)
@@ -372,8 +333,6 @@ def test_okx_async_get_option_long_short_ratio():
     print("async_get_option_long_short_ratio status:", ratio_data.get_status())
 
 
-
-
 def test_okx_req_get_contracts_oi_volume():
     """Test get_contracts_oi_volume interface"""
     live_okx_swap_feed = init_req_feed()
@@ -384,8 +343,6 @@ def test_okx_req_get_contracts_oi_volume():
     oi_list = data.get_data()
     assert isinstance(oi_list, list)
     print("get_contracts_oi_volume count:", len(oi_list))
-
-
 
 
 def test_okx_async_get_contracts_oi_volume():
@@ -405,13 +362,13 @@ def test_okx_async_get_contracts_oi_volume():
     print("async_get_contracts_oi_volume status:", oi_data.get_status())
 
 
-
-
 def test_okx_req_get_option_oi_volume():
     """Test get_option_oi_volume interface"""
     live_okx_swap_feed = init_req_feed()
     # Get option open interest and volume
-    data = live_okx_swap_feed.get_option_oi_volume(ccy="BTC-USD", currency="USD", period="8H", limit="10")
+    data = live_okx_swap_feed.get_option_oi_volume(
+        ccy="BTC-USD", currency="USD", period="8H", limit="10"
+    )
     assert isinstance(data, RequestData)
     print("get_option_oi_volume status:", data.get_status())
     oi_list = data.get_data()
@@ -419,13 +376,13 @@ def test_okx_req_get_option_oi_volume():
     print("get_option_oi_volume count:", len(oi_list))
 
 
-
-
 def test_okx_async_get_option_oi_volume():
     """Test async_get_option_oi_volume interface"""
     data_queue = queue.Queue()
     live_okx_swap_feed = init_async_feed(data_queue)
-    live_okx_swap_feed.async_get_option_oi_volume(ccy="BTC-USD", currency="USD", period="8H", limit="10")
+    live_okx_swap_feed.async_get_option_oi_volume(
+        ccy="BTC-USD", currency="USD", period="8H", limit="10"
+    )
     time.sleep(5)
     try:
         oi_data = data_queue.get(False)
@@ -438,13 +395,13 @@ def test_okx_async_get_option_oi_volume():
     print("async_get_option_oi_volume status:", oi_data.get_status())
 
 
-
-
 def test_okx_req_get_option_oi_volume_expiry():
     """Test get_option_oi_volume_expiry interface"""
     live_okx_swap_feed = init_req_feed()
     # Get option open interest and volume by expiry
-    data = live_okx_swap_feed.get_option_oi_volume_expiry(ccy="BTC-USD", currency="USD", period="8H", limit="10")
+    data = live_okx_swap_feed.get_option_oi_volume_expiry(
+        ccy="BTC-USD", currency="USD", period="8H", limit="10"
+    )
     assert isinstance(data, RequestData)
     print("get_option_oi_volume_expiry status:", data.get_status())
     oi_list = data.get_data()
@@ -452,13 +409,13 @@ def test_okx_req_get_option_oi_volume_expiry():
     print("get_option_oi_volume_expiry count:", len(oi_list))
 
 
-
-
 def test_okx_async_get_option_oi_volume_expiry():
     """Test async_get_option_oi_volume_expiry interface"""
     data_queue = queue.Queue()
     live_okx_swap_feed = init_async_feed(data_queue)
-    live_okx_swap_feed.async_get_option_oi_volume_expiry(ccy="BTC-USD", currency="USD", period="8H", limit="10")
+    live_okx_swap_feed.async_get_option_oi_volume_expiry(
+        ccy="BTC-USD", currency="USD", period="8H", limit="10"
+    )
     time.sleep(5)
     try:
         oi_data = data_queue.get(False)
@@ -471,13 +428,13 @@ def test_okx_async_get_option_oi_volume_expiry():
     print("async_get_option_oi_volume_expiry status:", oi_data.get_status())
 
 
-
-
 def test_okx_req_get_option_oi_volume_strike():
     """Test get_option_oi_volume_strike interface"""
     live_okx_swap_feed = init_req_feed()
     # Get option open interest and volume by strike price
-    data = live_okx_swap_feed.get_option_oi_volume_strike(ccy="BTC-USD", currency="USD", period="8H", limit="10")
+    data = live_okx_swap_feed.get_option_oi_volume_strike(
+        ccy="BTC-USD", currency="USD", period="8H", limit="10"
+    )
     assert isinstance(data, RequestData)
     print("get_option_oi_volume_strike status:", data.get_status())
     oi_list = data.get_data()
@@ -485,13 +442,13 @@ def test_okx_req_get_option_oi_volume_strike():
     print("get_option_oi_volume_strike count:", len(oi_list))
 
 
-
-
 def test_okx_async_get_option_oi_volume_strike():
     """Test async_get_option_oi_volume_strike interface"""
     data_queue = queue.Queue()
     live_okx_swap_feed = init_async_feed(data_queue)
-    live_okx_swap_feed.async_get_option_oi_volume_strike(ccy="BTC-USD", currency="USD", period="8H", limit="10")
+    live_okx_swap_feed.async_get_option_oi_volume_strike(
+        ccy="BTC-USD", currency="USD", period="8H", limit="10"
+    )
     time.sleep(5)
     try:
         oi_data = data_queue.get(False)
@@ -504,13 +461,13 @@ def test_okx_async_get_option_oi_volume_strike():
     print("async_get_option_oi_volume_strike status:", oi_data.get_status())
 
 
-
-
 def test_okx_req_get_option_taker_flow():
     """Test get_option_taker_flow interface"""
     live_okx_swap_feed = init_req_feed()
     # Get option taker block volume (large trades)
-    data = live_okx_swap_feed.get_option_taker_flow(ccy="BTC-USD", currency="USD", period="8H", limit="10")
+    data = live_okx_swap_feed.get_option_taker_flow(
+        ccy="BTC-USD", currency="USD", period="8H", limit="10"
+    )
     assert isinstance(data, RequestData)
     print("get_option_taker_flow status:", data.get_status())
     flow_list = data.get_data()
@@ -518,13 +475,13 @@ def test_okx_req_get_option_taker_flow():
     print("get_option_taker_flow count:", len(flow_list))
 
 
-
-
 def test_okx_async_get_option_taker_flow():
     """Test async_get_option_taker_flow interface"""
     data_queue = queue.Queue()
     live_okx_swap_feed = init_async_feed(data_queue)
-    live_okx_swap_feed.async_get_option_taker_flow(ccy="BTC-USD", currency="USD", period="8H", limit="10")
+    live_okx_swap_feed.async_get_option_taker_flow(
+        ccy="BTC-USD", currency="USD", period="8H", limit="10"
+    )
     time.sleep(5)
     try:
         flow_data = data_queue.get(False)
@@ -538,5 +495,3 @@ def test_okx_async_get_option_taker_flow():
 
 
 # ==================== Trading Account Configuration API Tests ====================
-
-

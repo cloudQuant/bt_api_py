@@ -2,9 +2,9 @@
 EXMO REST API request base class.
 """
 
-import time
-import hmac
 import hashlib
+import hmac
+import time
 from urllib.parse import urlencode
 
 from bt_api_py.containers.exchanges.exmo_exchange_data import ExmoExchangeDataSpot
@@ -47,13 +47,11 @@ class ExmoRequestData(Feed):
 
         EXMO uses HMAC SHA512 signature on URL-encoded body.
         """
-        secret = getattr(self._params, 'api_secret', None)
+        secret = getattr(self._params, "api_secret", None)
         if secret:
             body = urlencode(body_params)
             signature = hmac.new(
-                secret.encode("utf-8"),
-                body.encode("utf-8"),
-                hashlib.sha512
+                secret.encode("utf-8"), body.encode("utf-8"), hashlib.sha512
             ).hexdigest()
             return signature, body
         return "", ""
@@ -69,7 +67,7 @@ class ExmoRequestData(Feed):
         }
 
         # Add auth headers for private endpoints
-        api_key = getattr(self._params, 'api_key', None)
+        api_key = getattr(self._params, "api_key", None)
         if api_key:
             headers["Key"] = api_key
             if body:
@@ -85,7 +83,7 @@ class ExmoRequestData(Feed):
 
         # EXMO uses POST for all private endpoints with body
         # For public endpoints, use GET with query params
-        api_key = getattr(self._params, 'api_key', None)
+        api_key = getattr(self._params, "api_key", None)
         if method == "POST" or (api_key and body):
             # Private endpoint - use POST with body
             if not body:
@@ -126,7 +124,7 @@ class ExmoRequestData(Feed):
         method = path.split()[0] if " " in path else "GET"
         request_path = "/" + path.split()[1] if " " in path else path
 
-        api_key = getattr(self._params, 'api_key', None)
+        api_key = getattr(self._params, "api_key", None)
         if method == "POST" or (api_key and body):
             if not body:
                 body_params = {"nonce": int(time.time() * 1000)}
@@ -191,12 +189,14 @@ class ExmoRequestData(Feed):
             tuple: (path, params, extra_data)
         """
         request_type = "get_server_time"
-        path = f"GET /time"
+        path = "GET /time"
         extra_data = extra_data or {}
-        extra_data.update({
-            "request_type": request_type,
-            "normalize_function": self._get_server_time_normalize_function,
-        })
+        extra_data.update(
+            {
+                "request_type": request_type,
+                "normalize_function": self._get_server_time_normalize_function,
+            }
+        )
         return path, {}, extra_data
 
     @staticmethod
@@ -206,10 +206,8 @@ class ExmoRequestData(Feed):
         Since EXMO doesn't have a /time endpoint, we return current time.
         """
         import time as tm
-        server_time_data = {
-            "server_time": int(tm.time()),
-            "exchange": "EXMO"
-        }
+
+        server_time_data = {"server_time": int(tm.time()), "exchange": "EXMO"}
         return [server_time_data], True
 
     def get_server_time(self, extra_data=None, **kwargs):
@@ -222,6 +220,7 @@ class ExmoRequestData(Feed):
         path, params, extra_data = self._get_server_time(extra_data=extra_data, **kwargs)
         # Create a mock response with current time
         import time as tm
+
         response = {"server_time": int(tm.time())}
         return self._process_response(response, extra_data)
 

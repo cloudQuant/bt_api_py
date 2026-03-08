@@ -1,8 +1,4 @@
-import copy
-import datetime
-import json
 import os
-import time
 
 from bt_api_py.containers.exchanges.exchange_data import ExchangeData
 from bt_api_py.logging_factory import get_logger
@@ -106,25 +102,24 @@ class GeminiExchangeData(ExchangeData):
             self.account_wss_url = config.base_urls.wss.get("private", self.account_wss_url)
 
         # rest_paths
-        if hasattr(asset_cfg, 'rest_paths') and asset_cfg.rest_paths:
+        if hasattr(asset_cfg, "rest_paths") and asset_cfg.rest_paths:
             self.rest_paths.update(asset_cfg.rest_paths)
 
         # wss_paths
-        if hasattr(asset_cfg, 'wss_paths') and asset_cfg.wss_paths:
+        if hasattr(asset_cfg, "wss_paths") and asset_cfg.wss_paths:
             self.wss_paths.update(asset_cfg.wss_paths)
 
         # kline_periods
-        if hasattr(asset_cfg, 'kline_periods') and asset_cfg.kline_periods:
+        if hasattr(asset_cfg, "kline_periods") and asset_cfg.kline_periods:
             self.kline_periods = asset_cfg.kline_periods
 
         # reverse_kline_periods
-        if hasattr(asset_cfg, 'reverse_kline_periods') and asset_cfg.reverse_kline_periods:
+        if hasattr(asset_cfg, "reverse_kline_periods") and asset_cfg.reverse_kline_periods:
             self.reverse_kline_periods = asset_cfg.reverse_kline_periods
 
         # status_dict
-        if hasattr(asset_cfg, 'status_dict') and asset_cfg.status_dict:
+        if hasattr(asset_cfg, "status_dict") and asset_cfg.status_dict:
             self.status_dict = asset_cfg.status_dict
-
 
         # kline_periods - load from YAML, prefer asset-specific config
         kp = asset_cfg.kline_periods or (config.kline_periods if config.kline_periods else None)

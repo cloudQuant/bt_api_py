@@ -11,15 +11,14 @@ from unittest.mock import Mock
 
 import pytest
 
+# Import registration to auto-register EXMO
+import bt_api_py.exchange_registers.register_exmo  # noqa: F401
 from bt_api_py.containers.exchanges.exmo_exchange_data import ExmoExchangeDataSpot
 from bt_api_py.containers.requestdatas.request_data import RequestData
 from bt_api_py.containers.tickers.exmo_ticker import ExmoRequestTickerData
-from bt_api_py.feeds.live_exmo.spot import ExmoRequestDataSpot
 from bt_api_py.feeds.capability import Capability
+from bt_api_py.feeds.live_exmo.spot import ExmoRequestDataSpot
 from bt_api_py.registry import ExchangeRegistry
-
-# Import registration to auto-register EXMO
-import bt_api_py.exchange_registers.register_exmo  # noqa: F401
 
 
 @pytest.fixture
@@ -181,6 +180,7 @@ class TestExmoBaseCapabilities:
 
     def test_base_capabilities(self):
         from bt_api_py.feeds.live_exmo.request_base import ExmoRequestData
+
         caps = ExmoRequestData._capabilities()
         assert Capability.GET_TICK in caps
         assert Capability.MAKE_ORDER in caps
@@ -252,15 +252,17 @@ class TestExmoDataContainers:
     """Test EXMO data containers."""
 
     def test_ticker_container(self):
-        ticker_info = json.dumps({
-            "buy_price": "50000.0",
-            "sell_price": "50100.0",
-            "last_trade": "50050.0",
-            "high": "51000.0",
-            "low": "48000.0",
-            "vol": "1234.56",
-            "avg": "50000.0",
-        })
+        ticker_info = json.dumps(
+            {
+                "buy_price": "50000.0",
+                "sell_price": "50100.0",
+                "last_trade": "50050.0",
+                "high": "51000.0",
+                "low": "48000.0",
+                "vol": "1234.56",
+                "avg": "50000.0",
+            }
+        )
         ticker = ExmoRequestTickerData(ticker_info, "BTC/USDT", "SPOT", False)
         ticker.init_data()
         assert ticker.get_exchange_name() == "EXMO"

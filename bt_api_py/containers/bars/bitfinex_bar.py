@@ -2,7 +2,6 @@ import json
 import time
 
 from bt_api_py.containers.bars.bar import BarData
-from bt_api_py.functions.utils import from_dict_get_float
 
 
 class BitfinexRequestBarData(BarData):
@@ -107,4 +106,8 @@ class BitfinexRequestBarData(BarData):
 
     def get_mid_price(self):
         """Get mid price"""
-        return (self.open + self.high + self.low + self.close) / 4 if all(v is not None for v in [self.open, self.high, self.low, self.close]) else None
+        return (
+            (self.open + self.high + self.low + self.close) / 4
+            if all(v is not None for v in [self.open, self.high, self.low, self.close])
+            else None
+        )

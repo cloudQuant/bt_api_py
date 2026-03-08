@@ -558,7 +558,16 @@ class AccountMixin:
         )
 
     def _set_margin_balance(
-        self, symbol, pos_id, amt, mgn_mode, action_type="add", pos_side="net", ccy=None, extra_data=None, **kwargs
+        self,
+        symbol,
+        pos_id,
+        amt,
+        mgn_mode,
+        action_type="add",
+        pos_side="net",
+        ccy=None,
+        extra_data=None,
+        **kwargs,
     ):
         """
         Set margin balance (add/reduce margin)
@@ -601,7 +610,16 @@ class AccountMixin:
         return path, body, extra_data
 
     def set_margin_balance(
-        self, symbol, pos_id, amt, mgn_mode, action_type="add", pos_side="net", ccy=None, extra_data=None, **kwargs
+        self,
+        symbol,
+        pos_id,
+        amt,
+        mgn_mode,
+        action_type="add",
+        pos_side="net",
+        ccy=None,
+        extra_data=None,
+        **kwargs,
     ):
         """Set margin balance (add/reduce margin)"""
         path, body, extra_data = self._set_margin_balance(
@@ -611,7 +629,16 @@ class AccountMixin:
         return data
 
     def async_set_margin_balance(
-        self, symbol, pos_id, amt, mgn_mode, action_type="add", pos_side="net", ccy=None, extra_data=None, **kwargs
+        self,
+        symbol,
+        pos_id,
+        amt,
+        mgn_mode,
+        action_type="add",
+        pos_side="net",
+        ccy=None,
+        extra_data=None,
+        **kwargs,
     ):
         """Async set margin balance (add/reduce margin)"""
         path, body, extra_data = self._set_margin_balance(

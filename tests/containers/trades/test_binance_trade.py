@@ -1,29 +1,31 @@
 # import json
-from bt_api_py.containers.trades.binance_trade import (BinanceSwapWssTradeData,
-                                                       BinanceRequestTradeData,
-                                                       BinanceSpotWssTradeData,
-                                                       BinanceAggTradeData)
+from bt_api_py.containers.trades.binance_trade import (
+    BinanceAggTradeData,
+    BinanceRequestTradeData,
+    BinanceSpotWssTradeData,
+    BinanceSwapWssTradeData,
+)
 
 
 def test_binance_agg_trade():
     data = {
-          "e": "aggTrade",
-          "E": 123456789,
-          "s": "BNBUSDT",
-          "a": 5933014,
-          "p": "0.001",
-          "q": "100",
-          "f": 100,
-          "l": 105,
-          "T": 123456785,
-          "m": True
-        }
+        "e": "aggTrade",
+        "E": 123456789,
+        "s": "BNBUSDT",
+        "a": 5933014,
+        "p": "0.001",
+        "q": "100",
+        "f": 100,
+        "l": 105,
+        "T": 123456785,
+        "m": True,
+    }
     agg_trade = BinanceAggTradeData(data, "BNB-USDT", "SWAP", True)
     agg_trade.init_data()
     assert agg_trade.get_first_trade_id() == "100"
     assert agg_trade.get_last_trade_id() == "105"
     assert agg_trade.get_server_time() == 123456789
-    assert agg_trade.get_trade_id() == '5933014'
+    assert agg_trade.get_trade_id() == "5933014"
     assert agg_trade.get_trade_price() == 0.001
     assert agg_trade.get_trade_volume() == 100
     assert agg_trade.get_trade_time() == 123456785
@@ -32,19 +34,43 @@ def test_binance_agg_trade():
 
 
 def test_binance_spot_wss_trade():
-    data = {'e': 'executionReport', 'E': 1709103527340,
-            's': 'OPUSDT', 'c': 'quYaDMgXvQGpI0M2Uztcdl', 'S': 'BUY',
-            'o': 'LIMIT', 'f': 'GTC', 'q': '2.00000000', 'p': '3.37900000',
-            'P': '0.00000000', 'F': '0.00000000',
-            'g': -1, 'C': '784164848349476186', 'x': 'CANCELED',
-            'X': 'CANCELED', 'r': 'NONE', 'i': 1110157667,
-            'l': '0.00000000', 'z': '0.00000000', 'L': '0.00000000',
-            'n': '0', 'N': None, 'T': 1709103527340, 't': -1,
-            'I': 2284358278, 'w': False, 'm': False, 'M': False,
-            'O': 1709103527220, 'Z': '0.00000000',
-            'Y': '0.00000000', 'Q': '0.00000000', 'W': 1709103527220,
-            'V': 'EXPIRE_MAKER'}
-    spot_wss_trade = BinanceSpotWssTradeData(data, data['s'], "SPOT", True)
+    data = {
+        "e": "executionReport",
+        "E": 1709103527340,
+        "s": "OPUSDT",
+        "c": "quYaDMgXvQGpI0M2Uztcdl",
+        "S": "BUY",
+        "o": "LIMIT",
+        "f": "GTC",
+        "q": "2.00000000",
+        "p": "3.37900000",
+        "P": "0.00000000",
+        "F": "0.00000000",
+        "g": -1,
+        "C": "784164848349476186",
+        "x": "CANCELED",
+        "X": "CANCELED",
+        "r": "NONE",
+        "i": 1110157667,
+        "l": "0.00000000",
+        "z": "0.00000000",
+        "L": "0.00000000",
+        "n": "0",
+        "N": None,
+        "T": 1709103527340,
+        "t": -1,
+        "I": 2284358278,
+        "w": False,
+        "m": False,
+        "M": False,
+        "O": 1709103527220,
+        "Z": "0.00000000",
+        "Y": "0.00000000",
+        "Q": "0.00000000",
+        "W": 1709103527220,
+        "V": "EXPIRE_MAKER",
+    }
+    spot_wss_trade = BinanceSpotWssTradeData(data, data["s"], "SPOT", True)
     spot_wss_trade.init_data()
     assert spot_wss_trade.get_trade_id() == "-1"
     assert spot_wss_trade.get_trade_price() == 0.0
@@ -54,11 +80,11 @@ def test_binance_spot_wss_trade():
 
 def test_binance_req_trade():
     data = {
-        "buyer": 'false',  # 是否是买方
+        "buyer": "false",  # 是否是买方
         "commission": "-0.07819010",  # 手续费
         "commissionAsset": "USDT",  # 手续费计价单位
         "id": 698759,  # 交易ID
-        "maker": 'false',  # 是否是挂单方
+        "maker": "false",  # 是否是挂单方
         "orderId": 25851813,  # 订单编号
         "price": "7819.01",  # 成交价
         "qty": "0.002",  # 成交量
@@ -67,14 +93,14 @@ def test_binance_req_trade():
         "side": "SELL",  # 买卖方向
         "positionSide": "SHORT",  # 持仓方向
         "symbol": "BTCUSDT",  # 交易对
-        "time": 1569514978020  # 时间
+        "time": 1569514978020,  # 时间
     }
     bo = BinanceRequestTradeData(data, "BTC-USDT", "PERPETUAL", True)
     bo.init_data()
     assert bo.get_server_time() == 1569514978020.0
     assert bo.get_exchange_name() == "BINANCE"
     assert bo.get_asset_type() == "PERPETUAL"
-    assert bo.get_trade_id() == '698759'
+    assert bo.get_trade_id() == "698759"
     assert bo.get_trade_symbol_name() == "BTCUSDT"
     assert bo.get_order_id() == "25851813"
     assert bo.get_client_order_id() is None
@@ -134,15 +160,15 @@ def test_binance_wss_trade():
             "rp": "0",  # 该交易实现盈亏
             "V": "EXPIRE_TAKER",  # 自成交防止模式
             "pm": "OPPONENT",  # 价格匹配模式
-            "gtd": 0  # TIF为GTD的订单自动取消时间
-        }
+            "gtd": 0,  # TIF为GTD的订单自动取消时间
+        },
     }
     bo = BinanceSwapWssTradeData(data, "BTCUSDT", "PERPETUAL", True)
     bo.init_data()
     assert bo.get_server_time() == 1568879465651.0
     assert bo.get_exchange_name() == "BINANCE"
     assert bo.get_asset_type() == "PERPETUAL"
-    assert bo.get_trade_id() == '0'
+    assert bo.get_trade_id() == "0"
     assert bo.get_trade_symbol_name() == "BTCUSDT"
     assert bo.get_order_id() == "8886774"
     assert bo.get_client_order_id() == "TEST"

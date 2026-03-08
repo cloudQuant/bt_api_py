@@ -41,7 +41,9 @@ class DydxBalanceData(BalanceData):
             self.equity = from_dict_get_float(subaccount, "equity")
             self.free_collateral = from_dict_get_float(subaccount, "freeCollateral")
             self.open_pnl = from_dict_get_float(subaccount, "openPnl")
-            self.initial_margin_requirement = from_dict_get_float(subaccount, "initialMarginRequirement")
+            self.initial_margin_requirement = from_dict_get_float(
+                subaccount, "initialMarginRequirement"
+            )
             self.margin_balance = from_dict_get_float(subaccount, "marginBalance")
             self.available_margin = from_dict_get_float(subaccount, "availableMargin")
             self.position_margin = from_dict_get_float(subaccount, "positionMargin")

@@ -31,7 +31,7 @@ balance_data = {
     "twap": "0",
     "uTime": "1705449605015",
     "upl": "-7.545600000000006",
-    "uplLiab": "0"
+    "uplLiab": "0",
 }
 
 
@@ -84,9 +84,7 @@ def test_okx_req_one_symbol_account():
             {
                 "adjEq": "55415.624719833286",
                 "borrowFroz": "0",
-                "details": [
-                    balance_data
-                ],
+                "details": [balance_data],
                 "imr": "8.57068529",
                 "isoEq": "0",
                 "mgnRatio": "143682.59776662575",
@@ -95,12 +93,12 @@ def test_okx_req_one_symbol_account():
                 "ordFroz": "0",
                 "totalEq": "55837.43556134779",
                 "uTime": "1705474164160",
-                "upl": "-7.543562688000006"
+                "upl": "-7.543562688000006",
             }
         ],
-        "msg": ""
+        "msg": "",
     }
-    bo = OkxAccountData(data['data'][0], "USDT", "SWAP", True)
+    bo = OkxAccountData(data["data"][0], "USDT", "SWAP", True)
     bo.init_data()
     assert_one_symbol_account(bo)
     balances = bo.get_balances()

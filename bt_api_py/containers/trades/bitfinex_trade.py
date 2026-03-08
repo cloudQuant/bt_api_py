@@ -2,7 +2,6 @@ import json
 import time
 
 from bt_api_py.containers.trades.trade import TradeData
-from bt_api_py.functions.utils import from_dict_get_float, from_dict_get_string
 
 
 class BitfinexRequestTradeData(TradeData):
@@ -95,7 +94,11 @@ class BitfinexRequestTradeData(TradeData):
 
     def get_value(self):
         """Get trade value"""
-        return self.price * abs(self.amount) if self.price is not None and self.amount is not None else 0
+        return (
+            self.price * abs(self.amount)
+            if self.price is not None and self.amount is not None
+            else 0
+        )
 
     def is_buy(self):
         """Check if trade is a buy"""
@@ -108,4 +111,5 @@ class BitfinexRequestTradeData(TradeData):
 
 class BitfinexSpotWssTradeData(BitfinexRequestTradeData):
     """Bitfinex Spot WebSocket Trade Data"""
+
     pass  # Same structure as request data

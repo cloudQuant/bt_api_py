@@ -3,6 +3,7 @@ Foxbit Exchange Data Configuration
 """
 
 import os
+
 from bt_api_py.containers.exchanges.exchange_data import ExchangeData
 from bt_api_py.logging_factory import get_logger
 
@@ -19,6 +20,7 @@ def _get_foxbit_config():
         return _foxbit_config
     try:
         from bt_api_py.config_loader import load_exchange_config
+
         config_path = os.path.join(
             os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
             "configs",
@@ -77,8 +79,9 @@ class FoxbitExchangeData(ExchangeData):
                 # Try to get asset_type specific URL, fallback to 'default', fallback to 'spot'
                 self.rest_url = config.base_urls.rest.get(
                     asset_type,
-                    config.base_urls.rest.get('default',
-                    config.base_urls.rest.get('spot', self.rest_url))
+                    config.base_urls.rest.get(
+                        "default", config.base_urls.rest.get("spot", self.rest_url)
+                    ),
                 )
             else:
                 self.rest_url = config.base_urls.rest
@@ -87,8 +90,9 @@ class FoxbitExchangeData(ExchangeData):
                 # Try to get asset_type specific URL, fallback to 'default', fallback to 'spot'
                 self.wss_url = config.base_urls.wss.get(
                     asset_type,
-                    config.base_urls.wss.get('default',
-                    config.base_urls.wss.get('spot', self.wss_url))
+                    config.base_urls.wss.get(
+                        "default", config.base_urls.wss.get("spot", self.wss_url)
+                    ),
                 )
             else:
                 self.wss_url = config.base_urls.wss

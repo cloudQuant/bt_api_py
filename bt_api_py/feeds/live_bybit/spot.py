@@ -1,11 +1,10 @@
 """Bybit Spot Trading Feed"""
 
+from bt_api_py.containers.balances.bybit_balance import BybitSpotBalanceData
 from bt_api_py.containers.exchanges.bybit_exchange_data import BybitExchangeDataSpot
-from bt_api_py.containers.tickers.bybit_ticker import BybitSpotTickerData
 from bt_api_py.containers.orderbooks.bybit_orderbook import BybitSpotOrderBookData
 from bt_api_py.containers.orders.bybit_order import BybitSpotOrderData
-from bt_api_py.containers.balances.bybit_balance import BybitSpotBalanceData
-from bt_api_py.containers.requestdatas.request_data import RequestData
+from bt_api_py.containers.tickers.bybit_ticker import BybitSpotTickerData
 from bt_api_py.feeds.live_bybit.request_base import BybitRequestData
 from bt_api_py.functions.utils import update_extra_data
 from bt_api_py.logging_factory import get_logger
@@ -80,8 +79,10 @@ class BybitRequestDataSpot(BybitRequestData):
     def async_get_ticker(self, symbol, extra_data=None, **kwargs):
         """Async get ticker data."""
         path, params, extra_data = self._get_ticker(symbol, extra_data, **kwargs)
-        self.submit(self.async_request(path, params=params, extra_data=extra_data),
-                    callback=self.async_callback)
+        self.submit(
+            self.async_request(path, params=params, extra_data=extra_data),
+            callback=self.async_callback,
+        )
 
     def async_get_tick(self, symbol, extra_data=None, **kwargs):
         """Async get ticker data (alias)."""
@@ -136,8 +137,10 @@ class BybitRequestDataSpot(BybitRequestData):
     def async_get_depth(self, symbol, limit=50, extra_data=None, **kwargs):
         """Async get orderbook depth."""
         path, params, extra_data = self._get_depth(symbol, limit, extra_data, **kwargs)
-        self.submit(self.async_request(path, params=params, extra_data=extra_data),
-                    callback=self.async_callback)
+        self.submit(
+            self.async_request(path, params=params, extra_data=extra_data),
+            callback=self.async_callback,
+        )
 
     # ==================== Kline Methods ====================
 
@@ -192,8 +195,10 @@ class BybitRequestDataSpot(BybitRequestData):
     def async_get_kline(self, symbol, period="1m", limit=200, extra_data=None, **kwargs):
         """Async get kline/candlestick data."""
         path, params, extra_data = self._get_kline(symbol, period, limit, extra_data, **kwargs)
-        self.submit(self.async_request(path, params=params, extra_data=extra_data),
-                    callback=self.async_callback)
+        self.submit(
+            self.async_request(path, params=params, extra_data=extra_data),
+            callback=self.async_callback,
+        )
 
     # ==================== Server Time & Exchange Info Methods ====================
 
@@ -294,13 +299,24 @@ class BybitRequestDataSpot(BybitRequestData):
     def async_get_balance(self, account_type="UNIFIED", coin=None, extra_data=None, **kwargs):
         """Async get account balance."""
         path, params, extra_data = self._get_balance(account_type, coin, extra_data, **kwargs)
-        self.submit(self.async_request(path, params=params, extra_data=extra_data),
-                    callback=self.async_callback)
+        self.submit(
+            self.async_request(path, params=params, extra_data=extra_data),
+            callback=self.async_callback,
+        )
 
     # ==================== Trading Methods ====================
 
-    def _make_order(self, symbol, qty, side="Buy", order_type="Limit",
-                    price=None, time_in_force="GTC", extra_data=None, **kwargs):
+    def _make_order(
+        self,
+        symbol,
+        qty,
+        side="Buy",
+        order_type="Limit",
+        price=None,
+        time_in_force="GTC",
+        extra_data=None,
+        **kwargs,
+    ):
         """Place an order.
 
         Args:
@@ -355,22 +371,42 @@ class BybitRequestDataSpot(BybitRequestData):
         data = [BybitSpotOrderData(input_data, extra_data["symbol_name"], True)]
         return data, status
 
-    def make_order(self, symbol, qty, side="Buy", order_type="Limit",
-                   price=None, time_in_force="GTC", extra_data=None, **kwargs):
+    def make_order(
+        self,
+        symbol,
+        qty,
+        side="Buy",
+        order_type="Limit",
+        price=None,
+        time_in_force="GTC",
+        extra_data=None,
+        **kwargs,
+    ):
         """Place an order."""
         path, body, extra_data = self._make_order(
             symbol, qty, side, order_type, price, time_in_force, extra_data, **kwargs
         )
         return self.request(path, params={}, body=body, extra_data=extra_data)
 
-    def async_make_order(self, symbol, qty, side="Buy", order_type="Limit",
-                         price=None, time_in_force="GTC", extra_data=None, **kwargs):
+    def async_make_order(
+        self,
+        symbol,
+        qty,
+        side="Buy",
+        order_type="Limit",
+        price=None,
+        time_in_force="GTC",
+        extra_data=None,
+        **kwargs,
+    ):
         """Async place an order."""
         path, body, extra_data = self._make_order(
             symbol, qty, side, order_type, price, time_in_force, extra_data, **kwargs
         )
-        self.submit(self.async_request(path, params={}, body=body, extra_data=extra_data),
-                    callback=self.async_callback)
+        self.submit(
+            self.async_request(path, params={}, body=body, extra_data=extra_data),
+            callback=self.async_callback,
+        )
 
     def _cancel_order(self, symbol, order_id=None, order_link_id=None, extra_data=None, **kwargs):
         """Cancel an order.
@@ -412,7 +448,9 @@ class BybitRequestDataSpot(BybitRequestData):
 
     def cancel_order(self, symbol, order_id=None, order_link_id=None, extra_data=None, **kwargs):
         """Cancel an order."""
-        path, body, extra_data = self._cancel_order(symbol, order_id, order_link_id, extra_data, **kwargs)
+        path, body, extra_data = self._cancel_order(
+            symbol, order_id, order_link_id, extra_data, **kwargs
+        )
         return self.request(path, params={}, body=body, extra_data=extra_data)
 
     def _query_order(self, symbol, order_id=None, order_link_id=None, extra_data=None, **kwargs):
@@ -463,7 +501,9 @@ class BybitRequestDataSpot(BybitRequestData):
 
     def query_order(self, symbol, order_id=None, order_link_id=None, extra_data=None, **kwargs):
         """Query order details."""
-        path, params, extra_data = self._query_order(symbol, order_id, order_link_id, extra_data, **kwargs)
+        path, params, extra_data = self._query_order(
+            symbol, order_id, order_link_id, extra_data, **kwargs
+        )
         return self.request(path, params=params, extra_data=extra_data)
 
     def _get_deals(self, symbol=None, limit=50, extra_data=None, **kwargs):

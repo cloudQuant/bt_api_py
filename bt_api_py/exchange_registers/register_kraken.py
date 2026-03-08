@@ -6,12 +6,12 @@ Kraken 交易所注册模块
 
 from bt_api_py.balance_utils import nested_balance_handler as _kraken_balance_handler
 from bt_api_py.containers.exchanges.kraken_exchange_data import (
-    KrakenExchangeDataSpot,
     KrakenExchangeDataFutures,
+    KrakenExchangeDataSpot,
 )
 from bt_api_py.feeds.live_kraken import (
-    KrakenRequestDataSpot,
     KrakenRequestDataFutures,
+    KrakenRequestDataSpot,
 )
 from bt_api_py.registry import ExchangeRegistry
 

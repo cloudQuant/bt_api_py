@@ -102,7 +102,7 @@ class BTCTurkRequestTickerData(TickerData):
         return self.asset_type
 
     def get_server_time(self):
-        return getattr(self, 'timestamp', None)
+        return getattr(self, "timestamp", None)
 
     def get_bid_price(self):
         return self.bid_price

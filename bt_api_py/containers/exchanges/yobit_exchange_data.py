@@ -21,10 +21,11 @@ def _load_yobit_yaml():
     try:
         cfg_path = os.path.join(
             os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
-            "configs", "yobit.yaml",
+            "configs",
+            "yobit.yaml",
         )
         if os.path.exists(cfg_path):
-            with open(cfg_path, "r", encoding="utf-8") as f:
+            with open(cfg_path, encoding="utf-8") as f:
                 _yobit_yaml_cache = yaml.safe_load(f) or {}
     except Exception as e:
         logger.warn(f"Failed to load yobit.yaml: {e}")
@@ -41,9 +42,18 @@ class YobitExchangeData(ExchangeData):
         self.rest_url = "https://yobit.net"
         self.wss_url = "wss://ws.yobit.net"
         self.kline_periods = {
-            "1m": "1", "3m": "3", "5m": "5", "15m": "15",
-            "30m": "30", "1h": "60", "2h": "120", "4h": "240",
-            "6h": "360", "12h": "720", "1d": "1d", "1w": "1w",
+            "1m": "1",
+            "3m": "3",
+            "5m": "5",
+            "15m": "15",
+            "30m": "30",
+            "1h": "60",
+            "2h": "120",
+            "4h": "240",
+            "6h": "360",
+            "12h": "720",
+            "1d": "1d",
+            "1w": "1w",
         }
         self.legal_currency = ["USD", "USDT", "RUB", "BTC", "ETH", "DOGE"]
 

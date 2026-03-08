@@ -1,9 +1,7 @@
-- --
-
-description: 'Flexible development workflow - execute tech-specs OR direct instructions with optional planning. Use when the user says ""lets implement this feature"" or ""execute these development tasks""'
+---
+description: 'Flexible development workflow - execute tech-specs OR direct instructions with optional planning. Use when the user says "lets implement this feature" or "execute these development tasks"'
 auto_execution_mode: "iterate"
-
-- --
+---
 
 # quick-dev
 

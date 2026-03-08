@@ -6,10 +6,8 @@ Raydium is a Solana-based DEX that doesn't require authentication for public dat
 """
 
 import time
-from typing import Any
 
 from bt_api_py.containers.exchanges.raydium_exchange_data import (
-    RaydiumExchangeData,
     RaydiumExchangeDataSpot,
 )
 from bt_api_py.containers.requestdatas.request_data import RequestData
@@ -66,6 +64,7 @@ class RaydiumRequestData(Feed):
 
         if params:
             from urllib.parse import urlencode
+
             url = f"{url}?{urlencode(params)}"
 
         return url
@@ -77,7 +76,7 @@ class RaydiumRequestData(Feed):
         body: dict = None,
         extra_data: dict = None,
         timeout: int = 10,
-        is_sign: bool = False
+        is_sign: bool = False,
     ) -> RequestData:
         """Send HTTP request.
 
@@ -105,7 +104,9 @@ class RaydiumRequestData(Feed):
                 headers=headers,
             )
 
-            self.request_logger.info(f"Request: GET {url} - Response code: {response.get('success', 'N/A')}")
+            self.request_logger.info(
+                f"Request: GET {url} - Response code: {response.get('success', 'N/A')}"
+            )
             return RequestData(response, extra_data)
 
         except Exception as e:
@@ -119,7 +120,7 @@ class RaydiumRequestData(Feed):
         body: dict = None,
         extra_data: dict = None,
         timeout: int = 5,
-        is_sign: bool = False
+        is_sign: bool = False,
     ) -> RequestData:
         """Send async HTTP request.
 
@@ -147,7 +148,9 @@ class RaydiumRequestData(Feed):
                 headers=headers,
             )
 
-            self.async_logger.info(f"Async Request: GET {url} - Response code: {response.get('success', 'N/A')}")
+            self.async_logger.info(
+                f"Async Request: GET {url} - Response code: {response.get('success', 'N/A')}"
+            )
             return RequestData(response, extra_data)
 
         except Exception as e:
@@ -172,13 +175,15 @@ class RaydiumRequestData(Feed):
         """
         if extra_data is None:
             extra_data = {}
-        extra_data.update({
-            "exchange_name": self.exchange_name,
-            "symbol_name": "",
-            "asset_type": self.asset_type,
-            "request_type": "get_server_time",
-            "server_time": time.time(),
-        })
+        extra_data.update(
+            {
+                "exchange_name": self.exchange_name,
+                "symbol_name": "",
+                "asset_type": self.asset_type,
+                "request_type": "get_server_time",
+                "server_time": time.time(),
+            }
+        )
         return "/main/chain-time", {}, extra_data
 
     def get_server_time(self, extra_data=None, **kwargs):

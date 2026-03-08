@@ -25,9 +25,9 @@ Playwright's `mergeTests` provides:
 
 ### Example 1: Basic Fixture Merging
 
-- *Context**: Combine multiple playwright-utils fixtures into single test object.
+**Context**: Combine multiple playwright-utils fixtures into single test object.
 
-- *Implementation**:
+**Implementation**:
 
 ```typescript
 // playwright/support/merged-fixtures.ts
@@ -40,8 +40,7 @@ import { test as recurseFixture } from '@seontechnologies/playwright-utils/recur
 export const test = mergeTests(apiRequestFixture, authFixture, recurseFixture);
 
 export { expect } from '@playwright/test';
-
-```bash
+```
 
 ```typescript
 // In your tests - import from merged fixtures
@@ -64,10 +63,9 @@ test('all utilities available', async ({
     (res) => res.body.ready === true,
   );
 });
+```
 
-```bash
-
-- *Key Points**:
+**Key Points**:
 
 - Create one `merged-fixtures.ts` per project
 - Import test object from merged fixtures in all test files
@@ -76,9 +74,9 @@ test('all utilities available', async ({
 
 ### Example 2: Combining with Custom Fixtures
 
-- *Context**: Add project-specific fixtures alongside playwright-utils.
+**Context**: Add project-specific fixtures alongside playwright-utils.
 
-- *Implementation**:
+**Implementation**:
 
 ```typescript
 // playwright/support/custom-fixtures.ts - Your project fixtures
@@ -117,8 +115,7 @@ export const test = mergeTests(
 );
 
 export { expect } from '@playwright/test';
-
-```bash
+```
 
 ```typescript
 // In tests - all fixtures available
@@ -140,10 +137,9 @@ test('using mixed fixtures', async ({
   // Use custom fixture
   await db.clear();
 });
+```
 
-```bash
-
-- *Key Points**:
+**Key Points**:
 
 - Custom fixtures extend `base` test
 - Merge custom with playwright-utils fixtures
@@ -152,9 +148,9 @@ test('using mixed fixtures', async ({
 
 ### Example 3: Full Utility Suite Integration
 
-- *Context**: Production setup with all core playwright-utils and custom fixtures.
+**Context**: Production setup with all core playwright-utils and custom fixtures.
 
-- *Implementation**:
+**Implementation**:
 
 ```typescript
 // playwright/support/merged-fixtures.ts
@@ -174,8 +170,7 @@ import { test as customFixtures } from './custom-fixtures';
 export const test = mergeTests(apiRequestFixture, authFixture, interceptFixture, recurseFixture, networkRecorderFixture, customFixtures);
 
 export { expect } from '@playwright/test';
-
-```bash
+```
 
 ```typescript
 // In tests
@@ -201,10 +196,9 @@ test('full integration', async ({
 
   expect(responseJson).toContainEqual(expect.objectContaining({ id: testUser.id }));
 });
+```
 
-```bash
-
-- *Key Points**:
+**Key Points**:
 
 - One merged-fixtures.ts for entire project
 - Combine all playwright-utils you use
@@ -213,9 +207,9 @@ test('full integration', async ({
 
 ### Example 4: Fixture Override Pattern
 
-- *Context**: Override default options for specific test files or describes.
+**Context**: Override default options for specific test files or describes.
 
-- *Implementation**:
+**Implementation**:
 
 ```typescript
 import { test, expect } from '../support/merged-fixtures';
@@ -245,10 +239,9 @@ test.describe('manager tests', () => {
     await page.goto('/reports');
   });
 });
+```
 
-```bash
-
-- *Key Points**:
+**Key Points**:
 
 - `test.use()` overrides fixture options
 - Can override at file or describe level
@@ -257,9 +250,9 @@ test.describe('manager tests', () => {
 
 ### Example 5: Avoiding Fixture Conflicts
 
-- *Context**: Handle name collisions when merging fixtures with same names.
+**Context**: Handle name collisions when merging fixtures with same names.
 
-- *Implementation**:
+**Implementation**:
 
 ```typescript
 // If two fixtures have same name, last one wins
@@ -283,10 +276,9 @@ const test = mergeTests(fixture1Renamed, fixture2);
 // Best: Design fixtures without conflicts
 // - Prefix custom fixtures: 'myAppUser', 'myAppDb'
 // - Playwright-utils uses descriptive names: 'apiRequest', 'authToken'
+```
 
-```bash
-
-- *Key Points**:
+**Key Points**:
 
 - Last fixture wins in conflicts
 - Rename fixtures to avoid collisions
@@ -295,16 +287,13 @@ const test = mergeTests(fixture1Renamed, fixture2);
 
 ## Recommended Project Structure
 
-```bash
+```
 playwright/
 ├── support/
 │   ├── merged-fixtures.ts        # ⭐ Single test object for project
-
 │   ├── custom-fixtures.ts        # Your project-specific fixtures
-
 │   ├── auth/
 │   │   ├── auth-fixture.ts       # Auth wrapper (if needed)
-
 │   │   └── custom-auth-provider.ts
 │   ├── fixtures/
 │   │   ├── user-fixture.ts
@@ -319,12 +308,11 @@ playwright/
     │   └── login.spec.ts          # import { test } from '../../support/merged-fixtures'
     └── component/
         └── button.spec.ts         # import { test } from '../../support/merged-fixtures'
-
-```bash
+```
 
 ## Benefits of Fixture Composition
 
-- *Compared to direct imports:**
+**Compared to direct imports:**
 
 ```typescript
 // ❌ Without mergeTests (verbose)
@@ -347,10 +335,9 @@ test('clean', async ({ apiRequest, authToken, testUser }) => {
   const { body } = await apiRequest({ method: 'GET', path: '/api/users' });
   // All fixtures auto-wired
 });
+```
 
-```bash
-
-- *Reduction:** ~10 lines per test → ~2 lines
+**Reduction:** ~10 lines per test → ~2 lines
 
 ## Related Fragments
 
@@ -360,25 +347,23 @@ test('clean', async ({ apiRequest, authToken, testUser }) => {
 
 ## Anti-Patterns
 
-- *❌ Importing test from multiple fixture files:**
+**❌ Importing test from multiple fixture files:**
 
 ```typescript
 import { test } from '@seontechnologies/playwright-utils/api-request/fixtures';
 // Also need auth...
 import { test as authTest } from '@seontechnologies/playwright-utils/auth-session/fixtures';
 // Name conflict! Which test to use?
+```
 
-```bash
-
-- *✅ Use merged fixtures:**
+**✅ Use merged fixtures:**
 
 ```typescript
 import { test } from '../support/merged-fixtures';
 // All utilities available, no conflicts
+```
 
-```bash
-
-- *❌ Merging too many fixtures (kitchen sink):**
+**❌ Merging too many fixtures (kitchen sink):**
 
 ```typescript
 // Merging 20+ fixtures makes test signature huge
@@ -387,13 +372,11 @@ const test = mergeTests(...20 different fixtures)
 test('my test', async ({ fixture1, fixture2, ..., fixture20 }) => {
   // Cognitive overload
 })
+```
 
-```bash
-
-- *✅ Merge only what you actually use:**
+**✅ Merge only what you actually use:**
 
 ```typescript
 // Merge the 4-6 fixtures your project actually needs
 const test = mergeTests(apiRequestFixture, authFixture, recurseFixture, customFixtures);
-
-```bash
+```

@@ -1,4 +1,5 @@
 from bt_api_py.logging_factory import get_logger
+
 """
 MEXC Market WebSocket Base Class
 
@@ -8,7 +9,6 @@ Provides base functionality for MEXC market data WebSocket connections.
 import json
 import threading
 import time
-from queue import Queue
 
 import websocket
 
@@ -19,7 +19,7 @@ class MexcMarketWssData:
     def __init__(self, data_queue, **kwargs):
         self.data_queue = data_queue
         self.wss_url = kwargs.get("wss_url", "")
-        self.exchange_data = kwargs.get("exchange_data", None)
+        self.exchange_data = kwargs.get("exchange_data")
         self.topics = kwargs.get("topics", [])
         self.logger_name = kwargs.get("logger_name", "mexc_market_wss.log")
         self.request_logger = None
@@ -71,7 +71,7 @@ class MexcMarketWssData:
                     on_open=self._on_open,
                     on_message=self._on_message,
                     on_error=self._on_error,
-                    on_close=self._on_close
+                    on_close=self._on_close,
                 )
 
                 # Run the WebSocket connection
@@ -124,7 +124,7 @@ class MexcMarketWssData:
                         subscription = {
                             "method": topic_config["method"],
                             "params": [param],
-                            "id": topic_config.get("id", 1)
+                            "id": topic_config.get("id", 1),
                         }
 
                         message = json.dumps(subscription)
@@ -174,6 +174,7 @@ class MexcMarketWssData:
 
     def _start_ping_thread(self):
         """Start a background thread to send ping messages"""
+
         def ping_worker():
             while self.is_running:
                 time.sleep(30)  # Send ping every 30 seconds

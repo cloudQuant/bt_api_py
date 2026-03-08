@@ -8,6 +8,7 @@ Response format: {"code": 1000, "message": "OK", "data": {...}}
 """
 
 import os
+
 from bt_api_py.containers.exchanges.exchange_data import ExchangeData
 from bt_api_py.logging_factory import get_logger
 
@@ -24,6 +25,7 @@ def _get_bitmart_config():
         return _bitmart_config
     try:
         from bt_api_py.config_loader import load_exchange_config
+
         config_path = os.path.join(
             os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
             "configs",
@@ -48,10 +50,19 @@ class BitmartExchangeData(ExchangeData):
         self.rest_paths = {}
         self.wss_paths = {}
         self.kline_periods = {
-            "1m": "1", "3m": "3", "5m": "5", "15m": "15",
-            "30m": "30", "45m": "45", "1h": "60", "2h": "120",
-            "3h": "180", "4h": "240", "1d": "1440",
-            "1w": "10080", "1M": "43200",
+            "1m": "1",
+            "3m": "3",
+            "5m": "5",
+            "15m": "15",
+            "30m": "30",
+            "45m": "45",
+            "1h": "60",
+            "2h": "120",
+            "3h": "180",
+            "4h": "240",
+            "1d": "1440",
+            "1w": "10080",
+            "1M": "43200",
         }
         self.legal_currency = ["USDT", "USD", "BTC", "ETH", "USDC"]
 
@@ -70,12 +81,20 @@ class BitmartExchangeData(ExchangeData):
             self.rest_url = asset_cfg.rest_url
         elif config.base_urls and config.base_urls.rest:
             rest = config.base_urls.rest
-            self.rest_url = rest.get(asset_type, rest.get("default", self.rest_url)) if isinstance(rest, dict) else rest
+            self.rest_url = (
+                rest.get(asset_type, rest.get("default", self.rest_url))
+                if isinstance(rest, dict)
+                else rest
+            )
         if hasattr(asset_cfg, "wss_url") and asset_cfg.wss_url:
             self.wss_url = asset_cfg.wss_url
         elif config.base_urls and config.base_urls.wss:
             wss = config.base_urls.wss
-            self.wss_url = wss.get(asset_type, wss.get("default", self.wss_url)) if isinstance(wss, dict) else wss
+            self.wss_url = (
+                wss.get(asset_type, wss.get("default", self.wss_url))
+                if isinstance(wss, dict)
+                else wss
+            )
 
         if asset_cfg.rest_paths:
             self.rest_paths.update(asset_cfg.rest_paths)
@@ -108,8 +127,7 @@ class BitmartExchangeData(ExchangeData):
         path = self.rest_paths.get(request_type)
         if path is None:
             raise ValueError(
-                f"Unknown rest path: {request_type}. "
-                f"Available: {list(self.rest_paths.keys())}"
+                f"Unknown rest path: {request_type}. Available: {list(self.rest_paths.keys())}"
             )
         return path
 

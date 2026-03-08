@@ -4,29 +4,21 @@ Hyperliquid Spot Trading Implementation
 Provides spot trading functionality for Hyperliquid exchange.
 """
 
-import json
-import time
 
-from bt_api_py.containers.accounts.hyperliquid_account import HyperliquidSpotWssAccountData
-from bt_api_py.containers.balances.hyperliquid_balance import HyperliquidSpotRequestBalanceData
 from bt_api_py.containers.exchanges.hyperliquid_exchange_data import HyperliquidExchangeDataSpot
 from bt_api_py.containers.orders.hyperliquid_order import (
-    HyperliquidRequestOrderData,
     HyperliquidSpotWssOrderData,
 )
 from bt_api_py.containers.tickers.hyperliquid_ticker import HyperliquidTickerData
 from bt_api_py.containers.trades.hyperliquid_trade import HyperliquidSpotWssTradeData
-from bt_api_py.feeds.live_hyperliquid.market_wss_base import HyperliquidMarketWssData
 from bt_api_py.feeds.live_hyperliquid.account_wss_base import HyperliquidAccountWssData
+from bt_api_py.feeds.live_hyperliquid.market_wss_base import HyperliquidMarketWssData
 from bt_api_py.feeds.live_hyperliquid.request_base import HyperliquidRequestData
-from bt_api_py.functions.utils import update_extra_data
 from bt_api_py.logging_factory import get_logger
 from bt_api_py.utils.hyperliquid_types import (
     LIMIT_ORDER,
     MARKET_ORDER,
     TIF_GTC,
-    SIDE_BUY,
-    SIDE_SELL,
 )
 
 
@@ -43,8 +35,18 @@ class HyperliquidRequestDataSpot(HyperliquidRequestData):
 
     # ── Standard Interface: make_order ──────────────────────────────
 
-    def _make_order(self, symbol, volume, price, order_type, offset="open",
-                    post_only=False, client_order_id=None, extra_data=None, **kwargs):
+    def _make_order(
+        self,
+        symbol,
+        volume,
+        price,
+        order_type,
+        offset="open",
+        post_only=False,
+        client_order_id=None,
+        extra_data=None,
+        **kwargs,
+    ):
         """Prepare order request parameters. Returns (path, body, extra_data)."""
         if extra_data is None:
             extra_data = {}
@@ -79,33 +81,69 @@ class HyperliquidRequestDataSpot(HyperliquidRequestData):
             if price:
                 order_params["limit_px"] = str(price)
 
-        extra_data.update({
-            "exchange_name": self._params.exchange_name,
-            "symbol_name": symbol,
-            "asset_type": self.asset_type,
-            "request_type": "make_order",
-            "side": side,
-            "quantity": volume,
-            "price": price,
-            "order_type": order_type,
-        })
+        extra_data.update(
+            {
+                "exchange_name": self._params.exchange_name,
+                "symbol_name": symbol,
+                "asset_type": self.asset_type,
+                "request_type": "make_order",
+                "side": side,
+                "quantity": volume,
+                "price": price,
+                "order_type": order_type,
+            }
+        )
         return path, order_params, extra_data
 
-    def make_order(self, symbol, volume, price, order_type, offset="open",
-                   post_only=False, client_order_id=None, extra_data=None, **kwargs):
+    def make_order(
+        self,
+        symbol,
+        volume,
+        price,
+        order_type,
+        offset="open",
+        post_only=False,
+        client_order_id=None,
+        extra_data=None,
+        **kwargs,
+    ):
         """Place order following standard Feed interface. Returns RequestData."""
         path, body, extra_data = self._make_order(
-            symbol, volume, price, order_type, offset, post_only,
-            client_order_id, extra_data, **kwargs
+            symbol,
+            volume,
+            price,
+            order_type,
+            offset,
+            post_only,
+            client_order_id,
+            extra_data,
+            **kwargs,
         )
         return self.request(path, body=body, extra_data=extra_data, is_sign=True)
 
-    def place_order(self, symbol, side, quantity, order_type="limit", price=None,
-                    time_in_force=TIF_GTC, client_order_id=None, post_only=False, **kwargs):
+    def place_order(
+        self,
+        symbol,
+        side,
+        quantity,
+        order_type="limit",
+        price=None,
+        time_in_force=TIF_GTC,
+        client_order_id=None,
+        post_only=False,
+        **kwargs,
+    ):
         """Place order (legacy Hyperliquid-specific interface). Returns RequestData."""
         return self.make_order(
-            symbol, quantity, price, order_type, post_only=post_only,
-            client_order_id=client_order_id, side=side, time_in_force=time_in_force, **kwargs
+            symbol,
+            quantity,
+            price,
+            order_type,
+            post_only=post_only,
+            client_order_id=client_order_id,
+            side=side,
+            time_in_force=time_in_force,
+            **kwargs,
         )
 
     # ── Standard Interface: cancel_order ────────────────────────────
@@ -120,13 +158,15 @@ class HyperliquidRequestDataSpot(HyperliquidRequestData):
             "coin": coin,
             "oid": order_id,
         }
-        extra_data.update({
-            "exchange_name": self._params.exchange_name,
-            "symbol_name": symbol,
-            "asset_type": self.asset_type,
-            "request_type": "cancel_order",
-            "order_id": order_id,
-        })
+        extra_data.update(
+            {
+                "exchange_name": self._params.exchange_name,
+                "symbol_name": symbol,
+                "asset_type": self.asset_type,
+                "request_type": "cancel_order",
+                "order_id": order_id,
+            }
+        )
         return path, cancel_params, extra_data
 
     def cancel_order(self, symbol, order_id, extra_data=None, **kwargs):
@@ -143,13 +183,15 @@ class HyperliquidRequestDataSpot(HyperliquidRequestData):
         path = self._params.get_rest_path("get_order_status")
         user = kwargs.get("user", self.address or "")
         body = {"type": "orderStatus", "user": user, "oid": order_id}
-        extra_data.update({
-            "exchange_name": self._params.exchange_name,
-            "symbol_name": symbol,
-            "asset_type": self.asset_type,
-            "request_type": "query_order",
-            "order_id": order_id,
-        })
+        extra_data.update(
+            {
+                "exchange_name": self._params.exchange_name,
+                "symbol_name": symbol,
+                "asset_type": self.asset_type,
+                "request_type": "query_order",
+                "order_id": order_id,
+            }
+        )
         return path, body, extra_data
 
     def query_order(self, symbol, order_id, extra_data=None, **kwargs):
@@ -166,12 +208,14 @@ class HyperliquidRequestDataSpot(HyperliquidRequestData):
         path = self._params.get_rest_path("get_order_status")
         user = kwargs.get("user", self.address or "")
         body = {"type": "openOrders", "user": user}
-        extra_data.update({
-            "exchange_name": self._params.exchange_name,
-            "symbol_name": symbol or "",
-            "asset_type": self.asset_type,
-            "request_type": "get_open_orders",
-        })
+        extra_data.update(
+            {
+                "exchange_name": self._params.exchange_name,
+                "symbol_name": symbol or "",
+                "asset_type": self.asset_type,
+                "request_type": "get_open_orders",
+            }
+        )
         return path, body, extra_data
 
     def get_open_orders(self, symbol=None, extra_data=None, **kwargs):
@@ -188,12 +232,14 @@ class HyperliquidRequestDataSpot(HyperliquidRequestData):
         path = self._params.get_rest_path("get_spot_clearinghouse_state")
         user = kwargs.get("user", self.address or "")
         body = {"type": "spotClearinghouseState", "user": user}
-        extra_data.update({
-            "exchange_name": self._params.exchange_name,
-            "symbol_name": symbol,
-            "asset_type": self.asset_type,
-            "request_type": "get_account",
-        })
+        extra_data.update(
+            {
+                "exchange_name": self._params.exchange_name,
+                "symbol_name": symbol,
+                "asset_type": self.asset_type,
+                "request_type": "get_account",
+            }
+        )
         return path, body, extra_data
 
     def get_account(self, symbol="ALL", extra_data=None, **kwargs):
@@ -210,12 +256,14 @@ class HyperliquidRequestDataSpot(HyperliquidRequestData):
         path = self._params.get_rest_path("get_spot_clearinghouse_state")
         user = kwargs.get("user", self.address or "")
         body = {"type": "spotClearinghouseState", "user": user}
-        extra_data.update({
-            "exchange_name": self._params.exchange_name,
-            "symbol_name": symbol or "",
-            "asset_type": self.asset_type,
-            "request_type": "get_balance",
-        })
+        extra_data.update(
+            {
+                "exchange_name": self._params.exchange_name,
+                "symbol_name": symbol or "",
+                "asset_type": self.asset_type,
+                "request_type": "get_balance",
+            }
+        )
         return path, body, extra_data
 
     def get_balance(self, symbol=None, extra_data=None, **kwargs):
@@ -263,17 +311,14 @@ class HyperliquidMarketWssDataSpot(HyperliquidMarketWssData):
 
     def subscribe_ticker(self, symbol):
         """Subscribe to ticker data for symbol"""
-        subscription = {
-            "method": "subscribe",
-            "subscription": {"type": "allMids"}
-        }
+        subscription = {"method": "subscribe", "subscription": {"type": "allMids"}}
         return subscription
 
     def subscribe_orderbook(self, symbol, depth=5):
         """Subscribe to order book data for symbol"""
         subscription = {
             "method": "subscribe",
-            "subscription": {"type": "l2Book", "coin": self._params.get_symbol(symbol)}
+            "subscription": {"type": "l2Book", "coin": self._params.get_symbol(symbol)},
         }
         return subscription
 
@@ -281,7 +326,7 @@ class HyperliquidMarketWssDataSpot(HyperliquidMarketWssData):
         """Subscribe to trade data for symbol"""
         subscription = {
             "method": "subscribe",
-            "subscription": {"type": "trades", "coin": self._params.get_symbol(symbol)}
+            "subscription": {"type": "trades", "coin": self._params.get_symbol(symbol)},
         }
         return subscription
 
@@ -296,10 +341,7 @@ class HyperliquidMarketWssDataSpot(HyperliquidMarketWssData):
                     "asset_type": self.asset_type,
                     "request_type": "ticker",
                 }
-                ticker_data = {
-                    "last": float(price),
-                    "symbol": symbol
-                }
+                ticker_data = {"last": float(price), "symbol": symbol}
                 ticker_obj = HyperliquidTickerData(ticker_data, symbol, self.asset_type)
                 ticker_obj.init_data()
                 self.data_queue.put(ticker_obj)
@@ -318,7 +360,7 @@ class HyperliquidMarketWssDataSpot(HyperliquidMarketWssData):
                     "side": "ask",
                     "price": float(level["px"]),
                     "quantity": float(level["sz"]),
-                    "count": int(level["n"])
+                    "count": int(level["n"]),
                 }
                 # Create orderbook RequestData object
                 extra_data = {
@@ -337,7 +379,7 @@ class HyperliquidMarketWssDataSpot(HyperliquidMarketWssData):
                     "side": "bid",
                     "price": float(level["px"]),
                     "quantity": float(level["sz"]),
-                    "count": int(level["n"])
+                    "count": int(level["n"]),
                 }
                 # Create orderbook RequestData object
                 extra_data = {
@@ -359,7 +401,7 @@ class HyperliquidMarketWssDataSpot(HyperliquidMarketWssData):
                     "side": trade.get("side"),
                     "price": float(trade["px"]),
                     "quantity": float(trade["sz"]),
-                    "timestamp": trade.get("time")
+                    "timestamp": trade.get("time"),
                 }
                 extra_data = {
                     "exchange_name": self._params.exchange_name,
@@ -367,7 +409,9 @@ class HyperliquidMarketWssDataSpot(HyperliquidMarketWssData):
                     "asset_type": self.asset_type,
                     "request_type": "trade",
                 }
-                trade_obj = HyperliquidSpotWssTradeData(trade_data, trade.get("coin"), self.asset_type)
+                trade_obj = HyperliquidSpotWssTradeData(
+                    trade_data, trade.get("coin"), self.asset_type
+                )
                 trade_obj.init_data()
                 self.data_queue.put(trade_obj)
 
@@ -391,7 +435,7 @@ class HyperliquidAccountWssDataSpot(HyperliquidAccountWssData):
 
         subscription = {
             "method": "subscribe",
-            "subscription": {"type": "orderUpdates", "user": self.user_address}
+            "subscription": {"type": "orderUpdates", "user": self.user_address},
         }
         return subscription
 

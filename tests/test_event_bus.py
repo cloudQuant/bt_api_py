@@ -1,8 +1,6 @@
 """Unit tests for EventBus publish/subscribe mechanism."""
 
-import logging
 
-import pytest
 
 from bt_api_py.event_bus import EventBus
 
@@ -53,6 +51,7 @@ class TestEventBus:
 
     def test_handler_error_does_not_stop_others(self):
         """A failing handler should not prevent other handlers from executing."""
+
         def bad_handler(data):
             raise ValueError("boom")
 

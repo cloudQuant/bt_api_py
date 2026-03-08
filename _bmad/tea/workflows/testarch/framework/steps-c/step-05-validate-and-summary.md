@@ -1,10 +1,8 @@
-- --
-
+---
 name: 'step-05-validate-and-summary'
 description: 'Validate against checklist and summarize'
 outputFile: '{test_artifacts}/framework-setup-progress.md'
-
-- --
+---
 
 # Step 5: Validate & Summarize
 
@@ -17,7 +15,7 @@ Validate framework setup and provide a completion summary.
 - 📖 Read the entire step file before acting
 - ✅ Speak in `{communication_language}`
 
-- --
+---
 
 ## EXECUTION PROTOCOLS:
 
@@ -34,7 +32,7 @@ Validate framework setup and provide a completion summary.
 
 ## MANDATORY SEQUENCE
 
-- *CRITICAL:** Follow this sequence exactly. Do not skip, reorder, or improvise.
+**CRITICAL:** Follow this sequence exactly. Do not skip, reorder, or improvise.
 
 ## 1. Validation
 
@@ -48,7 +46,7 @@ Validate against `checklist.md`:
 
 Fix any gaps before completion.
 
-- --
+---
 
 ## 2. Completion Summary
 
@@ -59,24 +57,20 @@ Report:
 - Next steps (install deps, run tests)
 - Knowledge fragments applied
 
-- --
+---
 
 ### 3. Save Progress
 
-- *Save this step's accumulated work to `{outputFile}`.**
+**Save this step's accumulated work to `{outputFile}`.**
 
-- **If `{outputFile}` does not exist**(first save), create it with YAML frontmatter:
+- **If `{outputFile}` does not exist** (first save), create it with YAML frontmatter:
 
   ```yaml
-
-  - --
-
+  ---
   stepsCompleted: ['step-05-validate-and-summary']
   lastStep: 'step-05-validate-and-summary'
   lastSaved: '{date}'
-
-  - --
-
+  ---
   ```
 
   Then write this step's output below the frontmatter.
@@ -96,4 +90,4 @@ Report:
 ### ❌ SYSTEM FAILURE:
 
 - Skipped sequence steps or missing outputs
-  - *Master Rule:** Skipping steps is FORBIDDEN.
+  **Master Rule:** Skipping steps is FORBIDDEN.

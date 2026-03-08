@@ -9,29 +9,33 @@ from unittest.mock import patch
 
 import pytest
 
+import bt_api_py.exchange_registers.register_korbit  # noqa: F401
 from bt_api_py.containers.exchanges.korbit_exchange_data import KorbitExchangeDataSpot
 from bt_api_py.containers.requestdatas.request_data import RequestData
 from bt_api_py.feeds.live_korbit.request_base import KorbitRequestData
 from bt_api_py.feeds.live_korbit.spot import (
-    KorbitRequestDataSpot,
-    KorbitMarketWssDataSpot,
     KorbitAccountWssDataSpot,
+    KorbitMarketWssDataSpot,
+    KorbitRequestDataSpot,
 )
 from bt_api_py.registry import ExchangeRegistry
-
-import bt_api_py.exchange_registers.register_korbit  # noqa: F401
 
 # ── sample response fixtures ─────────────────────────────────
 
 SAMPLE_TICK = {
-    "last": "95000000", "bid": "94990000", "ask": "95010000",
-    "low": "93500000", "high": "95800000", "volume": "1234.56",
+    "last": "95000000",
+    "bid": "94990000",
+    "ask": "95010000",
+    "low": "93500000",
+    "high": "95800000",
+    "volume": "1234.56",
     "timestamp": 1678901234000,
 }
 
 SAMPLE_DEPTH = {
     "timestamp": 1678901234000,
-    "bids": [["94990000", "0.5", "1"]], "asks": [["95010000", "0.3", "1"]],
+    "bids": [["94990000", "0.5", "1"]],
+    "asks": [["95010000", "0.3", "1"]],
 }
 
 SAMPLE_CONSTANTS = {
@@ -44,8 +48,14 @@ SAMPLE_DEALS = [
 ]
 
 SAMPLE_KLINE = [
-    {"time": 1678901234000, "open": 94000000, "high": 95000000,
-     "low": 93500000, "close": 94800000, "volume": 12.3},
+    {
+        "time": 1678901234000,
+        "open": 94000000,
+        "high": 95000000,
+        "low": 93500000,
+        "close": 94800000,
+        "volume": 12.3,
+    },
 ]
 
 SAMPLE_ORDER = {"orderId": "12345", "status": "success"}
@@ -64,6 +74,7 @@ SAMPLE_ERROR = {"errorCode": 1, "errorMessage": "Invalid request"}
 
 # ── helpers ───────────────────────────────────────────────────
 
+
 @pytest.fixture
 def feed():
     return KorbitRequestDataSpot(queue.Queue())
@@ -77,6 +88,7 @@ def exdata():
 # ═══════════════════════════════════════════════════════════════
 # 1) ExchangeData
 # ═══════════════════════════════════════════════════════════════
+
 
 class TestExchangeData:
     def test_exchange_name(self, exdata):
@@ -117,15 +129,26 @@ class TestExchangeData:
             exdata.get_rest_path("nonexistent")
 
     def test_rest_paths_keys(self, exdata):
-        for key in ("get_tick", "get_depth", "get_deals", "get_exchange_info",
-                     "get_kline", "make_order", "make_order_sell", "cancel_order",
-                     "get_open_orders", "get_account", "get_balance"):
+        for key in (
+            "get_tick",
+            "get_depth",
+            "get_deals",
+            "get_exchange_info",
+            "get_kline",
+            "make_order",
+            "make_order_sell",
+            "cancel_order",
+            "get_open_orders",
+            "get_account",
+            "get_balance",
+        ):
             assert key in exdata.rest_paths
 
 
 # ═══════════════════════════════════════════════════════════════
 # 2) Parameter generation (_get_xxx)
 # ═══════════════════════════════════════════════════════════════
+
 
 class TestParamGeneration:
     def test_get_tick_params(self, feed):
@@ -200,6 +223,7 @@ class TestParamGeneration:
 # 3) Normalization functions
 # ═══════════════════════════════════════════════════════════════
 
+
 class TestNormalization:
     def test_tick_ok(self):
         result, ok = KorbitRequestData._get_tick_normalize_function(SAMPLE_TICK, {})
@@ -270,6 +294,7 @@ class TestNormalization:
 # 4) Mocked sync calls
 # ═══════════════════════════════════════════════════════════════
 
+
 class TestSyncCalls:
     @patch.object(KorbitRequestData, "http_request", return_value=SAMPLE_TICK)
     def test_get_tick(self, mock_http, feed):
@@ -327,6 +352,7 @@ class TestSyncCalls:
 # 5) Auth
 # ═══════════════════════════════════════════════════════════════
 
+
 class TestAuth:
     def test_headers_no_key(self, feed):
         h = feed._get_headers()
@@ -342,6 +368,7 @@ class TestAuth:
 # ═══════════════════════════════════════════════════════════════
 # 6) Registry
 # ═══════════════════════════════════════════════════════════════
+
 
 class TestRegistry:
     def test_feed_registered(self):
@@ -367,18 +394,30 @@ class TestRegistry:
 # ═══════════════════════════════════════════════════════════════
 
 _EXPECTED_METHODS = [
-    "get_tick", "async_get_tick",
-    "get_ticker", "async_get_ticker",
-    "get_depth", "async_get_depth",
-    "get_exchange_info", "async_get_exchange_info",
-    "get_deals", "async_get_deals",
-    "get_recent_trades", "async_get_recent_trades",
-    "get_kline", "async_get_kline",
-    "make_order", "async_make_order",
-    "cancel_order", "async_cancel_order",
-    "get_open_orders", "async_get_open_orders",
-    "get_balance", "async_get_balance",
-    "get_account", "async_get_account",
+    "get_tick",
+    "async_get_tick",
+    "get_ticker",
+    "async_get_ticker",
+    "get_depth",
+    "async_get_depth",
+    "get_exchange_info",
+    "async_get_exchange_info",
+    "get_deals",
+    "async_get_deals",
+    "get_recent_trades",
+    "async_get_recent_trades",
+    "get_kline",
+    "async_get_kline",
+    "make_order",
+    "async_make_order",
+    "cancel_order",
+    "async_cancel_order",
+    "get_open_orders",
+    "async_get_open_orders",
+    "get_balance",
+    "async_get_balance",
+    "get_account",
+    "async_get_account",
 ]
 
 
@@ -392,6 +431,7 @@ class TestMethodExistence:
 # ═══════════════════════════════════════════════════════════════
 # 8) Feed init
 # ═══════════════════════════════════════════════════════════════
+
 
 class TestFeedInit:
     def test_default_exchange_name(self, feed):
@@ -413,6 +453,7 @@ class TestFeedInit:
 # 9) WebSocket stubs
 # ═══════════════════════════════════════════════════════════════
 
+
 class TestWebSocketStubs:
     def test_market_wss_start_stop(self):
         wss = KorbitMarketWssDataSpot(queue.Queue(), topics=[{"topic": "ticker"}])
@@ -432,6 +473,7 @@ class TestWebSocketStubs:
 # ═══════════════════════════════════════════════════════════════
 # 10) Integration (skipped)
 # ═══════════════════════════════════════════════════════════════
+
 
 class TestIntegration:
     @pytest.mark.skip(reason="Requires network access")

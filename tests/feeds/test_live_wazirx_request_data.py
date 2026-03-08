@@ -10,23 +10,20 @@ Run with coverage:
 """
 
 import queue
-import time
-import pytest
-from unittest.mock import Mock, MagicMock
 
+import pytest
+
+# Import registration to auto-register WazirX
+import bt_api_py.exchange_registers.register_wazirx  # noqa: F401
 from bt_api_py.containers.exchanges.wazirx_exchange_data import (
     WazirxExchangeData,
     WazirxExchangeDataSpot,
 )
-from bt_api_py.containers.tickers.wazirx_ticker import WazirxRequestTickerData
 from bt_api_py.feeds.live_wazirx.spot import WazirxRequestDataSpot
 from bt_api_py.registry import ExchangeRegistry
 
-# Import registration to auto-register WazirX
-import bt_api_py.exchange_registers.register_wazirx  # noqa: F401
-
-
 # ==================== Fixtures ====================
+
 
 @pytest.fixture
 def data_queue():
@@ -43,6 +40,7 @@ def wazirx_feed(data_queue):
 
 # ==================== ServerTime Tests ====================
 
+
 class TestWazirXServerTime:
     """Test server time functionality."""
 
@@ -53,6 +51,7 @@ class TestWazirXServerTime:
 
 
 # ==================== Ticker Tests ====================
+
 
 class TestWazirXTickerData:
     """Test ticker data functionality."""
@@ -72,6 +71,7 @@ class TestWazirXTickerData:
             pass
             # WazirX ticker response structure
         from bt_api_py.containers.requestdatas.request_data import RequestData
+
         assert isinstance(data, (dict, list, RequestData))
 
     def test_wazirx_usdt_pair_ticker(self, wazirx_feed):
@@ -81,6 +81,7 @@ class TestWazirXTickerData:
 
 
 # ==================== Kline Tests ====================
+
 
 class TestWazirXKlineData:
     """Test kline/candlestick data functionality."""
@@ -112,6 +113,7 @@ class TestWazirXKlineData:
 
 # ==================== OrderBook Tests ====================
 
+
 class TestWazirXOrderBook:
     """Test order book depth functionality."""
 
@@ -121,6 +123,7 @@ class TestWazirXOrderBook:
         assert data is not None
 
         from bt_api_py.containers.requestdatas.request_data import RequestData
+
         assert isinstance(data, (dict, list, RequestData))
 
     def test_wazirx_orderbook_bids_asks(self, wazirx_feed):
@@ -144,6 +147,7 @@ class TestWazirXOrderBook:
 
 # ==================== Market Info Tests ====================
 
+
 class TestWazirXMarketInfo:
     """Test market information functionality."""
 
@@ -157,6 +161,7 @@ class TestWazirXMarketInfo:
 
 
 # ==================== Exchange Data Tests ====================
+
 
 class TestWazirXExchangeData:
     """Test WazirX exchange data configuration."""
@@ -191,6 +196,7 @@ class TestWazirXExchangeData:
 
 # ==================== Registry Tests ====================
 
+
 class TestWazirXRegistry:
     """Test WazirX registration."""
 
@@ -206,6 +212,7 @@ class TestWazirXRegistry:
 
 
 # ==================== Integration Tests ====================
+
 
 class TestWazirXIntegration:
     """Integration tests for WazirX."""

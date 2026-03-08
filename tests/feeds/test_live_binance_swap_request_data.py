@@ -1,33 +1,33 @@
 import queue
-import time
 import random
-import pytest
+import time
 
-from bt_api_py.containers import TradeData
-from bt_api_py.functions.utils import read_account_config
-from bt_api_py.feeds.live_binance_feed import BinanceRequestDataSwap
-from bt_api_py.containers.exchanges.binance_exchange_data import BinanceExchangeDataSwap
-from bt_api_py.containers.orderbooks.binance_orderbook import BinanceRequestOrderBookData
-from bt_api_py.containers.fundingrates.binance_funding_rate import BinanceRequestFundingRateData, \
-    BinanceRequestHistoryFundingRateData
-from bt_api_py.containers.balances.binance_balance import BinanceSwapRequestBalanceData
 from bt_api_py.containers.accounts.binance_account import BinanceSwapRequestAccountData
-from bt_api_py.containers.requestdatas.request_data import RequestData
-from bt_api_py.containers.positions.binance_position import BinanceRequestPositionData
-from bt_api_py.containers.orders.binance_order import BinanceRequestOrderData
-from bt_api_py.containers.markprices.binance_mark_price import BinanceRequestMarkPriceData
+from bt_api_py.containers.balances.binance_balance import BinanceSwapRequestBalanceData
 from bt_api_py.containers.bars.binance_bar import BinanceRequestBarData
+from bt_api_py.containers.exchanges.binance_exchange_data import BinanceExchangeDataSwap
+from bt_api_py.containers.fundingrates.binance_funding_rate import (
+    BinanceRequestFundingRateData,
+    BinanceRequestHistoryFundingRateData,
+)
+from bt_api_py.containers.markprices.binance_mark_price import BinanceRequestMarkPriceData
+from bt_api_py.containers.orderbooks.binance_orderbook import BinanceRequestOrderBookData
+from bt_api_py.containers.orders.binance_order import BinanceRequestOrderData
+from bt_api_py.containers.positions.binance_position import BinanceRequestPositionData
+from bt_api_py.containers.requestdatas.request_data import RequestData
 from bt_api_py.containers.tickers.binance_ticker import BinanceRequestTickerData
+from bt_api_py.feeds.live_binance_feed import BinanceRequestDataSwap
+from bt_api_py.functions.utils import read_account_config
 
 
 def generate_kwargs(exchange=BinanceExchangeDataSwap):
     data = read_account_config()
     kwargs = {
-        "public_key": data['binance']['public_key'],
-        "private_key": data['binance']['private_key'],
+        "public_key": data["binance"]["public_key"],
+        "private_key": data["binance"]["private_key"],
         "topics": {"tick": {"symbol": "BTC-USDT"}},
-        "proxies": data.get('proxies'),
-        "async_proxy": data.get('async_proxy'),
+        "proxies": data.get("proxies"),
+        "async_proxy": data.get("async_proxy"),
     }
     return kwargs
 
@@ -51,7 +51,7 @@ def test_binance_req_server_time():
     assert isinstance(data, RequestData)
     current_timestamp = time.time()
     current_timestamp_utc = time.mktime(time.gmtime())
-    server_time = data.get_data()['serverTime']
+    server_time = data.get_data()["serverTime"]
     # print(f"Server time: {server_time}, current timestamp: {current_timestamp}, "
     #       f"current timestamp_utc: {current_timestamp_utc}")
     assert abs(server_time / 1000 - current_timestamp) < 3, "服务器时间和本地时间超过3s"
@@ -118,8 +118,9 @@ def test_binance_req_kline_data():
 def test_binance_async_kline_data():
     data_queue = queue.Queue()
     live_binance_swap_feed = init_async_feed(data_queue)
-    live_binance_swap_feed.async_get_kline("BTC-USDT", period="1m",
-                                           extra_data={"test_async_kline_data": True})
+    live_binance_swap_feed.async_get_kline(
+        "BTC-USDT", period="1m", extra_data={"test_async_kline_data": True}
+    )
 
     time.sleep(3)
     try:
@@ -203,9 +204,12 @@ def test_binance_req_funding_rate_data():
     assert isinstance(data[0], BinanceRequestFundingRateData)
     assert_funding_rate_value(data[0].init_data())
 
+
 def test_binance_req_history_funding_rate_data():
     live_binance_swap_feed = init_req_feed()
-    data_list = live_binance_swap_feed.get_history_funding_rate("BTC-USDT", "2024-09-30 00:00:00.000", "2024-12-31 00:00:00.000", 1000).get_data()
+    data_list = live_binance_swap_feed.get_history_funding_rate(
+        "BTC-USDT", "2024-09-30 00:00:00.000", "2024-12-31 00:00:00.000", 1000
+    ).get_data()
     # print(data_list)
     assert isinstance(data_list, list)
     print(type(data_list[0]))
@@ -367,19 +371,27 @@ def binance_make_order_and_cancel_order():
     while lots * bid_price < 10:
         lots += 1
     # https://fapi.binance.com/fapi/v1/order?recvWindow=3000&timestamp=1708936750172&symbol=OPUSDT&side=BUY&quantity=2&price=3.5&type=LIMIT&timeInForce=GTC&positionSide=LONG&signature=72803587914b786ba57b9dccbf5b83c5dfc5c10da9d138c2dfc0bd6f105f7bcf
-    buy_data = live_binance_swap_feed.make_order("OP-USDT", lots, bid_price, "buy-limit",
-                                                 client_order_id=buy_client_order_id,
-                                                 **{"position_side": "LONG"})
+    buy_data = live_binance_swap_feed.make_order(
+        "OP-USDT",
+        lots,
+        bid_price,
+        "buy-limit",
+        client_order_id=buy_client_order_id,
+        **{"position_side": "LONG"},
+    )
     # print("make_order info", buy_data.get_data())
     # "https://fapi.binance.com/fapi/v1/order?recvWindow=3000&timestamp=1708936667118&symbol=OPUSDT&orderId=9106714922&signature=69492a311ad22b37710e029a4e317ac5a7f43f7beadfdfba2caa20baf19a9a6b"
     # 查询订单信息
-    query_data = live_binance_swap_feed.query_order(symbol="OP-USDT", client_order_id=buy_client_order_id)
+    query_data = live_binance_swap_feed.query_order(
+        symbol="OP-USDT", client_order_id=buy_client_order_id
+    )
     # print("query_order", query_data.get_data())
     # get_open_orders
     open_order_data = live_binance_swap_feed.get_open_orders(symbol="OP-USDT")
     # print("get_open_orders: ", open_order_data.get_data())
-    cancel_order_data = live_binance_swap_feed.cancel_order("OP-USDT", order_id=None,
-                                                            client_order_id=buy_client_order_id)
+    cancel_order_data = live_binance_swap_feed.cancel_order(
+        "OP-USDT", order_id=None, client_order_id=buy_client_order_id
+    )
     # print("cancel_order info", cancel_order_data.get_data())
 
 
@@ -389,18 +401,28 @@ def test_binance_req_order_functions():
     price_data = price_data.get_data()[0].init_data()
     bid_price = round(price_data.get_bid_price() * 0.9, 2)
     ask_price = round(price_data.get_ask_price() * 1.1, 2)
-    random_number = random.randint(10 ** 17, 10 ** 18 - 1)
+    random_number = random.randint(10**17, 10**18 - 1)
     buy_client_order_id = str(random_number)
     sell_client_order_id = str(random_number + 1)
     lots = 0
     while lots * bid_price < 10:
         lots += 1
-    buy_data = live_binance_swap_feed.make_order("OP-USDT", lots, bid_price, "buy-limit",
-                                                 client_order_id=buy_client_order_id,
-                                                 **{"position_side": "LONG"})
-    sell_data = live_binance_swap_feed.make_order("OP-USDT", lots, ask_price, "sell-limit",
-                                                  client_order_id=sell_client_order_id,
-                                                  **{"position_side": "SHORT"})
+    buy_data = live_binance_swap_feed.make_order(
+        "OP-USDT",
+        lots,
+        bid_price,
+        "buy-limit",
+        client_order_id=buy_client_order_id,
+        **{"position_side": "LONG"},
+    )
+    sell_data = live_binance_swap_feed.make_order(
+        "OP-USDT",
+        lots,
+        ask_price,
+        "sell-limit",
+        client_order_id=sell_client_order_id,
+        **{"position_side": "SHORT"},
+    )
     # 测试买单和卖单
     buy_info = buy_data.get_data()[0]
     assert buy_data.get_status()
@@ -452,7 +474,7 @@ def test_binance_async_order_functions():
     price_data = live_binance_swap_feed.get_tick("OP-USDT").get_data()[0].init_data()
     bid_price = round(price_data.get_bid_price() * 0.9, 2)
     # ask_price = round(price_data.get_ask_price() * 1.1, 2)
-    random_number = random.randint(10 ** 17, 10 ** 18 - 1)
+    random_number = random.randint(10**17, 10**18 - 1)
     buy_client_order_id = str(random_number)
     # sell_client_order_id = str(random_number + 1)
     make_order_func = False
@@ -462,8 +484,14 @@ def test_binance_async_order_functions():
     lots = 0
     while lots * bid_price < 10:
         lots += 1
-    live_binance_swap_feed.async_make_order("OP-USDT", lots, bid_price, "buy-limit", client_order_id=buy_client_order_id,
-                                            **{"position_side": "LONG"})
+    live_binance_swap_feed.async_make_order(
+        "OP-USDT",
+        lots,
+        bid_price,
+        "buy-limit",
+        client_order_id=buy_client_order_id,
+        **{"position_side": "LONG"},
+    )
     time.sleep(5)
     live_binance_swap_feed.async_query_order("OP-USDT", **{"client_order_id": buy_client_order_id})
     live_binance_swap_feed.async_get_open_orders()
@@ -481,18 +509,22 @@ def test_binance_async_order_functions():
         if event_type == "RequestEvent" and request_type == "make_order":
             assert target_data.get_status()
             print("MakeOrderRequestEvent", event_data)
-            assert target_data.get_data()[0].init_data().get_client_order_id() == buy_client_order_id
+            assert (
+                target_data.get_data()[0].init_data().get_client_order_id() == buy_client_order_id
+            )
             make_order_func = True
         if event_type == "RequestEvent" and request_type == "query_order":
             assert target_data.get_status()
             print("QueryOrderRequestEvent", event_data)
-            assert target_data.get_data()[0].init_data().get_client_order_id() == buy_client_order_id
+            assert (
+                target_data.get_data()[0].init_data().get_client_order_id() == buy_client_order_id
+            )
             query_order_func = True
-        if event_type == "RequestEvent" and request_type == 'cancel_order':
+        if event_type == "RequestEvent" and request_type == "cancel_order":
             assert target_data.get_status()
             print("CancelOrderRequestEvent", event_data)
             cancel_order_func = True
-        if event_type == "RequestEvent" and request_type == 'get_open_orders':
+        if event_type == "RequestEvent" and request_type == "get_open_orders":
             assert target_data.get_status()
             print("GetOpenOrdersRequestEvent", event_data)
             assert target_data.get_data() is not None
@@ -578,15 +610,16 @@ def test_binance_async_get_position():
 def test_cancel_all_orders():
     print("Cancelling all orders")
     live_feed = init_req_feed()
-    data = live_feed.get_open_orders('OP-USDT')
+    data = live_feed.get_open_orders("OP-USDT")
     order_data_list = data.get_data()
-    print('order_data_list', order_data_list)
+    print("order_data_list", order_data_list)
     for d in order_data_list:
-        info = live_feed.cancel_order('OP-USDT', d.init_data().get_order_id())
+        info = live_feed.cancel_order("OP-USDT", d.init_data().get_order_id())
         print(info.get_data())
 
 
 # ===== Tests for new market data endpoints =====
+
 
 def test_binance_req_agg_trades():
     live_binance_swap_feed = init_req_feed()
@@ -596,10 +629,10 @@ def test_binance_req_agg_trades():
     assert isinstance(result, list)
     assert len(result) == 5
     first = result[0]
-    assert 'a' in first  # agg trade id
-    assert 'p' in first  # price
-    assert 'q' in first  # quantity
-    assert 'T' in first  # timestamp
+    assert "a" in first  # agg trade id
+    assert "p" in first  # price
+    assert "q" in first  # quantity
+    assert "T" in first  # timestamp
 
 
 def test_binance_req_open_interest():
@@ -608,9 +641,9 @@ def test_binance_req_open_interest():
     assert isinstance(data, RequestData)
     result = data.get_data()
     assert isinstance(result, dict)
-    assert 'openInterest' in result
-    assert 'symbol' in result
-    assert float(result['openInterest']) > 0
+    assert "openInterest" in result
+    assert "symbol" in result
+    assert float(result["openInterest"]) > 0
 
 
 def test_binance_req_continuous_kline():
@@ -655,8 +688,8 @@ def test_binance_req_funding_info():
     assert isinstance(result, list)
     assert len(result) > 0
     first = result[0]
-    assert 'symbol' in first
-    assert 'fundingIntervalHours' in first
+    assert "symbol" in first
+    assert "fundingIntervalHours" in first
 
 
 def test_binance_req_long_short_ratio():
@@ -667,10 +700,10 @@ def test_binance_req_long_short_ratio():
     assert isinstance(result, list)
     assert len(result) > 0
     first = result[0]
-    assert 'symbol' in first
-    assert 'longShortRatio' in first
-    assert 'longAccount' in first
-    assert 'shortAccount' in first
+    assert "symbol" in first
+    assert "longShortRatio" in first
+    assert "longAccount" in first
+    assert "shortAccount" in first
 
 
 def test_binance_req_taker_buy_sell_volume():
@@ -681,12 +714,13 @@ def test_binance_req_taker_buy_sell_volume():
     assert isinstance(result, list)
     assert len(result) > 0
     first = result[0]
-    assert 'buySellRatio' in first
-    assert 'buyVol' in first
-    assert 'sellVol' in first
+    assert "buySellRatio" in first
+    assert "buyVol" in first
+    assert "sellVol" in first
 
 
 # ===== Tests for new trade endpoints =====
+
 
 def test_binance_req_get_all_orders():
     live_binance_swap_feed = init_req_feed()
@@ -698,6 +732,7 @@ def test_binance_req_get_all_orders():
 
 # ===== Tests for new account endpoints =====
 
+
 def test_binance_req_get_leverage_bracket():
     live_binance_swap_feed = init_req_feed()
     data = live_binance_swap_feed.get_leverage_bracket("BTC-USDT")
@@ -706,9 +741,9 @@ def test_binance_req_get_leverage_bracket():
     assert isinstance(result, list)
     assert len(result) > 0
     first = result[0]
-    assert 'symbol' in first
-    assert 'brackets' in first
-    assert len(first['brackets']) > 0
+    assert "symbol" in first
+    assert "brackets" in first
+    assert len(first["brackets"]) > 0
 
 
 def test_binance_req_get_position_mode():
@@ -717,7 +752,7 @@ def test_binance_req_get_position_mode():
     assert isinstance(data, RequestData)
     result = data.get_data()
     assert isinstance(result, dict)
-    assert 'dualSidePosition' in result
+    assert "dualSidePosition" in result
 
 
 def test_binance_req_get_income():
@@ -734,12 +769,13 @@ def test_binance_req_get_fee():
     assert isinstance(data, RequestData)
     result = data.get_data()
     assert isinstance(result, dict)
-    assert 'symbol' in result
-    assert 'makerCommissionRate' in result
-    assert 'takerCommissionRate' in result
+    assert "symbol" in result
+    assert "makerCommissionRate" in result
+    assert "takerCommissionRate" in result
 
 
 # ===== Async tests for new market data endpoints =====
+
 
 def test_binance_async_agg_trades():
     data_queue = queue.Queue()
@@ -769,8 +805,8 @@ def test_binance_async_open_interest():
     assert isinstance(request_data, RequestData)
     result = request_data.get_data()
     assert isinstance(result, dict)
-    assert 'openInterest' in result
-    assert float(result['openInterest']) > 0
+    assert "openInterest" in result
+    assert float(result["openInterest"]) > 0
 
 
 def test_binance_async_continuous_kline():
@@ -870,6 +906,7 @@ def test_binance_async_taker_buy_sell_volume():
 
 # ===== Async tests for new account endpoints =====
 
+
 def test_binance_async_get_leverage_bracket():
     data_queue = queue.Queue()
     live_binance_swap_feed = init_async_feed(data_queue)
@@ -899,7 +936,7 @@ def test_binance_async_get_position_mode():
     assert isinstance(request_data, RequestData)
     result = request_data.get_data()
     assert isinstance(result, dict)
-    assert 'dualSidePosition' in result
+    assert "dualSidePosition" in result
 
 
 def test_binance_async_get_income():
@@ -929,31 +966,37 @@ def test_binance_async_get_fee():
     assert isinstance(request_data, RequestData)
     result = request_data.get_data()
     assert isinstance(result, dict)
-    assert 'makerCommissionRate' in result
+    assert "makerCommissionRate" in result
 
 
 # ===== Trade mutation tests (modify_order, cancel_orders, change_leverage, change_margin_type) =====
+
 
 def test_binance_req_modify_order_flow():
     live_binance_swap_feed = init_req_feed()
     price_data = live_binance_swap_feed.get_tick("OP-USDT").get_data()[0].init_data()
     bid_price = round(price_data.get_bid_price() * 0.9, 2)
-    random_number = random.randint(10 ** 17, 10 ** 18 - 1)
+    random_number = random.randint(10**17, 10**18 - 1)
     client_order_id = str(random_number)
     lots = 0
     while lots * bid_price < 10:
         lots += 1
-    buy_data = live_binance_swap_feed.make_order("OP-USDT", lots, bid_price, "buy-limit",
-                                                  client_order_id=client_order_id,
-                                                  **{"position_side": "LONG"})
+    buy_data = live_binance_swap_feed.make_order(
+        "OP-USDT",
+        lots,
+        bid_price,
+        "buy-limit",
+        client_order_id=client_order_id,
+        **{"position_side": "LONG"},
+    )
     assert buy_data.get_status()
     order_id = buy_data.get_data()[0].init_data().get_order_id()
     assert order_id is not None
 
     new_price = round(bid_price * 0.95, 2)
     modify_result = live_binance_swap_feed.modify_order(
-        "OP-USDT", order_id=int(order_id), side="BUY",
-        quantity=lots, price=new_price)
+        "OP-USDT", order_id=int(order_id), side="BUY", quantity=lots, price=new_price
+    )
     assert isinstance(modify_result, RequestData)
     print("modify_order result:", modify_result.get_data())
 
@@ -965,16 +1008,21 @@ def test_binance_req_cancel_orders_batch():
     live_binance_swap_feed = init_req_feed()
     price_data = live_binance_swap_feed.get_tick("OP-USDT").get_data()[0].init_data()
     bid_price = round(price_data.get_bid_price() * 0.9, 2)
-    random_number = random.randint(10 ** 17, 10 ** 18 - 1)
+    random_number = random.randint(10**17, 10**18 - 1)
     lots = 0
     while lots * bid_price < 10:
         lots += 1
     order_ids = []
     for i in range(2):
         cid = str(random_number + i)
-        result = live_binance_swap_feed.make_order("OP-USDT", lots, bid_price, "buy-limit",
-                                                    client_order_id=cid,
-                                                    **{"position_side": "LONG"})
+        result = live_binance_swap_feed.make_order(
+            "OP-USDT",
+            lots,
+            bid_price,
+            "buy-limit",
+            client_order_id=cid,
+            **{"position_side": "LONG"},
+        )
         assert result.get_status()
         oid = result.get_data()[0].init_data().get_order_id()
         order_ids.append(int(oid))
@@ -988,13 +1036,18 @@ def test_binance_req_cancel_all_orders_new():
     live_binance_swap_feed = init_req_feed()
     price_data = live_binance_swap_feed.get_tick("OP-USDT").get_data()[0].init_data()
     bid_price = round(price_data.get_bid_price() * 0.9, 2)
-    random_number = random.randint(10 ** 17, 10 ** 18 - 1)
+    random_number = random.randint(10**17, 10**18 - 1)
     lots = 0
     while lots * bid_price < 10:
         lots += 1
-    live_binance_swap_feed.make_order("OP-USDT", lots, bid_price, "buy-limit",
-                                      client_order_id=str(random_number),
-                                      **{"position_side": "LONG"})
+    live_binance_swap_feed.make_order(
+        "OP-USDT",
+        lots,
+        bid_price,
+        "buy-limit",
+        client_order_id=str(random_number),
+        **{"position_side": "LONG"},
+    )
     cancel_data = live_binance_swap_feed.cancel_all_orders("OP-USDT")
     assert isinstance(cancel_data, RequestData)
     print("cancel_all_orders result:", cancel_data.get_data())
@@ -1006,10 +1059,10 @@ def test_binance_req_change_leverage():
     assert isinstance(data, RequestData)
     result = data.get_data()
     assert isinstance(result, dict)
-    assert 'leverage' in result
-    assert result['leverage'] == 20
+    assert "leverage" in result
+    assert result["leverage"] == 20
     data2 = live_binance_swap_feed.change_leverage("BTC-USDT", leverage=10)
-    assert data2.get_data()['leverage'] == 10
+    assert data2.get_data()["leverage"] == 10
 
 
 def test_binance_req_change_margin_type():
@@ -1025,32 +1078,33 @@ def test_binance_req_change_margin_type():
 
 # ===== Additional coverage: agg_trades with time range, open_interest_hist, price_ticker =====
 
+
 def test_binance_req_agg_trades_with_time():
     live_binance_swap_feed = init_req_feed()
     server_time_data = live_binance_swap_feed.get_server_time().get_data()
-    end_time = server_time_data['serverTime']
+    end_time = server_time_data["serverTime"]
     start_time = end_time - 60000  # last 1 minute
-    data = live_binance_swap_feed.get_agg_trades("BTC-USDT", start_time=start_time,
-                                                  end_time=end_time, count=10)
+    data = live_binance_swap_feed.get_agg_trades(
+        "BTC-USDT", start_time=start_time, end_time=end_time, count=10
+    )
     assert isinstance(data, RequestData)
     result = data.get_data()
     assert isinstance(result, list)
     if len(result) > 0:
-        assert 'a' in result[0]
-        assert 'p' in result[0]
+        assert "a" in result[0]
+        assert "p" in result[0]
 
 
 def test_binance_req_long_short_ratio_with_time():
     live_binance_swap_feed = init_req_feed()
-    data = live_binance_swap_feed.get_long_short_ratio(
-        "BTC-USDT", period="5m", count=10)
+    data = live_binance_swap_feed.get_long_short_ratio("BTC-USDT", period="5m", count=10)
     assert isinstance(data, RequestData)
     result = data.get_data()
     assert isinstance(result, list)
     assert len(result) > 0
     for item in result:
-        assert 'longShortRatio' in item
-        assert float(item['longShortRatio']) > 0
+        assert "longShortRatio" in item
+        assert float(item["longShortRatio"]) > 0
 
 
 def test_binance_req_income_with_type():
@@ -1073,10 +1127,11 @@ def test_binance_req_leverage_bracket_all():
 def test_binance_req_get_all_orders_with_time():
     live_binance_swap_feed = init_req_feed()
     server_time_data = live_binance_swap_feed.get_server_time().get_data()
-    end_time = server_time_data['serverTime']
+    end_time = server_time_data["serverTime"]
     start_time = end_time - 86400000  # last 24 hours
-    data = live_binance_swap_feed.get_all_orders("BTC-USDT", start_time=start_time,
-                                                  end_time=end_time, count=10)
+    data = live_binance_swap_feed.get_all_orders(
+        "BTC-USDT", start_time=start_time, end_time=end_time, count=10
+    )
     assert isinstance(data, RequestData)
     result = data.get_data()
     assert isinstance(result, list)
@@ -1084,11 +1139,12 @@ def test_binance_req_get_all_orders_with_time():
 
 # ===== Tests for new futures advanced data endpoints =====
 
+
 def test_binance_has_top_long_short_methods():
     """测试有大户多空比方法"""
     live_binance_swap_feed = init_req_feed()
-    assert hasattr(live_binance_swap_feed, 'get_top_long_short_account_ratio')
-    assert hasattr(live_binance_swap_feed, 'get_top_long_short_position_ratio')
+    assert hasattr(live_binance_swap_feed, "get_top_long_short_account_ratio")
+    assert hasattr(live_binance_swap_feed, "get_top_long_short_position_ratio")
 
 
 def test_binance_req_top_long_short_account_ratio():
@@ -1100,31 +1156,35 @@ def test_binance_req_top_long_short_account_ratio():
     assert isinstance(result, list)
     assert len(result) > 0
     first = result[0]
-    assert 'symbol' in first
-    assert 'longPosition' in first or 'longAccount' in first
-    assert 'shortPosition' in first or 'shortAccount' in first
+    assert "symbol" in first
+    assert "longPosition" in first or "longAccount" in first
+    assert "shortPosition" in first or "shortAccount" in first
 
 
 def test_binance_req_top_long_short_position_ratio():
     """测试获取大户多空比 (持仓)"""
     live_binance_swap_feed = init_req_feed()
-    data = live_binance_swap_feed.get_top_long_short_position_ratio("BTC-USDT", period="1h", count=5)
+    data = live_binance_swap_feed.get_top_long_short_position_ratio(
+        "BTC-USDT", period="1h", count=5
+    )
     assert isinstance(data, RequestData)
     result = data.get_data()
     assert isinstance(result, list)
     assert len(result) > 0
     first = result[0]
-    assert 'symbol' in first
+    assert "symbol" in first
 
 
 def test_binance_has_liquidation_methods():
     """测试有强平订单方法"""
     live_binance_swap_feed = init_req_feed()
     # NOTE: get_liquidation_orders endpoint discontinued by Binance
-    assert hasattr(live_binance_swap_feed, 'get_force_orders')
+    assert hasattr(live_binance_swap_feed, "get_force_orders")
+
 
 # NOTE: get_liquidation_orders tests removed - endpoint discontinued by Binance
 # Use WebSocket stream !forceOrder@arr for liquidation data instead
+
 
 def test_binance_req_force_orders():
     """测试获取用户强平订单"""
@@ -1138,7 +1198,7 @@ def test_binance_req_force_orders():
 def test_binance_has_open_interest_hist():
     """测试有持仓量历史方法"""
     live_binance_swap_feed = init_req_feed()
-    assert hasattr(live_binance_swap_feed, 'get_open_interest_hist')
+    assert hasattr(live_binance_swap_feed, "get_open_interest_hist")
 
 
 def test_binance_req_open_interest_hist():
@@ -1150,9 +1210,9 @@ def test_binance_req_open_interest_hist():
     assert isinstance(result, list)
     assert len(result) > 0
     first = result[0]
-    assert 'symbol' in first
-    assert 'sumOpenInterest' in first or 'openInterest' in first
-    assert 'timestamp' in first
+    assert "symbol" in first
+    assert "sumOpenInterest" in first or "openInterest" in first
+    assert "timestamp" in first
 
 
 def test_binance_req_top_long_short_params():
@@ -1162,20 +1222,18 @@ def test_binance_req_top_long_short_params():
         "BTC-USDT", period="5m", count=30
     )
     assert path == "GET /futures/data/topLongShortAccountRatio"
-    assert params['symbol'] == "BTCUSDT"
-    assert params['period'] == "5m"
-    assert params['limit'] == 30
+    assert params["symbol"] == "BTCUSDT"
+    assert params["period"] == "5m"
+    assert params["limit"] == 30
 
 
 def test_binance_req_force_orders_params():
     """测试用户强平订单参数构建"""
     live_binance_swap_feed = init_req_feed()
-    path, params, extra_data = live_binance_swap_feed._get_force_orders(
-        symbol="ETH-USDT", limit=20
-    )
+    path, params, extra_data = live_binance_swap_feed._get_force_orders(symbol="ETH-USDT", limit=20)
     assert path == "GET /fapi/v1/forceOrders"
-    assert params['symbol'] == "ETHUSDT"
-    assert params['limit'] == 20
+    assert params["symbol"] == "ETHUSDT"
+    assert params["limit"] == 20
 
 
 def test_binance_req_open_interest_hist_params():
@@ -1185,9 +1243,9 @@ def test_binance_req_open_interest_hist_params():
         "BTC-USDT", period="1h", count=100
     )
     assert path == "GET /futures/data/openInterestHist"
-    assert params['symbol'] == "BTCUSDT"
-    assert params['period'] == "1h"
-    assert params['limit'] == 100
+    assert params["symbol"] == "BTCUSDT"
+    assert params["period"] == "1h"
+    assert params["limit"] == 100
 
 
 # NOTE: get_open_interest_interval tests removed - endpoint not available

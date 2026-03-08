@@ -16,10 +16,9 @@ Run with coverage:
 
 import queue
 import time
+
 import pytest
 
-from bt_api_py.containers.tickers.bybit_ticker import BybitSpotTickerData
-from bt_api_py.containers.orderbooks.bybit_orderbook import BybitSpotOrderBookData
 from bt_api_py.feeds.live_bybit.spot import BybitRequestDataSpot
 
 
@@ -50,15 +49,14 @@ class TestBybitTickData:
         data = live_bybit_spot_feed.get_ticker("BTCUSDT")
         assert data is not None
         from bt_api_py.containers.requestdatas.request_data import RequestData
+
         assert isinstance(data, (dict, RequestData))
 
     def test_bybit_async_tick_data(self):
         """Test getting ticker data (asynchronous)."""
         data_queue = queue.Queue()
         live_bybit_spot_feed = BybitRequestDataSpot(data_queue)
-        live_bybit_spot_feed.async_get_tick(
-            "BTCUSDT", extra_data={
-                "test_async_tick_data": True})
+        live_bybit_spot_feed.async_get_tick("BTCUSDT", extra_data={"test_async_tick_data": True})
         time.sleep(3)
 
         try:
@@ -78,14 +76,16 @@ class TestBybitKlineData:
         data = live_bybit_spot_feed.get_kline("BTCUSDT", period="1", limit=2)
         assert data is not None
         from bt_api_py.containers.requestdatas.request_data import RequestData
+
         assert isinstance(data, (dict, list, RequestData))
 
     def test_bybit_async_kline_data(self):
         """Test getting kline data (asynchronous)."""
         data_queue = queue.Queue()
         live_bybit_spot_feed = BybitRequestDataSpot(data_queue)
-        live_bybit_spot_feed.async_get_kline("BTCUSDT", period="1", count=3,
-                                             extra_data={"test_async_kline_data": True})
+        live_bybit_spot_feed.async_get_kline(
+            "BTCUSDT", period="1", count=3, extra_data={"test_async_kline_data": True}
+        )
         time.sleep(5)
 
         try:
@@ -105,6 +105,7 @@ class TestBybitOrderBook:
         data = live_bybit_spot_feed.get_depth("BTCUSDT", limit=20)
         assert data is not None
         from bt_api_py.containers.requestdatas.request_data import RequestData
+
         assert isinstance(data, (dict, list, RequestData))
 
     def order_book_value_equals(self, order_book_data):
@@ -112,21 +113,17 @@ class TestBybitOrderBook:
         assert order_book_data is not None
 
         # Bybit returns dict with b (bids) and a (asks)
-        assert isinstance(
-            order_book_data, dict), f"Expected dict, got {type(order_book_data)}"
+        assert isinstance(order_book_data, dict), f"Expected dict, got {type(order_book_data)}"
 
         # Check for bids (b)
         if "b" in order_book_data:
             bids = order_book_data["b"]
-            assert isinstance(
-                bids, list), f"bids should be list, got {type(bids)}"
+            assert isinstance(bids, list), f"bids should be list, got {type(bids)}"
             if len(bids) > 0:
                 first_bid = bids[0]
                 # Bybit bid format: [price, volume]
-                assert isinstance(
-                    first_bid, list), f"bid should be list, got {type(first_bid)}"
-                assert len(
-                    first_bid) >= 2, f"bid should have price and volume, got {first_bid}"
+                assert isinstance(first_bid, list), f"bid should be list, got {type(first_bid)}"
+                assert len(first_bid) >= 2, f"bid should have price and volume, got {first_bid}"
                 bid_price = float(first_bid[0])
                 bid_volume = float(first_bid[1])
                 assert bid_price > 0, f"Invalid bid_price: {bid_price}"
@@ -135,14 +132,11 @@ class TestBybitOrderBook:
         # Check for asks (a)
         if "a" in order_book_data:
             asks = order_book_data["a"]
-            assert isinstance(
-                asks, list), f"asks should be list, got {type(asks)}"
+            assert isinstance(asks, list), f"asks should be list, got {type(asks)}"
             if len(asks) > 0:
                 first_ask = asks[0]
-                assert isinstance(
-                    first_ask, list), f"ask should be list, got {type(first_ask)}"
-                assert len(
-                    first_ask) >= 2, f"ask should have price and volume, got {first_ask}"
+                assert isinstance(first_ask, list), f"ask should be list, got {type(first_ask)}"
+                assert len(first_ask) >= 2, f"ask should have price and volume, got {first_ask}"
                 ask_price = float(first_ask[0])
                 ask_volume = float(first_ask[1])
                 assert ask_price > 0, f"Invalid ask_price: {ask_price}"
@@ -153,7 +147,9 @@ class TestBybitOrderBook:
             if len(order_book_data["b"]) > 0 and len(order_book_data["a"]) > 0:
                 best_bid = float(order_book_data["b"][0][0])
                 best_ask = float(order_book_data["a"][0][0])
-                assert best_bid <= best_ask, f"best_bid ({best_bid}) should be <= best_ask ({best_ask})"
+                assert best_bid <= best_ask, (
+                    f"best_bid ({best_bid}) should be <= best_ask ({best_ask})"
+                )
 
     def test_bybit_async_orderbook_data(self):
         """Test getting order book data (asynchronous)."""
@@ -179,6 +175,7 @@ class TestBybitExchangeInfo:
         data = live_bybit_spot_feed.get_exchange_info(symbol="BTCUSDT")
         assert data is not None
         from bt_api_py.containers.requestdatas.request_data import RequestData
+
         assert isinstance(data, (dict, list, RequestData))
 
 

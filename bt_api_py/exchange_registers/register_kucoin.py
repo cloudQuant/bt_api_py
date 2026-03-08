@@ -6,11 +6,11 @@ Import this module to complete registration.
 
 from bt_api_py.balance_utils import simple_balance_handler as _kucoin_balance_handler
 from bt_api_py.containers.exchanges.kucoin_exchange_data import (
-    KuCoinExchangeDataSpot,
     KuCoinExchangeDataFutures,
+    KuCoinExchangeDataSpot,
 )
-from bt_api_py.feeds.live_kucoin.spot import KuCoinRequestDataSpot
 from bt_api_py.feeds.live_kucoin.futures import KuCoinRequestDataFutures
+from bt_api_py.feeds.live_kucoin.spot import KuCoinRequestDataSpot
 from bt_api_py.registry import ExchangeRegistry
 
 

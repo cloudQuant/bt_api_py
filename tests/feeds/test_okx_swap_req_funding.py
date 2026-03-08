@@ -1,39 +1,25 @@
 import queue
 import time
-import random
+
 import pytest
-from bt_api_py.functions.utils import read_account_config, get_public_ip
-from bt_api_py.feeds.live_okx_feed import OkxRequestDataSwap
 
 from bt_api_py.containers.exchanges.okx_exchange_data import OkxExchangeDataSwap
 from bt_api_py.containers.requestdatas.request_data import RequestData
-from bt_api_py.containers.tickers.okx_ticker import OkxTickerData
-from bt_api_py.containers.bars.okx_bar import OkxBarData
-from bt_api_py.containers.orderbooks.okx_orderbook import OkxOrderBookData
-from bt_api_py.containers.fundingrates.okx_funding_rate import OkxFundingRateData
-from bt_api_py.containers.markprices.okx_mark_price import OkxMarkPriceData
-from bt_api_py.containers.accounts.okx_account import OkxAccountData
+
 # from bt_api_py.containers.orders.okx_order import OkxOrderData
-from bt_api_py.containers.trades.okx_trade import OkxRequestTradeData, OkxWssTradeData
-from bt_api_py.containers.positions.okx_position import OkxPositionData
-from bt_api_py.containers.orders.order import OrderStatus
-from bt_api_py.containers.symbols.okx_symbol import OkxSymbolData
-from bt_api_py.containers.assets.okx_asset import OkxCurrencyData, OkxAssetBalanceData, OkxAssetValuationData, OkxTransferStateData, OkxDepositInfoData, OkxWithdrawalInfoData
-
-
-
-
+from bt_api_py.feeds.live_okx_feed import OkxRequestDataSwap
+from bt_api_py.functions.utils import read_account_config
 
 
 def generate_kwargs(exchange=OkxExchangeDataSwap):
     data = read_account_config()
     kwargs = {
-        "public_key": data['okx']['public_key'],
-        "private_key": data['okx']['private_key'],
-        "passphrase": data['okx']["passphrase"],
+        "public_key": data["okx"]["public_key"],
+        "private_key": data["okx"]["private_key"],
+        "passphrase": data["okx"]["passphrase"],
         "topics": {"tick": {"symbol": "BTC-USDT"}},
-        "proxies": data.get('proxies'),
-        "async_proxy": data.get('async_proxy'),
+        "proxies": data.get("proxies"),
+        "async_proxy": data.get("async_proxy"),
     }
     return kwargs
 
@@ -50,6 +36,7 @@ def init_async_feed(data_queue):
     live_okx_swap_feed = OkxRequestDataSwap(data_queue, **kwargs)
     return live_okx_swap_feed
 
+
 def test_okx_req_get_max_withdrawal():
     """Test get_max_withdrawal interface"""
     live_okx_swap_feed = init_req_feed()
@@ -60,8 +47,6 @@ def test_okx_req_get_max_withdrawal():
     max_withdrawal_list = data.get_data()
     assert isinstance(max_withdrawal_list, list)
     print("get_max_withdrawal:", max_withdrawal_list)
-
-
 
 
 def test_okx_req_get_currencies():
@@ -76,14 +61,12 @@ def test_okx_req_get_currencies():
     print("get_currencies count:", len(currencies_list))
     if len(currencies_list) > 0:
         currency = currencies_list[0]
-        if hasattr(currency, 'init_data'):
+        if hasattr(currency, "init_data"):
             currency.init_data()
             print("First currency:", currency.get_currency())
         else:
             assert isinstance(currency, dict)
-            print("First currency (raw):", currency.get('ccy', currency))
-
-
+            print("First currency (raw):", currency.get("ccy", currency))
 
 
 def test_okx_async_get_currencies():
@@ -103,8 +86,6 @@ def test_okx_async_get_currencies():
     assert isinstance(currencies_list, list)
 
 
-
-
 def test_okx_req_get_currencies_single():
     """Test get_currencies interface for single currency"""
     live_okx_swap_feed = init_req_feed()
@@ -116,14 +97,12 @@ def test_okx_req_get_currencies_single():
     assert isinstance(currencies_list, list)
     if len(currencies_list) > 0:
         currency = currencies_list[0]
-        if hasattr(currency, 'init_data'):
+        if hasattr(currency, "init_data"):
             currency.init_data()
             assert currency.get_currency() == "BTC"
         else:
             assert isinstance(currency, dict)
-            assert currency.get('ccy') == "BTC"
-
-
+            assert currency.get("ccy") == "BTC"
 
 
 def test_okx_req_get_asset_balances():
@@ -138,14 +117,12 @@ def test_okx_req_get_asset_balances():
     print("get_asset_balances count:", len(balances_list))
     if len(balances_list) > 0:
         balance = balances_list[0]
-        if hasattr(balance, 'init_data'):
+        if hasattr(balance, "init_data"):
             balance.init_data()
             print("First balance currency:", balance.get_currency())
         else:
             assert isinstance(balance, dict)
-            print("First balance (raw):", balance.get('ccy', balance))
-
-
+            print("First balance (raw):", balance.get("ccy", balance))
 
 
 def test_okx_async_get_asset_balances():
@@ -164,8 +141,6 @@ def test_okx_async_get_asset_balances():
     assert isinstance(balances_list, list)
 
 
-
-
 def test_okx_req_get_asset_balances_single():
     """Test get_asset_balances interface for single currency"""
     live_okx_swap_feed = init_req_feed()
@@ -177,16 +152,14 @@ def test_okx_req_get_asset_balances_single():
     assert isinstance(balances_list, list)
     if len(balances_list) > 0:
         balance = balances_list[0]
-        if hasattr(balance, 'init_data'):
+        if hasattr(balance, "init_data"):
             balance.init_data()
             assert balance.get_currency() == "USDT"
             print("USDT balance:", balance.get_balance())
         else:
             assert isinstance(balance, dict)
-            assert balance.get('ccy') == "USDT"
-            print("USDT balance (raw):", balance.get('bal', balance))
-
-
+            assert balance.get("ccy") == "USDT"
+            print("USDT balance (raw):", balance.get("bal", balance))
 
 
 def test_okx_req_get_non_tradable_assets():
@@ -199,8 +172,6 @@ def test_okx_req_get_non_tradable_assets():
     assets_list = data.get_data()
     assert isinstance(assets_list, list)
     print("get_non_tradable_assets count:", len(assets_list))
-
-
 
 
 def test_okx_async_get_non_tradable_assets():
@@ -220,8 +191,6 @@ def test_okx_async_get_non_tradable_assets():
     assert isinstance(assets_list, list)
 
 
-
-
 def test_okx_req_get_asset_valuation():
     """Test get_asset_valuation interface"""
     live_okx_swap_feed = init_req_feed()
@@ -233,15 +202,13 @@ def test_okx_req_get_asset_valuation():
     assert isinstance(valuation_list, list)
     if len(valuation_list) > 0:
         valuation = valuation_list[0]
-        if hasattr(valuation, 'init_data'):
+        if hasattr(valuation, "init_data"):
             valuation.init_data()
             print("Total valuation:", valuation.get_total_valuation())
             print("BTC valuation:", valuation.get_btc_valuation())
         else:
             assert isinstance(valuation, dict)
             print("Valuation (raw):", valuation)
-
-
 
 
 def test_okx_async_get_asset_valuation():
@@ -260,8 +227,6 @@ def test_okx_async_get_asset_valuation():
     assert isinstance(valuation_list, list)
 
 
-
-
 def test_okx_req_transfer():
     """Test transfer interface (will fail with insufficient balance)"""
     live_okx_swap_feed = init_req_feed()
@@ -277,8 +242,6 @@ def test_okx_req_transfer():
     assert isinstance(result, RequestData)
     print("transfer status:", result.get_status())
     print("transfer data:", result.get_data())
-
-
 
 
 def test_okx_async_transfer():
@@ -302,8 +265,6 @@ def test_okx_async_transfer():
     print("async_transfer status:", transfer_data.get_status())
 
 
-
-
 def test_okx_req_get_transfer_state():
     """Test get_transfer_state interface"""
     live_okx_swap_feed = init_req_feed()
@@ -319,8 +280,6 @@ def test_okx_req_get_transfer_state():
         transfer.init_data()
         print("First transfer currency:", transfer.get_currency())
         print("First transfer amount:", transfer.get_amount())
-
-
 
 
 def test_okx_async_get_transfer_state():
@@ -342,7 +301,6 @@ def test_okx_async_get_transfer_state():
 # ==================== Public Data Tests ====================
 
 
-
 def test_okx_req_get_asset_bills():
     """Test get_asset_bills interface"""
     live_okx_swap_feed = init_req_feed()
@@ -353,8 +311,6 @@ def test_okx_req_get_asset_bills():
     bills_list = data.get_data()
     assert isinstance(bills_list, list)
     print("get_asset_bills count:", len(bills_list))
-
-
 
 
 def test_okx_async_get_asset_bills():
@@ -376,8 +332,6 @@ def test_okx_async_get_asset_bills():
     print("async_get_asset_bills count:", len(bills_list))
 
 
-
-
 def test_okx_req_get_asset_bills_history():
     """Test get_asset_bills_history interface"""
     live_okx_swap_feed = init_req_feed()
@@ -388,8 +342,6 @@ def test_okx_req_get_asset_bills_history():
     bills_list = data.get_data()
     assert isinstance(bills_list, list)
     print("get_asset_bills_history count:", len(bills_list))
-
-
 
 
 def test_okx_async_get_asset_bills_history():
@@ -407,8 +359,6 @@ def test_okx_async_get_asset_bills_history():
     print("async_get_asset_bills_history status:", bills_data.get_status())
 
 
-
-
 def test_okx_req_get_deposit_address():
     """Test get_deposit_address interface"""
     live_okx_swap_feed = init_req_feed()
@@ -421,8 +371,6 @@ def test_okx_req_get_deposit_address():
     print("get_deposit_address count:", len(address_list))
     if len(address_list) > 0:
         print("deposit_address:", address_list[0])
-
-
 
 
 def test_okx_async_get_deposit_address():
@@ -442,8 +390,6 @@ def test_okx_async_get_deposit_address():
     assert isinstance(address_list, list)
 
 
-
-
 def test_okx_req_get_deposit_history():
     """Test get_deposit_history interface"""
     live_okx_swap_feed = init_req_feed()
@@ -454,8 +400,6 @@ def test_okx_req_get_deposit_history():
     deposit_list = data.get_data()
     assert isinstance(deposit_list, list)
     print("get_deposit_history count:", len(deposit_list))
-
-
 
 
 def test_okx_async_get_deposit_history():
@@ -475,8 +419,6 @@ def test_okx_async_get_deposit_history():
     assert isinstance(deposit_list, list)
 
 
-
-
 def test_okx_req_get_deposit_withdraw_status():
     """Test get_deposit_withdraw_status interface"""
     live_okx_swap_feed = init_req_feed()
@@ -486,8 +428,6 @@ def test_okx_req_get_deposit_withdraw_status():
     print("get_deposit_withdraw_status status:", data.get_status())
     status_list = data.get_data()
     assert isinstance(status_list, list)
-
-
 
 
 def test_okx_async_get_deposit_withdraw_status():
@@ -505,8 +445,6 @@ def test_okx_async_get_deposit_withdraw_status():
     print("async_get_deposit_withdraw_status status:", status_data.get_status())
 
 
-
-
 def test_okx_req_withdrawal():
     """Test withdrawal interface (will fail without valid address, but tests the interface)"""
     live_okx_swap_feed = init_req_feed()
@@ -516,13 +454,11 @@ def test_okx_req_withdrawal():
         amt="1",
         dest="4",  # on-chain withdrawal
         to_addr="0x0000000000000000000000000000000000000000",  # Invalid address for testing
-        fee="0.1"
+        fee="0.1",
     )
     assert isinstance(result, RequestData)
     print("withdrawal status:", result.get_status())
     print("withdrawal input:", result.get_input_data())
-
-
 
 
 def test_okx_async_withdrawal():
@@ -535,7 +471,7 @@ def test_okx_async_withdrawal():
         amt="1",
         dest="4",  # on-chain withdrawal
         to_addr="0x0000000000000000000000000000000000000000",  # Invalid address for testing
-        fee="0.1"
+        fee="0.1",
     )
     time.sleep(5)
     try:
@@ -547,8 +483,6 @@ def test_okx_async_withdrawal():
     print("async_withdrawal status:", withdraw_data.get_status())
 
 
-
-
 def test_okx_req_cancel_withdrawal():
     """Test cancel_withdrawal interface (will fail without valid wd_id, but tests the interface)"""
     live_okx_swap_feed = init_req_feed()
@@ -557,8 +491,6 @@ def test_okx_req_cancel_withdrawal():
     assert isinstance(result, RequestData)
     print("cancel_withdrawal status:", result.get_status())
     print("cancel_withdrawal input:", result.get_input_data())
-
-
 
 
 def test_okx_async_cancel_withdrawal():
@@ -577,8 +509,6 @@ def test_okx_async_cancel_withdrawal():
     print("async_cancel_withdrawal status:", cancel_data.get_status())
 
 
-
-
 def test_okx_req_get_withdrawal_history():
     """Test get_withdrawal_history interface"""
     live_okx_swap_feed = init_req_feed()
@@ -589,8 +519,6 @@ def test_okx_req_get_withdrawal_history():
     withdraw_list = data.get_data()
     assert isinstance(withdraw_list, list)
     print("get_withdrawal_history count:", len(withdraw_list))
-
-
 
 
 def test_okx_async_get_withdrawal_history():
@@ -613,7 +541,6 @@ def test_okx_async_get_withdrawal_history():
 # ==================== Trading Statistics Tests ====================
 
 
-
 def test_okx_req_get_easy_convert_currency_list():
     """Test get_easy_convert_currency_list interface"""
     live_okx_swap_feed = init_req_feed()
@@ -624,8 +551,6 @@ def test_okx_req_get_easy_convert_currency_list():
     currency_list = data.get_data()
     assert isinstance(currency_list, list)
     print("get_easy_convert_currency_list count:", len(currency_list))
-
-
 
 
 def test_okx_async_get_easy_convert_currency_list():
@@ -645,8 +570,6 @@ def test_okx_async_get_easy_convert_currency_list():
     print("async_get_easy_convert_currency_list status:", currency_data.get_status())
 
 
-
-
 def test_okx_req_easy_convert():
     """Test easy_convert interface"""
     live_okx_swap_feed = init_req_feed()
@@ -655,8 +578,6 @@ def test_okx_req_easy_convert():
     assert isinstance(data, RequestData)
     print("easy_convert status:", data.get_status())
     print("easy_convert input:", data.get_input_data())
-
-
 
 
 def test_okx_async_easy_convert():
@@ -676,8 +597,6 @@ def test_okx_async_easy_convert():
     print("async_easy_convert status:", convert_data.get_status())
 
 
-
-
 def test_okx_req_get_easy_convert_history():
     """Test get_easy_convert_history interface"""
     live_okx_swap_feed = init_req_feed()
@@ -688,8 +607,6 @@ def test_okx_req_get_easy_convert_history():
     history_list = data.get_data()
     assert isinstance(history_list, list)
     print("get_easy_convert_history count:", len(history_list))
-
-
 
 
 def test_okx_async_get_easy_convert_history():
@@ -709,8 +626,6 @@ def test_okx_async_get_easy_convert_history():
     print("async_get_easy_convert_history status:", history_data.get_status())
 
 
-
-
 def test_okx_req_get_one_click_repay_currency_list():
     """Test get_one_click_repay_currency_list interface"""
     live_okx_swap_feed = init_req_feed()
@@ -721,8 +636,6 @@ def test_okx_req_get_one_click_repay_currency_list():
     currency_list = data.get_data()
     assert isinstance(currency_list, list)
     print("get_one_click_repay_currency_list count:", len(currency_list))
-
-
 
 
 def test_okx_async_get_one_click_repay_currency_list():
@@ -742,8 +655,6 @@ def test_okx_async_get_one_click_repay_currency_list():
     print("async_get_one_click_repay_currency_list status:", currency_data.get_status())
 
 
-
-
 def test_okx_req_one_click_repay():
     """Test one_click_repay interface"""
     live_okx_swap_feed = init_req_feed()
@@ -752,8 +663,6 @@ def test_okx_req_one_click_repay():
     assert isinstance(data, RequestData)
     print("one_click_repay status:", data.get_status())
     print("one_click_repay input:", data.get_input_data())
-
-
 
 
 def test_okx_async_one_click_repay():
@@ -773,8 +682,6 @@ def test_okx_async_one_click_repay():
     print("async_one_click_repay status:", repay_data.get_status())
 
 
-
-
 def test_okx_req_get_one_click_repay_history():
     """Test get_one_click_repay_history interface"""
     live_okx_swap_feed = init_req_feed()
@@ -785,8 +692,6 @@ def test_okx_req_get_one_click_repay_history():
     history_list = data.get_data()
     assert isinstance(history_list, list)
     print("get_one_click_repay_history count:", len(history_list))
-
-
 
 
 def test_okx_async_get_one_click_repay_history():
@@ -806,16 +711,12 @@ def test_okx_async_get_one_click_repay_history():
     print("async_get_one_click_repay_history status:", history_data.get_status())
 
 
-
-
 def test_okx_get_exchange_list():
     """Test get_exchange_list interface"""
     live_okx_swap_feed = init_req_feed()
     data = live_okx_swap_feed.get_exchange_list(ccy="BTC")
     assert isinstance(data, RequestData)
     print("get_exchange_list status:", data.get_status())
-
-
 
 
 def test_okx_async_get_exchange_list():
@@ -833,16 +734,12 @@ def test_okx_async_get_exchange_list():
         print("async_get_exchange_list status:", result.get_status())
 
 
-
-
 def test_okx_get_convert_currencies():
     """Test get_convert_currencies interface"""
     live_okx_swap_feed = init_req_feed()
     data = live_okx_swap_feed.get_convert_currencies()
     assert isinstance(data, RequestData)
     print("get_convert_currencies status:", data.get_status())
-
-
 
 
 def test_okx_async_get_convert_currencies():
@@ -860,16 +757,12 @@ def test_okx_async_get_convert_currencies():
         print("async_get_convert_currencies status:", result.get_status())
 
 
-
-
 def test_okx_get_convert_currency_pair():
     """Test get_convert_currency_pair interface"""
     live_okx_swap_feed = init_req_feed()
     data = live_okx_swap_feed.get_convert_currency_pair(from_ccy="BTC", to_ccy="USDT")
     assert isinstance(data, RequestData)
     print("get_convert_currency_pair status:", data.get_status())
-
-
 
 
 def test_okx_async_get_convert_currency_pair():
@@ -887,16 +780,12 @@ def test_okx_async_get_convert_currency_pair():
         print("async_get_convert_currency_pair status:", result.get_status())
 
 
-
-
 def test_okx_get_convert_history():
     """Test get_convert_history interface"""
     live_okx_swap_feed = init_req_feed()
     data = live_okx_swap_feed.get_convert_history(limit="10")
     assert isinstance(data, RequestData)
     print("get_convert_history status:", data.get_status())
-
-
 
 
 def test_okx_async_get_convert_history():
@@ -914,8 +803,6 @@ def test_okx_async_get_convert_history():
         print("async_get_convert_history status:", result.get_status())
 
 
-
-
 @pytest.mark.skip(reason="OKX API endpoint deprecated/removed (404)")
 def test_okx_get_deposit_payment_methods():
     """Test get_deposit_payment_methods interface"""
@@ -923,8 +810,6 @@ def test_okx_get_deposit_payment_methods():
     data = live_okx_swap_feed.get_deposit_payment_methods(ccy="BTC")
     assert isinstance(data, RequestData)
     print("get_deposit_payment_methods status:", data.get_status())
-
-
 
 
 @pytest.mark.skip(reason="OKX API endpoint deprecated/removed (404)")
@@ -943,8 +828,6 @@ def test_okx_async_get_deposit_payment_methods():
         print("async_get_deposit_payment_methods status:", result.get_status())
 
 
-
-
 @pytest.mark.skip(reason="OKX API endpoint deprecated/removed (404)")
 def test_okx_get_withdrawal_payment_methods():
     """Test get_withdrawal_payment_methods interface"""
@@ -952,8 +835,6 @@ def test_okx_get_withdrawal_payment_methods():
     data = live_okx_swap_feed.get_withdrawal_payment_methods(ccy="BTC")
     assert isinstance(data, RequestData)
     print("get_withdrawal_payment_methods status:", data.get_status())
-
-
 
 
 @pytest.mark.skip(reason="OKX API endpoint deprecated/removed (404)")
@@ -972,8 +853,6 @@ def test_okx_async_get_withdrawal_payment_methods():
         print("async_get_withdrawal_payment_methods status:", result.get_status())
 
 
-
-
 @pytest.mark.skip(reason="OKX API endpoint deprecated/removed (404)")
 def test_okx_get_withdrawal_order_history():
     """Test get_withdrawal_order_history interface"""
@@ -981,8 +860,6 @@ def test_okx_get_withdrawal_order_history():
     data = live_okx_swap_feed.get_withdrawal_order_history(ccy="BTC", limit="10")
     assert isinstance(data, RequestData)
     print("get_withdrawal_order_history status:", data.get_status())
-
-
 
 
 @pytest.mark.skip(reason="OKX API endpoint deprecated/removed (404)")
@@ -1001,8 +878,6 @@ def test_okx_async_get_withdrawal_order_history():
         print("async_get_withdrawal_order_history status:", result.get_status())
 
 
-
-
 @pytest.mark.skip(reason="OKX API endpoint deprecated/removed (404)")
 def test_okx_get_deposit_order_history():
     """Test get_deposit_order_history interface"""
@@ -1010,8 +885,6 @@ def test_okx_get_deposit_order_history():
     data = live_okx_swap_feed.get_deposit_order_history(ccy="BTC", limit="10")
     assert isinstance(data, RequestData)
     print("get_deposit_order_history status:", data.get_status())
-
-
 
 
 @pytest.mark.skip(reason="OKX API endpoint deprecated/removed (404)")
@@ -1030,8 +903,6 @@ def test_okx_async_get_deposit_order_history():
         print("async_get_deposit_order_history status:", result.get_status())
 
 
-
-
 @pytest.mark.skip(reason="OKX API endpoint deprecated/removed (404)")
 def test_okx_get_buy_sell_currencies():
     """Test get_buy_sell_currencies interface"""
@@ -1039,8 +910,6 @@ def test_okx_get_buy_sell_currencies():
     data = live_okx_swap_feed.get_buy_sell_currencies()
     assert isinstance(data, RequestData)
     print("get_buy_sell_currencies status:", data.get_status())
-
-
 
 
 @pytest.mark.skip(reason="OKX API endpoint deprecated/removed (404)")
@@ -1059,8 +928,6 @@ def test_okx_async_get_buy_sell_currencies():
         print("async_get_buy_sell_currencies status:", result.get_status())
 
 
-
-
 @pytest.mark.skip(reason="OKX API endpoint deprecated/removed (404)")
 def test_okx_get_buy_sell_currency_pair():
     """Test get_buy_sell_currency_pair interface"""
@@ -1068,8 +935,6 @@ def test_okx_get_buy_sell_currency_pair():
     data = live_okx_swap_feed.get_buy_sell_currency_pair()
     assert isinstance(data, RequestData)
     print("get_buy_sell_currency_pair status:", data.get_status())
-
-
 
 
 @pytest.mark.skip(reason="OKX API endpoint deprecated/removed (404)")
@@ -1088,8 +953,6 @@ def test_okx_async_get_buy_sell_currency_pair():
         print("async_get_buy_sell_currency_pair status:", result.get_status())
 
 
-
-
 @pytest.mark.skip(reason="OKX API endpoint deprecated/removed (404)")
 def test_okx_get_buy_sell_history():
     """Test get_buy_sell_history interface"""
@@ -1097,8 +960,6 @@ def test_okx_get_buy_sell_history():
     data = live_okx_swap_feed.get_buy_sell_history(limit="10")
     assert isinstance(data, RequestData)
     print("get_buy_sell_history status:", data.get_status())
-
-
 
 
 @pytest.mark.skip(reason="OKX API endpoint deprecated/removed (404)")
@@ -1118,5 +979,3 @@ def test_okx_async_get_buy_sell_history():
 
 
 # ==================== Sub-account (P2) Tests ====================
-
-

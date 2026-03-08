@@ -2,9 +2,9 @@
 BingX REST API request base class.
 """
 
-import time
-import hmac
 import hashlib
+import hmac
+import time
 from urllib.parse import urlencode
 
 from bt_api_py.containers.exchanges.bingx_exchange_data import BingXExchangeDataSpot
@@ -46,9 +46,7 @@ class BingXRequestData(Feed):
         # Sort params and create query string
         query_string = urlencode(sorted(params.items()))
         signature = hmac.new(
-            secret_key.encode("utf-8"),
-            query_string.encode("utf-8"),
-            hashlib.sha256
+            secret_key.encode("utf-8"), query_string.encode("utf-8"), hashlib.sha256
         ).hexdigest()
         return signature
 
@@ -59,15 +57,17 @@ class BingXRequestData(Feed):
         }
 
         # Add API key for private endpoints
-        api_key = getattr(self._params, 'api_key', None)
-        if api_key and request_path.startswith(("/openApi/spot/v1/account", "/openApi/spot/v1/trade")):
+        api_key = getattr(self._params, "api_key", None)
+        if api_key and request_path.startswith(
+            ("/openApi/spot/v1/account", "/openApi/spot/v1/trade")
+        ):
             headers["X-BX-APIKEY"] = api_key
 
         return headers
 
     def _add_signature(self, params):
         """Add signature to params for private endpoints."""
-        api_secret = getattr(self._params, 'api_secret', None)
+        api_secret = getattr(self._params, "api_secret", None)
         if api_secret:
             # Timestamp is already added in request() method
             params["signature"] = self._generate_signature(params, api_secret)
@@ -148,12 +148,14 @@ class BingXRequestData(Feed):
         """Prepare server time request. Returns (path, params, extra_data)."""
         if extra_data is None:
             extra_data = {}
-        extra_data.update({
-            "exchange_name": self.exchange_name,
-            "symbol_name": "",
-            "asset_type": self.asset_type,
-            "request_type": "get_server_time",
-        })
+        extra_data.update(
+            {
+                "exchange_name": self.exchange_name,
+                "symbol_name": "",
+                "asset_type": self.asset_type,
+                "request_type": "get_server_time",
+            }
+        )
         return "GET /openApi/server/time", {}, extra_data
 
     def get_server_time(self, extra_data=None, **kwargs):

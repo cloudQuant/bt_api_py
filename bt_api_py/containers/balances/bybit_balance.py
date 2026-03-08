@@ -132,9 +132,11 @@ class BybitBalanceData(BalanceData):
     def __str__(self):
         """返回余额的字符串表示"""
         self.init_data()
-        return (f"BybitBalance(account_type={self.account_type}, "
-                f"total_equity={self.total_equity}, "
-                f"available={self.total_available_balance})")
+        return (
+            f"BybitBalance(account_type={self.account_type}, "
+            f"total_equity={self.total_equity}, "
+            f"available={self.total_available_balance})"
+        )
 
 
 class BybitSpotBalanceData(BybitBalanceData):

@@ -1,4 +1,3 @@
-import json
 import os
 
 from bt_api_py.containers.exchanges.exchange_data import ExchangeData
@@ -94,24 +93,24 @@ class PancakeSwapExchangeData(ExchangeData):
             return False
 
         # exchange_name
-        if hasattr(asset_cfg, 'exchange_name') and asset_cfg.exchange_name:
+        if hasattr(asset_cfg, "exchange_name") and asset_cfg.exchange_name:
             self.exchange_name = asset_cfg.exchange_name
 
         # rest_url - check for rest attribute and graphql_url
-        if hasattr(asset_cfg, 'rest') and asset_cfg.rest:
-            if hasattr(asset_cfg.rest, 'graphql_url') and asset_cfg.rest.graphql_url:
+        if hasattr(asset_cfg, "rest") and asset_cfg.rest:
+            if hasattr(asset_cfg.rest, "graphql_url") and asset_cfg.rest.graphql_url:
                 self.rest_url = asset_cfg.rest.graphql_url
-            elif hasattr(asset_cfg, 'rest_url') and asset_cfg.rest_url:
+            elif hasattr(asset_cfg, "rest_url") and asset_cfg.rest_url:
                 self.rest_url = asset_cfg.rest_url
 
         # acct_wss_url
-        if hasattr(asset_cfg, 'websocket') and asset_cfg.websocket:
-            if hasattr(asset_cfg.websocket, 'private_url') and asset_cfg.websocket.private_url:
+        if hasattr(asset_cfg, "websocket") and asset_cfg.websocket:
+            if hasattr(asset_cfg.websocket, "private_url") and asset_cfg.websocket.private_url:
                 self.acct_wss_url = asset_cfg.websocket.private_url
 
         # wss_url
-        if hasattr(asset_cfg, 'websocket') and asset_cfg.websocket:
-            if hasattr(asset_cfg.websocket, 'public_url') and asset_cfg.websocket.public_url:
+        if hasattr(asset_cfg, "websocket") and asset_cfg.websocket:
+            if hasattr(asset_cfg.websocket, "public_url") and asset_cfg.websocket.public_url:
                 self.wss_url = asset_cfg.websocket.public_url
 
         # rest_paths
@@ -134,10 +133,9 @@ class PancakeSwapExchangeData(ExchangeData):
             }
 
         # legal_currency 从配置中提取稳定币
-        if hasattr(asset_cfg, 'tokens') and asset_cfg.tokens:
-            stablecoins = asset_cfg.tokens.get('stablecoins', [])
-            self.legal_currency = [token['symbol'] for token in stablecoins]
-
+        if hasattr(asset_cfg, "tokens") and asset_cfg.tokens:
+            stablecoins = asset_cfg.tokens.get("stablecoins", [])
+            self.legal_currency = [token["symbol"] for token in stablecoins]
 
         # kline_periods - load from YAML, prefer asset-specific config
         kp = asset_cfg.kline_periods or (config.kline_periods if config.kline_periods else None)
@@ -165,7 +163,7 @@ class PancakeSwapExchangeData(ExchangeData):
             return None
 
         if network_name is None:
-            return config.networks.get('bsc')  # 默认返回主网
+            return config.networks.get("bsc")  # 默认返回主网
 
         return config.networks.get(network_name)
 
@@ -175,49 +173,55 @@ class PancakeSwapExchangeData(ExchangeData):
         if config is None:
             return []
 
-        asset_cfg = config.asset_types.get('spot')
+        asset_cfg = config.asset_types.get("spot")
         if not asset_cfg:
             return []
 
         tokens = []
 
         # Check if tokens attribute exists
-        if not hasattr(asset_cfg, 'tokens'):
+        if not hasattr(asset_cfg, "tokens"):
             return tokens
 
         # 添加原生代币
-        tokens_dict = asset_cfg.tokens if hasattr(asset_cfg, 'tokens') else {}
-        native = tokens_dict.get('native', {})
+        tokens_dict = asset_cfg.tokens if hasattr(asset_cfg, "tokens") else {}
+        native = tokens_dict.get("native", {})
         if native:
-            tokens.append({
-                'symbol': native.get('symbol', ''),
-                'name': native.get('name', ''),
-                'address': native.get('address', ''),
-                'decimals': native.get('decimals', 18),
-                'type': 'native'
-            })
+            tokens.append(
+                {
+                    "symbol": native.get("symbol", ""),
+                    "name": native.get("name", ""),
+                    "address": native.get("address", ""),
+                    "decimals": native.get("decimals", 18),
+                    "type": "native",
+                }
+            )
 
         # 添加治理代币
-        governance = tokens_dict.get('governance', {})
+        governance = tokens_dict.get("governance", {})
         if governance:
-            tokens.append({
-                'symbol': governance.get('symbol', ''),
-                'name': governance.get('name', ''),
-                'address': governance.get('address', ''),
-                'decimals': governance.get('decimals', 18),
-                'type': 'governance'
-            })
+            tokens.append(
+                {
+                    "symbol": governance.get("symbol", ""),
+                    "name": governance.get("name", ""),
+                    "address": governance.get("address", ""),
+                    "decimals": governance.get("decimals", 18),
+                    "type": "governance",
+                }
+            )
 
         # 添加稳定币
-        stablecoins = tokens_dict.get('stablecoins', [])
+        stablecoins = tokens_dict.get("stablecoins", [])
         for stable in stablecoins:
-            tokens.append({
-                'symbol': stable.get('symbol', ''),
-                'name': stable.get('name', ''),
-                'address': stable.get('address', ''),
-                'decimals': stable.get('decimals', 18),
-                'type': 'stablecoin'
-            })
+            tokens.append(
+                {
+                    "symbol": stable.get("symbol", ""),
+                    "name": stable.get("name", ""),
+                    "address": stable.get("address", ""),
+                    "decimals": stable.get("decimals", 18),
+                    "type": "stablecoin",
+                }
+            )
 
         return tokens
 
@@ -227,30 +231,26 @@ class PancakeSwapExchangeData(ExchangeData):
         if config is None:
             return []
 
-        asset_cfg = config.asset_types.get('spot')
+        asset_cfg = config.asset_types.get("spot")
         if not asset_cfg:
             return []
 
         pairs = []
 
         # Check if pairs attribute exists
-        if not hasattr(asset_cfg, 'pairs'):
+        if not hasattr(asset_cfg, "pairs"):
             return pairs
 
         # 合并所有交易对分类
-        pairs_dict = asset_cfg.pairs if hasattr(asset_cfg, 'pairs') else {}
-        for category in ['major', 'popular', 'emerging']:
+        pairs_dict = asset_cfg.pairs if hasattr(asset_cfg, "pairs") else {}
+        for category in ["major", "popular", "emerging"]:
             category_pairs = pairs_dict.get(category, [])
             for pair in category_pairs:
-                pairs.append({
-                    'symbol': pair,
-                    'category': category,
-                    'enabled': True
-                })
+                pairs.append({"symbol": pair, "category": category, "enabled": True})
 
         return pairs
 
-    def get_fee_config(self, asset_type='spot'):
+    def get_fee_config(self, asset_type="spot"):
         """获取费率配置
 
         Args:
@@ -268,11 +268,11 @@ class PancakeSwapExchangeData(ExchangeData):
             return None
 
         # Check if fees attribute exists
-        if hasattr(asset_cfg, 'fees'):
+        if hasattr(asset_cfg, "fees"):
             return asset_cfg.fees
 
         # Return default fees for DEX
-        return {'maker': 0.0025, 'taker': 0.0025}
+        return {"maker": 0.0025, "taker": 0.0025}
 
     def get_slippage_config(self):
         """获取滑点配置"""
@@ -280,7 +280,7 @@ class PancakeSwapExchangeData(ExchangeData):
         if config is None:
             return None
 
-        asset_cfg = config.asset_types.get('spot')
+        asset_cfg = config.asset_types.get("spot")
         if not asset_cfg:
             return None
 
@@ -294,7 +294,7 @@ class PancakeSwapExchangeData(ExchangeData):
 
         return config.networks.bsc.gas
 
-    def get_order_types(self, asset_type='spot'):
+    def get_order_types(self, asset_type="spot"):
         """获取支持的订单类型"""
         config = _get_pancakeswap_config()
         if config is None:
@@ -305,13 +305,13 @@ class PancakeSwapExchangeData(ExchangeData):
             return []
 
         # Check if order_types attribute exists
-        if hasattr(asset_cfg, 'order_types'):
+        if hasattr(asset_cfg, "order_types"):
             return asset_cfg.order_types
 
         # Return default order types for DEX
-        return ['MARKET', 'LIMIT']
+        return ["MARKET", "LIMIT"]
 
-    def get_order_statuses(self, asset_type='spot'):
+    def get_order_statuses(self, asset_type="spot"):
         """获取订单状态列表"""
         config = _get_pancakeswap_config()
         if config is None:
@@ -322,13 +322,13 @@ class PancakeSwapExchangeData(ExchangeData):
             return []
 
         # Check if order_statuses attribute exists
-        if hasattr(asset_cfg, 'order_statuses'):
+        if hasattr(asset_cfg, "order_statuses"):
             return asset_cfg.order_statuses
 
         # Return default order statuses for DEX
-        return ['NEW', 'FILLED', 'PARTIALLY_FILLED', 'FAILED']
+        return ["NEW", "FILLED", "PARTIALLY_FILLED", "FAILED"]
 
-    def get_capabilities(self, asset_type='spot'):
+    def get_capabilities(self, asset_type="spot"):
         """获取支持的功能列表"""
         config = _get_pancakeswap_config()
         if config is None:
@@ -339,11 +339,11 @@ class PancakeSwapExchangeData(ExchangeData):
             return []
 
         # Check if capabilities attribute exists
-        if hasattr(asset_cfg, 'capabilities'):
+        if hasattr(asset_cfg, "capabilities"):
             return asset_cfg.capabilities
 
         # Return default capabilities for DEX
-        return ['GET_TICK', 'GET_DEPTH', 'GET_KLINE', 'GET_EXCHANGE_INFO', 'MAKE_ORDER']
+        return ["GET_TICK", "GET_DEPTH", "GET_KLINE", "GET_EXCHANGE_INFO", "MAKE_ORDER"]
 
     def get_minimum_trade_amount(self, symbol):
         """获取指定代币的最小交易额
@@ -359,17 +359,17 @@ class PancakeSwapExchangeData(ExchangeData):
             return 0.0
 
         # Check if security attribute exists
-        if hasattr(config, 'security') and config.security:
+        if hasattr(config, "security") and config.security:
             security = config.security
-            if hasattr(security, 'minimum_trade_amounts'):
+            if hasattr(security, "minimum_trade_amounts"):
                 return security.minimum_trade_amounts.get(symbol, 0.0)
 
         # Return default minimum trade amounts
         default_amounts = {
-            'USDT': 10.0,
-            'BNB': 0.01,
-            'BTC': 0.0001,
-            'ETH': 0.001,
+            "USDT": 10.0,
+            "BNB": 0.01,
+            "BTC": 0.0001,
+            "ETH": 0.001,
         }
         return default_amounts.get(symbol, 0.0)
 
@@ -389,7 +389,7 @@ class PancakeSwapExchangeData(ExchangeData):
         security = config.security
         return security.maximum_trade_amounts.get(symbol, 0.0)
 
-    def get_special_features(self, asset_type='spot'):
+    def get_special_features(self, asset_type="spot"):
         """获取特殊功能列表
 
         Args:
@@ -408,7 +408,7 @@ class PancakeSwapExchangeData(ExchangeData):
 
         return asset_cfg.special_features
 
-    def get_rate_limits(self, asset_type='spot'):
+    def get_rate_limits(self, asset_type="spot"):
         """获取限流配置
 
         Args:
@@ -466,7 +466,7 @@ class PancakeSwapExchangeData(ExchangeData):
 
         return symbol_mapping.get(address, "UNKNOWN")
 
-    def get_backup_urls(self, endpoint_type='graphql'):
+    def get_backup_urls(self, endpoint_type="graphql"):
         """获取备用URL列表
 
         Args:
@@ -479,11 +479,11 @@ class PancakeSwapExchangeData(ExchangeData):
         if config is None:
             return []
 
-        asset_cfg = config.asset_types.get('spot')
+        asset_cfg = config.asset_types.get("spot")
         if not asset_cfg or not asset_cfg.rest:
             return []
 
-        return asset_cfg.rest.get('backup_urls', [])
+        return asset_cfg.rest.get("backup_urls", [])
 
     def is_supported_network(self, chain_id):
         """检查是否支持指定网络
@@ -528,7 +528,7 @@ class PancakeSwapExchangeData(ExchangeData):
         """
         # Load config to get rest paths
         if not self.rest_paths:
-            self._load_from_config('spot')
+            self._load_from_config("spot")
 
         return self.rest_paths.get(request_type, "")
 
@@ -543,7 +543,7 @@ class PancakeSwapExchangeData(ExchangeData):
         """
         # Load config to get wss paths
         if not self.wss_paths:
-            self._load_from_config('spot')
+            self._load_from_config("spot")
 
         return self.wss_paths.get(channel, "")
 

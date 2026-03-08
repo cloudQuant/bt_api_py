@@ -6,7 +6,7 @@ import json
 import time
 
 from bt_api_py.containers.orderbooks.orderbook import OrderBookData
-from bt_api_py.functions.utils import from_dict_get_float, from_dict_get_string
+from bt_api_py.functions.utils import from_dict_get_float
 
 
 class KuCoinOrderBookData(OrderBookData):
@@ -236,7 +236,9 @@ class KuCoinLevel3OrderBookData(KuCoinOrderBookData):
         # Extract data from response
         self.order_book_data = self.order_book_info.get("data", {})
         self.order_book_symbol_name = self.symbol_name
-        self.server_time = from_dict_get_float(self.order_book_data, "sequence")  # Use sequence as time
+        self.server_time = from_dict_get_float(
+            self.order_book_data, "sequence"
+        )  # Use sequence as time
 
         # Level3 format: [[order_id, price, size], ...]
         bids = self.order_book_data.get("bids", [])
@@ -267,11 +269,13 @@ class KuCoinLevel3OrderBookData(KuCoinOrderBookData):
                 ask_dict[price_float + "_orders"] = 1
 
         # Extract aggregated data
-        self.bid_price_list = sorted([k for k in bid_dict.keys() if isinstance(k, float)], reverse=True)
+        self.bid_price_list = sorted(
+            [k for k in bid_dict if isinstance(k, float)], reverse=True
+        )
         self.bid_volume_list = [bid_dict[p] for p in self.bid_price_list]
         self.bid_trade_nums = [bid_dict.get(f"{p}_orders", 1) for p in self.bid_price_list]
 
-        self.ask_price_list = sorted([k for k in ask_dict.keys() if isinstance(k, float)])
+        self.ask_price_list = sorted([k for k in ask_dict if isinstance(k, float)])
         self.ask_volume_list = [ask_dict[p] for p in self.ask_price_list]
         self.ask_trade_nums = [ask_dict.get(f"{p}_orders", 1) for p in self.ask_price_list]
 

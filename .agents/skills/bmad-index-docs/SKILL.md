@@ -1,9 +1,7 @@
-- --
-
+---
 name: bmad-index-docs
 description: Execute index-docs
-
-- --
+---
 
 # index-docs
 

@@ -21,10 +21,11 @@ def _load_zaif_yaml():
     try:
         cfg_path = os.path.join(
             os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
-            "configs", "zaif.yaml",
+            "configs",
+            "zaif.yaml",
         )
         if os.path.exists(cfg_path):
-            with open(cfg_path, "r", encoding="utf-8") as f:
+            with open(cfg_path, encoding="utf-8") as f:
                 _zaif_yaml_cache = yaml.safe_load(f) or {}
     except Exception as e:
         logger.warn(f"Failed to load zaif.yaml: {e}")
@@ -41,8 +42,14 @@ class ZaifExchangeData(ExchangeData):
         self.rest_url = "https://api.zaif.jp"
         self.wss_url = "wss://ws.zaif.jp:8888"
         self.kline_periods = {
-            "1m": "1min", "5m": "5min", "15m": "15min", "30m": "30min",
-            "1h": "1hour", "4h": "4hour", "1d": "1day", "1w": "1week",
+            "1m": "1min",
+            "5m": "5min",
+            "15m": "15min",
+            "30m": "30min",
+            "1h": "1hour",
+            "4h": "4hour",
+            "1d": "1day",
+            "1w": "1week",
         }
         self.legal_currency = ["JPY", "BTC", "ETH"]
 

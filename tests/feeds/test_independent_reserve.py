@@ -9,6 +9,7 @@ from unittest.mock import patch
 
 import pytest
 
+import bt_api_py.exchange_registers.register_independent_reserve  # noqa: F401
 from bt_api_py.containers.exchanges.independent_reserve_exchange_data import (
     IndependentReserveExchangeDataSpot,
 )
@@ -17,15 +18,17 @@ from bt_api_py.feeds.live_independent_reserve.request_base import IndependentRes
 from bt_api_py.feeds.live_independent_reserve.spot import IndependentReserveRequestDataSpot
 from bt_api_py.registry import ExchangeRegistry
 
-import bt_api_py.exchange_registers.register_independent_reserve  # noqa: F401
-
 # ── sample response fixtures ─────────────────────────────────
 
 SAMPLE_TICK = {
-    "LastPrice": 50000.0, "CurrentHighestBidPrice": 49950.0,
-    "CurrentLowestOfferPrice": 50050.0, "DayVolumeXbt": 123.45,
-    "DayHighestPrice": 51000.0, "DayLowestPrice": 49000.0,
-    "DayAvgPrice": 50000.0, "CreatedTimestamp": "2026-01-01T00:00:00Z",
+    "LastPrice": 50000.0,
+    "CurrentHighestBidPrice": 49950.0,
+    "CurrentLowestOfferPrice": 50050.0,
+    "DayVolumeXbt": 123.45,
+    "DayHighestPrice": 51000.0,
+    "DayLowestPrice": 49000.0,
+    "DayAvgPrice": 50000.0,
+    "CreatedTimestamp": "2026-01-01T00:00:00Z",
 }
 
 SAMPLE_DEPTH = {
@@ -37,8 +40,11 @@ SAMPLE_CURRENCIES = ["Xbt", "Eth", "Ltc", "Usdt"]
 
 SAMPLE_DEALS = {
     "Trades": [
-        {"TradeTimestampUtc": "2026-01-01T00:00:00Z", "PrimaryCurrencyAmount": 0.01,
-         "SecondaryCurrencyTradePrice": 50000.0},
+        {
+            "TradeTimestampUtc": "2026-01-01T00:00:00Z",
+            "PrimaryCurrencyAmount": 0.01,
+            "SecondaryCurrencyTradePrice": 50000.0,
+        },
     ]
 }
 
@@ -58,6 +64,7 @@ SAMPLE_ERROR = {"Message": "Invalid request"}
 
 # ── helpers ───────────────────────────────────────────────────
 
+
 @pytest.fixture
 def feed():
     return IndependentReserveRequestDataSpot(queue.Queue())
@@ -71,6 +78,7 @@ def exdata():
 # ═══════════════════════════════════════════════════════════════
 # 1) ExchangeData
 # ═══════════════════════════════════════════════════════════════
+
 
 class TestExchangeData:
     def test_exchange_name(self, exdata):
@@ -110,15 +118,25 @@ class TestExchangeData:
             exdata.get_rest_path("nonexistent")
 
     def test_rest_paths_keys(self, exdata):
-        for key in ("get_tick", "get_depth", "get_deals", "get_exchange_info",
-                     "make_order_limit", "make_order_market", "cancel_order",
-                     "get_open_orders", "get_account", "get_balance"):
+        for key in (
+            "get_tick",
+            "get_depth",
+            "get_deals",
+            "get_exchange_info",
+            "make_order_limit",
+            "make_order_market",
+            "cancel_order",
+            "get_open_orders",
+            "get_account",
+            "get_balance",
+        ):
             assert key in exdata.rest_paths
 
 
 # ═══════════════════════════════════════════════════════════════
 # 2) Parameter generation (_get_xxx)
 # ═══════════════════════════════════════════════════════════════
+
 
 class TestParamGeneration:
     def test_get_tick_params(self, feed):
@@ -191,6 +209,7 @@ class TestParamGeneration:
 # 3) Normalization functions
 # ═══════════════════════════════════════════════════════════════
 
+
 class TestNormalization:
     def test_tick_ok(self):
         result, ok = IndependentReserveRequestData._get_tick_normalize_function(SAMPLE_TICK, {})
@@ -206,7 +225,9 @@ class TestNormalization:
         assert ok is True
 
     def test_exchange_info_list(self):
-        result, ok = IndependentReserveRequestData._get_exchange_info_normalize_function(SAMPLE_CURRENCIES, {})
+        result, ok = IndependentReserveRequestData._get_exchange_info_normalize_function(
+            SAMPLE_CURRENCIES, {}
+        )
         assert ok is True
 
     def test_deals_ok(self):
@@ -227,16 +248,22 @@ class TestNormalization:
         assert ok is True
 
     def test_open_orders_ok(self):
-        result, ok = IndependentReserveRequestData._get_open_orders_normalize_function(SAMPLE_OPEN_ORDERS, {})
+        result, ok = IndependentReserveRequestData._get_open_orders_normalize_function(
+            SAMPLE_OPEN_ORDERS, {}
+        )
         assert ok is True
 
     def test_balance_ok(self):
-        result, ok = IndependentReserveRequestData._get_balance_normalize_function(SAMPLE_ACCOUNTS, {})
+        result, ok = IndependentReserveRequestData._get_balance_normalize_function(
+            SAMPLE_ACCOUNTS, {}
+        )
         assert ok is True
         assert len(result) == 2
 
     def test_account_ok(self):
-        result, ok = IndependentReserveRequestData._get_account_normalize_function(SAMPLE_ACCOUNTS, {})
+        result, ok = IndependentReserveRequestData._get_account_normalize_function(
+            SAMPLE_ACCOUNTS, {}
+        )
         assert ok is True
 
     def test_is_error_none(self):
@@ -252,6 +279,7 @@ class TestNormalization:
 # ═══════════════════════════════════════════════════════════════
 # 4) Mocked sync calls
 # ═══════════════════════════════════════════════════════════════
+
 
 class TestSyncCalls:
     @patch.object(IndependentReserveRequestData, "http_request", return_value=SAMPLE_TICK)
@@ -305,6 +333,7 @@ class TestSyncCalls:
 # 5) Auth
 # ═══════════════════════════════════════════════════════════════
 
+
 class TestAuth:
     def test_headers(self, feed):
         h = feed._get_headers()
@@ -325,17 +354,13 @@ class TestAuth:
         assert sig == ""
 
     def test_signature_nonempty_with_secret(self):
-        f = IndependentReserveRequestDataSpot(
-            queue.Queue(), public_key="k", private_key="s"
-        )
+        f = IndependentReserveRequestDataSpot(queue.Queue(), public_key="k", private_key="s")
         sig = f._generate_signature("http://example.com", 1234, {"foo": "bar"})
         assert len(sig) == 64
         assert sig == sig.upper()
 
     def test_sign_body(self):
-        f = IndependentReserveRequestDataSpot(
-            queue.Queue(), public_key="k", private_key="s"
-        )
+        f = IndependentReserveRequestDataSpot(queue.Queue(), public_key="k", private_key="s")
         body = f._sign_body("http://example.com", {"foo": "bar"})
         assert "apiKey" in body
         assert "nonce" in body
@@ -345,6 +370,7 @@ class TestAuth:
 # ═══════════════════════════════════════════════════════════════
 # 6) Registry
 # ═══════════════════════════════════════════════════════════════
+
 
 class TestRegistry:
     def test_feed_registered(self):
@@ -366,17 +392,28 @@ class TestRegistry:
 # ═══════════════════════════════════════════════════════════════
 
 _EXPECTED_METHODS = [
-    "get_tick", "async_get_tick",
-    "get_ticker", "async_get_ticker",
-    "get_depth", "async_get_depth",
-    "get_exchange_info", "async_get_exchange_info",
-    "get_deals", "async_get_deals",
-    "get_recent_trades", "async_get_recent_trades",
-    "make_order", "async_make_order",
-    "cancel_order", "async_cancel_order",
-    "get_open_orders", "async_get_open_orders",
-    "get_balance", "async_get_balance",
-    "get_account", "async_get_account",
+    "get_tick",
+    "async_get_tick",
+    "get_ticker",
+    "async_get_ticker",
+    "get_depth",
+    "async_get_depth",
+    "get_exchange_info",
+    "async_get_exchange_info",
+    "get_deals",
+    "async_get_deals",
+    "get_recent_trades",
+    "async_get_recent_trades",
+    "make_order",
+    "async_make_order",
+    "cancel_order",
+    "async_cancel_order",
+    "get_open_orders",
+    "async_get_open_orders",
+    "get_balance",
+    "async_get_balance",
+    "get_account",
+    "async_get_account",
 ]
 
 
@@ -390,6 +427,7 @@ class TestMethodExistence:
 # ═══════════════════════════════════════════════════════════════
 # 8) Feed init
 # ═══════════════════════════════════════════════════════════════
+
 
 class TestFeedInit:
     def test_default_exchange_name(self, feed):
@@ -410,6 +448,7 @@ class TestFeedInit:
 # ═══════════════════════════════════════════════════════════════
 # 9) Integration (skipped)
 # ═══════════════════════════════════════════════════════════════
+
 
 class TestIntegration:
     @pytest.mark.skip(reason="Requires network access and API key")

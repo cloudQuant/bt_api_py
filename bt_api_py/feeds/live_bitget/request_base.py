@@ -25,11 +25,18 @@ class BitgetRequestData(Feed):
     @classmethod
     def _capabilities(cls):
         return {
-            Capability.GET_TICK, Capability.GET_DEPTH, Capability.GET_KLINE,
-            Capability.GET_EXCHANGE_INFO, Capability.GET_SERVER_TIME,
-            Capability.MAKE_ORDER, Capability.CANCEL_ORDER,
-            Capability.QUERY_ORDER, Capability.QUERY_OPEN_ORDERS,
-            Capability.GET_BALANCE, Capability.GET_ACCOUNT, Capability.GET_DEALS,
+            Capability.GET_TICK,
+            Capability.GET_DEPTH,
+            Capability.GET_KLINE,
+            Capability.GET_EXCHANGE_INFO,
+            Capability.GET_SERVER_TIME,
+            Capability.MAKE_ORDER,
+            Capability.CANCEL_ORDER,
+            Capability.QUERY_ORDER,
+            Capability.QUERY_OPEN_ORDERS,
+            Capability.GET_BALANCE,
+            Capability.GET_ACCOUNT,
+            Capability.GET_DEALS,
         }
 
     def __init__(self, data_queue, **kwargs):
@@ -59,12 +66,8 @@ class BitgetRequestData(Feed):
             assert 0, "Queue not initialized"
 
     def _generate_signature(self, message):
-        mac = hmac.new(
-            self.private_key.encode('utf-8'),
-            message.encode('utf-8'),
-            hashlib.sha256
-        )
-        return base64.b64encode(mac.digest()).decode('utf-8')
+        mac = hmac.new(self.private_key.encode("utf-8"), message.encode("utf-8"), hashlib.sha256)
+        return base64.b64encode(mac.digest()).decode("utf-8")
 
     def _build_auth_headers(self, method, request_path, body_string=""):
         timestamp = str(int(time.time() * 1000))
@@ -85,7 +88,7 @@ class BitgetRequestData(Feed):
         parts = path.split(" ", 1)
         method, request_path = (parts[0], parts[1]) if len(parts) == 2 else ("GET", path)
         url = f"{self._params.rest_url}{request_path}"
-        is_public = '/public/' in request_path or '/market/' in request_path
+        is_public = "/public/" in request_path or "/market/" in request_path
 
         if is_public:
             if params:
@@ -114,7 +117,7 @@ class BitgetRequestData(Feed):
         parts = path.split(" ", 1)
         method, request_path = (parts[0], parts[1]) if len(parts) == 2 else ("GET", path)
         url = f"{self._params.rest_url}{request_path}"
-        is_public = '/public/' in request_path or '/market/' in request_path
+        is_public = "/public/" in request_path or "/market/" in request_path
 
         if is_public:
             if params:

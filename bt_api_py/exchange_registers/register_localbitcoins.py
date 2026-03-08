@@ -7,8 +7,6 @@ LocalBitcoins 交易所注册模块
 from bt_api_py.balance_utils import simple_balance_handler as _localbitcoins_balance_handler
 from bt_api_py.containers.exchanges.localbitcoins_exchange_data import LocalBitcoinsExchangeDataSpot
 from bt_api_py.feeds.live_localbitcoins import (
-    LocalBitcoinsAccountWssDataSpot,
-    LocalBitcoinsMarketWssDataSpot,
     LocalBitcoinsRequestDataSpot,
 )
 from bt_api_py.registry import ExchangeRegistry
@@ -37,8 +35,12 @@ def register_localbitcoins():
     # Spot
     ExchangeRegistry.register_feed("LOCALBITCOINS___SPOT", LocalBitcoinsRequestDataSpot)
     ExchangeRegistry.register_exchange_data("LOCALBITCOINS___SPOT", LocalBitcoinsExchangeDataSpot)
-    ExchangeRegistry.register_balance_handler("LOCALBITCOINS___SPOT", _localbitcoins_balance_handler)
-    ExchangeRegistry.register_stream("LOCALBITCOINS___SPOT", "subscribe", _localbitcoins_spot_subscribe_handler)
+    ExchangeRegistry.register_balance_handler(
+        "LOCALBITCOINS___SPOT", _localbitcoins_balance_handler
+    )
+    ExchangeRegistry.register_stream(
+        "LOCALBITCOINS___SPOT", "subscribe", _localbitcoins_spot_subscribe_handler
+    )
 
 
 # 模块导入时自动注册

@@ -15,8 +15,8 @@ from bt_api_py.containers.requestdatas.request_data import RequestData
 from bt_api_py.error import ErrorTranslator
 from bt_api_py.feeds.capability import Capability
 from bt_api_py.feeds.feed import Feed
-from bt_api_py.rate_limiter import RateLimiter, RateLimitRule, RateLimitScope, RateLimitType
 from bt_api_py.logging_factory import get_logger
+from bt_api_py.rate_limiter import RateLimiter, RateLimitRule, RateLimitScope, RateLimitType
 
 
 class PoloniexErrorTranslator(ErrorTranslator):
@@ -48,7 +48,6 @@ class PoloniexErrorTranslator(ErrorTranslator):
         1001: (1001, "Invalid API key"),
         1002: (1002, "Invalid signature"),
         1003: (1003, "Timestamp expired"),
-
         # Order errors
         21301: (2001, "Order not found"),
         21302: (2002, "Order amount too small"),
@@ -57,10 +56,8 @@ class PoloniexErrorTranslator(ErrorTranslator):
         21305: (2005, "Exceeded maximum order count"),
         21308: (2006, "Price precision error"),
         21309: (2007, "Quantity precision error"),
-
         # Rate limiting
         429: (3001, "Rate limit exceeded"),
-
         # System errors
         500: (5001, "Internal server error"),
         503: (5002, "Service unavailable"),
@@ -179,11 +176,7 @@ class PoloniexRequestData(Feed):
         sign_str = str(timestamp) + method.upper() + request_path + body_str
 
         signature = base64.b64encode(
-            hmac.new(
-                secret_key.encode("utf-8"),
-                sign_str.encode("utf-8"),
-                hashlib.sha256
-            ).digest()
+            hmac.new(secret_key.encode("utf-8"), sign_str.encode("utf-8"), hashlib.sha256).digest()
         ).decode("utf-8")
 
         return signature
@@ -244,7 +237,11 @@ class PoloniexRequestData(Feed):
 
         # Generate signature for private endpoints
         headers = {}
-        if endpoint.startswith("/accounts/") or endpoint.startswith("/orders") or endpoint.startswith("/trades"):
+        if (
+            endpoint.startswith("/accounts/")
+            or endpoint.startswith("/orders")
+            or endpoint.startswith("/trades")
+        ):
             if self.public_key and self.private_key:
                 timestamp = int(time.time() * 1000)
                 sign = self.signature(timestamp, method, request_path, self.private_key, body)
@@ -298,7 +295,11 @@ class PoloniexRequestData(Feed):
             request_path += "?" + query_string
 
         headers = {}
-        if endpoint.startswith("/accounts/") or endpoint.startswith("/orders") or endpoint.startswith("/trades"):
+        if (
+            endpoint.startswith("/accounts/")
+            or endpoint.startswith("/orders")
+            or endpoint.startswith("/trades")
+        ):
             if self.public_key and self.private_key:
                 timestamp = int(time.time() * 1000)
                 sign = self.signature(timestamp, method, request_path, self.private_key, body)

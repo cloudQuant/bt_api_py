@@ -2,10 +2,9 @@
 Bitunix REST API request base class.
 """
 
-import time
 import hashlib
+import time
 import uuid
-from urllib.parse import urlencode
 
 from bt_api_py.containers.exchanges.bitunix_exchange_data import BitunixExchangeDataSpot
 from bt_api_py.containers.requestdatas.request_data import RequestData
@@ -55,11 +54,11 @@ class BitunixRequestData(Feed):
 
         # First SHA256
         first_input = nonce + timestamp + api_key + query_params + body
-        digest = hashlib.sha256(first_input.encode('utf-8')).hexdigest()
+        digest = hashlib.sha256(first_input.encode("utf-8")).hexdigest()
 
         # Second SHA256
         second_input = digest + secret
-        return hashlib.sha256(second_input.encode('utf-8')).hexdigest()
+        return hashlib.sha256(second_input.encode("utf-8")).hexdigest()
 
     def _get_headers(self, method, request_path, params=None, body=""):
         """Generate request headers."""
@@ -140,12 +139,14 @@ class BitunixRequestData(Feed):
         """Prepare server time request. Returns (path, params, extra_data)."""
         if extra_data is None:
             extra_data = {}
-        extra_data.update({
-            "exchange_name": self.exchange_name,
-            "symbol_name": "",
-            "asset_type": self.asset_type,
-            "request_type": "get_server_time",
-        })
+        extra_data.update(
+            {
+                "exchange_name": self.exchange_name,
+                "symbol_name": "",
+                "asset_type": self.asset_type,
+                "request_type": "get_server_time",
+            }
+        )
         return "GET /api/v1/futures/market/serverTime", {}, extra_data
 
     def get_server_time(self, extra_data=None, **kwargs):

@@ -83,13 +83,20 @@ class BigONERequestDataSpot(BigONERequestData):
 
     # ── private: make order ─────────────────────────────────────
 
-    def make_order(self, symbol, amount, price=None, order_type="buy-limit", extra_data=None, **kwargs):
+    def make_order(
+        self, symbol, amount, price=None, order_type="buy-limit", extra_data=None, **kwargs
+    ):
         path, body, ed = self._make_order(symbol, amount, price, order_type, extra_data, **kwargs)
         return self.request(path, body=body, extra_data=ed, is_sign=True)
 
-    def async_make_order(self, symbol, amount, price=None, order_type="buy-limit", extra_data=None, **kwargs):
+    def async_make_order(
+        self, symbol, amount, price=None, order_type="buy-limit", extra_data=None, **kwargs
+    ):
         path, body, ed = self._make_order(symbol, amount, price, order_type, extra_data, **kwargs)
-        self.submit(self.async_request(path, body=body, extra_data=ed, is_sign=True), callback=self.async_callback)
+        self.submit(
+            self.async_request(path, body=body, extra_data=ed, is_sign=True),
+            callback=self.async_callback,
+        )
 
     # ── private: cancel order ───────────────────────────────────
 
@@ -99,7 +106,10 @@ class BigONERequestDataSpot(BigONERequestData):
 
     def async_cancel_order(self, symbol=None, order_id=None, extra_data=None, **kwargs):
         path, params, ed = self._cancel_order(symbol, order_id, extra_data, **kwargs)
-        self.submit(self.async_request(path, params, extra_data=ed, is_sign=True), callback=self.async_callback)
+        self.submit(
+            self.async_request(path, params, extra_data=ed, is_sign=True),
+            callback=self.async_callback,
+        )
 
     # ── private: query order ────────────────────────────────────
 
@@ -109,7 +119,10 @@ class BigONERequestDataSpot(BigONERequestData):
 
     def async_query_order(self, symbol=None, order_id=None, extra_data=None, **kwargs):
         path, params, ed = self._query_order(symbol, order_id, extra_data, **kwargs)
-        self.submit(self.async_request(path, params, extra_data=ed, is_sign=True), callback=self.async_callback)
+        self.submit(
+            self.async_request(path, params, extra_data=ed, is_sign=True),
+            callback=self.async_callback,
+        )
 
     # ── private: open orders ────────────────────────────────────
 
@@ -119,7 +132,10 @@ class BigONERequestDataSpot(BigONERequestData):
 
     def async_get_open_orders(self, symbol=None, extra_data=None, **kwargs):
         path, params, ed = self._get_open_orders(symbol, extra_data, **kwargs)
-        self.submit(self.async_request(path, params, extra_data=ed, is_sign=True), callback=self.async_callback)
+        self.submit(
+            self.async_request(path, params, extra_data=ed, is_sign=True),
+            callback=self.async_callback,
+        )
 
     # ── private: account ────────────────────────────────────────
 
@@ -129,7 +145,10 @@ class BigONERequestDataSpot(BigONERequestData):
 
     def async_get_account(self, extra_data=None, **kwargs):
         path, params, ed = self._get_account(extra_data, **kwargs)
-        self.submit(self.async_request(path, params, extra_data=ed, is_sign=True), callback=self.async_callback)
+        self.submit(
+            self.async_request(path, params, extra_data=ed, is_sign=True),
+            callback=self.async_callback,
+        )
 
     # ── private: balance ────────────────────────────────────────
 
@@ -139,4 +158,7 @@ class BigONERequestDataSpot(BigONERequestData):
 
     def async_get_balance(self, extra_data=None, **kwargs):
         path, params, ed = self._get_balance(extra_data, **kwargs)
-        self.submit(self.async_request(path, params, extra_data=ed, is_sign=True), callback=self.async_callback)
+        self.submit(
+            self.async_request(path, params, extra_data=ed, is_sign=True),
+            callback=self.async_callback,
+        )

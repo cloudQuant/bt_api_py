@@ -9,15 +9,11 @@ Tests for Phemex spot trading implementation following Binance/OKX standards:
 """
 
 import queue
-import time
-import pytest
-
-from bt_api_py.containers.requestdatas.request_data import RequestData
-from bt_api_py.feeds.live_phemex.spot import PhemexRequestDataSpot
-from bt_api_py.registry import ExchangeRegistry
 
 # Import registration to auto-register Phemex
 import bt_api_py.exchange_registers.register_phemex  # noqa: F401
+from bt_api_py.feeds.live_phemex.spot import PhemexRequestDataSpot
+from bt_api_py.registry import ExchangeRegistry
 
 
 def init_req_feed():
@@ -62,7 +58,7 @@ def test_phemex_tick_normalize_function():
             "lastEp": 50000000000,  # Scaled price (multiply by 1e8)
             "markEp": 50000000000,
             "indexEp": 50000000000,
-        }
+        },
     }
 
     result, status = PhemexRequestDataSpot._get_tick_normalize_function(
@@ -109,7 +105,7 @@ def test_phemex_kline_normalize_function():
                 [1678901234000, 49000, 51000, 48000, 50500, 100],
                 [1678904834000, 50500, 52000, 50000, 51500, 150],
             ]
-        }
+        },
     }
 
     result, status = PhemexRequestDataSpot._get_kline_normalize_function(
@@ -201,9 +197,9 @@ def test_phemex_depth_normalize_function():
                 "asks": [
                     [5000100000000, 150000000],
                     [5000200000000, 250000000],
-                ]
+                ],
             }
-        }
+        },
     }
 
     result, status = PhemexRequestDataSpot._get_depth_normalize_function(
@@ -258,6 +254,7 @@ def test_phemex_registration():
 
     # Check exchange data class
     from bt_api_py.containers.exchanges.phemex_exchange_data import PhemexExchangeDataSpot
+
     data_class = ExchangeRegistry._exchange_data_classes.get("PHEMEX___SPOT")
     assert data_class is not None
     assert data_class == PhemexExchangeDataSpot

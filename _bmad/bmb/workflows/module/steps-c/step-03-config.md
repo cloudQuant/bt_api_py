@@ -1,5 +1,4 @@
-- --
-
+---
 name: 'step-03-config'
 description: 'Generate module.yaml with install questions'
 
@@ -7,8 +6,7 @@ nextStepFile: './step-04-agents.md'
 moduleYamlConventionsFile: '../data/module-yaml-conventions.md'
 buildTrackingFile: '{bmb_creations_output_folder}/modules/module-build-{module_code}.md'
 targetLocation: '{build_tracking_targetLocation}'
-
-- --
+---
 
 # Step 3: Module Configuration
 
@@ -32,7 +30,7 @@ Generate module.yaml with install configuration and custom variables.
 - ✅ Follow module.yaml conventions
 - ✅ Ask about custom variables
 
-- --
+---
 
 ## MANDATORY SEQUENCE
 
@@ -44,47 +42,42 @@ Load `{moduleYamlConventionsFile}` for reference.
 
 Create `{targetLocation}/module.yaml` with:
 
-- *Required fields:**
-
+**Required fields:**
 ```yaml
 code: {module_code}
 name: "{module_display_name}"
 header: "{brief_header}"
 subheader: "{additional_context}"
 default_selected: false
+```
 
-```bash
-
-- *Note for Extension modules:** `code:` matches base module
+**Note for Extension modules:** `code:` matches base module
 
 ### 3. Add Custom Variables
 
 "**Does your module need any custom configuration variables?**"
 
 Reference the brief for:
-
 - User input needed during installation
 - Paths or settings users should configure
 - Feature flags or options
 
-- *For each variable, create:**
-
+**For each variable, create:**
 ```yaml
 variable_name:
   prompt: "{question to ask}"
   default: "{default_value}"
   result: "{template}"
+```
 
-```bash
-
-- *Common patterns:**
+**Common patterns:**
 - Text input (names, titles)
 - Boolean (enable features)
 - Single-select (experience levels)
 - Multi-select (platforms)
 - Paths (artifact folders)
 
-- *IF no custom variables needed:**
+**IF no custom variables needed:**
 
 Keep it simple — just use core config variables.
 
@@ -95,7 +88,6 @@ Write the complete module.yaml to `{targetLocation}/module.yaml`
 ### 5. Update Build Tracking
 
 Update `{buildTrackingFile}`:
-
 - Add 'step-03-config' to stepsCompleted
 - Note: module.yaml created
 
@@ -110,12 +102,12 @@ Update `{buildTrackingFile}`:
 
 ### 7. MENU OPTIONS
 
-- *Select an Option:** [C] Continue
+**Select an Option:** [C] Continue
 
 - IF C: Update tracking, load `{nextStepFile}`
 - IF Any other: Help, then redisplay menu
 
-- --
+---
 
 ## Success Metrics
 

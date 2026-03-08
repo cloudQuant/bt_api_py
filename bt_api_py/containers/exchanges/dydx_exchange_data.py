@@ -63,7 +63,7 @@ class DydxExchangeData(ExchangeData):
             "MATIC-USD",
             "LINK-USD",
             "UNI-USD",
-            "AAVE-USD"
+            "AAVE-USD",
         ]
 
         self.rest_paths = {}
@@ -153,7 +153,7 @@ class DydxExchangeData(ExchangeData):
                 # Common quote currencies: USD, USDT, EUR, etc.
                 for quote in ["USD", "EUR", "ETH", "BTC"]:
                     if symbol.endswith(quote):
-                        base = symbol[:-len(quote)]
+                        base = symbol[: -len(quote)]
                         symbol = f"{base}-{quote}"
                         break
         return symbol
@@ -190,7 +190,7 @@ class DydxExchangeData(ExchangeData):
 
     def str2int(self, time_str):
         """将时间字符串转换为时间戳"""
-        if time_str.endswith('Z'):
+        if time_str.endswith("Z"):
             time_str = time_str[:-1]
         dt = datetime.datetime.strptime(time_str, "%Y-%m-%dT%H:%M:%S.%f")
         timestamp = int((time.mktime(dt.timetuple()) + dt.microsecond / 1000000) * 1000)

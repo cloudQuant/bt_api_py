@@ -75,9 +75,7 @@ class BybitRequestData(Feed):
             str: Hex digest of HMAC SHA256 signature
         """
         return hmac.new(
-            self.private_key.encode('utf-8'),
-            payload_string.encode('utf-8'),
-            hashlib.sha256
+            self.private_key.encode("utf-8"), payload_string.encode("utf-8"), hashlib.sha256
         ).hexdigest()
 
     def request(self, path, params=None, body=None, extra_data=None, timeout=10):
@@ -119,7 +117,7 @@ class BybitRequestData(Feed):
         url = f"{self._params.rest_url}{request_path}"
 
         # Determine if request needs authentication
-        is_public = '/market' in request_path
+        is_public = "/market" in request_path
 
         # Build query string and headers
         if is_public:
@@ -205,7 +203,7 @@ class BybitRequestData(Feed):
         url = f"{self._params.rest_url}{request_path}"
 
         # Determine if request needs authentication
-        is_public = '/market' in request_path
+        is_public = "/market" in request_path
 
         if is_public:
             if params:

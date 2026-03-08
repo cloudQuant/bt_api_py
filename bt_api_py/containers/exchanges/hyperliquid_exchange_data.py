@@ -1,7 +1,4 @@
-import copy
-import json
 import os
-import time
 
 from bt_api_py.containers.exchanges.exchange_data import ExchangeData
 from bt_api_py.logging_factory import get_logger
@@ -124,7 +121,6 @@ class HyperliquidExchangeData(ExchangeData):
         # Update trading symbols if defined in config
         if asset_cfg.trading_symbols:
             self.trading_symbols.update(asset_cfg.trading_symbols)
-
 
         # kline_periods - load from YAML, prefer asset-specific config
         kp = asset_cfg.kline_periods or (config.kline_periods if config.kline_periods else None)

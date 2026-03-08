@@ -84,6 +84,7 @@ class SwyftxRequestDataSpot(SwyftxRequestData):
 
 # ── WebSocket stubs ──────────────────────────────────────────
 
+
 class SwyftxMarketWssDataSpot:
     """Swyftx Spot Market WebSocket Data Handler (stub)."""
 

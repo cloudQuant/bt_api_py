@@ -1,11 +1,8 @@
 def test_pop_item() -> None:
-    content = {
-        "name": "cloud",
-        "age": 34
-    }
+    content = {"name": "cloud", "age": 34}
     content.pop("name")
     assert content == {"age": 34}
-    content.pop('name', None)
+    content.pop("name", None)
     content.pop("gender", None)
     assert content == {"age": 34}
 

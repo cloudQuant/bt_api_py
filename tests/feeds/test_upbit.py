@@ -5,17 +5,16 @@ Run:  pytest tests/feeds/test_upbit.py -v
 """
 
 import queue
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch
 
 import pytest
 
+import bt_api_py.exchange_registers.register_upbit  # noqa: F401
 from bt_api_py.containers.exchanges.upbit_exchange_data import UpbitExchangeDataSpot
 from bt_api_py.containers.requestdatas.request_data import RequestData
 from bt_api_py.feeds.live_upbit.request_base import UpbitRequestData
 from bt_api_py.feeds.live_upbit.spot import UpbitRequestDataSpot
 from bt_api_py.registry import ExchangeRegistry
-
-import bt_api_py.exchange_registers.register_upbit  # noqa: F401
 
 # ── sample response fixtures ──────────────────────────────────
 
@@ -33,14 +32,34 @@ SAMPLE_DEPTH = [
 ]
 
 SAMPLE_KLINE = [
-    {"market": "KRW-BTC", "candle_date_time_utc": "2024-01-01T00:00:00", "opening_price": 49000000,
-     "high_price": 51000000, "low_price": 48000000, "trade_price": 50000000, "candle_acc_trade_volume": 100},
-    {"market": "KRW-BTC", "candle_date_time_utc": "2024-01-01T01:00:00", "opening_price": 50000000,
-     "high_price": 52000000, "low_price": 49000000, "trade_price": 51000000, "candle_acc_trade_volume": 120},
+    {
+        "market": "KRW-BTC",
+        "candle_date_time_utc": "2024-01-01T00:00:00",
+        "opening_price": 49000000,
+        "high_price": 51000000,
+        "low_price": 48000000,
+        "trade_price": 50000000,
+        "candle_acc_trade_volume": 100,
+    },
+    {
+        "market": "KRW-BTC",
+        "candle_date_time_utc": "2024-01-01T01:00:00",
+        "opening_price": 50000000,
+        "high_price": 52000000,
+        "low_price": 49000000,
+        "trade_price": 51000000,
+        "candle_acc_trade_volume": 120,
+    },
 ]
 
 SAMPLE_TRADES = [
-    {"market": "KRW-BTC", "trade_price": 50000000, "trade_volume": 0.01, "ask_bid": "BID", "timestamp": 1700000000000}
+    {
+        "market": "KRW-BTC",
+        "trade_price": 50000000,
+        "trade_volume": 0.01,
+        "ask_bid": "BID",
+        "timestamp": 1700000000000,
+    }
 ]
 
 SAMPLE_EXCHANGE_INFO = [
@@ -53,13 +72,21 @@ SAMPLE_ACCOUNT = [
     {"currency": "KRW", "balance": "10000000", "locked": "0.0", "avg_buy_price": "0"},
 ]
 
-SAMPLE_ORDER = {"uuid": "abc-123", "side": "bid", "ord_type": "limit", "price": "50000000",
-                "state": "done", "market": "KRW-BTC", "volume": "0.01"}
+SAMPLE_ORDER = {
+    "uuid": "abc-123",
+    "side": "bid",
+    "ord_type": "limit",
+    "price": "50000000",
+    "state": "done",
+    "market": "KRW-BTC",
+    "volume": "0.01",
+}
 
 SAMPLE_ERROR = {"error": {"name": "invalid_parameter", "message": "invalid market"}}
 
 
 # ── helpers ───────────────────────────────────────────────────
+
 
 @pytest.fixture
 def feed():
@@ -115,9 +142,19 @@ class TestExchangeData:
             exdata.get_rest_path("nonexistent_endpoint")
 
     def test_rest_paths_keys(self, exdata):
-        for key in ("get_tick", "get_depth", "get_exchange_info", "get_trades",
-                     "get_kline_minutes", "get_kline_days", "get_account",
-                     "make_order", "cancel_order", "query_order", "get_open_orders"):
+        for key in (
+            "get_tick",
+            "get_depth",
+            "get_exchange_info",
+            "get_trades",
+            "get_kline_minutes",
+            "get_kline_days",
+            "get_account",
+            "make_order",
+            "cancel_order",
+            "query_order",
+            "get_open_orders",
+        ):
             assert key in exdata.rest_paths
 
 
@@ -168,7 +205,9 @@ class TestParamGeneration:
         assert params["isDetails"] == "true"
 
     def test_make_order_params(self, feed):
-        path, body, extra = feed._make_order("KRW-BTC", 0.01, price=50000000, order_type="bid-limit")
+        path, body, extra = feed._make_order(
+            "KRW-BTC", 0.01, price=50000000, order_type="bid-limit"
+        )
         assert "POST" in path
         assert body["market"] == "KRW-BTC"
         assert body["side"] == "bid"
@@ -251,7 +290,9 @@ class TestNormalization:
         assert ok is False
 
     def test_exchange_info_ok(self):
-        result, ok = UpbitRequestData._get_exchange_info_normalize_function(SAMPLE_EXCHANGE_INFO, {})
+        result, ok = UpbitRequestData._get_exchange_info_normalize_function(
+            SAMPLE_EXCHANGE_INFO, {}
+        )
         assert ok is True
         assert "markets" in result[0]
 
@@ -406,6 +447,7 @@ class TestAuth:
         q = queue.Queue()
         try:
             import jwt
+
             feed = UpbitRequestDataSpot(q, access_key="mykey", secret_key="mysecret")
             headers = feed._generate_auth_headers()
             assert "Authorization" in headers
@@ -417,6 +459,7 @@ class TestAuth:
         q = queue.Queue()
         try:
             import jwt
+
             feed = UpbitRequestDataSpot(q, access_key="mykey", secret_key="mysecret")
             token = feed._generate_jwt_token({"market": "KRW-BTC"})
             assert token is not None
@@ -453,20 +496,34 @@ class TestRegistry:
 
 
 _EXPECTED_METHODS = [
-    "get_tick", "async_get_tick",
-    "get_ticker", "async_get_ticker",
-    "get_depth", "async_get_depth",
-    "get_kline", "async_get_kline",
-    "get_trade_history", "async_get_trade_history",
-    "get_trades", "async_get_trades",
-    "make_order", "async_make_order",
-    "cancel_order", "async_cancel_order",
-    "query_order", "async_query_order",
-    "get_open_orders", "async_get_open_orders",
-    "get_deals", "async_get_deals",
-    "get_account", "async_get_account",
-    "get_balance", "async_get_balance",
-    "get_exchange_info", "async_get_exchange_info",
+    "get_tick",
+    "async_get_tick",
+    "get_ticker",
+    "async_get_ticker",
+    "get_depth",
+    "async_get_depth",
+    "get_kline",
+    "async_get_kline",
+    "get_trade_history",
+    "async_get_trade_history",
+    "get_trades",
+    "async_get_trades",
+    "make_order",
+    "async_make_order",
+    "cancel_order",
+    "async_cancel_order",
+    "query_order",
+    "async_query_order",
+    "get_open_orders",
+    "async_get_open_orders",
+    "get_deals",
+    "async_get_deals",
+    "get_account",
+    "async_get_account",
+    "get_balance",
+    "async_get_balance",
+    "get_exchange_info",
+    "async_get_exchange_info",
 ]
 
 

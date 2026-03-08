@@ -65,4 +65,5 @@ class BitfinexSpotRequestAccountData(AccountData):
 
 class BitfinexSpotWssAccountData(BitfinexSpotRequestAccountData):
     """Bitfinex Spot WebSocket Account Data"""
+
     pass  # Same structure as request data

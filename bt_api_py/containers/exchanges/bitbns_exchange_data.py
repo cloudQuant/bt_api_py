@@ -3,6 +3,7 @@ Bitbns Exchange Data Configuration
 """
 
 import os
+
 from bt_api_py.containers.exchanges.exchange_data import ExchangeData
 from bt_api_py.logging_factory import get_logger
 
@@ -19,6 +20,7 @@ def _get_bitbns_config():
         return _bitbns_config
     try:
         from bt_api_py.config_loader import load_exchange_config
+
         config_path = os.path.join(
             os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
             "configs",
@@ -74,16 +76,16 @@ class BitbnsExchangeData(ExchangeData):
                 rest_urls = config.base_urls.rest
                 # Handle both dict and string cases
                 if isinstance(rest_urls, dict):
-                    self.rest_url = rest_urls.get(asset_type, rest_urls.get('default', ''))
+                    self.rest_url = rest_urls.get(asset_type, rest_urls.get("default", ""))
                 else:
                     self.rest_url = rest_urls
-            if hasattr(config.base_urls, 'rest_public') and config.base_urls.rest_public:
+            if hasattr(config.base_urls, "rest_public") and config.base_urls.rest_public:
                 self.rest_public_url = config.base_urls.rest_public
             if config.base_urls.wss:
                 wss_urls = config.base_urls.wss
                 # Handle both dict and string cases
                 if isinstance(wss_urls, dict):
-                    self.wss_url = wss_urls.get(asset_type, wss_urls.get('default', ''))
+                    self.wss_url = wss_urls.get(asset_type, wss_urls.get("default", ""))
                 else:
                     self.wss_url = wss_urls
         if asset_cfg.rest_paths:

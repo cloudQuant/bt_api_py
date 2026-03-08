@@ -1,15 +1,30 @@
 """
 Feed Registry
 
-This module provides a registry system for exchange feeds.
-Allows exchange feeds to be registered and discovered by the framework.
+This module provides a backward-compatible registry facade for exchange feeds.
+Prefer `bt_api_py.registry.ExchangeRegistry` for new code.
 """
 
-from typing import Dict, Type, Any, Callable
+from collections.abc import Callable
 
+from bt_api_py.logging_factory import get_logger
+from bt_api_py.registry import ExchangeRegistry
 
-# Global registry to store all registered feeds
-_registry: Dict[str, Any] = {}
+__all__ = [
+    "register",
+    "get_feed",
+    "get_all_feeds",
+    "is_registered",
+    "unregister",
+    "clear_registry",
+    "list_feeds",
+    "register_feed",
+    "get_registry",
+    "initialize_default_feeds",
+]
+
+_logger = get_logger("registry")
+_legacy_registry: dict[str, type] = {}
 
 
 def register(name: str) -> Callable:
@@ -27,18 +42,21 @@ def register(name: str) -> Callable:
         class BinanceSpotFeed:
             pass
     """
-    def decorator(cls):
-        if name in _registry:
-            print(f"Warning: Overriding existing feed registration for '{name}'")
 
-        _registry[name] = cls
-        print(f"Registered feed: {name} -> {cls}")
+    def decorator(cls: type) -> type:
+        existing = ExchangeRegistry.get_feed_class(name)
+        if existing is not None and existing is not cls:
+            _logger.warning(f"Overriding existing feed registration for '{name}'")
+
+        ExchangeRegistry.register_feed(name, cls)
+        _legacy_registry[name] = cls
+        _logger.debug(f"Registered feed: {name} -> {cls.__name__}")
         return cls
 
     return decorator
 
 
-def get_feed(name: str) -> Type:
+def get_feed(name: str) -> type:
     """
     Get a registered feed class by name.
 
@@ -51,20 +69,21 @@ def get_feed(name: str) -> Type:
     Raises:
         KeyError: If feed is not registered
     """
-    if name not in _registry:
+    feed_class = ExchangeRegistry.get_feed_class(name)
+    if feed_class is None:
         raise KeyError(f"Feed '{name}' is not registered")
 
-    return _registry[name]
+    return feed_class
 
 
-def get_all_feeds() -> Dict[str, Type]:
+def get_all_feeds() -> dict[str, type]:
     """
     Get all registered feeds.
 
     Returns:
         Dictionary of feed name to feed class
     """
-    return _registry.copy()
+    return ExchangeRegistry.get_feed_classes()
 
 
 def is_registered(name: str) -> bool:
@@ -77,7 +96,7 @@ def is_registered(name: str) -> bool:
     Returns:
         True if registered, False otherwise
     """
-    return name in _registry
+    return ExchangeRegistry.get_feed_class(name) is not None
 
 
 def unregister(name: str) -> bool:
@@ -90,46 +109,41 @@ def unregister(name: str) -> bool:
     Returns:
         True if successfully unregistered, False if not registered
     """
-    if name in _registry:
-        del _registry[name]
-        return True
-    return False
+    _legacy_registry.pop(name, None)
+    return ExchangeRegistry.unregister_feed(name)
 
 
 def clear_registry():
     """Clear all registered feeds."""
-    _registry.clear()
+    _legacy_registry.clear()
+    ExchangeRegistry.clear()
 
 
 def list_feeds():
     """List all registered feeds."""
-    print("Registered feeds:")
-    for name, cls in _registry.items():
-        print(f"  - {name}: {cls}")
+    for name, cls in get_all_feeds().items():
+        _logger.info(f"Registered feed: {name} -> {cls.__name__}")
 
 
 # Legacy functions for backward compatibility
-def register_feed(name: str, feed_class: Type):
+def register_feed(name: str, feed_class: type):
     """Legacy function to register a feed (deprecated)."""
-    _registry[name] = feed_class
+    ExchangeRegistry.register_feed(name, feed_class)
+    _legacy_registry[name] = feed_class
 
 
-def get_registry() -> Dict[str, Type]:
+def get_registry() -> dict[str, type]:
     """Legacy function to get registry (deprecated)."""
-    return _registry.copy()
+    return get_all_feeds()
 
 
-# Initialize with built-in exchanges
 def initialize_default_feeds():
-    """Initialize with default exchanges."""
+    """Explicitly initialize the legacy default feeds."""
     try:
-        # Import and register default exchanges
-        import bt_api_py.feeds.live_binance
-        import bt_api_py.feeds.live_okx
-        import bt_api_py.feeds.live_hitbtc
-    except ImportError:
-        pass
+        import bt_api_py.exchange_registers.register_binance  # noqa: F401
+        import bt_api_py.exchange_registers.register_hitbtc  # noqa: F401
+        import bt_api_py.exchange_registers.register_okx  # noqa: F401
+    except ImportError as exc:
+        _logger.warning(f"Failed to initialize default feeds: {exc}")
 
-
-# Initialize on import
-initialize_default_feeds()
+    return get_all_feeds()

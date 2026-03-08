@@ -9,15 +9,11 @@ Tests for Ripio spot trading implementation following Binance/OKX standards:
 """
 
 import queue
-import time
-import pytest
-
-from bt_api_py.containers.requestdatas.request_data import RequestData
-from bt_api_py.feeds.live_ripio.spot import RipioRequestDataSpot
-from bt_api_py.registry import ExchangeRegistry
 
 # Import registration to auto-register Ripio
 import bt_api_py.exchange_registers.register_ripio  # noqa: F401
+from bt_api_py.feeds.live_ripio.spot import RipioRequestDataSpot
+from bt_api_py.registry import ExchangeRegistry
 
 
 def init_req_feed():
@@ -67,7 +63,7 @@ def test_ripio_tick_normalize_function():
             "volume": "1234.56",
             "high": "51000.00",
             "low": "49000.00",
-        }
+        },
     }
 
     result, status = RipioRequestDataSpot._get_tick_normalize_function(
@@ -115,7 +111,7 @@ def test_ripio_kline_normalize_function():
         "data": [
             [1678901234000, "49000", "51000", "48000", "50500", "100"],
             [1678904834000, "50500", "52000", "50000", "51500", "150"],
-        ]
+        ],
     }
 
     result, status = RipioRequestDataSpot._get_kline_normalize_function(
@@ -199,15 +195,9 @@ def test_ripio_depth_normalize_function():
     input_data = {
         "success": True,
         "data": {
-            "bids": [
-                ["49999.00", "1.5"],
-                ["49998.00", "2.0"]
-            ],
-            "asks": [
-                ["50001.00", "1.3"],
-                ["50002.00", "2.5"]
-            ]
-        }
+            "bids": [["49999.00", "1.5"], ["49998.00", "2.0"]],
+            "asks": [["50001.00", "1.3"], ["50002.00", "2.5"]],
+        },
     }
 
     result, status = RipioRequestDataSpot._get_depth_normalize_function(
@@ -246,6 +236,7 @@ def test_ripio_registration():
 
     # Check exchange data class
     from bt_api_py.containers.exchanges.ripio_exchange_data import RipioExchangeDataSpot
+
     data_class = ExchangeRegistry._exchange_data_classes.get("RIPIO___SPOT")
     assert data_class is not None
     assert data_class == RipioExchangeDataSpot
@@ -280,8 +271,8 @@ def test_ripio_trades_normalize_function():
                 "amount": "0.3",
                 "side": "sell",
                 "timestamp": 1678901235000,
-            }
-        ]
+            },
+        ],
     }
 
     result, status = RipioRequestDataSpot._get_trades_normalize_function(

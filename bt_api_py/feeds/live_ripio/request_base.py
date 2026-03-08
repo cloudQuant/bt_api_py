@@ -4,13 +4,11 @@ Ripio REST API request base class.
 Handles HTTP requests to Ripio's API with optional HMAC SHA256 signature authentication.
 """
 
-import hmac
 import hashlib
+import hmac
 import time
-from typing import Any
 
 from bt_api_py.containers.exchanges.ripio_exchange_data import (
-    RipioExchangeData,
     RipioExchangeDataSpot,
 )
 from bt_api_py.containers.requestdatas.request_data import RequestData
@@ -57,13 +55,7 @@ class RipioRequestData(Feed):
         self.api_key = kwargs.get("api_key", "")
         self.api_secret = kwargs.get("api_secret", "")
 
-    def _generate_signature(
-        self,
-        method: str,
-        path: str,
-        timestamp: str,
-        body: str = ""
-    ) -> str:
+    def _generate_signature(self, method: str, path: str, timestamp: str, body: str = "") -> str:
         """Generate Ripio HMAC SHA256 signature.
 
         Args:
@@ -79,20 +71,12 @@ class RipioRequestData(Feed):
         sign_str = timestamp + method + path + body
 
         signature = hmac.new(
-            self.api_secret.encode('utf-8'),
-            sign_str.encode('utf-8'),
-            hashlib.sha256
+            self.api_secret.encode("utf-8"), sign_str.encode("utf-8"), hashlib.sha256
         ).hexdigest()
 
         return signature
 
-    def _build_headers(
-        self,
-        method: str,
-        path: str,
-        body: str = "",
-        is_sign: bool = False
-    ) -> dict:
+    def _build_headers(self, method: str, path: str, body: str = "", is_sign: bool = False) -> dict:
         """Build request headers.
 
         Args:
@@ -136,6 +120,7 @@ class RipioRequestData(Feed):
 
         if params:
             from urllib.parse import urlencode
+
             url = f"{url}?{urlencode(params)}"
 
         return url
@@ -147,7 +132,7 @@ class RipioRequestData(Feed):
         body: dict = None,
         extra_data: dict = None,
         timeout: int = 10,
-        is_sign: bool = False
+        is_sign: bool = False,
     ) -> RequestData:
         """Send HTTP request.
 
@@ -168,6 +153,7 @@ class RipioRequestData(Feed):
         if body:
             method = "POST"
             import json
+
             body_str = json.dumps(body)
 
         headers = self._build_headers(method, path, body_str, is_sign)
@@ -195,7 +181,7 @@ class RipioRequestData(Feed):
         body: dict = None,
         extra_data: dict = None,
         timeout: int = 5,
-        is_sign: bool = False
+        is_sign: bool = False,
     ) -> RequestData:
         """Send async HTTP request.
 
@@ -216,6 +202,7 @@ class RipioRequestData(Feed):
         if body:
             method = "POST"
             import json
+
             body_str = json.dumps(body)
 
         headers = self._build_headers(method, path, body_str, is_sign)
@@ -250,13 +237,15 @@ class RipioRequestData(Feed):
         path = self._params.get_rest_path("get_tick").replace(":symbol", "BTC_USDT")
         if extra_data is None:
             extra_data = {}
-        extra_data.update({
-            "exchange_name": self.exchange_name,
-            "symbol_name": "",
-            "asset_type": self.asset_type,
-            "request_type": "get_server_time",
-            "normalize_function": self._get_server_time_normalize_function,
-        })
+        extra_data.update(
+            {
+                "exchange_name": self.exchange_name,
+                "symbol_name": "",
+                "asset_type": self.asset_type,
+                "request_type": "get_server_time",
+                "normalize_function": self._get_server_time_normalize_function,
+            }
+        )
         return path, {}, extra_data
 
     def get_server_time(self, extra_data=None, **kwargs):

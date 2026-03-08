@@ -6,30 +6,35 @@ Run tests:
 """
 
 import queue
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch
 
 import pytest
 
-from bt_api_py.containers.exchanges.coinbase_exchange_data import CoinbaseExchangeDataSpot
-from bt_api_py.containers.tickers.coinbase_ticker import CoinbaseRequestTickerData
-from bt_api_py.containers.orderbooks.coinbase_orderbook import CoinbaseRequestOrderBookData
-from bt_api_py.containers.bars.coinbase_bar import CoinbaseRequestBarData
-from bt_api_py.containers.orders.coinbase_order import CoinbaseRequestOrderData
+import bt_api_py.exchange_registers.register_coinbase  # noqa: F401
 from bt_api_py.containers.accounts.coinbase_account import CoinbaseRequestAccountData
+from bt_api_py.containers.bars.coinbase_bar import CoinbaseRequestBarData
+from bt_api_py.containers.exchanges.coinbase_exchange_data import CoinbaseExchangeDataSpot
+from bt_api_py.containers.orderbooks.coinbase_orderbook import CoinbaseRequestOrderBookData
+from bt_api_py.containers.orders.coinbase_order import CoinbaseRequestOrderData
 from bt_api_py.containers.requestdatas.request_data import RequestData
+from bt_api_py.containers.tickers.coinbase_ticker import CoinbaseRequestTickerData
 from bt_api_py.feeds.live_coinbase import CoinbaseRequestDataSpot
 from bt_api_py.registry import ExchangeRegistry
-
-import bt_api_py.exchange_registers.register_coinbase  # noqa: F401
-
 
 # ── Sample Coinbase API responses ────────────────────────────────────────
 
 SAMPLE_TICKER_RESP = {
     "trades": [
-        {"trade_id": "123", "product_id": "BTC-USD", "price": "50000",
-         "size": "0.001", "time": "2024-01-01T00:00:00Z", "side": "BUY",
-         "bid": "49999", "ask": "50001"}
+        {
+            "trade_id": "123",
+            "product_id": "BTC-USD",
+            "price": "50000",
+            "size": "0.001",
+            "time": "2024-01-01T00:00:00Z",
+            "side": "BUY",
+            "bid": "49999",
+            "ask": "50001",
+        }
     ],
     "best_bid": "49999",
     "best_ask": "50001",
@@ -52,10 +57,22 @@ SAMPLE_DEPTH_RESP = {
 
 SAMPLE_KLINE_RESP = {
     "candles": [
-        {"start": "1688671800", "low": "49500", "high": "50500",
-         "open": "50000", "close": "50200", "volume": "1000"},
-        {"start": "1688675400", "low": "49800", "high": "50800",
-         "open": "50200", "close": "50600", "volume": "800"},
+        {
+            "start": "1688671800",
+            "low": "49500",
+            "high": "50500",
+            "open": "50000",
+            "close": "50200",
+            "volume": "1000",
+        },
+        {
+            "start": "1688675400",
+            "low": "49800",
+            "high": "50800",
+            "open": "50200",
+            "close": "50600",
+            "volume": "800",
+        },
     ]
 }
 
@@ -70,9 +87,7 @@ SAMPLE_MAKE_ORDER_RESP = {
 }
 
 SAMPLE_CANCEL_ORDER_RESP = {
-    "results": [
-        {"success": True, "order_id": "abc123"}
-    ],
+    "results": [{"success": True, "order_id": "abc123"}],
 }
 
 SAMPLE_QUERY_ORDER_RESP = {
@@ -89,10 +104,20 @@ SAMPLE_QUERY_ORDER_RESP = {
 
 SAMPLE_OPEN_ORDERS_RESP = {
     "orders": [
-        {"order_id": "abc123", "product_id": "BTC-USD", "side": "BUY",
-         "status": "OPEN", "created_time": "2024-01-01T00:00:00Z"},
-        {"order_id": "def456", "product_id": "ETH-USD", "side": "SELL",
-         "status": "OPEN", "created_time": "2024-01-01T01:00:00Z"},
+        {
+            "order_id": "abc123",
+            "product_id": "BTC-USD",
+            "side": "BUY",
+            "status": "OPEN",
+            "created_time": "2024-01-01T00:00:00Z",
+        },
+        {
+            "order_id": "def456",
+            "product_id": "ETH-USD",
+            "side": "SELL",
+            "status": "OPEN",
+            "created_time": "2024-01-01T01:00:00Z",
+        },
     ],
     "has_next": False,
 }
@@ -127,10 +152,20 @@ SAMPLE_SERVER_TIME_RESP = {
 
 SAMPLE_EXCHANGE_INFO_RESP = {
     "products": [
-        {"product_id": "BTC-USD", "price": "50000", "status": "online",
-         "base_currency_id": "BTC", "quote_currency_id": "USD"},
-        {"product_id": "ETH-USD", "price": "3000", "status": "online",
-         "base_currency_id": "ETH", "quote_currency_id": "USD"},
+        {
+            "product_id": "BTC-USD",
+            "price": "50000",
+            "status": "online",
+            "base_currency_id": "BTC",
+            "quote_currency_id": "USD",
+        },
+        {
+            "product_id": "ETH-USD",
+            "price": "3000",
+            "status": "online",
+            "base_currency_id": "ETH",
+            "quote_currency_id": "USD",
+        },
     ],
     "num_products": 2,
 }
@@ -160,8 +195,8 @@ def _setup_mock(mock_req, resp_json, status_code=200):
 # 1. ExchangeData tests
 # ══════════════════════════════════════════════════════════════════════════
 
-class TestCoinbaseExchangeData:
 
+class TestCoinbaseExchangeData:
     def test_spot_creation(self):
         ed = CoinbaseExchangeDataSpot()
         assert ed.exchange_name == "COINBASE___SPOT"
@@ -191,9 +226,19 @@ class TestCoinbaseExchangeData:
 
     def test_rest_paths_present(self):
         ed = CoinbaseExchangeDataSpot()
-        for key in ("get_ticker", "get_depth", "get_kline", "get_exchange_info",
-                     "make_order", "cancel_order", "query_order", "get_open_orders",
-                     "get_account", "get_balance", "get_server_time"):
+        for key in (
+            "get_ticker",
+            "get_depth",
+            "get_kline",
+            "get_exchange_info",
+            "make_order",
+            "cancel_order",
+            "query_order",
+            "get_open_orders",
+            "get_account",
+            "get_balance",
+            "get_server_time",
+        ):
             path = ed.get_rest_path(key)
             assert path, f"rest_path '{key}' should not be empty"
 
@@ -202,8 +247,8 @@ class TestCoinbaseExchangeData:
 # 2. Layer-1 parameter generation
 # ══════════════════════════════════════════════════════════════════════════
 
-class TestCoinbaseParamGeneration:
 
+class TestCoinbaseParamGeneration:
     def test_get_ticker_params(self):
         feed = _make_spot_feed()
         path, params, extra = feed._get_ticker("BTC-USD")
@@ -220,7 +265,9 @@ class TestCoinbaseParamGeneration:
 
     def test_get_kline_params(self):
         feed = _make_spot_feed()
-        path, params, extra = feed._get_kline("BTC-USD", period="1h", start_time=1000, end_time=2000)
+        path, params, extra = feed._get_kline(
+            "BTC-USD", period="1h", start_time=1000, end_time=2000
+        )
         assert "BTC-USD" in path
         assert "candles" in path
         assert params["granularity"] == "ONE_HOUR"
@@ -293,12 +340,13 @@ class TestCoinbaseParamGeneration:
 # 3. Normalize functions
 # ══════════════════════════════════════════════════════════════════════════
 
-class TestCoinbaseNormalize:
 
+class TestCoinbaseNormalize:
     def test_ticker_normalize(self):
         extra = {"symbol_name": "BTC-USD", "asset_type": "SPOT", "exchange_name": "COINBASE___SPOT"}
         tickers, ok = CoinbaseRequestDataSpot._get_ticker_normalize_function(
-            SAMPLE_TICKER_RESP, extra)
+            SAMPLE_TICKER_RESP, extra
+        )
         assert ok is True
         assert len(tickers) == 1
         assert isinstance(tickers[0], CoinbaseRequestTickerData)
@@ -311,8 +359,7 @@ class TestCoinbaseNormalize:
 
     def test_depth_normalize(self):
         extra = {"symbol_name": "BTC-USD", "asset_type": "SPOT"}
-        books, ok = CoinbaseRequestDataSpot._get_depth_normalize_function(
-            SAMPLE_DEPTH_RESP, extra)
+        books, ok = CoinbaseRequestDataSpot._get_depth_normalize_function(SAMPLE_DEPTH_RESP, extra)
         assert ok is True
         assert len(books) == 1
         b = books[0]
@@ -329,8 +376,7 @@ class TestCoinbaseNormalize:
 
     def test_kline_normalize(self):
         extra = {"symbol_name": "BTC-USD", "asset_type": "SPOT"}
-        bars, ok = CoinbaseRequestDataSpot._get_kline_normalize_function(
-            SAMPLE_KLINE_RESP, extra)
+        bars, ok = CoinbaseRequestDataSpot._get_kline_normalize_function(SAMPLE_KLINE_RESP, extra)
         assert ok is True
         assert len(bars) == 2
         bar = bars[0]
@@ -348,7 +394,8 @@ class TestCoinbaseNormalize:
     def test_make_order_normalize(self):
         extra = {"symbol_name": "BTC-USD", "asset_type": "SPOT", "exchange_name": "COINBASE___SPOT"}
         orders, ok = CoinbaseRequestDataSpot._make_order_normalize_function(
-            SAMPLE_MAKE_ORDER_RESP, extra)
+            SAMPLE_MAKE_ORDER_RESP, extra
+        )
         assert ok is True
         assert len(orders) == 1
         assert isinstance(orders[0], CoinbaseRequestOrderData)
@@ -363,7 +410,8 @@ class TestCoinbaseNormalize:
     def test_query_order_normalize(self):
         extra = {"symbol_name": "BTC-USD", "asset_type": "SPOT"}
         orders, ok = CoinbaseRequestDataSpot._query_order_normalize_function(
-            SAMPLE_QUERY_ORDER_RESP, extra)
+            SAMPLE_QUERY_ORDER_RESP, extra
+        )
         assert ok is True
         assert len(orders) == 1
         assert isinstance(orders[0], CoinbaseRequestOrderData)
@@ -371,21 +419,24 @@ class TestCoinbaseNormalize:
     def test_open_orders_normalize(self):
         extra = {"symbol_name": "ALL", "asset_type": "SPOT"}
         orders, ok = CoinbaseRequestDataSpot._get_open_orders_normalize_function(
-            SAMPLE_OPEN_ORDERS_RESP, extra)
+            SAMPLE_OPEN_ORDERS_RESP, extra
+        )
         assert ok is True
         assert len(orders) == 2
 
     def test_account_normalize(self):
         extra = {"symbol_name": "ALL", "asset_type": "SPOT"}
         accounts, ok = CoinbaseRequestDataSpot._get_account_normalize_function(
-            SAMPLE_ACCOUNT_RESP, extra)
+            SAMPLE_ACCOUNT_RESP, extra
+        )
         assert ok is True
         assert len(accounts) == 2
         assert isinstance(accounts[0], CoinbaseRequestAccountData)
 
     def test_exchange_info_normalize(self):
         data, ok = CoinbaseRequestDataSpot._get_exchange_info_normalize_function(
-            SAMPLE_EXCHANGE_INFO_RESP, {})
+            SAMPLE_EXCHANGE_INFO_RESP, {}
+        )
         assert ok is True
         assert len(data) == 2
 
@@ -394,8 +445,8 @@ class TestCoinbaseNormalize:
 # 4. Synchronous API calls (mocked HTTP)
 # ══════════════════════════════════════════════════════════════════════════
 
-class TestCoinbaseSyncCalls:
 
+class TestCoinbaseSyncCalls:
     @patch(MOCK_PATH)
     def test_get_ticker(self, mock_req):
         _setup_mock(mock_req, SAMPLE_TICKER_RESP)
@@ -442,8 +493,9 @@ class TestCoinbaseSyncCalls:
     def test_make_order(self, mock_req):
         _setup_mock(mock_req, SAMPLE_MAKE_ORDER_RESP)
         feed = _make_spot_feed()
-        result = feed.make_order(symbol="BTC-USD", vol="0.001", price="50000",
-                                 order_type="buy-limit")
+        result = feed.make_order(
+            symbol="BTC-USD", vol="0.001", price="50000", order_type="buy-limit"
+        )
         assert isinstance(result, RequestData)
 
     @patch(MOCK_PATH)
@@ -486,8 +538,8 @@ class TestCoinbaseSyncCalls:
 # 5. Container tests
 # ══════════════════════════════════════════════════════════════════════════
 
-class TestCoinbaseContainers:
 
+class TestCoinbaseContainers:
     def test_ticker_container(self):
         t = CoinbaseRequestTickerData(SAMPLE_TICKER_RESP, "BTC-USD", "SPOT", True)
         t.init_data()
@@ -545,8 +597,8 @@ class TestCoinbaseContainers:
 # 6. Registry tests
 # ══════════════════════════════════════════════════════════════════════════
 
-class TestCoinbaseRegistry:
 
+class TestCoinbaseRegistry:
     def test_coinbase_registered(self):
         assert "COINBASE___SPOT" in ExchangeRegistry._feed_classes
         assert "COINBASE___SPOT" in ExchangeRegistry._exchange_data_classes
@@ -570,26 +622,44 @@ class TestCoinbaseRegistry:
 # 7. Method existence checks
 # ══════════════════════════════════════════════════════════════════════════
 
-class TestCoinbaseMethodExistence:
 
+class TestCoinbaseMethodExistence:
     def test_has_standard_methods(self):
         feed = _make_spot_feed()
         for method_name in (
-            "get_ticker", "get_tick", "get_depth", "get_kline",
-            "get_server_time", "get_exchange_info",
-            "make_order", "cancel_order", "query_order", "get_open_orders",
-            "get_account", "get_balance",
-            "async_get_ticker", "async_get_tick", "async_get_depth", "async_get_kline",
-            "async_get_account", "async_get_balance",
+            "get_ticker",
+            "get_tick",
+            "get_depth",
+            "get_kline",
+            "get_server_time",
+            "get_exchange_info",
+            "make_order",
+            "cancel_order",
+            "query_order",
+            "get_open_orders",
+            "get_account",
+            "get_balance",
+            "async_get_ticker",
+            "async_get_tick",
+            "async_get_depth",
+            "async_get_kline",
+            "async_get_account",
+            "async_get_balance",
         ):
             assert hasattr(feed, method_name), f"Missing method: {method_name}"
 
     def test_has_internal_methods(self):
         feed = _make_spot_feed()
         for method_name in (
-            "_get_ticker", "_get_depth", "_get_kline",
-            "_get_server_time", "_get_exchange_info",
-            "_make_order", "_cancel_order", "_query_order", "_get_open_orders",
+            "_get_ticker",
+            "_get_depth",
+            "_get_kline",
+            "_get_server_time",
+            "_get_exchange_info",
+            "_make_order",
+            "_cancel_order",
+            "_query_order",
+            "_get_open_orders",
             "_get_account",
         ):
             assert hasattr(feed, method_name), f"Missing internal method: {method_name}"

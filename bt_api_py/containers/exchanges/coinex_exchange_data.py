@@ -8,6 +8,7 @@ Symbol format: BTCUSDT (base+quote, no separator)
 """
 
 import os
+
 from bt_api_py.containers.exchanges.exchange_data import ExchangeData
 from bt_api_py.logging_factory import get_logger
 
@@ -24,6 +25,7 @@ def _get_coinex_config():
         return _coinex_config
     try:
         from bt_api_py.config_loader import load_exchange_config
+
         config_path = os.path.join(
             os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
             "configs",
@@ -65,11 +67,19 @@ class CoinExExchangeData(ExchangeData):
         self.rest_paths = dict(_FALLBACK_REST_PATHS)
         self.wss_paths = {}
         self.kline_periods = {
-            "1m": "1min", "3m": "3min", "5m": "5min",
-            "15m": "15min", "30m": "30min",
-            "1h": "1hour", "2h": "2hour", "4h": "4hour",
-            "6h": "6hour", "12h": "12hour",
-            "1d": "1day", "3d": "3day", "1w": "1week",
+            "1m": "1min",
+            "3m": "3min",
+            "5m": "5min",
+            "15m": "15min",
+            "30m": "30min",
+            "1h": "1hour",
+            "2h": "2hour",
+            "4h": "4hour",
+            "6h": "6hour",
+            "12h": "12hour",
+            "1d": "1day",
+            "3d": "3day",
+            "1w": "1week",
         }
         self.reverse_kline_periods = {v: k for k, v in self.kline_periods.items()}
         self.legal_currency = ["USDT", "USD", "BTC", "ETH", "USDC"]

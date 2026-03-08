@@ -6,27 +6,23 @@ Run tests:
 """
 
 import queue
-from unittest.mock import Mock, patch, MagicMock
 
 import pytest
 
+# Import registration to auto-register Bitget
+import bt_api_py.exchange_registers.register_bitget  # noqa: F401
+from bt_api_py.containers.balances.bitget_balance import BitgetBalanceData
 from bt_api_py.containers.exchanges.bitget_exchange_data import (
-    BitgetExchangeData,
     BitgetExchangeDataSpot,
     BitgetExchangeDataSwap,
 )
-from bt_api_py.containers.tickers.bitget_ticker import BitgetTickerData
 from bt_api_py.containers.orderbooks.bitget_orderbook import BitgetOrderBookData
 from bt_api_py.containers.orders.bitget_order import BitgetOrderData
-from bt_api_py.containers.balances.bitget_balance import BitgetBalanceData
-from bt_api_py.containers.requestdatas.request_data import RequestData
+from bt_api_py.containers.tickers.bitget_ticker import BitgetTickerData
 from bt_api_py.registry import ExchangeRegistry
 
-# Import registration to auto-register Bitget
-import bt_api_py.exchange_registers.register_bitget  # noqa: F401
-
-
 # ===================== Exchange Data Tests =====================
+
 
 class TestBitgetExchangeData:
     """Test Bitget exchange data configuration."""
@@ -77,6 +73,7 @@ class TestBitgetExchangeData:
 
 
 # ===================== Data Container Tests =====================
+
 
 class TestBitgetDataContainers:
     """Test Bitget data containers."""
@@ -183,15 +180,19 @@ class TestBitgetDataContainers:
 
 # ===================== Feed Creation Tests =====================
 
+
 class TestBitgetFeedCreation:
     """Test Bitget feed creation."""
 
     def test_spot_feed_creation(self):
         from bt_api_py.feeds.live_bitget.spot import BitgetRequestDataSpot
+
         data_queue = queue.Queue()
         feed = BitgetRequestDataSpot(
-            data_queue, public_key="test_key",
-            private_key="test_secret", passphrase="test_pass",
+            data_queue,
+            public_key="test_key",
+            private_key="test_secret",
+            passphrase="test_pass",
         )
         assert feed.asset_type == "spot"
         assert feed.public_key == "test_key"
@@ -201,76 +202,89 @@ class TestBitgetFeedCreation:
 
     def test_swap_feed_creation(self):
         from bt_api_py.feeds.live_bitget.swap import BitgetRequestDataSwap
+
         data_queue = queue.Queue()
         feed = BitgetRequestDataSwap(
-            data_queue, public_key="test_key",
-            private_key="test_secret", passphrase="test_pass",
+            data_queue,
+            public_key="test_key",
+            private_key="test_secret",
+            passphrase="test_pass",
         )
         assert feed.asset_type == "swap"
         assert isinstance(feed._params, BitgetExchangeDataSwap)
 
     def test_spot_three_layer_methods_exist(self):
         from bt_api_py.feeds.live_bitget.spot import BitgetRequestDataSpot
+
         data_queue = queue.Queue()
         feed = BitgetRequestDataSpot(
-            data_queue, public_key="k", private_key="s", passphrase="p",
+            data_queue,
+            public_key="k",
+            private_key="s",
+            passphrase="p",
         )
         # _get_xxx
-        assert hasattr(feed, '_get_ticker')
-        assert hasattr(feed, '_get_depth')
-        assert hasattr(feed, '_get_kline')
-        assert hasattr(feed, '_get_balance')
-        assert hasattr(feed, '_make_order')
-        assert hasattr(feed, '_cancel_order')
-        assert hasattr(feed, '_query_order')
-        assert hasattr(feed, '_get_deals')
+        assert hasattr(feed, "_get_ticker")
+        assert hasattr(feed, "_get_depth")
+        assert hasattr(feed, "_get_kline")
+        assert hasattr(feed, "_get_balance")
+        assert hasattr(feed, "_make_order")
+        assert hasattr(feed, "_cancel_order")
+        assert hasattr(feed, "_query_order")
+        assert hasattr(feed, "_get_deals")
         # get_xxx
-        assert hasattr(feed, 'get_ticker')
-        assert hasattr(feed, 'get_tick')
-        assert hasattr(feed, 'get_depth')
-        assert hasattr(feed, 'get_kline')
-        assert hasattr(feed, 'get_balance')
-        assert hasattr(feed, 'get_account')
-        assert hasattr(feed, 'make_order')
-        assert hasattr(feed, 'cancel_order')
-        assert hasattr(feed, 'query_order')
-        assert hasattr(feed, 'get_deals')
-        assert hasattr(feed, 'get_server_time')
-        assert hasattr(feed, 'get_exchange_info')
+        assert hasattr(feed, "get_ticker")
+        assert hasattr(feed, "get_tick")
+        assert hasattr(feed, "get_depth")
+        assert hasattr(feed, "get_kline")
+        assert hasattr(feed, "get_balance")
+        assert hasattr(feed, "get_account")
+        assert hasattr(feed, "make_order")
+        assert hasattr(feed, "cancel_order")
+        assert hasattr(feed, "query_order")
+        assert hasattr(feed, "get_deals")
+        assert hasattr(feed, "get_server_time")
+        assert hasattr(feed, "get_exchange_info")
         # async_get_xxx
-        assert hasattr(feed, 'async_get_ticker')
-        assert hasattr(feed, 'async_get_tick')
-        assert hasattr(feed, 'async_get_depth')
-        assert hasattr(feed, 'async_get_kline')
-        assert hasattr(feed, 'async_get_balance')
-        assert hasattr(feed, 'async_make_order')
+        assert hasattr(feed, "async_get_ticker")
+        assert hasattr(feed, "async_get_tick")
+        assert hasattr(feed, "async_get_depth")
+        assert hasattr(feed, "async_get_kline")
+        assert hasattr(feed, "async_get_balance")
+        assert hasattr(feed, "async_make_order")
 
     def test_swap_three_layer_methods_exist(self):
         from bt_api_py.feeds.live_bitget.swap import BitgetRequestDataSwap
+
         data_queue = queue.Queue()
         feed = BitgetRequestDataSwap(
-            data_queue, public_key="k", private_key="s", passphrase="p",
+            data_queue,
+            public_key="k",
+            private_key="s",
+            passphrase="p",
         )
-        assert hasattr(feed, '_get_ticker')
-        assert hasattr(feed, 'get_ticker')
-        assert hasattr(feed, 'async_get_ticker')
-        assert hasattr(feed, '_get_depth')
-        assert hasattr(feed, 'get_depth')
-        assert hasattr(feed, '_get_kline')
-        assert hasattr(feed, 'get_kline')
-        assert hasattr(feed, '_get_balance')
-        assert hasattr(feed, 'get_balance')
-        assert hasattr(feed, '_make_order')
-        assert hasattr(feed, 'make_order')
+        assert hasattr(feed, "_get_ticker")
+        assert hasattr(feed, "get_ticker")
+        assert hasattr(feed, "async_get_ticker")
+        assert hasattr(feed, "_get_depth")
+        assert hasattr(feed, "get_depth")
+        assert hasattr(feed, "_get_kline")
+        assert hasattr(feed, "get_kline")
+        assert hasattr(feed, "_get_balance")
+        assert hasattr(feed, "get_balance")
+        assert hasattr(feed, "_make_order")
+        assert hasattr(feed, "make_order")
 
 
 # ===================== Three-Layer Pattern Tests =====================
+
 
 class TestBitgetThreeLayerPattern:
     """Test the _get_xxx / get_xxx / async_get_xxx pattern."""
 
     def setup_method(self):
         from bt_api_py.feeds.live_bitget.spot import BitgetRequestDataSpot
+
         self.data_queue = queue.Queue()
         self.feed = BitgetRequestDataSpot(
             self.data_queue,
@@ -307,8 +321,7 @@ class TestBitgetThreeLayerPattern:
 
     def test_make_order_layer1(self):
         path, body, extra_data = self.feed._make_order(
-            "BTC-USDT", vol=1, price=50000, order_type="buy-limit",
-            client_order_id="test_order_123"
+            "BTC-USDT", vol=1, price=50000, order_type="buy-limit", client_order_id="test_order_123"
         )
         assert body["symbol"] == "BTCUSDT"
         assert body["side"] == "BUY"
@@ -319,26 +332,20 @@ class TestBitgetThreeLayerPattern:
         assert extra_data["request_type"] == "make_order"
 
     def test_make_market_order_layer1(self):
-        path, body, extra_data = self.feed._make_order(
-            "ETH-USDT", vol=10, order_type="sell-market"
-        )
+        path, body, extra_data = self.feed._make_order("ETH-USDT", vol=10, order_type="sell-market")
         assert body["symbol"] == "ETHUSDT"
         assert body["side"] == "SELL"
         assert body["orderType"] == "MARKET"
         assert "price" not in body
 
     def test_cancel_order_layer1(self):
-        path, body, extra_data = self.feed._cancel_order(
-            "BTC-USDT", order_id="123456"
-        )
+        path, body, extra_data = self.feed._cancel_order("BTC-USDT", order_id="123456")
         assert body["symbol"] == "BTCUSDT"
         assert body["orderId"] == "123456"
         assert extra_data["request_type"] == "cancel_order"
 
     def test_query_order_layer1(self):
-        path, params, extra_data = self.feed._query_order(
-            "BTC-USDT", order_id="123456"
-        )
+        path, params, extra_data = self.feed._query_order("BTC-USDT", order_id="123456")
         assert params["symbol"] == "BTCUSDT"
         assert params["orderId"] == "123456"
         assert extra_data["request_type"] == "query_order"
@@ -352,11 +359,13 @@ class TestBitgetThreeLayerPattern:
 
 # ===================== Normalize Function Tests =====================
 
+
 class TestBitgetNormalizeFunctions:
     """Test normalize functions produce correct data containers."""
 
     def test_ticker_normalize(self):
         from bt_api_py.feeds.live_bitget.spot import BitgetRequestDataSpot
+
         input_data = {
             "code": "00000",
             "data": [{"symbol": "BTCUSDT", "last": "50000", "bidPx": "49990", "askPx": "50010"}],
@@ -369,6 +378,7 @@ class TestBitgetNormalizeFunctions:
 
     def test_ticker_normalize_error(self):
         from bt_api_py.feeds.live_bitget.spot import BitgetRequestDataSpot
+
         input_data = {"code": "40001", "msg": "Error"}
         extra_data = {"symbol_name": "BTC-USDT", "asset_type": "spot"}
         data, status = BitgetRequestDataSpot._get_ticker_normalize_function(input_data, extra_data)
@@ -376,6 +386,7 @@ class TestBitgetNormalizeFunctions:
 
     def test_ticker_normalize_none(self):
         from bt_api_py.feeds.live_bitget.spot import BitgetRequestDataSpot
+
         extra_data = {"symbol_name": "BTC-USDT", "asset_type": "spot"}
         data, status = BitgetRequestDataSpot._get_ticker_normalize_function(None, extra_data)
         assert status is False
@@ -383,6 +394,7 @@ class TestBitgetNormalizeFunctions:
 
     def test_depth_normalize(self):
         from bt_api_py.feeds.live_bitget.spot import BitgetRequestDataSpot
+
         input_data = {
             "code": "00000",
             "data": {
@@ -399,6 +411,7 @@ class TestBitgetNormalizeFunctions:
 
     def test_balance_normalize(self):
         from bt_api_py.feeds.live_bitget.spot import BitgetRequestDataSpot
+
         input_data = {
             "code": "00000",
             "data": [{"coin": "BTC", "available": "0.5", "frozen": "0.1"}],
@@ -411,6 +424,7 @@ class TestBitgetNormalizeFunctions:
 
     def test_make_order_normalize(self):
         from bt_api_py.feeds.live_bitget.spot import BitgetRequestDataSpot
+
         input_data = {
             "code": "00000",
             "data": {"orderId": "123456", "clientOid": "abc"},
@@ -423,6 +437,7 @@ class TestBitgetNormalizeFunctions:
 
     def test_query_order_normalize(self):
         from bt_api_py.feeds.live_bitget.spot import BitgetRequestDataSpot
+
         input_data = {
             "code": "00000",
             "data": [{"orderId": "123", "symbol": "BTCUSDT", "side": "buy"}],
@@ -435,6 +450,7 @@ class TestBitgetNormalizeFunctions:
 
     def test_kline_normalize(self):
         from bt_api_py.feeds.live_bitget.spot import BitgetRequestDataSpot
+
         input_data = {
             "code": "00000",
             "data": [
@@ -449,6 +465,7 @@ class TestBitgetNormalizeFunctions:
 
     def test_extract_data_normalize_function(self):
         from bt_api_py.feeds.live_bitget.request_base import BitgetRequestData
+
         input_data = {"code": "00000", "data": {"serverTime": "1640995200000"}}
         data, status = BitgetRequestData._extract_data_normalize_function(input_data, {})
         assert status is True
@@ -456,6 +473,7 @@ class TestBitgetNormalizeFunctions:
 
     def test_extract_data_normalize_list(self):
         from bt_api_py.feeds.live_bitget.request_base import BitgetRequestData
+
         input_data = {"code": "00000", "data": [{"a": 1}, {"b": 2}]}
         data, status = BitgetRequestData._extract_data_normalize_function(input_data, {})
         assert status is True
@@ -463,12 +481,14 @@ class TestBitgetNormalizeFunctions:
 
     def test_extract_data_normalize_error(self):
         from bt_api_py.feeds.live_bitget.request_base import BitgetRequestData
+
         input_data = {"code": "40001", "msg": "error"}
         data, status = BitgetRequestData._extract_data_normalize_function(input_data, {})
         assert status is False
 
 
 # ===================== Registration Tests =====================
+
 
 class TestBitgetRegistration:
     """Test Bitget registration."""
@@ -494,11 +514,13 @@ class TestBitgetRegistration:
 
 # ===================== Signature Tests =====================
 
+
 class TestBitgetSignature:
     """Test Bitget HMAC SHA256 + Base64 signature generation."""
 
     def test_signature_generation(self):
         from bt_api_py.feeds.live_bitget.request_base import BitgetRequestData
+
         data_queue = queue.Queue()
         feed = BitgetRequestData(
             data_queue,
@@ -514,6 +536,7 @@ class TestBitgetSignature:
 
     def test_auth_headers(self):
         from bt_api_py.feeds.live_bitget.request_base import BitgetRequestData
+
         data_queue = queue.Queue()
         feed = BitgetRequestData(
             data_queue,
@@ -530,6 +553,7 @@ class TestBitgetSignature:
 
 
 # ===================== Integration Tests (skipped by default) =====================
+
 
 class TestBitgetIntegration:
     """Integration tests for Bitget (require network/API keys)."""

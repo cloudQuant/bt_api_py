@@ -7,22 +7,20 @@ Run tests:
 
 import json
 import queue
-import time
 from unittest.mock import Mock
 
 import pytest
 
+# Import registration to auto-register CoinDCX
+import bt_api_py.exchange_registers.register_coindcx  # noqa: F401
 from bt_api_py.containers.exchanges.coindcx_exchange_data import (
     CoinDCXExchangeDataSpot,
 )
 from bt_api_py.containers.requestdatas.request_data import RequestData
 from bt_api_py.containers.tickers.coindcx_ticker import CoinDCXRequestTickerData
-from bt_api_py.feeds.live_coindcx.spot import CoinDCXRequestDataSpot
 from bt_api_py.feeds.capability import Capability
+from bt_api_py.feeds.live_coindcx.spot import CoinDCXRequestDataSpot
 from bt_api_py.registry import ExchangeRegistry
-
-# Import registration to auto-register CoinDCX
-import bt_api_py.exchange_registers.register_coindcx  # noqa: F401
 
 
 @pytest.fixture
@@ -174,6 +172,7 @@ class TestCoinDCXBaseCapabilities:
 
     def test_base_capabilities(self):
         from bt_api_py.feeds.live_coindcx.request_base import CoinDCXRequestData
+
         caps = CoinDCXRequestData._capabilities()
         assert Capability.GET_TICK in caps
         assert Capability.MAKE_ORDER in caps
@@ -232,20 +231,20 @@ class TestCoinDCXDataContainers:
     """Test CoinDCX data containers."""
 
     def test_ticker_container(self):
-        ticker_response = json.dumps({
-            "data": {
-                "market": "BTCINR",
-                "last_price": "5000000",
-                "bid": "4990000",
-                "ask": "5010000",
-                "volume": "100.50",
-                "high": "5100000",
-                "low": "4800000",
+        ticker_response = json.dumps(
+            {
+                "data": {
+                    "market": "BTCINR",
+                    "last_price": "5000000",
+                    "bid": "4990000",
+                    "ask": "5010000",
+                    "volume": "100.50",
+                    "high": "5100000",
+                    "low": "4800000",
+                }
             }
-        })
-        ticker = CoinDCXRequestTickerData(
-            ticker_response, "BTCINR", "SPOT", False
         )
+        ticker = CoinDCXRequestTickerData(ticker_response, "BTCINR", "SPOT", False)
         ticker.init_data()
         assert ticker.get_exchange_name() == "COINDCX"
         assert ticker.symbol_name == "BTCINR"
@@ -261,9 +260,7 @@ class TestCoinDCXDataContainers:
             }
         }
         ticker_response = json.dumps(ticker_data)
-        ticker = CoinDCXRequestTickerData(
-            ticker_response, "ETHINR", "SPOT", False
-        )
+        ticker = CoinDCXRequestTickerData(ticker_response, "ETHINR", "SPOT", False)
         ticker.init_data()
         assert ticker.last_price == 300000
 

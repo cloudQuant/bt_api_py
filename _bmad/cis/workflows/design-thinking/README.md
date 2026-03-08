@@ -1,13 +1,11 @@
-- --
-
+---
 last-redoc-date: 2025-09-28
-
-- --
+---
 
 # Design Thinking Workflow
 
-- *Type:** Interactive Document Workflow
-- *Module:**Creative Intelligence System (CIS)
+**Type:** Interactive Document Workflow
+**Module:** Creative Intelligence System (CIS)
 
 ## Purpose
 
@@ -23,16 +21,12 @@ Guides human-centered design processes through the complete design thinking meth
 ## Usage
 
 ```bash
-
 # Basic invocation
-
 workflow design-thinking
 
 # With project context
-
 workflow design-thinking --data /path/to/product-context.md
-
-```bash
+```
 
 ## Inputs
 
@@ -43,9 +37,9 @@ workflow design-thinking --data /path/to/product-context.md
 
 ## Outputs
 
-- *File:** `{output_folder}/design-thinking-{date}.md`
+**File:** `{output_folder}/design-thinking-{date}.md`
 
-- *Structure:**
+**Structure:**
 
 - Design challenge statement and point-of-view
 - User insights and empathy mapping

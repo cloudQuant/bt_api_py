@@ -28,8 +28,8 @@ from bt_api_py.feeds.live_okx.mixins.status_mixin import StatusMixin
 from bt_api_py.feeds.live_okx.mixins.sub_account_mixin import SubAccountMixin
 from bt_api_py.feeds.live_okx.mixins.trade_mixin import TradeMixin
 from bt_api_py.feeds.live_okx.mixins.trading_account_mixin import TradingAccountMixin
-from bt_api_py.rate_limiter import RateLimiter, RateLimitRule, RateLimitScope, RateLimitType
 from bt_api_py.logging_factory import get_logger
+from bt_api_py.rate_limiter import RateLimiter, RateLimitRule, RateLimitScope, RateLimitType
 
 
 class OkxRequestData(
@@ -173,7 +173,7 @@ class OkxRequestData(
         if params:
             path = f"{path}?{req}"
         timestamp = round(time.time(), 3)
-        body_str = json.dumps(body, separators=(',', ':')) if body is not None else None
+        body_str = json.dumps(body, separators=(",", ":")) if body is not None else None
         signature_ = self.signature(
             timestamp,
             method,
@@ -204,7 +204,7 @@ class OkxRequestData(
         if params:
             path = f"{path}?{req}"
         timestamp = round(time.time(), 3)
-        body_str = json.dumps(body, separators=(',', ':')) if body is not None else None
+        body_str = json.dumps(body, separators=(",", ":")) if body is not None else None
         signature_ = self.signature(
             timestamp,
             method,

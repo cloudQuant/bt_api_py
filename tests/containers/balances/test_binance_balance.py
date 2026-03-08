@@ -1,11 +1,13 @@
-from bt_api_py.containers.balances.binance_balance import (BinanceSwapWssBalanceData,
-                                                           BinanceSwapRequestBalanceData,
-                                                           BinanceSpotRequestBalanceData,
-                                                           BinanceSpotWssBalanceData)
+from bt_api_py.containers.balances.binance_balance import (
+    BinanceSpotRequestBalanceData,
+    BinanceSpotWssBalanceData,
+    BinanceSwapRequestBalanceData,
+    BinanceSwapWssBalanceData,
+)
 
 
 def test_binance_spot_wss_balance_data():
-    data = {'a': 'USDT', 'f': '29.24200000', 'l': '6.75800000'}
+    data = {"a": "USDT", "f": "29.24200000", "l": "6.75800000"}
     spot_wss_data = BinanceSpotWssBalanceData(data, "USDT", "SPOT", True)
     spot_wss_data.init_data()
     assert spot_wss_data.get_margin() == 29.24200000 + 6.75800000
@@ -14,7 +16,7 @@ def test_binance_spot_wss_balance_data():
 
 
 def test_binance_spot_request_balance():
-    data = {'asset': 'BTC', 'free': '0.00000000', 'locked': '0.00000000'}
+    data = {"asset": "BTC", "free": "0.00000000", "locked": "0.00000000"}
     bal = BinanceSpotRequestBalanceData(data, "BTC", "SPOT", True)
     bal.init_data()
     assert bal is not None
@@ -36,11 +38,11 @@ def test_binance_request_account_balance():
         "crossUnPnl": "0.00000000",  # 全仓持仓未实现盈亏
         "availableBalance": "126.72469206",  # 可用余额
         "maxWithdrawAmount": "23.72469206",  # 最大可转出余额
-        "marginAvailable": 'true',  # 是否可用作联合保证金
-        "updateTime": 1625474304765  # 更新时间
+        "marginAvailable": "true",  # 是否可用作联合保证金
+        "updateTime": 1625474304765,  # 更新时间
     }
-    symbol = data['asset']
-    asset_type = data['asset']
+    symbol = data["asset"]
+    asset_type = data["asset"]
     data = BinanceSwapRequestBalanceData(data, symbol, asset_type, True)
     data.init_data()
     assert data.get_position_initial_margin() == 0.0
@@ -56,8 +58,8 @@ def test_binance_request_balance():
         "crossUnPnl": "0.00000000",  # 全仓持仓未实现盈亏
         "availableBalance": "23.72469206",  # 下单可用余额
         "maxWithdrawAmount": "23.72469206",  # 最大可转出余额
-        "marginAvailable": 'true',  # 是否可用作联合保证金
-        "updateTime": 1617939110373
+        "marginAvailable": "true",  # 是否可用作联合保证金
+        "updateTime": 1617939110373,
     }
 
     bo = BinanceSwapRequestBalanceData(data, "USDT", "SWAP", True)
@@ -76,7 +78,7 @@ def test_binance_wss_balance():
         "a": "USDT",  # 资产名称
         "wb": "122624.12345678",  # 钱包余额
         "cw": "100.12345678",  # 除去逐仓仓位保证金的钱包余额
-        "bc": "50.12345678"  # 除去盈亏与交易手续费以外的钱包余额改变量
+        "bc": "50.12345678",  # 除去盈亏与交易手续费以外的钱包余额改变量
     }
 
     bo = BinanceSwapWssBalanceData(data, "USDT", "SWAP", True)

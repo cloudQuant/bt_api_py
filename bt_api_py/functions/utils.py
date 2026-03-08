@@ -199,7 +199,10 @@ def from_dict_get_float(content, key, default=None):
     elif isinstance(value, float):
         return value
     else:
-        return float(value)
+        try:
+            return float(value)
+        except (TypeError, ValueError):
+            return default
 
 
 def from_dict_get_int(content, key, default=None):
@@ -211,7 +214,10 @@ def from_dict_get_int(content, key, default=None):
     elif isinstance(value, int):
         return value
     else:
-        return int(value)
+        try:
+            return int(value)
+        except (TypeError, ValueError):
+            return default
 
 
 if __name__ == "__main__":

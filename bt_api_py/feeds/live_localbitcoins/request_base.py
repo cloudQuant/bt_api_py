@@ -26,8 +26,8 @@ class LocalBitcoinsRequestData(Feed):
         self.request_logger = get_logger("localbitcoins_spot_feed")
         self.async_logger = get_logger("localbitcoins_spot_feed")
 
-        self.api_key = kwargs.get("public_key", None) or kwargs.get("api_key", None)
-        self.api_secret = kwargs.get("private_key", None) or kwargs.get("api_secret", None)
+        self.api_key = kwargs.get("public_key") or kwargs.get("api_key")
+        self.api_secret = kwargs.get("private_key") or kwargs.get("api_secret")
         self.rest_url = self._params.rest_url
 
     # ── core request helpers ────────────────────────────────────
@@ -97,9 +97,7 @@ class LocalBitcoinsRequestData(Feed):
         """HMAC-SHA256 → hex digest.  nonce+key+path+query+body"""
         nonce = str(int(time.time() * 1000))
         msg = f"{nonce}{self.api_key}{path}{params_str}{body_str}"
-        sig = hmac.new(
-            self.api_secret.encode(), msg.encode(), hashlib.sha256
-        ).hexdigest()
+        sig = hmac.new(self.api_secret.encode(), msg.encode(), hashlib.sha256).hexdigest()
         return nonce, sig
 
     def _get_headers(self, method="GET", path="", params=None):
@@ -126,78 +124,99 @@ class LocalBitcoinsRequestData(Feed):
 
     def _get_tick(self, symbol, extra_data=None, **kwargs):
         path = self._params.get_rest_path("get_tick")
-        extra_data = update_extra_data(extra_data, **{
-            "request_type": "get_tick",
-            "symbol_name": symbol,
-            "asset_type": self.asset_type,
-            "exchange_name": self.exchange_name,
-            "normalize_function": self._get_tick_normalize_function,
-        })
+        extra_data = update_extra_data(
+            extra_data,
+            **{
+                "request_type": "get_tick",
+                "symbol_name": symbol,
+                "asset_type": self.asset_type,
+                "exchange_name": self.exchange_name,
+                "normalize_function": self._get_tick_normalize_function,
+            },
+        )
         return path, {}, extra_data
 
     def _get_exchange_info(self, extra_data=None, **kwargs):
         path = self._params.get_rest_path("get_exchange_info")
-        extra_data = update_extra_data(extra_data, **{
-            "request_type": "get_exchange_info",
-            "symbol_name": None,
-            "asset_type": self.asset_type,
-            "exchange_name": self.exchange_name,
-            "normalize_function": self._get_exchange_info_normalize_function,
-        })
+        extra_data = update_extra_data(
+            extra_data,
+            **{
+                "request_type": "get_exchange_info",
+                "symbol_name": None,
+                "asset_type": self.asset_type,
+                "exchange_name": self.exchange_name,
+                "normalize_function": self._get_exchange_info_normalize_function,
+            },
+        )
         return path, {}, extra_data
 
     def _get_server_time(self, extra_data=None, **kwargs):
         path = self._params.get_rest_path("get_server_time")
-        extra_data = update_extra_data(extra_data, **{
-            "request_type": "get_server_time",
-            "exchange_name": self.exchange_name,
-            "normalize_function": self._get_server_time_normalize_function,
-        })
+        extra_data = update_extra_data(
+            extra_data,
+            **{
+                "request_type": "get_server_time",
+                "exchange_name": self.exchange_name,
+                "normalize_function": self._get_server_time_normalize_function,
+            },
+        )
         return path, {}, extra_data
 
     def _get_ads(self, ad_id, extra_data=None, **kwargs):
         path = self._params.get_rest_path("get_ads", id=ad_id)
-        extra_data = update_extra_data(extra_data, **{
-            "request_type": "get_ads",
-            "ad_id": ad_id,
-            "asset_type": self.asset_type,
-            "exchange_name": self.exchange_name,
-            "normalize_function": self._get_ads_normalize_function,
-        })
+        extra_data = update_extra_data(
+            extra_data,
+            **{
+                "request_type": "get_ads",
+                "ad_id": ad_id,
+                "asset_type": self.asset_type,
+                "exchange_name": self.exchange_name,
+                "normalize_function": self._get_ads_normalize_function,
+            },
+        )
         return path, {}, extra_data
 
     def _get_online_ads(self, currency="USD", country_code="all", extra_data=None, **kwargs):
         path = self._params.get_rest_path(
             "get_online_ads", currency=currency.lower(), country_code=country_code.lower()
         )
-        extra_data = update_extra_data(extra_data, **{
-            "request_type": "get_online_ads",
-            "currency": currency,
-            "country_code": country_code,
-            "asset_type": self.asset_type,
-            "exchange_name": self.exchange_name,
-            "normalize_function": self._get_ads_normalize_function,
-        })
+        extra_data = update_extra_data(
+            extra_data,
+            **{
+                "request_type": "get_online_ads",
+                "currency": currency,
+                "country_code": country_code,
+                "asset_type": self.asset_type,
+                "exchange_name": self.exchange_name,
+                "normalize_function": self._get_ads_normalize_function,
+            },
+        )
         return path, {}, extra_data
 
     def _get_balance(self, extra_data=None, **kwargs):
         path = self._params.get_rest_path("get_balance")
-        extra_data = update_extra_data(extra_data, **{
-            "request_type": "get_balance",
-            "asset_type": self.asset_type,
-            "exchange_name": self.exchange_name,
-            "normalize_function": self._get_balance_normalize_function,
-        })
+        extra_data = update_extra_data(
+            extra_data,
+            **{
+                "request_type": "get_balance",
+                "asset_type": self.asset_type,
+                "exchange_name": self.exchange_name,
+                "normalize_function": self._get_balance_normalize_function,
+            },
+        )
         return path, {}, extra_data
 
     def _get_account(self, extra_data=None, **kwargs):
         path = self._params.get_rest_path("get_account")
-        extra_data = update_extra_data(extra_data, **{
-            "request_type": "get_account",
-            "asset_type": self.asset_type,
-            "exchange_name": self.exchange_name,
-            "normalize_function": self._get_account_normalize_function,
-        })
+        extra_data = update_extra_data(
+            extra_data,
+            **{
+                "request_type": "get_account",
+                "asset_type": self.asset_type,
+                "exchange_name": self.exchange_name,
+                "normalize_function": self._get_account_normalize_function,
+            },
+        )
         return path, {}, extra_data
 
     # ── normalization functions ──────────────────────────────────

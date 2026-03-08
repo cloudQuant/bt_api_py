@@ -114,7 +114,9 @@ class PhemexRequestData(Feed):
         self.request_logger.info(f"{method} {url} -> {type(res)}")
         return RequestData(res, extra_data)
 
-    async def async_request(self, path, params=None, body=None, extra_data=None, timeout=5, is_sign=False):
+    async def async_request(
+        self, path, params=None, body=None, extra_data=None, timeout=5, is_sign=False
+    ):
         """Async HTTP request function using Feed.async_http_request()."""
         if params is None:
             params = {}
@@ -145,51 +147,63 @@ class PhemexRequestData(Feed):
     def _get_server_time(self, extra_data=None, **kwargs):
         path = self._params.get_rest_path("get_server_time")
         params = {}
-        extra_data = update_extra_data(extra_data, **{
-            "request_type": "get_server_time",
-            "symbol_name": None,
-            "asset_type": self.asset_type,
-            "exchange_name": self.exchange_name,
-            "normalize_function": self._get_server_time_normalize_function,
-        })
+        extra_data = update_extra_data(
+            extra_data,
+            **{
+                "request_type": "get_server_time",
+                "symbol_name": None,
+                "asset_type": self.asset_type,
+                "exchange_name": self.exchange_name,
+                "normalize_function": self._get_server_time_normalize_function,
+            },
+        )
         return path, params, extra_data
 
     def _get_exchange_info(self, extra_data=None, **kwargs):
         path = self._params.get_rest_path("get_exchange_info")
         params = {}
-        extra_data = update_extra_data(extra_data, **{
-            "request_type": "get_exchange_info",
-            "symbol_name": None,
-            "asset_type": self.asset_type,
-            "exchange_name": self.exchange_name,
-            "normalize_function": self._get_exchange_info_normalize_function,
-        })
+        extra_data = update_extra_data(
+            extra_data,
+            **{
+                "request_type": "get_exchange_info",
+                "symbol_name": None,
+                "asset_type": self.asset_type,
+                "exchange_name": self.exchange_name,
+                "normalize_function": self._get_exchange_info_normalize_function,
+            },
+        )
         return path, params, extra_data
 
     def _get_tick(self, symbol, extra_data=None, **kwargs):
         path = self._params.get_rest_path("get_tick")
         phemex_symbol = self._params.get_symbol(symbol)
         params = {"symbol": phemex_symbol}
-        extra_data = update_extra_data(extra_data, **{
-            "request_type": "get_tick",
-            "symbol_name": symbol,
-            "asset_type": self.asset_type,
-            "exchange_name": self.exchange_name,
-            "normalize_function": self._get_tick_normalize_function,
-        })
+        extra_data = update_extra_data(
+            extra_data,
+            **{
+                "request_type": "get_tick",
+                "symbol_name": symbol,
+                "asset_type": self.asset_type,
+                "exchange_name": self.exchange_name,
+                "normalize_function": self._get_tick_normalize_function,
+            },
+        )
         return path, params, extra_data
 
     def _get_depth(self, symbol, size=20, extra_data=None, **kwargs):
         path = self._params.get_rest_path("get_depth")
         phemex_symbol = self._params.get_symbol(symbol)
         params = {"symbol": phemex_symbol}
-        extra_data = update_extra_data(extra_data, **{
-            "request_type": "get_depth",
-            "symbol_name": symbol,
-            "asset_type": self.asset_type,
-            "exchange_name": self.exchange_name,
-            "normalize_function": self._get_depth_normalize_function,
-        })
+        extra_data = update_extra_data(
+            extra_data,
+            **{
+                "request_type": "get_depth",
+                "symbol_name": symbol,
+                "asset_type": self.asset_type,
+                "exchange_name": self.exchange_name,
+                "normalize_function": self._get_depth_normalize_function,
+            },
+        )
         return path, params, extra_data
 
     def _get_kline(self, symbol, period="1h", count=100, extra_data=None, **kwargs):
@@ -205,30 +219,38 @@ class PhemexRequestData(Feed):
             params["from"] = kwargs["from_time"]
         if kwargs.get("to_time"):
             params["to"] = kwargs["to_time"]
-        extra_data = update_extra_data(extra_data, **{
-            "request_type": "get_kline",
-            "symbol_name": symbol,
-            "period": period,
-            "asset_type": self.asset_type,
-            "exchange_name": self.exchange_name,
-            "normalize_function": self._get_kline_normalize_function,
-        })
+        extra_data = update_extra_data(
+            extra_data,
+            **{
+                "request_type": "get_kline",
+                "symbol_name": symbol,
+                "period": period,
+                "asset_type": self.asset_type,
+                "exchange_name": self.exchange_name,
+                "normalize_function": self._get_kline_normalize_function,
+            },
+        )
         return path, params, extra_data
 
     def _get_trade_history(self, symbol, count=100, extra_data=None, **kwargs):
         path = self._params.get_rest_path("get_trades")
         phemex_symbol = self._params.get_symbol(symbol)
         params = {"symbol": phemex_symbol}
-        extra_data = update_extra_data(extra_data, **{
-            "request_type": "get_trades",
-            "symbol_name": symbol,
-            "asset_type": self.asset_type,
-            "exchange_name": self.exchange_name,
-            "normalize_function": self._get_trade_history_normalize_function,
-        })
+        extra_data = update_extra_data(
+            extra_data,
+            **{
+                "request_type": "get_trades",
+                "symbol_name": symbol,
+                "asset_type": self.asset_type,
+                "exchange_name": self.exchange_name,
+                "normalize_function": self._get_trade_history_normalize_function,
+            },
+        )
         return path, params, extra_data
 
-    def _make_order(self, symbol, amount, price=None, order_type="buy-limit", extra_data=None, **kwargs):
+    def _make_order(
+        self, symbol, amount, price=None, order_type="buy-limit", extra_data=None, **kwargs
+    ):
         path = self._params.get_rest_path("make_order")
         phemex_symbol = self._params.get_symbol(symbol)
         side_str, type_str = order_type.upper().replace("-", " ").split()
@@ -244,76 +266,94 @@ class PhemexRequestData(Feed):
         if price is not None and type_str.upper() == "LIMIT":
             params["priceEp"] = int(float(price) * SCALE)
             params["timeInForce"] = kwargs.get("time_in_force", "GoodTillCancel")
-        extra_data = update_extra_data(extra_data, **{
-            "request_type": "make_order",
-            "symbol_name": symbol,
-            "asset_type": self.asset_type,
-            "exchange_name": self.exchange_name,
-            "normalize_function": self._make_order_normalize_function,
-        })
+        extra_data = update_extra_data(
+            extra_data,
+            **{
+                "request_type": "make_order",
+                "symbol_name": symbol,
+                "asset_type": self.asset_type,
+                "exchange_name": self.exchange_name,
+                "normalize_function": self._make_order_normalize_function,
+            },
+        )
         return path, params, extra_data
 
     def _cancel_order(self, symbol=None, order_id=None, extra_data=None, **kwargs):
         path = self._params.get_rest_path("cancel_order")
         phemex_symbol = self._params.get_symbol(symbol) if symbol else ""
         params = {"symbol": phemex_symbol, "orderID": order_id}
-        extra_data = update_extra_data(extra_data, **{
-            "request_type": "cancel_order",
-            "symbol_name": symbol,
-            "asset_type": self.asset_type,
-            "exchange_name": self.exchange_name,
-            "normalize_function": self._cancel_order_normalize_function,
-        })
+        extra_data = update_extra_data(
+            extra_data,
+            **{
+                "request_type": "cancel_order",
+                "symbol_name": symbol,
+                "asset_type": self.asset_type,
+                "exchange_name": self.exchange_name,
+                "normalize_function": self._cancel_order_normalize_function,
+            },
+        )
         return path, params, extra_data
 
     def _query_order(self, symbol=None, order_id=None, extra_data=None, **kwargs):
         path = self._params.get_rest_path("query_order")
         phemex_symbol = self._params.get_symbol(symbol) if symbol else ""
         params = {"symbol": phemex_symbol}
-        extra_data = update_extra_data(extra_data, **{
-            "request_type": "query_order",
-            "symbol_name": symbol,
-            "asset_type": self.asset_type,
-            "exchange_name": self.exchange_name,
-            "normalize_function": self._query_order_normalize_function,
-        })
+        extra_data = update_extra_data(
+            extra_data,
+            **{
+                "request_type": "query_order",
+                "symbol_name": symbol,
+                "asset_type": self.asset_type,
+                "exchange_name": self.exchange_name,
+                "normalize_function": self._query_order_normalize_function,
+            },
+        )
         return path, params, extra_data
 
     def _get_open_orders(self, symbol=None, extra_data=None, **kwargs):
         path = self._params.get_rest_path("get_open_orders")
         phemex_symbol = self._params.get_symbol(symbol) if symbol else ""
         params = {"symbol": phemex_symbol}
-        extra_data = update_extra_data(extra_data, **{
-            "request_type": "get_open_orders",
-            "symbol_name": symbol,
-            "asset_type": self.asset_type,
-            "exchange_name": self.exchange_name,
-            "normalize_function": self._get_open_orders_normalize_function,
-        })
+        extra_data = update_extra_data(
+            extra_data,
+            **{
+                "request_type": "get_open_orders",
+                "symbol_name": symbol,
+                "asset_type": self.asset_type,
+                "exchange_name": self.exchange_name,
+                "normalize_function": self._get_open_orders_normalize_function,
+            },
+        )
         return path, params, extra_data
 
     def _get_account(self, extra_data=None, **kwargs):
         path = self._params.get_rest_path("get_account")
         params = {}
-        extra_data = update_extra_data(extra_data, **{
-            "request_type": "get_account",
-            "symbol_name": None,
-            "asset_type": self.asset_type,
-            "exchange_name": self.exchange_name,
-            "normalize_function": self._get_account_normalize_function,
-        })
+        extra_data = update_extra_data(
+            extra_data,
+            **{
+                "request_type": "get_account",
+                "symbol_name": None,
+                "asset_type": self.asset_type,
+                "exchange_name": self.exchange_name,
+                "normalize_function": self._get_account_normalize_function,
+            },
+        )
         return path, params, extra_data
 
     def _get_balance(self, extra_data=None, **kwargs):
         path = self._params.get_rest_path("get_balance")
         params = {}
-        extra_data = update_extra_data(extra_data, **{
-            "request_type": "get_balance",
-            "symbol_name": None,
-            "asset_type": self.asset_type,
-            "exchange_name": self.exchange_name,
-            "normalize_function": self._get_balance_normalize_function,
-        })
+        extra_data = update_extra_data(
+            extra_data,
+            **{
+                "request_type": "get_balance",
+                "symbol_name": None,
+                "asset_type": self.asset_type,
+                "exchange_name": self.exchange_name,
+                "normalize_function": self._get_balance_normalize_function,
+            },
+        )
         return path, params, extra_data
 
     # ── normalize functions ─────────────────────────────────────

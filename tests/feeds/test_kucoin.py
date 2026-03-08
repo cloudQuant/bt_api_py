@@ -6,26 +6,24 @@ Run tests:
 """
 
 import queue
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch
 
 import pytest
 
-from bt_api_py.containers.exchanges.kucoin_exchange_data import (
-    KuCoinExchangeDataSpot,
-    KuCoinExchangeDataFutures,
-)
-from bt_api_py.containers.orders.kucoin_order import KuCoinRequestOrderData
-from bt_api_py.containers.tickers.kucoin_ticker import KuCoinRequestTickerData
-from bt_api_py.containers.orderbooks.kucoin_orderbook import KuCoinRequestOrderBookData
-from bt_api_py.containers.bars.kucoin_bar import KuCoinRequestBarData
-from bt_api_py.containers.requestdatas.request_data import RequestData
-from bt_api_py.feeds.live_kucoin.spot import KuCoinRequestDataSpot
-from bt_api_py.feeds.live_kucoin.futures import KuCoinRequestDataFutures
-from bt_api_py.registry import ExchangeRegistry
-
 # Import registration to auto-register KuCoin
 import bt_api_py.exchange_registers.register_kucoin  # noqa: F401
-
+from bt_api_py.containers.bars.kucoin_bar import KuCoinRequestBarData
+from bt_api_py.containers.exchanges.kucoin_exchange_data import (
+    KuCoinExchangeDataFutures,
+    KuCoinExchangeDataSpot,
+)
+from bt_api_py.containers.orderbooks.kucoin_orderbook import KuCoinRequestOrderBookData
+from bt_api_py.containers.orders.kucoin_order import KuCoinRequestOrderData
+from bt_api_py.containers.requestdatas.request_data import RequestData
+from bt_api_py.containers.tickers.kucoin_ticker import KuCoinRequestTickerData
+from bt_api_py.feeds.live_kucoin.futures import KuCoinRequestDataFutures
+from bt_api_py.feeds.live_kucoin.spot import KuCoinRequestDataSpot
+from bt_api_py.registry import ExchangeRegistry
 
 # ── Sample KuCoin API responses ──────────────────────────────────────────
 
@@ -187,6 +185,7 @@ SAMPLE_DEALS_RESP = {
 
 # ── Helper ───────────────────────────────────────────────────────────────
 
+
 def _make_spot_feed():
     data_queue = queue.Queue()
     return KuCoinRequestDataSpot(
@@ -221,8 +220,8 @@ def _setup_mock(mock_request, resp_json):
 # 1. ExchangeData tests
 # ══════════════════════════════════════════════════════════════════════════
 
-class TestKuCoinExchangeData:
 
+class TestKuCoinExchangeData:
     def test_spot_creation(self):
         ed = KuCoinExchangeDataSpot()
         assert ed.exchange_name == "KUCOIN___SPOT"
@@ -263,8 +262,8 @@ class TestKuCoinExchangeData:
 # 2. Layer-1 parameter generation
 # ══════════════════════════════════════════════════════════════════════════
 
-class TestKuCoinParamGeneration:
 
+class TestKuCoinParamGeneration:
     def test_get_ticker_params(self):
         feed = _make_spot_feed()
         path, params, extra = feed._get_ticker("BTC-USDT")
@@ -293,15 +292,17 @@ class TestKuCoinParamGeneration:
 
     def test_get_kline_params_with_time(self):
         feed = _make_spot_feed()
-        path, params, extra = feed._get_kline("BTC-USDT", period="5min",
-                                               start_time=1000, end_time=2000)
+        path, params, extra = feed._get_kline(
+            "BTC-USDT", period="5min", start_time=1000, end_time=2000
+        )
         assert params["startAt"] == 1000
         assert params["endAt"] == 2000
 
     def test_make_order_params_limit(self):
         feed = _make_spot_feed()
         path, params, extra = feed._make_order(
-            symbol="BTC-USDT", vol="0.001", price="50000", order_type="buy-limit")
+            symbol="BTC-USDT", vol="0.001", price="50000", order_type="buy-limit"
+        )
         assert path == "POST /api/v1/orders"
         assert params["symbol"] == "BTC-USDT"
         assert params["side"] == "BUY"
@@ -313,7 +314,8 @@ class TestKuCoinParamGeneration:
     def test_make_order_params_market_buy(self):
         feed = _make_spot_feed()
         path, params, extra = feed._make_order(
-            symbol="BTC-USDT", vol="100", order_type="buy-market")
+            symbol="BTC-USDT", vol="100", order_type="buy-market"
+        )
         assert params["type"] == "MARKET"
         assert params["funds"] == "100"
         assert "size" not in params
@@ -322,7 +324,8 @@ class TestKuCoinParamGeneration:
     def test_make_order_params_market_sell(self):
         feed = _make_spot_feed()
         path, params, extra = feed._make_order(
-            symbol="BTC-USDT", vol="0.5", order_type="sell-market")
+            symbol="BTC-USDT", vol="0.5", order_type="sell-market"
+        )
         assert params["type"] == "MARKET"
         assert params["size"] == "0.5"
         assert "funds" not in params
@@ -382,12 +385,13 @@ class TestKuCoinParamGeneration:
 # 3. Normalize functions
 # ══════════════════════════════════════════════════════════════════════════
 
-class TestKuCoinNormalize:
 
+class TestKuCoinNormalize:
     def test_ticker_normalize(self):
         extra = {"symbol_name": "BTC-USDT", "asset_type": "SPOT", "exchange_name": "KUCOIN"}
         tickers, ok = KuCoinRequestDataSpot._get_ticker_normalize_function(
-            SAMPLE_TICKER_RESP, extra)
+            SAMPLE_TICKER_RESP, extra
+        )
         assert ok is True
         assert len(tickers) == 1
         t = tickers[0]
@@ -400,16 +404,14 @@ class TestKuCoinNormalize:
 
     def test_depth_normalize(self):
         extra = {"symbol_name": "BTC-USDT", "asset_type": "SPOT"}
-        books, ok = KuCoinRequestDataSpot._get_depth_normalize_function(
-            SAMPLE_DEPTH_RESP, extra)
+        books, ok = KuCoinRequestDataSpot._get_depth_normalize_function(SAMPLE_DEPTH_RESP, extra)
         assert ok is True
         assert len(books) == 1
         assert isinstance(books[0], KuCoinRequestOrderBookData)
 
     def test_kline_normalize(self):
         extra = {"symbol_name": "BTC-USDT", "asset_type": "SPOT"}
-        bars, ok = KuCoinRequestDataSpot._get_kline_normalize_function(
-            SAMPLE_KLINE_RESP, extra)
+        bars, ok = KuCoinRequestDataSpot._get_kline_normalize_function(SAMPLE_KLINE_RESP, extra)
         assert ok is True
         assert len(bars) == 2
         assert isinstance(bars[0], KuCoinRequestBarData)
@@ -417,7 +419,8 @@ class TestKuCoinNormalize:
     def test_make_order_normalize(self):
         extra = {"symbol_name": "BTC-USDT", "asset_type": "SPOT"}
         orders, ok = KuCoinRequestDataSpot._make_order_normalize_function(
-            SAMPLE_MAKE_ORDER_RESP, extra)
+            SAMPLE_MAKE_ORDER_RESP, extra
+        )
         assert ok is True
         assert len(orders) == 1
         assert isinstance(orders[0], KuCoinRequestOrderData)
@@ -425,7 +428,8 @@ class TestKuCoinNormalize:
     def test_get_order_normalize(self):
         extra = {"symbol_name": "BTC-USDT", "asset_type": "SPOT"}
         orders, ok = KuCoinRequestDataSpot._get_order_normalize_function(
-            SAMPLE_QUERY_ORDER_RESP, extra)
+            SAMPLE_QUERY_ORDER_RESP, extra
+        )
         assert ok is True
         assert len(orders) == 1
         assert isinstance(orders[0], KuCoinRequestOrderData)
@@ -433,13 +437,15 @@ class TestKuCoinNormalize:
     def test_get_open_orders_normalize(self):
         extra = {"symbol_name": "ALL", "asset_type": "SPOT"}
         orders, ok = KuCoinRequestDataSpot._get_open_orders_normalize_function(
-            SAMPLE_OPEN_ORDERS_RESP, extra)
+            SAMPLE_OPEN_ORDERS_RESP, extra
+        )
         assert ok is True
         assert len(orders) == 1
 
     def test_exchange_info_normalize(self):
         data, ok = KuCoinRequestDataSpot._get_exchange_info_normalize_function(
-            SAMPLE_EXCHANGE_INFO_RESP, {})
+            SAMPLE_EXCHANGE_INFO_RESP, {}
+        )
         assert ok is True
         assert isinstance(data, list)
         assert len(data) == 1
@@ -450,8 +456,8 @@ class TestKuCoinNormalize:
 # 4. Data containers
 # ══════════════════════════════════════════════════════════════════════════
 
-class TestKuCoinDataContainers:
 
+class TestKuCoinDataContainers:
     def test_ticker_container(self):
         ticker = KuCoinRequestTickerData(SAMPLE_TICKER_RESP, "BTC-USDT", "SPOT", True)
         assert ticker.init_data() is ticker
@@ -505,8 +511,8 @@ class TestKuCoinDataContainers:
 # 5. Layer-2 sync calls (mocked HTTP)
 # ══════════════════════════════════════════════════════════════════════════
 
-class TestKuCoinSyncCalls:
 
+class TestKuCoinSyncCalls:
     @patch(MOCK_PATH)
     def test_get_ticker(self, mock_req):
         _setup_mock(mock_req, SAMPLE_TICKER_RESP)
@@ -651,8 +657,8 @@ class TestKuCoinSyncCalls:
 # 6. Registry tests
 # ══════════════════════════════════════════════════════════════════════════
 
-class TestKuCoinRegistry:
 
+class TestKuCoinRegistry:
     def test_spot_registered(self):
         assert "KUCOIN___SPOT" in ExchangeRegistry._feed_classes
         assert ExchangeRegistry._feed_classes["KUCOIN___SPOT"] is KuCoinRequestDataSpot
@@ -664,13 +670,18 @@ class TestKuCoinRegistry:
         assert "KUCOIN___FUTURES" in ExchangeRegistry._feed_classes
         assert ExchangeRegistry._feed_classes["KUCOIN___FUTURES"] is KuCoinRequestDataFutures
         assert "KUCOIN___FUTURES" in ExchangeRegistry._exchange_data_classes
-        assert ExchangeRegistry._exchange_data_classes["KUCOIN___FUTURES"] is KuCoinExchangeDataFutures
+        assert (
+            ExchangeRegistry._exchange_data_classes["KUCOIN___FUTURES"] is KuCoinExchangeDataFutures
+        )
 
     def test_create_feed_spot(self):
         data_queue = queue.Queue()
         feed = ExchangeRegistry.create_feed(
-            "KUCOIN___SPOT", data_queue,
-            public_key="test", private_key="test", passphrase="test",
+            "KUCOIN___SPOT",
+            data_queue,
+            public_key="test",
+            private_key="test",
+            passphrase="test",
         )
         assert isinstance(feed, KuCoinRequestDataSpot)
 
@@ -687,8 +698,8 @@ class TestKuCoinRegistry:
 # 7. Signing tests
 # ══════════════════════════════════════════════════════════════════════════
 
-class TestKuCoinSigning:
 
+class TestKuCoinSigning:
     def test_signature(self):
         feed = _make_spot_feed()
         sig = feed.signature(1234567890000, "GET", "/api/v1/orders", "test_secret", "")
@@ -716,7 +727,11 @@ class TestKuCoinSigning:
             _setup_mock(mock_req, SAMPLE_ACCOUNT_RESP)
             feed.get_account()
             call_kwargs = mock_req.call_args
-            headers = call_kwargs.kwargs.get("headers", call_kwargs[1].get("headers", {})) if call_kwargs else {}
+            headers = (
+                call_kwargs.kwargs.get("headers", call_kwargs[1].get("headers", {}))
+                if call_kwargs
+                else {}
+            )
             assert "KC-API-KEY" in headers
 
 
@@ -724,18 +739,33 @@ class TestKuCoinSigning:
 # 8. Method existence checks
 # ══════════════════════════════════════════════════════════════════════════
 
-class TestKuCoinMethodExistence:
 
+class TestKuCoinMethodExistence:
     def test_spot_has_all_methods(self):
         feed = _make_spot_feed()
         methods = [
-            'get_ticker', 'get_tick', 'get_depth', 'get_kline',
-            'get_server_time', 'get_exchange_info', 'get_symbols',
-            'make_order', 'cancel_order', 'cancel_all_orders',
-            'get_order', 'query_order', 'get_open_orders',
-            'get_account', 'get_balance', 'get_deals',
-            'async_get_ticker', 'async_get_tick', 'async_get_depth',
-            'async_get_kline', 'async_get_account', 'async_get_balance',
+            "get_ticker",
+            "get_tick",
+            "get_depth",
+            "get_kline",
+            "get_server_time",
+            "get_exchange_info",
+            "get_symbols",
+            "make_order",
+            "cancel_order",
+            "cancel_all_orders",
+            "get_order",
+            "query_order",
+            "get_open_orders",
+            "get_account",
+            "get_balance",
+            "get_deals",
+            "async_get_ticker",
+            "async_get_tick",
+            "async_get_depth",
+            "async_get_kline",
+            "async_get_account",
+            "async_get_balance",
         ]
         for m in methods:
             assert hasattr(feed, m), f"Missing method: {m}"
@@ -743,12 +773,23 @@ class TestKuCoinMethodExistence:
     def test_futures_has_core_methods(self):
         feed = _make_futures_feed()
         methods = [
-            'get_ticker', 'get_tick', 'get_depth', 'get_kline',
-            'get_server_time', 'get_exchange_info',
-            'make_order', 'cancel_order', 'get_open_orders',
-            'get_account', 'get_balance', 'query_order',
-            'async_get_ticker', 'async_get_depth', 'async_get_kline',
-            'async_get_account', 'async_get_balance',
+            "get_ticker",
+            "get_tick",
+            "get_depth",
+            "get_kline",
+            "get_server_time",
+            "get_exchange_info",
+            "make_order",
+            "cancel_order",
+            "get_open_orders",
+            "get_account",
+            "get_balance",
+            "query_order",
+            "async_get_ticker",
+            "async_get_depth",
+            "async_get_kline",
+            "async_get_account",
+            "async_get_balance",
         ]
         for m in methods:
             assert hasattr(feed, m), f"Missing method: {m}"

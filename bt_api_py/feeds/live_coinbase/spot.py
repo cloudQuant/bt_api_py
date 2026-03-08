@@ -3,13 +3,10 @@ Coinbase Spot trading feed implementation.
 Three-layer pattern: _get_xxx() -> get_xxx() / async_get_xxx()
 """
 
-import json
-import time
 import uuid
 
 from bt_api_py.containers.accounts.coinbase_account import CoinbaseRequestAccountData
 from bt_api_py.containers.bars.coinbase_bar import CoinbaseRequestBarData
-from bt_api_py.containers.balances.coinbase_balance import CoinbaseBalanceData
 from bt_api_py.containers.exchanges.coinbase_exchange_data import CoinbaseExchangeDataSpot
 from bt_api_py.containers.orderbooks.coinbase_orderbook import CoinbaseRequestOrderBookData
 from bt_api_py.containers.orders.coinbase_order import CoinbaseRequestOrderData
@@ -200,7 +197,9 @@ class CoinbaseRequestDataSpot(CoinbaseRequestData):
         path = path.replace("{product_id}", self._params.get_symbol(symbol))
 
         # Convert period if needed
-        granularity = self._params.get_period(period) if period in self._params.kline_periods else period
+        granularity = (
+            self._params.get_period(period) if period in self._params.kline_periods else period
+        )
 
         params = {"granularity": granularity}
         if start_time:
@@ -229,7 +228,9 @@ class CoinbaseRequestDataSpot(CoinbaseRequestData):
 
         if input_data and isinstance(input_data, dict) and "candles" in input_data:
             candles = input_data["candles"]
-            return [CoinbaseRequestBarData(c, symbol_name, asset_type, True) for c in candles], status
+            return [
+                CoinbaseRequestBarData(c, symbol_name, asset_type, True) for c in candles
+            ], status
         return [], status
 
     def get_kline(
@@ -265,12 +266,25 @@ class CoinbaseRequestDataSpot(CoinbaseRequestData):
         data = self.request(path, params=params, extra_data=extra_data, is_sign=False)
         return data
 
-    def async_get_kline(self, symbol, period="ONE_HOUR", start_time=None, end_time=None,
-                        limit=None, extra_data=None, **kwargs):
+    def async_get_kline(
+        self,
+        symbol,
+        period="ONE_HOUR",
+        start_time=None,
+        end_time=None,
+        limit=None,
+        extra_data=None,
+        **kwargs,
+    ):
         """Get kline data asynchronously."""
         path, params, extra_data = self._get_kline(
-            symbol=symbol, period=period, start_time=start_time, end_time=end_time,
-            limit=limit, extra_data=extra_data, **kwargs,
+            symbol=symbol,
+            period=period,
+            start_time=start_time,
+            end_time=end_time,
+            limit=limit,
+            extra_data=extra_data,
+            **kwargs,
         )
         self.submit(
             self.async_request(path, params=params, extra_data=extra_data, is_sign=False),
@@ -458,7 +472,9 @@ class CoinbaseRequestDataSpot(CoinbaseRequestData):
 
     # ── cancel order ────────────────────────────────────────────
 
-    def _cancel_order(self, symbol=None, order_id=None, client_order_id=None, extra_data=None, **kwargs):
+    def _cancel_order(
+        self, symbol=None, order_id=None, client_order_id=None, extra_data=None, **kwargs
+    ):
         """Create cancel order parameters.
 
         Args:
@@ -493,15 +509,20 @@ class CoinbaseRequestDataSpot(CoinbaseRequestData):
         )
         return path, body, extra_data
 
-    def cancel_order(self, symbol=None, order_id=None, client_order_id=None, extra_data=None, **kwargs):
+    def cancel_order(
+        self, symbol=None, order_id=None, client_order_id=None, extra_data=None, **kwargs
+    ):
         """Cancel an order.
 
         Returns:
             RequestData with cancel response
         """
         path, body, extra_data = self._cancel_order(
-            symbol=symbol, order_id=order_id, client_order_id=client_order_id,
-            extra_data=extra_data, **kwargs
+            symbol=symbol,
+            order_id=order_id,
+            client_order_id=client_order_id,
+            extra_data=extra_data,
+            **kwargs,
         )
         data = self.request(path, body=body, extra_data=extra_data, is_sign=True)
         return data
@@ -543,7 +564,9 @@ class CoinbaseRequestDataSpot(CoinbaseRequestData):
         asset_type = extra_data["asset_type"]
 
         if input_data and isinstance(input_data, dict) and "order" in input_data:
-            return [CoinbaseRequestOrderData(input_data["order"], symbol_name, asset_type, True)], status
+            return [
+                CoinbaseRequestOrderData(input_data["order"], symbol_name, asset_type, True)
+            ], status
         return [], status
 
     def query_order(self, order_id, extra_data=None, **kwargs):
@@ -555,7 +578,9 @@ class CoinbaseRequestDataSpot(CoinbaseRequestData):
         Returns:
             RequestData with order details
         """
-        path, params, extra_data = self._query_order(order_id=order_id, extra_data=extra_data, **kwargs)
+        path, params, extra_data = self._query_order(
+            order_id=order_id, extra_data=extra_data, **kwargs
+        )
         data = self.request(path, params=params, extra_data=extra_data, is_sign=True)
         return data
 
@@ -598,7 +623,9 @@ class CoinbaseRequestDataSpot(CoinbaseRequestData):
 
         if input_data and isinstance(input_data, dict) and "orders" in input_data:
             orders = input_data["orders"]
-            return [CoinbaseRequestOrderData(o, symbol_name, asset_type, True) for o in orders], status
+            return [
+                CoinbaseRequestOrderData(o, symbol_name, asset_type, True) for o in orders
+            ], status
         return [], status
 
     def get_open_orders(self, symbol=None, extra_data=None, **kwargs):
@@ -648,7 +675,9 @@ class CoinbaseRequestDataSpot(CoinbaseRequestData):
 
         if input_data and isinstance(input_data, dict) and "accounts" in input_data:
             accounts = input_data["accounts"]
-            return [CoinbaseRequestAccountData(acc, symbol_name, asset_type, True) for acc in accounts], status
+            return [
+                CoinbaseRequestAccountData(acc, symbol_name, asset_type, True) for acc in accounts
+            ], status
         return [], status
 
     def get_account(self, extra_data=None, **kwargs):
@@ -684,6 +713,7 @@ class CoinbaseRequestDataSpot(CoinbaseRequestData):
 
 class CoinbaseMarketWssData:
     """Placeholder for Coinbase WebSocket market data implementation."""
+
     def __init__(self, data_queue, **kwargs):
         self.data_queue = data_queue
         self.asset_type = kwargs.get("asset_type", "SPOT")
@@ -692,6 +722,7 @@ class CoinbaseMarketWssData:
 
 class CoinbaseAccountWssData:
     """Placeholder for Coinbase WebSocket account data implementation."""
+
     def __init__(self, data_queue, **kwargs):
         self.data_queue = data_queue
         self.asset_type = kwargs.get("asset_type", "SPOT")

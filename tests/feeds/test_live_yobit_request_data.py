@@ -10,23 +10,20 @@ Run with coverage:
 """
 
 import queue
-import time
-import pytest
-from unittest.mock import Mock, MagicMock
 
+import pytest
+
+# Import registration to auto-register YoBit
+import bt_api_py.exchange_registers.register_yobit  # noqa: F401
 from bt_api_py.containers.exchanges.yobit_exchange_data import (
     YobitExchangeData,
     YobitExchangeDataSpot,
 )
-from bt_api_py.containers.tickers.yobit_ticker import YobitRequestTickerData
 from bt_api_py.feeds.live_yobit.spot import YobitRequestDataSpot
 from bt_api_py.registry import ExchangeRegistry
 
-# Import registration to auto-register YoBit
-import bt_api_py.exchange_registers.register_yobit  # noqa: F401
-
-
 # ==================== Fixtures ====================
+
 
 @pytest.fixture
 def data_queue():
@@ -43,6 +40,7 @@ def yobit_feed(data_queue):
 
 # ==================== ServerTime Tests ====================
 
+
 class TestYoBitServerTime:
     """Test server time functionality."""
 
@@ -53,6 +51,7 @@ class TestYoBitServerTime:
 
 
 # ==================== Ticker Tests ====================
+
 
 class TestYoBitTickerData:
     """Test ticker data functionality."""
@@ -72,6 +71,7 @@ class TestYoBitTickerData:
             pass
             # YoBit ticker response structure
         from bt_api_py.containers.requestdatas.request_data import RequestData
+
         assert isinstance(data, (dict, list, RequestData))
 
     def test_yobit_multiple_tickers(self, yobit_feed):
@@ -85,6 +85,7 @@ class TestYoBitTickerData:
 
 
 # ==================== Kline Tests ====================
+
 
 class TestYoBitKlineData:
     """Test kline/candlestick data functionality."""
@@ -107,6 +108,7 @@ class TestYoBitKlineData:
 
 # ==================== OrderBook Tests ====================
 
+
 class TestYoBitOrderBook:
     """Test order book depth functionality."""
 
@@ -116,6 +118,7 @@ class TestYoBitOrderBook:
         assert data is not None
 
         from bt_api_py.containers.requestdatas.request_data import RequestData
+
         assert isinstance(data, (dict, list, RequestData))
 
     def test_yobit_orderbook_bids_asks(self, yobit_feed):
@@ -146,6 +149,7 @@ class TestYoBitOrderBook:
 
 # ==================== Market Info Tests ====================
 
+
 class TestYoBitMarketInfo:
     """Test market information functionality."""
 
@@ -155,6 +159,7 @@ class TestYoBitMarketInfo:
         assert data is not None
 
         from bt_api_py.containers.requestdatas.request_data import RequestData
+
         assert isinstance(data, (dict, list, RequestData))
 
     def test_yobit_symbol_info(self, yobit_feed):
@@ -163,6 +168,7 @@ class TestYoBitMarketInfo:
 
 
 # ==================== Exchange Data Tests ====================
+
 
 class TestYoBitExchangeData:
     """Test YoBit exchange data configuration."""
@@ -198,6 +204,7 @@ class TestYoBitExchangeData:
 
 # ==================== Registry Tests ====================
 
+
 class TestYoBitRegistry:
     """Test YoBit registration."""
 
@@ -213,6 +220,7 @@ class TestYoBitRegistry:
 
 
 # ==================== Symbol Format Tests ====================
+
 
 class TestYoBitSymbolFormat:
     """Test YoBit symbol format conversion."""
@@ -234,6 +242,7 @@ class TestYoBitSymbolFormat:
 
 
 # ==================== Integration Tests ====================
+
 
 class TestYoBitIntegration:
     """Integration tests for YoBit."""

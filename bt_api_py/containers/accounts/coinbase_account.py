@@ -51,7 +51,9 @@ class CoinbaseAccountData(AccountData):
                     self.hold = from_dict_get_float(hold_info, "value", 0)
 
                     self.balance = self.available + self.hold
-                    self.native_balance = from_dict_get_float(self.account_data, "native_balance", 0)
+                    self.native_balance = from_dict_get_float(
+                        self.account_data, "native_balance", 0
+                    )
 
                     self.last_activity = from_dict_get_string(self.account_data, "updated_at")
 

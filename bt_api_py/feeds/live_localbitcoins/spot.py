@@ -61,7 +61,9 @@ class LocalBitcoinsRequestDataSpot(LocalBitcoinsRequestData):
         path, params, extra = self._get_online_ads(currency, country_code, extra_data, **kwargs)
         return self.request(path, params, extra_data=extra)
 
-    async def async_get_online_ads(self, currency="USD", country_code="all", extra_data=None, **kwargs):
+    async def async_get_online_ads(
+        self, currency="USD", country_code="all", extra_data=None, **kwargs
+    ):
         path, params, extra = self._get_online_ads(currency, country_code, extra_data, **kwargs)
         return await self.async_request(path, params, extra_data=extra)
 
@@ -85,6 +87,7 @@ class LocalBitcoinsRequestDataSpot(LocalBitcoinsRequestData):
 
 
 # ── WebSocket stubs (kept for backward compatibility) ────────
+
 
 class LocalBitcoinsMarketWssDataSpot:
     """LocalBitcoins Spot Market WebSocket Data Handler (stub)."""

@@ -13,28 +13,28 @@ Supported asset types:
 
 from bt_api_py.balance_utils import simple_balance_handler as _htx_balance_handler
 from bt_api_py.containers.exchanges.htx_exchange_data import (
-    HtxExchangeDataSpot,
-    HtxExchangeDataMargin,
-    HtxExchangeDataUsdtSwap,
     HtxExchangeDataCoinSwap,
+    HtxExchangeDataMargin,
     HtxExchangeDataOption,
+    HtxExchangeDataSpot,
+    HtxExchangeDataUsdtSwap,
 )
 from bt_api_py.feeds.live_htx import (
-    HtxRequestDataSpot,
-    HtxRequestDataMargin,
-    HtxRequestDataUsdtSwap,
-    HtxRequestDataCoinSwap,
-    HtxRequestDataOption,
-    HtxMarketWssDataSpot,
-    HtxAccountWssDataSpot,
-    HtxMarketWssDataMargin,
+    HtxAccountWssDataCoinSwap,
     HtxAccountWssDataMargin,
-    HtxMarketWssDataUsdtSwap,
+    HtxAccountWssDataOption,
+    HtxAccountWssDataSpot,
     HtxAccountWssDataUsdtSwap,
     HtxMarketWssDataCoinSwap,
-    HtxAccountWssDataCoinSwap,
+    HtxMarketWssDataMargin,
     HtxMarketWssDataOption,
-    HtxAccountWssDataOption,
+    HtxMarketWssDataSpot,
+    HtxMarketWssDataUsdtSwap,
+    HtxRequestDataCoinSwap,
+    HtxRequestDataMargin,
+    HtxRequestDataOption,
+    HtxRequestDataSpot,
+    HtxRequestDataUsdtSwap,
 )
 from bt_api_py.registry import ExchangeRegistry
 
@@ -147,13 +147,17 @@ def register_htx():
     ExchangeRegistry.register_feed("HTX___USDT_SWAP", HtxRequestDataUsdtSwap)
     ExchangeRegistry.register_exchange_data("HTX___USDT_SWAP", HtxExchangeDataUsdtSwap)
     ExchangeRegistry.register_balance_handler("HTX___USDT_SWAP", _htx_balance_handler)
-    ExchangeRegistry.register_stream("HTX___USDT_SWAP", "subscribe", _htx_usdt_swap_subscribe_handler)
+    ExchangeRegistry.register_stream(
+        "HTX___USDT_SWAP", "subscribe", _htx_usdt_swap_subscribe_handler
+    )
 
     # Coin Swap (Inverse Perpetual)
     ExchangeRegistry.register_feed("HTX___COIN_SWAP", HtxRequestDataCoinSwap)
     ExchangeRegistry.register_exchange_data("HTX___COIN_SWAP", HtxExchangeDataCoinSwap)
     ExchangeRegistry.register_balance_handler("HTX___COIN_SWAP", _htx_balance_handler)
-    ExchangeRegistry.register_stream("HTX___COIN_SWAP", "subscribe", _htx_coin_swap_subscribe_handler)
+    ExchangeRegistry.register_stream(
+        "HTX___COIN_SWAP", "subscribe", _htx_coin_swap_subscribe_handler
+    )
 
     # Option
     ExchangeRegistry.register_feed("HTX___OPTION", HtxRequestDataOption)

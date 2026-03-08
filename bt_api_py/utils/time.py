@@ -1,5 +1,6 @@
 from datetime import datetime
 
+
 def convert_utc_timestamp(timestamp):
     """Convert millisecond timestamp to datetime object
 

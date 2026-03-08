@@ -1,4 +1,3 @@
-import json
 import time
 
 from bt_api_py.containers.trades.trade import TradeData

@@ -22,10 +22,11 @@ def _load_swyftx_yaml():
     try:
         cfg_path = os.path.join(
             os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
-            "configs", "swyftx.yaml",
+            "configs",
+            "swyftx.yaml",
         )
         if os.path.exists(cfg_path):
-            with open(cfg_path, "r", encoding="utf-8") as f:
+            with open(cfg_path, encoding="utf-8") as f:
                 _swyftx_yaml_cache = yaml.safe_load(f) or {}
     except Exception as e:
         logger.warn(f"Failed to load swyftx.yaml: {e}")
@@ -42,8 +43,14 @@ class SwyftxExchangeData(ExchangeData):
         self.rest_url = "https://api.swyftx.com.au"
         self.wss_url = ""
         self.kline_periods = {
-            "1m": "60", "5m": "300", "15m": "900", "30m": "1800",
-            "1h": "3600", "4h": "14400", "1d": "86400", "1w": "604800",
+            "1m": "60",
+            "5m": "300",
+            "15m": "900",
+            "30m": "1800",
+            "1h": "3600",
+            "4h": "14400",
+            "1d": "86400",
+            "1w": "604800",
         }
         self.legal_currency = ["AUD", "USD", "BTC", "ETH", "USDT"]
 

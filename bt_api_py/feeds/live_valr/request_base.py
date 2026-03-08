@@ -31,8 +31,8 @@ class ValrRequestData(Feed):
         self.data_queue = data_queue
         self.exchange_name = kwargs.get("exchange_name", "VALR___SPOT")
         self.asset_type = kwargs.get("asset_type", "SPOT")
-        self.api_key = kwargs.get("public_key", kwargs.get("api_key", None))
-        self.api_secret = kwargs.get("secret_key", kwargs.get("api_secret", None))
+        self.api_key = kwargs.get("public_key", kwargs.get("api_key"))
+        self.api_secret = kwargs.get("secret_key", kwargs.get("api_secret"))
         self._params = ValrExchangeDataSpot()
         self.request_logger = get_logger("valr_feed")
         self.async_logger = get_logger("valr_feed")
@@ -55,9 +55,7 @@ class ValrRequestData(Feed):
             ts = str(int(time.time() * 1000))
             headers["X-VALR-API-KEY"] = self.api_key
             headers["X-VALR-TIMESTAMP"] = ts
-            headers["X-VALR-SIGNATURE"] = self._generate_signature(
-                ts, method, request_path
-            )
+            headers["X-VALR-SIGNATURE"] = self._generate_signature(ts, method, request_path)
         return headers
 
     # ── request / async_request ─────────────────────────────────
@@ -70,8 +68,11 @@ class ValrRequestData(Feed):
             url = url + "?" + urlencode(params)
         headers = self._get_headers(method=method, request_path=endpoint)
         response = self.http_request(
-            method=method, url=url, headers=headers,
-            body=body, timeout=timeout,
+            method=method,
+            url=url,
+            headers=headers,
+            body=body,
+            timeout=timeout,
         )
         return self._process_response(response, extra_data)
 
@@ -83,8 +84,11 @@ class ValrRequestData(Feed):
             url = url + "?" + urlencode(params)
         headers = self._get_headers(method=method, request_path=endpoint)
         response = await self.async_http_request(
-            method=method, url=url, headers=headers,
-            body=body, timeout=timeout,
+            method=method,
+            url=url,
+            headers=headers,
+            body=body,
+            timeout=timeout,
         )
         return self._process_response(response, extra_data)
 
@@ -126,67 +130,81 @@ class ValrRequestData(Feed):
     def _get_server_time(self, extra_data=None, **kwargs):
         path = self._params.get_rest_path("get_server_time")
         extra_data = extra_data or {}
-        extra_data.update({
-            "request_type": "get_server_time",
-            "normalize_function": self._get_server_time_normalize_function,
-        })
+        extra_data.update(
+            {
+                "request_type": "get_server_time",
+                "normalize_function": self._get_server_time_normalize_function,
+            }
+        )
         return path, None, extra_data
 
     def _get_tick(self, symbol, extra_data=None, **kwargs):
         path = self._params.get_rest_path("get_tick", symbol=symbol)
         extra_data = extra_data or {}
-        extra_data.update({
-            "request_type": "get_tick",
-            "symbol_name": symbol,
-            "normalize_function": self._get_tick_normalize_function,
-        })
+        extra_data.update(
+            {
+                "request_type": "get_tick",
+                "symbol_name": symbol,
+                "normalize_function": self._get_tick_normalize_function,
+            }
+        )
         return path, None, extra_data
 
     def _get_depth(self, symbol, count=20, extra_data=None, **kwargs):
         path = self._params.get_rest_path("get_depth", symbol=symbol)
         extra_data = extra_data or {}
-        extra_data.update({
-            "request_type": "get_depth",
-            "symbol_name": symbol,
-            "normalize_function": self._get_depth_normalize_function,
-        })
+        extra_data.update(
+            {
+                "request_type": "get_depth",
+                "symbol_name": symbol,
+                "normalize_function": self._get_depth_normalize_function,
+            }
+        )
         return path, None, extra_data
 
     def _get_kline(self, symbol, period, count=20, extra_data=None, **kwargs):
         path = self._params.get_rest_path("get_kline", symbol=symbol)
         extra_data = extra_data or {}
-        extra_data.update({
-            "request_type": "get_kline",
-            "symbol_name": symbol,
-            "normalize_function": self._get_kline_normalize_function,
-        })
+        extra_data.update(
+            {
+                "request_type": "get_kline",
+                "symbol_name": symbol,
+                "normalize_function": self._get_kline_normalize_function,
+            }
+        )
         return path, None, extra_data
 
     def _get_exchange_info(self, extra_data=None, **kwargs):
         path = self._params.get_rest_path("get_exchange_info")
         extra_data = extra_data or {}
-        extra_data.update({
-            "request_type": "get_exchange_info",
-            "normalize_function": self._get_exchange_info_normalize_function,
-        })
+        extra_data.update(
+            {
+                "request_type": "get_exchange_info",
+                "normalize_function": self._get_exchange_info_normalize_function,
+            }
+        )
         return path, None, extra_data
 
     def _get_balance(self, extra_data=None, **kwargs):
         path = self._params.get_rest_path("get_balance")
         extra_data = extra_data or {}
-        extra_data.update({
-            "request_type": "get_balance",
-            "normalize_function": self._get_balance_normalize_function,
-        })
+        extra_data.update(
+            {
+                "request_type": "get_balance",
+                "normalize_function": self._get_balance_normalize_function,
+            }
+        )
         return path, None, extra_data
 
     def _get_account(self, extra_data=None, **kwargs):
         path = self._params.get_rest_path("get_account")
         extra_data = extra_data or {}
-        extra_data.update({
-            "request_type": "get_account",
-            "normalize_function": self._get_account_normalize_function,
-        })
+        extra_data.update(
+            {
+                "request_type": "get_account",
+                "normalize_function": self._get_account_normalize_function,
+            }
+        )
         return path, None, extra_data
 
     # ── normalization functions ──────────────────────────────────

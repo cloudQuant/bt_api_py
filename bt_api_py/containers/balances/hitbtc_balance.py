@@ -1,4 +1,3 @@
-import json
 import time
 
 from bt_api_py.containers.balances.balance import BalanceData
@@ -90,7 +89,9 @@ class HitBtcRequestBalanceData(BalanceData):
         return abs(total) < 1e-8
 
     def __str__(self):
-        return f"HITBTC Balance {self.currency}: Available={self.available}, Reserved={self.reserved}"
+        return (
+            f"HITBTC Balance {self.currency}: Available={self.available}, Reserved={self.reserved}"
+        )
 
     def __repr__(self):
         return f"<HitBtcBalanceData {self.currency} {self.get_total()}>"

@@ -36,7 +36,9 @@ class FoxbitRequestTickerData(TickerData):
             data = data[0]
 
         if data:
-            self.ticker_symbol_name = data.get("marketSymbol") or data.get("market_symbol") or data.get("symbol")
+            self.ticker_symbol_name = (
+                data.get("marketSymbol") or data.get("market_symbol") or data.get("symbol")
+            )
 
             # Handle nested structure from actual API response
             last_trade = data.get("last_trade", {})
@@ -44,12 +46,18 @@ class FoxbitRequestTickerData(TickerData):
             rolling_24h = data.get("rolling_24h", {})
 
             self.last_price = self._parse_float(last_trade.get("price") or data.get("lastPrice"))
-            self.bid_price = self._parse_float(best.get("bid", {}).get("price") or data.get("bidPrice"))
-            self.ask_price = self._parse_float(best.get("ask", {}).get("price") or data.get("askPrice"))
+            self.bid_price = self._parse_float(
+                best.get("bid", {}).get("price") or data.get("bidPrice")
+            )
+            self.ask_price = self._parse_float(
+                best.get("ask", {}).get("price") or data.get("askPrice")
+            )
             self.volume_24h = self._parse_float(rolling_24h.get("volume") or data.get("vol"))
             self.high_24h = self._parse_float(rolling_24h.get("high") or data.get("highPrice"))
             self.low_24h = self._parse_float(rolling_24h.get("low") or data.get("lowPrice"))
-            self.quote_volume_24h = self._parse_float(rolling_24h.get("quote_volume") or data.get("volQuote"))
+            self.quote_volume_24h = self._parse_float(
+                rolling_24h.get("quote_volume") or data.get("volQuote")
+            )
 
         self.has_been_init_data = True
         return self

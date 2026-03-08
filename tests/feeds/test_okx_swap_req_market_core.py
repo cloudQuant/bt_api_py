@@ -1,35 +1,28 @@
 import queue
 import time
-import random
-import pytest
-from bt_api_py.functions.utils import read_account_config, get_public_ip
-from bt_api_py.feeds.live_okx_feed import OkxRequestDataSwap
 
-from bt_api_py.containers.exchanges.okx_exchange_data import OkxExchangeDataSwap
-from bt_api_py.containers.requestdatas.request_data import RequestData
-from bt_api_py.containers.tickers.okx_ticker import OkxTickerData
 from bt_api_py.containers.bars.okx_bar import OkxBarData
-from bt_api_py.containers.orderbooks.okx_orderbook import OkxOrderBookData
+from bt_api_py.containers.exchanges.okx_exchange_data import OkxExchangeDataSwap
 from bt_api_py.containers.fundingrates.okx_funding_rate import OkxFundingRateData
 from bt_api_py.containers.markprices.okx_mark_price import OkxMarkPriceData
-from bt_api_py.containers.accounts.okx_account import OkxAccountData
+from bt_api_py.containers.orderbooks.okx_orderbook import OkxOrderBookData
+from bt_api_py.containers.requestdatas.request_data import RequestData
+from bt_api_py.containers.tickers.okx_ticker import OkxTickerData
+
 # from bt_api_py.containers.orders.okx_order import OkxOrderData
-from bt_api_py.containers.trades.okx_trade import OkxRequestTradeData, OkxWssTradeData
-from bt_api_py.containers.positions.okx_position import OkxPositionData
-from bt_api_py.containers.orders.order import OrderStatus
-from bt_api_py.containers.symbols.okx_symbol import OkxSymbolData
-from bt_api_py.containers.assets.okx_asset import OkxCurrencyData, OkxAssetBalanceData, OkxAssetValuationData, OkxTransferStateData, OkxDepositInfoData, OkxWithdrawalInfoData
+from bt_api_py.feeds.live_okx_feed import OkxRequestDataSwap
+from bt_api_py.functions.utils import read_account_config
 
 
 def generate_kwargs(exchange=OkxExchangeDataSwap):
     data = read_account_config()
     kwargs = {
-        "public_key": data['okx']['public_key'],
-        "private_key": data['okx']['private_key'],
-        "passphrase": data['okx']["passphrase"],
+        "public_key": data["okx"]["public_key"],
+        "private_key": data["okx"]["private_key"],
+        "passphrase": data["okx"]["passphrase"],
         "topics": {"tick": {"symbol": "BTC-USDT"}},
-        "proxies": data.get('proxies'),
-        "async_proxy": data.get('async_proxy'),
+        "proxies": data.get("proxies"),
+        "async_proxy": data.get("async_proxy"),
     }
     return kwargs
 
@@ -47,17 +40,12 @@ def init_async_feed(data_queue):
     return live_okx_swap_feed
 
 
-
 def test_get_okx_key():
     data = read_account_config()
-    public_key = data['okx']['public_key']
-    private_key = data['okx']['private_key'] + "//" + data['okx']["passphrase"]
+    public_key = data["okx"]["public_key"]
+    private_key = data["okx"]["private_key"] + "//" + data["okx"]["passphrase"]
     assert len(public_key) == 36, "public key is wrong"
     assert len(private_key) > 0, "private key is wrong"
-
-
-
-
 
 
 def test_okx_req_symbol_data():
@@ -70,11 +58,6 @@ def test_okx_req_symbol_data():
     symbol_data = symbol_data_list[0]
     symbol_data.init_data()
     assert isinstance(symbol_data.get_symbol_name(), str)
-
-
-
-
-
 
 
 def test_okx_req_tick_data():
@@ -91,10 +74,6 @@ def test_okx_req_tick_data():
     assert swap_tick_data.get_ask_volume() >= 0
     assert swap_tick_data.get_last_price() > 0
     assert swap_tick_data.get_last_volume() >= 0
-
-
-
-
 
 
 def test_okx_async_tick_data():
@@ -119,10 +98,6 @@ def test_okx_async_tick_data():
         assert swap_async_tick_data.get_last_price() > 0
 
 
-
-
-
-
 def test_okx_req_kline_data():
     live_okx_swap_feed = init_req_feed()
     data_list = live_okx_swap_feed.get_kline("BTC-USDT", "1m", count=2).get_data()
@@ -142,15 +117,12 @@ def test_okx_req_kline_data():
     assert swap_kline_data.get_bar_status() in [0.0, 1.0]
 
 
-
-
-
-
 def test_okx_async_kline_data():
     data_queue = queue.Queue()
     live_okx_swap_feed = init_async_feed(data_queue)
-    live_okx_swap_feed.async_get_kline("BTC-USDT", period="1m",
-                                       extra_data={"test_async_kline_data": True})
+    live_okx_swap_feed.async_get_kline(
+        "BTC-USDT", period="1m", extra_data={"test_async_kline_data": True}
+    )
 
     time.sleep(5)
     try:
@@ -173,10 +145,6 @@ def test_okx_async_kline_data():
     assert swap_async_kline_data.get_volume() >= 0
 
 
-
-
-
-
 def order_book_value_equals(order_book):
     assert isinstance(order_book, OkxOrderBookData)
     assert order_book.get_server_time() > 0
@@ -192,19 +160,11 @@ def order_book_value_equals(order_book):
     assert len(order_book.get_bid_price_list()) == 20
 
 
-
-
-
-
 def test_okx_req_depth_data():
     live_okx_swap_feed = init_req_feed()
     data = live_okx_swap_feed.get_depth("BTC-USDT", 20).get_data()
     assert isinstance(data, list)
     order_book_value_equals(data[0].init_data())
-
-
-
-
 
 
 def test_okx_async_depth_data():
@@ -223,10 +183,6 @@ def test_okx_async_depth_data():
     order_book_value_equals(target_data[0].init_data())
 
 
-
-
-
-
 def assert_funding_rate_value(bf):
     assert bf.get_pre_funding_rate() is None
     assert bf.get_pre_funding_time() is None
@@ -243,20 +199,12 @@ def assert_funding_rate_value(bf):
     assert bf.get_method() in ["next_period", "current_period"]
 
 
-
-
-
-
 def test_okx_req_funding_rate_data():
     live_okx_swap_feed = init_req_feed()
     data = live_okx_swap_feed.get_funding_rate("BTC-USDT").get_data()
     assert isinstance(data, list)
     assert isinstance(data[0], OkxFundingRateData)
     assert_funding_rate_value(data[0].init_data())
-
-
-
-
 
 
 def test_okx_async_funding_rate_data():
@@ -274,10 +222,6 @@ def test_okx_async_funding_rate_data():
     assert_funding_rate_value(target_data[0].init_data())
 
 
-
-
-
-
 def assert_mark_price_data_value(bp):
     assert bp.get_server_time() > 0
     assert bp.get_exchange_name() == "OKX"
@@ -287,20 +231,12 @@ def assert_mark_price_data_value(bp):
     assert bp.get_event() == "MarkPriceEvent"
 
 
-
-
-
-
 def test_okx_req_mark_price_data():
     live_okx_swap_feed = init_req_feed()
     data = live_okx_swap_feed.get_mark_price("BTC-USDT").get_data()
     assert isinstance(data, list)
     assert isinstance(data[0], OkxMarkPriceData)
     assert_mark_price_data_value(data[0].init_data())
-
-
-
-
 
 
 def test_okx_async_mark_price_data():
@@ -321,10 +257,6 @@ def test_okx_async_mark_price_data():
     assert_mark_price_data_value(target_data[0].init_data())
 
 
-
-
-
-
 def test_okx_req_get_tickers():
     """Test get_tickers interface"""
     live_okx_swap_feed = init_req_feed()
@@ -336,10 +268,6 @@ def test_okx_req_get_tickers():
     assert isinstance(tickers_list, list)
     assert len(tickers_list) > 0
     print("get_tickers count:", len(tickers_list))
-
-
-
-
 
 
 def test_okx_req_get_system_time():
@@ -356,7 +284,3 @@ def test_okx_req_get_system_time():
 
 
 # ==================== Market Data Tests (Additional) ====================
-
-
-
-

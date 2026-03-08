@@ -6,23 +6,22 @@ Run tests:
 """
 
 import queue
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch
 
 import pytest
 
+import bt_api_py.exchange_registers.register_bitmart  # noqa: F401
 from bt_api_py.containers.exchanges.bitmart_exchange_data import (
     BitmartExchangeDataSpot,
 )
 from bt_api_py.containers.requestdatas.request_data import RequestData
+from bt_api_py.feeds.capability import Capability
 from bt_api_py.feeds.live_bitmart.request_base import BitmartRequestData
 from bt_api_py.feeds.live_bitmart.spot import BitmartRequestDataSpot
-from bt_api_py.feeds.capability import Capability
 from bt_api_py.registry import ExchangeRegistry
 
-import bt_api_py.exchange_registers.register_bitmart  # noqa: F401
-
-
 # ── fixtures ────────────────────────────────────────────────────
+
 
 @pytest.fixture
 def exchange_data():
@@ -38,34 +37,39 @@ def feed():
 @pytest.fixture
 def feed_with_keys():
     q = queue.Queue()
-    return BitmartRequestDataSpot(
-        q, api_key="test_key", api_secret="test_secret", memo="test_memo"
-    )
+    return BitmartRequestDataSpot(q, api_key="test_key", api_secret="test_secret", memo="test_memo")
 
 
 # ── sample API responses ────────────────────────────────────────
 
 SAMPLE_TICK = {
-    "code": 1000, "message": "OK",
+    "code": 1000,
+    "message": "OK",
     "data": {
-        "symbol": "BTC_USDT", "last_price": "50000",
-        "bid_1": "49999", "ask_1": "50001",
-        "high_24h": "51000", "low_24h": "49000",
+        "symbol": "BTC_USDT",
+        "last_price": "50000",
+        "bid_1": "49999",
+        "ask_1": "50001",
+        "high_24h": "51000",
+        "low_24h": "49000",
         "volume_24h": "1234.56",
     },
 }
 
 SAMPLE_DEPTH = {
-    "code": 1000, "message": "OK",
+    "code": 1000,
+    "message": "OK",
     "data": {
-        "symbol": "BTC_USDT", "timestamp": 1700000000,
+        "symbol": "BTC_USDT",
+        "timestamp": 1700000000,
         "buys": [["49999", "0.5"], ["49998", "1.0"]],
         "sells": [["50001", "0.3"], ["50002", "0.8"]],
     },
 }
 
 SAMPLE_KLINE = {
-    "code": 1000, "message": "OK",
+    "code": 1000,
+    "message": "OK",
     "data": {
         "symbol": "BTC_USDT",
         "klines": [
@@ -76,7 +80,8 @@ SAMPLE_KLINE = {
 }
 
 SAMPLE_TRADES = {
-    "code": 1000, "message": "OK",
+    "code": 1000,
+    "message": "OK",
     "data": {
         "symbol": "BTC_USDT",
         "trades": [
@@ -89,29 +94,34 @@ SAMPLE_TRADES = {
 SAMPLE_SERVER_TIME = {"code": 1000, "message": "OK", "data": {"server_time": 1700000000}}
 
 SAMPLE_EXCHANGE_INFO = {
-    "code": 1000, "message": "OK",
+    "code": 1000,
+    "message": "OK",
     "data": {"currencies": [{"id": "BTC", "name": "Bitcoin"}]},
 }
 
 SAMPLE_MAKE_ORDER = {
-    "code": 1000, "message": "OK",
+    "code": 1000,
+    "message": "OK",
     "data": {"order_id": "12345678"},
 }
 
 SAMPLE_CANCEL_ORDER = {"code": 1000, "message": "OK", "data": True}
 
 SAMPLE_QUERY_ORDER = {
-    "code": 1000, "message": "OK",
+    "code": 1000,
+    "message": "OK",
     "data": {"order_id": "12345678", "state": "filled", "filled_size": "0.001"},
 }
 
 SAMPLE_OPEN_ORDERS = {
-    "code": 1000, "message": "OK",
+    "code": 1000,
+    "message": "OK",
     "data": {"orders": [{"order_id": "111"}, {"order_id": "222"}]},
 }
 
 SAMPLE_BALANCE = {
-    "code": 1000, "message": "OK",
+    "code": 1000,
+    "message": "OK",
     "data": {"wallet": [{"id": "BTC", "available": "1.0", "frozen": "0.0"}]},
 }
 
@@ -119,6 +129,7 @@ SAMPLE_ERROR = {"code": 40001, "message": "Invalid parameter"}
 
 
 # ── TestExchangeData ────────────────────────────────────────────
+
 
 class TestExchangeData:
     def test_exchange_name(self, exchange_data):
@@ -178,6 +189,7 @@ class TestExchangeData:
 
 
 # ── TestParameterGeneration ─────────────────────────────────────
+
 
 class TestParameterGeneration:
     def test_get_tick_params(self, feed):
@@ -250,6 +262,7 @@ class TestParameterGeneration:
 
 # ── TestNormalization ───────────────────────────────────────────
 
+
 class TestNormalization:
     def test_tick_ok(self):
         result, ok = BitmartRequestData._get_tick_normalize_function(SAMPLE_TICK, {})
@@ -299,7 +312,9 @@ class TestNormalization:
         assert ok is True
 
     def test_exchange_info_ok(self):
-        result, ok = BitmartRequestData._get_exchange_info_normalize_function(SAMPLE_EXCHANGE_INFO, {})
+        result, ok = BitmartRequestData._get_exchange_info_normalize_function(
+            SAMPLE_EXCHANGE_INFO, {}
+        )
         assert ok is True
         assert "currencies" in result[0]
 
@@ -337,6 +352,7 @@ class TestNormalization:
 
 
 # ── TestSyncCalls (mocked) ──────────────────────────────────────
+
 
 class TestSyncCalls:
     @patch.object(BitmartRequestDataSpot, "http_request", return_value=SAMPLE_TICK)
@@ -403,6 +419,7 @@ class TestSyncCalls:
 
 # ── TestAuth ────────────────────────────────────────────────────
 
+
 class TestAuth:
     def test_signature_generation(self, feed_with_keys):
         sig = feed_with_keys._generate_signature("1700000000000", "body_str")
@@ -420,6 +437,7 @@ class TestAuth:
 
 
 # ── TestRegistry ────────────────────────────────────────────────
+
 
 class TestRegistry:
     def test_bitmart_spot_registered(self):
@@ -441,21 +459,36 @@ class TestRegistry:
 # ── TestMethodExistence ─────────────────────────────────────────
 
 _REQUIRED_METHODS = [
-    "get_tick", "async_get_tick",
-    "get_ticker", "async_get_ticker",
-    "get_depth", "async_get_depth",
-    "get_kline", "async_get_kline",
-    "get_trade_history", "async_get_trade_history",
-    "get_trades", "async_get_trades",
-    "make_order", "async_make_order",
-    "cancel_order", "async_cancel_order",
-    "query_order", "async_query_order",
-    "get_open_orders", "async_get_open_orders",
-    "get_deals", "async_get_deals",
-    "get_account", "async_get_account",
-    "get_balance", "async_get_balance",
-    "get_server_time", "async_get_server_time",
-    "get_exchange_info", "async_get_exchange_info",
+    "get_tick",
+    "async_get_tick",
+    "get_ticker",
+    "async_get_ticker",
+    "get_depth",
+    "async_get_depth",
+    "get_kline",
+    "async_get_kline",
+    "get_trade_history",
+    "async_get_trade_history",
+    "get_trades",
+    "async_get_trades",
+    "make_order",
+    "async_make_order",
+    "cancel_order",
+    "async_cancel_order",
+    "query_order",
+    "async_query_order",
+    "get_open_orders",
+    "async_get_open_orders",
+    "get_deals",
+    "async_get_deals",
+    "get_account",
+    "async_get_account",
+    "get_balance",
+    "async_get_balance",
+    "get_server_time",
+    "async_get_server_time",
+    "get_exchange_info",
+    "async_get_exchange_info",
 ]
 
 
@@ -467,6 +500,7 @@ class TestMethodExistence:
 
 
 # ── TestFeedInit ────────────────────────────────────────────────
+
 
 class TestFeedInit:
     def test_default_exchange_name(self, feed):
@@ -495,6 +529,7 @@ class TestFeedInit:
 
 
 # ── TestIntegration (skipped by default) ────────────────────────
+
 
 class TestIntegration:
     @pytest.mark.skip(reason="requires network")

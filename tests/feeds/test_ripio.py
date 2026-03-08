@@ -5,24 +5,22 @@ Run tests:
     pytest tests/feeds/test_ripio.py -v
 """
 
-import json
 import queue
 from unittest.mock import Mock
 
 import pytest
 
+# Import registration to auto-register Ripio
+import bt_api_py.exchange_registers.register_ripio  # noqa: F401
 from bt_api_py.containers.exchanges.ripio_exchange_data import (
     RipioExchangeData,
     RipioExchangeDataSpot,
 )
+from bt_api_py.containers.requestdatas.request_data import RequestData
 from bt_api_py.containers.tickers.ripio_ticker import RipioRequestTickerData
 from bt_api_py.feeds.capability import Capability
 from bt_api_py.feeds.live_ripio.spot import RipioRequestDataSpot
-from bt_api_py.containers.requestdatas.request_data import RequestData
 from bt_api_py.registry import ExchangeRegistry
-
-# Import registration to auto-register Ripio
-import bt_api_py.exchange_registers.register_ripio  # noqa: F401
 
 
 @pytest.fixture
@@ -130,9 +128,7 @@ class TestRipioRequestDataSpot:
         assert extra_data["request_type"] == "get_account"
 
     def test_make_order_returns_tuple(self, mock_feed):
-        path, params, extra_data = mock_feed._make_order(
-            "BTC/USDT", "0.001", "50000", "buy-limit"
-        )
+        path, params, extra_data = mock_feed._make_order("BTC/USDT", "0.001", "50000", "buy-limit")
         assert path is not None
         assert extra_data["request_type"] == "make_order"
 
@@ -289,7 +285,7 @@ class TestRipioDataContainers:
                 "bid": "49999.00",
                 "ask": "50001.00",
                 "volume": "1000.00",
-            }
+            },
         }
         ticker = RipioRequestTickerData(ticker_response, "BTC/USDT", "SPOT")
         assert ticker.symbol == "BTC_USDT"

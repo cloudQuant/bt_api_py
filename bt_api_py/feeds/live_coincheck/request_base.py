@@ -2,9 +2,9 @@
 Coincheck REST API request base class.
 """
 
-import time
-import hmac
 import hashlib
+import hmac
+import time
 
 from bt_api_py.containers.exchanges.coincheck_exchange_data import CoincheckExchangeDataSpot
 from bt_api_py.containers.requestdatas.request_data import RequestData
@@ -43,13 +43,11 @@ class CoincheckRequestData(Feed):
     def _generate_signature(self, nonce, url, body=""):
         """Generate HMAC SHA256 signature for Coincheck API."""
         # Coincheck signature: nonce + url + body
-        secret = getattr(self._params, 'api_secret', None)
+        secret = getattr(self._params, "api_secret", None)
         if secret:
             sign_str = nonce + url + body
             signature = hmac.new(
-                secret.encode("utf-8"),
-                sign_str.encode("utf-8"),
-                hashlib.sha256
+                secret.encode("utf-8"), sign_str.encode("utf-8"), hashlib.sha256
             ).hexdigest()
             return signature
         return ""
@@ -62,6 +60,7 @@ class CoincheckRequestData(Feed):
         # Build query string for GET requests
         if method == "GET" and params:
             from urllib.parse import urlencode
+
             query_string = urlencode(sorted(params.items()))
             url = url + "?" + query_string
 
@@ -71,7 +70,7 @@ class CoincheckRequestData(Feed):
 
         # Only add authentication headers if API key is available
         # This allows public endpoints to work without authentication
-        api_key = getattr(self._params, 'api_key', None)
+        api_key = getattr(self._params, "api_key", None)
         if api_key:
             headers["ACCESS-KEY"] = api_key
             headers["ACCESS-NONCE"] = nonce
@@ -137,12 +136,14 @@ class CoincheckRequestData(Feed):
         """Prepare server time request. Returns (path, params, extra_data)."""
         if extra_data is None:
             extra_data = {}
-        extra_data.update({
-            "exchange_name": self.exchange_name,
-            "symbol_name": "",
-            "asset_type": self.asset_type,
-            "request_type": "get_server_time",
-        })
+        extra_data.update(
+            {
+                "exchange_name": self.exchange_name,
+                "symbol_name": "",
+                "asset_type": self.asset_type,
+                "request_type": "get_server_time",
+            }
+        )
         return "GET /api/ticker", {}, extra_data
 
     def get_server_time(self, extra_data=None, **kwargs):

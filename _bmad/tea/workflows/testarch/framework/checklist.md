@@ -2,7 +2,7 @@
 
 This checklist ensures the framework workflow completes successfully and all deliverables meet quality standards.
 
-- --
+---
 
 ## Prerequisites
 
@@ -14,7 +14,7 @@ Before starting the workflow:
 - [ ] Bundler identifiable (Vite, Webpack, Rollup, esbuild) or not applicable (backend projects)
 - [ ] User has write permissions to create directories and files
 
-- --
+---
 
 ## Process Steps
 
@@ -45,7 +45,7 @@ Before starting the workflow:
 - [ ] `tests/support/page-objects/` directory created (if applicable)
 - [ ] All directories have correct permissions
 
-- *Note**: Test organization is flexible (e2e/, api/, integration/). The **support/** folder is the key pattern.
+**Note**: Test organization is flexible (e2e/, api/, integration/). The **support/** folder is the key pattern.
 
 ### Step 4: Configuration Files
 
@@ -123,7 +123,7 @@ Before starting the workflow:
 - [ ] Type definitions added (if TypeScript)
 - [ ] Users can extend with additional scripts as needed
 
-- --
+---
 
 ## Output Validation
 
@@ -158,7 +158,7 @@ Before starting the workflow:
 - [ ] No hardcoded credentials or secrets in files
 - [ ] All file paths use correct separators for OS
 
-- --
+---
 
 ## Quality Checks
 
@@ -188,6 +188,30 @@ Before starting the workflow:
 - [ ] Config follows `playwright-config.md` or `test-config.md`
 - [ ] Test quality matches `test-quality.md`
 
+### Pact Consumer CDC Alignment (when `tea_use_pactjs_utils` enabled)
+
+- [ ] `vitest.config.pact.ts` is minimal (no pool/coverage/setup copied from unit config)
+- [ ] Script names match pactjs-utils (`test:pact:consumer`, `publish:pact`, `can:i:deploy:consumer`, `record:consumer:deployment`)
+- [ ] Scripts source `env-setup.sh` inline in package.json
+- [ ] Shell scripts use `pact-broker` not `npx pact-broker`
+- [ ] Shell scripts use `PACTICIPANT` env var pattern (not hardcoded service names)
+- [ ] `can-i-deploy.sh` has `--retry-while-unknown=10 --retry-interval=30`
+- [ ] `record-deployment.sh` has branch guard (only records on main/master)
+- [ ] `env-setup.sh` uses `set -eu`; broker scripts use `set -euo pipefail` — each with explanatory comment
+- [ ] CI workflow named `contract-test-consumer.yml`
+- [ ] CI has workflow-level env block (not per-step)
+- [ ] CI has `detect-breaking-change` step before install
+- [ ] CI step numbering skips (3) — webhook-triggered provider verification
+- [ ] CI can-i-deploy has `PACT_BREAKING_CHANGE != 'true'` condition
+- [ ] CI has NO upload-artifact step (broker is source of truth)
+- [ ] `.github/actions/detect-breaking-change/action.yml` exists
+- [ ] Consumer tests use `.pacttest.ts` extension
+- [ ] Consumer tests use PactV4 `addInteraction()` builder (not PactV3 fluent API)
+- [ ] Consumer tests call REAL consumer code (actual API client functions), NOT raw `fetch()`
+- [ ] Consumer code exposes URL injection mechanism (`setApiUrl()`, env var, or constructor param)
+- [ ] Local consumer-helpers shim present if `@seontechnologies/pactjs-utils` not installed
+- [ ] `.gitignore` includes `/pacts/` and `pact-logs/`
+
 ### Security Checks
 
 - [ ] No credentials in configuration files
@@ -196,7 +220,7 @@ Before starting the workflow:
 - [ ] API keys and tokens use environment variables
 - [ ] No secrets committed to version control
 
-- --
+---
 
 ## Integration Points
 
@@ -220,11 +244,11 @@ Before starting the workflow:
 - [ ] Can proceed to `atdd` workflow after completion
 - [ ] Framework setup compatible with downstream workflows
 
-- --
+---
 
 ## Completion Criteria
 
-- *All of the following must be true:**
+**All of the following must be true:**
 
 - [ ] All prerequisite checks passed
 - [ ] All process steps completed without errors
@@ -236,11 +260,11 @@ Before starting the workflow:
 - [ ] Documentation is complete and accurate
 - [ ] No critical issues or blockers identified
 
-- --
+---
 
 ## Post-Workflow Actions
 
-- *User must complete:**
+**User must complete:**
 
 1. [ ] Copy `.env.example` to `.env`
 2. [ ] Fill in environment-specific values in `.env`
@@ -248,13 +272,13 @@ Before starting the workflow:
 4. [ ] Run `npm run test:e2e` to verify setup
 5. [ ] Review `tests/README.md` for project-specific guidance
 
-- *Recommended next workflows:**
+**Recommended next workflows:**
 
 1. [ ] Run `ci` workflow to set up CI/CD pipeline
 2. [ ] Run `test-design` workflow to plan test coverage
 3. [ ] Run `atdd` workflow when ready to develop stories
 
-- --
+---
 
 ## Rollback Procedure
 
@@ -268,37 +292,37 @@ If workflow fails and needs to be rolled back:
 6. [ ] Remove test dependencies from package.json (if added)
 7. [ ] Run `npm install` to clean up node_modules
 
-- --
+---
 
 ## Notes
 
 ### Common Issues
 
-- *Issue**: Config file has TypeScript errors
+**Issue**: Config file has TypeScript errors
 
 - **Solution**: Ensure `@playwright/test` or `cypress` types are installed
 
-- *Issue**: Sample test fails to run
+**Issue**: Sample test fails to run
 
 - **Solution**: Check BASE_URL in .env, ensure app is running
 
-- *Issue**: Fixture cleanup not working
+**Issue**: Fixture cleanup not working
 
 - **Solution**: Verify cleanup() is called in fixture teardown
 
-- *Issue**: Network interception not working
+**Issue**: Network interception not working
 
 - **Solution**: Ensure route setup occurs before page.goto()
 
 ### Framework-Specific Considerations
 
-- *Playwright:**
+**Playwright:**
 
 - Requires Node.js 18+
 - Browser binaries auto-installed on first run
 - Trace viewer requires running `npx playwright show-trace`
 
-- *Cypress:**
+**Cypress:**
 
 - Requires Node.js 18+
 - Cypress app opens on first run
@@ -311,11 +335,11 @@ If workflow fails and needs to be rolled back:
 - [ ] TypeScript version compatible with framework
 - [ ] All peer dependencies satisfied
 
-- --
+---
 
-- *Checklist Complete**: Sign off when all items checked and validated.
+**Checklist Complete**: Sign off when all items checked and validated.
 
-- *Completed by:** {name}
-- *Date:** {date}
-- *Framework:** { Playwright / Cypress or something else}
-- *Notes:** {notes}
+**Completed by:** {name}
+**Date:** {date}
+**Framework:** { Playwright / Cypress or something else}
+**Notes:** {notes}

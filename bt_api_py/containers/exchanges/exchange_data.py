@@ -4,7 +4,6 @@ ExchangeData保存交易所数据
 
 
 class ExchangeData:
-
     def __init__(self):
         self.rate_limit_type = ""  # 频率限制类型
         self.interval = ""  # 间隔

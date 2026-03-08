@@ -2,8 +2,8 @@
 Bitfinex Funding Rate Data Container
 """
 
-import json
 import time
+
 from bt_api_py.containers.fundingrates.funding_rate import FundingRateData
 
 

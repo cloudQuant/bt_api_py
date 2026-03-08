@@ -103,7 +103,9 @@ class BigONERequestData(Feed):
         self.request_logger.info(f"{method} {url} -> {type(res)}")
         return RequestData(res, extra_data)
 
-    async def async_request(self, path, params=None, body=None, extra_data=None, timeout=5, is_sign=False):
+    async def async_request(
+        self, path, params=None, body=None, extra_data=None, timeout=5, is_sign=False
+    ):
         """Async HTTP request using Feed.async_http_request()."""
         if params is None:
             params = {}
@@ -135,26 +137,30 @@ class BigONERequestData(Feed):
         path = self._params.get_rest_path("get_server_time")
         params = {}
         extra_data = extra_data or {}
-        extra_data.update({
-            "request_type": "get_server_time",
-            "symbol_name": None,
-            "asset_type": self.asset_type,
-            "exchange_name": self.exchange_name,
-            "normalize_function": self._get_server_time_normalize_function,
-        })
+        extra_data.update(
+            {
+                "request_type": "get_server_time",
+                "symbol_name": None,
+                "asset_type": self.asset_type,
+                "exchange_name": self.exchange_name,
+                "normalize_function": self._get_server_time_normalize_function,
+            }
+        )
         return path, params, extra_data
 
     def _get_exchange_info(self, extra_data=None, **kwargs):
         path = self._params.get_rest_path("get_exchange_info")
         params = {}
         extra_data = extra_data or {}
-        extra_data.update({
-            "request_type": "get_exchange_info",
-            "symbol_name": None,
-            "asset_type": self.asset_type,
-            "exchange_name": self.exchange_name,
-            "normalize_function": self._get_exchange_info_normalize_function,
-        })
+        extra_data.update(
+            {
+                "request_type": "get_exchange_info",
+                "symbol_name": None,
+                "asset_type": self.asset_type,
+                "exchange_name": self.exchange_name,
+                "normalize_function": self._get_exchange_info_normalize_function,
+            }
+        )
         return path, params, extra_data
 
     def _get_tick(self, symbol, extra_data=None, **kwargs):
@@ -162,13 +168,15 @@ class BigONERequestData(Feed):
         path = self._params.get_rest_path("get_tick").replace("{symbol}", bo_symbol)
         params = {}
         extra_data = extra_data or {}
-        extra_data.update({
-            "request_type": "get_tick",
-            "symbol_name": symbol,
-            "asset_type": self.asset_type,
-            "exchange_name": self.exchange_name,
-            "normalize_function": self._get_tick_normalize_function,
-        })
+        extra_data.update(
+            {
+                "request_type": "get_tick",
+                "symbol_name": symbol,
+                "asset_type": self.asset_type,
+                "exchange_name": self.exchange_name,
+                "normalize_function": self._get_tick_normalize_function,
+            }
+        )
         return path, params, extra_data
 
     def _get_depth(self, symbol, count=20, extra_data=None, **kwargs):
@@ -176,13 +184,15 @@ class BigONERequestData(Feed):
         path = self._params.get_rest_path("get_depth").replace("{symbol}", bo_symbol)
         params = {"limit": count}
         extra_data = extra_data or {}
-        extra_data.update({
-            "request_type": "get_depth",
-            "symbol_name": symbol,
-            "asset_type": self.asset_type,
-            "exchange_name": self.exchange_name,
-            "normalize_function": self._get_depth_normalize_function,
-        })
+        extra_data.update(
+            {
+                "request_type": "get_depth",
+                "symbol_name": symbol,
+                "asset_type": self.asset_type,
+                "exchange_name": self.exchange_name,
+                "normalize_function": self._get_depth_normalize_function,
+            }
+        )
         return path, params, extra_data
 
     def _get_kline(self, symbol, period="1h", count=100, extra_data=None, **kwargs):
@@ -191,14 +201,16 @@ class BigONERequestData(Feed):
         bo_period = self._params.get_period(period)
         params = {"period": bo_period, "limit": min(count, 500)}
         extra_data = extra_data or {}
-        extra_data.update({
-            "request_type": "get_kline",
-            "symbol_name": symbol,
-            "period": period,
-            "asset_type": self.asset_type,
-            "exchange_name": self.exchange_name,
-            "normalize_function": self._get_kline_normalize_function,
-        })
+        extra_data.update(
+            {
+                "request_type": "get_kline",
+                "symbol_name": symbol,
+                "period": period,
+                "asset_type": self.asset_type,
+                "exchange_name": self.exchange_name,
+                "normalize_function": self._get_kline_normalize_function,
+            }
+        )
         return path, params, extra_data
 
     def _get_trade_history(self, symbol, count=100, extra_data=None, **kwargs):
@@ -206,16 +218,20 @@ class BigONERequestData(Feed):
         path = self._params.get_rest_path("get_trades").replace("{symbol}", bo_symbol)
         params = {"limit": count}
         extra_data = extra_data or {}
-        extra_data.update({
-            "request_type": "get_trades",
-            "symbol_name": symbol,
-            "asset_type": self.asset_type,
-            "exchange_name": self.exchange_name,
-            "normalize_function": self._get_trade_history_normalize_function,
-        })
+        extra_data.update(
+            {
+                "request_type": "get_trades",
+                "symbol_name": symbol,
+                "asset_type": self.asset_type,
+                "exchange_name": self.exchange_name,
+                "normalize_function": self._get_trade_history_normalize_function,
+            }
+        )
         return path, params, extra_data
 
-    def _make_order(self, symbol, amount, price=None, order_type="buy-limit", extra_data=None, **kwargs):
+    def _make_order(
+        self, symbol, amount, price=None, order_type="buy-limit", extra_data=None, **kwargs
+    ):
         path = self._params.get_rest_path("make_order")
         bo_symbol = self._params.get_symbol(symbol)
         parts = order_type.lower().replace("-", " ").split()
@@ -235,41 +251,45 @@ class BigONERequestData(Feed):
         if kwargs.get("client_order_id"):
             body["client_order_id"] = kwargs["client_order_id"]
         extra_data = extra_data or {}
-        extra_data.update({
-            "request_type": "make_order",
-            "symbol_name": symbol,
-            "asset_type": self.asset_type,
-            "exchange_name": self.exchange_name,
-            "normalize_function": self._make_order_normalize_function,
-        })
+        extra_data.update(
+            {
+                "request_type": "make_order",
+                "symbol_name": symbol,
+                "asset_type": self.asset_type,
+                "exchange_name": self.exchange_name,
+                "normalize_function": self._make_order_normalize_function,
+            }
+        )
         return path, body, extra_data
 
     def _cancel_order(self, symbol=None, order_id=None, extra_data=None, **kwargs):
-        path = self._params.get_rest_path("cancel_order").replace(
-            "{order_id}", str(order_id or ""))
+        path = self._params.get_rest_path("cancel_order").replace("{order_id}", str(order_id or ""))
         params = {}
         extra_data = extra_data or {}
-        extra_data.update({
-            "request_type": "cancel_order",
-            "symbol_name": symbol,
-            "asset_type": self.asset_type,
-            "exchange_name": self.exchange_name,
-            "normalize_function": self._cancel_order_normalize_function,
-        })
+        extra_data.update(
+            {
+                "request_type": "cancel_order",
+                "symbol_name": symbol,
+                "asset_type": self.asset_type,
+                "exchange_name": self.exchange_name,
+                "normalize_function": self._cancel_order_normalize_function,
+            }
+        )
         return path, params, extra_data
 
     def _query_order(self, symbol=None, order_id=None, extra_data=None, **kwargs):
-        path = self._params.get_rest_path("query_order").replace(
-            "{order_id}", str(order_id or ""))
+        path = self._params.get_rest_path("query_order").replace("{order_id}", str(order_id or ""))
         params = {}
         extra_data = extra_data or {}
-        extra_data.update({
-            "request_type": "query_order",
-            "symbol_name": symbol,
-            "asset_type": self.asset_type,
-            "exchange_name": self.exchange_name,
-            "normalize_function": self._query_order_normalize_function,
-        })
+        extra_data.update(
+            {
+                "request_type": "query_order",
+                "symbol_name": symbol,
+                "asset_type": self.asset_type,
+                "exchange_name": self.exchange_name,
+                "normalize_function": self._query_order_normalize_function,
+            }
+        )
         return path, params, extra_data
 
     def _get_open_orders(self, symbol=None, extra_data=None, **kwargs):
@@ -278,39 +298,45 @@ class BigONERequestData(Feed):
         if symbol:
             params["asset_pair_name"] = self._params.get_symbol(symbol)
         extra_data = extra_data or {}
-        extra_data.update({
-            "request_type": "get_open_orders",
-            "symbol_name": symbol,
-            "asset_type": self.asset_type,
-            "exchange_name": self.exchange_name,
-            "normalize_function": self._get_open_orders_normalize_function,
-        })
+        extra_data.update(
+            {
+                "request_type": "get_open_orders",
+                "symbol_name": symbol,
+                "asset_type": self.asset_type,
+                "exchange_name": self.exchange_name,
+                "normalize_function": self._get_open_orders_normalize_function,
+            }
+        )
         return path, params, extra_data
 
     def _get_account(self, extra_data=None, **kwargs):
         path = self._params.get_rest_path("get_account")
         params = {}
         extra_data = extra_data or {}
-        extra_data.update({
-            "request_type": "get_account",
-            "symbol_name": None,
-            "asset_type": self.asset_type,
-            "exchange_name": self.exchange_name,
-            "normalize_function": self._get_account_normalize_function,
-        })
+        extra_data.update(
+            {
+                "request_type": "get_account",
+                "symbol_name": None,
+                "asset_type": self.asset_type,
+                "exchange_name": self.exchange_name,
+                "normalize_function": self._get_account_normalize_function,
+            }
+        )
         return path, params, extra_data
 
     def _get_balance(self, extra_data=None, **kwargs):
         path = self._params.get_rest_path("get_balance")
         params = {}
         extra_data = extra_data or {}
-        extra_data.update({
-            "request_type": "get_balance",
-            "symbol_name": None,
-            "asset_type": self.asset_type,
-            "exchange_name": self.exchange_name,
-            "normalize_function": self._get_balance_normalize_function,
-        })
+        extra_data.update(
+            {
+                "request_type": "get_balance",
+                "symbol_name": None,
+                "asset_type": self.asset_type,
+                "exchange_name": self.exchange_name,
+                "normalize_function": self._get_balance_normalize_function,
+            }
+        )
         return path, params, extra_data
 
     # ── normalize functions ─────────────────────────────────────

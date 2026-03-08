@@ -1,4 +1,3 @@
-import json
 import time
 
 from bt_api_py.containers.tickers.ticker import TickerData

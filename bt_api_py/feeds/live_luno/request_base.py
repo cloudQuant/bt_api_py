@@ -3,6 +3,7 @@ Luno REST API request base class.
 """
 
 import base64
+
 from bt_api_py.containers.exchanges.luno_exchange_data import LunoExchangeDataSpot
 from bt_api_py.containers.requestdatas.request_data import RequestData
 from bt_api_py.feeds.capability import Capability
@@ -44,7 +45,7 @@ class LunoRequestData(Feed):
         }
         if self._params.api_key and self._params.api_secret:
             credentials = base64.b64encode(
-                f"{self._params.api_key}:{self._params.api_secret}".encode("utf-8")
+                f"{self._params.api_key}:{self._params.api_secret}".encode()
             ).decode("utf-8")
             headers["Authorization"] = f"Basic {credentials}"
         return headers
@@ -53,7 +54,7 @@ class LunoRequestData(Feed):
         """Resolve base URL based on request path."""
         base_url = self._params.rest_url
         if "candles" in request_path or "markets" in request_path:
-            base_url = getattr(self._params, 'rest_exchange_url', self._params.rest_url)
+            base_url = getattr(self._params, "rest_exchange_url", self._params.rest_url)
         return base_url
 
     def request(self, path, params=None, body=None, extra_data=None, timeout=10):
@@ -115,13 +116,15 @@ class LunoRequestData(Feed):
         path = "GET /ticker"
         if extra_data is None:
             extra_data = {}
-        extra_data.update({
-            "exchange_name": self.exchange_name,
-            "symbol_name": "",
-            "asset_type": self.asset_type,
-            "request_type": "get_server_time",
-            "normalize_function": self._get_server_time_normalize_function,
-        })
+        extra_data.update(
+            {
+                "exchange_name": self.exchange_name,
+                "symbol_name": "",
+                "asset_type": self.asset_type,
+                "request_type": "get_server_time",
+                "normalize_function": self._get_server_time_normalize_function,
+            }
+        )
         return path, {"pair": "XBTZAR"}, extra_data
 
     def get_server_time(self, extra_data=None, **kwargs):

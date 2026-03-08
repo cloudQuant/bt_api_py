@@ -1,0 +1,279 @@
+"""
+WebSocket module initialization and integration.
+Provides unified API for advanced WebSocket functionality with monitoring and optimizations.
+"""
+
+from typing import Optional
+
+# Create singleton instances
+from bt_api_py.core.dependency_injection import singleton
+
+from .advanced_connection_manager import (
+    AdvancedWebSocketConnection,
+    ConnectionState,
+    ErrorCategory,
+    WebSocketConfig,
+)
+from .advanced_websocket_manager import AdvancedWebSocketManager, PoolConfiguration
+from .exchange_adapters import (
+    AuthenticationType,
+    BinanceWebSocketAdapter,
+    ExchangeCredentials,
+    ExchangeType,
+    ExchangeWebSocketAdapter,
+    OKXWebSocketAdapter,
+    WebSocketAdapterFactory,
+)
+from .monitoring import (
+    AlertManager,
+    AlertSeverity,
+    MetricsCollector,
+    PerformanceAlert,
+    WebSocketBenchmark,
+    WebSocketMonitor,
+)
+
+
+class WebSocketSystem:
+    """Unified WebSocket system with all components integrated."""
+
+    def __init__(self):
+        self.manager = None
+        self.monitor = None
+        self._initialized = False
+
+    async def initialize(self) -> None:
+        """Initialize WebSocket system."""
+        if self._initialized:
+            return
+
+        # Create components
+        self.manager = AdvancedWebSocketManager(event_bus=None)
+        self.monitor = WebSocketMonitor(self.manager)
+
+        # Start components
+        await self.manager.start()
+        await self.monitor.start()
+
+        self._initialized = True
+
+    async def shutdown(self) -> None:
+        """Shutdown WebSocket system."""
+        if not self._initialized:
+            return
+
+        # Stop components
+        if self.monitor:
+            await self.monitor.stop()
+
+        if self.manager:
+            await self.manager.stop()
+
+        self._initialized = False
+
+    def get_manager(self):
+        """Get WebSocket manager."""
+        if not self.manager:
+            raise RuntimeError("WebSocket system not initialized")
+        return self.manager
+
+    def get_monitor(self):
+        """Get WebSocket monitor."""
+        if not self.monitor:
+            raise RuntimeError("WebSocket system not initialized")
+        return self.monitor
+
+
+# Global instance
+_websocket_system = WebSocketSystem()
+
+
+async def get_websocket_manager() -> AdvancedWebSocketManager:
+    """Get global WebSocket manager."""
+    await _websocket_system.initialize()
+    return _websocket_system.get_manager()
+
+
+async def get_websocket_monitor() -> WebSocketMonitor:
+    """Get global WebSocket monitor."""
+    await _websocket_system.initialize()
+    return _websocket_system.get_monitor()
+
+
+# Convenience functions for common operations
+async def subscribe_to_ticker(
+    exchange_name: str,
+    symbol: str,
+    callback: callable,
+    pool_config: PoolConfiguration | None = None,
+) -> str:
+    """Subscribe to ticker data for a symbol."""
+    manager = await get_websocket_manager()
+
+    # Add exchange if not already configured
+    from .advanced_connection_manager import WebSocketConfig
+    from .exchange_adapters import WebSocketAdapterFactory
+
+    if exchange_name not in manager._pools:
+        # Create default configuration
+        adapter = WebSocketAdapterFactory.create_adapter(exchange_name)
+        endpoints = adapter.get_endpoints(f"wss://stream.{exchange_name.lower()}.com")
+
+        config = WebSocketConfig(
+            url=endpoints[0],
+            exchange_name=exchange_name,
+            endpoints=endpoints[1:],
+            subscription_limits=adapter.get_subscription_limits(),
+        )
+
+        await manager.add_exchange(config, pool_config)
+
+    return await manager.subscribe(exchange_name, "ticker", symbol, callback)
+
+
+async def subscribe_to_depth(
+    exchange_name: str,
+    symbol: str,
+    callback: callable,
+    level: int = 20,
+    pool_config: PoolConfiguration | None = None,
+) -> str:
+    """Subscribe to order book depth for a symbol."""
+    manager = await get_websocket_manager()
+
+    # Add exchange if not already configured
+    from .advanced_connection_manager import WebSocketConfig
+    from .exchange_adapters import WebSocketAdapterFactory
+
+    if exchange_name not in manager._pools:
+        adapter = WebSocketAdapterFactory.create_adapter(exchange_name)
+        endpoints = adapter.get_endpoints(f"wss://stream.{exchange_name.lower()}.com")
+
+        config = WebSocketConfig(
+            url=endpoints[0],
+            exchange_name=exchange_name,
+            endpoints=endpoints[1:],
+            subscription_limits=adapter.get_subscription_limits(),
+        )
+
+        await manager.add_exchange(config, pool_config)
+
+    params = {"level": str(level)} if level != 20 else {}
+    return await manager.subscribe(exchange_name, "depth", symbol, callback, params)
+
+
+async def subscribe_to_trades(
+    exchange_name: str,
+    symbol: str,
+    callback: callable,
+    pool_config: PoolConfiguration | None = None,
+) -> str:
+    """Subscribe to trade data for a symbol."""
+    manager = await get_websocket_manager()
+
+    # Add exchange if not already configured
+    from .advanced_connection_manager import WebSocketConfig
+    from .exchange_adapters import WebSocketAdapterFactory
+
+    if exchange_name not in manager._pools:
+        adapter = WebSocketAdapterFactory.create_adapter(exchange_name)
+        endpoints = adapter.get_endpoints(f"wss://stream.{exchange_name.lower()}.com")
+
+        config = WebSocketConfig(
+            url=endpoints[0],
+            exchange_name=exchange_name,
+            endpoints=endpoints[1:],
+            subscription_limits=adapter.get_subscription_limits(),
+        )
+
+        await manager.add_exchange(config, pool_config)
+
+    return await manager.subscribe(exchange_name, "trades", symbol, callback)
+
+
+async def subscribe_to_klines(
+    exchange_name: str,
+    symbol: str,
+    interval: str,
+    callback: callable,
+    pool_config: PoolConfiguration | None = None,
+) -> str:
+    """Subscribe to candlestick data for a symbol."""
+    manager = await get_websocket_manager()
+
+    # Add exchange if not already configured
+    from .advanced_connection_manager import WebSocketConfig
+    from .exchange_adapters import WebSocketAdapterFactory
+
+    if exchange_name not in manager._pools:
+        adapter = WebSocketAdapterFactory.create_adapter(exchange_name)
+        endpoints = adapter.get_endpoints(f"wss://stream.{exchange_name.lower()}.com")
+
+        config = WebSocketConfig(
+            url=endpoints[0],
+            exchange_name=exchange_name,
+            endpoints=endpoints[1:],
+            subscription_limits=adapter.get_subscription_limits(),
+        )
+
+        await manager.add_exchange(config, pool_config)
+
+    params = {"interval": interval}
+    return await manager.subscribe(exchange_name, "kline", symbol, callback, params)
+
+
+async def unsubscribe(exchange_name: str, subscription_id: str) -> None:
+    """Unsubscribe from a WebSocket topic."""
+    manager = await get_websocket_manager()
+    await manager.unsubscribe(exchange_name, subscription_id)
+
+
+async def get_websocket_stats() -> dict:
+    """Get comprehensive WebSocket statistics."""
+    manager = await get_websocket_manager()
+    return manager.get_pool_stats()
+
+
+async def get_monitoring_dashboard() -> dict:
+    """Get monitoring dashboard data."""
+    monitor = await get_websocket_monitor()
+    return monitor.get_monitoring_dashboard()
+
+
+# Export main classes and functions
+__all__ = [
+    # Core classes
+    "AdvancedWebSocketConnection",
+    "WebSocketConfig",
+    "ConnectionState",
+    "ErrorCategory",
+    "AdvancedWebSocketManager",
+    "PoolConfiguration",
+    # Exchange adapters
+    "ExchangeWebSocketAdapter",
+    "WebSocketAdapterFactory",
+    "ExchangeCredentials",
+    "AuthenticationType",
+    "ExchangeType",
+    "BinanceWebSocketAdapter",
+    "OKXWebSocketAdapter",
+    # Monitoring
+    "WebSocketMonitor",
+    "MetricsCollector",
+    "AlertManager",
+    "WebSocketBenchmark",
+    "PerformanceAlert",
+    "AlertSeverity",
+    # System integration
+    "WebSocketSystem",
+    "get_websocket_manager",
+    "get_websocket_monitor",
+    # Convenience functions
+    "subscribe_to_ticker",
+    "subscribe_to_depth",
+    "subscribe_to_trades",
+    "subscribe_to_klines",
+    "unsubscribe",
+    "get_websocket_stats",
+    "get_monitoring_dashboard",
+]

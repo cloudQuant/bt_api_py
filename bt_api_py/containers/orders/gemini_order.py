@@ -5,8 +5,16 @@ from bt_api_py.utils.time import convert_utc_timestamp
 class GeminiRequestOrderData(RequestData):
     """Gemini Order Data Container"""
 
-    def __init__(self, data, symbol=None, asset_type=None, is_rest=True,
-                 extra_data=None, status=False, normalize_func=None):
+    def __init__(
+        self,
+        data,
+        symbol=None,
+        asset_type=None,
+        is_rest=True,
+        extra_data=None,
+        status=False,
+        normalize_func=None,
+    ):
         # Handle positional arguments from test
         if extra_data is None:
             extra_data = {}
@@ -67,7 +75,11 @@ class GeminiRequestOrderData(RequestData):
                 self.remaining_amount = float(data.get("remaining_amount", 0))
                 self.timestamp = data.get("timestampms")
                 self.exchange_timestamp = convert_utc_timestamp(self.timestamp)
-                self.avg_price = float(data.get("avg_execution_price", 0)) if data.get("avg_execution_price") else None
+                self.avg_price = (
+                    float(data.get("avg_execution_price", 0))
+                    if data.get("avg_execution_price")
+                    else None
+                )
 
             # Order status query response
             elif "id" in data:
@@ -83,7 +95,11 @@ class GeminiRequestOrderData(RequestData):
                 self.remaining_amount = float(data.get("remaining_amount", 0))
                 self.timestamp = data.get("timestampms")
                 self.exchange_timestamp = convert_utc_timestamp(self.timestamp)
-                self.avg_price = float(data.get("avg_execution_price", 0)) if data.get("avg_execution_price") else None
+                self.avg_price = (
+                    float(data.get("avg_execution_price", 0))
+                    if data.get("avg_execution_price")
+                    else None
+                )
 
     def _parse_wss_data(self, data):
         """Parse WebSocket response"""
@@ -150,9 +166,11 @@ class GeminiRequestOrderData(RequestData):
 
     def __str__(self):
         """String representation"""
-        return (f"GeminiOrder(id={self.order_id}, symbol={self.symbol_name}, "
-                f"side={self.side}, type={self.type}, status={self.status}, "
-                f"price={self.price}, amount={self.original_amount})")
+        return (
+            f"GeminiOrder(id={self.order_id}, symbol={self.symbol_name}, "
+            f"side={self.side}, type={self.type}, status={self.status}, "
+            f"price={self.price}, amount={self.original_amount})"
+        )
 
 
 class GeminiSpotWssOrderData(GeminiRequestOrderData):

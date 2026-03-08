@@ -6,7 +6,7 @@ import json
 import time
 
 from bt_api_py.containers.orders.order import OrderData
-from bt_api_py.functions.utils import from_dict_get_float, from_dict_get_string, from_dict_get_int
+from bt_api_py.functions.utils import from_dict_get_float, from_dict_get_string
 
 
 class GateioOrderData(OrderData):

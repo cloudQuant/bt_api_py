@@ -9,6 +9,7 @@ from unittest.mock import patch
 
 import pytest
 
+import bt_api_py.exchange_registers.register_zaif  # noqa: F401
 from bt_api_py.containers.exchanges.zaif_exchange_data import (
     ZaifExchangeData,
     ZaifExchangeDataSpot,
@@ -17,19 +18,34 @@ from bt_api_py.containers.requestdatas.request_data import RequestData
 from bt_api_py.containers.tickers.zaif_ticker import ZaifRequestTickerData
 from bt_api_py.feeds.live_zaif.request_base import ZaifRequestData
 from bt_api_py.feeds.live_zaif.spot import (
-    ZaifRequestDataSpot,
-    ZaifMarketWssDataSpot,
     ZaifAccountWssDataSpot,
+    ZaifMarketWssDataSpot,
+    ZaifRequestDataSpot,
 )
 from bt_api_py.registry import ExchangeRegistry
 
-import bt_api_py.exchange_registers.register_zaif  # noqa: F401
-
 # ── sample fixtures ──────────────────────────────────────────
 
-SAMPLE_TICK = {"last": 5000000, "high": 5100000, "low": 4900000, "vwap": 5000000, "volume": 100, "bid": 4999000, "ask": 5001000}
+SAMPLE_TICK = {
+    "last": 5000000,
+    "high": 5100000,
+    "low": 4900000,
+    "vwap": 5000000,
+    "volume": 100,
+    "bid": 4999000,
+    "ask": 5001000,
+}
 SAMPLE_DEPTH = {"asks": [[5001000, 0.5]], "bids": [[4999000, 0.5]]}
-SAMPLE_KLINE = [{"date": 1678901234, "price": 5000000, "amount": 0.1, "tid": 1, "currency_pair": "btc_jpy", "trade_type": "bid"}]
+SAMPLE_KLINE = [
+    {
+        "date": 1678901234,
+        "price": 5000000,
+        "amount": 0.1,
+        "tid": 1,
+        "currency_pair": "btc_jpy",
+        "trade_type": "bid",
+    }
+]
 SAMPLE_EXCHANGE_INFO = [{"name": "btc_jpy", "title": "BTC/JPY"}]
 SAMPLE_SERVER_TIME = {"last_price": 5000000}
 SAMPLE_BALANCE = {"success": 1, "return": {"funds": {"btc": 0.5, "jpy": 100000}}}
@@ -37,7 +53,10 @@ SAMPLE_ACCOUNT = {"success": 1, "return": {"funds": {"btc": 0.5}}}
 SAMPLE_ERROR = {"error": "invalid pair"}
 SAMPLE_ORDER = {"success": 1, "return": {"order_id": 12345, "received": 0.1, "remains": 0.0}}
 SAMPLE_CANCEL = {"success": 1, "return": {"order_id": 12345, "funds": {}}}
-SAMPLE_QUERY = {"success": 1, "return": {"12345": {"currency_pair": "btc_jpy", "action": "bid", "amount": 0.1}}}
+SAMPLE_QUERY = {
+    "success": 1,
+    "return": {"12345": {"currency_pair": "btc_jpy", "action": "bid", "amount": 0.1}},
+}
 
 
 @pytest.fixture
@@ -53,6 +72,7 @@ def exdata():
 # ═══════════════════════════════════════════════════════════════
 # 1) ExchangeData
 # ═══════════════════════════════════════════════════════════════
+
 
 class TestExchangeData:
     def test_exchange_name(self, exdata):
@@ -105,15 +125,25 @@ class TestExchangeData:
             exdata.get_rest_path("nonexistent")
 
     def test_rest_paths_keys(self, exdata):
-        for key in ("get_tick", "get_ticker", "get_depth", "get_kline",
-                     "get_exchange_info", "get_account", "get_balance",
-                     "get_server_time", "make_order", "cancel_order"):
+        for key in (
+            "get_tick",
+            "get_ticker",
+            "get_depth",
+            "get_kline",
+            "get_exchange_info",
+            "get_account",
+            "get_balance",
+            "get_server_time",
+            "make_order",
+            "cancel_order",
+        ):
             assert key in exdata.rest_paths
 
 
 # ═══════════════════════════════════════════════════════════════
 # 2) Parameter generation (_get_xxx)
 # ═══════════════════════════════════════════════════════════════
+
 
 class TestParamGeneration:
     def test_get_tick_params(self, feed):
@@ -185,6 +215,7 @@ class TestParamGeneration:
 # ═══════════════════════════════════════════════════════════════
 # 3) Normalization functions
 # ═══════════════════════════════════════════════════════════════
+
 
 class TestNormalization:
     def test_tick_ok(self):
@@ -271,6 +302,7 @@ class TestNormalization:
 # 4) Mocked sync calls
 # ═══════════════════════════════════════════════════════════════
 
+
 class TestSyncCalls:
     @patch.object(ZaifRequestData, "http_request", return_value=SAMPLE_TICK)
     def test_get_tick(self, mock_http, feed):
@@ -334,6 +366,7 @@ class TestSyncCalls:
 # 5) Auth
 # ═══════════════════════════════════════════════════════════════
 
+
 class TestAuth:
     def test_headers_no_key(self, feed):
         h = feed._get_headers()
@@ -360,6 +393,7 @@ class TestAuth:
 # ═══════════════════════════════════════════════════════════════
 # 6) Registry
 # ═══════════════════════════════════════════════════════════════
+
 
 class TestRegistry:
     def test_feed_registered(self):
@@ -391,17 +425,28 @@ class TestRegistry:
 # ═══════════════════════════════════════════════════════════════
 
 _EXPECTED_METHODS = [
-    "get_tick", "async_get_tick",
-    "get_ticker", "async_get_ticker",
-    "get_depth", "async_get_depth",
-    "get_kline", "async_get_kline",
-    "get_exchange_info", "async_get_exchange_info",
-    "get_server_time", "async_get_server_time",
-    "get_balance", "async_get_balance",
-    "get_account", "async_get_account",
-    "make_order", "async_make_order",
-    "cancel_order", "async_cancel_order",
-    "query_order", "async_query_order",
+    "get_tick",
+    "async_get_tick",
+    "get_ticker",
+    "async_get_ticker",
+    "get_depth",
+    "async_get_depth",
+    "get_kline",
+    "async_get_kline",
+    "get_exchange_info",
+    "async_get_exchange_info",
+    "get_server_time",
+    "async_get_server_time",
+    "get_balance",
+    "async_get_balance",
+    "get_account",
+    "async_get_account",
+    "make_order",
+    "async_make_order",
+    "cancel_order",
+    "async_cancel_order",
+    "query_order",
+    "async_query_order",
 ]
 
 
@@ -416,6 +461,7 @@ class TestMethodExistence:
 # 8) Feed init
 # ═══════════════════════════════════════════════════════════════
 
+
 class TestFeedInit:
     def test_default_exchange_name(self, feed):
         assert feed.exchange_name == "ZAIF___SPOT"
@@ -425,6 +471,7 @@ class TestFeedInit:
 
     def test_capabilities(self, feed):
         from bt_api_py.feeds.capability import Capability
+
         caps = feed._capabilities()
         assert Capability.GET_TICK in caps
         assert Capability.GET_DEPTH in caps
@@ -442,6 +489,7 @@ class TestFeedInit:
 # ═══════════════════════════════════════════════════════════════
 # 9) WebSocket stubs
 # ═══════════════════════════════════════════════════════════════
+
 
 class TestWebSocketStubs:
     def test_market_wss_start_stop(self):
@@ -463,6 +511,7 @@ class TestWebSocketStubs:
 # 10) Data containers
 # ═══════════════════════════════════════════════════════════════
 
+
 class TestDataContainers:
     def test_ticker_float_parsing(self):
         assert ZaifRequestTickerData._parse_float("5000000") == 5000000.0
@@ -471,13 +520,14 @@ class TestDataContainers:
         assert ZaifRequestTickerData._parse_float("invalid") is None
 
     def test_ticker_class_creation(self):
-        assert hasattr(ZaifRequestTickerData, '_parse_float')
-        assert hasattr(ZaifRequestTickerData, 'init_data')
+        assert hasattr(ZaifRequestTickerData, "_parse_float")
+        assert hasattr(ZaifRequestTickerData, "init_data")
 
 
 # ═══════════════════════════════════════════════════════════════
 # 11) Integration (skipped)
 # ═══════════════════════════════════════════════════════════════
+
 
 class TestIntegration:
     @pytest.mark.skip(reason="Requires network access")

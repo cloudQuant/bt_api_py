@@ -2,11 +2,11 @@
 BTC Markets REST API request base class.
 """
 
-import time
-import hmac
-import hashlib
 import base64
+import hashlib
+import hmac
 import json
+import time
 
 from bt_api_py.containers.exchanges.btc_markets_exchange_data import BtcMarketsExchangeDataSpot
 from bt_api_py.containers.requestdatas.request_data import RequestData
@@ -38,8 +38,8 @@ class BtcMarketsRequestData(Feed):
         self.exchange_name = kwargs.get("exchange_name", "BTC_MARKETS___SPOT")
         self.asset_type = kwargs.get("asset_type", "SPOT")
         self._params = BtcMarketsExchangeDataSpot()
-        self.api_key = kwargs.get("api_key", None)
-        self.api_secret = kwargs.get("api_secret", None)
+        self.api_key = kwargs.get("api_key")
+        self.api_secret = kwargs.get("api_secret")
         self.request_logger = get_logger("btc_markets_feed")
         self.async_logger = get_logger("btc_markets_feed")
         self._http_client = HttpClient(venue=self.exchange_name, timeout=10)
@@ -64,11 +64,7 @@ class BtcMarketsRequestData(Feed):
             auth += body
 
         # HMAC-SHA512 signature
-        signature = hmac.new(
-            secret,
-            auth.encode(),
-            hashlib.sha512
-        ).digest()
+        signature = hmac.new(secret, auth.encode(), hashlib.sha512).digest()
 
         # Base64 encode signature
         return base64.b64encode(signature).decode()
@@ -80,7 +76,7 @@ class BtcMarketsRequestData(Feed):
         # Build body string for POST requests
         body_str = ""
         if method == "POST" and body:
-            body_str = json.dumps(body, separators=(',', ':'))
+            body_str = json.dumps(body, separators=(",", ":"))
 
         headers = {
             "Accept": "application/json",
@@ -160,12 +156,14 @@ class BtcMarketsRequestData(Feed):
         """Prepare server time request. Returns (path, params, extra_data)."""
         if extra_data is None:
             extra_data = {}
-        extra_data.update({
-            "exchange_name": self.exchange_name,
-            "symbol_name": "",
-            "asset_type": self.asset_type,
-            "request_type": "get_server_time",
-        })
+        extra_data.update(
+            {
+                "exchange_name": self.exchange_name,
+                "symbol_name": "",
+                "asset_type": self.asset_type,
+                "request_type": "get_server_time",
+            }
+        )
         return "GET /v3/time", {}, extra_data
 
     def get_server_time(self, extra_data=None, **kwargs):

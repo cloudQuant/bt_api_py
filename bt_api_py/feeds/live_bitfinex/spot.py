@@ -29,7 +29,9 @@ class BitfinexRequestDataSpot(BitfinexRequestData):
 
     def get_exchange_info(self, symbol=None, extra_data=None, **kwargs):
         """Get exchange information"""
-        path, params, extra_data = self._get_exchange_info(symbol=symbol, extra_data=extra_data, **kwargs)
+        path, params, extra_data = self._get_exchange_info(
+            symbol=symbol, extra_data=extra_data, **kwargs
+        )
         return self.request(path, params=params, extra_data=extra_data, is_sign=False)
 
     def get_ticker(self, symbol, extra_data=None, **kwargs):
@@ -73,7 +75,9 @@ class BitfinexRequestDataSpot(BitfinexRequestData):
 
     def async_get_exchange_info(self, symbol=None, extra_data=None, **kwargs):
         """Get exchange information asynchronously"""
-        path, params, extra_data = self._get_exchange_info(symbol=symbol, extra_data=extra_data, **kwargs)
+        path, params, extra_data = self._get_exchange_info(
+            symbol=symbol, extra_data=extra_data, **kwargs
+        )
         self.submit(
             self.async_request(path, params=params, extra_data=extra_data, is_sign=False),
             callback=self.async_callback,
@@ -111,32 +115,55 @@ class BitfinexRequestDataSpot(BitfinexRequestData):
 
     # ==================== Trading Public Methods ====================
 
-    def make_order(self, symbol, vol, price=None, order_type="buy-limit",
-                   offset="open", post_only=False, client_order_id=None,
-                   extra_data=None, **kwargs):
+    def make_order(
+        self,
+        symbol,
+        vol,
+        price=None,
+        order_type="buy-limit",
+        offset="open",
+        post_only=False,
+        client_order_id=None,
+        extra_data=None,
+        **kwargs,
+    ):
         """Place a new order"""
         path, params, extra_data = self._make_order(
-            symbol=symbol, vol=vol, price=price, order_type=order_type,
-            offset=offset, post_only=post_only, client_order_id=client_order_id,
-            extra_data=extra_data, **kwargs
+            symbol=symbol,
+            vol=vol,
+            price=price,
+            order_type=order_type,
+            offset=offset,
+            post_only=post_only,
+            client_order_id=client_order_id,
+            extra_data=extra_data,
+            **kwargs,
         )
         return self.request(path, params=params, extra_data=extra_data, is_sign=True)
 
-    def cancel_order(self, symbol=None, order_id=None, client_order_id=None,
-                     extra_data=None, **kwargs):
+    def cancel_order(
+        self, symbol=None, order_id=None, client_order_id=None, extra_data=None, **kwargs
+    ):
         """Cancel an existing order"""
         path, params, extra_data = self._cancel_order(
-            symbol=symbol, order_id=order_id, client_order_id=client_order_id,
-            extra_data=extra_data, **kwargs
+            symbol=symbol,
+            order_id=order_id,
+            client_order_id=client_order_id,
+            extra_data=extra_data,
+            **kwargs,
         )
         return self.request(path, params=params, extra_data=extra_data, is_sign=True)
 
-    def query_order(self, symbol=None, order_id=None, client_order_id=None,
-                    extra_data=None, **kwargs):
+    def query_order(
+        self, symbol=None, order_id=None, client_order_id=None, extra_data=None, **kwargs
+    ):
         """Query an order's status"""
         path, params, extra_data = self._get_order(
-            symbol=symbol, order_id=order_id, client_order_id=client_order_id,
-            extra_data=extra_data, **kwargs
+            symbol=symbol,
+            order_id=order_id,
+            client_order_id=client_order_id,
+            extra_data=extra_data,
+            **kwargs,
         )
         return self.request(path, params=params, extra_data=extra_data, is_sign=True)
 
@@ -158,38 +185,61 @@ class BitfinexRequestDataSpot(BitfinexRequestData):
 
     # ==================== Async Private/Account Methods ====================
 
-    def async_make_order(self, symbol, vol, price=None, order_type="buy-limit",
-                         offset="open", post_only=False, client_order_id=None,
-                         extra_data=None, **kwargs):
+    def async_make_order(
+        self,
+        symbol,
+        vol,
+        price=None,
+        order_type="buy-limit",
+        offset="open",
+        post_only=False,
+        client_order_id=None,
+        extra_data=None,
+        **kwargs,
+    ):
         """Place a new order asynchronously"""
         path, params, extra_data = self._make_order(
-            symbol=symbol, vol=vol, price=price, order_type=order_type,
-            offset=offset, post_only=post_only, client_order_id=client_order_id,
-            extra_data=extra_data, **kwargs
+            symbol=symbol,
+            vol=vol,
+            price=price,
+            order_type=order_type,
+            offset=offset,
+            post_only=post_only,
+            client_order_id=client_order_id,
+            extra_data=extra_data,
+            **kwargs,
         )
         self.submit(
             self.async_request(path, params=params, extra_data=extra_data, is_sign=True),
             callback=self.async_callback,
         )
 
-    def async_cancel_order(self, symbol=None, order_id=None, client_order_id=None,
-                           extra_data=None, **kwargs):
+    def async_cancel_order(
+        self, symbol=None, order_id=None, client_order_id=None, extra_data=None, **kwargs
+    ):
         """Cancel an order asynchronously"""
         path, params, extra_data = self._cancel_order(
-            symbol=symbol, order_id=order_id, client_order_id=client_order_id,
-            extra_data=extra_data, **kwargs
+            symbol=symbol,
+            order_id=order_id,
+            client_order_id=client_order_id,
+            extra_data=extra_data,
+            **kwargs,
         )
         self.submit(
             self.async_request(path, params=params, extra_data=extra_data, is_sign=True),
             callback=self.async_callback,
         )
 
-    def async_query_order(self, symbol=None, order_id=None, client_order_id=None,
-                          extra_data=None, **kwargs):
+    def async_query_order(
+        self, symbol=None, order_id=None, client_order_id=None, extra_data=None, **kwargs
+    ):
         """Query an order asynchronously"""
         path, params, extra_data = self._get_order(
-            symbol=symbol, order_id=order_id, client_order_id=client_order_id,
-            extra_data=extra_data, **kwargs
+            symbol=symbol,
+            order_id=order_id,
+            client_order_id=client_order_id,
+            extra_data=extra_data,
+            **kwargs,
         )
         self.submit(
             self.async_request(path, params=params, extra_data=extra_data, is_sign=True),

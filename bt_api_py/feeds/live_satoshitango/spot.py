@@ -2,7 +2,6 @@
 SatoshiTango Spot Feed implementation.
 """
 
-from bt_api_py.containers.exchanges.satoshitango_exchange_data import SatoshiTangoExchangeDataSpot
 from bt_api_py.feeds.capability import Capability
 from bt_api_py.feeds.live_satoshitango.request_base import SatoshiTangoRequestData
 from bt_api_py.functions.utils import update_extra_data
@@ -113,11 +112,15 @@ class SatoshiTangoRequestDataSpot(SatoshiTangoRequestData):
                 "normalize_function": SatoshiTangoRequestDataSpot._get_kline_normalize_function,
             },
         )
-        return path, {
-            "symbol": symbol,
-            "interval": self._params.get_period(period),
-            "limit": count,
-        }, extra_data
+        return (
+            path,
+            {
+                "symbol": symbol,
+                "interval": self._params.get_period(period),
+                "limit": count,
+            },
+            extra_data,
+        )
 
     @staticmethod
     def _get_kline_normalize_function(input_data, extra_data):
@@ -220,8 +223,9 @@ class SatoshiTangoRequestDataSpot(SatoshiTangoRequestData):
         path, params, extra_data = self._get_account(extra_data, **kwargs)
         return self.request(path, params=params, extra_data=extra_data)
 
-    def _make_order(self, symbol, volume, price, order_type, offset="open",
-                    extra_data=None, **kwargs):
+    def _make_order(
+        self, symbol, volume, price, order_type, offset="open", extra_data=None, **kwargs
+    ):
         """Prepare make order request. Returns (path, params, extra_data)."""
         path = "POST /v1/order"
         params = {
@@ -249,8 +253,9 @@ class SatoshiTangoRequestDataSpot(SatoshiTangoRequestData):
             return [], False
         return [input_data], True
 
-    def make_order(self, symbol, volume, price, order_type, offset="open",
-                   extra_data=None, **kwargs):
+    def make_order(
+        self, symbol, volume, price, order_type, offset="open", extra_data=None, **kwargs
+    ):
         """Place an order."""
         path, params, extra_data = self._make_order(
             symbol, volume, price, order_type, offset, extra_data, **kwargs
@@ -259,7 +264,7 @@ class SatoshiTangoRequestDataSpot(SatoshiTangoRequestData):
 
     def _cancel_order(self, symbol, order_id, extra_data=None, **kwargs):
         """Prepare cancel order request. Returns (path, params, extra_data)."""
-        path = f"POST /v1/order/cancel"
+        path = "POST /v1/order/cancel"
         params = {
             "order_id": order_id,
         }

@@ -6,21 +6,19 @@ Run tests:
 """
 
 import queue
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch
 
 import pytest
 
-from bt_api_py.containers.exchanges.mexc_exchange_data import MexcExchangeDataSpot
-from bt_api_py.containers.orders.mexc_order import MexcRequestOrderData
-from bt_api_py.containers.tickers.mexc_ticker import MexcRequestTickerData
-from bt_api_py.containers.orderbooks.mexc_orderbook import MexcRequestOrderBookData
+import bt_api_py.exchange_registers.register_mexc  # noqa: F401
 from bt_api_py.containers.balances.mexc_balance import MexcRequestBalanceData
+from bt_api_py.containers.exchanges.mexc_exchange_data import MexcExchangeDataSpot
+from bt_api_py.containers.orderbooks.mexc_orderbook import MexcRequestOrderBookData
+from bt_api_py.containers.orders.mexc_order import MexcRequestOrderData
 from bt_api_py.containers.requestdatas.request_data import RequestData
+from bt_api_py.containers.tickers.mexc_ticker import MexcRequestTickerData
 from bt_api_py.feeds.live_mexc.spot import MexcRequestDataSpot
 from bt_api_py.registry import ExchangeRegistry
-
-import bt_api_py.exchange_registers.register_mexc  # noqa: F401
-
 
 # ── Sample MEXC API responses ────────────────────────────────────────
 
@@ -58,10 +56,32 @@ SAMPLE_DEPTH_RESP = {
 }
 
 SAMPLE_KLINE_RESP = [
-    [1672531200000, "50000", "51000", "49000", "50500",
-     "100", 1672534800000, "5050000", 100, "50", "2500000"],
-    [1672534800000, "50500", "51500", "50000", "51000",
-     "150", 1672538400000, "7650000", 150, "75", "3825000"],
+    [
+        1672531200000,
+        "50000",
+        "51000",
+        "49000",
+        "50500",
+        "100",
+        1672534800000,
+        "5050000",
+        100,
+        "50",
+        "2500000",
+    ],
+    [
+        1672534800000,
+        "50500",
+        "51500",
+        "50000",
+        "51000",
+        "150",
+        1672538400000,
+        "7650000",
+        150,
+        "75",
+        "3825000",
+    ],
 ]
 
 SAMPLE_SERVER_TIME_RESP = {
@@ -124,10 +144,24 @@ SAMPLE_QUERY_ORDER_RESP = {
 }
 
 SAMPLE_OPEN_ORDERS_RESP = [
-    {"symbol": "BTCUSDT", "orderId": "111", "status": "NEW",
-     "side": "BUY", "type": "LIMIT", "origQty": "0.01", "price": "48000"},
-    {"symbol": "ETHUSDT", "orderId": "222", "status": "NEW",
-     "side": "SELL", "type": "LIMIT", "origQty": "1.0", "price": "3500"},
+    {
+        "symbol": "BTCUSDT",
+        "orderId": "111",
+        "status": "NEW",
+        "side": "BUY",
+        "type": "LIMIT",
+        "origQty": "0.01",
+        "price": "48000",
+    },
+    {
+        "symbol": "ETHUSDT",
+        "orderId": "222",
+        "status": "NEW",
+        "side": "SELL",
+        "type": "LIMIT",
+        "origQty": "1.0",
+        "price": "3500",
+    },
 ]
 
 SAMPLE_ACCOUNT_RESP = {
@@ -171,8 +205,8 @@ def _setup_mock(mock_req, resp_json, status_code=200):
 # 1. ExchangeData tests
 # ══════════════════════════════════════════════════════════════════════════
 
-class TestMexcExchangeData:
 
+class TestMexcExchangeData:
     def test_spot_creation(self):
         ed = MexcExchangeDataSpot()
         assert ed.exchange_name == "MEXC___SPOT"
@@ -194,12 +228,24 @@ class TestMexcExchangeData:
 
     def test_rest_paths_present(self):
         ed = MexcExchangeDataSpot()
-        for key in ("get_server_time", "get_exchange_info", "get_tick",
-                     "get_depth", "get_order_book", "get_kline", "get_klines",
-                     "get_24hr_ticker", "get_recent_trades",
-                     "make_order", "cancel_order", "query_order",
-                     "get_open_orders", "get_all_orders",
-                     "get_account", "get_balance"):
+        for key in (
+            "get_server_time",
+            "get_exchange_info",
+            "get_tick",
+            "get_depth",
+            "get_order_book",
+            "get_kline",
+            "get_klines",
+            "get_24hr_ticker",
+            "get_recent_trades",
+            "make_order",
+            "cancel_order",
+            "query_order",
+            "get_open_orders",
+            "get_all_orders",
+            "get_account",
+            "get_balance",
+        ):
             path = ed.get_rest_path(key)
             assert path, f"rest_path '{key}' should not be empty"
 
@@ -208,8 +254,8 @@ class TestMexcExchangeData:
 # 2. Layer-1 parameter generation
 # ══════════════════════════════════════════════════════════════════════════
 
-class TestMexcParamGeneration:
 
+class TestMexcParamGeneration:
     def test_get_ticker_params(self):
         feed = _make_spot_feed()
         path, params, extra = feed._get_ticker("BTCUSDT")
@@ -247,7 +293,8 @@ class TestMexcParamGeneration:
     def test_make_order_params_limit(self):
         feed = _make_spot_feed()
         path, params, extra = feed._make_order(
-            symbol="BTCUSDT", vol="0.001", price="50000", order_type="buy-limit")
+            symbol="BTCUSDT", vol="0.001", price="50000", order_type="buy-limit"
+        )
         assert "order" in path.lower()
         assert params["side"] == "BUY"
         assert params["type"] == "LIMIT"
@@ -258,7 +305,8 @@ class TestMexcParamGeneration:
     def test_make_order_params_market(self):
         feed = _make_spot_feed()
         path, params, extra = feed._make_order(
-            symbol="BTCUSDT", vol="0.001", order_type="buy-market")
+            symbol="BTCUSDT", vol="0.001", order_type="buy-market"
+        )
         assert params["side"] == "BUY"
         assert params["type"] == "MARKET"
         assert "timeInForce" not in params
@@ -295,12 +343,11 @@ class TestMexcParamGeneration:
 # 3. Normalize functions
 # ══════════════════════════════════════════════════════════════════════════
 
-class TestMexcNormalize:
 
+class TestMexcNormalize:
     def test_ticker_normalize(self):
         extra = {"symbol_name": "BTCUSDT", "asset_type": "SPOT"}
-        tickers, ok = MexcRequestDataSpot._get_ticker_normalize_function(
-            SAMPLE_TICKER_RESP, extra)
+        tickers, ok = MexcRequestDataSpot._get_ticker_normalize_function(SAMPLE_TICKER_RESP, extra)
         assert ok is True
         assert len(tickers) == 1
         assert isinstance(tickers[0], MexcRequestTickerData)
@@ -313,8 +360,7 @@ class TestMexcNormalize:
 
     def test_depth_normalize(self):
         extra = {"symbol_name": "BTCUSDT", "asset_type": "SPOT"}
-        books, ok = MexcRequestDataSpot._get_order_book_normalize_function(
-            SAMPLE_DEPTH_RESP, extra)
+        books, ok = MexcRequestDataSpot._get_order_book_normalize_function(SAMPLE_DEPTH_RESP, extra)
         assert ok is True
         assert len(books) == 1
         b = books[0]
@@ -331,8 +377,7 @@ class TestMexcNormalize:
 
     def test_kline_normalize(self):
         extra = {"symbol_name": "BTCUSDT", "asset_type": "SPOT", "interval": "1h"}
-        bars, ok = MexcRequestDataSpot._get_klines_normalize_function(
-            SAMPLE_KLINE_RESP, extra)
+        bars, ok = MexcRequestDataSpot._get_klines_normalize_function(SAMPLE_KLINE_RESP, extra)
         assert ok is True
         assert len(bars) > 0
         klines = bars[0]
@@ -350,14 +395,16 @@ class TestMexcNormalize:
     def test_server_time_normalize(self):
         extra = {"asset_type": "SPOT", "exchange_name": "MEXC___SPOT"}
         data, ok = MexcRequestDataSpot._get_server_time_normalize_function(
-            SAMPLE_SERVER_TIME_RESP, extra)
+            SAMPLE_SERVER_TIME_RESP, extra
+        )
         assert ok is True
         assert data[0]["server_time"] == 1704067200000
 
     def test_exchange_info_normalize(self):
         extra = {"symbol_name": None, "asset_type": "SPOT", "exchange_name": "MEXC___SPOT"}
         data, ok = MexcRequestDataSpot._get_exchange_info_normalize_function(
-            SAMPLE_EXCHANGE_INFO_RESP, extra)
+            SAMPLE_EXCHANGE_INFO_RESP, extra
+        )
         assert ok is True
         assert len(data) == 1
         assert "exchange_info" in data[0]
@@ -365,7 +412,8 @@ class TestMexcNormalize:
     def test_make_order_normalize(self):
         extra = {"symbol_name": "BTCUSDT", "asset_type": "SPOT", "exchange_name": "MEXC___SPOT"}
         orders, ok = MexcRequestDataSpot._make_order_normalize_function(
-            SAMPLE_MAKE_ORDER_RESP, extra)
+            SAMPLE_MAKE_ORDER_RESP, extra
+        )
         assert ok is True
         assert len(orders) == 1
         assert isinstance(orders[0], MexcRequestOrderData)
@@ -373,7 +421,8 @@ class TestMexcNormalize:
     def test_cancel_order_normalize(self):
         extra = {"symbol_name": "BTCUSDT", "asset_type": "SPOT"}
         orders, ok = MexcRequestDataSpot._cancel_order_normalize_function(
-            SAMPLE_CANCEL_ORDER_RESP, extra)
+            SAMPLE_CANCEL_ORDER_RESP, extra
+        )
         assert ok is True
         assert len(orders) == 1
         assert isinstance(orders[0], MexcRequestOrderData)
@@ -381,7 +430,8 @@ class TestMexcNormalize:
     def test_get_order_normalize(self):
         extra = {"symbol_name": "BTCUSDT", "asset_type": "SPOT"}
         orders, ok = MexcRequestDataSpot._get_order_normalize_function(
-            SAMPLE_QUERY_ORDER_RESP, extra)
+            SAMPLE_QUERY_ORDER_RESP, extra
+        )
         assert ok is True
         assert len(orders) == 1
         assert isinstance(orders[0], MexcRequestOrderData)
@@ -389,14 +439,14 @@ class TestMexcNormalize:
     def test_open_orders_normalize(self):
         extra = {"symbol_name": "BTCUSDT", "asset_type": "SPOT"}
         orders, ok = MexcRequestDataSpot._get_open_orders_normalize_function(
-            SAMPLE_OPEN_ORDERS_RESP, extra)
+            SAMPLE_OPEN_ORDERS_RESP, extra
+        )
         assert ok is True
         assert len(orders) > 0
 
     def test_account_normalize(self):
         extra = {"asset_type": "SPOT", "exchange_name": "MEXC___SPOT"}
-        data, ok = MexcRequestDataSpot._get_account_normalize_function(
-            SAMPLE_ACCOUNT_RESP, extra)
+        data, ok = MexcRequestDataSpot._get_account_normalize_function(SAMPLE_ACCOUNT_RESP, extra)
         assert ok is True
         assert len(data) == 1
         account = data[0]
@@ -408,8 +458,8 @@ class TestMexcNormalize:
 # 4. Synchronous API calls (mocked HTTP)
 # ══════════════════════════════════════════════════════════════════════════
 
-class TestMexcSyncCalls:
 
+class TestMexcSyncCalls:
     @patch(MOCK_PATH)
     def test_get_server_time(self, mock_req):
         _setup_mock(mock_req, SAMPLE_SERVER_TIME_RESP)
@@ -449,8 +499,9 @@ class TestMexcSyncCalls:
     def test_make_order(self, mock_req):
         _setup_mock(mock_req, SAMPLE_MAKE_ORDER_RESP)
         feed = _make_spot_feed()
-        result = feed.make_order(symbol="BTCUSDT", vol="0.001",
-                                 price="50000", order_type="buy-limit")
+        result = feed.make_order(
+            symbol="BTCUSDT", vol="0.001", price="50000", order_type="buy-limit"
+        )
         assert isinstance(result, RequestData)
 
     @patch(MOCK_PATH)
@@ -493,8 +544,8 @@ class TestMexcSyncCalls:
 # 5. Container tests
 # ══════════════════════════════════════════════════════════════════════════
 
-class TestMexcContainers:
 
+class TestMexcContainers:
     def test_ticker_container(self):
         t = MexcRequestTickerData(SAMPLE_TICKER_RESP, "BTCUSDT", "SPOT")
         t.init_data()
@@ -541,8 +592,8 @@ class TestMexcContainers:
 
     def test_balance_container(self):
         b = MexcRequestBalanceData(
-            {"asset": "USDT", "free": "1000.50", "locked": "100.00"},
-            None, "SPOT")
+            {"asset": "USDT", "free": "1000.50", "locked": "100.00"}, None, "SPOT"
+        )
         b.init_data()
         assert b.get_asset() == "USDT"
         assert b.get_free() == 1000.50
@@ -551,8 +602,8 @@ class TestMexcContainers:
 
     def test_balance_init_returns_self(self):
         b = MexcRequestBalanceData(
-            {"asset": "USDT", "free": "1000.50", "locked": "100.00"},
-            None, "SPOT")
+            {"asset": "USDT", "free": "1000.50", "locked": "100.00"}, None, "SPOT"
+        )
         result = b.init_data()
         assert result is b
 
@@ -561,8 +612,8 @@ class TestMexcContainers:
 # 6. Registry tests
 # ══════════════════════════════════════════════════════════════════════════
 
-class TestMexcRegistry:
 
+class TestMexcRegistry:
     def test_mexc_registered(self):
         assert "MEXC___SPOT" in ExchangeRegistry._feed_classes
         assert ExchangeRegistry._feed_classes["MEXC___SPOT"] == MexcRequestDataSpot
@@ -589,30 +640,50 @@ class TestMexcRegistry:
 # 7. Method existence checks
 # ══════════════════════════════════════════════════════════════════════════
 
-class TestMexcMethodExistence:
 
+class TestMexcMethodExistence:
     def test_has_standard_methods(self):
         feed = _make_spot_feed()
         for method_name in (
-            "get_tick", "get_depth", "get_kline",
-            "get_server_time", "get_exchange_info",
-            "make_order", "cancel_order", "query_order", "get_open_orders",
-            "get_account", "get_balance",
-            "async_get_tick", "async_get_depth", "async_get_kline",
-            "async_get_server_time", "async_get_exchange_info",
-            "async_make_order", "async_cancel_order", "async_query_order",
+            "get_tick",
+            "get_depth",
+            "get_kline",
+            "get_server_time",
+            "get_exchange_info",
+            "make_order",
+            "cancel_order",
+            "query_order",
+            "get_open_orders",
+            "get_account",
+            "get_balance",
+            "async_get_tick",
+            "async_get_depth",
+            "async_get_kline",
+            "async_get_server_time",
+            "async_get_exchange_info",
+            "async_make_order",
+            "async_cancel_order",
+            "async_query_order",
             "async_get_open_orders",
-            "async_get_account", "async_get_balance",
+            "async_get_account",
+            "async_get_balance",
         ):
             assert hasattr(feed, method_name), f"Missing method: {method_name}"
 
     def test_has_internal_methods(self):
         feed = _make_spot_feed()
         for method_name in (
-            "_get_ticker", "_get_order_book", "_get_klines",
-            "_get_server_time", "_get_exchange_info",
-            "_make_order", "_cancel_order", "_get_order",
-            "_get_open_orders", "_get_account", "_get_my_trades",
+            "_get_ticker",
+            "_get_order_book",
+            "_get_klines",
+            "_get_server_time",
+            "_get_exchange_info",
+            "_make_order",
+            "_cancel_order",
+            "_get_order",
+            "_get_open_orders",
+            "_get_account",
+            "_get_my_trades",
         ):
             assert hasattr(feed, method_name), f"Missing internal method: {method_name}"
 

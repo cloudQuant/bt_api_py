@@ -2,7 +2,6 @@ import json
 import time
 
 from bt_api_py.containers.orderbooks.orderbook import OrderBookData
-from bt_api_py.functions.utils import from_dict_get_float
 
 
 class BitfinexOrderBookData(OrderBookData):
@@ -45,20 +44,24 @@ class BitfinexOrderBookData(OrderBookData):
                     # 判断是买单还是卖单
                     if amount > 0:
                         # 买单
-                        self.bids.append({
-                            "price": price,
-                            "count": count,
-                            "amount": amount,
-                            "total": price * amount  # 总价值
-                        })
+                        self.bids.append(
+                            {
+                                "price": price,
+                                "count": count,
+                                "amount": amount,
+                                "total": price * amount,  # 总价值
+                            }
+                        )
                     else:
                         # 卖单 (Bitfinex 使用负数表示卖单)
-                        self.asks.append({
-                            "price": price,
-                            "count": count,
-                            "amount": abs(amount),
-                            "total": price * abs(amount)  # 总价值
-                        })
+                        self.asks.append(
+                            {
+                                "price": price,
+                                "count": count,
+                                "amount": abs(amount),
+                                "total": price * abs(amount),  # 总价值
+                            }
+                        )
 
         self.has_been_init_data = True
         return self
@@ -261,18 +264,16 @@ class BitfinexOrderBookData(OrderBookData):
                     sell_impact = weighted_price / cumulative_volume
                     break
 
-        return {
-            "buy_impact": buy_impact,
-            "sell_impact": sell_impact,
-            "spread": self.get_spread()
-        }
+        return {"buy_impact": buy_impact, "sell_impact": sell_impact, "spread": self.get_spread()}
 
 
 class BitfinexWssOrderBookData(BitfinexOrderBookData):
     """保存 Bitfinex WebSocket 订单簿信息"""
+
     pass  # WebSocket 订单簿格式与 REST API 相同
 
 
 class BitfinexRequestOrderBookData(BitfinexOrderBookData):
     """保存 Bitfinex REST API 订单簿信息"""
+
     pass  # REST API 订单簿格式直接处理

@@ -1,0 +1,36 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+rule_files:
+  # - "first_rules.yml"
+  # - "second_rules.yml"
+
+scrape_configs:
+  # Prometheus itself
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+
+  # BT API Py application metrics
+  - job_name: 'bt_api_py'
+    static_configs:
+      - targets: ['host.docker.internal:8080']  # Replace with actual host
+    scrape_interval: 5s
+    metrics_path: '/metrics'
+
+  # Node exporter for system metrics
+  - job_name: 'node_exporter'
+    static_configs:
+      - targets: ['node-exporter:9100']
+    scrape_interval: 5s
+
+  # Additional scraping for multiple instances
+  - job_name: 'bt_api_py_cluster'
+    static_configs:
+      - targets: 
+        - 'bt-api-1:8080'
+        - 'bt-api-2:8080'
+        - 'bt-api-3:8080'
+    scrape_interval: 5s
+    metrics_path: '/metrics'

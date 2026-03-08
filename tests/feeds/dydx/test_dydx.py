@@ -4,13 +4,13 @@ Tests for dYdX Spot Feed implementation.
 Following Binance/OKX test standards with DEX-specific adaptations.
 """
 
-import queue
-import pytest
-from unittest.mock import Mock, patch, MagicMock
+from unittest.mock import MagicMock, Mock, patch
 
-from bt_api_py.feeds.live_dydx.spot import DydxRequestDataSpot
+import pytest
+
 from bt_api_py.containers.exchanges.dydx_exchange_data import DydxExchangeDataSwap
 from bt_api_py.containers.requestdatas.request_data import RequestData
+from bt_api_py.feeds.live_dydx.spot import DydxRequestDataSpot
 
 
 class TestDydxRequestDataSpot:
@@ -24,7 +24,7 @@ class TestDydxRequestDataSpot:
     @pytest.fixture
     def dydx_spot(self, mock_data_queue):
         """Create DydxRequestDataSpot instance."""
-        with patch('bt_api_py.feeds.http_client.HttpClient', return_value=MagicMock()):
+        with patch("bt_api_py.feeds.http_client.HttpClient", return_value=MagicMock()):
             instance = DydxRequestDataSpot(mock_data_queue)
             return instance
 
@@ -50,9 +50,9 @@ class TestDydxRequestDataSpot:
         symbol = "BTC-USD"
         path, params, extra_data = dydx_spot.get_ticker_spot(symbol)
 
-        assert extra_data['request_type'] == "get_ticker"
-        assert extra_data['symbol_name'] == symbol
-        assert extra_data['exchange_name'] == "DYDX___SWAP"
+        assert extra_data["request_type"] == "get_ticker"
+        assert extra_data["symbol_name"] == symbol
+        assert extra_data["exchange_name"] == "DYDX___SWAP"
 
     def test_get_ticker_normalize_function(self):
         """Test ticker normalize function."""
@@ -67,26 +67,27 @@ class TestDydxRequestDataSpot:
                     "volume24H": "1000",
                     "high24H": "51000",
                     "low24H": "49000",
-                    "volumeNotional24H": "50000000"
+                    "volumeNotional24H": "50000000",
                 }
-            }
+            },
         }
         extra_data = {"symbol_name": "BTC-USD"}
 
-        result, status = DydxRequestDataSpot._get_ticker_spot_normalize_function(input_data, extra_data)
+        result, status = DydxRequestDataSpot._get_ticker_spot_normalize_function(
+            input_data, extra_data
+        )
         assert status == True
         assert len(result) == 9
         assert result[1] == 50000.0  # oraclePrice
 
     def test_get_ticker_normalize_function_error(self):
         """Test ticker normalize function with error."""
-        input_data = {
-            "code": 1,
-            "markets": {}
-        }
+        input_data = {"code": 1, "markets": {}}
         extra_data = {"symbol_name": "BTC-USD"}
 
-        result, status = DydxRequestDataSpot._get_ticker_spot_normalize_function(input_data, extra_data)
+        result, status = DydxRequestDataSpot._get_ticker_spot_normalize_function(
+            input_data, extra_data
+        )
         assert status == False
 
     # ==================== Balance Tests ====================
@@ -98,8 +99,8 @@ class TestDydxRequestDataSpot:
 
         path, params, extra_data = dydx_spot.get_balance_spot(address, subaccount_number)
 
-        assert extra_data['request_type'] == "get_subaccount"
-        assert extra_data['exchange_name'] == "DYDX___SWAP"
+        assert extra_data["request_type"] == "get_subaccount"
+        assert extra_data["exchange_name"] == "DYDX___SWAP"
 
     def test_get_balance_normalize_function(self):
         """Test balance normalize function."""
@@ -109,15 +110,15 @@ class TestDydxRequestDataSpot:
                 "freeCollateral": "5000",
                 "availableMargin": "3000",
                 "positionMargin": "2000",
-                "marginBalance": "8000"
+                "marginBalance": "8000",
             }
         }
 
         result, status = DydxRequestDataSpot._get_balance_spot_normalize_function(input_data, None)
         assert status == True
         assert len(result) == 1
-        assert result[0]['symbol'] == "USD"
-        assert result[0]['equity'] == 10000.0
+        assert result[0]["symbol"] == "USD"
+        assert result[0]["equity"] == 10000.0
 
     # ==================== Kline Tests ====================
 
@@ -125,8 +126,22 @@ class TestDydxRequestDataSpot:
         """Test kline normalize function."""
         input_data = {
             "candles": [
-                {"startedAt": "2024-01-01T00:00:00Z", "open": "50000", "high": "51000", "low": "49000", "close": "50500", "volume": "100"},
-                {"startedAt": "2024-01-01T01:00:00Z", "open": "50500", "high": "51500", "low": "50000", "close": "51000", "volume": "150"}
+                {
+                    "startedAt": "2024-01-01T00:00:00Z",
+                    "open": "50000",
+                    "high": "51000",
+                    "low": "49000",
+                    "close": "50500",
+                    "volume": "100",
+                },
+                {
+                    "startedAt": "2024-01-01T01:00:00Z",
+                    "open": "50500",
+                    "high": "51500",
+                    "low": "50000",
+                    "close": "51000",
+                    "volume": "150",
+                },
             ]
         }
 
@@ -139,14 +154,8 @@ class TestDydxRequestDataSpot:
     def test_get_orderbook_normalize_function(self):
         """Test orderbook normalize function."""
         input_data = {
-            "bids": [
-                {"price": "50000", "size": "1.0"},
-                {"price": "49999", "size": "2.0"}
-            ],
-            "asks": [
-                {"price": "50001", "size": "1.0"},
-                {"price": "50002", "size": "2.0"}
-            ]
+            "bids": [{"price": "50000", "size": "1.0"}, {"price": "49999", "size": "2.0"}],
+            "asks": [{"price": "50001", "size": "1.0"}, {"price": "50002", "size": "2.0"}],
         }
 
         result, status = DydxRequestDataSpot._get_orderbook_normalize_function(input_data, None)
@@ -164,10 +173,7 @@ class TestDydxRequestDataSpot:
     def test_get_exchange_info_normalize_function(self):
         """Test exchange info normalize function."""
         input_data = {
-            "markets": {
-                "BTC-USD": {"market": "BTC-USD"},
-                "ETH-USD": {"market": "ETH-USD"}
-            }
+            "markets": {"BTC-USD": {"market": "BTC-USD"}, "ETH-USD": {"market": "ETH-USD"}}
         }
 
         result, status = DydxRequestDataSpot._get_exchange_info_normalize_function(input_data, None)
@@ -200,7 +206,11 @@ class TestDydxRequestDataSpot:
         result = dydx_spot.get_tick("BTC-USD")
         assert dydx_spot.request.called
         call_args = dydx_spot.request.call_args
-        extra_data = call_args[1].get("extra_data") or call_args[0][2] if len(call_args[0]) > 2 else call_args[1].get("extra_data")
+        extra_data = (
+            call_args[1].get("extra_data") or call_args[0][2]
+            if len(call_args[0]) > 2
+            else call_args[1].get("extra_data")
+        )
         assert extra_data["request_type"] == "get_tick"
         assert extra_data["symbol_name"] == "BTC-USD"
 
@@ -409,8 +419,15 @@ class TestDydxDataContainers:
         """Test that calling init_data() twice returns self both times."""
         from bt_api_py.containers.orders.dydx_order import DydxOrderData
 
-        order_data = {"id": "o1", "status": "OPEN", "side": "BUY", "type": "LIMIT",
-                      "size": "1", "price": "100", "createdAt": "2024-01-01T00:00:00Z"}
+        order_data = {
+            "id": "o1",
+            "status": "OPEN",
+            "side": "BUY",
+            "type": "LIMIT",
+            "size": "1",
+            "price": "100",
+            "createdAt": "2024-01-01T00:00:00Z",
+        }
         order = DydxOrderData(order_data, "BTC-USD", "swap", has_been_json_encoded=True)
         r1 = order.init_data()
         r2 = order.init_data()
@@ -491,7 +508,9 @@ class TestDydxNormalizeFunctions:
         """Test ticker normalize returns None for missing symbol."""
         input_data = {"code": 0, "markets": {"ETH-USD": {}}}
         extra_data = {"symbol_name": "BTC-USD"}
-        result, status = DydxRequestDataSpot._get_ticker_spot_normalize_function(input_data, extra_data)
+        result, status = DydxRequestDataSpot._get_ticker_spot_normalize_function(
+            input_data, extra_data
+        )
         assert result is None
         assert status is False
 
@@ -499,7 +518,9 @@ class TestDydxNormalizeFunctions:
         """Test orderbook normalize includes symbol."""
         input_data = {"bids": [["50000", "1"]], "asks": [["50001", "2"]]}
         extra_data = {"symbol_name": "BTC-USD"}
-        result, status = DydxRequestDataSpot._get_orderbook_normalize_function(input_data, extra_data)
+        result, status = DydxRequestDataSpot._get_orderbook_normalize_function(
+            input_data, extra_data
+        )
         assert status is True
         assert result[0]["symbol"] == "BTC-USD"
 

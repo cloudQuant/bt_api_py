@@ -9,15 +9,14 @@ Tests for Luno spot trading implementation following Binance/OKX standards:
 """
 
 import queue
-import time
-import pytest
 
-from bt_api_py.containers.requestdatas.request_data import RequestData
-from bt_api_py.feeds.live_luno.spot import LunoRequestDataSpot
-from bt_api_py.registry import ExchangeRegistry
+import pytest
 
 # Import registration to auto-register Luno
 import bt_api_py.exchange_registers.register_luno  # noqa: F401
+from bt_api_py.containers.requestdatas.request_data import RequestData
+from bt_api_py.feeds.live_luno.spot import LunoRequestDataSpot
+from bt_api_py.registry import ExchangeRegistry
 
 
 def init_req_feed():
@@ -176,6 +175,7 @@ def test_luno_registration():
 
     # Check exchange data class
     from bt_api_py.containers.exchanges.luno_exchange_data import LunoExchangeDataSpot
+
     data_class = ExchangeRegistry._exchange_data_classes.get("LUNO___SPOT")
     assert data_class is not None
     assert data_class == LunoExchangeDataSpot

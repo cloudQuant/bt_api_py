@@ -2,22 +2,24 @@
 
 ## Principle
 
-Use `createProviderState` and `toJsonMap` from `@seontechnologies/pactjs-utils` to build type-safe provider state tuples for consumer contract tests. These helpers eliminate manual `JsonMap` casting and ensure consistent parameter serialization across all consumer pact interactions.
+Use `createProviderState`, `toJsonMap`, `setJsonContent`, and `setJsonBody` from `@seontechnologies/pactjs-utils` to build type-safe provider state tuples and reusable PactV4 JSON callbacks for consumer contract tests. These helpers eliminate manual `JsonMap` casting and repetitive inline builder lambdas.
 
 ## Rationale
 
-### Problems with raw provider state handling
+### Problems with raw consumer helper handling
 
 - **JsonMap requirement**: Pact's `.given(stateName, params)` requires `params` to be `JsonMap` — a flat object where every value must be `string | number | boolean | null`
-
 - **Type gymnastics**: Complex params (Date objects, nested objects, null values) require manual casting that TypeScript can't verify
 - **Inconsistent serialization**: Different developers serialize the same data differently (e.g., dates as ISO strings vs timestamps)
 - **Verbose `.given()` calls**: Repeating state name and params inline makes consumer tests harder to read
+- **Repeated interaction callbacks**: PactV4 interactions duplicate inline `(builder) => { ... }` blocks for body/query/header setup
 
 ### Solutions
 
 - **`createProviderState`**: Returns a `[string, JsonMap]` tuple that spreads directly into `.given()` — one function handles name and params
 - **`toJsonMap`**: Explicit coercion rules documented and tested — Date→ISO string, null→"null" string, nested objects→JSON string
+- **`setJsonContent`**: Curried callback helper for request/response builders — set `query`, `headers`, and/or `body` from one reusable function
+- **`setJsonBody`**: Body-only shorthand for `setJsonContent({ body })` — ideal for concise `.willRespondWith(...)` bodies
 
 ## Pattern Examples
 
@@ -56,10 +58,9 @@ describe('Movie API Contract', () => {
       });
   });
 });
+```
 
-```bash
-
-- *Key Points**:
+**Key Points**:
 
 - `createProviderState` accepts `{ name: string, params: Record<string, unknown> }`
 - Both `name` and `params` are required (pass `params: {}` for states without parameters)
@@ -98,10 +99,9 @@ const params = toJsonMap({
 //   createdAt: "2025-01-15T10:00:00.000Z",
 //   metadata: '{"role":"admin","permissions":["read","write"]}'
 // }
+```
 
-```bash
-
-- *Key Points**:
+**Key Points**:
 
 - `toJsonMap` is called internally by `createProviderState` — you rarely need it directly
 - Use it when you need explicit control over parameter conversion outside of provider states
@@ -126,8 +126,7 @@ await provider
     const movies = await res.json();
     expect(movies).toEqual([]);
   });
-
-```bash
+```
 
 ### Example 4: Multiple Provider States
 
@@ -149,8 +148,42 @@ await provider
   .executeTest(async (mockServer) => {
     // test implementation
   });
+```
 
-```bash
+### Example 5: When to Use setJsonBody vs setJsonContent
+
+```typescript
+import { MatchersV3 } from '@pact-foundation/pact';
+import { setJsonBody, setJsonContent } from '@seontechnologies/pactjs-utils';
+
+const { integer, string } = MatchersV3;
+
+await pact
+  .addInteraction()
+  .given('movie exists')
+  .uponReceiving('a request to get movie by name')
+  .withRequest(
+    'GET',
+    '/movies',
+    setJsonContent({
+      query: { name: 'Inception' },
+      headers: { Accept: 'application/json' },
+    }),
+  )
+  .willRespondWith(
+    200,
+    setJsonBody({
+      status: 200,
+      data: { id: integer(1), name: string('Inception') },
+    }),
+  );
+```
+
+**Key Points**:
+
+- Use `setJsonContent` when the interaction needs `query`, `headers`, and/or `body` in one callback (most request builders)
+- Use `setJsonBody` when you only need `jsonBody` and want the shorter `.willRespondWith(status, setJsonBody(...))` form
+- `setJsonBody` is equivalent to `setJsonContent({ body: ... })`
 
 ## Key Points
 
@@ -161,6 +194,8 @@ await provider
 - **No nested objects in JsonMap**: Nested objects are JSON-stringified — provider state handlers must parse them
 - **Array serialization is lossy**: Arrays are converted via `String()` (e.g., `[1,2,3]` → `"1,2,3"`) — prefer passing arrays as JSON-stringified objects for round-trip safety
 - **Message pacts**: Works identically with `MessageConsumerPact` — same `.given()` API
+- **Builder reuse**: `setJsonContent` works for both `.withRequest(...)` and `.willRespondWith(...)` callbacks (query is ignored on response builders)
+- **Body shorthand**: `setJsonBody` keeps body-only responses concise and readable
 
 ## Related Fragments
 
@@ -179,8 +214,7 @@ provider.given('user exists', {
   createdAt: new Date().toISOString(),
   metadata: JSON.stringify({ role: 'admin' }),
 } as JsonMap);
-
-```bash
+```
 
 ### Right: Use createProviderState
 
@@ -192,8 +226,7 @@ provider.given(
     params: { id: 1, createdAt: new Date(), metadata: { role: 'admin' } },
   }),
 );
-
-```bash
+```
 
 ### Wrong: Inline state names without helper
 
@@ -201,8 +234,7 @@ provider.given(
 // ❌ Duplicated state names between consumer and provider — easy to mismatch
 provider.given('a user with id 1 exists', { id: '1' });
 // Later in provider: 'user with id 1 exists' — different string!
-
-```bash
+```
 
 ### Right: Share state constants
 
@@ -214,6 +246,23 @@ const STATES = {
 } as const;
 
 provider.given(...createProviderState({ name: STATES.USER_EXISTS, params: { id: 1 } }));
+```
 
-```bash
+### Wrong: Repeating inline builder lambdas everywhere
+
+```typescript
+// ❌ Repetitive callback boilerplate in every interaction
+.willRespondWith(200, (builder) => {
+  builder.jsonBody({ status: 200 });
+});
+```
+
+### Right: Use setJsonBody / setJsonContent
+
+```typescript
+// ✅ Reusable callbacks with less boilerplate
+.withRequest('GET', '/movies', setJsonContent({ query: { name: 'Inception' } }))
+.willRespondWith(200, setJsonBody({ status: 200 }));
+```
+
 _Source: @seontechnologies/pactjs-utils consumer-helpers module, pactjs-utils sample-app consumer tests_

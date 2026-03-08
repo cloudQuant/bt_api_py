@@ -31,7 +31,11 @@ class MercadoBitcoinRequestTickerData(TickerData):
 
         # Mercado Bitcoin ticker response structure
         # Response format: {"ticker": {"last": "...", "buy": "...", "sell": "...", ...}}
-        ticker = self.ticker_data.get("ticker", {}) if isinstance(self.ticker_data, dict) else self.ticker_data
+        ticker = (
+            self.ticker_data.get("ticker", {})
+            if isinstance(self.ticker_data, dict)
+            else self.ticker_data
+        )
 
         self.ticker_symbol_name = self.symbol_name
         self.last_price = self._parse_float(ticker.get("last"))

@@ -22,10 +22,11 @@ def _load_valr_yaml():
     try:
         cfg_path = os.path.join(
             os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
-            "configs", "valr.yaml",
+            "configs",
+            "valr.yaml",
         )
         if os.path.exists(cfg_path):
-            with open(cfg_path, "r", encoding="utf-8") as f:
+            with open(cfg_path, encoding="utf-8") as f:
                 _valr_yaml_cache = yaml.safe_load(f) or {}
     except Exception as e:
         logger.warn(f"Failed to load valr.yaml: {e}")
@@ -42,9 +43,19 @@ class ValrExchangeData(ExchangeData):
         self.rest_url = "https://api.valr.com"
         self.wss_url = "wss://api.valr.com/ws"
         self.kline_periods = {
-            "1m": "1m", "3m": "3m", "5m": "5m", "15m": "15m",
-            "30m": "30m", "1h": "1h", "2h": "2h", "4h": "4h",
-            "6h": "6h", "12h": "12h", "1d": "1d", "1w": "1w", "1M": "1M",
+            "1m": "1m",
+            "3m": "3m",
+            "5m": "5m",
+            "15m": "15m",
+            "30m": "30m",
+            "1h": "1h",
+            "2h": "2h",
+            "4h": "4h",
+            "6h": "6h",
+            "12h": "12h",
+            "1d": "1d",
+            "1w": "1w",
+            "1M": "1M",
         }
         self.legal_currency = ["USDC", "ZAR", "BTC", "ETH"]
 

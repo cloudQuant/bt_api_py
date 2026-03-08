@@ -1,5 +1,4 @@
-- --
-
+---
 name: 'v-02a-validate-metadata'
 description: 'Validate metadata and append to report'
 
@@ -7,8 +6,7 @@ nextStepFile: './v-02b-validate-persona.md'
 validationReport: '{bmb_creations_output_folder}/validation-report-{agent-name}.md'
 agentMetadata: ../data/agent-metadata.md
 agentFile: '{agent-file-path}'
-
-- --
+---
 
 # Validate Step 2a: Validate Metadata
 
@@ -40,7 +38,7 @@ Validate the agent's metadata properties against BMAD standards as defined in ag
 
 ## MANDATORY SEQUENCE
 
-- *CRITICAL:**Follow this sequence exactly. Do not skip, reorder, or improvise unless user explicitly requests a change.
+**CRITICAL:** Follow this sequence exactly. Do not skip, reorder, or improvise unless user explicitly requests a change.
 
 ### 1. Load References
 
@@ -50,8 +48,7 @@ Read `{agentMetadata}`, `{validationReport}`, and `{agentFile}`.
 
 Perform these checks systematically - validate EVERY rule specified in agentMetadata.md:
 
-1.**Required Fields Existence**
-
+1. **Required Fields Existence**
    - [ ] id: Present and non-empty
    - [ ] name: Present and non-empty (display name)
    - [ ] title: Present and non-empty
@@ -59,7 +56,7 @@ Perform these checks systematically - validate EVERY rule specified in agentMeta
    - [ ] module: Present and valid format
    - [ ] hasSidecar: Present (boolean, if applicable)
 
-1. **Format Validation**
+2. **Format Validation**
    - [ ] id: Uses kebab-case, no spaces, unique identifier
    - [ ] name: Clear display name for UI
    - [ ] title: Concise functional description
@@ -67,7 +64,7 @@ Perform these checks systematically - validate EVERY rule specified in agentMeta
    - [ ] module: Either a 3-4 letter module code OR 'stand-alone'
    - [ ] hasSidecar: Boolean value, matches actual agent structure
 
-1. **Content Quality**
+3. **Content Quality**
    - [ ] id: Unique and descriptive
    - [ ] name: Clear and user-friendly
    - [ ] title: Accurately describes agent's function
@@ -75,7 +72,7 @@ Perform these checks systematically - validate EVERY rule specified in agentMeta
    - [ ] module: Correctly identifies module membership
    - [ ] hasSidecar: Correctly indicates if agent uses sidecar files
 
-1. **Agent Type Consistency**
+4. **Agent Type Consistency**
    - [ ] If hasSidecar: true, sidecar folder path must be specified
    - [ ] If module is a module code, agent is a module agent
    - [ ] If module is 'stand-alone', agent is not part of a module
@@ -86,12 +83,11 @@ Perform these checks systematically - validate EVERY rule specified in agentMeta
 Append to `{validationReport}`:
 
 ```markdown
-
 ### Metadata Validation
 
-- *Status:** {✅ PASS / ⚠️ WARNING / ❌ FAIL}
+**Status:** {✅ PASS / ⚠️ WARNING / ❌ FAIL}
 
-- *Checks:**
+**Checks:**
 - [ ] id: kebab-case, no spaces, unique
 - [ ] name: clear display name
 - [ ] title: concise function description
@@ -99,26 +95,22 @@ Append to `{validationReport}`:
 - [ ] module: correct format (code or stand-alone)
 - [ ] hasSidecar: matches actual usage
 
-- *Detailed Findings:**
+**Detailed Findings:**
 
-- PASSING:*
-
+*PASSING:*
 {List of passing checks}
 
-- WARNINGS:*
-
+*WARNINGS:*
 {List of non-blocking issues}
 
-- FAILURES:*
-
+*FAILURES:*
 {List of blocking issues that must be fixed}
-
-```bash
+```
 
 ### 4. Auto-Advance
 
 Load and execute `{nextStepFile}` immediately.
 
-- --
+---
 
-- *Validating persona...**
+**Validating persona...**

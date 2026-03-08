@@ -112,13 +112,15 @@ class CowSwapRequestData(Feed):
         """
         if extra_data is None:
             extra_data = {}
-        extra_data.update({
-            "exchange_name": self.exchange_name,
-            "symbol_name": "",
-            "asset_type": self.asset_type,
-            "request_type": "get_server_time",
-            "server_time": time.time(),
-        })
+        extra_data.update(
+            {
+                "exchange_name": self.exchange_name,
+                "symbol_name": "",
+                "asset_type": self.asset_type,
+                "request_type": "get_server_time",
+                "server_time": time.time(),
+            }
+        )
         return "GET /api/v1/version", {}, extra_data
 
     def get_server_time(self, extra_data=None, **kwargs):

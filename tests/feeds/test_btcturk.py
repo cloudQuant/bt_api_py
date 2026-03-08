@@ -8,21 +8,20 @@ Run tests:
 import json
 import queue
 import time
-from unittest.mock import Mock, MagicMock
+from unittest.mock import Mock
 
 import pytest
 
+# Import registration to auto-register BTCTurk
+import bt_api_py.exchange_registers.register_btcturk  # noqa: F401
 from bt_api_py.containers.exchanges.btcturk_exchange_data import (
     BTCTurkExchangeDataSpot,
 )
 from bt_api_py.containers.requestdatas.request_data import RequestData
 from bt_api_py.containers.tickers.btcturk_ticker import BTCTurkRequestTickerData
-from bt_api_py.feeds.live_btcturk.spot import BTCTurkRequestDataSpot
 from bt_api_py.feeds.capability import Capability
+from bt_api_py.feeds.live_btcturk.spot import BTCTurkRequestDataSpot
 from bt_api_py.registry import ExchangeRegistry
-
-# Import registration to auto-register BTCTurk
-import bt_api_py.exchange_registers.register_btcturk  # noqa: F401
 
 
 @pytest.fixture
@@ -184,6 +183,7 @@ class TestBTCTurkBaseCapabilities:
 
     def test_base_capabilities(self):
         from bt_api_py.feeds.live_btcturk.request_base import BTCTurkRequestData
+
         caps = BTCTurkRequestData._capabilities()
         assert Capability.GET_TICK in caps
         assert Capability.MAKE_ORDER in caps
@@ -249,21 +249,23 @@ class TestBTCTurkDataContainers:
     """Test BTCTurk data containers."""
 
     def test_ticker_container(self):
-        ticker_response = json.dumps({
-            "data": [{
-                "pairSymbol": "BTCUSDT",
-                "last": "50000.00",
-                "bid": "49900.00",
-                "ask": "50100.00",
-                "volume": "100.50",
-                "high": "51000.00",
-                "low": "48000.00",
-                "timestamp": 1640995200000,
-            }]
-        })
-        ticker = BTCTurkRequestTickerData(
-            ticker_response, "BTCUSDT", "SPOT", False
+        ticker_response = json.dumps(
+            {
+                "data": [
+                    {
+                        "pairSymbol": "BTCUSDT",
+                        "last": "50000.00",
+                        "bid": "49900.00",
+                        "ask": "50100.00",
+                        "volume": "100.50",
+                        "high": "51000.00",
+                        "low": "48000.00",
+                        "timestamp": 1640995200000,
+                    }
+                ]
+            }
         )
+        ticker = BTCTurkRequestTickerData(ticker_response, "BTCUSDT", "SPOT", False)
         ticker.init_data()
         assert ticker.get_exchange_name() == "BTCTURK"
         assert ticker.symbol_name == "BTCUSDT"
@@ -273,17 +275,17 @@ class TestBTCTurkDataContainers:
         assert ticker.volume_24h == 100.50
 
     def test_ticker_container_with_dict_data(self):
-        ticker_response = json.dumps({
-            "data": {
-                "pairSymbol": "ETHUSDT",
-                "last": "3000.00",
-                "bid": "2990.00",
-                "ask": "3010.00",
+        ticker_response = json.dumps(
+            {
+                "data": {
+                    "pairSymbol": "ETHUSDT",
+                    "last": "3000.00",
+                    "bid": "2990.00",
+                    "ask": "3010.00",
+                }
             }
-        })
-        ticker = BTCTurkRequestTickerData(
-            ticker_response, "ETHUSDT", "SPOT", False
         )
+        ticker = BTCTurkRequestTickerData(ticker_response, "ETHUSDT", "SPOT", False)
         ticker.init_data()
         assert ticker.last_price == 3000.00
         assert ticker.bid_price == 2990.00

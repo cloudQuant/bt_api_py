@@ -2,8 +2,6 @@
 KuCoin Spot trading feed implementation.
 """
 
-import json
-import time
 import uuid
 
 from bt_api_py.containers.accounts.kucoin_account import KuCoinRequestAccountData
@@ -287,7 +285,10 @@ class KuCoinRequestDataSpot(KuCoinRequestData):
         if input_data and "data" in input_data:
             data = input_data["data"]
             if isinstance(data, list):
-                return [KuCoinRequestOrderData({"data": item}, symbol_name, asset_type, True) for item in data], status
+                return [
+                    KuCoinRequestOrderData({"data": item}, symbol_name, asset_type, True)
+                    for item in data
+                ], status
             return [KuCoinRequestOrderData(input_data, symbol_name, asset_type, True)], status
         return [], status
 
@@ -347,7 +348,10 @@ class KuCoinRequestDataSpot(KuCoinRequestData):
 
         if input_data and "data" in input_data and "items" in input_data["data"]:
             items = input_data["data"]["items"]
-            return [KuCoinRequestOrderData({"data": item}, symbol_name, asset_type, True) for item in items], status
+            return [
+                KuCoinRequestOrderData({"data": item}, symbol_name, asset_type, True)
+                for item in items
+            ], status
         return [], status
 
     def get_open_orders(self, symbol=None, extra_data=None, **kwargs):
@@ -556,7 +560,9 @@ class KuCoinRequestDataSpot(KuCoinRequestData):
         if input_data and "data" in input_data:
             # KuCoin returns klines as array of arrays: [time, open, close, high, low, volume, turnover]
             klines = input_data["data"]
-            return [KuCoinRequestBarData(kline, symbol_name, asset_type, True) for kline in klines], status
+            return [
+                KuCoinRequestBarData(kline, symbol_name, asset_type, True) for kline in klines
+            ], status
         return [], status
 
     def get_kline(
@@ -637,7 +643,10 @@ class KuCoinRequestDataSpot(KuCoinRequestData):
 
         if input_data and "data" in input_data:
             trades = input_data["data"]
-            return [KuCoinRequestTradeData({"data": trade}, symbol_name, asset_type, True) for trade in trades], status
+            return [
+                KuCoinRequestTradeData({"data": trade}, symbol_name, asset_type, True)
+                for trade in trades
+            ], status
         return [], status
 
     def get_deals(self, symbol, limit=None, extra_data=None, **kwargs):
@@ -698,7 +707,9 @@ class KuCoinRequestDataSpot(KuCoinRequestData):
 
         if input_data and "data" in input_data:
             accounts = input_data["data"]
-            return [KuCoinRequestAccountData(acc, symbol_name, asset_type, True) for acc in accounts], status
+            return [
+                KuCoinRequestAccountData(acc, symbol_name, asset_type, True) for acc in accounts
+            ], status
         return [], status
 
     def get_account(self, currency=None, account_type=None, extra_data=None, **kwargs):

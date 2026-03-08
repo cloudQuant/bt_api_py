@@ -9,15 +9,14 @@ Tests for Mercado Bitcoin spot trading implementation following Binance/OKX stan
 """
 
 import queue
-import time
-import pytest
 
-from bt_api_py.containers.requestdatas.request_data import RequestData
-from bt_api_py.feeds.live_mercado_bitcoin.spot import MercadoBitcoinRequestDataSpot
-from bt_api_py.registry import ExchangeRegistry
+import pytest
 
 # Import registration to auto-register Mercado Bitcoin
 import bt_api_py.exchange_registers.register_mercado_bitcoin  # noqa: F401
+from bt_api_py.containers.requestdatas.request_data import RequestData
+from bt_api_py.feeds.live_mercado_bitcoin.spot import MercadoBitcoinRequestDataSpot
+from bt_api_py.registry import ExchangeRegistry
 
 
 def init_req_feed():
@@ -181,7 +180,9 @@ def test_mercado_bitcoin_req_orderbook_data():
 @pytest.mark.integration
 def test_mercado_bitcoin_exchange_data():
     """Test Mercado Bitcoin exchange data configuration."""
-    from bt_api_py.containers.exchanges.mercado_bitcoin_exchange_data import MercadoBitcoinExchangeDataSpot
+    from bt_api_py.containers.exchanges.mercado_bitcoin_exchange_data import (
+        MercadoBitcoinExchangeDataSpot,
+    )
 
     exchange_data = MercadoBitcoinExchangeDataSpot()
     assert exchange_data.exchange_name == "MERCADO_BITCOIN___SPOT"
@@ -200,7 +201,10 @@ def test_mercado_bitcoin_registration():
     assert feed_class == MercadoBitcoinRequestDataSpot
 
     # Check exchange data class
-    from bt_api_py.containers.exchanges.mercado_bitcoin_exchange_data import MercadoBitcoinExchangeDataSpot
+    from bt_api_py.containers.exchanges.mercado_bitcoin_exchange_data import (
+        MercadoBitcoinExchangeDataSpot,
+    )
+
     data_class = ExchangeRegistry._exchange_data_classes.get("MERCADO_BITCOIN___SPOT")
     assert data_class is not None
     assert data_class == MercadoBitcoinExchangeDataSpot

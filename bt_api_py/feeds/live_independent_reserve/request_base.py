@@ -7,8 +7,8 @@ Public: GET /Public/...  Private: POST /Private/...
 Symbol: primaryCurrencyCode + secondaryCurrencyCode (e.g. Xbt, Aud)
 """
 
-import hmac
 import hashlib
+import hmac
 import time
 from urllib.parse import urlencode
 
@@ -65,11 +65,15 @@ class IndependentReserveRequestData(Feed):
                 if k not in ("apiKey", "nonce", "signature"):
                     auth_parts.append(f"{k}={v}")
         message = ",".join(auth_parts)
-        return hmac.new(
-            self._api_secret.encode("utf-8"),
-            message.encode("utf-8"),
-            hashlib.sha256,
-        ).hexdigest().upper()
+        return (
+            hmac.new(
+                self._api_secret.encode("utf-8"),
+                message.encode("utf-8"),
+                hashlib.sha256,
+            )
+            .hexdigest()
+            .upper()
+        )
 
     def _get_headers(self):
         return {
@@ -146,13 +150,15 @@ class IndependentReserveRequestData(Feed):
         primary, secondary = self._params.get_symbol(symbol)
         params = {"primaryCurrencyCode": primary, "secondaryCurrencyCode": secondary}
         extra_data = extra_data or {}
-        extra_data.update({
-            "request_type": "get_tick",
-            "symbol_name": symbol,
-            "asset_type": self.asset_type,
-            "exchange_name": self.exchange_name,
-            "normalize_function": self._get_tick_normalize_function,
-        })
+        extra_data.update(
+            {
+                "request_type": "get_tick",
+                "symbol_name": symbol,
+                "asset_type": self.asset_type,
+                "exchange_name": self.exchange_name,
+                "normalize_function": self._get_tick_normalize_function,
+            }
+        )
         return path, params, extra_data
 
     def _get_depth(self, symbol, extra_data=None, **kwargs):
@@ -160,26 +166,30 @@ class IndependentReserveRequestData(Feed):
         primary, secondary = self._params.get_symbol(symbol)
         params = {"primaryCurrencyCode": primary, "secondaryCurrencyCode": secondary}
         extra_data = extra_data or {}
-        extra_data.update({
-            "request_type": "get_depth",
-            "symbol_name": symbol,
-            "asset_type": self.asset_type,
-            "exchange_name": self.exchange_name,
-            "normalize_function": self._get_depth_normalize_function,
-        })
+        extra_data.update(
+            {
+                "request_type": "get_depth",
+                "symbol_name": symbol,
+                "asset_type": self.asset_type,
+                "exchange_name": self.exchange_name,
+                "normalize_function": self._get_depth_normalize_function,
+            }
+        )
         return path, params, extra_data
 
     def _get_exchange_info(self, extra_data=None, **kwargs):
         path = self._params.get_rest_path("get_exchange_info")
         params = {}
         extra_data = extra_data or {}
-        extra_data.update({
-            "request_type": "get_exchange_info",
-            "symbol_name": None,
-            "asset_type": self.asset_type,
-            "exchange_name": self.exchange_name,
-            "normalize_function": self._get_exchange_info_normalize_function,
-        })
+        extra_data.update(
+            {
+                "request_type": "get_exchange_info",
+                "symbol_name": None,
+                "asset_type": self.asset_type,
+                "exchange_name": self.exchange_name,
+                "normalize_function": self._get_exchange_info_normalize_function,
+            }
+        )
         return path, params, extra_data
 
     def _get_deals(self, symbol, extra_data=None, **kwargs):
@@ -191,13 +201,15 @@ class IndependentReserveRequestData(Feed):
             "numberOfRecentTradesToRetrieve": kwargs.get("count", 50),
         }
         extra_data = extra_data or {}
-        extra_data.update({
-            "request_type": "get_deals",
-            "symbol_name": symbol,
-            "asset_type": self.asset_type,
-            "exchange_name": self.exchange_name,
-            "normalize_function": self._get_deals_normalize_function,
-        })
+        extra_data.update(
+            {
+                "request_type": "get_deals",
+                "symbol_name": symbol,
+                "asset_type": self.asset_type,
+                "exchange_name": self.exchange_name,
+                "normalize_function": self._get_deals_normalize_function,
+            }
+        )
         return path, params, extra_data
 
     def _make_order(self, symbol, side, order_type, amount, price=None, extra_data=None, **kwargs):
@@ -218,26 +230,30 @@ class IndependentReserveRequestData(Feed):
         if price is not None and "limit" in order_type.lower():
             body["price"] = price
         extra_data = extra_data or {}
-        extra_data.update({
-            "request_type": "make_order",
-            "symbol_name": symbol,
-            "asset_type": self.asset_type,
-            "exchange_name": self.exchange_name,
-            "normalize_function": self._make_order_normalize_function,
-        })
+        extra_data.update(
+            {
+                "request_type": "make_order",
+                "symbol_name": symbol,
+                "asset_type": self.asset_type,
+                "exchange_name": self.exchange_name,
+                "normalize_function": self._make_order_normalize_function,
+            }
+        )
         return path, body, extra_data
 
     def _cancel_order(self, order_id, extra_data=None, **kwargs):
         path = self._params.get_rest_path("cancel_order")
         body = {"orderGuid": order_id}
         extra_data = extra_data or {}
-        extra_data.update({
-            "request_type": "cancel_order",
-            "symbol_name": None,
-            "asset_type": self.asset_type,
-            "exchange_name": self.exchange_name,
-            "normalize_function": self._cancel_order_normalize_function,
-        })
+        extra_data.update(
+            {
+                "request_type": "cancel_order",
+                "symbol_name": None,
+                "asset_type": self.asset_type,
+                "exchange_name": self.exchange_name,
+                "normalize_function": self._cancel_order_normalize_function,
+            }
+        )
         return path, body, extra_data
 
     def _get_open_orders(self, symbol=None, extra_data=None, **kwargs):
@@ -248,39 +264,45 @@ class IndependentReserveRequestData(Feed):
             body["primaryCurrencyCode"] = primary
             body["secondaryCurrencyCode"] = secondary
         extra_data = extra_data or {}
-        extra_data.update({
-            "request_type": "get_open_orders",
-            "symbol_name": symbol,
-            "asset_type": self.asset_type,
-            "exchange_name": self.exchange_name,
-            "normalize_function": self._get_open_orders_normalize_function,
-        })
+        extra_data.update(
+            {
+                "request_type": "get_open_orders",
+                "symbol_name": symbol,
+                "asset_type": self.asset_type,
+                "exchange_name": self.exchange_name,
+                "normalize_function": self._get_open_orders_normalize_function,
+            }
+        )
         return path, body, extra_data
 
     def _get_balance(self, extra_data=None, **kwargs):
         path = self._params.get_rest_path("get_balance")
         body = {}
         extra_data = extra_data or {}
-        extra_data.update({
-            "request_type": "get_balance",
-            "symbol_name": None,
-            "asset_type": self.asset_type,
-            "exchange_name": self.exchange_name,
-            "normalize_function": self._get_balance_normalize_function,
-        })
+        extra_data.update(
+            {
+                "request_type": "get_balance",
+                "symbol_name": None,
+                "asset_type": self.asset_type,
+                "exchange_name": self.exchange_name,
+                "normalize_function": self._get_balance_normalize_function,
+            }
+        )
         return path, body, extra_data
 
     def _get_account(self, extra_data=None, **kwargs):
         path = self._params.get_rest_path("get_account")
         body = {}
         extra_data = extra_data or {}
-        extra_data.update({
-            "request_type": "get_account",
-            "symbol_name": None,
-            "asset_type": self.asset_type,
-            "exchange_name": self.exchange_name,
-            "normalize_function": self._get_account_normalize_function,
-        })
+        extra_data.update(
+            {
+                "request_type": "get_account",
+                "symbol_name": None,
+                "asset_type": self.asset_type,
+                "exchange_name": self.exchange_name,
+                "normalize_function": self._get_account_normalize_function,
+            }
+        )
         return path, body, extra_data
 
     # ── normalize helpers ───────────────────────────────────────

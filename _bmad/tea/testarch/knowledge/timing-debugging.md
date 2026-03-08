@@ -6,11 +6,11 @@ Race conditions arise when tests make assumptions about asynchronous timing (net
 
 ## Rationale
 
-- *The Problem**: Tests pass locally but fail in CI (different timing), or pass/fail randomly (race conditions). Hard waits (`waitForTimeout`, `sleep`) mask timing issues without solving them.
+**The Problem**: Tests pass locally but fail in CI (different timing), or pass/fail randomly (race conditions). Hard waits (`waitForTimeout`, `sleep`) mask timing issues without solving them.
 
-- *The Solution**: Replace all hard waits with event-based waits (`waitForResponse`, `waitFor({ state })`). Implement network-first pattern (intercept before navigate). Use explicit state checks (loading spinner detached, data loaded). This makes tests deterministic regardless of network speed or system load.
+**The Solution**: Replace all hard waits with event-based waits (`waitForResponse`, `waitFor({ state })`). Implement network-first pattern (intercept before navigate). Use explicit state checks (loading spinner detached, data loaded). This makes tests deterministic regardless of network speed or system load.
 
-- *Why This Matters**:
+**Why This Matters**:
 
 - Eliminates flaky tests (0 tolerance for timing-based failures)
 - Works consistently across environments (local, CI, production-like)
@@ -21,9 +21,9 @@ Race conditions arise when tests make assumptions about asynchronous timing (net
 
 ### Example 1: Race Condition Identification (Network-First Pattern)
 
-- *Context**: Prevent race conditions by intercepting network requests before navigation
+**Context**: Prevent race conditions by intercepting network requests before navigation
 
-- *Implementation**:
+**Implementation**:
 
 ```typescript
 // tests/timing/race-condition-prevention.spec.ts
@@ -104,10 +104,9 @@ test.describe('Race Condition Prevention Patterns', () => {
     await expect(page.getByText('Dashboard loaded')).toBeVisible();
   });
 });
+```
 
-```bash
-
-- *Key Points**:
+**Key Points**:
 
 - Network-first: ALWAYS intercept before navigate (prevents race conditions)
 - State changes: Wait for loading spinner detached (explicit load completion)
@@ -115,13 +114,13 @@ test.describe('Race Condition Prevention Patterns', () => {
 - Avoid networkidle: Unreliable in SPAs (WebSocket, polling connections)
 - Explicit waits: Document exactly what we're waiting for
 
-- --
+---
 
 ### Example 2: Deterministic Waiting Patterns (Event-Based, Not Time-Based)
 
-- *Context**: Replace all hard waits with observable event waits
+**Context**: Replace all hard waits with observable event waits
 
-- *Implementation**:
+**Implementation**:
 
 ```typescript
 // tests/timing/deterministic-waits.spec.ts
@@ -156,7 +155,6 @@ test.describe('Deterministic Waiting Patterns', () => {
     await page.waitForFunction(() => {
       const element = document.querySelector('[data-testid="user-count"]');
       return element && parseInt(element.textContent || '0') > 0;
-
     });
 
     // User count now loaded
@@ -187,15 +185,12 @@ test.describe('Deterministic Waiting Patterns', () => {
     cy.wait('@getProducts') // Deterministic wait for specific request
 
     cy.get('[data-testid="product-list"]').should('be.visible')
-
-    - /
-
+    */
   });
 });
+```
 
-```bash
-
-- *Key Points**:
+**Key Points**:
 
 - `waitForResponse()`: Wait for specific API calls (URL pattern or predicate)
 - `waitForFunction()`: Wait for custom JavaScript conditions
@@ -203,13 +198,13 @@ test.describe('Deterministic Waiting Patterns', () => {
 - Cypress `cy.wait('@alias')`: Deterministic wait for aliased intercepts
 - All waits are event-based (not time-based)
 
-- --
+---
 
 ### Example 3: Timing Anti-Patterns (What NEVER to Do)
 
-- *Context**: Common timing mistakes that cause flakiness
+**Context**: Common timing mistakes that cause flakiness
 
-- *Problem Examples**:
+**Problem Examples**:
 
 ```typescript
 // tests/timing/anti-patterns.spec.ts
@@ -239,9 +234,7 @@ test.describe('Timing Anti-Patterns to Avoid', () => {
     cy.intercept('GET', '/api/products').as('getProducts')
     cy.visit('/products')
     cy.wait('@getProducts') // Deterministic
-
-    - /
-
+    */
   });
 
   test('❌ NEVER: Multiple hard waits in sequence (compounding delays)', async ({ page }) => {
@@ -284,19 +277,18 @@ test.describe('Timing Anti-Patterns to Avoid', () => {
     await expect(page.getByText('Products loaded')).toBeVisible();
   });
 });
+```
 
-```bash
-
-- *Why These Fail**:
+**Why These Fail**:
 
 - **Hard waits**: Arbitrary timeouts (too short → flaky, too long → slow)
 - **Stacked waits**: Compound delays (wasteful, unreliable)
 - **networkidle**: Broken in SPAs (WebSocket/polling never idle)
 - **Sleep**: Blocks execution (wastes time, doesn't solve race conditions)
 
-- *Better Approach**: Use event-based waits from examples above
+**Better Approach**: Use event-based waits from examples above
 
-- --
+---
 
 ## Async Debugging Techniques
 
@@ -317,8 +309,7 @@ test('debug async waterfall with console logs', async ({ page }) => {
 
   // Console output shows exactly where timing issue occurs
 });
-
-```bash
+```
 
 ### Technique 2: Network Waterfall Inspection (DevTools)
 
@@ -336,8 +327,7 @@ test('inspect network timing with trace viewer', async ({ page }) => {
   // 3. Find race conditions (overlapping requests)
   // 4. Verify request order (dependencies)
 });
-
-```bash
+```
 
 ### Technique 3: Trace Viewer for Timing Visualization
 
@@ -356,10 +346,9 @@ test('use trace viewer to debug timing', async ({ page }) => {
 
   await expect(page.getByText('Success')).toBeVisible();
 });
+```
 
-```bash
-
-- --
+---
 
 ## Race Condition Checklist
 

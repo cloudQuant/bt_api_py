@@ -19,14 +19,12 @@
 ## Generated Files
 
 ### Directory Structure
-
 - [ ] `Tests/PlayMode/E2E/` directory created
 - [ ] `Tests/PlayMode/E2E/Infrastructure/` directory created
 - [ ] `Tests/PlayMode/E2E/Scenarios/` directory created
 - [ ] `Tests/PlayMode/E2E/TestData/` directory created
 
 ### Infrastructure Files
-
 - [ ] `E2E.asmdef` created with correct assembly references
 - [ ] `GameE2ETestFixture.cs` created with correct class references
 - [ ] `ScenarioBuilder.cs` created with at least placeholder methods
@@ -34,14 +32,12 @@
 - [ ] `AsyncAssert.cs` created with core assertion methods
 
 ### Example and Documentation
-
 - [ ] `ExampleE2ETest.cs` created with working infrastructure test
 - [ ] `README.md` created with usage documentation
 
 ## Code Quality
 
 ### GameE2ETestFixture
-
 - [ ] Correct namespace applied
 - [ ] Correct `GameStateClass` reference
 - [ ] Correct `SceneName` default
@@ -50,14 +46,12 @@
 - [ ] Virtual methods for derived class customization
 
 ### ScenarioBuilder
-
 - [ ] Fluent API pattern correctly implemented
 - [ ] `Build()` executes all queued actions
 - [ ] At least one domain-specific method added (or clear TODOs)
 - [ ] `FromSaveFile` method scaffolded
 
 ### InputSimulator
-
 - [ ] Matches detected input system (New vs Legacy)
 - [ ] Mouse click simulation works
 - [ ] Button click by name works
@@ -65,7 +59,6 @@
 - [ ] `Reset()` method cleans up state
 
 ### AsyncAssert
-
 - [ ] `WaitUntil` includes timeout and descriptive failure
 - [ ] `WaitForValue` provides current vs expected in failure
 - [ ] `AssertNeverTrue` for negative assertions

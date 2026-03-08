@@ -92,7 +92,6 @@ class UnifiedErrorCode(int, Enum):
     ACCOUNT_ERROR = 8004
 
 
-
 # ── 统一错误 ──────────────────────────────────────────────────
 
 
@@ -270,17 +269,17 @@ class ErrorTranslator:
 
 
 # ── 从 errors/ 子模块重新导出翻译器，保持向后兼容 ─────────────────
-from bt_api_py.errors.gemini_translator import GeminiErrorTranslator
 from bt_api_py.errors.binance_translator import BinanceErrorTranslator
-from bt_api_py.errors.okx_translator import OKXErrorTranslator
-from bt_api_py.errors.kraken_translator import KrakenErrorTranslator
-from bt_api_py.errors.ctp_translator import CTPErrorTranslator
-from bt_api_py.errors.ib_web_translator import IBWebErrorTranslator
-from bt_api_py.errors.bybit_translator import BybitErrorTranslator
-from bt_api_py.errors.bitget_translator import BitgetErrorTranslator
-from bt_api_py.errors.kucoin_translator import KuCoinErrorTranslator
-from bt_api_py.errors.upbit_translator import UpbitErrorTranslator
 from bt_api_py.errors.bitfinex_error_translator import BitfinexErrorTranslator
+from bt_api_py.errors.bitget_translator import BitgetErrorTranslator
+from bt_api_py.errors.bybit_translator import BybitErrorTranslator
+from bt_api_py.errors.ctp_translator import CTPErrorTranslator
+from bt_api_py.errors.gemini_translator import GeminiErrorTranslator
+from bt_api_py.errors.ib_web_translator import IBWebErrorTranslator
+from bt_api_py.errors.kraken_translator import KrakenErrorTranslator
+from bt_api_py.errors.kucoin_translator import KuCoinErrorTranslator
+from bt_api_py.errors.okx_translator import OKXErrorTranslator
+from bt_api_py.errors.upbit_translator import UpbitErrorTranslator
 
 __all__ = [
     # 核心类

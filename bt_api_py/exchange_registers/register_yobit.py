@@ -18,9 +18,7 @@ def register_yobit():
     ExchangeRegistry.register_feed("YOBIT___SPOT", YobitRequestDataSpot)
     ExchangeRegistry.register_exchange_data("YOBIT___SPOT", YobitExchangeDataSpot)
     ExchangeRegistry.register_balance_handler("YOBIT___SPOT", _yobit_balance_handler)
-    ExchangeRegistry.register_stream(
-        "YOBIT___SPOT", "subscribe", _yobit_spot_subscribe_handler
-    )
+    ExchangeRegistry.register_stream("YOBIT___SPOT", "subscribe", _yobit_spot_subscribe_handler)
 
 
 # Auto-register on module import

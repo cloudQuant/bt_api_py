@@ -7,18 +7,17 @@ Run tests:
 
 import queue
 import time
-from unittest.mock import Mock, MagicMock
+from unittest.mock import Mock
 
 import pytest
 
-from bt_api_py.containers.exchanges.bitinka_exchange_data import BitinkaExchangeDataSpot
-from bt_api_py.containers.requestdatas.request_data import RequestData
-from bt_api_py.feeds.live_bitinka.spot import BitinkaRequestDataSpot
-from bt_api_py.feeds.capability import Capability
-from bt_api_py.registry import ExchangeRegistry
-
 # Import registration to auto-register Bitinka
 import bt_api_py.exchange_registers.register_bitinka  # noqa: F401
+from bt_api_py.containers.exchanges.bitinka_exchange_data import BitinkaExchangeDataSpot
+from bt_api_py.containers.requestdatas.request_data import RequestData
+from bt_api_py.feeds.capability import Capability
+from bt_api_py.feeds.live_bitinka.spot import BitinkaRequestDataSpot
+from bt_api_py.registry import ExchangeRegistry
 
 
 @pytest.fixture
@@ -173,6 +172,7 @@ class TestBitinkaBaseCapabilities:
 
     def test_base_capabilities(self):
         from bt_api_py.feeds.live_bitinka.request_base import BitinkaRequestData
+
         caps = BitinkaRequestData._capabilities()
         assert Capability.GET_TICK in caps
         assert Capability.MAKE_ORDER in caps

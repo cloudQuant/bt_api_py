@@ -8,20 +8,18 @@ Run with coverage:
     pytest tests/feeds/test_bybit.py --cov=bt_api_py.feeds.live_bybit --cov-report=term-missing
 """
 
-import json
 import queue
-from unittest.mock import Mock, patch, MagicMock
 
 import pytest
 
+# Import registration to auto-register Bybit
+import bt_api_py.exchange_registers.register_bybit  # noqa: F401
+from bt_api_py.containers.balances.bybit_balance import (
+    BybitSpotBalanceData,
+)
 from bt_api_py.containers.exchanges.bybit_exchange_data import (
-    BybitExchangeData,
     BybitExchangeDataSpot,
     BybitExchangeDataSwap,
-)
-from bt_api_py.containers.tickers.bybit_ticker import (
-    BybitSpotTickerData,
-    BybitSwapTickerData,
 )
 from bt_api_py.containers.orderbooks.bybit_orderbook import (
     BybitSpotOrderBookData,
@@ -29,16 +27,14 @@ from bt_api_py.containers.orderbooks.bybit_orderbook import (
 from bt_api_py.containers.orders.bybit_order import (
     BybitSpotOrderData,
 )
-from bt_api_py.containers.balances.bybit_balance import (
-    BybitSpotBalanceData,
+from bt_api_py.containers.tickers.bybit_ticker import (
+    BybitSpotTickerData,
+    BybitSwapTickerData,
 )
 from bt_api_py.registry import ExchangeRegistry
 
-# Import registration to auto-register Bybit
-import bt_api_py.exchange_registers.register_bybit  # noqa: F401
-
-
 # ===================== Exchange Data Tests =====================
+
 
 class TestBybitExchangeData:
     """Test Bybit exchange data configuration."""
@@ -118,6 +114,7 @@ class TestBybitExchangeData:
 
 # ===================== Data Container Tests =====================
 
+
 class TestBybitDataContainers:
     """Test Bybit data containers."""
 
@@ -127,19 +124,21 @@ class TestBybitDataContainers:
             "retCode": 0,
             "retMsg": "OK",
             "result": {
-                "list": [{
-                    "symbol": "BTCUSDT",
-                    "lastPrice": "50000",
-                    "bid1Price": "49990",
-                    "ask1Price": "50010",
-                    "bid1Size": "1.5",
-                    "ask1Size": "2.0",
-                    "volume24h": "1234.56",
-                    "highPrice24h": "51000",
-                    "lowPrice24h": "49000",
-                    "turnover24h": "12345678",
-                }]
-            }
+                "list": [
+                    {
+                        "symbol": "BTCUSDT",
+                        "lastPrice": "50000",
+                        "bid1Price": "49990",
+                        "ask1Price": "50010",
+                        "bid1Size": "1.5",
+                        "ask1Size": "2.0",
+                        "volume24h": "1234.56",
+                        "highPrice24h": "51000",
+                        "lowPrice24h": "49000",
+                        "turnover24h": "12345678",
+                    }
+                ]
+            },
         }
 
         ticker = BybitSpotTickerData(ticker_data, "BTCUSDT", True)
@@ -163,13 +162,15 @@ class TestBybitDataContainers:
         ticker_data = {
             "retCode": 0,
             "result": {
-                "list": [{
-                    "symbol": "BTCUSDT",
-                    "lastPrice": "50000",
-                    "bid1Price": "49990",
-                    "ask1Price": "50010",
-                }]
-            }
+                "list": [
+                    {
+                        "symbol": "BTCUSDT",
+                        "lastPrice": "50000",
+                        "bid1Price": "49990",
+                        "ask1Price": "50010",
+                    }
+                ]
+            },
         }
         ticker = BybitSpotTickerData(ticker_data, "BTCUSDT", True)
         all_data = ticker.get_all_data()
@@ -182,13 +183,15 @@ class TestBybitDataContainers:
         ticker_data = {
             "retCode": 0,
             "result": {
-                "list": [{
-                    "symbol": "BTCUSDT",
-                    "lastPrice": "50000",
-                    "bid1Price": "49990",
-                    "ask1Price": "50010",
-                }]
-            }
+                "list": [
+                    {
+                        "symbol": "BTCUSDT",
+                        "lastPrice": "50000",
+                        "bid1Price": "49990",
+                        "ask1Price": "50010",
+                    }
+                ]
+            },
         }
         ticker = BybitSwapTickerData(ticker_data, "BTCUSDT", True)
         ticker.init_data()
@@ -201,17 +204,11 @@ class TestBybitDataContainers:
         orderbook_data = {
             "retCode": 0,
             "result": {
-                "b": [
-                    ["49990", "1.5"],
-                    ["49980", "2.0"]
-                ],
-                "a": [
-                    ["50010", "1.0"],
-                    ["50020", "2.5"]
-                ],
+                "b": [["49990", "1.5"], ["49980", "2.0"]],
+                "a": [["50010", "1.0"], ["50020", "2.5"]],
                 "ts": "1640995200000",
                 "u": 12345,
-            }
+            },
         }
         orderbook = BybitSpotOrderBookData(orderbook_data, "BTCUSDT", True)
         orderbook.init_data()
@@ -233,23 +230,25 @@ class TestBybitDataContainers:
         order_data = {
             "retCode": 0,
             "result": {
-                "list": [{
-                    "orderId": "123456789",
-                    "orderLinkId": "client_123",
-                    "symbol": "BTCUSDT",
-                    "side": "Buy",
-                    "orderType": "Limit",
-                    "orderStatus": "Filled",
-                    "qty": "0.001",
-                    "cumExecQty": "0.001",
-                    "leavesQty": "0",
-                    "price": "50000",
-                    "avgPrice": "50000",
-                    "createdTime": "1640995200000",
-                    "updatedTime": "1640995201000",
-                    "timeInForce": "GTC",
-                }]
-            }
+                "list": [
+                    {
+                        "orderId": "123456789",
+                        "orderLinkId": "client_123",
+                        "symbol": "BTCUSDT",
+                        "side": "Buy",
+                        "orderType": "Limit",
+                        "orderStatus": "Filled",
+                        "qty": "0.001",
+                        "cumExecQty": "0.001",
+                        "leavesQty": "0",
+                        "price": "50000",
+                        "avgPrice": "50000",
+                        "createdTime": "1640995200000",
+                        "updatedTime": "1640995201000",
+                        "timeInForce": "GTC",
+                    }
+                ]
+            },
         }
         order = BybitSpotOrderData(order_data, "BTCUSDT", True)
         order.init_data()
@@ -270,21 +269,25 @@ class TestBybitDataContainers:
         balance_data = {
             "retCode": 0,
             "result": {
-                "list": [{
-                    "accountType": "SPOT",
-                    "totalEquity": "10000",
-                    "totalWalletBalance": "10000",
-                    "totalAvailableBalance": "9000",
-                    "coin": [{
-                        "coin": "BTC",
-                        "walletBalance": "0.5",
-                        "availableToWithdraw": "0.4",
-                        "locked": "0.1",
-                        "equity": "0.5",
-                        "unrealisedPnl": "0",
-                    }]
-                }]
-            }
+                "list": [
+                    {
+                        "accountType": "SPOT",
+                        "totalEquity": "10000",
+                        "totalWalletBalance": "10000",
+                        "totalAvailableBalance": "9000",
+                        "coin": [
+                            {
+                                "coin": "BTC",
+                                "walletBalance": "0.5",
+                                "availableToWithdraw": "0.4",
+                                "locked": "0.1",
+                                "equity": "0.5",
+                                "unrealisedPnl": "0",
+                            }
+                        ],
+                    }
+                ]
+            },
         }
 
         balance = BybitSpotBalanceData(balance_data, True)
@@ -305,10 +308,7 @@ class TestBybitDataContainers:
 
     def test_balance_container_empty(self):
         """Test balance container with empty result."""
-        balance_data = {
-            "retCode": 0,
-            "result": {"list": []}
-        }
+        balance_data = {"retCode": 0, "result": {"list": []}}
         balance = BybitSpotBalanceData(balance_data, True)
         balance.init_data()
         assert balance.account_type is None
@@ -316,12 +316,14 @@ class TestBybitDataContainers:
 
 # ===================== Feed Creation Tests =====================
 
+
 class TestBybitFeedCreation:
     """Test Bybit feed creation."""
 
     def test_spot_feed_creation(self):
         """Test creating Bybit spot feed."""
         from bt_api_py.feeds.live_bybit.spot import BybitRequestDataSpot
+
         data_queue = queue.Queue()
         feed = BybitRequestDataSpot(
             data_queue,
@@ -337,6 +339,7 @@ class TestBybitFeedCreation:
     def test_swap_feed_creation(self):
         """Test creating Bybit swap feed."""
         from bt_api_py.feeds.live_bybit.swap import BybitRequestDataSwap
+
         data_queue = queue.Queue()
         feed = BybitRequestDataSwap(
             data_queue,
@@ -349,6 +352,7 @@ class TestBybitFeedCreation:
     def test_spot_three_layer_methods_exist(self):
         """Test that three-layer methods exist in spot feed."""
         from bt_api_py.feeds.live_bybit.spot import BybitRequestDataSpot
+
         data_queue = queue.Queue()
         feed = BybitRequestDataSpot(
             data_queue,
@@ -356,66 +360,69 @@ class TestBybitFeedCreation:
             private_key="test_secret",
         )
         # Check _get_xxx methods exist
-        assert hasattr(feed, '_get_ticker')
-        assert hasattr(feed, '_get_depth')
-        assert hasattr(feed, '_get_kline')
-        assert hasattr(feed, '_get_balance')
-        assert hasattr(feed, '_make_order')
-        assert hasattr(feed, '_cancel_order')
-        assert hasattr(feed, '_query_order')
-        assert hasattr(feed, '_get_deals')
+        assert hasattr(feed, "_get_ticker")
+        assert hasattr(feed, "_get_depth")
+        assert hasattr(feed, "_get_kline")
+        assert hasattr(feed, "_get_balance")
+        assert hasattr(feed, "_make_order")
+        assert hasattr(feed, "_cancel_order")
+        assert hasattr(feed, "_query_order")
+        assert hasattr(feed, "_get_deals")
 
         # Check get_xxx methods exist
-        assert hasattr(feed, 'get_ticker')
-        assert hasattr(feed, 'get_tick')
-        assert hasattr(feed, 'get_depth')
-        assert hasattr(feed, 'get_kline')
-        assert hasattr(feed, 'get_balance')
-        assert hasattr(feed, 'get_account')
-        assert hasattr(feed, 'make_order')
-        assert hasattr(feed, 'cancel_order')
-        assert hasattr(feed, 'query_order')
-        assert hasattr(feed, 'get_deals')
-        assert hasattr(feed, 'get_server_time')
-        assert hasattr(feed, 'get_exchange_info')
+        assert hasattr(feed, "get_ticker")
+        assert hasattr(feed, "get_tick")
+        assert hasattr(feed, "get_depth")
+        assert hasattr(feed, "get_kline")
+        assert hasattr(feed, "get_balance")
+        assert hasattr(feed, "get_account")
+        assert hasattr(feed, "make_order")
+        assert hasattr(feed, "cancel_order")
+        assert hasattr(feed, "query_order")
+        assert hasattr(feed, "get_deals")
+        assert hasattr(feed, "get_server_time")
+        assert hasattr(feed, "get_exchange_info")
 
         # Check async_get_xxx methods exist
-        assert hasattr(feed, 'async_get_ticker')
-        assert hasattr(feed, 'async_get_tick')
-        assert hasattr(feed, 'async_get_depth')
-        assert hasattr(feed, 'async_get_kline')
-        assert hasattr(feed, 'async_get_balance')
-        assert hasattr(feed, 'async_make_order')
+        assert hasattr(feed, "async_get_ticker")
+        assert hasattr(feed, "async_get_tick")
+        assert hasattr(feed, "async_get_depth")
+        assert hasattr(feed, "async_get_kline")
+        assert hasattr(feed, "async_get_balance")
+        assert hasattr(feed, "async_make_order")
 
     def test_swap_three_layer_methods_exist(self):
         """Test that three-layer methods exist in swap feed."""
         from bt_api_py.feeds.live_bybit.swap import BybitRequestDataSwap
+
         data_queue = queue.Queue()
         feed = BybitRequestDataSwap(
             data_queue,
             public_key="test_key",
             private_key="test_secret",
         )
-        assert hasattr(feed, '_get_ticker')
-        assert hasattr(feed, 'get_ticker')
-        assert hasattr(feed, 'async_get_ticker')
-        assert hasattr(feed, '_get_depth')
-        assert hasattr(feed, 'get_depth')
-        assert hasattr(feed, '_get_kline')
-        assert hasattr(feed, 'get_kline')
-        assert hasattr(feed, '_get_balance')
-        assert hasattr(feed, 'get_balance')
-        assert hasattr(feed, '_make_order')
-        assert hasattr(feed, 'make_order')
+        assert hasattr(feed, "_get_ticker")
+        assert hasattr(feed, "get_ticker")
+        assert hasattr(feed, "async_get_ticker")
+        assert hasattr(feed, "_get_depth")
+        assert hasattr(feed, "get_depth")
+        assert hasattr(feed, "_get_kline")
+        assert hasattr(feed, "get_kline")
+        assert hasattr(feed, "_get_balance")
+        assert hasattr(feed, "get_balance")
+        assert hasattr(feed, "_make_order")
+        assert hasattr(feed, "make_order")
 
 
 # ===================== Three-Layer Pattern Tests =====================
+
 
 class TestBybitThreeLayerPattern:
     """Test the _get_xxx / get_xxx / async_get_xxx pattern."""
 
     def setup_method(self):
         from bt_api_py.feeds.live_bybit.spot import BybitRequestDataSpot
+
         self.data_queue = queue.Queue()
         self.feed = BybitRequestDataSpot(
             self.data_queue,
@@ -469,18 +476,14 @@ class TestBybitThreeLayerPattern:
 
     def test_cancel_order_layer1(self):
         """Test _cancel_order returns correct tuple."""
-        path, body, extra_data = self.feed._cancel_order(
-            "BTCUSDT", order_id="123456"
-        )
+        path, body, extra_data = self.feed._cancel_order("BTCUSDT", order_id="123456")
         assert body["category"] == "spot"
         assert body["symbol"] == "BTCUSDT"
         assert body["orderId"] == "123456"
 
     def test_query_order_layer1(self):
         """Test _query_order returns correct tuple."""
-        path, params, extra_data = self.feed._query_order(
-            "BTCUSDT", order_id="123456"
-        )
+        path, params, extra_data = self.feed._query_order("BTCUSDT", order_id="123456")
         assert params["category"] == "spot"
         assert params["symbol"] == "BTCUSDT"
         assert params["orderId"] == "123456"
@@ -488,22 +491,26 @@ class TestBybitThreeLayerPattern:
 
 # ===================== Normalize Function Tests =====================
 
+
 class TestBybitNormalizeFunctions:
     """Test normalize functions produce correct data containers."""
 
     def test_ticker_normalize(self):
         """Test ticker normalize function."""
         from bt_api_py.feeds.live_bybit.spot import BybitRequestDataSpot
+
         input_data = {
             "retCode": 0,
             "result": {
-                "list": [{
-                    "symbol": "BTCUSDT",
-                    "lastPrice": "50000",
-                    "bid1Price": "49990",
-                    "ask1Price": "50010",
-                }]
-            }
+                "list": [
+                    {
+                        "symbol": "BTCUSDT",
+                        "lastPrice": "50000",
+                        "bid1Price": "49990",
+                        "ask1Price": "50010",
+                    }
+                ]
+            },
         }
         extra_data = {"symbol_name": "BTCUSDT", "asset_type": "spot"}
         data, status = BybitRequestDataSpot._get_ticker_normalize_function(input_data, extra_data)
@@ -514,6 +521,7 @@ class TestBybitNormalizeFunctions:
     def test_ticker_normalize_error(self):
         """Test ticker normalize with retCode != 0."""
         from bt_api_py.feeds.live_bybit.spot import BybitRequestDataSpot
+
         input_data = {"retCode": 10001, "retMsg": "Error"}
         extra_data = {"symbol_name": "BTCUSDT", "asset_type": "spot"}
         data, status = BybitRequestDataSpot._get_ticker_normalize_function(input_data, extra_data)
@@ -522,6 +530,7 @@ class TestBybitNormalizeFunctions:
     def test_ticker_normalize_none(self):
         """Test ticker normalize with None input."""
         from bt_api_py.feeds.live_bybit.spot import BybitRequestDataSpot
+
         extra_data = {"symbol_name": "BTCUSDT", "asset_type": "spot"}
         data, status = BybitRequestDataSpot._get_ticker_normalize_function(None, extra_data)
         assert status is False
@@ -530,13 +539,14 @@ class TestBybitNormalizeFunctions:
     def test_depth_normalize(self):
         """Test depth normalize function."""
         from bt_api_py.feeds.live_bybit.spot import BybitRequestDataSpot
+
         input_data = {
             "retCode": 0,
             "result": {
                 "b": [["49990", "1.5"]],
                 "a": [["50010", "1.0"]],
                 "ts": "12345",
-            }
+            },
         }
         extra_data = {"symbol_name": "BTCUSDT", "asset_type": "spot"}
         data, status = BybitRequestDataSpot._get_depth_normalize_function(input_data, extra_data)
@@ -547,15 +557,10 @@ class TestBybitNormalizeFunctions:
     def test_balance_normalize(self):
         """Test balance normalize function."""
         from bt_api_py.feeds.live_bybit.spot import BybitRequestDataSpot
+
         input_data = {
             "retCode": 0,
-            "result": {
-                "list": [{
-                    "accountType": "UNIFIED",
-                    "totalEquity": "10000",
-                    "coin": []
-                }]
-            }
+            "result": {"list": [{"accountType": "UNIFIED", "totalEquity": "10000", "coin": []}]},
         }
         extra_data = {"symbol_name": "ALL", "asset_type": "spot"}
         data, status = BybitRequestDataSpot._get_balance_normalize_function(input_data, extra_data)
@@ -566,6 +571,7 @@ class TestBybitNormalizeFunctions:
     def test_kline_normalize(self):
         """Test kline normalize function."""
         from bt_api_py.feeds.live_bybit.spot import BybitRequestDataSpot
+
         input_data = {
             "retCode": 0,
             "result": {
@@ -573,7 +579,7 @@ class TestBybitNormalizeFunctions:
                     ["1640995200000", "50000", "51000", "49000", "50500", "100", "5000000"],
                     ["1640995260000", "50500", "51500", "50000", "51000", "200", "10000000"],
                 ]
-            }
+            },
         }
         extra_data = {"symbol_name": "BTCUSDT", "asset_type": "spot"}
         data, status = BybitRequestDataSpot._get_kline_normalize_function(input_data, extra_data)
@@ -582,6 +588,7 @@ class TestBybitNormalizeFunctions:
 
 
 # ===================== Registration Tests =====================
+
 
 class TestBybitRegistration:
     """Test Bybit registration."""
@@ -606,12 +613,14 @@ class TestBybitRegistration:
 
 # ===================== Signature Tests =====================
 
+
 class TestBybitSignature:
     """Test Bybit HMAC SHA256 signature generation."""
 
     def test_signature_generation(self):
         """Test that signature is generated correctly."""
         from bt_api_py.feeds.live_bybit.request_base import BybitRequestData
+
         data_queue = queue.Queue()
         feed = BybitRequestData(
             data_queue,
@@ -625,6 +634,7 @@ class TestBybitSignature:
 
 
 # ===================== Integration Tests (skipped by default) =====================
+
 
 class TestBybitIntegration:
     """Integration tests for Bybit (require network/API keys)."""

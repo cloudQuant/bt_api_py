@@ -4,7 +4,7 @@ Provides standardized order data structure for Kraken exchange.
 """
 
 import time
-from typing import Optional, Dict, Any, List
+from typing import Any
 
 from bt_api_py.containers.orders.order import OrderData
 from bt_api_py.logging_factory import get_logger
@@ -13,7 +13,14 @@ from bt_api_py.logging_factory import get_logger
 class KrakenRequestOrderData(OrderData):
     """Kraken Request Order Data Container"""
 
-    def __init__(self, data: Dict[str, Any], symbol: str, asset_type: str, is_response_data: bool = False, has_been_json_encoded=False):
+    def __init__(
+        self,
+        data: dict[str, Any],
+        symbol: str,
+        asset_type: str,
+        is_response_data: bool = False,
+        has_been_json_encoded=False,
+    ):
         """Initialize Kraken order data.
 
         Args:
@@ -31,7 +38,7 @@ class KrakenRequestOrderData(OrderData):
         self.is_response_data = is_response_data
         self._parse_data(data)
 
-    def _parse_data(self, data: Dict[str, Any]):
+    def _parse_data(self, data: dict[str, Any]):
         """Parse Kraken order data.
 
         Kraken order response format for AddOrder:
@@ -79,10 +86,10 @@ class KrakenRequestOrderData(OrderData):
         }
         """
         try:
-            if self.is_response_data and 'txid' in data:
+            if self.is_response_data and "txid" in data:
                 # New order response
                 self._parse_new_order_response(data)
-            elif isinstance(data, dict) and 'status' in data:
+            elif isinstance(data, dict) and "status" in data:
                 # Order status update
                 self._parse_order_status(data)
             else:
@@ -94,55 +101,55 @@ class KrakenRequestOrderData(OrderData):
             self.logger.error(f"Raw data: {data}")
             raise
 
-    def _parse_new_order_response(self, data: Dict[str, Any]):
+    def _parse_new_order_response(self, data: dict[str, Any]):
         """Parse new order response from Kraken."""
         # Handle both simple txid response and full order data
-        if 'txid' in data and len(data) > 1:
+        if "txid" in data and len(data) > 1:
             # Full order response with txid and other fields
             # Use _parse_order_status for full responses
             self._parse_order_status(data)
         else:
             # Simple txid-only response
-            self.order_id = data.get('txid', data.get('order_id', str(time.time())))
-            self.status = 'new'
+            self.order_id = data.get("txid", data.get("order_id", str(time.time())))
+            self.status = "new"
             self.timestamp = time.time()
-            self.datetime = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(self.timestamp))
-            self.exchange = 'kraken'
+            self.datetime = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(self.timestamp))
+            self.exchange = "kraken"
 
-    def _parse_order_status(self, data: Dict[str, Any]):
+    def _parse_order_status(self, data: dict[str, Any]):
         """Parse order status from Kraken API."""
         # Basic order info
         # Try both 'id' and 'txid' for order ID
-        self.order_id = data.get('id') or data.get('txid') or str(time.time())
-        self.status = data.get('status', 'unknown')
-        self.timestamp = data.get('opentm', time.time())
-        self.datetime = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(self.timestamp))
-        self.exchange = 'kraken'
+        self.order_id = data.get("id") or data.get("txid") or str(time.time())
+        self.status = data.get("status", "unknown")
+        self.timestamp = data.get("opentm", time.time())
+        self.datetime = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(self.timestamp))
+        self.exchange = "kraken"
 
         # Order details from descr
-        descr = data.get('descr', {})
-        self.symbol = descr.get('pair', self.symbol)
-        self.side = descr.get('type', 'unknown')
-        self.order_type = descr.get('ordertype', 'unknown')
-        self.price = float(descr.get('price')) if descr.get('price') else None
-        self.quantity = float(descr.get('vol')) if descr.get('vol') else None
+        descr = data.get("descr", {})
+        self.symbol = descr.get("pair", self.symbol)
+        self.side = descr.get("type", "unknown")
+        self.order_type = descr.get("ordertype", "unknown")
+        self.price = float(descr.get("price")) if descr.get("price") else None
+        self.quantity = float(descr.get("vol")) if descr.get("vol") else None
 
         # Execution info
-        self.executed_quantity = float(data.get('vol_exec', '0')) if data.get('vol_exec') else 0
+        self.executed_quantity = float(data.get("vol_exec", "0")) if data.get("vol_exec") else 0
         self.remaining_quantity = self.quantity - self.executed_quantity if self.quantity else None
-        self.cost = float(data.get('cost', '0')) if data.get('cost') else 0
-        self.fee = float(data.get('fee', '0')) if data.get('fee') else 0
+        self.cost = float(data.get("cost", "0")) if data.get("cost") else 0
+        self.fee = float(data.get("fee", "0")) if data.get("fee") else 0
 
         # Additional fields
-        self.userref = data.get('userref')
-        self.leverage = data.get('leverage', 'none')
-        self.order_description = descr.get('order')
-        self.misc = data.get('misc', '')
-        self.oflags = data.get('oflags', '')
+        self.userref = data.get("userref")
+        self.leverage = data.get("leverage", "none")
+        self.order_description = descr.get("order")
+        self.misc = data.get("misc", "")
+        self.oflags = data.get("oflags", "")
 
         # Time fields
-        self.start_time = data.get('starttm')
-        self.expire_time = data.get('expiretm')
+        self.start_time = data.get("starttm")
+        self.expire_time = data.get("expiretm")
 
         # Calculate average price
         if self.executed_quantity > 0 and self.cost > 0:
@@ -150,45 +157,45 @@ class KrakenRequestOrderData(OrderData):
         else:
             self.average_price = None
 
-    def _parse_normalized_data(self, data: Dict[str, Any]):
+    def _parse_normalized_data(self, data: dict[str, Any]):
         """Parse normalized order data."""
         # Extract basic fields
-        self.order_id = data.get('id', str(time.time()))
-        self.symbol = data.get('symbol', self.symbol)
-        self.status = data.get('status', 'unknown')
-        self.side = data.get('side', 'unknown')
-        self.type = data.get('type', 'unknown')
-        self.exchange = data.get('exchange', 'kraken')
+        self.order_id = data.get("id", str(time.time()))
+        self.symbol = data.get("symbol", self.symbol)
+        self.status = data.get("status", "unknown")
+        self.side = data.get("side", "unknown")
+        self.type = data.get("type", "unknown")
+        self.exchange = data.get("exchange", "kraken")
 
         # Timestamps
-        self.timestamp = data.get('created_at', time.time())
+        self.timestamp = data.get("created_at", time.time())
         if isinstance(self.timestamp, str):
             self.timestamp = time.time()
-        self.datetime = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(self.timestamp))
+        self.datetime = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(self.timestamp))
 
         # Order details
-        self.quantity = float(data.get('quantity')) if data.get('quantity') else None
-        self.price = float(data.get('price')) if data.get('price') else None
-        self.executed_quantity = float(data.get('executed_quantity', '0'))
-        self.remaining_quantity = data.get('remaining_quantity')
+        self.quantity = float(data.get("quantity")) if data.get("quantity") else None
+        self.price = float(data.get("price")) if data.get("price") else None
+        self.executed_quantity = float(data.get("executed_quantity", "0"))
+        self.remaining_quantity = data.get("remaining_quantity")
         if self.remaining_quantity is None and self.quantity:
             self.remaining_quantity = self.quantity - self.executed_quantity
 
         # Cost and fees
-        self.cost = float(data.get('cost', '0'))
-        self.fee = float(data.get('fee', '0'))
-        self.average_price = float(data.get('average_price')) if data.get('average_price') else None
+        self.cost = float(data.get("cost", "0"))
+        self.fee = float(data.get("fee", "0"))
+        self.average_price = float(data.get("average_price")) if data.get("average_price") else None
 
         # Additional fields
-        self.userref = data.get('userref')
-        self.leverage = data.get('leverage')
-        self.order_description = data.get('order_description')
-        self.misc = data.get('misc', '')
-        self.oflags = data.get('oflags', '')
+        self.userref = data.get("userref")
+        self.leverage = data.get("leverage")
+        self.order_description = data.get("order_description")
+        self.misc = data.get("misc", "")
+        self.oflags = data.get("oflags", "")
 
         # Time fields
-        self.start_time = data.get('start_time')
-        self.expire_time = data.get('expire_time')
+        self.start_time = data.get("start_time")
+        self.expire_time = data.get("expire_time")
 
     # Base class interface methods
     def init_data(self):
@@ -334,34 +341,34 @@ class KrakenRequestOrderData(OrderData):
 
     def get_order_exchange_id(self):
         """Get order exchange ID."""
-        return 'kraken'
+        return "kraken"
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert order data to dictionary."""
         return {
-            'order_id': self.order_id,
-            'symbol': self.symbol,
-            'status': self.status,
-            'side': self.side,
-            'type': self.type,
-            'quantity': self.quantity,
-            'price': self.price,
-            'executed_quantity': self.executed_quantity,
-            'remaining_quantity': self.remaining_quantity,
-            'average_price': self.average_price,
-            'cost': self.cost,
-            'fee': self.fee,
-            'timestamp': self.timestamp,
-            'datetime': self.datetime,
-            'exchange': self.exchange,
-            'userref': self.userref,
-            'leverage': self.leverage,
-            'order_description': self.order_description,
-            'misc': self.misc,
-            'oflags': self.oflags,
-            'start_time': self.start_time,
-            'expire_time': self.expire_time,
-            'asset_type': self.asset_type
+            "order_id": self.order_id,
+            "symbol": self.symbol,
+            "status": self.status,
+            "side": self.side,
+            "type": self.type,
+            "quantity": self.quantity,
+            "price": self.price,
+            "executed_quantity": self.executed_quantity,
+            "remaining_quantity": self.remaining_quantity,
+            "average_price": self.average_price,
+            "cost": self.cost,
+            "fee": self.fee,
+            "timestamp": self.timestamp,
+            "datetime": self.datetime,
+            "exchange": self.exchange,
+            "userref": self.userref,
+            "leverage": self.leverage,
+            "order_description": self.order_description,
+            "misc": self.misc,
+            "oflags": self.oflags,
+            "start_time": self.start_time,
+            "expire_time": self.expire_time,
+            "asset_type": self.asset_type,
         }
 
     def validate(self) -> bool:
@@ -369,17 +376,24 @@ class KrakenRequestOrderData(OrderData):
         if not self.order_id:
             return False
 
-        if self.status not in ['new', 'open', 'closed', 'canceled', 'expired', 'unknown']:
+        if self.status not in ["new", "open", "closed", "canceled", "expired", "unknown"]:
             return False
 
-        if self.side not in ['buy', 'sell']:
+        if self.side not in ["buy", "sell"]:
             return False
 
-        if self.type not in ['market', 'limit', 'stop-loss', 'take-profit', 'stop-loss-limit', 'take-profit-limit']:
+        if self.type not in [
+            "market",
+            "limit",
+            "stop-loss",
+            "take-profit",
+            "stop-loss-limit",
+            "take-profit-limit",
+        ]:
             return False
 
         # Validate price and quantity
-        if self.type in ['limit', 'stop-loss-limit', 'take-profit-limit'] and self.price is None:
+        if self.type in ["limit", "stop-loss-limit", "take-profit-limit"] and self.price is None:
             return False
 
         if self.quantity is None or self.quantity <= 0:
@@ -394,11 +408,11 @@ class KrakenRequestOrderData(OrderData):
 
     def is_open(self) -> bool:
         """Check if order is open."""
-        return self.status in ['open', 'new']
+        return self.status in ["open", "new"]
 
     def is_filled(self) -> bool:
         """Check if order is fully filled."""
-        return self.status == 'closed' and self.executed_quantity == self.quantity
+        return self.status == "closed" and self.executed_quantity == self.quantity
 
     def get_fill_percentage(self) -> float:
         """Calculate fill percentage."""
@@ -406,14 +420,14 @@ class KrakenRequestOrderData(OrderData):
             return 0.0
         return (self.executed_quantity / self.quantity) * 100
 
-    def update_from_trade(self, trade_data: Dict[str, Any]):
+    def update_from_trade(self, trade_data: dict[str, Any]):
         """Update order from trade execution."""
-        if 'executed_quantity' in trade_data:
-            self.executed_quantity = float(trade_data['executed_quantity'])
-        if 'cost' in trade_data:
-            self.cost = float(trade_data['cost'])
-        if 'fee' in trade_data:
-            self.fee = float(trade_data['fee'])
+        if "executed_quantity" in trade_data:
+            self.executed_quantity = float(trade_data["executed_quantity"])
+        if "cost" in trade_data:
+            self.cost = float(trade_data["cost"])
+        if "fee" in trade_data:
+            self.fee = float(trade_data["fee"])
 
         # Update remaining quantity
         if self.quantity is not None:
@@ -421,30 +435,36 @@ class KrakenRequestOrderData(OrderData):
 
         # Update status if fully filled
         if self.executed_quantity == self.quantity and self.quantity > 0:
-            self.status = 'closed'
+            self.status = "closed"
 
     def cancel(self):
         """Cancel the order."""
-        self.status = 'canceled'
+        self.status = "canceled"
         self.remaining_quantity = 0
 
     def __str__(self) -> str:
         """String representation of order."""
-        return (f"KrakenOrder({self.order_id}: {self.side} {self.quantity} {self.symbol} "
-                f"@ {self.price} [{self.status}])")
+        return (
+            f"KrakenOrder({self.order_id}: {self.side} {self.quantity} {self.symbol} "
+            f"@ {self.price} [{self.status}])"
+        )
 
     def __repr__(self) -> str:
         """Detailed string representation."""
-        return (f"KrakenRequestOrderData(order_id='{self.order_id}', "
-                f"symbol='{self.symbol}', side='{self.side}', "
-                f"quantity={self.quantity}, price={self.price}, "
-                f"status='{self.status}')")
+        return (
+            f"KrakenRequestOrderData(order_id='{self.order_id}', "
+            f"symbol='{self.symbol}', side='{self.side}', "
+            f"quantity={self.quantity}, price={self.price}, "
+            f"status='{self.status}')"
+        )
 
 
 class KrakenSpotWssOrderData(OrderData):
     """Kraken Spot WebSocket Order Data Container"""
 
-    def __init__(self, data: Dict[str, Any], symbol: str, asset_type: str, has_been_json_encoded=False):
+    def __init__(
+        self, data: dict[str, Any], symbol: str, asset_type: str, has_been_json_encoded=False
+    ):
         """Initialize Kraken WebSocket order data.
 
         Args:
@@ -460,40 +480,42 @@ class KrakenSpotWssOrderData(OrderData):
         self.logger = get_logger("kraken_wss_order")
         self._parse_wss_data(data)
 
-    def _parse_wss_data(self, data: Dict[str, Any]):
+    def _parse_wss_data(self, data: dict[str, Any]):
         """Parse WebSocket order data."""
-        self.order_id = data.get('orderId')
-        self.symbol = data.get('symbol', self.symbol)
-        self.status = data.get('status', 'unknown')
-        self.side = data.get('side', 'unknown')
-        self.type = data.get('type', 'unknown')
-        self.quantity = float(data.get('qty')) if data.get('qty') else None
-        self.price = float(data.get('price')) if data.get('price') else None
-        self.executed_quantity = float(data.get('executedQty', '0'))
-        self.remaining_quantity = float(data.get('remainingQty')) if data.get('remainingQty') else None
-        self.timestamp = data.get('time', time.time())
-        self.datetime = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(self.timestamp))
-        self.exchange = 'kraken'
+        self.order_id = data.get("orderId")
+        self.symbol = data.get("symbol", self.symbol)
+        self.status = data.get("status", "unknown")
+        self.side = data.get("side", "unknown")
+        self.type = data.get("type", "unknown")
+        self.quantity = float(data.get("qty")) if data.get("qty") else None
+        self.price = float(data.get("price")) if data.get("price") else None
+        self.executed_quantity = float(data.get("executedQty", "0"))
+        self.remaining_quantity = (
+            float(data.get("remainingQty")) if data.get("remainingQty") else None
+        )
+        self.timestamp = data.get("time", time.time())
+        self.datetime = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(self.timestamp))
+        self.exchange = "kraken"
 
         # Calculate average price and cost
         if self.executed_quantity > 0:
             # This might need to be calculated from the actual trades
             pass
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert WebSocket order data to dictionary."""
         return {
-            'order_id': self.order_id,
-            'symbol': self.symbol,
-            'status': self.status,
-            'side': self.side,
-            'type': self.type,
-            'quantity': self.quantity,
-            'price': self.price,
-            'executed_quantity': self.executed_quantity,
-            'remaining_quantity': self.remaining_quantity,
-            'timestamp': self.timestamp,
-            'datetime': self.datetime,
-            'exchange': self.exchange,
-            'asset_type': self.asset_type
+            "order_id": self.order_id,
+            "symbol": self.symbol,
+            "status": self.status,
+            "side": self.side,
+            "type": self.type,
+            "quantity": self.quantity,
+            "price": self.price,
+            "executed_quantity": self.executed_quantity,
+            "remaining_quantity": self.remaining_quantity,
+            "timestamp": self.timestamp,
+            "datetime": self.datetime,
+            "exchange": self.exchange,
+            "asset_type": self.asset_type,
         }

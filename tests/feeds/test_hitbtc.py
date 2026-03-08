@@ -9,10 +9,9 @@ Skip live tests (default):
 """
 
 import base64
-import json
 import os
 import queue
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pytest
 
@@ -46,22 +45,58 @@ SAMPLE_ORDERBOOK = {
 }
 
 SAMPLE_TRADES = [
-    {"id": 1, "price": "50000", "qty": "0.01", "side": "buy", "timestamp": "2024-01-01T00:00:00.000Z"},
-    {"id": 2, "price": "50001", "qty": "0.02", "side": "sell", "timestamp": "2024-01-01T00:00:01.000Z"},
+    {
+        "id": 1,
+        "price": "50000",
+        "qty": "0.01",
+        "side": "buy",
+        "timestamp": "2024-01-01T00:00:00.000Z",
+    },
+    {
+        "id": 2,
+        "price": "50001",
+        "qty": "0.02",
+        "side": "sell",
+        "timestamp": "2024-01-01T00:00:01.000Z",
+    },
 ]
 
 SAMPLE_KLINES = [
-    {"timestamp": "2024-01-01T00:00:00.000Z", "open": "49500", "close": "50000",
-     "min": "49000", "max": "51000", "volume": "100", "volumeQuote": "5000000"},
-    {"timestamp": "2024-01-01T01:00:00.000Z", "open": "50000", "close": "50500",
-     "min": "49800", "max": "50800", "volume": "80", "volumeQuote": "4040000"},
+    {
+        "timestamp": "2024-01-01T00:00:00.000Z",
+        "open": "49500",
+        "close": "50000",
+        "min": "49000",
+        "max": "51000",
+        "volume": "100",
+        "volumeQuote": "5000000",
+    },
+    {
+        "timestamp": "2024-01-01T01:00:00.000Z",
+        "open": "50000",
+        "close": "50500",
+        "min": "49800",
+        "max": "50800",
+        "volume": "80",
+        "volumeQuote": "4040000",
+    },
 ]
 
 SAMPLE_EXCHANGE_INFO = {
-    "BTCUSDT": {"base_currency": "BTC", "quote_currency": "USDT", "status": "trading",
-                "tick_size": "0.01", "quantity_increment": "0.00001"},
-    "ETHUSDT": {"base_currency": "ETH", "quote_currency": "USDT", "status": "trading",
-                "tick_size": "0.01", "quantity_increment": "0.0001"},
+    "BTCUSDT": {
+        "base_currency": "BTC",
+        "quote_currency": "USDT",
+        "status": "trading",
+        "tick_size": "0.01",
+        "quantity_increment": "0.00001",
+    },
+    "ETHUSDT": {
+        "base_currency": "ETH",
+        "quote_currency": "USDT",
+        "status": "trading",
+        "tick_size": "0.01",
+        "quantity_increment": "0.0001",
+    },
 }
 
 SAMPLE_BALANCE = [
@@ -70,18 +105,29 @@ SAMPLE_BALANCE = [
 ]
 
 SAMPLE_ORDER = {
-    "id": 123456, "client_order_id": "my_order_1", "symbol": "BTCUSDT",
-    "side": "buy", "type": "limit", "price": "50000", "quantity": "0.001",
-    "quantity_cumulative": "0", "status": "new", "time_in_force": "GTC",
-    "created_at": "2024-01-01T00:00:00.000Z", "updated_at": "2024-01-01T00:00:00.000Z",
+    "id": 123456,
+    "client_order_id": "my_order_1",
+    "symbol": "BTCUSDT",
+    "side": "buy",
+    "type": "limit",
+    "price": "50000",
+    "quantity": "0.001",
+    "quantity_cumulative": "0",
+    "status": "new",
+    "time_in_force": "GTC",
+    "created_at": "2024-01-01T00:00:00.000Z",
+    "updated_at": "2024-01-01T00:00:00.000Z",
 }
 
 SAMPLE_OPEN_ORDERS = [SAMPLE_ORDER]
 
-SAMPLE_ERROR = {"error": {"code": 20001, "message": "Insufficient funds", "description": "Not enough balance"}}
+SAMPLE_ERROR = {
+    "error": {"code": 20001, "message": "Insufficient funds", "description": "Not enough balance"}
+}
 
 
 # ── helpers ─────────────────────────────────────────────────────
+
 
 def _make_feed(**kwargs):
     """Create a HitBtcSpotRequestData with mocked queue."""
@@ -133,9 +179,18 @@ class TestExchangeDataContainer:
     def test_rest_paths_present(self):
         ed = HitBtcExchangeDataSpot()
         required = [
-            "get_server_time", "get_exchange_info", "get_tick", "get_depth",
-            "get_trades", "get_kline", "make_order", "cancel_order",
-            "get_open_orders", "query_order", "get_balance", "get_account",
+            "get_server_time",
+            "get_exchange_info",
+            "get_tick",
+            "get_depth",
+            "get_trades",
+            "get_kline",
+            "make_order",
+            "cancel_order",
+            "get_open_orders",
+            "query_order",
+            "get_balance",
+            "get_account",
         ]
         for key in required:
             assert key in ed.rest_paths, f"Missing REST path: {key}"
@@ -146,7 +201,9 @@ class TestExchangeDataContainer:
         for key, path in ed.rest_paths.items():
             parts = path.split(" ", 1)
             assert len(parts) == 2, f"Path '{key}' has no METHOD prefix: {path}"
-            assert parts[0] in ("GET", "POST", "PUT", "DELETE"), f"Invalid method in '{key}': {parts[0]}"
+            assert parts[0] in ("GET", "POST", "PUT", "DELETE"), (
+                f"Invalid method in '{key}': {parts[0]}"
+            )
 
     def test_get_rest_path_raises_for_unknown(self):
         ed = HitBtcExchangeDataSpot()
@@ -221,7 +278,9 @@ class TestParameterGeneration:
         assert extra["request_type"] == "get_trades"
 
     def test_make_order_params(self):
-        path, body, extra = self.feed._make_order("BTC/USDT", 0.001, price=50000, order_type="buy-limit")
+        path, body, extra = self.feed._make_order(
+            "BTC/USDT", 0.001, price=50000, order_type="buy-limit"
+        )
         assert path.startswith("POST ")
         assert "/spot/order" in path
         assert body["symbol"] == "BTCUSDT"
@@ -276,7 +335,8 @@ class TestParameterGeneration:
 class TestNormalizeFunctions:
     def test_server_time_ok(self):
         data, ok = HitBtcRequestData._get_server_time_normalize_function(
-            {"iso": "2024-01-01T00:00:00.000Z", "timestamp": 1704067200000}, {})
+            {"iso": "2024-01-01T00:00:00.000Z", "timestamp": 1704067200000}, {}
+        )
         assert ok is True
         assert len(data) == 1
 
@@ -570,17 +630,20 @@ class TestTickerContainer:
 
 class TestRegistry:
     def test_hitbtc_spot_registered(self):
-        from bt_api_py.registry import ExchangeRegistry
         import bt_api_py.exchange_registers.register_hitbtc  # noqa: F401
+        from bt_api_py.registry import ExchangeRegistry
+
         assert ExchangeRegistry.has_exchange("HITBTC___SPOT")
         assert ExchangeRegistry._feed_classes["HITBTC___SPOT"] is HitBtcSpotRequestData
 
     def test_exchange_data_registered(self):
         from bt_api_py.registry import ExchangeRegistry
+
         assert ExchangeRegistry._exchange_data_classes["HITBTC___SPOT"] is HitBtcExchangeDataSpot
 
     def test_balance_handler_registered(self):
         from bt_api_py.registry import ExchangeRegistry
+
         handler = ExchangeRegistry.get_balance_handler("HITBTC___SPOT")
         assert callable(handler)
 
@@ -591,20 +654,35 @@ class TestRegistry:
 class TestMethodExistence:
     """Verify HitBtcSpotRequestData exposes all required public methods."""
 
-    @pytest.mark.parametrize("method_name", [
-        "get_server_time", "async_get_server_time",
-        "get_exchange_info", "async_get_exchange_info",
-        "get_tick", "async_get_tick",
-        "get_depth", "async_get_depth",
-        "get_kline", "async_get_kline",
-        "get_trade_history", "async_get_trade_history",
-        "make_order", "async_make_order",
-        "cancel_order", "async_cancel_order",
-        "query_order", "async_query_order",
-        "get_open_orders", "async_get_open_orders",
-        "get_account", "async_get_account",
-        "get_balance", "async_get_balance",
-    ])
+    @pytest.mark.parametrize(
+        "method_name",
+        [
+            "get_server_time",
+            "async_get_server_time",
+            "get_exchange_info",
+            "async_get_exchange_info",
+            "get_tick",
+            "async_get_tick",
+            "get_depth",
+            "async_get_depth",
+            "get_kline",
+            "async_get_kline",
+            "get_trade_history",
+            "async_get_trade_history",
+            "make_order",
+            "async_make_order",
+            "cancel_order",
+            "async_cancel_order",
+            "query_order",
+            "async_query_order",
+            "get_open_orders",
+            "async_get_open_orders",
+            "get_account",
+            "async_get_account",
+            "get_balance",
+            "async_get_balance",
+        ],
+    )
     def test_method_exists(self, method_name):
         feed = _make_feed()
         assert hasattr(feed, method_name)
@@ -636,6 +714,7 @@ class TestFeedInit:
 
     def test_capabilities(self):
         from bt_api_py.feeds.capability import Capability
+
         caps = HitBtcSpotRequestData._capabilities()
         assert Capability.GET_TICK in caps
         assert Capability.GET_DEPTH in caps

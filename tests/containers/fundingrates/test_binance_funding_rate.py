@@ -1,4 +1,7 @@
-from bt_api_py.containers.fundingrates.binance_funding_rate import BinanceRequestFundingRateData, BinanceWssFundingRateData
+from bt_api_py.containers.fundingrates.binance_funding_rate import (
+    BinanceRequestFundingRateData,
+    BinanceWssFundingRateData,
+)
 
 
 def test_binance_request_funding_rate():
@@ -10,7 +13,7 @@ def test_binance_request_funding_rate():
         "lastFundingRate": "0.00038246",  # 最近更新的资金费率
         "nextFundingTime": 1597392000000,  # 下次资金费时间
         "interestRate": "0.00010000",  # 标的资产基础利率
-        "time": 1597370495002  # 更新时间
+        "time": 1597370495002,  # 更新时间
     }
     bf = BinanceRequestFundingRateData(data, "BTC-USDT", "SWAP", True)
     bf.init_data()
@@ -35,7 +38,7 @@ def test_binance_funding_rate():
         "i": "11784.62659091",  # 现货指数价格
         "P": "11784.25641265",  # 预估结算价,仅在结算前最后一小时有参考价值
         "r": "0.00038167",  # 资金费率
-        "T": 1562306400000  # 下次资金时间
+        "T": 1562306400000,  # 下次资金时间
     }
     bf = BinanceWssFundingRateData(data, "BTC-USDT", "PERPETUAL", True)
     bf.init_data()

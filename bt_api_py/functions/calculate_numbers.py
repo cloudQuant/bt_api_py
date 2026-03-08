@@ -179,11 +179,13 @@ def merge_zheng_order(zheng_order_dict):
             key: value for key, value in zheng_order_dict.items() if value["qty_wbf"] > 0
         }
         # 对zheng_order_dict的多头盈利进行排序，按照从大到小的顺序进行排序
-        sorted_long_order = dict(sorted(
+        sorted_long_order = dict(
+            sorted(
                 long_zheng_order_dict.items(),
                 key=lambda x: (x[1]["price_binance"] - x[1]["price_wbf"]) / x[1]["price_wbf"],
                 reverse=True,
-            ))
+            )
+        )
         key_list = list(sorted_long_order.keys())
         for key in key_list:
             value = sorted_long_order[key]
@@ -203,11 +205,13 @@ def merge_zheng_order(zheng_order_dict):
         short_zheng_order_dict = {
             key: value for key, value in zheng_order_dict.items() if value["qty_wbf"] < 0
         }
-        sorted_short_order = dict(sorted(
+        sorted_short_order = dict(
+            sorted(
                 short_zheng_order_dict.items(),
                 key=lambda x: (x[1]["price_wbf"] - x[1]["price_binance"]) / x[1]["price_wbf"],
                 reverse=True,
-            ))
+            )
+        )
 
         key_list = list(sorted_short_order.keys())
         for key in key_list:

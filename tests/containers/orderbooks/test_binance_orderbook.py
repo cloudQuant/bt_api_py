@@ -1,5 +1,8 @@
 # import json
-from bt_api_py.containers.orderbooks.binance_orderbook import BinanceWssOrderBookData, BinanceRequestOrderBookData
+from bt_api_py.containers.orderbooks.binance_orderbook import (
+    BinanceRequestOrderBookData,
+    BinanceWssOrderBookData,
+)
 
 
 def test_binance_request_orderbook():
@@ -10,15 +13,15 @@ def test_binance_request_orderbook():
         "bids": [  # 买单
             [
                 "4.00000000",  # 价格
-                "431.00000000"  # 数量
+                "431.00000000",  # 数量
             ]
         ],
         "asks": [  # 卖单
             [
                 "4.00000200",  # 价格
-                "12.00000000"  # 数量
+                "12.00000000",  # 数量
             ]
-        ]
+        ],
     }
     bo = BinanceRequestOrderBookData(data, "boCUSDT", "PERPETUAL", True)
     bo.init_data()
@@ -44,47 +47,23 @@ def test_binance_orderbook():
         "b": [  # 买方
             [
                 "7403.89",  # 价格
-                "0.002"  # 数量
+                "0.002",  # 数量
             ],
-            [
-                "7403.90",
-                "3.906"
-            ],
-            [
-                "7404.00",
-                "1.428"
-            ],
-            [
-                "7404.85",
-                "5.239"
-            ],
-            [
-                "7405.43",
-                "2.562"
-            ]
+            ["7403.90", "3.906"],
+            ["7404.00", "1.428"],
+            ["7404.85", "5.239"],
+            ["7405.43", "2.562"],
         ],
         "a": [  # 卖方
             [
                 "7405.96",  # 价格
-                "3.340"  # 数量
+                "3.340",  # 数量
             ],
-            [
-                "7406.63",
-                "4.525"
-            ],
-            [
-                "7407.08",
-                "2.475"
-            ],
-            [
-                "7407.15",
-                "4.800"
-            ],
-            [
-                "7407.20",
-                "0.175"
-            ]
-        ]
+            ["7406.63", "4.525"],
+            ["7407.08", "2.475"],
+            ["7407.15", "4.800"],
+            ["7407.20", "0.175"],
+        ],
     }
     bo = BinanceWssOrderBookData(data, "boCUSDT", "PERPETUAL", True)
     bo.init_data()

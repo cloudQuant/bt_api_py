@@ -2,7 +2,7 @@ import json
 import time
 
 from bt_api_py.containers.orders.order import OrderData
-from bt_api_py.functions.utils import from_dict_get_float, from_dict_get_string, from_dict_get_int
+from bt_api_py.functions.utils import from_dict_get_float, from_dict_get_int, from_dict_get_string
 
 
 class MexcOrderData(OrderData):
@@ -49,7 +49,9 @@ class MexcOrderData(OrderData):
             self.time_in_force = from_dict_get_string(self.order_data, "timeInForce")
             self.quantity = from_dict_get_float(self.order_data, "origQty", 0.0)
             self.executed_qty = from_dict_get_float(self.order_data, "executedQty", 0.0)
-            self.cummulative_quote_qty = from_dict_get_float(self.order_data, "cummulativeQuoteQty", 0.0)
+            self.cummulative_quote_qty = from_dict_get_float(
+                self.order_data, "cummulativeQuoteQty", 0.0
+            )
             self.price = from_dict_get_float(self.order_data, "price", 0.0)
             self.stop_price = from_dict_get_float(self.order_data, "stopPrice", 0.0)
             self.iceberg_qty = from_dict_get_float(self.order_data, "icebergQty", 0.0)
@@ -242,7 +244,9 @@ class MexcRequestOrderData(MexcOrderData):
             self.time_in_force = from_dict_get_string(self.order_data, "timeInForce")
             self.quantity = from_dict_get_float(self.order_data, "origQty", 0.0)
             self.executed_qty = from_dict_get_float(self.order_data, "executedQty", 0.0)
-            self.cummulative_quote_qty = from_dict_get_float(self.order_data, "cummulativeQuoteQty", 0.0)
+            self.cummulative_quote_qty = from_dict_get_float(
+                self.order_data, "cummulativeQuoteQty", 0.0
+            )
             self.price = from_dict_get_float(self.order_data, "price", 0.0)
             self.stop_price = from_dict_get_float(self.order_data, "stopPrice", 0.0)
             self.iceberg_qty = from_dict_get_float(self.order_data, "icebergQty", 0.0)

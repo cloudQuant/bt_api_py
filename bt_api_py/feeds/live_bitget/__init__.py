@@ -9,8 +9,8 @@ This package provides Bitget exchange API integration including:
 """
 
 from .request_base import BitgetRequestData
-from .spot import BitgetRequestDataSpot, BitgetAccountWssDataSpot, BitgetMarketWssDataSpot
-from .swap import BitgetRequestDataSwap, BitgetAccountWssDataSwap, BitgetMarketWssDataSwap
+from .spot import BitgetAccountWssDataSpot, BitgetMarketWssDataSpot, BitgetRequestDataSpot
+from .swap import BitgetAccountWssDataSwap, BitgetMarketWssDataSwap, BitgetRequestDataSwap
 
 __all__ = [
     "BitgetRequestData",

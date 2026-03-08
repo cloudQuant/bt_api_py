@@ -7,25 +7,29 @@ BeQuant uses HitBTC V3 API (white-label) with HTTP Basic Auth.
 """
 
 import queue
-import pytest
 from unittest.mock import patch
 
-from bt_api_py.containers.exchanges.bequant_exchange_data import (
-    BeQuantExchangeData,
-    BeQuantExchangeDataSpot,
-)
-from bt_api_py.feeds.live_bequant.spot import BeQuantRequestDataSpot
-from bt_api_py.containers.requestdatas.request_data import RequestData
+import pytest
 
 # Import registration to auto-register BeQuant
 import bt_api_py.exchange_registers.register_bequant  # noqa: F401
+from bt_api_py.containers.exchanges.bequant_exchange_data import (
+    BeQuantExchangeDataSpot,
+)
+from bt_api_py.containers.requestdatas.request_data import RequestData
+from bt_api_py.feeds.live_bequant.spot import BeQuantRequestDataSpot
 
 # ── Sample API responses ─────────────────────────────────────
 
 SAMPLE_TICKER = {
-    "ask": "50001.00", "bid": "49999.00", "last": "50000.50",
-    "open": "49500.00", "high": "51000.00", "low": "49000.00",
-    "volume": "1234.56", "volume_quote": "61728000",
+    "ask": "50001.00",
+    "bid": "49999.00",
+    "last": "50000.50",
+    "open": "49500.00",
+    "high": "51000.00",
+    "low": "49000.00",
+    "volume": "1234.56",
+    "volume_quote": "61728000",
     "timestamp": "2024-01-01T00:00:00.000Z",
 }
 
@@ -36,17 +40,41 @@ SAMPLE_ORDERBOOK = {
 }
 
 SAMPLE_KLINES = [
-    {"timestamp": "2024-01-01T00:00:00.000Z", "open": "50000", "close": "50500",
-     "min": "49000", "max": "51000", "volume": "1000", "volume_quote": "50000000"},
-    {"timestamp": "2024-01-01T01:00:00.000Z", "open": "50500", "close": "51000",
-     "min": "50000", "max": "51500", "volume": "1500", "volume_quote": "75000000"},
+    {
+        "timestamp": "2024-01-01T00:00:00.000Z",
+        "open": "50000",
+        "close": "50500",
+        "min": "49000",
+        "max": "51000",
+        "volume": "1000",
+        "volume_quote": "50000000",
+    },
+    {
+        "timestamp": "2024-01-01T01:00:00.000Z",
+        "open": "50500",
+        "close": "51000",
+        "min": "50000",
+        "max": "51500",
+        "volume": "1500",
+        "volume_quote": "75000000",
+    },
 ]
 
 SAMPLE_TRADES = [
-    {"id": 1001, "price": "50000", "quantity": "0.01", "side": "buy",
-     "timestamp": "2024-01-01T00:00:00.000Z"},
-    {"id": 1002, "price": "50001", "quantity": "0.02", "side": "sell",
-     "timestamp": "2024-01-01T00:00:01.000Z"},
+    {
+        "id": 1001,
+        "price": "50000",
+        "quantity": "0.01",
+        "side": "buy",
+        "timestamp": "2024-01-01T00:00:00.000Z",
+    },
+    {
+        "id": 1002,
+        "price": "50001",
+        "quantity": "0.02",
+        "side": "sell",
+        "timestamp": "2024-01-01T00:00:01.000Z",
+    },
 ]
 
 SAMPLE_BALANCE = [
@@ -55,24 +83,42 @@ SAMPLE_BALANCE = [
 ]
 
 SAMPLE_ORDER = {
-    "id": 123456, "client_order_id": "my-order-1", "symbol": "BTCUSDT",
-    "side": "buy", "status": "new", "type": "limit", "time_in_force": "GTC",
-    "quantity": "1.0", "price": "50000", "created_at": "2024-01-01T00:00:00.000Z",
+    "id": 123456,
+    "client_order_id": "my-order-1",
+    "symbol": "BTCUSDT",
+    "side": "buy",
+    "status": "new",
+    "type": "limit",
+    "time_in_force": "GTC",
+    "quantity": "1.0",
+    "price": "50000",
+    "created_at": "2024-01-01T00:00:00.000Z",
 }
 
 SAMPLE_SERVER_TIME = {"iso": "2024-01-01T00:00:00.000Z", "timestamp": 1704067200000}
 
 SAMPLE_SYMBOLS = {
-    "BTCUSDT": {"type": "spot", "base_currency": "BTC", "quote_currency": "USDT",
-                "status": "trading", "quantity_increment": "0.000001"},
-    "ETHUSDT": {"type": "spot", "base_currency": "ETH", "quote_currency": "USDT",
-                "status": "trading", "quantity_increment": "0.00001"},
+    "BTCUSDT": {
+        "type": "spot",
+        "base_currency": "BTC",
+        "quote_currency": "USDT",
+        "status": "trading",
+        "quantity_increment": "0.000001",
+    },
+    "ETHUSDT": {
+        "type": "spot",
+        "base_currency": "ETH",
+        "quote_currency": "USDT",
+        "status": "trading",
+        "quantity_increment": "0.00001",
+    },
 }
 
 SAMPLE_ERROR = {"error": {"code": 20001, "message": "Insufficient funds"}}
 
 
 # ── Helpers ──────────────────────────────────────────────────
+
 
 def _make_feed(**kwargs):
     q = kwargs.pop("data_queue", queue.Queue())
@@ -141,9 +187,20 @@ class TestExchangeData:
 
     def test_rest_paths_complete(self):
         ed = BeQuantExchangeDataSpot()
-        required = ["get_server_time", "get_exchange_info", "get_tick", "get_depth",
-                     "get_kline", "get_trades", "make_order", "cancel_order",
-                     "query_order", "get_open_orders", "get_balance", "get_account"]
+        required = [
+            "get_server_time",
+            "get_exchange_info",
+            "get_tick",
+            "get_depth",
+            "get_kline",
+            "get_trades",
+            "make_order",
+            "cancel_order",
+            "query_order",
+            "get_open_orders",
+            "get_balance",
+            "get_account",
+        ]
         for key in required:
             assert key in ed.rest_paths, f"Missing rest_path: {key}"
 
@@ -222,7 +279,7 @@ class TestParameterGeneration:
     def test_cancel_order_by_id(self):
         feed = _make_feed()
         path, params, ed = feed._cancel_order(order_id="abc123")
-        assert "DELETE /spot/order/abc123" == path
+        assert path == "DELETE /spot/order/abc123"
         assert params == {}
 
     def test_query_order(self):
@@ -307,7 +364,9 @@ class TestNormalization:
         assert ok is False
 
     def test_server_time(self):
-        data, ok = BeQuantRequestDataSpot._get_server_time_normalize_function(SAMPLE_SERVER_TIME, {})
+        data, ok = BeQuantRequestDataSpot._get_server_time_normalize_function(
+            SAMPLE_SERVER_TIME, {}
+        )
         assert ok is True
 
     def test_exchange_info_dict(self):
@@ -326,7 +385,8 @@ class TestNormalization:
 
     def test_cancel_order_dict(self):
         data, ok = BeQuantRequestDataSpot._cancel_order_normalize_function(
-            {"id": 123, "status": "canceled"}, {})
+            {"id": 123, "status": "canceled"}, {}
+        )
         assert ok is True
 
     def test_query_order_dict(self):
@@ -406,6 +466,7 @@ class TestAuth:
 
     def test_basic_auth_contains_key(self):
         import base64
+
         feed = _make_feed(public_key="mykey", private_key="mysecret")
         header = feed._basic_auth_header()
         decoded = base64.b64decode(header.replace("Basic ", "")).decode("ascii")
@@ -418,20 +479,24 @@ class TestAuth:
 class TestRegistry:
     def test_bequant_spot_registered(self):
         from bt_api_py.registry import ExchangeRegistry
+
         assert ExchangeRegistry.has_exchange("BEQUANT___SPOT")
         assert ExchangeRegistry._feed_classes["BEQUANT___SPOT"] is BeQuantRequestDataSpot
 
     def test_exchange_data_registered(self):
         from bt_api_py.registry import ExchangeRegistry
+
         assert ExchangeRegistry._exchange_data_classes["BEQUANT___SPOT"] is BeQuantExchangeDataSpot
 
     def test_balance_handler_registered(self):
         from bt_api_py.registry import ExchangeRegistry
+
         handler = ExchangeRegistry.get_balance_handler("BEQUANT___SPOT")
         assert callable(handler)
 
     def test_create_exchange_data(self):
         from bt_api_py.registry import ExchangeRegistry
+
         ed = ExchangeRegistry.create_exchange_data("BEQUANT___SPOT")
         assert isinstance(ed, BeQuantExchangeDataSpot)
 
@@ -441,20 +506,34 @@ class TestRegistry:
 
 class TestMethodExistence:
     METHODS = [
-        "get_tick", "async_get_tick",
-        "get_ticker", "async_get_ticker",
-        "get_depth", "async_get_depth",
-        "get_kline", "async_get_kline",
-        "get_trade_history", "async_get_trade_history",
-        "get_trades", "async_get_trades",
-        "make_order", "async_make_order",
-        "cancel_order", "async_cancel_order",
-        "query_order", "async_query_order",
-        "get_open_orders", "async_get_open_orders",
-        "get_account", "async_get_account",
-        "get_balance", "async_get_balance",
-        "get_server_time", "async_get_server_time",
-        "get_exchange_info", "async_get_exchange_info",
+        "get_tick",
+        "async_get_tick",
+        "get_ticker",
+        "async_get_ticker",
+        "get_depth",
+        "async_get_depth",
+        "get_kline",
+        "async_get_kline",
+        "get_trade_history",
+        "async_get_trade_history",
+        "get_trades",
+        "async_get_trades",
+        "make_order",
+        "async_make_order",
+        "cancel_order",
+        "async_cancel_order",
+        "query_order",
+        "async_query_order",
+        "get_open_orders",
+        "async_get_open_orders",
+        "get_account",
+        "async_get_account",
+        "get_balance",
+        "async_get_balance",
+        "get_server_time",
+        "async_get_server_time",
+        "get_exchange_info",
+        "async_get_exchange_info",
     ]
 
     @pytest.mark.parametrize("method_name", METHODS, ids=METHODS)
@@ -488,6 +567,7 @@ class TestFeedInit:
 
     def test_capabilities(self):
         from bt_api_py.feeds.capability import Capability
+
         caps = BeQuantRequestDataSpot._capabilities()
         assert Capability.GET_TICK in caps
         assert Capability.GET_DEPTH in caps

@@ -6,7 +6,7 @@ import json
 import time
 
 from bt_api_py.containers.orders.order import OrderData, OrderStatus
-from bt_api_py.functions.utils import from_dict_get_float, from_dict_get_string, from_dict_get_int
+from bt_api_py.functions.utils import from_dict_get_float, from_dict_get_int, from_dict_get_string
 
 
 class PoloniexOrderData(OrderData):
@@ -164,19 +164,29 @@ class PoloniexWssOrderData(PoloniexOrderData):
             return self
 
         # WebSocket format may differ slightly
-        self.order_id = from_dict_get_string(self.order_data, "orderId") or from_dict_get_string(self.order_data, "id")
+        self.order_id = from_dict_get_string(self.order_data, "orderId") or from_dict_get_string(
+            self.order_data, "id"
+        )
         self.client_order_id = from_dict_get_string(self.order_data, "clientOrderId")
         self.symbol = from_dict_get_string(self.order_data, "symbol")
         self.order_side = from_dict_get_string(self.order_data, "side")
         self.order_type = from_dict_get_string(self.order_data, "type")
         self.order_price = from_dict_get_float(self.order_data, "price")
-        self.order_qty = from_dict_get_float(self.order_data, "qty") or from_dict_get_float(self.order_data, "quantity")
-        self.order_filled_qty = from_dict_get_float(self.order_data, "filledQty") or from_dict_get_float(self.order_data, "accumulatedQty")
+        self.order_qty = from_dict_get_float(self.order_data, "qty") or from_dict_get_float(
+            self.order_data, "quantity"
+        )
+        self.order_filled_qty = from_dict_get_float(
+            self.order_data, "filledQty"
+        ) or from_dict_get_float(self.order_data, "accumulatedQty")
         self.order_avg_price = from_dict_get_float(self.order_data, "avgPrice")
-        self.order_time = from_dict_get_int(self.order_data, "time") or from_dict_get_int(self.order_data, "createTime")
+        self.order_time = from_dict_get_int(self.order_data, "time") or from_dict_get_int(
+            self.order_data, "createTime"
+        )
         self.update_time = from_dict_get_int(self.order_data, "updateTime") or self.order_time
 
-        status_str = from_dict_get_string(self.order_data, "orderStatus") or from_dict_get_string(self.order_data, "state")
+        status_str = from_dict_get_string(self.order_data, "orderStatus") or from_dict_get_string(
+            self.order_data, "state"
+        )
         status_map = {
             "NEW": OrderStatus.LIVE,
             "PARTIALLY_FILLED": OrderStatus.PARTIALLY_FILLED,

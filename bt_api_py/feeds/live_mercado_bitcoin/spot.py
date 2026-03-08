@@ -4,7 +4,6 @@ Mercado Bitcoin Spot Feed implementation.
 
 import time as _time
 
-from bt_api_py.containers.exchanges.mercado_bitcoin_exchange_data import MercadoBitcoinExchangeDataSpot
 from bt_api_py.feeds.capability import Capability
 from bt_api_py.feeds.live_mercado_bitcoin.request_base import MercadoBitcoinRequestData
 from bt_api_py.functions.utils import update_extra_data
@@ -201,11 +200,16 @@ class MercadoBitcoinRequestDataSpot(MercadoBitcoinRequestData):
         path, params, extra_data = self._get_account(extra_data, **kwargs)
         return self.request(path, params=params, extra_data=extra_data)
 
-    def _make_order(self, symbol, volume, price, order_type, offset="open",
-                    extra_data=None, **kwargs):
+    def _make_order(
+        self, symbol, volume, price, order_type, offset="open", extra_data=None, **kwargs
+    ):
         """Prepare make order request. Returns (path, params, extra_data)."""
         coin = symbol.split("-")[0] if "-" in symbol else symbol
-        path = "POST /tapi/v3/place_buy_order" if "buy" in order_type.lower() else "POST /tapi/v3/place_sell_order"
+        path = (
+            "POST /tapi/v3/place_buy_order"
+            if "buy" in order_type.lower()
+            else "POST /tapi/v3/place_sell_order"
+        )
         params = {
             "coin_pair": f"BRL{coin}",
             "quantity": str(volume),
@@ -229,8 +233,9 @@ class MercadoBitcoinRequestDataSpot(MercadoBitcoinRequestData):
             return [], False
         return [input_data], True
 
-    def make_order(self, symbol, volume, price, order_type, offset="open",
-                   extra_data=None, **kwargs):
+    def make_order(
+        self, symbol, volume, price, order_type, offset="open", extra_data=None, **kwargs
+    ):
         """Place an order."""
         path, params, extra_data = self._make_order(
             symbol, volume, price, order_type, offset, extra_data, **kwargs

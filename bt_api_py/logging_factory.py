@@ -9,7 +9,13 @@
     logger = get_logger("api", print_info=True)  # 同时输出到控制台
 """
 
+import os
+import threading
+from pathlib import Path
+
 from bt_api_py.functions.log_message import SpdLogManager
+
+__all__ = ["get_logger"]
 
 # 预定义的模块日志名称映射: module_key -> (file_name, logger_name)
 _MODULE_LOG_MAP = {
@@ -22,7 +28,39 @@ _MODULE_LOG_MAP = {
 }
 
 # 缓存已创建的 logger，避免重复创建
-_logger_cache: dict = {}
+_logger_cache: dict[tuple[str, bool], object] = {}
+_logger_cache_lock = threading.Lock()
+
+
+class _LoggerProxy:
+    """Compatibility wrapper exposing both `warn` and `warning`."""
+
+    def __init__(self, logger: object):
+        self._logger = logger
+
+    def warning(self, *args, **kwargs):
+        warning_method = getattr(self._logger, "warning", None)
+        if warning_method is not None:
+            return warning_method(*args, **kwargs)
+        return self._logger.warn(*args, **kwargs)
+
+    def warn(self, *args, **kwargs):
+        warn_method = getattr(self._logger, "warn", None)
+        if warn_method is not None:
+            return warn_method(*args, **kwargs)
+        return self._logger.warning(*args, **kwargs)
+
+    def __getattr__(self, name: str):
+        return getattr(self._logger, name)
+
+
+def _resolve_log_file_name(file_name: str) -> str:
+    """Resolve a log file name with optional environment-based log directory."""
+    log_dir = os.getenv("BT_API_LOG_DIR")
+    if not log_dir or os.path.isabs(file_name):
+        return file_name
+
+    return str(Path(log_dir).expanduser() / file_name)
 
 
 def get_logger(module: str, print_info: bool = False):
@@ -34,20 +72,22 @@ def get_logger(module: str, print_info: bool = False):
     :return: spdlog logger 实例
     """
     cache_key = (module, print_info)
-    if cache_key in _logger_cache:
-        return _logger_cache[cache_key]
+    with _logger_cache_lock:
+        cached_logger = _logger_cache.get(cache_key)
+        if cached_logger is not None:
+            return cached_logger
+        if module in _MODULE_LOG_MAP:
+            file_name, logger_name = _MODULE_LOG_MAP[module]
+        else:
+            file_name = f"{module}.log"
+            logger_name = module
 
-    if module in _MODULE_LOG_MAP:
-        file_name, logger_name = _MODULE_LOG_MAP[module]
-    else:
-        file_name = f"{module}.log"
-        logger_name = module
-
-    logger = SpdLogManager(
-        file_name=file_name,
-        logger_name=logger_name,
-        print_info=print_info,
-    ).create_logger()
-
-    _logger_cache[cache_key] = logger
-    return logger
+        logger = _LoggerProxy(
+            SpdLogManager(
+                file_name=_resolve_log_file_name(file_name),
+                logger_name=logger_name,
+                print_info=print_info,
+            ).create_logger()
+        )
+        _logger_cache[cache_key] = logger
+        return logger

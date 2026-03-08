@@ -84,6 +84,7 @@ class ValrRequestDataSpot(ValrRequestData):
 
 # ── WebSocket stubs ──────────────────────────────────────────
 
+
 class ValrMarketWssDataSpot:
     """VALR Spot Market WebSocket Data Handler (stub)."""
 

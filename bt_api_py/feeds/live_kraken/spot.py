@@ -2,13 +2,12 @@
 Kraken Spot Trading Feed Implementation
 """
 
-import time
 
+from bt_api_py.containers.balances.kraken_balance import KrakenSpotWssBalanceData
 from bt_api_py.containers.exchanges.kraken_exchange_data import KrakenExchangeDataSpot
-from bt_api_py.containers.tickers.kraken_ticker import KrakenRequestTickerData
 from bt_api_py.containers.orderbooks.kraken_orderbook import KrakenRequestOrderBookData
 from bt_api_py.containers.orders.kraken_order import KrakenRequestOrderData
-from bt_api_py.containers.balances.kraken_balance import KrakenSpotWssBalanceData
+from bt_api_py.containers.tickers.kraken_ticker import KrakenRequestTickerData
 from bt_api_py.feeds.live_kraken.request_base import KrakenRequestData
 from bt_api_py.functions.utils import update_extra_data
 from bt_api_py.logging_factory import get_logger
@@ -57,11 +56,13 @@ class KrakenRequestDataSpot(KrakenRequestData):
             for pair_name, ticker_data in result.items():
                 if not isinstance(ticker_data, dict):
                     continue
-                tickers.append(KrakenRequestTickerData(
-                    {"error": [], "result": {pair_name: ticker_data}},
-                    extra_data["symbol_name"],
-                    extra_data["asset_type"],
-                ))
+                tickers.append(
+                    KrakenRequestTickerData(
+                        {"error": [], "result": {pair_name: ticker_data}},
+                        extra_data["symbol_name"],
+                        extra_data["asset_type"],
+                    )
+                )
             return tickers, bool(tickers)
         return [], False
 
@@ -74,8 +75,10 @@ class KrakenRequestDataSpot(KrakenRequestData):
 
     def async_get_ticker(self, symbol, extra_data=None, **kwargs):
         path, params, extra_data = self._get_ticker(symbol, extra_data, **kwargs)
-        self.submit(self.async_request(path, params=params, extra_data=extra_data),
-                    callback=self.async_callback)
+        self.submit(
+            self.async_request(path, params=params, extra_data=extra_data),
+            callback=self.async_callback,
+        )
 
     def async_get_tick(self, symbol, extra_data=None, **kwargs):
         self.async_get_ticker(symbol, extra_data=extra_data, **kwargs)
@@ -111,11 +114,13 @@ class KrakenRequestDataSpot(KrakenRequestData):
             for pair_name, book_data in result.items():
                 if not isinstance(book_data, dict):
                     continue
-                books.append(KrakenRequestOrderBookData(
-                    {"error": [], "result": {pair_name: book_data}},
-                    extra_data["symbol_name"],
-                    extra_data["asset_type"],
-                ))
+                books.append(
+                    KrakenRequestOrderBookData(
+                        {"error": [], "result": {pair_name: book_data}},
+                        extra_data["symbol_name"],
+                        extra_data["asset_type"],
+                    )
+                )
             return books, bool(books)
         return [], False
 
@@ -125,8 +130,10 @@ class KrakenRequestDataSpot(KrakenRequestData):
 
     def async_get_depth(self, symbol, count=20, extra_data=None, **kwargs):
         path, params, extra_data = self._get_depth(symbol, count, extra_data, **kwargs)
-        self.submit(self.async_request(path, params=params, extra_data=extra_data),
-                    callback=self.async_callback)
+        self.submit(
+            self.async_request(path, params=params, extra_data=extra_data),
+            callback=self.async_callback,
+        )
 
     # ==================== Kline Methods ====================
 
@@ -152,8 +159,10 @@ class KrakenRequestDataSpot(KrakenRequestData):
 
     def async_get_kline(self, symbol, period="1m", count=100, extra_data=None, **kwargs):
         path, params, extra_data = self._get_kline(symbol, period, count, extra_data, **kwargs)
-        self.submit(self.async_request(path, params=params, extra_data=extra_data),
-                    callback=self.async_callback)
+        self.submit(
+            self.async_request(path, params=params, extra_data=extra_data),
+            callback=self.async_callback,
+        )
 
     # ==================== Server Time & Exchange Info ====================
 
@@ -224,9 +233,11 @@ class KrakenRequestDataSpot(KrakenRequestData):
                 for currency, amount in result.items():
                     try:
                         if float(amount) > 0:
-                            balances.append(KrakenSpotWssBalanceData(
-                                {currency: amount}, extra_data["asset_type"]
-                            ))
+                            balances.append(
+                                KrakenSpotWssBalanceData(
+                                    {currency: amount}, extra_data["asset_type"]
+                                )
+                            )
                     except (ValueError, TypeError):
                         pass
                 return balances, True
@@ -241,16 +252,26 @@ class KrakenRequestDataSpot(KrakenRequestData):
 
     def async_get_balance(self, extra_data=None, **kwargs):
         path, params, extra_data = self._get_balance(extra_data, **kwargs)
-        self.submit(self.async_request(path, params=params, extra_data=extra_data),
-                    callback=self.async_callback)
+        self.submit(
+            self.async_request(path, params=params, extra_data=extra_data),
+            callback=self.async_callback,
+        )
 
     def async_get_account(self, symbol=None, extra_data=None, **kwargs):
         self.async_get_balance(extra_data=extra_data, **kwargs)
 
     # ==================== Trading Methods ====================
 
-    def _make_order(self, symbol, vol, price=None, order_type="buy-limit",
-                    client_order_id=None, extra_data=None, **kwargs):
+    def _make_order(
+        self,
+        symbol,
+        vol,
+        price=None,
+        order_type="buy-limit",
+        client_order_id=None,
+        extra_data=None,
+        **kwargs,
+    ):
         request_symbol = self._params.get_symbol(symbol)
         request_type = "make_order"
         path = self._params.get_rest_path(request_type)
@@ -298,31 +319,53 @@ class KrakenRequestDataSpot(KrakenRequestData):
                         "descr": result.get("descr", {}),
                         "status": "open",
                     }
-                    return [KrakenRequestOrderData(
-                        order_data,
-                        extra_data["symbol_name"],
-                        extra_data["asset_type"],
-                        True,
-                    )], True
-                return [KrakenRequestOrderData(
-                    result, extra_data["symbol_name"], extra_data["asset_type"], True
-                )], True
+                    return [
+                        KrakenRequestOrderData(
+                            order_data,
+                            extra_data["symbol_name"],
+                            extra_data["asset_type"],
+                            True,
+                        )
+                    ], True
+                return [
+                    KrakenRequestOrderData(
+                        result, extra_data["symbol_name"], extra_data["asset_type"], True
+                    )
+                ], True
         return [], False
 
-    def make_order(self, symbol, vol, price=None, order_type="buy-limit",
-                   client_order_id=None, extra_data=None, **kwargs):
+    def make_order(
+        self,
+        symbol,
+        vol,
+        price=None,
+        order_type="buy-limit",
+        client_order_id=None,
+        extra_data=None,
+        **kwargs,
+    ):
         path, body, extra_data = self._make_order(
             symbol, vol, price, order_type, client_order_id, extra_data, **kwargs
         )
         return self.request(path, params={}, body=body, extra_data=extra_data)
 
-    def async_make_order(self, symbol, vol, price=None, order_type="buy-limit",
-                         client_order_id=None, extra_data=None, **kwargs):
+    def async_make_order(
+        self,
+        symbol,
+        vol,
+        price=None,
+        order_type="buy-limit",
+        client_order_id=None,
+        extra_data=None,
+        **kwargs,
+    ):
         path, body, extra_data = self._make_order(
             symbol, vol, price, order_type, client_order_id, extra_data, **kwargs
         )
-        self.submit(self.async_request(path, params={}, body=body, extra_data=extra_data),
-                    callback=self.async_callback)
+        self.submit(
+            self.async_request(path, params={}, body=body, extra_data=extra_data),
+            callback=self.async_callback,
+        )
 
     def _cancel_order(self, order_id, extra_data=None, **kwargs):
         request_type = "cancel_order"
@@ -373,12 +416,14 @@ class KrakenRequestDataSpot(KrakenRequestData):
                 for txid, order_info in result.items():
                     if isinstance(order_info, dict):
                         order_info["txid"] = txid
-                        orders.append(KrakenRequestOrderData(
-                            order_info,
-                            extra_data.get("symbol_name", ""),
-                            extra_data["asset_type"],
-                            True,
-                        ))
+                        orders.append(
+                            KrakenRequestOrderData(
+                                order_info,
+                                extra_data.get("symbol_name", ""),
+                                extra_data["asset_type"],
+                                True,
+                            )
+                        )
                 return orders, bool(orders)
         return [], False
 
@@ -415,12 +460,14 @@ class KrakenRequestDataSpot(KrakenRequestData):
             for txid, order_info in open_orders.items():
                 if isinstance(order_info, dict):
                     order_info["txid"] = txid
-                    orders.append(KrakenRequestOrderData(
-                        order_info,
-                        order_info.get("descr", {}).get("pair", ""),
-                        extra_data["asset_type"],
-                        True,
-                    ))
+                    orders.append(
+                        KrakenRequestOrderData(
+                            order_info,
+                            order_info.get("descr", {}).get("pair", ""),
+                            extra_data["asset_type"],
+                            True,
+                        )
+                    )
             return orders, True
         return [], False
 
@@ -449,11 +496,14 @@ class KrakenRequestDataSpot(KrakenRequestData):
 
 # ==================== WebSocket Placeholder Classes ====================
 
+
 class KrakenMarketWssDataSpot:
     """Placeholder for Kraken Spot Market WebSocket data handler."""
+
     pass
 
 
 class KrakenAccountWssDataSpot:
     """Placeholder for Kraken Spot Account WebSocket data handler."""
+
     pass

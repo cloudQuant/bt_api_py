@@ -1,28 +1,30 @@
-import json
-from bt_api_py.containers.orders.binance_order import (BinanceSwapWssOrderData,
-                                                       BinanceRequestOrderData,
-                                                       BinanceSpotWssOrderData,
-                                                       BinanceForceOrderData)
+from bt_api_py.containers.orders.binance_order import (
+    BinanceForceOrderData,
+    BinanceRequestOrderData,
+    BinanceSpotWssOrderData,
+    BinanceSwapWssOrderData,
+)
 from bt_api_py.containers.orders.order import OrderStatus
+
 
 def test_binance_force_order_data():
     data = {
-            "e":"forceOrder",
-            "E":1568014460893,
-            "o":{
-                "s":"BTCUSDT",
-                "S":"SELL",
-                "o":"LIMIT",
-                "f":"IOC",
-                "q":"0.014",
-                "p":"9910",
-                "ap":"9910",
-                "X":"FILLED",
-                "l":"0.014",
-                "z":"0.014",
-                "T":1568014460893,
-                }
-            }
+        "e": "forceOrder",
+        "E": 1568014460893,
+        "o": {
+            "s": "BTCUSDT",
+            "S": "SELL",
+            "o": "LIMIT",
+            "f": "IOC",
+            "q": "0.014",
+            "p": "9910",
+            "ap": "9910",
+            "X": "FILLED",
+            "l": "0.014",
+            "z": "0.014",
+            "T": 1568014460893,
+        },
+    }
     fo = BinanceForceOrderData(data, "BTC-USDT", "SWAP", True)
     fo.init_data()
     assert fo.get_trade_time() == 1568014460893
@@ -39,27 +41,50 @@ def test_binance_force_order_data():
     assert fo.get_order_status() == OrderStatus.COMPLETED
 
 
-
 def test_binance_spot_wss_order():
-    data = {'e': 'executionReport', 'E': 1709103527340,
-            's': 'OPUSDT', 'c': 'quYaDMgXvQGpI0M2Uztcdl', 'S': 'BUY',
-            'o': 'LIMIT', 'f': 'GTC', 'q': '2.00000000', 'p': '3.37900000',
-            'P': '0.00000000', 'F': '0.00000000',
-            'g': -1, 'C': '784164848349476186', 'x': 'CANCELED',
-            'X': 'CANCELED', 'r': 'NONE', 'i': 1110157667,
-            'l': '0.00000000', 'z': '0.00000000', 'L': '0.00000000',
-            'n': '0', 'N': None, 'T': 1709103527340, 't': -1,
-            'I': 2284358278, 'w': False, 'm': False, 'M': False,
-            'O': 1709103527220, 'Z': '0.00000000',
-            'Y': '0.00000000', 'Q': '0.00000000', 'W': 1709103527220,
-            'V': 'EXPIRE_MAKER'}
-    spot_wss_data = BinanceSpotWssOrderData(data, data['s'], "SPOT", True)
+    data = {
+        "e": "executionReport",
+        "E": 1709103527340,
+        "s": "OPUSDT",
+        "c": "quYaDMgXvQGpI0M2Uztcdl",
+        "S": "BUY",
+        "o": "LIMIT",
+        "f": "GTC",
+        "q": "2.00000000",
+        "p": "3.37900000",
+        "P": "0.00000000",
+        "F": "0.00000000",
+        "g": -1,
+        "C": "784164848349476186",
+        "x": "CANCELED",
+        "X": "CANCELED",
+        "r": "NONE",
+        "i": 1110157667,
+        "l": "0.00000000",
+        "z": "0.00000000",
+        "L": "0.00000000",
+        "n": "0",
+        "N": None,
+        "T": 1709103527340,
+        "t": -1,
+        "I": 2284358278,
+        "w": False,
+        "m": False,
+        "M": False,
+        "O": 1709103527220,
+        "Z": "0.00000000",
+        "Y": "0.00000000",
+        "Q": "0.00000000",
+        "W": 1709103527220,
+        "V": "EXPIRE_MAKER",
+    }
+    spot_wss_data = BinanceSpotWssOrderData(data, data["s"], "SPOT", True)
     spot_wss_data.init_data()
     assert spot_wss_data is not None
     assert spot_wss_data.get_order_id() == "1110157667"
     assert spot_wss_data.get_server_time() == 1709103527340.0
     assert spot_wss_data.get_trade_id() == -1.0
-    assert spot_wss_data.get_client_order_id() == 'quYaDMgXvQGpI0M2Uztcdl'
+    assert spot_wss_data.get_client_order_id() == "quYaDMgXvQGpI0M2Uztcdl"
     assert spot_wss_data.get_executed_qty() == 0.0
     assert spot_wss_data.get_order_size() == 2.0
     assert spot_wss_data.get_asset_type() == "SPOT"
@@ -67,7 +92,7 @@ def test_binance_spot_wss_order():
     assert spot_wss_data.get_reduce_only() is None
     assert spot_wss_data.get_order_side() == "BUY"
     assert spot_wss_data.get_order_status() == OrderStatus.CANCELED
-    assert spot_wss_data.get_order_symbol_name() == 'OPUSDT'
+    assert spot_wss_data.get_order_symbol_name() == "OPUSDT"
     assert spot_wss_data.get_order_time_in_force() == "GTC"
     assert spot_wss_data.get_order_type() == "LIMIT"
 
@@ -117,8 +142,8 @@ def test_binance_wss_order():
             "rp": "0",  # 该交易实现盈亏
             "V": "EXPIRE_TAKER",  # 自成交防止模式
             "pm": "OPPONENT",  # 价格匹配模式
-            "gtd": 0  # TIF为GTD的订单自动取消时间
-        }
+            "gtd": 0,  # TIF为GTD的订单自动取消时间
+        },
     }
     bo = BinanceSwapWssOrderData(data, "BTC-USDT", "PERPETUAL", True)
     bo.init_data()
@@ -156,12 +181,12 @@ def test_binance_req_order():
         "avgPrice": "0.00000",  # 平均成交价
         "origQty": "10",  # 原始委托数量
         "price": "0",  # 委托价格
-        "reduceOnly": 'false',  # 仅减仓
+        "reduceOnly": "false",  # 仅减仓
         "side": "SELL",  # 买卖方向
         "positionSide": "SHORT",  # 持仓方向
         "status": "NEW",  # 订单状态
         "stopPrice": "0",  # 触发价，对`TRAILING_STOP_MARKET`无效
-        "closePosition": 'false',  # 是否条件全平仓
+        "closePosition": "false",  # 是否条件全平仓
         "symbol": "BTCUSDT",  # 交易对
         "timeInForce": "GTD",  # 有效方法
         "type": "TRAILING_STOP_MARKET",  # 订单类型
@@ -170,10 +195,10 @@ def test_binance_req_order():
         "priceRate": "0.3",  # 跟踪止损回调比例, 仅`TRAILING_STOP_MARKET` 订单返回此字段
         "updateTime": 1566818724722,  # 更新时间
         "workingType": "CONTRACT_PRICE",  # 条件价格触发类型
-        "priceProtect": 'false',  # 是否开启条件单触发保护
+        "priceProtect": "false",  # 是否开启条件单触发保护
         "priceMatch": "NONE",  # 盘口价格下单模式
         "selfTradePreventionMode": "NONE",  # 订单自成交保护模式
-        "goodTillDate": 1693207680000  # 订单TIF为GTD时的自动取消时间
+        "goodTillDate": 1693207680000,  # 订单TIF为GTD时的自动取消时间
     }
     bo = BinanceRequestOrderData(data, "BTC-USDT", "PERPETUAL", True)
     bo.init_data()

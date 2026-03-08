@@ -10,47 +10,40 @@ Run with coverage:
 
 import hashlib
 import hmac
-import json
 import os
 import queue
-import time
-from unittest.mock import Mock, patch, MagicMock
 
 import pytest
 
+# Import registration to auto-register Gate.io
+import bt_api_py.exchange_registers.register_gateio  # noqa: F401
+from bt_api_py.containers.balances.gateio_balance import (
+    GateioBalanceData,
+)
 from bt_api_py.containers.exchanges.gateio_exchange_data import (
-    GateioExchangeData,
     GateioExchangeDataSpot,
     GateioExchangeDataSwap,
 )
-from bt_api_py.containers.tickers.gateio_ticker import (
-    GateioTickerData,
-    GateioRequestTickerData,
-)
 from bt_api_py.containers.orderbooks.gateio_orderbook import (
     GateioOrderBookData,
-    GateioRequestOrderBookData,
 )
 from bt_api_py.containers.orders.gateio_order import (
     GateioOrderData,
-    GateioRequestOrderData,
 )
-from bt_api_py.containers.balances.gateio_balance import (
-    GateioBalanceData,
-    GateioRequestBalanceData,
+from bt_api_py.containers.tickers.gateio_ticker import (
+    GateioRequestTickerData,
+    GateioTickerData,
 )
 from bt_api_py.feeds.live_gateio.request_base import GateioRequestData
 from bt_api_py.feeds.live_gateio.spot import GateioRequestDataSpot
 from bt_api_py.feeds.live_gateio.swap import GateioRequestDataSwap
 from bt_api_py.registry import ExchangeRegistry
 
-# Import registration to auto-register Gate.io
-import bt_api_py.exchange_registers.register_gateio  # noqa: F401
-
 SKIP_LIVE = os.environ.get("SKIP_LIVE_TESTS", "true").lower() == "true"
 
 
 # ── Fixtures ─────────────────────────────────────────────────────────────
+
 
 def _make_spot_feed():
     data_queue = queue.Queue()
@@ -124,14 +117,13 @@ SAMPLE_BALANCE = {
     "locked": "0.1",
 }
 
-SAMPLE_KLINE = [
-    ["1640995200", "100", "50000", "51000", "49000", "50500", "1234.56"]
-]
+SAMPLE_KLINE = [["1640995200", "100", "50000", "51000", "49000", "50500", "1234.56"]]
 
 
 # ═══════════════════════════════════════════════════════════════════════
 # Exchange Data Tests
 # ═══════════════════════════════════════════════════════════════════════
+
 
 class TestGateioExchangeData:
     """Test Gate.io exchange data configuration."""
@@ -182,6 +174,7 @@ class TestGateioExchangeData:
 # ═══════════════════════════════════════════════════════════════════════
 # Data Container Tests
 # ═══════════════════════════════════════════════════════════════════════
+
 
 class TestGateioDataContainers:
     """Test Gate.io data container classes."""
@@ -251,6 +244,7 @@ class TestGateioDataContainers:
 # ═══════════════════════════════════════════════════════════════════════
 # Feed Creation Tests
 # ═══════════════════════════════════════════════════════════════════════
+
 
 class TestGateioFeedCreation:
     """Test Gate.io feed creation and three-layer pattern."""
@@ -323,6 +317,7 @@ class TestGateioFeedCreation:
 # Three Layer Pattern Tests (Layer 1 returns)
 # ═══════════════════════════════════════════════════════════════════════
 
+
 class TestGateioThreeLayerPattern:
     """Test layer-1 methods return (path, params, extra_data) correctly."""
 
@@ -372,9 +367,7 @@ class TestGateioThreeLayerPattern:
 
     def test_make_market_order_layer1(self):
         feed = _make_spot_feed()
-        path, body, extra_data = feed._make_order(
-            "ETH-USDT", 1.0, order_type="sell-market"
-        )
+        path, body, extra_data = feed._make_order("ETH-USDT", 1.0, order_type="sell-market")
         assert body["side"] == "sell"
         assert body["type"] == "market"
 
@@ -418,6 +411,7 @@ class TestGateioThreeLayerPattern:
 # Normalize Function Tests
 # ═══════════════════════════════════════════════════════════════════════
 
+
 class TestGateioNormalizeFunctions:
     """Test normalization functions for each data type."""
 
@@ -432,9 +426,7 @@ class TestGateioNormalizeFunctions:
 
     def test_ticker_normalize_dict(self):
         extra = {"symbol_name": "BTC-USDT", "asset_type": "SPOT"}
-        result, status = GateioRequestDataSpot._get_ticker_normalize_function(
-            SAMPLE_TICKER, extra
-        )
+        result, status = GateioRequestDataSpot._get_ticker_normalize_function(SAMPLE_TICKER, extra)
         assert status is True
         assert len(result) == 1
 
@@ -487,34 +479,26 @@ class TestGateioNormalizeFunctions:
 
     def test_make_order_normalize(self):
         extra = {"symbol_name": "BTC-USDT", "asset_type": "SPOT"}
-        result, status = GateioRequestDataSpot._make_order_normalize_function(
-            SAMPLE_ORDER, extra
-        )
+        result, status = GateioRequestDataSpot._make_order_normalize_function(SAMPLE_ORDER, extra)
         assert status is True
         assert len(result) == 1
         assert isinstance(result[0], GateioOrderData)
 
     def test_query_order_normalize(self):
         extra = {"symbol_name": "BTC-USDT", "asset_type": "SPOT"}
-        result, status = GateioRequestDataSpot._query_order_normalize_function(
-            SAMPLE_ORDER, extra
-        )
+        result, status = GateioRequestDataSpot._query_order_normalize_function(SAMPLE_ORDER, extra)
         assert status is True
         assert len(result) == 1
         assert isinstance(result[0], GateioOrderData)
 
     def test_kline_normalize(self):
         extra = {"symbol_name": "BTC-USDT", "asset_type": "SPOT"}
-        result, status = GateioRequestDataSpot._get_kline_normalize_function(
-            SAMPLE_KLINE, extra
-        )
+        result, status = GateioRequestDataSpot._get_kline_normalize_function(SAMPLE_KLINE, extra)
         assert status is True
         assert len(result) == 1
 
     def test_extract_data_normalize_function(self):
-        result, status = GateioRequestData._extract_data_normalize_function(
-            [{"key": "value"}], {}
-        )
+        result, status = GateioRequestData._extract_data_normalize_function([{"key": "value"}], {})
         assert status is True
         assert len(result) == 1
 
@@ -539,9 +523,7 @@ class TestGateioNormalizeFunctions:
 
     def test_swap_make_order_normalize(self):
         extra = {"symbol_name": "BTC-USDT", "asset_type": "swap"}
-        result, status = GateioRequestDataSwap._make_order_normalize_function(
-            SAMPLE_ORDER, extra
-        )
+        result, status = GateioRequestDataSwap._make_order_normalize_function(SAMPLE_ORDER, extra)
         assert status is True
         assert len(result) == 1
 
@@ -549,6 +531,7 @@ class TestGateioNormalizeFunctions:
 # ═══════════════════════════════════════════════════════════════════════
 # Registration Tests
 # ═══════════════════════════════════════════════════════════════════════
+
 
 class TestGateioRegistration:
     """Test Gate.io registration."""
@@ -575,6 +558,7 @@ class TestGateioRegistration:
 # ═══════════════════════════════════════════════════════════════════════
 # Signature Tests
 # ═══════════════════════════════════════════════════════════════════════
+
 
 class TestGateioSignature:
     """Test Gate.io HMAC SHA512 signature generation."""
@@ -620,9 +604,7 @@ class TestGateioSignature:
 
         hashed_payload = hashlib.sha512(payload_string.encode()).hexdigest()
         sign_string = f"{method}\n{url_path}\n{query_string}\n{hashed_payload}\n{timestamp}"
-        expected_sig = hmac.new(
-            secret.encode(), sign_string.encode(), hashlib.sha512
-        ).hexdigest()
+        expected_sig = hmac.new(secret.encode(), sign_string.encode(), hashlib.sha512).hexdigest()
 
         assert len(expected_sig) == 128
         assert isinstance(expected_sig, str)
@@ -631,6 +613,7 @@ class TestGateioSignature:
 # ═══════════════════════════════════════════════════════════════════════
 # Integration Tests (skipped by default)
 # ═══════════════════════════════════════════════════════════════════════
+
 
 class TestGateioIntegration:
     """Integration tests (require network, skipped by default)."""

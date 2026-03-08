@@ -1,5 +1,4 @@
 import os
-import sys
 from pathlib import Path
 
 import spdlog
@@ -11,6 +10,7 @@ def _get_project_logs_dir():
     """
     try:
         import bt_api_py
+
         pkg_dir = os.path.dirname(bt_api_py.__file__)
         return os.path.join(str(Path(pkg_dir).parent), "logs")
     except Exception:
@@ -33,9 +33,9 @@ class SpdLogManager:
         if not os.path.isabs(file_name):
             # 去除 ./logs/ 或 ./  前缀，提取纯文件名
             if file_name.startswith("./logs/"):
-                file_name = file_name[len("./logs/"):]
+                file_name = file_name[len("./logs/") :]
             elif file_name.startswith("./"):
-                file_name = file_name[len("./"):]
+                file_name = file_name[len("./") :]
             file_name = os.path.join(SpdLogManager._project_logs_dir, file_name)
         self.file_name = file_name
         self.logger_name = logger_name

@@ -147,13 +147,19 @@ class KuCoinRequestAccountData(KuCoinAccountData):
             data = self.account_data
 
         if isinstance(data, list):
-            return [KuCoinRequestBalanceData(
-                json.dumps({"data": acc}), acc.get("currency", self.symbol_name), self.asset_type, True
-            ) for acc in data]
+            return [
+                KuCoinRequestBalanceData(
+                    json.dumps({"data": acc}),
+                    acc.get("currency", self.symbol_name),
+                    self.asset_type,
+                    True,
+                )
+                for acc in data
+            ]
         else:
-            return [KuCoinRequestBalanceData(
-                self.account_info, self.symbol_name, self.asset_type, True
-            )]
+            return [
+                KuCoinRequestBalanceData(self.account_info, self.symbol_name, self.asset_type, True)
+            ]
 
 
 class KuCoinWssAccountData(KuCoinAccountData):
@@ -203,6 +209,4 @@ class KuCoinWssAccountData(KuCoinAccountData):
         """Return list of balance objects."""
         from bt_api_py.containers.balances.kucoin_balance import KuCoinWssBalanceData
 
-        return [KuCoinWssBalanceData(
-            self.account_info, self.symbol_name, self.asset_type, True
-        )]
+        return [KuCoinWssBalanceData(self.account_info, self.symbol_name, self.asset_type, True)]

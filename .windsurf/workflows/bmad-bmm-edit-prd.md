@@ -1,9 +1,7 @@
-- --
-
-description: 'Edit an existing PRD. Use when the user says ""edit this PRD"".'
+---
+description: 'Edit an existing PRD. Use when the user says "edit this PRD".'
 auto_execution_mode: "iterate"
-
-- --
+---
 
 # edit-prd
 

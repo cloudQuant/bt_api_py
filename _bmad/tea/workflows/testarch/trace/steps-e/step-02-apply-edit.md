@@ -1,9 +1,7 @@
-- --
-
+---
 name: 'step-02-apply-edit'
 description: 'Apply edits to the selected output'
-
-- --
+---
 
 # Step 2: Apply Edits
 
@@ -37,7 +35,7 @@ Apply the requested edits to the selected output and confirm changes.
 
 ## MANDATORY SEQUENCE
 
-- *CRITICAL:** Follow this sequence exactly.
+**CRITICAL:** Follow this sequence exactly.
 
 ### 1. Confirm Requested Changes
 

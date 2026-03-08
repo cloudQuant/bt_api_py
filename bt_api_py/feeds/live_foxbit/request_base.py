@@ -2,10 +2,10 @@
 Foxbit REST API request base class.
 """
 
-import time
-import hmac
 import hashlib
+import hmac
 import json
+import time
 
 from bt_api_py.containers.exchanges.foxbit_exchange_data import FoxbitExchangeDataSpot
 from bt_api_py.containers.requestdatas.request_data import RequestData
@@ -53,9 +53,7 @@ class FoxbitRequestData(Feed):
         if secret:
             pre_hash = f"{timestamp}{method}{request_path}{body}"
             signature = hmac.new(
-                secret.encode("utf-8"),
-                pre_hash.encode("utf-8"),
-                hashlib.sha256
+                secret.encode("utf-8"), pre_hash.encode("utf-8"), hashlib.sha256
             ).hexdigest()
             return signature
         return ""
@@ -90,6 +88,7 @@ class FoxbitRequestData(Feed):
         query_string = ""
         if params and method == "GET":
             from urllib.parse import urlencode
+
             query_string = "?" + urlencode(params)
             request_path += query_string
 
@@ -119,6 +118,7 @@ class FoxbitRequestData(Feed):
         query_string = ""
         if params and method == "GET":
             from urllib.parse import urlencode
+
             query_string = "?" + urlencode(params)
             request_path += query_string
 
@@ -157,13 +157,15 @@ class FoxbitRequestData(Feed):
         """Prepare server time request. Returns (path, params, extra_data)."""
         if extra_data is None:
             extra_data = {}
-        extra_data.update({
-            "exchange_name": self.exchange_name,
-            "symbol_name": "",
-            "asset_type": self.asset_type,
-            "request_type": "get_server_time",
-            "normalize_function": self._get_server_time_normalize_function,
-        })
+        extra_data.update(
+            {
+                "exchange_name": self.exchange_name,
+                "symbol_name": "",
+                "asset_type": self.asset_type,
+                "request_type": "get_server_time",
+                "normalize_function": self._get_server_time_normalize_function,
+            }
+        )
         return "GET /rest/v3/system/time", {}, extra_data
 
     def get_server_time(self, extra_data=None, **kwargs):

@@ -4,25 +4,26 @@ Tests for Curve DEX Spot Feed implementation.
 Following Binance/OKX test standards with DEX-specific adaptations.
 """
 
-import queue
-import pytest
-from unittest.mock import Mock, patch, MagicMock
 from enum import Enum
+from unittest.mock import MagicMock, Mock, patch
+
+import pytest
 
 
 class MockCurveChain(str, Enum):
     """Mock CurveChain for testing."""
+
     ETHEREUM = "ETHEREUM"
     ARBITRUM = "ARBITRUM"
     POLYGON = "POLYGON"
 
 
-from bt_api_py.feeds.live_curve.spot import CurveRequestDataSpot
 from bt_api_py.containers.exchanges.curve_exchange_data import (
-    CurveExchangeDataSpot,
     CurveChain,
+    CurveExchangeDataSpot,
 )
 from bt_api_py.containers.requestdatas.request_data import RequestData
+from bt_api_py.feeds.live_curve.spot import CurveRequestDataSpot
 
 
 class TestCurveRequestDataSpot:
@@ -36,7 +37,7 @@ class TestCurveRequestDataSpot:
     @pytest.fixture
     def curve_spot(self, mock_data_queue):
         """Create CurveRequestDataSpot instance."""
-        with patch('bt_api_py.feeds.http_client.HttpClient', return_value=MagicMock()):
+        with patch("bt_api_py.feeds.http_client.HttpClient", return_value=MagicMock()):
             instance = CurveRequestDataSpot(mock_data_queue, chain=MockCurveChain.ETHEREUM)
             return instance
 
@@ -80,28 +81,23 @@ class TestCurveRequestDataSpot:
     def test_get_pools_tuple(self, curve_spot):
         """Test _get_pools returns (path, params, extra_data)."""
         path, params, extra_data = curve_spot._get_pools()
-        assert extra_data['request_type'] == "get_pools"
-        assert extra_data['exchange_name'] == "CURVE___DEX"
+        assert extra_data["request_type"] == "get_pools"
+        assert extra_data["exchange_name"] == "CURVE___DEX"
 
     def test_get_pools(self, curve_spot):
         """Test get_pools method - mocked."""
-        with patch.object(curve_spot, 'request') as mock_request:
-            mock_request.return_value = Mock(extra_data={'request_type': 'get_pools'})
+        with patch.object(curve_spot, "request") as mock_request:
+            mock_request.return_value = Mock(extra_data={"request_type": "get_pools"})
             result = curve_spot.get_pools()
             assert mock_request.called
             call_args = mock_request.call_args
-            assert call_args[1]['extra_data']['request_type'] == "get_pools"
+            assert call_args[1]["extra_data"]["request_type"] == "get_pools"
 
     # ==================== Volumes Tests ====================
 
     def test_get_volumes_normalize_function(self):
         """Test volumes normalize function."""
-        input_data = {
-            "data": {
-                "dailyVolume": "1000000",
-                "weeklyVolume": "5000000"
-            }
-        }
+        input_data = {"data": {"dailyVolume": "1000000", "weeklyVolume": "5000000"}}
         result, status = CurveRequestDataSpot._get_volumes_normalize_function(input_data, None)
         assert status == True
         assert len(result) == 1
@@ -109,26 +105,22 @@ class TestCurveRequestDataSpot:
     def test_get_volumes_tuple(self, curve_spot):
         """Test _get_volumes returns tuple."""
         path, params, extra_data = curve_spot._get_volumes()
-        assert extra_data['request_type'] == "get_volumes"
+        assert extra_data["request_type"] == "get_volumes"
 
     def test_get_volumes(self, curve_spot):
         """Test get_volumes method - mocked."""
-        with patch.object(curve_spot, 'request') as mock_request:
-            mock_request.return_value = Mock(extra_data={'request_type': 'get_volumes'})
+        with patch.object(curve_spot, "request") as mock_request:
+            mock_request.return_value = Mock(extra_data={"request_type": "get_volumes"})
             result = curve_spot.get_volumes()
             assert mock_request.called
             call_args = mock_request.call_args
-            assert call_args[1]['extra_data']['request_type'] == "get_volumes"
+            assert call_args[1]["extra_data"]["request_type"] == "get_volumes"
 
     # ==================== TVL Tests ====================
 
     def test_get_tvl_normalize_function(self):
         """Test TVL normalize function."""
-        input_data = {
-            "data": {
-                "totalTVL": "10000000"
-            }
-        }
+        input_data = {"data": {"totalTVL": "10000000"}}
         result, status = CurveRequestDataSpot._get_tvl_normalize_function(input_data, None)
         assert status == True
         assert len(result) == 1
@@ -136,29 +128,22 @@ class TestCurveRequestDataSpot:
     def test_get_tvl_tuple(self, curve_spot):
         """Test _get_tvl returns tuple."""
         path, params, extra_data = curve_spot._get_tvl()
-        assert extra_data['request_type'] == "get_tvl"
+        assert extra_data["request_type"] == "get_tvl"
 
     def test_get_tvl(self, curve_spot):
         """Test get_tvl method - mocked."""
-        with patch.object(curve_spot, 'request') as mock_request:
-            mock_request.return_value = Mock(extra_data={'request_type': 'get_tvl'})
+        with patch.object(curve_spot, "request") as mock_request:
+            mock_request.return_value = Mock(extra_data={"request_type": "get_tvl"})
             result = curve_spot.get_tvl()
             assert mock_request.called
             call_args = mock_request.call_args
-            assert call_args[1]['extra_data']['request_type'] == "get_tvl"
+            assert call_args[1]["extra_data"]["request_type"] == "get_tvl"
 
     # ==================== APY Tests ====================
 
     def test_get_apys_normalize_function(self):
         """Test APYs normalize function."""
-        input_data = {
-            "data": {
-                "poolApy": {
-                    "pool1": 0.05,
-                    "pool2": 0.10
-                }
-            }
-        }
+        input_data = {"data": {"poolApy": {"pool1": 0.05, "pool2": 0.10}}}
         result, status = CurveRequestDataSpot._get_apys_normalize_function(input_data, None)
         assert status == True
         assert len(result) == 1
@@ -166,16 +151,16 @@ class TestCurveRequestDataSpot:
     def test_get_apys_tuple(self, curve_spot):
         """Test _get_apys returns tuple."""
         path, params, extra_data = curve_spot._get_apys()
-        assert extra_data['request_type'] == "get_apys"
+        assert extra_data["request_type"] == "get_apys"
 
     def test_get_apys(self, curve_spot):
         """Test get_apys method - mocked."""
-        with patch.object(curve_spot, 'request') as mock_request:
-            mock_request.return_value = Mock(extra_data={'request_type': 'get_apys'})
+        with patch.object(curve_spot, "request") as mock_request:
+            mock_request.return_value = Mock(extra_data={"request_type": "get_apys"})
             result = curve_spot.get_apys()
             assert mock_request.called
             call_args = mock_request.call_args
-            assert call_args[1]['extra_data']['request_type'] == "get_apys"
+            assert call_args[1]["extra_data"]["request_type"] == "get_apys"
 
     # ==================== Pool Detail Tests ====================
 
@@ -183,11 +168,7 @@ class TestCurveRequestDataSpot:
         """Test pool summary normalize function."""
         input_data = {
             "data": {
-                "poolData": {
-                    "name": "3pool",
-                    "address": "0x...",
-                    "totalLiquidity": "10000000"
-                }
+                "poolData": {"name": "3pool", "address": "0x...", "totalLiquidity": "10000000"}
             }
         }
         result, status = CurveRequestDataSpot._get_pool_summary_normalize_function(input_data, None)
@@ -200,25 +181,25 @@ class TestCurveRequestDataSpot:
 
         path, params, extra_data = curve_spot._get_pool_summary(pool_address)
 
-        assert extra_data['request_type'] == "get_pool_summary"
-        assert extra_data['pool_address'] == pool_address
+        assert extra_data["request_type"] == "get_pool_summary"
+        assert extra_data["pool_address"] == pool_address
 
     # ==================== Exchange Info Tests ====================
 
     def test_get_exchange_info_tuple(self, curve_spot):
         """Test _get_exchange_info returns tuple."""
         path, params, extra_data = curve_spot._get_exchange_info()
-        assert extra_data['request_type'] == "get_exchange_info"
-        assert extra_data['exchange_name'] == "CURVE___DEX"
+        assert extra_data["request_type"] == "get_exchange_info"
+        assert extra_data["exchange_name"] == "CURVE___DEX"
 
     def test_get_exchange_info(self, curve_spot):
         """Test get_exchange_info method - mocked."""
-        with patch.object(curve_spot, 'request') as mock_request:
-            mock_request.return_value = Mock(extra_data={'request_type': 'get_exchange_info'})
+        with patch.object(curve_spot, "request") as mock_request:
+            mock_request.return_value = Mock(extra_data={"request_type": "get_exchange_info"})
             result = curve_spot.get_exchange_info()
             assert mock_request.called
             call_args = mock_request.call_args
-            assert call_args[1]['extra_data']['request_type'] == "get_exchange_info"
+            assert call_args[1]["extra_data"]["request_type"] == "get_exchange_info"
 
     # ==================== Ticker Tests (via pools) ====================
 
@@ -228,19 +209,12 @@ class TestCurveRequestDataSpot:
 
         path, params, extra_data = curve_spot._get_tick(pool_address)
 
-        assert extra_data['request_type'] == "get_tick"
-        assert extra_data['symbol_name'] == pool_address
+        assert extra_data["request_type"] == "get_tick"
+        assert extra_data["symbol_name"] == pool_address
 
     def test_get_tick_normalize_function(self):
         """Test tick normalize function - uses pool summary."""
-        input_data = {
-            "data": {
-                "poolData": {
-                    "name": "3pool",
-                    "virtualPrice": "1.01"
-                }
-            }
-        }
+        input_data = {"data": {"poolData": {"name": "3pool", "virtualPrice": "1.01"}}}
         result, status = CurveRequestDataSpot._get_tick_normalize_function(input_data, None)
         assert status == True
         assert len(result) == 1
@@ -266,52 +240,76 @@ class TestCurveExchangeDataSpot:
 
     def test_init_with_chain_enum(self):
         """Test initialization with chain enum."""
-        with patch('bt_api_py.containers.exchanges.curve_exchange_data._get_curve_config', return_value=None):
+        with patch(
+            "bt_api_py.containers.exchanges.curve_exchange_data._get_curve_config",
+            return_value=None,
+        ):
             exchange_data = CurveExchangeDataSpot(chain=MockCurveChain.ETHEREUM)
             assert exchange_data.chain == MockCurveChain.ETHEREUM
             assert exchange_data.rest_url == "https://api.curve.finance"
 
     def test_init_with_chain_string(self):
         """Test initialization with chain string."""
-        with patch('bt_api_py.containers.exchanges.curve_exchange_data._get_curve_config', return_value=None):
+        with patch(
+            "bt_api_py.containers.exchanges.curve_exchange_data._get_curve_config",
+            return_value=None,
+        ):
             exchange_data = CurveExchangeDataSpot(chain="ETHEREUM")
             assert exchange_data.chain.value == "ETHEREUM"
 
     def test_get_chain_value(self):
         """Test get_chain_value method."""
-        with patch('bt_api_py.containers.exchanges.curve_exchange_data._get_curve_config', return_value=None):
+        with patch(
+            "bt_api_py.containers.exchanges.curve_exchange_data._get_curve_config",
+            return_value=None,
+        ):
             exchange_data = CurveExchangeDataSpot(chain=MockCurveChain.ETHEREUM)
             assert exchange_data.get_chain_value() == "ethereum"
 
     def test_get_chain_name(self):
         """Test get_chain_name method."""
-        with patch('bt_api_py.containers.exchanges.curve_exchange_data._get_curve_config', return_value=None):
+        with patch(
+            "bt_api_py.containers.exchanges.curve_exchange_data._get_curve_config",
+            return_value=None,
+        ):
             exchange_data = CurveExchangeDataSpot(chain=MockCurveChain.ARBITRUM)
             assert exchange_data.get_chain_name() == "arbitrum"
 
     def test_get_rest_path(self):
         """Test get_rest_path method."""
-        with patch('bt_api_py.containers.exchanges.curve_exchange_data._get_curve_config', return_value=None):
+        with patch(
+            "bt_api_py.containers.exchanges.curve_exchange_data._get_curve_config",
+            return_value=None,
+        ):
             exchange_data = CurveExchangeDataSpot(chain=MockCurveChain.ETHEREUM)
             path = exchange_data.get_rest_path("get_pools")
             assert "getPools/ethereum/main" in path
 
     def test_get_rest_url(self):
         """Test get_rest_url method."""
-        with patch('bt_api_py.containers.exchanges.curve_exchange_data._get_curve_config', return_value=None):
+        with patch(
+            "bt_api_py.containers.exchanges.curve_exchange_data._get_curve_config",
+            return_value=None,
+        ):
             exchange_data = CurveExchangeDataSpot(chain=MockCurveChain.ETHEREUM)
             assert exchange_data.get_rest_url() == "https://api.curve.finance"
 
     def test_factory_addresses(self):
         """Test factory addresses are defined."""
-        with patch('bt_api_py.containers.exchanges.curve_exchange_data._get_curve_config', return_value=None):
+        with patch(
+            "bt_api_py.containers.exchanges.curve_exchange_data._get_curve_config",
+            return_value=None,
+        ):
             exchange_data = CurveExchangeDataSpot(chain=MockCurveChain.ETHEREUM)
-            assert hasattr(CurveExchangeDataSpot, 'FACTORY_ADDRESSES')
+            assert hasattr(CurveExchangeDataSpot, "FACTORY_ADDRESSES")
             assert CurveChain.ETHEREUM in exchange_data.FACTORY_ADDRESSES
 
     def test_kline_periods(self):
         """Test kline periods are defined."""
-        with patch('bt_api_py.containers.exchanges.curve_exchange_data._get_curve_config', return_value=None):
+        with patch(
+            "bt_api_py.containers.exchanges.curve_exchange_data._get_curve_config",
+            return_value=None,
+        ):
             exchange_data = CurveExchangeDataSpot(chain=MockCurveChain.ETHEREUM)
             assert "1m" in exchange_data.kline_periods
             assert "1h" in exchange_data.kline_periods
@@ -319,7 +317,10 @@ class TestCurveExchangeDataSpot:
 
     def test_legal_currency(self):
         """Test legal currencies."""
-        with patch('bt_api_py.containers.exchanges.curve_exchange_data._get_curve_config', return_value=None):
+        with patch(
+            "bt_api_py.containers.exchanges.curve_exchange_data._get_curve_config",
+            return_value=None,
+        ):
             exchange_data = CurveExchangeDataSpot(chain=MockCurveChain.ETHEREUM)
             assert "USDT" in exchange_data.legal_currency
             assert "USDC" in exchange_data.legal_currency
@@ -345,7 +346,7 @@ class TestCurveStandardInterfaces:
     @pytest.fixture
     def curve_spot(self):
         """Create CurveRequestDataSpot instance with mocked request."""
-        with patch('bt_api_py.feeds.http_client.HttpClient', return_value=MagicMock()):
+        with patch("bt_api_py.feeds.http_client.HttpClient", return_value=MagicMock()):
             instance = CurveRequestDataSpot(Mock(), chain=MockCurveChain.ETHEREUM)
             instance.request = Mock(return_value=Mock(spec=RequestData))
             return instance
@@ -360,8 +361,8 @@ class TestCurveStandardInterfaces:
     def test_get_depth_tuple(self, curve_spot):
         """Test _get_depth returns tuple."""
         path, params, extra_data = curve_spot._get_depth("0xPool")
-        assert extra_data['request_type'] == "get_depth"
-        assert extra_data['symbol_name'] == "0xPool"
+        assert extra_data["request_type"] == "get_depth"
+        assert extra_data["symbol_name"] == "0xPool"
 
     def test_get_depth_calls_request(self, curve_spot):
         """Test get_depth calls self.request."""
@@ -373,8 +374,8 @@ class TestCurveStandardInterfaces:
     def test_get_kline_tuple(self, curve_spot):
         """Test _get_kline returns tuple."""
         path, params, extra_data = curve_spot._get_kline("0xPool", "1h", 100)
-        assert extra_data['request_type'] == "get_kline"
-        assert extra_data['period'] == "1h"
+        assert extra_data["request_type"] == "get_kline"
+        assert extra_data["period"] == "1h"
 
     def test_get_kline_calls_request(self, curve_spot):
         """Test get_kline calls self.request."""
@@ -383,14 +384,14 @@ class TestCurveStandardInterfaces:
 
     def test_get_server_time(self):
         """Test get_server_time returns RequestData."""
-        with patch('bt_api_py.feeds.http_client.HttpClient', return_value=MagicMock()):
+        with patch("bt_api_py.feeds.http_client.HttpClient", return_value=MagicMock()):
             inst = CurveRequestDataSpot(Mock(), chain=MockCurveChain.ETHEREUM)
             result = inst.get_server_time()
             assert isinstance(result, RequestData)
 
     def test_get_server_time_extra_data(self):
         """Test _get_server_time populates extra_data."""
-        with patch('bt_api_py.feeds.http_client.HttpClient', return_value=MagicMock()):
+        with patch("bt_api_py.feeds.http_client.HttpClient", return_value=MagicMock()):
             inst = CurveRequestDataSpot(Mock(), chain=MockCurveChain.ETHEREUM)
             path, params, extra_data = inst._get_server_time()
             assert extra_data["request_type"] == "get_server_time"

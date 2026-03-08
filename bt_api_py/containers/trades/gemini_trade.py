@@ -89,8 +89,10 @@ class GeminiRequestTradeData(RequestData):
 
     def __str__(self):
         """String representation"""
-        return (f"GeminiTrade(id={self.trade_id}, symbol={self.symbol}, "
-                f"side={self.side}, price={self.price}, amount={self.amount})")
+        return (
+            f"GeminiTrade(id={self.trade_id}, symbol={self.symbol}, "
+            f"side={self.side}, price={self.price}, amount={self.amount})"
+        )
 
 
 class GeminiSpotWssTradeData(GeminiRequestTradeData):

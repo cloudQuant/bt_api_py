@@ -1,17 +1,19 @@
-# -*- coding: utf-8 -*-
 """
 Tests for Binance Margin WebSocket API
 测试 Binance 杠杆 WebSocket API
 """
 
 import queue
+from unittest.mock import patch
+
 import pytest
-from unittest.mock import patch, MagicMock
-from bt_api_py.feeds.live_binance_feed import BinanceAccountWssDataMargin
+
 from bt_api_py.containers.accounts.binance_account import BinanceSpotWssAccountData
+from bt_api_py.containers.exchanges.binance_exchange_data import BinanceExchangeDataMargin
 from bt_api_py.containers.orders.binance_order import BinanceSpotWssOrderData
 from bt_api_py.containers.trades.binance_trade import BinanceSpotWssTradeData
-from bt_api_py.containers.exchanges.binance_exchange_data import BinanceExchangeDataMargin
+from bt_api_py.feeds.live_binance_feed import BinanceAccountWssDataMargin
+
 
 def init_margin_wss():
     """初始化 Margin WSS 实例 (mock wss_author 避免网络调用)"""
@@ -20,7 +22,7 @@ def init_margin_wss():
         "exchange_data": BinanceExchangeDataMargin(),
     }
     # Mock wss_author to avoid actual network calls
-    with patch.object(BinanceAccountWssDataMargin, 'wss_author', return_value=None):
+    with patch.object(BinanceAccountWssDataMargin, "wss_author", return_value=None):
         margin_wss = BinanceAccountWssDataMargin(data_queue, **kwargs)
         # Set listen_key manually
         margin_wss.listen_key = "test_listen_key"
@@ -30,7 +32,7 @@ def init_margin_wss():
 def test_margin_account_wss_has_handle_data():
     """测试 Margin Account WSS 有 handle_data 方法"""
     margin_wss, _ = init_margin_wss()
-    assert hasattr(margin_wss, 'handle_data')
+    assert hasattr(margin_wss, "handle_data")
     assert callable(margin_wss.handle_data)
 
 
@@ -67,7 +69,7 @@ def test_margin_account_wss_handle_data_execution_report():
         "O": 123456789,
         "Z": "0.00000000",
         "Y": "0.00000000",
-        "Q": "0.00000000"
+        "Q": "0.00000000",
     }
 
     margin_wss.handle_data(content)
@@ -90,17 +92,9 @@ def test_margin_account_wss_handle_data_outbound_account_position():
         "E": 123456789,
         "u": 123456789,
         "B": [
-            {
-                "a": "USDT",
-                "f": "1000.00000000",
-                "l": "0.00000000"
-            },
-            {
-                "a": "BTC",
-                "f": "0.50000000",
-                "l": "0.00000000"
-            }
-        ]
+            {"a": "USDT", "f": "1000.00000000", "l": "0.00000000"},
+            {"a": "BTC", "f": "0.50000000", "l": "0.00000000"},
+        ],
     }
 
     margin_wss.handle_data(content)
@@ -146,7 +140,7 @@ def test_margin_account_wss_handle_data_execution_report_trade():
         "O": 123456789,
         "Z": "50000.00000000",
         "Y": "0.00000000",
-        "Q": "0.00000000"
+        "Q": "0.00000000",
     }
 
     margin_wss.handle_data(content)
@@ -169,7 +163,7 @@ def test_margin_account_wss_handle_data_balance_update():
         "E": 1573200697114,
         "s": "BTC",
         "u": "15896533547050558808",
-        "B": "500.00000000"
+        "B": "500.00000000",
     }
 
     margin_wss.handle_data(content)
@@ -186,10 +180,10 @@ def test_margin_account_wss_has_push_methods():
     """测试 Margin Account WSS 有 push 方法"""
     margin_wss, _ = init_margin_wss()
 
-    assert hasattr(margin_wss, 'push_account')
-    assert hasattr(margin_wss, 'push_order')
-    assert hasattr(margin_wss, 'push_trade')
-    assert hasattr(margin_wss, 'push_balance')
+    assert hasattr(margin_wss, "push_account")
+    assert hasattr(margin_wss, "push_order")
+    assert hasattr(margin_wss, "push_trade")
+    assert hasattr(margin_wss, "push_balance")
     assert callable(margin_wss.push_account)
     assert callable(margin_wss.push_order)
     assert callable(margin_wss.push_trade)
@@ -198,29 +192,29 @@ def test_margin_account_wss_has_push_methods():
 
 def test_spot_account_wss_has_push_balance():
     """测试 Spot Account WSS 有 push_balance 方法"""
-    from bt_api_py.feeds.live_binance_feed import BinanceAccountWssDataSpot
     from bt_api_py.containers.exchanges.binance_exchange_data import BinanceExchangeDataSpot
+    from bt_api_py.feeds.live_binance_feed import BinanceAccountWssDataSpot
 
     data_queue = queue.Queue()
     kwargs = {"exchange_data": BinanceExchangeDataSpot()}
     # Mock wss_author to avoid actual network calls
-    with patch.object(BinanceAccountWssDataSpot, 'wss_author', return_value=None):
+    with patch.object(BinanceAccountWssDataSpot, "wss_author", return_value=None):
         spot_wss = BinanceAccountWssDataSpot(data_queue, **kwargs)
         spot_wss.listen_key = "test_listen_key"
 
-    assert hasattr(spot_wss, 'push_balance')
+    assert hasattr(spot_wss, "push_balance")
     assert callable(spot_wss.push_balance)
 
 
 def test_spot_account_wss_handle_balance_update():
     """测试 Spot 处理 balanceUpdate 事件"""
-    from bt_api_py.feeds.live_binance_feed import BinanceAccountWssDataSpot
     from bt_api_py.containers.exchanges.binance_exchange_data import BinanceExchangeDataSpot
+    from bt_api_py.feeds.live_binance_feed import BinanceAccountWssDataSpot
 
     data_queue = queue.Queue()
     kwargs = {"exchange_data": BinanceExchangeDataSpot()}
     # Mock wss_author to avoid actual network calls
-    with patch.object(BinanceAccountWssDataSpot, 'wss_author', return_value=None):
+    with patch.object(BinanceAccountWssDataSpot, "wss_author", return_value=None):
         spot_wss = BinanceAccountWssDataSpot(data_queue, **kwargs)
         spot_wss.listen_key = "test_listen_key"
 
@@ -230,7 +224,7 @@ def test_spot_account_wss_handle_balance_update():
         "E": 1573200697114,
         "s": "BTC",
         "u": "15896533547050558808",
-        "B": "500.00000000"
+        "B": "500.00000000",
     }
 
     spot_wss.handle_data(content)
@@ -245,4 +239,5 @@ def test_spot_account_wss_handle_balance_update():
 
 if __name__ == "__main__":
     import pytest
+
     pytest.main([__file__, "-v"])

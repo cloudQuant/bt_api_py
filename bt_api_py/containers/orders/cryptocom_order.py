@@ -195,6 +195,7 @@ class CryptoComOrder(OrderData):
         For production use, use the standard constructor with json-encoded data.
         """
         import json
+
         return cls(
             order_info=json.dumps(data),
             symbol_name=symbol or data.get("instrument_name"),

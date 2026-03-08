@@ -7,7 +7,7 @@ Trading is done on-chain through smart contracts.
 
 import time
 
-from bt_api_py.containers.exchanges.curve_exchange_data import CurveExchangeDataSpot, CurveChain
+from bt_api_py.containers.exchanges.curve_exchange_data import CurveChain, CurveExchangeDataSpot
 from bt_api_py.containers.requestdatas.request_data import RequestData
 from bt_api_py.feeds.capability import Capability
 from bt_api_py.feeds.feed import Feed
@@ -117,13 +117,15 @@ class CurveRequestData(Feed):
         """
         if extra_data is None:
             extra_data = {}
-        extra_data.update({
-            "exchange_name": self.exchange_name,
-            "symbol_name": "",
-            "asset_type": self.asset_type,
-            "request_type": "get_server_time",
-            "server_time": time.time(),
-        })
+        extra_data.update(
+            {
+                "exchange_name": self.exchange_name,
+                "symbol_name": "",
+                "asset_type": self.asset_type,
+                "request_type": "get_server_time",
+                "server_time": time.time(),
+            }
+        )
         return "GET /v1/getPools/ethereum/main", {}, extra_data
 
     def get_server_time(self, extra_data=None, **kwargs):

@@ -4,8 +4,6 @@ Handles authentication, signing, and all REST API methods.
 dYdX is a decentralized exchange, so authentication uses wallet signatures.
 """
 
-import json
-import time
 from urllib.parse import urlencode
 
 from bt_api_py.containers.exchanges.dydx_exchange_data import DydxExchangeDataSwap
@@ -13,8 +11,8 @@ from bt_api_py.containers.requestdatas.request_data import RequestData
 from bt_api_py.error import ErrorTranslator
 from bt_api_py.feeds.capability import Capability
 from bt_api_py.feeds.feed import Feed
-from bt_api_py.rate_limiter import RateLimiter, RateLimitRule, RateLimitScope, RateLimitType
 from bt_api_py.logging_factory import get_logger
+from bt_api_py.rate_limiter import RateLimiter, RateLimitRule, RateLimitScope, RateLimitType
 
 
 class DydxErrorTranslator(ErrorTranslator):
@@ -128,10 +126,7 @@ class DydxRequestData(Feed):
 
         # dYdX Indexer API doesn't require authentication for public endpoints
         # For private endpoints, authentication would need to be implemented
-        headers = {
-            "Content-Type": "application/json",
-            "User-Agent": "bt_api_py/1.0"
-        }
+        headers = {"Content-Type": "application/json", "User-Agent": "bt_api_py/1.0"}
 
         res = self.http_request(method, url, headers, body, timeout)
         return RequestData(res, extra_data)
@@ -149,10 +144,7 @@ class DydxRequestData(Feed):
         if req:
             url += f"?{req}"
 
-        headers = {
-            "Content-Type": "application/json",
-            "User-Agent": "bt_api_py/1.0"
-        }
+        headers = {"Content-Type": "application/json", "User-Agent": "bt_api_py/1.0"}
 
         res = await self.async_http_request(method, url, headers, body, timeout)
         return RequestData(res, extra_data)
@@ -350,13 +342,15 @@ class DydxRequestData(Feed):
             extra_data = {}
         request_symbol = self._params.get_symbol(symbol)
         path = self._params.get_rest_path("get_perpetual_markets")
-        extra_data.update({
-            "exchange_name": self.exchange_name,
-            "symbol_name": request_symbol,
-            "asset_type": self.asset_type,
-            "request_type": "get_tick",
-            "normalize_function": self._get_ticker_normalize_function,
-        })
+        extra_data.update(
+            {
+                "exchange_name": self.exchange_name,
+                "symbol_name": request_symbol,
+                "asset_type": self.asset_type,
+                "request_type": "get_tick",
+                "normalize_function": self._get_ticker_normalize_function,
+            }
+        )
         return path, {}, extra_data
 
     def get_tick(self, symbol, extra_data=None, **kwargs):
@@ -381,13 +375,15 @@ class DydxRequestData(Feed):
         request_symbol = self._params.get_symbol(symbol)
         path = self._params.get_rest_path("get_orderbook")
         path = path.replace("<placeholder>", request_symbol)
-        extra_data.update({
-            "exchange_name": self.exchange_name,
-            "symbol_name": request_symbol,
-            "asset_type": self.asset_type,
-            "request_type": "get_depth",
-            "normalize_function": self._get_orderbook_normalize_function,
-        })
+        extra_data.update(
+            {
+                "exchange_name": self.exchange_name,
+                "symbol_name": request_symbol,
+                "asset_type": self.asset_type,
+                "request_type": "get_depth",
+                "normalize_function": self._get_orderbook_normalize_function,
+            }
+        )
         return path, {}, extra_data
 
     def get_depth(self, symbol, count=20, extra_data=None, **kwargs):
@@ -414,14 +410,16 @@ class DydxRequestData(Feed):
         path = self._params.get_rest_path("get_candles")
         path = path.replace("<placeholder>", request_symbol)
         params = {"resolution": exchange_period, "limit": count}
-        extra_data.update({
-            "exchange_name": self.exchange_name,
-            "symbol_name": request_symbol,
-            "asset_type": self.asset_type,
-            "request_type": "get_kline",
-            "period": period,
-            "normalize_function": self._get_candles_normalize_function,
-        })
+        extra_data.update(
+            {
+                "exchange_name": self.exchange_name,
+                "symbol_name": request_symbol,
+                "asset_type": self.asset_type,
+                "request_type": "get_kline",
+                "period": period,
+                "normalize_function": self._get_candles_normalize_function,
+            }
+        )
         return path, params, extra_data
 
     def get_kline(self, symbol, period, count=20, extra_data=None, **kwargs):
@@ -444,12 +442,14 @@ class DydxRequestData(Feed):
         if extra_data is None:
             extra_data = {}
         path = self._params.get_rest_path("get_exchange_info")
-        extra_data.update({
-            "exchange_name": self.exchange_name,
-            "symbol_name": "",
-            "asset_type": self.asset_type,
-            "request_type": "get_exchange_info",
-        })
+        extra_data.update(
+            {
+                "exchange_name": self.exchange_name,
+                "symbol_name": "",
+                "asset_type": self.asset_type,
+                "request_type": "get_exchange_info",
+            }
+        )
         return path, {}, extra_data
 
     def get_exchange_info(self, extra_data=None, **kwargs):
@@ -464,12 +464,14 @@ class DydxRequestData(Feed):
         if extra_data is None:
             extra_data = {}
         path = self._params.get_rest_path("get_time")
-        extra_data.update({
-            "exchange_name": self.exchange_name,
-            "symbol_name": "",
-            "asset_type": self.asset_type,
-            "request_type": "get_server_time",
-        })
+        extra_data.update(
+            {
+                "exchange_name": self.exchange_name,
+                "symbol_name": "",
+                "asset_type": self.asset_type,
+                "request_type": "get_server_time",
+            }
+        )
         return path, {}, extra_data
 
     def get_server_time(self, extra_data=None, **kwargs):
@@ -483,7 +485,9 @@ class DydxRequestData(Feed):
         """Get subaccount information"""
         request_type = "get_subaccount"
         path = self._params.get_rest_path(request_type)
-        path = path.replace("<address>", address).replace("<subaccount_number>", str(subaccount_number))
+        path = path.replace("<address>", address).replace(
+            "<subaccount_number>", str(subaccount_number)
+        )
 
         extra_data = self._update_extra_data(
             extra_data,
@@ -502,8 +506,16 @@ class DydxRequestData(Feed):
         data = input_data.get("subaccount", {})
         return data, status
 
-    def get_orders(self, address=None, subaccount_number=None, market=None, status=None,
-                   limit=50, extra_data=None, **kwargs):
+    def get_orders(
+        self,
+        address=None,
+        subaccount_number=None,
+        market=None,
+        status=None,
+        limit=50,
+        extra_data=None,
+        **kwargs,
+    ):
         """Get orders (requires address and subaccount_number for authenticated requests)"""
         request_type = "get_orders"
         path = self._params.get_rest_path(request_type)
@@ -541,8 +553,15 @@ class DydxRequestData(Feed):
         }
         return data, status
 
-    def get_fills(self, address=None, subaccount_number=None, market=None, limit=100,
-                  extra_data=None, **kwargs):
+    def get_fills(
+        self,
+        address=None,
+        subaccount_number=None,
+        market=None,
+        limit=100,
+        extra_data=None,
+        **kwargs,
+    ):
         """Get fills/trades"""
         request_type = "get_fills"
         path = self._params.get_rest_path(request_type)
@@ -578,8 +597,15 @@ class DydxRequestData(Feed):
         }
         return data, status
 
-    def get_funding_payments(self, address=None, subaccount_number=None, market=None,
-                           limit=100, extra_data=None, **kwargs):
+    def get_funding_payments(
+        self,
+        address=None,
+        subaccount_number=None,
+        market=None,
+        limit=100,
+        extra_data=None,
+        **kwargs,
+    ):
         """Get funding payments"""
         request_type = "get_funding_payments"
         path = self._params.get_rest_path(request_type)
@@ -613,8 +639,15 @@ class DydxRequestData(Feed):
         }
         return data, status
 
-    def get_historical_pnl(self, address=None, subaccount_number=None, market=None,
-                          limit=100, extra_data=None, **kwargs):
+    def get_historical_pnl(
+        self,
+        address=None,
+        subaccount_number=None,
+        market=None,
+        limit=100,
+        extra_data=None,
+        **kwargs,
+    ):
         """Get historical PnL"""
         request_type = "get_historical_pnl"
         path = self._params.get_rest_path(request_type)

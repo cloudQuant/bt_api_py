@@ -1,17 +1,15 @@
-- --
-
+---
 name: 'step-04-self-check'
 description: 'Self-audit implementation against tasks, tests, AC, and patterns'
 
 nextStepFile: './step-05-adversarial-review.md'
-
-- --
+---
 
 # Step 4: Self-Check
 
-- *Goal:** Audit completed work against tasks, tests, AC, and patterns before external review.
+**Goal:** Audit completed work against tasks, tests, AC, and patterns before external review.
 
-- --
+---
 
 ## AVAILABLE STATE
 
@@ -22,7 +20,7 @@ From previous steps:
 - `{tech_spec_path}` - Tech-spec file (if Mode A)
 - `{project_context}` - Project patterns (if exists)
 
-- --
+---
 
 ## SELF-CHECK AUDIT
 
@@ -59,7 +57,7 @@ Verify code quality:
 - [ ] Error handling consistent with codebase
 - [ ] No obvious code smells introduced
 
-- --
+---
 
 ## UPDATE TECH-SPEC (Mode A only)
 
@@ -70,32 +68,30 @@ If `{execution_mode}` is "tech-spec":
 3. Update status to "Implementation Complete"
 4. Save changes
 
-- --
+---
 
 ## IMPLEMENTATION SUMMARY
 
 Present summary to transition to review:
 
-```bash
+```
+**Implementation Complete!**
 
-- *Implementation Complete!**
-
-- *Summary:** {what was implemented}
-- *Files Modified:** {list of files}
-- *Tests:** {test summary - passed/added/etc}
-- *AC Status:** {all satisfied / issues noted}
+**Summary:** {what was implemented}
+**Files Modified:** {list of files}
+**Tests:** {test summary - passed/added/etc}
+**AC Status:** {all satisfied / issues noted}
 
 Proceeding to adversarial code review...
+```
 
-```bash
-
-- --
+---
 
 ## NEXT STEP
 
 Proceed immediately to `{project-root}/_bmad/bmm/workflows/bmad-quick-flow/quick-dev/steps/step-05-adversarial-review.md`.
 
-- --
+---
 
 ## SUCCESS METRICS
 

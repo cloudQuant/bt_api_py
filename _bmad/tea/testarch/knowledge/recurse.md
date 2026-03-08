@@ -42,16 +42,15 @@ test('wait for job completion', async ({ recurse, apiRequest }) => {
 
   expect(result.body.downloadUrl).toBeDefined();
 });
-
-```bash
+```
 
 ## Pattern Examples
 
 ### Example 1: Basic Polling
 
-- *Context**: Wait for async operation to complete with custom timeout and interval.
+**Context**: Wait for async operation to complete with custom timeout and interval.
 
-- *Implementation**:
+**Implementation**:
 
 ```typescript
 import { test } from '@seontechnologies/playwright-utils/recurse/fixtures';
@@ -77,10 +76,9 @@ test('should wait for job completion', async ({ recurse, apiRequest }) => {
 
   expect(result.body.downloadUrl).toBeDefined();
 });
+```
 
-```bash
-
-- *Key Points**:
+**Key Points**:
 
 - First arg: command function (what to execute)
 - Second arg: predicate function (when to stop)
@@ -89,9 +87,9 @@ test('should wait for job completion', async ({ recurse, apiRequest }) => {
 
 ### Example 2: Working with Assertions
 
-- *Context**: Use assertions directly in predicate for more expressive tests.
+**Context**: Use assertions directly in predicate for more expressive tests.
 
-- *Implementation**:
+**Implementation**:
 
 ```typescript
 test('should poll with assertions', async ({ recurse, apiRequest }) => {
@@ -116,10 +114,9 @@ test('should poll with assertions', async ({ recurse, apiRequest }) => {
     { timeout: 30000 },
   );
 });
+```
 
-```bash
-
-- *Why no `return true` needed?**
+**Why no `return true` needed?**
 
 The predicate checks for "truthiness" of the return value. But there's a catch - in JavaScript, an empty `return` (or no return) returns `undefined`, which is falsy!
 
@@ -144,20 +141,19 @@ So you can:
   expect(event.processed).toBe(true);
   return true;
 };
-
-```bash
+```
 
 ### Example 3: Error Handling
 
-- *Context**: Understanding the different error types.
+**Context**: Understanding the different error types.
 
-- *Error Types:**
+**Error Types:**
 
 ```typescript
 // RecurseTimeoutError - Predicate never returned true within timeout
 // Contains last command value and predicate error
 try {
-  await recurse(/*...*/);
+  await recurse(/* ... */);
 } catch (error) {
   if (error instanceof RecurseTimeoutError) {
     console.log('Timed out. Last value:', error.lastCommandValue);
@@ -170,10 +166,9 @@ try {
 
 // RecursePredicateError - Predicate function threw (not from assertions failing)
 // Logic error in your predicate code
+```
 
-```bash
-
-- *Custom Error Messages:**
+**Custom Error Messages:**
 
 ```typescript
 test('custom error on timeout', async ({ recurse, apiRequest }) => {
@@ -192,14 +187,13 @@ test('custom error on timeout', async ({ recurse, apiRequest }) => {
     throw error;
   }
 });
-
-```bash
+```
 
 ### Example 4: Post-Polling Callback
 
-- *Context**: Process or log results after successful polling.
+**Context**: Process or log results after successful polling.
 
-- *Implementation**:
+**Implementation**:
 
 ```typescript
 test('post-poll processing', async ({ recurse, apiRequest }) => {
@@ -219,10 +213,9 @@ test('post-poll processing', async ({ recurse, apiRequest }) => {
 
   expect(finalResult.itemsProcessed).toBeGreaterThan(0);
 });
+```
 
-```bash
-
-- *Key Points**:
+**Key Points**:
 
 - `post` callback runs after predicate succeeds
 - Receives the final result
@@ -231,9 +224,9 @@ test('post-poll processing', async ({ recurse, apiRequest }) => {
 
 ### Example 5: UI Testing Scenarios
 
-- *Context**: Wait for UI elements to reach a specific state through polling.
+**Context**: Wait for UI elements to reach a specific state through polling.
 
-- *Implementation**:
+**Implementation**:
 
 ```typescript
 test('table data loads', async ({ page, recurse }) => {
@@ -253,14 +246,13 @@ test('table data loads', async ({ page, recurse }) => {
   // Now safe to interact with table
   await page.locator('table tbody tr').first().click();
 });
-
-```bash
+```
 
 ### Example 6: Event-Based Systems (Kafka/Message Queues)
 
-- *Context**: Testing eventual consistency with message queue processing.
+**Context**: Testing eventual consistency with message queue processing.
 
-- *Implementation**:
+**Implementation**:
 
 ```typescript
 test('kafka event processed', async ({ recurse, apiRequest }) => {
@@ -288,14 +280,13 @@ test('kafka event processed', async ({ recurse, apiRequest }) => {
 
   expect(inventoryResult.body.lastOrderId).toBeDefined();
 });
-
-```bash
+```
 
 ### Example 7: Integration with API Request (Common Pattern)
 
-- *Context**: Most common use case - polling API endpoints for state changes.
+**Context**: Most common use case - polling API endpoints for state changes.
 
-- *Implementation**:
+**Implementation**:
 
 ```typescript
 import { test } from '@seontechnologies/playwright-utils/fixtures';
@@ -325,10 +316,9 @@ test('end-to-end polling', async ({ apiRequest, recurse }) => {
   expect(importResult.body.rowsImported).toBeGreaterThan(1000);
   expect(importResult.body.errors).toHaveLength(0);
 });
+```
 
-```bash
-
-- *Key Points**:
+**Key Points**:
 
 - Combine `apiRequest` + `recurse` for API polling
 - Both from `@seontechnologies/playwright-utils/fixtures`
@@ -340,50 +330,34 @@ test('end-to-end polling', async ({ apiRequest, recurse }) => {
 ### RecurseOptions
 
 | Option     | Type               | Default     | Description                          |
-
 | ---------- | ------------------ | ----------- | ------------------------------------ |
-
 | `timeout`  | `number`           | `30000`     | Maximum time to wait (ms)            |
-
 | `interval` | `number`           | `1000`      | Time between polls (ms)              |
-
 | `log`      | `string`           | `undefined` | Message logged on each poll          |
-
 | `error`    | `string`           | `undefined` | Custom error message for timeout     |
-
 | `post`     | `(result: T) => R` | `undefined` | Callback after successful poll       |
-
 | `delay`    | `number`           | `0`         | Initial delay before first poll (ms) |
 
 ### Error Types
 
 | Error Type              | When Thrown                             | Properties                               |
-
 | ----------------------- | --------------------------------------- | ---------------------------------------- |
-
 | `RecurseTimeoutError`   | Predicate never passed within timeout   | `lastCommandValue`, `lastPredicateError` |
-
 | `RecurseCommandError`   | Command function threw an error         | `cause` (original error)                 |
-
 | `RecursePredicateError` | Predicate threw (not assertion failure) | `cause` (original error)                 |
 
 ## Comparison with Vanilla Playwright
 
 | Vanilla Playwright                                                | recurse Utility                                                           |
-
 | ----------------------------------------------------------------- | ------------------------------------------------------------------------- |
-
 | `await expect.poll(() => { ... }, { timeout: 30000 }).toBe(true)` | `await recurse(() => { ... }, (val) => val === true, { timeout: 30000 })` |
-
 | No logging                                                        | Built-in log option                                                       |
-
 | Generic timeout errors                                            | Categorized errors (timeout/command/predicate)                            |
-
 | No post-poll hooks                                                | `post` callback support                                                   |
 
 ## When to Use
 
-- *Use recurse for:**
+**Use recurse for:**
 
 - Background job completion
 - Webhook/event processing
@@ -391,7 +365,7 @@ test('end-to-end polling', async ({ apiRequest, recurse }) => {
 - Cache propagation
 - State machine transitions
 
-- *Stick with vanilla expect.poll for:**
+**Stick with vanilla expect.poll for:**
 
 - Simple UI element visibility (use `expect(locator).toBeVisible()`)
 - Single-property checks
@@ -407,16 +381,15 @@ test('end-to-end polling', async ({ apiRequest, recurse }) => {
 
 ## Anti-Patterns
 
-- *DON'T use hard waits instead of polling:**
+**DON'T use hard waits instead of polling:**
 
 ```typescript
 await page.click('#export');
 await page.waitForTimeout(5000); // Arbitrary wait
 expect(await page.textContent('#status')).toBe('Ready');
+```
 
-```bash
-
-- *DO poll for actual condition:**
+**DO poll for actual condition:**
 
 ```typescript
 await page.click('#export');
@@ -425,10 +398,9 @@ await recurse(
   (status) => status === 'Ready',
   { timeout: 10000 },
 );
+```
 
-```bash
-
-- *DON'T poll too frequently:**
+**DON'T poll too frequently:**
 
 ```typescript
 await recurse(
@@ -436,10 +408,9 @@ await recurse(
   (res) => res.body.ready,
   { interval: 100 }, // Hammers API every 100ms!
 );
+```
 
-```bash
-
-- *DO use reasonable interval for API calls:**
+**DO use reasonable interval for API calls:**
 
 ```typescript
 await recurse(
@@ -447,5 +418,4 @@ await recurse(
   (res) => res.body.ready,
   { interval: 2000 }, // Check every 2 seconds (reasonable)
 );
-
-```bash
+```

@@ -2,9 +2,9 @@
 BYDFi REST API request base class.
 """
 
-import time
-import hmac
 import hashlib
+import hmac
+import time
 from urllib.parse import urlencode
 
 from bt_api_py.containers.exchanges.bydfi_exchange_data import BYDFiExchangeDataSpot
@@ -58,9 +58,7 @@ class BYDFiRequestData(Feed):
             sign_str = f"{api_key}{timestamp}{query_string}{body_str}"
 
             signature = hmac.new(
-                secret.encode("utf-8"),
-                sign_str.encode("utf-8"),
-                hashlib.sha256
+                secret.encode("utf-8"), sign_str.encode("utf-8"), hashlib.sha256
             ).hexdigest()
             return signature
         return ""
@@ -77,9 +75,7 @@ class BYDFiRequestData(Feed):
         if self._params.api_key:
             headers["X-API-KEY"] = self._params.api_key
             headers["X-API-TIMESTAMP"] = str(timestamp)
-            headers["X-API-SIGNATURE"] = self._generate_signature(
-                timestamp, params, body
-            )
+            headers["X-API-SIGNATURE"] = self._generate_signature(timestamp, params, body)
 
         return headers
 
@@ -142,12 +138,14 @@ class BYDFiRequestData(Feed):
         """Prepare server time request. Returns (path, params, extra_data)."""
         if extra_data is None:
             extra_data = {}
-        extra_data.update({
-            "exchange_name": self.exchange_name,
-            "symbol_name": "",
-            "asset_type": self.asset_type,
-            "request_type": "get_server_time",
-        })
+        extra_data.update(
+            {
+                "exchange_name": self.exchange_name,
+                "symbol_name": "",
+                "asset_type": self.asset_type,
+                "request_type": "get_server_time",
+            }
+        )
         return "GET /v1/public/time", {}, extra_data
 
     def get_server_time(self, extra_data=None, **kwargs):

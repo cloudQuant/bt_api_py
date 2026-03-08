@@ -46,8 +46,8 @@ from bt_api_py.feeds.capability import Capability
 from bt_api_py.feeds.feed import Feed
 from bt_api_py.functions.calculate_time import datetime2timestamp
 from bt_api_py.functions.utils import update_extra_data
-from bt_api_py.rate_limiter import RateLimiter, RateLimitRule, RateLimitScope, RateLimitType
 from bt_api_py.logging_factory import get_logger
+from bt_api_py.rate_limiter import RateLimiter, RateLimitRule, RateLimitScope, RateLimitType
 
 # session = requests.Session()
 # session.keep_alive = False

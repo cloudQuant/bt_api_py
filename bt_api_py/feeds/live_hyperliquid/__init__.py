@@ -12,9 +12,9 @@ Components:
 
 from .request_base import HyperliquidRequestData
 from .spot import (
-    HyperliquidRequestDataSpot,
-    HyperliquidMarketWssDataSpot,
     HyperliquidAccountWssDataSpot,
+    HyperliquidMarketWssDataSpot,
+    HyperliquidRequestDataSpot,
 )
 
 __all__ = [

@@ -1,9 +1,7 @@
-- --
-
+---
 description: 'Edit existing BMAD modules while maintaining coherence'
 auto_execution_mode: "iterate"
-
-- --
+---
 
 # edit-module
 

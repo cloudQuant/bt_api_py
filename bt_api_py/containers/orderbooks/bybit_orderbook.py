@@ -124,10 +124,12 @@ class BybitOrderBookData(OrderBookData):
         self.init_data()
         best_bid = self.get_best_bid()
         best_ask = self.get_best_ask()
-        return (f"BybitOrderBook(symbol={self.symbol_name}, "
-                f"bid={best_bid}, "
-                f"ask={best_ask}, "
-                f"spread={self.get_spread()})")
+        return (
+            f"BybitOrderBook(symbol={self.symbol_name}, "
+            f"bid={best_bid}, "
+            f"ask={best_ask}, "
+            f"spread={self.get_spread()})"
+        )
 
 
 class BybitSpotOrderBookData(BybitOrderBookData):

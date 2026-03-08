@@ -5,8 +5,8 @@ Provides common functionality for market WebSocket data handling.
 """
 
 import json
-import time
 import threading
+
 import websocket
 
 from bt_api_py.containers.requestdatas.request_data import RequestData
@@ -21,11 +21,13 @@ class HyperliquidMarketWssData(Feed):
         super().__init__(data_queue, **kwargs)
         self.asset_type = kwargs.get("asset_type", "SPOT")
         self.logger_name = kwargs.get("logger_name", "hyperliquid_market_wss.log")
-        self._params = kwargs.get("exchange_data", None)
+        self._params = kwargs.get("exchange_data")
         self.request_logger = get_logger("hyperliquid_market_wss")
         self.async_logger = get_logger("hyperliquid_market_wss")
 
-        self.ws_url = kwargs.get("ws_url", self._params.wss_url if self._params else "wss://api.hyperliquid.xyz/ws")
+        self.ws_url = kwargs.get(
+            "ws_url", self._params.wss_url if self._params else "wss://api.hyperliquid.xyz/ws"
+        )
         self.subscriptions = []
         self.is_running = False
         self.ws_thread = None
@@ -84,7 +86,7 @@ class HyperliquidMarketWssData(Feed):
             on_message=self.on_message,
             on_open=self.on_open,
             on_error=self.on_error,
-            on_close=self.on_close
+            on_close=self.on_close,
         )
         ws.run_forever(ping_interval=30)
 

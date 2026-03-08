@@ -2,17 +2,16 @@
 Tests for Uniswap Spot Feed implementation.
 """
 
-import pytest
-from unittest.mock import Mock, patch, MagicMock
-from decimal import Decimal
 import os
+from decimal import Decimal
+from unittest.mock import MagicMock, Mock, patch
 
-from bt_api_py.feeds.live_uniswap.spot import UniswapRequestDataSpot
-from bt_api_py.containers.exchanges.uniswap_exchange_data import UniswapExchangeDataSpot
-from bt_api_py.containers.exchanges.uniswap_ticker import UniswapTicker
+import pytest
+
 from bt_api_py.containers.exchanges.uniswap_pool import UniswapPool
 from bt_api_py.containers.exchanges.uniswap_quote import UniswapQuote
-
+from bt_api_py.containers.exchanges.uniswap_ticker import UniswapTicker
+from bt_api_py.feeds.live_uniswap.spot import UniswapRequestDataSpot
 
 # Set a dummy API key for tests
 os.environ["UNISWAP_API_KEY"] = "test_api_key"
@@ -35,7 +34,7 @@ class TestUniswapRequestDataSpot:
     @pytest.fixture
     def uniswap_spot(self, mock_data_queue, mock_http_client):
         """Create UniswapRequestDataSpot instance with mocked HTTP client."""
-        with patch('bt_api_py.feeds.http_client.HttpClient', return_value=mock_http_client):
+        with patch("bt_api_py.feeds.http_client.HttpClient", return_value=mock_http_client):
             instance = UniswapRequestDataSpot(mock_data_queue, chain="ETHEREUM")
             # Replace the http_client with our mock
             instance._http_client = mock_http_client
@@ -65,6 +64,7 @@ class TestUniswapRequestDataSpot:
     def test_get_server_time(self, uniswap_spot):
         """Test get_server_time returns RequestData."""
         from bt_api_py.containers.requestdatas.request_data import RequestData
+
         result = uniswap_spot.get_server_time()
         assert isinstance(result, RequestData)
 
@@ -87,7 +87,7 @@ class TestUniswapRequestDataSpot:
                     "price": {"USD": "3000.0"},
                     "priceChange24h": {"USD": "50.0"},
                     "volume": {"USD": "1000000.0"},
-                    "marketCap": {"USD": "360000000000"}
+                    "marketCap": {"USD": "360000000000"},
                 }
             }
         }
@@ -99,7 +99,7 @@ class TestUniswapRequestDataSpot:
         # Verify result
         assert result.input_data == mock_response
         assert result.extra_data is not None
-        assert result.extra_data['symbol_name'] == "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2"
+        assert result.extra_data["symbol_name"] == "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2"
 
     def test_get_pool(self, uniswap_spot, mock_http_client):
         """Test get_pool method."""
@@ -122,20 +122,20 @@ class TestUniswapRequestDataSpot:
                         "symbol": "WETH",
                         "name": "Wrapped Ether",
                         "decimals": 18,
-                        "priceUSD": "3000.0"
+                        "priceUSD": "3000.0",
                     },
                     "token1": {
                         "id": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
                         "symbol": "USDC",
                         "name": "USD Coin",
                         "decimals": 6,
-                        "priceUSD": "1.0"
+                        "priceUSD": "1.0",
                     },
                     "reserve0": "1000",
                     "reserve1": "3000000",
                     "token0Price": "3000.0",
                     "token1Price": "0.0003333333333333333",
-                    "liquidityProviderCount": 100
+                    "liquidityProviderCount": 100,
                 }
             }
         }
@@ -147,7 +147,7 @@ class TestUniswapRequestDataSpot:
         # Verify result
         assert result.input_data == mock_response
         assert result.extra_data is not None
-        assert result.extra_data['pool_id'] == "0x8ad599c3a0ff1de082011efddc58f1908eb6e6d8"
+        assert result.extra_data["pool_id"] == "0x8ad599c3a0ff1de082011efddc58f1908eb6e6d8"
 
     def test_get_swap_quote(self, uniswap_spot, mock_http_client):
         """Test get_swap_quote method."""
@@ -158,12 +158,12 @@ class TestUniswapRequestDataSpot:
                     "tokenIn": {
                         "address": "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
                         "symbol": "WETH",
-                        "name": "Wrapped Ether"
+                        "name": "Wrapped Ether",
                     },
                     "tokenOut": {
                         "address": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
                         "symbol": "USDC",
-                        "name": "USD Coin"
+                        "name": "USD Coin",
                     },
                     "amountIn": "1",
                     "amountOut": "2985.05",
@@ -175,19 +175,19 @@ class TestUniswapRequestDataSpot:
                             {
                                 "pool": {
                                     "id": "0x8ad599c3a0ff1de082011efddc58f1908eb6e6d8",
-                                    "address": "0x8ad599c3a0ff1de082011efddc58f1908eb6e6d8"
+                                    "address": "0x8ad599c3a0ff1de082011efddc58f1908eb6e6d8",
                                 },
                                 "tokenIn": {
                                     "address": "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
-                                    "symbol": "WETH"
+                                    "symbol": "WETH",
                                 },
                                 "tokenOut": {
                                     "address": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
-                                    "symbol": "USDC"
-                                }
+                                    "symbol": "USDC",
+                                },
                             }
-                        ]
-                    }
+                        ],
+                    },
                 }
             }
         }
@@ -197,14 +197,14 @@ class TestUniswapRequestDataSpot:
         result = uniswap_spot.get_swap_quote(
             token_in="0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
             token_out="0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
-            amount="1"
+            amount="1",
         )
 
         # Verify result
         assert result.input_data == mock_response
         assert result.extra_data is not None
-        assert result.extra_data['token_in'] == "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2"
-        assert result.extra_data['token_out'] == "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48"
+        assert result.extra_data["token_in"] == "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2"
+        assert result.extra_data["token_out"] == "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48"
 
     def test_get_swappable_tokens(self, uniswap_spot, mock_http_client):
         """Test get_swappable_tokens method."""
@@ -221,7 +221,7 @@ class TestUniswapRequestDataSpot:
                         "priceUSD": "3000.0",
                         "volumeUSD": "1000000",
                         "marketCapUSD": "360000000000",
-                        "totalLiquidityUSD": "10000000"
+                        "totalLiquidityUSD": "10000000",
                     },
                     {
                         "id": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
@@ -232,8 +232,8 @@ class TestUniswapRequestDataSpot:
                         "priceUSD": "1.0",
                         "volumeUSD": "5000000",
                         "marketCapUSD": "50000000000",
-                        "totalLiquidityUSD": "50000000"
-                    }
+                        "totalLiquidityUSD": "50000000",
+                    },
                 ]
             }
         }
@@ -244,7 +244,7 @@ class TestUniswapRequestDataSpot:
 
         # Verify result
         assert result.input_data == mock_response
-        assert len(result.input_data['data']['swappableTokens']) == 2
+        assert len(result.input_data["data"]["swappableTokens"]) == 2
 
     def test_get_depth(self, uniswap_spot, mock_http_client):
         """Test get_depth method."""
@@ -257,7 +257,7 @@ class TestUniswapRequestDataSpot:
                     "name": "WETH/USDC",
                     "symbol": "WETH/USDC 0.3%",
                     "type": "V3",
-                    "totalValueLockedUSD": "10000000"
+                    "totalValueLockedUSD": "10000000",
                 }
             }
         }
@@ -291,14 +291,10 @@ class TestUniswapRequestDataSpot:
                     "apiKey": "test_key",
                     "version": "1.0",
                     "supportedChains": ["ETHEREUM", "ARBITRUM"],
-                    "features": ["swapping", "pool_management"]
+                    "features": ["swapping", "pool_management"],
                 },
-                "tokens": {
-                    "totalCount": 1000
-                },
-                "pools": {
-                    "totalCount": 500
-                }
+                "tokens": {"totalCount": 1000},
+                "pools": {"totalCount": 500},
             }
         }
         mock_http_client.request.return_value = mock_response
@@ -325,7 +321,7 @@ class TestUniswapTicker:
                 "price": {"USD": "3000.0"},
                 "priceChange24h": {"USD": "50.0"},
                 "volume": {"USD": "1000000.0"},
-                "marketCap": {"USD": "360000000000"}
+                "marketCap": {"USD": "360000000000"},
             }
         }
 
@@ -348,7 +344,7 @@ class TestUniswapTicker:
             address="0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
             decimals=18,
             price=3000.0,
-            price_change_24h=150.0  # 5% of 3000
+            price_change_24h=150.0,  # 5% of 3000
         )
 
         assert ticker.price_change_percentage_24h == 5.0
@@ -363,7 +359,7 @@ class TestUniswapTicker:
             decimals=18,
             price=3000.0,
             volume_24h=1000000.0,
-            total_liquidity_usd=10000000.0
+            total_liquidity_usd=10000000.0,
         )
 
         assert ticker.is_valid_price == True
@@ -378,7 +374,7 @@ class TestUniswapTicker:
             decimals=18,
             price=0.0,
             volume_24h=0.0,
-            total_liquidity_usd=0.0
+            total_liquidity_usd=0.0,
         )
 
         assert invalid_ticker.is_valid_price == False
@@ -408,14 +404,14 @@ class TestUniswapPool:
                     "symbol": "WETH",
                     "name": "Wrapped Ether",
                     "decimals": 18,
-                    "priceUSD": "3000.0"
+                    "priceUSD": "3000.0",
                 },
                 "token1": {
                     "id": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
                     "symbol": "USDC",
                     "name": "USD Coin",
                     "decimals": 6,
-                    "priceUSD": "1.0"
+                    "priceUSD": "1.0",
                 },
                 "reserve0": "1000",
                 "reserve1": "3000000",
@@ -427,14 +423,8 @@ class TestUniswapPool:
                     "volumeUSD": "5000000",
                     "volumeUSDDay": "100000",
                     "feesUSD": "15000",
-                    "aprItems": [
-                        {
-                            "title": "Trading Fees",
-                            "type": "swap",
-                            "apr": "0.15"
-                        }
-                    ]
-                }
+                    "aprItems": [{"title": "Trading Fees", "type": "swap", "apr": "0.15"}],
+                },
             }
         }
 
@@ -469,19 +459,22 @@ class TestUniswapPool:
             pool_type="V3",
             token0=None,
             token1=None,
-            tokens=[UniswapPoolToken(
-                address="0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
-                symbol="WETH",
-                name="Wrapped Ether",
-                decimals=18,
-                reserve=Decimal("1000")
-            ), UniswapPoolToken(
-                address="0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
-                symbol="USDC",
-                name="USD Coin",
-                decimals=6,
-                reserve=Decimal("3000000")
-            )]
+            tokens=[
+                UniswapPoolToken(
+                    address="0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
+                    symbol="WETH",
+                    name="Wrapped Ether",
+                    decimals=18,
+                    reserve=Decimal("1000"),
+                ),
+                UniswapPoolToken(
+                    address="0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+                    symbol="USDC",
+                    name="USD Coin",
+                    decimals=6,
+                    reserve=Decimal("3000000"),
+                ),
+            ],
         )
 
         # Get WETH balance
@@ -507,12 +500,12 @@ class TestUniswapQuote:
                 "tokenIn": {
                     "address": "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
                     "symbol": "WETH",
-                    "name": "Wrapped Ether"
+                    "name": "Wrapped Ether",
                 },
                 "tokenOut": {
                     "address": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
                     "symbol": "USDC",
-                    "name": "USD Coin"
+                    "name": "USD Coin",
                 },
                 "amountIn": "1",
                 "amountOut": "2985.05",
@@ -524,19 +517,19 @@ class TestUniswapQuote:
                         {
                             "pool": {
                                 "id": "0x8ad599c3a0ff1de082011efddc58f1908eb6e6d8",
-                                "address": "0x8ad599c3a0ff1de082011efddc58f1908eb6e6d8"
+                                "address": "0x8ad599c3a0ff1de082011efddc58f1908eb6e6d8",
                             },
                             "tokenIn": {
                                 "address": "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
-                                "symbol": "WETH"
+                                "symbol": "WETH",
                             },
                             "tokenOut": {
                                 "address": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
-                                "symbol": "USDC"
-                            }
+                                "symbol": "USDC",
+                            },
                         }
-                    ]
-                }
+                    ],
+                },
             }
         }
 
@@ -565,7 +558,7 @@ class TestUniswapQuote:
             swap_type="EXACT_IN",
             amount_in=Decimal("100"),
             amount_out=Decimal("90"),
-            price_impact=Decimal("-10")  # -10 amount impact
+            price_impact=Decimal("-10"),  # -10 amount impact
         )
 
         # price_impact_percentage is calculated as abs(-10) / 100 * 100 = 10.0
@@ -581,7 +574,7 @@ class TestUniswapQuote:
             token_out=Mock(address="0x2", symbol="USDC", name="USD Coin"),
             swap_type="EXACT_IN",
             amount_in=Decimal("100"),
-            amount_out=Decimal("90")
+            amount_out=Decimal("90"),
         )
 
         assert quote.get_effective_rate() == Decimal("0.9")
@@ -594,7 +587,7 @@ class TestUniswapQuote:
             token_out=Mock(address="0x2", symbol="USDC", name="USD Coin"),
             swap_type="EXACT_IN",
             amount_in=Decimal("100"),
-            amount_out=Decimal("90")
+            amount_out=Decimal("90"),
         )
 
         # With 1% slippage tolerance
@@ -607,7 +600,7 @@ class TestUniswapStandardInterfaces:
 
     @pytest.fixture
     def uniswap_spot(self):
-        with patch('bt_api_py.feeds.http_client.HttpClient', return_value=MagicMock()):
+        with patch("bt_api_py.feeds.http_client.HttpClient", return_value=MagicMock()):
             instance = UniswapRequestDataSpot(Mock(), chain="ETHEREUM")
             instance.request = Mock(return_value=Mock())
             return instance

@@ -1,5 +1,4 @@
-- --
-
+---
 title: '{title}'
 slug: '{slug}'
 created: '{date}'
@@ -9,12 +8,11 @@ tech_stack: []
 files_to_modify: []
 code_patterns: []
 test_patterns: []
-
-- --
+---
 
 # Tech-Spec: {title}
 
-- *Created:** {date}
+**Created:** {date}
 
 ## Overview
 
@@ -28,12 +26,10 @@ test_patterns: []
 
 ### Scope
 
-- *In Scope:**
-
+**In Scope:**
 {in_scope}
 
-- *Out of Scope:**
-
+**Out of Scope:**
 {out_of_scope}
 
 ## Context for Development
@@ -45,7 +41,6 @@ test_patterns: []
 ### Files to Reference
 
 | File | Purpose |
-
 | ---- | ------- |
 
 {files_table}

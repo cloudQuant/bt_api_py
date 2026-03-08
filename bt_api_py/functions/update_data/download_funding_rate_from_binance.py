@@ -89,7 +89,7 @@ def download_funding_rate_from_binance():
             if len(df) > 0:
                 funding_rate_data_list.append(df)
             else:
-                print(f"{symbol} cannot get data in {time_list[i]} to {time_list[i+1]}")
+                print(f"{symbol} cannot get data in {time_list[i]} to {time_list[i + 1]}")
         if len(funding_rate_data_list) == 0:
             continue
         data = pd.concat(funding_rate_data_list, axis=0)

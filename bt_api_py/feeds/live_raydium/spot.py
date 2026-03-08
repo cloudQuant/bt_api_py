@@ -4,10 +4,8 @@ Raydium Spot Feed implementation.
 Provides market data access for Raydium DEX pools.
 """
 
-from typing import Any
 
 from bt_api_py.containers.exchanges.raydium_exchange_data import RaydiumExchangeDataSpot
-from bt_api_py.containers.tickers.raydium_ticker import RaydiumRequestTickerData
 from bt_api_py.feeds.capability import Capability
 from bt_api_py.feeds.live_raydium.request_base import RaydiumRequestData
 from bt_api_py.functions.utils import update_extra_data
@@ -56,7 +54,7 @@ class RaydiumRequestDataSpot(RaydiumRequestData):
         first: int = 10,
         min_tvl: float | None = None,
         pool_type: str | None = None,
-        **kwargs
+        **kwargs,
     ):
         """Get list of pools.
 
@@ -110,7 +108,7 @@ class RaydiumRequestDataSpot(RaydiumRequestData):
         min_tvl: float | None = None,
         pool_type: str | None = None,
         extra_data=None,
-        **kwargs
+        **kwargs,
     ):
         """Get list of pools.
 
@@ -124,9 +122,7 @@ class RaydiumRequestDataSpot(RaydiumRequestData):
         Returns:
             RequestData with list of pools
         """
-        path, params, extra_data = self._get_pools(
-            extra_data, first, min_tvl, pool_type, **kwargs
-        )
+        path, params, extra_data = self._get_pools(extra_data, first, min_tvl, pool_type, **kwargs)
         return self.request(path, params=params, extra_data=extra_data)
 
     # ==================== Pool Detail ====================
@@ -364,32 +360,63 @@ class RaydiumRequestDataSpot(RaydiumRequestData):
 
     # ==================== Standard Trading Interfaces ====================
 
-    def _make_order(self, symbol, volume, price, order_type, offset="open",
-                    post_only=False, client_order_id=None, extra_data=None, **kwargs):
+    def _make_order(
+        self,
+        symbol,
+        volume,
+        price,
+        order_type,
+        offset="open",
+        post_only=False,
+        client_order_id=None,
+        extra_data=None,
+        **kwargs,
+    ):
         """Prepare order. Returns (path, params, extra_data).
 
         Raydium is a DEX; trading requires on-chain transactions.
         """
         if extra_data is None:
             extra_data = {}
-        extra_data.update({
-            "exchange_name": self.exchange_name,
-            "symbol_name": symbol,
-            "asset_type": self.asset_type,
-            "request_type": "make_order",
-        })
+        extra_data.update(
+            {
+                "exchange_name": self.exchange_name,
+                "symbol_name": symbol,
+                "asset_type": self.asset_type,
+                "request_type": "make_order",
+            }
+        )
         params = {
-            "symbol": symbol, "quantity": str(volume),
-            "price": str(price), "orderType": order_type,
+            "symbol": symbol,
+            "quantity": str(volume),
+            "price": str(price),
+            "orderType": order_type,
         }
         return "/trade/swap", params, extra_data
 
-    def make_order(self, symbol, volume, price, order_type, offset="open",
-                   post_only=False, client_order_id=None, extra_data=None, **kwargs):
+    def make_order(
+        self,
+        symbol,
+        volume,
+        price,
+        order_type,
+        offset="open",
+        post_only=False,
+        client_order_id=None,
+        extra_data=None,
+        **kwargs,
+    ):
         """Place an order. Note: Raydium requires on-chain tx."""
         path, params, extra_data = self._make_order(
-            symbol, volume, price, order_type, offset, post_only,
-            client_order_id, extra_data, **kwargs
+            symbol,
+            volume,
+            price,
+            order_type,
+            offset,
+            post_only,
+            client_order_id,
+            extra_data,
+            **kwargs,
         )
         return self.request(path, params=params, extra_data=extra_data)
 
@@ -397,13 +424,15 @@ class RaydiumRequestDataSpot(RaydiumRequestData):
         """Cancel order. Returns (path, params, extra_data)."""
         if extra_data is None:
             extra_data = {}
-        extra_data.update({
-            "exchange_name": self.exchange_name,
-            "symbol_name": symbol,
-            "asset_type": self.asset_type,
-            "request_type": "cancel_order",
-            "order_id": order_id,
-        })
+        extra_data.update(
+            {
+                "exchange_name": self.exchange_name,
+                "symbol_name": symbol,
+                "asset_type": self.asset_type,
+                "request_type": "cancel_order",
+                "order_id": order_id,
+            }
+        )
         return f"/orders/{order_id}", {}, extra_data
 
     def cancel_order(self, symbol, order_id, extra_data=None, **kwargs):
@@ -415,13 +444,15 @@ class RaydiumRequestDataSpot(RaydiumRequestData):
         """Query order. Returns (path, params, extra_data)."""
         if extra_data is None:
             extra_data = {}
-        extra_data.update({
-            "exchange_name": self.exchange_name,
-            "symbol_name": symbol,
-            "asset_type": self.asset_type,
-            "request_type": "query_order",
-            "order_id": order_id,
-        })
+        extra_data.update(
+            {
+                "exchange_name": self.exchange_name,
+                "symbol_name": symbol,
+                "asset_type": self.asset_type,
+                "request_type": "query_order",
+                "order_id": order_id,
+            }
+        )
         return f"/orders/{order_id}", {}, extra_data
 
     def query_order(self, symbol, order_id, extra_data=None, **kwargs):
@@ -433,12 +464,14 @@ class RaydiumRequestDataSpot(RaydiumRequestData):
         """Get open orders. Returns (path, params, extra_data)."""
         if extra_data is None:
             extra_data = {}
-        extra_data.update({
-            "exchange_name": self.exchange_name,
-            "symbol_name": symbol or "",
-            "asset_type": self.asset_type,
-            "request_type": "get_open_orders",
-        })
+        extra_data.update(
+            {
+                "exchange_name": self.exchange_name,
+                "symbol_name": symbol or "",
+                "asset_type": self.asset_type,
+                "request_type": "get_open_orders",
+            }
+        )
         return "/orders", {}, extra_data
 
     def get_open_orders(self, symbol=None, extra_data=None, **kwargs):
@@ -452,12 +485,14 @@ class RaydiumRequestDataSpot(RaydiumRequestData):
         """Get account info. Returns (path, params, extra_data)."""
         if extra_data is None:
             extra_data = {}
-        extra_data.update({
-            "exchange_name": self.exchange_name,
-            "symbol_name": symbol or "",
-            "asset_type": self.asset_type,
-            "request_type": "get_account",
-        })
+        extra_data.update(
+            {
+                "exchange_name": self.exchange_name,
+                "symbol_name": symbol or "",
+                "asset_type": self.asset_type,
+                "request_type": "get_account",
+            }
+        )
         return "/account", {}, extra_data
 
     def get_account(self, symbol=None, extra_data=None, **kwargs):
@@ -469,12 +504,14 @@ class RaydiumRequestDataSpot(RaydiumRequestData):
         """Get balance. Returns (path, params, extra_data)."""
         if extra_data is None:
             extra_data = {}
-        extra_data.update({
-            "exchange_name": self.exchange_name,
-            "symbol_name": symbol or "",
-            "asset_type": self.asset_type,
-            "request_type": "get_balance",
-        })
+        extra_data.update(
+            {
+                "exchange_name": self.exchange_name,
+                "symbol_name": symbol or "",
+                "asset_type": self.asset_type,
+                "request_type": "get_balance",
+            }
+        )
         return "/balance", {}, extra_data
 
     def get_balance(self, symbol=None, extra_data=None, **kwargs):

@@ -6,6 +6,7 @@ Endpoints use /{pair}/ suffix for market data.
 """
 
 import os
+
 from bt_api_py.containers.exchanges.exchange_data import ExchangeData
 from bt_api_py.logging_factory import get_logger
 
@@ -22,6 +23,7 @@ def _get_bitstamp_config():
         return _bitstamp_config
     try:
         from bt_api_py.config_loader import load_exchange_config
+
         config_path = os.path.join(
             os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
             "configs",
@@ -66,9 +68,18 @@ class BitstampExchangeData(ExchangeData):
         self.rest_paths = dict(_FALLBACK_REST_PATHS)
         self.wss_paths = {}
         self.kline_periods = {
-            "1m": "60", "3m": "180", "5m": "300", "15m": "900",
-            "30m": "1800", "1h": "3600", "2h": "7200", "4h": "14400",
-            "6h": "21600", "12h": "43200", "1d": "86400", "3d": "259200",
+            "1m": "60",
+            "3m": "180",
+            "5m": "300",
+            "15m": "900",
+            "30m": "1800",
+            "1h": "3600",
+            "2h": "7200",
+            "4h": "14400",
+            "6h": "21600",
+            "12h": "43200",
+            "1d": "86400",
+            "3d": "259200",
         }
         self.legal_currency = ["USD", "EUR", "GBP", "USDC"]
 

@@ -10,18 +10,17 @@ from unittest.mock import Mock
 
 import pytest
 
+# Import registration to auto-register SatoshiTango
+import bt_api_py.exchange_registers.register_satoshitango  # noqa: F401
 from bt_api_py.containers.exchanges.satoshitango_exchange_data import (
     SatoshiTangoExchangeData,
     SatoshiTangoExchangeDataSpot,
 )
+from bt_api_py.containers.requestdatas.request_data import RequestData
 from bt_api_py.containers.tickers.satoshitango_ticker import SatoshiTangoRequestTickerData
 from bt_api_py.feeds.capability import Capability
 from bt_api_py.feeds.live_satoshitango.spot import SatoshiTangoRequestDataSpot
-from bt_api_py.containers.requestdatas.request_data import RequestData
 from bt_api_py.registry import ExchangeRegistry
-
-# Import registration to auto-register SatoshiTango
-import bt_api_py.exchange_registers.register_satoshitango  # noqa: F401
 
 
 @pytest.fixture
@@ -115,9 +114,7 @@ class TestSatoshiTangoRequestDataSpot:
         assert extra_data["request_type"] == "get_account"
 
     def test_make_order_returns_tuple(self, mock_feed):
-        path, params, extra_data = mock_feed._make_order(
-            "BTC/ARS", "0.001", "9500000", "buy-limit"
-        )
+        path, params, extra_data = mock_feed._make_order("BTC/ARS", "0.001", "9500000", "buy-limit")
         assert path is not None
         assert extra_data["request_type"] == "make_order"
 
@@ -215,13 +212,17 @@ class TestSatoshiTangoNormalizeFunctions:
         assert status is True
 
     def test_exchange_info_normalize_with_none(self):
-        result, status = SatoshiTangoRequestDataSpot._get_exchange_info_normalize_function(None, None)
+        result, status = SatoshiTangoRequestDataSpot._get_exchange_info_normalize_function(
+            None, None
+        )
         assert result == []
         assert status is False
 
     def test_exchange_info_normalize_with_data(self):
         input_data = {"BTCARS": {}, "ETHARS": {}}
-        result, status = SatoshiTangoRequestDataSpot._get_exchange_info_normalize_function(input_data, {})
+        result, status = SatoshiTangoRequestDataSpot._get_exchange_info_normalize_function(
+            input_data, {}
+        )
         assert status is True
 
     def test_balance_normalize_with_none(self):
@@ -246,7 +247,9 @@ class TestSatoshiTangoNormalizeFunctions:
 
     def test_server_time_normalize_with_data(self):
         input_data = {"timestamp": 1678901234}
-        result, status = SatoshiTangoRequestDataSpot._get_server_time_normalize_function(input_data, {})
+        result, status = SatoshiTangoRequestDataSpot._get_server_time_normalize_function(
+            input_data, {}
+        )
         assert status is True
 
 

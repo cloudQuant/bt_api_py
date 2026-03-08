@@ -12,9 +12,9 @@ except ImportError:
     httpx = None
 
 from bt_api_py.error import (
+    ServerError,
     UnifiedAuthError,
     UnifiedRateLimitError,
-    ServerError,
 )
 from bt_api_py.exceptions import RequestFailedError
 from bt_api_py.logging_factory import get_logger
@@ -187,9 +187,7 @@ class HttpClient:
         # 4xx responses that exchange-specific code handles via RequestData.
         # This matches the old requests-based behavior where only 404/410 raised.
         if 400 <= status < 500 and status not in (404, 410):
-            logger.warn(
-                f"HTTP {status} response from {response.url}: {response.text[:200]}"
-            )
+            logger.warn(f"HTTP {status} response from {response.url}: {response.text[:200]}")
             try:
                 return response.json()
             except (ValueError, UnicodeDecodeError):

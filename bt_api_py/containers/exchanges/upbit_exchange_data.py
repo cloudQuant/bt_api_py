@@ -7,6 +7,7 @@ Auth: JWT (HS256) with SHA512 query hash.
 """
 
 import os
+
 from bt_api_py.containers.exchanges.exchange_data import ExchangeData
 from bt_api_py.logging_factory import get_logger
 
@@ -23,6 +24,7 @@ def _get_upbit_config():
         return _upbit_config
     try:
         from bt_api_py.config_loader import load_exchange_config
+
         config_path = os.path.join(
             os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
             "configs",
@@ -68,10 +70,22 @@ class UpbitExchangeData(ExchangeData):
         self.rest_paths = dict(_FALLBACK_REST_PATHS)
         self.wss_paths = {}
         self.kline_periods = {
-            "1m": "1", "3m": "3", "5m": "5", "10m": "10",
-            "15m": "15", "30m": "30", "1h": "60", "2h": "120",
-            "4h": "240", "6h": "360", "8h": "480", "12h": "720",
-            "1d": "D", "3d": "3D", "1w": "W", "1M": "M",
+            "1m": "1",
+            "3m": "3",
+            "5m": "5",
+            "10m": "10",
+            "15m": "15",
+            "30m": "30",
+            "1h": "60",
+            "2h": "120",
+            "4h": "240",
+            "6h": "360",
+            "8h": "480",
+            "12h": "720",
+            "1d": "D",
+            "3d": "3D",
+            "1w": "W",
+            "1M": "M",
         }
         self.reverse_kline_periods = {v: k for k, v in self.kline_periods.items()}
         self.legal_currency = ["KRW", "USDT", "BTC", "ETH"]

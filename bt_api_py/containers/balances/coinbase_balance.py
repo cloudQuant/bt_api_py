@@ -19,7 +19,9 @@ class CoinbaseBalanceData(BalanceData):
         self.asset_type = asset_type
         # If already JSON encoded, parse it to dict; otherwise store raw
         if has_been_json_encoded:
-            self.balance_data = json.loads(balance_info) if isinstance(balance_info, str) else balance_info
+            self.balance_data = (
+                json.loads(balance_info) if isinstance(balance_info, str) else balance_info
+            )
         else:
             self.balance_data = None
         self.currency = None

@@ -40,8 +40,7 @@ test('should add, edit and delete a movie', async ({ page, context, networkRecor
 
   // Network traffic is automatically saved to HAR file
 });
-
-```bash
+```
 
 ### 2. Playback Network Traffic
 
@@ -58,17 +57,17 @@ test('should add, edit and delete a movie', async ({ page, context, networkRecor
   await page.fill('#movie-name', 'Inception');
   await page.click('#add-movie');
 });
+```
 
-```bash
 That's it! Your tests now run completely offline using recorded network traffic.
 
 ## Pattern Examples
 
 ### Example 1: Basic Record and Playback
 
-- *Context**: The fundamental pattern - record traffic once, play back for all subsequent runs.
+**Context**: The fundamental pattern - record traffic once, play back for all subsequent runs.
 
-- *Implementation**:
+**Implementation**:
 
 ```typescript
 import { test } from '@seontechnologies/playwright-utils/network-recorder/fixtures';
@@ -90,10 +89,9 @@ test('CRUD operations work offline', async ({ page, context, networkRecorder }) 
   // Intelligent CRUD detection makes this work offline!
   await expect(page.getByText('Inception')).toBeVisible();
 });
+```
 
-```bash
-
-- *Key Points**:
+**Key Points**:
 
 - `PW_NET_MODE=record` captures traffic to HAR files
 - `PW_NET_MODE=playback` replays from HAR files
@@ -103,9 +101,9 @@ test('CRUD operations work offline', async ({ page, context, networkRecorder }) 
 
 ### Example 2: Complete CRUD Flow with HAR
 
-- *Context**: Full create-read-update-delete flow that works completely offline.
+**Context**: Full create-read-update-delete flow that works completely offline.
 
-- *Implementation**:
+**Implementation**:
 
 ```typescript
 process.env.PW_NET_MODE = 'playback';
@@ -148,10 +146,9 @@ test.describe('Movie CRUD - offline with network recorder', () => {
     await expect(page.getByText("Inception Director's Cut")).not.toBeVisible();
   });
 });
+```
 
-```bash
-
-- *Key Points**:
+**Key Points**:
 
 - Full CRUD operations work offline
 - Stateful HAR mocking tracks creates/updates/deletes
@@ -160,7 +157,7 @@ test.describe('Movie CRUD - offline with network recorder', () => {
 
 ### Example 3: Common Patterns
 
-- *Recording Only API Calls**:
+**Recording Only API Calls**:
 
 ```typescript
 await networkRecorder.setup(context, {
@@ -168,10 +165,9 @@ await networkRecorder.setup(context, {
     urlFilter: /\/api\//, // Only record API calls, ignore static assets
   },
 });
+```
 
-```bash
-
-- *Playback with Fallback**:
+**Playback with Fallback**:
 
 ```typescript
 await networkRecorder.setup(context, {
@@ -179,10 +175,9 @@ await networkRecorder.setup(context, {
     fallback: true, // Fall back to live requests if HAR entry missing
   },
 });
+```
 
-```bash
-
-- *Custom HAR File Location**:
+**Custom HAR File Location**:
 
 ```typescript
 await networkRecorder.setup(context, {
@@ -192,19 +187,18 @@ await networkRecorder.setup(context, {
     organizeByTestFile: false, // Optional: flatten directory structure
   },
 });
+```
 
-```bash
-
-- *Directory Organization:**
+**Directory Organization:**
 
 - `organizeByTestFile: true` (default): `har-files/test-file-name/baseName-test-title.har`
 - `organizeByTestFile: false`: `har-files/baseName-test-title.har`
 
 ### Example 4: Response Content Storage - Embed vs Attach
 
-- *Context**: Choose how response content is stored in HAR files.
+**Context**: Choose how response content is stored in HAR files.
 
-- *`embed` (Default - Recommended):**
+**`embed` (Default - Recommended):**
 
 ```typescript
 await networkRecorder.setup(context, {
@@ -212,21 +206,20 @@ await networkRecorder.setup(context, {
     content: 'embed', // Store content inline (default)
   },
 });
+```
 
-```bash
-
-- *Pros:**
+**Pros:**
 
 - Single self-contained file - Easy to share, version control
 - Better for small-medium responses (API JSON, HTML pages)
 - HAR specification compliant
 
-- *Cons:**
+**Cons:**
 
 - Larger HAR files
 - Not ideal for large binary content (images, videos)
 
-- *`attach` (Alternative):**
+**`attach` (Alternative):**
 
 ```typescript
 await networkRecorder.setup(context, {
@@ -234,40 +227,34 @@ await networkRecorder.setup(context, {
     content: 'attach', // Store content separately
   },
 });
+```
 
-```bash
-
-- *Pros:**
+**Pros:**
 
 - Smaller HAR files
 - Better for large responses (images, videos, documents)
 
-- *Cons:**
+**Cons:**
 
 - Multiple files to manage
 - Harder to share
 
-- *When to Use Each:**
+**When to Use Each:**
 
 | Use `embed` (default) when          | Use `attach` when               |
-
 | ----------------------------------- | ------------------------------- |
-
 | Recording API responses (JSON, XML) | Recording large images, videos  |
-
 | Small to medium HTML pages          | HAR file size >50MB             |
-
 | You want a single, portable file    | Maximum disk efficiency needed  |
-
 | Sharing HAR files with team         | Working with ZIP archive output |
 
 ### Example 5: Cross-Environment Compatibility (URL Mapping)
 
-- *Context**: Record in dev environment, play back in CI with different base URLs.
+**Context**: Record in dev environment, play back in CI with different base URLs.
 
-- *The Problem**: HAR files contain URLs for the recording environment (e.g., `dev.example.com`). Playing back on a different environment fails.
+**The Problem**: HAR files contain URLs for the recording environment (e.g., `dev.example.com`). Playing back on a different environment fails.
 
-- *Simple Hostname Mapping:**
+**Simple Hostname Mapping:**
 
 ```typescript
 await networkRecorder.setup(context, {
@@ -281,10 +268,9 @@ await networkRecorder.setup(context, {
     },
   },
 });
+```
 
-```bash
-
-- *Pattern-Based Mapping (Recommended):**
+**Pattern-Based Mapping (Recommended):**
 
 ```typescript
 await networkRecorder.setup(context, {
@@ -297,10 +283,9 @@ await networkRecorder.setup(context, {
     },
   },
 });
+```
 
-```bash
-
-- *Custom Function:**
+**Custom Function:**
 
 ```typescript
 await networkRecorder.setup(context, {
@@ -310,10 +295,9 @@ await networkRecorder.setup(context, {
     },
   },
 });
+```
 
-```bash
-
-- *Complex Multi-Environment Example:**
+**Complex Multi-Environment Example:**
 
 ```typescript
 await networkRecorder.setup(context, {
@@ -331,10 +315,9 @@ await networkRecorder.setup(context, {
     },
   },
 });
+```
 
-```bash
-
-- *Benefits:**
+**Benefits:**
 
 - Record once on dev, all environments map back to recordings
 - CORS headers automatically updated based on request origin
@@ -343,22 +326,15 @@ await networkRecorder.setup(context, {
 ## Why Use This Instead of Native Playwright?
 
 | Native Playwright (`routeFromHAR`) | network-recorder Utility       |
-
 | ---------------------------------- | ------------------------------ |
-
 | ~80 lines setup boilerplate        | ~5 lines total                 |
-
 | Manual HAR file management         | Automatic file organization    |
-
 | Complex setup/teardown             | Automatic cleanup via fixtures |
-
-| **Read-only tests only**|**Full CRUD support**|
-
-|**Stateless**|**Stateful mocking**           |
-
+| **Read-only tests only**           | **Full CRUD support**          |
+| **Stateless**                      | **Stateful mocking**           |
 | Manual URL mapping                 | Automatic environment mapping  |
 
-- *The game-changer: Stateful CRUD detection**
+**The game-changer: Stateful CRUD detection**
 
 Native Playwright HAR playback is stateless - a POST create followed by GET list won't show the created item. This utility intelligently tracks CRUD operations in memory to reflect state changes, making offline tests behave like real APIs.
 
@@ -377,38 +353,32 @@ It automatically switches from static HAR playback to an intelligent stateful mo
 - Returns proper 404s for deleted resources
 - Supports polling scenarios where state changes over time
 
-- *This happens automatically - no configuration needed!**
+**This happens automatically - no configuration needed!**
 
 ## API Reference
 
 ### NetworkRecorder Methods
 
 | Method               | Return Type              | Description                                   |
-
 | -------------------- | ------------------------ | --------------------------------------------- |
-
 | `setup(context)`     | `Promise<void>`          | Sets up recording/playback on browser context |
-
 | `cleanup()`          | `Promise<void>`          | Flushes data to disk and cleans up memory     |
-
 | `getContext()`       | `NetworkRecorderContext` | Gets current recorder context information     |
-
 | `getStatusMessage()` | `string`                 | Gets human-readable status message            |
-
 | `getHarStats()`      | `Promise<HarFileStats>`  | Gets HAR file statistics and metadata         |
 
 ### Understanding `cleanup()`
 
 The `cleanup()` method performs memory and resource cleanup - **it does NOT delete HAR files**:
 
-- *What it does:**
+**What it does:**
 
 - Flushes recorded data to disk (writes HAR file in recording mode)
 - Releases file locks
 - Clears in-memory data
 - Resets internal state
 
-- *What it does NOT do:**
+**What it does NOT do:**
 
 - Delete HAR files from disk
 - Remove recorded network traffic
@@ -426,50 +396,39 @@ type NetworkRecorderConfig = {
 
   recording?: {
     content?: 'embed' | 'attach'; // Response content handling (default: 'embed')
-
     urlFilter?: string | RegExp; // URL filter for recording
-
     update?: boolean; // Update existing HAR files (default: false)
   };
 
   playback?: {
     fallback?: boolean; // Fall back to live requests (default: false)
     urlFilter?: string | RegExp; // URL filter for playback
-
     updateMode?: boolean; // Update mode during playback (default: false)
   };
 
   forceMode?: 'record' | 'playback' | 'disabled';
-
 };
-
-```bash
+```
 
 ## Environment Configuration
 
 Control the recording mode using the `PW_NET_MODE` environment variable:
 
 ```bash
-
 # Record mode - captures network traffic to HAR files
-
 PW_NET_MODE=record npm run test:pw
 
 # Playback mode - replays network traffic from HAR files
-
 PW_NET_MODE=playback npm run test:pw
 
 # Disabled mode - no network recording/playback
-
 PW_NET_MODE=disabled npm run test:pw
 
 # Default behavior (when PW_NET_MODE is empty/unset) - same as disabled
-
 npm run test:pw
+```
 
-```bash
-
-- *Tip**: We recommend setting `process.env.PW_NET_MODE` directly in your test file for better control.
+**Tip**: We recommend setting `process.env.PW_NET_MODE` directly in your test file for better control.
 
 ## Troubleshooting
 
@@ -496,8 +455,7 @@ test('Authenticated recording', async ({ page, context, authSession, networkReco
   // Test authenticated flows
   await page.goto('/dashboard');
 });
-
-```bash
+```
 
 ### Concurrent Test Issues
 
@@ -505,7 +463,7 @@ The recorder includes built-in file locking for safe parallel execution. Each te
 
 ## Integration with Other Utilities
 
-- *With interceptNetworkCall (deterministic waits):**
+**With interceptNetworkCall (deterministic waits):**
 
 ```typescript
 test('use both utilities', async ({ page, context, networkRecorder, interceptNetworkCall }) => {
@@ -521,8 +479,7 @@ test('use both utilities', async ({ page, context, networkRecorder, interceptNet
 
   // Network recorder provides playback, intercept provides determinism
 });
-
-```bash
+```
 
 ## Related Fragments
 
@@ -533,16 +490,15 @@ test('use both utilities', async ({ page, context, networkRecorder, interceptNet
 
 ## Anti-Patterns
 
-- *DON'T mix record and playback in same test:**
+**DON'T mix record and playback in same test:**
 
 ```typescript
 process.env.PW_NET_MODE = 'record';
 // ... some test code ...
 process.env.PW_NET_MODE = 'playback'; // Don't switch mid-test
+```
 
-```bash
-
-- *DO use one mode per test:**
+**DO use one mode per test:**
 
 ```typescript
 process.env.PW_NET_MODE = 'playback'; // Set once at top
@@ -551,24 +507,21 @@ test('my test', async ({ page, context, networkRecorder }) => {
   await networkRecorder.setup(context);
   // Entire test uses playback mode
 });
+```
 
-```bash
-
-- *DON'T forget to call setup:**
+**DON'T forget to call setup:**
 
 ```typescript
 test('broken', async ({ page, networkRecorder }) => {
   await page.goto('/'); // HAR not active!
 });
+```
 
-```bash
-
-- *DO always call setup before navigation:**
+**DO always call setup before navigation:**
 
 ```typescript
 test('correct', async ({ page, context, networkRecorder }) => {
   await networkRecorder.setup(context); // Must setup first
   await page.goto('/'); // Now HAR is active
 });
-
-```bash
+```

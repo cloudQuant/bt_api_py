@@ -9,50 +9,35 @@ Localization testing ensures games work correctly across languages, regions, and
 ### Linguistic Testing
 
 | Category             | Focus                   | Examples                       |
-
 | -------------------- | ----------------------- | ------------------------------ |
-
 | Translation accuracy | Meaning preserved       | Idioms, game terminology       |
-
 | Grammar/spelling     | Language correctness    | Verb tense, punctuation        |
-
 | Consistency          | Same terms throughout   | "Health" vs "HP" vs "Life"     |
-
 | Context              | Meaning in game context | Item names, skill descriptions |
 
 ### Functional Testing
 
 | Category       | Focus                   | Examples                    |
-
 | -------------- | ----------------------- | --------------------------- |
-
 | Text display   | Fits in UI              | Button labels, dialog boxes |
-
 | Font support   | Characters render       | CJK, Cyrillic, Arabic       |
-
 | Text expansion | Longer translations     | German is ~30% longer       |
-
 | RTL support    | Right-to-left languages | Arabic, Hebrew layouts      |
 
 ### Cultural Testing
 
 | Category             | Focus              | Examples                  |
-
 | -------------------- | ------------------ | ------------------------- |
-
 | Cultural sensitivity | Offensive content  | Gestures, symbols, colors |
-
 | Regional compliance  | Legal requirements | Ratings, gambling laws    |
-
 | Date/time formats    | Local conventions  | DD/MM/YYYY vs MM/DD/YYYY  |
-
 | Number formats       | Decimal separators | 1,000.00 vs 1.000,00      |
 
 ## Test Scenarios
 
 ### Text Display
 
-```bash
+```
 SCENARIO: Text Fits UI Elements
   GIVEN all localized strings
   WHEN displayed in target language
@@ -72,12 +57,11 @@ SCENARIO: Plural Forms
   WHEN displaying in Polish (4 plural forms)
   THEN correct plural form is used
   AND all plural forms are translated
-
-```bash
+```
 
 ### Character Support
 
-```bash
+```
 SCENARIO: CJK Character Rendering
   GIVEN Japanese localization
   WHEN displaying text with kanji/hiragana/katakana
@@ -97,12 +81,11 @@ SCENARIO: User-Generated Content
   THEN name displays correctly
   AND name saves/loads correctly
   AND name appears correctly to other players
-
-```bash
+```
 
 ### Layout and Direction
 
-```bash
+```
 SCENARIO: Right-to-Left Layout
   GIVEN Arabic localization
   WHEN viewing UI
@@ -117,37 +100,26 @@ SCENARIO: Text Expansion Accommodation
   THEN button expands or text size adjusts
   AND button remains clickable
   AND layout doesn't break
-
-```bash
+```
 
 ## Locale-Specific Formatting
 
 ### Date and Time
 
 | Locale | Date Format    | Time Format |
-
 | ------ | -------------- | ----------- |
-
 | en-US  | 12/25/2024     | 3:30 PM     |
-
 | en-GB  | 25/12/2024     | 15:30       |
-
 | de-DE  | 25.12.2024     | 15:30 Uhr   |
-
-| ja-JP  | 2024 年 12 月 25 日 | 15 時 30 分    |
+| ja-JP  | 2024年12月25日 | 15時30分    |
 
 ### Numbers and Currency
 
 | Locale | Number   | Currency   |
-
 | ------ | -------- | ---------- |
-
 | en-US  | 1,234.56 | $1,234.56  |
-
 | de-DE  | 1.234,56 | 1.234,56 € |
-
 | fr-FR  | 1 234,56 | 1 234,56 € |
-
 | ja-JP  | 1,234.56 | ¥1,235     |
 
 ## Automated Test Examples
@@ -202,8 +174,7 @@ public void Pluralization_ReturnsCorrectForm(string locale, int count, string ex
     var result = Localization.GetPlural("coin", count, locale);
     Assert.AreEqual(expected, result);
 }
-
-```bash
+```
 
 ### Unreal
 
@@ -231,8 +202,7 @@ bool FLocalizationTest::RunTest(const FString& Parameters)
 
     return true;
 }
-
-```bash
+```
 
 ### Godot
 
@@ -267,8 +237,7 @@ func test_text_fits_buttons():
             var label = button.get_node("Label")
             assert_lt(label.size.x, button.size.x,
                 "Button text overflows in %s: %s" % [locale, button.name])
-
-```bash
+```
 
 ## Visual Verification Checklist
 
@@ -298,31 +267,20 @@ func test_text_fits_buttons():
 ### Ratings Requirements
 
 | Region        | Rating Board | Special Requirements      |
-
 | ------------- | ------------ | ------------------------- |
-
 | North America | ESRB         | Content descriptors       |
-
 | Europe        | PEGI         | Age-appropriate icons     |
-
 | Japan         | CERO         | Strict content guidelines |
-
 | Germany       | USK          | Violence restrictions     |
-
 | China         | GRAC         | Approval process          |
 
 ### Common Regional Issues
 
 | Issue            | Regions Affected | Solution                 |
-
 | ---------------- | ---------------- | ------------------------ |
-
 | Blood color      | Japan, Germany   | Option for green/disable |
-
 | Gambling imagery | Many regions     | Remove or modify         |
-
 | Skulls/bones     | China            | Alternative designs      |
-
 | Nazi imagery     | Germany          | Remove entirely          |
 
 ## Best Practices

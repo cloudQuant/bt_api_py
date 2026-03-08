@@ -1,0 +1,8 @@
+{
+  "key_id": "key_1772950490_9b27e84c",
+  "algorithm": "aes_256_gcm",
+  "created_at": 1772950490.646281,
+  "provider": "local",
+  "key_size": 256,
+  "is_active": false
+}

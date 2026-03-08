@@ -6,23 +6,22 @@ Run tests:
 """
 
 import queue
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock
 
 import pytest
 
+import bt_api_py.exchange_registers.register_bitso  # noqa: F401
 from bt_api_py.containers.exchanges.bitso_exchange_data import (
     BitsoExchangeDataSpot,
 )
 from bt_api_py.containers.requestdatas.request_data import RequestData
+from bt_api_py.feeds.capability import Capability
 from bt_api_py.feeds.live_bitso.request_base import BitsoRequestData
 from bt_api_py.feeds.live_bitso.spot import BitsoRequestDataSpot
-from bt_api_py.feeds.capability import Capability
 from bt_api_py.registry import ExchangeRegistry
 
-import bt_api_py.exchange_registers.register_bitso  # noqa: F401
-
-
 # ── fixtures ────────────────────────────────────────────────────
+
 
 @pytest.fixture
 def exchange_data():
@@ -38,9 +37,7 @@ def feed():
 @pytest.fixture
 def feed_with_keys():
     q = queue.Queue()
-    return BitsoRequestDataSpot(
-        q, api_key="test_key", api_secret="test_secret"
-    )
+    return BitsoRequestDataSpot(q, api_key="test_key", api_secret="test_secret")
 
 
 # ── sample API responses (Bitso envelope) ───────────────────────
@@ -48,8 +45,12 @@ def feed_with_keys():
 SAMPLE_TICK = {
     "success": True,
     "payload": {
-        "book": "btc_mxn", "last": "800000", "bid": "799000",
-        "ask": "801000", "high": "810000", "low": "790000",
+        "book": "btc_mxn",
+        "last": "800000",
+        "bid": "799000",
+        "ask": "801000",
+        "high": "810000",
+        "low": "790000",
         "volume": "123.45",
     },
 }
@@ -65,18 +66,42 @@ SAMPLE_DEPTH = {
 SAMPLE_KLINE = {
     "success": True,
     "payload": [
-        {"bucket_start_time": "2024-01-01T00:00:00", "open": "800000", "close": "810000",
-         "high": "815000", "low": "795000", "volume": "50.0"},
-        {"bucket_start_time": "2024-01-01T01:00:00", "open": "810000", "close": "805000",
-         "high": "812000", "low": "803000", "volume": "30.0"},
+        {
+            "bucket_start_time": "2024-01-01T00:00:00",
+            "open": "800000",
+            "close": "810000",
+            "high": "815000",
+            "low": "795000",
+            "volume": "50.0",
+        },
+        {
+            "bucket_start_time": "2024-01-01T01:00:00",
+            "open": "810000",
+            "close": "805000",
+            "high": "812000",
+            "low": "803000",
+            "volume": "30.0",
+        },
     ],
 }
 
 SAMPLE_TRADES = {
     "success": True,
     "payload": [
-        {"tid": 1, "price": "800000", "amount": "0.01", "maker_side": "buy", "created_at": "2024-01-01T00:00:00"},
-        {"tid": 2, "price": "801000", "amount": "0.02", "maker_side": "sell", "created_at": "2024-01-01T00:00:01"},
+        {
+            "tid": 1,
+            "price": "800000",
+            "amount": "0.01",
+            "maker_side": "buy",
+            "created_at": "2024-01-01T00:00:00",
+        },
+        {
+            "tid": 2,
+            "price": "801000",
+            "amount": "0.02",
+            "maker_side": "sell",
+            "created_at": "2024-01-01T00:00:01",
+        },
     ],
 }
 
@@ -88,8 +113,12 @@ SAMPLE_SERVER_TIME = {
 SAMPLE_EXCHANGE_INFO = {
     "success": True,
     "payload": [
-        {"book": "btc_mxn", "minimum_amount": "0.00001", "minimum_price": "10",
-         "minimum_value": "10"},
+        {
+            "book": "btc_mxn",
+            "minimum_amount": "0.00001",
+            "minimum_price": "10",
+            "minimum_value": "10",
+        },
     ],
 }
 
@@ -111,8 +140,14 @@ SAMPLE_ACCOUNT = {
 SAMPLE_OPEN_ORDERS = {
     "success": True,
     "payload": [
-        {"oid": "o1", "book": "btc_mxn", "side": "buy", "type": "limit",
-         "price": "790000", "original_amount": "0.01"},
+        {
+            "oid": "o1",
+            "book": "btc_mxn",
+            "side": "buy",
+            "type": "limit",
+            "price": "790000",
+            "original_amount": "0.01",
+        },
     ],
 }
 
@@ -121,8 +156,8 @@ SAMPLE_ERROR = {"success": False, "error": {"code": "0301", "message": "Unauthor
 
 # ── TestExchangeData ────────────────────────────────────────────
 
-class TestExchangeData:
 
+class TestExchangeData:
     def test_exchange_name(self, exchange_data):
         assert exchange_data.exchange_name == "BITSO___SPOT"
 
@@ -181,6 +216,7 @@ class TestExchangeData:
 
 
 # ── TestParameterGeneration ─────────────────────────────────────
+
 
 class TestParameterGeneration:
     def test_get_tick_params(self, feed):
@@ -261,8 +297,8 @@ class TestParameterGeneration:
 
 # ── TestNormalization ───────────────────────────────────────────
 
-class TestNormalization:
 
+class TestNormalization:
     def test_tick_ok(self):
         result, ok = BitsoRequestData._get_tick_normalize_function(SAMPLE_TICK, {})
         assert ok is True
@@ -312,7 +348,9 @@ class TestNormalization:
         assert "server_time" in result[0]
 
     def test_exchange_info_ok(self):
-        result, ok = BitsoRequestData._get_exchange_info_normalize_function(SAMPLE_EXCHANGE_INFO, {})
+        result, ok = BitsoRequestData._get_exchange_info_normalize_function(
+            SAMPLE_EXCHANGE_INFO, {}
+        )
         assert ok is True
         assert "books" in result[0]
 
@@ -376,8 +414,8 @@ class TestNormalization:
 
 # ── TestSyncCalls (mocked) ──────────────────────────────────────
 
-class TestSyncCalls:
 
+class TestSyncCalls:
     def _mock_feed(self, mock_response):
         q = queue.Queue()
         feed = BitsoRequestDataSpot(q)
@@ -443,12 +481,10 @@ class TestSyncCalls:
 
 # ── TestAuth ────────────────────────────────────────────────────
 
-class TestAuth:
 
+class TestAuth:
     def test_signature_generation(self, feed_with_keys):
-        sig = feed_with_keys._generate_signature(
-            "1234567890", "GET", "/api/v3/balance"
-        )
+        sig = feed_with_keys._generate_signature("1234567890", "GET", "/api/v3/balance")
         assert isinstance(sig, str)
         assert len(sig) == 64  # SHA256 hex
 
@@ -463,8 +499,8 @@ class TestAuth:
 
 # ── TestRegistry ────────────────────────────────────────────────
 
-class TestRegistry:
 
+class TestRegistry:
     def test_bitso_spot_registered(self):
         assert "BITSO___SPOT" in ExchangeRegistry._feed_classes
         assert ExchangeRegistry._feed_classes["BITSO___SPOT"] == BitsoRequestDataSpot
@@ -484,24 +520,43 @@ class TestRegistry:
 
 # ── TestMethodExistence ─────────────────────────────────────────
 
+
 class TestMethodExistence:
-    @pytest.mark.parametrize("method_name", [
-        "get_tick", "async_get_tick",
-        "get_ticker", "async_get_ticker",
-        "get_depth", "async_get_depth",
-        "get_kline", "async_get_kline",
-        "get_trade_history", "async_get_trade_history",
-        "get_trades", "async_get_trades",
-        "make_order", "async_make_order",
-        "cancel_order", "async_cancel_order",
-        "query_order", "async_query_order",
-        "get_open_orders", "async_get_open_orders",
-        "get_deals", "async_get_deals",
-        "get_account", "async_get_account",
-        "get_balance", "async_get_balance",
-        "get_server_time", "async_get_server_time",
-        "get_exchange_info", "async_get_exchange_info",
-    ])
+    @pytest.mark.parametrize(
+        "method_name",
+        [
+            "get_tick",
+            "async_get_tick",
+            "get_ticker",
+            "async_get_ticker",
+            "get_depth",
+            "async_get_depth",
+            "get_kline",
+            "async_get_kline",
+            "get_trade_history",
+            "async_get_trade_history",
+            "get_trades",
+            "async_get_trades",
+            "make_order",
+            "async_make_order",
+            "cancel_order",
+            "async_cancel_order",
+            "query_order",
+            "async_query_order",
+            "get_open_orders",
+            "async_get_open_orders",
+            "get_deals",
+            "async_get_deals",
+            "get_account",
+            "async_get_account",
+            "get_balance",
+            "async_get_balance",
+            "get_server_time",
+            "async_get_server_time",
+            "get_exchange_info",
+            "async_get_exchange_info",
+        ],
+    )
     def test_method_exists(self, feed, method_name):
         assert hasattr(feed, method_name)
         assert callable(getattr(feed, method_name))
@@ -509,8 +564,8 @@ class TestMethodExistence:
 
 # ── TestFeedInit ────────────────────────────────────────────────
 
-class TestFeedInit:
 
+class TestFeedInit:
     def test_default_exchange_name(self, feed):
         assert feed.exchange_name == "BITSO___SPOT"
 
@@ -540,8 +595,8 @@ class TestFeedInit:
 
 # ── TestIntegration (skipped) ───────────────────────────────────
 
-class TestIntegration:
 
+class TestIntegration:
     @pytest.mark.skip(reason="Requires network access")
     def test_live_get_tick(self):
         q = queue.Queue()

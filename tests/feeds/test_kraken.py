@@ -6,26 +6,23 @@ Run tests:
 """
 
 import queue
-import time
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock, patch
 
 import pytest
 
+import bt_api_py.exchange_registers.register_kraken  # noqa: F401
+from bt_api_py.containers.balances.kraken_balance import KrakenSpotWssBalanceData
 from bt_api_py.containers.exchanges.kraken_exchange_data import (
-    KrakenExchangeDataSpot,
     KrakenExchangeDataFutures,
+    KrakenExchangeDataSpot,
 )
-from bt_api_py.containers.tickers.kraken_ticker import KrakenRequestTickerData
 from bt_api_py.containers.orderbooks.kraken_orderbook import KrakenRequestOrderBookData
 from bt_api_py.containers.orders.kraken_order import KrakenRequestOrderData
-from bt_api_py.containers.balances.kraken_balance import KrakenSpotWssBalanceData
 from bt_api_py.containers.requestdatas.request_data import RequestData
+from bt_api_py.containers.tickers.kraken_ticker import KrakenRequestTickerData
 from bt_api_py.feeds.live_kraken import KrakenRequestData, KrakenRequestDataSpot
 from bt_api_py.feeds.live_kraken.futures import KrakenRequestDataFutures
 from bt_api_py.registry import ExchangeRegistry
-
-import bt_api_py.exchange_registers.register_kraken  # noqa: F401
-
 
 # ── Sample Kraken API responses ──────────────────────────────────────────
 
@@ -85,8 +82,13 @@ SAMPLE_QUERY_ORDER_RESP = {
         "OUF4EM-FRGI2-MQMWZD": {
             "status": "open",
             "opentm": 1688671955.1234,
-            "descr": {"pair": "XBTUSD", "type": "buy", "ordertype": "limit",
-                      "price": "50000.0", "order": "buy 0.001 XBTUSD @ limit 50000.0"},
+            "descr": {
+                "pair": "XBTUSD",
+                "type": "buy",
+                "ordertype": "limit",
+                "price": "50000.0",
+                "order": "buy 0.001 XBTUSD @ limit 50000.0",
+            },
             "vol": "0.00100000",
             "vol_exec": "0.00000000",
             "cost": "0.00000",
@@ -102,8 +104,12 @@ SAMPLE_OPEN_ORDERS_RESP = {
             "OUF4EM-FRGI2-MQMWZD": {
                 "status": "open",
                 "opentm": 1688671955.1234,
-                "descr": {"pair": "XBTUSD", "type": "buy", "ordertype": "limit",
-                          "price": "50000.0"},
+                "descr": {
+                    "pair": "XBTUSD",
+                    "type": "buy",
+                    "ordertype": "limit",
+                    "price": "50000.0",
+                },
                 "vol": "0.00100000",
                 "vol_exec": "0.00000000",
             }
@@ -123,6 +129,7 @@ SAMPLE_CANCEL_ORDER_RESP = {
 
 
 # ── Helper ───────────────────────────────────────────────────────────────
+
 
 def _make_spot_feed():
     data_queue = queue.Queue()
@@ -146,8 +153,8 @@ def _setup_mock(mock_post, resp_json):
 # 1. ExchangeData tests
 # ══════════════════════════════════════════════════════════════════════════
 
-class TestKrakenExchangeData:
 
+class TestKrakenExchangeData:
     def test_spot_creation(self):
         ed = KrakenExchangeDataSpot()
         assert ed.exchange_name == "kraken"
@@ -201,8 +208,8 @@ class TestKrakenExchangeData:
 # 2. Layer-1 parameter generation
 # ══════════════════════════════════════════════════════════════════════════
 
-class TestKrakenParamGeneration:
 
+class TestKrakenParamGeneration:
     def test_get_ticker_params(self):
         feed = _make_spot_feed()
         path, params, extra = feed._get_ticker("BTC/USD")
@@ -274,13 +281,15 @@ class TestKrakenParamGeneration:
 # 3. Normalize functions
 # ══════════════════════════════════════════════════════════════════════════
 
-class TestKrakenNormalize:
 
+class TestKrakenNormalize:
     def test_ticker_normalize(self):
         from bt_api_py.feeds.live_kraken.spot import KrakenRequestDataSpot
+
         extra = {"symbol_name": "BTC/USD", "asset_type": "SPOT", "exchange_name": "KRAKEN"}
         tickers, ok = KrakenRequestDataSpot._get_ticker_normalize_function(
-            SAMPLE_TICKER_RESP, extra)
+            SAMPLE_TICKER_RESP, extra
+        )
         assert ok is True
         assert len(tickers) == 1
         t = tickers[0]
@@ -291,6 +300,7 @@ class TestKrakenNormalize:
 
     def test_ticker_normalize_error(self):
         from bt_api_py.feeds.live_kraken.spot import KrakenRequestDataSpot
+
         extra = {"symbol_name": "BTC/USD", "asset_type": "SPOT"}
         data = {"error": ["EGeneral:Invalid arguments"], "result": {}}
         tickers, ok = KrakenRequestDataSpot._get_ticker_normalize_function(data, extra)
@@ -299,15 +309,16 @@ class TestKrakenNormalize:
 
     def test_ticker_normalize_none(self):
         from bt_api_py.feeds.live_kraken.spot import KrakenRequestDataSpot
+
         extra = {"symbol_name": "BTC/USD", "asset_type": "SPOT"}
         tickers, ok = KrakenRequestDataSpot._get_ticker_normalize_function(None, extra)
         assert ok is False
 
     def test_depth_normalize(self):
         from bt_api_py.feeds.live_kraken.spot import KrakenRequestDataSpot
+
         extra = {"symbol_name": "BTC/USD", "asset_type": "SPOT"}
-        books, ok = KrakenRequestDataSpot._get_depth_normalize_function(
-            SAMPLE_DEPTH_RESP, extra)
+        books, ok = KrakenRequestDataSpot._get_depth_normalize_function(SAMPLE_DEPTH_RESP, extra)
         assert ok is True
         assert len(books) == 1
         b = books[0]
@@ -319,9 +330,11 @@ class TestKrakenNormalize:
 
     def test_balance_normalize(self):
         from bt_api_py.feeds.live_kraken.spot import KrakenRequestDataSpot
+
         extra = {"asset_type": "SPOT"}
         balances, ok = KrakenRequestDataSpot._get_balance_normalize_function(
-            SAMPLE_BALANCE_RESP, extra)
+            SAMPLE_BALANCE_RESP, extra
+        )
         assert ok is True
         assert len(balances) == 3  # XXBT, XETH, ZUSD all > 0
         currencies = [bal.currency for bal in balances]
@@ -329,18 +342,22 @@ class TestKrakenNormalize:
 
     def test_make_order_normalize(self):
         from bt_api_py.feeds.live_kraken.spot import KrakenRequestDataSpot
+
         extra = {"symbol_name": "BTC/USD", "asset_type": "SPOT"}
         orders, ok = KrakenRequestDataSpot._make_order_normalize_function(
-            SAMPLE_MAKE_ORDER_RESP, extra)
+            SAMPLE_MAKE_ORDER_RESP, extra
+        )
         assert ok is True
         assert len(orders) == 1
         assert isinstance(orders[0], KrakenRequestOrderData)
 
     def test_query_order_normalize(self):
         from bt_api_py.feeds.live_kraken.spot import KrakenRequestDataSpot
+
         extra = {"symbol_name": "BTC/USD", "asset_type": "SPOT"}
         orders, ok = KrakenRequestDataSpot._query_order_normalize_function(
-            SAMPLE_QUERY_ORDER_RESP, extra)
+            SAMPLE_QUERY_ORDER_RESP, extra
+        )
         assert ok is True
         assert len(orders) == 1
         o = orders[0]
@@ -348,15 +365,16 @@ class TestKrakenNormalize:
 
     def test_open_orders_normalize(self):
         from bt_api_py.feeds.live_kraken.spot import KrakenRequestDataSpot
+
         extra = {"asset_type": "SPOT"}
         orders, ok = KrakenRequestDataSpot._get_open_orders_normalize_function(
-            SAMPLE_OPEN_ORDERS_RESP, extra)
+            SAMPLE_OPEN_ORDERS_RESP, extra
+        )
         assert ok is True
         assert len(orders) == 1
 
     def test_extract_data_normalize(self):
-        data, ok = KrakenRequestData._extract_data_normalize_function(
-            SAMPLE_SERVER_TIME_RESP, {})
+        data, ok = KrakenRequestData._extract_data_normalize_function(SAMPLE_SERVER_TIME_RESP, {})
         assert ok is True
         assert len(data) == 1
         assert data[0]["unixtime"] == 1688671955
@@ -366,8 +384,8 @@ class TestKrakenNormalize:
 # 4. Data containers
 # ══════════════════════════════════════════════════════════════════════════
 
-class TestKrakenDataContainers:
 
+class TestKrakenDataContainers:
     def test_ticker_container(self):
         ticker = KrakenRequestTickerData(SAMPLE_TICKER_RESP, "BTC/USD", "SPOT")
         assert ticker.symbol == "BTC/USD"
@@ -396,8 +414,13 @@ class TestKrakenDataContainers:
     def test_order_container(self):
         order_data = {
             "txid": "O123456",
-            "descr": {"pair": "XBTUSD", "type": "buy", "ordertype": "limit",
-                      "price": "50000.0", "order": "buy 0.001 XBTUSD @ limit 50000.0"},
+            "descr": {
+                "pair": "XBTUSD",
+                "type": "buy",
+                "ordertype": "limit",
+                "price": "50000.0",
+                "order": "buy 0.001 XBTUSD @ limit 50000.0",
+            },
             "status": "open",
             "opentm": 1688671955.1234,
             "vol": "0.00100000",
@@ -414,8 +437,8 @@ class TestKrakenDataContainers:
 # 5. Layer-2 sync calls (mocked HTTP)
 # ══════════════════════════════════════════════════════════════════════════
 
-class TestKrakenSyncCalls:
 
+class TestKrakenSyncCalls:
     @patch("bt_api_py.feeds.live_kraken.request_base.req_lib.post")
     def test_get_ticker(self, mock_post):
         _setup_mock(mock_post, SAMPLE_TICKER_RESP)
@@ -521,8 +544,8 @@ class TestKrakenSyncCalls:
 # 6. Registry tests
 # ══════════════════════════════════════════════════════════════════════════
 
-class TestKrakenRegistry:
 
+class TestKrakenRegistry:
     def test_spot_registered(self):
         assert "KRAKEN___SPOT" in ExchangeRegistry._feed_classes
         assert ExchangeRegistry._feed_classes["KRAKEN___SPOT"] is KrakenRequestDataSpot
@@ -534,7 +557,9 @@ class TestKrakenRegistry:
         assert "KRAKEN___FUTURES" in ExchangeRegistry._feed_classes
         assert ExchangeRegistry._feed_classes["KRAKEN___FUTURES"] is KrakenRequestDataFutures
         assert "KRAKEN___FUTURES" in ExchangeRegistry._exchange_data_classes
-        assert ExchangeRegistry._exchange_data_classes["KRAKEN___FUTURES"] is KrakenExchangeDataFutures
+        assert (
+            ExchangeRegistry._exchange_data_classes["KRAKEN___FUTURES"] is KrakenExchangeDataFutures
+        )
 
     def test_create_exchange_data_spot(self):
         ed = ExchangeRegistry.create_exchange_data("KRAKEN___SPOT")
@@ -549,8 +574,8 @@ class TestKrakenRegistry:
 # 7. Signing test
 # ══════════════════════════════════════════════════════════════════════════
 
-class TestKrakenSigning:
 
+class TestKrakenSigning:
     def test_sign_request(self):
         feed = _make_spot_feed()
         data = {"pair": "XBTUSD", "type": "buy"}

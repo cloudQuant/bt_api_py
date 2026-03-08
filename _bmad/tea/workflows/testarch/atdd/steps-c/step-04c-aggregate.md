@@ -1,32 +1,30 @@
-- --
-
+---
 name: 'step-04c-aggregate'
-description: 'Aggregate subprocess outputs and complete ATDD test infrastructure'
+description: 'Aggregate subagent outputs and complete ATDD test infrastructure'
 outputFile: '{test_artifacts}/atdd-checklist-{story_id}.md'
 nextStepFile: './step-05-validate-and-complete.md'
-
-- --
+---
 
 # Step 4C: Aggregate ATDD Test Generation Results
 
 ## STEP GOAL
 
-Read outputs from parallel subprocesses (API + E2E failing test generation), aggregate results, verify TDD red phase compliance, and create supporting infrastructure.
+Read outputs from parallel subagents (API + E2E failing test generation), aggregate results, verify TDD red phase compliance, and create supporting infrastructure.
 
-- --
+---
 
 ## MANDATORY EXECUTION RULES
 
 - 📖 Read the entire step file before acting
 - ✅ Speak in `{communication_language}`
-- ✅ Read subprocess outputs from temp files
+- ✅ Read subagent outputs from temp files
 - ✅ Verify all tests are marked with test.skip() (TDD red phase)
 - ✅ Generate shared fixtures based on fixture needs
 - ✅ Write all generated test files to disk
 - ❌ Do NOT remove test.skip() (that's done after feature implementation)
 - ❌ Do NOT run tests yet (that's step 5 - verify they fail)
 
-- --
+---
 
 ## EXECUTION PROTOCOLS:
 
@@ -36,48 +34,46 @@ Read outputs from parallel subprocesses (API + E2E failing test generation), agg
 
 ## CONTEXT BOUNDARIES:
 
-- Available context: config, subprocess outputs from temp files
+- Available context: config, subagent outputs from temp files
 - Focus: aggregation and TDD validation
 - Limits: do not execute future steps
-- Dependencies: Step 4A and 4B subprocess outputs
+- Dependencies: Step 4A and 4B subagent outputs
 
-- --
+---
 
 ## MANDATORY SEQUENCE
 
-- *CRITICAL:** Follow this sequence exactly. Do not skip, reorder, or improvise.
+**CRITICAL:** Follow this sequence exactly. Do not skip, reorder, or improvise.
 
-### 1. Read Subprocess Outputs
+### 1. Read Subagent Outputs
 
-- *Read API test subprocess output:**
+**Read API test subagent output:**
 
 ```javascript
 const apiTestsPath = '/tmp/tea-atdd-api-tests-{{timestamp}}.json';
 const apiTestsOutput = JSON.parse(fs.readFileSync(apiTestsPath, 'utf8'));
+```
 
-```bash
-
-- *Read E2E test subprocess output:**
+**Read E2E test subagent output:**
 
 ```javascript
 const e2eTestsPath = '/tmp/tea-atdd-e2e-tests-{{timestamp}}.json';
 const e2eTestsOutput = JSON.parse(fs.readFileSync(e2eTestsPath, 'utf8'));
+```
 
-```bash
-
-- *Verify both subprocesses succeeded:**
+**Verify both subagents succeeded:**
 
 - Check `apiTestsOutput.success === true`
 - Check `e2eTestsOutput.success === true`
 - If either failed, report error and stop (don't proceed)
 
-- --
+---
 
 ### 2. Verify TDD Red Phase Compliance
 
-- *CRITICAL TDD Validation:**
+**CRITICAL TDD Validation:**
 
-- *Check API tests:**
+**Check API tests:**
 
 ```javascript
 apiTestsOutput.tests.forEach((test) => {
@@ -96,10 +92,9 @@ apiTestsOutput.tests.forEach((test) => {
     throw new Error(`ATDD ERROR: ${test.file} not marked as expected_to_fail!`);
   }
 });
+```
 
-```bash
-
-- *Check E2E tests:**
+**Check E2E tests:**
 
 ```javascript
 e2eTestsOutput.tests.forEach((test) => {
@@ -116,67 +111,60 @@ e2eTestsOutput.tests.forEach((test) => {
     throw new Error(`ATDD ERROR: ${test.file} not marked as expected_to_fail!`);
   }
 });
+```
 
-```bash
+**If validation passes:**
 
-- *If validation passes:**
-
-```bash
+```
 ✅ TDD Red Phase Validation: PASS
-
 - All tests use test.skip()
 - All tests assert expected behavior (not placeholders)
 - All tests marked as expected_to_fail
+```
 
-```bash
-
-- --
+---
 
 ### 3. Write All Test Files to Disk
 
-- *Write API test files:**
+**Write API test files:**
 
 ```javascript
 apiTestsOutput.tests.forEach((test) => {
   fs.writeFileSync(test.file, test.content, 'utf8');
   console.log(`✅ Created (RED): ${test.file}`);
 });
+```
 
-```bash
-
-- *Write E2E test files:**
+**Write E2E test files:**
 
 ```javascript
 e2eTestsOutput.tests.forEach((test) => {
   fs.writeFileSync(test.file, test.content, 'utf8');
   console.log(`✅ Created (RED): ${test.file}`);
 });
+```
 
-```bash
-
-- --
+---
 
 ### 4. Aggregate Fixture Needs
 
-- *Collect all fixture needs from both subprocesses:**
+**Collect all fixture needs from both subagents:**
 
 ```javascript
 const allFixtureNeeds = [...apiTestsOutput.fixture_needs, ...e2eTestsOutput.fixture_needs];
 
 // Remove duplicates
 const uniqueFixtures = [...new Set(allFixtureNeeds)];
+```
 
-```bash
-
-- --
+---
 
 ### 5. Generate Fixture Infrastructure
 
-- *Create fixtures needed by ATDD tests:**
-
+**Create fixtures needed by ATDD tests:**
 (Similar to automate workflow, but may be simpler for ATDD since feature not implemented)
 
-- *Minimal fixtures for TDD red phase:**
+**Minimal fixtures for TDD red phase:**
 
 ```typescript
 // tests/fixtures/test-data.ts
@@ -184,18 +172,17 @@ export const testUserData = {
   email: 'test@example.com',
   password: 'SecurePass123!',
 };
+```
 
-```bash
 Note: More complete fixtures will be needed when moving to green phase.
 
-- --
+---
 
 ### 6. Generate ATDD Checklist
 
-- *Create ATDD checklist document:**
+**Create ATDD checklist document:**
 
 ```markdown
-
 # ATDD Checklist: [Story Name]
 
 ## TDD Red Phase (Current)
@@ -219,7 +206,7 @@ After implementing the feature:
 4. If any tests fail:
    - Either fix implementation (feature bug)
    - Or fix test (test bug)
-1. Commit passing tests
+5. Commit passing tests
 
 ## Implementation Guidance
 
@@ -228,23 +215,37 @@ Feature endpoints to implement:
 
 UI components to implement:
 {list UI flows from E2E tests}
+```
 
-```bash
-
-- *Save checklist:**
+**Save checklist:**
 
 ```javascript
 fs.writeFileSync(`{test_artifacts}/atdd-checklist-{story-id}.md`, checklistContent, 'utf8');
+```
 
-```bash
-
-- --
+---
 
 ### 7. Calculate Summary Statistics
 
-- *Aggregate test counts:**
+**Aggregate test counts:**
 
 ```javascript
+const resolvedMode = subagentContext?.execution?.resolvedMode; // Provided by Step 4's orchestration context
+const subagentExecutionLabel =
+  resolvedMode === 'sequential'
+    ? 'SEQUENTIAL (API → E2E)'
+    : resolvedMode === 'agent-team'
+      ? 'AGENT-TEAM (API + E2E)'
+      : resolvedMode === 'subagent'
+        ? 'SUBAGENT (API + E2E)'
+        : 'PARALLEL (API + E2E)';
+const performanceGainLabel =
+  resolvedMode === 'sequential'
+    ? 'baseline (no parallel speedup)'
+    : resolvedMode === 'agent-team' || resolvedMode === 'subagent'
+      ? '~50% faster than sequential'
+      : 'mode-dependent';
+
 const summary = {
   tdd_phase: 'RED',
   total_tests: apiTestsOutput.test_count + e2eTestsOutput.test_count,
@@ -258,32 +259,29 @@ const summary = {
     ...e2eTestsOutput.tests.flatMap((t) => t.acceptance_criteria_covered),
   ],
   knowledge_fragments_used: [...apiTestsOutput.knowledge_fragments_used, ...e2eTestsOutput.knowledge_fragments_used],
-  subprocess_execution: 'PARALLEL (API + E2E)',
-  performance_gain: '~50% faster than sequential',
+  subagent_execution: subagentExecutionLabel,
+  performance_gain: performanceGainLabel,
 };
+```
 
-```bash
-
-- *Store summary for Step 5:**
+**Store summary for Step 5:**
 
 ```javascript
 fs.writeFileSync('/tmp/tea-atdd-summary-{{timestamp}}.json', JSON.stringify(summary, null, 2), 'utf8');
+```
 
-```bash
-
-- --
+---
 
 ## OUTPUT SUMMARY
 
 Display to user:
 
-```bash
+```
 ✅ ATDD Test Generation Complete (TDD RED PHASE)
 
 🔴 TDD Red Phase: Failing Tests Generated
 
 📊 Summary:
-
 - Total Tests: {total_tests} (all with test.skip())
   - API Tests: {api_tests} (RED)
   - E2E Tests: {e2e_tests} (RED)
@@ -293,27 +291,24 @@ Display to user:
 ✅ Acceptance Criteria Coverage:
 {list all covered criteria}
 
-🚀 Performance: Parallel execution ~50% faster than sequential
+🚀 Performance: {performance_gain}
 
 📂 Generated Files:
-
 - tests/api/[feature].spec.ts (with test.skip())
 - tests/e2e/[feature].spec.ts (with test.skip())
 - tests/fixtures/test-data.ts
 - {test_artifacts}/atdd-checklist-{story-id}.md
 
 📝 Next Steps:
-
 1. Implement the feature
 2. Remove test.skip() from tests
 3. Run tests → verify PASS (green phase)
 4. Commit passing tests
 
 ✅ Ready for validation (Step 5 - verify tests fail as expected)
+```
 
-```bash
-
-- --
+---
 
 ## EXIT CONDITION
 
@@ -326,24 +321,20 @@ Proceed to Step 5 when:
 - ✅ Summary statistics calculated and saved
 - ✅ Output displayed to user
 
-- --
+---
 
 ### 8. Save Progress
 
-- *Save this step's accumulated work to `{outputFile}`.**
+**Save this step's accumulated work to `{outputFile}`.**
 
-- **If `{outputFile}` does not exist**(first save), create it with YAML frontmatter:
+- **If `{outputFile}` does not exist** (first save), create it with YAML frontmatter:
 
   ```yaml
-
-  - --
-
+  ---
   stepsCompleted: ['step-04c-aggregate']
   lastStep: 'step-04c-aggregate'
   lastSaved: '{date}'
-
-  - --
-
+  ---
   ```
 
   Then write this step's output below the frontmatter.
@@ -356,13 +347,13 @@ Proceed to Step 5 when:
 
 Load next step: `{nextStepFile}`
 
-- --
+---
 
 ## 🚨 SYSTEM SUCCESS/FAILURE METRICS:
 
 ### ✅ SUCCESS:
 
-- Both subprocesses succeeded
+- Both subagents succeeded
 - All tests have test.skip() (TDD red phase compliant)
 - All tests assert expected behavior (not placeholders)
 - All test files written to disk
@@ -370,10 +361,10 @@ Load next step: `{nextStepFile}`
 
 ### ❌ SYSTEM FAILURE:
 
-- One or both subprocesses failed
+- One or both subagents failed
 - Tests missing test.skip() (would break CI)
 - Tests have placeholder assertions
 - Test files not written to disk
 - ATDD checklist missing
 
-- *Master Rule:** TDD RED PHASE requires ALL tests to use test.skip() and assert expected behavior.
+**Master Rule:** TDD RED PHASE requires ALL tests to use test.skip() and assert expected behavior.

@@ -37,11 +37,15 @@ class CurveRequestTickerData(TickerData):
         data = self.ticker_data.get("data", {}) if isinstance(self.ticker_data, dict) else {}
         if data:
             # Pool data fields
-            self.ticker_symbol_name = self.ticker_symbol_name or data.get("name") or data.get("address")
+            self.ticker_symbol_name = (
+                self.ticker_symbol_name or data.get("name") or data.get("address")
+            )
             self.last_price = self._parse_float(data.get("virtualPrice"))
-            self.volume_24h = self._parse_float(data.get("volume")) or self._parse_float(data.get("usdVolume"))
+            self.volume_24h = self._parse_float(data.get("volume")) or self._parse_float(
+                data.get("usdVolume")
+            )
             self.high_24h = None  # Not applicable for Curve pools
-            self.low_24h = None   # Not applicable for Curve pools
+            self.low_24h = None  # Not applicable for Curve pools
 
             # Additional pool-specific fields
             self.pool_address = data.get("address")

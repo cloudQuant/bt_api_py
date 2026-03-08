@@ -5,7 +5,6 @@ Provides market data access for Ripio spot trading.
 """
 
 from bt_api_py.containers.exchanges.ripio_exchange_data import RipioExchangeDataSpot
-from bt_api_py.containers.tickers.ripio_ticker import RipioRequestTickerData
 from bt_api_py.feeds.capability import Capability
 from bt_api_py.feeds.live_ripio.request_base import RipioRequestData
 from bt_api_py.functions.utils import update_extra_data
@@ -179,14 +178,7 @@ class RipioRequestDataSpot(RipioRequestData):
     # ==================== Klines ====================
 
     def _get_kline(
-        self,
-        symbol,
-        period,
-        count=100,
-        from_time=None,
-        to_time=None,
-        extra_data=None,
-        **kwargs
+        self, symbol, period, count=100, from_time=None, to_time=None, extra_data=None, **kwargs
     ):
         """Get kline data.
 
@@ -250,14 +242,7 @@ class RipioRequestDataSpot(RipioRequestData):
         return klines or [], status
 
     def get_kline(
-        self,
-        symbol,
-        period,
-        count=100,
-        from_time=None,
-        to_time=None,
-        extra_data=None,
-        **kwargs
+        self, symbol, period, count=100, from_time=None, to_time=None, extra_data=None, **kwargs
     ):
         """Get kline/candlestick data.
 
@@ -459,8 +444,9 @@ class RipioRequestDataSpot(RipioRequestData):
         path, params, extra_data = self._get_account(extra_data, **kwargs)
         return self.request(path, params=params, extra_data=extra_data, is_sign=True)
 
-    def _make_order(self, symbol, volume, price, order_type, offset="open",
-                    extra_data=None, **kwargs):
+    def _make_order(
+        self, symbol, volume, price, order_type, offset="open", extra_data=None, **kwargs
+    ):
         """Prepare make order request. Returns (path, params, extra_data)."""
         ripio_symbol = self._params.get_symbol(symbol)
         path = "/api/v1/order"
@@ -489,8 +475,9 @@ class RipioRequestDataSpot(RipioRequestData):
             return [], False
         return [input_data], True
 
-    def make_order(self, symbol, volume, price, order_type, offset="open",
-                   extra_data=None, **kwargs):
+    def make_order(
+        self, symbol, volume, price, order_type, offset="open", extra_data=None, **kwargs
+    ):
         """Place an order."""
         path, params, extra_data = self._make_order(
             symbol, volume, price, order_type, offset, extra_data, **kwargs
@@ -549,14 +536,7 @@ class RipioRequestDataSpot(RipioRequestData):
         )
 
     def async_get_kline(
-        self,
-        symbol,
-        period,
-        count=100,
-        from_time=None,
-        to_time=None,
-        extra_data=None,
-        **kwargs
+        self, symbol, period, count=100, from_time=None, to_time=None, extra_data=None, **kwargs
     ):
         """Async get kline/candlestick data.
 

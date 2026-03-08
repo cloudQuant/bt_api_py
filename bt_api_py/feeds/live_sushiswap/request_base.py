@@ -5,19 +5,17 @@ Handles REST API queries to SushiSwap's API. SushiSwap uses REST endpoints
 instead of GraphQL for most operations.
 """
 
-import os
 import time
 from typing import Any
 
 from bt_api_py.containers.exchanges.sushiswap_exchange_data import (
-    SushiSwapExchangeData,
     SushiSwapChain,
+    SushiSwapExchangeData,
 )
 from bt_api_py.containers.requestdatas.request_data import RequestData
 from bt_api_py.feeds.capability import Capability
 from bt_api_py.feeds.feed import Feed
 from bt_api_py.feeds.http_client import HttpClient
-from bt_api_py.functions.utils import update_extra_data
 from bt_api_py.logging_factory import get_logger
 
 
@@ -117,9 +115,7 @@ class SushiSwapRequestData(Feed):
 
         return self._execute_rest_query(method, endpoint, params, extra_data)
 
-    async def async_request(
-        self, path, params=None, body=None, extra_data=None, timeout=5
-    ):
+    async def async_request(self, path, params=None, body=None, extra_data=None, timeout=5):
         """Async HTTP request function."""
         method = path.split()[0] if " " in path else "GET"
         endpoint = "/" + path.split()[1] if " " in path else path
@@ -170,13 +166,15 @@ class SushiSwapRequestData(Feed):
         """
         if extra_data is None:
             extra_data = {}
-        extra_data.update({
-            "exchange_name": self.exchange_name,
-            "symbol_name": "",
-            "asset_type": "DEX",
-            "request_type": "get_server_time",
-            "server_time": time.time(),
-        })
+        extra_data.update(
+            {
+                "exchange_name": self.exchange_name,
+                "symbol_name": "",
+                "asset_type": "DEX",
+                "request_type": "get_server_time",
+                "server_time": time.time(),
+            }
+        )
         return "/time", {}, extra_data
 
     def get_server_time(self, extra_data=None, **kwargs):

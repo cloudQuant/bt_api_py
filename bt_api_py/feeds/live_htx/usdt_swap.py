@@ -6,7 +6,6 @@ Market data uses 'contract_code' parameter instead of 'symbol'.
 """
 
 from bt_api_py.containers.exchanges.htx_exchange_data import HtxExchangeDataUsdtSwap
-from bt_api_py.containers.requestdatas.request_data import RequestData
 from bt_api_py.feeds.live_htx.request_base import HtxRequestData
 from bt_api_py.feeds.live_htx.spot import HtxAccountWssDataSpot, HtxMarketWssDataSpot
 from bt_api_py.functions.utils import update_extra_data
@@ -199,9 +198,19 @@ class HtxRequestDataUsdtSwap(HtxRequestData):
 
     # ==================== Trade ====================
 
-    def _make_order(self, symbol, vol, price=None, order_type="limit",
-                    direction="buy", offset="open", lever_rate=1,
-                    client_order_id=None, extra_data=None, **kwargs):
+    def _make_order(
+        self,
+        symbol,
+        vol,
+        price=None,
+        order_type="limit",
+        direction="buy",
+        offset="open",
+        lever_rate=1,
+        client_order_id=None,
+        extra_data=None,
+        **kwargs,
+    ):
         """Create an order."""
         request_type = "make_order"
         path = self._params.get_rest_path(request_type)
@@ -230,13 +239,31 @@ class HtxRequestDataUsdtSwap(HtxRequestData):
         )
         return path, body, extra_data
 
-    def make_order(self, symbol, vol, price=None, order_type="limit",
-                   direction="buy", offset="open", lever_rate=1,
-                   client_order_id=None, extra_data=None, **kwargs):
+    def make_order(
+        self,
+        symbol,
+        vol,
+        price=None,
+        order_type="limit",
+        direction="buy",
+        offset="open",
+        lever_rate=1,
+        client_order_id=None,
+        extra_data=None,
+        **kwargs,
+    ):
         """Create an order."""
         path, body, extra_data = self._make_order(
-            symbol, vol, price, order_type, direction, offset,
-            lever_rate, client_order_id, extra_data, **kwargs
+            symbol,
+            vol,
+            price,
+            order_type,
+            direction,
+            offset,
+            lever_rate,
+            client_order_id,
+            extra_data,
+            **kwargs,
         )
         return self.request(path, params={}, body=body, extra_data=extra_data)
 

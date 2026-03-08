@@ -11,7 +11,9 @@ from bt_api_py.containers.orderbooks.orderbook import OrderBookData
 class CryptoComOrderBook(OrderBookData):
     """Crypto.com orderbook implementation."""
 
-    def __init__(self, order_book_info, symbol_name, asset_type="SPOT", has_been_json_encoded=False):
+    def __init__(
+        self, order_book_info, symbol_name, asset_type="SPOT", has_been_json_encoded=False
+    ):
         super().__init__(order_book_info, has_been_json_encoded)
         self.exchange_name = "CRYPTOCOM"
         self.local_update_time = time.time()
@@ -137,6 +139,7 @@ class CryptoComOrderBook(OrderBookData):
         For production use, use the standard constructor with json-encoded data.
         """
         import json
+
         return cls(
             order_book_info=json.dumps(data),
             symbol_name=symbol,

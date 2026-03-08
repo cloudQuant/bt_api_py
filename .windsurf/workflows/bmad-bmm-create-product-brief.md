@@ -1,9 +1,7 @@
-- --
-
-description: 'Create product brief through collaborative discovery. Use when the user says ""lets create a product brief"" or ""help me create a project brief""'
+---
+description: 'Create product brief through collaborative discovery. Use when the user says "lets create a product brief" or "help me create a project brief"'
 auto_execution_mode: "iterate"
-
-- --
+---
 
 # create-product-brief
 

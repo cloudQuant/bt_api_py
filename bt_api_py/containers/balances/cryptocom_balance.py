@@ -3,13 +3,16 @@ Crypto.com Balance Data Container
 """
 
 import time
+
 from bt_api_py.containers.balances.balance import BalanceData
 
 
 class CryptoComBalance(BalanceData):
     """Crypto.com specific balance implementation."""
 
-    def __init__(self, balance_info, symbol_name=None, asset_type="SPOT", has_been_json_encoded=False):
+    def __init__(
+        self, balance_info, symbol_name=None, asset_type="SPOT", has_been_json_encoded=False
+    ):
         super().__init__(balance_info, has_been_json_encoded)
         self.exchange_name = "CRYPTOCOM"
         self.account_type = "SPOT"

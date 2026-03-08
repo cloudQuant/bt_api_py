@@ -7,11 +7,11 @@ Registers PancakeSpot feed and error translator with the system.
 from bt_api_py.containers.exchanges.pancakeswap_exchange_data import PancakeSwapExchangeData
 from bt_api_py.containers.pools.pancakeswap_pool import PancakeSwapPoolData, PancakeSwapPoolList
 from bt_api_py.containers.tickers.pancakeswap_ticker import PancakeSwapRequestTickerData
+from bt_api_py.errors.error_framework_pancakeswap_error_translator import PancakeSwapErrorTranslator
 from bt_api_py.feeds.live_pancakeswap.spot import PancakeSpotRequestData
-from bt_api_py.feeds.registry import register
+from bt_api_py.registry import ExchangeRegistry
 
-# Register PancakeSpot feed
-@register("PANCakeSwap")
+
 class PancakeSpotFeed(PancakeSpotRequestData):
     """
     PancakeSpot Feed Implementation
@@ -51,8 +51,9 @@ class PancakeSpotFeed(PancakeSpotRequestData):
             pool = PancakeSwapPoolData.from_dict(pool_data)
             pools.append(pool)
 
-        return PancakeSwapPoolList(pools=pools, total_pools=len(pools),
-                                 total_liquidity_usd=0, total_volume_24h_usd=0)
+        return PancakeSwapPoolList(
+            pools=pools, total_pools=len(pools), total_liquidity_usd=0, total_volume_24h_usd=0
+        )
 
     def get_ticker_data(self, symbol):
         """Get ticker data for a symbol"""
@@ -60,17 +61,23 @@ class PancakeSpotFeed(PancakeSpotRequestData):
         return PancakeSwapRequestTickerData.from_dict(ticker_data)
 
 
-# Register error translator
-from bt_api_py.errors.error_framework_pancakeswap_error_translator import PancakeSwapErrorTranslator
-
 # The error translator is automatically imported and can be used by the feed
 # No separate registration needed for error translators
 
+
+def register_pancakeswap() -> None:
+    """Register PancakeSwap feeds into the unified exchange registry."""
+    ExchangeRegistry.register_feed("PANCAKESWAP___DEX", PancakeSpotFeed)
+    ExchangeRegistry.register_exchange_data("PANCAKESWAP___DEX", PancakeSwapExchangeData)
+
+
+register_pancakeswap()
+
 __all__ = [
-    'PancakeSpotFeed',
-    'PancakeSwapExchangeData',
-    'PancakeSwapPoolData',
-    'PancakeSwapPoolList',
-    'PancakeSwapRequestTickerData',
-    'PancakeSwapErrorTranslator'
+    "PancakeSpotFeed",
+    "PancakeSwapExchangeData",
+    "PancakeSwapPoolData",
+    "PancakeSwapPoolList",
+    "PancakeSwapRequestTickerData",
+    "PancakeSwapErrorTranslator",
 ]

@@ -1,9 +1,7 @@
-- --
-
+---
 description: 'Edit existing BMAD agents while maintaining compliance'
 auto_execution_mode: "iterate"
-
-- --
+---
 
 # edit-agent
 

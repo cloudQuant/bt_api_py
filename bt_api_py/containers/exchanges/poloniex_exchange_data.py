@@ -6,6 +6,7 @@ including REST endpoints, WebSocket channels, and symbol formatting.
 """
 
 import os
+
 from bt_api_py.containers.exchanges.exchange_data import ExchangeData
 from bt_api_py.logging_factory import get_logger
 
@@ -153,7 +154,7 @@ class PoloniexExchangeData(ExchangeData):
         # Try to split by known quote currencies
         for lc in sorted(self.legal_currency, key=len, reverse=True):
             if symbol.endswith(lc) and len(symbol) > len(lc):
-                return f"{symbol[:-len(lc)]}_{lc}"
+                return f"{symbol[: -len(lc)]}_{lc}"
         return symbol
 
     def account_wss_symbol(self, symbol):
@@ -200,8 +201,7 @@ class PoloniexExchangeData(ExchangeData):
         path = self.rest_paths.get(request_type)
         if path is None:
             raise ValueError(
-                f"Unknown rest path: {request_type}. "
-                f"Available: {list(self.rest_paths.keys())}"
+                f"Unknown rest path: {request_type}. Available: {list(self.rest_paths.keys())}"
             )
         return path
 
@@ -256,7 +256,6 @@ class PoloniexExchangeDataSpot(PoloniexExchangeData):
                 "get_kline": "GET /markets/{symbol}/candles",
                 "get_trades": "GET /markets/{symbol}/trades",
                 "get_server_time": "GET /markets/time",
-
                 # Trading
                 "make_order": "POST /orders",
                 "cancel_order": "DELETE /orders/{id}",
@@ -265,7 +264,6 @@ class PoloniexExchangeDataSpot(PoloniexExchangeData):
                 "get_open_orders": "GET /orders",
                 "get_order_history": "GET /orders/history",
                 "get_deals": "GET /trades",
-
                 # Account
                 "get_balance": "GET /accounts/balances",
                 "get_account": "GET /accounts/balances",

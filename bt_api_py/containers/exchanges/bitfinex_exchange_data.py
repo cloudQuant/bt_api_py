@@ -1,6 +1,5 @@
 import json
 import os
-from typing import Dict, List, Optional
 
 from bt_api_py.containers.exchanges.exchange_data import ExchangeData
 from bt_api_py.logging_factory import get_logger
@@ -293,13 +292,23 @@ class BitfinexExchangeDataSpot(BitfinexExchangeData):
             self.rest_paths.setdefault(k, v)
 
         # Bitfinex specific WebSocket paths
-        self.wss_paths.update({
-            "ticker": {"params": ["ticker:{symbol}"], "method": "SUBSCRIBE", "id": 1},
-            "trades": {"params": ["trades:{symbol}"], "method": "SUBSCRIBE", "id": 1},
-            "orderbook": {"params": ["book:{symbol}:{precision}:{len}"], "method": "SUBSCRIBE", "id": 1},
-            "klines": {"params": ["candle_raw_{symbol}:trade:{period}"], "method": "SUBSCRIBE", "id": 1},
-            "auth": {"params": [], "method": "SUBSCRIBE", "id": 1},
-        })
+        self.wss_paths.update(
+            {
+                "ticker": {"params": ["ticker:{symbol}"], "method": "SUBSCRIBE", "id": 1},
+                "trades": {"params": ["trades:{symbol}"], "method": "SUBSCRIBE", "id": 1},
+                "orderbook": {
+                    "params": ["book:{symbol}:{precision}:{len}"],
+                    "method": "SUBSCRIBE",
+                    "id": 1,
+                },
+                "klines": {
+                    "params": ["candle_raw_{symbol}:trade:{period}"],
+                    "method": "SUBSCRIBE",
+                    "id": 1,
+                },
+                "auth": {"params": [], "method": "SUBSCRIBE", "id": 1},
+            }
+        )
 
         # Spot specific symbol mappings
         self.symbol_mappings = {
@@ -387,17 +396,17 @@ class BitfinexExchangeDataSpot(BitfinexExchangeData):
             "LUNA-USD": "tLUNAUSD",
             "BUSD-USD": "tBUSDUSD",  # Binance USD
             "USDC-USD": "tUSDCUSD",  # USD Coin
-            "PAX-USD": "tPAXUSD",    # Paxos Standard
+            "PAX-USD": "tPAXUSD",  # Paxos Standard
             "GUSD-USD": "tGUSDUSD",  # Gemini Dollar
             "HUSD-USD": "tHUSDUSD",  # HUSD
             "PAXG-USD": "tPAXGUSD",  # Paxos Gold
-            "tXAUUSD": "tXAUUSD",    # Gold
-            "tXAGUSD": "tXAGUSD",    # Silver
+            "tXAUUSD": "tXAUUSD",  # Gold
+            "tXAGUSD": "tXAGUSD",  # Silver
             # Stablecoins
-            "fUSD": "fUSD",          # USD margin funding
-            "fUSDT": "fUSDT",        # USDT margin funding
-            "fBTC": "fBTC",          # BTC margin funding
-            "fETH": "fETH",          # ETH margin funding
+            "fUSD": "fUSD",  # USD margin funding
+            "fUSDT": "fUSDT",  # USDT margin funding
+            "fBTC": "fBTC",  # BTC margin funding
+            "fETH": "fETH",  # ETH margin funding
         }
 
         # Reverse mappings for easy lookup

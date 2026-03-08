@@ -7,22 +7,20 @@ Run tests:
 
 import json
 import queue
-import time
 from unittest.mock import Mock
 
 import pytest
 
+# Import registration to auto-register Coincheck
+import bt_api_py.exchange_registers.register_coincheck  # noqa: F401
 from bt_api_py.containers.exchanges.coincheck_exchange_data import (
     CoincheckExchangeDataSpot,
 )
 from bt_api_py.containers.requestdatas.request_data import RequestData
 from bt_api_py.containers.tickers.coincheck_ticker import CoincheckRequestTickerData
-from bt_api_py.feeds.live_coincheck.spot import CoincheckRequestDataSpot
 from bt_api_py.feeds.capability import Capability
+from bt_api_py.feeds.live_coincheck.spot import CoincheckRequestDataSpot
 from bt_api_py.registry import ExchangeRegistry
-
-# Import registration to auto-register Coincheck
-import bt_api_py.exchange_registers.register_coincheck  # noqa: F401
 
 
 @pytest.fixture
@@ -172,6 +170,7 @@ class TestCoincheckBaseCapabilities:
 
     def test_base_capabilities(self):
         from bt_api_py.feeds.live_coincheck.request_base import CoincheckRequestData
+
         caps = CoincheckRequestData._capabilities()
         assert Capability.GET_TICK in caps
         assert Capability.MAKE_ORDER in caps
@@ -227,17 +226,17 @@ class TestCoincheckDataContainers:
     """Test Coincheck data containers."""
 
     def test_ticker_container(self):
-        ticker_response = json.dumps({
-            "last": "5000000",
-            "bid": "4990000",
-            "ask": "5010000",
-            "volume": "100.50",
-            "high": "5100000",
-            "low": "4800000",
-        })
-        ticker = CoincheckRequestTickerData(
-            ticker_response, "btc_jpy", "SPOT", False
+        ticker_response = json.dumps(
+            {
+                "last": "5000000",
+                "bid": "4990000",
+                "ask": "5010000",
+                "volume": "100.50",
+                "high": "5100000",
+                "low": "4800000",
+            }
         )
+        ticker = CoincheckRequestTickerData(ticker_response, "btc_jpy", "SPOT", False)
         ticker.init_data()
         assert ticker.get_exchange_name() == "COINCHECK"
         assert ticker.symbol_name == "btc_jpy"
@@ -250,9 +249,7 @@ class TestCoincheckDataContainers:
             "ask": "3010000",
         }
         ticker_response = json.dumps(ticker_data)
-        ticker = CoincheckRequestTickerData(
-            ticker_response, "eth_jpy", "SPOT", False
-        )
+        ticker = CoincheckRequestTickerData(ticker_response, "eth_jpy", "SPOT", False)
         ticker.init_data()
         assert ticker.last_price == 3000000
 
@@ -266,7 +263,9 @@ class TestCoincheckRegistry:
 
     def test_coincheck_exchange_data_registered(self):
         assert "COINCHECK___SPOT" in ExchangeRegistry._exchange_data_classes
-        assert ExchangeRegistry._exchange_data_classes["COINCHECK___SPOT"] == CoincheckExchangeDataSpot
+        assert (
+            ExchangeRegistry._exchange_data_classes["COINCHECK___SPOT"] == CoincheckExchangeDataSpot
+        )
 
     def test_coincheck_create_feed(self):
         data_queue = queue.Queue()

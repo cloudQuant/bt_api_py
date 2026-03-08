@@ -2,10 +2,10 @@
 CoinDCX REST API request base class.
 """
 
-import time
-import hmac
 import hashlib
+import hmac
 import json
+import time
 
 from bt_api_py.containers.exchanges.coindcx_exchange_data import CoinDCXExchangeDataSpot
 from bt_api_py.containers.requestdatas.request_data import RequestData
@@ -46,9 +46,7 @@ class CoinDCXRequestData(Feed):
         secret = self._params.api_secret
         if secret:
             signature = hmac.new(
-                secret.encode("utf-8"),
-                body.encode("utf-8"),
-                hashlib.sha256
+                secret.encode("utf-8"), body.encode("utf-8"), hashlib.sha256
             ).hexdigest()
             return signature
         return ""
@@ -82,7 +80,7 @@ class CoinDCXRequestData(Feed):
                 self.request_logger.error(f"Request failed: {e}")
                 raise
         else:
-            json_body = json.dumps(body, separators=(',', ':')) if body else "{}"
+            json_body = json.dumps(body, separators=(",", ":")) if body else "{}"
             headers = self._get_headers(json_body)
             try:
                 response = self._http_client.request(
@@ -115,7 +113,7 @@ class CoinDCXRequestData(Feed):
                 self.async_logger.error(f"Async request failed: {e}")
                 raise
         else:
-            json_body = json.dumps(body, separators=(',', ':')) if body else "{}"
+            json_body = json.dumps(body, separators=(",", ":")) if body else "{}"
             headers = self._get_headers(json_body)
             try:
                 response = await self._http_client.async_request(
@@ -148,12 +146,14 @@ class CoinDCXRequestData(Feed):
         """Prepare server time request. Returns (path, params, extra_data)."""
         if extra_data is None:
             extra_data = {}
-        extra_data.update({
-            "exchange_name": self.exchange_name,
-            "symbol_name": "",
-            "asset_type": self.asset_type,
-            "request_type": "get_server_time",
-        })
+        extra_data.update(
+            {
+                "exchange_name": self.exchange_name,
+                "symbol_name": "",
+                "asset_type": self.asset_type,
+                "request_type": "get_server_time",
+            }
+        )
         return "GET /exchange/v1/time", {}, extra_data
 
     def get_server_time(self, extra_data=None, **kwargs):

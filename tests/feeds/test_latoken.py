@@ -9,17 +9,16 @@ from unittest.mock import patch
 
 import pytest
 
+import bt_api_py.exchange_registers.register_latoken  # noqa: F401
 from bt_api_py.containers.exchanges.latoken_exchange_data import LatokenExchangeDataSpot
 from bt_api_py.containers.requestdatas.request_data import RequestData
 from bt_api_py.feeds.live_latoken.request_base import LatokenRequestData
 from bt_api_py.feeds.live_latoken.spot import (
-    LatokenRequestDataSpot,
-    LatokenMarketWssDataSpot,
     LatokenAccountWssDataSpot,
+    LatokenMarketWssDataSpot,
+    LatokenRequestDataSpot,
 )
 from bt_api_py.registry import ExchangeRegistry
-
-import bt_api_py.exchange_registers.register_latoken  # noqa: F401
 
 # ── sample response fixtures ─────────────────────────────────
 
@@ -27,33 +26,57 @@ SAMPLE_TICK = {
     "symbol": "620f2013-f1f0-11e9-9ec2-0242ac130002/0c3a106d-bde3-4c13-a26e-3fd2394529e5",
     "baseCurrency": "620f2013-f1f0-11e9-9ec2-0242ac130002",
     "quoteCurrency": "0c3a106d-bde3-4c13-a26e-3fd2394529e5",
-    "volume24h": "123.45", "volume7d": "890.12",
-    "change24h": "1.5", "change7d": "3.2",
-    "amount24h": "6000000", "amount7d": "40000000",
-    "lastPrice": "50000.50", "lastQuantity": "0.01",
-    "bestBid": "50000.00", "bestAsk": "50001.00",
-    "bestBidQuantity": "0.5", "bestAskQuantity": "0.3",
+    "volume24h": "123.45",
+    "volume7d": "890.12",
+    "change24h": "1.5",
+    "change7d": "3.2",
+    "amount24h": "6000000",
+    "amount7d": "40000000",
+    "lastPrice": "50000.50",
+    "lastQuantity": "0.01",
+    "bestBid": "50000.00",
+    "bestAsk": "50001.00",
+    "bestBidQuantity": "0.5",
+    "bestAskQuantity": "0.3",
 }
 
 SAMPLE_DEPTH = {
     "ask": [{"price": "50001", "quantity": "0.3", "cost": "15000.3", "accumulated": "0.3"}],
     "bid": [{"price": "50000", "quantity": "0.5", "cost": "25000", "accumulated": "0.5"}],
-    "totalAsk": "10.5", "totalBid": "8.3",
+    "totalAsk": "10.5",
+    "totalBid": "8.3",
 }
 
 SAMPLE_PAIRS = [
-    {"id": "uuid1", "baseCurrency": "btc_uuid", "quoteCurrency": "usdt_uuid",
-     "priceTick": "0.01", "quantityTick": "0.00001"},
+    {
+        "id": "uuid1",
+        "baseCurrency": "btc_uuid",
+        "quoteCurrency": "usdt_uuid",
+        "priceTick": "0.01",
+        "quantityTick": "0.00001",
+    },
 ]
 
 SAMPLE_DEALS = [
-    {"id": "t1", "direction": "BUY", "price": "50000", "quantity": "0.01",
-     "cost": "500", "timestamp": 1678901234000},
+    {
+        "id": "t1",
+        "direction": "BUY",
+        "price": "50000",
+        "quantity": "0.01",
+        "cost": "500",
+        "timestamp": 1678901234000,
+    },
 ]
 
 SAMPLE_KLINE = [
-    {"time": 1678901234000, "open": 49000, "high": 50500,
-     "low": 48800, "close": 50000, "volume": 12.3},
+    {
+        "time": 1678901234000,
+        "open": 49000,
+        "high": 50500,
+        "low": 48800,
+        "close": 50000,
+        "volume": 12.3,
+    },
 ]
 
 SAMPLE_ORDER = {"id": "order_uuid", "status": "PLACED", "side": "BUY"}
@@ -63,8 +86,13 @@ SAMPLE_CANCEL = {"id": "order_uuid", "status": "CANCELLED"}
 SAMPLE_OPEN_ORDERS = [{"id": "order_uuid", "side": "BUY", "price": "49000", "status": "PLACED"}]
 
 SAMPLE_BALANCE = [
-    {"id": "uuid", "currency": "btc_uuid", "available": "0.5",
-     "blocked": "0.1", "timestamp": 1678901234000},
+    {
+        "id": "uuid",
+        "currency": "btc_uuid",
+        "available": "0.5",
+        "blocked": "0.1",
+        "timestamp": 1678901234000,
+    },
 ]
 
 SAMPLE_SERVER_TIME = {"serverTime": 1678901234000}
@@ -73,6 +101,7 @@ SAMPLE_ERROR = {"status": "FAILURE", "error": "BAD_REQUEST", "message": "Invalid
 
 
 # ── helpers ───────────────────────────────────────────────────
+
 
 @pytest.fixture
 def feed():
@@ -87,6 +116,7 @@ def exdata():
 # ═══════════════════════════════════════════════════════════════
 # 1) ExchangeData
 # ═══════════════════════════════════════════════════════════════
+
 
 class TestExchangeData:
     def test_exchange_name(self, exdata):
@@ -134,16 +164,28 @@ class TestExchangeData:
             exdata.get_rest_path("nonexistent")
 
     def test_rest_paths_keys(self, exdata):
-        for key in ("get_tick", "get_depth", "get_deals", "get_exchange_info",
-                     "get_kline", "make_order", "cancel_order",
-                     "get_open_orders", "get_balance", "get_account",
-                     "get_server_time", "get_all_tickers", "get_currencies"):
+        for key in (
+            "get_tick",
+            "get_depth",
+            "get_deals",
+            "get_exchange_info",
+            "get_kline",
+            "make_order",
+            "cancel_order",
+            "get_open_orders",
+            "get_balance",
+            "get_account",
+            "get_server_time",
+            "get_all_tickers",
+            "get_currencies",
+        ):
             assert key in exdata.rest_paths
 
 
 # ═══════════════════════════════════════════════════════════════
 # 2) Parameter generation (_get_xxx)
 # ═══════════════════════════════════════════════════════════════
+
 
 class TestParamGeneration:
     def test_get_tick_params(self, feed):
@@ -216,6 +258,7 @@ class TestParamGeneration:
 # ═══════════════════════════════════════════════════════════════
 # 3) Normalization functions
 # ═══════════════════════════════════════════════════════════════
+
 
 class TestNormalization:
     def test_tick_ok(self):
@@ -291,6 +334,7 @@ class TestNormalization:
 # 4) Mocked sync calls
 # ═══════════════════════════════════════════════════════════════
 
+
 class TestSyncCalls:
     @patch.object(LatokenRequestData, "http_request", return_value=SAMPLE_TICK)
     def test_get_tick(self, mock_http, feed):
@@ -353,6 +397,7 @@ class TestSyncCalls:
 # 5) Auth
 # ═══════════════════════════════════════════════════════════════
 
+
 class TestAuth:
     def test_headers_no_key(self, feed):
         h = feed._get_headers()
@@ -378,6 +423,7 @@ class TestAuth:
 # 6) Registry
 # ═══════════════════════════════════════════════════════════════
 
+
 class TestRegistry:
     def test_feed_registered(self):
         assert "LATOKEN___SPOT" in ExchangeRegistry._feed_classes
@@ -402,19 +448,32 @@ class TestRegistry:
 # ═══════════════════════════════════════════════════════════════
 
 _EXPECTED_METHODS = [
-    "get_tick", "async_get_tick",
-    "get_ticker", "async_get_ticker",
-    "get_depth", "async_get_depth",
-    "get_exchange_info", "async_get_exchange_info",
-    "get_deals", "async_get_deals",
-    "get_recent_trades", "async_get_recent_trades",
-    "get_kline", "async_get_kline",
-    "get_server_time", "async_get_server_time",
-    "make_order", "async_make_order",
-    "cancel_order", "async_cancel_order",
-    "get_open_orders", "async_get_open_orders",
-    "get_balance", "async_get_balance",
-    "get_account", "async_get_account",
+    "get_tick",
+    "async_get_tick",
+    "get_ticker",
+    "async_get_ticker",
+    "get_depth",
+    "async_get_depth",
+    "get_exchange_info",
+    "async_get_exchange_info",
+    "get_deals",
+    "async_get_deals",
+    "get_recent_trades",
+    "async_get_recent_trades",
+    "get_kline",
+    "async_get_kline",
+    "get_server_time",
+    "async_get_server_time",
+    "make_order",
+    "async_make_order",
+    "cancel_order",
+    "async_cancel_order",
+    "get_open_orders",
+    "async_get_open_orders",
+    "get_balance",
+    "async_get_balance",
+    "get_account",
+    "async_get_account",
 ]
 
 
@@ -428,6 +487,7 @@ class TestMethodExistence:
 # ═══════════════════════════════════════════════════════════════
 # 8) Feed init
 # ═══════════════════════════════════════════════════════════════
+
 
 class TestFeedInit:
     def test_default_exchange_name(self, feed):
@@ -449,6 +509,7 @@ class TestFeedInit:
 # 9) WebSocket stubs
 # ═══════════════════════════════════════════════════════════════
 
+
 class TestWebSocketStubs:
     def test_market_wss_start_stop(self):
         wss = LatokenMarketWssDataSpot(queue.Queue(), topics=[{"topic": "ticker"}])
@@ -468,6 +529,7 @@ class TestWebSocketStubs:
 # ═══════════════════════════════════════════════════════════════
 # 10) Integration (skipped)
 # ═══════════════════════════════════════════════════════════════
+
 
 class TestIntegration:
     @pytest.mark.skip(reason="Requires network access")

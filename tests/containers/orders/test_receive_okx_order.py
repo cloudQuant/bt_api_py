@@ -1,6 +1,6 @@
-import json
 from bt_api_py.containers.orders.okx_order import OkxOrderData
 from bt_api_py.containers.orders.order import OrderStatus
+
 
 def test_receive_okx_order():
     data = {
@@ -56,12 +56,12 @@ def test_receive_okx_order():
                 "algoClOrdId": "",
                 "algoId": "",
                 "uTime": "1597026383085",
-                "cTime": "1597026383085"
+                "cTime": "1597026383085",
             }
-        ]
+        ],
     }
 
-    bo = OkxOrderData(data['data'][0], "BTC-USDT", "FUTURE", True)
+    bo = OkxOrderData(data["data"][0], "BTC-USDT", "FUTURE", True)
     bo.init_data()
     assert bo.get_asset_type() == "FUTURE"
     assert bo.get_event() == "OrderEvent"

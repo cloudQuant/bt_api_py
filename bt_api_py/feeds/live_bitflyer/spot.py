@@ -2,7 +2,6 @@
 bitFlyer Spot Feed implementation.
 """
 
-from bt_api_py.containers.exchanges.bitflyer_exchange_data import BitflyerExchangeDataSpot
 from bt_api_py.feeds.capability import Capability
 from bt_api_py.feeds.live_bitflyer.request_base import BitflyerRequestData
 
@@ -40,13 +39,15 @@ class BitflyerRequestDataSpot(BitflyerRequestData):
         path = "GET /v1/ticker"
         if extra_data is None:
             extra_data = {}
-        extra_data.update({
-            "request_type": "get_tick",
-            "symbol_name": symbol,
-            "asset_type": self.asset_type,
-            "exchange_name": self.exchange_name,
-            "normalize_function": self._get_tick_normalize_function,
-        })
+        extra_data.update(
+            {
+                "request_type": "get_tick",
+                "symbol_name": symbol,
+                "asset_type": self.asset_type,
+                "exchange_name": self.exchange_name,
+                "normalize_function": self._get_tick_normalize_function,
+            }
+        )
         params = {"product_code": product_code}
         return path, params, extra_data
 
@@ -80,13 +81,15 @@ class BitflyerRequestDataSpot(BitflyerRequestData):
         path = "GET /v1/board"
         if extra_data is None:
             extra_data = {}
-        extra_data.update({
-            "request_type": "get_depth",
-            "symbol_name": symbol,
-            "asset_type": self.asset_type,
-            "exchange_name": self.exchange_name,
-            "normalize_function": self._get_depth_normalize_function,
-        })
+        extra_data.update(
+            {
+                "request_type": "get_depth",
+                "symbol_name": symbol,
+                "asset_type": self.asset_type,
+                "exchange_name": self.exchange_name,
+                "normalize_function": self._get_depth_normalize_function,
+            }
+        )
         params = {"product_code": product_code}
         return path, params, extra_data
 
@@ -124,14 +127,16 @@ class BitflyerRequestDataSpot(BitflyerRequestData):
         path = "GET /v1/executions"
         if extra_data is None:
             extra_data = {}
-        extra_data.update({
-            "request_type": "get_kline",
-            "symbol_name": symbol,
-            "asset_type": self.asset_type,
-            "exchange_name": self.exchange_name,
-            "period": period,
-            "normalize_function": self._get_kline_normalize_function,
-        })
+        extra_data.update(
+            {
+                "request_type": "get_kline",
+                "symbol_name": symbol,
+                "asset_type": self.asset_type,
+                "exchange_name": self.exchange_name,
+                "period": period,
+                "normalize_function": self._get_kline_normalize_function,
+            }
+        )
         params = {"product_code": product_code, "count": count}
         return path, params, extra_data
 
@@ -167,13 +172,15 @@ class BitflyerRequestDataSpot(BitflyerRequestData):
         path = "GET /v1/executions"
         if extra_data is None:
             extra_data = {}
-        extra_data.update({
-            "request_type": "get_trades",
-            "symbol_name": symbol,
-            "asset_type": self.asset_type,
-            "exchange_name": self.exchange_name,
-            "normalize_function": self._get_trades_normalize_function,
-        })
+        extra_data.update(
+            {
+                "request_type": "get_trades",
+                "symbol_name": symbol,
+                "asset_type": self.asset_type,
+                "exchange_name": self.exchange_name,
+                "normalize_function": self._get_trades_normalize_function,
+            }
+        )
         params = {"product_code": product_code, "count": limit}
         return path, params, extra_data
 
@@ -200,13 +207,15 @@ class BitflyerRequestDataSpot(BitflyerRequestData):
         path = "GET /v1/getmarkets"
         if extra_data is None:
             extra_data = {}
-        extra_data.update({
-            "request_type": "get_exchange_info",
-            "symbol_name": "",
-            "asset_type": self.asset_type,
-            "exchange_name": self.exchange_name,
-            "normalize_function": self._get_exchange_info_normalize_function,
-        })
+        extra_data.update(
+            {
+                "request_type": "get_exchange_info",
+                "symbol_name": "",
+                "asset_type": self.asset_type,
+                "exchange_name": self.exchange_name,
+                "normalize_function": self._get_exchange_info_normalize_function,
+            }
+        )
         return path, None, extra_data
 
     @staticmethod
@@ -230,10 +239,12 @@ class BitflyerRequestDataSpot(BitflyerRequestData):
         path = "GET /v1/gethealth"
         if extra_data is None:
             extra_data = {}
-        extra_data.update({
-            "request_type": "get_health",
-            "normalize_function": self._get_health_normalize_function,
-        })
+        extra_data.update(
+            {
+                "request_type": "get_health",
+                "normalize_function": self._get_health_normalize_function,
+            }
+        )
         params = {}
         if symbol:
             product_code = self._normalize_product_code(symbol)
@@ -256,19 +267,31 @@ class BitflyerRequestDataSpot(BitflyerRequestData):
 
     # ==================== Trading Interfaces ====================
 
-    def _make_order(self, symbol, volume, price, order_type, offset="open",
-                    post_only=False, client_order_id=None, extra_data=None, **kwargs):
+    def _make_order(
+        self,
+        symbol,
+        volume,
+        price,
+        order_type,
+        offset="open",
+        post_only=False,
+        client_order_id=None,
+        extra_data=None,
+        **kwargs,
+    ):
         """Prepare order. Returns (path, params, extra_data)."""
         product_code = self._normalize_product_code(symbol)
         path = "POST /v1/me/sendchildorder"
         if extra_data is None:
             extra_data = {}
-        extra_data.update({
-            "exchange_name": self.exchange_name,
-            "symbol_name": symbol,
-            "asset_type": self.asset_type,
-            "request_type": "make_order",
-        })
+        extra_data.update(
+            {
+                "exchange_name": self.exchange_name,
+                "symbol_name": symbol,
+                "asset_type": self.asset_type,
+                "request_type": "make_order",
+            }
+        )
         params = {
             "product_code": product_code,
             "child_order_type": order_type.upper(),
@@ -278,12 +301,29 @@ class BitflyerRequestDataSpot(BitflyerRequestData):
         }
         return path, params, extra_data
 
-    def make_order(self, symbol, volume, price, order_type, offset="open",
-                   post_only=False, client_order_id=None, extra_data=None, **kwargs):
+    def make_order(
+        self,
+        symbol,
+        volume,
+        price,
+        order_type,
+        offset="open",
+        post_only=False,
+        client_order_id=None,
+        extra_data=None,
+        **kwargs,
+    ):
         """Place an order."""
         path, params, extra_data = self._make_order(
-            symbol, volume, price, order_type, offset, post_only,
-            client_order_id, extra_data, **kwargs
+            symbol,
+            volume,
+            price,
+            order_type,
+            offset,
+            post_only,
+            client_order_id,
+            extra_data,
+            **kwargs,
         )
         return self.request(path, body=params, extra_data=extra_data)
 
@@ -293,13 +333,15 @@ class BitflyerRequestDataSpot(BitflyerRequestData):
         path = "POST /v1/me/cancelchildorder"
         if extra_data is None:
             extra_data = {}
-        extra_data.update({
-            "exchange_name": self.exchange_name,
-            "symbol_name": symbol,
-            "asset_type": self.asset_type,
-            "request_type": "cancel_order",
-            "order_id": order_id,
-        })
+        extra_data.update(
+            {
+                "exchange_name": self.exchange_name,
+                "symbol_name": symbol,
+                "asset_type": self.asset_type,
+                "request_type": "cancel_order",
+                "order_id": order_id,
+            }
+        )
         params = {"product_code": product_code, "child_order_acceptance_id": order_id}
         return path, params, extra_data
 
@@ -314,13 +356,15 @@ class BitflyerRequestDataSpot(BitflyerRequestData):
         path = "GET /v1/me/getchildorders"
         if extra_data is None:
             extra_data = {}
-        extra_data.update({
-            "exchange_name": self.exchange_name,
-            "symbol_name": symbol,
-            "asset_type": self.asset_type,
-            "request_type": "query_order",
-            "order_id": order_id,
-        })
+        extra_data.update(
+            {
+                "exchange_name": self.exchange_name,
+                "symbol_name": symbol,
+                "asset_type": self.asset_type,
+                "request_type": "query_order",
+                "order_id": order_id,
+            }
+        )
         params = {"product_code": product_code, "child_order_acceptance_id": order_id}
         return path, params, extra_data
 
@@ -334,12 +378,14 @@ class BitflyerRequestDataSpot(BitflyerRequestData):
         path = "GET /v1/me/getchildorders"
         if extra_data is None:
             extra_data = {}
-        extra_data.update({
-            "exchange_name": self.exchange_name,
-            "symbol_name": symbol or "",
-            "asset_type": self.asset_type,
-            "request_type": "get_open_orders",
-        })
+        extra_data.update(
+            {
+                "exchange_name": self.exchange_name,
+                "symbol_name": symbol or "",
+                "asset_type": self.asset_type,
+                "request_type": "get_open_orders",
+            }
+        )
         params = {"child_order_state": "ACTIVE"}
         if symbol:
             product_code = self._normalize_product_code(symbol)
@@ -358,12 +404,14 @@ class BitflyerRequestDataSpot(BitflyerRequestData):
         path = "GET /v1/me/getpermissions"
         if extra_data is None:
             extra_data = {}
-        extra_data.update({
-            "exchange_name": self.exchange_name,
-            "symbol_name": symbol or "",
-            "asset_type": self.asset_type,
-            "request_type": "get_account",
-        })
+        extra_data.update(
+            {
+                "exchange_name": self.exchange_name,
+                "symbol_name": symbol or "",
+                "asset_type": self.asset_type,
+                "request_type": "get_account",
+            }
+        )
         return path, None, extra_data
 
     def get_account(self, symbol=None, extra_data=None, **kwargs):
@@ -376,12 +424,14 @@ class BitflyerRequestDataSpot(BitflyerRequestData):
         path = "GET /v1/me/getbalance"
         if extra_data is None:
             extra_data = {}
-        extra_data.update({
-            "exchange_name": self.exchange_name,
-            "symbol_name": symbol or "",
-            "asset_type": self.asset_type,
-            "request_type": "get_balance",
-        })
+        extra_data.update(
+            {
+                "exchange_name": self.exchange_name,
+                "symbol_name": symbol or "",
+                "asset_type": self.asset_type,
+                "request_type": "get_balance",
+            }
+        )
         return path, None, extra_data
 
     def get_balance(self, symbol=None, extra_data=None, **kwargs):

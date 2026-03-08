@@ -7,20 +7,19 @@ Run tests:
 
 import queue
 import time
-from unittest.mock import Mock, MagicMock, patch
+from unittest.mock import MagicMock, Mock, patch
 
 import pytest
 
+# Import registration to auto-register Bitvavo
+import bt_api_py.exchange_registers.register_bitvavo  # noqa: F401
 from bt_api_py.containers.exchanges.bitvavo_exchange_data import (
     BitvavoExchangeDataSpot,
 )
 from bt_api_py.containers.requestdatas.request_data import RequestData
-from bt_api_py.feeds.live_bitvavo.spot import BitvavoRequestDataSpot
 from bt_api_py.feeds.capability import Capability
+from bt_api_py.feeds.live_bitvavo.spot import BitvavoRequestDataSpot
 from bt_api_py.registry import ExchangeRegistry
-
-# Import registration to auto-register Bitvavo
-import bt_api_py.exchange_registers.register_bitvavo  # noqa: F401
 
 
 @pytest.fixture
@@ -184,6 +183,7 @@ class TestBitvavoBaseCapabilities:
 
     def test_base_capabilities(self):
         from bt_api_py.feeds.live_bitvavo.request_base import BitvavoRequestData
+
         caps = BitvavoRequestData._capabilities()
         assert Capability.GET_TICK in caps
         assert Capability.MAKE_ORDER in caps

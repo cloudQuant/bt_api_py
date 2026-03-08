@@ -20,7 +20,6 @@ from bt_api_py.functions.async_base import AsyncBase
 
 
 class FeishuManagerAsync(AsyncBase):
-
     def __init__(self):
         super().__init__()
         self.host = "https://open.larksuite.com/open-apis/bot/v2/hook/"

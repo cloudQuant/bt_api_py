@@ -6,7 +6,6 @@ Defines API endpoints, chain enums, and path configurations for Balancer DEX.
 
 import os
 from enum import Enum
-from typing import Any
 
 # ── 配置加载缓存 ──────────────────────────────────────────────
 _balancer_config = None
@@ -20,8 +19,9 @@ def _get_balancer_config():
     if _balancer_config_loaded:
         return _balancer_config
     try:
-        from bt_api_py.config_loader import load_exchange_config
         import yaml
+
+        from bt_api_py.config_loader import load_exchange_config
 
         config_path = os.path.join(
             os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
@@ -42,6 +42,7 @@ def _get_balancer_config():
     except Exception as e:
         # Import logger here to avoid circular imports
         from bt_api_py.logging_factory import get_logger
+
         logger = get_logger("balancer_exchange_data")
         logger.warn(f"Failed to load balancer.yaml config: {e}")
     return _balancer_config
@@ -126,20 +127,20 @@ class BalancerExchangeData:
             return False
 
         # Load GraphQL API URL
-        if hasattr(self.config, '_raw_config') and self.config._raw_config:
-            raw_base_urls = self.config._raw_config.get('base_urls', {})
-            if raw_base_urls and raw_base_urls.get('graphql_api'):
-                self.rest_url = raw_base_urls['graphql_api']
+        if hasattr(self.config, "_raw_config") and self.config._raw_config:
+            raw_base_urls = self.config._raw_config.get("base_urls", {})
+            if raw_base_urls and raw_base_urls.get("graphql_api"):
+                self.rest_url = raw_base_urls["graphql_api"]
         else:
             self.rest_url = self.GRAPHQL_API_URL
 
         # Load subgraph URLs
         # Use raw config data since AssetTypeConfig doesn't have graphql_endpoints
-        if hasattr(self.config, '_raw_config') and self.config._raw_config:
-            raw_asset_types = self.config._raw_config.get('asset_types', {})
+        if hasattr(self.config, "_raw_config") and self.config._raw_config:
+            raw_asset_types = self.config._raw_config.get("asset_types", {})
             raw_asset_config = raw_asset_types.get(asset_type, {})
-            if raw_asset_config.get('graphql_endpoints'):
-                subgraph_url = raw_asset_config['graphql_endpoints'].get('subgraph')
+            if raw_asset_config.get("graphql_endpoints"):
+                subgraph_url = raw_asset_config["graphql_endpoints"].get("subgraph")
                 if subgraph_url:
                     chain_name = self.chain.value
                     self.subgraph_urls = {chain_name: subgraph_url}
@@ -147,15 +148,15 @@ class BalancerExchangeData:
             self.subgraph_urls = self.SUBGRAPH_URLS
 
         # Load supported chains
-        asset_config_dict = asset_cfg.__dict__ if hasattr(asset_cfg, '__dict__') else {}
-        if 'chains_supported' in asset_config_dict and asset_config_dict['chains_supported']:
-            self.chains_supported = list(asset_config_dict['chains_supported'])
+        asset_config_dict = asset_cfg.__dict__ if hasattr(asset_cfg, "__dict__") else {}
+        if "chains_supported" in asset_config_dict and asset_config_dict["chains_supported"]:
+            self.chains_supported = list(asset_config_dict["chains_supported"])
         else:
             self.chains_supported = [self.chain.value]
 
         # Load GraphQL queries from config
-        if hasattr(self.config, '_raw_config') and self.config._raw_config:
-            self.graphql_queries = self.config._raw_config.get('graphql_queries', {})
+        if hasattr(self.config, "_raw_config") and self.config._raw_config:
+            self.graphql_queries = self.config._raw_config.get("graphql_queries", {})
         else:
             self.graphql_queries = {}
 
@@ -167,7 +168,7 @@ class BalancerExchangeData:
 
     def get_subgraph_url(self) -> str:
         """Get the subgraph URL for the configured chain."""
-        if hasattr(self, 'subgraph_urls') and self.chain.value in self.subgraph_urls:
+        if hasattr(self, "subgraph_urls") and self.chain.value in self.subgraph_urls:
             return self.subgraph_urls[self.chain.value]
         # Fallback to predefined URLs
         return self.SUBGRAPH_URLS.get(self.chain, self.SUBGRAPH_URLS[GqlChain.MAINNET])
@@ -213,7 +214,7 @@ class BalancerExchangeData:
         Returns:
             GraphQL query string or None if not found
         """
-        if hasattr(self, 'graphql_queries') and self.graphql_queries:
+        if hasattr(self, "graphql_queries") and self.graphql_queries:
             return self.graphql_queries.get(query_name)
         return None
 
@@ -226,7 +227,7 @@ class BalancerExchangeData:
         Returns:
             GraphQL path string or None if not found
         """
-        if hasattr(self, 'graphql_paths') and self.graphql_paths:
+        if hasattr(self, "graphql_paths") and self.graphql_paths:
             return self.graphql_paths.get(path_name)
         return None
 
@@ -258,7 +259,11 @@ class BalancerExchangeDataSpot(BalancerExchangeData):
         "WETH",
     ]
 
-    def __init__(self, chain: GqlChain | str = BalancerExchangeData.DEFAULT_CHAIN, asset_type: str | None = None):
+    def __init__(
+        self,
+        chain: GqlChain | str = BalancerExchangeData.DEFAULT_CHAIN,
+        asset_type: str | None = None,
+    ):
         # Convert string to enum if needed
         if isinstance(chain, str):
             try:
@@ -281,15 +286,15 @@ class BalancerExchangeDataSpot(BalancerExchangeData):
             return False
 
         # Use raw config data to get graphql_paths
-        if hasattr(self.config, '_raw_config') and self.config._raw_config:
-            raw_asset_types = self.config._raw_config.get('asset_types', {})
+        if hasattr(self.config, "_raw_config") and self.config._raw_config:
+            raw_asset_types = self.config._raw_config.get("asset_types", {})
             asset_config = raw_asset_types.get(asset_type, {})
 
             # Load GraphQL paths if available
-            self.graphql_paths = asset_config.get('graphql_paths', {})
+            self.graphql_paths = asset_config.get("graphql_paths", {})
 
             # Load special operations if available
-            self.special_operations = asset_config.get('special_operations', {})
+            self.special_operations = asset_config.get("special_operations", {})
         else:
             self.graphql_paths = {}
             self.special_operations = {}
@@ -309,7 +314,7 @@ class BalancerExchangeDataSpot(BalancerExchangeData):
             String in format "POST /graphql" or "GRAPHQL {query}"
         """
         # If config has rest_paths and this request_type is defined
-        if self.config and hasattr(self, 'asset_type') and self.asset_type:
+        if self.config and hasattr(self, "asset_type") and self.asset_type:
             asset_cfg = self.config.asset_types.get(self.asset_type)
             if asset_cfg and asset_cfg.rest_paths:
                 path = asset_cfg.rest_paths.get(request_type)

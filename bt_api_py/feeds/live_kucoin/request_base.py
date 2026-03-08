@@ -15,8 +15,8 @@ from bt_api_py.containers.requestdatas.request_data import RequestData
 from bt_api_py.error import KuCoinErrorTranslator
 from bt_api_py.feeds.capability import Capability
 from bt_api_py.feeds.feed import Feed
-from bt_api_py.rate_limiter import RateLimiter, RateLimitRule, RateLimitScope, RateLimitType
 from bt_api_py.logging_factory import get_logger
+from bt_api_py.rate_limiter import RateLimiter, RateLimitRule, RateLimitScope, RateLimitType
 
 
 class KuCoinRequestData(Feed):
@@ -95,7 +95,7 @@ class KuCoinRequestData(Feed):
             assert 0, "Queue not initialized"
 
     # noinspection PyMethodMayBeStatic
-    def signature(self, timestamp, method, request_path, secret_key, body=''):
+    def signature(self, timestamp, method, request_path, secret_key, body=""):
         """Generate KuCoin API signature.
 
         Args:
@@ -112,7 +112,7 @@ class KuCoinRequestData(Feed):
         mac = hmac.new(
             bytes(secret_key, encoding="utf-8"),
             bytes(message, encoding="utf-8"),
-            digestmod=hashlib.sha256
+            digestmod=hashlib.sha256,
         )
         return base64.b64encode(mac.digest()).decode()
 
@@ -130,7 +130,7 @@ class KuCoinRequestData(Feed):
         mac = hmac.new(
             bytes(secret_key, encoding="utf-8"),
             bytes(passphrase, encoding="utf-8"),
-            digestmod=hashlib.sha256
+            digestmod=hashlib.sha256,
         )
         return base64.b64encode(mac.digest()).decode()
 
@@ -187,7 +187,7 @@ class KuCoinRequestData(Feed):
         if is_sign:
             # Generate signature for authenticated requests
             timestamp = int(time.time() * 1000)
-            body_str = json.dumps(body) if body is not None else ''
+            body_str = json.dumps(body) if body is not None else ""
             signature_ = self.signature(timestamp, method, request_path, self.private_key, body_str)
             encrypted_passphrase = self.get_encrypted_passphrase(self.passphrase, self.private_key)
             headers = self.get_header(self.public_key, signature_, timestamp, encrypted_passphrase)
@@ -226,7 +226,7 @@ class KuCoinRequestData(Feed):
         headers = {}
         if is_sign:
             timestamp = int(time.time() * 1000)
-            body_str = json.dumps(body) if body is not None else ''
+            body_str = json.dumps(body) if body is not None else ""
             signature_ = self.signature(timestamp, method, request_path, self.private_key, body_str)
             encrypted_passphrase = self.get_encrypted_passphrase(self.passphrase, self.private_key)
             headers = self.get_header(self.public_key, signature_, timestamp, encrypted_passphrase)

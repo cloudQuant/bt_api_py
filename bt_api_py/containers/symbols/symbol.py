@@ -4,7 +4,6 @@ from bt_api_py.containers.auto_init_mixin import AutoInitMixin
 
 
 class SymbolData(AutoInitMixin):
-
     def __init__(self, symbol_info, has_been_json_encoded):
         self.event = "SymbolEvent"
         self.symbol_info = symbol_info

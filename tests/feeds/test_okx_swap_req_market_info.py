@@ -1,44 +1,25 @@
 import queue
 import time
-import random
-import pytest
-from bt_api_py.functions.utils import read_account_config, get_public_ip
-from bt_api_py.feeds.live_okx_feed import OkxRequestDataSwap
 
 from bt_api_py.containers.exchanges.okx_exchange_data import OkxExchangeDataSwap
 from bt_api_py.containers.requestdatas.request_data import RequestData
-from bt_api_py.containers.tickers.okx_ticker import OkxTickerData
-from bt_api_py.containers.bars.okx_bar import OkxBarData
-from bt_api_py.containers.orderbooks.okx_orderbook import OkxOrderBookData
-from bt_api_py.containers.fundingrates.okx_funding_rate import OkxFundingRateData
-from bt_api_py.containers.markprices.okx_mark_price import OkxMarkPriceData
-from bt_api_py.containers.accounts.okx_account import OkxAccountData
+
 # from bt_api_py.containers.orders.okx_order import OkxOrderData
-from bt_api_py.containers.trades.okx_trade import OkxRequestTradeData, OkxWssTradeData
-from bt_api_py.containers.positions.okx_position import OkxPositionData
-from bt_api_py.containers.orders.order import OrderStatus
-from bt_api_py.containers.symbols.okx_symbol import OkxSymbolData
-from bt_api_py.containers.assets.okx_asset import OkxCurrencyData, OkxAssetBalanceData, OkxAssetValuationData, OkxTransferStateData, OkxDepositInfoData, OkxWithdrawalInfoData
-
-
-
+from bt_api_py.feeds.live_okx_feed import OkxRequestDataSwap
+from bt_api_py.functions.utils import read_account_config
 
 
 def generate_kwargs(exchange=OkxExchangeDataSwap):
     data = read_account_config()
     kwargs = {
-        "public_key": data['okx']['public_key'],
-        "private_key": data['okx']['private_key'],
-        "passphrase": data['okx']["passphrase"],
+        "public_key": data["okx"]["public_key"],
+        "private_key": data["okx"]["private_key"],
+        "passphrase": data["okx"]["passphrase"],
         "topics": {"tick": {"symbol": "BTC-USDT"}},
-        "proxies": data.get('proxies'),
-        "async_proxy": data.get('async_proxy'),
+        "proxies": data.get("proxies"),
+        "async_proxy": data.get("async_proxy"),
     }
     return kwargs
-
-
-
-
 
 
 def init_req_feed():
@@ -48,18 +29,10 @@ def init_req_feed():
     return live_okx_swap_feed
 
 
-
-
-
-
 def init_async_feed(data_queue):
     kwargs = generate_kwargs()
     live_okx_swap_feed = OkxRequestDataSwap(data_queue, **kwargs)
     return live_okx_swap_feed
-
-
-
-
 
 
 def test_okx_req_get_24h_volume():
@@ -71,10 +44,6 @@ def test_okx_req_get_24h_volume():
     volume_data = data.get_data()
     assert isinstance(volume_data, list)
     print("get_24h_volume count:", len(volume_data))
-
-
-
-
 
 
 def test_okx_async_get_24h_volume():
@@ -97,9 +66,6 @@ def test_okx_async_get_24h_volume():
 # ==================== Call Auction Details API Tests ====================
 
 
-
-
-
 def test_okx_req_get_call_auction_details():
     """Test get_call_auction_details interface - Get call auction details"""
     live_okx_swap_feed = init_req_feed()
@@ -110,10 +76,6 @@ def test_okx_req_get_call_auction_details():
     auction_data = data.get_data()
     assert isinstance(auction_data, list)
     print("get_call_auction_details count:", len(auction_data))
-
-
-
-
 
 
 def test_okx_async_get_call_auction_details():
@@ -136,9 +98,6 @@ def test_okx_async_get_call_auction_details():
 # ==================== Index Price API Tests ====================
 
 
-
-
-
 def test_okx_req_get_index_price():
     """Test get_index_price interface - Get index ticker data"""
     live_okx_swap_feed = init_req_feed()
@@ -149,10 +108,6 @@ def test_okx_req_get_index_price():
     index_data = data.get_data()
     assert isinstance(index_data, list)
     print("get_index_price count:", len(index_data))
-
-
-
-
 
 
 def test_okx_async_get_index_price():
@@ -172,10 +127,6 @@ def test_okx_async_get_index_price():
     print("async_get_index_price status:", index_data.get_status())
 
 
-
-
-
-
 def test_okx_req_get_index_price_all():
     """Test get_index_price interface - Get all index tickers"""
     live_okx_swap_feed = init_req_feed()
@@ -190,9 +141,6 @@ def test_okx_req_get_index_price_all():
 # ==================== Index Candles History API Tests ====================
 
 
-
-
-
 def test_okx_req_get_index_candles_history():
     """Test get_index_candles_history interface - Get historical index candlestick charts"""
     live_okx_swap_feed = init_req_feed()
@@ -203,10 +151,6 @@ def test_okx_req_get_index_candles_history():
     candles_data = data.get_data()
     assert isinstance(candles_data, list)
     print("get_index_candles_history data count:", len(candles_data))
-
-
-
-
 
 
 def test_okx_async_get_index_candles_history():
@@ -226,10 +170,6 @@ def test_okx_async_get_index_candles_history():
     print("async_get_index_candles_history status:", candles_data.get_status())
 
 
-
-
-
-
 def test_okx_req_get_index_candles_history_with_pagination():
     """Test get_index_candles_history interface with pagination"""
     live_okx_swap_feed = init_req_feed()
@@ -241,14 +181,13 @@ def test_okx_req_get_index_candles_history_with_pagination():
 # ==================== Mark Price Candles History API Tests ====================
 
 
-
-
-
 def test_okx_req_get_mark_price_candles_history():
     """Test get_mark_price_candles_history interface - Get historical mark price candlestick charts"""
     live_okx_swap_feed = init_req_feed()
     # Get historical mark price candles for BTC-USDT-SWAP
-    data = live_okx_swap_feed.get_mark_price_candles_history(symbol="BTC-USDT-SWAP", bar="1m", limit="10")
+    data = live_okx_swap_feed.get_mark_price_candles_history(
+        symbol="BTC-USDT-SWAP", bar="1m", limit="10"
+    )
     assert isinstance(data, RequestData)
     print("get_mark_price_candles_history status:", data.get_status())
     candles_data = data.get_data()
@@ -256,15 +195,13 @@ def test_okx_req_get_mark_price_candles_history():
     print("get_mark_price_candles_history data count:", len(candles_data))
 
 
-
-
-
-
 def test_okx_async_get_mark_price_candles_history():
     """Test async_get_mark_price_candles_history interface"""
     data_queue = queue.Queue()
     live_okx_swap_feed = init_async_feed(data_queue)
-    live_okx_swap_feed.async_get_mark_price_candles_history(symbol="BTC-USDT-SWAP", bar="1m", limit="10")
+    live_okx_swap_feed.async_get_mark_price_candles_history(
+        symbol="BTC-USDT-SWAP", bar="1m", limit="10"
+    )
     time.sleep(5)
     try:
         candles_data = data_queue.get(False)
@@ -277,22 +214,17 @@ def test_okx_async_get_mark_price_candles_history():
     print("async_get_mark_price_candles_history status:", candles_data.get_status())
 
 
-
-
-
-
 def test_okx_req_get_mark_price_candles_history_with_pagination():
     """Test get_mark_price_candles_history interface with pagination"""
     live_okx_swap_feed = init_req_feed()
-    data = live_okx_swap_feed.get_mark_price_candles_history(symbol="ETH-USDT-SWAP", bar="5m", limit="20")
+    data = live_okx_swap_feed.get_mark_price_candles_history(
+        symbol="ETH-USDT-SWAP", bar="5m", limit="20"
+    )
     assert isinstance(data, RequestData)
     print("get_mark_price_candles_history (ETH, 5m, 20) status:", data.get_status())
 
 
 # ==================== Trading Statistics Tests ====================
-
-
-
 
 
 def test_okx_get_open_interest():
@@ -308,16 +240,13 @@ def test_okx_get_open_interest():
         print("Open interest data:", data_list[:1] if data_list else "No data")
 
 
-
-
-
-
 def test_okx_async_get_open_interest():
     """Test async_get_open_interest interface"""
     data_queue = queue.Queue()
     live_okx_swap_feed = init_async_feed(data_queue)
-    live_okx_swap_feed.async_get_open_interest(inst_type="SWAP", inst_id="BTC-USDT-SWAP",
-                                                extra_data={"test_async_get_open_interest": True})
+    live_okx_swap_feed.async_get_open_interest(
+        inst_type="SWAP", inst_id="BTC-USDT-SWAP", extra_data={"test_async_get_open_interest": True}
+    )
     time.sleep(5)
     try:
         result = data_queue.get(False)
@@ -326,10 +255,6 @@ def test_okx_async_get_open_interest():
     if result is not None:
         assert isinstance(result, RequestData)
         print("async_get_open_interest status:", result.get_status())
-
-
-
-
 
 
 def test_okx_get_open_interest_by_uly():
@@ -341,16 +266,13 @@ def test_okx_get_open_interest_by_uly():
     print("get_open_interest (by uly) status:", data.get_status())
 
 
-
-
-
-
 def test_okx_async_get_open_interest_by_uly():
     """Test async_get_open_interest with underlying"""
     data_queue = queue.Queue()
     live_okx_swap_feed = init_async_feed(data_queue)
-    live_okx_swap_feed.async_get_open_interest(inst_type="SWAP", uly="BTC-USD",
-                                                extra_data={"test_async_get_open_interest_uly": True})
+    live_okx_swap_feed.async_get_open_interest(
+        inst_type="SWAP", uly="BTC-USD", extra_data={"test_async_get_open_interest_uly": True}
+    )
     time.sleep(5)
     try:
         result = data_queue.get(False)
@@ -360,8 +282,5 @@ def test_okx_async_get_open_interest_by_uly():
         assert isinstance(result, RequestData)
         print("async_get_open_interest (by uly) status:", result.get_status())
 
+
 # ==================== Grid Trading Tests ====================
-
-
-
-

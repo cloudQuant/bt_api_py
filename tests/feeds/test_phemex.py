@@ -7,26 +7,24 @@ Run tests:
 
 import hashlib
 import hmac
-import json
 import os
 import queue
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pytest
 
+# Import registration to auto-register Phemex
+import bt_api_py.exchange_registers.register_phemex  # noqa: F401
 from bt_api_py.containers.exchanges.phemex_exchange_data import (
     PhemexExchangeData,
     PhemexExchangeDataSpot,
 )
-from bt_api_py.containers.tickers.phemex_ticker import PhemexRequestTickerData
 from bt_api_py.containers.requestdatas.request_data import RequestData
+from bt_api_py.containers.tickers.phemex_ticker import PhemexRequestTickerData
 from bt_api_py.feeds.capability import Capability
 from bt_api_py.feeds.live_phemex.request_base import PhemexRequestData
 from bt_api_py.feeds.live_phemex.spot import PhemexRequestDataSpot
 from bt_api_py.registry import ExchangeRegistry
-
-# Import registration to auto-register Phemex
-import bt_api_py.exchange_registers.register_phemex  # noqa: F401
 
 SKIP_LIVE = os.environ.get("SKIP_LIVE_TESTS", "true").lower() in ("1", "true", "yes")
 
@@ -163,6 +161,7 @@ SAMPLE_ERROR_RESP = {"code": 10001, "msg": "Invalid parameter"}
 
 # ── Helper ────────────────────────────────────────────────────────────────
 
+
 def _make_feed():
     """Create a PhemexRequestDataSpot instance with a queue."""
     return PhemexRequestDataSpot(queue.Queue())
@@ -171,6 +170,7 @@ def _make_feed():
 # ═══════════════════════════════════════════════════════════════════════════
 #  1. Exchange Data
 # ═══════════════════════════════════════════════════════════════════════════
+
 
 class TestExchangeData:
     def test_base_init(self):
@@ -189,9 +189,20 @@ class TestExchangeData:
 
     def test_spot_rest_paths_populated(self):
         d = PhemexExchangeDataSpot()
-        for key in ("get_server_time", "get_exchange_info", "get_tick", "get_depth",
-                     "get_kline", "get_trades", "get_account", "get_balance",
-                     "make_order", "cancel_order", "query_order", "get_open_orders"):
+        for key in (
+            "get_server_time",
+            "get_exchange_info",
+            "get_tick",
+            "get_depth",
+            "get_kline",
+            "get_trades",
+            "get_account",
+            "get_balance",
+            "make_order",
+            "cancel_order",
+            "query_order",
+            "get_open_orders",
+        ):
             path = d.get_rest_path(key)
             assert path != "", f"Missing rest_path: {key}"
 
@@ -223,6 +234,7 @@ class TestExchangeData:
 # ═══════════════════════════════════════════════════════════════════════════
 #  2. Parameter Generation
 # ═══════════════════════════════════════════════════════════════════════════
+
 
 class TestParameterGeneration:
     def test_get_tick_params(self):
@@ -256,7 +268,9 @@ class TestParameterGeneration:
 
     def test_get_kline_with_time_range(self):
         f = _make_feed()
-        path, params, ed = f._get_kline("BTC/USDT", period="1h", count=100, from_time=1000, to_time=2000)
+        path, params, ed = f._get_kline(
+            "BTC/USDT", period="1h", count=100, from_time=1000, to_time=2000
+        )
         assert params["from"] == 1000
         assert params["to"] == 2000
 
@@ -330,10 +344,12 @@ class TestParameterGeneration:
 #  3. Normalize Functions
 # ═══════════════════════════════════════════════════════════════════════════
 
+
 class TestNormalization:
     def test_tick_normalize_success(self):
         result, ok = PhemexRequestData._get_tick_normalize_function(
-            SAMPLE_TICKER_RESP, {"symbol_name": "BTC/USDT", "asset_type": "SPOT"})
+            SAMPLE_TICKER_RESP, {"symbol_name": "BTC/USDT", "asset_type": "SPOT"}
+        )
         assert ok is True
         assert len(result) == 1
         assert isinstance(result[0], PhemexRequestTickerData)
@@ -374,14 +390,18 @@ class TestNormalization:
         assert len(result) == 2
 
     def test_exchange_info_normalize_success(self):
-        result, ok = PhemexRequestData._get_exchange_info_normalize_function(SAMPLE_EXCHANGE_INFO_RESP, {})
+        result, ok = PhemexRequestData._get_exchange_info_normalize_function(
+            SAMPLE_EXCHANGE_INFO_RESP, {}
+        )
         assert ok is True
         assert len(result) == 1
         assert "symbols" in result[0]
         assert len(result[0]["symbols"]) == 2
 
     def test_server_time_normalize_success(self):
-        result, ok = PhemexRequestData._get_server_time_normalize_function(SAMPLE_SERVER_TIME_RESP, {})
+        result, ok = PhemexRequestData._get_server_time_normalize_function(
+            SAMPLE_SERVER_TIME_RESP, {}
+        )
         assert ok is True
         assert len(result) == 1
 
@@ -391,7 +411,9 @@ class TestNormalization:
         assert result[0]["orderID"] == "abc-123-def"
 
     def test_cancel_order_normalize_success(self):
-        result, ok = PhemexRequestData._cancel_order_normalize_function(SAMPLE_CANCEL_ORDER_RESP, {})
+        result, ok = PhemexRequestData._cancel_order_normalize_function(
+            SAMPLE_CANCEL_ORDER_RESP, {}
+        )
         assert ok is True
         assert result[0]["success"] is True
 
@@ -400,7 +422,9 @@ class TestNormalization:
         assert ok is False
 
     def test_open_orders_normalize_success(self):
-        result, ok = PhemexRequestData._get_open_orders_normalize_function(SAMPLE_OPEN_ORDERS_RESP, {})
+        result, ok = PhemexRequestData._get_open_orders_normalize_function(
+            SAMPLE_OPEN_ORDERS_RESP, {}
+        )
         assert ok is True
         assert len(result) == 1
 
@@ -418,6 +442,7 @@ class TestNormalization:
 # ═══════════════════════════════════════════════════════════════════════════
 #  4. Mocked Synchronous Calls
 # ═══════════════════════════════════════════════════════════════════════════
+
 
 class TestMockedSyncCalls:
     """Test each sync method with mocked http_request."""
@@ -530,6 +555,7 @@ class TestMockedSyncCalls:
 #  5. Container Tests
 # ═══════════════════════════════════════════════════════════════════════════
 
+
 class TestContainers:
     def test_ticker_container_parse(self):
         ticker = PhemexRequestTickerData(SAMPLE_TICKER_RESP, "BTC/USDT", "SPOT")
@@ -554,6 +580,7 @@ class TestContainers:
 # ═══════════════════════════════════════════════════════════════════════════
 #  6. Registry Tests
 # ═══════════════════════════════════════════════════════════════════════════
+
 
 class TestRegistry:
     def test_feed_registered(self):
@@ -584,52 +611,98 @@ class TestRegistry:
 #  7. Method Existence & Capabilities
 # ═══════════════════════════════════════════════════════════════════════════
 
+
 class TestMethodExistence:
     def test_capabilities(self):
         caps = PhemexRequestData._capabilities()
         for c in [
-            Capability.GET_TICK, Capability.GET_DEPTH, Capability.GET_KLINE, Capability.GET_DEALS,
-            Capability.MAKE_ORDER, Capability.CANCEL_ORDER, Capability.QUERY_ORDER,
-            Capability.QUERY_OPEN_ORDERS, Capability.GET_BALANCE, Capability.GET_ACCOUNT,
-            Capability.GET_EXCHANGE_INFO, Capability.GET_SERVER_TIME,
+            Capability.GET_TICK,
+            Capability.GET_DEPTH,
+            Capability.GET_KLINE,
+            Capability.GET_DEALS,
+            Capability.MAKE_ORDER,
+            Capability.CANCEL_ORDER,
+            Capability.QUERY_ORDER,
+            Capability.QUERY_OPEN_ORDERS,
+            Capability.GET_BALANCE,
+            Capability.GET_ACCOUNT,
+            Capability.GET_EXCHANGE_INFO,
+            Capability.GET_SERVER_TIME,
         ]:
             assert c in caps, f"Missing capability: {c}"
 
     def test_public_sync_methods(self):
         f = _make_feed()
-        for m in ("get_server_time", "get_exchange_info", "get_tick", "get_ticker",
-                   "get_depth", "get_kline", "get_trade_history"):
+        for m in (
+            "get_server_time",
+            "get_exchange_info",
+            "get_tick",
+            "get_ticker",
+            "get_depth",
+            "get_kline",
+            "get_trade_history",
+        ):
             assert callable(getattr(f, m, None)), f"Missing method: {m}"
 
     def test_private_sync_methods(self):
         f = _make_feed()
-        for m in ("make_order", "cancel_order", "query_order",
-                   "get_open_orders", "get_account", "get_balance"):
+        for m in (
+            "make_order",
+            "cancel_order",
+            "query_order",
+            "get_open_orders",
+            "get_account",
+            "get_balance",
+        ):
             assert callable(getattr(f, m, None)), f"Missing method: {m}"
 
     def test_public_async_methods(self):
         f = _make_feed()
-        for m in ("async_get_server_time", "async_get_exchange_info", "async_get_tick",
-                   "async_get_depth", "async_get_kline", "async_get_trade_history"):
+        for m in (
+            "async_get_server_time",
+            "async_get_exchange_info",
+            "async_get_tick",
+            "async_get_depth",
+            "async_get_kline",
+            "async_get_trade_history",
+        ):
             assert callable(getattr(f, m, None)), f"Missing async method: {m}"
 
     def test_private_async_methods(self):
         f = _make_feed()
-        for m in ("async_make_order", "async_cancel_order", "async_query_order",
-                   "async_get_open_orders", "async_get_account", "async_get_balance"):
+        for m in (
+            "async_make_order",
+            "async_cancel_order",
+            "async_query_order",
+            "async_get_open_orders",
+            "async_get_account",
+            "async_get_balance",
+        ):
             assert callable(getattr(f, m, None)), f"Missing async method: {m}"
 
     def test_internal_methods(self):
         f = _make_feed()
-        for m in ("_get_server_time", "_get_exchange_info", "_get_tick", "_get_depth",
-                   "_get_kline", "_get_trade_history", "_make_order", "_cancel_order",
-                   "_query_order", "_get_open_orders", "_get_account", "_get_balance"):
+        for m in (
+            "_get_server_time",
+            "_get_exchange_info",
+            "_get_tick",
+            "_get_depth",
+            "_get_kline",
+            "_get_trade_history",
+            "_make_order",
+            "_cancel_order",
+            "_query_order",
+            "_get_open_orders",
+            "_get_account",
+            "_get_balance",
+        ):
             assert callable(getattr(f, m, None)), f"Missing internal method: {m}"
 
 
 # ═══════════════════════════════════════════════════════════════════════════
 #  8. Signature Tests
 # ═══════════════════════════════════════════════════════════════════════════
+
 
 class TestSignature:
     def test_sign_basic(self):
@@ -638,9 +711,7 @@ class TestSignature:
         sig = f.sign("/spot/orders/active", "symbol=sBTCUSDT", "1700000060", "")
         # Verify it matches manual computation
         sign_str = "/spot/orders/active" + "symbol=sBTCUSDT" + "1700000060" + ""
-        expected = hmac.new(
-            b"my_secret", sign_str.encode("utf-8"), hashlib.sha256
-        ).hexdigest()
+        expected = hmac.new(b"my_secret", sign_str.encode("utf-8"), hashlib.sha256).hexdigest()
         assert sig == expected
 
     def test_sign_with_body(self):
@@ -649,9 +720,7 @@ class TestSignature:
         body = '{"symbol":"sBTCUSDT","side":"Buy"}'
         sig = f.sign("/spot/orders/create", "", "1700000060", body)
         sign_str = "/spot/orders/create" + "" + "1700000060" + body
-        expected = hmac.new(
-            b"test_sec", sign_str.encode("utf-8"), hashlib.sha256
-        ).hexdigest()
+        expected = hmac.new(b"test_sec", sign_str.encode("utf-8"), hashlib.sha256).hexdigest()
         assert sig == expected
 
     @patch.object(PhemexRequestData, "http_request", return_value=SAMPLE_BALANCE_RESP)
@@ -678,6 +747,7 @@ class TestSignature:
 # ═══════════════════════════════════════════════════════════════════════════
 #  9. Integration Tests (skipped by default)
 # ═══════════════════════════════════════════════════════════════════════════
+
 
 @pytest.mark.integration
 @pytest.mark.skipif(SKIP_LIVE, reason="SKIP_LIVE_TESTS is set")

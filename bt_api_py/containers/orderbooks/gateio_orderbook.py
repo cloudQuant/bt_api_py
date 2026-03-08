@@ -6,7 +6,7 @@ import json
 import time
 
 from bt_api_py.containers.orderbooks.orderbook import OrderBookData
-from bt_api_py.functions.utils import from_dict_get_float, from_dict_get_int, from_dict_get_string
+from bt_api_py.functions.utils import from_dict_get_float, from_dict_get_int
 
 
 class GateioOrderBookData(OrderBookData):
@@ -46,19 +46,23 @@ class GateioOrderBookData(OrderBookData):
         if "bids" in self.orderbook_data and isinstance(self.orderbook_data["bids"], list):
             for bid in self.orderbook_data["bids"]:
                 if isinstance(bid, list) and len(bid) >= 2:
-                    self.bids.append({
-                        "price": from_dict_get_float(bid, 0),
-                        "amount": from_dict_get_float(bid, 1),
-                    })
+                    self.bids.append(
+                        {
+                            "price": from_dict_get_float(bid, 0),
+                            "amount": from_dict_get_float(bid, 1),
+                        }
+                    )
 
         self.asks = []
         if "asks" in self.orderbook_data and isinstance(self.orderbook_data["asks"], list):
             for ask in self.orderbook_data["asks"]:
                 if isinstance(ask, list) and len(ask) >= 2:
-                    self.asks.append({
-                        "price": from_dict_get_float(ask, 0),
-                        "amount": from_dict_get_float(ask, 1),
-                    })
+                    self.asks.append(
+                        {
+                            "price": from_dict_get_float(ask, 0),
+                            "amount": from_dict_get_float(ask, 1),
+                        }
+                    )
 
         self.has_been_init_data = True
         return self
@@ -169,19 +173,23 @@ class GateioRequestOrderBookData(GateioOrderBookData):
         if "bids" in self.orderbook_data and isinstance(self.orderbook_data["bids"], list):
             for bid in self.orderbook_data["bids"]:
                 if isinstance(bid, list) and len(bid) >= 2:
-                    self.bids.append({
-                        "price": from_dict_get_float(bid, 0),
-                        "amount": from_dict_get_float(bid, 1),
-                    })
+                    self.bids.append(
+                        {
+                            "price": from_dict_get_float(bid, 0),
+                            "amount": from_dict_get_float(bid, 1),
+                        }
+                    )
 
         self.asks = []
         if "asks" in self.orderbook_data and isinstance(self.orderbook_data["asks"], list):
             for ask in self.orderbook_data["asks"]:
                 if isinstance(ask, list) and len(ask) >= 2:
-                    self.asks.append({
-                        "price": from_dict_get_float(ask, 0),
-                        "amount": from_dict_get_float(ask, 1),
-                    })
+                    self.asks.append(
+                        {
+                            "price": from_dict_get_float(ask, 0),
+                            "amount": from_dict_get_float(ask, 1),
+                        }
+                    )
 
         self.has_been_init_data = True
         return self

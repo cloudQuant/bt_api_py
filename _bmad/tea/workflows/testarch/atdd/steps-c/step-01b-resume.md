@@ -1,10 +1,8 @@
-- --
-
+---
 name: 'step-01b-resume'
 description: 'Resume interrupted workflow from last completed step'
 outputFile: '{test_artifacts}/atdd-checklist-{story_id}.md'
-
-- --
+---
 
 # Step 1b: Resume Workflow
 
@@ -17,7 +15,7 @@ Resume an interrupted workflow by loading the existing output document, displayi
 - 📖 Read the entire step file before acting
 - ✅ Speak in `{communication_language}`
 
-- --
+---
 
 ## EXECUTION PROTOCOLS:
 
@@ -33,7 +31,7 @@ Resume an interrupted workflow by loading the existing output document, displayi
 
 ## MANDATORY SEQUENCE
 
-- *CRITICAL:** Follow this sequence exactly.
+**CRITICAL:** Follow this sequence exactly.
 
 ### 1. Load Output Document
 
@@ -43,13 +41,13 @@ Read `{outputFile}` and parse YAML frontmatter for:
 - `lastStep` — last completed step name
 - `lastSaved` — timestamp of last save
 
-- *If `{outputFile}` does not exist**, display:
+**If `{outputFile}` does not exist**, display:
 
-"⚠️ **No previous progress found.**There is no output document to resume from. Please use**[C] Create** to start a fresh workflow run."
+"⚠️ **No previous progress found.** There is no output document to resume from. Please use **[C] Create** to start a fresh workflow run."
 
-- *THEN:**Halt. Do not proceed.
+**THEN:** Halt. Do not proceed.
 
-- --
+---
 
 ### 2. Display Progress Dashboard
 
@@ -61,7 +59,7 @@ Display progress with ✅/⬜ indicators:
 4. ✅/⬜ Generate Tests + Aggregate (step-04c-aggregate)
 5. ✅/⬜ Validate & Complete (step-05-validate-and-complete)
 
-- --
+---
 
 ### 3. Route to Next Step
 
@@ -71,15 +69,15 @@ Based on `lastStep`, load the next incomplete step:
 - `'step-02-generation-mode'` → load `./step-03-test-strategy.md`
 - `'step-03-test-strategy'` → load `./step-04-generate-tests.md`
 - `'step-04c-aggregate'` → load `./step-05-validate-and-complete.md`
-- `'step-05-validate-and-complete'` →**Workflow already complete.**Display: "✅**All steps completed.**Use**[V] Validate**to review outputs or**[E] Edit** to make revisions." Then halt.
+- `'step-05-validate-and-complete'` → **Workflow already complete.** Display: "✅ **All steps completed.** Use **[V] Validate** to review outputs or **[E] Edit** to make revisions." Then halt.
 
-- *If `lastStep` does not match any value above**, display: "⚠️ **Unknown progress state**(`lastStep`: {lastStep}). Please use**[C] Create** to start fresh." Then halt.
+**If `lastStep` does not match any value above**, display: "⚠️ **Unknown progress state** (`lastStep`: {lastStep}). Please use **[C] Create** to start fresh." Then halt.
 
-- *Otherwise**, load the identified step file, read completely, and execute.
+**Otherwise**, load the identified step file, read completely, and execute.
 
 The existing content in `{outputFile}` provides context from previously completed steps.
 
-- --
+---
 
 ## 🚨 SYSTEM SUCCESS/FAILURE METRICS
 
@@ -95,4 +93,4 @@ The existing content in `{outputFile}` provides context from previously complete
 - Incorrect progress display
 - Routing to wrong step
 
-- *Master Rule:** Resume MUST route to the exact next incomplete step. Never re-execute completed steps.
+**Master Rule:** Resume MUST route to the exact next incomplete step. Never re-execute completed steps.

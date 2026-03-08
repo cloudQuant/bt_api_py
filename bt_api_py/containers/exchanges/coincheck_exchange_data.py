@@ -3,6 +3,7 @@ Coincheck Exchange Data Configuration
 """
 
 import os
+
 from bt_api_py.containers.exchanges.exchange_data import ExchangeData
 from bt_api_py.logging_factory import get_logger
 
@@ -19,6 +20,7 @@ def _get_coincheck_config():
         return _coincheck_config
     try:
         from bt_api_py.config_loader import load_exchange_config
+
         config_path = os.path.join(
             os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
             "configs",
@@ -63,18 +65,18 @@ class CoincheckExchangeData(ExchangeData):
 
         if asset_cfg.exchange_name:
             self.exchange_name = asset_cfg.exchange_name
-        if config.base_urls and hasattr(config.base_urls, 'rest'):
+        if config.base_urls and hasattr(config.base_urls, "rest"):
             rest_url = config.base_urls.rest
             # Handle both dict and string
             if isinstance(rest_url, dict):
-                self.rest_url = rest_url.get(asset_type, rest_url.get('default', self.rest_url))
+                self.rest_url = rest_url.get(asset_type, rest_url.get("default", self.rest_url))
             else:
                 self.rest_url = rest_url
-        if config.base_urls and hasattr(config.base_urls, 'wss'):
+        if config.base_urls and hasattr(config.base_urls, "wss"):
             wss_url = config.base_urls.wss
             # Handle both dict and string
             if isinstance(wss_url, dict):
-                self.wss_url = wss_url.get(asset_type, wss_url.get('default', self.wss_url))
+                self.wss_url = wss_url.get(asset_type, wss_url.get("default", self.wss_url))
             else:
                 self.wss_url = wss_url
         if asset_cfg.rest_paths:

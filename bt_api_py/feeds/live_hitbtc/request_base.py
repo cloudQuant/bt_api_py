@@ -5,8 +5,6 @@ HitBTC V3 uses HTTP Basic Auth with API key as username and secret as password.
 """
 
 import base64
-import json
-import time
 from urllib.parse import urlencode
 
 from bt_api_py.containers.exchanges.hitbtc_exchange_data import HitBtcExchangeDataSpot
@@ -98,7 +96,9 @@ class HitBtcRequestData(Feed):
         self.request_logger.info(f"{method} {url} -> {type(res)}")
         return RequestData(res, extra_data)
 
-    async def async_request(self, path, params=None, body=None, extra_data=None, timeout=5, is_sign=False):
+    async def async_request(
+        self, path, params=None, body=None, extra_data=None, timeout=5, is_sign=False
+    ):
         """Async HTTP request function using Feed.async_http_request()."""
         if params is None:
             params = {}
@@ -128,51 +128,63 @@ class HitBtcRequestData(Feed):
     def _get_server_time(self, extra_data=None, **kwargs):
         path = self._params.get_rest_path("get_server_time")
         params = {}
-        extra_data = update_extra_data(extra_data, **{
-            "request_type": "get_server_time",
-            "symbol_name": None,
-            "asset_type": self.asset_type,
-            "exchange_name": self.exchange_name,
-            "normalize_function": self._get_server_time_normalize_function,
-        })
+        extra_data = update_extra_data(
+            extra_data,
+            **{
+                "request_type": "get_server_time",
+                "symbol_name": None,
+                "asset_type": self.asset_type,
+                "exchange_name": self.exchange_name,
+                "normalize_function": self._get_server_time_normalize_function,
+            },
+        )
         return path, params, extra_data
 
     def _get_exchange_info(self, extra_data=None, **kwargs):
         path = self._params.get_rest_path("get_exchange_info")
         params = {}
-        extra_data = update_extra_data(extra_data, **{
-            "request_type": "get_exchange_info",
-            "symbol_name": None,
-            "asset_type": self.asset_type,
-            "exchange_name": self.exchange_name,
-            "normalize_function": self._get_exchange_info_normalize_function,
-        })
+        extra_data = update_extra_data(
+            extra_data,
+            **{
+                "request_type": "get_exchange_info",
+                "symbol_name": None,
+                "asset_type": self.asset_type,
+                "exchange_name": self.exchange_name,
+                "normalize_function": self._get_exchange_info_normalize_function,
+            },
+        )
         return path, params, extra_data
 
     def _get_tick(self, symbol, extra_data=None, **kwargs):
         hitbtc_symbol = self._params.get_symbol(symbol)
         path = self._params.get_rest_path("get_tick").replace("{symbol}", hitbtc_symbol)
         params = {}
-        extra_data = update_extra_data(extra_data, **{
-            "request_type": "get_tick",
-            "symbol_name": symbol,
-            "asset_type": self.asset_type,
-            "exchange_name": self.exchange_name,
-            "normalize_function": self._get_tick_normalize_function,
-        })
+        extra_data = update_extra_data(
+            extra_data,
+            **{
+                "request_type": "get_tick",
+                "symbol_name": symbol,
+                "asset_type": self.asset_type,
+                "exchange_name": self.exchange_name,
+                "normalize_function": self._get_tick_normalize_function,
+            },
+        )
         return path, params, extra_data
 
     def _get_depth(self, symbol, count=20, extra_data=None, **kwargs):
         hitbtc_symbol = self._params.get_symbol(symbol)
         path = self._params.get_rest_path("get_depth").replace("{symbol}", hitbtc_symbol)
         params = {"depth": count}
-        extra_data = update_extra_data(extra_data, **{
-            "request_type": "get_depth",
-            "symbol_name": symbol,
-            "asset_type": self.asset_type,
-            "exchange_name": self.exchange_name,
-            "normalize_function": self._get_depth_normalize_function,
-        })
+        extra_data = update_extra_data(
+            extra_data,
+            **{
+                "request_type": "get_depth",
+                "symbol_name": symbol,
+                "asset_type": self.asset_type,
+                "exchange_name": self.exchange_name,
+                "normalize_function": self._get_depth_normalize_function,
+            },
+        )
         return path, params, extra_data
 
     def _get_kline(self, symbol, period="1h", count=100, extra_data=None, **kwargs):
@@ -184,14 +196,17 @@ class HitBtcRequestData(Feed):
             params["from"] = kwargs["from_time"]
         if kwargs.get("to_time"):
             params["till"] = kwargs["to_time"]
-        extra_data = update_extra_data(extra_data, **{
-            "request_type": "get_kline",
-            "symbol_name": symbol,
-            "period": period,
-            "asset_type": self.asset_type,
-            "exchange_name": self.exchange_name,
-            "normalize_function": self._get_kline_normalize_function,
-        })
+        extra_data = update_extra_data(
+            extra_data,
+            **{
+                "request_type": "get_kline",
+                "symbol_name": symbol,
+                "period": period,
+                "asset_type": self.asset_type,
+                "exchange_name": self.exchange_name,
+                "normalize_function": self._get_kline_normalize_function,
+            },
+        )
         return path, params, extra_data
 
     def _get_trade_history(self, symbol, count=100, extra_data=None, **kwargs):
@@ -200,16 +215,21 @@ class HitBtcRequestData(Feed):
         params = {"limit": count}
         if kwargs.get("sort"):
             params["sort"] = kwargs["sort"]
-        extra_data = update_extra_data(extra_data, **{
-            "request_type": "get_trades",
-            "symbol_name": symbol,
-            "asset_type": self.asset_type,
-            "exchange_name": self.exchange_name,
-            "normalize_function": self._get_trade_history_normalize_function,
-        })
+        extra_data = update_extra_data(
+            extra_data,
+            **{
+                "request_type": "get_trades",
+                "symbol_name": symbol,
+                "asset_type": self.asset_type,
+                "exchange_name": self.exchange_name,
+                "normalize_function": self._get_trade_history_normalize_function,
+            },
+        )
         return path, params, extra_data
 
-    def _make_order(self, symbol, amount, price=None, order_type="buy-limit", extra_data=None, **kwargs):
+    def _make_order(
+        self, symbol, amount, price=None, order_type="buy-limit", extra_data=None, **kwargs
+    ):
         path = self._params.get_rest_path("make_order")
         hitbtc_symbol = self._params.get_symbol(symbol)
         parts = order_type.lower().replace("-", " ").split()
@@ -226,39 +246,50 @@ class HitBtcRequestData(Feed):
         body["time_in_force"] = kwargs.get("time_in_force", "GTC")
         if kwargs.get("client_order_id"):
             body["client_order_id"] = kwargs["client_order_id"]
-        extra_data = update_extra_data(extra_data, **{
-            "request_type": "make_order",
-            "symbol_name": symbol,
-            "asset_type": self.asset_type,
-            "exchange_name": self.exchange_name,
-            "normalize_function": self._make_order_normalize_function,
-        })
+        extra_data = update_extra_data(
+            extra_data,
+            **{
+                "request_type": "make_order",
+                "symbol_name": symbol,
+                "asset_type": self.asset_type,
+                "exchange_name": self.exchange_name,
+                "normalize_function": self._make_order_normalize_function,
+            },
+        )
         return path, body, extra_data
 
     def _cancel_order(self, symbol=None, order_id=None, extra_data=None, **kwargs):
         path = self._params.get_rest_path("cancel_order").replace(
-            "{client_order_id}", str(order_id or ""))
+            "{client_order_id}", str(order_id or "")
+        )
         params = {}
-        extra_data = update_extra_data(extra_data, **{
-            "request_type": "cancel_order",
-            "symbol_name": symbol,
-            "asset_type": self.asset_type,
-            "exchange_name": self.exchange_name,
-            "normalize_function": self._cancel_order_normalize_function,
-        })
+        extra_data = update_extra_data(
+            extra_data,
+            **{
+                "request_type": "cancel_order",
+                "symbol_name": symbol,
+                "asset_type": self.asset_type,
+                "exchange_name": self.exchange_name,
+                "normalize_function": self._cancel_order_normalize_function,
+            },
+        )
         return path, params, extra_data
 
     def _query_order(self, symbol=None, order_id=None, extra_data=None, **kwargs):
         path = self._params.get_rest_path("query_order").replace(
-            "{client_order_id}", str(order_id or ""))
+            "{client_order_id}", str(order_id or "")
+        )
         params = {}
-        extra_data = update_extra_data(extra_data, **{
-            "request_type": "query_order",
-            "symbol_name": symbol,
-            "asset_type": self.asset_type,
-            "exchange_name": self.exchange_name,
-            "normalize_function": self._query_order_normalize_function,
-        })
+        extra_data = update_extra_data(
+            extra_data,
+            **{
+                "request_type": "query_order",
+                "symbol_name": symbol,
+                "asset_type": self.asset_type,
+                "exchange_name": self.exchange_name,
+                "normalize_function": self._query_order_normalize_function,
+            },
+        )
         return path, params, extra_data
 
     def _get_open_orders(self, symbol=None, extra_data=None, **kwargs):
@@ -266,37 +297,46 @@ class HitBtcRequestData(Feed):
         params = {}
         if symbol:
             params["symbol"] = self._params.get_symbol(symbol)
-        extra_data = update_extra_data(extra_data, **{
-            "request_type": "get_open_orders",
-            "symbol_name": symbol,
-            "asset_type": self.asset_type,
-            "exchange_name": self.exchange_name,
-            "normalize_function": self._get_open_orders_normalize_function,
-        })
+        extra_data = update_extra_data(
+            extra_data,
+            **{
+                "request_type": "get_open_orders",
+                "symbol_name": symbol,
+                "asset_type": self.asset_type,
+                "exchange_name": self.exchange_name,
+                "normalize_function": self._get_open_orders_normalize_function,
+            },
+        )
         return path, params, extra_data
 
     def _get_account(self, extra_data=None, **kwargs):
         path = self._params.get_rest_path("get_account")
         params = {}
-        extra_data = update_extra_data(extra_data, **{
-            "request_type": "get_account",
-            "symbol_name": None,
-            "asset_type": self.asset_type,
-            "exchange_name": self.exchange_name,
-            "normalize_function": self._get_account_normalize_function,
-        })
+        extra_data = update_extra_data(
+            extra_data,
+            **{
+                "request_type": "get_account",
+                "symbol_name": None,
+                "asset_type": self.asset_type,
+                "exchange_name": self.exchange_name,
+                "normalize_function": self._get_account_normalize_function,
+            },
+        )
         return path, params, extra_data
 
     def _get_balance(self, extra_data=None, **kwargs):
         path = self._params.get_rest_path("get_balance")
         params = {}
-        extra_data = update_extra_data(extra_data, **{
-            "request_type": "get_balance",
-            "symbol_name": None,
-            "asset_type": self.asset_type,
-            "exchange_name": self.exchange_name,
-            "normalize_function": self._get_balance_normalize_function,
-        })
+        extra_data = update_extra_data(
+            extra_data,
+            **{
+                "request_type": "get_balance",
+                "symbol_name": None,
+                "asset_type": self.asset_type,
+                "exchange_name": self.exchange_name,
+                "normalize_function": self._get_balance_normalize_function,
+            },
+        )
         return path, params, extra_data
 
     # ── normalize functions ─────────────────────────────────────

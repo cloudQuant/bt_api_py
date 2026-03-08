@@ -18,9 +18,7 @@ def register_zebpay():
     ExchangeRegistry.register_feed("ZEBPAY___SPOT", ZebpayRequestDataSpot)
     ExchangeRegistry.register_exchange_data("ZEBPAY___SPOT", ZebpayExchangeDataSpot)
     ExchangeRegistry.register_balance_handler("ZEBPAY___SPOT", _zebpay_balance_handler)
-    ExchangeRegistry.register_stream(
-        "ZEBPAY___SPOT", "subscribe", _zebpay_spot_subscribe_handler
-    )
+    ExchangeRegistry.register_stream("ZEBPAY___SPOT", "subscribe", _zebpay_spot_subscribe_handler)
 
 
 # Auto-register on module import

@@ -5,8 +5,16 @@ from bt_api_py.utils.time import convert_utc_timestamp
 class GeminiRequestOrderBookData(RequestData):
     """Gemini Order Book Data Container"""
 
-    def __init__(self, data, symbol=None, asset_type=None, is_rest=True,
-                 extra_data=None, status=False, normalize_func=None):
+    def __init__(
+        self,
+        data,
+        symbol=None,
+        asset_type=None,
+        is_rest=True,
+        extra_data=None,
+        status=False,
+        normalize_func=None,
+    ):
         # Handle positional arguments from test
         if extra_data is None:
             extra_data = {}
@@ -49,30 +57,38 @@ class GeminiRequestOrderBookData(RequestData):
                 self.bids = []
                 for bid in data["bids"]:
                     if isinstance(bid, dict):
-                        self.bids.append({
-                            "price": float(bid.get("price", 0)),
-                            "amount": float(bid.get("amount", 0)),
-                        })
+                        self.bids.append(
+                            {
+                                "price": float(bid.get("price", 0)),
+                                "amount": float(bid.get("amount", 0)),
+                            }
+                        )
                     elif len(bid) >= 2:
-                        self.bids.append({
-                            "price": float(bid[0]),
-                            "amount": float(bid[1]),
-                        })
+                        self.bids.append(
+                            {
+                                "price": float(bid[0]),
+                                "amount": float(bid[1]),
+                            }
+                        )
 
             # Parse asks - handle both list of lists and list of dicts
             if "asks" in data:
                 self.asks = []
                 for ask in data["asks"]:
                     if isinstance(ask, dict):
-                        self.asks.append({
-                            "price": float(ask.get("price", 0)),
-                            "amount": float(ask.get("amount", 0)),
-                        })
+                        self.asks.append(
+                            {
+                                "price": float(ask.get("price", 0)),
+                                "amount": float(ask.get("amount", 0)),
+                            }
+                        )
                     elif len(ask) >= 2:
-                        self.asks.append({
-                            "price": float(ask[0]),
-                            "amount": float(ask[1]),
-                        })
+                        self.asks.append(
+                            {
+                                "price": float(ask[0]),
+                                "amount": float(ask[1]),
+                            }
+                        )
 
             self.timestamp = data.get("timestampms")
             self.exchange_timestamp = convert_utc_timestamp(self.timestamp)
@@ -165,8 +181,8 @@ class GeminiRequestOrderBookData(RequestData):
         if asks_limit is not None:
             self.asks_limit = asks_limit
 
-        self.bids = self.bids[:self.bids_limit]
-        self.asks = self.asks[:self.asks_limit]
+        self.bids = self.bids[: self.bids_limit]
+        self.asks = self.asks[: self.asks_limit]
 
     def to_dict(self):
         """Convert to dictionary"""
@@ -186,8 +202,9 @@ class GeminiRequestOrderBookData(RequestData):
 
     def __str__(self):
         """String representation"""
-        return (f"GeminiOrderBook(symbol={self.symbol}, "
-                f"bids={len(self.bids)}, asks={len(self.asks)})")
+        return (
+            f"GeminiOrderBook(symbol={self.symbol}, bids={len(self.bids)}, asks={len(self.asks)})"
+        )
 
 
 class GeminiSpotWssOrderBookData(GeminiRequestOrderBookData):

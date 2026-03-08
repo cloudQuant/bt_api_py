@@ -1,10 +1,10 @@
 # Agent Specification: {agent_name}
 
-- *Module:** {module_code}
-- *Status:** Placeholder — To be created via create-agent workflow
-- *Created:** {date}
+**Module:** {module_code}
+**Status:** Placeholder — To be created via create-agent workflow
+**Created:** {date}
 
-- --
+---
 
 ## Agent Metadata
 
@@ -17,10 +17,9 @@ agent:
     icon: {agent_icon}
     module: {module_code}
     hasSidecar: false
+```
 
-```bash
-
-- --
+---
 
 ## Agent Persona
 
@@ -40,19 +39,17 @@ agent:
 
 {agent_principles}
 
-- --
+---
 
 ## Agent Menu
 
 ### Planned Commands
 
 | Trigger | Command | Description | Workflow |
-
 |---------|---------|-------------|----------|
-
 {agent_menu_table}
 
-- --
+---
 
 ## Agent Integration
 
@@ -65,19 +62,18 @@ agent:
 
 {workflow_references}
 
-- --
+---
 
 ## Implementation Notes
 
-- *Use the create-agent workflow to build this agent.**
+**Use the create-agent workflow to build this agent.**
 
 Inputs needed:
-
 - Agent name and human name
 - Role and expertise area
 - Communication style preferences
 - Menu commands and workflow mappings
 
-- --
+---
 
 _Spec created on {date} via BMAD Module workflow_

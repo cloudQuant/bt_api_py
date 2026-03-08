@@ -15,12 +15,11 @@ Unity provides a built-in Test Framework based on NUnit for writing and running 
     "com.unity.test-framework": "1.6.0"
   }
 }
-
-```bash
+```
 
 ### Project Structure
 
-```bash
+```
 Assets/
 ├── Scripts/
 │   └── Runtime/
@@ -33,8 +32,7 @@ Assets/
     │   └── DamageCalculatorTests.cs
     └── PlayMode/
         └── PlayerMovementTests.cs
-
-```bash
+```
 
 ### Assembly Definitions
 
@@ -56,8 +54,7 @@ Create `.asmdef` files for test assemblies:
   "includePlatforms": [],
   "defineConstraints": ["UNITY_INCLUDE_TESTS"]
 }
-
-```bash
+```
 
 ## Edit Mode Tests
 
@@ -102,8 +99,7 @@ public class DamageCalculatorTests
         Assert.AreEqual(expected, _calculator.Calculate(base_, mult));
     }
 }
-
-```bash
+```
 
 ### Testing ScriptableObjects
 
@@ -120,8 +116,7 @@ public void WeaponStats_DPS_CalculatesCorrectly()
     // Cleanup
     Object.DestroyImmediate(weapon);
 }
-
-```bash
+```
 
 ## Play Mode Tests
 
@@ -185,8 +180,7 @@ public class PlayerMovementTests
         Object.Destroy(ground);
     }
 }
-
-```bash
+```
 
 ### Testing Coroutines
 
@@ -205,8 +199,7 @@ public IEnumerator Attack_Cooldown_PreventsSpam()
     _controller.Attack();
     Assert.AreEqual(2, _controller.AttackCount);
 }
-
-```bash
+```
 
 ### Scene Testing
 
@@ -227,8 +220,7 @@ public IEnumerator MainMenu_StartButton_LoadsGameScene()
 
     Assert.AreEqual("GameScene", SceneManager.GetActiveScene().name);
 }
-
-```bash
+```
 
 ## Integration Test Patterns
 
@@ -249,8 +241,7 @@ public IEnumerator EnemyPrefab_Spawns_WithCorrectComponents()
 
     Object.Destroy(instance);
 }
-
-```bash
+```
 
 ### Input System Testing
 
@@ -274,8 +265,7 @@ public IEnumerator InputAction_Fire_TriggersWeapon()
 
     Assert.IsFalse(_controller.IsFiring);
 }
-
-```bash
+```
 
 ## Test Utilities
 
@@ -298,8 +288,7 @@ public static class GameAssert
         Assert.LessOrEqual(value, max);
     }
 }
-
-```bash
+```
 
 ### Test Fixtures
 
@@ -332,30 +321,23 @@ public IEnumerator Player_FallsToGround()
 
     Assert.Less(scene.Player.transform.position.y, 0.5f);
 }
-
-```bash
+```
 
 ## CI Integration
 
 ### Command Line Execution
 
 ```bash
-
 # Run Edit Mode tests
-
 Unity -runTests -batchmode -projectPath . \
-
-  - testPlatform EditMode \
-  - testResults results.xml
+  -testPlatform EditMode \
+  -testResults results.xml
 
 # Run Play Mode tests
-
 Unity -runTests -batchmode -projectPath . \
-
-  - testPlatform PlayMode \
-  - testResults results.xml
-
-```bash
+  -testPlatform PlayMode \
+  -testResults results.xml
+```
 
 ### GitHub Actions
 
@@ -363,15 +345,12 @@ Unity -runTests -batchmode -projectPath . \
 test:
   runs-on: ubuntu-latest
   steps:
-
     - uses: game-ci/unity-test-runner@v4
-
       with:
         projectPath: .
         testMode: all
         artifactsPath: TestResults
-
-```bash
+```
 
 ## Best Practices
 
@@ -397,20 +376,15 @@ test:
 ### Common Issues
 
 | Issue                  | Cause              | Fix                                        |
-
 | ---------------------- | ------------------ | ------------------------------------------ |
-
 | Tests not appearing    | Missing asmdef     | Create test assembly definition            |
-
 | NullReferenceException | Missing Setup      | Ensure [SetUp] initializes all fields      |
-
 | Tests hang             | Infinite coroutine | Add timeout or max iterations              |
-
 | Flaky physics tests    | Timing dependent   | Use WaitForFixedUpdate, increase tolerance |
 
 ## End-to-End Testing
 
-For comprehensive E2E testing patterns, infrastructure scaffolding, and
+For comprehensive E2E testing patterns, infrastructure scaffolding, and 
 scenario builders, see **knowledge/e2e-testing.md**.
 
 ### Quick E2E Checklist for Unity

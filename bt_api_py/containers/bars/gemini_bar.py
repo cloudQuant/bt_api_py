@@ -5,8 +5,17 @@ from bt_api_py.utils.time import convert_utc_timestamp
 class GeminiRequestBarData(RequestData):
     """Gemini Bar/Candle Data Container"""
 
-    def __init__(self, data, symbol=None, asset_type=None, time_frame=None, is_rest=True,
-                 extra_data=None, status=False, normalize_func=None):
+    def __init__(
+        self,
+        data,
+        symbol=None,
+        asset_type=None,
+        time_frame=None,
+        is_rest=True,
+        extra_data=None,
+        status=False,
+        normalize_func=None,
+    ):
         # Handle positional arguments from test
         if extra_data is None:
             extra_data = {}
@@ -83,7 +92,7 @@ class GeminiRequestBarData(RequestData):
                 symbol=self.symbol,
                 asset_type=self.asset_type,
                 time_frame=self.time_frame,
-                is_rest=self.is_rest
+                is_rest=self.is_rest,
             )
             bar.open = float(bar_data[1])  # open
             bar.high = float(bar_data[2])  # high
@@ -147,8 +156,10 @@ class GeminiRequestBarData(RequestData):
 
     def __str__(self):
         """String representation"""
-        return (f"GeminiBar(symbol={self.symbol}, tf={self.time_frame}, "
-                f"O={self.open}, H={self.high}, L={self.low}, C={self.close})")
+        return (
+            f"GeminiBar(symbol={self.symbol}, tf={self.time_frame}, "
+            f"O={self.open}, H={self.high}, L={self.low}, C={self.close})"
+        )
 
 
 class GeminiSpotWssBarData(GeminiRequestBarData):

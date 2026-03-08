@@ -2,7 +2,6 @@ import json
 import time
 
 from bt_api_py.containers.balances.balance import BalanceData
-from bt_api_py.functions.utils import from_dict_get_float, from_dict_get_string
 
 
 class BitfinexBalanceData(BalanceData):
@@ -35,8 +34,12 @@ class BitfinexBalanceData(BalanceData):
             self.wallet_type = str(self.balance_data[0]) if self.balance_data[0] is not None else ""
             self.currency = str(self.balance_data[1]) if self.balance_data[1] is not None else ""
             self.balance = float(self.balance_data[2]) if self.balance_data[2] is not None else 0.0
-            self.unsettled_interest = float(self.balance_data[3]) if self.balance_data[3] is not None else 0.0
-            self.balance_available = float(self.balance_data[4]) if self.balance_data[4] is not None else 0.0
+            self.unsettled_interest = (
+                float(self.balance_data[3]) if self.balance_data[3] is not None else 0.0
+            )
+            self.balance_available = (
+                float(self.balance_data[4]) if self.balance_data[4] is not None else 0.0
+            )
 
         self.has_been_init_data = True
         return self
@@ -53,7 +56,9 @@ class BitfinexBalanceData(BalanceData):
                 "balance": self.balance,
                 "unsettled_interest": self.unsettled_interest,
                 "balance_available": self.balance_available,
-                "balance_used": self.balance - self.balance_available if self.balance is not None and self.balance_available is not None else 0,
+                "balance_used": self.balance - self.balance_available
+                if self.balance is not None and self.balance_available is not None
+                else 0,
             }
         return self.all_data
 
@@ -127,9 +132,11 @@ class BitfinexBalanceData(BalanceData):
 
 class BitfinexSpotRequestBalanceData(BitfinexBalanceData):
     """保存 Bitfinex 现货余额信息"""
+
     pass  # 现货余额格式与基础格式相同
 
 
 class BitfinexWssBalanceData(BitfinexBalanceData):
     """保存 Bitfinex WebSocket 余额信息"""
+
     pass  # WebSocket 余额格式与 REST API 相同

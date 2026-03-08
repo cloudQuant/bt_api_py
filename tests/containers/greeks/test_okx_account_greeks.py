@@ -1,5 +1,5 @@
-# -*- coding: utf-8 -*-
 """Tests for OKX account Greeks data container."""
+
 from bt_api_py.containers.greeks.okx_account_greeks import OkxAccountGreeksData
 
 
@@ -14,7 +14,7 @@ def test_okx_account_greeks_data():
         "bsG": "0.09",
         "bsT": "-0.04",
         "bsV": "0.18",
-        "uTime": "1700000000000"
+        "uTime": "1700000000000",
     }
 
     greeks = OkxAccountGreeksData(data, "ANY", "SWAP", True)
@@ -56,7 +56,7 @@ def test_okx_account_greeks_zero_values():
         "bsG": "0",
         "bsT": "0",
         "bsV": "0",
-        "uTime": "1700000000000"
+        "uTime": "1700000000000",
     }
 
     greeks = OkxAccountGreeksData(data, "ANY", "SWAP", True)

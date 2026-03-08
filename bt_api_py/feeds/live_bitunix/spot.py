@@ -2,7 +2,6 @@
 Bitunix Spot Feed implementation.
 """
 
-from bt_api_py.containers.exchanges.bitunix_exchange_data import BitunixExchangeDataSpot
 from bt_api_py.feeds.capability import Capability
 from bt_api_py.feeds.live_bitunix.request_base import BitunixRequestData
 
@@ -34,13 +33,15 @@ class BitunixRequestDataSpot(BitunixRequestData):
         path = "GET /api/v1/futures/market/tickers"
         if extra_data is None:
             extra_data = {}
-        extra_data.update({
-            "request_type": "get_tick",
-            "symbol_name": symbol,
-            "asset_type": self.asset_type,
-            "exchange_name": self.exchange_name,
-            "normalize_function": self._get_tick_normalize_function,
-        })
+        extra_data.update(
+            {
+                "request_type": "get_tick",
+                "symbol_name": symbol,
+                "asset_type": self.asset_type,
+                "exchange_name": self.exchange_name,
+                "normalize_function": self._get_tick_normalize_function,
+            }
+        )
         params = {"symbol": symbol}
         return path, params, extra_data
 
@@ -71,13 +72,15 @@ class BitunixRequestDataSpot(BitunixRequestData):
         path = "GET /api/v1/futures/market/depth"
         if extra_data is None:
             extra_data = {}
-        extra_data.update({
-            "request_type": "get_depth",
-            "symbol_name": symbol,
-            "asset_type": self.asset_type,
-            "exchange_name": self.exchange_name,
-            "normalize_function": self._get_depth_normalize_function,
-        })
+        extra_data.update(
+            {
+                "request_type": "get_depth",
+                "symbol_name": symbol,
+                "asset_type": self.asset_type,
+                "exchange_name": self.exchange_name,
+                "normalize_function": self._get_depth_normalize_function,
+            }
+        )
         params = {"symbol": symbol, "limit": count}
         return path, params, extra_data
 
@@ -106,13 +109,15 @@ class BitunixRequestDataSpot(BitunixRequestData):
         path = "GET /api/v1/futures/market/klines"
         if extra_data is None:
             extra_data = {}
-        extra_data.update({
-            "request_type": "get_kline",
-            "symbol_name": symbol,
-            "asset_type": self.asset_type,
-            "exchange_name": self.exchange_name,
-            "normalize_function": self._get_kline_normalize_function,
-        })
+        extra_data.update(
+            {
+                "request_type": "get_kline",
+                "symbol_name": symbol,
+                "asset_type": self.asset_type,
+                "exchange_name": self.exchange_name,
+                "normalize_function": self._get_kline_normalize_function,
+            }
+        )
         interval = self._params.kline_periods.get(period, period)
         params = {"symbol": symbol, "interval": interval, "limit": count}
         return path, params, extra_data
@@ -142,13 +147,15 @@ class BitunixRequestDataSpot(BitunixRequestData):
         path = "GET /api/v1/futures/market/symbols"
         if extra_data is None:
             extra_data = {}
-        extra_data.update({
-            "request_type": "get_exchange_info",
-            "symbol_name": "",
-            "asset_type": self.asset_type,
-            "exchange_name": self.exchange_name,
-            "normalize_function": self._get_exchange_info_normalize_function,
-        })
+        extra_data.update(
+            {
+                "request_type": "get_exchange_info",
+                "symbol_name": "",
+                "asset_type": self.asset_type,
+                "exchange_name": self.exchange_name,
+                "normalize_function": self._get_exchange_info_normalize_function,
+            }
+        )
         return path, {}, extra_data
 
     @staticmethod
@@ -170,13 +177,15 @@ class BitunixRequestDataSpot(BitunixRequestData):
         path = "GET /api/v1/futures/account"
         if extra_data is None:
             extra_data = {}
-        extra_data.update({
-            "request_type": "get_account",
-            "symbol_name": "",
-            "asset_type": self.asset_type,
-            "exchange_name": self.exchange_name,
-            "normalize_function": self._get_account_normalize_function,
-        })
+        extra_data.update(
+            {
+                "request_type": "get_account",
+                "symbol_name": "",
+                "asset_type": self.asset_type,
+                "exchange_name": self.exchange_name,
+                "normalize_function": self._get_account_normalize_function,
+            }
+        )
         return path, {}, extra_data
 
     @staticmethod
@@ -204,13 +213,15 @@ class BitunixRequestDataSpot(BitunixRequestData):
         path = "GET /api/v1/futures/account/balance"
         if extra_data is None:
             extra_data = {}
-        extra_data.update({
-            "request_type": "get_balance",
-            "symbol_name": symbol or "",
-            "asset_type": self.asset_type,
-            "exchange_name": self.exchange_name,
-            "normalize_function": self._get_balance_normalize_function,
-        })
+        extra_data.update(
+            {
+                "request_type": "get_balance",
+                "symbol_name": symbol or "",
+                "asset_type": self.asset_type,
+                "exchange_name": self.exchange_name,
+                "normalize_function": self._get_balance_normalize_function,
+            }
+        )
         params = {}
         if symbol:
             params["currency"] = symbol
@@ -230,18 +241,30 @@ class BitunixRequestDataSpot(BitunixRequestData):
 
     # ==================== Trading Interfaces ====================
 
-    def _make_order(self, symbol, volume, price, order_type, offset="open",
-                    post_only=False, client_order_id=None, extra_data=None, **kwargs):
+    def _make_order(
+        self,
+        symbol,
+        volume,
+        price,
+        order_type,
+        offset="open",
+        post_only=False,
+        client_order_id=None,
+        extra_data=None,
+        **kwargs,
+    ):
         """Prepare order. Returns (path, params, extra_data)."""
         path = "POST /api/v1/futures/trade/place_order"
         if extra_data is None:
             extra_data = {}
-        extra_data.update({
-            "exchange_name": self.exchange_name,
-            "symbol_name": symbol,
-            "asset_type": self.asset_type,
-            "request_type": "make_order",
-        })
+        extra_data.update(
+            {
+                "exchange_name": self.exchange_name,
+                "symbol_name": symbol,
+                "asset_type": self.asset_type,
+                "request_type": "make_order",
+            }
+        )
         params = {
             "symbol": symbol,
             "side": offset.upper() if offset in ("BUY", "SELL", "buy", "sell") else "BUY",
@@ -253,12 +276,29 @@ class BitunixRequestDataSpot(BitunixRequestData):
             params["clientOrderId"] = client_order_id
         return path, params, extra_data
 
-    def make_order(self, symbol, volume, price, order_type, offset="open",
-                   post_only=False, client_order_id=None, extra_data=None, **kwargs):
+    def make_order(
+        self,
+        symbol,
+        volume,
+        price,
+        order_type,
+        offset="open",
+        post_only=False,
+        client_order_id=None,
+        extra_data=None,
+        **kwargs,
+    ):
         """Place an order."""
         path, params, extra_data = self._make_order(
-            symbol, volume, price, order_type, offset, post_only,
-            client_order_id, extra_data, **kwargs
+            symbol,
+            volume,
+            price,
+            order_type,
+            offset,
+            post_only,
+            client_order_id,
+            extra_data,
+            **kwargs,
         )
         return self.request(path, body=params, extra_data=extra_data)
 
@@ -267,13 +307,15 @@ class BitunixRequestDataSpot(BitunixRequestData):
         path = "POST /api/v1/futures/trade/cancel_order"
         if extra_data is None:
             extra_data = {}
-        extra_data.update({
-            "exchange_name": self.exchange_name,
-            "symbol_name": symbol,
-            "asset_type": self.asset_type,
-            "request_type": "cancel_order",
-            "order_id": order_id,
-        })
+        extra_data.update(
+            {
+                "exchange_name": self.exchange_name,
+                "symbol_name": symbol,
+                "asset_type": self.asset_type,
+                "request_type": "cancel_order",
+                "order_id": order_id,
+            }
+        )
         params = {"symbol": symbol, "orderId": order_id}
         return path, params, extra_data
 
@@ -287,13 +329,15 @@ class BitunixRequestDataSpot(BitunixRequestData):
         path = "GET /api/v1/futures/trade/get_order"
         if extra_data is None:
             extra_data = {}
-        extra_data.update({
-            "exchange_name": self.exchange_name,
-            "symbol_name": symbol,
-            "asset_type": self.asset_type,
-            "request_type": "query_order",
-            "order_id": order_id,
-        })
+        extra_data.update(
+            {
+                "exchange_name": self.exchange_name,
+                "symbol_name": symbol,
+                "asset_type": self.asset_type,
+                "request_type": "query_order",
+                "order_id": order_id,
+            }
+        )
         params = {"symbol": symbol, "orderId": order_id}
         return path, params, extra_data
 
@@ -307,12 +351,14 @@ class BitunixRequestDataSpot(BitunixRequestData):
         path = "GET /api/v1/futures/trade/get_open_orders"
         if extra_data is None:
             extra_data = {}
-        extra_data.update({
-            "exchange_name": self.exchange_name,
-            "symbol_name": symbol or "",
-            "asset_type": self.asset_type,
-            "request_type": "get_open_orders",
-        })
+        extra_data.update(
+            {
+                "exchange_name": self.exchange_name,
+                "symbol_name": symbol or "",
+                "asset_type": self.asset_type,
+                "request_type": "get_open_orders",
+            }
+        )
         params = {}
         if symbol:
             params["symbol"] = symbol

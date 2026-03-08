@@ -9,15 +9,11 @@ Tests for Swyftx spot trading implementation following Binance/OKX standards:
 """
 
 import queue
-import time
-import pytest
-
-from bt_api_py.containers.requestdatas.request_data import RequestData
-from bt_api_py.feeds.live_swyftx.spot import SwyftxRequestDataSpot
-from bt_api_py.registry import ExchangeRegistry
 
 # Import registration to auto-register Swyftx
 import bt_api_py.exchange_registers.register_swyftx  # noqa: F401
+from bt_api_py.feeds.live_swyftx.spot import SwyftxRequestDataSpot
+from bt_api_py.registry import ExchangeRegistry
 
 
 def init_req_feed():
@@ -197,14 +193,8 @@ def test_swyftx_depth_normalize_function():
     """Test Swyftx depth normalize function."""
     # Swyftx orderbook response format
     input_data = {
-        "bids": [
-            ["94999.00", "1.5"],
-            ["94998.00", "2.0"]
-        ],
-        "asks": [
-            ["95001.00", "1.3"],
-            ["95002.00", "2.5"]
-        ]
+        "bids": [["94999.00", "1.5"], ["94998.00", "2.0"]],
+        "asks": [["95001.00", "1.3"], ["95002.00", "2.5"]],
     }
 
     result, status = SwyftxRequestDataSpot._get_depth_normalize_function(
@@ -241,6 +231,7 @@ def test_swyftx_registration():
 
     # Check exchange data class
     from bt_api_py.containers.exchanges.swyftx_exchange_data import SwyftxExchangeDataSpot
+
     data_class = ExchangeRegistry._exchange_data_classes.get("SWYFTX___SPOT")
     assert data_class is not None
     assert data_class == SwyftxExchangeDataSpot

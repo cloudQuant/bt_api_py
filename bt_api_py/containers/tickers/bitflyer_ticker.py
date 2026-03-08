@@ -78,6 +78,7 @@ class BitflyerRequestTickerData(TickerData):
             return None
         try:
             from datetime import datetime
+
             # bitFlyer returns ISO format like "2024-01-01T00:00:00.000"
             dt = datetime.fromisoformat(timestamp_str.replace("Z", "+00:00"))
             return int(dt.timestamp() * 1000)

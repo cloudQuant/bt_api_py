@@ -4,7 +4,6 @@ Handles authentication, signing, and all REST API methods.
 """
 
 import hmac
-import json
 import time
 from urllib.parse import urlencode
 
@@ -59,9 +58,7 @@ class MexcRequestData(Feed):
             str: Hexadecimal signature
         """
         signature = hmac.new(
-            self.private_key.encode("utf-8"),
-            content.encode("utf-8"),
-            digestmod="sha256"
+            self.private_key.encode("utf-8"), content.encode("utf-8"), digestmod="sha256"
         ).hexdigest()
 
         return signature.lower()  # MEXC requires lowercase signature
@@ -99,10 +96,7 @@ class MexcRequestData(Feed):
             # Build URL with query parameters
             req = urlencode(req)
             url = f"{self._params.rest_url}{path}?{req}"
-            headers = {
-                "X-MEXC-APIKEY": self.public_key,
-                "Content-Type": "application/json"
-            }
+            headers = {"X-MEXC-APIKEY": self.public_key, "Content-Type": "application/json"}
         else:
             # Public request
             req = urlencode(params)
@@ -114,7 +108,9 @@ class MexcRequestData(Feed):
 
         return RequestData(response, extra_data)
 
-    async def async_request(self, path, params=None, body=None, extra_data=None, timeout=10, is_sign=True):
+    async def async_request(
+        self, path, params=None, body=None, extra_data=None, timeout=10, is_sign=True
+    ):
         """Async HTTP request function
 
         Args:
@@ -147,10 +143,7 @@ class MexcRequestData(Feed):
             # Build URL with query parameters
             req = urlencode(req)
             url = f"{self._params.rest_url}{path}?{req}"
-            headers = {
-                "X-MEXC-APIKEY": self.public_key,
-                "Content-Type": "application/json"
-            }
+            headers = {"X-MEXC-APIKEY": self.public_key, "Content-Type": "application/json"}
         else:
             # Public request
             req = urlencode(params)
@@ -275,10 +268,7 @@ class MexcRequestData(Feed):
         """
         request_type = "get_order_book"
         path = self._params.get_rest_path(request_type)
-        params = {
-            "symbol": symbol,
-            "limit": limit
-        }
+        params = {"symbol": symbol, "limit": limit}
 
         extra_data = update_extra_data(
             extra_data,
@@ -299,13 +289,15 @@ class MexcRequestData(Feed):
         status = input_data is not None
 
         if status:
-            return [{
-                "symbol": extra_data["symbol_name"],
-                "bids": input_data.get("bids", []),
-                "asks": input_data.get("asks", []),
-                "timestamp": input_data.get("time"),
-                "local_update_time": time.time()
-            }], status
+            return [
+                {
+                    "symbol": extra_data["symbol_name"],
+                    "bids": input_data.get("bids", []),
+                    "asks": input_data.get("asks", []),
+                    "timestamp": input_data.get("time"),
+                    "local_update_time": time.time(),
+                }
+            ], status
         else:
             return [], status
 
@@ -323,10 +315,7 @@ class MexcRequestData(Feed):
         """
         request_type = "get_recent_trades"
         path = self._params.get_rest_path(request_type)
-        params = {
-            "symbol": symbol,
-            "limit": limit
-        }
+        params = {"symbol": symbol, "limit": limit}
 
         extra_data = update_extra_data(
             extra_data,
@@ -350,16 +339,18 @@ class MexcRequestData(Feed):
         if status and isinstance(input_data, list):
             trades = []
             for trade in input_data:
-                trades.append({
-                    "symbol": extra_data["symbol_name"],
-                    "id": trade.get("id"),
-                    "price": float(trade.get("price", 0)),
-                    "qty": float(trade.get("qty", 0)),
-                    "quote_qty": float(trade.get("quoteQty", 0)),
-                    "time": trade.get("time"),
-                    "is_buyer_maker": trade.get("isBuyerMaker", False),
-                    "is_best_match": trade.get("isBestMatch", False)
-                })
+                trades.append(
+                    {
+                        "symbol": extra_data["symbol_name"],
+                        "id": trade.get("id"),
+                        "price": float(trade.get("price", 0)),
+                        "qty": float(trade.get("qty", 0)),
+                        "quote_qty": float(trade.get("quoteQty", 0)),
+                        "time": trade.get("time"),
+                        "is_buyer_maker": trade.get("isBuyerMaker", False),
+                        "is_best_match": trade.get("isBestMatch", False),
+                    }
+                )
 
         return [{"trades": trades}], status
 
@@ -378,11 +369,7 @@ class MexcRequestData(Feed):
         """
         request_type = "get_klines"
         path = self._params.get_rest_path(request_type)
-        params = {
-            "symbol": symbol,
-            "interval": interval,
-            "limit": limit
-        }
+        params = {"symbol": symbol, "interval": interval, "limit": limit}
 
         extra_data = update_extra_data(
             extra_data,
@@ -407,21 +394,27 @@ class MexcRequestData(Feed):
         if status and isinstance(input_data, list):
             for kline in input_data:
                 if len(kline) >= 6:
-                    klines.append({
-                        "symbol": extra_data["symbol_name"],
-                        "interval": extra_data["interval"],
-                        "open_time": int(kline[0]),
-                        "open": float(kline[1]),
-                        "high": float(kline[2]),
-                        "low": float(kline[3]),
-                        "close": float(kline[4]),
-                        "volume": float(kline[5]),
-                        "close_time": int(kline[6]),
-                        "quote_volume": float(kline[7]) if len(kline) > 7 and kline[7] else 0,
-                        "trades": int(kline[8]) if len(kline) > 8 and kline[8] else 0,
-                        "taker_buy_base_volume": float(kline[9]) if len(kline) > 9 and kline[9] else 0,
-                        "taker_buy_quote_volume": float(kline[10]) if len(kline) > 10 and kline[10] else 0,
-                    })
+                    klines.append(
+                        {
+                            "symbol": extra_data["symbol_name"],
+                            "interval": extra_data["interval"],
+                            "open_time": int(kline[0]),
+                            "open": float(kline[1]),
+                            "high": float(kline[2]),
+                            "low": float(kline[3]),
+                            "close": float(kline[4]),
+                            "volume": float(kline[5]),
+                            "close_time": int(kline[6]),
+                            "quote_volume": float(kline[7]) if len(kline) > 7 and kline[7] else 0,
+                            "trades": int(kline[8]) if len(kline) > 8 and kline[8] else 0,
+                            "taker_buy_base_volume": float(kline[9])
+                            if len(kline) > 9 and kline[9]
+                            else 0,
+                            "taker_buy_quote_volume": float(kline[10])
+                            if len(kline) > 10 and kline[10]
+                            else 0,
+                        }
+                    )
 
         return [{"klines": klines}], status
 
@@ -462,48 +455,61 @@ class MexcRequestData(Feed):
         status = input_data is not None
 
         if status and isinstance(input_data, dict):
-            return [{
-                "symbol": extra_data["symbol_name"],
-                "price_change": float(input_data.get("priceChange", 0)),
-                "price_change_percent": float(input_data.get("priceChangePercent", 0)),
-                "weighted_avg_price": float(input_data.get("weightedAvgPrice", 0)),
-                "prev_close_price": float(input_data.get("prevClosePrice", 0)),
-                "last_price": float(input_data.get("lastPrice", 0)),
-                "last_qty": float(input_data.get("lastQty", 0)),
-                "bid_price": float(input_data.get("bidPrice", 0)),
-                "bid_qty": float(input_data.get("bidQty", 0)),
-                "ask_price": float(input_data.get("askPrice", 0)),
-                "ask_qty": float(input_data.get("askQty", 0)),
-                "open_price": float(input_data.get("openPrice", 0)),
-                "high_price": float(input_data.get("highPrice", 0)),
-                "low_price": float(input_data.get("lowPrice", 0)),
-                "volume": float(input_data.get("volume", 0)),
-                "quote_volume": float(input_data.get("quoteVolume", 0)),
-                "open_time": input_data.get("openTime"),
-                "close_time": input_data.get("closeTime"),
-                "count": int(input_data.get("count", 0))
-            }], status
+            return [
+                {
+                    "symbol": extra_data["symbol_name"],
+                    "price_change": float(input_data.get("priceChange", 0)),
+                    "price_change_percent": float(input_data.get("priceChangePercent", 0)),
+                    "weighted_avg_price": float(input_data.get("weightedAvgPrice", 0)),
+                    "prev_close_price": float(input_data.get("prevClosePrice", 0)),
+                    "last_price": float(input_data.get("lastPrice", 0)),
+                    "last_qty": float(input_data.get("lastQty", 0)),
+                    "bid_price": float(input_data.get("bidPrice", 0)),
+                    "bid_qty": float(input_data.get("bidQty", 0)),
+                    "ask_price": float(input_data.get("askPrice", 0)),
+                    "ask_qty": float(input_data.get("askQty", 0)),
+                    "open_price": float(input_data.get("openPrice", 0)),
+                    "high_price": float(input_data.get("highPrice", 0)),
+                    "low_price": float(input_data.get("lowPrice", 0)),
+                    "volume": float(input_data.get("volume", 0)),
+                    "quote_volume": float(input_data.get("quoteVolume", 0)),
+                    "open_time": input_data.get("openTime"),
+                    "close_time": input_data.get("closeTime"),
+                    "count": int(input_data.get("count", 0)),
+                }
+            ], status
         elif status and isinstance(input_data, list):
             # Multiple tickers response
             tickers = []
             for ticker in input_data:
-                tickers.append({
-                    "symbol": ticker.get("symbol"),
-                    "price_change": float(ticker.get("priceChange", 0)),
-                    "price_change_percent": float(ticker.get("priceChangePercent", 0)),
-                    "last_price": float(ticker.get("lastPrice", 0)),
-                    "volume": float(ticker.get("volume", 0)),
-                    "quote_volume": float(ticker.get("quoteVolume", 0)),
-                    "count": int(ticker.get("count", 0)),
-                })
+                tickers.append(
+                    {
+                        "symbol": ticker.get("symbol"),
+                        "price_change": float(ticker.get("priceChange", 0)),
+                        "price_change_percent": float(ticker.get("priceChangePercent", 0)),
+                        "last_price": float(ticker.get("lastPrice", 0)),
+                        "volume": float(ticker.get("volume", 0)),
+                        "quote_volume": float(ticker.get("quoteVolume", 0)),
+                        "count": int(ticker.get("count", 0)),
+                    }
+                )
             return [{"tickers": tickers}], status
         else:
             return [], status
 
     # ==================== Trading APIs ====================
 
-    def _make_order(self, symbol, side, order_type, quantity, price=None,
-                   client_order_id=None, extra_data=None, **kwargs):
+    def _make_order(
+        self,
+        symbol,
+        side,
+        order_type,
+        quantity,
+        price=None,
+        client_order_id=None,
+        extra_data=None,
+        **kwargs,
+    ):
         """Place a new order
 
         Args:
@@ -525,7 +531,7 @@ class MexcRequestData(Feed):
             "symbol": symbol,
             "side": side.upper(),
             "type": order_type.upper(),
-            "quantity": str(quantity)
+            "quantity": str(quantity),
         }
 
         if price:
@@ -553,20 +559,21 @@ class MexcRequestData(Feed):
         status = input_data is not None
 
         if status:
-            return [{
-                "symbol": extra_data["symbol_name"],
-                "order_id": input_data.get("orderId"),
-                "client_order_id": input_data.get("clientOrderId"),
-                "transact_time": input_data.get("transactTime"),
-                "status": input_data.get("status"),
-                "executed_qty": input_data.get("executedQty", "0"),
-                "cummulative_quote_qty": input_data.get("cummulativeQuoteQty", "0"),
-            }], status
+            return [
+                {
+                    "symbol": extra_data["symbol_name"],
+                    "order_id": input_data.get("orderId"),
+                    "client_order_id": input_data.get("clientOrderId"),
+                    "transact_time": input_data.get("transactTime"),
+                    "status": input_data.get("status"),
+                    "executed_qty": input_data.get("executedQty", "0"),
+                    "cummulative_quote_qty": input_data.get("cummulativeQuoteQty", "0"),
+                }
+            ], status
         else:
             return [], status
 
-    def _cancel_order(self, symbol, order_id=None, client_order_id=None,
-                     extra_data=None, **kwargs):
+    def _cancel_order(self, symbol, order_id=None, client_order_id=None, extra_data=None, **kwargs):
         """Cancel an existing order
 
         Args:
@@ -581,9 +588,7 @@ class MexcRequestData(Feed):
         """
         request_type = "cancel_order"
         path = self._params.get_rest_path(request_type)
-        params = {
-            "symbol": symbol
-        }
+        params = {"symbol": symbol}
 
         if order_id:
             params["orderId"] = order_id
@@ -609,18 +614,19 @@ class MexcRequestData(Feed):
         status = input_data is not None
 
         if status:
-            return [{
-                "symbol": extra_data["symbol_name"],
-                "order_id": input_data.get("orderId"),
-                "client_order_id": input_data.get("clientOrderId"),
-                "status": input_data.get("status"),
-                "transact_time": input_data.get("transactTime"),
-            }], status
+            return [
+                {
+                    "symbol": extra_data["symbol_name"],
+                    "order_id": input_data.get("orderId"),
+                    "client_order_id": input_data.get("clientOrderId"),
+                    "status": input_data.get("status"),
+                    "transact_time": input_data.get("transactTime"),
+                }
+            ], status
         else:
             return [], status
 
-    def _get_order(self, symbol, order_id=None, client_order_id=None,
-                   extra_data=None, **kwargs):
+    def _get_order(self, symbol, order_id=None, client_order_id=None, extra_data=None, **kwargs):
         """Query an order's status
 
         Args:
@@ -635,9 +641,7 @@ class MexcRequestData(Feed):
         """
         request_type = "get_order"
         path = self._params.get_rest_path(request_type)
-        params = {
-            "symbol": symbol
-        }
+        params = {"symbol": symbol}
 
         if order_id:
             params["orderId"] = order_id
@@ -663,26 +667,28 @@ class MexcRequestData(Feed):
         status = input_data is not None
 
         if status:
-            return [{
-                "symbol": extra_data["symbol_name"],
-                "order_id": input_data.get("orderId"),
-                "client_order_id": input_data.get("clientOrderId"),
-                "status": input_data.get("status"),
-                "side": input_data.get("side"),
-                "type": input_data.get("type"),
-                "time_in_force": input_data.get("timeInForce"),
-                "quantity": input_data.get("origQty"),
-                "executed_qty": input_data.get("executedQty"),
-                "cummulative_quote_qty": input_data.get("cummulativeQuoteQty"),
-                "price": input_data.get("price"),
-                "stop_price": input_data.get("stopPrice"),
-                "iceberg_qty": input_data.get("icebergQty"),
-                "time": input_data.get("time"),
-                "update_time": input_data.get("updateTime"),
-                "is_working": input_data.get("isWorking"),
-                "exchange": input_data.get("exchange"),
-                "symbol": input_data.get("symbol"),
-            }], status
+            return [
+                {
+                    "symbol": extra_data["symbol_name"],
+                    "order_id": input_data.get("orderId"),
+                    "client_order_id": input_data.get("clientOrderId"),
+                    "status": input_data.get("status"),
+                    "side": input_data.get("side"),
+                    "type": input_data.get("type"),
+                    "time_in_force": input_data.get("timeInForce"),
+                    "quantity": input_data.get("origQty"),
+                    "executed_qty": input_data.get("executedQty"),
+                    "cummulative_quote_qty": input_data.get("cummulativeQuoteQty"),
+                    "price": input_data.get("price"),
+                    "stop_price": input_data.get("stopPrice"),
+                    "iceberg_qty": input_data.get("icebergQty"),
+                    "time": input_data.get("time"),
+                    "update_time": input_data.get("updateTime"),
+                    "is_working": input_data.get("isWorking"),
+                    "exchange": input_data.get("exchange"),
+                    "symbol": input_data.get("symbol"),
+                }
+            ], status
         else:
             return [], status
 
@@ -725,23 +731,25 @@ class MexcRequestData(Feed):
 
         if status and isinstance(input_data, list):
             for order in input_data:
-                orders.append({
-                    "symbol": extra_data["symbol_name"],
-                    "order_id": order.get("orderId"),
-                    "client_order_id": order.get("clientOrderId"),
-                    "status": order.get("status"),
-                    "side": order.get("side"),
-                    "type": order.get("type"),
-                    "time_in_force": order.get("timeInForce"),
-                    "quantity": order.get("origQty"),
-                    "executed_qty": order.get("executedQty"),
-                    "cummulative_quote_qty": order.get("cummulativeQuoteQty"),
-                    "price": order.get("price"),
-                    "stop_price": order.get("stopPrice"),
-                    "iceberg_qty": order.get("icebergQty"),
-                    "time": order.get("time"),
-                    "update_time": order.get("updateTime"),
-                })
+                orders.append(
+                    {
+                        "symbol": extra_data["symbol_name"],
+                        "order_id": order.get("orderId"),
+                        "client_order_id": order.get("clientOrderId"),
+                        "status": order.get("status"),
+                        "side": order.get("side"),
+                        "type": order.get("type"),
+                        "time_in_force": order.get("timeInForce"),
+                        "quantity": order.get("origQty"),
+                        "executed_qty": order.get("executedQty"),
+                        "cummulative_quote_qty": order.get("cummulativeQuoteQty"),
+                        "price": order.get("price"),
+                        "stop_price": order.get("stopPrice"),
+                        "iceberg_qty": order.get("icebergQty"),
+                        "time": order.get("time"),
+                        "update_time": order.get("updateTime"),
+                    }
+                )
 
         return [{"orders": orders}], status
 
@@ -759,10 +767,7 @@ class MexcRequestData(Feed):
         """
         request_type = "get_all_orders"
         path = self._params.get_rest_path(request_type)
-        params = {
-            "symbol": symbol,
-            "limit": limit
-        }
+        params = {"symbol": symbol, "limit": limit}
 
         extra_data = update_extra_data(
             extra_data,
@@ -785,24 +790,26 @@ class MexcRequestData(Feed):
 
         if status and isinstance(input_data, list):
             for order in input_data:
-                orders.append({
-                    "symbol": extra_data["symbol_name"],
-                    "order_id": order.get("orderId"),
-                    "client_order_id": order.get("clientOrderId"),
-                    "status": order.get("status"),
-                    "side": order.get("side"),
-                    "type": order.get("type"),
-                    "time_in_force": order.get("timeInForce"),
-                    "quantity": order.get("origQty"),
-                    "executed_qty": order.get("executedQty"),
-                    "cummulative_quote_qty": order.get("cummulativeQuoteQty"),
-                    "price": order.get("price"),
-                    "stop_price": order.get("stopPrice"),
-                    "iceberg_qty": order.get("icebergQty"),
-                    "time": order.get("time"),
-                    "update_time": order.get("updateTime"),
-                    "is_working": order.get("isWorking"),
-                })
+                orders.append(
+                    {
+                        "symbol": extra_data["symbol_name"],
+                        "order_id": order.get("orderId"),
+                        "client_order_id": order.get("clientOrderId"),
+                        "status": order.get("status"),
+                        "side": order.get("side"),
+                        "type": order.get("type"),
+                        "time_in_force": order.get("timeInForce"),
+                        "quantity": order.get("origQty"),
+                        "executed_qty": order.get("executedQty"),
+                        "cummulative_quote_qty": order.get("cummulativeQuoteQty"),
+                        "price": order.get("price"),
+                        "stop_price": order.get("stopPrice"),
+                        "iceberg_qty": order.get("icebergQty"),
+                        "time": order.get("time"),
+                        "update_time": order.get("updateTime"),
+                        "is_working": order.get("isWorking"),
+                    }
+                )
 
         return [{"orders": orders}], status
 
@@ -843,23 +850,27 @@ class MexcRequestData(Feed):
             balances = []
             for balance in input_data.get("balances", []):
                 if float(balance.get("free", 0)) > 0 or float(balance.get("locked", 0)) > 0:
-                    balances.append({
-                        "asset": balance.get("asset"),
-                        "free": float(balance.get("free", 0)),
-                        "locked": float(balance.get("locked", 0))
-                    })
+                    balances.append(
+                        {
+                            "asset": balance.get("asset"),
+                            "free": float(balance.get("free", 0)),
+                            "locked": float(balance.get("locked", 0)),
+                        }
+                    )
 
-            return [{
-                "maker_commission": input_data.get("makerCommission", 0),
-                "taker_commission": input_data.get("takerCommission", 0),
-                "buyer_commission": input_data.get("buyerCommission", 0),
-                "seller_commission": input_data.get("sellerCommission", 0),
-                "can_trade": input_data.get("canTrade", False),
-                "can_withdraw": input_data.get("canWithdraw", False),
-                "can_deposit": input_data.get("canDeposit", False),
-                "balances": balances,
-                "account_type": input_data.get("accountType"),
-            }], status
+            return [
+                {
+                    "maker_commission": input_data.get("makerCommission", 0),
+                    "taker_commission": input_data.get("takerCommission", 0),
+                    "buyer_commission": input_data.get("buyerCommission", 0),
+                    "seller_commission": input_data.get("sellerCommission", 0),
+                    "can_trade": input_data.get("canTrade", False),
+                    "can_withdraw": input_data.get("canWithdraw", False),
+                    "can_deposit": input_data.get("canDeposit", False),
+                    "balances": balances,
+                    "account_type": input_data.get("accountType"),
+                }
+            ], status
         else:
             return [], status
 
@@ -877,10 +888,7 @@ class MexcRequestData(Feed):
         """
         request_type = "get_my_trades"
         path = self._params.get_rest_path(request_type)
-        params = {
-            "symbol": symbol,
-            "limit": limit
-        }
+        params = {"symbol": symbol, "limit": limit}
 
         extra_data = update_extra_data(
             extra_data,
@@ -903,19 +911,21 @@ class MexcRequestData(Feed):
 
         if status and isinstance(input_data, list):
             for trade in input_data:
-                trades.append({
-                    "symbol": extra_data["symbol_name"],
-                    "id": trade.get("id"),
-                    "order_id": trade.get("orderId"),
-                    "price": float(trade.get("price", 0)),
-                    "qty": float(trade.get("qty", 0)),
-                    "quote_qty": float(trade.get("quoteQty", 0)),
-                    "commission": float(trade.get("commission", 0)),
-                    "commission_asset": trade.get("commissionAsset"),
-                    "time": trade.get("time"),
-                    "is_buyer": trade.get("isBuyer", False),
-                    "is_maker": trade.get("isMaker", False),
-                    "is_best_match": trade.get("isBestMatch", False),
-                })
+                trades.append(
+                    {
+                        "symbol": extra_data["symbol_name"],
+                        "id": trade.get("id"),
+                        "order_id": trade.get("orderId"),
+                        "price": float(trade.get("price", 0)),
+                        "qty": float(trade.get("qty", 0)),
+                        "quote_qty": float(trade.get("quoteQty", 0)),
+                        "commission": float(trade.get("commission", 0)),
+                        "commission_asset": trade.get("commissionAsset"),
+                        "time": trade.get("time"),
+                        "is_buyer": trade.get("isBuyer", False),
+                        "is_maker": trade.get("isMaker", False),
+                        "is_best_match": trade.get("isBestMatch", False),
+                    }
+                )
 
         return [{"trades": trades}], status

@@ -17,22 +17,21 @@ Run with coverage:
 """
 
 import queue
-import time
-import pytest
-from unittest.mock import Mock, patch, MagicMock
+from unittest.mock import MagicMock
 
-from bt_api_py.containers.exchanges.uniswap_exchange_data import (
-    UniswapExchangeData,
-    UniswapExchangeDataSpot,
-    UniswapChain,
-)
-# Uniswap uses different data containers - tickers may not exist
-from bt_api_py.feeds.live_uniswap.spot import UniswapRequestDataSpot
-from bt_api_py.registry import ExchangeRegistry
+import pytest
 
 # Import registration to auto-register Uniswap
 import bt_api_py.exchange_registers.register_uniswap  # noqa: F401
+from bt_api_py.containers.exchanges.uniswap_exchange_data import (
+    UniswapChain,
+    UniswapExchangeData,
+    UniswapExchangeDataSpot,
+)
 
+# Uniswap uses different data containers - tickers may not exist
+from bt_api_py.feeds.live_uniswap.spot import UniswapRequestDataSpot
+from bt_api_py.registry import ExchangeRegistry
 
 # ==================== Common Token Addresses ====================
 
@@ -49,6 +48,7 @@ USDT_WETH_POOL = "0x4e68Cd3E89f51C3074ca5072bbAC773960dfa36e"
 
 # ==================== Fixtures ====================
 
+
 @pytest.fixture
 def data_queue():
     """Create a queue for test data."""
@@ -59,11 +59,11 @@ def data_queue():
 def uniswap_feed(data_queue):
     """Create a Uniswap feed instance for testing."""
     import sys
-    from unittest.mock import MagicMock
+
     # Mock requests module
-    sys.modules['requests'] = MagicMock()
-    sys.modules['requests.Session'] = MagicMock
-    sys.modules['requests.post'] = MagicMock
+    sys.modules["requests"] = MagicMock()
+    sys.modules["requests.Session"] = MagicMock
+    sys.modules["requests.post"] = MagicMock
 
     feed = UniswapRequestDataSpot(
         data_queue,
@@ -77,11 +77,11 @@ def uniswap_feed(data_queue):
 def uniswap_feed_arbitrum(data_queue):
     """Create a Uniswap feed for Arbitrum."""
     import sys
-    from unittest.mock import MagicMock
+
     # Mock requests module
-    sys.modules['requests'] = MagicMock()
-    sys.modules['requests.Session'] = MagicMock
-    sys.modules['requests.post'] = MagicMock
+    sys.modules["requests"] = MagicMock()
+    sys.modules["requests.Session"] = MagicMock
+    sys.modules["requests.post"] = MagicMock
 
     feed = UniswapRequestDataSpot(
         data_queue,
@@ -94,6 +94,7 @@ def uniswap_feed_arbitrum(data_queue):
 
 # ==================== ServerTime Tests ====================
 
+
 class TestUniswapServerTime:
     """Test server time functionality."""
 
@@ -104,6 +105,7 @@ class TestUniswapServerTime:
 
 
 # ==================== Ticker/Token Price Tests ====================
+
 
 class TestUniswapTickerData:
     """Test token price/ticker data functionality."""
@@ -143,6 +145,7 @@ class TestUniswapTickerData:
 
 # ==================== Pool Tests ====================
 
+
 class TestUniswapPoolData:
     """Test pool data functionality."""
 
@@ -179,6 +182,7 @@ class TestUniswapPoolData:
 
 
 # ==================== Swap Quote Tests ====================
+
 
 class TestUniswapSwapQuote:
     """Test swap quote functionality."""
@@ -233,6 +237,7 @@ class TestUniswapSwapQuote:
 
 # ==================== Swappable Tokens Tests ====================
 
+
 class TestUniswapSwappableTokens:
     """Test swappable tokens functionality."""
 
@@ -256,6 +261,7 @@ class TestUniswapSwappableTokens:
 
 # ==================== Kline Tests ====================
 
+
 class TestUniswapKlineData:
     """Test kline/candlestick data functionality."""
 
@@ -270,6 +276,7 @@ class TestUniswapKlineData:
 
 # ==================== Depth/Liquidity Tests ====================
 
+
 class TestUniswapDepth:
     """Test liquidity depth functionality."""
 
@@ -283,14 +290,14 @@ class TestUniswapDepth:
 
     def test_uniswap_get_depth_params(self, uniswap_feed):
         """Test get depth parameter generation."""
-        path, params, extra_data = uniswap_feed._get_depth(
-            WETH_ADDRESS, count=20)
+        path, params, extra_data = uniswap_feed._get_depth(WETH_ADDRESS, count=20)
         assert path is not None
         assert extra_data is not None
         assert extra_data.get("request_type") == "get_depth"
 
 
 # ==================== Exchange Info Tests ====================
+
 
 class TestUniswapExchangeInfo:
     """Test exchange information functionality."""
@@ -309,6 +316,7 @@ class TestUniswapExchangeInfo:
 
 
 # ==================== Chain Tests ====================
+
 
 class TestUniswapChainSupport:
     """Test multi-chain support."""
@@ -334,6 +342,7 @@ class TestUniswapChainSupport:
 
 
 # ==================== Exchange Data Tests ====================
+
 
 class TestUniswapExchangeData:
     """Test Uniswap exchange data configuration."""
@@ -375,14 +384,11 @@ class TestUniswapExchangeData:
         exchange_data = UniswapExchangeDataSpot()
         # Uniswap might not have traditional kline_periods attribute
         # or it might be inherited from base class
-        assert hasattr(
-            exchange_data,
-            'kline_periods') or hasattr(
-            exchange_data,
-            'rest_url')
+        assert hasattr(exchange_data, "kline_periods") or hasattr(exchange_data, "rest_url")
 
 
 # ==================== Registry Tests ====================
+
 
 class TestUniswapRegistry:
     """Test Uniswap registration."""
@@ -411,6 +417,7 @@ class TestUniswapRegistry:
 
 # ==================== Normalization Tests ====================
 
+
 class TestUniswapNormalization:
     """Test data normalization functions."""
 
@@ -429,9 +436,7 @@ class TestUniswapNormalization:
         }
 
         extra_data = {"symbol_name": "WETH"}
-        result, status = UniswapRequestDataSpot._get_tick_normalize_function(
-            input_data, extra_data
-        )
+        result, status = UniswapRequestDataSpot._get_tick_normalize_function(input_data, extra_data)
 
         assert status is True
         assert result is not None
@@ -452,9 +457,7 @@ class TestUniswapNormalization:
         }
 
         extra_data = {"pool_id": "test_pool"}
-        result, status = UniswapRequestDataSpot._get_pool_normalize_function(
-            input_data, extra_data
-        )
+        result, status = UniswapRequestDataSpot._get_pool_normalize_function(input_data, extra_data)
 
         assert status is True
         assert result is not None
@@ -550,6 +553,7 @@ class TestUniswapNormalization:
 
 
 # ==================== Integration Tests ====================
+
 
 class TestUniswapIntegration:
     """Integration tests for Uniswap."""

@@ -5,25 +5,21 @@ Run tests:
     pytest tests/feeds/test_bingx.py -v
 """
 
-import json
 import queue
 import time
-from unittest.mock import Mock, patch, MagicMock
+from unittest.mock import MagicMock, Mock, patch
 
 import pytest
 
-from bt_api_py.containers.exchanges.bingx_exchange_data import (
-    BingXExchangeData,
-    BingXExchangeDataSpot,
-)
-from bt_api_py.feeds.live_bingx.spot import BingXRequestDataSpot
-from bt_api_py.feeds.capability import Capability
-from bt_api_py.containers.requestdatas.request_data import RequestData
-from bt_api_py.containers.tickers.bingx_ticker import BingXRequestTickerData
-from bt_api_py.registry import ExchangeRegistry
-
 # Import registration to auto-register BingX
 import bt_api_py.exchange_registers.register_bingx  # noqa: F401
+from bt_api_py.containers.exchanges.bingx_exchange_data import (
+    BingXExchangeDataSpot,
+)
+from bt_api_py.containers.requestdatas.request_data import RequestData
+from bt_api_py.feeds.capability import Capability
+from bt_api_py.feeds.live_bingx.spot import BingXRequestDataSpot
+from bt_api_py.registry import ExchangeRegistry
 
 
 @pytest.fixture
@@ -50,7 +46,10 @@ class TestBingXExchangeData:
         """Test creating BingX spot exchange data."""
         exchange_data = BingXExchangeDataSpot()
         assert exchange_data.rest_url
-        assert "get_ticker" in exchange_data.rest_paths or "get_server_time" in exchange_data.rest_paths
+        assert (
+            "get_ticker" in exchange_data.rest_paths
+            or "get_server_time" in exchange_data.rest_paths
+        )
 
     def test_kline_periods(self, mock_logger):
         """Test kline periods are defined."""
@@ -160,9 +159,7 @@ class TestBingXRequestDataSpot:
         }
         extra_data = {"symbol_name": "BTC-USDT"}
 
-        result, success = BingXRequestDataSpot._get_tick_normalize_function(
-            input_data, extra_data
-        )
+        result, success = BingXRequestDataSpot._get_tick_normalize_function(input_data, extra_data)
         assert success is True
 
     def test_depth_normalize_function(self):
@@ -175,25 +172,17 @@ class TestBingXRequestDataSpot:
         }
         extra_data = {"symbol_name": "BTC-USDT"}
 
-        result, success = BingXRequestDataSpot._get_depth_normalize_function(
-            input_data, extra_data
-        )
+        result, success = BingXRequestDataSpot._get_depth_normalize_function(input_data, extra_data)
 
         assert success is True
         assert "bids" in result[0]
 
     def test_kline_normalize_function(self):
         """Test kline normalization function."""
-        input_data = {
-            "data": [
-                [1640995200, "49500", "51000", "49000", "50000", "1234.56"]
-            ]
-        }
+        input_data = {"data": [[1640995200, "49500", "51000", "49000", "50000", "1234.56"]]}
         extra_data = {"symbol_name": "BTC-USDT"}
 
-        result, success = BingXRequestDataSpot._get_kline_normalize_function(
-            input_data, extra_data
-        )
+        result, success = BingXRequestDataSpot._get_kline_normalize_function(input_data, extra_data)
 
         assert success is True
         assert isinstance(result[0], list)
@@ -277,6 +266,7 @@ class TestBingXBaseCapabilities:
 
     def test_base_capabilities(self):
         from bt_api_py.feeds.live_bingx.request_base import BingXRequestData
+
         caps = BingXRequestData._capabilities()
         assert Capability.GET_TICK in caps
         assert Capability.GET_DEPTH in caps

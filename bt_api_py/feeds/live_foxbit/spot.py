@@ -4,7 +4,6 @@ Foxbit Spot Feed implementation.
 
 import json
 
-from bt_api_py.containers.exchanges.foxbit_exchange_data import FoxbitExchangeDataSpot
 from bt_api_py.containers.tickers.foxbit_ticker import FoxbitRequestTickerData
 from bt_api_py.feeds.capability import Capability
 from bt_api_py.feeds.live_foxbit.request_base import FoxbitRequestData
@@ -42,13 +41,15 @@ class FoxbitRequestDataSpot(FoxbitRequestData):
         path = f"GET /rest/v3/markets/{market}/ticker/24hr"
         if extra_data is None:
             extra_data = {}
-        extra_data.update({
-            "request_type": "get_tick",
-            "symbol_name": symbol,
-            "asset_type": self.asset_type,
-            "exchange_name": self.exchange_name,
-            "normalize_function": self._get_tick_normalize_function,
-        })
+        extra_data.update(
+            {
+                "request_type": "get_tick",
+                "symbol_name": symbol,
+                "asset_type": self.asset_type,
+                "exchange_name": self.exchange_name,
+                "normalize_function": self._get_tick_normalize_function,
+            }
+        )
         return path, None, extra_data
 
     @staticmethod
@@ -85,13 +86,15 @@ class FoxbitRequestDataSpot(FoxbitRequestData):
         path = f"GET /rest/v3/markets/{market}/orderbook"
         if extra_data is None:
             extra_data = {}
-        extra_data.update({
-            "request_type": "get_depth",
-            "symbol_name": symbol,
-            "asset_type": self.asset_type,
-            "exchange_name": self.exchange_name,
-            "normalize_function": self._get_depth_normalize_function,
-        })
+        extra_data.update(
+            {
+                "request_type": "get_depth",
+                "symbol_name": symbol,
+                "asset_type": self.asset_type,
+                "exchange_name": self.exchange_name,
+                "normalize_function": self._get_depth_normalize_function,
+            }
+        )
         return path, None, extra_data
 
     @staticmethod
@@ -123,13 +126,15 @@ class FoxbitRequestDataSpot(FoxbitRequestData):
         period_str = self._params.kline_periods.get(period, period)
         if extra_data is None:
             extra_data = {}
-        extra_data.update({
-            "request_type": "get_kline",
-            "symbol_name": symbol,
-            "asset_type": self.asset_type,
-            "exchange_name": self.exchange_name,
-            "normalize_function": self._get_kline_normalize_function,
-        })
+        extra_data.update(
+            {
+                "request_type": "get_kline",
+                "symbol_name": symbol,
+                "asset_type": self.asset_type,
+                "exchange_name": self.exchange_name,
+                "normalize_function": self._get_kline_normalize_function,
+            }
+        )
         return path, {"interval": period_str, "limit": count}, extra_data
 
     @staticmethod
@@ -159,13 +164,15 @@ class FoxbitRequestDataSpot(FoxbitRequestData):
         path = "GET /rest/v3/markets"
         if extra_data is None:
             extra_data = {}
-        extra_data.update({
-            "request_type": "get_exchange_info",
-            "symbol_name": "",
-            "asset_type": self.asset_type,
-            "exchange_name": self.exchange_name,
-            "normalize_function": self._get_exchange_info_normalize_function,
-        })
+        extra_data.update(
+            {
+                "request_type": "get_exchange_info",
+                "symbol_name": "",
+                "asset_type": self.asset_type,
+                "exchange_name": self.exchange_name,
+                "normalize_function": self._get_exchange_info_normalize_function,
+            }
+        )
         return path, None, extra_data
 
     @staticmethod
@@ -184,13 +191,15 @@ class FoxbitRequestDataSpot(FoxbitRequestData):
         path = "GET /rest/v3/markets/ticker/24hr"
         if extra_data is None:
             extra_data = {}
-        extra_data.update({
-            "request_type": "get_all_tickers",
-            "symbol_name": "",
-            "asset_type": self.asset_type,
-            "exchange_name": self.exchange_name,
-            "normalize_function": self._get_all_tickers_normalize_function,
-        })
+        extra_data.update(
+            {
+                "request_type": "get_all_tickers",
+                "symbol_name": "",
+                "asset_type": self.asset_type,
+                "exchange_name": self.exchange_name,
+                "normalize_function": self._get_all_tickers_normalize_function,
+            }
+        )
         return path, None, extra_data
 
     @staticmethod
@@ -213,13 +222,15 @@ class FoxbitRequestDataSpot(FoxbitRequestData):
         path = f"GET /rest/v3/markets/{market}/trades/history"
         if extra_data is None:
             extra_data = {}
-        extra_data.update({
-            "request_type": "get_trades",
-            "symbol_name": symbol,
-            "asset_type": self.asset_type,
-            "exchange_name": self.exchange_name,
-            "normalize_function": self._get_trades_normalize_function,
-        })
+        extra_data.update(
+            {
+                "request_type": "get_trades",
+                "symbol_name": symbol,
+                "asset_type": self.asset_type,
+                "exchange_name": self.exchange_name,
+                "normalize_function": self._get_trades_normalize_function,
+            }
+        )
         return path, {"limit": count}, extra_data
 
     @staticmethod
@@ -243,13 +254,15 @@ class FoxbitRequestDataSpot(FoxbitRequestData):
         path = "GET /rest/v3/me"
         if extra_data is None:
             extra_data = {}
-        extra_data.update({
-            "request_type": "get_account",
-            "symbol_name": "",
-            "asset_type": self.asset_type,
-            "exchange_name": self.exchange_name,
-            "normalize_function": self._get_account_normalize_function,
-        })
+        extra_data.update(
+            {
+                "request_type": "get_account",
+                "symbol_name": "",
+                "asset_type": self.asset_type,
+                "exchange_name": self.exchange_name,
+                "normalize_function": self._get_account_normalize_function,
+            }
+        )
         return path, None, extra_data
 
     @staticmethod
@@ -268,13 +281,15 @@ class FoxbitRequestDataSpot(FoxbitRequestData):
         path = "GET /rest/v3/accounts"
         if extra_data is None:
             extra_data = {}
-        extra_data.update({
-            "request_type": "get_balance",
-            "symbol_name": symbol or "",
-            "asset_type": self.asset_type,
-            "exchange_name": self.exchange_name,
-            "normalize_function": self._get_balance_normalize_function,
-        })
+        extra_data.update(
+            {
+                "request_type": "get_balance",
+                "symbol_name": symbol or "",
+                "asset_type": self.asset_type,
+                "exchange_name": self.exchange_name,
+                "normalize_function": self._get_balance_normalize_function,
+            }
+        )
         return path, None, extra_data
 
     @staticmethod
@@ -290,18 +305,30 @@ class FoxbitRequestDataSpot(FoxbitRequestData):
 
     # ==================== Trading Interfaces ====================
 
-    def _make_order(self, symbol, volume, price, order_type, offset="open",
-                    post_only=False, client_order_id=None, extra_data=None, **kwargs):
+    def _make_order(
+        self,
+        symbol,
+        volume,
+        price,
+        order_type,
+        offset="open",
+        post_only=False,
+        client_order_id=None,
+        extra_data=None,
+        **kwargs,
+    ):
         """Prepare order. Returns (path, params, extra_data)."""
         path = "POST /rest/v3/orders"
         if extra_data is None:
             extra_data = {}
-        extra_data.update({
-            "exchange_name": self.exchange_name,
-            "symbol_name": symbol,
-            "asset_type": self.asset_type,
-            "request_type": "make_order",
-        })
+        extra_data.update(
+            {
+                "exchange_name": self.exchange_name,
+                "symbol_name": symbol,
+                "asset_type": self.asset_type,
+                "request_type": "make_order",
+            }
+        )
         side = "BUY" if offset.upper() in ("BUY", "OPEN") else "SELL"
         market = self._format_market(symbol)
         params = {
@@ -315,12 +342,29 @@ class FoxbitRequestDataSpot(FoxbitRequestData):
             params["client_order_id"] = client_order_id
         return path, params, extra_data
 
-    def make_order(self, symbol, volume, price, order_type, offset="open",
-                   post_only=False, client_order_id=None, extra_data=None, **kwargs):
+    def make_order(
+        self,
+        symbol,
+        volume,
+        price,
+        order_type,
+        offset="open",
+        post_only=False,
+        client_order_id=None,
+        extra_data=None,
+        **kwargs,
+    ):
         """Place an order."""
         path, params, extra_data = self._make_order(
-            symbol, volume, price, order_type, offset, post_only,
-            client_order_id, extra_data, **kwargs
+            symbol,
+            volume,
+            price,
+            order_type,
+            offset,
+            post_only,
+            client_order_id,
+            extra_data,
+            **kwargs,
         )
         return self.request(path, body=params, extra_data=extra_data)
 
@@ -329,13 +373,15 @@ class FoxbitRequestDataSpot(FoxbitRequestData):
         path = f"DELETE /rest/v3/orders/{order_id}"
         if extra_data is None:
             extra_data = {}
-        extra_data.update({
-            "exchange_name": self.exchange_name,
-            "symbol_name": symbol,
-            "asset_type": self.asset_type,
-            "request_type": "cancel_order",
-            "order_id": order_id,
-        })
+        extra_data.update(
+            {
+                "exchange_name": self.exchange_name,
+                "symbol_name": symbol,
+                "asset_type": self.asset_type,
+                "request_type": "cancel_order",
+                "order_id": order_id,
+            }
+        )
         return path, {}, extra_data
 
     def cancel_order(self, symbol, order_id, extra_data=None, **kwargs):
@@ -348,13 +394,15 @@ class FoxbitRequestDataSpot(FoxbitRequestData):
         path = f"GET /rest/v3/orders/{order_id}"
         if extra_data is None:
             extra_data = {}
-        extra_data.update({
-            "exchange_name": self.exchange_name,
-            "symbol_name": symbol,
-            "asset_type": self.asset_type,
-            "request_type": "query_order",
-            "order_id": order_id,
-        })
+        extra_data.update(
+            {
+                "exchange_name": self.exchange_name,
+                "symbol_name": symbol,
+                "asset_type": self.asset_type,
+                "request_type": "query_order",
+                "order_id": order_id,
+            }
+        )
         return path, {}, extra_data
 
     def query_order(self, symbol, order_id, extra_data=None, **kwargs):
@@ -370,12 +418,14 @@ class FoxbitRequestDataSpot(FoxbitRequestData):
             params["market_symbol"] = self._format_market(symbol)
         if extra_data is None:
             extra_data = {}
-        extra_data.update({
-            "exchange_name": self.exchange_name,
-            "symbol_name": symbol or "",
-            "asset_type": self.asset_type,
-            "request_type": "get_open_orders",
-        })
+        extra_data.update(
+            {
+                "exchange_name": self.exchange_name,
+                "symbol_name": symbol or "",
+                "asset_type": self.asset_type,
+                "request_type": "get_open_orders",
+            }
+        )
         return path, params, extra_data
 
     def get_open_orders(self, symbol=None, extra_data=None, **kwargs):

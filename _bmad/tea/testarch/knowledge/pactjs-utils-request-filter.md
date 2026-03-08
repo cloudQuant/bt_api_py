@@ -31,7 +31,7 @@ const opts = buildVerifierOptions({
   port: '3001',
   includeMainAndDeployed: true,
   stateHandlers: {
-    /*...*/
+    /* ... */
   },
   requestFilter: createRequestFilter({
     // tokenGenerator returns raw token — filter adds "Bearer " prefix
@@ -41,10 +41,9 @@ const opts = buildVerifierOptions({
 
 // Every request during verification will have:
 // Authorization: Bearer test-auth-token-123
+```
 
-```bash
-
-- *Key Points**:
+**Key Points**:
 
 - `tokenGenerator` is **synchronous** (`() => string`) — if you need async token fetching, resolve the token before creating the filter
 - Return the raw token value, NOT `"Bearer ..."` — the filter adds the prefix
@@ -59,7 +58,7 @@ import { createRequestFilter } from '@seontechnologies/pactjs-utils';
 let cachedToken: string;
 
 async function setupRequestFilter() {
-  const response = await fetch('<http://localhost:8080/auth/token',> {
+  const response = await fetch('http://localhost:8080/auth/token', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
@@ -80,12 +79,11 @@ const opts = buildVerifierOptions({
   port: '3001',
   includeMainAndDeployed: true,
   stateHandlers: {
-    /*...*/
+    /* ... */
   },
   requestFilter,
 });
-
-```bash
+```
 
 ### Example 3: No-Auth Provider
 
@@ -98,14 +96,13 @@ const opts = buildVerifierOptions({
   port: '3001',
   includeMainAndDeployed: true,
   stateHandlers: {
-    /*...*/
+    /* ... */
   },
   requestFilter: noOpRequestFilter,
 });
 
 // noOpRequestFilter is equivalent to: (req, res, next) => next()
-
-```bash
+```
 
 ### Example 4: Integration with buildVerifierOptions
 
@@ -142,8 +139,7 @@ const opts = buildVerifierOptions({
 
 // Run verification
 await new Verifier(opts).verifyProvider();
-
-```bash
+```
 
 ## Key Points
 
@@ -170,8 +166,7 @@ requestFilter: (req, res, next) => {
   req.headers['authorization'] = `Bearer ${token}`;
   next();
 };
-
-```bash
+```
 
 ### Right: Use createRequestFilter with raw token
 
@@ -180,8 +175,7 @@ requestFilter: (req, res, next) => {
 requestFilter: createRequestFilter({
   tokenGenerator: () => getToken(), // Returns "abc123", not "Bearer abc123"
 });
-
-```bash
+```
 
 ### Wrong: Inline auth logic in verifier config
 
@@ -189,7 +183,7 @@ requestFilter: createRequestFilter({
 // ❌ Auth logic mixed with verifier config
 const opts: VerifierOptions = {
   provider: 'my-api',
-  providerBaseUrl: '<http://localhost:3001',>
+  providerBaseUrl: 'http://localhost:3001',
   requestFilter: (req, res, next) => {
     const clientId = process.env.CLIENT_ID;
     const clientSecret = process.env.CLIENT_SECRET;
@@ -199,8 +193,7 @@ const opts: VerifierOptions = {
   },
   // ... rest of config
 };
-
-```bash
+```
 
 ### Right: Separate auth into createRequestFilter
 
@@ -219,13 +212,13 @@ async function setupVerifierOptions() {
     includeMainAndDeployed: true,
     requestFilter,
     stateHandlers: {
-      /*...*/
+      /* ... */
     },
   });
 }
 
 // In tests/hooks, callers can await setupVerifierOptions():
 // const opts = await setupVerifierOptions();
+```
 
-```bash
 _Source: @seontechnologies/pactjs-utils request-filter module, pact-js-example-provider verification tests_

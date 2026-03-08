@@ -1,8 +1,7 @@
-import json
 import time
 
 from bt_api_py.containers.orderbooks.orderbook import OrderBookData
-from bt_api_py.functions.utils import from_dict_get_float, from_dict_get_string
+from bt_api_py.functions.utils import from_dict_get_float
 
 
 class HitBtcRequestOrderBookData(OrderBookData):
@@ -55,10 +54,12 @@ class HitBtcRequestOrderBookData(OrderBookData):
                 parsed_levels.append({"price": price, "quantity": quantity})
             elif isinstance(level, dict):
                 # {price, quantity}
-                parsed_levels.append({
-                    "price": from_dict_get_float(level, "price"),
-                    "quantity": from_dict_get_float(level, "quantity")
-                })
+                parsed_levels.append(
+                    {
+                        "price": from_dict_get_float(level, "price"),
+                        "quantity": from_dict_get_float(level, "quantity"),
+                    }
+                )
         return parsed_levels
 
     def get_all_data(self):
@@ -145,4 +146,6 @@ class HitBtcRequestOrderBookData(OrderBookData):
         return f"HITBTC OrderBook {self.symbol_name}: Bid={best_bid}, Ask={best_ask}"
 
     def __repr__(self):
-        return f"<HitBtcOrderBookData {self.symbol_name} bids={len(self.bids)} asks={len(self.asks)}>"
+        return (
+            f"<HitBtcOrderBookData {self.symbol_name} bids={len(self.bids)} asks={len(self.asks)}>"
+        )

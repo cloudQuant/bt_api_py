@@ -1,6 +1,6 @@
-import time
 import queue
 import traceback
+
 import pytest
 
 pytestmark = pytest.mark.xdist_group("mixed_exchange_api")
@@ -10,13 +10,14 @@ from bt_api_py.containers.requestdatas.request_data import RequestData
 from bt_api_py.containers.tickers.binance_ticker import BinanceRequestTickerData
 from bt_api_py.functions.utils import read_account_config
 
+
 def generate_binance_swap_kwargs():
     data = read_account_config()
     kwargs = {
-        "public_key": data['binance']['public_key'],
-        "private_key": data['binance']['private_key'],
-        "proxies": data.get('proxies'),
-        "async_proxy": data.get('async_proxy'),
+        "public_key": data["binance"]["public_key"],
+        "private_key": data["binance"]["private_key"],
+        "proxies": data.get("proxies"),
+        "async_proxy": data.get("async_proxy"),
     }
 
     return {"BINANCE___SWAP": kwargs}
@@ -25,10 +26,10 @@ def generate_binance_swap_kwargs():
 def generate_binance_spot_kwargs():
     data = read_account_config()
     kwargs = {
-        "public_key": data['binance']['public_key'],
-        "private_key": data['binance']['private_key'],
-        "proxies": data.get('proxies'),
-        "async_proxy": data.get('async_proxy'),
+        "public_key": data["binance"]["public_key"],
+        "private_key": data["binance"]["private_key"],
+        "proxies": data.get("proxies"),
+        "async_proxy": data.get("async_proxy"),
     }
 
     return {"BINANCE___SPOT": kwargs}
@@ -37,22 +38,23 @@ def generate_binance_spot_kwargs():
 def generate_okx_spot_kwargs():
     data = read_account_config()
     kwargs = {
-        "public_key": data['okx']['public_key'],
-        "private_key": data['okx']['private_key'],
-        "passphrase": data['okx']["passphrase"],
-        "proxies": data.get('proxies'),
-        "async_proxy": data.get('async_proxy'),
+        "public_key": data["okx"]["public_key"],
+        "private_key": data["okx"]["private_key"],
+        "passphrase": data["okx"]["passphrase"],
+        "proxies": data.get("proxies"),
+        "async_proxy": data.get("async_proxy"),
     }
     return {"OKX___SPOT": kwargs}
+
 
 def generate_okx_swap_kwargs():
     data = read_account_config()
     kwargs = {
-        "public_key": data['okx']['public_key'],
-        "private_key": data['okx']['private_key'],
-        "passphrase": data['okx']["passphrase"],
-        "proxies": data.get('proxies'),
-        "async_proxy": data.get('async_proxy'),
+        "public_key": data["okx"]["public_key"],
+        "private_key": data["okx"]["private_key"],
+        "passphrase": data["okx"]["passphrase"],
+        "proxies": data.get("proxies"),
+        "async_proxy": data.get("async_proxy"),
     }
     return {"OKX___SWAP": kwargs}
 
@@ -60,20 +62,24 @@ def generate_okx_swap_kwargs():
 def generate_bt_api_kwargs():
     data = read_account_config()
     binance_kwargs = {
-        "public_key": data['binance']['public_key'],
-        "private_key": data['binance']['private_key'],
-        "proxies": data.get('proxies'),
-        "async_proxy": data.get('async_proxy'),
+        "public_key": data["binance"]["public_key"],
+        "private_key": data["binance"]["private_key"],
+        "proxies": data.get("proxies"),
+        "async_proxy": data.get("async_proxy"),
     }
     okx_kwargs = {
-        "public_key": data['okx']['public_key'],
-        "private_key": data['okx']['private_key'],
-        "passphrase": data['okx']["passphrase"],
-        "proxies": data.get('proxies'),
-        "async_proxy": data.get('async_proxy'),
+        "public_key": data["okx"]["public_key"],
+        "private_key": data["okx"]["private_key"],
+        "passphrase": data["okx"]["passphrase"],
+        "proxies": data.get("proxies"),
+        "async_proxy": data.get("async_proxy"),
     }
-    return {"BINANCE___SWAP": binance_kwargs, "OKX___SWAP": okx_kwargs,
-            "BINANCE___SPOT": binance_kwargs, "OKX___SPOT": okx_kwargs}
+    return {
+        "BINANCE___SWAP": binance_kwargs,
+        "OKX___SWAP": okx_kwargs,
+        "BINANCE___SPOT": binance_kwargs,
+        "OKX___SPOT": okx_kwargs,
+    }
 
 
 def test_binance_swap_bt_api():
@@ -212,21 +218,24 @@ def test_async_bt_api():
 
 def test_binance_swap_wss_data():
     from bt_api_py.containers.bars.binance_bar import BinanceWssBarData
-    from bt_api_py.containers.tickers.binance_ticker import BinanceWssTickerData
-    from bt_api_py.containers.orderbooks.binance_orderbook import BinanceWssOrderBookData
     from bt_api_py.containers.fundingrates.binance_funding_rate import BinanceWssFundingRateData
     from bt_api_py.containers.markprices.binance_mark_price import BinanceWssMarkPriceData
-    from bt_api_py.containers.trades.binance_trade import BinanceAggTradeData
+    from bt_api_py.containers.orderbooks.binance_orderbook import BinanceWssOrderBookData
     from bt_api_py.containers.orders.binance_order import BinanceForceOrderData
+    from bt_api_py.containers.tickers.binance_ticker import BinanceWssTickerData
+    from bt_api_py.containers.trades.binance_trade import BinanceAggTradeData
+
     exchange_kwargs = generate_binance_swap_kwargs()
-    topics = [{"topic": "ticker", "symbol": "BTC-USDT"},
-                {"topic": "depth", "symbol": "BTC-USDT"},
-                {"topic": "funding_rate", "symbol": "BTC-USDT"},
-                {"topic": "mark_price", "symbol": "BTC-USDT"},
-                {"topic": "kline", "symbol": "BTC-USDT", "period": "1m"},
-                {"topic": "kline", "symbol": "ETH-USDT", "period": "1m"},
-                {"topic": "agg_trade", "symbol": "BTC-USDT"},
-                {"topic": "force_order", "symbol": "BTC-USDT"}]
+    topics = [
+        {"topic": "ticker", "symbol": "BTC-USDT"},
+        {"topic": "depth", "symbol": "BTC-USDT"},
+        {"topic": "funding_rate", "symbol": "BTC-USDT"},
+        {"topic": "mark_price", "symbol": "BTC-USDT"},
+        {"topic": "kline", "symbol": "BTC-USDT", "period": "1m"},
+        {"topic": "kline", "symbol": "ETH-USDT", "period": "1m"},
+        {"topic": "agg_trade", "symbol": "BTC-USDT"},
+        {"topic": "force_order", "symbol": "BTC-USDT"},
+    ]
     bt_api = BtApi(exchange_kwargs, debug=True)
     bt_api.subscribe("BINANCE___SWAP___BTC-USDT", topics)
     data_queue = bt_api.get_data_queue("BINANCE___SWAP")
@@ -274,7 +283,6 @@ def test_binance_swap_wss_data():
     assert receive_binance_mark_price_data is True
     assert receive_binance_agg_trade_data is True
     # assert receive_binance_force_order_data is True
-
 
 
 if __name__ == "__main__":

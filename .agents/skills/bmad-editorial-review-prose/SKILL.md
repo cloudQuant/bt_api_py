@@ -1,9 +1,7 @@
-- --
-
+---
 name: bmad-editorial-review-prose
 description: Execute editorial-review-prose
-
-- --
+---
 
 # editorial-review-prose
 

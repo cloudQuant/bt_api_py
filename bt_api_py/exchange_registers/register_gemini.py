@@ -3,11 +3,10 @@ Register Gemini exchange feeds
 """
 
 from bt_api_py.feeds.live_gemini.spot import GeminiRequestDataSpot
-from bt_api_py.feeds.registry import register
 from bt_api_py.logging_factory import get_logger
+from bt_api_py.registry import ExchangeRegistry
 
-# Register Gemini Spot feed
-@register("GEMINI___SPOT")
+
 class GeminiSpotFeed(GeminiRequestDataSpot):
     """Gemini Spot Exchange Feed"""
 
@@ -102,3 +101,11 @@ class GeminiWssData:
     def subscribe_account_data(self):
         """Subscribe to account data channels"""
         pass
+
+
+def register_gemini() -> None:
+    """Register Gemini feeds into the unified exchange registry."""
+    ExchangeRegistry.register_feed("GEMINI___SPOT", GeminiSpotFeed)
+
+
+register_gemini()

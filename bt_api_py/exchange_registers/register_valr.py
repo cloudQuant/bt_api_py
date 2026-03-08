@@ -18,9 +18,7 @@ def register_valr():
     ExchangeRegistry.register_feed("VALR___SPOT", ValrRequestDataSpot)
     ExchangeRegistry.register_exchange_data("VALR___SPOT", ValrExchangeDataSpot)
     ExchangeRegistry.register_balance_handler("VALR___SPOT", _valr_balance_handler)
-    ExchangeRegistry.register_stream(
-        "VALR___SPOT", "subscribe", _valr_spot_subscribe_handler
-    )
+    ExchangeRegistry.register_stream("VALR___SPOT", "subscribe", _valr_spot_subscribe_handler)
 
 
 # Auto-register on module import

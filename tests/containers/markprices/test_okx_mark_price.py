@@ -16,11 +16,11 @@ def test_okx_req_mark_price():
                 "open24h": "43640.8",
                 "low24h": "43261.9",
                 "sodUtc8": "43328.7",
-                "ts": "1649419644492"
+                "ts": "1649419644492",
             }
-        ]
+        ],
     }
-    bp = OkxMarkPriceData(data['data'][0], "BTC-USDT", "SPOT", True)
+    bp = OkxMarkPriceData(data["data"][0], "BTC-USDT", "SPOT", True)
     bp.init_data()
     assert bp.get_server_time() == 1649419644492.0
     assert bp.get_exchange_name() == "OKX"
@@ -32,18 +32,10 @@ def test_okx_req_mark_price():
 
 def test_okx_wss_mark_price():
     data = {
-        "arg": {
-            "channel": "mark-price",
-            "instId": "BTC-USDT"
-        },
+        "arg": {"channel": "mark-price", "instId": "BTC-USDT"},
         "data": [
-            {
-                "instType": "MARGIN",
-                "instId": "BTC-USDT",
-                "markPx": "42310.6",
-                "ts": "1630049139746"
-            }
-        ]
+            {"instType": "MARGIN", "instId": "BTC-USDT", "markPx": "42310.6", "ts": "1630049139746"}
+        ],
     }
     bp = OkxMarkPriceData(json.dumps(data), "BTC-USDT", "SPOT", False)
     bp.init_data()

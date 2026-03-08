@@ -25,39 +25,32 @@ class PancakeSwapErrorTranslator(ErrorTranslator):
         "UNAUTHORIZED": (2001, "Authentication failed"),
         "INVALID_TOKEN": (2001, "Invalid API token"),
         "FORBIDDEN": (2004, "Permission denied"),
-
         # Rate limiting
         "RATE_LIMITED": (3001, "Rate limit exceeded"),
         "TOO_MANY_REQUESTS": (3003, "Too many requests"),
-
         # Validation errors
         "INVALID_INPUT": (4001, "Invalid input parameter"),
         "MISSING_PARAMETER": (4002, "Missing required parameter"),
         "INVALID_ADDRESS": (4003, "Invalid address format"),
         "INVALID_AMOUNT": (4004, "Invalid amount"),
-
         # Business logic errors
         "INSUFFICIENT_LIQUIDITY": (5001, "Insufficient liquidity"),
         "SLIPPAGE_TOO_HIGH": (5002, "Slippage too high"),
         "TRADE_TOO_SMALL": (5003, "Trade amount too small"),
         "INVALID_PATH": (5004, "Invalid trade path"),
-
         # Transaction errors
         "TRANSACTION_FAILED": (6001, "Transaction failed"),
         "REVERTED": (6002, "Transaction reverted"),
         "TIMEOUT": (6003, "Transaction timeout"),
         "PENDING": (6004, "Transaction pending"),
-
         # Token errors
         "TOKEN_NOT_FOUND": (7001, "Token not found"),
         "TOKEN_NOT_TRADABLE": (7002, "Token not tradable"),
         "BLACKLISTED_TOKEN": (7003, "Blacklisted token"),
-
         # Network errors
         "NETWORK_ERROR": (1001, "Network error"),
         "GAS_ERROR": (1002, "Gas error"),
         "BLOCKCHAIN_ERROR": (1003, "Blockchain error"),
-
         # System errors
         "INTERNAL_ERROR": (8001, "Internal server error"),
         "MAINTENANCE": (8002, "Exchange under maintenance"),

@@ -9,7 +9,6 @@ GMX is a decentralized perpetual exchange that supports multiple blockchains:
 
 import os
 from enum import Enum
-from typing import Any
 
 from bt_api_py.logging_factory import get_logger
 
@@ -26,8 +25,9 @@ def _get_gmx_config():
     if _gmx_config_loaded:
         return _gmx_config
     try:
-        from bt_api_py.config_loader import load_exchange_config
         import yaml
+
+        from bt_api_py.config_loader import load_exchange_config
 
         config_path = os.path.join(
             os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),

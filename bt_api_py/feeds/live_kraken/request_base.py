@@ -70,22 +70,18 @@ class KrakenRequestData(Feed):
             return {}
 
         nonce = self._generate_nonce()
-        data['nonce'] = nonce
+        data["nonce"] = nonce
 
         postdata = urlencode(data)
-        encoded = (nonce + postdata).encode('utf-8')
-        message = url_path.encode('utf-8') + hashlib.sha256(encoded).digest()
+        encoded = (nonce + postdata).encode("utf-8")
+        message = url_path.encode("utf-8") + hashlib.sha256(encoded).digest()
 
-        mac = hmac.new(
-            base64.b64decode(self.private_key),
-            message,
-            hashlib.sha512
-        )
+        mac = hmac.new(base64.b64decode(self.private_key), message, hashlib.sha512)
         sigdigest = base64.b64encode(mac.digest())
 
         return {
-            'API-Key': self.public_key,
-            'API-Sign': sigdigest.decode('utf-8'),
+            "API-Key": self.public_key,
+            "API-Sign": sigdigest.decode("utf-8"),
         }
 
     def request(self, path, params=None, body=None, extra_data=None, timeout=10):
@@ -117,14 +113,14 @@ class KrakenRequestData(Feed):
         base_url = self._params.rest_url
         url = base_url + endpoint
 
-        headers = {'Content-Type': 'application/x-www-form-urlencoded'}
+        headers = {"Content-Type": "application/x-www-form-urlencoded"}
         response_data = None
 
         try:
-            if method == 'POST':
+            if method == "POST":
                 post_data = {**params, **body}
 
-                if '/private/' in endpoint:
+                if "/private/" in endpoint:
                     auth_headers = self._sign_request(endpoint, post_data)
                     headers.update(auth_headers)
 
@@ -170,8 +166,9 @@ class KrakenRequestData(Feed):
 
         response_data = None
         try:
-            if method == 'POST':
+            if method == "POST":
                 import asyncio
+
                 post_data = {**params, **body}
                 loop = asyncio.get_event_loop()
                 response_data = await loop.run_in_executor(
@@ -190,8 +187,8 @@ class KrakenRequestData(Feed):
 
     def _sync_post(self, url, post_data, endpoint, timeout):
         """Helper for form-encoded POST (used by async_request via executor)."""
-        headers = {'Content-Type': 'application/x-www-form-urlencoded'}
-        if '/private/' in endpoint:
+        headers = {"Content-Type": "application/x-www-form-urlencoded"}
+        if "/private/" in endpoint:
             auth_headers = self._sign_request(endpoint, post_data)
             headers.update(auth_headers)
         try:

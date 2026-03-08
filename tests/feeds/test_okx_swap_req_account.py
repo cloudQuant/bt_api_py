@@ -1,39 +1,25 @@
 import queue
 import time
-import random
-import pytest
-from bt_api_py.functions.utils import read_account_config, get_public_ip
-from bt_api_py.feeds.live_okx_feed import OkxRequestDataSwap
 
-from bt_api_py.containers.exchanges.okx_exchange_data import OkxExchangeDataSwap
-from bt_api_py.containers.requestdatas.request_data import RequestData
-from bt_api_py.containers.tickers.okx_ticker import OkxTickerData
-from bt_api_py.containers.bars.okx_bar import OkxBarData
-from bt_api_py.containers.orderbooks.okx_orderbook import OkxOrderBookData
-from bt_api_py.containers.fundingrates.okx_funding_rate import OkxFundingRateData
-from bt_api_py.containers.markprices.okx_mark_price import OkxMarkPriceData
 from bt_api_py.containers.accounts.okx_account import OkxAccountData
-# from bt_api_py.containers.orders.okx_order import OkxOrderData
-from bt_api_py.containers.trades.okx_trade import OkxRequestTradeData, OkxWssTradeData
+from bt_api_py.containers.exchanges.okx_exchange_data import OkxExchangeDataSwap
 from bt_api_py.containers.positions.okx_position import OkxPositionData
-from bt_api_py.containers.orders.order import OrderStatus
-from bt_api_py.containers.symbols.okx_symbol import OkxSymbolData
-from bt_api_py.containers.assets.okx_asset import OkxCurrencyData, OkxAssetBalanceData, OkxAssetValuationData, OkxTransferStateData, OkxDepositInfoData, OkxWithdrawalInfoData
+from bt_api_py.containers.requestdatas.request_data import RequestData
 
-
-
-
+# from bt_api_py.containers.orders.okx_order import OkxOrderData
+from bt_api_py.feeds.live_okx_feed import OkxRequestDataSwap
+from bt_api_py.functions.utils import get_public_ip, read_account_config
 
 
 def generate_kwargs(exchange=OkxExchangeDataSwap):
     data = read_account_config()
     kwargs = {
-        "public_key": data['okx']['public_key'],
-        "private_key": data['okx']['private_key'],
-        "passphrase": data['okx']["passphrase"],
+        "public_key": data["okx"]["public_key"],
+        "private_key": data["okx"]["private_key"],
+        "passphrase": data["okx"]["passphrase"],
         "topics": {"tick": {"symbol": "BTC-USDT"}},
-        "proxies": data.get('proxies'),
-        "async_proxy": data.get('async_proxy'),
+        "proxies": data.get("proxies"),
+        "async_proxy": data.get("async_proxy"),
     }
     return kwargs
 
@@ -50,6 +36,7 @@ def init_async_feed(data_queue):
     live_okx_swap_feed = OkxRequestDataSwap(data_queue, **kwargs)
     return live_okx_swap_feed
 
+
 def assert_account_data_value(bp):
     assert bp.get_server_time() > 0
     assert bp.get_exchange_name() == "OKX"
@@ -58,16 +45,12 @@ def assert_account_data_value(bp):
     assert bp.get_event() == "AccountEvent"
 
 
-
-
 def test_okx_req_account_data():
     live_okx_swap_feed = init_req_feed()
     data = live_okx_swap_feed.get_account().get_data()
     # print(data)
     assert isinstance(data[0], OkxAccountData)
     assert_account_data_value(data[0].init_data())
-
-
 
 
 def test_okx_async_account_data():
@@ -87,8 +70,6 @@ def test_okx_async_account_data():
     assert_account_data_value(target_data[0].init_data())
 
 
-
-
 def test_okx_req_get_config():
     public_ip = get_public_ip()
     assert isinstance(public_ip, str)
@@ -98,12 +79,10 @@ def test_okx_req_get_config():
     assert isinstance(data, RequestData)
 
     config_data = data.get_data()[0]
-    print('config_data', config_data)
+    print("config_data", config_data)
     api_ip = config_data.get("ip")
     print(public_ip, api_ip)
     assert public_ip in api_ip, "需要绑定当前ip地址到okx的API当中"
-
-
 
 
 def test_okx_req_get_position():
@@ -111,8 +90,6 @@ def test_okx_req_get_position():
     data = live_okx_swap_feed.get_position(symbol="OP-USDT")
     assert isinstance(data, RequestData)
     print("position_data", data.get_data())
-
-
 
 
 def test_okx_async_get_position():
@@ -132,8 +109,6 @@ def test_okx_async_get_position():
         assert isinstance(target_data, OkxPositionData)
 
 
-
-
 def test_okx_req_get_positions_history():
     live_okx_swap_feed = init_req_feed()
     data = live_okx_swap_feed.get_positions_history(inst_type="SWAP", limit="10")
@@ -146,8 +121,6 @@ def test_okx_req_get_positions_history():
         position_data = position_history_list[0]
         assert isinstance(position_data, OkxPositionData)
         position_data.init_data()
-
-
 
 
 def test_okx_async_get_positions_history():
@@ -169,8 +142,6 @@ def test_okx_async_get_positions_history():
         position_data.init_data()
 
 
-
-
 def test_okx_req_get_fee():
     live_okx_swap_feed = init_req_feed()
     # Get fee rates for SWAP instruments
@@ -184,8 +155,6 @@ def test_okx_req_get_fee():
         fee_data = fee_data_list[0]
         # Fee data uses OkxPositionData container
         assert isinstance(fee_data, OkxPositionData)
-
-
 
 
 def test_okx_async_get_fee():
@@ -205,8 +174,6 @@ def test_okx_async_get_fee():
     assert isinstance(fee_data_list, list)
 
 
-
-
 def test_okx_req_get_max_size():
     live_okx_swap_feed = init_req_feed()
     data = live_okx_swap_feed.get_max_size(symbol="BTC-USDT", td_mode="cross")
@@ -218,8 +185,6 @@ def test_okx_req_get_max_size():
     if len(max_size_list) > 0:
         max_size_data = max_size_list[0]
         assert isinstance(max_size_data, OkxPositionData)
-
-
 
 
 def test_okx_async_get_max_size():
@@ -238,8 +203,6 @@ def test_okx_async_get_max_size():
     assert isinstance(max_size_list, list)
 
 
-
-
 def test_okx_req_get_max_avail_size():
     live_okx_swap_feed = init_req_feed()
     data = live_okx_swap_feed.get_max_avail_size(symbol="BTC-USDT", td_mode="cross")
@@ -251,8 +214,6 @@ def test_okx_req_get_max_avail_size():
     if len(max_avail_size_list) > 0:
         max_avail_size_data = max_avail_size_list[0]
         assert isinstance(max_avail_size_data, OkxPositionData)
-
-
 
 
 def test_okx_async_get_max_avail_size():
@@ -271,8 +232,6 @@ def test_okx_async_get_max_avail_size():
     assert isinstance(max_avail_size_list, list)
 
 
-
-
 def test_okx_req_get_risk_state():
     """Test get_risk_state interface"""
     live_okx_swap_feed = init_req_feed()
@@ -281,8 +240,6 @@ def test_okx_req_get_risk_state():
     # May fail in some account modes, but interface works
     print("get_risk_state status:", data.get_status())
     print("get_risk_state input:", data.get_input_data())
-
-
 
 
 def test_okx_req_get_bills():
@@ -297,8 +254,6 @@ def test_okx_req_get_bills():
     print("get_bills count:", len(bills_list))
 
 
-
-
 def test_okx_req_get_lever():
     """Test get_lever interface"""
     live_okx_swap_feed = init_req_feed()
@@ -311,8 +266,6 @@ def test_okx_req_get_lever():
     print("get_lever data:", lever_list)
 
 
-
-
 def test_okx_req_get_account_position_risk():
     """Test get_account_position_risk interface"""
     live_okx_swap_feed = init_req_feed()
@@ -323,8 +276,6 @@ def test_okx_req_get_account_position_risk():
     risk_list = data.get_data()
     assert isinstance(risk_list, list)
     print("get_account_position_risk count:", len(risk_list))
-
-
 
 
 def test_okx_async_get_account_position_risk():
@@ -342,8 +293,6 @@ def test_okx_async_get_account_position_risk():
     print("async_get_account_position_risk status:", risk_data.get_status())
 
 
-
-
 def test_okx_req_get_bills_archive():
     """Test get_bills_archive interface"""
     live_okx_swap_feed = init_req_feed()
@@ -354,8 +303,6 @@ def test_okx_req_get_bills_archive():
     bills_list = data.get_data()
     assert isinstance(bills_list, list)
     print("get_bills_archive count:", len(bills_list))
-
-
 
 
 def test_okx_async_get_bills_archive():
@@ -373,16 +320,12 @@ def test_okx_async_get_bills_archive():
     print("async_get_bills_archive status:", bills_data.get_status())
 
 
-
-
 def test_okx_req_get_adjust_leverage_info():
     """Test get_adjust_leverage_info interface"""
     live_okx_swap_feed = init_req_feed()
     # Get adjust leverage info for BTC-USDT-SWAP
     data = live_okx_swap_feed.get_adjust_leverage_info(
-        inst_type="SWAP",
-        inst_id="BTC-USDT-SWAP",
-        mgn_mode="cross"
+        inst_type="SWAP", inst_id="BTC-USDT-SWAP", mgn_mode="cross"
     )
     assert isinstance(data, RequestData)
     print("get_adjust_leverage_info status:", data.get_status())
@@ -391,16 +334,12 @@ def test_okx_req_get_adjust_leverage_info():
     print("get_adjust_leverage_info data:", leverage_list)
 
 
-
-
 def test_okx_async_get_adjust_leverage_info():
     """Test async_get_adjust_leverage_info interface"""
     data_queue = queue.Queue()
     live_okx_swap_feed = init_async_feed(data_queue)
     live_okx_swap_feed.async_get_adjust_leverage_info(
-        inst_type="SWAP",
-        uly="BTC-USDT",
-        mgn_mode="cross"
+        inst_type="SWAP", uly="BTC-USDT", mgn_mode="cross"
     )
     time.sleep(10)
     try:
@@ -412,16 +351,12 @@ def test_okx_async_get_adjust_leverage_info():
     print("async_get_adjust_leverage_info status:", leverage_data.get_status())
 
 
-
-
 def test_okx_req_get_max_loan():
     """Test get_max_loan interface"""
     live_okx_swap_feed = init_req_feed()
     # Get maximum loan for BTC-USDT-SWAP
     data = live_okx_swap_feed.get_max_loan(
-        inst_type="SWAP",
-        inst_id="BTC-USDT-SWAP",
-        mgn_mode="cross"
+        inst_type="SWAP", inst_id="BTC-USDT-SWAP", mgn_mode="cross"
     )
     assert isinstance(data, RequestData)
     print("get_max_loan status:", data.get_status())
@@ -430,16 +365,11 @@ def test_okx_req_get_max_loan():
     print("get_max_loan data:", loan_list)
 
 
-
-
 def test_okx_async_get_max_loan():
     """Test async_get_max_loan interface"""
     data_queue = queue.Queue()
     live_okx_swap_feed = init_async_feed(data_queue)
-    live_okx_swap_feed.async_get_max_loan(
-        symbol="BTC-USDT",
-        mgn_mode="cross"
-    )
+    live_okx_swap_feed.async_get_max_loan(symbol="BTC-USDT", mgn_mode="cross")
     time.sleep(5)
     try:
         loan_data = data_queue.get(False)
@@ -448,8 +378,6 @@ def test_okx_async_get_max_loan():
     assert loan_data is not None
     assert isinstance(loan_data, RequestData)
     print("async_get_max_loan status:", loan_data.get_status())
-
-
 
 
 def test_okx_req_get_interest_accrued():
@@ -462,8 +390,6 @@ def test_okx_req_get_interest_accrued():
     interest_list = data.get_data()
     assert isinstance(interest_list, list)
     print("get_interest_accrued count:", len(interest_list))
-
-
 
 
 def test_okx_async_get_interest_accrued():
@@ -481,8 +407,6 @@ def test_okx_async_get_interest_accrued():
     print("async_get_interest_accrued status:", interest_data.get_status())
 
 
-
-
 def test_okx_req_get_interest_rate():
     """Test get_interest_rate interface"""
     live_okx_swap_feed = init_req_feed()
@@ -493,8 +417,6 @@ def test_okx_req_get_interest_rate():
     rate_list = data.get_data()
     assert isinstance(rate_list, list)
     print("get_interest_rate count:", len(rate_list))
-
-
 
 
 def test_okx_async_get_interest_rate():
@@ -511,8 +433,6 @@ def test_okx_async_get_interest_rate():
     print("async_get_interest_rate status:", rate_data.get_status())
 
 
-
-
 def test_okx_req_get_greeks():
     """Test get_greeks interface"""
     live_okx_swap_feed = init_req_feed()
@@ -523,8 +443,6 @@ def test_okx_req_get_greeks():
     greeks_list = data.get_data()
     assert isinstance(greeks_list, list)
     print("get_greeks count:", len(greeks_list))
-
-
 
 
 def test_okx_async_get_greeks():
@@ -542,8 +460,6 @@ def test_okx_async_get_greeks():
     print("async_get_greeks status:", greeks_data.get_status())
 
 
-
-
 def test_okx_req_get_position_tiers():
     """Test get_position_tiers interface"""
     live_okx_swap_feed = init_req_feed()
@@ -554,8 +470,6 @@ def test_okx_req_get_position_tiers():
     tiers_list = data.get_data()
     assert isinstance(tiers_list, list)
     print("get_position_tiers count:", len(tiers_list))
-
-
 
 
 def test_okx_async_get_position_tiers():
@@ -576,7 +490,6 @@ def test_okx_async_get_position_tiers():
 # ==================== Funding Account Tests ====================
 
 
-
 def test_okx_req_get_account_rate_limit():
     """Test get_account_rate_limit interface - get account trading rate limit"""
     live_okx_swap_feed = init_req_feed()
@@ -592,12 +505,10 @@ def test_okx_req_get_account_rate_limit():
         rate_limit = rate_limit_list[0]
         assert isinstance(rate_limit, dict)
         # Check for common rate limit fields
-        if 'reqIp' in rate_limit:
+        if "reqIp" in rate_limit:
             print(f"Request IP: {rate_limit['reqIp']}")
-        if 'rule' in rate_limit:
+        if "rule" in rate_limit:
             print(f"Rule: {rate_limit['rule']}")
-
-
 
 
 def test_okx_async_get_account_rate_limit():
@@ -617,8 +528,6 @@ def test_okx_async_get_account_rate_limit():
     print("async_get_account_rate_limit status:", rate_limit_data.get_status())
 
 
-
-
 def test_okx_req_get_interest_limits():
     """Test get_interest_limits interface - Get interest limit and interest rate"""
     live_okx_swap_feed = init_req_feed()
@@ -628,8 +537,6 @@ def test_okx_req_get_interest_limits():
     limits_list = data.get_data()
     assert isinstance(limits_list, list)
     print("get_interest_limits count:", len(limits_list))
-
-
 
 
 def test_okx_async_get_interest_limits():
@@ -647,8 +554,6 @@ def test_okx_async_get_interest_limits():
         print("async_get_interest_limits status:", limits_data.get_status())
 
 
-
-
 def test_okx_req_set_greeks():
     """Test set_greeks interface - Set Greeks display type"""
     live_okx_swap_feed = init_req_feed()
@@ -657,8 +562,6 @@ def test_okx_req_set_greeks():
     assert isinstance(result, RequestData)
     print("set_greeks status:", result.get_status())
     print("set_greeks input:", result.get_input_data())
-
-
 
 
 def test_okx_async_set_greeks():
@@ -674,6 +577,3 @@ def test_okx_async_set_greeks():
     if result is not None:
         assert isinstance(result, RequestData)
         print("async_set_greeks status:", result.get_status())
-
-
-

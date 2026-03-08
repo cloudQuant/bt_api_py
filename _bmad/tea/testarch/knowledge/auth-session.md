@@ -28,9 +28,9 @@ The `auth-session` utility provides:
 
 ### Example 1: Basic Auth Session Setup
 
-- *Context**: Configure global authentication that persists across test runs.
+**Context**: Configure global authentication that persists across test runs.
 
-- *Implementation**:
+**Implementation**:
 
 ```typescript
 // Step 1: Configure in global-setup.ts
@@ -74,10 +74,9 @@ test('authenticated request', async ({ authToken, request }) => {
 
   expect(response.ok()).toBeTruthy();
 });
+```
 
-```bash
-
-- *Key Points**:
+**Key Points**:
 
 - Global setup runs once before all tests
 - Token fetched once, reused across all tests
@@ -86,9 +85,9 @@ test('authenticated request', async ({ authToken, request }) => {
 
 ### Example 2: Multi-User Authentication
 
-- *Context**: Testing with different user roles (admin, regular user, guest) in same test suite.
+**Context**: Testing with different user roles (admin, regular user, guest) in same test suite.
 
-- *Implementation**:
+**Implementation**:
 
 ```typescript
 import { test } from '../support/auth/auth-fixture';
@@ -119,10 +118,9 @@ test.describe.parallel('multi-user tests', () => {
     // Uses different token for user2
   });
 });
+```
 
-```bash
-
-- *Key Points**:
+**Key Points**:
 
 - Override `authOptions.userIdentifier` per test
 - Tokens cached separately per user identifier
@@ -131,9 +129,9 @@ test.describe.parallel('multi-user tests', () => {
 
 ### Example 3: Ephemeral User Authentication
 
-- *Context**: Create temporary test users that don't persist to disk (e.g., testing user creation flow).
+**Context**: Create temporary test users that don't persist to disk (e.g., testing user creation flow).
 
-- *Implementation**:
+**Implementation**:
 
 ```typescript
 import { applyUserCookiesToBrowserContext } from '@seontechnologies/playwright-utils/auth-session';
@@ -156,10 +154,9 @@ test('ephemeral user test', async ({ context, page }) => {
 
   // User and token cleaned up after test
 });
+```
 
-```bash
-
-- *Key Points**:
+**Key Points**:
 
 - No disk persistence (ephemeral)
 - Apply cookies directly to context
@@ -168,9 +165,9 @@ test('ephemeral user test', async ({ context, page }) => {
 
 ### Example 4: Testing Multiple Users in Single Test
 
-- *Context**: Testing interactions between users (messaging, sharing, collaboration features).
+**Context**: Testing interactions between users (messaging, sharing, collaboration features).
 
-- *Implementation**:
+**Implementation**:
 
 ```typescript
 test('user interaction', async ({ browser }) => {
@@ -199,10 +196,9 @@ test('user interaction', async ({ browser }) => {
   await user1Context.close();
   await user2Context.close();
 });
+```
 
-```bash
-
-- *Key Points**:
+**Key Points**:
 
 - Each user has separate browser context
 - Reference storage state files directly
@@ -211,9 +207,9 @@ test('user interaction', async ({ browser }) => {
 
 ### Example 5: Worker-Specific Accounts (Parallel Testing)
 
-- *Context**: Running tests in parallel with isolated user accounts per worker to avoid conflicts.
+**Context**: Running tests in parallel with isolated user accounts per worker to avoid conflicts.
 
-- *Implementation**:
+**Implementation**:
 
 ```typescript
 // playwright.config.ts
@@ -240,10 +236,9 @@ test('parallel test 2', async ({ page }) => {
   // Worker 1 uses worker-1 account
   await page.goto('/dashboard');
 });
+```
 
-```bash
-
-- *Key Points**:
+**Key Points**:
 
 - Each worker has isolated user account
 - No conflicts in parallel execution
@@ -252,9 +247,9 @@ test('parallel test 2', async ({ page }) => {
 
 ### Example 6: Pure API Authentication (No Browser)
 
-- *Context**: Get auth tokens for API-only tests using auth-session disk persistence.
+**Context**: Get auth tokens for API-only tests using auth-session disk persistence.
 
-- *Implementation**:
+**Implementation**:
 
 ```typescript
 // Step 1: Create API-only auth provider (no browser needed)
@@ -263,7 +258,6 @@ import { type AuthProvider } from '@seontechnologies/playwright-utils/auth-sessi
 
 const apiAuthProvider: AuthProvider = {
   getEnvironment: (options) => options.environment || 'local',
-
   getUserIdentifier: (options) => options.userIdentifier || 'api-user',
 
   extractToken: (storageState) => {
@@ -283,7 +277,6 @@ const apiAuthProvider: AuthProvider = {
     const password = process.env.TEST_USER_PASSWORD;
 
     if (!email || !password) {
-
       throw new Error('TEST_USER_EMAIL and TEST_USER_PASSWORD must be set');
     }
 
@@ -297,15 +290,14 @@ const apiAuthProvider: AuthProvider = {
     }
 
     const { token, expiresIn } = await response.json();
-    const expiryTime = Date.now() + expiresIn *1000;
+    const expiryTime = Date.now() + expiresIn * 1000;
 
     // Return storage state format for disk persistence
     return {
       cookies: [],
       origins: [
         {
-          origin: process.env.API_BASE_URL || '<http://localhost:3000',>
-
+          origin: process.env.API_BASE_URL || 'http://localhost:3000',
           localStorage: [
             { name: 'auth_token', value: token },
             { name: 'token_expiry', value: String(expiryTime) },
@@ -355,10 +347,9 @@ test('should create resource with auth', async ({ authToken, apiRequest }) => {
   expect(status).toBe(201);
   expect(body.id).toBeDefined();
 });
+```
 
-```bash
-
-- *Key Points**:
+**Key Points**:
 
 - Token persisted to disk (not in-memory) - survives test reruns
 - Provider fetches token once, reuses until expired
@@ -368,9 +359,9 @@ test('should create resource with auth', async ({ authToken, apiRequest }) => {
 
 ### Example 7: Service-to-Service Authentication
 
-- *Context**: Test microservice authentication patterns (API keys, service tokens) with proper environment validation.
+**Context**: Test microservice authentication patterns (API keys, service tokens) with proper environment validation.
 
-- *Implementation**:
+**Implementation**:
 
 ```typescript
 // tests/api/service-auth.spec.ts
@@ -432,10 +423,9 @@ test.describe('Service-to-Service Auth', () => {
     expect(body.aggregatedFrom).toHaveLength(3);
   });
 });
+```
 
-```bash
-
-- *Key Points**:
+**Key Points**:
 
 - Environment variables validated at module load with clear errors
 - API key authentication (simpler than OAuth - no disk persistence needed)
@@ -447,9 +437,9 @@ test.describe('Service-to-Service Auth', () => {
 
 ## Custom Auth Provider Pattern
 
-- *Context**: Adapt auth-session to your authentication system (OAuth2, JWT, SAML, custom).
+**Context**: Adapt auth-session to your authentication system (OAuth2, JWT, SAML, custom).
 
-- *Minimal provider structure**:
+**Minimal provider structure**:
 
 ```typescript
 import { type AuthProvider } from '@seontechnologies/playwright-utils/auth-session';
@@ -482,7 +472,6 @@ const myCustomProvider: AuthProvider = {
     // Check if token is expired
     const expiresAt = storageState.cookies.find((c) => c.name === 'expires_at');
     return Date.now() > parseInt(expiresAt?.value || '0');
-
   },
 
   manageAuthToken: async (request, options) => {
@@ -492,8 +481,7 @@ const myCustomProvider: AuthProvider = {
 };
 
 export default myCustomProvider;
-
-```bash
+```
 
 ## Integration with API Request
 
@@ -509,8 +497,7 @@ test('authenticated API call', async ({ apiRequest, authToken }) => {
 
   expect(status).toBe(200);
 });
-
-```bash
+```
 
 ## Related Fragments
 
@@ -521,7 +508,7 @@ test('authenticated API call', async ({ apiRequest, authToken }) => {
 
 ## Anti-Patterns
 
-- *❌ Calling setAuthProvider after globalSetup:**
+**❌ Calling setAuthProvider after globalSetup:**
 
 ```typescript
 async function globalSetup() {
@@ -529,10 +516,9 @@ async function globalSetup() {
   await authGlobalInit()  // Provider not set yet!
   setAuthProvider(provider)  // Too late
 }
+```
 
-```bash
-
-- *✅ Register provider before init:**
+**✅ Register provider before init:**
 
 ```typescript
 async function globalSetup() {
@@ -541,17 +527,15 @@ async function globalSetup() {
   setAuthProvider(provider)  // First
   await authGlobalInit()     // Then init
 }
+```
 
-```bash
-
-- *❌ Hardcoding storage paths:**
+**❌ Hardcoding storage paths:**
 
 ```typescript
 const storageState = './auth-sessions/local/user1/storage-state.json'; // Brittle
+```
 
-```bash
-
-- *✅ Use helper functions:**
+**✅ Use helper functions:**
 
 ```typescript
 import { getTokenFilePath } from '@seontechnologies/playwright-utils/auth-session';
@@ -561,5 +545,4 @@ const tokenPath = getTokenFilePath({
   userIdentifier: 'user1',
   tokenFileName: 'storage-state.json',
 });
-
-```bash
+```

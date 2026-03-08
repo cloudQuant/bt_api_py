@@ -2,21 +2,19 @@
 
 <narrative-workflow-critical>
 This game type is **narrative-critical**. You MUST run the Narrative Design workflow after completing the GDD to create:
-
 - Complete story structure and script
 - All character profiles and development arcs
 - Branching story flowcharts
 - Scene-by-scene breakdown
 - Dialogue drafts
 - Multiple route planning
-
 </narrative-workflow-critical>
 
 ### Branching Story Structure
 
 {{branching_structure}}
 
-- *Narrative design:**
+**Narrative design:**
 
 - Story route types (character routes, plot branches)
 - Branch points (choices, stats, flags)
@@ -29,7 +27,7 @@ This game type is **narrative-critical**. You MUST run the Narrative Design work
 
 {{choice_impact}}
 
-- *Decision mechanics:**
+**Decision mechanics:**
 
 - Choice types (immediate, delayed, hidden)
 - Choice visualization (explicit, subtle, invisible)
@@ -42,7 +40,7 @@ This game type is **narrative-critical**. You MUST run the Narrative Design work
 
 {{route_design}}
 
-- *Route structure:**
+**Route structure:**
 
 - Common route (shared beginning)
 - Individual routes (character-specific paths)
@@ -55,7 +53,7 @@ This game type is **narrative-critical**. You MUST run the Narrative Design work
 
 {{relationship_systems}}
 
-- *Character mechanics:**
+**Character mechanics:**
 
 - Affection/friendship points
 - Relationship milestones
@@ -68,7 +66,7 @@ This game type is **narrative-critical**. You MUST run the Narrative Design work
 
 {{save_flowchart}}
 
-- *Player navigation:**
+**Player navigation:**
 
 - Save point frequency
 - Quick save/load
@@ -81,7 +79,7 @@ This game type is **narrative-critical**. You MUST run the Narrative Design work
 
 {{art_assets}}
 
-- *Visual content:**
+**Visual content:**
 
 - Character sprites (poses, expressions)
 - Background art (locations, times of day)

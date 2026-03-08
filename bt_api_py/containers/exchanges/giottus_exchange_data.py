@@ -3,6 +3,7 @@ Giottus Exchange Data Configuration
 """
 
 import os
+
 from bt_api_py.containers.exchanges.exchange_data import ExchangeData
 from bt_api_py.logging_factory import get_logger
 
@@ -19,6 +20,7 @@ def _get_giottus_config():
         return _giottus_config
     try:
         from bt_api_py.config_loader import load_exchange_config
+
         config_path = os.path.join(
             os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
             "configs",
@@ -68,7 +70,7 @@ class GiottusExchangeData(ExchangeData):
             rest_urls = config.base_urls.rest
             if isinstance(rest_urls, dict):
                 # Try asset_type first, then 'default'
-                self.rest_url = rest_urls.get(asset_type) or rest_urls.get('default', self.rest_url)
+                self.rest_url = rest_urls.get(asset_type) or rest_urls.get("default", self.rest_url)
             else:
                 self.rest_url = rest_urls
         if config.base_urls and config.base_urls.wss:
@@ -76,7 +78,7 @@ class GiottusExchangeData(ExchangeData):
             wss_urls = config.base_urls.wss
             if isinstance(wss_urls, dict):
                 # Try asset_type first, then 'default'
-                self.wss_url = wss_urls.get(asset_type) or wss_urls.get('default', self.wss_url)
+                self.wss_url = wss_urls.get(asset_type) or wss_urls.get("default", self.wss_url)
             else:
                 self.wss_url = wss_urls
         if asset_cfg.rest_paths:

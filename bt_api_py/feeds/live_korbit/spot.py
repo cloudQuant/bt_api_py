@@ -2,8 +2,6 @@
 Korbit Spot Feed – three-layer sync / async wrappers + WSS stubs.
 """
 
-import json
-import time
 
 from bt_api_py.containers.exchanges.korbit_exchange_data import KorbitExchangeDataSpot
 from bt_api_py.feeds.live_korbit.request_base import KorbitRequestData
@@ -73,11 +71,17 @@ class KorbitRequestDataSpot(KorbitRequestData):
     # ── trading ─────────────────────────────────────────────────
 
     def make_order(self, symbol, side, order_type, amount, price=None, extra_data=None, **kwargs):
-        path, body, extra = self._make_order(symbol, side, order_type, amount, price, extra_data, **kwargs)
+        path, body, extra = self._make_order(
+            symbol, side, order_type, amount, price, extra_data, **kwargs
+        )
         return self.request(path, body=body, extra_data=extra)
 
-    async def async_make_order(self, symbol, side, order_type, amount, price=None, extra_data=None, **kwargs):
-        path, body, extra = self._make_order(symbol, side, order_type, amount, price, extra_data, **kwargs)
+    async def async_make_order(
+        self, symbol, side, order_type, amount, price=None, extra_data=None, **kwargs
+    ):
+        path, body, extra = self._make_order(
+            symbol, side, order_type, amount, price, extra_data, **kwargs
+        )
         return await self.async_request(path, body=body, extra_data=extra)
 
     def cancel_order(self, order_id, extra_data=None, **kwargs):
@@ -116,6 +120,7 @@ class KorbitRequestDataSpot(KorbitRequestData):
 
 
 # ── WebSocket stubs (kept for backward compatibility) ────────
+
 
 class KorbitMarketWssDataSpot:
     """Korbit Spot Market WebSocket Data Handler (stub)."""

@@ -4,22 +4,20 @@ Tests for Balancer DEX Spot Feed implementation.
 Following Binance/OKX test standards with DEX-specific adaptations.
 """
 
-import queue
-import pytest
-from unittest.mock import Mock, patch, MagicMock
-from decimal import Decimal
-from enum import Enum
+from unittest.mock import MagicMock, Mock, patch
 
-from bt_api_py.feeds.live_balancer.spot import BalancerRequestDataSpot
+import pytest
+
 from bt_api_py.containers.exchanges.balancer_exchange_data import (
     BalancerExchangeDataSpot,
-    GqlChain,
 )
 from bt_api_py.containers.requestdatas.request_data import RequestData
+from bt_api_py.feeds.live_balancer.spot import BalancerRequestDataSpot
 
 
 class MockGqlChain:
     """Mock GqlChain for testing."""
+
     MAINNET = "MAINNET"
     ARBITRUM = "ARBITRUM"
     POLYGON = "POLYGON"
@@ -36,7 +34,9 @@ class TestBalancerRequestDataSpot:
     @pytest.fixture
     def balancer_spot(self, mock_data_queue):
         """Create BalancerRequestDataSpot instance."""
-        with patch('bt_api_py.feeds.live_balancer.request_base.HttpClient', return_value=MagicMock()):
+        with patch(
+            "bt_api_py.feeds.live_balancer.request_base.HttpClient", return_value=MagicMock()
+        ):
             instance = BalancerRequestDataSpot(mock_data_queue, chain=MockGqlChain.MAINNET)
             return instance
 
@@ -68,9 +68,9 @@ class TestBalancerRequestDataSpot:
         pool_id = "0x7f2b3b7fbd3226c5be438cde49a519f442ca2eda00020000000000000000067d"
         path, params, extra_data = balancer_spot._get_pool(pool_id)
 
-        assert extra_data['request_type'] == "get_pool"
-        assert extra_data['pool_id'] == pool_id
-        assert extra_data['exchange_name'] == "BALANCER___DEX"
+        assert extra_data["request_type"] == "get_pool"
+        assert extra_data["pool_id"] == pool_id
+        assert extra_data["exchange_name"] == "BALANCER___DEX"
 
     def test_get_pool_normalize_function(self):
         """Test pool normalize function."""
@@ -80,22 +80,22 @@ class TestBalancerRequestDataSpot:
                     "id": "pool123",
                     "name": "Test Pool",
                     "totalLiquidity": "1000000",
-                    "volume24h": "50000"
+                    "volume24h": "50000",
                 }
             }
         }
         result, status = BalancerRequestDataSpot._get_pool_normalize_function(input_data, None)
         assert status == True
         assert len(result) == 1
-        assert result[0]['id'] == "pool123"
+        assert result[0]["id"] == "pool123"
 
     def test_get_pools(self, balancer_spot):
         """Test get_pools method."""
         path, params, extra_data = balancer_spot._get_pools(first=10, min_tvl=100000)
 
-        assert extra_data['request_type'] == "get_pools"
-        assert extra_data['exchange_name'] == "BALANCER___DEX"
-        assert extra_data['chain'] == "MAINNET"
+        assert extra_data["request_type"] == "get_pools"
+        assert extra_data["exchange_name"] == "BALANCER___DEX"
+        assert extra_data["chain"] == "MAINNET"
 
     def test_get_pools_normalize_function(self):
         """Test pools normalize function."""
@@ -118,9 +118,9 @@ class TestBalancerRequestDataSpot:
         token_address = "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2"
         path, params, extra_data = balancer_spot._get_tick(token_address)
 
-        assert extra_data['request_type'] == "get_tick"
-        assert extra_data['symbol_name'] == token_address
-        assert extra_data['exchange_name'] == "BALANCER___DEX"
+        assert extra_data["request_type"] == "get_tick"
+        assert extra_data["symbol_name"] == token_address
+        assert extra_data["exchange_name"] == "BALANCER___DEX"
 
     def test_get_tick_normalize_function(self):
         """Test tick normalize function."""
@@ -129,7 +129,7 @@ class TestBalancerRequestDataSpot:
                 "tokenGetTokenDynamicData": {
                     "price": "3000.50",
                     "priceChange24h": "50.00",
-                    "marketCap": "100000000"
+                    "marketCap": "100000000",
                 }
             }
         }
@@ -144,19 +144,15 @@ class TestBalancerRequestDataSpot:
         pool_id = "0x7f2b3b7fbd3226c5be438cde49a519f442ca2eda00020000000000000000067d"
         path, params, extra_data = balancer_spot._get_depth(pool_id)
 
-        assert extra_data['request_type'] == "get_depth"
-        assert extra_data['symbol_name'] == pool_id
-        assert extra_data['exchange_name'] == "BALANCER___DEX"
+        assert extra_data["request_type"] == "get_depth"
+        assert extra_data["symbol_name"] == pool_id
+        assert extra_data["exchange_name"] == "BALANCER___DEX"
 
     def test_get_depth_normalize_function(self):
         """Test depth normalize function."""
         input_data = {
             "data": {
-                "poolGetPool": {
-                    "id": "pool123",
-                    "swapVolume": "50000",
-                    "totalLiquidity": "1000000"
-                }
+                "poolGetPool": {"id": "pool123", "swapVolume": "50000", "totalLiquidity": "1000000"}
             }
         }
         result, status = BalancerRequestDataSpot._get_depth_normalize_function(input_data, None)
@@ -171,14 +167,12 @@ class TestBalancerRequestDataSpot:
         token_out = "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48"
         amount = "1"
 
-        path, params, extra_data = balancer_spot._get_swap_path(
-            token_in, token_out, amount
-        )
+        path, params, extra_data = balancer_spot._get_swap_path(token_in, token_out, amount)
 
-        assert extra_data['request_type'] == "get_swap_path"
-        assert extra_data['token_in'] == token_in
-        assert extra_data['token_out'] == token_out
-        assert extra_data['exchange_name'] == "BALANCER___DEX"
+        assert extra_data["request_type"] == "get_swap_path"
+        assert extra_data["token_in"] == token_in
+        assert extra_data["token_out"] == token_out
+        assert extra_data["exchange_name"] == "BALANCER___DEX"
 
     def test_get_swap_path_normalize_function(self):
         """Test swap path normalize function."""
@@ -189,8 +183,8 @@ class TestBalancerRequestDataSpot:
                     "returnAmountRaw": "3000000000000000000",
                     "tokenAddresses": [
                         "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
-                        "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48"
-                    ]
+                        "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+                    ],
                 }
             }
         }
@@ -205,13 +199,11 @@ class TestBalancerRequestDataSpot:
         pool_id = "0x7f2b3b7fbd3226c5be438cde49a519f442ca2eda00020000000000000000067d"
         event_type = "SWAP"
 
-        path, params, extra_data = balancer_spot._get_pool_events(
-            pool_id, event_type=event_type
-        )
+        path, params, extra_data = balancer_spot._get_pool_events(pool_id, event_type=event_type)
 
-        assert extra_data['request_type'] == "get_pool_events"
-        assert extra_data['pool_id'] == pool_id
-        assert extra_data['event_type'] == event_type
+        assert extra_data["request_type"] == "get_pool_events"
+        assert extra_data["pool_id"] == pool_id
+        assert extra_data["event_type"] == event_type
 
     def test_get_pool_events_normalize_function(self):
         """Test pool events normalize function."""
@@ -219,11 +211,13 @@ class TestBalancerRequestDataSpot:
             "data": {
                 "poolGetEvents": [
                     {"id": "swap1", "timestamp": 1234567890},
-                    {"id": "swap2", "timestamp": 1234567891}
+                    {"id": "swap2", "timestamp": 1234567891},
                 ]
             }
         }
-        result, status = BalancerRequestDataSpot._get_pool_events_normalize_function(input_data, None)
+        result, status = BalancerRequestDataSpot._get_pool_events_normalize_function(
+            input_data, None
+        )
         assert status == True
         assert len(result) == 2
 
@@ -237,9 +231,9 @@ class TestBalancerRequestDataSpot:
 
         path, params, extra_data = balancer_spot._get_kline(pool_id, period, count)
 
-        assert extra_data['request_type'] == "get_kline"
-        assert extra_data['symbol_name'] == pool_id
-        assert extra_data['period'] == period
+        assert extra_data["request_type"] == "get_kline"
+        assert extra_data["symbol_name"] == pool_id
+        assert extra_data["period"] == period
 
     def test_get_kline_normalize_function(self):
         """Test kline normalize function."""
@@ -248,7 +242,7 @@ class TestBalancerRequestDataSpot:
                 "poolGetPool": {
                     "hourlySnapshots": [
                         {"timestamp": 1234567890, "volume24h": "50000"},
-                        {"timestamp": 1234567900, "volume24h": "60000"}
+                        {"timestamp": 1234567900, "volume24h": "60000"},
                     ]
                 }
             }
@@ -265,8 +259,8 @@ class TestBalancerRequestDataSpot:
         """Test get_exchange_info method."""
         path, params, extra_data = balancer_spot._get_exchange_info()
 
-        assert extra_data['request_type'] == "get_pools"
-        assert extra_data['exchange_name'] == "BALANCER___DEX"
+        assert extra_data["request_type"] == "get_pools"
+        assert extra_data["exchange_name"] == "BALANCER___DEX"
 
     @pytest.mark.skip(reason="Requires actual API call")
     def test_integration_pool_query(self, balancer_spot):
@@ -289,26 +283,38 @@ class TestBalancerExchangeDataSpot:
 
     def test_init_with_chain_enum(self):
         """Test initialization with chain enum."""
-        with patch('bt_api_py.containers.exchanges.balancer_exchange_data._get_balancer_config', return_value=None):
+        with patch(
+            "bt_api_py.containers.exchanges.balancer_exchange_data._get_balancer_config",
+            return_value=None,
+        ):
             exchange_data = BalancerExchangeDataSpot(chain=MockGqlChain.MAINNET)
             assert exchange_data.chain == MockGqlChain.MAINNET
             assert exchange_data.rest_url == "https://api-v3.balancer.fi"
 
     def test_init_with_chain_string(self):
         """Test initialization with chain string."""
-        with patch('bt_api_py.containers.exchanges.balancer_exchange_data._get_balancer_config', return_value=None):
+        with patch(
+            "bt_api_py.containers.exchanges.balancer_exchange_data._get_balancer_config",
+            return_value=None,
+        ):
             exchange_data = BalancerExchangeDataSpot(chain="MAINNET")
             assert exchange_data.chain.value == "MAINNET"
 
     def test_get_chain_value(self):
         """Test get_chain_value method."""
-        with patch('bt_api_py.containers.exchanges.balancer_exchange_data._get_balancer_config', return_value=None):
+        with patch(
+            "bt_api_py.containers.exchanges.balancer_exchange_data._get_balancer_config",
+            return_value=None,
+        ):
             exchange_data = BalancerExchangeDataSpot(chain=MockGqlChain.MAINNET)
             assert exchange_data.get_chain_value() == "MAINNET"
 
     def test_get_symbol(self):
         """Test get_symbol method."""
-        with patch('bt_api_py.containers.exchanges.balancer_exchange_data._get_balancer_config', return_value=None):
+        with patch(
+            "bt_api_py.containers.exchanges.balancer_exchange_data._get_balancer_config",
+            return_value=None,
+        ):
             exchange_data = BalancerExchangeDataSpot(chain=MockGqlChain.MAINNET)
             # Token address
             address = "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2"
@@ -316,27 +322,39 @@ class TestBalancerExchangeDataSpot:
 
     def test_get_pool_id(self):
         """Test get_pool_id method."""
-        with patch('bt_api_py.containers.exchanges.balancer_exchange_data._get_balancer_config', return_value=None):
+        with patch(
+            "bt_api_py.containers.exchanges.balancer_exchange_data._get_balancer_config",
+            return_value=None,
+        ):
             exchange_data = BalancerExchangeDataSpot(chain=MockGqlChain.MAINNET)
             pool_id = "0x7f2b3b7fbd3226c5be438cde49a519f442ca2eda00020000000000000000067d"
             assert exchange_data.get_pool_id(pool_id) == pool_id
 
     def test_get_rest_path(self):
         """Test get_rest_path method."""
-        with patch('bt_api_py.containers.exchanges.balancer_exchange_data._get_balancer_config', return_value=None):
+        with patch(
+            "bt_api_py.containers.exchanges.balancer_exchange_data._get_balancer_config",
+            return_value=None,
+        ):
             exchange_data = BalancerExchangeDataSpot(chain=MockGqlChain.MAINNET)
             path = exchange_data.get_rest_path("get_tick")
             assert path == "POST https://api-v3.balancer.fi/graphql"
 
     def test_get_rest_url(self):
         """Test get_rest_url method."""
-        with patch('bt_api_py.containers.exchanges.balancer_exchange_data._get_balancer_config', return_value=None):
+        with patch(
+            "bt_api_py.containers.exchanges.balancer_exchange_data._get_balancer_config",
+            return_value=None,
+        ):
             exchange_data = BalancerExchangeDataSpot(chain=MockGqlChain.MAINNET)
             assert exchange_data.get_rest_url() == "https://api-v3.balancer.fi"
 
     def test_kline_periods(self):
         """Test kline periods are defined."""
-        with patch('bt_api_py.containers.exchanges.balancer_exchange_data._get_balancer_config', return_value=None):
+        with patch(
+            "bt_api_py.containers.exchanges.balancer_exchange_data._get_balancer_config",
+            return_value=None,
+        ):
             exchange_data = BalancerExchangeDataSpot(chain=MockGqlChain.MAINNET)
             assert "1m" in exchange_data.kline_periods
             assert "1h" in exchange_data.kline_periods
@@ -344,7 +362,10 @@ class TestBalancerExchangeDataSpot:
 
     def test_legal_currency(self):
         """Test legal currencies."""
-        with patch('bt_api_py.containers.exchanges.balancer_exchange_data._get_balancer_config', return_value=None):
+        with patch(
+            "bt_api_py.containers.exchanges.balancer_exchange_data._get_balancer_config",
+            return_value=None,
+        ):
             exchange_data = BalancerExchangeDataSpot(chain=MockGqlChain.MAINNET)
             assert "USDT" in exchange_data.legal_currency
             assert "USDC" in exchange_data.legal_currency
@@ -370,7 +391,9 @@ class TestBalancerStandardInterfaces:
     @pytest.fixture
     def balancer_spot(self):
         """Create BalancerRequestDataSpot instance with mocked request."""
-        with patch('bt_api_py.feeds.live_balancer.request_base.HttpClient', return_value=MagicMock()):
+        with patch(
+            "bt_api_py.feeds.live_balancer.request_base.HttpClient", return_value=MagicMock()
+        ):
             instance = BalancerRequestDataSpot(Mock(), chain=MockGqlChain.MAINNET)
             instance.request = Mock(return_value=Mock(spec=RequestData))
             return instance
@@ -383,7 +406,11 @@ class TestBalancerStandardInterfaces:
         result = balancer_spot.get_tick(token)
         assert balancer_spot.request.called
         call_args = balancer_spot.request.call_args
-        extra_data = call_args[1].get("extra_data") or call_args[0][2] if len(call_args[0]) > 2 else call_args[1].get("extra_data")
+        extra_data = (
+            call_args[1].get("extra_data") or call_args[0][2]
+            if len(call_args[0]) > 2
+            else call_args[1].get("extra_data")
+        )
         assert extra_data["request_type"] == "get_tick"
         assert extra_data["symbol_name"] == token
 
@@ -395,7 +422,11 @@ class TestBalancerStandardInterfaces:
         result = balancer_spot.get_depth(pool_id)
         assert balancer_spot.request.called
         call_args = balancer_spot.request.call_args
-        extra_data = call_args[1].get("extra_data") or call_args[0][2] if len(call_args[0]) > 2 else call_args[1].get("extra_data")
+        extra_data = (
+            call_args[1].get("extra_data") or call_args[0][2]
+            if len(call_args[0]) > 2
+            else call_args[1].get("extra_data")
+        )
         assert extra_data["request_type"] == "get_depth"
         assert extra_data["symbol_name"] == pool_id
 
@@ -406,7 +437,11 @@ class TestBalancerStandardInterfaces:
         result = balancer_spot.get_kline("0xpool", "1h", 100)
         assert balancer_spot.request.called
         call_args = balancer_spot.request.call_args
-        extra_data = call_args[1].get("extra_data") or call_args[0][2] if len(call_args[0]) > 2 else call_args[1].get("extra_data")
+        extra_data = (
+            call_args[1].get("extra_data") or call_args[0][2]
+            if len(call_args[0]) > 2
+            else call_args[1].get("extra_data")
+        )
         assert extra_data["request_type"] == "get_kline"
         assert extra_data["period"] == "1h"
 
@@ -415,14 +450,18 @@ class TestBalancerStandardInterfaces:
     def test_get_server_time(self, balancer_spot):
         """Test get_server_time returns RequestData with server_time."""
         # get_server_time builds its own RequestData, don't mock request
-        with patch('bt_api_py.feeds.live_balancer.request_base.HttpClient', return_value=MagicMock()):
+        with patch(
+            "bt_api_py.feeds.live_balancer.request_base.HttpClient", return_value=MagicMock()
+        ):
             inst = BalancerRequestDataSpot(Mock(), chain=MockGqlChain.MAINNET)
             result = inst.get_server_time()
             assert isinstance(result, RequestData)
 
     def test_get_server_time_extra_data(self, balancer_spot):
         """Test _get_server_time populates extra_data correctly."""
-        with patch('bt_api_py.feeds.live_balancer.request_base.HttpClient', return_value=MagicMock()):
+        with patch(
+            "bt_api_py.feeds.live_balancer.request_base.HttpClient", return_value=MagicMock()
+        ):
             inst = BalancerRequestDataSpot(Mock(), chain=MockGqlChain.MAINNET)
             path, params, extra_data = inst._get_server_time()
             assert extra_data["request_type"] == "get_server_time"
@@ -434,7 +473,10 @@ class TestBalancerStandardInterfaces:
     def test_make_order_calls_request(self, balancer_spot):
         """Test make_order calls self.request with swap params."""
         result = balancer_spot.make_order(
-            "WETH-USDC", 1.0, 3000, "LIMIT",
+            "WETH-USDC",
+            1.0,
+            3000,
+            "LIMIT",
             token_in="0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
             token_out="0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
         )
@@ -446,9 +488,7 @@ class TestBalancerStandardInterfaces:
 
     def test_make_order_parses_symbol(self, balancer_spot):
         """Test _make_order parses tokenIn-tokenOut from symbol."""
-        path, body, extra_data = balancer_spot._make_order(
-            "0xTokenA-0xTokenB", 1.0, 100, "LIMIT"
-        )
+        path, body, extra_data = balancer_spot._make_order("0xTokenA-0xTokenB", 1.0, 100, "LIMIT")
         assert extra_data["token_in"] == "0xTokenA"
         assert extra_data["token_out"] == "0xTokenB"
         assert body["amount"] == "1.0"
@@ -460,7 +500,11 @@ class TestBalancerStandardInterfaces:
         result = balancer_spot.cancel_order("WETH-USDC", "tx_hash_123")
         assert balancer_spot.request.called
         call_args = balancer_spot.request.call_args
-        extra_data = call_args[1].get("extra_data") or call_args[0][2] if len(call_args[0]) > 2 else call_args[1].get("extra_data")
+        extra_data = (
+            call_args[1].get("extra_data") or call_args[0][2]
+            if len(call_args[0]) > 2
+            else call_args[1].get("extra_data")
+        )
         assert extra_data["request_type"] == "cancel_order"
         assert extra_data["order_id"] == "tx_hash_123"
 
@@ -471,7 +515,11 @@ class TestBalancerStandardInterfaces:
         result = balancer_spot.query_order("WETH-USDC", "tx_hash_123")
         assert balancer_spot.request.called
         call_args = balancer_spot.request.call_args
-        extra_data = call_args[1].get("extra_data") or call_args[0][2] if len(call_args[0]) > 2 else call_args[1].get("extra_data")
+        extra_data = (
+            call_args[1].get("extra_data") or call_args[0][2]
+            if len(call_args[0]) > 2
+            else call_args[1].get("extra_data")
+        )
         assert extra_data["request_type"] == "query_order"
         assert extra_data["order_id"] == "tx_hash_123"
 
@@ -482,7 +530,11 @@ class TestBalancerStandardInterfaces:
         result = balancer_spot.get_open_orders("WETH-USDC")
         assert balancer_spot.request.called
         call_args = balancer_spot.request.call_args
-        extra_data = call_args[1].get("extra_data") or call_args[0][2] if len(call_args[0]) > 2 else call_args[1].get("extra_data")
+        extra_data = (
+            call_args[1].get("extra_data") or call_args[0][2]
+            if len(call_args[0]) > 2
+            else call_args[1].get("extra_data")
+        )
         assert extra_data["request_type"] == "get_open_orders"
 
     # ── get_account ───────────────────────────────────────────
@@ -492,7 +544,11 @@ class TestBalancerStandardInterfaces:
         result = balancer_spot.get_account("WETH")
         assert balancer_spot.request.called
         call_args = balancer_spot.request.call_args
-        extra_data = call_args[1].get("extra_data") or call_args[0][2] if len(call_args[0]) > 2 else call_args[1].get("extra_data")
+        extra_data = (
+            call_args[1].get("extra_data") or call_args[0][2]
+            if len(call_args[0]) > 2
+            else call_args[1].get("extra_data")
+        )
         assert extra_data["request_type"] == "get_account"
         assert extra_data["chain"] == "MAINNET"
 
@@ -503,7 +559,11 @@ class TestBalancerStandardInterfaces:
         result = balancer_spot.get_balance("WETH")
         assert balancer_spot.request.called
         call_args = balancer_spot.request.call_args
-        extra_data = call_args[1].get("extra_data") or call_args[0][2] if len(call_args[0]) > 2 else call_args[1].get("extra_data")
+        extra_data = (
+            call_args[1].get("extra_data") or call_args[0][2]
+            if len(call_args[0]) > 2
+            else call_args[1].get("extra_data")
+        )
         assert extra_data["request_type"] == "get_balance"
         assert extra_data["chain"] == "MAINNET"
 
@@ -513,7 +573,9 @@ class TestBalancerRequestMethod:
 
     def test_request_with_graphql_query(self):
         """Test request() delegates to _execute_graphql_query when _graphql_query present."""
-        with patch('bt_api_py.feeds.live_balancer.request_base.HttpClient', return_value=MagicMock()):
+        with patch(
+            "bt_api_py.feeds.live_balancer.request_base.HttpClient", return_value=MagicMock()
+        ):
             inst = BalancerRequestDataSpot(Mock(), chain=MockGqlChain.MAINNET)
             inst._execute_graphql_query = Mock(return_value=Mock(spec=RequestData))
             extra_data = {
@@ -526,9 +588,13 @@ class TestBalancerRequestMethod:
 
     def test_request_without_graphql_returns_request_data(self):
         """Test request() returns RequestData when no _graphql_query."""
-        with patch('bt_api_py.feeds.live_balancer.request_base.HttpClient', return_value=MagicMock()):
+        with patch(
+            "bt_api_py.feeds.live_balancer.request_base.HttpClient", return_value=MagicMock()
+        ):
             inst = BalancerRequestDataSpot(Mock(), chain=MockGqlChain.MAINNET)
-            result = inst.request("GET /test", params={"key": "val"}, extra_data={"request_type": "test"})
+            result = inst.request(
+                "GET /test", params={"key": "val"}, extra_data={"request_type": "test"}
+            )
             assert isinstance(result, RequestData)
 
 
@@ -688,7 +754,9 @@ class TestBalancerNormalizeFunctions:
     def test_pool_events_normalize_with_empty_events(self):
         """Test pool events normalize returns empty for no events."""
         input_data = {"data": {"poolGetEvents": []}}
-        result, status = BalancerRequestDataSpot._get_pool_events_normalize_function(input_data, None)
+        result, status = BalancerRequestDataSpot._get_pool_events_normalize_function(
+            input_data, None
+        )
         assert result == []
         assert status is True
 

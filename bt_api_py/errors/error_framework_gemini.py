@@ -39,7 +39,6 @@ class GeminiErrorTranslator(ErrorTranslator):
         "NonceTooLow": (1003, "Nonce too low"),
         "NonceTooHigh": (1003, "Nonce too high"),
         "NonceAlreadyUsed": (1003, "Nonce already used"),
-
         # Order errors
         "OrderNotFound": (1006, "Order not found"),
         "OrderNotOpen": (1006, "Order is not open"),
@@ -50,7 +49,6 @@ class GeminiErrorTranslator(ErrorTranslator):
         "NewOrderRejected": (1016, "New order rejected"),
         "CancelRejected": (1017, "Cancel order rejected"),
         "AmendRejected": (1018, "Amend order rejected"),
-
         # Trading errors
         "InvalidSymbol": (1007, "Invalid symbol"),
         "InvalidPrice": (1018, "Invalid price"),
@@ -69,7 +67,6 @@ class GeminiErrorTranslator(ErrorTranslator):
         "TradingHalted": (1022, "Trading halted"),
         "MaintenanceMode": (1023, "Maintenance mode"),
         "Suspended": (1023, "Trading suspended"),
-
         # Rate limiting
         "RateLimit": (3001, "Rate limit exceeded"),
         "TooManyRequests": (3001, "Too many requests"),
@@ -77,7 +74,6 @@ class GeminiErrorTranslator(ErrorTranslator):
         "RequestTimeout": (3002, "Request timeout"),
         "RequestTimeoutOnPost": (3002, "Request timeout on POST"),
         "Timeout": (3002, "Timeout"),
-
         # Account errors
         "InsufficientExchangeBalance": (1008, "Insufficient exchange balance"),
         "InsufficientAvailableBalance": (1008, "Insufficient available balance"),
@@ -88,7 +84,6 @@ class GeminiErrorTranslator(ErrorTranslator):
         "AccountSuspended": (1027, "Account suspended"),
         "AccountFrozen": (1027, "Account frozen"),
         "AccountRestricted": (1027, "Account restricted"),
-
         # System errors
         "InternalServerError": (5003, "Internal server error"),
         "ServiceUnavailable": (5001, "Service unavailable"),
@@ -98,7 +93,6 @@ class GeminiErrorTranslator(ErrorTranslator):
         "Busy": (5002, "System busy"),
         "TooBusy": (5002, "Too busy"),
         "TemporarilyUnavailable": (5001, "Temporarily unavailable"),
-
         # Validation errors
         "ValidationError": (1018, "Validation error"),
         "InvalidParameter": (1018, "Invalid parameter"),
@@ -109,7 +103,6 @@ class GeminiErrorTranslator(ErrorTranslator):
         "InvalidTimestamp": (1018, "Invalid timestamp"),
         "InvalidSignatureAlgorithm": (1018, "Invalid signature algorithm"),
         "InvalidSignature": (1002, "Invalid signature"),
-
         # Network errors
         "NetworkError": (1001, "Network error"),
         "ConnectionError": (1001, "Connection error"),
@@ -210,10 +203,7 @@ class GeminiErrorTranslator(ErrorTranslator):
         if reason in cls.ERROR_MAP:
             unified_code, default_msg = cls.ERROR_MAP[reason]
             return cls._create_unified_error(
-                unified_code,
-                message or default_msg,
-                venue,
-                f"{reason}: {message}"
+                unified_code, message or default_msg, venue, f"{reason}: {message}"
             )
 
         # Use message for pattern matching
@@ -222,16 +212,13 @@ class GeminiErrorTranslator(ErrorTranslator):
 
         # Fallback for unknown error codes
         return cls._create_unified_error(
-            5003,
-            message or f"Unknown error reason: {reason}",
-            venue,
-            f"{reason}: {message}"
+            5003, message or f"Unknown error reason: {reason}", venue, f"{reason}: {message}"
         )
 
     @classmethod
     def _create_unified_error(cls, code, message, venue, original_error):
         """Create a unified error instance"""
-        from bt_api_py.error import UnifiedError, UnifiedErrorCode, ErrorCategory
+        from bt_api_py.error import ErrorCategory, UnifiedError, UnifiedErrorCode
 
         # Map Gemini codes to unified codes
         code_mapping = {
@@ -281,15 +268,12 @@ class GeminiErrorTranslator(ErrorTranslator):
             venue=venue,
             message=message,
             original_error=original_error,
-            context={"raw_response": original_error}
+            context={"raw_response": original_error},
         )
 
     @classmethod
     def _translate_fallback(cls, raw_error, venue: str):
         """Fallback translation for unknown error formats"""
         return cls._create_unified_error(
-            UnifiedErrorCode.INTERNAL_ERROR,
-            "Unknown error",
-            venue,
-            str(raw_error)
+            UnifiedErrorCode.INTERNAL_ERROR, "Unknown error", venue, str(raw_error)
         )

@@ -12,17 +12,16 @@ from unittest.mock import Mock
 
 import pytest
 
+# Import registration to auto-register Buda
+import bt_api_py.exchange_registers.register_buda  # noqa: F401
 from bt_api_py.containers.exchanges.buda_exchange_data import (
     BudaExchangeDataSpot,
 )
 from bt_api_py.containers.requestdatas.request_data import RequestData
 from bt_api_py.containers.tickers.buda_ticker import BudaRequestTickerData
-from bt_api_py.feeds.live_buda.spot import BudaRequestDataSpot
 from bt_api_py.feeds.capability import Capability
+from bt_api_py.feeds.live_buda.spot import BudaRequestDataSpot
 from bt_api_py.registry import ExchangeRegistry
-
-# Import registration to auto-register Buda
-import bt_api_py.exchange_registers.register_buda  # noqa: F401
 
 
 @pytest.fixture
@@ -184,6 +183,7 @@ class TestBudaBaseCapabilities:
 
     def test_base_capabilities(self):
         from bt_api_py.feeds.live_buda.request_base import BudaRequestData
+
         caps = BudaRequestData._capabilities()
         assert Capability.GET_TICK in caps
         assert Capability.MAKE_ORDER in caps
@@ -249,21 +249,21 @@ class TestBudaDataContainers:
     """Test Buda data containers."""
 
     def test_ticker_container(self):
-        ticker_response = json.dumps({
-            "ticker": {
-                "market_id": "btc-clp",
-                "last_price": [50000000],
-                "min_ask": [49900000],
-                "max_bid": [50100000],
-                "volume": [1.5],
-                "max_price": [51000000],
-                "min_price": [48000000],
-                "timestamp": 1640995200,
+        ticker_response = json.dumps(
+            {
+                "ticker": {
+                    "market_id": "btc-clp",
+                    "last_price": [50000000],
+                    "min_ask": [49900000],
+                    "max_bid": [50100000],
+                    "volume": [1.5],
+                    "max_price": [51000000],
+                    "min_price": [48000000],
+                    "timestamp": 1640995200,
+                }
             }
-        })
-        ticker = BudaRequestTickerData(
-            ticker_response, "btc-clp", "SPOT", False
         )
+        ticker = BudaRequestTickerData(ticker_response, "btc-clp", "SPOT", False)
         ticker.init_data()
         assert ticker.get_exchange_name() == "BUDA"
         assert ticker.symbol_name == "btc-clp"
@@ -276,9 +276,7 @@ class TestBudaDataContainers:
 
     def test_ticker_container_with_empty_data(self):
         ticker_response = json.dumps({"ticker": {}})
-        ticker = BudaRequestTickerData(
-            ticker_response, "btc-clp", "SPOT", False
-        )
+        ticker = BudaRequestTickerData(ticker_response, "btc-clp", "SPOT", False)
         ticker.init_data()
         assert ticker.last_price is None
 

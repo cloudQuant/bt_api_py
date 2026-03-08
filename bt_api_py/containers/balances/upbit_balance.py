@@ -34,7 +34,9 @@ class UpbitBalanceData(BalanceData):
             self.balance = from_dict_get_float(self.balance_data, "balance")
             self.locked = from_dict_get_float(self.balance_data, "locked")
             self.avg_buy_price = from_dict_get_float(self.balance_data, "avg_buy_price")
-            self.avg_buy_price_modified = from_dict_get_string(self.balance_data, "avg_buy_price_modified")
+            self.avg_buy_price_modified = from_dict_get_string(
+                self.balance_data, "avg_buy_price_modified"
+            )
 
             # 币种信息
             self.currency_name = from_dict_get_string(self.balance_data, "currency_name")
@@ -44,7 +46,11 @@ class UpbitBalanceData(BalanceData):
             self.status = from_dict_get_string(self.balance_data, "status")
 
             # 计算可用余额
-            self.available = self.balance - self.locked if self.balance and self.locked is not None else self.balance
+            self.available = (
+                self.balance - self.locked
+                if self.balance and self.locked is not None
+                else self.balance
+            )
 
             self.has_been_init_data = True
 
@@ -100,7 +106,9 @@ class UpbitBalanceData(BalanceData):
         if not self.has_been_init_data:
             self.init_data()
 
-        return (f"UpbitBalance(currency={self.currency}, "
-                f"total={self.balance:.8f}, "
-                f"available={self.available:.8f}, "
-                f"locked={self.locked:.8f})")
+        return (
+            f"UpbitBalance(currency={self.currency}, "
+            f"total={self.balance:.8f}, "
+            f"available={self.available:.8f}, "
+            f"locked={self.locked:.8f})"
+        )

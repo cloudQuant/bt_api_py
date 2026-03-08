@@ -18,9 +18,7 @@ def register_swyftx():
     ExchangeRegistry.register_feed("SWYFTX___SPOT", SwyftxRequestDataSpot)
     ExchangeRegistry.register_exchange_data("SWYFTX___SPOT", SwyftxExchangeDataSpot)
     ExchangeRegistry.register_balance_handler("SWYFTX___SPOT", _swyftx_balance_handler)
-    ExchangeRegistry.register_stream(
-        "SWYFTX___SPOT", "subscribe", _swyftx_spot_subscribe_handler
-    )
+    ExchangeRegistry.register_stream("SWYFTX___SPOT", "subscribe", _swyftx_spot_subscribe_handler)
 
 
 # Auto-register on module import

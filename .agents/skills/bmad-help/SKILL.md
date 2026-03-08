@@ -1,9 +1,7 @@
-- --
-
+---
 name: bmad-help
 description: Execute help
-
-- --
+---
 
 # help
 

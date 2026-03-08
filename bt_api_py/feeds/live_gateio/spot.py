@@ -2,11 +2,11 @@
 Gate.io Spot Trading Feed Implementation
 """
 
+from bt_api_py.containers.balances.gateio_balance import GateioBalanceData
 from bt_api_py.containers.exchanges.gateio_exchange_data import GateioExchangeDataSpot
-from bt_api_py.containers.tickers.gateio_ticker import GateioTickerData
 from bt_api_py.containers.orderbooks.gateio_orderbook import GateioOrderBookData
 from bt_api_py.containers.orders.gateio_order import GateioOrderData
-from bt_api_py.containers.balances.gateio_balance import GateioBalanceData
+from bt_api_py.containers.tickers.gateio_ticker import GateioTickerData
 from bt_api_py.feeds.live_gateio.request_base import GateioRequestData
 from bt_api_py.functions.utils import update_extra_data
 from bt_api_py.logging_factory import get_logger
@@ -48,10 +48,17 @@ class GateioRequestDataSpot(GateioRequestData):
         if isinstance(input_data, dict) and "label" in input_data:
             return [], False
         if isinstance(input_data, list):
-            result = [GateioTickerData(item, extra_data["symbol_name"], extra_data["asset_type"], True) for item in input_data]
+            result = [
+                GateioTickerData(item, extra_data["symbol_name"], extra_data["asset_type"], True)
+                for item in input_data
+            ]
             return result, True
         if isinstance(input_data, dict):
-            return [GateioTickerData(input_data, extra_data["symbol_name"], extra_data["asset_type"], True)], True
+            return [
+                GateioTickerData(
+                    input_data, extra_data["symbol_name"], extra_data["asset_type"], True
+                )
+            ], True
         return [], False
 
     def get_ticker(self, symbol, extra_data=None, **kwargs):
@@ -63,8 +70,10 @@ class GateioRequestDataSpot(GateioRequestData):
 
     def async_get_ticker(self, symbol, extra_data=None, **kwargs):
         path, params, extra_data = self._get_ticker(symbol, extra_data, **kwargs)
-        self.submit(self.async_request(path, params=params, extra_data=extra_data),
-                    callback=self.async_callback)
+        self.submit(
+            self.async_request(path, params=params, extra_data=extra_data),
+            callback=self.async_callback,
+        )
 
     def async_get_tick(self, symbol, extra_data=None, **kwargs):
         self.async_get_ticker(symbol, extra_data=extra_data, **kwargs)
@@ -93,7 +102,11 @@ class GateioRequestDataSpot(GateioRequestData):
         if isinstance(input_data, dict) and "label" in input_data:
             return [], False
         if isinstance(input_data, dict):
-            return [GateioOrderBookData(input_data, extra_data["symbol_name"], extra_data["asset_type"], True)], True
+            return [
+                GateioOrderBookData(
+                    input_data, extra_data["symbol_name"], extra_data["asset_type"], True
+                )
+            ], True
         return [], False
 
     def get_depth(self, symbol, limit=20, extra_data=None, **kwargs):
@@ -102,8 +115,10 @@ class GateioRequestDataSpot(GateioRequestData):
 
     def async_get_depth(self, symbol, limit=20, extra_data=None, **kwargs):
         path, params, extra_data = self._get_depth(symbol, limit, extra_data, **kwargs)
-        self.submit(self.async_request(path, params=params, extra_data=extra_data),
-                    callback=self.async_callback)
+        self.submit(
+            self.async_request(path, params=params, extra_data=extra_data),
+            callback=self.async_callback,
+        )
 
     # ==================== Kline Methods ====================
 
@@ -139,8 +154,10 @@ class GateioRequestDataSpot(GateioRequestData):
 
     def async_get_kline(self, symbol, period="1m", limit=100, extra_data=None, **kwargs):
         path, params, extra_data = self._get_kline(symbol, period, limit, extra_data, **kwargs)
-        self.submit(self.async_request(path, params=params, extra_data=extra_data),
-                    callback=self.async_callback)
+        self.submit(
+            self.async_request(path, params=params, extra_data=extra_data),
+            callback=self.async_callback,
+        )
 
     # ==================== Server Time & Exchange Info ====================
 
@@ -194,7 +211,9 @@ class GateioRequestDataSpot(GateioRequestData):
         if isinstance(input_data, dict) and "label" in input_data:
             return [], False
         if isinstance(input_data, list):
-            result = [GateioBalanceData(item, extra_data["asset_type"], True) for item in input_data]
+            result = [
+                GateioBalanceData(item, extra_data["asset_type"], True) for item in input_data
+            ]
             return result, True
         if isinstance(input_data, dict):
             return [GateioBalanceData(input_data, extra_data["asset_type"], True)], True
@@ -209,13 +228,23 @@ class GateioRequestDataSpot(GateioRequestData):
 
     def async_get_balance(self, extra_data=None, **kwargs):
         path, params, extra_data = self._get_balance(extra_data, **kwargs)
-        self.submit(self.async_request(path, params=params, extra_data=extra_data),
-                    callback=self.async_callback)
+        self.submit(
+            self.async_request(path, params=params, extra_data=extra_data),
+            callback=self.async_callback,
+        )
 
     # ==================== Trading Methods ====================
 
-    def _make_order(self, symbol, vol, price=None, order_type="buy-limit",
-                    client_order_id=None, extra_data=None, **kwargs):
+    def _make_order(
+        self,
+        symbol,
+        vol,
+        price=None,
+        order_type="buy-limit",
+        client_order_id=None,
+        extra_data=None,
+        **kwargs,
+    ):
         request_symbol = self._params.get_symbol(symbol)
         request_type = "make_order"
         path = self._params.get_rest_path(request_type)
@@ -253,29 +282,53 @@ class GateioRequestDataSpot(GateioRequestData):
         if isinstance(input_data, dict) and "label" in input_data:
             return [], False
         if isinstance(input_data, list):
-            result = [GateioOrderData(o, extra_data["symbol_name"], extra_data["asset_type"], True) for o in input_data]
+            result = [
+                GateioOrderData(o, extra_data["symbol_name"], extra_data["asset_type"], True)
+                for o in input_data
+            ]
             return result, True
         if isinstance(input_data, dict):
-            return [GateioOrderData(input_data, extra_data["symbol_name"], extra_data["asset_type"], True)], True
+            return [
+                GateioOrderData(
+                    input_data, extra_data["symbol_name"], extra_data["asset_type"], True
+                )
+            ], True
         return [], False
 
-    def make_order(self, symbol, vol, price=None, order_type="buy-limit",
-                   client_order_id=None, extra_data=None, **kwargs):
+    def make_order(
+        self,
+        symbol,
+        vol,
+        price=None,
+        order_type="buy-limit",
+        client_order_id=None,
+        extra_data=None,
+        **kwargs,
+    ):
         path, body, extra_data = self._make_order(
             symbol, vol, price, order_type, client_order_id, extra_data, **kwargs
         )
         return self.request(path, params={}, body=body, extra_data=extra_data)
 
-    def async_make_order(self, symbol, vol, price=None, order_type="buy-limit",
-                         client_order_id=None, extra_data=None, **kwargs):
+    def async_make_order(
+        self,
+        symbol,
+        vol,
+        price=None,
+        order_type="buy-limit",
+        client_order_id=None,
+        extra_data=None,
+        **kwargs,
+    ):
         path, body, extra_data = self._make_order(
             symbol, vol, price, order_type, client_order_id, extra_data, **kwargs
         )
-        self.submit(self.async_request(path, params={}, body=body, extra_data=extra_data),
-                    callback=self.async_callback)
+        self.submit(
+            self.async_request(path, params={}, body=body, extra_data=extra_data),
+            callback=self.async_callback,
+        )
 
-    def _cancel_order(self, symbol, order_id=None, client_order_id=None,
-                      extra_data=None, **kwargs):
+    def _cancel_order(self, symbol, order_id=None, client_order_id=None, extra_data=None, **kwargs):
         request_symbol = self._params.get_symbol(symbol)
         request_type = "cancel_order"
         path = self._params.get_rest_path(request_type)
@@ -293,15 +346,13 @@ class GateioRequestDataSpot(GateioRequestData):
         )
         return path, params, body, extra_data
 
-    def cancel_order(self, symbol, order_id=None, client_order_id=None,
-                     extra_data=None, **kwargs):
+    def cancel_order(self, symbol, order_id=None, client_order_id=None, extra_data=None, **kwargs):
         path, params, body, extra_data = self._cancel_order(
             symbol, order_id, client_order_id, extra_data, **kwargs
         )
         return self.request(path, params=params, body=body, extra_data=extra_data)
 
-    def _query_order(self, symbol, order_id=None, client_order_id=None,
-                     extra_data=None, **kwargs):
+    def _query_order(self, symbol, order_id=None, client_order_id=None, extra_data=None, **kwargs):
         request_symbol = self._params.get_symbol(symbol)
         request_type = "query_order"
         path = self._params.get_rest_path(request_type)
@@ -324,14 +375,20 @@ class GateioRequestDataSpot(GateioRequestData):
         if isinstance(input_data, dict) and "label" in input_data:
             return [], False
         if isinstance(input_data, list):
-            result = [GateioOrderData(o, extra_data["symbol_name"], extra_data["asset_type"], True) for o in input_data]
+            result = [
+                GateioOrderData(o, extra_data["symbol_name"], extra_data["asset_type"], True)
+                for o in input_data
+            ]
             return result, True
         if isinstance(input_data, dict):
-            return [GateioOrderData(input_data, extra_data["symbol_name"], extra_data["asset_type"], True)], True
+            return [
+                GateioOrderData(
+                    input_data, extra_data["symbol_name"], extra_data["asset_type"], True
+                )
+            ], True
         return [], False
 
-    def query_order(self, symbol, order_id=None, client_order_id=None,
-                    extra_data=None, **kwargs):
+    def query_order(self, symbol, order_id=None, client_order_id=None, extra_data=None, **kwargs):
         path, params, extra_data = self._query_order(
             symbol, order_id, client_order_id, extra_data, **kwargs
         )
@@ -360,11 +417,14 @@ class GateioRequestDataSpot(GateioRequestData):
 
 # ==================== WebSocket Placeholder Classes ====================
 
+
 class GateioMarketWssDataSpot:
     """Placeholder for Gate.io Spot Market WebSocket data handler."""
+
     pass
 
 
 class GateioAccountWssDataSpot:
     """Placeholder for Gate.io Spot Account WebSocket data handler."""
+
     pass

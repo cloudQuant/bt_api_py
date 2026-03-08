@@ -3,6 +3,7 @@ Buda Exchange Data Configuration
 """
 
 import os
+
 from bt_api_py.containers.exchanges.exchange_data import ExchangeData
 from bt_api_py.logging_factory import get_logger
 
@@ -19,6 +20,7 @@ def _get_buda_config():
         return _buda_config
     try:
         from bt_api_py.config_loader import load_exchange_config
+
         config_path = os.path.join(
             os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
             "configs",
@@ -65,10 +67,18 @@ class BudaExchangeData(ExchangeData):
             self.exchange_name = asset_cfg.exchange_name
         if config.base_urls and config.base_urls.rest:
             rest = config.base_urls.rest
-            self.rest_url = rest.get(asset_type, rest.get("default", self.rest_url)) if isinstance(rest, dict) else rest
+            self.rest_url = (
+                rest.get(asset_type, rest.get("default", self.rest_url))
+                if isinstance(rest, dict)
+                else rest
+            )
         if config.base_urls and config.base_urls.wss:
             wss = config.base_urls.wss
-            self.wss_url = wss.get(asset_type, wss.get("default", self.wss_url)) if isinstance(wss, dict) else wss
+            self.wss_url = (
+                wss.get(asset_type, wss.get("default", self.wss_url))
+                if isinstance(wss, dict)
+                else wss
+            )
         if asset_cfg.rest_paths:
             self.rest_paths.update(asset_cfg.rest_paths)
         if asset_cfg.wss_paths:

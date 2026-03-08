@@ -5,18 +5,18 @@ This test verifies that the Uniswap integration can be registered
 and used through the ExchangeRegistry.
 """
 
+from unittest.mock import Mock, patch
+
 import pytest
-from unittest.mock import Mock, patch, MagicMock
 
 # Import the registration module to ensure Uniswap is registered
 import bt_api_py.exchange_registers.register_uniswap  # noqa: F401 - module import triggers registration
-
-from bt_api_py.registry import ExchangeRegistry
-from bt_api_py.feeds.live_uniswap.spot import UniswapRequestDataSpot
 from bt_api_py.containers.exchanges.uniswap_exchange_data import (
-    UniswapExchangeDataSpot,
     UniswapChain,
+    UniswapExchangeDataSpot,
 )
+from bt_api_py.feeds.live_uniswap.spot import UniswapRequestDataSpot
+from bt_api_py.registry import ExchangeRegistry
 
 
 class TestUniswapRegistration:
@@ -33,7 +33,6 @@ class TestUniswapRegistration:
     def test_uniswap_feed_class_correct(self):
         """Test that the registered feed class is correct."""
         # Access the internal registry to verify the class
-        from bt_api_py.exchange_registers.register_uniswap import UniswapRequestDataSpot as RegisteredSpot
 
         # The class in registry should match the imported class
         assert ExchangeRegistry._feed_classes.get("UNISWAP___DEX") == UniswapRequestDataSpot
@@ -49,7 +48,7 @@ class TestUniswapRegistration:
         # Verify it's the correct class
         assert exchange_data_class == UniswapExchangeDataSpot
 
-    @patch('bt_api_py.feeds.http_client.httpx.Client')
+    @patch("bt_api_py.feeds.http_client.httpx.Client")
     def test_uniswap_spot_instantiation(self, mock_httpx_client):
         """Test that Uniswap spot feed can be instantiated."""
         # Create a mock data queue
@@ -98,7 +97,7 @@ class TestUniswapRegistration:
         assert exchange_data.asset_type == "ethereum"
         assert exchange_data.rest_url == "https://trade-api.gateway.uniswap.org/v1"
 
-    @patch.dict('os.environ', {'UNISWAP_API_KEY': 'test_key'})
+    @patch.dict("os.environ", {"UNISWAP_API_KEY": "test_key"})
     def test_uniswap_api_key(self):
         """Test that Uniswap API key can be retrieved."""
         from bt_api_py.containers.exchanges.uniswap_exchange_data import UniswapExchangeData
@@ -113,11 +112,7 @@ class TestUniswapRegistration:
         mock_data_queue = Mock()
 
         # Create feed using the registry
-        feed = ExchangeRegistry.create_feed(
-            "UNISWAP___DEX",
-            mock_data_queue,
-            chain="ETHEREUM"
-        )
+        feed = ExchangeRegistry.create_feed("UNISWAP___DEX", mock_data_queue, chain="ETHEREUM")
 
         # Verify the feed is created correctly
         assert isinstance(feed, UniswapRequestDataSpot)

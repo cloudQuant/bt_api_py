@@ -2,7 +2,6 @@
 KuCoin Futures trading feed implementation.
 """
 
-import json
 import uuid
 
 from bt_api_py.containers.exchanges.kucoin_exchange_data import KuCoinExchangeDataFutures
@@ -92,11 +91,15 @@ class KuCoinRequestDataFutures(KuCoinRequestData):
         return [], status
 
     def get_depth(self, symbol, limit=20, extra_data=None, **kwargs):
-        path, params, extra_data = self._get_depth(symbol=symbol, limit=limit, extra_data=extra_data, **kwargs)
+        path, params, extra_data = self._get_depth(
+            symbol=symbol, limit=limit, extra_data=extra_data, **kwargs
+        )
         return self.request(path, params=params, extra_data=extra_data, is_sign=False)
 
     def async_get_depth(self, symbol, limit=20, extra_data=None, **kwargs):
-        path, params, extra_data = self._get_depth(symbol=symbol, limit=limit, extra_data=extra_data, **kwargs)
+        path, params, extra_data = self._get_depth(
+            symbol=symbol, limit=limit, extra_data=extra_data, **kwargs
+        )
         self.submit(
             self.async_request(path, params=params, extra_data=extra_data, is_sign=False),
             callback=self.async_callback,
@@ -104,8 +107,16 @@ class KuCoinRequestDataFutures(KuCoinRequestData):
 
     # ==================== Kline ====================
 
-    def _get_kline(self, symbol, period="1hour", start_time=None, end_time=None,
-                   limit=None, extra_data=None, **kwargs):
+    def _get_kline(
+        self,
+        symbol,
+        period="1hour",
+        start_time=None,
+        end_time=None,
+        limit=None,
+        extra_data=None,
+        **kwargs,
+    ):
         request_type = "get_kline"
         path = self._params.get_rest_path(request_type)
         params = {"symbol": symbol, "granularity": self._params.get_period(period)}
@@ -123,19 +134,45 @@ class KuCoinRequestDataFutures(KuCoinRequestData):
         )
         return path, params, extra_data
 
-    def get_kline(self, symbol, period="1hour", start_time=None, end_time=None,
-                  limit=None, extra_data=None, **kwargs):
+    def get_kline(
+        self,
+        symbol,
+        period="1hour",
+        start_time=None,
+        end_time=None,
+        limit=None,
+        extra_data=None,
+        **kwargs,
+    ):
         path, params, extra_data = self._get_kline(
-            symbol=symbol, period=period, start_time=start_time,
-            end_time=end_time, limit=limit, extra_data=extra_data, **kwargs,
+            symbol=symbol,
+            period=period,
+            start_time=start_time,
+            end_time=end_time,
+            limit=limit,
+            extra_data=extra_data,
+            **kwargs,
         )
         return self.request(path, params=params, extra_data=extra_data, is_sign=False)
 
-    def async_get_kline(self, symbol, period="1hour", start_time=None, end_time=None,
-                        limit=None, extra_data=None, **kwargs):
+    def async_get_kline(
+        self,
+        symbol,
+        period="1hour",
+        start_time=None,
+        end_time=None,
+        limit=None,
+        extra_data=None,
+        **kwargs,
+    ):
         path, params, extra_data = self._get_kline(
-            symbol=symbol, period=period, start_time=start_time,
-            end_time=end_time, limit=limit, extra_data=extra_data, **kwargs,
+            symbol=symbol,
+            period=period,
+            start_time=start_time,
+            end_time=end_time,
+            limit=limit,
+            extra_data=extra_data,
+            **kwargs,
         )
         self.submit(
             self.async_request(path, params=params, extra_data=extra_data, is_sign=False),
@@ -206,14 +243,18 @@ class KuCoinRequestDataFutures(KuCoinRequestData):
         return path, params, extra_data
 
     def get_account(self, currency=None, extra_data=None, **kwargs):
-        path, params, extra_data = self._get_account(currency=currency, extra_data=extra_data, **kwargs)
+        path, params, extra_data = self._get_account(
+            currency=currency, extra_data=extra_data, **kwargs
+        )
         return self.request(path, params=params, extra_data=extra_data, is_sign=True)
 
     def get_balance(self, symbol=None, extra_data=None, **kwargs):
         return self.get_account(currency=symbol, extra_data=extra_data, **kwargs)
 
     def async_get_account(self, currency=None, extra_data=None, **kwargs):
-        path, params, extra_data = self._get_account(currency=currency, extra_data=extra_data, **kwargs)
+        path, params, extra_data = self._get_account(
+            currency=currency, extra_data=extra_data, **kwargs
+        )
         self.submit(
             self.async_request(path, params=params, extra_data=extra_data, is_sign=True),
             callback=self.async_callback,
@@ -224,9 +265,18 @@ class KuCoinRequestDataFutures(KuCoinRequestData):
 
     # ==================== Order Management ====================
 
-    def _make_order(self, symbol, vol, price=None, order_type="buy-limit",
-                    offset="open", post_only=False, client_order_id=None,
-                    extra_data=None, **kwargs):
+    def _make_order(
+        self,
+        symbol,
+        vol,
+        price=None,
+        order_type="buy-limit",
+        offset="open",
+        post_only=False,
+        client_order_id=None,
+        extra_data=None,
+        **kwargs,
+    ):
         request_type = "make_order"
         path = self._params.get_rest_path(request_type)
         side, ord_type = order_type.split("-")
@@ -263,12 +313,28 @@ class KuCoinRequestDataFutures(KuCoinRequestData):
             return [KuCoinRequestOrderData(input_data, symbol_name, asset_type, True)], status
         return [], status
 
-    def make_order(self, symbol, vol, price=None, order_type="buy-limit",
-                   offset="open", post_only=False, client_order_id=None,
-                   extra_data=None, **kwargs):
+    def make_order(
+        self,
+        symbol,
+        vol,
+        price=None,
+        order_type="buy-limit",
+        offset="open",
+        post_only=False,
+        client_order_id=None,
+        extra_data=None,
+        **kwargs,
+    ):
         path, params, extra_data = self._make_order(
-            symbol, vol, price, order_type, offset, post_only,
-            client_order_id, extra_data, **kwargs,
+            symbol,
+            vol,
+            price,
+            order_type,
+            offset,
+            post_only,
+            client_order_id,
+            extra_data,
+            **kwargs,
         )
         return self.request(path, params=params, extra_data=extra_data, is_sign=True)
 
@@ -288,7 +354,9 @@ class KuCoinRequestDataFutures(KuCoinRequestData):
         return path, params, extra_data
 
     def cancel_order(self, order_id=None, extra_data=None, **kwargs):
-        path, params, extra_data = self._cancel_order(order_id=order_id, extra_data=extra_data, **kwargs)
+        path, params, extra_data = self._cancel_order(
+            order_id=order_id, extra_data=extra_data, **kwargs
+        )
         return self.request(path, params=params, extra_data=extra_data, is_sign=True)
 
     def _get_open_orders(self, symbol=None, extra_data=None, **kwargs):
@@ -308,7 +376,9 @@ class KuCoinRequestDataFutures(KuCoinRequestData):
         return path, params, extra_data
 
     def get_open_orders(self, symbol=None, extra_data=None, **kwargs):
-        path, params, extra_data = self._get_open_orders(symbol=symbol, extra_data=extra_data, **kwargs)
+        path, params, extra_data = self._get_open_orders(
+            symbol=symbol, extra_data=extra_data, **kwargs
+        )
         return self.request(path, params=params, extra_data=extra_data, is_sign=True)
 
     def query_order(self, order_id=None, extra_data=None, **kwargs):
@@ -329,11 +399,14 @@ class KuCoinRequestDataFutures(KuCoinRequestData):
 
 # ==================== WebSocket Placeholder Classes ====================
 
+
 class KuCoinMarketWssDataFutures:
     """Placeholder for KuCoin Futures Market WebSocket data handler."""
+
     pass
 
 
 class KuCoinAccountWssDataFutures:
     """Placeholder for KuCoin Futures Account WebSocket data handler."""
+
     pass

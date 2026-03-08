@@ -4,7 +4,6 @@ BTCTurk Spot Feed implementation.
 
 import time as _time
 
-from bt_api_py.containers.exchanges.btcturk_exchange_data import BTCTurkExchangeDataSpot
 from bt_api_py.feeds.capability import Capability
 from bt_api_py.feeds.live_btcturk.request_base import BTCTurkRequestData
 
@@ -36,13 +35,15 @@ class BTCTurkRequestDataSpot(BTCTurkRequestData):
         path = "GET /api/v2/ticker"
         if extra_data is None:
             extra_data = {}
-        extra_data.update({
-            "request_type": "get_tick",
-            "symbol_name": symbol,
-            "asset_type": self.asset_type,
-            "exchange_name": self.exchange_name,
-            "normalize_function": self._get_tick_normalize_function,
-        })
+        extra_data.update(
+            {
+                "request_type": "get_tick",
+                "symbol_name": symbol,
+                "asset_type": self.asset_type,
+                "exchange_name": self.exchange_name,
+                "normalize_function": self._get_tick_normalize_function,
+            }
+        )
         params = {"pairSymbol": symbol}
         return path, params, extra_data
 
@@ -73,13 +74,15 @@ class BTCTurkRequestDataSpot(BTCTurkRequestData):
         path = "GET /api/v2/orderbook"
         if extra_data is None:
             extra_data = {}
-        extra_data.update({
-            "request_type": "get_depth",
-            "symbol_name": symbol,
-            "asset_type": self.asset_type,
-            "exchange_name": self.exchange_name,
-            "normalize_function": self._get_depth_normalize_function,
-        })
+        extra_data.update(
+            {
+                "request_type": "get_depth",
+                "symbol_name": symbol,
+                "asset_type": self.asset_type,
+                "exchange_name": self.exchange_name,
+                "normalize_function": self._get_depth_normalize_function,
+            }
+        )
         limit = min(count, 1000)
         params = {"pairSymbol": symbol, "limit": limit}
         return path, params, extra_data
@@ -113,13 +116,15 @@ class BTCTurkRequestDataSpot(BTCTurkRequestData):
         path = "GET /api/v2/ohlcs"
         if extra_data is None:
             extra_data = {}
-        extra_data.update({
-            "request_type": "get_kline",
-            "symbol_name": symbol,
-            "asset_type": self.asset_type,
-            "exchange_name": self.exchange_name,
-            "normalize_function": self._get_kline_normalize_function,
-        })
+        extra_data.update(
+            {
+                "request_type": "get_kline",
+                "symbol_name": symbol,
+                "asset_type": self.asset_type,
+                "exchange_name": self.exchange_name,
+                "normalize_function": self._get_kline_normalize_function,
+            }
+        )
         period_minutes = int(self._params.kline_periods.get(period, period))
         to_timestamp = int(_time.time())
         from_timestamp = to_timestamp - (period_minutes * 60 * count)
@@ -151,13 +156,15 @@ class BTCTurkRequestDataSpot(BTCTurkRequestData):
         path = "GET /api/v2/server/exchangeinfo"
         if extra_data is None:
             extra_data = {}
-        extra_data.update({
-            "request_type": "get_exchange_info",
-            "symbol_name": "",
-            "asset_type": self.asset_type,
-            "exchange_name": self.exchange_name,
-            "normalize_function": self._get_exchange_info_normalize_function,
-        })
+        extra_data.update(
+            {
+                "request_type": "get_exchange_info",
+                "symbol_name": "",
+                "asset_type": self.asset_type,
+                "exchange_name": self.exchange_name,
+                "normalize_function": self._get_exchange_info_normalize_function,
+            }
+        )
         return path, {}, extra_data
 
     @staticmethod
@@ -178,13 +185,15 @@ class BTCTurkRequestDataSpot(BTCTurkRequestData):
         path = "GET /api/v2/trades"
         if extra_data is None:
             extra_data = {}
-        extra_data.update({
-            "request_type": "get_trades",
-            "symbol_name": symbol,
-            "asset_type": self.asset_type,
-            "exchange_name": self.exchange_name,
-            "normalize_function": self._get_trades_normalize_function,
-        })
+        extra_data.update(
+            {
+                "request_type": "get_trades",
+                "symbol_name": symbol,
+                "asset_type": self.asset_type,
+                "exchange_name": self.exchange_name,
+                "normalize_function": self._get_trades_normalize_function,
+            }
+        )
         params = {"pairSymbol": symbol, "last": count}
         return path, params, extra_data
 
@@ -207,13 +216,15 @@ class BTCTurkRequestDataSpot(BTCTurkRequestData):
         path = "GET /api/v1/users/balances"
         if extra_data is None:
             extra_data = {}
-        extra_data.update({
-            "request_type": "get_account",
-            "symbol_name": "",
-            "asset_type": self.asset_type,
-            "exchange_name": self.exchange_name,
-            "normalize_function": self._get_account_normalize_function,
-        })
+        extra_data.update(
+            {
+                "request_type": "get_account",
+                "symbol_name": "",
+                "asset_type": self.asset_type,
+                "exchange_name": self.exchange_name,
+                "normalize_function": self._get_account_normalize_function,
+            }
+        )
         return path, {}, extra_data
 
     @staticmethod
@@ -241,13 +252,15 @@ class BTCTurkRequestDataSpot(BTCTurkRequestData):
         path = "GET /api/v1/users/balances"
         if extra_data is None:
             extra_data = {}
-        extra_data.update({
-            "request_type": "get_balance",
-            "symbol_name": symbol or "",
-            "asset_type": self.asset_type,
-            "exchange_name": self.exchange_name,
-            "normalize_function": self._get_balance_normalize_function,
-        })
+        extra_data.update(
+            {
+                "request_type": "get_balance",
+                "symbol_name": symbol or "",
+                "asset_type": self.asset_type,
+                "exchange_name": self.exchange_name,
+                "normalize_function": self._get_balance_normalize_function,
+            }
+        )
         return path, {}, extra_data
 
     @staticmethod
@@ -264,18 +277,30 @@ class BTCTurkRequestDataSpot(BTCTurkRequestData):
 
     # ==================== Trading Interfaces ====================
 
-    def _make_order(self, symbol, volume, price, order_type, offset="open",
-                    post_only=False, client_order_id=None, extra_data=None, **kwargs):
+    def _make_order(
+        self,
+        symbol,
+        volume,
+        price,
+        order_type,
+        offset="open",
+        post_only=False,
+        client_order_id=None,
+        extra_data=None,
+        **kwargs,
+    ):
         """Prepare order. Returns (path, params, extra_data)."""
         path = "POST /api/v1/order"
         if extra_data is None:
             extra_data = {}
-        extra_data.update({
-            "exchange_name": self.exchange_name,
-            "symbol_name": symbol,
-            "asset_type": self.asset_type,
-            "request_type": "make_order",
-        })
+        extra_data.update(
+            {
+                "exchange_name": self.exchange_name,
+                "symbol_name": symbol,
+                "asset_type": self.asset_type,
+                "request_type": "make_order",
+            }
+        )
         order_method = 1 if order_type.lower() == "limit" else 0  # 0=market, 1=limit
         side = 0 if offset.upper() in ("BUY", "OPEN") else 1  # 0=buy, 1=sell
         params = {
@@ -289,12 +314,29 @@ class BTCTurkRequestDataSpot(BTCTurkRequestData):
             params["newClientOrderId"] = client_order_id
         return path, params, extra_data
 
-    def make_order(self, symbol, volume, price, order_type, offset="open",
-                   post_only=False, client_order_id=None, extra_data=None, **kwargs):
+    def make_order(
+        self,
+        symbol,
+        volume,
+        price,
+        order_type,
+        offset="open",
+        post_only=False,
+        client_order_id=None,
+        extra_data=None,
+        **kwargs,
+    ):
         """Place an order."""
         path, params, extra_data = self._make_order(
-            symbol, volume, price, order_type, offset, post_only,
-            client_order_id, extra_data, **kwargs
+            symbol,
+            volume,
+            price,
+            order_type,
+            offset,
+            post_only,
+            client_order_id,
+            extra_data,
+            **kwargs,
         )
         return self.request(path, body=params, extra_data=extra_data)
 
@@ -303,13 +345,15 @@ class BTCTurkRequestDataSpot(BTCTurkRequestData):
         path = "DELETE /api/v1/order"
         if extra_data is None:
             extra_data = {}
-        extra_data.update({
-            "exchange_name": self.exchange_name,
-            "symbol_name": symbol,
-            "asset_type": self.asset_type,
-            "request_type": "cancel_order",
-            "order_id": order_id,
-        })
+        extra_data.update(
+            {
+                "exchange_name": self.exchange_name,
+                "symbol_name": symbol,
+                "asset_type": self.asset_type,
+                "request_type": "cancel_order",
+                "order_id": order_id,
+            }
+        )
         params = {"id": order_id}
         return path, params, extra_data
 
@@ -323,13 +367,15 @@ class BTCTurkRequestDataSpot(BTCTurkRequestData):
         path = "GET /api/v1/order"
         if extra_data is None:
             extra_data = {}
-        extra_data.update({
-            "exchange_name": self.exchange_name,
-            "symbol_name": symbol,
-            "asset_type": self.asset_type,
-            "request_type": "query_order",
-            "order_id": order_id,
-        })
+        extra_data.update(
+            {
+                "exchange_name": self.exchange_name,
+                "symbol_name": symbol,
+                "asset_type": self.asset_type,
+                "request_type": "query_order",
+                "order_id": order_id,
+            }
+        )
         params = {"id": order_id}
         return path, params, extra_data
 
@@ -343,12 +389,14 @@ class BTCTurkRequestDataSpot(BTCTurkRequestData):
         path = "GET /api/v1/openOrders"
         if extra_data is None:
             extra_data = {}
-        extra_data.update({
-            "exchange_name": self.exchange_name,
-            "symbol_name": symbol or "",
-            "asset_type": self.asset_type,
-            "request_type": "get_open_orders",
-        })
+        extra_data.update(
+            {
+                "exchange_name": self.exchange_name,
+                "symbol_name": symbol or "",
+                "asset_type": self.asset_type,
+                "request_type": "get_open_orders",
+            }
+        )
         params = {}
         if symbol:
             params["pairSymbol"] = symbol

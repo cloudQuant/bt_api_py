@@ -2,9 +2,9 @@
 Bithumb REST API request base class.
 """
 
-import time
-import hmac
 import hashlib
+import hmac
+import time
 import uuid
 
 from bt_api_py.containers.exchanges.bithumb_exchange_data import BithumbExchangeDataSpot
@@ -52,9 +52,7 @@ class BithumbRequestData(Feed):
             sorted_params = sorted(params.items())
             query_string = "&".join(f"{k}={v}" for k, v in sorted_params)
             signature = hmac.new(
-                secret.encode("utf-8"),
-                query_string.encode("utf-8"),
-                hashlib.sha256
+                secret.encode("utf-8"), query_string.encode("utf-8"), hashlib.sha256
             ).hexdigest()
             return signature
         return ""
@@ -81,8 +79,17 @@ class BithumbRequestData(Feed):
         }
 
         # For private endpoints, add auth params to body or params
-        is_private = any(x in path for x in ["placeOrder", "cancelOrder", "orderDetail",
-                                              "singleOrder", "orderList", "assetList"])
+        is_private = any(
+            x in path
+            for x in [
+                "placeOrder",
+                "cancelOrder",
+                "orderDetail",
+                "singleOrder",
+                "orderList",
+                "assetList",
+            ]
+        )
 
         request_params = params.copy() if params else {}
         request_body = body.copy() if body else {}
@@ -113,9 +120,19 @@ class BithumbRequestData(Feed):
         request_path = "/" + path.split()[1] if " " in path else path
 
         headers = {"Content-Type": "application/json"}
-        is_private = any(x in path for x in ["placeOrder", "cancelOrder", "orderDetail",
-                                              "singleOrder", "orderList", "assetList",
-                                              "account", "balance"])
+        is_private = any(
+            x in path
+            for x in [
+                "placeOrder",
+                "cancelOrder",
+                "orderDetail",
+                "singleOrder",
+                "orderList",
+                "assetList",
+                "account",
+                "balance",
+            ]
+        )
         request_params = params.copy() if params else {}
         request_body = body.copy() if body else {}
 
@@ -158,12 +175,14 @@ class BithumbRequestData(Feed):
         """Prepare server time request. Returns (path, params, extra_data)."""
         if extra_data is None:
             extra_data = {}
-        extra_data.update({
-            "exchange_name": self.exchange_name,
-            "symbol_name": "",
-            "asset_type": self.asset_type,
-            "request_type": "get_server_time",
-        })
+        extra_data.update(
+            {
+                "exchange_name": self.exchange_name,
+                "symbol_name": "",
+                "asset_type": self.asset_type,
+                "request_type": "get_server_time",
+            }
+        )
         return "GET /spot/serverTime", {}, extra_data
 
     def get_server_time(self, extra_data=None, **kwargs):

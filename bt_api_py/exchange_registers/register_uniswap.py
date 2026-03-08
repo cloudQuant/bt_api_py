@@ -48,12 +48,12 @@ def _uniswap_order_handler(order_data):
     # Uniswap 订单格式适配
     if isinstance(order_data, dict):
         # 添加 Uniswap 特有的字段
-        order_data['exchange_type'] = 'DEX'
-        order_data['protocol'] = 'Uniswap'
+        order_data["exchange_type"] = "DEX"
+        order_data["protocol"] = "Uniswap"
 
         # 如果是限价单，添加相关字段
-        if order_data.get('type') == 'limit':
-            order_data['slippage_tolerance'] = order_data.get('slippage_tolerance', 0.5)
+        if order_data.get("type") == "limit":
+            order_data["slippage_tolerance"] = order_data.get("slippage_tolerance", 0.5)
 
     return order_data
 

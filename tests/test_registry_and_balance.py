@@ -2,21 +2,29 @@
 Registry, BalanceUtils, Exceptions 单元测试
 纯单元测试，不需要网络连接
 """
-import pytest
-from bt_api_py.registry import ExchangeRegistry
-from bt_api_py.balance_utils import simple_balance_handler, nested_balance_handler
-from bt_api_py.exceptions import (
-    BtApiError, ExchangeNotFoundError, ExchangeConnectionAlias as BtConnectionError,
-    RequestTimeoutError, OrderError, SubscribeError, DataParseError,
-)
 
+import pytest
+
+from bt_api_py.balance_utils import nested_balance_handler, simple_balance_handler
+from bt_api_py.exceptions import (
+    BtApiError,
+    DataParseError,
+    ExchangeNotFoundError,
+    OrderError,
+    RequestTimeoutError,
+    SubscribeError,
+)
+from bt_api_py.exceptions import (
+    ExchangeConnectionAlias as BtConnectionError,
+)
+from bt_api_py.registry import ExchangeRegistry
 
 # ========================================================================
 #  ExchangeRegistry 测试
 # ========================================================================
 
-class TestExchangeRegistry:
 
+class TestExchangeRegistry:
     def setup_method(self):
         """每个测试前保存注册表状态，测试后恢复"""
         self._saved_feeds = dict(ExchangeRegistry._feed_classes)
@@ -69,6 +77,7 @@ class TestExchangeRegistry:
     def test_binance_registered(self):
         """验证 Binance 在 import 后已注册"""
         import bt_api_py.exchange_registers.register_binance  # noqa: F401
+
         assert ExchangeRegistry.has_exchange("BINANCE___SWAP")
         assert ExchangeRegistry.has_exchange("BINANCE___SPOT")
         assert ExchangeRegistry.get_balance_handler("BINANCE___SWAP") is not None
@@ -77,6 +86,7 @@ class TestExchangeRegistry:
     def test_okx_registered(self):
         """验证 OKX 在 import 后已注册"""
         import bt_api_py.exchange_registers.register_okx  # noqa: F401
+
         assert ExchangeRegistry.has_exchange("OKX___SWAP")
         assert ExchangeRegistry.has_exchange("OKX___SPOT")
         assert ExchangeRegistry.get_balance_handler("OKX___SWAP") is not None
@@ -87,8 +97,10 @@ class TestExchangeRegistry:
 #  BalanceUtils 测试
 # ========================================================================
 
+
 class MockAccount:
     """模拟 AccountData，用于测试 balance_handler"""
+
     def __init__(self, account_type, margin, available, unrealized_pnl):
         self._type = account_type
         self._margin = margin
@@ -115,6 +127,7 @@ class MockAccount:
 
 class MockNestedAccount:
     """模拟 OKX 嵌套 AccountData"""
+
     def __init__(self, balances):
         self._balances = balances
 
@@ -127,6 +140,7 @@ class MockNestedAccount:
 
 class MockBalance:
     """模拟 OKX BalanceData"""
+
     def __init__(self, symbol, margin, available, unrealized_pnl):
         self._symbol = symbol
         self._margin = margin
@@ -150,7 +164,6 @@ class MockBalance:
 
 
 class TestBalanceUtils:
-
     def test_simple_balance_handler_single_account(self):
         accounts = [MockAccount("USDT", 10000.0, 8000.0, 500.0)]
         value_result, cash_result = simple_balance_handler(accounts)
@@ -189,8 +202,8 @@ class TestBalanceUtils:
 #  Exceptions 测试
 # ========================================================================
 
-class TestExceptions:
 
+class TestExceptions:
     def test_hierarchy(self):
         assert issubclass(ExchangeNotFoundError, BtApiError)
         assert issubclass(BtConnectionError, BtApiError)

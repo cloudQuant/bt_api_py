@@ -10,21 +10,19 @@ Run with coverage:
 """
 
 import queue
-import time
-import pytest
-from unittest.mock import Mock, patch, MagicMock
 
-from bt_api_py.containers.exchanges.upbit_exchange_data import UpbitExchangeDataSpot
-from bt_api_py.containers.tickers.upbit_ticker import UpbitTickerData
-from bt_api_py.registry import ExchangeRegistry
+import pytest
 
 # Import registration to auto-register Upbit
 import bt_api_py.exchange_registers.register_upbit  # noqa: F401
+from bt_api_py.containers.exchanges.upbit_exchange_data import UpbitExchangeDataSpot
+from bt_api_py.registry import ExchangeRegistry
 
 # Upbit feed has implementation issues with RateLimiter, so we'll skip it
 # in unit tests
 try:
     from bt_api_py.feeds.live_upbit.spot import UpbitRequestDataSpot
+
     UPBIT_FEED_AVAILABLE = True
 except (ImportError, AttributeError):
     UPBIT_FEED_AVAILABLE = False
@@ -46,6 +44,7 @@ def upbit_feed(data_queue):
     feed = UpbitRequestDataSpot(data_queue)
     return feed
 
+
 # ==================== ServerTime Tests ====================
 
 
@@ -64,6 +63,7 @@ class TestUpbitServerTime:
         result = upbit_feed.get_exchange_info()
         assert result is not None
 
+
 # ==================== Ticker Tests ====================
 
 
@@ -79,6 +79,7 @@ class TestUpbitTickerData:
     def test_upbit_tick_data_validation(self, upbit_feed):
         """Test ticker data structure and values."""
         from bt_api_py.containers.requestdatas.request_data import RequestData
+
         data = upbit_feed.get_ticker("KRW-BTC")
         assert isinstance(data, (list, dict, RequestData))
 
@@ -92,6 +93,7 @@ class TestUpbitTickerData:
         """Test ticker for USDT pairs."""
         data = upbit_feed.get_ticker("USDT-BTC")
         assert data is not None
+
 
 # ==================== Kline Tests ====================
 
@@ -128,6 +130,7 @@ class TestUpbitKlineData:
         data = upbit_feed.get_kline("KRW-BTC", tf, count=1)
         assert data is not None
 
+
 # ==================== OrderBook Tests ====================
 
 
@@ -149,6 +152,7 @@ class TestUpbitOrderBook:
         data = upbit_feed.get_depth("KRW-ETH")
         assert data is not None
 
+
 # ==================== Trade Ticks Tests ====================
 
 
@@ -164,6 +168,7 @@ class TestUpbitTradeTicks:
         """Test trade history with parameters."""
         data = upbit_feed.get_trade_history("KRW-BTC", count=5)
         assert data is not None
+
 
 # ==================== Market Info Tests ====================
 
@@ -185,6 +190,7 @@ class TestUpbitMarketInfo:
         """Test convenience method for symbol info."""
         data = upbit_feed.get_exchange_info()
         assert data is not None
+
 
 # ==================== Exchange Data Tests ====================
 
@@ -219,6 +225,7 @@ class TestUpbitExchangeData:
         assert "KRW" in exchange_data.legal_currency
         assert "USDT" in exchange_data.legal_currency
 
+
 # ==================== Registry Tests ====================
 
 
@@ -234,6 +241,7 @@ class TestUpbitRegistry:
         """Test creating Upbit exchange data through registry."""
         exchange_data = ExchangeRegistry.create_exchange_data("UPBIT___SPOT")
         assert isinstance(exchange_data, UpbitExchangeDataSpot)
+
 
 # ==================== Integration Tests ====================
 

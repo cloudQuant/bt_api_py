@@ -1780,7 +1780,14 @@ class TradeMixin:
         )
 
     def _get_algo_orders_pending(
-        self, inst_type=None, ord_type=None, uly=None, inst_id=None, algo_id=None, extra_data=None, **kwargs
+        self,
+        inst_type=None,
+        ord_type=None,
+        uly=None,
+        inst_id=None,
+        algo_id=None,
+        extra_data=None,
+        **kwargs,
     ):
         """Get pending algo orders"""
         request_type = "get_algo_orders_pending"
@@ -1812,7 +1819,14 @@ class TradeMixin:
         return path, params, extra_data
 
     def get_algo_orders_pending(
-        self, inst_type=None, ord_type=None, uly=None, inst_id=None, algo_id=None, extra_data=None, **kwargs
+        self,
+        inst_type=None,
+        ord_type=None,
+        uly=None,
+        inst_id=None,
+        algo_id=None,
+        extra_data=None,
+        **kwargs,
     ):
         """Get pending algo orders"""
         path, params, extra_data = self._get_algo_orders_pending(
@@ -1822,7 +1836,14 @@ class TradeMixin:
         return data
 
     def async_get_algo_orders_pending(
-        self, inst_type=None, ord_type=None, uly=None, inst_id=None, algo_id=None, extra_data=None, **kwargs
+        self,
+        inst_type=None,
+        ord_type=None,
+        uly=None,
+        inst_id=None,
+        algo_id=None,
+        extra_data=None,
+        **kwargs,
     ):
         """Async get pending algo orders"""
         path, params, extra_data = self._get_algo_orders_pending(

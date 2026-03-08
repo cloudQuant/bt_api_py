@@ -6,9 +6,12 @@ and environment variable management.
 """
 
 import base64
+import logging
 import os
 from pathlib import Path
 from typing import Any
+
+logger = logging.getLogger(__name__)
 
 try:
     from cryptography.fernet import Fernet
@@ -148,9 +151,7 @@ class SecureCredentialManager:
 
         return True
 
-    def get_exchange_credentials(
-        self, exchange: str, encrypted: bool = False
-    ) -> dict[str, Any]:
+    def get_exchange_credentials(self, exchange: str, encrypted: bool = False) -> dict[str, Any]:
         """
         Get credentials for a specific exchange from environment.
 
@@ -198,8 +199,8 @@ class SecureCredentialManager:
                 if value and isinstance(value, str) and key != "testnet":
                     try:
                         credentials[key] = self.decrypt_credential(value)
-                    except Exception:
-                        pass  # Keep original if decryption fails
+                    except Exception as e:
+                        logger.warning(f"Failed to decrypt credential for {exchange}.{key}: {e}")
 
         return credentials
 

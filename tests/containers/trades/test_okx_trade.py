@@ -30,7 +30,7 @@ def test_okx_req_order():
                 "feeCcy": "",
                 "fee": "",
                 "ts": "1597026383085",
-                "fillTime": "1597026383084"
+                "fillTime": "1597026383084",
             },
             {
                 "instType": "FUTURES",
@@ -55,9 +55,9 @@ def test_okx_req_order():
                 "feeCcy": "",
                 "fee": "",
                 "ts": "1597026383085",
-                "fillTime": "1597026383084"
-            }
-        ]
+                "fillTime": "1597026383084",
+            },
+        ],
     }
 
     bo = OkxRequestTradeData(data["data"][-1], "BTC-USD-200329", "SWAP", True)
@@ -86,7 +86,7 @@ def test_okx_wss_trade():
             "channel": "orders",
             "instType": "SPOT",
             "instId": "BTC-USDT",
-            "uid": "614488474791936"
+            "uid": "614488474791936",
         },
         "data": [
             {
@@ -154,9 +154,9 @@ def test_okx_wss_trade():
                 "algoId": "",
                 "amendSource": "",
                 "cancelSource": "",
-                "uTime": "1654084353264"
+                "uTime": "1654084353264",
             }
-        ]
+        ],
     }
     bo = OkxWssTradeData(data["data"][-1], "BTC-USDT", "SWAP", True)
     bo.init_data()
@@ -187,11 +187,7 @@ if __name__ == "__main__":
 def test_okx_wss_fills():
     """Test OkxWssFillsData for fills channel."""
     data = {
-        "arg": {
-            "channel": "fills",
-            "instType": "SWAP",
-            "instId": "BTC-USDT-SWAP"
-        },
+        "arg": {"channel": "fills", "instType": "SWAP", "instId": "BTC-USDT-SWAP"},
         "data": [
             {
                 "tradeId": "123456",
@@ -208,12 +204,13 @@ def test_okx_wss_fills():
                 "feeCcy": "USDT",
                 "fee": "-0.03",
                 "ts": "1597026383085",
-                "fillTime": "1597026383084"
+                "fillTime": "1597026383084",
             }
-        ]
+        ],
     }
 
     from bt_api_py.containers.trades.okx_trade import OkxWssFillsData
+
     fill = OkxWssFillsData(data["data"][0], "BTC-USDT-SWAP", "SWAP", True)
     fill.init_data()
 

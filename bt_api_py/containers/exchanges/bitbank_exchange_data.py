@@ -3,6 +3,7 @@ Bitbank Exchange Data Configuration
 """
 
 import os
+
 from bt_api_py.containers.exchanges.exchange_data import ExchangeData
 from bt_api_py.logging_factory import get_logger
 
@@ -19,6 +20,7 @@ def _get_bitbank_config():
         return _bitbank_config
     try:
         from bt_api_py.config_loader import load_exchange_config
+
         config_path = os.path.join(
             os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
             "configs",
@@ -70,13 +72,25 @@ class BitbankExchangeData(ExchangeData):
         if config.base_urls:
             if config.base_urls.rest:
                 rest = config.base_urls.rest
-                self.rest_url = rest.get(asset_type, rest.get("default", self.rest_url)) if isinstance(rest, dict) else rest
-            if hasattr(config.base_urls, 'rest_private') and config.base_urls.rest_private:
+                self.rest_url = (
+                    rest.get(asset_type, rest.get("default", self.rest_url))
+                    if isinstance(rest, dict)
+                    else rest
+                )
+            if hasattr(config.base_urls, "rest_private") and config.base_urls.rest_private:
                 rest_private = config.base_urls.rest_private
-                self.rest_private_url = rest_private.get(asset_type, rest_private.get("default", self.rest_private_url)) if isinstance(rest_private, dict) else rest_private
+                self.rest_private_url = (
+                    rest_private.get(asset_type, rest_private.get("default", self.rest_private_url))
+                    if isinstance(rest_private, dict)
+                    else rest_private
+                )
             if config.base_urls.wss:
                 wss = config.base_urls.wss
-                self.wss_url = wss.get(asset_type, wss.get("default", self.wss_url)) if isinstance(wss, dict) else wss
+                self.wss_url = (
+                    wss.get(asset_type, wss.get("default", self.wss_url))
+                    if isinstance(wss, dict)
+                    else wss
+                )
         if asset_cfg.rest_paths:
             self.rest_paths.update(asset_cfg.rest_paths)
         if asset_cfg.wss_paths:

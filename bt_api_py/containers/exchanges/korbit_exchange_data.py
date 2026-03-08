@@ -7,6 +7,7 @@ Symbol: {base}_{quote} lowercase (e.g. btc_krw)
 """
 
 import os
+
 from bt_api_py.containers.exchanges.exchange_data import ExchangeData
 from bt_api_py.logging_factory import get_logger
 
@@ -23,6 +24,7 @@ def _get_korbit_config():
         return _korbit_config
     try:
         from bt_api_py.config_loader import load_exchange_config
+
         config_path = os.path.join(
             os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
             "configs",
@@ -63,8 +65,14 @@ class KorbitExchangeData(ExchangeData):
         self.rest_paths = dict(_FALLBACK_REST_PATHS)
         self.wss_paths = {}
         self.kline_periods = {
-            "1m": "1m", "3m": "3m", "5m": "5m", "15m": "15m",
-            "30m": "30m", "1h": "1h", "4h": "4h", "1d": "1d",
+            "1m": "1m",
+            "3m": "3m",
+            "5m": "5m",
+            "15m": "15m",
+            "30m": "30m",
+            "1h": "1h",
+            "4h": "4h",
+            "1d": "1d",
         }
         self.reverse_kline_periods = {v: k for k, v in self.kline_periods.items()}
         self.legal_currency = ["KRW", "BTC", "ETH"]

@@ -21,10 +21,11 @@ def _load_zebpay_yaml():
     try:
         cfg_path = os.path.join(
             os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
-            "configs", "zebpay.yaml",
+            "configs",
+            "zebpay.yaml",
         )
         if os.path.exists(cfg_path):
-            with open(cfg_path, "r", encoding="utf-8") as f:
+            with open(cfg_path, encoding="utf-8") as f:
                 _zebpay_yaml_cache = yaml.safe_load(f) or {}
     except Exception as e:
         logger.warn(f"Failed to load zebpay.yaml: {e}")
@@ -41,9 +42,16 @@ class ZebpayExchangeData(ExchangeData):
         self.rest_url = "https://sapi.zebpay.com"
         self.wss_url = "wss://stream.zebpay.com"
         self.kline_periods = {
-            "1m": "1m", "5m": "5m", "15m": "15m", "30m": "30m",
-            "1h": "1h", "2h": "2h", "4h": "4h", "12h": "12h",
-            "1d": "1d", "1w": "1w",
+            "1m": "1m",
+            "5m": "5m",
+            "15m": "15m",
+            "30m": "30m",
+            "1h": "1h",
+            "2h": "2h",
+            "4h": "4h",
+            "12h": "12h",
+            "1d": "1d",
+            "1w": "1w",
         }
         self.legal_currency = ["INR", "USDT"]
 

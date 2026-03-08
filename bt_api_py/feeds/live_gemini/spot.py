@@ -1,13 +1,7 @@
 from bt_api_py.containers.exchanges.gemini_exchange_data import GeminiExchangeDataSpot
 from bt_api_py.containers.orders.gemini_order import (
     GeminiRequestOrderData,
-    GeminiSpotWssOrderData,
 )
-from bt_api_py.containers.trades.gemini_trade import GeminiSpotWssTradeData
-from bt_api_py.containers.balances.gemini_balance import GeminiRequestBalanceData
-from bt_api_py.containers.tickers.gemini_ticker import GeminiRequestTickerData
-from bt_api_py.containers.orderbooks.gemini_orderbook import GeminiRequestOrderBookData
-from bt_api_py.containers.bars.gemini_bar import GeminiRequestBarData
 from bt_api_py.feeds.live_gemini.request_base import GeminiRequestData
 from bt_api_py.functions.utils import update_extra_data
 from bt_api_py.logging_factory import get_logger
@@ -270,8 +264,7 @@ class GeminiRequestDataSpot(GeminiRequestData):
         request_symbol = self._params.get_symbol(symbol)
         gemini_time_frame = self._params.get_period(time_frame)
         path = self._params.get_rest_path("get_kline").format(
-            symbol=request_symbol,
-            time_frame=gemini_time_frame
+            symbol=request_symbol, time_frame=gemini_time_frame
         )
         extra_data = update_extra_data(
             extra_data,
@@ -352,7 +345,9 @@ class GeminiRequestDataSpot(GeminiRequestData):
 
     def get_order_history(self, symbol=None, limit_trades=50, extra_data=None, **kwargs):
         """Get order history."""
-        path, params, extra_data = self._get_order_history(symbol, limit_trades, extra_data, **kwargs)
+        path, params, extra_data = self._get_order_history(
+            symbol, limit_trades, extra_data, **kwargs
+        )
         return self.request(path, method="POST", params=params, extra_data=extra_data)
 
     def get_ticker(self, symbol, extra_data=None, **kwargs):
@@ -374,12 +369,16 @@ class GeminiRequestDataSpot(GeminiRequestData):
 
     def get_depth(self, symbol, limit_bids=50, limit_asks=50, extra_data=None, **kwargs):
         """Get order book for a symbol."""
-        path, params, extra_data = self._get_depth(symbol, limit_bids, limit_asks, extra_data, **kwargs)
+        path, params, extra_data = self._get_depth(
+            symbol, limit_bids, limit_asks, extra_data, **kwargs
+        )
         return self.request(path, method="GET", params=params, extra_data=extra_data)
 
     def async_get_depth(self, symbol, limit_bids=50, limit_asks=50, extra_data=None, **kwargs):
         """Async get depth."""
-        path, params, extra_data = self._get_depth(symbol, limit_bids, limit_asks, extra_data, **kwargs)
+        path, params, extra_data = self._get_depth(
+            symbol, limit_bids, limit_asks, extra_data, **kwargs
+        )
         self.submit(
             self.async_request(path, method="GET", params=params, extra_data=extra_data),
             callback=self.async_callback,
@@ -413,12 +412,22 @@ class GeminiRequestDataSpot(GeminiRequestData):
         path, params, extra_data = self._get_symbol_details(symbol, extra_data, **kwargs)
         return self.request(path, method="GET", params=params, extra_data=extra_data)
 
-    def make_order(self, symbol, vol, price=None, order_type="buy-limit",
-                   offset="open", post_only=False, client_order_id=None,
-                   extra_data=None, **kwargs):
+    def make_order(
+        self,
+        symbol,
+        vol,
+        price=None,
+        order_type="buy-limit",
+        offset="open",
+        post_only=False,
+        client_order_id=None,
+        extra_data=None,
+        **kwargs,
+    ):
         """Place a new order."""
-        path, params, extra_data = self._make_order(symbol, vol, price, order_type, offset,
-                                                     post_only, client_order_id, extra_data, **kwargs)
+        path, params, extra_data = self._make_order(
+            symbol, vol, price, order_type, offset, post_only, client_order_id, extra_data, **kwargs
+        )
         return self.request(path, method="POST", params=params, extra_data=extra_data)
 
     def cancel_order(self, symbol, order_id, extra_data=None, **kwargs):
@@ -427,13 +436,15 @@ class GeminiRequestDataSpot(GeminiRequestData):
         params = {"order_id": order_id}
         if extra_data is None:
             extra_data = {}
-        extra_data.update({
-            "exchange_name": self.exchange_name,
-            "symbol_name": symbol,
-            "asset_type": self.asset_type,
-            "request_type": "cancel_order",
-            "order_id": order_id,
-        })
+        extra_data.update(
+            {
+                "exchange_name": self.exchange_name,
+                "symbol_name": symbol,
+                "asset_type": self.asset_type,
+                "request_type": "cancel_order",
+                "order_id": order_id,
+            }
+        )
         return self.request(path, method="POST", params=params, extra_data=extra_data)
 
     def cancel_all_orders(self, symbol=None, extra_data=None, **kwargs):

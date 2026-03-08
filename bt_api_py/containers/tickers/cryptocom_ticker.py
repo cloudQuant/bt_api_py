@@ -41,7 +41,9 @@ class CryptoComTicker(TickerData):
             return self
 
         self.ticker_symbol_name = self.symbol_name
-        self.server_time = float(self.ticker_data.get("t", 0)) / 1000 if self.ticker_data.get("t") else None
+        self.server_time = (
+            float(self.ticker_data.get("t", 0)) / 1000 if self.ticker_data.get("t") else None
+        )
         self.last_price = float(self.ticker_data.get("a", 0))
         self.bid_price = float(self.ticker_data.get("b", 0))
         self.ask_price = float(self.ticker_data.get("k", 0))
@@ -125,6 +127,7 @@ class CryptoComTicker(TickerData):
         For production use, use the standard constructor with json-encoded data.
         """
         import json
+
         return cls(
             ticker_info=json.dumps(data),
             symbol_name=symbol,

@@ -44,7 +44,9 @@ class SushiSwapRequestTickerData(TickerData):
             self.high_24h = self._parse_float(data.get("high"))
             self.low_24h = self._parse_float(data.get("low"))
             # Add liquidity for AMM pools
-            self.liquidity = self._parse_float(data.get("liquidity") or data.get("totalValueLockedUSD"))
+            self.liquidity = self._parse_float(
+                data.get("liquidity") or data.get("totalValueLockedUSD")
+            )
 
         self.has_been_init_data = True
         return self

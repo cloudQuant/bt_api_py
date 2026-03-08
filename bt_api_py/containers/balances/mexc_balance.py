@@ -8,7 +8,9 @@ from bt_api_py.functions.utils import from_dict_get_float, from_dict_get_string
 class MexcBalanceData(BalanceData):
     """保存余额信息"""
 
-    def __init__(self, balance_info, symbol_name=None, asset_type=None, has_been_json_encoded=False):
+    def __init__(
+        self, balance_info, symbol_name=None, asset_type=None, has_been_json_encoded=False
+    ):
         super().__init__(balance_info, has_been_json_encoded)
         self.exchange_name = "MEXC"  # 交易所名称
         self.local_update_time = time.time()  # 本地时间戳
@@ -118,7 +120,9 @@ class MexcBalanceData(BalanceData):
 class MexcRequestBalanceData(MexcBalanceData):
     """保存请求返回的余额信息"""
 
-    def __init__(self, balance_info, symbol_name=None, asset_type=None, has_been_json_encoded=False):
+    def __init__(
+        self, balance_info, symbol_name=None, asset_type=None, has_been_json_encoded=False
+    ):
         super().__init__(balance_info, symbol_name, asset_type, has_been_json_encoded)
 
     def init_data(self):
@@ -170,10 +174,7 @@ class MexcAccountData:
             # 处理余额列表
             for balance in self.account_data.get("balances", []):
                 if float(balance.get("free", 0)) > 0 or float(balance.get("locked", 0)) > 0:
-                    balance_data = MexcRequestBalanceData(
-                        balance,
-                        asset_type=self.asset_type
-                    )
+                    balance_data = MexcRequestBalanceData(balance, asset_type=self.asset_type)
                     self.balances.append(balance_data)
 
             self.has_been_init_data = True

@@ -18,6 +18,9 @@ import queue
 
 import pytest
 
+# Import registration to auto-register OKX
+import bt_api_py.exchange_registers.register_okx  # noqa: F401
+
 # OkxBalance import not available
 from bt_api_py.containers.exchanges.okx_exchange_data import (
     OkxExchangeDataSpot,
@@ -27,9 +30,6 @@ from bt_api_py.containers.orders.okx_order import OkxOrderData
 from bt_api_py.containers.tickers.okx_ticker import OkxTickerData
 from bt_api_py.feeds.live_okx.spot import OkxRequestDataSpot
 from bt_api_py.registry import ExchangeRegistry
-
-# Import registration to auto-register OKX
-import bt_api_py.exchange_registers.register_okx  # noqa: F401
 
 
 class TestOkxExchangeData:
@@ -41,7 +41,11 @@ class TestOkxExchangeData:
         # exchange_name is loaded from YAML config
         assert exchange_data.rest_url
         # OKX uses different key names for rest_paths
-        assert "make_order" in exchange_data.rest_paths or "place_order" in exchange_data.rest_paths or "amend_algo_order" in exchange_data.rest_paths
+        assert (
+            "make_order" in exchange_data.rest_paths
+            or "place_order" in exchange_data.rest_paths
+            or "amend_algo_order" in exchange_data.rest_paths
+        )
 
     def test_exchange_data_swap_creation(self):
         """Test creating OKX swap exchange data."""
@@ -101,23 +105,21 @@ class TestOkxDataContainers:
             "code": "0",
             "msg": "",
             "data": [
-            {
-                "instType": "SP",
-                "instId": "BTC-USDT",
-                "last": "50000",
-                "bidPx": "49999",
-                "askPx": "50001",
-                "volCcy24h": "1000",
-                "vol24h": "1000",
-                "high24h": "51000",
-                "low24h": "49000",
-            }
+                {
+                    "instType": "SP",
+                    "instId": "BTC-USDT",
+                    "last": "50000",
+                    "bidPx": "49999",
+                    "askPx": "50001",
+                    "volCcy24h": "1000",
+                    "vol24h": "1000",
+                    "high24h": "51000",
+                    "low24h": "49000",
+                }
             ],
         }
 
-        ticker = OkxTickerData(
-            ticker_response, "BTC-USDT", "SPOT", has_been_json_encoded=True
-        )
+        ticker = OkxTickerData(ticker_response, "BTC-USDT", "SPOT", has_been_json_encoded=True)
         ticker.init_data()
 
         assert ticker.get_exchange_name() == "OKX"
@@ -129,24 +131,22 @@ class TestOkxDataContainers:
             "code": "0",
             "msg": "",
             "data": [
-            {
-                "instType": "SP",
-                "instId": "BTC-USDT",
-                "ordId": "123456",
-                "clOrdId": "client_123",
-                "px": "50000",
-                "sz": "0.001",
-                "fillSz": "0.0005",
-                "side": "buy",
-                "ordType": "limit",
-                "state": "live",
-            }
+                {
+                    "instType": "SP",
+                    "instId": "BTC-USDT",
+                    "ordId": "123456",
+                    "clOrdId": "client_123",
+                    "px": "50000",
+                    "sz": "0.001",
+                    "fillSz": "0.0005",
+                    "side": "buy",
+                    "ordType": "limit",
+                    "state": "live",
+                }
             ],
         }
 
-        order = OkxOrderData(
-            order_response, "BTC-USDT", "SPOT", has_been_json_encoded=True
-        )
+        order = OkxOrderData(order_response, "BTC-USDT", "SPOT", has_been_json_encoded=True)
         order.init_data()
 
         assert order.get_exchange_name() == "OKX"
@@ -157,6 +157,7 @@ class TestOkxDataContainers:
         # OkxBalanceData exists
         # This test verifies the import works
         from bt_api_py.containers.balances.okx_balance import OkxBalanceData
+
         assert OkxBalanceData is not None
 
 

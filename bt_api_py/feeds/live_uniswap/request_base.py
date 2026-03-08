@@ -6,19 +6,17 @@ traditional REST endpoints, so this class provides GraphQL query building and
 response parsing.
 """
 
-import json
 import time
 from typing import Any
 
 from bt_api_py.containers.exchanges.uniswap_exchange_data import (
-    UniswapExchangeData,
     UniswapChain,
+    UniswapExchangeData,
 )
 from bt_api_py.containers.requestdatas.request_data import RequestData
 from bt_api_py.feeds.capability import Capability
 from bt_api_py.feeds.feed import Feed
 from bt_api_py.feeds.http_client import HttpClient
-from bt_api_py.functions.utils import update_extra_data
 from bt_api_py.logging_factory import get_logger
 
 
@@ -117,9 +115,7 @@ class UniswapRequestData(Feed):
 
             # Check for GraphQL errors
             if "errors" in response:
-                self.request_logger.error(
-                    f"GraphQL errors: {response['errors']}"
-                )
+                self.request_logger.error(f"GraphQL errors: {response['errors']}")
 
             return RequestData(response, extra_data)
 
@@ -162,9 +158,7 @@ class UniswapRequestData(Feed):
             )
 
             if "errors" in response:
-                self.async_logger.error(
-                    f"GraphQL errors: {response['errors']}"
-                )
+                self.async_logger.error(f"GraphQL errors: {response['errors']}")
 
             return RequestData(response, extra_data)
 
@@ -185,16 +179,17 @@ class UniswapRequestData(Feed):
         }
         try:
             response = self._http_client.request(
-                method="GET", url=url, headers=headers, params=params,
+                method="GET",
+                url=url,
+                headers=headers,
+                params=params,
             )
             return RequestData(response, extra_data)
         except Exception as e:
             self.request_logger.error(f"Request failed: {e}")
             raise
 
-    async def async_request(
-        self, path, params=None, body=None, extra_data=None, timeout=5
-    ):
+    async def async_request(self, path, params=None, body=None, extra_data=None, timeout=5):
         """Async HTTP request function."""
         url = f"{self._params.get_rest_url()}{path}"
         headers = {
@@ -203,7 +198,10 @@ class UniswapRequestData(Feed):
         }
         try:
             response = await self._http_client.async_request(
-                method="GET", url=url, headers=headers, params=params,
+                method="GET",
+                url=url,
+                headers=headers,
+                params=params,
             )
             return RequestData(response, extra_data)
         except Exception as e:
@@ -228,13 +226,15 @@ class UniswapRequestData(Feed):
         """
         if extra_data is None:
             extra_data = {}
-        extra_data.update({
-            "exchange_name": self.exchange_name,
-            "symbol_name": "",
-            "asset_type": "DEX",
-            "request_type": "get_server_time",
-            "server_time": time.time(),
-        })
+        extra_data.update(
+            {
+                "exchange_name": self.exchange_name,
+                "symbol_name": "",
+                "asset_type": "DEX",
+                "request_type": "get_server_time",
+                "server_time": time.time(),
+            }
+        )
         return "/time", {}, extra_data
 
     def get_server_time(self, extra_data=None, **kwargs):

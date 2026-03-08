@@ -16,7 +16,6 @@ __all__ = ["AsyncBase"]
 
 
 class AsyncBase:
-
     def __init__(self, **kwargs):
         self.loop = None
         self.keepalive_timeout = 30
@@ -26,8 +25,9 @@ class AsyncBase:
         self.async_proxy = kwargs.get("async_proxy")
         if self.async_proxy is None:
             import urllib.request
+
             system_proxies = urllib.request.getproxies()
-            self.async_proxy = system_proxies.get('https') or system_proxies.get('http')
+            self.async_proxy = system_proxies.get("https") or system_proxies.get("http")
         self.async_base_logger = get_logger("async_data")
         self.start_loop()
 
@@ -84,7 +84,9 @@ class AsyncBase:
             if headers is not None:
                 params["headers"] = headers
             if body is not None:
-                params["data"] = body if isinstance(body, str) else json.dumps(body, ensure_ascii=False)
+                params["data"] = (
+                    body if isinstance(body, str) else json.dumps(body, ensure_ascii=False)
+                )
             # print(f' rest _ async httpRequest params: {params}')
             if self.async_proxy:
                 params["proxy"] = self.async_proxy

@@ -6,13 +6,12 @@ import time
 from urllib.parse import urlencode
 
 from bt_api_py.containers.exchanges.gemini_exchange_data import GeminiExchangeDataSpot
-from bt_api_py.containers.requestdatas.request_data import RequestData
 from bt_api_py.error import GeminiErrorTranslator
 from bt_api_py.feeds.capability import Capability
 from bt_api_py.feeds.feed import Feed
 from bt_api_py.feeds.http_client import HttpClient
-from bt_api_py.rate_limiter import RateLimiter, RateLimitRule, RateLimitScope, RateLimitType
 from bt_api_py.logging_factory import get_logger
+from bt_api_py.rate_limiter import RateLimiter, RateLimitRule, RateLimitScope, RateLimitType
 
 
 class GeminiRequestData(Feed):
@@ -205,7 +204,7 @@ class GeminiRequestData(Feed):
             extra={
                 "log_data": log_data,
                 "response": response,
-            }
+            },
         )
 
     # ==================== Public API Methods ====================
@@ -260,10 +259,7 @@ class GeminiRequestData(Feed):
     def get_kline(self, symbol, time_frame, extra_data=None, **kwargs):
         """Get kline/candlestick data"""
         request_type = "get_kline"
-        path = self._params.get_rest_path(request_type).format(
-            symbol=symbol,
-            time_frame=time_frame
-        )
+        path = self._params.get_rest_path(request_type).format(symbol=symbol, time_frame=time_frame)
 
         data = self.request(path, method="GET", extra_data=extra_data)
         return data
@@ -317,8 +313,18 @@ class GeminiRequestData(Feed):
         data = self.request(path, method="POST", params=params, extra_data=extra_data)
         return data
 
-    def make_order(self, symbol, side, amount, price, order_type="exchange limit",
-                   client_order_id=None, options=None, extra_data=None, **kwargs):
+    def make_order(
+        self,
+        symbol,
+        side,
+        amount,
+        price,
+        order_type="exchange limit",
+        client_order_id=None,
+        options=None,
+        extra_data=None,
+        **kwargs,
+    ):
         """Place a new order"""
         request_type = "make_order"
         path = self._params.get_rest_path(request_type)
@@ -387,6 +393,7 @@ class GeminiRequestData(Feed):
         else:
             if params:
                 from urllib.parse import urlencode
+
                 query_string = urlencode(params)
                 url = f"{self._params.rest_url}{path}?{query_string}"
             else:
@@ -423,13 +430,15 @@ class GeminiRequestData(Feed):
         path = self._params.get_rest_path("get_system_time")
         if extra_data is None:
             extra_data = {}
-        extra_data.update({
-            "exchange_name": self.exchange_name,
-            "symbol_name": "",
-            "asset_type": self.asset_type,
-            "request_type": "get_server_time",
-            "normalize_function": self._get_server_time_normalize_function,
-        })
+        extra_data.update(
+            {
+                "exchange_name": self.exchange_name,
+                "symbol_name": "",
+                "asset_type": self.asset_type,
+                "request_type": "get_server_time",
+                "normalize_function": self._get_server_time_normalize_function,
+            }
+        )
         return path, {}, extra_data
 
     def get_server_time(self, extra_data=None, **kwargs):

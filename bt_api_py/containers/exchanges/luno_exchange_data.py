@@ -3,6 +3,7 @@ Luno Exchange Data Configuration
 """
 
 import os
+
 from bt_api_py.containers.exchanges.exchange_data import ExchangeData
 from bt_api_py.logging_factory import get_logger
 
@@ -19,6 +20,7 @@ def _get_luno_config():
         return _luno_config
     try:
         from bt_api_py.config_loader import load_exchange_config
+
         config_path = os.path.join(
             os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
             "configs",
@@ -72,11 +74,15 @@ class LunoExchangeData(ExchangeData):
             self.exchange_name = asset_cfg.exchange_name
         if config.base_urls and config.base_urls.rest:
             # Get spot-specific URL if available, otherwise use default
-            self.rest_url = config.base_urls.rest.get(asset_type, config.base_urls.rest.get("default", self.rest_url))
-        if config.base_urls and hasattr(config.base_urls, 'rest_exchange'):
+            self.rest_url = config.base_urls.rest.get(
+                asset_type, config.base_urls.rest.get("default", self.rest_url)
+            )
+        if config.base_urls and hasattr(config.base_urls, "rest_exchange"):
             self.rest_exchange_url = config.base_urls.rest_exchange
         if config.base_urls and config.base_urls.wss:
-            self.wss_url = config.base_urls.wss.get(asset_type, config.base_urls.wss.get("default", self.wss_url))
+            self.wss_url = config.base_urls.wss.get(
+                asset_type, config.base_urls.wss.get("default", self.wss_url)
+            )
         if asset_cfg.rest_paths:
             self.rest_paths.update(asset_cfg.rest_paths)
 
