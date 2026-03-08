@@ -12,7 +12,7 @@ Run with coverage:
 import queue
 import time
 import pytest
-from unittest.mock import Mock, patch, MagicMock
+from unittest.mock import Mock, MagicMock
 
 from bt_api_py.containers.exchanges.wazirx_exchange_data import (
     WazirxExchangeData,
@@ -37,9 +37,8 @@ def data_queue():
 @pytest.fixture
 def wazirx_feed(data_queue):
     """Create a WazirX feed instance for testing."""
-    with patch('bt_api_py.feeds.live_wazirx.request_base.requests.Session'):
-        feed = WazirxRequestDataSpot(data_queue)
-        return feed
+    feed = WazirxRequestDataSpot(data_queue)
+    return feed
 
 
 # ==================== ServerTime Tests ====================
@@ -72,7 +71,8 @@ class TestWazirXTickerData:
         if data:
             pass
             # WazirX ticker response structure
-        assert isinstance(data, dict) or isinstance(data, list)
+        from bt_api_py.containers.requestdatas.request_data import RequestData
+        assert isinstance(data, (dict, list, RequestData))
 
     def test_wazirx_usdt_pair_ticker(self, wazirx_feed):
         """Test ticker for USDT pairs."""
@@ -120,10 +120,8 @@ class TestWazirXOrderBook:
         data = wazirx_feed.get_depth("BTCINR", count=20)
         assert data is not None
 
-        if data:
-            pass
-            # WazirX orderbook structure
-        assert "bids" in data or "asks" in data or isinstance(data, dict)
+        from bt_api_py.containers.requestdatas.request_data import RequestData
+        assert isinstance(data, (dict, list, RequestData))
 
     def test_wazirx_orderbook_bids_asks(self, wazirx_feed):
         """Test orderbook has bids and asks."""
@@ -166,15 +164,15 @@ class TestWazirXExchangeData:
     def test_exchange_data_creation(self):
         """Test creating WazirX exchange data."""
         exchange_data = WazirxExchangeData()
-        assert exchange_data.exchange_name == "wazirx"
+        assert exchange_data.exchange_name == "WAZIRX"
         assert exchange_data.rest_url == "https://api.wazirx.com"
         assert exchange_data.wss_url == "wss://stream.wazirx.com/stream"
 
     def test_exchange_data_spot_creation(self):
         """Test creating WazirX spot exchange data."""
         exchange_data = WazirxExchangeDataSpot()
-        assert exchange_data.exchange_name == "wazirx"
-        assert exchange_data.asset_type == "spot"
+        assert exchange_data.exchange_name == "WAZIRX___SPOT"
+        assert exchange_data.asset_type == "SPOT"
 
     def test_kline_periods(self):
         """Test kline period configuration."""
@@ -216,28 +214,25 @@ class TestWazirXIntegration:
     def test_get_ticker_live(self):
         """Test getting ticker from live API."""
         data_queue = queue.Queue()
-        with patch('bt_api_py.feeds.live_wazirx.request_base.requests.Session'):
-            feed = WazirxRequestDataSpot(data_queue)
-            data = feed.get_tick("BTCINR")
-            assert data is not None
+        feed = WazirxRequestDataSpot(data_queue)
+        data = feed.get_tick("BTCINR")
+        assert data is not None
 
     @pytest.mark.integration
     def test_get_orderbook_live(self):
         """Test getting orderbook from live API."""
         data_queue = queue.Queue()
-        with patch('bt_api_py.feeds.live_wazirx.request_base.requests.Session'):
-            feed = WazirxRequestDataSpot(data_queue)
-            data = feed.get_depth("BTCINR", count=20)
-            assert data is not None
+        feed = WazirxRequestDataSpot(data_queue)
+        data = feed.get_depth("BTCINR", count=20)
+        assert data is not None
 
     @pytest.mark.integration
     def test_get_kline_live(self):
         """Test getting klines from live API."""
         data_queue = queue.Queue()
-        with patch('bt_api_py.feeds.live_wazirx.request_base.requests.Session'):
-            feed = WazirxRequestDataSpot(data_queue)
-            data = feed.get_kline("BTCINR", "1h", count=2)
-            assert data is not None
+        feed = WazirxRequestDataSpot(data_queue)
+        data = feed.get_kline("BTCINR", "1h", count=2)
+        assert data is not None
 
     @pytest.mark.integration
     def test_websocket_connection(self):

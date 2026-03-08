@@ -121,7 +121,12 @@ class TestBtcMarketsKlineData:
                 assert len(
                     first_kline) >= 6, f"Expected at least 6 fields, got {len(first_kline)}"
 
-                timestamp = int(first_kline[0])
+                try:
+                    timestamp = int(first_kline[0])
+                except (ValueError, TypeError):
+                    # BTC Markets returns ISO date strings
+                    from datetime import datetime
+                    timestamp = int(datetime.fromisoformat(str(first_kline[0]).replace('Z', '+00:00')).timestamp())
                 open_price = float(first_kline[1])
                 high_price = float(first_kline[2])
                 low_price = float(first_kline[3])

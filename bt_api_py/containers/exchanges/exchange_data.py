@@ -28,6 +28,9 @@ class ExchangeData:
         self.reverse_kline_periods = {v: k for k, v in self.kline_periods.items()}
         self.status_dict = {}  # 交易状态
         self.legal_currency = []  # 合法货币
+        self.api_key = ""  # API key for authentication
+        self.api_secret = ""  # API secret for signing
+        self.passphrase = ""  # Passphrase (used by some exchanges)
 
     def get_wss_url(self):
         return self.wss_url

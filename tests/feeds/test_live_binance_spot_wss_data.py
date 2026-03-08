@@ -35,6 +35,7 @@ def init_req_feed():
     return live_binance_spot_feed
 
 
+@pytest.mark.timeout(60)
 def test_binance_wss_data_feed():
     data_queue = queue.Queue()
     data = read_account_config()

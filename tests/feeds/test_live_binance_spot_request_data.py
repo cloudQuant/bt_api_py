@@ -359,6 +359,7 @@ def test_binance_req_order_functions():
     # assert orders.get_data() is None
 
 
+@pytest.mark.timeout(120)
 def test_binance_async_order_functions():
     data_queue = queue.Queue()
     live_binance_spot_feed = init_async_feed(data_queue)

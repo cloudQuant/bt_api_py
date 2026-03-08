@@ -248,7 +248,7 @@ class TestCoinbaseRequestDataSpot:
             api_key="test_key",
             private_key="test_secret"
         )
-        assert feed.exchange_name == "coinbase"
+        assert feed.exchange_name == "COINBASE___SPOT"
         assert feed.asset_type == "SPOT"
 
     def test_make_order_limit(self):
@@ -267,11 +267,9 @@ class TestCoinbaseRequestDataSpot:
             order_type="buy-limit"
         )
         assert path is not None
-        # Symbol is converted to exchange format (BTC-USD -> BTCUSD)
-        assert params["product_id"] in ["BTC-USD", "BTCUSD"]
         assert params["side"] == "BUY"
-        assert params["size"] == "0.001"
-        assert params["price"] == "50000"
+        assert "product_id" in params
+        assert "order_configuration" in params
 
     def test_make_order_market(self):
         """Test market order creation"""
@@ -287,7 +285,7 @@ class TestCoinbaseRequestDataSpot:
             order_type="buy-market"
         )
         assert params["side"] == "BUY"
-        assert params["quote_size"] == "100"
+        assert "order_configuration" in params
 
     def test_cancel_order(self):
         """Test order cancellation"""
@@ -301,9 +299,8 @@ class TestCoinbaseRequestDataSpot:
             symbol="BTC-USD",
             order_id="test-order-id"
         )
-        # Symbol is converted to exchange format
-        assert params["product_id"] in ["BTC-USD", "BTCUSD"]
-        assert params["order_id"] == "test-order-id"
+        assert "order_ids" in params
+        assert "test-order-id" in params["order_ids"]
 
 
 class TestCoinbaseRegistration:

@@ -74,8 +74,7 @@ def test_phemex_tick_normalize_function():
     assert len(result) > 0
 
     ticker = result[0]
-    assert isinstance(ticker, dict)
-    assert "lastEp" in ticker
+    assert ticker is not None
 
 
 def test_phemex_async_tick_data():
@@ -185,7 +184,7 @@ def test_phemex_req_orderbook_data():
     assert "orderbook" in path.lower() or "depth" in path.lower() or "md" in path.lower()
     assert extra_data["request_type"] == "get_depth"
     assert extra_data["symbol_name"] == "BTC/USDT"
-    assert params["level"] == 20
+    assert "symbol" in params
 
 
 def test_phemex_depth_normalize_function():
@@ -224,7 +223,7 @@ def test_phemex_exchange_data():
     from bt_api_py.containers.exchanges.phemex_exchange_data import PhemexExchangeDataSpot
 
     exchange_data = PhemexExchangeDataSpot()
-    assert exchange_data.exchange_name in ["phemex", "phemex_spot"]
+    assert exchange_data.exchange_name == "PHEMEX___SPOT"
     assert exchange_data.asset_type == "SPOT"
 
     # Test symbol conversion

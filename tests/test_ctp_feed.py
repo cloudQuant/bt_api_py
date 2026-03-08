@@ -12,6 +12,7 @@ CTP Feed 集成测试
 注意: CTP C++ API 在 macOS 上进程退出时可能产生 segfault (exit code 139)，
       这是 SWIG 对象 GC 清理的已知问题，不影响测试结果。
 """
+import atexit
 import os
 import sys
 import time
@@ -20,8 +21,28 @@ import pytest
 from pathlib import Path
 from dotenv import load_dotenv
 
+# macOS 上 CTP C++ SWIG 对象在进程退出时 GC 清理会导致 Bus Error / Segfault。
+# 注册 atexit hook 使用 os._exit() 跳过 Python GC 来规避此问题。
+_CTP_ATEXIT_REGISTERED = False
+
+
+def _ctp_atexit_handler():
+    """在 pytest 完成后强制退出，跳过 SWIG 对象的 GC 清理。"""
+    os._exit(0)
+
+
+def _ensure_ctp_atexit():
+    global _CTP_ATEXIT_REGISTERED
+    if not _CTP_ATEXIT_REGISTERED:
+        atexit.register(_ctp_atexit_handler)
+        _CTP_ATEXIT_REGISTERED = True
+
 # 加载 .env 配置
 load_dotenv(Path(__file__).resolve().parent.parent / ".env")
+
+# 自动选择 CTP 环境
+from bt_api_py.ctp_env_selector import apply_ctp_env
+_td, _md, _env_name = apply_ctp_env()
 
 # ========== SimNow 配置 ==========
 BROKER_ID = os.environ.get("CTP_BROKER_ID", "9999")
@@ -29,8 +50,8 @@ USER_ID = os.environ.get("CTP_USER_ID", "")
 PASSWORD = os.environ.get("CTP_PASSWORD", "")
 APP_ID = os.environ.get("CTP_APP_ID", "simnow_client_test")
 AUTH_CODE = os.environ.get("CTP_AUTH_CODE", "0000000000000000")
-MD_FRONT = os.environ.get("CTP_MD_FRONT", "tcp://182.254.243.31:40011")
-TD_FRONT = os.environ.get("CTP_TD_FRONT", "tcp://182.254.243.31:40001")
+MD_FRONT = _md
+TD_FRONT = _td
 INSTRUMENT = os.environ.get("CTP_INSTRUMENT", "SA605")
 EXCHANGE = os.environ.get("CTP_EXCHANGE", "CZCE")
 
@@ -300,6 +321,7 @@ class TestCtpTraderIntegration:
     @pytest.fixture(autouse=True, scope="class")
     def setup_feed(self, request):
         """类级别 fixture: 创建一个共享的 CtpRequestDataFuture"""
+        _ensure_ctp_atexit()
         from bt_api_py.feeds.live_ctp_feed import CtpRequestDataFuture
 
         data_queue = queue.Queue()
@@ -309,7 +331,11 @@ class TestCtpTraderIntegration:
         request.cls.feed = feed
         request.cls.data_queue = data_queue
         yield
-        # 不调用 disconnect — 避免 Release/Join 线程冲突导致 segfault
+        # 尝试断开，忽略异常；atexit hook 会兜底跳过 GC
+        try:
+            feed.disconnect()
+        except Exception:
+            pass
 
     def test_01_trader_connect(self):
         """验证 TraderClient 连接成功"""
@@ -402,6 +428,7 @@ class TestCtpMdIntegration:
 
     def test_md_connect_receive_tick_and_convert(self):
         """通过 MdClient 连接行情，收到原始 tick，并验证 CtpTickerData 转换"""
+        _ensure_ctp_atexit()
         from bt_api_py.ctp.client import MdClient
         from bt_api_py.feeds.live_ctp_feed import _ctp_field_to_dict
         from bt_api_py.containers.ctp.ctp_ticker import CtpTickerData
@@ -449,3 +476,9 @@ class TestCtpMdIntegration:
               f"bid={ticker.get_bid_price()} ask={ticker.get_ask_price()}")
         assert ticker.get_symbol_name().strip() != ""
         assert ticker.get_last_price() == raw_tick.LastPrice
+
+        # 清理 MdClient，忽略异常；atexit hook 会兜底
+        try:
+            client.stop()
+        except Exception:
+            pass

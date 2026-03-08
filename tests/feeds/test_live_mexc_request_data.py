@@ -210,7 +210,7 @@ def test_mexc_exchange_data():
     from bt_api_py.containers.exchanges.mexc_exchange_data import MexcExchangeDataSpot
 
     exchange_data = MexcExchangeDataSpot()
-    assert exchange_data.exchange_name == "MEXC"
+    assert exchange_data.exchange_name == "MEXC___SPOT"
     assert exchange_data.asset_type == "SPOT"
 
     # Test symbol conversion

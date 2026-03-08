@@ -44,6 +44,7 @@ def _collect_wss_data(data_queue, wait_seconds=20, max_items=50000):
     return items
 
 
+@pytest.mark.timeout(60)
 def test_binance_wss_data_feed():
     data_queue = queue.Queue()
     kwargs = _make_wss_kwargs([
@@ -126,6 +127,7 @@ def test_binance_wss_all_book_ticker():
     assert received_ticker is True, "all_book_ticker should push BinanceWssTickerData"
 
 
+@pytest.mark.timeout(120)
 def test_binance_wss_continuous_kline():
     data_queue = queue.Queue()
     kwargs = _make_wss_kwargs([
@@ -181,6 +183,7 @@ def test_binance_wss_all_ticker():
     assert len(items) > 0, "all_ticker should receive data within 5s"
 
 
+@pytest.mark.timeout(60)
 def test_binance_wss_all_force_order():
     data_queue = queue.Queue()
     kwargs = _make_wss_kwargs([
