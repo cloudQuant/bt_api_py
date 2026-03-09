@@ -1,9 +1,9 @@
 # bt_api_py
 
-[![Python 3.11+](<https://img.shields.io/badge/python-3.11%2B-blue.svg)](<https://www.python.org/downloads/>)>
-[![License: MIT](<https://img.shields.io/badge/License-MIT-green.svg)](<https://opensource.org/licenses/MIT>)>
-[![PyPI](<https://img.shields.io/pypi/v/bt_api_py.svg)](<https://pypi.org/project/bt_api_py/>)>
-[![Documentation](<https://img.shields.io/badge/docs-latest-blue.svg)](<https://cloudquant.github.io/bt_api_py/>)>
+[![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-blue.svg)](https://www.python.org/downloads/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](https://opensource.org/licenses/MIT)
+[![PyPI](https://img.shields.io/badge/pypi/v/bt_api_py.svg)](https://pypi.org/project/bt_api_py/)
+[![Documentation](https://img.shields.io/badge/docs-latest-blue.svg)](https://cloudquant.github.io/bt_api_py/)
 
 - **bt_api_py** 是一个专业的统一多交易所交易 API 框架，专为量化交易者和机构投资者设计。支持现货、合约、期货、股票等多种交易类型，提供同步、异步和 WebSocket 三种接口模式，让您用一套代码轻松对接全球主流交易所。
 
@@ -15,9 +15,9 @@
 4. **📦 丰富的标准化数据容器** — 提供 20+ 种标准化数据类型（Ticker、OrderBook、Bar、Order、Position 等），屏蔽各交易所数据格式差异
 5. **🚀 高性能 C/C++ 扩展** — 核心计算模块使用 Cython 和 C++ 实现，关键路径性能优化，适合高频交易场景
 
-:books:**[在线文档](https://cloudquant.github.io/bt_api_py/)**|> :rocket: [快速开始](https://cloudquant.github.io/bt_api_py/quickstart/) | [English](README.en.md) | 中文
+📚 **[在线文档](https://cloudquant.github.io/bt_api_py/)** | 🚀 [快速开始](https://cloudquant.github.io/bt_api_py/quickstart/) | [English](README.en.md) | 中文
 
-- --
+---
 
 ## 适用场景
 
@@ -111,7 +111,7 @@
 | **Luno** | 15 passed | **Mercado Bitcoin** | 18 passed | **Ripio** | 22 passed |
 | **SatoshiTango** | 20 passed | **Swyftx** | 73 passed | **VALR** | 73 passed |
 | **WazirX** | 74 passed | **YoBit** | 83 passed | **Zaif** | 92 passed |
-| **Zebpay** | 93 passed | | | | |
+| **Zebpay** | 93 passed | | | |
 
 **去中心化交易所 (DEX) — 测试通过 ✅**
 
