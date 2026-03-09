@@ -4,6 +4,7 @@ IB 持仓数据容器
 """
 
 from typing import Any
+
 from bt_api_py.containers.positions.position import PositionData
 
 

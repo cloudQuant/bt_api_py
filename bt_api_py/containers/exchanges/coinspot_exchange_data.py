@@ -7,8 +7,8 @@ Symbol: coin shortname "BTC" (no trading pair)
 No WebSocket support.
 """
 
-from typing import Any
 import os
+from typing import Any
 
 from bt_api_py.containers.exchanges.exchange_data import ExchangeData
 from bt_api_py.logging_factory import get_logger

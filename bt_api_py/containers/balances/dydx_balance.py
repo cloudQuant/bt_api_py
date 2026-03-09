@@ -1,6 +1,6 @@
-from typing import Any
 import json
 import time
+from typing import Any
 
 from bt_api_py.containers.balances.balance import BalanceData
 from bt_api_py.functions.utils import from_dict_get_float, from_dict_get_string

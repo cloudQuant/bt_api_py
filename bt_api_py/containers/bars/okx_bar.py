@@ -1,6 +1,6 @@
-from typing import Any
 import json
 import time
+from typing import Any
 
 from bt_api_py.containers.bars.bar import BarData
 

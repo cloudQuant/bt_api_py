@@ -415,7 +415,7 @@ class LoggingManager:
         """Generate a new correlation ID."""
         return str(uuid.uuid4())
 
-    def with_correlation_id(def with_correlation_id(self, correlation_id: str: dict[str, Any]) -> None:
+    def with_correlation_id(self, correlation_id: str) -> None:
         """Context manager for setting correlation ID."""
         return _correlation_id_context(correlation_id)
 

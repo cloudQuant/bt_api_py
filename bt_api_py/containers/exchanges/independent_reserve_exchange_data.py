@@ -6,8 +6,8 @@ Public: GET /Public/...  Private: POST /Private/...
 Symbol: primaryCurrencyCode + secondaryCurrencyCode (e.g. Xbt, Aud)
 """
 
-from typing import Any
 import os
+from typing import Any
 
 from bt_api_py.containers.exchanges.exchange_data import ExchangeData
 from bt_api_py.logging_factory import get_logger

@@ -143,7 +143,7 @@ class BalancerRequestDataSpot(BalancerRequestData):
         # Return as list for consistency with other APIs
         return [pool_data], status
 
-    def get_pool(def get_pool(self, pool_id: str: dict[str, Any], extra_data=None: Any, **kwargs: dict[str, Any]) -> None:
+    def get_pool(self, pool_id: str, extra_data: Any = None, **kwargs: dict[str, Any]) -> None:
         """Get pool details.
 
         Args:
@@ -241,7 +241,13 @@ class BalancerRequestDataSpot(BalancerRequestData):
 
         return pools or [], status
 
-    def get_pools(def get_pools(self, first: int = 10: Any, min_tvl: float | None = None: Any, extra_data=None: Any, **kwargs: dict[str, Any]) -> None:
+    def get_pools(
+        self,
+        first: int = 10,
+        min_tvl: float | None = None,
+        extra_data: Any = None,
+        **kwargs: dict[str, Any],
+    ) -> None:
         """Get list of pools sorted by TVL.
 
         Args:
@@ -315,7 +321,7 @@ class BalancerRequestDataSpot(BalancerRequestData):
 
         return [ticker_data], status
 
-    def get_tick(def get_tick(self, symbol: str: dict[str, Any], extra_data=None: Any, **kwargs: dict[str, Any]) -> None:
+    def get_tick(self, symbol: str, extra_data: Any = None, **kwargs: dict[str, Any]) -> None:
         """Get token price and 24h statistics.
 
         Args:
@@ -329,7 +335,7 @@ class BalancerRequestDataSpot(BalancerRequestData):
         path, params, extra_data = self._get_tick(symbol, extra_data, **kwargs)
         return self.request(path, params=params, extra_data=extra_data)
 
-    def async_get_tick(def async_get_tick(self, symbol: str: dict[str, Any], extra_data=None: Any, **kwargs: dict[str, Any]) -> None:
+    def async_get_tick(self, symbol: str, extra_data: Any = None, **kwargs: dict[str, Any]) -> None:
         """Async get token price."""
         path, params, extra_data = self._get_tick(symbol, extra_data, **kwargs)
         self.submit(
@@ -422,7 +428,15 @@ class BalancerRequestDataSpot(BalancerRequestData):
 
         return [swap_data], status
 
-    def get_swap_path(def get_swap_path(self, token_in: str: dict[str, Any], token_out: str: dict[str, Any], amount: str: dict[str, Any], swap_type: str = "EXACT_IN": Any, extra_data=None: Any, **kwargs: dict[str, Any]) -> None:
+    def get_swap_path(
+        self,
+        token_in: str,
+        token_out: str,
+        amount: str,
+        swap_type: str = "EXACT_IN",
+        extra_data: Any = None,
+        **kwargs: dict[str, Any],
+    ) -> None:
         """Get optimal swap path for a token swap.
 
         Args:
@@ -487,7 +501,9 @@ class BalancerRequestDataSpot(BalancerRequestData):
 
         return [input_data], True
 
-    def get_depth(def get_depth(self, symbol: str: dict[str, Any], count: int = 20: Any, extra_data=None: Any, **kwargs: dict[str, Any]) -> None:
+    def get_depth(
+        self, symbol: str, count: int = 20, extra_data: Any = None, **kwargs: dict[str, Any]
+    ) -> None:
         """Get liquidity depth.
 
         Note: This is not a traditional order book. For Balancer pools,
@@ -496,7 +512,9 @@ class BalancerRequestDataSpot(BalancerRequestData):
         path, params, extra_data = self._get_depth(symbol, count, extra_data, **kwargs)
         return self.request(path, params=params, extra_data=extra_data)
 
-    def async_get_depth(def async_get_depth(self, symbol: str: dict[str, Any], count: int = 20: Any, extra_data=None: Any, **kwargs: dict[str, Any]) -> None:
+    def async_get_depth(
+        self, symbol: str, count: int = 20, extra_data: Any = None, **kwargs: dict[str, Any]
+    ) -> None:
         """Async get liquidity depth."""
         path, params, extra_data = self._get_depth(symbol, count, extra_data, **kwargs)
         self.submit(
@@ -546,7 +564,14 @@ class BalancerRequestDataSpot(BalancerRequestData):
         # Balancer doesn't have direct kline data
         return [], True
 
-    def get_kline(def get_kline(self, symbol: str: dict[str, Any], period: str: dict[str, Any], count: int = 20: Any, extra_data=None: Any, **kwargs: dict[str, Any]) -> None:
+    def get_kline(
+        self,
+        symbol: str,
+        period: str,
+        count: int = 20,
+        extra_data: Any = None,
+        **kwargs: dict[str, Any],
+    ) -> None:
         """Get kline data.
 
         Note: Balancer doesn't provide direct kline data through GraphQL.
@@ -555,7 +580,14 @@ class BalancerRequestDataSpot(BalancerRequestData):
         path, params, extra_data = self._get_kline(symbol, period, count, extra_data, **kwargs)
         return self.request(path, params=params, extra_data=extra_data)
 
-    def async_get_kline(def async_get_kline(self, symbol: str: dict[str, Any], period: str: dict[str, Any], count: int = 20: Any, extra_data=None: Any, **kwargs: dict[str, Any]) -> None:
+    def async_get_kline(
+        self,
+        symbol: str,
+        period: str,
+        count: int = 20,
+        extra_data: Any = None,
+        **kwargs: dict[str, Any],
+    ) -> None:
         """Async get kline data."""
         path, params, extra_data = self._get_kline(symbol, period, count, extra_data, **kwargs)
         self.submit(
@@ -685,7 +717,15 @@ class BalancerRequestDataSpot(BalancerRequestData):
 
         return events or [], status
 
-    def get_pool_events(def get_pool_events(self, pool_id: str: dict[str, Any], event_type: str | None = None: Any, start_time: int | None = None: Any, end_time: int | None = None: Any, extra_data=None: Any, **kwargs: dict[str, Any]) -> None:
+    def get_pool_events(
+        self,
+        pool_id: str,
+        event_type: str | None = None,
+        start_time: int | None = None,
+        end_time: int | None = None,
+        extra_data: Any = None,
+        **kwargs: dict[str, Any],
+    ) -> None:
         """Get pool events (swaps, joins, exits).
 
         Args:

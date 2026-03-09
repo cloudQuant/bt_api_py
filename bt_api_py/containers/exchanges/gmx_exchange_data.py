@@ -6,9 +6,9 @@ GMX is a decentralized perpetual exchange that supports multiple blockchains:
 - Botanix
 """
 
-from typing import Any
 import os
 from enum import Enum
+from typing import Any
 
 from bt_api_py.logging_factory import get_logger
 

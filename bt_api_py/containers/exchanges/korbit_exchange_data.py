@@ -5,8 +5,8 @@ Auth: OAuth2 Bearer token (Authorization: Bearer {token})
 Symbol: {base}_{quote} lowercase (e.g. btc_krw)
 """
 
-from typing import Any
 import os
+from typing import Any
 
 from bt_api_py.containers.exchanges.exchange_data import ExchangeData
 from bt_api_py.logging_factory import get_logger

@@ -1,8 +1,8 @@
 """Bitget Ticker Data Container."""
 
-from typing import Any, Self
 import json
 import time
+from typing import Any, Self
 
 from bt_api_py.containers.tickers.ticker import TickerData
 from bt_api_py.functions.utils import from_dict_get_float, from_dict_get_string

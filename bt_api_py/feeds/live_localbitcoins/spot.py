@@ -3,6 +3,7 @@ LocalBitcoins Spot Feed – three-layer sync / async wrappers + WSS stubs.
 """
 
 from typing import Any
+
 from bt_api_py.containers.exchanges.localbitcoins_exchange_data import LocalBitcoinsExchangeDataSpot
 from bt_api_py.feeds.live_localbitcoins.request_base import LocalBitcoinsRequestData
 from bt_api_py.logging_factory import get_logger

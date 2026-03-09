@@ -4,8 +4,8 @@ This module provides HitBTC-specific configuration and path management.
 Loads configuration from YAML file and provides REST/WSS endpoints.
 """
 
-from typing import Any
 import os
+from typing import Any
 
 from bt_api_py.containers.exchanges.exchange_data import ExchangeData
 from bt_api_py.logging_factory import get_logger

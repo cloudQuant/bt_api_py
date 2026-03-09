@@ -4,8 +4,8 @@ This module contains exchange-specific configuration for Poloniex,
 including REST endpoints, WebSocket channels, and symbol formatting.
 """
 
-from typing import Any
 import os
+from typing import Any
 
 from bt_api_py.containers.exchanges.exchange_data import ExchangeData
 from bt_api_py.logging_factory import get_logger

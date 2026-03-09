@@ -3,9 +3,9 @@
 Defines API endpoints, chain enums, and path configurations for SushiSwap DEX.
 """
 
-from typing import Any
 import os
 from enum import Enum
+from typing import Any
 
 # Config loading cache
 _sushiswap_config = None
