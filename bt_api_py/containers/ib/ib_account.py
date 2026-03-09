@@ -3,6 +3,8 @@ IB 账户数据容器
 对应 IB TWS API 的 AccountSummary / AccountValue
 """
 
+from typing import Any
+
 from bt_api_py.containers.accounts.account import AccountData
 
 

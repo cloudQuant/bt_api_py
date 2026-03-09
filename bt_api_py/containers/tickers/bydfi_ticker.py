@@ -1,5 +1,7 @@
 """BYDFi Ticker Data Container."""
 
+from typing import Any
+
 import json
 import time
 

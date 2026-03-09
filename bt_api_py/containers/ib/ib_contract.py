@@ -3,6 +3,8 @@ IB 合约描述容器
 IB 的合约描述比加密货币和 CTP 都复杂，需要多个字段组合才能唯一确定一个合约
 """
 
+from typing import Any
+
 
 class IbContract:
     """IB 合约描述，对应 ibapi.contract.Contract"""

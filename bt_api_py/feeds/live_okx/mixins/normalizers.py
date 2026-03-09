@@ -3,6 +3,8 @@ Shared normalize functions for OKX API responses.
 These are used across multiple mixin modules.
 """
 
+from typing import Any
+
 
 def generic_normalize_function(input_data: Any, extra_data: Any) -> None:
     """Generic normalize function for OKX API responses.

@@ -3,6 +3,8 @@ IB 成交数据容器
 对应 IB TWS API 的 Execution
 """
 
+from typing import Any
+
 from bt_api_py.containers.trades.trade import TradeData
 
 

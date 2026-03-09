@@ -3,6 +3,8 @@ IB K线数据容器
 对应 IB TWS API 的 BarData (reqHistoricalData / reqRealTimeBars)
 """
 
+from typing import Any
+
 from bt_api_py.containers.bars.bar import BarData
 
 
