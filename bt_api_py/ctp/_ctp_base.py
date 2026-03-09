@@ -1,9 +1,8 @@
 """Shared SWIG infrastructure for split CTP wrapper modules."""
 
+import weakref
 from sys import float_info, stderr
 from traceback import print_exception
-
-import weakref
 
 # Import the low-level C/C++ module.
 if getattr(globals().get("__spec__"), "parent", None) or __package__ or "." in __name__:

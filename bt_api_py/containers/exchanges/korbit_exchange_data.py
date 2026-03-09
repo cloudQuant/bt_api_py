@@ -1,11 +1,11 @@
-"""
-Korbit Exchange Data Configuration.
+"""Korbit Exchange Data Configuration.
 
 API doc: https://docs.korbit.co.kr
 Auth: OAuth2 Bearer token (Authorization: Bearer {token})
 Symbol: {base}_{quote} lowercase (e.g. btc_krw)
 """
 
+from typing import Any
 import os
 
 from bt_api_py.containers.exchanges.exchange_data import ExchangeData
@@ -17,7 +17,7 @@ _korbit_config = None
 _korbit_config_loaded = False
 
 
-def _get_korbit_config():
+def _get_korbit_config() -> Any | None:
     """Load and cache Korbit YAML configuration."""
     global _korbit_config, _korbit_config_loaded
     if _korbit_config_loaded:
@@ -57,7 +57,7 @@ _FALLBACK_REST_PATHS = {
 class KorbitExchangeData(ExchangeData):
     """Base class for Korbit exchange."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__()
         self.exchange_name = "KORBIT___SPOT"
         self.rest_url = "https://api.korbit.co.kr"
@@ -77,7 +77,7 @@ class KorbitExchangeData(ExchangeData):
         self.reverse_kline_periods = {v: k for k, v in self.kline_periods.items()}
         self.legal_currency = ["KRW", "BTC", "ETH"]
 
-    def _load_from_config(self, asset_type):
+    def _load_from_config(self, asset_type) -> bool:
         """Load from YAML config."""
         config = _get_korbit_config()
         if config is None:
@@ -108,7 +108,7 @@ class KorbitExchangeData(ExchangeData):
 class KorbitExchangeDataSpot(KorbitExchangeData):
     """Korbit Spot exchange configuration."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__()
         self.asset_type = "SPOT"
         self._load_from_config("spot")
@@ -123,15 +123,15 @@ class KorbitExchangeDataSpot(KorbitExchangeData):
         """Convert 'btc_krw' → 'BTC-KRW'."""
         return symbol.upper().replace("_", "-")
 
-    def get_period(self, key):
+    def get_period(self, key: str) -> str:
         """Get kline period value."""
         return self.kline_periods.get(key, key)
 
-    def get_reverse_period(self, key):
+    def get_reverse_period(self, key: str) -> str:
         """Reverse kline period lookup."""
         return self.reverse_kline_periods.get(key, key)
 
-    def get_rest_path(self, key):
+    def get_rest_path(self, key: str, **kwargs) -> str:
         """Get REST path for *key*. Raises ValueError if missing."""
         if key not in self.rest_paths or self.rest_paths[key] == "":
             raise ValueError(f"[{self.exchange_name}] REST path not found: {key}")

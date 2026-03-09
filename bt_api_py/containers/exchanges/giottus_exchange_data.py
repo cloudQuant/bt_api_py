@@ -1,6 +1,6 @@
-"""
-Giottus Exchange Data Configuration
-"""
+from typing import Any
+
+"""Giottus Exchange Data Configuration."""
 
 import os
 
@@ -13,7 +13,7 @@ _giottus_config = None
 _giottus_config_loaded = False
 
 
-def _get_giottus_config():
+def _get_giottus_config() -> Any | None:
     """Load Giottus YAML configuration."""
     global _giottus_config, _giottus_config_loaded
     if _giottus_config_loaded:
@@ -37,7 +37,7 @@ def _get_giottus_config():
 class GiottusExchangeData(ExchangeData):
     """Base class for Giottus exchange."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__()
         self.exchange_name = "giottus"
         self.rest_url = "https://api.giottus.com"
@@ -54,7 +54,7 @@ class GiottusExchangeData(ExchangeData):
         }
         self.legal_currency = ["INR", "USDT", "USD", "BTC", "ETH"]
 
-    def _load_from_config(self, asset_type):
+    def _load_from_config(self, asset_type) -> bool:
         """Load from YAML config."""
         config = _get_giottus_config()
         if config is None:
@@ -100,7 +100,7 @@ class GiottusExchangeData(ExchangeData):
 class GiottusExchangeDataSpot(GiottusExchangeData):
     """Giottus Spot exchange configuration."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__()
         self.asset_type = "spot"
         self.rest_paths = {}

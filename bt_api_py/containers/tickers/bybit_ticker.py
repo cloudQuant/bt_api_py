@@ -5,9 +5,9 @@ from bt_api_py.functions.utils import from_dict_get_float
 
 
 class BybitTickerData(TickerData):
-    """保存 Bybit ticker 信息"""
+    """保存 Bybit ticker 信息."""
 
-    def __init__(self, ticker_info, symbol_name, asset_type, has_been_json_encoded=False):
+    def __init__(self, ticker_info, symbol_name, asset_type, has_been_json_encoded=False) -> None:
         super().__init__(ticker_info, has_been_json_encoded)
         self.exchange_name = "BYBIT"  # 交易所名称
         self.local_update_time = time.time()  # 本地时间戳
@@ -31,8 +31,8 @@ class BybitTickerData(TickerData):
         self.all_data = None
         self.has_been_init_data = False
 
-    def init_data(self):
-        """初始化 ticker 数据"""
+    def init_data(self) -> "Self":
+        """初始化 ticker 数据."""
         if self.has_been_init_data or self.ticker_data is None:
             return self
 
@@ -78,8 +78,8 @@ class BybitTickerData(TickerData):
             self.has_been_init_data = False
         return self
 
-    def get_all_data(self):
-        """获取所有 ticker 数据"""
+    def get_all_data(self) -> dict[str, Any]:
+        """获取所有 ticker 数据."""
         if self.all_data is None:
             self.init_data()
             self.all_data = {
@@ -104,8 +104,8 @@ class BybitTickerData(TickerData):
             }
         return self.all_data
 
-    def __str__(self):
-        """返回 ticker 的字符串表示"""
+    def __str__(self) -> str:
+        """返回 ticker 的字符串表示."""
         self.init_data()
         return (
             f"BybitTicker(symbol={self.symbol_name}, "
@@ -117,14 +117,14 @@ class BybitTickerData(TickerData):
 
 
 class BybitSpotTickerData(BybitTickerData):
-    """Bybit 现货 ticker 数据"""
+    """Bybit 现货 ticker 数据."""
 
-    def __init__(self, ticker_info, symbol_name, has_been_json_encoded=False):
+    def __init__(self, ticker_info, symbol_name, has_been_json_encoded=False) -> None:
         super().__init__(ticker_info, symbol_name, "spot", has_been_json_encoded)
 
 
 class BybitSwapTickerData(BybitTickerData):
-    """Bybit 期货/swap ticker 数据"""
+    """Bybit 期货/swap ticker 数据."""
 
-    def __init__(self, ticker_info, symbol_name, has_been_json_encoded=False):
+    def __init__(self, ticker_info, symbol_name, has_been_json_encoded=False) -> None:
         super().__init__(ticker_info, symbol_name, "swap", has_been_json_encoded)

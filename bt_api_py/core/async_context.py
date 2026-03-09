@@ -25,7 +25,7 @@ class AsyncContextManager:
             raise
         else:
             # Use asyncio.wait_for for timeout
-            async def _inner():
+            async def _inner() -> Any | None:
                 await asyncio.sleep(0)  # Dummy async function
                 return None
 
@@ -194,7 +194,7 @@ def async_circuit_breaker(
 class AsyncRateLimiter:
     """Async rate limiter implementation."""
 
-    def __init__(self, max_requests: int, time_window: float):
+    def __init__(self, max_requests: int, time_window: float) -> Any | None:
         self.max_requests = max_requests
         self.time_window = time_window
         self.requests = []
@@ -227,7 +227,7 @@ class AsyncRateLimiter:
 class AsyncSemaphore:
     """Async semaphore with timeout support."""
 
-    def __init__(self, max_concurrent: int):
+    def __init__(self, max_concurrent: int) -> Any | None:
         self._semaphore = asyncio.Semaphore(max_concurrent)
 
     async def acquire(self, timeout: float | None = None) -> None:
@@ -255,7 +255,7 @@ class AsyncSemaphore:
 class AsyncQueue:
     """Async queue with timeout and priority support."""
 
-    def __init__(self, maxsize: int = 0):
+    def __init__(self, maxsize: int = 0) -> Any | None:
         self._queue = asyncio.Queue(maxsize=maxsize)
 
     async def put(self, item: Any, timeout: float | None = None) -> None:
@@ -294,7 +294,7 @@ class AsyncQueue:
 class AsyncTaskGroup:
     """Manage group of async tasks with proper cleanup."""
 
-    def __init__(self):
+    def __init__(self) -> Any | None:
         self._tasks = set()
         self._shutdown = False
 

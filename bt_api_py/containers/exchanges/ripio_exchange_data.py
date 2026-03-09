@@ -1,8 +1,8 @@
-"""
-Ripio Exchange Data Configuration
+"""Ripio Exchange Data Configuration
 Provides URL configurations, symbol mappings, and REST paths for Ripio API.
 """
 
+from typing import Any
 import os
 
 from bt_api_py.containers.exchanges.exchange_data import ExchangeData
@@ -15,8 +15,8 @@ _ripio_config = None
 _ripio_config_loaded = False
 
 
-def _get_ripio_config():
-    """延迟加载并缓存 Ripio YAML 配置"""
+def _get_ripio_config() -> Any | None:
+    """延迟加载并缓存 Ripio YAML 配置."""
     global _ripio_config, _ripio_config_loaded
     if _ripio_config_loaded:
         return _ripio_config
@@ -44,7 +44,7 @@ class RipioExchangeData(ExchangeData):
     wss_url, rest_paths, wss_paths, legal_currency.
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__()
         self.exchange_name = "ripio"
         self.rest_url = "https://api.exchange.ripio.com"
@@ -66,13 +66,14 @@ class RipioExchangeData(ExchangeData):
 
         self.legal_currency = ["ARS", "BRL", "EUR", "MXN", "USD", "USDT", "BTC", "ETH", "UAH"]
 
-    def _load_from_config(self, asset_type):
-        """从 YAML 配置文件加载交易所参数
+    def _load_from_config(self, asset_type) -> bool:
+        """从 YAML 配置文件加载交易所参数.
 
         Args:
             asset_type: 资产类型 key, 如 'spot'
         Returns:
             bool: 是否加载成功
+
         """
         config = _get_ripio_config()
         if config is None:
@@ -120,48 +121,54 @@ class RipioExchangeData(ExchangeData):
 
         return True
 
-    def get_symbol(self, symbol):
+    def get_symbol(self, symbol: str) -> str:
         """将交易对名称转换为 Ripio 格式.
 
         Ripio uses underscore format: BTC_USDT
 
         Args:
             symbol: 交易对名称 (e.g., 'BTC/USDT', 'BTC-USDT')
+
         Returns:
             str: Ripio 格式的交易对名称
+
         """
         # Convert to underscore format
         return symbol.replace("-", "_").replace("/", "_").upper()
 
-    def get_period(self, period):
+    def get_period(self, period: str) -> str:
         """将周期转换为 Ripio 格式.
 
         Args:
             period: 周期名称 (e.g., '1m', '5m', '1h', '1d')
+
         Returns:
             str: Ripio 格式的周期
+
         """
         return self.kline_periods.get(period, period)
 
-    def get_rest_path(self, request_type):
+    def get_rest_path(self, request_type: str, **kwargs) -> str:
         """获取 REST API 路径.
 
         Args:
             request_type: 请求类型
         Returns:
             str: REST API 路径
+
         """
         if request_type not in self.rest_paths or self.rest_paths[request_type] == "":
             self.raise_path_error(self.exchange_name, request_type)
         return self.rest_paths[request_type]
 
-    def get_wss_path(self, **kwargs):
+    def get_wss_path(self, **kwargs) -> str:
         """获取 WebSocket 路径.
 
         Args:
             **kwargs: kwargs params
         Returns:
             str: WebSocket 路径
+
         """
         key = kwargs.get("topic", "")
         if "symbol" in kwargs:
@@ -182,14 +189,14 @@ class RipioExchangeData(ExchangeData):
 
 
 class RipioExchangeDataSpot(RipioExchangeData):
-    """Ripio Spot Trading Configuration"""
+    """Ripio Spot Trading Configuration."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__()
         self.asset_type = "SPOT"
         self._load_from_config("spot")
 
-    def get_symbol(self, symbol):
+    def get_symbol(self, symbol: str) -> str:
         """将交易对名称转换为 Ripio Spot 格式.
 
         Ripio uses underscore format: BTC_USDT

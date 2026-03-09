@@ -1,10 +1,10 @@
-"""
-Bitso Exchange Data Configuration.
+"""Bitso Exchange Data Configuration.
 
 Symbol format: lowercase underscore (btc_mxn).
 """
 
 import os
+from typing import Any
 
 from bt_api_py.containers.exchanges.exchange_data import ExchangeData
 from bt_api_py.logging_factory import get_logger
@@ -15,7 +15,7 @@ _bitso_config = None
 _bitso_config_loaded = False
 
 
-def _get_bitso_config():
+def _get_bitso_config() -> Any | None:
     """Load Bitso YAML configuration (cached)."""
     global _bitso_config, _bitso_config_loaded
     if _bitso_config_loaded:
@@ -59,7 +59,7 @@ _FALLBACK_REST_PATHS = {
 class BitsoExchangeData(ExchangeData):
     """Base class for Bitso exchange."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__()
         self.exchange_name = "BITSO___SPOT"
         self.rest_url = "https://bitso.com/api/v3"
@@ -82,7 +82,7 @@ class BitsoExchangeData(ExchangeData):
         }
         self.legal_currency = ["MXN", "USD", "BTC", "ETH", "USDC"]
 
-    def _load_from_config(self, asset_type):
+    def _load_from_config(self, asset_type) -> bool:
         """Load from YAML config."""
         config = _get_bitso_config()
         if config is None:
@@ -113,27 +113,27 @@ class BitsoExchangeData(ExchangeData):
 class BitsoExchangeDataSpot(BitsoExchangeData):
     """Bitso Spot exchange configuration."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__()
         self.asset_type = "SPOT"
         self._load_from_config("spot")
 
-    def get_symbol(self, symbol):
+    def get_symbol(self, symbol: str) -> str:
         """Convert symbol to Bitso format: lowercase underscore (btc_mxn)."""
         s = symbol.replace("/", "_").replace("-", "_").lower()
         return s
 
-    def get_period(self, key):
+    def get_period(self, key: str) -> str:
         """Get kline period for API (in seconds string)."""
         return self.kline_periods.get(key, key)
 
-    def get_rest_path(self, key):
+    def get_rest_path(self, key: str, **kwargs) -> str:
         """Get REST path for *key*. Raises ValueError if missing."""
         if key not in self.rest_paths or self.rest_paths[key] == "":
             raise ValueError(f"[{self.exchange_name}] REST path not found: {key}")
         return self.rest_paths[key]
 
-    def get_wss_path(self, channel, symbol=None):
+    def get_wss_path(self, channel, symbol: str | None = None, **kwargs) -> str:
         """Get WSS subscription path for *channel*."""
         tpl = self.wss_paths.get(channel, "")
         if symbol and tpl:

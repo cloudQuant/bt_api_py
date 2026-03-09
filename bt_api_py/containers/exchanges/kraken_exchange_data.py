@@ -1,8 +1,8 @@
-"""
-Kraken Exchange Data Configuration
+"""Kraken Exchange Data Configuration
 Provides URL configurations, symbol mappings, and REST paths for Kraken API.
 """
 
+from typing import Any
 import os
 
 from bt_api_py.containers.exchanges.exchange_data import ExchangeData
@@ -15,8 +15,8 @@ _kraken_config = None
 _kraken_config_loaded = False
 
 
-def _get_kraken_config():
-    """延迟加载并缓存 Kraken YAML 配置"""
+def _get_kraken_config() -> Any | None:
+    """延迟加载并缓存 Kraken YAML 配置."""
     global _kraken_config, _kraken_config_loaded
     if _kraken_config_loaded:
         return _kraken_config
@@ -45,7 +45,7 @@ class KrakenExchangeData(ExchangeData):
     acct_wss_url, wss_url, rest_paths, wss_paths, legal_currency.
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__()
         self.exchange_name = "kraken"
         self.rest_url = "https://api.kraken.com"
@@ -72,8 +72,8 @@ class KrakenExchangeData(ExchangeData):
 
         self.legal_currency = ["USD", "EUR", "USDT", "BTC", "ETH"]
 
-    def _load_from_config(self, asset_type):
-        """从 YAML 配置文件加载交易所参数"""
+    def _load_from_config(self, asset_type) -> bool:
+        """从 YAML 配置文件加载交易所参数."""
         config = _get_kraken_config()
         if config is None:
             return False
@@ -115,7 +115,7 @@ class KrakenExchangeData(ExchangeData):
 
         return True
 
-    def get_symbol(self, symbol):
+    def get_symbol(self, symbol: str) -> str:
         """将交易对名称转换为 Kraken 格式.
 
         去除 '/' 和 '-', 并将 BTC 替换为 XBT (Kraken 惯例).
@@ -124,31 +124,32 @@ class KrakenExchangeData(ExchangeData):
         result = result.replace("BTC", "XBT")
         return result
 
-    def get_period(self, period):
+    def get_period(self, period: str) -> str:
         """将周期转换为 Kraken 格式."""
         return self.kline_periods.get(period, period)
 
-    def get_rest_path(self, request_type):
+    def get_rest_path(self, request_type: str, **kwargs) -> str:
         """获取 REST API 路径.
 
         Returns:
             str: REST API 路径 (e.g. "POST /0/public/Ticker"), 未找到返回空字符串
+
         """
         return self.rest_paths.get(request_type, "")
 
-    def get_wss_path(self, channel):
+    def get_wss_path(self, channel: Any, **kwargs) -> str:
         """获取 WebSocket 路径."""
         return self.wss_paths.get(channel, "")
 
-    def account_wss_symbol(self, symbol):
+    def account_wss_symbol(self, symbol: str) -> str:
         """获取 WebSocket 账户数据中的交易对格式."""
         return self.get_symbol(symbol)
 
 
 class KrakenExchangeDataSpot(KrakenExchangeData):
-    """Kraken Spot Trading Configuration"""
+    """Kraken Spot Trading Configuration."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__()
         self.exchange_name = "kraken"
         self.asset_type = "SPOT"
@@ -181,9 +182,9 @@ class KrakenExchangeDataSpot(KrakenExchangeData):
 
 
 class KrakenExchangeDataFutures(KrakenExchangeData):
-    """Kraken Futures Trading Configuration"""
+    """Kraken Futures Trading Configuration."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__()
         self.exchange_name = "krakenFutures"
         self.asset_type = "FUTURES"

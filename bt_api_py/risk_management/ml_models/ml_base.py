@@ -6,11 +6,10 @@
 import pickle
 import time
 from abc import ABC, abstractmethod
-from decimal import Decimal
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
 
 import numpy as np
-from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score
+from sklearn.metrics import accuracy_score, f1_score, precision_score, recall_score
 
 from bt_api_py.logging_factory import get_logger
 
@@ -21,7 +20,7 @@ class BaseMLModel(ABC):
     定义所有ML模型的通用接口和基础功能
     """
 
-    def __init__(self, model_name: str, config: Optional[Dict[str, Any]] = None):
+    def __init__(self, model_name: str, config: dict[str, Any] | None = None) -> Any | None:
         """初始化ML模型
 
         Args:
@@ -54,11 +53,11 @@ class BaseMLModel(ABC):
         self.data_version = "1.0.0"
 
         # 训练历史
-        self.training_history: List[Dict[str, Any]] = []
+        self.training_history: list[dict[str, Any]] = []
 
         # 特征信息
-        self.feature_names: List[str] = []
-        self.feature_importance: Dict[str, float] = {}
+        self.feature_names: list[str] = []
+        self.feature_importance: dict[str, float] = {}
 
         self.logger.info(f"ML model {model_name} initialized")
 
@@ -67,8 +66,8 @@ class BaseMLModel(ABC):
         self,
         X: np.ndarray,
         y: np.ndarray,
-        validation_data: Optional[Tuple[np.ndarray, np.ndarray]] = None,
-    ) -> Dict[str, Any]:
+        validation_data: tuple[np.ndarray, np.ndarray] | None = None,
+    ) -> dict[str, Any]:
         """训练模型
 
         Args:
@@ -105,7 +104,7 @@ class BaseMLModel(ABC):
         """
         pass
 
-    def evaluate(self, X: np.ndarray, y: np.ndarray) -> Dict[str, float]:
+    def evaluate(self, X: np.ndarray, y: np.ndarray) -> dict[str, float]:
         """评估模型性能
 
         Args:
@@ -204,7 +203,7 @@ class BaseMLModel(ABC):
             self.logger.error(f"Error loading model: {e}")
             return False
 
-    def get_feature_importance(self) -> Dict[str, float]:
+    def get_feature_importance(self) -> dict[str, float]:
         """获取特征重要性
 
         Returns:
@@ -212,7 +211,7 @@ class BaseMLModel(ABC):
         """
         return self.feature_importance
 
-    def update_feature_names(self, feature_names: List[str]) -> None:
+    def update_feature_names(self, feature_names: list[str]) -> None:
         """更新特征名称
 
         Args:
@@ -221,7 +220,7 @@ class BaseMLModel(ABC):
         self.feature_names = feature_names
         self.metrics["features_count"] = len(feature_names)
 
-    def get_model_info(self) -> Dict[str, Any]:
+    def get_model_info(self) -> dict[str, Any]:
         """获取模型信息
 
         Returns:
@@ -239,7 +238,7 @@ class BaseMLModel(ABC):
             "features_count": len(self.feature_names),
         }
 
-    def _record_training_step(self, step_data: Dict[str, Any]) -> None:
+    def _record_training_step(self, step_data: dict[str, Any]) -> None:
         """记录训练步骤
 
         Args:
@@ -267,7 +266,7 @@ class BaseMLModel(ABC):
 
         return X
 
-    def _validate_input(self, X: np.ndarray, y: Optional[np.ndarray] = None) -> bool:
+    def _validate_input(self, X: np.ndarray, y: np.ndarray | None = None) -> bool:
         """验证输入数据
 
         Args:
@@ -316,8 +315,8 @@ class RiskPredictionResult:
         confidence: float,
         model_name: str,
         timestamp: int,
-        features_used: List[str],
-    ):
+        features_used: list[str],
+    ) -> Any | None:
         self.prediction = prediction
         self.probability = probability
         self.confidence = confidence
@@ -325,7 +324,7 @@ class RiskPredictionResult:
         self.timestamp = timestamp
         self.features_used = features_used
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """转换为字典格式"""
         return {
             "prediction": self.prediction,
@@ -340,7 +339,7 @@ class RiskPredictionResult:
 class ModelMetrics:
     """模型性能指标"""
 
-    def __init__(self):
+    def __init__(self) -> Any | None:
         self.accuracy = 0.0
         self.precision = 0.0
         self.recall = 0.0
@@ -353,17 +352,17 @@ class ModelMetrics:
         self.prediction_time = 0.0
 
     def update_from_sklearn_metrics(
-        self, y_true: np.ndarray, y_pred: np.ndarray, y_proba: Optional[np.ndarray] = None
+        self, y_true: np.ndarray, y_pred: np.ndarray, y_proba: np.ndarray | None = None
     ) -> None:
         """从scikit-learn指标更新"""
         from sklearn.metrics import (
             accuracy_score,
+            classification_report,
+            confusion_matrix,
+            f1_score,
             precision_score,
             recall_score,
-            f1_score,
             roc_auc_score,
-            confusion_matrix,
-            classification_report,
         )
 
         self.accuracy = accuracy_score(y_true, y_pred)
@@ -381,7 +380,7 @@ class ModelMetrics:
             except Exception:
                 self.roc_auc = 0.0
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """转换为字典格式"""
         return {
             "accuracy": self.accuracy,
@@ -400,9 +399,9 @@ class ModelMetrics:
 class ModelComparator:
     """模型比较器"""
 
-    def __init__(self):
-        self.models: Dict[str, BaseMLModel] = {}
-        self.test_results: Dict[str, Dict[str, float]] = {}
+    def __init__(self) -> Any | None:
+        self.models: dict[str, BaseMLModel] = {}
+        self.test_results: dict[str, dict[str, float]] = {}
 
     def add_model(self, name: str, model: BaseMLModel) -> None:
         """添加模型
@@ -413,7 +412,7 @@ class ModelComparator:
         """
         self.models[name] = model
 
-    def compare_models(self, X_test: np.ndarray, y_test: np.ndarray) -> Dict[str, Dict[str, float]]:
+    def compare_models(self, X_test: np.ndarray, y_test: np.ndarray) -> dict[str, dict[str, float]]:
         """比较模型性能
 
         Args:
@@ -435,7 +434,7 @@ class ModelComparator:
         self.test_results = results
         return results
 
-    def get_best_model(self, metric: str = "f1_score") -> Tuple[str, BaseMLModel]:
+    def get_best_model(self, metric: str = "f1_score") -> tuple[str, BaseMLModel]:
         """获取最佳模型
 
         Args:
@@ -458,7 +457,7 @@ class ModelComparator:
 
         return best_name, best_model
 
-    def get_comparison_report(self) -> Dict[str, Any]:
+    def get_comparison_report(self) -> dict[str, Any]:
         """获取比较报告"""
         if not self.test_results:
             return {"error": "No test results available"}

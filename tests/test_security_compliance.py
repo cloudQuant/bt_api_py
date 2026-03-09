@@ -4,33 +4,30 @@ Tests for the security compliance framework to ensure
 proper functioning of all security components.
 """
 
-import pytest
-import time
 from pathlib import Path
 
-from bt_api_py.security_compliance.framework import SecurityFramework
+import pytest
+
+from bt_api_py.security_compliance.auth.mfa_provider import MFAProvider
+from bt_api_py.security_compliance.auth.oauth2_provider import GrantType, OAuth2Provider, TokenType
 from bt_api_py.security_compliance.core.access_control import (
     AccessControlManager,
-    Resource,
     PermissionLevel,
-    User,
-    Role,
+    Resource,
 )
 from bt_api_py.security_compliance.core.audit_logger import (
+    AuditEvent,
     AuditLogger,
     EventType,
     SeverityLevel,
-    AuditEvent,
 )
 from bt_api_py.security_compliance.core.encryption_manager import (
     EncryptionManager,
-    create_key_manager,
     KeyProvider,
-    EncryptionAlgorithm,
+    create_key_manager,
 )
-from bt_api_py.security_compliance.auth.oauth2_provider import GrantType, OAuth2Provider, TokenType
-from bt_api_py.security_compliance.auth.mfa_provider import MFAProvider
 from bt_api_py.security_compliance.data.protection import DataProtectionManager
+from bt_api_py.security_compliance.framework import SecurityFramework
 
 
 class TestAccessControl:

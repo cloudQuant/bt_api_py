@@ -18,7 +18,7 @@ from bt_api_py.rate_limiter import RateLimiter, RateLimitRule, RateLimitScope, R
 class DydxErrorTranslator(ErrorTranslator):
     """dYdX error translator"""
 
-    def translate(self, raw_response, exchange_name):
+    def translate(self, raw_response: Any, exchange_name: Any) -> None:
         """Translate dYdX error response to UnifiedError"""
         if isinstance(raw_response, dict):
             error_code = raw_response.get("code")
@@ -41,7 +41,7 @@ class DydxRequestData(Feed):
     """dYdX request base class for REST API calls"""
 
     @classmethod
-    def _capabilities(cls):
+    def _capabilities(cls: Any) -> None:
         return {
             Capability.GET_TICK,
             Capability.GET_DEPTH,
@@ -60,7 +60,7 @@ class DydxRequestData(Feed):
             Capability.CANCEL_ALL,
         }
 
-    def __init__(self, data_queue, **kwargs):
+    def __init__(self, data_queue: Any, **kwargs: Any) -> None:
         super().__init__(data_queue, **kwargs)
         self.data_queue = data_queue
         self.exchange_name = kwargs.get("exchange_name", "DYDX___SWAP")
@@ -89,7 +89,7 @@ class DydxRequestData(Feed):
         self._rate_limiter = kwargs.get("rate_limiter", self._create_default_rate_limiter())
 
     @staticmethod
-    def _create_default_rate_limiter():
+    def _create_default_rate_limiter() -> None:
         rules = [
             RateLimitRule(
                 name="dydx_indexer_get",
@@ -103,17 +103,24 @@ class DydxRequestData(Feed):
         ]
         return RateLimiter(rules)
 
-    def translate_error(self, raw_response):
+    def translate_error(self, raw_response: Any) -> None:
         """Translate raw dYdX response to UnifiedError"""
         return self._error_translator.translate(raw_response, self.exchange_name)
 
-    def push_data_to_queue(self, data):
+    def push_data_to_queue(self, data: Any) -> None:
         if self.data_queue is not None:
             self.data_queue.put(data)
         else:
             assert 0, "队列未初始化"
 
-    def request(self, path, params=None, body=None, extra_data=None, timeout=10):
+    def request(
+        self,
+        path: Any,
+        params: Any = None,
+        body: Any = None,
+        extra_data: Any = None,
+        timeout: Any = 10,
+    ) -> None:
         """HTTP request function"""
         if params is None:
             params = {}
@@ -149,7 +156,7 @@ class DydxRequestData(Feed):
         res = await self.async_http_request(method, url, headers, body, timeout)
         return RequestData(res, extra_data)
 
-    def async_callback(self, future):
+    def async_callback(self, future: Any) -> None:
         """Callback function for async requests"""
         try:
             result = future.result()
@@ -159,7 +166,7 @@ class DydxRequestData(Feed):
 
     # Market Data Methods
 
-    def get_perpetual_markets(self, extra_data=None, **kwargs):
+    def get_perpetual_markets(self, extra_data: Any = None, **kwargs: Any) -> None:
         """Get perpetual markets information"""
         request_type = "get_perpetual_markets"
         path = self._params.get_rest_path(request_type)
@@ -175,7 +182,7 @@ class DydxRequestData(Feed):
         return self.request(path, extra_data=extra_data)
 
     @staticmethod
-    def _get_perpetual_markets_normalize_function(input_data, extra_data):
+    def _get_perpetual_markets_normalize_function(input_data: Any, extra_data: Any) -> None:
         """Normalize perpetual markets response"""
         status = True
         if "markets" in input_data:
@@ -183,7 +190,7 @@ class DydxRequestData(Feed):
             return data, status
         return None, False
 
-    def get_orderbook(self, symbol, extra_data=None, **kwargs):
+    def get_orderbook(self, symbol: Any, extra_data: Any = None, **kwargs: Any) -> None:
         """Get orderbook for a symbol"""
         request_symbol = self._params.get_symbol(symbol)
         request_type = "get_orderbook"
@@ -201,7 +208,7 @@ class DydxRequestData(Feed):
         return self.request(path, extra_data=extra_data)
 
     @staticmethod
-    def _get_orderbook_normalize_function(input_data, extra_data):
+    def _get_orderbook_normalize_function(input_data: Any, extra_data: Any) -> None:
         """Normalize orderbook response"""
         status = True
         data = {
@@ -212,7 +219,9 @@ class DydxRequestData(Feed):
         }
         return data, status
 
-    def get_trades(self, symbol, limit=100, extra_data=None, **kwargs):
+    def get_trades(
+        self, symbol: Any, limit: Any = 100, extra_data: Any = None, **kwargs: Any
+    ) -> None:
         """Get recent trades for a symbol"""
         request_symbol = self._params.get_symbol(symbol)
         request_type = "get_trades"
@@ -232,7 +241,7 @@ class DydxRequestData(Feed):
         return self.request(path, params=params, extra_data=extra_data)
 
     @staticmethod
-    def _get_trades_normalize_function(input_data, extra_data):
+    def _get_trades_normalize_function(input_data: Any, extra_data: Any) -> None:
         """Normalize trades response"""
         status = True
         trades = input_data.get("trades", [])
@@ -243,7 +252,14 @@ class DydxRequestData(Feed):
         }
         return data, status
 
-    def get_candles(self, symbol, resolution="1HOUR", limit=100, extra_data=None, **kwargs):
+    def get_candles(
+        self,
+        symbol: Any,
+        resolution: Any = "1HOUR",
+        limit: Any = 100,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """Get candle data for a symbol"""
         request_symbol = self._params.get_symbol(symbol)
         period = self._params.get_period(resolution)
@@ -268,7 +284,7 @@ class DydxRequestData(Feed):
         return self.request(path, params=params, extra_data=extra_data)
 
     @staticmethod
-    def _get_candles_normalize_function(input_data, extra_data):
+    def _get_candles_normalize_function(input_data: Any, extra_data: Any) -> None:
         """Normalize candles response"""
         status = True
         candles = input_data.get("candles", [])
@@ -280,7 +296,9 @@ class DydxRequestData(Feed):
         }
         return data, status
 
-    def get_historical_funding(self, symbol, limit=100, extra_data=None, **kwargs):
+    def get_historical_funding(
+        self, symbol: Any, limit: Any = 100, extra_data: Any = None, **kwargs: Any
+    ) -> None:
         """Get historical funding rates for a symbol"""
         request_symbol = self._params.get_symbol(symbol)
         request_type = "get_historical_funding"
@@ -300,7 +318,7 @@ class DydxRequestData(Feed):
         return self.request(path, params=params, extra_data=extra_data)
 
     @staticmethod
-    def _get_historical_funding_normalize_function(input_data, extra_data):
+    def _get_historical_funding_normalize_function(input_data: Any, extra_data: Any) -> None:
         """Normalize historical funding response"""
         status = True
         data = {
@@ -309,7 +327,7 @@ class DydxRequestData(Feed):
         }
         return data, status
 
-    def get_ticker(self, symbol, extra_data=None, **kwargs):
+    def get_ticker(self, symbol: Any, extra_data: Any = None, **kwargs: Any) -> None:
         """Get ticker information for a symbol"""
         request_symbol = self._params.get_symbol(symbol)
         request_type = "get_perpetual_markets"
@@ -327,7 +345,7 @@ class DydxRequestData(Feed):
         return self.request(path, extra_data=extra_data)
 
     @staticmethod
-    def _get_ticker_normalize_function(input_data, extra_data):
+    def _get_ticker_normalize_function(input_data: Any, extra_data: Any) -> None:
         """Normalize ticker response"""
         status = True
         symbol_name = extra_data.get("symbol_name")
@@ -336,7 +354,7 @@ class DydxRequestData(Feed):
 
     # ── Standard Interface: get_tick ──────────────────────────────
 
-    def _get_tick(self, symbol, extra_data=None, **kwargs):
+    def _get_tick(self, symbol: Any, extra_data: Any = None, **kwargs: Any) -> None:
         """Prepare tick request parameters. Returns (path, params, extra_data)."""
         if extra_data is None:
             extra_data = {}
@@ -353,12 +371,12 @@ class DydxRequestData(Feed):
         )
         return path, {}, extra_data
 
-    def get_tick(self, symbol, extra_data=None, **kwargs):
+    def get_tick(self, symbol: Any, extra_data: Any = None, **kwargs: Any) -> None:
         """Get latest tick price for symbol. Returns RequestData."""
         path, params, extra_data = self._get_tick(symbol, extra_data, **kwargs)
         return self.request(path, params=params, extra_data=extra_data)
 
-    def async_get_tick(self, symbol, extra_data=None, **kwargs):
+    def async_get_tick(self, symbol: Any, extra_data: Any = None, **kwargs: Any) -> None:
         """Async get tick price for symbol."""
         path, params, extra_data = self._get_tick(symbol, extra_data, **kwargs)
         self.submit(
@@ -368,7 +386,9 @@ class DydxRequestData(Feed):
 
     # ── Standard Interface: get_depth ────────────────────────────
 
-    def _get_depth(self, symbol, count=20, extra_data=None, **kwargs):
+    def _get_depth(
+        self, symbol: Any, count: Any = 20, extra_data: Any = None, **kwargs: Any
+    ) -> None:
         """Prepare depth request parameters. Returns (path, params, extra_data)."""
         if extra_data is None:
             extra_data = {}
@@ -386,12 +406,16 @@ class DydxRequestData(Feed):
         )
         return path, {}, extra_data
 
-    def get_depth(self, symbol, count=20, extra_data=None, **kwargs):
+    def get_depth(
+        self, symbol: Any, count: Any = 20, extra_data: Any = None, **kwargs: Any
+    ) -> None:
         """Get order book depth for symbol. Returns RequestData."""
         path, params, extra_data = self._get_depth(symbol, count, extra_data, **kwargs)
         return self.request(path, params=params, extra_data=extra_data)
 
-    def async_get_depth(self, symbol, count=20, extra_data=None, **kwargs):
+    def async_get_depth(
+        self, symbol: Any, count: Any = 20, extra_data: Any = None, **kwargs: Any
+    ) -> None:
         """Async get depth for symbol."""
         path, params, extra_data = self._get_depth(symbol, count, extra_data, **kwargs)
         self.submit(
@@ -401,7 +425,9 @@ class DydxRequestData(Feed):
 
     # ── Standard Interface: get_kline ────────────────────────────
 
-    def _get_kline(self, symbol, period, count=20, extra_data=None, **kwargs):
+    def _get_kline(
+        self, symbol: Any, period: Any, count: Any = 20, extra_data: Any = None, **kwargs: Any
+    ) -> None:
         """Prepare kline request parameters. Returns (path, params, extra_data)."""
         if extra_data is None:
             extra_data = {}
@@ -422,12 +448,16 @@ class DydxRequestData(Feed):
         )
         return path, params, extra_data
 
-    def get_kline(self, symbol, period, count=20, extra_data=None, **kwargs):
+    def get_kline(
+        self, symbol: Any, period: Any, count: Any = 20, extra_data: Any = None, **kwargs: Any
+    ) -> None:
         """Get kline/candle data for symbol. Returns RequestData."""
         path, params, extra_data = self._get_kline(symbol, period, count, extra_data, **kwargs)
         return self.request(path, params=params, extra_data=extra_data)
 
-    def async_get_kline(self, symbol, period, count=20, extra_data=None, **kwargs):
+    def async_get_kline(
+        self, symbol: Any, period: Any, count: Any = 20, extra_data: Any = None, **kwargs: Any
+    ) -> None:
         """Async get kline for symbol."""
         path, params, extra_data = self._get_kline(symbol, period, count, extra_data, **kwargs)
         self.submit(
@@ -437,7 +467,7 @@ class DydxRequestData(Feed):
 
     # ── Standard Interface: get_exchange_info ─────────────────────
 
-    def _get_exchange_info(self, extra_data=None, **kwargs):
+    def _get_exchange_info(self, extra_data: Any = None, **kwargs: Any) -> None:
         """Prepare exchange info request. Returns (path, params, extra_data)."""
         if extra_data is None:
             extra_data = {}
@@ -452,14 +482,14 @@ class DydxRequestData(Feed):
         )
         return path, {}, extra_data
 
-    def get_exchange_info(self, extra_data=None, **kwargs):
+    def get_exchange_info(self, extra_data: Any = None, **kwargs: Any) -> None:
         """Get exchange metadata. Returns RequestData."""
         path, params, extra_data = self._get_exchange_info(extra_data, **kwargs)
         return self.request(path, params=params, extra_data=extra_data)
 
     # ── Standard Interface: get_server_time ───────────────────────
 
-    def _get_server_time(self, extra_data=None, **kwargs):
+    def _get_server_time(self, extra_data: Any = None, **kwargs: Any) -> None:
         """Prepare server time request. Returns (path, params, extra_data)."""
         if extra_data is None:
             extra_data = {}
@@ -474,14 +504,16 @@ class DydxRequestData(Feed):
         )
         return path, {}, extra_data
 
-    def get_server_time(self, extra_data=None, **kwargs):
+    def get_server_time(self, extra_data: Any = None, **kwargs: Any) -> None:
         """Get server time. Returns RequestData."""
         path, params, extra_data = self._get_server_time(extra_data, **kwargs)
         return self.request(path, params=params, extra_data=extra_data)
 
     # Account Data Methods (require authentication)
 
-    def get_subaccount(self, address, subaccount_number=0, extra_data=None, **kwargs):
+    def get_subaccount(
+        self, address: Any, subaccount_number: Any = 0, extra_data: Any = None, **kwargs: Any
+    ) -> None:
         """Get subaccount information"""
         request_type = "get_subaccount"
         path = self._params.get_rest_path(request_type)
@@ -500,7 +532,7 @@ class DydxRequestData(Feed):
         return self.request(path, extra_data=extra_data)
 
     @staticmethod
-    def _get_subaccount_normalize_function(input_data, extra_data):
+    def _get_subaccount_normalize_function(input_data: Any, extra_data: Any) -> None:
         """Normalize subaccount response"""
         status = True
         data = input_data.get("subaccount", {})
@@ -508,14 +540,14 @@ class DydxRequestData(Feed):
 
     def get_orders(
         self,
-        address=None,
-        subaccount_number=None,
-        market=None,
-        status=None,
-        limit=50,
-        extra_data=None,
-        **kwargs,
-    ):
+        address: Any = None,
+        subaccount_number: Any = None,
+        market: Any = None,
+        status: Any = None,
+        limit: Any = 50,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """Get orders (requires address and subaccount_number for authenticated requests)"""
         request_type = "get_orders"
         path = self._params.get_rest_path(request_type)
@@ -543,7 +575,7 @@ class DydxRequestData(Feed):
         return self.request(path, params=params, extra_data=extra_data)
 
     @staticmethod
-    def _get_orders_normalize_function(input_data, extra_data):
+    def _get_orders_normalize_function(input_data: Any, extra_data: Any) -> None:
         """Normalize orders response"""
         status = True
         orders = input_data if isinstance(input_data, list) else []
@@ -555,13 +587,13 @@ class DydxRequestData(Feed):
 
     def get_fills(
         self,
-        address=None,
-        subaccount_number=None,
-        market=None,
-        limit=100,
-        extra_data=None,
-        **kwargs,
-    ):
+        address: Any = None,
+        subaccount_number: Any = None,
+        market: Any = None,
+        limit: Any = 100,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """Get fills/trades"""
         request_type = "get_fills"
         path = self._params.get_rest_path(request_type)
@@ -587,7 +619,7 @@ class DydxRequestData(Feed):
         return self.request(path, params=params, extra_data=extra_data)
 
     @staticmethod
-    def _get_fills_normalize_function(input_data, extra_data):
+    def _get_fills_normalize_function(input_data: Any, extra_data: Any) -> None:
         """Normalize fills response"""
         status = True
         fills = input_data if isinstance(input_data, list) else []
@@ -599,13 +631,13 @@ class DydxRequestData(Feed):
 
     def get_funding_payments(
         self,
-        address=None,
-        subaccount_number=None,
-        market=None,
-        limit=100,
-        extra_data=None,
-        **kwargs,
-    ):
+        address: Any = None,
+        subaccount_number: Any = None,
+        market: Any = None,
+        limit: Any = 100,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """Get funding payments"""
         request_type = "get_funding_payments"
         path = self._params.get_rest_path(request_type)
@@ -631,7 +663,7 @@ class DydxRequestData(Feed):
         return self.request(path, params=params, extra_data=extra_data)
 
     @staticmethod
-    def _get_funding_payments_normalize_function(input_data, extra_data):
+    def _get_funding_payments_normalize_function(input_data: Any, extra_data: Any) -> None:
         """Normalize funding payments response"""
         status = True
         data = {
@@ -641,13 +673,13 @@ class DydxRequestData(Feed):
 
     def get_historical_pnl(
         self,
-        address=None,
-        subaccount_number=None,
-        market=None,
-        limit=100,
-        extra_data=None,
-        **kwargs,
-    ):
+        address: Any = None,
+        subaccount_number: Any = None,
+        market: Any = None,
+        limit: Any = 100,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """Get historical PnL"""
         request_type = "get_historical_pnl"
         path = self._params.get_rest_path(request_type)
@@ -673,7 +705,7 @@ class DydxRequestData(Feed):
         return self.request(path, params=params, extra_data=extra_data)
 
     @staticmethod
-    def _get_historical_pnl_normalize_function(input_data, extra_data):
+    def _get_historical_pnl_normalize_function(input_data: Any, extra_data: Any) -> None:
         """Normalize historical PnL response"""
         status = True
         data = {
@@ -685,16 +717,16 @@ class DydxRequestData(Feed):
     # Note: These are placeholders for future implementation
     # Actual trading would require wallet signing integration
 
-    def place_order(self, **kwargs):
+    def place_order(self, **kwargs: Any) -> None:
         """Place an order (requires wallet signature)"""
         # This would need to integrate with v4-client-py for signing
         raise NotImplementedError("Trading requires wallet signature integration")
 
-    def cancel_order(self, order_id, **kwargs):
+    def cancel_order(self, order_id: Any, **kwargs: Any) -> None:
         """Cancel an order (requires wallet signature)"""
         raise NotImplementedError("Trading requires wallet signature integration")
 
-    def get_order(self, order_id, **kwargs):
+    def get_order(self, order_id: Any, **kwargs: Any) -> None:
         """Get order details (requires authentication)"""
         request_type = "get_orders"
         path = self._params.get_rest_path(request_type)
@@ -712,7 +744,7 @@ class DydxRequestData(Feed):
         return self.request(path, params=params, extra_data=extra_data)
 
     @staticmethod
-    def _get_order_normalize_function(input_data, extra_data):
+    def _get_order_normalize_function(input_data: Any, extra_data: Any) -> None:
         """Normalize single order response"""
         status = True
         # dYdX returns a list of orders, we need to filter by order ID
@@ -723,7 +755,7 @@ class DydxRequestData(Feed):
         return None, False
 
     @staticmethod
-    def _update_extra_data(extra_data, **kwargs):
+    def _update_extra_data(extra_data: Any, **kwargs: Any) -> None:
         """Update extra_data with additional information"""
         if extra_data is None:
             extra_data = {}

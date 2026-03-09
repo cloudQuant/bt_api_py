@@ -1,5 +1,4 @@
-"""
-Raydium Ticker Data Container
+"""Raydium Ticker Data Container
 Provides standardized ticker data structure for Raydium DEX.
 """
 
@@ -11,24 +10,25 @@ from bt_api_py.logging_factory import get_logger
 
 
 class RaydiumRequestTickerData(TickerData):
-    """Raydium Request Ticker Data Container
+    """Raydium Request Ticker Data Container.
 
     Raydium is a DEX, so ticker data comes from pool information.
     """
 
-    def __init__(self, data: dict[str, Any], symbol: str, asset_type: str):
+    def __init__(self, data: dict[str, Any], symbol: str, asset_type: str) -> None:
         """Initialize Raydium ticker data.
 
         Args:
             data: Raw ticker/pool data from Raydium API
             symbol: Trading pair symbol (e.g., 'SOL/USDC')
             asset_type: Asset type (e.g., 'DEX')
+
         """
         super().__init__(data, symbol, asset_type)
         self.logger = get_logger("raydium_ticker")
         self._parse_data(data)
 
-    def _parse_data(self, data: dict[str, Any]):
+    def _parse_data(self, data: dict[str, Any]) -> None:
         """Parse Raydium pool data as ticker.
 
         Raydium pool response format:
@@ -179,6 +179,7 @@ class RaydiumRequestTickerData(TickerData):
 
         Returns:
             tuple: (base_amount, quote_amount)
+
         """
         return (self.pool_base_amount, self.pool_quote_amount)
 
@@ -196,6 +197,7 @@ class RaydiumRequestTickerData(TickerData):
 
         Returns:
             Dict with output amount and price impact
+
         """
         if not self.pool_base_amount or not self.pool_quote_amount:
             return {"output_amount": None, "price_impact": None}

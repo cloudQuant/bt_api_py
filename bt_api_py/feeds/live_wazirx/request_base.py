@@ -4,6 +4,7 @@ WazirX REST API request base class – Feed pattern.
 
 import hashlib
 import hmac
+from typing import Any
 from urllib.parse import urlencode
 
 from bt_api_py.containers.exchanges.wazirx_exchange_data import WazirxExchangeDataSpot
@@ -25,7 +26,7 @@ class WazirxRequestData(Feed):
             Capability.GET_EXCHANGE_INFO,
         }
 
-    def __init__(self, data_queue, **kwargs):
+    def __init__(self, data_queue, **kwargs) -> None:
         super().__init__(data_queue, **kwargs)
         self.data_queue = data_queue
         self.exchange_name = kwargs.get("exchange_name", "WAZIRX___SPOT")
@@ -38,7 +39,7 @@ class WazirxRequestData(Feed):
 
     # ── auth ────────────────────────────────────────────────────
 
-    def _generate_signature(self, query_string):
+    def _generate_signature(self, query_string) -> Any:
         if self.api_secret:
             return hmac.new(
                 self.api_secret.encode("utf-8"),
@@ -47,7 +48,7 @@ class WazirxRequestData(Feed):
             ).hexdigest()
         return ""
 
-    def _get_headers(self, **kwargs):
+    def _get_headers(self, **kwargs) -> Any:
         headers = {"Content-Type": "application/x-www-form-urlencoded"}
         if self.api_key:
             headers["X-API-KEY"] = self.api_key
@@ -87,7 +88,7 @@ class WazirxRequestData(Feed):
         )
         return self._process_response(response, extra_data)
 
-    def _process_response(self, response, extra_data=None):
+    def _process_response(self, response, extra_data=None) -> Any:
         return RequestData(response, extra_data)
 
     def push_data_to_queue(self, data):
@@ -122,7 +123,7 @@ class WazirxRequestData(Feed):
 
     # ── _get_xxx internal methods ───────────────────────────────
 
-    def _get_server_time(self, extra_data=None, **kwargs):
+    def _get_server_time(self, extra_data=None, **kwargs) -> Any:
         path = self._params.get_rest_path("get_server_time")
         extra_data = extra_data or {}
         extra_data.update(
@@ -133,7 +134,7 @@ class WazirxRequestData(Feed):
         )
         return path, None, extra_data
 
-    def _get_tick(self, symbol, extra_data=None, **kwargs):
+    def _get_tick(self, symbol, extra_data=None, **kwargs) -> Any:
         path = self._params.get_rest_path("get_tick")
         params = {"symbol": symbol}
         extra_data = extra_data or {}
@@ -146,7 +147,7 @@ class WazirxRequestData(Feed):
         )
         return path, params, extra_data
 
-    def _get_depth(self, symbol, count=20, extra_data=None, **kwargs):
+    def _get_depth(self, symbol, count=20, extra_data=None, **kwargs) -> Any:
         path = self._params.get_rest_path("get_depth")
         params = {"symbol": symbol, "limit": count}
         extra_data = extra_data or {}
@@ -159,7 +160,7 @@ class WazirxRequestData(Feed):
         )
         return path, params, extra_data
 
-    def _get_kline(self, symbol, period, count=20, extra_data=None, **kwargs):
+    def _get_kline(self, symbol, period, count=20, extra_data=None, **kwargs) -> Any:
         path = self._params.get_rest_path("get_kline")
         params = {
             "symbol": symbol,
@@ -176,7 +177,7 @@ class WazirxRequestData(Feed):
         )
         return path, params, extra_data
 
-    def _get_exchange_info(self, extra_data=None, **kwargs):
+    def _get_exchange_info(self, extra_data=None, **kwargs) -> Any:
         path = self._params.get_rest_path("get_exchange_info")
         extra_data = extra_data or {}
         extra_data.update(
@@ -187,7 +188,7 @@ class WazirxRequestData(Feed):
         )
         return path, None, extra_data
 
-    def _get_balance(self, extra_data=None, **kwargs):
+    def _get_balance(self, extra_data=None, **kwargs) -> Any:
         path = self._params.get_rest_path("get_balance")
         extra_data = extra_data or {}
         extra_data.update(
@@ -198,7 +199,7 @@ class WazirxRequestData(Feed):
         )
         return path, None, extra_data
 
-    def _get_account(self, extra_data=None, **kwargs):
+    def _get_account(self, extra_data=None, **kwargs) -> Any:
         path = self._params.get_rest_path("get_account")
         extra_data = extra_data or {}
         extra_data.update(

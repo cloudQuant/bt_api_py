@@ -1,7 +1,4 @@
-"""
-SatoshiTango REST API request base class.
-"""
-
+"""SatoshiTango REST API request base class."""
 
 from bt_api_py.containers.exchanges.satoshitango_exchange_data import SatoshiTangoExchangeDataSpot
 from bt_api_py.containers.requestdatas.request_data import RequestData
@@ -27,7 +24,7 @@ class SatoshiTangoRequestData(Feed):
             Capability.CANCEL_ORDER,
         }
 
-    def __init__(self, data_queue, **kwargs):
+    def __init__(self, data_queue, **kwargs) -> None:
         super().__init__(data_queue, **kwargs)
         self.data_queue = data_queue
         self.exchange_name = kwargs.get("exchange_name", "SATOSHITANGO___SPOT")
@@ -103,7 +100,7 @@ class SatoshiTangoRequestData(Feed):
             extra_data = {}
         return RequestData(response, extra_data)
 
-    def _get_server_time(self, extra_data=None, **kwargs):
+    def _get_server_time(self, extra_data=None, **kwargs) -> float:
         """Prepare server time request. Returns (path, params, extra_data)."""
         path = "GET /v1/ticker"
         if extra_data is None:
@@ -119,7 +116,7 @@ class SatoshiTangoRequestData(Feed):
         )
         return path, {"symbol": "BTC/ARS"}, extra_data
 
-    def get_server_time(self, extra_data=None, **kwargs):
+    def get_server_time(self, extra_data=None, **kwargs) -> float:
         """Get server time."""
         path, params, extra_data = self._get_server_time(extra_data, **kwargs)
         return self.request(path, params=params, extra_data=extra_data)

@@ -8,6 +8,7 @@ import base64
 import hmac
 import json
 import time
+from typing import Any
 
 from bt_api_py.containers.accounts.okx_account import OkxAccountData
 from bt_api_py.containers.assets.okx_asset import OkxDepositInfoData, OkxWithdrawalInfoData
@@ -34,7 +35,7 @@ from bt_api_py.logging_factory import get_logger
 class OkxWssData(MyWebsocketApp):
     count = 0
 
-    def __init__(self, data_queue, **kwargs):
+    def __init__(self, data_queue: Any, **kwargs: Any) -> None:
         super().__init__(data_queue, **kwargs)
         self.topics = kwargs.get("topics", {})
         self.public_key = kwargs.get("public_key")
@@ -44,7 +45,7 @@ class OkxWssData(MyWebsocketApp):
         self.asset_type = kwargs.get("asset_type", "SWAP")
         self.logger = get_logger("okx_market_wss")
 
-    def sign(self, content):
+    def sign(self, content: Any) -> None:
         """签名
         Args:
             content (TYPE): Description
@@ -57,7 +58,7 @@ class OkxWssData(MyWebsocketApp):
 
         return sign
 
-    def author(self):
+    def author(self) -> None:
         timestamp = str(round(time.time()))
         sign_content = f"{timestamp}GET/users/self/verify"
         sign = self.sign(sign_content)
@@ -74,7 +75,7 @@ class OkxWssData(MyWebsocketApp):
         }
         self.ws.send(json.dumps(auth))
 
-    def open_rsp(self):
+    def open_rsp(self) -> None:
         self.wss_logger.info(
             f"===== {time.strftime('%Y-%m-%d %H:%M:%S')} {self._params.exchange_name} Websocket Connected ====="
         )
@@ -82,7 +83,7 @@ class OkxWssData(MyWebsocketApp):
         time.sleep(0.3)
         self._init()
 
-    def _init(self):
+    def _init(self) -> None:
         for topics in self.topics:
             self.count += 1
             if "orders" in topics["topic"]:
@@ -439,7 +440,7 @@ class OkxWssData(MyWebsocketApp):
                     f"subscribe {self.count} data, OKX, {self.asset_type}, block-tickers"
                 )
 
-    def handle_data(self, content):
+    def handle_data(self, content: Any) -> None:
         arg = content.get("arg", None)
         if arg is not None:
             channel = arg.get("channel", "")
@@ -547,7 +548,7 @@ class OkxWssData(MyWebsocketApp):
             if "block-tickers" in channel:
                 self._push_block_tickers(content)
 
-    def push_economic_calendar(self, content):
+    def push_economic_calendar(self, content: Any) -> None:
         """Handle economic-calendar channel data (经济日历推送)."""
         data = content.get("data", [])
         if len(data) > 0:
@@ -556,43 +557,43 @@ class OkxWssData(MyWebsocketApp):
             calendar_data = OkxTickerData(calendar_info, "ALL", self.asset_type, True)
             self.data_queue.put(calendar_data)
 
-    def push_mark_price(self, content):
+    def push_mark_price(self, content: Any) -> None:
         mark_price_info = content["data"][0]
         symbol = content["arg"]["instId"]
         mark_price_data = OkxMarkPriceData(mark_price_info, symbol, self.asset_type, True)
         self.data_queue.put(mark_price_data)
 
-    def push_funding_rate(self, content):
+    def push_funding_rate(self, content: Any) -> None:
         funding_rate_info = content["data"][0]
         symbol = content["arg"]["instId"]
         funding_rate_data = OkxFundingRateData(funding_rate_info, symbol, self.asset_type, True)
         self.data_queue.put(funding_rate_data)
 
-    def push_ticker(self, content):
+    def push_ticker(self, content: Any) -> None:
         ticker_info = content["data"][0]
         symbol = content["arg"]["instId"]
         ticker_data = OkxTickerData(ticker_info, symbol, self.asset_type, True)
         self.data_queue.put(ticker_data)
 
-    def push_order_book(self, content):
+    def push_order_book(self, content: Any) -> None:
         order_book_info = content["data"][0]
         symbol = content["arg"]["instId"]
         order_book_data = OkxOrderBookData(order_book_info, symbol, self.asset_type, True)
         self.data_queue.put(order_book_data)
 
-    def push_bar(self, content):
+    def push_bar(self, content: Any) -> None:
         bar_info = content["data"][0]
         symbol = content["arg"]["instId"]
         bar_data = OkxBarData(bar_info, symbol, self.asset_type, True)
         self.data_queue.put(bar_data)
 
-    def push_account(self, content):
+    def push_account(self, content: Any) -> None:
         account_info = content["data"][0]
         symbol = "ANY"
         account_data = OkxAccountData(account_info, symbol, self.asset_type, True)
         self.data_queue.put(account_data)
 
-    def push_order(self, content):
+    def push_order(self, content: Any) -> None:
         self.logger.info("订阅到order数据")
         order_info = content["data"][0]
         symbol = content["arg"]["instId"]
@@ -600,13 +601,13 @@ class OkxWssData(MyWebsocketApp):
         self.data_queue.put(order_data)
         self.logger.info("获取order成功，当前order_status 为：", order_data.get_order_status())
 
-    def push_trade(self, content):
+    def push_trade(self, content: Any) -> None:
         trade_info = content["data"][0]
         symbol = content["arg"]["instId"]
         trade_data = OkxWssTradeData(trade_info, symbol, self.asset_type, True)
         self.data_queue.put(trade_data)
 
-    def push_position(self, content):
+    def push_position(self, content: Any) -> None:
         data = content["data"]
         if len(data) > 0:
             position_info = data[0]
@@ -614,7 +615,7 @@ class OkxWssData(MyWebsocketApp):
             position_data = OkxPositionData(position_info, symbol, self.asset_type, True)
             self.data_queue.put(position_data)
 
-    def push_fills(self, content):
+    def push_fills(self, content: Any) -> None:
         """Handle fills channel data."""
         data = content.get("data", [])
         if len(data) > 0:
@@ -623,7 +624,7 @@ class OkxWssData(MyWebsocketApp):
             fills_data = OkxWssFillsData(fills_info, symbol, self.asset_type, True)
             self.data_queue.put(fills_data)
 
-    def push_liquidation_warning(self, content):
+    def push_liquidation_warning(self, content: Any) -> None:
         """Handle liquidation-warning channel data."""
         data = content.get("data", [])
         if len(data) > 0:
@@ -632,7 +633,7 @@ class OkxWssData(MyWebsocketApp):
             warning_data = OkxLiquidationWarningData(warning_info, symbol, self.asset_type, True)
             self.data_queue.put(warning_data)
 
-    def push_account_greeks(self, content):
+    def push_account_greeks(self, content: Any) -> None:
         """Handle account-greeks channel data."""
         data = content.get("data", [])
         if len(data) > 0:
@@ -640,7 +641,7 @@ class OkxWssData(MyWebsocketApp):
             greeks_data = OkxAccountGreeksData(greeks_info, "ANY", self.asset_type, True)
             self.data_queue.put(greeks_data)
 
-    def push_l2_order_book(self, content):
+    def push_l2_order_book(self, content: Any) -> None:
         """Handle books-l2-tbt channel data (400 depth tick-by-tick)."""
         try:
             order_book_info = content["data"][0]
@@ -650,7 +651,7 @@ class OkxWssData(MyWebsocketApp):
         except Exception as e:
             self.wss_logger.warn(f"Error in push_l2_order_book: {e}")
 
-    def push_market_trades(self, content):
+    def push_market_trades(self, content: Any) -> None:
         """Handle trades/trades-all channel data (public market trades)."""
         data = content.get("data", [])
         if len(data) > 0:
@@ -660,21 +661,21 @@ class OkxWssData(MyWebsocketApp):
                 trade_data = OkxMarketTradeData(trade_info, symbol, self.asset_type, True)
                 self.data_queue.put(trade_data)
 
-    def push_open_interest(self, content):
+    def push_open_interest(self, content: Any) -> None:
         """Handle open-interest channel data."""
         open_interest_info = content["data"][0]
         symbol = content["arg"]["instId"]
         open_interest_data = OkxOpenInterestData(open_interest_info, symbol, self.asset_type, True)
         self.data_queue.put(open_interest_data)
 
-    def push_price_limit(self, content):
+    def push_price_limit(self, content: Any) -> None:
         """Handle price-limit channel data."""
         price_limit_info = content["data"][0]
         symbol = content["arg"]["instId"]
         price_limit_data = OkxPriceLimitData(price_limit_info, symbol, self.asset_type, True)
         self.data_queue.put(price_limit_data)
 
-    def push_liquidation_orders(self, content):
+    def push_liquidation_orders(self, content: Any) -> None:
         """Handle liquidation-orders channel data (public liquidation events)."""
         data = content.get("data", [])
         if len(data) > 0:
@@ -685,7 +686,7 @@ class OkxWssData(MyWebsocketApp):
                 )
                 self.data_queue.put(liquidation_data)
 
-    def push_opt_summary(self, content):
+    def push_opt_summary(self, content: Any) -> None:
         """Handle opt-summary channel data (option overview)."""
         data = content.get("data", [])
         if len(data) > 0:
@@ -695,7 +696,7 @@ class OkxWssData(MyWebsocketApp):
                 opt_data = OkxTickerData(opt_info, symbol, self.asset_type, True)
                 self.data_queue.put(opt_data)
 
-    def push_estimated_price(self, content):
+    def push_estimated_price(self, content: Any) -> None:
         """Handle estimated-price channel data (estimated delivery/exercise price)."""
         data = content.get("data", [])
         if len(data) > 0:
@@ -705,7 +706,7 @@ class OkxWssData(MyWebsocketApp):
             price_data = OkxTickerData(price_info, symbol, self.asset_type, True)
             self.data_queue.put(price_data)
 
-    def push_index_ticker(self, content):
+    def push_index_ticker(self, content: Any) -> None:
         """Handle index-tickers channel data (index tickers)."""
         data = content.get("data", [])
         if len(data) > 0:
@@ -714,7 +715,7 @@ class OkxWssData(MyWebsocketApp):
             ticker_data = OkxTickerData(ticker_info, symbol, self.asset_type, True)
             self.data_queue.put(ticker_data)
 
-    def push_instruments(self, content):
+    def push_instruments(self, content: Any) -> None:
         """Handle instruments channel data (trading instrument updates)."""
         data = content.get("data", [])
         if len(data) > 0:
@@ -724,7 +725,7 @@ class OkxWssData(MyWebsocketApp):
                 symbol_data = OkxSymbolData(inst_info, symbol, self.asset_type)
                 self.data_queue.put(symbol_data)
 
-    def push_adl_warning(self, content):
+    def push_adl_warning(self, content: Any) -> None:
         """Handle adl-warning channel data (ADL reduction warnings)."""
         data = content.get("data", [])
         if len(data) > 0:
@@ -736,7 +737,7 @@ class OkxWssData(MyWebsocketApp):
                 )
                 self.data_queue.put(warning_data)
 
-    def push_status(self, content):
+    def push_status(self, content: Any) -> None:
         """Handle status channel data (system status updates)."""
         data = content.get("data", [])
         if len(data) > 0:
@@ -745,7 +746,7 @@ class OkxWssData(MyWebsocketApp):
             status_data = OkxTickerData(status_info, "SYSTEM", self.asset_type, True)
             self.data_queue.put(status_data)
 
-    def push_algo_order(self, content):
+    def push_algo_order(self, content: Any) -> None:
         """Handle algo-orders channel data (strategy order updates)."""
         data = content.get("data", [])
         if len(data) > 0:
@@ -755,7 +756,7 @@ class OkxWssData(MyWebsocketApp):
                 algo_order_data = OkxOrderData(algo_info, symbol, self.asset_type, True)
                 self.data_queue.put(algo_order_data)
 
-    def push_algo_advance(self, content):
+    def push_algo_advance(self, content: Any) -> None:
         """Handle algo-advance channel data (advanced strategy order updates)."""
         data = content.get("data", [])
         if len(data) > 0:
@@ -765,7 +766,7 @@ class OkxWssData(MyWebsocketApp):
                 algo_advance_data = OkxOrderData(algo_info, symbol, self.asset_type, True)
                 self.data_queue.put(algo_advance_data)
 
-    def push_deposit_info(self, content):
+    def push_deposit_info(self, content: Any) -> None:
         """Handle deposit-info channel data (充值信息推送)."""
         data = content.get("data", [])
         if len(data) > 0:
@@ -774,7 +775,7 @@ class OkxWssData(MyWebsocketApp):
                 deposit_data = OkxDepositInfoData(deposit_info, "ANY", self.asset_type, True)
                 self.data_queue.put(deposit_data)
 
-    def push_withdrawal_info(self, content):
+    def push_withdrawal_info(self, content: Any) -> None:
         """Handle withdrawal-info channel data (提币信息推送)."""
         data = content.get("data", [])
         if len(data) > 0:
@@ -786,7 +787,7 @@ class OkxWssData(MyWebsocketApp):
                 self.data_queue.put(withdrawal_data)
 
     # Grid Trading Channel Handlers
-    def _push_grid_orders_spot(self, content):
+    def _push_grid_orders_spot(self, content: Any) -> None:
         """Handle grid-orders-spot channel data (现货网格订单推送)."""
         data = content.get("data", [])
         if len(data) > 0:
@@ -796,7 +797,7 @@ class OkxWssData(MyWebsocketApp):
                 grid_order_data = OkxOrderData(grid_order_info, symbol, self.asset_type, True)
                 self.data_queue.put(grid_order_data)
 
-    def _push_grid_orders_contract(self, content):
+    def _push_grid_orders_contract(self, content: Any) -> None:
         """Handle grid-orders-contract channel data (合约网格订单推送)."""
         data = content.get("data", [])
         if len(data) > 0:
@@ -806,7 +807,7 @@ class OkxWssData(MyWebsocketApp):
                 grid_order_data = OkxOrderData(grid_order_info, symbol, self.asset_type, True)
                 self.data_queue.put(grid_order_data)
 
-    def _push_grid_positions(self, content):
+    def _push_grid_positions(self, content: Any) -> None:
         """Handle grid-positions channel data (网格持仓推送)."""
         data = content.get("data", [])
         if len(data) > 0:
@@ -816,7 +817,7 @@ class OkxWssData(MyWebsocketApp):
                 grid_pos_data = OkxPositionData(grid_pos_info, symbol, self.asset_type, True)
                 self.data_queue.put(grid_pos_data)
 
-    def _push_grid_sub_orders(self, content):
+    def _push_grid_sub_orders(self, content: Any) -> None:
         """Handle grid-sub-orders channel data (网格子订单推送)."""
         data = content.get("data", [])
         if len(data) > 0:
@@ -829,7 +830,7 @@ class OkxWssData(MyWebsocketApp):
                 self.data_queue.put(grid_sub_order_data)
 
     # Spread Trading Channel Handlers
-    def _push_sprd_orders(self, content):
+    def _push_sprd_orders(self, content: Any) -> None:
         """Handle sprd-orders channel data (价差订单推送)."""
         data = content.get("data", [])
         if len(data) > 0:
@@ -841,7 +842,7 @@ class OkxWssData(MyWebsocketApp):
                 )
                 self.data_queue.put(sprd_order_data)
 
-    def _push_sprd_tickers(self, content):
+    def _push_sprd_tickers(self, content: Any) -> None:
         """Handle sprd-tickers channel data (价差行情推送)."""
         data = content.get("data", [])
         if len(data) > 0:
@@ -854,7 +855,7 @@ class OkxWssData(MyWebsocketApp):
                 self.data_queue.put(sprd_ticker_data)
 
     # RFQ/Block Trading Channel Handlers
-    def _push_rfqs(self, content):
+    def _push_rfqs(self, content: Any) -> None:
         """Handle rfqs channel data (RFQ推送频道)."""
         data = content.get("data", [])
         if len(data) > 0:
@@ -864,7 +865,7 @@ class OkxWssData(MyWebsocketApp):
                 rfq_data = OkxOrderData(rfq_info, symbol, self.asset_type, True)
                 self.data_queue.put(rfq_data)
 
-    def _push_quotes(self, content):
+    def _push_quotes(self, content: Any) -> None:
         """Handle quotes channel data (报价推送频道)."""
         data = content.get("data", [])
         if len(data) > 0:
@@ -874,7 +875,7 @@ class OkxWssData(MyWebsocketApp):
                 quote_data = OkxOrderData(quote_info, symbol, self.asset_type, True)
                 self.data_queue.put(quote_data)
 
-    def _push_struc_block_trades(self, content):
+    def _push_struc_block_trades(self, content: Any) -> None:
         """Handle struc-block-trades channel data (结构化大宗交易推送频道)."""
         data = content.get("data", [])
         if len(data) > 0:
@@ -884,7 +885,7 @@ class OkxWssData(MyWebsocketApp):
                 block_trade_data = OkxOrderData(block_trade_info, symbol, self.asset_type, True)
                 self.data_queue.put(block_trade_data)
 
-    def _push_public_struc_block_trades(self, content):
+    def _push_public_struc_block_trades(self, content: Any) -> None:
         """Handle public-struc-block-trades channel data (公开结构化大宗交易推送频道)."""
         data = content.get("data", [])
         if len(data) > 0:
@@ -894,7 +895,7 @@ class OkxWssData(MyWebsocketApp):
                 block_trade_data = OkxOrderData(block_trade_info, symbol, self.asset_type, True)
                 self.data_queue.put(block_trade_data)
 
-    def _push_public_block_trades(self, content):
+    def _push_public_block_trades(self, content: Any) -> None:
         """Handle public-block-trades channel data (公开大宗交易推送频道)."""
         data = content.get("data", [])
         if len(data) > 0:
@@ -904,7 +905,7 @@ class OkxWssData(MyWebsocketApp):
                 block_trade_data = OkxOrderData(block_trade_info, symbol, self.asset_type, True)
                 self.data_queue.put(block_trade_data)
 
-    def _push_block_tickers(self, content):
+    def _push_block_tickers(self, content: Any) -> None:
         """Handle block-tickers channel data (大宗行情推送频道)."""
         data = content.get("data", [])
         if len(data) > 0:
@@ -914,7 +915,7 @@ class OkxWssData(MyWebsocketApp):
                 ticker_data = OkxTickerData(ticker_info, symbol, self.asset_type, True)
                 self.data_queue.put(ticker_data)
 
-    def message_rsp(self, message):
+    def message_rsp(self, message: Any) -> None:
         rsp = json.loads(message)
         if "event" in rsp:
             if rsp["event"] == "login":

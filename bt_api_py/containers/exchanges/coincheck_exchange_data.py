@@ -1,8 +1,7 @@
-"""
-Coincheck Exchange Data Configuration
-"""
+"""Coincheck Exchange Data Configuration."""
 
 import os
+from typing import Any
 
 from bt_api_py.containers.exchanges.exchange_data import ExchangeData
 from bt_api_py.logging_factory import get_logger
@@ -13,7 +12,7 @@ _coincheck_config = None
 _coincheck_config_loaded = False
 
 
-def _get_coincheck_config():
+def _get_coincheck_config() -> Any | None:
     """Load Coincheck YAML configuration."""
     global _coincheck_config, _coincheck_config_loaded
     if _coincheck_config_loaded:
@@ -37,7 +36,7 @@ def _get_coincheck_config():
 class CoincheckExchangeData(ExchangeData):
     """Base class for Coincheck exchange."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__()
         self.exchange_name = "coincheck"
         self.rest_url = "https://coincheck.com"
@@ -54,7 +53,7 @@ class CoincheckExchangeData(ExchangeData):
         }
         self.legal_currency = ["JPY"]
 
-    def _load_from_config(self, asset_type):
+    def _load_from_config(self, asset_type) -> bool:
         """Load from YAML config."""
         config = _get_coincheck_config()
         if config is None:
@@ -98,7 +97,7 @@ class CoincheckExchangeData(ExchangeData):
 class CoincheckExchangeDataSpot(CoincheckExchangeData):
     """Coincheck Spot exchange configuration."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__()
         self.asset_type = "spot"
         self.rest_paths = {}

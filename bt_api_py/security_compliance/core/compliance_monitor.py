@@ -4,9 +4,9 @@ Implements automated compliance checking for SOX, MiFID II, PCI DSS,
 and other financial industry regulations.
 """
 
-from typing import Any, Dict, List, Optional
 from dataclasses import dataclass
 from enum import Enum
+from typing import Any
 
 
 class ComplianceStandard(Enum):
@@ -36,7 +36,7 @@ class ComplianceMonitor:
 
     def __init__(self):
         """Initialize compliance monitor."""
-        self.rules: List[ComplianceRule] = []
+        self.rules: list[ComplianceRule] = []
         self._init_default_rules()
 
     def _init_default_rules(self):
@@ -86,7 +86,7 @@ class ComplianceMonitor:
         # Implementation would verify encryption of sensitive data
         return True
 
-    def run_compliance_check(self, standard: Optional[ComplianceStandard] = None) -> Dict[str, Any]:
+    def run_compliance_check(self, standard: ComplianceStandard | None = None) -> dict[str, Any]:
         """Run compliance checks."""
         results = {}
 
@@ -111,7 +111,7 @@ class ComplianceMonitor:
 
         return results
 
-    def generate_compliance_report(self) -> Dict[str, Any]:
+    def generate_compliance_report(self) -> dict[str, Any]:
         """Generate comprehensive compliance report."""
         results = self.run_compliance_check()
 
@@ -131,7 +131,7 @@ class ComplianceMonitor:
             "by_standard": self._group_by_standard(results),
         }
 
-    def _group_by_standard(self, results: Dict[str, Any]) -> Dict[str, Any]:
+    def _group_by_standard(self, results: dict[str, Any]) -> dict[str, Any]:
         """Group results by compliance standard."""
         grouped = {}
 

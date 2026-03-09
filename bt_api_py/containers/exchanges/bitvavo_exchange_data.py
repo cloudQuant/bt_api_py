@@ -1,6 +1,6 @@
-"""
-Bitvavo Exchange Data Configuration
-"""
+from typing import Any
+
+"""Bitvavo Exchange Data Configuration."""
 
 import os
 
@@ -13,7 +13,7 @@ _bitvavo_config = None
 _bitvavo_config_loaded = False
 
 
-def _get_bitvavo_config():
+def _get_bitvavo_config() -> Any | None:
     """Load Bitvavo YAML configuration."""
     global _bitvavo_config, _bitvavo_config_loaded
     if _bitvavo_config_loaded:
@@ -37,7 +37,7 @@ def _get_bitvavo_config():
 class BitvavoExchangeData(ExchangeData):
     """Base class for Bitvavo exchange."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__()
         self.exchange_name = "bitvavo"
         self.rest_url = "https://api.bitvavo.com/v2"
@@ -57,7 +57,7 @@ class BitvavoExchangeData(ExchangeData):
         }
         self.legal_currency = ["EUR", "USDT", "USD"]
 
-    def _load_from_config(self, asset_type):
+    def _load_from_config(self, asset_type) -> bool:
         """Load from YAML config."""
         config = _get_bitvavo_config()
         if config is None:
@@ -103,7 +103,7 @@ class BitvavoExchangeData(ExchangeData):
 class BitvavoExchangeDataSpot(BitvavoExchangeData):
     """Bitvavo Spot exchange configuration."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__()
         self.asset_type = "spot"
         self.rest_paths = {}

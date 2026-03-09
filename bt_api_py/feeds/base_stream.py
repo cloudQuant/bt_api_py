@@ -36,7 +36,6 @@ class BaseDataStream(ABC):
         self._running = False
         self._state = ConnectionState.DISCONNECTED
         self._thread = None
-        log_file = kwargs.get("log_file_name", f"./logs/{self.stream_name}.log")
         self.logger = get_logger("unknown")
 
     @property

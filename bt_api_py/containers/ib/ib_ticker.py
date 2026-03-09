@@ -10,8 +10,12 @@ class IbTickerData(TickerData):
     """IB Tick 行情数据"""
 
     def __init__(
-        self, ticker_info, symbol_name=None, asset_type="STK", has_been_json_encoded=False
-    ):
+        self,
+        ticker_info: Any,
+        symbol_name: Any = None,
+        asset_type: Any = "STK",
+        has_been_json_encoded: Any = False,
+    ) -> None:
         super().__init__(ticker_info, has_been_json_encoded)
         self.symbol_name = symbol_name
         self.asset_type = asset_type
@@ -30,7 +34,7 @@ class IbTickerData(TickerData):
         self.close_val = None
         self.timestamp_val = None
 
-    def init_data(self):
+    def init_data(self) -> None:
         if self._initialized:
             return self
         info = self.ticker_info
@@ -50,43 +54,43 @@ class IbTickerData(TickerData):
         self._initialized = True
         return self
 
-    def get_exchange_name(self):
+    def get_exchange_name(self) -> None:
         return self.exchange_name
 
-    def get_local_update_time(self):
+    def get_local_update_time(self) -> None:
         return self.timestamp_val
 
-    def get_symbol_name(self):
+    def get_symbol_name(self) -> None:
         return self.contract_symbol or self.symbol_name
 
-    def get_ticker_symbol_name(self):
+    def get_ticker_symbol_name(self) -> None:
         return self.contract_symbol or self.symbol_name
 
-    def get_asset_type(self):
+    def get_asset_type(self) -> None:
         return self.asset_type
 
-    def get_server_time(self):
+    def get_server_time(self) -> None:
         return self.timestamp_val
 
-    def get_bid_price(self):
+    def get_bid_price(self) -> None:
         return self.bid_val
 
-    def get_ask_price(self):
+    def get_ask_price(self) -> None:
         return self.ask_val
 
-    def get_bid_volume(self):
+    def get_bid_volume(self) -> None:
         return self.bid_size_val
 
-    def get_ask_volume(self):
+    def get_ask_volume(self) -> None:
         return self.ask_size_val
 
-    def get_last_price(self):
+    def get_last_price(self) -> None:
         return self.last_val
 
-    def get_last_volume(self):
+    def get_last_volume(self) -> None:
         return self.last_size_val
 
-    def get_all_data(self):
+    def get_all_data(self) -> None:
         return {
             "exchange_name": self.exchange_name,
             "symbol": self.contract_symbol,

@@ -1,5 +1,4 @@
-"""
-Uniswap Quote Data Container
+"""Uniswap Quote Data Container.
 
 Standardized container for Uniswap swap quotes and routing information.
 """
@@ -111,6 +110,7 @@ class UniswapQuote:
 
         Returns:
             UniswapQuote instance
+
         """
         quote_data = data.get("quote", {}) or {}
 
@@ -176,6 +176,7 @@ class UniswapQuote:
 
         Returns:
             Dictionary representation of quote
+
         """
         return {
             "quote_id": self.quote_id,
@@ -234,6 +235,7 @@ class UniswapQuote:
 
         Returns:
             Output amount based on current price impact and fees
+
         """
         if not self.is_valid or self.is_expired:
             return None
@@ -248,6 +250,7 @@ class UniswapQuote:
 
         Returns:
             Exchange rate as decimal
+
         """
         if self.amount_in > 0:
             return self.amount_out / self.amount_in
@@ -261,6 +264,7 @@ class UniswapQuote:
 
         Returns:
             Output amount adjusted for slippage
+
         """
         if not self.is_valid or self.is_expired:
             return None
@@ -276,6 +280,7 @@ class UniswapQuote:
 
         Returns:
             Total cost in input token amount
+
         """
         if not self.estimated_gas or not gas_price_gwei:
             return None
@@ -296,6 +301,7 @@ class UniswapQuote:
 
         Returns:
             True if quote price is acceptable
+
         """
         if self.price_impact_percentage:
             return abs(self.price_impact_percentage) <= max_slippage
@@ -306,6 +312,7 @@ class UniswapQuote:
 
         Args:
             expiry_seconds: Number of seconds until expiry
+
         """
         import time
 
@@ -318,6 +325,7 @@ class UniswapQuote:
 
         Args:
             route: Route to add
+
         """
         self.routes.append(route)
         # Update best route if this is better (fewer hops, better price)

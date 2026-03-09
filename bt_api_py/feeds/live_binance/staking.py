@@ -1,5 +1,4 @@
-"""
-Binance Staking API - 质押理财接口请求类
+"""Binance Staking API - 质押理财接口请求类.
 
 实现 Binance 质押理财相关的所有 REST API 请求，包括：
 - Staking 产品查询
@@ -9,6 +8,8 @@ Binance Staking API - 质押理财接口请求类
 - Staking 历史记录查询
 """
 
+from typing import Any
+
 from bt_api_py.containers.exchanges.binance_exchange_data import BinanceExchangeDataStaking
 from bt_api_py.feeds.live_binance.request_base import BinanceRequestData
 from bt_api_py.functions.utils import update_extra_data
@@ -16,12 +17,12 @@ from bt_api_py.logging_factory import get_logger
 
 
 class BinanceRequestDataStaking(BinanceRequestData):
-    """Binance Staking API 请求类
+    """Binance Staking API 请求类.
 
     处理所有质押理财相关的请求。
     """
 
-    def __init__(self, data_queue, **kwargs):
+    def __init__(self, data_queue: Any, **kwargs: Any) -> None:
         kwargs.setdefault("exchange_data", BinanceExchangeDataStaking())
         kwargs.setdefault("exchange_name", "binance_staking")
         super().__init__(data_queue, **kwargs)
@@ -36,7 +37,7 @@ class BinanceRequestDataStaking(BinanceRequestData):
     def _get_staking_products(
         self, product_type, asset=None, size=None, current=None, extra_data=None, **kwargs
     ):
-        """查询 Staking 产品
+        """查询 Staking 产品.
 
         Args:
             product_type: 产品类型 (STAKING, F_DEFI, L_DEFI)
@@ -48,6 +49,7 @@ class BinanceRequestDataStaking(BinanceRequestData):
 
         Returns:
             tuple: (path, params, extra_data)
+
         """
         request_type = "get_staking_products"
         path = self._params.get_rest_path(request_type)
@@ -75,10 +77,11 @@ class BinanceRequestDataStaking(BinanceRequestData):
     def get_staking_products(
         self, product_type, asset=None, size=None, current=None, extra_data=None, **kwargs
     ):
-        """查询 Staking 产品
+        """查询 Staking 产品.
 
         Returns:
             RequestData: 请求结果
+
         """
         path, params, extra_data = self._get_staking_products(
             product_type=product_type,
@@ -92,7 +95,7 @@ class BinanceRequestDataStaking(BinanceRequestData):
         return data
 
     def _staking_purchase(self, product_id, amount, auto_renew=None, extra_data=None, **kwargs):
-        """购买 Staking 产品
+        """购买 Staking 产品.
 
         Args:
             product_id: 产品ID
@@ -103,6 +106,7 @@ class BinanceRequestDataStaking(BinanceRequestData):
 
         Returns:
             tuple: (path, params, extra_data)
+
         """
         request_type = "staking_purchase"
         path = self._params.get_rest_path(request_type)
@@ -125,10 +129,11 @@ class BinanceRequestDataStaking(BinanceRequestData):
         return path, params, extra_data
 
     def staking_purchase(self, product_id, amount, auto_renew=None, extra_data=None, **kwargs):
-        """购买 Staking 产品
+        """购买 Staking 产品.
 
         Returns:
             RequestData: 请求结果
+
         """
         path, params, extra_data = self._staking_purchase(
             product_id=product_id,
@@ -141,7 +146,7 @@ class BinanceRequestDataStaking(BinanceRequestData):
         return data
 
     def _staking_redeem(self, product_id, amount, position_id=None, extra_data=None, **kwargs):
-        """赎回 Staking 产品
+        """赎回 Staking 产品.
 
         Args:
             product_id: 产品ID
@@ -152,6 +157,7 @@ class BinanceRequestDataStaking(BinanceRequestData):
 
         Returns:
             tuple: (path, params, extra_data)
+
         """
         request_type = "staking_redeem"
         path = self._params.get_rest_path(request_type)
@@ -174,10 +180,11 @@ class BinanceRequestDataStaking(BinanceRequestData):
         return path, params, extra_data
 
     def staking_redeem(self, product_id, amount, position_id=None, extra_data=None, **kwargs):
-        """赎回 Staking 产品
+        """赎回 Staking 产品.
 
         Returns:
             RequestData: 请求结果
+
         """
         path, params, extra_data = self._staking_redeem(
             product_id=product_id,
@@ -192,7 +199,7 @@ class BinanceRequestDataStaking(BinanceRequestData):
     def _get_staking_position(
         self, product_type=None, asset=None, size=None, current=None, extra_data=None, **kwargs
     ):
-        """查询 Staking 持仓
+        """查询 Staking 持仓.
 
         Args:
             product_type: 产品类型 (STAKING, F_DEFI, L_DEFI)
@@ -204,6 +211,7 @@ class BinanceRequestDataStaking(BinanceRequestData):
 
         Returns:
             tuple: (path, params, extra_data)
+
         """
         request_type = "get_staking_position"
         path = self._params.get_rest_path(request_type)
@@ -231,10 +239,11 @@ class BinanceRequestDataStaking(BinanceRequestData):
     def get_staking_position(
         self, product_type=None, asset=None, size=None, current=None, extra_data=None, **kwargs
     ):
-        """查询 Staking 持仓
+        """查询 Staking 持仓.
 
         Returns:
             RequestData: 请求结果
+
         """
         path, params, extra_data = self._get_staking_position(
             product_type=product_type,
@@ -258,7 +267,7 @@ class BinanceRequestDataStaking(BinanceRequestData):
         extra_data=None,
         **kwargs,
     ):
-        """查询 Staking 历史记录
+        """查询 Staking 历史记录.
 
         Args:
             product_type: 产品类型 (STAKING, F_DEFI, L_DEFI)
@@ -272,6 +281,7 @@ class BinanceRequestDataStaking(BinanceRequestData):
 
         Returns:
             tuple: (path, params, extra_data)
+
         """
         request_type = "get_staking_history"
         path = self._params.get_rest_path(request_type)
@@ -311,10 +321,11 @@ class BinanceRequestDataStaking(BinanceRequestData):
         extra_data=None,
         **kwargs,
     ):
-        """查询 Staking 历史记录
+        """查询 Staking 历史记录.
 
         Returns:
             RequestData: 请求结果
+
         """
         path, params, extra_data = self._get_staking_history(
             product_type=product_type,

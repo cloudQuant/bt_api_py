@@ -17,16 +17,16 @@ class TradeMixin:
 
     def _make_order(
         self,
-        symbol,
-        vol,
-        price=None,
-        order_type="buy-limit",
-        offset="open",
-        post_only=False,
-        client_order_id=None,
-        extra_data=None,
-        **kwargs,
-    ):
+        symbol: Any,
+        vol: Any,
+        price: Any = None,
+        order_type: Any = "buy-limit",
+        offset: Any = "open",
+        post_only: Any = False,
+        client_order_id: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         request_symbol = self._params.get_symbol(symbol)
         request_type = "make_order"
         try:
@@ -64,7 +64,7 @@ class TradeMixin:
         return path, params, extra_data
 
     @staticmethod
-    def _make_order_normalize_function(input_data, extra_data):
+    def _make_order_normalize_function(input_data: Any, extra_data: Any) -> None:
         if extra_data is None:
             pass
         status = input_data["code"] == "0"
@@ -87,16 +87,16 @@ class TradeMixin:
     # noinspection PyBroadException
     def make_order(
         self,
-        symbol,
-        vol,
-        price=None,
-        order_type="buy-limit",
-        offset="open",
-        post_only=False,
-        client_order_id=None,
-        extra_data=None,
-        **kwargs,
-    ):
+        symbol: Any,
+        vol: Any,
+        price: Any = None,
+        order_type: Any = "buy-limit",
+        offset: Any = "open",
+        post_only: Any = False,
+        client_order_id: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         path, params, extra_data = self._make_order(
             symbol, vol, price, order_type, offset, post_only, client_order_id, extra_data, **kwargs
         )
@@ -106,16 +106,16 @@ class TradeMixin:
     # noinspection PyBroadException
     def async_make_order(
         self,
-        symbol,
-        vol,
-        price=None,
-        order_type="buy-limit",
-        offset="open",
-        post_only=False,
-        client_order_id=None,
-        extra_data=None,
-        **kwargs,
-    ):
+        symbol: Any,
+        vol: Any,
+        price: Any = None,
+        order_type: Any = "buy-limit",
+        offset: Any = "open",
+        post_only: Any = False,
+        client_order_id: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         path, params, extra_data = self._make_order(
             symbol, vol, price, order_type, offset, post_only, client_order_id, extra_data, **kwargs
         )
@@ -126,14 +126,14 @@ class TradeMixin:
 
     def _amend_order(
         self,
-        symbol,
-        order_id=None,
-        client_order_id=None,
-        new_sz=None,
-        new_px=None,
-        extra_data=None,
-        **kwargs,
-    ):
+        symbol: Any,
+        order_id: Any = None,
+        client_order_id: Any = None,
+        new_sz: Any = None,
+        new_px: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """Amend an incomplete order"""
         request_symbol = self._params.get_symbol(symbol)
         request_type = "amend_order"
@@ -164,7 +164,7 @@ class TradeMixin:
         return path, params, extra_data
 
     @staticmethod
-    def _amend_order_normalize_function(input_data, extra_data):
+    def _amend_order_normalize_function(input_data: Any, extra_data: Any) -> None:
         if extra_data is None:
             pass
         status = input_data["code"] == "0"
@@ -184,14 +184,14 @@ class TradeMixin:
 
     def amend_order(
         self,
-        symbol,
-        order_id=None,
-        client_order_id=None,
-        new_sz=None,
-        new_px=None,
-        extra_data=None,
-        **kwargs,
-    ):
+        symbol: Any,
+        order_id: Any = None,
+        client_order_id: Any = None,
+        new_sz: Any = None,
+        new_px: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         path, params, extra_data = self._amend_order(
             symbol, order_id, client_order_id, new_sz, new_px, extra_data, **kwargs
         )
@@ -200,14 +200,14 @@ class TradeMixin:
 
     def async_amend_order(
         self,
-        symbol,
-        order_id=None,
-        client_order_id=None,
-        new_sz=None,
-        new_px=None,
-        extra_data=None,
-        **kwargs,
-    ):
+        symbol: Any,
+        order_id: Any = None,
+        client_order_id: Any = None,
+        new_sz: Any = None,
+        new_px: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         path, params, extra_data = self._amend_order(
             symbol, order_id, client_order_id, new_sz, new_px, extra_data, **kwargs
         )
@@ -216,7 +216,9 @@ class TradeMixin:
             callback=self.async_callback,
         )
 
-    def _cancel_order(self, symbol, order_id=None, extra_data=None, **kwargs):
+    def _cancel_order(
+        self, symbol: Any, order_id: Any = None, extra_data: Any = None, **kwargs: Any
+    ) -> None:
         request_symbol = self._params.get_symbol(symbol)
         request_type = "cancel_order"
         path = self._params.get_rest_path(request_type)
@@ -238,7 +240,7 @@ class TradeMixin:
         return path, params, extra_data
 
     @staticmethod
-    def _cancel_order_normalize_function(input_data, extra_data):
+    def _cancel_order_normalize_function(input_data: Any, extra_data: Any) -> None:
         if extra_data:
             pass
         status = input_data["code"] == "0"
@@ -260,12 +262,16 @@ class TradeMixin:
             target_data = []
         return target_data, status
 
-    def cancel_order(self, symbol, order_id=None, extra_data=None, **kwargs):
+    def cancel_order(
+        self, symbol: Any, order_id: Any = None, extra_data: Any = None, **kwargs: Any
+    ) -> None:
         path, params, extra_data = self._cancel_order(symbol, order_id, extra_data, **kwargs)
         data = self.request(path, body=params, extra_data=extra_data)
         return data
 
-    def async_cancel_order(self, symbol, order_id=None, extra_data=None, **kwargs):
+    def async_cancel_order(
+        self, symbol: Any, order_id: Any = None, extra_data: Any = None, **kwargs: Any
+    ) -> None:
         path, params, extra_data = self._cancel_order(symbol, order_id, extra_data, **kwargs)
         self.submit(
             self.async_request(path, body=params, extra_data=extra_data),
@@ -273,7 +279,9 @@ class TradeMixin:
         )
 
     # noinspection PyBroadException
-    def _query_order(self, symbol, order_id=None, extra_data=None, **kwargs):
+    def _query_order(
+        self, symbol: Any, order_id: Any = None, extra_data: Any = None, **kwargs: Any
+    ) -> None:
         request_symbol = self._params.get_symbol(symbol)
         request_type = "query_order"
         path = self._params.get_rest_path(request_type)
@@ -296,7 +304,7 @@ class TradeMixin:
         return path, params, extra_data
 
     @staticmethod
-    def _query_order_normalize_function(input_data, extra_data):
+    def _query_order_normalize_function(input_data: Any, extra_data: Any) -> None:
         status = input_data["code"] == "0"
         if "data" not in input_data:
             return [], status
@@ -312,19 +320,23 @@ class TradeMixin:
         return data, status
 
     # noinspection PyBroadException
-    def query_order(self, symbol, order_id=None, extra_data=None, **kwargs):
+    def query_order(
+        self, symbol: Any, order_id: Any = None, extra_data: Any = None, **kwargs: Any
+    ) -> None:
         path, params, extra_data = self._query_order(symbol, order_id, extra_data, **kwargs)
         data = self.request(path, params=params, extra_data=extra_data)
         return data
 
-    def async_query_order(self, symbol, order_id=None, extra_data=None, **kwargs):
+    def async_query_order(
+        self, symbol: Any, order_id: Any = None, extra_data: Any = None, **kwargs: Any
+    ) -> None:
         path, params, extra_data = self._query_order(symbol, order_id, extra_data, **kwargs)
         self.submit(
             self.async_request(path, params=params, extra_data=extra_data),
             callback=self.async_callback,
         )
 
-    def _get_open_orders(self, symbol=None, extra_data=None, **kwargs):
+    def _get_open_orders(self, symbol: Any = None, extra_data: Any = None, **kwargs: Any) -> None:
         request_symbol = self._params.get_symbol(symbol) if symbol is not None else ""
         request_type = "get_open_orders"
         uly = kwargs.get("uly", "")
@@ -361,7 +373,7 @@ class TradeMixin:
         return path, params, extra_data
 
     @staticmethod
-    def _get_open_orders_normalize_function(input_data, extra_data):
+    def _get_open_orders_normalize_function(input_data: Any, extra_data: Any) -> None:
         status = input_data["code"] == "0"
         if "data" not in input_data:
             return [], status
@@ -382,13 +394,15 @@ class TradeMixin:
         return target_data, status
 
     # noinspection PyBroadException
-    def get_open_orders(self, symbol=None, extra_data=None, **kwargs):
+    def get_open_orders(self, symbol: Any = None, extra_data: Any = None, **kwargs: Any) -> None:
         path, params, extra_data = self._get_open_orders(symbol, extra_data, **kwargs)
         data = self.request(path, params=params, extra_data=extra_data)
         return data
 
     # noinspection PyBroadException
-    def async_get_open_orders(self, symbol=None, extra_data=None, **kwargs):
+    def async_get_open_orders(
+        self, symbol: Any = None, extra_data: Any = None, **kwargs: Any
+    ) -> None:
         path, params, extra_data = self._get_open_orders(symbol, extra_data, **kwargs)
         self.submit(
             self.async_request(path, params=params, extra_data=extra_data),
@@ -397,16 +411,16 @@ class TradeMixin:
 
     def _get_order_history(
         self,
-        inst_type="SWAP",
-        symbol=None,
-        ord_type=None,
-        state=None,
-        after=None,
-        before=None,
-        limit=None,
-        extra_data=None,
-        **kwargs,
-    ):
+        inst_type: Any = "SWAP",
+        symbol: Any = None,
+        ord_type: Any = None,
+        state: Any = None,
+        after: Any = None,
+        before: Any = None,
+        limit: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """Get order history (last 7 days)"""
         request_type = "get_order_history"
         params = {"instType": inst_type}
@@ -439,16 +453,16 @@ class TradeMixin:
 
     def get_order_history(
         self,
-        inst_type="SWAP",
-        symbol=None,
-        ord_type=None,
-        state=None,
-        after=None,
-        before=None,
-        limit=None,
-        extra_data=None,
-        **kwargs,
-    ):
+        inst_type: Any = "SWAP",
+        symbol: Any = None,
+        ord_type: Any = None,
+        state: Any = None,
+        after: Any = None,
+        before: Any = None,
+        limit: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         path, params, extra_data = self._get_order_history(
             inst_type, symbol, ord_type, state, after, before, limit, extra_data, **kwargs
         )
@@ -456,8 +470,14 @@ class TradeMixin:
         return data
 
     def _get_deals(
-        self, symbol=None, count=100, start_time="", end_time="", extra_data=None, **kwargs
-    ):
+        self,
+        symbol: Any = None,
+        count: Any = 100,
+        start_time: Any = "",
+        end_time: Any = "",
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         if symbol is not None:
             request_symbol = self._params.get_symbol(symbol)
         else:
@@ -490,7 +510,7 @@ class TradeMixin:
         return path, params, extra_data
 
     @staticmethod
-    def _get_deals_normalize_function(input_data, extra_data):
+    def _get_deals_normalize_function(input_data: Any, extra_data: Any) -> None:
         status = input_data["code"] == "0"
         if "data" not in input_data:
             return [], status
@@ -508,8 +528,14 @@ class TradeMixin:
 
     # noinspection PyBroadException
     def get_deals(
-        self, symbol=None, count=100, start_time="", end_time="", extra_data=None, **kwargs
-    ):
+        self,
+        symbol: Any = None,
+        count: Any = 100,
+        start_time: Any = "",
+        end_time: Any = "",
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         path, params, extra_data = self._get_deals(
             symbol, count, start_time, end_time, extra_data, **kwargs
         )
@@ -517,8 +543,14 @@ class TradeMixin:
         return data
 
     def async_get_deals(
-        self, symbol=None, count=100, start_time="", end_time="", extra_data=None, **kwargs
-    ):
+        self,
+        symbol: Any = None,
+        count: Any = 100,
+        start_time: Any = "",
+        end_time: Any = "",
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         path, params, extra_data = self._get_deals(
             symbol, count, start_time, end_time, extra_data, **kwargs
         )
@@ -529,7 +561,9 @@ class TradeMixin:
 
     # ==================== Algo Trading APIs ====================
 
-    def _make_algo_order(self, symbol, side, ord_type, sz, extra_data=None, **kwargs):
+    def _make_algo_order(
+        self, symbol: Any, side: Any, ord_type: Any, sz: Any, extra_data: Any = None, **kwargs: Any
+    ) -> None:
         """Place algo order (trigger, conditional, oco, iceberg, twap, trailing)"""
         request_symbol = self._params.get_symbol(symbol)
         request_type = "make_algo_order"
@@ -574,14 +608,16 @@ class TradeMixin:
             extra_data.update({k: v for k, v in kwargs.items() if k not in params})
         return path, params, extra_data
 
-    def make_algo_order(self, symbol, side, ord_type, sz, extra_data=None, **kwargs):
+    def make_algo_order(
+        self, symbol: Any, side: Any, ord_type: Any, sz: Any, extra_data: Any = None, **kwargs: Any
+    ) -> None:
         path, params, extra_data = self._make_algo_order(
             symbol, side, ord_type, sz, extra_data, **kwargs
         )
         data = self.request(path, body=params, extra_data=extra_data)
         return data
 
-    def cancel_algo_order(self, algo_id, inst_id, extra_data=None):
+    def cancel_algo_order(self, algo_id: Any, inst_id: Any, extra_data: Any = None) -> None:
         """Cancel algo order"""
         path = self._params.get_rest_path("cancel_algo_order")
         params = [{"algoId": algo_id, "instId": inst_id}]
@@ -598,7 +634,7 @@ class TradeMixin:
         data = self.request(path, body=params, extra_data=extra_data)
         return data
 
-    def async_get_clear_price(self, symbol, extra_data=None, **kwargs):
+    def async_get_clear_price(self, symbol: Any, extra_data: Any = None, **kwargs: Any) -> None:
         data_type = "get_clear_price"
         path = self._params.get_rest_path(data_type)
         params = {"instId": self._params.get_symbol(symbol)}
@@ -610,8 +646,13 @@ class TradeMixin:
     # ==================== Option Instrument Family Trades ====================
 
     def _get_option_instrument_family_trades(
-        self, inst_family, uly=None, limit=None, extra_data=None, **kwargs
-    ):
+        self,
+        inst_family: Any,
+        uly: Any = None,
+        limit: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """
         Get option instrument family trades data
         :param inst_family: Instrument family, e.g. `BTC-USD`
@@ -643,8 +684,13 @@ class TradeMixin:
         return path, params, extra_data
 
     def get_option_instrument_family_trades(
-        self, inst_family, uly=None, limit=None, extra_data=None, **kwargs
-    ):
+        self,
+        inst_family: Any,
+        uly: Any = None,
+        limit: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """Get option instrument family trades data"""
         path, params, extra_data = self._get_option_instrument_family_trades(
             inst_family, uly, limit, extra_data, **kwargs
@@ -653,8 +699,13 @@ class TradeMixin:
         return data
 
     def async_get_option_instrument_family_trades(
-        self, inst_family, uly=None, limit=None, extra_data=None, **kwargs
-    ):
+        self,
+        inst_family: Any,
+        uly: Any = None,
+        limit: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """Async get option instrument family trades data"""
         path, params, extra_data = self._get_option_instrument_family_trades(
             inst_family, uly, limit, extra_data, **kwargs
@@ -666,7 +717,9 @@ class TradeMixin:
 
     # ==================== Option Trades ====================
 
-    def _get_option_trades(self, inst_id, limit=None, extra_data=None, **kwargs):
+    def _get_option_trades(
+        self, inst_id: Any, limit: Any = None, extra_data: Any = None, **kwargs: Any
+    ) -> None:
         """
         Get option trades data
         :param inst_id: Instrument ID, e.g. `BTC-USD-231229-40000-C`
@@ -694,13 +747,17 @@ class TradeMixin:
             extra_data.update(kwargs)
         return path, params, extra_data
 
-    def get_option_trades(self, inst_id, limit=None, extra_data=None, **kwargs):
+    def get_option_trades(
+        self, inst_id: Any, limit: Any = None, extra_data: Any = None, **kwargs: Any
+    ) -> None:
         """Get option trades data"""
         path, params, extra_data = self._get_option_trades(inst_id, limit, extra_data, **kwargs)
         data = self.request(path, params=params, extra_data=extra_data)
         return data
 
-    def async_get_option_trades(self, inst_id, limit=None, extra_data=None, **kwargs):
+    def async_get_option_trades(
+        self, inst_id: Any, limit: Any = None, extra_data: Any = None, **kwargs: Any
+    ) -> None:
         """Async get option trades data"""
         path, params, extra_data = self._get_option_trades(inst_id, limit, extra_data, **kwargs)
         self.submit(
@@ -710,7 +767,7 @@ class TradeMixin:
 
     # ==================== 24h Volume ====================
 
-    def _get_24h_volume(self, extra_data=None, **kwargs):
+    def _get_24h_volume(self, extra_data: Any = None, **kwargs: Any) -> None:
         """
         Get platform 24h total volume
         :param extra_data: extra_data, default is None, can be a dict passed by user
@@ -734,13 +791,13 @@ class TradeMixin:
             extra_data.update(kwargs)
         return path, params, extra_data
 
-    def get_24h_volume(self, extra_data=None, **kwargs):
+    def get_24h_volume(self, extra_data: Any = None, **kwargs: Any) -> None:
         """Get platform 24h total volume"""
         path, params, extra_data = self._get_24h_volume(extra_data, **kwargs)
         data = self.request(path, params=params, extra_data=extra_data)
         return data
 
-    def async_get_24h_volume(self, extra_data=None, **kwargs):
+    def async_get_24h_volume(self, extra_data: Any = None, **kwargs: Any) -> None:
         """Async get platform 24h total volume"""
         path, params, extra_data = self._get_24h_volume(extra_data, **kwargs)
         self.submit(
@@ -751,8 +808,13 @@ class TradeMixin:
     # ==================== Call Auction Details ====================
 
     def _get_call_auction_details(
-        self, inst_type=None, uly=None, inst_id=None, extra_data=None, **kwargs
-    ):
+        self,
+        inst_type: Any = None,
+        uly: Any = None,
+        inst_id: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """
         Get call auction details
         :param inst_type: Instrument type: `FUTURES`, `OPTION`
@@ -786,8 +848,13 @@ class TradeMixin:
         return path, params, extra_data
 
     def get_call_auction_details(
-        self, inst_type=None, uly=None, inst_id=None, extra_data=None, **kwargs
-    ):
+        self,
+        inst_type: Any = None,
+        uly: Any = None,
+        inst_id: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """Get call auction details"""
         path, params, extra_data = self._get_call_auction_details(
             inst_type, uly, inst_id, extra_data, **kwargs
@@ -796,8 +863,13 @@ class TradeMixin:
         return data
 
     def async_get_call_auction_details(
-        self, inst_type=None, uly=None, inst_id=None, extra_data=None, **kwargs
-    ):
+        self,
+        inst_type: Any = None,
+        uly: Any = None,
+        inst_id: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """Async get call auction details"""
         path, params, extra_data = self._get_call_auction_details(
             inst_type, uly, inst_id, extra_data, **kwargs
@@ -809,7 +881,7 @@ class TradeMixin:
 
     # ==================== Index Price ====================
 
-    def _get_index_price(self, index=None, extra_data=None, **kwargs):
+    def _get_index_price(self, index: Any = None, extra_data: Any = None, **kwargs: Any) -> None:
         """
         Get index ticker data
         :param index: Index, e.g. `BTC-USD`
@@ -836,13 +908,15 @@ class TradeMixin:
             extra_data.update(kwargs)
         return path, params, extra_data
 
-    def get_index_price(self, index=None, extra_data=None, **kwargs):
+    def get_index_price(self, index: Any = None, extra_data: Any = None, **kwargs: Any) -> None:
         """Get index ticker data"""
         path, params, extra_data = self._get_index_price(index, extra_data, **kwargs)
         data = self.request(path, params=params, extra_data=extra_data)
         return data
 
-    def async_get_index_price(self, index=None, extra_data=None, **kwargs):
+    def async_get_index_price(
+        self, index: Any = None, extra_data: Any = None, **kwargs: Any
+    ) -> None:
         """Async get index ticker data"""
         path, params, extra_data = self._get_index_price(index, extra_data, **kwargs)
         self.submit(
@@ -853,8 +927,15 @@ class TradeMixin:
     # ==================== Index Candles ====================
 
     def _get_index_candles(
-        self, index, bar="1m", after="", before="", limit="100", extra_data=None, **kwargs
-    ):
+        self,
+        index: Any,
+        bar: Any = "1m",
+        after: Any = "",
+        before: Any = "",
+        limit: Any = "100",
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """
         Get index candlestick charts
         :param index: Index, e.g. `BTC-USD`
@@ -893,7 +974,7 @@ class TradeMixin:
         return path, params, extra_data
 
     @staticmethod
-    def _get_index_candles_normalize_function(input_data, extra_data):
+    def _get_index_candles_normalize_function(input_data: Any, extra_data: Any) -> None:
         """Normalize index candles data - API returns 6 elements, OkxBarData expects 9"""
         status = input_data["code"] == "0"
         if "data" not in input_data:
@@ -933,8 +1014,15 @@ class TradeMixin:
         return target_data, status
 
     def get_index_candles(
-        self, index, bar="1m", after="", before="", limit="100", extra_data=None, **kwargs
-    ):
+        self,
+        index: Any,
+        bar: Any = "1m",
+        after: Any = "",
+        before: Any = "",
+        limit: Any = "100",
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """Get index candlestick charts"""
         path, params, extra_data = self._get_index_candles(
             index, bar, after, before, limit, extra_data, **kwargs
@@ -943,8 +1031,15 @@ class TradeMixin:
         return data
 
     def async_get_index_candles(
-        self, index, bar="1m", after="", before="", limit="100", extra_data=None, **kwargs
-    ):
+        self,
+        index: Any,
+        bar: Any = "1m",
+        after: Any = "",
+        before: Any = "",
+        limit: Any = "100",
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """Async get index candlestick charts"""
         path, params, extra_data = self._get_index_candles(
             index, bar, after, before, limit, extra_data, **kwargs
@@ -957,8 +1052,15 @@ class TradeMixin:
     # ==================== Mark Price Candles ====================
 
     def _get_mark_price_candles(
-        self, symbol, bar="1m", after="", before="", limit="100", extra_data=None, **kwargs
-    ):
+        self,
+        symbol: Any,
+        bar: Any = "1m",
+        after: Any = "",
+        before: Any = "",
+        limit: Any = "100",
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """
         Get mark price candlestick charts
         :param symbol: Instrument ID, e.g. `BTC-USDT`
@@ -998,7 +1100,7 @@ class TradeMixin:
         return path, params, extra_data
 
     @staticmethod
-    def _get_mark_price_candles_normalize_function(input_data, extra_data):
+    def _get_mark_price_candles_normalize_function(input_data: Any, extra_data: Any) -> None:
         """Normalize mark price candles data - API returns 6-7 elements, OkxBarData expects 9"""
         status = input_data["code"] == "0"
         if "data" not in input_data:
@@ -1038,8 +1140,15 @@ class TradeMixin:
         return target_data, status
 
     def get_mark_price_candles(
-        self, symbol, bar="1m", after="", before="", limit="100", extra_data=None, **kwargs
-    ):
+        self,
+        symbol: Any,
+        bar: Any = "1m",
+        after: Any = "",
+        before: Any = "",
+        limit: Any = "100",
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """Get mark price candlestick charts"""
         path, params, extra_data = self._get_mark_price_candles(
             symbol, bar, after, before, limit, extra_data, **kwargs
@@ -1048,8 +1157,15 @@ class TradeMixin:
         return data
 
     def async_get_mark_price_candles(
-        self, symbol, bar="1m", after="", before="", limit="100", extra_data=None, **kwargs
-    ):
+        self,
+        symbol: Any,
+        bar: Any = "1m",
+        after: Any = "",
+        before: Any = "",
+        limit: Any = "100",
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """Async get mark price candlestick charts"""
         path, params, extra_data = self._get_mark_price_candles(
             symbol, bar, after, before, limit, extra_data, **kwargs
@@ -1062,8 +1178,15 @@ class TradeMixin:
     # ==================== Index Candles History ====================
 
     def _get_index_candles_history(
-        self, index, bar="1m", after="", before="", limit="100", extra_data=None, **kwargs
-    ):
+        self,
+        index: Any,
+        bar: Any = "1m",
+        after: Any = "",
+        before: Any = "",
+        limit: Any = "100",
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """
         Get historical index candlestick charts
         :param index: Index, e.g. `BTC-USD`
@@ -1102,8 +1225,15 @@ class TradeMixin:
         return path, params, extra_data
 
     def get_index_candles_history(
-        self, index, bar="1m", after="", before="", limit="100", extra_data=None, **kwargs
-    ):
+        self,
+        index: Any,
+        bar: Any = "1m",
+        after: Any = "",
+        before: Any = "",
+        limit: Any = "100",
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """Get historical index candlestick charts"""
         path, params, extra_data = self._get_index_candles_history(
             index, bar, after, before, limit, extra_data, **kwargs
@@ -1112,8 +1242,15 @@ class TradeMixin:
         return data
 
     def async_get_index_candles_history(
-        self, index, bar="1m", after="", before="", limit="100", extra_data=None, **kwargs
-    ):
+        self,
+        index: Any,
+        bar: Any = "1m",
+        after: Any = "",
+        before: Any = "",
+        limit: Any = "100",
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """Async get historical index candlestick charts"""
         path, params, extra_data = self._get_index_candles_history(
             index, bar, after, before, limit, extra_data, **kwargs
@@ -1126,8 +1263,15 @@ class TradeMixin:
     # ==================== Mark Price Candles History ====================
 
     def _get_mark_price_candles_history(
-        self, symbol, bar="1m", after="", before="", limit="100", extra_data=None, **kwargs
-    ):
+        self,
+        symbol: Any,
+        bar: Any = "1m",
+        after: Any = "",
+        before: Any = "",
+        limit: Any = "100",
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """
         Get historical mark price candlestick charts
         :param symbol: Instrument ID, e.g. `BTC-USD-SWAP`
@@ -1167,8 +1311,15 @@ class TradeMixin:
         return path, params, extra_data
 
     def get_mark_price_candles_history(
-        self, symbol, bar="1m", after="", before="", limit="100", extra_data=None, **kwargs
-    ):
+        self,
+        symbol: Any,
+        bar: Any = "1m",
+        after: Any = "",
+        before: Any = "",
+        limit: Any = "100",
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """Get historical mark price candlestick charts"""
         path, params, extra_data = self._get_mark_price_candles_history(
             symbol, bar, after, before, limit, extra_data, **kwargs
@@ -1177,8 +1328,15 @@ class TradeMixin:
         return data
 
     def async_get_mark_price_candles_history(
-        self, symbol, bar="1m", after="", before="", limit="100", extra_data=None, **kwargs
-    ):
+        self,
+        symbol: Any,
+        bar: Any = "1m",
+        after: Any = "",
+        before: Any = "",
+        limit: Any = "100",
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """Async get historical mark price candlestick charts"""
         path, params, extra_data = self._get_mark_price_candles_history(
             symbol, bar, after, before, limit, extra_data, **kwargs
@@ -1190,7 +1348,7 @@ class TradeMixin:
 
     # ==================== Missing Trade APIs ====================
 
-    def _make_orders(self, orders_data, extra_data=None, **kwargs):
+    def _make_orders(self, orders_data: Any, extra_data: Any = None, **kwargs: Any) -> None:
         """Make multiple orders (batch)"""
         request_type = "make_orders"
         params = orders_data
@@ -1209,13 +1367,13 @@ class TradeMixin:
             extra_data.update(kwargs)
         return path, params, extra_data
 
-    def make_orders(self, orders_data, extra_data=None, **kwargs):
+    def make_orders(self, orders_data: Any, extra_data: Any = None, **kwargs: Any) -> None:
         """Make multiple orders (batch)"""
         path, params, extra_data = self._make_orders(orders_data, extra_data, **kwargs)
         data = self.request(path, body=params, extra_data=extra_data)
         return data
 
-    def async_make_orders(self, orders_data, extra_data=None, **kwargs):
+    def async_make_orders(self, orders_data: Any, extra_data: Any = None, **kwargs: Any) -> None:
         """Async make multiple orders (batch)"""
         path, params, extra_data = self._make_orders(orders_data, extra_data, **kwargs)
         self.submit(
@@ -1223,7 +1381,7 @@ class TradeMixin:
             callback=self.async_callback,
         )
 
-    def _cancel_orders(self, orders_data, extra_data=None, **kwargs):
+    def _cancel_orders(self, orders_data: Any, extra_data: Any = None, **kwargs: Any) -> None:
         """Cancel multiple orders (batch)"""
         request_type = "cancel_orders"
         params = orders_data
@@ -1242,13 +1400,13 @@ class TradeMixin:
             extra_data.update(kwargs)
         return path, params, extra_data
 
-    def cancel_orders(self, orders_data, extra_data=None, **kwargs):
+    def cancel_orders(self, orders_data: Any, extra_data: Any = None, **kwargs: Any) -> None:
         """Cancel multiple orders (batch)"""
         path, params, extra_data = self._cancel_orders(orders_data, extra_data, **kwargs)
         data = self.request(path, body=params, extra_data=extra_data)
         return data
 
-    def async_cancel_orders(self, orders_data, extra_data=None, **kwargs):
+    def async_cancel_orders(self, orders_data: Any, extra_data: Any = None, **kwargs: Any) -> None:
         """Async cancel multiple orders (batch)"""
         path, params, extra_data = self._cancel_orders(orders_data, extra_data, **kwargs)
         self.submit(
@@ -1256,7 +1414,7 @@ class TradeMixin:
             callback=self.async_callback,
         )
 
-    def _amend_orders(self, orders_data, extra_data=None, **kwargs):
+    def _amend_orders(self, orders_data: Any, extra_data: Any = None, **kwargs: Any) -> None:
         """Amend multiple orders (batch)"""
         request_type = "amend_orders"
         params = orders_data
@@ -1275,13 +1433,13 @@ class TradeMixin:
             extra_data.update(kwargs)
         return path, params, extra_data
 
-    def amend_orders(self, orders_data, extra_data=None, **kwargs):
+    def amend_orders(self, orders_data: Any, extra_data: Any = None, **kwargs: Any) -> None:
         """Amend multiple orders (batch)"""
         path, params, extra_data = self._amend_orders(orders_data, extra_data, **kwargs)
         data = self.request(path, body=params, extra_data=extra_data)
         return data
 
-    def async_amend_orders(self, orders_data, extra_data=None, **kwargs):
+    def async_amend_orders(self, orders_data: Any, extra_data: Any = None, **kwargs: Any) -> None:
         """Async amend multiple orders (batch)"""
         path, params, extra_data = self._amend_orders(orders_data, extra_data, **kwargs)
         self.submit(
@@ -1291,16 +1449,16 @@ class TradeMixin:
 
     def _get_fills(
         self,
-        inst_type=None,
-        uly=None,
-        inst_id=None,
-        order_id=None,
-        after=None,
-        before=None,
-        limit=None,
-        extra_data=None,
-        **kwargs,
-    ):
+        inst_type: Any = None,
+        uly: Any = None,
+        inst_id: Any = None,
+        order_id: Any = None,
+        after: Any = None,
+        before: Any = None,
+        limit: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """Get fills"""
         request_type = "get_fills"
         params = {}
@@ -1335,16 +1493,16 @@ class TradeMixin:
 
     def get_fills(
         self,
-        inst_type=None,
-        uly=None,
-        inst_id=None,
-        order_id=None,
-        after=None,
-        before=None,
-        limit=None,
-        extra_data=None,
-        **kwargs,
-    ):
+        inst_type: Any = None,
+        uly: Any = None,
+        inst_id: Any = None,
+        order_id: Any = None,
+        after: Any = None,
+        before: Any = None,
+        limit: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """Get fills"""
         path, params, extra_data = self._get_fills(
             inst_type, uly, inst_id, order_id, after, before, limit, extra_data, **kwargs
@@ -1354,16 +1512,16 @@ class TradeMixin:
 
     def async_get_fills(
         self,
-        inst_type=None,
-        uly=None,
-        inst_id=None,
-        order_id=None,
-        after=None,
-        before=None,
-        limit=None,
-        extra_data=None,
-        **kwargs,
-    ):
+        inst_type: Any = None,
+        uly: Any = None,
+        inst_id: Any = None,
+        order_id: Any = None,
+        after: Any = None,
+        before: Any = None,
+        limit: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """Async get fills"""
         path, params, extra_data = self._get_fills(
             inst_type, uly, inst_id, order_id, after, before, limit, extra_data, **kwargs
@@ -1375,14 +1533,14 @@ class TradeMixin:
 
     def _close_position(
         self,
-        symbol,
-        pos_side=None,
-        mgn_mode=None,
-        ccy=None,
-        auto_cxl=False,
-        extra_data=None,
-        **kwargs,
-    ):
+        symbol: Any,
+        pos_side: Any = None,
+        mgn_mode: Any = None,
+        ccy: Any = None,
+        auto_cxl: Any = False,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """Close position"""
         request_symbol = self._params.get_symbol(symbol)
         request_type = "close_position"
@@ -1414,14 +1572,14 @@ class TradeMixin:
 
     def close_position(
         self,
-        symbol,
-        pos_side=None,
-        mgn_mode=None,
-        ccy=None,
-        auto_cxl=False,
-        extra_data=None,
-        **kwargs,
-    ):
+        symbol: Any,
+        pos_side: Any = None,
+        mgn_mode: Any = None,
+        ccy: Any = None,
+        auto_cxl: Any = False,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """Close position"""
         path, params, extra_data = self._close_position(
             symbol, pos_side, mgn_mode, ccy, auto_cxl, extra_data, **kwargs
@@ -1431,14 +1589,14 @@ class TradeMixin:
 
     def async_close_position(
         self,
-        symbol,
-        pos_side=None,
-        mgn_mode=None,
-        ccy=None,
-        auto_cxl=False,
-        extra_data=None,
-        **kwargs,
-    ):
+        symbol: Any,
+        pos_side: Any = None,
+        mgn_mode: Any = None,
+        ccy: Any = None,
+        auto_cxl: Any = False,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """Async close position"""
         path, params, extra_data = self._close_position(
             symbol, pos_side, mgn_mode, ccy, auto_cxl, extra_data, **kwargs
@@ -1450,16 +1608,16 @@ class TradeMixin:
 
     def _get_fills_history(
         self,
-        inst_type=None,
-        uly=None,
-        inst_id=None,
-        order_id=None,
-        after=None,
-        before=None,
-        limit=None,
-        extra_data=None,
-        **kwargs,
-    ):
+        inst_type: Any = None,
+        uly: Any = None,
+        inst_id: Any = None,
+        order_id: Any = None,
+        after: Any = None,
+        before: Any = None,
+        limit: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """Get fills history"""
         request_type = "get_fills_history"
         params = {}
@@ -1494,16 +1652,16 @@ class TradeMixin:
 
     def get_fills_history(
         self,
-        inst_type=None,
-        uly=None,
-        inst_id=None,
-        order_id=None,
-        after=None,
-        before=None,
-        limit=None,
-        extra_data=None,
-        **kwargs,
-    ):
+        inst_type: Any = None,
+        uly: Any = None,
+        inst_id: Any = None,
+        order_id: Any = None,
+        after: Any = None,
+        before: Any = None,
+        limit: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """Get fills history"""
         path, params, extra_data = self._get_fills_history(
             inst_type, uly, inst_id, order_id, after, before, limit, extra_data, **kwargs
@@ -1513,16 +1671,16 @@ class TradeMixin:
 
     def async_get_fills_history(
         self,
-        inst_type=None,
-        uly=None,
-        inst_id=None,
-        order_id=None,
-        after=None,
-        before=None,
-        limit=None,
-        extra_data=None,
-        **kwargs,
-    ):
+        inst_type: Any = None,
+        uly: Any = None,
+        inst_id: Any = None,
+        order_id: Any = None,
+        after: Any = None,
+        before: Any = None,
+        limit: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """Async get fills history"""
         path, params, extra_data = self._get_fills_history(
             inst_type, uly, inst_id, order_id, after, before, limit, extra_data, **kwargs
@@ -1534,15 +1692,15 @@ class TradeMixin:
 
     def _get_order_history_archive(
         self,
-        inst_type=None,
-        uly=None,
-        inst_id=None,
-        after=None,
-        before=None,
-        limit=None,
-        extra_data=None,
-        **kwargs,
-    ):
+        inst_type: Any = None,
+        uly: Any = None,
+        inst_id: Any = None,
+        after: Any = None,
+        before: Any = None,
+        limit: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """Get order history archive"""
         request_type = "get_order_history_archive"
         params = {}
@@ -1575,15 +1733,15 @@ class TradeMixin:
 
     def get_order_history_archive(
         self,
-        inst_type=None,
-        uly=None,
-        inst_id=None,
-        after=None,
-        before=None,
-        limit=None,
-        extra_data=None,
-        **kwargs,
-    ):
+        inst_type: Any = None,
+        uly: Any = None,
+        inst_id: Any = None,
+        after: Any = None,
+        before: Any = None,
+        limit: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """Get order history archive"""
         path, params, extra_data = self._get_order_history_archive(
             inst_type, uly, inst_id, after, before, limit, extra_data, **kwargs
@@ -1593,15 +1751,15 @@ class TradeMixin:
 
     def async_get_order_history_archive(
         self,
-        inst_type=None,
-        uly=None,
-        inst_id=None,
-        after=None,
-        before=None,
-        limit=None,
-        extra_data=None,
-        **kwargs,
-    ):
+        inst_type: Any = None,
+        uly: Any = None,
+        inst_id: Any = None,
+        after: Any = None,
+        before: Any = None,
+        limit: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """Async get order history archive"""
         path, params, extra_data = self._get_order_history_archive(
             inst_type, uly, inst_id, after, before, limit, extra_data, **kwargs
@@ -1611,7 +1769,7 @@ class TradeMixin:
             callback=self.async_callback,
         )
 
-    def _cancel_all_after(self, time_slug, extra_data=None, **kwargs):
+    def _cancel_all_after(self, time_slug: Any, extra_data: Any = None, **kwargs: Any) -> None:
         """Cancel all orders after time"""
         request_type = "cancel_all_after"
         params = {"timeOut": str(time_slug)}
@@ -1630,13 +1788,13 @@ class TradeMixin:
             extra_data.update(kwargs)
         return path, params, extra_data
 
-    def cancel_all_after(self, time_slug, extra_data=None, **kwargs):
+    def cancel_all_after(self, time_slug: Any, extra_data: Any = None, **kwargs: Any) -> None:
         """Cancel all orders after time"""
         path, params, extra_data = self._cancel_all_after(time_slug, extra_data, **kwargs)
         data = self.request(path, body=params, extra_data=extra_data)
         return data
 
-    def async_cancel_all_after(self, time_slug, extra_data=None, **kwargs):
+    def async_cancel_all_after(self, time_slug: Any, extra_data: Any = None, **kwargs: Any) -> None:
         """Async cancel all orders after time"""
         path, params, extra_data = self._cancel_all_after(time_slug, extra_data, **kwargs)
         self.submit(
@@ -1646,21 +1804,21 @@ class TradeMixin:
 
     def _amend_algo_order(
         self,
-        algo_id,
-        inst_id,
-        ccy=None,
-        amend_px_on_trigger_type=None,
-        new_sz=None,
-        new_px=None,
-        new_tp_trigger_px=None,
-        new_tp_ord_px=None,
-        new_sl_trigger_px=None,
-        new_sl_ord_px=None,
-        trigger_px=None,
-        order_type=None,
-        extra_data=None,
-        **kwargs,
-    ):
+        algo_id: Any,
+        inst_id: Any,
+        ccy: Any = None,
+        amend_px_on_trigger_type: Any = None,
+        new_sz: Any = None,
+        new_px: Any = None,
+        new_tp_trigger_px: Any = None,
+        new_tp_ord_px: Any = None,
+        new_sl_trigger_px: Any = None,
+        new_sl_ord_px: Any = None,
+        trigger_px: Any = None,
+        order_type: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """Amend algo order"""
         request_symbol = self._params.get_symbol(inst_id)
         request_type = "amend_algo_order"
@@ -1705,21 +1863,21 @@ class TradeMixin:
 
     def amend_algo_order(
         self,
-        algo_id,
-        inst_id,
-        ccy=None,
-        amend_px_on_trigger_type=None,
-        new_sz=None,
-        new_px=None,
-        new_tp_trigger_px=None,
-        new_tp_ord_px=None,
-        new_sl_trigger_px=None,
-        new_sl_ord_px=None,
-        trigger_px=None,
-        order_type=None,
-        extra_data=None,
-        **kwargs,
-    ):
+        algo_id: Any,
+        inst_id: Any,
+        ccy: Any = None,
+        amend_px_on_trigger_type: Any = None,
+        new_sz: Any = None,
+        new_px: Any = None,
+        new_tp_trigger_px: Any = None,
+        new_tp_ord_px: Any = None,
+        new_sl_trigger_px: Any = None,
+        new_sl_ord_px: Any = None,
+        trigger_px: Any = None,
+        order_type: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """Amend algo order"""
         path, params, extra_data = self._amend_algo_order(
             algo_id,
@@ -1742,21 +1900,21 @@ class TradeMixin:
 
     def async_amend_algo_order(
         self,
-        algo_id,
-        inst_id,
-        ccy=None,
-        amend_px_on_trigger_type=None,
-        new_sz=None,
-        new_px=None,
-        new_tp_trigger_px=None,
-        new_tp_ord_px=None,
-        new_sl_trigger_px=None,
-        new_sl_ord_px=None,
-        trigger_px=None,
-        order_type=None,
-        extra_data=None,
-        **kwargs,
-    ):
+        algo_id: Any,
+        inst_id: Any,
+        ccy: Any = None,
+        amend_px_on_trigger_type: Any = None,
+        new_sz: Any = None,
+        new_px: Any = None,
+        new_tp_trigger_px: Any = None,
+        new_tp_ord_px: Any = None,
+        new_sl_trigger_px: Any = None,
+        new_sl_ord_px: Any = None,
+        trigger_px: Any = None,
+        order_type: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """Async amend algo order"""
         path, params, extra_data = self._amend_algo_order(
             algo_id,
@@ -1781,14 +1939,14 @@ class TradeMixin:
 
     def _get_algo_orders_pending(
         self,
-        inst_type=None,
-        ord_type=None,
-        uly=None,
-        inst_id=None,
-        algo_id=None,
-        extra_data=None,
-        **kwargs,
-    ):
+        inst_type: Any = None,
+        ord_type: Any = None,
+        uly: Any = None,
+        inst_id: Any = None,
+        algo_id: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """Get pending algo orders"""
         request_type = "get_algo_orders_pending"
         params = {}
@@ -1820,14 +1978,14 @@ class TradeMixin:
 
     def get_algo_orders_pending(
         self,
-        inst_type=None,
-        ord_type=None,
-        uly=None,
-        inst_id=None,
-        algo_id=None,
-        extra_data=None,
-        **kwargs,
-    ):
+        inst_type: Any = None,
+        ord_type: Any = None,
+        uly: Any = None,
+        inst_id: Any = None,
+        algo_id: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """Get pending algo orders"""
         path, params, extra_data = self._get_algo_orders_pending(
             inst_type, ord_type, uly, inst_id, algo_id, extra_data, **kwargs
@@ -1837,14 +1995,14 @@ class TradeMixin:
 
     def async_get_algo_orders_pending(
         self,
-        inst_type=None,
-        ord_type=None,
-        uly=None,
-        inst_id=None,
-        algo_id=None,
-        extra_data=None,
-        **kwargs,
-    ):
+        inst_type: Any = None,
+        ord_type: Any = None,
+        uly: Any = None,
+        inst_id: Any = None,
+        algo_id: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """Async get pending algo orders"""
         path, params, extra_data = self._get_algo_orders_pending(
             inst_type, ord_type, uly, inst_id, algo_id, extra_data, **kwargs
@@ -1856,16 +2014,16 @@ class TradeMixin:
 
     def _get_algo_order_history(
         self,
-        inst_type=None,
-        uly=None,
-        inst_id=None,
-        algo_id=None,
-        after=None,
-        before=None,
-        limit=None,
-        extra_data=None,
-        **kwargs,
-    ):
+        inst_type: Any = None,
+        uly: Any = None,
+        inst_id: Any = None,
+        algo_id: Any = None,
+        after: Any = None,
+        before: Any = None,
+        limit: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """Get algo order history"""
         request_type = "get_algo_order_history"
         params = {}
@@ -1901,16 +2059,16 @@ class TradeMixin:
 
     def get_algo_order_history(
         self,
-        inst_type=None,
-        uly=None,
-        inst_id=None,
-        algo_id=None,
-        after=None,
-        before=None,
-        limit=None,
-        extra_data=None,
-        **kwargs,
-    ):
+        inst_type: Any = None,
+        uly: Any = None,
+        inst_id: Any = None,
+        algo_id: Any = None,
+        after: Any = None,
+        before: Any = None,
+        limit: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """Get algo order history"""
         path, params, extra_data = self._get_algo_order_history(
             inst_type, uly, inst_id, algo_id, after, before, limit, extra_data, **kwargs
@@ -1920,16 +2078,16 @@ class TradeMixin:
 
     def async_get_algo_order_history(
         self,
-        inst_type=None,
-        uly=None,
-        inst_id=None,
-        algo_id=None,
-        after=None,
-        before=None,
-        limit=None,
-        extra_data=None,
-        **kwargs,
-    ):
+        inst_type: Any = None,
+        uly: Any = None,
+        inst_id: Any = None,
+        algo_id: Any = None,
+        after: Any = None,
+        before: Any = None,
+        limit: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """Async get algo order history"""
         path, params, extra_data = self._get_algo_order_history(
             inst_type, uly, inst_id, algo_id, after, before, limit, extra_data, **kwargs
@@ -1939,7 +2097,14 @@ class TradeMixin:
             callback=self.async_callback,
         )
 
-    def _get_algo_order(self, algo_id=None, symbol=None, inst_type=None, extra_data=None, **kwargs):
+    def _get_algo_order(
+        self,
+        algo_id: Any = None,
+        symbol: Any = None,
+        inst_type: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """Get algo order details"""
         request_type = "get_algo_order"
         params = {}
@@ -1965,7 +2130,14 @@ class TradeMixin:
             extra_data.update(kwargs)
         return path, params, extra_data
 
-    def get_algo_order(self, algo_id=None, symbol=None, inst_type=None, extra_data=None, **kwargs):
+    def get_algo_order(
+        self,
+        algo_id: Any = None,
+        symbol: Any = None,
+        inst_type: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """Get algo order details"""
         path, params, extra_data = self._get_algo_order(
             algo_id, symbol, inst_type, extra_data, **kwargs
@@ -1974,8 +2146,13 @@ class TradeMixin:
         return data
 
     def async_get_algo_order(
-        self, algo_id=None, symbol=None, inst_type=None, extra_data=None, **kwargs
-    ):
+        self,
+        algo_id: Any = None,
+        symbol: Any = None,
+        inst_type: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """Async get algo order details"""
         path, params, extra_data = self._get_algo_order(
             algo_id, symbol, inst_type, extra_data, **kwargs
@@ -1985,7 +2162,14 @@ class TradeMixin:
             callback=self.async_callback,
         )
 
-    def _cancel_all(self, inst_type, uly=None, inst_id=None, extra_data=None, **kwargs):
+    def _cancel_all(
+        self,
+        inst_type: Any,
+        uly: Any = None,
+        inst_id: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """Cancel all orders"""
         request_type = "cancel_all"
         order_item = {"instType": inst_type}
@@ -2008,13 +2192,27 @@ class TradeMixin:
             extra_data.update(kwargs)
         return path, params, extra_data
 
-    def cancel_all(self, inst_type, uly=None, inst_id=None, extra_data=None, **kwargs):
+    def cancel_all(
+        self,
+        inst_type: Any,
+        uly: Any = None,
+        inst_id: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """Cancel all orders"""
         path, params, extra_data = self._cancel_all(inst_type, uly, inst_id, extra_data, **kwargs)
         data = self.request(path, body=params, extra_data=extra_data)
         return data
 
-    def async_cancel_all(self, inst_type, uly=None, inst_id=None, extra_data=None, **kwargs):
+    def async_cancel_all(
+        self,
+        inst_type: Any,
+        uly: Any = None,
+        inst_id: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """Async cancel all orders"""
         path, params, extra_data = self._cancel_all(inst_type, uly, inst_id, extra_data, **kwargs)
         self.submit(
@@ -2022,7 +2220,7 @@ class TradeMixin:
             callback=self.async_callback,
         )
 
-    def _get_account_rate_limit(self, extra_data=None, **kwargs):
+    def _get_account_rate_limit(self, extra_data: Any = None, **kwargs: Any) -> None:
         """Get account rate limit"""
         request_type = "get_account_rate_limit"
         params = {}
@@ -2041,13 +2239,13 @@ class TradeMixin:
             extra_data.update(kwargs)
         return path, params, extra_data
 
-    def get_account_rate_limit(self, extra_data=None, **kwargs):
+    def get_account_rate_limit(self, extra_data: Any = None, **kwargs: Any) -> None:
         """Get account rate limit"""
         path, params, extra_data = self._get_account_rate_limit(extra_data, **kwargs)
         data = self.request(path, params=params, extra_data=extra_data)
         return data
 
-    def async_get_account_rate_limit(self, extra_data=None, **kwargs):
+    def async_get_account_rate_limit(self, extra_data: Any = None, **kwargs: Any) -> None:
         """Async get account rate limit"""
         path, params, extra_data = self._get_account_rate_limit(extra_data, **kwargs)
         self.submit(
@@ -2055,7 +2253,7 @@ class TradeMixin:
             callback=self.async_callback,
         )
 
-    def _get_easy_convert_currency_list(self, extra_data=None, **kwargs):
+    def _get_easy_convert_currency_list(self, extra_data: Any = None, **kwargs: Any) -> None:
         """Get easy convert currency list"""
         request_type = "get_easy_convert_currency_list"
         params = {}
@@ -2074,13 +2272,13 @@ class TradeMixin:
             extra_data.update(kwargs)
         return path, params, extra_data
 
-    def get_easy_convert_currency_list(self, extra_data=None, **kwargs):
+    def get_easy_convert_currency_list(self, extra_data: Any = None, **kwargs: Any) -> None:
         """Get easy convert currency list"""
         path, params, extra_data = self._get_easy_convert_currency_list(extra_data, **kwargs)
         data = self.request(path, params=params, extra_data=extra_data)
         return data
 
-    def async_get_easy_convert_currency_list(self, extra_data=None, **kwargs):
+    def async_get_easy_convert_currency_list(self, extra_data: Any = None, **kwargs: Any) -> None:
         """Async get easy convert currency list"""
         path, params, extra_data = self._get_easy_convert_currency_list(extra_data, **kwargs)
         self.submit(
@@ -2088,7 +2286,15 @@ class TradeMixin:
             callback=self.async_callback,
         )
 
-    def _easy_convert(self, from_ccy, to_ccy, amt, client_order_id=None, extra_data=None, **kwargs):
+    def _easy_convert(
+        self,
+        from_ccy: Any,
+        to_ccy: Any,
+        amt: Any,
+        client_order_id: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """Easy convert"""
         request_type = "easy_convert"
         params = {
@@ -2113,7 +2319,15 @@ class TradeMixin:
             extra_data.update(kwargs)
         return path, params, extra_data
 
-    def easy_convert(self, from_ccy, to_ccy, amt, client_order_id=None, extra_data=None, **kwargs):
+    def easy_convert(
+        self,
+        from_ccy: Any,
+        to_ccy: Any,
+        amt: Any,
+        client_order_id: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """Easy convert"""
         path, params, extra_data = self._easy_convert(
             from_ccy, to_ccy, amt, client_order_id, extra_data, **kwargs
@@ -2122,8 +2336,14 @@ class TradeMixin:
         return data
 
     def async_easy_convert(
-        self, from_ccy, to_ccy, amt, client_order_id=None, extra_data=None, **kwargs
-    ):
+        self,
+        from_ccy: Any,
+        to_ccy: Any,
+        amt: Any,
+        client_order_id: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """Async easy convert"""
         path, params, extra_data = self._easy_convert(
             from_ccy, to_ccy, amt, client_order_id, extra_data, **kwargs
@@ -2134,8 +2354,13 @@ class TradeMixin:
         )
 
     def _get_easy_convert_history(
-        self, after=None, before=None, limit=None, extra_data=None, **kwargs
-    ):
+        self,
+        after: Any = None,
+        before: Any = None,
+        limit: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """Get easy convert history"""
         request_type = "get_easy_convert_history"
         params = {}
@@ -2161,8 +2386,13 @@ class TradeMixin:
         return path, params, extra_data
 
     def get_easy_convert_history(
-        self, after=None, before=None, limit=None, extra_data=None, **kwargs
-    ):
+        self,
+        after: Any = None,
+        before: Any = None,
+        limit: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """Get easy convert history"""
         path, params, extra_data = self._get_easy_convert_history(
             after, before, limit, extra_data, **kwargs
@@ -2171,8 +2401,13 @@ class TradeMixin:
         return data
 
     def async_get_easy_convert_history(
-        self, after=None, before=None, limit=None, extra_data=None, **kwargs
-    ):
+        self,
+        after: Any = None,
+        before: Any = None,
+        limit: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """Async get easy convert history"""
         path, params, extra_data = self._get_easy_convert_history(
             after, before, limit, extra_data, **kwargs
@@ -2182,7 +2417,7 @@ class TradeMixin:
             callback=self.async_callback,
         )
 
-    def _get_one_click_repay_currency_list(self, extra_data=None, **kwargs):
+    def _get_one_click_repay_currency_list(self, extra_data: Any = None, **kwargs: Any) -> None:
         """Get one click repay currency list"""
         request_type = "get_one_click_repay_currency_list"
         params = {}
@@ -2201,13 +2436,15 @@ class TradeMixin:
             extra_data.update(kwargs)
         return path, params, extra_data
 
-    def get_one_click_repay_currency_list(self, extra_data=None, **kwargs):
+    def get_one_click_repay_currency_list(self, extra_data: Any = None, **kwargs: Any) -> None:
         """Get one click repay currency list"""
         path, params, extra_data = self._get_one_click_repay_currency_list(extra_data, **kwargs)
         data = self.request(path, params=params, extra_data=extra_data)
         return data
 
-    def async_get_one_click_repay_currency_list(self, extra_data=None, **kwargs):
+    def async_get_one_click_repay_currency_list(
+        self, extra_data: Any = None, **kwargs: Any
+    ) -> None:
         """Async get one click repay currency list"""
         path, params, extra_data = self._get_one_click_repay_currency_list(extra_data, **kwargs)
         self.submit(
@@ -2215,7 +2452,9 @@ class TradeMixin:
             callback=self.async_callback,
         )
 
-    def _one_click_repay(self, ccy, amt, client_order_id=None, extra_data=None, **kwargs):
+    def _one_click_repay(
+        self, ccy: Any, amt: Any, client_order_id: Any = None, extra_data: Any = None, **kwargs: Any
+    ) -> None:
         """One click repay"""
         request_type = "one_click_repay"
         params = {
@@ -2239,7 +2478,9 @@ class TradeMixin:
             extra_data.update(kwargs)
         return path, params, extra_data
 
-    def one_click_repay(self, ccy, amt, client_order_id=None, extra_data=None, **kwargs):
+    def one_click_repay(
+        self, ccy: Any, amt: Any, client_order_id: Any = None, extra_data: Any = None, **kwargs: Any
+    ) -> None:
         """One click repay"""
         path, params, extra_data = self._one_click_repay(
             ccy, amt, client_order_id, extra_data, **kwargs
@@ -2247,7 +2488,9 @@ class TradeMixin:
         data = self.request(path, body=params, extra_data=extra_data)
         return data
 
-    def async_one_click_repay(self, ccy, amt, client_order_id=None, extra_data=None, **kwargs):
+    def async_one_click_repay(
+        self, ccy: Any, amt: Any, client_order_id: Any = None, extra_data: Any = None, **kwargs: Any
+    ) -> None:
         """Async one click repay"""
         path, params, extra_data = self._one_click_repay(
             ccy, amt, client_order_id, extra_data, **kwargs
@@ -2258,8 +2501,13 @@ class TradeMixin:
         )
 
     def _get_one_click_repay_history(
-        self, after=None, before=None, limit=None, extra_data=None, **kwargs
-    ):
+        self,
+        after: Any = None,
+        before: Any = None,
+        limit: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """Get one click repay history"""
         request_type = "get_one_click_repay_history"
         params = {}
@@ -2285,8 +2533,13 @@ class TradeMixin:
         return path, params, extra_data
 
     def get_one_click_repay_history(
-        self, after=None, before=None, limit=None, extra_data=None, **kwargs
-    ):
+        self,
+        after: Any = None,
+        before: Any = None,
+        limit: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """Get one click repay history"""
         path, params, extra_data = self._get_one_click_repay_history(
             after, before, limit, extra_data, **kwargs
@@ -2295,8 +2548,13 @@ class TradeMixin:
         return data
 
     def async_get_one_click_repay_history(
-        self, after=None, before=None, limit=None, extra_data=None, **kwargs
-    ):
+        self,
+        after: Any = None,
+        before: Any = None,
+        limit: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """Async get one click repay history"""
         path, params, extra_data = self._get_one_click_repay_history(
             after, before, limit, extra_data, **kwargs
@@ -2306,7 +2564,14 @@ class TradeMixin:
             callback=self.async_callback,
         )
 
-    def _mass_cancel(self, inst_type, uly=None, inst_id=None, extra_data=None, **kwargs):
+    def _mass_cancel(
+        self,
+        inst_type: Any,
+        uly: Any = None,
+        inst_id: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """Mass cancel orders"""
         request_type = "mass_cancel"
         params = {}
@@ -2330,13 +2595,27 @@ class TradeMixin:
             extra_data.update(kwargs)
         return path, params, extra_data
 
-    def mass_cancel(self, inst_type, uly=None, inst_id=None, extra_data=None, **kwargs):
+    def mass_cancel(
+        self,
+        inst_type: Any,
+        uly: Any = None,
+        inst_id: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """Mass cancel orders"""
         path, params, extra_data = self._mass_cancel(inst_type, uly, inst_id, extra_data, **kwargs)
         data = self.request(path, body=params, extra_data=extra_data)
         return data
 
-    def async_mass_cancel(self, inst_type, uly=None, inst_id=None, extra_data=None, **kwargs):
+    def async_mass_cancel(
+        self,
+        inst_type: Any,
+        uly: Any = None,
+        inst_id: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """Async mass cancel orders"""
         path, params, extra_data = self._mass_cancel(inst_type, uly, inst_id, extra_data, **kwargs)
         self.submit(
@@ -2346,16 +2625,16 @@ class TradeMixin:
 
     def _order_precheck(
         self,
-        symbol,
-        td_mode,
-        ccy,
-        side,
-        order_type=None,
-        sz=None,
-        px=None,
-        extra_data=None,
-        **kwargs,
-    ):
+        symbol: Any,
+        td_mode: Any,
+        ccy: Any,
+        side: Any,
+        order_type: Any = None,
+        sz: Any = None,
+        px: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """Order precheck"""
         request_symbol = self._params.get_symbol(symbol)
         request_type = "order_precheck"
@@ -2388,16 +2667,16 @@ class TradeMixin:
 
     def order_precheck(
         self,
-        symbol,
-        td_mode,
-        ccy,
-        side,
-        order_type=None,
-        sz=None,
-        px=None,
-        extra_data=None,
-        **kwargs,
-    ):
+        symbol: Any,
+        td_mode: Any,
+        ccy: Any,
+        side: Any,
+        order_type: Any = None,
+        sz: Any = None,
+        px: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """Order precheck"""
         path, params, extra_data = self._order_precheck(
             symbol, td_mode, ccy, side, order_type, sz, px, extra_data, **kwargs
@@ -2407,16 +2686,16 @@ class TradeMixin:
 
     def async_order_precheck(
         self,
-        symbol,
-        td_mode,
-        ccy,
-        side,
-        order_type=None,
-        sz=None,
-        px=None,
-        extra_data=None,
-        **kwargs,
-    ):
+        symbol: Any,
+        td_mode: Any,
+        ccy: Any,
+        side: Any,
+        order_type: Any = None,
+        sz: Any = None,
+        px: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """Async order precheck"""
         path, params, extra_data = self._order_precheck(
             symbol, td_mode, ccy, side, order_type, sz, px, extra_data, **kwargs

@@ -11,7 +11,7 @@ class StatusMixin:
 
     # ==================== Status/Announcement APIs ====================
 
-    def _get_system_status(self, state=None, extra_data=None, **kwargs):
+    def _get_system_status(self, state: Any = None, extra_data: Any = None, **kwargs: Any) -> None:
         """Get system status (maintenance, degraded, etc.)
         Args:
             state: Status type. "scheduled" for maintenance announcements. Default is empty for current system status.
@@ -38,7 +38,7 @@ class StatusMixin:
         return path, params, extra_data
 
     @staticmethod
-    def _get_system_status_normalize_function(input_data, extra_data):
+    def _get_system_status_normalize_function(input_data: Any, extra_data: Any) -> None:
         """Normalize system status response
         Returns: (status_list, status_bool) where status_list contains system status data
         """
@@ -47,7 +47,7 @@ class StatusMixin:
             return [], status
         return input_data["data"], status
 
-    def get_system_status(self, state=None, extra_data=None, **kwargs):
+    def get_system_status(self, state: Any = None, extra_data: Any = None, **kwargs: Any) -> None:
         """Get system status
         Args:
             state: Status type. "scheduled" for maintenance announcements. Default is empty for current system status.
@@ -57,7 +57,9 @@ class StatusMixin:
         data = self.request(path, params=params, extra_data=extra_data)
         return data
 
-    def async_get_system_status(self, state=None, extra_data=None, **kwargs):
+    def async_get_system_status(
+        self, state: Any = None, extra_data: Any = None, **kwargs: Any
+    ) -> None:
         """Async get system status
         Args:
             state: Status type. "scheduled" for maintenance announcements. Default is empty for current system status.
@@ -70,8 +72,13 @@ class StatusMixin:
         )
 
     def _get_announcements(
-        self, announcement_type=None, page=None, limit=None, extra_data=None, **kwargs
-    ):
+        self,
+        announcement_type: Any = None,
+        page: Any = None,
+        limit: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """Get announcements
         Args:
             announcement_type: Announcement type. Default is empty for all types.
@@ -104,7 +111,7 @@ class StatusMixin:
         return path, params, extra_data
 
     @staticmethod
-    def _get_announcements_normalize_function(input_data, extra_data):
+    def _get_announcements_normalize_function(input_data: Any, extra_data: Any) -> None:
         """Normalize announcements response
         Returns: (announcement_list, status_bool) where announcement_list contains announcement data
         """
@@ -117,8 +124,13 @@ class StatusMixin:
         return input_data["data"], status
 
     def get_announcements(
-        self, announcement_type=None, page=None, limit=None, extra_data=None, **kwargs
-    ):
+        self,
+        announcement_type: Any = None,
+        page: Any = None,
+        limit: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """Get announcements
         Args:
             announcement_type: Announcement type. Default is empty for all types.
@@ -133,8 +145,13 @@ class StatusMixin:
         return data
 
     def async_get_announcements(
-        self, announcement_type=None, page=None, limit=None, extra_data=None, **kwargs
-    ):
+        self,
+        announcement_type: Any = None,
+        page: Any = None,
+        limit: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """Async get announcements
         Args:
             announcement_type: Announcement type. Default is empty for all types.
@@ -150,7 +167,7 @@ class StatusMixin:
             callback=self.async_callback,
         )
 
-    def _get_announcement_types(self, extra_data=None, **kwargs):
+    def _get_announcement_types(self, extra_data: Any = None, **kwargs: Any) -> None:
         """Get announcement types
         Args:
             extra_data: extra_data, default is None, can be a dict passed by user
@@ -174,7 +191,7 @@ class StatusMixin:
         return path, params, extra_data
 
     @staticmethod
-    def _get_announcement_types_normalize_function(input_data, extra_data):
+    def _get_announcement_types_normalize_function(input_data: Any, extra_data: Any) -> None:
         """Normalize announcement types response
         Returns: (type_list, status_bool) where type_list contains announcement type data
         """
@@ -186,7 +203,7 @@ class StatusMixin:
             return input_data["data"][0]["announcementType"], status
         return input_data["data"], status
 
-    def get_announcement_types(self, extra_data=None, **kwargs):
+    def get_announcement_types(self, extra_data: Any = None, **kwargs: Any) -> None:
         """Get announcement types
         Args:
             extra_data: extra_data, default is None, can be a dict passed by user
@@ -195,7 +212,7 @@ class StatusMixin:
         data = self.request(path, params=params, extra_data=extra_data)
         return data
 
-    def async_get_announcement_types(self, extra_data=None, **kwargs):
+    def async_get_announcement_types(self, extra_data: Any = None, **kwargs: Any) -> None:
         """Async get announcement types
         Args:
             extra_data: extra_data, default is None, can be a dict passed by user

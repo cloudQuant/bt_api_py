@@ -1,6 +1,6 @@
-"""
-Bitunix Exchange Data Configuration
-"""
+from typing import Any
+
+"""Bitunix Exchange Data Configuration."""
 
 import os
 
@@ -13,7 +13,7 @@ _bitunix_config = None
 _bitunix_config_loaded = False
 
 
-def _get_bitunix_config():
+def _get_bitunix_config() -> Any | None:
     """Load Bitunix YAML configuration."""
     global _bitunix_config, _bitunix_config_loaded
     if _bitunix_config_loaded:
@@ -37,7 +37,7 @@ def _get_bitunix_config():
 class BitunixExchangeData(ExchangeData):
     """Base class for Bitunix exchange."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__()
         self.exchange_name = "bitunix"
         self.rest_url = "https://fapi.bitunix.com"
@@ -54,7 +54,7 @@ class BitunixExchangeData(ExchangeData):
         }
         self.legal_currency = ["USDT", "USD"]
 
-    def _load_from_config(self, asset_type):
+    def _load_from_config(self, asset_type) -> bool:
         """Load from YAML config."""
         config = _get_bitunix_config()
         if config is None:
@@ -104,7 +104,7 @@ class BitunixExchangeData(ExchangeData):
 class BitunixExchangeDataSpot(BitunixExchangeData):
     """Bitunix Spot exchange configuration."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__()
         self.asset_type = "spot"
         self.rest_paths = {}

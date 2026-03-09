@@ -1,8 +1,8 @@
-"""
-CoW Swap Exchange Data Configuration
+"""CoW Swap Exchange Data Configuration
 CoW Swap is a DEX (Decentralized Exchange) on Ethereum and other chains.
 """
 
+from typing import Any
 import os
 
 from bt_api_py.containers.exchanges.exchange_data import ExchangeData
@@ -14,7 +14,7 @@ _cow_swap_config = None
 _cow_swap_config_loaded = False
 
 
-def _get_cow_swap_config():
+def _get_cow_swap_config() -> Any | None:
     """Load CoW Swap YAML configuration."""
     global _cow_swap_config, _cow_swap_config_loaded
     if _cow_swap_config_loaded:
@@ -38,7 +38,7 @@ def _get_cow_swap_config():
 class CowSwapExchangeData(ExchangeData):
     """Base class for CoW Swap DEX."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__()
         self.exchange_name = "cow_swap"
         self.rest_url = "https://api.cow.fi"
@@ -55,7 +55,7 @@ class CowSwapExchangeData(ExchangeData):
         self.legal_currency = ["USDT", "USD", "EUR", "DAI", "USDC", "BTC", "ETH", "WETH"]
         self.supported_chains = ["mainnet", "xdai", "arbitrum_one", "base", "avalanche", "polygon"]
 
-    def _load_from_config(self, asset_type):
+    def _load_from_config(self, asset_type) -> bool:
         """Load from YAML config."""
         config = _get_cow_swap_config()
         if config is None:
@@ -101,17 +101,17 @@ class CowSwapExchangeData(ExchangeData):
 class CowSwapExchangeDataSpot(CowSwapExchangeData):
     """CoW Swap Spot exchange configuration."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__()
         self.asset_type = "spot"
         self.rest_paths = {}
         self.wss_paths = {}
         self._load_from_config("spot")
 
-    def get_rest_url(self):
+    def get_rest_url(self) -> Any:
         """Get the REST URL for this exchange."""
         return self.rest_url
 
-    def get_symbol(self, address):
+    def get_symbol(self, address: str) -> str:
         """Get symbol from token address (CoW Swap uses addresses directly)."""
         return address

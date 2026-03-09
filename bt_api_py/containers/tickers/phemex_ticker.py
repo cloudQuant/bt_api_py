@@ -1,5 +1,4 @@
-"""
-Phemex Ticker Data Container
+"""Phemex Ticker Data Container
 Provides standardized ticker data structure for Phemex exchange.
 """
 
@@ -11,11 +10,11 @@ from bt_api_py.logging_factory import get_logger
 
 
 class PhemexRequestTickerData(TickerData):
-    """Phemex Request Ticker Data Container"""
+    """Phemex Request Ticker Data Container."""
 
     def __init__(
         self, data: dict[str, Any], symbol: str, asset_type: str, has_been_json_encoded=False
-    ):
+    ) -> None:
         """Initialize Phemex ticker data.
 
         Args:
@@ -23,6 +22,7 @@ class PhemexRequestTickerData(TickerData):
             symbol: Trading pair symbol
             asset_type: Asset type (e.g., 'SPOT', 'PERPETUAL')
             has_been_json_encoded: Whether data has been JSON encoded
+
         """
         super().__init__(data, has_been_json_encoded)
         self.symbol = symbol
@@ -30,7 +30,7 @@ class PhemexRequestTickerData(TickerData):
         self.logger = get_logger("phemex_ticker")
         self._parse_data(data)
 
-    def _parse_data(self, data: dict[str, Any]):
+    def _parse_data(self, data: dict[str, Any]) -> None:
         """Parse Phemex ticker data.
 
         Phemex ticker response format:
@@ -130,6 +130,7 @@ class PhemexRequestTickerData(TickerData):
 
         Returns:
             Unscaled float value
+
         """
         if value is None:
             return None

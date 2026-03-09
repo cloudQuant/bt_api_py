@@ -1,6 +1,6 @@
-"""
-Zaif Exchange Data Configuration – Feed pattern.
-"""
+from typing import Any
+
+"""Zaif Exchange Data Configuration – Feed pattern."""
 
 import os
 
@@ -14,7 +14,7 @@ logger = get_logger("zaif_exchange_data")
 _zaif_yaml_cache = None
 
 
-def _load_zaif_yaml():
+def _load_zaif_yaml() -> Any | None:
     global _zaif_yaml_cache
     if _zaif_yaml_cache is not None:
         return _zaif_yaml_cache
@@ -36,7 +36,7 @@ def _load_zaif_yaml():
 class ZaifExchangeData(ExchangeData):
     """Base class for Zaif exchange."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__()
         self.exchange_name = "ZAIF"
         self.rest_url = "https://api.zaif.jp"
@@ -65,10 +65,10 @@ class ZaifExchangeData(ExchangeData):
     def get_reverse_symbol(symbol):
         return symbol.strip().replace("/", "_").replace("-", "_").lower()
 
-    def get_period(self, period):
+    def get_period(self, period: str) -> str:
         return self.kline_periods.get(period, period)
 
-    def get_reverse_period(self, period):
+    def get_reverse_period(self, period: str) -> str:
         for k, v in self.kline_periods.items():
             if v == period:
                 return k
@@ -78,7 +78,7 @@ class ZaifExchangeData(ExchangeData):
 class ZaifExchangeDataSpot(ZaifExchangeData):
     """Zaif Spot exchange configuration."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__()
         self.exchange_name = "ZAIF___SPOT"
         self.asset_type = "SPOT"
@@ -99,7 +99,7 @@ class ZaifExchangeDataSpot(ZaifExchangeData):
         self.wss_paths = {}
         self._load_yaml()
 
-    def _load_yaml(self):
+    def _load_yaml(self) -> None:
         cfg = _load_zaif_yaml()
         spot = cfg.get("ZAIF___SPOT", {})
         if not spot:
@@ -118,7 +118,7 @@ class ZaifExchangeDataSpot(ZaifExchangeData):
         if lc:
             self.legal_currency = list(lc)
 
-    def get_rest_path(self, key, **kwargs):
+    def get_rest_path(self, key: str, **kwargs) -> str:
         path = self.rest_paths.get(key, "")
         if not path:
             raise ValueError(f"[{self.exchange_name}] REST path not found: {key}")

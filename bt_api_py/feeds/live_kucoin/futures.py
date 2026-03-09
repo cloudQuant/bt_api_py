@@ -16,7 +16,7 @@ from bt_api_py.logging_factory import get_logger
 class KuCoinRequestDataFutures(KuCoinRequestData):
     """KuCoin Futures trading REST API implementation."""
 
-    def __init__(self, data_queue, **kwargs):
+    def __init__(self, data_queue, **kwargs) -> Any | None:
         kwargs.setdefault("asset_type", "FUTURES")
         kwargs.setdefault("logger_name", "kucoin_futures_feed.log")
         super().__init__(data_queue, **kwargs)
@@ -27,7 +27,7 @@ class KuCoinRequestDataFutures(KuCoinRequestData):
 
     # ==================== Market Data ====================
 
-    def _get_ticker(self, symbol, extra_data=None, **kwargs):
+    def _get_ticker(self, symbol, extra_data=None, **kwargs) -> Any | None:
         request_type = "get_tick"
         path = self._params.get_rest_path(request_type)
         params = {"symbol": symbol}
@@ -42,7 +42,7 @@ class KuCoinRequestDataFutures(KuCoinRequestData):
         return path, params, extra_data
 
     @staticmethod
-    def _get_ticker_normalize_function(input_data, extra_data):
+    def _get_ticker_normalize_function(input_data, extra_data) -> Any | None:
         status = input_data is not None
         symbol_name = extra_data["symbol_name"]
         asset_type = extra_data["asset_type"]
@@ -67,7 +67,7 @@ class KuCoinRequestDataFutures(KuCoinRequestData):
 
     # ==================== Depth ====================
 
-    def _get_depth(self, symbol, limit=20, extra_data=None, **kwargs):
+    def _get_depth(self, symbol, limit=20, extra_data=None, **kwargs) -> Any | None:
         request_type = "get_depth"
         path = self._params.get_rest_path(request_type)
         params = {"symbol": symbol}
@@ -82,7 +82,7 @@ class KuCoinRequestDataFutures(KuCoinRequestData):
         return path, params, extra_data
 
     @staticmethod
-    def _get_depth_normalize_function(input_data, extra_data):
+    def _get_depth_normalize_function(input_data, extra_data) -> Any | None:
         status = input_data is not None
         symbol_name = extra_data["symbol_name"]
         asset_type = extra_data["asset_type"]
@@ -116,7 +116,7 @@ class KuCoinRequestDataFutures(KuCoinRequestData):
         limit=None,
         extra_data=None,
         **kwargs,
-    ):
+    ) -> Any | None:
         request_type = "get_kline"
         path = self._params.get_rest_path(request_type)
         params = {"symbol": symbol, "granularity": self._params.get_period(period)}
@@ -181,7 +181,7 @@ class KuCoinRequestDataFutures(KuCoinRequestData):
 
     # ==================== Server Time & Exchange Info ====================
 
-    def _get_server_time(self, extra_data=None, **kwargs):
+    def _get_server_time(self, extra_data=None, **kwargs) -> Any | None:
         request_type = "get_server_time"
         path = self._params.get_rest_path(request_type)
         extra_data = update_extra_data(
@@ -198,7 +198,7 @@ class KuCoinRequestDataFutures(KuCoinRequestData):
         path, params, extra_data = self._get_server_time(extra_data=extra_data, **kwargs)
         return self.request(path, params=params, extra_data=extra_data, is_sign=False)
 
-    def _get_exchange_info(self, extra_data=None, **kwargs):
+    def _get_exchange_info(self, extra_data=None, **kwargs) -> Any | None:
         request_type = "get_contract"
         path = self._params.get_rest_path(request_type)
         extra_data = update_extra_data(
@@ -212,7 +212,7 @@ class KuCoinRequestDataFutures(KuCoinRequestData):
         return path, {}, extra_data
 
     @staticmethod
-    def _get_exchange_info_normalize_function(input_data, extra_data):
+    def _get_exchange_info_normalize_function(input_data, extra_data) -> Any | None:
         if input_data and isinstance(input_data, dict) and "data" in input_data:
             data = input_data["data"]
             if isinstance(data, list):
@@ -226,7 +226,7 @@ class KuCoinRequestDataFutures(KuCoinRequestData):
 
     # ==================== Account ====================
 
-    def _get_account(self, currency=None, extra_data=None, **kwargs):
+    def _get_account(self, currency=None, extra_data=None, **kwargs) -> Any | None:
         request_type = "get_account"
         path = self._params.get_rest_path(request_type)
         params = {}
@@ -276,7 +276,7 @@ class KuCoinRequestDataFutures(KuCoinRequestData):
         client_order_id=None,
         extra_data=None,
         **kwargs,
-    ):
+    ) -> Any | None:
         request_type = "make_order"
         path = self._params.get_rest_path(request_type)
         side, ord_type = order_type.split("-")
@@ -305,7 +305,7 @@ class KuCoinRequestDataFutures(KuCoinRequestData):
         return path, params, extra_data
 
     @staticmethod
-    def _make_order_normalize_function(input_data, extra_data):
+    def _make_order_normalize_function(input_data, extra_data) -> Any | None:
         status = input_data is not None
         symbol_name = extra_data["symbol_name"]
         asset_type = extra_data["asset_type"]
@@ -338,7 +338,7 @@ class KuCoinRequestDataFutures(KuCoinRequestData):
         )
         return self.request(path, params=params, extra_data=extra_data, is_sign=True)
 
-    def _cancel_order(self, order_id=None, extra_data=None, **kwargs):
+    def _cancel_order(self, order_id=None, extra_data=None, **kwargs) -> Any | None:
         if order_id is None:
             raise ValueError("order_id must be provided")
         path = f"DELETE /api/v1/orders/{order_id}"
@@ -359,7 +359,7 @@ class KuCoinRequestDataFutures(KuCoinRequestData):
         )
         return self.request(path, params=params, extra_data=extra_data, is_sign=True)
 
-    def _get_open_orders(self, symbol=None, extra_data=None, **kwargs):
+    def _get_open_orders(self, symbol=None, extra_data=None, **kwargs) -> Any | None:
         request_type = "get_open_orders"
         path = self._params.get_rest_path(request_type)
         params = {}

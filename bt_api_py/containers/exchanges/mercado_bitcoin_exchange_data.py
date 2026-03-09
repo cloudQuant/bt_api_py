@@ -1,6 +1,6 @@
-"""
-Mercado Bitcoin Exchange Data Configuration
-"""
+from typing import Any
+
+"""Mercado Bitcoin Exchange Data Configuration."""
 
 import os
 
@@ -13,7 +13,7 @@ _mercado_bitcoin_config = None
 _mercado_bitcoin_config_loaded = False
 
 
-def _get_mercado_bitcoin_config():
+def _get_mercado_bitcoin_config() -> Any | None:
     """Load Mercado Bitcoin YAML configuration."""
     global _mercado_bitcoin_config, _mercado_bitcoin_config_loaded
     if _mercado_bitcoin_config_loaded:
@@ -37,7 +37,7 @@ def _get_mercado_bitcoin_config():
 class MercadoBitcoinExchangeData(ExchangeData):
     """Base class for Mercado Bitcoin exchange."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__()
         self.exchange_name = "mercado_bitcoin"
         self.rest_url = "https://www.mercadobitcoin.net/api"
@@ -54,7 +54,7 @@ class MercadoBitcoinExchangeData(ExchangeData):
         }
         self.legal_currency = ["BRL"]
 
-    def _load_from_config(self, asset_type):
+    def _load_from_config(self, asset_type) -> bool:
         """Load from YAML config."""
         config = _get_mercado_bitcoin_config()
         if config is None:
@@ -117,7 +117,7 @@ class MercadoBitcoinExchangeData(ExchangeData):
 class MercadoBitcoinExchangeDataSpot(MercadoBitcoinExchangeData):
     """Mercado Bitcoin Spot exchange configuration."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__()
         self.asset_type = "spot"
         self.rest_paths = {}
@@ -128,18 +128,19 @@ class MercadoBitcoinExchangeDataSpot(MercadoBitcoinExchangeData):
             # If config loading failed, ensure we have the right exchange name
             self.exchange_name = default_exchange_name
 
-    def get_symbol(self, symbol):
+    def get_symbol(self, symbol: str) -> str:
         """Get symbol in Mercado Bitcoin format.
 
         Mercado Bitcoin uses dash format (e.g., BTC-BRL).
         """
         return symbol
 
-    def get_period(self, key, default=None):
+    def get_period(self, key, default=None) -> Any:
         """Get kline period.
 
         Args:
             key: Period key (e.g., '1h', '1d')
             default: Default value if key not found
+
         """
         return self.kline_periods.get(key, default or key)

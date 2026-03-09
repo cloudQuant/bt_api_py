@@ -6,7 +6,7 @@
 import time
 from dataclasses import dataclass
 from enum import Enum
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from ...containers.auto_init_mixin import AutoInitMixin
 
@@ -117,7 +117,9 @@ class MitigationAction(Enum):
 class RiskEvent(AutoInitMixin):
     """风险事件容器"""
 
-    def __init__(self, data: Dict[str, Any] | None = None, has_been_json_encoded: bool = False):
+    def __init__(
+        self, data: dict[str, Any] | None = None, has_been_json_encoded: bool = False
+    ) -> Any | None:
         if data is None:
             data = {}
 
@@ -159,9 +161,9 @@ class RiskEvent(AutoInitMixin):
         # 处理信息
         self.assigned_to = data.get("assigned_to", "")  # 分配给
         self.acknowledged_by = data.get("acknowledged_by", "")  # 确认人
-        self.acknowledged_time = data.get("acknowledged_time", None)  # 确认时间
+        self.acknowledged_time = data.get("acknowledged_time")  # 确认时间
         self.resolved_by = data.get("resolved_by", "")  # 解决人
-        self.resolved_time = data.get("resolved_time", None)  # 解决时间
+        self.resolved_time = data.get("resolved_time")  # 解决时间
 
         # 缓解措施
         self.mitigation_actions = [
@@ -189,7 +191,7 @@ class RiskEvent(AutoInitMixin):
         # 通知信息
         self.notification_sent = data.get("notification_sent", False)
         self.notification_channels = data.get("notification_channels", [])  # 通知渠道
-        self.last_notification_time = data.get("last_notification_time", None)
+        self.last_notification_time = data.get("last_notification_time")
 
         self.has_been_json_encoded = has_been_json_encoded
 
@@ -202,7 +204,7 @@ class RiskEvent(AutoInitMixin):
 class EventHistoryEntry:
     """事件历史记录条目"""
 
-    def __init__(self, data: Dict[str, Any]):
+    def __init__(self, data: dict[str, Any]) -> Any | None:
         self.timestamp = data.get("timestamp", int(time.time()))
         self.action = data.get("action", "")  # 状态变更或行动
         self.previous_value = data.get("previous_value", "")
@@ -216,7 +218,7 @@ class EventHistoryEntry:
 class EventNote:
     """事件备注"""
 
-    def __init__(self, data: Dict[str, Any]):
+    def __init__(self, data: dict[str, Any]) -> Any | None:
         self.timestamp = data.get("timestamp", int(time.time()))
         self.author = data.get("author", "")
         self.content = data.get("content", "")
@@ -231,10 +233,10 @@ class EventNote:
 class EventEscalation:
     """事件升级信息"""
 
-    def __init__(self, data: Dict[str, Any]):
+    def __init__(self, data: dict[str, Any]) -> Any | None:
         self.escalation_level = data.get("escalation_level", 1)  # 升级级别
         self.escalation_criteria = data.get("escalation_criteria", [])  # 升级条件
-        self.escalation_time = data.get("escalation_time", None)  # 升级时间
+        self.escalation_time = data.get("escalation_time")  # 升级时间
         self.escalated_to = data.get("escalated_to", [])  # 升级到的对象
         self.escalation_reason = data.get("escalation_reason", "")
         self.auto_escalation = data.get("auto_escalation", False)  # 是否自动升级
@@ -244,7 +246,7 @@ class EventEscalation:
 class EventMetrics:
     """事件指标"""
 
-    def __init__(self, data: Dict[str, Any]):
+    def __init__(self, data: dict[str, Any]) -> Any | None:
         self.detection_latency = data.get("detection_latency", 0)  # 检测延迟(秒)
         self.resolution_time = data.get("resolution_time", 0)  # 解决时间(秒)
         self.mitigation_effectiveness = data.get("mitigation_effectiveness", 0)  # 缓解效果(0-1)
@@ -271,7 +273,7 @@ class EventMetrics:
 class EventPattern:
     """事件模式"""
 
-    def __init__(self, data: Dict[str, Any]):
+    def __init__(self, data: dict[str, Any]) -> Any | None:
         self.pattern_id = data.get("pattern_id", "")
         self.pattern_name = data.get("pattern_name", "")
         self.pattern_type = data.get("pattern_type", "")

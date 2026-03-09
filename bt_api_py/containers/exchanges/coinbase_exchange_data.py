@@ -1,9 +1,9 @@
-"""
-Coinbase Exchange Data Container
-Handles configuration loading and data structures for Coinbase exchange
+"""Coinbase Exchange Data Container
+Handles configuration loading and data structures for Coinbase exchange.
 """
 
 import os
+from typing import Never
 
 from bt_api_py.containers.exchanges.exchange_data import ExchangeData
 from bt_api_py.logging_factory import get_logger
@@ -15,8 +15,8 @@ _coinbase_config = None
 _coinbase_config_loaded = False
 
 
-def _get_coinbase_config():
-    """延迟加载并缓存 Coinbase YAML 配置"""
+def _get_coinbase_config() -> Any | None:
+    """延迟加载并缓存 Coinbase YAML 配置."""
     global _coinbase_config, _coinbase_config_loaded
     if _coinbase_config_loaded:
         return _coinbase_config
@@ -43,7 +43,7 @@ class CoinbaseExchangeData(ExchangeData):
     Subclasses MUST set exchange-specific: exchange_name, rest_url, rest_paths, legal_currency.
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__()
         self.exchange_name = "COINBASE___SPOT"
         self.rest_url = "https://api.coinbase.com/api/v3"
@@ -82,13 +82,14 @@ class CoinbaseExchangeData(ExchangeData):
             "EUR",
         ]
 
-    def _load_from_config(self, asset_type):
-        """从 YAML 配置文件加载交易所参数
+    def _load_from_config(self, asset_type) -> bool:
+        """从 YAML 配置文件加载交易所参数.
 
         Args:
             asset_type: 资产类型 key, 如 'spot'
         Returns:
             bool: 是否加载成功
+
         """
         config = _get_coinbase_config()
         if config is None:
@@ -124,53 +125,59 @@ class CoinbaseExchangeData(ExchangeData):
         return True
 
     # noinspection PyMethodMayBeStatic
-    def get_symbol(self, symbol):
-        """Convert symbol format to exchange format
+    def get_symbol(self, symbol: str) -> str:
+        """Convert symbol format to exchange format.
 
         Coinbase Advanced Trade API uses hyphenated symbols (e.g., "BTC-USD").
 
         Args:
             symbol: Input symbol (e.g., "BTC-USD")
+
         Returns:
             str: Exchange symbol format (e.g., "BTC-USD")
+
         """
         return symbol
 
-    def get_rest_path(self, key):
-        """Get REST API path for given key
+    def get_rest_path(self, key: str, **kwargs) -> str:
+        """Get REST API path for given key.
 
         Args:
             key: Path key
         Returns:
             str: REST path
+
         """
         if key not in self.rest_paths or self.rest_paths[key] == "":
             self.raise_path_error(self.exchange_name, key)
         return self.rest_paths[key]
 
-    def get_period(self, key):
-        """Get kline period for given key
+    def get_period(self, key: str) -> str:
+        """Get kline period for given key.
 
         Args:
             key: Period key (e.g., "1m", "1h", "1d")
+
         Returns:
             str: Exchange period format
+
         """
         return self.kline_periods.get(key, key)
 
-    def raise_path_error(self, *args):
-        """Raise path error exception
+    def raise_path_error(self, *args) -> Never:
+        """Raise path error exception.
 
         Args:
             *args: Arguments for error message
+
         """
         raise Exception(f"API path not found: {args}")
 
 
 class CoinbaseExchangeDataSpot(CoinbaseExchangeData):
-    """Coinbase Spot Trading Data"""
+    """Coinbase Spot Trading Data."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__()
         self.exchange_name = "COINBASE___SPOT"
         self._load_from_config("spot")

@@ -7,21 +7,22 @@ This script tests whether the MEXC feed can be imported and instantiated.
 """
 
 import sys
-import os
-from queue import Queue
 
 # Add the project root to the path
-sys.path.insert(0, '/Users/yunjinqi/Documents/source_code/bt_api_py')
+sys.path.insert(0, "/Users/yunjinqi/Documents/source_code/bt_api_py")
+
 
 def test_mexc_import():
     """Test if MEXC modules can be imported"""
     try:
         from bt_api_py.feeds.live_mexc import MexcRequestData, MexcRequestDataSpot
+
         print("✓ Successfully imported MEXC feed classes")
         pass
     except ImportError as e:
         print(f"✗ Failed to import MEXC feed classes: {e}")
         pass
+
 
 def test_mexc_exchange_data():
     """Test if MEXC exchange data can be imported and instantiated"""
@@ -30,7 +31,7 @@ def test_mexc_exchange_data():
 
         # Create an instance
         exchange_data = MexcExchangeDataSpot()
-        print(f"✓ Successfully created MexcExchangeDataSpot instance")
+        print("✓ Successfully created MexcExchangeDataSpot instance")
         print(f"  - Exchange name: {exchange_data.exchange_name}")
         print(f"  - REST URL: {exchange_data.rest_url}")
         print(f"  - WebSocket URL: {exchange_data.wss_url}")
@@ -41,13 +42,14 @@ def test_mexc_exchange_data():
         print(f"✗ Failed to create MexcExchangeDataSpot instance: {e}")
         pass
 
+
 def test_mexc_data_containers():
     """Test if MEXC data containers can be imported"""
     try:
-        from bt_api_py.containers.tickers.mexc_ticker import MexcRequestTickerData
-        from bt_api_py.containers.orders.mexc_order import MexcRequestOrderData
-        from bt_api_py.containers.orderbooks.mexc_orderbook import MexcRequestOrderBookData
         from bt_api_py.containers.balances.mexc_balance import MexcRequestBalanceData
+        from bt_api_py.containers.orderbooks.mexc_orderbook import MexcRequestOrderBookData
+        from bt_api_py.containers.orders.mexc_order import MexcRequestOrderData
+        from bt_api_py.containers.tickers.mexc_ticker import MexcRequestTickerData
         from bt_api_py.containers.trades.mexc_trade import MexcRequestTradeData
 
         print("✓ Successfully imported all MEXC data container classes")
@@ -56,23 +58,26 @@ def test_mexc_data_containers():
         print(f"✗ Failed to import MEXC data container classes: {e}")
         pass
 
+
 def test_mexc_registration():
     """Test if MEXC registration works"""
     try:
         # This should register the feed without errors
-        import bt_api_py.exchange_registers.register_mexc
+
         print("✓ Successfully imported MEXC registration module")
         pass
     except Exception as e:
         print(f"✗ Failed to import MEXC registration module: {e}")
         pass
 
+
 def test_mexc_feed_instantiation():
     """Test if MEXC feed can be instantiated"""
     try:
-        from bt_api_py.feeds.live_mexc import MexcRequestDataSpot
-        from bt_api_py.containers.exchanges.mexc_exchange_data import MexcExchangeDataSpot
         from queue import Queue
+
+        from bt_api_py.containers.exchanges.mexc_exchange_data import MexcExchangeDataSpot
+        from bt_api_py.feeds.live_mexc import MexcRequestDataSpot
 
         # Create a data queue
         data_queue = Queue()
@@ -85,7 +90,7 @@ def test_mexc_feed_instantiation():
             data_queue=data_queue,
             public_key="test_key",
             private_key="test_secret",
-            exchange_data=exchange_data
+            exchange_data=exchange_data,
         )
 
         print("✓ Successfully created MexcRequestDataSpot instance")
@@ -95,6 +100,7 @@ def test_mexc_feed_instantiation():
     except Exception as e:
         print(f"✗ Failed to create MexcRequestDataSpot instance: {e}")
         pass
+
 
 def main():
     """Run all tests"""
@@ -126,6 +132,7 @@ def main():
     else:
         print("❌ Some tests failed. Please check the implementation.")
         pass
+
 
 if __name__ == "__main__":
     success = main()

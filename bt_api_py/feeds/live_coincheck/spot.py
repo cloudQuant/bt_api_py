@@ -101,7 +101,6 @@ class CoincheckRequestDataSpot(CoincheckRequestData):
     def _get_kline(self, symbol, period, count=20, extra_data=None, **kwargs):
         """Get kline/candlestick data. Returns (path, params, extra_data)."""
         path = "GET /api/exchange/orders/rate"
-        period_str = self._params.kline_periods.get(period, period)
         params = {"pair": symbol}
         if extra_data is None:
             extra_data = {}
@@ -112,6 +111,7 @@ class CoincheckRequestDataSpot(CoincheckRequestData):
                 "asset_type": self.asset_type,
                 "exchange_name": self.exchange_name,
                 "normalize_function": self._get_kline_normalize_function,
+                "period": self._params.kline_periods.get(period, period),
             }
         )
         return path, params, extra_data

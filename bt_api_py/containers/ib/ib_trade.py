@@ -9,7 +9,13 @@ from bt_api_py.containers.trades.trade import TradeData
 class IbTradeData(TradeData):
     """IB 成交数据"""
 
-    def __init__(self, trade_info, symbol_name=None, asset_type="STK", has_been_json_encoded=False):
+    def __init__(
+        self,
+        trade_info: Any,
+        symbol_name: Any = None,
+        asset_type: Any = "STK",
+        has_been_json_encoded: Any = False,
+    ) -> None:
         super().__init__(trade_info, has_been_json_encoded)
         self.symbol_name = symbol_name
         self.asset_type = asset_type
@@ -27,7 +33,7 @@ class IbTradeData(TradeData):
         self.commission_val = None
         self.exchange_val = None
 
-    def init_data(self):
+    def init_data(self) -> None:
         if self._initialized:
             return self
         info = self.trade_info
@@ -46,49 +52,49 @@ class IbTradeData(TradeData):
         self._initialized = True
         return self
 
-    def get_exchange_name(self):
+    def get_exchange_name(self) -> None:
         return self.exchange_name
 
-    def get_asset_type(self):
+    def get_asset_type(self) -> None:
         return self.asset_type
 
-    def get_symbol_name(self):
+    def get_symbol_name(self) -> None:
         return self.symbol_name
 
-    def get_server_time(self):
+    def get_server_time(self) -> None:
         return self.exec_time
 
-    def get_trade_id(self):
+    def get_trade_id(self) -> None:
         return self.exec_id
 
-    def get_order_id(self):
+    def get_order_id(self) -> None:
         return self.order_id_val
 
-    def get_client_order_id(self):
+    def get_client_order_id(self) -> None:
         return self.perm_id
 
-    def get_trade_side(self):
+    def get_trade_side(self) -> None:
         return "buy" if self.side == "BOT" else "sell"
 
-    def get_trade_offset(self):
+    def get_trade_offset(self) -> None:
         return None  # IB 没有开平方向概念
 
-    def get_trade_price(self):
+    def get_trade_price(self) -> None:
         return self.price_val
 
-    def get_trade_volume(self):
+    def get_trade_volume(self) -> None:
         return self.shares
 
-    def get_trade_time(self):
+    def get_trade_time(self) -> None:
         return self.exec_time
 
-    def get_trade_fee(self):
+    def get_trade_fee(self) -> None:
         return self.commission_val or 0.0
 
-    def get_trade_fee_symbol(self):
+    def get_trade_fee_symbol(self) -> None:
         return "USD"
 
-    def get_all_data(self):
+    def get_all_data(self) -> None:
         return {
             "exchange_name": self.exchange_name,
             "exec_id": self.exec_id,

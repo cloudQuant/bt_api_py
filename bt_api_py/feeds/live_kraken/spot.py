@@ -2,7 +2,6 @@
 Kraken Spot Trading Feed Implementation
 """
 
-
 from bt_api_py.containers.balances.kraken_balance import KrakenSpotWssBalanceData
 from bt_api_py.containers.exchanges.kraken_exchange_data import KrakenExchangeDataSpot
 from bt_api_py.containers.orderbooks.kraken_orderbook import KrakenRequestOrderBookData

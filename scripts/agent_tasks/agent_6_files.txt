@@ -1,0 +1,383 @@
+代理 6 需要改进的文件 (共 50 个)
+================================================================================
+
+
+bt_api_py/connection_pool.py:
+--------------------------------------------------------------------------------
+  bt_api_py/connection_pool.py
+    - TypeHint: Line 33: ConnectionPool.__init__ - method missing return annotation
+    - Docstring: Line 63: ConnectionPool.start - method has incomplete Google-style docstring
+    - Docstring: Line 80: ConnectionPool.stop - method has incomplete Google-style docstring
+    - Docstring: Line 98: ConnectionPool.acquire - method has incomplete Google-style docstring
+    - Docstring: Line 127: ConnectionPool.release - method has incomplete Google-style docstring
+    ... 还有 5 个问题
+
+bt_api_py/containers/ctp:
+--------------------------------------------------------------------------------
+  bt_api_py/containers/ctp/ctp_account.py
+    - TypeHint: Line 13: CtpAccountData.__init__ - method missing return annotation
+    - TypeHint: Line 13: CtpAccountData.__init__ - method missing annotation for param 'account_info'
+    - TypeHint: Line 13: CtpAccountData.__init__ - method missing annotation for param 'symbol_name'
+    - TypeHint: Line 13: CtpAccountData.__init__ - method missing annotation for param 'asset_type'
+    - TypeHint: Line 13: CtpAccountData.__init__ - method missing annotation for param 'has_been_json_encoded'
+    ... 还有 25 个问题
+  bt_api_py/containers/ctp/ctp_bar.py
+    - TypeHint: Line 14: CtpBarData.__init__ - method missing return annotation
+    - TypeHint: Line 14: CtpBarData.__init__ - method missing annotation for param 'bar_info'
+    - TypeHint: Line 14: CtpBarData.__init__ - method missing annotation for param 'symbol_name'
+    - TypeHint: Line 14: CtpBarData.__init__ - method missing annotation for param 'asset_type'
+    - TypeHint: Line 14: CtpBarData.__init__ - method missing annotation for param 'has_been_json_encoded'
+    ... 还有 35 个问题
+  bt_api_py/containers/ctp/ctp_order.py
+    - TypeHint: Line 43: CtpOrderData.__init__ - method missing return annotation
+    - TypeHint: Line 43: CtpOrderData.__init__ - method missing annotation for param 'order_info'
+    - TypeHint: Line 43: CtpOrderData.__init__ - method missing annotation for param 'symbol_name'
+    - TypeHint: Line 43: CtpOrderData.__init__ - method missing annotation for param 'asset_type'
+    - TypeHint: Line 43: CtpOrderData.__init__ - method missing annotation for param 'has_been_json_encoded'
+    ... 还有 39 个问题
+  bt_api_py/containers/ctp/ctp_position.py
+    - TypeHint: Line 20: CtpPositionData.__init__ - method missing return annotation
+    - TypeHint: Line 20: CtpPositionData.__init__ - method missing annotation for param 'position_info'
+    - TypeHint: Line 20: CtpPositionData.__init__ - method missing annotation for param 'symbol_name'
+    - TypeHint: Line 20: CtpPositionData.__init__ - method missing annotation for param 'asset_type'
+    - TypeHint: Line 20: CtpPositionData.__init__ - method missing annotation for param 'has_been_json_encoded'
+    ... 还有 33 个问题
+  bt_api_py/containers/ctp/ctp_ticker.py
+    - TypeHint: Line 14: CtpTickerData.__init__ - method missing return annotation
+    - TypeHint: Line 14: CtpTickerData.__init__ - method missing annotation for param 'ticker_info'
+    - TypeHint: Line 14: CtpTickerData.__init__ - method missing annotation for param 'symbol_name'
+    - TypeHint: Line 14: CtpTickerData.__init__ - method missing annotation for param 'asset_type'
+    - TypeHint: Line 14: CtpTickerData.__init__ - method missing annotation for param 'has_been_json_encoded'
+    ... 还有 35 个问题
+  bt_api_py/containers/ctp/ctp_trade.py
+    - TypeHint: Line 13: CtpTradeData.__init__ - method missing return annotation
+    - TypeHint: Line 13: CtpTradeData.__init__ - method missing annotation for param 'trade_info'
+    - TypeHint: Line 13: CtpTradeData.__init__ - method missing annotation for param 'symbol_name'
+    - TypeHint: Line 13: CtpTradeData.__init__ - method missing annotation for param 'asset_type'
+    - TypeHint: Line 13: CtpTradeData.__init__ - method missing annotation for param 'has_been_json_encoded'
+    ... 还有 33 个问题
+
+bt_api_py/containers/symbols:
+--------------------------------------------------------------------------------
+  bt_api_py/containers/symbols/binance_symbol.py
+    - TypeHint: Line 9: BinanceSwapSymbolData.__init__ - method missing return annotation
+    - TypeHint: Line 9: BinanceSwapSymbolData.__init__ - method missing annotation for param 'symbol_info'
+    - TypeHint: Line 9: BinanceSwapSymbolData.__init__ - method missing annotation for param 'has_been_json_encoded'
+    - TypeHint: Line 41: BinanceSwapSymbolData.init_data - method missing return annotation
+    - TypeHint: Line 74: BinanceSwapSymbolData.get_symbol_name - method missing return annotation
+    ... 还有 101 个问题
+  bt_api_py/containers/symbols/okx_symbol.py
+    - TypeHint: Line 11: OkxSymbolData.__init__ - method missing return annotation
+    - TypeHint: Line 11: OkxSymbolData.__init__ - method missing annotation for param 'symbol_info'
+    - TypeHint: Line 11: OkxSymbolData.__init__ - method missing annotation for param 'has_been_json_encoded'
+    - TypeHint: Line 63: OkxSymbolData.init_data - method missing return annotation
+    - TypeHint: Line 105: OkxSymbolData.get_local_update_time - method missing return annotation
+    ... 还有 93 个问题
+  bt_api_py/containers/symbols/symbol.py
+    - Docstring: Line 44: SymbolData.__init__ - method has incomplete Google-style docstring
+    - Docstring: Line 55: SymbolData.get_event - method has incomplete Google-style docstring
+    - Docstring: Line 63: SymbolData.get_all_data - method has incomplete Google-style docstring
+    - Docstring: Line 74: SymbolData.init_data - method has incomplete Google-style docstring
+    - Docstring: Line 85: SymbolData.get_exchange_name - method has incomplete Google-style docstring
+    ... 还有 23 个问题
+
+bt_api_py/containers/trades:
+--------------------------------------------------------------------------------
+  bt_api_py/containers/trades/binance_trade.py
+    - TypeHint: Line 10: BinanceAggTradeData.__init__ - method missing annotation for param 'symbol_name'
+    - TypeHint: Line 10: BinanceAggTradeData.__init__ - method missing annotation for param 'asset_type'
+    - TypeHint: Line 32: BinanceAggTradeData.init_data - method missing return annotation
+    - TypeHint: Line 51: BinanceAggTradeData.get_all_data - method missing return annotation
+    - TypeHint: Line 77: BinanceAggTradeData.get_exchange_name - method missing return annotation
+    ... 还有 74 个问题
+  bt_api_py/containers/trades/bitfinex_trade.py
+    - TypeHint: Line 11: BitfinexRequestTradeData.__init__ - method missing annotation for param 'symbol_name'
+    - TypeHint: Line 11: BitfinexRequestTradeData.__init__ - method missing annotation for param 'asset_type'
+    - TypeHint: Line 28: BitfinexRequestTradeData.init_data - method missing return annotation
+    - TypeHint: Line 56: BitfinexRequestTradeData.get_all_data - method missing return annotation
+    - TypeHint: Line 80: BitfinexRequestTradeData.get_trade_id - method missing return annotation
+    ... 还有 20 个问题
+  bt_api_py/containers/trades/bitget_trade.py
+    - TypeHint: Line 18: BitgetTradeData.__init__ - method missing annotation for param 'symbol_name'
+    - TypeHint: Line 18: BitgetTradeData.__init__ - method missing annotation for param 'asset_type'
+    - TypeHint: Line 40: BitgetTradeData.init_data - method missing return annotation
+    - TypeHint: Line 65: BitgetTradeData.get_all_data - method missing return annotation
+    - TypeHint: Line 94: BitgetTradeData.get_exchange_name - method missing return annotation
+    ... 还有 36 个问题
+  bt_api_py/containers/trades/coinbase_trade.py
+    - TypeHint: Line 36: CoinbaseTradeData.__init__ - method missing annotation for param 'symbol_name'
+    - TypeHint: Line 36: CoinbaseTradeData.__init__ - method missing annotation for param 'asset_type'
+    - TypeHint: Line 62: CoinbaseTradeData.init_data - method missing return annotation
+    - TypeHint: Line 94: CoinbaseTradeData.get_all_data - method missing return annotation
+    - TypeHint: Line 122: CoinbaseTradeData.get_exchange_name - method missing return annotation
+    ... 还有 34 个问题
+  bt_api_py/containers/trades/gateio_trade.py
+    - TypeHint: Line 18: GateioTradeData.__init__ - method missing annotation for param 'symbol_name'
+    - TypeHint: Line 18: GateioTradeData.__init__ - method missing annotation for param 'asset_type'
+    - TypeHint: Line 40: GateioTradeData.init_data - method missing return annotation
+    - TypeHint: Line 64: GateioTradeData.get_all_data - method missing return annotation
+    - TypeHint: Line 93: GateioTradeData.get_exchange_name - method missing return annotation
+    ... 还有 64 个问题
+  bt_api_py/containers/trades/gemini_trade.py
+    - TypeHint: Line 8: GeminiRequestTradeData.__init__ - method missing return annotation
+    - TypeHint: Line 8: GeminiRequestTradeData.__init__ - method missing annotation for param 'data'
+    - TypeHint: Line 8: GeminiRequestTradeData.__init__ - method missing annotation for param 'symbol'
+    - TypeHint: Line 8: GeminiRequestTradeData.__init__ - method missing annotation for param 'asset_type'
+    - TypeHint: Line 8: GeminiRequestTradeData.__init__ - method missing annotation for param 'is_rest'
+    ... 还有 8 个问题
+  bt_api_py/containers/trades/hitbtc_trade.py
+    - TypeHint: Line 11: HitBtcRequestTradeData.__init__ - method missing annotation for param 'symbol_name'
+    - TypeHint: Line 11: HitBtcRequestTradeData.__init__ - method missing annotation for param 'asset_type'
+    - TypeHint: Line 28: HitBtcRequestTradeData.init_data - method missing return annotation
+    - TypeHint: Line 44: HitBtcRequestTradeData.get_all_data - method missing return annotation
+    - TypeHint: Line 59: HitBtcRequestTradeData.get_symbol_name - method missing return annotation
+    ... 还有 38 个问题
+  bt_api_py/containers/trades/htx_trade.py
+    - TypeHint: Line 14: HtxRequestTradeData.__init__ - method missing annotation for param 'symbol_name'
+    - TypeHint: Line 14: HtxRequestTradeData.__init__ - method missing annotation for param 'asset_type'
+    - TypeHint: Line 34: HtxRequestTradeData.init_data - method missing return annotation
+    - TypeHint: Line 86: HtxRequestTradeData.get_all_data - method missing return annotation
+    - TypeHint: Line 111: HtxRequestTradeData.get_exchange_name - method missing return annotation
+    ... 还有 26 个问题
+  bt_api_py/containers/trades/hyperliquid_trade.py
+    - TypeHint: Line 12: HyperliquidSpotWssTradeData.__init__ - method missing annotation for param 'symbol_name'
+    - TypeHint: Line 12: HyperliquidSpotWssTradeData.__init__ - method missing annotation for param 'asset_type'
+    - TypeHint: Line 31: HyperliquidSpotWssTradeData.init_data - method missing return annotation
+    - TypeHint: Line 56: HyperliquidSpotWssTradeData.get_all_data - method missing return annotation
+    - TypeHint: Line 74: HyperliquidSpotWssTradeData.get_exchange_name - method missing return annotation
+    ... 还有 24 个问题
+  bt_api_py/containers/trades/kucoin_trade.py
+    - TypeHint: Line 14: KuCoinTradeData.__init__ - method missing annotation for param 'symbol_name'
+    - TypeHint: Line 14: KuCoinTradeData.__init__ - method missing annotation for param 'asset_type'
+    - TypeHint: Line 31: KuCoinTradeData.init_data - method missing return annotation
+    - TypeHint: Line 34: KuCoinTradeData.get_all_data - method missing return annotation
+    - TypeHint: Line 56: KuCoinTradeData.get_exchange_name - method missing return annotation
+    ... 还有 28 个问题
+  bt_api_py/containers/trades/latoken_trade.py
+    - TypeHint: Line 10: LatokenSpotWssTradeData.__init__ - method missing annotation for param 'symbol_name'
+    - TypeHint: Line 10: LatokenSpotWssTradeData.__init__ - method missing annotation for param 'asset_type'
+    - Docstring: Line 10: LatokenSpotWssTradeData.__init__ - method missing docstring
+  bt_api_py/containers/trades/localbitcoins_trade.py
+    - TypeHint: Line 10: LocalBitcoinsSpotWssTradeData.__init__ - method missing annotation for param 'symbol_name'
+    - TypeHint: Line 10: LocalBitcoinsSpotWssTradeData.__init__ - method missing annotation for param 'asset_type'
+    - Docstring: Line 10: LocalBitcoinsSpotWssTradeData.__init__ - method missing docstring
+  bt_api_py/containers/trades/mexc_trade.py
+    - TypeHint: Line 12: MexcTradeData.__init__ - method missing annotation for param 'symbol_name'
+    - TypeHint: Line 12: MexcTradeData.__init__ - method missing annotation for param 'asset_type'
+    - TypeHint: Line 35: MexcTradeData.init_data - method missing return annotation
+    - TypeHint: Line 57: MexcTradeData.get_all_data - method missing return annotation
+    - TypeHint: Line 86: MexcTradeData.get_exchange_name - method missing return annotation
+    ... 还有 42 个问题
+  bt_api_py/containers/trades/okx_market_trade.py
+    - TypeHint: Line 18: OkxMarketTradeData.__init__ - method missing annotation for param 'symbol_name'
+    - TypeHint: Line 18: OkxMarketTradeData.__init__ - method missing annotation for param 'asset_type'
+    - TypeHint: Line 29: OkxMarketTradeData.init_data - method missing return annotation
+    - TypeHint: Line 65: OkxMarketTradeData.get_all_data - method missing return annotation
+    - TypeHint: Line 85: OkxMarketTradeData.get_exchange_name - method missing return annotation
+    ... 还有 36 个问题
+  bt_api_py/containers/trades/okx_trade.py
+    - TypeHint: Line 12: OkxTradeData.__init__ - method missing annotation for param 'symbol_name'
+    - TypeHint: Line 12: OkxTradeData.__init__ - method missing annotation for param 'asset_type'
+    - TypeHint: Line 23: OkxTradeData.init_data - method missing return annotation
+    - TypeHint: Line 48: OkxTradeData.get_exchange_name - method missing return annotation
+    - TypeHint: Line 52: OkxTradeData.get_asset_type - method missing return annotation
+    ... 还有 34 个问题
+  bt_api_py/containers/trades/korbit_trade.py
+    - Docstring: Line 26: KorbitSpotWssTradeData.__init__ - method has incomplete Google-style docstring
+    - Docstring: Line 47: KorbitSpotWssTradeData.init_data - method has incomplete Google-style docstring
+    - Docstring: Line 59: KorbitSpotWssTradeData.get_exchange_name - method has incomplete Google-style docstring
+    - Docstring: Line 67: KorbitSpotWssTradeData.get_symbol_name - method has incomplete Google-style docstring
+    - Docstring: Line 75: KorbitSpotWssTradeData.get_asset_type - method has incomplete Google-style docstring
+    ... 还有 2 个问题
+  bt_api_py/containers/trades/trade.py
+    - Docstring: Line 59: TradeData.__init__ - method has incomplete Google-style docstring
+    - Docstring: Line 90: TradeData.get_event - method has incomplete Google-style docstring
+    - Docstring: Line 98: TradeData.init_data - method has incomplete Google-style docstring
+    - Docstring: Line 109: TradeData.get_all_data - method has incomplete Google-style docstring
+    - Docstring: Line 136: TradeData.get_exchange_name - method has incomplete Google-style docstring
+    ... 还有 17 个问题
+
+bt_api_py/exchange_registers/register_bitbns.py:
+--------------------------------------------------------------------------------
+  bt_api_py/exchange_registers/register_bitbns.py
+    - TypeHint: Line 11: register_bitbns - function missing return annotation
+    - Docstring: Line 11: register_bitbns - function has incomplete Google-style docstring
+
+bt_api_py/exchange_registers/register_bitfinex.py:
+--------------------------------------------------------------------------------
+  bt_api_py/exchange_registers/register_bitfinex.py
+    - Docstring: Line 13: register_bitfinex - function has incomplete Google-style docstring
+
+bt_api_py/exchange_registers/register_coindcx.py:
+--------------------------------------------------------------------------------
+  bt_api_py/exchange_registers/register_coindcx.py
+    - Docstring: Line 13: register_coindcx - function has incomplete Google-style docstring
+
+bt_api_py/exchange_registers/register_coinspot.py:
+--------------------------------------------------------------------------------
+  bt_api_py/exchange_registers/register_coinspot.py
+    - TypeHint: Line 11: register_coinspot - function missing return annotation
+    - Docstring: Line 11: register_coinspot - function has incomplete Google-style docstring
+
+bt_api_py/exchange_registers/register_ib.py:
+--------------------------------------------------------------------------------
+  bt_api_py/exchange_registers/register_ib.py
+    - Docstring: Line 28: _ib_subscribe_handler - function has incomplete Google-style docstring
+    - Docstring: Line 60: register_ib - function has incomplete Google-style docstring
+
+bt_api_py/exchange_registers/register_latoken.py:
+--------------------------------------------------------------------------------
+  bt_api_py/exchange_registers/register_latoken.py
+    - TypeHint: Line 15: _latoken_spot_subscribe_handler - function missing return annotation
+    - TypeHint: Line 15: _latoken_spot_subscribe_handler - function missing annotation for param 'data_queue'
+    - TypeHint: Line 15: _latoken_spot_subscribe_handler - function missing annotation for param 'exchange_params'
+    - TypeHint: Line 15: _latoken_spot_subscribe_handler - function missing annotation for param 'topics'
+    - TypeHint: Line 15: _latoken_spot_subscribe_handler - function missing annotation for param 'bt_api'
+    ... 还有 3 个问题
+
+bt_api_py/exchange_registers/register_uniswap.py:
+--------------------------------------------------------------------------------
+  bt_api_py/exchange_registers/register_uniswap.py
+    - Docstring: Line 64: register_uniswap - function has incomplete Google-style docstring
+
+bt_api_py/exchange_registers/register_yobit.py:
+--------------------------------------------------------------------------------
+  bt_api_py/exchange_registers/register_yobit.py
+    - TypeHint: Line 11: _yobit_spot_subscribe_handler - function missing return annotation
+    - TypeHint: Line 11: _yobit_spot_subscribe_handler - function missing annotation for param 'feed'
+    - TypeHint: Line 11: _yobit_spot_subscribe_handler - function missing annotation for param 'topics'
+    - TypeHint: Line 16: register_yobit - function missing return annotation
+    - Docstring: Line 11: _yobit_spot_subscribe_handler - function has incomplete Google-style docstring
+    ... 还有 1 个问题
+
+bt_api_py/feeds/live_bequant:
+--------------------------------------------------------------------------------
+  bt_api_py/feeds/live_bequant/request_base.py
+    - TypeHint: Line 38: BeQuantRequestData.__init__ - method missing return annotation
+    - TypeHint: Line 38: BeQuantRequestData.__init__ - method missing annotation for param 'data_queue'
+    - TypeHint: Line 38: BeQuantRequestData.__init__ - method missing annotation for param 'kwargs'
+    - TypeHint: Line 50: BeQuantRequestData.api_key - method missing return annotation
+    - TypeHint: Line 54: BeQuantRequestData.api_secret - method missing return annotation
+    ... 还有 25 个问题
+  bt_api_py/feeds/live_bequant/spot.py
+    - TypeHint: Line 16: BeQuantRequestDataSpot.get_server_time - method missing return annotation
+    - TypeHint: Line 16: BeQuantRequestDataSpot.get_server_time - method missing annotation for param 'extra_data'
+    - TypeHint: Line 16: BeQuantRequestDataSpot.get_server_time - method missing annotation for param 'kwargs'
+    - TypeHint: Line 20: BeQuantRequestDataSpot.async_get_server_time - method missing return annotation
+    - TypeHint: Line 20: BeQuantRequestDataSpot.async_get_server_time - method missing annotation for param 'extra_data'
+    ... 还有 125 个问题
+
+bt_api_py/feeds/live_bitrue:
+--------------------------------------------------------------------------------
+  bt_api_py/feeds/live_bitrue/request_base.py
+    - TypeHint: Line 42: BitrueRequestData.__init__ - method missing return annotation
+    - TypeHint: Line 42: BitrueRequestData.__init__ - method missing annotation for param 'data_queue'
+    - TypeHint: Line 42: BitrueRequestData.__init__ - method missing annotation for param 'kwargs'
+    - TypeHint: Line 54: BitrueRequestData.api_key - method missing return annotation
+    - TypeHint: Line 58: BitrueRequestData.api_secret - method missing return annotation
+    ... 还有 25 个问题
+  bt_api_py/feeds/live_bitrue/spot.py
+    - TypeHint: Line 14: BitrueRequestDataSpot.__init__ - method missing return annotation
+    - TypeHint: Line 14: BitrueRequestDataSpot.__init__ - method missing annotation for param 'data_queue'
+    - TypeHint: Line 14: BitrueRequestDataSpot.__init__ - method missing annotation for param 'kwargs'
+    - TypeHint: Line 21: BitrueRequestDataSpot.get_server_time - method missing return annotation
+    - TypeHint: Line 21: BitrueRequestDataSpot.get_server_time - method missing annotation for param 'extra_data'
+    ... 还有 139 个问题
+
+bt_api_py/feeds/live_coincheck:
+--------------------------------------------------------------------------------
+  bt_api_py/feeds/live_coincheck/request_base.py
+    - TypeHint: Line 33: CoincheckRequestData.__init__ - method missing return annotation
+    - TypeHint: Line 33: CoincheckRequestData.__init__ - method missing annotation for param 'data_queue'
+    - TypeHint: Line 33: CoincheckRequestData.__init__ - method missing annotation for param 'kwargs'
+    - TypeHint: Line 81: CoincheckRequestData.request - method missing return annotation
+    - TypeHint: Line 81: CoincheckRequestData.request - method missing annotation for param 'path'
+    ... 还有 29 个问题
+  bt_api_py/feeds/live_coincheck/spot.py
+    - TypeHint: Line 25: CoincheckRequestDataSpot.__init__ - method missing annotation for param 'data_queue'
+    - TypeHint: Line 25: CoincheckRequestDataSpot.__init__ - method missing annotation for param 'kwargs'
+    - TypeHint: Line 53: CoincheckRequestDataSpot.get_tick - method missing return annotation
+    - TypeHint: Line 53: CoincheckRequestDataSpot.get_tick - method missing annotation for param 'symbol'
+    - TypeHint: Line 53: CoincheckRequestDataSpot.get_tick - method missing annotation for param 'extra_data'
+    ... 还有 75 个问题
+
+bt_api_py/feeds/live_exmo:
+--------------------------------------------------------------------------------
+  bt_api_py/feeds/live_exmo/request_base.py
+    - TypeHint: Line 35: ExmoRequestData.__init__ - method missing return annotation
+    - TypeHint: Line 35: ExmoRequestData.__init__ - method missing annotation for param 'data_queue'
+    - TypeHint: Line 35: ExmoRequestData.__init__ - method missing annotation for param 'kwargs'
+    - TypeHint: Line 79: ExmoRequestData.request - method missing return annotation
+    - TypeHint: Line 79: ExmoRequestData.request - method missing annotation for param 'path'
+    ... 还有 29 个问题
+  bt_api_py/feeds/live_exmo/spot.py
+    - TypeHint: Line 28: ExmoRequestDataSpot.__init__ - method missing return annotation
+    - TypeHint: Line 28: ExmoRequestDataSpot.__init__ - method missing annotation for param 'data_queue'
+    - TypeHint: Line 28: ExmoRequestDataSpot.__init__ - method missing annotation for param 'kwargs'
+    - TypeHint: Line 68: ExmoRequestDataSpot.get_tick - method missing return annotation
+    - TypeHint: Line 68: ExmoRequestDataSpot.get_tick - method missing annotation for param 'symbol'
+    ... 还有 77 个问题
+
+bt_api_py/feeds/live_luno:
+--------------------------------------------------------------------------------
+  bt_api_py/feeds/live_luno/request_base.py
+    - TypeHint: Line 31: LunoRequestData.__init__ - method missing return annotation
+    - TypeHint: Line 31: LunoRequestData.__init__ - method missing annotation for param 'data_queue'
+    - TypeHint: Line 31: LunoRequestData.__init__ - method missing annotation for param 'kwargs'
+    - TypeHint: Line 60: LunoRequestData.request - method missing return annotation
+    - TypeHint: Line 60: LunoRequestData.request - method missing annotation for param 'path'
+    ... 还有 29 个问题
+  bt_api_py/feeds/live_luno/spot.py
+    - TypeHint: Line 28: LunoRequestDataSpot.__init__ - method missing return annotation
+    - TypeHint: Line 28: LunoRequestDataSpot.__init__ - method missing annotation for param 'data_queue'
+    - TypeHint: Line 28: LunoRequestDataSpot.__init__ - method missing annotation for param 'kwargs'
+    - TypeHint: Line 55: LunoRequestDataSpot.get_tick - method missing return annotation
+    - TypeHint: Line 55: LunoRequestDataSpot.get_tick - method missing annotation for param 'symbol'
+    ... 还有 64 个问题
+
+bt_api_py/feeds/live_uniswap:
+--------------------------------------------------------------------------------
+  bt_api_py/feeds/live_uniswap/request_base.py
+    - TypeHint: Line 44: UniswapRequestData.__init__ - method missing return annotation
+    - TypeHint: Line 44: UniswapRequestData.__init__ - method missing annotation for param 'data_queue'
+    - TypeHint: Line 44: UniswapRequestData.__init__ - method missing annotation for param 'kwargs'
+    - TypeHint: Line 169: UniswapRequestData.request - method missing return annotation
+    - TypeHint: Line 169: UniswapRequestData.request - method missing annotation for param 'path'
+    ... 还有 26 个问题
+  bt_api_py/feeds/live_uniswap/spot.py
+    - TypeHint: Line 43: UniswapRequestDataSpot.__init__ - method missing return annotation
+    - TypeHint: Line 43: UniswapRequestDataSpot.__init__ - method missing annotation for param 'data_queue'
+    - TypeHint: Line 43: UniswapRequestDataSpot.__init__ - method missing annotation for param 'kwargs'
+    - TypeHint: Line 137: UniswapRequestDataSpot.get_tick - method missing return annotation
+    - TypeHint: Line 137: UniswapRequestDataSpot.get_tick - method missing annotation for param 'extra_data'
+    ... 还有 72 个问题
+
+bt_api_py/functions/async_base.py:
+--------------------------------------------------------------------------------
+  bt_api_py/functions/async_base.py
+    - Docstring: Line 31: AsyncBase.__init__ - method has incomplete Google-style docstring
+    - Docstring: Line 53: AsyncBase.start_loop - method has incomplete Google-style docstring
+    - Docstring: Line 94: AsyncBase.release - method has incomplete Google-style docstring
+    - Docstring: Line 102: AsyncBase.submit - method has incomplete Google-style docstring
+    - Docstring: Line 122: AsyncBase.get_session - method has incomplete Google-style docstring
+    ... 还有 1 个问题
+
+bt_api_py/rate_limiter.py:
+--------------------------------------------------------------------------------
+  bt_api_py/rate_limiter.py
+    - Docstring: Line 113: SlidingWindowLimiter.__init__ - method has incomplete Google-style docstring
+    - Docstring: Line 146: SlidingWindowLimiter.wait_time - method has incomplete Google-style docstring
+    - Docstring: Line 159: SlidingWindowLimiter.current_usage - method has incomplete Google-style docstring
+    - Docstring: Line 177: FixedWindowLimiter.__init__ - method has incomplete Google-style docstring
+    - Docstring: Line 212: FixedWindowLimiter.wait_time - method has incomplete Google-style docstring
+    ... 还有 3 个问题
+
+bt_api_py/registry.py:
+--------------------------------------------------------------------------------
+  bt_api_py/registry.py
+    - TypeHint: Line 147: ExchangeRegistry.create_feed - method missing annotation for param 'kwargs'
+    - Docstring: Line 53: ExchangeRegistry.__init__ - method missing docstring
+    - Docstring: Line 73: ExchangeRegistry.register_feed - method has incomplete Google-style docstring
+    - Docstring: Line 83: ExchangeRegistry.register_stream - method has incomplete Google-style docstring
+    - Docstring: Line 94: ExchangeRegistry.register_exchange_data - method has incomplete Google-style docstring
+    ... 还有 4 个问题

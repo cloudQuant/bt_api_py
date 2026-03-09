@@ -7,7 +7,7 @@ and single sign-on for enterprise environments.
 import time
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Dict, List, Optional, Set
+from typing import Any
 from uuid import uuid4
 
 
@@ -38,16 +38,16 @@ class Identity:
     username: str
     email: str
     full_name: str
-    department: Optional[str]
-    title: Optional[str]
-    manager_id: Optional[str]
-    groups: Set[str] = field(default_factory=set)
-    attributes: Dict[str, Any] = field(default_factory=dict)
+    department: str | None
+    title: str | None
+    manager_id: str | None
+    groups: set[str] = field(default_factory=set)
+    attributes: dict[str, Any] = field(default_factory=dict)
     provider: IdentityProvider = IdentityProvider.LOCAL
     status: UserStatus = UserStatus.ACTIVE
     created_at: float = field(default_factory=time.time)
-    last_login: Optional[float] = None
-    password_changed: Optional[float] = None
+    last_login: float | None = None
+    password_changed: float | None = None
 
 
 @dataclass
@@ -57,23 +57,23 @@ class Group:
     group_id: str
     name: str
     description: str
-    members: Set[str] = field(default_factory=set)
-    parent_groups: Set[str] = field(default_factory=set)
-    attributes: Dict[str, Any] = field(default_factory=dict)
+    members: set[str] = field(default_factory=set)
+    parent_groups: set[str] = field(default_factory=set)
+    attributes: dict[str, Any] = field(default_factory=dict)
     created_at: float = field(default_factory=time.time)
 
 
 class IdentityManager:
     """Identity and access management system."""
 
-    def __init__(self, config: Optional[Dict[str, Any]] = None):
+    def __init__(self, config: dict[str, Any] | None = None):
         """Initialize identity manager."""
         self.config = config or {}
 
         # Storage
-        self._identities: Dict[str, Identity] = {}
-        self._groups: Dict[str, Group] = {}
-        self._user_groups: Dict[str, Set[str]] = {}
+        self._identities: dict[str, Identity] = {}
+        self._groups: dict[str, Group] = {}
+        self._user_groups: dict[str, set[str]] = {}
 
         # Provider configurations
         self._providers = {}
@@ -124,7 +124,7 @@ class IdentityManager:
         username: str,
         email: str,
         full_name: str,
-        password: Optional[str] = None,
+        password: str | None = None,
         provider: IdentityProvider = IdentityProvider.LOCAL,
         **attributes,
     ) -> Identity:
@@ -152,7 +152,6 @@ class IdentityManager:
 
     def _hash_password(self, password: str) -> str:
         """Hash password securely."""
-        import hashlib
         import bcrypt
 
         # Use bcrypt for secure password hashing
@@ -176,7 +175,7 @@ class IdentityManager:
 
     def authenticate_user(
         self, username: str, password: str, provider: IdentityProvider = IdentityProvider.LOCAL
-    ) -> Optional[Identity]:
+    ) -> Identity | None:
         """Authenticate user credentials."""
         # Find identity by username and provider
         identity = None
@@ -218,7 +217,7 @@ class IdentityManager:
         return username in ldap_config.get("users", {})
 
     def create_group(
-        self, name: str, description: str, parent_group_ids: Optional[Set[str]] = None
+        self, name: str, description: str, parent_group_ids: set[str] | None = None
     ) -> Group:
         """Create a new user group."""
         group_id = str(uuid4())
@@ -257,11 +256,11 @@ class IdentityManager:
         self._user_groups[identity_id].discard(group_id)
         return True
 
-    def get_user_groups(self, identity_id: str) -> Set[str]:
+    def get_user_groups(self, identity_id: str) -> set[str]:
         """Get all groups for a user."""
         return self._user_groups.get(identity_id, set())
 
-    def get_group_members(self, group_id: str) -> Set[str]:
+    def get_group_members(self, group_id: str) -> set[str]:
         """Get all members of a group."""
         group = self._groups.get(group_id)
         return group.members if group else set()
@@ -320,12 +319,12 @@ class IdentityManager:
 
     def search_identities(
         self,
-        query: Optional[str] = None,
-        group_id: Optional[str] = None,
-        department: Optional[str] = None,
-        status: Optional[UserStatus] = None,
+        query: str | None = None,
+        group_id: str | None = None,
+        department: str | None = None,
+        status: UserStatus | None = None,
         limit: int = 100,
-    ) -> List[Identity]:
+    ) -> list[Identity]:
         """Search identities with filters."""
         results = []
 
@@ -355,22 +354,22 @@ class IdentityManager:
 
         return results
 
-    def get_identity_by_username(self, username: str) -> Optional[Identity]:
+    def get_identity_by_username(self, username: str) -> Identity | None:
         """Get identity by username."""
         for identity in self._identities.values():
             if identity.username == username:
                 return identity
         return None
 
-    def get_identity(self, identity_id: str) -> Optional[Identity]:
+    def get_identity(self, identity_id: str) -> Identity | None:
         """Get identity by ID."""
         return self._identities.get(identity_id)
 
-    def get_group(self, group_id: str) -> Optional[Group]:
+    def get_group(self, group_id: str) -> Group | None:
         """Get group by ID."""
         return self._groups.get(group_id)
 
-    def get_user_permissions(self, identity_id: str) -> Dict[str, Any]:
+    def get_user_permissions(self, identity_id: str) -> dict[str, Any]:
         """Get all permissions for a user through group memberships."""
         user_groups = self.get_user_groups(identity_id)
         permissions = {
@@ -388,7 +387,7 @@ class IdentityManager:
         # In a real implementation, this would resolve permission hierarchies
         return permissions
 
-    def sync_with_external_provider(self, provider: IdentityProvider) -> Dict[str, Any]:
+    def sync_with_external_provider(self, provider: IdentityProvider) -> dict[str, Any]:
         """Synchronize identities with external provider."""
         sync_results = {"provider": provider.value, "created": 0, "updated": 0, "errors": []}
 
@@ -399,13 +398,13 @@ class IdentityManager:
 
         return sync_results
 
-    def _sync_ldap(self) -> Dict[str, Any]:
+    def _sync_ldap(self) -> dict[str, Any]:
         """Synchronize with LDAP provider."""
         # Placeholder for LDAP synchronization
         # In real implementation, would query LDAP and create/update identities
         return {"created": 0, "updated": 0, "errors": []}
 
-    def _sync_saml(self) -> Dict[str, Any]:
+    def _sync_saml(self) -> dict[str, Any]:
         """Synchronize with SAML provider."""
         # Placeholder for SAML synchronization
         return {"created": 0, "updated": 0, "errors": []}
@@ -421,7 +420,7 @@ class IdentityManager:
     </md:IDPSSODescriptor>
 </md:EntityDescriptor>"""
 
-    def get_identity_summary(self) -> Dict[str, Any]:
+    def get_identity_summary(self) -> dict[str, Any]:
         """Get summary of identity management statistics."""
         total_identities = len(self._identities)
         status_counts = {}

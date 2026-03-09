@@ -8,17 +8,17 @@ from bt_api_py.feeds.live_bithumb.spot import BithumbRequestDataSpot
 from bt_api_py.registry import ExchangeRegistry
 
 
-def register_bithumb():
-    """注册 Bithumb SPOT 到全局 ExchangeRegistry"""
-    # 注册 Feed 类
+def register_bithumb() -> None:
+    """Register Bithumb SPOT to global ExchangeRegistry.
+
+    This function registers:
+    - Feed class for market data
+    - Exchange data configuration
+    - Balance handler for account management
+    """
     ExchangeRegistry.register_feed("BITHUMB___SPOT", BithumbRequestDataSpot)
-
-    # 注册配置类
     ExchangeRegistry.register_exchange_data("BITHUMB___SPOT", BithumbExchangeDataSpot)
-
-    # 注册余额处理器
     ExchangeRegistry.register_balance_handler("BITHUMB___SPOT", _bithumb_balance_handler)
 
 
-# 模块导入时自动注册
 register_bithumb()

@@ -4,18 +4,14 @@
 """
 
 import time
-from decimal import Decimal
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Any
 
 import numpy as np
-import pandas as pd
 from sklearn.ensemble import IsolationForest
 from sklearn.preprocessing import StandardScaler
 from sklearn.svm import OneClassSVM
 
-from bt_api_py.logging_factory import get_logger
-
-from .ml_base import BaseMLModel, RiskPredictionResult
+from .ml_base import BaseMLModel
 
 
 class AnomalyType:
@@ -60,13 +56,13 @@ class AnomalyDetectionResult:
         self,
         is_anomaly: bool,
         anomaly_score: float,
-        anomaly_type: Optional[str],
+        anomaly_type: str | None,
         severity: str,
         confidence: float,
         explanation: str,
         timestamp: int,
-        features_used: List[str],
-    ):
+        features_used: list[str],
+    ) -> Any | None:
         self.is_anomaly = is_anomaly
         self.anomaly_score = anomaly_score
         self.anomaly_type = anomaly_type
@@ -76,7 +72,7 @@ class AnomalyDetectionResult:
         self.timestamp = timestamp
         self.features_used = features_used
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """转换为字典格式"""
         return {
             "is_anomaly": self.is_anomaly,
@@ -101,7 +97,7 @@ class AnomalyDetector(BaseMLModel):
     5. 模式识别异常检测
     """
 
-    def __init__(self, config: Optional[Dict[str, Any]] = None):
+    def __init__(self, config: dict[str, Any] | None = None) -> Any | None:
         """初始化异常检测器
 
         Args:
@@ -130,8 +126,8 @@ class AnomalyDetector(BaseMLModel):
         self.trend_threshold = self.config.get("trend_threshold", 2.0)
 
         # 检测历史
-        self.detection_history: List[AnomalyDetectionResult] = []
-        self.feature_stats: Dict[str, Dict[str, float]] = {}
+        self.detection_history: list[AnomalyDetectionResult] = []
+        self.feature_stats: dict[str, dict[str, float]] = {}
 
         # 异常模式库
         self.anomaly_patterns = self._load_anomaly_patterns()
@@ -141,9 +137,9 @@ class AnomalyDetector(BaseMLModel):
     def train(
         self,
         X: np.ndarray,
-        y: Optional[np.ndarray] = None,
-        validation_data: Optional[Tuple[np.ndarray, np.ndarray]] = None,
-    ) -> Dict[str, Any]:
+        y: np.ndarray | None = None,
+        validation_data: tuple[np.ndarray, np.ndarray] | None = None,
+    ) -> dict[str, Any]:
         """训练异常检测模型
 
         Args:
@@ -206,7 +202,7 @@ class AnomalyDetector(BaseMLModel):
             return {"error": str(e)}
 
     def detect_anomaly(
-        self, X: Union[np.ndarray, Dict[str, Any]], method: str = "ensemble"
+        self, X: np.ndarray | dict[str, Any], method: str = "ensemble"
     ) -> AnomalyDetectionResult:
         """检测异常
 
@@ -340,8 +336,8 @@ class AnomalyDetector(BaseMLModel):
         return 1 - probabilities.reshape(-1, 1)
 
     def detect_trading_anomalies(
-        self, trading_data: Dict[str, Any]
-    ) -> List[AnomalyDetectionResult]:
+        self, trading_data: dict[str, Any]
+    ) -> list[AnomalyDetectionResult]:
         """检测交易异常
 
         Args:
@@ -374,7 +370,7 @@ class AnomalyDetector(BaseMLModel):
 
         return anomalies
 
-    def detect_market_anomalies(self, market_data: Dict[str, Any]) -> List[AnomalyDetectionResult]:
+    def detect_market_anomalies(self, market_data: dict[str, Any]) -> list[AnomalyDetectionResult]:
         """检测市场异常
 
         Args:
@@ -404,8 +400,8 @@ class AnomalyDetector(BaseMLModel):
         return anomalies
 
     def detect_operational_anomalies(
-        self, operational_data: Dict[str, Any]
-    ) -> List[AnomalyDetectionResult]:
+        self, operational_data: dict[str, Any]
+    ) -> list[AnomalyDetectionResult]:
         """检测操作异常
 
         Args:
@@ -437,7 +433,7 @@ class AnomalyDetector(BaseMLModel):
     # 私有方法
 
     def _detect_with_isolation_forest(
-        self, X: np.ndarray, feature_names: List[str]
+        self, X: np.ndarray, feature_names: list[str]
     ) -> AnomalyDetectionResult:
         """使用Isolation Forest检测异常"""
         prediction = self.isolation_forest.predict(X)[0]
@@ -461,7 +457,7 @@ class AnomalyDetector(BaseMLModel):
         )
 
     def _detect_with_one_class_svm(
-        self, X: np.ndarray, feature_names: List[str]
+        self, X: np.ndarray, feature_names: list[str]
     ) -> AnomalyDetectionResult:
         """使用One-Class SVM检测异常"""
         prediction = self.one_class_svm.predict(X)[0]
@@ -484,7 +480,7 @@ class AnomalyDetector(BaseMLModel):
         )
 
     def _detect_statistical(
-        self, X: np.ndarray, feature_names: List[str]
+        self, X: np.ndarray, feature_names: list[str]
     ) -> AnomalyDetectionResult:
         """使用统计方法检测异常"""
         anomaly_scores = []
@@ -517,7 +513,7 @@ class AnomalyDetector(BaseMLModel):
             features_used=feature_names,
         )
 
-    def _detect_ensemble(self, X: np.ndarray, feature_names: List[str]) -> AnomalyDetectionResult:
+    def _detect_ensemble(self, X: np.ndarray, feature_names: list[str]) -> AnomalyDetectionResult:
         """使用集成方法检测异常"""
         # 获取各个检测器的结果
         if_result = self._detect_with_isolation_forest(X, feature_names)
@@ -565,7 +561,7 @@ class AnomalyDetector(BaseMLModel):
 
     def _classify_anomaly(
         self, features: np.ndarray, is_anomaly: bool, score: float
-    ) -> Tuple[Optional[str], str]:
+    ) -> tuple[str | None, str]:
         """分类异常类型和严重程度"""
         if not is_anomaly:
             return None, AnomalySeverity.LOW
@@ -586,7 +582,7 @@ class AnomalyDetector(BaseMLModel):
         return anomaly_type, severity
 
     def _generate_explanation(
-        self, features: np.ndarray, feature_names: List[str], is_anomaly: bool, score: float
+        self, features: np.ndarray, feature_names: list[str], is_anomaly: bool, score: float
     ) -> str:
         """生成异常解释"""
         if not is_anomaly:
@@ -608,7 +604,7 @@ class AnomalyDetector(BaseMLModel):
 
         return f"Anomaly detected with score: {score:.3f}"
 
-    def _extract_trading_features(self, trading_data: Dict[str, Any]) -> np.ndarray:
+    def _extract_trading_features(self, trading_data: dict[str, Any]) -> np.ndarray:
         """提取交易特征"""
         features = [
             trading_data.get("volume", 0),
@@ -620,7 +616,7 @@ class AnomalyDetector(BaseMLModel):
         ]
         return np.array(features)
 
-    def _extract_market_features(self, market_data: Dict[str, Any]) -> np.ndarray:
+    def _extract_market_features(self, market_data: dict[str, Any]) -> np.ndarray:
         """提取市场特征"""
         features = [
             market_data.get("volatility", 0),
@@ -632,7 +628,7 @@ class AnomalyDetector(BaseMLModel):
         ]
         return np.array(features)
 
-    def _extract_operational_features(self, operational_data: Dict[str, Any]) -> np.ndarray:
+    def _extract_operational_features(self, operational_data: dict[str, Any]) -> np.ndarray:
         """提取操作特征"""
         features = [
             operational_data.get("response_time", 0),
@@ -645,8 +641,8 @@ class AnomalyDetector(BaseMLModel):
         return np.array(features)
 
     def _detect_volume_anomaly(
-        self, trading_data: Dict[str, Any], features: np.ndarray
-    ) -> Optional[AnomalyDetectionResult]:
+        self, trading_data: dict[str, Any], features: np.ndarray
+    ) -> AnomalyDetectionResult | None:
         """检测成交量异常"""
         volume = trading_data.get("volume", 0)
         avg_volume = trading_data.get("avg_volume_30d", 1)
@@ -667,8 +663,8 @@ class AnomalyDetector(BaseMLModel):
         return None
 
     def _detect_price_anomaly(
-        self, trading_data: Dict[str, Any], features: np.ndarray
-    ) -> Optional[AnomalyDetectionResult]:
+        self, trading_data: dict[str, Any], features: np.ndarray
+    ) -> AnomalyDetectionResult | None:
         """检测价格异常"""
         price_change = abs(trading_data.get("price_change", 0))
 
@@ -686,8 +682,8 @@ class AnomalyDetector(BaseMLModel):
         return None
 
     def _detect_pattern_anomaly(
-        self, trading_data: Dict[str, Any], features: np.ndarray
-    ) -> Optional[AnomalyDetectionResult]:
+        self, trading_data: dict[str, Any], features: np.ndarray
+    ) -> AnomalyDetectionResult | None:
         """检测模式异常"""
         cancel_rate = trading_data.get("cancel_rate", 0)
 
@@ -705,8 +701,8 @@ class AnomalyDetector(BaseMLModel):
         return None
 
     def _detect_timing_anomaly(
-        self, trading_data: Dict[str, Any], features: np.ndarray
-    ) -> Optional[AnomalyDetectionResult]:
+        self, trading_data: dict[str, Any], features: np.ndarray
+    ) -> AnomalyDetectionResult | None:
         """检测时间异常"""
         time_between_orders = trading_data.get("time_between_orders", 0)
 
@@ -724,8 +720,8 @@ class AnomalyDetector(BaseMLModel):
         return None
 
     def _detect_volatility_anomaly(
-        self, market_data: Dict[str, Any], features: np.ndarray
-    ) -> Optional[AnomalyDetectionResult]:
+        self, market_data: dict[str, Any], features: np.ndarray
+    ) -> AnomalyDetectionResult | None:
         """检测波动率异常"""
         volatility = market_data.get("volatility", 0)
         avg_volatility = market_data.get("avg_volatility_30d", 0.02)
@@ -748,8 +744,8 @@ class AnomalyDetector(BaseMLModel):
         return None
 
     def _detect_liquidity_anomaly(
-        self, market_data: Dict[str, Any], features: np.ndarray
-    ) -> Optional[AnomalyDetectionResult]:
+        self, market_data: dict[str, Any], features: np.ndarray
+    ) -> AnomalyDetectionResult | None:
         """检测流动性异常"""
         bid_ask_spread = market_data.get("bid_ask_spread", 0)
         market_depth = market_data.get("market_depth", 1000000)
@@ -772,8 +768,8 @@ class AnomalyDetector(BaseMLModel):
         return None
 
     def _detect_correlation_anomaly(
-        self, market_data: Dict[str, Any], features: np.ndarray
-    ) -> Optional[AnomalyDetectionResult]:
+        self, market_data: dict[str, Any], features: np.ndarray
+    ) -> AnomalyDetectionResult | None:
         """检测相关性异常"""
         correlation_breakdown = market_data.get("correlation_breakdown", 0)
 
@@ -791,8 +787,8 @@ class AnomalyDetector(BaseMLModel):
         return None
 
     def _detect_performance_anomaly(
-        self, operational_data: Dict[str, Any], features: np.ndarray
-    ) -> Optional[AnomalyDetectionResult]:
+        self, operational_data: dict[str, Any], features: np.ndarray
+    ) -> AnomalyDetectionResult | None:
         """检测性能异常"""
         response_time = operational_data.get("response_time", 0)
 
@@ -810,8 +806,8 @@ class AnomalyDetector(BaseMLModel):
         return None
 
     def _detect_error_anomaly(
-        self, operational_data: Dict[str, Any], features: np.ndarray
-    ) -> Optional[AnomalyDetectionResult]:
+        self, operational_data: dict[str, Any], features: np.ndarray
+    ) -> AnomalyDetectionResult | None:
         """检测错误异常"""
         error_rate = operational_data.get("error_rate", 0)
 
@@ -829,8 +825,8 @@ class AnomalyDetector(BaseMLModel):
         return None
 
     def _detect_access_anomaly(
-        self, operational_data: Dict[str, Any], features: np.ndarray
-    ) -> Optional[AnomalyDetectionResult]:
+        self, operational_data: dict[str, Any], features: np.ndarray
+    ) -> AnomalyDetectionResult | None:
         """检测访问异常"""
         unauthorized_attempts = operational_data.get("unauthorized_attempts", 0)
 
@@ -863,7 +859,7 @@ class AnomalyDetector(BaseMLModel):
                 "q75": float(np.percentile(feature_values, 75)),
             }
 
-    def _dict_to_features(self, data: Dict[str, Any]) -> np.ndarray:
+    def _dict_to_features(self, data: dict[str, Any]) -> np.ndarray:
         """将字典转换为特征向量"""
         if not self.feature_names:
             self.feature_names = list(data.keys())
@@ -874,7 +870,7 @@ class AnomalyDetector(BaseMLModel):
 
         return np.array(features).reshape(1, -1)
 
-    def _load_anomaly_patterns(self) -> Dict[str, Any]:
+    def _load_anomaly_patterns(self) -> dict[str, Any]:
         """加载异常模式库"""
         # 简化的异常模式库
         return {
@@ -888,7 +884,7 @@ class AnomalyDetector(BaseMLModel):
             "system_overload": {"threshold": 1000, "description": "High system response time"},
         }
 
-    def get_anomaly_statistics(self) -> Dict[str, Any]:
+    def get_anomaly_statistics(self) -> dict[str, Any]:
         """获取异常统计信息"""
         if not self.detection_history:
             return {}

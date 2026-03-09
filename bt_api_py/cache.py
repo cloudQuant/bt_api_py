@@ -33,7 +33,7 @@ class SimpleCache:
     - Thread-safe operations (basic)
     """
 
-    def __init__(self, default_ttl: float = 300.0):
+    def __init__(self, default_ttl: float = 300.0) -> None:
         """
         Initialize cache.
 
@@ -88,21 +88,33 @@ class SimpleCache:
             self._cache[key] = (value, expiry)
 
     def delete(self, key: str) -> None:
-        """Delete key from cache."""
+        """
+        Delete key from cache.
+
+        Args:
+            key: Cache key to delete
+        """
         with self._lock:
             self._cache.pop(key, None)
 
     def clear(self) -> None:
-        """Clear all cached data."""
+        """
+        Clear all cached data.
+
+        Removes all entries from the cache regardless of expiration.
+        """
         with self._lock:
             self._cache.clear()
 
     def cleanup(self) -> int:
         """
-        Remove expired entries.
+        Remove expired entries from cache.
+
+        Iterates through all cached entries and removes those that have
+        exceeded their time-to-live (TTL).
 
         Returns:
-            Number of entries removed
+            Number of entries removed from cache.
         """
         with self._lock:
             now = time.time()
@@ -112,17 +124,36 @@ class SimpleCache:
             return len(expired_keys)
 
     def size(self) -> int:
-        """Get number of cached entries."""
+        """
+        Get number of cached entries.
+
+        Returns:
+            Number of entries currently in cache (including expired ones).
+        """
         with self._lock:
             return len(self._cache)
 
     def keys(self) -> list[str]:
-        """Return a snapshot of cache keys."""
+        """
+        Return a snapshot of cache keys.
+
+        Returns:
+            List of all cache keys (including expired entries).
+        """
         with self._lock:
             return list(self._cache.keys())
 
     def get_stats(self) -> dict[str, float]:
-        """Return cache hit/miss statistics."""
+        """
+        Return cache hit/miss statistics.
+
+        Returns:
+            Dictionary with cache statistics including:
+            - size: Number of cached entries
+            - hits: Number of cache hits
+            - misses: Number of cache misses
+            - hit_rate: Cache hit rate (0.0 to 1.0)
+        """
         with self._lock:
             total = self._hits + self._misses
             hit_rate = self._hits / total if total else 0.0
@@ -145,7 +176,7 @@ class ExchangeInfoCache:
     - Market status
     """
 
-    def __init__(self, ttl: float = 3600.0):
+    def __init__(self, ttl: float = 3600.0) -> None:
         """
         Initialize exchange info cache.
 
@@ -155,23 +186,58 @@ class ExchangeInfoCache:
         self._cache = SimpleCache(default_ttl=ttl)
 
     def get_trading_pairs(self, exchange: str) -> list[str] | None:
-        """Get cached trading pairs for exchange."""
+        """
+        Get cached trading pairs for exchange.
+
+        Args:
+            exchange: Exchange identifier (e.g., "BINANCE", "OKX")
+
+        Returns:
+            List of trading pair symbols or None if not cached.
+        """
         return self._cache.get(f"{exchange}:trading_pairs")
 
     def set_trading_pairs(self, exchange: str, pairs: list[str]) -> None:
-        """Cache trading pairs for exchange."""
+        """
+        Cache trading pairs for exchange.
+
+        Args:
+            exchange: Exchange identifier (e.g., "BINANCE", "OKX")
+            pairs: List of trading pair symbols to cache
+        """
         self._cache.set(f"{exchange}:trading_pairs", pairs)
 
     def get_exchange_info(self, exchange: str, symbol: str) -> dict[str, Any] | None:
-        """Get cached exchange info for symbol."""
+        """
+        Get cached exchange info for symbol.
+
+        Args:
+            exchange: Exchange identifier (e.g., "BINANCE", "OKX")
+            symbol: Trading pair symbol (e.g., "BTCUSDT")
+
+        Returns:
+            Dictionary with exchange info or None if not cached.
+        """
         return self._cache.get(f"{exchange}:{symbol}:info")
 
     def set_exchange_info(self, exchange: str, symbol: str, info: dict[str, Any]) -> None:
-        """Cache exchange info for symbol."""
+        """
+        Cache exchange info for symbol.
+
+        Args:
+            exchange: Exchange identifier (e.g., "BINANCE", "OKX")
+            symbol: Trading pair symbol (e.g., "BTCUSDT")
+            info: Dictionary with exchange information to cache
+        """
         self._cache.set(f"{exchange}:{symbol}:info", info)
 
     def clear_exchange(self, exchange: str) -> None:
-        """Clear all cached data for an exchange."""
+        """
+        Clear all cached data for an exchange.
+
+        Args:
+            exchange: Exchange identifier to clear all cached data for
+        """
         keys_to_delete = [key for key in self._cache if key.startswith(f"{exchange}:")]
         for key in keys_to_delete:
             self._cache.delete(key)
@@ -187,7 +253,7 @@ class MarketDataCache:
     - Recent trades
     """
 
-    def __init__(self, ttl: float = 5.0):
+    def __init__(self, ttl: float = 5.0) -> None:
         """
         Initialize market data cache.
 
@@ -197,29 +263,67 @@ class MarketDataCache:
         self._cache = SimpleCache(default_ttl=ttl)
 
     def get_ticker(self, exchange: str, symbol: str) -> Any | None:
-        """Get cached ticker."""
+        """
+        Get cached ticker data.
+
+        Args:
+            exchange: Exchange identifier (e.g., "BINANCE", "OKX")
+            symbol: Trading pair symbol (e.g., "BTCUSDT")
+
+        Returns:
+            Ticker data or None if not cached.
+        """
         return self._cache.get(f"{exchange}:{symbol}:ticker")
 
     def set_ticker(self, exchange: str, symbol: str, ticker: Any) -> None:
-        """Cache ticker data."""
+        """
+        Cache ticker data.
+
+        Args:
+            exchange: Exchange identifier (e.g., "BINANCE", "OKX")
+            symbol: Trading pair symbol (e.g., "BTCUSDT")
+            ticker: Ticker data to cache
+        """
         self._cache.set(f"{exchange}:{symbol}:ticker", ticker)
 
     def get_orderbook(self, exchange: str, symbol: str) -> Any | None:
-        """Get cached order book."""
+        """
+        Get cached order book data.
+
+        Args:
+            exchange: Exchange identifier (e.g., "BINANCE", "OKX")
+            symbol: Trading pair symbol (e.g., "BTCUSDT")
+
+        Returns:
+            Order book data or None if not cached.
+        """
         return self._cache.get(f"{exchange}:{symbol}:orderbook")
 
     def set_orderbook(self, exchange: str, symbol: str, orderbook: Any) -> None:
-        """Cache order book data."""
+        """
+        Cache order book data.
+
+        Args:
+            exchange: Exchange identifier (e.g., "BINANCE", "OKX")
+            symbol: Trading pair symbol (e.g., "BTCUSDT")
+            orderbook: Order book data to cache
+        """
         self._cache.set(f"{exchange}:{symbol}:orderbook", orderbook)
 
 
-def cached(ttl: float = 300.0, cache_instance: SimpleCache | None = None):
+def cached(ttl: float = 300.0, cache_instance: SimpleCache | None = None) -> Callable[[F], F]:
     """
     Decorator for caching function results.
 
+    Automatically caches function results based on function name and arguments.
+    Useful for expensive API calls or computations.
+
     Args:
-        ttl: Time-to-live in seconds
+        ttl: Time-to-live in seconds for cached results
         cache_instance: Cache instance to use (creates new if None)
+
+    Returns:
+        Decorator function that wraps the original function with caching
 
     Example:
         @cached(ttl=60.0)
@@ -232,7 +336,17 @@ def cached(ttl: float = 300.0, cache_instance: SimpleCache | None = None):
 
     def decorator(func: F) -> F:
         @wraps(func)
-        def wrapper(*args, **kwargs):
+        def wrapper(*args: Any, **kwargs: Any) -> Any:
+            """
+            Wrapper function that implements caching logic.
+
+            Args:
+                *args: Positional arguments passed to the decorated function
+                **kwargs: Keyword arguments passed to the decorated function
+
+            Returns:
+                Cached result or fresh result from function execution
+            """
             # Create cache key from function name and arguments
             key_parts = [func.__name__]
             key_parts.extend(str(arg) for arg in args)
@@ -265,10 +379,20 @@ _market_data_cache = MarketDataCache()
 
 
 def get_exchange_info_cache() -> ExchangeInfoCache:
-    """Get global exchange info cache instance."""
+    """
+    Get global exchange info cache instance.
+
+    Returns:
+        Global ExchangeInfoCache instance for caching exchange information
+    """
     return _exchange_info_cache
 
 
 def get_market_data_cache() -> MarketDataCache:
-    """Get global market data cache instance."""
+    """
+    Get global market data cache instance.
+
+    Returns:
+        Global MarketDataCache instance for caching market data
+    """
     return _market_data_cache

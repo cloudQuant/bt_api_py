@@ -1,53 +1,77 @@
-"""
-Bitget Order Data Container
-"""
+"""Bitget Order Data Container."""
 
 import json
 import time
+from typing import Any
 
 from bt_api_py.containers.orders.order import OrderData
 from bt_api_py.functions.utils import from_dict_get_float, from_dict_get_string
 
 
 class BitgetOrderData(OrderData):
-    """保存Bitget订单信息"""
+    """Bitget order data container.
 
-    def __init__(self, order_info, symbol_name, asset_type, has_been_json_encoded=False):
+    This class holds order information from Bitget exchange.
+    """
+
+    def __init__(
+        self,
+        order_info: dict[str, Any] | str,
+        symbol_name: str,
+        asset_type: str,
+        has_been_json_encoded: bool = False,
+    ) -> None:
+        """Initialize Bitget order data.
+
+        Args:
+            order_info: Order information from exchange (dict or JSON string)
+            symbol_name: Symbol name for the order
+            asset_type: Asset type (SPOT, FUTURE, etc.)
+            has_been_json_encoded: Whether order_info is already JSON encoded
+        """
         super().__init__(order_info, has_been_json_encoded)
         self.exchange_name = "BITGET"
         self.local_update_time = time.time()
         self.symbol_name = symbol_name
         self.asset_type = asset_type
-        self.order_data = order_info if has_been_json_encoded else None
-        self.order_id = None
-        self.client_order_id = None
-        self.symbol = None
-        self.side = None
-        self.order_type = None
-        self.status = None
-        self.size = None
-        self.filled_size = None
-        self.remaining_size = None
-        self.price = None
-        self.avg_price = None
-        self.create_time = None
-        self.update_time = None
-        self.done_at = None
-        self.fee = None
-        self.fee_currency = None
-        self.stop_price = None
-        self.trigger_price = None
-        self.time_in_force = None
-        self.post_only = None
-        self.hidden = None
-        self.reduce_only = None
-        self.iceberg = None
-        self.iceberg_size = None
+        self.order_data: dict[str, Any] | None = order_info if has_been_json_encoded else None
+        self.order_id: str | None = None
+        self.client_order_id: str | None = None
+        self.symbol: str | None = None
+        self.side: str | None = None
+        self.order_type: str | None = None
+        self.status: str | None = None
+        self.size: float | None = None
+        self.filled_size: float | None = None
+        self.remaining_size: float | None = None
+        self.price: float | None = None
+        self.avg_price: float | None = None
+        self.create_time: float | None = None
+        self.update_time: float | None = None
+        self.done_at: float | None = None
+        self.fee: float | None = None
+        self.fee_currency: str | None = None
+        self.stop_price: float | None = None
+        self.trigger_price: float | None = None
+        self.time_in_force: str | None = None
+        self.post_only: str | None = None
+        self.hidden: str | None = None
+        self.reduce_only: str | None = None
+        self.iceberg: str | None = None
+        self.iceberg_size: float | None = None
         self.has_been_init_data = False
 
-    def init_data(self):
+    def init_data(self) -> "BitgetOrderData":
+        """Initialize order data by parsing order_info.
+
+        Returns:
+            Self for method chaining
+        """
         if not self.has_been_json_encoded:
-            self.order_data = json.loads(self.order_info)
+            if isinstance(self.order_info, str):
+                self.order_data = json.loads(self.order_info)
+            else:
+                self.order_data = self.order_info
             self.has_been_json_encoded = True
         if self.has_been_init_data:
             return self
@@ -87,7 +111,12 @@ class BitgetOrderData(OrderData):
         self.has_been_init_data = True
         return self
 
-    def get_all_data(self):
+    def get_all_data(self) -> dict[str, Any]:
+        """Get all order data as a dictionary.
+
+        Returns:
+            Dictionary containing all order data fields
+        """
         if self.all_data is None:
             self.init_data()
             self.all_data = {
@@ -122,104 +151,252 @@ class BitgetOrderData(OrderData):
             }
         return self.all_data
 
-    def __str__(self):
+    def __str__(self) -> str:
         self.init_data()
         return json.dumps(self.get_all_data())
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return self.__str__()
 
-    def get_exchange_name(self):
+    def get_exchange_name(self) -> str:
+        """Get exchange name.
+
+        Returns:
+            Exchange name (BITGET)
+        """
         return self.exchange_name
 
-    def get_local_update_time(self):
+    def get_local_update_time(self) -> float:
+        """Get local update timestamp.
+
+        Returns:
+            Local update timestamp
+        """
         return self.local_update_time
 
-    def get_symbol_name(self):
+    def get_symbol_name(self) -> str:
+        """Get symbol name.
+
+        Returns:
+            Symbol name
+        """
         return self.symbol_name
 
-    def get_asset_type(self):
+    def get_asset_type(self) -> str:
+        """Get asset type.
+
+        Returns:
+            Asset type (SPOT, FUTURE, etc.)
+        """
         return self.asset_type
 
-    def get_order_id(self):
+    def get_order_id(self) -> str | None:
+        """Get order ID.
+
+        Returns:
+            Order ID
+        """
         return self.order_id
 
-    def get_client_order_id(self):
+    def get_client_order_id(self) -> str | None:
+        """Get client order ID.
+
+        Returns:
+            Client order ID
+        """
         return self.client_order_id
 
-    def get_symbol(self):
+    def get_symbol(self) -> str | None:
+        """Get symbol.
+
+        Returns:
+            Symbol
+        """
         return self.symbol
 
-    def get_side(self):
+    def get_side(self) -> str | None:
+        """Get order side.
+
+        Returns:
+            Order side (buy/sell)
+        """
         return self.side
 
-    def get_order_type(self):
+    def get_order_type(self) -> str | None:
+        """Get order type.
+
+        Returns:
+            Order type
+        """
         return self.order_type
 
-    def get_status(self):
+    def get_status(self) -> str | None:
+        """Get order status.
+
+        Returns:
+            Order status
+        """
         return self.status
 
-    def get_size(self):
+    def get_size(self) -> float | None:
+        """Get order size.
+
+        Returns:
+            Order size
+        """
         return self.size
 
-    def get_filled_size(self):
+    def get_filled_size(self) -> float | None:
+        """Get filled size.
+
+        Returns:
+            Filled size
+        """
         return self.filled_size
 
-    def get_remaining_size(self):
+    def get_remaining_size(self) -> float | None:
+        """Get remaining size.
+
+        Returns:
+            Remaining size
+        """
         return self.remaining_size
 
-    def get_price(self):
+    def get_price(self) -> float | None:
+        """Get order price.
+
+        Returns:
+            Order price
+        """
         return self.price
 
-    def get_avg_price(self):
+    def get_avg_price(self) -> float | None:
+        """Get average price.
+
+        Returns:
+            Average price
+        """
         return self.avg_price
 
-    def get_create_time(self):
+    def get_create_time(self) -> float | None:
+        """Get creation time.
+
+        Returns:
+            Creation timestamp
+        """
         return self.create_time
 
-    def get_update_time(self):
+    def get_update_time(self) -> float | None:
+        """Get update time.
+
+        Returns:
+            Update timestamp
+        """
         return self.update_time
 
-    def get_done_at(self):
+    def get_done_at(self) -> float | None:
+        """Get done time.
+
+        Returns:
+            Done timestamp
+        """
         return self.done_at
 
-    def get_fee(self):
+    def get_fee(self) -> float | None:
+        """Get fee.
+
+        Returns:
+            Fee amount
+        """
         return self.fee
 
-    def get_fee_currency(self):
+    def get_fee_currency(self) -> str | None:
+        """Get fee currency.
+
+        Returns:
+            Fee currency
+        """
         return self.fee_currency
 
-    def get_stop_price(self):
+    def get_stop_price(self) -> float | None:
+        """Get stop price.
+
+        Returns:
+            Stop price
+        """
         return self.stop_price
 
-    def get_trigger_price(self):
+    def get_trigger_price(self) -> float | None:
+        """Get trigger price.
+
+        Returns:
+            Trigger price
+        """
         return self.trigger_price
 
-    def get_time_in_force(self):
+    def get_time_in_force(self) -> str | None:
+        """Get time in force.
+
+        Returns:
+            Time in force
+        """
         return self.time_in_force
 
-    def get_post_only(self):
+    def get_post_only(self) -> str | None:
+        """Get post only flag.
+
+        Returns:
+            Post only flag
+        """
         return self.post_only
 
-    def get_hidden(self):
+    def get_hidden(self) -> str | None:
+        """Get hidden flag.
+
+        Returns:
+            Hidden flag
+        """
         return self.hidden
 
-    def get_reduce_only(self):
+    def get_reduce_only(self) -> str | None:
+        """Get reduce only flag.
+
+        Returns:
+            Reduce only flag
+        """
         return self.reduce_only
 
-    def get_iceberg(self):
+    def get_iceberg(self) -> str | None:
+        """Get iceberg flag.
+
+        Returns:
+            Iceberg flag
+        """
         return self.iceberg
 
-    def get_iceberg_size(self):
+    def get_iceberg_size(self) -> float | None:
+        """Get iceberg size.
+
+        Returns:
+            Iceberg size
+        """
         return self.iceberg_size
 
 
 class BitgetWssOrderData(BitgetOrderData):
-    """Bitget WebSocket Order Data"""
+    """Bitget WebSocket order data container."""
 
-    def init_data(self):
+    def init_data(self) -> "BitgetWssOrderData":
+        """Initialize order data from WebSocket message.
+
+        Returns:
+            Self for method chaining
+        """
         if not self.has_been_json_encoded:
-            self.order_data = json.loads(self.order_info)
+            if isinstance(self.order_info, str):
+                self.order_data = json.loads(self.order_info)
+            else:
+                self.order_data = self.order_info
             self.has_been_json_encoded = True
         if self.has_been_init_data:
             return self
@@ -253,11 +430,19 @@ class BitgetWssOrderData(BitgetOrderData):
 
 
 class BitgetRequestOrderData(BitgetOrderData):
-    """Bitget REST API Order Data"""
+    """Bitget REST API order data container."""
 
-    def init_data(self):
+    def init_data(self) -> "BitgetRequestOrderData":
+        """Initialize order data from REST API response.
+
+        Returns:
+            Self for method chaining
+        """
         if not self.has_been_json_encoded:
-            self.order_data = json.loads(self.order_info)
+            if isinstance(self.order_info, str):
+                self.order_data = json.loads(self.order_info)
+            else:
+                self.order_data = self.order_info
             self.has_been_json_encoded = True
         if self.has_been_init_data:
             return self

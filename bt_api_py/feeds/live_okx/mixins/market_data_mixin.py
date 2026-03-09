@@ -18,7 +18,7 @@ class MarketDataMixin:
 
     # ==================== Market Data APIs ====================
 
-    def _get_tick(self, symbol, extra_data=None, **kwargs):
+    def _get_tick(self, symbol: Any, extra_data: Any = None, **kwargs: Any) -> None:
         request_type = "get_tick"
         path = self._params.get_rest_path(request_type)
         params = {
@@ -39,7 +39,7 @@ class MarketDataMixin:
         return path, params, extra_data
 
     @staticmethod
-    def _get_tick_normalize_function(input_data, extra_data):
+    def _get_tick_normalize_function(input_data: Any, extra_data: Any) -> None:
         status = input_data["code"] == "0"
         if "data" not in input_data or not input_data["data"]:
             return [], status
@@ -53,19 +53,21 @@ class MarketDataMixin:
             target_data = []
         return target_data, status
 
-    def get_tick(self, symbol, extra_data=None, **kwargs):
+    def get_tick(self, symbol: Any, extra_data: Any = None, **kwargs: Any) -> None:
         path, params, extra_data = self._get_tick(symbol, extra_data, **kwargs)
         data = self.request(path, params=params, extra_data=extra_data)
         return data
 
-    def async_get_tick(self, symbol, extra_data=None, **kwargs):
+    def async_get_tick(self, symbol: Any, extra_data: Any = None, **kwargs: Any) -> None:
         path, params, extra_data = self._get_tick(symbol, extra_data, **kwargs)
         self.submit(
             self.async_request(path, params=params, extra_data=extra_data),
             callback=self.async_callback,
         )
 
-    def _get_depth(self, symbol, size=20, extra_data=None, **kwargs):
+    def _get_depth(
+        self, symbol: Any, size: Any = 20, extra_data: Any = None, **kwargs: Any
+    ) -> None:
         request_type = "get_depth"
         request_symbol = self._params.get_symbol(symbol)
         params = {"instId": request_symbol, "sz": size}
@@ -85,7 +87,7 @@ class MarketDataMixin:
         return path, params, extra_data
 
     @staticmethod
-    def _get_depth_normalize_function(input_data, extra_data):
+    def _get_depth_normalize_function(input_data: Any, extra_data: Any) -> None:
         status = input_data["code"] == "0"
         if "data" not in input_data or not input_data["data"]:
             return [], status
@@ -99,12 +101,14 @@ class MarketDataMixin:
             target_data = []
         return target_data, status
 
-    def get_depth(self, symbol, size=20, extra_data=None, **kwargs):
+    def get_depth(self, symbol: Any, size: Any = 20, extra_data: Any = None, **kwargs: Any) -> None:
         path, params, extra_data = self._get_depth(symbol, size, extra_data, **kwargs)
         data = self.request(path, params=params, extra_data=extra_data)
         return data
 
-    def async_get_depth(self, symbol, size=20, extra_data=None, **kwargs):
+    def async_get_depth(
+        self, symbol: Any, size: Any = 20, extra_data: Any = None, **kwargs: Any
+    ) -> None:
         path, params, extra_data = self._get_depth(symbol, size, extra_data, **kwargs)
         self.submit(
             self.async_request(path, params=params, extra_data=extra_data),
@@ -112,8 +116,15 @@ class MarketDataMixin:
         )
 
     def _get_kline(
-        self, symbol, period, count=100, start_time=0, end_time=0, extra_data=None, **kwargs
-    ):
+        self,
+        symbol: Any,
+        period: Any,
+        count: Any = 100,
+        start_time: Any = 0,
+        end_time: Any = 0,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         request_type = "get_kline"
         request_symbol = self._params.get_symbol(symbol)
         params = {
@@ -142,7 +153,7 @@ class MarketDataMixin:
         return path, params, extra_data
 
     @staticmethod
-    def _get_kline_normalize_function(input_data, extra_data):
+    def _get_kline_normalize_function(input_data: Any, extra_data: Any) -> None:
         status = input_data["code"] == "0"
         if "data" not in input_data:
             return [], status
@@ -158,8 +169,15 @@ class MarketDataMixin:
         return target_data, status
 
     def get_kline(
-        self, symbol, period, count=100, start_time=None, end_time=None, extra_data=None, **kwargs
-    ):
+        self,
+        symbol: Any,
+        period: Any,
+        count: Any = 100,
+        start_time: Any = None,
+        end_time: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         path, params, extra_data = self._get_kline(
             symbol, period, count, start_time, end_time, extra_data, **kwargs
         )
@@ -168,8 +186,15 @@ class MarketDataMixin:
 
     # noinspection PyMethodMayBeStatic
     def async_get_kline(
-        self, symbol, period, count=100, before=0, after=0, extra_data=None, **kwargs
-    ):
+        self,
+        symbol: Any,
+        period: Any,
+        count: Any = 100,
+        before: Any = 0,
+        after: Any = 0,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         path, params, extra_data = self._get_kline(
             symbol, period, count, before, after, extra_data, **kwargs
         )
@@ -180,7 +205,7 @@ class MarketDataMixin:
 
     # ==================== Public Data APIs ====================
 
-    def _get_funding_rate(self, symbol, extra_data=None, **kwargs):
+    def _get_funding_rate(self, symbol: Any, extra_data: Any = None, **kwargs: Any) -> None:
         request_type = "get_funding_rate"
         request_symbol = self._params.get_symbol(symbol)
         params = {
@@ -202,7 +227,7 @@ class MarketDataMixin:
         return path, params, extra_data
 
     @staticmethod
-    def _get_funding_rate_normalize_function(input_data, extra_data):
+    def _get_funding_rate_normalize_function(input_data: Any, extra_data: Any) -> None:
         status = input_data["code"] == "0"
         if "data" not in input_data or not input_data["data"]:
             return [], status
@@ -216,12 +241,12 @@ class MarketDataMixin:
             target_data = []
         return target_data, status
 
-    def get_funding_rate(self, symbol, extra_data=None, **kwargs):
+    def get_funding_rate(self, symbol: Any, extra_data: Any = None, **kwargs: Any) -> None:
         path, params, extra_data = self._get_funding_rate(symbol, extra_data, **kwargs)
         data = self.request(path, params=params, extra_data=extra_data)
         return data
 
-    def async_get_funding_rate(self, symbol, extra_data=None, **kwargs):
+    def async_get_funding_rate(self, symbol: Any, extra_data: Any = None, **kwargs: Any) -> None:
         path, params, extra_data = self._get_funding_rate(symbol, extra_data, **kwargs)
         self.submit(
             self.async_request(path, params=params, extra_data=extra_data),
@@ -229,8 +254,14 @@ class MarketDataMixin:
         )
 
     def _get_funding_rate_history(
-        self, symbol, before="", after="", limit="100", extra_data=None, **kwargs
-    ):
+        self,
+        symbol: Any,
+        before: Any = "",
+        after: Any = "",
+        limit: Any = "100",
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """Get funding rate history"""
         request_type = "get_funding_rate_history"
         request_symbol = self._params.get_symbol(symbol)
@@ -259,7 +290,7 @@ class MarketDataMixin:
         return path, params, extra_data
 
     @staticmethod
-    def _get_funding_rate_history_normalize_function(input_data, extra_data):
+    def _get_funding_rate_history_normalize_function(input_data: Any, extra_data: Any) -> None:
         status = input_data["code"] == "0"
         if "data" not in input_data or not input_data["data"]:
             return [], status
@@ -275,8 +306,14 @@ class MarketDataMixin:
         return target_data, status
 
     def get_funding_rate_history(
-        self, symbol, before="", after="", limit="100", extra_data=None, **kwargs
-    ):
+        self,
+        symbol: Any,
+        before: Any = "",
+        after: Any = "",
+        limit: Any = "100",
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         path, params, extra_data = self._get_funding_rate_history(
             symbol, before, after, limit, extra_data, **kwargs
         )
@@ -285,13 +322,13 @@ class MarketDataMixin:
 
     def _get_instruments(
         self,
-        asset_type=None,
-        underlying=None,
-        inst_family=None,
-        inst_id=None,
-        extra_data=None,
-        **kwargs,
-    ):
+        asset_type: Any = None,
+        underlying: Any = None,
+        inst_family: Any = None,
+        inst_id: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         request_type = "get_instruments"
         params = {}
         if asset_type:
@@ -318,7 +355,7 @@ class MarketDataMixin:
         return path, params, extra_data
 
     @staticmethod
-    def _get_instruments_normalize_function(input_data, extra_data):
+    def _get_instruments_normalize_function(input_data: Any, extra_data: Any) -> None:
         status = input_data["code"] == "0"
         if "data" not in input_data:
             return [], status
@@ -333,20 +370,20 @@ class MarketDataMixin:
 
     def get_instruments(
         self,
-        asset_type=None,
-        underlying=None,
-        inst_family=None,
-        inst_id=None,
-        extra_data=None,
-        **kwargs,
-    ):
+        asset_type: Any = None,
+        underlying: Any = None,
+        inst_family: Any = None,
+        inst_id: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         path, params, extra_data = self._get_instruments(
             asset_type, underlying, inst_family, inst_id, extra_data, **kwargs
         )
         data = self.request(path, params=params, extra_data=extra_data)
         return data
 
-    def _get_mark_price(self, symbol, extra_data=None, **kwargs):
+    def _get_mark_price(self, symbol: Any, extra_data: Any = None, **kwargs: Any) -> None:
         request_type = "get_mark_price"
         request_symbol = self._params.get_symbol(symbol)
         params = {
@@ -368,7 +405,7 @@ class MarketDataMixin:
         return path, params, extra_data
 
     @staticmethod
-    def _get_mark_price_normalize_function(input_data, extra_data):
+    def _get_mark_price_normalize_function(input_data: Any, extra_data: Any) -> None:
         status = input_data["code"] == "0"
         if "data" not in input_data or not input_data["data"]:
             return [], status
@@ -382,12 +419,12 @@ class MarketDataMixin:
             target_data = []
         return target_data, status
 
-    def get_mark_price(self, symbol, extra_data=None, **kwargs):
+    def get_mark_price(self, symbol: Any, extra_data: Any = None, **kwargs: Any) -> None:
         path, params, extra_data = self._get_mark_price(symbol, extra_data, **kwargs)
         data = self.request(path, params=params, extra_data=extra_data)
         return data
 
-    def async_get_mark_price(self, symbol, extra_data=None, **kwargs):
+    def async_get_mark_price(self, symbol: Any, extra_data: Any = None, **kwargs: Any) -> None:
         path, params, extra_data = self._get_mark_price(symbol, extra_data, **kwargs)
         self.submit(
             self.async_request(path, params=params, extra_data=extra_data),
@@ -395,8 +432,14 @@ class MarketDataMixin:
         )
 
     def _get_open_interest(
-        self, inst_type="SWAP", uly=None, inst_family=None, inst_id=None, extra_data=None, **kwargs
-    ):
+        self,
+        inst_type: Any = "SWAP",
+        uly: Any = None,
+        inst_family: Any = None,
+        inst_id: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """Get open interest data"""
         request_type = "get_open_interest"
         params = {"instType": inst_type}
@@ -422,8 +465,14 @@ class MarketDataMixin:
         return path, params, extra_data
 
     def get_open_interest(
-        self, inst_type="SWAP", uly=None, inst_family=None, inst_id=None, extra_data=None, **kwargs
-    ):
+        self,
+        inst_type: Any = "SWAP",
+        uly: Any = None,
+        inst_family: Any = None,
+        inst_id: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         path, params, extra_data = self._get_open_interest(
             inst_type, uly, inst_family, inst_id, extra_data, **kwargs
         )
@@ -431,8 +480,14 @@ class MarketDataMixin:
         return data
 
     def async_get_open_interest(
-        self, inst_type="SWAP", uly=None, inst_family=None, inst_id=None, extra_data=None, **kwargs
-    ):
+        self,
+        inst_type: Any = "SWAP",
+        uly: Any = None,
+        inst_family: Any = None,
+        inst_id: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """Async get open interest data"""
         path, params, extra_data = self._get_open_interest(
             inst_type, uly, inst_family, inst_id, extra_data, **kwargs
@@ -444,15 +499,15 @@ class MarketDataMixin:
 
     def _get_premium_history(
         self,
-        inst_type,
-        uly=None,
-        inst_id=None,
-        after=None,
-        before=None,
-        limit=None,
-        extra_data=None,
-        **kwargs,
-    ):
+        inst_type: Any,
+        uly: Any = None,
+        inst_id: Any = None,
+        after: Any = None,
+        before: Any = None,
+        limit: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """
         Get premium history
         :param inst_type: Instrument type: `FUTURES`, `SWAP` (required)
@@ -493,7 +548,7 @@ class MarketDataMixin:
         return path, params, extra_data
 
     @staticmethod
-    def _get_premium_history_normalize_function(input_data, extra_data):
+    def _get_premium_history_normalize_function(input_data: Any, extra_data: Any) -> None:
         status = input_data["code"] == "0"
         if "data" not in input_data:
             return [], status
@@ -503,15 +558,15 @@ class MarketDataMixin:
 
     def get_premium_history(
         self,
-        inst_type,
-        uly=None,
-        inst_id=None,
-        after=None,
-        before=None,
-        limit=None,
-        extra_data=None,
-        **kwargs,
-    ):
+        inst_type: Any,
+        uly: Any = None,
+        inst_id: Any = None,
+        after: Any = None,
+        before: Any = None,
+        limit: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """Get premium history"""
         path, params, extra_data = self._get_premium_history(
             inst_type, uly, inst_id, after, before, limit, extra_data, **kwargs
@@ -521,15 +576,15 @@ class MarketDataMixin:
 
     def async_get_premium_history(
         self,
-        inst_type,
-        uly=None,
-        inst_id=None,
-        after=None,
-        before=None,
-        limit=None,
-        extra_data=None,
-        **kwargs,
-    ):
+        inst_type: Any,
+        uly: Any = None,
+        inst_id: Any = None,
+        after: Any = None,
+        before: Any = None,
+        limit: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """Async get premium history"""
         path, params, extra_data = self._get_premium_history(
             inst_type, uly, inst_id, after, before, limit, extra_data, **kwargs
@@ -540,8 +595,13 @@ class MarketDataMixin:
         )
 
     def _get_economic_calendar(
-        self, after=None, before=None, limit=None, extra_data=None, **kwargs
-    ):
+        self,
+        after: Any = None,
+        before: Any = None,
+        limit: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """
         Get economic calendar
         :param after: Pagination (older data), request before this timestamp
@@ -575,7 +635,7 @@ class MarketDataMixin:
         return path, params, extra_data
 
     @staticmethod
-    def _get_economic_calendar_normalize_function(input_data, extra_data):
+    def _get_economic_calendar_normalize_function(input_data: Any, extra_data: Any) -> None:
         status = input_data["code"] == "0"
         if "data" not in input_data:
             return [], status
@@ -583,7 +643,14 @@ class MarketDataMixin:
         target_data = data if len(data) > 0 else []
         return target_data, status
 
-    def get_economic_calendar(self, after=None, before=None, limit=None, extra_data=None, **kwargs):
+    def get_economic_calendar(
+        self,
+        after: Any = None,
+        before: Any = None,
+        limit: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """Get economic calendar"""
         path, params, extra_data = self._get_economic_calendar(
             after, before, limit, extra_data, **kwargs
@@ -592,8 +659,13 @@ class MarketDataMixin:
         return data
 
     def async_get_economic_calendar(
-        self, after=None, before=None, limit=None, extra_data=None, **kwargs
-    ):
+        self,
+        after: Any = None,
+        before: Any = None,
+        limit: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """Async get economic calendar"""
         path, params, extra_data = self._get_economic_calendar(
             after, before, limit, extra_data, **kwargs
@@ -605,7 +677,7 @@ class MarketDataMixin:
 
     # ==================== Market Data APIs (continued) ====================
 
-    def _get_exchange_rate(self, extra_data=None, **kwargs):
+    def _get_exchange_rate(self, extra_data: Any = None, **kwargs: Any) -> None:
         """
         Get exchange rate
         :param extra_data: extra_data, default is None, can be a dict passed by user
@@ -630,7 +702,7 @@ class MarketDataMixin:
         return path, params, extra_data
 
     @staticmethod
-    def _get_exchange_rate_normalize_function(input_data, extra_data):
+    def _get_exchange_rate_normalize_function(input_data: Any, extra_data: Any) -> None:
         status = input_data["code"] == "0"
         if "data" not in input_data:
             return [], status
@@ -638,13 +710,13 @@ class MarketDataMixin:
         target_data = data if len(data) > 0 else []
         return target_data, status
 
-    def get_exchange_rate(self, extra_data=None, **kwargs):
+    def get_exchange_rate(self, extra_data: Any = None, **kwargs: Any) -> None:
         """Get exchange rate"""
         path, params, extra_data = self._get_exchange_rate(extra_data, **kwargs)
         data = self.request(path, params=params, extra_data=extra_data)
         return data
 
-    def async_get_exchange_rate(self, extra_data=None, **kwargs):
+    def async_get_exchange_rate(self, extra_data: Any = None, **kwargs: Any) -> None:
         """Async get exchange rate"""
         path, params, extra_data = self._get_exchange_rate(extra_data, **kwargs)
         self.submit(
@@ -652,7 +724,7 @@ class MarketDataMixin:
             callback=self.async_callback,
         )
 
-    def _get_index_components(self, index, extra_data=None, **kwargs):
+    def _get_index_components(self, index: Any, extra_data: Any = None, **kwargs: Any) -> None:
         """
         Get index components
         :param index: Index name, e.g. "BTC-USD"
@@ -678,7 +750,7 @@ class MarketDataMixin:
         return path, params, extra_data
 
     @staticmethod
-    def _get_index_components_normalize_function(input_data, extra_data):
+    def _get_index_components_normalize_function(input_data: Any, extra_data: Any) -> None:
         status = input_data["code"] == "0"
         if "data" not in input_data:
             return {}, status
@@ -690,13 +762,13 @@ class MarketDataMixin:
             target_data = {}
         return target_data, status
 
-    def get_index_components(self, index, extra_data=None, **kwargs):
+    def get_index_components(self, index: Any, extra_data: Any = None, **kwargs: Any) -> None:
         """Get index components"""
         path, params, extra_data = self._get_index_components(index, extra_data, **kwargs)
         data = self.request(path, params=params, extra_data=extra_data)
         return data
 
-    def async_get_index_components(self, index, extra_data=None, **kwargs):
+    def async_get_index_components(self, index: Any, extra_data: Any = None, **kwargs: Any) -> None:
         """Async get index components"""
         path, params, extra_data = self._get_index_components(index, extra_data, **kwargs)
         self.submit(
@@ -706,7 +778,14 @@ class MarketDataMixin:
 
     # ==================== Public Data APIs (Additional) ====================
 
-    def _get_estimated_price(self, inst_type, uly=None, inst_id=None, extra_data=None, **kwargs):
+    def _get_estimated_price(
+        self,
+        inst_type: Any,
+        uly: Any = None,
+        inst_id: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """
         Get estimated delivery/exercise price
         :param inst_type: Instrument type: `FUTURES`, `OPTION` (required)
@@ -738,7 +817,7 @@ class MarketDataMixin:
         return path, params, extra_data
 
     @staticmethod
-    def _get_estimated_price_normalize_function(input_data, extra_data):
+    def _get_estimated_price_normalize_function(input_data: Any, extra_data: Any) -> None:
         status = input_data["code"] == "0"
         if "data" not in input_data:
             return [], status
@@ -746,7 +825,14 @@ class MarketDataMixin:
         target_data = data if len(data) > 0 else []
         return target_data, status
 
-    def get_estimated_price(self, inst_type, uly=None, inst_id=None, extra_data=None, **kwargs):
+    def get_estimated_price(
+        self,
+        inst_type: Any,
+        uly: Any = None,
+        inst_id: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """Get estimated delivery/exercise price"""
         path, params, extra_data = self._get_estimated_price(
             inst_type, uly, inst_id, extra_data, **kwargs
@@ -755,8 +841,13 @@ class MarketDataMixin:
         return data
 
     def async_get_estimated_price(
-        self, inst_type, uly=None, inst_id=None, extra_data=None, **kwargs
-    ):
+        self,
+        inst_type: Any,
+        uly: Any = None,
+        inst_id: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """Async get estimated delivery/exercise price"""
         path, params, extra_data = self._get_estimated_price(
             inst_type, uly, inst_id, extra_data, **kwargs
@@ -766,7 +857,9 @@ class MarketDataMixin:
             callback=self.async_callback,
         )
 
-    def _get_discount_rate(self, ccy=None, discount_level=None, extra_data=None, **kwargs):
+    def _get_discount_rate(
+        self, ccy: Any = None, discount_level: Any = None, extra_data: Any = None, **kwargs: Any
+    ) -> None:
         """
         Get discount rate and interest-free quota
         :param ccy: Currency, e.g. `BTC`
@@ -797,7 +890,7 @@ class MarketDataMixin:
         return path, params, extra_data
 
     @staticmethod
-    def _get_discount_rate_normalize_function(input_data, extra_data):
+    def _get_discount_rate_normalize_function(input_data: Any, extra_data: Any) -> None:
         status = input_data["code"] == "0"
         if "data" not in input_data:
             return [], status
@@ -805,7 +898,9 @@ class MarketDataMixin:
         target_data = data if len(data) > 0 else []
         return target_data, status
 
-    def get_discount_rate(self, ccy=None, discount_level=None, extra_data=None, **kwargs):
+    def get_discount_rate(
+        self, ccy: Any = None, discount_level: Any = None, extra_data: Any = None, **kwargs: Any
+    ) -> None:
         """Get discount rate and interest-free quota"""
         path, params, extra_data = self._get_discount_rate(
             ccy, discount_level, extra_data, **kwargs
@@ -813,7 +908,9 @@ class MarketDataMixin:
         data = self.request(path, params=params, extra_data=extra_data)
         return data
 
-    def async_get_discount_rate(self, ccy=None, discount_level=None, extra_data=None, **kwargs):
+    def async_get_discount_rate(
+        self, ccy: Any = None, discount_level: Any = None, extra_data: Any = None, **kwargs: Any
+    ) -> None:
         """Async get discount rate and interest-free quota"""
         path, params, extra_data = self._get_discount_rate(
             ccy, discount_level, extra_data, **kwargs
@@ -823,7 +920,9 @@ class MarketDataMixin:
             callback=self.async_callback,
         )
 
-    def _get_interest_rate_loan_quota(self, ccy=None, extra_data=None, **kwargs):
+    def _get_interest_rate_loan_quota(
+        self, ccy: Any = None, extra_data: Any = None, **kwargs: Any
+    ) -> None:
         """
         Get interest rate and loan quota
         :param ccy: Currency, e.g. `BTC`
@@ -851,7 +950,7 @@ class MarketDataMixin:
         return path, params, extra_data
 
     @staticmethod
-    def _get_interest_rate_loan_quota_normalize_function(input_data, extra_data):
+    def _get_interest_rate_loan_quota_normalize_function(input_data: Any, extra_data: Any) -> None:
         status = input_data["code"] == "0"
         if "data" not in input_data:
             return [], status
@@ -859,13 +958,17 @@ class MarketDataMixin:
         target_data = data if len(data) > 0 else []
         return target_data, status
 
-    def get_interest_rate_loan_quota(self, ccy=None, extra_data=None, **kwargs):
+    def get_interest_rate_loan_quota(
+        self, ccy: Any = None, extra_data: Any = None, **kwargs: Any
+    ) -> None:
         """Get interest rate and loan quota"""
         path, params, extra_data = self._get_interest_rate_loan_quota(ccy, extra_data, **kwargs)
         data = self.request(path, params=params, extra_data=extra_data)
         return data
 
-    def async_get_interest_rate_loan_quota(self, ccy=None, extra_data=None, **kwargs):
+    def async_get_interest_rate_loan_quota(
+        self, ccy: Any = None, extra_data: Any = None, **kwargs: Any
+    ) -> None:
         """Async get interest rate and loan quota"""
         path, params, extra_data = self._get_interest_rate_loan_quota(ccy, extra_data, **kwargs)
         self.submit(
@@ -874,8 +977,14 @@ class MarketDataMixin:
         )
 
     def _get_interest_rate(
-        self, ccy=None, inst_type=None, mgn_mode=None, uly=None, extra_data=None, **kwargs
-    ):
+        self,
+        ccy: Any = None,
+        inst_type: Any = None,
+        mgn_mode: Any = None,
+        uly: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """
         Get interest rate for borrowing
         :param ccy: Currency, e.g. `BTC`
@@ -912,8 +1021,14 @@ class MarketDataMixin:
         return path, params, extra_data
 
     def get_interest_rate(
-        self, ccy=None, inst_type=None, mgn_mode=None, uly=None, extra_data=None, **kwargs
-    ):
+        self,
+        ccy: Any = None,
+        inst_type: Any = None,
+        mgn_mode: Any = None,
+        uly: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """Get interest rate for borrowing"""
         path, params, extra_data = self._get_interest_rate(
             ccy, inst_type, mgn_mode, uly, extra_data, **kwargs
@@ -922,8 +1037,14 @@ class MarketDataMixin:
         return data
 
     def async_get_interest_rate(
-        self, ccy=None, inst_type=None, mgn_mode=None, uly=None, extra_data=None, **kwargs
-    ):
+        self,
+        ccy: Any = None,
+        inst_type: Any = None,
+        mgn_mode: Any = None,
+        uly: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """Async get interest rate for borrowing"""
         path, params, extra_data = self._get_interest_rate(
             ccy, inst_type, mgn_mode, uly, extra_data, **kwargs
@@ -933,7 +1054,9 @@ class MarketDataMixin:
             callback=self.async_callback,
         )
 
-    def _get_underlying(self, inst_type, uly=None, extra_data=None, **kwargs):
+    def _get_underlying(
+        self, inst_type: Any, uly: Any = None, extra_data: Any = None, **kwargs: Any
+    ) -> None:
         """
         Get underlying index
         :param inst_type: Instrument type: `FUTURES`, `SWAP`, `OPTION` (required)
@@ -962,7 +1085,7 @@ class MarketDataMixin:
         return path, params, extra_data
 
     @staticmethod
-    def _get_underlying_normalize_function(input_data, extra_data):
+    def _get_underlying_normalize_function(input_data: Any, extra_data: Any) -> None:
         status = input_data["code"] == "0"
         if "data" not in input_data:
             return [], status
@@ -970,13 +1093,17 @@ class MarketDataMixin:
         target_data = data if len(data) > 0 else []
         return target_data, status
 
-    def get_underlying(self, inst_type, uly=None, extra_data=None, **kwargs):
+    def get_underlying(
+        self, inst_type: Any, uly: Any = None, extra_data: Any = None, **kwargs: Any
+    ) -> None:
         """Get underlying index"""
         path, params, extra_data = self._get_underlying(inst_type, uly, extra_data, **kwargs)
         data = self.request(path, params=params, extra_data=extra_data)
         return data
 
-    def async_get_underlying(self, inst_type, uly=None, extra_data=None, **kwargs):
+    def async_get_underlying(
+        self, inst_type: Any, uly: Any = None, extra_data: Any = None, **kwargs: Any
+    ) -> None:
         """Async get underlying index"""
         path, params, extra_data = self._get_underlying(inst_type, uly, extra_data, **kwargs)
         self.submit(
@@ -986,15 +1113,15 @@ class MarketDataMixin:
 
     def _get_insurance_fund(
         self,
-        inst_type,
-        uly=None,
-        inst_id=None,
-        after=None,
-        before=None,
-        limit=None,
-        extra_data=None,
-        **kwargs,
-    ):
+        inst_type: Any,
+        uly: Any = None,
+        inst_id: Any = None,
+        after: Any = None,
+        before: Any = None,
+        limit: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """
         Get insurance fund balance
         :param inst_type: Instrument type: `MARGIN`, `FUTURES`, `SWAP`, `OPTION` (required)
@@ -1035,7 +1162,7 @@ class MarketDataMixin:
         return path, params, extra_data
 
     @staticmethod
-    def _get_insurance_fund_normalize_function(input_data, extra_data):
+    def _get_insurance_fund_normalize_function(input_data: Any, extra_data: Any) -> None:
         status = input_data["code"] == "0"
         if "data" not in input_data:
             return [], status
@@ -1045,15 +1172,15 @@ class MarketDataMixin:
 
     def get_insurance_fund(
         self,
-        inst_type,
-        uly=None,
-        inst_id=None,
-        after=None,
-        before=None,
-        limit=None,
-        extra_data=None,
-        **kwargs,
-    ):
+        inst_type: Any,
+        uly: Any = None,
+        inst_id: Any = None,
+        after: Any = None,
+        before: Any = None,
+        limit: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """Get insurance fund balance"""
         path, params, extra_data = self._get_insurance_fund(
             inst_type, uly, inst_id, after, before, limit, extra_data, **kwargs
@@ -1063,15 +1190,15 @@ class MarketDataMixin:
 
     def async_get_insurance_fund(
         self,
-        inst_type,
-        uly=None,
-        inst_id=None,
-        after=None,
-        before=None,
-        limit=None,
-        extra_data=None,
-        **kwargs,
-    ):
+        inst_type: Any,
+        uly: Any = None,
+        inst_id: Any = None,
+        after: Any = None,
+        before: Any = None,
+        limit: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """Async get insurance fund balance"""
         path, params, extra_data = self._get_insurance_fund(
             inst_type, uly, inst_id, after, before, limit, extra_data, **kwargs
@@ -1082,8 +1209,15 @@ class MarketDataMixin:
         )
 
     def _convert_contract_coin(
-        self, inst_type, uly, inst_id, amount, unit, extra_data=None, **kwargs
-    ):
+        self,
+        inst_type: Any,
+        uly: Any,
+        inst_id: Any,
+        amount: Any,
+        unit: Any,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """
         Convert contract unit
         :param inst_type: Instrument type: `FUTURES`, `SWAP` (required)
@@ -1119,7 +1253,7 @@ class MarketDataMixin:
         return path, params, extra_data
 
     @staticmethod
-    def _convert_contract_coin_normalize_function(input_data, extra_data):
+    def _convert_contract_coin_normalize_function(input_data: Any, extra_data: Any) -> None:
         status = input_data["code"] == "0"
         if "data" not in input_data:
             return [], status
@@ -1128,8 +1262,15 @@ class MarketDataMixin:
         return target_data, status
 
     def convert_contract_coin(
-        self, inst_type, uly, inst_id, amount, unit, extra_data=None, **kwargs
-    ):
+        self,
+        inst_type: Any,
+        uly: Any,
+        inst_id: Any,
+        amount: Any,
+        unit: Any,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """Convert contract unit"""
         path, params, extra_data = self._convert_contract_coin(
             inst_type, uly, inst_id, amount, unit, extra_data, **kwargs
@@ -1138,8 +1279,15 @@ class MarketDataMixin:
         return data
 
     def async_convert_contract_coin(
-        self, inst_type, uly, inst_id, amount, unit, extra_data=None, **kwargs
-    ):
+        self,
+        inst_type: Any,
+        uly: Any,
+        inst_id: Any,
+        amount: Any,
+        unit: Any,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """Async convert contract unit"""
         path, params, extra_data = self._convert_contract_coin(
             inst_type, uly, inst_id, amount, unit, extra_data, **kwargs
@@ -1150,8 +1298,13 @@ class MarketDataMixin:
         )
 
     def _get_instrument_tick_bands(
-        self, inst_type, uly=None, inst_id=None, extra_data=None, **kwargs
-    ):
+        self,
+        inst_type: Any,
+        uly: Any = None,
+        inst_id: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """
         Get instrument minimum tick size
         :param inst_type: Instrument type: `SPOT`, `MARGIN`, `FUTURES`, `SWAP`, `OPTION` (required)
@@ -1183,7 +1336,7 @@ class MarketDataMixin:
         return path, params, extra_data
 
     @staticmethod
-    def _get_instrument_tick_bands_normalize_function(input_data, extra_data):
+    def _get_instrument_tick_bands_normalize_function(input_data: Any, extra_data: Any) -> None:
         status = input_data["code"] == "0"
         if "data" not in input_data:
             return [], status
@@ -1192,8 +1345,13 @@ class MarketDataMixin:
         return target_data, status
 
     def get_instrument_tick_bands(
-        self, inst_type, uly=None, inst_id=None, extra_data=None, **kwargs
-    ):
+        self,
+        inst_type: Any,
+        uly: Any = None,
+        inst_id: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """Get instrument minimum tick size"""
         path, params, extra_data = self._get_instrument_tick_bands(
             inst_type, uly, inst_id, extra_data, **kwargs
@@ -1202,8 +1360,13 @@ class MarketDataMixin:
         return data
 
     def async_get_instrument_tick_bands(
-        self, inst_type, uly=None, inst_id=None, extra_data=None, **kwargs
-    ):
+        self,
+        inst_type: Any,
+        uly: Any = None,
+        inst_id: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """Async get instrument minimum tick size"""
         path, params, extra_data = self._get_instrument_tick_bands(
             inst_type, uly, inst_id, extra_data, **kwargs
@@ -1215,7 +1378,7 @@ class MarketDataMixin:
 
     # ==================== Missing Critical Public APIs ====================
 
-    def _get_system_time(self, extra_data=None, **kwargs):
+    def _get_system_time(self, extra_data: Any = None, **kwargs: Any) -> None:
         """Get system time"""
         request_type = "get_system_time"
         params = {}
@@ -1234,13 +1397,13 @@ class MarketDataMixin:
             extra_data.update(kwargs)
         return path, params, extra_data
 
-    def get_system_time(self, extra_data=None, **kwargs):
+    def get_system_time(self, extra_data: Any = None, **kwargs: Any) -> None:
         """Get system time"""
         path, params, extra_data = self._get_system_time(extra_data, **kwargs)
         data = self.request(path, params=params, extra_data=extra_data)
         return data
 
-    def async_get_system_time(self, extra_data=None, **kwargs):
+    def async_get_system_time(self, extra_data: Any = None, **kwargs: Any) -> None:
         """Async get system time"""
         path, params, extra_data = self._get_system_time(extra_data, **kwargs)
         self.submit(
@@ -1248,7 +1411,14 @@ class MarketDataMixin:
             callback=self.async_callback,
         )
 
-    def _get_tickers(self, inst_type="SWAP", uly=None, inst_id=None, extra_data=None, **kwargs):
+    def _get_tickers(
+        self,
+        inst_type: Any = "SWAP",
+        uly: Any = None,
+        inst_id: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """Get tickers for all instruments"""
         request_type = "get_tickers"
         params = {"instType": inst_type}
@@ -1271,15 +1441,27 @@ class MarketDataMixin:
             extra_data.update(kwargs)
         return path, params, extra_data
 
-    def get_tickers(self, inst_type="SWAP", uly=None, inst_id=None, extra_data=None, **kwargs):
+    def get_tickers(
+        self,
+        inst_type: Any = "SWAP",
+        uly: Any = None,
+        inst_id: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """Get tickers for all instruments"""
         path, params, extra_data = self._get_tickers(inst_type, uly, inst_id, extra_data, **kwargs)
         data = self.request(path, params=params, extra_data=extra_data)
         return data
 
     def async_get_tickers(
-        self, inst_type="SWAP", uly=None, inst_id=None, extra_data=None, **kwargs
-    ):
+        self,
+        inst_type: Any = "SWAP",
+        uly: Any = None,
+        inst_id: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """Async get tickers for all instruments"""
         path, params, extra_data = self._get_tickers(inst_type, uly, inst_id, extra_data, **kwargs)
         self.submit(
@@ -1287,7 +1469,9 @@ class MarketDataMixin:
             callback=self.async_callback,
         )
 
-    def _get_depth_full(self, symbol, sz=100, extra_data=None, **kwargs):
+    def _get_depth_full(
+        self, symbol: Any, sz: Any = 100, extra_data: Any = None, **kwargs: Any
+    ) -> None:
         """Get full depth order book"""
         request_symbol = self._params.get_symbol(symbol)
         request_type = "get_depth_full"
@@ -1307,13 +1491,17 @@ class MarketDataMixin:
             extra_data.update(kwargs)
         return path, params, extra_data
 
-    def get_depth_full(self, symbol, sz=100, extra_data=None, **kwargs):
+    def get_depth_full(
+        self, symbol: Any, sz: Any = 100, extra_data: Any = None, **kwargs: Any
+    ) -> None:
         """Get full depth order book"""
         path, params, extra_data = self._get_depth_full(symbol, sz, extra_data, **kwargs)
         data = self.request(path, params=params, extra_data=extra_data)
         return data
 
-    def async_get_depth_full(self, symbol, sz=100, extra_data=None, **kwargs):
+    def async_get_depth_full(
+        self, symbol: Any, sz: Any = 100, extra_data: Any = None, **kwargs: Any
+    ) -> None:
         """Async get full depth order book"""
         path, params, extra_data = self._get_depth_full(symbol, sz, extra_data, **kwargs)
         self.submit(
@@ -1322,8 +1510,15 @@ class MarketDataMixin:
         )
 
     def _get_kline_his(
-        self, symbol, bar="1m", after="", before="", limit="100", extra_data=None, **kwargs
-    ):
+        self,
+        symbol: Any,
+        bar: Any = "1m",
+        after: Any = "",
+        before: Any = "",
+        limit: Any = "100",
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """Get historical kline data"""
         request_symbol = self._params.get_symbol(symbol)
         request_type = "get_kline_his"
@@ -1353,8 +1548,15 @@ class MarketDataMixin:
         return path, params, extra_data
 
     def get_kline_his(
-        self, symbol, bar="1m", after="", before="", limit="100", extra_data=None, **kwargs
-    ):
+        self,
+        symbol: Any,
+        bar: Any = "1m",
+        after: Any = "",
+        before: Any = "",
+        limit: Any = "100",
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """Get historical kline data"""
         path, params, extra_data = self._get_kline_his(
             symbol, bar, after, before, limit, extra_data, **kwargs
@@ -1363,8 +1565,15 @@ class MarketDataMixin:
         return data
 
     def async_get_kline_his(
-        self, symbol, bar="1m", after="", before="", limit="100", extra_data=None, **kwargs
-    ):
+        self,
+        symbol: Any,
+        bar: Any = "1m",
+        after: Any = "",
+        before: Any = "",
+        limit: Any = "100",
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """Async get historical kline data"""
         path, params, extra_data = self._get_kline_his(
             symbol, bar, after, before, limit, extra_data, **kwargs
@@ -1374,7 +1583,9 @@ class MarketDataMixin:
             callback=self.async_callback,
         )
 
-    def _get_trades(self, symbol, limit="100", extra_data=None, **kwargs):
+    def _get_trades(
+        self, symbol: Any, limit: Any = "100", extra_data: Any = None, **kwargs: Any
+    ) -> None:
         """Get recent trades"""
         request_symbol = self._params.get_symbol(symbol)
         request_type = "get_trades"
@@ -1394,13 +1605,17 @@ class MarketDataMixin:
             extra_data.update(kwargs)
         return path, params, extra_data
 
-    def get_trades(self, symbol, limit="100", extra_data=None, **kwargs):
+    def get_trades(
+        self, symbol: Any, limit: Any = "100", extra_data: Any = None, **kwargs: Any
+    ) -> None:
         """Get recent trades"""
         path, params, extra_data = self._get_trades(symbol, limit, extra_data, **kwargs)
         data = self.request(path, params=params, extra_data=extra_data)
         return data
 
-    def async_get_trades(self, symbol, limit="100", extra_data=None, **kwargs):
+    def async_get_trades(
+        self, symbol: Any, limit: Any = "100", extra_data: Any = None, **kwargs: Any
+    ) -> None:
         """Async get recent trades"""
         path, params, extra_data = self._get_trades(symbol, limit, extra_data, **kwargs)
         self.submit(
@@ -1409,8 +1624,14 @@ class MarketDataMixin:
         )
 
     def _get_trades_history(
-        self, symbol, after="", before="", limit="100", extra_data=None, **kwargs
-    ):
+        self,
+        symbol: Any,
+        after: Any = "",
+        before: Any = "",
+        limit: Any = "100",
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """Get historical trades data"""
         request_symbol = self._params.get_symbol(symbol)
         request_type = "get_trades_history"
@@ -1439,8 +1660,14 @@ class MarketDataMixin:
         return path, params, extra_data
 
     def get_trades_history(
-        self, symbol, after="", before="", limit="100", extra_data=None, **kwargs
-    ):
+        self,
+        symbol: Any,
+        after: Any = "",
+        before: Any = "",
+        limit: Any = "100",
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """Get historical trades data"""
         path, params, extra_data = self._get_trades_history(
             symbol, after, before, limit, extra_data, **kwargs
@@ -1449,8 +1676,14 @@ class MarketDataMixin:
         return data
 
     def async_get_trades_history(
-        self, symbol, after="", before="", limit="100", extra_data=None, **kwargs
-    ):
+        self,
+        symbol: Any,
+        after: Any = "",
+        before: Any = "",
+        limit: Any = "100",
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """Async get historical trades data"""
         path, params, extra_data = self._get_trades_history(
             symbol, after, before, limit, extra_data, **kwargs
@@ -1461,8 +1694,14 @@ class MarketDataMixin:
         )
 
     def _get_public_instruments(
-        self, inst_type, uly=None, inst_id=None, uly_multi=None, extra_data=None, **kwargs
-    ):
+        self,
+        inst_type: Any,
+        uly: Any = None,
+        inst_id: Any = None,
+        uly_multi: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """Get public instruments"""
         request_type = "get_public_instruments"
         params = {"instType": inst_type}
@@ -1488,8 +1727,14 @@ class MarketDataMixin:
         return path, params, extra_data
 
     def get_public_instruments(
-        self, inst_type, uly=None, inst_id=None, uly_multi=None, extra_data=None, **kwargs
-    ):
+        self,
+        inst_type: Any,
+        uly: Any = None,
+        inst_id: Any = None,
+        uly_multi: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """Get public instruments"""
         path, params, extra_data = self._get_public_instruments(
             inst_type, uly, inst_id, uly_multi, extra_data, **kwargs
@@ -1498,8 +1743,14 @@ class MarketDataMixin:
         return data
 
     def async_get_public_instruments(
-        self, inst_type, uly=None, inst_id=None, uly_multi=None, extra_data=None, **kwargs
-    ):
+        self,
+        inst_type: Any,
+        uly: Any = None,
+        inst_id: Any = None,
+        uly_multi: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """Async get public instruments"""
         path, params, extra_data = self._get_public_instruments(
             inst_type, uly, inst_id, uly_multi, extra_data, **kwargs
@@ -1510,8 +1761,15 @@ class MarketDataMixin:
         )
 
     def _get_delivery_exercise_history(
-        self, inst_type, uly, after="", before="", limit="100", extra_data=None, **kwargs
-    ):
+        self,
+        inst_type: Any,
+        uly: Any,
+        after: Any = "",
+        before: Any = "",
+        limit: Any = "100",
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """Get delivery exercise history"""
         request_type = "get_delivery_exercise_history"
         params = {
@@ -1540,8 +1798,15 @@ class MarketDataMixin:
         return path, params, extra_data
 
     def get_delivery_exercise_history(
-        self, inst_type, uly, after="", before="", limit="100", extra_data=None, **kwargs
-    ):
+        self,
+        inst_type: Any,
+        uly: Any,
+        after: Any = "",
+        before: Any = "",
+        limit: Any = "100",
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """Get delivery exercise history"""
         path, params, extra_data = self._get_delivery_exercise_history(
             inst_type, uly, after, before, limit, extra_data, **kwargs
@@ -1550,8 +1815,15 @@ class MarketDataMixin:
         return data
 
     def async_get_delivery_exercise_history(
-        self, inst_type, uly, after="", before="", limit="100", extra_data=None, **kwargs
-    ):
+        self,
+        inst_type: Any,
+        uly: Any,
+        after: Any = "",
+        before: Any = "",
+        limit: Any = "100",
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """Async get delivery exercise history"""
         path, params, extra_data = self._get_delivery_exercise_history(
             inst_type, uly, after, before, limit, extra_data, **kwargs
@@ -1562,8 +1834,13 @@ class MarketDataMixin:
         )
 
     def _get_estimated_settlement_price(
-        self, inst_type, uly=None, inst_id=None, extra_data=None, **kwargs
-    ):
+        self,
+        inst_type: Any,
+        uly: Any = None,
+        inst_id: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """Get estimated settlement price"""
         request_type = "get_estimated_settlement_price"
         params = {"instType": inst_type}
@@ -1587,8 +1864,13 @@ class MarketDataMixin:
         return path, params, extra_data
 
     def get_estimated_settlement_price(
-        self, inst_type, uly=None, inst_id=None, extra_data=None, **kwargs
-    ):
+        self,
+        inst_type: Any,
+        uly: Any = None,
+        inst_id: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """Get estimated settlement price"""
         path, params, extra_data = self._get_estimated_settlement_price(
             inst_type, uly, inst_id, extra_data, **kwargs
@@ -1597,8 +1879,13 @@ class MarketDataMixin:
         return data
 
     def async_get_estimated_settlement_price(
-        self, inst_type, uly=None, inst_id=None, extra_data=None, **kwargs
-    ):
+        self,
+        inst_type: Any,
+        uly: Any = None,
+        inst_id: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """Async get estimated settlement price"""
         path, params, extra_data = self._get_estimated_settlement_price(
             inst_type, uly, inst_id, extra_data, **kwargs
@@ -1609,8 +1896,15 @@ class MarketDataMixin:
         )
 
     def _get_settlement_history(
-        self, inst_type, uly, after="", before="", limit="100", extra_data=None, **kwargs
-    ):
+        self,
+        inst_type: Any,
+        uly: Any,
+        after: Any = "",
+        before: Any = "",
+        limit: Any = "100",
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """Get settlement history"""
         request_type = "get_settlement_history"
         params = {
@@ -1639,8 +1933,15 @@ class MarketDataMixin:
         return path, params, extra_data
 
     def get_settlement_history(
-        self, inst_type, uly, after="", before="", limit="100", extra_data=None, **kwargs
-    ):
+        self,
+        inst_type: Any,
+        uly: Any,
+        after: Any = "",
+        before: Any = "",
+        limit: Any = "100",
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """Get settlement history"""
         path, params, extra_data = self._get_settlement_history(
             inst_type, uly, after, before, limit, extra_data, **kwargs
@@ -1649,8 +1950,15 @@ class MarketDataMixin:
         return data
 
     def async_get_settlement_history(
-        self, inst_type, uly, after="", before="", limit="100", extra_data=None, **kwargs
-    ):
+        self,
+        inst_type: Any,
+        uly: Any,
+        after: Any = "",
+        before: Any = "",
+        limit: Any = "100",
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """Async get settlement history"""
         path, params, extra_data = self._get_settlement_history(
             inst_type, uly, after, before, limit, extra_data, **kwargs
@@ -1660,7 +1968,14 @@ class MarketDataMixin:
             callback=self.async_callback,
         )
 
-    def _get_price_limit(self, inst_type, uly=None, inst_id=None, extra_data=None, **kwargs):
+    def _get_price_limit(
+        self,
+        inst_type: Any,
+        uly: Any = None,
+        inst_id: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """Get price limit"""
         request_type = "get_price_limit"
         params = {"instType": inst_type}
@@ -1683,7 +1998,14 @@ class MarketDataMixin:
             extra_data.update(kwargs)
         return path, params, extra_data
 
-    def get_price_limit(self, inst_type, uly=None, inst_id=None, extra_data=None, **kwargs):
+    def get_price_limit(
+        self,
+        inst_type: Any,
+        uly: Any = None,
+        inst_id: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """Get price limit"""
         path, params, extra_data = self._get_price_limit(
             inst_type, uly, inst_id, extra_data, **kwargs
@@ -1691,7 +2013,14 @@ class MarketDataMixin:
         data = self.request(path, params=params, extra_data=extra_data)
         return data
 
-    def async_get_price_limit(self, inst_type, uly=None, inst_id=None, extra_data=None, **kwargs):
+    def async_get_price_limit(
+        self,
+        inst_type: Any,
+        uly: Any = None,
+        inst_id: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """Async get price limit"""
         path, params, extra_data = self._get_price_limit(
             inst_type, uly, inst_id, extra_data, **kwargs
@@ -1702,8 +2031,13 @@ class MarketDataMixin:
         )
 
     def _get_opt_summary(
-        self, inst_type="OPTION", uly=None, exp_time=None, extra_data=None, **kwargs
-    ):
+        self,
+        inst_type: Any = "OPTION",
+        uly: Any = None,
+        exp_time: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """Get option summary"""
         request_type = "get_opt_summary"
         params = {"instType": inst_type}
@@ -1727,8 +2061,13 @@ class MarketDataMixin:
         return path, params, extra_data
 
     def get_opt_summary(
-        self, inst_type="OPTION", uly=None, exp_time=None, extra_data=None, **kwargs
-    ):
+        self,
+        inst_type: Any = "OPTION",
+        uly: Any = None,
+        exp_time: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """Get option summary"""
         path, params, extra_data = self._get_opt_summary(
             inst_type, uly, exp_time, extra_data, **kwargs
@@ -1737,8 +2076,13 @@ class MarketDataMixin:
         return data
 
     def async_get_opt_summary(
-        self, inst_type="OPTION", uly=None, exp_time=None, extra_data=None, **kwargs
-    ):
+        self,
+        inst_type: Any = "OPTION",
+        uly: Any = None,
+        exp_time: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """Async get option summary"""
         path, params, extra_data = self._get_opt_summary(
             inst_type, uly, exp_time, extra_data, **kwargs
@@ -1749,8 +2093,14 @@ class MarketDataMixin:
         )
 
     def _get_position_tiers_public(
-        self, inst_type, uly=None, inst_id=None, tier=None, extra_data=None, **kwargs
-    ):
+        self,
+        inst_type: Any,
+        uly: Any = None,
+        inst_id: Any = None,
+        tier: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """Get position tiers (public)"""
         request_type = "get_position_tiers_public"
         params = {"instType": inst_type}
@@ -1776,8 +2126,14 @@ class MarketDataMixin:
         return path, params, extra_data
 
     def get_position_tiers_public(
-        self, inst_type, uly=None, inst_id=None, tier=None, extra_data=None, **kwargs
-    ):
+        self,
+        inst_type: Any,
+        uly: Any = None,
+        inst_id: Any = None,
+        tier: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """Get position tiers (public)"""
         path, params, extra_data = self._get_position_tiers_public(
             inst_type, uly, inst_id, tier, extra_data, **kwargs
@@ -1786,8 +2142,14 @@ class MarketDataMixin:
         return data
 
     def async_get_position_tiers_public(
-        self, inst_type, uly=None, inst_id=None, tier=None, extra_data=None, **kwargs
-    ):
+        self,
+        inst_type: Any,
+        uly: Any = None,
+        inst_id: Any = None,
+        tier: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """Async get position tiers (public)"""
         path, params, extra_data = self._get_position_tiers_public(
             inst_type, uly, inst_id, tier, extra_data, **kwargs

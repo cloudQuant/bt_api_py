@@ -1,10 +1,9 @@
-"""
-Bitbank REST API request base class.
-"""
+"""Bitbank REST API request base class."""
 
 import hashlib
 import hmac
 import time
+from typing import Any
 
 from bt_api_py.containers.exchanges.bitbank_exchange_data import BitbankExchangeDataSpot
 from bt_api_py.containers.requestdatas.request_data import RequestData
@@ -30,7 +29,7 @@ class BitbankRequestData(Feed):
             Capability.CANCEL_ORDER,
         }
 
-    def __init__(self, data_queue, **kwargs):
+    def __init__(self, data_queue, **kwargs) -> None:
         super().__init__(data_queue, **kwargs)
         self.data_queue = data_queue
         self.exchange_name = kwargs.get("exchange_name", "BITBANK___SPOT")
@@ -40,7 +39,7 @@ class BitbankRequestData(Feed):
         self.async_logger = get_logger("bitbank_feed")
         self._http_client = HttpClient(venue=self.exchange_name, timeout=10)
 
-    def _generate_signature(self, timestamp, time_window, message):
+    def _generate_signature(self, timestamp, time_window, message) -> Any:
         """Generate HMAC SHA256 signature for Bitbank API."""
         secret = getattr(self._params, "api_secret", None)
         if secret:
@@ -50,7 +49,7 @@ class BitbankRequestData(Feed):
             return signature
         return ""
 
-    def _get_headers(self, method, request_path, params=None, body=""):
+    def _get_headers(self, method, request_path, params=None, body="") -> Any:
         """Generate request headers with authentication."""
         headers = {
             "Content-Type": "application/json",
@@ -134,13 +133,13 @@ class BitbankRequestData(Feed):
         except Exception as e:
             self.async_logger.error(f"Async callback error: {e}")
 
-    def _process_response(self, response, extra_data=None):
+    def _process_response(self, response, extra_data=None) -> Any:
         """Process API response."""
         if extra_data is None:
             extra_data = {}
         return RequestData(response, extra_data)
 
-    def _get_server_time(self, extra_data=None, **kwargs):
+    def _get_server_time(self, extra_data=None, **kwargs) -> Any:
         """Prepare server time request. Returns (path, params, extra_data)."""
         if extra_data is None:
             extra_data = {}
@@ -154,7 +153,7 @@ class BitbankRequestData(Feed):
         )
         return "GET /api/v1/spot/status", {}, extra_data
 
-    def get_server_time(self, extra_data=None, **kwargs):
+    def get_server_time(self, extra_data=None, **kwargs) -> Any:
         """Get server time. Returns RequestData."""
         path, params, extra_data = self._get_server_time(extra_data, **kwargs)
         return self.request(path, params=params, extra_data=extra_data)

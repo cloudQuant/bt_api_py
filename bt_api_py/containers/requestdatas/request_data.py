@@ -1,108 +1,168 @@
+"""Request Data Container."""
+
 import time
+from collections.abc import Callable
+from typing import Any
 
 
 class RequestData:
-    """request data info"""
+    """Request data container for API requests.
 
-    def __init__(self, data, extra_data, status=False, normalize_func=None):
+    This class handles request data for API calls, including input data,
+    extra data, status, and normalization functions.
+
+    Attributes:
+        event: Event type identifier.
+        input_data: Input data for the request.
+        extra_data: Additional data for the request.
+        data: Processed data list.
+        status: Request status.
+        normalize_func: Function to normalize input data.
+        local_update_time: Local timestamp of last update.
+        exchange_name: Exchange identifier.
+        symbol_name: Trading symbol name.
+        asset_type: Asset type.
+        request_type: Request type identifier.
+        has_been_init_data: Flag indicating if data has been initialized.
+    """
+
+    def __init__(
+        self,
+        data: Any,
+        extra_data: dict[str, Any],
+        status: bool = False,
+        normalize_func: Callable | None = None,
+    ) -> None:
+        """Initialize request data container.
+
+        Args:
+            data: Input data for the request.
+            extra_data: Additional data for the request.
+            status: Request status, defaults to False.
+            normalize_func: Function to normalize input data, defaults to None.
+        """
         self.event = "RequestEvent"
         self.input_data = data
-        # 额外的数据，策略中传入的，用于策略得到数据之后进行分析
         self.extra_data = extra_data
-        # 传递的数据
-        self.data: list = []
-        # 返回的状态, False代表失败，True代表成功
+        self.data: list[Any] = []
         self.status = status
-        # 标准化数据函数
         self.normalize_func = normalize_func
-        # 本地化时间
         self.local_update_time = time.time()
-        # 交易所名称
         self.exchange_name = extra_data.get("exchange_name", "")
-        # symbol名称
         self.symbol_name = extra_data.get("symbol_name", "")
-        # 资产类型
         self.asset_type = extra_data.get("asset_type", "")
-        # 请求类型
         self.request_type = extra_data.get("request_type", "")
-        # 是否初始化
         self.has_been_init_data = False
 
-    def init_data(self):
-        # print("self.input_data", self.input_data)
+    def init_data(self) -> None:
+        """Initialize and parse request data.
+
+        Processes the input data using the normalize function if provided,
+        otherwise uses the input data directly.
+        """
         normalize_func = self.extra_data.get("normalize_function", None)
         if normalize_func is None:
             self.data = self.input_data
             self.status = None
         else:
             self.data, self.status = normalize_func(self.input_data, self.extra_data)
-        # print(f"asset_type: {self.asset_type}, self.data: {self.data},status: {self.status}")
 
-    def set_data(self, data):
-        """
-        set data to request
-        :param data: list type
-        :return: None
+        self.has_been_init_data = True
+
+    def set_data(self, data: list[Any]) -> None:
+        """Set data to request.
+
+        Args:
+            data: List type data to set.
         """
         self.data = data
 
-    def set_status(self, status=True):
-        """
-        set status of request
-        :param status: default:True
-        :return: None
+    def set_status(self, status: bool = True) -> None:
+        """Set status of request.
+
+        Args:
+            status: Request status, defaults to True.
         """
         self.status = status
 
-    def get_event(self):
-        """
-        get an event type from request data info
-        :return: str
+    def get_event(self) -> str:
+        """Get event type from request data info.
+
+        Returns:
+            Event type string.
         """
         return self.event
 
-    def get_request_type(self):
+    def get_request_type(self) -> str:
+        """Get request type from request data info.
+
+        Returns:
+            Request type string.
+        """
         return self.request_type
 
-    def get_input_data(self):
-        """
-        get input data from request data info
-        :return: str or dict
+    def get_input_data(self) -> Any:
+        """Get input data from request data info.
+
+        Returns:
+            Input data (str or dict).
         """
         return self.input_data
 
-    def get_extra_data(self):
-        """
-        get extra data from request data info
-        :return: None or dict
+    def get_extra_data(self) -> dict[str, Any]:
+        """Get extra data from request data info.
+
+        Returns:
+            Extra data dictionary.
         """
         return self.extra_data
 
-    def get_data(self):
-        """
-        get data from a request data info
-        :return: list of different data instance
+    def get_data(self) -> list[Any]:
+        """Get data from request data info.
+
+        Initializes data if not already done.
+
+        Returns:
+            List of different data instances.
         """
         if not self.has_been_init_data:
             self.init_data()
             self.has_been_init_data = True
         return self.data
 
-    def get_status(self):
-        """
-        get status of request
-        :return: bool, True or False
+    def get_status(self) -> bool | None:
+        """Get status of request.
+
+        Initializes data if not already done.
+
+        Returns:
+            bool: True or False, None if not initialized.
         """
         if not self.has_been_init_data:
             self.init_data()
             self.has_been_init_data = True
         return self.status
 
-    def get_exchange_name(self):
+    def get_exchange_name(self) -> str:
+        """Get exchange name.
+
+        Returns:
+            Exchange identifier.
+        """
         return self.exchange_name
 
-    def get_symbol_name(self):
+    def get_symbol_name(self) -> str:
+        """Get symbol name.
+
+        Returns:
+            Trading symbol name.
+        """
         return self.symbol_name
 
-    def get_asset_type(self):
+    def get_asset_type(self) -> str:
+        """Get asset type.
+
+        Returns:
+            Asset type.
+        """
         return self.asset_type

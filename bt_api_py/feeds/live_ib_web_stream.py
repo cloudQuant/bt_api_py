@@ -16,6 +16,7 @@ import contextlib
 import json
 import threading
 import time
+from typing import Any
 
 from bt_api_py.feeds.base_stream import BaseDataStream, ConnectionState
 
@@ -27,7 +28,7 @@ class IbWebDataStream(BaseDataStream):
     每个 conid 需要单独订阅。
     """
 
-    def __init__(self, data_queue, **kwargs):
+    def __init__(self, data_queue, **kwargs) -> None:
         super().__init__(data_queue, **kwargs)
         self.base_url = kwargs.get("base_url", "https://localhost:5000")
         self.access_token = kwargs.get("access_token")
@@ -40,7 +41,7 @@ class IbWebDataStream(BaseDataStream):
         self._max_reconnect_delay = 60
         self._subscribed_conids = set()
 
-    def _build_ws_url(self):
+    def _build_ws_url(self) -> Any:
         """构建 WebSocket URL"""
         base = self.base_url.replace("https://", "wss://").replace("http://", "ws://")
         if "/v1/api" in base:
@@ -114,7 +115,7 @@ class IbWebDataStream(BaseDataStream):
             except Exception as e:
                 self.logger.warn(f"Unsubscribe failed for conid={conid}: {e}")
 
-    def _subscribe_market_data(self, conid, fields=None):
+    def _subscribe_market_data(self, conid, fields=None) -> Any:
         """发送市场数据订阅消息"""
         if fields is None:
             fields = ["31", "84", "85", "86", "88"]
@@ -128,7 +129,7 @@ class IbWebDataStream(BaseDataStream):
             except Exception as e:
                 self.logger.warn(f"Subscribe failed for conid={conid}: {e}")
 
-    def _on_open(self, ws):
+    def _on_open(self, ws) -> Any:
         """WebSocket 连接建立回调"""
         self.state = ConnectionState.CONNECTED
         self.logger.info("IB WebSocket connected")
@@ -140,7 +141,7 @@ class IbWebDataStream(BaseDataStream):
         if self.topics:
             self.subscribe_topics(self.topics)
 
-    def _on_message(self, ws, message):
+    def _on_message(self, ws, message) -> Any:
         """WebSocket 消息处理"""
         try:
             # IB WebSocket 消息格式可能是 JSON 或特殊格式
@@ -157,7 +158,7 @@ class IbWebDataStream(BaseDataStream):
         except Exception as e:
             self.logger.warn(f"WS message processing error: {e}")
 
-    def _process_message(self, data):
+    def _process_message(self, data) -> Any:
         """处理解析后的 JSON 消息"""
         if isinstance(data, dict):
             # 市场数据更新
@@ -205,12 +206,12 @@ class IbWebDataStream(BaseDataStream):
                         }
                     )
 
-    def _on_error(self, ws, error):
+    def _on_error(self, ws, error) -> Any:
         """WebSocket 错误回调"""
         self.logger.warn(f"IB WebSocket error: {error}")
         self.state = ConnectionState.ERROR
 
-    def _on_close(self, ws, close_status_code, close_msg):
+    def _on_close(self, ws, close_status_code, close_msg) -> Any:
         """WebSocket 关闭回调"""
         self.logger.info(f"IB WebSocket closed: {close_status_code} {close_msg}")
         self.state = ConnectionState.DISCONNECTED
@@ -228,7 +229,7 @@ class IbWebDataStream(BaseDataStream):
             except Exception as e:
                 self.logger.warn(f"Reconnect failed: {e}")
 
-    def _start_heartbeat(self):
+    def _start_heartbeat(self) -> Any:
         """启动心跳发送线程"""
 
         def heartbeat_loop():
@@ -242,7 +243,7 @@ class IbWebDataStream(BaseDataStream):
         self._heartbeat_thread = threading.Thread(target=heartbeat_loop, daemon=True)
         self._heartbeat_thread.start()
 
-    def _run_loop(self):
+    def _run_loop(self) -> Any:
         """主循环 (由 BaseDataStream.start() 在线程中调用)"""
         self.connect()
         while self._running:
@@ -258,7 +259,7 @@ class IbWebAccountStream(BaseDataStream):
       - 盈亏更新 (spl)
     """
 
-    def __init__(self, data_queue, **kwargs):
+    def __init__(self, data_queue, **kwargs) -> None:
         super().__init__(data_queue, **kwargs)
         self.base_url = kwargs.get("base_url", "https://localhost:5000")
         self.access_token = kwargs.get("access_token")
@@ -270,7 +271,7 @@ class IbWebAccountStream(BaseDataStream):
         self._reconnect_delay = 5
         self._max_reconnect_delay = 60
 
-    def _build_ws_url(self):
+    def _build_ws_url(self) -> Any:
         base = self.base_url.replace("https://", "wss://").replace("http://", "ws://")
         if "/v1/api" in base:
             return f"{base}/ws"
@@ -333,7 +334,7 @@ class IbWebAccountStream(BaseDataStream):
             elif topic_type == "trade":
                 self._send_ws("str")
 
-    def _send_ws(self, msg):
+    def _send_ws(self, msg) -> Any:
         if self._ws and self._running:
             try:
                 self._ws.send(msg)
@@ -341,14 +342,14 @@ class IbWebAccountStream(BaseDataStream):
             except Exception as e:
                 self.logger.warn(f"WS send failed: {e}")
 
-    def _on_open(self, ws):
+    def _on_open(self, ws) -> Any:
         self.state = ConnectionState.CONNECTED
         self.logger.info("IB Account WebSocket connected")
         self._start_heartbeat()
         if self.topics:
             self.subscribe_topics(self.topics)
 
-    def _on_message(self, ws, message):
+    def _on_message(self, ws, message) -> Any:
         try:
             if message.startswith("{") or message.startswith("["):
                 data = json.loads(message)
@@ -362,7 +363,7 @@ class IbWebAccountStream(BaseDataStream):
         except Exception as e:
             self.logger.warn(f"Account WS message error: {e}")
 
-    def _process_message(self, data):
+    def _process_message(self, data) -> Any:
         if isinstance(data, dict):
             topic = data.get("topic", "")
             if topic.startswith("spl"):
@@ -406,11 +407,11 @@ class IbWebAccountStream(BaseDataStream):
                     }
                 )
 
-    def _on_error(self, ws, error):
+    def _on_error(self, ws, error) -> Any:
         self.logger.warn(f"IB Account WebSocket error: {error}")
         self.state = ConnectionState.ERROR
 
-    def _on_close(self, ws, close_status_code, close_msg):
+    def _on_close(self, ws, close_status_code, close_msg) -> Any:
         self.logger.info(f"IB Account WebSocket closed: {close_status_code} {close_msg}")
         self.state = ConnectionState.DISCONNECTED
         if self._running:
@@ -422,7 +423,7 @@ class IbWebAccountStream(BaseDataStream):
             except Exception as e:
                 self.logger.warn(f"Account WS reconnect failed: {e}")
 
-    def _start_heartbeat(self):
+    def _start_heartbeat(self) -> Any:
         def heartbeat_loop():
             while self._running and self._ws:
                 try:
@@ -434,7 +435,7 @@ class IbWebAccountStream(BaseDataStream):
         t = threading.Thread(target=heartbeat_loop, daemon=True)
         t.start()
 
-    def _run_loop(self):
+    def _run_loop(self) -> Any:
         self.connect()
         while self._running:
             time.sleep(1)

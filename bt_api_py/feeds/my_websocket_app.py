@@ -15,7 +15,7 @@ from bt_api_py.logging_factory import get_logger
 
 
 class MyWebsocketApp:
-    def __init__(self, data_queue, **kwargs):
+    def __init__(self, data_queue, **kwargs) -> None:
         self.ws = None
         self.data_queue = data_queue
         self.wss_name = kwargs.get("wss_name", "default_name")
@@ -37,11 +37,12 @@ class MyWebsocketApp:
             try:
                 import urllib.request
                 from urllib.parse import urlparse
+
                 system_proxies = urllib.request.getproxies()
-                proxy_url = system_proxies.get('http') or system_proxies.get('https')
+                proxy_url = system_proxies.get("http") or system_proxies.get("https")
                 if proxy_url:
                     parsed = urlparse(proxy_url)
-                    if parsed.scheme in ('http', 'https'):
+                    if parsed.scheme in ("http", "https"):
                         self.http_proxy_host = parsed.hostname
                         self.http_proxy_port = parsed.port
             except Exception:
@@ -61,10 +62,10 @@ class MyWebsocketApp:
         self._current_delay = self._reconnect_base_delay
 
         # ── EventBus 支持（可选） ────────────────────────────────
-        self._event_bus = kwargs.get("event_bus", None)
+        self._event_bus = kwargs.get("event_bus")
 
     # noinspection PyMethodMayBeStatic
-    def get_timestamp(self, time_str):
+    def get_timestamp(self, time_str) -> Any:
         dt = datetime.datetime.strptime(time_str, "%Y-%m-%dT%H:%M:%S.%fZ")
         timestamp = int((time.mktime(dt.timetuple()) + dt.microsecond / 1000000) * 1000)
         return timestamp
@@ -76,23 +77,26 @@ class MyWebsocketApp:
         # time.sleep(0.3)
 
     def _emit_event(self, event_type, **payload):
-        """通过 EventBus 发送 WebSocket 状态事件（如果已配置）"""
+        """通过 EventBus 发送 WebSocket 状态事件（如果已配置）."""
         if self._event_bus is not None:
-            self._event_bus.emit(event_type, {
-                "wss_name": self.wss_name,
-                "wss_url": self.wss_url,
-                **payload,
-            })
+            self._event_bus.emit(
+                event_type,
+                {
+                    "wss_name": self.wss_name,
+                    "wss_url": self.wss_url,
+                    **payload,
+                },
+            )
 
     def _backoff_delay(self):
-        """计算指数退避延迟（带抖动），并更新下次延迟"""
+        """计算指数退避延迟（带抖动），并更新下次延迟."""
         jitter = random.uniform(0, self._current_delay * 0.1)
         delay = min(self._current_delay + jitter, self._reconnect_max_delay)
         self._current_delay = min(self._current_delay * 2, self._reconnect_max_delay)
         return delay
 
     def _reset_backoff(self):
-        """连接成功后重置退避计数器"""
+        """连接成功后重置退避计数器."""
         self._reconnect_attempt = 0
         self._current_delay = self._reconnect_base_delay
 
@@ -172,7 +176,10 @@ class MyWebsocketApp:
         # print("初始化run成功, self.wss_url=", self.wss_url)
         while True:
             # 检查最大重连次数
-            if self._max_reconnect_attempts > 0 and self._reconnect_attempt >= self._max_reconnect_attempts:
+            if (
+                self._max_reconnect_attempts > 0
+                and self._reconnect_attempt >= self._max_reconnect_attempts
+            ):
                 self.wss_logger.warn(
                     f"{self.wss_name}: max reconnect attempts ({self._max_reconnect_attempts}) reached, giving up"
                 )
@@ -240,7 +247,7 @@ class MyWebsocketApp:
             self.ws = None
 
     def restart_timer(self):
-        """重启定时器"""
+        """重启定时器."""
         time_gap = self.restart_gap
         while True:
             time.sleep(time_gap)
@@ -260,5 +267,5 @@ if __name__ == "__main__":
                 for exc in task:
                     # print(exc.wss_name, "begin_to_run")
                     exc.start()
-            except Exception as e:
+            except Exception:
                 pass

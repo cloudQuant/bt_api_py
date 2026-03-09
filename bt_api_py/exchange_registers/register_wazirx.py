@@ -8,12 +8,12 @@ from bt_api_py.feeds.live_wazirx.spot import WazirxRequestDataSpot
 from bt_api_py.registry import ExchangeRegistry
 
 
-def _wazirx_spot_subscribe_handler(feed, topics):
+def _wazirx_spot_subscribe_handler(feed: Any, topics: Any) -> None:
     """Placeholder subscribe handler for WazirX WebSocket."""
     pass
 
 
-def register_wazirx():
+def register_wazirx() -> None:
     """Register WazirX SPOT to global ExchangeRegistry"""
     ExchangeRegistry.register_feed("WAZIRX___SPOT", WazirxRequestDataSpot)
     ExchangeRegistry.register_exchange_data("WAZIRX___SPOT", WazirxExchangeDataSpot)

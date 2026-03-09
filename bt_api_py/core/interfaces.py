@@ -1,6 +1,4 @@
-"""
-Core interfaces for the modernized bt_api_py architecture.
-"""
+"""Core interfaces for the modernized bt_api_py architecture."""
 
 from abc import ABC, abstractmethod
 from typing import Any, Protocol, runtime_checkable
@@ -234,9 +232,7 @@ class IMetricsCollector(ABC):
         ...
 
     @abstractmethod
-    def record_histogram(
-        self, name: str, value: float, tags: dict[str, str] | None = None
-    ) -> None:
+    def record_histogram(self, name: str, value: float, tags: dict[str, str] | None = None) -> None:
         """Record a histogram value."""
         ...
 

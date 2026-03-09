@@ -10,7 +10,7 @@ from bt_api_py.logging_factory import get_logger
 
 
 class OkxRequestDataFutures(OkxRequestData):
-    def __init__(self, data_queue, **kwargs):
+    def __init__(self, data_queue: Any, **kwargs: Any) -> None:
         super().__init__(data_queue, **kwargs)
         self.asset_type = kwargs.get("asset_type", "FUTURES")
         self.logger_name = kwargs.get("logger_name", "okx_futures_feed.log")
@@ -20,24 +20,24 @@ class OkxRequestDataFutures(OkxRequestData):
 
 
 class OkxAccountWssDataFutures(OkxAccountWssData):
-    def __init__(self, data_queue, **kwargs):
+    def __init__(self, data_queue: Any, **kwargs: Any) -> None:
         super().__init__(data_queue, **kwargs)
         self.asset_type = kwargs.get("asset_type", "FUTURES")
 
 
 class OkxMarketWssDataFutures(OkxMarketWssData):
-    def __init__(self, data_queue, **kwargs):
+    def __init__(self, data_queue: Any, **kwargs: Any) -> None:
         super().__init__(data_queue, **kwargs)
         self.asset_type = kwargs.get("asset_type", "FUTURES")
 
 
 class OkxKlineWssDataFutures(OkxKlineWssData):
-    def __init__(self, data_queue, **kwargs):
+    def __init__(self, data_queue: Any, **kwargs: Any) -> None:
         super().__init__(data_queue, **kwargs)
         self.asset_type = kwargs.get("asset_type", "FUTURES")
 
 
 class OkxWssDataFutures(OkxWssData):
-    def __init__(self, data_queue, **kwargs):
+    def __init__(self, data_queue: Any, **kwargs: Any) -> None:
         super().__init__(data_queue, **kwargs)
         self.asset_type = kwargs.get("asset_type", "FUTURES")

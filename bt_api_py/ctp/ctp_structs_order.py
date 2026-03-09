@@ -127,7 +127,7 @@ class CThostFtdcInputOrderField:
         _ctp.CThostFtdcInputOrderField_SessionReqSeq_set,
     )
 
-    def __init__(self):
+    def __init__(self) -> None:
         _ctp.CThostFtdcInputOrderField_swiginit(self, _ctp.new_CThostFtdcInputOrderField())
 
     __swig_destroy__ = _ctp.delete_CThostFtdcInputOrderField
@@ -347,7 +347,7 @@ class CThostFtdcOrderField:
         _ctp.CThostFtdcOrderField_SessionReqSeq_get, _ctp.CThostFtdcOrderField_SessionReqSeq_set
     )
 
-    def __init__(self):
+    def __init__(self) -> None:
         _ctp.CThostFtdcOrderField_swiginit(self, _ctp.new_CThostFtdcOrderField())
 
     __swig_destroy__ = _ctp.delete_CThostFtdcOrderField
@@ -550,7 +550,7 @@ class CThostFtdcExchangeOrderField:
         _ctp.CThostFtdcExchangeOrderField_IPAddress_set,
     )
 
-    def __init__(self):
+    def __init__(self) -> None:
         _ctp.CThostFtdcExchangeOrderField_swiginit(self, _ctp.new_CThostFtdcExchangeOrderField())
 
     __swig_destroy__ = _ctp.delete_CThostFtdcExchangeOrderField
@@ -594,7 +594,7 @@ class CThostFtdcExchangeOrderInsertErrorField:
         _ctp.CThostFtdcExchangeOrderInsertErrorField_ErrorMsg_set,
     )
 
-    def __init__(self):
+    def __init__(self) -> None:
         _ctp.CThostFtdcExchangeOrderInsertErrorField_swiginit(
             self, _ctp.new_CThostFtdcExchangeOrderInsertErrorField()
         )
@@ -696,7 +696,7 @@ class CThostFtdcInputOrderActionField:
         _ctp.CThostFtdcInputOrderActionField_SessionReqSeq_set,
     )
 
-    def __init__(self):
+    def __init__(self) -> None:
         _ctp.CThostFtdcInputOrderActionField_swiginit(
             self, _ctp.new_CThostFtdcInputOrderActionField()
         )
@@ -831,7 +831,7 @@ class CThostFtdcOrderActionField:
         _ctp.CThostFtdcOrderActionField_SessionReqSeq_set,
     )
 
-    def __init__(self):
+    def __init__(self) -> None:
         _ctp.CThostFtdcOrderActionField_swiginit(self, _ctp.new_CThostFtdcOrderActionField())
 
     __swig_destroy__ = _ctp.delete_CThostFtdcOrderActionField
@@ -927,7 +927,7 @@ class CThostFtdcExchangeOrderActionField:
         _ctp.CThostFtdcExchangeOrderActionField_IPAddress_set,
     )
 
-    def __init__(self):
+    def __init__(self) -> None:
         _ctp.CThostFtdcExchangeOrderActionField_swiginit(
             self, _ctp.new_CThostFtdcExchangeOrderActionField()
         )
@@ -977,7 +977,7 @@ class CThostFtdcExchangeOrderActionErrorField:
         _ctp.CThostFtdcExchangeOrderActionErrorField_ErrorMsg_set,
     )
 
-    def __init__(self):
+    def __init__(self) -> None:
         _ctp.CThostFtdcExchangeOrderActionErrorField_swiginit(
             self, _ctp.new_CThostFtdcExchangeOrderActionErrorField()
         )
@@ -1085,7 +1085,7 @@ class CThostFtdcInputExecOrderField:
         _ctp.CThostFtdcInputExecOrderField_IPAddress_set,
     )
 
-    def __init__(self):
+    def __init__(self) -> None:
         _ctp.CThostFtdcInputExecOrderField_swiginit(self, _ctp.new_CThostFtdcInputExecOrderField())
 
     __swig_destroy__ = _ctp.delete_CThostFtdcInputExecOrderField
@@ -1169,7 +1169,7 @@ class CThostFtdcInputExecOrderActionField:
         _ctp.CThostFtdcInputExecOrderActionField_IPAddress_set,
     )
 
-    def __init__(self):
+    def __init__(self) -> None:
         _ctp.CThostFtdcInputExecOrderActionField_swiginit(
             self, _ctp.new_CThostFtdcInputExecOrderActionField()
         )
@@ -1345,7 +1345,7 @@ class CThostFtdcExecOrderField:
         _ctp.CThostFtdcExecOrderField_IPAddress_get, _ctp.CThostFtdcExecOrderField_IPAddress_set
     )
 
-    def __init__(self):
+    def __init__(self) -> None:
         _ctp.CThostFtdcExecOrderField_swiginit(self, _ctp.new_CThostFtdcExecOrderField())
 
     __swig_destroy__ = _ctp.delete_CThostFtdcExecOrderField
@@ -1481,7 +1481,7 @@ class CThostFtdcExecOrderActionField:
         _ctp.CThostFtdcExecOrderActionField_IPAddress_set,
     )
 
-    def __init__(self):
+    def __init__(self) -> None:
         _ctp.CThostFtdcExecOrderActionField_swiginit(
             self, _ctp.new_CThostFtdcExecOrderActionField()
         )
@@ -1627,7 +1627,7 @@ class CThostFtdcExchangeExecOrderField:
         _ctp.CThostFtdcExchangeExecOrderField_IPAddress_set,
     )
 
-    def __init__(self):
+    def __init__(self) -> None:
         _ctp.CThostFtdcExchangeExecOrderField_swiginit(
             self, _ctp.new_CThostFtdcExchangeExecOrderField()
         )
@@ -1733,7 +1733,7 @@ class CThostFtdcExchangeExecOrderActionField:
         _ctp.CThostFtdcExchangeExecOrderActionField_ExchangeInstID_set,
     )
 
-    def __init__(self):
+    def __init__(self) -> None:
         _ctp.CThostFtdcExchangeExecOrderActionField_swiginit(
             self, _ctp.new_CThostFtdcExchangeExecOrderActionField()
         )
@@ -1843,7 +1843,7 @@ class CThostFtdcErrExecOrderField:
         _ctp.CThostFtdcErrExecOrderField_IPAddress_set,
     )
 
-    def __init__(self):
+    def __init__(self) -> None:
         _ctp.CThostFtdcErrExecOrderField_swiginit(self, _ctp.new_CThostFtdcErrExecOrderField())
 
     __swig_destroy__ = _ctp.delete_CThostFtdcErrExecOrderField
@@ -1935,7 +1935,7 @@ class CThostFtdcErrExecOrderActionField:
         _ctp.CThostFtdcErrExecOrderActionField_IPAddress_set,
     )
 
-    def __init__(self):
+    def __init__(self) -> None:
         _ctp.CThostFtdcErrExecOrderActionField_swiginit(
             self, _ctp.new_CThostFtdcErrExecOrderActionField()
         )
@@ -1996,7 +1996,7 @@ class CThostFtdcInputForQuoteField:
         _ctp.CThostFtdcInputForQuoteField_IPAddress_set,
     )
 
-    def __init__(self):
+    def __init__(self) -> None:
         _ctp.CThostFtdcInputForQuoteField_swiginit(self, _ctp.new_CThostFtdcInputForQuoteField())
 
     __swig_destroy__ = _ctp.delete_CThostFtdcInputForQuoteField
@@ -2095,7 +2095,7 @@ class CThostFtdcForQuoteField:
         _ctp.CThostFtdcForQuoteField_IPAddress_get, _ctp.CThostFtdcForQuoteField_IPAddress_set
     )
 
-    def __init__(self):
+    def __init__(self) -> None:
         _ctp.CThostFtdcForQuoteField_swiginit(self, _ctp.new_CThostFtdcForQuoteField())
 
     __swig_destroy__ = _ctp.delete_CThostFtdcForQuoteField
@@ -2167,7 +2167,7 @@ class CThostFtdcExchangeForQuoteField:
         _ctp.CThostFtdcExchangeForQuoteField_IPAddress_set,
     )
 
-    def __init__(self):
+    def __init__(self) -> None:
         _ctp.CThostFtdcExchangeForQuoteField_swiginit(
             self, _ctp.new_CThostFtdcExchangeForQuoteField()
         )
@@ -2285,7 +2285,7 @@ class CThostFtdcInputQuoteField:
         _ctp.CThostFtdcInputQuoteField_SessionReqSeq_set,
     )
 
-    def __init__(self):
+    def __init__(self) -> None:
         _ctp.CThostFtdcInputQuoteField_swiginit(self, _ctp.new_CThostFtdcInputQuoteField())
 
     __swig_destroy__ = _ctp.delete_CThostFtdcInputQuoteField
@@ -2381,7 +2381,7 @@ class CThostFtdcInputQuoteActionField:
         _ctp.CThostFtdcInputQuoteActionField_SessionReqSeq_set,
     )
 
-    def __init__(self):
+    def __init__(self) -> None:
         _ctp.CThostFtdcInputQuoteActionField_swiginit(
             self, _ctp.new_CThostFtdcInputQuoteActionField()
         )
@@ -2567,7 +2567,7 @@ class CThostFtdcQuoteField:
         _ctp.CThostFtdcQuoteField_SessionReqSeq_get, _ctp.CThostFtdcQuoteField_SessionReqSeq_set
     )
 
-    def __init__(self):
+    def __init__(self) -> None:
         _ctp.CThostFtdcQuoteField_swiginit(self, _ctp.new_CThostFtdcQuoteField())
 
     __swig_destroy__ = _ctp.delete_CThostFtdcQuoteField
@@ -2692,7 +2692,7 @@ class CThostFtdcQuoteActionField:
         _ctp.CThostFtdcQuoteActionField_SessionReqSeq_set,
     )
 
-    def __init__(self):
+    def __init__(self) -> None:
         _ctp.CThostFtdcQuoteActionField_swiginit(self, _ctp.new_CThostFtdcQuoteActionField())
 
     __swig_destroy__ = _ctp.delete_CThostFtdcQuoteActionField
@@ -2856,7 +2856,7 @@ class CThostFtdcExchangeQuoteField:
         _ctp.CThostFtdcExchangeQuoteField_TimeCondition_set,
     )
 
-    def __init__(self):
+    def __init__(self) -> None:
         _ctp.CThostFtdcExchangeQuoteField_swiginit(self, _ctp.new_CThostFtdcExchangeQuoteField())
 
     __swig_destroy__ = _ctp.delete_CThostFtdcExchangeQuoteField
@@ -2940,7 +2940,7 @@ class CThostFtdcExchangeQuoteActionField:
         _ctp.CThostFtdcExchangeQuoteActionField_IPAddress_set,
     )
 
-    def __init__(self):
+    def __init__(self) -> None:
         _ctp.CThostFtdcExchangeQuoteActionField_swiginit(
             self, _ctp.new_CThostFtdcExchangeQuoteActionField()
         )
@@ -2984,7 +2984,7 @@ class CThostFtdcForQuoteRspField:
         _ctp.CThostFtdcForQuoteRspField_InstrumentID_set,
     )
 
-    def __init__(self):
+    def __init__(self) -> None:
         _ctp.CThostFtdcForQuoteRspField_swiginit(self, _ctp.new_CThostFtdcForQuoteRspField())
 
     __swig_destroy__ = _ctp.delete_CThostFtdcForQuoteRspField
@@ -3048,7 +3048,7 @@ class CThostFtdcInputBatchOrderActionField:
         _ctp.CThostFtdcInputBatchOrderActionField_IPAddress_set,
     )
 
-    def __init__(self):
+    def __init__(self) -> None:
         _ctp.CThostFtdcInputBatchOrderActionField_swiginit(
             self, _ctp.new_CThostFtdcInputBatchOrderActionField()
         )
@@ -3154,7 +3154,7 @@ class CThostFtdcBatchOrderActionField:
         _ctp.CThostFtdcBatchOrderActionField_IPAddress_set,
     )
 
-    def __init__(self):
+    def __init__(self) -> None:
         _ctp.CThostFtdcBatchOrderActionField_swiginit(
             self, _ctp.new_CThostFtdcBatchOrderActionField()
         )
@@ -3228,7 +3228,7 @@ class CThostFtdcExchangeBatchOrderActionField:
         _ctp.CThostFtdcExchangeBatchOrderActionField_IPAddress_set,
     )
 
-    def __init__(self):
+    def __init__(self) -> None:
         _ctp.CThostFtdcExchangeBatchOrderActionField_swiginit(
             self, _ctp.new_CThostFtdcExchangeBatchOrderActionField()
         )
@@ -3314,7 +3314,7 @@ class CThostFtdcInputCombActionField:
         _ctp.CThostFtdcInputCombActionField_IPAddress_set,
     )
 
-    def __init__(self):
+    def __init__(self) -> None:
         _ctp.CThostFtdcInputCombActionField_swiginit(
             self, _ctp.new_CThostFtdcInputCombActionField()
         )
@@ -3442,7 +3442,7 @@ class CThostFtdcCombActionField:
         _ctp.CThostFtdcCombActionField_IPAddress_get, _ctp.CThostFtdcCombActionField_IPAddress_set
     )
 
-    def __init__(self):
+    def __init__(self) -> None:
         _ctp.CThostFtdcCombActionField_swiginit(self, _ctp.new_CThostFtdcCombActionField())
 
     __swig_destroy__ = _ctp.delete_CThostFtdcCombActionField
@@ -3546,7 +3546,7 @@ class CThostFtdcExchangeCombActionField:
         _ctp.CThostFtdcExchangeCombActionField_IPAddress_set,
     )
 
-    def __init__(self):
+    def __init__(self) -> None:
         _ctp.CThostFtdcExchangeCombActionField_swiginit(
             self, _ctp.new_CThostFtdcExchangeCombActionField()
         )
@@ -3588,7 +3588,7 @@ class CThostFtdcForQuoteParamField:
         _ctp.CThostFtdcForQuoteParamField_InstrumentID_set,
     )
 
-    def __init__(self):
+    def __init__(self) -> None:
         _ctp.CThostFtdcForQuoteParamField_swiginit(self, _ctp.new_CThostFtdcForQuoteParamField())
 
     __swig_destroy__ = _ctp.delete_CThostFtdcForQuoteParamField
@@ -3680,7 +3680,7 @@ class CThostFtdcInputOptionSelfCloseField:
         _ctp.CThostFtdcInputOptionSelfCloseField_IPAddress_set,
     )
 
-    def __init__(self):
+    def __init__(self) -> None:
         _ctp.CThostFtdcInputOptionSelfCloseField_swiginit(
             self, _ctp.new_CThostFtdcInputOptionSelfCloseField()
         )
@@ -3766,7 +3766,7 @@ class CThostFtdcInputOptionSelfCloseActionField:
         _ctp.CThostFtdcInputOptionSelfCloseActionField_IPAddress_set,
     )
 
-    def __init__(self):
+    def __init__(self) -> None:
         _ctp.CThostFtdcInputOptionSelfCloseActionField_swiginit(
             self, _ctp.new_CThostFtdcInputOptionSelfCloseActionField()
         )
@@ -3958,7 +3958,7 @@ class CThostFtdcOptionSelfCloseField:
         _ctp.CThostFtdcOptionSelfCloseField_IPAddress_set,
     )
 
-    def __init__(self):
+    def __init__(self) -> None:
         _ctp.CThostFtdcOptionSelfCloseField_swiginit(
             self, _ctp.new_CThostFtdcOptionSelfCloseField()
         )
@@ -4092,7 +4092,7 @@ class CThostFtdcOptionSelfCloseActionField:
         _ctp.CThostFtdcOptionSelfCloseActionField_IPAddress_set,
     )
 
-    def __init__(self):
+    def __init__(self) -> None:
         _ctp.CThostFtdcOptionSelfCloseActionField_swiginit(
             self, _ctp.new_CThostFtdcOptionSelfCloseActionField()
         )
@@ -4222,7 +4222,7 @@ class CThostFtdcExchangeOptionSelfCloseField:
         _ctp.CThostFtdcExchangeOptionSelfCloseField_IPAddress_set,
     )
 
-    def __init__(self):
+    def __init__(self) -> None:
         _ctp.CThostFtdcExchangeOptionSelfCloseField_swiginit(
             self, _ctp.new_CThostFtdcExchangeOptionSelfCloseField()
         )
@@ -4324,7 +4324,7 @@ class CThostFtdcExchangeOptionSelfCloseActionField:
         _ctp.CThostFtdcExchangeOptionSelfCloseActionField_ExchangeInstID_set,
     )
 
-    def __init__(self):
+    def __init__(self) -> None:
         _ctp.CThostFtdcExchangeOptionSelfCloseActionField_swiginit(
             self, _ctp.new_CThostFtdcExchangeOptionSelfCloseActionField()
         )
@@ -4475,7 +4475,7 @@ class CThostFtdcParkedOrderField:
         _ctp.CThostFtdcParkedOrderField_IPAddress_get, _ctp.CThostFtdcParkedOrderField_IPAddress_set
     )
 
-    def __init__(self):
+    def __init__(self) -> None:
         _ctp.CThostFtdcParkedOrderField_swiginit(self, _ctp.new_CThostFtdcParkedOrderField())
 
     __swig_destroy__ = _ctp.delete_CThostFtdcParkedOrderField
@@ -4587,7 +4587,7 @@ class CThostFtdcParkedOrderActionField:
         _ctp.CThostFtdcParkedOrderActionField_IPAddress_set,
     )
 
-    def __init__(self):
+    def __init__(self) -> None:
         _ctp.CThostFtdcParkedOrderActionField_swiginit(
             self, _ctp.new_CThostFtdcParkedOrderActionField()
         )
@@ -4621,7 +4621,7 @@ class CThostFtdcRemoveParkedOrderField:
         _ctp.CThostFtdcRemoveParkedOrderField_InvestUnitID_set,
     )
 
-    def __init__(self):
+    def __init__(self) -> None:
         _ctp.CThostFtdcRemoveParkedOrderField_swiginit(
             self, _ctp.new_CThostFtdcRemoveParkedOrderField()
         )
@@ -4655,7 +4655,7 @@ class CThostFtdcRemoveParkedOrderActionField:
         _ctp.CThostFtdcRemoveParkedOrderActionField_InvestUnitID_set,
     )
 
-    def __init__(self):
+    def __init__(self) -> None:
         _ctp.CThostFtdcRemoveParkedOrderActionField_swiginit(
             self, _ctp.new_CThostFtdcRemoveParkedOrderActionField()
         )
@@ -4792,7 +4792,7 @@ class CThostFtdcErrOrderField:
         _ctp.CThostFtdcErrOrderField_SessionReqSeq_set,
     )
 
-    def __init__(self):
+    def __init__(self) -> None:
         _ctp.CThostFtdcErrOrderField_swiginit(self, _ctp.new_CThostFtdcErrOrderField())
 
     __swig_destroy__ = _ctp.delete_CThostFtdcErrOrderField
@@ -5080,7 +5080,7 @@ class CThostFtdcErrorConditionalOrderField:
         _ctp.CThostFtdcErrorConditionalOrderField_IPAddress_set,
     )
 
-    def __init__(self):
+    def __init__(self) -> None:
         _ctp.CThostFtdcErrorConditionalOrderField_swiginit(
             self, _ctp.new_CThostFtdcErrorConditionalOrderField()
         )
@@ -5237,7 +5237,7 @@ class CThostFtdcErrOrderActionField:
         _ctp.CThostFtdcErrOrderActionField_SessionReqSeq_set,
     )
 
-    def __init__(self):
+    def __init__(self) -> None:
         _ctp.CThostFtdcErrOrderActionField_swiginit(self, _ctp.new_CThostFtdcErrOrderActionField())
 
     __swig_destroy__ = _ctp.delete_CThostFtdcErrOrderActionField

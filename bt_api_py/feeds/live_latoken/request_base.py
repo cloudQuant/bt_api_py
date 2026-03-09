@@ -17,7 +17,7 @@ from bt_api_py.logging_factory import get_logger
 class LatokenRequestData(Feed):
     """Latoken REST Feed base – HMAC-SHA512 auth, _get_xxx pattern."""
 
-    def __init__(self, data_queue, **kwargs):
+    def __init__(self, data_queue, **kwargs) -> None:
         super().__init__(data_queue, **kwargs)
         self.exchange_name = kwargs.get("exchange_name", "LATOKEN___SPOT")
         self.asset_type = kwargs.get("asset_type", "SPOT")

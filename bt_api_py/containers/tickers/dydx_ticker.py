@@ -6,9 +6,9 @@ from bt_api_py.functions.utils import from_dict_get_float, from_dict_get_string
 
 
 class DydxTickerData(TickerData):
-    """保存 dYdX ticker 信息"""
+    """保存 dYdX ticker 信息."""
 
-    def __init__(self, ticker_info, symbol_name, asset_type, has_been_json_encoded=False):
+    def __init__(self, ticker_info, symbol_name, asset_type, has_been_json_encoded=False) -> None:
         super().__init__(ticker_info, has_been_json_encoded)
         self.exchange_name = "DYDX"  # 交易所名称
         self.local_update_time = time.time()
@@ -34,10 +34,10 @@ class DydxTickerData(TickerData):
         self.all_data = None
         self.has_been_init_data = False
 
-    def init_data(self):
+    def init_data(self) -> "Self":
         raise NotImplementedError
 
-    def get_all_data(self):
+    def get_all_data(self) -> dict[str, Any]:
         if self.all_data is None:
             self.all_data = {
                 "exchange_name": self.exchange_name,
@@ -60,44 +60,44 @@ class DydxTickerData(TickerData):
             }
         return self.all_data
 
-    def __str__(self):
+    def __str__(self) -> str:
         self.init_data()
         return json.dumps(self.get_all_data())
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return self.__str__()
 
-    def get_exchange_name(self):
+    def get_exchange_name(self) -> str:
         return self.exchange_name
 
-    def get_local_update_time(self):
+    def get_local_update_time(self) -> float:
         return self.local_update_time
 
-    def get_symbol_name(self):
+    def get_symbol_name(self) -> str:
         return self.symbol_name
 
-    def get_ticker_symbol_name(self):
+    def get_ticker_symbol_name(self) -> str | None:
         return self.ticker_symbol_name
 
-    def get_asset_type(self):
+    def get_asset_type(self) -> str:
         return self.asset_type
 
-    def get_server_time(self):
+    def get_server_time(self) -> float | None:
         return self.server_time
 
-    def get_last_price(self):
+    def get_last_price(self) -> float | None:
         return self.last_price
 
-    def get_last_volume(self):
+    def get_last_volume(self) -> float | None:
         return self.last_volume
 
-    def get_high_24h(self):
+    def get_high_24h(self) -> float | None:
         return self.high_24h
 
-    def get_low_24h(self):
+    def get_low_24h(self) -> float | None:
         return self.low_24h
 
-    def get_volume_24h(self):
+    def get_volume_24h(self) -> float | None:
         return self.volume_24h
 
     def get_volume_24h_usd(self):
@@ -120,9 +120,9 @@ class DydxTickerData(TickerData):
 
 
 class DydxWssTickerData(DydxTickerData):
-    """保存 WebSocket ticker 信息"""
+    """保存 WebSocket ticker 信息."""
 
-    def init_data(self):
+    def init_data(self) -> "Self":
         if not self.has_been_json_encoded:
             self.ticker_data = json.loads(self.ticker_info)
             self.has_been_json_encoded = True
@@ -145,9 +145,9 @@ class DydxWssTickerData(DydxTickerData):
 
 
 class DydxRequestTickerData(DydxTickerData):
-    """保存 REST API ticker 信息"""
+    """保存 REST API ticker 信息."""
 
-    def init_data(self):
+    def init_data(self) -> "Self":
         if not self.has_been_json_encoded:
             self.ticker_data = json.loads(self.ticker_info)
             self.has_been_json_encoded = True

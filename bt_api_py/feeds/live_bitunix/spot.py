@@ -2,6 +2,8 @@
 Bitunix Spot Feed implementation.
 """
 
+from typing import Any
+
 from bt_api_py.feeds.capability import Capability
 from bt_api_py.feeds.live_bitunix.request_base import BitunixRequestData
 
@@ -22,13 +24,13 @@ class BitunixRequestDataSpot(BitunixRequestData):
             Capability.CANCEL_ORDER,
         }
 
-    def __init__(self, data_queue, **kwargs):
+    def __init__(self, data_queue, **kwargs) -> None:
         super().__init__(data_queue, **kwargs)
         self.exchange_name = kwargs.get("exchange_name", "BITUNIX___SPOT")
 
     # ==================== Market Data ====================
 
-    def _get_tick(self, symbol, extra_data=None, **kwargs):
+    def _get_tick(self, symbol, extra_data=None, **kwargs) -> Any:
         """Get ticker data. Returns (path, params, extra_data)."""
         path = "GET /api/v1/futures/market/tickers"
         if extra_data is None:
@@ -54,7 +56,7 @@ class BitunixRequestDataSpot(BitunixRequestData):
             return [tickers[0]], True
         return [tickers] if tickers else [], False
 
-    def get_tick(self, symbol, extra_data=None, **kwargs):
+    def get_tick(self, symbol, extra_data=None, **kwargs) -> Any:
         """Get symbol ticker."""
         path, params, extra_data = self._get_tick(symbol, extra_data, **kwargs)
         return self.request(path, params=params, extra_data=extra_data)
@@ -67,7 +69,7 @@ class BitunixRequestDataSpot(BitunixRequestData):
             callback=self.async_callback,
         )
 
-    def _get_depth(self, symbol, count=20, extra_data=None, **kwargs):
+    def _get_depth(self, symbol, count=20, extra_data=None, **kwargs) -> Any:
         """Get order book depth. Returns (path, params, extra_data)."""
         path = "GET /api/v1/futures/market/depth"
         if extra_data is None:
@@ -91,7 +93,7 @@ class BitunixRequestDataSpot(BitunixRequestData):
         depth = input_data.get("data", {})
         return [depth], depth is not None
 
-    def get_depth(self, symbol, count=20, extra_data=None, **kwargs):
+    def get_depth(self, symbol, count=20, extra_data=None, **kwargs) -> Any:
         """Get order book."""
         path, params, extra_data = self._get_depth(symbol, count, extra_data, **kwargs)
         return self.request(path, params=params, extra_data=extra_data)
@@ -104,7 +106,7 @@ class BitunixRequestDataSpot(BitunixRequestData):
             callback=self.async_callback,
         )
 
-    def _get_kline(self, symbol, period, count=20, extra_data=None, **kwargs):
+    def _get_kline(self, symbol, period, count=20, extra_data=None, **kwargs) -> Any:
         """Get kline/candlestick data. Returns (path, params, extra_data)."""
         path = "GET /api/v1/futures/market/klines"
         if extra_data is None:
@@ -129,7 +131,7 @@ class BitunixRequestDataSpot(BitunixRequestData):
         klines = input_data.get("data", [])
         return [klines], klines is not None
 
-    def get_kline(self, symbol, period, count=20, extra_data=None, **kwargs):
+    def get_kline(self, symbol, period, count=20, extra_data=None, **kwargs) -> Any:
         """Get kline data."""
         path, params, extra_data = self._get_kline(symbol, period, count, extra_data, **kwargs)
         return self.request(path, params=params, extra_data=extra_data)
@@ -142,7 +144,7 @@ class BitunixRequestDataSpot(BitunixRequestData):
             callback=self.async_callback,
         )
 
-    def _get_exchange_info(self, extra_data=None, **kwargs):
+    def _get_exchange_info(self, extra_data=None, **kwargs) -> Any:
         """Get exchange configuration. Returns (path, params, extra_data)."""
         path = "GET /api/v1/futures/market/symbols"
         if extra_data is None:
@@ -165,14 +167,14 @@ class BitunixRequestDataSpot(BitunixRequestData):
         info = input_data.get("data", input_data)
         return [info], info is not None
 
-    def get_exchange_info(self, extra_data=None, **kwargs):
+    def get_exchange_info(self, extra_data=None, **kwargs) -> Any:
         """Get exchange info."""
         path, params, extra_data = self._get_exchange_info(extra_data, **kwargs)
         return self.request(path, params=params, extra_data=extra_data)
 
     # ==================== Account Interfaces ====================
 
-    def _get_account(self, extra_data=None, **kwargs):
+    def _get_account(self, extra_data=None, **kwargs) -> Any:
         """Get account information. Returns (path, params, extra_data)."""
         path = "GET /api/v1/futures/account"
         if extra_data is None:
@@ -195,7 +197,7 @@ class BitunixRequestDataSpot(BitunixRequestData):
         account = input_data.get("data", input_data)
         return [account], account is not None
 
-    def get_account(self, symbol="ALL", extra_data=None, **kwargs):
+    def get_account(self, symbol="ALL", extra_data=None, **kwargs) -> Any:
         """Get account information."""
         path, params, extra_data = self._get_account(extra_data, **kwargs)
         return self.request(path, params=params, extra_data=extra_data)
@@ -208,7 +210,7 @@ class BitunixRequestDataSpot(BitunixRequestData):
             callback=self.async_callback,
         )
 
-    def _get_balance(self, symbol=None, extra_data=None, **kwargs):
+    def _get_balance(self, symbol=None, extra_data=None, **kwargs) -> Any:
         """Get account balance. Returns (path, params, extra_data)."""
         path = "GET /api/v1/futures/account/balance"
         if extra_data is None:
@@ -234,7 +236,7 @@ class BitunixRequestDataSpot(BitunixRequestData):
         balance = input_data.get("data", input_data)
         return [balance], balance is not None
 
-    def get_balance(self, symbol=None, extra_data=None, **kwargs):
+    def get_balance(self, symbol=None, extra_data=None, **kwargs) -> Any:
         """Get account balance."""
         path, params, extra_data = self._get_balance(symbol, extra_data, **kwargs)
         return self.request(path, params=params, extra_data=extra_data)
@@ -302,7 +304,7 @@ class BitunixRequestDataSpot(BitunixRequestData):
         )
         return self.request(path, body=params, extra_data=extra_data)
 
-    def _cancel_order(self, symbol, order_id, extra_data=None, **kwargs):
+    def _cancel_order(self, symbol, order_id, extra_data=None, **kwargs) -> Any:
         """Cancel order. Returns (path, params, extra_data)."""
         path = "POST /api/v1/futures/trade/cancel_order"
         if extra_data is None:
@@ -324,7 +326,7 @@ class BitunixRequestDataSpot(BitunixRequestData):
         path, params, extra_data = self._cancel_order(symbol, order_id, extra_data, **kwargs)
         return self.request(path, body=params, extra_data=extra_data)
 
-    def _query_order(self, symbol, order_id, extra_data=None, **kwargs):
+    def _query_order(self, symbol, order_id, extra_data=None, **kwargs) -> Any:
         """Query order. Returns (path, params, extra_data)."""
         path = "GET /api/v1/futures/trade/get_order"
         if extra_data is None:
@@ -346,7 +348,7 @@ class BitunixRequestDataSpot(BitunixRequestData):
         path, params, extra_data = self._query_order(symbol, order_id, extra_data, **kwargs)
         return self.request(path, params=params, extra_data=extra_data)
 
-    def _get_open_orders(self, symbol=None, extra_data=None, **kwargs):
+    def _get_open_orders(self, symbol=None, extra_data=None, **kwargs) -> Any:
         """Get open orders. Returns (path, params, extra_data)."""
         path = "GET /api/v1/futures/trade/get_open_orders"
         if extra_data is None:
@@ -364,7 +366,7 @@ class BitunixRequestDataSpot(BitunixRequestData):
             params["symbol"] = symbol
         return path, params, extra_data
 
-    def get_open_orders(self, symbol=None, extra_data=None, **kwargs):
+    def get_open_orders(self, symbol=None, extra_data=None, **kwargs) -> Any:
         """Get open orders."""
         path, params, extra_data = self._get_open_orders(symbol, extra_data, **kwargs)
         return self.request(path, params=params, extra_data=extra_data)

@@ -1,10 +1,10 @@
-"""
-Giottus REST API request base class.
+"""Giottus REST API request base class.
 
 Giottus is an Indian cryptocurrency exchange.
 API documentation: https://api.giottus.com/
 """
 
+from typing import Any
 
 from bt_api_py.containers.exchanges.giottus_exchange_data import GiottusExchangeDataSpot
 from bt_api_py.containers.requestdatas.request_data import RequestData
@@ -30,7 +30,7 @@ class GiottusRequestData(Feed):
             Capability.CANCEL_ORDER,
         }
 
-    def __init__(self, data_queue, **kwargs):
+    def __init__(self, data_queue, **kwargs) -> None:
         super().__init__(data_queue, **kwargs)
         self.data_queue = data_queue
         self.exchange_name = kwargs.get("exchange_name", "GIOTTUS___SPOT")
@@ -40,7 +40,7 @@ class GiottusRequestData(Feed):
         self.async_logger = get_logger("giottus_feed")
         self._http_client = HttpClient(venue=self.exchange_name, timeout=10)
 
-    def _get_headers(self, method="GET", request_path="", params=None, body=""):
+    def _get_headers(self, method="GET", request_path="", params=None, body="") -> Any:
         """Generate request headers for Giottus API."""
         headers = {
             "Content-Type": "application/json",
@@ -100,13 +100,13 @@ class GiottusRequestData(Feed):
         except Exception as e:
             self.async_logger.error(f"Async callback error: {e}")
 
-    def _process_response(self, response, extra_data=None):
+    def _process_response(self, response, extra_data=None) -> Any:
         """Process API response."""
         if extra_data is None:
             extra_data = {}
         return RequestData(response, extra_data)
 
-    def _get_server_time(self, extra_data=None, **kwargs):
+    def _get_server_time(self, extra_data=None, **kwargs) -> Any:
         """Prepare server time request. Returns (path, params, extra_data)."""
         path = self._params.rest_paths.get("get_server_time", "GET /v1/time")
         if extra_data is None:
@@ -122,7 +122,7 @@ class GiottusRequestData(Feed):
         )
         return path, {}, extra_data
 
-    def get_server_time(self, extra_data=None, **kwargs):
+    def get_server_time(self, extra_data=None, **kwargs) -> Any:
         """Get server time."""
         path, params, extra_data = self._get_server_time(extra_data, **kwargs)
         return self.request(path, params=params, extra_data=extra_data)

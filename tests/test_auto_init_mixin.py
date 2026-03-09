@@ -1,6 +1,5 @@
 """Unit tests for AutoInitMixin — automatic init_data() triggering."""
 
-
 from bt_api_py.containers.auto_init_mixin import AutoInitMixin
 
 

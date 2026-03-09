@@ -12,7 +12,9 @@ from bt_api_py.feeds.live_poloniex import PoloniexRequestDataSpot
 from bt_api_py.registry import ExchangeRegistry
 
 
-def _poloniex_subscribe_handler(data_queue, exchange_params, topics, bt_api):
+def _poloniex_subscribe_handler(
+    data_queue: Any, exchange_params: Any, topics: Any, bt_api: Any
+) -> None:
     """Poloniex 订阅处理函数
 
     Args:
@@ -33,12 +35,14 @@ def _poloniex_subscribe_handler(data_queue, exchange_params, topics, bt_api):
         pass
 
 
-def _poloniex_spot_subscribe_handler(data_queue, exchange_params, topics, bt_api):
+def _poloniex_spot_subscribe_handler(
+    data_queue: Any, exchange_params: Any, topics: Any, bt_api: Any
+) -> None:
     """Poloniex SPOT 订阅处理函数"""
     _poloniex_subscribe_handler(data_queue, exchange_params, topics, bt_api)
 
 
-def register_poloniex():
+def register_poloniex() -> None:
     """注册 Poloniex SPOT 到全局 ExchangeRegistry"""
     # 注册 Feed 类
     ExchangeRegistry.register_feed("POLONIEX___SPOT", PoloniexRequestDataSpot)

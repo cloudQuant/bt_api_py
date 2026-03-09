@@ -1,6 +1,6 @@
-"""
-Gate.io Exchange Data Configuration
-"""
+from typing import Any
+
+"""Gate.io Exchange Data Configuration."""
 
 import json
 import os
@@ -15,8 +15,8 @@ _gateio_config = None
 _gateio_config_loaded = False
 
 
-def _get_gateio_config():
-    """延迟加载并缓存 Gate.io YAML 配置"""
+def _get_gateio_config() -> Any | None:
+    """延迟加载并缓存 Gate.io YAML 配置."""
     global _gateio_config, _gateio_config_loaded
     if _gateio_config_loaded:
         return _gateio_config
@@ -37,9 +37,9 @@ def _get_gateio_config():
 
 
 class GateioExchangeData(ExchangeData):
-    """Base class for Gate.io exchange data"""
+    """Base class for Gate.io exchange data."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__()
         self.exchange_name = "gateio"
         self.rest_url = ""
@@ -78,13 +78,14 @@ class GateioExchangeData(ExchangeData):
             "USDC",
         ]
 
-    def _load_from_config(self, asset_type):
-        """从 YAML 配置文件加载交易所参数
+    def _load_from_config(self, asset_type) -> bool:
+        """从 YAML 配置文件加载交易所参数.
 
         Args:
             asset_type: 资产类型 key, 如 'spot', 'margin', 'futures', 'delivery', 'option'
         Returns:
             bool: 是否加载成功
+
         """
         config = _get_gateio_config()
         if config is None:
@@ -133,25 +134,25 @@ class GateioExchangeData(ExchangeData):
 
         return True
 
-    def get_symbol(self, symbol):
-        """Convert symbol to exchange format"""
+    def get_symbol(self, symbol: str) -> str:
+        """Convert symbol to exchange format."""
         # Gate.io uses underscore as separator
         return symbol.replace("-", "_")
 
-    def get_rest_path(self, key):
-        """Get REST API path"""
+    def get_rest_path(self, key: str, **kwargs) -> str:
+        """Get REST API path."""
         return self.rest_paths.get(key, "")
 
-    def get_wss_path(self, **kwargs):
-        """Get WebSocket path (placeholder for future implementation)"""
+    def get_wss_path(self, **kwargs) -> str:
+        """Get WebSocket path (placeholder for future implementation)."""
         return json.dumps({})
 
-    def get_period(self, period):
-        """Convert period key to Gate.io format"""
+    def get_period(self, period: str) -> str:
+        """Convert period key to Gate.io format."""
         return self.kline_periods.get(period, period)
 
-    def account_wss_symbol(self, symbol):
-        """Convert symbol for WebSocket account stream"""
+    def account_wss_symbol(self, symbol: str) -> str:
+        """Convert symbol for WebSocket account stream."""
         for lc in self.legal_currency:
             if lc in symbol:
                 symbol = f"{symbol.split(lc)[0]}_{lc}".lower()
@@ -160,18 +161,18 @@ class GateioExchangeData(ExchangeData):
 
 
 class GateioExchangeDataSpot(GateioExchangeData):
-    """Gate.io Spot Trading Data Configuration"""
+    """Gate.io Spot Trading Data Configuration."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__()
         self.asset_type = "spot"
         self._load_from_config("spot")
 
 
 class GateioExchangeDataSwap(GateioExchangeData):
-    """Gate.io Futures (USDT-M) Trading Data Configuration"""
+    """Gate.io Futures (USDT-M) Trading Data Configuration."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__()
         self.asset_type = "swap"
         self._load_from_config("futures")

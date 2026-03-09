@@ -12,15 +12,15 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
-from typing import Any, Dict, Optional, Union
+from typing import Any
 
 try:
     from cryptography.fernet import Fernet
+    from cryptography.hazmat.backends import default_backend
     from cryptography.hazmat.primitives import hashes, serialization
-    from cryptography.hazmat.primitives.asymmetric import rsa, padding
+    from cryptography.hazmat.primitives.asymmetric import padding, rsa
     from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
     from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
-    from cryptography.hazmat.backends import default_backend
 
     CRYPTOGRAPHY_AVAILABLE = True
 except ImportError:
@@ -78,7 +78,7 @@ class EncryptionKey:
     key_size: int = 256
     is_active: bool = True
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for serialization."""
         return {
             "key_id": self.key_id,
@@ -99,7 +99,7 @@ class KeyManager(ABC):
         pass
 
     @abstractmethod
-    def get_key(self, key_id: str) -> Optional[EncryptionKey]:
+    def get_key(self, key_id: str) -> EncryptionKey | None:
         """Retrieve an existing key."""
         pass
 
@@ -117,7 +117,7 @@ class KeyManager(ABC):
 class LocalKeyManager(KeyManager):
     """Local file-based key management."""
 
-    def __init__(self, key_dir: Union[str, Path], master_password: str):
+    def __init__(self, key_dir: str | Path, master_password: str):
         """Initialize local key manager."""
         if not CRYPTOGRAPHY_AVAILABLE:
             raise EncryptionError("cryptography package required for encryption")
@@ -141,9 +141,10 @@ class LocalKeyManager(KeyManager):
 
     def generate_key(self, algorithm: EncryptionAlgorithm) -> EncryptionKey:
         """Generate a new encryption key."""
-        if algorithm == EncryptionAlgorithm.AES_256_GCM:
-            key_data = os.urandom(32)  # 256 bits
-        elif algorithm == EncryptionAlgorithm.CHACHA20_POLY1305:
+        if (
+            algorithm == EncryptionAlgorithm.AES_256_GCM
+            or algorithm == EncryptionAlgorithm.CHACHA20_POLY1305
+        ):
             key_data = os.urandom(32)  # 256 bits
         else:
             raise EncryptionError(f"Unsupported algorithm: {algorithm}")
@@ -178,7 +179,7 @@ class LocalKeyManager(KeyManager):
 
             json.dump(key.to_dict(), f, indent=2)
 
-    def get_key(self, key_id: str) -> Optional[EncryptionKey]:
+    def get_key(self, key_id: str) -> EncryptionKey | None:
         """Retrieve and decrypt an existing key."""
         key_file = self.key_dir / f"{key_id}.key"
         metadata_file = self.key_dir / f"{key_id}.meta"
@@ -188,7 +189,7 @@ class LocalKeyManager(KeyManager):
 
         try:
             # Load metadata
-            with open(metadata_file, "r") as f:
+            with open(metadata_file) as f:
                 import json
 
                 metadata = json.load(f)
@@ -270,7 +271,7 @@ class AWSKMSKeyManager(KeyManager):
         except Exception as e:
             raise EncryptionError(f"Failed to create KMS key: {e}")
 
-    def get_key(self, key_id: str) -> Optional[EncryptionKey]:
+    def get_key(self, key_id: str) -> EncryptionKey | None:
         """Get KMS key metadata."""
         try:
             response = self.kms_client.describe_key(KeyId=key_id)
@@ -346,7 +347,7 @@ class HashiCorpVaultKeyManager(KeyManager):
         }
         return mapping.get(algorithm, "aes256-gcm96")
 
-    def get_key(self, key_id: str) -> Optional[EncryptionKey]:
+    def get_key(self, key_id: str) -> EncryptionKey | None:
         """Get Vault key information."""
         try:
             response = self.client.secrets.transit.read_key(name=key_id)
@@ -402,8 +403,8 @@ class EncryptionManager:
 
         self.key_manager = key_manager
         self.default_algorithm = default_algorithm
-        self._active_key: Optional[EncryptionKey] = None
-        self._key_cache: Dict[str, EncryptionKey] = {}
+        self._active_key: EncryptionKey | None = None
+        self._key_cache: dict[str, EncryptionKey] = {}
 
     def _get_active_key(self) -> EncryptionKey:
         """Get or create the active encryption key."""
@@ -415,7 +416,7 @@ class EncryptionManager:
         self._active_key = self.key_manager.generate_key(self.default_algorithm)
         return self._active_key
 
-    def encrypt(self, data: Union[str, bytes], key_id: Optional[str] = None) -> Dict[str, Any]:
+    def encrypt(self, data: str | bytes, key_id: str | None = None) -> dict[str, Any]:
         """Encrypt data with specified or default key."""
         if isinstance(data, str):
             data = data.encode("utf-8")
@@ -446,7 +447,7 @@ class EncryptionManager:
             else None,
         }
 
-    def _encrypt_aes_gcm(self, data: bytes, key: EncryptionKey) -> Dict[str, bytes]:
+    def _encrypt_aes_gcm(self, data: bytes, key: EncryptionKey) -> dict[str, bytes]:
         """Encrypt using AES-256-GCM."""
         nonce = os.urandom(12)  # 96-bit nonce for GCM
         cipher = Cipher(algorithms.AES(key.key_data), modes.GCM(nonce), backend=default_backend())
@@ -460,7 +461,7 @@ class EncryptionManager:
             "tag": encryptor.tag,
         }
 
-    def _encrypt_chacha20(self, data: bytes, key: EncryptionKey) -> Dict[str, bytes]:
+    def _encrypt_chacha20(self, data: bytes, key: EncryptionKey) -> dict[str, bytes]:
         """Encrypt using ChaCha20-Poly1305."""
         nonce = os.urandom(12)  # 96-bit nonce
         cipher = Cipher(
@@ -476,7 +477,7 @@ class EncryptionManager:
             "tag": encryptor.tag,
         }
 
-    def decrypt(self, encrypted_data: Dict[str, Any]) -> bytes:
+    def decrypt(self, encrypted_data: dict[str, Any]) -> bytes:
         """Decrypt encrypted data."""
         key_id = encrypted_data["key_id"]
         algorithm = encrypted_data["algorithm"]
@@ -527,7 +528,7 @@ class EncryptionManager:
         self._active_key = new_key
         return new_key
 
-    def generate_key_pair(self, key_size: int = 2048) -> Dict[str, str]:
+    def generate_key_pair(self, key_size: int = 2048) -> dict[str, str]:
         """Generate RSA key pair for asymmetric encryption."""
         private_key = rsa.generate_private_key(
             public_exponent=65537, key_size=key_size, backend=default_backend()
@@ -551,7 +552,7 @@ class EncryptionManager:
             "public_key": base64.b64encode(public_pem).decode(),
         }
 
-    def encrypt_with_public_key(self, data: Union[str, bytes], public_key_pem: str) -> str:
+    def encrypt_with_public_key(self, data: str | bytes, public_key_pem: str) -> str:
         """Encrypt data with RSA public key."""
         if isinstance(data, str):
             data = data.encode("utf-8")
@@ -608,10 +609,10 @@ def create_key_manager(provider: KeyProvider, **kwargs) -> KeyManager:
 
 
 # Global encryption manager instance
-_encryption_manager: Optional[EncryptionManager] = None
+_encryption_manager: EncryptionManager | None = None
 
 
-def get_encryption_manager() -> Optional[EncryptionManager]:
+def get_encryption_manager() -> EncryptionManager | None:
     """Get the global encryption manager instance."""
     return _encryption_manager
 

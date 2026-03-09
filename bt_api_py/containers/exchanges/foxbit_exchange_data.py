@@ -1,6 +1,6 @@
-"""
-Foxbit Exchange Data Configuration
-"""
+from typing import Any
+
+"""Foxbit Exchange Data Configuration."""
 
 import os
 
@@ -13,7 +13,7 @@ _foxbit_config = None
 _foxbit_config_loaded = False
 
 
-def _get_foxbit_config():
+def _get_foxbit_config() -> Any | None:
     """Load Foxbit YAML configuration."""
     global _foxbit_config, _foxbit_config_loaded
     if _foxbit_config_loaded:
@@ -37,7 +37,7 @@ def _get_foxbit_config():
 class FoxbitExchangeData(ExchangeData):
     """Base class for Foxbit exchange."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__()
         self.exchange_name = "foxbit"
         self.rest_url = "https://api.foxbit.com.br"
@@ -62,7 +62,7 @@ class FoxbitExchangeData(ExchangeData):
         }
         self.legal_currency = ["BRL"]
 
-    def _load_from_config(self, asset_type):
+    def _load_from_config(self, asset_type) -> bool:
         """Load from YAML config."""
         config = _get_foxbit_config()
         if config is None:
@@ -117,7 +117,7 @@ class FoxbitExchangeData(ExchangeData):
 class FoxbitExchangeDataSpot(FoxbitExchangeData):
     """Foxbit Spot exchange configuration."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__()
         self.asset_type = "spot"
         self.rest_paths = {}

@@ -1,3 +1,4 @@
+from typing import Any
 import json
 import time
 
@@ -6,9 +7,11 @@ from bt_api_py.functions.utils import from_dict_get_float, from_dict_get_string
 
 
 class DydxBalanceData(BalanceData):
-    """dYdX 余额数据类"""
+    """dYdX 余额数据类."""
 
-    def __init__(self, balance_info, symbol_name, asset_type, has_been_json_encoded=False):
+    def __init__(
+        self, balance_info, symbol_name, asset_type, has_been_json_encoded: bool = False
+    ) -> None:
         super().__init__(balance_info, has_been_json_encoded)
         self.exchange_name = "DYDX"
         self.symbol_name = symbol_name
@@ -28,7 +31,7 @@ class DydxBalanceData(BalanceData):
         self.all_data = None
         self.has_been_init_data = False
 
-    def init_data(self):
+    def init_data(self) -> None:
         if not self.has_been_json_encoded:
             self.balance_data = json.loads(self.balance_info)
             self.has_been_json_encoded = True
@@ -60,7 +63,7 @@ class DydxBalanceData(BalanceData):
         self.has_been_init_data = True
         return self
 
-    def get_all_data(self):
+    def get_all_data(self) -> dict[str, Any]:
         if self.all_data is None:
             self.all_data = {
                 "exchange_name": self.exchange_name,
@@ -80,97 +83,97 @@ class DydxBalanceData(BalanceData):
             }
         return self.all_data
 
-    def __str__(self):
+    def __str__(self) -> str:
         self.init_data()
         return json.dumps(self.get_all_data())
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return self.__str__()
 
-    def get_exchange_name(self):
-        """交易所名称"""
+    def get_exchange_name(self) -> str:
+        """交易所名称."""
         return self.exchange_name
 
-    def get_symbol_name(self):
-        """货币名称"""
+    def get_symbol_name(self) -> str:
+        """货币名称."""
         return self.symbol_name
 
-    def get_asset_type(self):
-        """资产类型"""
+    def get_asset_type(self) -> str:
+        """资产类型."""
         return self.asset_type
 
-    def get_server_time(self):
-        """服务器时间戳"""
+    def get_server_time(self) -> float:
+        """服务器时间戳."""
         return None  # dYdX 响应中没有直接的时间戳
 
-    def get_local_update_time(self):
-        """本地时间戳"""
+    def get_local_update_time(self) -> float:
+        """本地时间戳."""
         return self.local_update_time
 
-    def get_account_id(self):
-        """账户id (dYdX 使用地址)"""
+    def get_account_id(self) -> Any:
+        """账户id (dYdX 使用地址)."""
         return self.address
 
-    def get_account_type(self):
-        """账户类型"""
+    def get_account_type(self) -> Any:
+        """账户类型."""
         return "PERPETUAL"  # dYdX 主要是永续合约
 
-    def get_fee_tier(self):
-        """资金费率等级"""
+    def get_fee_tier(self) -> Any:
+        """资金费率等级."""
         return None  # 需要单独查询
 
-    def get_max_withdraw_amount(self):
-        """最大可取资金"""
+    def get_max_withdraw_amount(self) -> Any:
+        """最大可取资金."""
         return self.free_collateral  # 可用保证金是最大可取金额
 
-    def get_margin(self):
-        """总的保证金"""
+    def get_margin(self) -> Any:
+        """总的保证金."""
         return self.margin_balance
 
-    def get_used_margin(self):
-        """总的使用的保证金"""
+    def get_used_margin(self) -> Any:
+        """总的使用的保证金."""
         return self.position_margin
 
-    def get_maintain_margin(self):
-        """总的维持资金"""
+    def get_maintain_margin(self) -> Any:
+        """总的维持资金."""
         return self.initial_margin_requirement
 
-    def get_available_margin(self):
-        """总的可用保证金"""
+    def get_available_margin(self) -> Any:
+        """总的可用保证金."""
         return self.available_margin
 
-    def get_open_order_initial_margin(self):
-        """开仓订单初始保证金 (包含在 position_margin 中)"""
+    def get_open_order_initial_margin(self) -> Any:
+        """开仓订单初始保证金 (包含在 position_margin 中)."""
         return self.position_margin
 
-    def get_position_initial_margin(self):
-        """持仓初始化保证金"""
+    def get_position_initial_margin(self) -> Any:
+        """持仓初始化保证金."""
         return self.position_margin
 
-    def get_unrealized_profit(self):
-        """未实现利润"""
+    def get_unrealized_profit(self) -> Any:
+        """未实现利润."""
         return self.open_pnl
 
-    def get_interest(self):
-        """获取应计利息"""
+    def get_interest(self) -> Any:
+        """获取应计利息."""
         return None  # dYdX 可能没有直接的利息字段
 
-    def get_address(self):
-        """钱包地址"""
+    def get_address(self) -> Any:
+        """钱包地址."""
         return self.address
 
-    def get_subaccount_number(self):
-        """子账户编号"""
+    def get_subaccount_number(self) -> Any:
+        """子账户编号."""
         return self.subaccount_number
 
-    def get_equity(self):
-        """账户权益"""
+    def get_equity(self) -> Any:
+        """账户权益."""
         return self.equity
 
-    def get_free_collateral(self):
-        """可用抵押品"""
+    def get_free_collateral(self) -> Any:
+        """可用抵押品."""
         return self.free_collateral
 
-    def get_account_value(self):
-        """账户价值"""
+    def get_account_value(self) -> Any:
+        """账户价值."""
         return self.account_value

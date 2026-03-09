@@ -1,5 +1,4 @@
-"""
-Ripio Ticker Data Container
+"""Ripio Ticker Data Container
 Provides standardized ticker data structure for Ripio exchange.
 """
 
@@ -11,11 +10,11 @@ from bt_api_py.logging_factory import get_logger
 
 
 class RipioRequestTickerData(TickerData):
-    """Ripio Request Ticker Data Container"""
+    """Ripio Request Ticker Data Container."""
 
     def __init__(
         self, data: dict[str, Any], symbol: str, asset_type: str, has_been_json_encoded=False
-    ):
+    ) -> None:
         """Initialize Ripio ticker data.
 
         Args:
@@ -23,6 +22,7 @@ class RipioRequestTickerData(TickerData):
             symbol: Trading pair symbol
             asset_type: Asset type (e.g., 'SPOT')
             has_been_json_encoded: Whether data is already JSON encoded
+
         """
         super().__init__(data, has_been_json_encoded)
         self.symbol_name = symbol
@@ -30,7 +30,7 @@ class RipioRequestTickerData(TickerData):
         self.logger = get_logger("ripio_ticker")
         self._parse_data(data)
 
-    def _parse_data(self, data: dict[str, Any]):
+    def _parse_data(self, data: dict[str, Any]) -> None:
         """Parse Ripio ticker data.
 
         Ripio ticker response format (typical):
@@ -102,6 +102,7 @@ class RipioRequestTickerData(TickerData):
 
         Returns:
             Float value or None
+
         """
         if value is None:
             return None

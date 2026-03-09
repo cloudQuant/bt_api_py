@@ -1,6 +1,4 @@
-"""
-Bitinka 交易所注册模块
-"""
+"""Bitinka 交易所注册模块."""
 
 from bt_api_py.balance_utils import simple_balance_handler as _bitinka_balance_handler
 from bt_api_py.containers.exchanges.bitinka_exchange_data import BitinkaExchangeDataSpot
@@ -9,7 +7,7 @@ from bt_api_py.registry import ExchangeRegistry
 
 
 def register_bitinka():
-    """注册 Bitinka SPOT 到全局 ExchangeRegistry"""
+    """注册 Bitinka SPOT 到全局 ExchangeRegistry."""
     # 注册 Feed 类
     ExchangeRegistry.register_feed("BITINKA___SPOT", BitinkaRequestDataSpot)
 

@@ -14,15 +14,15 @@ class StatisticsMixin:
 
     def _get_taker_volume_contract(
         self,
-        ccy=None,
-        inst_type=None,
-        begin=None,
-        end=None,
-        period=None,
-        limit=None,
-        extra_data=None,
-        **kwargs,
-    ):
+        ccy: Any = None,
+        inst_type: Any = None,
+        begin: Any = None,
+        end: Any = None,
+        period: Any = None,
+        limit: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """
         Get contract active buy/sell volume (taker volume)
         :param ccy: Currency, e.g. "BTC"
@@ -65,7 +65,7 @@ class StatisticsMixin:
         return path, params, extra_data
 
     @staticmethod
-    def _get_taker_volume_contract_normalize_function(input_data, extra_data):
+    def _get_taker_volume_contract_normalize_function(input_data: Any, extra_data: Any) -> None:
         status = input_data["code"] == "0"
         if "data" not in input_data:
             return [], status
@@ -75,15 +75,15 @@ class StatisticsMixin:
 
     def get_taker_volume_contract(
         self,
-        ccy=None,
-        inst_type=None,
-        begin=None,
-        end=None,
-        period=None,
-        limit=None,
-        extra_data=None,
-        **kwargs,
-    ):
+        ccy: Any = None,
+        inst_type: Any = None,
+        begin: Any = None,
+        end: Any = None,
+        period: Any = None,
+        limit: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """Get contract active buy/sell volume (taker volume)"""
         path, params, extra_data = self._get_taker_volume_contract(
             ccy, inst_type, begin, end, period, limit, extra_data, **kwargs
@@ -93,15 +93,15 @@ class StatisticsMixin:
 
     def async_get_taker_volume_contract(
         self,
-        ccy=None,
-        inst_type=None,
-        begin=None,
-        end=None,
-        period=None,
-        limit=None,
-        extra_data=None,
-        **kwargs,
-    ):
+        ccy: Any = None,
+        inst_type: Any = None,
+        begin: Any = None,
+        end: Any = None,
+        period: Any = None,
+        limit: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """Async get contract active buy/sell volume (taker volume)"""
         path, params, extra_data = self._get_taker_volume_contract(
             ccy, inst_type, begin, end, period, limit, extra_data, **kwargs
@@ -112,8 +112,15 @@ class StatisticsMixin:
         )
 
     def _get_margin_loan_ratio(
-        self, ccy=None, begin=None, end=None, period=None, limit=None, extra_data=None, **kwargs
-    ):
+        self,
+        ccy: Any = None,
+        begin: Any = None,
+        end: Any = None,
+        period: Any = None,
+        limit: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """
         Get margin loan ratio (spot long/short ratio)
         :param ccy: Currency, e.g. "BTC"
@@ -153,7 +160,7 @@ class StatisticsMixin:
         return path, params, extra_data
 
     @staticmethod
-    def _get_margin_loan_ratio_normalize_function(input_data, extra_data):
+    def _get_margin_loan_ratio_normalize_function(input_data: Any, extra_data: Any) -> None:
         status = input_data["code"] == "0"
         if "data" not in input_data:
             return [], status
@@ -162,8 +169,15 @@ class StatisticsMixin:
         return target_data, status
 
     def get_margin_loan_ratio(
-        self, ccy=None, begin=None, end=None, period=None, limit=None, extra_data=None, **kwargs
-    ):
+        self,
+        ccy: Any = None,
+        begin: Any = None,
+        end: Any = None,
+        period: Any = None,
+        limit: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """Get margin loan ratio (spot long/short ratio)"""
         path, params, extra_data = self._get_margin_loan_ratio(
             ccy, begin, end, period, limit, extra_data, **kwargs
@@ -172,8 +186,15 @@ class StatisticsMixin:
         return data
 
     def async_get_margin_loan_ratio(
-        self, ccy=None, begin=None, end=None, period=None, limit=None, extra_data=None, **kwargs
-    ):
+        self,
+        ccy: Any = None,
+        begin: Any = None,
+        end: Any = None,
+        period: Any = None,
+        limit: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """Async get margin loan ratio (spot long/short ratio)"""
         path, params, extra_data = self._get_margin_loan_ratio(
             ccy, begin, end, period, limit, extra_data, **kwargs
@@ -185,15 +206,15 @@ class StatisticsMixin:
 
     def _get_option_long_short_ratio(
         self,
-        ccy=None,
-        currency=None,
-        begin=None,
-        end=None,
-        period=None,
-        limit=None,
-        extra_data=None,
-        **kwargs,
-    ):
+        ccy: Any = None,
+        currency: Any = None,
+        begin: Any = None,
+        end: Any = None,
+        period: Any = None,
+        limit: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """
         Get option long/short ratio
         :param ccy: Underlying index, e.g. "BTC-USD"
@@ -236,7 +257,7 @@ class StatisticsMixin:
         return path, params, extra_data
 
     @staticmethod
-    def _get_option_long_short_ratio_normalize_function(input_data, extra_data):
+    def _get_option_long_short_ratio_normalize_function(input_data: Any, extra_data: Any) -> None:
         status = input_data["code"] == "0"
         if "data" not in input_data:
             return [], status
@@ -246,15 +267,15 @@ class StatisticsMixin:
 
     def get_option_long_short_ratio(
         self,
-        ccy=None,
-        currency=None,
-        begin=None,
-        end=None,
-        period=None,
-        limit=None,
-        extra_data=None,
-        **kwargs,
-    ):
+        ccy: Any = None,
+        currency: Any = None,
+        begin: Any = None,
+        end: Any = None,
+        period: Any = None,
+        limit: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """Get option long/short ratio"""
         path, params, extra_data = self._get_option_long_short_ratio(
             ccy, currency, begin, end, period, limit, extra_data, **kwargs
@@ -264,15 +285,15 @@ class StatisticsMixin:
 
     def async_get_option_long_short_ratio(
         self,
-        ccy=None,
-        currency=None,
-        begin=None,
-        end=None,
-        period=None,
-        limit=None,
-        extra_data=None,
-        **kwargs,
-    ):
+        ccy: Any = None,
+        currency: Any = None,
+        begin: Any = None,
+        end: Any = None,
+        period: Any = None,
+        limit: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """Async get option long/short ratio"""
         path, params, extra_data = self._get_option_long_short_ratio(
             ccy, currency, begin, end, period, limit, extra_data, **kwargs
@@ -283,8 +304,15 @@ class StatisticsMixin:
         )
 
     def _get_contracts_oi_volume(
-        self, ccy=None, begin=None, end=None, period=None, limit=None, extra_data=None, **kwargs
-    ):
+        self,
+        ccy: Any = None,
+        begin: Any = None,
+        end: Any = None,
+        period: Any = None,
+        limit: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """
         Get contract open interest and volume
         :param ccy: Currency, e.g. "BTC"
@@ -324,7 +352,7 @@ class StatisticsMixin:
         return path, params, extra_data
 
     @staticmethod
-    def _get_contracts_oi_volume_normalize_function(input_data, extra_data):
+    def _get_contracts_oi_volume_normalize_function(input_data: Any, extra_data: Any) -> None:
         status = input_data["code"] == "0"
         if "data" not in input_data:
             return [], status
@@ -333,8 +361,15 @@ class StatisticsMixin:
         return target_data, status
 
     def get_contracts_oi_volume(
-        self, ccy=None, begin=None, end=None, period=None, limit=None, extra_data=None, **kwargs
-    ):
+        self,
+        ccy: Any = None,
+        begin: Any = None,
+        end: Any = None,
+        period: Any = None,
+        limit: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """Get contract open interest and volume"""
         path, params, extra_data = self._get_contracts_oi_volume(
             ccy, begin, end, period, limit, extra_data, **kwargs
@@ -343,8 +378,15 @@ class StatisticsMixin:
         return data
 
     def async_get_contracts_oi_volume(
-        self, ccy=None, begin=None, end=None, period=None, limit=None, extra_data=None, **kwargs
-    ):
+        self,
+        ccy: Any = None,
+        begin: Any = None,
+        end: Any = None,
+        period: Any = None,
+        limit: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """Async get contract open interest and volume"""
         path, params, extra_data = self._get_contracts_oi_volume(
             ccy, begin, end, period, limit, extra_data, **kwargs
@@ -356,15 +398,15 @@ class StatisticsMixin:
 
     def _get_option_oi_volume(
         self,
-        ccy=None,
-        currency=None,
-        begin=None,
-        end=None,
-        period=None,
-        limit=None,
-        extra_data=None,
-        **kwargs,
-    ):
+        ccy: Any = None,
+        currency: Any = None,
+        begin: Any = None,
+        end: Any = None,
+        period: Any = None,
+        limit: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """
         Get option open interest and volume
         :param ccy: Underlying index, e.g. "BTC-USD"
@@ -407,7 +449,7 @@ class StatisticsMixin:
         return path, params, extra_data
 
     @staticmethod
-    def _get_option_oi_volume_normalize_function(input_data, extra_data):
+    def _get_option_oi_volume_normalize_function(input_data: Any, extra_data: Any) -> None:
         status = input_data["code"] == "0"
         if "data" not in input_data:
             return [], status
@@ -417,15 +459,15 @@ class StatisticsMixin:
 
     def get_option_oi_volume(
         self,
-        ccy=None,
-        currency=None,
-        begin=None,
-        end=None,
-        period=None,
-        limit=None,
-        extra_data=None,
-        **kwargs,
-    ):
+        ccy: Any = None,
+        currency: Any = None,
+        begin: Any = None,
+        end: Any = None,
+        period: Any = None,
+        limit: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """Get option open interest and volume"""
         path, params, extra_data = self._get_option_oi_volume(
             ccy, currency, begin, end, period, limit, extra_data, **kwargs
@@ -435,15 +477,15 @@ class StatisticsMixin:
 
     def async_get_option_oi_volume(
         self,
-        ccy=None,
-        currency=None,
-        begin=None,
-        end=None,
-        period=None,
-        limit=None,
-        extra_data=None,
-        **kwargs,
-    ):
+        ccy: Any = None,
+        currency: Any = None,
+        begin: Any = None,
+        end: Any = None,
+        period: Any = None,
+        limit: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """Async get option open interest and volume"""
         path, params, extra_data = self._get_option_oi_volume(
             ccy, currency, begin, end, period, limit, extra_data, **kwargs
@@ -455,15 +497,15 @@ class StatisticsMixin:
 
     def _get_option_oi_volume_expiry(
         self,
-        ccy=None,
-        currency=None,
-        begin=None,
-        end=None,
-        period=None,
-        limit=None,
-        extra_data=None,
-        **kwargs,
-    ):
+        ccy: Any = None,
+        currency: Any = None,
+        begin: Any = None,
+        end: Any = None,
+        period: Any = None,
+        limit: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """
         Get option open interest and volume by expiry
         :param ccy: Underlying index, e.g. "BTC-USD"
@@ -506,7 +548,7 @@ class StatisticsMixin:
         return path, params, extra_data
 
     @staticmethod
-    def _get_option_oi_volume_expiry_normalize_function(input_data, extra_data):
+    def _get_option_oi_volume_expiry_normalize_function(input_data: Any, extra_data: Any) -> None:
         status = input_data["code"] == "0"
         if "data" not in input_data:
             return [], status
@@ -516,15 +558,15 @@ class StatisticsMixin:
 
     def get_option_oi_volume_expiry(
         self,
-        ccy=None,
-        currency=None,
-        begin=None,
-        end=None,
-        period=None,
-        limit=None,
-        extra_data=None,
-        **kwargs,
-    ):
+        ccy: Any = None,
+        currency: Any = None,
+        begin: Any = None,
+        end: Any = None,
+        period: Any = None,
+        limit: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """Get option open interest and volume by expiry"""
         path, params, extra_data = self._get_option_oi_volume_expiry(
             ccy, currency, begin, end, period, limit, extra_data, **kwargs
@@ -534,15 +576,15 @@ class StatisticsMixin:
 
     def async_get_option_oi_volume_expiry(
         self,
-        ccy=None,
-        currency=None,
-        begin=None,
-        end=None,
-        period=None,
-        limit=None,
-        extra_data=None,
-        **kwargs,
-    ):
+        ccy: Any = None,
+        currency: Any = None,
+        begin: Any = None,
+        end: Any = None,
+        period: Any = None,
+        limit: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """Async get option open interest and volume by expiry"""
         path, params, extra_data = self._get_option_oi_volume_expiry(
             ccy, currency, begin, end, period, limit, extra_data, **kwargs
@@ -554,15 +596,15 @@ class StatisticsMixin:
 
     def _get_option_oi_volume_strike(
         self,
-        ccy=None,
-        currency=None,
-        begin=None,
-        end=None,
-        period=None,
-        limit=None,
-        extra_data=None,
-        **kwargs,
-    ):
+        ccy: Any = None,
+        currency: Any = None,
+        begin: Any = None,
+        end: Any = None,
+        period: Any = None,
+        limit: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """
         Get option open interest and volume by strike price
         :param ccy: Underlying index, e.g. "BTC-USD"
@@ -605,7 +647,7 @@ class StatisticsMixin:
         return path, params, extra_data
 
     @staticmethod
-    def _get_option_oi_volume_strike_normalize_function(input_data, extra_data):
+    def _get_option_oi_volume_strike_normalize_function(input_data: Any, extra_data: Any) -> None:
         status = input_data["code"] == "0"
         if "data" not in input_data:
             return [], status
@@ -615,15 +657,15 @@ class StatisticsMixin:
 
     def get_option_oi_volume_strike(
         self,
-        ccy=None,
-        currency=None,
-        begin=None,
-        end=None,
-        period=None,
-        limit=None,
-        extra_data=None,
-        **kwargs,
-    ):
+        ccy: Any = None,
+        currency: Any = None,
+        begin: Any = None,
+        end: Any = None,
+        period: Any = None,
+        limit: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """Get option open interest and volume by strike price"""
         path, params, extra_data = self._get_option_oi_volume_strike(
             ccy, currency, begin, end, period, limit, extra_data, **kwargs
@@ -633,15 +675,15 @@ class StatisticsMixin:
 
     def async_get_option_oi_volume_strike(
         self,
-        ccy=None,
-        currency=None,
-        begin=None,
-        end=None,
-        period=None,
-        limit=None,
-        extra_data=None,
-        **kwargs,
-    ):
+        ccy: Any = None,
+        currency: Any = None,
+        begin: Any = None,
+        end: Any = None,
+        period: Any = None,
+        limit: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """Async get option open interest and volume by strike price"""
         path, params, extra_data = self._get_option_oi_volume_strike(
             ccy, currency, begin, end, period, limit, extra_data, **kwargs
@@ -653,15 +695,15 @@ class StatisticsMixin:
 
     def _get_option_taker_flow(
         self,
-        ccy=None,
-        currency=None,
-        begin=None,
-        end=None,
-        period=None,
-        limit=None,
-        extra_data=None,
-        **kwargs,
-    ):
+        ccy: Any = None,
+        currency: Any = None,
+        begin: Any = None,
+        end: Any = None,
+        period: Any = None,
+        limit: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """
         Get option taker block volume (large trades)
         :param ccy: Underlying index, e.g. "BTC-USD"
@@ -704,7 +746,7 @@ class StatisticsMixin:
         return path, params, extra_data
 
     @staticmethod
-    def _get_option_taker_flow_normalize_function(input_data, extra_data):
+    def _get_option_taker_flow_normalize_function(input_data: Any, extra_data: Any) -> None:
         status = input_data["code"] == "0"
         if "data" not in input_data:
             return [], status
@@ -714,15 +756,15 @@ class StatisticsMixin:
 
     def get_option_taker_flow(
         self,
-        ccy=None,
-        currency=None,
-        begin=None,
-        end=None,
-        period=None,
-        limit=None,
-        extra_data=None,
-        **kwargs,
-    ):
+        ccy: Any = None,
+        currency: Any = None,
+        begin: Any = None,
+        end: Any = None,
+        period: Any = None,
+        limit: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """Get option taker block volume (large trades)"""
         path, params, extra_data = self._get_option_taker_flow(
             ccy, currency, begin, end, period, limit, extra_data, **kwargs
@@ -732,15 +774,15 @@ class StatisticsMixin:
 
     def async_get_option_taker_flow(
         self,
-        ccy=None,
-        currency=None,
-        begin=None,
-        end=None,
-        period=None,
-        limit=None,
-        extra_data=None,
-        **kwargs,
-    ):
+        ccy: Any = None,
+        currency: Any = None,
+        begin: Any = None,
+        end: Any = None,
+        period: Any = None,
+        limit: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """Async get option taker block volume (large trades)"""
         path, params, extra_data = self._get_option_taker_flow(
             ccy, currency, begin, end, period, limit, extra_data, **kwargs
@@ -754,17 +796,17 @@ class StatisticsMixin:
 
     def _position_builder(
         self,
-        inst_type,
-        uly=None,
-        inst_id=None,
-        ccy=None,
-        max_sz=None,
-        margin_mode=None,
-        pos_side=None,
-        auto_sz=None,
-        extra_data=None,
-        **kwargs,
-    ):
+        inst_type: Any,
+        uly: Any = None,
+        inst_id: Any = None,
+        ccy: Any = None,
+        max_sz: Any = None,
+        margin_mode: Any = None,
+        pos_side: Any = None,
+        auto_sz: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """
         Position builder - Calculate the maximum open size
         :param inst_type: Instrument type, e.g. SPOT, MARGIN, SWAP, FUTURES, OPTION
@@ -811,7 +853,7 @@ class StatisticsMixin:
         return path, params, extra_data
 
     @staticmethod
-    def _position_builder_normalize_function(input_data, extra_data):
+    def _position_builder_normalize_function(input_data: Any, extra_data: Any) -> None:
         """Normalize position builder response"""
         status = input_data.get("code") == "0"
         if "data" not in input_data:
@@ -822,17 +864,17 @@ class StatisticsMixin:
 
     def position_builder(
         self,
-        inst_type,
-        uly=None,
-        inst_id=None,
-        ccy=None,
-        max_sz=None,
-        margin_mode=None,
-        pos_side=None,
-        auto_sz=None,
-        extra_data=None,
-        **kwargs,
-    ):
+        inst_type: Any,
+        uly: Any = None,
+        inst_id: Any = None,
+        ccy: Any = None,
+        max_sz: Any = None,
+        margin_mode: Any = None,
+        pos_side: Any = None,
+        auto_sz: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """Position builder - Calculate the maximum open size"""
         path, params, extra_data = self._position_builder(
             inst_type,
@@ -851,17 +893,17 @@ class StatisticsMixin:
 
     def async_position_builder(
         self,
-        inst_type,
-        uly=None,
-        inst_id=None,
-        ccy=None,
-        max_sz=None,
-        margin_mode=None,
-        pos_side=None,
-        auto_sz=None,
-        extra_data=None,
-        **kwargs,
-    ):
+        inst_type: Any,
+        uly: Any = None,
+        inst_id: Any = None,
+        ccy: Any = None,
+        max_sz: Any = None,
+        margin_mode: Any = None,
+        pos_side: Any = None,
+        auto_sz: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """Async position builder - Calculate the maximum open size"""
         path, params, extra_data = self._position_builder(
             inst_type,
@@ -882,17 +924,17 @@ class StatisticsMixin:
 
     def _position_builder_trend(
         self,
-        inst_type,
-        uly=None,
-        inst_id=None,
-        ccy=None,
-        max_sz=None,
-        margin_mode=None,
-        pos_side=None,
-        auto_sz=None,
-        extra_data=None,
-        **kwargs,
-    ):
+        inst_type: Any,
+        uly: Any = None,
+        inst_id: Any = None,
+        ccy: Any = None,
+        max_sz: Any = None,
+        margin_mode: Any = None,
+        pos_side: Any = None,
+        auto_sz: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """
         Position builder trend - Get position builder trend data
         :param inst_type: Instrument type, e.g. SPOT, MARGIN, SWAP, FUTURES, OPTION
@@ -939,7 +981,7 @@ class StatisticsMixin:
         return path, params, extra_data
 
     @staticmethod
-    def _position_builder_trend_normalize_function(input_data, extra_data):
+    def _position_builder_trend_normalize_function(input_data: Any, extra_data: Any) -> None:
         """Normalize position builder trend response"""
         status = input_data.get("code") == "0"
         if "data" not in input_data:
@@ -950,17 +992,17 @@ class StatisticsMixin:
 
     def position_builder_trend(
         self,
-        inst_type,
-        uly=None,
-        inst_id=None,
-        ccy=None,
-        max_sz=None,
-        margin_mode=None,
-        pos_side=None,
-        auto_sz=None,
-        extra_data=None,
-        **kwargs,
-    ):
+        inst_type: Any,
+        uly: Any = None,
+        inst_id: Any = None,
+        ccy: Any = None,
+        max_sz: Any = None,
+        margin_mode: Any = None,
+        pos_side: Any = None,
+        auto_sz: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """Position builder trend - Get position builder trend data"""
         path, params, extra_data = self._position_builder_trend(
             inst_type,
@@ -979,17 +1021,17 @@ class StatisticsMixin:
 
     def async_position_builder_trend(
         self,
-        inst_type,
-        uly=None,
-        inst_id=None,
-        ccy=None,
-        max_sz=None,
-        margin_mode=None,
-        pos_side=None,
-        auto_sz=None,
-        extra_data=None,
-        **kwargs,
-    ):
+        inst_type: Any,
+        uly: Any = None,
+        inst_id: Any = None,
+        ccy: Any = None,
+        max_sz: Any = None,
+        margin_mode: Any = None,
+        pos_side: Any = None,
+        auto_sz: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """Async position builder trend - Get position builder trend data"""
         path, params, extra_data = self._position_builder_trend(
             inst_type,
@@ -1011,7 +1053,7 @@ class StatisticsMixin:
     # ==================== Missing Trading Statistics APIs ====================
 
     @staticmethod
-    def _get_support_coin_normalize_function(input_data, extra_data):
+    def _get_support_coin_normalize_function(input_data: Any, extra_data: Any) -> None:
         """Normalize get_support_coin response.
         API returns data with different coin types grouped by category.
         Response format: {"code": "0", "data": {"contract": [...], "option": [...], "spot": [...]}}
@@ -1024,7 +1066,7 @@ class StatisticsMixin:
         # Return dict as-is with keys: contract, option, spot
         return data, status
 
-    def _get_support_coin(self, extra_data=None, **kwargs):
+    def _get_support_coin(self, extra_data: Any = None, **kwargs: Any) -> None:
         """Get support coin"""
         request_type = "get_support_coin"
         params = {}
@@ -1043,13 +1085,13 @@ class StatisticsMixin:
             extra_data.update(kwargs)
         return path, params, extra_data
 
-    def get_support_coin(self, extra_data=None, **kwargs):
+    def get_support_coin(self, extra_data: Any = None, **kwargs: Any) -> None:
         """Get support coin"""
         path, params, extra_data = self._get_support_coin(extra_data, **kwargs)
         data = self.request(path, params=params, extra_data=extra_data)
         return data
 
-    def async_get_support_coin(self, extra_data=None, **kwargs):
+    def async_get_support_coin(self, extra_data: Any = None, **kwargs: Any) -> None:
         """Async get support coin"""
         path, params, extra_data = self._get_support_coin(extra_data, **kwargs)
         self.submit(
@@ -1059,16 +1101,16 @@ class StatisticsMixin:
 
     def _get_contract_oi_history(
         self,
-        ccy=None,
-        uly=None,
-        inst_id=None,
-        after=None,
-        before=None,
-        limit=None,
-        period=None,
-        extra_data=None,
-        **kwargs,
-    ):
+        ccy: Any = None,
+        uly: Any = None,
+        inst_id: Any = None,
+        after: Any = None,
+        before: Any = None,
+        limit: Any = None,
+        period: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """Get contract open interest history"""
         request_type = "get_contract_oi_history"
         params = {}
@@ -1103,16 +1145,16 @@ class StatisticsMixin:
 
     def get_contract_oi_history(
         self,
-        ccy=None,
-        uly=None,
-        inst_id=None,
-        after=None,
-        before=None,
-        limit=None,
-        period=None,
-        extra_data=None,
-        **kwargs,
-    ):
+        ccy: Any = None,
+        uly: Any = None,
+        inst_id: Any = None,
+        after: Any = None,
+        before: Any = None,
+        limit: Any = None,
+        period: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """Get contract open interest history"""
         path, params, extra_data = self._get_contract_oi_history(
             ccy, uly, inst_id, after, before, limit, period, extra_data, **kwargs
@@ -1122,16 +1164,16 @@ class StatisticsMixin:
 
     def async_get_contract_oi_history(
         self,
-        ccy=None,
-        uly=None,
-        inst_id=None,
-        after=None,
-        before=None,
-        limit=None,
-        period=None,
-        extra_data=None,
-        **kwargs,
-    ):
+        ccy: Any = None,
+        uly: Any = None,
+        inst_id: Any = None,
+        after: Any = None,
+        before: Any = None,
+        limit: Any = None,
+        period: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """Async get contract open interest history"""
         path, params, extra_data = self._get_contract_oi_history(
             ccy, uly, inst_id, after, before, limit, period, extra_data, **kwargs
@@ -1143,15 +1185,15 @@ class StatisticsMixin:
 
     def _get_taker_volume(
         self,
-        ccy=None,
-        uly=None,
-        inst_id=None,
-        begin=None,
-        end=None,
-        period=None,
-        extra_data=None,
-        **kwargs,
-    ):
+        ccy: Any = None,
+        uly: Any = None,
+        inst_id: Any = None,
+        begin: Any = None,
+        end: Any = None,
+        period: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """Get taker volume"""
         request_type = "get_taker_volume"
         params = {}
@@ -1184,15 +1226,15 @@ class StatisticsMixin:
 
     def get_taker_volume(
         self,
-        ccy=None,
-        uly=None,
-        inst_id=None,
-        begin=None,
-        end=None,
-        period=None,
-        extra_data=None,
-        **kwargs,
-    ):
+        ccy: Any = None,
+        uly: Any = None,
+        inst_id: Any = None,
+        begin: Any = None,
+        end: Any = None,
+        period: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """Get taker volume"""
         path, params, extra_data = self._get_taker_volume(
             ccy, uly, inst_id, begin, end, period, extra_data, **kwargs
@@ -1202,15 +1244,15 @@ class StatisticsMixin:
 
     def async_get_taker_volume(
         self,
-        ccy=None,
-        uly=None,
-        inst_id=None,
-        begin=None,
-        end=None,
-        period=None,
-        extra_data=None,
-        **kwargs,
-    ):
+        ccy: Any = None,
+        uly: Any = None,
+        inst_id: Any = None,
+        begin: Any = None,
+        end: Any = None,
+        period: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """Async get taker volume"""
         path, params, extra_data = self._get_taker_volume(
             ccy, uly, inst_id, begin, end, period, extra_data, **kwargs
@@ -1221,8 +1263,14 @@ class StatisticsMixin:
         )
 
     def _get_long_short_ratio(
-        self, ccy=None, begin=None, end=None, period=None, extra_data=None, **kwargs
-    ):
+        self,
+        ccy: Any = None,
+        begin: Any = None,
+        end: Any = None,
+        period: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """Get long short ratio"""
         request_type = "get_long_short_ratio"
         params = {}
@@ -1250,8 +1298,14 @@ class StatisticsMixin:
         return path, params, extra_data
 
     def get_long_short_ratio(
-        self, ccy=None, begin=None, end=None, period=None, extra_data=None, **kwargs
-    ):
+        self,
+        ccy: Any = None,
+        begin: Any = None,
+        end: Any = None,
+        period: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """Get long short ratio"""
         path, params, extra_data = self._get_long_short_ratio(
             ccy, begin, end, period, extra_data, **kwargs
@@ -1260,8 +1314,14 @@ class StatisticsMixin:
         return data
 
     def async_get_long_short_ratio(
-        self, ccy=None, begin=None, end=None, period=None, extra_data=None, **kwargs
-    ):
+        self,
+        ccy: Any = None,
+        begin: Any = None,
+        end: Any = None,
+        period: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """Async get long short ratio"""
         path, params, extra_data = self._get_long_short_ratio(
             ccy, begin, end, period, extra_data, **kwargs
@@ -1272,8 +1332,14 @@ class StatisticsMixin:
         )
 
     def _get_long_short_ratio_top_trader(
-        self, ccy=None, begin=None, end=None, period=None, extra_data=None, **kwargs
-    ):
+        self,
+        ccy: Any = None,
+        begin: Any = None,
+        end: Any = None,
+        period: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """Get long short ratio (top trader)"""
         request_type = "get_long_short_ratio_top_trader"
         params = {}
@@ -1301,8 +1367,14 @@ class StatisticsMixin:
         return path, params, extra_data
 
     def get_long_short_ratio_top_trader(
-        self, ccy=None, begin=None, end=None, period=None, extra_data=None, **kwargs
-    ):
+        self,
+        ccy: Any = None,
+        begin: Any = None,
+        end: Any = None,
+        period: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """Get long short ratio (top trader)"""
         path, params, extra_data = self._get_long_short_ratio_top_trader(
             ccy, begin, end, period, extra_data, **kwargs
@@ -1311,8 +1383,14 @@ class StatisticsMixin:
         return data
 
     def async_get_long_short_ratio_top_trader(
-        self, ccy=None, begin=None, end=None, period=None, extra_data=None, **kwargs
-    ):
+        self,
+        ccy: Any = None,
+        begin: Any = None,
+        end: Any = None,
+        period: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """Async get long short ratio (top trader)"""
         path, params, extra_data = self._get_long_short_ratio_top_trader(
             ccy, begin, end, period, extra_data, **kwargs
@@ -1324,16 +1402,16 @@ class StatisticsMixin:
 
     def _get_contract_long_short_ratio(
         self,
-        ccy=None,
-        uly=None,
-        inst_id=None,
-        begin=None,
-        end=None,
-        period=None,
-        limit=None,
-        extra_data=None,
-        **kwargs,
-    ):
+        ccy: Any = None,
+        uly: Any = None,
+        inst_id: Any = None,
+        begin: Any = None,
+        end: Any = None,
+        period: Any = None,
+        limit: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """Get contract long short ratio"""
         request_type = "get_contract_long_short_ratio"
         params = {}
@@ -1368,16 +1446,16 @@ class StatisticsMixin:
 
     def get_contract_long_short_ratio(
         self,
-        ccy=None,
-        uly=None,
-        inst_id=None,
-        begin=None,
-        end=None,
-        period=None,
-        limit=None,
-        extra_data=None,
-        **kwargs,
-    ):
+        ccy: Any = None,
+        uly: Any = None,
+        inst_id: Any = None,
+        begin: Any = None,
+        end: Any = None,
+        period: Any = None,
+        limit: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """Get contract long short ratio"""
         path, params, extra_data = self._get_contract_long_short_ratio(
             ccy, uly, inst_id, begin, end, period, limit, extra_data, **kwargs
@@ -1387,16 +1465,16 @@ class StatisticsMixin:
 
     def async_get_contract_long_short_ratio(
         self,
-        ccy=None,
-        uly=None,
-        inst_id=None,
-        begin=None,
-        end=None,
-        period=None,
-        limit=None,
-        extra_data=None,
-        **kwargs,
-    ):
+        ccy: Any = None,
+        uly: Any = None,
+        inst_id: Any = None,
+        begin: Any = None,
+        end: Any = None,
+        period: Any = None,
+        limit: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """Async get contract long short ratio"""
         path, params, extra_data = self._get_contract_long_short_ratio(
             ccy, uly, inst_id, begin, end, period, limit, extra_data, **kwargs
@@ -1407,8 +1485,15 @@ class StatisticsMixin:
         )
 
     def _get_put_call_ratio(
-        self, ccy=None, uly=None, begin=None, end=None, period=None, extra_data=None, **kwargs
-    ):
+        self,
+        ccy: Any = None,
+        uly: Any = None,
+        begin: Any = None,
+        end: Any = None,
+        period: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """Get put call ratio"""
         request_type = "get_put_call_ratio"
         params = {}
@@ -1438,8 +1523,15 @@ class StatisticsMixin:
         return path, params, extra_data
 
     def get_put_call_ratio(
-        self, ccy=None, uly=None, begin=None, end=None, period=None, extra_data=None, **kwargs
-    ):
+        self,
+        ccy: Any = None,
+        uly: Any = None,
+        begin: Any = None,
+        end: Any = None,
+        period: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """Get put call ratio"""
         path, params, extra_data = self._get_put_call_ratio(
             ccy, uly, begin, end, period, extra_data, **kwargs
@@ -1448,8 +1540,15 @@ class StatisticsMixin:
         return data
 
     def async_get_put_call_ratio(
-        self, ccy=None, uly=None, begin=None, end=None, period=None, extra_data=None, **kwargs
-    ):
+        self,
+        ccy: Any = None,
+        uly: Any = None,
+        begin: Any = None,
+        end: Any = None,
+        period: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """Async get put call ratio"""
         path, params, extra_data = self._get_put_call_ratio(
             ccy, uly, begin, end, period, extra_data, **kwargs

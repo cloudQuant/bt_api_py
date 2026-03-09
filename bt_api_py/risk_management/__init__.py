@@ -26,16 +26,12 @@ Intelligent Risk Management and Compliance Monitoring System for 73+ exchanges.
 - 信用风险和保证金管理
 """
 
-from .core.risk_manager import RiskManager
-from .core.risk_assessor import RiskAssessor
-from .ml_models.ensemble_model import RiskEnsembleModel
-from .ml_models.anomaly_detector import AnomalyDetector
-from .core.risk_manager import RiskManager
-from .core.risk_assessor import RiskAssessor
-from .ml_models.ensemble_model import RiskEnsembleModel
-from .ml_models.anomaly_detector import AnomalyDetector
-from .containers.risk_metrics import RiskMetrics
 from .containers.risk_events import RiskEvent, RiskEventType, RiskLevel
+from .containers.risk_metrics import RiskMetrics
+from .core.risk_assessor import RiskAssessor
+from .core.risk_manager import RiskManager
+from .ml_models.anomaly_detector import AnomalyDetector
+from .ml_models.ensemble_model import RiskEnsembleModel
 
 __all__ = [
     # Core Risk Management
@@ -50,8 +46,6 @@ __all__ = [
     "RiskEventType",
     "RiskLevel",
 ]
-from .containers.risk_metrics import RiskMetrics
-from .containers.risk_events import RiskEvent, RiskEventType, RiskLevel
 
 __all__ = [
     # Core Risk Management

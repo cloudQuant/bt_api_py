@@ -5,10 +5,9 @@ capabilities for financial industry compliance with zero trust principles.
 """
 
 import enum
-import hashlib
 import time
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional, Set, Union
+from typing import Any
 from uuid import uuid4
 
 from bt_api_py.exceptions import BtApiError
@@ -73,8 +72,8 @@ class Role:
 
     name: str
     description: str
-    permissions: Set[Permission] = field(default_factory=set)
-    attributes: Dict[str, Any] = field(default_factory=dict)
+    permissions: set[Permission] = field(default_factory=set)
+    attributes: dict[str, Any] = field(default_factory=dict)
     is_system_role: bool = False
     created_at: float = field(default_factory=time.time)
     id: str = field(default_factory=lambda: str(uuid4()))
@@ -108,13 +107,13 @@ class User:
     user_id: str
     username: str
     email: str
-    roles: Set[str] = field(default_factory=set)
-    attributes: Dict[str, Any] = field(default_factory=dict)
+    roles: set[str] = field(default_factory=set)
+    attributes: dict[str, Any] = field(default_factory=dict)
     is_active: bool = True
     created_at: float = field(default_factory=time.time)
-    last_login: Optional[float] = None
+    last_login: float | None = None
     failed_login_attempts: int = 0
-    locked_until: Optional[float] = None
+    locked_until: float | None = None
 
     def add_role(self, role_name: str) -> None:
         """Add a role to the user."""
@@ -142,13 +141,13 @@ class AccessContext:
     user: User
     resource: Resource
     action: str
-    ip_address: Optional[str] = None
-    user_agent: Optional[str] = None
+    ip_address: str | None = None
+    user_agent: str | None = None
     timestamp: float = field(default_factory=time.time)
-    session_id: Optional[str] = None
-    request_id: Optional[str] = None
+    session_id: str | None = None
+    request_id: str | None = None
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert context to dictionary for evaluation."""
         return {
             "user_id": self.user.user_id,
@@ -167,11 +166,11 @@ class AccessContext:
 class AccessControlManager:
     """Zero Trust Access Control Manager with RBAC + ABAC."""
 
-    def __init__(self, encryption_key: Optional[str] = None):
+    def __init__(self, encryption_key: str | None = None):
         """Initialize access control manager."""
-        self._users: Dict[str, User] = {}
-        self._roles: Dict[str, Role] = {}
-        self._session_contexts: Dict[str, AccessContext] = {}
+        self._users: dict[str, User] = {}
+        self._roles: dict[str, Role] = {}
+        self._session_contexts: dict[str, AccessContext] = {}
         self._encryption_key = encryption_key
 
         # Initialize system roles
@@ -240,7 +239,7 @@ class AccessControlManager:
         self._users[user_id] = user
         return user
 
-    def get_user(self, user_id: str) -> Optional[User]:
+    def get_user(self, user_id: str) -> User | None:
         """Get user by ID."""
         return self._users.get(user_id)
 
@@ -253,7 +252,7 @@ class AccessControlManager:
         self._roles[name] = role
         return role
 
-    def get_role(self, name: str) -> Optional[Role]:
+    def get_role(self, name: str) -> Role | None:
         """Get role by name."""
         return self._roles.get(name)
 
@@ -283,7 +282,7 @@ class AccessControlManager:
         resource: Resource,
         action: str,
         level: PermissionLevel,
-        context: Optional[AccessContext] = None,
+        context: AccessContext | None = None,
     ) -> bool:
         """Check if user has permission (Zero Trust verification)."""
         user = self.get_user(user_id)
@@ -347,7 +346,7 @@ class AccessControlManager:
         resource: Resource,
         action: str,
         level: PermissionLevel,
-        context: Optional[AccessContext] = None,
+        context: AccessContext | None = None,
     ) -> None:
         """Require permission or raise AccessDeniedError."""
         if not self.check_permission(user_id, resource, action, level, context):
@@ -376,7 +375,7 @@ class AccessControlManager:
 
         return session_id
 
-    def validate_session(self, session_id: str) -> Optional[AccessContext]:
+    def validate_session(self, session_id: str) -> AccessContext | None:
         """Validate a session and return context."""
         return self._session_contexts.get(session_id)
 
@@ -410,7 +409,7 @@ class AccessControlManager:
             if user.failed_login_attempts >= 3:
                 self.lock_user(user_id, 900)  # 15 minutes
 
-    def get_user_permissions(self, user_id: str) -> Set[Permission]:
+    def get_user_permissions(self, user_id: str) -> set[Permission]:
         """Get all permissions for a user."""
         user = self.get_user(user_id)
         if not user:
@@ -430,8 +429,8 @@ class AccessControlManager:
         resource: Resource,
         action: str,
         granted: bool,
-        context: Optional[AccessContext] = None,
-    ) -> Dict[str, Any]:
+        context: AccessContext | None = None,
+    ) -> dict[str, Any]:
         """Create an audit record for access attempt."""
         return {
             "user_id": user_id,

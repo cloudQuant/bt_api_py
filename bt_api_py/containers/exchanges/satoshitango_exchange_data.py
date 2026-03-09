@@ -1,6 +1,6 @@
-"""
-SatoshiTango Exchange Data Configuration
-"""
+from typing import Any
+
+"""SatoshiTango Exchange Data Configuration."""
 
 import os
 
@@ -13,7 +13,7 @@ _satoshitango_config = None
 _satoshitango_config_loaded = False
 
 
-def _get_satoshitango_config():
+def _get_satoshitango_config() -> Any | None:
     """Load SatoshiTango YAML configuration."""
     global _satoshitango_config, _satoshitango_config_loaded
     if _satoshitango_config_loaded:
@@ -37,7 +37,7 @@ def _get_satoshitango_config():
 class SatoshiTangoExchangeData(ExchangeData):
     """Base class for SatoshiTango exchange."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__()
         self.exchange_name = "satoshitango"
         self.rest_url = "https://api.satoshitango.com"
@@ -54,7 +54,7 @@ class SatoshiTangoExchangeData(ExchangeData):
         }
         self.legal_currency = ["ARS", "USD", "BTC", "ETH", "USDT"]
 
-    def get_period(self, period):
+    def get_period(self, period: str) -> str:
         """Get period format for SatoshiTango API.
 
         Args:
@@ -62,10 +62,11 @@ class SatoshiTangoExchangeData(ExchangeData):
 
         Returns:
             str: SatoshiTango format period
+
         """
         return self.kline_periods.get(period, period)
 
-    def _load_from_config(self, asset_type):
+    def _load_from_config(self, asset_type) -> bool:
         """Load from YAML config."""
         config = _get_satoshitango_config()
         if config is None:
@@ -101,7 +102,7 @@ class SatoshiTangoExchangeData(ExchangeData):
 class SatoshiTangoExchangeDataSpot(SatoshiTangoExchangeData):
     """SatoshiTango Spot exchange configuration."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__()
         self.asset_type = "spot"
         self.rest_paths = {}

@@ -10,8 +10,12 @@ class IbAccountData(AccountData):
     """IB 账户数据"""
 
     def __init__(
-        self, account_info, symbol_name=None, asset_type="STK", has_been_json_encoded=False
-    ):
+        self,
+        account_info: Any,
+        symbol_name: Any = None,
+        asset_type: Any = "STK",
+        has_been_json_encoded: Any = False,
+    ) -> None:
         super().__init__(account_info, has_been_json_encoded)
         self.symbol_name = symbol_name
         self.asset_type = asset_type
@@ -28,7 +32,7 @@ class IbAccountData(AccountData):
         self.realized_pnl = None  # 已实现盈亏
         self.currency = None
 
-    def init_data(self):
+    def init_data(self) -> None:
         if self._initialized:
             return self
         info = self.account_info
@@ -46,37 +50,37 @@ class IbAccountData(AccountData):
         self._initialized = True
         return self
 
-    def get_exchange_name(self):
+    def get_exchange_name(self) -> None:
         return self.exchange_name
 
-    def get_asset_type(self):
+    def get_asset_type(self) -> None:
         return self.asset_type
 
-    def get_account_type(self):
+    def get_account_type(self) -> None:
         return self.currency or "USD"
 
-    def get_server_time(self):
+    def get_server_time(self) -> None:
         return None
 
-    def get_total_wallet_balance(self):
+    def get_total_wallet_balance(self) -> None:
         return self.net_liquidation
 
-    def get_margin(self):
+    def get_margin(self) -> None:
         return self.net_liquidation or 0.0
 
-    def get_available_margin(self):
+    def get_available_margin(self) -> None:
         return self.available_funds or 0.0
 
-    def get_unrealized_profit(self):
+    def get_unrealized_profit(self) -> None:
         return self.unrealized_pnl or 0.0
 
-    def get_balances(self):
+    def get_balances(self) -> None:
         return [self]
 
-    def get_positions(self):
+    def get_positions(self) -> None:
         return []
 
-    def get_all_data(self):
+    def get_all_data(self) -> None:
         return {
             "exchange_name": self.exchange_name,
             "account_id": self.account_id,

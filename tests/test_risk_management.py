@@ -3,16 +3,17 @@
 测试风险管理器、风险评估器、限制管理器和策略引擎的基本功能
 """
 
-import pytest
 import time
 from decimal import Decimal
 
-from bt_api_py.risk_management.core.risk_manager import RiskManager
-from bt_api_py.risk_management.core.risk_assessor import RiskAssessor
+import pytest
+
+from bt_api_py.risk_management.containers.risk_events import RiskEventType, RiskLevel
+from bt_api_py.risk_management.containers.risk_metrics import RiskMetrics
 from bt_api_py.risk_management.core.limits_manager import LimitsManager
 from bt_api_py.risk_management.core.policy_engine import PolicyEngine
-from bt_api_py.risk_management.containers.risk_metrics import RiskMetrics
-from bt_api_py.risk_management.containers.risk_events import RiskEvent, RiskLevel, RiskEventType
+from bt_api_py.risk_management.core.risk_assessor import RiskAssessor
+from bt_api_py.risk_management.core.risk_manager import RiskManager
 from bt_api_py.risk_management.ml_models.anomaly_detector import AnomalyDetector
 from bt_api_py.risk_management.ml_models.ensemble_model import RiskEnsembleModel
 

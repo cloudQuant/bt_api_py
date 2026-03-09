@@ -1,6 +1,6 @@
-"""
-Bitbns Exchange Data Configuration
-"""
+from typing import Any
+
+"""Bitbns Exchange Data Configuration."""
 
 import os
 
@@ -13,7 +13,7 @@ _bitbns_config = None
 _bitbns_config_loaded = False
 
 
-def _get_bitbns_config():
+def _get_bitbns_config() -> Any | None:
     """Load Bitbns YAML configuration."""
     global _bitbns_config, _bitbns_config_loaded
     if _bitbns_config_loaded:
@@ -37,7 +37,7 @@ def _get_bitbns_config():
 class BitbnsExchangeData(ExchangeData):
     """Base class for Bitbns exchange."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__()
         self.exchange_name = "bitbns"
         self.rest_url = "https://api.bitbns.com"
@@ -60,7 +60,7 @@ class BitbnsExchangeData(ExchangeData):
         }
         self.legal_currency = ["INR", "USDT"]
 
-    def _load_from_config(self, asset_type):
+    def _load_from_config(self, asset_type) -> bool:
         """Load from YAML config."""
         config = _get_bitbns_config()
         if config is None:
@@ -109,7 +109,7 @@ class BitbnsExchangeData(ExchangeData):
 class BitbnsExchangeDataSpot(BitbnsExchangeData):
     """Bitbns Spot exchange configuration."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__()
         self.asset_type = "spot"
         self.rest_paths = {}

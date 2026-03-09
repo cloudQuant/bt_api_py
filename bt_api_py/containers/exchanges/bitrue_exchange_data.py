@@ -1,5 +1,4 @@
-"""
-Bitrue Exchange Data Configuration
+"""Bitrue Exchange Data Configuration.
 
 Bitrue Spot API with Binance-compatible HMAC SHA256 authentication.
 Signature: HMAC-SHA256(query_string_with_timestamp, secret_key)
@@ -7,6 +6,7 @@ Header: X-MBX-APIKEY
 Symbol format: BTCUSDT (concatenated uppercase, no separator).
 """
 
+from typing import Any
 import os
 
 from bt_api_py.containers.exchanges.exchange_data import ExchangeData
@@ -18,7 +18,7 @@ _bitrue_config = None
 _bitrue_config_loaded = False
 
 
-def _get_bitrue_config():
+def _get_bitrue_config() -> Any | None:
     """Load Bitrue YAML configuration."""
     global _bitrue_config, _bitrue_config_loaded
     if _bitrue_config_loaded:
@@ -42,7 +42,7 @@ def _get_bitrue_config():
 class BitrueExchangeData(ExchangeData):
     """Base class for Bitrue exchange."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__()
         self.exchange_name = "BITRUE___SPOT"
         self.rest_url = "https://www.bitrue.com"
@@ -63,7 +63,7 @@ class BitrueExchangeData(ExchangeData):
         }
         self.legal_currency = ["USDT", "BTC", "ETH", "XRP"]
 
-    def _load_from_config(self, asset_type):
+    def _load_from_config(self, asset_type) -> bool:
         """Load from YAML config."""
         config = _get_bitrue_config()
         if config is None:
@@ -108,17 +108,17 @@ class BitrueExchangeData(ExchangeData):
 
         return True
 
-    def get_symbol(self, symbol):
+    def get_symbol(self, symbol: str) -> str:
         """Convert symbol to Bitrue format (concatenated uppercase).
-        e.g. 'BTC/USDT' -> 'BTCUSDT', 'BTC-USDT' -> 'BTCUSDT'
+        e.g. 'BTC/USDT' -> 'BTCUSDT', 'BTC-USDT' -> 'BTCUSDT'.
         """
         return symbol.upper().replace("/", "").replace("-", "").replace("_", "")
 
-    def get_period(self, period):
+    def get_period(self, period: str) -> str:
         """Map standard period to Bitrue kline scale."""
         return self.kline_periods.get(period, period)
 
-    def get_rest_path(self, request_type):
+    def get_rest_path(self, request_type: str, **kwargs) -> str:
         """Get REST path for request_type. Raises ValueError if not found."""
         path = self.rest_paths.get(request_type)
         if path is None:
@@ -127,7 +127,7 @@ class BitrueExchangeData(ExchangeData):
             )
         return path
 
-    def get_wss_path(self, channel_type, symbol=None):
+    def get_wss_path(self, channel_type, symbol: str | None = None, **kwargs) -> str:
         """Get WebSocket subscription path."""
         path = self.wss_paths.get(channel_type, "")
         if symbol and "{symbol}" in str(path):
@@ -138,7 +138,7 @@ class BitrueExchangeData(ExchangeData):
 class BitrueExchangeDataSpot(BitrueExchangeData):
     """Bitrue Spot exchange configuration."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__()
         self.asset_type = "SPOT"
         if not self._load_from_config("spot"):

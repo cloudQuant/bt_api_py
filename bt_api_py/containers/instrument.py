@@ -76,8 +76,15 @@ class Instrument:
             return False
         return not (self.delist_time and datetime.now() > self.delist_time)
 
-    def with_params(self, **kwargs) -> "Instrument":
-        """创建带有新参数的副本"""
+    def with_params(self, **kwargs: Any) -> "Instrument":
+        """Create a copy with updated parameters.
+
+        Args:
+            **kwargs: Field names and values to update.
+
+        Returns:
+            A new Instrument instance with updated fields.
+        """
         return dataclasses.replace(self, **kwargs)
 
 
@@ -110,9 +117,19 @@ class InstrumentFactory:
         venue: str,
         venue_symbol: str,
         asset_type: AssetType,
-        **kwargs,
+        **kwargs: Any,
     ) -> Instrument:
-        """从交易所符号创建 Instrument"""
+        """Create an Instrument from exchange symbol.
+
+        Args:
+            venue: Exchange identifier (e.g., "BINANCE___SPOT", "CTP___FUTURE").
+            venue_symbol: Original exchange symbol (e.g., "BTCUSDT", "IF2506").
+            asset_type: Type of asset (spot, swap, future, etc.).
+            **kwargs: Additional instrument attributes.
+
+        Returns:
+            A new Instrument instance.
+        """
         internal = InstrumentFactory._make_internal(venue, venue_symbol, asset_type)
         return Instrument(
             internal=internal,
@@ -124,12 +141,20 @@ class InstrumentFactory:
 
     @staticmethod
     def _make_internal(venue: str, venue_symbol: str, asset_type: AssetType) -> str:
-        """生成内部统一符号
+        """Generate internal unified symbol.
 
-        解析策略：
-        1. 如果符号包含分隔符（-/_.），直接按分隔符拆分并用 '-' 连接
-        2. 否则，使用已知 quote 货币列表从后往前匹配
-        3. 匹配失败时返回原始符号（不抛异常，留给上层处理）
+        Parsing strategy:
+        1. If symbol contains separators (-/_.), split by separator and join with '-'.
+        2. Otherwise, match known quote currencies from the end.
+        3. Return original symbol if matching fails.
+
+        Args:
+            venue: Exchange identifier.
+            venue_symbol: Original exchange symbol.
+            asset_type: Type of asset.
+
+        Returns:
+            Internal unified symbol (e.g., "BTC-USDT").
         """
         # 已含分隔符的交易所（OKX, Bitget, KuCoin 等）
         for sep in ["-", "/", "_", "."]:

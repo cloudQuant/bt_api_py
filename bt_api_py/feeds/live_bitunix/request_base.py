@@ -5,6 +5,7 @@ Bitunix REST API request base class.
 import hashlib
 import time
 import uuid
+from typing import Any
 
 from bt_api_py.containers.exchanges.bitunix_exchange_data import BitunixExchangeDataSpot
 from bt_api_py.containers.requestdatas.request_data import RequestData
@@ -30,7 +31,7 @@ class BitunixRequestData(Feed):
             Capability.CANCEL_ORDER,
         }
 
-    def __init__(self, data_queue, **kwargs):
+    def __init__(self, data_queue, **kwargs) -> None:
         super().__init__(data_queue, **kwargs)
         self.data_queue = data_queue
         self.exchange_name = kwargs.get("exchange_name", "BITUNIX___SPOT")
@@ -40,7 +41,7 @@ class BitunixRequestData(Feed):
         self.async_logger = get_logger("bitunix_feed")
         self._http_client = HttpClient(venue=self.exchange_name, timeout=10)
 
-    def _generate_signature(self, nonce, timestamp, query_params="", body=""):
+    def _generate_signature(self, nonce, timestamp, query_params="", body="") -> Any:
         """Generate dual SHA256 signature for Bitunix API.
 
         Bitunix uses dual SHA256 signature (not HMAC):
@@ -60,7 +61,7 @@ class BitunixRequestData(Feed):
         second_input = digest + secret
         return hashlib.sha256(second_input.encode("utf-8")).hexdigest()
 
-    def _get_headers(self, method, request_path, params=None, body=""):
+    def _get_headers(self, method, request_path, params=None, body="") -> Any:
         """Generate request headers."""
         nonce = str(uuid.uuid4()).replace("-", "")[:32]
         timestamp = str(int(time.time() * 1000))
@@ -129,13 +130,13 @@ class BitunixRequestData(Feed):
         except Exception as e:
             self.async_logger.error(f"Async callback error: {e}")
 
-    def _process_response(self, response, extra_data=None):
+    def _process_response(self, response, extra_data=None) -> Any:
         """Process API response."""
         if extra_data is None:
             extra_data = {}
         return RequestData(response, extra_data)
 
-    def _get_server_time(self, extra_data=None, **kwargs):
+    def _get_server_time(self, extra_data=None, **kwargs) -> Any:
         """Prepare server time request. Returns (path, params, extra_data)."""
         if extra_data is None:
             extra_data = {}
@@ -149,7 +150,7 @@ class BitunixRequestData(Feed):
         )
         return "GET /api/v1/futures/market/serverTime", {}, extra_data
 
-    def get_server_time(self, extra_data=None, **kwargs):
+    def get_server_time(self, extra_data=None, **kwargs) -> Any:
         """Get server time. Returns RequestData."""
         path, params, extra_data = self._get_server_time(extra_data, **kwargs)
         return self.request(path, params=params, extra_data=extra_data)

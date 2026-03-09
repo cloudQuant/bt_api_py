@@ -1,6 +1,6 @@
-"""
-Buda Exchange Data Configuration
-"""
+from typing import Any
+
+"""Buda Exchange Data Configuration."""
 
 import os
 
@@ -13,7 +13,7 @@ _buda_config = None
 _buda_config_loaded = False
 
 
-def _get_buda_config():
+def _get_buda_config() -> Any | None:
     """Load Buda YAML configuration."""
     global _buda_config, _buda_config_loaded
     if _buda_config_loaded:
@@ -37,7 +37,7 @@ def _get_buda_config():
 class BudaExchangeData(ExchangeData):
     """Base class for Buda exchange."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__()
         self.exchange_name = "buda"
         self.rest_url = "https://api.buda.com"
@@ -54,7 +54,7 @@ class BudaExchangeData(ExchangeData):
         }
         self.legal_currency = ["CLP", "COP", "PEN", "EUR", "USDT"]
 
-    def _load_from_config(self, asset_type):
+    def _load_from_config(self, asset_type) -> bool:
         """Load from YAML config."""
         config = _get_buda_config()
         if config is None:
@@ -100,7 +100,7 @@ class BudaExchangeData(ExchangeData):
 class BudaExchangeDataSpot(BudaExchangeData):
     """Buda Spot exchange configuration."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__()
         self.asset_type = "spot"
         self.rest_paths = {}

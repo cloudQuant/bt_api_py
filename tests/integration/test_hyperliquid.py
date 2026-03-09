@@ -68,19 +68,19 @@ def test_hyperliquid_request_data():
         # but we can verify the method calls work)
 
         # Test method exists and callable
-        assert hasattr(request_data, 'get_all_mids')
+        assert hasattr(request_data, "get_all_mids")
         assert callable(request_data.get_all_mids)
 
-        assert hasattr(request_data, 'get_meta')
+        assert hasattr(request_data, "get_meta")
         assert callable(request_data.get_meta)
 
-        assert hasattr(request_data, 'get_l2_book')
+        assert hasattr(request_data, "get_l2_book")
         assert callable(request_data.get_l2_book)
 
-        assert hasattr(request_data, 'get_candle_snapshot')
+        assert hasattr(request_data, "get_candle_snapshot")
         assert callable(request_data.get_candle_snapshot)
 
-        assert hasattr(request_data, 'get_recent_trades')
+        assert hasattr(request_data, "get_recent_trades")
         assert callable(request_data.get_recent_trades)
 
         print("✓ Hyperliquid request data tests passed")
@@ -133,13 +133,7 @@ def main():
     print("=" * 60)
 
     # Set up logging
-    logger = SpdLogManager(
-        "./logs/test_hyperliquid.log",
-        "test",
-        0,
-        0,
-        False
-    ).create_logger()
+    logger = SpdLogManager("./logs/test_hyperliquid.log", "test", 0, 0, False).create_logger()
 
     # Run tests
     tests = [

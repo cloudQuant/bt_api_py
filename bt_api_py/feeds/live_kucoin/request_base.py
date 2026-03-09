@@ -23,7 +23,7 @@ class KuCoinRequestData(Feed):
     """KuCoin REST API base class with authentication and signing."""
 
     @classmethod
-    def _capabilities(cls):
+    def _capabilities(cls) -> Any | None:
         return {
             Capability.GET_TICK,
             Capability.GET_DEPTH,
@@ -39,7 +39,7 @@ class KuCoinRequestData(Feed):
             Capability.GET_SERVER_TIME,
         }
 
-    def __init__(self, data_queue, **kwargs):
+    def __init__(self, data_queue, **kwargs) -> Any | None:
         super().__init__(data_queue, **kwargs)
         self.data_queue = data_queue
         self.public_key = kwargs.get("public_key")
@@ -54,7 +54,7 @@ class KuCoinRequestData(Feed):
         self._rate_limiter = kwargs.get("rate_limiter", self._create_default_rate_limiter())
 
     @staticmethod
-    def _create_default_rate_limiter():
+    def _create_default_rate_limiter() -> Any | None:
         """Create default rate limiter for KuCoin API.
 
         KuCoin rate limits:
@@ -247,7 +247,7 @@ class KuCoinRequestData(Feed):
             self.async_logger.warn(f"async_callback::{e}")
 
     @staticmethod
-    def _generic_normalize_function(input_data, extra_data):
+    def _generic_normalize_function(input_data, extra_data) -> Any | None:
         """Generic normalize function for KuCoin API responses.
 
         KuCoin API response format:

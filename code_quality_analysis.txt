@@ -1,0 +1,3187 @@
+代码质量分析报告
+================================================================================
+
+总文件数: 764
+需要改进的文件数: 612
+
+
+按目录分组的文件分布:
+containers/exchanges: 72 个文件
+containers/tickers: 67 个文件
+containers/orders: 23 个文件
+containers/balances: 20 个文件
+containers/trades: 18 个文件
+containers/orderbooks: 17 个文件
+feeds/live_binance: 16 个文件
+ctp: 16 个文件
+exchange_registers: 14 个文件
+feeds: 13 个文件
+feeds/live_okx/mixins: 13 个文件
+containers/bars: 10 个文件
+containers/accounts: 10 个文件
+functions/update_data: 8 个文件
+containers/ib: 8 个文件
+feeds/live_htx: 7 个文件
+containers/ctp: 7 个文件
+feeds/live_hyperliquid: 5 个文件
+containers/fundingrates: 5 个文件
+monitoring: 5 个文件
+feeds/live_okx: 4 个文件
+feeds/live_bitget: 4 个文件
+feeds/live_mexc: 4 个文件
+feeds/live_kraken: 4 个文件
+functions: 4 个文件
+containers/markprices: 4 个文件
+containers/liquidations: 4 个文件
+containers/symbols: 4 个文件
+containers/positions: 4 个文件
+.: 3 个文件
+risk_management/ml_models: 3 个文件
+feeds/live_coinswitch: 3 个文件
+feeds/live_coindcx: 3 个文件
+feeds/live_swyftx: 3 个文件
+feeds/live_zaif: 3 个文件
+feeds/live_valr: 3 个文件
+feeds/live_zebpay: 3 个文件
+feeds/live_dydx: 3 个文件
+feeds/live_bithumb: 3 个文件
+feeds/live_btc_markets: 3 个文件
+feeds/live_mercado_bitcoin: 3 个文件
+feeds/live_bigone: 3 个文件
+feeds/live_satoshitango: 3 个文件
+feeds/live_bybit: 3 个文件
+feeds/live_bydfi: 3 个文件
+feeds/live_cow_swap: 3 个文件
+feeds/live_bitunix: 3 个文件
+feeds/live_bequant: 3 个文件
+feeds/live_cryptocom: 3 个文件
+feeds/live_wazirx: 3 个文件
+feeds/live_latoken: 3 个文件
+feeds/live_bitso: 3 个文件
+feeds/live_bitmart: 3 个文件
+feeds/live_bitinka: 3 个文件
+feeds/live_gmx: 3 个文件
+feeds/live_exmo: 3 个文件
+feeds/live_coinex: 3 个文件
+feeds/live_yobit: 3 个文件
+feeds/live_korbit: 3 个文件
+feeds/live_luno: 3 个文件
+feeds/live_bitstamp: 3 个文件
+feeds/live_upbit: 3 个文件
+feeds/live_coinbase: 3 个文件
+feeds/live_coinspot: 3 个文件
+feeds/live_kucoin: 3 个文件
+feeds/live_bitfinex: 3 个文件
+feeds/live_poloniex: 3 个文件
+feeds/live_coinone: 3 个文件
+feeds/live_bitbns: 3 个文件
+feeds/live_hitbtc: 3 个文件
+feeds/live_bitrue: 3 个文件
+feeds/live_bitflyer: 3 个文件
+feeds/live_bingx: 3 个文件
+feeds/live_bitvavo: 3 个文件
+feeds/live_phemex: 3 个文件
+feeds/live_curve: 3 个文件
+feeds/live_coincheck: 3 个文件
+feeds/live_buda: 3 个文件
+feeds/live_btcturk: 3 个文件
+feeds/live_giottus: 3 个文件
+feeds/live_gateio: 3 个文件
+feeds/live_foxbit: 3 个文件
+feeds/live_localbitcoins: 3 个文件
+feeds/live_independent_reserve: 3 个文件
+feeds/live_bitbank: 3 个文件
+containers/greeks: 3 个文件
+containers/incomes: 3 个文件
+security_compliance/core: 3 个文件
+core: 2 个文件
+utils: 2 个文件
+feeds/live_balancer: 2 个文件
+feeds/live_raydium: 2 个文件
+feeds/live_uniswap: 2 个文件
+feeds/live_ripio: 2 个文件
+feeds/live_sushiswap: 2 个文件
+containers: 2 个文件
+containers/pools: 2 个文件
+containers/pricelimits: 2 个文件
+containers/timers: 2 个文件
+containers/openinterests: 2 个文件
+containers/requestdatas: 2 个文件
+containers/assets: 2 个文件
+security_compliance: 2 个文件
+security_compliance/network: 2 个文件
+feeds/live_gemini: 2 个文件
+risk_management: 1 个文件
+risk_management/core: 1 个文件
+feeds/live_hitbtc/mixins: 1 个文件
+configs: 1 个文件
+security_compliance/auth: 1 个文件
+security_compliance/recovery: 1 个文件
+security_compliance/monitoring: 1 个文件
+security_compliance/data: 1 个文件
+functions/calculate_number: 1 个文件
+errors: 1 个文件
+risk_management/containers: 1 个文件
+
+
+需要改进的文件列表:
+  1. __init__.py
+     质量分数: 0.0
+     函数数: 0, 类数: 0
+     类型注解: 0, 文档字符串: 0
+
+  2. core/__init__.py
+     质量分数: 0.0
+     函数数: 0, 类数: 0
+     类型注解: 0, 文档字符串: 1
+
+  3. utils/hyperliquid_types.py
+     质量分数: 0.0
+     函数数: 0, 类数: 0
+     类型注解: 0, 文档字符串: 1
+
+  4. risk_management/__init__.py
+     质量分数: 0.0
+     函数数: 0, 类数: 0
+     类型注解: 0, 文档字符串: 1
+
+  5. risk_management/core/__init__.py
+     质量分数: 0.0
+     函数数: 0, 类数: 0
+     类型注解: 0, 文档字符串: 1
+
+  6. risk_management/ml_models/__init__.py
+     质量分数: 0.0
+     函数数: 0, 类数: 0
+     类型注解: 0, 文档字符串: 1
+
+  7. feeds/__init__.py
+     质量分数: 0.0
+     函数数: 0, 类数: 0
+     类型注解: 0, 文档字符串: 0
+
+  8. feeds/live_okx_feed.py
+     质量分数: 0.0
+     函数数: 0, 类数: 0
+     类型注解: 0, 文档字符串: 1
+
+  9. feeds/live_binance_feed.py
+     质量分数: 0.0
+     函数数: 0, 类数: 0
+     类型注解: 0, 文档字符串: 1
+
+ 10. feeds/live_hyperliquid_feed.py
+     质量分数: 0.0
+     函数数: 0, 类数: 0
+     类型注解: 0, 文档字符串: 1
+
+ 11. feeds/live_coinswitch/__init__.py
+     质量分数: 0.0
+     函数数: 0, 类数: 0
+     类型注解: 0, 文档字符串: 1
+
+ 12. feeds/live_coindcx/__init__.py
+     质量分数: 0.0
+     函数数: 0, 类数: 0
+     类型注解: 0, 文档字符串: 1
+
+ 13. feeds/live_swyftx/__init__.py
+     质量分数: 0.0
+     函数数: 0, 类数: 0
+     类型注解: 0, 文档字符串: 1
+
+ 14. feeds/live_zaif/__init__.py
+     质量分数: 0.0
+     函数数: 0, 类数: 0
+     类型注解: 0, 文档字符串: 1
+
+ 15. feeds/live_valr/__init__.py
+     质量分数: 0.0
+     函数数: 0, 类数: 0
+     类型注解: 0, 文档字符串: 1
+
+ 16. feeds/live_zebpay/__init__.py
+     质量分数: 0.0
+     函数数: 0, 类数: 0
+     类型注解: 0, 文档字符串: 1
+
+ 17. feeds/live_dydx/__init__.py
+     质量分数: 0.0
+     函数数: 0, 类数: 0
+     类型注解: 0, 文档字符串: 1
+
+ 18. feeds/live_bithumb/__init__.py
+     质量分数: 0.0
+     函数数: 0, 类数: 0
+     类型注解: 0, 文档字符串: 1
+
+ 19. feeds/live_btc_markets/__init__.py
+     质量分数: 0.0
+     函数数: 0, 类数: 0
+     类型注解: 0, 文档字符串: 1
+
+ 20. feeds/live_mercado_bitcoin/__init__.py
+     质量分数: 0.0
+     函数数: 0, 类数: 0
+     类型注解: 0, 文档字符串: 1
+
+ 21. feeds/live_bigone/__init__.py
+     质量分数: 0.0
+     函数数: 0, 类数: 0
+     类型注解: 0, 文档字符串: 1
+
+ 22. feeds/live_satoshitango/__init__.py
+     质量分数: 0.0
+     函数数: 0, 类数: 0
+     类型注解: 0, 文档字符串: 1
+
+ 23. feeds/live_bybit/__init__.py
+     质量分数: 0.0
+     函数数: 0, 类数: 0
+     类型注解: 0, 文档字符串: 0
+
+ 24. feeds/live_bydfi/__init__.py
+     质量分数: 0.0
+     函数数: 0, 类数: 0
+     类型注解: 0, 文档字符串: 1
+
+ 25. feeds/live_cow_swap/__init__.py
+     质量分数: 0.0
+     函数数: 0, 类数: 0
+     类型注解: 0, 文档字符串: 1
+
+ 26. feeds/live_bitunix/__init__.py
+     质量分数: 0.0
+     函数数: 0, 类数: 0
+     类型注解: 0, 文档字符串: 1
+
+ 27. feeds/live_bequant/__init__.py
+     质量分数: 0.0
+     函数数: 0, 类数: 0
+     类型注解: 0, 文档字符串: 1
+
+ 28. feeds/live_cryptocom/__init__.py
+     质量分数: 0.0
+     函数数: 0, 类数: 0
+     类型注解: 0, 文档字符串: 1
+
+ 29. feeds/live_wazirx/__init__.py
+     质量分数: 0.0
+     函数数: 0, 类数: 0
+     类型注解: 0, 文档字符串: 1
+
+ 30. feeds/live_latoken/__init__.py
+     质量分数: 0.0
+     函数数: 0, 类数: 0
+     类型注解: 0, 文档字符串: 0
+
+ 31. feeds/live_hyperliquid/__init__.py
+     质量分数: 0.0
+     函数数: 0, 类数: 0
+     类型注解: 0, 文档字符串: 1
+
+ 32. feeds/live_binance/option.py
+     质量分数: 0.0
+     函数数: 3, 类数: 3
+     类型注解: 0, 文档字符串: 0
+
+ 33. feeds/live_binance/swap.py
+     质量分数: 0.0
+     函数数: 2, 类数: 3
+     类型注解: 0, 文档字符串: 0
+
+ 34. feeds/live_binance/market_wss_base.py
+     质量分数: 0.0
+     函数数: 17, 类数: 1
+     类型注解: 0, 文档字符串: 0
+
+ 35. feeds/live_binance/__init__.py
+     质量分数: 0.0
+     函数数: 0, 类数: 0
+     类型注解: 0, 文档字符串: 0
+
+ 36. feeds/live_binance/coin_m.py
+     质量分数: 0.0
+     函数数: 3, 类数: 3
+     类型注解: 0, 文档字符串: 0
+
+ 37. feeds/live_binance/algo.py
+     质量分数: 0.0
+     函数数: 1, 类数: 1
+     类型注解: 0, 文档字符串: 0
+
+ 38. feeds/live_bitso/__init__.py
+     质量分数: 0.0
+     函数数: 0, 类数: 0
+     类型注解: 0, 文档字符串: 1
+
+ 39. feeds/live_bitmart/__init__.py
+     质量分数: 0.0
+     函数数: 0, 类数: 0
+     类型注解: 0, 文档字符串: 1
+
+ 40. feeds/live_bitinka/__init__.py
+     质量分数: 0.0
+     函数数: 0, 类数: 0
+     类型注解: 0, 文档字符串: 1
+
+ 41. feeds/live_gmx/__init__.py
+     质量分数: 0.0
+     函数数: 0, 类数: 0
+     类型注解: 0, 文档字符串: 1
+
+ 42. feeds/live_exmo/__init__.py
+     质量分数: 0.0
+     函数数: 0, 类数: 0
+     类型注解: 0, 文档字符串: 1
+
+ 43. feeds/live_coinex/__init__.py
+     质量分数: 0.0
+     函数数: 0, 类数: 0
+     类型注解: 0, 文档字符串: 1
+
+ 44. feeds/live_balancer/__init__.py
+     质量分数: 0.0
+     函数数: 0, 类数: 0
+     类型注解: 0, 文档字符串: 1
+
+ 45. feeds/live_raydium/__init__.py
+     质量分数: 0.0
+     函数数: 0, 类数: 0
+     类型注解: 0, 文档字符串: 1
+
+ 46. feeds/live_htx/__init__.py
+     质量分数: 0.0
+     函数数: 0, 类数: 0
+     类型注解: 0, 文档字符串: 0
+
+ 47. feeds/live_okx/__init__.py
+     质量分数: 0.0
+     函数数: 0, 类数: 0
+     类型注解: 0, 文档字符串: 0
+
+ 48. feeds/live_okx/futures.py
+     质量分数: 0.0
+     函数数: 5, 类数: 5
+     类型注解: 0, 文档字符串: 0
+
+ 49. feeds/live_okx/mixins/__init__.py
+     质量分数: 0.0
+     函数数: 0, 类数: 0
+     类型注解: 0, 文档字符串: 0
+
+ 50. feeds/live_yobit/__init__.py
+     质量分数: 0.0
+     函数数: 0, 类数: 0
+     类型注解: 0, 文档字符串: 1
+
+ 51. feeds/live_korbit/__init__.py
+     质量分数: 0.0
+     函数数: 0, 类数: 0
+     类型注解: 0, 文档字符串: 0
+
+ 52. feeds/live_luno/__init__.py
+     质量分数: 0.0
+     函数数: 0, 类数: 0
+     类型注解: 0, 文档字符串: 1
+
+ 53. feeds/live_bitstamp/__init__.py
+     质量分数: 0.0
+     函数数: 0, 类数: 0
+     类型注解: 0, 文档字符串: 1
+
+ 54. feeds/live_upbit/__init__.py
+     质量分数: 0.0
+     函数数: 0, 类数: 0
+     类型注解: 0, 文档字符串: 0
+
+ 55. feeds/live_coinbase/__init__.py
+     质量分数: 0.0
+     函数数: 0, 类数: 0
+     类型注解: 0, 文档字符串: 1
+
+ 56. feeds/live_bitget/__init__.py
+     质量分数: 0.0
+     函数数: 0, 类数: 0
+     类型注解: 0, 文档字符串: 1
+
+ 57. feeds/live_coinspot/__init__.py
+     质量分数: 0.0
+     函数数: 0, 类数: 0
+     类型注解: 0, 文档字符串: 1
+
+ 58. feeds/live_kucoin/__init__.py
+     质量分数: 0.0
+     函数数: 0, 类数: 0
+     类型注解: 0, 文档字符串: 0
+
+ 59. feeds/live_bitfinex/__init__.py
+     质量分数: 0.0
+     函数数: 0, 类数: 0
+     类型注解: 0, 文档字符串: 0
+
+ 60. feeds/live_uniswap/__init__.py
+     质量分数: 0.0
+     函数数: 0, 类数: 0
+     类型注解: 0, 文档字符串: 1
+
+ 61. feeds/live_poloniex/__init__.py
+     质量分数: 0.0
+     函数数: 0, 类数: 0
+     类型注解: 0, 文档字符串: 1
+
+ 62. feeds/live_coinone/__init__.py
+     质量分数: 0.0
+     函数数: 0, 类数: 0
+     类型注解: 0, 文档字符串: 1
+
+ 63. feeds/live_bitbns/__init__.py
+     质量分数: 0.0
+     函数数: 0, 类数: 0
+     类型注解: 0, 文档字符串: 1
+
+ 64. feeds/live_hitbtc/__init__.py
+     质量分数: 0.0
+     函数数: 0, 类数: 0
+     类型注解: 0, 文档字符串: 1
+
+ 65. feeds/live_hitbtc/mixins/__init__.py
+     质量分数: 0.0
+     函数数: 0, 类数: 0
+     类型注解: 0, 文档字符串: 1
+
+ 66. feeds/live_bitrue/__init__.py
+     质量分数: 0.0
+     函数数: 0, 类数: 0
+     类型注解: 0, 文档字符串: 1
+
+ 67. feeds/live_ripio/__init__.py
+     质量分数: 0.0
+     函数数: 0, 类数: 0
+     类型注解: 0, 文档字符串: 1
+
+ 68. feeds/live_bitflyer/__init__.py
+     质量分数: 0.0
+     函数数: 0, 类数: 0
+     类型注解: 0, 文档字符串: 1
+
+ 69. feeds/live_bingx/__init__.py
+     质量分数: 0.0
+     函数数: 0, 类数: 0
+     类型注解: 0, 文档字符串: 1
+
+ 70. feeds/live_mexc/__init__.py
+     质量分数: 0.0
+     函数数: 0, 类数: 0
+     类型注解: 0, 文档字符串: 1
+
+ 71. feeds/live_bitvavo/__init__.py
+     质量分数: 0.0
+     函数数: 0, 类数: 0
+     类型注解: 0, 文档字符串: 1
+
+ 72. feeds/live_phemex/__init__.py
+     质量分数: 0.0
+     函数数: 0, 类数: 0
+     类型注解: 0, 文档字符串: 1
+
+ 73. feeds/live_curve/__init__.py
+     质量分数: 0.0
+     函数数: 0, 类数: 0
+     类型注解: 0, 文档字符串: 1
+
+ 74. feeds/live_coincheck/__init__.py
+     质量分数: 0.0
+     函数数: 0, 类数: 0
+     类型注解: 0, 文档字符串: 1
+
+ 75. feeds/live_buda/__init__.py
+     质量分数: 0.0
+     函数数: 0, 类数: 0
+     类型注解: 0, 文档字符串: 1
+
+ 76. feeds/live_btcturk/__init__.py
+     质量分数: 0.0
+     函数数: 0, 类数: 0
+     类型注解: 0, 文档字符串: 1
+
+ 77. feeds/live_giottus/__init__.py
+     质量分数: 0.0
+     函数数: 0, 类数: 0
+     类型注解: 0, 文档字符串: 1
+
+ 78. feeds/live_kraken/__init__.py
+     质量分数: 0.0
+     函数数: 0, 类数: 0
+     类型注解: 0, 文档字符串: 1
+
+ 79. feeds/live_gateio/__init__.py
+     质量分数: 0.0
+     函数数: 0, 类数: 0
+     类型注解: 0, 文档字符串: 1
+
+ 80. feeds/live_sushiswap/__init__.py
+     质量分数: 0.0
+     函数数: 0, 类数: 0
+     类型注解: 0, 文档字符串: 1
+
+ 81. feeds/live_foxbit/__init__.py
+     质量分数: 0.0
+     函数数: 0, 类数: 0
+     类型注解: 0, 文档字符串: 1
+
+ 82. feeds/live_localbitcoins/__init__.py
+     质量分数: 0.0
+     函数数: 0, 类数: 0
+     类型注解: 0, 文档字符串: 0
+
+ 83. feeds/live_independent_reserve/__init__.py
+     质量分数: 0.0
+     函数数: 0, 类数: 0
+     类型注解: 0, 文档字符串: 1
+
+ 84. feeds/live_bitbank/__init__.py
+     质量分数: 0.0
+     函数数: 0, 类数: 0
+     类型注解: 0, 文档字符串: 1
+
+ 85. exchange_registers/__init__.py
+     质量分数: 0.0
+     函数数: 0, 类数: 0
+     类型注解: 0, 文档字符串: 0
+
+ 86. configs/__init__.py
+     质量分数: 0.0
+     函数数: 0, 类数: 0
+     类型注解: 0, 文档字符串: 0
+
+ 87. functions/timer_event.py
+     质量分数: 0.0
+     函数数: 2, 类数: 0
+     类型注解: 0, 文档字符串: 0
+
+ 88. functions/analysis_deals.py
+     质量分数: 0.0
+     函数数: 0, 类数: 0
+     类型注解: 0, 文档字符串: 0
+
+ 89. functions/__init__.py
+     质量分数: 0.0
+     函数数: 0, 类数: 0
+     类型注解: 0, 文档字符串: 1
+
+ 90. functions/update_data/download_spot_history_bar_from_binance.py
+     质量分数: 0.0
+     函数数: 2, 类数: 0
+     类型注解: 0, 文档字符串: 0
+
+ 91. functions/update_data/download_spot_history_bar_from_okx.py
+     质量分数: 0.0
+     函数数: 2, 类数: 0
+     类型注解: 0, 文档字符串: 0
+
+ 92. functions/update_data/__init__.py
+     质量分数: 0.0
+     函数数: 0, 类数: 0
+     类型注解: 0, 文档字符串: 0
+
+ 93. functions/update_data/download_swap_history_bar_from_binance.py
+     质量分数: 0.0
+     函数数: 2, 类数: 0
+     类型注解: 0, 文档字符串: 0
+
+ 94. functions/update_data/download_swap_histoy_bar_from_okx.py
+     质量分数: 0.0
+     函数数: 0, 类数: 0
+     类型注解: 0, 文档字符串: 0
+
+ 95. functions/update_data/download_funding_rate_from_binance.py
+     质量分数: 0.0
+     函数数: 1, 类数: 0
+     类型注解: 0, 文档字符串: 0
+
+ 96. containers/__init__.py
+     质量分数: 0.0
+     函数数: 0, 类数: 0
+     类型注解: 0, 文档字符串: 1
+
+ 97. containers/pools/__init__.py
+     质量分数: 0.0
+     函数数: 0, 类数: 0
+     类型注解: 0, 文档字符串: 1
+
+ 98. containers/exchanges/__init__.py
+     质量分数: 0.0
+     函数数: 0, 类数: 0
+     类型注解: 0, 文档字符串: 0
+
+ 99. containers/pricelimits/__init__.py
+     质量分数: 0.0
+     函数数: 0, 类数: 0
+     类型注解: 0, 文档字符串: 0
+
+100. containers/trades/__init__.py
+     质量分数: 0.0
+     函数数: 0, 类数: 0
+     类型注解: 0, 文档字符串: 0
+
+101. containers/timers/timer.py
+     质量分数: 0.0
+     函数数: 3, 类数: 1
+     类型注解: 0, 文档字符串: 0
+
+102. containers/timers/__init__.py
+     质量分数: 0.0
+     函数数: 0, 类数: 0
+     类型注解: 0, 文档字符串: 0
+
+103. containers/markprices/__init__.py
+     质量分数: 0.0
+     函数数: 0, 类数: 0
+     类型注解: 0, 文档字符串: 0
+
+104. containers/liquidations/__init__.py
+     质量分数: 0.0
+     函数数: 0, 类数: 0
+     类型注解: 0, 文档字符串: 0
+
+105. containers/orderbooks/__init__.py
+     质量分数: 0.0
+     函数数: 0, 类数: 0
+     类型注解: 0, 文档字符串: 0
+
+106. containers/openinterests/__init__.py
+     质量分数: 0.0
+     函数数: 0, 类数: 0
+     类型注解: 0, 文档字符串: 0
+
+107. containers/tickers/__init__.py
+     质量分数: 0.0
+     函数数: 0, 类数: 0
+     类型注解: 0, 文档字符串: 0
+
+108. containers/bars/__init__.py
+     质量分数: 0.0
+     函数数: 0, 类数: 0
+     类型注解: 0, 文档字符串: 0
+
+109. containers/accounts/__init__.py
+     质量分数: 0.0
+     函数数: 0, 类数: 0
+     类型注解: 0, 文档字符串: 0
+
+110. containers/requestdatas/__init__.py
+     质量分数: 0.0
+     函数数: 0, 类数: 0
+     类型注解: 0, 文档字符串: 0
+
+111. containers/greeks/__init__.py
+     质量分数: 0.0
+     函数数: 0, 类数: 0
+     类型注解: 0, 文档字符串: 0
+
+112. containers/balances/__init__.py
+     质量分数: 0.0
+     函数数: 0, 类数: 0
+     类型注解: 0, 文档字符串: 0
+
+113. containers/symbols/binance_symbol.py
+     质量分数: 0.0
+     函数数: 54, 类数: 2
+     类型注解: 0, 文档字符串: 0
+
+114. containers/symbols/__init__.py
+     质量分数: 0.0
+     函数数: 0, 类数: 0
+     类型注解: 0, 文档字符串: 0
+
+115. containers/positions/__init__.py
+     质量分数: 0.0
+     函数数: 0, 类数: 0
+     类型注解: 0, 文档字符串: 0
+
+116. containers/orders/__init__.py
+     质量分数: 0.0
+     函数数: 0, 类数: 0
+     类型注解: 0, 文档字符串: 0
+
+117. containers/ib/__init__.py
+     质量分数: 0.0
+     函数数: 0, 类数: 0
+     类型注解: 0, 文档字符串: 1
+
+118. containers/ctp/__init__.py
+     质量分数: 0.0
+     函数数: 0, 类数: 0
+     类型注解: 0, 文档字符串: 1
+
+119. containers/assets/__init__.py
+     质量分数: 0.0
+     函数数: 0, 类数: 0
+     类型注解: 0, 文档字符串: 0
+
+120. containers/fundingrates/__init__.py
+     质量分数: 0.0
+     函数数: 0, 类数: 0
+     类型注解: 0, 文档字符串: 0
+
+121. containers/incomes/__init__.py
+     质量分数: 0.0
+     函数数: 0, 类数: 0
+     类型注解: 0, 文档字符串: 0
+
+122. ctp/ctp_constants.py
+     质量分数: 0.0
+     函数数: 0, 类数: 0
+     类型注解: 0, 文档字符串: 1
+
+123. ctp/ctp.py
+     质量分数: 0.0
+     函数数: 0, 类数: 0
+     类型注解: 0, 文档字符串: 1
+
+124. ctp/__init__.py
+     质量分数: 0.0
+     函数数: 0, 类数: 0
+     类型注解: 0, 文档字符串: 0
+
+125. monitoring/__init__.py
+     质量分数: 0.0
+     函数数: 0, 类数: 0
+     类型注解: 0, 文档字符串: 1
+
+126. security_compliance/__init__.py
+     质量分数: 0.0
+     函数数: 0, 类数: 0
+     类型注解: 0, 文档字符串: 1
+
+127. security_compliance/core/__init__.py
+     质量分数: 0.0
+     函数数: 0, 类数: 0
+     类型注解: 0, 文档字符串: 1
+
+128. security_compliance/auth/__init__.py
+     质量分数: 0.0
+     函数数: 0, 类数: 0
+     类型注解: 0, 文档字符串: 1
+
+129. security_compliance/recovery/__init__.py
+     质量分数: 0.0
+     函数数: 0, 类数: 0
+     类型注解: 0, 文档字符串: 1
+
+130. security_compliance/network/__init__.py
+     质量分数: 0.0
+     函数数: 0, 类数: 0
+     类型注解: 0, 文档字符串: 1
+
+131. security_compliance/monitoring/__init__.py
+     质量分数: 0.0
+     函数数: 0, 类数: 0
+     类型注解: 0, 文档字符串: 1
+
+132. security_compliance/data/__init__.py
+     质量分数: 0.0
+     函数数: 0, 类数: 0
+     类型注解: 0, 文档字符串: 1
+
+133. ctp/ctp_structs_query.py
+     质量分数: 0.1
+     函数数: 139, 类数: 139
+     类型注解: 0, 文档字符串: 1
+
+134. ctp/ctp_structs_common.py
+     质量分数: 0.1
+     函数数: 102, 类数: 102
+     类型注解: 0, 文档字符串: 1
+
+135. ctp/ctp_structs_risk.py
+     质量分数: 0.1
+     函数数: 95, 类数: 95
+     类型注解: 0, 文档字符串: 1
+
+136. ctp/ctp_trader_api.py
+     质量分数: 0.2
+     函数数: 286, 类数: 2
+     类型注解: 0, 文档字符串: 2
+
+137. ctp/ctp_structs_order.py
+     质量分数: 0.3
+     函数数: 46, 类数: 46
+     类型注解: 0, 文档字符串: 1
+
+138. ctp/ctp_structs_transfer.py
+     质量分数: 0.3
+     函数数: 46, 类数: 46
+     类型注解: 0, 文档字符串: 1
+
+139. ctp/ctp_structs_market.py
+     质量分数: 0.4
+     函数数: 28, 类数: 28
+     类型注解: 0, 文档字符串: 1
+
+140. containers/symbols/okx_symbol.py
+     质量分数: 0.5
+     函数数: 50, 类数: 1
+     类型注解: 0, 文档字符串: 1
+
+141. feeds/live_poloniex/spot.py
+     质量分数: 0.9
+     函数数: 52, 类数: 1
+     类型注解: 0, 文档字符串: 2
+
+142. containers/fundingrates/binance_funding_rate.py
+     质量分数: 1.1
+     函数数: 66, 类数: 3
+     类型注解: 0, 文档字符串: 3
+
+143. containers/tickers/okx_ticker.py
+     质量分数: 1.4
+     函数数: 17, 类数: 1
+     类型注解: 0, 文档字符串: 1
+
+144. ctp/ctp_structs_account.py
+     质量分数: 1.4
+     函数数: 9, 类数: 9
+     类型注解: 0, 文档字符串: 1
+
+145. ctp/ctp_md_api.py
+     质量分数: 1.4
+     函数数: 34, 类数: 2
+     类型注解: 0, 文档字符串: 2
+
+146. containers/orderbooks/okx_orderbook.py
+     质量分数: 1.5
+     函数数: 16, 类数: 1
+     类型注解: 0, 文档字符串: 1
+
+147. feeds/live_valr/request_base.py
+     质量分数: 1.9
+     函数数: 26, 类数: 1
+     类型注解: 0, 文档字符串: 2
+
+148. feeds/live_wazirx/request_base.py
+     质量分数: 1.9
+     函数数: 26, 类数: 1
+     类型注解: 0, 文档字符串: 2
+
+149. feeds/live_phemex/spot.py
+     质量分数: 1.9
+     函数数: 26, 类数: 1
+     类型注解: 0, 文档字符串: 2
+
+150. feeds/live_swyftx/request_base.py
+     质量分数: 1.9
+     函数数: 25, 类数: 1
+     类型注解: 0, 文档字符串: 2
+
+151. feeds/live_bigone/spot.py
+     质量分数: 1.9
+     函数数: 25, 类数: 1
+     类型注解: 0, 文档字符串: 2
+
+152. feeds/live_coinex/spot.py
+     质量分数: 1.9
+     函数数: 25, 类数: 1
+     类型注解: 0, 文档字符串: 2
+
+153. containers/markprices/okx_mark_price.py
+     质量分数: 1.9
+     函数数: 12, 类数: 1
+     类型注解: 0, 文档字符串: 1
+
+154. containers/incomes/binance_income.py
+     质量分数: 1.9
+     函数数: 12, 类数: 1
+     类型注解: 0, 文档字符串: 1
+
+155. feeds/live_bequant/spot.py
+     质量分数: 2.0
+     函数数: 24, 类数: 1
+     类型注解: 0, 文档字符串: 2
+
+156. feeds/live_hitbtc/spot.py
+     质量分数: 2.0
+     函数数: 24, 类数: 1
+     类型注解: 0, 文档字符串: 2
+
+157. containers/trades/okx_market_trade.py
+     质量分数: 2.2
+     函数数: 22, 类数: 1
+     类型注解: 0, 文档字符串: 2
+
+158. containers/orders/mexc_order.py
+     质量分数: 2.2
+     函数数: 31, 类数: 3
+     类型注解: 0, 文档字符串: 3
+
+159. containers/ib/ib_order.py
+     质量分数: 2.3
+     函数数: 21, 类数: 1
+     类型注解: 0, 文档字符串: 2
+
+160. containers/orders/kucoin_order.py
+     质量分数: 2.4
+     函数数: 39, 类数: 3
+     类型注解: 0, 文档字符串: 4
+
+161. feeds/live_bitget/spot.py
+     质量分数: 2.5
+     函数数: 37, 类数: 3
+     类型注解: 0, 文档字符串: 4
+
+162. containers/bars/htx_bar.py
+     质量分数: 2.5
+     函数数: 19, 类数: 1
+     类型注解: 0, 文档字符串: 2
+
+163. feeds/live_bybit/swap.py
+     质量分数: 2.5
+     函数数: 29, 类数: 1
+     类型注解: 1, 文档字符串: 2
+
+164. containers/tickers/ticker.py
+     质量分数: 2.6
+     函数数: 18, 类数: 1
+     类型注解: 0, 文档字符串: 2
+
+165. containers/orders/bitget_order.py
+     质量分数: 2.6
+     函数数: 35, 类数: 3
+     类型注解: 0, 文档字符串: 4
+
+166. feeds/live_cryptocom/spot.py
+     质量分数: 2.8
+     函数数: 26, 类数: 1
+     类型注解: 0, 文档字符串: 3
+
+167. containers/tickers/dydx_ticker.py
+     质量分数: 2.8
+     函数数: 24, 类数: 3
+     类型注解: 0, 文档字符串: 3
+
+168. containers/ib/ib_trade.py
+     质量分数: 2.8
+     函数数: 17, 类数: 1
+     类型注解: 0, 文档字符串: 2
+
+169. containers/tickers/korbit_ticker.py
+     质量分数: 2.9
+     函数数: 23, 类数: 3
+     类型注解: 0, 文档字符串: 3
+
+170. containers/tickers/latoken_ticker.py
+     质量分数: 2.9
+     函数数: 23, 类数: 3
+     类型注解: 0, 文档字符串: 3
+
+171. containers/tickers/bitfinex_ticker.py
+     质量分数: 2.9
+     函数数: 23, 类数: 3
+     类型注解: 0, 文档字符串: 3
+
+172. containers/tickers/localbitcoins_ticker.py
+     质量分数: 2.9
+     函数数: 23, 类数: 3
+     类型注解: 0, 文档字符串: 3
+
+173. containers/orderbooks/orderbook.py
+     质量分数: 2.9
+     函数数: 16, 类数: 1
+     类型注解: 0, 文档字符串: 2
+
+174. containers/bars/coinbase_bar.py
+     质量分数: 3.0
+     函数数: 23, 类数: 2
+     类型注解: 0, 文档字符串: 3
+
+175. feeds/live_zaif/request_base.py
+     质量分数: 3.1
+     函数数: 32, 类数: 1
+     类型注解: 2, 文档字符串: 2
+
+176. feeds/live_zaif/spot.py
+     质量分数: 3.1
+     函数数: 29, 类数: 3
+     类型注解: 0, 文档字符串: 4
+
+177. feeds/live_zebpay/spot.py
+     质量分数: 3.1
+     函数数: 29, 类数: 3
+     类型注解: 0, 文档字符串: 4
+
+178. feeds/live_coinone/spot.py
+     质量分数: 3.1
+     函数数: 15, 类数: 1
+     类型注解: 0, 文档字符串: 2
+
+179. containers/ib/ib_ticker.py
+     质量分数: 3.1
+     函数数: 15, 类数: 1
+     类型注解: 0, 文档字符串: 2
+
+180. ctp/ctp_structs_position.py
+     质量分数: 3.1
+     函数数: 4, 类数: 4
+     类型注解: 0, 文档字符串: 1
+
+181. feeds/live_bitget/swap.py
+     质量分数: 3.2
+     函数数: 28, 类数: 3
+     类型注解: 0, 文档字符串: 4
+
+182. containers/orders/coinbase_order.py
+     质量分数: 3.2
+     函数数: 28, 类数: 3
+     类型注解: 0, 文档字符串: 4
+
+183. feeds/live_yobit/request_base.py
+     质量分数: 3.3
+     函数数: 30, 类数: 1
+     类型注解: 2, 文档字符串: 2
+
+184. feeds/live_bitso/spot.py
+     质量分数: 3.3
+     函数数: 14, 类数: 1
+     类型注解: 0, 文档字符串: 2
+
+185. feeds/live_bitmart/spot.py
+     质量分数: 3.3
+     函数数: 14, 类数: 1
+     类型注解: 0, 文档字符串: 2
+
+186. feeds/live_yobit/spot.py
+     质量分数: 3.3
+     函数数: 27, 类数: 3
+     类型注解: 0, 文档字符串: 4
+
+187. feeds/live_upbit/spot.py
+     质量分数: 3.3
+     函数数: 14, 类数: 1
+     类型注解: 0, 文档字符串: 2
+
+188. feeds/live_bitrue/spot.py
+     质量分数: 3.3
+     函数数: 14, 类数: 1
+     类型注解: 0, 文档字符串: 2
+
+189. containers/pricelimits/okx_price_limit.py
+     质量分数: 3.3
+     函数数: 14, 类数: 1
+     类型注解: 0, 文档字符串: 2
+
+190. containers/openinterests/okx_open_interest.py
+     质量分数: 3.3
+     函数数: 14, 类数: 1
+     类型注解: 0, 文档字符串: 2
+
+191. containers/ib/ib_position.py
+     质量分数: 3.3
+     函数数: 14, 类数: 1
+     类型注解: 0, 文档字符串: 2
+
+192. containers/orderbooks/binance_orderbook.py
+     质量分数: 3.4
+     函数数: 19, 类数: 3
+     类型注解: 0, 文档字符串: 3
+
+193. containers/tickers/mexc_ticker.py
+     质量分数: 3.4
+     函数数: 19, 类数: 3
+     类型注解: 0, 文档字符串: 3
+
+194. containers/tickers/binance_ticker.py
+     质量分数: 3.4
+     函数数: 19, 类数: 3
+     类型注解: 0, 文档字符串: 3
+
+195. containers/orders/htx_order.py
+     质量分数: 3.4
+     函数数: 21, 类数: 1
+     类型注解: 0, 文档字符串: 3
+
+196. containers/fundingrates/okx_funding_rate.py
+     质量分数: 3.5
+     函数数: 21, 类数: 1
+     类型注解: 1, 文档字符串: 2
+
+197. feeds/live_gateio/spot.py
+     质量分数: 3.5
+     函数数: 33, 类数: 3
+     类型注解: 1, 文档字符串: 4
+
+198. feeds/live_bitstamp/spot.py
+     质量分数: 3.6
+     函数数: 13, 类数: 1
+     类型注解: 0, 文档字符串: 2
+
+199. containers/orders/cryptocom_order.py
+     质量分数: 3.6
+     函数数: 41, 类数: 1
+     类型注解: 0, 文档字符串: 6
+
+200. containers/orders/hyperliquid_order.py
+     质量分数: 3.6
+     函数数: 40, 类数: 2
+     类型注解: 0, 文档字符串: 6
+
+201. containers/ib/ib_account.py
+     质量分数: 3.6
+     函数数: 13, 类数: 1
+     类型注解: 0, 文档字符串: 2
+
+202. containers/tickers/bitget_ticker.py
+     质量分数: 3.7
+     函数数: 24, 类数: 3
+     类型注解: 0, 文档字符串: 4
+
+203. containers/bars/kucoin_bar.py
+     质量分数: 3.7
+     函数数: 24, 类数: 3
+     类型注解: 0, 文档字符串: 4
+
+204. containers/balances/kucoin_balance.py
+     质量分数: 3.7
+     函数数: 24, 类数: 3
+     类型注解: 0, 文档字符串: 4
+
+205. feeds/live_coinswitch/spot.py
+     质量分数: 3.8
+     函数数: 12, 类数: 1
+     类型注解: 0, 文档字符串: 2
+
+206. feeds/live_independent_reserve/spot.py
+     质量分数: 3.8
+     函数数: 12, 类数: 1
+     类型注解: 0, 文档字符串: 2
+
+207. containers/orders/poloniex_order.py
+     质量分数: 3.8
+     函数数: 23, 类数: 3
+     类型注解: 0, 文档字符串: 4
+
+208. feeds/live_zebpay/request_base.py
+     质量分数: 3.9
+     函数数: 32, 类数: 1
+     类型注解: 3, 文档字符串: 2
+
+209. containers/orderbooks/coinbase_orderbook.py
+     质量分数: 3.9
+     函数数: 17, 类数: 2
+     类型注解: 0, 文档字符串: 3
+
+210. containers/tickers/giottus_ticker.py
+     质量分数: 3.9
+     函数数: 18, 类数: 1
+     类型注解: 0, 文档字符串: 3
+
+211. containers/tickers/bitso_ticker.py
+     质量分数: 3.9
+     函数数: 18, 类数: 1
+     类型注解: 0, 文档字符串: 3
+
+212. containers/tickers/bitstamp_ticker.py
+     质量分数: 3.9
+     函数数: 18, 类数: 1
+     类型注解: 0, 文档字符串: 3
+
+213. containers/ib/ib_bar.py
+     质量分数: 3.9
+     函数数: 18, 类数: 1
+     类型注解: 0, 文档字符串: 3
+
+214. containers/trades/bitget_trade.py
+     质量分数: 4.0
+     函数数: 22, 类数: 3
+     类型注解: 0, 文档字符串: 4
+
+215. feeds/live_okx/account_wss_base.py
+     质量分数: 4.2
+     函数数: 3, 类数: 3
+     类型注解: 0, 文档字符串: 1
+
+216. feeds/live_coinspot/spot.py
+     质量分数: 4.2
+     函数数: 11, 类数: 1
+     类型注解: 0, 文档字符串: 2
+
+217. containers/trades/htx_trade.py
+     质量分数: 4.2
+     函数数: 17, 类数: 1
+     类型注解: 0, 文档字符串: 3
+
+218. containers/trades/coinbase_trade.py
+     质量分数: 4.2
+     函数数: 21, 类数: 3
+     类型注解: 0, 文档字符串: 4
+
+219. containers/ctp/ctp_trade.py
+     质量分数: 4.2
+     函数数: 17, 类数: 1
+     类型注解: 0, 文档字符串: 3
+
+220. feeds/live_latoken/spot.py
+     质量分数: 4.3
+     函数数: 20, 类数: 3
+     类型注解: 0, 文档字符串: 4
+
+221. containers/ctp/ctp_order.py
+     质量分数: 4.3
+     函数数: 22, 类数: 1
+     类型注解: 0, 文档字符串: 4
+
+222. containers/tickers/htx_ticker.py
+     质量分数: 4.4
+     函数数: 16, 类数: 1
+     类型注解: 0, 文档字符串: 3
+
+223. containers/tickers/hyperliquid_ticker.py
+     质量分数: 4.4
+     函数数: 16, 类数: 1
+     类型注解: 0, 文档字符串: 3
+
+224. feeds/live_korbit/spot.py
+     质量分数: 4.5
+     函数数: 19, 类数: 3
+     类型注解: 0, 文档字符串: 4
+
+225. containers/trades/hyperliquid_trade.py
+     质量分数: 4.7
+     函数数: 15, 类数: 1
+     类型注解: 0, 文档字符串: 3
+
+226. containers/orderbooks/htx_orderbook.py
+     质量分数: 4.7
+     函数数: 15, 类数: 1
+     类型注解: 0, 文档字符串: 3
+
+227. containers/balances/hyperliquid_balance.py
+     质量分数: 4.7
+     函数数: 30, 类数: 2
+     类型注解: 0, 文档字符串: 6
+
+228. feeds/live_kucoin/futures.py
+     质量分数: 4.7
+     函数数: 30, 类数: 3
+     类型注解: 2, 文档字符串: 4
+
+229. feeds/live_latoken/request_base.py
+     质量分数: 4.7
+     函数数: 31, 类数: 1
+     类型注解: 1, 文档字符串: 5
+
+230. containers/tickers/poloniex_ticker.py
+     质量分数: 4.8
+     函数数: 18, 类数: 3
+     类型注解: 0, 文档字符串: 4
+
+231. containers/accounts/coinbase_account.py
+     质量分数: 4.8
+     函数数: 18, 类数: 3
+     类型注解: 0, 文档字符串: 4
+
+232. feeds/live_gateio/swap.py
+     质量分数: 4.8
+     函数数: 29, 类数: 3
+     类型注解: 2, 文档字符串: 4
+
+233. feeds/live_bitget/request_base.py
+     质量分数: 5.0
+     函数数: 9, 类数: 1
+     类型注解: 0, 文档字符串: 2
+
+234. containers/accounts/hyperliquid_account.py
+     质量分数: 5.0
+     函数数: 14, 类数: 1
+     类型注解: 0, 文档字符串: 3
+
+235. containers/balances/htx_balance.py
+     质量分数: 5.0
+     函数数: 14, 类数: 1
+     类型注解: 0, 文档字符串: 3
+
+236. containers/tickers/kucoin_ticker.py
+     质量分数: 5.2
+     函数数: 20, 类数: 4
+     类型注解: 0, 文档字符串: 5
+
+237. containers/ctp/ctp_bar.py
+     质量分数: 5.3
+     函数数: 18, 类数: 1
+     类型注解: 0, 文档字符串: 4
+
+238. containers/trades/mexc_trade.py
+     质量分数: 5.4
+     函数数: 25, 类数: 3
+     类型注解: 0, 文档字符串: 6
+
+239. containers/tickers/buda_ticker.py
+     质量分数: 5.4
+     函数数: 13, 类数: 1
+     类型注解: 0, 文档字符串: 3
+
+240. containers/tickers/gmx_ticker.py
+     质量分数: 5.4
+     函数数: 13, 类数: 1
+     类型注解: 0, 文档字符串: 3
+
+241. containers/tickers/cow_swap_ticker.py
+     质量分数: 5.4
+     函数数: 13, 类数: 1
+     类型注解: 0, 文档字符串: 3
+
+242. containers/tickers/btcturk_ticker.py
+     质量分数: 5.4
+     函数数: 13, 类数: 1
+     类型注解: 0, 文档字符串: 3
+
+243. containers/tickers/curve_ticker.py
+     质量分数: 5.4
+     函数数: 13, 类数: 1
+     类型注解: 0, 文档字符串: 3
+
+244. containers/accounts/htx_account.py
+     质量分数: 5.4
+     函数数: 13, 类数: 1
+     类型注解: 0, 文档字符串: 3
+
+245. containers/orderbooks/kucoin_orderbook.py
+     质量分数: 5.4
+     函数数: 19, 类数: 4
+     类型注解: 0, 文档字符串: 5
+
+246. containers/tickers/coinbase_ticker.py
+     质量分数: 5.5
+     函数数: 25, 类数: 3
+     类型注解: 1, 文档字符串: 5
+
+247. feeds/my_websocket_app.py
+     质量分数: 5.5
+     函数数: 22, 类数: 1
+     类型注解: 1, 文档字符串: 4
+
+248. feeds/live_swyftx/spot.py
+     质量分数: 5.6
+     函数数: 15, 类数: 3
+     类型注解: 0, 文档字符串: 4
+
+249. feeds/live_valr/spot.py
+     质量分数: 5.6
+     函数数: 15, 类数: 3
+     类型注解: 0, 文档字符串: 4
+
+250. feeds/live_wazirx/spot.py
+     质量分数: 5.6
+     函数数: 15, 类数: 3
+     类型注解: 0, 文档字符串: 4
+
+251. feeds/live_localbitcoins/spot.py
+     质量分数: 5.6
+     函数数: 15, 类数: 3
+     类型注解: 0, 文档字符串: 4
+
+252. containers/balances/coinbase_balance.py
+     质量分数: 5.6
+     函数数: 15, 类数: 3
+     类型注解: 0, 文档字符串: 4
+
+253. containers/balances/poloniex_balance.py
+     质量分数: 5.6
+     函数数: 15, 类数: 3
+     类型注解: 0, 文档字符串: 4
+
+254. containers/trades/kucoin_trade.py
+     质量分数: 5.7
+     函数数: 18, 类数: 4
+     类型注解: 0, 文档字符串: 5
+
+255. containers/tickers/coincheck_ticker.py
+     质量分数: 5.8
+     函数数: 12, 类数: 1
+     类型注解: 0, 文档字符串: 3
+
+256. containers/tickers/coinone_ticker.py
+     质量分数: 5.8
+     函数数: 12, 类数: 1
+     类型注解: 0, 文档字符串: 3
+
+257. containers/tickers/btc_markets_ticker.py
+     质量分数: 5.8
+     函数数: 12, 类数: 1
+     类型注解: 0, 文档字符串: 3
+
+258. containers/tickers/coindcx_ticker.py
+     质量分数: 5.8
+     函数数: 12, 类数: 1
+     类型注解: 0, 文档字符串: 3
+
+259. feeds/live_kraken/futures.py
+     质量分数: 6.2
+     函数数: 18, 类数: 3
+     类型注解: 1, 文档字符串: 4
+
+260. feeds/live_binance/account_wss_base.py
+     质量分数: 6.2
+     函数数: 12, 类数: 1
+     类型注解: 3, 文档字符串: 0
+
+261. functions/update_data/update_exchange_symbol_info.py
+     质量分数: 6.2
+     函数数: 4, 类数: 0
+     类型注解: 0, 文档字符串: 1
+
+262. containers/bars/bitfinex_bar.py
+     质量分数: 6.2
+     函数数: 15, 类数: 1
+     类型注解: 0, 文档字符串: 4
+
+263. containers/orders/bitfinex_order.py
+     质量分数: 6.2
+     函数数: 37, 类数: 3
+     类型注解: 0, 文档字符串: 10
+
+264. ctp/ctp_structs_trade.py
+     质量分数: 6.2
+     函数数: 2, 类数: 2
+     类型注解: 0, 文档字符串: 1
+
+265. containers/tickers/cryptocom_ticker.py
+     质量分数: 6.6
+     函数数: 18, 类数: 1
+     类型注解: 0, 文档字符串: 5
+
+266. containers/ctp/ctp_ticker.py
+     质量分数: 6.6
+     函数数: 18, 类数: 1
+     类型注解: 0, 文档字符串: 5
+
+267. feeds/live_kraken/spot.py
+     质量分数: 6.8
+     函数数: 38, 类数: 3
+     类型注解: 1, 文档字符串: 10
+
+268. feeds/live_localbitcoins/request_base.py
+     质量分数: 6.9
+     函数数: 21, 类数: 1
+     类型注解: 1, 文档字符串: 5
+
+269. containers/orders/gateio_order.py
+     质量分数: 6.9
+     函数数: 26, 类数: 3
+     类型注解: 0, 文档字符串: 8
+
+270. containers/tickers/balancer_ticker.py
+     质量分数: 6.9
+     函数数: 16, 类数: 2
+     类型注解: 0, 文档字符串: 5
+
+271. containers/ctp/ctp_position.py
+     质量分数: 6.9
+     函数数: 17, 类数: 1
+     类型注解: 0, 文档字符串: 5
+
+272. feeds/live_coinex/request_base.py
+     质量分数: 7.0
+     函数数: 35, 类数: 1
+     类型注解: 3, 文档字符串: 7
+
+273. feeds/live_coinone/request_base.py
+     质量分数: 7.0
+     函数数: 35, 类数: 1
+     类型注解: 3, 文档字符串: 7
+
+274. feeds/live_bitstamp/request_base.py
+     质量分数: 7.0
+     函数数: 35, 类数: 1
+     类型注解: 5, 文档字符串: 5
+
+275. feeds/live_bitrue/request_base.py
+     质量分数: 7.0
+     函数数: 35, 类数: 1
+     类型注解: 5, 文档字符串: 5
+
+276. containers/accounts/bitfinex_account.py
+     质量分数: 7.1
+     函数数: 5, 类数: 2
+     类型注解: 0, 文档字符串: 2
+
+277. feeds/live_upbit/request_base.py
+     质量分数: 7.2
+     函数数: 34, 类数: 1
+     类型注解: 3, 文档字符串: 7
+
+278. feeds/live_korbit/request_base.py
+     质量分数: 7.3
+     函数数: 27, 类数: 1
+     类型注解: 4, 文档字符串: 4
+
+279. containers/orderbooks/cryptocom_orderbook.py
+     质量分数: 7.5
+     函数数: 19, 类数: 1
+     类型注解: 0, 文档字符串: 6
+
+280. feeds/live_bitso/request_base.py
+     质量分数: 7.5
+     函数数: 36, 类数: 1
+     类型注解: 5, 文档字符串: 6
+
+281. containers/trades/bitfinex_trade.py
+     质量分数: 7.8
+     函数数: 14, 类数: 2
+     类型注解: 0, 文档字符串: 5
+
+282. containers/accounts/bitget_account.py
+     质量分数: 7.9
+     函数数: 24, 类数: 2
+     类型注解: 2, 文档字符串: 6
+
+283. containers/accounts/kucoin_account.py
+     质量分数: 7.9
+     函数数: 16, 类数: 3
+     类型注解: 0, 文档字符串: 6
+
+284. feeds/live_bitmart/request_base.py
+     质量分数: 8.0
+     函数数: 37, 类数: 1
+     类型注解: 5, 文档字符串: 7
+
+285. containers/tickers/gateio_ticker.py
+     质量分数: 8.0
+     函数数: 22, 类数: 3
+     类型注解: 0, 文档字符串: 8
+
+286. containers/balances/mexc_balance.py
+     质量分数: 8.2
+     函数数: 43, 类数: 3
+     类型注解: 0, 文档字符串: 15
+
+287. feeds/live_bequant/request_base.py
+     质量分数: 8.2
+     函数数: 33, 类数: 1
+     类型注解: 5, 文档字符串: 6
+
+288. feeds/live_phemex/request_base.py
+     质量分数: 8.5
+     函数数: 29, 类数: 1
+     类型注解: 5, 文档字符串: 5
+
+289. containers/orderbooks/okx_l2_orderbook.py
+     质量分数: 8.7
+     函数数: 22, 类数: 1
+     类型注解: 0, 文档字符串: 8
+
+290. feeds/live_independent_reserve/request_base.py
+     质量分数: 8.7
+     函数数: 28, 类数: 1
+     类型注解: 4, 文档字符串: 6
+
+291. containers/pools/balancer_pool.py
+     质量分数: 8.9
+     函数数: 18, 类数: 2
+     类型注解: 1, 文档字符串: 6
+
+292. containers/ctp/ctp_account.py
+     质量分数: 8.9
+     函数数: 13, 类数: 1
+     类型注解: 0, 文档字符串: 5
+
+293. containers/exchanges/wazirx_exchange_data.py
+     质量分数: 9.1
+     函数数: 9, 类数: 2
+     类型注解: 0, 文档字符串: 4
+
+294. containers/exchanges/zaif_exchange_data.py
+     质量分数: 9.1
+     函数数: 9, 类数: 2
+     类型注解: 0, 文档字符串: 4
+
+295. containers/exchanges/yobit_exchange_data.py
+     质量分数: 9.1
+     函数数: 9, 类数: 2
+     类型注解: 0, 文档字符串: 4
+
+296. containers/exchanges/zebpay_exchange_data.py
+     质量分数: 9.1
+     函数数: 9, 类数: 2
+     类型注解: 0, 文档字符串: 4
+
+297. feeds/live_bigone/request_base.py
+     质量分数: 9.4
+     函数数: 34, 类数: 1
+     类型注解: 6, 文档字符串: 7
+
+298. feeds/live_hitbtc/request_base.py
+     质量分数: 9.5
+     函数数: 31, 类数: 1
+     类型注解: 5, 文档字符串: 7
+
+299. containers/exchanges/binance_exchange_data.py
+     质量分数: 9.6
+     函数数: 24, 类数: 14
+     类型注解: 1, 文档字符串: 13
+
+300. containers/markprices/binance_mark_price.py
+     质量分数: 9.7
+     函数数: 16, 类数: 3
+     类型注解: 2, 文档字符串: 5
+
+301. ctp/client.py
+     质量分数: 9.9
+     函数数: 44, 类数: 4
+     类型注解: 0, 文档字符串: 19
+
+302. feeds/live_coinswitch/request_base.py
+     质量分数: 10.0
+     函数数: 27, 类数: 1
+     类型注解: 6, 文档字符串: 5
+
+303. feeds/live_coinspot/request_base.py
+     质量分数: 10.5
+     函数数: 28, 类数: 1
+     类型注解: 6, 文档字符串: 6
+
+304. containers/exchanges/swyftx_exchange_data.py
+     质量分数: 11.4
+     函数数: 9, 类数: 2
+     类型注解: 0, 文档字符串: 5
+
+305. containers/exchanges/valr_exchange_data.py
+     质量分数: 11.4
+     函数数: 9, 类数: 2
+     类型注解: 0, 文档字符串: 5
+
+306. containers/exchanges/latoken_exchange_data.py
+     质量分数: 11.4
+     函数数: 9, 类数: 2
+     类型注解: 0, 文档字符串: 5
+
+307. containers/exchanges/localbitcoins_exchange_data.py
+     质量分数: 12.5
+     函数数: 8, 类数: 2
+     类型注解: 0, 文档字符串: 5
+
+308. containers/trades/latoken_trade.py
+     质量分数: 12.5
+     函数数: 1, 类数: 1
+     类型注解: 0, 文档字符串: 1
+
+309. containers/trades/korbit_trade.py
+     质量分数: 12.5
+     函数数: 1, 类数: 1
+     类型注解: 0, 文档字符串: 1
+
+310. containers/trades/localbitcoins_trade.py
+     质量分数: 12.5
+     函数数: 1, 类数: 1
+     类型注解: 0, 文档字符串: 1
+
+311. containers/liquidations/okx_liquidation_warning.py
+     质量分数: 12.5
+     函数数: 17, 类数: 1
+     类型注解: 0, 文档字符串: 9
+
+312. containers/orders/korbit_order.py
+     质量分数: 12.5
+     函数数: 1, 类数: 1
+     类型注解: 0, 文档字符串: 1
+
+313. containers/orders/latoken_order.py
+     质量分数: 12.5
+     函数数: 1, 类数: 1
+     类型注解: 0, 文档字符串: 1
+
+314. containers/orders/localbitcoins_order.py
+     质量分数: 12.5
+     函数数: 1, 类数: 1
+     类型注解: 0, 文档字符串: 1
+
+315. containers/exchanges/okx_exchange_data.py
+     质量分数: 12.8
+     函数数: 16, 类数: 4
+     类型注解: 1, 文档字符串: 9
+
+316. containers/trades/gateio_trade.py
+     质量分数: 13.1
+     函数数: 36, 类数: 4
+     类型注解: 0, 文档字符串: 21
+
+317. containers/liquidations/okx_liquidation_order.py
+     质量分数: 13.2
+     函数数: 18, 类数: 1
+     类型注解: 0, 文档字符串: 10
+
+318. containers/bars/gemini_bar.py
+     质量分数: 13.3
+     函数数: 13, 类数: 2
+     类型注解: 0, 文档字符串: 8
+
+319. containers/orderbooks/mexc_orderbook.py
+     质量分数: 13.5
+     函数数: 23, 类数: 3
+     类型注解: 0, 文档字符串: 14
+
+320. containers/orderbooks/gateio_orderbook.py
+     质量分数: 13.5
+     函数数: 21, 类数: 3
+     类型注解: 0, 文档字符串: 13
+
+321. feeds/live_binance/request_base.py
+     质量分数: 13.7
+     函数数: 136, 类数: 1
+     类型注解: 42, 文档字符串: 33
+
+322. containers/greeks/okx_account_greeks.py
+     质量分数: 13.8
+     函数数: 19, 类数: 1
+     类型注解: 0, 文档字符串: 11
+
+323. containers/exchanges/exchange_data.py
+     质量分数: 13.9
+     函数数: 8, 类数: 1
+     类型注解: 0, 文档字符串: 5
+
+324. containers/exchanges/mexc_exchange_data.py
+     质量分数: 14.6
+     函数数: 12, 类数: 4
+     类型注解: 1, 文档字符串: 8
+
+325. containers/balances/gateio_balance.py
+     质量分数: 14.8
+     函数数: 23, 类数: 4
+     类型注解: 0, 文档字符串: 16
+
+326. containers/tickers/mercado_bitcoin_ticker.py
+     质量分数: 15.0
+     函数数: 4, 类数: 1
+     类型注解: 0, 文档字符串: 3
+
+327. containers/tickers/luno_ticker.py
+     质量分数: 15.0
+     函数数: 4, 类数: 1
+     类型注解: 0, 文档字符串: 3
+
+328. containers/tickers/bitbank_ticker.py
+     质量分数: 15.0
+     函数数: 4, 类数: 1
+     类型注解: 0, 文档字符串: 3
+
+329. containers/tickers/bithumb_ticker.py
+     质量分数: 15.0
+     函数数: 4, 类数: 1
+     类型注解: 0, 文档字符串: 3
+
+330. containers/tickers/bitmart_ticker.py
+     质量分数: 15.0
+     函数数: 4, 类数: 1
+     类型注解: 0, 文档字符串: 3
+
+331. containers/orders/binance_order.py
+     质量分数: 15.2
+     函数数: 61, 类数: 5
+     类型注解: 0, 文档字符串: 40
+
+332. containers/assets/okx_asset.py
+     质量分数: 15.9
+     函数数: 74, 类数: 6
+     类型注解: 0, 文档字符串: 51
+
+333. containers/accounts/binance_account.py
+     质量分数: 16.0
+     函数数: 137, 类数: 4
+     类型注解: 0, 文档字符串: 90
+
+334. feeds/live_okx/mixins/account_mixin.py
+     质量分数: 16.0
+     函数数: 38, 类数: 1
+     类型注解: 1, 文档字符串: 24
+
+335. containers/accounts/okx_account.py
+     质量分数: 16.2
+     函数数: 33, 类数: 1
+     类型注解: 0, 文档字符串: 22
+
+336. containers/balances/bitfinex_balance.py
+     质量分数: 16.5
+     函数数: 17, 类数: 3
+     类型注解: 1, 文档字符串: 12
+
+337. containers/trades/binance_trade.py
+     质量分数: 16.5
+     函数数: 45, 类数: 5
+     类型注解: 0, 文档字符串: 33
+
+338. feeds/live_htx/option.py
+     质量分数: 16.7
+     函数数: 3, 类数: 3
+     类型注解: 0, 文档字符串: 4
+
+339. feeds/live_htx/margin.py
+     质量分数: 16.7
+     函数数: 3, 类数: 3
+     类型注解: 0, 文档字符串: 4
+
+340. feeds/live_htx/coin_swap.py
+     质量分数: 16.7
+     函数数: 3, 类数: 3
+     类型注解: 0, 文档字符串: 4
+
+341. containers/exchanges/hitbtc_exchange_data.py
+     质量分数: 16.7
+     函数数: 10, 类数: 2
+     类型注解: 0, 文档字符串: 8
+
+342. containers/liquidations/liquidation.py
+     质量分数: 16.7
+     函数数: 11, 类数: 1
+     类型注解: 0, 文档字符串: 8
+
+343. containers/tickers/bybit_ticker.py
+     质量分数: 16.7
+     函数数: 6, 类数: 3
+     类型注解: 0, 文档字符串: 6
+
+344. containers/greeks/greeks.py
+     质量分数: 16.7
+     函数数: 11, 类数: 1
+     类型注解: 0, 文档字符串: 8
+
+345. containers/balances/hitbtc_balance.py
+     质量分数: 16.7
+     函数数: 14, 类数: 1
+     类型注解: 0, 文档字符串: 10
+
+346. containers/ib/ib_contract.py
+     质量分数: 16.7
+     函数数: 8, 类数: 1
+     类型注解: 0, 文档字符串: 6
+
+347. feeds/live_ib_web_stream.py
+     质量分数: 17.2
+     函数数: 29, 类数: 2
+     类型注解: 4, 文档字符串: 17
+
+348. feeds/live_okx/market_wss_base.py
+     质量分数: 17.2
+     函数数: 47, 类数: 1
+     类型注解: 0, 文档字符串: 33
+
+349. feeds/live_okx/mixins/market_data_mixin.py
+     质量分数: 17.2
+     函数数: 115, 类数: 1
+     类型注解: 0, 文档字符串: 80
+
+350. containers/balances/gemini_balance.py
+     质量分数: 17.5
+     函数数: 8, 类数: 2
+     类型注解: 0, 文档字符串: 7
+
+351. containers/orderbooks/bitfinex_orderbook.py
+     质量分数: 17.6
+     函数数: 27, 类数: 3
+     类型注解: 1, 文档字符串: 20
+
+352. ctp/_ctp_base.py
+     质量分数: 17.7
+     函数数: 8, 类数: 1
+     类型注解: 3, 文档字符串: 3
+
+353. feeds/live_satoshitango/request_base.py
+     质量分数: 17.9
+     函数数: 13, 类数: 1
+     类型注解: 0, 文档字符串: 10
+
+354. feeds/live_giottus/request_base.py
+     质量分数: 17.9
+     函数数: 13, 类数: 1
+     类型注解: 0, 文档字符串: 10
+
+355. containers/tickers/hitbtc_ticker.py
+     质量分数: 18.1
+     函数数: 17, 类数: 1
+     类型注解: 0, 文档字符串: 13
+
+356. containers/trades/okx_trade.py
+     质量分数: 18.1
+     函数数: 25, 类数: 4
+     类型注解: 0, 文档字符串: 21
+
+357. containers/orders/gemini_order.py
+     质量分数: 18.2
+     函数数: 9, 类数: 2
+     类型注解: 0, 文档字符串: 8
+
+358. feeds/live_luno/request_base.py
+     质量分数: 18.3
+     函数数: 14, 类数: 1
+     类型注解: 0, 文档字符串: 11
+
+359. feeds/live_mercado_bitcoin/request_base.py
+     质量分数: 18.8
+     函数数: 15, 类数: 1
+     类型注解: 0, 文档字符串: 12
+
+360. feeds/live_curve/request_base.py
+     质量分数: 18.8
+     函数数: 11, 类数: 1
+     类型注解: 0, 文档字符串: 9
+
+361. containers/auto_init_mixin.py
+     质量分数: 18.8
+     函数数: 2, 类数: 2
+     类型注解: 0, 文档字符串: 3
+
+362. containers/tickers/foxbit_ticker.py
+     质量分数: 18.8
+     函数数: 3, 类数: 1
+     类型注解: 0, 文档字符串: 3
+
+363. containers/tickers/bequant_ticker.py
+     质量分数: 18.8
+     函数数: 3, 类数: 1
+     类型注解: 0, 文档字符串: 3
+
+364. containers/tickers/bingx_ticker.py
+     质量分数: 18.8
+     函数数: 3, 类数: 1
+     类型注解: 0, 文档字符串: 3
+
+365. containers/tickers/bitinka_ticker.py
+     质量分数: 18.8
+     函数数: 3, 类数: 1
+     类型注解: 0, 文档字符串: 3
+
+366. containers/tickers/bitvavo_ticker.py
+     质量分数: 18.8
+     函数数: 3, 类数: 1
+     类型注解: 0, 文档字符串: 3
+
+367. containers/tickers/coinswitch_ticker.py
+     质量分数: 18.8
+     函数数: 3, 类数: 1
+     类型注解: 0, 文档字符串: 3
+
+368. containers/tickers/swyftx_ticker.py
+     质量分数: 18.8
+     函数数: 3, 类数: 1
+     类型注解: 0, 文档字符串: 3
+
+369. containers/tickers/zaif_ticker.py
+     质量分数: 18.8
+     函数数: 3, 类数: 1
+     类型注解: 0, 文档字符串: 3
+
+370. containers/tickers/coinspot_ticker.py
+     质量分数: 18.8
+     函数数: 3, 类数: 1
+     类型注解: 0, 文档字符串: 3
+
+371. containers/tickers/valr_ticker.py
+     质量分数: 18.8
+     函数数: 3, 类数: 1
+     类型注解: 0, 文档字符串: 3
+
+372. containers/tickers/wazirx_ticker.py
+     质量分数: 18.8
+     函数数: 3, 类数: 1
+     类型注解: 0, 文档字符串: 3
+
+373. containers/tickers/independent_reserve_ticker.py
+     质量分数: 18.8
+     函数数: 3, 类数: 1
+     类型注解: 0, 文档字符串: 3
+
+374. containers/tickers/bitbns_ticker.py
+     质量分数: 18.8
+     函数数: 3, 类数: 1
+     类型注解: 0, 文档字符串: 3
+
+375. containers/tickers/yobit_ticker.py
+     质量分数: 18.8
+     函数数: 3, 类数: 1
+     类型注解: 0, 文档字符串: 3
+
+376. containers/tickers/zebpay_ticker.py
+     质量分数: 18.8
+     函数数: 3, 类数: 1
+     类型注解: 0, 文档字符串: 3
+
+377. containers/tickers/bitunix_ticker.py
+     质量分数: 18.8
+     函数数: 3, 类数: 1
+     类型注解: 0, 文档字符串: 3
+
+378. containers/tickers/bigone_ticker.py
+     质量分数: 18.8
+     函数数: 3, 类数: 1
+     类型注解: 0, 文档字符串: 3
+
+379. containers/tickers/sushiswap_ticker.py
+     质量分数: 18.8
+     函数数: 3, 类数: 1
+     类型注解: 0, 文档字符串: 3
+
+380. containers/tickers/satoshitango_ticker.py
+     质量分数: 18.8
+     函数数: 3, 类数: 1
+     类型注解: 0, 文档字符串: 3
+
+381. containers/tickers/bydfi_ticker.py
+     质量分数: 18.8
+     函数数: 15, 类数: 1
+     类型注解: 0, 文档字符串: 12
+
+382. containers/fundingrates/bitfinex_funding_rate.py
+     质量分数: 18.8
+     函数数: 2, 类数: 2
+     类型注解: 0, 文档字符串: 3
+
+383. containers/exchanges/ctp_exchange_data.py
+     质量分数: 19.0
+     函数数: 8, 类数: 3
+     类型注解: 1, 文档字符串: 7
+
+384. containers/orderbooks/hitbtc_orderbook.py
+     质量分数: 19.0
+     函数数: 20, 类数: 1
+     类型注解: 0, 文档字符串: 16
+
+385. containers/bars/hitbtc_bar.py
+     质量分数: 19.0
+     函数数: 20, 类数: 1
+     类型注解: 0, 文档字符串: 16
+
+386. containers/orders/okx_order.py
+     质量分数: 19.1
+     函数数: 37, 类数: 1
+     类型注解: 0, 文档字符串: 29
+
+387. feeds/live_cow_swap/request_base.py
+     质量分数: 19.2
+     函数数: 12, 类数: 1
+     类型注解: 0, 文档字符串: 10
+
+388. feeds/live_bitinka/request_base.py
+     质量分数: 19.2
+     函数数: 12, 类数: 1
+     类型注解: 0, 文档字符串: 10
+
+389. containers/orders/bybit_order.py
+     质量分数: 19.2
+     函数数: 10, 类数: 3
+     类型注解: 0, 文档字符串: 10
+
+390. containers/trades/gemini_trade.py
+     质量分数: 19.4
+     函数数: 7, 类数: 2
+     类型注解: 0, 文档字符串: 7
+
+391. containers/tickers/gemini_ticker.py
+     质量分数: 19.4
+     函数数: 7, 类数: 2
+     类型注解: 0, 文档字符串: 7
+
+392. containers/exchanges/kucoin_exchange_data.py
+     质量分数: 19.5
+     函数数: 11, 类数: 4
+     类型注解: 2, 文档字符串: 9
+
+393. feeds/live_coindcx/request_base.py
+     质量分数: 19.6
+     函数数: 13, 类数: 1
+     类型注解: 0, 文档字符串: 11
+
+394. feeds/live_btc_markets/request_base.py
+     质量分数: 19.6
+     函数数: 13, 类数: 1
+     类型注解: 0, 文档字符串: 11
+
+395. feeds/live_bydfi/request_base.py
+     质量分数: 19.6
+     函数数: 13, 类数: 1
+     类型注解: 0, 文档字符串: 11
+
+396. feeds/live_bitunix/request_base.py
+     质量分数: 19.6
+     函数数: 13, 类数: 1
+     类型注解: 0, 文档字符串: 11
+
+397. feeds/live_bitvavo/request_base.py
+     质量分数: 19.6
+     函数数: 13, 类数: 1
+     类型注解: 0, 文档字符串: 11
+
+398. feeds/live_coincheck/request_base.py
+     质量分数: 19.6
+     函数数: 13, 类数: 1
+     类型注解: 0, 文档字符串: 11
+
+399. feeds/live_buda/request_base.py
+     质量分数: 19.6
+     函数数: 13, 类数: 1
+     类型注解: 0, 文档字符串: 11
+
+400. feeds/live_btcturk/request_base.py
+     质量分数: 19.6
+     函数数: 13, 类数: 1
+     类型注解: 0, 文档字符串: 11
+
+401. feeds/live_bitbank/request_base.py
+     质量分数: 19.6
+     函数数: 13, 类数: 1
+     类型注解: 0, 文档字符串: 11
+
+402. exchange_registers/register_gemini.py
+     质量分数: 19.7
+     函数数: 15, 类数: 4
+     类型注解: 0, 文档字符串: 15
+
+403. containers/trades/hitbtc_trade.py
+     质量分数: 19.8
+     函数数: 23, 类数: 1
+     类型注解: 0, 文档字符串: 19
+
+404. feeds/live_ctp_feed.py
+     质量分数: 19.9
+     函数数: 40, 类数: 4
+     类型注解: 0, 文档字符串: 35
+
+405. feeds/live_satoshitango/spot.py
+     质量分数: 19.9
+     函数数: 28, 类数: 1
+     类型注解: 2, 文档字符串: 21
+
+406. feeds/live_luno/spot.py
+     质量分数: 19.9
+     函数数: 28, 类数: 1
+     类型注解: 2, 文档字符串: 21
+
+407. feeds/live_giottus/spot.py
+     质量分数: 19.9
+     函数数: 28, 类数: 1
+     类型注解: 2, 文档字符串: 21
+
+408. feeds/live_mexc_feed.py
+     质量分数: 20.0
+     函数数: 11, 类数: 4
+     类型注解: 0, 文档字符串: 12
+
+409. feeds/live_bingx/request_base.py
+     质量分数: 20.0
+     函数数: 14, 类数: 1
+     类型注解: 0, 文档字符串: 12
+
+410. feeds/live_foxbit/request_base.py
+     质量分数: 20.0
+     函数数: 14, 类数: 1
+     类型注解: 0, 文档字符串: 12
+
+411. containers/orders/hitbtc_order.py
+     质量分数: 20.0
+     函数数: 24, 类数: 1
+     类型注解: 0, 文档字符串: 20
+
+412. feeds/live_ib_web_feed.py
+     质量分数: 20.1
+     函数数: 68, 类数: 3
+     类型注解: 4, 文档字符串: 53
+
+413. feeds/live_mercado_bitcoin/spot.py
+     质量分数: 20.3
+     函数数: 25, 类数: 1
+     类型注解: 2, 文档字符串: 19
+
+414. containers/balances/dydx_balance.py
+     质量分数: 20.5
+     函数数: 27, 类数: 1
+     类型注解: 0, 文档字符串: 23
+
+415. feeds/live_foxbit/spot.py
+     质量分数: 20.5
+     函数数: 38, 类数: 1
+     类型注解: 2, 文档字符串: 30
+
+416. containers/orderbooks/bybit_orderbook.py
+     质量分数: 20.6
+     函数数: 14, 类数: 3
+     类型注解: 0, 文档字符串: 14
+
+417. feeds/live_coincheck/spot.py
+     质量分数: 20.6
+     函数数: 33, 类数: 1
+     类型注解: 2, 文档字符串: 26
+
+418. feeds/live_bydfi/spot.py
+     质量分数: 20.8
+     函数数: 34, 类数: 1
+     类型注解: 2, 文档字符串: 27
+
+419. containers/exchanges/coincheck_exchange_data.py
+     质量分数: 20.8
+     函数数: 4, 类数: 2
+     类型注解: 0, 文档字符串: 5
+
+420. containers/exchanges/bitinka_exchange_data.py
+     质量分数: 20.8
+     函数数: 4, 类数: 2
+     类型注解: 0, 文档字符串: 5
+
+421. containers/exchanges/btcturk_exchange_data.py
+     质量分数: 20.8
+     函数数: 4, 类数: 2
+     类型注解: 0, 文档字符串: 5
+
+422. containers/exchanges/buda_exchange_data.py
+     质量分数: 20.8
+     函数数: 4, 类数: 2
+     类型注解: 0, 文档字符串: 5
+
+423. containers/exchanges/bitvavo_exchange_data.py
+     质量分数: 20.8
+     函数数: 4, 类数: 2
+     类型注解: 0, 文档字符串: 5
+
+424. containers/exchanges/giottus_exchange_data.py
+     质量分数: 20.8
+     函数数: 4, 类数: 2
+     类型注解: 0, 文档字符串: 5
+
+425. containers/exchanges/bitbns_exchange_data.py
+     质量分数: 20.8
+     函数数: 4, 类数: 2
+     类型注解: 0, 文档字符串: 5
+
+426. containers/exchanges/bitflyer_exchange_data.py
+     质量分数: 20.8
+     函数数: 4, 类数: 2
+     类型注解: 0, 文档字符串: 5
+
+427. containers/exchanges/bitunix_exchange_data.py
+     质量分数: 20.8
+     函数数: 4, 类数: 2
+     类型注解: 0, 文档字符串: 5
+
+428. containers/exchanges/foxbit_exchange_data.py
+     质量分数: 20.8
+     函数数: 4, 类数: 2
+     类型注解: 0, 文档字符串: 5
+
+429. containers/exchanges/bitbank_exchange_data.py
+     质量分数: 20.8
+     函数数: 4, 类数: 2
+     类型注解: 0, 文档字符串: 5
+
+430. containers/exchanges/bingx_exchange_data.py
+     质量分数: 20.8
+     函数数: 4, 类数: 2
+     类型注解: 0, 文档字符串: 5
+
+431. containers/exchanges/exmo_exchange_data.py
+     质量分数: 20.8
+     函数数: 4, 类数: 2
+     类型注解: 0, 文档字符串: 5
+
+432. feeds/live_buda/spot.py
+     质量分数: 20.9
+     函数数: 35, 类数: 1
+     类型注解: 2, 文档字符串: 28
+
+433. feeds/live_btcturk/spot.py
+     质量分数: 20.9
+     函数数: 35, 类数: 1
+     类型注解: 2, 文档字符串: 28
+
+434. containers/trades/trade.py
+     质量分数: 21.0
+     函数数: 24, 类数: 1
+     类型注解: 0, 文档字符串: 21
+
+435. containers/tickers/bitrue_ticker.py
+     质量分数: 21.1
+     函数数: 18, 类数: 1
+     类型注解: 0, 文档字符串: 16
+
+436. containers/orderbooks/bitget_orderbook.py
+     质量分数: 21.1
+     函数数: 22, 类数: 3
+     类型注解: 8, 文档字符串: 12
+
+437. feeds/live_coindcx/spot.py
+     质量分数: 21.1
+     函数数: 31, 类数: 1
+     类型注解: 2, 文档字符串: 25
+
+438. feeds/live_exmo/spot.py
+     质量分数: 21.1
+     函数数: 31, 类数: 1
+     类型注解: 2, 文档字符串: 25
+
+439. containers/orders/dydx_order.py
+     质量分数: 21.2
+     函数数: 38, 类数: 1
+     类型注解: 0, 文档字符串: 33
+
+440. containers/exchanges/luno_exchange_data.py
+     质量分数: 21.4
+     函数数: 5, 类数: 2
+     类型注解: 0, 文档字符串: 6
+
+441. feeds/live_okx/mixins/trade_mixin.py
+     质量分数: 21.4
+     函数数: 125, 类数: 1
+     类型注解: 7, 文档字符串: 101
+
+442. feeds/live_binance/spot.py
+     质量分数: 21.4
+     函数数: 31, 类数: 3
+     类型注解: 12, 文档字符串: 16
+
+443. feeds/live_bitbns/request_base.py
+     质量分数: 21.8
+     函数数: 14, 类数: 1
+     类型注解: 1, 文档字符串: 12
+
+444. feeds/live_bitflyer/request_base.py
+     质量分数: 21.8
+     函数数: 14, 类数: 1
+     类型注解: 1, 文档字符串: 12
+
+445. feeds/connection_mixin.py
+     质量分数: 21.9
+     函数数: 6, 类数: 2
+     类型注解: 0, 文档字符串: 7
+
+446. containers/exchanges/cow_swap_exchange_data.py
+     质量分数: 21.9
+     函数数: 6, 类数: 2
+     类型注解: 0, 文档字符串: 7
+
+447. containers/exchanges/mercado_bitcoin_exchange_data.py
+     质量分数: 21.9
+     函数数: 6, 类数: 2
+     类型注解: 0, 文档字符串: 7
+
+448. containers/tickers/upbit_ticker.py
+     质量分数: 21.9
+     函数数: 7, 类数: 1
+     类型注解: 0, 文档字符串: 7
+
+449. feeds/live_btc_markets/spot.py
+     质量分数: 22.0
+     函数数: 32, 类数: 1
+     类型注解: 3, 文档字符串: 26
+
+450. feeds/live_bitunix/spot.py
+     质量分数: 22.0
+     函数数: 32, 类数: 1
+     类型注解: 3, 文档字符串: 26
+
+451. feeds/live_bitvavo/spot.py
+     质量分数: 22.0
+     函数数: 32, 类数: 1
+     类型注解: 3, 文档字符串: 26
+
+452. feeds/live_okx/mixins/trading_account_mixin.py
+     质量分数: 22.1
+     函数数: 137, 类数: 1
+     类型注解: 9, 文档字符串: 113
+
+453. feeds/live_okx/mixins/statistics_mixin.py
+     质量分数: 22.2
+     函数数: 62, 类数: 1
+     类型注解: 0, 文档字符串: 56
+
+454. containers/exchanges/bydfi_exchange_data.py
+     质量分数: 22.2
+     函数数: 7, 类数: 2
+     类型注解: 0, 文档字符串: 8
+
+455. containers/exchanges/coinswitch_exchange_data.py
+     质量分数: 22.2
+     函数数: 7, 类数: 2
+     类型注解: 0, 文档字符串: 8
+
+456. containers/exchanges/independent_reserve_exchange_data.py
+     质量分数: 22.2
+     函数数: 7, 类数: 2
+     类型注解: 0, 文档字符串: 8
+
+457. containers/exchanges/coinspot_exchange_data.py
+     质量分数: 22.2
+     函数数: 7, 类数: 2
+     类型注解: 0, 文档字符串: 8
+
+458. containers/exchanges/coinex_exchange_data.py
+     质量分数: 22.2
+     函数数: 7, 类数: 2
+     类型注解: 0, 文档字符串: 8
+
+459. containers/balances/upbit_balance.py
+     质量分数: 22.2
+     函数数: 8, 类数: 1
+     类型注解: 0, 文档字符串: 8
+
+460. containers/orders/upbit_order.py
+     质量分数: 22.2
+     函数数: 8, 类数: 1
+     类型注解: 0, 文档字符串: 8
+
+461. containers/tickers/exmo_ticker.py
+     质量分数: 22.4
+     函数数: 18, 类数: 1
+     类型注解: 0, 文档字符串: 17
+
+462. feeds/live_gemini/spot.py
+     质量分数: 22.5
+     函数数: 37, 类数: 1
+     类型注解: 5, 文档字符串: 29
+
+463. containers/exchanges/coinone_exchange_data.py
+     质量分数: 22.5
+     函数数: 8, 类数: 2
+     类型注解: 0, 文档字符串: 9
+
+464. containers/exchanges/bitstamp_exchange_data.py
+     质量分数: 22.5
+     函数数: 8, 类数: 2
+     类型注解: 0, 文档字符串: 9
+
+465. containers/exchanges/bigone_exchange_data.py
+     质量分数: 22.5
+     函数数: 8, 类数: 2
+     类型注解: 0, 文档字符串: 9
+
+466. containers/exchanges/bequant_exchange_data.py
+     质量分数: 22.5
+     函数数: 8, 类数: 2
+     类型注解: 0, 文档字符串: 9
+
+467. containers/exchanges/bitso_exchange_data.py
+     质量分数: 22.5
+     函数数: 8, 类数: 2
+     类型注解: 0, 文档字符串: 9
+
+468. containers/exchanges/bitrue_exchange_data.py
+     质量分数: 22.5
+     函数数: 8, 类数: 2
+     类型注解: 0, 文档字符串: 9
+
+469. containers/exchanges/bitmart_exchange_data.py
+     质量分数: 22.5
+     函数数: 8, 类数: 2
+     类型注解: 0, 文档字符串: 9
+
+470. containers/exchanges/upbit_exchange_data.py
+     质量分数: 22.5
+     函数数: 8, 类数: 2
+     类型注解: 0, 文档字符串: 9
+
+471. containers/exchanges/bybit_exchange_data.py
+     质量分数: 22.5
+     函数数: 15, 类数: 3
+     类型注解: 1, 文档字符串: 15
+
+472. containers/exchanges/cryptocom_exchange_data.py
+     质量分数: 22.5
+     函数数: 17, 类数: 2
+     类型注解: 1, 文档字符串: 16
+
+473. feeds/live_bingx/spot.py
+     质量分数: 22.6
+     函数数: 29, 类数: 1
+     类型注解: 2, 文档字符串: 25
+
+474. containers/exchanges/korbit_exchange_data.py
+     质量分数: 22.7
+     函数数: 9, 类数: 2
+     类型注解: 0, 文档字符串: 10
+
+475. containers/tickers/bitflyer_ticker.py
+     质量分数: 22.7
+     函数数: 10, 类数: 1
+     类型注解: 0, 文档字符串: 10
+
+476. feeds/live_mexc/market_wss_base.py
+     质量分数: 23.4
+     函数数: 15, 类数: 1
+     类型注解: 0, 文档字符串: 15
+
+477. feeds/live_bithumb/request_base.py
+     质量分数: 23.5
+     函数数: 13, 类数: 1
+     类型注解: 2, 文档字符串: 11
+
+478. feeds/live_poloniex/request_base.py
+     质量分数: 23.5
+     函数数: 12, 类数: 2
+     类型注解: 1, 文档字符串: 12
+
+479. feeds/live_mexc/account_wss_base.py
+     质量分数: 23.6
+     函数数: 17, 类数: 1
+     类型注解: 0, 文档字符串: 17
+
+480. containers/exchanges/kraken_exchange_data.py
+     质量分数: 23.7
+     函数数: 10, 类数: 3
+     类型注解: 1, 文档字符串: 11
+
+481. containers/exchanges/gateio_exchange_data.py
+     质量分数: 23.7
+     函数数: 10, 类数: 3
+     类型注解: 1, 文档字符串: 11
+
+482. containers/exchanges/dydx_exchange_data.py
+     质量分数: 23.8
+     函数数: 12, 类数: 3
+     类型注解: 1, 文档字符串: 13
+
+483. feeds/live_dydx/request_base.py
+     质量分数: 24.0
+     函数数: 48, 类数: 2
+     类型注解: 0, 文档字符串: 48
+
+484. feeds/capability.py
+     质量分数: 24.2
+     函数数: 6, 类数: 4
+     类型注解: 1, 文档字符串: 8
+
+485. containers/balances/bitget_balance.py
+     质量分数: 24.8
+     函数数: 28, 类数: 4
+     类型注解: 12, 文档字符串: 18
+
+486. utils/time.py
+     质量分数: 25.0
+     函数数: 1, 类数: 0
+     类型注解: 0, 文档字符串: 1
+
+487. feeds/live_hyperliquid/account_wss_base.py
+     质量分数: 25.0
+     函数数: 11, 类数: 1
+     类型注解: 0, 文档字符串: 12
+
+488. feeds/live_hyperliquid/market_wss_base.py
+     质量分数: 25.0
+     函数数: 11, 类数: 1
+     类型注解: 0, 文档字符串: 12
+
+489. feeds/live_bitfinex/spot.py
+     质量分数: 25.0
+     函数数: 24, 类数: 1
+     类型注解: 0, 文档字符串: 25
+
+490. feeds/live_kraken/request_base.py
+     质量分数: 25.0
+     函数数: 9, 类数: 1
+     类型注解: 0, 文档字符串: 10
+
+491. exchange_registers/register_pancakeswap.py
+     质量分数: 25.0
+     函数数: 7, 类数: 1
+     类型注解: 0, 文档字符串: 8
+
+492. functions/calculate_number/setup_run.py
+     质量分数: 25.0
+     函数数: 4, 类数: 0
+     类型注解: 4, 文档字符串: 0
+
+493. containers/exchanges/ib_web_exchange_data.py
+     质量分数: 25.0
+     函数数: 15, 类数: 5
+     类型注解: 3, 文档字符串: 16
+
+494. containers/tickers/coinex_ticker.py
+     质量分数: 25.0
+     函数数: 18, 类数: 1
+     类型注解: 0, 文档字符串: 19
+
+495. containers/balances/cryptocom_balance.py
+     质量分数: 25.0
+     函数数: 3, 类数: 1
+     类型注解: 0, 文档字符串: 4
+
+496. errors/binance_translator.py
+     质量分数: 25.0
+     函数数: 0, 类数: 1
+     类型注解: 0, 文档字符串: 1
+
+497. feeds/live_curve/spot.py
+     质量分数: 25.0
+     函数数: 43, 类数: 1
+     类型注解: 1, 文档字符串: 43
+
+498. feeds/live_cow_swap/spot.py
+     质量分数: 25.0
+     函数数: 40, 类数: 1
+     类型注解: 1, 文档字符串: 40
+
+499. feeds/live_bitfinex/request_base.py
+     质量分数: 25.0
+     函数数: 28, 类数: 1
+     类型注解: 1, 文档字符串: 28
+
+500. feeds/live_bitbns/spot.py
+     质量分数: 25.0
+     函数数: 34, 类数: 1
+     类型注解: 2, 文档字符串: 33
+
+501. feeds/live_bitbank/spot.py
+     质量分数: 25.0
+     函数数: 33, 类数: 1
+     类型注解: 2, 文档字符串: 32
+
+502. feeds/live_gemini/request_base.py
+     质量分数: 25.1
+     函数数: 29, 类数: 1
+     类型注解: 3, 文档字符串: 27
+
+503. feeds/live_htx/request_base.py
+     质量分数: 25.2
+     函数数: 10, 类数: 1
+     类型注解: 1, 文档字符串: 10
+
+504. feeds/live_okx/mixins/grid_trading_mixin.py
+     质量分数: 25.4
+     函数数: 60, 类数: 1
+     类型注解: 0, 文档字符串: 62
+
+505. feeds/live_okx/mixins/copy_trading_mixin.py
+     质量分数: 25.5
+     函数数: 104, 类数: 1
+     类型注解: 1, 文档字符串: 106
+
+506. containers/exchanges/poloniex_exchange_data.py
+     质量分数: 25.5
+     函数数: 9, 类数: 2
+     类型注解: 1, 文档字符串: 10
+
+507. feeds/live_bithumb/spot.py
+     质量分数: 25.6
+     函数数: 40, 类数: 1
+     类型注解: 2, 文档字符串: 40
+
+508. feeds/live_bitinka/spot.py
+     质量分数: 25.7
+     函数数: 36, 类数: 1
+     类型注解: 2, 文档字符串: 36
+
+509. feeds/live_bitflyer/spot.py
+     质量分数: 25.7
+     函数数: 36, 类数: 1
+     类型注解: 2, 文档字符串: 36
+
+510. feeds/live_htx/spot.py
+     质量分数: 26.1
+     函数数: 60, 类数: 3
+     类型注解: 14, 文档字符串: 51
+
+511. containers/exchanges/satoshitango_exchange_data.py
+     质量分数: 26.4
+     函数数: 5, 类数: 2
+     类型注解: 1, 文档字符串: 6
+
+512. containers/exchanges/coindcx_exchange_data.py
+     质量分数: 26.4
+     函数数: 5, 类数: 2
+     类型注解: 1, 文档字符串: 6
+
+513. containers/exchanges/bithumb_exchange_data.py
+     质量分数: 26.4
+     函数数: 5, 类数: 2
+     类型注解: 1, 文档字符串: 6
+
+514. feeds/live_okx/mixins/rfq_mixin.py
+     质量分数: 26.6
+     函数数: 92, 类数: 1
+     类型注解: 5, 文档字符串: 94
+
+515. feeds/live_okx/mixins/funding_mixin.py
+     质量分数: 26.7
+     函数数: 105, 类数: 1
+     类型注解: 6, 文档字符串: 107
+
+516. feeds/live_kucoin/spot.py
+     质量分数: 26.8
+     函数数: 41, 类数: 1
+     类型注解: 3, 文档字符串: 42
+
+517. feeds/live_okx/mixins/status_mixin.py
+     质量分数: 26.9
+     函数数: 12, 类数: 1
+     类型注解: 0, 文档字符串: 14
+
+518. containers/exchanges/hyperliquid_exchange_data.py
+     质量分数: 26.9
+     函数数: 13, 类数: 3
+     类型注解: 1, 文档字符串: 16
+
+519. feeds/live_okx/mixins/spread_trading_mixin.py
+     质量分数: 27.0
+     函数数: 24, 类数: 1
+     类型注解: 1, 文档字符串: 26
+
+520. containers/exchanges/btc_markets_exchange_data.py
+     质量分数: 27.1
+     函数数: 4, 类数: 2
+     类型注解: 1, 文档字符串: 5
+
+521. containers/accounts/account.py
+     质量分数: 27.3
+     函数数: 33, 类数: 1
+     类型注解: 2, 文档字符串: 35
+
+522. containers/orders/order.py
+     质量分数: 27.4
+     函数数: 42, 类数: 2
+     类型注解: 3, 文档字符串: 45
+
+523. containers/symbols/symbol.py
+     质量分数: 27.5
+     函数数: 30, 类数: 1
+     类型注解: 2, 文档字符串: 32
+
+524. containers/positions/position.py
+     质量分数: 27.5
+     函数数: 30, 类数: 1
+     类型注解: 2, 文档字符串: 32
+
+525. feeds/live_okx/mixins/sub_account_mixin.py
+     质量分数: 27.5
+     函数数: 39, 类数: 1
+     类型注解: 3, 文档字符串: 41
+
+526. feeds/live_coinbase/spot.py
+     质量分数: 27.8
+     函数数: 37, 类数: 3
+     类型注解: 6, 文档字符串: 38
+
+527. containers/bars/bar.py
+     质量分数: 28.0
+     函数数: 25, 类数: 1
+     类型注解: 2, 文档字符串: 27
+
+528. feeds/live_hyperliquid/request_base.py
+     质量分数: 28.2
+     函数数: 31, 类数: 2
+     类型注解: 4, 文档字符串: 33
+
+529. feeds/live_ripio/spot.py
+     质量分数: 28.3
+     函数数: 31, 类数: 1
+     类型注解: 7, 文档字符串: 29
+
+530. containers/balances/balance.py
+     质量分数: 28.4
+     函数数: 22, 类数: 1
+     类型注解: 2, 文档字符串: 24
+
+531. containers/fundingrates/funding_rate.py
+     质量分数: 28.5
+     函数数: 21, 类数: 1
+     类型注解: 2, 文档字符串: 23
+
+532. containers/exchanges/htx_exchange_data.py
+     质量分数: 28.7
+     函数数: 16, 类数: 6
+     类型注解: 6, 文档字符串: 17
+
+533. feeds/live_exmo/request_base.py
+     质量分数: 28.9
+     函数数: 14, 类数: 1
+     类型注解: 5, 文档字符串: 12
+
+534. feeds/live_coinbase/request_base.py
+     质量分数: 29.2
+     函数数: 6, 类数: 1
+     类型注解: 1, 文档字符串: 7
+
+535. exchange_registers/register_htx.py
+     质量分数: 29.2
+     函数数: 6, 类数: 0
+     类型注解: 0, 文档字符串: 7
+
+536. containers/incomes/income.py
+     质量分数: 31.1
+     函数数: 12, 类数: 1
+     类型注解: 2, 文档字符串: 14
+
+537. containers/requestdatas/request_data.py
+     质量分数: 31.6
+     函数数: 13, 类数: 1
+     类型注解: 9, 文档字符串: 8
+
+538. containers/orders/kraken_order.py
+     质量分数: 31.7
+     函数数: 52, 类数: 2
+     类型注解: 13, 文档字符串: 55
+
+539. ctp_env_selector.py
+     质量分数: 32.1
+     函数数: 7, 类数: 0
+     类型注解: 1, 文档字符串: 8
+
+540. feeds/live_bybit/spot.py
+     质量分数: 33.1
+     函数数: 34, 类数: 1
+     类型注解: 11, 文档字符串: 35
+
+541. feeds/live_hyperliquid/spot.py
+     质量分数: 33.2
+     函数数: 25, 类数: 3
+     类型注解: 10, 文档字符串: 26
+
+542. feeds/live_sushiswap/request_base.py
+     质量分数: 33.9
+     函数数: 11, 类数: 1
+     类型注解: 3, 文档字符串: 13
+
+543. containers/tickers/kraken_ticker.py
+     质量分数: 34.0
+     函数数: 22, 类数: 1
+     类型注解: 7, 文档字符串: 24
+
+544. monitoring/decorators.py
+     质量分数: 34.6
+     函数数: 13, 类数: 0
+     类型注解: 11, 文档字符串: 7
+
+545. containers/markprices/mark_price.py
+     质量分数: 34.7
+     函数数: 11, 类数: 1
+     类型注解: 7, 文档字符串: 9
+
+546. containers/exchanges/coinbase_exchange_data.py
+     质量分数: 35.0
+     函数数: 8, 类数: 2
+     类型注解: 4, 文档字符串: 9
+
+547. containers/exchanges/phemex_exchange_data.py
+     质量分数: 35.3
+     函数数: 13, 类数: 3
+     类型注解: 7, 文档字符串: 14
+
+548. feeds/live_dydx/spot.py
+     质量分数: 35.4
+     函数数: 22, 类数: 1
+     类型注解: 12, 文档字符串: 20
+
+549. containers/orderbooks/gemini_orderbook.py
+     质量分数: 35.4
+     函数数: 13, 类数: 2
+     类型注解: 8, 文档字符串: 12
+
+550. containers/exchanges/gemini_exchange_data.py
+     质量分数: 36.2
+     函数数: 10, 类数: 3
+     类型注解: 6, 文档字符串: 11
+
+551. feeds/registry.py
+     质量分数: 36.6
+     函数数: 11, 类数: 1
+     类型注解: 6, 文档字符串: 11
+
+552. containers/exchanges/ripio_exchange_data.py
+     质量分数: 36.6
+     函数数: 9, 类数: 2
+     类型注解: 5, 文档字符串: 10
+
+553. feeds/live_binance/margin.py
+     质量分数: 37.1
+     函数数: 26, 类数: 3
+     类型注解: 18, 文档字符串: 23
+
+554. exchange_registers/register_kraken.py
+     质量分数: 37.5
+     函数数: 2, 类数: 0
+     类型注解: 0, 文档字符串: 3
+
+555. exchange_registers/register_yobit.py
+     质量分数: 37.5
+     函数数: 2, 类数: 0
+     类型注解: 0, 文档字符串: 3
+
+556. exchange_registers/register_swyftx.py
+     质量分数: 37.5
+     函数数: 2, 类数: 0
+     类型注解: 0, 文档字符串: 3
+
+557. exchange_registers/register_wazirx.py
+     质量分数: 37.5
+     函数数: 2, 类数: 0
+     类型注解: 0, 文档字符串: 3
+
+558. exchange_registers/register_zebpay.py
+     质量分数: 37.5
+     函数数: 2, 类数: 0
+     类型注解: 0, 文档字符串: 3
+
+559. exchange_registers/register_zaif.py
+     质量分数: 37.5
+     函数数: 2, 类数: 0
+     类型注解: 0, 文档字符串: 3
+
+560. exchange_registers/register_valr.py
+     质量分数: 37.5
+     函数数: 2, 类数: 0
+     类型注解: 0, 文档字符串: 3
+
+561. feeds/base_stream.py
+     质量分数: 38.2
+     函数数: 13, 类数: 2
+     类型注解: 6, 文档字符串: 16
+
+562. feeds/live_mexc/spot.py
+     质量分数: 38.3
+     函数数: 49, 类数: 1
+     类型注解: 27, 文档字符串: 49
+
+563. containers/exchanges/bitget_exchange_data.py
+     质量分数: 38.3
+     函数数: 12, 类数: 3
+     类型注解: 8, 文档字符串: 13
+
+564. containers/balances/binance_balance.py
+     质量分数: 38.6
+     函数数: 92, 类数: 5
+     类型注解: 50, 文档字符串: 97
+
+565. feeds/live_cryptocom/request_base.py
+     质量分数: 39.2
+     函数数: 30, 类数: 1
+     类型注解: 18, 文档字符串: 30
+
+566. monitoring/prometheus.py
+     质量分数: 39.3
+     函数数: 23, 类数: 3
+     类型注解: 14, 文档字符串: 25
+
+567. functions/decorators.py
+     质量分数: 39.3
+     函数数: 7, 类数: 0
+     类型注解: 8, 文档字符串: 3
+
+568. containers/exchanges/gmx_exchange_data.py
+     质量分数: 39.3
+     函数数: 7, 类数: 3
+     类型注解: 4, 文档字符串: 10
+
+569. feeds/live_htx/usdt_swap.py
+     质量分数: 39.4
+     函数数: 23, 类数: 3
+     类型注解: 15, 文档字符串: 24
+
+570. risk_management/containers/risk_metrics.py
+     质量分数: 40.4
+     函数数: 13, 类数: 13
+     类型注解: 14, 文档字符串: 14
+
+571. containers/exchanges/pancakeswap_exchange_data.py
+     质量分数: 40.7
+     函数数: 24, 类数: 1
+     类型注解: 16, 文档字符串: 24
+
+572. core/dependency_injection.py
+     质量分数: 40.7
+     函数数: 23, 类数: 2
+     类型注解: 20, 文档字符串: 19
+
+573. containers/balances/okx_balance.py
+     质量分数: 40.9
+     函数数: 22, 类数: 1
+     类型注解: 14, 文档字符串: 23
+
+574. exchange_registers/register_uniswap.py
+     质量分数: 41.7
+     函数数: 3, 类数: 0
+     类型注解: 1, 文档字符串: 4
+
+575. functions/update_data/download_bars_from_okex.py
+     质量分数: 41.7
+     函数数: 3, 类数: 0
+     类型注解: 2, 文档字符串: 3
+
+576. containers/exchanges/uniswap_exchange_data.py
+     质量分数: 41.7
+     函数数: 12, 类数: 3
+     类型注解: 8, 文档字符串: 15
+
+577. containers/exchanges/curve_exchange_data.py
+     质量分数: 41.7
+     函数数: 9, 类数: 3
+     类型注解: 6, 文档字符串: 12
+
+578. feeds/live_gmx/spot.py
+     质量分数: 41.7
+     函数数: 36, 类数: 1
+     类型注解: 25, 文档字符串: 36
+
+579. security_compliance/framework.py
+     质量分数: 42.0
+     函数数: 18, 类数: 1
+     类型注解: 16, 文档字符串: 15
+
+580. containers/exchanges/sushiswap_exchange_data.py
+     质量分数: 42.5
+     函数数: 10, 类数: 3
+     类型注解: 7, 文档字符串: 13
+
+581. risk_management/ml_models/ensemble_model.py
+     质量分数: 42.6
+     函数数: 27, 类数: 3
+     类型注解: 19, 文档字符串: 30
+
+582. containers/exchanges/raydium_exchange_data.py
+     质量分数: 43.1
+     函数数: 10, 类数: 3
+     类型注解: 8, 文档字符串: 12
+
+583. connection_pool.py
+     质量分数: 43.1
+     函数数: 13, 类数: 3
+     类型注解: 7, 文档字符串: 19
+
+584. feeds/live_gmx/request_base.py
+     质量分数: 43.2
+     函数数: 11, 类数: 1
+     类型注解: 8, 文档字符串: 12
+
+585. monitoring/grafana.py
+     质量分数: 43.3
+     函数数: 15, 类数: 1
+     类型注解: 11, 文档字符串: 16
+
+586. containers/tickers/ripio_ticker.py
+     质量分数: 43.4
+     函数数: 8, 类数: 1
+     类型注解: 5, 文档字符串: 10
+
+587. exchange_registers/register_dydx.py
+     质量分数: 43.8
+     函数数: 4, 类数: 0
+     类型注解: 2, 文档字符串: 5
+
+588. feeds/live_raydium/spot.py
+     质量分数: 43.9
+     函数数: 33, 类数: 1
+     类型注解: 25, 文档字符串: 34
+
+589. monitoring/metrics.py
+     质量分数: 44.1
+     函数数: 34, 类数: 7
+     类型注解: 31, 文档字符串: 35
+
+590. containers/exchanges/balancer_exchange_data.py
+     质量分数: 44.2
+     函数数: 13, 类数: 3
+     类型注解: 10, 文档字符串: 16
+
+591. containers/exchanges/bitfinex_exchange_data.py
+     质量分数: 44.6
+     函数数: 18, 类数: 5
+     类型注解: 18, 文档字符串: 18
+
+592. containers/orderbooks/kraken_orderbook.py
+     质量分数: 45.2
+     函数数: 26, 类数: 1
+     类型注解: 20, 文档字符串: 28
+
+593. containers/balances/bybit_balance.py
+     质量分数: 45.2
+     函数数: 31, 类数: 3
+     类型注解: 25, 文档字符串: 34
+
+594. containers/bars/binance_bar.py
+     质量分数: 45.5
+     函数数: 50, 类数: 2
+     类型注解: 40, 文档字符串: 53
+
+595. security_compliance/core/compliance_monitor.py
+     质量分数: 46.0
+     函数数: 8, 类数: 3
+     类型注解: 6, 文档字符串: 12
+
+596. security_compliance/core/encryption_manager.py
+     质量分数: 46.0
+     函数数: 39, 类数: 9
+     类型注解: 32, 文档字符串: 49
+
+597. containers/balances/kraken_balance.py
+     质量分数: 46.1
+     函数数: 20, 类数: 2
+     类型注解: 16, 文档字符串: 23
+
+598. containers/positions/binance_position.py
+     质量分数: 46.3
+     函数数: 34, 类数: 3
+     类型注解: 28, 文档字符串: 38
+
+599. feeds/live_binance/mining.py
+     质量分数: 46.4
+     函数数: 7, 类数: 1
+     类型注解: 6, 文档字符串: 8
+
+600. feeds/live_binance/portfolio.py
+     质量分数: 46.4
+     函数数: 7, 类数: 1
+     类型注解: 6, 文档字符串: 8
+
+601. containers/bars/okx_bar.py
+     质量分数: 47.0
+     函数数: 25, 类数: 1
+     类型注解: 21, 文档字符串: 27
+
+602. risk_management/ml_models/ml_base.py
+     质量分数: 47.3
+     函数数: 25, 类数: 4
+     类型注解: 24, 文档字符串: 27
+
+603. feeds/live_balancer/request_base.py
+     质量分数: 47.6
+     函数数: 12, 类数: 1
+     类型注解: 9, 文档字符串: 15
+
+604. feeds/live_uniswap/request_base.py
+     质量分数: 47.6
+     函数数: 12, 类数: 1
+     类型注解: 9, 文档字符串: 15
+
+605. feeds/live_binance/vip_loan.py
+     质量分数: 47.7
+     函数数: 11, 类数: 1
+     类型注解: 10, 文档字符串: 12
+
+606. feeds/live_binance/grid.py
+     质量分数: 47.7
+     函数数: 11, 类数: 1
+     类型注解: 10, 文档字符串: 12
+
+607. security_compliance/network/tls_manager.py
+     质量分数: 47.9
+     函数数: 3, 类数: 1
+     类型注解: 2, 文档字符串: 5
+
+608. containers/positions/okx_position.py
+     质量分数: 48.4
+     函数数: 31, 类数: 1
+     类型注解: 28, 文档字符串: 33
+
+609. feeds/live_binance/sub_account.py
+     质量分数: 49.3
+     函数数: 35, 类数: 1
+     类型注解: 34, 文档字符串: 36
+
+610. feeds/live_binance/wallet.py
+     质量分数: 49.3
+     函数数: 35, 类数: 1
+     类型注解: 34, 文档字符串: 36
+
+611. containers/tickers/phemex_ticker.py
+     质量分数: 49.6
+     函数数: 7, 类数: 1
+     类型注解: 6, 文档字符串: 9
+
+612. exchange_registers/register_poloniex.py
+     质量分数: 50.0
+     函数数: 3, 类数: 0
+     类型注解: 2, 文档字符串: 4
+

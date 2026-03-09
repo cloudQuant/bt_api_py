@@ -3,8 +3,14 @@ CTP 订单数据容器
 对应 CTP 的 CThostFtdcOrderField 结构体
 """
 
+from typing import Any
+
 from bt_api_py.containers.orders.order import OrderData, OrderStatus
-from bt_api_py.functions.utils import from_dict_get_float, from_dict_get_int, from_dict_get_string
+from bt_api_py.functions.utils import (
+    from_dict_get_float,
+    from_dict_get_int,
+    from_dict_get_string,
+)
 
 # CTP 报单状态映射
 CTP_ORDER_STATUS_MAP = {
@@ -38,35 +44,57 @@ CTP_OFFSET_MAP = {
 
 
 class CtpOrderData(OrderData):
-    """CTP 订单数据"""
+    """CTP 订单数据."""
 
     def __init__(
-        self, order_info, symbol_name=None, asset_type="FUTURE", has_been_json_encoded=False
-    ):
+        self,
+        order_info: Any,
+        symbol_name: str | None = None,
+        asset_type: str = "FUTURE",
+        has_been_json_encoded: bool = False,
+    ) -> None:
+        """
+        Initialize CTP order data.
+
+        Args:
+            order_info: Order information dictionary.
+            symbol_name: Symbol name.
+            asset_type: Asset type (default: "FUTURE").
+            has_been_json_encoded: Whether data has been JSON encoded.
+
+        Returns:
+            None
+        """
         super().__init__(order_info, has_been_json_encoded)
         self.symbol_name = symbol_name
         self.asset_type = asset_type
         self.exchange_name = "CTP"
         self._initialized = False
         # CTP 订单字段
-        self.instrument_id = None
-        self.order_ref = None
-        self.order_sys_id = None
-        self.direction = None
-        self.offset = None
-        self.limit_price = None
-        self.volume_total_original = None
-        self.volume_traded = None
-        self.volume_total = None
-        self.order_status = None
-        self.insert_time = None
-        self.update_time = None
-        self.status_msg = None
-        self.exchange_id = None
-        self.front_id = None
-        self.session_id = None
+        self.instrument_id: str | None = None
+        self.order_ref: str | None = None
+        self.order_sys_id: str | None = None
+        self.direction: str | None = None
+        self.offset: str | None = None
+        self.limit_price: float | None = None
+        self.volume_total_original: int | None = None
+        self.volume_traded: int | None = None
+        self.volume_total: int | None = None
+        self.order_status: OrderStatus | None = None
+        self.insert_time: str | None = None
+        self.update_time: str | None = None
+        self.status_msg: str | None = None
+        self.exchange_id: str | None = None
+        self.front_id: int | None = None
+        self.session_id: int | None = None
 
-    def init_data(self):
+    def init_data(self) -> "CtpOrderData":
+        """
+        Initialize data from order_info.
+
+        Returns:
+            Self instance for chaining.
+        """
         if self._initialized:
             return self
         info = self.order_info
@@ -93,68 +121,164 @@ class CtpOrderData(OrderData):
         self._initialized = True
         return self
 
-    def get_exchange_name(self):
+    def get_exchange_name(self) -> str:
+        """
+        Get exchange name.
+
+        Returns:
+            Exchange name string.
+        """
         return self.exchange_name
 
-    def get_asset_type(self):
+    def get_asset_type(self) -> str:
+        """
+        Get asset type.
+
+        Returns:
+            Asset type string.
+        """
         return self.asset_type
 
-    def get_symbol_name(self):
+    def get_symbol_name(self) -> str | None:
+        """
+        Get symbol name.
+
+        Returns:
+            Symbol name or None.
+        """
         return self.instrument_id or self.symbol_name
 
-    def get_server_time(self):
+    def get_server_time(self) -> str | None:
+        """
+        Get server time.
+
+        Returns:
+            Server time string or None.
+        """
         return self.insert_time
 
-    def get_local_update_time(self):
+    def get_local_update_time(self) -> str | None:
+        """
+        Get local update time.
+
+        Returns:
+            Local update time string or None.
+        """
         return self.update_time
 
-    def get_order_id(self):
+    def get_order_id(self) -> str | None:
+        """
+        Get order ID.
+
+        Returns:
+            Order ID string or None.
+        """
         return self.order_sys_id
 
-    def get_client_order_id(self):
+    def get_client_order_id(self) -> str | None:
+        """
+        Get client order ID.
+
+        Returns:
+            Client order ID string or None.
+        """
         return self.order_ref
 
-    def get_order_size(self):
+    def get_order_size(self) -> int | None:
+        """
+        Get order size.
+
+        Returns:
+            Order size or None.
+        """
         return self.volume_total_original
 
-    def get_order_price(self):
+    def get_order_price(self) -> float | None:
+        """
+        Get order price.
+
+        Returns:
+            Order price or None.
+        """
         return self.limit_price
 
-    def get_order_side(self):
+    def get_order_side(self) -> str | None:
+        """
+        Get order side.
+
+        Returns:
+            Order side string or None.
+        """
         return self.direction
 
-    def get_order_status(self):
+    def get_order_status(self) -> OrderStatus | None:
+        """
+        Get order status.
+
+        Returns:
+            Order status or None.
+        """
         return self.order_status
 
-    def get_order_offset(self):
-        """开平方向: open / close / close_today / close_yesterday"""
+    def get_order_offset(self) -> str | None:
+        """
+        Get order offset.
+
+        Returns:
+            Offset: open / close / close_today / close_yesterday.
+        """
         return self.offset
 
-    def get_order_exchange_id(self):
-        """交易所代码: CFFEX / SHFE / DCE / CZCE / INE / GFEX"""
+    def get_order_exchange_id(self) -> str | None:
+        """
+        Get order exchange ID.
+
+        Returns:
+            Exchange ID: CFFEX / SHFE / DCE / CZCE / INE / GFEX.
+        """
         return self.exchange_id
 
-    def get_executed_qty(self):
+    def get_executed_qty(self) -> int | None:
+        """
+        Get executed quantity.
+
+        Returns:
+            Executed quantity or None.
+        """
         return self.volume_traded
 
-    def get_order_symbol_name(self):
+    def get_order_symbol_name(self) -> str | None:
+        """
+        Get order symbol name.
+
+        Returns:
+            Order symbol name or None.
+        """
         return self.instrument_id or self.symbol_name
 
-    def get_order_type(self):
+    def get_order_type(self) -> str:
+        """
+        Get order type.
+
+        Returns:
+            Always "limit" for CTP.
+        """
         return "limit"
 
-    def get_order_avg_price(self):
+    def get_order_avg_price(self) -> float | None:
+        """
+        Get order average price.
+
+        Returns:
+            Order average price or None.
+        """
         return self.limit_price
 
-    def get_order_time_in_force(self):
+    def get_order_time_in_force(self) -> str:
+        """
+        Get order time in force.
+
+        Returns:
+            Always "GFD" for CTP (Good For Day).
+        """
         return "GFD"  # CTP 默认当日有效
-
-    def __str__(self):
-        return (
-            f"CtpOrder({self.instrument_id}, {self.direction}, {self.offset}, "
-            f"price={self.limit_price}, vol={self.volume_total_original}, "
-            f"status={self.order_status})"
-        )
-
-    def __repr__(self):
-        return self.__str__()

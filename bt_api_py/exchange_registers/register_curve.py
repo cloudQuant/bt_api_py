@@ -8,17 +8,17 @@ from bt_api_py.feeds.live_curve.spot import CurveRequestDataSpot
 from bt_api_py.registry import ExchangeRegistry
 
 
-def register_curve():
-    """Register Curve DEX to global ExchangeRegistry"""
-    # Register Feed class
+def register_curve() -> None:
+    """Register Curve DEX to global ExchangeRegistry.
+
+    This function registers:
+    - Feed class for market data
+    - Exchange data configuration
+    - Balance handler for account management
+    """
     ExchangeRegistry.register_feed("CURVE___DEX", CurveRequestDataSpot)
-
-    # Register config class
     ExchangeRegistry.register_exchange_data("CURVE___DEX", CurveExchangeDataSpot)
-
-    # Register balance handler (for on-chain balances)
     ExchangeRegistry.register_balance_handler("CURVE___DEX", _curve_balance_handler)
 
 
-# Auto-register on module import
 register_curve()

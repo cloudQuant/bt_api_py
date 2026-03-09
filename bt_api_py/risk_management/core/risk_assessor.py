@@ -5,18 +5,18 @@
 
 import time
 from decimal import Decimal
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
 
 from bt_api_py.logging_factory import get_logger
 
-from ..containers.risk_metrics import RiskMetrics
 from ..containers.risk_events import RiskLevel
+from ..containers.risk_metrics import RiskMetrics
 
 
 class RiskAssessmentResult:
     """风险评估结果"""
 
-    def __init__(self, data: Dict[str, Any]):
+    def __init__(self, data: dict[str, Any]) -> Any | None:
         self.score = Decimal(str(data.get("score", 0)))  # 风险评分 0-1
         self.level = RiskLevel(data.get("level", "LOW"))  # 风险级别
         self.confidence = Decimal(str(data.get("confidence", 0)))  # 置信度 0-1
@@ -30,7 +30,7 @@ class RiskAssessmentResult:
 class RiskFactor:
     """风险因素"""
 
-    def __init__(self, name: str, weight: float, score: float, description: str = ""):
+    def __init__(self, name: str, weight: float, score: float, description: str = "") -> Any | None:
         self.name = name
         self.weight = weight  # 权重 0-1
         self.score = score  # 评分 0-1
@@ -52,7 +52,7 @@ class RiskAssessor:
     6. 压力测试集成
     """
 
-    def __init__(self, config: Optional[Dict[str, Any]] = None):
+    def __init__(self, config: dict[str, Any] | None = None) -> Any | None:
         """初始化风险评估器
 
         Args:
@@ -90,8 +90,8 @@ class RiskAssessor:
         self.min_samples_for_ml = self.config.get("min_samples_for_ml", 1000)
 
         # 历史数据存储
-        self.historical_assessments: List[RiskAssessmentResult] = []
-        self.risk_factors_history: List[Dict[str, float]] = []
+        self.historical_assessments: list[RiskAssessmentResult] = []
+        self.risk_factors_history: list[dict[str, float]] = []
 
         # 统计数据
         self.assessment_stats = {
@@ -201,7 +201,7 @@ class RiskAssessor:
                 }
             )
 
-    def _extract_risk_factors(self, risk_metrics: RiskMetrics) -> List[RiskFactor]:
+    def _extract_risk_factors(self, risk_metrics: RiskMetrics) -> list[RiskFactor]:
         """提取风险因素
 
         Args:
@@ -333,7 +333,7 @@ class RiskAssessor:
 
         return factors
 
-    def _calculate_traditional_score(self, risk_factors: List[RiskFactor]) -> float:
+    def _calculate_traditional_score(self, risk_factors: list[RiskFactor]) -> float:
         """计算传统评分
 
         Args:
@@ -351,7 +351,7 @@ class RiskAssessor:
 
         return total_score if total_weight > 0 else 0.0
 
-    def _predict_with_ml(self, risk_factors: List[RiskFactor]) -> Tuple[float, float]:
+    def _predict_with_ml(self, risk_factors: list[RiskFactor]) -> tuple[float, float]:
         """使用机器学习模型预测
 
         Args:
@@ -424,8 +424,8 @@ class RiskAssessor:
             return RiskLevel.LOW
 
     def _generate_recommendations(
-        self, risk_factors: List[RiskFactor], risk_level: RiskLevel
-    ) -> List[str]:
+        self, risk_factors: list[RiskFactor], risk_level: RiskLevel
+    ) -> list[str]:
         """生成风险管理建议
 
         Args:
@@ -465,7 +465,7 @@ class RiskAssessor:
 
         return recommendations
 
-    def _predict_future_risk(self, risk_factors: List[RiskFactor]) -> Dict[str, Any]:
+    def _predict_future_risk(self, risk_factors: list[RiskFactor]) -> dict[str, Any]:
         """预测未来风险
 
         Args:
@@ -502,7 +502,7 @@ class RiskAssessor:
         }
 
     def _update_historical_data(
-        self, result: RiskAssessmentResult, risk_factors: List[RiskFactor]
+        self, result: RiskAssessmentResult, risk_factors: list[RiskFactor]
     ) -> None:
         """更新历史数据
 
@@ -539,7 +539,7 @@ class RiskAssessor:
         # 更新分布
         self.assessment_stats["score_distribution"][result.level.value] += 1
 
-    def get_risk_statistics(self) -> Dict[str, Any]:
+    def get_risk_statistics(self) -> dict[str, Any]:
         """获取风险统计信息
 
         Returns:
@@ -567,17 +567,17 @@ class RiskAssessor:
         """创建简化集成模型"""
         return {"type": "ensemble", "trained": False}
 
-    def _predict_rf(self, features: List[float]) -> float:
+    def _predict_rf(self, features: list[float]) -> float:
         """随机森林预测"""
         # 简化逻辑
         return sum(features) / len(features) * 0.9
 
-    def _predict_nn(self, features: List[float]) -> float:
+    def _predict_nn(self, features: list[float]) -> float:
         """神经网络预测"""
         # 简化逻辑
         return sum(features) / len(features) * 0.95
 
-    def _predict_ensemble(self, features: List[float]) -> float:
+    def _predict_ensemble(self, features: list[float]) -> float:
         """集成模型预测"""
         # 简化逻辑
         return sum(features) / len(features) * 0.92

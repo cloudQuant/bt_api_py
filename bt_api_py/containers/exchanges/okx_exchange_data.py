@@ -1,3 +1,4 @@
+from typing import Any
 import copy
 import datetime
 import json
@@ -14,8 +15,8 @@ _okx_config = None
 _okx_config_loaded = False
 
 
-def _get_okx_config():
-    """延迟加载并缓存 OKX YAML 配置"""
+def _get_okx_config() -> Any | None:
+    """延迟加载并缓存 OKX YAML 配置."""
     global _okx_config, _okx_config_loaded
     if _okx_config_loaded:
         return _okx_config
@@ -43,8 +44,8 @@ class OkxExchangeData(ExchangeData):
     Subclasses MUST set exchange-specific: exchange_name, rest_paths, wss_paths.
     """
 
-    def __init__(self):
-        """这个类存放一些交易所用到的参数"""
+    def __init__(self) -> None:
+        """这个类存放一些交易所用到的参数."""
         super().__init__()
         self.exchange_name = "OkxSwap"
         self.rest_url = "https://www.okx.com"
@@ -69,13 +70,14 @@ class OkxExchangeData(ExchangeData):
         # 从 YAML 配置加载 (默认加载 swap)
         self._load_from_config("swap")
 
-    def _load_from_config(self, asset_type):
-        """从 YAML 配置文件加载交易所参数
+    def _load_from_config(self, asset_type) -> bool:
+        """从 YAML 配置文件加载交易所参数.
 
         Args:
             asset_type: 资产类型 key, 如 'swap', 'futures', 'spot'
         Returns:
             bool: 是否加载成功
+
         """
         config = _get_okx_config()
         if config is None:
@@ -124,7 +126,7 @@ class OkxExchangeData(ExchangeData):
         return True
 
     # noinspection PyMethodMayBeStatic
-    def get_symbol(self, symbol):
+    def get_symbol(self, symbol: str) -> str:
         return symbol.replace("/", "-").upper() + "-SWAP"
 
     # noinspection PyMethodMayBeStatic
@@ -132,12 +134,12 @@ class OkxExchangeData(ExchangeData):
         return symbol.replace("-", "/").lower().rsplit("/", 1)[0]
 
     # noinspection PyMethodMayBeStatic
-    def get_period(self, key):
+    def get_period(self, key: str) -> str:
         if key not in self.kline_periods:
             return key
         return self.kline_periods[key]
 
-    def get_rest_path(self, key):
+    def get_rest_path(self, key: str, **kwargs) -> str:
         if key not in self.rest_paths or self.rest_paths[key] == "":
             self.raise_path_error(self.exchange_name, key)
         return self.rest_paths[key]
@@ -148,10 +150,10 @@ class OkxExchangeData(ExchangeData):
         timestamp = int((time.mktime(dt.timetuple()) + dt.microsecond / 1000000) * 1000)
         return timestamp
 
-    def get_wss_path(self, **kwargs):
+    def get_wss_path(self, **kwargs) -> str:
         """拿wss订阅字段
         Returns:
-            TYPE: Description
+            TYPE: Description.
         """
         key = kwargs["topic"]
         if key == "mark_price" or key == "positions":
@@ -190,7 +192,7 @@ class OkxExchangeDataSwap(OkxExchangeData):
 class OkxExchangeDataFutures(OkxExchangeData):
     """OKX Futures (expiry-based contracts)."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__()
         self._load_from_config("futures")
         # Override instType in wss_paths for FUTURES
@@ -200,7 +202,7 @@ class OkxExchangeDataFutures(OkxExchangeData):
                     if "instType" in arg:
                         arg["instType"] = "FUTURES"
 
-    def get_symbol(self, symbol):
+    def get_symbol(self, symbol: str) -> str:
         return symbol.replace("/", "-").upper()
 
     def get_symbol_re(self, symbol):
@@ -210,21 +212,21 @@ class OkxExchangeDataFutures(OkxExchangeData):
 class OkxExchangeDataSpot(OkxExchangeData):
     """OKX Spot Trading."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__()
         self._load_from_config("spot")
 
-    def get_symbol(self, symbol):
+    def get_symbol(self, symbol: str) -> str:
         return symbol.replace("/", "-").upper()
 
     # noinspection PyMethodMayBeStatic
     def get_symbol_re(self, symbol):
         return symbol.replace("-", "/").lower()
 
-    def get_wss_path(self, **kwargs):
+    def get_wss_path(self, **kwargs) -> str:
         """拿wss订阅字段
         Returns:
-            TYPE: Description
+            TYPE: Description.
         """
         key = kwargs["topic"]
         if "symbol" in kwargs:

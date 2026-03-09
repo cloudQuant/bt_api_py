@@ -2,6 +2,8 @@
 Gate.io Futures (USDT-M) Trading Feed Implementation
 """
 
+from typing import Any
+
 from bt_api_py.containers.balances.gateio_balance import GateioBalanceData
 from bt_api_py.containers.exchanges.gateio_exchange_data import GateioExchangeDataSwap
 from bt_api_py.containers.orderbooks.gateio_orderbook import GateioOrderBookData
@@ -15,7 +17,7 @@ from bt_api_py.logging_factory import get_logger
 class GateioRequestDataSwap(GateioRequestData):
     """Gate.io Futures (USDT-M) Trading Feed"""
 
-    def __init__(self, data_queue, **kwargs):
+    def __init__(self, data_queue, **kwargs) -> None:
         kwargs["asset_type"] = "swap"
         kwargs.setdefault("logger_name", "gateio_swap_feed.log")
         super().__init__(data_queue, **kwargs)
@@ -25,7 +27,7 @@ class GateioRequestDataSwap(GateioRequestData):
 
     # ==================== Market Data Methods ====================
 
-    def _get_ticker(self, symbol, extra_data=None, **kwargs):
+    def _get_ticker(self, symbol, extra_data=None, **kwargs) -> Any:
         request_symbol = self._params.get_symbol(symbol)
         request_type = "get_tickers"
         path = self._params.get_rest_path(request_type)
@@ -59,11 +61,11 @@ class GateioRequestDataSwap(GateioRequestData):
             ], True
         return [], False
 
-    def get_ticker(self, symbol, extra_data=None, **kwargs):
+    def get_ticker(self, symbol, extra_data=None, **kwargs) -> Any:
         path, params, extra_data = self._get_ticker(symbol, extra_data, **kwargs)
         return self.request(path, params=params, extra_data=extra_data)
 
-    def get_tick(self, symbol, extra_data=None, **kwargs):
+    def get_tick(self, symbol, extra_data=None, **kwargs) -> Any:
         return self.get_ticker(symbol, extra_data=extra_data, **kwargs)
 
     def async_get_ticker(self, symbol, extra_data=None, **kwargs):
@@ -75,7 +77,7 @@ class GateioRequestDataSwap(GateioRequestData):
 
     # ==================== Depth Methods ====================
 
-    def _get_depth(self, symbol, limit=20, extra_data=None, **kwargs):
+    def _get_depth(self, symbol, limit=20, extra_data=None, **kwargs) -> Any:
         request_symbol = self._params.get_symbol(symbol)
         request_type = "get_depth"
         path = self._params.get_rest_path(request_type)
@@ -104,7 +106,7 @@ class GateioRequestDataSwap(GateioRequestData):
             ], True
         return [], False
 
-    def get_depth(self, symbol, limit=20, extra_data=None, **kwargs):
+    def get_depth(self, symbol, limit=20, extra_data=None, **kwargs) -> Any:
         path, params, extra_data = self._get_depth(symbol, limit, extra_data, **kwargs)
         return self.request(path, params=params, extra_data=extra_data)
 
@@ -117,7 +119,7 @@ class GateioRequestDataSwap(GateioRequestData):
 
     # ==================== Kline Methods ====================
 
-    def _get_kline(self, symbol, period="1m", limit=100, extra_data=None, **kwargs):
+    def _get_kline(self, symbol, period="1m", limit=100, extra_data=None, **kwargs) -> Any:
         request_symbol = self._params.get_symbol(symbol)
         request_period = self._params.get_period(period)
         request_type = "get_kline"
@@ -143,7 +145,7 @@ class GateioRequestDataSwap(GateioRequestData):
             return input_data, True
         return [input_data], True
 
-    def get_kline(self, symbol, period="1m", limit=100, extra_data=None, **kwargs):
+    def get_kline(self, symbol, period="1m", limit=100, extra_data=None, **kwargs) -> Any:
         path, params, extra_data = self._get_kline(symbol, period, limit, extra_data, **kwargs)
         return self.request(path, params=params, extra_data=extra_data)
 
@@ -156,7 +158,7 @@ class GateioRequestDataSwap(GateioRequestData):
 
     # ==================== Account Methods ====================
 
-    def _get_balance(self, extra_data=None, **kwargs):
+    def _get_balance(self, extra_data=None, **kwargs) -> Any:
         request_type = "get_account"
         path = self._params.get_rest_path(request_type)
         params = {}
@@ -184,7 +186,7 @@ class GateioRequestDataSwap(GateioRequestData):
             return [GateioBalanceData(input_data, extra_data["asset_type"], True)], True
         return [], False
 
-    def get_balance(self, extra_data=None, **kwargs):
+    def get_balance(self, extra_data=None, **kwargs) -> Any:
         path, params, extra_data = self._get_balance(extra_data, **kwargs)
         return self.request(path, params=params, extra_data=extra_data)
 
@@ -291,7 +293,9 @@ class GateioRequestDataSwap(GateioRequestData):
             callback=self.async_callback,
         )
 
-    def _cancel_order(self, symbol, order_id=None, client_order_id=None, extra_data=None, **kwargs):
+    def _cancel_order(
+        self, symbol, order_id=None, client_order_id=None, extra_data=None, **kwargs
+    ) -> Any:
         request_type = "cancel_order"
         path = self._params.get_rest_path(request_type)
         params = {}
@@ -313,7 +317,9 @@ class GateioRequestDataSwap(GateioRequestData):
         )
         return self.request(path, params=params, body=body, extra_data=extra_data)
 
-    def _query_order(self, symbol, order_id=None, client_order_id=None, extra_data=None, **kwargs):
+    def _query_order(
+        self, symbol, order_id=None, client_order_id=None, extra_data=None, **kwargs
+    ) -> Any:
         request_type = "query_order"
         path = self._params.get_rest_path(request_type)
         params = {}
@@ -353,7 +359,7 @@ class GateioRequestDataSwap(GateioRequestData):
         )
         return self.request(path, params=params, extra_data=extra_data)
 
-    def _get_deals(self, symbol=None, limit=100, extra_data=None, **kwargs):
+    def _get_deals(self, symbol=None, limit=100, extra_data=None, **kwargs) -> Any:
         request_type = "get_deals"
         path = self._params.get_rest_path(request_type)
         params = {"limit": limit}
@@ -369,7 +375,7 @@ class GateioRequestDataSwap(GateioRequestData):
         )
         return path, params, extra_data
 
-    def get_deals(self, symbol=None, limit=100, extra_data=None, **kwargs):
+    def get_deals(self, symbol=None, limit=100, extra_data=None, **kwargs) -> Any:
         path, params, extra_data = self._get_deals(symbol, limit, extra_data, **kwargs)
         return self.request(path, params=params, extra_data=extra_data)
 

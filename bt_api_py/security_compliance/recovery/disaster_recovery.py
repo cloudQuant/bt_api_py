@@ -7,7 +7,7 @@ for financial industry resilience requirements.
 import time
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 
 class RecoveryStatus(Enum):
@@ -28,7 +28,7 @@ class BackupConfig:
     name: str
     frequency: str  # hourly, daily, weekly
     retention_days: int
-    locations: List[str]
+    locations: list[str]
     encryption_enabled: bool = True
     created_at: float = field(default_factory=time.time)
 
@@ -40,23 +40,23 @@ class RecoveryPlan:
     plan_id: str
     name: str
     description: str
-    disaster_types: List[str]
-    recovery_steps: List[str]
+    disaster_types: list[str]
+    recovery_steps: list[str]
     rto_hours: int  # Recovery Time Objective
     rpo_hours: int  # Recovery Point Objective
-    contacts: List[Dict[str, str]]
+    contacts: list[dict[str, str]]
     created_at: float = field(default_factory=time.time)
 
 
 class DisasterRecoveryManager:
     """Disaster recovery and business continuity manager."""
 
-    def __init__(self, config: Optional[Dict[str, Any]] = None):
+    def __init__(self, config: dict[str, Any] | None = None):
         """Initialize disaster recovery manager."""
         self.config = config or {}
 
-        self._backups: Dict[str, BackupConfig] = {}
-        self._recovery_plans: Dict[str, RecoveryPlan] = {}
+        self._backups: dict[str, BackupConfig] = {}
+        self._recovery_plans: dict[str, RecoveryPlan] = {}
         self._current_status = RecoveryStatus.NORMAL
 
         self._init_default_configs()
@@ -97,7 +97,7 @@ class DisasterRecoveryManager:
         self._recovery_plans["primary_recovery"] = recovery_plan
 
     def create_backup_config(
-        self, name: str, frequency: str, retention_days: int, locations: List[str]
+        self, name: str, frequency: str, retention_days: int, locations: list[str]
     ) -> BackupConfig:
         """Create a new backup configuration."""
         backup_id = f"backup_{int(time.time())}"
@@ -117,11 +117,11 @@ class DisasterRecoveryManager:
         self,
         name: str,
         description: str,
-        disaster_types: List[str],
-        recovery_steps: List[str],
+        disaster_types: list[str],
+        recovery_steps: list[str],
         rto_hours: int,
         rpo_hours: int,
-        contacts: List[Dict[str, str]],
+        contacts: list[dict[str, str]],
     ) -> RecoveryPlan:
         """Create a new disaster recovery plan."""
         plan_id = f"plan_{int(time.time())}"
@@ -140,7 +140,7 @@ class DisasterRecoveryManager:
         self._recovery_plans[plan_id] = plan
         return plan
 
-    def initiate_backup(self, backup_id: str) -> Dict[str, Any]:
+    def initiate_backup(self, backup_id: str) -> dict[str, Any]:
         """Initiate a backup process."""
         backup = self._backups.get(backup_id)
         if not backup:
@@ -154,7 +154,7 @@ class DisasterRecoveryManager:
             "locations": backup.locations,
         }
 
-    def initiate_recovery(self, plan_id: str) -> Dict[str, Any]:
+    def initiate_recovery(self, plan_id: str) -> dict[str, Any]:
         """Initiate disaster recovery process."""
         plan = self._recovery_plans.get(plan_id)
         if not plan:
@@ -171,7 +171,7 @@ class DisasterRecoveryManager:
             "initiated_at": time.time(),
         }
 
-    def get_recovery_status(self) -> Dict[str, Any]:
+    def get_recovery_status(self) -> dict[str, Any]:
         """Get current recovery status."""
         return {
             "status": self._current_status.value,
@@ -179,7 +179,7 @@ class DisasterRecoveryManager:
             "recovery_plans": len(self._recovery_plans),
         }
 
-    def test_recovery_plan(self, plan_id: str) -> Dict[str, Any]:
+    def test_recovery_plan(self, plan_id: str) -> dict[str, Any]:
         """Test a disaster recovery plan."""
         plan = self._recovery_plans.get(plan_id)
         if not plan:
@@ -197,7 +197,7 @@ class DisasterRecoveryManager:
             },
         }
 
-    def generate_recovery_report(self) -> Dict[str, Any]:
+    def generate_recovery_report(self) -> dict[str, Any]:
         """Generate disaster recovery report."""
         return {
             "backup_configurations": [

@@ -2,6 +2,8 @@
 Giottus Spot Feed implementation.
 """
 
+from typing import Any
+
 from bt_api_py.feeds.capability import Capability
 from bt_api_py.feeds.live_giottus.request_base import GiottusRequestData
 from bt_api_py.functions.utils import update_extra_data
@@ -23,13 +25,13 @@ class GiottusRequestDataSpot(GiottusRequestData):
             Capability.CANCEL_ORDER,
         }
 
-    def __init__(self, data_queue, **kwargs):
+    def __init__(self, data_queue, **kwargs) -> None:
         super().__init__(data_queue, **kwargs)
         self.exchange_name = kwargs.get("exchange_name", "GIOTTUS___SPOT")
 
     # ==================== Market Data ====================
 
-    def _get_tick(self, symbol, extra_data=None, **kwargs):
+    def _get_tick(self, symbol, extra_data=None, **kwargs) -> Any:
         """Get ticker data. Returns (path, params, extra_data)."""
         path = self._params.rest_paths.get("get_ticker", "GET /v1/ticker")
         extra_data = update_extra_data(
@@ -52,7 +54,7 @@ class GiottusRequestDataSpot(GiottusRequestData):
         ticker = data.get("data", data)
         return [ticker], ticker is not None
 
-    def get_tick(self, symbol, extra_data=None, **kwargs):
+    def get_tick(self, symbol, extra_data=None, **kwargs) -> Any:
         """Get symbol ticker."""
         path, params, extra_data = self._get_tick(symbol, extra_data, **kwargs)
         return self.request(path, params=params, extra_data=extra_data)
@@ -65,7 +67,7 @@ class GiottusRequestDataSpot(GiottusRequestData):
             callback=self.async_callback,
         )
 
-    def _get_depth(self, symbol, count=20, extra_data=None, **kwargs):
+    def _get_depth(self, symbol, count=20, extra_data=None, **kwargs) -> Any:
         """Get order book depth. Returns (path, params, extra_data)."""
         path = self._params.rest_paths.get("get_depth", "GET /v1/orderbook")
         extra_data = update_extra_data(
@@ -88,7 +90,7 @@ class GiottusRequestDataSpot(GiottusRequestData):
         depth = data.get("data", data)
         return [depth], depth is not None
 
-    def get_depth(self, symbol, count=20, extra_data=None, **kwargs):
+    def get_depth(self, symbol, count=20, extra_data=None, **kwargs) -> Any:
         """Get order book."""
         path, params, extra_data = self._get_depth(symbol, count, extra_data, **kwargs)
         return self.request(path, params=params, extra_data=extra_data)
@@ -101,7 +103,7 @@ class GiottusRequestDataSpot(GiottusRequestData):
             callback=self.async_callback,
         )
 
-    def _get_kline(self, symbol, period, count=20, extra_data=None, **kwargs):
+    def _get_kline(self, symbol, period, count=20, extra_data=None, **kwargs) -> Any:
         """Get kline/candlestick data. Returns (path, params, extra_data)."""
         path = self._params.rest_paths.get("get_kline", "GET /v1/klines")
         giottus_period = self._params.kline_periods.get(period, period)
@@ -125,7 +127,7 @@ class GiottusRequestDataSpot(GiottusRequestData):
         klines = data.get("data", data.get("klines", []))
         return [klines], klines is not None
 
-    def get_kline(self, symbol, period, count=20, extra_data=None, **kwargs):
+    def get_kline(self, symbol, period, count=20, extra_data=None, **kwargs) -> Any:
         """Get kline data."""
         path, params, extra_data = self._get_kline(symbol, period, count, extra_data, **kwargs)
         return self.request(path, params=params, extra_data=extra_data)
@@ -138,7 +140,7 @@ class GiottusRequestDataSpot(GiottusRequestData):
             callback=self.async_callback,
         )
 
-    def _get_exchange_info(self, extra_data=None, **kwargs):
+    def _get_exchange_info(self, extra_data=None, **kwargs) -> Any:
         """Get exchange information. Returns (path, params, extra_data)."""
         path = self._params.rest_paths.get("get_markets", "GET /v1/markets")
         extra_data = update_extra_data(
@@ -161,14 +163,14 @@ class GiottusRequestDataSpot(GiottusRequestData):
         markets = data.get("data", data.get("markets", []))
         return [markets], markets is not None
 
-    def get_exchange_info(self, extra_data=None, **kwargs):
+    def get_exchange_info(self, extra_data=None, **kwargs) -> Any:
         """Get exchange information."""
         path, params, extra_data = self._get_exchange_info(extra_data, **kwargs)
         return self.request(path, params=params, extra_data=extra_data)
 
     # ==================== Account / Trading ====================
 
-    def _get_balance(self, symbol=None, extra_data=None, **kwargs):
+    def _get_balance(self, symbol=None, extra_data=None, **kwargs) -> Any:
         """Get account balance. Returns (path, params, extra_data)."""
         path = self._params.rest_paths.get("get_balance", "POST /v1/balance")
         extra_data = update_extra_data(
@@ -189,12 +191,12 @@ class GiottusRequestDataSpot(GiottusRequestData):
             return [], False
         return [input_data], True
 
-    def get_balance(self, symbol=None, extra_data=None, **kwargs):
+    def get_balance(self, symbol=None, extra_data=None, **kwargs) -> Any:
         """Get account balance."""
         path, params, extra_data = self._get_balance(symbol, extra_data, **kwargs)
         return self.request(path, params=params, extra_data=extra_data)
 
-    def _get_account(self, extra_data=None, **kwargs):
+    def _get_account(self, extra_data=None, **kwargs) -> Any:
         """Get account information. Returns (path, params, extra_data)."""
         path = self._params.rest_paths.get("get_balance", "POST /v1/balance")
         extra_data = update_extra_data(
@@ -215,7 +217,7 @@ class GiottusRequestDataSpot(GiottusRequestData):
             return [], False
         return [input_data], True
 
-    def get_account(self, symbol="ALL", extra_data=None, **kwargs):
+    def get_account(self, symbol="ALL", extra_data=None, **kwargs) -> Any:
         """Get account information."""
         path, params, extra_data = self._get_account(extra_data, **kwargs)
         return self.request(path, params=params, extra_data=extra_data)
@@ -260,7 +262,7 @@ class GiottusRequestDataSpot(GiottusRequestData):
         )
         return self.request(path, params=params, extra_data=extra_data)
 
-    def _cancel_order(self, symbol, order_id, extra_data=None, **kwargs):
+    def _cancel_order(self, symbol, order_id, extra_data=None, **kwargs) -> Any:
         """Prepare cancel order request. Returns (path, params, extra_data)."""
         path = self._params.rest_paths.get("cancel_order", "POST /v1/cancel")
         params = {"orderId": order_id}

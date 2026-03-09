@@ -1,24 +1,20 @@
-"""风险集成模型 - 结合多种ML算法的风险预测
+"""风险集成模型 - 结合多种ML算法的风险预测.
 
 集成随机森林、神经网络、XGBoost等多种模型进行综合风险预测
 """
 
 import time
-from decimal import Decimal
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Any
 
 import numpy as np
-import pandas as pd
-from sklearn.ensemble import RandomForestClassifier, GradientBoostingClassifier
+from sklearn.ensemble import GradientBoostingClassifier, RandomForestClassifier
 from sklearn.linear_model import LogisticRegression
-
-from bt_api_py.logging_factory import get_logger
 
 from .ml_base import BaseMLModel, RiskPredictionResult
 
 
 class EnsembleMethod:
-    """集成方法常量"""
+    """集成方法常量."""
 
     VOTING = "voting"  # 投票法
     STACKING = "stacking"  # 堆叠法
@@ -29,27 +25,27 @@ class EnsembleMethod:
 
 
 class ModelWeight:
-    """模型权重配置"""
+    """模型权重配置."""
 
     def __init__(
         self, model_name: str, weight: float, min_confidence: float = 0.5, max_weight: float = 1.0
-    ):
+    ) -> Any | None:
         self.model_name = model_name
         self.weight = weight
         self.min_confidence = min_confidence
         self.max_weight = max_weight
-        self.performance_history: List[float] = []
+        self.performance_history: list[float] = []
         self.current_performance = 0.5
 
     def update_performance(self, performance: float) -> None:
-        """更新模型性能"""
+        """更新模型性能."""
         self.performance_history.append(performance)
         if len(self.performance_history) > 100:
             self.performance_history = self.performance_history[-50:]
         self.current_performance = np.mean(self.performance_history)
 
     def get_dynamic_weight(self) -> float:
-        """获取动态权重"""
+        """获取动态权重."""
         if not self.performance_history:
             return self.weight
 
@@ -61,7 +57,7 @@ class ModelWeight:
 
 
 class RiskEnsembleModel(BaseMLModel):
-    """风险集成模型
+    """风险集成模型.
 
     结合多种ML算法进行风险预测:
     1. 随机森林 - 随机性、鲁棒性强
@@ -71,11 +67,12 @@ class RiskEnsembleModel(BaseMLModel):
     5. 动态权重调整 - 基于性能自适应
     """
 
-    def __init__(self, config: Optional[Dict[str, Any]] = None):
-        """初始化集成模型
+    def __init__(self, config: dict[str, Any] | None = None) -> Any | None:
+        """初始化集成模型.
 
         Args:
             config: 模型配置
+
         """
         super().__init__("RiskEnsembleModel", config)
 
@@ -107,15 +104,15 @@ class RiskEnsembleModel(BaseMLModel):
         self.use_stacking = self.ensemble_method == EnsembleMethod.STACKING
 
         # 集成预测历史
-        self.prediction_history: List[Dict[str, Any]] = []
-        self.weight_history: List[Dict[str, float]] = []
+        self.prediction_history: list[dict[str, Any]] = []
+        self.weight_history: list[dict[str, float]] = []
 
         # 性能跟踪
-        self.model_performance: Dict[str, Dict[str, float]] = {}
-        self.ensemble_performance: Dict[str, float] = {}
+        self.model_performance: dict[str, dict[str, float]] = {}
+        self.ensemble_performance: dict[str, float] = {}
 
         # 预测缓存
-        self.prediction_cache: Dict[str, RiskPredictionResult] = {}
+        self.prediction_cache: dict[str, RiskPredictionResult] = {}
         self.cache_size_limit = 1000
 
         self.logger.info("RiskEnsembleModel initialized")
@@ -124,9 +121,9 @@ class RiskEnsembleModel(BaseMLModel):
         self,
         X: np.ndarray,
         y: np.ndarray,
-        validation_data: Optional[Tuple[np.ndarray, np.ndarray]] = None,
-    ) -> Dict[str, Any]:
-        """训练集成模型
+        validation_data: tuple[np.ndarray, np.ndarray] | None = None,
+    ) -> dict[str, Any]:
+        """训练集成模型.
 
         Args:
             X: 特征矩阵
@@ -135,6 +132,7 @@ class RiskEnsembleModel(BaseMLModel):
 
         Returns:
             Dict[str, Any]: 训练结果
+
         """
         start_time = time.time()
 
@@ -233,13 +231,14 @@ class RiskEnsembleModel(BaseMLModel):
             return {"error": str(e)}
 
     def predict(self, X: np.ndarray) -> np.ndarray:
-        """集成预测
+        """集成预测.
 
         Args:
             X: 特征矩阵
 
         Returns:
             np.ndarray: 预测结果
+
         """
         if not self.is_trained:
             raise ValueError("Model not trained")
@@ -258,13 +257,14 @@ class RiskEnsembleModel(BaseMLModel):
             return self._predict_weighted_average(X_processed)
 
     def predict_proba(self, X: np.ndarray) -> np.ndarray:
-        """预测概率
+        """预测概率.
 
         Args:
             X: 特征矩阵
 
         Returns:
             np.ndarray: 预测概率
+
         """
         if not self.is_trained:
             raise ValueError("Model not trained")
@@ -283,9 +283,9 @@ class RiskEnsembleModel(BaseMLModel):
             return self._predict_proba_weighted_average(X_processed)
 
     def predict_risk(
-        self, features: Union[np.ndarray, Dict[str, Any]], return_details: bool = False
+        self, features: np.ndarray | dict[str, Any], return_details: bool = False
     ) -> RiskPredictionResult:
-        """预测风险
+        """预测风险.
 
         Args:
             features: 输入特征
@@ -293,6 +293,7 @@ class RiskEnsembleModel(BaseMLModel):
 
         Returns:
             RiskPredictionResult: 风险预测结果
+
         """
         try:
             # 生成缓存键
@@ -370,17 +371,18 @@ class RiskEnsembleModel(BaseMLModel):
             )
 
     def update_model_performance(self, true_labels: np.ndarray, predictions: np.ndarray) -> None:
-        """更新模型性能
+        """更新模型性能.
 
         Args:
             true_labels: 真实标签
             predictions: 预测标签
+
         """
         if not self.is_trained:
             return
 
         try:
-            from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score
+            from sklearn.metrics import accuracy_score, f1_score, precision_score, recall_score
 
             # 计算整体性能
             accuracy = accuracy_score(true_labels, predictions)
@@ -417,11 +419,12 @@ class RiskEnsembleModel(BaseMLModel):
         except Exception as e:
             self.logger.error(f"Error updating model performance: {e}")
 
-    def get_ensemble_info(self) -> Dict[str, Any]:
-        """获取集成模型信息
+    def get_ensemble_info(self) -> dict[str, Any]:
+        """获取集成模型信息.
 
         Returns:
             Dict[str, Any]: 集成信息
+
         """
         current_weights = {
             name: weight.get_dynamic_weight() for name, weight in self.model_weights.items()
@@ -440,11 +443,12 @@ class RiskEnsembleModel(BaseMLModel):
             "cache_size": len(self.prediction_cache),
         }
 
-    def get_feature_importance(self) -> Dict[str, float]:
-        """获取特征重要性
+    def get_feature_importance(self) -> dict[str, float]:
+        """获取特征重要性.
 
         Returns:
             Dict[str, float]: 特征重要性
+
         """
         if not self.is_trained:
             return {}
@@ -476,7 +480,7 @@ class RiskEnsembleModel(BaseMLModel):
     def _train_meta_learner(
         self, X_train: np.ndarray, y_train: np.ndarray, X_val: np.ndarray, y_val: np.ndarray
     ) -> None:
-        """训练元学习器"""
+        """训练元学习器."""
         # 获取基础模型的预测作为元特征
         meta_features_train = []
         meta_features_val = []
@@ -502,7 +506,7 @@ class RiskEnsembleModel(BaseMLModel):
         self.meta_learner.fit(X_meta_train, y_train)
 
     def _predict_stacking(self, X: np.ndarray) -> np.ndarray:
-        """使用stacking方法预测"""
+        """使用stacking方法预测."""
         meta_features = []
 
         for model in self.models.values():
@@ -517,7 +521,7 @@ class RiskEnsembleModel(BaseMLModel):
         return self.meta_learner.predict(X_meta)
 
     def _predict_proba_stacking(self, X: np.ndarray) -> np.ndarray:
-        """使用stacking方法预测概率"""
+        """使用stacking方法预测概率."""
         meta_features = []
 
         for model in self.models.values():
@@ -532,7 +536,7 @@ class RiskEnsembleModel(BaseMLModel):
         return self.meta_learner.predict_proba(X_meta)
 
     def _predict_voting(self, X: np.ndarray) -> np.ndarray:
-        """使用投票法预测"""
+        """使用投票法预测."""
         predictions = []
 
         for model in self.models.values():
@@ -548,7 +552,7 @@ class RiskEnsembleModel(BaseMLModel):
         return majority_vote
 
     def _predict_proba_voting(self, X: np.ndarray) -> np.ndarray:
-        """使用投票法预测概率"""
+        """使用投票法预测概率."""
         probabilities = []
 
         for model in self.models.values():
@@ -561,7 +565,7 @@ class RiskEnsembleModel(BaseMLModel):
         return avg_proba
 
     def _predict_weighted_average(self, X: np.ndarray) -> np.ndarray:
-        """使用加权平均预测"""
+        """使用加权平均预测."""
         weighted_predictions = []
         total_weight = 0
 
@@ -575,7 +579,7 @@ class RiskEnsembleModel(BaseMLModel):
         return np.round(ensemble_pred).astype(int)
 
     def _predict_proba_weighted_average(self, X: np.ndarray) -> np.ndarray:
-        """使用加权平均预测概率"""
+        """使用加权平均预测概率."""
         weighted_probabilities = []
         total_weight = 0
 
@@ -595,7 +599,7 @@ class RiskEnsembleModel(BaseMLModel):
             return np.array([[0.5, 0.5]] * n_samples)
 
     def _predict_dynamic_weighting(self, X: np.ndarray) -> np.ndarray:
-        """使用动态权重预测"""
+        """使用动态权重预测."""
         weighted_predictions = []
         total_weight = 0
 
@@ -609,7 +613,7 @@ class RiskEnsembleModel(BaseMLModel):
         return np.round(ensemble_pred).astype(int)
 
     def _predict_proba_dynamic_weighting(self, X: np.ndarray) -> np.ndarray:
-        """使用动态权重预测概率"""
+        """使用动态权重预测概率."""
         weighted_probabilities = []
         total_weight = 0
 
@@ -627,9 +631,9 @@ class RiskEnsembleModel(BaseMLModel):
             n_samples = X.shape[0]
             return np.array([[0.5, 0.5]] * n_samples)
 
-    def _evaluate_ensemble(self, X_val: np.ndarray, y_val: np.ndarray) -> Dict[str, float]:
-        """评估集成性能"""
-        from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score
+    def _evaluate_ensemble(self, X_val: np.ndarray, y_val: np.ndarray) -> dict[str, float]:
+        """评估集成性能."""
+        from sklearn.metrics import accuracy_score, f1_score, precision_score, recall_score
 
         y_pred = self.predict(X_val)
         y_proba = self.predict_proba(X_val)
@@ -652,8 +656,8 @@ class RiskEnsembleModel(BaseMLModel):
 
         return metrics
 
-    def _update_model_weights(self, performance_metrics: Dict[str, float]) -> None:
-        """更新模型权重"""
+    def _update_model_weights(self, performance_metrics: dict[str, float]) -> None:
+        """更新模型权重."""
         f1_score = performance_metrics.get("f1_score", 0.5)
 
         # 基于整体性能调整各模型权重
@@ -675,7 +679,7 @@ class RiskEnsembleModel(BaseMLModel):
     def _update_weights_based_on_performance(
         self, true_labels: np.ndarray, predictions: np.ndarray
     ) -> None:
-        """基于性能更新权重"""
+        """基于性能更新权重."""
         X_for_individual = self._get_last_X_for_individual_predictions()
 
         if X_for_individual is not None:
@@ -689,13 +693,13 @@ class RiskEnsembleModel(BaseMLModel):
                 except Exception as e:
                     self.logger.error(f"Error updating performance for {name}: {e}")
 
-    def _get_last_X_for_individual_predictions(self) -> Optional[np.ndarray]:
-        """获取最后一次预测的X (简化实现)"""
+    def _get_last_X_for_individual_predictions(self) -> np.ndarray | None:
+        """获取最后一次预测的X (简化实现)."""
         # 这里应该保存最近的预测数据，简化实现返回None
         return None
 
     def _calculate_prediction_confidence(self, probabilities: np.ndarray) -> float:
-        """计算预测置信度"""
+        """计算预测置信度."""
         if len(probabilities) == 1:
             return 0.5  # 单类别情况
 
@@ -703,8 +707,8 @@ class RiskEnsembleModel(BaseMLModel):
         max_prob = np.max(probabilities)
         return float(max_prob)
 
-    def _dict_to_features(self, data: Dict[str, Any]) -> np.ndarray:
-        """将字典转换为特征向量"""
+    def _dict_to_features(self, data: dict[str, Any]) -> np.ndarray:
+        """将字典转换为特征向量."""
         if not self.feature_names:
             self.feature_names = list(data.keys())
 
@@ -714,8 +718,8 @@ class RiskEnsembleModel(BaseMLModel):
 
         return np.array(features).reshape(1, -1)
 
-    def _generate_cache_key(self, features: Union[np.ndarray, Dict[str, Any]]) -> str:
-        """生成缓存键"""
+    def _generate_cache_key(self, features: np.ndarray | dict[str, Any]) -> str:
+        """生成缓存键."""
         if isinstance(features, dict):
             # 简化的哈希
             feature_str = str(sorted(features.items()))

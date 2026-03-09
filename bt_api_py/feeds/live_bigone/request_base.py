@@ -1,5 +1,4 @@
-"""
-BigONE REST API request base class.
+"""BigONE REST API request base class.
 
 BigONE API v3 with JWT (HS256) authentication.
 Public endpoints require no auth; private endpoints (under /viewer) need Bearer JWT.
@@ -41,7 +40,7 @@ class BigONERequestData(Feed):
             Capability.GET_SERVER_TIME,
         }
 
-    def __init__(self, data_queue, **kwargs):
+    def __init__(self, data_queue, **kwargs) -> None:
         super().__init__(data_queue, **kwargs)
         self.data_queue = data_queue
         self._api_key = kwargs.get("public_key") or kwargs.get("api_key") or ""
@@ -133,7 +132,7 @@ class BigONERequestData(Feed):
 
     # ── _get_xxx internal methods ───────────────────────────────
 
-    def _get_server_time(self, extra_data=None, **kwargs):
+    def _get_server_time(self, extra_data=None, **kwargs) -> float:
         path = self._params.get_rest_path("get_server_time")
         params = {}
         extra_data = extra_data or {}

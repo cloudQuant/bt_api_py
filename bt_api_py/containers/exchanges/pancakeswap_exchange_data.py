@@ -1,3 +1,4 @@
+from typing import Any
 import os
 
 from bt_api_py.containers.exchanges.exchange_data import ExchangeData
@@ -10,8 +11,8 @@ _pancakeswap_config = None
 _pancakeswap_config_loaded = False
 
 
-def _get_pancakeswap_config():
-    """延迟加载并缓存 PancakeSwap YAML 配置"""
+def _get_pancakeswap_config() -> Any | None:
+    """延迟加载并缓存 PancakeSwap YAML 配置."""
     global _pancakeswap_config, _pancakeswap_config_loaded
     if _pancakeswap_config_loaded:
         return _pancakeswap_config
@@ -40,7 +41,7 @@ class PancakeSwapExchangeData(ExchangeData):
     acct_wss_url, wss_url, rest_paths, wss_paths, legal_currency.
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__()
         self.exchange_name = "pancakeswap"
         self.rest_url = ""
@@ -77,13 +78,14 @@ class PancakeSwapExchangeData(ExchangeData):
             "ETH",
         ]
 
-    def _load_from_config(self, asset_type):
-        """从 YAML 配置文件加载交易所参数
+    def _load_from_config(self, asset_type) -> bool:
+        """从 YAML 配置文件加载交易所参数.
 
         Args:
             asset_type: 资产类型 key, 如 'spot', 'swap' 等
         Returns:
             bool: 是否加载成功
+
         """
         config = _get_pancakeswap_config()
         if config is None:
@@ -150,13 +152,14 @@ class PancakeSwapExchangeData(ExchangeData):
         return True
 
     def get_network_config(self, network_name: str = None):
-        """获取网络配置
+        """获取网络配置.
 
         Args:
             network_name: 网络名称，如 'bsc', 'bsc_testnet'
 
         Returns:
             dict: 网络配置信息
+
         """
         config = _get_pancakeswap_config()
         if config is None:
@@ -167,8 +170,8 @@ class PancakeSwapExchangeData(ExchangeData):
 
         return config.networks.get(network_name)
 
-    def get_supported_tokens(self):
-        """获取支持的代币列表"""
+    def get_supported_tokens(self) -> Any:
+        """获取支持的代币列表."""
         config = _get_pancakeswap_config()
         if config is None:
             return []
@@ -225,8 +228,8 @@ class PancakeSwapExchangeData(ExchangeData):
 
         return tokens
 
-    def get_supported_pairs(self):
-        """获取支持交易对列表"""
+    def get_supported_pairs(self) -> Any:
+        """获取支持交易对列表."""
         config = _get_pancakeswap_config()
         if config is None:
             return []
@@ -251,13 +254,14 @@ class PancakeSwapExchangeData(ExchangeData):
         return pairs
 
     def get_fee_config(self, asset_type="spot"):
-        """获取费率配置
+        """获取费率配置.
 
         Args:
             asset_type: 资产类型
 
         Returns:
             dict: 费率配置
+
         """
         config = _get_pancakeswap_config()
         if config is None:
@@ -274,8 +278,8 @@ class PancakeSwapExchangeData(ExchangeData):
         # Return default fees for DEX
         return {"maker": 0.0025, "taker": 0.0025}
 
-    def get_slippage_config(self):
-        """获取滑点配置"""
+    def get_slippage_config(self) -> Any:
+        """获取滑点配置."""
         config = _get_pancakeswap_config()
         if config is None:
             return None
@@ -286,8 +290,8 @@ class PancakeSwapExchangeData(ExchangeData):
 
         return asset_cfg.slippage
 
-    def get_gas_config(self):
-        """获取Gas配置"""
+    def get_gas_config(self) -> Any:
+        """获取Gas配置."""
         config = _get_pancakeswap_config()
         if config is None:
             return None
@@ -295,7 +299,7 @@ class PancakeSwapExchangeData(ExchangeData):
         return config.networks.bsc.gas
 
     def get_order_types(self, asset_type="spot"):
-        """获取支持的订单类型"""
+        """获取支持的订单类型."""
         config = _get_pancakeswap_config()
         if config is None:
             return []
@@ -312,7 +316,7 @@ class PancakeSwapExchangeData(ExchangeData):
         return ["MARKET", "LIMIT"]
 
     def get_order_statuses(self, asset_type="spot"):
-        """获取订单状态列表"""
+        """获取订单状态列表."""
         config = _get_pancakeswap_config()
         if config is None:
             return []
@@ -329,7 +333,7 @@ class PancakeSwapExchangeData(ExchangeData):
         return ["NEW", "FILLED", "PARTIALLY_FILLED", "FAILED"]
 
     def get_capabilities(self, asset_type="spot"):
-        """获取支持的功能列表"""
+        """获取支持的功能列表."""
         config = _get_pancakeswap_config()
         if config is None:
             return []
@@ -346,13 +350,14 @@ class PancakeSwapExchangeData(ExchangeData):
         return ["GET_TICK", "GET_DEPTH", "GET_KLINE", "GET_EXCHANGE_INFO", "MAKE_ORDER"]
 
     def get_minimum_trade_amount(self, symbol):
-        """获取指定代币的最小交易额
+        """获取指定代币的最小交易额.
 
         Args:
             symbol: 代币符号，如 'USDT', 'BNB'
 
         Returns:
             float: 最小交易额
+
         """
         config = _get_pancakeswap_config()
         if config is None:
@@ -374,13 +379,14 @@ class PancakeSwapExchangeData(ExchangeData):
         return default_amounts.get(symbol, 0.0)
 
     def get_maximum_trade_amount(self, symbol):
-        """获取指定代币的最大交易额
+        """获取指定代币的最大交易额.
 
         Args:
             symbol: 代币符号，如 'USDT', 'BNB'
 
         Returns:
             float: 最大交易额
+
         """
         config = _get_pancakeswap_config()
         if config is None:
@@ -390,13 +396,14 @@ class PancakeSwapExchangeData(ExchangeData):
         return security.maximum_trade_amounts.get(symbol, 0.0)
 
     def get_special_features(self, asset_type="spot"):
-        """获取特殊功能列表
+        """获取特殊功能列表.
 
         Args:
             asset_type: 资产类型
 
         Returns:
             list: 特殊功能列表
+
         """
         config = _get_pancakeswap_config()
         if config is None:
@@ -409,13 +416,14 @@ class PancakeSwapExchangeData(ExchangeData):
         return asset_cfg.special_features
 
     def get_rate_limits(self, asset_type="spot"):
-        """获取限流配置
+        """获取限流配置.
 
         Args:
             asset_type: 资产类型
 
         Returns:
             dict: 限流配置
+
         """
         config = _get_pancakeswap_config()
         if config is None:
@@ -428,13 +436,14 @@ class PancakeSwapExchangeData(ExchangeData):
         return asset_cfg.rate_limits
 
     def symbol_to_address(self, symbol):
-        """将交易对符号转换为池子地址
+        """将交易对符号转换为池子地址.
 
         Args:
             symbol: 交易对符号，如 'BTCB/USDT'
 
         Returns:
             str: 池子合约地址
+
         """
         # 这里应该有一个映射表，从符号到地址
         # 实际实现中可能需要查询配置或调用API
@@ -448,13 +457,14 @@ class PancakeSwapExchangeData(ExchangeData):
         return symbol_mapping.get(symbol, "0x0")
 
     def address_to_symbol(self, address):
-        """将池子地址转换为交易对符号
+        """将池子地址转换为交易对符号.
 
         Args:
             address: 池子合约地址
 
         Returns:
             str: 交易对符号
+
         """
         # 反向映射
         symbol_mapping = {
@@ -467,13 +477,14 @@ class PancakeSwapExchangeData(ExchangeData):
         return symbol_mapping.get(address, "UNKNOWN")
 
     def get_backup_urls(self, endpoint_type="graphql"):
-        """获取备用URL列表
+        """获取备用URL列表.
 
         Args:
             endpoint_type: 端点类型，如 'graphql'
 
         Returns:
             list: 备用URL列表
+
         """
         config = _get_pancakeswap_config()
         if config is None:
@@ -485,14 +496,15 @@ class PancakeSwapExchangeData(ExchangeData):
 
         return asset_cfg.rest.get("backup_urls", [])
 
-    def is_supported_network(self, chain_id):
-        """检查是否支持指定网络
+    def is_supported_network(self, chain_id) -> bool:
+        """检查是否支持指定网络.
 
         Args:
             chain_id: 链ID
 
         Returns:
             bool: 是否支持
+
         """
         config = _get_pancakeswap_config()
         if config is None:
@@ -504,27 +516,29 @@ class PancakeSwapExchangeData(ExchangeData):
 
         return False
 
-    def get_symbol(self, symbol):
-        """将交易符号转换为交易所API所需的格式
+    def get_symbol(self, symbol: str) -> str:
+        """将交易符号转换为交易所API所需的格式.
 
         Args:
             symbol: 标准交易对符号，如 'BTCB/USDT'
 
         Returns:
             str: 交易所API所需的符号格式
+
         """
         # For PancakeSwap, symbol format is typically the same or needs address conversion
         # Keep the symbol format as-is for REST API calls
         return symbol
 
-    def get_rest_path(self, request_type):
-        """根据请求类型获取REST API路径
+    def get_rest_path(self, request_type: str, **kwargs) -> str:
+        """根据请求类型获取REST API路径.
 
         Args:
             request_type: 请求类型，如 'get_tick', 'get_depth' 等
 
         Returns:
             str: REST API路径
+
         """
         # Load config to get rest paths
         if not self.rest_paths:
@@ -532,14 +546,15 @@ class PancakeSwapExchangeData(ExchangeData):
 
         return self.rest_paths.get(request_type, "")
 
-    def get_wss_path(self, channel):
-        """根据频道获取WebSocket路径
+    def get_wss_path(self, channel: Any, **kwargs) -> str:
+        """根据频道获取WebSocket路径.
 
         Args:
             channel: WebSocket频道名称
 
         Returns:
             str: WebSocket路径
+
         """
         # Load config to get wss paths
         if not self.wss_paths:
@@ -547,13 +562,14 @@ class PancakeSwapExchangeData(ExchangeData):
 
         return self.wss_paths.get(channel, "")
 
-    def get_period(self, period):
-        """转换K线周期格式
+    def get_period(self, period: str) -> str:
+        """转换K线周期格式.
 
         Args:
             period: 标准周期格式，如 '1m', '1h', '1d'
 
         Returns:
             str: 交易所API所需的周期格式
+
         """
         return self.kline_periods.get(period, period)

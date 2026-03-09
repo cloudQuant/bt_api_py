@@ -27,7 +27,7 @@ class BalancerRequestData(Feed):
     """
 
     @classmethod
-    def _capabilities(cls):
+    def _capabilities(cls: Any) -> None:
         """Declare supported capabilities for Balancer."""
         return {
             Capability.GET_TICK,
@@ -40,7 +40,7 @@ class BalancerRequestData(Feed):
             Capability.CANCEL_ORDER,
         }
 
-    def __init__(self, data_queue, **kwargs):
+    def __init__(self, data_queue: Any, **kwargs: Any) -> None:
         super().__init__(data_queue, **kwargs)
         self.data_queue = data_queue
         self.exchange_name = kwargs.get("exchange_name", "BALANCER___DEX")
@@ -163,7 +163,14 @@ class BalancerRequestData(Feed):
             self.async_logger.error(f"Async GraphQL query failed: {e}")
             raise
 
-    def request(self, path, params=None, body=None, extra_data=None, timeout=10):
+    def request(
+        self,
+        path: Any,
+        params: Any = None,
+        body: Any = None,
+        extra_data: Any = None,
+        timeout: Any = 10,
+    ) -> None:
         """Execute a request. For Balancer, delegates to GraphQL execution.
 
         If extra_data contains '_graphql_query' and '_graphql_variables',
@@ -176,7 +183,14 @@ class BalancerRequestData(Feed):
         # Fallback: wrap body/params as RequestData directly
         return RequestData(body or params or {}, extra_data)
 
-    async def async_request(self, path, params=None, body=None, extra_data=None, timeout=5):
+    async def async_request(
+        self,
+        path: Any,
+        params: Any = None,
+        body: Any = None,
+        extra_data: Any = None,
+        timeout: Any = 5,
+    ) -> None:
         """Async request. For Balancer, delegates to async GraphQL execution.
 
         If extra_data contains '_graphql_query' and '_graphql_variables',
@@ -188,7 +202,7 @@ class BalancerRequestData(Feed):
             return await self._async_execute_graphql_query(query, variables, extra_data)
         return RequestData(body or params or {}, extra_data)
 
-    def async_callback(self, future):
+    def async_callback(self, future: Any) -> None:
         """Callback function for async requests, push result to data_queue."""
         try:
             result = future.result()
@@ -199,7 +213,7 @@ class BalancerRequestData(Feed):
 
     # ── Standard Interface: get_server_time ───────────────────────
 
-    def _get_server_time(self, extra_data=None, **kwargs):
+    def _get_server_time(self, extra_data: Any = None, **kwargs: Any) -> None:
         """Prepare server time request. Returns (path, params, extra_data).
 
         Note: Balancer is a DEX without a server time endpoint.
@@ -220,7 +234,7 @@ class BalancerRequestData(Feed):
         )
         return "GET /server_time", {}, extra_data
 
-    def get_server_time(self, extra_data=None, **kwargs):
+    def get_server_time(self, extra_data: Any = None, **kwargs: Any) -> None:
         """Get server time. Returns RequestData.
 
         Balancer is a DEX — returns local timestamp as proxy.
@@ -230,7 +244,7 @@ class BalancerRequestData(Feed):
         path, params, extra_data = self._get_server_time(extra_data, **kwargs)
         return RequestData({"server_time": time.time()}, extra_data)
 
-    def push_data_to_queue(self, data):
+    def push_data_to_queue(self, data: Any) -> None:
         """Push data to the queue."""
         if self.data_queue is not None:
             self.data_queue.put(data)

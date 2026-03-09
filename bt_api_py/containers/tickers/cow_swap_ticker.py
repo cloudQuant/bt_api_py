@@ -1,10 +1,10 @@
-"""
-CoW Swap Ticker Data Container
+"""CoW Swap Ticker Data Container
 CoW Swap is a DEX - ticker data comes from on-chain events and settlement contracts.
 """
 
 import json
 import time
+from typing import Any
 
 from bt_api_py.containers.tickers.ticker import TickerData
 
@@ -12,16 +12,33 @@ from bt_api_py.containers.tickers.ticker import TickerData
 class CowSwapRequestTickerData(TickerData):
     """CoW Swap ticker data container."""
 
-    def __init__(self, ticker_info, symbol_name, asset_type, has_been_json_encoded=False):
+    def __init__(
+        self,
+        ticker_info: str | dict[str, Any],
+        symbol_name: str,
+        asset_type: str,
+        has_been_json_encoded: bool = False,
+    ) -> None:
+        """Initialize CowSwap ticker data container.
+
+        Args:
+            ticker_info: Raw ticker data from API (JSON string or dict).
+            symbol_name: Trading symbol name.
+            asset_type: Asset type (e.g., "SPOT", "FUTURE").
+            has_been_json_encoded: Whether ticker_info is already parsed.
+
+        """
         super().__init__(ticker_info, has_been_json_encoded)
         self.ticker_symbol_name = symbol_name
         self.asset_type = asset_type
         self.exchange_name = "COW_SWAP"
         self.local_update_time = time.time()
-        self.ticker_data = ticker_info if has_been_json_encoded else None
+        self.ticker_data: dict[str, Any] | None = (
+            ticker_info if has_been_json_encoded and isinstance(ticker_info, dict) else None
+        )
         self.has_been_init_data = False
 
-    def init_data(self):
+    def init_data(self) -> "CowSwapRequestTickerData":
         """Parse CoW Swap ticker response.
         Note: As a DEX, CoW Swap doesn't provide traditional ticker data.
         This container is provided for compatibility but may be populated from
@@ -49,38 +66,47 @@ class CowSwapRequestTickerData(TickerData):
 
     # ── Standard getters ────────────────────────────────────────
 
-    def get_symbol_name(self):
+    def get_symbol_name(self) -> str:
         return self.ticker_symbol_name
 
-    def get_ticker_symbol_name(self):
+    def get_ticker_symbol_name(self) -> str | None:
         return self.ticker_symbol_name
 
-    def get_last_price(self):
+    def get_last_price(self) -> float | None:
         return getattr(self, "last_price", None)
 
-    def get_exchange_name(self):
+    def get_exchange_name(self) -> str:
         return self.exchange_name
 
-    def get_local_update_time(self):
+    def get_local_update_time(self) -> float:
         return self.local_update_time
 
-    def get_asset_type(self):
+    def get_asset_type(self) -> str:
         return self.asset_type
 
-    def get_all_data(self):
+    def get_all_data(self) -> dict[str, Any]:
         return self.ticker_data
 
-    def get_server_time(self):
+    def get_server_time(self) -> float | None:
         return self.local_update_time
 
-    def get_bid_price(self):
+    def get_bid_price(self) -> float | None:
         return getattr(self, "last_price", None)
 
-    def get_ask_price(self):
+    def get_ask_price(self) -> float | None:
         return getattr(self, "last_price", None)
 
     @staticmethod
-    def _parse_float(value):
+    def _parse_float(value: Any) -> float | None:
+        """Parse value to float.
+
+        Args:
+            value: Value to parse.
+
+        Returns:
+            Parsed float value or None if parsing fails.
+
+        """
         if value is None:
             return None
         try:

@@ -8,7 +8,7 @@ from bt_api_py.feeds.live_coinone.spot import CoinoneRequestDataSpot
 from bt_api_py.registry import ExchangeRegistry
 
 
-def register_coinone():
+def register_coinone() -> None:
     """注册 Coinone SPOT 到全局 ExchangeRegistry"""
     # 注册 Feed 类
     ExchangeRegistry.register_feed("COINONE___SPOT", CoinoneRequestDataSpot)

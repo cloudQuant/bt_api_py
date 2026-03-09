@@ -1,10 +1,10 @@
-"""
-ExchangeData保存交易所数据
-"""
+"""ExchangeData保存交易所数据."""
+
+from typing import Any, Never
 
 
 class ExchangeData:
-    def __init__(self):
+    def __init__(self) -> None:
         self.rate_limit_type = ""  # 频率限制类型
         self.interval = ""  # 间隔
         self.interval_num = 0  # 间隔数
@@ -31,36 +31,37 @@ class ExchangeData:
         self.api_secret = ""  # API secret for signing
         self.passphrase = ""  # Passphrase (used by some exchanges)
 
-    def get_wss_url(self):
+    def get_wss_url(self) -> Any:
         return self.wss_url
 
-    def raise_path_error(self, *args):
+    def raise_path_error(self, *args) -> Never:
         """检查请求路径path是否合规
         Args:
-            args: 不定参数
+            args: 不定参数.
         """
         raise Exception(f"wbfAPI还未封装 {args} 接口")
 
-    def raise_timeout(self, timeout, *args):
-        """raise 超时错误
+    def raise_timeout(self, timeout, *args) -> Never:
+        """Raise 超时错误.
 
         Args:
             timeout (int): 超时时间，单位s
             *args: Description
+
         """
         raise Exception(f"{args} rest请求超时{timeout}s")
 
-    def raise400(self, *args):
-        """http 400
+    def raise400(self, *args) -> Never:
+        """Http 400
         Args:
-            *args: Description
+            *args: Description.
         """
         raise Exception(f"{args} rest请求返回<400>")
 
-    def raise_proxy_error(self, *args):
+    def raise_proxy_error(self, *args) -> Never:
         """代理错误
         Args:
-            *args: Description
+            *args: Description.
         """
         raise Exception(f"{args} 网络代理错误")
 

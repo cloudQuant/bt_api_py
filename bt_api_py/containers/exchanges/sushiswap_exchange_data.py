@@ -1,9 +1,9 @@
-"""
-SushiSwap Exchange Data Configuration
+"""SushiSwap Exchange Data Configuration.
 
 Defines API endpoints, chain enums, and path configurations for SushiSwap DEX.
 """
 
+from typing import Any
 import os
 from enum import Enum
 
@@ -13,7 +13,7 @@ _sushiswap_config_loaded = False
 _sushiswap_config_raw = None
 
 
-def _get_sushiswap_config():
+def _get_sushiswap_config() -> Any | None:
     """Load SushiSwap YAML configuration with caching."""
     global _sushiswap_config, _sushiswap_config_loaded, _sushiswap_config_raw
     if _sushiswap_config_loaded:
@@ -87,12 +87,15 @@ class SushiSwapExchangeData:
         SushiSwapChain.MOONRIVER: "1285",
     }
 
-    def __init__(self, chain: SushiSwapChain = DEFAULT_CHAIN, asset_type: str | None = None):
+    def __init__(
+        self, chain: SushiSwapChain = DEFAULT_CHAIN, asset_type: str | None = None
+    ) -> None:
         """Initialize SushiSwap exchange data.
 
         Args:
             chain: The blockchain to query
             asset_type: Asset type (e.g., 'ethereum', 'arbitrum') to load config
+
         """
         self.chain = chain
         self.asset_type = asset_type
@@ -111,8 +114,10 @@ class SushiSwapExchangeData:
 
         Args:
             asset_type: Asset type key, like 'ethereum', 'arbitrum', etc.
+
         Returns:
             bool: Whether loading succeeded
+
         """
         if not self.config:
             return False
@@ -156,6 +161,7 @@ class SushiSwapExchangeData:
 
         Returns:
             Normalized token address or symbol
+
         """
         # Return as-is if it looks like an address
         if symbol.startswith("0x") and len(symbol) == 42:
@@ -174,6 +180,7 @@ class SushiSwapExchangeData:
 
         Returns:
             String in format "GET /endpoint" or "POST /endpoint"
+
         """
         # If config has rest_paths and this request_type is defined
         if self.config and hasattr(self, "asset_type") and self.asset_type:
@@ -215,7 +222,7 @@ class SushiSwapExchangeDataSpot(SushiSwapExchangeData):
         self,
         chain: SushiSwapChain | str = SushiSwapExchangeData.DEFAULT_CHAIN,
         asset_type: str | None = None,
-    ):
+    ) -> None:
         # Convert string to enum if needed
         if isinstance(chain, str):
             try:

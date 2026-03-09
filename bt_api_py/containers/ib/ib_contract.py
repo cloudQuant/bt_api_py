@@ -9,19 +9,19 @@ class IbContract:
 
     def __init__(
         self,
-        symbol="",
-        sec_type="STK",
-        exchange="SMART",
-        currency="USD",
-        con_id=0,
-        last_trade_date="",
-        strike=0.0,
-        right="",
-        multiplier="",
-        primary_exchange="",
-        local_symbol="",
-        trading_class="",
-    ):
+        symbol: Any = "",
+        sec_type: Any = "STK",
+        exchange: Any = "SMART",
+        currency: Any = "USD",
+        con_id: Any = 0,
+        last_trade_date: Any = "",
+        strike: Any = 0.0,
+        right: Any = "",
+        multiplier: Any = "",
+        primary_exchange: Any = "",
+        local_symbol: Any = "",
+        trading_class: Any = "",
+    ) -> None:
         self.symbol = symbol  # 品种代码, 如 "AAPL"
         self.sec_type = sec_type  # 合约类型: STK/FUT/OPT/FOP/CASH/CFD/BOND/CRYPTO
         self.exchange = exchange  # 交易所: SMART/NYSE/GLOBEX/SEHK 等
@@ -35,10 +35,10 @@ class IbContract:
         self.local_symbol = local_symbol  # 本地品种代码
         self.trading_class = trading_class  # 交易类别
 
-    def to_dict(self):
+    def to_dict(self) -> None:
         return {k: v for k, v in self.__dict__.items() if v}
 
-    def __str__(self):
+    def __str__(self) -> None:
         parts = [self.symbol, self.sec_type, self.exchange, self.currency]
         if self.last_trade_date:
             parts.append(self.last_trade_date)
@@ -48,16 +48,22 @@ class IbContract:
             parts.append(self.right)
         return " ".join(parts)
 
-    def __repr__(self):
+    def __repr__(self) -> None:
         return f"IbContract({self.__str__()})"
 
     @classmethod
-    def stock(cls, symbol, exchange="SMART", currency="USD"):
+    def stock(cls: Any, symbol: Any, exchange: Any = "SMART", currency: Any = "USD") -> None:
         """快速创建股票合约"""
         return cls(symbol=symbol, sec_type="STK", exchange=exchange, currency=currency)
 
     @classmethod
-    def future(cls, symbol, exchange="GLOBEX", currency="USD", last_trade_date=""):
+    def future(
+        cls: Any,
+        symbol: Any,
+        exchange: Any = "GLOBEX",
+        currency: Any = "USD",
+        last_trade_date: Any = "",
+    ) -> None:
         """快速创建期货合约"""
         return cls(
             symbol=symbol,
@@ -68,7 +74,15 @@ class IbContract:
         )
 
     @classmethod
-    def option(cls, symbol, last_trade_date, strike, right, exchange="SMART", currency="USD"):
+    def option(
+        cls: Any,
+        symbol: Any,
+        last_trade_date: Any,
+        strike: Any,
+        right: Any,
+        exchange: Any = "SMART",
+        currency: Any = "USD",
+    ) -> None:
         """快速创建期权合约"""
         return cls(
             symbol=symbol,
@@ -81,6 +95,6 @@ class IbContract:
         )
 
     @classmethod
-    def forex(cls, symbol, exchange="IDEALPRO", currency="USD"):
+    def forex(cls: Any, symbol: Any, exchange: Any = "IDEALPRO", currency: Any = "USD") -> None:
         """快速创建外汇合约"""
         return cls(symbol=symbol, sec_type="CASH", exchange=exchange, currency=currency)

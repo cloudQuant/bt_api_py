@@ -1,44 +1,69 @@
 import json
 import time
+from typing import Any
 
 from bt_api_py.containers.orders.order import OrderData
 from bt_api_py.functions.utils import from_dict_get_float, from_dict_get_int, from_dict_get_string
 
 
 class BitfinexOrderData(OrderData):
-    """保存 Bitfinex 订单信息"""
+    """Bitfinex order data container.
 
-    def __init__(self, order_info, symbol_name, asset_type, has_been_json_encoded=False):
+    This class holds order information from Bitfinex exchange.
+    """
+
+    def __init__(
+        self,
+        order_info: dict[str, Any] | str | list[Any],
+        symbol_name: str,
+        asset_type: str,
+        has_been_json_encoded: bool = False,
+    ) -> None:
+        """Initialize Bitfinex order data.
+
+        Args:
+            order_info: Order information from exchange (dict, list, or JSON string)
+            symbol_name: Symbol name for the order
+            asset_type: Asset type (SPOT, FUTURE, etc.)
+            has_been_json_encoded: Whether order_info is already JSON encoded
+        """
         super().__init__(order_info, has_been_json_encoded)
-        self.exchange_name = "BITFINEX"  # 交易所名称
-        self.local_update_time = time.time()  # 本地时间戳
+        self.exchange_name = "BITFINEX"
+        self.local_update_time = time.time()
         self.symbol_name = symbol_name
-        self.asset_type = asset_type  # 订单的类型
-        self.order_data = order_info if has_been_json_encoded else None
-        self.order_id = None
-        self.group_id = None
-        self.client_order_id = None
-        self.symbol = None
-        self.mts_create = None
-        self.mts_update = None
-        self.amount = None
-        self.amount_orig = None
-        self.type = None
-        self.type_prev = None
-        self.flags = None
-        self.status = None
-        self.price = None
-        self.price_avg = None
-        self.price_trail = None
-        self.price_aux_limit = None
-        self.notify = None
-        self.hidden = None
-        self.placed_id = None
-        self.routing = None
-        self.meta = None
+        self.asset_type = asset_type
+        self.order_data: dict[str, Any] | str | list[Any] | None = (
+            order_info if has_been_json_encoded else None
+        )
+        self.order_id: int | None = None
+        self.group_id: int | None = None
+        self.client_order_id: int | None = None
+        self.symbol: str | None = None
+        self.mts_create: int | None = None
+        self.mts_update: int | None = None
+        self.amount: float | None = None
+        self.amount_orig: float | None = None
+        self.type: str | None = None
+        self.type_prev: str | None = None
+        self.flags: int | None = None
+        self.status: str | None = None
+        self.price: float | None = None
+        self.price_avg: float | None = None
+        self.price_trail: float | None = None
+        self.price_aux_limit: float | None = None
+        self.notify: int | None = None
+        self.hidden: int | None = None
+        self.placed_id: int | None = None
+        self.routing: str | None = None
+        self.meta: Any = None
         self.has_been_init_data = False
 
-    def init_data(self):
+    def init_data(self) -> "BitfinexOrderData":
+        """Initialize order data by parsing order_info.
+
+        Returns:
+            Self for method chaining
+        """
         if not self.has_been_json_encoded:
             if isinstance(self.order_info, str):
                 self.order_data = json.loads(self.order_info)
@@ -50,9 +75,6 @@ class BitfinexOrderData(OrderData):
             return self
 
         if isinstance(self.order_data, list) and len(self.order_data) >= 16:
-            # Bitfinex 订单格式:
-            # [ID, GID, CID, SYMBOL, MTS_CREATE, MTS_UPDATE, AMOUNT, AMOUNT_ORIG, TYPE,
-            #  TYPE_PREV, ..., FLAGS, STATUS, ..., PRICE, PRICE_AVG, ..., AUX_PRICE]
             self.order_id = from_dict_get_int(self.order_data[0], None)
             self.group_id = from_dict_get_int(self.order_data[1], None)
             self.client_order_id = from_dict_get_int(self.order_data[2], None)
@@ -70,7 +92,6 @@ class BitfinexOrderData(OrderData):
             self.price_trail = from_dict_get_float(self.order_data[14], 0.0)
             self.price_aux_limit = from_dict_get_float(self.order_data[15], 0.0)
 
-            # 处理额外字段（如果存在）
             if len(self.order_data) > 16:
                 self.notify = from_dict_get_int(self.order_data[16], 0)
             if len(self.order_data) > 17:
@@ -80,10 +101,9 @@ class BitfinexOrderData(OrderData):
             if len(self.order_data) > 19:
                 self.routing = from_dict_get_string(self.order_data[19], "")
             if len(self.order_data) > 20:
-                self.meta = self.order_data[20]  # 通常是字典
+                self.meta = self.order_data[20]
 
         elif isinstance(self.order_data, dict):
-            # 处理字典格式的响应
             self.order_id = from_dict_get_int(self.order_data, "id", None)
             self.group_id = from_dict_get_int(self.order_data, "gid", None)
             self.client_order_id = from_dict_get_int(self.order_data, "cid", None)
@@ -109,7 +129,12 @@ class BitfinexOrderData(OrderData):
         self.has_been_init_data = True
         return self
 
-    def get_all_data(self):
+    def get_all_data(self) -> dict[str, Any]:
+        """Get all order data as a dictionary.
+
+        Returns:
+            Dictionary containing all order data fields
+        """
         if self.all_data is None:
             self.init_data()
             self.all_data = {
@@ -141,120 +166,277 @@ class BitfinexOrderData(OrderData):
             }
         return self.all_data
 
-    def __str__(self):
+    def __str__(self) -> str:
         self.init_data()
         return json.dumps(self.get_all_data())
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return self.__str__()
 
-    def get_exchange_name(self):
+    def get_exchange_name(self) -> str:
+        """Get exchange name.
+
+        Returns:
+            Exchange name (BITFINEX)
+        """
         return self.exchange_name
 
-    def get_local_update_time(self):
+    def get_local_update_time(self) -> float:
+        """Get local update timestamp.
+
+        Returns:
+            Local update timestamp
+        """
         return self.local_update_time
 
-    def get_symbol_name(self):
+    def get_symbol_name(self) -> str:
+        """Get symbol name.
+
+        Returns:
+            Symbol name
+        """
         return self.symbol_name
 
-    def get_asset_type(self):
+    def get_asset_type(self) -> str:
+        """Get asset type.
+
+        Returns:
+            Asset type (SPOT, FUTURE, etc.)
+        """
         return self.asset_type
 
-    def get_order_id(self):
+    def get_order_id(self) -> int | None:
+        """Get order ID.
+
+        Returns:
+            Order ID
+        """
         return self.order_id
 
-    def get_group_id(self):
+    def get_group_id(self) -> int | None:
+        """Get group ID.
+
+        Returns:
+            Group ID
+        """
         return self.group_id
 
-    def get_client_order_id(self):
+    def get_client_order_id(self) -> int | None:
+        """Get client order ID.
+
+        Returns:
+            Client order ID
+        """
         return self.client_order_id
 
-    def get_symbol(self):
+    def get_symbol(self) -> str | None:
+        """Get symbol.
+
+        Returns:
+            Symbol
+        """
         return self.symbol
 
-    def get_mts_create(self):
+    def get_mts_create(self) -> int | None:
+        """Get creation timestamp.
+
+        Returns:
+            Creation timestamp in milliseconds
+        """
         return self.mts_create
 
-    def get_mts_update(self):
+    def get_mts_update(self) -> int | None:
+        """Get update timestamp.
+
+        Returns:
+            Update timestamp in milliseconds
+        """
         return self.mts_update
 
-    def get_amount(self):
+    def get_amount(self) -> float | None:
+        """Get current amount.
+
+        Returns:
+            Current amount (negative for sell)
+        """
         return self.amount
 
-    def get_amount_orig(self):
+    def get_amount_orig(self) -> float | None:
+        """Get original amount.
+
+        Returns:
+            Original order amount
+        """
         return self.amount_orig
 
-    def get_type(self):
+    def get_type(self) -> str | None:
+        """Get order type.
+
+        Returns:
+            Order type
+        """
         return self.type
 
-    def get_type_prev(self):
+    def get_type_prev(self) -> str | None:
+        """Get previous order type.
+
+        Returns:
+            Previous order type
+        """
         return self.type_prev
 
-    def get_flags(self):
+    def get_flags(self) -> int | None:
+        """Get order flags.
+
+        Returns:
+            Order flags
+        """
         return self.flags
 
-    def get_status(self):
+    def get_status(self) -> str | None:
+        """Get order status.
+
+        Returns:
+            Order status
+        """
         return self.status
 
-    def get_price(self):
+    def get_price(self) -> float | None:
+        """Get order price.
+
+        Returns:
+            Order price
+        """
         return self.price
 
-    def get_price_avg(self):
+    def get_price_avg(self) -> float | None:
+        """Get average price.
+
+        Returns:
+            Average execution price
+        """
         return self.price_avg
 
-    def get_price_trail(self):
+    def get_price_trail(self) -> float | None:
+        """Get trailing price.
+
+        Returns:
+            Trailing price for trailing stop orders
+        """
         return self.price_trail
 
-    def get_price_aux_limit(self):
+    def get_price_aux_limit(self) -> float | None:
+        """Get auxiliary limit price.
+
+        Returns:
+            Auxiliary limit price
+        """
         return self.price_aux_limit
 
-    def get_notify(self):
+    def get_notify(self) -> int | None:
+        """Get notify flag.
+
+        Returns:
+            Notify flag
+        """
         return self.notify
 
-    def get_hidden(self):
+    def get_hidden(self) -> int | None:
+        """Get hidden flag.
+
+        Returns:
+            Hidden flag (1 if order is hidden)
+        """
         return self.hidden
 
-    def get_placed_id(self):
+    def get_placed_id(self) -> int | None:
+        """Get placed ID.
+
+        Returns:
+            Placed ID
+        """
         return self.placed_id
 
-    def get_routing(self):
+    def get_routing(self) -> str | None:
+        """Get routing information.
+
+        Returns:
+            Routing information
+        """
         return self.routing
 
-    def get_meta(self):
+    def get_meta(self) -> Any:
+        """Get metadata.
+
+        Returns:
+            Metadata
+        """
         return self.meta
 
-    def get_side(self):
-        """获取订单方向 (BUY/SELL)"""
+    def get_side(self) -> str | None:
+        """Get order side.
+
+        Returns:
+            Order side (BUY/SELL)
+        """
         if self.type:
-            return "BUY" if self.type.upper().startswith("BUY") or self.amount > 0 else "SELL"
+            if self.amount is not None and self.amount > 0:
+                return "BUY"
+            if self.type.upper().startswith("BUY"):
+                return "BUY"
+            return "SELL"
         return None
 
-    def get_order_state(self):
-        """获取订单状态"""
+    def get_order_state(self) -> str | None:
+        """Get order state.
+
+        Returns:
+            Order state
+        """
         return self.status
 
-    def is_active(self):
-        """检查订单是否活跃"""
+    def is_active(self) -> bool:
+        """Check if order is active.
+
+        Returns:
+            True if order is active
+        """
         return self.status in ["ACTIVE", "PARTIALLY FILLED", "OPEN"]
 
-    def is_filled(self):
-        """检查订单是否完全成交"""
+    def is_filled(self) -> bool:
+        """Check if order is completely filled.
+
+        Returns:
+            True if order is filled
+        """
         return self.status == "FILLED"
 
-    def is_cancelled(self):
-        """检查订单是否已取消"""
+    def is_cancelled(self) -> bool:
+        """Check if order is cancelled.
+
+        Returns:
+            True if order is cancelled
+        """
         return self.status == "CANCELED"
 
-    def get_filled_amount(self):
-        """获取已成交数量"""
+    def get_filled_amount(self) -> float:
+        """Get filled amount.
+
+        Returns:
+            Filled amount
+        """
         return (
             self.amount_orig - self.amount
             if self.amount_orig is not None and self.amount is not None
             else 0
         )
 
-    def get_fill_percentage(self):
-        """获取成交百分比"""
+    def get_fill_percentage(self) -> float:
+        """Get fill percentage.
+
+        Returns:
+            Fill percentage (0-100)
+        """
         if self.amount_orig is None or self.amount_orig == 0:
             return 0
         filled = self.get_filled_amount()
@@ -262,12 +444,12 @@ class BitfinexOrderData(OrderData):
 
 
 class BitfinexWssOrderData(BitfinexOrderData):
-    """保存 Bitfinex WebSocket 订单信息"""
+    """Bitfinex WebSocket order data container."""
 
-    pass  # WebSocket 订单格式与 REST API 相同
+    pass
 
 
 class BitfinexRequestOrderData(BitfinexOrderData):
-    """保存 Bitfinex REST API 订单信息"""
+    """Bitfinex REST API order data container."""
 
-    pass  # REST API 订单格式直接处理
+    pass

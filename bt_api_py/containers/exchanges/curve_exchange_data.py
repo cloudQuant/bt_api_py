@@ -1,9 +1,9 @@
-"""
-Curve Exchange Data Configuration
+"""Curve Exchange Data Configuration.
 
 Defines API endpoints, chain enums, and path configurations for Curve DEX.
 """
 
+from typing import Any
 import os
 from enum import Enum
 
@@ -13,8 +13,8 @@ _curve_config_loaded = False
 _curve_config_raw = None
 
 
-def _get_curve_config():
-    """延迟加载并缓存 Curve YAML 配置"""
+def _get_curve_config() -> Any | None:
+    """延迟加载并缓存 Curve YAML 配置."""
     global _curve_config, _curve_config_loaded, _curve_config_raw
     if _curve_config_loaded:
         return _curve_config
@@ -101,12 +101,13 @@ class CurveExchangeData:
         CurveChain.XAYER: "0x1BF9C9381F37F3aFB3Fa25E1bFa2E91581718475",
     }
 
-    def __init__(self, chain: CurveChain = DEFAULT_CHAIN, asset_type: str | None = None):
+    def __init__(self, chain: CurveChain = DEFAULT_CHAIN, asset_type: str | None = None) -> None:
         """Initialize Curve exchange data.
 
         Args:
             chain: The blockchain to query
             asset_type: Asset type (e.g., 'ethereum', 'arbitrum') to load config from curve.yaml
+
         """
         self.chain = chain
         self.asset_type = asset_type
@@ -122,12 +123,13 @@ class CurveExchangeData:
             self.factory_address = self.FACTORY_ADDRESSES.get(chain)
 
     def _load_from_config(self, asset_type: str) -> bool:
-        """从 YAML 配置文件加载 Curve 参数
+        """从 YAML 配置文件加载 Curve 参数.
 
         Args:
             asset_type: 资产类型 key, 如 'ethereum', 'arbitrum' 等
         Returns:
             bool: 是否加载成功
+
         """
         if not self.config:
             return False
@@ -181,6 +183,7 @@ class CurveExchangeData:
 
         Returns:
             String in format "GET /endpoint"
+
         """
         # If config has rest_paths and this request_type is defined
         if self.config and hasattr(self, "asset_type") and self.asset_type:
@@ -212,7 +215,7 @@ class CurveExchangeDataSpot(CurveExchangeData):
         self,
         chain: CurveChain | str = CurveExchangeData.DEFAULT_CHAIN,
         asset_type: str | None = None,
-    ):
+    ) -> None:
         # Convert string to enum if needed
         if isinstance(chain, str):
             try:

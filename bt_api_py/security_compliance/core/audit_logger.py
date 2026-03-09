@@ -10,7 +10,7 @@ import json
 import time
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Union
+from typing import Any
 from uuid import uuid4
 
 from bt_api_py.exceptions import BtApiError
@@ -73,19 +73,19 @@ class AuditEvent:
     timestamp: float = field(default_factory=time.time)
     event_type: EventType = EventType.USER_LOGIN
     severity: SeverityLevel = SeverityLevel.MEDIUM
-    user_id: Optional[str] = None
-    session_id: Optional[str] = None
-    ip_address: Optional[str] = None
-    user_agent: Optional[str] = None
-    resource: Optional[str] = None
-    action: Optional[str] = None
+    user_id: str | None = None
+    session_id: str | None = None
+    ip_address: str | None = None
+    user_agent: str | None = None
+    resource: str | None = None
+    action: str | None = None
     outcome: str = "success"  # success, failure, error
-    details: Dict[str, Any] = field(default_factory=dict)
-    compliance_tags: List[str] = field(default_factory=list)
+    details: dict[str, Any] = field(default_factory=dict)
+    compliance_tags: list[str] = field(default_factory=list)
 
     # Cryptographic fields for tamper detection
-    previous_hash: Optional[str] = None
-    event_hash: Optional[str] = None
+    previous_hash: str | None = None
+    event_hash: str | None = None
 
     def __post_init__(self) -> None:
         """Calculate event hash after initialization."""
@@ -108,7 +108,7 @@ class AuditEvent:
         calculated_hash = self._calculate_hash()
         return calculated_hash == self.event_hash
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for serialization."""
         data = asdict(self)
         data["event_type"] = self.event_type.value
@@ -116,7 +116,7 @@ class AuditEvent:
         return data
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> "AuditEvent":
+    def from_dict(cls, data: dict[str, Any]) -> "AuditEvent":
         """Create event from dictionary."""
         # Convert string event_type back to enum
         if isinstance(data.get("event_type"), str):
@@ -134,8 +134,8 @@ class AuditLogger:
 
     def __init__(
         self,
-        log_file: Union[str, Path],
-        encryption_key: Optional[str] = None,
+        log_file: str | Path,
+        encryption_key: str | None = None,
         retention_days: int = 2555,  # 7 years for SOX compliance
         enable_real_time: bool = True,
     ):
@@ -154,12 +154,12 @@ class AuditLogger:
         self.enable_real_time = enable_real_time
 
         # Chain integrity tracking
-        self._last_hash: Optional[str] = None
-        self._events: List[AuditEvent] = []
+        self._last_hash: str | None = None
+        self._events: list[AuditEvent] = []
         self._load_last_hash()
 
         # Real-time monitoring
-        self._subscribers: List[callable] = []
+        self._subscribers: list[callable] = []
 
     def _load_last_hash(self) -> None:
         """Load the hash of the last event for chain integrity."""
@@ -167,7 +167,7 @@ class AuditLogger:
             return
 
         try:
-            with open(self.log_file, "r") as f:
+            with open(self.log_file) as f:
                 lines = f.readlines()
                 if lines:
                     last_line = lines[-1].strip()
@@ -287,7 +287,7 @@ class AuditLogger:
         if callback in self._subscribers:
             self._subscribers.remove(callback)
 
-    def verify_log_integrity(self) -> Dict[str, Any]:
+    def verify_log_integrity(self) -> dict[str, Any]:
         """Verify the integrity of the entire audit log."""
         if not self.log_file.exists():
             return {"status": "no_log_file", "verified_events": 0, "violations": []}
@@ -297,7 +297,7 @@ class AuditLogger:
         previous_hash = None
 
         try:
-            with open(self.log_file, "r") as f:
+            with open(self.log_file) as f:
                 for line_num, line in enumerate(f, 1):
                     line = line.strip()
                     if not line:
@@ -349,12 +349,12 @@ class AuditLogger:
 
     def search_events(
         self,
-        event_type: Optional[EventType] = None,
-        user_id: Optional[str] = None,
-        start_time: Optional[float] = None,
-        end_time: Optional[float] = None,
+        event_type: EventType | None = None,
+        user_id: str | None = None,
+        start_time: float | None = None,
+        end_time: float | None = None,
         limit: int = 1000,
-    ) -> List[AuditEvent]:
+    ) -> list[AuditEvent]:
         """Search audit events with filters."""
         if not self.log_file.exists():
             return []
@@ -362,7 +362,7 @@ class AuditLogger:
         results = []
 
         try:
-            with open(self.log_file, "r") as f:
+            with open(self.log_file) as f:
                 for line in f:
                     line = line.strip()
                     if not line:
@@ -405,9 +405,9 @@ class AuditLogger:
     def get_compliance_report(
         self,
         compliance_standard: str,
-        start_date: Optional[str] = None,
-        end_date: Optional[str] = None,
-    ) -> Dict[str, Any]:
+        start_date: str | None = None,
+        end_date: str | None = None,
+    ) -> dict[str, Any]:
         """Generate compliance report for specific standard."""
         # Convert date strings to timestamps
         start_timestamp = None
@@ -487,7 +487,7 @@ class AuditLogger:
         removed_count = 0
 
         try:
-            with open(self.log_file, "r") as infile, open(temp_file, "w") as outfile:
+            with open(self.log_file) as infile, open(temp_file, "w") as outfile:
                 for line in infile:
                     line = line.strip()
                     if not line:
@@ -518,15 +518,15 @@ class AuditLogger:
 
 
 # Global audit logger instance
-_audit_logger: Optional[AuditLogger] = None
+_audit_logger: AuditLogger | None = None
 
 
-def get_audit_logger() -> Optional[AuditLogger]:
+def get_audit_logger() -> AuditLogger | None:
     """Get the global audit logger instance."""
     return _audit_logger
 
 
-def initialize_audit_logger(log_file: Union[str, Path], **kwargs) -> AuditLogger:
+def initialize_audit_logger(log_file: str | Path, **kwargs) -> AuditLogger:
     """Initialize the global audit logger."""
     global _audit_logger
     _audit_logger = AuditLogger(log_file, **kwargs)
@@ -535,7 +535,7 @@ def initialize_audit_logger(log_file: Union[str, Path], **kwargs) -> AuditLogger
 
 def log_audit_event(
     event_type: EventType,
-    user_id: Optional[str] = None,
+    user_id: str | None = None,
     severity: SeverityLevel = SeverityLevel.MEDIUM,
     **kwargs,
 ) -> None:

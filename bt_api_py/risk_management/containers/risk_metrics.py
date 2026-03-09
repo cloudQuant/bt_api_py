@@ -4,9 +4,9 @@
 """
 
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from decimal import Decimal
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from ...containers.auto_init_mixin import AutoInitMixin
 
@@ -15,7 +15,9 @@ from ...containers.auto_init_mixin import AutoInitMixin
 class RiskMetrics(AutoInitMixin):
     """风险指标容器，包含完整的风险评估数据"""
 
-    def __init__(self, data: Dict[str, Any] | None = None, has_been_json_encoded: bool = False):
+    def __init__(
+        self, data: dict[str, Any] | None = None, has_been_json_encoded: bool = False
+    ) -> Any | None:
         if data is None:
             data = {}
 
@@ -64,7 +66,7 @@ class RiskMetrics(AutoInitMixin):
 class MarketRiskMetrics:
     """市场风险指标"""
 
-    def __init__(self, data: Dict[str, Any]):
+    def __init__(self, data: dict[str, Any]) -> Any | None:
         self.value_at_risk_1d = Decimal(str(data.get("value_at_risk_1d", 0)))  # 1日VaR
         self.value_at_risk_10d = Decimal(str(data.get("value_at_risk_10d", 0)))  # 10日VaR
         self.expected_shortfall = Decimal(str(data.get("expected_shortfall", 0)))  # ES
@@ -86,7 +88,7 @@ class MarketRiskMetrics:
 class CreditRiskMetrics:
     """信用风险指标"""
 
-    def __init__(self, data: Dict[str, Any]):
+    def __init__(self, data: dict[str, Any]) -> Any | None:
         self.credit_score = Decimal(str(data.get("credit_score", 0)))  # 信用评分
         self.probability_of_default = Decimal(
             str(data.get("probability_of_default", 0))
@@ -103,7 +105,7 @@ class CreditRiskMetrics:
 class OperationalRiskMetrics:
     """操作风险指标"""
 
-    def __init__(self, data: Dict[str, Any]):
+    def __init__(self, data: dict[str, Any]) -> Any | None:
         self.system_health_score = Decimal(str(data.get("system_health_score", 0)))  # 系统健康度
         self.latency_metrics = LatencyMetrics(data.get("latency_metrics", {}))  # 延迟指标
         self.error_rate = Decimal(str(data.get("error_rate", 0)))  # 错误率
@@ -118,7 +120,7 @@ class OperationalRiskMetrics:
 class LiquidityRiskMetrics:
     """流动性风险指标"""
 
-    def __init__(self, data: Dict[str, Any]):
+    def __init__(self, data: dict[str, Any]) -> Any | None:
         self.liquidity_score = Decimal(str(data.get("liquidity_score", 0)))  # 流动性评分
         self.bid_ask_spread = Decimal(str(data.get("bid_ask_spread", 0)))  # 买卖价差
         self.market_depth = Decimal(str(data.get("market_depth", 0)))  # 市场深度
@@ -132,7 +134,7 @@ class LiquidityRiskMetrics:
 class ComplianceRiskMetrics:
     """合规风险指标"""
 
-    def __init__(self, data: Dict[str, Any]):
+    def __init__(self, data: dict[str, Any]) -> Any | None:
         self.compliance_score = Decimal(str(data.get("compliance_score", 0)))  # 合规评分
         self.regulatory_violations = data.get("regulatory_violations", [])  # 监管违规
         self.reporting_compliance = Decimal(str(data.get("reporting_compliance", 0)))  # 报告合规度
@@ -146,7 +148,7 @@ class ComplianceRiskMetrics:
 class RiskLimitsCheck:
     """风险限制检查结果"""
 
-    def __init__(self, data: Dict[str, Any]):
+    def __init__(self, data: dict[str, Any]) -> Any | None:
         self.position_limits = LimitsCheckResult(data.get("position_limits", {}))
         self.concentration_limits = LimitsCheckResult(data.get("concentration_limits", {}))
         self.leverage_limits = LimitsCheckResult(data.get("leverage_limits", {}))
@@ -159,21 +161,21 @@ class RiskLimitsCheck:
 class LimitsCheckResult:
     """限制检查结果"""
 
-    def __init__(self, data: Dict[str, Any]):
+    def __init__(self, data: dict[str, Any]) -> Any | None:
         self.limit_name = data.get("limit_name", "")
         self.current_value = Decimal(str(data.get("current_value", 0)))
         self.limit_value = Decimal(str(data.get("limit_value", 0)))
         self.utilization_ratio = Decimal(str(data.get("utilization_ratio", 0)))  # 使用率
         self.status = data.get("status", "WITHIN_LIMIT")  # WITHIN_LIMIT, WARNING, BREACHED
         self.breached_amount = Decimal(str(data.get("breached_amount", 0)))
-        self.time_to_breach = data.get("time_to_breach", None)  # 预计突破时间
+        self.time_to_breach = data.get("time_to_breach")  # 预计突破时间
 
 
 @dataclass
 class HistoricalComparison:
     """历史对比数据"""
 
-    def __init__(self, data: Dict[str, Any]):
+    def __init__(self, data: dict[str, Any]) -> Any | None:
         self.day_over_day_change = Decimal(str(data.get("day_over_day_change", 0)))
         self.week_over_week_change = Decimal(str(data.get("week_over_week_change", 0)))
         self.month_over_month_change = Decimal(str(data.get("month_over_month_change", 0)))
@@ -186,7 +188,7 @@ class HistoricalComparison:
 class PredictiveIndicators:
     """预测性指标"""
 
-    def __init__(self, data: Dict[str, Any]):
+    def __init__(self, data: dict[str, Any]) -> Any | None:
         self.next_period_risk = Decimal(str(data.get("next_period_risk", 0)))  # 下一期风险
         self.risk_trajectory = data.get(
             "risk_trajectory", "STABLE"
@@ -200,7 +202,7 @@ class PredictiveIndicators:
 class PositionConcentration:
     """仓位集中度"""
 
-    def __init__(self, data: Dict[str, Any]):
+    def __init__(self, data: dict[str, Any]) -> Any | None:
         self.herfindahl_index = Decimal(str(data.get("herfindahl_index", 0)))  # 赫芬达尔指数
         self.top_10_holdings_ratio = Decimal(
             str(data.get("top_10_holdings_ratio", 0))
@@ -214,7 +216,7 @@ class PositionConcentration:
 class SectorExposure:
     """行业暴露"""
 
-    def __init__(self, data: Dict[str, Any]):
+    def __init__(self, data: dict[str, Any]) -> Any | None:
         self.technology = Decimal(str(data.get("technology", 0)))
         self.finance = Decimal(str(data.get("finance", 0)))
         self.healthcare = Decimal(str(data.get("healthcare", 0)))
@@ -233,7 +235,7 @@ class SectorExposure:
 class LatencyMetrics:
     """延迟指标"""
 
-    def __init__(self, data: Dict[str, Any]):
+    def __init__(self, data: dict[str, Any]) -> Any | None:
         self.average_latency_ms = Decimal(str(data.get("average_latency_ms", 0)))
         self.p95_latency_ms = Decimal(str(data.get("p95_latency_ms", 0)))
         self.p99_latency_ms = Decimal(str(data.get("p99_latency_ms", 0)))

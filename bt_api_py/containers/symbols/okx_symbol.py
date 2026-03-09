@@ -6,9 +6,9 @@ from bt_api_py.functions.utils import from_dict_get_bool, from_dict_get_float, f
 
 
 class OkxSymbolData(SymbolData):
-    """https://www.okx.com/docs-v5/zh/#trading-account-rest-api-get-instruments"""
+    """https://www.okx.com/docs-v5/zh/#trading-account-rest-api-get-instruments."""
 
-    def __init__(self, symbol_info, has_been_json_encoded):
+    def __init__(self, symbol_info, has_been_json_encoded) -> None:
         super().__init__(symbol_info, has_been_json_encoded)
         self.event = "OkxSymbolEvent"
         self.local_update_time = time.time()  # 本地时间戳
@@ -60,7 +60,7 @@ class OkxSymbolData(SymbolData):
         self.contract_notional_value = None
         self.has_been_init_data = False
 
-    def init_data(self):
+    def init_data(self) -> None:
         if not self.has_been_json_encoded:
             self.symbol_info = json.loads(self.symbol_info)
             self.symbol_data = self.symbol_info["data"][0]
@@ -102,22 +102,22 @@ class OkxSymbolData(SymbolData):
         self.future_settlement = from_dict_get_bool(self.symbol_data, "futureSettlement")
         self.has_been_init_data = True
 
-    def get_local_update_time(self):
+    def get_local_update_time(self) -> float:
         return self.local_update_time
 
-    def get_underlying_symbol_name(self):
+    def get_underlying_symbol_name(self) -> Any:
         return self.underlying_symbol_name
 
-    def get_underlying_index_name(self):
+    def get_underlying_index_name(self) -> Any:
         return self.underlying_index_name
 
-    def get_symbol_name(self):
+    def get_symbol_name(self) -> str:
         return self.symbol_name
 
-    def get_asset_type(self):
+    def get_asset_type(self) -> str:
         return self.asset_type
 
-    def get_all_data(self):
+    def get_all_data(self) -> dict[str, Any]:
         if self.all_data is None:
             self.all_data = {
                 "exchange_name": self.exchange_name,
@@ -158,129 +158,129 @@ class OkxSymbolData(SymbolData):
             }
         return self.all_data
 
-    def get_maintain_margin_percent(self):
+    def get_maintain_margin_percent(self) -> Any:
         return self.maintain_margin_percent
 
-    def get_required_margin_percent(self):
+    def get_required_margin_percent(self) -> Any:
         return self.required_margin_percent
 
-    def get_base_asset(self):
+    def get_base_asset(self) -> Any:
         return self.base_asset
 
-    def get_quote_asset(self):
+    def get_quote_asset(self) -> Any:
         return self.quote_asset
 
-    def get_contract_multiplier(self):
+    def get_contract_multiplier(self) -> Any:
         return self.contract_multiplier
 
-    def get_price_unit(self):
+    def get_price_unit(self) -> Any:
         return self.price_unit
 
-    def get_price_digital(self):
+    def get_price_digital(self) -> Any:
         return self.price_digital
 
-    def get_max_price(self):
+    def get_max_price(self) -> Any:
         return self.max_price
 
-    def get_min_price(self):
+    def get_min_price(self) -> Any:
         return self.min_price
 
-    def get_min_amount(self):
+    def get_min_amount(self) -> Any:
         return self.min_amount
 
-    def get_qty_unit(self):
+    def get_qty_unit(self) -> Any:
         return self.qty_unit
 
-    def get_qty_digital(self):
+    def get_qty_digital(self) -> Any:
         return self.qty_digital
 
-    def get_min_qty(self):
+    def get_min_qty(self) -> Any:
         return self.min_qty
 
-    def get_max_qty(self):
+    def get_max_qty(self) -> Any:
         return self.max_qty
 
-    def get_base_asset_digital(self):
+    def get_base_asset_digital(self) -> Any:
         return self.base_asset_digital
 
-    def get_quote_asset_digital(self):
+    def get_quote_asset_digital(self) -> Any:
         return self.quote_asset_digital
 
-    def get_order_types(self):
+    def get_order_types(self) -> Any:
         return self.order_types
 
-    def get_time_in_force(self):
+    def get_time_in_force(self) -> Any:
         return self.time_in_force
 
-    def get_fee_digital(self):
+    def get_fee_digital(self) -> Any:
         return self.fee_digital
 
-    def get_fee_currency(self):
+    def get_fee_currency(self) -> Any:
         return self.fee_currency
 
-    def get_server_time(self):
+    def get_server_time(self) -> float:
         return self.server_time
 
-    def get_exchange_name(self):
+    def get_exchange_name(self) -> str:
         return self.exchange_name
 
-    def get_symbol_status(self):
+    def get_symbol_status(self) -> Any:
         return self.symbol_status
 
-    def get_symbol_trading_type(self):
+    def get_symbol_trading_type(self) -> Any:
         return self.symbol_trading_type
 
-    def get_contract_type(self):
+    def get_contract_type(self) -> Any:
         return self.contract_type
 
-    def get_max_leverage(self):
+    def get_max_leverage(self) -> Any:
         return self.max_leverage
 
-    def get_max_limit_amount(self):
+    def get_max_limit_amount(self) -> Any:
         return self.max_limit_amount
 
-    def get_max_market_amount(self):
+    def get_max_market_amount(self) -> Any:
         return self.max_market_amount
 
-    def get_max_limit_qty(self):
+    def get_max_limit_qty(self) -> Any:
         return self.max_limit_qty
 
-    def get_max_market_qty(self):
+    def get_max_market_qty(self) -> Any:
         return self.max_market_qty
 
-    def get_max_twap_qty(self):
+    def get_max_twap_qty(self) -> Any:
         return self.max_twap_qty
 
-    def get_max_iceberg_qty(self):
+    def get_max_iceberg_qty(self) -> Any:
         return self.max_iceberg_qty
 
-    def get_max_stop_qty(self):
+    def get_max_stop_qty(self) -> Any:
         return self.max_stop_qty
 
-    def get_future_settlement(self):
+    def get_future_settlement(self) -> Any:
         return self.future_settlement
 
-    def get_list_time(self):
+    def get_list_time(self) -> Any:
         return self.list_time
 
-    def get_auction_end_time(self):
+    def get_auction_end_time(self) -> Any:
         return self.auction_end_time
 
-    def get_delist_time(self):
+    def get_delist_time(self) -> Any:
         return self.delist_time
 
-    def get_option_strike_price(self):
+    def get_option_strike_price(self) -> Any:
         return self.option_strike_price
 
-    def get_option_type(self):
+    def get_option_type(self) -> Any:
         return self.option_type
 
-    def get_contract_notional_value(self):
+    def get_contract_notional_value(self) -> Any:
         return self.contract_notional_value
 
-    def __str__(self):
+    def __str__(self) -> str:
         self.init_data()
         return json.dumps(self.get_all_data())
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return self.__str__()

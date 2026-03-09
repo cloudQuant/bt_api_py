@@ -1,6 +1,6 @@
-"""
-Zebpay Exchange Data Configuration – Feed pattern.
-"""
+from typing import Any
+
+"""Zebpay Exchange Data Configuration – Feed pattern."""
 
 import os
 
@@ -14,7 +14,7 @@ logger = get_logger("zebpay_exchange_data")
 _zebpay_yaml_cache = None
 
 
-def _load_zebpay_yaml():
+def _load_zebpay_yaml() -> Any | None:
     global _zebpay_yaml_cache
     if _zebpay_yaml_cache is not None:
         return _zebpay_yaml_cache
@@ -36,7 +36,7 @@ def _load_zebpay_yaml():
 class ZebpayExchangeData(ExchangeData):
     """Base class for Zebpay exchange."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__()
         self.exchange_name = "ZEBPAY"
         self.rest_url = "https://sapi.zebpay.com"
@@ -65,10 +65,10 @@ class ZebpayExchangeData(ExchangeData):
     def get_reverse_symbol(symbol):
         return symbol.strip().replace("/", "-").replace("_", "-").upper()
 
-    def get_period(self, period):
+    def get_period(self, period: str) -> str:
         return self.kline_periods.get(period, period)
 
-    def get_reverse_period(self, period):
+    def get_reverse_period(self, period: str) -> str:
         for k, v in self.kline_periods.items():
             if v == period:
                 return k
@@ -78,7 +78,7 @@ class ZebpayExchangeData(ExchangeData):
 class ZebpayExchangeDataSpot(ZebpayExchangeData):
     """Zebpay Spot exchange configuration."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__()
         self.exchange_name = "ZEBPAY___SPOT"
         self.asset_type = "SPOT"
@@ -99,7 +99,7 @@ class ZebpayExchangeDataSpot(ZebpayExchangeData):
         self.wss_paths = {}
         self._load_yaml()
 
-    def _load_yaml(self):
+    def _load_yaml(self) -> None:
         cfg = _load_zebpay_yaml()
         spot = cfg.get("ZEBPAY___SPOT", {})
         if not spot:
@@ -118,7 +118,7 @@ class ZebpayExchangeDataSpot(ZebpayExchangeData):
         if lc:
             self.legal_currency = list(lc)
 
-    def get_rest_path(self, key, **kwargs):
+    def get_rest_path(self, key: str, **kwargs) -> str:
         path = self.rest_paths.get(key, "")
         if not path:
             raise ValueError(f"[{self.exchange_name}] REST path not found: {key}")

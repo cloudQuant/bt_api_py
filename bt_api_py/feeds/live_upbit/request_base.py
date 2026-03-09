@@ -45,7 +45,7 @@ class UpbitRequestData(Feed):
     # ── minute-value → period key mapping ───────────────────────
     _MINUTE_PERIODS = {"1", "3", "5", "10", "15", "30", "60", "120", "240", "360", "480", "720"}
 
-    def __init__(self, data_queue, **kwargs):
+    def __init__(self, data_queue, **kwargs) -> None:
         super().__init__(data_queue, **kwargs)
         self.data_queue = data_queue
         self._api_key = (

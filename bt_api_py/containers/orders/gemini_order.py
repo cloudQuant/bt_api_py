@@ -176,5 +176,5 @@ class GeminiRequestOrderData(RequestData):
 class GeminiSpotWssOrderData(GeminiRequestOrderData):
     """Gemini Spot WebSocket Order Data"""
 
-    def __init__(self, data, symbol=None, asset_type=None):
+    def __init__(self, data, symbol=None, asset_type=None) -> None:
         super().__init__(data, symbol, asset_type, is_rest=False)

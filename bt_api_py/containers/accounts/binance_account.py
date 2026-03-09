@@ -1,5 +1,6 @@
 import json
 import time
+from typing import Any
 
 from bt_api_py.containers.accounts.account import AccountData
 from bt_api_py.containers.balances.binance_balance import (
@@ -16,24 +17,48 @@ from bt_api_py.functions.utils import from_dict_get_bool, from_dict_get_float, f
 
 
 class BinanceSpotRequestAccountData(AccountData):
-    def __init__(self, account_info, symbol_name, asset_type, has_been_json_encoded=False):
+    """Binance现货账户数据类。
+
+    用于存储和管理Binance现货账户的账户信息、余额等数据。
+    """
+
+    def __init__(
+        self,
+        account_info: dict[str, Any] | str,
+        symbol_name: str,
+        asset_type: str,
+        has_been_json_encoded: bool = False,
+    ) -> None:
+        """初始化Binance现货账户数据。
+
+        Args:
+            account_info: 账户信息，可以是字典或JSON字符串。
+            symbol_name: 交易对名称。
+            asset_type: 资产类型。
+            has_been_json_encoded: 是否已经JSON编码。
+        """
         super().__init__(account_info, has_been_json_encoded)
         self.exchange_name = "BINANCE"
         self.symbol_name = symbol_name
-        self.local_update_time = time.time()  # 本地时间戳
+        self.local_update_time = time.time()
         self.asset_type = asset_type
         self.account_data = self.account_info if has_been_json_encoded else None
-        self.balances = None
-        self.can_withdraw = None
-        self.can_trade = None
-        self.can_deposit = None
-        self.account_type = None
-        self.server_time = None
-        self.is_multi_assets_margin = None
-        self.all_data = None
+        self.balances: list[BinanceSpotRequestBalanceData] | None = None
+        self.can_withdraw: bool | None = None
+        self.can_trade: bool | None = None
+        self.can_deposit: bool | None = None
+        self.account_type: str | None = None
+        self.server_time: float | None = None
+        self.is_multi_assets_margin: bool | None = None
+        self.all_data: dict[str, Any] | None = None
         self.has_been_init_data = False
 
-    def init_data(self):
+    def init_data(self) -> "BinanceSpotRequestAccountData":
+        """初始化账户数据。
+
+        Returns:
+            初始化后的账户数据对象。
+        """
         if not self.has_been_json_encoded:
             self.account_data = json.loads(self.account_info)
             self.has_been_json_encoded = True
@@ -51,7 +76,12 @@ class BinanceSpotRequestAccountData(AccountData):
         self.has_been_init_data = True
         return self
 
-    def get_all_data(self):
+    def get_all_data(self) -> dict[str, Any]:
+        """获取所有账户数据。
+
+        Returns:
+            包含所有账户信息的字典。
+        """
         if self.all_data is None:
             self.all_data = {
                 "exchange_name": self.exchange_name,
@@ -67,167 +97,322 @@ class BinanceSpotRequestAccountData(AccountData):
             }
         return self.all_data
 
-    def __str__(self):
+    def __str__(self) -> str:
         self.init_data()
         return str(self.get_all_data())
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return self.__str__()
 
-    def get_exchange_name(self):
-        """# 交易所名称"""
+    def get_exchange_name(self) -> str:
+        """获取交易所名称。
+
+        Returns:
+            交易所名称。
+        """
         return self.exchange_name
 
-    def get_symbol_name(self):
-        """# 货币名称"""
+    def get_symbol_name(self) -> str:
+        """获取交易对名称。
+
+        Returns:
+            交易对名称。
+        """
         return self.symbol_name
 
-    def get_asset_type(self):
-        """# 资产类型"""
+    def get_asset_type(self) -> str:
+        """获取资产类型。
+
+        Returns:
+            资产类型。
+        """
         return self.asset_type
 
-    def get_server_time(self):
-        """# 服务器时间戳"""
+    def get_server_time(self) -> float | None:
+        """获取服务器时间戳。
+
+        Returns:
+            服务器时间戳。
+        """
         return self.server_time
 
-    def get_local_update_time(self):
-        """# 本地时间戳"""
+    def get_local_update_time(self) -> float:
+        """获取本地时间戳。
+
+        Returns:
+            本地时间戳。
+        """
         return self.local_update_time
 
-    def get_account_id(self):
-        """# 账户id"""
+    def get_account_id(self) -> None:
+        """获取账户ID。
+
+        Returns:
+            账户ID（现货账户无此信息）。
+        """
         return None
 
-    def get_account_type(self):
-        """# 账户类型"""
+    def get_account_type(self) -> str | None:
+        """获取账户类型。
+
+        Returns:
+            账户类型。
+        """
         return self.account_type
 
-    def get_is_multi_assets_margin(self):
-        """是否是多账户资产类型"""
+    def get_is_multi_assets_margin(self) -> bool | None:
+        """获取是否是多账户资产类型。
+
+        Returns:
+            是否是多账户资产类型。
+        """
         return self.is_multi_assets_margin
 
-    def get_can_deposit(self):
-        """# 是否可以存钱"""
+    def get_can_deposit(self) -> bool | None:
+        """获取是否可以存款。
+
+        Returns:
+            是否可以存款。
+        """
         return self.can_deposit
 
-    def get_can_trade(self):
-        """# 是否可以交易"""
+    def get_can_trade(self) -> bool | None:
+        """获取是否可以交易。
+
+        Returns:
+            是否可以交易。
+        """
         return self.can_trade
 
-    def get_can_withdraw(self):
-        """# 是否可以取钱"""
+    def get_can_withdraw(self) -> bool | None:
+        """获取是否可以取款。
+
+        Returns:
+            是否可以取款。
+        """
         return self.can_withdraw
 
-    def get_fee_tier(self):
-        """# 资金费率等级"""
+    def get_fee_tier(self) -> None:
+        """获取资金费率等级。
+
+        Returns:
+            资金费率等级（现货账户无此信息）。
+        """
         return None
 
-    def get_max_withdraw_amount(self):
-        """# 最大可取资金"""
+    def get_max_withdraw_amount(self) -> None:
+        """获取最大可取资金。
+
+        Returns:
+            最大可取资金（现货账户无此信息）。
+        """
         return None
 
-    def get_total_margin(self):
-        """# 总的初始化保证金"""
+    def get_total_margin(self) -> None:
+        """获取总的初始化保证金。
+
+        Returns:
+            总的初始化保证金（现货账户无此信息）。
+        """
         return None
 
-    def get_margin(self):
+    def get_margin(self) -> int:
+        """获取保证金。
+
+        Returns:
+            保证金（现货账户为0）。
+        """
         return 0
 
-    def get_total_used_margin(self):
-        """# 总的使用的保证金"""
+    def get_total_used_margin(self) -> None:
+        """获取总的使用的保证金。
+
+        Returns:
+            总的使用的保证金（现货账户无此信息）。
+        """
         return None
 
-    def get_total_maintain_margin(self):
-        """# 总的维持资金"""
+    def get_total_maintain_margin(self) -> None:
+        """获取总的维持资金。
+
+        Returns:
+            总的维持资金（现货账户无此信息）。
+        """
         return None
 
-    def get_available_margin(self):
+    def get_available_margin(self) -> int:
+        """获取可用保证金。
+
+        Returns:
+            可用保证金（现货账户为0）。
+        """
         return 0
 
-    def get_total_available_margin(self):
-        """# 总的可用保证金"""
+    def get_total_available_margin(self) -> None:
+        """获取总的可用保证金。
+
+        Returns:
+            总的可用保证金（现货账户无此信息）。
+        """
         return None
 
-    def get_total_open_order_initial_margin(self):
-        """# 总的开仓订单初始保证金"""
+    def get_total_open_order_initial_margin(self) -> None:
+        """获取总的开仓订单初始保证金。
+
+        Returns:
+            总的开仓订单初始保证金（现货账户无此信息）。
+        """
         return None
 
-    def get_total_position_initial_margin(self):
-        """# 总的持仓初始化保证金"""
+    def get_total_position_initial_margin(self) -> None:
+        """获取总的持仓初始化保证金。
+
+        Returns:
+            总的持仓初始化保证金（现货账户无此信息）。
+        """
         return None
 
-    def get_total_unrealized_profit(self):
-        """# 总的未实现利润"""
+    def get_total_unrealized_profit(self) -> None:
+        """获取总的未实现利润。
+
+        Returns:
+            总的未实现利润（现货账户无此信息）。
+        """
         return None
 
-    def get_unrealized_profit(self):
+    def get_unrealized_profit(self) -> int:
+        """获取未实现利润。
+
+        Returns:
+            未实现利润（现货账户为0）。
+        """
         return 0
 
-    def get_total_wallet_balance(self):
-        """# 总的钱包余额"""
+    def get_total_wallet_balance(self) -> None:
+        """获取总的钱包余额。
+
+        Returns:
+            总的钱包余额（现货账户无此信息）。
+        """
         return None
 
-    def get_balances(self):
-        """# 现货资产,账户余额，可用，冻结"""
+    def get_balances(self) -> list[BinanceSpotRequestBalanceData] | None:
+        """获取现货资产余额列表。
+
+        Returns:
+            余额数据列表。
+        """
         return self.balances
 
-    def get_positions(self):
-        """# 获取持仓数据"""
+    def get_positions(self) -> None:
+        """获取持仓数据。
+
+        Returns:
+            持仓数据（现货账户无此信息）。
+        """
         return None
 
-    def get_spot_maker_commission_rate(self):
-        # maker佣金费率
+    def get_spot_maker_commission_rate(self) -> None:
+        """获取现货maker佣金费率。
+
+        Returns:
+            maker佣金费率。
+        """
         return None
 
-    def get_spot_taker_commission_rate(self):
-        # taker佣金费率
+    def get_spot_taker_commission_rate(self) -> None:
+        """获取现货taker佣金费率。
+
+        Returns:
+            taker佣金费率。
+        """
         return None
 
-    def get_future_maker_commission_rate(self):
-        # maker佣金费率
+    def get_future_maker_commission_rate(self) -> None:
+        """获取合约maker佣金费率。
+
+        Returns:
+            maker佣金费率。
+        """
         return None
 
-    def get_future_taker_commission_rate(self):
-        # taker佣金费率
+    def get_future_taker_commission_rate(self) -> None:
+        """获取合约taker佣金费率。
+
+        Returns:
+            taker佣金费率。
+        """
         return None
 
-    def get_option_maker_commission_rate(self):
-        # maker佣金费率
+    def get_option_maker_commission_rate(self) -> None:
+        """获取期权maker佣金费率。
+
+        Returns:
+            maker佣金费率。
+        """
         return None
 
-    def get_option_taker_commission_rate(self):
-        # taker佣金费率
+    def get_option_taker_commission_rate(self) -> None:
+        """获取期权taker佣金费率。
+
+        Returns:
+            taker佣金费率。
+        """
         return None
 
 
 class BinanceSwapRequestAccountData(AccountData):
-    def __init__(self, account_info, symbol_name, asset_type, has_been_json_encoded=False):
+    """Binance永续合约账户数据类。
+
+    用于存储和管理Binance永续合约账户的账户信息、余额、持仓等数据。
+    """
+
+    def __init__(
+        self,
+        account_info: dict[str, Any] | str,
+        symbol_name: str,
+        asset_type: str,
+        has_been_json_encoded: bool = False,
+    ) -> None:
+        """初始化Binance永续合约账户数据。
+
+        Args:
+            account_info: 账户信息，可以是字典或JSON字符串。
+            symbol_name: 交易对名称。
+            asset_type: 资产类型。
+            has_been_json_encoded: 是否已经JSON编码。
+        """
         super().__init__(account_info, has_been_json_encoded)
         self.exchange_name = "BINANCE"
         self.symbol_name = symbol_name
-        self.local_update_time = time.time()  # 本地时间戳
+        self.local_update_time = time.time()
         self.asset_type = asset_type
         self.account_data = self.account_info if has_been_json_encoded else None
-        self.balances = None
-        self.total_wallet_balance = None
-        self.total_unrealized_profit = None
-        self.total_open_order_initial_margin = None
-        self.total_maintain_margin = None
-        self.total_margin = None
-        self.server_time = None
-        self.positions = None
-        self.total_position_initial_margin = None
-        self.total_available_margin = None
-        self.max_withdraw_amount = None
-        self.fee_tier = None
-        self.can_withdraw = None
-        self.can_trade = None
-        self.can_deposit = None
-        self.is_multi_assets_margin = None
-        self.all_data = None
+        self.balances: list[BinanceSwapRequestBalanceData] | None = None
+        self.total_wallet_balance: float | None = None
+        self.total_unrealized_profit: float | None = None
+        self.total_open_order_initial_margin: float | None = None
+        self.total_maintain_margin: float | None = None
+        self.total_margin: float | None = None
+        self.server_time: float | None = None
+        self.positions: list[BinanceRequestPositionData] | None = None
+        self.total_position_initial_margin: float | None = None
+        self.total_available_margin: float | None = None
+        self.max_withdraw_amount: float | None = None
+        self.fee_tier: float | None = None
+        self.can_withdraw: bool | None = None
+        self.can_trade: bool | None = None
+        self.can_deposit: bool | None = None
+        self.is_multi_assets_margin: bool | None = None
+        self.all_data: dict[str, Any] | None = None
         self.has_been_init_data = False
 
-    def init_data(self):
+    def init_data(self) -> "BinanceSwapRequestAccountData":
+        """初始化账户数据。
+
+        Returns:
+            初始化后的账户数据对象。
+        """
         if not self.has_been_json_encoded:
             self.account_data = json.loads(self.account_info)
             self.has_been_json_encoded = True
@@ -262,7 +447,12 @@ class BinanceSwapRequestAccountData(AccountData):
         self.has_been_init_data = True
         return self
 
-    def get_all_data(self):
+    def get_all_data(self) -> dict[str, Any]:
+        """获取所有账户数据。
+
+        Returns:
+            包含所有账户信息的字典。
+        """
         if self.all_data is None:
             self.all_data = {
                 "exchange_name": self.exchange_name,
@@ -288,145 +478,285 @@ class BinanceSwapRequestAccountData(AccountData):
             }
         return self.all_data
 
-    def __str__(self):
+    def __str__(self) -> str:
         self.init_data()
         return str(self.get_all_data())
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return self.__str__()
 
-    def get_exchange_name(self):
-        """# 交易所名称"""
+    def get_exchange_name(self) -> str:
+        """获取交易所名称。
+
+        Returns:
+            交易所名称。
+        """
         return self.exchange_name
 
-    def get_symbol_name(self):
-        """# 货币名称"""
+    def get_symbol_name(self) -> str:
+        """获取交易对名称。
+
+        Returns:
+            交易对名称。
+        """
         return self.symbol_name
 
-    def get_asset_type(self):
-        """# 资产类型"""
+    def get_asset_type(self) -> str:
+        """获取资产类型。
+
+        Returns:
+            资产类型。
+        """
         return self.asset_type
 
-    def get_server_time(self):
-        """# 服务器时间戳"""
+    def get_server_time(self) -> float | None:
+        """获取服务器时间戳。
+
+        Returns:
+            服务器时间戳。
+        """
         return self.server_time
 
-    def get_local_update_time(self):
-        """# 本地时间戳"""
+    def get_local_update_time(self) -> float:
+        """获取本地时间戳。
+
+        Returns:
+            本地时间戳。
+        """
         return self.local_update_time
 
-    def get_account_id(self):
-        """# 账户id"""
+    def get_account_id(self) -> None:
+        """获取账户ID。
+
+        Returns:
+            账户ID。
+        """
         return None
 
-    def get_account_type(self):
-        """# 账户类型"""
+    def get_account_type(self) -> None:
+        """获取账户类型。
+
+        Returns:
+            账户类型。
+        """
         return None
 
-    def get_is_multi_assets_margin(self):
-        """是否是多账户资产类型"""
+    def get_is_multi_assets_margin(self) -> bool | None:
+        """获取是否是多账户资产类型。
+
+        Returns:
+            是否是多账户资产类型。
+        """
         return self.is_multi_assets_margin
 
-    def get_can_deposit(self):
-        """# 是否可以存钱"""
+    def get_can_deposit(self) -> bool | None:
+        """获取是否可以存款。
+
+        Returns:
+            是否可以存款。
+        """
         return self.can_deposit
 
-    def get_can_trade(self):
-        """# 是否可以交易"""
+    def get_can_trade(self) -> bool | None:
+        """获取是否可以交易。
+
+        Returns:
+            是否可以交易。
+        """
         return self.can_trade
 
-    def get_can_withdraw(self):
-        """# 是否可以取钱"""
+    def get_can_withdraw(self) -> bool | None:
+        """获取是否可以取款。
+
+        Returns:
+            是否可以取款。
+        """
         return self.can_withdraw
 
-    def get_fee_tier(self):
-        """# 资金费率等级"""
+    def get_fee_tier(self) -> float | None:
+        """获取资金费率等级。
+
+        Returns:
+            资金费率等级。
+        """
         return self.fee_tier
 
-    def get_max_withdraw_amount(self):
-        """# 最大可取资金"""
+    def get_max_withdraw_amount(self) -> float | None:
+        """获取最大可取资金。
+
+        Returns:
+            最大可取资金。
+        """
         return self.max_withdraw_amount
 
-    def get_total_margin(self):
-        """# 总的初始化保证金"""
+    def get_total_margin(self) -> float | None:
+        """获取总的初始化保证金。
+
+        Returns:
+            总的初始化保证金。
+        """
         return self.total_margin
 
-    def get_total_used_margin(self):
-        """# 总的使用的保证金"""
+    def get_total_used_margin(self) -> float | None:
+        """获取总的使用的保证金。
+
+        Returns:
+            总的使用的保证金。
+        """
         return self.get_total_margin() - self.get_total_available_margin()
 
-    def get_total_maintain_margin(self):
-        """# 总的维持资金"""
+    def get_total_maintain_margin(self) -> float | None:
+        """获取总的维持资金。
+
+        Returns:
+            总的维持资金。
+        """
         return self.total_maintain_margin
 
-    def get_total_available_margin(self):
-        """# 总的可用保证金"""
+    def get_total_available_margin(self) -> float | None:
+        """获取总的可用保证金。
+
+        Returns:
+            总的可用保证金。
+        """
         return self.total_available_margin
 
-    def get_total_open_order_initial_margin(self):
-        """# 总的开仓订单初始保证金"""
+    def get_total_open_order_initial_margin(self) -> float | None:
+        """获取总的开仓订单初始保证金。
+
+        Returns:
+            总的开仓订单初始保证金。
+        """
         return self.total_open_order_initial_margin
 
-    def get_total_position_initial_margin(self):
-        """# 总的持仓初始化保证金"""
+    def get_total_position_initial_margin(self) -> float | None:
+        """获取总的持仓初始化保证金。
+
+        Returns:
+            总的持仓初始化保证金。
+        """
         return self.total_position_initial_margin
 
-    def get_total_unrealized_profit(self):
-        """# 总的未实现利润"""
+    def get_total_unrealized_profit(self) -> float | None:
+        """获取总的未实现利润。
+
+        Returns:
+            总的未实现利润。
+        """
         return self.total_unrealized_profit
 
-    def get_total_wallet_balance(self):
-        """# 总的钱包余额"""
+    def get_total_wallet_balance(self) -> float | None:
+        """获取总的钱包余额。
+
+        Returns:
+            总的钱包余额。
+        """
         return self.total_wallet_balance
 
-    def get_balances(self):
-        """# 现货资产,账户余额，可用，冻结"""
+    def get_balances(self) -> list[BinanceSwapRequestBalanceData] | None:
+        """获取账户余额列表。
+
+        Returns:
+            余额数据列表。
+        """
         return self.balances
 
-    def get_positions(self):
-        """# 获取持仓数据"""
+    def get_positions(self) -> list[BinanceRequestPositionData] | None:
+        """获取持仓数据。
+
+        Returns:
+            持仓数据列表。
+        """
         return self.positions
 
-    def get_spot_maker_commission_rate(self):
-        # maker佣金费率
+    def get_spot_maker_commission_rate(self) -> None:
+        """获取现货maker佣金费率。
+
+        Returns:
+            maker佣金费率。
+        """
         return None
 
-    def get_spot_taker_commission_rate(self):
-        # taker佣金费率
+    def get_spot_taker_commission_rate(self) -> None:
+        """获取现货taker佣金费率。
+
+        Returns:
+            taker佣金费率。
+        """
         return None
 
-    def get_future_maker_commission_rate(self):
-        # maker佣金费率
+    def get_future_maker_commission_rate(self) -> None:
+        """获取合约maker佣金费率。
+
+        Returns:
+            maker佣金费率。
+        """
         return None
 
-    def get_future_taker_commission_rate(self):
-        # taker佣金费率
+    def get_future_taker_commission_rate(self) -> None:
+        """获取合约taker佣金费率。
+
+        Returns:
+            taker佣金费率。
+        """
         return None
 
-    def get_option_maker_commission_rate(self):
-        # maker佣金费率
+    def get_option_maker_commission_rate(self) -> None:
+        """获取期权maker佣金费率。
+
+        Returns:
+            maker佣金费率。
+        """
         return None
 
-    def get_option_taker_commission_rate(self):
-        # taker佣金费率
+    def get_option_taker_commission_rate(self) -> None:
+        """获取期权taker佣金费率。
+
+        Returns:
+            taker佣金费率。
+        """
         return None
 
 
 class BinanceSwapWssAccountData(AccountData):
-    def __init__(self, account_info, symbol_name, asset_type, has_been_json_encoded=False):
+    """Binance永续合约WebSocket账户数据类。
+
+    用于存储和管理通过WebSocket推送的Binance永续合约账户数据。
+    """
+
+    def __init__(
+        self,
+        account_info: dict[str, Any] | str,
+        symbol_name: str,
+        asset_type: str,
+        has_been_json_encoded: bool = False,
+    ) -> None:
+        """初始化Binance永续合约WebSocket账户数据。
+
+        Args:
+            account_info: 账户信息，可以是字典或JSON字符串。
+            symbol_name: 交易对名称。
+            asset_type: 资产类型。
+            has_been_json_encoded: 是否已经JSON编码。
+        """
         super().__init__(account_info, has_been_json_encoded)
         self.exchange_name = "BINANCE"
         self.symbol_name = symbol_name
-        self.local_update_time = time.time()  # 本地时间戳
+        self.local_update_time = time.time()
         self.asset_type = asset_type
         self.account_data = self.account_info if has_been_json_encoded else None
-        self.positions = None
-        self.balances = None
-        self.server_time = None
-        self.all_data = None
+        self.positions: list[BinanceWssPositionData] | None = None
+        self.balances: list[BinanceSwapWssBalanceData] | None = None
+        self.server_time: float | None = None
+        self.all_data: dict[str, Any] | None = None
         self.has_been_init_data = False
 
-    def init_data(self):
+    def init_data(self) -> "BinanceSwapWssAccountData":
+        """初始化账户数据。
+
+        Returns:
+            初始化后的账户数据对象。
+        """
         if not self.has_been_json_encoded:
             self.account_data = json.loads(self.account_info)
             self.has_been_json_encoded = True
@@ -444,7 +774,12 @@ class BinanceSwapWssAccountData(AccountData):
         self.has_been_init_data = True
         return self
 
-    def get_all_data(self):
+    def get_all_data(self) -> dict[str, Any] | None:
+        """获取所有账户数据。
+
+        Returns:
+            包含所有账户信息的字典。
+        """
         if self.all_data is not None:
             self.all_data = {
                 "exchange_name": self.exchange_name,
@@ -457,140 +792,276 @@ class BinanceSwapWssAccountData(AccountData):
             }
         return self.all_data
 
-    def __str__(self):
+    def __str__(self) -> str:
         self.init_data()
         return str(self.get_all_data())
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return self.__str__()
 
-    def get_exchange_name(self):
-        """# 交易所名称"""
+    def get_exchange_name(self) -> str:
+        """获取交易所名称。
+
+        Returns:
+            交易所名称。
+        """
         return self.exchange_name
 
-    def get_symbol_name(self):
-        """# 货币名称"""
+    def get_symbol_name(self) -> str:
+        """获取交易对名称。
+
+        Returns:
+            交易对名称。
+        """
         return self.symbol_name
 
-    def get_asset_type(self):
-        """# 资产类型"""
+    def get_asset_type(self) -> str:
+        """获取资产类型。
+
+        Returns:
+            资产类型。
+        """
         return self.asset_type
 
-    def get_server_time(self):
-        """# 服务器时间戳"""
+    def get_server_time(self) -> float | None:
+        """获取服务器时间戳。
+
+        Returns:
+            服务器时间戳。
+        """
         return self.server_time
 
-    def get_local_update_time(self):
-        """# 本地时间戳"""
+    def get_local_update_time(self) -> float:
+        """获取本地时间戳。
+
+        Returns:
+            本地时间戳。
+        """
         return self.local_update_time
 
-    def get_account_id(self):
-        """# 账户id"""
+    def get_account_id(self) -> None:
+        """获取账户ID。
+
+        Returns:
+            账户ID。
+        """
         return None
 
-    def get_account_type(self):
-        """# 账户类型"""
+    def get_account_type(self) -> None:
+        """获取账户类型。
+
+        Returns:
+            账户类型。
+        """
         return None
 
-    def get_can_deposit(self):
-        """# 是否可以存钱"""
+    def get_can_deposit(self) -> None:
+        """获取是否可以存款。
+
+        Returns:
+            是否可以存款。
+        """
         return None
 
-    def get_can_trade(self):
-        """# 是否可以交易"""
+    def get_can_trade(self) -> None:
+        """获取是否可以交易。
+
+        Returns:
+            是否可以交易。
+        """
         return None
 
-    def get_can_withdraw(self):
-        """# 是否可以取钱"""
+    def get_can_withdraw(self) -> None:
+        """获取是否可以取款。
+
+        Returns:
+            是否可以取款。
+        """
         return None
 
-    def get_fee_tier(self):
-        """# 资金费率等级"""
+    def get_fee_tier(self) -> None:
+        """获取资金费率等级。
+
+        Returns:
+            资金费率等级。
+        """
         return None
 
-    def get_max_withdraw_amount(self):
-        """# 最大可取资金"""
+    def get_max_withdraw_amount(self) -> None:
+        """获取最大可取资金。
+
+        Returns:
+            最大可取资金。
+        """
         return None
 
-    def get_total_margin(self):
-        """# 总的初始化保证金"""
+    def get_total_margin(self) -> None:
+        """获取总的初始化保证金。
+
+        Returns:
+            总的初始化保证金。
+        """
         return None
 
-    def get_total_used_margin(self):
-        """# 总的使用的保证金"""
+    def get_total_used_margin(self) -> None:
+        """获取总的使用的保证金。
+
+        Returns:
+            总的使用的保证金。
+        """
         return None
 
-    def get_total_maintain_margin(self):
-        """# 总的维持资金"""
+    def get_total_maintain_margin(self) -> None:
+        """获取总的维持资金。
+
+        Returns:
+            总的维持资金。
+        """
         return None
 
-    def get_total_available_margin(self):
-        """# 总的可用保证金"""
+    def get_total_available_margin(self) -> None:
+        """获取总的可用保证金。
+
+        Returns:
+            总的可用保证金。
+        """
         return None
 
-    def get_total_open_order_initial_margin(self):
-        """# 总的开仓订单初始保证金"""
+    def get_total_open_order_initial_margin(self) -> None:
+        """获取总的开仓订单初始保证金。
+
+        Returns:
+            总的开仓订单初始保证金。
+        """
         return None
 
-    def get_total_position_initial_margin(self):
-        """# 总的持仓初始化保证金"""
+    def get_total_position_initial_margin(self) -> None:
+        """获取总的持仓初始化保证金。
+
+        Returns:
+            总的持仓初始化保证金。
+        """
         return None
 
-    def get_total_unrealized_profit(self):
-        """# 总的未实现利润"""
+    def get_total_unrealized_profit(self) -> None:
+        """获取总的未实现利润。
+
+        Returns:
+            总的未实现利润。
+        """
         return None
 
-    def get_total_wallet_balance(self):
-        """# 总的钱包余额"""
+    def get_total_wallet_balance(self) -> None:
+        """获取总的钱包余额。
+
+        Returns:
+            总的钱包余额。
+        """
         return None
 
-    def get_balances(self):
-        """# 现货资产,账户余额，可用，冻结"""
+    def get_balances(self) -> list[BinanceSwapWssBalanceData] | None:
+        """获取账户余额列表。
+
+        Returns:
+            余额数据列表。
+        """
         return self.balances
 
-    def get_positions(self):
-        """# 获取持仓数据"""
+    def get_positions(self) -> list[BinanceWssPositionData] | None:
+        """获取持仓数据。
+
+        Returns:
+            持仓数据列表。
+        """
         return self.positions
 
-    def get_spot_maker_commission_rate(self):
-        # maker佣金费率
+    def get_spot_maker_commission_rate(self) -> None:
+        """获取现货maker佣金费率。
+
+        Returns:
+            maker佣金费率。
+        """
         return None
 
-    def get_spot_taker_commission_rate(self):
-        # taker佣金费率
+    def get_spot_taker_commission_rate(self) -> None:
+        """获取现货taker佣金费率。
+
+        Returns:
+            taker佣金费率。
+        """
         return None
 
-    def get_future_maker_commission_rate(self):
-        # maker佣金费率
+    def get_future_maker_commission_rate(self) -> None:
+        """获取合约maker佣金费率。
+
+        Returns:
+            maker佣金费率。
+        """
         return None
 
-    def get_future_taker_commission_rate(self):
-        # taker佣金费率
+    def get_future_taker_commission_rate(self) -> None:
+        """获取合约taker佣金费率。
+
+        Returns:
+            taker佣金费率。
+        """
         return None
 
-    def get_option_maker_commission_rate(self):
-        # maker佣金费率
+    def get_option_maker_commission_rate(self) -> None:
+        """获取期权maker佣金费率。
+
+        Returns:
+            maker佣金费率。
+        """
         return None
 
-    def get_option_taker_commission_rate(self):
-        # taker佣金费率
+    def get_option_taker_commission_rate(self) -> None:
+        """获取期权taker佣金费率。
+
+        Returns:
+            taker佣金费率。
+        """
         return None
 
 
 class BinanceSpotWssAccountData(AccountData):
-    def __init__(self, account_info, symbol_name, asset_type, has_been_json_encoded=False):
+    """Binance现货WebSocket账户数据类。
+
+    用于存储和管理通过WebSocket推送的Binance现货账户数据。
+    """
+
+    def __init__(
+        self,
+        account_info: dict[str, Any] | str,
+        symbol_name: str,
+        asset_type: str,
+        has_been_json_encoded: bool = False,
+    ) -> None:
+        """初始化Binance现货WebSocket账户数据。
+
+        Args:
+            account_info: 账户信息，可以是字典或JSON字符串。
+            symbol_name: 交易对名称。
+            asset_type: 资产类型。
+            has_been_json_encoded: 是否已经JSON编码。
+        """
         super().__init__(account_info, has_been_json_encoded)
         self.exchange_name = "BINANCE"
         self.symbol_name = symbol_name
-        self.local_update_time = time.time()  # 本地时间戳
+        self.local_update_time = time.time()
         self.asset_type = asset_type
         self.account_data = self.account_info if has_been_json_encoded else None
-        self.server_time = None
-        self.balances = None
-        self.all_data = None
+        self.server_time: float | None = None
+        self.balances: list[BinanceSpotWssBalanceData] | None = None
+        self.all_data: dict[str, Any] | None = None
         self.has_been_init_data = False
 
-    def init_data(self):
+    def init_data(self) -> "BinanceSpotWssAccountData":
+        """初始化账户数据。
+
+        Returns:
+            初始化后的账户数据对象。
+        """
         if not self.has_been_json_encoded:
             self.account_data = json.loads(self.account_info)
             self.has_been_json_encoded = True
@@ -604,7 +1075,12 @@ class BinanceSpotWssAccountData(AccountData):
         self.has_been_init_data = True
         return self
 
-    def get_all_data(self):
+    def get_all_data(self) -> dict[str, Any]:
+        """获取所有账户数据。
+
+        Returns:
+            包含所有账户信息的字典。
+        """
         if self.all_data is None:
             self.all_data = {
                 "symbol": self.symbol_name,
@@ -615,121 +1091,233 @@ class BinanceSpotWssAccountData(AccountData):
             }
         return self.all_data
 
-    def __str__(self):
+    def __str__(self) -> str:
         self.init_data()
         return str(self.get_all_data())
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return self.__str__()
 
-    def get_exchange_name(self):
-        """# 交易所名称"""
+    def get_exchange_name(self) -> str:
+        """获取交易所名称。
+
+        Returns:
+            交易所名称。
+        """
         return self.exchange_name
 
-    def get_symbol_name(self):
-        """# 货币名称"""
+    def get_symbol_name(self) -> str:
+        """获取交易对名称。
+
+        Returns:
+            交易对名称。
+        """
         return self.symbol_name
 
-    def get_asset_type(self):
-        """# 资产类型"""
+    def get_asset_type(self) -> str:
+        """获取资产类型。
+
+        Returns:
+            资产类型。
+        """
         return self.asset_type
 
-    def get_server_time(self):
-        """# 服务器时间戳"""
+    def get_server_time(self) -> float | None:
+        """获取服务器时间戳。
+
+        Returns:
+            服务器时间戳。
+        """
         return self.server_time
 
-    def get_local_update_time(self):
-        """# 本地时间戳"""
+    def get_local_update_time(self) -> float:
+        """获取本地时间戳。
+
+        Returns:
+            本地时间戳。
+        """
         return self.local_update_time
 
-    def get_account_id(self):
-        """# 账户id"""
+    def get_account_id(self) -> None:
+        """获取账户ID。
+
+        Returns:
+            账户ID。
+        """
         return None
 
-    def get_account_type(self):
-        """# 账户类型"""
+    def get_account_type(self) -> None:
+        """获取账户类型。
+
+        Returns:
+            账户类型。
+        """
         return None
 
-    def get_can_deposit(self):
-        """# 是否可以存钱"""
+    def get_can_deposit(self) -> None:
+        """获取是否可以存款。
+
+        Returns:
+            是否可以存款。
+        """
         return None
 
-    def get_can_trade(self):
-        """# 是否可以交易"""
+    def get_can_trade(self) -> None:
+        """获取是否可以交易。
+
+        Returns:
+            是否可以交易。
+        """
         return None
 
-    def get_can_withdraw(self):
-        """# 是否可以取钱"""
+    def get_can_withdraw(self) -> None:
+        """获取是否可以取款。
+
+        Returns:
+            是否可以取款。
+        """
         return None
 
-    def get_fee_tier(self):
-        """# 资金费率等级"""
+    def get_fee_tier(self) -> None:
+        """获取资金费率等级。
+
+        Returns:
+            资金费率等级。
+        """
         return None
 
-    def get_max_withdraw_amount(self):
-        """# 最大可取资金"""
+    def get_max_withdraw_amount(self) -> None:
+        """获取最大可取资金。
+
+        Returns:
+            最大可取资金。
+        """
         return None
 
-    def get_total_margin(self):
-        """# 总的初始化保证金"""
+    def get_total_margin(self) -> None:
+        """获取总的初始化保证金。
+
+        Returns:
+            总的初始化保证金。
+        """
         return None
 
-    def get_total_used_margin(self):
-        """# 总的使用的保证金"""
+    def get_total_used_margin(self) -> None:
+        """获取总的使用的保证金。
+
+        Returns:
+            总的使用的保证金。
+        """
         return None
 
-    def get_total_maintain_margin(self):
-        """# 总的维持资金"""
+    def get_total_maintain_margin(self) -> None:
+        """获取总的维持资金。
+
+        Returns:
+            总的维持资金。
+        """
         return None
 
-    def get_total_available_margin(self):
-        """# 总的可用保证金"""
+    def get_total_available_margin(self) -> None:
+        """获取总的可用保证金。
+
+        Returns:
+            总的可用保证金。
+        """
         return None
 
-    def get_total_open_order_initial_margin(self):
-        """# 总的开仓订单初始保证金"""
+    def get_total_open_order_initial_margin(self) -> None:
+        """获取总的开仓订单初始保证金。
+
+        Returns:
+            总的开仓订单初始保证金。
+        """
         return None
 
-    def get_total_position_initial_margin(self):
-        """# 总的持仓初始化保证金"""
+    def get_total_position_initial_margin(self) -> None:
+        """获取总的持仓初始化保证金。
+
+        Returns:
+            总的持仓初始化保证金。
+        """
         return None
 
-    def get_total_unrealized_profit(self):
-        """# 总的未实现利润"""
+    def get_total_unrealized_profit(self) -> None:
+        """获取总的未实现利润。
+
+        Returns:
+            总的未实现利润。
+        """
         return None
 
-    def get_total_wallet_balance(self):
-        """# 总的钱包余额"""
+    def get_total_wallet_balance(self) -> None:
+        """获取总的钱包余额。
+
+        Returns:
+            总的钱包余额。
+        """
         return None
 
-    def get_balances(self):
-        """# 现货资产,账户余额，可用，冻结"""
+    def get_balances(self) -> list[BinanceSpotWssBalanceData] | None:
+        """获取账户余额列表。
+
+        Returns:
+            余额数据列表。
+        """
         return self.balances
 
-    def get_positions(self):
-        """# 获取持仓数据"""
+    def get_positions(self) -> None:
+        """获取持仓数据。
+
+        Returns:
+            持仓数据。
+        """
         return None
 
-    def get_spot_maker_commission_rate(self):
-        # maker佣金费率
+    def get_spot_maker_commission_rate(self) -> None:
+        """获取现货maker佣金费率。
+
+        Returns:
+            maker佣金费率。
+        """
         return None
 
-    def get_spot_taker_commission_rate(self):
-        # taker佣金费率
+    def get_spot_taker_commission_rate(self) -> None:
+        """获取现货taker佣金费率。
+
+        Returns:
+            taker佣金费率。
+        """
         return None
 
-    def get_future_maker_commission_rate(self):
-        # maker佣金费率
+    def get_future_maker_commission_rate(self) -> None:
+        """获取合约maker佣金费率。
+
+        Returns:
+            maker佣金费率。
+        """
         return None
 
-    def get_future_taker_commission_rate(self):
-        # taker佣金费率
+    def get_future_taker_commission_rate(self) -> None:
+        """获取合约taker佣金费率。
+
+        Returns:
+            taker佣金费率。
+        """
         return None
 
-    def get_option_maker_commission_rate(self):
-        # maker佣金费率
+    def get_option_maker_commission_rate(self) -> None:
+        """获取期权maker佣金费率。
+
+        Returns:
+            maker佣金费率。
+        """
         return None
 
-    def get_option_taker_commission_rate(self):
-        # taker佣金费率
+    def get_option_taker_commission_rate(self) -> None:
+        """获取期权taker佣金费率。
+
+        Returns:
+            taker佣金费率。
+        """
         return None

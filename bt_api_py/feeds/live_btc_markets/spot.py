@@ -22,7 +22,7 @@ class BtcMarketsRequestDataSpot(BtcMarketsRequestData):
             Capability.CANCEL_ORDER,
         }
 
-    def __init__(self, data_queue, **kwargs):
+    def __init__(self, data_queue, **kwargs) -> None:
         super().__init__(data_queue, **kwargs)
         self.exchange_name = kwargs.get("exchange_name", "BTC_MARKETS___SPOT")
 

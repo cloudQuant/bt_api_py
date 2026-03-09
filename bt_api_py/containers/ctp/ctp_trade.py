@@ -1,37 +1,68 @@
-"""
-CTP 成交数据容器
-对应 CTP 的 CThostFtdcTradeField 结构体
+"""CTP 成交数据容器.
+
+对应 CTP 的 CThostFtdcTradeField 结构体.
 """
 
+from __future__ import annotations
+
+from typing import Any
+
 from bt_api_py.containers.trades.trade import TradeData
-from bt_api_py.functions.utils import from_dict_get_float, from_dict_get_int, from_dict_get_string
+from bt_api_py.functions.utils import (
+    from_dict_get_float,
+    from_dict_get_int,
+    from_dict_get_string,
+)
 
 
 class CtpTradeData(TradeData):
-    """CTP 成交数据"""
+    """CTP 成交数据容器."""
 
     def __init__(
-        self, trade_info, symbol_name=None, asset_type="FUTURE", has_been_json_encoded=False
-    ):
+        self,
+        trade_info: dict[str, Any],
+        symbol_name: str | None,
+        asset_type: str = "FUTURE",
+        has_been_json_encoded: bool = False,
+    ) -> None:
+        """Initialize CTP trade data.
+
+        Args:
+            trade_info: Raw trade data from CTP API
+            symbol_name: Symbol name
+            asset_type: Asset type (default: "FUTURE")
+            has_been_json_encoded: Whether data is already JSON encoded
+        """
         super().__init__(trade_info, has_been_json_encoded)
         self.symbol_name = symbol_name
         self.asset_type = asset_type
         self.exchange_name = "CTP"
         self._initialized = False
-        # CTP 成交字段
-        self.instrument_id = None
-        self.trade_id_value = None
-        self.order_ref = None
-        self.order_sys_id = None
-        self.direction = None
-        self.offset = None
-        self.price = None
-        self.volume = None
-        self.trade_date = None
-        self.trade_time = None
-        self.exchange_id = None
 
-    def init_data(self):
+        self.instrument_id: str | None = None
+        self.trade_id_value: str | None = None
+        self.order_ref: str | None = None
+        self.order_sys_id: str | None = None
+        self.direction: str | None = None
+        self.offset: str | None = None
+        self.price: float | None = None
+        self.volume: int | None = None
+        self.trade_date: str | None = None
+        self.trade_time: str | None = None
+        self.exchange_id: str | None = None
+
+        self.trade_fee: float | 0.0
+        self.trade_fee_symbol: str = "CNY"
+        self._trade_offset: str | None = None
+
+        self._all_data: dict[str, Any] | None = None
+
+    def init_data(self) -> CtpTradeData:
+        """Initialize and parse the trade data.
+
+        Returns:
+            Self for method chaining
+        """
         if self._initialized:
             return self
         info = self.trade_info
@@ -53,60 +84,138 @@ class CtpTradeData(TradeData):
         self._initialized = True
         return self
 
-    def get_exchange_name(self):
-        return self.exchange_name
+    def get_exchange_name(self) -> str:
+        """Get exchange name.
 
-    def get_asset_type(self):
-        return self.asset_type
+        Returns:
+            Exchange name string
+        """
 
-    def get_symbol_name(self):
+    def get_asset_type(self) -> str:
+        """Get asset type.
+
+        Returns:
+            Asset type string
+        """
+
+    def get_symbol_name(self) -> str | None:
+        """Get symbol name.
+
+        Returns:
+            Symbol name or instrument ID
+        """
         return self.instrument_id or self.symbol_name
 
-    def get_server_time(self):
+    def get_server_time(self) -> str | None:
+        """Get server time.
+
+        Returns:
+            Server time string
+        """
         return self.trade_time
 
-    def get_trade_id(self):
+    def get_trade_id(self) -> str | None:
+        """Get trade ID.
+
+        Returns:
+            Trade ID string
+        """
         return self.trade_id_value
 
-    def get_order_id(self):
+    def get_order_id(self) -> str | None:
+        """Get order ID.
+
+        Returns:
+            Order system ID string
+        """
         return self.order_sys_id
 
-    def get_client_order_id(self):
+    def get_client_order_id(self) -> str | None:
+        """Get client order ID.
+
+        Returns:
+            Client order reference string
+        """
         return self.order_ref
 
-    def get_trade_side(self):
+    def get_trade_side(self) -> str | None:
+        """Get trade side (buy/sell).
+
+        Returns:
+            Trade side string
+        """
         return self.direction
 
-    def get_trade_offset(self):
-        """开平方向: open / close / close_today / close_yesterday"""
+    def get_trade_offset(self) -> str:
+        """Get trade offset.
+
+        Returns:
+            Trade offset string (One of:
+                "open", "close", "close_today", "close_yesterday"
+        """
         return self.offset
 
-    def get_trade_price(self):
+    def get_trade_price(self) -> float | None:
+        """Get trade price.
+
+        Returns:
+            Trade price as float
+        """
         return self.price
 
-    def get_trade_volume(self):
+    def get_trade_volume(self) -> int | None:
+        """Get trade volume.
+
+        Returns:
+            Trade volume as integer
+        """
         return self.volume
 
-    def get_trade_time(self):
+    def get_trade_time(self) -> str | None:
+        """Get trade time.
+
+        Returns:
+            Trade time string
+        """
         return self.trade_time
 
-    def get_trade_fee(self):
-        return 0.0  # CTP 成交回报不含手续费
+    def get_trade_fee(self) -> float:
+        """Get trade fee.
 
-    def get_trade_fee_symbol(self):
-        return "CNY"
+        Note:
+            CTP trade data does not contain fee information.
 
-    def get_all_data(self):
-        return {
-            "exchange_name": self.exchange_name,
-            "instrument_id": self.instrument_id,
-            "trade_id": self.trade_id_value,
-            "order_sys_id": self.order_sys_id,
-            "direction": self.direction,
-            "offset": self.offset,
-            "price": self.price,
-            "volume": self.volume,
-            "trade_date": self.trade_date,
-            "trade_time": self.trade_time,
-            "exchange_id": self.exchange_id,
-        }
+        Returns:
+            Trade fee as float (0.0)
+        """
+        return self.trade_fee
+
+    def get_trade_fee_symbol(self) -> str:
+        """Get trade fee symbol.
+
+        Returns:
+            Fee currency symbol (e.g., "CNY")
+        """
+        return self.trade_fee_symbol
+
+    def get_all_data(self) -> dict[str, Any]:
+        """Get all trade data as dictionary.
+
+        Returns:
+            Dictionary containing all trade data
+        """
+        if self._all_data is None:
+            self._all_data = {
+                "exchange_name": self.exchange_name,
+                "instrument_id": self.instrument_id,
+                "trade_id": self.trade_id_value,
+                "order_sys_id": self.order_sys_id,
+                "direction": self.direction,
+                "offset": self.offset,
+                "price": self.price,
+                "volume": self.volume,
+                "trade_date": self.trade_date,
+                "trade_time": self.trade_time,
+                "exchange_id": self.exchange_id,
+            }
+        return self._all_data

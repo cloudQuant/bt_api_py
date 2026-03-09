@@ -1,7 +1,6 @@
-import pytest
-
 import time
 
+import pytest
 import rapidjson
 import requests
 

@@ -19,7 +19,7 @@ from bt_api_py.logging_factory import get_logger
 class KuCoinRequestDataSpot(KuCoinRequestData):
     """KuCoin Spot trading REST API implementation."""
 
-    def __init__(self, data_queue, **kwargs):
+    def __init__(self, data_queue, **kwargs) -> Any | None:
         super().__init__(data_queue, **kwargs)
         self.asset_type = kwargs.get("asset_type", "SPOT")
         self.logger_name = kwargs.get("logger_name", "kucoin_spot_feed.log")
@@ -40,7 +40,7 @@ class KuCoinRequestDataSpot(KuCoinRequestData):
         client_order_id=None,
         extra_data=None,
         **kwargs,
-    ):
+    ) -> Any | None:
         """Create order parameters.
 
         Args:
@@ -105,7 +105,7 @@ class KuCoinRequestDataSpot(KuCoinRequestData):
         return path, params, extra_data
 
     @staticmethod
-    def _make_order_normalize_function(input_data, extra_data):
+    def _make_order_normalize_function(input_data, extra_data) -> Any | None:
         """Normalize order response."""
         status = input_data is not None
         symbol_name = extra_data["symbol_name"]
@@ -148,7 +148,9 @@ class KuCoinRequestDataSpot(KuCoinRequestData):
         data = self.request(path, params=params, extra_data=extra_data, is_sign=True)
         return data
 
-    def _cancel_order(self, order_id=None, client_order_id=None, extra_data=None, **kwargs):
+    def _cancel_order(
+        self, order_id=None, client_order_id=None, extra_data=None, **kwargs
+    ) -> Any | None:
         """Create cancel order parameters.
 
         Args:
@@ -199,7 +201,7 @@ class KuCoinRequestDataSpot(KuCoinRequestData):
         data = self.request(path, params=params, extra_data=extra_data, is_sign=True)
         return data
 
-    def _cancel_all_orders(self, symbol=None, extra_data=None, **kwargs):
+    def _cancel_all_orders(self, symbol=None, extra_data=None, **kwargs) -> Any | None:
         """Create cancel all orders parameters.
 
         Args:
@@ -242,7 +244,9 @@ class KuCoinRequestDataSpot(KuCoinRequestData):
         data = self.request(path, params=params, extra_data=extra_data, is_sign=True)
         return data
 
-    def _get_order(self, order_id=None, client_order_id=None, extra_data=None, **kwargs):
+    def _get_order(
+        self, order_id=None, client_order_id=None, extra_data=None, **kwargs
+    ) -> Any | None:
         """Create get order parameters.
 
         Args:
@@ -276,7 +280,7 @@ class KuCoinRequestDataSpot(KuCoinRequestData):
         return path, params, extra_data
 
     @staticmethod
-    def _get_order_normalize_function(input_data, extra_data):
+    def _get_order_normalize_function(input_data, extra_data) -> Any | None:
         """Normalize order response."""
         status = input_data is not None
         symbol_name = extra_data["symbol_name"]
@@ -311,7 +315,7 @@ class KuCoinRequestDataSpot(KuCoinRequestData):
     # Alias for get_order to match Binance/OKX pattern
     query_order = get_order
 
-    def _get_open_orders(self, symbol=None, extra_data=None, **kwargs):
+    def _get_open_orders(self, symbol=None, extra_data=None, **kwargs) -> Any | None:
         """Create get open orders parameters.
 
         Args:
@@ -340,7 +344,7 @@ class KuCoinRequestDataSpot(KuCoinRequestData):
         return path, params, extra_data
 
     @staticmethod
-    def _get_open_orders_normalize_function(input_data, extra_data):
+    def _get_open_orders_normalize_function(input_data, extra_data) -> Any | None:
         """Normalize open orders response."""
         status = input_data is not None
         symbol_name = extra_data["symbol_name"]
@@ -371,7 +375,7 @@ class KuCoinRequestDataSpot(KuCoinRequestData):
 
     # ==================== Market Data ====================
 
-    def _get_ticker(self, symbol, extra_data=None, **kwargs):
+    def _get_ticker(self, symbol, extra_data=None, **kwargs) -> Any | None:
         """Create get ticker parameters.
 
         Args:
@@ -398,7 +402,7 @@ class KuCoinRequestDataSpot(KuCoinRequestData):
         return path, params, extra_data
 
     @staticmethod
-    def _get_ticker_normalize_function(input_data, extra_data):
+    def _get_ticker_normalize_function(input_data, extra_data) -> Any | None:
         """Normalize ticker response."""
         status = input_data is not None
         symbol_name = extra_data["symbol_name"]
@@ -424,7 +428,7 @@ class KuCoinRequestDataSpot(KuCoinRequestData):
     # Alias for get_ticker to match standard interface
     get_tick = get_ticker
 
-    def _get_depth(self, symbol, limit=20, extra_data=None, **kwargs):
+    def _get_depth(self, symbol, limit=20, extra_data=None, **kwargs) -> Any | None:
         """Create get order book parameters.
 
         Args:
@@ -458,7 +462,7 @@ class KuCoinRequestDataSpot(KuCoinRequestData):
         return path, params, extra_data
 
     @staticmethod
-    def _get_depth_normalize_function(input_data, extra_data):
+    def _get_depth_normalize_function(input_data, extra_data) -> Any | None:
         """Normalize order book response."""
         status = input_data is not None
         symbol_name = extra_data["symbol_name"]
@@ -493,7 +497,7 @@ class KuCoinRequestDataSpot(KuCoinRequestData):
         limit=None,
         extra_data=None,
         **kwargs,
-    ):
+    ) -> Any | None:
         """Create get kline parameters.
 
         Args:
@@ -551,7 +555,7 @@ class KuCoinRequestDataSpot(KuCoinRequestData):
         return path, params, extra_data
 
     @staticmethod
-    def _get_kline_normalize_function(input_data, extra_data):
+    def _get_kline_normalize_function(input_data, extra_data) -> Any | None:
         """Normalize kline response."""
         status = input_data is not None
         symbol_name = extra_data["symbol_name"]
@@ -605,7 +609,7 @@ class KuCoinRequestDataSpot(KuCoinRequestData):
         limit=None,
         extra_data=None,
         **kwargs,
-    ):
+    ) -> Any | None:
         """Create get trade history parameters.
 
         Args:
@@ -635,7 +639,7 @@ class KuCoinRequestDataSpot(KuCoinRequestData):
         return path, params, extra_data
 
     @staticmethod
-    def _get_deals_normalize_function(input_data, extra_data):
+    def _get_deals_normalize_function(input_data, extra_data) -> Any | None:
         """Normalize trade history response."""
         status = input_data is not None
         symbol_name = extra_data["symbol_name"]
@@ -667,7 +671,9 @@ class KuCoinRequestDataSpot(KuCoinRequestData):
 
     # ==================== Account Management ====================
 
-    def _get_account(self, currency=None, account_type=None, extra_data=None, **kwargs):
+    def _get_account(
+        self, currency=None, account_type=None, extra_data=None, **kwargs
+    ) -> Any | None:
         """Create get account parameters.
 
         Args:
@@ -699,7 +705,7 @@ class KuCoinRequestDataSpot(KuCoinRequestData):
         return path, params, extra_data
 
     @staticmethod
-    def _get_account_normalize_function(input_data, extra_data):
+    def _get_account_normalize_function(input_data, extra_data) -> Any | None:
         """Normalize account response."""
         status = input_data is not None
         symbol_name = extra_data["symbol_name"]
@@ -741,7 +747,7 @@ class KuCoinRequestDataSpot(KuCoinRequestData):
 
     # ==================== Server & Exchange Info ====================
 
-    def _get_server_time(self, extra_data=None, **kwargs):
+    def _get_server_time(self, extra_data=None, **kwargs) -> Any | None:
         """Create get server time parameters.
 
         Args:
@@ -776,7 +782,7 @@ class KuCoinRequestDataSpot(KuCoinRequestData):
         data = self.request(path, params=params, extra_data=extra_data, is_sign=False)
         return data
 
-    def _get_exchange_info(self, extra_data=None, **kwargs):
+    def _get_exchange_info(self, extra_data=None, **kwargs) -> Any | None:
         """Create get exchange info parameters.
 
         Args:
@@ -802,7 +808,7 @@ class KuCoinRequestDataSpot(KuCoinRequestData):
         return path, params, extra_data
 
     @staticmethod
-    def _get_exchange_info_normalize_function(input_data, extra_data):
+    def _get_exchange_info_normalize_function(input_data, extra_data) -> Any | None:
         """Normalize exchange info response — extract 'data' from KuCoin wrapper."""
         if input_data and isinstance(input_data, dict) and "data" in input_data:
             data = input_data["data"]

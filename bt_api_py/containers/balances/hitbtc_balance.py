@@ -1,13 +1,32 @@
 import time
+from typing import Any
 
 from bt_api_py.containers.balances.balance import BalanceData
 from bt_api_py.functions.utils import from_dict_get_float, from_dict_get_string
 
 
 class HitBtcRequestBalanceData(BalanceData):
-    """保存HitBTC账户余额信息"""
+    """保存HitBTC账户余额信息."""
 
-    def __init__(self, balance_info, symbol_name, asset_type, has_been_json_encoded=False):
+    def __init__(
+        self,
+        balance_info: Any,
+        symbol_name: str,
+        asset_type: str,
+        has_been_json_encoded: bool = False,
+    ) -> None:
+        """
+        Initialize HitBTC balance data.
+
+        Args:
+            balance_info: Balance information dictionary.
+            symbol_name: Symbol name.
+            asset_type: Asset type.
+            has_been_json_encoded: Whether data has been JSON encoded.
+
+        Returns:
+            None
+        """
         super().__init__(balance_info, has_been_json_encoded)
         self.exchange_name = "HITBTC"
         self.local_update_time = time.time()
@@ -15,14 +34,20 @@ class HitBtcRequestBalanceData(BalanceData):
         self.asset_type = asset_type
         # Always store balance_info for init_data() to parse
         self.balance_data = balance_info
-        self.currency = None
-        self.available = None
-        self.reserved = None
-        self.timestamp = None
-        self.all_data = None
+        self.currency: str | None = None
+        self.available: float | None = None
+        self.reserved: float | None = None
+        self.timestamp: float | None = None
+        self.all_data: dict[str, Any] | None = None
         self.has_been_init_data = False
 
-    def init_data(self):
+    def init_data(self) -> None:
+        """
+        Initialize data from balance_info.
+
+        Returns:
+            None
+        """
         if self.has_been_init_data:
             return
 
@@ -37,7 +62,13 @@ class HitBtcRequestBalanceData(BalanceData):
 
         self.has_been_init_data = True
 
-    def get_all_data(self):
+    def get_all_data(self) -> dict[str, Any]:
+        """
+        Get all balance data as dictionary.
+
+        Returns:
+            Dictionary containing all balance data.
+        """
         if self.all_data is None:
             self.all_data = {
                 "exchange_name": self.exchange_name,
@@ -51,47 +82,92 @@ class HitBtcRequestBalanceData(BalanceData):
             }
         return self.all_data
 
-    def get_exchange_name(self):
-        """Get exchange name."""
+    def get_exchange_name(self) -> str:
+        """
+        Get exchange name.
+
+        Returns:
+            Exchange name string.
+        """
         return self.exchange_name
 
-    def get_asset_type(self):
-        """Get asset type."""
+    def get_asset_type(self) -> str:
+        """
+        Get asset type.
+
+        Returns:
+            Asset type string.
+        """
         return self.asset_type
 
-    def get_server_time(self):
-        """Get server time."""
+    def get_server_time(self) -> float | None:
+        """
+        Get server time.
+
+        Returns:
+            Server timestamp or None.
+        """
         return self.timestamp
 
-    def get_local_update_time(self):
-        """Get local update time."""
+    def get_local_update_time(self) -> float:
+        """
+        Get local update time.
+
+        Returns:
+            Local update timestamp.
+        """
         return self.local_update_time
 
-    def get_currency(self):
-        """Get currency."""
+    def get_currency(self) -> str | None:
+        """
+        Get currency.
+
+        Returns:
+            Currency string or None.
+        """
         return self.currency
 
-    def get_total(self):
-        """获取总余额"""
+    def get_total(self) -> float:
+        """
+        Get total balance.
+
+        Returns:
+            Total balance amount.
+        """
         return (self.available or 0) + (self.reserved or 0)
 
-    def get_free(self):
-        """获取可用余额"""
+    def get_free(self) -> float:
+        """
+        Get available balance.
+
+        Returns:
+            Available balance amount.
+        """
         return self.available or 0
 
-    def get_used(self):
-        """获取已用余额"""
+    def get_used(self) -> float:
+        """
+        Get used balance.
+
+        Returns:
+            Used balance amount.
+        """
         return self.reserved or 0
 
-    def is_zero(self):
-        """判断是否为零余额"""
+    def is_zero(self) -> bool:
+        """
+        Check if balance is zero.
+
+        Returns:
+            True if balance is zero, False otherwise.
+        """
         total = self.get_total()
         return abs(total) < 1e-8
 
-    def __str__(self):
+    def __str__(self) -> str:
         return (
             f"HITBTC Balance {self.currency}: Available={self.available}, Reserved={self.reserved}"
         )
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return f"<HitBtcBalanceData {self.currency} {self.get_total()}>"

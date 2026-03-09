@@ -8,7 +8,7 @@ from bt_api_py.feeds.live_bitbank.spot import BitbankRequestDataSpot
 from bt_api_py.registry import ExchangeRegistry
 
 
-def register_bitbank():
+def register_bitbank() -> None:
     """注册 Bitbank SPOT 到全局 ExchangeRegistry"""
     # 注册 Feed 类
     ExchangeRegistry.register_feed("BITBANK___SPOT", BitbankRequestDataSpot)

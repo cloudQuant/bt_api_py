@@ -8,6 +8,7 @@ import hashlib
 import hmac
 import json
 import time
+from typing import Any
 from urllib.parse import urlencode
 
 from bt_api_py.containers.exchanges.phemex_exchange_data import PhemexExchangeDataSpot
@@ -45,7 +46,7 @@ class PhemexRequestData(Feed):
             Capability.GET_SERVER_TIME,
         }
 
-    def __init__(self, data_queue, **kwargs):
+    def __init__(self, data_queue, **kwargs) -> None:
         super().__init__(data_queue, **kwargs)
         self.data_queue = data_queue
         self.api_key = kwargs.get("public_key") or kwargs.get("api_key") or ""
@@ -144,7 +145,7 @@ class PhemexRequestData(Feed):
 
     # ── _get_xxx internal methods ───────────────────────────────
 
-    def _get_server_time(self, extra_data=None, **kwargs):
+    def _get_server_time(self, extra_data=None, **kwargs) -> Any:
         path = self._params.get_rest_path("get_server_time")
         params = {}
         extra_data = update_extra_data(
@@ -159,7 +160,7 @@ class PhemexRequestData(Feed):
         )
         return path, params, extra_data
 
-    def _get_exchange_info(self, extra_data=None, **kwargs):
+    def _get_exchange_info(self, extra_data=None, **kwargs) -> Any:
         path = self._params.get_rest_path("get_exchange_info")
         params = {}
         extra_data = update_extra_data(
@@ -174,7 +175,7 @@ class PhemexRequestData(Feed):
         )
         return path, params, extra_data
 
-    def _get_tick(self, symbol, extra_data=None, **kwargs):
+    def _get_tick(self, symbol, extra_data=None, **kwargs) -> Any:
         path = self._params.get_rest_path("get_tick")
         phemex_symbol = self._params.get_symbol(symbol)
         params = {"symbol": phemex_symbol}
@@ -190,7 +191,7 @@ class PhemexRequestData(Feed):
         )
         return path, params, extra_data
 
-    def _get_depth(self, symbol, size=20, extra_data=None, **kwargs):
+    def _get_depth(self, symbol, size=20, extra_data=None, **kwargs) -> Any:
         path = self._params.get_rest_path("get_depth")
         phemex_symbol = self._params.get_symbol(symbol)
         params = {"symbol": phemex_symbol}
@@ -206,7 +207,7 @@ class PhemexRequestData(Feed):
         )
         return path, params, extra_data
 
-    def _get_kline(self, symbol, period="1h", count=100, extra_data=None, **kwargs):
+    def _get_kline(self, symbol, period="1h", count=100, extra_data=None, **kwargs) -> Any:
         path = self._params.get_rest_path("get_kline")
         phemex_symbol = self._params.get_symbol(symbol)
         resolution = self._params.get_period(period)
@@ -232,7 +233,7 @@ class PhemexRequestData(Feed):
         )
         return path, params, extra_data
 
-    def _get_trade_history(self, symbol, count=100, extra_data=None, **kwargs):
+    def _get_trade_history(self, symbol, count=100, extra_data=None, **kwargs) -> Any:
         path = self._params.get_rest_path("get_trades")
         phemex_symbol = self._params.get_symbol(symbol)
         params = {"symbol": phemex_symbol}
@@ -278,7 +279,7 @@ class PhemexRequestData(Feed):
         )
         return path, params, extra_data
 
-    def _cancel_order(self, symbol=None, order_id=None, extra_data=None, **kwargs):
+    def _cancel_order(self, symbol=None, order_id=None, extra_data=None, **kwargs) -> Any:
         path = self._params.get_rest_path("cancel_order")
         phemex_symbol = self._params.get_symbol(symbol) if symbol else ""
         params = {"symbol": phemex_symbol, "orderID": order_id}
@@ -294,7 +295,7 @@ class PhemexRequestData(Feed):
         )
         return path, params, extra_data
 
-    def _query_order(self, symbol=None, order_id=None, extra_data=None, **kwargs):
+    def _query_order(self, symbol=None, order_id=None, extra_data=None, **kwargs) -> Any:
         path = self._params.get_rest_path("query_order")
         phemex_symbol = self._params.get_symbol(symbol) if symbol else ""
         params = {"symbol": phemex_symbol}
@@ -310,7 +311,7 @@ class PhemexRequestData(Feed):
         )
         return path, params, extra_data
 
-    def _get_open_orders(self, symbol=None, extra_data=None, **kwargs):
+    def _get_open_orders(self, symbol=None, extra_data=None, **kwargs) -> Any:
         path = self._params.get_rest_path("get_open_orders")
         phemex_symbol = self._params.get_symbol(symbol) if symbol else ""
         params = {"symbol": phemex_symbol}
@@ -326,7 +327,7 @@ class PhemexRequestData(Feed):
         )
         return path, params, extra_data
 
-    def _get_account(self, extra_data=None, **kwargs):
+    def _get_account(self, extra_data=None, **kwargs) -> Any:
         path = self._params.get_rest_path("get_account")
         params = {}
         extra_data = update_extra_data(
@@ -341,7 +342,7 @@ class PhemexRequestData(Feed):
         )
         return path, params, extra_data
 
-    def _get_balance(self, extra_data=None, **kwargs):
+    def _get_balance(self, extra_data=None, **kwargs) -> Any:
         path = self._params.get_rest_path("get_balance")
         params = {}
         extra_data = update_extra_data(

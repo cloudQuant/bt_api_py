@@ -5,10 +5,10 @@ and automated threat response for financial systems.
 """
 
 import time
+from collections import defaultdict, deque
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Dict, List, Optional, Set
-from collections import defaultdict, deque
+from typing import Any
 
 
 class ThreatLevel(Enum):
@@ -40,9 +40,9 @@ class ThreatEvent:
     event_id: str
     threat_type: ThreatType
     level: ThreatLevel
-    user_id: Optional[str]
-    ip_address: Optional[str]
-    details: Dict[str, Any]
+    user_id: str | None
+    ip_address: str | None
+    details: dict[str, Any]
     timestamp: float = field(default_factory=time.time)
     resolved: bool = False
 
@@ -50,7 +50,7 @@ class ThreatEvent:
 class ThreatDetector:
     """Advanced threat detection system."""
 
-    def __init__(self, config: Optional[Dict[str, Any]] = None):
+    def __init__(self, config: dict[str, Any] | None = None) -> None:
         """Initialize threat detector."""
         self.config = config or {}
         self.thresholds = self.config.get(
@@ -63,15 +63,15 @@ class ThreatDetector:
         )
 
         # Event tracking
-        self._failed_logins: Dict[str, deque] = defaultdict(lambda: deque(maxlen=100))
-        self._suspicious_ips: Dict[str, int] = defaultdict(int)
-        self._data_access_patterns: Dict[str, List[float]] = defaultdict(list)
-        self._threat_events: List[ThreatEvent] = []
+        self._failed_logins: dict[str, deque] = defaultdict(lambda: deque(maxlen=100))
+        self._suspicious_ips: dict[str, int] = defaultdict(int)
+        self._data_access_patterns: dict[str, list[float]] = defaultdict(list)
+        self._threat_events: list[ThreatEvent] = []
 
         # Anomaly detection
-        self._baseline_patterns: Dict[str, Any] = {}
+        self._baseline_patterns: dict[str, Any] = {}
 
-    def detect_failed_login(self, user_id: str, ip_address: str) -> Optional[ThreatEvent]:
+    def detect_failed_login(self, user_id: str, ip_address: str) -> ThreatEvent | None:
         """Detect brute force or suspicious login attempts."""
         current_time = time.time()
         key = f"{user_id}:{ip_address}"
@@ -117,7 +117,7 @@ class ThreatDetector:
 
     def detect_suspicious_access_pattern(
         self, user_id: str, resource: str, ip_address: str
-    ) -> Optional[ThreatEvent]:
+    ) -> ThreatEvent | None:
         """Detect anomalous access patterns."""
         current_time = time.time()
 
@@ -152,7 +152,7 @@ class ThreatDetector:
         return None
 
     def detect_unauthorized_access_attempt(
-        self, user_id: str, resource: str, ip_address: str, details: Optional[Dict[str, Any]] = None
+        self, user_id: str, resource: str, ip_address: str, details: dict[str, Any] | None = None
     ) -> ThreatEvent:
         """Detect unauthorized access attempts."""
         current_time = time.time()
@@ -183,7 +183,7 @@ class ThreatDetector:
 
     def analyze_login_anomaly(
         self, user_id: str, ip_address: str, user_agent: str
-    ) -> Optional[ThreatEvent]:
+    ) -> ThreatEvent | None:
         """Analyze login patterns for anomalies."""
         # In a real implementation, this would use ML models
         # For now, basic heuristic checks
@@ -216,7 +216,7 @@ class ThreatDetector:
 
     def detect_data_exfiltration(
         self, user_id: str, data_size: int, resource: str
-    ) -> Optional[ThreatEvent]:
+    ) -> ThreatEvent | None:
         """Detect potential data exfiltration."""
         # Threshold for large data transfers
         large_data_threshold = 100 * 1024 * 1024  # 100MB
@@ -240,7 +240,7 @@ class ThreatDetector:
 
         return None
 
-    def get_threat_summary(self, time_window: int = 3600) -> Dict[str, Any]:
+    def get_threat_summary(self, time_window: int = 3600) -> dict[str, Any]:
         """Get threat summary for specified time window."""
         current_time = time.time()
         cutoff_time = current_time - time_window
@@ -285,7 +285,7 @@ class ThreatDetector:
                 return True
         return False
 
-    def auto_respond_to_threat(self, threat_event: ThreatEvent) -> Dict[str, Any]:
+    def auto_respond_to_threat(self, threat_event: ThreatEvent) -> dict[str, Any]:
         """Automated threat response actions."""
         response_actions = []
 
@@ -336,7 +336,7 @@ class ThreatDetector:
             "timestamp": time.time(),
         }
 
-    def establish_baseline(self, user_id: str, patterns: Dict[str, Any]) -> None:
+    def establish_baseline(self, user_id: str, patterns: dict[str, Any]) -> None:
         """Establish baseline behavioral patterns."""
         self._baseline_patterns[user_id] = {
             "normal_login_hours": patterns.get("login_hours", []),
@@ -345,7 +345,7 @@ class ThreatDetector:
             "created_at": time.time(),
         }
 
-    def is_baseline_anomaly(self, user_id: str, current_behavior: Dict[str, Any]) -> bool:
+    def is_baseline_anomaly(self, user_id: str, current_behavior: dict[str, Any]) -> bool:
         """Check if current behavior deviates from baseline."""
         baseline = self._baseline_patterns.get(user_id)
         if not baseline:

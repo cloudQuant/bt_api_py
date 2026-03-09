@@ -1,20 +1,22 @@
-"""
-BTCTurk Exchange Data Configuration
-"""
+"""BTCTurk Exchange Data Configuration."""
 
 import os
+from typing import Any
 
 from bt_api_py.containers.exchanges.exchange_data import ExchangeData
 from bt_api_py.logging_factory import get_logger
 
 logger = get_logger("btcturk_exchange_data")
-
 _btcturk_config = None
 _btcturk_config_loaded = False
 
 
-def _get_btcturk_config():
-    """Load BTCTurk YAML configuration."""
+def _get_btcturk_config() -> Any | None:
+    """Lazy load and cache BTCTurk YAML configuration.
+
+    Returns:
+        Configuration dictionary or None if not found
+    """
     global _btcturk_config, _btcturk_config_loaded
     if _btcturk_config_loaded:
         return _btcturk_config
@@ -28,84 +30,69 @@ def _get_btcturk_config():
         )
         if os.path.exists(config_path):
             _btcturk_config = load_exchange_config(config_path)
-        _btcturk_config_loaded = True
+            _btcturk_config_loaded = True
+            return _btcturk_config
     except Exception as e:
-        logger.warn(f"Failed to load btcturk.yaml config: {e}")
-    return _btcturk_config
+        logger.error(f"Failed to load btcturk.yaml config: {e}")
+        _btcturk_config_loaded = True
+        return None
+    return None
 
 
 class BTCTurkExchangeData(ExchangeData):
-    """Base class for BTCTurk exchange."""
+    """BTCTurk Exchange Data Configuration."""
 
-    def __init__(self):
-        super().__init__()
-        self.exchange_name = "btcturk"
-        self.rest_url = "https://api.btcturk.com"
-        self.wss_url = "wss://ws-feed-pro.btcturk.com"
-        self.kline_periods = {
-            "1m": "1",
-            "5m": "5",
-            "15m": "15",
-            "30m": "30",
-            "1h": "60",
-            "4h": "240",
-            "1d": "1440",
-            "1w": "10080",
-        }
-        self.legal_currency = ["USDT", "TRY", "BTC", "ETH", "USDC"]
-        # API credentials (for authenticated requests)
-        self.api_key = None
-        self.api_secret = None
+    def __init__(self, config: dict[str, Any] | None = None) -> None:
+        """Initialize BTCTurk exchange data.
 
-    def _load_from_config(self, asset_type):
-        """Load from YAML config."""
-        config = _get_btcturk_config()
+        Args:
+            config: Optional configuration dictionary
+        """
         if config is None:
-            return False
-        asset_cfg = config.asset_types.get(asset_type)
-        if asset_cfg is None:
-            return False
+            config = _get_btcturk_config()
+        if config is None:
+            raise ValueError("BTCTurk configuration not found")
+        super().__init__(config or {})
+        self.exchange_name = "BTCTURK"
+        self._load_from_config(config)
 
-        if asset_cfg.exchange_name:
-            self.exchange_name = asset_cfg.exchange_name
-        if config.base_urls and config.base_urls.rest:
-            rest = config.base_urls.rest
-            self.rest_url = (
-                rest.get(asset_type, rest.get("default", self.rest_url))
-                if isinstance(rest, dict)
-                else rest
-            )
-        if config.base_urls and config.base_urls.wss:
-            wss = config.base_urls.wss
-            self.wss_url = (
-                wss.get(asset_type, wss.get("default", self.wss_url))
-                if isinstance(wss, dict)
-                else wss
-            )
-        if asset_cfg.rest_paths:
-            self.rest_paths.update(asset_cfg.rest_paths)
-        if asset_cfg.wss_paths:
-            self.wss_paths.update(asset_cfg.wss_paths)
+    def _load_from_config(self, config: dict[str, Any]) -> None:
+        """Load configuration from dict.
 
-        # kline_periods - load from YAML, prefer asset-specific config
-        kp = asset_cfg.kline_periods or (config.kline_periods if config.kline_periods else None)
-        if kp:
-            self.kline_periods = dict(kp)
+        Args:
+            config: Configuration dictionary
+        """
+        self.rest_url = config.get("rest_url", "")
+        self.wss_url = config.get("wss_url", "")
+        self.api_version = config.get("api_version", "")
+        self.kline_periods = config.get("kline_periods", {})
+        self.rest_paths = config.get("rest_paths", {})
+        self.wss_paths = config.get("wss_paths", {})
+        self.legal_currency = config.get("legal_currency", [])
+        self.symbols = config.get("symbols", {})
+        self._parse_exchange_info(config)
 
-        # legal_currency - load from YAML
-        lc = asset_cfg.legal_currency or (config.legal_currency if config.legal_currency else None)
-        if lc:
-            self.legal_currency = list(lc)
+    def _parse_exchange_info(self, config: dict[str, Any]) -> None:
+        """Parse exchange information from config.
 
-        return True
+        Args:
+            config: Configuration dictionary
+        """
+        if "exchange_info" in config:
+            for key, value in config["exchange_info"].items():
+                self.exchange_info[key] = value
+        else:
+            self.exchange_info = {}
 
 
 class BTCTurkExchangeDataSpot(BTCTurkExchangeData):
-    """BTCTurk Spot exchange configuration."""
+    """BTCTurk Spot Exchange Configuration."""
 
-    def __init__(self):
-        super().__init__()
-        self.asset_type = "spot"
-        self.rest_paths = {}
-        self.wss_paths = {}
-        self._load_from_config("spot")
+    def __init__(self, config: dict[str, Any] | None = None) -> None:
+        """Initialize BTCTurk spot exchange data.
+
+        Args:
+            config: Optional configuration dictionary
+        """
+        super().__init__(config or {})
+        self.asset_type = "SPOT"

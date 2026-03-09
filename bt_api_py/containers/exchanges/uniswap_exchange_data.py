@@ -1,11 +1,11 @@
-"""
-Uniswap Exchange Data Configuration
+"""Uniswap Exchange Data Configuration.
 
 Defines API endpoints, chain enums, and path configurations for Uniswap DEX.
 """
 
 import os
 from enum import Enum
+from typing import Any
 
 # ── 配置加载缓存 ──────────────────────────────────────────────
 _uniswap_config = None
@@ -13,8 +13,8 @@ _uniswap_config_loaded = False
 _uniswap_config_raw = None
 
 
-def _get_uniswap_config():
-    """延迟加载并缓存 Uniswap YAML 配置"""
+def _get_uniswap_config() -> Any | None:
+    """延迟加载并缓存 Uniswap YAML 配置."""
     global _uniswap_config, _uniswap_config_loaded, _uniswap_config_raw
     if _uniswap_config_loaded:
         return _uniswap_config
@@ -87,12 +87,13 @@ class UniswapExchangeData:
     # Router addresses (Ethereum Mainnet)
     ROUTER_ADDRESS = "0x68b3465833fb129eeae6d7305a3f870a770d97c5"
 
-    def __init__(self, chain: UniswapChain = DEFAULT_CHAIN, asset_type: str | None = None):
+    def __init__(self, chain: UniswapChain = DEFAULT_CHAIN, asset_type: str | None = None) -> None:
         """Initialize Uniswap exchange data.
 
         Args:
             chain: The blockchain to query
             asset_type: Asset type (e.g., 'ethereum', 'arbitrum') to load config from uniswap.yaml
+
         """
         self.chain = chain
         self.asset_type = asset_type
@@ -109,12 +110,13 @@ class UniswapExchangeData:
             self.router_address = self.ROUTER_ADDRESS
 
     def _load_from_config(self, asset_type: str) -> bool:
-        """从 YAML 配置文件加载 Uniswap 参数
+        """从 YAML 配置文件加载 Uniswap 参数.
 
         Args:
             asset_type: 资产类型 key, 如 'ethereum', 'arbitrum' 等
         Returns:
             bool: 是否加载成功
+
         """
         if not self.config:
             return False
@@ -180,6 +182,7 @@ class UniswapExchangeData:
 
         Returns:
             Normalized token address (checksummed)
+
         """
         # Return as-is if it looks like an address
         if symbol.startswith("0x") and len(symbol) == 42:
@@ -192,6 +195,7 @@ class UniswapExchangeData:
 
         Returns:
             API key string
+
         """
         # API key should be set via environment variable
         api_key = os.getenv("UNISWAP_API_KEY")
@@ -211,6 +215,7 @@ class UniswapExchangeData:
 
         Returns:
             GraphQL query string or None if not found
+
         """
         if hasattr(self, "graphql_queries") and self.graphql_queries:
             return self.graphql_queries.get(query_name)
@@ -227,6 +232,7 @@ class UniswapExchangeData:
 
         Returns:
             String in format "POST /endpoint" or "GRAPHQL {query}"
+
         """
         # If config has rest_paths and this request_type is defined
         if self.config and hasattr(self, "asset_type") and self.asset_type:
@@ -251,7 +257,7 @@ class UniswapExchangeDataSpot(UniswapExchangeData):
         self,
         chain: UniswapChain | str = UniswapExchangeData.DEFAULT_CHAIN,
         asset_type: str | None = None,
-    ):
+    ) -> None:
         # Convert string to enum if needed
         if isinstance(chain, str):
             try:

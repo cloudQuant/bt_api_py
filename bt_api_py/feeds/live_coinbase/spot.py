@@ -4,6 +4,7 @@ Three-layer pattern: _get_xxx() -> get_xxx() / async_get_xxx()
 """
 
 import uuid
+from typing import Any
 
 from bt_api_py.containers.accounts.coinbase_account import CoinbaseRequestAccountData
 from bt_api_py.containers.bars.coinbase_bar import CoinbaseRequestBarData
@@ -19,7 +20,7 @@ from bt_api_py.logging_factory import get_logger
 class CoinbaseRequestDataSpot(CoinbaseRequestData):
     """Coinbase Spot trading REST API implementation."""
 
-    def __init__(self, data_queue, **kwargs):
+    def __init__(self, data_queue: Any, **kwargs: Any) -> None:
         super().__init__(data_queue, **kwargs)
         self.asset_type = kwargs.get("asset_type", "SPOT")
         self.exchange_name = kwargs.get("exchange_name", "COINBASE___SPOT")
@@ -30,7 +31,7 @@ class CoinbaseRequestDataSpot(CoinbaseRequestData):
 
     # ==================== Market Data ====================
 
-    def _get_ticker(self, symbol, extra_data=None, **kwargs):
+    def _get_ticker(self, symbol: Any, extra_data: Any = None, **kwargs: Any) -> None:
         """Create get ticker parameters.
 
         Args:
@@ -61,7 +62,7 @@ class CoinbaseRequestDataSpot(CoinbaseRequestData):
         return path, params, extra_data
 
     @staticmethod
-    def _get_ticker_normalize_function(input_data, extra_data):
+    def _get_ticker_normalize_function(input_data: Any, extra_data: Any) -> None:
         """Normalize ticker response."""
         status = input_data is not None
         symbol_name = extra_data["symbol_name"]
@@ -72,7 +73,7 @@ class CoinbaseRequestDataSpot(CoinbaseRequestData):
             return [CoinbaseRequestTickerData(input_data, symbol_name, asset_type, True)], status
         return [], status
 
-    def get_ticker(self, symbol, extra_data=None, **kwargs):
+    def get_ticker(self, symbol: Any, extra_data: Any = None, **kwargs: Any) -> None:
         """Get ticker data.
 
         Args:
@@ -88,7 +89,7 @@ class CoinbaseRequestDataSpot(CoinbaseRequestData):
     # Alias for get_ticker to match standard interface
     get_tick = get_ticker
 
-    def async_get_ticker(self, symbol, extra_data=None, **kwargs):
+    def async_get_ticker(self, symbol: Any, extra_data: Any = None, **kwargs: Any) -> None:
         """Get ticker data asynchronously."""
         path, params, extra_data = self._get_ticker(symbol=symbol, extra_data=extra_data, **kwargs)
         self.submit(
@@ -100,7 +101,9 @@ class CoinbaseRequestDataSpot(CoinbaseRequestData):
 
     # ── order book ──────────────────────────────────────────────
 
-    def _get_depth(self, symbol, limit=50, extra_data=None, **kwargs):
+    def _get_depth(
+        self, symbol: Any, limit: Any = 50, extra_data: Any = None, **kwargs: Any
+    ) -> None:
         """Create get order book parameters.
 
         Args:
@@ -131,7 +134,7 @@ class CoinbaseRequestDataSpot(CoinbaseRequestData):
         return path, params, extra_data
 
     @staticmethod
-    def _get_depth_normalize_function(input_data, extra_data):
+    def _get_depth_normalize_function(input_data: Any, extra_data: Any) -> None:
         """Normalize order book response."""
         status = input_data is not None
         symbol_name = extra_data["symbol_name"]
@@ -141,7 +144,9 @@ class CoinbaseRequestDataSpot(CoinbaseRequestData):
             return [CoinbaseRequestOrderBookData(input_data, symbol_name, asset_type, True)], status
         return [], status
 
-    def get_depth(self, symbol, limit=50, extra_data=None, **kwargs):
+    def get_depth(
+        self, symbol: Any, limit: Any = 50, extra_data: Any = None, **kwargs: Any
+    ) -> None:
         """Get order book data.
 
         Args:
@@ -157,7 +162,9 @@ class CoinbaseRequestDataSpot(CoinbaseRequestData):
         data = self.request(path, params=params, extra_data=extra_data, is_sign=False)
         return data
 
-    def async_get_depth(self, symbol, limit=50, extra_data=None, **kwargs):
+    def async_get_depth(
+        self, symbol: Any, limit: Any = 50, extra_data: Any = None, **kwargs: Any
+    ) -> None:
         """Get order book data asynchronously."""
         path, params, extra_data = self._get_depth(
             symbol=symbol, limit=limit, extra_data=extra_data, **kwargs
@@ -171,14 +178,14 @@ class CoinbaseRequestDataSpot(CoinbaseRequestData):
 
     def _get_kline(
         self,
-        symbol,
-        period="ONE_HOUR",
-        start_time=None,
-        end_time=None,
-        limit=None,
-        extra_data=None,
-        **kwargs,
-    ):
+        symbol: Any,
+        period: Any = "ONE_HOUR",
+        start_time: Any = None,
+        end_time: Any = None,
+        limit: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """Create get kline parameters.
 
         Args:
@@ -220,7 +227,7 @@ class CoinbaseRequestDataSpot(CoinbaseRequestData):
         return path, params, extra_data
 
     @staticmethod
-    def _get_kline_normalize_function(input_data, extra_data):
+    def _get_kline_normalize_function(input_data: Any, extra_data: Any) -> None:
         """Normalize kline response."""
         status = input_data is not None
         symbol_name = extra_data["symbol_name"]
@@ -235,14 +242,14 @@ class CoinbaseRequestDataSpot(CoinbaseRequestData):
 
     def get_kline(
         self,
-        symbol,
-        period="ONE_HOUR",
-        start_time=None,
-        end_time=None,
-        limit=None,
-        extra_data=None,
-        **kwargs,
-    ):
+        symbol: Any,
+        period: Any = "ONE_HOUR",
+        start_time: Any = None,
+        end_time: Any = None,
+        limit: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """Get kline / candle data.
 
         Args:
@@ -268,14 +275,14 @@ class CoinbaseRequestDataSpot(CoinbaseRequestData):
 
     def async_get_kline(
         self,
-        symbol,
-        period="ONE_HOUR",
-        start_time=None,
-        end_time=None,
-        limit=None,
-        extra_data=None,
-        **kwargs,
-    ):
+        symbol: Any,
+        period: Any = "ONE_HOUR",
+        start_time: Any = None,
+        end_time: Any = None,
+        limit: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """Get kline data asynchronously."""
         path, params, extra_data = self._get_kline(
             symbol=symbol,
@@ -293,7 +300,7 @@ class CoinbaseRequestDataSpot(CoinbaseRequestData):
 
     # ── server time ─────────────────────────────────────────────
 
-    def _get_server_time(self, extra_data=None, **kwargs):
+    def _get_server_time(self, extra_data: Any = None, **kwargs: Any) -> None:
         """Create get server time parameters."""
         request_type = "get_server_time"
         path = self._params.get_rest_path(request_type)
@@ -311,7 +318,7 @@ class CoinbaseRequestDataSpot(CoinbaseRequestData):
         )
         return path, params, extra_data
 
-    def get_server_time(self, extra_data=None, **kwargs):
+    def get_server_time(self, extra_data: Any = None, **kwargs: Any) -> None:
         """Get server time.
 
         Returns:
@@ -323,7 +330,7 @@ class CoinbaseRequestDataSpot(CoinbaseRequestData):
 
     # ── exchange info ───────────────────────────────────────────
 
-    def _get_exchange_info(self, extra_data=None, **kwargs):
+    def _get_exchange_info(self, extra_data: Any = None, **kwargs: Any) -> None:
         """Create get exchange info parameters."""
         request_type = "get_exchange_info"
         path = self._params.get_rest_path(request_type)
@@ -342,7 +349,7 @@ class CoinbaseRequestDataSpot(CoinbaseRequestData):
         return path, params, extra_data
 
     @staticmethod
-    def _get_exchange_info_normalize_function(input_data, extra_data):
+    def _get_exchange_info_normalize_function(input_data: Any, extra_data: Any) -> None:
         """Normalize exchange info response."""
         if input_data and isinstance(input_data, dict) and "products" in input_data:
             return input_data["products"], True
@@ -350,7 +357,7 @@ class CoinbaseRequestDataSpot(CoinbaseRequestData):
             return input_data, True
         return [], False
 
-    def get_exchange_info(self, extra_data=None, **kwargs):
+    def get_exchange_info(self, extra_data: Any = None, **kwargs: Any) -> None:
         """Get exchange trading rules and product info.
 
         Returns:
@@ -364,16 +371,16 @@ class CoinbaseRequestDataSpot(CoinbaseRequestData):
 
     def _make_order(
         self,
-        symbol,
-        vol,
-        price=None,
-        order_type="buy-limit",
-        offset="open",
-        post_only=False,
-        client_order_id=None,
-        extra_data=None,
-        **kwargs,
-    ):
+        symbol: Any,
+        vol: Any,
+        price: Any = None,
+        order_type: Any = "buy-limit",
+        offset: Any = "open",
+        post_only: Any = False,
+        client_order_id: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """Create order parameters.
 
         Args:
@@ -436,7 +443,7 @@ class CoinbaseRequestDataSpot(CoinbaseRequestData):
         return path, body, extra_data
 
     @staticmethod
-    def _make_order_normalize_function(input_data, extra_data):
+    def _make_order_normalize_function(input_data: Any, extra_data: Any) -> None:
         """Normalize order response."""
         status = input_data is not None
         symbol_name = extra_data["symbol_name"]
@@ -449,16 +456,16 @@ class CoinbaseRequestDataSpot(CoinbaseRequestData):
 
     def make_order(
         self,
-        symbol,
-        vol,
-        price=None,
-        order_type="buy-limit",
-        offset="open",
-        post_only=False,
-        client_order_id=None,
-        extra_data=None,
-        **kwargs,
-    ):
+        symbol: Any,
+        vol: Any,
+        price: Any = None,
+        order_type: Any = "buy-limit",
+        offset: Any = "open",
+        post_only: Any = False,
+        client_order_id: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """Place a new order.
 
         Returns:
@@ -473,8 +480,13 @@ class CoinbaseRequestDataSpot(CoinbaseRequestData):
     # ── cancel order ────────────────────────────────────────────
 
     def _cancel_order(
-        self, symbol=None, order_id=None, client_order_id=None, extra_data=None, **kwargs
-    ):
+        self,
+        symbol: Any = None,
+        order_id: Any = None,
+        client_order_id: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """Create cancel order parameters.
 
         Args:
@@ -510,8 +522,13 @@ class CoinbaseRequestDataSpot(CoinbaseRequestData):
         return path, body, extra_data
 
     def cancel_order(
-        self, symbol=None, order_id=None, client_order_id=None, extra_data=None, **kwargs
-    ):
+        self,
+        symbol: Any = None,
+        order_id: Any = None,
+        client_order_id: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """Cancel an order.
 
         Returns:
@@ -529,7 +546,7 @@ class CoinbaseRequestDataSpot(CoinbaseRequestData):
 
     # ── query order ─────────────────────────────────────────────
 
-    def _query_order(self, order_id, extra_data=None, **kwargs):
+    def _query_order(self, order_id: Any, extra_data: Any = None, **kwargs: Any) -> None:
         """Create query order parameters.
 
         Args:
@@ -557,7 +574,7 @@ class CoinbaseRequestDataSpot(CoinbaseRequestData):
         return path, params, extra_data
 
     @staticmethod
-    def _query_order_normalize_function(input_data, extra_data):
+    def _query_order_normalize_function(input_data: Any, extra_data: Any) -> None:
         """Normalize query order response."""
         status = input_data is not None
         symbol_name = extra_data["symbol_name"]
@@ -569,7 +586,7 @@ class CoinbaseRequestDataSpot(CoinbaseRequestData):
             ], status
         return [], status
 
-    def query_order(self, order_id, extra_data=None, **kwargs):
+    def query_order(self, order_id: Any, extra_data: Any = None, **kwargs: Any) -> None:
         """Query order details.
 
         Args:
@@ -586,7 +603,7 @@ class CoinbaseRequestDataSpot(CoinbaseRequestData):
 
     # ── open orders ─────────────────────────────────────────────
 
-    def _get_open_orders(self, symbol=None, extra_data=None, **kwargs):
+    def _get_open_orders(self, symbol: Any = None, extra_data: Any = None, **kwargs: Any) -> None:
         """Create get open orders parameters.
 
         Args:
@@ -615,7 +632,7 @@ class CoinbaseRequestDataSpot(CoinbaseRequestData):
         return path, params, extra_data
 
     @staticmethod
-    def _get_open_orders_normalize_function(input_data, extra_data):
+    def _get_open_orders_normalize_function(input_data: Any, extra_data: Any) -> None:
         """Normalize open orders response."""
         status = input_data is not None
         symbol_name = extra_data["symbol_name"]
@@ -628,7 +645,7 @@ class CoinbaseRequestDataSpot(CoinbaseRequestData):
             ], status
         return [], status
 
-    def get_open_orders(self, symbol=None, extra_data=None, **kwargs):
+    def get_open_orders(self, symbol: Any = None, extra_data: Any = None, **kwargs: Any) -> None:
         """Get all open orders.
 
         Returns:
@@ -642,7 +659,7 @@ class CoinbaseRequestDataSpot(CoinbaseRequestData):
 
     # ==================== Account Management ====================
 
-    def _get_account(self, extra_data=None, **kwargs):
+    def _get_account(self, extra_data: Any = None, **kwargs: Any) -> None:
         """Create get account parameters.
 
         Returns:
@@ -667,7 +684,7 @@ class CoinbaseRequestDataSpot(CoinbaseRequestData):
         return path, params, extra_data
 
     @staticmethod
-    def _get_account_normalize_function(input_data, extra_data):
+    def _get_account_normalize_function(input_data: Any, extra_data: Any) -> None:
         """Normalize account response."""
         status = input_data is not None
         symbol_name = extra_data["symbol_name"]
@@ -680,7 +697,7 @@ class CoinbaseRequestDataSpot(CoinbaseRequestData):
             ], status
         return [], status
 
-    def get_account(self, extra_data=None, **kwargs):
+    def get_account(self, extra_data: Any = None, **kwargs: Any) -> None:
         """Get account information.
 
         Returns:
@@ -690,7 +707,7 @@ class CoinbaseRequestDataSpot(CoinbaseRequestData):
         data = self.request(path, params=params, extra_data=extra_data, is_sign=True)
         return data
 
-    def get_balance(self, symbol=None, extra_data=None, **kwargs):
+    def get_balance(self, symbol: Any = None, extra_data: Any = None, **kwargs: Any) -> None:
         """Get balance data — delegates to get_account.
 
         Returns:
@@ -698,7 +715,7 @@ class CoinbaseRequestDataSpot(CoinbaseRequestData):
         """
         return self.get_account(extra_data=extra_data, **kwargs)
 
-    def async_get_account(self, extra_data=None, **kwargs):
+    def async_get_account(self, extra_data: Any = None, **kwargs: Any) -> None:
         """Get account information asynchronously."""
         path, params, extra_data = self._get_account(extra_data=extra_data, **kwargs)
         self.submit(
@@ -706,7 +723,7 @@ class CoinbaseRequestDataSpot(CoinbaseRequestData):
             callback=self.async_callback,
         )
 
-    def async_get_balance(self, extra_data=None, **kwargs):
+    def async_get_balance(self, extra_data: Any = None, **kwargs: Any) -> None:
         """Get account balance asynchronously."""
         self.async_get_account(extra_data=extra_data, **kwargs)
 
@@ -714,7 +731,7 @@ class CoinbaseRequestDataSpot(CoinbaseRequestData):
 class CoinbaseMarketWssData:
     """Placeholder for Coinbase WebSocket market data implementation."""
 
-    def __init__(self, data_queue, **kwargs):
+    def __init__(self, data_queue: Any, **kwargs: Any) -> None:
         self.data_queue = data_queue
         self.asset_type = kwargs.get("asset_type", "SPOT")
         self._params = CoinbaseExchangeDataSpot()
@@ -723,7 +740,7 @@ class CoinbaseMarketWssData:
 class CoinbaseAccountWssData:
     """Placeholder for Coinbase WebSocket account data implementation."""
 
-    def __init__(self, data_queue, **kwargs):
+    def __init__(self, data_queue: Any, **kwargs: Any) -> None:
         self.data_queue = data_queue
         self.asset_type = kwargs.get("asset_type", "SPOT")
         self._params = CoinbaseExchangeDataSpot()

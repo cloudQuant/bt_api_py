@@ -1,8 +1,8 @@
-"""
-Phemex Exchange Data Configuration
+"""Phemex Exchange Data Configuration
 Provides URL configurations, symbol mappings, and REST paths for Phemex API.
 """
 
+from typing import Any
 import os
 
 from bt_api_py.containers.exchanges.exchange_data import ExchangeData
@@ -15,8 +15,8 @@ _phemex_config = None
 _phemex_config_loaded = False
 
 
-def _get_phemex_config():
-    """延迟加载并缓存 Phemex YAML 配置"""
+def _get_phemex_config() -> Any | None:
+    """延迟加载并缓存 Phemex YAML 配置."""
     global _phemex_config, _phemex_config_loaded
     if _phemex_config_loaded:
         return _phemex_config
@@ -49,7 +49,7 @@ class PhemexExchangeData(ExchangeData):
     BTC_PRICE_SCALE = 1e8
     USD_PRICE_SCALE = 1e8
 
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__()
         self.exchange_name = "phemex"
         self.rest_url = "https://api.phemex.com"
@@ -71,13 +71,14 @@ class PhemexExchangeData(ExchangeData):
 
         self.legal_currency = ["USDT", "USD", "BTC", "ETH"]
 
-    def _load_from_config(self, asset_type):
-        """从 YAML 配置文件加载交易所参数
+    def _load_from_config(self, asset_type) -> bool:
+        """从 YAML 配置文件加载交易所参数.
 
         Args:
             asset_type: 资产类型 key, 如 'spot', 'perpetual' 等
         Returns:
             bool: 是否加载成功
+
         """
         config = _get_phemex_config()
         if config is None:
@@ -125,7 +126,7 @@ class PhemexExchangeData(ExchangeData):
 
         return True
 
-    def get_symbol(self, symbol):
+    def get_symbol(self, symbol: str) -> str:
         """将交易对名称转换为 Phemex 格式.
 
         Phemex spot symbols use 's' prefix (e.g., sBTCUSDT)
@@ -133,8 +134,10 @@ class PhemexExchangeData(ExchangeData):
 
         Args:
             symbol: 交易对名称 (e.g., 'BTC/USDT', 'ETHUSDT')
+
         Returns:
             str: Phemex 格式的交易对名称
+
         """
         # Remove slash if present
         symbol = symbol.replace("/", "")
@@ -151,35 +154,39 @@ class PhemexExchangeData(ExchangeData):
 
         return symbol
 
-    def get_period(self, period):
+    def get_period(self, period: str) -> str:
         """将周期转换为 Phemex 格式 (resolution in seconds).
 
         Args:
             period: 周期名称 (e.g., '1m', '5m', '1h', '1d')
+
         Returns:
             str: Phemex 格式的周期 (秒数)
+
         """
         return self.kline_periods.get(period, period)
 
-    def get_rest_path(self, request_type):
+    def get_rest_path(self, request_type: str, **kwargs) -> str:
         """获取 REST API 路径.
 
         Args:
             request_type: 请求类型
         Returns:
             str: REST API 路径
+
         """
         if request_type not in self.rest_paths or self.rest_paths[request_type] == "":
             self.raise_path_error(self.exchange_name, request_type)
         return self.rest_paths[request_type]
 
-    def get_wss_path(self, **kwargs):
+    def get_wss_path(self, **kwargs) -> str:
         """获取 WebSocket 路径.
 
         Args:
             **kwargs: kwargs params
         Returns:
             str: WebSocket 路径
+
         """
         key = kwargs.get("topic", "")
         if "symbol" in kwargs:
@@ -213,6 +220,7 @@ class PhemexExchangeData(ExchangeData):
 
         Returns:
             int: Scaled price
+
         """
         if scale is None:
             scale = self.USDT_PRICE_SCALE
@@ -227,6 +235,7 @@ class PhemexExchangeData(ExchangeData):
 
         Returns:
             float: Unscaled price
+
         """
         if scale is None:
             scale = self.USDT_PRICE_SCALE
@@ -234,9 +243,9 @@ class PhemexExchangeData(ExchangeData):
 
 
 class PhemexExchangeDataSpot(PhemexExchangeData):
-    """Phemex Spot Trading Configuration"""
+    """Phemex Spot Trading Configuration."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__()
         self.asset_type = "SPOT"
         if not self._load_from_config("spot"):
@@ -266,7 +275,7 @@ class PhemexExchangeDataSpot(PhemexExchangeData):
         if self.exchange_name in ("phemex", "phemex_spot", "phemexSpot"):
             self.exchange_name = "PHEMEX___SPOT"
 
-    def get_symbol(self, symbol):
+    def get_symbol(self, symbol: str) -> str:
         """将交易对名称转换为 Phemex Spot 格式.
 
         Spot symbols use 's' prefix: sBTCUSDT
@@ -283,14 +292,14 @@ class PhemexExchangeDataSpot(PhemexExchangeData):
 
 
 class PhemexExchangeDataPerpetual(PhemexExchangeData):
-    """Phemex Perpetual Futures Configuration"""
+    """Phemex Perpetual Futures Configuration."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__()
         self.asset_type = "PERPETUAL"
         self._load_from_config("perpetual")
 
-    def get_symbol(self, symbol):
+    def get_symbol(self, symbol: str) -> str:
         """将交易对名称转换为 Phemex Perpetual 格式.
 
         Perpetual symbols don't use prefix: BTCUSDT

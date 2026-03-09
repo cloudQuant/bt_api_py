@@ -13,7 +13,7 @@ class AccountMixin:
 
     # ==================== Account APIs ====================
 
-    def _get_account(self, symbol=None, extra_data=None, **kwargs):
+    def _get_account(self, symbol: Any = None, extra_data: Any = None, **kwargs: Any) -> None:
         """
         get account info using async
         :param symbol: default None, get all the currency, can be string, e.g. "BTC-USDT".
@@ -52,7 +52,7 @@ class AccountMixin:
         return path, params, extra_data
 
     @staticmethod
-    def _get_account_normalize_function(input_data, extra_data):
+    def _get_account_normalize_function(input_data: Any, extra_data: Any) -> None:
         status = input_data["code"] == "0"
         if "data" not in input_data or not input_data["data"]:
             return [], status
@@ -66,23 +66,23 @@ class AccountMixin:
             target_data = []
         return target_data, status
 
-    def get_account(self, symbol=None, extra_data=None, **kwargs):
+    def get_account(self, symbol: Any = None, extra_data: Any = None, **kwargs: Any) -> None:
         path, params, extra_data = self._get_account(symbol, extra_data, **kwargs)
         data = self.request(path, params=params, extra_data=extra_data)
         return data
 
-    def get_balance(self, symbol=None, extra_data=None, **kwargs):
+    def get_balance(self, symbol: Any = None, extra_data: Any = None, **kwargs: Any) -> None:
         return self.get_account(symbol, extra_data, **kwargs)
 
-    def async_get_account(self, symbol=None, extra_data=None, **kwargs):
+    def async_get_account(self, symbol: Any = None, extra_data: Any = None, **kwargs: Any) -> None:
         path, params, extra_data = self._get_account(symbol, extra_data, **kwargs)
         self.submit(self.async_request(path, extra_data=extra_data), callback=self.async_callback)
 
-    def async_get_balance(self, extra_data=None, **kwargs):
+    def async_get_balance(self, extra_data: Any = None, **kwargs: Any) -> None:
         path = self._params.get_rest_path("get_balance_assert")
         self.submit(self.async_request(path, extra_data=extra_data), callback=self.async_callback)
 
-    def async_sub_account(self, extra_data=None):
+    def async_sub_account(self, extra_data: Any = None) -> None:
         path = self._params.get_rest_path("sub_account")
         params = {"subAcct": "xxx"}
         self.submit(
@@ -92,7 +92,7 @@ class AccountMixin:
 
     # ==================== Position APIs ====================
 
-    def _get_position(self, symbol, extra_data=None, **kwargs):
+    def _get_position(self, symbol: Any, extra_data: Any = None, **kwargs: Any) -> None:
         """
         get position info from okx by symbol
         :param symbol: default None, get all the currency, can be string, e.g. "BTC-USDT".
@@ -119,7 +119,7 @@ class AccountMixin:
         return path, params, extra_data
 
     @staticmethod
-    def _get_position_normalize_function(input_data, extra_data):
+    def _get_position_normalize_function(input_data: Any, extra_data: Any) -> None:
         status = input_data["code"] == "0"
         if "data" not in input_data:
             return [], status
@@ -133,12 +133,12 @@ class AccountMixin:
             target_data = []
         return target_data, status
 
-    def get_position(self, symbol, extra_data=None, **kwargs):
+    def get_position(self, symbol: Any, extra_data: Any = None, **kwargs: Any) -> None:
         path, params, extra_data = self._get_position(symbol, extra_data, **kwargs)
         data = self.request(path, params=params, extra_data=extra_data)
         return data
 
-    def async_get_position(self, symbol, extra_data=None, **kwargs):
+    def async_get_position(self, symbol: Any, extra_data: Any = None, **kwargs: Any) -> None:
         path, params, extra_data = self._get_position(symbol, extra_data, **kwargs)
         self.submit(
             self.async_request(path, params=params, extra_data=extra_data),
@@ -147,17 +147,17 @@ class AccountMixin:
 
     def _get_positions_history(
         self,
-        inst_type=None,
-        uly=None,
-        inst_id=None,
-        mgn_mode=None,
-        ccy=None,
-        after=None,
-        before=None,
-        limit=None,
-        extra_data=None,
-        **kwargs,
-    ):
+        inst_type: Any = None,
+        uly: Any = None,
+        inst_id: Any = None,
+        mgn_mode: Any = None,
+        ccy: Any = None,
+        after: Any = None,
+        before: Any = None,
+        limit: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """
         Get positions history
         :param inst_type: Instrument type, e.g. SPOT, MARGIN, SWAP, FUTURES, OPTION
@@ -206,7 +206,7 @@ class AccountMixin:
         return path, params, extra_data
 
     @staticmethod
-    def _get_positions_history_normalize_function(input_data, extra_data):
+    def _get_positions_history_normalize_function(input_data: Any, extra_data: Any) -> None:
         """Normalize positions history data"""
         status = input_data["code"] == "0"
         if "data" not in input_data:
@@ -224,17 +224,17 @@ class AccountMixin:
 
     def get_positions_history(
         self,
-        inst_type=None,
-        uly=None,
-        inst_id=None,
-        mgn_mode=None,
-        ccy=None,
-        after=None,
-        before=None,
-        limit=None,
-        extra_data=None,
-        **kwargs,
-    ):
+        inst_type: Any = None,
+        uly: Any = None,
+        inst_id: Any = None,
+        mgn_mode: Any = None,
+        ccy: Any = None,
+        after: Any = None,
+        before: Any = None,
+        limit: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """Get positions history"""
         path, params, extra_data = self._get_positions_history(
             inst_type, uly, inst_id, mgn_mode, ccy, after, before, limit, extra_data, **kwargs
@@ -244,17 +244,17 @@ class AccountMixin:
 
     def async_get_positions_history(
         self,
-        inst_type=None,
-        uly=None,
-        inst_id=None,
-        mgn_mode=None,
-        ccy=None,
-        after=None,
-        before=None,
-        limit=None,
-        extra_data=None,
-        **kwargs,
-    ):
+        inst_type: Any = None,
+        uly: Any = None,
+        inst_id: Any = None,
+        mgn_mode: Any = None,
+        ccy: Any = None,
+        after: Any = None,
+        before: Any = None,
+        limit: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """Async get positions history"""
         path, params, extra_data = self._get_positions_history(
             inst_type, uly, inst_id, mgn_mode, ccy, after, before, limit, extra_data, **kwargs
@@ -266,7 +266,7 @@ class AccountMixin:
 
     # ==================== Config APIs ====================
 
-    def _get_config(self, extra_data=None):
+    def _get_config(self, extra_data: Any = None) -> None:
         params = {}
         path = self._params.get_rest_path("get_config")
         extra_data = update_extra_data(
@@ -282,7 +282,7 @@ class AccountMixin:
         return path, params, extra_data
 
     @staticmethod
-    def _generic_normalize_function(input_data, extra_data):
+    def _generic_normalize_function(input_data: Any, extra_data: Any) -> None:
         """Generic normalize function for OKX API responses.
         Extracts 'data' list and checks 'code' for status."""
         status = input_data.get("code") == "0"
@@ -294,7 +294,7 @@ class AccountMixin:
         return [data] if data else [], status
 
     @staticmethod
-    def _get_config_normalize_function(input_data, extra_data):
+    def _get_config_normalize_function(input_data: Any, extra_data: Any) -> None:
         status = input_data["code"] == "0"
         if "data" not in input_data:
             return [], status
@@ -304,29 +304,31 @@ class AccountMixin:
         data = data if len(data) > 0 else []
         return data, status
 
-    def get_config(self, extra_data=None):
+    def get_config(self, extra_data: Any = None) -> None:
         path, params, extra_data = self._get_config(extra_data=extra_data)
         data = self.request(path, params=params, extra_data=extra_data)
         return data
 
-    def async_get_config(self, extra_data=None):
+    def async_get_config(self, extra_data: Any = None) -> None:
         path, params, extra_data = self._get_config(extra_data=extra_data)
         self.submit(self.async_request(path, extra_data=extra_data), callback=self.async_callback)
 
-    def set_mode(self):
+    def set_mode(self) -> None:
         params = {"posMode": "long_short_mode"}
         path = self._params.get_rest_path("set_mode")
         data = self.request(path, body=params)
         return data
 
-    def set_lever(self, symbol, lever=10, mgn_mode="cross"):
+    def set_lever(self, symbol: Any, lever: Any = 10, mgn_mode: Any = "cross") -> None:
         symbol = self._params.get_symbol(symbol)
         params = {"instId": symbol, "lever": lever, "mgnMode": mgn_mode}
         path = self._params.get_rest_path("set_lever")
         data = self.request(path, body=params)
         return data
 
-    def async_set_lever(self, symbol, lever=10, mgn_mode="cross", extra_data=None):
+    def async_set_lever(
+        self, symbol: Any, lever: Any = 10, mgn_mode: Any = "cross", extra_data: Any = None
+    ) -> None:
         symbol = self._params.get_symbol(symbol)
         params = {"instId": symbol, "lever": lever, "mgnMode": mgn_mode}
         path = self._params.get_rest_path("set_lever")
@@ -336,8 +338,15 @@ class AccountMixin:
         )
 
     def _get_fee(
-        self, inst_type, uly=None, inst_id=None, ccy=None, qty=None, extra_data=None, **kwargs
-    ):
+        self,
+        inst_type: Any,
+        uly: Any = None,
+        inst_id: Any = None,
+        ccy: Any = None,
+        qty: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """
         Get fee rate
         :param inst_type: Instrument type, e.g. SPOT, MARGIN, SWAP, FUTURES, OPTION
@@ -375,7 +384,7 @@ class AccountMixin:
         return path, params, extra_data
 
     @staticmethod
-    def _get_fee_normalize_function(input_data, extra_data):
+    def _get_fee_normalize_function(input_data: Any, extra_data: Any) -> None:
         """Normalize fee data"""
         status = input_data["code"] == "0"
         if "data" not in input_data:
@@ -392,8 +401,15 @@ class AccountMixin:
         return target_data, status
 
     def get_fee(
-        self, inst_type, uly=None, inst_id=None, ccy=None, qty=None, extra_data=None, **kwargs
-    ):
+        self,
+        inst_type: Any,
+        uly: Any = None,
+        inst_id: Any = None,
+        ccy: Any = None,
+        qty: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """Get fee rate"""
         path, params, extra_data = self._get_fee(
             inst_type, uly, inst_id, ccy, qty, extra_data, **kwargs
@@ -402,8 +418,15 @@ class AccountMixin:
         return data
 
     def async_get_fee(
-        self, inst_type, uly=None, inst_id=None, ccy=None, qty=None, extra_data=None, **kwargs
-    ):
+        self,
+        inst_type: Any,
+        uly: Any = None,
+        inst_id: Any = None,
+        ccy: Any = None,
+        qty: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """Async get fee rate"""
         path, params, extra_data = self._get_fee(
             inst_type, uly, inst_id, ccy, qty, extra_data, **kwargs
@@ -413,7 +436,15 @@ class AccountMixin:
             callback=self.async_callback,
         )
 
-    def _get_max_size(self, symbol, td_mode, ccy=None, px=None, extra_data=None, **kwargs):
+    def _get_max_size(
+        self,
+        symbol: Any,
+        td_mode: Any,
+        ccy: Any = None,
+        px: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """
         Get maximum open position size
         :param symbol: Instrument ID, e.g. BTC-USDT
@@ -450,7 +481,7 @@ class AccountMixin:
         return path, params, extra_data
 
     @staticmethod
-    def _get_max_size_normalize_function(input_data, extra_data):
+    def _get_max_size_normalize_function(input_data: Any, extra_data: Any) -> None:
         """Normalize max size data"""
         status = input_data["code"] == "0"
         if "data" not in input_data:
@@ -466,7 +497,15 @@ class AccountMixin:
             target_data = []
         return target_data, status
 
-    def get_max_size(self, symbol, td_mode, ccy=None, px=None, extra_data=None, **kwargs):
+    def get_max_size(
+        self,
+        symbol: Any,
+        td_mode: Any,
+        ccy: Any = None,
+        px: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """Get maximum open position size"""
         path, params, extra_data = self._get_max_size(
             symbol, td_mode, ccy, px, extra_data, **kwargs
@@ -474,7 +513,15 @@ class AccountMixin:
         data = self.request(path, params=params, extra_data=extra_data)
         return data
 
-    def async_get_max_size(self, symbol, td_mode, ccy=None, px=None, extra_data=None, **kwargs):
+    def async_get_max_size(
+        self,
+        symbol: Any,
+        td_mode: Any,
+        ccy: Any = None,
+        px: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """Async get maximum open position size"""
         path, params, extra_data = self._get_max_size(
             symbol, td_mode, ccy, px, extra_data, **kwargs
@@ -484,7 +531,15 @@ class AccountMixin:
             callback=self.async_callback,
         )
 
-    def _get_max_avail_size(self, symbol, td_mode, ccy=None, px=None, extra_data=None, **kwargs):
+    def _get_max_avail_size(
+        self,
+        symbol: Any,
+        td_mode: Any,
+        ccy: Any = None,
+        px: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """
         Get maximum available open position size
         :param symbol: Instrument ID, e.g. BTC-USDT
@@ -521,7 +576,7 @@ class AccountMixin:
         return path, params, extra_data
 
     @staticmethod
-    def _get_max_avail_size_normalize_function(input_data, extra_data):
+    def _get_max_avail_size_normalize_function(input_data: Any, extra_data: Any) -> None:
         """Normalize max avail size data"""
         status = input_data["code"] == "0"
         if "data" not in input_data:
@@ -537,7 +592,15 @@ class AccountMixin:
             target_data = []
         return target_data, status
 
-    def get_max_avail_size(self, symbol, td_mode, ccy=None, px=None, extra_data=None, **kwargs):
+    def get_max_avail_size(
+        self,
+        symbol: Any,
+        td_mode: Any,
+        ccy: Any = None,
+        px: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """Get maximum available open position size"""
         path, params, extra_data = self._get_max_avail_size(
             symbol, td_mode, ccy, px, extra_data, **kwargs
@@ -546,8 +609,14 @@ class AccountMixin:
         return data
 
     def async_get_max_avail_size(
-        self, symbol, td_mode, ccy=None, px=None, extra_data=None, **kwargs
-    ):
+        self,
+        symbol: Any,
+        td_mode: Any,
+        ccy: Any = None,
+        px: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """Async get maximum available open position size"""
         path, params, extra_data = self._get_max_avail_size(
             symbol, td_mode, ccy, px, extra_data, **kwargs
@@ -559,16 +628,16 @@ class AccountMixin:
 
     def _set_margin_balance(
         self,
-        symbol,
-        pos_id,
-        amt,
-        mgn_mode,
-        action_type="add",
-        pos_side="net",
-        ccy=None,
-        extra_data=None,
-        **kwargs,
-    ):
+        symbol: Any,
+        pos_id: Any,
+        amt: Any,
+        mgn_mode: Any,
+        action_type: Any = "add",
+        pos_side: Any = "net",
+        ccy: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """
         Set margin balance (add/reduce margin)
         :param symbol: Instrument ID, e.g. BTC-USDT
@@ -611,16 +680,16 @@ class AccountMixin:
 
     def set_margin_balance(
         self,
-        symbol,
-        pos_id,
-        amt,
-        mgn_mode,
-        action_type="add",
-        pos_side="net",
-        ccy=None,
-        extra_data=None,
-        **kwargs,
-    ):
+        symbol: Any,
+        pos_id: Any,
+        amt: Any,
+        mgn_mode: Any,
+        action_type: Any = "add",
+        pos_side: Any = "net",
+        ccy: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """Set margin balance (add/reduce margin)"""
         path, body, extra_data = self._set_margin_balance(
             symbol, pos_id, amt, mgn_mode, action_type, pos_side, ccy, extra_data, **kwargs
@@ -630,16 +699,16 @@ class AccountMixin:
 
     def async_set_margin_balance(
         self,
-        symbol,
-        pos_id,
-        amt,
-        mgn_mode,
-        action_type="add",
-        pos_side="net",
-        ccy=None,
-        extra_data=None,
-        **kwargs,
-    ):
+        symbol: Any,
+        pos_id: Any,
+        amt: Any,
+        mgn_mode: Any,
+        action_type: Any = "add",
+        pos_side: Any = "net",
+        ccy: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """Async set margin balance (add/reduce margin)"""
         path, body, extra_data = self._set_margin_balance(
             symbol, pos_id, amt, mgn_mode, action_type, pos_side, ccy, extra_data, **kwargs

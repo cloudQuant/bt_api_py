@@ -1,6 +1,6 @@
-"""
-Luno Exchange Data Configuration
-"""
+from typing import Any
+
+"""Luno Exchange Data Configuration."""
 
 import os
 
@@ -13,7 +13,7 @@ _luno_config = None
 _luno_config_loaded = False
 
 
-def _get_luno_config():
+def _get_luno_config() -> Any | None:
     """Load Luno YAML configuration."""
     global _luno_config, _luno_config_loaded
     if _luno_config_loaded:
@@ -37,7 +37,7 @@ def _get_luno_config():
 class LunoExchangeData(ExchangeData):
     """Base class for Luno exchange."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__()
         self.exchange_name = "LUNO___SPOT"
         self.rest_url = "https://api.luno.com/api/1"
@@ -61,7 +61,7 @@ class LunoExchangeData(ExchangeData):
         self.api_key = os.getenv("LUNO_API_KEY", "")
         self.api_secret = os.getenv("LUNO_API_SECRET", "")
 
-    def _load_from_config(self, asset_type):
+    def _load_from_config(self, asset_type) -> bool:
         """Load from YAML config."""
         config = _get_luno_config()
         if config is None:
@@ -109,6 +109,7 @@ class LunoExchangeData(ExchangeData):
 
         Returns:
             The period value or default if not found
+
         """
         if key not in self.kline_periods:
             return default if default is not None else key
@@ -118,7 +119,7 @@ class LunoExchangeData(ExchangeData):
 class LunoExchangeDataSpot(LunoExchangeData):
     """Luno Spot exchange configuration."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__()
         self.asset_type = "spot"
         self.rest_paths = {}

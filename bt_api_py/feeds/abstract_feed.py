@@ -1,5 +1,4 @@
-"""
-统一场所协议 (AbstractVenueFeed) 与异步包装混入 (AsyncWrapperMixin)
+"""统一场所协议 (AbstractVenueFeed) 与异步包装混入 (AsyncWrapperMixin).
 
 设计原则：
 1. 方法签名必须兼容现有 Feed 基类（extra_data + **kwargs 模式不变）
@@ -14,7 +13,7 @@ from typing import Any, Protocol, runtime_checkable
 
 @runtime_checkable
 class AbstractVenueFeed(Protocol):
-    """统一场所协议
+    """统一场所协议.
 
     所有场所 Feed（CEX/DEX/CTP/IB/QMT）都应满足此协议。
     使用 Protocol 而非 ABC，以便现有 Feed 子类无需修改继承链即可通过类型检查。
@@ -23,31 +22,31 @@ class AbstractVenueFeed(Protocol):
     # ── 连接管理 ──────────────────────────────────────────────
 
     def connect(self) -> None:
-        """建立连接（HTTP 场所可为 no-op）"""
+        """建立连接（HTTP 场所可为 no-op）."""
         ...
 
     def disconnect(self) -> None:
-        """断开连接"""
+        """断开连接."""
         ...
 
     def is_connected(self) -> bool:
-        """检查连接状态"""
+        """检查连接状态."""
         ...
 
     # ── 行情查询（同步）── 签名与现有 Feed 保持一致 ────────────
 
     def get_tick(self, symbol: str, extra_data=None, **kwargs) -> Any:
-        """获取最新价格"""
+        """获取最新价格."""
         ...
 
     def get_depth(self, symbol: str, count: int = 20, extra_data=None, **kwargs) -> Any:
-        """获取深度"""
+        """获取深度."""
         ...
 
     def get_kline(
         self, symbol: str, period: str, count: int = 20, extra_data=None, **kwargs
     ) -> Any:
-        """获取K线"""
+        """获取K线."""
         ...
 
     # ── 交易操作（同步）── 签名与现有 Feed 保持一致 ────────────
@@ -64,37 +63,37 @@ class AbstractVenueFeed(Protocol):
         extra_data=None,
         **kwargs,
     ) -> Any:
-        """下单"""
+        """下单."""
         ...
 
     def cancel_order(self, symbol: str, order_id: str, extra_data=None, **kwargs) -> Any:
-        """撤单"""
+        """撤单."""
         ...
 
     def cancel_all(self, symbol: str | None = None, extra_data=None, **kwargs) -> Any:
-        """撤销所有订单（可选能力）"""
+        """撤销所有订单（可选能力）."""
         ...
 
     def query_order(self, symbol: str, order_id: str, extra_data=None, **kwargs) -> Any:
-        """查询订单"""
+        """查询订单."""
         ...
 
     def get_open_orders(self, symbol: str | None = None, extra_data=None, **kwargs) -> Any:
-        """查询挂单"""
+        """查询挂单."""
         ...
 
     # ── 账户查询（同步）────────────────────────────────────────
 
     def get_balance(self, symbol=None, extra_data=None, **kwargs) -> Any:
-        """查询余额"""
+        """查询余额."""
         ...
 
     def get_account(self, symbol="ALL", extra_data=None, **kwargs) -> Any:
-        """查询账户信息"""
+        """查询账户信息."""
         ...
 
     def get_position(self, symbol: str | None = None, extra_data=None, **kwargs) -> Any:
-        """查询持仓（期货/期权）"""
+        """查询持仓（期货/期权）."""
         ...
 
     # ── 异步版本 ───────────────────────────────────────────────
@@ -122,12 +121,12 @@ class AbstractVenueFeed(Protocol):
 
     @property
     def capabilities(self) -> set[str]:
-        """返回该 Feed 支持的能力集合"""
+        """返回该 Feed 支持的能力集合."""
         ...
 
 
 class AsyncWrapperMixin:
-    """为非 HTTP 场所（CTP/IB/QMT）提供默认的异步包装
+    """为非 HTTP 场所（CTP/IB/QMT）提供默认的异步包装.
 
     HTTP 场所应覆盖这些方法为真正的 httpx 异步实现。
     非 HTTP 场所继承此 Mixin，自动将同步方法包装为异步。
@@ -135,7 +134,7 @@ class AsyncWrapperMixin:
     使用方式::
 
         class CtpFeed(Feed, AsyncWrapperMixin):
-            def get_tick(self, symbol, extra_data=None, **kwargs):
+            def get_tick(self, symbol, extra_data=None, **kwargs) -> Any:
                 # CTP 同步实现
                 ...
             # async_get_tick 自动由 AsyncWrapperMixin 提供
@@ -238,7 +237,7 @@ class AsyncWrapperMixin:
 
 
 def check_protocol_compliance(feed_class) -> list:
-    """检查 feed_class 是否符合 AbstractVenueFeed 协议
+    """检查 feed_class 是否符合 AbstractVenueFeed 协议.
 
     :param feed_class: Feed 类（非实例）
     :return: 缺失方法列表，空列表表示完全符合

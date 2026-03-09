@@ -1,0 +1,518 @@
+{
+  "agent_id": 0,
+  "total_files": 62,
+  "files": [
+    {
+      "file_path": "containers/exchanges/__init__.py",
+      "quality_score": 0.0,
+      "functions": 0,
+      "classes": 0,
+      "type_hints": 0,
+      "docstrings": 0
+    },
+    {
+      "file_path": "containers/exchanges/okx_exchange_data.py",
+      "quality_score": 12.8,
+      "functions": 16,
+      "classes": 4,
+      "type_hints": 1,
+      "docstrings": 9
+    },
+    {
+      "file_path": "containers/exchanges/bitvavo_exchange_data.py",
+      "quality_score": 20.8,
+      "functions": 4,
+      "classes": 2,
+      "type_hints": 0,
+      "docstrings": 5
+    },
+    {
+      "file_path": "containers/exchanges/cow_swap_exchange_data.py",
+      "quality_score": 21.9,
+      "functions": 6,
+      "classes": 2,
+      "type_hints": 0,
+      "docstrings": 7
+    },
+    {
+      "file_path": "containers/exchanges/bequant_exchange_data.py",
+      "quality_score": 22.5,
+      "functions": 8,
+      "classes": 2,
+      "type_hints": 0,
+      "docstrings": 9
+    },
+    {
+      "file_path": "containers/exchanges/dydx_exchange_data.py",
+      "quality_score": 23.8,
+      "functions": 12,
+      "classes": 3,
+      "type_hints": 1,
+      "docstrings": 13
+    },
+    {
+      "file_path": "containers/exchanges/phemex_exchange_data.py",
+      "quality_score": 35.3,
+      "functions": 13,
+      "classes": 3,
+      "type_hints": 7,
+      "docstrings": 14
+    },
+    {
+      "file_path": "containers/exchanges/balancer_exchange_data.py",
+      "quality_score": 44.2,
+      "functions": 13,
+      "classes": 3,
+      "type_hints": 10,
+      "docstrings": 16
+    },
+    {
+      "file_path": "containers/tickers/mexc_ticker.py",
+      "quality_score": 3.4,
+      "functions": 19,
+      "classes": 3,
+      "type_hints": 0,
+      "docstrings": 3
+    },
+    {
+      "file_path": "containers/tickers/buda_ticker.py",
+      "quality_score": 5.4,
+      "functions": 13,
+      "classes": 1,
+      "type_hints": 0,
+      "docstrings": 3
+    },
+    {
+      "file_path": "containers/tickers/cryptocom_ticker.py",
+      "quality_score": 6.6,
+      "functions": 18,
+      "classes": 1,
+      "type_hints": 0,
+      "docstrings": 5
+    },
+    {
+      "file_path": "containers/tickers/foxbit_ticker.py",
+      "quality_score": 18.8,
+      "functions": 3,
+      "classes": 1,
+      "type_hints": 0,
+      "docstrings": 3
+    },
+    {
+      "file_path": "containers/tickers/wazirx_ticker.py",
+      "quality_score": 18.8,
+      "functions": 3,
+      "classes": 1,
+      "type_hints": 0,
+      "docstrings": 3
+    },
+    {
+      "file_path": "containers/tickers/gemini_ticker.py",
+      "quality_score": 19.4,
+      "functions": 7,
+      "classes": 2,
+      "type_hints": 0,
+      "docstrings": 7
+    },
+    {
+      "file_path": "containers/orders/mexc_order.py",
+      "quality_score": 2.2,
+      "functions": 31,
+      "classes": 3,
+      "type_hints": 0,
+      "docstrings": 3
+    },
+    {
+      "file_path": "containers/orders/korbit_order.py",
+      "quality_score": 12.5,
+      "functions": 1,
+      "classes": 1,
+      "type_hints": 0,
+      "docstrings": 1
+    },
+    {
+      "file_path": "containers/orders/order.py",
+      "quality_score": 27.4,
+      "functions": 42,
+      "classes": 2,
+      "type_hints": 3,
+      "docstrings": 45
+    },
+    {
+      "file_path": "containers/balances/bitfinex_balance.py",
+      "quality_score": 16.5,
+      "functions": 17,
+      "classes": 3,
+      "type_hints": 1,
+      "docstrings": 12
+    },
+    {
+      "file_path": "containers/balances/bybit_balance.py",
+      "quality_score": 45.2,
+      "functions": 31,
+      "classes": 3,
+      "type_hints": 25,
+      "docstrings": 34
+    },
+    {
+      "file_path": "containers/trades/bitfinex_trade.py",
+      "quality_score": 7.8,
+      "functions": 14,
+      "classes": 2,
+      "type_hints": 0,
+      "docstrings": 5
+    },
+    {
+      "file_path": "containers/orderbooks/__init__.py",
+      "quality_score": 0.0,
+      "functions": 0,
+      "classes": 0,
+      "type_hints": 0,
+      "docstrings": 0
+    },
+    {
+      "file_path": "containers/orderbooks/gateio_orderbook.py",
+      "quality_score": 13.5,
+      "functions": 21,
+      "classes": 3,
+      "type_hints": 0,
+      "docstrings": 13
+    },
+    {
+      "file_path": "feeds/live_binance/__init__.py",
+      "quality_score": 0.0,
+      "functions": 0,
+      "classes": 0,
+      "type_hints": 0,
+      "docstrings": 0
+    },
+    {
+      "file_path": "feeds/live_binance/grid.py",
+      "quality_score": 47.7,
+      "functions": 11,
+      "classes": 1,
+      "type_hints": 10,
+      "docstrings": 12
+    },
+    {
+      "file_path": "ctp/ctp_structs_order.py",
+      "quality_score": 0.3,
+      "functions": 46,
+      "classes": 46,
+      "type_hints": 0,
+      "docstrings": 1
+    },
+    {
+      "file_path": "exchange_registers/register_gemini.py",
+      "quality_score": 19.7,
+      "functions": 15,
+      "classes": 4,
+      "type_hints": 0,
+      "docstrings": 15
+    },
+    {
+      "file_path": "exchange_registers/register_uniswap.py",
+      "quality_score": 41.7,
+      "functions": 3,
+      "classes": 0,
+      "type_hints": 1,
+      "docstrings": 4
+    },
+    {
+      "file_path": "feeds/live_mexc_feed.py",
+      "quality_score": 20.0,
+      "functions": 11,
+      "classes": 4,
+      "type_hints": 0,
+      "docstrings": 12
+    },
+    {
+      "file_path": "feeds/live_okx/mixins/trading_account_mixin.py",
+      "quality_score": 22.1,
+      "functions": 137,
+      "classes": 1,
+      "type_hints": 9,
+      "docstrings": 113
+    },
+    {
+      "file_path": "containers/bars/htx_bar.py",
+      "quality_score": 2.5,
+      "functions": 19,
+      "classes": 1,
+      "type_hints": 0,
+      "docstrings": 2
+    },
+    {
+      "file_path": "containers/accounts/coinbase_account.py",
+      "quality_score": 4.8,
+      "functions": 18,
+      "classes": 3,
+      "type_hints": 0,
+      "docstrings": 4
+    },
+    {
+      "file_path": "functions/update_data/download_spot_history_bar_from_okx.py",
+      "quality_score": 0.0,
+      "functions": 2,
+      "classes": 0,
+      "type_hints": 0,
+      "docstrings": 0
+    },
+    {
+      "file_path": "containers/ib/ib_ticker.py",
+      "quality_score": 3.1,
+      "functions": 15,
+      "classes": 1,
+      "type_hints": 0,
+      "docstrings": 2
+    },
+    {
+      "file_path": "feeds/live_htx/spot.py",
+      "quality_score": 26.1,
+      "functions": 60,
+      "classes": 3,
+      "type_hints": 14,
+      "docstrings": 51
+    },
+    {
+      "file_path": "feeds/live_hyperliquid/account_wss_base.py",
+      "quality_score": 25.0,
+      "functions": 11,
+      "classes": 1,
+      "type_hints": 0,
+      "docstrings": 12
+    },
+    {
+      "file_path": "monitoring/decorators.py",
+      "quality_score": 34.6,
+      "functions": 13,
+      "classes": 0,
+      "type_hints": 11,
+      "docstrings": 7
+    },
+    {
+      "file_path": "feeds/live_bitget/swap.py",
+      "quality_score": 3.2,
+      "functions": 28,
+      "classes": 3,
+      "type_hints": 0,
+      "docstrings": 4
+    },
+    {
+      "file_path": "functions/timer_event.py",
+      "quality_score": 0.0,
+      "functions": 2,
+      "classes": 0,
+      "type_hints": 0,
+      "docstrings": 0
+    },
+    {
+      "file_path": "containers/liquidations/okx_liquidation_order.py",
+      "quality_score": 13.2,
+      "functions": 18,
+      "classes": 1,
+      "type_hints": 0,
+      "docstrings": 10
+    },
+    {
+      "file_path": "__init__.py",
+      "quality_score": 0.0,
+      "functions": 0,
+      "classes": 0,
+      "type_hints": 0,
+      "docstrings": 0
+    },
+    {
+      "file_path": "feeds/live_coindcx/request_base.py",
+      "quality_score": 19.6,
+      "functions": 13,
+      "classes": 1,
+      "type_hints": 0,
+      "docstrings": 11
+    },
+    {
+      "file_path": "feeds/live_valr/spot.py",
+      "quality_score": 5.6,
+      "functions": 15,
+      "classes": 3,
+      "type_hints": 0,
+      "docstrings": 4
+    },
+    {
+      "file_path": "feeds/live_btc_markets/__init__.py",
+      "quality_score": 0.0,
+      "functions": 0,
+      "classes": 0,
+      "type_hints": 0,
+      "docstrings": 1
+    },
+    {
+      "file_path": "feeds/live_satoshitango/request_base.py",
+      "quality_score": 17.9,
+      "functions": 13,
+      "classes": 1,
+      "type_hints": 0,
+      "docstrings": 10
+    },
+    {
+      "file_path": "feeds/live_cow_swap/spot.py",
+      "quality_score": 25.0,
+      "functions": 40,
+      "classes": 1,
+      "type_hints": 1,
+      "docstrings": 40
+    },
+    {
+      "file_path": "feeds/live_wazirx/__init__.py",
+      "quality_score": 0.0,
+      "functions": 0,
+      "classes": 0,
+      "type_hints": 0,
+      "docstrings": 1
+    },
+    {
+      "file_path": "feeds/live_bitmart/spot.py",
+      "quality_score": 3.3,
+      "functions": 14,
+      "classes": 1,
+      "type_hints": 0,
+      "docstrings": 2
+    },
+    {
+      "file_path": "feeds/live_exmo/request_base.py",
+      "quality_score": 28.9,
+      "functions": 14,
+      "classes": 1,
+      "type_hints": 5,
+      "docstrings": 12
+    },
+    {
+      "file_path": "feeds/live_luno/__init__.py",
+      "quality_score": 0.0,
+      "functions": 0,
+      "classes": 0,
+      "type_hints": 0,
+      "docstrings": 1
+    },
+    {
+      "file_path": "feeds/live_coinbase/spot.py",
+      "quality_score": 27.8,
+      "functions": 37,
+      "classes": 3,
+      "type_hints": 6,
+      "docstrings": 38
+    },
+    {
+      "file_path": "feeds/live_bitfinex/request_base.py",
+      "quality_score": 25.0,
+      "functions": 28,
+      "classes": 1,
+      "type_hints": 1,
+      "docstrings": 28
+    },
+    {
+      "file_path": "feeds/live_hitbtc/__init__.py",
+      "quality_score": 0.0,
+      "functions": 0,
+      "classes": 0,
+      "type_hints": 0,
+      "docstrings": 1
+    },
+    {
+      "file_path": "feeds/live_bingx/request_base.py",
+      "quality_score": 20.0,
+      "functions": 14,
+      "classes": 1,
+      "type_hints": 0,
+      "docstrings": 12
+    },
+    {
+      "file_path": "feeds/live_curve/spot.py",
+      "quality_score": 25.0,
+      "functions": 43,
+      "classes": 1,
+      "type_hints": 1,
+      "docstrings": 43
+    },
+    {
+      "file_path": "feeds/live_giottus/__init__.py",
+      "quality_score": 0.0,
+      "functions": 0,
+      "classes": 0,
+      "type_hints": 0,
+      "docstrings": 1
+    },
+    {
+      "file_path": "feeds/live_localbitcoins/spot.py",
+      "quality_score": 5.6,
+      "functions": 15,
+      "classes": 3,
+      "type_hints": 0,
+      "docstrings": 4
+    },
+    {
+      "file_path": "containers/greeks/greeks.py",
+      "quality_score": 16.7,
+      "functions": 11,
+      "classes": 1,
+      "type_hints": 0,
+      "docstrings": 8
+    },
+    {
+      "file_path": "utils/time.py",
+      "quality_score": 25.0,
+      "functions": 1,
+      "classes": 0,
+      "type_hints": 0,
+      "docstrings": 1
+    },
+    {
+      "file_path": "feeds/live_sushiswap/request_base.py",
+      "quality_score": 33.9,
+      "functions": 11,
+      "classes": 1,
+      "type_hints": 3,
+      "docstrings": 13
+    },
+    {
+      "file_path": "containers/openinterests/okx_open_interest.py",
+      "quality_score": 3.3,
+      "functions": 14,
+      "classes": 1,
+      "type_hints": 0,
+      "docstrings": 2
+    },
+    {
+      "file_path": "feeds/live_gemini/request_base.py",
+      "quality_score": 25.1,
+      "functions": 29,
+      "classes": 1,
+      "type_hints": 3,
+      "docstrings": 27
+    },
+    {
+      "file_path": "errors/binance_translator.py",
+      "quality_score": 25.0,
+      "functions": 0,
+      "classes": 1,
+      "type_hints": 0,
+      "docstrings": 1
+    }
+  ],
+  "instructions": {
+    "goal": "改进代码质量，添加类型注解和文档字符串",
+    "steps": [
+      "1. 为所有函数和类方法添加类型注解（参数和返回值）",
+      "2. 为所有公共函数和类添加Google风格的文档字符串",
+      "3. 为模块添加模块级文档字符串",
+      "4. 确保代码符合项目的代码风格（ruff format）",
+      "5. 保持代码功能不变，只改进质量"
+    ],
+    "style_guide": {
+      "type_hints": "使用Python 3.11+类型语法（list[str]而不是List[str]）",
+      "docstrings": "Google风格，包含Args、Returns、Raises等部分",
+      "quotes": "使用双引号",
+      "line_length": "100字符"
+    }
+  }
+}

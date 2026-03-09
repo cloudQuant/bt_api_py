@@ -12,6 +12,7 @@
 import os
 import threading
 from pathlib import Path
+from typing import Any
 
 from bt_api_py.functions.log_message import SpdLogManager
 
@@ -38,13 +39,13 @@ class _LoggerProxy:
     def __init__(self, logger: object):
         self._logger = logger
 
-    def warning(self, *args, **kwargs):
+    def warning(self, *args: Any, **kwargs: Any) -> None:
         warning_method = getattr(self._logger, "warning", None)
         if warning_method is not None:
             return warning_method(*args, **kwargs)
         return self._logger.warn(*args, **kwargs)
 
-    def warn(self, *args, **kwargs):
+    def warn(self, *args: Any, **kwargs: Any) -> None:
         warn_method = getattr(self._logger, "warn", None)
         if warn_method is not None:
             return warn_method(*args, **kwargs)

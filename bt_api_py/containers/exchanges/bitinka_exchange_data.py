@@ -1,6 +1,6 @@
-"""
-Bitinka Exchange Data Configuration
-"""
+from typing import Any
+
+"""Bitinka Exchange Data Configuration."""
 
 import os
 
@@ -13,7 +13,7 @@ _bitinka_config = None
 _bitinka_config_loaded = False
 
 
-def _get_bitinka_config():
+def _get_bitinka_config() -> Any | None:
     """Load Bitinka YAML configuration."""
     global _bitinka_config, _bitinka_config_loaded
     if _bitinka_config_loaded:
@@ -37,7 +37,7 @@ def _get_bitinka_config():
 class BitinkaExchangeData(ExchangeData):
     """Base class for Bitinka exchange."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__()
         self.exchange_name = "bitinka"
         self.rest_url = "https://www.bitinka.com/api"
@@ -54,7 +54,7 @@ class BitinkaExchangeData(ExchangeData):
         }
         self.legal_currency = ["USDT", "USD", "EUR", "ARS", "BRL", "CLP", "COP", "PEN"]
 
-    def _load_from_config(self, asset_type):
+    def _load_from_config(self, asset_type) -> bool:
         """Load from YAML config."""
         config = _get_bitinka_config()
         if config is None:
@@ -100,7 +100,7 @@ class BitinkaExchangeData(ExchangeData):
 class BitinkaExchangeDataSpot(BitinkaExchangeData):
     """Bitinka Spot exchange configuration."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__()
         self.asset_type = "spot"
         self.rest_paths = {}

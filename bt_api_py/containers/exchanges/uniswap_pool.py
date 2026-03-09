@@ -1,5 +1,4 @@
-"""
-Uniswap Pool Data Container
+"""Uniswap Pool Data Container.
 
 Standardized container for Uniswap pool information and liquidity data.
 """
@@ -152,6 +151,7 @@ class UniswapPool:
 
         Returns:
             UniswapPool instance
+
         """
         pool_data = data.get("pool", {}) or {}
 
@@ -253,6 +253,7 @@ class UniswapPool:
 
         Returns:
             Dictionary representation of pool
+
         """
         return {
             "pool_id": self.pool_id,
@@ -309,6 +310,7 @@ class UniswapPool:
 
         Returns:
             Token balance in the pool
+
         """
         for token in self.tokens:
             if token.address.lower() == token_address.lower():
@@ -323,6 +325,7 @@ class UniswapPool:
 
         Returns:
             Token price in USD
+
         """
         for token in self.tokens:
             if token.address.lower() == token_address.lower():
@@ -334,6 +337,7 @@ class UniswapPool:
 
         Returns:
             Total pool value in USD
+
         """
         if self.stats and self.stats.total_value_locked_usd:
             return self.stats.total_value_locked_usd
@@ -347,6 +351,7 @@ class UniswapPool:
 
         Returns:
             True if pool is liquid
+
         """
         return (
             self.has_liquidity
@@ -359,6 +364,7 @@ class UniswapPool:
 
         Returns:
             Fee rate as percentage (e.g., 0.003 for 0.3%)
+
         """
         if self.fees and self.fees.swap_fee:
             return self.fees.swap_fee

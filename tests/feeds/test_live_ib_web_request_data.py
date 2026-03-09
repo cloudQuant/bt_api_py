@@ -17,7 +17,6 @@ IB Web API 实时行情测试
   pytest tests/feeds/test_live_ib_web_request_data.py -v -s -k "test_auth_status"
 """
 
-import json
 import queue
 import time
 
@@ -583,7 +582,6 @@ class TestCookieFunctionality:
 
 
 if __name__ == "__main__":
-
     # 先检查 Gateway 是否可用
     if not _gateway_available():
         pass

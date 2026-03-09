@@ -11,6 +11,7 @@ import sys
 # Add the project root to the Python path
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
+
 def test_bitfinex_import():
     """Test importing Bitfinex modules"""
     print("=== Testing Bitfinex Module Imports ===")
@@ -22,25 +23,40 @@ def test_bitfinex_import():
             BitfinexMarketWssDataSpot,
             BitfinexRequestData,
         )
+
         print("✓ Successfully imported Bitfinex live feed modules")
 
         # Test importing exchange data
-        from bt_api_py.containers.exchanges.bitfinex_exchange_data import BitfinexExchangeDataSpot  # noqa: F401
+        from bt_api_py.containers.exchanges.bitfinex_exchange_data import (
+            BitfinexExchangeDataSpot,  # noqa: F401
+        )
+
         print("✓ Successfully imported Bitfinex exchange data")
 
         # Test importing data containers
-        from bt_api_py.containers.balances.bitfinex_balance import BitfinexSpotRequestBalanceData  # noqa: F401
-        from bt_api_py.containers.orderbooks.bitfinex_orderbook import BitfinexRequestOrderBookData  # noqa: F401
-        from bt_api_py.containers.orders.bitfinex_order import BitfinexRequestOrderData  # noqa: F401
-        from bt_api_py.containers.tickers.bitfinex_ticker import BitfinexRequestTickerData  # noqa: F401
+        from bt_api_py.containers.balances.bitfinex_balance import (
+            BitfinexSpotRequestBalanceData,  # noqa: F401
+        )
+        from bt_api_py.containers.orderbooks.bitfinex_orderbook import (
+            BitfinexRequestOrderBookData,  # noqa: F401
+        )
+        from bt_api_py.containers.orders.bitfinex_order import (
+            BitfinexRequestOrderData,  # noqa: F401
+        )
+        from bt_api_py.containers.tickers.bitfinex_ticker import (
+            BitfinexRequestTickerData,  # noqa: F401
+        )
+
         print("✓ Successfully imported Bitfinex data containers")
 
         # Test importing registration
         from bt_api_py.exchange_registers.register_bitfinex import register_bitfinex  # noqa: F401
+
         print("✓ Successfully imported Bitfinex registration")
 
         # Test importing error translator
         from bt_api_py.error import BitfinexErrorTranslator  # noqa: F401
+
         print("✓ Successfully imported Bitfinex error translator")
 
         pass
@@ -51,6 +67,7 @@ def test_bitfinex_import():
     except Exception as e:
         print(f"✗ Unexpected error: {e}")
         pass
+
 
 def test_bitfinex_instantiation():
     """Test instantiating Bitfinex classes"""
@@ -66,16 +83,20 @@ def test_bitfinex_instantiation():
             "api_secret": "test_api_secret",
             "asset_type": "SPOT",
             "logger_name": "test_bitfinex_feed.log",
-            "exchange_name": "bitfinex"
+            "exchange_name": "bitfinex",
         }
 
         # Test instantiating request data
         from bt_api_py.feeds.live_bitfinex import BitfinexRequestData  # noqa: F401
+
         feed = BitfinexRequestData(data_queue, **test_params)
         print("✓ Successfully instantiated BitfinexRequestData")
 
         # Test exchange data
-        from bt_api_py.containers.exchanges.bitfinex_exchange_data import BitfinexExchangeDataSpot  # noqa: F401
+        from bt_api_py.containers.exchanges.bitfinex_exchange_data import (
+            BitfinexExchangeDataSpot,  # noqa: F401
+        )
+
         exchange_data = BitfinexExchangeDataSpot()
         print("✓ Successfully instantiated BitfinexExchangeDataSpot")
 
@@ -88,21 +109,23 @@ def test_bitfinex_instantiation():
         print(f"✓ Reverse symbol conversion: {converted_symbol} -> {reverse_symbol}")
 
         # Test data container instantiation
-        from bt_api_py.containers.tickers.bitfinex_ticker import BitfinexRequestTickerData  # noqa: F401
+        from bt_api_py.containers.tickers.bitfinex_ticker import (
+            BitfinexRequestTickerData,  # noqa: F401
+        )
 
         # Create sample ticker data
         ticker_data = [
             "tBTCUSD",  # symbol
-            45000.0,   # bid
-            1.5,       # bid_size
-            45010.0,   # ask
-            2.0,       # ask_size
-            100.0,     # daily_change
-            0.0022,    # daily_change_perc
-            45005.0,   # last_price
-            1000.0,    # volume
-            45200.0,   # high
-            44800.0    # low
+            45000.0,  # bid
+            1.5,  # bid_size
+            45010.0,  # ask
+            2.0,  # ask_size
+            100.0,  # daily_change
+            0.0022,  # daily_change_perc
+            45005.0,  # last_price
+            1000.0,  # volume
+            45200.0,  # high
+            44800.0,  # low
         ]
 
         ticker = BitfinexRequestTickerData(ticker_data, "BTC-USD", "SPOT", False)
@@ -114,10 +137,12 @@ def test_bitfinex_instantiation():
         print(f"  - Ask: {ticker.get_ask_price()}")
 
         # Test order book data
-        from bt_api_py.containers.orderbooks.bitfinex_orderbook import BitfinexRequestOrderBookData  # noqa: F401
+        from bt_api_py.containers.orderbooks.bitfinex_orderbook import (
+            BitfinexRequestOrderBookData,  # noqa: F401
+        )
 
         orderbook_data = [
-            [45000.0, 5, 1.0],   # [price, count, amount] - bid
+            [45000.0, 5, 1.0],  # [price, count, amount] - bid
             [45005.0, 3, -0.5],  # [price, count, amount] - ask (negative)
             [45010.0, 2, -1.5],  # [price, count, amount] - ask
             [45015.0, 4, -0.8],  # [price, count, amount] - ask
@@ -135,8 +160,10 @@ def test_bitfinex_instantiation():
     except Exception as e:
         print(f"✗ Instantiation error: {e}")
         import traceback
+
         traceback.print_exc()
         pass
+
 
 def test_bitfinex_registration():
     """Test Bitfinex registration"""
@@ -154,8 +181,10 @@ def test_bitfinex_registration():
     except Exception as e:
         print(f"✗ Registration test error: {e}")
         import traceback
+
         traceback.print_exc()
         pass
+
 
 def main():
     """Main test function"""
@@ -180,6 +209,7 @@ def main():
     else:
         print("❌ Some tests failed. Please check the errors above.")
         return 1
+
 
 if __name__ == "__main__":
     exit(main())

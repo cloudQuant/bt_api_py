@@ -1,12 +1,12 @@
-"""
-Interactive Brokers Web API 交易所配置数据
-包含 REST/WebSocket URL、端点路径映射、市场数据字段定义等
+"""Interactive Brokers Web API 交易所配置数据
+包含 REST/WebSocket URL、端点路径映射、市场数据字段定义等.
 
 IB Web API 分为两大组件:
   - Trading API (/iserver 端点): 交易、行情、持仓
   - Account Management API (/gw/api/v1 端点): 账户管理、资金、报告
 """
 
+from typing import Any
 import os
 
 from bt_api_py.containers.exchanges.exchange_data import ExchangeData
@@ -20,8 +20,8 @@ _ib_raw_config = None  # 原始 yaml dict (用于加载 pydantic 忽略的额外
 _ib_config_loaded = False
 
 
-def _get_ib_yaml_path():
-    """获取 ib.yaml 配置文件路径"""
+def _get_ib_yaml_path() -> Any | None:
+    """获取 ib.yaml 配置文件路径."""
     return os.path.join(
         os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
         "configs",
@@ -29,8 +29,8 @@ def _get_ib_yaml_path():
     )
 
 
-def _get_ib_config():
-    """延迟加载并缓存 IB Web API YAML 配置 (pydantic 模型)"""
+def _get_ib_config() -> Any | None:
+    """延迟加载并缓存 IB Web API YAML 配置 (pydantic 模型)."""
     global _ib_config, _ib_raw_config, _ib_config_loaded
     if _ib_config_loaded:
         return _ib_config
@@ -51,15 +51,15 @@ def _get_ib_config():
     return _ib_config
 
 
-def _get_ib_raw_config():
-    """获取原始 yaml dict (包含 pydantic ExchangeConfig 忽略的额外字段)"""
+def _get_ib_raw_config() -> Any | None:
+    """获取原始 yaml dict (包含 pydantic ExchangeConfig 忽略的额外字段)."""
     if not _ib_config_loaded:
         _get_ib_config()  # 触发加载
     return _ib_raw_config
 
 
 class IbWebExchangeData(ExchangeData):
-    """IB Web API 交易所配置基类"""
+    """IB Web API 交易所配置基类."""
 
     # 生产环境URL
     PROD_REST_URL = "https://api.interactivebrokers.com"
@@ -68,7 +68,7 @@ class IbWebExchangeData(ExchangeData):
     # Client Portal Gateway 默认URL
     GATEWAY_REST_URL = "https://localhost:5000"
 
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__()
         self.exchange_name = "IB_WEB"
         self.rest_url = self.GATEWAY_REST_URL
@@ -90,8 +90,8 @@ class IbWebExchangeData(ExchangeData):
         # 从 YAML 配置加载 (默认加载 stk)
         self._load_from_config("stk")
 
-    def _load_from_config(self, asset_type):
-        """从 YAML 配置文件加载交易所参数
+    def _load_from_config(self, asset_type) -> bool:
+        """从 YAML 配置文件加载交易所参数.
 
         同时使用 pydantic 校验后的 config 和原始 yaml dict:
           - config (pydantic): base_urls, kline_periods, status_dict, asset_types 等标准字段
@@ -101,6 +101,7 @@ class IbWebExchangeData(ExchangeData):
             asset_type: 资产类型 key, 如 'stk', 'fut', 'opt', 'cash'
         Returns:
             bool: 是否加载成功
+
         """
         config = _get_ib_config()
         raw = _get_ib_raw_config()
@@ -169,28 +170,29 @@ class IbWebExchangeData(ExchangeData):
 
         return True
 
-    def get_symbol(self, symbol):
-        """IB Web API 品种名称直接使用"""
+    def get_symbol(self, symbol: str) -> str:
+        """IB Web API 品种名称直接使用."""
         return symbol
 
-    def get_period(self, key):
-        """获取 IB kline 周期映射值"""
+    def get_period(self, key: str) -> str:
+        """获取 IB kline 周期映射值."""
         if key not in self.kline_periods:
             return key
         return self.kline_periods[key]
 
-    def get_rest_path(self, key):
-        """获取 REST 端点路径 (含 HTTP 方法, 如 'GET /path')"""
+    def get_rest_path(self, key: str, **kwargs) -> str:
+        """获取 REST 端点路径 (含 HTTP 方法, 如 'GET /path')."""
         path = self.rest_paths.get(key)
         if path is None or path == "":
             self.raise_path_error(self.exchange_name, key)
         return path
 
-    def get_rest_url(self, key, **kwargs):
-        """获取完整 REST URL (含路径参数替换)
+    def get_rest_url(self, key, **kwargs) -> str:
+        """获取完整 REST URL (含路径参数替换).
 
         Returns:
             tuple: (method, full_url)
+
         """
         raw = self.get_rest_path(key)
         # 解析 'METHOD /path' 格式
@@ -203,8 +205,8 @@ class IbWebExchangeData(ExchangeData):
             path = path.format(**kwargs)
         return method, f"{self.rest_url}{path}"
 
-    def get_wss_path(self, **kwargs):
-        """获取 WebSocket URL"""
+    def get_wss_path(self, **kwargs) -> str:
+        """获取 WebSocket URL."""
         base = self.rest_url.replace("https://", "wss://").replace("http://", "ws://")
         # 避免重复 /v1/api 前缀
         if "/v1/api" in base:
@@ -212,39 +214,39 @@ class IbWebExchangeData(ExchangeData):
         return f"{base}/v1/api/ws"
 
     def get_snapshot_fields_str(self, fields=None):
-        """获取市场数据快照字段字符串"""
+        """获取市场数据快照字段字符串."""
         if fields is None:
             fields = self.default_snapshot_fields
         return ",".join(str(f) for f in fields)
 
 
 class IbWebExchangeDataStock(IbWebExchangeData):
-    """IB Web API 股票配置"""
+    """IB Web API 股票配置."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__()
         self._load_from_config("stk")
 
 
 class IbWebExchangeDataFuture(IbWebExchangeData):
-    """IB Web API 期货配置"""
+    """IB Web API 期货配置."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__()
         self._load_from_config("fut")
 
 
 class IbWebExchangeDataOption(IbWebExchangeData):
-    """IB Web API 期权配置"""
+    """IB Web API 期权配置."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__()
         self._load_from_config("opt")
 
 
 class IbWebExchangeDataForex(IbWebExchangeData):
-    """IB Web API 外汇配置"""
+    """IB Web API 外汇配置."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__()
         self._load_from_config("cash")

@@ -1,8 +1,7 @@
-"""
-BingX Exchange Data Configuration
-"""
+"""BingX Exchange Data Configuration."""
 
 import os
+from typing import Any
 
 from bt_api_py.containers.exchanges.exchange_data import ExchangeData
 from bt_api_py.logging_factory import get_logger
@@ -13,8 +12,13 @@ _bingx_config = None
 _bingx_config_loaded = False
 
 
-def _get_bingx_config():
-    """Load BingX YAML configuration."""
+def _get_bingx_config() -> Any | None:
+    """Load BingX YAML configuration with lazy loading and caching.
+
+    Returns:
+        The loaded BingX configuration object or None if loading failed.
+
+    """
     global _bingx_config, _bingx_config_loaded
     if _bingx_config_loaded:
         return _bingx_config
@@ -37,7 +41,8 @@ def _get_bingx_config():
 class BingXExchangeData(ExchangeData):
     """Base class for BingX exchange."""
 
-    def __init__(self):
+    def __init__(self) -> None:
+        """Initialize BingX exchange data with default configuration."""
         super().__init__()
         self.exchange_name = "bingx"
         self.rest_url = "https://open-api.bingx.com"
@@ -60,8 +65,16 @@ class BingXExchangeData(ExchangeData):
         }
         self.legal_currency = ["USDT", "USD", "BTC", "ETH", "EUR"]
 
-    def _load_from_config(self, asset_type):
-        """Load from YAML config."""
+    def _load_from_config(self, asset_type: str) -> bool:
+        """Load from YAML config.
+
+        Args:
+            asset_type: Type of asset (e.g., 'spot').
+
+        Returns:
+            True if configuration was loaded successfully, False otherwise.
+
+        """
         config = _get_bingx_config()
         if config is None:
             return False
@@ -106,7 +119,8 @@ class BingXExchangeData(ExchangeData):
 class BingXExchangeDataSpot(BingXExchangeData):
     """BingX Spot exchange configuration."""
 
-    def __init__(self):
+    def __init__(self) -> None:
+        """Initialize BingX Spot exchange data with spot-specific configuration."""
         super().__init__()
         self.asset_type = "spot"
         self.rest_paths = {}

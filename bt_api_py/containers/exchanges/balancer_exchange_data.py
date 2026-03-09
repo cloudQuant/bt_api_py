@@ -1,11 +1,11 @@
-"""
-Balancer Exchange Data Configuration
+"""Balancer Exchange Data Configuration.
 
 Defines API endpoints, chain enums, and path configurations for Balancer DEX.
 """
 
 import os
 from enum import Enum
+from typing import Any
 
 # ── 配置加载缓存 ──────────────────────────────────────────────
 _balancer_config = None
@@ -13,8 +13,13 @@ _balancer_config_loaded = False
 _balancer_config_raw = None
 
 
-def _get_balancer_config():
-    """延迟加载并缓存 Balancer YAML 配置"""
+def _get_balancer_config() -> Any | None:
+    """Load and cache Balancer YAML configuration with lazy loading.
+
+    Returns:
+        The loaded Balancer configuration object or None if loading failed.
+
+    """
     global _balancer_config, _balancer_config_loaded, _balancer_config_raw
     if _balancer_config_loaded:
         return _balancer_config
@@ -90,12 +95,13 @@ class BalancerExchangeData:
     BALANCER_QUERIES_ADDRESS = "0xE39B5e3B6D74016b2F6A9673D7d7493B6DF549d5"
     BAL_TOKEN_ADDRESS = "0xba100000625a3754423978a60c9317c58a424e3d"
 
-    def __init__(self, chain: GqlChain = DEFAULT_CHAIN, asset_type: str | None = None):
+    def __init__(self, chain: GqlChain = DEFAULT_CHAIN, asset_type: str | None = None) -> None:
         """Initialize Balancer exchange data.
 
         Args:
             chain: The blockchain to query
             asset_type: Asset type (e.g., 'mainnet', 'polygon') to load config from balancer.yaml
+
         """
         self.chain = chain
         self.asset_type = asset_type
@@ -112,12 +118,14 @@ class BalancerExchangeData:
             self.graphql_queries = {}
 
     def _load_from_config(self, asset_type: str) -> bool:
-        """从 YAML 配置文件加载 Balancer 参数
+        """从 YAML 配置文件加载 Balancer 参数.
 
         Args:
-            asset_type: 资产类型 key, 如 'mainnet', 'polygon' 等
+            asset_type: 资产类型 key, 如 'mainnet', 'polygon' 等.
+
         Returns:
-            bool: 是否加载成功
+            是否加载成功.
+
         """
         if not self.config:
             return False
@@ -163,11 +171,21 @@ class BalancerExchangeData:
         return True
 
     def get_rest_url(self) -> str:
-        """Get the GraphQL API URL."""
+        """Get the GraphQL API URL.
+
+        Returns:
+            The GraphQL API URL string.
+
+        """
         return self.rest_url
 
     def get_subgraph_url(self) -> str:
-        """Get the subgraph URL for the configured chain."""
+        """Get the subgraph URL for the configured chain.
+
+        Returns:
+            The subgraph URL for the current chain.
+
+        """
         if hasattr(self, "subgraph_urls") and self.chain.value in self.subgraph_urls:
             return self.subgraph_urls[self.chain.value]
         # Fallback to predefined URLs
@@ -179,10 +197,11 @@ class BalancerExchangeData:
         Balancer uses token addresses as symbols.
 
         Args:
-            symbol: Token address or symbol (e.g., "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2" for WETH)
+            symbol: Token address or symbol (e.g., "0xC02...WETH")
 
         Returns:
             Normalized token address (checksummed)
+
         """
         # Return as-is if it looks like an address
         if symbol.startswith("0x") and len(symbol) == 42:
@@ -198,11 +217,17 @@ class BalancerExchangeData:
 
         Returns:
             Pool ID string
+
         """
         return pool_id
 
     def get_chain_value(self) -> str:
-        """Get the chain enum value for GraphQL queries."""
+        """Get the chain enum value for GraphQL queries.
+
+        Returns:
+            The chain enum value as a string.
+
+        """
         return self.chain.value
 
     def get_graphql_query(self, query_name: str) -> str | None:
@@ -213,6 +238,7 @@ class BalancerExchangeData:
 
         Returns:
             GraphQL query string or None if not found
+
         """
         if hasattr(self, "graphql_queries") and self.graphql_queries:
             return self.graphql_queries.get(query_name)
@@ -226,6 +252,7 @@ class BalancerExchangeData:
 
         Returns:
             GraphQL path string or None if not found
+
         """
         if hasattr(self, "graphql_paths") and self.graphql_paths:
             return self.graphql_paths.get(path_name)
@@ -263,7 +290,14 @@ class BalancerExchangeDataSpot(BalancerExchangeData):
         self,
         chain: GqlChain | str = BalancerExchangeData.DEFAULT_CHAIN,
         asset_type: str | None = None,
-    ):
+    ) -> None:
+        """Initialize Balancer Spot exchange data.
+
+        Args:
+            chain: The blockchain to query (can be GqlChain enum or string).
+            asset_type: Asset type to load configuration for.
+
+        """
         # Convert string to enum if needed
         if isinstance(chain, str):
             try:
@@ -312,6 +346,7 @@ class BalancerExchangeDataSpot(BalancerExchangeData):
 
         Returns:
             String in format "POST /graphql" or "GRAPHQL {query}"
+
         """
         # If config has rest_paths and this request_type is defined
         if self.config and hasattr(self, "asset_type") and self.asset_type:

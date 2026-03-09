@@ -1,6 +1,6 @@
-"""
-Swyftx Exchange Data Configuration – Feed pattern.
-"""
+from typing import Any
+
+"""Swyftx Exchange Data Configuration – Feed pattern."""
 
 import os
 import re
@@ -15,7 +15,7 @@ logger = get_logger("swyftx_exchange_data")
 _swyftx_yaml_cache = None
 
 
-def _load_swyftx_yaml():
+def _load_swyftx_yaml() -> Any | None:
     global _swyftx_yaml_cache
     if _swyftx_yaml_cache is not None:
         return _swyftx_yaml_cache
@@ -37,7 +37,7 @@ def _load_swyftx_yaml():
 class SwyftxExchangeData(ExchangeData):
     """Base class for Swyftx exchange."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__()
         self.exchange_name = "SWYFTX"
         self.rest_url = "https://api.swyftx.com.au"
@@ -68,10 +68,10 @@ class SwyftxExchangeData(ExchangeData):
         s = re.sub(r"[/_]", "-", s)
         return s.upper()
 
-    def get_period(self, period):
+    def get_period(self, period: str) -> str:
         return self.kline_periods.get(period, period)
 
-    def get_reverse_period(self, period):
+    def get_reverse_period(self, period: str) -> str:
         for k, v in self.kline_periods.items():
             if v == period:
                 return k
@@ -81,7 +81,7 @@ class SwyftxExchangeData(ExchangeData):
 class SwyftxExchangeDataSpot(SwyftxExchangeData):
     """Swyftx Spot exchange configuration."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__()
         self.exchange_name = "SWYFTX___SPOT"
         self.asset_type = "SPOT"
@@ -103,7 +103,7 @@ class SwyftxExchangeDataSpot(SwyftxExchangeData):
         self.wss_paths = {}
         self._load_yaml()
 
-    def _load_yaml(self):
+    def _load_yaml(self) -> None:
         cfg = _load_swyftx_yaml()
         spot = cfg.get("SWYFTX___SPOT", {})
         if not spot:
@@ -122,7 +122,7 @@ class SwyftxExchangeDataSpot(SwyftxExchangeData):
         if lc:
             self.legal_currency = list(lc)
 
-    def get_rest_path(self, key, **kwargs):
+    def get_rest_path(self, key: str, **kwargs) -> str:
         path = self.rest_paths.get(key, "")
         if not path:
             raise ValueError(f"[{self.exchange_name}] REST path not found: {key}")

@@ -346,12 +346,10 @@ class DataProtectionManager:
     def check_retention_policies(self) -> dict[str, list[str]]:
         """Check data retention policies and identify expired data."""
         expired_data = {}
-        current_time = time.time()
 
         for data_type, classification in self._classifications.items():
-            cutoff_time = current_time - (classification.retention_days * 24 * 60 * 60)
-
             # In a real implementation, this would query data stores
+            # using cutoff_time = time.time() - (classification.retention_days * 24 * 60 * 60)
             # For now, just return the policy information
             expired_data[data_type.value] = [
                 f"Data older than {classification.retention_days} days should be deleted"

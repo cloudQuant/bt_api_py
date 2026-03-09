@@ -1,10 +1,10 @@
-"""
-BeQuant Exchange Data Configuration
+"""BeQuant Exchange Data Configuration.
 
 BeQuant uses HitBTC V3 API (white-label). Same endpoints, HTTP Basic Auth.
 """
 
 import os
+from typing import Any
 
 from bt_api_py.containers.exchanges.exchange_data import ExchangeData
 from bt_api_py.logging_factory import get_logger
@@ -15,8 +15,13 @@ _bequant_config = None
 _bequant_config_loaded = False
 
 
-def _get_bequant_config():
-    """Load BeQuant YAML configuration."""
+def _get_bequant_config() -> Any | None:
+    """Load BeQuant YAML configuration with lazy loading and caching.
+
+    Returns:
+        The loaded BeQuant configuration object or None if loading failed.
+
+    """
     global _bequant_config, _bequant_config_loaded
     if _bequant_config_loaded:
         return _bequant_config
@@ -39,7 +44,8 @@ def _get_bequant_config():
 class BeQuantExchangeData(ExchangeData):
     """Base class for BeQuant exchange."""
 
-    def __init__(self):
+    def __init__(self) -> None:
+        """Initialize BeQuant exchange data with default configuration."""
         super().__init__()
         self.exchange_name = "BEQUANT___SPOT"
         self.rest_url = "https://api.bequant.io/api/3"
@@ -60,8 +66,16 @@ class BeQuantExchangeData(ExchangeData):
         }
         self.legal_currency = ["USDT", "USD", "BTC", "ETH", "EUR"]
 
-    def _load_from_config(self, asset_type):
-        """Load from YAML config."""
+    def _load_from_config(self, asset_type: str) -> bool:
+        """Load from YAML config.
+
+        Args:
+            asset_type: Type of asset (e.g., 'spot').
+
+        Returns:
+            True if configuration was loaded successfully, False otherwise.
+
+        """
         config = _get_bequant_config()
         if config is None:
             return False
@@ -107,18 +121,43 @@ class BeQuantExchangeData(ExchangeData):
 
         return True
 
-    def get_symbol(self, symbol):
+    def get_symbol(self, symbol: str) -> str:
         """Convert symbol to BeQuant format (no separator, uppercase).
-        e.g. 'BTC/USDT' -> 'BTCUSDT', 'BTC-USDT' -> 'BTCUSDT'
+
+        Args:
+            symbol: Symbol to convert (e.g., 'BTC/USDT', 'BTC-USDT').
+
+        Returns:
+            Normalized symbol without separators (e.g., 'BTCUSDT').
+
         """
         return symbol.upper().replace("/", "").replace("-", "").replace("_", "")
 
-    def get_period(self, period):
-        """Map standard period to BeQuant kline period."""
+    def get_period(self, period: str) -> str:
+        """Map standard period to BeQuant kline period.
+
+        Args:
+            period: Standard period string (e.g., '1m', '5m', '1h').
+
+        Returns:
+            BeQuant-specific period string.
+
+        """
         return self.kline_periods.get(period, period)
 
-    def get_rest_path(self, request_type):
-        """Get REST path for request_type. Raises ValueError if not found."""
+    def get_rest_path(self, request_type: str) -> str:
+        """Get REST path for request_type.
+
+        Args:
+            request_type: Type of REST request (e.g., 'get_tick', 'make_order').
+
+        Returns:
+            REST API path string.
+
+        Raises:
+            ValueError: If request_type is not found in rest_paths.
+
+        """
         path = self.rest_paths.get(request_type)
         if path is None:
             raise ValueError(
@@ -126,8 +165,17 @@ class BeQuantExchangeData(ExchangeData):
             )
         return path
 
-    def get_wss_path(self, channel_type, symbol=None):
-        """Get WebSocket subscription path."""
+    def get_wss_path(self, channel_type: str, symbol: str | None = None) -> str:
+        """Get WebSocket subscription path.
+
+        Args:
+            channel_type: Type of WebSocket channel (e.g., 'ticker', 'depth').
+            symbol: Trading symbol to include in path (optional).
+
+        Returns:
+            WebSocket path string with symbol placeholder replaced if provided.
+
+        """
         path = self.wss_paths.get(channel_type, "")
         if symbol and "{symbol}" in str(path):
             path = str(path).replace("{symbol}", self.get_symbol(symbol))
@@ -137,7 +185,8 @@ class BeQuantExchangeData(ExchangeData):
 class BeQuantExchangeDataSpot(BeQuantExchangeData):
     """BeQuant Spot exchange configuration."""
 
-    def __init__(self):
+    def __init__(self) -> None:
+        """Initialize BeQuant Spot exchange data with spot-specific configuration."""
         super().__init__()
         self.asset_type = "spot"
         if not self._load_from_config("spot"):

@@ -1,5 +1,4 @@
-"""
-Binance Sub-account API - 子账户管理接口请求类
+"""Binance Sub-account API - 子账户管理接口请求类.
 
 实现 Binance 子账户管理相关的所有 REST API 请求，包括：
 - 子账户管理 (列表、状态、现货汇总)
@@ -8,6 +7,8 @@ Binance Sub-account API - 子账户管理接口请求类
 - 子账户 API Key 管理 (创建、查询、删除、IP限制)
 """
 
+from typing import Any
+
 from bt_api_py.containers.exchanges.binance_exchange_data import BinanceExchangeDataSubAccount
 from bt_api_py.feeds.live_binance.request_base import BinanceRequestData
 from bt_api_py.functions.utils import update_extra_data
@@ -15,12 +16,12 @@ from bt_api_py.logging_factory import get_logger
 
 
 class BinanceRequestDataSubAccount(BinanceRequestData):
-    """Binance Sub-account API 请求类
+    """Binance Sub-account API 请求类.
 
     处理所有子账户管理相关的请求。
     """
 
-    def __init__(self, data_queue, **kwargs):
+    def __init__(self, data_queue: Any, **kwargs: Any) -> None:
         kwargs.setdefault("exchange_data", BinanceExchangeDataSubAccount())
         kwargs.setdefault("exchange_name", "binance_sub_account")
         super().__init__(data_queue, **kwargs)
@@ -33,7 +34,7 @@ class BinanceRequestDataSubAccount(BinanceRequestData):
     # ==================== 子账户管理接口 ====================
 
     def _get_sub_account_list(self, email=None, is_freeze=None, extra_data=None, **kwargs):
-        """查询子账户列表
+        """查询子账户列表.
 
         Args:
             email: 子账户邮箱 (模糊查询)
@@ -43,6 +44,7 @@ class BinanceRequestDataSubAccount(BinanceRequestData):
 
         Returns:
             tuple: (path, params, extra_data)
+
         """
         request_type = "get_sub_account_list"
         path = self._params.get_rest_path(request_type)
@@ -64,10 +66,11 @@ class BinanceRequestDataSubAccount(BinanceRequestData):
         return path, params, extra_data
 
     def get_sub_account_list(self, email=None, is_freeze=None, extra_data=None, **kwargs):
-        """查询子账户列表
+        """查询子账户列表.
 
         Returns:
             RequestData: 请求结果
+
         """
         path, params, extra_data = self._get_sub_account_list(
             email=email, is_freeze=is_freeze, extra_data=extra_data, **kwargs
@@ -76,7 +79,7 @@ class BinanceRequestDataSubAccount(BinanceRequestData):
         return data
 
     def _get_sub_account_status(self, extra_data=None, **kwargs):
-        """查询子账户状态
+        """查询子账户状态.
 
         Args:
             extra_data: 额外数据
@@ -84,6 +87,7 @@ class BinanceRequestDataSubAccount(BinanceRequestData):
 
         Returns:
             tuple: (path, params, extra_data)
+
         """
         request_type = "get_sub_account_status"
         path = self._params.get_rest_path(request_type)
@@ -101,17 +105,18 @@ class BinanceRequestDataSubAccount(BinanceRequestData):
         return path, params, extra_data
 
     def get_sub_account_status(self, extra_data=None, **kwargs):
-        """查询子账户状态
+        """查询子账户状态.
 
         Returns:
             RequestData: 请求结果
+
         """
         path, params, extra_data = self._get_sub_account_status(extra_data=extra_data, **kwargs)
         data = self.request(path, params=params, extra_data=extra_data, is_sign=True)
         return data
 
     def _get_sub_account_spot_summary(self, email=None, extra_data=None, **kwargs):
-        """查询子账户现货汇总
+        """查询子账户现货汇总.
 
         Args:
             email: 子账户邮箱
@@ -120,6 +125,7 @@ class BinanceRequestDataSubAccount(BinanceRequestData):
 
         Returns:
             tuple: (path, params, extra_data)
+
         """
         request_type = "get_sub_account_spot_summary"
         path = self._params.get_rest_path(request_type)
@@ -139,10 +145,11 @@ class BinanceRequestDataSubAccount(BinanceRequestData):
         return path, params, extra_data
 
     def get_sub_account_spot_summary(self, email=None, extra_data=None, **kwargs):
-        """查询子账户现货汇总
+        """查询子账户现货汇总.
 
         Returns:
             RequestData: 请求结果
+
         """
         path, params, extra_data = self._get_sub_account_spot_summary(
             email=email, extra_data=extra_data, **kwargs
@@ -153,7 +160,7 @@ class BinanceRequestDataSubAccount(BinanceRequestData):
     # ==================== 子账户资金划转接口 ====================
 
     def _sub_transfer_to_main(self, email, asset, amount, extra_data=None, **kwargs):
-        """子账户转主账户
+        """子账户转主账户.
 
         Args:
             email: 子账户邮箱
@@ -164,6 +171,7 @@ class BinanceRequestDataSubAccount(BinanceRequestData):
 
         Returns:
             tuple: (path, params, extra_data)
+
         """
         request_type = "sub_transfer_to_main"
         path = self._params.get_rest_path(request_type)
@@ -185,10 +193,11 @@ class BinanceRequestDataSubAccount(BinanceRequestData):
         return path, params, extra_data
 
     def sub_transfer_to_main(self, email, asset, amount, extra_data=None, **kwargs):
-        """子账户转主账户
+        """子账户转主账户.
 
         Returns:
             RequestData: 请求结果
+
         """
         path, params, extra_data = self._sub_transfer_to_main(
             email=email, asset=asset, amount=amount, extra_data=extra_data, **kwargs
@@ -197,7 +206,7 @@ class BinanceRequestDataSubAccount(BinanceRequestData):
         return data
 
     def _main_transfer_to_sub(self, email, asset, amount, extra_data=None, **kwargs):
-        """主账户转子账户
+        """主账户转子账户.
 
         Args:
             email: 子账户邮箱
@@ -208,6 +217,7 @@ class BinanceRequestDataSubAccount(BinanceRequestData):
 
         Returns:
             tuple: (path, params, extra_data)
+
         """
         request_type = "main_transfer_to_sub"
         path = self._params.get_rest_path(request_type)
@@ -229,10 +239,11 @@ class BinanceRequestDataSubAccount(BinanceRequestData):
         return path, params, extra_data
 
     def main_transfer_to_sub(self, email, asset, amount, extra_data=None, **kwargs):
-        """主账户转子账户
+        """主账户转子账户.
 
         Returns:
             RequestData: 请求结果
+
         """
         path, params, extra_data = self._main_transfer_to_sub(
             email=email, asset=asset, amount=amount, extra_data=extra_data, **kwargs
@@ -241,7 +252,7 @@ class BinanceRequestDataSubAccount(BinanceRequestData):
         return data
 
     def _sub_transfer_to_sub(self, from_email, to_email, asset, amount, extra_data=None, **kwargs):
-        """子账户互转
+        """子账户互转.
 
         Args:
             from_email: 源子账户邮箱
@@ -253,6 +264,7 @@ class BinanceRequestDataSubAccount(BinanceRequestData):
 
         Returns:
             tuple: (path, params, extra_data)
+
         """
         request_type = "sub_transfer_to_sub"
         path = self._params.get_rest_path(request_type)
@@ -275,10 +287,11 @@ class BinanceRequestDataSubAccount(BinanceRequestData):
         return path, params, extra_data
 
     def sub_transfer_to_sub(self, from_email, to_email, asset, amount, extra_data=None, **kwargs):
-        """子账户互转
+        """子账户互转.
 
         Returns:
             RequestData: 请求结果
+
         """
         path, params, extra_data = self._sub_transfer_to_sub(
             from_email=from_email,
@@ -294,7 +307,7 @@ class BinanceRequestDataSubAccount(BinanceRequestData):
     def _get_sub_transfer_history(
         self, startTime=None, endTime=None, limit=None, extra_data=None, **kwargs
     ):
-        """查询子账户划转历史
+        """查询子账户划转历史.
 
         Args:
             startTime: 开始时间戳
@@ -305,6 +318,7 @@ class BinanceRequestDataSubAccount(BinanceRequestData):
 
         Returns:
             tuple: (path, params, extra_data)
+
         """
         request_type = "get_sub_transfer_history"
         path = self._params.get_rest_path(request_type)
@@ -330,10 +344,11 @@ class BinanceRequestDataSubAccount(BinanceRequestData):
     def get_sub_transfer_history(
         self, startTime=None, endTime=None, limit=None, extra_data=None, **kwargs
     ):
-        """查询子账户划转历史
+        """查询子账户划转历史.
 
         Returns:
             RequestData: 请求结果
+
         """
         path, params, extra_data = self._get_sub_transfer_history(
             startTime=startTime, endTime=endTime, limit=limit, extra_data=extra_data, **kwargs
@@ -344,7 +359,7 @@ class BinanceRequestDataSubAccount(BinanceRequestData):
     def _get_sub_account_universal_transfer(
         self, from_type, to_type, asset, amount, extra_data=None, **kwargs
     ):
-        """子账户通用划转
+        """子账户通用划转.
 
         Args:
             from_type: 源账户类型
@@ -356,6 +371,7 @@ class BinanceRequestDataSubAccount(BinanceRequestData):
 
         Returns:
             tuple: (path, params, extra_data)
+
         """
         request_type = "get_sub_account_universal_transfer"
         path = self._params.get_rest_path(request_type)
@@ -380,10 +396,11 @@ class BinanceRequestDataSubAccount(BinanceRequestData):
     def get_sub_account_universal_transfer(
         self, from_type, to_type, asset, amount, extra_data=None, **kwargs
     ):
-        """子账户通用划转
+        """子账户通用划转.
 
         Returns:
             RequestData: 请求结果
+
         """
         path, params, extra_data = self._get_sub_account_universal_transfer(
             from_type=from_type,
@@ -399,7 +416,7 @@ class BinanceRequestDataSubAccount(BinanceRequestData):
     # ==================== 子账户资产查询接口 ====================
 
     def _get_sub_account_assets(self, email, extra_data=None, **kwargs):
-        """查询子账户资产
+        """查询子账户资产.
 
         Args:
             email: 子账户邮箱
@@ -408,6 +425,7 @@ class BinanceRequestDataSubAccount(BinanceRequestData):
 
         Returns:
             tuple: (path, params, extra_data)
+
         """
         request_type = "get_sub_account_assets"
         path = self._params.get_rest_path(request_type)
@@ -427,10 +445,11 @@ class BinanceRequestDataSubAccount(BinanceRequestData):
         return path, params, extra_data
 
     def get_sub_account_assets(self, email, extra_data=None, **kwargs):
-        """查询子账户资产
+        """查询子账户资产.
 
         Returns:
             RequestData: 请求结果
+
         """
         path, params, extra_data = self._get_sub_account_assets(
             email=email, extra_data=extra_data, **kwargs
@@ -439,7 +458,7 @@ class BinanceRequestDataSubAccount(BinanceRequestData):
         return data
 
     def _get_sub_account_margin_account(self, email, extra_data=None, **kwargs):
-        """查询子账户杠杆账户
+        """查询子账户杠杆账户.
 
         Args:
             email: 子账户邮箱
@@ -448,6 +467,7 @@ class BinanceRequestDataSubAccount(BinanceRequestData):
 
         Returns:
             tuple: (path, params, extra_data)
+
         """
         request_type = "get_sub_account_margin_account"
         path = self._params.get_rest_path(request_type)
@@ -467,10 +487,11 @@ class BinanceRequestDataSubAccount(BinanceRequestData):
         return path, params, extra_data
 
     def get_sub_account_margin_account(self, email, extra_data=None, **kwargs):
-        """查询子账户杠杆账户
+        """查询子账户杠杆账户.
 
         Returns:
             RequestData: 请求结果
+
         """
         path, params, extra_data = self._get_sub_account_margin_account(
             email=email, extra_data=extra_data, **kwargs
@@ -479,7 +500,7 @@ class BinanceRequestDataSubAccount(BinanceRequestData):
         return data
 
     def _get_sub_account_margin_summary(self, email, extra_data=None, **kwargs):
-        """查询子账户杠杆账户汇总
+        """查询子账户杠杆账户汇总.
 
         Args:
             email: 子账户邮箱
@@ -488,6 +509,7 @@ class BinanceRequestDataSubAccount(BinanceRequestData):
 
         Returns:
             tuple: (path, params, extra_data)
+
         """
         request_type = "get_sub_account_margin_summary"
         path = self._params.get_rest_path(request_type)
@@ -507,10 +529,11 @@ class BinanceRequestDataSubAccount(BinanceRequestData):
         return path, params, extra_data
 
     def get_sub_account_margin_summary(self, email, extra_data=None, **kwargs):
-        """查询子账户杠杆账户汇总
+        """查询子账户杠杆账户汇总.
 
         Returns:
             RequestData: 请求结果
+
         """
         path, params, extra_data = self._get_sub_account_margin_summary(
             email=email, extra_data=extra_data, **kwargs
@@ -519,7 +542,7 @@ class BinanceRequestDataSubAccount(BinanceRequestData):
         return data
 
     def _get_sub_account_futures_account(self, email, extra_data=None, **kwargs):
-        """查询子账户期货账户
+        """查询子账户期货账户.
 
         Args:
             email: 子账户邮箱
@@ -528,6 +551,7 @@ class BinanceRequestDataSubAccount(BinanceRequestData):
 
         Returns:
             tuple: (path, params, extra_data)
+
         """
         request_type = "get_sub_account_futures_account"
         path = self._params.get_rest_path(request_type)
@@ -547,10 +571,11 @@ class BinanceRequestDataSubAccount(BinanceRequestData):
         return path, params, extra_data
 
     def get_sub_account_futures_account(self, email, extra_data=None, **kwargs):
-        """查询子账户期货账户
+        """查询子账户期货账户.
 
         Returns:
             RequestData: 请求结果
+
         """
         path, params, extra_data = self._get_sub_account_futures_account(
             email=email, extra_data=extra_data, **kwargs
@@ -561,7 +586,7 @@ class BinanceRequestDataSubAccount(BinanceRequestData):
     # ==================== 子账户 API Key 管理接口 ====================
 
     def _create_sub_api_key(self, email, extra_data=None, **kwargs):
-        """创建子账户 API Key
+        """创建子账户 API Key.
 
         Args:
             email: 子账户邮箱
@@ -570,6 +595,7 @@ class BinanceRequestDataSubAccount(BinanceRequestData):
 
         Returns:
             tuple: (path, params, extra_data)
+
         """
         request_type = "create_sub_api_key"
         path = self._params.get_rest_path(request_type)
@@ -596,10 +622,11 @@ class BinanceRequestDataSubAccount(BinanceRequestData):
         return path, params, extra_data
 
     def create_sub_api_key(self, email, extra_data=None, **kwargs):
-        """创建子账户 API Key
+        """创建子账户 API Key.
 
         Returns:
             RequestData: 请求结果
+
         """
         path, params, extra_data = self._create_sub_api_key(
             email=email, extra_data=extra_data, **kwargs
@@ -608,7 +635,7 @@ class BinanceRequestDataSubAccount(BinanceRequestData):
         return data
 
     def _get_sub_api_key(self, email, extra_data=None, **kwargs):
-        """查询子账户 API Key
+        """查询子账户 API Key.
 
         Args:
             email: 子账户邮箱
@@ -617,6 +644,7 @@ class BinanceRequestDataSubAccount(BinanceRequestData):
 
         Returns:
             tuple: (path, params, extra_data)
+
         """
         request_type = "get_sub_api_key"
         path = self._params.get_rest_path(request_type)
@@ -636,10 +664,11 @@ class BinanceRequestDataSubAccount(BinanceRequestData):
         return path, params, extra_data
 
     def get_sub_api_key(self, email, extra_data=None, **kwargs):
-        """查询子账户 API Key
+        """查询子账户 API Key.
 
         Returns:
             RequestData: 请求结果
+
         """
         path, params, extra_data = self._get_sub_api_key(
             email=email, extra_data=extra_data, **kwargs
@@ -648,7 +677,7 @@ class BinanceRequestDataSubAccount(BinanceRequestData):
         return data
 
     def _delete_sub_api_key(self, email, api_key, extra_data=None, **kwargs):
-        """删除子账户 API Key
+        """删除子账户 API Key.
 
         Args:
             email: 子账户邮箱
@@ -658,6 +687,7 @@ class BinanceRequestDataSubAccount(BinanceRequestData):
 
         Returns:
             tuple: (path, params, extra_data)
+
         """
         request_type = "delete_sub_api_key"
         path = self._params.get_rest_path(request_type)
@@ -678,10 +708,11 @@ class BinanceRequestDataSubAccount(BinanceRequestData):
         return path, params, extra_data
 
     def delete_sub_api_key(self, email, api_key, extra_data=None, **kwargs):
-        """删除子账户 API Key
+        """删除子账户 API Key.
 
         Returns:
             RequestData: 请求结果
+
         """
         path, params, extra_data = self._delete_sub_api_key(
             email=email, api_key=api_key, extra_data=extra_data, **kwargs
@@ -690,7 +721,7 @@ class BinanceRequestDataSubAccount(BinanceRequestData):
         return data
 
     def _get_sub_api_ip_restriction(self, email, extra_data=None, **kwargs):
-        """查询子账户 IP 限制
+        """查询子账户 IP 限制.
 
         Args:
             email: 子账户邮箱
@@ -699,6 +730,7 @@ class BinanceRequestDataSubAccount(BinanceRequestData):
 
         Returns:
             tuple: (path, params, extra_data)
+
         """
         request_type = "get_sub_api_ip_restriction"
         path = self._params.get_rest_path(request_type)
@@ -718,10 +750,11 @@ class BinanceRequestDataSubAccount(BinanceRequestData):
         return path, params, extra_data
 
     def get_sub_api_ip_restriction(self, email, extra_data=None, **kwargs):
-        """查询子账户 IP 限制
+        """查询子账户 IP 限制.
 
         Returns:
             RequestData: 请求结果
+
         """
         path, params, extra_data = self._get_sub_api_ip_restriction(
             email=email, extra_data=extra_data, **kwargs
@@ -730,7 +763,7 @@ class BinanceRequestDataSubAccount(BinanceRequestData):
         return data
 
     def _delete_sub_ip_restriction(self, email, extra_data=None, **kwargs):
-        """删除子账户 IP 限制
+        """删除子账户 IP 限制.
 
         Args:
             email: 子账户邮箱
@@ -739,6 +772,7 @@ class BinanceRequestDataSubAccount(BinanceRequestData):
 
         Returns:
             tuple: (path, params, extra_data)
+
         """
         request_type = "delete_sub_ip_restriction"
         path = self._params.get_rest_path(request_type)
@@ -758,10 +792,11 @@ class BinanceRequestDataSubAccount(BinanceRequestData):
         return path, params, extra_data
 
     def delete_sub_ip_restriction(self, email, extra_data=None, **kwargs):
-        """删除子账户 IP 限制
+        """删除子账户 IP 限制.
 
         Returns:
             RequestData: 请求结果
+
         """
         path, params, extra_data = self._delete_sub_ip_restriction(
             email=email, extra_data=extra_data, **kwargs

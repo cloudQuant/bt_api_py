@@ -1,10 +1,10 @@
-"""
-HitBTC Exchange Data Container
+"""HitBTC Exchange Data Container.
 
 This module provides HitBTC-specific configuration and path management.
 Loads configuration from YAML file and provides REST/WSS endpoints.
 """
 
+from typing import Any
 import os
 
 from bt_api_py.containers.exchanges.exchange_data import ExchangeData
@@ -17,8 +17,8 @@ _hitbtc_config = None
 _hitbtc_config_loaded = False
 
 
-def _get_hitbtc_config():
-    """延迟加载并缓存 HitBTC YAML 配置"""
+def _get_hitbtc_config() -> Any | None:
+    """延迟加载并缓存 HitBTC YAML 配置."""
     global _hitbtc_config, _hitbtc_config_loaded
     if _hitbtc_config_loaded:
         return _hitbtc_config
@@ -46,7 +46,7 @@ class HitBtcExchangeData(ExchangeData):
     Subclasses MUST set exchange-specific: exchange_name, rest_paths, wss_paths.
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__()
         self.exchange_name = "HITBTC"
         self.rest_url = "https://api.hitbtc.com/api/3"
@@ -68,7 +68,7 @@ class HitBtcExchangeData(ExchangeData):
         self.rest_paths = {}
         self.wss_paths = {}
 
-    def _load_from_config(self, asset_type):
+    def _load_from_config(self, asset_type) -> bool | None:
         config = _get_hitbtc_config()
         if config is None:
             return False
@@ -91,39 +91,39 @@ class HitBtcExchangeData(ExchangeData):
             logger.warn(f"Failed to load hitbtc config for {asset_type}: {e}")
             return False
 
-    def get_rest_path(self, key):
+    def get_rest_path(self, key: str, **kwargs) -> str:
         """Get REST API path for request type (returns 'METHOD /path' format)."""
         path = self.rest_paths.get(key)
         if path is None:
             raise ValueError(f"Unknown REST path key: {key}")
         return path
 
-    def get_wss_path(self, channel):
+    def get_wss_path(self, channel: Any, **kwargs) -> str:
         """Get WebSocket channel path."""
         path = self.wss_paths.get(channel)
         if path is None:
             raise ValueError(f"Unknown WSS channel: {channel}")
         return path
 
-    def get_symbol(self, symbol):
+    def get_symbol(self, symbol: str) -> str:
         """Normalize symbol format for HitBTC (uppercase, no separator)."""
         return symbol.upper().replace("/", "").replace("-", "")
 
-    def get_period(self, period):
+    def get_period(self, period: str) -> str:
         """Convert period to HitBTC format (e.g. '1h' -> 'H1')."""
         return self.kline_periods.get(period.lower(), period.upper())
 
-    def __str__(self):
+    def __str__(self) -> str:
         return f"{self.exchange_name} Exchange Data"
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return f"<HitBtcExchangeData exchange='{self.exchange_name}'>"
 
 
 class HitBtcExchangeDataSpot(HitBtcExchangeData):
-    """HitBTC Spot Trading exchange data"""
+    """HitBTC Spot Trading exchange data."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__()
         self.asset_type = "SPOT"
         if not self._load_from_config("spot"):

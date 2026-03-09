@@ -6,30 +6,37 @@ with bt_api_py, including configuration management and initialization.
 
 import os
 import time
-from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any
 
-from .core.access_control import AccessControlManager, Resource, PermissionLevel
-from .core.audit_logger import AuditLogger, EventType, SeverityLevel
-from .core.encryption_manager import EncryptionManager, create_key_manager, KeyProvider
-from .auth.oauth2_provider import OAuth2Provider
 from .auth.mfa_provider import MFAProvider
+from .auth.oauth2_provider import OAuth2Provider
+from .core.access_control import AccessControlManager, PermissionLevel, Resource
+from .core.audit_logger import AuditEvent, AuditLogger, EventType, SeverityLevel
+from .core.encryption_manager import EncryptionManager, KeyProvider, create_key_manager
 from .data.protection import DataProtectionManager
-from .network.tls_manager import TLSManager
 from .monitoring.security_monitoring import SecurityMonitoring
+from .network.tls_manager import TLSManager
 from .recovery.disaster_recovery import DisasterRecoveryManager
 
 
 class SecurityFramework:
     """Main security framework integration class."""
 
-    def __init__(self, config: Dict[str, Any]):
-        """Initialize security framework with configuration."""
+    def __init__(self, config: dict[str, Any]) -> None:
+        """Initialize security framework with configuration.
+
+        Args:
+            config: Configuration dictionary containing all security settings.
+        """
         self.config = config
         self._initialize_components()
 
-    def _initialize_components(self):
-        """Initialize all security components."""
+    def _initialize_components(self) -> None:
+        """Initialize all security components.
+
+        Sets up encryption, access control, audit logging, OAuth2, MFA,
+        data protection, TLS, monitoring, and disaster recovery components.
+        """
         # Initialize encryption manager
         self.encryption_manager = self._init_encryption_manager()
 
@@ -65,7 +72,11 @@ class SecurityFramework:
         )
 
     def _init_encryption_manager(self) -> EncryptionManager:
-        """Initialize encryption manager based on configuration."""
+        """Initialize encryption manager based on configuration.
+
+        Returns:
+            Configured EncryptionManager instance.
+        """
         encryption_config = self.config.get("encryption", {})
         provider_type = KeyProvider(encryption_config.get("provider", "local"))
 
@@ -79,7 +90,11 @@ class SecurityFramework:
         )
 
     def _init_audit_logger(self) -> AuditLogger:
-        """Initialize audit logger."""
+        """Initialize audit logger.
+
+        Returns:
+            Configured AuditLogger instance.
+        """
         audit_config = self.config.get("audit", {})
 
         return AuditLogger(
@@ -90,7 +105,11 @@ class SecurityFramework:
         )
 
     def _init_oauth2_provider(self) -> OAuth2Provider:
-        """Initialize OAuth2 provider."""
+        """Initialize OAuth2 provider.
+
+        Returns:
+            Configured OAuth2Provider instance.
+        """
         oauth_config = self.config.get("oauth2", {})
 
         return OAuth2Provider(
@@ -103,7 +122,11 @@ class SecurityFramework:
         )
 
     def _init_mfa_provider(self) -> MFAProvider:
-        """Initialize MFA provider."""
+        """Initialize MFA provider.
+
+        Returns:
+            Configured MFAProvider instance.
+        """
         mfa_config = self.config.get("mfa", {})
 
         return MFAProvider(
@@ -115,8 +138,13 @@ class SecurityFramework:
             rp_name=mfa_config.get("rp_name", "bt_api_py Trading Platform"),
         )
 
-    def get_security_status(self) -> Dict[str, Any]:
-        """Get comprehensive security status."""
+    def get_security_status(self) -> dict[str, Any]:
+        """Get comprehensive security status.
+
+        Returns:
+            Dictionary containing security status for all components including
+            encryption, access control, audit, and compliance settings.
+        """
         return {
             "encryption": {
                 "provider": self.config.get("encryption", {}).get("provider", "local"),
@@ -145,8 +173,15 @@ class SecurityFramework:
         }
 
 
-def create_security_config_from_env() -> Dict[str, Any]:
-    """Create security configuration from environment variables."""
+def create_security_config_from_env() -> dict[str, Any]:
+    """Create security configuration from environment variables.
+
+    Reads security-related environment variables and constructs a complete
+    configuration dictionary for the SecurityFramework.
+
+    Returns:
+        Configuration dictionary with all security settings from environment.
+    """
     return {
         "encryption": {
             "provider": os.getenv("SECURITY_KEY_PROVIDER", "local"),
@@ -215,16 +250,27 @@ def create_security_config_from_env() -> Dict[str, Any]:
 
 
 # Global security framework instance
-_security_framework: Optional[SecurityFramework] = None
+_security_framework: SecurityFramework | None = None
 
 
-def get_security_framework() -> Optional[SecurityFramework]:
-    """Get the global security framework instance."""
+def get_security_framework() -> SecurityFramework | None:
+    """Get the global security framework instance.
+
+    Returns:
+        The global SecurityFramework instance or None if not initialized.
+    """
     return _security_framework
 
 
-def initialize_security_framework(config: Optional[Dict[str, Any]] = None) -> SecurityFramework:
-    """Initialize the global security framework."""
+def initialize_security_framework(config: dict[str, Any] | None = None) -> SecurityFramework:
+    """Initialize the global security framework.
+
+    Args:
+        config: Optional configuration dictionary. If None, reads from environment.
+
+    Returns:
+        Initialized SecurityFramework instance.
+    """
     global _security_framework
 
     if config is None:
@@ -234,8 +280,18 @@ def initialize_security_framework(config: Optional[Dict[str, Any]] = None) -> Se
     return _security_framework
 
 
-def integrate_with_bt_api(bt_api_instance):
-    """Integrate security framework with bt_api_py instance."""
+def integrate_with_bt_api(bt_api_instance: Any) -> Any:
+    """Integrate security framework with bt_api_py instance.
+
+    Args:
+        bt_api_instance: The bt_api instance to secure.
+
+    Returns:
+        The modified bt_api instance with security features.
+
+    Raises:
+        RuntimeError: If security framework is not initialized.
+    """
     framework = get_security_framework()
     if not framework:
         raise RuntimeError("Security framework not initialized")
@@ -253,13 +309,14 @@ def integrate_with_bt_api(bt_api_instance):
             )
 
             # Log the action
-            framework.audit_logger.log_event(
-                EventType.USER_LOGIN,  # Use appropriate event type
+            event = AuditEvent(
+                event_type=EventType.USER_LOGIN,
                 user_id=user_id,
                 resource="exchange_feed",
                 action="create",
                 details={"args": args, "kwargs": kwargs},
             )
+            framework.audit_logger.log_event(event)
 
         return original_create_feed(*args, **kwargs)
 
@@ -275,11 +332,20 @@ def integrate_with_bt_api(bt_api_instance):
 # Decorator for security
 def require_permission(
     resource: Resource, action: str, level: PermissionLevel = PermissionLevel.READ
-):
-    """Decorator to require specific permissions for a function."""
+) -> Any:
+    """Decorator to require specific permissions for a function.
 
-    def decorator(func):
-        def wrapper(*args, **kwargs):
+    Args:
+        resource: The resource being accessed.
+        action: The action being performed.
+        level: Required permission level.
+
+    Returns:
+        Decorator function.
+    """
+
+    def decorator(func: Any) -> Any:
+        def wrapper(*args: Any, **kwargs: Any) -> Any:
             framework = get_security_framework()
             if not framework:
                 return func(*args, **kwargs)
@@ -297,11 +363,19 @@ def require_permission(
 
 
 # Security check decorator
-def audit_access(event_type: EventType, severity: SeverityLevel = SeverityLevel.MEDIUM):
-    """Decorator to audit function access."""
+def audit_access(event_type: EventType, severity: SeverityLevel = SeverityLevel.MEDIUM) -> Any:
+    """Decorator to audit function access.
 
-    def decorator(func):
-        def wrapper(*args, **kwargs):
+    Args:
+        event_type: Type of audit event.
+        severity: Severity level of the event.
+
+    Returns:
+        Decorator function.
+    """
+
+    def decorator(func: Any) -> Any:
+        def wrapper(*args: Any, **kwargs: Any) -> Any:
             framework = get_security_framework()
             if not framework:
                 return func(*args, **kwargs)
@@ -310,20 +384,21 @@ def audit_access(event_type: EventType, severity: SeverityLevel = SeverityLevel.
             user_id = kwargs.get("user_id", "anonymous")
 
             # Log before execution
-            framework.audit_logger.log_event(
+            event_before = AuditEvent(
                 event_type=event_type,
                 user_id=user_id,
                 severity=severity,
                 resource=func.__name__,
                 action="execute",
-                details={"args": args, "kwargs": kwargs},
+                details={"args": str(args), "kwargs": str(kwargs)},
             )
+            framework.audit_logger.log_event(event_before)
 
             try:
                 result = func(*args, **kwargs)
 
                 # Log successful execution
-                framework.audit_logger.log_event(
+                event_success = AuditEvent(
                     event_type=event_type,
                     user_id=user_id,
                     severity=severity,
@@ -331,12 +406,13 @@ def audit_access(event_type: EventType, severity: SeverityLevel = SeverityLevel.
                     action="success",
                     outcome="success",
                 )
+                framework.audit_logger.log_event(event_success)
 
                 return result
 
             except Exception as e:
                 # Log failed execution
-                framework.audit_logger.log_event(
+                event_failure = AuditEvent(
                     event_type=event_type,
                     user_id=user_id,
                     severity=SeverityLevel.HIGH,
@@ -345,6 +421,7 @@ def audit_access(event_type: EventType, severity: SeverityLevel = SeverityLevel.
                     outcome="failure",
                     details={"error": str(e)},
                 )
+                framework.audit_logger.log_event(event_failure)
 
                 raise
 

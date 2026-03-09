@@ -3,6 +3,7 @@ import datetime
 import json
 import os
 import time
+from typing import Any
 
 from bt_api_py.containers.exchanges.exchange_data import ExchangeData
 from bt_api_py.logging_factory import get_logger
@@ -14,8 +15,8 @@ _dydx_config = None
 _dydx_config_loaded = False
 
 
-def _get_dydx_config():
-    """延迟加载并缓存 dYdX YAML 配置"""
+def _get_dydx_config() -> Any | None:
+    """延迟加载并缓存 dYdX YAML 配置."""
     global _dydx_config, _dydx_config_loaded
     if _dydx_config_loaded:
         return _dydx_config
@@ -43,8 +44,8 @@ class DydxExchangeData(ExchangeData):
     Subclasses MUST set exchange-specific: exchange_name, rest_paths, wss_paths.
     """
 
-    def __init__(self):
-        """这个类存放一些交易所用到的参数"""
+    def __init__(self) -> None:
+        """这个类存放一些交易所用到的参数."""
         super().__init__()
         self.exchange_name = "DydxSwap"
         self.rest_url = "https://indexer.dydx.trade/v4"
@@ -76,13 +77,14 @@ class DydxExchangeData(ExchangeData):
         # 从 YAML 配置加载 (默认加载 swap)
         self._load_from_config("swap")
 
-    def _load_from_config(self, asset_type):
-        """从 YAML 配置文件加载交易所参数
+    def _load_from_config(self, asset_type) -> bool:
+        """从 YAML 配置文件加载交易所参数.
 
         Args:
             asset_type: 资产类型 key, 如 'swap', 'spot'
         Returns:
             bool: 是否加载成功
+
         """
         config = _get_dydx_config()
         if config is None:
@@ -130,8 +132,8 @@ class DydxExchangeData(ExchangeData):
 
         return True
 
-    def get_symbol(self, symbol):
-        """格式化交易对符号
+    def get_symbol(self, symbol: str) -> str:
+        """格式化交易对符号.
 
         dYdX uses USD as quote currency, convert USDT to USD.
         Also ensures proper formatting with dash separator.
@@ -159,17 +161,17 @@ class DydxExchangeData(ExchangeData):
         return symbol
 
     def get_symbol_re(self, symbol):
-        """反向解析交易对符号"""
+        """反向解析交易对符号."""
         return symbol.lower()
 
-    def get_period(self, key):
-        """获取K线周期"""
+    def get_period(self, key: str) -> str:
+        """获取K线周期."""
         if key not in self.kline_periods:
             return key
         return self.kline_periods[key]
 
-    def get_rest_path(self, key):
-        """获取REST API路径"""
+    def get_rest_path(self, key: str, **kwargs) -> str:
+        """获取REST API路径."""
         if key not in self.rest_paths or self.rest_paths[key] == "":
             self.raise_path_error(self.exchange_name, key)
 
@@ -189,15 +191,15 @@ class DydxExchangeData(ExchangeData):
         return path
 
     def str2int(self, time_str):
-        """将时间字符串转换为时间戳"""
+        """将时间字符串转换为时间戳."""
         if time_str.endswith("Z"):
             time_str = time_str[:-1]
         dt = datetime.datetime.strptime(time_str, "%Y-%m-%dT%H:%M:%S.%f")
         timestamp = int((time.mktime(dt.timetuple()) + dt.microsecond / 1000000) * 1000)
         return timestamp
 
-    def get_wss_path(self, **kwargs):
-        """获取WebSocket订阅字段"""
+    def get_wss_path(self, **kwargs) -> str:
+        """获取WebSocket订阅字段."""
         key = kwargs["topic"]
         if key not in self.wss_paths or self.wss_paths[key] == "":
             self.raise_path_error(self.exchange_name, key)
@@ -220,20 +222,20 @@ class DydxExchangeData(ExchangeData):
         return json.dumps(req)
 
     def is_testnet(self):
-        """检查是否使用测试网"""
+        """检查是否使用测试网."""
         return self.rest_url == self.testnet_rest_url
 
 
 class DydxExchangeDataSwap(DydxExchangeData):
-    """dYdX 永续合约"""
+    """dYdX 永续合约."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__()
 
 
 class DydxExchangeDataSpot(DydxExchangeData):
-    """dYdX 现货 (如果支持)"""
+    """dYdX 现货 (如果支持)."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__()
         self._load_from_config("spot")

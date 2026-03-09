@@ -1,5 +1,4 @@
-"""
-Structured logging system for bt_api_py.
+"""Structured logging system for bt_api_py.
 
 Provides correlation IDs, structured JSON logging, and integration with monitoring.
 """
@@ -416,7 +415,7 @@ class LoggingManager:
         """Generate a new correlation ID."""
         return str(uuid.uuid4())
 
-    def with_correlation_id(self, correlation_id: str):
+    def with_correlation_id(def with_correlation_id(self, correlation_id: str: dict[str, Any]) -> None:
         """Context manager for setting correlation ID."""
         return _correlation_id_context(correlation_id)
 
@@ -428,11 +427,11 @@ class _correlation_id_context:
         self.correlation_id = correlation_id
         self.token = None
 
-    def __enter__(self):
+    def __enter__(self) -> None:
         self.token = correlation_id_var.set(self.correlation_id)
         return self
 
-    def __exit__(self, exc_type, exc_val, exc_tb):
+    def __exit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:
         correlation_id_var.reset(self.token)
 
 

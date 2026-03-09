@@ -5,7 +5,6 @@ Handles authentication, signing, and all REST API methods for Hyperliquid.
 Hyperliquid uses EIP-712 signatures for authenticated requests.
 """
 
-
 import requests
 from eth_account import Account
 

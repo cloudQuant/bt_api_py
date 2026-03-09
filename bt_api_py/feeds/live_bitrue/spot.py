@@ -11,7 +11,7 @@ from bt_api_py.feeds.live_bitrue.request_base import BitrueRequestData
 class BitrueRequestDataSpot(BitrueRequestData):
     """Bitrue Spot Feed with three-layer method wrappers."""
 
-    def __init__(self, data_queue, **kwargs):
+    def __init__(self, data_queue, **kwargs) -> None:
         kwargs.setdefault("exchange_name", "BITRUE___SPOT")
         kwargs.setdefault("asset_type", "SPOT")
         super().__init__(data_queue, **kwargs)

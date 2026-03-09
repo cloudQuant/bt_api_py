@@ -14,14 +14,14 @@ class TradingAccountMixin:
 
     def _get_interest_limits(
         self,
-        ccy=None,
-        inst_type=None,
-        mgn_mode=None,
-        uly=None,
-        inst_family=None,
-        extra_data=None,
-        **kwargs,
-    ):
+        ccy: Any = None,
+        inst_type: Any = None,
+        mgn_mode: Any = None,
+        uly: Any = None,
+        inst_family: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """
         Get interest limit and interest rate
         :param ccy: Currency
@@ -61,7 +61,7 @@ class TradingAccountMixin:
         return path, params, extra_data
 
     @staticmethod
-    def _get_interest_limits_normalize_function(input_data, extra_data):
+    def _get_interest_limits_normalize_function(input_data: Any, extra_data: Any) -> None:
         status = input_data["code"] == "0"
         if "data" not in input_data:
             return [], status
@@ -71,14 +71,14 @@ class TradingAccountMixin:
 
     def get_interest_limits(
         self,
-        ccy=None,
-        inst_type=None,
-        mgn_mode=None,
-        uly=None,
-        inst_family=None,
-        extra_data=None,
-        **kwargs,
-    ):
+        ccy: Any = None,
+        inst_type: Any = None,
+        mgn_mode: Any = None,
+        uly: Any = None,
+        inst_family: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """Get interest limit and interest rate"""
         path, params, extra_data = self._get_interest_limits(
             ccy, inst_type, mgn_mode, uly, inst_family, extra_data, **kwargs
@@ -88,14 +88,14 @@ class TradingAccountMixin:
 
     def async_get_interest_limits(
         self,
-        ccy=None,
-        inst_type=None,
-        mgn_mode=None,
-        uly=None,
-        inst_family=None,
-        extra_data=None,
-        **kwargs,
-    ):
+        ccy: Any = None,
+        inst_type: Any = None,
+        mgn_mode: Any = None,
+        uly: Any = None,
+        inst_family: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """Async get interest limit and interest rate"""
         path, params, extra_data = self._get_interest_limits(
             ccy, inst_type, mgn_mode, uly, inst_family, extra_data, **kwargs
@@ -105,7 +105,7 @@ class TradingAccountMixin:
             callback=self.async_callback,
         )
 
-    def _set_fee_type(self, fee_type, extra_data=None, **kwargs):
+    def _set_fee_type(self, fee_type: Any, extra_data: Any = None, **kwargs: Any) -> None:
         """
         Set fee rate tier
         :param fee_type: Fee rate tier, default is 1, 2, 3, 4, 5
@@ -133,7 +133,7 @@ class TradingAccountMixin:
         return path, body, extra_data
 
     @staticmethod
-    def _set_fee_type_normalize_function(input_data, extra_data):
+    def _set_fee_type_normalize_function(input_data: Any, extra_data: Any) -> None:
         status = input_data["code"] == "0"
         if "data" not in input_data:
             return [], status
@@ -141,20 +141,20 @@ class TradingAccountMixin:
         target_data = [data[0]] if len(data) > 0 else []
         return target_data, status
 
-    def set_fee_type(self, fee_type, extra_data=None, **kwargs):
+    def set_fee_type(self, fee_type: Any, extra_data: Any = None, **kwargs: Any) -> None:
         """Set fee rate tier"""
         path, body, extra_data = self._set_fee_type(fee_type, extra_data, **kwargs)
         data = self.request(path, body=body, extra_data=extra_data)
         return data
 
-    def async_set_fee_type(self, fee_type, extra_data=None, **kwargs):
+    def async_set_fee_type(self, fee_type: Any, extra_data: Any = None, **kwargs: Any) -> None:
         """Async set fee rate tier"""
         path, body, extra_data = self._set_fee_type(fee_type, extra_data, **kwargs)
         self.submit(
             self.async_request(path, body=body, extra_data=extra_data), callback=self.async_callback
         )
 
-    def _set_greeks(self, greeks_type, extra_data=None, **kwargs):
+    def _set_greeks(self, greeks_type: Any, extra_data: Any = None, **kwargs: Any) -> None:
         """
         Set Greeks display type
         :param greeks_type: Greeks display type: `PA` PA price, `IV` IV
@@ -182,7 +182,7 @@ class TradingAccountMixin:
         return path, body, extra_data
 
     @staticmethod
-    def _set_greeks_normalize_function(input_data, extra_data):
+    def _set_greeks_normalize_function(input_data: Any, extra_data: Any) -> None:
         status = input_data["code"] == "0"
         if "data" not in input_data:
             return [], status
@@ -190,20 +190,22 @@ class TradingAccountMixin:
         target_data = [data[0]] if len(data) > 0 else []
         return target_data, status
 
-    def set_greeks(self, greeks_type, extra_data=None, **kwargs):
+    def set_greeks(self, greeks_type: Any, extra_data: Any = None, **kwargs: Any) -> None:
         """Set Greeks display type"""
         path, body, extra_data = self._set_greeks(greeks_type, extra_data, **kwargs)
         data = self.request(path, body=body, extra_data=extra_data)
         return data
 
-    def async_set_greeks(self, greeks_type, extra_data=None, **kwargs):
+    def async_set_greeks(self, greeks_type: Any, extra_data: Any = None, **kwargs: Any) -> None:
         """Async set Greeks display type"""
         path, body, extra_data = self._set_greeks(greeks_type, extra_data, **kwargs)
         self.submit(
             self.async_request(path, body=body, extra_data=extra_data), callback=self.async_callback
         )
 
-    def _set_isolated_mode(self, symbol, iso_mode, extra_data=None, **kwargs):
+    def _set_isolated_mode(
+        self, symbol: Any, iso_mode: Any, extra_data: Any = None, **kwargs: Any
+    ) -> None:
         """
         Set isolated margin mode
         :param symbol: Instrument ID, e.g. "BTC-USDT"
@@ -234,7 +236,7 @@ class TradingAccountMixin:
         return path, body, extra_data
 
     @staticmethod
-    def _set_isolated_mode_normalize_function(input_data, extra_data):
+    def _set_isolated_mode_normalize_function(input_data: Any, extra_data: Any) -> None:
         status = input_data["code"] == "0"
         if "data" not in input_data:
             return [], status
@@ -242,13 +244,17 @@ class TradingAccountMixin:
         target_data = [data[0]] if len(data) > 0 else []
         return target_data, status
 
-    def set_isolated_mode(self, symbol, iso_mode, extra_data=None, **kwargs):
+    def set_isolated_mode(
+        self, symbol: Any, iso_mode: Any, extra_data: Any = None, **kwargs: Any
+    ) -> None:
         """Set isolated margin mode"""
         path, body, extra_data = self._set_isolated_mode(symbol, iso_mode, extra_data, **kwargs)
         data = self.request(path, body=body, extra_data=extra_data)
         return data
 
-    def async_set_isolated_mode(self, symbol, iso_mode, extra_data=None, **kwargs):
+    def async_set_isolated_mode(
+        self, symbol: Any, iso_mode: Any, extra_data: Any = None, **kwargs: Any
+    ) -> None:
         """Async set isolated margin mode"""
         path, body, extra_data = self._set_isolated_mode(symbol, iso_mode, extra_data, **kwargs)
         self.submit(
@@ -256,8 +262,16 @@ class TradingAccountMixin:
         )
 
     def _borrow_repay(
-        self, ccy, side, amt, mgn_mode=None, symbol=None, auto=None, extra_data=None, **kwargs
-    ):
+        self,
+        ccy: Any,
+        side: Any,
+        amt: Any,
+        mgn_mode: Any = None,
+        symbol: Any = None,
+        auto: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """
         Manual borrow or repay for cross/isolated margin
         :param ccy: Currency, e.g. `BTC`
@@ -299,7 +313,7 @@ class TradingAccountMixin:
         return path, body, extra_data
 
     @staticmethod
-    def _borrow_repay_normalize_function(input_data, extra_data):
+    def _borrow_repay_normalize_function(input_data: Any, extra_data: Any) -> None:
         status = input_data["code"] == "0"
         if "data" not in input_data:
             return [], status
@@ -308,8 +322,16 @@ class TradingAccountMixin:
         return target_data, status
 
     def borrow_repay(
-        self, ccy, side, amt, mgn_mode=None, symbol=None, auto=None, extra_data=None, **kwargs
-    ):
+        self,
+        ccy: Any,
+        side: Any,
+        amt: Any,
+        mgn_mode: Any = None,
+        symbol: Any = None,
+        auto: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """Manual borrow or repay for cross/isolated margin"""
         path, body, extra_data = self._borrow_repay(
             ccy, side, amt, mgn_mode, symbol, auto, extra_data, **kwargs
@@ -318,8 +340,16 @@ class TradingAccountMixin:
         return data
 
     def async_borrow_repay(
-        self, ccy, side, amt, mgn_mode=None, symbol=None, auto=None, extra_data=None, **kwargs
-    ):
+        self,
+        ccy: Any,
+        side: Any,
+        amt: Any,
+        mgn_mode: Any = None,
+        symbol: Any = None,
+        auto: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """Async manual borrow or repay for cross/isolated margin"""
         path, body, extra_data = self._borrow_repay(
             ccy, side, amt, mgn_mode, symbol, auto, extra_data, **kwargs
@@ -328,7 +358,7 @@ class TradingAccountMixin:
             self.async_request(path, body=body, extra_data=extra_data), callback=self.async_callback
         )
 
-    def _set_auto_repay(self, auto_repay, extra_data=None, **kwargs):
+    def _set_auto_repay(self, auto_repay: Any, extra_data: Any = None, **kwargs: Any) -> None:
         """
         Set auto loan repayment
         :param auto_repay: Auto loan repayment: `true`, `false`
@@ -356,7 +386,7 @@ class TradingAccountMixin:
         return path, body, extra_data
 
     @staticmethod
-    def _set_auto_repay_normalize_function(input_data, extra_data):
+    def _set_auto_repay_normalize_function(input_data: Any, extra_data: Any) -> None:
         status = input_data["code"] == "0"
         if "data" not in input_data:
             return [], status
@@ -364,13 +394,13 @@ class TradingAccountMixin:
         target_data = [data[0]] if len(data) > 0 else []
         return target_data, status
 
-    def set_auto_repay(self, auto_repay, extra_data=None, **kwargs):
+    def set_auto_repay(self, auto_repay: Any, extra_data: Any = None, **kwargs: Any) -> None:
         """Set auto loan repayment"""
         path, body, extra_data = self._set_auto_repay(auto_repay, extra_data, **kwargs)
         data = self.request(path, body=body, extra_data=extra_data)
         return data
 
-    def async_set_auto_repay(self, auto_repay, extra_data=None, **kwargs):
+    def async_set_auto_repay(self, auto_repay: Any, extra_data: Any = None, **kwargs: Any) -> None:
         """Async set auto loan repayment"""
         path, body, extra_data = self._set_auto_repay(auto_repay, extra_data, **kwargs)
         self.submit(
@@ -379,14 +409,14 @@ class TradingAccountMixin:
 
     def _get_borrow_repay_history(
         self,
-        ccy=None,
-        mgn_mode=None,
-        after=None,
-        before=None,
-        limit=None,
-        extra_data=None,
-        **kwargs,
-    ):
+        ccy: Any = None,
+        mgn_mode: Any = None,
+        after: Any = None,
+        before: Any = None,
+        limit: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """
         Get borrowing and repayment history (last 3 months)
         :param ccy: Currency, e.g. `BTC`
@@ -426,7 +456,7 @@ class TradingAccountMixin:
         return path, params, extra_data
 
     @staticmethod
-    def _get_borrow_repay_history_normalize_function(input_data, extra_data):
+    def _get_borrow_repay_history_normalize_function(input_data: Any, extra_data: Any) -> None:
         status = input_data["code"] == "0"
         if "data" not in input_data:
             return [], status
@@ -436,14 +466,14 @@ class TradingAccountMixin:
 
     def get_borrow_repay_history(
         self,
-        ccy=None,
-        mgn_mode=None,
-        after=None,
-        before=None,
-        limit=None,
-        extra_data=None,
-        **kwargs,
-    ):
+        ccy: Any = None,
+        mgn_mode: Any = None,
+        after: Any = None,
+        before: Any = None,
+        limit: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """Get borrowing and repayment history (last 3 months)"""
         path, params, extra_data = self._get_borrow_repay_history(
             ccy, mgn_mode, after, before, limit, extra_data, **kwargs
@@ -453,14 +483,14 @@ class TradingAccountMixin:
 
     def async_get_borrow_repay_history(
         self,
-        ccy=None,
-        mgn_mode=None,
-        after=None,
-        before=None,
-        limit=None,
-        extra_data=None,
-        **kwargs,
-    ):
+        ccy: Any = None,
+        mgn_mode: Any = None,
+        after: Any = None,
+        before: Any = None,
+        limit: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """Async get borrowing and repayment history (last 3 months)"""
         path, params, extra_data = self._get_borrow_repay_history(
             ccy, mgn_mode, after, before, limit, extra_data, **kwargs
@@ -472,7 +502,9 @@ class TradingAccountMixin:
 
     # ==================== MMP (Market Maker Protection) APIs ====================
 
-    def _mmp_reset(self, inst_type, symbol=None, extra_data=None, **kwargs):
+    def _mmp_reset(
+        self, inst_type: Any, symbol: Any = None, extra_data: Any = None, **kwargs: Any
+    ) -> None:
         """
         Reset MMP (Market Maker Protection) status
         :param inst_type: Instrument type, e.g. `SPOT`, `MARGIN`, `SWAP`, `FUTURES`, `OPTION`
@@ -503,7 +535,7 @@ class TradingAccountMixin:
         return path, params, extra_data
 
     @staticmethod
-    def _mmp_reset_normalize_function(input_data, extra_data):
+    def _mmp_reset_normalize_function(input_data: Any, extra_data: Any) -> None:
         status = input_data["code"] == "0"
         if "data" not in input_data:
             return [], status
@@ -511,13 +543,17 @@ class TradingAccountMixin:
         target_data = data if len(data) > 0 else []
         return target_data, status
 
-    def mmp_reset(self, inst_type, symbol=None, extra_data=None, **kwargs):
+    def mmp_reset(
+        self, inst_type: Any, symbol: Any = None, extra_data: Any = None, **kwargs: Any
+    ) -> None:
         """Reset MMP (Market Maker Protection) status"""
         path, params, extra_data = self._mmp_reset(inst_type, symbol, extra_data, **kwargs)
         data = self.request(path, body=params, extra_data=extra_data)
         return data
 
-    def async_mmp_reset(self, inst_type, symbol=None, extra_data=None, **kwargs):
+    def async_mmp_reset(
+        self, inst_type: Any, symbol: Any = None, extra_data: Any = None, **kwargs: Any
+    ) -> None:
         """Async reset MMP (Market Maker Protection) status"""
         path, params, extra_data = self._mmp_reset(inst_type, symbol, extra_data, **kwargs)
         self.submit(
@@ -527,13 +563,13 @@ class TradingAccountMixin:
 
     def _set_mmp_config(
         self,
-        inst_type,
-        symbol=None,
-        time_interval_frozen=None,
-        algo_orders_frozen=None,
-        extra_data=None,
-        **kwargs,
-    ):
+        inst_type: Any,
+        symbol: Any = None,
+        time_interval_frozen: Any = None,
+        algo_orders_frozen: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """
         Set MMP (Market Maker Protection) configuration
         :param inst_type: Instrument type, e.g. `SPOT`, `MARGIN`, `SWAP`, `FUTURES`, `OPTION`
@@ -570,7 +606,7 @@ class TradingAccountMixin:
         return path, params, extra_data
 
     @staticmethod
-    def _set_mmp_config_normalize_function(input_data, extra_data):
+    def _set_mmp_config_normalize_function(input_data: Any, extra_data: Any) -> None:
         status = input_data["code"] == "0"
         if "data" not in input_data:
             return [], status
@@ -580,13 +616,13 @@ class TradingAccountMixin:
 
     def set_mmp_config(
         self,
-        inst_type,
-        symbol=None,
-        time_interval_frozen=None,
-        algo_orders_frozen=None,
-        extra_data=None,
-        **kwargs,
-    ):
+        inst_type: Any,
+        symbol: Any = None,
+        time_interval_frozen: Any = None,
+        algo_orders_frozen: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """Set MMP (Market Maker Protection) configuration"""
         path, params, extra_data = self._set_mmp_config(
             inst_type, symbol, time_interval_frozen, algo_orders_frozen, extra_data, **kwargs
@@ -596,13 +632,13 @@ class TradingAccountMixin:
 
     def async_set_mmp_config(
         self,
-        inst_type,
-        symbol=None,
-        time_interval_frozen=None,
-        algo_orders_frozen=None,
-        extra_data=None,
-        **kwargs,
-    ):
+        inst_type: Any,
+        symbol: Any = None,
+        time_interval_frozen: Any = None,
+        algo_orders_frozen: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """Async set MMP (Market Maker Protection) configuration"""
         path, params, extra_data = self._set_mmp_config(
             inst_type, symbol, time_interval_frozen, algo_orders_frozen, extra_data, **kwargs
@@ -612,7 +648,7 @@ class TradingAccountMixin:
             callback=self.async_callback,
         )
 
-    def _get_mmp_config(self, inst_type, extra_data=None, **kwargs):
+    def _get_mmp_config(self, inst_type: Any, extra_data: Any = None, **kwargs: Any) -> None:
         """
         Get MMP (Market Maker Protection) configuration
         :param inst_type: Instrument type, e.g. `SPOT`, `MARGIN`, `SWAP`, `FUTURES`, `OPTION`
@@ -640,7 +676,7 @@ class TradingAccountMixin:
         return path, params, extra_data
 
     @staticmethod
-    def _get_mmp_config_normalize_function(input_data, extra_data):
+    def _get_mmp_config_normalize_function(input_data: Any, extra_data: Any) -> None:
         status = input_data["code"] == "0"
         if "data" not in input_data:
             return [], status
@@ -648,13 +684,13 @@ class TradingAccountMixin:
         target_data = data if len(data) > 0 else []
         return target_data, status
 
-    def get_mmp_config(self, inst_type, extra_data=None, **kwargs):
+    def get_mmp_config(self, inst_type: Any, extra_data: Any = None, **kwargs: Any) -> None:
         """Get MMP (Market Maker Protection) configuration"""
         path, params, extra_data = self._get_mmp_config(inst_type, extra_data, **kwargs)
         data = self.request(path, params=params, extra_data=extra_data)
         return data
 
-    def async_get_mmp_config(self, inst_type, extra_data=None, **kwargs):
+    def async_get_mmp_config(self, inst_type: Any, extra_data: Any = None, **kwargs: Any) -> None:
         """Async get MMP (Market Maker Protection) configuration"""
         path, params, extra_data = self._get_mmp_config(inst_type, extra_data, **kwargs)
         self.submit(
@@ -665,8 +701,14 @@ class TradingAccountMixin:
     # ==================== Bills History Archive APIs ====================
 
     def _apply_bills_history_archive(
-        self, year, ccy=None, after=None, before=None, extra_data=None, **kwargs
-    ):
+        self,
+        year: Any,
+        ccy: Any = None,
+        after: Any = None,
+        before: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """
         Apply for historical bills archive (from 2021)
         :param year: Year, e.g. `2023`, `2024`
@@ -703,7 +745,7 @@ class TradingAccountMixin:
         return path, params, extra_data
 
     @staticmethod
-    def _apply_bills_history_archive_normalize_function(input_data, extra_data):
+    def _apply_bills_history_archive_normalize_function(input_data: Any, extra_data: Any) -> None:
         status = input_data["code"] == "0"
         if "data" not in input_data:
             return [], status
@@ -712,8 +754,14 @@ class TradingAccountMixin:
         return target_data, status
 
     def apply_bills_history_archive(
-        self, year, ccy=None, after=None, before=None, extra_data=None, **kwargs
-    ):
+        self,
+        year: Any,
+        ccy: Any = None,
+        after: Any = None,
+        before: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """Apply for historical bills archive (from 2021)"""
         path, params, extra_data = self._apply_bills_history_archive(
             year, ccy, after, before, extra_data, **kwargs
@@ -722,8 +770,14 @@ class TradingAccountMixin:
         return data
 
     def async_apply_bills_history_archive(
-        self, year, ccy=None, after=None, before=None, extra_data=None, **kwargs
-    ):
+        self,
+        year: Any,
+        ccy: Any = None,
+        after: Any = None,
+        before: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """Async apply for historical bills archive (from 2021)"""
         path, params, extra_data = self._apply_bills_history_archive(
             year, ccy, after, before, extra_data, **kwargs
@@ -734,8 +788,14 @@ class TradingAccountMixin:
         )
 
     def _get_bills_history_archive(
-        self, year, ccy=None, after=None, before=None, extra_data=None, **kwargs
-    ):
+        self,
+        year: Any,
+        ccy: Any = None,
+        after: Any = None,
+        before: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """
         Get historical bills archive (from 2021)
         :param year: Year, e.g. `2023`, `2024`
@@ -772,7 +832,7 @@ class TradingAccountMixin:
         return path, params, extra_data
 
     @staticmethod
-    def _get_bills_history_archive_normalize_function(input_data, extra_data):
+    def _get_bills_history_archive_normalize_function(input_data: Any, extra_data: Any) -> None:
         status = input_data["code"] == "0"
         if "data" not in input_data:
             return [], status
@@ -781,8 +841,14 @@ class TradingAccountMixin:
         return target_data, status
 
     def get_bills_history_archive(
-        self, year, ccy=None, after=None, before=None, extra_data=None, **kwargs
-    ):
+        self,
+        year: Any,
+        ccy: Any = None,
+        after: Any = None,
+        before: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """Get historical bills archive (from 2021)"""
         path, params, extra_data = self._get_bills_history_archive(
             year, ccy, after, before, extra_data, **kwargs
@@ -791,8 +857,14 @@ class TradingAccountMixin:
         return data
 
     def async_get_bills_history_archive(
-        self, year, ccy=None, after=None, before=None, extra_data=None, **kwargs
-    ):
+        self,
+        year: Any,
+        ccy: Any = None,
+        after: Any = None,
+        before: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """Async get historical bills archive (from 2021)"""
         path, params, extra_data = self._get_bills_history_archive(
             year, ccy, after, before, extra_data, **kwargs
@@ -805,8 +877,14 @@ class TradingAccountMixin:
     # ==================== Trading Account Configuration APIs ====================
 
     def _set_auto_loan(
-        self, auto_loan, ccy=None, iso_mode=None, mgn_mode=None, extra_data=None, **kwargs
-    ):
+        self,
+        auto_loan: Any,
+        ccy: Any = None,
+        iso_mode: Any = None,
+        mgn_mode: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """
         Set auto loan status
         :param auto_loan: Auto loan status: `true` for on, `false` for off
@@ -841,7 +919,7 @@ class TradingAccountMixin:
         return path, body, extra_data
 
     @staticmethod
-    def _set_auto_loan_normalize_function(input_data, extra_data):
+    def _set_auto_loan_normalize_function(input_data: Any, extra_data: Any) -> None:
         status = input_data["code"] == "0"
         if "data" not in input_data:
             return [], status
@@ -850,8 +928,14 @@ class TradingAccountMixin:
         return target_data, status
 
     def set_auto_loan(
-        self, auto_loan, ccy=None, iso_mode=None, mgn_mode=None, extra_data=None, **kwargs
-    ):
+        self,
+        auto_loan: Any,
+        ccy: Any = None,
+        iso_mode: Any = None,
+        mgn_mode: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """Set auto loan status"""
         path, body, extra_data = self._set_auto_loan(
             auto_loan, ccy, iso_mode, mgn_mode, extra_data, **kwargs
@@ -860,8 +944,14 @@ class TradingAccountMixin:
         return data
 
     def async_set_auto_loan(
-        self, auto_loan, ccy=None, iso_mode=None, mgn_mode=None, extra_data=None, **kwargs
-    ):
+        self,
+        auto_loan: Any,
+        ccy: Any = None,
+        iso_mode: Any = None,
+        mgn_mode: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """Async set auto loan status"""
         path, body, extra_data = self._set_auto_loan(
             auto_loan, ccy, iso_mode, mgn_mode, extra_data, **kwargs
@@ -872,16 +962,16 @@ class TradingAccountMixin:
 
     def _set_account_level(
         self,
-        acct_lv,
-        inst_type=None,
-        inst_id=None,
-        ccy=None,
-        td_mode=None,
-        pos_side=None,
-        uly=None,
-        extra_data=None,
-        **kwargs,
-    ):
+        acct_lv: Any,
+        inst_type: Any = None,
+        inst_id: Any = None,
+        ccy: Any = None,
+        td_mode: Any = None,
+        pos_side: Any = None,
+        uly: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """
         Set account level
         :param acct_lv: Account level: `1` Simple mode, `2` Single-currency margin, `3` Multi-currency margin, `4` Portfolio margin
@@ -926,7 +1016,7 @@ class TradingAccountMixin:
         return path, body, extra_data
 
     @staticmethod
-    def _set_account_level_normalize_function(input_data, extra_data):
+    def _set_account_level_normalize_function(input_data: Any, extra_data: Any) -> None:
         status = input_data["code"] == "0"
         if "data" not in input_data:
             return [], status
@@ -936,16 +1026,16 @@ class TradingAccountMixin:
 
     def set_account_level(
         self,
-        acct_lv,
-        inst_type=None,
-        inst_id=None,
-        ccy=None,
-        td_mode=None,
-        pos_side=None,
-        uly=None,
-        extra_data=None,
-        **kwargs,
-    ):
+        acct_lv: Any,
+        inst_type: Any = None,
+        inst_id: Any = None,
+        ccy: Any = None,
+        td_mode: Any = None,
+        pos_side: Any = None,
+        uly: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """Set account level"""
         path, body, extra_data = self._set_account_level(
             acct_lv, inst_type, inst_id, ccy, td_mode, pos_side, uly, extra_data, **kwargs
@@ -955,16 +1045,16 @@ class TradingAccountMixin:
 
     def async_set_account_level(
         self,
-        acct_lv,
-        inst_type=None,
-        inst_id=None,
-        ccy=None,
-        td_mode=None,
-        pos_side=None,
-        uly=None,
-        extra_data=None,
-        **kwargs,
-    ):
+        acct_lv: Any,
+        inst_type: Any = None,
+        inst_id: Any = None,
+        ccy: Any = None,
+        td_mode: Any = None,
+        pos_side: Any = None,
+        uly: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """Async set account level"""
         path, body, extra_data = self._set_account_level(
             acct_lv, inst_type, inst_id, ccy, td_mode, pos_side, uly, extra_data, **kwargs
@@ -975,14 +1065,14 @@ class TradingAccountMixin:
 
     def _account_level_switch_preset(
         self,
-        acct_lv,
-        pos_side=None,
-        ccy_list=None,
-        uly=None,
-        inst_type=None,
-        extra_data=None,
-        **kwargs,
-    ):
+        acct_lv: Any,
+        pos_side: Any = None,
+        ccy_list: Any = None,
+        uly: Any = None,
+        inst_type: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """
         Account level switch preset
         :param acct_lv: Target account level: `2` Single-currency margin, `3` Multi-currency margin, `4` Portfolio margin
@@ -1020,7 +1110,7 @@ class TradingAccountMixin:
         return path, body, extra_data
 
     @staticmethod
-    def _account_level_switch_preset_normalize_function(input_data, extra_data):
+    def _account_level_switch_preset_normalize_function(input_data: Any, extra_data: Any) -> None:
         status = input_data["code"] == "0"
         if "data" not in input_data:
             return [], status
@@ -1030,14 +1120,14 @@ class TradingAccountMixin:
 
     def account_level_switch_preset(
         self,
-        acct_lv,
-        pos_side=None,
-        ccy_list=None,
-        uly=None,
-        inst_type=None,
-        extra_data=None,
-        **kwargs,
-    ):
+        acct_lv: Any,
+        pos_side: Any = None,
+        ccy_list: Any = None,
+        uly: Any = None,
+        inst_type: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """Account level switch preset"""
         path, body, extra_data = self._account_level_switch_preset(
             acct_lv, pos_side, ccy_list, uly, inst_type, extra_data, **kwargs
@@ -1047,14 +1137,14 @@ class TradingAccountMixin:
 
     def async_account_level_switch_preset(
         self,
-        acct_lv,
-        pos_side=None,
-        ccy_list=None,
-        uly=None,
-        inst_type=None,
-        extra_data=None,
-        **kwargs,
-    ):
+        acct_lv: Any,
+        pos_side: Any = None,
+        ccy_list: Any = None,
+        uly: Any = None,
+        inst_type: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """Async account level switch preset"""
         path, body, extra_data = self._account_level_switch_preset(
             acct_lv, pos_side, ccy_list, uly, inst_type, extra_data, **kwargs
@@ -1064,8 +1154,13 @@ class TradingAccountMixin:
         )
 
     def _account_level_switch_precheck(
-        self, acct_lv, inst_type=None, uly=None, extra_data=None, **kwargs
-    ):
+        self,
+        acct_lv: Any,
+        inst_type: Any = None,
+        uly: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """
         Account level switch precheck
         :param acct_lv: Target account level: `2` Single-currency margin, `3` Multi-currency margin, `4` Portfolio margin
@@ -1097,7 +1192,7 @@ class TradingAccountMixin:
         return path, params, extra_data
 
     @staticmethod
-    def _account_level_switch_precheck_normalize_function(input_data, extra_data):
+    def _account_level_switch_precheck_normalize_function(input_data: Any, extra_data: Any) -> None:
         status = input_data["code"] == "0"
         if "data" not in input_data:
             return [], status
@@ -1106,8 +1201,13 @@ class TradingAccountMixin:
         return target_data, status
 
     def account_level_switch_precheck(
-        self, acct_lv, inst_type=None, uly=None, extra_data=None, **kwargs
-    ):
+        self,
+        acct_lv: Any,
+        inst_type: Any = None,
+        uly: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """Account level switch precheck"""
         path, params, extra_data = self._account_level_switch_precheck(
             acct_lv, inst_type, uly, extra_data, **kwargs
@@ -1116,8 +1216,13 @@ class TradingAccountMixin:
         return data
 
     def async_account_level_switch_precheck(
-        self, acct_lv, inst_type=None, uly=None, extra_data=None, **kwargs
-    ):
+        self,
+        acct_lv: Any,
+        inst_type: Any = None,
+        uly: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """Async account level switch precheck"""
         path, params, extra_data = self._account_level_switch_precheck(
             acct_lv, inst_type, uly, extra_data, **kwargs
@@ -1127,7 +1232,9 @@ class TradingAccountMixin:
             callback=self.async_callback,
         )
 
-    def _set_collateral_assets(self, ccy_list, auto_loan=None, extra_data=None, **kwargs):
+    def _set_collateral_assets(
+        self, ccy_list: Any, auto_loan: Any = None, extra_data: Any = None, **kwargs: Any
+    ) -> None:
         """
         Set collateral assets
         :param ccy_list: Currency list, comma-separated, e.g. "BTC,USDT,ETH"
@@ -1158,7 +1265,7 @@ class TradingAccountMixin:
         return path, body, extra_data
 
     @staticmethod
-    def _set_collateral_assets_normalize_function(input_data, extra_data):
+    def _set_collateral_assets_normalize_function(input_data: Any, extra_data: Any) -> None:
         status = input_data["code"] == "0"
         if "data" not in input_data:
             return [], status
@@ -1166,7 +1273,9 @@ class TradingAccountMixin:
         target_data = [data[0]] if len(data) > 0 else []
         return target_data, status
 
-    def set_collateral_assets(self, ccy_list, auto_loan=None, extra_data=None, **kwargs):
+    def set_collateral_assets(
+        self, ccy_list: Any, auto_loan: Any = None, extra_data: Any = None, **kwargs: Any
+    ) -> None:
         """Set collateral assets"""
         path, body, extra_data = self._set_collateral_assets(
             ccy_list, auto_loan, extra_data, **kwargs
@@ -1174,7 +1283,9 @@ class TradingAccountMixin:
         data = self.request(path, body=body, extra_data=extra_data)
         return data
 
-    def async_set_collateral_assets(self, ccy_list, auto_loan=None, extra_data=None, **kwargs):
+    def async_set_collateral_assets(
+        self, ccy_list: Any, auto_loan: Any = None, extra_data: Any = None, **kwargs: Any
+    ) -> None:
         """Async set collateral assets"""
         path, body, extra_data = self._set_collateral_assets(
             ccy_list, auto_loan, extra_data, **kwargs
@@ -1183,7 +1294,9 @@ class TradingAccountMixin:
             self.async_request(path, body=body, extra_data=extra_data), callback=self.async_callback
         )
 
-    def _get_collateral_assets(self, ccy=None, extra_data=None, **kwargs):
+    def _get_collateral_assets(
+        self, ccy: Any = None, extra_data: Any = None, **kwargs: Any
+    ) -> None:
         """
         Get collateral assets
         :param ccy: Currency, e.g. `BTC`
@@ -1211,7 +1324,7 @@ class TradingAccountMixin:
         return path, params, extra_data
 
     @staticmethod
-    def _get_collateral_assets_normalize_function(input_data, extra_data):
+    def _get_collateral_assets_normalize_function(input_data: Any, extra_data: Any) -> None:
         status = input_data["code"] == "0"
         if "data" not in input_data:
             return [], status
@@ -1219,13 +1332,15 @@ class TradingAccountMixin:
         target_data = data if len(data) > 0 else []
         return target_data, status
 
-    def get_collateral_assets(self, ccy=None, extra_data=None, **kwargs):
+    def get_collateral_assets(self, ccy: Any = None, extra_data: Any = None, **kwargs: Any) -> None:
         """Get collateral assets"""
         path, params, extra_data = self._get_collateral_assets(ccy, extra_data, **kwargs)
         data = self.request(path, params=params, extra_data=extra_data)
         return data
 
-    def async_get_collateral_assets(self, ccy=None, extra_data=None, **kwargs):
+    def async_get_collateral_assets(
+        self, ccy: Any = None, extra_data: Any = None, **kwargs: Any
+    ) -> None:
         """Async get collateral assets"""
         path, params, extra_data = self._get_collateral_assets(ccy, extra_data, **kwargs)
         self.submit(
@@ -1235,17 +1350,17 @@ class TradingAccountMixin:
 
     def _set_risk_offset_amt(
         self,
-        amt_type,
-        uly=None,
-        ccy=None,
-        inst_type=None,
-        offset_amt=None,
-        inst_id=None,
-        td_mode=None,
-        pos_side=None,
-        extra_data=None,
-        **kwargs,
-    ):
+        amt_type: Any,
+        uly: Any = None,
+        ccy: Any = None,
+        inst_type: Any = None,
+        offset_amt: Any = None,
+        inst_id: Any = None,
+        td_mode: Any = None,
+        pos_side: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """
         Set risk offset amount
         :param amt_type: Offset amount type: `1` Add, `2` Reduce
@@ -1293,7 +1408,7 @@ class TradingAccountMixin:
         return path, body, extra_data
 
     @staticmethod
-    def _set_risk_offset_amt_normalize_function(input_data, extra_data):
+    def _set_risk_offset_amt_normalize_function(input_data: Any, extra_data: Any) -> None:
         status = input_data["code"] == "0"
         if "data" not in input_data:
             return [], status
@@ -1303,17 +1418,17 @@ class TradingAccountMixin:
 
     def set_risk_offset_amt(
         self,
-        amt_type,
-        uly=None,
-        ccy=None,
-        inst_type=None,
-        offset_amt=None,
-        inst_id=None,
-        td_mode=None,
-        pos_side=None,
-        extra_data=None,
-        **kwargs,
-    ):
+        amt_type: Any,
+        uly: Any = None,
+        ccy: Any = None,
+        inst_type: Any = None,
+        offset_amt: Any = None,
+        inst_id: Any = None,
+        td_mode: Any = None,
+        pos_side: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """Set risk offset amount"""
         path, body, extra_data = self._set_risk_offset_amt(
             amt_type,
@@ -1332,17 +1447,17 @@ class TradingAccountMixin:
 
     def async_set_risk_offset_amt(
         self,
-        amt_type,
-        uly=None,
-        ccy=None,
-        inst_type=None,
-        offset_amt=None,
-        inst_id=None,
-        td_mode=None,
-        pos_side=None,
-        extra_data=None,
-        **kwargs,
-    ):
+        amt_type: Any,
+        uly: Any = None,
+        ccy: Any = None,
+        inst_type: Any = None,
+        offset_amt: Any = None,
+        inst_id: Any = None,
+        td_mode: Any = None,
+        pos_side: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """Async set risk offset amount"""
         path, body, extra_data = self._set_risk_offset_amt(
             amt_type,
@@ -1363,8 +1478,14 @@ class TradingAccountMixin:
     # ==================== Additional Trading Account APIs ====================
 
     def _activate_option(
-        self, uly, inst_id=None, cnt=None, amend_px_on=None, extra_data=None, **kwargs
-    ):
+        self,
+        uly: Any,
+        inst_id: Any = None,
+        cnt: Any = None,
+        amend_px_on: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """
         Activate option trading
         :param uly: Underlying, e.g. `BTC-USD`
@@ -1401,7 +1522,7 @@ class TradingAccountMixin:
         return path, params, extra_data
 
     @staticmethod
-    def _activate_option_normalize_function(input_data, extra_data):
+    def _activate_option_normalize_function(input_data: Any, extra_data: Any) -> None:
         status = input_data["code"] == "0"
         if "data" not in input_data:
             return [], status
@@ -1410,8 +1531,14 @@ class TradingAccountMixin:
         return target_data, status
 
     def activate_option(
-        self, uly, inst_id=None, cnt=None, amend_px_on=None, extra_data=None, **kwargs
-    ):
+        self,
+        uly: Any,
+        inst_id: Any = None,
+        cnt: Any = None,
+        amend_px_on: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """Activate option trading"""
         path, params, extra_data = self._activate_option(
             uly, inst_id, cnt, amend_px_on, extra_data, **kwargs
@@ -1420,8 +1547,14 @@ class TradingAccountMixin:
         return data
 
     def async_activate_option(
-        self, uly, inst_id=None, cnt=None, amend_px_on=None, extra_data=None, **kwargs
-    ):
+        self,
+        uly: Any,
+        inst_id: Any = None,
+        cnt: Any = None,
+        amend_px_on: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """Async activate option trading"""
         path, params, extra_data = self._activate_option(
             uly, inst_id, cnt, amend_px_on, extra_data, **kwargs
@@ -1431,7 +1564,15 @@ class TradingAccountMixin:
             callback=self.async_callback,
         )
 
-    def _move_positions(self, symbol, pos_id, ccy, algo_id=None, extra_data=None, **kwargs):
+    def _move_positions(
+        self,
+        symbol: Any,
+        pos_id: Any,
+        ccy: Any,
+        algo_id: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """
         Move positions between currencies
         :param symbol: Instrument ID
@@ -1469,7 +1610,7 @@ class TradingAccountMixin:
         return path, params, extra_data
 
     @staticmethod
-    def _move_positions_normalize_function(input_data, extra_data):
+    def _move_positions_normalize_function(input_data: Any, extra_data: Any) -> None:
         status = input_data["code"] == "0"
         if "data" not in input_data:
             return [], status
@@ -1477,7 +1618,15 @@ class TradingAccountMixin:
         target_data = data if len(data) > 0 else []
         return target_data, status
 
-    def move_positions(self, symbol, pos_id, ccy, algo_id=None, extra_data=None, **kwargs):
+    def move_positions(
+        self,
+        symbol: Any,
+        pos_id: Any,
+        ccy: Any,
+        algo_id: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """Move positions between currencies"""
         path, params, extra_data = self._move_positions(
             symbol, pos_id, ccy, algo_id, extra_data, **kwargs
@@ -1485,7 +1634,15 @@ class TradingAccountMixin:
         data = self.request(path, body=params, extra_data=extra_data)
         return data
 
-    def async_move_positions(self, symbol, pos_id, ccy, algo_id=None, extra_data=None, **kwargs):
+    def async_move_positions(
+        self,
+        symbol: Any,
+        pos_id: Any,
+        ccy: Any,
+        algo_id: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """Async move positions between currencies"""
         path, params, extra_data = self._move_positions(
             symbol, pos_id, ccy, algo_id, extra_data, **kwargs
@@ -1496,8 +1653,15 @@ class TradingAccountMixin:
         )
 
     def _get_move_positions_history(
-        self, symbol=None, ccy=None, after=None, before=None, limit=None, extra_data=None, **kwargs
-    ):
+        self,
+        symbol: Any = None,
+        ccy: Any = None,
+        after: Any = None,
+        before: Any = None,
+        limit: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """
         Get move positions history
         :param symbol: Instrument ID
@@ -1537,7 +1701,7 @@ class TradingAccountMixin:
         return path, params, extra_data
 
     @staticmethod
-    def _get_move_positions_history_normalize_function(input_data, extra_data):
+    def _get_move_positions_history_normalize_function(input_data: Any, extra_data: Any) -> None:
         status = input_data["code"] == "0"
         if "data" not in input_data:
             return [], status
@@ -1546,8 +1710,15 @@ class TradingAccountMixin:
         return target_data, status
 
     def get_move_positions_history(
-        self, symbol=None, ccy=None, after=None, before=None, limit=None, extra_data=None, **kwargs
-    ):
+        self,
+        symbol: Any = None,
+        ccy: Any = None,
+        after: Any = None,
+        before: Any = None,
+        limit: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """Get move positions history"""
         path, params, extra_data = self._get_move_positions_history(
             symbol, ccy, after, before, limit, extra_data, **kwargs
@@ -1556,8 +1727,15 @@ class TradingAccountMixin:
         return data
 
     def async_get_move_positions_history(
-        self, symbol=None, ccy=None, after=None, before=None, limit=None, extra_data=None, **kwargs
-    ):
+        self,
+        symbol: Any = None,
+        ccy: Any = None,
+        after: Any = None,
+        before: Any = None,
+        limit: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """Async get move positions history"""
         path, params, extra_data = self._get_move_positions_history(
             symbol, ccy, after, before, limit, extra_data, **kwargs
@@ -1567,7 +1745,14 @@ class TradingAccountMixin:
             callback=self.async_callback,
         )
 
-    def _set_auto_earn(self, ccy, auto_earn, auto_earn_type=None, extra_data=None, **kwargs):
+    def _set_auto_earn(
+        self,
+        ccy: Any,
+        auto_earn: Any,
+        auto_earn_type: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """
         Set auto earn (automatic savings)
         :param ccy: Currency, e.g. `USDT`
@@ -1600,7 +1785,7 @@ class TradingAccountMixin:
         return path, params, extra_data
 
     @staticmethod
-    def _set_auto_earn_normalize_function(input_data, extra_data):
+    def _set_auto_earn_normalize_function(input_data: Any, extra_data: Any) -> None:
         status = input_data["code"] == "0"
         if "data" not in input_data:
             return [], status
@@ -1608,7 +1793,14 @@ class TradingAccountMixin:
         target_data = data if len(data) > 0 else []
         return target_data, status
 
-    def set_auto_earn(self, ccy, auto_earn, auto_earn_type=None, extra_data=None, **kwargs):
+    def set_auto_earn(
+        self,
+        ccy: Any,
+        auto_earn: Any,
+        auto_earn_type: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """Set auto earn (automatic savings)"""
         path, params, extra_data = self._set_auto_earn(
             ccy, auto_earn, auto_earn_type, extra_data, **kwargs
@@ -1616,7 +1808,14 @@ class TradingAccountMixin:
         data = self.request(path, body=params, extra_data=extra_data)
         return data
 
-    def async_set_auto_earn(self, ccy, auto_earn, auto_earn_type=None, extra_data=None, **kwargs):
+    def async_set_auto_earn(
+        self,
+        ccy: Any,
+        auto_earn: Any,
+        auto_earn_type: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """Async set auto earn (automatic savings)"""
         path, params, extra_data = self._set_auto_earn(
             ccy, auto_earn, auto_earn_type, extra_data, **kwargs
@@ -1626,7 +1825,9 @@ class TradingAccountMixin:
             callback=self.async_callback,
         )
 
-    def _set_settle_currency(self, symbol, ccy, extra_data=None, **kwargs):
+    def _set_settle_currency(
+        self, symbol: Any, ccy: Any, extra_data: Any = None, **kwargs: Any
+    ) -> None:
         """
         Set settlement currency
         :param symbol: Instrument ID
@@ -1657,7 +1858,7 @@ class TradingAccountMixin:
         return path, params, extra_data
 
     @staticmethod
-    def _set_settle_currency_normalize_function(input_data, extra_data):
+    def _set_settle_currency_normalize_function(input_data: Any, extra_data: Any) -> None:
         status = input_data["code"] == "0"
         if "data" not in input_data:
             return [], status
@@ -1665,13 +1866,17 @@ class TradingAccountMixin:
         target_data = data if len(data) > 0 else []
         return target_data, status
 
-    def set_settle_currency(self, symbol, ccy, extra_data=None, **kwargs):
+    def set_settle_currency(
+        self, symbol: Any, ccy: Any, extra_data: Any = None, **kwargs: Any
+    ) -> None:
         """Set settlement currency"""
         path, params, extra_data = self._set_settle_currency(symbol, ccy, extra_data, **kwargs)
         data = self.request(path, body=params, extra_data=extra_data)
         return data
 
-    def async_set_settle_currency(self, symbol, ccy, extra_data=None, **kwargs):
+    def async_set_settle_currency(
+        self, symbol: Any, ccy: Any, extra_data: Any = None, **kwargs: Any
+    ) -> None:
         """Async set settlement currency"""
         path, params, extra_data = self._set_settle_currency(symbol, ccy, extra_data, **kwargs)
         self.submit(
@@ -1681,14 +1886,14 @@ class TradingAccountMixin:
 
     def _set_trading_config(
         self,
-        symbol,
-        pos_mode=None,
-        auto_loan=None,
-        auto_margin=None,
-        auto_mul=None,
-        extra_data=None,
-        **kwargs,
-    ):
+        symbol: Any,
+        pos_mode: Any = None,
+        auto_loan: Any = None,
+        auto_margin: Any = None,
+        auto_mul: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """
         Set trading config
         :param symbol: Instrument ID
@@ -1729,7 +1934,7 @@ class TradingAccountMixin:
         return path, params, extra_data
 
     @staticmethod
-    def _set_trading_config_normalize_function(input_data, extra_data):
+    def _set_trading_config_normalize_function(input_data: Any, extra_data: Any) -> None:
         status = input_data["code"] == "0"
         if "data" not in input_data:
             return [], status
@@ -1739,14 +1944,14 @@ class TradingAccountMixin:
 
     def set_trading_config(
         self,
-        symbol,
-        pos_mode=None,
-        auto_loan=None,
-        auto_margin=None,
-        auto_mul=None,
-        extra_data=None,
-        **kwargs,
-    ):
+        symbol: Any,
+        pos_mode: Any = None,
+        auto_loan: Any = None,
+        auto_margin: Any = None,
+        auto_mul: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """Set trading config"""
         path, params, extra_data = self._set_trading_config(
             symbol, pos_mode, auto_loan, auto_margin, auto_mul, extra_data, **kwargs
@@ -1756,14 +1961,14 @@ class TradingAccountMixin:
 
     def async_set_trading_config(
         self,
-        symbol,
-        pos_mode=None,
-        auto_loan=None,
-        auto_margin=None,
-        auto_mul=None,
-        extra_data=None,
-        **kwargs,
-    ):
+        symbol: Any,
+        pos_mode: Any = None,
+        auto_loan: Any = None,
+        auto_margin: Any = None,
+        auto_mul: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """Async set trading config"""
         path, params, extra_data = self._set_trading_config(
             symbol, pos_mode, auto_loan, auto_margin, auto_mul, extra_data, **kwargs
@@ -1774,8 +1979,8 @@ class TradingAccountMixin:
         )
 
     def _set_delta_neutral_precheck(
-        self, symbol, delta_neutral_precheck, extra_data=None, **kwargs
-    ):
+        self, symbol: Any, delta_neutral_precheck: Any, extra_data: Any = None, **kwargs: Any
+    ) -> None:
         """
         Set delta neutral precheck
         :param symbol: Instrument ID
@@ -1806,7 +2011,7 @@ class TradingAccountMixin:
         return path, params, extra_data
 
     @staticmethod
-    def _set_delta_neutral_precheck_normalize_function(input_data, extra_data):
+    def _set_delta_neutral_precheck_normalize_function(input_data: Any, extra_data: Any) -> None:
         status = input_data["code"] == "0"
         if "data" not in input_data:
             return [], status
@@ -1814,7 +2019,9 @@ class TradingAccountMixin:
         target_data = data if len(data) > 0 else []
         return target_data, status
 
-    def set_delta_neutral_precheck(self, symbol, delta_neutral_precheck, extra_data=None, **kwargs):
+    def set_delta_neutral_precheck(
+        self, symbol: Any, delta_neutral_precheck: Any, extra_data: Any = None, **kwargs: Any
+    ) -> None:
         """Set delta neutral precheck"""
         path, params, extra_data = self._set_delta_neutral_precheck(
             symbol, delta_neutral_precheck, extra_data, **kwargs
@@ -1823,8 +2030,8 @@ class TradingAccountMixin:
         return data
 
     def async_set_delta_neutral_precheck(
-        self, symbol, delta_neutral_precheck, extra_data=None, **kwargs
-    ):
+        self, symbol: Any, delta_neutral_precheck: Any, extra_data: Any = None, **kwargs: Any
+    ) -> None:
         """Async set delta neutral precheck"""
         path, params, extra_data = self._set_delta_neutral_precheck(
             symbol, delta_neutral_precheck, extra_data, **kwargs
@@ -1836,7 +2043,7 @@ class TradingAccountMixin:
 
     # ==================== Missing Trading Account APIs ====================
 
-    def _get_account_position_risk(self, extra_data=None, **kwargs):
+    def _get_account_position_risk(self, extra_data: Any = None, **kwargs: Any) -> None:
         """Get account position risk"""
         request_type = "get_account_position_risk"
         params = {}
@@ -1855,13 +2062,13 @@ class TradingAccountMixin:
             extra_data.update(kwargs)
         return path, params, extra_data
 
-    def get_account_position_risk(self, extra_data=None, **kwargs):
+    def get_account_position_risk(self, extra_data: Any = None, **kwargs: Any) -> None:
         """Get account position risk"""
         path, params, extra_data = self._get_account_position_risk(extra_data, **kwargs)
         data = self.request(path, params=params, extra_data=extra_data)
         return data
 
-    def async_get_account_position_risk(self, extra_data=None, **kwargs):
+    def async_get_account_position_risk(self, extra_data: Any = None, **kwargs: Any) -> None:
         """Async get account position risk"""
         path, params, extra_data = self._get_account_position_risk(extra_data, **kwargs)
         self.submit(
@@ -1870,8 +2077,15 @@ class TradingAccountMixin:
         )
 
     def _get_bills_archive(
-        self, year=None, ccy=None, after=None, before=None, limit=None, extra_data=None, **kwargs
-    ):
+        self,
+        year: Any = None,
+        ccy: Any = None,
+        after: Any = None,
+        before: Any = None,
+        limit: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """Get bills archive"""
         request_type = "get_bills_archive"
         params = {}
@@ -1901,8 +2115,15 @@ class TradingAccountMixin:
         return path, params, extra_data
 
     def get_bills_archive(
-        self, year=None, ccy=None, after=None, before=None, limit=None, extra_data=None, **kwargs
-    ):
+        self,
+        year: Any = None,
+        ccy: Any = None,
+        after: Any = None,
+        before: Any = None,
+        limit: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """Get bills archive"""
         path, params, extra_data = self._get_bills_archive(
             year, ccy, after, before, limit, extra_data, **kwargs
@@ -1911,8 +2132,15 @@ class TradingAccountMixin:
         return data
 
     def async_get_bills_archive(
-        self, year=None, ccy=None, after=None, before=None, limit=None, extra_data=None, **kwargs
-    ):
+        self,
+        year: Any = None,
+        ccy: Any = None,
+        after: Any = None,
+        before: Any = None,
+        limit: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """Async get bills archive"""
         path, params, extra_data = self._get_bills_archive(
             year, ccy, after, before, limit, extra_data, **kwargs
@@ -1923,8 +2151,14 @@ class TradingAccountMixin:
         )
 
     def _get_adjust_leverage_info(
-        self, inst_type, uly=None, inst_id=None, mgn_mode=None, extra_data=None, **kwargs
-    ):
+        self,
+        inst_type: Any,
+        uly: Any = None,
+        inst_id: Any = None,
+        mgn_mode: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """Get adjust leverage info"""
         request_type = "get_adjust_leverage_info"
         params = {"instType": inst_type}
@@ -1950,8 +2184,14 @@ class TradingAccountMixin:
         return path, params, extra_data
 
     def get_adjust_leverage_info(
-        self, inst_type, uly=None, inst_id=None, mgn_mode=None, extra_data=None, **kwargs
-    ):
+        self,
+        inst_type: Any,
+        uly: Any = None,
+        inst_id: Any = None,
+        mgn_mode: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """Get adjust leverage info"""
         path, params, extra_data = self._get_adjust_leverage_info(
             inst_type, uly, inst_id, mgn_mode, extra_data, **kwargs
@@ -1960,8 +2200,14 @@ class TradingAccountMixin:
         return data
 
     def async_get_adjust_leverage_info(
-        self, inst_type, uly=None, inst_id=None, mgn_mode=None, extra_data=None, **kwargs
-    ):
+        self,
+        inst_type: Any,
+        uly: Any = None,
+        inst_id: Any = None,
+        mgn_mode: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """Async get adjust leverage info"""
         path, params, extra_data = self._get_adjust_leverage_info(
             inst_type, uly, inst_id, mgn_mode, extra_data, **kwargs
@@ -1973,15 +2219,15 @@ class TradingAccountMixin:
 
     def _get_max_loan(
         self,
-        inst_type=None,
-        symbol=None,
-        uly=None,
-        inst_id=None,
-        mgn_mode=None,
-        ccy=None,
-        extra_data=None,
-        **kwargs,
-    ):
+        inst_type: Any = None,
+        symbol: Any = None,
+        uly: Any = None,
+        inst_id: Any = None,
+        mgn_mode: Any = None,
+        ccy: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """Get max loan"""
         request_type = "get_max_loan"
         params = {}
@@ -2015,15 +2261,15 @@ class TradingAccountMixin:
 
     def get_max_loan(
         self,
-        inst_type=None,
-        symbol=None,
-        uly=None,
-        inst_id=None,
-        mgn_mode=None,
-        ccy=None,
-        extra_data=None,
-        **kwargs,
-    ):
+        inst_type: Any = None,
+        symbol: Any = None,
+        uly: Any = None,
+        inst_id: Any = None,
+        mgn_mode: Any = None,
+        ccy: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """Get max loan"""
         path, params, extra_data = self._get_max_loan(
             inst_type, symbol, uly, inst_id, mgn_mode, ccy, extra_data, **kwargs
@@ -2033,15 +2279,15 @@ class TradingAccountMixin:
 
     def async_get_max_loan(
         self,
-        inst_type=None,
-        symbol=None,
-        uly=None,
-        inst_id=None,
-        mgn_mode=None,
-        ccy=None,
-        extra_data=None,
-        **kwargs,
-    ):
+        inst_type: Any = None,
+        symbol: Any = None,
+        uly: Any = None,
+        inst_id: Any = None,
+        mgn_mode: Any = None,
+        ccy: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """Async get max loan"""
         path, params, extra_data = self._get_max_loan(
             inst_type, symbol, uly, inst_id, mgn_mode, ccy, extra_data, **kwargs
@@ -2053,14 +2299,14 @@ class TradingAccountMixin:
 
     def _get_interest_accrued(
         self,
-        inst_type=None,
-        uly=None,
-        inst_id=None,
-        mgn_mode=None,
-        ccy=None,
-        extra_data=None,
-        **kwargs,
-    ):
+        inst_type: Any = None,
+        uly: Any = None,
+        inst_id: Any = None,
+        mgn_mode: Any = None,
+        ccy: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """Get interest accrued"""
         request_type = "get_interest_accrued"
         params = {}
@@ -2091,14 +2337,14 @@ class TradingAccountMixin:
 
     def get_interest_accrued(
         self,
-        inst_type=None,
-        uly=None,
-        inst_id=None,
-        mgn_mode=None,
-        ccy=None,
-        extra_data=None,
-        **kwargs,
-    ):
+        inst_type: Any = None,
+        uly: Any = None,
+        inst_id: Any = None,
+        mgn_mode: Any = None,
+        ccy: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """Get interest accrued"""
         path, params, extra_data = self._get_interest_accrued(
             inst_type, uly, inst_id, mgn_mode, ccy, extra_data, **kwargs
@@ -2108,14 +2354,14 @@ class TradingAccountMixin:
 
     def async_get_interest_accrued(
         self,
-        inst_type=None,
-        uly=None,
-        inst_id=None,
-        mgn_mode=None,
-        ccy=None,
-        extra_data=None,
-        **kwargs,
-    ):
+        inst_type: Any = None,
+        uly: Any = None,
+        inst_id: Any = None,
+        mgn_mode: Any = None,
+        ccy: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """Async get interest accrued"""
         path, params, extra_data = self._get_interest_accrued(
             inst_type, uly, inst_id, mgn_mode, ccy, extra_data, **kwargs
@@ -2125,7 +2371,14 @@ class TradingAccountMixin:
             callback=self.async_callback,
         )
 
-    def _get_greeks(self, inst_type=None, uly=None, inst_id=None, extra_data=None, **kwargs):
+    def _get_greeks(
+        self,
+        inst_type: Any = None,
+        uly: Any = None,
+        inst_id: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """Get greeks"""
         request_type = "get_greeks"
         params = {}
@@ -2150,13 +2403,27 @@ class TradingAccountMixin:
             extra_data.update(kwargs)
         return path, params, extra_data
 
-    def get_greeks(self, inst_type=None, uly=None, inst_id=None, extra_data=None, **kwargs):
+    def get_greeks(
+        self,
+        inst_type: Any = None,
+        uly: Any = None,
+        inst_id: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """Get greeks"""
         path, params, extra_data = self._get_greeks(inst_type, uly, inst_id, extra_data, **kwargs)
         data = self.request(path, params=params, extra_data=extra_data)
         return data
 
-    def async_get_greeks(self, inst_type=None, uly=None, inst_id=None, extra_data=None, **kwargs):
+    def async_get_greeks(
+        self,
+        inst_type: Any = None,
+        uly: Any = None,
+        inst_id: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """Async get greeks"""
         path, params, extra_data = self._get_greeks(inst_type, uly, inst_id, extra_data, **kwargs)
         self.submit(
@@ -2165,8 +2432,14 @@ class TradingAccountMixin:
         )
 
     def _get_position_tiers(
-        self, inst_type, uly=None, inst_id=None, tier=None, extra_data=None, **kwargs
-    ):
+        self,
+        inst_type: Any,
+        uly: Any = None,
+        inst_id: Any = None,
+        tier: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """Get position tiers"""
         request_type = "get_position_tiers"
         params = {"instType": inst_type}
@@ -2192,8 +2465,14 @@ class TradingAccountMixin:
         return path, params, extra_data
 
     def get_position_tiers(
-        self, inst_type, uly=None, inst_id=None, tier=None, extra_data=None, **kwargs
-    ):
+        self,
+        inst_type: Any,
+        uly: Any = None,
+        inst_id: Any = None,
+        tier: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """Get position tiers"""
         path, params, extra_data = self._get_position_tiers(
             inst_type, uly, inst_id, tier, extra_data, **kwargs
@@ -2202,8 +2481,14 @@ class TradingAccountMixin:
         return data
 
     def async_get_position_tiers(
-        self, inst_type, uly=None, inst_id=None, tier=None, extra_data=None, **kwargs
-    ):
+        self,
+        inst_type: Any,
+        uly: Any = None,
+        inst_id: Any = None,
+        tier: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """Async get position tiers"""
         path, params, extra_data = self._get_position_tiers(
             inst_type, uly, inst_id, tier, extra_data, **kwargs
@@ -2213,7 +2498,7 @@ class TradingAccountMixin:
             callback=self.async_callback,
         )
 
-    def _get_max_withdrawal(self, ccy=None, extra_data=None, **kwargs):
+    def _get_max_withdrawal(self, ccy: Any = None, extra_data: Any = None, **kwargs: Any) -> None:
         """Get max withdrawal"""
         request_type = "get_max_withdrawal"
         params = {}
@@ -2234,13 +2519,15 @@ class TradingAccountMixin:
             extra_data.update(kwargs)
         return path, params, extra_data
 
-    def get_max_withdrawal(self, ccy=None, extra_data=None, **kwargs):
+    def get_max_withdrawal(self, ccy: Any = None, extra_data: Any = None, **kwargs: Any) -> None:
         """Get max withdrawal"""
         path, params, extra_data = self._get_max_withdrawal(ccy, extra_data, **kwargs)
         data = self.request(path, params=params, extra_data=extra_data)
         return data
 
-    def async_get_max_withdrawal(self, ccy=None, extra_data=None, **kwargs):
+    def async_get_max_withdrawal(
+        self, ccy: Any = None, extra_data: Any = None, **kwargs: Any
+    ) -> None:
         """Async get max withdrawal"""
         path, params, extra_data = self._get_max_withdrawal(ccy, extra_data, **kwargs)
         self.submit(
@@ -2248,7 +2535,7 @@ class TradingAccountMixin:
             callback=self.async_callback,
         )
 
-    def _get_risk_state(self, extra_data=None, **kwargs):
+    def _get_risk_state(self, extra_data: Any = None, **kwargs: Any) -> None:
         """Get risk state"""
         request_type = "get_risk_state"
         params = {}
@@ -2267,13 +2554,13 @@ class TradingAccountMixin:
             extra_data.update(kwargs)
         return path, params, extra_data
 
-    def get_risk_state(self, extra_data=None, **kwargs):
+    def get_risk_state(self, extra_data: Any = None, **kwargs: Any) -> None:
         """Get risk state"""
         path, params, extra_data = self._get_risk_state(extra_data, **kwargs)
         data = self.request(path, params=params, extra_data=extra_data)
         return data
 
-    def async_get_risk_state(self, extra_data=None, **kwargs):
+    def async_get_risk_state(self, extra_data: Any = None, **kwargs: Any) -> None:
         """Async get risk state"""
         path, params, extra_data = self._get_risk_state(extra_data, **kwargs)
         self.submit(
@@ -2283,17 +2570,17 @@ class TradingAccountMixin:
 
     def _get_bills(
         self,
-        inst_type=None,
-        uly=None,
-        inst_id=None,
-        ccy=None,
-        mgn_mode=None,
-        after=None,
-        before=None,
-        limit=None,
-        extra_data=None,
-        **kwargs,
-    ):
+        inst_type: Any = None,
+        uly: Any = None,
+        inst_id: Any = None,
+        ccy: Any = None,
+        mgn_mode: Any = None,
+        after: Any = None,
+        before: Any = None,
+        limit: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """Get bills"""
         request_type = "get_bills"
         params = {}
@@ -2330,17 +2617,17 @@ class TradingAccountMixin:
 
     def get_bills(
         self,
-        inst_type=None,
-        uly=None,
-        inst_id=None,
-        ccy=None,
-        mgn_mode=None,
-        after=None,
-        before=None,
-        limit=None,
-        extra_data=None,
-        **kwargs,
-    ):
+        inst_type: Any = None,
+        uly: Any = None,
+        inst_id: Any = None,
+        ccy: Any = None,
+        mgn_mode: Any = None,
+        after: Any = None,
+        before: Any = None,
+        limit: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """Get bills"""
         path, params, extra_data = self._get_bills(
             inst_type, uly, inst_id, ccy, mgn_mode, after, before, limit, extra_data, **kwargs
@@ -2350,17 +2637,17 @@ class TradingAccountMixin:
 
     def async_get_bills(
         self,
-        inst_type=None,
-        uly=None,
-        inst_id=None,
-        ccy=None,
-        mgn_mode=None,
-        after=None,
-        before=None,
-        limit=None,
-        extra_data=None,
-        **kwargs,
-    ):
+        inst_type: Any = None,
+        uly: Any = None,
+        inst_id: Any = None,
+        ccy: Any = None,
+        mgn_mode: Any = None,
+        after: Any = None,
+        before: Any = None,
+        limit: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """Async get bills"""
         path, params, extra_data = self._get_bills(
             inst_type, uly, inst_id, ccy, mgn_mode, after, before, limit, extra_data, **kwargs
@@ -2371,8 +2658,14 @@ class TradingAccountMixin:
         )
 
     def _get_lever(
-        self, inst_type, uly=None, inst_id=None, mgn_mode=None, extra_data=None, **kwargs
-    ):
+        self,
+        inst_type: Any,
+        uly: Any = None,
+        inst_id: Any = None,
+        mgn_mode: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """Get leverage info"""
         request_type = "get_lever"
         params = {"instType": inst_type}
@@ -2398,8 +2691,14 @@ class TradingAccountMixin:
         return path, params, extra_data
 
     def get_lever(
-        self, inst_type, uly=None, inst_id=None, mgn_mode=None, extra_data=None, **kwargs
-    ):
+        self,
+        inst_type: Any,
+        uly: Any = None,
+        inst_id: Any = None,
+        mgn_mode: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """Get leverage info"""
         path, params, extra_data = self._get_lever(
             inst_type, uly, inst_id, mgn_mode, extra_data, **kwargs
@@ -2408,8 +2707,14 @@ class TradingAccountMixin:
         return data
 
     def async_get_lever(
-        self, inst_type, uly=None, inst_id=None, mgn_mode=None, extra_data=None, **kwargs
-    ):
+        self,
+        inst_type: Any,
+        uly: Any = None,
+        inst_id: Any = None,
+        mgn_mode: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """Async get leverage info"""
         path, params, extra_data = self._get_lever(
             inst_type, uly, inst_id, mgn_mode, extra_data, **kwargs

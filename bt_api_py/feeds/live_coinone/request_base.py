@@ -12,6 +12,7 @@ import hashlib
 import hmac
 import json
 import uuid
+from typing import Any
 from urllib.parse import urlencode
 
 from bt_api_py.containers.exchanges.coinone_exchange_data import CoinoneExchangeDataSpot
@@ -40,7 +41,7 @@ class CoinoneRequestData(Feed):
             Capability.GET_EXCHANGE_INFO,
         }
 
-    def __init__(self, data_queue, **kwargs):
+    def __init__(self, data_queue, **kwargs) -> None:
         super().__init__(data_queue, **kwargs)
         self.data_queue = data_queue
         self._api_key = (
@@ -65,7 +66,7 @@ class CoinoneRequestData(Feed):
 
     # ── HMAC-SHA512 authentication ──────────────────────────────
 
-    def _generate_payload(self, body_dict=None):
+    def _generate_payload(self, body_dict=None) -> Any:
         """Build Base64-encoded JSON payload for Coinone private API."""
         nonce = str(uuid.uuid4())
         payload_body = {"access_token": self._api_key, "nonce": nonce}
@@ -75,7 +76,7 @@ class CoinoneRequestData(Feed):
         payload = base64.b64encode(json_str.encode("utf-8")).decode("utf-8")
         return payload
 
-    def _generate_signature(self, payload):
+    def _generate_signature(self, payload) -> Any:
         """HMAC-SHA512(payload, SECRET.upper())."""
         if not self._api_secret:
             return ""
@@ -86,7 +87,7 @@ class CoinoneRequestData(Feed):
             hashlib.sha512,
         ).hexdigest()
 
-    def _generate_auth_headers(self, body_dict=None):
+    def _generate_auth_headers(self, body_dict=None) -> Any:
         """Return Coinone auth headers dict for a POST request."""
         if not self._api_key:
             return {}, None
@@ -164,7 +165,7 @@ class CoinoneRequestData(Feed):
     # ── _get_xxx internal methods ───────────────────────────────
     # Public market endpoints append /{target} to the base path.
 
-    def _get_exchange_info(self, extra_data=None, **kwargs):
+    def _get_exchange_info(self, extra_data=None, **kwargs) -> Any:
         path = self._params.get_rest_path("get_exchange_info")
         params = {}
         extra_data = extra_data or {}
@@ -179,7 +180,7 @@ class CoinoneRequestData(Feed):
         )
         return path, params, extra_data
 
-    def _get_tick(self, symbol, extra_data=None, **kwargs):
+    def _get_tick(self, symbol, extra_data=None, **kwargs) -> Any:
         base_path = self._params.get_rest_path("get_tick")
         quote, target = CoinoneExchangeDataSpot.parse_symbol(symbol)
         method_prefix = base_path.split(" ", 1)[0]
@@ -198,7 +199,7 @@ class CoinoneRequestData(Feed):
         )
         return path, params, extra_data
 
-    def _get_depth(self, symbol, count=15, extra_data=None, **kwargs):
+    def _get_depth(self, symbol, count=15, extra_data=None, **kwargs) -> Any:
         base_path = self._params.get_rest_path("get_depth")
         quote, target = CoinoneExchangeDataSpot.parse_symbol(symbol)
         method_prefix = base_path.split(" ", 1)[0]
@@ -217,7 +218,7 @@ class CoinoneRequestData(Feed):
         )
         return path, params, extra_data
 
-    def _get_kline(self, symbol, period="1h", count=100, extra_data=None, **kwargs):
+    def _get_kline(self, symbol, period="1h", count=100, extra_data=None, **kwargs) -> Any:
         base_path = self._params.get_rest_path("get_kline")
         quote, target = CoinoneExchangeDataSpot.parse_symbol(symbol)
         method_prefix = base_path.split(" ", 1)[0]
@@ -238,7 +239,7 @@ class CoinoneRequestData(Feed):
         )
         return path, params, extra_data
 
-    def _get_trade_history(self, symbol, count=50, extra_data=None, **kwargs):
+    def _get_trade_history(self, symbol, count=50, extra_data=None, **kwargs) -> Any:
         base_path = self._params.get_rest_path("get_trades")
         quote, target = CoinoneExchangeDataSpot.parse_symbol(symbol)
         method_prefix = base_path.split(" ", 1)[0]
@@ -257,7 +258,9 @@ class CoinoneRequestData(Feed):
         )
         return path, params, extra_data
 
-    def _make_order(self, symbol, size, price=None, order_type="bid", extra_data=None, **kwargs):
+    def _make_order(
+        self, symbol, size, price=None, order_type="bid", extra_data=None, **kwargs
+    ) -> Any:
         path = self._params.get_rest_path("make_order")
         quote, target = CoinoneExchangeDataSpot.parse_symbol(symbol)
         body = {
@@ -281,7 +284,7 @@ class CoinoneRequestData(Feed):
         )
         return path, body, extra_data
 
-    def _cancel_order(self, symbol=None, order_id=None, extra_data=None, **kwargs):
+    def _cancel_order(self, symbol=None, order_id=None, extra_data=None, **kwargs) -> Any:
         path = self._params.get_rest_path("cancel_order")
         body = {}
         if order_id:
@@ -302,7 +305,7 @@ class CoinoneRequestData(Feed):
         )
         return path, body, extra_data
 
-    def _query_order(self, symbol=None, order_id=None, extra_data=None, **kwargs):
+    def _query_order(self, symbol=None, order_id=None, extra_data=None, **kwargs) -> Any:
         path = self._params.get_rest_path("query_order")
         body = {}
         if order_id:
@@ -323,7 +326,7 @@ class CoinoneRequestData(Feed):
         )
         return path, body, extra_data
 
-    def _get_open_orders(self, symbol=None, extra_data=None, **kwargs):
+    def _get_open_orders(self, symbol=None, extra_data=None, **kwargs) -> Any:
         path = self._params.get_rest_path("get_open_orders")
         body = {}
         if symbol:
@@ -342,7 +345,7 @@ class CoinoneRequestData(Feed):
         )
         return path, body, extra_data
 
-    def _get_deals(self, symbol=None, extra_data=None, **kwargs):
+    def _get_deals(self, symbol=None, extra_data=None, **kwargs) -> Any:
         path = self._params.get_rest_path("get_deals")
         body = {}
         if symbol:
@@ -361,7 +364,7 @@ class CoinoneRequestData(Feed):
         )
         return path, body, extra_data
 
-    def _get_account(self, extra_data=None, **kwargs):
+    def _get_account(self, extra_data=None, **kwargs) -> Any:
         path = self._params.get_rest_path("get_account")
         body = {}
         extra_data = extra_data or {}
@@ -376,7 +379,7 @@ class CoinoneRequestData(Feed):
         )
         return path, body, extra_data
 
-    def _get_balance(self, extra_data=None, **kwargs):
+    def _get_balance(self, extra_data=None, **kwargs) -> Any:
         path = self._params.get_rest_path("get_balance")
         body = {}
         extra_data = extra_data or {}

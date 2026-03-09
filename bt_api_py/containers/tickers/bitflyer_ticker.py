@@ -1,9 +1,8 @@
-"""
-bitFlyer Ticker Data Container
-"""
+"""bitFlyer Ticker Data Container."""
 
 import json
 import time
+from typing import Any
 
 from bt_api_py.containers.tickers.ticker import TickerData
 
@@ -11,13 +10,30 @@ from bt_api_py.containers.tickers.ticker import TickerData
 class BitflyerRequestTickerData(TickerData):
     """bitFlyer ticker data container."""
 
-    def __init__(self, ticker_info, symbol_name, asset_type, has_been_json_encoded=False):
+    def __init__(
+        self,
+        ticker_info: str | dict[str, Any],
+        symbol_name: str,
+        asset_type: str,
+        has_been_json_encoded: bool = False,
+    ) -> None:
+        """Initialize Bitflyer ticker data container.
+
+        Args:
+            ticker_info: Raw ticker data from API (JSON string or dict).
+            symbol_name: Trading symbol name.
+            asset_type: Asset type (e.g., "SPOT", "FUTURE").
+            has_been_json_encoded: Whether ticker_info is already parsed.
+
+        """
         super().__init__(ticker_info, has_been_json_encoded)
         self.symbol_name = symbol_name
         self.asset_type = asset_type
         self.exchange_name = "BITFLYER"
         self.local_update_time = time.time()
-        self.ticker_data = ticker_info if has_been_json_encoded else None
+        self.ticker_data: dict[str, Any] | None = (
+            ticker_info if has_been_json_encoded and isinstance(ticker_info, dict) else None
+        )
         self.ticker_symbol_name = None
         self.last_price = None
         self.bid_price = None
@@ -31,7 +47,7 @@ class BitflyerRequestTickerData(TickerData):
         self.timestamp = None
         self.has_been_init_data = False
 
-    def init_data(self):
+    def init_data(self) -> "BitflyerRequestTickerData":
         """Parse bitFlyer ticker response."""
         if not self.has_been_json_encoded:
             self.ticker_data = json.loads(self.ticker_info)
@@ -63,7 +79,16 @@ class BitflyerRequestTickerData(TickerData):
         return self
 
     @staticmethod
-    def _parse_float(value):
+    def _parse_float(value: Any) -> float | None:
+        """Parse value to float.
+
+        Args:
+            value: Value to parse.
+
+        Returns:
+            Parsed float value or None if parsing fails.
+
+        """
         if value is None:
             return None
         try:
@@ -72,8 +97,16 @@ class BitflyerRequestTickerData(TickerData):
             return None
 
     @staticmethod
-    def _parse_timestamp(timestamp_str):
-        """Parse ISO 8601 timestamp to unix timestamp in milliseconds."""
+    def _parse_timestamp(timestamp_str: str) -> int | None:
+        """Parse ISO 8601 timestamp to unix timestamp in milliseconds.
+
+        Args:
+            timestamp_str: ISO 8601 timestamp string.
+
+        Returns:
+            Unix timestamp in milliseconds or None if parsing fails.
+
+        """
         if not timestamp_str:
             return None
         try:
@@ -85,29 +118,59 @@ class BitflyerRequestTickerData(TickerData):
         except (ValueError, TypeError):
             return None
 
-    def get_exchange_name(self):
-        """Get exchange name."""
+    def get_exchange_name(self) -> str:
+        """Get exchange name.
+
+        Returns:
+            Exchange name string.
+
+        """
         return self.exchange_name
 
-    def get_symbol_name(self):
-        """Get symbol name."""
+    def get_symbol_name(self) -> str:
+        """Get symbol name.
+
+        Returns:
+            Symbol name string.
+
+        """
         return self.symbol_name
 
-    def get_asset_type(self):
-        """Get asset type."""
+    def get_asset_type(self) -> str:
+        """Get asset type.
+
+        Returns:
+            Asset type string.
+
+        """
         return self.asset_type
 
-    def get_last_price(self):
-        """Get last price."""
+    def get_last_price(self) -> float | None:
+        """Get last price.
+
+        Returns:
+            Last price or None.
+
+        """
         self.init_data()
         return self.last_price
 
-    def get_bid_price(self):
-        """Get bid price."""
+    def get_bid_price(self) -> float | None:
+        """Get bid price.
+
+        Returns:
+            Bid price or None.
+
+        """
         self.init_data()
         return self.bid_price
 
-    def get_ask_price(self):
-        """Get ask price."""
+    def get_ask_price(self) -> float | None:
+        """Get ask price.
+
+        Returns:
+            Ask price or None.
+
+        """
         self.init_data()
         return self.ask_price

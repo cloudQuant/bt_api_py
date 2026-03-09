@@ -231,9 +231,7 @@ class PancakeSwapPoolList:
             self.total_liquidity_usd = 0.0
             self.total_volume_24h_usd = 0.0
 
-    def filter_by_tvl(
-        self, min_tvl: float, max_tvl: float | None = None
-    ) -> "PancakeSwapPoolList":
+    def filter_by_tvl(self, min_tvl: float, max_tvl: float | None = None) -> "PancakeSwapPoolList":
         """Filter pools by TVL range"""
         filtered = []
         for pool in self.pools:

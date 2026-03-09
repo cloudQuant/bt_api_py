@@ -1,0 +1,329 @@
+代理 10 需要改进的文件 (共 43 个)
+================================================================================
+
+
+bt_api_py/containers/fundingrates:
+--------------------------------------------------------------------------------
+  bt_api_py/containers/fundingrates/binance_funding_rate.py
+    - TypeHint: Line 11: BinanceRequestFundingRateData.__init__ - method missing return annotation
+    - TypeHint: Line 11: BinanceRequestFundingRateData.__init__ - method missing annotation for param 'funding_rate_info'
+    - TypeHint: Line 11: BinanceRequestFundingRateData.__init__ - method missing annotation for param 'symbol_name'
+    - TypeHint: Line 11: BinanceRequestFundingRateData.__init__ - method missing annotation for param 'asset_type'
+    - TypeHint: Line 11: BinanceRequestFundingRateData.__init__ - method missing annotation for param 'has_been_json_encoded'
+    ... 还有 127 个问题
+  bt_api_py/containers/fundingrates/okx_funding_rate.py
+    - TypeHint: Line 11: OkxFundingRateData.__init__ - method missing return annotation
+    - TypeHint: Line 11: OkxFundingRateData.__init__ - method missing annotation for param 'funding_rate_info'
+    - TypeHint: Line 11: OkxFundingRateData.__init__ - method missing annotation for param 'symbol_name'
+    - TypeHint: Line 11: OkxFundingRateData.__init__ - method missing annotation for param 'asset_type'
+    - TypeHint: Line 11: OkxFundingRateData.__init__ - method missing annotation for param 'has_been_json_encoded'
+    ... 还有 37 个问题
+  bt_api_py/containers/fundingrates/bitfinex_funding_rate.py
+    - Docstring: Line 25: BitfinexFundingRateData.__init__ - method has incomplete Google-style docstring
+    - Docstring: Line 52: BitfinexRequestFundingRateData.__init__ - method has incomplete Google-style docstring
+  bt_api_py/containers/fundingrates/funding_rate.py
+    - Docstring: Line 42: FundingRateData.__init__ - method has incomplete Google-style docstring
+    - Docstring: Line 53: FundingRateData.get_event_type - method has incomplete Google-style docstring
+    - Docstring: Line 61: FundingRateData.init_data - method has incomplete Google-style docstring
+    - Docstring: Line 72: FundingRateData.get_exchange_name - method has incomplete Google-style docstring
+    - Docstring: Line 83: FundingRateData.get_server_time - method has incomplete Google-style docstring
+    ... 还有 14 个问题
+
+bt_api_py/containers/requestdatas:
+--------------------------------------------------------------------------------
+  bt_api_py/containers/requestdatas/request_data.py
+    - TypeHint: Line 7: RequestData.__init__ - method missing return annotation
+    - TypeHint: Line 7: RequestData.__init__ - method missing annotation for param 'data'
+    - TypeHint: Line 7: RequestData.__init__ - method missing annotation for param 'extra_data'
+    - TypeHint: Line 7: RequestData.__init__ - method missing annotation for param 'status'
+    - TypeHint: Line 7: RequestData.__init__ - method missing annotation for param 'normalize_func'
+    ... 还有 27 个问题
+
+bt_api_py/containers/timers:
+--------------------------------------------------------------------------------
+  bt_api_py/containers/timers/timer.py
+    - Docstring: Line 21: TimerData.__init__ - method has incomplete Google-style docstring
+    - Docstring: Line 30: TimerData.get_data - method has incomplete Google-style docstring
+
+bt_api_py/exchange_registers/register_bitmart.py:
+--------------------------------------------------------------------------------
+  bt_api_py/exchange_registers/register_bitmart.py
+    - Docstring: Line 13: register_bitmart - function has incomplete Google-style docstring
+
+bt_api_py/exchange_registers/register_btc_markets.py:
+--------------------------------------------------------------------------------
+  bt_api_py/exchange_registers/register_btc_markets.py
+    - TypeHint: Line 11: register_btc_markets - function missing return annotation
+    - Docstring: Line 11: register_btc_markets - function has incomplete Google-style docstring
+
+bt_api_py/exchange_registers/register_dydx.py:
+--------------------------------------------------------------------------------
+  bt_api_py/exchange_registers/register_dydx.py
+    - Docstring: Line 16: _dydx_subscribe_handler - function has incomplete Google-style docstring
+    - Docstring: Line 46: _dydx_swap_subscribe_handler - function has incomplete Google-style docstring
+    - Docstring: Line 53: _dydx_spot_subscribe_handler - function has incomplete Google-style docstring
+    - Docstring: Line 60: register_dydx - function has incomplete Google-style docstring
+
+bt_api_py/exchange_registers/register_exmo.py:
+--------------------------------------------------------------------------------
+  bt_api_py/exchange_registers/register_exmo.py
+    - TypeHint: Line 11: register_exmo - function missing return annotation
+    - Docstring: Line 11: register_exmo - function has incomplete Google-style docstring
+
+bt_api_py/exchange_registers/register_luno.py:
+--------------------------------------------------------------------------------
+  bt_api_py/exchange_registers/register_luno.py
+    - Docstring: Line 13: register_luno - function has incomplete Google-style docstring
+
+bt_api_py/exchange_registers/register_ripio.py:
+--------------------------------------------------------------------------------
+  bt_api_py/exchange_registers/register_ripio.py
+    - TypeHint: Line 13: register_ripio - function missing return annotation
+    - Docstring: Line 13: register_ripio - function has incomplete Google-style docstring
+
+bt_api_py/feeds/abstract_feed.py:
+--------------------------------------------------------------------------------
+  bt_api_py/feeds/abstract_feed.py
+    - Docstring: Line 36: AbstractVenueFeed.connect - method has incomplete Google-style docstring
+    - Docstring: Line 40: AbstractVenueFeed.disconnect - method has incomplete Google-style docstring
+    - Docstring: Line 44: AbstractVenueFeed.is_connected - method has incomplete Google-style docstring
+    - Docstring: Line 272: AbstractVenueFeed.async_get_tick - method has incomplete Google-style docstring
+    - Docstring: Line 281: AbstractVenueFeed.async_make_order - method has incomplete Google-style docstring
+    ... 还有 15 个问题
+
+bt_api_py/feeds/live_bitbns:
+--------------------------------------------------------------------------------
+  bt_api_py/feeds/live_bitbns/request_base.py
+    - TypeHint: Line 33: BitbnsRequestData.__init__ - method missing return annotation
+    - TypeHint: Line 33: BitbnsRequestData.__init__ - method missing annotation for param 'data_queue'
+    - TypeHint: Line 33: BitbnsRequestData.__init__ - method missing annotation for param 'kwargs'
+    - TypeHint: Line 84: BitbnsRequestData.request - method missing return annotation
+    - TypeHint: Line 84: BitbnsRequestData.request - method missing annotation for param 'path'
+    ... 还有 29 个问题
+  bt_api_py/feeds/live_bitbns/spot.py
+    - TypeHint: Line 25: BitbnsRequestDataSpot.__init__ - method missing return annotation
+    - TypeHint: Line 25: BitbnsRequestDataSpot.__init__ - method missing annotation for param 'data_queue'
+    - TypeHint: Line 25: BitbnsRequestDataSpot.__init__ - method missing annotation for param 'kwargs'
+    - TypeHint: Line 77: BitbnsRequestDataSpot.get_tick - method missing return annotation
+    - TypeHint: Line 77: BitbnsRequestDataSpot.get_tick - method missing annotation for param 'symbol'
+    ... 还有 83 个问题
+
+bt_api_py/feeds/live_bitvavo:
+--------------------------------------------------------------------------------
+  bt_api_py/feeds/live_bitvavo/request_base.py
+    - TypeHint: Line 33: BitvavoRequestData.__init__ - method missing annotation for param 'data_queue'
+    - TypeHint: Line 33: BitvavoRequestData.__init__ - method missing annotation for param 'kwargs'
+    - TypeHint: Line 81: BitvavoRequestData.request - method missing return annotation
+    - TypeHint: Line 81: BitvavoRequestData.request - method missing annotation for param 'path'
+    - TypeHint: Line 81: BitvavoRequestData.request - method missing annotation for param 'params'
+    ... 还有 28 个问题
+  bt_api_py/feeds/live_bitvavo/spot.py
+    - TypeHint: Line 25: BitvavoRequestDataSpot.__init__ - method missing return annotation
+    - TypeHint: Line 25: BitvavoRequestDataSpot.__init__ - method missing annotation for param 'data_queue'
+    - TypeHint: Line 25: BitvavoRequestDataSpot.__init__ - method missing annotation for param 'kwargs'
+    - TypeHint: Line 55: BitvavoRequestDataSpot.get_tick - method missing return annotation
+    - TypeHint: Line 55: BitvavoRequestDataSpot.get_tick - method missing annotation for param 'symbol'
+    ... 还有 82 个问题
+
+bt_api_py/feeds/live_coinspot:
+--------------------------------------------------------------------------------
+  bt_api_py/feeds/live_coinspot/request_base.py
+    - TypeHint: Line 39: CoinSpotRequestData.__init__ - method missing return annotation
+    - TypeHint: Line 39: CoinSpotRequestData.__init__ - method missing annotation for param 'data_queue'
+    - TypeHint: Line 39: CoinSpotRequestData.__init__ - method missing annotation for param 'kwargs'
+    - TypeHint: Line 53: CoinSpotRequestData.api_key - method missing return annotation
+    - TypeHint: Line 57: CoinSpotRequestData.api_secret - method missing return annotation
+    ... 还有 25 个问题
+  bt_api_py/feeds/live_coinspot/spot.py
+    - TypeHint: Line 11: CoinSpotRequestDataSpot.__init__ - method missing annotation for param 'data_queue'
+    - TypeHint: Line 11: CoinSpotRequestDataSpot.__init__ - method missing annotation for param 'kwargs'
+    - TypeHint: Line 16: CoinSpotRequestDataSpot.get_exchange_info - method missing return annotation
+    - TypeHint: Line 16: CoinSpotRequestDataSpot.get_exchange_info - method missing annotation for param 'extra_data'
+    - TypeHint: Line 16: CoinSpotRequestDataSpot.get_exchange_info - method missing annotation for param 'kwargs'
+    ... 还有 98 个问题
+
+bt_api_py/feeds/live_gmx:
+--------------------------------------------------------------------------------
+  bt_api_py/feeds/live_gmx/request_base.py
+    - TypeHint: Line 47: GmxRequestData.__init__ - method missing return annotation
+    - TypeHint: Line 47: GmxRequestData.__init__ - method missing annotation for param 'data_queue'
+    - TypeHint: Line 47: GmxRequestData.__init__ - method missing annotation for param 'kwargs'
+    - TypeHint: Line 77: GmxRequestData.request - method missing return annotation
+    - TypeHint: Line 77: GmxRequestData.request - method missing annotation for param 'extra_data'
+    ... 还有 17 个问题
+  bt_api_py/feeds/live_gmx/spot.py
+    - TypeHint: Line 43: GmxRequestDataSpot.__init__ - method missing return annotation
+    - TypeHint: Line 43: GmxRequestDataSpot.__init__ - method missing annotation for param 'data_queue'
+    - TypeHint: Line 43: GmxRequestDataSpot.__init__ - method missing annotation for param 'kwargs'
+    - TypeHint: Line 107: GmxRequestDataSpot.get_tick - method missing return annotation
+    - TypeHint: Line 107: GmxRequestDataSpot.get_tick - method missing annotation for param 'extra_data'
+    ... 还有 71 个问题
+
+bt_api_py/feeds/live_kraken:
+--------------------------------------------------------------------------------
+  bt_api_py/feeds/live_kraken/futures.py
+    - TypeHint: Line 14: KrakenRequestDataFutures.__init__ - method missing return annotation
+    - TypeHint: Line 14: KrakenRequestDataFutures.__init__ - method missing annotation for param 'data_queue'
+    - TypeHint: Line 14: KrakenRequestDataFutures.__init__ - method missing annotation for param 'kwargs'
+    - TypeHint: Line 40: KrakenRequestDataFutures.get_ticker - method missing return annotation
+    - TypeHint: Line 40: KrakenRequestDataFutures.get_ticker - method missing annotation for param 'symbol'
+    ... 还有 59 个问题
+  bt_api_py/feeds/live_kraken/request_base.py
+    - TypeHint: Line 46: KrakenRequestData.__init__ - method missing return annotation
+    - TypeHint: Line 46: KrakenRequestData.__init__ - method missing annotation for param 'data_queue'
+    - TypeHint: Line 46: KrakenRequestData.__init__ - method missing annotation for param 'kwargs'
+    - TypeHint: Line 87: KrakenRequestData.request - method missing return annotation
+    - TypeHint: Line 87: KrakenRequestData.request - method missing annotation for param 'path'
+    ... 还有 18 个问题
+  bt_api_py/feeds/live_kraken/spot.py
+    - TypeHint: Line 18: KrakenRequestDataSpot.__init__ - method missing return annotation
+    - TypeHint: Line 18: KrakenRequestDataSpot.__init__ - method missing annotation for param 'data_queue'
+    - TypeHint: Line 18: KrakenRequestDataSpot.__init__ - method missing annotation for param 'kwargs'
+    - TypeHint: Line 68: KrakenRequestDataSpot.get_ticker - method missing return annotation
+    - TypeHint: Line 68: KrakenRequestDataSpot.get_ticker - method missing annotation for param 'symbol'
+    ... 还有 117 个问题
+
+bt_api_py/feeds/live_mexc_feed.py:
+--------------------------------------------------------------------------------
+  bt_api_py/feeds/live_mexc_feed.py
+    - TypeHint: Line 19: MexcMarketWssFeed.__init__ - method missing return annotation
+    - TypeHint: Line 19: MexcMarketWssFeed.__init__ - method missing annotation for param 'data_queue'
+    - TypeHint: Line 19: MexcMarketWssFeed.__init__ - method missing annotation for param 'exchange_data'
+    - TypeHint: Line 19: MexcMarketWssFeed.__init__ - method missing annotation for param 'kwargs'
+    - TypeHint: Line 38: MexcAccountWssFeed.__init__ - method missing return annotation
+    ... 还有 13 个问题
+
+bt_api_py/feeds/live_poloniex:
+--------------------------------------------------------------------------------
+  bt_api_py/feeds/live_poloniex/request_base.py
+    - TypeHint: Line 92: PoloniexRequestData.__init__ - method missing annotation for param 'data_queue'
+    - TypeHint: Line 92: PoloniexRequestData.__init__ - method missing annotation for param 'kwargs'
+    - TypeHint: Line 107: PoloniexRequestData.api_key - method missing return annotation
+    - TypeHint: Line 111: PoloniexRequestData.api_secret - method missing return annotation
+    - TypeHint: Line 145: PoloniexRequestData.translate_error - method missing return annotation
+    ... 还有 31 个问题
+  bt_api_py/feeds/live_poloniex/spot.py
+    - TypeHint: Line 14: PoloniexRequestDataSpot.__init__ - method missing return annotation
+    - TypeHint: Line 14: PoloniexRequestDataSpot.__init__ - method missing annotation for param 'data_queue'
+    - TypeHint: Line 14: PoloniexRequestDataSpot.__init__ - method missing annotation for param 'kwargs'
+    - TypeHint: Line 472: PoloniexRequestDataSpot.get_server_time - method missing return annotation
+    - TypeHint: Line 472: PoloniexRequestDataSpot.get_server_time - method missing annotation for param 'extra_data'
+    ... 还有 131 个问题
+
+bt_api_py/feeds/live_yobit:
+--------------------------------------------------------------------------------
+  bt_api_py/feeds/live_yobit/request_base.py
+    - TypeHint: Line 34: YobitRequestData.__init__ - method missing return annotation
+    - TypeHint: Line 34: YobitRequestData.__init__ - method missing annotation for param 'data_queue'
+    - TypeHint: Line 34: YobitRequestData.__init__ - method missing annotation for param 'kwargs'
+    - TypeHint: Line 68: YobitRequestData.request - method missing return annotation
+    - TypeHint: Line 68: YobitRequestData.request - method missing annotation for param 'path'
+    ... 还有 25 个问题
+  bt_api_py/feeds/live_yobit/spot.py
+    - TypeHint: Line 13: YobitRequestDataSpot.__init__ - method missing return annotation
+    - TypeHint: Line 13: YobitRequestDataSpot.__init__ - method missing annotation for param 'data_queue'
+    - TypeHint: Line 13: YobitRequestDataSpot.__init__ - method missing annotation for param 'kwargs'
+    - TypeHint: Line 18: YobitRequestDataSpot.get_server_time - method missing return annotation
+    - TypeHint: Line 18: YobitRequestDataSpot.get_server_time - method missing annotation for param 'extra_data'
+    ... 还有 125 个问题
+
+bt_api_py/functions/decorators.py:
+--------------------------------------------------------------------------------
+  bt_api_py/functions/decorators.py
+    - Docstring: Line 70: time_async_function - function has incomplete Google-style docstring
+    - Docstring: Line 28: deprecated_dec - function missing docstring
+    - Docstring: Line 60: wrapper - function missing docstring
+    - Docstring: Line 85: wrapper - function missing docstring
+    - Docstring: Line 30: wrapper - function missing docstring
+    ... 还有 1 个问题
+
+bt_api_py/security_compliance:
+--------------------------------------------------------------------------------
+  bt_api_py/security_compliance/auth/mfa_provider.py
+    - TypeHint: Line 599: initialize_mfa_provider - function missing annotation for param 'kwargs'
+    - TypeHint: Line 100: MFAProvider.__init__ - method missing return annotation
+    - Docstring: Line 594: get_mfa_provider - function has incomplete Google-style docstring
+    - Docstring: Line 599: initialize_mfa_provider - function has incomplete Google-style docstring
+    - Docstring: Line 100: MFAProvider.__init__ - method has incomplete Google-style docstring
+    ... 还有 13 个问题
+  bt_api_py/security_compliance/auth/oauth2_provider.py
+    - TypeHint: Line 159: OAuth2Provider.__init__ - method missing return annotation
+    - Docstring: Line 62: OAuthClient.can_use_grant_type - method has incomplete Google-style docstring
+    - Docstring: Line 66: OAuthClient.has_scope - method has incomplete Google-style docstring
+    - Docstring: Line 99: AuthorizationCode.is_expired - method has incomplete Google-style docstring
+    - Docstring: Line 103: AuthorizationCode.is_valid - method has incomplete Google-style docstring
+    ... 还有 20 个问题
+  bt_api_py/security_compliance/core/access_control.py
+    - TypeHint: Line 19: AccessDeniedError.__init__ - method missing return annotation
+    - TypeHint: Line 169: AccessControlManager.__init__ - method missing return annotation
+    - TypeHint: Line 231: AccessControlManager.create_user - method missing annotation for param 'attributes'
+    - TypeHint: Line 246: AccessControlManager.create_role - method missing annotation for param 'attributes'
+    - TypeHint: Line 358: AccessControlManager.create_session - method missing annotation for param 'context_attrs'
+    ... 还有 26 个问题
+  bt_api_py/security_compliance/core/audit_logger.py
+    - TypeHint: Line 529: initialize_audit_logger - function missing annotation for param 'kwargs'
+    - TypeHint: Line 536: log_audit_event - function missing annotation for param 'kwargs'
+    - TypeHint: Line 135: AuditLogger.__init__ - method missing return annotation
+    - Docstring: Line 524: get_audit_logger - function has incomplete Google-style docstring
+    - Docstring: Line 529: initialize_audit_logger - function has incomplete Google-style docstring
+    ... 还有 11 个问题
+  bt_api_py/security_compliance/core/compliance_monitor.py
+    - TypeHint: Line 37: ComplianceMonitor.__init__ - method missing return annotation
+    - Docstring: Line 37: ComplianceMonitor.__init__ - method has incomplete Google-style docstring
+    - Docstring: Line 89: ComplianceMonitor.run_compliance_check - method has incomplete Google-style docstring
+    - Docstring: Line 114: ComplianceMonitor.generate_compliance_report - method has incomplete Google-style docstring
+  bt_api_py/security_compliance/core/encryption_manager.py
+    - TypeHint: Line 592: create_key_manager - function missing annotation for param 'kwargs'
+    - TypeHint: Line 120: LocalKeyManager.__init__ - method missing return annotation
+    - TypeHint: Line 245: AWSKMSKeyManager.__init__ - method missing return annotation
+    - TypeHint: Line 311: HashiCorpVaultKeyManager.__init__ - method missing return annotation
+    - TypeHint: Line 395: EncryptionManager.__init__ - method missing return annotation
+    ... 还有 30 个问题
+  bt_api_py/security_compliance/core/identity_manager.py
+    - TypeHint: Line 69: IdentityManager.__init__ - method missing return annotation
+    - TypeHint: Line 122: IdentityManager.create_identity - method missing annotation for param 'attributes'
+    - TypeHint: Line 268: IdentityManager.update_identity - method missing annotation for param 'updates'
+    - Docstring: Line 69: IdentityManager.__init__ - method has incomplete Google-style docstring
+    - Docstring: Line 122: IdentityManager.create_identity - method has incomplete Google-style docstring
+    ... 还有 19 个问题
+  bt_api_py/security_compliance/core/threat_detection.py
+    - TypeHint: Line 53: ThreatDetector.__init__ - method missing return annotation
+    - Docstring: Line 53: ThreatDetector.__init__ - method has incomplete Google-style docstring
+    - Docstring: Line 74: ThreatDetector.detect_failed_login - method has incomplete Google-style docstring
+    - Docstring: Line 118: ThreatDetector.detect_suspicious_access_pattern - method has incomplete Google-style docstring
+    - Docstring: Line 154: ThreatDetector.detect_unauthorized_access_attempt - method has incomplete Google-style docstring
+    ... 还有 7 个问题
+  bt_api_py/security_compliance/data/protection.py
+    - TypeHint: Line 61: DataProtectionManager.__init__ - method missing return annotation
+    - TypeHint: Line 61: DataProtectionManager.__init__ - method missing annotation for param 'encryption_manager'
+    - Docstring: Line 61: DataProtectionManager.__init__ - method has incomplete Google-style docstring
+    - Docstring: Line 117: DataProtectionManager.classify_data - method has incomplete Google-style docstring
+    - Docstring: Line 138: DataProtectionManager.mask_data - method has incomplete Google-style docstring
+    ... 还有 10 个问题
+  bt_api_py/security_compliance/framework.py
+    - TypeHint: Line 236: integrate_with_bt_api - function missing return annotation
+    - TypeHint: Line 236: integrate_with_bt_api - function missing annotation for param 'bt_api_instance'
+    - TypeHint: Line 275: require_permission - function missing return annotation
+    - TypeHint: Line 299: audit_access - function missing return annotation
+    - TypeHint: Line 245: secure_create_feed - function missing return annotation
+    ... 还有 26 个问题
+  bt_api_py/security_compliance/monitoring/security_monitoring.py
+    - TypeHint: Line 42: SecurityMonitoring.__init__ - method missing return annotation
+    - TypeHint: Line 42: SecurityMonitoring.__init__ - method missing annotation for param 'audit_logger'
+    - TypeHint: Line 51: SecurityMonitoring.create_alert - method missing annotation for param 'details'
+    - Docstring: Line 42: SecurityMonitoring.__init__ - method has incomplete Google-style docstring
+    - Docstring: Line 51: SecurityMonitoring.create_alert - method has incomplete Google-style docstring
+    ... 还有 5 个问题
+  bt_api_py/security_compliance/network/tls_manager.py
+    - TypeHint: Line 13: TLSManager.__init__ - method missing return annotation
+    - TypeHint: Line 20: TLSManager.get_ssl_context - method missing return annotation
+    - Docstring: Line 13: TLSManager.__init__ - method has incomplete Google-style docstring
+    - Docstring: Line 20: TLSManager.get_ssl_context - method has incomplete Google-style docstring
+    - Docstring: Line 46: TLSManager.validate_certificate - method has incomplete Google-style docstring
+  bt_api_py/security_compliance/recovery/disaster_recovery.py
+    - TypeHint: Line 54: DisasterRecoveryManager.__init__ - method missing return annotation
+    - Docstring: Line 54: DisasterRecoveryManager.__init__ - method has incomplete Google-style docstring
+    - Docstring: Line 99: DisasterRecoveryManager.create_backup_config - method has incomplete Google-style docstring
+    - Docstring: Line 116: DisasterRecoveryManager.create_recovery_plan - method has incomplete Google-style docstring
+    - Docstring: Line 143: DisasterRecoveryManager.initiate_backup - method has incomplete Google-style docstring
+    ... 还有 4 个问题

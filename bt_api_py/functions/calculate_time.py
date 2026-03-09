@@ -1,79 +1,109 @@
 from datetime import UTC, datetime
+from typing import Any
 
-# import time
 import pytz
 
 
-def get_utc_time():
+def get_utc_time() -> str:
+    """Get current UTC time in ISO format.
+
+    Returns:
+        Current UTC time string in format "YYYY-MM-DDTHH:MM:SS.ffffffZ".
+    """
     return datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%S.%fZ")
 
 
-def convert_utc_local_datetime(datetime_utc, timezone=pytz.timezone("Asia/Shanghai")):
-    """
-    Convert a UTC datetime object to a local datetime in the given timezone.
-    If no timezone is provided, defaults to 'Asia/Shanghai'.
+def convert_utc_local_datetime(
+    datetime_utc: datetime, timezone: Any = pytz.timezone("Asia/Shanghai")
+) -> datetime:
+    """Convert UTC datetime to local datetime in given timezone.
 
-    :param datetime_utc: A datetime object in UTC.
-    :param timezone: A pytz timezone object (optional).
-    :return: A datetime object in the local timezone.
+    Args:
+        datetime_utc: A datetime object in UTC.
+        timezone: A pytz timezone object. Defaults to 'Asia/Shanghai'.
+
+    Returns:
+        A datetime object in the local timezone.
     """
-    # 将 UTC 时间转换为目标时区的时间
     dtime_local = datetime_utc.astimezone(timezone)
-
     return dtime_local
 
 
-def get_string_tz_time(tz="Asia/Singapore", string_format="%Y-%m-%d %H:%M:%S.%f"):
-    """generate string timezone datetime in particular timezone
-    :param  tz: timezone in pytz.common_timezones
-    :param  string_format: string format
-    :return: now: timestamp
+def get_string_tz_time(
+    tz: str = "Asia/Singapore", string_format: str = "%Y-%m-%d %H:%M:%S.%f"
+) -> str:
+    """Generate string timezone datetime in particular timezone.
+
+    Args:
+        tz: Timezone in pytz.common_timezones.
+        string_format: String format for output.
+
+    Returns:
+        Formatted timestamp string.
     """
-    tz = pytz.timezone(tz)
-    now = datetime.now(tz).strftime(string_format)
+    tz_obj = pytz.timezone(tz)
+    now = datetime.now(tz_obj).strftime(string_format)
     return now
 
 
-def timestamp2datetime(timestamp, string_format="%Y-%m-%d %H:%M:%S.%f"):
-    """change timestamp to datetime object
-    :param  timestamp: datetime timestamp
-    :param  string_format: string format
-    :return: formatted_time (Str): timestamp
+def timestamp2datetime(timestamp: float, string_format: str = "%Y-%m-%d %H:%M:%S.%f") -> str:
+    """Convert timestamp to formatted datetime string.
+
+    Args:
+        timestamp: Datetime timestamp.
+        string_format: String format for output.
+
+    Returns:
+        Formatted datetime string.
     """
-    # 将时间戳转换为datetime对象
     dt_object = datetime.fromtimestamp(timestamp)
-    # 将datetime对象格式化为字符串形式
     formatted_time = dt_object.strftime(string_format)
     return formatted_time
 
 
 def datetime2timestamp(
-    datetime_string="2023-06-01 09:30:00.000", string_format="%Y-%m-%d %H:%M:%S.%f"
-):
-    """change the string format datetime to timestamp
-    :param  datetime_string: the string format of datetime
-    :param  string_format: string format
-    :return: timestamp
+    datetime_string: str = "2023-06-01 09:30:00.000",
+    string_format: str = "%Y-%m-%d %H:%M:%S.%f",
+) -> float:
+    """Convert string format datetime to timestamp.
+
+    Args:
+        datetime_string: The string format of datetime.
+        string_format: String format of input.
+
+    Returns:
+        Timestamp as float.
     """
     time_date = datetime.strptime(datetime_string, string_format)
     timestamp = time_date.timestamp()
     return timestamp
 
 
-def str2datetime(datetime_string="2023-06-01 09:30:00.0", string_format="%Y-%m-%d %H:%M:%S.%f"):
-    """change datetime string to datetime
-    :param  datetime_string: the string format of datetime
-    :param  string_format: string format
-    :return: datetime
+def str2datetime(
+    datetime_string: str = "2023-06-01 09:30:00.0",
+    string_format: str = "%Y-%m-%d %H:%M:%S.%f",
+) -> datetime:
+    """Convert datetime string to datetime object.
+
+    Args:
+        datetime_string: The string format of datetime.
+        string_format: String format of input.
+
+    Returns:
+        Datetime object.
     """
     return datetime.strptime(datetime_string, string_format)
 
 
-def datetime2str(datetime_obj, string_format="%Y-%m-%d %H:%M:%S.%f"):
-    """change datetime to string format
-    :param  datetime_obj (datetime) timezone in pytz.common_timezones
-    :param  string_format (str) string format
-    :return:  datetime_str
+def datetime2str(datetime_obj: datetime, string_format: str = "%Y-%m-%d %H:%M:%S.%f") -> str:
+    """Convert datetime to string format.
+
+    Args:
+        datetime_obj: Datetime object to convert.
+        string_format: String format for output.
+
+    Returns:
+        Formatted datetime string.
     """
     return datetime_obj.strftime(string_format)
 

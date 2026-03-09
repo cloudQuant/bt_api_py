@@ -1,6 +1,6 @@
-"""
-bitFlyer Exchange Data Configuration
-"""
+from typing import Any
+
+"""bitFlyer Exchange Data Configuration."""
 
 import os
 
@@ -13,7 +13,7 @@ _bitflyer_config = None
 _bitflyer_config_loaded = False
 
 
-def _get_bitflyer_config():
+def _get_bitflyer_config() -> Any | None:
     """Load bitFlyer YAML configuration."""
     global _bitflyer_config, _bitflyer_config_loaded
     if _bitflyer_config_loaded:
@@ -37,7 +37,7 @@ def _get_bitflyer_config():
 class BitflyerExchangeData(ExchangeData):
     """Base class for bitFlyer exchange."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__()
         self.exchange_name = "bitflyer"
         self.rest_url = "https://api.bitflyer.com"
@@ -54,7 +54,7 @@ class BitflyerExchangeData(ExchangeData):
         }
         self.legal_currency = ["JPY", "USD", "EUR", "BTC"]
 
-    def _load_from_config(self, asset_type):
+    def _load_from_config(self, asset_type) -> bool:
         """Load from YAML config."""
         config = _get_bitflyer_config()
         if config is None:
@@ -104,7 +104,7 @@ class BitflyerExchangeData(ExchangeData):
 class BitflyerExchangeDataSpot(BitflyerExchangeData):
     """bitFlyer Spot exchange configuration."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__()
         self.asset_type = "spot"
         self.rest_paths = {}

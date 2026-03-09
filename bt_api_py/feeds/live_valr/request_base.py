@@ -1,6 +1,4 @@
-"""
-VALR REST API request base class – Feed pattern.
-"""
+"""VALR REST API request base class – Feed pattern."""
 
 import hashlib
 import hmac
@@ -26,7 +24,7 @@ class ValrRequestData(Feed):
             Capability.GET_EXCHANGE_INFO,
         }
 
-    def __init__(self, data_queue, **kwargs):
+    def __init__(self, data_queue, **kwargs) -> None:
         super().__init__(data_queue, **kwargs)
         self.data_queue = data_queue
         self.exchange_name = kwargs.get("exchange_name", "VALR___SPOT")
@@ -127,7 +125,7 @@ class ValrRequestData(Feed):
 
     # ── _get_xxx internal methods ───────────────────────────────
 
-    def _get_server_time(self, extra_data=None, **kwargs):
+    def _get_server_time(self, extra_data=None, **kwargs) -> float:
         path = self._params.get_rest_path("get_server_time")
         extra_data = extra_data or {}
         extra_data.update(

@@ -1,6 +1,6 @@
-"""
-Bithumb Exchange Data Configuration
-"""
+from typing import Any
+
+"""Bithumb Exchange Data Configuration."""
 
 import os
 
@@ -13,7 +13,7 @@ _bithumb_config = None
 _bithumb_config_loaded = False
 
 
-def _get_bithumb_config():
+def _get_bithumb_config() -> Any | None:
     """Load Bithumb YAML configuration."""
     global _bithumb_config, _bithumb_config_loaded
     if _bithumb_config_loaded:
@@ -37,7 +37,7 @@ def _get_bithumb_config():
 class BithumbExchangeData(ExchangeData):
     """Base class for Bithumb exchange."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__()
         self.exchange_name = "bithumb"
         self.rest_url = "https://global-openapi.bithumb.pro/openapi/v1"
@@ -61,7 +61,7 @@ class BithumbExchangeData(ExchangeData):
         }
         self.legal_currency = ["USDT", "USD", "BTC", "ETH", "KRW"]
 
-    def _load_from_config(self, asset_type):
+    def _load_from_config(self, asset_type) -> bool:
         """Load from YAML config."""
         config = _get_bithumb_config()
         if config is None:
@@ -112,7 +112,7 @@ class BithumbExchangeData(ExchangeData):
 class BithumbExchangeDataSpot(BithumbExchangeData):
     """Bithumb Spot exchange configuration."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__()
         self.asset_type = "spot"
         self.rest_paths = {}
@@ -127,6 +127,7 @@ class BithumbExchangeDataSpot(BithumbExchangeData):
 
         Returns:
             API period string (e.g., 'm1', 'h1', 'd1')
+
         """
         if period not in self.kline_periods:
             logger.warn(f"Unknown period '{period}', returning as-is")

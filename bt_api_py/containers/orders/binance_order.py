@@ -1,41 +1,67 @@
 import json
 import time
+from typing import Any
 
 from bt_api_py.containers.orders.order import OrderData, OrderStatus
 from bt_api_py.functions.utils import from_dict_get_bool, from_dict_get_float, from_dict_get_string
 
 
 class BinanceForceOrderData:
-    def __init__(self, order_info, symbol_name, asset_type, has_been_json_encoded=False):
+    """Binance force order data container.
+
+    This class holds force order information from Binance exchange.
+    """
+
+    def __init__(
+        self,
+        order_info: dict[str, Any] | str,
+        symbol_name: str,
+        asset_type: str,
+        has_been_json_encoded: bool = False,
+    ) -> None:
+        """Initialize Binance force order data.
+
+        Args:
+            order_info: Order information from exchange (dict or JSON string)
+            symbol_name: Symbol name for the order
+            asset_type: Asset type (SPOT, FUTURE, etc.)
+            has_been_json_encoded: Whether order_info is already JSON encoded
+
+        """
         self.order_info = order_info
         self.exchange_name = "BINANCE"
-        self.local_update_time = time.time()  # 本地时间戳
+        self.local_update_time = time.time()
         self.symbol_name = symbol_name
         self.asset_type = asset_type
         self.has_been_json_encoded = has_been_json_encoded
-        self.order_data = self.order_info["o"] if has_been_json_encoded else None
-        self.all_data = None
+        self.order_data: dict[str, Any] | None = None
+        if has_been_json_encoded and isinstance(self.order_info, dict):
+            self.order_data = self.order_info.get("o")
+        self.all_data: dict[str, Any] | None = None
         self.has_been_init_data = False
-        self.server_time = None
-        self.order_symbol_name = None
-        self.order_side = None
-        self.order_type = None
-        self.order_time_in_force = None
-        self.order_price = None
-        self.order_qty = None
-        self.order_avg_price = None
-        self.order_status = None
-        self.trade_time = None
-        self.last_trade_volume = None
-        self.total_trade_volume = None
+        self.server_time: float | None = None
+        self.order_symbol_name: str | None = None
+        self.order_side: str | None = None
+        self.order_type: str | None = None
+        self.order_time_in_force: str | None = None
+        self.order_price: float | None = None
+        self.order_qty: float | None = None
+        self.order_avg_price: float | None = None
+        self.order_status: OrderStatus | None = None
+        self.trade_time: float | None = None
+        self.last_trade_volume: float | None = None
+        self.total_trade_volume: float | None = None
 
-    def init_data(self):
+    def init_data(self) -> None:
+        """Initialize order data by parsing order_info."""
         if self.has_been_init_data:
             return
         if not self.has_been_json_encoded:
-            self.order_info = json.loads(self.order_info)
-            self.order_data = self.order_info["o"]
-        self.server_time = float(from_dict_get_float(self.order_info, "E"))
+            if isinstance(self.order_info, str):
+                self.order_info = json.loads(self.order_info)
+            self.order_data = self.order_info["o"] if isinstance(self.order_info, dict) else None
+        server_time_raw = from_dict_get_float(self.order_info, "E")
+        self.server_time = float(server_time_raw) if server_time_raw is not None else None
         self.order_symbol_name = from_dict_get_string(self.order_data, "s")
         self.order_side = from_dict_get_string(self.order_data, "S")
         self.order_type = from_dict_get_string(self.order_data, "o")
@@ -48,7 +74,13 @@ class BinanceForceOrderData:
         self.last_trade_volume = from_dict_get_float(self.order_data, "l")
         self.total_trade_volume = from_dict_get_float(self.order_data, "z")
 
-    def get_all_data(self):
+    def get_all_data(self) -> dict[str, Any]:
+        """Get all order data as a dictionary.
+
+        Returns:
+            Dictionary containing all order data fields
+
+        """
         if self.all_data is None:
             self.all_data = {
                 "exchange_name": self.exchange_name,
@@ -63,119 +95,237 @@ class BinanceForceOrderData:
                 "order_price": self.order_price,
                 "order_qty": self.order_qty,
                 "order_avg_price": self.order_avg_price,
-                "order_status": self.order_status.value,
+                "order_status": self.order_status.value if self.order_status else None,
                 "trade_time": self.trade_time,
                 "last_trade_volume": self.last_trade_volume,
                 "total_trade_volume": self.total_trade_volume,
             }
         return self.all_data
 
-    def __str__(self):
+    def __str__(self) -> str:
         self.init_data()
         return json.dumps(self.get_all_data())
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return self.__str__()
 
-    def get_exchange_name(self):
-        """# 交易所名称"""
+    def get_exchange_name(self) -> str:
+        """Get exchange name.
+
+        Returns:
+            Exchange name (BINANCE)
+
+        """
         return self.exchange_name
 
-    def get_symbol_name(self):
-        """# 品种名称"""
+    def get_symbol_name(self) -> str:
+        """Get symbol name.
+
+        Returns:
+            Symbol name
+
+        """
         return self.symbol_name
 
-    def get_asset_type(self):
+    def get_asset_type(self) -> str:
+        """Get asset type.
+
+        Returns:
+            Asset type (SPOT, FUTURE, etc.)
+
+        """
         return self.asset_type
 
-    def get_server_time(self):
-        """# 服务器时间戳"""
+    def get_server_time(self) -> float | None:
+        """Get server timestamp.
+
+        Returns:
+            Server timestamp
+
+        """
         return self.server_time
 
-    def get_local_update_time(self):
-        """# 本地时间戳"""
+    def get_local_update_time(self) -> float:
+        """Get local update timestamp.
+
+        Returns:
+            Local update timestamp
+
+        """
         return self.local_update_time
 
-    def get_order_price(self):
-        """# 订单价格"""
+    def get_order_price(self) -> float | None:
+        """Get order price.
+
+        Returns:
+            Order price
+
+        """
         return self.order_price
 
-    def get_order_qty(self):
+    def get_order_qty(self) -> float | None:
+        """Get order quantity.
+
+        Returns:
+            Order quantity
+
+        """
         return self.order_qty
 
-    def get_order_side(self):
-        """# 订单方向"""
+    def get_order_side(self) -> str | None:
+        """Get order side.
+
+        Returns:
+            Order side (BUY/SELL)
+
+        """
         return self.order_side
 
-    def get_order_status(self):
-        """# 订单状态"""
+    def get_order_status(self) -> OrderStatus | None:
+        """Get order status.
+
+        Returns:
+            Order status
+
+        """
         return self.order_status
 
-    def get_order_symbol_name(self):
-        """# 品种"""
+    def get_order_symbol_name(self) -> str | None:
+        """Get order symbol name.
+
+        Returns:
+            Order symbol name
+
+        """
         return self.order_symbol_name
 
-    def get_order_time_in_force(self):
-        """# 订单有效期类型"""
+    def get_order_time_in_force(self) -> str | None:
+        """Get order time in force.
+
+        Returns:
+            Order time in force type
+
+        """
         return self.order_time_in_force
 
-    def get_order_type(self):
-        """# 订单类型"""
+    def get_order_type(self) -> str | None:
+        """Get order type.
+
+        Returns:
+            Order type
+
+        """
         return self.order_type
 
-    def get_order_avg_price(self):
-        """# 平均价格"""
+    def get_order_avg_price(self) -> float | None:
+        """Get order average price.
+
+        Returns:
+            Average price
+
+        """
         return self.order_avg_price
 
-    def get_trade_time(self):
+    def get_trade_time(self) -> float | None:
+        """Get trade time.
+
+        Returns:
+            Trade timestamp
+
+        """
         return self.trade_time
 
-    def get_last_trade_volume(self):
+    def get_last_trade_volume(self) -> float | None:
+        """Get last trade volume.
+
+        Returns:
+            Last trade volume
+
+        """
         return self.last_trade_volume
 
-    def get_total_trade_volume(self):
+    def get_total_trade_volume(self) -> float | None:
+        """Get total trade volume.
+
+        Returns:
+            Total trade volume
+
+        """
         return self.total_trade_volume
 
 
 class BinanceOrderData(OrderData):
-    """订单类，用于确定订单的属性和方法"""
+    """Binance order data container.
 
-    def __init__(self, order_info, symbol_name, asset_type, has_been_json_encoded=False):
+    This class holds order information from Binance exchange.
+    """
+
+    def __init__(
+        self,
+        order_info: dict[str, Any] | str,
+        symbol_name: str,
+        asset_type: str,
+        has_been_json_encoded: bool = False,
+    ) -> None:
+        """Initialize Binance order data.
+
+        Args:
+            order_info: Order information from exchange (dict or JSON string)
+            symbol_name: Symbol name for the order
+            asset_type: Asset type (SPOT, FUTURE, etc.)
+            has_been_json_encoded: Whether order_info is already JSON encoded
+
+        """
         super().__init__(order_info, has_been_json_encoded)
         self.exchange_name = "BINANCE"
-        self.local_update_time = time.time()  # 本地时间戳
+        self.local_update_time = time.time()
         self.symbol_name = symbol_name
         self.asset_type = asset_type
         self.order_data = self.order_info if has_been_json_encoded else None
-        self.server_time = None
-        self.trade_id = None
-        self.client_order_id = None
-        self.cum_quote = None
-        self.executed_qty = None
-        self.order_id = None
-        self.order_size = None
-        self.order_price = None
-        self.reduce_only = None
-        self.order_side = None
-        self.order_status = None
-        self.order_symbol_name = None
-        self.order_type = None
-        self.order_time_in_force = None
-        self.order_avg_price = None
-        self.origin_order_type = None
-        self.position_side = None
-        self.close_position = None
-        self.trailing_stop_price = None
-        self.trailing_stop_trigger_price = None
-        self.trailing_stop_trigger_price_type = None
-        self.trailing_stop_callback_rate = None
-        self.all_data = None
+        self.server_time: float | None = None
+        self.trade_id: float | None = None
+        self.client_order_id: str | None = None
+        self.cum_quote: float | None = None
+        self.executed_qty: float | None = None
+        self.order_id: str | None = None
+        self.order_size: float | None = None
+        self.order_price: float | None = None
+        self.reduce_only: bool | None = None
+        self.order_side: str | None = None
+        self.order_status: OrderStatus | None = None
+        self.order_symbol_name: str | None = None
+        self.order_type: str | None = None
+        self.order_time_in_force: str | None = None
+        self.order_avg_price: float | None = None
+        self.origin_order_type: str | None = None
+        self.position_side: str | None = None
+        self.close_position: bool | None = None
+        self.trailing_stop_price: float | None = None
+        self.trailing_stop_trigger_price: float | None = None
+        self.trailing_stop_trigger_price_type: str | None = None
+        self.trailing_stop_callback_rate: float | None = None
+        self.all_data: dict[str, Any] | None = None
         self.has_been_init_data = False
 
-    def init_data(self):
+    def init_data(self) -> "BinanceOrderData":
+        """Initialize order data by parsing order_info.
+
+        Returns:
+            Self for method chaining
+
+        Raises:
+            NotImplementedError: This method should be overridden by subclasses
+
+        """
         raise NotImplementedError
 
-    def get_all_data(self):
+    def get_all_data(self) -> dict[str, Any]:
+        """Get all order data as a dictionary.
+
+        Returns:
+            Dictionary containing all order data fields
+
+        """
         if self.all_data is None:
             self.all_data = {
                 "exchange_name": self.exchange_name,
@@ -187,7 +337,7 @@ class BinanceOrderData(OrderData):
                 "client_order_id": self.client_order_id,
                 "order_symbol_name": self.order_symbol_name,
                 "order_type": self.order_type,
-                "order_status": self.order_status.value,
+                "order_status": self.order_status.value if self.order_status else None,
                 "order_size": self.order_size,
                 "order_price": self.order_price,
                 "trade_id": self.trade_id,
@@ -206,145 +356,312 @@ class BinanceOrderData(OrderData):
             }
         return self.all_data
 
-    def __str__(self):
+    def __str__(self) -> str:
         self.init_data()
         return json.dumps(self.get_all_data())
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return self.__str__()
 
-    def get_exchange_name(self):
-        """# 交易所名称"""
+    def get_exchange_name(self) -> str:
+        """Get exchange name.
+
+        Returns:
+            Exchange name (BINANCE)
+
+        """
         return self.exchange_name
 
-    def get_symbol_name(self):
-        """# 品种名称"""
+    def get_symbol_name(self) -> str:
+        """Get symbol name.
+
+        Returns:
+            Symbol name
+
+        """
         return self.symbol_name
 
-    def get_asset_type(self):
+    def get_asset_type(self) -> str:
+        """Get asset type.
+
+        Returns:
+            Asset type (SPOT, FUTURE, etc.)
+
+        """
         return self.asset_type
 
-    def get_server_time(self):
-        """# 服务器时间戳"""
+    def get_server_time(self) -> float | None:
+        """Get server timestamp.
+
+        Returns:
+            Server timestamp
+
+        """
         return self.server_time
 
-    def get_local_update_time(self):
-        """# 本地时间戳"""
+    def get_local_update_time(self) -> float:
+        """Get local update timestamp.
+
+        Returns:
+            Local update timestamp
+
+        """
         return self.local_update_time
 
-    def get_trade_id(self):
-        """# 交易所返回唯一成交id"""
+    def get_trade_id(self) -> float | None:
+        """Get trade ID.
+
+        Returns:
+            Unique trade ID from exchange
+
+        """
         return self.trade_id
 
-    def get_client_order_id(self):
-        """# 客户端自定订单ID"""
+    def get_client_order_id(self) -> str | None:
+        """Get client order ID.
+
+        Returns:
+            Client custom order ID
+
+        """
         return self.client_order_id
 
-    def get_cum_quote(self):
-        """# 成交金额"""
+    def get_cum_quote(self) -> float | None:
+        """Get cumulative quote amount.
+
+        Returns:
+            Cumulative quote amount
+
+        """
         return self.cum_quote
 
-    def get_executed_qty(self):
-        """# 已执行的成交量"""
+    def get_executed_qty(self) -> float | None:
+        """Get executed quantity.
+
+        Returns:
+            Executed quantity
+
+        """
         return self.executed_qty
 
-    def get_order_id(self):
-        """# 订单id"""
+    def get_order_id(self) -> str | None:
+        """Get order ID.
+
+        Returns:
+            Order ID
+
+        """
         return self.order_id
 
-    def get_order_size(self):
-        """# 订单原始数量"""
+    def get_order_size(self) -> float | None:
+        """Get order size.
+
+        Returns:
+            Original order quantity
+
+        """
         return self.order_size
 
-    def get_order_price(self):
-        """# 订单价格"""
+    def get_order_price(self) -> float | None:
+        """Get order price.
+
+        Returns:
+            Order price
+
+        """
         return self.order_price
 
-    def get_reduce_only(self):
-        """# 是否是只减仓单"""
+    def get_reduce_only(self) -> bool | None:
+        """Get reduce only flag.
+
+        Returns:
+            Whether this is a reduce-only order
+
+        """
         return self.reduce_only
 
-    def get_order_side(self):
-        """# 订单方向"""
+    def get_order_side(self) -> str | None:
+        """Get order side.
+
+        Returns:
+            Order side (BUY/SELL)
+
+        """
         return self.order_side
 
-    def get_order_status(self):
-        """# 订单状态"""
+    def get_order_status(self) -> OrderStatus | None:
+        """Get order status.
+
+        Returns:
+            Order status
+
+        """
         return self.order_status
 
-    def get_trailing_stop_price(self):
-        """# 条件单止损价格"""
+    def get_trailing_stop_price(self) -> float | None:
+        """Get trailing stop price.
+
+        Returns:
+            Trailing stop price for conditional orders
+
+        """
         return self.trailing_stop_price
 
-    def get_trailing_stop_trigger_price(self):
-        """# 跟踪止损激活价格"""
+    def get_trailing_stop_trigger_price(self) -> float | None:
+        """Get trailing stop trigger price.
+
+        Returns:
+            Trailing stop activation price
+
+        """
         return self.trailing_stop_trigger_price
 
-    def get_trailing_stop_callback_rate(self):
-        """# 跟踪止损回调比例"""
+    def get_trailing_stop_callback_rate(self) -> float | None:
+        """Get trailing stop callback rate.
+
+        Returns:
+            Trailing stop callback rate
+
+        """
         return self.trailing_stop_callback_rate
 
-    def get_order_symbol_name(self):
-        """# 品种"""
+    def get_order_symbol_name(self) -> str | None:
+        """Get order symbol name.
+
+        Returns:
+            Order symbol name
+
+        """
         return self.order_symbol_name
 
-    def get_order_time_in_force(self):
-        """# 订单有效期类型"""
+    def get_order_time_in_force(self) -> str | None:
+        """Get order time in force.
+
+        Returns:
+            Order time in force type
+
+        """
         return self.order_time_in_force
 
-    def get_order_type(self):
-        """# 订单类型"""
+    def get_order_type(self) -> str | None:
+        """Get order type.
+
+        Returns:
+            Order type
+
+        """
         return self.order_type
 
-    def get_trailing_stop_trigger_price_type(self):
-        """# 触发价类型"""
+    def get_trailing_stop_trigger_price_type(self) -> str | None:
+        """Get trailing stop trigger price type.
+
+        Returns:
+            Trigger price type
+
+        """
         return self.trailing_stop_trigger_price_type
 
-    def get_order_avg_price(self):
-        """# 平均价格"""
+    def get_order_avg_price(self) -> float | None:
+        """Get order average price.
+
+        Returns:
+            Average price
+
+        """
         return self.order_avg_price
 
-    def get_origin_order_type(self):
-        """# 原始订单类型"""
+    def get_origin_order_type(self) -> str | None:
+        """Get original order type.
+
+        Returns:
+            Original order type
+
+        """
         return self.origin_order_type
 
-    def get_position_side(self):
-        """# 持仓方向"""
+    def get_position_side(self) -> str | None:
+        """Get position side.
+
+        Returns:
+            Position side
+
+        """
         return self.position_side
 
-    def get_close_position(self):
-        """# 是否为触发平仓单; 仅在条件订单情况下会推送此字段"""
+    def get_close_position(self) -> bool | None:
+        """Get close position flag.
+
+        Returns:
+            Whether this is a close position order (only for conditional orders)
+
+        """
         return self.close_position
 
-    def get_stop_loss_price(self):
-        # stop loss price
+    def get_stop_loss_price(self) -> None:
+        """Get stop loss price.
+
+        Returns:
+            Stop loss price (not implemented)
+
+        """
         return None
 
-    def get_stop_loss_trigger_price(self):
-        # stop_loss_trigger price
+    def get_stop_loss_trigger_price(self) -> None:
+        """Get stop loss trigger price.
+
+        Returns:
+            Stop loss trigger price (not implemented)
+
+        """
         return None
 
-    def get_stop_loss_trigger_price_type(self):
-        # stop loss trigger price type
+    def get_stop_loss_trigger_price_type(self) -> None:
+        """Get stop loss trigger price type.
+
+        Returns:
+            Stop loss trigger price type (not implemented)
+
+        """
         return None
 
-    def get_take_profit_price(self):
-        # get stop profit price
+    def get_take_profit_price(self) -> None:
+        """Get take profit price.
+
+        Returns:
+            Take profit price (not implemented)
+
+        """
         return None
 
-    def get_take_profit_trigger_price(self):
-        # get stop profit trigger price
+    def get_take_profit_trigger_price(self) -> None:
+        """Get take profit trigger price.
+
+        Returns:
+            Take profit trigger price (not implemented)
+
+        """
         return None
 
-    def get_take_profit_trigger_price_type(self):
-        # get a stop profit trigger price type
+    def get_take_profit_trigger_price_type(self) -> None:
+        """Get take profit trigger price type.
+
+        Returns:
+            Take profit trigger price type (not implemented)
+
+        """
         return None
 
 
 class BinanceRequestOrderData(BinanceOrderData):
-    """订单类，用于确定订单的属性和方法"""
+    """Binance REST API order data container."""
 
-    def init_data(self):
+    def init_data(self) -> "BinanceRequestOrderData":
+        """Initialize order data from REST API response.
+
+        Returns:
+            Self for method chaining
+
+        """
         if not self.has_been_json_encoded:
             self.order_info = json.loads(self.order_info)
             self.order_data = self.order_info["data"]
@@ -378,9 +695,15 @@ class BinanceRequestOrderData(BinanceOrderData):
 
 
 class BinanceSwapWssOrderData(BinanceOrderData):
-    """订单类，用于确定订单的属性和方法"""
+    """Binance swap WebSocket order data container."""
 
-    def init_data(self):
+    def init_data(self) -> "BinanceSwapWssOrderData":
+        """Initialize order data from WebSocket message.
+
+        Returns:
+            Self for method chaining
+
+        """
         if not self.has_been_json_encoded:
             self.order_data = json.loads(self.order_info)
             self.has_been_json_encoded = True
@@ -413,9 +736,15 @@ class BinanceSwapWssOrderData(BinanceOrderData):
 
 
 class BinanceSpotWssOrderData(BinanceOrderData):
-    """spot订单类，用于确定订单的属性和方法"""
+    """Binance spot WebSocket order data container."""
 
-    def init_data(self):
+    def init_data(self) -> "BinanceSpotWssOrderData":
+        """Initialize order data from WebSocket message.
+
+        Returns:
+            Self for method chaining
+
+        """
         if not self.has_been_json_encoded:
             self.order_data = json.loads(self.order_info)
             self.has_been_json_encoded = True
@@ -429,19 +758,10 @@ class BinanceSpotWssOrderData(BinanceOrderData):
         self.order_id = from_dict_get_string(self.order_data, "i")
         self.order_size = from_dict_get_float(self.order_data, "q")
         self.order_price = from_dict_get_float(self.order_data, "p")
-        # self.reduce_only = from_dict_get_bool(self.order_data, "R")
         self.order_side = from_dict_get_string(self.order_data, "S")
         self.order_status = OrderStatus.from_value(from_dict_get_string(self.order_data, "X"))
-        # self.trailing_stop_price = from_dict_get_float(self.order_data, "sp")
-        # self.trailing_stop_trigger_price = from_dict_get_float(self.order_data, "AP")
-        # self.trailing_stop_callback_rate = from_dict_get_float(self.order_data, "cr")
         self.order_symbol_name = from_dict_get_string(self.order_data, "s")
         self.order_time_in_force = from_dict_get_string(self.order_data, "f")
         self.order_type = from_dict_get_string(self.order_data, "o")
-        # self.trailing_stop_trigger_price_type = from_dict_get_float(self.order_data, "wt")
-        # self.order_avg_price = from_dict_get_float(self.order_data, "ap")
-        # self.origin_order_type = from_dict_get_string(self.order_data, "ot")
-        # self.position_side = from_dict_get_string(self.order_data, "ps")
-        # self.close_position = from_dict_get_float(self.order_data, "cp")
         self.has_been_init_data = True
         return self

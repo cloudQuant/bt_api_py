@@ -1,11 +1,11 @@
-"""
-BigONE Exchange Data Configuration
+"""BigONE Exchange Data Configuration.
 
 BigONE API v3 with JWT (HS256) authentication.
 Symbol format: BTC-USDT (dash separated).
 Responses wrapped in {"data": ...}.
 """
 
+from typing import Any
 import os
 
 from bt_api_py.containers.exchanges.exchange_data import ExchangeData
@@ -17,7 +17,7 @@ _bigone_config = None
 _bigone_config_loaded = False
 
 
-def _get_bigone_config():
+def _get_bigone_config() -> Any | None:
     """Load BigONE YAML configuration."""
     global _bigone_config, _bigone_config_loaded
     if _bigone_config_loaded:
@@ -41,7 +41,7 @@ def _get_bigone_config():
 class BigONEExchangeData(ExchangeData):
     """Base class for BigONE exchange."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__()
         self.exchange_name = "BIGONE___SPOT"
         self.rest_url = "https://big.one/api/v3"
@@ -62,7 +62,7 @@ class BigONEExchangeData(ExchangeData):
         }
         self.legal_currency = ["USDT", "USD", "BTC", "ETH", "EUR"]
 
-    def _load_from_config(self, asset_type):
+    def _load_from_config(self, asset_type) -> bool:
         """Load from YAML config."""
         config = _get_bigone_config()
         if config is None:
@@ -108,18 +108,18 @@ class BigONEExchangeData(ExchangeData):
 
         return True
 
-    def get_symbol(self, symbol):
+    def get_symbol(self, symbol: str) -> str:
         """Convert symbol to BigONE format (dash separated, uppercase).
         e.g. 'BTC/USDT' -> 'BTC-USDT', 'BTCUSDT' kept as-is if already has dash.
         """
         s = symbol.upper().replace("/", "-").replace("_", "-")
         return s
 
-    def get_period(self, period):
+    def get_period(self, period: str) -> str:
         """Map standard period to BigONE kline period."""
         return self.kline_periods.get(period, period)
 
-    def get_rest_path(self, request_type):
+    def get_rest_path(self, request_type: str, **kwargs) -> str:
         """Get REST path for request_type. Raises ValueError if not found."""
         path = self.rest_paths.get(request_type)
         if path is None:
@@ -128,7 +128,7 @@ class BigONEExchangeData(ExchangeData):
             )
         return path
 
-    def get_wss_path(self, channel_type, symbol=None):
+    def get_wss_path(self, channel_type, symbol: str | None = None, **kwargs) -> str:
         """Get WebSocket subscription path."""
         path = self.wss_paths.get(channel_type, "")
         if symbol and "{symbol}" in str(path):
@@ -139,7 +139,7 @@ class BigONEExchangeData(ExchangeData):
 class BigONEExchangeDataSpot(BigONEExchangeData):
     """BigONE Spot exchange configuration."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__()
         self.asset_type = "spot"
         if not self._load_from_config("spot"):

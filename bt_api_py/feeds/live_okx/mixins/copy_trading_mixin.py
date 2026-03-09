@@ -13,14 +13,14 @@ class CopyTradingMixin:
 
     def _copytrading_get_current_subpositions(
         self,
-        inst_type=None,
-        inst_id=None,
-        after=None,
-        before=None,
-        limit=None,
-        extra_data=None,
-        **kwargs,
-    ):
+        inst_type: Any = None,
+        inst_id: Any = None,
+        after: Any = None,
+        before: Any = None,
+        limit: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """
         Get existing lead positions
         :param inst_type: Instrument type, e.g. SPOT, MARGIN, SWAP, FUTURES, OPTION
@@ -60,7 +60,9 @@ class CopyTradingMixin:
         return path, params, extra_data
 
     @staticmethod
-    def _copytrading_get_current_subpositions_normalize_function(input_data, extra_data):
+    def _copytrading_get_current_subpositions_normalize_function(
+        input_data: Any, extra_data: Any
+    ) -> None:
         """Normalize copy trading current subpositions data"""
         status = input_data.get("code") == "0"
         if "data" not in input_data:
@@ -71,14 +73,14 @@ class CopyTradingMixin:
 
     def copytrading_get_current_subpositions(
         self,
-        inst_type=None,
-        inst_id=None,
-        after=None,
-        before=None,
-        limit=None,
-        extra_data=None,
-        **kwargs,
-    ):
+        inst_type: Any = None,
+        inst_id: Any = None,
+        after: Any = None,
+        before: Any = None,
+        limit: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """Get existing lead positions"""
         path, params, extra_data = self._copytrading_get_current_subpositions(
             inst_type, inst_id, after, before, limit, extra_data, **kwargs
@@ -88,14 +90,14 @@ class CopyTradingMixin:
 
     def async_copytrading_get_current_subpositions(
         self,
-        inst_type=None,
-        inst_id=None,
-        after=None,
-        before=None,
-        limit=None,
-        extra_data=None,
-        **kwargs,
-    ):
+        inst_type: Any = None,
+        inst_id: Any = None,
+        after: Any = None,
+        before: Any = None,
+        limit: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """Async get existing lead positions"""
         path, params, extra_data = self._copytrading_get_current_subpositions(
             inst_type, inst_id, after, before, limit, extra_data, **kwargs
@@ -107,14 +109,14 @@ class CopyTradingMixin:
 
     def _copytrading_get_subpositions_history(
         self,
-        inst_type=None,
-        inst_id=None,
-        after=None,
-        before=None,
-        limit=None,
-        extra_data=None,
-        **kwargs,
-    ):
+        inst_type: Any = None,
+        inst_id: Any = None,
+        after: Any = None,
+        before: Any = None,
+        limit: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """
         Lead position history
         :param inst_type: Instrument type, e.g. SPOT, MARGIN, SWAP, FUTURES, OPTION
@@ -154,7 +156,9 @@ class CopyTradingMixin:
         return path, params, extra_data
 
     @staticmethod
-    def _copytrading_get_subpositions_history_normalize_function(input_data, extra_data):
+    def _copytrading_get_subpositions_history_normalize_function(
+        input_data: Any, extra_data: Any
+    ) -> None:
         """Normalize copy trading subpositions history data"""
         status = input_data.get("code") == "0"
         if "data" not in input_data:
@@ -165,14 +169,14 @@ class CopyTradingMixin:
 
     def copytrading_get_subpositions_history(
         self,
-        inst_type=None,
-        inst_id=None,
-        after=None,
-        before=None,
-        limit=None,
-        extra_data=None,
-        **kwargs,
-    ):
+        inst_type: Any = None,
+        inst_id: Any = None,
+        after: Any = None,
+        before: Any = None,
+        limit: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """Lead position history"""
         path, params, extra_data = self._copytrading_get_subpositions_history(
             inst_type, inst_id, after, before, limit, extra_data, **kwargs
@@ -182,14 +186,14 @@ class CopyTradingMixin:
 
     def async_copytrading_get_subpositions_history(
         self,
-        inst_type=None,
-        inst_id=None,
-        after=None,
-        before=None,
-        limit=None,
-        extra_data=None,
-        **kwargs,
-    ):
+        inst_type: Any = None,
+        inst_id: Any = None,
+        after: Any = None,
+        before: Any = None,
+        limit: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """Async lead position history"""
         path, params, extra_data = self._copytrading_get_subpositions_history(
             inst_type, inst_id, after, before, limit, extra_data, **kwargs
@@ -201,16 +205,16 @@ class CopyTradingMixin:
 
     def _copytrading_algo_order(
         self,
-        sub_pos_id,
-        tp_trigger_px=None,
-        tp_trigger_px_type=None,
-        sl_trigger_px=None,
-        sl_trigger_px_type=None,
-        tp_ord_px=None,
-        sl_ord_px=None,
-        extra_data=None,
-        **kwargs,
-    ):
+        sub_pos_id: Any,
+        tp_trigger_px: Any = None,
+        tp_trigger_px_type: Any = None,
+        sl_trigger_px: Any = None,
+        sl_trigger_px_type: Any = None,
+        tp_ord_px: Any = None,
+        sl_ord_px: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """
         Place lead stop order
         :param sub_pos_id: Sub position ID
@@ -256,7 +260,7 @@ class CopyTradingMixin:
         return path, body, extra_data
 
     @staticmethod
-    def _copytrading_algo_order_normalize_function(input_data, extra_data):
+    def _copytrading_algo_order_normalize_function(input_data: Any, extra_data: Any) -> None:
         """Normalize copy trading algo order response"""
         status = input_data.get("code") == "0"
         if "data" not in input_data:
@@ -267,16 +271,16 @@ class CopyTradingMixin:
 
     def copytrading_algo_order(
         self,
-        sub_pos_id,
-        tp_trigger_px=None,
-        tp_trigger_px_type=None,
-        sl_trigger_px=None,
-        sl_trigger_px_type=None,
-        tp_ord_px=None,
-        sl_ord_px=None,
-        extra_data=None,
-        **kwargs,
-    ):
+        sub_pos_id: Any,
+        tp_trigger_px: Any = None,
+        tp_trigger_px_type: Any = None,
+        sl_trigger_px: Any = None,
+        sl_trigger_px_type: Any = None,
+        tp_ord_px: Any = None,
+        sl_ord_px: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """Place lead stop order"""
         path, body, extra_data = self._copytrading_algo_order(
             sub_pos_id,
@@ -294,16 +298,16 @@ class CopyTradingMixin:
 
     def async_copytrading_algo_order(
         self,
-        sub_pos_id,
-        tp_trigger_px=None,
-        tp_trigger_px_type=None,
-        sl_trigger_px=None,
-        sl_trigger_px_type=None,
-        tp_ord_px=None,
-        sl_ord_px=None,
-        extra_data=None,
-        **kwargs,
-    ):
+        sub_pos_id: Any,
+        tp_trigger_px: Any = None,
+        tp_trigger_px_type: Any = None,
+        sl_trigger_px: Any = None,
+        sl_trigger_px_type: Any = None,
+        tp_ord_px: Any = None,
+        sl_ord_px: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """Async place lead stop order"""
         path, body, extra_data = self._copytrading_algo_order(
             sub_pos_id,
@@ -320,7 +324,9 @@ class CopyTradingMixin:
             self.async_request(path, body=body, extra_data=extra_data), callback=self.async_callback
         )
 
-    def _copytrading_close_subposition(self, sub_pos_id, extra_data=None, **kwargs):
+    def _copytrading_close_subposition(
+        self, sub_pos_id: Any, extra_data: Any = None, **kwargs: Any
+    ) -> None:
         """
         Close lead position
         :param sub_pos_id: Sub position ID
@@ -348,7 +354,7 @@ class CopyTradingMixin:
         return path, body, extra_data
 
     @staticmethod
-    def _copytrading_close_subposition_normalize_function(input_data, extra_data):
+    def _copytrading_close_subposition_normalize_function(input_data: Any, extra_data: Any) -> None:
         """Normalize copy trading close subposition response"""
         status = input_data.get("code") == "0"
         if "data" not in input_data:
@@ -357,7 +363,9 @@ class CopyTradingMixin:
         target_data = [data[0]] if len(data) > 0 else []
         return target_data, status
 
-    def copytrading_close_subposition(self, sub_pos_id, extra_data=None, **kwargs):
+    def copytrading_close_subposition(
+        self, sub_pos_id: Any, extra_data: Any = None, **kwargs: Any
+    ) -> None:
         """Close lead position"""
         path, body, extra_data = self._copytrading_close_subposition(
             sub_pos_id, extra_data, **kwargs
@@ -365,7 +373,9 @@ class CopyTradingMixin:
         data = self.request(path, body=body, extra_data=extra_data)
         return data
 
-    def async_copytrading_close_subposition(self, sub_pos_id, extra_data=None, **kwargs):
+    def async_copytrading_close_subposition(
+        self, sub_pos_id: Any, extra_data: Any = None, **kwargs: Any
+    ) -> None:
         """Async close lead position"""
         path, body, extra_data = self._copytrading_close_subposition(
             sub_pos_id, extra_data, **kwargs
@@ -374,7 +384,7 @@ class CopyTradingMixin:
             self.async_request(path, body=body, extra_data=extra_data), callback=self.async_callback
         )
 
-    def _copytrading_get_instruments(self, extra_data=None, **kwargs):
+    def _copytrading_get_instruments(self, extra_data: Any = None, **kwargs: Any) -> None:
         """
         Leading instruments
         :param extra_data: extra_data, default is None, can be a dict passed by user
@@ -399,7 +409,7 @@ class CopyTradingMixin:
         return path, params, extra_data
 
     @staticmethod
-    def _copytrading_get_instruments_normalize_function(input_data, extra_data):
+    def _copytrading_get_instruments_normalize_function(input_data: Any, extra_data: Any) -> None:
         """Normalize copy trading instruments data"""
         status = input_data.get("code") == "0"
         if "data" not in input_data:
@@ -408,13 +418,13 @@ class CopyTradingMixin:
         target_data = data if len(data) > 0 else []
         return target_data, status
 
-    def copytrading_get_instruments(self, extra_data=None, **kwargs):
+    def copytrading_get_instruments(self, extra_data: Any = None, **kwargs: Any) -> None:
         """Leading instruments"""
         path, params, extra_data = self._copytrading_get_instruments(extra_data, **kwargs)
         data = self.request(path, params=params, extra_data=extra_data)
         return data
 
-    def async_copytrading_get_instruments(self, extra_data=None, **kwargs):
+    def async_copytrading_get_instruments(self, extra_data: Any = None, **kwargs: Any) -> None:
         """Async leading instruments"""
         path, params, extra_data = self._copytrading_get_instruments(extra_data, **kwargs)
         self.submit(
@@ -422,7 +432,9 @@ class CopyTradingMixin:
             callback=self.async_callback,
         )
 
-    def _copytrading_set_instruments(self, inst_type, inst_ids=None, extra_data=None, **kwargs):
+    def _copytrading_set_instruments(
+        self, inst_type: Any, inst_ids: Any = None, extra_data: Any = None, **kwargs: Any
+    ) -> None:
         """
         Amend leading instruments
         :param inst_type: Instrument type, e.g. SPOT, MARGIN, SWAP, FUTURES, OPTION
@@ -453,7 +465,7 @@ class CopyTradingMixin:
         return path, body, extra_data
 
     @staticmethod
-    def _copytrading_set_instruments_normalize_function(input_data, extra_data):
+    def _copytrading_set_instruments_normalize_function(input_data: Any, extra_data: Any) -> None:
         """Normalize copy trading set instruments response"""
         status = input_data.get("code") == "0"
         if "data" not in input_data:
@@ -462,7 +474,9 @@ class CopyTradingMixin:
         target_data = [data[0]] if len(data) > 0 else []
         return target_data, status
 
-    def copytrading_set_instruments(self, inst_type, inst_ids=None, extra_data=None, **kwargs):
+    def copytrading_set_instruments(
+        self, inst_type: Any, inst_ids: Any = None, extra_data: Any = None, **kwargs: Any
+    ) -> None:
         """Amend leading instruments"""
         path, body, extra_data = self._copytrading_set_instruments(
             inst_type, inst_ids, extra_data, **kwargs
@@ -471,8 +485,8 @@ class CopyTradingMixin:
         return data
 
     def async_copytrading_set_instruments(
-        self, inst_type, inst_ids=None, extra_data=None, **kwargs
-    ):
+        self, inst_type: Any, inst_ids: Any = None, extra_data: Any = None, **kwargs: Any
+    ) -> None:
         """Async amend leading instruments"""
         path, body, extra_data = self._copytrading_set_instruments(
             inst_type, inst_ids, extra_data, **kwargs
@@ -482,8 +496,13 @@ class CopyTradingMixin:
         )
 
     def _copytrading_get_profit_sharing_details(
-        self, after=None, before=None, limit=None, extra_data=None, **kwargs
-    ):
+        self,
+        after: Any = None,
+        before: Any = None,
+        limit: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """
         Profit sharing details
         :param after: Pagination (older data)
@@ -517,7 +536,9 @@ class CopyTradingMixin:
         return path, params, extra_data
 
     @staticmethod
-    def _copytrading_get_profit_sharing_details_normalize_function(input_data, extra_data):
+    def _copytrading_get_profit_sharing_details_normalize_function(
+        input_data: Any, extra_data: Any
+    ) -> None:
         """Normalize copy trading profit sharing details data"""
         status = input_data.get("code") == "0"
         if "data" not in input_data:
@@ -527,8 +548,13 @@ class CopyTradingMixin:
         return target_data, status
 
     def copytrading_get_profit_sharing_details(
-        self, after=None, before=None, limit=None, extra_data=None, **kwargs
-    ):
+        self,
+        after: Any = None,
+        before: Any = None,
+        limit: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """Profit sharing details"""
         path, params, extra_data = self._copytrading_get_profit_sharing_details(
             after, before, limit, extra_data, **kwargs
@@ -537,8 +563,13 @@ class CopyTradingMixin:
         return data
 
     def async_copytrading_get_profit_sharing_details(
-        self, after=None, before=None, limit=None, extra_data=None, **kwargs
-    ):
+        self,
+        after: Any = None,
+        before: Any = None,
+        limit: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """Async profit sharing details"""
         path, params, extra_data = self._copytrading_get_profit_sharing_details(
             after, before, limit, extra_data, **kwargs
@@ -548,7 +579,7 @@ class CopyTradingMixin:
             callback=self.async_callback,
         )
 
-    def _copytrading_get_total_profit_sharing(self, extra_data=None, **kwargs):
+    def _copytrading_get_total_profit_sharing(self, extra_data: Any = None, **kwargs: Any) -> None:
         """
         Total profit sharing
         :param extra_data: extra_data, default is None, can be a dict passed by user
@@ -573,7 +604,9 @@ class CopyTradingMixin:
         return path, params, extra_data
 
     @staticmethod
-    def _copytrading_get_total_profit_sharing_normalize_function(input_data, extra_data):
+    def _copytrading_get_total_profit_sharing_normalize_function(
+        input_data: Any, extra_data: Any
+    ) -> None:
         """Normalize copy trading total profit sharing data"""
         status = input_data.get("code") == "0"
         if "data" not in input_data:
@@ -582,13 +615,15 @@ class CopyTradingMixin:
         target_data = data if len(data) > 0 else []
         return target_data, status
 
-    def copytrading_get_total_profit_sharing(self, extra_data=None, **kwargs):
+    def copytrading_get_total_profit_sharing(self, extra_data: Any = None, **kwargs: Any) -> None:
         """Total profit sharing"""
         path, params, extra_data = self._copytrading_get_total_profit_sharing(extra_data, **kwargs)
         data = self.request(path, params=params, extra_data=extra_data)
         return data
 
-    def async_copytrading_get_total_profit_sharing(self, extra_data=None, **kwargs):
+    def async_copytrading_get_total_profit_sharing(
+        self, extra_data: Any = None, **kwargs: Any
+    ) -> None:
         """Async total profit sharing"""
         path, params, extra_data = self._copytrading_get_total_profit_sharing(extra_data, **kwargs)
         self.submit(
@@ -597,8 +632,13 @@ class CopyTradingMixin:
         )
 
     def _copytrading_get_unrealized_profit_sharing_details(
-        self, after=None, before=None, limit=None, extra_data=None, **kwargs
-    ):
+        self,
+        after: Any = None,
+        before: Any = None,
+        limit: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """
         Unrealized profit sharing details
         :param after: Pagination (older data)
@@ -633,8 +673,8 @@ class CopyTradingMixin:
 
     @staticmethod
     def _copytrading_get_unrealized_profit_sharing_details_normalize_function(
-        input_data, extra_data
-    ):
+        input_data: Any, extra_data: Any
+    ) -> None:
         """Normalize copy trading unrealized profit sharing details data"""
         status = input_data.get("code") == "0"
         if "data" not in input_data:
@@ -644,8 +684,13 @@ class CopyTradingMixin:
         return target_data, status
 
     def copytrading_get_unrealized_profit_sharing_details(
-        self, after=None, before=None, limit=None, extra_data=None, **kwargs
-    ):
+        self,
+        after: Any = None,
+        before: Any = None,
+        limit: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """Unrealized profit sharing details"""
         path, params, extra_data = self._copytrading_get_unrealized_profit_sharing_details(
             after, before, limit, extra_data, **kwargs
@@ -654,8 +699,13 @@ class CopyTradingMixin:
         return data
 
     def async_copytrading_get_unrealized_profit_sharing_details(
-        self, after=None, before=None, limit=None, extra_data=None, **kwargs
-    ):
+        self,
+        after: Any = None,
+        before: Any = None,
+        limit: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """Async unrealized profit sharing details"""
         path, params, extra_data = self._copytrading_get_unrealized_profit_sharing_details(
             after, before, limit, extra_data, **kwargs
@@ -665,7 +715,9 @@ class CopyTradingMixin:
             callback=self.async_callback,
         )
 
-    def _copytrading_get_total_unrealized_profit_sharing(self, extra_data=None, **kwargs):
+    def _copytrading_get_total_unrealized_profit_sharing(
+        self, extra_data: Any = None, **kwargs: Any
+    ) -> None:
         """
         Total unrealized profit sharing
         :param extra_data: extra_data, default is None, can be a dict passed by user
@@ -690,7 +742,9 @@ class CopyTradingMixin:
         return path, params, extra_data
 
     @staticmethod
-    def _copytrading_get_total_unrealized_profit_sharing_normalize_function(input_data, extra_data):
+    def _copytrading_get_total_unrealized_profit_sharing_normalize_function(
+        input_data: Any, extra_data: Any
+    ) -> None:
         """Normalize copy trading total unrealized profit sharing data"""
         status = input_data.get("code") == "0"
         if "data" not in input_data:
@@ -699,7 +753,9 @@ class CopyTradingMixin:
         target_data = data if len(data) > 0 else []
         return target_data, status
 
-    def copytrading_get_total_unrealized_profit_sharing(self, extra_data=None, **kwargs):
+    def copytrading_get_total_unrealized_profit_sharing(
+        self, extra_data: Any = None, **kwargs: Any
+    ) -> None:
         """Total unrealized profit sharing"""
         path, params, extra_data = self._copytrading_get_total_unrealized_profit_sharing(
             extra_data, **kwargs
@@ -707,7 +763,9 @@ class CopyTradingMixin:
         data = self.request(path, params=params, extra_data=extra_data)
         return data
 
-    def async_copytrading_get_total_unrealized_profit_sharing(self, extra_data=None, **kwargs):
+    def async_copytrading_get_total_unrealized_profit_sharing(
+        self, extra_data: Any = None, **kwargs: Any
+    ) -> None:
         """Async total unrealized profit sharing"""
         path, params, extra_data = self._copytrading_get_total_unrealized_profit_sharing(
             extra_data, **kwargs
@@ -718,8 +776,8 @@ class CopyTradingMixin:
         )
 
     def _copytrading_set_profit_sharing_ratio(
-        self, profit_sharing_ratio, extra_data=None, **kwargs
-    ):
+        self, profit_sharing_ratio: Any, extra_data: Any = None, **kwargs: Any
+    ) -> None:
         """
         Amend profit sharing ratio
         :param profit_sharing_ratio: Profit sharing ratio, e.g. 10 means 10%
@@ -747,7 +805,9 @@ class CopyTradingMixin:
         return path, body, extra_data
 
     @staticmethod
-    def _copytrading_set_profit_sharing_ratio_normalize_function(input_data, extra_data):
+    def _copytrading_set_profit_sharing_ratio_normalize_function(
+        input_data: Any, extra_data: Any
+    ) -> None:
         """Normalize copy trading set profit sharing ratio response"""
         status = input_data.get("code") == "0"
         if "data" not in input_data:
@@ -756,7 +816,9 @@ class CopyTradingMixin:
         target_data = [data[0]] if len(data) > 0 else []
         return target_data, status
 
-    def copytrading_set_profit_sharing_ratio(self, profit_sharing_ratio, extra_data=None, **kwargs):
+    def copytrading_set_profit_sharing_ratio(
+        self, profit_sharing_ratio: Any, extra_data: Any = None, **kwargs: Any
+    ) -> None:
         """Amend profit sharing ratio"""
         path, body, extra_data = self._copytrading_set_profit_sharing_ratio(
             profit_sharing_ratio, extra_data, **kwargs
@@ -765,8 +827,8 @@ class CopyTradingMixin:
         return data
 
     def async_copytrading_set_profit_sharing_ratio(
-        self, profit_sharing_ratio, extra_data=None, **kwargs
-    ):
+        self, profit_sharing_ratio: Any, extra_data: Any = None, **kwargs: Any
+    ) -> None:
         """Async amend profit sharing ratio"""
         path, body, extra_data = self._copytrading_set_profit_sharing_ratio(
             profit_sharing_ratio, extra_data, **kwargs
@@ -775,7 +837,7 @@ class CopyTradingMixin:
             self.async_request(path, body=body, extra_data=extra_data), callback=self.async_callback
         )
 
-    def _copytrading_get_config(self, extra_data=None, **kwargs):
+    def _copytrading_get_config(self, extra_data: Any = None, **kwargs: Any) -> None:
         """
         Account configuration
         :param extra_data: extra_data, default is None, can be a dict passed by user
@@ -800,7 +862,7 @@ class CopyTradingMixin:
         return path, params, extra_data
 
     @staticmethod
-    def _copytrading_get_config_normalize_function(input_data, extra_data):
+    def _copytrading_get_config_normalize_function(input_data: Any, extra_data: Any) -> None:
         """Normalize copy trading config data"""
         status = input_data.get("code") == "0"
         if "data" not in input_data:
@@ -809,13 +871,13 @@ class CopyTradingMixin:
         target_data = data if len(data) > 0 else []
         return target_data, status
 
-    def copytrading_get_config(self, extra_data=None, **kwargs):
+    def copytrading_get_config(self, extra_data: Any = None, **kwargs: Any) -> None:
         """Account configuration"""
         path, params, extra_data = self._copytrading_get_config(extra_data, **kwargs)
         data = self.request(path, params=params, extra_data=extra_data)
         return data
 
-    def async_copytrading_get_config(self, extra_data=None, **kwargs):
+    def async_copytrading_get_config(self, extra_data: Any = None, **kwargs: Any) -> None:
         """Async account configuration"""
         path, params, extra_data = self._copytrading_get_config(extra_data, **kwargs)
         self.submit(
@@ -823,7 +885,9 @@ class CopyTradingMixin:
             callback=self.async_callback,
         )
 
-    def _copytrading_first_copy_settings(self, copy_inst_id, lever=None, extra_data=None, **kwargs):
+    def _copytrading_first_copy_settings(
+        self, copy_inst_id: Any, lever: Any = None, extra_data: Any = None, **kwargs: Any
+    ) -> None:
         """
         First copy settings
         :param copy_inst_id: Copy instrument ID, unique identifier for the lead trader
@@ -854,7 +918,9 @@ class CopyTradingMixin:
         return path, body, extra_data
 
     @staticmethod
-    def _copytrading_first_copy_settings_normalize_function(input_data, extra_data):
+    def _copytrading_first_copy_settings_normalize_function(
+        input_data: Any, extra_data: Any
+    ) -> None:
         """Normalize copy trading first copy settings response"""
         status = input_data.get("code") == "0"
         if "data" not in input_data:
@@ -863,7 +929,9 @@ class CopyTradingMixin:
         target_data = [data[0]] if len(data) > 0 else []
         return target_data, status
 
-    def copytrading_first_copy_settings(self, copy_inst_id, lever=None, extra_data=None, **kwargs):
+    def copytrading_first_copy_settings(
+        self, copy_inst_id: Any, lever: Any = None, extra_data: Any = None, **kwargs: Any
+    ) -> None:
         """First copy settings"""
         path, body, extra_data = self._copytrading_first_copy_settings(
             copy_inst_id, lever, extra_data, **kwargs
@@ -872,8 +940,8 @@ class CopyTradingMixin:
         return data
 
     def async_copytrading_first_copy_settings(
-        self, copy_inst_id, lever=None, extra_data=None, **kwargs
-    ):
+        self, copy_inst_id: Any, lever: Any = None, extra_data: Any = None, **kwargs: Any
+    ) -> None:
         """Async first copy settings"""
         path, body, extra_data = self._copytrading_first_copy_settings(
             copy_inst_id, lever, extra_data, **kwargs
@@ -882,7 +950,9 @@ class CopyTradingMixin:
             self.async_request(path, body=body, extra_data=extra_data), callback=self.async_callback
         )
 
-    def _copytrading_amend_copy_settings(self, copy_inst_id, lever=None, extra_data=None, **kwargs):
+    def _copytrading_amend_copy_settings(
+        self, copy_inst_id: Any, lever: Any = None, extra_data: Any = None, **kwargs: Any
+    ) -> None:
         """
         Amend copy settings
         :param copy_inst_id: Copy instrument ID, unique identifier for the lead trader
@@ -913,7 +983,9 @@ class CopyTradingMixin:
         return path, body, extra_data
 
     @staticmethod
-    def _copytrading_amend_copy_settings_normalize_function(input_data, extra_data):
+    def _copytrading_amend_copy_settings_normalize_function(
+        input_data: Any, extra_data: Any
+    ) -> None:
         """Normalize copy trading amend copy settings response"""
         status = input_data.get("code") == "0"
         if "data" not in input_data:
@@ -922,7 +994,9 @@ class CopyTradingMixin:
         target_data = [data[0]] if len(data) > 0 else []
         return target_data, status
 
-    def copytrading_amend_copy_settings(self, copy_inst_id, lever=None, extra_data=None, **kwargs):
+    def copytrading_amend_copy_settings(
+        self, copy_inst_id: Any, lever: Any = None, extra_data: Any = None, **kwargs: Any
+    ) -> None:
         """Amend copy settings"""
         path, body, extra_data = self._copytrading_amend_copy_settings(
             copy_inst_id, lever, extra_data, **kwargs
@@ -931,8 +1005,8 @@ class CopyTradingMixin:
         return data
 
     def async_copytrading_amend_copy_settings(
-        self, copy_inst_id, lever=None, extra_data=None, **kwargs
-    ):
+        self, copy_inst_id: Any, lever: Any = None, extra_data: Any = None, **kwargs: Any
+    ) -> None:
         """Async amend copy settings"""
         path, body, extra_data = self._copytrading_amend_copy_settings(
             copy_inst_id, lever, extra_data, **kwargs
@@ -941,7 +1015,9 @@ class CopyTradingMixin:
             self.async_request(path, body=body, extra_data=extra_data), callback=self.async_callback
         )
 
-    def _copytrading_stop_copy_trading(self, copy_inst_id, extra_data=None, **kwargs):
+    def _copytrading_stop_copy_trading(
+        self, copy_inst_id: Any, extra_data: Any = None, **kwargs: Any
+    ) -> None:
         """
         Stop copying
         :param copy_inst_id: Copy instrument ID, unique identifier for the lead trader
@@ -969,7 +1045,7 @@ class CopyTradingMixin:
         return path, body, extra_data
 
     @staticmethod
-    def _copytrading_stop_copy_trading_normalize_function(input_data, extra_data):
+    def _copytrading_stop_copy_trading_normalize_function(input_data: Any, extra_data: Any) -> None:
         """Normalize copy trading stop copy trading response"""
         status = input_data.get("code") == "0"
         if "data" not in input_data:
@@ -978,7 +1054,9 @@ class CopyTradingMixin:
         target_data = [data[0]] if len(data) > 0 else []
         return target_data, status
 
-    def copytrading_stop_copy_trading(self, copy_inst_id, extra_data=None, **kwargs):
+    def copytrading_stop_copy_trading(
+        self, copy_inst_id: Any, extra_data: Any = None, **kwargs: Any
+    ) -> None:
         """Stop copying"""
         path, body, extra_data = self._copytrading_stop_copy_trading(
             copy_inst_id, extra_data, **kwargs
@@ -986,7 +1064,9 @@ class CopyTradingMixin:
         data = self.request(path, body=body, extra_data=extra_data)
         return data
 
-    def async_copytrading_stop_copy_trading(self, copy_inst_id, extra_data=None, **kwargs):
+    def async_copytrading_stop_copy_trading(
+        self, copy_inst_id: Any, extra_data: Any = None, **kwargs: Any
+    ) -> None:
         """Async stop copying"""
         path, body, extra_data = self._copytrading_stop_copy_trading(
             copy_inst_id, extra_data, **kwargs
@@ -995,7 +1075,7 @@ class CopyTradingMixin:
             self.async_request(path, body=body, extra_data=extra_data), callback=self.async_callback
         )
 
-    def _copytrading_get_copy_settings(self, extra_data=None, **kwargs):
+    def _copytrading_get_copy_settings(self, extra_data: Any = None, **kwargs: Any) -> None:
         """
         Get copy settings
         :param extra_data: extra_data, default is None, can be a dict passed by user
@@ -1020,7 +1100,7 @@ class CopyTradingMixin:
         return path, params, extra_data
 
     @staticmethod
-    def _copytrading_get_copy_settings_normalize_function(input_data, extra_data):
+    def _copytrading_get_copy_settings_normalize_function(input_data: Any, extra_data: Any) -> None:
         """Normalize copy trading copy settings data"""
         status = input_data.get("code") == "0"
         if "data" not in input_data:
@@ -1029,13 +1109,13 @@ class CopyTradingMixin:
         target_data = data if len(data) > 0 else []
         return target_data, status
 
-    def copytrading_get_copy_settings(self, extra_data=None, **kwargs):
+    def copytrading_get_copy_settings(self, extra_data: Any = None, **kwargs: Any) -> None:
         """Get copy settings"""
         path, params, extra_data = self._copytrading_get_copy_settings(extra_data, **kwargs)
         data = self.request(path, params=params, extra_data=extra_data)
         return data
 
-    def async_copytrading_get_copy_settings(self, extra_data=None, **kwargs):
+    def async_copytrading_get_copy_settings(self, extra_data: Any = None, **kwargs: Any) -> None:
         """Async get copy settings"""
         path, params, extra_data = self._copytrading_get_copy_settings(extra_data, **kwargs)
         self.submit(
@@ -1043,7 +1123,7 @@ class CopyTradingMixin:
             callback=self.async_callback,
         )
 
-    def _copytrading_get_batch_leverage_info(self, extra_data=None, **kwargs):
+    def _copytrading_get_batch_leverage_info(self, extra_data: Any = None, **kwargs: Any) -> None:
         """
         My lead traders
         :param extra_data: extra_data, default is None, can be a dict passed by user
@@ -1068,7 +1148,9 @@ class CopyTradingMixin:
         return path, params, extra_data
 
     @staticmethod
-    def _copytrading_get_batch_leverage_info_normalize_function(input_data, extra_data):
+    def _copytrading_get_batch_leverage_info_normalize_function(
+        input_data: Any, extra_data: Any
+    ) -> None:
         """Normalize copy trading batch leverage info data"""
         status = input_data.get("code") == "0"
         if "data" not in input_data:
@@ -1077,13 +1159,15 @@ class CopyTradingMixin:
         target_data = data if len(data) > 0 else []
         return target_data, status
 
-    def copytrading_get_batch_leverage_info(self, extra_data=None, **kwargs):
+    def copytrading_get_batch_leverage_info(self, extra_data: Any = None, **kwargs: Any) -> None:
         """My lead traders"""
         path, params, extra_data = self._copytrading_get_batch_leverage_info(extra_data, **kwargs)
         data = self.request(path, params=params, extra_data=extra_data)
         return data
 
-    def async_copytrading_get_batch_leverage_info(self, extra_data=None, **kwargs):
+    def async_copytrading_get_batch_leverage_info(
+        self, extra_data: Any = None, **kwargs: Any
+    ) -> None:
         """Async my lead traders"""
         path, params, extra_data = self._copytrading_get_batch_leverage_info(extra_data, **kwargs)
         self.submit(
@@ -1091,7 +1175,9 @@ class CopyTradingMixin:
             callback=self.async_callback,
         )
 
-    def _copytrading_get_copy_trading_configuration(self, extra_data=None, **kwargs):
+    def _copytrading_get_copy_trading_configuration(
+        self, extra_data: Any = None, **kwargs: Any
+    ) -> None:
         """
         Copy trading configuration
         :param extra_data: extra_data, default is None, can be a dict passed by user
@@ -1116,7 +1202,9 @@ class CopyTradingMixin:
         return path, params, extra_data
 
     @staticmethod
-    def _copytrading_get_copy_trading_configuration_normalize_function(input_data, extra_data):
+    def _copytrading_get_copy_trading_configuration_normalize_function(
+        input_data: Any, extra_data: Any
+    ) -> None:
         """Normalize copy trading configuration data"""
         status = input_data.get("code") == "0"
         if "data" not in input_data:
@@ -1125,7 +1213,9 @@ class CopyTradingMixin:
         target_data = data if len(data) > 0 else []
         return target_data, status
 
-    def copytrading_get_copy_trading_configuration(self, extra_data=None, **kwargs):
+    def copytrading_get_copy_trading_configuration(
+        self, extra_data: Any = None, **kwargs: Any
+    ) -> None:
         """Copy trading configuration"""
         path, params, extra_data = self._copytrading_get_copy_trading_configuration(
             extra_data, **kwargs
@@ -1133,7 +1223,9 @@ class CopyTradingMixin:
         data = self.request(path, params=params, extra_data=extra_data)
         return data
 
-    def async_copytrading_get_copy_trading_configuration(self, extra_data=None, **kwargs):
+    def async_copytrading_get_copy_trading_configuration(
+        self, extra_data: Any = None, **kwargs: Any
+    ) -> None:
         """Async copy trading configuration"""
         path, params, extra_data = self._copytrading_get_copy_trading_configuration(
             extra_data, **kwargs
@@ -1147,15 +1239,15 @@ class CopyTradingMixin:
 
     def _copytrading_public_lead_traders(
         self,
-        inst_type=None,
-        sort_by=None,
-        uly=None,
-        after=None,
-        before=None,
-        limit=None,
-        extra_data=None,
-        **kwargs,
-    ):
+        inst_type: Any = None,
+        sort_by: Any = None,
+        uly: Any = None,
+        after: Any = None,
+        before: Any = None,
+        limit: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """
         Lead trader ranks (public)
         :param inst_type: Instrument type, e.g. SPOT, MARGIN, SWAP, FUTURES, OPTION
@@ -1198,7 +1290,9 @@ class CopyTradingMixin:
         return path, params, extra_data
 
     @staticmethod
-    def _copytrading_public_lead_traders_normalize_function(input_data, extra_data):
+    def _copytrading_public_lead_traders_normalize_function(
+        input_data: Any, extra_data: Any
+    ) -> None:
         """Normalize copy trading public lead traders data"""
         status = input_data.get("code") == "0"
         if "data" not in input_data:
@@ -1209,15 +1303,15 @@ class CopyTradingMixin:
 
     def copytrading_public_lead_traders(
         self,
-        inst_type=None,
-        sort_by=None,
-        uly=None,
-        after=None,
-        before=None,
-        limit=None,
-        extra_data=None,
-        **kwargs,
-    ):
+        inst_type: Any = None,
+        sort_by: Any = None,
+        uly: Any = None,
+        after: Any = None,
+        before: Any = None,
+        limit: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """Lead trader ranks (public)"""
         path, params, extra_data = self._copytrading_public_lead_traders(
             inst_type, sort_by, uly, after, before, limit, extra_data, **kwargs
@@ -1227,15 +1321,15 @@ class CopyTradingMixin:
 
     def async_copytrading_public_lead_traders(
         self,
-        inst_type=None,
-        sort_by=None,
-        uly=None,
-        after=None,
-        before=None,
-        limit=None,
-        extra_data=None,
-        **kwargs,
-    ):
+        inst_type: Any = None,
+        sort_by: Any = None,
+        uly: Any = None,
+        after: Any = None,
+        before: Any = None,
+        limit: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """Async lead trader ranks (public)"""
         path, params, extra_data = self._copytrading_public_lead_traders(
             inst_type, sort_by, uly, after, before, limit, extra_data, **kwargs
@@ -1246,8 +1340,14 @@ class CopyTradingMixin:
         )
 
     def _copytrading_public_weekly_pnl(
-        self, copy_inst_id, after=None, before=None, limit=None, extra_data=None, **kwargs
-    ):
+        self,
+        copy_inst_id: Any,
+        after: Any = None,
+        before: Any = None,
+        limit: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """
         Lead trader weekly PnL (public)
         :param copy_inst_id: Copy instrument ID
@@ -1284,7 +1384,7 @@ class CopyTradingMixin:
         return path, params, extra_data
 
     @staticmethod
-    def _copytrading_public_weekly_pnl_normalize_function(input_data, extra_data):
+    def _copytrading_public_weekly_pnl_normalize_function(input_data: Any, extra_data: Any) -> None:
         """Normalize copy trading public weekly PnL data"""
         status = input_data.get("code") == "0"
         if "data" not in input_data:
@@ -1294,8 +1394,14 @@ class CopyTradingMixin:
         return target_data, status
 
     def copytrading_public_weekly_pnl(
-        self, copy_inst_id, after=None, before=None, limit=None, extra_data=None, **kwargs
-    ):
+        self,
+        copy_inst_id: Any,
+        after: Any = None,
+        before: Any = None,
+        limit: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """Lead trader weekly PnL (public)"""
         path, params, extra_data = self._copytrading_public_weekly_pnl(
             copy_inst_id, after, before, limit, extra_data, **kwargs
@@ -1304,8 +1410,14 @@ class CopyTradingMixin:
         return data
 
     def async_copytrading_public_weekly_pnl(
-        self, copy_inst_id, after=None, before=None, limit=None, extra_data=None, **kwargs
-    ):
+        self,
+        copy_inst_id: Any,
+        after: Any = None,
+        before: Any = None,
+        limit: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """Async lead trader weekly PnL (public)"""
         path, params, extra_data = self._copytrading_public_weekly_pnl(
             copy_inst_id, after, before, limit, extra_data, **kwargs
@@ -1316,8 +1428,14 @@ class CopyTradingMixin:
         )
 
     def _copytrading_public_pnl(
-        self, copy_inst_id, after=None, before=None, limit=None, extra_data=None, **kwargs
-    ):
+        self,
+        copy_inst_id: Any,
+        after: Any = None,
+        before: Any = None,
+        limit: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """
         Lead trader daily PnL (public)
         :param copy_inst_id: Copy instrument ID
@@ -1354,7 +1472,7 @@ class CopyTradingMixin:
         return path, params, extra_data
 
     @staticmethod
-    def _copytrading_public_pnl_normalize_function(input_data, extra_data):
+    def _copytrading_public_pnl_normalize_function(input_data: Any, extra_data: Any) -> None:
         """Normalize copy trading public PnL data"""
         status = input_data.get("code") == "0"
         if "data" not in input_data:
@@ -1364,8 +1482,14 @@ class CopyTradingMixin:
         return target_data, status
 
     def copytrading_public_pnl(
-        self, copy_inst_id, after=None, before=None, limit=None, extra_data=None, **kwargs
-    ):
+        self,
+        copy_inst_id: Any,
+        after: Any = None,
+        before: Any = None,
+        limit: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """Lead trader daily PnL (public)"""
         path, params, extra_data = self._copytrading_public_pnl(
             copy_inst_id, after, before, limit, extra_data, **kwargs
@@ -1374,8 +1498,14 @@ class CopyTradingMixin:
         return data
 
     def async_copytrading_public_pnl(
-        self, copy_inst_id, after=None, before=None, limit=None, extra_data=None, **kwargs
-    ):
+        self,
+        copy_inst_id: Any,
+        after: Any = None,
+        before: Any = None,
+        limit: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """Async lead trader daily PnL (public)"""
         path, params, extra_data = self._copytrading_public_pnl(
             copy_inst_id, after, before, limit, extra_data, **kwargs
@@ -1385,7 +1515,9 @@ class CopyTradingMixin:
             callback=self.async_callback,
         )
 
-    def _copytrading_public_stats(self, copy_inst_id, extra_data=None, **kwargs):
+    def _copytrading_public_stats(
+        self, copy_inst_id: Any, extra_data: Any = None, **kwargs: Any
+    ) -> None:
         """
         Lead trader stats (public)
         :param copy_inst_id: Copy instrument ID
@@ -1413,7 +1545,7 @@ class CopyTradingMixin:
         return path, params, extra_data
 
     @staticmethod
-    def _copytrading_public_stats_normalize_function(input_data, extra_data):
+    def _copytrading_public_stats_normalize_function(input_data: Any, extra_data: Any) -> None:
         """Normalize copy trading public stats data"""
         status = input_data.get("code") == "0"
         if "data" not in input_data:
@@ -1422,7 +1554,9 @@ class CopyTradingMixin:
         target_data = data if len(data) > 0 else []
         return target_data, status
 
-    def copytrading_public_stats(self, copy_inst_id, extra_data=None, **kwargs):
+    def copytrading_public_stats(
+        self, copy_inst_id: Any, extra_data: Any = None, **kwargs: Any
+    ) -> None:
         """Lead trader stats (public)"""
         path, params, extra_data = self._copytrading_public_stats(
             copy_inst_id, extra_data, **kwargs
@@ -1430,7 +1564,9 @@ class CopyTradingMixin:
         data = self.request(path, params=params, extra_data=extra_data)
         return data
 
-    def async_copytrading_public_stats(self, copy_inst_id, extra_data=None, **kwargs):
+    def async_copytrading_public_stats(
+        self, copy_inst_id: Any, extra_data: Any = None, **kwargs: Any
+    ) -> None:
         """Async lead trader stats (public)"""
         path, params, extra_data = self._copytrading_public_stats(
             copy_inst_id, extra_data, **kwargs
@@ -1440,7 +1576,9 @@ class CopyTradingMixin:
             callback=self.async_callback,
         )
 
-    def _copytrading_public_preference_currency(self, copy_inst_id, extra_data=None, **kwargs):
+    def _copytrading_public_preference_currency(
+        self, copy_inst_id: Any, extra_data: Any = None, **kwargs: Any
+    ) -> None:
         """
         Lead trader currency preferences (public)
         :param copy_inst_id: Copy instrument ID
@@ -1468,7 +1606,9 @@ class CopyTradingMixin:
         return path, params, extra_data
 
     @staticmethod
-    def _copytrading_public_preference_currency_normalize_function(input_data, extra_data):
+    def _copytrading_public_preference_currency_normalize_function(
+        input_data: Any, extra_data: Any
+    ) -> None:
         """Normalize copy trading public preference currency data"""
         status = input_data.get("code") == "0"
         if "data" not in input_data:
@@ -1477,7 +1617,9 @@ class CopyTradingMixin:
         target_data = data if len(data) > 0 else []
         return target_data, status
 
-    def copytrading_public_preference_currency(self, copy_inst_id, extra_data=None, **kwargs):
+    def copytrading_public_preference_currency(
+        self, copy_inst_id: Any, extra_data: Any = None, **kwargs: Any
+    ) -> None:
         """Lead trader currency preferences (public)"""
         path, params, extra_data = self._copytrading_public_preference_currency(
             copy_inst_id, extra_data, **kwargs
@@ -1485,7 +1627,9 @@ class CopyTradingMixin:
         data = self.request(path, params=params, extra_data=extra_data)
         return data
 
-    def async_copytrading_public_preference_currency(self, copy_inst_id, extra_data=None, **kwargs):
+    def async_copytrading_public_preference_currency(
+        self, copy_inst_id: Any, extra_data: Any = None, **kwargs: Any
+    ) -> None:
         """Async lead trader currency preferences (public)"""
         path, params, extra_data = self._copytrading_public_preference_currency(
             copy_inst_id, extra_data, **kwargs
@@ -1496,8 +1640,14 @@ class CopyTradingMixin:
         )
 
     def _copytrading_public_current_subpositions(
-        self, copy_inst_id, after=None, before=None, limit=None, extra_data=None, **kwargs
-    ):
+        self,
+        copy_inst_id: Any,
+        after: Any = None,
+        before: Any = None,
+        limit: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """
         Lead trader current positions (public)
         :param copy_inst_id: Copy instrument ID
@@ -1534,7 +1684,9 @@ class CopyTradingMixin:
         return path, params, extra_data
 
     @staticmethod
-    def _copytrading_public_current_subpositions_normalize_function(input_data, extra_data):
+    def _copytrading_public_current_subpositions_normalize_function(
+        input_data: Any, extra_data: Any
+    ) -> None:
         """Normalize copy trading public current subpositions data"""
         status = input_data.get("code") == "0"
         if "data" not in input_data:
@@ -1544,8 +1696,14 @@ class CopyTradingMixin:
         return target_data, status
 
     def copytrading_public_current_subpositions(
-        self, copy_inst_id, after=None, before=None, limit=None, extra_data=None, **kwargs
-    ):
+        self,
+        copy_inst_id: Any,
+        after: Any = None,
+        before: Any = None,
+        limit: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """Lead trader current positions (public)"""
         path, params, extra_data = self._copytrading_public_current_subpositions(
             copy_inst_id, after, before, limit, extra_data, **kwargs
@@ -1554,8 +1712,14 @@ class CopyTradingMixin:
         return data
 
     def async_copytrading_public_current_subpositions(
-        self, copy_inst_id, after=None, before=None, limit=None, extra_data=None, **kwargs
-    ):
+        self,
+        copy_inst_id: Any,
+        after: Any = None,
+        before: Any = None,
+        limit: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """Async lead trader current positions (public)"""
         path, params, extra_data = self._copytrading_public_current_subpositions(
             copy_inst_id, after, before, limit, extra_data, **kwargs
@@ -1566,8 +1730,14 @@ class CopyTradingMixin:
         )
 
     def _copytrading_public_subpositions_history(
-        self, copy_inst_id, after=None, before=None, limit=None, extra_data=None, **kwargs
-    ):
+        self,
+        copy_inst_id: Any,
+        after: Any = None,
+        before: Any = None,
+        limit: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """
         Lead trader position history (public)
         :param copy_inst_id: Copy instrument ID
@@ -1604,7 +1774,9 @@ class CopyTradingMixin:
         return path, params, extra_data
 
     @staticmethod
-    def _copytrading_public_subpositions_history_normalize_function(input_data, extra_data):
+    def _copytrading_public_subpositions_history_normalize_function(
+        input_data: Any, extra_data: Any
+    ) -> None:
         """Normalize copy trading public subpositions history data"""
         status = input_data.get("code") == "0"
         if "data" not in input_data:
@@ -1614,8 +1786,14 @@ class CopyTradingMixin:
         return target_data, status
 
     def copytrading_public_subpositions_history(
-        self, copy_inst_id, after=None, before=None, limit=None, extra_data=None, **kwargs
-    ):
+        self,
+        copy_inst_id: Any,
+        after: Any = None,
+        before: Any = None,
+        limit: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """Lead trader position history (public)"""
         path, params, extra_data = self._copytrading_public_subpositions_history(
             copy_inst_id, after, before, limit, extra_data, **kwargs
@@ -1624,8 +1802,14 @@ class CopyTradingMixin:
         return data
 
     def async_copytrading_public_subpositions_history(
-        self, copy_inst_id, after=None, before=None, limit=None, extra_data=None, **kwargs
-    ):
+        self,
+        copy_inst_id: Any,
+        after: Any = None,
+        before: Any = None,
+        limit: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """Async lead trader position history (public)"""
         path, params, extra_data = self._copytrading_public_subpositions_history(
             copy_inst_id, after, before, limit, extra_data, **kwargs
@@ -1636,8 +1820,14 @@ class CopyTradingMixin:
         )
 
     def _copytrading_public_copy_traders(
-        self, copy_inst_id, after=None, before=None, limit=None, extra_data=None, **kwargs
-    ):
+        self,
+        copy_inst_id: Any,
+        after: Any = None,
+        before: Any = None,
+        limit: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """
         Copy traders (public)
         :param copy_inst_id: Copy instrument ID
@@ -1674,7 +1864,9 @@ class CopyTradingMixin:
         return path, params, extra_data
 
     @staticmethod
-    def _copytrading_public_copy_traders_normalize_function(input_data, extra_data):
+    def _copytrading_public_copy_traders_normalize_function(
+        input_data: Any, extra_data: Any
+    ) -> None:
         """Normalize copy trading public copy traders data"""
         status = input_data.get("code") == "0"
         if "data" not in input_data:
@@ -1684,8 +1876,14 @@ class CopyTradingMixin:
         return target_data, status
 
     def copytrading_public_copy_traders(
-        self, copy_inst_id, after=None, before=None, limit=None, extra_data=None, **kwargs
-    ):
+        self,
+        copy_inst_id: Any,
+        after: Any = None,
+        before: Any = None,
+        limit: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """Copy traders (public)"""
         path, params, extra_data = self._copytrading_public_copy_traders(
             copy_inst_id, after, before, limit, extra_data, **kwargs
@@ -1694,8 +1892,14 @@ class CopyTradingMixin:
         return data
 
     def async_copytrading_public_copy_traders(
-        self, copy_inst_id, after=None, before=None, limit=None, extra_data=None, **kwargs
-    ):
+        self,
+        copy_inst_id: Any,
+        after: Any = None,
+        before: Any = None,
+        limit: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """Async copy traders (public)"""
         path, params, extra_data = self._copytrading_public_copy_traders(
             copy_inst_id, after, before, limit, extra_data, **kwargs

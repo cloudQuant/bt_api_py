@@ -1,6 +1,6 @@
-"""
-BTC Markets Exchange Data Configuration
-"""
+from typing import Any
+
+"""BTC Markets Exchange Data Configuration."""
 
 import os
 
@@ -13,7 +13,7 @@ _btc_markets_config = None
 _btc_markets_config_loaded = False
 
 
-def _get_btc_markets_config():
+def _get_btc_markets_config() -> Any | None:
     """Load BTC Markets YAML configuration."""
     global _btc_markets_config, _btc_markets_config_loaded
     if _btc_markets_config_loaded:
@@ -37,7 +37,7 @@ def _get_btc_markets_config():
 class BtcMarketsExchangeData(ExchangeData):
     """Base class for BTC Markets exchange."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__()
         self.exchange_name = "btc_markets"
         self.rest_url = "https://api.btcmarkets.net"
@@ -49,13 +49,14 @@ class BtcMarketsExchangeData(ExchangeData):
         }
         self.legal_currency = ["AUD"]
 
-    def _load_from_config(self, asset_type):
+    def _load_from_config(self, asset_type) -> bool:
         """Load from YAML config.
 
         Args:
             asset_type: Asset type key, such as 'spot'
         Returns:
             bool: Whether loading was successful
+
         """
         config = _get_btc_markets_config()
         if config is None:
@@ -99,7 +100,7 @@ class BtcMarketsExchangeData(ExchangeData):
 class BtcMarketsExchangeDataSpot(BtcMarketsExchangeData):
     """BTC Markets Spot exchange configuration."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__()
         self.asset_type = "spot"
         self.rest_paths = {}

@@ -1,6 +1,6 @@
-"""
-EXMO Exchange Data Configuration
-"""
+from typing import Any
+
+"""EXMO Exchange Data Configuration."""
 
 import os
 
@@ -13,7 +13,7 @@ _exmo_config = None
 _exmo_config_loaded = False
 
 
-def _get_exmo_config():
+def _get_exmo_config() -> Any | None:
     """Load EXMO YAML configuration."""
     global _exmo_config, _exmo_config_loaded
     if _exmo_config_loaded:
@@ -37,7 +37,7 @@ def _get_exmo_config():
 class ExmoExchangeData(ExchangeData):
     """Base class for EXMO exchange."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__()
         self.exchange_name = "exmo"
         self.rest_url = "https://api.exmo.com/v1.1"
@@ -67,7 +67,7 @@ class ExmoExchangeData(ExchangeData):
             "ETH",
         ]
 
-    def _load_from_config(self, asset_type):
+    def _load_from_config(self, asset_type) -> bool:
         """Load from YAML config."""
         config = _get_exmo_config()
         if config is None:
@@ -104,7 +104,7 @@ class ExmoExchangeData(ExchangeData):
 class ExmoExchangeDataSpot(ExmoExchangeData):
     """EXMO Spot exchange configuration."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__()
         self.asset_type = "spot"
         self.rest_paths = {}

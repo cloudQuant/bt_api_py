@@ -33,7 +33,7 @@ class GeminiRequestData(Feed):
             Capability.ACCOUNT_STREAM,
         }
 
-    def __init__(self, data_queue, **kwargs):
+    def __init__(self, data_queue, **kwargs) -> None:
         super().__init__(data_queue, **kwargs)
         self.data_queue = data_queue
         self.public_key = kwargs.get("public_key")

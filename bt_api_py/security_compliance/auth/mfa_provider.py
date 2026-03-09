@@ -5,13 +5,11 @@ following FIDO2 standards for financial services.
 """
 
 import base64
-import hashlib
 import secrets
 import time
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Dict, List, Optional, Tuple
-from uuid import uuid4
+from typing import Any
 
 try:
     import pyotp
@@ -37,8 +35,9 @@ except ImportError:
     CBOR2_AVAILABLE = False
 
 try:
-    import qrcode
     from io import BytesIO
+
+    import qrcode
 
     QR_CODE_AVAILABLE = True
 except ImportError:
@@ -70,17 +69,17 @@ class MFAConfig:
     user_id: str
     mfa_type: MFAType
     is_enabled: bool = False
-    secret: Optional[str] = None
-    backup_codes: List[str] = field(default_factory=list)
+    secret: str | None = None
+    backup_codes: list[str] = field(default_factory=list)
     counter: int = 0  # For HOTP
     created_at: float = field(default_factory=time.time)
-    last_used: Optional[float] = None
+    last_used: float | None = None
 
     # WebAuthn specific fields
-    credential_id: Optional[str] = None
-    public_key: Optional[bytes] = None
+    credential_id: str | None = None
+    public_key: bytes | None = None
     sign_count: int = 0
-    user_handle: Optional[bytes] = None
+    user_handle: bytes | None = None
 
 
 @dataclass
@@ -122,10 +121,10 @@ class MFAProvider:
         self.rp_name = rp_name
 
         # Storage
-        self._mfa_configs: Dict[str, MFAConfig] = {}
-        self._webauthn_credentials: Dict[str, WebAuthnCredential] = {}
+        self._mfa_configs: dict[str, MFAConfig] = {}
+        self._webauthn_credentials: dict[str, WebAuthnCredential] = {}
 
-    def setup_totp(self, user_id: str, account_name: Optional[str] = None) -> Dict[str, Any]:
+    def setup_totp(self, user_id: str, account_name: str | None = None) -> dict[str, Any]:
         """Setup TOTP for a user."""
         # Generate secret
         secret = pyotp.random_base32()
@@ -157,7 +156,7 @@ class MFAProvider:
             "qr_code": self._generate_qr_code(provisioning_uri) if QR_CODE_AVAILABLE else None,
         }
 
-    def _generate_backup_codes(self) -> List[str]:
+    def _generate_backup_codes(self) -> list[str]:
         """Generate backup codes for MFA."""
         codes = []
         for _ in range(self.backup_codes_count):
@@ -165,7 +164,7 @@ class MFAProvider:
             codes.append(code)
         return codes
 
-    def _generate_qr_code(self, uri: str) -> Optional[str]:
+    def _generate_qr_code(self, uri: str) -> str | None:
         """Generate QR code image as base64."""
         if not QR_CODE_AVAILABLE:
             return None
@@ -183,7 +182,7 @@ class MFAProvider:
         except Exception:
             return None
 
-    def verify_totp(self, user_id: str, token: str, backup_code: Optional[str] = None) -> bool:
+    def verify_totp(self, user_id: str, token: str, backup_code: str | None = None) -> bool:
         """Verify TOTP token."""
         config = self._mfa_configs.get(user_id)
         if not config or config.mfa_type != MFAType.TOTP:
@@ -208,7 +207,7 @@ class MFAProvider:
 
         return is_valid
 
-    def setup_hotp(self, user_id: str, account_name: Optional[str] = None) -> Dict[str, Any]:
+    def setup_hotp(self, user_id: str, account_name: str | None = None) -> dict[str, Any]:
         """Setup HOTP for a user."""
         # Generate secret
         secret = pyotp.random_base32()
@@ -237,7 +236,7 @@ class MFAProvider:
             "initial_counter": self.hotp_counter_start,
         }
 
-    def verify_hotp(self, user_id: str, token: str, backup_code: Optional[str] = None) -> bool:
+    def verify_hotp(self, user_id: str, token: str, backup_code: str | None = None) -> bool:
         """Verify HOTP token."""
         config = self._mfa_configs.get(user_id)
         if not config or config.mfa_type != MFAType.HOTP:
@@ -264,8 +263,8 @@ class MFAProvider:
         return is_valid
 
     def generate_webauthn_registration_options(
-        self, user_id: str, username: str, display_name: Optional[str] = None
-    ) -> Dict[str, Any]:
+        self, user_id: str, username: str, display_name: str | None = None
+    ) -> dict[str, Any]:
         """Generate WebAuthn registration options."""
         # Generate challenge
         challenge = base64.urlsafe_b64encode(secrets.token_bytes(32)).decode()
@@ -305,7 +304,7 @@ class MFAProvider:
 
         return options
 
-    def verify_webauthn_registration(self, user_id: str, credential_data: Dict[str, Any]) -> bool:
+    def verify_webauthn_registration(self, user_id: str, credential_data: dict[str, Any]) -> bool:
         """Verify WebAuthn registration response."""
         # Get stored challenge
         if not hasattr(self, "_webauthn_challenges"):
@@ -399,7 +398,7 @@ class MFAProvider:
         except Exception:
             return False
 
-    def generate_webauthn_authentication_options(self, user_id: str) -> Dict[str, Any]:
+    def generate_webauthn_authentication_options(self, user_id: str) -> dict[str, Any]:
         """Generate WebAuthn authentication options."""
         # Get user's WebAuthn credentials
         user_credentials = [
@@ -439,7 +438,7 @@ class MFAProvider:
 
         return options
 
-    def verify_webauthn_authentication(self, user_id: str, assertion_data: Dict[str, Any]) -> bool:
+    def verify_webauthn_authentication(self, user_id: str, assertion_data: dict[str, Any]) -> bool:
         """Verify WebAuthn authentication response."""
         # Get stored challenge
         challenge_key = f"auth_{user_id}"
@@ -528,7 +527,7 @@ class MFAProvider:
         except Exception:
             return False
 
-    def disable_mfa(self, user_id: str, backup_code: Optional[str] = None) -> bool:
+    def disable_mfa(self, user_id: str, backup_code: str | None = None) -> bool:
         """Disable MFA for a user."""
         config = self._mfa_configs.get(user_id)
         if not config:
@@ -542,11 +541,11 @@ class MFAProvider:
 
         return False
 
-    def get_mfa_status(self, user_id: str) -> Optional[MFAConfig]:
+    def get_mfa_status(self, user_id: str) -> MFAConfig | None:
         """Get MFA status for a user."""
         return self._mfa_configs.get(user_id)
 
-    def regenerate_backup_codes(self, user_id: str) -> List[str]:
+    def regenerate_backup_codes(self, user_id: str) -> list[str]:
         """Regenerate backup codes for a user."""
         config = self._mfa_configs.get(user_id)
         if not config:
@@ -562,7 +561,7 @@ class MFAProvider:
         config = self._mfa_configs.get(user_id)
         return config is not None and config.is_enabled
 
-    def get_available_mfa_methods(self) -> List[Dict[str, Any]]:
+    def get_available_mfa_methods(self) -> list[dict[str, Any]]:
         """Get list of available MFA methods."""
         methods = [
             {
@@ -589,10 +588,10 @@ class MFAProvider:
 
 
 # Global MFA provider instance
-_mfa_provider: Optional[MFAProvider] = None
+_mfa_provider: MFAProvider | None = None
 
 
-def get_mfa_provider() -> Optional[MFAProvider]:
+def get_mfa_provider() -> MFAProvider | None:
     """Get the global MFA provider instance."""
     return _mfa_provider
 

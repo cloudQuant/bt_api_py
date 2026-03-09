@@ -1,3 +1,4 @@
+from typing import Any
 import json
 import time
 
@@ -7,7 +8,9 @@ from bt_api_py.containers.bars.bar import BarData
 
 
 class OkxBarData(BarData):
-    def __init__(self, bar_info, symbol_name, asset_type, has_been_json_encoded=False):
+    def __init__(
+        self, bar_info, symbol_name, asset_type, has_been_json_encoded: bool = False
+    ) -> None:
         super().__init__(bar_info, has_been_json_encoded)
         self.exchange_name = "OKX"
         self.symbol_name = symbol_name
@@ -28,7 +31,7 @@ class OkxBarData(BarData):
         self.all_data = None
         self.has_been_init_data = False
 
-    def init_data(self):
+    def init_data(self) -> None:
         if not self.has_been_json_encoded:
             self.bar_data = json.loads(self.bar_info)
             self.has_been_json_encoded = True
@@ -46,7 +49,7 @@ class OkxBarData(BarData):
         self.has_been_init_data = True
         return self
 
-    def get_all_data(self):
+    def get_all_data(self) -> dict[str, Any]:
         if self.all_data is None:
             self.all_data = {
                 "open_time": self.open_time,
@@ -67,70 +70,70 @@ class OkxBarData(BarData):
             }
         return self.all_data
 
-    def __str__(self):
+    def __str__(self) -> str:
         self.init_data()
         return json.dumps(self.get_all_data())
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return self.__str__()
 
-    def get_event_type(self):
+    def get_event_type(self) -> Any:
         return self.event
 
-    def get_exchange_name(self):
+    def get_exchange_name(self) -> str:
         return self.exchange_name
 
-    def get_symbol_name(self):
+    def get_symbol_name(self) -> str:
         return self.symbol_name
 
-    def get_asset_type(self):
+    def get_asset_type(self) -> str:
         return self.asset_type
 
-    def get_server_time(self):
+    def get_server_time(self) -> float:
         return self.server_time
 
-    def get_local_update_time(self):
+    def get_local_update_time(self) -> float:
         return self.local_update_time
 
-    def get_open_time(self):
+    def get_open_time(self) -> Any:
         return self.open_time
 
-    def get_open_price(self):
+    def get_open_price(self) -> Any:
         return self.open_price
 
-    def get_high_price(self):
+    def get_high_price(self) -> Any:
         return self.high_price
 
-    def get_low_price(self):
+    def get_low_price(self) -> Any:
         return self.low_price
 
-    def get_close_price(self):
+    def get_close_price(self) -> Any:
         return self.close_price
 
-    def get_volume(self):
+    def get_volume(self) -> Any:
         return self.volume
 
-    def get_amount(self):
+    def get_amount(self) -> Any:
         return None
 
-    def get_close_time(self):
+    def get_close_time(self) -> Any:
         return None
 
-    def get_quote_asset_volume(self):
+    def get_quote_asset_volume(self) -> Any:
         return self.quote_asset_volume
 
-    def get_base_asset_volume(self):
+    def get_base_asset_volume(self) -> Any:
         return self.base_asset_volume
 
-    def get_num_trades(self):
+    def get_num_trades(self) -> Any:
         return None
 
-    def get_taker_buy_base_asset_volume(self):
+    def get_taker_buy_base_asset_volume(self) -> Any:
         return None
 
-    def get_taker_buy_quote_asset_volume(self):
+    def get_taker_buy_quote_asset_volume(self) -> Any:
         return None
 
-    def get_bar_status(self):
+    def get_bar_status(self) -> Any:
         # print("bar status:", self.bar_data)
         return self.bar_status

@@ -1,26 +1,25 @@
-"""
-KuCoin exchange configuration.
-Defines REST URLs, WebSocket URLs, and API endpoints for KuCoin.
-"""
+"""KuCoin Exchange Data Configuration."""
 
-import json
 import os
+from typing import Any
 
 from bt_api_py.containers.exchanges.exchange_data import ExchangeData
 from bt_api_py.logging_factory import get_logger
 
 logger = get_logger("kucoin_exchange_data")
-
-# ── 配置加载缓存 ──────────────────────────────────────────────
-_kucoin_config_cache = None
+_kucoin_config = None
 _kucoin_config_loaded = False
 
 
-def _get_kucoin_config():
-    """延迟加载并缓存 KuCoin YAML 配置"""
-    global _kucoin_config_cache, _kucoin_config_loaded
+def _get_kucoin_config() -> Any | None:
+    """Lazy load and cache KuCoin YAML configuration.
+
+    Returns:
+        Configuration dictionary or None if not found
+    """
+    global _kucoin_config, _kucoin_config_loaded
     if _kucoin_config_loaded:
-        return _kucoin_config_cache
+        return _kucoin_config
     try:
         from bt_api_py.config_loader import load_exchange_config
 
@@ -30,62 +29,41 @@ def _get_kucoin_config():
             "kucoin.yaml",
         )
         if os.path.exists(config_path):
-            _kucoin_config_cache = load_exchange_config(config_path)
-        _kucoin_config_loaded = True
+            _kucoin_config = load_exchange_config(config_path)
+            _kucoin_config_loaded = True
+            return _kucoin_config
     except Exception as e:
-        logger.warn(f"Failed to load kucoin.yaml config: {e}")
-    return _kucoin_config_cache
+        logger.info(f"Failed to load kucoin.yaml config: {e}")
+        _kucoin_config_loaded = True
+        return None
+    return None
 
 
 class KuCoinExchangeData(ExchangeData):
-    """Base class for all KuCoin exchange types.
+    """Base class for all KuCoin exchange types."""
 
-    Provides shared utility methods and default configuration.
-    Subclasses MUST set exchange-specific: exchange_name, rest_url,
-    wss_url, rest_paths, wss_paths, legal_currency.
-    """
-
-    def __init__(self):
+    def __init__(self) -> None:
+        """Initialize KuCoin exchange data with default configuration."""
         super().__init__()
-        self.exchange_name = "kucoin"
+        self.exchange_name = "KUCOIN"
         self.rest_url = "https://api.kucoin.com"
-        self.wss_url = ""  # WebSocket URL is dynamically retrieved
-        self.acct_wss_url = ""  # Account WebSocket URL is dynamically retrieved
-        self.rest_paths = {}
-        self.wss_paths = {}
+        self.wss_url = "wss://push.kucoin.com/endpoint"
 
-        self.kline_periods = {
-            "1min": "1min",
-            "3min": "3min",
-            "5min": "5min",
-            "15min": "15min",
-            "30min": "30min",
-            "1hour": "1hour",
-            "2hour": "2hour",
-            "4hour": "4hour",
-            "6hour": "6hour",
-            "8hour": "8hour",
-            "12hour": "12hour",
-            "1day": "1day",
-            "1week": "1week",
-        }
-        self.reverse_kline_periods = {v: k for k, v in self.kline_periods.items()}
+        self.rest_paths: dict[str, str] = {}
+        self.wss_paths: dict[str, Any] = {}
+        self.kline_periods: dict[str, str] = {}
+        self.reverse_kline_periods: dict[str, str] = {}
 
-        self.legal_currency = [
-            "USDT",
-            "USD",
-            "BTC",
-            "ETH",
-            "KCS",
-        ]
+        self._load_from_config("spot")
 
-    def _load_from_config(self, asset_type):
-        """从 YAML 配置文件加载交易所参数
+    def _load_from_config(self, asset_type: str) -> bool:
+        """Load exchange parameters from YAML configuration file.
 
         Args:
-            asset_type: 资产类型 key, 如 'spot', 'futures' 等
+            asset_type: Asset type key, e.g., 'spot', 'futures', 'margin'
+
         Returns:
-            bool: 是否加载成功
+            bool: Whether loading was successful
         """
         config = _get_kucoin_config()
         if config is None:
@@ -94,68 +72,50 @@ class KuCoinExchangeData(ExchangeData):
         if asset_cfg is None:
             return False
 
-        # exchange_name
         if asset_cfg.exchange_name:
             self.exchange_name = asset_cfg.exchange_name
 
-        # URLs
         if config.base_urls:
             self.rest_url = config.base_urls.rest.get(asset_type, self.rest_url)
             self.wss_url = config.base_urls.wss.get(asset_type, self.wss_url)
-            self.acct_wss_url = config.base_urls.acct_wss.get(asset_type, self.acct_wss_url)
 
-        # rest_paths (直接使用, 格式一致)
-        if asset_cfg.rest_paths:
+        if hasattr(asset_cfg, "rest_paths") and asset_cfg.rest_paths:
             self.rest_paths = dict(asset_cfg.rest_paths)
 
-        # wss_paths: YAML 模板字符串 → {'params': [template], 'method': 'SUBSCRIBE', 'id': 1}
-        if asset_cfg.wss_paths:
-            converted = {}
-            for key, value in asset_cfg.wss_paths.items():
-                if isinstance(value, str):
-                    if value:
-                        converted[key] = {"params": [value], "method": "SUBSCRIBE", "id": 1}
-                    else:
-                        converted[key] = ""
-                else:
-                    converted[key] = value
-            self.wss_paths = converted
+        if hasattr(asset_cfg, "wss_paths") and asset_cfg.wss_paths:
+            self.wss_paths = dict(asset_cfg.wss_paths)
 
-        # kline_periods (asset-level 优先, 否则用 exchange-level)
-        kp = asset_cfg.kline_periods or (config.kline_periods if config.kline_periods else None)
-        if kp:
-            self.kline_periods = dict(kp)
+        if hasattr(asset_cfg, "kline_periods") and asset_cfg.kline_periods:
+            self.kline_periods = dict(asset_cfg.kline_periods)
             self.reverse_kline_periods = {v: k for k, v in self.kline_periods.items()}
-
-        # legal_currency (asset-level 优先, 否则用 exchange-level)
-        lc = asset_cfg.legal_currency or (config.legal_currency if config.legal_currency else None)
-        if lc:
-            self.legal_currency = list(lc)
 
         return True
 
-    # noinspection PyMethodMayBeStatic
-    def get_symbol(self, symbol):
-        """KuCoin uses hyphen-separated format (BTC-USDT)."""
+    def get_symbol(self, symbol: str) -> str:
+        """Format trading pair name for KuCoin (hyphen-separated).
+
+        Args:
+            symbol: Raw trading pair name
+
+        Returns:
+            str: Formatted trading pair name
+        """
         return symbol
 
-    def account_wss_symbol(self, symbol):
-        """Convert symbol format for account WebSocket."""
-        # KuCoin account WebSocket doesn't use symbol-specific channels
-        return symbol
+    def get_rest_path(self, key: str, **kwargs: Any) -> str:
+        """Get REST API endpoint path.
 
-    # noinspection PyMethodMayBeStatic
-    def get_period(self, key):
-        """Return period key as-is."""
-        return key
+        Args:
+            key: Path key
 
-    def get_rest_path(self, key):
-        """Get REST API endpoint path."""
+        Returns:
+            str: REST API path
+        """
         if key not in self.rest_paths or self.rest_paths[key] == "":
             self.raise_path_error(self.exchange_name, key)
         return self.rest_paths[key]
 
-    def get_wss_path(self, **kwargs):
+    def get_wss_path(self, **kwargs: Any) -> str:
         """Get WebSocket subscription message.
 
         Args:
@@ -170,37 +130,44 @@ class KuCoinExchangeData(ExchangeData):
 
         wss_config = self.wss_paths[topic]
         if isinstance(wss_config, dict):
-            # Build subscription message
+            import json
+
             msg = {
-                "id": int(hash(topic)) % 1000000,  # Simple ID generation
+                "id": str(hash(topic)) % 1000000,
                 "type": "subscribe",
                 "topic": wss_config["topic"],
                 "privateChannel": kwargs.get("private_channel", False),
                 "response": True,
             }
-
-            # Replace symbol placeholder if present
             if "symbol" in kwargs and "<symbol>" in msg["topic"]:
                 msg["topic"] = msg["topic"].replace("<symbol>", kwargs["symbol"])
-
             return json.dumps(msg)
 
-        return wss_config
+        return str(wss_config)
 
 
 class KuCoinExchangeDataSpot(KuCoinExchangeData):
-    def __init__(self):
+    """KuCoin Spot Exchange Configuration."""
+
+    def __init__(self) -> None:
+        """Initialize KuCoin spot exchange data."""
         super().__init__()
-        self._load_from_config("spot")
+        self.asset_type = "SPOT"
 
 
 class KuCoinExchangeDataFutures(KuCoinExchangeData):
-    def __init__(self):
+    """KuCoin Futures Exchange Configuration."""
+
+    def __init__(self) -> None:
+        """Initialize KuCoin futures exchange data."""
         super().__init__()
-        self._load_from_config("futures")
+        self.asset_type = "FUTURES"
 
 
 class KuCoinExchangeDataMargin(KuCoinExchangeData):
-    def __init__(self):
+    """KuCoin Margin Exchange Configuration."""
+
+    def __init__(self) -> None:
+        """Initialize KuCoin margin exchange data."""
         super().__init__()
-        self._load_from_config("margin")
+        self.asset_type = "MARGIN"

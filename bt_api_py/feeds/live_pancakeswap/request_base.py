@@ -1,5 +1,4 @@
-"""
-PancakeSwap REST API request base class.
+"""PancakeSwap REST API request base class.
 Handles GraphQL queries and REST API calls to PancakeSwap.
 """
 
@@ -34,7 +33,7 @@ class PancakeSwapRequestData(Feed):
             Capability.CANCEL_ORDER,
         }
 
-    def __init__(self, data_queue, **kwargs):
+    def __init__(self, data_queue, **kwargs) -> None:
         super().__init__(data_queue, **kwargs)
         self.data_queue = data_queue
         self.exchange_name = kwargs.get("exchange_name", "PANCAKESWAP___DEX")
@@ -89,6 +88,7 @@ class PancakeSwapRequestData(Feed):
 
         Returns:
             dict: API response
+
         """
         # Apply rate limiting
         if "private" in endpoint.lower() or is_graphql:
@@ -149,6 +149,7 @@ class PancakeSwapRequestData(Feed):
 
         Returns:
             dict: GraphQL response
+
         """
         return self._make_request(
             "POST",
@@ -178,6 +179,7 @@ class PancakeSwapRequestData(Feed):
 
         Returns:
             RequestData with parsed response
+
         """
         if not self._params:
             base_url = "https://api.pancakeswap.org"
@@ -242,7 +244,7 @@ class PancakeSwapRequestData(Feed):
 
     # ── Standard Interface: get_server_time ───────────────────────
 
-    def _get_server_time(self, extra_data=None, **kwargs):
+    def _get_server_time(self, extra_data=None, **kwargs) -> float:
         """Prepare server time request. Returns (path, params, extra_data).
 
         PancakeSwap is a DEX — no dedicated server time endpoint.
@@ -260,7 +262,7 @@ class PancakeSwapRequestData(Feed):
         )
         return "GET", "/api/v1/time", {}, extra_data
 
-    def get_server_time(self, extra_data=None, **kwargs):
+    def get_server_time(self, extra_data=None, **kwargs) -> float:
         """Get server time. Returns RequestData."""
         method, path, params, extra_data = self._get_server_time(extra_data, **kwargs)
         return RequestData({"server_time": time.time()}, extra_data)

@@ -1,5 +1,4 @@
-"""
-Uniswap Ticker Data Container
+"""Uniswap Ticker Data Container.
 
 Standardized container for Uniswap token price and market data.
 """
@@ -82,6 +81,7 @@ class UniswapTicker:
 
         Returns:
             UniswapTicker instance
+
         """
         # Extract token basic info
         token_info = data.get("token", {}) or {}
@@ -123,6 +123,7 @@ class UniswapTicker:
 
         Returns:
             Dictionary representation of ticker
+
         """
         return {
             "symbol": self.symbol,
@@ -150,6 +151,7 @@ class UniswapTicker:
 
         Returns:
             True if price is valid
+
         """
         return self.is_valid_price and self.price is not None and self.price > 0
 
@@ -158,6 +160,7 @@ class UniswapTicker:
 
         Returns:
             True if volume is valid
+
         """
         return self.is_valid_volume and self.volume_24h is not None and self.volume_24h > 0
 
@@ -166,6 +169,7 @@ class UniswapTicker:
 
         Args:
             new_price: New price value
+
         """
         if new_price > 0:
             old_price = self.price

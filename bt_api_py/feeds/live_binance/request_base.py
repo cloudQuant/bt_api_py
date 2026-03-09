@@ -124,7 +124,7 @@ class BinanceRequestData(Feed):
         return RateLimiter(rules)
 
     def translate_error(self, raw_response):
-        """将原始 Binance API 响应翻译为 UnifiedError（如有错误），否则返回 None"""
+        """将原始 Binance API 响应翻译为 UnifiedError（如有错误），否则返回 None."""
         if isinstance(raw_response, dict):
             code = raw_response.get("code")
             if code is not None and int(code) < 0:
@@ -149,10 +149,11 @@ class BinanceRequestData(Feed):
     #     return base64.b64encode(d).decode()
 
     def sign(self, content):
-        """签名
+        """签名.
 
         Args:
             content (TYPE): Description
+
         """
         sign = hmac.new(
             self.private_key.encode("utf-8"), content.encode("utf-8"), digestmod="sha256"
@@ -163,14 +164,14 @@ class BinanceRequestData(Feed):
     # set request header
     # noinspection PyMethodMayBeStatic
     def request(self, path, params=None, body=None, extra_data=None, timeout=10, is_sign=True):
-        """http request function
+        """Http request function
         Args:
             path (TYPE): request url
             params (dict, optional): in url
             body (dict, optional): in request body
             extra_data(dict,None): extra_data, generate by user
             timeout (int, optional): request timeout(s)
-            is_sign (bool, optional): is need signature
+            is_sign (bool, optional): is need signature.
         """
         if params is None:
             params = {}
@@ -205,12 +206,11 @@ class BinanceRequestData(Feed):
         return RequestData(res, extra_data)
 
     def _get_account(self, symbol=None, extra_data=None, **kwargs):
-        """
-        get account info using async
+        """Get account info using async
         :param symbol: default None, get all the currency, can be string, e.g. "BTC-USDT".
         :param extra_data: extra_data, default is None, can be a dict passed by user
         :param kwargs: pass key-worded, variable-length arguments.
-        :return: RequestData
+        :return: RequestData.
         """
         request_type = "get_account"
         path = self._params.get_rest_path(request_type)
@@ -254,12 +254,11 @@ class BinanceRequestData(Feed):
         return data
 
     def _get_balance(self, symbol=None, extra_data=None, **kwargs):
-        """
-        get balance info using async
+        """Get balance info using async
         :param symbol: default None, get all the currency, can be string, e.g. "BTC-USDT".
         :param extra_data: extra_data, default is None, can be a dict passed by user
         :param kwargs: pass key-worded, variable-length arguments.
-        :return: RequestData
+        :return: RequestData.
         """
         request_type = "get_balance"
         # request_symbol = self._params.get_symbol(symbol)
@@ -306,12 +305,11 @@ class BinanceRequestData(Feed):
         return data
 
     def _get_position(self, symbol, extra_data=None, **kwargs):
-        """
-        get position info from okx by symbol
+        """Get position info from okx by symbol
         :param symbol: default None, get all the currency, can be string, e.g. "BTC-USDT".
         :param extra_data: extra_data, default is None, can be a dict passed by user
         :param kwargs: pass key-worded, variable-length arguments.
-        :return: RequestData
+        :return: RequestData.
         """
         request_symbol = self._params.get_symbol(symbol)
         request_type = "get_position"
@@ -347,24 +345,22 @@ class BinanceRequestData(Feed):
         return data, status
 
     def get_position(self, symbol, extra_data=None, **kwargs):
-        """
-        get position info from okx by symbol
+        """Get position info from okx by symbol
         :param symbol: default None, get all the currency, can be string, e.g. "BTC-USDT".
         :param extra_data: extra_data, default is None, can be a dict passed by user
         :param kwargs: pass key-worded, variable-length arguments.
-        :return: RequestData
+        :return: RequestData.
         """
         path, params, extra_data = self._get_position(symbol, extra_data, **kwargs)
         data = self.request(path, params=params, extra_data=extra_data)
         return data
 
     def _get_tick(self, symbol, extra_data=None, **kwargs):
-        """
-        get tick price by symbol
+        """Get tick price by symbol
         :param symbol: default None, get all the currency, can be string, e.g. "BTC-USDT".
         :param extra_data: extra_data, default is None, can be a dict passed by user
         :param kwargs: pass key-worded, variable-length arguments.
-        :return: RequestData
+        :return: RequestData.
         """
         request_type = "get_tick"
         path = self._params.get_rest_path(request_type)
@@ -408,14 +404,13 @@ class BinanceRequestData(Feed):
         return data
 
     def _get_depth(self, symbol, size=20, extra_data=None, **kwargs):
-        """
-        get depth data from okx using requests package
+        """Get depth data from okx using requests package
         :param symbol: instrument name
         :param size: the size of the orderbook level
         :param args:  pass a variable number of arguments to a function.
         :param extra_data: extra_data, generated by user and extended by function
         :param kwargs: pass key-worded, variable-length arguments.
-        :return: tuple of (str, dict, dict)
+        :return: tuple of (str, dict, dict).
         """
         request_type = "get_depth"
         request_symbol = self._params.get_symbol(symbol)
@@ -458,8 +453,7 @@ class BinanceRequestData(Feed):
     def _get_kline(
         self, symbol, period, count=100, start_time=None, end_time=None, extra_data=None, **kwargs
     ):
-        """
-        get kline from okx using request.
+        """Get kline from okx using request.
         :param symbol: instrument name.
         :param period: kline interval.
         :param count: kline number, default is 100.
@@ -467,7 +461,7 @@ class BinanceRequestData(Feed):
         :param end_time: end_time
         :param extra_data: extra_data, generated by user and function
         :param kwargs: pass a key-worded, variable-length argument list.
-        :return: tuple of (str, dict, dict)
+        :return: tuple of (str, dict, dict).
         """
         request_type = "get_kline"
         request_symbol = self._params.get_symbol(symbol)
@@ -530,13 +524,12 @@ class BinanceRequestData(Feed):
         return data
 
     def _get_funding_rate(self, symbol, extra_data=None, **kwargs):
-        """
-        get funding rate from okx
+        """Get funding rate from okx
         :param symbol: symbol name, eg: BTC-USDT.
         :param args:  pass a variable number of arguments to a function.
         :param extra_data: extra_data, generated by user and function
         :param kwargs: pass a key-worded, variable-length argument list.
-        :return: tuple of (str, dict, dict)
+        :return: tuple of (str, dict, dict).
         """
         request_type = "get_funding_rate"
         request_symbol = self._params.get_symbol(symbol)
@@ -582,8 +575,7 @@ class BinanceRequestData(Feed):
     def _get_history_funding_rate(
         self, symbol, start_time, end_time, count=1000, extra_data=None, **kwargs
     ):
-        """
-        get funding rate from binance
+        """Get funding rate from binance
         :param symbol: symbol name, eg: BTC-USDT.
         :param start_time: start time
         :param end_time: end time
@@ -591,7 +583,7 @@ class BinanceRequestData(Feed):
         :param args:  passes a variable number of arguments to a function.
         :param extra_data: extra_data, generated by user and function
         :param kwargs: pass a key-worded, variable-length argument list.
-        :return: tuple of (str, dict, dict)
+        :return: tuple of (str, dict, dict).
         """
         request_type = "get_history_funding_rate"
         request_symbol = self._params.get_symbol(symbol)
@@ -658,13 +650,12 @@ class BinanceRequestData(Feed):
         return data
 
     def _get_mark_price(self, symbol, extra_data=None, **kwargs):
-        """
-        get mark_price from okx
+        """Get mark_price from okx
         :param symbol: symbol name, eg: BTC-USDT.
         :param extra_data: extra_data, generated by user and function
         :param args:  pass a variable number of arguments to a function.
         :param kwargs: pass a key-worded, variable-length argument list.
-        :return: tuple of (str, dict, dict)
+        :return: tuple of (str, dict, dict).
         """
         request_type = "get_mark_price"
         request_symbol = self._params.get_symbol(symbol)
@@ -832,8 +823,7 @@ class BinanceRequestData(Feed):
         return data
 
     def _cancel_order(self, symbol, order_id=None, extra_data=None, **kwargs):
-        """
-        cancel order by order_id using async
+        """Cancel order by order_id using async
         :param symbol: default None, get all the currency, can be string, e.g. "BTC-USDT".
         :param order_id: order_id, default is None, can be a string passed by user
         :param extra_data: extra_data, default is None, can be a dict passed by user
@@ -965,12 +955,11 @@ class BinanceRequestData(Feed):
         return data
 
     def _get_open_orders(self, symbol=None, extra_data=None, **kwargs):
-        """
-        get open orders by symbol using async
+        """Get open orders by symbol using async
         :param symbol: default None, get all the currency, can be string, e.g. "BTC-USDT".
         :param extra_data: extra_data, default is None, can be a dict passed by user
         :param kwargs: pass key-worded, variable-length arguments.
-        :return: RequestData
+        :return: RequestData.
         """
         if symbol is not None:
             request_symbol = self._params.get_symbol(symbol)
@@ -1016,8 +1005,7 @@ class BinanceRequestData(Feed):
     def _get_deals(
         self, symbol=None, count=100, start_time="", end_time="", extra_data=None, **kwargs
     ):
-        """
-        get history trade records from okx
+        """Get history trade records from okx
         :param symbol: 交易对, btc/usdt
         :param count: 分页数量, 默认100, 最大100
         :param start_time: 筛选开始时间戳, 毫秒
@@ -1808,7 +1796,7 @@ class BinanceRequestData(Feed):
         extra_data=None,
         **kwargs,
     ):
-        """获取大户多空比 (账户)
+        """获取大户多空比 (账户).
 
         Args:
             symbol: 交易对
@@ -1821,6 +1809,7 @@ class BinanceRequestData(Feed):
 
         Returns:
             tuple: (path, params, extra_data)
+
         """
         request_type = "get_top_long_short_account_ratio"
         request_symbol = self._params.get_symbol(symbol)
@@ -1862,7 +1851,7 @@ class BinanceRequestData(Feed):
         extra_data=None,
         **kwargs,
     ):
-        """获取大户多空比 (账户)"""
+        """获取大户多空比 (账户)."""
         path, params, extra_data = self._get_top_long_short_account_ratio(
             symbol, period, count, start_time, end_time, extra_data, **kwargs
         )
@@ -1879,7 +1868,7 @@ class BinanceRequestData(Feed):
         extra_data=None,
         **kwargs,
     ):
-        """获取大户多空比 (持仓)
+        """获取大户多空比 (持仓).
 
         Args:
             symbol: 交易对
@@ -1892,6 +1881,7 @@ class BinanceRequestData(Feed):
 
         Returns:
             tuple: (path, params, extra_data)
+
         """
         request_type = "get_top_long_short_position_ratio"
         request_symbol = self._params.get_symbol(symbol)
@@ -1933,7 +1923,7 @@ class BinanceRequestData(Feed):
         extra_data=None,
         **kwargs,
     ):
-        """获取大户多空比 (持仓)"""
+        """获取大户多空比 (持仓)."""
         path, params, extra_data = self._get_top_long_short_position_ratio(
             symbol, period, count, start_time, end_time, extra_data, **kwargs
         )
@@ -1950,7 +1940,7 @@ class BinanceRequestData(Feed):
         extra_data=None,
         **kwargs,
     ):
-        """获取持仓量历史
+        """获取持仓量历史.
 
         Args:
             symbol: 交易对
@@ -1963,6 +1953,7 @@ class BinanceRequestData(Feed):
 
         Returns:
             tuple: (path, params, extra_data)
+
         """
         request_type = "get_open_interest_hist"
         request_symbol = self._params.get_symbol(symbol)
@@ -2004,7 +1995,7 @@ class BinanceRequestData(Feed):
         extra_data=None,
         **kwargs,
     ):
-        """获取持仓量历史"""
+        """获取持仓量历史."""
         path, params, extra_data = self._get_open_interest_hist(
             symbol, period, count, start_time, end_time, extra_data, **kwargs
         )
@@ -2017,7 +2008,7 @@ class BinanceRequestData(Feed):
     def _get_force_orders(
         self, symbol=None, start_time=None, end_time=None, limit=None, extra_data=None, **kwargs
     ):
-        """获取用户强平订单
+        """获取用户强平订单.
 
         Args:
             symbol: 交易对 (可选)
@@ -2029,6 +2020,7 @@ class BinanceRequestData(Feed):
 
         Returns:
             tuple: (path, params, extra_data)
+
         """
         request_type = "get_force_orders"
         params = {}
@@ -2063,7 +2055,7 @@ class BinanceRequestData(Feed):
     def get_force_orders(
         self, symbol=None, start_time=None, end_time=None, limit=None, extra_data=None, **kwargs
     ):
-        """获取用户强平订单"""
+        """获取用户强平订单."""
         path, params, extra_data = self._get_force_orders(
             symbol, start_time, end_time, limit, extra_data, **kwargs
         )
@@ -2076,14 +2068,14 @@ class BinanceRequestData(Feed):
     async def async_request(
         self, path, params=None, body=None, extra_data=None, timeout=10, is_sign=False
     ):
-        """http request function
+        """Http request function
         Args:
             path (TYPE): request url
             params (dict, optional): in url
             body (dict, optional): in request body
             timeout (int, optional): request timeout(s)
             extra_data(dict,None): extra_data, generate by user
-            is_sign (bool, optional): whether to signature
+            is_sign (bool, optional): whether to signature.
         """
         if params is None:
             params = {}
@@ -2135,12 +2127,11 @@ class BinanceRequestData(Feed):
         )
 
     def async_get_position(self, symbol, extra_data=None, **kwargs):
-        """
-        get position info from okx by symbol using async
+        """Get position info from okx by symbol using async
         :param symbol: default None, get all the currency, can be string, e.g. "BTC-USDT".
         :param extra_data: extra_data, default is None, can be a dict passed by user
         :param kwargs: pass key-worded, variable-length arguments.
-        :return: RequestData
+        :return: RequestData.
         """
         path, params, extra_data = self._get_position(symbol, extra_data, **kwargs)
         self.submit(
@@ -2149,10 +2140,9 @@ class BinanceRequestData(Feed):
         )
 
     def async_callback(self, future):
-        """
-        callback function for async_get_tick, push tickerData to data_queue
+        """Callback function for async_get_tick, push tickerData to data_queue
         :param future: asyncio future object
-        :return: None
+        :return: None.
         """
         try:
             result = future.result()

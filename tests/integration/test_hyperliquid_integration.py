@@ -39,7 +39,7 @@ def test_market_data_queries():
 
         pass
 
-    except Exception as e:
+    except Exception:
         pass
 
 
@@ -56,24 +56,20 @@ def test_authenticated_queries():
         # Try to get clearinghouse state (requires valid address)
         try:
             result = request_data.get_clearinghouse_state()
-        except ValueError as e:
+        except ValueError:
             pass
 
         # Try to place an order (should fail without valid credentials)
         try:
             result = request_data.place_order(
-                symbol="BTC",
-                side="buy",
-                quantity=0.001,
-                price=40000,
-                order_type="limit"
+                symbol="BTC", side="buy", quantity=0.001, price=40000, order_type="limit"
             )
-        except Exception as e:
+        except Exception:
             pass
 
         pass
 
-    except Exception as e:
+    except Exception:
         pass
 
 
@@ -97,15 +93,7 @@ def test_websocket_subscription():
         # Test message processing
 
         # Mock ticker message
-        ticker_message = {
-            "channel": "allMids",
-            "data": {
-                "mids": {
-                    "BTC": 45000.0,
-                    "ETH": 3000.0
-                }
-            }
-        }
+        ticker_message = {"channel": "allMids", "data": {"mids": {"BTC": 45000.0, "ETH": 3000.0}}}
         wss_data.process_ticker_message(ticker_message)
 
         # Mock orderbook message
@@ -115,9 +103,9 @@ def test_websocket_subscription():
                 "coin": "BTC",
                 "levels": [
                     [{"px": 45001, "sz": "0.1", "n": 1}],
-                    [{"px": 44999, "sz": "0.2", "n": 1}]
-                ]
-            }
+                    [{"px": 44999, "sz": "0.2", "n": 1}],
+                ],
+            },
         }
         wss_data.process_orderbook_message(orderbook_message)
 
@@ -130,15 +118,15 @@ def test_websocket_subscription():
                     "px": "45000.5",
                     "sz": "0.05",
                     "side": "buy",
-                    "time": int(time.time() * 1000)
+                    "time": int(time.time() * 1000),
                 }
-            ]
+            ],
         }
         wss_data.process_trades_message(trades_message)
 
         pass
 
-    except Exception as e:
+    except Exception:
         pass
 
 
@@ -152,7 +140,6 @@ def test_config_loading():
         config_path = "configs/hyperliquid.yaml"
         config = load_exchange_config(config_path)
 
-
         # Check asset types
         for asset_type, asset_config in config.asset_types.items():
             pass
@@ -161,7 +148,7 @@ def test_config_loading():
 
         pass
 
-    except Exception as e:
+    except Exception:
         pass
 
 
@@ -170,11 +157,7 @@ def main():
 
     # Set up logging
     logger = SpdLogManager(
-        "./logs/test_hyperliquid_integration.log",
-        "test",
-        0,
-        0,
-        False
+        "./logs/test_hyperliquid_integration.log", "test", 0, 0, False
     ).create_logger()
 
     # Run tests
@@ -189,10 +172,8 @@ def main():
     total = len(tests)
 
     for test_name, test_func in tests:
-
         if test_func():
             passed += 1
-
 
     if passed == total:
         pass

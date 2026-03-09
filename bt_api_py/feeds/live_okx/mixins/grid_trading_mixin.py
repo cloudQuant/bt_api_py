@@ -14,28 +14,28 @@ class GridTradingMixin:
 
     def _grid_order_algo(
         self,
-        inst_id,
-        td_mode,
-        ccy,
-        algo_algo_type,
-        max_px,
-        min_px,
-        grid_num,
-        run_type=None,
-        sz=None,
-        base_sz=None,
-        trigger_px=None,
-        trigger_time=None,
-        attach_algo_cl_or=None,
-        attach_algo_om_trigger_px=None,
-        tp_px=None,
-        tp_trigger_px=None,
-        sl_px=None,
-        sl_trigger_px=None,
-        fast_callback_speed=None,
-        extra_data=None,
-        **kwargs,
-    ):
+        inst_id: Any,
+        td_mode: Any,
+        ccy: Any,
+        algo_algo_type: Any,
+        max_px: Any,
+        min_px: Any,
+        grid_num: Any,
+        run_type: Any = None,
+        sz: Any = None,
+        base_sz: Any = None,
+        trigger_px: Any = None,
+        trigger_time: Any = None,
+        attach_algo_cl_or: Any = None,
+        attach_algo_om_trigger_px: Any = None,
+        tp_px: Any = None,
+        tp_trigger_px: Any = None,
+        sl_px: Any = None,
+        sl_trigger_px: Any = None,
+        fast_callback_speed: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """Create grid strategy order"""
         request_type = "grid_order_algo"
         params = {
@@ -88,28 +88,28 @@ class GridTradingMixin:
 
     def grid_order_algo(
         self,
-        inst_id,
-        td_mode,
-        ccy,
-        algo_algo_type,
-        max_px,
-        min_px,
-        grid_num,
-        run_type=None,
-        sz=None,
-        base_sz=None,
-        trigger_px=None,
-        trigger_time=None,
-        attach_algo_cl_or=None,
-        attach_algo_om_trigger_px=None,
-        tp_px=None,
-        tp_trigger_px=None,
-        sl_px=None,
-        sl_trigger_px=None,
-        fast_callback_speed=None,
-        extra_data=None,
-        **kwargs,
-    ):
+        inst_id: Any,
+        td_mode: Any,
+        ccy: Any,
+        algo_algo_type: Any,
+        max_px: Any,
+        min_px: Any,
+        grid_num: Any,
+        run_type: Any = None,
+        sz: Any = None,
+        base_sz: Any = None,
+        trigger_px: Any = None,
+        trigger_time: Any = None,
+        attach_algo_cl_or: Any = None,
+        attach_algo_om_trigger_px: Any = None,
+        tp_px: Any = None,
+        tp_trigger_px: Any = None,
+        sl_px: Any = None,
+        sl_trigger_px: Any = None,
+        fast_callback_speed: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """Create grid strategy order"""
         path, params, extra_data = self._grid_order_algo(
             inst_id,
@@ -139,28 +139,28 @@ class GridTradingMixin:
 
     def async_grid_order_algo(
         self,
-        inst_id,
-        td_mode,
-        ccy,
-        algo_algo_type,
-        max_px,
-        min_px,
-        grid_num,
-        run_type=None,
-        sz=None,
-        base_sz=None,
-        trigger_px=None,
-        trigger_time=None,
-        attach_algo_cl_or=None,
-        attach_algo_om_trigger_px=None,
-        tp_px=None,
-        tp_trigger_px=None,
-        sl_px=None,
-        sl_trigger_px=None,
-        fast_callback_speed=None,
-        extra_data=None,
-        **kwargs,
-    ):
+        inst_id: Any,
+        td_mode: Any,
+        ccy: Any,
+        algo_algo_type: Any,
+        max_px: Any,
+        min_px: Any,
+        grid_num: Any,
+        run_type: Any = None,
+        sz: Any = None,
+        base_sz: Any = None,
+        trigger_px: Any = None,
+        trigger_time: Any = None,
+        attach_algo_cl_or: Any = None,
+        attach_algo_om_trigger_px: Any = None,
+        tp_px: Any = None,
+        tp_trigger_px: Any = None,
+        sl_px: Any = None,
+        sl_trigger_px: Any = None,
+        fast_callback_speed: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """Async create grid strategy order"""
         path, params, extra_data = self._grid_order_algo(
             inst_id,
@@ -192,18 +192,18 @@ class GridTradingMixin:
 
     def _grid_amend_order_algo(
         self,
-        algo_id,
-        inst_id,
-        trigger_px=None,
-        max_px=None,
-        min_px=None,
-        tp_px=None,
-        tp_trigger_px=None,
-        sl_px=None,
-        sl_trigger_px=None,
-        extra_data=None,
-        **kwargs,
-    ):
+        algo_id: Any,
+        inst_id: Any,
+        trigger_px: Any = None,
+        max_px: Any = None,
+        min_px: Any = None,
+        tp_px: Any = None,
+        tp_trigger_px: Any = None,
+        sl_px: Any = None,
+        sl_trigger_px: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """Amend grid strategy order"""
         request_type = "grid_amend_order_algo"
         params = {
@@ -241,18 +241,18 @@ class GridTradingMixin:
 
     def grid_amend_order_algo(
         self,
-        algo_id,
-        inst_id,
-        trigger_px=None,
-        max_px=None,
-        min_px=None,
-        tp_px=None,
-        tp_trigger_px=None,
-        sl_px=None,
-        sl_trigger_px=None,
-        extra_data=None,
-        **kwargs,
-    ):
+        algo_id: Any,
+        inst_id: Any,
+        trigger_px: Any = None,
+        max_px: Any = None,
+        min_px: Any = None,
+        tp_px: Any = None,
+        tp_trigger_px: Any = None,
+        sl_px: Any = None,
+        sl_trigger_px: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """Amend grid strategy order"""
         path, params, extra_data = self._grid_amend_order_algo(
             algo_id,
@@ -272,18 +272,18 @@ class GridTradingMixin:
 
     def async_grid_amend_order_algo(
         self,
-        algo_id,
-        inst_id,
-        trigger_px=None,
-        max_px=None,
-        min_px=None,
-        tp_px=None,
-        tp_trigger_px=None,
-        sl_px=None,
-        sl_trigger_px=None,
-        extra_data=None,
-        **kwargs,
-    ):
+        algo_id: Any,
+        inst_id: Any,
+        trigger_px: Any = None,
+        max_px: Any = None,
+        min_px: Any = None,
+        tp_px: Any = None,
+        tp_trigger_px: Any = None,
+        sl_px: Any = None,
+        sl_trigger_px: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """Async amend grid strategy order"""
         path, params, extra_data = self._grid_amend_order_algo(
             algo_id,
@@ -303,7 +303,9 @@ class GridTradingMixin:
             callback=self.async_callback,
         )
 
-    def _grid_stop_order_algo(self, algo_id, inst_id, extra_data=None, **kwargs):
+    def _grid_stop_order_algo(
+        self, algo_id: Any, inst_id: Any, extra_data: Any = None, **kwargs: Any
+    ) -> None:
         """Stop grid strategy order"""
         request_type = "grid_stop_order_algo"
         params = {
@@ -325,7 +327,9 @@ class GridTradingMixin:
             extra_data.update(kwargs)
         return path, params, extra_data
 
-    def grid_stop_order_algo(self, algo_id, inst_id, extra_data=None, **kwargs):
+    def grid_stop_order_algo(
+        self, algo_id: Any, inst_id: Any, extra_data: Any = None, **kwargs: Any
+    ) -> None:
         """Stop grid strategy order"""
         path, params, extra_data = self._grid_stop_order_algo(
             algo_id, inst_id, extra_data, **kwargs
@@ -333,7 +337,9 @@ class GridTradingMixin:
         data = self.request(path, body=params, extra_data=extra_data)
         return data
 
-    def async_grid_stop_order_algo(self, algo_id, inst_id, extra_data=None, **kwargs):
+    def async_grid_stop_order_algo(
+        self, algo_id: Any, inst_id: Any, extra_data: Any = None, **kwargs: Any
+    ) -> None:
         """Async stop grid strategy order"""
         path, params, extra_data = self._grid_stop_order_algo(
             algo_id, inst_id, extra_data, **kwargs
@@ -345,15 +351,15 @@ class GridTradingMixin:
 
     def _grid_orders_algo_pending(
         self,
-        inst_type=None,
-        inst_id=None,
-        algo_id=None,
-        after=None,
-        before=None,
-        limit=None,
-        extra_data=None,
-        **kwargs,
-    ):
+        inst_type: Any = None,
+        inst_id: Any = None,
+        algo_id: Any = None,
+        after: Any = None,
+        before: Any = None,
+        limit: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """Get grid strategy pending orders"""
         request_type = "grid_orders_algo_pending"
         params = {}
@@ -386,15 +392,15 @@ class GridTradingMixin:
 
     def grid_orders_algo_pending(
         self,
-        inst_type=None,
-        inst_id=None,
-        algo_id=None,
-        after=None,
-        before=None,
-        limit=None,
-        extra_data=None,
-        **kwargs,
-    ):
+        inst_type: Any = None,
+        inst_id: Any = None,
+        algo_id: Any = None,
+        after: Any = None,
+        before: Any = None,
+        limit: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """Get grid strategy pending orders"""
         path, params, extra_data = self._grid_orders_algo_pending(
             inst_type, inst_id, algo_id, after, before, limit, extra_data, **kwargs
@@ -404,15 +410,15 @@ class GridTradingMixin:
 
     def async_grid_orders_algo_pending(
         self,
-        inst_type=None,
-        inst_id=None,
-        algo_id=None,
-        after=None,
-        before=None,
-        limit=None,
-        extra_data=None,
-        **kwargs,
-    ):
+        inst_type: Any = None,
+        inst_id: Any = None,
+        algo_id: Any = None,
+        after: Any = None,
+        before: Any = None,
+        limit: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """Async get grid strategy pending orders"""
         path, params, extra_data = self._grid_orders_algo_pending(
             inst_type, inst_id, algo_id, after, before, limit, extra_data, **kwargs
@@ -424,16 +430,16 @@ class GridTradingMixin:
 
     def _grid_orders_algo_history(
         self,
-        inst_type=None,
-        inst_id=None,
-        algo_id=None,
-        state=None,
-        after=None,
-        before=None,
-        limit=None,
-        extra_data=None,
-        **kwargs,
-    ):
+        inst_type: Any = None,
+        inst_id: Any = None,
+        algo_id: Any = None,
+        state: Any = None,
+        after: Any = None,
+        before: Any = None,
+        limit: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """Get grid strategy order history"""
         request_type = "grid_orders_algo_history"
         params = {}
@@ -468,16 +474,16 @@ class GridTradingMixin:
 
     def grid_orders_algo_history(
         self,
-        inst_type=None,
-        inst_id=None,
-        algo_id=None,
-        state=None,
-        after=None,
-        before=None,
-        limit=None,
-        extra_data=None,
-        **kwargs,
-    ):
+        inst_type: Any = None,
+        inst_id: Any = None,
+        algo_id: Any = None,
+        state: Any = None,
+        after: Any = None,
+        before: Any = None,
+        limit: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """Get grid strategy order history"""
         path, params, extra_data = self._grid_orders_algo_history(
             inst_type, inst_id, algo_id, state, after, before, limit, extra_data, **kwargs
@@ -487,16 +493,16 @@ class GridTradingMixin:
 
     def async_grid_orders_algo_history(
         self,
-        inst_type=None,
-        inst_id=None,
-        algo_id=None,
-        state=None,
-        after=None,
-        before=None,
-        limit=None,
-        extra_data=None,
-        **kwargs,
-    ):
+        inst_type: Any = None,
+        inst_id: Any = None,
+        algo_id: Any = None,
+        state: Any = None,
+        after: Any = None,
+        before: Any = None,
+        limit: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """Async get grid strategy order history"""
         path, params, extra_data = self._grid_orders_algo_history(
             inst_type, inst_id, algo_id, state, after, before, limit, extra_data, **kwargs
@@ -508,17 +514,17 @@ class GridTradingMixin:
 
     def _grid_amend_order_algo_basic(
         self,
-        algo_id,
-        inst_id,
-        max_px=None,
-        min_px=None,
-        tp_px=None,
-        tp_trigger_px=None,
-        sl_px=None,
-        sl_trigger_px=None,
-        extra_data=None,
-        **kwargs,
-    ):
+        algo_id: Any,
+        inst_id: Any,
+        max_px: Any = None,
+        min_px: Any = None,
+        tp_px: Any = None,
+        tp_trigger_px: Any = None,
+        sl_px: Any = None,
+        sl_trigger_px: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """Amend grid order (basic parameters) - 修改网格委托(基础参数)"""
         request_type = "grid_amend_order_algo_basic"
         params = {
@@ -554,17 +560,17 @@ class GridTradingMixin:
 
     def grid_amend_order_algo_basic(
         self,
-        algo_id,
-        inst_id,
-        max_px=None,
-        min_px=None,
-        tp_px=None,
-        tp_trigger_px=None,
-        sl_px=None,
-        sl_trigger_px=None,
-        extra_data=None,
-        **kwargs,
-    ):
+        algo_id: Any,
+        inst_id: Any,
+        max_px: Any = None,
+        min_px: Any = None,
+        tp_px: Any = None,
+        tp_trigger_px: Any = None,
+        sl_px: Any = None,
+        sl_trigger_px: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """Amend grid order (basic parameters) - 修改网格委托(基础参数)"""
         path, params, extra_data = self._grid_amend_order_algo_basic(
             algo_id,
@@ -583,17 +589,17 @@ class GridTradingMixin:
 
     def async_grid_amend_order_algo_basic(
         self,
-        algo_id,
-        inst_id,
-        max_px=None,
-        min_px=None,
-        tp_px=None,
-        tp_trigger_px=None,
-        sl_px=None,
-        sl_trigger_px=None,
-        extra_data=None,
-        **kwargs,
-    ):
+        algo_id: Any,
+        inst_id: Any,
+        max_px: Any = None,
+        min_px: Any = None,
+        tp_px: Any = None,
+        tp_trigger_px: Any = None,
+        sl_px: Any = None,
+        sl_trigger_px: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """Async amend grid order (basic parameters)"""
         path, params, extra_data = self._grid_amend_order_algo_basic(
             algo_id,
@@ -613,8 +619,14 @@ class GridTradingMixin:
         )
 
     def _grid_close_position(
-        self, algo_id, inst_id, ccy=None, margin=None, extra_data=None, **kwargs
-    ):
+        self,
+        algo_id: Any,
+        inst_id: Any,
+        ccy: Any = None,
+        margin: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """Close futures grid position - 合约网格平仓"""
         request_type = "grid_close_position"
         params = {
@@ -641,8 +653,14 @@ class GridTradingMixin:
         return path, params, extra_data
 
     def grid_close_position(
-        self, algo_id, inst_id, ccy=None, margin=None, extra_data=None, **kwargs
-    ):
+        self,
+        algo_id: Any,
+        inst_id: Any,
+        ccy: Any = None,
+        margin: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """Close futures grid position - 合约网格平仓"""
         path, params, extra_data = self._grid_close_position(
             algo_id, inst_id, ccy, margin, extra_data, **kwargs
@@ -651,8 +669,14 @@ class GridTradingMixin:
         return data
 
     def async_grid_close_position(
-        self, algo_id, inst_id, ccy=None, margin=None, extra_data=None, **kwargs
-    ):
+        self,
+        algo_id: Any,
+        inst_id: Any,
+        ccy: Any = None,
+        margin: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """Async close futures grid position"""
         path, params, extra_data = self._grid_close_position(
             algo_id, inst_id, ccy, margin, extra_data, **kwargs
@@ -662,7 +686,9 @@ class GridTradingMixin:
             callback=self.async_callback,
         )
 
-    def _grid_cancel_close_order(self, algo_id, inst_id, extra_data=None, **kwargs):
+    def _grid_cancel_close_order(
+        self, algo_id: Any, inst_id: Any, extra_data: Any = None, **kwargs: Any
+    ) -> None:
         """Cancel futures grid close order - 撤销合约网格平仓单"""
         request_type = "grid_cancel_close_order"
         params = {
@@ -684,7 +710,9 @@ class GridTradingMixin:
             extra_data.update(kwargs)
         return path, params, extra_data
 
-    def grid_cancel_close_order(self, algo_id, inst_id, extra_data=None, **kwargs):
+    def grid_cancel_close_order(
+        self, algo_id: Any, inst_id: Any, extra_data: Any = None, **kwargs: Any
+    ) -> None:
         """Cancel futures grid close order - 撤销合约网格平仓单"""
         path, params, extra_data = self._grid_cancel_close_order(
             algo_id, inst_id, extra_data, **kwargs
@@ -692,7 +720,9 @@ class GridTradingMixin:
         data = self.request(path, body=params, extra_data=extra_data)
         return data
 
-    def async_grid_cancel_close_order(self, algo_id, inst_id, extra_data=None, **kwargs):
+    def async_grid_cancel_close_order(
+        self, algo_id: Any, inst_id: Any, extra_data: Any = None, **kwargs: Any
+    ) -> None:
         """Async cancel futures grid close order"""
         path, params, extra_data = self._grid_cancel_close_order(
             algo_id, inst_id, extra_data, **kwargs
@@ -703,8 +733,13 @@ class GridTradingMixin:
         )
 
     def _grid_order_instant_trigger(
-        self, algo_id, inst_id, trigger_px=None, extra_data=None, **kwargs
-    ):
+        self,
+        algo_id: Any,
+        inst_id: Any,
+        trigger_px: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """Grid order instant trigger - 网格委托立即触发"""
         request_type = "grid_order_instant_trigger"
         params = {
@@ -729,8 +764,13 @@ class GridTradingMixin:
         return path, params, extra_data
 
     def grid_order_instant_trigger(
-        self, algo_id, inst_id, trigger_px=None, extra_data=None, **kwargs
-    ):
+        self,
+        algo_id: Any,
+        inst_id: Any,
+        trigger_px: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """Grid order instant trigger - 网格委托立即触发"""
         path, params, extra_data = self._grid_order_instant_trigger(
             algo_id, inst_id, trigger_px, extra_data, **kwargs
@@ -739,8 +779,13 @@ class GridTradingMixin:
         return data
 
     def async_grid_order_instant_trigger(
-        self, algo_id, inst_id, trigger_px=None, extra_data=None, **kwargs
-    ):
+        self,
+        algo_id: Any,
+        inst_id: Any,
+        trigger_px: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """Async grid order instant trigger"""
         path, params, extra_data = self._grid_order_instant_trigger(
             algo_id, inst_id, trigger_px, extra_data, **kwargs
@@ -750,7 +795,9 @@ class GridTradingMixin:
             callback=self.async_callback,
         )
 
-    def _grid_orders_algo_details(self, algo_id, inst_id, extra_data=None, **kwargs):
+    def _grid_orders_algo_details(
+        self, algo_id: Any, inst_id: Any, extra_data: Any = None, **kwargs: Any
+    ) -> None:
         """Get grid order details - 获取网格委托详情"""
         request_type = "grid_orders_algo_details"
         params = {
@@ -772,7 +819,9 @@ class GridTradingMixin:
             extra_data.update(kwargs)
         return path, params, extra_data
 
-    def grid_orders_algo_details(self, algo_id, inst_id, extra_data=None, **kwargs):
+    def grid_orders_algo_details(
+        self, algo_id: Any, inst_id: Any, extra_data: Any = None, **kwargs: Any
+    ) -> None:
         """Get grid order details - 获取网格委托详情"""
         path, params, extra_data = self._grid_orders_algo_details(
             algo_id, inst_id, extra_data, **kwargs
@@ -780,7 +829,9 @@ class GridTradingMixin:
         data = self.request(path, params=params, extra_data=extra_data)
         return data
 
-    def async_grid_orders_algo_details(self, algo_id, inst_id, extra_data=None, **kwargs):
+    def async_grid_orders_algo_details(
+        self, algo_id: Any, inst_id: Any, extra_data: Any = None, **kwargs: Any
+    ) -> None:
         """Async get grid order details"""
         path, params, extra_data = self._grid_orders_algo_details(
             algo_id, inst_id, extra_data, **kwargs
@@ -792,16 +843,16 @@ class GridTradingMixin:
 
     def _grid_sub_orders(
         self,
-        algo_id,
-        inst_id,
-        type=None,
-        ord_id=None,
-        after=None,
-        before=None,
-        limit=None,
-        extra_data=None,
-        **kwargs,
-    ):
+        algo_id: Any,
+        inst_id: Any,
+        type: Any = None,
+        ord_id: Any = None,
+        after: Any = None,
+        before: Any = None,
+        limit: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """Get grid sub orders - 获取网格委托子订单"""
         request_type = "grid_sub_orders"
         params = {
@@ -835,16 +886,16 @@ class GridTradingMixin:
 
     def grid_sub_orders(
         self,
-        algo_id,
-        inst_id,
-        type=None,
-        ord_id=None,
-        after=None,
-        before=None,
-        limit=None,
-        extra_data=None,
-        **kwargs,
-    ):
+        algo_id: Any,
+        inst_id: Any,
+        type: Any = None,
+        ord_id: Any = None,
+        after: Any = None,
+        before: Any = None,
+        limit: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """Get grid sub orders - 获取网格委托子订单"""
         path, params, extra_data = self._grid_sub_orders(
             algo_id, inst_id, type, ord_id, after, before, limit, extra_data, **kwargs
@@ -854,16 +905,16 @@ class GridTradingMixin:
 
     def async_grid_sub_orders(
         self,
-        algo_id,
-        inst_id,
-        type=None,
-        ord_id=None,
-        after=None,
-        before=None,
-        limit=None,
-        extra_data=None,
-        **kwargs,
-    ):
+        algo_id: Any,
+        inst_id: Any,
+        type: Any = None,
+        ord_id: Any = None,
+        after: Any = None,
+        before: Any = None,
+        limit: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """Async get grid sub orders"""
         path, params, extra_data = self._grid_sub_orders(
             algo_id, inst_id, type, ord_id, after, before, limit, extra_data, **kwargs
@@ -874,8 +925,13 @@ class GridTradingMixin:
         )
 
     def _grid_positions(
-        self, inst_type=None, inst_id=None, algo_id=None, extra_data=None, **kwargs
-    ):
+        self,
+        inst_type: Any = None,
+        inst_id: Any = None,
+        algo_id: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """Get grid positions - 获取网格委托持仓"""
         request_type = "grid_positions"
         params = {}
@@ -900,7 +956,14 @@ class GridTradingMixin:
             extra_data.update(kwargs)
         return path, params, extra_data
 
-    def grid_positions(self, inst_type=None, inst_id=None, algo_id=None, extra_data=None, **kwargs):
+    def grid_positions(
+        self,
+        inst_type: Any = None,
+        inst_id: Any = None,
+        algo_id: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """Get grid positions - 获取网格委托持仓"""
         path, params, extra_data = self._grid_positions(
             inst_type, inst_id, algo_id, extra_data, **kwargs
@@ -909,8 +972,13 @@ class GridTradingMixin:
         return data
 
     def async_grid_positions(
-        self, inst_type=None, inst_id=None, algo_id=None, extra_data=None, **kwargs
-    ):
+        self,
+        inst_type: Any = None,
+        inst_id: Any = None,
+        algo_id: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """Async get grid positions"""
         path, params, extra_data = self._grid_positions(
             inst_type, inst_id, algo_id, extra_data, **kwargs
@@ -921,8 +989,15 @@ class GridTradingMixin:
         )
 
     def _grid_withdraw_income(
-        self, algo_id, inst_id, amt, ccy=None, type=None, extra_data=None, **kwargs
-    ):
+        self,
+        algo_id: Any,
+        inst_id: Any,
+        amt: Any,
+        ccy: Any = None,
+        type: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """Spot grid withdraw income - 现货网格提取利润"""
         request_type = "grid_withdraw_income"
         params = {
@@ -950,8 +1025,15 @@ class GridTradingMixin:
         return path, params, extra_data
 
     def grid_withdraw_income(
-        self, algo_id, inst_id, amt, ccy=None, type=None, extra_data=None, **kwargs
-    ):
+        self,
+        algo_id: Any,
+        inst_id: Any,
+        amt: Any,
+        ccy: Any = None,
+        type: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """Spot grid withdraw income - 现货网格提取利润"""
         path, params, extra_data = self._grid_withdraw_income(
             algo_id, inst_id, amt, ccy, type, extra_data, **kwargs
@@ -960,8 +1042,15 @@ class GridTradingMixin:
         return data
 
     def async_grid_withdraw_income(
-        self, algo_id, inst_id, amt, ccy=None, type=None, extra_data=None, **kwargs
-    ):
+        self,
+        algo_id: Any,
+        inst_id: Any,
+        amt: Any,
+        ccy: Any = None,
+        type: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """Async spot grid withdraw income"""
         path, params, extra_data = self._grid_withdraw_income(
             algo_id, inst_id, amt, ccy, type, extra_data, **kwargs
@@ -973,18 +1062,18 @@ class GridTradingMixin:
 
     def _grid_compute_margin_balance(
         self,
-        inst_id,
-        td_mode,
-        ccy,
-        algo_ords_type,
-        sz,
-        max_px=None,
-        min_px=None,
-        grid_num=None,
-        trigger_px=None,
-        extra_data=None,
-        **kwargs,
-    ):
+        inst_id: Any,
+        td_mode: Any,
+        ccy: Any,
+        algo_ords_type: Any,
+        sz: Any,
+        max_px: Any = None,
+        min_px: Any = None,
+        grid_num: Any = None,
+        trigger_px: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """Compute margin balance - 计算保证金余额"""
         request_type = "grid_compute_margin_balance"
         params = {
@@ -1019,18 +1108,18 @@ class GridTradingMixin:
 
     def grid_compute_margin_balance(
         self,
-        inst_id,
-        td_mode,
-        ccy,
-        algo_ords_type,
-        sz,
-        max_px=None,
-        min_px=None,
-        grid_num=None,
-        trigger_px=None,
-        extra_data=None,
-        **kwargs,
-    ):
+        inst_id: Any,
+        td_mode: Any,
+        ccy: Any,
+        algo_ords_type: Any,
+        sz: Any,
+        max_px: Any = None,
+        min_px: Any = None,
+        grid_num: Any = None,
+        trigger_px: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """Compute margin balance - 计算保证金余额"""
         path, params, extra_data = self._grid_compute_margin_balance(
             inst_id,
@@ -1050,18 +1139,18 @@ class GridTradingMixin:
 
     def async_grid_compute_margin_balance(
         self,
-        inst_id,
-        td_mode,
-        ccy,
-        algo_ords_type,
-        sz,
-        max_px=None,
-        min_px=None,
-        grid_num=None,
-        trigger_px=None,
-        extra_data=None,
-        **kwargs,
-    ):
+        inst_id: Any,
+        td_mode: Any,
+        ccy: Any,
+        algo_ords_type: Any,
+        sz: Any,
+        max_px: Any = None,
+        min_px: Any = None,
+        grid_num: Any = None,
+        trigger_px: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """Async compute margin balance"""
         path, params, extra_data = self._grid_compute_margin_balance(
             inst_id,
@@ -1082,8 +1171,15 @@ class GridTradingMixin:
         )
 
     def _grid_margin_balance(
-        self, algo_id, inst_id, amt, ccy=None, type=None, extra_data=None, **kwargs
-    ):
+        self,
+        algo_id: Any,
+        inst_id: Any,
+        amt: Any,
+        ccy: Any = None,
+        type: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """Adjust margin - 调整保证金"""
         request_type = "grid_margin_balance"
         params = {
@@ -1111,8 +1207,15 @@ class GridTradingMixin:
         return path, params, extra_data
 
     def grid_margin_balance(
-        self, algo_id, inst_id, amt, ccy=None, type=None, extra_data=None, **kwargs
-    ):
+        self,
+        algo_id: Any,
+        inst_id: Any,
+        amt: Any,
+        ccy: Any = None,
+        type: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """Adjust margin - 调整保证金"""
         path, params, extra_data = self._grid_margin_balance(
             algo_id, inst_id, amt, ccy, type, extra_data, **kwargs
@@ -1121,8 +1224,15 @@ class GridTradingMixin:
         return data
 
     def async_grid_margin_balance(
-        self, algo_id, inst_id, amt, ccy=None, type=None, extra_data=None, **kwargs
-    ):
+        self,
+        algo_id: Any,
+        inst_id: Any,
+        amt: Any,
+        ccy: Any = None,
+        type: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """Async adjust margin"""
         path, params, extra_data = self._grid_margin_balance(
             algo_id, inst_id, amt, ccy, type, extra_data, **kwargs
@@ -1133,8 +1243,15 @@ class GridTradingMixin:
         )
 
     def _grid_add_investment(
-        self, algo_id, inst_id, amt, ccy=None, type=None, extra_data=None, **kwargs
-    ):
+        self,
+        algo_id: Any,
+        inst_id: Any,
+        amt: Any,
+        ccy: Any = None,
+        type: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """Add investment - 增加投入币数量"""
         request_type = "grid_add_investment"
         params = {
@@ -1162,8 +1279,15 @@ class GridTradingMixin:
         return path, params, extra_data
 
     def grid_add_investment(
-        self, algo_id, inst_id, amt, ccy=None, type=None, extra_data=None, **kwargs
-    ):
+        self,
+        algo_id: Any,
+        inst_id: Any,
+        amt: Any,
+        ccy: Any = None,
+        type: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """Add investment - 增加投入币数量"""
         path, params, extra_data = self._grid_add_investment(
             algo_id, inst_id, amt, ccy, type, extra_data, **kwargs
@@ -1172,8 +1296,15 @@ class GridTradingMixin:
         return data
 
     def async_grid_add_investment(
-        self, algo_id, inst_id, amt, ccy=None, type=None, extra_data=None, **kwargs
-    ):
+        self,
+        algo_id: Any,
+        inst_id: Any,
+        amt: Any,
+        ccy: Any = None,
+        type: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """Async add investment"""
         path, params, extra_data = self._grid_add_investment(
             algo_id, inst_id, amt, ccy, type, extra_data, **kwargs
@@ -1185,14 +1316,14 @@ class GridTradingMixin:
 
     def _grid_get_ai_param(
         self,
-        inst_id,
-        algo_algo_type,
-        max_px=None,
-        min_px=None,
-        grid_num=None,
-        extra_data=None,
-        **kwargs,
-    ):
+        inst_id: Any,
+        algo_algo_type: Any,
+        max_px: Any = None,
+        min_px: Any = None,
+        grid_num: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """Get grid AI parameters - 获取网格AI参数"""
         request_type = "grid_get_ai_param"
         params = {
@@ -1222,14 +1353,14 @@ class GridTradingMixin:
 
     def grid_get_ai_param(
         self,
-        inst_id,
-        algo_algo_type,
-        max_px=None,
-        min_px=None,
-        grid_num=None,
-        extra_data=None,
-        **kwargs,
-    ):
+        inst_id: Any,
+        algo_algo_type: Any,
+        max_px: Any = None,
+        min_px: Any = None,
+        grid_num: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """Get grid AI parameters - 获取网格AI参数"""
         path, params, extra_data = self._grid_get_ai_param(
             inst_id, algo_algo_type, max_px, min_px, grid_num, extra_data, **kwargs
@@ -1239,14 +1370,14 @@ class GridTradingMixin:
 
     def async_grid_get_ai_param(
         self,
-        inst_id,
-        algo_algo_type,
-        max_px=None,
-        min_px=None,
-        grid_num=None,
-        extra_data=None,
-        **kwargs,
-    ):
+        inst_id: Any,
+        algo_algo_type: Any,
+        max_px: Any = None,
+        min_px: Any = None,
+        grid_num: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """Async get grid AI parameters"""
         path, params, extra_data = self._grid_get_ai_param(
             inst_id, algo_algo_type, max_px, min_px, grid_num, extra_data, **kwargs
@@ -1258,16 +1389,16 @@ class GridTradingMixin:
 
     def _grid_compute_min_investment(
         self,
-        inst_id,
-        algo_algo_type,
-        max_px,
-        min_px,
-        grid_num,
-        run_type=None,
-        trigger_px=None,
-        extra_data=None,
-        **kwargs,
-    ):
+        inst_id: Any,
+        algo_algo_type: Any,
+        max_px: Any,
+        min_px: Any,
+        grid_num: Any,
+        run_type: Any = None,
+        trigger_px: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """Compute minimum investment - 计算最小投入金额"""
         request_type = "grid_compute_min_investment"
         params = {
@@ -1298,16 +1429,16 @@ class GridTradingMixin:
 
     def grid_compute_min_investment(
         self,
-        inst_id,
-        algo_algo_type,
-        max_px,
-        min_px,
-        grid_num,
-        run_type=None,
-        trigger_px=None,
-        extra_data=None,
-        **kwargs,
-    ):
+        inst_id: Any,
+        algo_algo_type: Any,
+        max_px: Any,
+        min_px: Any,
+        grid_num: Any,
+        run_type: Any = None,
+        trigger_px: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """Compute minimum investment - 计算最小投入金额"""
         path, params, extra_data = self._grid_compute_min_investment(
             inst_id,
@@ -1325,16 +1456,16 @@ class GridTradingMixin:
 
     def async_grid_compute_min_investment(
         self,
-        inst_id,
-        algo_algo_type,
-        max_px,
-        min_px,
-        grid_num,
-        run_type=None,
-        trigger_px=None,
-        extra_data=None,
-        **kwargs,
-    ):
+        inst_id: Any,
+        algo_algo_type: Any,
+        max_px: Any,
+        min_px: Any,
+        grid_num: Any,
+        run_type: Any = None,
+        trigger_px: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """Async compute minimum investment"""
         path, params, extra_data = self._grid_compute_min_investment(
             inst_id,
@@ -1354,15 +1485,15 @@ class GridTradingMixin:
 
     def _grid_rsi_back_testing(
         self,
-        inst_id,
-        algo_algo_type,
-        max_px,
-        min_px,
-        grid_num,
-        time_type=None,
-        extra_data=None,
-        **kwargs,
-    ):
+        inst_id: Any,
+        algo_algo_type: Any,
+        max_px: Any,
+        min_px: Any,
+        grid_num: Any,
+        time_type: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """RSI back testing - RSI回测"""
         request_type = "grid_rsi_back_testing"
         params = {
@@ -1391,15 +1522,15 @@ class GridTradingMixin:
 
     def grid_rsi_back_testing(
         self,
-        inst_id,
-        algo_algo_type,
-        max_px,
-        min_px,
-        grid_num,
-        time_type=None,
-        extra_data=None,
-        **kwargs,
-    ):
+        inst_id: Any,
+        algo_algo_type: Any,
+        max_px: Any,
+        min_px: Any,
+        grid_num: Any,
+        time_type: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """RSI back testing - RSI回测"""
         path, params, extra_data = self._grid_rsi_back_testing(
             inst_id, algo_algo_type, max_px, min_px, grid_num, time_type, extra_data, **kwargs
@@ -1409,15 +1540,15 @@ class GridTradingMixin:
 
     def async_grid_rsi_back_testing(
         self,
-        inst_id,
-        algo_algo_type,
-        max_px,
-        min_px,
-        grid_num,
-        time_type=None,
-        extra_data=None,
-        **kwargs,
-    ):
+        inst_id: Any,
+        algo_algo_type: Any,
+        max_px: Any,
+        min_px: Any,
+        grid_num: Any,
+        time_type: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> None:
         """Async RSI back testing"""
         path, params, extra_data = self._grid_rsi_back_testing(
             inst_id, algo_algo_type, max_px, min_px, grid_num, time_type, extra_data, **kwargs
@@ -1427,7 +1558,9 @@ class GridTradingMixin:
             callback=self.async_callback,
         )
 
-    def _grid_max_grid_quantity(self, inst_id, algo_algo_type, extra_data=None, **kwargs):
+    def _grid_max_grid_quantity(
+        self, inst_id: Any, algo_algo_type: Any, extra_data: Any = None, **kwargs: Any
+    ) -> None:
         """Get max grid quantity - 最大网格数量"""
         request_type = "grid_max_grid_quantity"
         params = {
@@ -1449,7 +1582,9 @@ class GridTradingMixin:
             extra_data.update(kwargs)
         return path, params, extra_data
 
-    def grid_max_grid_quantity(self, inst_id, algo_algo_type, extra_data=None, **kwargs):
+    def grid_max_grid_quantity(
+        self, inst_id: Any, algo_algo_type: Any, extra_data: Any = None, **kwargs: Any
+    ) -> None:
         """Get max grid quantity - 最大网格数量"""
         path, params, extra_data = self._grid_max_grid_quantity(
             inst_id, algo_algo_type, extra_data, **kwargs
@@ -1457,7 +1592,9 @@ class GridTradingMixin:
         data = self.request(path, params=params, extra_data=extra_data)
         return data
 
-    def async_grid_max_grid_quantity(self, inst_id, algo_algo_type, extra_data=None, **kwargs):
+    def async_grid_max_grid_quantity(
+        self, inst_id: Any, algo_algo_type: Any, extra_data: Any = None, **kwargs: Any
+    ) -> None:
         """Async get max grid quantity"""
         path, params, extra_data = self._grid_max_grid_quantity(
             inst_id, algo_algo_type, extra_data, **kwargs

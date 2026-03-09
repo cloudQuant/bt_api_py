@@ -1,3 +1,5 @@
+from typing import Any
+
 """LocalBitcoins exchange data – Feed pattern."""
 
 import os
@@ -13,7 +15,7 @@ logger = get_logger("localbitcoins_exchange_data")
 _config_cache = None
 
 
-def _load_yaml():
+def _load_yaml() -> Any | None:
     global _config_cache
     if _config_cache is not None:
         return _config_cache
@@ -39,7 +41,7 @@ def _load_yaml():
 class LocalBitcoinsExchangeData(ExchangeData):
     """Base exchange data for LocalBitcoins (P2P, HMAC-SHA256)."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__()
         self.exchange_name = "LOCALBITCOINS___SPOT"
         self.asset_type = "SPOT"
@@ -69,25 +71,25 @@ class LocalBitcoinsExchangeData(ExchangeData):
 
     @staticmethod
     def get_symbol(symbol):
-        """BTC/USD | BTC-USD → btc_usd"""
+        """BTC/USD | BTC-USD → btc_usd."""
         return symbol.lower().replace("-", "_").replace("/", "_")
 
     @staticmethod
     def get_reverse_symbol(symbol):
-        """btc_usd → BTC-USD"""
+        """btc_usd → BTC-USD."""
         return symbol.upper().replace("_", "-")
 
     # ── period helpers ──────────────────────────────────────────
 
-    def get_period(self, period):
+    def get_period(self, period: str) -> str:
         return self.kline_periods.get(period, period)
 
-    def get_reverse_period(self, period):
+    def get_reverse_period(self, period: str) -> str:
         return self.reverse_kline_periods.get(period, period)
 
     # ── path helpers ────────────────────────────────────────────
 
-    def get_rest_path(self, key, **kwargs):
+    def get_rest_path(self, key: str, **kwargs) -> str:
         if key not in self.rest_paths or self.rest_paths[key] == "":
             raise ValueError(f"[{self.exchange_name}] REST path not found: {key}")
         path = self.rest_paths[key]
@@ -103,7 +105,7 @@ class LocalBitcoinsExchangeData(ExchangeData):
 class LocalBitcoinsExchangeDataSpot(LocalBitcoinsExchangeData):
     """LocalBitcoins Spot (P2P) exchange data."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__()
         cfg = _load_yaml()
         if cfg:

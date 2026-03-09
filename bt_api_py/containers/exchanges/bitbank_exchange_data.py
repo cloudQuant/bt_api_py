@@ -1,6 +1,6 @@
-"""
-Bitbank Exchange Data Configuration
-"""
+from typing import Any
+
+"""Bitbank Exchange Data Configuration."""
 
 import os
 
@@ -13,7 +13,7 @@ _bitbank_config = None
 _bitbank_config_loaded = False
 
 
-def _get_bitbank_config():
+def _get_bitbank_config() -> Any | None:
     """Load Bitbank YAML configuration."""
     global _bitbank_config, _bitbank_config_loaded
     if _bitbank_config_loaded:
@@ -37,7 +37,7 @@ def _get_bitbank_config():
 class BitbankExchangeData(ExchangeData):
     """Base class for Bitbank exchange."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__()
         self.exchange_name = "bitbank"
         self.rest_url = "https://public.bitbank.cc"
@@ -58,7 +58,7 @@ class BitbankExchangeData(ExchangeData):
         }
         self.legal_currency = ["JPY", "BTC", "ETH"]
 
-    def _load_from_config(self, asset_type):
+    def _load_from_config(self, asset_type) -> bool:
         """Load from YAML config."""
         config = _get_bitbank_config()
         if config is None:
@@ -112,7 +112,7 @@ class BitbankExchangeData(ExchangeData):
 class BitbankExchangeDataSpot(BitbankExchangeData):
     """Bitbank Spot exchange configuration."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__()
         self.asset_type = "spot"
         self.rest_paths = {}

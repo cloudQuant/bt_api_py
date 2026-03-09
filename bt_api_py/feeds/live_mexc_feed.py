@@ -1,5 +1,4 @@
-"""
-MEXC Live Feed Implementation
+"""MEXC Live Feed Implementation.
 
 Provides WebSocket feed implementations for MEXC exchange.
 """
@@ -14,9 +13,9 @@ from bt_api_py.logging_factory import get_logger
 
 
 class MexcMarketWssFeed(MexcMarketWssDataBase):
-    """MEXC 市场数据 WebSocket 实现"""
+    """MEXC 市场数据 WebSocket 实现."""
 
-    def __init__(self, data_queue, exchange_data=None, **kwargs):
+    def __init__(self, data_queue, exchange_data=None, **kwargs) -> None:
         super().__init__(data_queue, **kwargs)
         self.exchange_data = exchange_data if exchange_data is not None else MexcExchangeDataSpot()
         self.topics = kwargs.get("topics", [])
@@ -33,9 +32,9 @@ class MexcMarketWssFeed(MexcMarketWssDataBase):
 
 
 class MexcAccountWssFeed(MexcAccountWssDataBase):
-    """MEXC 账户数据 WebSocket 实现"""
+    """MEXC 账户数据 WebSocket 实现."""
 
-    def __init__(self, data_queue, exchange_data=None, **kwargs):
+    def __init__(self, data_queue, exchange_data=None, **kwargs) -> None:
         super().__init__(data_queue, **kwargs)
         self.exchange_data = exchange_data if exchange_data is not None else MexcExchangeDataSpot()
         self.topics = kwargs.get("topics", [])
@@ -52,9 +51,9 @@ class MexcAccountWssFeed(MexcAccountWssDataBase):
 
 
 class MexcMarketWssDataSpot(MexcMarketWssFeed):
-    """MEXC Spot 市场数据 WebSocket 实现"""
+    """MEXC Spot 市场数据 WebSocket 实现."""
 
-    def __init__(self, data_queue, **kwargs):
+    def __init__(self, data_queue, **kwargs) -> None:
         super().__init__(data_queue, **kwargs)
         self.asset_type = "SPOT"
 
@@ -67,7 +66,7 @@ class MexcMarketWssDataSpot(MexcMarketWssFeed):
         }
 
     def _handle_ticker(self, data):
-        """处理 ticker 数据"""
+        """处理 ticker 数据."""
         try:
             # MEXC ticker 格式示例
             # {"method": "push", "code": "0", "msg": "", "data": {"symbol": "BTCUSDT", "last": "40000.0", ...}}
@@ -79,7 +78,7 @@ class MexcMarketWssDataSpot(MexcMarketWssFeed):
             self.request_logger.error(f"Error handling ticker data: {e}")
 
     def _handle_trade(self, data):
-        """处理成交数据"""
+        """处理成交数据."""
         try:
             if "data" in data and isinstance(data["data"], list):
                 for trade in data["data"]:
@@ -91,7 +90,7 @@ class MexcMarketWssDataSpot(MexcMarketWssFeed):
             self.request_logger.error(f"Error handling trade data: {e}")
 
     def _handle_orderbook(self, data):
-        """处理订单簿数据"""
+        """处理订单簿数据."""
         try:
             if "data" in data and "symbol" in data["data"]:
                 symbol = data["data"]["symbol"]
@@ -107,7 +106,7 @@ class MexcMarketWssDataSpot(MexcMarketWssFeed):
             self.request_logger.error(f"Error handling orderbook data: {e}")
 
     def _handle_kline(self, data):
-        """处理 K 线数据"""
+        """处理 K 线数据."""
         try:
             if "data" in data and "symbol" in data["data"]:
                 symbol = data["data"]["symbol"]
@@ -119,9 +118,9 @@ class MexcMarketWssDataSpot(MexcMarketWssFeed):
 
 
 class MexcAccountWssDataSpot(MexcAccountWssFeed):
-    """MEXC Spot 账户数据 WebSocket 实现"""
+    """MEXC Spot 账户数据 WebSocket 实现."""
 
-    def __init__(self, data_queue, **kwargs):
+    def __init__(self, data_queue, **kwargs) -> None:
         super().__init__(data_queue, **kwargs)
         self.asset_type = "SPOT"
 
@@ -133,7 +132,7 @@ class MexcAccountWssDataSpot(MexcAccountWssFeed):
         }
 
     def _handle_account(self, data):
-        """处理账户数据"""
+        """处理账户数据."""
         try:
             if "data" in data:
                 account_data = data["data"]
@@ -143,7 +142,7 @@ class MexcAccountWssDataSpot(MexcAccountWssFeed):
             self.request_logger.error(f"Error handling account data: {e}")
 
     def _handle_order(self, data):
-        """处理订单数据"""
+        """处理订单数据."""
         try:
             if "data" in data and "symbol" in data["data"]:
                 symbol = data["data"]["symbol"]
@@ -153,7 +152,7 @@ class MexcAccountWssDataSpot(MexcAccountWssFeed):
             self.request_logger.error(f"Error handling order data: {e}")
 
     def _handle_trade(self, data):
-        """处理成交数据"""
+        """处理成交数据."""
         try:
             if "data" in data and "symbol" in data["data"]:
                 symbol = data["data"]["symbol"]

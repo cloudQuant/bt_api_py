@@ -1,7 +1,5 @@
 """Unit tests for EventBus publish/subscribe mechanism."""
 
-
-
 from bt_api_py.event_bus import EventBus
 
 

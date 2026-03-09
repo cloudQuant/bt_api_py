@@ -1,10 +1,10 @@
-"""
-Poloniex Exchange Data Configuration
+"""Poloniex Exchange Data Configuration.
 
 This module contains exchange-specific configuration for Poloniex,
 including REST endpoints, WebSocket channels, and symbol formatting.
 """
 
+from typing import Any
 import os
 
 from bt_api_py.containers.exchanges.exchange_data import ExchangeData
@@ -17,8 +17,8 @@ _poloniex_config = None
 _poloniex_config_loaded = False
 
 
-def _get_poloniex_config():
-    """延迟加载并缓存 Poloniex YAML 配置"""
+def _get_poloniex_config() -> Any | None:
+    """延迟加载并缓存 Poloniex YAML 配置."""
     global _poloniex_config, _poloniex_config_loaded
     if _poloniex_config_loaded:
         return _poloniex_config
@@ -47,7 +47,7 @@ class PoloniexExchangeData(ExchangeData):
     acct_wss_url, wss_url, rest_paths, wss_paths, legal_currency.
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__()
         self.exchange_name = "poloniex"
         self.rest_url = ""
@@ -81,13 +81,14 @@ class PoloniexExchangeData(ExchangeData):
             "ETH",
         ]
 
-    def _load_from_config(self, asset_type):
-        """从 YAML 配置文件加载交易所参数
+    def _load_from_config(self, asset_type) -> bool:
+        """从 YAML 配置文件加载交易所参数.
 
         Args:
             asset_type: 资产类型 key, 如 'spot', 'futures' 等
         Returns:
             bool: 是否加载成功
+
         """
         config = _get_poloniex_config()
         if config is None:
@@ -137,15 +138,15 @@ class PoloniexExchangeData(ExchangeData):
 
         return True
 
-    def get_symbol(self, symbol):
-        """
-        Convert symbol to Poloniex format.
+    def get_symbol(self, symbol: str) -> str:
+        """Convert symbol to Poloniex format.
 
         Args:
             symbol: Symbol in any format (e.g., "BTC-USDT", "BTC/USDT")
 
         Returns:
             Poloniex format symbol (e.g., "BTC_USDT")
+
         """
         symbol = symbol.upper().replace("/", "_").replace("-", "_")
         # If already has underscore, return as-is
@@ -157,15 +158,15 @@ class PoloniexExchangeData(ExchangeData):
                 return f"{symbol[: -len(lc)]}_{lc}"
         return symbol
 
-    def account_wss_symbol(self, symbol):
-        """
-        Convert symbol for account WebSocket.
+    def account_wss_symbol(self, symbol: str) -> str:
+        """Convert symbol for account WebSocket.
 
         Args:
             symbol: Symbol in any format
 
         Returns:
             Lowercase symbol with slash (e.g., "btc/usdt")
+
         """
         for lc in self.legal_currency:
             if lc in symbol:
@@ -173,21 +174,20 @@ class PoloniexExchangeData(ExchangeData):
                 break
         return symbol
 
-    def get_period(self, key):
-        """
-        Get kline period in Poloniex format.
+    def get_period(self, key: str) -> str:
+        """Get kline period in Poloniex format.
 
         Args:
             key: Period key (e.g., "1m", "1h", "1d")
 
         Returns:
             Poloniex period string (e.g., "MINUTE_1", "HOUR_1", "DAY_1")
+
         """
         return self.kline_periods.get(key, key)
 
-    def get_rest_path(self, request_type):
-        """
-        Get REST API path for a request type.
+    def get_rest_path(self, request_type: str, **kwargs) -> str:
+        """Get REST API path for a request type.
 
         Args:
             request_type: Request type key (e.g., "get_ticker", "make_order")
@@ -197,6 +197,7 @@ class PoloniexExchangeData(ExchangeData):
 
         Raises:
             ValueError: If request_type is not found in rest_paths
+
         """
         path = self.rest_paths.get(request_type)
         if path is None:
@@ -205,9 +206,8 @@ class PoloniexExchangeData(ExchangeData):
             )
         return path
 
-    def get_wss_path(self, channel_type, symbol=None):
-        """
-        Get WebSocket subscription path.
+    def get_wss_path(self, channel_type, symbol: str | None = None, **kwargs) -> str:
+        """Get WebSocket subscription path.
 
         Args:
             channel_type: Channel type (e.g., "ticker", "depth", "kline")
@@ -215,6 +215,7 @@ class PoloniexExchangeData(ExchangeData):
 
         Returns:
             WebSocket subscription parameters dict
+
         """
         path_template = self.wss_paths.get(channel_type, "")
         if isinstance(path_template, dict) and "params" in path_template:
@@ -232,9 +233,9 @@ class PoloniexExchangeData(ExchangeData):
 
 
 class PoloniexExchangeDataSpot(PoloniexExchangeData):
-    """Poloniex Spot Trading Configuration"""
+    """Poloniex Spot Trading Configuration."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__()
         # Load from YAML config
         if not self._load_from_config("spot"):

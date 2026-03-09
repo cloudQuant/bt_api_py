@@ -1,3 +1,5 @@
+from typing import Any
+
 from bt_api_py.containers.exchanges.binance_exchange_data import BinanceExchangeDataOption
 from bt_api_py.feeds.live_binance.account_wss_base import BinanceAccountWssData
 from bt_api_py.feeds.live_binance.market_wss_base import BinanceMarketWssData
@@ -6,7 +8,18 @@ from bt_api_py.logging_factory import get_logger
 
 
 class BinanceRequestDataOption(BinanceRequestData):
-    def __init__(self, data_queue, **kwargs):
+    """Binance options request data handler."""
+
+    def __init__(self, data_queue: Any, **kwargs: Any) -> None:
+        """Initialize Binance options request data handler.
+
+        Args:
+            data_queue: Queue for storing data.
+            **kwargs: Additional keyword arguments including:
+                - asset_type: Asset type (default: "OPTION")
+                - logger_name: Logger name (default: "binance_option_feed.log")
+
+        """
         super().__init__(data_queue, **kwargs)
         self.asset_type = kwargs.get("asset_type", "OPTION")
         self.logger_name = kwargs.get("logger_name", "binance_option_feed.log")
@@ -16,13 +29,32 @@ class BinanceRequestDataOption(BinanceRequestData):
 
 
 class BinanceMarketWssDataOption(BinanceMarketWssData):
-    def __init__(self, data_queue, **kwargs):
+    """Binance options market WebSocket data handler."""
+
+    def __init__(self, data_queue: Any, **kwargs: Any) -> None:
+        """Initialize Binance options market WebSocket data handler.
+
+        Args:
+            data_queue: Queue for storing data.
+            **kwargs: Additional keyword arguments including:
+                - asset_type: Asset type (default: "OPTION")
+
+        """
         super().__init__(data_queue, **kwargs)
         self.asset_type = kwargs.get("asset_type", "OPTION")
         self._params = BinanceExchangeDataOption()
 
 
 class BinanceAccountWssDataOption(BinanceAccountWssData):
-    def __init__(self, data_queue, **kwargs):
+    """Binance options account WebSocket data handler."""
+
+    def __init__(self, data_queue: Any, **kwargs: Any) -> None:
+        """Initialize Binance options account WebSocket data handler.
+
+        Args:
+            data_queue: Queue for storing data.
+            **kwargs: Additional keyword arguments.
+
+        """
         super().__init__(data_queue, **kwargs)
         self._params = BinanceExchangeDataOption()

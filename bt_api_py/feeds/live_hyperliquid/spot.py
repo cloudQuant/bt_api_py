@@ -4,7 +4,6 @@ Hyperliquid Spot Trading Implementation
 Provides spot trading functionality for Hyperliquid exchange.
 """
 
-
 from bt_api_py.containers.exchanges.hyperliquid_exchange_data import HyperliquidExchangeDataSpot
 from bt_api_py.containers.orders.hyperliquid_order import (
     HyperliquidSpotWssOrderData,

@@ -1,6 +1,4 @@
-"""
-Poloniex Ticker Data Container
-"""
+"""Poloniex Ticker Data Container."""
 
 import json
 import time
@@ -10,9 +8,9 @@ from bt_api_py.functions.utils import from_dict_get_float, from_dict_get_string
 
 
 class PoloniexTickerData(TickerData):
-    """Poloniex Ticker Data Container"""
+    """Poloniex Ticker Data Container."""
 
-    def __init__(self, ticker_info, symbol_name, asset_type, has_been_json_encoded=False):
+    def __init__(self, ticker_info, symbol_name, asset_type, has_been_json_encoded=False) -> None:
         super().__init__(ticker_info, has_been_json_encoded)
         self.exchange_name = "POLONIEX"
         self.local_update_time = time.time()
@@ -32,10 +30,10 @@ class PoloniexTickerData(TickerData):
         self.all_data = None
         self.has_been_init_data = False
 
-    def init_data(self):
+    def init_data(self) -> "Self":
         raise NotImplementedError
 
-    def get_all_data(self):
+    def get_all_data(self) -> dict[str, Any]:
         if self.all_data is None:
             self.all_data = {
                 "exchange_name": self.exchange_name,
@@ -52,51 +50,51 @@ class PoloniexTickerData(TickerData):
             }
         return self.all_data
 
-    def __str__(self):
+    def __str__(self) -> str:
         self.init_data()
         return json.dumps(self.get_all_data())
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return self.__str__()
 
-    def get_exchange_name(self):
+    def get_exchange_name(self) -> str:
         return self.exchange_name
 
-    def get_local_update_time(self):
+    def get_local_update_time(self) -> float:
         return self.local_update_time
 
-    def get_symbol_name(self):
+    def get_symbol_name(self) -> str:
         return self.symbol_name
 
-    def get_ticker_symbol_name(self):
+    def get_ticker_symbol_name(self) -> str | None:
         return self.ticker_symbol_name
 
-    def get_asset_type(self):
+    def get_asset_type(self) -> str:
         return self.asset_type
 
-    def get_server_time(self):
+    def get_server_time(self) -> float | None:
         return self.server_time
 
-    def get_bid_price(self):
+    def get_bid_price(self) -> float | None:
         return self.bid_price
 
-    def get_ask_price(self):
+    def get_ask_price(self) -> float | None:
         return self.ask_price
 
-    def get_bid_volume(self):
+    def get_bid_volume(self) -> float | None:
         return self.bid_volume
 
-    def get_ask_volume(self):
+    def get_ask_volume(self) -> float | None:
         return self.ask_volume
 
-    def get_last_price(self):
+    def get_last_price(self) -> float | None:
         return self.last_price
 
 
 class PoloniexRequestTickerData(PoloniexTickerData):
-    """Poloniex REST API Ticker Data"""
+    """Poloniex REST API Ticker Data."""
 
-    def init_data(self):
+    def init_data(self) -> "Self":
         if not self.has_been_json_encoded:
             self.ticker_data = json.loads(self.ticker_info)
             self.has_been_json_encoded = True
@@ -115,9 +113,9 @@ class PoloniexRequestTickerData(PoloniexTickerData):
 
 
 class PoloniexWssTickerData(PoloniexTickerData):
-    """Poloniex WebSocket Ticker Data"""
+    """Poloniex WebSocket Ticker Data."""
 
-    def init_data(self):
+    def init_data(self) -> "Self":
         if not self.has_been_json_encoded:
             self.ticker_data = json.loads(self.ticker_info)
             self.has_been_json_encoded = True

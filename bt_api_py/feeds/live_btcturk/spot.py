@@ -1,6 +1,4 @@
-"""
-BTCTurk Spot Feed implementation.
-"""
+"""BTCTurk Spot Feed implementation."""
 
 import time as _time
 
@@ -24,7 +22,7 @@ class BTCTurkRequestDataSpot(BTCTurkRequestData):
             Capability.CANCEL_ORDER,
         }
 
-    def __init__(self, data_queue, **kwargs):
+    def __init__(self, data_queue, **kwargs) -> None:
         super().__init__(data_queue, **kwargs)
         self.exchange_name = kwargs.get("exchange_name", "BTCTURK___SPOT")
 
@@ -56,7 +54,7 @@ class BTCTurkRequestDataSpot(BTCTurkRequestData):
             return [data[0]], True
         return [data], data is not None
 
-    def get_tick(self, symbol, extra_data=None, **kwargs):
+    def get_tick(self, symbol, extra_data=None, **kwargs) -> Any:
         """Get symbol ticker."""
         path, params, extra_data = self._get_tick(symbol, extra_data, **kwargs)
         return self.request(path, params=params, extra_data=extra_data)
@@ -94,7 +92,7 @@ class BTCTurkRequestDataSpot(BTCTurkRequestData):
         depth = input_data.get("data", {})
         return [depth], depth is not None
 
-    def get_depth(self, symbol, count=20, extra_data=None, **kwargs):
+    def get_depth(self, symbol, count=20, extra_data=None, **kwargs) -> Any:
         """Get order book."""
         path, params, extra_data = self._get_depth(symbol, count, extra_data, **kwargs)
         return self.request(path, params=params, extra_data=extra_data)
@@ -138,7 +136,7 @@ class BTCTurkRequestDataSpot(BTCTurkRequestData):
         klines = input_data.get("data", [])
         return [klines], klines is not None
 
-    def get_kline(self, symbol, period, count=20, extra_data=None, **kwargs):
+    def get_kline(self, symbol, period, count=20, extra_data=None, **kwargs) -> Any:
         """Get kline data."""
         path, params, extra_data = self._get_kline(symbol, period, count, extra_data, **kwargs)
         return self.request(path, params=params, extra_data=extra_data)
@@ -175,7 +173,7 @@ class BTCTurkRequestDataSpot(BTCTurkRequestData):
         symbols = data.get("symbols", [])
         return [symbols], symbols is not None
 
-    def get_exchange_info(self, extra_data=None, **kwargs):
+    def get_exchange_info(self, extra_data=None, **kwargs) -> Any:
         """Get exchange information."""
         path, params, extra_data = self._get_exchange_info(extra_data, **kwargs)
         return self.request(path, params=params, extra_data=extra_data)
@@ -204,7 +202,7 @@ class BTCTurkRequestDataSpot(BTCTurkRequestData):
         trades = input_data.get("data", [])
         return [trades], trades is not None
 
-    def get_trades(self, symbol, count=10, extra_data=None, **kwargs):
+    def get_trades(self, symbol, count=10, extra_data=None, **kwargs) -> Any:
         """Get recent trades."""
         path, params, extra_data = self._get_trades(symbol, count, extra_data, **kwargs)
         return self.request(path, params=params, extra_data=extra_data)
@@ -234,7 +232,7 @@ class BTCTurkRequestDataSpot(BTCTurkRequestData):
         data = input_data.get("data", {})
         return [data], data is not None
 
-    def get_account(self, symbol="ALL", extra_data=None, **kwargs):
+    def get_account(self, symbol="ALL", extra_data=None, **kwargs) -> Any:
         """Get account information."""
         path, params, extra_data = self._get_account(extra_data, **kwargs)
         return self.request(path, params=params, extra_data=extra_data)
@@ -270,7 +268,7 @@ class BTCTurkRequestDataSpot(BTCTurkRequestData):
         data = input_data.get("data", [])
         return [data], data is not None
 
-    def get_balance(self, symbol=None, extra_data=None, **kwargs):
+    def get_balance(self, symbol=None, extra_data=None, **kwargs) -> Any:
         """Get account balance."""
         path, params, extra_data = self._get_balance(symbol, extra_data, **kwargs)
         return self.request(path, params=params, extra_data=extra_data)
@@ -402,7 +400,7 @@ class BTCTurkRequestDataSpot(BTCTurkRequestData):
             params["pairSymbol"] = symbol
         return path, params, extra_data
 
-    def get_open_orders(self, symbol=None, extra_data=None, **kwargs):
+    def get_open_orders(self, symbol=None, extra_data=None, **kwargs) -> Any:
         """Get open orders."""
         path, params, extra_data = self._get_open_orders(symbol, extra_data, **kwargs)
         return self.request(path, params=params, extra_data=extra_data)

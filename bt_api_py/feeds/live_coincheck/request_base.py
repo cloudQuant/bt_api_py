@@ -1,6 +1,4 @@
-"""
-Coincheck REST API request base class.
-"""
+"""Coincheck REST API request base class."""
 
 import hashlib
 import hmac
@@ -30,7 +28,7 @@ class CoincheckRequestData(Feed):
             Capability.CANCEL_ORDER,
         }
 
-    def __init__(self, data_queue, **kwargs):
+    def __init__(self, data_queue, **kwargs) -> None:
         super().__init__(data_queue, **kwargs)
         self.data_queue = data_queue
         self.exchange_name = kwargs.get("exchange_name", "COINCHECK___SPOT")
@@ -132,7 +130,7 @@ class CoincheckRequestData(Feed):
         status = response is not None and (isinstance(response, dict) and len(response) > 0)
         return RequestData(response, extra_data, status=status)
 
-    def _get_server_time(self, extra_data=None, **kwargs):
+    def _get_server_time(self, extra_data=None, **kwargs) -> float:
         """Prepare server time request. Returns (path, params, extra_data)."""
         if extra_data is None:
             extra_data = {}
@@ -146,7 +144,7 @@ class CoincheckRequestData(Feed):
         )
         return "GET /api/ticker", {}, extra_data
 
-    def get_server_time(self, extra_data=None, **kwargs):
+    def get_server_time(self, extra_data=None, **kwargs) -> float:
         """Get server time. Returns RequestData."""
         path, params, extra_data = self._get_server_time(extra_data, **kwargs)
         return self.request(path, params=params, extra_data=extra_data)

@@ -14,7 +14,7 @@ from bt_api_py.feeds.live_coinbase.spot import (
 from bt_api_py.registry import ExchangeRegistry
 
 
-def register_coinbase():
+def register_coinbase() -> None:
     """注册 Coinbase Spot 到全局 ExchangeRegistry"""
     # Spot
     ExchangeRegistry.register_feed("COINBASE___SPOT", CoinbaseRequestDataSpot)

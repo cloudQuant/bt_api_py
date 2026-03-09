@@ -4,7 +4,7 @@ These are used across multiple mixin modules.
 """
 
 
-def generic_normalize_function(input_data, extra_data):
+def generic_normalize_function(input_data: Any, extra_data: Any) -> None:
     """Generic normalize function for OKX API responses.
     Extracts 'data' list and checks 'code' for status."""
     status = input_data.get("code") == "0"

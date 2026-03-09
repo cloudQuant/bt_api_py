@@ -1,9 +1,8 @@
-"""
-VALR Exchange Data Configuration – Feed pattern.
-"""
+"""VALR Exchange Data Configuration."""
 
 import os
 import re
+from typing import Any
 
 import yaml
 
@@ -11,11 +10,15 @@ from bt_api_py.containers.exchanges.exchange_data import ExchangeData
 from bt_api_py.logging_factory import get_logger
 
 logger = get_logger("valr_exchange_data")
+_valr_yaml_cache: dict[str, Any] | None = None
 
-_valr_yaml_cache = None
 
+def _load_valr_yaml() -> dict[str, Any] | None:
+    """Load and cache VALR YAML configuration.
 
-def _load_valr_yaml():
+    Returns:
+        Configuration dictionary or None if not found
+    """
     global _valr_yaml_cache
     if _valr_yaml_cache is not None:
         return _valr_yaml_cache
@@ -37,7 +40,8 @@ def _load_valr_yaml():
 class ValrExchangeData(ExchangeData):
     """Base class for VALR exchange."""
 
-    def __init__(self):
+    def __init__(self) -> None:
+        """Initialize VALR exchange data with default configuration."""
         super().__init__()
         self.exchange_name = "VALR"
         self.rest_url = "https://api.valr.com"
@@ -60,23 +64,53 @@ class ValrExchangeData(ExchangeData):
         self.legal_currency = ["USDC", "ZAR", "BTC", "ETH"]
 
     @staticmethod
-    def get_symbol(symbol):
-        """Normalize symbol: BTCZAR (uppercase, no separators)."""
+    def get_symbol(symbol: str) -> str:
+        """Normalize symbol: BTCZAR (uppercase, no separators).
+
+        Args:
+            symbol: Raw trading pair name
+
+        Returns:
+            str: Formatted trading pair name
+        """
         s = symbol.strip()
         s = re.sub(r"[-/_]", "", s)
         return s.upper()
 
     @staticmethod
-    def get_reverse_symbol(symbol):
-        """Reverse normalize: keep uppercase no-separator."""
+    def get_reverse_symbol(symbol: str) -> str:
+        """Reverse normalize: keep uppercase no-separator.
+
+        Args:
+            symbol: Raw trading pair name
+
+        Returns:
+            str: Formatted trading pair name
+        """
         s = symbol.strip()
         s = re.sub(r"[-/_]", "", s)
         return s.upper()
 
-    def get_period(self, period):
+    def get_period(self, period: str) -> str:
+        """Convert period name.
+
+        Args:
+            period: Period name
+
+        Returns:
+            str: Converted period name
+        """
         return self.kline_periods.get(period, period)
 
-    def get_reverse_period(self, period):
+    def get_reverse_period(self, period: str) -> str:
+        """Reverse convert period name.
+
+        Args:
+            period: Period name
+
+        Returns:
+            str: Original period key
+        """
         for k, v in self.kline_periods.items():
             if v == period:
                 return k
@@ -86,7 +120,8 @@ class ValrExchangeData(ExchangeData):
 class ValrExchangeDataSpot(ValrExchangeData):
     """VALR Spot exchange configuration."""
 
-    def __init__(self):
+    def __init__(self) -> None:
+        """Initialize VALR spot exchange data."""
         super().__init__()
         self.exchange_name = "VALR___SPOT"
         self.asset_type = "SPOT"
@@ -108,11 +143,14 @@ class ValrExchangeDataSpot(ValrExchangeData):
             "query_order": "GET /v1/order/{order_id}",
             "get_open_orders": "GET /v1/orders/open",
         }
-        self.wss_paths = {}
+        self.wss_paths: dict[str, Any] = {}
         self._load_yaml()
 
-    def _load_yaml(self):
+    def _load_yaml(self) -> None:
+        """Load configuration from YAML file."""
         cfg = _load_valr_yaml()
+        if cfg is None:
+            return
         spot = cfg.get("VALR___SPOT", {})
         if not spot:
             return
@@ -130,7 +168,15 @@ class ValrExchangeDataSpot(ValrExchangeData):
         if lc:
             self.legal_currency = list(lc)
 
-    def get_rest_path(self, key, **kwargs):
+    def get_rest_path(self, key: str, **kwargs: Any) -> str:
+        """Get REST API endpoint path.
+
+        Args:
+            key: Path key
+
+        Returns:
+            str: REST API path
+        """
         path = self.rest_paths.get(key, "")
         if not path:
             raise ValueError(f"[{self.exchange_name}] REST path not found: {key}")

@@ -1,3 +1,4 @@
+from typing import Any
 import json
 import os
 
@@ -11,8 +12,8 @@ _bitfinex_config = None
 _bitfinex_config_loaded = False
 
 
-def _get_bitfinex_config():
-    """延迟加载并缓存 Bitfinex YAML 配置"""
+def _get_bitfinex_config() -> Any | None:
+    """延迟加载并缓存 Bitfinex YAML 配置."""
     global _bitfinex_config, _bitfinex_config_loaded
     if _bitfinex_config_loaded:
         return _bitfinex_config
@@ -41,7 +42,7 @@ class BitfinexExchangeData(ExchangeData):
     acct_wss_url, wss_url, rest_paths, wss_paths, legal_currency.
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__()
         self.exchange_name = "BITFINEX"
         self.rest_url = ""
@@ -79,13 +80,14 @@ class BitfinexExchangeData(ExchangeData):
             "CHF",
         ]
 
-    def _load_from_config(self, asset_type):
-        """从 YAML 配置文件加载交易所参数
+    def _load_from_config(self, asset_type) -> bool:
+        """从 YAML 配置文件加载交易所参数.
 
         Args:
             asset_type: 资产类型 key, 如 'spot', 'margin', 'derivatives' 等
         Returns:
             bool: 是否加载成功
+
         """
         config = _get_bitfinex_config()
         if config is None:
@@ -135,13 +137,14 @@ class BitfinexExchangeData(ExchangeData):
         return True
 
     def get_symbol(self, symbol: str) -> str:
-        """获取交易所标准格式交易对
+        """获取交易所标准格式交易对.
 
         Args:
             symbol: 原始交易对符号 (e.g., 'BTC-USD')
 
         Returns:
             str: 交易所标准格式交易对
+
         """
         # Bitfinex 使用 t 前缀表示现货交易对
         if "-" in symbol:
@@ -151,13 +154,14 @@ class BitfinexExchangeData(ExchangeData):
         return symbol
 
     def get_reverse_symbol(self, symbol: str) -> str:
-        """从交易所格式转换回原始格式
+        """从交易所格式转换回原始格式.
 
         Args:
             symbol: 交易所格式交易对 (e.g., 'tBTCUSD')
 
         Returns:
             str: 原始格式交易对
+
         """
         # 移除 t 前缀
         if symbol.startswith("t"):
@@ -168,11 +172,11 @@ class BitfinexExchangeData(ExchangeData):
         return symbol
 
     def account_wss_symbol(self, symbol: str) -> str:
-        """获取 WebSocket 账户更新使用的交易对格式"""
+        """获取 WebSocket 账户更新使用的交易对格式."""
         # Bitfinex WebSocket 使用标准格式
         return symbol.lower()
 
-    def get_rest_path(self, key, **kwargs):
+    def get_rest_path(self, key: str, **kwargs) -> str:
         """Get REST API path for a given endpoint, with optional parameter substitution.
 
         Args:
@@ -181,6 +185,7 @@ class BitfinexExchangeData(ExchangeData):
 
         Returns:
             str: The API path with parameters substituted
+
         """
         if key not in self.rest_paths or self.rest_paths[key] == "":
             self.raise_path_error(self.exchange_name, key)
@@ -200,11 +205,10 @@ class BitfinexExchangeData(ExchangeData):
 
         return path
 
-    def get_wss_path(self, **kwargs):
-        """
-        get wss key path
+    def get_wss_path(self, **kwargs) -> str:
+        """Get wss key path
         :param kwargs: kwargs params
-        :return: path
+        :return: path.
         """
         # 'trade': {'params': ['trades:<symbol>'], 'method': 'SUBSCRIBE', 'id': 1}
         key = kwargs["topic"]
@@ -231,35 +235,37 @@ class BitfinexExchangeData(ExchangeData):
         return json.dumps(req)
 
     def get_period(self, period: str) -> str:
-        """获取 K 线时间周期
+        """获取 K 线时间周期.
 
         Args:
             period: 时间周期 (e.g., '1m', '5m', '1h')
 
         Returns:
             str: 交易所标准时间周期
+
         """
         return self.kline_periods.get(period, period)
 
     def get_reverse_period(self, period: str) -> str:
-        """从交易所时间周期转换回原始格式
+        """从交易所时间周期转换回原始格式.
 
         Args:
             period: 交易所时间周期
 
         Returns:
             str: 原始时间周期
+
         """
         return self.reverse_kline_periods.get(period, period)
 
 
 class BitfinexExchangeDataSpot(BitfinexExchangeData):
-    """Bitfinex Spot Trading Data Configuration
+    """Bitfinex Spot Trading Data Configuration.
 
     Handles spot trading specific configurations for Bitfinex.
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__()
         self.asset_type = "spot"
         if not self._load_from_config("spot"):
@@ -413,7 +419,7 @@ class BitfinexExchangeDataSpot(BitfinexExchangeData):
         self.reverse_symbol_mappings = {v: k for k, v in self.symbol_mappings.items()}
 
     def get_symbol(self, symbol: str) -> str:
-        """获取交易对标准格式，支持自定义映射"""
+        """获取交易对标准格式，支持自定义映射."""
         # 首先检查是否有自定义映射
         if symbol in self.symbol_mappings:
             return self.symbol_mappings[symbol]
@@ -425,7 +431,7 @@ class BitfinexExchangeDataSpot(BitfinexExchangeData):
         return symbol
 
     def get_reverse_symbol(self, symbol: str) -> str:
-        """从交易所格式转换回原始格式"""
+        """从交易所格式转换回原始格式."""
         # 首先检查反向映射
         if symbol in self.reverse_symbol_mappings:
             return self.reverse_symbol_mappings[symbol]
@@ -447,43 +453,43 @@ class BitfinexExchangeDataSpot(BitfinexExchangeData):
         return symbol
 
     def get_precision(self, symbol: str) -> str:
-        """获取交易对默认精度设置"""
+        """获取交易对默认精度设置."""
         # 返回默认精度，可以根据需要扩展
         return "P0"  # 默认精度级别
 
     def get_orderbook_length(self, symbol: str) -> str:
-        """获取订单簿默认长度"""
+        """获取订单簿默认长度."""
         return "25"  # 默认返回 25 档价格
 
 
 class BitfinexExchangeDataMargin(BitfinexExchangeData):
-    """Bitfinex Margin Trading Data Configuration
+    """Bitfinex Margin Trading Data Configuration.
 
     Handles margin trading specific configurations for Bitfinex.
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__()
         self._load_from_config("margin")
 
 
 class BitfinexExchangeDataFutures(BitfinexExchangeData):
-    """Bitfinex Futures Trading Data Configuration
+    """Bitfinex Futures Trading Data Configuration.
 
     Handles futures trading specific configurations for Bitfinex.
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__()
         self._load_from_config("futures")
 
 
 class BitfinexExchangeDataFunding(BitfinexExchangeData):
-    """Bitfinex Funding Data Configuration
+    """Bitfinex Funding Data Configuration.
 
     Handles funding specific configurations for Bitfinex.
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__()
         self._load_from_config("funding")

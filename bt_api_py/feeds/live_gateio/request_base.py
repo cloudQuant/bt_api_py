@@ -7,6 +7,7 @@ import hashlib
 import hmac
 import json
 import time
+from typing import Any
 from urllib.parse import urlencode
 
 from bt_api_py.containers.exchanges.gateio_exchange_data import GateioExchangeDataSpot
@@ -37,7 +38,7 @@ class GateioRequestData(Feed, RequestData):
             Capability.GET_SERVER_TIME,
         }
 
-    def __init__(self, data_queue, **kwargs):
+    def __init__(self, data_queue, **kwargs) -> None:
         super().__init__(data_queue, **kwargs)
         self.public_key = kwargs.get("public_key")
         self.private_key = kwargs.get("private_key")
@@ -59,7 +60,7 @@ class GateioRequestData(Feed, RequestData):
             ]
         )
 
-    def _generate_signature(self, method, url_path, query_string="", payload_string=""):
+    def _generate_signature(self, method, url_path, query_string="", payload_string="") -> Any:
         """Generate HMAC SHA512 signature for Gate.io API v4.
 
         Returns (signature, timestamp) or (None, None) for public endpoints.
@@ -79,7 +80,7 @@ class GateioRequestData(Feed, RequestData):
         ).hexdigest()
         return signature, timestamp
 
-    def _build_auth_headers(self, method, url_path, query_string="", payload_string=""):
+    def _build_auth_headers(self, method, url_path, query_string="", payload_string="") -> Any:
         """Build request headers with optional authentication."""
         signature, timestamp = self._generate_signature(
             method, url_path, query_string, payload_string

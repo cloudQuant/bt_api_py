@@ -1,5 +1,4 @@
-"""
-统一限流器
+"""统一限流器.
 
 支持滑动窗口、固定窗口两种限流模式，以及端点级 glob 匹配和权重映射。
 对非 HTTP 场所可关闭或替换为场所内置流控。
@@ -40,7 +39,7 @@ class RateLimitScope(str, Enum):
 
 @dataclass
 class RateLimitRule:
-    """限流规则"""
+    """限流规则."""
 
     name: str
     type: RateLimitType
@@ -52,7 +51,7 @@ class RateLimitRule:
     weight: int = 1  # 默认权重
 
     def match(self, method: str, path: str) -> bool:
-        """判断请求是否匹配此规则"""
+        """判断请求是否匹配此规则."""
         if self.scope == RateLimitScope.GLOBAL:
             return True
         if self.scope == RateLimitScope.ENDPOINT and self.endpoint:
@@ -60,7 +59,7 @@ class RateLimitRule:
         return False
 
     def get_weight(self, method: str, path: str) -> int:
-        """获取请求权重"""
+        """获取请求权重."""
         if self.weight_map:
             key = f"{method} {path}"
             if key in self.weight_map:
@@ -71,9 +70,9 @@ class RateLimitRule:
 
 
 class SlidingWindowLimiter:
-    """滑动窗口限流器"""
+    """滑动窗口限流器."""
 
-    def __init__(self, interval: int, limit: int):
+    def __init__(self, interval: int, limit: int) -> None:
         self.interval = interval
         self.limit = limit
         self._requests: deque = deque()  # (timestamp, weight)
@@ -108,9 +107,9 @@ class SlidingWindowLimiter:
 
 
 class FixedWindowLimiter:
-    """固定窗口限流器"""
+    """固定窗口限流器."""
 
-    def __init__(self, interval: int, limit: int):
+    def __init__(self, interval: int, limit: int) -> None:
         self.interval = interval
         self.limit = limit
         self._window_start = 0.0
@@ -144,7 +143,7 @@ class FixedWindowLimiter:
 
 
 class RateLimiter:
-    """统一限流器
+    """统一限流器.
 
     使用方式::
 
@@ -174,7 +173,7 @@ class RateLimiter:
             ...
     """
 
-    def __init__(self, rules: list[RateLimitRule] | None = None):
+    def __init__(self, rules: list[RateLimitRule] | None = None) -> None:
         self.rules = rules or []
         self._limiters: dict[str, Any] = {}
 
@@ -185,15 +184,15 @@ class RateLimiter:
                 self._limiters[rule.name] = FixedWindowLimiter(rule.interval, rule.limit)
 
     def __enter__(self):
-        """进入上下文管理器（阻塞等待获取许可）"""
+        """进入上下文管理器（阻塞等待获取许可）."""
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
-        """退出上下文管理器"""
+        """退出上下文管理器."""
         return False
 
     def acquire(self, method: str = "", path: str = "", weight: int = 1) -> bool:
-        """同步获取限流许可（不阻塞）"""
+        """同步获取限流许可（不阻塞）."""
         if not self.rules:
             return True
 
@@ -217,7 +216,7 @@ class RateLimiter:
         weight: int = 1,
         timeout: float | None = None,
     ) -> bool:
-        """同步阻塞获取许可"""
+        """同步阻塞获取许可."""
         start = time.time()
         while True:
             if self.acquire(method, path, weight):
@@ -234,14 +233,14 @@ class RateLimiter:
             time.sleep(min(max_wait, 1.0) if max_wait > 0 else 0.05)
 
     async def async_acquire(self, method: str = "", path: str = "", weight: int = 1) -> bool:
-        """异步获取限流许可（自动等待）"""
+        """异步获取限流许可（自动等待）."""
         while True:
             if self.acquire(method, path, weight):
                 return True
             await asyncio.sleep(0.05)
 
     def get_status(self) -> dict[str, dict]:
-        """获取各限流器状态（用于监控）"""
+        """获取各限流器状态（用于监控）."""
         status = {}
         for rule in self.rules:
             limiter = self._limiters.get(rule.name)

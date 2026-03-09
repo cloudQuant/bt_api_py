@@ -1,5 +1,4 @@
-"""
-Independent Reserve Exchange Data Configuration.
+"""Independent Reserve Exchange Data Configuration.
 
 API doc: https://www.independentreserve.com/API
 Auth: HMAC-SHA256 signature in POST JSON body
@@ -7,6 +6,7 @@ Public: GET /Public/...  Private: POST /Private/...
 Symbol: primaryCurrencyCode + secondaryCurrencyCode (e.g. Xbt, Aud)
 """
 
+from typing import Any
 import os
 
 from bt_api_py.containers.exchanges.exchange_data import ExchangeData
@@ -18,7 +18,7 @@ _independent_reserve_config = None
 _independent_reserve_config_loaded = False
 
 
-def _get_independent_reserve_config():
+def _get_independent_reserve_config() -> Any | None:
     """Load and cache Independent Reserve YAML configuration."""
     global _independent_reserve_config, _independent_reserve_config_loaded
     if _independent_reserve_config_loaded:
@@ -84,7 +84,7 @@ _FALLBACK_REST_PATHS = {
 class IndependentReserveExchangeData(ExchangeData):
     """Base class for Independent Reserve exchange."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__()
         self.exchange_name = "INDEPENDENT_RESERVE___SPOT"
         self.rest_url = "https://api.independentreserve.com"
@@ -104,7 +104,7 @@ class IndependentReserveExchangeData(ExchangeData):
         self.reverse_kline_periods = {v: k for k, v in self.kline_periods.items()}
         self.legal_currency = ["AUD", "NZD", "USD", "SGD", "USDT", "BTC", "ETH"]
 
-    def _load_from_config(self, asset_type):
+    def _load_from_config(self, asset_type) -> bool:
         """Load from YAML config."""
         config = _get_independent_reserve_config()
         if config is None:
@@ -136,7 +136,7 @@ class IndependentReserveExchangeData(ExchangeData):
 class IndependentReserveExchangeDataSpot(IndependentReserveExchangeData):
     """Independent Reserve Spot exchange configuration."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__()
         self.asset_type = "SPOT"
         self._load_from_config("spot")
@@ -151,11 +151,11 @@ class IndependentReserveExchangeDataSpot(IndependentReserveExchangeData):
             return base, quote
         return "Xbt", "Aud"
 
-    def get_period(self, key):
+    def get_period(self, key: str) -> str:
         """Get kline period value."""
         return self.kline_periods.get(key, key)
 
-    def get_rest_path(self, key):
+    def get_rest_path(self, key: str, **kwargs) -> str:
         """Get REST path for *key*. Raises ValueError if missing."""
         if key not in self.rest_paths or self.rest_paths[key] == "":
             raise ValueError(f"[{self.exchange_name}] REST path not found: {key}")

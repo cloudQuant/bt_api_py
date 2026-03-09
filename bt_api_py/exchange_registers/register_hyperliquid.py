@@ -18,7 +18,9 @@ from bt_api_py.feeds.live_hyperliquid import (
 from bt_api_py.registry import ExchangeRegistry
 
 
-def _hyperliquid_swap_subscribe_handler(data_queue, exchange_params, topics, bt_api):
+def _hyperliquid_swap_subscribe_handler(
+    data_queue: Any, exchange_params: Any, topics: Any, bt_api: Any
+) -> None:
     """Hyperliquid SWAP 订阅处理函数
     :param data_queue: queue.Queue
     :param exchange_params: dict
@@ -43,7 +45,9 @@ def _hyperliquid_swap_subscribe_handler(data_queue, exchange_params, topics, bt_
         bt_api._subscription_flags["HYPERLIQUID___SWAP_account"] = True
 
 
-def _hyperliquid_spot_subscribe_handler(data_queue, exchange_params, topics, bt_api):
+def _hyperliquid_spot_subscribe_handler(
+    data_queue: Any, exchange_params: Any, topics: Any, bt_api: Any
+) -> None:
     """Hyperliquid SPOT 订阅处理函数
     :param data_queue: queue.Queue
     :param exchange_params: dict
@@ -68,7 +72,7 @@ def _hyperliquid_spot_subscribe_handler(data_queue, exchange_params, topics, bt_
         bt_api._subscription_flags["HYPERLIQUID___SPOT_account"] = True
 
 
-def register_hyperliquid():
+def register_hyperliquid() -> None:
     """注册 Hyperliquid Swap 和 Spot 到全局 ExchangeRegistry"""
     # Swap
     ExchangeRegistry.register_feed("HYPERLIQUID___SWAP", HyperliquidRequestData)

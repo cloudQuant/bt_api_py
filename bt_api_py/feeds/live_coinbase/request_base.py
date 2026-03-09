@@ -8,6 +8,7 @@ import hashlib
 import hmac
 import json
 import time
+from typing import Any
 from urllib import parse
 
 from bt_api_py.containers.exchanges.coinbase_exchange_data import CoinbaseExchangeDataSpot
@@ -24,7 +25,7 @@ class CoinbaseRequestData(Feed):
     (Coinbase Advanced Trade API v3 style).
     """
 
-    def __init__(self, data_queue, **kwargs):
+    def __init__(self, data_queue: Any, **kwargs: Any) -> None:
         super().__init__(data_queue, **kwargs)
         self.data_queue = data_queue
         self.api_key = kwargs.get("api_key") or kwargs.get("public_key")
@@ -41,7 +42,9 @@ class CoinbaseRequestData(Feed):
     # ── authentication ──────────────────────────────────────────
 
     # noinspection PyMethodMayBeStatic
-    def signature(self, timestamp, method, request_path, secret_key, body=""):
+    def signature(
+        self, timestamp: Any, method: Any, request_path: Any, secret_key: Any, body: Any = ""
+    ) -> None:
         """Generate Coinbase API signature (HMAC SHA256).
 
         Args:
@@ -63,7 +66,7 @@ class CoinbaseRequestData(Feed):
         return base64.b64encode(mac.digest()).decode()
 
     # noinspection PyMethodMayBeStatic
-    def get_header(self, api_key, sign, timestamp):
+    def get_header(self, api_key: Any, sign: Any, timestamp: Any) -> None:
         """Generate request headers with authentication.
 
         Args:
@@ -83,13 +86,21 @@ class CoinbaseRequestData(Feed):
 
     # ── core request helpers ────────────────────────────────────
 
-    def push_data_to_queue(self, data):
+    def push_data_to_queue(self, data: Any) -> None:
         if self.data_queue is not None:
             self.data_queue.put(data)
         else:
             assert 0, "Queue not initialized"
 
-    def request(self, path, params=None, body=None, extra_data=None, timeout=10, is_sign=False):
+    def request(
+        self,
+        path: Any,
+        params: Any = None,
+        body: Any = None,
+        extra_data: Any = None,
+        timeout: Any = 10,
+        is_sign: Any = False,
+    ) -> None:
         """HTTP request function using Feed.http_request().
 
         Args:
@@ -164,7 +175,7 @@ class CoinbaseRequestData(Feed):
         res = await self.async_http_request(method, url, headers, body, timeout)
         return RequestData(res, extra_data)
 
-    def async_callback(self, future):
+    def async_callback(self, future: Any) -> None:
         """Callback function for async requests.
 
         Args:

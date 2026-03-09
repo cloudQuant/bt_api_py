@@ -6,26 +6,25 @@
 import math
 import statistics
 from decimal import Decimal
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
 
 import numpy as np
-import pandas as pd
 
 from bt_api_py.logging_factory import get_logger
 
 from ..containers.risk_metrics import (
-    RiskMetrics,
-    MarketRiskMetrics,
-    CreditRiskMetrics,
-    OperationalRiskMetrics,
-    LiquidityRiskMetrics,
     ComplianceRiskMetrics,
-    PositionConcentration,
-    SectorExposure,
+    CreditRiskMetrics,
+    HistoricalComparison,
     LatencyMetrics,
     LimitsCheckResult,
-    HistoricalComparison,
+    LiquidityRiskMetrics,
+    MarketRiskMetrics,
+    OperationalRiskMetrics,
+    PositionConcentration,
     PredictiveIndicators,
+    RiskMetrics,
+    SectorExposure,
 )
 
 
@@ -41,7 +40,7 @@ class RiskCalculator:
     6. 压力测试和情景分析
     """
 
-    def __init__(self, config: Optional[Dict[str, Any]] = None):
+    def __init__(self, config: dict[str, Any] | None = None) -> Any | None:
         """初始化风险计算器
 
         Args:
@@ -72,9 +71,9 @@ class RiskCalculator:
         self,
         exchange_name: str,
         account_id: str,
-        account_data: Dict[str, Any],
-        position_data: Dict[str, Any],
-        market_data: Dict[str, Any],
+        account_data: dict[str, Any],
+        position_data: dict[str, Any],
+        market_data: dict[str, Any],
     ) -> RiskMetrics:
         """计算综合风险指标
 
@@ -137,7 +136,7 @@ class RiskCalculator:
             raise
 
     def _calculate_market_risk(
-        self, position_data: Dict[str, Any], market_data: Dict[str, Any]
+        self, position_data: dict[str, Any], market_data: dict[str, Any]
     ) -> MarketRiskMetrics:
         """计算市场风险指标"""
 
@@ -191,7 +190,7 @@ class RiskCalculator:
         )
 
     def _calculate_credit_risk(
-        self, account_data: Dict[str, Any], position_data: Dict[str, Any]
+        self, account_data: dict[str, Any], position_data: dict[str, Any]
     ) -> CreditRiskMetrics:
         """计算信用风险指标"""
 
@@ -226,7 +225,7 @@ class RiskCalculator:
             }
         )
 
-    def _calculate_operational_risk(self, account_data: Dict[str, Any]) -> OperationalRiskMetrics:
+    def _calculate_operational_risk(self, account_data: dict[str, Any]) -> OperationalRiskMetrics:
         """计算操作风险指标"""
 
         # 系统健康度
@@ -264,7 +263,7 @@ class RiskCalculator:
         )
 
     def _calculate_liquidity_risk(
-        self, position_data: Dict[str, Any], market_data: Dict[str, Any]
+        self, position_data: dict[str, Any], market_data: dict[str, Any]
     ) -> LiquidityRiskMetrics:
         """计算流动性风险指标"""
 
@@ -298,7 +297,7 @@ class RiskCalculator:
             }
         )
 
-    def _calculate_compliance_risk(self, account_data: Dict[str, Any]) -> ComplianceRiskMetrics:
+    def _calculate_compliance_risk(self, account_data: dict[str, Any]) -> ComplianceRiskMetrics:
         """计算合规风险指标"""
 
         # 合规评分
@@ -336,7 +335,7 @@ class RiskCalculator:
 
     # 具体风险指标计算方法
 
-    def _calculate_returns(self, price_history: List[float]) -> List[float]:
+    def _calculate_returns(self, price_history: list[float]) -> list[float]:
         """计算收益率序列"""
         if len(price_history) < 2:
             return []
@@ -350,7 +349,7 @@ class RiskCalculator:
         return returns
 
     def _calculate_var(
-        self, returns: List[float], confidence: float = 0.95, time_horizon: int = 1
+        self, returns: list[float], confidence: float = 0.95, time_horizon: int = 1
     ) -> Decimal:
         """计算VaR (Value at Risk)"""
         if not returns or len(returns) < self.min_data_points:
@@ -365,7 +364,7 @@ class RiskCalculator:
 
         return Decimal(str(abs(var_time_adjusted)))
 
-    def _calculate_cvar(self, returns: List[float], confidence: float = 0.95) -> Decimal:
+    def _calculate_cvar(self, returns: list[float], confidence: float = 0.95) -> Decimal:
         """计算CVaR (Conditional Value at Risk) / Expected Shortfall"""
         if not returns or len(returns) < self.min_data_points:
             return Decimal("0")
@@ -381,7 +380,7 @@ class RiskCalculator:
         cvar = statistics.mean(tail_losses)
         return Decimal(str(abs(cvar)))
 
-    def _calculate_volatility(self, returns: List[float], window: Optional[int] = None) -> Decimal:
+    def _calculate_volatility(self, returns: list[float], window: int | None = None) -> Decimal:
         """计算波动率"""
         if not returns:
             return Decimal("0")
@@ -399,7 +398,7 @@ class RiskCalculator:
         volatility = statistics.stdev(recent_returns)
         return Decimal(str(volatility))
 
-    def _calculate_beta(self, asset_returns: List[float], market_returns: List[float]) -> Decimal:
+    def _calculate_beta(self, asset_returns: list[float], market_returns: list[float]) -> Decimal:
         """计算Beta系数"""
         if len(asset_returns) < 2 or len(market_returns) < 2:
             return Decimal("1.0")  # 默认值
@@ -426,8 +425,8 @@ class RiskCalculator:
         return Decimal(str(beta))
 
     def _calculate_correlation_matrix(
-        self, asset_returns: Dict[str, List[float]]
-    ) -> Dict[str, Dict[str, float]]:
+        self, asset_returns: dict[str, list[float]]
+    ) -> dict[str, dict[str, float]]:
         """计算相关性矩阵"""
         correlation_matrix = {}
         assets = list(asset_returns.keys())
@@ -466,8 +465,8 @@ class RiskCalculator:
         return correlation_matrix
 
     def _run_stress_tests(
-        self, position_data: Dict[str, Any], market_data: Dict[str, Any]
-    ) -> Dict[str, Any]:
+        self, position_data: dict[str, Any], market_data: dict[str, Any]
+    ) -> dict[str, Any]:
         """运行压力测试"""
         stress_results = {}
 
@@ -503,8 +502,8 @@ class RiskCalculator:
         return stress_results
 
     def _run_scenario_analysis(
-        self, position_data: Dict[str, Any], market_data: Dict[str, Any]
-    ) -> Dict[str, Any]:
+        self, position_data: dict[str, Any], market_data: dict[str, Any]
+    ) -> dict[str, Any]:
         """运行情景分析"""
         scenarios = {
             "best_case": {"return": 0.15, "probability": 0.1},
@@ -530,7 +529,7 @@ class RiskCalculator:
         return scenario_results
 
     def _calculate_position_concentration(
-        self, position_data: Dict[str, Any]
+        self, position_data: dict[str, Any]
     ) -> PositionConcentration:
         """计算仓位集中度"""
         positions = position_data.get("positions", [])
@@ -561,7 +560,7 @@ class RiskCalculator:
             }
         )
 
-    def _calculate_sector_exposure(self, position_data: Dict[str, Any]) -> SectorExposure:
+    def _calculate_sector_exposure(self, position_data: dict[str, Any]) -> SectorExposure:
         """计算行业暴露"""
         positions = position_data.get("positions", [])
         total_value = sum(pos.get("value", 0) for pos in positions)
@@ -583,7 +582,7 @@ class RiskCalculator:
 
         return SectorExposure(sector_percentages)
 
-    def _calculate_credit_score(self, account_data: Dict[str, Any]) -> Decimal:
+    def _calculate_credit_score(self, account_data: dict[str, Any]) -> Decimal:
         """计算信用评分"""
         # 简化的信用评分计算
         base_score = Decimal("750")  # 基础分
@@ -612,25 +611,25 @@ class RiskCalculator:
         else:
             return Decimal("0.1")  # 10%
 
-    def _calculate_loss_given_default(self, position_data: Dict[str, Any]) -> Decimal:
+    def _calculate_loss_given_default(self, position_data: dict[str, Any]) -> Decimal:
         """计算违约损失率"""
         # 简化的LGD计算
         collateral_ratio = position_data.get("collateral_ratio", 0.5)
         lgd = max(0.1, 1 - collateral_ratio)  # 最低10%，最高90%
         return Decimal(str(lgd))
 
-    def _calculate_exposure_at_default(self, position_data: Dict[str, Any]) -> Decimal:
+    def _calculate_exposure_at_default(self, position_data: dict[str, Any]) -> Decimal:
         """计算违约暴露"""
         return Decimal(str(position_data.get("total_exposure", 0)))
 
-    def _calculate_credit_utilization(self, account_data: Dict[str, Any]) -> Decimal:
+    def _calculate_credit_utilization(self, account_data: dict[str, Any]) -> Decimal:
         """计算信用使用率"""
         used_credit = account_data.get("used_credit", 0)
         total_credit = account_data.get("total_credit", 1)
         utilization = used_credit / total_credit if total_credit > 0 else 0
         return Decimal(str(min(utilization, 1.0)))
 
-    def _calculate_settlement_risk(self, position_data: Dict[str, Any]) -> Decimal:
+    def _calculate_settlement_risk(self, position_data: dict[str, Any]) -> Decimal:
         """计算结算风险"""
         # 基于持仓价值和结算周期
         portfolio_value = position_data.get("portfolio_value", 0)
@@ -642,7 +641,7 @@ class RiskCalculator:
 
         return Decimal(str(settlement_risk))
 
-    def _calculate_system_health_score(self, account_data: Dict[str, Any]) -> Decimal:
+    def _calculate_system_health_score(self, account_data: dict[str, Any]) -> Decimal:
         """计算系统健康度"""
         # 基于各种系统指标
         cpu_usage = account_data.get("cpu_usage", 0.5)
@@ -656,7 +655,7 @@ class RiskCalculator:
         )
         return Decimal(str(max(0, min(health_score, 1.0))))
 
-    def _calculate_latency_metrics(self, account_data: Dict[str, Any]) -> LatencyMetrics:
+    def _calculate_latency_metrics(self, account_data: dict[str, Any]) -> LatencyMetrics:
         """计算延迟指标"""
         latency_data = account_data.get("latency_history", [100, 150, 120, 80, 200])
 
@@ -681,14 +680,14 @@ class RiskCalculator:
             }
         )
 
-    def _calculate_error_rate(self, account_data: Dict[str, Any]) -> Decimal:
+    def _calculate_error_rate(self, account_data: dict[str, Any]) -> Decimal:
         """计算错误率"""
         total_requests = account_data.get("total_requests", 1000)
         error_count = account_data.get("error_count", 10)
         error_rate = error_count / total_requests if total_requests > 0 else 0
         return Decimal(str(error_rate))
 
-    def _calculate_system_availability(self, account_data: Dict[str, Any]) -> Decimal:
+    def _calculate_system_availability(self, account_data: dict[str, Any]) -> Decimal:
         """计算系统可用性"""
         uptime_seconds = account_data.get("uptime_seconds", 86400)  # 24小时
         downtime_seconds = account_data.get("downtime_seconds", 3600)  # 1小时
@@ -697,7 +696,7 @@ class RiskCalculator:
         availability = uptime_seconds / total_time if total_time > 0 else 0
         return Decimal(str(availability))
 
-    def _calculate_data_quality_score(self, account_data: Dict[str, Any]) -> Decimal:
+    def _calculate_data_quality_score(self, account_data: dict[str, Any]) -> Decimal:
         """计算数据质量评分"""
         completeness = account_data.get("data_completeness", 0.95)
         accuracy = account_data.get("data_accuracy", 0.98)
@@ -707,14 +706,14 @@ class RiskCalculator:
         quality_score = (completeness + accuracy + timeliness + consistency) / 4
         return Decimal(str(quality_score))
 
-    def _calculate_processing_capacity(self, account_data: Dict[str, Any]) -> Decimal:
+    def _calculate_processing_capacity(self, account_data: dict[str, Any]) -> Decimal:
         """计算处理能力"""
         current_load = account_data.get("current_load", 0.6)
         max_capacity = 1.0
         capacity_utilization = current_load / max_capacity
         return Decimal(str(capacity_utilization))
 
-    def _calculate_vulnerability_score(self, account_data: Dict[str, Any]) -> Decimal:
+    def _calculate_vulnerability_score(self, account_data: dict[str, Any]) -> Decimal:
         """计算漏洞评分"""
         critical_vulns = account_data.get("critical_vulnerabilities", 0)
         high_vulns = account_data.get("high_vulnerabilities", 1)
@@ -726,7 +725,7 @@ class RiskCalculator:
         return Decimal(str(min(vuln_score, 1.0)))
 
     def _calculate_liquidity_score(
-        self, position_data: Dict[str, Any], market_data: Dict[str, Any]
+        self, position_data: dict[str, Any], market_data: dict[str, Any]
     ) -> Decimal:
         """计算流动性评分"""
         # 基于多个流动性指标
@@ -742,7 +741,7 @@ class RiskCalculator:
         liquidity_score = (spread_score + depth_score + volume_score) / 3
         return Decimal(str(liquidity_score))
 
-    def _calculate_bid_ask_spread(self, market_data: Dict[str, Any]) -> Decimal:
+    def _calculate_bid_ask_spread(self, market_data: dict[str, Any]) -> Decimal:
         """计算买卖价差"""
         bid_price = market_data.get("bid_price", 0)
         ask_price = market_data.get("ask_price", 0)
@@ -754,7 +753,7 @@ class RiskCalculator:
         spread_bps = ((ask_price - bid_price) / mid_price) * 10000
         return Decimal(str(spread_bps))
 
-    def _calculate_market_depth(self, market_data: Dict[str, Any]) -> Decimal:
+    def _calculate_market_depth(self, market_data: dict[str, Any]) -> Decimal:
         """计算市场深度"""
         bid_depth = market_data.get("bid_depth", 0)  # 买单深度
         ask_depth = market_data.get("ask_depth", 0)  # 卖单深度
@@ -763,7 +762,7 @@ class RiskCalculator:
         return Decimal(str(total_depth))
 
     def _calculate_impact_cost(
-        self, position_data: Dict[str, Any], market_data: Dict[str, Any]
+        self, position_data: dict[str, Any], market_data: dict[str, Any]
     ) -> Decimal:
         """计算冲击成本"""
         position_size = position_data.get("position_size", 0)
@@ -780,7 +779,7 @@ class RiskCalculator:
 
         return Decimal(str(impact_cost))
 
-    def _calculate_volume_profile(self, market_data: Dict[str, Any]) -> Dict[str, Any]:
+    def _calculate_volume_profile(self, market_data: dict[str, Any]) -> dict[str, Any]:
         """计算成交量分布"""
         volume_data = market_data.get("volume_by_price", {})
 
@@ -799,7 +798,7 @@ class RiskCalculator:
         return volume_profile
 
     def _calculate_liquidation_value(
-        self, position_data: Dict[str, Any], market_data: Dict[str, Any]
+        self, position_data: dict[str, Any], market_data: dict[str, Any]
     ) -> Decimal:
         """计算清算价值"""
         positions = position_data.get("positions", [])
@@ -817,7 +816,7 @@ class RiskCalculator:
 
         return Decimal(str(liquidation_value))
 
-    def _calculate_compliance_score(self, account_data: Dict[str, Any]) -> Decimal:
+    def _calculate_compliance_score(self, account_data: dict[str, Any]) -> Decimal:
         """计算合规评分"""
         kyc_compliance = 1.0 if account_data.get("kyc_status") == "VERIFIED" else 0.0
         aml_compliance = 1.0 if not account_data.get("aml_flags", []) else 0.5
@@ -829,11 +828,11 @@ class RiskCalculator:
         ) / 4
         return Decimal(str(compliance_score))
 
-    def _get_regulatory_violations(self, account_data: Dict[str, Any]) -> List[Dict[str, Any]]:
+    def _get_regulatory_violations(self, account_data: dict[str, Any]) -> list[dict[str, Any]]:
         """获取监管违规记录"""
         return account_data.get("regulatory_violations", [])
 
-    def _calculate_reporting_compliance(self, account_data: Dict[str, Any]) -> Decimal:
+    def _calculate_reporting_compliance(self, account_data: dict[str, Any]) -> Decimal:
         """计算报告合规度"""
         required_reports = account_data.get("required_reports", 100)
         submitted_reports = account_data.get("submitted_reports", 95)
@@ -841,11 +840,11 @@ class RiskCalculator:
         compliance_rate = submitted_reports / required_reports if required_reports > 0 else 0
         return Decimal(str(compliance_rate))
 
-    def _get_audit_findings(self, account_data: Dict[str, Any]) -> List[Dict[str, Any]]:
+    def _get_audit_findings(self, account_data: dict[str, Any]) -> list[dict[str, Any]]:
         """获取审计发现"""
         return account_data.get("audit_findings", [])
 
-    def _calculate_policy_adherence(self, account_data: Dict[str, Any]) -> Decimal:
+    def _calculate_policy_adherence(self, account_data: dict[str, Any]) -> Decimal:
         """计算政策遵循度"""
         policy_checks = account_data.get("policy_checks", [])
         if not policy_checks:
@@ -856,7 +855,7 @@ class RiskCalculator:
 
         return Decimal(str(adherence_rate))
 
-    def _get_aml_flags(self, account_data: Dict[str, Any]) -> List[str]:
+    def _get_aml_flags(self, account_data: dict[str, Any]) -> list[str]:
         """获取AML标志"""
         return account_data.get("aml_flags", [])
 
@@ -926,7 +925,7 @@ class RiskCalculator:
         operational_risk: OperationalRiskMetrics,
         liquidity_risk: LiquidityRiskMetrics,
         compliance_risk: ComplianceRiskMetrics,
-    ) -> List[str]:
+    ) -> list[str]:
         """生成风险管理建议行动"""
         actions = []
 
@@ -951,7 +950,7 @@ class RiskCalculator:
 
         return actions
 
-    def _serialize_metrics(self, obj: Any) -> Dict[str, Any]:
+    def _serialize_metrics(self, obj: Any) -> dict[str, Any]:
         """序列化指标对象为字典"""
         if isinstance(obj, Decimal):
             return str(obj)

@@ -1,4 +1,6 @@
-"""HTX Exchange Data Configuration"""
+from typing import Any
+
+"""HTX Exchange Data Configuration."""
 
 import json
 import os
@@ -13,8 +15,8 @@ _htx_config = None
 _htx_config_loaded = False
 
 
-def _get_htx_config():
-    """延迟加载并缓存 HTX YAML 配置"""
+def _get_htx_config() -> Any | None:
+    """延迟加载并缓存 HTX YAML 配置."""
     global _htx_config, _htx_config_loaded
     if _htx_config_loaded:
         return _htx_config
@@ -42,7 +44,7 @@ class HtxExchangeData(ExchangeData):
     - WebSocket: wss://api.huobi.pro/ws
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__()
         self.exchange_name = "htx"
         self.rest_url = ""
@@ -84,13 +86,14 @@ class HtxExchangeData(ExchangeData):
             "HTX",
         ]
 
-    def _load_from_config(self, asset_type):
-        """从 YAML 配置文件加载交易所参数
+    def _load_from_config(self, asset_type) -> bool:
+        """从 YAML 配置文件加载交易所参数.
 
         Args:
             asset_type: 资产类型 key, 如 'swap', 'spot', 'futures' 等
         Returns:
             bool: 是否加载成功
+
         """
         config = _get_htx_config()
         if config is None:
@@ -139,7 +142,7 @@ class HtxExchangeData(ExchangeData):
 
         return True
 
-    def get_rest_path(self, path_name):
+    def get_rest_path(self, path_name: str, **kwargs) -> str:
         """Get REST API path by name.
 
         Args:
@@ -147,10 +150,11 @@ class HtxExchangeData(ExchangeData):
 
         Returns:
             str: REST API path
+
         """
         return self.rest_paths.get(path_name, "")
 
-    def get_wss_path(self, **kwargs):
+    def get_wss_path(self, **kwargs) -> str:
         """Build HTX WebSocket subscription message.
 
         HTX market WSS v1 format: {"sub": "market.btcusdt.depth.step0", "id": "id1"}
@@ -161,6 +165,7 @@ class HtxExchangeData(ExchangeData):
 
         Returns:
             str: JSON subscription message
+
         """
         topic = kwargs.get("topic", "")
         if topic not in self.wss_paths:
@@ -187,7 +192,7 @@ class HtxExchangeData(ExchangeData):
         sub_id = f"{topic}_{kwargs.get('symbol', 'all')}"
         return json.dumps({"sub": channel, "id": sub_id})
 
-    def get_symbol(self, symbol):
+    def get_symbol(self, symbol: str) -> str:
         """Convert standard symbol to HTX symbol format.
 
         HTX uses lowercase format (e.g., 'btcusdt').
@@ -197,6 +202,7 @@ class HtxExchangeData(ExchangeData):
 
         Returns:
             str: HTX symbol format
+
         """
         if not symbol:
             return symbol
@@ -207,7 +213,7 @@ class HtxExchangeData(ExchangeData):
         # Convert to lowercase
         return symbol.lower()
 
-    def get_period(self, period):
+    def get_period(self, period: str) -> str:
         """Convert standard period to HTX period format.
 
         Args:
@@ -215,10 +221,11 @@ class HtxExchangeData(ExchangeData):
 
         Returns:
             str: HTX period format
+
         """
         return self.kline_periods.get(period, period)
 
-    def get_standard_period(self, period):
+    def get_standard_period(self, period: str) -> str:
         """Convert HTX period to standard period format.
 
         Args:
@@ -226,6 +233,7 @@ class HtxExchangeData(ExchangeData):
 
         Returns:
             str: Standard period format
+
         """
         return self.reverse_kline_periods.get(period, period)
 
@@ -233,7 +241,7 @@ class HtxExchangeData(ExchangeData):
 class HtxExchangeDataSpot(HtxExchangeData):
     """HTX Spot trading configuration."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__()
         self.exchange_name = "htx_spot"
         self.asset_type = "SPOT"
@@ -245,7 +253,7 @@ class HtxExchangeDataSpot(HtxExchangeData):
 class HtxExchangeDataMargin(HtxExchangeData):
     """HTX Margin trading configuration."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__()
         self.exchange_name = "htx_margin"
         self.asset_type = "MARGIN"
@@ -261,7 +269,7 @@ class HtxExchangeDataUsdtSwap(HtxExchangeData):
     Symbol format: BTC-USDT (uppercase, dash-separated).
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__()
         self.exchange_name = "htx_usdt_swap"
         self.asset_type = "USDT_SWAP"
@@ -269,7 +277,7 @@ class HtxExchangeDataUsdtSwap(HtxExchangeData):
         # Load configuration from YAML
         self._load_from_config("usdt_swap")
 
-    def get_symbol(self, symbol):
+    def get_symbol(self, symbol: str) -> str:
         """Convert standard symbol to HTX derivatives format (e.g., BTC-USDT)."""
         if not symbol:
             return symbol
@@ -290,7 +298,7 @@ class HtxExchangeDataCoinSwap(HtxExchangeData):
     Symbol format: BTC-USD (uppercase, dash-separated).
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__()
         self.exchange_name = "htx_coin_swap"
         self.asset_type = "COIN_SWAP"
@@ -298,7 +306,7 @@ class HtxExchangeDataCoinSwap(HtxExchangeData):
         # Load configuration from YAML
         self._load_from_config("coin_swap")
 
-    def get_symbol(self, symbol):
+    def get_symbol(self, symbol: str) -> str:
         """Convert standard symbol to HTX coin swap format (e.g., BTC-USD)."""
         if not symbol:
             return symbol
@@ -318,7 +326,7 @@ class HtxExchangeDataOption(HtxExchangeData):
     Symbol format: BTC-USDT (uppercase, dash-separated).
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__()
         self.exchange_name = "htx_option"
         self.asset_type = "OPTION"
@@ -326,7 +334,7 @@ class HtxExchangeDataOption(HtxExchangeData):
         # Load configuration from YAML
         self._load_from_config("option")
 
-    def get_symbol(self, symbol):
+    def get_symbol(self, symbol: str) -> str:
         """Convert standard symbol to HTX option format (e.g., BTC-USDT)."""
         if not symbol:
             return symbol

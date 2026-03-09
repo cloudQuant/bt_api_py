@@ -31,7 +31,9 @@ class RiskManagerError(BtApiError):
 class RiskManager:
     """Minimal but consistent risk manager implementation."""
 
-    def __init__(self, event_bus: EventBus | None = None, config: dict[str, Any] | None = None):
+    def __init__(
+        self, event_bus: EventBus | None = None, config: dict[str, Any] | None = None
+    ) -> Any | None:
         self.logger = get_logger("risk_manager")
         self.event_bus = event_bus or EventBus()
         self.config = config or {}
@@ -296,10 +298,7 @@ class RiskManager:
             result["detailed_checks"] = limits_result.get("detailed_checks", [])
             result["triggered_rules"] = policy_result.get("triggered_rules", [])
             result["actions_executed"] = policy_result.get("actions_executed", 0)
-            result["mitigation_required"] = (
-                result["mitigation_required"]
-                or not result["approved"]
-            )
+            result["mitigation_required"] = result["mitigation_required"] or not result["approved"]
             result["evaluation_time_ms"] = round((time.time() - start) * 1000, 3)
 
             self._update_performance_metrics(result["evaluation_time_ms"])

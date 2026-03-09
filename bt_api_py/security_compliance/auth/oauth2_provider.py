@@ -6,20 +6,18 @@ and financial industry compliance (PSD2, Open Banking).
 
 import base64
 import hashlib
-import json
 import secrets
 import time
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Set, Union
-from urllib.parse import urlencode, urlparse
+from typing import Any
 
 try:
+    from cryptography.hazmat.backends import default_backend
     from cryptography.hazmat.primitives import hashes, serialization
     from cryptography.hazmat.primitives.asymmetric import rsa
     from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
-    from cryptography.hazmat.backends import default_backend
 
 except ImportError:
     CRYPTO_AVAILABLE = False
@@ -55,9 +53,9 @@ class OAuthClient:
 
     client_id: str
     client_secret: str
-    redirect_uris: List[str]
-    scopes: Set[str]
-    grant_types: Set[GrantType]
+    redirect_uris: list[str]
+    scopes: set[str]
+    grant_types: set[GrantType]
     is_confidential: bool = True
     created_at: float = field(default_factory=time.time)
 
@@ -79,7 +77,7 @@ class OAuthUser:
     email: str
     is_active: bool = True
     mfa_enabled: bool = False
-    totp_secret: Optional[str] = None
+    totp_secret: str | None = None
     created_at: float = field(default_factory=time.time)
 
 
@@ -91,9 +89,9 @@ class AuthorizationCode:
     client_id: str
     user_id: str
     redirect_uri: str
-    scopes: Set[str]
-    code_challenge: Optional[str] = None
-    code_challenge_method: Optional[str] = None
+    scopes: set[str]
+    code_challenge: str | None = None
+    code_challenge_method: str | None = None
     created_at: float = field(default_factory=time.time)
     expires_at: float = field(default=lambda: time.time() + 600)  # 10 minutes
     used: bool = False
@@ -114,11 +112,11 @@ class AccessToken:
     token: str
     token_type: TokenType
     client_id: str
-    user_id: Optional[str]
-    scopes: Set[str]
+    user_id: str | None
+    scopes: set[str]
     expires_at: float
     created_at: float = field(default_factory=time.time)
-    refresh_token: Optional[str] = None
+    refresh_token: str | None = None
 
     def is_expired(self) -> bool:
         """Check if access token has expired."""
@@ -141,7 +139,7 @@ class RefreshToken:
     token: str
     client_id: str
     user_id: str
-    scopes: Set[str]
+    scopes: set[str]
     created_at: float = field(default_factory=time.time)
     expires_at: float = field(default=lambda: time.time() + 2592000)  # 30 days
     used: bool = False
@@ -161,7 +159,7 @@ class OAuth2Provider:
     def __init__(
         self,
         issuer_url: str,
-        private_key_path: Optional[str] = None,
+        private_key_path: str | None = None,
         token_lifetime: int = 3600,  # 1 hour
         refresh_token_lifetime: int = 2592000,  # 30 days
         enable_pkce: bool = True,
@@ -175,17 +173,17 @@ class OAuth2Provider:
         self.enable_token_rotation = enable_token_rotation
 
         # Storage
-        self._clients: Dict[str, OAuthClient] = {}
-        self._users: Dict[str, OAuthUser] = {}
-        self._auth_codes: Dict[str, AuthorizationCode] = {}
-        self._access_tokens: Dict[str, AccessToken] = {}
-        self._refresh_tokens: Dict[str, RefreshToken] = {}
+        self._clients: dict[str, OAuthClient] = {}
+        self._users: dict[str, OAuthUser] = {}
+        self._auth_codes: dict[str, AuthorizationCode] = {}
+        self._access_tokens: dict[str, AccessToken] = {}
+        self._refresh_tokens: dict[str, RefreshToken] = {}
 
         # Cryptographic keys
         self._private_key = self._load_or_generate_key(private_key_path)
         self._public_key = self._private_key.public_key()
 
-    def _load_or_generate_key(self, key_path: Optional[str]):
+    def _load_or_generate_key(self, key_path: str | None):
         """Load or generate RSA key for JWT signing."""
         if key_path and Path(key_path).exists():
             with open(key_path, "rb") as f:
@@ -213,9 +211,9 @@ class OAuth2Provider:
         self,
         client_id: str,
         client_secret: str,
-        redirect_uris: List[str],
-        scopes: Set[str],
-        grant_types: Set[GrantType],
+        redirect_uris: list[str],
+        scopes: set[str],
+        grant_types: set[GrantType],
         is_confidential: bool = True,
     ) -> OAuthClient:
         """Register an OAuth client."""
@@ -245,9 +243,9 @@ class OAuth2Provider:
         client_id: str,
         user_id: str,
         redirect_uri: str,
-        scopes: Set[str],
-        code_challenge: Optional[str] = None,
-        code_challenge_method: Optional[str] = None,
+        scopes: set[str],
+        code_challenge: str | None = None,
+        code_challenge_method: str | None = None,
     ) -> str:
         """Generate authorization code for authorization flow."""
         # Validate client
@@ -280,7 +278,7 @@ class OAuth2Provider:
         return code
 
     def validate_authorization_code(
-        self, code: str, client_id: str, redirect_uri: str, code_verifier: Optional[str] = None
+        self, code: str, client_id: str, redirect_uri: str, code_verifier: str | None = None
     ) -> AuthorizationCode:
         """Validate authorization code and return auth code object."""
         auth_code = self._auth_codes.get(code)
@@ -311,7 +309,7 @@ class OAuth2Provider:
         return auth_code
 
     def _validate_pkce(
-        self, code_verifier: str, code_challenge: str, code_challenge_method: Optional[str]
+        self, code_verifier: str, code_challenge: str, code_challenge_method: str | None
     ) -> bool:
         """Validate PKCE code verifier."""
         method = code_challenge_method or "plain"
@@ -330,7 +328,7 @@ class OAuth2Provider:
             raise OAuthError(f"Unsupported PKCE method: {method}")
 
     def generate_access_token(
-        self, client_id: str, user_id: Optional[str], scopes: Set[str], grant_type: GrantType
+        self, client_id: str, user_id: str | None, scopes: set[str], grant_type: GrantType
     ) -> AccessToken:
         """Generate access token."""
         # Validate client
@@ -362,7 +360,7 @@ class OAuth2Provider:
         return access_token
 
     def _generate_refresh_token(
-        self, client_id: str, user_id: str, scopes: Set[str]
+        self, client_id: str, user_id: str, scopes: set[str]
     ) -> RefreshToken:
         """Generate refresh token."""
         token = secrets.token_urlsafe(32)
@@ -375,7 +373,7 @@ class OAuth2Provider:
         return refresh_token
 
     def validate_access_token(
-        self, token: str, required_scopes: Optional[Set[str]] = None
+        self, token: str, required_scopes: set[str] | None = None
     ) -> AccessToken:
         """Validate access token."""
         access_token = self._access_tokens.get(token)
@@ -431,7 +429,7 @@ class OAuth2Provider:
 
         return False
 
-    def introspect_token(self, token: str) -> Dict[str, Any]:
+    def introspect_token(self, token: str) -> dict[str, Any]:
         """Introspect token (RFC 7662)."""
         # Check access token
         if token in self._access_tokens:
@@ -461,7 +459,7 @@ class OAuth2Provider:
 
         return {"active": False}
 
-    def generate_jwt_id_token(self, user_id: str, client_id: str, scopes: Set[str]) -> str:
+    def generate_jwt_id_token(self, user_id: str, client_id: str, scopes: set[str]) -> str:
         """Generate OpenID Connect ID token."""
         user = self._users.get(user_id)
         if not user:
@@ -493,7 +491,7 @@ class OAuth2Provider:
 
         return jwt.encode(payload, self._private_key, algorithm="RS256", headers=header)
 
-    def validate_jwt(self, token: str, audience: Optional[str] = None) -> Dict[str, Any]:
+    def validate_jwt(self, token: str, audience: str | None = None) -> dict[str, Any]:
         """Validate JWT token."""
         try:
             import jwt
@@ -518,15 +516,15 @@ class OAuth2Provider:
         except Exception as e:
             raise OAuthError(f"Invalid JWT: {e}")
 
-    def get_client_info(self, client_id: str) -> Optional[OAuthClient]:
+    def get_client_info(self, client_id: str) -> OAuthClient | None:
         """Get client information."""
         return self._clients.get(client_id)
 
-    def get_user_info(self, user_id: str) -> Optional[OAuthUser]:
+    def get_user_info(self, user_id: str) -> OAuthUser | None:
         """Get user information."""
         return self._users.get(user_id)
 
-    def cleanup_expired_tokens(self) -> Dict[str, int]:
+    def cleanup_expired_tokens(self) -> dict[str, int]:
         """Clean up expired tokens."""
         now = time.time()
         cleanup_counts = {"authorization_codes": 0, "access_tokens": 0, "refresh_tokens": 0}

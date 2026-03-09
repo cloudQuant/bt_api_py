@@ -6,24 +6,34 @@ CTP 交易所注册模块
 依赖: pip install ctp-python
 """
 
+from typing import Any
+
 from bt_api_py.balance_utils import simple_balance_handler as _ctp_balance_handler
 from bt_api_py.containers.exchanges.ctp_exchange_data import CtpExchangeDataFuture
-from bt_api_py.feeds.live_ctp_feed import CtpMarketStream, CtpRequestDataFuture, CtpTradeStream
+from bt_api_py.feeds.live_ctp_feed import (
+    CtpMarketStream,
+    CtpRequestDataFuture,
+    CtpTradeStream,
+)
 from bt_api_py.registry import ExchangeRegistry
 
 
-def _ctp_future_subscribe_handler(data_queue, exchange_params, topics, bt_api):
-    """CTP FUTURE 订阅处理函数
-    启动行情流（CtpMarketStream）和交易流（CtpTradeStream）
+def _ctp_future_subscribe_handler(
+    data_queue: Any,
+    exchange_params: dict[str, Any],
+    topics: list[dict[str, Any]],
+    bt_api: Any,
+) -> None:
+    """CTP FUTURE 订阅处理函数，启动行情流和交易流.
 
-    :param data_queue: queue.Queue
-    :param exchange_params: dict, 包含 broker_id, user_id, password, md_front, td_front 等
-    :param topics: list of topic dicts, 如 [{"topic": "tick", "symbol": "IF2506"}, ...]
-    :param bt_api: BtApi 实例
+    Args:
+        data_queue: Queue for data transmission.
+        exchange_params: Dict containing broker_id, user_id, password, md_front, td_front, etc.
+        topics: List of topic dicts, e.g. [{"topic": "tick", "symbol": "IF2506"}, ...].
+        bt_api: BtApi instance.
     """
     topic_list = [t.get("topic") for t in topics]
 
-    # 启动行情流 — 订阅 tick/ticker/depth 数据
     has_tick = any(t in topic_list for t in ("tick", "ticker", "depth"))
     if has_tick:
         market_kwargs = dict(exchange_params.items())
@@ -33,7 +43,6 @@ def _ctp_future_subscribe_handler(data_queue, exchange_params, topics, bt_api):
         stream.start()
         bt_api.log("CTP market stream started")
 
-    # 启动交易流 — 接收订单/成交回报推送
     if not bt_api._subscription_flags.get("CTP___FUTURE_account", False):
         trade_kwargs = dict(exchange_params.items())
         trade_kwargs["stream_name"] = "ctp_trade_stream"
@@ -43,8 +52,17 @@ def _ctp_future_subscribe_handler(data_queue, exchange_params, topics, bt_api):
         bt_api.log("CTP trade stream started")
 
 
-def register_ctp():
-    """注册 CTP Future 到全局 ExchangeRegistry"""
+def register_ctp() -> None:
+    """Register CTP Future to global ExchangeRegistry.
+
+    This function registers:
+    - Feed class for market data
+    - Exchange data configuration
+    - Balance handler for account management
+    - Subscribe handler for stream management
+    - Market stream for tick/depth data
+    - Account stream for order/trade data
+    """
     ExchangeRegistry.register_feed("CTP___FUTURE", CtpRequestDataFuture)
     ExchangeRegistry.register_exchange_data("CTP___FUTURE", CtpExchangeDataFuture)
     ExchangeRegistry.register_balance_handler("CTP___FUTURE", _ctp_balance_handler)
@@ -53,5 +71,4 @@ def register_ctp():
     ExchangeRegistry.register_stream("CTP___FUTURE", "account", CtpTradeStream)
 
 
-# 模块导入时自动注册
 register_ctp()

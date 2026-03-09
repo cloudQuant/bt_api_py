@@ -1,4 +1,4 @@
-"""HTX Order Data Container"""
+"""HTX Order Data Container."""
 
 import json
 import time
@@ -10,7 +10,9 @@ from bt_api_py.functions.utils import from_dict_get_float, from_dict_get_string
 class HtxRequestOrderData(OrderData):
     """HTX REST API order data."""
 
-    def __init__(self, order_info, symbol_name, asset_type, has_been_json_encoded=False):
+    def __init__(
+        self, order_info, symbol_name, asset_type, has_been_json_encoded: bool = False
+    ) -> None:
         super().__init__(order_info, has_been_json_encoded)
         self.exchange_name = "HTX"
         self.local_update_time = time.time()
@@ -32,7 +34,7 @@ class HtxRequestOrderData(OrderData):
         self.all_data = None
         self.has_been_init_data = False
 
-    def init_data(self):
+    def init_data(self) -> None:
         """Initialize order data from HTX response.
 
         HTX order response format:
@@ -97,7 +99,7 @@ class HtxRequestOrderData(OrderData):
 
         self.has_been_init_data = True
 
-    def get_all_data(self):
+    def get_all_data(self) -> dict[str, Any]:
         if self.all_data is None:
             self.all_data = {
                 "exchange_name": self.exchange_name,
@@ -119,69 +121,69 @@ class HtxRequestOrderData(OrderData):
             }
         return self.all_data
 
-    def __str__(self):
+    def __str__(self) -> str:
         self.init_data()
         return json.dumps(self.get_all_data())
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return self.__str__()
 
-    def get_exchange_name(self):
+    def get_exchange_name(self) -> str:
         return self.exchange_name
 
-    def get_local_update_time(self):
+    def get_local_update_time(self) -> float:
         return self.local_update_time
 
-    def get_symbol_name(self):
+    def get_symbol_name(self) -> str:
         return self.symbol_name
 
-    def get_asset_type(self):
+    def get_asset_type(self) -> str:
         return self.asset_type
 
-    def get_order_id(self):
+    def get_order_id(self) -> Any:
         self.init_data()
         return self.order_id
 
-    def get_client_order_id(self):
+    def get_client_order_id(self) -> Any:
         self.init_data()
         return self.client_order_id
 
-    def get_order_symbol_name(self):
+    def get_order_symbol_name(self) -> Any:
         self.init_data()
         return self.order_symbol_name
 
-    def get_order_side(self):
+    def get_order_side(self) -> Any:
         self.init_data()
         return self.order_side  # String: 'BUY' or 'SELL'
 
-    def get_order_type(self):
+    def get_order_type(self) -> Any:
         self.init_data()
         return self.order_type  # String: 'LIMIT', 'MARKET', etc.
 
-    def get_order_price(self):
+    def get_order_price(self) -> Any:
         self.init_data()
         return self.order_price
 
-    def get_order_qty(self):
+    def get_order_qty(self) -> Any:
         self.init_data()
         return self.order_qty
 
-    def get_order_avg_price(self):
+    def get_order_avg_price(self) -> Any:
         self.init_data()
         return self.order_avg_price
 
-    def get_order_filled_qty(self):
+    def get_order_filled_qty(self) -> Any:
         self.init_data()
         return self.order_filled_qty
 
-    def get_order_status(self):
+    def get_order_status(self) -> Any:
         self.init_data()
         return self.order_status
 
-    def get_create_time(self):
+    def get_create_time(self) -> Any:
         self.init_data()
         return self.create_time
 
-    def get_update_time(self):
+    def get_update_time(self) -> Any:
         self.init_data()
         return self.update_time

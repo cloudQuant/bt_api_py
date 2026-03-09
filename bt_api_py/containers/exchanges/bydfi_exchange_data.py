@@ -1,6 +1,6 @@
-"""
-BYDFi Exchange Data Configuration
-"""
+from typing import Any
+
+"""BYDFi Exchange Data Configuration."""
 
 import os
 
@@ -13,7 +13,7 @@ _bydfi_config = None
 _bydfi_config_loaded = False
 
 
-def _get_bydfi_config():
+def _get_bydfi_config() -> Any | None:
     """Load BYDFi YAML configuration."""
     global _bydfi_config, _bydfi_config_loaded
     if _bydfi_config_loaded:
@@ -37,7 +37,7 @@ def _get_bydfi_config():
 class BYDFiExchangeData(ExchangeData):
     """Base class for BYDFi exchange."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__()
         self.exchange_name = "bydfi"
         self.rest_url = "https://api.bydfi.com"
@@ -58,7 +58,7 @@ class BYDFiExchangeData(ExchangeData):
         self.api_key = None
         self.api_secret = None
 
-    def _load_from_config(self, asset_type):
+    def _load_from_config(self, asset_type) -> bool:
         """Load from YAML config."""
         config = _get_bydfi_config()
         if config is None:
@@ -96,7 +96,7 @@ class BYDFiExchangeData(ExchangeData):
 
         return True
 
-    def get_symbol(self, symbol):
+    def get_symbol(self, symbol: str) -> str:
         """Convert symbol format for BYDFi API.
 
         BYDFi uses dash separator (BTC-USDT).
@@ -104,11 +104,11 @@ class BYDFiExchangeData(ExchangeData):
         """
         return symbol.replace("/", "-")
 
-    def get_period(self, key):
+    def get_period(self, key: str) -> str:
         """Get kline period for API."""
         return self.kline_periods.get(key, key)
 
-    def get_rest_path(self, key):
+    def get_rest_path(self, key: str, **kwargs) -> str:
         """Get REST API path by key."""
         if key not in self.rest_paths or self.rest_paths[key] == "":
             self.raise_path_error(self.exchange_name, key)
@@ -118,7 +118,7 @@ class BYDFiExchangeData(ExchangeData):
 class BYDFiExchangeDataSpot(BYDFiExchangeData):
     """BYDFi Spot exchange configuration."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__()
         self.asset_type = "spot"
         self.rest_paths = {}

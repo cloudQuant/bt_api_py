@@ -1,11 +1,11 @@
-"""
-MEXC Exchange Data Configuration
+"""MEXC Exchange Data Configuration.
 
 Provides REST API URLs, path mappings, and configuration for MEXC exchange.
 """
 
 import json
 import os
+from typing import Any
 
 from bt_api_py.containers.exchanges.exchange_data import ExchangeData
 from bt_api_py.logging_factory import get_logger
@@ -17,8 +17,8 @@ _mexc_config = None
 _mexc_config_loaded = False
 
 
-def _get_mexc_config():
-    """延迟加载并缓存 MEXC YAML 配置"""
+def _get_mexc_config() -> Any | None:
+    """延迟加载并缓存 MEXC YAML 配置."""
     global _mexc_config, _mexc_config_loaded
     if _mexc_config_loaded:
         return _mexc_config
@@ -47,7 +47,7 @@ class MexcExchangeData(ExchangeData):
     acct_wss_url, wss_url, rest_paths, wss_paths, legal_currency.
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__()
         self.exchange_name = "mexc"
         self.rest_url = ""
@@ -85,13 +85,14 @@ class MexcExchangeData(ExchangeData):
             "ETH",
         ]
 
-    def _load_from_config(self, asset_type):
-        """从 YAML 配置文件加载交易所参数
+    def _load_from_config(self, asset_type) -> bool:
+        """从 YAML 配置文件加载交易所参数.
 
         Args:
             asset_type: 资产类型 key, 如 'spot', 'swap', 'coin_m' 等
         Returns:
             bool: 是否加载成功
+
         """
         config = _get_mexc_config()
         if config is None:
@@ -141,11 +142,11 @@ class MexcExchangeData(ExchangeData):
         return True
 
     # noinspection PyMethodMayBeStatic
-    def get_symbol(self, symbol):
+    def get_symbol(self, symbol: str) -> str:
         # Remove common separators to get MEXC format (BASEQUOTE)
         return symbol.replace("-", "").replace("/", "")
 
-    def account_wss_symbol(self, symbol):
+    def account_wss_symbol(self, symbol: str) -> str:
         for lc in self.legal_currency:
             if lc in symbol:
                 symbol = f"{symbol.split(lc)[0]}/{lc}".lower()
@@ -153,21 +154,20 @@ class MexcExchangeData(ExchangeData):
         return symbol
 
     # noinspection PyMethodMayBeStatic
-    def get_period(self, key):
+    def get_period(self, key: str) -> str:
         if key in self.kline_periods:
             return self.kline_periods[key]
         return key
 
-    def get_rest_path(self, key):
+    def get_rest_path(self, key: str, **kwargs) -> str:
         if key not in self.rest_paths or self.rest_paths[key] == "":
             self.raise_path_error(self.exchange_name, key)
         return self.rest_paths[key]
 
-    def get_wss_path(self, **kwargs):
-        """
-        get wss key path
+    def get_wss_path(self, **kwargs) -> str:
+        """Get wss key path
         :param kwargs: kwargs params
-        :return: path
+        :return: path.
         """
         # 'depth': {'params': ['<symbol>@depth20@100ms'], 'method': 'SUBSCRIBE', 'id': 1},
         key = kwargs["topic"]
@@ -199,9 +199,9 @@ class MexcExchangeData(ExchangeData):
 
 
 class MexcExchangeDataSwap(MexcExchangeData):
-    """MEXC USDT-M Futures (swap) Data Configuration"""
+    """MEXC USDT-M Futures (swap) Data Configuration."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__()
         # Load configuration from YAML file
         config_loaded = self._load_from_config("swap")
@@ -344,9 +344,9 @@ class MexcExchangeDataSwap(MexcExchangeData):
 
 
 class MexcExchangeDataMargin(MexcExchangeData):
-    """MEXC Margin Trading Data Configuration"""
+    """MEXC Margin Trading Data Configuration."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__()
         # Load configuration from YAML file
         config_loaded = self._load_from_config("margin")
@@ -458,9 +458,9 @@ class MexcExchangeDataMargin(MexcExchangeData):
 
 
 class MexcExchangeDataSpot(MexcExchangeData):
-    """MEXC Spot Trading Data Configuration"""
+    """MEXC Spot Trading Data Configuration."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__()
         self.asset_type = "SPOT"
         # Load configuration from YAML file

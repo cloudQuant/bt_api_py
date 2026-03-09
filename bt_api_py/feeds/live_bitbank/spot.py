@@ -3,6 +3,7 @@ Bitbank Spot Feed implementation.
 """
 
 from datetime import datetime
+from typing import Any
 
 from bt_api_py.feeds.capability import Capability
 from bt_api_py.feeds.live_bitbank.request_base import BitbankRequestData
@@ -24,18 +25,18 @@ class BitbankRequestDataSpot(BitbankRequestData):
             Capability.CANCEL_ORDER,
         }
 
-    def __init__(self, data_queue, **kwargs):
+    def __init__(self, data_queue, **kwargs) -> None:
         super().__init__(data_queue, **kwargs)
         self.exchange_name = kwargs.get("exchange_name", "BITBANK___SPOT")
 
-    def _normalize_pair(self, symbol):
+    def _normalize_pair(self, symbol) -> Any:
         """Normalize symbol to bitbank format (e.g., btc_jpy)."""
         symbol = symbol.upper().replace("/", "_").replace("-", "_")
         return symbol.lower()
 
     # ==================== Ticker ====================
 
-    def _get_tick(self, symbol, extra_data=None, **kwargs):
+    def _get_tick(self, symbol, extra_data=None, **kwargs) -> Any:
         """Prepare ticker request. Returns (path, params, extra_data)."""
         pair = self._normalize_pair(symbol)
         path = f"GET /{pair}/ticker"
@@ -62,7 +63,7 @@ class BitbankRequestDataSpot(BitbankRequestData):
             return [data], True
         return [], False
 
-    def get_tick(self, symbol, extra_data=None, **kwargs):
+    def get_tick(self, symbol, extra_data=None, **kwargs) -> Any:
         """Get symbol ticker."""
         path, params, extra_data = self._get_tick(symbol, extra_data, **kwargs)
         return self.request(path, params=params, extra_data=extra_data)
@@ -77,7 +78,7 @@ class BitbankRequestDataSpot(BitbankRequestData):
 
     # ==================== Depth ====================
 
-    def _get_depth(self, symbol, count=20, extra_data=None, **kwargs):
+    def _get_depth(self, symbol, count=20, extra_data=None, **kwargs) -> Any:
         """Prepare depth request. Returns (path, params, extra_data)."""
         pair = self._normalize_pair(symbol)
         path = f"GET /{pair}/depth"
@@ -104,7 +105,7 @@ class BitbankRequestDataSpot(BitbankRequestData):
             return [data], True
         return [], False
 
-    def get_depth(self, symbol, count=20, extra_data=None, **kwargs):
+    def get_depth(self, symbol, count=20, extra_data=None, **kwargs) -> Any:
         """Get order book."""
         path, params, extra_data = self._get_depth(symbol, count, extra_data, **kwargs)
         return self.request(path, params=params, extra_data=extra_data)
@@ -119,7 +120,7 @@ class BitbankRequestDataSpot(BitbankRequestData):
 
     # ==================== Kline ====================
 
-    def _get_kline(self, symbol, period, count=20, extra_data=None, **kwargs):
+    def _get_kline(self, symbol, period, count=20, extra_data=None, **kwargs) -> Any:
         """Prepare kline request. Returns (path, params, extra_data)."""
         pair = self._normalize_pair(symbol)
         kline_periods = getattr(self._params, "kline_periods", {})
@@ -160,7 +161,7 @@ class BitbankRequestDataSpot(BitbankRequestData):
                     return [{"ohlcv": ohlcv}], True
         return [], False
 
-    def get_kline(self, symbol, period, count=20, extra_data=None, **kwargs):
+    def get_kline(self, symbol, period, count=20, extra_data=None, **kwargs) -> Any:
         """Get kline data."""
         path, params, extra_data = self._get_kline(symbol, period, count, extra_data, **kwargs)
         return self.request(path, params=params, extra_data=extra_data)
@@ -175,7 +176,7 @@ class BitbankRequestDataSpot(BitbankRequestData):
 
     # ==================== Trades ====================
 
-    def _get_trades(self, symbol, limit=60, extra_data=None, **kwargs):
+    def _get_trades(self, symbol, limit=60, extra_data=None, **kwargs) -> Any:
         """Prepare trades request. Returns (path, params, extra_data)."""
         pair = self._normalize_pair(symbol)
         path = f"GET /{pair}/transactions"
@@ -203,14 +204,14 @@ class BitbankRequestDataSpot(BitbankRequestData):
             return [transactions], True
         return [], False
 
-    def get_trades(self, symbol, limit=60, extra_data=None, **kwargs):
+    def get_trades(self, symbol, limit=60, extra_data=None, **kwargs) -> Any:
         """Get recent trades."""
         path, params, extra_data = self._get_trades(symbol, limit, extra_data, **kwargs)
         return self.request(path, params=params, extra_data=extra_data)
 
     # ==================== Exchange Info ====================
 
-    def _get_exchange_info(self, extra_data=None, **kwargs):
+    def _get_exchange_info(self, extra_data=None, **kwargs) -> Any:
         """Prepare exchange info request. Returns (path, params, extra_data)."""
         path = "GET /spot/pairs"
         if extra_data is None:
@@ -236,7 +237,7 @@ class BitbankRequestDataSpot(BitbankRequestData):
             return pairs if isinstance(pairs, list) else [pairs], True
         return [], False
 
-    def get_exchange_info(self, extra_data=None, **kwargs):
+    def get_exchange_info(self, extra_data=None, **kwargs) -> Any:
         """Get exchange info."""
         path, params, extra_data = self._get_exchange_info(extra_data, **kwargs)
         return self.request(path, params=params, extra_data=extra_data)
@@ -302,7 +303,7 @@ class BitbankRequestDataSpot(BitbankRequestData):
         )
         return self.request(path, params=params, extra_data=extra_data)
 
-    def _cancel_order(self, symbol, order_id, extra_data=None, **kwargs):
+    def _cancel_order(self, symbol, order_id, extra_data=None, **kwargs) -> Any:
         """Cancel order. Returns (path, params, extra_data)."""
         path = "POST /v1/user/spot/cancel_order"
         if extra_data is None:
@@ -324,7 +325,7 @@ class BitbankRequestDataSpot(BitbankRequestData):
         path, params, extra_data = self._cancel_order(symbol, order_id, extra_data, **kwargs)
         return self.request(path, params=params, extra_data=extra_data)
 
-    def _query_order(self, symbol, order_id, extra_data=None, **kwargs):
+    def _query_order(self, symbol, order_id, extra_data=None, **kwargs) -> Any:
         """Query order. Returns (path, params, extra_data)."""
         path = "GET /v1/user/spot/order"
         if extra_data is None:
@@ -346,7 +347,7 @@ class BitbankRequestDataSpot(BitbankRequestData):
         path, params, extra_data = self._query_order(symbol, order_id, extra_data, **kwargs)
         return self.request(path, params=params, extra_data=extra_data)
 
-    def _get_open_orders(self, symbol=None, extra_data=None, **kwargs):
+    def _get_open_orders(self, symbol=None, extra_data=None, **kwargs) -> Any:
         """Get open orders. Returns (path, params, extra_data)."""
         path = "GET /v1/user/spot/active_orders"
         if extra_data is None:
@@ -362,14 +363,14 @@ class BitbankRequestDataSpot(BitbankRequestData):
         params = {"pair": self._normalize_pair(symbol)} if symbol else {}
         return path, params, extra_data
 
-    def get_open_orders(self, symbol=None, extra_data=None, **kwargs):
+    def get_open_orders(self, symbol=None, extra_data=None, **kwargs) -> Any:
         """Get open orders."""
         path, params, extra_data = self._get_open_orders(symbol, extra_data, **kwargs)
         return self.request(path, params=params, extra_data=extra_data)
 
     # ==================== Account Interfaces ====================
 
-    def _get_account(self, symbol=None, extra_data=None, **kwargs):
+    def _get_account(self, symbol=None, extra_data=None, **kwargs) -> Any:
         """Get account info. Returns (path, params, extra_data)."""
         path = "GET /v1/user/assets"
         if extra_data is None:
@@ -384,12 +385,12 @@ class BitbankRequestDataSpot(BitbankRequestData):
         )
         return path, None, extra_data
 
-    def get_account(self, symbol=None, extra_data=None, **kwargs):
+    def get_account(self, symbol=None, extra_data=None, **kwargs) -> Any:
         """Get account info."""
         path, params, extra_data = self._get_account(symbol, extra_data, **kwargs)
         return self.request(path, params=params, extra_data=extra_data)
 
-    def _get_balance(self, symbol=None, extra_data=None, **kwargs):
+    def _get_balance(self, symbol=None, extra_data=None, **kwargs) -> Any:
         """Get balance. Returns (path, params, extra_data)."""
         path = "GET /v1/user/assets"
         if extra_data is None:
@@ -404,7 +405,7 @@ class BitbankRequestDataSpot(BitbankRequestData):
         )
         return path, None, extra_data
 
-    def get_balance(self, symbol=None, extra_data=None, **kwargs):
+    def get_balance(self, symbol=None, extra_data=None, **kwargs) -> Any:
         """Get token balance."""
         path, params, extra_data = self._get_balance(symbol, extra_data, **kwargs)
         return self.request(path, params=params, extra_data=extra_data)

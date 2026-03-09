@@ -1,5 +1,4 @@
-"""
-GMX Exchange Data Configuration
+"""GMX Exchange Data Configuration.
 
 GMX is a decentralized perpetual exchange that supports multiple blockchains:
 - Arbitrum
@@ -7,6 +6,7 @@ GMX is a decentralized perpetual exchange that supports multiple blockchains:
 - Botanix
 """
 
+from typing import Any
 import os
 from enum import Enum
 
@@ -19,7 +19,7 @@ _gmx_config_loaded = False
 _gmx_config_raw = None
 
 
-def _get_gmx_config():
+def _get_gmx_config() -> Any | None:
     """Load GMX YAML configuration."""
     global _gmx_config, _gmx_config_loaded, _gmx_config_raw
     if _gmx_config_loaded:
@@ -74,12 +74,13 @@ class GmxExchangeData:
         GmxChain.BOTANIX: "https://botanix-api.gmxinfra.io",
     }
 
-    def __init__(self, chain: GmxChain = DEFAULT_CHAIN, asset_type: str | None = None):
+    def __init__(self, chain: GmxChain = DEFAULT_CHAIN, asset_type: str | None = None) -> None:
         """Initialize GMX exchange data.
 
         Args:
             chain: The blockchain to query
             asset_type: Asset type (e.g., 'spot', 'perpetual')
+
         """
         self.chain = chain
         self.asset_type = asset_type or "spot"
@@ -99,8 +100,10 @@ class GmxExchangeData:
 
         Args:
             asset_type: Asset type key (e.g., 'spot', 'perpetual')
+
         Returns:
             bool: Whether loading was successful
+
         """
         if not self.config:
             return False
@@ -153,6 +156,7 @@ class GmxExchangeData:
 
         Returns:
             String in format "GET /endpoint"
+
         """
         if self.rest_paths and request_type in self.rest_paths:
             return self.rest_paths[request_type]
@@ -203,7 +207,7 @@ class GmxExchangeDataSpot(GmxExchangeData):
         "LINK",
     ]
 
-    def __init__(self, chain: GmxChain | str = GmxExchangeData.DEFAULT_CHAIN):
+    def __init__(self, chain: GmxChain | str = GmxExchangeData.DEFAULT_CHAIN) -> None:
         # Convert string to enum if needed
         if isinstance(chain, str):
             try:

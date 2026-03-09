@@ -1,6 +1,6 @@
-"""
-Crypto.com Exchange Data Configuration
-"""
+from typing import Any
+
+"""Crypto.com Exchange Data Configuration."""
 
 import json
 import os
@@ -15,8 +15,8 @@ _cryptocom_config = None
 _cryptocom_config_loaded = False
 
 
-def _get_cryptocom_config():
-    """延迟加载并缓存 Crypto.com YAML 配置"""
+def _get_cryptocom_config() -> Any | None:
+    """延迟加载并缓存 Crypto.com YAML 配置."""
     global _cryptocom_config, _cryptocom_config_loaded
     if _cryptocom_config_loaded:
         return _cryptocom_config
@@ -45,7 +45,7 @@ class CryptoComExchangeData(ExchangeData):
     acct_wss_url, wss_url, rest_paths, wss_paths, legal_currency.
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__()
         self.exchange_name = "cryptocom"
         self.rest_url = ""
@@ -80,13 +80,14 @@ class CryptoComExchangeData(ExchangeData):
             "CRO",
         ]
 
-    def _load_from_config(self, asset_type):
-        """从 YAML 配置文件加载交易所参数
+    def _load_from_config(self, asset_type) -> bool:
+        """从 YAML 配置文件加载交易所参数.
 
         Args:
             asset_type: 资产类型 key, 如 'spot'
         Returns:
             bool: 是否加载成功
+
         """
         config = _get_cryptocom_config()
         if config is None:
@@ -136,7 +137,7 @@ class CryptoComExchangeData(ExchangeData):
         return True
 
     # noinspection PyMethodMayBeStatic
-    def get_symbol(self, symbol):
+    def get_symbol(self, symbol: str) -> str:
         """Get normalized symbol for API requests.
 
         Crypto.com uses underscore format like BTC_USDT
@@ -144,19 +145,18 @@ class CryptoComExchangeData(ExchangeData):
         return symbol.replace("/", "_").replace("-", "_")
 
     # noinspection PyMethodMayBeStatic
-    def get_period(self, key):
+    def get_period(self, key: str) -> str:
         return key
 
-    def get_rest_path(self, key):
+    def get_rest_path(self, key: str, **kwargs) -> str:
         if key not in self.rest_paths or self.rest_paths[key] == "":
             self.raise_path_error(self.exchange_name, key)
         return self.rest_paths[key]
 
-    def get_wss_path(self, **kwargs):
-        """
-        get wss key path
+    def get_wss_path(self, **kwargs) -> str:
+        """Get wss key path
         :param kwargs: kwargs params
-        :return: path
+        :return: path.
         """
         # 'ticker': {'params': ['ticker.{symbol}'], 'method': 'SUBSCRIBE', 'id': 1},
         key = kwargs["topic"]
@@ -186,7 +186,7 @@ class CryptoComExchangeData(ExchangeData):
 class CryptoComExchangeDataSpot(CryptoComExchangeData):
     """Crypto.com Spot exchange data configuration."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__()
         self.asset_type = "spot"
         if not self._load_from_config("spot"):
@@ -260,13 +260,13 @@ class CryptoComExchangeDataSpot(CryptoComExchangeData):
         """
         return symbol.replace("/", "_")
 
-    def get_rest_path(self, endpoint):
+    def get_rest_path(self, endpoint: str, **kwargs) -> str:
         """Get REST API path for endpoint."""
         if endpoint not in self.rest_paths or self.rest_paths[endpoint] == "":
             self.raise_path_error(self.exchange_name, endpoint)
         return self.rest_paths[endpoint]
 
-    def get_wss_path(self, channel_type, **kwargs):
+    def get_wss_path(self, channel_type, **kwargs) -> str:
         """Get WebSocket path for channel type."""
         if channel_type in self.wss_paths:
             path = self.wss_paths[channel_type]
@@ -289,7 +289,7 @@ class CryptoComExchangeDataSpot(CryptoComExchangeData):
         """
         return instrument_name.replace("_", "/")
 
-    def validate_symbol(self, symbol):
+    def validate_symbol(self, symbol) -> bool:
         """Validate symbol format for Crypto.com."""
         if not symbol:
             return False

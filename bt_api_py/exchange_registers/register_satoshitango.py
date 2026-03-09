@@ -1,6 +1,4 @@
-"""
-SatoshiTango Exchange Registration Module
-"""
+"""SatoshiTango Exchange Registration Module."""
 
 from bt_api_py.balance_utils import simple_balance_handler as _satoshitango_balance_handler
 from bt_api_py.containers.exchanges.satoshitango_exchange_data import SatoshiTangoExchangeDataSpot
@@ -9,7 +7,7 @@ from bt_api_py.registry import ExchangeRegistry
 
 
 def register_satoshitango():
-    """Register SatoshiTango SPOT to global ExchangeRegistry"""
+    """Register SatoshiTango SPOT to global ExchangeRegistry."""
     # Register Feed class
     ExchangeRegistry.register_feed("SATOSHITANGO___SPOT", SatoshiTangoRequestDataSpot)
 

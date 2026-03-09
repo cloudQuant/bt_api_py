@@ -1,8 +1,8 @@
-"""
-IB 订单数据容器
-对应 IB TWS API 的 Order / OrderState
+"""IB 订单数据容器
+对应 IB TWS API 的 Order / OrderState.
 """
 
+from typing import Any
 from bt_api_py.containers.orders.order import OrderData, OrderStatus
 
 # IB 订单状态映射
@@ -20,9 +20,15 @@ IB_ORDER_STATUS_MAP = {
 
 
 class IbOrderData(OrderData):
-    """IB 订单数据"""
+    """IB 订单数据."""
 
-    def __init__(self, order_info, symbol_name=None, asset_type="STK", has_been_json_encoded=False):
+    def __init__(
+        self,
+        order_info: Any,
+        symbol_name: Any = None,
+        asset_type: Any = "STK",
+        has_been_json_encoded: Any = False,
+    ) -> None:
         super().__init__(order_info, has_been_json_encoded)
         self.symbol_name = symbol_name
         self.asset_type = asset_type
@@ -44,7 +50,7 @@ class IbOrderData(OrderData):
         self.avg_fill_price = None
         self.last_fill_time = None
 
-    def init_data(self):
+    def init_data(self) -> None:
         if self._initialized:
             return self
         info = self.order_info
@@ -68,63 +74,63 @@ class IbOrderData(OrderData):
         self._initialized = True
         return self
 
-    def get_exchange_name(self):
+    def get_exchange_name(self) -> None:
         return self.exchange_name
 
-    def get_asset_type(self):
+    def get_asset_type(self) -> None:
         return self.asset_type
 
-    def get_symbol_name(self):
+    def get_symbol_name(self) -> None:
         return self.symbol_name
 
-    def get_server_time(self):
+    def get_server_time(self) -> None:
         return self.last_fill_time
 
-    def get_local_update_time(self):
+    def get_local_update_time(self) -> None:
         return self.last_fill_time
 
-    def get_order_id(self):
+    def get_order_id(self) -> None:
         return self.order_id_val
 
-    def get_client_order_id(self):
+    def get_client_order_id(self) -> None:
         return self.perm_id
 
-    def get_order_size(self):
+    def get_order_size(self) -> None:
         return self.total_quantity
 
-    def get_order_price(self):
+    def get_order_price(self) -> None:
         return self.lmt_price
 
-    def get_order_side(self):
+    def get_order_side(self) -> None:
         return self.action.lower() if self.action else None
 
-    def get_order_status(self):
+    def get_order_status(self) -> None:
         return self.status_val
 
-    def get_executed_qty(self):
+    def get_executed_qty(self) -> None:
         return self.filled
 
-    def get_order_symbol_name(self):
+    def get_order_symbol_name(self) -> None:
         return self.symbol_name
 
-    def get_order_type(self):
+    def get_order_type(self) -> None:
         return self.order_type_val
 
-    def get_order_avg_price(self):
+    def get_order_avg_price(self) -> None:
         return self.avg_fill_price
 
-    def get_order_time_in_force(self):
+    def get_order_time_in_force(self) -> None:
         return self.tif
 
-    def get_order_exchange_id(self):
+    def get_order_exchange_id(self) -> None:
         return "SMART"
 
-    def __str__(self):
+    def __str__(self) -> None:
         return (
             f"IbOrder({self.symbol_name}, {self.action}, "
             f"type={self.order_type_val}, price={self.lmt_price}, "
             f"qty={self.total_quantity}, status={self.status_val})"
         )
 
-    def __repr__(self):
+    def __repr__(self) -> None:
         return self.__str__()

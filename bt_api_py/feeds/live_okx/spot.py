@@ -11,7 +11,7 @@ from bt_api_py.logging_factory import get_logger
 
 
 class OkxRequestDataSpot(OkxRequestData):
-    def __init__(self, data_queue, **kwargs):
+    def __init__(self, data_queue: Any, **kwargs: Any) -> None:
         super().__init__(data_queue, **kwargs)
         self.asset_type = kwargs.get("asset_type", "SPOT")
         self.logger_name = kwargs.get("logger_name", "okx_spot_feed.log")
@@ -19,7 +19,7 @@ class OkxRequestDataSpot(OkxRequestData):
         self.request_logger = get_logger("okx_spot_feed")
         self.async_logger = get_logger("okx_spot_feed")
 
-    def _get_index_price(self, symbol, extra_data=None, **kwargs):
+    def _get_index_price(self, symbol: Any, extra_data: Any = None, **kwargs: Any) -> None:
         request_symbol = self._params.get_symbol(symbol) if symbol is not None else ""
         request_type = "get_index_price"
         params = {
@@ -41,7 +41,7 @@ class OkxRequestDataSpot(OkxRequestData):
         return path, params, extra_data
 
     @staticmethod
-    def _get_index_price_normalize_function(input_data, extra_data):
+    def _get_index_price_normalize_function(input_data: Any, extra_data: Any) -> None:
         if extra_data is None:
             pass
         status = input_data["code"] == "0"
@@ -50,31 +50,31 @@ class OkxRequestDataSpot(OkxRequestData):
         data = [timestamp, float(data["idxPx"])]
         return data, status
 
-    def get_index_price(self, symbol, extra_data=None, **kwargs):
+    def get_index_price(self, symbol: Any, extra_data: Any = None, **kwargs: Any) -> None:
         path, params, extra_data = self._get_index_price(symbol, extra_data, **kwargs)
         data = self.request(path, params=params, extra_data=extra_data)
         return data
 
 
 class OkxAccountWssDataSpot(OkxAccountWssData):
-    def __init__(self, data_queue, **kwargs):
+    def __init__(self, data_queue: Any, **kwargs: Any) -> None:
         super().__init__(data_queue, **kwargs)
         self.asset_type = kwargs.get("asset_type", "SPOT")
 
 
 class OkxMarketWssDataSpot(OkxMarketWssData):
-    def __init__(self, data_queue, **kwargs):
+    def __init__(self, data_queue: Any, **kwargs: Any) -> None:
         super().__init__(data_queue, **kwargs)
         self.asset_type = kwargs.get("asset_type", "SPOT")
 
 
 class OkxKlineWssDataSpot(OkxKlineWssData):
-    def __init__(self, data_queue, **kwargs):
+    def __init__(self, data_queue: Any, **kwargs: Any) -> None:
         super().__init__(data_queue, **kwargs)
         self.asset_type = kwargs.get("asset_type", "SPOT")
 
 
 class OkxWssDataSpot(OkxWssData):
-    def __init__(self, data_queue, **kwargs):
+    def __init__(self, data_queue: Any, **kwargs: Any) -> None:
         super().__init__(data_queue, **kwargs)
         self.asset_type = kwargs.get("asset_type", "SPOT")

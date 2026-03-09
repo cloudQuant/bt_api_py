@@ -18,8 +18,7 @@ from bt_api_py.feeds.live_gemini.spot import GeminiRequestDataSpot  # noqa: F401
 
 # Set up logging
 logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 )
 logger = logging.getLogger(__name__)
 
@@ -30,17 +29,15 @@ def test_gemini_config():
     try:
         config = load_exchange_config("bt_api_py/configs/gemini.yaml")
         if config:
-
             # Check asset types
-            if hasattr(config, 'asset_types') and config.asset_types:
-
+            if hasattr(config, "asset_types") and config.asset_types:
                 # Check spot configuration
-                if 'spot' in config.asset_types:
-                    spot = config.asset_types['spot']
+                if "spot" in config.asset_types:
+                    spot = config.asset_types["spot"]
             pass
         else:
             pass
-    except Exception as e:
+    except Exception:
         pass
 
 
@@ -57,15 +54,14 @@ def test_gemini_feed_initialization():
             public_key="test_api_key",
             private_key="test_api_secret",
             asset_type="SPOT",
-            logger_name="test_gemini_feed.log"
+            logger_name="test_gemini_feed.log",
         )
-
 
         # Test capabilities
         capabilities = feed._capabilities()
 
         pass
-    except Exception as e:
+    except Exception:
         pass
 
 
@@ -89,7 +85,7 @@ def test_gemini_symbol_handling():
         period = feed._params.get_period("1h")
 
         pass
-    except Exception as e:
+    except Exception:
         pass
 
 
@@ -116,7 +112,7 @@ def test_gemini_api_methods():
         for method_name, method_call in methods_to_test:
             try:
                 response = method_call()
-            except Exception as e:
+            except Exception:
                 pass
 
         # Restore original request method
@@ -132,11 +128,11 @@ def test_gemini_api_methods():
         for method_name, method_call in private_methods:
             try:
                 response = method_call()
-            except Exception as e:
+            except Exception:
                 pass
 
         pass
-    except Exception as e:
+    except Exception:
         pass
 
 
@@ -163,11 +159,11 @@ def test_gemini_error_handling():
                     pass
                 else:
                     pass
-            except Exception as e:
+            except Exception:
                 pass
 
         pass
-    except Exception as e:
+    except Exception:
         pass
 
 
@@ -191,9 +187,8 @@ def main():
                 passed += 1
             else:
                 failed += 1
-        except Exception as e:
+        except Exception:
             failed += 1
-
 
     if failed == 0:
         pass

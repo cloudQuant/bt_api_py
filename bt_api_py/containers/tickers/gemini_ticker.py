@@ -3,7 +3,7 @@ from bt_api_py.utils.time import convert_utc_timestamp
 
 
 class GeminiRequestTickerData(RequestData):
-    """Gemini Ticker Data Container"""
+    """Gemini Ticker Data Container."""
 
     def __init__(
         self,
@@ -14,7 +14,7 @@ class GeminiRequestTickerData(RequestData):
         extra_data=None,
         status=False,
         normalize_func=None,
-    ):
+    ) -> None:
         # Handle positional arguments from test
         if extra_data is None:
             extra_data = {}
@@ -54,15 +54,15 @@ class GeminiRequestTickerData(RequestData):
         if data:
             self._parse_data(data)
 
-    def _parse_data(self, data):
-        """Parse Gemini API response"""
+    def _parse_data(self, data) -> None:
+        """Parse Gemini API response."""
         if self.is_rest:
             self._parse_rest_data(data)
         else:
             self._parse_wss_data(data)
 
-    def _parse_rest_data(self, data):
-        """Parse REST API response"""
+    def _parse_rest_data(self, data) -> None:
+        """Parse REST API response."""
         if isinstance(data, dict):
             # Single ticker response
             if "close" in data or "bid" in data or "ask" in data:
@@ -87,8 +87,8 @@ class GeminiRequestTickerData(RequestData):
                 self.change_24h = float(data.get("changes", {}).get("24h", 0))
                 self.change_percent_24h = float(data.get("changes", {}).get("24h_percent", 0))
 
-    def _parse_wss_data(self, data):
-        """Parse WebSocket response"""
+    def _parse_wss_data(self, data) -> None:
+        """Parse WebSocket response."""
         if isinstance(data, dict):
             # Handle ticker updates
             if data.get("type") == "update" and "events" in data:
@@ -101,7 +101,7 @@ class GeminiRequestTickerData(RequestData):
                         break
 
     def to_dict(self):
-        """Convert to dictionary"""
+        """Convert to dictionary."""
         return {
             "last_price": self.last_price,
             "high": self.high,
@@ -118,8 +118,8 @@ class GeminiRequestTickerData(RequestData):
             "is_rest": self.is_rest,
         }
 
-    def __str__(self):
-        """String representation"""
+    def __str__(self) -> str:
+        """String representation."""
         return (
             f"GeminiTicker(symbol={self.symbol}, last={self.last_price}, "
             f"bid={self.bid}, ask={self.ask})"
@@ -127,7 +127,7 @@ class GeminiRequestTickerData(RequestData):
 
 
 class GeminiSpotWssTickerData(GeminiRequestTickerData):
-    """Gemini Spot WebSocket Ticker Data"""
+    """Gemini Spot WebSocket Ticker Data."""
 
-    def __init__(self, data, symbol=None, asset_type=None):
+    def __init__(self, data, symbol=None, asset_type=None) -> None:
         super().__init__(data, symbol, asset_type, is_rest=False)

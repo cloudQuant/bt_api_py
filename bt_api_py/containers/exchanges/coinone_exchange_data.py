@@ -1,5 +1,4 @@
-"""
-Coinone Exchange Data Configuration.
+"""Coinone Exchange Data Configuration.
 
 API: Public V2 / Private V2.1  (https://docs.coinone.co.kr)
 Auth: HMAC-SHA512 over Base64 payload, secret uppercased
@@ -7,6 +6,7 @@ Response: {"result": "success", "errorCode": "0", ...}
 Symbol: KRW-BTC  (quote-target, dash separated)
 """
 
+from typing import Any
 import os
 
 from bt_api_py.containers.exchanges.exchange_data import ExchangeData
@@ -18,7 +18,7 @@ _coinone_config = None
 _coinone_config_loaded = False
 
 
-def _get_coinone_config():
+def _get_coinone_config() -> Any | None:
     """Load and cache Coinone YAML configuration."""
     global _coinone_config, _coinone_config_loaded
     if _coinone_config_loaded:
@@ -59,7 +59,7 @@ _FALLBACK_REST_PATHS = {
 class CoinoneExchangeData(ExchangeData):
     """Base class for Coinone exchange."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__()
         self.exchange_name = "COINONE___SPOT"
         self.rest_url = "https://api.coinone.co.kr"
@@ -79,7 +79,7 @@ class CoinoneExchangeData(ExchangeData):
         self.reverse_kline_periods = {v: k for k, v in self.kline_periods.items()}
         self.legal_currency = ["KRW"]
 
-    def _load_from_config(self, asset_type):
+    def _load_from_config(self, asset_type) -> bool:
         """Load from YAML config."""
         config = _get_coinone_config()
         if config is None:
@@ -111,7 +111,7 @@ class CoinoneExchangeData(ExchangeData):
 class CoinoneExchangeDataSpot(CoinoneExchangeData):
     """Coinone Spot exchange configuration."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__()
         self.asset_type = "SPOT"
         self._load_from_config("spot")
@@ -124,15 +124,15 @@ class CoinoneExchangeDataSpot(CoinoneExchangeData):
             return parts[0], parts[1]
         return "KRW", symbol
 
-    def get_symbol(self, symbol):
+    def get_symbol(self, symbol: str) -> str:
         """Return symbol as-is (Coinone uses KRW-BTC format)."""
         return symbol
 
-    def get_period(self, key):
+    def get_period(self, key: str) -> str:
         """Get kline period value (Coinone uses same keys: 1m, 1h, …)."""
         return self.kline_periods.get(key, key)
 
-    def get_rest_path(self, key):
+    def get_rest_path(self, key: str, **kwargs) -> str:
         """Get REST path for *key*. Raises ValueError if missing."""
         if key not in self.rest_paths or self.rest_paths[key] == "":
             raise ValueError(f"[{self.exchange_name}] REST path not found: {key}")

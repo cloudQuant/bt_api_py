@@ -6,9 +6,9 @@ from bt_api_py.functions.utils import from_dict_get_float, from_dict_get_string
 
 
 class UpbitTickerData(TickerData):
-    """保存 Upbit ticker 信息"""
+    """保存 Upbit ticker 信息."""
 
-    def __init__(self, ticker_info, symbol_name, asset_type, has_been_json_encoded=False):
+    def __init__(self, ticker_info, symbol_name, asset_type, has_been_json_encoded=False) -> None:
         # Set raw_data first
         if isinstance(ticker_info, str):
             self.raw_data = ticker_info
@@ -39,8 +39,8 @@ class UpbitTickerData(TickerData):
         self.all_data = None
         self.has_been_init_data = False
 
-    def init_data(self):
-        """初始化 ticker 数据"""
+    def init_data(self) -> "Self":
+        """初始化 ticker 数据."""
         try:
             if not self.has_been_json_encoded:
                 self.ticker_data = json.loads(self.raw_data)
@@ -89,22 +89,22 @@ class UpbitTickerData(TickerData):
         except Exception as e:
             print(f"Error initializing Upbit ticker data: {e}")
 
-    def get_exchange_name(self):
-        """获取交易所名称"""
+    def get_exchange_name(self) -> str:
+        """获取交易所名称."""
         return self.exchange_name
 
-    def get_symbol_name(self):
-        """获取交易对名称"""
+    def get_symbol_name(self) -> str:
+        """获取交易对名称."""
         return self.symbol_name
 
-    def get_last_price(self):
-        """获取最新价格"""
+    def get_last_price(self) -> float | None:
+        """获取最新价格."""
         if not self.has_been_init_data:
             self.init_data()
         return self.last_price
 
-    def get_all_data(self):
-        """获取所有 ticker 数据"""
+    def get_all_data(self) -> dict[str, Any]:
+        """获取所有 ticker 数据."""
         if self.all_data is None:
             self.all_data = {
                 "exchange_name": self.exchange_name,
@@ -129,8 +129,8 @@ class UpbitTickerData(TickerData):
             }
         return self.all_data
 
-    def __str__(self):
-        """字符串表示"""
+    def __str__(self) -> str:
+        """字符串表示."""
         if not self.has_been_init_data:
             self.init_data()
 

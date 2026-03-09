@@ -1,23 +1,23 @@
-"""
-Raydium Exchange Data Configuration
-Provides URL configurations, symbol mappings, and REST paths for Raydium DEX API.
-"""
+"""Raydium Exchange Data Configuration."""
 
 import os
 from enum import Enum
+from typing import Any
 
 from bt_api_py.containers.exchanges.exchange_data import ExchangeData
 from bt_api_py.logging_factory import get_logger
 
 logger = get_logger("raydium_exchange_data")
-
-# ── 配置加载缓存 ──────────────────────────────────────────────
 _raydium_config = None
 _raydium_config_loaded = False
 
 
-def _get_raydium_config():
-    """延迟加载并缓存 Raydium YAML 配置"""
+def _get_raydium_config() -> Any | None:
+    """Lazy load and cache Raydium YAML configuration.
+
+    Returns:
+        Configuration dictionary or None if not found
+    """
     global _raydium_config, _raydium_config_loaded
     if _raydium_config_loaded:
         return _raydium_config
@@ -31,14 +31,17 @@ def _get_raydium_config():
         )
         if os.path.exists(config_path):
             _raydium_config = load_exchange_config(config_path)
-        _raydium_config_loaded = True
+            _raydium_config_loaded = True
+            return _raydium_config
     except Exception as e:
         logger.warn(f"Failed to load raydium.yaml config: {e}")
-    return _raydium_config
+        _raydium_config_loaded = True
+        return None
+    return None
 
 
 class RaydiumChain(Enum):
-    """Supported blockchain networks for Raydium"""
+    """Supported blockchain networks for Raydium."""
 
     SOLANA = "SOLANA"
 
@@ -50,13 +53,18 @@ class RaydiumExchangeData(ExchangeData):
     This class provides REST API access to pool data, prices, and liquidity.
     """
 
-    def __init__(self, chain: RaydiumChain = RaydiumChain.SOLANA):
+    def __init__(self, chain: RaydiumChain = RaydiumChain.SOLANA) -> None:
+        """Initialize Raydium exchange data.
+
+        Args:
+            chain: Blockchain network to use
+        """
         super().__init__()
         self.exchange_name = "raydium"
         self.chain = chain
         self.rest_url = "https://api-v3.raydium.io"
-        self.rest_paths = {}
-        self.wss_paths = {}
+        self.rest_paths: dict[str, str] = {}
+        self.wss_paths: dict[str, Any] = {}
 
         self.kline_periods = {
             "1m": "60",
@@ -64,21 +72,25 @@ class RaydiumExchangeData(ExchangeData):
             "15m": "900",
             "30m": "1800",
             "1h": "3600",
+            "2h": "7200",
             "4h": "14400",
+            "6h": "21600",
+            "12h": "43200",
             "1d": "86400",
             "1w": "604800",
+            "1M": "2592000",
         }
-        self.reverse_kline_periods = {v: k for k, v in self.kline_periods.items()}
 
-        self.legal_currency = ["SOL", "USDC", "USDT", "RAY"]
+        self._load_from_config("solana")
 
-    def _load_from_config(self, asset_type):
-        """从 YAML 配置文件加载交易所参数
+    def _load_from_config(self, asset_type: str) -> bool:
+        """Load exchange parameters from YAML configuration file.
 
         Args:
-            asset_type: 资产类型 key, 如 'solana'
+            asset_type: Asset type key, e.g., 'solana'
+
         Returns:
-            bool: 是否加载成功
+            bool: Whether loading was successful
         """
         config = _get_raydium_config()
         if config is None:
@@ -87,116 +99,54 @@ class RaydiumExchangeData(ExchangeData):
         if asset_cfg is None:
             return False
 
-        # exchange_name
         if asset_cfg.exchange_name:
             self.exchange_name = asset_cfg.exchange_name
 
-        # URLs
         if config.base_urls:
-            self.rest_url = config.base_urls.rest.get("default", self.rest_url)
+            self.rest_url = config.base_urls.rest.get(asset_type, self.rest_url)
 
-        # rest_paths
-        if asset_cfg.rest_paths:
-            self.rest_paths.update(dict(asset_cfg.rest_paths))
-
-        # kline_periods
-        kp = asset_cfg.kline_periods or (config.kline_periods if config.kline_periods else None)
-        if kp:
-            self.kline_periods = dict(kp)
-            self.reverse_kline_periods = {v: k for k, v in self.kline_periods.items()}
-
-        # legal_currency
-        lc = asset_cfg.legal_currency or (config.legal_currency if config.legal_currency else None)
-        if lc:
-            self.legal_currency = list(lc)
+        if hasattr(asset_cfg, "rest_paths") and asset_cfg.rest_paths:
+            self.rest_paths = dict(asset_cfg.rest_paths)
 
         return True
 
-    def get_chain_value(self) -> str:
-        """Get the chain value for API queries."""
-        return self.chain.value
-
-    def get_symbol(self, symbol: str) -> str:
-        """将交易对名称转换为 Raydium 格式.
-
-        Raydium pools are identified by token pair (e.g., SOL/USDC)
+    def get_period(self, period: str) -> int:
+        """Convert period to seconds.
 
         Args:
-            symbol: 交易对名称 (e.g., 'SOL/USDC', 'SOL-USDC')
+            period: Period name
+
         Returns:
-            str: 标准化的交易对名称
+            int: Period in seconds
         """
-        # Standardize format
-        return symbol.replace("-", "/").upper()
+        return int(self.kline_periods.get(period, period))
 
-    def get_period(self, period):
-        """将周期转换为秒数.
-
-        Args:
-            period: 周期名称 (e.g., '1m', '5m', '1h', '1d')
-        Returns:
-            str: 周期（秒数）
-        """
-        return self.kline_periods.get(period, period)
-
-    def get_rest_path(self, request_type):
-        """获取 REST API 路径.
+    def get_rest_path(self, request_type: str, **kwargs: Any) -> str:
+        """Get REST API path.
 
         Args:
-            request_type: 请求类型
+            request_type: Request type
+
         Returns:
-            str: REST API 路径
+            str: REST API path
         """
         if request_type not in self.rest_paths or self.rest_paths[request_type] == "":
             self.raise_path_error(self.exchange_name, request_type)
         return self.rest_paths[request_type]
 
-    def get_wss_path(self, **kwargs):
-        """Raydium doesn't support WebSocket for public data.
+    def get_wss_path(self, **kwargs: Any) -> str:
+        """Get WebSocket path.
 
-        This method is provided for compatibility but raises NotImplementedError.
+        Args:
+            **kwargs: Path parameters
+
+        Returns:
+            str: WebSocket path
         """
-        raise NotImplementedError(
-            "Raydium public API doesn't support WebSocket. Use REST endpoints."
-        )
-
-
-class RaydiumExchangeDataSpot(RaydiumExchangeData):
-    """Raydium DEX (Solana) Configuration"""
-
-    def __init__(self):
-        super().__init__(chain=RaydiumChain.SOLANA)
-        self.asset_type = "DEX"
-        self._load_from_config("solana")
-
-        # Define REST paths directly (Raydium API v3)
-        # These are the main API endpoints for pool and market data
-        if not self.rest_paths:
-            self.rest_paths = {
-                # Main API
-                "get_chain_time": "/main/chain-time",
-                "get_info": "/main/info",
-                "get_clmm_config": "/main/clmm-config",
-                "get_cpmm_config": "/main/cpmm-config",
-                # Pool endpoints
-                "get_pool_ids": "/pools/info/ids",
-                "get_pools": "/pools/info/list",
-                "get_pools_v2": "/pools/info/list-v2",
-                "get_pool_by_lp": "/pools/info/lps",
-                "get_pool_by_mint": "/pools/info/mint",
-                "get_pool_keys": "/pools/key/ids",
-                "get_pool_liquidity": "/pools/line/liquidity",
-                # Farm endpoints
-                "get_farm_ids": "/farms/info/ids",
-                "get_farm_by_lp": "/farms/info/lp",
-                "get_farm_keys": "/farms/key/ids",
-                # Mint info
-                "get_mint_ids": "/mint/ids",
-                "get_mint_list": "/mint/list",
-                "get_mint_price": "/mint/price",
-                # IDO
-                "get_ido_keys": "/ido/key/ids",
-            }
+        topic = kwargs.get("topic", "")
+        if topic not in self.wss_paths or self.wss_paths[topic] == "":
+            self.raise_path_error(self.exchange_name, topic)
+        return str(self.wss_paths[topic])
 
     def get_pool_id(self, base_token: str, quote_token: str) -> str:
         """Get pool ID for a token pair.
@@ -211,6 +161,13 @@ class RaydiumExchangeDataSpot(RaydiumExchangeData):
         Returns:
             str: Pool ID
         """
-        # This would need to query the API
-        # For now, return a placeholder
         return f"{base_token}-{quote_token}"
+
+
+class RaydiumExchangeDataSpot(RaydiumExchangeData):
+    """Raydium Spot Exchange Configuration."""
+
+    def __init__(self) -> None:
+        """Initialize Raydium spot exchange data."""
+        super().__init__()
+        self.asset_type = "SPOT"

@@ -1,6 +1,6 @@
-"""
-CoinDCX Exchange Data Configuration
-"""
+from typing import Any
+
+"""CoinDCX Exchange Data Configuration."""
 
 import os
 
@@ -13,7 +13,7 @@ _coindcx_config = None
 _coindcx_config_loaded = False
 
 
-def _get_coindcx_config():
+def _get_coindcx_config() -> Any | None:
     """Load CoinDCX YAML configuration."""
     global _coindcx_config, _coindcx_config_loaded
     if _coindcx_config_loaded:
@@ -37,7 +37,7 @@ def _get_coindcx_config():
 class CoinDCXExchangeData(ExchangeData):
     """Base class for CoinDCX exchange."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__()
         self.exchange_name = "coindcx"
         self.rest_url = "https://api.coindcx.com"
@@ -54,7 +54,7 @@ class CoinDCXExchangeData(ExchangeData):
         }
         self.legal_currency = ["INR", "USDT", "BTC", "ETH"]
 
-    def get_period(self, period):
+    def get_period(self, period: str) -> str:
         """Get kline period for API request.
 
         Args:
@@ -62,10 +62,11 @@ class CoinDCXExchangeData(ExchangeData):
 
         Returns:
             str: API period value
+
         """
         return self.kline_periods.get(period, period)
 
-    def _load_from_config(self, asset_type):
+    def _load_from_config(self, asset_type) -> bool:
         """Load from YAML config."""
         config = _get_coindcx_config()
         if config is None:
@@ -103,7 +104,7 @@ class CoinDCXExchangeData(ExchangeData):
 class CoinDCXExchangeDataSpot(CoinDCXExchangeData):
     """CoinDCX Spot exchange configuration."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__()
         self.asset_type = "spot"
         self.rest_paths = {}

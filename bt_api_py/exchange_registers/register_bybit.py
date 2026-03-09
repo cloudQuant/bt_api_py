@@ -1,6 +1,4 @@
-"""
-Bybit Exchange Registration
-"""
+"""Bybit Exchange Registration."""
 
 from bt_api_py.containers.exchanges.bybit_exchange_data import (
     BybitExchangeDataSpot,
@@ -12,7 +10,7 @@ from bt_api_py.registry import ExchangeRegistry
 
 
 def register_bybit():
-    """Register Bybit Spot and Swap feeds"""
+    """Register Bybit Spot and Swap feeds."""
     # Spot
     ExchangeRegistry.register_feed("BYBIT___SPOT", BybitRequestDataSpot)
     ExchangeRegistry.register_exchange_data("BYBIT___SPOT", BybitExchangeDataSpot)

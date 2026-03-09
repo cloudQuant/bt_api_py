@@ -105,16 +105,8 @@ def _ensure_ctp_atexit() -> None:
 def get_simnow_credentials() -> tuple[str, str, str, str, str]:
     """Return broker, user, password, app_id and auth_code from env vars."""
     broker_id = os.getenv("CTP_BROKER_ID", "9999")
-    user_id = (
-        os.getenv("CTP_USER_ID")
-        or os.getenv("SIMNOW_USER_ID")
-        or ""
-    )
-    password = (
-        os.getenv("CTP_PASSWORD")
-        or os.getenv("SIMNOW_PASSWORD")
-        or ""
-    )
+    user_id = os.getenv("CTP_USER_ID") or os.getenv("SIMNOW_USER_ID") or ""
+    password = os.getenv("CTP_PASSWORD") or os.getenv("SIMNOW_PASSWORD") or ""
     app_id = os.getenv("CTP_APP_ID", "simnow_client_test")
     auth_code = os.getenv("CTP_AUTH_CODE", "0000000000000000")
     return broker_id, user_id, password, app_id, auth_code

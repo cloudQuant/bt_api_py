@@ -2,7 +2,6 @@
 Bitinka REST API request base class.
 """
 
-
 from bt_api_py.containers.exchanges.bitinka_exchange_data import BitinkaExchangeDataSpot
 from bt_api_py.containers.requestdatas.request_data import RequestData
 from bt_api_py.feeds.capability import Capability

@@ -1,9 +1,9 @@
-"""
-CTP 交易所配置数据类
-包含 CTP 行情和交易的前置地址、REST path 映射、品种信息等
+"""CTP 交易所配置数据类
+包含 CTP 行情和交易的前置地址、REST path 映射、品种信息等.
 """
 
 import os
+from typing import Never
 
 from bt_api_py.containers.exchanges.exchange_data import ExchangeData
 from bt_api_py.logging_factory import get_logger
@@ -15,8 +15,8 @@ _ctp_config = None
 _ctp_config_loaded = False
 
 
-def _get_ctp_config():
-    """延迟加载并缓存 CTP YAML 配置"""
+def _get_ctp_config() -> Any | None:
+    """延迟加载并缓存 CTP YAML 配置."""
     global _ctp_config, _ctp_config_loaded
     if _ctp_config_loaded:
         return _ctp_config
@@ -37,9 +37,9 @@ def _get_ctp_config():
 
 
 class CtpExchangeData(ExchangeData):
-    """CTP 交易所配置基类"""
+    """CTP 交易所配置基类."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__()
         self.exchange_name = "CTP"
         # CTP 没有 REST API，使用 SPI 回调模式
@@ -72,13 +72,15 @@ class CtpExchangeData(ExchangeData):
         # 从 YAML 配置加载 (基类不指定 asset_type)
         self._load_from_config(None)
 
-    def _load_from_config(self, asset_type):
-        """从 YAML 配置文件加载交易所参数
+    def _load_from_config(self, asset_type) -> bool:
+        """从 YAML 配置文件加载交易所参数.
 
         Args:
             asset_type: 资产类型 key, 如 'future', 'option', 或 None (仅加载 exchange 级别)
+
         Returns:
             bool: 是否加载成功
+
         """
         config = _get_ctp_config()
         if config is None:
@@ -105,28 +107,28 @@ class CtpExchangeData(ExchangeData):
 
         return True
 
-    def get_symbol(self, symbol):
-        """CTP 品种名称直接使用, 如 'IF2506', 'rb2510'"""
+    def get_symbol(self, symbol: str) -> str:
+        """CTP 品种名称直接使用, 如 'IF2506', 'rb2510'."""
         return symbol
 
-    def get_rest_path(self, key):
+    def get_rest_path(self, key) -> Never:
         raise NotImplementedError("CTP does not use REST API, use SPI callback instead")
 
-    def get_wss_path(self, **kwargs):
+    def get_wss_path(self, **kwargs) -> Never:
         raise NotImplementedError("CTP does not use WebSocket, use SPI callback instead")
 
 
 class CtpExchangeDataFuture(CtpExchangeData):
-    """CTP 期货配置"""
+    """CTP 期货配置."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__()
         self._load_from_config("future")
 
 
 class CtpExchangeDataOption(CtpExchangeData):
-    """CTP 期权配置"""
+    """CTP 期权配置."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__()
         self._load_from_config("option")

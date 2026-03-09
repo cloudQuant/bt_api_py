@@ -4,9 +4,10 @@ Core service lifecycle and behavior tests
 """
 
 import asyncio
+
 import pytest
 
-from bt_api_py.core.services import CacheService, ConnectionService, EventService
+from bt_api_py.core.services import EventService
 
 
 class TestEventService:
@@ -26,7 +27,7 @@ class TestEventService:
         """Test event publishing"""
         service = EventService()
         await service.start()
-        
+
         received = []
 
         def callback(event):
@@ -34,11 +35,11 @@ class TestEventService:
 
         service.subscribe("test_topic", callback)
         service.publish("test_topic", {"data": "test"})
-        
+
         await asyncio.sleep(0.1)
         assert len(received) == 1
         assert received[0] == {"data": "test"}
-        
+
         await service.stop()
 
     @pytest.mark.asyncio
@@ -60,5 +61,3 @@ class TestEventService:
         assert len(received) == 0
 
         await service.stop()
-
-

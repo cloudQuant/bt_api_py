@@ -11,6 +11,8 @@ This module provides comprehensive performance monitoring capabilities including
 - ELK stack compatibility
 """
 
+from bt_api_py.logging_system import get_logger
+
 from .collector import (
     MetricsCollector,
     PerformanceMetrics,
@@ -48,7 +50,6 @@ from .grafana import (
     get_all_dashboard_configs,
     save_dashboard_to_file,
 )
-from bt_api_py.logging_system import get_logger
 from .metrics import (
     Counter,
     Gauge,

@@ -43,7 +43,7 @@ class ConnectionConfig:
 class ConnectionService(IConnectionManager):
     """Manages connection pools for multiple exchanges."""
 
-    def __init__(self, logger=None):
+    def __init__(self, logger=None) -> Any | None:
         self.logger = logger or get_logger("connection_service")
         self._pools: dict[str, dict[str, Any]] = {}
         self._semaphores: dict[str, AsyncSemaphore] = {}
@@ -122,7 +122,7 @@ class ConnectionService(IConnectionManager):
 class EventService(IEventBus):
     """Enhanced event bus with async support and persistence."""
 
-    def __init__(self, logger=None):
+    def __init__(self, logger=None) -> Any | None:
         self.logger = logger or get_logger("event_service")
         self._handlers: dict[str, list[callable]] = defaultdict(list)
         self._async_handlers: dict[str, list[callable]] = defaultdict(list)
@@ -240,7 +240,7 @@ class EventService(IEventBus):
 class CacheService(ICache):
     """Distributed cache service with Redis support."""
 
-    def __init__(self, redis_url: str | None = None, logger=None):
+    def __init__(self, redis_url: str | None = None, logger=None) -> Any | None:
         self.logger = logger or get_logger("cache_service")
         self._redis_client = None
         self._local_cache: dict[str, Any] = {}
@@ -329,7 +329,7 @@ class CacheService(ICache):
 class RateLimitService(IRateLimiter):
     """Advanced rate limiting with multiple strategies."""
 
-    def __init__(self, logger=None):
+    def __init__(self, logger=None) -> Any | None:
         self.logger = logger or get_logger("rate_limit_service")
         self._limiters: dict[str, AsyncRateLimiter] = {}
         self._limits: dict[str, dict[str, Any]] = {}

@@ -1,5 +1,4 @@
-"""
-BitMart Exchange Data Configuration
+"""BitMart Exchange Data Configuration.
 
 BitMart API V2/V3 with HMAC SHA256 authentication.
 Signature: timestamp + "#" + memo + "#" + body
@@ -7,6 +6,7 @@ Symbol format: BTC_USDT (underscore separated).
 Response format: {"code": 1000, "message": "OK", "data": {...}}
 """
 
+from typing import Any
 import os
 
 from bt_api_py.containers.exchanges.exchange_data import ExchangeData
@@ -18,7 +18,7 @@ _bitmart_config = None
 _bitmart_config_loaded = False
 
 
-def _get_bitmart_config():
+def _get_bitmart_config() -> Any | None:
     """Load BitMart YAML configuration."""
     global _bitmart_config, _bitmart_config_loaded
     if _bitmart_config_loaded:
@@ -42,7 +42,7 @@ def _get_bitmart_config():
 class BitmartExchangeData(ExchangeData):
     """Base class for BitMart exchange."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__()
         self.exchange_name = "BITMART___SPOT"
         self.rest_url = "https://api-cloud.bitmart.com"
@@ -66,7 +66,7 @@ class BitmartExchangeData(ExchangeData):
         }
         self.legal_currency = ["USDT", "USD", "BTC", "ETH", "USDC"]
 
-    def _load_from_config(self, asset_type):
+    def _load_from_config(self, asset_type) -> bool:
         """Load from YAML config."""
         config = _get_bitmart_config()
         if config is None:
@@ -111,18 +111,18 @@ class BitmartExchangeData(ExchangeData):
 
         return True
 
-    def get_symbol(self, symbol):
+    def get_symbol(self, symbol: str) -> str:
         """Convert symbol to BitMart format (underscore separated, uppercase).
-        e.g. 'BTC/USDT' -> 'BTC_USDT', 'BTC-USDT' -> 'BTC_USDT'
+        e.g. 'BTC/USDT' -> 'BTC_USDT', 'BTC-USDT' -> 'BTC_USDT'.
         """
         s = symbol.upper().replace("/", "_").replace("-", "_")
         return s
 
-    def get_period(self, period):
+    def get_period(self, period: str) -> str:
         """Map standard period to BitMart kline step (minutes string)."""
         return self.kline_periods.get(period, period)
 
-    def get_rest_path(self, request_type):
+    def get_rest_path(self, request_type: str, **kwargs) -> str:
         """Get REST path for request_type. Raises ValueError if not found."""
         path = self.rest_paths.get(request_type)
         if path is None:
@@ -131,7 +131,7 @@ class BitmartExchangeData(ExchangeData):
             )
         return path
 
-    def get_wss_path(self, channel_type, symbol=None):
+    def get_wss_path(self, channel_type, symbol: str | None = None, **kwargs) -> str:
         """Get WebSocket subscription path."""
         path = self.wss_paths.get(channel_type, "")
         if symbol and "{symbol}" in str(path):
@@ -142,7 +142,7 @@ class BitmartExchangeData(ExchangeData):
 class BitmartExchangeDataSpot(BitmartExchangeData):
     """BitMart Spot exchange configuration."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__()
         self.asset_type = "SPOT"
         if not self._load_from_config("spot"):

@@ -221,26 +221,26 @@ class HttpClient:
                 message=f"HTTP {status}: {body.get('msg', body.get('message', 'Request failed'))}",
             )
 
-    def close(self):
+    def close(self) -> None:
         """关闭同步客户端"""
         if not self._sync_client.is_closed:
             self._sync_client.close()
 
-    async def aclose(self):
+    async def aclose(self) -> None:
         """异步关闭所有客户端"""
         if not self._sync_client.is_closed:
             self._sync_client.close()
         if self._async_client and not self._async_client.is_closed:
             await self._async_client.aclose()
 
-    def __enter__(self):
+    def __enter__(self) -> None:
         return self
 
-    def __exit__(self, *args):
+    def __exit__(self, *args: Any) -> None:
         self.close()
 
-    async def __aenter__(self):
+    async def __aenter__(self) -> None:
         return self
 
-    async def __aexit__(self, *args):
+    async def __aexit__(self, *args: Any) -> None:
         await self.aclose()

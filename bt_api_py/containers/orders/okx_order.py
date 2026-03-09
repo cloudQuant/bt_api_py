@@ -8,7 +8,7 @@ from bt_api_py.functions.utils import from_dict_get_bool, from_dict_get_float, f
 class OkxOrderData(OrderData):
     """订单类，用于确定订单的属性和方法"""
 
-    def __init__(self, order_info, symbol_name, asset_type, has_been_json_encoded=False):
+    def __init__(self, order_info, symbol_name, asset_type, has_been_json_encoded=False) -> None:
         super().__init__(order_info, has_been_json_encoded)
         self.exchange_name = "OKX"
         self.symbol_name = symbol_name

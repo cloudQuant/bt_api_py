@@ -1,5 +1,4 @@
-"""
-CoinSwitch REST API request base class.
+"""CoinSwitch REST API request base class.
 
 API: REST V2  (https://docs.coinswitch.co/)
 Auth: API key in header x-api-key
@@ -32,7 +31,7 @@ class CoinSwitchRequestData(Feed):
             Capability.QUERY_OPEN_ORDERS,
         }
 
-    def __init__(self, data_queue, **kwargs):
+    def __init__(self, data_queue, **kwargs) -> None:
         super().__init__(data_queue, **kwargs)
         self.data_queue = data_queue
         self._api_key = kwargs.get("public_key") or kwargs.get("api_key") or ""

@@ -6,9 +6,9 @@ from bt_api_py.functions.utils import from_dict_get_float
 
 
 class HyperliquidTickerData(TickerData):
-    """保存Hyperliquid ticker信息"""
+    """保存Hyperliquid ticker信息."""
 
-    def __init__(self, ticker_info, symbol_name, asset_type, has_been_json_encoded=False):
+    def __init__(self, ticker_info, symbol_name, asset_type, has_been_json_encoded=False) -> None:
         super().__init__(ticker_info, has_been_json_encoded)
         self.exchange_name = "HYPERLIQUID"  # 交易所名称
         self.local_update_time = time.time()  # 本地时间戳
@@ -26,8 +26,8 @@ class HyperliquidTickerData(TickerData):
         self.all_data = None
         self.has_been_init_data = False
 
-    def init_data(self):
-        """初始化ticker数据"""
+    def init_data(self) -> "Self":
+        """初始化ticker数据."""
         if self.has_been_init_data:
             return self
 
@@ -66,8 +66,8 @@ class HyperliquidTickerData(TickerData):
             print(f"Error initializing Hyperliquid ticker data: {e}")
         return self
 
-    def get_all_data(self):
-        """获取所有ticker数据"""
+    def get_all_data(self) -> dict[str, Any]:
+        """获取所有ticker数据."""
         if self.all_data is None:
             self.all_data = {
                 "exchange_name": self.exchange_name,
@@ -85,41 +85,41 @@ class HyperliquidTickerData(TickerData):
             }
         return self.all_data
 
-    def get_exchange_name(self):
+    def get_exchange_name(self) -> str:
         return self.exchange_name
 
-    def get_local_update_time(self):
+    def get_local_update_time(self) -> float:
         return self.local_update_time
 
-    def get_symbol_name(self):
+    def get_symbol_name(self) -> str:
         return self.symbol_name
 
-    def get_ticker_symbol_name(self):
+    def get_ticker_symbol_name(self) -> str | None:
         return self.ticker_symbol_name
 
-    def get_asset_type(self):
+    def get_asset_type(self) -> str:
         return self.asset_type
 
-    def get_server_time(self):
+    def get_server_time(self) -> float | None:
         return self.server_time
 
-    def get_bid_price(self):
+    def get_bid_price(self) -> float | None:
         return self.bid_price
 
-    def get_ask_price(self):
+    def get_ask_price(self) -> float | None:
         return self.ask_price
 
-    def get_bid_volume(self):
+    def get_bid_volume(self) -> float | None:
         return self.bid_volume
 
-    def get_ask_volume(self):
+    def get_ask_volume(self) -> float | None:
         return self.ask_volume
 
-    def get_last_price(self):
+    def get_last_price(self) -> float | None:
         return self.last_price
 
-    def get_last_volume(self):
+    def get_last_volume(self) -> float | None:
         return self.last_volume
 
-    def __str__(self):
+    def __str__(self) -> str:
         return f"HyperliquidTickerData(symbol={self.symbol_name}, last_price={self.last_price}, bid={self.bid_price}, ask={self.ask_price})"

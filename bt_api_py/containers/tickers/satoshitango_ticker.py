@@ -1,9 +1,8 @@
-"""
-SatoshiTango Ticker Data Container
-"""
+"""SatoshiTango Ticker Data Container."""
 
 import json
 import time
+from typing import Any
 
 from bt_api_py.containers.tickers.ticker import TickerData
 
@@ -11,16 +10,33 @@ from bt_api_py.containers.tickers.ticker import TickerData
 class SatoshiTangoRequestTickerData(TickerData):
     """SatoshiTango ticker data container."""
 
-    def __init__(self, ticker_info, symbol_name, asset_type, has_been_json_encoded=False):
+    def __init__(
+        self,
+        ticker_info: str | dict[str, Any],
+        symbol_name: str,
+        asset_type: str,
+        has_been_json_encoded: bool = False,
+    ) -> None:
+        """Initialize SatoshiTango ticker data container.
+
+        Args:
+            ticker_info: Raw ticker data from API (JSON string or dict).
+            symbol_name: Trading symbol name.
+            asset_type: Asset type (e.g., "SPOT", "FUTURE").
+            has_been_json_encoded: Whether ticker_info is already parsed.
+
+        """
         super().__init__(ticker_info, has_been_json_encoded)
         self.exchange_name = "SATOSHITANGO"
         self.local_update_time = time.time()
         self.symbol_name = symbol_name
         self.asset_type = asset_type
         self.has_been_init_data = False
-        self.ticker_data = ticker_info if has_been_json_encoded else None
+        self.ticker_data: dict[str, Any] | None = (
+            ticker_info if has_been_json_encoded and isinstance(ticker_info, dict) else None
+        )
 
-    def init_data(self):
+    def init_data(self) -> "SatoshiTangoRequestTickerData":
         """Parse SatoshiTango ticker response."""
         if not self.has_been_json_encoded:
             if isinstance(self.ticker_info, str):
@@ -45,7 +61,16 @@ class SatoshiTangoRequestTickerData(TickerData):
         return self
 
     @staticmethod
-    def _parse_float(value):
+    def _parse_float(value: Any) -> float | None:
+        """Parse value to float.
+
+        Args:
+            value: Value to parse.
+
+        Returns:
+            Parsed float value or None if parsing fails.
+
+        """
         if value is None:
             return None
         try:

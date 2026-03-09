@@ -1,7 +1,6 @@
-"""
-LocalBitcoins 交易所注册模块
+"""LocalBitcoins 交易所注册模块
 将 LocalBitcoins Spot 的 feed 类、流式数据类、交易所配置类注册到全局 ExchangeRegistry
-导入此模块即可完成注册
+导入此模块即可完成注册.
 """
 
 from bt_api_py.balance_utils import simple_balance_handler as _localbitcoins_balance_handler
@@ -17,7 +16,7 @@ def _localbitcoins_spot_subscribe_handler(data_queue, exchange_params, topics, b
     :param data_queue: queue.Queue
     :param exchange_params: dict
     :param topics: list of topic dicts
-    :param bt_api: BtApi 实例 (用于访问共享状态)
+    :param bt_api: BtApi 实例 (用于访问共享状态).
     """
     exchange_data = LocalBitcoinsExchangeDataSpot()
     kwargs = dict(exchange_params.items())
@@ -31,7 +30,7 @@ def _localbitcoins_spot_subscribe_handler(data_queue, exchange_params, topics, b
 
 
 def register_localbitcoins():
-    """注册 LocalBitcoins Spot 到全局 ExchangeRegistry"""
+    """注册 LocalBitcoins Spot 到全局 ExchangeRegistry."""
     # Spot
     ExchangeRegistry.register_feed("LOCALBITCOINS___SPOT", LocalBitcoinsRequestDataSpot)
     ExchangeRegistry.register_exchange_data("LOCALBITCOINS___SPOT", LocalBitcoinsExchangeDataSpot)

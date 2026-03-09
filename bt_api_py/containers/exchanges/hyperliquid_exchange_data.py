@@ -1,4 +1,5 @@
 import os
+from typing import Any
 
 from bt_api_py.containers.exchanges.exchange_data import ExchangeData
 from bt_api_py.logging_factory import get_logger
@@ -10,8 +11,8 @@ _hyperliquid_config = None
 _hyperliquid_config_loaded = False
 
 
-def _get_hyperliquid_config():
-    """延迟加载并缓存 Hyperliquid YAML 配置"""
+def _get_hyperliquid_config() -> Any | None:
+    """延迟加载并缓存 Hyperliquid YAML 配置."""
     global _hyperliquid_config, _hyperliquid_config_loaded
     if _hyperliquid_config_loaded:
         return _hyperliquid_config
@@ -39,8 +40,8 @@ class HyperliquidExchangeData(ExchangeData):
     Subclasses MUST set exchange-specific: exchange_name, rest_url, wss_url.
     """
 
-    def __init__(self):
-        """Initialize Hyperliquid exchange data"""
+    def __init__(self) -> None:
+        """Initialize Hyperliquid exchange data."""
         super().__init__()
         self.exchange_name = "hyperliquid"
         self.rest_url = "https://api.hyperliquid.xyz"
@@ -94,13 +95,14 @@ class HyperliquidExchangeData(ExchangeData):
         # From YAML config (default to spot)
         self._load_from_config("spot")
 
-    def _load_from_config(self, asset_type):
-        """从 YAML 配置文件加载交易所参数
+    def _load_from_config(self, asset_type) -> bool:
+        """从 YAML 配置文件加载交易所参数.
 
         Args:
             asset_type: 资产类型 key, 如 'spot', 'swap'
         Returns:
             bool: 是否加载成功
+
         """
         config = _get_hyperliquid_config()
         if config is None:
@@ -134,16 +136,16 @@ class HyperliquidExchangeData(ExchangeData):
 
         return True
 
-    def get_symbol(self, symbol):
-        """Convert trading symbol to Hyperliquid format"""
+    def get_symbol(self, symbol: str) -> str:
+        """Convert trading symbol to Hyperliquid format."""
         # For Hyperliquid, most symbols use the base name (e.g., BTC, ETH)
         # Spot symbols might use different format
         if "/" in symbol and symbol.split("/")[1] == "USDC":
             return symbol.split("/")[0]
         return symbol
 
-    def get_rest_path(self, request_type):
-        """Get REST API path for request type"""
+    def get_rest_path(self, request_type: str, **kwargs) -> str:
+        """Get REST API path for request type."""
         rest_paths = {
             "get_all_mids": "/info",
             "get_meta": "/info",
@@ -166,29 +168,29 @@ class HyperliquidExchangeData(ExchangeData):
         }
         return rest_paths.get(request_type, "/info")
 
-    def get_wss_path(self, channel_type):
-        """Get WebSocket channel path"""
+    def get_wss_path(self, channel_type: Any, **kwargs) -> str:
+        """Get WebSocket channel path."""
         # Hyperliquid uses simple subscription format
         return channel_type
 
     def get_account_wss_symbol(self, symbol):
-        """Get symbol for account WebSocket"""
+        """Get symbol for account WebSocket."""
         return self.get_symbol(symbol)
 
     def get_order_status_text(self, status_code):
-        """Convert status code to text"""
+        """Convert status code to text."""
         return self.status_dict.get(status_code, f"UNKNOWN_{status_code}")
 
     def get_timeframe_minutes(self, timeframe):
-        """Convert timeframe string to minutes"""
+        """Convert timeframe string to minutes."""
         return self.kline_periods.get(timeframe, 60)
 
     def get_timeframe_from_minutes(self, minutes):
-        """Convert minutes to timeframe string"""
+        """Convert minutes to timeframe string."""
         return self.reverse_kline_periods.get(minutes, "1h")
 
     def get_leverage_limit(self, symbol):
-        """Get maximum leverage for symbol"""
+        """Get maximum leverage for symbol."""
         # Default leverage limits for Hyperliquid
         leverage_limits = {
             "BTC": 100,
@@ -204,10 +206,10 @@ class HyperliquidExchangeData(ExchangeData):
 
 
 class HyperliquidExchangeDataSpot(HyperliquidExchangeData):
-    """Hyperliquid spot trading data container"""
+    """Hyperliquid spot trading data container."""
 
-    def __init__(self):
-        """Initialize Hyperliquid spot data"""
+    def __init__(self) -> None:
+        """Initialize Hyperliquid spot data."""
         super().__init__()
         self.exchange_name = "hyperliquid_spot"
 
@@ -221,10 +223,10 @@ class HyperliquidExchangeDataSpot(HyperliquidExchangeData):
 
 
 class HyperliquidExchangeDataSwap(HyperliquidExchangeData):
-    """Hyperliquid swap/futures data container"""
+    """Hyperliquid swap/futures data container."""
 
-    def __init__(self):
-        """Initialize Hyperliquid swap data"""
+    def __init__(self) -> None:
+        """Initialize Hyperliquid swap data."""
         super().__init__()
         self.exchange_name = "hyperliquid_swap"
 

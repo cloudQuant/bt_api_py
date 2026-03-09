@@ -1,3 +1,5 @@
+from typing import Any
+
 """Latoken exchange data – Feed pattern."""
 
 import os
@@ -11,7 +13,7 @@ _latoken_config = None
 _latoken_config_loaded = False
 
 
-def _get_latoken_config():
+def _get_latoken_config() -> Any | None:
     global _latoken_config, _latoken_config_loaded
     if _latoken_config_loaded:
         return _latoken_config
@@ -33,7 +35,7 @@ def _get_latoken_config():
 class LatokenExchangeData(ExchangeData):
     """Base Latoken exchange data (HMAC-SHA512 auth, UUID-based currencies)."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__()
         self.exchange_name = "LATOKEN___SPOT"
         self.asset_type = "SPOT"
@@ -54,7 +56,7 @@ class LatokenExchangeData(ExchangeData):
         self.reverse_kline_periods = {v: k for k, v in self.kline_periods.items()}
         self.legal_currency = ["USDT", "BTC", "ETH", "LA"]
 
-    def _load_from_config(self, asset_type):
+    def _load_from_config(self, asset_type) -> bool:
         config = _get_latoken_config()
         if config is None:
             return False
@@ -86,15 +88,15 @@ class LatokenExchangeData(ExchangeData):
 
     @staticmethod
     def get_symbol(symbol):
-        """Convert to lowercase underscore: BTC/USDT -> btc_usdt"""
+        """Convert to lowercase underscore: BTC/USDT -> btc_usdt."""
         return symbol.lower().replace("/", "_").replace("-", "_")
 
     @staticmethod
     def get_reverse_symbol(symbol):
-        """Convert back: btc_usdt -> BTC-USDT"""
+        """Convert back: btc_usdt -> BTC-USDT."""
         return symbol.upper().replace("_", "-")
 
-    def get_rest_path(self, key, **kwargs):
+    def get_rest_path(self, key: str, **kwargs) -> str:
         if key not in self.rest_paths or self.rest_paths[key] == "":
             raise ValueError(f"[{self.exchange_name}] REST path not found: {key}")
         path = self.rest_paths[key]
@@ -103,17 +105,17 @@ class LatokenExchangeData(ExchangeData):
                 path = path.replace(f"{{{k}}}", str(v).lower())
         return path
 
-    def get_period(self, period):
+    def get_period(self, period: str) -> str:
         return self.kline_periods.get(period, period)
 
-    def get_reverse_period(self, period):
+    def get_reverse_period(self, period: str) -> str:
         return self.reverse_kline_periods.get(period, period)
 
 
 class LatokenExchangeDataSpot(LatokenExchangeData):
     """Latoken Spot exchange data."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__()
         self._load_from_config("spot")
 

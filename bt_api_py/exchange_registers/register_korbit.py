@@ -14,7 +14,9 @@ from bt_api_py.feeds.live_korbit import (
 from bt_api_py.registry import ExchangeRegistry
 
 
-def _korbit_spot_subscribe_handler(data_queue, exchange_params, topics, bt_api):
+def _korbit_spot_subscribe_handler(
+    data_queue: Any, exchange_params: Any, topics: Any, bt_api: Any
+) -> None:
     """Korbit SPOT 订阅处理函数
     :param data_queue: queue.Queue
     :param exchange_params: dict
@@ -40,7 +42,7 @@ def _korbit_spot_subscribe_handler(data_queue, exchange_params, topics, bt_api):
         bt_api._subscription_flags["KORBIT___SPOT_account"] = True
 
 
-def register_korbit():
+def register_korbit() -> None:
     """注册 Korbit Spot 到全局 ExchangeRegistry"""
     # Spot
     ExchangeRegistry.register_feed("KORBIT___SPOT", KorbitRequestDataSpot)

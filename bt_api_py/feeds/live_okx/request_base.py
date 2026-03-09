@@ -8,6 +8,7 @@ import base64
 import hmac
 import json
 import time
+from typing import Any
 from urllib import parse
 
 from bt_api_py.containers.exchanges.okx_exchange_data import OkxExchangeDataSwap
@@ -48,7 +49,7 @@ class OkxRequestData(
     Feed,
 ):
     @classmethod
-    def _capabilities(cls):
+    def _capabilities(cls: Any) -> None:
         return {
             Capability.GET_TICK,
             Capability.GET_DEPTH,
@@ -76,7 +77,7 @@ class OkxRequestData(
             Capability.GET_SERVER_TIME,
         }
 
-    def __init__(self, data_queue, **kwargs):
+    def __init__(self, data_queue: Any, **kwargs: Any) -> None:
         super().__init__(data_queue, **kwargs)
         self.data_queue = data_queue
         self.public_key = kwargs.get("public_key")
@@ -92,7 +93,7 @@ class OkxRequestData(
         self._rate_limiter = kwargs.get("rate_limiter", self._create_default_rate_limiter())
 
     @staticmethod
-    def _create_default_rate_limiter():
+    def _create_default_rate_limiter() -> None:
         rules = [
             RateLimitRule(
                 name="okx_general",
@@ -121,7 +122,7 @@ class OkxRequestData(
         ]
         return RateLimiter(rules)
 
-    def translate_error(self, raw_response):
+    def translate_error(self, raw_response: Any) -> None:
         """将原始 OKX API 响应翻译为 UnifiedError（如有错误），否则返回 None"""
         if isinstance(raw_response, dict):
             code = raw_response.get("code", raw_response.get("sCode", "0"))
@@ -129,14 +130,16 @@ class OkxRequestData(
                 return self._error_translator.translate(raw_response, self.exchange_name)
         return None
 
-    def push_data_to_queue(self, data):
+    def push_data_to_queue(self, data: Any) -> None:
         if self.data_queue is not None:
             self.data_queue.put(data)
         else:
             assert 0, "队列未初始化"
 
     # noinspection PyMethodMayBeStatic
-    def signature(self, timestamp, method, request_path, secret_key, body=None):
+    def signature(
+        self, timestamp: Any, method: Any, request_path: Any, secret_key: Any, body: Any = None
+    ) -> None:
         body = "" if body is None else str(body)
         message = str(timestamp) + str.upper(method) + request_path + body
         mac = hmac.new(
@@ -146,7 +149,7 @@ class OkxRequestData(
         return base64.b64encode(d).decode()
 
     # noinspection PyMethodMayBeStatic
-    def get_header(self, api_key, sign, timestamp, passphrase):
+    def get_header(self, api_key: Any, sign: Any, timestamp: Any, passphrase: Any) -> None:
         header = {}
         header["Content-Type"] = "application/json"
         header["OK-ACCESS-KEY"] = api_key
@@ -156,7 +159,14 @@ class OkxRequestData(
         header["x-simulated-trading"] = "0"
         return header
 
-    def request(self, path, params=None, body=None, extra_data=None, timeout=10):
+    def request(
+        self,
+        path: Any,
+        params: Any = None,
+        body: Any = None,
+        extra_data: Any = None,
+        timeout: Any = 10,
+    ) -> None:
         """http request function
         Args:
             path (TYPE): request url
@@ -216,7 +226,7 @@ class OkxRequestData(
         res = await self.async_http_request(method, url, headers, body_str, timeout)
         return RequestData(res, extra_data)
 
-    def async_callback(self, future):
+    def async_callback(self, future: Any) -> None:
         """
         callback function for async requests, push result to data_queue
         :param future: asyncio future object
@@ -229,7 +239,7 @@ class OkxRequestData(
             self.async_logger.warn(f"async_callback::{e}")
 
     @staticmethod
-    def _generic_normalize_function(input_data, extra_data):
+    def _generic_normalize_function(input_data: Any, extra_data: Any) -> None:
         """Generic normalize function for OKX API responses.
         Extracts 'data' list and checks 'code' for status.
         Delegates to the shared normalizers module."""

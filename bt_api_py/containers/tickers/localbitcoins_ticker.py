@@ -1,3 +1,4 @@
+from typing import Any
 import json
 import time
 
@@ -6,13 +7,15 @@ from bt_api_py.functions.utils import from_dict_get_float
 
 
 class LocalBitcoinsTickerData(TickerData):
-    """保存 LocalBitcoins ticker 信息
+    """保存 LocalBitcoins ticker 信息.
 
     Note: LocalBitcoins is a P2P exchange, ticker data represents
     aggregated P2P advertisements, not order book data.
     """
 
-    def __init__(self, ticker_info, symbol_name, asset_type, has_been_json_encoded=False):
+    def __init__(
+        self, ticker_info, symbol_name, asset_type, has_been_json_encoded: bool = False
+    ) -> None:
         super().__init__(ticker_info, has_been_json_encoded)
         self.exchange_name = "LOCALBITCOINS"
         self.local_update_time = time.time()
@@ -36,7 +39,7 @@ class LocalBitcoinsTickerData(TickerData):
         self.low = None
         self.has_been_init_data = False
 
-    def init_data(self):
+    def init_data(self) -> "Self":
         if not self.has_been_json_encoded:
             self.ticker_data = json.loads(self.ticker_info)
             self.has_been_json_encoded = True
@@ -75,7 +78,7 @@ class LocalBitcoinsTickerData(TickerData):
         self.has_been_init_data = True
         return self
 
-    def get_all_data(self):
+    def get_all_data(self) -> dict[str, Any]:
         if self.all_data is None:
             self.init_data()
             self.all_data = {
@@ -98,70 +101,70 @@ class LocalBitcoinsTickerData(TickerData):
             }
         return self.all_data
 
-    def __str__(self):
+    def __str__(self) -> str:
         self.init_data()
         return json.dumps(self.get_all_data())
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return self.__str__()
 
-    def get_exchange_name(self):
+    def get_exchange_name(self) -> str:
         return self.exchange_name
 
-    def get_local_update_time(self):
+    def get_local_update_time(self) -> float:
         return self.local_update_time
 
-    def get_symbol_name(self):
+    def get_symbol_name(self) -> str:
         return self.symbol_name
 
-    def get_ticker_symbol_name(self):
+    def get_ticker_symbol_name(self) -> str | None:
         return self.ticker_symbol_name
 
-    def get_asset_type(self):
+    def get_asset_type(self) -> str:
         return self.asset_type
 
-    def get_server_time(self):
+    def get_server_time(self) -> float | None:
         return self.server_time
 
-    def get_bid_price(self):
+    def get_bid_price(self) -> float | None:
         return self.bid_price
 
-    def get_ask_price(self):
+    def get_ask_price(self) -> float | None:
         return self.ask_price
 
-    def get_bid_volume(self):
+    def get_bid_volume(self) -> float | None:
         return self.bid_volume
 
-    def get_ask_volume(self):
+    def get_ask_volume(self) -> float | None:
         return self.ask_volume
 
-    def get_last_price(self):
+    def get_last_price(self) -> float | None:
         return self.last_price
 
-    def get_daily_change(self):
+    def get_daily_change(self) -> float | None:
         return self.daily_change
 
-    def get_daily_change_percentage(self):
+    def get_daily_change_percentage(self) -> float | None:
         return self.daily_change_percentage
 
-    def get_volume(self):
+    def get_volume(self) -> float | None:
         return self.volume
 
-    def get_high(self):
+    def get_high(self) -> float | None:
         return self.high
 
-    def get_low(self):
+    def get_low(self) -> float | None:
         return self.low
 
 
 class LocalBitcoinsWssTickerData(LocalBitcoinsTickerData):
-    """保存 LocalBitcoins WebSocket ticker 信息
+    """保存 LocalBitcoins WebSocket ticker 信息.
 
     Note: LocalBitcoins does not provide WebSocket API.
     This is a placeholder for future compatibility.
     """
 
-    def init_data(self):
+    def init_data(self) -> "Self":
         if not self.has_been_json_encoded:
             self.ticker_data = json.loads(self.ticker_info)
             self.has_been_json_encoded = True
@@ -189,9 +192,9 @@ class LocalBitcoinsWssTickerData(LocalBitcoinsTickerData):
 
 
 class LocalBitcoinsRequestTickerData(LocalBitcoinsTickerData):
-    """保存 LocalBitcoins REST API ticker 信息"""
+    """保存 LocalBitcoins REST API ticker 信息."""
 
-    def init_data(self):
+    def init_data(self) -> "Self":
         if not self.has_been_json_encoded:
             self.ticker_data = json.loads(self.ticker_info)
             self.has_been_json_encoded = True

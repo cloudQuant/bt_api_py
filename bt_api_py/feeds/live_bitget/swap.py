@@ -1,4 +1,4 @@
-"""Bitget Swap (USDT-M Futures) Trading Feed"""
+"""Bitget Swap (USDT-M Futures) Trading Feed."""
 
 from bt_api_py.containers.balances.bitget_balance import BitgetBalanceData
 from bt_api_py.containers.exchanges.bitget_exchange_data import BitgetExchangeDataSwap
@@ -13,7 +13,7 @@ from bt_api_py.logging_factory import get_logger
 class BitgetRequestDataSwap(BitgetRequestData):
     """Bitget Swap (USDT-M Futures) trading REST API feed."""
 
-    def __init__(self, data_queue, **kwargs):
+    def __init__(self, data_queue, **kwargs) -> None:
         kwargs["asset_type"] = "swap"
         kwargs.setdefault("logger_name", "bitget_swap_feed.log")
         super().__init__(data_queue, **kwargs)
@@ -52,11 +52,11 @@ class BitgetRequestDataSwap(BitgetRequestData):
         ]
         return result, status
 
-    def get_ticker(self, symbol, extra_data=None, **kwargs):
+    def get_ticker(self, symbol, extra_data=None, **kwargs) -> Any:
         path, params, extra_data = self._get_ticker(symbol, extra_data, **kwargs)
         return self.request(path, params=params, extra_data=extra_data)
 
-    def get_tick(self, symbol, extra_data=None, **kwargs):
+    def get_tick(self, symbol, extra_data=None, **kwargs) -> Any:
         return self.get_ticker(symbol, extra_data=extra_data, **kwargs)
 
     def async_get_ticker(self, symbol, extra_data=None, **kwargs):
@@ -95,7 +95,7 @@ class BitgetRequestDataSwap(BitgetRequestData):
             BitgetOrderBookData(data, extra_data["symbol_name"], extra_data["asset_type"], True)
         ], status
 
-    def get_depth(self, symbol, limit=50, extra_data=None, **kwargs):
+    def get_depth(self, symbol, limit=50, extra_data=None, **kwargs) -> Any:
         path, params, extra_data = self._get_depth(symbol, limit, extra_data, **kwargs)
         return self.request(path, params=params, extra_data=extra_data)
 
@@ -127,13 +127,13 @@ class BitgetRequestDataSwap(BitgetRequestData):
             return data, status
         return [data], status
 
-    def get_kline(self, symbol, period="1m", limit=200, extra_data=None, **kwargs):
+    def get_kline(self, symbol, period="1m", limit=200, extra_data=None, **kwargs) -> Any:
         path, params, extra_data = self._get_kline(symbol, period, limit, extra_data, **kwargs)
         return self.request(path, params=params, extra_data=extra_data)
 
     # ==================== Server Time & Exchange Info ====================
 
-    def get_server_time(self, extra_data=None, **kwargs):
+    def get_server_time(self, extra_data=None, **kwargs) -> float:
         request_type = "get_server_time"
         path = self._params.get_rest_path(request_type)
         params = {}
@@ -147,7 +147,7 @@ class BitgetRequestDataSwap(BitgetRequestData):
         )
         return self.request(path, params=params, extra_data=extra_data)
 
-    def get_exchange_info(self, symbol=None, extra_data=None, **kwargs):
+    def get_exchange_info(self, symbol=None, extra_data=None, **kwargs) -> Any:
         request_type = "get_contract"
         path = self._params.get_rest_path(request_type)
         params = {}
@@ -192,11 +192,11 @@ class BitgetRequestDataSwap(BitgetRequestData):
         ]
         return result, status
 
-    def get_balance(self, extra_data=None, **kwargs):
+    def get_balance(self, extra_data=None, **kwargs) -> Any:
         path, params, extra_data = self._get_balance(extra_data, **kwargs)
         return self.request(path, params=params, extra_data=extra_data)
 
-    def get_account(self, symbol=None, extra_data=None, **kwargs):
+    def get_account(self, symbol=None, extra_data=None, **kwargs) -> Any:
         return self.get_balance(extra_data=extra_data, **kwargs)
 
     # ==================== Trading Methods ====================
@@ -351,7 +351,7 @@ class BitgetRequestDataSwap(BitgetRequestData):
         )
         return path, params, extra_data
 
-    def get_deals(self, symbol=None, limit=50, extra_data=None, **kwargs):
+    def get_deals(self, symbol=None, limit=50, extra_data=None, **kwargs) -> Any:
         path, params, extra_data = self._get_deals(symbol, limit, extra_data, **kwargs)
         return self.request(path, params=params, extra_data=extra_data)
 

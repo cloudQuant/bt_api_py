@@ -8,7 +8,7 @@ from bt_api_py.feeds.live_bingx.spot import BingXRequestDataSpot
 from bt_api_py.registry import ExchangeRegistry
 
 
-def register_bingx():
+def register_bingx() -> None:
     """注册 BingX SPOT 到全局 ExchangeRegistry"""
     # 注册 Feed 类
     ExchangeRegistry.register_feed("BINGX___SPOT", BingXRequestDataSpot)

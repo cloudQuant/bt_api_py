@@ -209,9 +209,7 @@ class KrakenRequestOrderBookData(OrderBookData):
 
         return levels
 
-    def get_total_depth(
-        self, side: str, price_range: tuple[float, float] | None = None
-    ) -> float:
+    def get_total_depth(self, side: str, price_range: tuple[float, float] | None = None) -> float:
         """Get total depth for a side within optional price range.
 
         Args:

@@ -1,5 +1,4 @@
-"""
-CoinSpot Exchange Data Configuration.
+"""CoinSpot Exchange Data Configuration.
 
 API: Public V2 (GET) / Private V2 (POST)
 Auth: HMAC-SHA512 over JSON body with nonce; headers: key + sign
@@ -8,6 +7,7 @@ Symbol: coin shortname "BTC" (no trading pair)
 No WebSocket support.
 """
 
+from typing import Any
 import os
 
 from bt_api_py.containers.exchanges.exchange_data import ExchangeData
@@ -19,7 +19,7 @@ _coinspot_config = None
 _coinspot_config_loaded = False
 
 
-def _get_coinspot_config():
+def _get_coinspot_config() -> Any | None:
     """Load and cache CoinSpot YAML configuration."""
     global _coinspot_config, _coinspot_config_loaded
     if _coinspot_config_loaded:
@@ -60,7 +60,7 @@ _FALLBACK_REST_PATHS = {
 class CoinSpotExchangeData(ExchangeData):
     """Base class for CoinSpot exchange."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__()
         self.exchange_name = "COINSPOT___SPOT"
         self.rest_url = "https://www.coinspot.com.au"
@@ -79,7 +79,7 @@ class CoinSpotExchangeData(ExchangeData):
         self.reverse_kline_periods = {v: k for k, v in self.kline_periods.items()}
         self.legal_currency = ["AUD", "USDT", "USD", "BTC", "ETH"]
 
-    def _load_from_config(self, asset_type):
+    def _load_from_config(self, asset_type) -> bool:
         """Load from YAML config."""
         config = _get_coinspot_config()
         if config is None:
@@ -111,7 +111,7 @@ class CoinSpotExchangeData(ExchangeData):
 class CoinSpotExchangeDataSpot(CoinSpotExchangeData):
     """CoinSpot Spot exchange configuration."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__()
         self.asset_type = "SPOT"
         self._load_from_config("spot")
@@ -121,11 +121,11 @@ class CoinSpotExchangeDataSpot(CoinSpotExchangeData):
         """Return coin shortname as-is (CoinSpot uses 'BTC', not a pair)."""
         return symbol
 
-    def get_period(self, key):
+    def get_period(self, key: str) -> str:
         """Get kline period value."""
         return self.kline_periods.get(key, key)
 
-    def get_rest_path(self, key):
+    def get_rest_path(self, key: str, **kwargs) -> str:
         """Get REST path for *key*. Raises ValueError if missing."""
         if key not in self.rest_paths or self.rest_paths[key] == "":
             raise ValueError(f"[{self.exchange_name}] REST path not found: {key}")

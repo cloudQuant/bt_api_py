@@ -1,6 +1,4 @@
-"""
-BeQuant 交易所注册模块
-"""
+"""BeQuant 交易所注册模块."""
 
 from bt_api_py.balance_utils import simple_balance_handler as _bequant_balance_handler
 from bt_api_py.containers.exchanges.bequant_exchange_data import BeQuantExchangeDataSpot
@@ -9,7 +7,7 @@ from bt_api_py.registry import ExchangeRegistry
 
 
 def register_bequant():
-    """注册 BeQuant SPOT 到全局 ExchangeRegistry"""
+    """注册 BeQuant SPOT 到全局 ExchangeRegistry."""
     # 注册 Feed 类
     ExchangeRegistry.register_feed("BEQUANT___SPOT", BeQuantRequestDataSpot)
 

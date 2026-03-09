@@ -4,13 +4,13 @@
 """
 
 import time
-from decimal import Decimal
-from typing import Any, Callable, Dict, List, Optional, Set, Tuple
+from collections.abc import Callable
+from typing import Any
 
 from bt_api_py.logging_factory import get_logger
 
+from ..containers.risk_events import RiskLevel
 from ..containers.risk_metrics import RiskMetrics
-from ..containers.risk_events import RiskEvent, RiskLevel, MitigationAction
 
 
 class RuleType:
@@ -55,13 +55,13 @@ class ActionType:
 class RuleCondition:
     """规则条件"""
 
-    def __init__(self, field: str, operator: str, value: Any, description: str = ""):
+    def __init__(self, field: str, operator: str, value: Any, description: str = "") -> Any | None:
         self.field = field
         self.operator = operator  # eq, ne, gt, gte, lt, lte, in, contains
         self.value = value
         self.description = description
 
-    def evaluate(self, data: Dict[str, Any]) -> bool:
+    def evaluate(self, data: dict[str, Any]) -> bool:
         """评估条件
 
         Args:
@@ -91,7 +91,7 @@ class RuleCondition:
         else:
             return False
 
-    def _get_nested_value(self, data: Dict[str, Any], field: str) -> Any:
+    def _get_nested_value(self, data: dict[str, Any], field: str) -> Any:
         """获取嵌套字段值"""
         keys = field.split(".")
         value = data
@@ -113,8 +113,8 @@ class Rule:
         rule_id: str,
         name: str,
         description: str,
-        conditions: List[RuleCondition],
-        actions: List[Dict[str, Any]],
+        conditions: list[RuleCondition],
+        actions: list[dict[str, Any]],
         rule_type: str = RuleType.CONDITION_BASED,
         enabled: bool = True,
         priority: int = 0,
@@ -133,7 +133,7 @@ class Rule:
         self.trigger_count = 0
         self.created_at = int(time.time())
 
-    def evaluate(self, data: Dict[str, Any]) -> bool:
+    def evaluate(self, data: dict[str, Any]) -> bool:
         """评估规则
 
         Args:
@@ -158,12 +158,12 @@ class Rule:
         else:
             return False
 
-    def _evaluate_threshold_conditions(self, data: Dict[str, Any]) -> bool:
+    def _evaluate_threshold_conditions(self, data: dict[str, Any]) -> bool:
         """评估阈值条件"""
         # 简化实现
         return all(condition.evaluate(data) for condition in self.conditions)
 
-    def trigger(self, data: Dict[str, Any]) -> List[Dict[str, Any]]:
+    def trigger(self, data: dict[str, Any]) -> list[dict[str, Any]]:
         """触发规则
 
         Args:
@@ -190,7 +190,7 @@ class PolicyEngine:
     6. 性能监控 - 规则执行性能统计
     """
 
-    def __init__(self, config: Optional[Dict[str, Any]] = None):
+    def __init__(self, config: dict[str, Any] | None = None) -> Any | None:
         """初始化策略引擎
 
         Args:
@@ -200,16 +200,16 @@ class PolicyEngine:
         self.config = config or {}
 
         # 规则存储
-        self.rules: Dict[str, Rule] = {}
-        self.rule_groups: Dict[str, Set[str]] = {}  # 规则分组
-        self.active_rules: List[str] = []  # 当前活跃规则ID列表
+        self.rules: dict[str, Rule] = {}
+        self.rule_groups: dict[str, set[str]] = {}  # 规则分组
+        self.active_rules: list[str] = []  # 当前活跃规则ID列表
 
         # 动作处理器
-        self.action_handlers: Dict[str, Callable] = {}
+        self.action_handlers: dict[str, Callable] = {}
         self.default_actions = self._initialize_default_actions()
 
         # 执行历史
-        self.execution_history: List[Dict[str, Any]] = []
+        self.execution_history: list[dict[str, Any]] = []
 
         # 配置参数
         self.max_rules_per_evaluation = self.config.get("max_rules_per_evaluation", 100)
@@ -286,7 +286,7 @@ class PolicyEngine:
             self.logger.error(f"Error removing rule {rule_id}: {e}")
             return False
 
-    def update_rule(self, rule_id: str, updates: Dict[str, Any]) -> bool:
+    def update_rule(self, rule_id: str, updates: dict[str, Any]) -> bool:
         """更新规则
 
         Args:
@@ -322,9 +322,9 @@ class PolicyEngine:
         self,
         exchange_name: str,
         account_id: str,
-        order_data: Dict[str, Any],
-        risk_metrics: Optional[RiskMetrics] = None,
-    ) -> Dict[str, Any]:
+        order_data: dict[str, Any],
+        risk_metrics: RiskMetrics | None = None,
+    ) -> dict[str, Any]:
         """评估订单策略
 
         Args:
@@ -422,8 +422,8 @@ class PolicyEngine:
             }
 
     def evaluate_risk_policy(
-        self, risk_metrics: RiskMetrics, context: Optional[Dict[str, Any]] = None
-    ) -> Dict[str, Any]:
+        self, risk_metrics: RiskMetrics, context: dict[str, Any] | None = None
+    ) -> dict[str, Any]:
         """评估风险策略
 
         Args:
@@ -491,7 +491,7 @@ class PolicyEngine:
                 "error": str(e),
             }
 
-    def get_rule_statistics(self) -> Dict[str, Any]:
+    def get_rule_statistics(self) -> dict[str, Any]:
         """获取规则统计信息
 
         Returns:
@@ -524,7 +524,7 @@ class PolicyEngine:
 
     # 私有方法
 
-    def _evaluate_rules(self, data: Dict[str, Any]) -> Tuple[List[Rule], List[Dict[str, Any]]]:
+    def _evaluate_rules(self, data: dict[str, Any]) -> tuple[list[Rule], list[dict[str, Any]]]:
         """评估规则
 
         Args:
@@ -555,7 +555,7 @@ class PolicyEngine:
 
         return triggered_rules, actions
 
-    def _execute_action(self, action: Dict[str, Any], data: Dict[str, Any]) -> Dict[str, Any]:
+    def _execute_action(self, action: dict[str, Any], data: dict[str, Any]) -> dict[str, Any]:
         """执行动作
 
         Args:
@@ -603,7 +603,7 @@ class PolicyEngine:
                 "timestamp": int(time.time()),
             }
 
-    def _initialize_default_actions(self) -> Dict[str, Callable]:
+    def _initialize_default_actions(self) -> dict[str, Callable]:
         """初始化默认动作处理器"""
         return {
             ActionType.SEND_ALERT: self._action_send_alert,
@@ -614,7 +614,7 @@ class PolicyEngine:
             ActionType.NOTIFY_MANAGER: self._action_notify_manager,
         }
 
-    def _action_send_alert(self, action: Dict[str, Any], data: Dict[str, Any]) -> Dict[str, Any]:
+    def _action_send_alert(self, action: dict[str, Any], data: dict[str, Any]) -> dict[str, Any]:
         """发送告警动作"""
         alert_level = action.get("level", "MEDIUM")
         message = action.get("message", "Risk alert triggered")
@@ -632,7 +632,7 @@ class PolicyEngine:
             },
         }
 
-    def _action_log_event(self, action: Dict[str, Any], data: Dict[str, Any]) -> Dict[str, Any]:
+    def _action_log_event(self, action: dict[str, Any], data: dict[str, Any]) -> dict[str, Any]:
         """记录事件动作"""
         event_type = action.get("event_type", "risk_event")
         message = action.get("message", "Risk event logged")
@@ -649,7 +649,7 @@ class PolicyEngine:
             },
         }
 
-    def _action_halt_trading(self, action: Dict[str, Any], data: Dict[str, Any]) -> Dict[str, Any]:
+    def _action_halt_trading(self, action: dict[str, Any], data: dict[str, Any]) -> dict[str, Any]:
         """暂停交易动作"""
         scope = action.get("scope", "account")  # account, symbol, global
         duration = action.get("duration", 3600)  # 秒
@@ -666,7 +666,7 @@ class PolicyEngine:
             },
         }
 
-    def _action_limit_orders(self, action: Dict[str, Any], data: Dict[str, Any]) -> Dict[str, Any]:
+    def _action_limit_orders(self, action: dict[str, Any], data: dict[str, Any]) -> dict[str, Any]:
         """限制订单动作"""
         limit_type = action.get("limit_type", "frequency")
         limit_value = action.get("limit_value", 10)
@@ -684,8 +684,8 @@ class PolicyEngine:
         }
 
     def _action_increase_margin(
-        self, action: Dict[str, Any], data: Dict[str, Any]
-    ) -> Dict[str, Any]:
+        self, action: dict[str, Any], data: dict[str, Any]
+    ) -> dict[str, Any]:
         """增加保证金动作"""
         increase_amount = action.get("increase_amount", 0.1)  # 10%
         reason = action.get("reason", "Risk mitigation")
@@ -703,8 +703,8 @@ class PolicyEngine:
         }
 
     def _action_notify_manager(
-        self, action: Dict[str, Any], data: Dict[str, Any]
-    ) -> Dict[str, Any]:
+        self, action: dict[str, Any], data: dict[str, Any]
+    ) -> dict[str, Any]:
         """通知管理员动作"""
         message = action.get("message", "Risk notification")
         urgency = action.get("urgency", "medium")
@@ -750,7 +750,7 @@ class PolicyEngine:
                 self.performance_stats["rule_hit_rates"].get("overall", 0) * 0.9 + hit_rate * 0.1
             )
 
-    def _record_execution(self, execution_record: Dict[str, Any]) -> None:
+    def _record_execution(self, execution_record: dict[str, Any]) -> None:
         """记录执行历史"""
         execution_record["timestamp"] = int(time.time())
         self.execution_history.append(execution_record)

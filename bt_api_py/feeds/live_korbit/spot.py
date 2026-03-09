@@ -2,7 +2,6 @@
 Korbit Spot Feed – three-layer sync / async wrappers + WSS stubs.
 """
 
-
 from bt_api_py.containers.exchanges.korbit_exchange_data import KorbitExchangeDataSpot
 from bt_api_py.feeds.live_korbit.request_base import KorbitRequestData
 from bt_api_py.logging_factory import get_logger

@@ -1,11 +1,11 @@
-"""
-Upbit Exchange Data Configuration.
+"""Upbit Exchange Data Configuration.
 
 Symbol format: KRW-BTC (quote-base with dash).
 Kline uses separate endpoints for minutes/days/weeks/months.
 Auth: JWT (HS256) with SHA512 query hash.
 """
 
+from typing import Any
 import os
 
 from bt_api_py.containers.exchanges.exchange_data import ExchangeData
@@ -17,7 +17,7 @@ _upbit_config = None
 _upbit_config_loaded = False
 
 
-def _get_upbit_config():
+def _get_upbit_config() -> Any | None:
     """Load and cache Upbit YAML configuration."""
     global _upbit_config, _upbit_config_loaded
     if _upbit_config_loaded:
@@ -62,7 +62,7 @@ _FALLBACK_REST_PATHS = {
 class UpbitExchangeData(ExchangeData):
     """Base class for Upbit exchange."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__()
         self.exchange_name = "UPBIT___SPOT"
         self.rest_url = "https://api.upbit.com"
@@ -90,7 +90,7 @@ class UpbitExchangeData(ExchangeData):
         self.reverse_kline_periods = {v: k for k, v in self.kline_periods.items()}
         self.legal_currency = ["KRW", "USDT", "BTC", "ETH"]
 
-    def _load_from_config(self, asset_type):
+    def _load_from_config(self, asset_type) -> bool:
         """Load from YAML config."""
         config = _get_upbit_config()
         if config is None:
@@ -122,26 +122,26 @@ class UpbitExchangeData(ExchangeData):
 class UpbitExchangeDataSpot(UpbitExchangeData):
     """Upbit Spot exchange configuration."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__()
         self.asset_type = "SPOT"
         self._load_from_config("spot")
 
-    def get_symbol(self, symbol):
+    def get_symbol(self, symbol: str) -> str:
         """Return symbol as-is (Upbit uses KRW-BTC format with dashes)."""
         return symbol
 
-    def get_period(self, key):
+    def get_period(self, key: str) -> str:
         """Get kline period value."""
         return self.kline_periods.get(key, key)
 
-    def get_rest_path(self, key):
+    def get_rest_path(self, key: str, **kwargs) -> str:
         """Get REST path for *key*. Raises ValueError if missing."""
         if key not in self.rest_paths or self.rest_paths[key] == "":
             raise ValueError(f"[{self.exchange_name}] REST path not found: {key}")
         return self.rest_paths[key]
 
-    def get_wss_path(self, channel, symbol=None):
+    def get_wss_path(self, channel, symbol: str | None = None, **kwargs) -> str:
         """Get WSS subscription message for *channel*."""
         tpl = self.wss_paths.get(channel, "")
         if symbol and tpl:

@@ -1,5 +1,4 @@
-"""
-Comprehensive monitoring and observability system for WebSocket connections.
+"""Comprehensive monitoring and observability system for WebSocket connections.
 Provides real-time metrics, alerts, performance benchmarking, and visualization.
 """
 
@@ -82,7 +81,7 @@ class BenchmarkResult:
 class MetricsCollector(IMetricsCollector):
     """Advanced metrics collector with time-series storage."""
 
-    def __init__(self, retention_period: float = 3600.0, max_points: int = 10000):
+    def __init__(self, retention_period: float = 3600.0, max_points: int = 10000) -> None:
         self.retention_period = retention_period
         self.max_points = max_points
         self.logger = get_logger("metrics_collector")
@@ -288,7 +287,7 @@ class MetricsCollector(IMetricsCollector):
 class AlertManager:
     """Alert management system with customizable rules and notifications."""
 
-    def __init__(self, metrics_collector: MetricsCollector):
+    def __init__(self, metrics_collector: MetricsCollector) -> None:
         self.metrics_collector = metrics_collector
         self.logger = get_logger("alert_manager")
 
@@ -467,7 +466,7 @@ class AlertManager:
 class WebSocketBenchmark:
     """WebSocket performance benchmarking suite."""
 
-    def __init__(self, metrics_collector: MetricsCollector):
+    def __init__(self, metrics_collector: MetricsCollector) -> None:
         self.metrics_collector = metrics_collector
         self.logger = get_logger("websocket_benchmark")
 
@@ -708,7 +707,7 @@ class WebSocketBenchmark:
 class WebSocketMonitor:
     """Comprehensive WebSocket monitoring system."""
 
-    def __init__(self, websocket_manager):
+    def __init__(self, websocket_manager) -> None:
         self.websocket_manager = websocket_manager
         self.logger = get_logger("websocket_monitor")
 

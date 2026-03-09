@@ -1,5 +1,4 @@
-"""
-Binance VIP Loan API - VIP借贷接口请求类
+"""Binance VIP Loan API - VIP借贷接口请求类.
 
 实现 Binance VIP借贷相关的所有 REST API 请求，包括：
 - VIP借贷进行中订单查询
@@ -16,7 +15,7 @@ from bt_api_py.logging_factory import get_logger
 
 
 class BinanceRequestDataVipLoan(BinanceRequestData):
-    """Binance VIP Loan API 请求类
+    """Binance VIP Loan API 请求类.
 
     处理所有VIP借贷相关的请求。
     """
@@ -42,7 +41,7 @@ class BinanceRequestDataVipLoan(BinanceRequestData):
         extra_data=None,
         **kwargs,
     ):
-        """查询VIP借贷进行中订单
+        """查询VIP借贷进行中订单.
 
         Args:
             loan_coin: 借贷币种
@@ -54,6 +53,7 @@ class BinanceRequestDataVipLoan(BinanceRequestData):
 
         Returns:
             tuple: (path, params, extra_data)
+
         """
         request_type = "get_vip_loan_ongoing_orders"
         path = self._params.get_rest_path(request_type)
@@ -87,10 +87,11 @@ class BinanceRequestDataVipLoan(BinanceRequestData):
         extra_data=None,
         **kwargs,
     ):
-        """查询VIP借贷进行中订单
+        """查询VIP借贷进行中订单.
 
         Returns:
             RequestData: 请求结果
+
         """
         path, params, extra_data = self._get_vip_loan_ongoing_orders(
             loan_coin=loan_coin,
@@ -106,7 +107,7 @@ class BinanceRequestDataVipLoan(BinanceRequestData):
     def _vip_loan_borrow(
         self, loan_coin, collateral_coin, loan_amount, collateral_amount, extra_data=None, **kwargs
     ):
-        """VIP借贷借入
+        """VIP借贷借入.
 
         Args:
             loan_coin: 借贷币种
@@ -118,6 +119,7 @@ class BinanceRequestDataVipLoan(BinanceRequestData):
 
         Returns:
             tuple: (path, params, extra_data)
+
         """
         request_type = "vip_loan_borrow"
         path = self._params.get_rest_path(request_type)
@@ -142,10 +144,11 @@ class BinanceRequestDataVipLoan(BinanceRequestData):
     def vip_loan_borrow(
         self, loan_coin, collateral_coin, loan_amount, collateral_amount, extra_data=None, **kwargs
     ):
-        """VIP借贷借入
+        """VIP借贷借入.
 
         Returns:
             RequestData: 请求结果
+
         """
         path, params, extra_data = self._vip_loan_borrow(
             loan_coin=loan_coin,
@@ -167,7 +170,7 @@ class BinanceRequestDataVipLoan(BinanceRequestData):
         extra_data=None,
         **kwargs,
     ):
-        """VIP借贷还款
+        """VIP借贷还款.
 
         Args:
             loan_coin: 借贷币种
@@ -179,6 +182,7 @@ class BinanceRequestDataVipLoan(BinanceRequestData):
 
         Returns:
             tuple: (path, params, extra_data)
+
         """
         request_type = "vip_loan_repay"
         path = self._params.get_rest_path(request_type)
@@ -211,10 +215,11 @@ class BinanceRequestDataVipLoan(BinanceRequestData):
         extra_data=None,
         **kwargs,
     ):
-        """VIP借贷还款
+        """VIP借贷还款.
 
         Returns:
             RequestData: 请求结果
+
         """
         path, params, extra_data = self._vip_loan_repay(
             loan_coin=loan_coin,
@@ -238,7 +243,7 @@ class BinanceRequestDataVipLoan(BinanceRequestData):
         extra_data=None,
         **kwargs,
     ):
-        """查询VIP借贷历史记录
+        """查询VIP借贷历史记录.
 
         Args:
             loan_coin: 借贷币种
@@ -252,6 +257,7 @@ class BinanceRequestDataVipLoan(BinanceRequestData):
 
         Returns:
             tuple: (path, params, extra_data)
+
         """
         request_type = "get_vip_loan_history"
         path = self._params.get_rest_path(request_type)
@@ -291,10 +297,11 @@ class BinanceRequestDataVipLoan(BinanceRequestData):
         extra_data=None,
         **kwargs,
     ):
-        """查询VIP借贷历史记录
+        """查询VIP借贷历史记录.
 
         Returns:
             RequestData: 请求结果
+
         """
         path, params, extra_data = self._get_vip_loan_history(
             loan_coin=loan_coin,
@@ -320,7 +327,7 @@ class BinanceRequestDataVipLoan(BinanceRequestData):
         extra_data=None,
         **kwargs,
     ):
-        """查询VIP还款历史记录
+        """查询VIP还款历史记录.
 
         Args:
             loan_coin: 借贷币种
@@ -334,6 +341,7 @@ class BinanceRequestDataVipLoan(BinanceRequestData):
 
         Returns:
             tuple: (path, params, extra_data)
+
         """
         request_type = "get_vip_repayment_history"
         path = self._params.get_rest_path(request_type)
@@ -373,10 +381,11 @@ class BinanceRequestDataVipLoan(BinanceRequestData):
         extra_data=None,
         **kwargs,
     ):
-        """查询VIP还款历史记录
+        """查询VIP还款历史记录.
 
         Returns:
             RequestData: 请求结果
+
         """
         path, params, extra_data = self._get_vip_repayment_history(
             loan_coin=loan_coin,

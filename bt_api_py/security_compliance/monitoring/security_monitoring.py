@@ -5,9 +5,10 @@ with SIEM systems for financial industry compliance.
 """
 
 import time
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Dict, List, Optional, Callable
+from typing import Any
 
 
 class AlertSeverity(Enum):
@@ -30,7 +31,7 @@ class SecurityAlert:
     severity: AlertSeverity
     source: str
     timestamp: float = field(default_factory=time.time)
-    details: Dict[str, Any] = field(default_factory=dict)
+    details: dict[str, Any] = field(default_factory=dict)
     acknowledged: bool = False
     resolved: bool = False
 
@@ -38,13 +39,13 @@ class SecurityAlert:
 class SecurityMonitoring:
     """Security monitoring and alerting system."""
 
-    def __init__(self, audit_logger, config: Optional[Dict[str, Any]] = None):
+    def __init__(self, audit_logger, config: dict[str, Any] | None = None):
         """Initialize security monitoring."""
         self.audit_logger = audit_logger
         self.config = config or {}
 
-        self._alerts: List[SecurityAlert] = []
-        self._alert_handlers: List[Callable] = []
+        self._alerts: list[SecurityAlert] = []
+        self._alert_handlers: list[Callable] = []
         self._thresholds = self.config.get("alert_thresholds", {})
 
     def create_alert(
@@ -92,10 +93,10 @@ class SecurityMonitoring:
 
     def get_alerts(
         self,
-        severity: Optional[AlertSeverity] = None,
-        acknowledged: Optional[bool] = None,
+        severity: AlertSeverity | None = None,
+        acknowledged: bool | None = None,
         limit: int = 100,
-    ) -> List[SecurityAlert]:
+    ) -> list[SecurityAlert]:
         """Get filtered alerts."""
         filtered = self._alerts
 
@@ -129,7 +130,7 @@ class SecurityMonitoring:
         """Add custom alert handler."""
         self._alert_handlers.append(handler)
 
-    def get_monitoring_summary(self) -> Dict[str, Any]:
+    def get_monitoring_summary(self) -> dict[str, Any]:
         """Get monitoring summary statistics."""
         total = len(self._alerts)
         unacknowledged = len([a for a in self._alerts if not a.acknowledged])

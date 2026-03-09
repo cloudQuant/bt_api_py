@@ -1,17 +1,24 @@
-"""
-Coinbase Ticker Data Container
-"""
+"""Coinbase Ticker Data Container."""
 
 import json
 import time
 from datetime import datetime
+from typing import Any
 
 from bt_api_py.containers.tickers.ticker import TickerData
 from bt_api_py.functions.utils import from_dict_get_float, from_dict_get_string
 
 
-def parse_iso_time_to_timestamp(time_str: str) -> float:
-    """Parse ISO 8601 time string to Unix timestamp."""
+def parse_iso_time_to_timestamp(time_str: str) -> float | None:
+    """Parse ISO 8601 time string to Unix timestamp.
+
+    Args:
+        time_str: ISO 8601 formatted time string.
+
+    Returns:
+        Unix timestamp or None if parsing fails.
+
+    """
     if not time_str:
         return None
     try:
@@ -25,19 +32,42 @@ def parse_iso_time_to_timestamp(time_str: str) -> float:
     except Exception:
         return None
 
+    try:
+        # Handle various ISO formats
+        time_str = time_str.replace("Z", "+00:00")
+        # Remove microseconds if present
+        if "." in time_str:
+            time_str = time_str.split(".")[0] + time_str.split(".")[1][-6:]  # Keep timezone
+        dt = datetime.fromisoformat(time_str)
+        return dt.timestamp()
+    except Exception:
+        return None
+
 
 class CoinbaseTickerData(TickerData):
-    """保存Coinbase ticker信息"""
+    """Coinbase ticker data container."""
 
-    def __init__(self, ticker_info, symbol_name, asset_type, has_been_json_encoded=False):
+    def __init__(
+        self,
+        ticker_info: str | dict[str, Any],
+        symbol_name: str,
+        asset_type: str,
+        has_been_json_encoded: bool = False,
+    ) -> None:
+        """Initialize Coinbase ticker data container.
+
+        Args:
+            ticker_info: Raw ticker data from API (JSON string or dict).
+            symbol_name: Trading symbol name.
+            asset_type: Asset type (e.g., "SPOT", "FUTURE").
+            has_been_json_encoded: Whether ticker_info is already parsed.
+
+        """
         super().__init__(ticker_info, has_been_json_encoded)
-        self.exchange_name = "COINBASE"  # 交易所名称
+        self.exchange_name = "COINBASE"
         self.local_update_time = time.time()
-        self.ticker_data = ticker_info if has_been_json_encoded else None
-        self.ticker_symbol_name = None
-        self.has_been_init_data = False  # 本地时间戳
         self.symbol_name = symbol_name
-        self.asset_type = asset_type  # ticker的类型
+        self.asset_type = asset_type
         # If already JSON encoded, parse it to dict; otherwise store raw
         if has_been_json_encoded:
             self.ticker_data = (
@@ -45,11 +75,21 @@ class CoinbaseTickerData(TickerData):
             )
         else:
             self.ticker_data = None
-        self.ticker_symbol_name = None
-        self.server_time = None
-        self.bid_price = None
-        self.ask_price = None
-        self.bid_volume = None
+        self.ticker_symbol_name: str | None = None
+        self.server_time: float | None = None
+        self.bid_price: float | None = None
+        self.ask_price: float | None = None
+        self.bid_volume: float | None = None
+        self.ask_volume: float | None = None
+        self.last_price: float | None = None
+        self.last_volume: float | None = None
+        self.price_24h_change: float | None = None
+        self.price_24h_change_percent: float | None = None
+        self.volume_24h: float | None = None
+        self.high_24h: float | None = None
+        self.low_24h: float | None = None
+        self.all_data: dict[str, Any] | None = None
+        self.has_been_init_data = False
         self.ask_volume = None
         self.last_price = None
         self.last_volume = None
@@ -61,7 +101,7 @@ class CoinbaseTickerData(TickerData):
         self.all_data = None
         self.has_been_init_data = False
 
-    def init_data(self):
+    def init_data(self) -> "Self":
         if not self.has_been_json_encoded:
             self.ticker_data = json.loads(self.ticker_info)
             self.has_been_json_encoded = True
@@ -93,7 +133,7 @@ class CoinbaseTickerData(TickerData):
         self.has_been_init_data = True
         return self
 
-    def get_all_data(self):
+    def get_all_data(self) -> dict[str, Any]:
         if self.all_data is None:
             self.init_data()
             self.all_data = {
@@ -117,80 +157,80 @@ class CoinbaseTickerData(TickerData):
             }
         return self.all_data
 
-    def __str__(self):
+    def __str__(self) -> str:
         self.init_data()
         return json.dumps(self.get_all_data())
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return self.__str__()
 
-    def get_exchange_name(self):
+    def get_exchange_name(self) -> str:
         return self.exchange_name
 
-    def get_local_update_time(self):
+    def get_local_update_time(self) -> float:
         return self.local_update_time
 
-    def get_symbol_name(self):
+    def get_symbol_name(self) -> str:
         return self.symbol_name
 
-    def get_ticker_symbol_name(self):
+    def get_ticker_symbol_name(self) -> str | None:
         return self.ticker_symbol_name
 
-    def get_asset_type(self):
+    def get_asset_type(self) -> str:
         return self.asset_type
 
-    def get_server_time(self):
+    def get_server_time(self) -> float | None:
         return self.server_time
 
-    def get_bid_price(self):
+    def get_bid_price(self) -> float | None:
         self.init_data()
         return self.bid_price
 
-    def get_ask_price(self):
+    def get_ask_price(self) -> float | None:
         self.init_data()
         return self.ask_price
 
-    def get_bid_volume(self):
+    def get_bid_volume(self) -> float | None:
         self.init_data()
         return self.bid_volume
 
-    def get_ask_volume(self):
+    def get_ask_volume(self) -> float | None:
         self.init_data()
         return self.ask_volume
 
-    def get_last_price(self):
+    def get_last_price(self) -> float | None:
         self.init_data()
         return self.last_price
 
-    def get_last_volume(self):
+    def get_last_volume(self) -> float | None:
         self.init_data()
         return self.last_volume
 
-    def get_price_24h_change(self):
+    def get_price_24h_change(self) -> float | None:
         self.init_data()
         return self.price_24h_change
 
-    def get_price_24h_change_percent(self):
+    def get_price_24h_change_percent(self) -> float | None:
         self.init_data()
         return self.price_24h_change_percent
 
-    def get_volume_24h(self):
+    def get_volume_24h(self) -> float | None:
         self.init_data()
         return self.volume_24h
 
-    def get_high_24h(self):
+    def get_high_24h(self) -> float | None:
         self.init_data()
         return self.high_24h
 
-    def get_low_24h(self):
+    def get_low_24h(self) -> float | None:
         self.init_data()
         return self.low_24h
 
 
 class CoinbaseWssTickerData(CoinbaseTickerData):
-    """保存WebSocket ticker信息"""
+    """保存WebSocket ticker信息."""
 
-    def init_data(self):
+    def init_data(self) -> "Self":
         if not self.has_been_json_encoded:
             self.ticker_data = json.loads(self.ticker_info)
             self.has_been_json_encoded = True
@@ -219,9 +259,9 @@ class CoinbaseWssTickerData(CoinbaseTickerData):
 
 
 class CoinbaseRequestTickerData(CoinbaseTickerData):
-    """保存REST API ticker信息"""
+    """保存REST API ticker信息."""
 
-    def init_data(self):
+    def init_data(self) -> "Self":
         if not self.has_been_json_encoded:
             self.ticker_data = json.loads(self.ticker_info)
             self.has_been_json_encoded = True
