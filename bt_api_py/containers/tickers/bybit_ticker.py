@@ -1,7 +1,11 @@
 import time
+from typing import Any, Self
 
 from bt_api_py.containers.tickers.ticker import TickerData
 from bt_api_py.functions.utils import from_dict_get_float
+from bt_api_py.logging_factory import get_logger
+
+logger = get_logger("container")
 
 
 class BybitTickerData(TickerData):
@@ -74,7 +78,8 @@ class BybitTickerData(TickerData):
             self.has_been_init_data = True
 
         except Exception as e:
-            print(f"Error parsing Bybit ticker data: {e}")
+            logger.error(f"Error parsing Bybit ticker data: {e}", exc_info=True)
+
             self.has_been_init_data = False
         return self
 

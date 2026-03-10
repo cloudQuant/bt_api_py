@@ -120,3 +120,43 @@ class GeminiRequestBarData(RequestData):
             bar.exchange_timestamp = convert_utc_timestamp(bar.timestamp)
             return bar
         return None
+
+    def get_exchange_name(self) -> str:
+        """Get exchange name."""
+        return "GEMINI"
+
+    def get_asset_type(self) -> str | None:
+        """Get asset type."""
+        return self.asset_type
+
+    def get_symbol_name(self) -> str | None:
+        """Get symbol name."""
+        return self.symbol
+
+    def get_server_time(self) -> int | None:
+        """Get server time."""
+        return self.timestamp
+
+    def get_local_update_time(self):
+        """Get local update time."""
+        return self.exchange_timestamp
+
+    def get_open_price(self) -> float | None:
+        """Get open price."""
+        return self.open
+
+    def get_high_price(self) -> float | None:
+        """Get high price."""
+        return self.high
+
+    def get_low_price(self) -> float | None:
+        """Get low price."""
+        return self.low
+
+    def get_close_price(self) -> float | None:
+        """Get close price."""
+        return self.close
+
+    def get_volume(self) -> float | None:
+        """Get volume."""
+        return self.volume

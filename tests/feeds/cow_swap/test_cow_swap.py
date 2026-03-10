@@ -64,7 +64,7 @@ class TestCowSwapRequestDataSpot:
         """Test order normalize function."""
         input_data = {"uid": "0x1234567890abcdef", "status": "filled", "amount": "1000000"}
         result, status = CowSwapRequestDataSpot._get_order_normalize_function(input_data, None)
-        assert status == True
+        assert status
         assert len(result) == 1
         assert result[0]["uid"] == "0x1234567890abcdef"
 
@@ -84,7 +84,7 @@ class TestCowSwapRequestDataSpot:
         result, status = CowSwapRequestDataSpot._get_order_status_normalize_function(
             input_data, None
         )
-        assert status == True
+        assert status
         assert len(result) == 1
 
     # ==================== Account Orders Tests ====================
@@ -107,7 +107,7 @@ class TestCowSwapRequestDataSpot:
         result, status = CowSwapRequestDataSpot._get_account_orders_normalize_function(
             input_data, None
         )
-        assert status == True
+        assert status
         assert len(result) == 1
         assert len(result[0]) == 2
 
@@ -131,7 +131,7 @@ class TestCowSwapRequestDataSpot:
             ]
         }
         result, status = CowSwapRequestDataSpot._get_trades_normalize_function(input_data, None)
-        assert status == True
+        assert status
         assert len(result) == 1
         assert len(result[0]) == 2
 
@@ -162,7 +162,7 @@ class TestCowSwapRequestDataSpot:
         result, status = CowSwapRequestDataSpot._get_exchange_info_normalize_function(
             input_data, None
         )
-        assert status == True
+        assert status
         assert len(result) == 1
         assert len(result[0]) == 2
 
@@ -195,7 +195,7 @@ class TestCowSwapRequestDataSpot:
         """Test quote normalize function."""
         input_data = {"quote": {"sellAmount": "1000000", "buyAmount": "3000", "feeAmount": "100"}}
         result, status = CowSwapRequestDataSpot._get_quote_normalize_function(input_data, None)
-        assert status == True
+        assert status
         assert len(result) == 1
 
     @pytest.mark.skip(reason="Requires actual API call")
@@ -331,7 +331,7 @@ class TestCowSwapStandardInterfaces:
     @pytest.mark.ticker
     def test_get_tick_calls_request(self, cow_swap_spot):
         """Test get_tick calls self.request."""
-        result = cow_swap_spot.get_tick("0xWETH")
+        cow_swap_spot.get_tick("0xWETH")
         assert cow_swap_spot.request.called
         call_ed = cow_swap_spot.request.call_args
         extra_data = call_ed[1].get("extra_data")
@@ -349,7 +349,7 @@ class TestCowSwapStandardInterfaces:
     @pytest.mark.orderbook
     def test_get_depth_calls_request(self, cow_swap_spot):
         """Test get_depth calls self.request."""
-        result = cow_swap_spot.get_depth("WETH")
+        cow_swap_spot.get_depth("WETH")
         assert cow_swap_spot.request.called
         extra_data = cow_swap_spot.request.call_args[1].get("extra_data")
         assert extra_data["request_type"] == "get_depth"
@@ -367,7 +367,7 @@ class TestCowSwapStandardInterfaces:
     @pytest.mark.kline
     def test_get_kline_calls_request(self, cow_swap_spot):
         """Test get_kline calls self.request."""
-        result = cow_swap_spot.get_kline("WETH", "1h")
+        cow_swap_spot.get_kline("WETH", "1h")
         assert cow_swap_spot.request.called
         extra_data = cow_swap_spot.request.call_args[1].get("extra_data")
         assert extra_data["request_type"] == "get_kline"
@@ -392,7 +392,7 @@ class TestCowSwapStandardInterfaces:
 
     def test_make_order_calls_request(self, cow_swap_spot):
         """Test make_order calls self.request."""
-        result = cow_swap_spot.make_order(
+        cow_swap_spot.make_order(
             "WETH-USDC",
             1.0,
             3000,
@@ -417,7 +417,7 @@ class TestCowSwapStandardInterfaces:
 
     def test_cancel_order_calls_request(self, cow_swap_spot):
         """Test cancel_order calls self.request."""
-        result = cow_swap_spot.cancel_order("WETH-USDC", "order_uid_123")
+        cow_swap_spot.cancel_order("WETH-USDC", "order_uid_123")
         assert cow_swap_spot.request.called
         extra_data = cow_swap_spot.request.call_args[1].get("extra_data")
         assert extra_data["request_type"] == "cancel_order"
@@ -427,7 +427,7 @@ class TestCowSwapStandardInterfaces:
 
     def test_query_order_calls_request(self, cow_swap_spot):
         """Test query_order calls self.request."""
-        result = cow_swap_spot.query_order("WETH-USDC", "order_uid_123")
+        cow_swap_spot.query_order("WETH-USDC", "order_uid_123")
         assert cow_swap_spot.request.called
         extra_data = cow_swap_spot.request.call_args[1].get("extra_data")
         assert extra_data["request_type"] == "query_order"
@@ -437,7 +437,7 @@ class TestCowSwapStandardInterfaces:
 
     def test_get_open_orders_calls_request(self, cow_swap_spot):
         """Test get_open_orders calls self.request."""
-        result = cow_swap_spot.get_open_orders("WETH-USDC")
+        cow_swap_spot.get_open_orders("WETH-USDC")
         assert cow_swap_spot.request.called
         extra_data = cow_swap_spot.request.call_args[1].get("extra_data")
         assert extra_data["request_type"] == "get_open_orders"
@@ -446,7 +446,7 @@ class TestCowSwapStandardInterfaces:
 
     def test_get_account_calls_request(self, cow_swap_spot):
         """Test get_account calls self.request."""
-        result = cow_swap_spot.get_account("WETH")
+        cow_swap_spot.get_account("WETH")
         assert cow_swap_spot.request.called
         extra_data = cow_swap_spot.request.call_args[1].get("extra_data")
         assert extra_data["request_type"] == "get_account"
@@ -456,7 +456,7 @@ class TestCowSwapStandardInterfaces:
 
     def test_get_balance_calls_request(self, cow_swap_spot):
         """Test get_balance calls self.request."""
-        result = cow_swap_spot.get_balance("WETH")
+        cow_swap_spot.get_balance("WETH")
         assert cow_swap_spot.request.called
         extra_data = cow_swap_spot.request.call_args[1].get("extra_data")
         assert extra_data["request_type"] == "get_balance"

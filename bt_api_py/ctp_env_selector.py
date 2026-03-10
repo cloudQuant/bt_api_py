@@ -48,11 +48,7 @@ def _in_trading_session(now: datetime) -> bool:
         return True
 
     # 检查日盘 + 夜盘 21:00~23:59
-    for start, end in _TRADING_SESSIONS:
-        if start <= t <= end:
-            return True
-
-    return False
+    return any(start <= t <= end for start, end in _TRADING_SESSIONS)
 
 
 def _is_set1_available(now: datetime) -> bool:

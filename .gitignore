@@ -107,6 +107,11 @@ _bmad-output/
 .windsurf/
 .ruff_cache/
 
+# Keys / secrets
+keys/
+*.key
+*.meta
+
 # 测试配置文件
 account_config.yaml
 demos/logs

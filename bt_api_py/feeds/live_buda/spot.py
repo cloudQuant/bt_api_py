@@ -235,10 +235,7 @@ class BudaRequestDataSpot(BudaRequestData):
 
     def _get_balance(self, symbol=None, extra_data=None, **kwargs):
         """Get account balance. Returns (path, params, extra_data)."""
-        if symbol:
-            path = f"GET /v2/balances/{symbol}"
-        else:
-            path = "GET /v2/balances"
+        path = f"GET /v2/balances/{symbol}" if symbol else "GET /v2/balances"
         if extra_data is None:
             extra_data = {}
         extra_data.update(
@@ -370,10 +367,7 @@ class BudaRequestDataSpot(BudaRequestData):
 
     def _get_open_orders(self, symbol=None, extra_data=None, **kwargs):
         """Get open orders. Returns (path, params, extra_data)."""
-        if symbol:
-            path = f"GET /v2/markets/{symbol}/orders"
-        else:
-            path = "GET /v2/orders"
+        path = f"GET /v2/markets/{symbol}/orders" if symbol else "GET /v2/orders"
         if extra_data is None:
             extra_data = {}
         extra_data.update(

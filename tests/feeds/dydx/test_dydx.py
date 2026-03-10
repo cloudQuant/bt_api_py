@@ -78,7 +78,7 @@ class TestDydxRequestDataSpot:
         result, status = DydxRequestDataSpot._get_ticker_spot_normalize_function(
             input_data, extra_data
         )
-        assert status == True
+        assert status
         assert len(result) == 9
         assert result[1] == 50000.0  # oraclePrice
 
@@ -91,7 +91,7 @@ class TestDydxRequestDataSpot:
         result, status = DydxRequestDataSpot._get_ticker_spot_normalize_function(
             input_data, extra_data
         )
-        assert status == False
+        assert not status
 
     # ==================== Balance Tests ====================
 
@@ -118,7 +118,7 @@ class TestDydxRequestDataSpot:
         }
 
         result, status = DydxRequestDataSpot._get_balance_spot_normalize_function(input_data, None)
-        assert status == True
+        assert status
         assert len(result) == 1
         assert result[0]["symbol"] == "USD"
         assert result[0]["equity"] == 10000.0
@@ -150,7 +150,7 @@ class TestDydxRequestDataSpot:
         }
 
         result, status = DydxRequestDataSpot._get_kline_normalize_function(input_data, None)
-        assert status == True
+        assert status
         assert len(result) == 2
 
     # ==================== OrderBook Tests ====================
@@ -164,7 +164,7 @@ class TestDydxRequestDataSpot:
         }
 
         result, status = DydxRequestDataSpot._get_orderbook_normalize_function(input_data, None)
-        assert status == True
+        assert status
         assert len(result) == 1
 
     # ==================== Exchange Info Tests ====================
@@ -172,7 +172,7 @@ class TestDydxRequestDataSpot:
     def test_get_exchange_info(self, dydx_spot):
         """Test get_exchange_info method returns RequestData."""
         dydx_spot.request = Mock(return_value=Mock(spec=RequestData))
-        result = dydx_spot.get_exchange_info()
+        dydx_spot.get_exchange_info()
         assert dydx_spot.request.called
 
     def test_get_exchange_info_normalize_function(self):
@@ -182,7 +182,7 @@ class TestDydxRequestDataSpot:
         }
 
         result, status = DydxRequestDataSpot._get_exchange_info_normalize_function(input_data, None)
-        assert status == True
+        assert status
         assert len(result) == 2
 
     # ==================== Method Wrappers ====================
@@ -193,7 +193,7 @@ class TestDydxRequestDataSpot:
         # Mock the request method
         dydx_spot.request = Mock(return_value=Mock(data=Mock()))
 
-        result = dydx_spot.get_ticker("BTC-USD")
+        dydx_spot.get_ticker("BTC-USD")
         assert dydx_spot.request.called
 
     def test_get_balance(self, dydx_spot):
@@ -201,7 +201,7 @@ class TestDydxRequestDataSpot:
         # Mock the request method
         dydx_spot.request = Mock(return_value=Mock(data=Mock()))
 
-        result = dydx_spot.get_balance("0x123", 0)
+        dydx_spot.get_balance("0x123", 0)
         assert dydx_spot.request.called
 
     # ==================== Standard Interface Tests ====================
@@ -210,7 +210,7 @@ class TestDydxRequestDataSpot:
     def test_get_tick(self, dydx_spot):
         """Test get_tick returns RequestData."""
         dydx_spot.request = Mock(return_value=Mock(spec=RequestData))
-        result = dydx_spot.get_tick("BTC-USD")
+        dydx_spot.get_tick("BTC-USD")
         assert dydx_spot.request.called
         call_args = dydx_spot.request.call_args
         extra_data = (
@@ -225,7 +225,7 @@ class TestDydxRequestDataSpot:
     def test_get_depth(self, dydx_spot):
         """Test get_depth returns RequestData."""
         dydx_spot.request = Mock(return_value=Mock(spec=RequestData))
-        result = dydx_spot.get_depth("BTC-USD", count=10)
+        dydx_spot.get_depth("BTC-USD", count=10)
         assert dydx_spot.request.called
         call_args = dydx_spot.request.call_args
         extra_data = call_args[1].get("extra_data")
@@ -236,7 +236,7 @@ class TestDydxRequestDataSpot:
     def test_get_kline(self, dydx_spot):
         """Test get_kline returns RequestData."""
         dydx_spot.request = Mock(return_value=Mock(spec=RequestData))
-        result = dydx_spot.get_kline("BTC-USD", "1m", count=20)
+        dydx_spot.get_kline("BTC-USD", "1m", count=20)
         assert dydx_spot.request.called
         call_args = dydx_spot.request.call_args
         extra_data = call_args[1].get("extra_data")
@@ -246,7 +246,7 @@ class TestDydxRequestDataSpot:
     def test_get_server_time(self, dydx_spot):
         """Test get_server_time returns RequestData."""
         dydx_spot.request = Mock(return_value=Mock(spec=RequestData))
-        result = dydx_spot.get_server_time()
+        dydx_spot.get_server_time()
         assert dydx_spot.request.called
         call_args = dydx_spot.request.call_args
         extra_data = call_args[1].get("extra_data")
@@ -255,7 +255,7 @@ class TestDydxRequestDataSpot:
     def test_make_order(self, dydx_spot):
         """Test make_order returns RequestData."""
         dydx_spot.request = Mock(return_value=Mock(spec=RequestData))
-        result = dydx_spot.make_order("BTC-USD", 0.1, 50000.0, "limit", side="BUY")
+        dydx_spot.make_order("BTC-USD", 0.1, 50000.0, "limit", side="BUY")
         assert dydx_spot.request.called
         call_args = dydx_spot.request.call_args
         extra_data = call_args[1].get("extra_data")
@@ -265,7 +265,7 @@ class TestDydxRequestDataSpot:
     def test_cancel_order(self, dydx_spot):
         """Test cancel_order returns RequestData."""
         dydx_spot.request = Mock(return_value=Mock(spec=RequestData))
-        result = dydx_spot.cancel_order("BTC-USD", "order123")
+        dydx_spot.cancel_order("BTC-USD", "order123")
         assert dydx_spot.request.called
         call_args = dydx_spot.request.call_args
         extra_data = call_args[1].get("extra_data")
@@ -275,7 +275,7 @@ class TestDydxRequestDataSpot:
     def test_query_order(self, dydx_spot):
         """Test query_order returns RequestData."""
         dydx_spot.request = Mock(return_value=Mock(spec=RequestData))
-        result = dydx_spot.query_order("BTC-USD", "order123")
+        dydx_spot.query_order("BTC-USD", "order123")
         assert dydx_spot.request.called
         call_args = dydx_spot.request.call_args
         extra_data = call_args[1].get("extra_data")
@@ -285,7 +285,7 @@ class TestDydxRequestDataSpot:
     def test_get_open_orders(self, dydx_spot):
         """Test get_open_orders returns RequestData."""
         dydx_spot.request = Mock(return_value=Mock(spec=RequestData))
-        result = dydx_spot.get_open_orders("BTC-USD")
+        dydx_spot.get_open_orders("BTC-USD")
         assert dydx_spot.request.called
         call_args = dydx_spot.request.call_args
         extra_data = call_args[1].get("extra_data")
@@ -294,7 +294,7 @@ class TestDydxRequestDataSpot:
     def test_get_account(self, dydx_spot):
         """Test get_account returns RequestData."""
         dydx_spot.request = Mock(return_value=Mock(spec=RequestData))
-        result = dydx_spot.get_account("ALL", address="0xabc", subaccount_number=0)
+        dydx_spot.get_account("ALL", address="0xabc", subaccount_number=0)
         assert dydx_spot.request.called
         call_args = dydx_spot.request.call_args
         extra_data = call_args[1].get("extra_data")

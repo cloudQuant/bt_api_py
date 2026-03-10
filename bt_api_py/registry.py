@@ -51,20 +51,30 @@ class ExchangeRegistry(metaclass=_RegistryMeta):
     _default: "ExchangeRegistry | None" = None  # 延迟初始化的全局默认实例
     _default_lock = threading.Lock()
 
+    def __new__(cls):
+        """确保 ExchangeRegistry() 返回全局单例实例"""
+        if cls._default is not None:
+            return cls._default
+        with cls._default_lock:
+            if cls._default is None:
+                instance = super().__new__(cls)
+                instance._feed_classes = {}
+                instance._stream_classes = {}
+                instance._exchange_data_classes = {}
+                instance._balance_handlers = {}
+                instance._lock = threading.RLock()
+                instance._initialized = True
+                cls._default = instance
+            return cls._default
+
     def __init__(self):
-        self._feed_classes: dict[str, type] = {}
-        self._stream_classes: dict[str, dict[str, Any]] = {}
-        self._exchange_data_classes: dict[str, type] = {}
-        self._balance_handlers: dict[str, Callable] = {}
-        self._lock = threading.RLock()
+        pass
 
     @classmethod
     def _get_default(cls) -> "ExchangeRegistry":
         """获取全局默认实例（延迟初始化）"""
         if cls._default is None:
-            with cls._default_lock:
-                if cls._default is None:
-                    cls._default = cls()
+            cls()  # triggers __new__ which creates the default
         return cls._default
 
     # ── 实例方法（核心逻辑）───────────────────────────────────────

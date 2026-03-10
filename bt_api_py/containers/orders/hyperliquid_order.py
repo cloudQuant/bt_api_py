@@ -3,6 +3,9 @@ import time
 
 from bt_api_py.containers.orders.order import OrderData
 from bt_api_py.functions.utils import from_dict_get_float, from_dict_get_string
+from bt_api_py.logging_factory import get_logger
+
+logger = get_logger("container")
 
 
 class HyperliquidRequestOrderData(OrderData):
@@ -40,23 +43,23 @@ class HyperliquidRequestOrderData(OrderData):
                 self.order_data = json.loads(self.order_info)
 
             # Process order response from Hyperliquid
-            if isinstance(self.order_data, dict):
-                if "statuses" in self.order_data and self.order_data["statuses"]:
-                    # Response after order placement
-                    status = self.order_data["statuses"][0]
-                    if "resting" in status:
-                        self.order_id = status["resting"].get("oid")
-                        self.status = "NEW"
-                        self.side = from_dict_get_string(status["resting"], "side")
-                        self.type = from_dict_get_string(status["resting"], "type")
-                        self.quantity = from_dict_get_float(status["resting"], "sz")
-                        self.price = from_dict_get_float(status["resting"], "limit_px")
-                        self.timestamp = time.time()
+            if isinstance(self.order_data, dict) and self.order_data.get("statuses"):
+                # Response after order placement
+                status = self.order_data["statuses"][0]
+                if "resting" in status:
+                    self.order_id = status["resting"].get("oid")
+                    self.status = "NEW"
+                    self.side = from_dict_get_string(status["resting"], "side")
+                    self.type = from_dict_get_string(status["resting"], "type")
+                    self.quantity = from_dict_get_float(status["resting"], "sz")
+                    self.price = from_dict_get_float(status["resting"], "limit_px")
+                    self.timestamp = time.time()
 
             self.has_been_init_data = True
 
         except Exception as e:
-            print(f"Error initializing Hyperliquid order data: {e}")
+            logger.error(f"Error initializing Hyperliquid order data: {e}", exc_info=True)
+
         return self
 
     def get_all_data(self):
@@ -183,7 +186,8 @@ class HyperliquidSpotWssOrderData(OrderData):
             self.has_been_init_data = True
 
         except Exception as e:
-            print(f"Error initializing Hyperliquid WebSocket order data: {e}")
+            logger.error(f"Error initializing Hyperliquid WebSocket order data: {e}", exc_info=True)
+
         return self
 
     def get_all_data(self):

@@ -1,6 +1,7 @@
 """BTCTurk Spot Feed implementation."""
 
 import time as _time
+from typing import Any
 
 from bt_api_py.feeds.capability import Capability
 from bt_api_py.feeds.live_btcturk.request_base import BTCTurkRequestData

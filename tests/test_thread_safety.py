@@ -5,7 +5,7 @@ Target: 20+ tests for concurrent access patterns
 
 import threading
 import time
-from queue import Queue
+from queue import Empty, Queue
 
 from bt_api_py.event_bus import EventBus
 from bt_api_py.registry import ExchangeRegistry
@@ -116,9 +116,12 @@ class TestRegistryThreadSafety:
     def test_concurrent_list_exchanges(self):
         """Registry should handle concurrent list_exchanges calls"""
         registry = ExchangeRegistry()
+        # Record pre-existing entries from other tests (singleton)
+        pre_existing = len(registry.list_exchanges())
         for i in range(10):
-            registry.register_feed(f"TEST{i}___SPOT", MockFeed)
+            registry.register_feed(f"CLIST{i}___SPOT", MockFeed)
 
+        expected_count = pre_existing + 10
         errors = []
         results = []
 
@@ -138,7 +141,7 @@ class TestRegistryThreadSafety:
         assert len(errors) == 0
         assert len(results) == 50
         for names in results:
-            assert len(names) == 10
+            assert len(names) == expected_count
 
 
 class TestEventBusThreadSafety:
@@ -194,8 +197,11 @@ class TestEventBusThreadSafety:
         event_bus = EventBus()
         handlers = []
 
-        for i in range(50):
-            handler = lambda e: None
+        for _i in range(50):
+
+            def handler(e):
+                return None
+
             event_bus.on("test_event", handler)
             handlers.append(handler)
 
@@ -312,7 +318,7 @@ class TestThreadSafetyWithQueue:
                     item = data_queue.get(timeout=0.1)
                     results.append(item)
                     data_queue.task_done()
-                except:
+                except Empty:
                     break
 
         producer_threads = [threading.Thread(target=producer) for _ in range(5)]

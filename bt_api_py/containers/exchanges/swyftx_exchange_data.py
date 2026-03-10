@@ -1,9 +1,8 @@
-from typing import Any
-
 """Swyftx Exchange Data Configuration – Feed pattern."""
 
 import os
 import re
+from typing import Any
 
 import yaml
 

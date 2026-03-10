@@ -72,7 +72,7 @@ class TestPancakeSpotRequestData:
         # Mock the request method
         mock_feed.request = Mock(return_value=Mock(data=Mock()))
 
-        result = mock_feed.get_tick("BTCB/USDT")
+        mock_feed.get_tick("BTCB/USDT")
         assert mock_feed.request.called
 
     @pytest.mark.ticker
@@ -80,7 +80,7 @@ class TestPancakeSpotRequestData:
         """Test ticker normalize function."""
         input_data = {"price": "50000.0", "symbol": "BTCB/USDT"}
         result, status = PancakeSpotRequestData._get_tick_normalize_function(input_data, None)
-        assert status == True
+        assert status
         assert len(result) == 1
 
     # ==================== Depth Tests ====================
@@ -91,7 +91,7 @@ class TestPancakeSpotRequestData:
         # Mock the request method
         mock_feed.request = Mock(return_value=Mock(data=Mock()))
 
-        result = mock_feed.get_depth("BTCB/USDT", 20)
+        mock_feed.get_depth("BTCB/USDT", 20)
         assert mock_feed.request.called
 
     @pytest.mark.orderbook
@@ -102,7 +102,7 @@ class TestPancakeSpotRequestData:
             "asks": [["50001", "1.0"], ["50002", "2.0"]],
         }
         result, status = PancakeSpotRequestData._get_depth_normalize_function(input_data, None)
-        assert status == True
+        assert status
         assert len(result) == 1
 
     # ==================== Kline Tests ====================
@@ -113,7 +113,7 @@ class TestPancakeSpotRequestData:
         # Mock the request method
         mock_feed.request = Mock(return_value=Mock(data=Mock()))
 
-        result = mock_feed.get_kline("BTCB/USDT", "1h", 100)
+        mock_feed.get_kline("BTCB/USDT", "1h", 100)
         assert mock_feed.request.called
 
     @pytest.mark.kline
@@ -124,7 +124,7 @@ class TestPancakeSpotRequestData:
             [1234567900, "50500", "51500", "50000", "51000", "1500"],
         ]
         result, status = PancakeSpotRequestData._get_kline_normalize_function(input_data, None)
-        assert status == True
+        assert status
         assert len(result) == 2
 
     # ==================== Exchange Info Tests ====================
@@ -134,7 +134,7 @@ class TestPancakeSpotRequestData:
         # Mock the request method
         mock_feed.request = Mock(return_value=Mock(data=Mock()))
 
-        result = mock_feed.get_exchange_info()
+        mock_feed.get_exchange_info()
         assert mock_feed.request.called
 
     # ==================== Pool Tests ====================
@@ -144,7 +144,7 @@ class TestPancakeSpotRequestData:
         # Mock the request method
         mock_feed.request = Mock(return_value=Mock(data=Mock()))
 
-        result = mock_feed.get_pools(first=10, min_tvl=100000)
+        mock_feed.get_pools(first=10, min_tvl=100000)
         assert mock_feed.request.called
 
     def test_get_pool(self, mock_feed):
@@ -153,14 +153,14 @@ class TestPancakeSpotRequestData:
         mock_feed.request = Mock(return_value=Mock(data=Mock()))
 
         pool_address = "0x..."
-        result = mock_feed.get_pool(pool_address)
+        mock_feed.get_pool(pool_address)
         assert mock_feed.request.called
 
     def test_get_pool_normalize_function(self):
         """Test pool normalize function."""
         input_data = {"id": "0x...", "symbol": "BTCB/USDT", "tvl": "1000000", "volume24h": "50000"}
         result, status = PancakeSpotRequestData._get_pool_normalize_function(input_data, None)
-        assert status == True
+        assert status
         assert len(result) == 1
 
     @pytest.mark.skip(reason="Integration test - requires network access")
@@ -452,37 +452,37 @@ class TestPancakeStandardInterfaces:
         assert extra_data["exchange_name"] == "PANCAKESWAP___DEX"
 
     def test_make_order_calls_request(self, mock_feed):
-        result = mock_feed.make_order("BTCB/USDT", 1.0, 50000, "LIMIT")
+        mock_feed.make_order("BTCB/USDT", 1.0, 50000, "LIMIT")
         assert mock_feed.request.called
         extra_data = mock_feed.request.call_args[1].get("extra_data")
         assert extra_data["request_type"] == "make_order"
 
     def test_cancel_order_calls_request(self, mock_feed):
-        result = mock_feed.cancel_order("BTCB/USDT", "order_123")
+        mock_feed.cancel_order("BTCB/USDT", "order_123")
         assert mock_feed.request.called
         extra_data = mock_feed.request.call_args[1].get("extra_data")
         assert extra_data["request_type"] == "cancel_order"
 
     def test_query_order_calls_request(self, mock_feed):
-        result = mock_feed.query_order("BTCB/USDT", "order_123")
+        mock_feed.query_order("BTCB/USDT", "order_123")
         assert mock_feed.request.called
         extra_data = mock_feed.request.call_args[1].get("extra_data")
         assert extra_data["request_type"] == "query_order"
 
     def test_get_open_orders_calls_request(self, mock_feed):
-        result = mock_feed.get_open_orders("BTCB/USDT")
+        mock_feed.get_open_orders("BTCB/USDT")
         assert mock_feed.request.called
         extra_data = mock_feed.request.call_args[1].get("extra_data")
         assert extra_data["request_type"] == "get_open_orders"
 
     def test_get_account_calls_request(self, mock_feed):
-        result = mock_feed.get_account("BTCB")
+        mock_feed.get_account("BTCB")
         assert mock_feed.request.called
         extra_data = mock_feed.request.call_args[1].get("extra_data")
         assert extra_data["request_type"] == "get_account"
 
     def test_get_balance_calls_request(self, mock_feed):
-        result = mock_feed.get_balance("BTCB")
+        mock_feed.get_balance("BTCB")
         assert mock_feed.request.called
         extra_data = mock_feed.request.call_args[1].get("extra_data")
         assert extra_data["request_type"] == "get_balance"

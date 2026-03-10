@@ -3,6 +3,7 @@ KuCoin Spot trading feed implementation.
 """
 
 import uuid
+from typing import Any
 
 from bt_api_py.containers.accounts.kucoin_account import KuCoinRequestAccountData
 from bt_api_py.containers.bars.kucoin_bar import KuCoinRequestBarData

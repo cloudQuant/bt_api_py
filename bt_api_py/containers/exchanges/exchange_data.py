@@ -4,7 +4,7 @@ from typing import Any, Never
 
 
 class ExchangeData:
-    def __init__(self) -> None:
+    def __init__(self, config: dict | None = None) -> None:
         self.rate_limit_type = ""  # 频率限制类型
         self.interval = ""  # 间隔
         self.interval_num = 0  # 间隔数
@@ -39,7 +39,7 @@ class ExchangeData:
         Args:
             args: 不定参数.
         """
-        raise Exception(f"wbfAPI还未封装 {args} 接口")
+        raise NotImplementedError(f"wbfAPI还未封装 {args} 接口")
 
     def raise_timeout(self, timeout, *args) -> Never:
         """Raise 超时错误.
@@ -49,21 +49,21 @@ class ExchangeData:
             *args: Description
 
         """
-        raise Exception(f"{args} rest请求超时{timeout}s")
+        raise TimeoutError(f"{args} rest请求超时{timeout}s")
 
     def raise400(self, *args) -> Never:
         """Http 400
         Args:
             *args: Description.
         """
-        raise Exception(f"{args} rest请求返回<400>")
+        raise RuntimeError(f"{args} rest请求返回<400>")
 
     def raise_proxy_error(self, *args) -> Never:
         """代理错误
         Args:
             *args: Description.
         """
-        raise Exception(f"{args} 网络代理错误")
+        raise ConnectionError(f"{args} 网络代理错误")
 
     @staticmethod
     def update_info(exchange_info):

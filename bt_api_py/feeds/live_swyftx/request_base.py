@@ -2,6 +2,7 @@
 Swyftx REST API request base class – Feed pattern.
 """
 
+from typing import Any
 from urllib.parse import urlencode
 
 from bt_api_py.containers.exchanges.swyftx_exchange_data import SwyftxExchangeDataSpot
@@ -118,9 +119,7 @@ class SwyftxRequestData(Feed):
     def _is_error(data: Any) -> None:
         if data is None:
             return True
-        if isinstance(data, dict) and ("error" in data or "errors" in data):
-            return True
-        return False
+        return bool(isinstance(data, dict) and ("error" in data or "errors" in data))
 
     # ── _get_xxx internal methods ───────────────────────────────
 

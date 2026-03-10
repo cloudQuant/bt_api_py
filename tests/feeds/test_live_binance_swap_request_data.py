@@ -4,8 +4,6 @@ import time
 
 import pytest
 
-pytestmark = [pytest.mark.integration, pytest.mark.network]
-
 from bt_api_py.containers.accounts.binance_account import BinanceSwapRequestAccountData
 from bt_api_py.containers.balances.binance_balance import BinanceSwapRequestBalanceData
 from bt_api_py.containers.bars.binance_bar import BinanceRequestBarData
@@ -22,6 +20,8 @@ from bt_api_py.containers.requestdatas.request_data import RequestData
 from bt_api_py.containers.tickers.binance_ticker import BinanceRequestTickerData
 from bt_api_py.feeds.live_binance_feed import BinanceRequestDataSwap
 from bt_api_py.functions.utils import read_account_config
+
+pytestmark = [pytest.mark.integration, pytest.mark.network]
 
 
 def generate_kwargs(exchange=BinanceExchangeDataSwap):
@@ -55,7 +55,7 @@ def test_binance_req_server_time():
     data = live_binance_swap_feed.get_server_time()
     assert isinstance(data, RequestData)
     current_timestamp = time.time()
-    current_timestamp_utc = time.mktime(time.gmtime())
+    time.mktime(time.gmtime())
     server_time = data.get_data()["serverTime"]
     # print(f"Server time: {server_time}, current timestamp: {current_timestamp}, "
     #       f"current timestamp_utc: {current_timestamp_utc}")
@@ -386,7 +386,7 @@ def binance_make_order_and_cancel_order():
     while lots * bid_price < 10:
         lots += 1
     # https://fapi.binance.com/fapi/v1/order?recvWindow=3000&timestamp=1708936750172&symbol=OPUSDT&side=BUY&quantity=2&price=3.5&type=LIMIT&timeInForce=GTC&positionSide=LONG&signature=72803587914b786ba57b9dccbf5b83c5dfc5c10da9d138c2dfc0bd6f105f7bcf
-    buy_data = live_binance_swap_feed.make_order(
+    live_binance_swap_feed.make_order(
         "OP-USDT",
         lots,
         bid_price,
@@ -397,14 +397,12 @@ def binance_make_order_and_cancel_order():
     # print("make_order info", buy_data.get_data())
     # "https://fapi.binance.com/fapi/v1/order?recvWindow=3000&timestamp=1708936667118&symbol=OPUSDT&orderId=9106714922&signature=69492a311ad22b37710e029a4e317ac5a7f43f7beadfdfba2caa20baf19a9a6b"
     # 查询订单信息
-    query_data = live_binance_swap_feed.query_order(
-        symbol="OP-USDT", client_order_id=buy_client_order_id
-    )
+    live_binance_swap_feed.query_order(symbol="OP-USDT", client_order_id=buy_client_order_id)
     # print("query_order", query_data.get_data())
     # get_open_orders
-    open_order_data = live_binance_swap_feed.get_open_orders(symbol="OP-USDT")
+    live_binance_swap_feed.get_open_orders(symbol="OP-USDT")
     # print("get_open_orders: ", open_order_data.get_data())
-    cancel_order_data = live_binance_swap_feed.cancel_order(
+    live_binance_swap_feed.cancel_order(
         "OP-USDT", order_id=None, client_order_id=buy_client_order_id
     )
     # print("cancel_order info", cancel_order_data.get_data())

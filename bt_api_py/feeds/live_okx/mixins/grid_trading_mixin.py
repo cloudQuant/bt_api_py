@@ -3,6 +3,8 @@ OKX API - GridTradingMixin
 Auto-generated from request_base.py
 """
 
+from typing import Any
+
 from bt_api_py.feeds.live_okx.mixins.normalizers import generic_normalize_function
 from bt_api_py.functions.utils import update_extra_data
 

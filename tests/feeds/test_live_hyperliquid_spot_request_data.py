@@ -9,8 +9,6 @@ from unittest.mock import Mock, patch
 
 import pytest
 
-pytestmark = [pytest.mark.integration, pytest.mark.network]
-
 from bt_api_py.containers.accounts.hyperliquid_account import HyperliquidSpotWssAccountData
 from bt_api_py.containers.balances.hyperliquid_balance import HyperliquidSpotRequestBalanceData
 from bt_api_py.containers.exchanges.hyperliquid_exchange_data import HyperliquidExchangeDataSpot
@@ -19,6 +17,8 @@ from bt_api_py.containers.requestdatas.request_data import RequestData
 from bt_api_py.containers.tickers.hyperliquid_ticker import HyperliquidTickerData
 from bt_api_py.feeds.live_hyperliquid_feed import HyperliquidRequestDataSpot
 from bt_api_py.functions.utils import read_account_config
+
+pytestmark = [pytest.mark.integration, pytest.mark.network]
 
 
 def generate_kwargs():
@@ -85,7 +85,7 @@ def test_hyperliquid_get_spot_meta():
     print("spot_meta_data:", result)
     # Verify result structure
     if result:
-        assert isinstance(result, list) or isinstance(result, dict)
+        assert isinstance(result, (list, dict))
 
 
 # ==================== Ticker Tests ====================

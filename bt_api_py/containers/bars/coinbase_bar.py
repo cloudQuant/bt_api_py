@@ -7,6 +7,9 @@ import time
 
 from bt_api_py.containers.bars.bar import BarData
 from bt_api_py.functions.utils import from_dict_get_float
+from bt_api_py.logging_factory import get_logger
+
+logger = get_logger("container")
 
 
 class CoinbaseBarData(BarData):
@@ -153,7 +156,8 @@ class CoinbaseRequestBarData(CoinbaseBarData):
                 self.close = float(self.bar_data[4])
                 self.volume = float(self.bar_data[5])
         except Exception as e:
-            print(f"Error parsing bar data: {e}")
+            logger.error(f"Error parsing bar data: {e}", exc_info=True)
+
             self.bar_data = {}
         self.has_been_init_data = True
         return self

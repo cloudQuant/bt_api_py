@@ -12,7 +12,7 @@ import uuid
 from contextvars import ContextVar
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
-from typing import Any, Dict, Optional, Union
+from typing import Any, Optional, Union
 
 # Context variables for correlation tracking
 correlation_id_var: ContextVar[str | None] = ContextVar("correlation_id", default=None)
@@ -415,12 +415,12 @@ class LoggingManager:
         """Generate a new correlation ID."""
         return str(uuid.uuid4())
 
-    def with_correlation_id(self, correlation_id: str) -> None:
+    def with_correlation_id(self, correlation_id: str) -> "_CorrelationIdContext":
         """Context manager for setting correlation ID."""
-        return _correlation_id_context(correlation_id)
+        return _CorrelationIdContext(correlation_id)
 
 
-class _correlation_id_context:
+class _CorrelationIdContext:
     """Context manager for correlation ID."""
 
     def __init__(self, correlation_id: str) -> None:

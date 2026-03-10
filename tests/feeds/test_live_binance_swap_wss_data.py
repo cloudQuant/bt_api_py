@@ -4,8 +4,6 @@ import time
 
 import pytest
 
-pytestmark = [pytest.mark.integration, pytest.mark.network]
-
 # from bt_api_py.containers.positions.binance_position import BinanceWssPositionData
 from test_live_binance_swap_request_data import init_req_feed
 
@@ -20,6 +18,8 @@ from bt_api_py.containers.tickers.binance_ticker import BinanceWssTickerData
 from bt_api_py.containers.trades.binance_trade import BinanceAggTradeData
 from bt_api_py.feeds.live_binance_feed import BinanceAccountWssDataSwap, BinanceMarketWssDataSwap
 from bt_api_py.functions.utils import read_account_config
+
+pytestmark = [pytest.mark.integration, pytest.mark.network]
 
 
 def _make_wss_kwargs(topics, wss_name="test_market_data"):
@@ -71,7 +71,6 @@ def test_binance_wss_data_feed():
     receive_binance_order_book_data = False
     receive_binance_mark_price_data = False
     receive_binance_funding_rate_data = False
-    receive_binance_force_order_data = False
     receive_binance_agg_trade_data = False
     for data in items:
         if isinstance(data, BinanceWssBarData):
@@ -85,7 +84,6 @@ def test_binance_wss_data_feed():
         if isinstance(data, BinanceWssMarkPriceData):
             receive_binance_mark_price_data = True
         if isinstance(data, BinanceForceOrderData):
-            receive_binance_force_order_data = True
             data.init_data()
             print(data.get_all_data())
         if isinstance(data, BinanceAggTradeData):
@@ -283,7 +281,6 @@ def test_get_binance_account_data_feed():
     }
     BinanceAccountWssDataSwap(data_queue, **kwargs).start()
     time.sleep(3)
-    receive_binance_account_data = False
     # receive_binance_position_data = False
     receive_binance_order_data = False
     # 下单撤单测试订单功能
@@ -340,7 +337,7 @@ def test_get_binance_account_data_feed():
         if count > 10000:
             break
         if isinstance(data, BinanceSwapWssAccountData):
-            receive_binance_account_data = True
+            pass
         # if isinstance(data, BinancePositionData):
         #     receive_binance_position_data = True
         if isinstance(data, BinanceSwapWssOrderData):

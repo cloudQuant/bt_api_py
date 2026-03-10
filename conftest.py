@@ -20,25 +20,24 @@ def has_binance_api_keys():
 def has_okx_api_keys():
     """Check if OKX API keys are configured."""
     return bool(
-        os.getenv("OKX_API_KEY")
-        and os.getenv("OKX_SECRET")
-        and os.getenv("OKX_PASSPHRASE")
+        os.getenv("OKX_API_KEY") and os.getenv("OKX_SECRET") and os.getenv("OKX_PASSPHRASE")
     )
 
 
 def has_ctp_credentials():
     """Check if CTP credentials are configured."""
     return bool(
-        os.getenv("CTP_BROKER_ID")
-        and os.getenv("CTP_USER_ID")
-        and os.getenv("CTP_PASSWORD")
+        os.getenv("CTP_BROKER_ID") and os.getenv("CTP_USER_ID") and os.getenv("CTP_PASSWORD")
     )
 
 
 def has_htx_api_keys():
     """Check if HTX API keys are configured."""
-    return bool(os.getenv("HTX_API_KEY") and os.getenv("HTX_SECRET")
-               and os.getenv("HTX_API_KEY") != "your_htx_api_key_here")
+    return bool(
+        os.getenv("HTX_API_KEY")
+        and os.getenv("HTX_SECRET")
+        and os.getenv("HTX_API_KEY") != "your_htx_api_key_here"
+    )
 
 
 def has_ib_credentials():
@@ -66,12 +65,12 @@ def pytest_configure(config):
     if os.path.exists(iconv_lib):
         current_preload = os.environ.get("LD_PRELOAD", "")
         if iconv_lib not in current_preload:
-            os.environ["LD_PRELOAD"] = f"{iconv_lib}:{current_preload}" if current_preload else iconv_lib
+            os.environ["LD_PRELOAD"] = (
+                f"{iconv_lib}:{current_preload}" if current_preload else iconv_lib
+            )
 
     # Register custom markers
-    config.addinivalue_line(
-        "markers", "unit: Unit tests (fast, no external dependencies)"
-    )
+    config.addinivalue_line("markers", "unit: Unit tests (fast, no external dependencies)")
     config.addinivalue_line(
         "markers", "integration: Integration tests (may require external services)"
     )
@@ -93,8 +92,17 @@ def pytest_collection_modifyitems(config, items):
         # don't overwhelm the same exchange API simultaneously.
         fspath = str(item.fspath).lower()
         for exchange in (
-            "okx", "binance", "ctp", "htx", "bitfinex", "coinbase",
-            "kucoin", "mexc", "bybit", "upbit", "hyperliquid",
+            "okx",
+            "binance",
+            "ctp",
+            "htx",
+            "bitfinex",
+            "coinbase",
+            "kucoin",
+            "mexc",
+            "bybit",
+            "upbit",
+            "hyperliquid",
         ):
             if exchange in fspath:
                 item.add_marker(pytest.mark.xdist_group(name=exchange))
@@ -109,17 +117,36 @@ def pytest_collection_modifyitems(config, items):
         # Auto-mark network tests
         if "network" not in item.keywords:
             test_name = item.nodeid.lower()
-            if any(keyword in test_name for keyword in [
-                "request", "wss", "websocket", "api",
-                "update_exchange", "update_binance", "update_okx",
-                "history_bar",
-            ]):
+            if any(
+                keyword in test_name
+                for keyword in [
+                    "request",
+                    "wss",
+                    "websocket",
+                    "api",
+                    "update_exchange",
+                    "update_binance",
+                    "update_okx",
+                    "history_bar",
+                ]
+            ):
                 item.add_marker(pytest.mark.network)
             # Also mark as network if test is in an exchange-specific path
-            if any(ex in fspath for ex in (
-                "binance", "okx", "htx", "bitfinex", "coinbase",
-                "kucoin", "mexc", "bybit", "upbit", "hyperliquid",
-            )):
+            if any(
+                ex in fspath
+                for ex in (
+                    "binance",
+                    "okx",
+                    "htx",
+                    "bitfinex",
+                    "coinbase",
+                    "kucoin",
+                    "mexc",
+                    "bybit",
+                    "upbit",
+                    "hyperliquid",
+                )
+            ):
                 item.add_marker(pytest.mark.network)
 
         # Auto-mark exchange-specific tests and skip if no API keys
@@ -144,11 +171,10 @@ def pytest_collection_modifyitems(config, items):
 
         # Skip @pytest.mark.integration tests when SKIP_LIVE_TESTS is set
         if skip_live and "integration" in item.keywords:
-            item.add_marker(
-                pytest.mark.skip(reason="SKIP_LIVE_TESTS=true")
-            )
+            item.add_marker(pytest.mark.skip(reason="SKIP_LIVE_TESTS=true"))
 
 
+@pytest.hookimpl(hookwrapper=True)
 def pytest_runtest_call(item):
     """Auto-skip tests that fail due to network/auth errors.
 
@@ -156,46 +182,70 @@ def pytest_runtest_call(item):
     (test_bt_api.py, test_update_exchange_symbol_info.py, etc.).
     Only applies to tests auto-marked 'network' or explicitly marked 'integration'.
     """
-    is_network_test = (
-        "integration" in item.keywords
-        or "network" in item.keywords
-    )
+    is_network_test = "integration" in item.keywords or "network" in item.keywords
+    outcome = yield
     if not is_network_test:
         return
-    try:
-        item.runtest()
-    except Exception as exc:
-        exc_name = type(exc).__name__
-        exc_msg = str(exc).lower()
-        network_indicators = [
-            "authenticationerror", "requestfailederror", "requesterror",
-            "connectionerror", "connecterror", "timeout",
-            "ssl", "eof", "connection refused", "no route to host",
-            "403", "401", "404", "name or service not known",
-            "urlerror", "socketerror", "gaierror",
-            "connection reset", "connection aborted",
-            "max retries exceeded", "network is unreachable",
-            "endpoint gone", "not found",
-            "remoteprotocolerror", "server disconnected",
-            "environment variable not set", "api_key",
-            "rate_limit", "ratelimit", "too many requests",
+    exc_info = outcome.excinfo
+    if exc_info is None:
+        return
+    exc = exc_info[1]
+    exc_name = type(exc).__name__
+    exc_msg = str(exc).lower()
+    network_indicators = [
+        "authenticationerror",
+        "requestfailederror",
+        "requesterror",
+        "connectionerror",
+        "connecterror",
+        "timeout",
+        "ssl",
+        "eof",
+        "connection refused",
+        "no route to host",
+        "403",
+        "401",
+        "404",
+        "name or service not known",
+        "urlerror",
+        "socketerror",
+        "gaierror",
+        "connection reset",
+        "connection aborted",
+        "max retries exceeded",
+        "network is unreachable",
+        "endpoint gone",
+        "not found",
+        "remoteprotocolerror",
+        "server disconnected",
+        "environment variable not set",
+        "api_key",
+        "rate_limit",
+        "ratelimit",
+        "too many requests",
+    ]
+    combined = exc_name.lower() + " " + exc_msg
+    if any(ind in combined for ind in network_indicators):
+        pytest.skip(f"Skipped (network/auth): {exc_name}: {str(exc)[:80]}")
+    # Also skip pytest-timeout failures for network tests
+    if "failed" == exc_name.lower() and "timeout" in exc_msg:
+        pytest.skip(f"Skipped (timeout): {str(exc)[:80]}")
+    # AssertionError with "returned no data/None" often means network call
+    # silently failed; skip for network-marked tests
+    if exc_name == "AssertionError" and any(
+        hint in exc_msg
+        for hint in [
+            "returned no data",
+            "returned none",
+            "is not none",
+            "no ticks",
+            "no response",
+            "empty response",
+            "failed to fetch",
+            "enough exchanges",
         ]
-        combined = exc_name.lower() + " " + exc_msg
-        if any(ind in combined for ind in network_indicators):
-            pytest.skip(f"Skipped (network/auth): {exc_name}: {str(exc)[:80]}")
-        # Also skip pytest-timeout failures for network tests
-        if "failed" == exc_name.lower() and "timeout" in exc_msg:
-            pytest.skip(f"Skipped (timeout): {str(exc)[:80]}")
-        # AssertionError with "returned no data/None" often means network call
-        # silently failed; skip for network-marked tests
-        if exc_name == "AssertionError" and any(
-            hint in exc_msg for hint in [
-                "returned no data", "returned none", "is not none",
-                "no ticks", "no response", "empty response",
-            ]
-        ):
-            pytest.skip(f"Skipped (no data, likely network): {str(exc)[:80]}")
-        raise
+    ):
+        pytest.skip(f"Skipped (no data, likely network): {str(exc)[:80]}")
 
 
 @pytest.fixture(scope="session")

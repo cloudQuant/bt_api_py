@@ -1,5 +1,3 @@
-import pytest
-
 """
 Phemex Exchange Live Request Data Tests
 
@@ -11,6 +9,8 @@ Tests for Phemex spot trading implementation following Binance/OKX standards:
 """
 
 import queue
+
+import pytest
 
 # Import registration to auto-register Phemex
 import bt_api_py.exchange_registers.register_phemex  # noqa: F401
@@ -81,7 +81,7 @@ def test_phemex_tick_normalize_function():
 def test_phemex_async_tick_data():
     """Test Phemex ticker data retrieval (asynchronous)."""
     data_queue = queue.Queue()
-    live_phemex_spot_feed = init_async_feed(data_queue)
+    init_async_feed(data_queue)
 
     # Note: Phemex's current implementation uses sync requests
     # This test would require async implementation
@@ -146,7 +146,7 @@ def test_phemex_kline_normalize_function():
 def test_phemex_async_kline_data():
     """Test Phemex kline data retrieval (asynchronous)."""
     data_queue = queue.Queue()
-    live_phemex_spot_feed = init_async_feed(data_queue)
+    init_async_feed(data_queue)
 
     # Note: Phemex's current implementation uses sync requests
     # This test would require async implementation

@@ -50,7 +50,9 @@ def get_cookies_from_browser(
     try:
         import browser_cookie3
     except ImportError:
-        raise ImportError("browser-cookie3 is required. Install: pip install browser-cookie3")
+        raise ImportError(
+            "browser-cookie3 is required. Install: pip install browser-cookie3"
+        ) from None
 
     cookie_jar = None
     domain_parts = domain.split(":")[0]  # 去掉端口号

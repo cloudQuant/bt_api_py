@@ -4,6 +4,9 @@ import time
 from typing import Any
 
 from bt_api_py.containers.orders.order import OrderData
+from bt_api_py.logging_factory import get_logger
+
+logger = get_logger("container")
 
 
 class BybitOrderData(OrderData):
@@ -97,7 +100,8 @@ class BybitOrderData(OrderData):
             self.has_been_init_data = True
 
         except Exception as e:
-            print(f"Error parsing Bybit order data: {e}")
+            logger.error(f"Error parsing Bybit order data: {e}", exc_info=True)
+
             self.has_been_init_data = False
         return self
 
@@ -137,7 +141,8 @@ class BybitOrderData(OrderData):
             self.has_been_init_data = True
 
         except Exception as e:
-            print(f"Error parsing Bybit order data: {e}")
+            logger.error(f"Error parsing Bybit order data: {e}", exc_info=True)
+
             self.has_been_init_data = False
         return self
 
@@ -223,6 +228,125 @@ class BybitOrderData(OrderData):
             f"qty={self.qty}, "
             f"filled={self.filled_qty})"
         )
+
+    def get_order_id(self) -> str | None:
+        """Get order ID.
+
+        Returns:
+            Order ID or None
+        """
+        self.init_data()
+        return self.order_id
+
+    def get_client_order_id(self) -> str | None:
+        """Get client order ID.
+
+        Returns:
+            Client order ID or None
+        """
+        self.init_data()
+        return self.order_link_id
+
+    def get_order_status(self):
+        """Get order status.
+
+        Returns:
+            OrderStatus enum value
+        """
+        from bt_api_py.containers.orders.order import OrderStatus
+
+        self.init_data()
+        if not self.status:
+            return None
+        status_map = {
+            "New": OrderStatus.ACCEPTED,
+            "PartiallyFilled": OrderStatus.PARTIAL,
+            "Filled": OrderStatus.COMPLETED,
+            "Cancelled": OrderStatus.CANCELED,
+            "Rejected": OrderStatus.REJECTED,
+            "Expired": OrderStatus.EXPIRED,
+        }
+        return status_map.get(self.status, OrderStatus.REJECTED)
+
+    def get_order_side(self) -> str | None:
+        """Get order side.
+
+        Returns:
+            Order side (Buy/Sell) or None
+        """
+        self.init_data()
+        return self.side.upper() if self.side else None
+
+    def get_order_type(self) -> str | None:
+        """Get order type.
+
+        Returns:
+            Order type or None
+        """
+        self.init_data()
+        return self.order_type.upper() if self.order_type else None
+
+    def get_order_price(self) -> float | None:
+        """Get order price.
+
+        Returns:
+            Order price or None
+        """
+        self.init_data()
+        return float(self.price) if self.price else None
+
+    def get_order_size(self) -> float | None:
+        """Get order size/quantity.
+
+        Returns:
+            Order size or None
+        """
+        self.init_data()
+        return float(self.qty) if self.qty else None
+
+    def get_executed_qty(self) -> float | None:
+        """Get executed quantity.
+
+        Returns:
+            Executed quantity or None
+        """
+        self.init_data()
+        return float(self.filled_qty) if self.filled_qty else 0.0
+
+    def get_remaining_qty(self) -> float | None:
+        """Get remaining quantity.
+
+        Returns:
+            Remaining quantity or None
+        """
+        self.init_data()
+        return float(self.remaining_qty) if self.remaining_qty else None
+
+    def get_order_avg_price(self) -> float | None:
+        """Get average execution price.
+
+        Returns:
+            Average price or None
+        """
+        self.init_data()
+        return float(self.avg_price) if self.avg_price else None
+
+    def get_order_time_in_force(self) -> str | None:
+        """Get time in force.
+
+        Returns:
+            Time in force or None
+        """
+        self.init_data()
+        return self.time_in_force
+
+    def get_order_symbol_name(self) -> str:
+        """Get symbol name.
+
+        Returns:
+            Symbol name
+        """
+        return self.symbol_name
 
 
 class BybitSpotOrderData(BybitOrderData):

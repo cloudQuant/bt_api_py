@@ -172,10 +172,7 @@ class OkxExchangeData(ExchangeData):
             symbol = kwargs.get("symbol", "")
             # print("symbol", symbol, "k = ", k, "v = ", v)
             req["args"][0][k] = req["args"][0][k].replace("<symbol>", symbol)
-            if "USDT" in symbol:
-                currency = symbol.split("-")[1]  # self.symbol.split("-")[0] + "-" +
-            else:
-                currency = symbol.split("-")[0]
+            currency = symbol.split("-")[1] if "USDT" in symbol else symbol.split("-")[0]
             req["args"][0][k] = req["args"][0][k].replace("<currency>", currency)
             req["args"][0][k] = req["args"][0][k].replace("<period>", kwargs.get("period", ""))
         req = json.dumps(req)

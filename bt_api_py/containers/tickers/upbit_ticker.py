@@ -1,8 +1,12 @@
 import json
 import time
+from typing import Any, Self
 
 from bt_api_py.containers.tickers.ticker import TickerData
 from bt_api_py.functions.utils import from_dict_get_float, from_dict_get_string
+from bt_api_py.logging_factory import get_logger
+
+logger = get_logger("container")
 
 
 class UpbitTickerData(TickerData):
@@ -87,7 +91,7 @@ class UpbitTickerData(TickerData):
             self.has_been_init_data = True
 
         except Exception as e:
-            print(f"Error initializing Upbit ticker data: {e}")
+            logger.error(f"Error initializing Upbit ticker data: {e}", exc_info=True)
 
     def get_exchange_name(self) -> str:
         """获取交易所名称."""

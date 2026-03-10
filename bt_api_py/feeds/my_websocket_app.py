@@ -1,11 +1,10 @@
-from typing import Any
-
 import datetime
 import random
 import ssl
 import threading
 import time
 import traceback
+from typing import Any
 
 import websocket
 

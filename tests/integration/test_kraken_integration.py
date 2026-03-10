@@ -157,7 +157,7 @@ def test_registration():
         from bt_api_py.registry import get_feed
 
         # Try to get Kraken feed (this will fail if not registered)
-        feed = get_feed("KRKEN___SPOT", None, api_key="dummy", api_secret="dummy")
+        get_feed("KRKEN___SPOT", None, api_key="dummy", api_secret="dummy")
         print("✓ KrakenSpotFeed found in registry")
 
         pass

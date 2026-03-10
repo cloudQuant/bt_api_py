@@ -15,8 +15,6 @@ import time
 
 import pytest
 
-pytestmark = [pytest.mark.integration, pytest.mark.network]
-
 from bt_api_py.containers.assets.okx_asset import OkxDepositInfoData, OkxWithdrawalInfoData
 from bt_api_py.containers.exchanges.okx_exchange_data import OkxExchangeDataSwap
 from bt_api_py.containers.liquidations.okx_liquidation_order import OkxLiquidationOrderData
@@ -26,6 +24,8 @@ from bt_api_py.containers.pricelimits.okx_price_limit import OkxPriceLimitData
 from bt_api_py.containers.trades.okx_market_trade import OkxMarketTradeData
 from bt_api_py.feeds.live_okx_feed import OkxMarketWssDataSwap
 from bt_api_py.functions.utils import read_account_config
+
+pytestmark = [pytest.mark.integration, pytest.mark.network]
 
 
 def generate_kwargs():
@@ -57,16 +57,12 @@ def test_okx_books_l2_tbt_channel():
     OkxMarketWssDataSwap(data_queue, **kwargs).start()
     time.sleep(5)  # Wait for data
 
-    received_books_l2 = False
-    received_any_data = False
     count = 0
     while count < 100:
         try:
             data = data_queue.get(timeout=0.5)
-            received_any_data = True
             print(f"Received data type: {type(data).__name__}")
             if isinstance(data, OkxL2OrderBookData):
-                received_books_l2 = True
                 # Verify the data structure
                 data.init_data()
                 assert data.get_exchange_name() == "OKX"
@@ -181,13 +177,11 @@ def test_okx_open_interest_channel():
     OkxMarketWssDataSwap(data_queue, **kwargs).start()
     time.sleep(5)
 
-    received_oi = False
     count = 0
     while count < 100:
         try:
             data = data_queue.get(timeout=0.5)
             if isinstance(data, OkxOpenInterestData):
-                received_oi = True
                 data.init_data()
                 assert data.get_exchange_name() == "OKX"
                 assert data.get_open_interest() >= 0
@@ -220,13 +214,11 @@ def test_okx_price_limit_channel():
     OkxMarketWssDataSwap(data_queue, **kwargs).start()
     time.sleep(5)
 
-    received_price_limit = False
     count = 0
     while count < 100:
         try:
             data = data_queue.get(timeout=0.5)
             if isinstance(data, OkxPriceLimitData):
-                received_price_limit = True
                 data.init_data()
                 assert data.get_exchange_name() == "OKX"
                 assert data.get_buy_limit() > 0
@@ -306,26 +298,20 @@ def test_okx_multiple_market_channels():
     OkxMarketWssDataSwap(data_queue, **kwargs).start()
     time.sleep(5)
 
-    received_books_l2 = False
     received_trades = False
-    received_oi = False
-    received_price_limit = False
 
     count = 0
     while count < 200:
         try:
             data = data_queue.get(timeout=0.5)
             if isinstance(data, OkxL2OrderBookData):
-                received_books_l2 = True
                 print("Received books-l2-tbt in multi-channel test")
             elif isinstance(data, OkxMarketTradeData):
                 received_trades = True
                 print("Received trade in multi-channel test")
             elif isinstance(data, OkxOpenInterestData):
-                received_oi = True
                 print("Received open interest in multi-channel test")
             elif isinstance(data, OkxPriceLimitData):
-                received_price_limit = True
                 print("Received price limit in multi-channel test")
 
             if received_trades:
@@ -362,13 +348,13 @@ if __name__ == "__main__":
     test_okx_multiple_market_channels()
     print("test_okx_multiple_market_channels passed")
 
-    test_okx_economic_calendar_channel()
+    test_okx_economic_calendar_channel()  # noqa: F821
     print("test_okx_economic_calendar_channel passed")
 
-    test_okx_deposit_info_channel()
+    test_okx_deposit_info_channel()  # noqa: F821
     print("test_okx_deposit_info_channel passed")
 
-    test_okx_withdrawal_info_channel()
+    test_okx_withdrawal_info_channel()  # noqa: F821
     print("test_okx_withdrawal_info_channel passed")
 
     print("\nAll tests passed!")

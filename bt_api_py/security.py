@@ -146,10 +146,7 @@ class SecureCredentialManager:
 
         # Check for common placeholder values
         placeholders = ["your_api_key", "api_key_here", "placeholder", "example"]
-        if api_key.lower() in placeholders:
-            return False
-
-        return True
+        return api_key.lower() not in placeholders
 
     def get_exchange_credentials(self, exchange: str, encrypted: bool = False) -> dict[str, Any]:
         """

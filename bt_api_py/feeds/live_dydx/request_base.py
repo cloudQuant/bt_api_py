@@ -4,6 +4,7 @@ Handles authentication, signing, and all REST API methods.
 dYdX is a decentralized exchange, so authentication uses wallet signatures.
 """
 
+from typing import Any
 from urllib.parse import urlencode
 
 from bt_api_py.containers.exchanges.dydx_exchange_data import DydxExchangeDataSwap

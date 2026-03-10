@@ -299,10 +299,7 @@ class AccessControlManager:
                 return True
 
         # Check attribute-based permissions
-        if context and self._check_abac_rules(user, resource, action, level, context):
-            return True
-
-        return False
+        return bool(context and self._check_abac_rules(user, resource, action, level, context))
 
     def _check_abac_rules(
         self,
@@ -316,19 +313,20 @@ class AccessControlManager:
         # Example ABAC rules
 
         # Rule 1: Users can only access their own trading accounts during business hours
-        if resource == Resource.TRADING_ACCOUNTS:
-            if "account_owner" in user.attributes:
-                import datetime
+        if resource == Resource.TRADING_ACCOUNTS and "account_owner" in user.attributes:
+            import datetime
 
-                now = datetime.datetime.fromtimestamp(context.timestamp)
-                if 9 <= now.hour <= 17:  # Business hours
-                    return True
+            now = datetime.datetime.fromtimestamp(context.timestamp)
+            if 9 <= now.hour <= 17:  # Business hours
+                return True
 
         # Rule 2: IP-based restrictions for sensitive operations
-        if resource in [Resource.API_KEYS, Resource.SECURITY_CONFIG]:
-            if "allowed_ips" in user.attributes:
-                if context.ip_address not in user.attributes["allowed_ips"]:
-                    return False
+        if (
+            resource in [Resource.API_KEYS, Resource.SECURITY_CONFIG]
+            and "allowed_ips" in user.attributes
+            and context.ip_address not in user.attributes["allowed_ips"]
+        ):
+            return False
 
         # Rule 3: Time-based restrictions for admin operations
         if level >= PermissionLevel.ADMIN:

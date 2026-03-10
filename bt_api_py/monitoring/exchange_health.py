@@ -5,6 +5,7 @@ Provides health checks and status monitoring for exchange connections.
 """
 
 import asyncio
+import contextlib
 import time
 from collections import deque
 from dataclasses import dataclass, field
@@ -283,10 +284,8 @@ class ExchangeHealthMonitor:
         self._running = False
         if self._task:
             self._task.cancel()
-            try:
+            with contextlib.suppress(asyncio.CancelledError):
                 await self._task
-            except asyncio.CancelledError:
-                pass
             self._task = None
 
     async def _monitoring_loop(self) -> None:

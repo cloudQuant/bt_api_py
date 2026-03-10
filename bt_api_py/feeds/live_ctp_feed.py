@@ -47,6 +47,9 @@ CTP_DIRECTION_FLAG = {
 }
 
 
+_ctp_field_logger = get_logger("ctp_field_converter")
+
+
 def _ctp_field_to_dict(field):
     """将 CTP SPI 回调的 field 对象转为 dict，方便 Container 解析
     CTP SWIG 生成的对象支持属性访问，遍历常用字段提取值
@@ -62,8 +65,10 @@ def _ctp_field_to_dict(field):
             val = getattr(field, attr)
             if not callable(val):
                 result[attr] = val
-        except Exception:
-            pass
+        except Exception as e:
+            _ctp_field_logger.debug(
+                f"Failed to access CTP field attribute '{attr}': {e}", exc_info=False
+            )
     return result
 
 

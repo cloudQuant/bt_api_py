@@ -2,6 +2,8 @@
 Swyftx Spot Feed – three-layer sync / async wrappers + WSS stubs.
 """
 
+from typing import Any
+
 from bt_api_py.containers.exchanges.swyftx_exchange_data import SwyftxExchangeDataSpot
 from bt_api_py.feeds.live_swyftx.request_base import SwyftxRequestData
 from bt_api_py.logging_factory import get_logger

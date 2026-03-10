@@ -202,8 +202,8 @@ class GrafanaDashboardBuilder:
                     }
                 },
                 "yAxes": [
-                    {"min": 0, "max": null, "format": "short"},
-                    {"min": 0, "max": null, "format": "short"},
+                    {"min": 0, "max": None, "format": "short"},
+                    {"min": 0, "max": None, "format": "short"},
                 ],
             }
         )

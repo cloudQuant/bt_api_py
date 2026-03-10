@@ -9,19 +9,18 @@ from unittest.mock import MagicMock, Mock, patch
 
 import pytest
 
-
-class MockRaydiumChain(str, Enum):
-    """Mock RaydiumChain for testing."""
-
-    SOLANA = "SOLANA"
-
-
 from bt_api_py.containers.exchanges.raydium_exchange_data import (
     RaydiumChain,
     RaydiumExchangeDataSpot,
 )
 from bt_api_py.containers.requestdatas.request_data import RequestData
 from bt_api_py.feeds.live_raydium.spot import RaydiumRequestDataSpot
+
+
+class MockRaydiumChain(str, Enum):
+    """Mock RaydiumChain for testing."""
+
+    SOLANA = "SOLANA"
 
 
 class TestRaydiumRequestDataSpot:
@@ -89,7 +88,7 @@ class TestRaydiumRequestDataSpot:
             ],
         }
         result, status = RaydiumRequestDataSpot._get_pools_normalize_function(input_data, None)
-        assert status == True
+        assert status
         assert len(result) == 2
 
     # ==================== Pool Detail Tests ====================
@@ -110,7 +109,7 @@ class TestRaydiumRequestDataSpot:
             "data": [{"id": "pool123", "name": "Test Pool", "tvl": 100000}],
         }
         result, status = RaydiumRequestDataSpot._get_pool_normalize_function(input_data, None)
-        assert status == True
+        assert status
         assert len(result) == 1
 
     # ==================== Ticker Tests ====================
@@ -131,7 +130,7 @@ class TestRaydiumRequestDataSpot:
         """Test tick normalize function."""
         input_data = {"success": True, "data": [{"id": "pool1", "name": "SOL/USDC", "price": 100}]}
         result, status = RaydiumRequestDataSpot._get_tick_normalize_function(input_data, None)
-        assert status == True
+        assert status
         assert len(result) == 1
 
     # ==================== Depth Tests ====================
@@ -150,7 +149,7 @@ class TestRaydiumRequestDataSpot:
         """Test depth normalize function."""
         input_data = {"success": True, "data": [{"id": "pool1", "liquidity": "1000000"}]}
         result, status = RaydiumRequestDataSpot._get_depth_normalize_function(input_data, None)
-        assert status == True
+        assert status
         assert len(result) == 1
 
     # ==================== Mint Prices Tests ====================
@@ -170,7 +169,7 @@ class TestRaydiumRequestDataSpot:
         result, status = RaydiumRequestDataSpot._get_mint_prices_normalize_function(
             input_data, None
         )
-        assert status == True
+        assert status
         assert len(result) == 2
 
     # ==================== Exchange Info Tests ====================
@@ -283,37 +282,37 @@ class TestRaydiumStandardInterfaces:
             return instance
 
     def test_make_order_calls_request(self, raydium_spot):
-        result = raydium_spot.make_order("SOL/USDC", 1.0, 100, "LIMIT")
+        raydium_spot.make_order("SOL/USDC", 1.0, 100, "LIMIT")
         assert raydium_spot.request.called
         extra_data = raydium_spot.request.call_args[1].get("extra_data")
         assert extra_data["request_type"] == "make_order"
 
     def test_cancel_order_calls_request(self, raydium_spot):
-        result = raydium_spot.cancel_order("SOL/USDC", "order_123")
+        raydium_spot.cancel_order("SOL/USDC", "order_123")
         assert raydium_spot.request.called
         extra_data = raydium_spot.request.call_args[1].get("extra_data")
         assert extra_data["request_type"] == "cancel_order"
 
     def test_query_order_calls_request(self, raydium_spot):
-        result = raydium_spot.query_order("SOL/USDC", "order_123")
+        raydium_spot.query_order("SOL/USDC", "order_123")
         assert raydium_spot.request.called
         extra_data = raydium_spot.request.call_args[1].get("extra_data")
         assert extra_data["request_type"] == "query_order"
 
     def test_get_open_orders_calls_request(self, raydium_spot):
-        result = raydium_spot.get_open_orders("SOL/USDC")
+        raydium_spot.get_open_orders("SOL/USDC")
         assert raydium_spot.request.called
         extra_data = raydium_spot.request.call_args[1].get("extra_data")
         assert extra_data["request_type"] == "get_open_orders"
 
     def test_get_account_calls_request(self, raydium_spot):
-        result = raydium_spot.get_account("SOL")
+        raydium_spot.get_account("SOL")
         assert raydium_spot.request.called
         extra_data = raydium_spot.request.call_args[1].get("extra_data")
         assert extra_data["request_type"] == "get_account"
 
     def test_get_balance_calls_request(self, raydium_spot):
-        result = raydium_spot.get_balance("SOL")
+        raydium_spot.get_balance("SOL")
         assert raydium_spot.request.called
         extra_data = raydium_spot.request.call_args[1].get("extra_data")
         assert extra_data["request_type"] == "get_balance"

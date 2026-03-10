@@ -80,7 +80,7 @@ def test_luno_req_tick_data():
 def test_luno_async_tick_data():
     """Test Luno ticker data retrieval (asynchronous)."""
     data_queue = queue.Queue()
-    live_luno_spot_feed = init_async_feed(data_queue)
+    init_async_feed(data_queue)
 
     # Note: Luno's current implementation uses sync requests
     # This test would require async implementation
@@ -108,7 +108,7 @@ def test_luno_req_kline_data():
     if len(klines) > 0:
         # Each kline should have timestamp, open, high, low, close, volume
         first_kline = klines[0]
-        assert isinstance(first_kline, list) or isinstance(first_kline, dict)
+        assert isinstance(first_kline, (list, dict))
 
         if isinstance(first_kline, list):
             assert len(first_kline) >= 6, "Kline should have at least 6 elements"
@@ -133,11 +133,35 @@ def test_luno_req_kline_data():
 def test_luno_async_kline_data():
     """Test Luno kline data retrieval (asynchronous)."""
     data_queue = queue.Queue()
-    live_luno_spot_feed = init_async_feed(data_queue)
+    init_async_feed(data_queue)
 
     # Note: Luno's current implementation uses sync requests
     # This test would require async implementation
     pass
+
+
+def order_book_value_equals(order_book):
+    """Validate Luno orderbook data structure."""
+    assert isinstance(order_book, dict)
+    assert "asks" in order_book or "asks" in order_book
+    assert "bids" in order_book or "bids" in order_book
+
+    # Validate bid/ask structure if present
+    if "bids" in order_book:
+        bids = order_book["bids"]
+        assert isinstance(bids, list)
+        if len(bids) > 0:
+            assert isinstance(bids[0], list)
+            assert len(bids[0]) >= 2  # price and volume
+            assert float(bids[0][0]) > 0  # bid price
+
+    if "asks" in order_book:
+        asks = order_book["asks"]
+        assert isinstance(asks, list)
+        if len(asks) > 0:
+            assert isinstance(asks[0], list)
+            assert len(asks[0]) >= 2  # price and volume
+            assert float(asks[0][0]) > 0  # ask price
 
 
 @pytest.mark.integration

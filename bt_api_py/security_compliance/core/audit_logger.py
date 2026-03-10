@@ -4,6 +4,7 @@ Provides tamper-evident, cryptographically secure audit logging with support for
 SOX, MiFID II, PCI DSS, and GDPR compliance requirements.
 """
 
+import contextlib
 import enum
 import hashlib
 import json
@@ -267,16 +268,14 @@ class AuditLogger:
             # Clean up temp file on error
             if temp_file.exists():
                 temp_file.unlink()
-            raise AuditError(f"Failed to write audit event: {e}")
+            raise AuditError(f"Failed to write audit event: {e}") from e
 
     def _notify_subscribers(self, event: AuditEvent) -> None:
         """Notify real-time monitoring subscribers."""
         for callback in self._subscribers:
-            try:
+            # Don't let subscriber errors break logging
+            with contextlib.suppress(Exception):
                 callback(event)
-            except Exception:
-                # Don't let subscriber errors break logging
-                pass
 
     def subscribe(self, callback: callable) -> None:
         """Subscribe to real-time audit events."""
@@ -512,7 +511,7 @@ class AuditLogger:
             # Clean up temp file on error
             if temp_file.exists():
                 temp_file.unlink()
-            raise AuditError(f"Failed to cleanup old events: {e}")
+            raise AuditError(f"Failed to cleanup old events: {e}") from e
 
         return removed_count
 

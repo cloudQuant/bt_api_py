@@ -169,10 +169,7 @@ class RaydiumRequestTickerData(TickerData):
             return False
 
         # Validate TVL
-        if self.tvl is not None and self.tvl < 0:
-            return False
-
-        return True
+        return not (self.tvl is not None and self.tvl < 0)
 
     def get_reserves(self) -> tuple:
         """Get pool reserves.

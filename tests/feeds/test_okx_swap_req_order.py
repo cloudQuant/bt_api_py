@@ -4,14 +4,14 @@ import time
 
 import pytest
 
-pytestmark = [pytest.mark.integration, pytest.mark.network]
-
 from bt_api_py.containers.exchanges.okx_exchange_data import OkxExchangeDataSwap
 from bt_api_py.containers.requestdatas.request_data import RequestData
 
 # from bt_api_py.containers.orders.okx_order import OkxOrderData
 from bt_api_py.feeds.live_okx_feed import OkxRequestDataSwap
 from bt_api_py.functions.utils import read_account_config
+
+pytestmark = [pytest.mark.integration, pytest.mark.network]
 
 
 def generate_kwargs(exchange=OkxExchangeDataSwap):
@@ -80,7 +80,7 @@ def test_okx_req_order_functions():
     price_data = live_okx_swap_feed.get_tick("OP-USDT")
     price_data = price_data.get_data()[0].init_data()
     bid_price = round(price_data.get_bid_price() * 0.9, 2)
-    ask_price = round(price_data.get_ask_price() * 1.1, 2)
+    round(price_data.get_ask_price() * 1.1, 2)
     random_number = random.randint(10**17, 10**18 - 1)
     buy_client_order_id = str(random_number)
     buy_data = live_okx_swap_feed.make_order(

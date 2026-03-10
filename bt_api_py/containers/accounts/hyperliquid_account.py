@@ -3,6 +3,9 @@ import time
 
 from bt_api_py.containers.accounts.account import AccountData
 from bt_api_py.functions.utils import from_dict_get_float, from_dict_get_string
+from bt_api_py.logging_factory import get_logger
+
+logger = get_logger("container")
 
 
 class HyperliquidSpotWssAccountData(AccountData):
@@ -53,7 +56,8 @@ class HyperliquidSpotWssAccountData(AccountData):
             self.has_been_init_data = True
 
         except Exception as e:
-            print(f"Error initializing Hyperliquid account data: {e}")
+            logger.error(f"Error initializing Hyperliquid account data: {e}", exc_info=True)
+
         return self
 
     def get_all_data(self):

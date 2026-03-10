@@ -2,9 +2,9 @@ import os.path
 
 import pytest
 
-pytestmark = [pytest.mark.integration, pytest.mark.network]
-
 from bt_api_py.functions.utils import get_package_path, read_account_config, read_yaml_file
+
+pytestmark = [pytest.mark.integration, pytest.mark.network]
 
 
 def test_get_package_path():

@@ -172,11 +172,7 @@ class PhemexRequestTickerData(TickerData):
             return False
 
         # Validate bid-ask spread
-        if self.ask_price and self.bid_price:
-            if self.ask_price < self.bid_price:
-                return False
-
-        return True
+        return not (self.ask_price and self.bid_price and self.ask_price < self.bid_price)
 
     def __str__(self) -> str:
         """String representation of ticker."""

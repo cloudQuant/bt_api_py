@@ -26,6 +26,7 @@ from setuptools.command.build_ext import build_ext
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "scripts"))
 try:
     from split_ctp_wrapper import split_ctp_wrapper
+
     split_ctp_wrapper()
 except Exception as e:
     print(f"WARNING: CTP wrapper split skipped: {e}")
@@ -60,9 +61,7 @@ if sys.platform.startswith("darwin"):
     ]
     ctp_lib_dirs = [API_PLAT_DIR]
     ctp_lib_names = ["iconv"]
-    MD_LIB = os.path.join(
-        API_PLAT_DIR, "thostmduserapi_se.framework/Versions/A/thostmduserapi_se"
-    )
+    MD_LIB = os.path.join(API_PLAT_DIR, "thostmduserapi_se.framework/Versions/A/thostmduserapi_se")
     TRADER_LIB = os.path.join(
         API_PLAT_DIR, "thosttraderapi_se.framework/Versions/A/thosttraderapi_se"
     )
@@ -215,12 +214,13 @@ pkg_data = {
         "functions/update_data/*",
     ],
     "bt_api_py.ctp": [
-        "ctp.py",          # 向后兼容垫片 (auto-generated)
-        "_ctp_base.py",    # SWIG 基础设施 (auto-generated)
-        "ctp_*.py",        # 拆分后的子模块 (auto-generated)
-        "client.py",       # 高层封装
-        "api/**/*",        # API 头文件 & 库文件
-    ] + ctp_package_data,  # runtime 库
+        "ctp.py",  # 向后兼容垫片 (auto-generated)
+        "_ctp_base.py",  # SWIG 基础设施 (auto-generated)
+        "ctp_*.py",  # 拆分后的子模块 (auto-generated)
+        "client.py",  # 高层封装
+        "api/**/*",  # API 头文件 & 库文件
+    ]
+    + ctp_package_data,  # runtime 库
 }
 
 # ---------------------------------------------------------------------------

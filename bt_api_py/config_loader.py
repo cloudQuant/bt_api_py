@@ -147,8 +147,8 @@ class ExchangeConfig(BaseModel):
 
     # DEX 特定
     chains: list[str] | None = None
-    router_address: str | None = None
-    factory_address: str | None = None
+    router_address: str | dict[str, str] | None = None
+    factory_address: str | dict[str, str] | None = None
 
     # 共享数据
     kline_periods: dict[str, str] | None = None

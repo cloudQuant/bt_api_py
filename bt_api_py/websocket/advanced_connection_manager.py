@@ -4,6 +4,7 @@ Production-grade implementation supporting 73+ exchanges with high reliability a
 """
 
 import asyncio
+import contextlib
 import json
 import statistics
 import time
@@ -224,10 +225,8 @@ class DeadLetterQueue:
         """Add failed message to dead letter queue."""
         if self._queue.qsize() >= self.max_size:
             # Remove oldest message
-            try:
+            with contextlib.suppress(asyncio.QueueEmpty):
                 self._queue.get_nowait()
-            except asyncio.QueueEmpty:
-                pass
 
         dlq_message = {
             "message": message,
@@ -287,6 +286,7 @@ class IntelligentCircuitBreaker:
         success_threshold: int = 3,
         adaptive_threshold: bool = True,
     ):
+        self.logger = get_logger("circuit_breaker")
         self.failure_threshold = failure_threshold
         self.recovery_timeout = recovery_timeout
         self.success_threshold = success_threshold
@@ -312,7 +312,9 @@ class IntelligentCircuitBreaker:
                 self.success_count = 0
 
         try:
-            result = await func(*args, **kwargs)
+            result = func(*args, **kwargs)
+            if asyncio.iscoroutine(result):
+                result = await result
             self.on_success()
             return result
         except Exception as e:
@@ -521,17 +523,13 @@ class AdvancedWebSocketConnection:
         # Stop processing tasks
         if self._processing_task:
             self._processing_task.cancel()
-            try:
+            with contextlib.suppress(asyncio.CancelledError):
                 await self._processing_task
-            except asyncio.CancelledError:
-                pass
 
         if self._sender_task:
             self._sender_task.cancel()
-            try:
+            with contextlib.suppress(asyncio.CancelledError):
                 await self._sender_task
-            except asyncio.CancelledError:
-                pass
 
         # Close WebSocket
         if self._websocket:
@@ -783,7 +781,7 @@ class AdvancedWebSocketConnection:
                 await self.connect()
 
                 # Resubscribe to all topics
-                for subscription_id, subscription in list(self._subscriptions.items()):
+                for _subscription_id, subscription in list(self._subscriptions.items()):
                     await self._send_subscription_message(subscription)
 
                 self.logger.info("Reconnection successful")

@@ -1,5 +1,3 @@
-import pytest
-
 """
 Ripio Exchange Live Request Data Tests
 
@@ -11,6 +9,8 @@ Tests for Ripio spot trading implementation following Binance/OKX standards:
 """
 
 import queue
+
+import pytest
 
 # Import registration to auto-register Ripio
 import bt_api_py.exchange_registers.register_ripio  # noqa: F401
@@ -89,7 +89,7 @@ def test_ripio_tick_normalize_function():
 def test_ripio_async_tick_data():
     """Test Ripio ticker data retrieval (asynchronous)."""
     data_queue = queue.Queue()
-    live_ripio_spot_feed = init_async_feed(data_queue)
+    init_async_feed(data_queue)
 
     # Note: Ripio's current implementation uses sync requests
     # This test would require async implementation
@@ -152,7 +152,7 @@ def test_ripio_kline_normalize_function():
 def test_ripio_async_kline_data():
     """Test Ripio kline data retrieval (asynchronous)."""
     data_queue = queue.Queue()
-    live_ripio_spot_feed = init_async_feed(data_queue)
+    init_async_feed(data_queue)
 
     # Note: Ripio's current implementation uses sync requests
     # This test would require async implementation

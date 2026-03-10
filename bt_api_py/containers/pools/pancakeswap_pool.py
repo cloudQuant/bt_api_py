@@ -235,9 +235,8 @@ class PancakeSwapPoolList:
         """Filter pools by TVL range"""
         filtered = []
         for pool in self.pools:
-            if pool.tvl >= min_tvl:
-                if max_tvl is None or pool.tvl <= max_tvl:
-                    filtered.append(pool)
+            if pool.tvl >= min_tvl and (max_tvl is None or pool.tvl <= max_tvl):
+                filtered.append(pool)
 
         return PancakeSwapPoolList(
             pools=filtered,
@@ -252,9 +251,10 @@ class PancakeSwapPoolList:
         """Filter pools by 24h volume range"""
         filtered = []
         for pool in self.pools:
-            if pool.volume_24h_usd >= min_volume:
-                if max_volume is None or pool.volume_24h_usd <= max_volume:
-                    filtered.append(pool)
+            if pool.volume_24h_usd >= min_volume and (
+                max_volume is None or pool.volume_24h_usd <= max_volume
+            ):
+                filtered.append(pool)
 
         return PancakeSwapPoolList(
             pools=filtered,

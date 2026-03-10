@@ -6,6 +6,7 @@ This test demonstrates the Hyperliquid exchange integration functionality.
 It includes both basic tests and integration examples.
 """
 
+import contextlib
 import time
 from queue import Queue
 
@@ -22,20 +23,20 @@ def test_market_data_queries():
         request_data = HyperliquidRequestDataSpot(data_queue)
 
         # Test public endpoints (these should work without authentication)
-        result = request_data.get_all_mids()
+        request_data.get_all_mids()
 
-        result = request_data.get_meta()
+        request_data.get_meta()
 
         # Test with a specific coin
-        result = request_data.get_l2_book("BTC")
+        request_data.get_l2_book("BTC")
 
-        result = request_data.get_recent_trades("BTC", limit=5)
+        request_data.get_recent_trades("BTC", limit=5)
 
         end_time = int(time.time() * 1000)
         start_time = end_time - 24 * 60 * 60 * 1000  # 24 hours ago
-        result = request_data.get_candle_snapshot("BTC", "1h", start_time, end_time)
+        request_data.get_candle_snapshot("BTC", "1h", start_time, end_time)
 
-        result = request_data.get_exchange_status()
+        request_data.get_exchange_status()
 
         pass
 
@@ -54,18 +55,14 @@ def test_authenticated_queries():
         request_data = HyperliquidRequestDataSpot(data_queue, private_key="0x1234567890abcdef")
 
         # Try to get clearinghouse state (requires valid address)
-        try:
-            result = request_data.get_clearinghouse_state()
-        except ValueError:
-            pass
+        with contextlib.suppress(ValueError):
+            request_data.get_clearinghouse_state()
 
         # Try to place an order (should fail without valid credentials)
-        try:
-            result = request_data.place_order(
+        with contextlib.suppress(Exception):
+            request_data.place_order(
                 symbol="BTC", side="buy", quantity=0.001, price=40000, order_type="limit"
             )
-        except Exception:
-            pass
 
         pass
 
@@ -84,11 +81,11 @@ def test_websocket_subscription():
         wss_data = HyperliquidMarketWssDataSpot(data_queue, symbols=["BTC"])
 
         # Test subscription methods
-        ticker_subscription = wss_data.subscribe_ticker("BTC")
+        wss_data.subscribe_ticker("BTC")
 
-        orderbook_subscription = wss_data.subscribe_orderbook("BTC")
+        wss_data.subscribe_orderbook("BTC")
 
-        trades_subscription = wss_data.subscribe_trades("BTC")
+        wss_data.subscribe_trades("BTC")
 
         # Test message processing
 
@@ -141,7 +138,7 @@ def test_config_loading():
         config = load_exchange_config(config_path)
 
         # Check asset types
-        for asset_type, asset_config in config.asset_types.items():
+        for _asset_type, _asset_config in config.asset_types.items():
             pass
 
         # Check API endpoints
@@ -156,9 +153,7 @@ def main():
     """Run all integration tests"""
 
     # Set up logging
-    logger = SpdLogManager(
-        "./logs/test_hyperliquid_integration.log", "test", 0, 0, False
-    ).create_logger()
+    SpdLogManager("./logs/test_hyperliquid_integration.log", "test", 0, 0, False).create_logger()
 
     # Run tests
     tests = [
@@ -171,7 +166,7 @@ def main():
     passed = 0
     total = len(tests)
 
-    for test_name, test_func in tests:
+    for _test_name, test_func in tests:
         if test_func():
             passed += 1
 

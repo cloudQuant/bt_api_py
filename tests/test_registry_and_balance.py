@@ -64,7 +64,9 @@ class TestExchangeRegistry:
         assert len(classes) == 2
 
     def test_register_balance_handler(self):
-        handler = lambda x: ({"v": 1}, {"c": 2})
+        def handler(x):
+            return ({"v": 1}, {"c": 2})
+
         ExchangeRegistry.register_balance_handler("TEST___BH", handler)
         assert ExchangeRegistry.get_balance_handler("TEST___BH") is handler
         assert ExchangeRegistry.get_balance_handler("NONEXIST") is None

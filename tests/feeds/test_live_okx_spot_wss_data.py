@@ -4,8 +4,6 @@ import time
 
 import pytest
 
-pytestmark = [pytest.mark.integration, pytest.mark.network]
-
 # from bt_api_py.containers.fundingrates.okx_funding_rate import OkxFundingRateData
 from bt_api_py.containers.accounts.okx_account import OkxAccountData
 from bt_api_py.containers.bars.okx_bar import OkxBarData
@@ -24,6 +22,8 @@ from bt_api_py.feeds.live_okx_feed import (
     OkxRequestDataSpot,
 )
 from bt_api_py.functions.utils import read_account_config
+
+pytestmark = [pytest.mark.integration, pytest.mark.network]
 
 # from bt_api_py.containers.trades.okx_trade import OkxWssTradeData
 # from bt_api_py.containers.positions.okx_position import OkxPositionData

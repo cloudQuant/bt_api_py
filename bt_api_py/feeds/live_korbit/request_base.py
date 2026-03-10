@@ -289,9 +289,7 @@ class KorbitRequestData(Feed):
     def _is_error(input_data):
         if input_data is None:
             return True
-        if isinstance(input_data, dict) and "errorCode" in input_data:
-            return True
-        return False
+        return bool(isinstance(input_data, dict) and "errorCode" in input_data)
 
     @staticmethod
     def _get_tick_normalize_function(input_data, extra_data):

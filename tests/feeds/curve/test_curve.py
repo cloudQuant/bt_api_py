@@ -9,6 +9,13 @@ from unittest.mock import MagicMock, Mock, patch
 
 import pytest
 
+from bt_api_py.containers.exchanges.curve_exchange_data import (
+    CurveChain,
+    CurveExchangeDataSpot,
+)
+from bt_api_py.containers.requestdatas.request_data import RequestData
+from bt_api_py.feeds.live_curve.spot import CurveRequestDataSpot
+
 
 class MockCurveChain(str, Enum):
     """Mock CurveChain for testing."""
@@ -16,14 +23,6 @@ class MockCurveChain(str, Enum):
     ETHEREUM = "ETHEREUM"
     ARBITRUM = "ARBITRUM"
     POLYGON = "POLYGON"
-
-
-from bt_api_py.containers.exchanges.curve_exchange_data import (
-    CurveChain,
-    CurveExchangeDataSpot,
-)
-from bt_api_py.containers.requestdatas.request_data import RequestData
-from bt_api_py.feeds.live_curve.spot import CurveRequestDataSpot
 
 
 class TestCurveRequestDataSpot:
@@ -74,7 +73,7 @@ class TestCurveRequestDataSpot:
             }
         }
         result, status = CurveRequestDataSpot._get_pools_normalize_function(input_data, None)
-        assert status == True
+        assert status
         assert len(result) == 1
         assert len(result[0]) == 2
 
@@ -88,7 +87,7 @@ class TestCurveRequestDataSpot:
         """Test get_pools method - mocked."""
         with patch.object(curve_spot, "request") as mock_request:
             mock_request.return_value = Mock(extra_data={"request_type": "get_pools"})
-            result = curve_spot.get_pools()
+            curve_spot.get_pools()
             assert mock_request.called
             call_args = mock_request.call_args
             assert call_args[1]["extra_data"]["request_type"] == "get_pools"
@@ -99,7 +98,7 @@ class TestCurveRequestDataSpot:
         """Test volumes normalize function."""
         input_data = {"data": {"dailyVolume": "1000000", "weeklyVolume": "5000000"}}
         result, status = CurveRequestDataSpot._get_volumes_normalize_function(input_data, None)
-        assert status == True
+        assert status
         assert len(result) == 1
 
     def test_get_volumes_tuple(self, curve_spot):
@@ -111,7 +110,7 @@ class TestCurveRequestDataSpot:
         """Test get_volumes method - mocked."""
         with patch.object(curve_spot, "request") as mock_request:
             mock_request.return_value = Mock(extra_data={"request_type": "get_volumes"})
-            result = curve_spot.get_volumes()
+            curve_spot.get_volumes()
             assert mock_request.called
             call_args = mock_request.call_args
             assert call_args[1]["extra_data"]["request_type"] == "get_volumes"
@@ -122,7 +121,7 @@ class TestCurveRequestDataSpot:
         """Test TVL normalize function."""
         input_data = {"data": {"totalTVL": "10000000"}}
         result, status = CurveRequestDataSpot._get_tvl_normalize_function(input_data, None)
-        assert status == True
+        assert status
         assert len(result) == 1
 
     def test_get_tvl_tuple(self, curve_spot):
@@ -134,7 +133,7 @@ class TestCurveRequestDataSpot:
         """Test get_tvl method - mocked."""
         with patch.object(curve_spot, "request") as mock_request:
             mock_request.return_value = Mock(extra_data={"request_type": "get_tvl"})
-            result = curve_spot.get_tvl()
+            curve_spot.get_tvl()
             assert mock_request.called
             call_args = mock_request.call_args
             assert call_args[1]["extra_data"]["request_type"] == "get_tvl"
@@ -145,7 +144,7 @@ class TestCurveRequestDataSpot:
         """Test APYs normalize function."""
         input_data = {"data": {"poolApy": {"pool1": 0.05, "pool2": 0.10}}}
         result, status = CurveRequestDataSpot._get_apys_normalize_function(input_data, None)
-        assert status == True
+        assert status
         assert len(result) == 1
 
     def test_get_apys_tuple(self, curve_spot):
@@ -157,7 +156,7 @@ class TestCurveRequestDataSpot:
         """Test get_apys method - mocked."""
         with patch.object(curve_spot, "request") as mock_request:
             mock_request.return_value = Mock(extra_data={"request_type": "get_apys"})
-            result = curve_spot.get_apys()
+            curve_spot.get_apys()
             assert mock_request.called
             call_args = mock_request.call_args
             assert call_args[1]["extra_data"]["request_type"] == "get_apys"
@@ -172,7 +171,7 @@ class TestCurveRequestDataSpot:
             }
         }
         result, status = CurveRequestDataSpot._get_pool_summary_normalize_function(input_data, None)
-        assert status == True
+        assert status
         assert len(result) == 1
 
     def test_get_pool_summary(self, curve_spot):
@@ -196,7 +195,7 @@ class TestCurveRequestDataSpot:
         """Test get_exchange_info method - mocked."""
         with patch.object(curve_spot, "request") as mock_request:
             mock_request.return_value = Mock(extra_data={"request_type": "get_exchange_info"})
-            result = curve_spot.get_exchange_info()
+            curve_spot.get_exchange_info()
             assert mock_request.called
             call_args = mock_request.call_args
             assert call_args[1]["extra_data"]["request_type"] == "get_exchange_info"
@@ -218,7 +217,7 @@ class TestCurveRequestDataSpot:
         """Test tick normalize function - uses pool summary."""
         input_data = {"data": {"poolData": {"name": "3pool", "virtualPrice": "1.01"}}}
         result, status = CurveRequestDataSpot._get_tick_normalize_function(input_data, None)
-        assert status == True
+        assert status
         assert len(result) == 1
 
     @pytest.mark.skip(reason="Requires actual API call")
@@ -357,7 +356,7 @@ class TestCurveStandardInterfaces:
     @pytest.mark.ticker
     def test_get_tick_calls_request(self, curve_spot):
         """Test get_tick calls self.request."""
-        result = curve_spot.get_tick("0xPool")
+        curve_spot.get_tick("0xPool")
         assert curve_spot.request.called
         extra_data = curve_spot.request.call_args[1].get("extra_data")
         assert extra_data["request_type"] == "get_tick"
@@ -372,7 +371,7 @@ class TestCurveStandardInterfaces:
     @pytest.mark.orderbook
     def test_get_depth_calls_request(self, curve_spot):
         """Test get_depth calls self.request."""
-        result = curve_spot.get_depth("0xPool")
+        curve_spot.get_depth("0xPool")
         assert curve_spot.request.called
         extra_data = curve_spot.request.call_args[1].get("extra_data")
         assert extra_data["request_type"] == "get_depth"
@@ -387,7 +386,7 @@ class TestCurveStandardInterfaces:
     @pytest.mark.kline
     def test_get_kline_calls_request(self, curve_spot):
         """Test get_kline calls self.request."""
-        result = curve_spot.get_kline("0xPool", "1h")
+        curve_spot.get_kline("0xPool", "1h")
         assert curve_spot.request.called
 
     def test_get_server_time(self):
@@ -407,42 +406,42 @@ class TestCurveStandardInterfaces:
 
     def test_make_order_calls_request(self, curve_spot):
         """Test make_order calls self.request."""
-        result = curve_spot.make_order("0xPool", 1.0, 3000, "LIMIT")
+        curve_spot.make_order("0xPool", 1.0, 3000, "LIMIT")
         assert curve_spot.request.called
         extra_data = curve_spot.request.call_args[1].get("extra_data")
         assert extra_data["request_type"] == "make_order"
 
     def test_cancel_order_calls_request(self, curve_spot):
         """Test cancel_order calls self.request."""
-        result = curve_spot.cancel_order("0xPool", "order_123")
+        curve_spot.cancel_order("0xPool", "order_123")
         assert curve_spot.request.called
         extra_data = curve_spot.request.call_args[1].get("extra_data")
         assert extra_data["request_type"] == "cancel_order"
 
     def test_query_order_calls_request(self, curve_spot):
         """Test query_order calls self.request."""
-        result = curve_spot.query_order("0xPool", "order_123")
+        curve_spot.query_order("0xPool", "order_123")
         assert curve_spot.request.called
         extra_data = curve_spot.request.call_args[1].get("extra_data")
         assert extra_data["request_type"] == "query_order"
 
     def test_get_open_orders_calls_request(self, curve_spot):
         """Test get_open_orders calls self.request."""
-        result = curve_spot.get_open_orders("0xPool")
+        curve_spot.get_open_orders("0xPool")
         assert curve_spot.request.called
         extra_data = curve_spot.request.call_args[1].get("extra_data")
         assert extra_data["request_type"] == "get_open_orders"
 
     def test_get_account_calls_request(self, curve_spot):
         """Test get_account calls self.request."""
-        result = curve_spot.get_account("ETH")
+        curve_spot.get_account("ETH")
         assert curve_spot.request.called
         extra_data = curve_spot.request.call_args[1].get("extra_data")
         assert extra_data["request_type"] == "get_account"
 
     def test_get_balance_calls_request(self, curve_spot):
         """Test get_balance calls self.request."""
-        result = curve_spot.get_balance("ETH")
+        curve_spot.get_balance("ETH")
         assert curve_spot.request.called
         extra_data = curve_spot.request.call_args[1].get("extra_data")
         assert extra_data["request_type"] == "get_balance"

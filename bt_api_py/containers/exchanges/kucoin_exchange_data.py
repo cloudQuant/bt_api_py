@@ -85,9 +85,14 @@ class KuCoinExchangeData(ExchangeData):
         if hasattr(asset_cfg, "wss_paths") and asset_cfg.wss_paths:
             self.wss_paths = dict(asset_cfg.wss_paths)
 
-        if hasattr(asset_cfg, "kline_periods") and asset_cfg.kline_periods:
-            self.kline_periods = dict(asset_cfg.kline_periods)
+        kp = asset_cfg.kline_periods or (config.kline_periods if config.kline_periods else None)
+        if kp:
+            self.kline_periods = dict(kp)
             self.reverse_kline_periods = {v: k for k, v in self.kline_periods.items()}
+
+        lc = asset_cfg.legal_currency or (config.legal_currency if config.legal_currency else None)
+        if lc:
+            self.legal_currency = list(lc)
 
         return True
 
@@ -161,6 +166,7 @@ class KuCoinExchangeDataFutures(KuCoinExchangeData):
     def __init__(self) -> None:
         """Initialize KuCoin futures exchange data."""
         super().__init__()
+        self._load_from_config("futures")
         self.asset_type = "FUTURES"
 
 

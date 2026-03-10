@@ -82,11 +82,10 @@ class BalancerRequestTickerData(TickerData):
         # }
 
         # Extract the nested data
-        if isinstance(self.ticker_data, dict):
-            if "data" in self.ticker_data:
-                inner = self.ticker_data.get("data", {}).get("tokenGetTokenDynamicData", {})
-                if inner:
-                    self.ticker_data = inner
+        if isinstance(self.ticker_data, dict) and "data" in self.ticker_data:
+            inner = self.ticker_data.get("data", {}).get("tokenGetTokenDynamicData", {})
+            if inner:
+                self.ticker_data = inner
 
         self.ticker_symbol_name = from_dict_get_string(self.ticker_data, "address")
         self.server_time = time.time()

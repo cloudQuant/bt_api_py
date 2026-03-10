@@ -79,7 +79,7 @@ def test_mercado_bitcoin_req_tick_data():
 def test_mercado_bitcoin_async_tick_data():
     """Test Mercado Bitcoin ticker data retrieval (asynchronous)."""
     data_queue = queue.Queue()
-    live_mercado_bitcoin_spot_feed = init_async_feed(data_queue)
+    init_async_feed(data_queue)
 
     # Note: Mercado Bitcoin's current implementation uses sync requests
     # This test would require async implementation
@@ -130,7 +130,7 @@ def test_mercado_bitcoin_req_kline_data():
 def test_mercado_bitcoin_async_kline_data():
     """Test Mercado Bitcoin kline data retrieval (asynchronous)."""
     data_queue = queue.Queue()
-    live_mercado_bitcoin_spot_feed = init_async_feed(data_queue)
+    init_async_feed(data_queue)
 
     # Note: Mercado Bitcoin's current implementation uses sync requests
     # This test would require async implementation

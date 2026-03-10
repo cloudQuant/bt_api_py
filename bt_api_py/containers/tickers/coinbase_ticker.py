@@ -3,10 +3,13 @@
 import json
 import time
 from datetime import datetime
-from typing import Any
+from typing import Any, Self
 
 from bt_api_py.containers.tickers.ticker import TickerData
 from bt_api_py.functions.utils import from_dict_get_float, from_dict_get_string
+from bt_api_py.logging_factory import get_logger
+
+logger = get_logger("container")
 
 
 def parse_iso_time_to_timestamp(time_str: str) -> float | None:
@@ -128,7 +131,8 @@ class CoinbaseTickerData(TickerData):
                 if "asks" in self.ticker_data and isinstance(self.ticker_data["asks"], list):
                     self.ask_volume = sum(float(ask[1]) for ask in self.ticker_data["asks"][:5])
         except Exception as e:
-            print(f"Error parsing ticker data: {e}")
+            logger.error(f"Error parsing ticker data: {e}", exc_info=True)
+
             self.ticker_data = {}
         self.has_been_init_data = True
         return self
@@ -252,7 +256,8 @@ class CoinbaseWssTickerData(CoinbaseTickerData):
                     self.ticker_data, "price_percentage_change_24h"
                 )
         except Exception as e:
-            print(f"Error parsing WebSocket ticker data: {e}")
+            logger.error(f"Error parsing WebSocket ticker data: {e}", exc_info=True)
+
             self.ticker_data = {}
         self.has_been_init_data = True
         return self
@@ -289,7 +294,8 @@ class CoinbaseRequestTickerData(CoinbaseTickerData):
                 self.bid_price = from_dict_get_float(self.ticker_data, "best_bid")
                 self.ask_price = from_dict_get_float(self.ticker_data, "best_ask")
         except Exception as e:
-            print(f"Error parsing REST ticker data: {e}")
+            logger.error(f"Error parsing REST ticker data: {e}", exc_info=True)
+
             self.ticker_data = {}
         self.has_been_init_data = True
         return self

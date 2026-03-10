@@ -1,5 +1,3 @@
-from bt_api_py.logging_factory import get_logger
-
 """
 MEXC Account WebSocket Base Class
 
@@ -11,6 +9,8 @@ import threading
 import time
 
 import websocket
+
+from bt_api_py.logging_factory import get_logger
 
 
 class MexcAccountWssData:

@@ -3,6 +3,8 @@ OKX API - TradeMixin
 Auto-generated from request_base.py
 """
 
+from typing import Any
+
 from bt_api_py.containers.bars.okx_bar import OkxBarData
 from bt_api_py.containers.orders.okx_order import OkxOrderData
 from bt_api_py.containers.trades.okx_trade import OkxRequestTradeData

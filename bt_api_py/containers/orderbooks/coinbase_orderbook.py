@@ -6,6 +6,9 @@ from typing import Any
 
 from bt_api_py.containers.orderbooks.orderbook import OrderBookData
 from bt_api_py.functions.utils import from_dict_get_string
+from bt_api_py.logging_factory import get_logger
+
+logger = get_logger("container")
 
 
 class CoinbaseOrderBookData(OrderBookData):
@@ -235,7 +238,7 @@ class CoinbaseRequestOrderBookData(CoinbaseOrderBookData):
                         self.ask_volume_list.append(float(ask[1]))
 
         except Exception as e:
-            print(f"Error parsing orderbook data: {e}")
+            logger.error(f"Error parsing orderbook data: {e}", exc_info=True)
             self.order_book_data = {}
         self.has_been_init_data = True
         return self

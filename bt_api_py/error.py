@@ -5,9 +5,10 @@
 各交易所的具体翻译器实现位于 bt_api_py/errors/ 子模块中。
 """
 
+import importlib
 from dataclasses import dataclass, field
 from enum import Enum, unique
-from typing import Any, ClassVar
+from typing import TYPE_CHECKING, Any, ClassVar
 
 from bt_api_py.exceptions import BtApiError
 
@@ -268,18 +269,49 @@ class ErrorTranslator:
             return ErrorCategory.VALIDATION
 
 
-# ── 从 errors/ 子模块重新导出翻译器，保持向后兼容 ─────────────────
-from bt_api_py.errors.binance_translator import BinanceErrorTranslator
-from bt_api_py.errors.bitfinex_error_translator import BitfinexErrorTranslator
-from bt_api_py.errors.bitget_translator import BitgetErrorTranslator
-from bt_api_py.errors.bybit_translator import BybitErrorTranslator
-from bt_api_py.errors.ctp_translator import CTPErrorTranslator
-from bt_api_py.errors.gemini_translator import GeminiErrorTranslator
-from bt_api_py.errors.ib_web_translator import IBWebErrorTranslator
-from bt_api_py.errors.kraken_translator import KrakenErrorTranslator
-from bt_api_py.errors.kucoin_translator import KuCoinErrorTranslator
-from bt_api_py.errors.okx_translator import OKXErrorTranslator
-from bt_api_py.errors.upbit_translator import UpbitErrorTranslator
+_TRANSLATOR_EXPORTS: dict[str, tuple[str, str]] = {
+    "GeminiErrorTranslator": ("bt_api_py.errors.gemini_translator", "GeminiErrorTranslator"),
+    "BinanceErrorTranslator": ("bt_api_py.errors.binance_translator", "BinanceErrorTranslator"),
+    "OKXErrorTranslator": ("bt_api_py.errors.okx_translator", "OKXErrorTranslator"),
+    "KrakenErrorTranslator": ("bt_api_py.errors.kraken_translator", "KrakenErrorTranslator"),
+    "CTPErrorTranslator": ("bt_api_py.errors.ctp_translator", "CTPErrorTranslator"),
+    "IBWebErrorTranslator": ("bt_api_py.errors.ib_web_translator", "IBWebErrorTranslator"),
+    "BybitErrorTranslator": ("bt_api_py.errors.bybit_translator", "BybitErrorTranslator"),
+    "BitgetErrorTranslator": ("bt_api_py.errors.bitget_translator", "BitgetErrorTranslator"),
+    "KuCoinErrorTranslator": ("bt_api_py.errors.kucoin_translator", "KuCoinErrorTranslator"),
+    "UpbitErrorTranslator": ("bt_api_py.errors.upbit_translator", "UpbitErrorTranslator"),
+    "BitfinexErrorTranslator": (
+        "bt_api_py.errors.bitfinex_error_translator",
+        "BitfinexErrorTranslator",
+    ),
+}
+
+
+def __getattr__(name: str):  # noqa: ANN201
+    """Lazy re-export translators from `bt_api_py.errors.*` for backward compatibility."""
+    if name in _TRANSLATOR_EXPORTS:
+        module_name, attr = _TRANSLATOR_EXPORTS[name]
+        value = getattr(importlib.import_module(module_name), attr)
+        globals()[name] = value
+        return value
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
+
+if TYPE_CHECKING:
+    # For type checkers and IDEs, make exports visible without importing at runtime.
+    from bt_api_py.errors.binance_translator import BinanceErrorTranslator as BinanceErrorTranslator
+    from bt_api_py.errors.bitfinex_error_translator import (
+        BitfinexErrorTranslator as BitfinexErrorTranslator,
+    )
+    from bt_api_py.errors.bitget_translator import BitgetErrorTranslator as BitgetErrorTranslator
+    from bt_api_py.errors.bybit_translator import BybitErrorTranslator as BybitErrorTranslator
+    from bt_api_py.errors.ctp_translator import CTPErrorTranslator as CTPErrorTranslator
+    from bt_api_py.errors.gemini_translator import GeminiErrorTranslator as GeminiErrorTranslator
+    from bt_api_py.errors.ib_web_translator import IBWebErrorTranslator as IBWebErrorTranslator
+    from bt_api_py.errors.kraken_translator import KrakenErrorTranslator as KrakenErrorTranslator
+    from bt_api_py.errors.kucoin_translator import KuCoinErrorTranslator as KuCoinErrorTranslator
+    from bt_api_py.errors.okx_translator import OKXErrorTranslator as OKXErrorTranslator
+    from bt_api_py.errors.upbit_translator import UpbitErrorTranslator as UpbitErrorTranslator
 
 __all__ = [
     # 核心类

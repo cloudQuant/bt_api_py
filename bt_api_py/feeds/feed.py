@@ -142,7 +142,7 @@ class Feed(AsyncBase, ConnectionMixin, CapabilityMixin):
                     raise RequestError(
                         self.exchange_name,
                         detail=f"endpoint gone/not found: {url}",
-                    )
+                    ) from None
                 # Retryable errors (timeout, connection, etc.)
                 if attempt < max_retries - 1:
                     self.logger.warn(f"Retry {attempt + 1}/{max_retries} for {url}: {e}")

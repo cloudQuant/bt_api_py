@@ -92,9 +92,8 @@ class PancakeSpotRequestData(PancakeSwapRequestData):
             return [], False
 
         # Handle different input formats
-        if isinstance(input_data, dict):
-            if "data" in input_data:
-                input_data = input_data["data"]
+        if isinstance(input_data, dict) and "data" in input_data:
+            input_data = input_data["data"]
 
         # Extract ticker data
         if isinstance(input_data, dict) and "price" in input_data:
@@ -214,9 +213,8 @@ class PancakeSpotRequestData(PancakeSwapRequestData):
             return [], False
 
         # Handle different input formats
-        if isinstance(input_data, dict):
-            if "data" in input_data:
-                input_data = input_data["data"]
+        if isinstance(input_data, dict) and "data" in input_data:
+            input_data = input_data["data"]
 
         # Extract depth data
         if isinstance(input_data, dict):

@@ -95,50 +95,49 @@ class GeminiRequestOrderBookData(RequestData):
 
     def _parse_wss_data(self, data):
         """Parse WebSocket response"""
-        if isinstance(data, dict):
-            if data.get("type") == "update" and "events" in data:
-                events = data.get("events", [])
-                for event in events:
-                    if event.get("type") == "change":
-                        side = event.get("side")
-                        price = float(event.get("price", 0))
-                        remaining = float(event.get("remaining", 0))
+        if isinstance(data, dict) and data.get("type") == "update" and "events" in data:
+            events = data.get("events", [])
+            for event in events:
+                if event.get("type") == "change":
+                    side = event.get("side")
+                    price = float(event.get("price", 0))
+                    remaining = float(event.get("remaining", 0))
 
-                        if side == "bid":
-                            # Update or remove bid
-                            found = False
-                            for i, bid in enumerate(self.bids):
-                                if bid["price"] == price:
-                                    if remaining > 0:
-                                        self.bids[i]["amount"] = remaining
-                                        found = True
-                                    else:
-                                        self.bids.pop(i)
-                                    break
+                    if side == "bid":
+                        # Update or remove bid
+                        found = False
+                        for i, bid in enumerate(self.bids):
+                            if bid["price"] == price:
+                                if remaining > 0:
+                                    self.bids[i]["amount"] = remaining
+                                    found = True
+                                else:
+                                    self.bids.pop(i)
+                                break
 
-                            if not found and remaining > 0:
-                                self.bids.append({"price": price, "amount": remaining})
+                        if not found and remaining > 0:
+                            self.bids.append({"price": price, "amount": remaining})
 
-                            # Sort bids (descending)
-                            self.bids.sort(key=lambda x: x["price"], reverse=True)
+                        # Sort bids (descending)
+                        self.bids.sort(key=lambda x: x["price"], reverse=True)
 
-                        elif side == "ask":
-                            # Update or remove ask
-                            found = False
-                            for i, ask in enumerate(self.asks):
-                                if ask["price"] == price:
-                                    if remaining > 0:
-                                        self.asks[i]["amount"] = remaining
-                                        found = True
-                                    else:
-                                        self.asks.pop(i)
-                                    break
+                    elif side == "ask":
+                        # Update or remove ask
+                        found = False
+                        for i, ask in enumerate(self.asks):
+                            if ask["price"] == price:
+                                if remaining > 0:
+                                    self.asks[i]["amount"] = remaining
+                                    found = True
+                                else:
+                                    self.asks.pop(i)
+                                break
 
-                            if not found and remaining > 0:
-                                self.asks.append({"price": price, "amount": remaining})
+                        if not found and remaining > 0:
+                            self.asks.append({"price": price, "amount": remaining})
 
-                            # Sort asks (ascending)
-                            self.asks.sort(key=lambda x: x["price"])
+                        # Sort asks (ascending)
+                        self.asks.sort(key=lambda x: x["price"])
 
     # Getter methods for compatibility with tests
     def get_symbol_name(self):

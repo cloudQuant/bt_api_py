@@ -3,6 +3,7 @@ WebSocket connection management with optimized pooling and backpressure.
 """
 
 import asyncio
+import contextlib
 import json
 import time
 import zlib
@@ -118,10 +119,8 @@ class WebSocketConnection:
 
         if self._processing_task:
             self._processing_task.cancel()
-            try:
+            with contextlib.suppress(asyncio.CancelledError):
                 await self._processing_task
-            except asyncio.CancelledError:
-                pass
 
         if self._websocket:
             await self._websocket.close()
@@ -297,18 +296,16 @@ class WebSocketConnection:
     def _extract_topic_symbol(self, message: dict[str, Any]) -> tuple[str | None, str | None]:
         """Extract topic and symbol from message."""
         # Exchange-specific parsing
-        if self.config.exchange_name.startswith("BINANCE"):
-            if "stream" in message:
-                stream = message["stream"]
-                parts = stream.split("@")
-                if len(parts) == 2:
-                    symbol = parts[0].upper()
-                    topic = parts[1]
-                    return topic, symbol
-        elif self.config.exchange_name.startswith("OKX"):
-            if "arg" in message and "data" in message:
-                arg = message["arg"]
-                return arg.get("channel"), arg.get("instId")
+        if self.config.exchange_name.startswith("BINANCE") and "stream" in message:
+            stream = message["stream"]
+            parts = stream.split("@")
+            if len(parts) == 2:
+                symbol = parts[0].upper()
+                topic = parts[1]
+                return topic, symbol
+        elif self.config.exchange_name.startswith("OKX") and "arg" in message and "data" in message:
+            arg = message["arg"]
+            return arg.get("channel"), arg.get("instId")
 
         return None, None
 

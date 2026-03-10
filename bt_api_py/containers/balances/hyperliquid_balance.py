@@ -3,6 +3,9 @@ import time
 
 from bt_api_py.containers.balances.balance import BalanceData
 from bt_api_py.functions.utils import from_dict_get_float
+from bt_api_py.logging_factory import get_logger
+
+logger = get_logger("container")
 
 
 class HyperliquidSwapRequestBalanceData(BalanceData):
@@ -65,7 +68,8 @@ class HyperliquidSwapRequestBalanceData(BalanceData):
             self.has_been_init_data = True
 
         except Exception as e:
-            print(f"Error initializing Hyperliquid balance data: {e}")
+            logger.error(f"Error initializing Hyperliquid balance data: {e}", exc_info=True)
+
         return self
 
     def get_all_data(self):
@@ -162,19 +166,19 @@ class HyperliquidSpotRequestBalanceData(BalanceData):
                 self.balance_data = json.loads(self.balance_info)
 
             # Process spot clearinghouse state
-            if isinstance(self.balance_data, dict):
-                if "balances" in self.balance_data:
-                    for balance in self.balance_data["balances"]:
-                        if balance.get("coin") == self.symbol_name:
-                            self.coin = balance.get("coin")
-                            self.total = from_dict_get_float(balance, "total")
-                            self.available = from_dict_get_float(balance, "free")
-                            self.hold = from_dict_get_float(balance, "hold")
+            if isinstance(self.balance_data, dict) and "balances" in self.balance_data:
+                for balance in self.balance_data["balances"]:
+                    if balance.get("coin") == self.symbol_name:
+                        self.coin = balance.get("coin")
+                        self.total = from_dict_get_float(balance, "total")
+                        self.available = from_dict_get_float(balance, "free")
+                        self.hold = from_dict_get_float(balance, "hold")
 
             self.has_been_init_data = True
 
         except Exception as e:
-            print(f"Error initializing Hyperliquid spot balance data: {e}")
+            logger.error(f"Error initializing Hyperliquid spot balance data: {e}", exc_info=True)
+
         return self
 
     def get_all_data(self):

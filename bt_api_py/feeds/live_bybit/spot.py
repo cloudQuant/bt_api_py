@@ -367,7 +367,7 @@ class BybitRequestDataSpot(BybitRequestData):
         if input_data is None:
             return [], False
         status = input_data.get("retCode") == 0
-        result = input_data.get("result", {})
+        input_data.get("result", {})
         data = [BybitSpotOrderData(input_data, extra_data["symbol_name"], True)]
         return data, status
 

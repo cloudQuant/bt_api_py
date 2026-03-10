@@ -61,9 +61,8 @@ class UniswapTicker:
             self.has_liquidity = True
 
         # Calculate percentage change if we have both price and change
-        if self.price is not None and self.price_change_24h is not None:
-            if self.price > 0:
-                self.price_change_percentage_24h = (self.price_change_24h / self.price) * 100
+        if self.price is not None and self.price_change_24h is not None and self.price > 0:
+            self.price_change_percentage_24h = (self.price_change_24h / self.price) * 100
 
         # Set timestamp if not provided
         if self.timestamp is None:

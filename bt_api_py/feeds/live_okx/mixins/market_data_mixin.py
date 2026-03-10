@@ -3,6 +3,8 @@ OKX API - MarketDataMixin
 Auto-generated from request_base.py
 """
 
+from typing import Any
+
 from bt_api_py.containers.bars.okx_bar import OkxBarData
 from bt_api_py.containers.fundingrates.okx_funding_rate import OkxFundingRateData
 from bt_api_py.containers.markprices.okx_mark_price import OkxMarkPriceData
@@ -755,11 +757,8 @@ class MarketDataMixin:
         if "data" not in input_data:
             return {}, status
         data = input_data["data"]
-        if len(data) > 0:
-            # The API returns a dict with 'components', 'index', 'last', 'ts' keys
-            target_data = data[0] if isinstance(data, list) else data
-        else:
-            target_data = {}
+        # The API returns a dict with 'components', 'index', 'last', 'ts' keys.
+        target_data = (data[0] if isinstance(data, list) else data) if data else {}
         return target_data, status
 
     def get_index_components(self, index: Any, extra_data: Any = None, **kwargs: Any) -> None:

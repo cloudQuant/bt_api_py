@@ -591,7 +591,7 @@ class AnomalyDetector(BaseMLModel):
         # 找出贡献最大的特征
         if len(feature_names) == len(features):
             feature_contributions = [
-                (name, abs(value)) for name, value in zip(feature_names, features)
+                (name, abs(value)) for name, value in zip(feature_names, features, strict=False)
             ]
             feature_contributions.sort(key=lambda x: x[1], reverse=True)
 

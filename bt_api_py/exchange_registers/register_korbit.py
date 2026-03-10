@@ -4,6 +4,8 @@ Korbit 交易所注册模块
 导入此模块即可完成注册
 """
 
+from typing import Any
+
 from bt_api_py.balance_utils import simple_balance_handler as _korbit_balance_handler
 from bt_api_py.containers.exchanges.korbit_exchange_data import KorbitExchangeDataSpot
 from bt_api_py.feeds.live_korbit import (

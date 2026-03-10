@@ -154,15 +154,11 @@ class DataProtectionManager:
             if len(data) <= 4:
                 return "*" * len(data)
             return data[:2] + "*" * (len(data) - 4) + data[-2:]
-        elif mask_level == "email":
+        elif mask_level == "email" and "@" in data:
             # Mask email while preserving domain
-            if "@" in data:
-                local, domain = data.split("@", 1)
-                if len(local) > 3:
-                    masked_local = local[:2] + "*" * (len(local) - 2)
-                else:
-                    masked_local = "*" * len(local)
-                return f"{masked_local}@{domain}"
+            local, domain = data.split("@", 1)
+            masked_local = local[:2] + "*" * (len(local) - 2) if len(local) > 3 else "*" * len(local)
+            return f"{masked_local}@{domain}"
         return data
 
     def anonymize_data(self, data: dict[str, Any]) -> dict[str, Any]:
@@ -191,10 +187,7 @@ class DataProtectionManager:
             return "*****@*****.com"
 
         local, domain = email.split("@", 1)
-        if len(local) <= 2:
-            masked_local = "**"
-        else:
-            masked_local = local[0] + "*" * (len(local) - 2) + local[-1]
+        masked_local = "**" if len(local) <= 2 else local[0] + "*" * (len(local) - 2) + local[-1]
 
         return f"{masked_local}@{domain}"
 
@@ -202,17 +195,19 @@ class DataProtectionManager:
         """Encrypt fields classified as sensitive."""
         encrypted_data = data.copy()
         classifications = self.classify_data(data)
+        has_sensitive = any(classifications.values())
+
+        if not has_sensitive or not self.encryption_manager:
+            return encrypted_data
 
         for field_name, value in encrypted_data.items():
-            if any(classifications.values()):
-                if self.encryption_manager:
-                    try:
-                        encrypted_value = self.encryption_manager.encrypt(str(value))
-                        encrypted_data[field_name] = {"_encrypted": True, "data": encrypted_value}
-                    except Exception as e:
-                        raise DataProtectionError(
-                            f"Failed to encrypt sensitive data for field '{field_name}': {e}"
-                        )
+            try:
+                encrypted_value = self.encryption_manager.encrypt(str(value))
+                encrypted_data[field_name] = {"_encrypted": True, "data": encrypted_value}
+            except Exception as e:
+                raise DataProtectionError(
+                    f"Failed to encrypt sensitive data for field '{field_name}': {e}"
+                ) from e
 
         return encrypted_data
 
@@ -221,15 +216,14 @@ class DataProtectionManager:
         decrypted_data = data.copy()
 
         for field_name, value in decrypted_data.items():
-            if isinstance(value, dict) and value.get("_encrypted"):
-                if self.encryption_manager:
-                    try:
-                        decrypted_value = self.encryption_manager.decrypt(value["data"])
-                        decrypted_data[field_name] = decrypted_value
-                    except Exception as e:
-                        raise DataProtectionError(
-                            f"Failed to decrypt sensitive data for field '{field_name}': {e}"
-                        )
+            if isinstance(value, dict) and value.get("_encrypted") and self.encryption_manager:
+                try:
+                    decrypted_value = self.encryption_manager.decrypt(value["data"])
+                    decrypted_data[field_name] = decrypted_value
+                except Exception as e:
+                    raise DataProtectionError(
+                        f"Failed to decrypt sensitive data for field '{field_name}': {e}"
+                    ) from e
 
         return decrypted_data
 

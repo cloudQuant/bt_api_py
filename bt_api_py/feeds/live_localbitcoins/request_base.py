@@ -133,9 +133,7 @@ class LocalBitcoinsRequestData(Feed):
     def _is_error(data: Any) -> None:
         if data is None:
             return True
-        if isinstance(data, dict) and "error" in data:
-            return True
-        return False
+        return bool(isinstance(data, dict) and "error" in data)
 
     # ── _get_xxx internal methods ───────────────────────────────
 

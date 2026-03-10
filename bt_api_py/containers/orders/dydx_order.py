@@ -44,9 +44,8 @@ class DydxOrderData(OrderData):
             return self
 
         # 处理订单列表响应
-        if isinstance(self.order_data, list):
-            if self.order_data:
-                self.order_data = self.order_data[0]
+        if isinstance(self.order_data, list) and self.order_data:
+            self.order_data = self.order_data[0]
 
         # 转换订单状态
         if "status" in self.order_data:

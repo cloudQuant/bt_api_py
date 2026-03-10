@@ -1,8 +1,10 @@
 # -*- coding: utf-8 -*-
 """Diagnostic script: check OKX spot open orders, positions, and account balance."""
+
 import queue
 import sys
-sys.path.insert(0, '.')
+
+sys.path.insert(0, ".")
 
 from bt_api_py.functions.utils import read_account_config
 from bt_api_py.feeds.live_okx_feed import OkxRequestDataSpot
@@ -11,12 +13,12 @@ from bt_api_py.feeds.live_okx_feed import OkxRequestDataSpot
 def init_feed():
     data = read_account_config()
     kwargs = {
-        "public_key": data['okx']['public_key'],
-        "private_key": data['okx']['private_key'],
-        "passphrase": data['okx']["passphrase"],
+        "public_key": data["okx"]["public_key"],
+        "private_key": data["okx"]["private_key"],
+        "passphrase": data["okx"]["passphrase"],
         "topics": {"tick": {"symbol": "BTC-USDT"}},
-        "proxies": data.get('proxies'),
-        "async_proxy": data.get('async_proxy'),
+        "proxies": data.get("proxies"),
+        "async_proxy": data.get("async_proxy"),
     }
     data_queue = queue.Queue()
     return OkxRequestDataSpot(data_queue, **kwargs)
@@ -45,7 +47,8 @@ def main():
     # Try a test make_order and print raw response
     print("\n   Testing make_order (buy) raw response:")
     import random
-    cid = str(random.randint(10**17, 10**18-1))
+
+    cid = str(random.randint(10**17, 10**18 - 1))
     buy_result = feed.make_order("OP-USDT", lots, bid_price_order, "buy-limit", client_order_id=cid)
     print(f"   status={buy_result.get_status()}")
     print(f"   raw input_data={buy_result.get_input_data()}")
@@ -66,9 +69,11 @@ def main():
     print(f"   Total open orders: {len(order_list)}")
     for i, order in enumerate(order_list):
         od = order.init_data()
-        print(f"   [{i}] symbol={od.get_symbol_name()}, order_id={od.get_order_id()}, "
-              f"side={od.get_order_side()}, price={od.get_order_price()}, "
-              f"volume={od.get_order_volume()}, status={od.get_order_status()}")
+        print(
+            f"   [{i}] symbol={od.get_symbol_name()}, order_id={od.get_order_id()}, "
+            f"side={od.get_order_side()}, price={od.get_order_price()}, "
+            f"volume={od.get_order_volume()}, status={od.get_order_status()}"
+        )
 
     # 2. Check positions
     print("\n" + "=" * 60)
@@ -106,7 +111,9 @@ def main():
             symbol = od.get_symbol_name()
             if order_id:
                 result = feed.cancel_order(symbol, order_id=order_id)
-                print(f"   Cancel order {order_id} on {symbol}: status={result.get_status()}, data={result.get_data()}")
+                print(
+                    f"   Cancel order {order_id} on {symbol}: status={result.get_status()}, data={result.get_data()}"
+                )
         # Re-check open orders after cancellation
         print("\n   Re-checking open orders after cancellation...")
         open_orders2 = feed.get_open_orders()

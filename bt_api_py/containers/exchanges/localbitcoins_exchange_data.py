@@ -1,8 +1,7 @@
-from typing import Any
-
 """LocalBitcoins exchange data – Feed pattern."""
 
 import os
+from typing import Any
 
 import yaml
 

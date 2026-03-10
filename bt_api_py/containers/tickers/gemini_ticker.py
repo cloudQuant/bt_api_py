@@ -63,42 +63,40 @@ class GeminiRequestTickerData(RequestData):
 
     def _parse_rest_data(self, data) -> None:
         """Parse REST API response."""
-        if isinstance(data, dict):
-            # Single ticker response
-            if "close" in data or "bid" in data or "ask" in data:
-                self.last_price = float(data.get("close", data.get("last", 0)))
-                self.high = float(data.get("high", 0))
-                self.low = float(data.get("low", 0))
-                volume_val = data.get("volume", 0)
-                if isinstance(volume_val, dict):
-                    self.volume = float(
-                        volume_val.get(self.symbol or "btcusd", 0)
-                        if self.symbol
-                        else list(volume_val.values())[0]
-                        if volume_val
-                        else 0
-                    )
-                else:
-                    self.volume = float(volume_val)
-                self.bid = float(data.get("bid", 0))
-                self.ask = float(data.get("ask", 0))
-                self.timestamp = data.get("timestampms", data.get("timestamp"))
-                self.exchange_timestamp = convert_utc_timestamp(self.timestamp)
-                self.change_24h = float(data.get("changes", {}).get("24h", 0))
-                self.change_percent_24h = float(data.get("changes", {}).get("24h_percent", 0))
+        # Single ticker response
+        if isinstance(data, dict) and ("close" in data or "bid" in data or "ask" in data):
+            self.last_price = float(data.get("close", data.get("last", 0)))
+            self.high = float(data.get("high", 0))
+            self.low = float(data.get("low", 0))
+            volume_val = data.get("volume", 0)
+            if isinstance(volume_val, dict):
+                self.volume = float(
+                    volume_val.get(self.symbol or "btcusd", 0)
+                    if self.symbol
+                    else list(volume_val.values())[0]
+                    if volume_val
+                    else 0
+                )
+            else:
+                self.volume = float(volume_val)
+            self.bid = float(data.get("bid", 0))
+            self.ask = float(data.get("ask", 0))
+            self.timestamp = data.get("timestampms", data.get("timestamp"))
+            self.exchange_timestamp = convert_utc_timestamp(self.timestamp)
+            self.change_24h = float(data.get("changes", {}).get("24h", 0))
+            self.change_percent_24h = float(data.get("changes", {}).get("24h_percent", 0))
 
     def _parse_wss_data(self, data) -> None:
         """Parse WebSocket response."""
-        if isinstance(data, dict):
-            # Handle ticker updates
-            if data.get("type") == "update" and "events" in data:
-                events = data.get("events", [])
-                for event in events:
-                    if event.get("type") == "trade":
-                        self.last_price = float(event.get("price", 0))
-                        self.timestamp = event.get("timestamp")
-                        self.exchange_timestamp = convert_utc_timestamp(self.timestamp)
-                        break
+        # Handle ticker updates
+        if isinstance(data, dict) and data.get("type") == "update" and "events" in data:
+            events = data.get("events", [])
+            for event in events:
+                if event.get("type") == "trade":
+                    self.last_price = float(event.get("price", 0))
+                    self.timestamp = event.get("timestamp")
+                    self.exchange_timestamp = convert_utc_timestamp(self.timestamp)
+                    break
 
     def to_dict(self):
         """Convert to dictionary."""

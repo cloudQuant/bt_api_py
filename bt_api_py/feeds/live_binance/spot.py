@@ -642,7 +642,7 @@ class BinanceAccountWssDataSpot(BinanceAccountWssData):
                     on_error=_on_error,
                 )
                 t = threading.Thread(
-                    target=lambda: tmp_ws.run_forever(sslopt={"cert_reqs": ssl.CERT_NONE}),
+                    target=lambda ws=tmp_ws: ws.run_forever(sslopt={"cert_reqs": ssl.CERT_NONE}),
                     daemon=True,
                 )
                 t.start()

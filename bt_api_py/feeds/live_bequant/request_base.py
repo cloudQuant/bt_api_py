@@ -328,9 +328,7 @@ class BeQuantRequestData(Feed):
     def _is_error(input_data):
         if not input_data:
             return True
-        if isinstance(input_data, dict) and "error" in input_data:
-            return True
-        return False
+        return bool(isinstance(input_data, dict) and "error" in input_data)
 
     @staticmethod
     def _get_server_time_normalize_function(input_data, extra_data):

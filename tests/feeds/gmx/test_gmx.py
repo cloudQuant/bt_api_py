@@ -9,20 +9,19 @@ from unittest.mock import MagicMock, Mock, patch
 
 import pytest
 
-
-class MockGmxChain(str, Enum):
-    """Mock GmxChain for testing."""
-
-    ARBITRUM = "arbitrum"
-    AVALANCHE = "avalanche"
-
-
 from bt_api_py.containers.exchanges.gmx_exchange_data import (
     GmxChain,
     GmxExchangeDataSpot,
 )
 from bt_api_py.containers.requestdatas.request_data import RequestData
 from bt_api_py.feeds.live_gmx.spot import GmxRequestDataSpot
+
+
+class MockGmxChain(str, Enum):
+    """Mock GmxChain for testing."""
+
+    ARBITRUM = "arbitrum"
+    AVALANCHE = "avalanche"
 
 
 class TestGmxRequestDataSpot:
@@ -97,7 +96,7 @@ class TestGmxRequestDataSpot:
             }
         }
         result, status = GmxRequestDataSpot._get_tick_normalize_function(input_data, None)
-        assert status == True
+        assert status
         assert len(result) == 1
 
     @pytest.mark.ticker
@@ -108,7 +107,7 @@ class TestGmxRequestDataSpot:
             return_value=Mock(data={"BTC": {"minPrice": "49000"}, "ETH": {"minPrice": "3000"}})
         )
 
-        result = gmx_spot.get_tick("BTC")
+        gmx_spot.get_tick("BTC")
         assert gmx_spot.request.called
 
     # ==================== Kline Tests ====================
@@ -139,7 +138,7 @@ class TestGmxRequestDataSpot:
             ],
         }
         result, status = GmxRequestDataSpot._get_kline_normalize_function(input_data, None)
-        assert status == True
+        assert status
         assert len(result) == 1
         assert len(result[0]) == 2  # Two candles
 
@@ -164,14 +163,14 @@ class TestGmxRequestDataSpot:
         """Test exchange info normalize function."""
         input_data = [{"market": "BTC", "name": "Bitcoin"}, {"market": "ETH", "name": "Ethereum"}]
         result, status = GmxRequestDataSpot._get_exchange_info_normalize_function(input_data, None)
-        assert status == True
+        assert status
         assert len(result) == 1
 
     def test_get_tokens_normalize_function(self):
         """Test tokens normalize function."""
         input_data = [{"symbol": "BTC", "name": "Bitcoin"}, {"symbol": "ETH", "name": "Ethereum"}]
         result, status = GmxRequestDataSpot._get_tokens_normalize_function(input_data, None)
-        assert status == True
+        assert status
         assert len(result) == 1
 
     # ==================== Depth Tests ====================
@@ -192,7 +191,7 @@ class TestGmxRequestDataSpot:
             {"market": "ETH", "liquidity": "500000"},
         ]
         result, status = GmxRequestDataSpot._get_markets_info_normalize_function(input_data, None)
-        assert status == True
+        assert status
         assert len(result) == 1
 
     # ==================== Signed Price Tests ====================
@@ -208,7 +207,7 @@ class TestGmxRequestDataSpot:
         """Test signed prices normalize function."""
         input_data = {"signedPrices": [{"token": "BTC", "price": "50000", "signature": "0x..."}]}
         result, status = GmxRequestDataSpot._get_signed_prices_normalize_function(input_data, None)
-        assert status == True
+        assert status
         assert len(result) == 1
 
     @pytest.mark.skip(reason="Requires actual API call")
@@ -332,9 +331,9 @@ class TestGmxStandardInterfaces:
 
     @pytest.mark.orderbook
     def test_get_depth_calls_request(self, gmx_spot):
-        result = gmx_spot.get_depth("BTC")
+        gmx_spot.get_depth("BTC")
         assert gmx_spot.request.called
-        extra_data = (
+        (
             gmx_spot.request.call_args[1].get("extra_data") or gmx_spot.request.call_args[0][2]
             if len(gmx_spot.request.call_args[0]) > 2
             else None
@@ -342,7 +341,7 @@ class TestGmxStandardInterfaces:
 
     @pytest.mark.kline
     def test_get_kline_calls_request(self, gmx_spot):
-        result = gmx_spot.get_kline("BTC", "1h")
+        gmx_spot.get_kline("BTC", "1h")
         assert gmx_spot.request.called
 
     def test_get_server_time(self):
@@ -359,37 +358,37 @@ class TestGmxStandardInterfaces:
             assert "server_time" in extra_data
 
     def test_make_order_calls_request(self, gmx_spot):
-        result = gmx_spot.make_order("BTC", 1.0, 50000, "LIMIT")
+        gmx_spot.make_order("BTC", 1.0, 50000, "LIMIT")
         assert gmx_spot.request.called
         extra_data = gmx_spot.request.call_args[1].get("extra_data")
         assert extra_data["request_type"] == "make_order"
 
     def test_cancel_order_calls_request(self, gmx_spot):
-        result = gmx_spot.cancel_order("BTC", "order_123")
+        gmx_spot.cancel_order("BTC", "order_123")
         assert gmx_spot.request.called
         extra_data = gmx_spot.request.call_args[1].get("extra_data")
         assert extra_data["request_type"] == "cancel_order"
 
     def test_query_order_calls_request(self, gmx_spot):
-        result = gmx_spot.query_order("BTC", "order_123")
+        gmx_spot.query_order("BTC", "order_123")
         assert gmx_spot.request.called
         extra_data = gmx_spot.request.call_args[1].get("extra_data")
         assert extra_data["request_type"] == "query_order"
 
     def test_get_open_orders_calls_request(self, gmx_spot):
-        result = gmx_spot.get_open_orders("BTC")
+        gmx_spot.get_open_orders("BTC")
         assert gmx_spot.request.called
         extra_data = gmx_spot.request.call_args[1].get("extra_data")
         assert extra_data["request_type"] == "get_open_orders"
 
     def test_get_account_calls_request(self, gmx_spot):
-        result = gmx_spot.get_account("BTC")
+        gmx_spot.get_account("BTC")
         assert gmx_spot.request.called
         extra_data = gmx_spot.request.call_args[1].get("extra_data")
         assert extra_data["request_type"] == "get_account"
 
     def test_get_balance_calls_request(self, gmx_spot):
-        result = gmx_spot.get_balance("BTC")
+        gmx_spot.get_balance("BTC")
         assert gmx_spot.request.called
         extra_data = gmx_spot.request.call_args[1].get("extra_data")
         assert extra_data["request_type"] == "get_balance"

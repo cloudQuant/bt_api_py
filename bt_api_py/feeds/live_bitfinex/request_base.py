@@ -542,7 +542,7 @@ class BitfinexRequestData(Feed):
         symbol_name = extra_data.get("symbol_name")
         asset_type = extra_data["asset_type"]
 
-        if isinstance(input_data, list) or isinstance(input_data, dict):
+        if isinstance(input_data, (list, dict)):
             data = [BitfinexRequestOrderData(input_data, symbol_name, asset_type, True)]
         else:
             data = []

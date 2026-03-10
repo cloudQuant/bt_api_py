@@ -8,6 +8,7 @@ import hashlib
 import hmac
 import json
 import time
+from typing import Any
 from urllib import parse
 
 from bt_api_py.containers.exchanges.kucoin_exchange_data import KuCoinExchangeDataSpot

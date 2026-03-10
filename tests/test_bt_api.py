@@ -3,16 +3,16 @@ import traceback
 
 import pytest
 
+from bt_api_py.bt_api import BtApi
+from bt_api_py.containers.requestdatas.request_data import RequestData
+from bt_api_py.containers.tickers.binance_ticker import BinanceRequestTickerData
+from bt_api_py.functions.utils import read_account_config
+
 pytestmark = [
     pytest.mark.integration,
     pytest.mark.network,
     pytest.mark.xdist_group("mixed_exchange_api"),
 ]
-
-from bt_api_py.bt_api import BtApi
-from bt_api_py.containers.requestdatas.request_data import RequestData
-from bt_api_py.containers.tickers.binance_ticker import BinanceRequestTickerData
-from bt_api_py.functions.utils import read_account_config
 
 
 def generate_binance_swap_kwargs():
@@ -89,7 +89,7 @@ def generate_bt_api_kwargs():
 def test_binance_swap_bt_api():
     exchange_kwargs = generate_binance_swap_kwargs()
     bt_api = BtApi(exchange_kwargs, debug=True)
-    for exchange_name in exchange_kwargs.keys():
+    for exchange_name in exchange_kwargs:
         api = bt_api.get_request_api(exchange_name)
         data = api.get_server_time()
         assert isinstance(data, RequestData)
@@ -99,7 +99,7 @@ def test_binance_swap_bt_api():
 def test_okx_spot_bt_api():
     exchange_kwargs = generate_okx_spot_kwargs()
     bt_api = BtApi(exchange_kwargs, debug=True)
-    for exchange_name in exchange_kwargs.keys():
+    for exchange_name in exchange_kwargs:
         api = bt_api.get_request_api(exchange_name)
         data = api.get_tick("BTC-USDT")
         assert isinstance(data, RequestData)
@@ -109,7 +109,7 @@ def test_okx_spot_bt_api():
 def test_okx_swap_bt_api():
     exchange_kwargs = generate_okx_swap_kwargs()
     bt_api = BtApi(exchange_kwargs, debug=True)
-    for exchange_name in exchange_kwargs.keys():
+    for exchange_name in exchange_kwargs:
         api = bt_api.get_request_api(exchange_name)
         data = api.get_tick("BTC-USDT")
         assert isinstance(data, RequestData)
@@ -123,7 +123,7 @@ def test_bt_api():
     okx_swap_api = False
     binance_spot_api = False
     binance_swap_api = False
-    for exchange_name in exchange_kwargs.keys():
+    for exchange_name in exchange_kwargs:
         api = bt_api.get_request_api(exchange_name)
         data = api.get_tick("BTC-USDT")
         assert isinstance(data, RequestData)
@@ -149,7 +149,7 @@ def test_bt_api():
 def test_async_binance_swap_api():
     exchange_kwargs = generate_binance_swap_kwargs()
     bt_api = BtApi(exchange_kwargs, debug=True)
-    for exchange_name in exchange_kwargs.keys():
+    for exchange_name in exchange_kwargs:
         data_queue = bt_api.get_data_queue(exchange_name)
         api = bt_api.get_request_api(exchange_name)
         api.async_get_tick("BTC-USDT", extra_data={"test_async_tick_data": True})
@@ -181,7 +181,7 @@ def test_async_bt_api():
     okx_swap_api = False
     binance_spot_api = False
     binance_swap_api = False
-    for exchange_name in exchange_kwargs.keys():
+    for exchange_name in exchange_kwargs:
         # data_queue = bt_api.get_data_queue(exchange_name)
         api = bt_api.get_request_api(exchange_name)
         api.async_get_tick("BTC-USDT", extra_data={"test_async_tick_data": True})
@@ -272,7 +272,6 @@ def test_binance_swap_wss_data():
             data.init_data()
             print(data.get_all_data())
         if isinstance(data, BinanceForceOrderData):
-            receive_binance_force_order_data = True
             data.init_data()
             # print(data.get_all_data())
         if isinstance(data, BinanceAggTradeData):

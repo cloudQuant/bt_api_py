@@ -3,6 +3,7 @@ Core services for modern bt_api_py architecture.
 """
 
 import asyncio
+import contextlib
 import json
 import time
 from collections import defaultdict
@@ -179,15 +180,11 @@ class EventService(IEventBus):
 
     def unsubscribe(self, event_type: str, handler: callable) -> None:
         """Unsubscribe from an event type."""
-        try:
+        with contextlib.suppress(ValueError):
             self._handlers[event_type].remove(handler)
-        except ValueError:
-            pass
 
-        try:
+        with contextlib.suppress(ValueError):
             self._async_handlers[event_type].remove(handler)
-        except ValueError:
-            pass
 
     async def _process_events(self) -> None:
         """Process events from the queue."""

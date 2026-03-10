@@ -5,6 +5,7 @@ following FIDO2 standards for financial services.
 """
 
 import base64
+import json
 import secrets
 import time
 from dataclasses import dataclass, field
@@ -19,9 +20,7 @@ except ImportError:
     PYOTP_AVAILABLE = False
 
 try:
-    from cryptography.hazmat.backends import default_backend
-    from cryptography.hazmat.primitives import hashes, serialization
-    from cryptography.hazmat.primitives.kdf.hkdf import HKDF
+    import cryptography  # noqa: F401 - imported to check availability
 
     CRYPTO_AVAILABLE = True
 except ImportError:
@@ -213,7 +212,7 @@ class MFAProvider:
         secret = pyotp.random_base32()
 
         # Create HOTP object
-        hotp = pyotp.HOTP(secret)
+        pyotp.HOTP(secret)
 
         # Generate backup codes
         backup_codes = self._generate_backup_codes()
@@ -355,8 +354,8 @@ class MFAProvider:
                 return False
 
             # Parse auth data
-            rp_id_hash = auth_data[:32]
-            flags = auth_data[32]
+            auth_data[:32]
+            auth_data[32]
             sign_count = int.from_bytes(auth_data[33:37], "big")
             credential_id_length = int.from_bytes(auth_data[37:39], "big")
             credential_id = auth_data[39 : 39 + credential_id_length]
@@ -492,9 +491,7 @@ class MFAProvider:
                 return False
 
             # Parse signature
-            signature = base64.b64decode(
-                assertion_data["signature"].replace("-", "+").replace("_", "/") + "=="
-            )
+            base64.b64decode(assertion_data["signature"].replace("-", "+").replace("_", "/") + "==")
 
             # Verify user presence and verification flags
             flags = authenticator_data[32]

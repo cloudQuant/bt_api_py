@@ -49,7 +49,7 @@ class YobitRequestTickerData(TickerData):
         data = self.ticker_data
         if isinstance(data, dict):
             # Get the first ticker data
-            for key, value in data.items():
+            for _key, value in data.items():
                 if isinstance(value, dict) and "last" in value:
                     data = value
                     break

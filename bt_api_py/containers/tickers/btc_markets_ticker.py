@@ -2,6 +2,7 @@
 
 import json
 import time
+from typing import Self
 
 from bt_api_py.containers.tickers.ticker import TickerData
 

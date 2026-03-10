@@ -1,9 +1,8 @@
 """BYDFi Ticker Data Container."""
 
-from typing import Any
-
 import json
 import time
+from typing import Any, Self
 
 from bt_api_py.containers.tickers.ticker import TickerData
 

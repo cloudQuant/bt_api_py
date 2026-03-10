@@ -164,7 +164,7 @@ class TestUniswapDataContainers:
     def test_get_tick_normalize_function(self):
         """Test ticker normalization function."""
         data_queue = queue.Queue()
-        request_data = UniswapRequestDataSpot(
+        UniswapRequestDataSpot(
             data_queue,
             public_key="test_key",
             private_key="test_secret",

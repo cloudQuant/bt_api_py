@@ -13,6 +13,8 @@ from unittest.mock import MagicMock  # noqa: F401
 # Add the project root to the path
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
+import contextlib
+
 from bt_api_py.config_loader import load_exchange_config  # noqa: F401
 from bt_api_py.feeds.live_gemini.spot import GeminiRequestDataSpot  # noqa: F401
 
@@ -33,7 +35,7 @@ def test_gemini_config():
             if hasattr(config, "asset_types") and config.asset_types:
                 # Check spot configuration
                 if "spot" in config.asset_types:
-                    spot = config.asset_types["spot"]
+                    config.asset_types["spot"]
             pass
         else:
             pass
@@ -58,7 +60,7 @@ def test_gemini_feed_initialization():
         )
 
         # Test capabilities
-        capabilities = feed._capabilities()
+        feed._capabilities()
 
         pass
     except Exception:
@@ -76,13 +78,13 @@ def test_gemini_symbol_handling():
         test_symbols = ["BTCUSD", "ETHUSD", "BTCETH"]
 
         for symbol in test_symbols:
-            formatted = feed._params.get_symbol(symbol)
+            feed._params.get_symbol(symbol)
 
         # Test rest path retrieval
-        path = feed._params.get_rest_path("get_ticker")
+        feed._params.get_rest_path("get_ticker")
 
         # Test period mapping
-        period = feed._params.get_period("1h")
+        feed._params.get_period("1h")
 
         pass
     except Exception:
@@ -109,11 +111,9 @@ def test_gemini_api_methods():
         original_request = feed.request
         feed.request = lambda *args, **kwargs: {"status": "mocked", "message": "Test response"}
 
-        for method_name, method_call in methods_to_test:
-            try:
-                response = method_call()
-            except Exception:
-                pass
+        for _method_name, method_call in methods_to_test:
+            with contextlib.suppress(Exception):
+                method_call()
 
         # Restore original request method
         feed.request = original_request
@@ -125,11 +125,9 @@ def test_gemini_api_methods():
             ("make_order", lambda: feed.make_order("BTCUSD", 0.001, 40000)),
         ]
 
-        for method_name, method_call in private_methods:
-            try:
-                response = method_call()
-            except Exception:
-                pass
+        for _method_name, method_call in private_methods:
+            with contextlib.suppress(Exception):
+                method_call()
 
         pass
     except Exception:

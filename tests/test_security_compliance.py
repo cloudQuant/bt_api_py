@@ -57,7 +57,7 @@ class TestAccessControl:
     def test_assign_role(self):
         """Test role assignment."""
         user = self.access_control.create_user("test_user", "testuser", "test@example.com")
-        role = self.access_control.create_role("test_role", "Test role")
+        self.access_control.create_role("test_role", "Test role")
 
         self.access_control.assign_role("test_user", "test_role")
 
@@ -65,7 +65,7 @@ class TestAccessControl:
 
     def test_permission_check(self):
         """Test permission checking."""
-        user = self.access_control.create_user("trader_user", "trader", "trader@example.com")
+        self.access_control.create_user("trader_user", "trader", "trader@example.com")
 
         # User should have trader permissions by default
         assert self.access_control.check_permission(
@@ -74,7 +74,7 @@ class TestAccessControl:
 
     def test_access_denied(self):
         """Test access denied scenarios."""
-        user = self.access_control.create_user("trader_user", "trader", "trader@example.com")
+        self.access_control.create_user("trader_user", "trader", "trader@example.com")
 
         # User should not have admin permissions
         assert not self.access_control.check_permission(
@@ -194,7 +194,7 @@ class TestOAuth2Provider:
 
     def test_generate_access_token(self):
         """Test access token generation."""
-        client = self.oauth2.register_client(
+        self.oauth2.register_client(
             client_id="test_client",
             client_secret="secret123",
             redirect_uris=["https://test.example.com/callback"],
@@ -215,7 +215,7 @@ class TestOAuth2Provider:
 
     def test_validate_access_token(self):
         """Test access token validation."""
-        client = self.oauth2.register_client(
+        self.oauth2.register_client(
             client_id="test_client",
             client_secret="secret123",
             redirect_uris=["https://test.example.com/callback"],
@@ -383,9 +383,7 @@ class TestSecurityFramework:
     def test_user_lifecycle(self):
         """Test complete user lifecycle with security."""
         # Create user
-        user = self.framework.access_control.create_user(
-            "trader_001", "john_trader", "john@company.com"
-        )
+        self.framework.access_control.create_user("trader_001", "john_trader", "john@company.com")
 
         # Setup MFA
         totp_setup = self.framework.mfa_provider.setup_totp("trader_001")

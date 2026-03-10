@@ -292,16 +292,11 @@ class KrakenRequestOrderBookData(OrderBookData):
             return False
 
         # Check for consistent bid-ask relationship
-        if self.bids and self.asks:
-            if self.bids[0]["price"] > self.asks[0]["price"]:
-                return False
+        if self.bids and self.asks and self.bids[0]["price"] > self.asks[0]["price"]:
+            return False
 
         # Check for negative quantities
-        for level in self.bids + self.asks:
-            if level["quantity"] < 0:
-                return False
-
-        return True
+        return all(level["quantity"] >= 0 for level in self.bids + self.asks)
 
     def update_from_delta(
         self, delta_bids: list[dict], delta_asks: list[dict], timestamp: float | None = None

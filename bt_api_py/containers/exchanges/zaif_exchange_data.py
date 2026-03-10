@@ -1,8 +1,7 @@
-from typing import Any
-
 """Zaif Exchange Data Configuration – Feed pattern."""
 
 import os
+from typing import Any
 
 import yaml
 

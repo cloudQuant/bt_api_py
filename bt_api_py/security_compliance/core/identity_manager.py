@@ -330,13 +330,12 @@ class IdentityManager:
 
         for identity in self._identities.values():
             # Apply filters
-            if query:
-                if (
-                    query.lower() not in identity.username.lower()
-                    and query.lower() not in identity.email.lower()
-                    and query.lower() not in identity.full_name.lower()
-                ):
-                    continue
+            if query and (
+                query.lower() not in identity.username.lower()
+                and query.lower() not in identity.email.lower()
+                and query.lower() not in identity.full_name.lower()
+            ):
+                continue
 
             if group_id and group_id not in self.get_user_groups(identity.identity_id):
                 continue

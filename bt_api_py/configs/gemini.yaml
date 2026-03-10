@@ -96,7 +96,7 @@ asset_types:
 
   # ─── GeminiExchangeDataSpot (现货) ─────────────────────────
   spot:
-    exchange_name: GeminiSpot
+    exchange_name: GEMINI
     symbol_format: "{base}{quote}"
     rest_paths:
       <<: *shared_rest_paths

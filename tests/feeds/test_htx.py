@@ -845,7 +845,7 @@ class TestHtxWebSocket(unittest.TestCase):
         ping_msg = gzip.compress(json.dumps({"ping": 1234567890}).encode("utf-8"))
         # We can't test ws.send directly without a connection, but we can test parsing
         # Test that data messages get pushed to queue
-        tick_msg = gzip.compress(
+        gzip.compress(
             json.dumps(
                 {
                     "ch": "market.btcusdt.ticker",

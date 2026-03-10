@@ -4,6 +4,8 @@ Hyperliquid 交易所注册模块
 导入此模块即可完成注册
 """
 
+from typing import Any
+
 from bt_api_py.balance_utils import simple_balance_handler as _hyperliquid_balance_handler
 from bt_api_py.containers.exchanges.hyperliquid_exchange_data import (
     HyperliquidExchangeDataSpot,

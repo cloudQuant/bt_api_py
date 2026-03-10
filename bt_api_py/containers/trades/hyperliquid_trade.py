@@ -3,6 +3,9 @@ import time
 
 from bt_api_py.containers.trades.trade import TradeData
 from bt_api_py.functions.utils import from_dict_get_float, from_dict_get_string
+from bt_api_py.logging_factory import get_logger
+
+logger = get_logger("container")
 
 
 class HyperliquidSpotWssTradeData(TradeData):
@@ -47,7 +50,8 @@ class HyperliquidSpotWssTradeData(TradeData):
             self.has_been_init_data = True
 
         except Exception as e:
-            print(f"Error initializing Hyperliquid trade data: {e}")
+            logger.error(f"Error initializing Hyperliquid trade data: {e}", exc_info=True)
+
         return self
 
     def get_all_data(self):

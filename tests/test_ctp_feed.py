@@ -14,6 +14,7 @@ CTP Feed 集成测试
 """
 
 import atexit
+import contextlib
 import os
 import queue
 import threading
@@ -22,6 +23,8 @@ from pathlib import Path
 
 import pytest
 from dotenv import load_dotenv
+
+from bt_api_py.ctp_env_selector import apply_ctp_env
 
 # macOS 上 CTP C++ SWIG 对象在进程退出时 GC 清理会导致 Bus Error / Segfault。
 # 注册 atexit hook 使用 os._exit() 跳过 Python GC 来规避此问题。
@@ -44,8 +47,6 @@ def _ensure_ctp_atexit():
 load_dotenv(Path(__file__).resolve().parent.parent / ".env")
 
 # 自动选择 CTP 环境
-from bt_api_py.ctp_env_selector import apply_ctp_env
-
 _td, _md, _env_name = apply_ctp_env()
 
 # ========== SimNow 配置 ==========
@@ -148,15 +149,17 @@ class TestCtpImports:
 
     def test_split_submodule_backward_compat(self):
         """验证拆分子模块与原始包导入返回相同对象 (向后兼容)"""
-        from bt_api_py.ctp import CThostFtdcMdApi as via_init
-        from bt_api_py.ctp.ctp_md_api import CThostFtdcMdApi as via_submod
+        from bt_api_py.ctp import CThostFtdcMdApi as CThostFtdcMdApiInit
+        from bt_api_py.ctp.ctp_md_api import CThostFtdcMdApi as CThostFtdcMdApiSubmod
 
-        assert via_init is via_submod
+        assert CThostFtdcMdApiInit is CThostFtdcMdApiSubmod
 
-        from bt_api_py.ctp import CThostFtdcInputOrderField as via_init2
-        from bt_api_py.ctp.ctp_structs_order import CThostFtdcInputOrderField as via_submod2
+        from bt_api_py.ctp import CThostFtdcInputOrderField as CThostFtdcInputOrderFieldInit
+        from bt_api_py.ctp.ctp_structs_order import (
+            CThostFtdcInputOrderField as CThostFtdcInputOrderFieldSubmod,
+        )
 
-        assert via_init2 is via_submod2
+        assert CThostFtdcInputOrderFieldInit is CThostFtdcInputOrderFieldSubmod
 
     def test_split_submodule_field_instantiation(self):
         """验证通过拆分子模块导入的 Field 可正常实例化和赋值"""
@@ -541,10 +544,8 @@ class TestCtpTraderIntegration:
         request.cls.data_queue = data_queue
         yield
         # 尝试断开，忽略异常；atexit hook 会兜底跳过 GC
-        try:
+        with contextlib.suppress(Exception):
             feed.disconnect()
-        except Exception:
-            pass
 
     def test_01_trader_connect(self):
         """验证 TraderClient 连接成功"""
@@ -701,7 +702,5 @@ class TestCtpMdIntegration:
         assert ticker.get_last_price() == raw_tick.LastPrice
 
         # 清理 MdClient，忽略异常；atexit hook 会兜底
-        try:
+        with contextlib.suppress(Exception):
             client.stop()
-        except Exception:
-            pass

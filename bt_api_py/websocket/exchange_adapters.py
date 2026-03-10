@@ -264,7 +264,7 @@ class BinanceWebSocketAdapter(ExchangeWebSocketAdapter):
         if "data" in message and "stream" in message:
             # Stream data message
             data = message["data"]
-            stream = message["stream"]
+            message["stream"]
             topic, symbol = self.extract_topic_symbol(message)
 
             normalized = {
@@ -463,7 +463,7 @@ class OKXWebSocketAdapter(ExchangeWebSocketAdapter):
     def normalize_message(self, message: dict[str, Any]) -> dict[str, Any]:
         """Normalize OKX message format."""
         if "data" in message and "arg" in message:
-            arg = message["arg"]
+            message["arg"]
             data = message["data"]
 
             # Handle array data (most OKX messages)
@@ -550,17 +550,17 @@ class WebSocketAdapterFactory:
 
     @classmethod
     def create_adapter(
-        self,
+        cls,
         exchange_name: str,
         exchange_type: ExchangeType = ExchangeType.SPOT,
         credentials: ExchangeCredentials | None = None,
     ) -> ExchangeWebSocketAdapter:
         """Create exchange-specific adapter."""
-        adapter_class = self._adapters.get(exchange_name.upper())
+        adapter_class = cls._adapters.get(exchange_name.upper())
 
         if not adapter_class:
             # Use generic adapter if exchange not supported
-            self._adapters[exchange_name.upper()] = adapter_class
+            cls._adapters[exchange_name.upper()] = adapter_class
             return GenericWebSocketAdapter(exchange_name, credentials)
 
         return adapter_class(exchange_type, credentials)

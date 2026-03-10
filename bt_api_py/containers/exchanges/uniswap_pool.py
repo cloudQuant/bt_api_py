@@ -137,10 +137,9 @@ class UniswapPool:
 
     def _calculate_derived_values(self) -> None:
         """Calculate derived values from pool data."""
-        if self.token0 and self.token1 and self.token0_price:
+        if self.token0 and self.token1 and self.token0_price and self.token0_price > 0:
             # Calculate token1 price from token0 price
-            if self.token0_price > 0:
-                self.token1_price = Decimal("1") / self.token0_price
+            self.token1_price = Decimal("1") / self.token0_price
 
     @classmethod
     def from_graphql_data(cls, data: dict) -> "UniswapPool":

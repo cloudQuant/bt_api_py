@@ -214,7 +214,7 @@ class GateioRequestDataSwap(GateioRequestData):
         path = self._params.get_rest_path(request_type)
 
         parts = order_type.split("-")
-        side = parts[0].lower() if len(parts) >= 1 else "buy"
+        parts[0].lower() if len(parts) >= 1 else "buy"
         otype = parts[1].lower() if len(parts) >= 2 else "limit"
 
         body = {

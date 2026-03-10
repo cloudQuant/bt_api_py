@@ -7,6 +7,17 @@ import requests
 import yaml
 from dotenv import find_dotenv, load_dotenv
 
+# Lazy import to avoid circular dependency
+# from bt_api_py.logging_factory import get_logger
+# logger = get_logger("function")
+
+
+def _get_logger():
+    """Lazy logger initialization to avoid circular imports."""
+    from bt_api_py.logging_factory import get_logger
+
+    return get_logger("function")
+
 
 def get_public_ip():
     try:
@@ -16,14 +27,16 @@ def get_public_ip():
         if response.status_code == 200:
             return response.text
     except Exception as e:
-        print(f"Error occurred: {e}")
+        _get_logger().error(f"Error occurred: {e}", exc_info=True)
+
         try:
             response = requests.get("https://api.myip.com")
             response.raise_for_status()  # 检查请求是否成功
             data = response.json()
             return data.get("ip")
         except requests.RequestException as e:
-            print(f"Error fetching IP: {e}")
+            _get_logger().error(f"Error fetching IP: {e}", exc_info=True)
+
             return None
     # 如果发生任何异常或请求失败，返回 None
     return None
@@ -38,7 +51,8 @@ def get_package_path(package_name="lv"):
         importlib.import_module(package_name)
         package = sys.modules[package_name]
     except KeyError:
-        print(f"Package {package_name} not found")
+        _get_logger().error(f"Package {package_name} not found")
+
         return None
     if package.__file__ is not None:
         return os.path.dirname(package.__file__)
@@ -53,10 +67,7 @@ def get_project_log_path(log_filename):
     :return: 完整日志路径 (e.g. "/path/to/project/logs/htx_spot_feed.log")
     """
     package_path = get_package_path("bt_api_py")
-    if package_path:
-        project_root = str(Path(package_path).parent)
-    else:
-        project_root = os.getcwd()
+    project_root = str(Path(package_path).parent) if package_path else os.getcwd()
     log_dir = os.path.join(project_root, "logs")
     return os.path.join(log_dir, log_filename)
 

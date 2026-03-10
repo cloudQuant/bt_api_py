@@ -479,8 +479,8 @@ class RiskCalculator:
                 loss = portfolio_value - stressed_value
 
             elif scenario_name == "liquidity_crisis":
-                spread_increase = scenario_params.get("spread_increase", 3.0)
-                volume_decrease = scenario_params.get("volume_decrease", 0.5)
+                scenario_params.get("spread_increase", 3.0)
+                scenario_params.get("volume_decrease", 0.5)
                 # 简化的流动性危机影响
                 stressed_value = portfolio_value * (1 - 0.1)  # 假设10%损失
                 loss = portfolio_value - stressed_value

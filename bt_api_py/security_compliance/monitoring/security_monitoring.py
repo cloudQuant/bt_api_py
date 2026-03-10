@@ -4,6 +4,7 @@ Provides comprehensive security monitoring, alerting, and integration
 with SIEM systems for financial industry compliance.
 """
 
+import contextlib
 import time
 from collections.abc import Callable
 from dataclasses import dataclass, field
@@ -84,10 +85,9 @@ class SecurityMonitoring:
 
         # Notify handlers
         for handler in self._alert_handlers:
-            try:
+            # Don't let handler errors break monitoring
+            with contextlib.suppress(Exception):
                 handler(alert)
-            except Exception:
-                pass  # Don't let handler errors break monitoring
 
         return alert
 

@@ -1,5 +1,3 @@
-import pytest
-
 """
 SatoshiTango Exchange Live Request Data Tests
 
@@ -11,6 +9,8 @@ Tests for SatoshiTango spot trading implementation following Binance/OKX standar
 """
 
 import queue
+
+import pytest
 
 # Import registration to auto-register SatoshiTango
 import bt_api_py.exchange_registers.register_satoshitango  # noqa: F401
@@ -87,7 +87,7 @@ def test_satoshitango_tick_normalize_function():
 def test_satoshitango_async_tick_data():
     """Test SatoshiTango ticker data retrieval (asynchronous)."""
     data_queue = queue.Queue()
-    live_satoshitango_spot_feed = init_async_feed(data_queue)
+    init_async_feed(data_queue)
 
     # Note: SatoshiTango's current implementation uses sync requests
     # This test would require async implementation
@@ -147,7 +147,7 @@ def test_satoshitango_kline_normalize_function():
 def test_satoshitango_async_kline_data():
     """Test SatoshiTango kline data retrieval (asynchronous)."""
     data_queue = queue.Queue()
-    live_satoshitango_spot_feed = init_async_feed(data_queue)
+    init_async_feed(data_queue)
 
     # Note: SatoshiTango's current implementation uses sync requests
     # This test would require async implementation

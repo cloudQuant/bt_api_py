@@ -33,7 +33,7 @@ def get_network_time():
 
         raise Exception("无法从任何 NTP 服务器获取时间，请检查网络连接或防火墙设置。")
     except ImportError:
-        raise ImportError("请确保已安装 ntplib 库。可以通过 pip install ntplib 安装。")
+        raise ImportError("请确保已安装 ntplib 库。可以通过 pip install ntplib 安装。") from None
 
 
 def get_system_time():

@@ -1,5 +1,7 @@
 """Bitget Swap (USDT-M Futures) Trading Feed."""
 
+from typing import Any
+
 from bt_api_py.containers.balances.bitget_balance import BitgetBalanceData
 from bt_api_py.containers.exchanges.bitget_exchange_data import BitgetExchangeDataSwap
 from bt_api_py.containers.orderbooks.bitget_orderbook import BitgetOrderBookData

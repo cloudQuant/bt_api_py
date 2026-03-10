@@ -400,9 +400,10 @@ class KrakenRequestOrderData(OrderData):
             return False
 
         # Validate execution
-        if self.executed_quantity is not None:
-            if self.executed_quantity < 0 or self.executed_quantity > self.quantity:
-                return False
+        if self.executed_quantity is not None and (
+            self.executed_quantity < 0 or self.executed_quantity > self.quantity
+        ):
+            return False
 
         return True
 

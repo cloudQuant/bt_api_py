@@ -367,7 +367,7 @@ class CryptoComRequestData(Feed):
     def _get_kline_normalize_function(input_data, extra_data):
         """Normalize kline data from API response."""
         status = input_data is not None
-        symbol_name = extra_data["symbol_name"]
+        extra_data["symbol_name"]
 
         if not status:
             return [], False

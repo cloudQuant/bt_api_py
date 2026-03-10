@@ -488,7 +488,6 @@ class LimitsManager:
             Dict[str, float]: 各限制的使用率
         """
         utilization = {}
-        key = f"{exchange_name}:{account_id}"
 
         # 从最近的检查记录中计算使用率
         recent_checks = [

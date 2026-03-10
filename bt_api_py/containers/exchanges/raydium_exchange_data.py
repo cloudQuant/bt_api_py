@@ -81,6 +81,8 @@ class RaydiumExchangeData(ExchangeData):
             "1M": "2592000",
         }
 
+        self.legal_currency = ["SOL", "USDC", "USDT"]
+
         self._load_from_config("solana")
 
     def _load_from_config(self, asset_type: str) -> bool:
@@ -103,23 +105,44 @@ class RaydiumExchangeData(ExchangeData):
             self.exchange_name = asset_cfg.exchange_name
 
         if config.base_urls:
-            self.rest_url = config.base_urls.rest.get(asset_type, self.rest_url)
+            self.rest_url = config.base_urls.rest.get(
+                asset_type, config.base_urls.rest.get("default", self.rest_url)
+            )
 
         if hasattr(asset_cfg, "rest_paths") and asset_cfg.rest_paths:
             self.rest_paths = dict(asset_cfg.rest_paths)
 
         return True
 
-    def get_period(self, period: str) -> int:
-        """Convert period to seconds.
+    def get_chain_value(self) -> str:
+        """Get the blockchain network value.
+
+        Returns:
+            str: Chain name (e.g., 'SOLANA')
+        """
+        return self.chain.value
+
+    def get_symbol(self, symbol: str) -> str:
+        """Convert symbol format to standard format.
+
+        Args:
+            symbol: Symbol in any format (e.g., 'SOL-USDC', 'sol/usdc')
+
+        Returns:
+            str: Symbol in standard format (e.g., 'SOL/USDC')
+        """
+        return symbol.upper().replace("-", "/")
+
+    def get_period(self, period: str) -> str:
+        """Convert period to seconds string.
 
         Args:
             period: Period name
 
         Returns:
-            int: Period in seconds
+            str: Period in seconds as string
         """
-        return int(self.kline_periods.get(period, period))
+        return str(self.kline_periods.get(period, period))
 
     def get_rest_path(self, request_type: str, **kwargs: Any) -> str:
         """Get REST API path.

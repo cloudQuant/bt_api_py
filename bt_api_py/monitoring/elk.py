@@ -9,7 +9,10 @@ import logging
 from datetime import datetime
 from typing import Any
 
+from bt_api_py.logging_factory import get_logger
 from bt_api_py.logging_system import LogEvent
+
+logger = get_logger("monitoring")
 
 
 class ElasticsearchClient:
@@ -39,7 +42,7 @@ class ElasticsearchClient:
         try:
             import aiohttp
         except ImportError:
-            raise ImportError("aiohttp is required for Elasticsearch integration")
+            raise ImportError("aiohttp is required for Elasticsearch integration") from None
 
         # Build URL
         protocol = "https" if self.use_ssl else "http"
@@ -73,7 +76,7 @@ class ElasticsearchClient:
                 if response.status != 200:
                     raise RuntimeError(f"Elasticsearch connection failed: {response.status}")
         except Exception as e:
-            raise RuntimeError(f"Cannot connect to Elasticsearch: {e}")
+            raise RuntimeError(f"Cannot connect to Elasticsearch: {e}") from e
 
     async def index_document(
         self,
@@ -169,9 +172,8 @@ class LogstashHandler(logging.Handler):
             try:
                 import aiohttp
             except ImportError:
-                raise ImportError("aiohttp is required for HTTP Logstash transport")
+                raise ImportError("aiohttp is required for HTTP Logstash transport") from None
 
-            url = f"http://{self.host}:{self.port}"
             self._writer = aiohttp.ClientSession()
         elif self.transport == "udp":
             # UDP transport would need different implementation
@@ -288,7 +290,8 @@ class LogstashHandler(logging.Handler):
                 async with self._writer.post(url, json=log_data) as response:
                     if response.status >= 400:
                         # Log error but don't raise to avoid recursion
-                        print(f"Failed to send log to Logstash: {response.status}")
+                        logger.warning(f"Failed to send log to Logstash: {response.status}")
+
         except Exception:
             # Silently ignore to avoid recursion
             pass

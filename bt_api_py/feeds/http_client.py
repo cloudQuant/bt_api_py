@@ -122,9 +122,9 @@ class HttpClient:
         try:
             response = self._sync_client.request(method, url, **req_kwargs)
         except httpx.TimeoutException as e:
-            raise RequestFailedError(venue=self._venue, message=f"Request timeout: {e}")
+            raise RequestFailedError(venue=self._venue, message=f"Request timeout: {e}") from e
         except httpx.ConnectError as e:
-            raise RequestFailedError(venue=self._venue, message=f"Connection error: {e}")
+            raise RequestFailedError(venue=self._venue, message=f"Connection error: {e}") from e
 
         return self._process_response(response)
 
@@ -165,9 +165,13 @@ class HttpClient:
         try:
             response = await client.request(method, url, **req_kwargs)
         except httpx.TimeoutException as e:
-            raise RequestFailedError(venue=self._venue, message=f"Async request timeout: {e}")
+            raise RequestFailedError(
+                venue=self._venue, message=f"Async request timeout: {e}"
+            ) from e
         except httpx.ConnectError as e:
-            raise RequestFailedError(venue=self._venue, message=f"Async connection error: {e}")
+            raise RequestFailedError(
+                venue=self._venue, message=f"Async connection error: {e}"
+            ) from e
 
         return self._process_response(response)
 

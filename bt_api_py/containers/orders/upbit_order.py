@@ -3,6 +3,9 @@ import time
 
 from bt_api_py.containers.orders.order import OrderData
 from bt_api_py.functions.utils import from_dict_get_float, from_dict_get_string
+from bt_api_py.logging_factory import get_logger
+
+logger = get_logger("container")
 
 
 class UpbitOrderData(OrderData):
@@ -85,7 +88,7 @@ class UpbitOrderData(OrderData):
             self.has_been_init_data = True
 
         except Exception as e:
-            print(f"Error initializing Upbit order data: {e}")
+            logger.error(f"Error initializing Upbit order data: {e}", exc_info=True)
 
     def get_all_data(self):
         """获取所有订单数据"""

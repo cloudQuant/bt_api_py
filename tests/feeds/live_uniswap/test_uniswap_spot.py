@@ -365,9 +365,9 @@ class TestUniswapTicker:
             total_liquidity_usd=10000000.0,
         )
 
-        assert ticker.is_valid_price == True
-        assert ticker.is_valid_volume == True
-        assert ticker.has_liquidity == True
+        assert ticker.is_valid_price
+        assert ticker.is_valid_volume
+        assert ticker.has_liquidity
 
         # Invalid ticker
         invalid_ticker = UniswapTicker(
@@ -380,9 +380,9 @@ class TestUniswapTicker:
             total_liquidity_usd=0.0,
         )
 
-        assert invalid_ticker.is_valid_price == False
-        assert invalid_ticker.is_valid_volume == False
-        assert invalid_ticker.has_liquidity == False
+        assert not invalid_ticker.is_valid_price
+        assert not invalid_ticker.is_valid_volume
+        assert not invalid_ticker.has_liquidity
 
 
 class TestUniswapPool:
@@ -447,8 +447,8 @@ class TestUniswapPool:
         assert pool.token1_price == Decimal("1") / Decimal("3000.0")
         assert pool.stats.total_value_locked_usd == Decimal("10000000")
         assert pool.stats.apr == Decimal("0.15")
-        assert pool.is_valid == True
-        assert pool.has_liquidity == True
+        assert pool.is_valid
+        assert pool.has_liquidity
 
     def test_get_token_balance(self):
         """Test getting token balance from pool."""
@@ -545,12 +545,12 @@ class TestUniswapQuote:
         assert quote.price_impact == Decimal("0.005")
         assert quote.estimated_gas == 45000
         assert len(quote.routes) == 1
-        assert quote.is_valid == True
+        assert quote.is_valid
         # price_impact_percentage is calculated as abs(0.005) / 1 * 100 = 0.5
         # has_price_impact_warning is True when percentage > 0.5 (threshold)
         # Since 0.5 is NOT > 0.5, warning should be False
         assert quote.price_impact_percentage == 0.5
-        assert quote.has_price_impact_warning == False  # 0.5% is not > 0.5% threshold
+        assert not quote.has_price_impact_warning  # 0.5% is not > 0.5% threshold
 
     def test_price_impact_calculation(self):
         """Test price impact percentage calculation."""
@@ -567,7 +567,7 @@ class TestUniswapQuote:
         # price_impact_percentage is calculated as abs(-10) / 100 * 100 = 10.0
         # Note: __post_init__ calculates this as a float, not Decimal
         assert quote.price_impact_percentage == 10.0
-        assert quote.has_price_impact_warning == True  # 10% > 0.5% threshold
+        assert quote.has_price_impact_warning  # 10% > 0.5% threshold
 
     def test_effective_rate(self):
         """Test effective exchange rate calculation."""
@@ -609,37 +609,37 @@ class TestUniswapStandardInterfaces:
             return instance
 
     def test_make_order_calls_request(self, uniswap_spot):
-        result = uniswap_spot.make_order("WETH/USDC", 1.0, 3000, "LIMIT")
+        uniswap_spot.make_order("WETH/USDC", 1.0, 3000, "LIMIT")
         assert uniswap_spot.request.called
         extra_data = uniswap_spot.request.call_args[1].get("extra_data")
         assert extra_data["request_type"] == "make_order"
 
     def test_cancel_order_calls_request(self, uniswap_spot):
-        result = uniswap_spot.cancel_order("WETH/USDC", "order_123")
+        uniswap_spot.cancel_order("WETH/USDC", "order_123")
         assert uniswap_spot.request.called
         extra_data = uniswap_spot.request.call_args[1].get("extra_data")
         assert extra_data["request_type"] == "cancel_order"
 
     def test_query_order_calls_request(self, uniswap_spot):
-        result = uniswap_spot.query_order("WETH/USDC", "order_123")
+        uniswap_spot.query_order("WETH/USDC", "order_123")
         assert uniswap_spot.request.called
         extra_data = uniswap_spot.request.call_args[1].get("extra_data")
         assert extra_data["request_type"] == "query_order"
 
     def test_get_open_orders_calls_request(self, uniswap_spot):
-        result = uniswap_spot.get_open_orders("WETH/USDC")
+        uniswap_spot.get_open_orders("WETH/USDC")
         assert uniswap_spot.request.called
         extra_data = uniswap_spot.request.call_args[1].get("extra_data")
         assert extra_data["request_type"] == "get_open_orders"
 
     def test_get_account_calls_request(self, uniswap_spot):
-        result = uniswap_spot.get_account("WETH")
+        uniswap_spot.get_account("WETH")
         assert uniswap_spot.request.called
         extra_data = uniswap_spot.request.call_args[1].get("extra_data")
         assert extra_data["request_type"] == "get_account"
 
     def test_get_balance_calls_request(self, uniswap_spot):
-        result = uniswap_spot.get_balance("WETH")
+        uniswap_spot.get_balance("WETH")
         assert uniswap_spot.request.called
         extra_data = uniswap_spot.request.call_args[1].get("extra_data")
         assert extra_data["request_type"] == "get_balance"

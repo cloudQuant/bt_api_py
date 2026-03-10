@@ -2,6 +2,8 @@
 WazirX Exchange Registration Module
 """
 
+from typing import Any
+
 from bt_api_py.balance_utils import simple_balance_handler as _wazirx_balance_handler
 from bt_api_py.containers.exchanges.wazirx_exchange_data import WazirxExchangeDataSpot
 from bt_api_py.feeds.live_wazirx.spot import WazirxRequestDataSpot

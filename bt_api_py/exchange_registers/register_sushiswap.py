@@ -28,7 +28,7 @@ def register_sushiswap():
         (SushiSwapChain.AVALANCHE, "AVALANCHE"),
     ]
 
-    for chain, chain_name in chains:
+    for _chain, chain_name in chains:
         identifier = f"SUSHISWAP___{chain_name}"
         ExchangeRegistry.register_feed(identifier, SushiSwapRequestDataSpot)
         ExchangeRegistry.register_exchange_data(identifier, SushiSwapExchangeDataSpot)

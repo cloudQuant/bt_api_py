@@ -1,5 +1,6 @@
 import json
 import time
+from typing import Any
 
 from bt_api_py.containers.symbols.symbol import SymbolData
 from bt_api_py.functions.utils import from_dict_get_bool, from_dict_get_float, from_dict_get_string
@@ -60,7 +61,7 @@ class OkxSymbolData(SymbolData):
         self.contract_notional_value = None
         self.has_been_init_data = False
 
-    def init_data(self) -> None:
+    def init_data(self) -> "OkxSymbolData":
         if not self.has_been_json_encoded:
             self.symbol_info = json.loads(self.symbol_info)
             self.symbol_data = self.symbol_info["data"][0]
@@ -75,9 +76,9 @@ class OkxSymbolData(SymbolData):
         self.contract_notional_value = from_dict_get_float(self.symbol_data, "ctVal")
         self.min_amount = from_dict_get_float(self.symbol_data, "notional")
         self.price_unit = from_dict_get_float(self.symbol_data, "tickSz")
-        self.price_digital = 1 / self.price_unit
+        self.price_digital = 1 / self.price_unit if self.price_unit else 1.0
         self.qty_unit = from_dict_get_float(self.symbol_data, "lotSz")
-        self.qty_digital = 1 / self.qty_unit
+        self.qty_digital = 1 / self.qty_unit if self.qty_unit else 1.0
         self.max_qty = from_dict_get_float(self.symbol_data, "maxLmtAmt")
         self.min_qty = from_dict_get_float(self.symbol_data, "minSz")
         self.fee_currency = from_dict_get_string(self.symbol_data, "settleCcy")
@@ -101,6 +102,7 @@ class OkxSymbolData(SymbolData):
         self.max_stop_qty = from_dict_get_float(self.symbol_data, "maxStopSz")
         self.future_settlement = from_dict_get_bool(self.symbol_data, "futureSettlement")
         self.has_been_init_data = True
+        return self
 
     def get_local_update_time(self) -> float:
         return self.local_update_time
@@ -111,10 +113,10 @@ class OkxSymbolData(SymbolData):
     def get_underlying_index_name(self) -> Any:
         return self.underlying_index_name
 
-    def get_symbol_name(self) -> str:
+    def get_symbol_name(self) -> str | None:
         return self.symbol_name
 
-    def get_asset_type(self) -> str:
+    def get_asset_type(self) -> str | None:
         return self.asset_type
 
     def get_all_data(self) -> dict[str, Any]:
@@ -218,7 +220,7 @@ class OkxSymbolData(SymbolData):
     def get_fee_currency(self) -> Any:
         return self.fee_currency
 
-    def get_server_time(self) -> float:
+    def get_server_time(self) -> float | None:
         return self.server_time
 
     def get_exchange_name(self) -> str:

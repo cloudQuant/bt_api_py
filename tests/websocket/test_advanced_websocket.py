@@ -3,6 +3,7 @@ Comprehensive tests for the advanced WebSocket system.
 """
 
 import asyncio
+import contextlib
 import time
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -96,7 +97,7 @@ class TestWebSocketMetrics:
         metrics = WebSocketMetrics("test_conn", "TEST_EXCHANGE")
 
         # Record some errors
-        now = time.time()
+        time.time()
         metrics.record_error(ErrorCategory.NETWORK)
         metrics.record_error(ErrorCategory.PROTOCOL)
 
@@ -181,11 +182,9 @@ class TestIntelligentCircuitBreaker:
         assert cb.get_state() == "CLOSED"
 
         # Record failures
-        for i in range(3):
-            try:
+        for _i in range(3):
+            with contextlib.suppress(Exception):
                 await cb.call(lambda: 1 / 0)  # Will raise exception
-            except Exception:
-                pass
 
         # Should be open now
         assert cb.get_state() == "OPEN"
@@ -194,10 +193,8 @@ class TestIntelligentCircuitBreaker:
         await asyncio.sleep(1.1)
 
         # Next call should put it in half-open state
-        try:
+        with contextlib.suppress(Exception):
             await cb.call(lambda: "success")
-        except Exception:
-            pass
 
         assert cb.get_state() in ["HALF_OPEN", "CLOSED"]
 
@@ -391,10 +388,11 @@ class TestLoadBalancer:
         selected1 = balancer.select_connection(connections)
         selected2 = balancer.select_connection(connections)
         selected3 = balancer.select_connection(connections)
+        selected4 = balancer.select_connection(connections)
 
-        assert selected1 != selected2
-        assert selected2 != selected3
-        assert selected1 == selected3  # Should cycle back
+        assert selected1 is not selected2
+        assert selected2 is not selected3
+        assert selected4 is selected1  # Should cycle back after 3
 
     def test_least_connections_selection(self):
         """Test least connections selection."""
@@ -412,7 +410,7 @@ class TestLoadBalancer:
 
         selected = balancer.select_connection(connections)
 
-        assert selected == connections[1]  # Should select least used
+        assert selected is connections[1]  # Should select least used
 
     def test_empty_connections(self):
         """Test behavior with empty connections list."""
@@ -423,7 +421,6 @@ class TestLoadBalancer:
         assert selected is None
 
 
-@pytest.mark.asyncio
 class TestMetricsCollector:
     """Test metrics collector functionality."""
 
@@ -431,7 +428,7 @@ class TestMetricsCollector:
     def metrics_collector(self):
         return MetricsCollector()
 
-    async def test_counter_increment(self, metrics_collector):
+    def test_counter_increment(self, metrics_collector):
         """Test counter increment."""
         metrics_collector.increment_counter("test_counter", tags={"env": "test"})
         metrics_collector.increment_counter("test_counter", tags={"env": "test"}, value=5)
@@ -441,7 +438,7 @@ class TestMetricsCollector:
         assert len(points) == 2
         assert points[-1].value == 6.0
 
-    async def test_gauge_set(self, metrics_collector):
+    def test_gauge_set(self, metrics_collector):
         """Test gauge setting."""
         metrics_collector.set_gauge("test_gauge", 42.5, tags={"env": "test"})
 
@@ -450,7 +447,7 @@ class TestMetricsCollector:
         assert len(points) == 1
         assert points[0].value == 42.5
 
-    async def test_histogram_record(self, metrics_collector):
+    def test_histogram_record(self, metrics_collector):
         """Test histogram recording."""
         for i in range(100):
             metrics_collector.record_histogram("test_histogram", i + 1, tags={"env": "test"})
@@ -462,7 +459,7 @@ class TestMetricsCollector:
         assert aggregated["min"] == 1.0
         assert aggregated["max"] == 100.0
 
-    async def test_cleanup(self, metrics_collector):
+    def test_cleanup(self, metrics_collector):
         """Test metrics cleanup."""
         # Add some old metrics
         with patch("time.time", return_value=1000.0):
@@ -473,8 +470,10 @@ class TestMetricsCollector:
             metrics_collector.set_gauge("new_metric", 2.0)
 
         # Cleanup with retention period of 500 seconds
+        # Must patch time.time so cutoff = 2000 - 500 = 1500 (old_metric@1000 < 1500, cleaned)
         metrics_collector.retention_period = 500.0
-        metrics_collector._cleanup_old_metrics()
+        with patch("time.time", return_value=2000.0):
+            metrics_collector._cleanup_old_metrics()
 
         old_points = metrics_collector.get_metric("old_metric")
         new_points = metrics_collector.get_metric("new_metric")
@@ -551,38 +550,38 @@ class TestWebSocketBenchmark:
     """Test WebSocket benchmark functionality."""
 
     @pytest.fixture
-    def benchmark(self):
+    def ws_benchmark(self):
         metrics_collector = MetricsCollector()
         return WebSocketBenchmark(metrics_collector)
 
-    async def test_latency_benchmark(self, benchmark):
+    async def test_latency_benchmark(self, ws_benchmark):
         """Test latency benchmark."""
         # Mock WebSocket manager
         mock_manager = MagicMock()
 
-        result = await benchmark.run_latency_benchmark(mock_manager, duration=0.1)
+        result = await ws_benchmark.run_latency_benchmark(mock_manager, duration=0.1)
 
         assert result.benchmark_name == "latency_test"
         assert result.success is True
         assert "avg_latency_ms" in result.metrics
         assert result.duration_ms >= 100  # Should run for at least 100ms
 
-    async def test_throughput_benchmark(self, benchmark):
+    async def test_throughput_benchmark(self, ws_benchmark):
         """Test throughput benchmark."""
         mock_manager = MagicMock()
 
-        result = await benchmark.run_throughput_benchmark(mock_manager, duration=0.1)
+        result = await ws_benchmark.run_throughput_benchmark(mock_manager, duration=0.1)
 
         assert result.benchmark_name == "throughput_test"
         assert result.success is True
         assert "messages_per_second_sent" in result.metrics
         assert "messages_per_second_received" in result.metrics
 
-    async def test_memory_benchmark(self, benchmark):
+    async def test_memory_benchmark(self, ws_benchmark):
         """Test memory benchmark."""
         mock_manager = MagicMock()
 
-        result = await benchmark.run_memory_benchmark(mock_manager, duration=0.1)
+        result = await ws_benchmark.run_memory_benchmark(mock_manager, duration=0.1)
 
         assert result.benchmark_name == "memory_test"
         assert result.success is True

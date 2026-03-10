@@ -55,11 +55,10 @@ class BalancerPoolData:
             return self
 
         # Extract nested data if present
-        if isinstance(self.pool_data, dict):
-            if "data" in self.pool_data:
-                inner = self.pool_data.get("data", {}).get("poolGetPool")
-                if inner:
-                    self.pool_data = inner
+        if isinstance(self.pool_data, dict) and "data" in self.pool_data:
+            inner = self.pool_data.get("data", {}).get("poolGetPool")
+            if inner:
+                self.pool_data = inner
 
         # Parse basic pool info
         self.pool_id = self.pool_data.get("id")

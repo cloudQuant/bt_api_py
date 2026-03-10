@@ -106,14 +106,22 @@ class PancakeSwapExchangeData(ExchangeData):
                 self.rest_url = asset_cfg.rest_url
 
         # acct_wss_url
-        if hasattr(asset_cfg, "websocket") and asset_cfg.websocket:
-            if hasattr(asset_cfg.websocket, "private_url") and asset_cfg.websocket.private_url:
-                self.acct_wss_url = asset_cfg.websocket.private_url
+        if (
+            hasattr(asset_cfg, "websocket")
+            and asset_cfg.websocket
+            and hasattr(asset_cfg.websocket, "private_url")
+            and asset_cfg.websocket.private_url
+        ):
+            self.acct_wss_url = asset_cfg.websocket.private_url
 
         # wss_url
-        if hasattr(asset_cfg, "websocket") and asset_cfg.websocket:
-            if hasattr(asset_cfg.websocket, "public_url") and asset_cfg.websocket.public_url:
-                self.wss_url = asset_cfg.websocket.public_url
+        if (
+            hasattr(asset_cfg, "websocket")
+            and asset_cfg.websocket
+            and hasattr(asset_cfg.websocket, "public_url")
+            and asset_cfg.websocket.public_url
+        ):
+            self.wss_url = asset_cfg.websocket.public_url
 
         # rest_paths
         if not self.rest_paths:
@@ -510,7 +518,7 @@ class PancakeSwapExchangeData(ExchangeData):
         if config is None:
             return False
 
-        for network_name, network_config in config.networks.items():
+        for _network_name, network_config in config.networks.items():
             if network_config.chain_id == chain_id:
                 return True
 

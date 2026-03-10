@@ -9,6 +9,7 @@ from typing import Any
 import numpy as np
 from sklearn.ensemble import GradientBoostingClassifier, RandomForestClassifier
 from sklearn.linear_model import LogisticRegression
+from sklearn.metrics import f1_score
 
 from .ml_base import BaseMLModel, RiskPredictionResult
 
@@ -456,7 +457,7 @@ class RiskEnsembleModel(BaseMLModel):
         feature_importance = {}
 
         # 获取各模型的特征重要性
-        for name, model in self.models.items():
+        for _name, model in self.models.items():
             if hasattr(model, "feature_importances_"):
                 importance = model.feature_importances_
                 for i, imp in enumerate(importance):
@@ -485,7 +486,7 @@ class RiskEnsembleModel(BaseMLModel):
         meta_features_train = []
         meta_features_val = []
 
-        for name, model in self.models.items():
+        for _name, model in self.models.items():
             # 训练集预测 (使用交叉验证避免过拟合)
             if hasattr(model, "predict_proba"):
                 train_proba = model.predict_proba(X_train)
@@ -500,7 +501,7 @@ class RiskEnsembleModel(BaseMLModel):
 
         # 合并元特征
         X_meta_train = np.hstack(meta_features_train)
-        X_meta_val = np.hstack(meta_features_val)
+        np.hstack(meta_features_val)
 
         # 训练元学习器
         self.meta_learner.fit(X_meta_train, y_train)
@@ -661,7 +662,7 @@ class RiskEnsembleModel(BaseMLModel):
         f1_score = performance_metrics.get("f1_score", 0.5)
 
         # 基于整体性能调整各模型权重
-        for name, weight_config in self.model_weights.items():
+        for _name, weight_config in self.model_weights.items():
             # 简单的权重更新策略
             if f1_score > 0.8:
                 # 高性能，略微增加权重

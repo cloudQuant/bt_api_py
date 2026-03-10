@@ -3,8 +3,6 @@ import time
 
 import pytest
 
-pytestmark = [pytest.mark.integration, pytest.mark.network]
-
 from bt_api_py.containers.bars.okx_bar import OkxBarData
 from bt_api_py.containers.exchanges.okx_exchange_data import OkxExchangeDataSwap
 from bt_api_py.containers.fundingrates.okx_funding_rate import OkxFundingRateData
@@ -16,6 +14,8 @@ from bt_api_py.containers.tickers.okx_ticker import OkxTickerData
 # from bt_api_py.containers.orders.okx_order import OkxOrderData
 from bt_api_py.feeds.live_okx_feed import OkxRequestDataSwap
 from bt_api_py.functions.utils import read_account_config
+
+pytestmark = [pytest.mark.integration, pytest.mark.network]
 
 
 def generate_kwargs(exchange=OkxExchangeDataSwap):

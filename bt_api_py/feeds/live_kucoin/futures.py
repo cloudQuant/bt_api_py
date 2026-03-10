@@ -3,6 +3,7 @@ KuCoin Futures trading feed implementation.
 """
 
 import uuid
+from typing import Any
 
 from bt_api_py.containers.exchanges.kucoin_exchange_data import KuCoinExchangeDataFutures
 from bt_api_py.containers.orderbooks.kucoin_orderbook import KuCoinRequestOrderBookData

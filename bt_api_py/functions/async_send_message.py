@@ -12,6 +12,9 @@ from email.mime.text import MIMEText
 import aiosmtplib
 
 from bt_api_py.functions.async_base import AsyncBase
+from bt_api_py.logging_factory import get_logger
+
+logger = get_logger("function")
 
 # from bt_api_py.functions.calculate_time import get_string_tz_time
 # from bt_api_py.functions.log_message import SpdLogManager
@@ -73,7 +76,8 @@ class EmailManagerAsync(AsyncBase):
         # 发送附件
         if files and isinstance(files, list):
             for i in files:
-                part_attach1 = MIMEApplication(open(i, "rb").read())  # 打开附件
+                with open(i, "rb") as f:
+                    part_attach1 = MIMEApplication(f.read())  # 打开附件
                 part_attach1.add_header(
                     "Content-Disposition", "attachment", filename=i
                 )  # 为附件命名
@@ -89,7 +93,7 @@ class EmailManagerAsync(AsyncBase):
                 await smtp.login(sender_mail, sender.get("sender_pass"))
                 await smtp.sendmail(sender_mail, receiver, msg_root.as_string())
         except Exception as e:
-            print(traceback.format_exc(), e)
+            logger.error(traceback.format_exc(), e, exc_info=True)
 
     def async_send(self, title, content, sender=None, receiver=None, files=None):
         self.submit(self.__send_email(title, content, sender, receiver, files))

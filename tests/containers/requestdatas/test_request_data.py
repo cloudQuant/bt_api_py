@@ -33,7 +33,7 @@ def test_request_data():
     }
 
     def _get_open_orders_normalize_function(input_data, extra_data_):
-        status = True if input_data is not None else False
+        status = input_data is not None
         symbol_name = extra_data_["symbol_name"]
         asset_type = extra_data_["asset_type"]
         if isinstance(input_data, list):

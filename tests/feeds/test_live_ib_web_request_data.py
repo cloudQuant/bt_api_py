@@ -335,15 +335,14 @@ class TestMarketData:
             extra_data={"conid": self.AAPL_CONID},
         )
         assert result is not None
-        if isinstance(result, dict):
-            # IB 返回 {"data": [...], "serverId": ...}
-            if "data" in result:
-                bars = result["data"]
-                assert len(bars) > 0
-                first_bar = bars[0]
-                # 验证 bar 字段
-                has_ohlc = any(k in first_bar for k in ["o", "h", "l", "c", "v"])
-                assert has_ohlc, f"Expected OHLC in: {list(first_bar.keys())}"
+        # IB 返回 {"data": [...], "serverId": ...}
+        if isinstance(result, dict) and "data" in result:
+            bars = result["data"]
+            assert len(bars) > 0
+            first_bar = bars[0]
+            # 验证 bar 字段
+            has_ohlc = any(k in first_bar for k in ["o", "h", "l", "c", "v"])
+            assert has_ohlc, f"Expected OHLC in: {list(first_bar.keys())}"
 
     def test_unsubscribe_market_data(self):
         """取消行情订阅"""
@@ -375,7 +374,7 @@ class TestWebSocketStream:
     def test_websocket_connect_and_receive(self):
         """测试 WebSocket 连接并接收市场数据"""
         try:
-            import websocket
+            import websocket  # noqa: F401 - imported to check availability
         except ImportError:
             pytest.skip("websocket-client not installed")
 
@@ -422,7 +421,7 @@ class TestWebSocketStream:
     def test_account_stream(self):
         """测试账户 WebSocket 流"""
         try:
-            import websocket
+            import websocket  # noqa: F401
         except ImportError:
             pytest.skip("websocket-client not installed")
 

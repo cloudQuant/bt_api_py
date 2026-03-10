@@ -1,5 +1,3 @@
-import pytest
-
 """
 MEXC Exchange Live Request Data Tests
 
@@ -11,6 +9,8 @@ Tests for MEXC spot trading implementation following Binance/OKX standards:
 """
 
 import queue
+
+import pytest
 
 # Import registration to auto-register MEXC
 import bt_api_py.exchange_registers.register_mexc  # noqa: F401
@@ -58,7 +58,7 @@ def test_mexc_req_tick_data():
 def test_mexc_async_tick_data():
     """Test MEXC ticker data retrieval (asynchronous)."""
     data_queue = queue.Queue()
-    live_mexc_spot_feed = init_async_feed(data_queue)
+    init_async_feed(data_queue)
 
     # Note: MEXC's current implementation uses sync requests
     # This test would require async implementation
@@ -82,7 +82,7 @@ def test_mexc_req_kline_data():
 def test_mexc_async_kline_data():
     """Test MEXC kline data retrieval (asynchronous)."""
     data_queue = queue.Queue()
-    live_mexc_spot_feed = init_async_feed(data_queue)
+    init_async_feed(data_queue)
 
     # Note: MEXC's current implementation uses sync requests
     # This test would require async implementation

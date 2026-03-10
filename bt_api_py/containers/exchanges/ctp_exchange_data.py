@@ -3,7 +3,7 @@
 """
 
 import os
-from typing import Never
+from typing import Any, Never
 
 from bt_api_py.containers.exchanges.exchange_data import ExchangeData
 from bt_api_py.logging_factory import get_logger

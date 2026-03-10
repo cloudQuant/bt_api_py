@@ -6,6 +6,9 @@ from typing import Any
 
 from bt_api_py.containers.balances.balance import BalanceData
 from bt_api_py.functions.utils import from_dict_get_float, from_dict_get_string
+from bt_api_py.logging_factory import get_logger
+
+logger = get_logger("container")
 
 
 class CoinbaseBalanceData(BalanceData):
@@ -81,40 +84,40 @@ class CoinbaseBalanceData(BalanceData):
         if self.has_been_init_data:
             return self
         try:
-            if isinstance(self.balance_data, dict):
-                if "currency" in self.balance_data:
-                    self.currency = from_dict_get_string(self.balance_data, "currency")
-                    if "available_balance" in self.balance_data:
-                        available_bal = self.balance_data.get("available_balance", {})
-                        if isinstance(available_bal, dict):
-                            self.available = from_dict_get_float(available_bal, "value")
-                        else:
-                            self.available = float(available_bal) if available_bal else None
+            if isinstance(self.balance_data, dict) and "currency" in self.balance_data:
+                self.currency = from_dict_get_string(self.balance_data, "currency")
+                if "available_balance" in self.balance_data:
+                    available_bal = self.balance_data.get("available_balance", {})
+                    if isinstance(available_bal, dict):
+                        self.available = from_dict_get_float(available_bal, "value")
                     else:
-                        self.available = from_dict_get_float(self.balance_data, "available")
+                        self.available = float(available_bal) if available_bal else None
+                else:
+                    self.available = from_dict_get_float(self.balance_data, "available")
 
-                    if "hold" in self.balance_data:
-                        hold_val = self.balance_data.get("hold")
-                        if isinstance(hold_val, dict):
-                            self.hold = from_dict_get_float(hold_val, "value")
-                        else:
-                            self.hold = float(hold_val) if hold_val else None
+                if "hold" in self.balance_data:
+                    hold_val = self.balance_data.get("hold")
+                    if isinstance(hold_val, dict):
+                        self.hold = from_dict_get_float(hold_val, "value")
                     else:
-                        self.hold = from_dict_get_float(self.balance_data, "hold")
+                        self.hold = float(hold_val) if hold_val else None
+                else:
+                    self.hold = from_dict_get_float(self.balance_data, "hold")
 
-                    if "total" in self.balance_data:
-                        total_val = self.balance_data.get("total")
-                        if isinstance(total_val, dict):
-                            self.total = from_dict_get_float(total_val, "value")
-                        else:
-                            self.total = float(total_val) if total_val else None
+                if "total" in self.balance_data:
+                    total_val = self.balance_data.get("total")
+                    if isinstance(total_val, dict):
+                        self.total = from_dict_get_float(total_val, "value")
                     else:
-                        self.total = from_dict_get_float(self.balance_data, "total")
+                        self.total = float(total_val) if total_val else None
+                else:
+                    self.total = from_dict_get_float(self.balance_data, "total")
 
-                    if "native_balance" in self.balance_data:
-                        self.native_balance = self.balance_data.get("native_balance")
+                if "native_balance" in self.balance_data:
+                    self.native_balance = self.balance_data.get("native_balance")
         except Exception as e:
-            print(f"Error parsing REST balance data: {e}")
+            logger.error(f"Error parsing REST balance data: {e}", exc_info=True)
+
             self.balance_data = {}
         self.has_been_init_data = True
         return self

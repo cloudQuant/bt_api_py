@@ -87,7 +87,7 @@ class WebSocketTestHarness:
                 return await asyncio.wait_for(message_queue.get(), timeout=1.0)
             except TimeoutError:
                 # Simulate WebSocket timeout
-                raise websockets.exceptions.ConnectionClosed(1006, "Connection timeout")
+                raise websockets.exceptions.ConnectionClosed(1006, "Connection timeout") from None
 
         mock_ws.recv.side_effect = recv_side_effect
 
@@ -140,7 +140,7 @@ class TestWebSocketConnections:
             {"stream": "btcusdt@depth", "data": {"symbol": "BTCUSDT", "bids": [["49999", "1"]]}},
         ]
 
-        server_url = await ws_harness.setup_mock_server(responses)
+        await ws_harness.setup_mock_server(responses)
 
         # Create mock client
         mock_client = ws_harness.create_mock_websocket_client()
@@ -170,7 +170,7 @@ class TestWebSocketConnections:
     @pytest.mark.asyncio
     async def test_websocket_reconnection_logic(self, ws_harness):
         """Test WebSocket reconnection logic."""
-        events = ws_harness.simulate_connection_events()
+        ws_harness.simulate_connection_events()
 
         mock_client = ws_harness.create_mock_websocket_client()
 
@@ -190,7 +190,7 @@ class TestWebSocketConnections:
                 return True
 
         # Test reconnection attempts
-        for attempt in range(3):
+        for _attempt in range(3):
             try:
                 await simulate_connection()
                 assert mock_client.closed  # Should be closed on failed attempts

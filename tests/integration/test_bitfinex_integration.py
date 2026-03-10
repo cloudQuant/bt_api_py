@@ -89,7 +89,7 @@ def test_bitfinex_instantiation():
         # Test instantiating request data
         from bt_api_py.feeds.live_bitfinex import BitfinexRequestData  # noqa: F401
 
-        feed = BitfinexRequestData(data_queue, **test_params)
+        BitfinexRequestData(data_queue, **test_params)
         print("✓ Successfully instantiated BitfinexRequestData")
 
         # Test exchange data

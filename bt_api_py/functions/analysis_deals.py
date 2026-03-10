@@ -16,11 +16,9 @@ print("bit_df['qty'].sum()", bit_df["qty"].sum())
 print("okex_df['qty'].sum()", okex_df["qty"].sum())
 
 total_base_qty = 0.008
-count = 0
 hedge_result = []
 self_result = []
-for _index, row in okex_df.iterrows():
-    count += 1
+for count, (_index, row) in enumerate(okex_df.iterrows(), start=1):
     hedge_ts = row["ts"]
     hedge_qty = row["qty"]
     hedge_side = row["side"]

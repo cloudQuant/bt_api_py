@@ -32,7 +32,7 @@ class AsyncContextManager:
             try:
                 await asyncio.wait_for(_inner(), timeout=timeout_seconds)
             except TimeoutError:
-                raise TimeoutError(f"Operation timed out after {timeout_seconds} seconds")
+                raise TimeoutError(f"Operation timed out after {timeout_seconds} seconds") from None
 
     @staticmethod
     @asynccontextmanager
@@ -236,7 +236,9 @@ class AsyncSemaphore:
             try:
                 await asyncio.wait_for(self._semaphore.acquire(), timeout=timeout)
             except TimeoutError:
-                raise TimeoutError(f"Failed to acquire semaphore within {timeout} seconds")
+                raise TimeoutError(
+                    f"Failed to acquire semaphore within {timeout} seconds"
+                ) from None
         else:
             await self._semaphore.acquire()
 
@@ -264,7 +266,7 @@ class AsyncQueue:
             try:
                 await asyncio.wait_for(self._queue.put(item), timeout=timeout)
             except TimeoutError:
-                raise TimeoutError(f"Failed to put item within {timeout} seconds")
+                raise TimeoutError(f"Failed to put item within {timeout} seconds") from None
         else:
             await self._queue.put(item)
 
@@ -274,7 +276,7 @@ class AsyncQueue:
             try:
                 return await asyncio.wait_for(self._queue.get(), timeout=timeout)
             except TimeoutError:
-                raise TimeoutError(f"Failed to get item within {timeout} seconds")
+                raise TimeoutError(f"Failed to get item within {timeout} seconds") from None
         else:
             return await self._queue.get()
 

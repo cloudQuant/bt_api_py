@@ -334,12 +334,6 @@ class HyperliquidMarketWssDataSpot(HyperliquidMarketWssData):
         if message.get("channel") == "allMids":
             data = message.get("data", {}).get("mids", {})
             for symbol, price in data.items():
-                extra_data = {
-                    "exchange_name": self._params.exchange_name,
-                    "symbol_name": symbol,
-                    "asset_type": self.asset_type,
-                    "request_type": "ticker",
-                }
                 ticker_data = {"last": float(price), "symbol": symbol}
                 ticker_obj = HyperliquidTickerData(ticker_data, symbol, self.asset_type)
                 ticker_obj.init_data()
@@ -402,7 +396,7 @@ class HyperliquidMarketWssDataSpot(HyperliquidMarketWssData):
                     "quantity": float(trade["sz"]),
                     "timestamp": trade.get("time"),
                 }
-                extra_data = {
+                {
                     "exchange_name": self._params.exchange_name,
                     "symbol_name": trade.get("coin"),
                     "asset_type": self.asset_type,
@@ -443,7 +437,7 @@ class HyperliquidAccountWssDataSpot(HyperliquidAccountWssData):
         if message.get("channel") == "orderUpdates":
             data = message.get("data", [])
             for order in data:
-                extra_data = {
+                {
                     "exchange_name": self._params.exchange_name,
                     "symbol_name": order.get("coin"),
                     "asset_type": self.asset_type,

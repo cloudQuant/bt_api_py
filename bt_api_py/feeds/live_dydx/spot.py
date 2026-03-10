@@ -1,3 +1,5 @@
+from typing import Any
+
 from bt_api_py.containers.exchanges.dydx_exchange_data import DydxExchangeDataSwap
 from bt_api_py.feeds.live_dydx.request_base import DydxRequestData
 from bt_api_py.functions.utils import update_extra_data

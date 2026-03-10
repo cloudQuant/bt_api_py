@@ -193,20 +193,15 @@ class SushiSwapExchangeData:
 
         # Fallback to standard API endpoint construction
         chain_id = self.get_chain_id()
-        if request_type == "get_tick":
-            return f"GET /price/v1/{chain_id}/{{address}}"
-        elif request_type == "get_pool":
-            return f"GET /pool/v1/{chain_id}/{{address}}"
-        elif request_type == "get_pools":
-            return f"GET /pools/v1/{chain_id}"
-        elif request_type == "get_quote":
-            return f"GET /quote/v7/{chain_id}"
-        elif request_type == "get_swap":
-            return f"GET /swap/v7/{chain_id}"
-        elif request_type == "get_exchange_info":
-            return f"GET /tokens/v1/{chain_id}"
-
-        return f"GET /{request_type}"
+        paths = {
+            "get_tick": f"GET /price/v1/{chain_id}/{{address}}",
+            "get_pool": f"GET /pool/v1/{chain_id}/{{address}}",
+            "get_pools": f"GET /pools/v1/{chain_id}",
+            "get_quote": f"GET /quote/v7/{chain_id}",
+            "get_swap": f"GET /swap/v7/{chain_id}",
+            "get_exchange_info": f"GET /tokens/v1/{chain_id}",
+        }
+        return paths.get(request_type, f"GET /{request_type}")
 
 
 class SushiSwapExchangeDataSpot(SushiSwapExchangeData):

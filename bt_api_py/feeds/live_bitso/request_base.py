@@ -100,7 +100,7 @@ class BitsoRequestData(Feed):
             full_path = f"/api/v3{endpoint}"
             url = f"{self._params.rest_url}{endpoint}"
             json_body = body or params
-            body_str = json.dumps(json_body) if json_body else ""
+            json.dumps(json_body) if json_body else ""
 
         if is_sign and self._api_key:
             nonce = str(int(time.time() * 1000))

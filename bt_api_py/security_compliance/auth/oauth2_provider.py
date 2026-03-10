@@ -14,11 +14,12 @@ from pathlib import Path
 from typing import Any
 
 try:
-    from cryptography.hazmat.backends import default_backend
-    from cryptography.hazmat.primitives import hashes, serialization
-    from cryptography.hazmat.primitives.asymmetric import rsa
-    from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
+    from cryptography.hazmat.backends import default_backend  # noqa: F401
+    from cryptography.hazmat.primitives import hashes, serialization  # noqa: F401
+    from cryptography.hazmat.primitives.asymmetric import rsa  # noqa: F401
+    from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC  # noqa: F401
 
+    CRYPTO_AVAILABLE = True
 except ImportError:
     CRYPTO_AVAILABLE = False
 
@@ -384,9 +385,8 @@ class OAuth2Provider:
             raise OAuthError("Access token expired")
 
         # Check scopes if required
-        if required_scopes:
-            if not required_scopes.issubset(access_token.scopes):
-                raise OAuthError("Insufficient scopes")
+        if required_scopes and not required_scopes.issubset(access_token.scopes):
+            raise OAuthError("Insufficient scopes")
 
         return access_token
 
@@ -514,7 +514,7 @@ class OAuth2Provider:
             return payload
 
         except Exception as e:
-            raise OAuthError(f"Invalid JWT: {e}")
+            raise OAuthError(f"Invalid JWT: {e}") from e
 
     def get_client_info(self, client_id: str) -> OAuthClient | None:
         """Get client information."""
@@ -526,7 +526,6 @@ class OAuth2Provider:
 
     def cleanup_expired_tokens(self) -> dict[str, int]:
         """Clean up expired tokens."""
-        now = time.time()
         cleanup_counts = {"authorization_codes": 0, "access_tokens": 0, "refresh_tokens": 0}
 
         # Clean expired authorization codes

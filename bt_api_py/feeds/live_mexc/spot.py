@@ -275,7 +275,7 @@ class MexcRequestDataSpot(MexcRequestData):
         """Normalize klines response"""
         status = input_data is not None
         symbol_name = extra_data["symbol_name"]
-        asset_type = extra_data["asset_type"]
+        extra_data["asset_type"]
         interval = extra_data["interval"]
 
         if status and isinstance(input_data, list):

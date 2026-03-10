@@ -3,6 +3,9 @@ import time
 
 from bt_api_py.containers.balances.balance import BalanceData
 from bt_api_py.functions.utils import from_dict_get_float, from_dict_get_string
+from bt_api_py.logging_factory import get_logger
+
+logger = get_logger("container")
 
 
 class UpbitBalanceData(BalanceData):
@@ -55,7 +58,7 @@ class UpbitBalanceData(BalanceData):
             self.has_been_init_data = True
 
         except Exception as e:
-            print(f"Error initializing Upbit balance data: {e}")
+            logger.error(f"Error initializing Upbit balance data: {e}", exc_info=True)
 
     def get_all_data(self):
         """获取所有余额数据"""

@@ -136,9 +136,7 @@ class ZebpayRequestData(Feed):
     def _is_error(data):
         if data is None:
             return True
-        if isinstance(data, dict) and ("error" in data or data.get("code", 0) != 0):
-            return True
-        return False
+        return bool(isinstance(data, dict) and ("error" in data or data.get("code", 0) != 0))
 
     # ── _get_xxx internal methods ───────────────────────────────
 

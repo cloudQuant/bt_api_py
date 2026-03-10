@@ -4,6 +4,10 @@ from collections.abc import Callable
 from functools import wraps
 from typing import Any
 
+from bt_api_py.logging_factory import get_logger
+
+logger = get_logger("function")
+
 
 def deprecated(msg=None, stack_level=2):
     """
@@ -43,12 +47,14 @@ def time_this_function(func):
     """
 
     @wraps(func)
-    def wrapper(*args, **kwargs):
+    async def wrapper(*args, **kwargs):
         start = time.perf_counter()
-        result = func(*args, **kwargs)
-        end = time.perf_counter()
-        print(f"{func.__name__}, consume: {end - start}s")
-        return result
+        logger.debug(f"start {func} with {args} {kwargs}")
+        try:
+            return await func(*args, **kwargs)
+        finally:
+            end = time.perf_counter()
+            logger.debug(f"{func.__name__}, consume: {end - start}s")
 
     return wrapper
 

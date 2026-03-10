@@ -346,9 +346,7 @@ class HitBtcRequestData(Feed):
         """Check if response is an error (HitBTC returns {"error": {...}})."""
         if not input_data:
             return True
-        if isinstance(input_data, dict) and "error" in input_data:
-            return True
-        return False
+        return bool(isinstance(input_data, dict) and "error" in input_data)
 
     @staticmethod
     def _get_server_time_normalize_function(input_data, extra_data):

@@ -210,7 +210,7 @@ class LocalKeyManager(KeyManager):
             )
 
         except Exception as e:
-            raise EncryptionError(f"Failed to retrieve key {key_id}: {e}")
+            raise EncryptionError(f"Failed to retrieve key {key_id}: {e}") from e
 
     def rotate_key(self, key_id: str) -> EncryptionKey:
         """Rotate an existing key."""
@@ -269,7 +269,7 @@ class AWSKMSKeyManager(KeyManager):
             )
 
         except Exception as e:
-            raise EncryptionError(f"Failed to create KMS key: {e}")
+            raise EncryptionError(f"Failed to create KMS key: {e}") from e
 
     def get_key(self, key_id: str) -> EncryptionKey | None:
         """Get KMS key metadata."""
@@ -295,14 +295,14 @@ class AWSKMSKeyManager(KeyManager):
             self.kms_client.rotate_key(KeyId=key_id)
             return self.get_key(key_id)
         except Exception as e:
-            raise EncryptionError(f"Failed to rotate KMS key {key_id}: {e}")
+            raise EncryptionError(f"Failed to rotate KMS key {key_id}: {e}") from e
 
     def delete_key(self, key_id: str) -> None:
         """Schedule KMS key for deletion."""
         try:
             self.kms_client.schedule_key_deletion(KeyId=key_id, PendingWindowInDays=7)
         except Exception as e:
-            raise EncryptionError(f"Failed to delete KMS key {key_id}: {e}")
+            raise EncryptionError(f"Failed to delete KMS key {key_id}: {e}") from e
 
 
 class HashiCorpVaultKeyManager(KeyManager):
@@ -324,7 +324,7 @@ class HashiCorpVaultKeyManager(KeyManager):
         try:
             key_name = f"bt_api_py_{algorithm.value}_{int(time.time())}"
 
-            response = self.client.secrets.transit.create_key(
+            self.client.secrets.transit.create_key(
                 name=key_name, key_type=self._get_vault_key_type(algorithm)
             )
 
@@ -337,7 +337,7 @@ class HashiCorpVaultKeyManager(KeyManager):
             )
 
         except Exception as e:
-            raise EncryptionError(f"Failed to create Vault key: {e}")
+            raise EncryptionError(f"Failed to create Vault key: {e}") from e
 
     def _get_vault_key_type(self, algorithm: EncryptionAlgorithm) -> str:
         """Map algorithm to Vault key type."""
@@ -379,14 +379,14 @@ class HashiCorpVaultKeyManager(KeyManager):
             self.client.secrets.transit.rotate_key(name=key_id)
             return self.get_key(key_id)
         except Exception as e:
-            raise EncryptionError(f"Failed to rotate Vault key {key_id}: {e}")
+            raise EncryptionError(f"Failed to rotate Vault key {key_id}: {e}") from e
 
     def delete_key(self, key_id: str) -> None:
         """Delete Vault key."""
         try:
             self.client.secrets.transit.delete_key(name=key_id)
         except Exception as e:
-            raise EncryptionError(f"Failed to delete Vault key {key_id}: {e}")
+            raise EncryptionError(f"Failed to delete Vault key {key_id}: {e}") from e
 
 
 class EncryptionManager:

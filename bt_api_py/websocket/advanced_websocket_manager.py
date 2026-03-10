@@ -4,6 +4,7 @@ Supports 73+ exchanges with high reliability and performance optimization.
 """
 
 import asyncio
+import contextlib
 import time
 from collections import defaultdict
 from collections.abc import Callable
@@ -56,15 +57,18 @@ class ConnectionWrapper:
     """Wrapper for WebSocket connection with pool metadata."""
 
     connection: AdvancedWebSocketConnection
-    created_at: float
-    last_used: float
+    created_at: float = 0.0
+    last_used: float = 0.0
     usage_count: int = 0
     health_score: float = 100.0
     in_use: bool = False
 
     def __post_init__(self):
-        self.created_at = time.time()
-        self.last_used = time.time()
+        now = time.time()
+        if self.created_at == 0.0:
+            self.created_at = now
+        if self.last_used == 0.0:
+            self.last_used = now
 
 
 class LoadBalancer:
@@ -360,10 +364,8 @@ class AdvancedWebSocketManager:
         # Cancel cleanup task
         if self._cleanup_task:
             self._cleanup_task.cancel()
-            try:
+            with contextlib.suppress(asyncio.CancelledError):
                 await self._cleanup_task
-            except asyncio.CancelledError:
-                pass
 
         # Close all connections
         await self.close_all()

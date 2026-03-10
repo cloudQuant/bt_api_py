@@ -272,7 +272,7 @@ class PolicyEngine:
                 self._update_active_rules()
 
                 # 从规则组中移除
-                for group_id, rule_ids in self.rule_groups.items():
+                for _group_id, rule_ids in self.rule_groups.items():
                     if rule_id in rule_ids:
                         rule_ids.remove(rule_id)
 
@@ -361,7 +361,7 @@ class PolicyEngine:
             # 生成评估结果
             approved = not any(
                 result.get("action_type") in [ActionType.HALT_TRADING, ActionType.CANCEL_ORDERS]
-                and result.get("success", False) == False
+                and not result.get("success", False)
                 for result in execution_results
             )
 

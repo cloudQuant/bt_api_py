@@ -85,7 +85,7 @@ class TestBalancerRequestDataSpot:
             }
         }
         result, status = BalancerRequestDataSpot._get_pool_normalize_function(input_data, None)
-        assert status == True
+        assert status
         assert len(result) == 1
         assert result[0]["id"] == "pool123"
 
@@ -108,7 +108,7 @@ class TestBalancerRequestDataSpot:
             }
         }
         result, status = BalancerRequestDataSpot._get_pools_normalize_function(input_data, None)
-        assert status == True
+        assert status
         assert len(result) == 2
 
     # ==================== Ticker Tests ====================
@@ -136,7 +136,7 @@ class TestBalancerRequestDataSpot:
             }
         }
         result, status = BalancerRequestDataSpot._get_tick_normalize_function(input_data, None)
-        assert status == True
+        assert status
         assert len(result) == 1
 
     # ==================== Depth/OrderBook Tests ====================
@@ -160,7 +160,7 @@ class TestBalancerRequestDataSpot:
             }
         }
         result, status = BalancerRequestDataSpot._get_depth_normalize_function(input_data, None)
-        assert status == True
+        assert status
         assert len(result) == 1
 
     # ==================== Swap Path Tests ====================
@@ -193,7 +193,7 @@ class TestBalancerRequestDataSpot:
             }
         }
         result, status = BalancerRequestDataSpot._get_swap_path_normalize_function(input_data, None)
-        assert status == True
+        assert status
         assert len(result) == 1
 
     # ==================== Pool Events Tests ====================
@@ -222,7 +222,7 @@ class TestBalancerRequestDataSpot:
         result, status = BalancerRequestDataSpot._get_pool_events_normalize_function(
             input_data, None
         )
-        assert status == True
+        assert status
         assert len(result) == 2
 
     # ==================== Kline Tests ====================
@@ -255,7 +255,7 @@ class TestBalancerRequestDataSpot:
         }
         result, status = BalancerRequestDataSpot._get_kline_normalize_function(input_data, None)
         # Balancer doesn't provide direct kline data through GraphQL
-        assert status == True
+        assert status
         # The normalize function returns empty list as klines are not directly available
         assert isinstance(result, list)
 
@@ -413,7 +413,7 @@ class TestBalancerStandardInterfaces:
     def test_get_tick_calls_request(self, balancer_spot):
         """Test get_tick calls self.request with correct extra_data."""
         token = "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2"
-        result = balancer_spot.get_tick(token)
+        balancer_spot.get_tick(token)
         assert balancer_spot.request.called
         call_args = balancer_spot.request.call_args
         extra_data = (
@@ -430,7 +430,7 @@ class TestBalancerStandardInterfaces:
     def test_get_depth_calls_request(self, balancer_spot):
         """Test get_depth calls self.request."""
         pool_id = "0x7f2b3b7fbd3226c5be438cde49a519f442ca2eda00020000000000000000067d"
-        result = balancer_spot.get_depth(pool_id)
+        balancer_spot.get_depth(pool_id)
         assert balancer_spot.request.called
         call_args = balancer_spot.request.call_args
         extra_data = (
@@ -446,7 +446,7 @@ class TestBalancerStandardInterfaces:
     @pytest.mark.kline
     def test_get_kline_calls_request(self, balancer_spot):
         """Test get_kline calls self.request."""
-        result = balancer_spot.get_kline("0xpool", "1h", 100)
+        balancer_spot.get_kline("0xpool", "1h", 100)
         assert balancer_spot.request.called
         call_args = balancer_spot.request.call_args
         extra_data = (
@@ -484,7 +484,7 @@ class TestBalancerStandardInterfaces:
 
     def test_make_order_calls_request(self, balancer_spot):
         """Test make_order calls self.request with swap params."""
-        result = balancer_spot.make_order(
+        balancer_spot.make_order(
             "WETH-USDC",
             1.0,
             3000,
@@ -509,7 +509,7 @@ class TestBalancerStandardInterfaces:
 
     def test_cancel_order_calls_request(self, balancer_spot):
         """Test cancel_order calls self.request."""
-        result = balancer_spot.cancel_order("WETH-USDC", "tx_hash_123")
+        balancer_spot.cancel_order("WETH-USDC", "tx_hash_123")
         assert balancer_spot.request.called
         call_args = balancer_spot.request.call_args
         extra_data = (
@@ -524,7 +524,7 @@ class TestBalancerStandardInterfaces:
 
     def test_query_order_calls_request(self, balancer_spot):
         """Test query_order calls self.request."""
-        result = balancer_spot.query_order("WETH-USDC", "tx_hash_123")
+        balancer_spot.query_order("WETH-USDC", "tx_hash_123")
         assert balancer_spot.request.called
         call_args = balancer_spot.request.call_args
         extra_data = (
@@ -539,7 +539,7 @@ class TestBalancerStandardInterfaces:
 
     def test_get_open_orders_calls_request(self, balancer_spot):
         """Test get_open_orders calls self.request."""
-        result = balancer_spot.get_open_orders("WETH-USDC")
+        balancer_spot.get_open_orders("WETH-USDC")
         assert balancer_spot.request.called
         call_args = balancer_spot.request.call_args
         extra_data = (
@@ -553,7 +553,7 @@ class TestBalancerStandardInterfaces:
 
     def test_get_account_calls_request(self, balancer_spot):
         """Test get_account calls self.request."""
-        result = balancer_spot.get_account("WETH")
+        balancer_spot.get_account("WETH")
         assert balancer_spot.request.called
         call_args = balancer_spot.request.call_args
         extra_data = (
@@ -568,7 +568,7 @@ class TestBalancerStandardInterfaces:
 
     def test_get_balance_calls_request(self, balancer_spot):
         """Test get_balance calls self.request."""
-        result = balancer_spot.get_balance("WETH")
+        balancer_spot.get_balance("WETH")
         assert balancer_spot.request.called
         call_args = balancer_spot.request.call_args
         extra_data = (
@@ -595,7 +595,7 @@ class TestBalancerRequestMethod:
                 "_graphql_variables": {"var1": "val1"},
                 "request_type": "test",
             }
-            result = inst.request("POST /graphql", extra_data=extra_data)
+            inst.request("POST /graphql", extra_data=extra_data)
             inst._execute_graphql_query.assert_called_once()
 
     def test_request_without_graphql_returns_request_data(self):

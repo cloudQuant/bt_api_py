@@ -506,7 +506,7 @@ class TestSyncCallsMocked:
     @pytest.mark.orderbook
     def test_get_depth(self):
         with self._mock_http(SAMPLE_ORDERBOOK) as mock:
-            rd = self.feed.get_depth("ETH/USDT", count=5)
+            self.feed.get_depth("ETH/USDT", count=5)
             url = mock.call_args[0][1]
             assert "/public/orderbook/ETHUSDT" in url
             assert "depth=5" in url
@@ -514,7 +514,7 @@ class TestSyncCallsMocked:
     @pytest.mark.kline
     def test_get_kline(self):
         with self._mock_http(SAMPLE_KLINES) as mock:
-            rd = self.feed.get_kline("BTC/USDT", period="1h", count=24)
+            self.feed.get_kline("BTC/USDT", period="1h", count=24)
             url = mock.call_args[0][1]
             assert "/public/candles/BTCUSDT" in url
             assert "period=H1" in url
@@ -522,14 +522,14 @@ class TestSyncCallsMocked:
 
     def test_get_trade_history(self):
         with self._mock_http(SAMPLE_TRADES) as mock:
-            rd = self.feed.get_trade_history("BTC/USDT", count=50)
+            self.feed.get_trade_history("BTC/USDT", count=50)
             url = mock.call_args[0][1]
             assert "/public/trades/BTCUSDT" in url
             assert "limit=50" in url
 
     def test_make_order(self):
         with self._mock_http(SAMPLE_ORDER) as mock:
-            rd = self.feed.make_order("BTC/USDT", 0.001, price=50000, order_type="buy-limit")
+            self.feed.make_order("BTC/USDT", 0.001, price=50000, order_type="buy-limit")
             # Should be POST with Authorization header
             method = mock.call_args[0][0]
             assert method == "POST"
@@ -539,7 +539,7 @@ class TestSyncCallsMocked:
 
     def test_cancel_order(self):
         with self._mock_http(SAMPLE_ORDER) as mock:
-            rd = self.feed.cancel_order(order_id="my_order_1")
+            self.feed.cancel_order(order_id="my_order_1")
             method = mock.call_args[0][0]
             url = mock.call_args[0][1]
             assert method == "DELETE"
@@ -547,27 +547,27 @@ class TestSyncCallsMocked:
 
     def test_query_order(self):
         with self._mock_http(SAMPLE_ORDER) as mock:
-            rd = self.feed.query_order(order_id="my_order_1")
+            self.feed.query_order(order_id="my_order_1")
             url = mock.call_args[0][1]
             assert "/spot/order/my_order_1" in url
 
     def test_get_open_orders(self):
         with self._mock_http(SAMPLE_OPEN_ORDERS) as mock:
-            rd = self.feed.get_open_orders(symbol="BTC/USDT")
+            self.feed.get_open_orders(symbol="BTC/USDT")
             url = mock.call_args[0][1]
             assert "/spot/order" in url
             assert "symbol=BTCUSDT" in url
 
     def test_get_balance(self):
         with self._mock_http(SAMPLE_BALANCE) as mock:
-            rd = self.feed.get_balance()
+            self.feed.get_balance()
             url = mock.call_args[0][1]
             assert "/spot/balance" in url
             headers = mock.call_args[0][2]
             assert "Authorization" in headers
 
     def test_get_account(self):
-        with self._mock_http(SAMPLE_BALANCE) as mock:
+        with self._mock_http(SAMPLE_BALANCE):
             rd = self.feed.get_account()
             assert rd is not None
 

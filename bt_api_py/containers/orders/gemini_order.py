@@ -103,25 +103,24 @@ class GeminiRequestOrderData(RequestData):
 
     def _parse_wss_data(self, data):
         """Parse WebSocket response"""
-        if isinstance(data, dict):
-            # Handle order events
-            if "type" in data:
-                event_type = data.get("type")
-                if event_type in ["order_started", "order_filled", "order_canceled"]:
-                    self.order_id = data.get("order_id")
-                    self.client_order_id = data.get("client_order_id")
-                    self.symbol_name = data.get("symbol")
-                    self.side = data.get("side")
-                    self.type = data.get("type")
-                    self.status = self._normalize_status(data.get("event_type"))
-                    self.price = float(data.get("price", 0))
-                    self.original_amount = float(data.get("original_amount", 0))
-                    self.executed_amount = float(data.get("executed_amount", 0))
-                    self.remaining_amount = float(data.get("remaining_amount", 0))
-                    self.timestamp = data.get("timestamp")
-                    self.exchange_timestamp = convert_utc_timestamp(self.timestamp)
-                    self.fee = float(data.get("fee", 0))
-                    self.fee_currency = data.get("fee_currency")
+        # Handle order events
+        if isinstance(data, dict) and "type" in data:
+            event_type = data.get("type")
+            if event_type in ["order_started", "order_filled", "order_canceled"]:
+                self.order_id = data.get("order_id")
+                self.client_order_id = data.get("client_order_id")
+                self.symbol_name = data.get("symbol")
+                self.side = data.get("side")
+                self.type = data.get("type")
+                self.status = self._normalize_status(data.get("event_type"))
+                self.price = float(data.get("price", 0))
+                self.original_amount = float(data.get("original_amount", 0))
+                self.executed_amount = float(data.get("executed_amount", 0))
+                self.remaining_amount = float(data.get("remaining_amount", 0))
+                self.timestamp = data.get("timestamp")
+                self.exchange_timestamp = convert_utc_timestamp(self.timestamp)
+                self.fee = float(data.get("fee", 0))
+                self.fee_currency = data.get("fee_currency")
 
     def _normalize_status(self, status):
         """Normalize order status to standard format"""

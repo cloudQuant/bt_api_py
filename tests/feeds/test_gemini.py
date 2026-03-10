@@ -374,7 +374,7 @@ class TestGeminiRegistry:
     """Test Gemini registration."""
 
     def test_gemini_registered(self):
-        has_gemini = any("GEMINI" in name for name in ExchangeRegistry._feed_classes.keys())
+        any("GEMINI" in name for name in ExchangeRegistry._feed_classes)
         assert GeminiRequestDataSpot is not None
         assert GeminiExchangeDataSpot is not None
 

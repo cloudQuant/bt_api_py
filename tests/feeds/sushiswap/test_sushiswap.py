@@ -9,6 +9,13 @@ from unittest.mock import MagicMock, Mock, patch
 
 import pytest
 
+from bt_api_py.containers.exchanges.sushiswap_exchange_data import (
+    SushiSwapChain,
+    SushiSwapExchangeDataSpot,
+)
+from bt_api_py.containers.requestdatas.request_data import RequestData
+from bt_api_py.feeds.live_sushiswap.spot import SushiSwapRequestDataSpot
+
 
 class MockSushiSwapChain(str, Enum):
     """Mock SushiSwapChain for testing."""
@@ -16,14 +23,6 @@ class MockSushiSwapChain(str, Enum):
     ETHEREUM = "ETHEREUM"
     POLYGON = "POLYGON"
     ARBITRUM = "ARBITRUM"
-
-
-from bt_api_py.containers.exchanges.sushiswap_exchange_data import (
-    SushiSwapChain,
-    SushiSwapExchangeDataSpot,
-)
-from bt_api_py.containers.requestdatas.request_data import RequestData
-from bt_api_py.feeds.live_sushiswap.spot import SushiSwapRequestDataSpot
 
 
 class TestSushiSwapRequestDataSpot:
@@ -92,7 +91,7 @@ class TestSushiSwapRequestDataSpot:
         result, status = SushiSwapRequestDataSpot._get_tick_normalize_function(
             input_data, extra_data
         )
-        assert status == True
+        assert status
         assert len(result) == 1
         assert result[0]["symbol"] == "0x..."
         assert result[0]["price"] == "3000.50"
@@ -106,7 +105,7 @@ class TestSushiSwapRequestDataSpot:
         result, status = SushiSwapRequestDataSpot._get_tick_normalize_function(
             input_data, extra_data
         )
-        assert status == True
+        assert status
         assert result[0]["price"] == 3000.50
 
     def test_get_pool(self, sushiswap_spot):
@@ -126,7 +125,7 @@ class TestSushiSwapRequestDataSpot:
             "tvl": "1000000",
         }
         result, status = SushiSwapRequestDataSpot._get_pool_normalize_function(input_data, None)
-        assert status == True
+        assert status
         assert len(result) == 1
 
     # ==================== Token Info Tests ====================
@@ -149,7 +148,7 @@ class TestSushiSwapRequestDataSpot:
         result, status = SushiSwapRequestDataSpot._get_token_info_normalize_function(
             input_data, None
         )
-        assert status == True
+        assert status
         assert len(result) == 1
 
     def test_get_swap_quote(self, sushiswap_spot):
@@ -181,7 +180,7 @@ class TestSushiSwapRequestDataSpot:
         result, status = SushiSwapRequestDataSpot._get_swap_quote_normalize_function(
             input_data, None
         )
-        assert status == True
+        assert status
         assert len(result) == 1
 
     def test_get_exchange_info(self, sushiswap_spot):
@@ -202,7 +201,7 @@ class TestSushiSwapRequestDataSpot:
         result, status = SushiSwapRequestDataSpot._get_exchange_info_normalize_function(
             input_data, extra_data
         )
-        assert status == True
+        assert status
         assert len(result) == 1
         assert result[0]["tokens"] == input_data
         assert result[0]["count"] == 2
@@ -248,7 +247,7 @@ class TestSushiSwapRequestDataSpot:
             },
         ]
         result, status = SushiSwapRequestDataSpot._get_kline_normalize_function(input_data, None)
-        assert status == True
+        assert status
         assert len(result) == 2
 
     @pytest.mark.orderbook
@@ -256,14 +255,14 @@ class TestSushiSwapRequestDataSpot:
         """Test depth normalize function."""
         input_data = {"liquidity": "1000000", "reserve0": "100", "reserve1": "1000"}
         result, status = SushiSwapRequestDataSpot._get_depth_normalize_function(input_data, None)
-        assert status == True
+        assert status
         assert len(result) == 1
 
     def test_get_tokens_normalize_function(self):
         """Test tokens normalize function."""
         input_data = [{"id": "token1", "symbol": "TOKEN1"}, {"id": "token2", "symbol": "TOKEN2"}]
         result, status = SushiSwapRequestDataSpot._get_tokens_normalize_function(input_data, None)
-        assert status == True
+        assert status
         assert len(result) == 2
 
     @pytest.mark.skip(reason="Requires actual API call")
@@ -411,37 +410,37 @@ class TestSushiStandardInterfaces:
             return instance
 
     def test_make_order_calls_request(self, sushiswap_spot):
-        result = sushiswap_spot.make_order("WETH/USDC", 1.0, 3000, "LIMIT")
+        sushiswap_spot.make_order("WETH/USDC", 1.0, 3000, "LIMIT")
         assert sushiswap_spot.request.called
         extra_data = sushiswap_spot.request.call_args[1].get("extra_data")
         assert extra_data["request_type"] == "make_order"
 
     def test_cancel_order_calls_request(self, sushiswap_spot):
-        result = sushiswap_spot.cancel_order("WETH/USDC", "order_123")
+        sushiswap_spot.cancel_order("WETH/USDC", "order_123")
         assert sushiswap_spot.request.called
         extra_data = sushiswap_spot.request.call_args[1].get("extra_data")
         assert extra_data["request_type"] == "cancel_order"
 
     def test_query_order_calls_request(self, sushiswap_spot):
-        result = sushiswap_spot.query_order("WETH/USDC", "order_123")
+        sushiswap_spot.query_order("WETH/USDC", "order_123")
         assert sushiswap_spot.request.called
         extra_data = sushiswap_spot.request.call_args[1].get("extra_data")
         assert extra_data["request_type"] == "query_order"
 
     def test_get_open_orders_calls_request(self, sushiswap_spot):
-        result = sushiswap_spot.get_open_orders("WETH/USDC")
+        sushiswap_spot.get_open_orders("WETH/USDC")
         assert sushiswap_spot.request.called
         extra_data = sushiswap_spot.request.call_args[1].get("extra_data")
         assert extra_data["request_type"] == "get_open_orders"
 
     def test_get_account_calls_request(self, sushiswap_spot):
-        result = sushiswap_spot.get_account("WETH")
+        sushiswap_spot.get_account("WETH")
         assert sushiswap_spot.request.called
         extra_data = sushiswap_spot.request.call_args[1].get("extra_data")
         assert extra_data["request_type"] == "get_account"
 
     def test_get_balance_calls_request(self, sushiswap_spot):
-        result = sushiswap_spot.get_balance("WETH")
+        sushiswap_spot.get_balance("WETH")
         assert sushiswap_spot.request.called
         extra_data = sushiswap_spot.request.call_args[1].get("extra_data")
         assert extra_data["request_type"] == "get_balance"

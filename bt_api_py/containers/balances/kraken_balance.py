@@ -417,15 +417,12 @@ class KrakenRequestBalanceData(BalanceData):
             return False
 
         # Check for negative balances
-        for currency, info in self.balances.items():
+        for _currency, info in self.balances.items():
             if info["total"] < 0:
                 return False
 
         # Check if total value calculation is reasonable
-        if self.total_value_usd < 0:
-            return False
-
-        return True
+        return not self.total_value_usd < 0
 
     def get_currency_balance(self, currency: str) -> float | None:
         """Get balance for a specific currency."""

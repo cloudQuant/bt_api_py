@@ -133,7 +133,7 @@ def main():
     print("=" * 60)
 
     # Set up logging
-    logger = SpdLogManager("./logs/test_hyperliquid.log", "test", 0, 0, False).create_logger()
+    SpdLogManager("./logs/test_hyperliquid.log", "test", 0, 0, False).create_logger()
 
     # Run tests
     tests = [

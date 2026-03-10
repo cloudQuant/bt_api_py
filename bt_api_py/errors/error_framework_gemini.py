@@ -4,7 +4,7 @@ Gemini Error Translator
 Translate Gemini API error codes to unified error codes
 """
 
-from bt_api_py.error import ErrorTranslator
+from bt_api_py.error import ErrorTranslator, UnifiedErrorCode
 
 
 class GeminiErrorTranslator(ErrorTranslator):

@@ -21,14 +21,14 @@ def test_get_history_bar():
     assert r.status_code == 200
     assert isinstance(r.text, str)
     get_text_time = 0
-    for i in range(1000):
+    for _i in range(1000):
         begin_time = time.perf_counter()
         _t = r.text
         end_time = time.perf_counter()
         get_text_time += end_time - begin_time
     print(f"r.text = {r.text}")
     get_json_time = 0
-    for i in range(1000):
+    for _i in range(1000):
         begin_time = time.perf_counter()
         _j = r.json()
         # _j = rapidjson.loads(r.text)
@@ -36,7 +36,7 @@ def test_get_history_bar():
         get_json_time += end_time - begin_time
 
     get_rapidjson_time = 0
-    for i in range(1000):
+    for _i in range(1000):
         begin_time = time.perf_counter()
         # _j = r.json()
         _j = rapidjson.loads(r.text)

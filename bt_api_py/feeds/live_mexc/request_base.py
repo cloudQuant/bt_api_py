@@ -669,7 +669,7 @@ class MexcRequestData(Feed):
         if status:
             return [
                 {
-                    "symbol": extra_data["symbol_name"],
+                    "symbol": input_data.get("symbol") or extra_data["symbol_name"],
                     "order_id": input_data.get("orderId"),
                     "client_order_id": input_data.get("clientOrderId"),
                     "status": input_data.get("status"),
@@ -686,7 +686,6 @@ class MexcRequestData(Feed):
                     "update_time": input_data.get("updateTime"),
                     "is_working": input_data.get("isWorking"),
                     "exchange": input_data.get("exchange"),
-                    "symbol": input_data.get("symbol"),
                 }
             ], status
         else:

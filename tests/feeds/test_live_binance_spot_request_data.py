@@ -4,8 +4,6 @@ import time
 
 import pytest
 
-pytestmark = [pytest.mark.integration, pytest.mark.network]
-
 from bt_api_py.containers.accounts.binance_account import (
     BinanceSpotRequestAccountData,
 )
@@ -19,6 +17,8 @@ from bt_api_py.containers.requestdatas.request_data import RequestData
 from bt_api_py.containers.tickers.binance_ticker import BinanceRequestTickerData
 from bt_api_py.feeds.live_binance_feed import BinanceRequestDataSpot
 from bt_api_py.functions.utils import read_account_config
+
+pytestmark = [pytest.mark.integration, pytest.mark.network]
 
 
 @pytest.mark.auth_account
@@ -328,7 +328,7 @@ def test_binance_req_order_functions():
     price_data = live_binance_spot_feed.get_tick("OP-USDT")
     price_data = price_data.get_data()[0].init_data()
     bid_price = round(price_data.get_bid_price() * 0.9, 2)
-    ask_price = round(price_data.get_ask_price() * 1.1, 2)
+    round(price_data.get_ask_price() * 1.1, 2)
     random_number = random.randint(10**17, 10**18 - 1)
     buy_client_order_id = str(random_number)
     lots = 0
@@ -526,7 +526,7 @@ def test_binance_get_account_snapshot():
     print("account_snapshot:", result)
     # 验证返回数据结构
     if result:
-        assert isinstance(result, dict) or isinstance(result, list)
+        assert isinstance(result, (dict, list))
 
 
 @pytest.mark.auth_account

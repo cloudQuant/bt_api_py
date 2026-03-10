@@ -4,8 +4,6 @@ import time
 
 import pytest
 
-pytestmark = [pytest.mark.integration, pytest.mark.network]
-
 from bt_api_py.containers.accounts.okx_account import OkxAccountData
 from bt_api_py.containers.bars.okx_bar import OkxBarData
 from bt_api_py.containers.markprices.okx_mark_price import OkxMarkPriceData
@@ -18,6 +16,8 @@ from bt_api_py.containers.requestdatas.request_data import RequestData
 from bt_api_py.containers.tickers.okx_ticker import OkxTickerData
 from bt_api_py.feeds.live_okx_feed import OkxRequestDataSpot
 from bt_api_py.functions.utils import get_public_ip, read_account_config
+
+pytestmark = [pytest.mark.integration, pytest.mark.network]
 
 
 def generate_kwargs():
@@ -417,7 +417,7 @@ def test_okx_async_spot_order_functions():
             target_data = data_queue.get(False)
         except queue.Empty:
             break
-        event_data = target_data.get_data()
+        target_data.get_data()
         event_type = target_data.get_event()
         request_type = target_data.get_request_type()
         if event_type == "RequestEvent" and request_type == "make_order":

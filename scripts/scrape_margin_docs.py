@@ -8,7 +8,9 @@ import json
 from playwright.sync_api import sync_playwright
 
 BASE_URL = "https://developers.binance.com"
-DOCS_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "docs", "binance", "margin_trading")
+DOCS_DIR = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "docs", "binance", "margin_trading"
+)
 
 # All known pages from sidebar exploration
 ALL_PAGES = {
@@ -19,7 +21,6 @@ ALL_PAGES = {
     "common-definition": "/docs/margin_trading/common-definition",
     "error-code": "/docs/margin_trading/error-code",
     "best-practice": "/docs/margin_trading/best-practice",
-
     # Market Data
     "market-data/cross-margin-collateral-ratio": "/docs/margin_trading/market-data",
     "market-data/get-all-cross-margin-pairs": "/docs/margin_trading/market-data/Get-All-Cross-Margin-Pairs",
@@ -34,7 +35,6 @@ ALL_PAGES = {
     "market-data/query-margin-available-inventory": "/docs/margin_trading/market-data/Query-margin-avaliable-inventory",
     "market-data/query-liability-coin-leverage-bracket": "/docs/margin_trading/market-data/Query-Liability-Coin-Leverage-Bracket-in-Cross-Margin-Pro-Mode",
     "market-data/get-margin-restricted-assets": "/docs/margin_trading/market-data/Get-Margin-Restricted-Assets",
-
     # Borrow And Repay
     "borrow-and-repay/get-future-hourly-interest-rate": "/docs/margin_trading/borrow-and-repay",
     "borrow-and-repay/get-interest-history": "/docs/margin_trading/borrow-and-repay/Get-Interest-History",
@@ -42,7 +42,6 @@ ALL_PAGES = {
     "borrow-and-repay/query-borrow-repay": "/docs/margin_trading/borrow-and-repay/Query-Borrow-Repay",
     "borrow-and-repay/query-margin-interest-rate-history": "/docs/margin_trading/borrow-and-repay/Query-Margin-Interest-Rate-History",
     "borrow-and-repay/query-max-borrow": "/docs/margin_trading/borrow-and-repay/Query-Max-Borrow",
-
     # Trade
     "trade/margin-account-new-order": "/docs/margin_trading/trade/Margin-Account-New-Order",
     "trade/margin-account-cancel-order": "/docs/margin_trading/trade/Margin-Account-Cancel-Order",
@@ -67,11 +66,9 @@ ALL_PAGES = {
     "trade/query-margin-allocations": "/docs/margin_trading/trade/Query-Margin-Allocations",
     "trade/query-special-key-of-low-latency-trading": "/docs/margin_trading/trade/Query-Special-Key-of-Low-Latency-Trading",
     "trade/query-special-key-list-of-low-latency-trading": "/docs/margin_trading/trade/Query-Special-Key-List-of-Low-Latency-Trading",
-
     # Transfer
     "transfer/cross-margin-transfer": "/docs/margin_trading/transfer",
     "transfer/query-max-transfer-out-amount": "/docs/margin_trading/transfer/Query-Max-Transfer-Out-Amount",
-
     # Account
     "account/query-cross-margin-account-details": "/docs/margin_trading/account/Query-Cross-Margin-Account-Details",
     "account/get-summary-of-margin-account": "/docs/margin_trading/account/Get-Summary-Of-Margin-Account",
@@ -84,12 +81,10 @@ ALL_PAGES = {
     "account/query-cross-isolated-margin-capital-flow": "/docs/margin_trading/account/Query-Cross-Isolated-Margin-Capital-Flow",
     "account/get-bnb-burn-status": "/docs/margin_trading/account/Get-BNB-Burn-Status",
     "account/toggle-bnb-burn": "/docs/margin_trading/account",
-
     # Trade Data Stream
     "trade-data-stream/create-listen-token": "/docs/margin_trading/trade-data-stream",
     "trade-data-stream/websocket-subscribe": "/docs/margin_trading/trade-data-stream/Websocket-Subscribe-User-Data-Stream-using-Listen-Token",
     "trade-data-stream/payload-account-update": "/docs/margin_trading/trade-data-stream/Payload-Account-Update",
-
     # Risk Data Stream
     "risk-data-stream/overview": "/docs/margin_trading/risk-data-stream",
     "risk-data-stream/create-listen-key": "/docs/margin_trading/risk-data-stream/Create-a-ListenKey",
@@ -313,7 +308,7 @@ def main():
 
         for filename, url_path in sorted(ALL_PAGES.items()):
             full_url = BASE_URL + url_path
-            print(f"  [{len(scraped)+1}/{len(ALL_PAGES)}] {filename}")
+            print(f"  [{len(scraped) + 1}/{len(ALL_PAGES)}] {filename}")
             try:
                 page.goto(full_url, wait_until="networkidle", timeout=30000)
                 page.wait_for_selector("article", timeout=10000)

@@ -1,5 +1,3 @@
-from bt_api_py.logging_factory import get_logger
-
 """
 MEXC Market WebSocket Base Class
 
@@ -11,6 +9,8 @@ import threading
 import time
 
 import websocket
+
+from bt_api_py.logging_factory import get_logger
 
 
 class MexcMarketWssData:
@@ -116,10 +116,7 @@ class MexcMarketWssData:
                                 symbol = topic_info["symbol"]
                                 break
 
-                        if symbol:
-                            param = param_template.format(symbol=symbol)
-                        else:
-                            param = param_template
+                        param = param_template.format(symbol=symbol) if symbol else param_template
 
                         subscription = {
                             "method": topic_config["method"],

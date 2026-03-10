@@ -53,7 +53,7 @@ class CoinDCXRequestData(Feed):
 
     def _get_headers(self, body=""):
         """Generate request headers."""
-        timestamp = int(time.time() * 1000)
+        int(time.time() * 1000)
         headers = {
             "Content-Type": "application/json",
             "X-AUTH-APIKEY": self._params.api_key,

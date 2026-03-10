@@ -2,6 +2,9 @@ import time
 from typing import Any
 
 from bt_api_py.containers.balances.balance import BalanceData
+from bt_api_py.logging_factory import get_logger
+
+logger = get_logger("container")
 
 
 class BybitBalanceData(BalanceData):
@@ -75,7 +78,8 @@ class BybitBalanceData(BalanceData):
             self.has_been_init_data = True
 
         except Exception as e:
-            print(f"Error parsing Bybit balance data: {e}")
+            logger.error(f"Error parsing Bybit balance data: {e}", exc_info=True)
+
             self.has_been_init_data = False
         return self
 

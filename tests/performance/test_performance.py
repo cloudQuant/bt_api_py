@@ -38,6 +38,7 @@ class PerformanceMeasure:
         self.operation = operation
         self.exchange = exchange
         self.start_time = None
+        self.metrics = None
 
     def __enter__(self):
         self.start_time = time.perf_counter()
@@ -54,6 +55,7 @@ class PerformanceMeasure:
             success=success,
             error_message=error,
         )
+        return True
 
 
 class PerformanceTestSuite:
@@ -71,17 +73,15 @@ class PerformanceTestSuite:
                     with PerformanceMetrics.measure(operation, exchange) as pm:
                         try:
                             await self.api.async_get_ticker(f"{exchange}___SPOT", "BTCUSDT")
-                            pm.metrics = pm.metrics
                         except Exception:
-                            pm.metrics = pm.metrics
+                            pass
 
                 elif operation == "get_balance":
                     with PerformanceMetrics.measure(operation, exchange) as pm:
                         try:
                             await self.api.async_get_balance(f"{exchange}___SPOT")
-                            pm.metrics = pm.metrics
                         except Exception:
-                            pm.metrics = pm.metrics
+                            pass
 
                 self.metrics.append(pm.metrics)
 
@@ -95,9 +95,8 @@ class PerformanceTestSuite:
                         await self.api.async_get_ticker(f"{exchange}___SPOT", "BTCUSDT")
                     elif operation == "get_depth":
                         await self.api.async_get_depth(f"{exchange}___SPOT", "BTCUSDT")
-                    pm.metrics = pm.metrics
                 except Exception:
-                    pm.metrics = pm.metrics
+                    pass
             return pm.metrics
 
         tasks = [single_request() for _ in range(concurrent_requests)]
@@ -154,13 +153,15 @@ class PerformanceTestSuite:
                 grouped[key] = []
             grouped[key].append(metric)
 
+        successful_metrics = [m for m in self.metrics if m.success]
+        success_rate = sum(1 for m in self.metrics if m.success) / len(self.metrics) * 100
+        avg_latency = statistics.mean([m.duration_ms for m in successful_metrics]) if successful_metrics else 0.0
+
         report = {
             "summary": {
                 "total_operations": len(self.metrics),
-                "success_rate": sum(1 for m in self.metrics if m.success) / len(self.metrics) * 100,
-                "overall_avg_latency_ms": statistics.mean(
-                    [m.duration_ms for m in self.metrics if m.success]
-                ),
+                "success_rate": success_rate,
+                "overall_avg_latency_ms": avg_latency,
             },
             "by_operation": {},
         }

@@ -22,6 +22,8 @@ from bt_api_py.exceptions import (
 from bt_api_py.logging_factory import get_logger
 from bt_api_py.registry import ExchangeRegistry
 
+__all__ = ["BtApi"]
+
 _reg_logger = get_logger("registry")
 
 import bt_api_py.exchange_registers as _exchange_reg_pkg  # noqa: E402

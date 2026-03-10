@@ -3,6 +3,8 @@ OKX API - AccountMixin
 Auto-generated from request_base.py
 """
 
+from typing import Any
+
 from bt_api_py.containers.accounts.okx_account import OkxAccountData
 from bt_api_py.containers.positions.okx_position import OkxPositionData
 from bt_api_py.functions.utils import update_extra_data

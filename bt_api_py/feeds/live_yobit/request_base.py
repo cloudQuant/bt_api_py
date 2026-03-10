@@ -126,11 +126,10 @@ class YobitRequestData(Feed):
     def _is_error(data):
         if data is None:
             return True
-        if isinstance(data, dict) and (
-            "error" in data or "success" in data and data.get("success") == 0
-        ):
-            return True
-        return False
+        return bool(
+            isinstance(data, dict)
+            and ("error" in data or "success" in data and data.get("success") == 0)
+        )
 
     # ── _get_xxx internal methods ───────────────────────────────
 
@@ -194,7 +193,7 @@ class YobitRequestData(Feed):
     def _get_balance(self, extra_data=None, **kwargs):
         path = self._params.get_rest_path("get_balance")
         nonce = int(time.time())
-        body = urlencode({"method": "getInfo", "nonce": nonce})
+        urlencode({"method": "getInfo", "nonce": nonce})
         extra_data = extra_data or {}
         extra_data.update(
             {
@@ -312,7 +311,7 @@ class YobitRequestData(Feed):
         if YobitRequestData._is_error(data):
             return [], False
         if isinstance(data, dict):
-            for key, value in data.items():
+            for _key, value in data.items():
                 if isinstance(value, dict):
                     return [value], True
             return [data], True
@@ -323,7 +322,7 @@ class YobitRequestData(Feed):
         if YobitRequestData._is_error(data):
             return [], False
         if isinstance(data, dict):
-            for key, value in data.items():
+            for _key, value in data.items():
                 if isinstance(value, dict):
                     return [value], True
             return [data], True

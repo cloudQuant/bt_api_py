@@ -2,6 +2,9 @@ import time
 from typing import Any
 
 from bt_api_py.containers.orderbooks.orderbook import OrderBookData
+from bt_api_py.logging_factory import get_logger
+
+logger = get_logger("container")
 
 
 class BybitOrderBookData(OrderBookData):
@@ -79,7 +82,8 @@ class BybitOrderBookData(OrderBookData):
             self.has_been_init_data = True
 
         except Exception as e:
-            print(f"Error parsing Bybit orderbook data: {e}")
+            logger.error(f"Error parsing Bybit orderbook data: {e}", exc_info=True)
+
             self.has_been_init_data = False
         return self
 

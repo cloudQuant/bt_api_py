@@ -244,14 +244,16 @@ class KrakenRequestTickerData(TickerData):
             return False
 
         # Validate bid-ask spread
-        if self.ask_price and self.bid_price:
-            if self.ask_price < self.bid_price:
-                return False
+        if self.ask_price and self.bid_price and self.ask_price < self.bid_price:
+            return False
 
         # Validate price change
-        if self.price_change is not None and self.open_price:
-            if abs(self.price_change_percentage) > 100:  # Unusual percentage change
-                self.logger.warn(f"Unusual price change: {self.price_change_percentage}%")
+        if (
+            self.price_change is not None
+            and self.open_price
+            and abs(self.price_change_percentage) > 100  # Unusual percentage change
+        ):
+            self.logger.warn(f"Unusual price change: {self.price_change_percentage}%")
 
         return True
 

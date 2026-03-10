@@ -15,6 +15,7 @@ from bt_api_py.containers.orderbooks.hitbtc_orderbook import HitBtcRequestOrderB
 from bt_api_py.containers.orders.hitbtc_order import HitBtcRequestOrderData
 from bt_api_py.containers.tickers.hitbtc_ticker import HitBtcRequestTickerData
 from bt_api_py.exchange_registers.register_hitbtc import register_hitbtc
+from bt_api_py.feeds.live_hitbtc.spot import HitBtcSpotRequestData
 
 
 class TestHitBtcFeedRegistration:
@@ -184,7 +185,7 @@ class TestHitBtcIntegration:
     @pytest.mark.skip(reason="Requires API keys for real API calls")
     def test_trading_api(self):
         """Test trading API calls (requires API keys)"""
-        data_queue = queue.Queue()
+        queue.Queue()
 
         # This would require API keys to test
         # feed = HitBtcSpotRequestData(data_queue, public_key="key", private_key="secret")

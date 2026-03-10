@@ -345,9 +345,7 @@ class BigONERequestData(Feed):
     def _is_error(input_data):
         if not input_data:
             return True
-        if isinstance(input_data, dict) and "errors" in input_data:
-            return True
-        return False
+        return bool(isinstance(input_data, dict) and "errors" in input_data)
 
     @staticmethod
     def _unwrap(input_data):

@@ -133,9 +133,7 @@ class LatokenRequestData(Feed):
             return True
         if isinstance(data, dict) and data.get("status") == "FAILURE":
             return True
-        if isinstance(data, dict) and "error" in data:
-            return True
-        return False
+        return bool(isinstance(data, dict) and "error" in data)
 
     # ── internal _get_xxx methods ───────────────────────────────
 

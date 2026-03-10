@@ -1,3 +1,5 @@
+from typing import Any
+
 from bt_api_py.containers.exchanges.okx_exchange_data import OkxExchangeDataSpot
 from bt_api_py.feeds.live_okx.account_wss_base import (
     OkxAccountWssData,

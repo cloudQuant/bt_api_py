@@ -77,7 +77,7 @@ class PropertyBasedTests:
         # (Note: We mock this since we don't have all exchanges registered)
         try:
             # This will likely fail for unregistered exchanges, which is expected
-            feed = registry.create_feed(exchange, data_queue="test")
+            registry.create_feed(exchange, data_queue="test")
         except ExchangeNotFoundError:
             # Expected for unregistered exchanges
             pass
@@ -156,8 +156,12 @@ class PropertyBasedTests:
 
         # Create orderbook structure
         orderbook = {
-            "bids": list(zip(prices[: len(prices) // 2], volumes[: len(volumes) // 2])),
-            "asks": list(zip(prices[len(prices) // 2 :], volumes[len(volumes) // 2 :])),
+            "bids": list(
+                zip(prices[: len(prices) // 2], volumes[: len(volumes) // 2], strict=False)
+            ),
+            "asks": list(
+                zip(prices[len(prices) // 2 :], volumes[len(volumes) // 2 :], strict=False)
+            ),
         }
 
         # Property: Best bid should be lower than best ask (if both exist)

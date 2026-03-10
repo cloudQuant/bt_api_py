@@ -12,6 +12,7 @@ IBKR Gateway Cookie 提取工具
 或者使用此脚本自动从浏览器提取:
     python3 scripts/get_ibkr_cookie.py
 """
+
 import os
 import sys
 import json
@@ -27,6 +28,7 @@ def get_cookie_from_browser():
     try:
         import browser_cookie3
         import urllib3
+
         urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
         # 尝试连接 Gateway 验证 cookie
@@ -34,15 +36,15 @@ def get_cookie_from_browser():
 
         # 尝试每个可能的浏览器
         browsers = [
-            ('Chrome', browser_cookie3.chrome),
-            ('Firefox', browser_cookie3.firefox),
-            ('Safari', browser_cookie3.safari),
-            ('Edge', browser_cookie3.edge),
+            ("Chrome", browser_cookie3.chrome),
+            ("Firefox", browser_cookie3.firefox),
+            ("Safari", browser_cookie3.safari),
+            ("Edge", browser_cookie3.edge),
         ]
 
         for browser_name, browser_func in browsers:
             try:
-                cj = browser_func(domain_name='localhost')
+                cj = browser_func(domain_name="localhost")
                 # 构建 cookie 字典
                 cookies = {cookie.name: cookie.value for cookie in cj}
 
@@ -54,7 +56,7 @@ def get_cookie_from_browser():
                         cookies=cookies,
                         verify=False,
                         timeout=5,
-                        proxies={"http": None, "https": None}
+                        proxies={"http": None, "https": None},
                     )
                     if response.status_code == 200:
                         print(f"✓ 从 {browser_name} 找到有效的 cookies!")
@@ -88,6 +90,7 @@ def get_cookie_manual():
         return None
 
     from bt_api_py.functions.browser_cookies import extract_cookie_string
+
     return extract_cookie_string(cookie_str)
 
 
@@ -100,7 +103,7 @@ def save_cookie_to_file(cookies, output_path=None):
     output_path = Path(output_path)
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
-    with open(output_path, 'w') as f:
+    with open(output_path, "w") as f:
         json.dump(cookies, f, indent=2)
 
     print(f"\n✓ Cookies 已保存到: {output_path}")
@@ -115,21 +118,21 @@ def update_env_file(cookie_file_path):
     cookie_source = f"file:{cookie_file_path}"
 
     if env_file.exists():
-        with open(env_file, 'r') as f:
+        with open(env_file, "r") as f:
             lines = f.readlines()
 
         # 更新或添加 IB_WEB_COOKIE_SOURCE
         updated = False
         for i, line in enumerate(lines):
-            if line.startswith('IB_WEB_COOKIE_SOURCE='):
-                lines[i] = f'IB_WEB_COOKIE_SOURCE={cookie_source}\n'
+            if line.startswith("IB_WEB_COOKIE_SOURCE="):
+                lines[i] = f"IB_WEB_COOKIE_SOURCE={cookie_source}\n"
                 updated = True
                 break
 
         if not updated:
-            lines.append(f'\nIB_WEB_COOKIE_SOURCE={cookie_source}\n')
+            lines.append(f"\nIB_WEB_COOKIE_SOURCE={cookie_source}\n")
 
-        with open(env_file, 'w') as f:
+        with open(env_file, "w") as f:
             f.writelines(lines)
 
         print(f"✓ 已更新 .env 文件，设置 IB_WEB_COOKIE_SOURCE={cookie_source}")

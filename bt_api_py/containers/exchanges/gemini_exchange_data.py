@@ -50,7 +50,7 @@ class GeminiExchangeData(ExchangeData):
     def __init__(self) -> None:
         """Initialize Gemini exchange data with default configuration."""
         super().__init__()
-        self.exchange_name = "GeminiSpot"
+        self.exchange_name = "GEMINI"
         self.rest_url = "https://api.gemini.com"
         self.wss_url = "wss://api.gemini.com/v1/marketdata"
         self.account_wss_url = "wss://api.gemini.com/v1/order/events"

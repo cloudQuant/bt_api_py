@@ -43,68 +43,112 @@ def _get_bitget_config() -> Any | None:
 class BitgetExchangeData(ExchangeData):
     """Bitget Exchange Data Configuration."""
 
-    def __init__(self, config: dict[str, Any] | None = None) -> None:
-        """Initialize Bitget exchange data.
-
-        Args:
-            config: Optional configuration dictionary to If None, loads from YAML
-        """
-        if config is None:
-            config = _get_bitget_config()
-        if config is None:
-            raise ValueError("Bitget configuration not found")
-
-        super().__init__(config or {})
+    def __init__(self) -> None:
+        """Initialize Bitget exchange data with default configuration."""
+        super().__init__()
         self.exchange_name = "BITGET"
-        self._load_from_config(config)
+        self.rest_url = "https://api.bitget.com"
+        self.wss_url = "wss://ws.bitget.com/spot/v1/stream"
+        self.api_version = "v2"
 
-    def _load_from_config(self, config: dict[str, Any]) -> None:
-        """Load configuration from dict.
+        self.rest_paths: dict[str, str] = {}
+        self.wss_paths: dict[str, Any] = {}
+        self.kline_periods: dict[str, str] = {}
+        self.reverse_kline_periods: dict[str, str] = {}
+        self.exchange_info: dict[str, Any] = {}
+
+        self._load_from_config("spot")
+
+    def _load_from_config(self, asset_type: str) -> bool:
+        """Load exchange parameters from YAML configuration file.
 
         Args:
-            config: Configuration dictionary
+            asset_type: Asset type key, e.g., 'spot', 'swap', 'margin'
+
+        Returns:
+            bool: Whether loading was successful
         """
-        self.rest_url = config.get("rest_url", "")
-        self.wss_url = config.get("wss_url", "")
-        self.api_version = config.get("api_version", "v2")
-        self.kline_periods = config.get("kline_periods", {})
-        self.rest_paths = config.get("rest_paths", {})
-        self.wss_paths = config.get("wss_paths", {})
-        self.legal_currency = config.get("legal_currency", [])
-        self.symbols = config.get("symbols", {})
-        self._parse_exchange_info()
+        config = _get_bitget_config()
+        if config is None:
+            return False
+        asset_cfg = config.asset_types.get(asset_type)
+        if asset_cfg is None:
+            return False
 
-    def _parse_exchange_info(self) -> None:
-        """Parse exchange information from config."""
-        if "exchange_info" in self.config:
-            for key, value in self.config["exchange_info"].items():
-                self.exchange_info[key] = value
+        if asset_cfg.exchange_name:
+            self.exchange_name = asset_cfg.exchange_name
 
-        else:
-            self.exchange_info = {}
+        if config.base_urls:
+            self.rest_url = config.base_urls.rest.get(asset_type, self.rest_url)
+            self.wss_url = config.base_urls.wss.get(asset_type, self.wss_url)
+
+        if hasattr(asset_cfg, "rest_paths") and asset_cfg.rest_paths:
+            self.rest_paths = dict(asset_cfg.rest_paths)
+
+        if hasattr(asset_cfg, "wss_paths") and asset_cfg.wss_paths:
+            self.wss_paths = dict(asset_cfg.wss_paths)
+
+        kp = asset_cfg.kline_periods or (config.kline_periods if config.kline_periods else None)
+        if kp:
+            self.kline_periods = dict(kp)
+            self.reverse_kline_periods = {v: k for k, v in self.kline_periods.items()}
+
+        lc = asset_cfg.legal_currency or (config.legal_currency if config.legal_currency else None)
+        if lc:
+            self.legal_currency = list(lc)
+
+        return True
+
+    def get_symbol(self, symbol: str) -> str:
+        """Format trading pair name for Bitget.
+
+        Args:
+            symbol: Raw trading pair name (e.g., 'BTC-USDT')
+
+        Returns:
+            str: Formatted trading pair name (e.g., 'BTCUSDT')
+        """
+        return symbol.replace("-", "").replace("/", "").upper()
+
+    def get_period(self, period: str) -> str:
+        """Convert period name.
+
+        Args:
+            period: Period name (e.g., '1m', '1h')
+
+        Returns:
+            str: Converted period name
+        """
+        return self.kline_periods.get(period, period)
+
+    def get_rest_path(self, request_type: str, **kwargs: Any) -> str:
+        """Get REST API endpoint path.
+
+        Args:
+            request_type: Request type key
+
+        Returns:
+            str: REST API path
+        """
+        if request_type not in self.rest_paths or self.rest_paths[request_type] == "":
+            self.raise_path_error(self.exchange_name, request_type)
+        return self.rest_paths[request_type]
 
 
 class BitgetExchangeDataSpot(BitgetExchangeData):
     """Bitget Spot Exchange Configuration."""
 
-    def __init__(self, config: dict[str, Any] | None = None) -> None:
-        """Initialize Bitget spot exchange data.
-
-        Args:
-            config: Optional configuration dictionary
-        """
-        super().__init__(config or {})
-        self.asset_type = "SPOT"
+    def __init__(self) -> None:
+        """Initialize Bitget spot exchange data."""
+        super().__init__()
+        self.asset_type = "spot"
 
 
 class BitgetExchangeDataSwap(BitgetExchangeData):
     """Bitget Swap Exchange Configuration."""
 
-    def __init__(self, config: dict[str, Any] | None = None) -> None:
-        """Initialize Bitget swap exchange data.
-
-        Args:
-            config: Optional configuration dictionary
-        """
-        super().__init__(config or {})
-        self.asset_type = "SWAP"
+    def __init__(self) -> None:
+        """Initialize Bitget swap exchange data."""
+        super().__init__()
+        self._load_from_config("swap")
+        self.asset_type = "swap"

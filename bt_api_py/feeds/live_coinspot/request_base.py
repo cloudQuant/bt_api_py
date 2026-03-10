@@ -300,10 +300,7 @@ class CoinSpotRequestData(Feed):
     def _is_error(input_data):
         if input_data is None:
             return True
-        if isinstance(input_data, dict):
-            if input_data.get("status") == "error":
-                return True
-        return False
+        return bool(isinstance(input_data, dict) and input_data.get("status") == "error")
 
     @staticmethod
     def _get_exchange_info_normalize_function(input_data, extra_data):

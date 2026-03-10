@@ -198,7 +198,7 @@ class IbWebRequestData(Feed):
         try:
             import jwt as pyjwt
         except ImportError:
-            raise ImportError("pyjwt required. Install: pip install pyjwt cryptography")
+            raise ImportError("pyjwt required. Install: pip install pyjwt cryptography") from None
         with open(private_key_path) as f:
             private_key = f.read()
         now = int(time.time())

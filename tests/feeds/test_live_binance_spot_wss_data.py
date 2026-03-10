@@ -4,8 +4,6 @@ import time
 
 import pytest
 
-pytestmark = [pytest.mark.integration, pytest.mark.network]
-
 from bt_api_py.containers.accounts.binance_account import BinanceSpotWssAccountData
 from bt_api_py.containers.bars.binance_bar import BinanceWssBarData
 from bt_api_py.containers.exchanges.binance_exchange_data import BinanceExchangeDataSpot
@@ -21,6 +19,8 @@ from bt_api_py.feeds.live_binance_feed import (
     BinanceRequestDataSpot,
 )
 from bt_api_py.functions.utils import read_account_config
+
+pytestmark = [pytest.mark.integration, pytest.mark.network]
 
 
 def generate_kwargs(exchange=BinanceExchangeDataSpot):
@@ -108,7 +108,6 @@ def test_get_binance_account_data_feed():
     }
     BinanceAccountWssDataSpot(data_queue, **kwargs).start()
     time.sleep(3)
-    receive_binance_account_data = False
     # receive_binance_position_data = False
     receive_binance_order_data = False
     # 下单撤单测试订单功能
@@ -151,7 +150,7 @@ def test_get_binance_account_data_feed():
         if count > 10000:
             break
         if isinstance(data, BinanceSpotWssAccountData):
-            receive_binance_account_data = True
+            pass
         # if isinstance(data, BinancePositionData):
         #     receive_binance_position_data = True
         if isinstance(data, BinanceSpotWssOrderData):

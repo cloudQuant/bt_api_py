@@ -7,6 +7,9 @@ import time
 
 from bt_api_py.containers.orders.order import OrderData
 from bt_api_py.functions.utils import from_dict_get_float, from_dict_get_string
+from bt_api_py.logging_factory import get_logger
+
+logger = get_logger("container")
 
 
 class CoinbaseOrderData(OrderData):
@@ -84,7 +87,8 @@ class CoinbaseOrderData(OrderData):
                 if self.size:
                     self.order_type = "limit" if self.price else "market"
         except Exception as e:
-            print(f"Error parsing order data: {e}")
+            logger.error(f"Error parsing order data: {e}", exc_info=True)
+
             self.order_data = {}
         self.has_been_init_data = True
         return self
@@ -242,7 +246,8 @@ class CoinbaseWssOrderData(CoinbaseOrderData):
                 # Settled
                 self.settled = from_dict_get_string(self.order_data, "settled")
         except Exception as e:
-            print(f"Error parsing WebSocket order data: {e}")
+            logger.error(f"Error parsing WebSocket order data: {e}", exc_info=True)
+
             self.order_data = {}
         self.has_been_init_data = True
         return self
@@ -296,7 +301,8 @@ class CoinbaseRequestOrderData(CoinbaseOrderData):
                     elif self.funds:
                         self.order_type = "market"
         except Exception as e:
-            print(f"Error parsing REST order data: {e}")
+            logger.error(f"Error parsing REST order data: {e}", exc_info=True)
+
             self.order_data = {}
         self.has_been_init_data = True
         return self

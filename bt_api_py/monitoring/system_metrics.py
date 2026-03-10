@@ -5,6 +5,7 @@ Collects system-level metrics including CPU, memory, network, and custom busines
 """
 
 import asyncio
+import contextlib
 import gc
 import time
 from dataclasses import dataclass, field
@@ -143,7 +144,7 @@ class SystemMetricsCollector:
             memory = psutil.virtual_memory()
 
             # Process metrics
-            process_cpu = self._process.cpu_percent()
+            self._process.cpu_percent()
             process_memory = self._process.memory_info()
             process_threads = self._process.num_threads()
 
@@ -154,7 +155,7 @@ class SystemMetricsCollector:
                 fd_count = 0
 
             # GC metrics
-            gc_stats = gc.get_stats() if hasattr(gc, "get_stats") else []
+            gc.get_stats() if hasattr(gc, "get_stats") else []
             gc_counts = gc.collect() if hasattr(gc, "collect") else [0, 0, 0]
 
             # Network metrics
@@ -213,7 +214,7 @@ class SystemMetricsCollector:
         self.fd_count_gauge.set(fd_count)
 
         # GC metrics
-        for i, count in enumerate(metrics.gc_count):
+        for _i, count in enumerate(metrics.gc_count):
             self.gc_count_gauge.set(count)
 
         # Network metrics
@@ -236,10 +237,8 @@ class SystemMetricsCollector:
         self._running = False
         if self._task:
             self._task.cancel()
-            try:
+            with contextlib.suppress(asyncio.CancelledError):
                 await self._task
-            except asyncio.CancelledError:
-                pass
             self._task = None
 
     async def _collection_loop(self) -> None:

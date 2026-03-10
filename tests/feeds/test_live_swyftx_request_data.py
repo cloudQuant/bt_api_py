@@ -1,5 +1,3 @@
-import pytest
-
 """
 Swyftx Exchange Live Request Data Tests
 
@@ -11,6 +9,8 @@ Tests for Swyftx spot trading implementation following Binance/OKX standards:
 """
 
 import queue
+
+import pytest
 
 # Import registration to auto-register Swyftx
 import bt_api_py.exchange_registers.register_swyftx  # noqa: F401
@@ -86,7 +86,7 @@ def test_swyftx_tick_normalize_function():
 def test_swyftx_async_tick_data():
     """Test Swyftx ticker data retrieval (asynchronous)."""
     data_queue = queue.Queue()
-    live_swyftx_spot_feed = init_async_feed(data_queue)
+    init_async_feed(data_queue)
 
     # Note: Swyftx's current implementation uses sync requests
     # This test would require async implementation
@@ -145,7 +145,7 @@ def test_swyftx_kline_normalize_function():
 def test_swyftx_async_kline_data():
     """Test Swyftx kline data retrieval (asynchronous)."""
     data_queue = queue.Queue()
-    live_swyftx_spot_feed = init_async_feed(data_queue)
+    init_async_feed(data_queue)
 
     # Note: Swyftx's current implementation uses sync requests
     # This test would require async implementation

@@ -8,6 +8,9 @@ from typing import Any
 
 from bt_api_py.containers.accounts.account import AccountData
 from bt_api_py.functions.utils import from_dict_get_float, from_dict_get_string
+from bt_api_py.logging_factory import get_logger
+
+logger = get_logger("container")
 
 
 class CoinbaseAccountData(AccountData):
@@ -57,26 +60,26 @@ class CoinbaseAccountData(AccountData):
             return self
         try:
             # Parse account data
-            if isinstance(self.account_data, dict):
-                # Single account structure
-                if "uuid" in self.account_data:
-                    self.account_id = from_dict_get_string(self.account_data, "uuid")
-                    self.currency = from_dict_get_string(self.account_data, "currency")
+            # Single account structure
+            if isinstance(self.account_data, dict) and "uuid" in self.account_data:
+                self.account_id = from_dict_get_string(self.account_data, "uuid")
+                self.currency = from_dict_get_string(self.account_data, "currency")
 
-                    # Balance information
-                    if "available_balance" in self.account_data:
-                        balance_info = self.account_data["available_balance"]
-                        self.available = from_dict_get_float(balance_info, "value", 0)
+                # Balance information
+                if "available_balance" in self.account_data:
+                    balance_info = self.account_data["available_balance"]
+                    self.available = from_dict_get_float(balance_info, "value", 0)
 
-                    if "hold" in self.account_data:
-                        hold_info = self.account_data["hold"]
-                        self.hold = from_dict_get_float(hold_info, "value", 0)
+                if "hold" in self.account_data:
+                    hold_info = self.account_data["hold"]
+                    self.hold = from_dict_get_float(hold_info, "value", 0)
 
-                    if self.available is not None and self.hold is not None:
-                        self.balance = self.available + self.hold
-                    self.last_activity = from_dict_get_string(self.account_data, "updated_at")
+                if self.available is not None and self.hold is not None:
+                    self.balance = self.available + self.hold
+                self.last_activity = from_dict_get_string(self.account_data, "updated_at")
         except Exception as e:
-            print(f"Error parsing account data: {e}")
+            logger.error(f"Error parsing account data: {e}", exc_info=True)
+
             self.account_data = {}
         self.has_been_init_data = True
         return self
@@ -233,28 +236,28 @@ class CoinbaseSpotWssAccountData(CoinbaseAccountData):
             return self
         try:
             # WebSocket account data
-            if isinstance(self.account_data, dict):
-                if "accounts" in self.account_data:
-                    # Handle multiple accounts
-                    for account in self.account_data["accounts"]:
-                        if account.get("currency") == self.symbol_name.split("-")[0]:
-                            self.account_id = from_dict_get_string(account, "uuid")
-                            self.currency = from_dict_get_string(account, "currency")
+            if isinstance(self.account_data, dict) and "accounts" in self.account_data:
+                # Handle multiple accounts
+                for account in self.account_data["accounts"]:
+                    if account.get("currency") == self.symbol_name.split("-")[0]:
+                        self.account_id = from_dict_get_string(account, "uuid")
+                        self.currency = from_dict_get_string(account, "currency")
 
-                            if "available_balance" in account:
-                                balance_info = account["available_balance"]
-                                self.available = from_dict_get_float(balance_info, "value", 0)
+                        if "available_balance" in account:
+                            balance_info = account["available_balance"]
+                            self.available = from_dict_get_float(balance_info, "value", 0)
 
-                            if "hold" in account:
-                                hold_info = account["hold"]
-                                self.hold = from_dict_get_float(hold_info, "value", 0)
+                        if "hold" in account:
+                            hold_info = account["hold"]
+                            self.hold = from_dict_get_float(hold_info, "value", 0)
 
-                            if self.available is not None and self.hold is not None:
-                                self.balance = self.available + self.hold
-                            self.last_activity = from_dict_get_string(account, "updated_at")
-                            break
+                        if self.available is not None and self.hold is not None:
+                            self.balance = self.available + self.hold
+                        self.last_activity = from_dict_get_string(account, "updated_at")
+                        break
         except Exception as e:
-            print(f"Error parsing WebSocket account data: {e}")
+            logger.error(f"Error parsing WebSocket account data: {e}", exc_info=True)
+
             self.account_data = {}
         self.has_been_init_data = True
         return self
@@ -309,7 +312,8 @@ class CoinbaseRequestAccountData(CoinbaseAccountData):
                             self.last_activity = from_dict_get_string(account, "updated_at")
                             break
         except Exception as e:
-            print(f"Error parsing REST account data: {e}")
+            logger.error(f"Error parsing REST account data: {e}", exc_info=True)
+
             self.account_data = {}
         self.has_been_init_data = True
         return self

@@ -6,11 +6,13 @@ Provides a lightweight Prometheus-like metrics system for bt_api_py.
 
 import threading
 import time
-from collections.abc import Callable
 from contextlib import contextmanager
 from dataclasses import dataclass, field
-from typing import Protocol
+from typing import TYPE_CHECKING, Protocol
 from weakref import WeakSet
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
 
 
 class Metric(Protocol):

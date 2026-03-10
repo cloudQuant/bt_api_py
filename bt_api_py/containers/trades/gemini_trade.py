@@ -60,15 +60,14 @@ class GeminiRequestTradeData(RequestData):
 
     def _parse_wss_data(self, data):
         """Parse WebSocket response"""
-        if isinstance(data, dict):
-            if data.get("type") == "trade":
-                self.trade_id = data.get("tid")
-                self.price = float(data.get("price", 0))
-                self.amount = float(data.get("amount", 0))
-                self.side = data.get("makerSide")  # 'buy' or 'sell'
-                self.timestamp = data.get("timestamp")
-                self.exchange_timestamp = convert_utc_timestamp(self.timestamp)
-                self.type = "maker" if data.get("makerSide") else "taker"
+        if isinstance(data, dict) and data.get("type") == "trade":
+            self.trade_id = data.get("tid")
+            self.price = float(data.get("price", 0))
+            self.amount = float(data.get("amount", 0))
+            self.side = data.get("makerSide")  # 'buy' or 'sell'
+            self.timestamp = data.get("timestamp")
+            self.exchange_timestamp = convert_utc_timestamp(self.timestamp)
+            self.type = "maker" if data.get("makerSide") else "taker"
 
     def to_dict(self):
         """Convert to dictionary"""

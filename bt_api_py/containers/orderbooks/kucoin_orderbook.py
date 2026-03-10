@@ -248,7 +248,7 @@ class KuCoinLevel3OrderBookData(KuCoinOrderBookData):
         bid_dict = {}
         ask_dict = {}
 
-        for order_id, price, size in bids:
+        for _order_id, price, size in bids:
             price_float = float(price)
             size_float = float(size)
             if price_float in bid_dict:
@@ -258,7 +258,7 @@ class KuCoinLevel3OrderBookData(KuCoinOrderBookData):
                 bid_dict[price_float] = size_float
                 bid_dict[price_float + "_orders"] = 1
 
-        for order_id, price, size in asks:
+        for _order_id, price, size in asks:
             price_float = float(price)
             size_float = float(size)
             if price_float in ask_dict:

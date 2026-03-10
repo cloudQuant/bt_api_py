@@ -362,7 +362,4 @@ class ThreatDetector:
         current_ip = current_behavior.get("ip_address")
         usual_ips = baseline.get("usual_ip_addresses", [])
 
-        if current_ip and usual_ips and current_ip not in usual_ips:
-            return True
-
-        return False
+        return bool(current_ip and usual_ips and current_ip not in usual_ips)

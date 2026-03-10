@@ -3,6 +3,26 @@ bt_api_py 自定义异常体系
 统一各模块的异常处理，替代散乱的 assert / raise Exception / ConnectionError
 """
 
+__all__ = [
+    "BtApiError",
+    "ExchangeNotFoundError",
+    "ExchangeConnectionError",
+    "ExchangeConnectionAlias",
+    "AuthenticationError",
+    "RequestTimeoutError",
+    "RequestError",
+    "RequestFailedError",
+    "OrderError",
+    "SubscribeError",
+    "DataParseError",
+    "RateLimitError",
+    "NetworkError",
+    "InvalidSymbolError",
+    "InsufficientBalanceError",
+    "InvalidOrderError",
+    "OrderNotFoundError",
+]
+
 
 class BtApiError(Exception):
     """bt_api_py 所有异常的基类"""
@@ -191,17 +211,27 @@ class WebSocketError(BtApiError):
         self.exchange_name = exchange_name
 
 
-class RequestFailedError(BtApiError):
+class RequestFailedError(RequestError):
     """通用请求失败错误（用于 HTTP 客户端）"""
 
-    def __init__(self, venue="", message="", status_code=None) -> None:
-        msg = "Request failed"
-        if venue:
-            msg = f"{venue} request failed"
-        if message:
-            msg += f": {message}"
-        if status_code:
-            msg += f" (HTTP {status_code})"
-        super().__init__(msg)
-        self.venue = venue
+    def __init__(
+        self,
+        exchange_name: str | None = None,
+        url: str = "",
+        detail: str = "",
+        *,
+        venue: str = "",
+        message: str = "",
+        status_code: int | None = None,
+    ) -> None:
+        # Backward compatibility:
+        # - Old call sites: RequestFailedError(exchange_name, url=..., detail=...)
+        # - New call sites (HttpClient): RequestFailedError(venue=..., message=..., status_code=...)
+        name = exchange_name or venue or ""
+        msg = message or detail or "Request failed"
+        if status_code is not None:
+            msg = f"{msg} (HTTP {status_code})"
+
+        super().__init__(name or "unknown", url=url, detail=msg)
+        self.venue = name
         self.status_code = status_code

@@ -5,6 +5,7 @@ Provides a unified interface for collecting performance metrics from various sou
 """
 
 import asyncio
+import contextlib
 import time
 from dataclasses import dataclass, field
 from typing import Any
@@ -85,10 +86,8 @@ class MetricsCollector:
         # Stop main collection loop
         if self._task:
             self._task.cancel()
-            try:
+            with contextlib.suppress(asyncio.CancelledError):
                 await self._task
-            except asyncio.CancelledError:
-                pass
             self._task = None
 
     async def _collection_loop(self) -> None:

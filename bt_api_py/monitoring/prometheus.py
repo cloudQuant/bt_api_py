@@ -203,7 +203,9 @@ class PrometheusExporter:
             raise RuntimeError("Server is already running")
 
         # Create server
-        handler = lambda *args, **kwargs: MetricsHandler(self.registry, *args, **kwargs)
+        def handler(*args, **kwargs):
+            return MetricsHandler(self.registry, *args, **kwargs)
+
         self.server = HTTPServer((self.host, self.port), handler)
         self.server.timeout = 1  # Non-blocking accept
 

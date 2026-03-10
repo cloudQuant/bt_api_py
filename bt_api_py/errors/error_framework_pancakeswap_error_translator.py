@@ -100,6 +100,7 @@ class PancakeSwapErrorTranslator(ErrorTranslator):
     def _translate_message(self, message: str) -> tuple:
         """Translate error message to unified error code."""
         message_upper = message.upper()
+        message_lower = message.lower()
 
         for error_pattern, (code, msg) in self.ERROR_MAP.items():
             if error_pattern in message_upper:

@@ -46,8 +46,8 @@ class TestBitgetExchangeData:
 
     def test_get_period(self):
         exchange_data = BitgetExchangeDataSpot()
-        # Bitget period returns key as-is
-        assert exchange_data.get_period("1m") == "1m"
+        # Bitget period converts via kline_periods mapping from YAML config
+        assert exchange_data.get_period("1m") == "1min"
         assert exchange_data.get_period("1h") == "1h"
 
     def test_get_rest_path(self):

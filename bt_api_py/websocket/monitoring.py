@@ -3,6 +3,7 @@ Provides real-time metrics, alerts, performance benchmarking, and visualization.
 """
 
 import asyncio
+import contextlib
 import statistics
 import threading
 import time
@@ -120,10 +121,8 @@ class MetricsCollector(IMetricsCollector):
 
         if self._cleanup_task:
             self._cleanup_task.cancel()
-            try:
+            with contextlib.suppress(asyncio.CancelledError):
                 await self._cleanup_task
-            except asyncio.CancelledError:
-                pass
 
         self.logger.info("Metrics collector stopped")
 
@@ -254,7 +253,7 @@ class MetricsCollector(IMetricsCollector):
         with self._lock:
             cutoff = time.time() - self.retention_period
 
-            for key, points in self._metrics.items():
+            for _key, points in self._metrics.items():
                 # Remove old points
                 while points and points[0].timestamp < cutoff:
                     points.popleft()
@@ -325,10 +324,8 @@ class AlertManager:
 
         if self._monitoring_task:
             self._monitoring_task.cancel()
-            try:
+            with contextlib.suppress(asyncio.CancelledError):
                 await self._monitoring_task
-            except asyncio.CancelledError:
-                pass
 
         self.logger.info("Alert manager stopped")
 

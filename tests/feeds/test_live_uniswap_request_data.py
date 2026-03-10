@@ -124,7 +124,7 @@ class TestUniswapTickerData:
         if data:
             pass
             # Uniswap returns token price in USD
-        assert isinstance(data, dict) or isinstance(data, list)
+        assert isinstance(data, (dict, list))
 
     def test_uniswap_multiple_token_prices(self, uniswap_feed):
         """Test getting multiple token prices."""
@@ -163,7 +163,7 @@ class TestUniswapPoolData:
         if data:
             pass
             # Pool should have token0, token1, liquidity, etc.
-        assert isinstance(data, dict) or isinstance(data, list)
+        assert isinstance(data, (dict, list))
 
     def test_uniswap_multiple_pools(self, uniswap_feed):
         """Test getting multiple pool data."""
@@ -210,7 +210,7 @@ class TestUniswapSwapQuote:
         if data:
             pass
             # Quote should have amountIn, amountOut, priceImpact, etc.
-        assert isinstance(data, dict) or isinstance(data, list)
+        assert isinstance(data, (dict, list))
 
     def test_uniswap_swap_quote_exact_out(self, uniswap_feed):
         """Test swap quote for exact output."""
@@ -250,7 +250,7 @@ class TestUniswapSwappableTokens:
         if data:
             pass
             # Should return a list of tokens
-        assert isinstance(data, list) or isinstance(data, dict)
+        assert isinstance(data, (list, dict))
 
     def test_uniswap_get_swappable_tokens_params(self, uniswap_feed):
         """Test get swappable tokens parameter generation."""

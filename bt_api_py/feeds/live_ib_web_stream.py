@@ -53,7 +53,9 @@ class IbWebDataStream(BaseDataStream):
         try:
             import websocket
         except ImportError:
-            raise ImportError("websocket-client required. Install: pip install websocket-client")
+            raise ImportError(
+                "websocket-client required. Install: pip install websocket-client"
+            ) from None
 
         self.state = ConnectionState.CONNECTING
         ws_url = self._build_ws_url()
@@ -281,7 +283,9 @@ class IbWebAccountStream(BaseDataStream):
         try:
             import websocket
         except ImportError:
-            raise ImportError("websocket-client required. Install: pip install websocket-client")
+            raise ImportError(
+                "websocket-client required. Install: pip install websocket-client"
+            ) from None
 
         self.state = ConnectionState.CONNECTING
         ws_url = self._build_ws_url()

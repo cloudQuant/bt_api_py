@@ -144,10 +144,7 @@ class DydxExchangeData(ExchangeData):
             # Handle BTC-USDT -> BTC-USD or BTCUSDT -> BTC-USD
             base = symbol[:-4]  # Remove USDT
             # If base ends with dash, keep it, otherwise add it
-            if base.endswith("-"):
-                symbol = base + "USD"
-            else:
-                symbol = base + "-USD"
+            symbol = base + "USD" if base.endswith("-") else base + "-USD"
         elif "-" not in symbol:
             # If no dash, insert one before the last 3-4 chars (quote currency)
             # This handles cases like BTCUSD -> BTC-USD
