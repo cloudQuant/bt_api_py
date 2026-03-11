@@ -348,6 +348,125 @@ def test_okx_adapter_dispatch_routes_ticker():
     assert result[1].symbol == "ETH-USDT-SWAP"
 
 
+def test_backtrader_gateway_wrapper_integration(monkeypatch, tmp_path):
+    """Verify the backtrader CtpGatewayClientWrapper works end-to-end with GatewayRuntime.
+
+    This simulates the path backtrader's BtApiStore/BtApiFeed/BtApiBroker would take:
+    subscribe -> supports_live_ticks -> poll_tick -> place_order -> poll_broker_update.
+    """
+    adapter = FakeGatewayAdapter()
+    monkeypatch.setattr(GatewayRuntime, "_create_adapter", lambda self: adapter)
+    runtime_name = f"bt-{uuid.uuid4().hex[:8]}"
+
+    config = GatewayConfig.from_kwargs(
+        exchange_type="ctp",
+        asset_type="future",
+        account_id="bt-acc",
+        gateway_base_dir="/tmp/btgw",
+        gateway_runtime_name=runtime_name,
+        gateway_poll_timeout_ms=10,
+        gateway_command_timeout_sec=1.0,
+    )
+    runtime = GatewayRuntime(
+        config, exchange_type="CTP", asset_type="FUTURE", account_id="bt-acc",
+        gateway_base_dir="/tmp/btgw", gateway_runtime_name=runtime_name,
+    )
+    client = GatewayClient(
+        exchange_type="CTP", asset_type="FUTURE", account_id="bt-acc",
+        gateway_command_endpoint=config.command_endpoint,
+        gateway_event_endpoint=config.event_endpoint,
+        gateway_market_endpoint=config.market_endpoint,
+        gateway_base_dir="/tmp/btgw", gateway_runtime_name=runtime_name,
+        gateway_poll_timeout_ms=10, gateway_command_timeout_sec=1.0,
+        gateway_start_local_runtime=False,
+    )
+    runtime.start_in_thread()
+    try:
+        client.connect()
+
+        # 1. subscribe (as backtrader's CtpGatewayClientWrapper.subscribe does)
+        result = client.subscribe(["rb2510"])
+        assert "rb2510" in result["subscribed"]
+
+        # 2. supports_live_ticks — must reflect subscribed set (was broken before fix)
+        assert client.supports_live_ticks("rb2510") is True
+        assert client.supports_live_ticks("ag2512") is False
+
+        # 3. get_balance / get_positions (as broker/store would call)
+        balance = client.get_balance()
+        assert balance["cash"] == 1000.0
+        positions = client.get_positions()
+        assert len(positions) > 0
+
+        # 4. Adapter emits a tick — verify poll_tick receives it
+        adapter.emit(
+            CHANNEL_MARKET,
+            GatewayTick(timestamp=time.time(), symbol="rb2510", price=3800.0, volume=5.0),
+        )
+        assert _wait_until(lambda: client.has_pending_tick("rb2510"))
+        tick = client.poll_tick("rb2510")
+        assert tick is not None
+        assert tick.symbol == "rb2510"
+        assert tick.price == 3800.0
+        # After drain, no more ticks
+        assert client.poll_tick("rb2510") is None
+
+        # 5. place_order (as broker would call via submit_order)
+        order = client.submit_order({
+            "data_name": "rb2510", "volume": 1, "direction": "buy",
+            "price": 3800.0, "order_type": "limit",
+        })
+        assert order["order_id"] == "ord-1"
+        assert order["data_name"] == "rb2510"
+
+        # 6. Adapter emits order event — verify poll_broker_update receives it
+        adapter.emit(CHANNEL_EVENT, {
+            "kind": "order",
+            "order_id": "ord-1",
+            "external_order_id": "ord-1",
+            "status": "submitted",
+            "data_name": "rb2510",
+        })
+        update = None
+        deadline = time.time() + 2.0
+        while time.time() < deadline:
+            update = client.poll_broker_update()
+            if update is not None:
+                break
+            time.sleep(0.05)
+        assert update is not None
+        assert update["kind"] == "order"
+        assert update["status"] == "submitted"
+
+        # 7. Adapter emits trade event — verify broker receives fill
+        adapter.emit(CHANNEL_EVENT, {
+            "kind": "trade",
+            "order_id": "ord-1",
+            "external_order_id": "ord-1",
+            "status": "filled",
+            "fill_price": 3800.0,
+            "fill_volume": 1,
+        })
+        fill = None
+        deadline = time.time() + 2.0
+        while time.time() < deadline:
+            fill = client.poll_broker_update()
+            if fill is not None:
+                break
+            time.sleep(0.05)
+        assert fill is not None
+        assert fill["kind"] == "trade"
+        assert fill["fill_price"] == 3800.0
+
+        # 8. cancel_order
+        cancel = client.cancel_order("ord-1", dataname="rb2510")
+        assert cancel["status"] == "canceled"
+
+    finally:
+        client.disconnect()
+        runtime.stop()
+
+
 def test_binance_adapter_ipc_roundtrip_with_fake(monkeypatch, tmp_path):
     """BinanceGatewayAdapter via GatewayRuntime IPC roundtrip using FakeGatewayAdapter."""
     adapter = FakeGatewayAdapter()

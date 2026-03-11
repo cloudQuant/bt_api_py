@@ -66,7 +66,7 @@ class GatewayClient:
     def subscribe(self, symbols) -> dict[str, Any]:
         values = [symbols] if isinstance(symbols, str) else list(symbols or [])
         result = self._command("subscribe", {"symbols": values})
-        self.subscribed.update(result.get("symbols") or [])
+        self.subscribed.update(result.get("subscribed") or result.get("symbols") or [])
         return result
 
     def poll_tick(self, symbol):
