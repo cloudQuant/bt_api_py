@@ -7,7 +7,12 @@ from typing import TYPE_CHECKING, Any
 
 import zmq
 
-from bt_api_py.gateway.adapters import CtpGatewayAdapter, IbWebGatewayAdapter
+from bt_api_py.gateway.adapters import (
+    BinanceGatewayAdapter,
+    CtpGatewayAdapter,
+    IbWebGatewayAdapter,
+    OkxGatewayAdapter,
+)
 from bt_api_py.gateway.protocol import CHANNEL_EVENT, CHANNEL_MARKET, dumps_message, loads_message
 
 if TYPE_CHECKING:
@@ -19,6 +24,8 @@ class GatewayRuntime:
     ADAPTER_REGISTRY = {
         "CTP": CtpGatewayAdapter,
         "IB_WEB": IbWebGatewayAdapter,
+        "BINANCE": BinanceGatewayAdapter,
+        "OKX": OkxGatewayAdapter,
     }
 
     def __init__(self, config: GatewayConfig, **kwargs: Any) -> None:
