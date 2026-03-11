@@ -1,0 +1,234 @@
+"""Gateway process management — CLI start/stop/status with PID file.
+
+Provides a thin entry-point layer that:
+1. Reads a YAML/dict config
+2. Writes a PID file on start
+3. Handles SIGTERM/SIGINT for graceful shutdown
+4. Exposes ``start / stop / status`` helpers
+
+Usage (programmatic)::
+
+    from bt_api_py.gateway.process import GatewayProcess
+    proc = GatewayProcess(config_dict)
+    proc.start()   # blocks until SIGTERM / SIGINT
+
+Usage (CLI)::
+
+    python -m bt_api_py.gateway.process start --config gateway.yaml
+    python -m bt_api_py.gateway.process stop  --pid-file /tmp/btgw/gw.pid
+    python -m bt_api_py.gateway.process status --pid-file /tmp/btgw/gw.pid
+"""
+
+from __future__ import annotations
+
+import json
+import logging
+import os
+import signal
+import sys
+import time
+from pathlib import Path
+from typing import Any
+
+logger = logging.getLogger(__name__)
+
+
+class GatewayProcess:
+    """Lifecycle wrapper around GatewayRuntime with PID-file management.
+
+    Args:
+        config: A dict-like gateway configuration (same kwargs accepted
+                by ``GatewayConfig.from_kwargs``).
+        pid_dir: Directory for the PID file.  Defaults to the gateway
+                 base dir from config.
+    """
+
+    def __init__(self, config: dict[str, Any], *, pid_dir: str | None = None) -> None:
+        self._config = dict(config)
+        self._pid_dir = Path(
+            pid_dir or config.get("gateway_base_dir", "/tmp/bt_gateway")
+        )
+        self._runtime = None
+        self._stopped = False
+
+    # ------------------------------------------------------------------
+    # PID helpers
+    # ------------------------------------------------------------------
+
+    @property
+    def pid_file(self) -> Path:
+        name = self._config.get(
+            "gateway_runtime_name",
+            f"gw-{self._config.get('exchange_type', 'unknown')}"
+            f"-{self._config.get('account_id', 'default')}",
+        )
+        return self._pid_dir / f"{name}.pid"
+
+    def _write_pid(self) -> None:
+        self._pid_dir.mkdir(parents=True, exist_ok=True)
+        self.pid_file.write_text(str(os.getpid()), encoding="utf-8")
+        logger.info("PID %d written to %s", os.getpid(), self.pid_file)
+
+    def _remove_pid(self) -> None:
+        try:
+            self.pid_file.unlink(missing_ok=True)
+        except OSError:
+            pass
+
+    @staticmethod
+    def read_pid(pid_file: str | Path) -> int | None:
+        """Read a PID from *pid_file*, returning ``None`` if absent or invalid."""
+        p = Path(pid_file)
+        if not p.exists():
+            return None
+        try:
+            return int(p.read_text(encoding="utf-8").strip())
+        except (ValueError, OSError):
+            return None
+
+    @staticmethod
+    def is_running(pid: int) -> bool:
+        """Check whether a process with *pid* is alive."""
+        try:
+            os.kill(pid, 0)
+            return True
+        except (OSError, ProcessLookupError):
+            return False
+
+    # ------------------------------------------------------------------
+    # Lifecycle
+    # ------------------------------------------------------------------
+
+    def start(self) -> None:
+        """Start the gateway runtime (blocking).
+
+        Installs signal handlers for graceful shutdown and blocks until
+        the runtime is stopped.
+        """
+        from bt_api_py.gateway.config import GatewayConfig
+        from bt_api_py.gateway.runtime import GatewayRuntime
+
+        cfg = GatewayConfig.from_kwargs(**self._config)
+        self._runtime = GatewayRuntime(cfg, **self._config)
+
+        self._write_pid()
+        self._install_signal_handlers()
+
+        logger.info("Gateway process starting …")
+        try:
+            self._runtime.start()
+        except KeyboardInterrupt:
+            pass
+        finally:
+            self._shutdown()
+
+    def stop_remote(self) -> bool:
+        """Send SIGTERM to the process recorded in the PID file.
+
+        Returns:
+            ``True`` if the signal was sent successfully.
+        """
+        pid = self.read_pid(self.pid_file)
+        if pid is None:
+            logger.warning("No PID file found at %s", self.pid_file)
+            return False
+        if not self.is_running(pid):
+            logger.warning("Process %d is not running; cleaning up PID file", pid)
+            self._remove_pid()
+            return False
+        try:
+            os.kill(pid, signal.SIGTERM)
+            logger.info("Sent SIGTERM to PID %d", pid)
+            return True
+        except OSError as exc:
+            logger.error("Failed to send SIGTERM to %d: %s", pid, exc)
+            return False
+
+    def status(self) -> dict[str, Any]:
+        """Return a status dict for the gateway process."""
+        pid = self.read_pid(self.pid_file)
+        running = pid is not None and self.is_running(pid)
+        return {
+            "pid_file": str(self.pid_file),
+            "pid": pid,
+            "running": running,
+        }
+
+    # ------------------------------------------------------------------
+    # Internals
+    # ------------------------------------------------------------------
+
+    def _shutdown(self) -> None:
+        if self._stopped:
+            return
+        self._stopped = True
+        logger.info("Gateway process shutting down …")
+        if self._runtime is not None:
+            self._runtime.stop()
+        self._remove_pid()
+        logger.info("Gateway process stopped.")
+
+    def _install_signal_handlers(self) -> None:
+        def _handler(signum, frame):
+            logger.info("Received signal %s, initiating shutdown", signum)
+            self._shutdown()
+
+        signal.signal(signal.SIGTERM, _handler)
+        signal.signal(signal.SIGINT, _handler)
+
+
+# ---------------------------------------------------------------------------
+# CLI entry point
+# ---------------------------------------------------------------------------
+
+
+def _cli_main() -> None:  # pragma: no cover
+    """Minimal CLI: ``python -m bt_api_py.gateway.process <start|stop|status>``."""
+    import argparse
+
+    parser = argparse.ArgumentParser(description="Gateway process manager")
+    sub = parser.add_subparsers(dest="command")
+
+    start_p = sub.add_parser("start")
+    start_p.add_argument("--config", required=True, help="JSON or YAML config file")
+
+    stop_p = sub.add_parser("stop")
+    stop_p.add_argument("--pid-file", required=True)
+
+    status_p = sub.add_parser("status")
+    status_p.add_argument("--pid-file", required=True)
+
+    args = parser.parse_args()
+
+    if args.command == "start":
+        config_path = Path(args.config)
+        if config_path.suffix in (".yaml", ".yml"):
+            try:
+                import yaml
+
+                config = yaml.safe_load(config_path.read_text(encoding="utf-8"))
+            except ImportError:
+                sys.exit("PyYAML required for YAML config files")
+        else:
+            config = json.loads(config_path.read_text(encoding="utf-8"))
+        GatewayProcess(config).start()
+
+    elif args.command == "stop":
+        pid = GatewayProcess.read_pid(args.pid_file)
+        if pid and GatewayProcess.is_running(pid):
+            os.kill(pid, signal.SIGTERM)
+            print(f"Sent SIGTERM to {pid}")
+        else:
+            print("Process not running")
+
+    elif args.command == "status":
+        pid = GatewayProcess.read_pid(args.pid_file)
+        running = pid is not None and GatewayProcess.is_running(pid)
+        print(json.dumps({"pid": pid, "running": running}, indent=2))
+
+    else:
+        parser.print_help()
+
+
+if __name__ == "__main__":
+    _cli_main()

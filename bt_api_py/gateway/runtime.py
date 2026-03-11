@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import contextlib
+import logging
 import threading
 import time
 from typing import TYPE_CHECKING, Any
@@ -13,11 +14,18 @@ from bt_api_py.gateway.adapters import (
     IbWebGatewayAdapter,
     OkxGatewayAdapter,
 )
+from bt_api_py.gateway.health import ConnectionState, GatewayHealth, GatewayState
+from bt_api_py.gateway.order_identity_map import OrderIdentityMap
+from bt_api_py.gateway.order_ref_allocator import OrderRefAllocator
 from bt_api_py.gateway.protocol import CHANNEL_EVENT, CHANNEL_MARKET, dumps_message, loads_message
+from bt_api_py.gateway.subscription_manager import SubscriptionManager
 
 if TYPE_CHECKING:
     from bt_api_py.gateway.adapters.base import BaseGatewayAdapter
     from bt_api_py.gateway.config import GatewayConfig
+    from bt_api_py.gateway.storage.tick_writer import TickWriter
+
+logger = logging.getLogger(__name__)
 
 
 class GatewayRuntime:
@@ -40,9 +48,44 @@ class GatewayRuntime:
         self.running = False
         self.thread: threading.Thread | None = None
 
+        # Core sub-systems
+        self.subscriptions = SubscriptionManager()
+        self.order_map = OrderIdentityMap()
+        self.health = GatewayHealth()
+        self.order_ref_allocator: OrderRefAllocator | None = None
+        self.tick_writer: TickWriter | None = None
+
+        # Initialise CTP-specific OrderRefAllocator
+        if config.exchange_type == "CTP":
+            state_dir = kwargs.get(
+                "state_dir",
+                config.gateway_base_dir if hasattr(config, "gateway_base_dir") else "/tmp/bt_gateway_state",
+            )
+            self.order_ref_allocator = OrderRefAllocator(
+                config.account_id, state_dir=state_dir
+            )
+
+        # Initialise TickWriter if tick_writer config provided
+        tick_writer_cfg = kwargs.get("tick_writer")
+        if isinstance(tick_writer_cfg, dict):
+            from bt_api_py.gateway.storage.tick_writer import TickWriter as _TW
+
+            self.tick_writer = _TW(
+                base_dir=tick_writer_cfg.get("base_dir", "/tmp/bt_ticks"),
+                exchange=config.exchange_type,
+                asset_type=config.asset_type,
+                flush_count=tick_writer_cfg.get("flush_count", 1000),
+                flush_interval_sec=tick_writer_cfg.get("flush_interval_sec", 5.0),
+            )
+
+        self.health.set_extra("exchange", config.exchange_type)
+        self.health.set_extra("asset_type", config.asset_type)
+        self.health.set_extra("account_id", config.account_id)
+
     def start(self) -> None:
         if self.running:
             return
+        self.health.set_state(GatewayState.STARTING)
         self.command_socket = self.context.socket(zmq.ROUTER)
         self.event_socket = self.context.socket(zmq.PUB)
         self.market_socket = self.context.socket(zmq.PUB)
@@ -51,7 +94,12 @@ class GatewayRuntime:
         self.market_socket.bind(self.config.market_endpoint)
         self.poller.register(self.command_socket, zmq.POLLIN)
         self.adapter.connect()
+        self.health.update_market_connection(ConnectionState.CONNECTED)
+        if self.tick_writer is not None:
+            self.tick_writer.start()
         self.running = True
+        self.health.set_state(GatewayState.RUNNING)
+        logger.info("GatewayRuntime started: %s", self.config.exchange_type)
         while self.running:
             try:
                 self._handle_commands()
@@ -59,6 +107,7 @@ class GatewayRuntime:
             except zmq.ZMQError:
                 if not self.running:
                     break
+                self.health.record_error("runtime", "ZMQError in main loop")
                 raise
 
     def start_in_thread(self) -> None:
@@ -69,8 +118,12 @@ class GatewayRuntime:
         time.sleep(0.2)
 
     def stop(self) -> None:
+        self.health.set_state(GatewayState.STOPPING)
         self.running = False
         self.adapter.disconnect()
+        self.health.update_market_connection(ConnectionState.DISCONNECTED)
+        if self.tick_writer is not None:
+            self.tick_writer.stop()
         for socket in (self.command_socket, self.event_socket, self.market_socket):
             if socket is not None:
                 with contextlib.suppress(KeyError):
@@ -81,6 +134,8 @@ class GatewayRuntime:
         self.market_socket = None
         if self.thread is not None and self.thread.is_alive() and threading.current_thread() is not self.thread:
             self.thread.join(timeout=1.0)
+        self.health.set_state(GatewayState.STOPPED)
+        logger.info("GatewayRuntime stopped: %s", self.config.exchange_type)
 
     @classmethod
     def register_adapter(cls, exchange_type: str, adapter_cls: type[BaseGatewayAdapter]) -> None:
@@ -120,17 +175,50 @@ class GatewayRuntime:
 
     def _dispatch(self, command: str, payload: dict[str, Any]) -> Any:
         if command == "ping":
+            self.health.record_heartbeat()
             return {"ready": True}
+        if command == "register_strategy":
+            strategy_id = str(payload.get("strategy_id") or "")
+            symbols = list(payload.get("symbols") or [])
+            newly = self.subscriptions.add(strategy_id, symbols)
+            if newly:
+                self.adapter.subscribe_symbols(list(newly))
+            self._sync_health_counts()
+            return {"strategy_id": strategy_id, "newly_subscribed": sorted(newly)}
+        if command == "unregister_strategy":
+            strategy_id = str(payload.get("strategy_id") or "")
+            removed = self.subscriptions.remove_strategy(strategy_id)
+            self._sync_health_counts()
+            return {"strategy_id": strategy_id, "unsubscribed": sorted(removed)}
         if command == "subscribe":
-            return self.adapter.subscribe_symbols(list(payload.get("symbols") or []))
+            symbols = list(payload.get("symbols") or [])
+            strategy_id = str(payload.get("strategy_id") or "default")
+            newly = self.subscriptions.add(strategy_id, symbols)
+            if newly:
+                self.adapter.subscribe_symbols(list(newly))
+            self._sync_health_counts()
+            return {"subscribed": sorted(newly)}
         if command == "get_balance":
             return self.adapter.get_balance()
         if command == "get_positions":
             return self.adapter.get_positions()
         if command == "place_order":
+            request_id = str(payload.get("request_id") or "")
+            strategy_id = str(payload.get("strategy_id") or "default")
+            entry = self.order_map.register(
+                request_id, strategy_id,
+                symbol=payload.get("symbol"),
+            )
+            if self.order_ref_allocator is not None:
+                client_oid = self.order_ref_allocator.next()
+                self.order_map.set_client_order_id(request_id, client_oid)
+                payload["client_order_id"] = client_oid
+            self.health.record_order()
             return self.adapter.place_order(payload)
         if command == "cancel_order":
             return self.adapter.cancel_order(payload)
+        if command == "health":
+            return self.health.snapshot()
         raise ValueError(f"unsupported command: {command}")
 
     def _flush_adapter_output(self) -> None:
@@ -139,7 +227,17 @@ class GatewayRuntime:
             if item is None:
                 return
             channel, payload = item
+            if channel == CHANNEL_MARKET:
+                self.health.record_tick()
+                if self.tick_writer is not None and hasattr(payload, "symbol"):
+                    self.tick_writer.write(payload)
             self._publish(channel, payload)
+
+    def _sync_health_counts(self) -> None:
+        self.health.update_counts(
+            strategy_count=self.subscriptions.strategy_count,
+            symbol_count=self.subscriptions.symbol_count,
+        )
 
     def _publish(self, channel: str, payload: Any) -> None:
         try:

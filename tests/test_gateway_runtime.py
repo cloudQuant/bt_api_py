@@ -136,7 +136,7 @@ def test_gateway_runtime_client_ipc_roundtrip(monkeypatch, tmp_path):
         assert adapter.connected is True
         assert client.get_balance()["cash"] == 1000.0
         assert client.get_positions()[0]["instrument"] == "IF2506.CFFEX"
-        assert client.subscribe(["IF2506.CFFEX"]) == {"symbols": ["IF2506.CFFEX"]}
+        assert client.subscribe(["IF2506.CFFEX"]) == {"subscribed": ["IF2506.CFFEX"]}
 
         order = client.submit_order({"data_name": "IF2506.CFFEX", "volume": 1})
         assert order["order_id"] == "ord-1"
@@ -380,7 +380,7 @@ def test_binance_adapter_ipc_roundtrip_with_fake(monkeypatch, tmp_path):
         client.connect()
         assert client.get_balance()["cash"] == 1000.0
         result = client.subscribe(["BTCUSDT"])
-        assert "BTCUSDT" in result["symbols"]
+        assert "BTCUSDT" in result["subscribed"]
     finally:
         client.disconnect()
         runtime.stop()
@@ -418,7 +418,7 @@ def test_okx_adapter_ipc_roundtrip_with_fake(monkeypatch, tmp_path):
         client.connect()
         assert client.get_balance()["cash"] == 1000.0
         result = client.subscribe(["BTC-USDT-SWAP"])
-        assert "BTC-USDT-SWAP" in result["symbols"]
+        assert "BTC-USDT-SWAP" in result["subscribed"]
     finally:
         client.disconnect()
         runtime.stop()
