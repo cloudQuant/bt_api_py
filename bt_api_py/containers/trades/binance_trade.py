@@ -163,6 +163,10 @@ class BinanceTradeData(TradeData):
         """# 交易所名称"""
         return self.exchange_name
 
+    def get_symbol_name(self):
+        """# symbol名称"""
+        return self.symbol_name
+
     def get_asset_type(self):
         """# 资产类型"""
         return self.asset_type

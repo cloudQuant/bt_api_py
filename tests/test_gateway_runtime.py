@@ -467,6 +467,250 @@ def test_backtrader_gateway_wrapper_integration(monkeypatch, tmp_path):
         runtime.stop()
 
 
+# ── IB_WEB Adapter Verification ──────────────────────────────────
+
+
+def test_ib_web_adapter_asset_normalization():
+    """IB_WEB adapter normalizes asset types correctly."""
+    from bt_api_py.gateway.adapters.ib_web_adapter import _normalize_asset_type as ib_normalize
+
+    assert ib_normalize("STK") == "STK"
+    assert ib_normalize("STOCK") == "STK"
+    assert ib_normalize("EQUITY") == "STK"
+    assert ib_normalize("FUT") == "FUT"
+    assert ib_normalize("FUTURE") == "FUT"
+    assert ib_normalize(None) == "STK"
+    assert ib_normalize("") == "STK"
+
+
+def test_ib_web_adapter_instantiation():
+    """IbWebGatewayAdapter can be constructed without network access."""
+    adapter = IbWebGatewayAdapter(
+        asset_type="STK",
+        account_id="test-ib",
+        base_url="https://localhost:5000",
+        verify_ssl=False,
+    )
+    assert adapter.asset_type == "STK"
+    assert adapter.feed is not None
+    assert adapter.running is False
+    assert isinstance(adapter.aliases, dict)
+
+
+def test_ib_web_adapter_instantiation_future():
+    """IbWebGatewayAdapter can be constructed for futures."""
+    adapter = IbWebGatewayAdapter(
+        asset_type="FUTURE",
+        account_id="test-ib-fut",
+        base_url="https://localhost:5000",
+    )
+    assert adapter.asset_type == "FUT"
+
+
+def test_ib_web_adapter_implements_interface():
+    """IbWebGatewayAdapter implements all BaseGatewayAdapter abstract methods."""
+    from bt_api_py.gateway.adapters.base import BaseGatewayAdapter
+
+    required = {"connect", "disconnect", "subscribe_symbols",
+                "get_balance", "get_positions", "place_order", "cancel_order"}
+    for method_name in required:
+        assert hasattr(IbWebGatewayAdapter, method_name), f"missing {method_name}"
+    assert issubclass(IbWebGatewayAdapter, BaseGatewayAdapter)
+
+
+def test_ib_web_adapter_ipc_roundtrip_with_fake(monkeypatch, tmp_path):
+    """IB_WEB via GatewayRuntime IPC roundtrip using FakeGatewayAdapter."""
+    adapter = FakeGatewayAdapter()
+    monkeypatch.setattr(GatewayRuntime, "_create_adapter", lambda self: adapter)
+    runtime_name = f"ib-{uuid.uuid4().hex[:8]}"
+
+    config = GatewayConfig.from_kwargs(
+        exchange_type="IB_WEB",
+        asset_type="STK",
+        account_id="test-ib",
+        gateway_base_dir="/tmp/btgw",
+        gateway_runtime_name=runtime_name,
+        gateway_poll_timeout_ms=10,
+        gateway_command_timeout_sec=1.0,
+    )
+    runtime = GatewayRuntime(config, exchange_type="IB_WEB", asset_type="STK",
+                             account_id="test-ib", gateway_base_dir="/tmp/btgw",
+                             gateway_runtime_name=runtime_name)
+    client = GatewayClient(
+        exchange_type="IB_WEB", asset_type="STK", account_id="test-ib",
+        gateway_command_endpoint=config.command_endpoint,
+        gateway_event_endpoint=config.event_endpoint,
+        gateway_market_endpoint=config.market_endpoint,
+        gateway_base_dir="/tmp/btgw", gateway_runtime_name=runtime_name,
+        gateway_poll_timeout_ms=10, gateway_command_timeout_sec=1.0,
+        gateway_start_local_runtime=False,
+    )
+    runtime.start_in_thread()
+    try:
+        client.connect()
+        # L3: 连接 + 订阅 + 账户查询
+        assert client.get_balance()["cash"] == 1000.0
+        result = client.subscribe(["AAPL"])
+        assert "AAPL" in result["subscribed"]
+        assert client.supports_live_ticks("AAPL") is True
+
+        positions = client.get_positions()
+        assert len(positions) > 0
+
+        # Verify tick delivery
+        adapter.emit(
+            CHANNEL_MARKET,
+            GatewayTick(timestamp=time.time(), symbol="AAPL", price=150.0,
+                        exchange="IB_WEB", asset_type="STK"),
+        )
+        assert _wait_until(lambda: client.has_pending_tick("AAPL"))
+        tick = client.poll_tick("AAPL")
+        assert tick is not None
+        assert tick.price == 150.0
+        assert tick.exchange == "IB_WEB"
+    finally:
+        client.disconnect()
+        runtime.stop()
+
+
+# ── Binance Adapter Order/Trade Dispatch Verification ────────────
+
+
+def test_binance_adapter_emit_order():
+    """BinanceGatewayAdapter._emit_order produces correct event on event channel."""
+    from bt_api_py.containers.orders.binance_order import BinanceSwapWssOrderData
+
+    adapter = BinanceGatewayAdapter(
+        asset_type="SWAP", public_key="", private_key="",
+    )
+    order_info = {
+        "E": 1700000000000,
+        "o": {
+            "s": "BTCUSDT", "i": "12345", "c": "client-1",
+            "X": "NEW", "S": "BUY", "p": "42000.0",
+            "q": "0.01", "z": "0.0", "o": "LIMIT",
+            "t": 0, "T": 1700000000000, "R": False,
+            "f": "GTC", "ap": "0", "sp": "0", "AP": "0",
+            "cr": "0", "wt": "CONTRACT_PRICE", "ot": "LIMIT",
+            "ps": "BOTH", "cp": False,
+        },
+    }
+    order = BinanceSwapWssOrderData(order_info, "BTCUSDT", "SWAP", True)
+    adapter._dispatch_item(order)
+
+    result = adapter.poll_output()
+    assert result is not None
+    channel, payload = result
+    assert channel == CHANNEL_EVENT
+    assert payload["kind"] == "order"
+    assert payload["exchange"] == "BINANCE"
+    assert payload["symbol"] is not None
+
+
+def test_binance_adapter_emit_trade():
+    """BinanceGatewayAdapter._emit_trade produces correct event on event channel."""
+    from bt_api_py.containers.trades.binance_trade import BinanceSwapWssTradeData
+
+    adapter = BinanceGatewayAdapter(
+        asset_type="SWAP", public_key="", private_key="",
+    )
+    trade_info = {
+        "E": 1700000000000,
+        "o": {
+            "s": "ETHUSDT", "t": "99999", "i": "12345",
+            "c": "cl-1", "L": "2000.5", "l": "1.0",
+            "z": "1.0", "S": "BUY", "T": 1700000000000,
+            "m": False, "X": "FILLED", "ps": "BOTH",
+            "n": "0.01", "N": "USDT",
+        },
+    }
+    trade = BinanceSwapWssTradeData(trade_info, "ETHUSDT", "SWAP", True)
+    adapter._dispatch_item(trade)
+
+    result = adapter.poll_output()
+    assert result is not None
+    channel, payload = result
+    assert channel == CHANNEL_EVENT
+    assert payload["kind"] == "trade"
+    assert payload["exchange"] == "BINANCE"
+
+
+def test_binance_adapter_implements_interface():
+    """BinanceGatewayAdapter implements all BaseGatewayAdapter abstract methods."""
+    from bt_api_py.gateway.adapters.base import BaseGatewayAdapter
+
+    required = {"connect", "disconnect", "subscribe_symbols",
+                "get_balance", "get_positions", "place_order", "cancel_order"}
+    for method_name in required:
+        assert hasattr(BinanceGatewayAdapter, method_name), f"missing {method_name}"
+    assert issubclass(BinanceGatewayAdapter, BaseGatewayAdapter)
+
+
+# ── OKX Adapter Order/Trade Dispatch Verification ────────────────
+
+
+def test_okx_adapter_emit_order():
+    """OkxGatewayAdapter._emit_order produces correct event on event channel."""
+    from bt_api_py.containers.orders.okx_order import OkxOrderData
+
+    adapter = OkxGatewayAdapter(
+        asset_type="SWAP", public_key="", private_key="", passphrase="",
+    )
+    order_info = {
+        "instId": "BTC-USDT-SWAP", "ordId": "ord-123", "clOrdId": "cl-1",
+        "state": "live", "side": "buy", "px": "42000",
+        "sz": "1", "fillSz": "0", "ordType": "limit",
+        "cTime": "1700000000000", "uTime": "1700000000000",
+    }
+    order = OkxOrderData(order_info, "BTC-USDT-SWAP", "SWAP", True)
+    adapter._dispatch_item(order)
+
+    result = adapter.poll_output()
+    assert result is not None
+    channel, payload = result
+    assert channel == CHANNEL_EVENT
+    assert payload["kind"] == "order"
+    assert payload["exchange"] == "OKX"
+    assert payload["order_id"] is not None
+
+
+def test_okx_adapter_emit_trade():
+    """OkxGatewayAdapter._emit_trade produces correct event on event channel."""
+    from bt_api_py.containers.trades.okx_trade import OkxWssFillsData
+
+    adapter = OkxGatewayAdapter(
+        asset_type="SWAP", public_key="", private_key="", passphrase="",
+    )
+    trade_info = {
+        "instId": "ETH-USDT-SWAP", "tradeId": "t-999", "ordId": "ord-456",
+        "fillPx": "2000.5", "fillSz": "1", "side": "buy",
+        "ts": "1700000000000",
+    }
+    trade = OkxWssFillsData(trade_info, "ETH-USDT-SWAP", "SWAP", True)
+    adapter._dispatch_item(trade)
+
+    result = adapter.poll_output()
+    assert result is not None
+    channel, payload = result
+    assert channel == CHANNEL_EVENT
+    assert payload["kind"] == "trade"
+    assert payload["exchange"] == "OKX"
+
+
+def test_okx_adapter_implements_interface():
+    """OkxGatewayAdapter implements all BaseGatewayAdapter abstract methods."""
+    from bt_api_py.gateway.adapters.base import BaseGatewayAdapter
+
+    required = {"connect", "disconnect", "subscribe_symbols",
+                "get_balance", "get_positions", "place_order", "cancel_order"}
+    for method_name in required:
+        assert hasattr(OkxGatewayAdapter, method_name), f"missing {method_name}"
+    assert issubclass(OkxGatewayAdapter, BaseGatewayAdapter)
+
+
+# ── Exchange-Specific IPC Roundtrip Tests ────────────────────────
+
+
 def test_binance_adapter_ipc_roundtrip_with_fake(monkeypatch, tmp_path):
     """BinanceGatewayAdapter via GatewayRuntime IPC roundtrip using FakeGatewayAdapter."""
     adapter = FakeGatewayAdapter()

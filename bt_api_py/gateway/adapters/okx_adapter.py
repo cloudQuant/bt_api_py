@@ -260,8 +260,8 @@ class OkxGatewayAdapter(BaseGatewayAdapter):
                     "status": order.get_order_status(),
                     "side": order.get_order_side(),
                     "price": order.get_order_price(),
-                    "volume": order.get_order_volume(),
-                    "filled": order.get_order_filled_volume(),
+                    "volume": order.get_order_size(),
+                    "filled": order.get_executed_qty(),
                 },
             )
         except Exception as exc:
