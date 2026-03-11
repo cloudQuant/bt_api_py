@@ -305,18 +305,15 @@ class TestDydxRequestDataSpot:
     @pytest.mark.ticker
     def test_integration_get_ticker(self, dydx_spot):
         """Integration test for get_ticker - skipped."""
-        pass
 
     @pytest.mark.skip(reason="Requires actual API call")
     def test_integration_get_balance(self, dydx_spot):
         """Integration test for get_balance - skipped."""
-        pass
 
     @pytest.mark.skip(reason="Requires actual API call")
     @pytest.mark.orderbook
     def test_integration_get_orderbook(self, dydx_spot):
         """Integration test for get_orderbook - skipped."""
-        pass
 
 
 class TestDydxStandardCapabilities:
@@ -538,7 +535,7 @@ class TestDydxNormalizeFunctions:
             input_data, extra_data
         )
         assert status is True
-        assert result[0]["symbol"] == "BTC-USD"
+        assert result["symbol"] == "BTC-USD"
 
     def test_exchange_info_normalize_empty(self):
         """Test exchange info normalize with empty markets."""

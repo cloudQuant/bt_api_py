@@ -1,8 +1,15 @@
-"""
-统一错误框架
+"""统一错误框架
 
 提供统一的错误码体系、错误翻译器基类及便捷异常子类。
 各交易所的具体翻译器实现位于 bt_api_py/errors/ 子模块中。
+
+关于异常体系:
+    bt_api_py 有两套异常:
+    - exceptions.py: 传统异常层级 (RateLimitError, RequestError 等)，用于控制流
+    - error.py (本模块): 带错误码的统一错误 (UnifiedError 及子类)，用于交易所错误翻译
+
+    便捷子类 (UnifiedRateLimitError, UnifiedAuthError 等) 同时继承两套体系，
+    因此 ``except RateLimitError`` 也能捕获 ``UnifiedRateLimitError``。
 """
 
 import importlib
@@ -10,7 +17,12 @@ from dataclasses import dataclass, field
 from enum import Enum, unique
 from typing import TYPE_CHECKING, Any, ClassVar
 
-from bt_api_py.exceptions import BtApiError
+from bt_api_py.exceptions import (
+    AuthenticationError,
+    BtApiError,
+    RateLimitError,
+    RequestFailedError,
+)
 
 # ── 错误分类 ─────────────────────────────────────────────────
 
@@ -70,6 +82,13 @@ class UnifiedErrorCode(int, Enum):
     MIN_NOTIONAL = 4014
     MINIMUM_NOT_MET = 4015
     PRECISION_ERROR = 4016
+    ORDER_CANCEL_FAILED = 4017
+    INVALID_SIDE = 4018
+    INVALID_ORDER_TYPE = 4019
+    WITHDRAWAL_FAILED = 4020
+    DEPOSIT_FAILED = 4021
+    TRANSFER_FAILED = 4022
+    ACCOUNT_SUSPENDED = 4023
 
     # 系统错误 (5xxx)
     EXCHANGE_MAINTENANCE = 5001
@@ -128,30 +147,45 @@ class UnifiedError(BtApiError):
 # ── 便捷异常子类 ──────────────────────────────────────────────
 
 
-class UnifiedRateLimitError(UnifiedError):
-    """限流错误"""
+class UnifiedRateLimitError(UnifiedError, RateLimitError):
+    """限流错误
+
+    同时继承 UnifiedError 和 exceptions.RateLimitError，
+    因此 ``except RateLimitError`` 可以捕获此异常。
+    """
 
     def __init__(self, venue: str, response=None, message: str = "Rate limit exceeded"):
-        super().__init__(
+        UnifiedError.__init__(
+            self,
             code=UnifiedErrorCode.RATE_LIMIT_EXCEEDED,
             category=ErrorCategory.RATE_LIMIT,
             venue=venue,
             message=message,
             context={"raw_response": response} if response else {},
         )
+        # exceptions.RateLimitError 兼容属性
+        self.exchange_name = venue
+        self.retry_after = None
 
 
-class UnifiedAuthError(UnifiedError):
-    """认证错误"""
+class UnifiedAuthError(UnifiedError, AuthenticationError):
+    """认证错误
+
+    同时继承 UnifiedError 和 exceptions.AuthenticationError，
+    因此 ``except AuthenticationError`` 可以捕获此异常。
+    """
 
     def __init__(self, venue: str, response=None, message: str = "Authentication failed"):
-        super().__init__(
+        UnifiedError.__init__(
+            self,
             code=UnifiedErrorCode.INVALID_API_KEY,
             category=ErrorCategory.AUTH,
             venue=venue,
             message=message,
             context={"raw_response": response} if response else {},
         )
+        # exceptions.AuthenticationError 兼容属性
+        self.exchange_name = venue
 
 
 class ServerError(UnifiedError):
@@ -167,17 +201,25 @@ class ServerError(UnifiedError):
         )
 
 
-class UnifiedRequestFailedError(UnifiedError):
-    """请求失败（通用）"""
+class UnifiedRequestFailedError(UnifiedError, RequestFailedError):
+    """请求失败（通用）
+
+    同时继承 UnifiedError 和 exceptions.RequestFailedError，
+    因此 ``except RequestFailedError`` 可以捕获此异常。
+    """
 
     def __init__(self, venue: str, status: int = 0, response=None, message: str = "Request failed"):
-        super().__init__(
+        UnifiedError.__init__(
+            self,
             code=UnifiedErrorCode.INTERNAL_ERROR,
             category=ErrorCategory.SYSTEM,
             venue=venue,
             message=message,
             context={"status": status, "raw_response": response},
         )
+        # exceptions.RequestFailedError 兼容属性
+        self.exchange_name = venue
+        self.status_code = status
 
 
 # ── 错误翻译器 ────────────────────────────────────────────────
@@ -202,7 +244,7 @@ class ErrorTranslator:
     }
 
     @classmethod
-    def translate(cls, raw_error: dict, venue: str) -> UnifiedError:
+    def translate(cls, raw_error: dict, venue: str) -> UnifiedError | None:
         """将原始错误转换为统一错误
 
         :param raw_error: 包含错误信息的字典 (code, msg/message, status 等)
@@ -287,7 +329,7 @@ _TRANSLATOR_EXPORTS: dict[str, tuple[str, str]] = {
 }
 
 
-def __getattr__(name: str):  # noqa: ANN201
+def __getattr__(name: str):
     """Lazy re-export translators from `bt_api_py.errors.*` for backward compatibility."""
     if name in _TRANSLATOR_EXPORTS:
         module_name, attr = _TRANSLATOR_EXPORTS[name]

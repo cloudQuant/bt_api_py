@@ -28,10 +28,10 @@ class DydxBalanceData(BalanceData):
         self.available_margin = None
         self.position_margin = None
         self.account_value = None
-        self.all_data = None
+        self.all_data: dict[str, Any] | None = None
         self.has_been_init_data = False
 
-    def init_data(self) -> None:
+    def init_data(self):
         if not self.has_been_json_encoded:
             self.balance_data = json.loads(self.balance_info)
             self.has_been_json_encoded = True
@@ -39,8 +39,11 @@ class DydxBalanceData(BalanceData):
             return self
 
         # 处理子账户信息响应
-        if "subaccount" in self.balance_data:
-            subaccount = self.balance_data["subaccount"]
+        balance_data = self.balance_data
+        if balance_data is None:
+            return
+        if "subaccount" in balance_data:
+            subaccount = balance_data["subaccount"]
             self.equity = from_dict_get_float(subaccount, "equity")
             self.free_collateral = from_dict_get_float(subaccount, "freeCollateral")
             self.open_pnl = from_dict_get_float(subaccount, "openPnl")
@@ -53,12 +56,12 @@ class DydxBalanceData(BalanceData):
             self.account_value = from_dict_get_float(subaccount, "accountValue")
         else:
             # 处理单个币种余额响应
-            self.symbol_name = from_dict_get_string(self.balance_data, "symbol")
-            self.equity = from_dict_get_float(self.balance_data, "equity")
-            self.free_collateral = from_dict_get_float(self.balance_data, "freeCollateral")
-            self.open_pnl = from_dict_get_float(self.balance_data, "unrealizedPnl")
-            self.available_margin = from_dict_get_float(self.balance_data, "availableMargin")
-            self.margin_balance = from_dict_get_float(self.balance_data, "marginBalance")
+            self.symbol_name = from_dict_get_string(balance_data, "symbol")
+            self.equity = from_dict_get_float(balance_data, "equity")
+            self.free_collateral = from_dict_get_float(balance_data, "freeCollateral")
+            self.open_pnl = from_dict_get_float(balance_data, "unrealizedPnl")
+            self.available_margin = from_dict_get_float(balance_data, "availableMargin")
+            self.margin_balance = from_dict_get_float(balance_data, "marginBalance")
 
         self.has_been_init_data = True
         return self
@@ -96,13 +99,13 @@ class DydxBalanceData(BalanceData):
 
     def get_symbol_name(self) -> str:
         """货币名称."""
-        return self.symbol_name
+        return self.symbol_name or ""
 
     def get_asset_type(self) -> str:
         """资产类型."""
-        return self.asset_type
+        return self.asset_type or ""
 
-    def get_server_time(self) -> float:
+    def get_server_time(self) -> float | None:
         """服务器时间戳."""
         return None  # dYdX 响应中没有直接的时间戳
 

@@ -109,9 +109,9 @@ class WebSocketConnection:
 
             self.logger.info(f"Connected to {self.config.url}")
 
-        except Exception as e:
+        except (OSError, websockets.exceptions.WebSocketException) as e:
             self.logger.error(f"Connection failed: {e}")
-            raise WebSocketError(f"Failed to connect: {e}") from e
+            raise WebSocketError(self.config.exchange_name, detail=str(e)) from e
 
     async def disconnect(self) -> None:
         """Disconnect from WebSocket."""
@@ -134,7 +134,10 @@ class WebSocketConnection:
         if self._subscription_count[subscription.topic] >= self.config.subscription_limits.get(
             subscription.topic, 100
         ):
-            raise RateLimitError(f"Subscription limit exceeded for {subscription.topic}")
+            raise RateLimitError(
+                self.config.exchange_name,
+                detail=f"Subscription limit exceeded for {subscription.topic}",
+            )
 
         self._subscriptions[subscription.id] = subscription
         self._subscription_count[subscription.topic] += 1
@@ -209,16 +212,14 @@ class WebSocketConnection:
     async def _send_message(self, message: dict[str, Any]) -> None:
         """Send message to WebSocket."""
         if not self._connected or not self._websocket:
-            raise WebSocketError("Not connected")
+            raise WebSocketError(self.config.exchange_name, detail="Not connected")
 
         try:
             await self._websocket.send(json.dumps(message))
             self._stats["messages_sent"] += 1
-        except Exception as e:
-            self.logger.error(f"Connection failed: {e}")
-            raise WebSocketError(
-                f"Failed to connect: {e}", exchange_name=self.config.exchange_name
-            ) from e
+        except (OSError, websockets.exceptions.WebSocketException) as e:
+            self.logger.error(f"Send failed: {e}")
+            raise WebSocketError(self.config.exchange_name, detail=str(e)) from e
 
     async def _process_messages(self) -> None:
         """Process incoming messages."""
@@ -237,7 +238,7 @@ class WebSocketConnection:
                     if isinstance(raw_message, bytes):
                         message = json.loads(raw_message.decode("utf-8"))
                     else:
-                        message = json.loads(raw_message)
+                        message = json.loads(str(raw_message))
 
                     # Process message
                     await self._handle_message(message)
@@ -246,8 +247,12 @@ class WebSocketConnection:
                 self.logger.warning("WebSocket connection closed")
                 await self._handle_disconnect()
                 break
-            except Exception as e:
+            except (json.JSONDecodeError, KeyError, ValueError, TypeError) as e:
                 self.logger.error(f"Message processing error: {e}")
+            except OSError as e:
+                self.logger.error(f"Network error during message processing: {e}")
+                await self._handle_disconnect()
+                break
 
     async def _handle_message(self, message: dict[str, Any]) -> None:
         """Handle incoming message."""
@@ -331,11 +336,30 @@ class WebSocketConnection:
                 for subscription in list(self._subscriptions.values()):
                     await self._send_subscription(subscription)
 
-            except Exception as e:
+            except (OSError, websockets.exceptions.WebSocketException) as e:
                 self.logger.error(f"Reconnection failed: {e}")
                 await self._handle_disconnect()
         else:
             self.logger.error("Max reconnection attempts reached")
+
+    @property
+    def connected(self) -> bool:
+        """Whether the connection is currently active."""
+        return self._connected
+
+    @property
+    def running(self) -> bool:
+        """Whether the connection loop is running."""
+        return self._running
+
+    @property
+    def subscription_count(self) -> int:
+        """Number of active subscriptions."""
+        return len(self._subscriptions)
+
+    def has_subscription(self, subscription_id: str) -> bool:
+        """Check if a subscription exists."""
+        return subscription_id in self._subscriptions
 
     def get_stats(self) -> dict[str, Any]:
         """Get connection statistics."""
@@ -388,7 +412,7 @@ class WebSocketManager(IConnectionManager):
             available_connection = None
             for conn in pool:
                 if (
-                    conn._connected and len(conn._subscriptions) < 50
+                    conn.connected and conn.subscription_count < 50
                 ):  # Limit subscriptions per connection
                     available_connection = conn
                     break
@@ -414,7 +438,6 @@ class WebSocketManager(IConnectionManager):
 
     async def release_connection(self, exchange_name: str, connection: WebSocketConnection) -> None:
         """Release connection (no-op for WebSockets as they're persistent)."""
-        pass
 
     async def close_all(self) -> None:
         """Close all WebSocket connections."""
@@ -430,7 +453,7 @@ class WebSocketManager(IConnectionManager):
         exchange_name: str,
         topic: str,
         symbol: str,
-        callback: Callable,
+        callback: Callable[..., Any],
         params: dict[str, Any] | None = None,
     ) -> str:
         """Subscribe to WebSocket topic."""
@@ -462,7 +485,7 @@ class WebSocketManager(IConnectionManager):
             pool = self._pools[exchange_name]
 
             for connection in pool:
-                if subscription_id in connection._subscriptions:
+                if connection.has_subscription(subscription_id):
                     await connection.unsubscribe(subscription_id)
                     break
 
@@ -474,16 +497,16 @@ class WebSocketManager(IConnectionManager):
 
     async def _monitor_connection(self, connection: WebSocketConnection) -> None:
         """Monitor connection health."""
-        while connection._running:
+        while connection.running:
             try:
                 await asyncio.sleep(30)  # Check every 30 seconds
 
                 # Send heartbeat if needed
-                if connection._connected:
+                if connection.connected and connection._websocket:
                     await connection._websocket.ping()
                     connection._stats["last_heartbeat"] = time.time()
 
-            except Exception as e:
+            except (OSError, websockets.exceptions.WebSocketException) as e:
                 self.logger.error(f"Connection monitoring error: {e}")
                 break
 
@@ -493,8 +516,8 @@ class WebSocketManager(IConnectionManager):
         for exchange_name, pool in self._pools.items():
             exchange_stats = {
                 "total_connections": len(pool),
-                "active_connections": sum(1 for conn in pool if conn._connected),
-                "total_subscriptions": sum(len(conn._subscriptions) for conn in pool),
+                "active_connections": sum(1 for conn in pool if conn.connected),
+                "total_subscriptions": sum(conn.subscription_count for conn in pool),
                 "connections": [],
             }
 

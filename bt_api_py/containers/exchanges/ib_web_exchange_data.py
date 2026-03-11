@@ -6,9 +6,11 @@ IB Web API 分为两大组件:
   - Account Management API (/gw/api/v1 端点): 账户管理、资金、报告
 """
 
-import os
 from typing import Any
 
+import yaml
+
+from bt_api_py.config_loader import get_exchange_config_path, load_exchange_config
 from bt_api_py.containers.exchanges.exchange_data import ExchangeData
 from bt_api_py.logging_factory import get_logger
 
@@ -20,34 +22,21 @@ _ib_raw_config = None  # 原始 yaml dict (用于加载 pydantic 忽略的额外
 _ib_config_loaded = False
 
 
-def _get_ib_yaml_path() -> Any | None:
-    """获取 ib.yaml 配置文件路径."""
-    return os.path.join(
-        os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
-        "configs",
-        "ib.yaml",
-    )
-
-
 def _get_ib_config() -> Any | None:
     """延迟加载并缓存 IB Web API YAML 配置 (pydantic 模型)."""
     global _ib_config, _ib_raw_config, _ib_config_loaded
     if _ib_config_loaded:
         return _ib_config
     try:
-        import yaml
-
-        from bt_api_py.config_loader import load_exchange_config
-
-        config_path = _get_ib_yaml_path()
-        if os.path.exists(config_path):
-            _ib_config = load_exchange_config(config_path)
+        config_path = get_exchange_config_path("ib.yaml")
+        if config_path.exists():
+            _ib_config = load_exchange_config(str(config_path))
             # 同时缓存原始 dict 以访问 pydantic 忽略的额外字段
-            with open(config_path, encoding="utf-8") as f:
+            with config_path.open(encoding="utf-8") as f:
                 _ib_raw_config = yaml.safe_load(f)
         _ib_config_loaded = True
     except Exception as e:
-        logger.warn(f"Failed to load ib.yaml config: {e}")
+        logger.warning(f"Failed to load ib.yaml config: {e}")
     return _ib_config
 
 
@@ -56,6 +45,11 @@ def _get_ib_raw_config() -> Any | None:
     if not _ib_config_loaded:
         _get_ib_config()  # 触发加载
     return _ib_raw_config
+
+
+def _get_ib_yaml_path():
+    """返回 ib.yaml 配置文件路径."""
+    return get_exchange_config_path("ib.yaml")
 
 
 class IbWebExchangeData(ExchangeData):
