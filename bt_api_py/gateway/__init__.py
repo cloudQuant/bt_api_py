@@ -1,9 +1,13 @@
 from bt_api_py.gateway.config import GatewayConfig
 
 __all__ = [
+    "ConnectionState",
     "GatewayClient",
     "GatewayConfig",
+    "GatewayHealth",
+    "GatewayProcess",
     "GatewayRuntime",
+    "GatewayState",
     "OrderIdentityMap",
     "OrderRefAllocator",
     "SubscriptionManager",
@@ -36,4 +40,20 @@ def __getattr__(name: str):
         from bt_api_py.gateway.storage.tick_writer import TickWriter
 
         return TickWriter
+    if name == "GatewayHealth":
+        from bt_api_py.gateway.health import GatewayHealth
+
+        return GatewayHealth
+    if name == "GatewayState":
+        from bt_api_py.gateway.health import GatewayState
+
+        return GatewayState
+    if name == "ConnectionState":
+        from bt_api_py.gateway.health import ConnectionState
+
+        return ConnectionState
+    if name == "GatewayProcess":
+        from bt_api_py.gateway.process import GatewayProcess
+
+        return GatewayProcess
     raise AttributeError(name)
