@@ -25,8 +25,20 @@ class PhemexRequestTickerData(TickerData):
 
         """
         super().__init__(data, has_been_json_encoded)
-        self.symbol = symbol
-        self.asset_type = asset_type
+        self.symbol: str = symbol
+        self.asset_type: str = asset_type
+        self.last_price: float | None = None
+        self.high_price: float | None = None
+        self.low_price: float | None = None
+        self.open_price: float | None = None
+        self.volume_24h: float | None = None
+        self.turnover_24h: float | None = None
+        self.ask_price: float | None = None
+        self.bid_price: float | None = None
+        self.price_change: float | None = None
+        self.price_change_percentage: float | None = None
+        self.spread: float | None = None
+        self.spread_percentage: float | None = None
         self.logger = get_logger("phemex_ticker")
         self._parse_data(data)
 
@@ -97,7 +109,7 @@ class PhemexRequestTickerData(TickerData):
             self.bid_price = self._unscale(result.get("bidEp"), SCALE)
 
             # Calculate price change
-            if self.last_price and self.open_price:
+            if self.last_price is not None and self.open_price is not None:
                 self.price_change = self.last_price - self.open_price
                 self.price_change_percentage = (
                     (self.last_price - self.open_price) / self.open_price
@@ -107,7 +119,7 @@ class PhemexRequestTickerData(TickerData):
                 self.price_change_percentage = None
 
             # Calculate spread
-            if self.ask_price and self.bid_price:
+            if self.ask_price is not None and self.bid_price is not None:
                 self.spread = self.ask_price - self.bid_price
                 self.spread_percentage = (
                     (self.spread / self.bid_price) * 100 if self.bid_price else None
@@ -176,10 +188,11 @@ class PhemexRequestTickerData(TickerData):
 
     def __str__(self) -> str:
         """String representation of ticker."""
+        pc = self.price_change_percentage if self.price_change_percentage is not None else 0
         return (
             f"PhemexTicker({self.symbol}: {self.last_price} "
             f"Bid:{self.bid_price} Ask:{self.ask_price} "
-            f"Vol24h:{self.volume_24h} Chg:{self.price_change_percentage:.2f}%)"
+            f"Vol24h:{self.volume_24h} Chg:{pc:.2f}%)"
         )
 
     def __repr__(self) -> str:

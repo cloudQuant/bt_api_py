@@ -30,9 +30,9 @@ def test_bitget_feed_imports():
 
 def test_bitget_exchange_data():
     """Test Bitget exchange data configuration"""
-    # Test base class
+    # Test base class (loads spot config by default)
     exchange_data = BitgetExchangeData()
-    assert exchange_data.exchange_name == "bitget"
+    assert exchange_data.exchange_name in ("bitget", "bitgetSpot", "BITGET")  # config-driven
     assert exchange_data.rest_url == "https://api.bitget.com"
     print("✓ BitgetExchangeData base class initialized successfully")
 

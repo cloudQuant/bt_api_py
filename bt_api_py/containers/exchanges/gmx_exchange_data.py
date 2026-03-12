@@ -46,7 +46,7 @@ def _get_gmx_config() -> Any | None:
             _gmx_config._raw_config = _gmx_config_raw
         _gmx_config_loaded = True
     except Exception as e:
-        logger.warn(f"Failed to load gmx.yaml config: {e}")
+        logger.warning(f"Failed to load gmx.yaml config: {e}")
     return _gmx_config
 
 

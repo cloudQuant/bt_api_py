@@ -112,8 +112,7 @@ class TestWazirXKlineData:
         """Test kline data for multiple timeframes."""
         timeframes = ["1m", "5m", "15m", "1h", "1d"]
 
-        for tf in timeframes:
-            pass
+        tf = timeframes[-1]
         data = wazirx_feed.get_kline("BTCINR", tf, count=1)
         assert data is not None
 
@@ -163,11 +162,9 @@ class TestWazirXMarketInfo:
 
     def test_wazirx_market_all(self, wazirx_feed):
         """Test getting all market information."""
-        pass
 
     def test_wazirx_symbol_info(self, wazirx_feed):
         """Test getting symbol information."""
-        pass
 
 
 # ==================== Exchange Data Tests ====================
@@ -258,7 +255,6 @@ class TestWazirXIntegration:
     @pytest.mark.integration
     def test_websocket_connection(self):
         """Test WebSocket connection."""
-        pass
 
 
 if __name__ == "__main__":

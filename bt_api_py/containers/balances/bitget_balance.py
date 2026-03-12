@@ -42,6 +42,7 @@ class BitgetBalanceData(BalanceData):
         self.margin_ratio: float | None = None
         self.pnl: float | None = None
         self.pnl_ratio: float | None = None
+        self.all_data: dict[str, Any] | None = None
         self.has_been_init_data = False
 
     def init_data(self) -> "BitgetBalanceData":

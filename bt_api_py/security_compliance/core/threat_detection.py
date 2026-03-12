@@ -250,8 +250,8 @@ class ThreatDetector:
         ]
 
         # Group by type and level
-        threat_counts = defaultdict(int)
-        level_counts = defaultdict(int)
+        threat_counts: dict[str, int] = defaultdict(int)
+        level_counts: dict[str, int] = defaultdict(int)
 
         for threat in recent_threats:
             threat_counts[threat.threat_type.value] += 1
@@ -296,7 +296,7 @@ class ThreatDetector:
                 response_actions.append(
                     {
                         "action": "block_ip",
-                        "ip_address": threat_event.ip_address,
+                        "ip_address": threat_event.ip_address or "",
                         "duration": "24_hours",
                     }
                 )
@@ -306,7 +306,7 @@ class ThreatDetector:
                 response_actions.append(
                     {
                         "action": "lock_user",
-                        "user_id": threat_event.user_id,
+                        "user_id": threat_event.user_id or "",
                         "reason": f"Threat detected: {threat_event.threat_type.value}",
                     }
                 )
@@ -325,8 +325,8 @@ class ThreatDetector:
             response_actions.append(
                 {
                     "action": "enhanced_monitoring",
-                    "user_id": threat_event.user_id,
-                    "ip_address": threat_event.ip_address,
+                    "user_id": threat_event.user_id or "",
+                    "ip_address": threat_event.ip_address or "",
                 }
             )
 

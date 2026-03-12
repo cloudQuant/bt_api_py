@@ -235,18 +235,15 @@ class TestBinanceIntegration:
     @pytest.mark.ticker
     def test_get_ticker_live(self):
         """Test getting ticker from live API."""
-        pass
 
     @pytest.mark.integration
     @pytest.mark.orderbook
     def test_get_orderbook_live(self):
         """Test getting orderbook from live API."""
-        pass
 
     @pytest.mark.integration
     def test_place_order_live(self):
         """Test placing order on live API."""
-        pass
 
 
 if __name__ == "__main__":

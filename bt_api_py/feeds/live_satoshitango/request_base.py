@@ -1,5 +1,7 @@
 """SatoshiTango REST API request base class."""
 
+from typing import Any
+
 from bt_api_py.containers.exchanges.satoshitango_exchange_data import SatoshiTangoExchangeDataSpot
 from bt_api_py.containers.requestdatas.request_data import RequestData
 from bt_api_py.feeds.capability import Capability
@@ -12,7 +14,7 @@ class SatoshiTangoRequestData(Feed):
     """SatoshiTango REST API Feed base class."""
 
     @classmethod
-    def _capabilities(cls):
+    def _capabilities(cls) -> set[Capability]:
         return {
             Capability.GET_TICK,
             Capability.GET_DEPTH,
@@ -24,7 +26,7 @@ class SatoshiTangoRequestData(Feed):
             Capability.CANCEL_ORDER,
         }
 
-    def __init__(self, data_queue, **kwargs) -> None:
+    def __init__(self, data_queue: Any = None, **kwargs: Any) -> None:
         super().__init__(data_queue, **kwargs)
         self.data_queue = data_queue
         self.exchange_name = kwargs.get("exchange_name", "SATOSHITANGO___SPOT")

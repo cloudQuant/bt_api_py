@@ -1,8 +1,8 @@
 """bitFlyer Exchange Data Configuration."""
 
-import os
 from typing import Any
 
+from bt_api_py.config_loader import get_exchange_config_path, load_exchange_config
 from bt_api_py.containers.exchanges.exchange_data import ExchangeData
 from bt_api_py.logging_factory import get_logger
 
@@ -18,18 +18,12 @@ def _get_bitflyer_config() -> Any | None:
     if _bitflyer_config_loaded:
         return _bitflyer_config
     try:
-        from bt_api_py.config_loader import load_exchange_config
-
-        config_path = os.path.join(
-            os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
-            "configs",
-            "bitflyer.yaml",
-        )
-        if os.path.exists(config_path):
-            _bitflyer_config = load_exchange_config(config_path)
+        config_path = get_exchange_config_path("bitflyer.yaml")
+        if config_path.exists():
+            _bitflyer_config = load_exchange_config(str(config_path))
         _bitflyer_config_loaded = True
     except Exception as e:
-        logger.warn(f"Failed to load bitflyer.yaml config: {e}")
+        logger.warning(f"Failed to load bitflyer.yaml config: {e}")
     return _bitflyer_config
 
 

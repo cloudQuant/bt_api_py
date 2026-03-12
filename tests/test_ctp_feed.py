@@ -289,7 +289,8 @@ class TestCtpContainerParsing:
                 "TradeDate": "20250226",
                 "TradeTime": "09:30:01",
                 "ExchangeID": "CFFEX",
-            }
+            },
+            symbol_name="IF2506",
         )
         trade.init_data()
         assert trade.get_trade_side() == "buy"

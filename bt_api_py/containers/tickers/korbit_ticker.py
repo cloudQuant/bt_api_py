@@ -13,24 +13,24 @@ class KorbitTickerData(TickerData):
         super().__init__(ticker_info, has_been_json_encoded)
         self.exchange_name = "KORBIT"
         self.local_update_time = time.time()
-        self.ticker_data = ticker_info if has_been_json_encoded else None
-        self.ticker_symbol_name = None
-        self.has_been_init_data = False
         self.symbol_name = symbol_name
         self.asset_type = asset_type
-        self.ticker_data = ticker_info if has_been_json_encoded else None
-        self.ticker_symbol_name = None
-        self.server_time = None
-        self.bid_price = None
-        self.ask_price = None
-        self.bid_volume = None
-        self.ask_volume = None
-        self.last_price = None
-        self.daily_change = None
-        self.daily_change_percentage = None
-        self.volume = None
-        self.high = None
-        self.low = None
+        self.ticker_data: dict[str, Any] | None = (
+            ticker_info if has_been_json_encoded and isinstance(ticker_info, dict) else None
+        )
+        self.ticker_symbol_name: str | None = None
+        self.server_time: float | None = None
+        self.bid_price: float | None = None
+        self.ask_price: float | None = None
+        self.bid_volume: float | None = None
+        self.ask_volume: float | None = None
+        self.last_price: float | None = None
+        self.daily_change: float | None = None
+        self.daily_change_percentage: float | None = None
+        self.volume: float | None = None
+        self.high: float | None = None
+        self.low: float | None = None
+        self.all_data: dict[str, Any] | None = None
         self.has_been_init_data = False
 
     def init_data(self) -> "Self":
@@ -101,29 +101,30 @@ class KorbitTickerData(TickerData):
                 "high": self.high,
                 "low": self.low,
             }
-        return self.all_data
+        return self.all_data or {}
 
     def __str__(self) -> str:
         self.init_data()
-        return json.dumps(self.get_all_data())
+        return str(json.dumps(self.get_all_data()))
 
     def __repr__(self) -> str:
-        return self.__str__()
+        return str(self.__str__())
 
     def get_exchange_name(self) -> str:
-        return self.exchange_name
+        return str(self.exchange_name)
 
     def get_local_update_time(self) -> float:
-        return self.local_update_time
+        return float(self.local_update_time)
 
     def get_symbol_name(self) -> str:
-        return self.symbol_name
+        return str(self.symbol_name)
 
     def get_ticker_symbol_name(self) -> str | None:
-        return self.ticker_symbol_name
+        val = self.ticker_symbol_name
+        return None if val is None else str(val)
 
     def get_asset_type(self) -> str:
-        return self.asset_type
+        return str(self.asset_type)
 
     def get_server_time(self) -> float | None:
         return self.server_time

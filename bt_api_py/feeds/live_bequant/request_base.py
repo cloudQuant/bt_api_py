@@ -6,6 +6,7 @@ Authentication: HTTP Basic Auth (API key as username, secret as password).
 """
 
 import base64
+from typing import Any
 from urllib.parse import urlencode
 
 from bt_api_py.containers.exchanges.bequant_exchange_data import BeQuantExchangeDataSpot
@@ -19,7 +20,7 @@ class BeQuantRequestData(Feed):
     """BeQuant REST API Feed base class (HitBTC V3 compatible)."""
 
     @classmethod
-    def _capabilities(cls):
+    def _capabilities(cls) -> set[Capability]:
         return {
             Capability.GET_TICK,
             Capability.GET_DEPTH,
@@ -35,7 +36,7 @@ class BeQuantRequestData(Feed):
             Capability.GET_SERVER_TIME,
         }
 
-    def __init__(self, data_queue, **kwargs) -> None:
+    def __init__(self, data_queue: Any = None, **kwargs: Any) -> None:
         super().__init__(data_queue, **kwargs)
         self.data_queue = data_queue
         self._api_key = kwargs.get("public_key") or kwargs.get("api_key") or ""
@@ -70,7 +71,7 @@ class BeQuantRequestData(Feed):
     def request(self, path, params=None, body=None, extra_data=None, timeout=10, is_sign=False):
         """Synchronous HTTP request using Feed.http_request()."""
         if params is None:
-            params = {}
+            params: dict[str, Any] = {}
         method, endpoint = path.split(" ", 1)
         query_string = urlencode(params) if params else ""
         url = f"{self._params.rest_url}{endpoint}"
@@ -91,7 +92,7 @@ class BeQuantRequestData(Feed):
     ):
         """Async HTTP request using Feed.async_http_request()."""
         if params is None:
-            params = {}
+            params: dict[str, Any] = {}
         method, endpoint = path.split(" ", 1)
         query_string = urlencode(params) if params else ""
         url = f"{self._params.rest_url}{endpoint}"
@@ -116,7 +117,7 @@ class BeQuantRequestData(Feed):
 
     def _get_server_time(self, extra_data=None, **kwargs):
         path = self._params.get_rest_path("get_server_time")
-        params = {}
+        params: dict[str, Any] = {}
         extra_data = extra_data or {}
         extra_data.update(
             {
@@ -131,7 +132,7 @@ class BeQuantRequestData(Feed):
 
     def _get_exchange_info(self, extra_data=None, **kwargs):
         path = self._params.get_rest_path("get_exchange_info")
-        params = {}
+        params: dict[str, Any] = {}
         extra_data = extra_data or {}
         extra_data.update(
             {
@@ -147,7 +148,7 @@ class BeQuantRequestData(Feed):
     def _get_tick(self, symbol, extra_data=None, **kwargs):
         bq_symbol = self._params.get_symbol(symbol)
         path = self._params.get_rest_path("get_tick").replace("{symbol}", bq_symbol)
-        params = {}
+        params: dict[str, Any] = {}
         extra_data = extra_data or {}
         extra_data.update(
             {
@@ -245,7 +246,7 @@ class BeQuantRequestData(Feed):
         path = self._params.get_rest_path("cancel_order").replace(
             "{client_order_id}", str(order_id or "")
         )
-        params = {}
+        params: dict[str, Any] = {}
         extra_data = extra_data or {}
         extra_data.update(
             {
@@ -262,7 +263,7 @@ class BeQuantRequestData(Feed):
         path = self._params.get_rest_path("query_order").replace(
             "{client_order_id}", str(order_id or "")
         )
-        params = {}
+        params: dict[str, Any] = {}
         extra_data = extra_data or {}
         extra_data.update(
             {
@@ -277,7 +278,7 @@ class BeQuantRequestData(Feed):
 
     def _get_open_orders(self, symbol=None, extra_data=None, **kwargs):
         path = self._params.get_rest_path("get_open_orders")
-        params = {}
+        params: dict[str, Any] = {}
         if symbol:
             params["symbol"] = self._params.get_symbol(symbol)
         extra_data = extra_data or {}
@@ -294,7 +295,7 @@ class BeQuantRequestData(Feed):
 
     def _get_account(self, extra_data=None, **kwargs):
         path = self._params.get_rest_path("get_account")
-        params = {}
+        params: dict[str, Any] = {}
         extra_data = extra_data or {}
         extra_data.update(
             {
@@ -309,7 +310,7 @@ class BeQuantRequestData(Feed):
 
     def _get_balance(self, extra_data=None, **kwargs):
         path = self._params.get_rest_path("get_balance")
-        params = {}
+        params: dict[str, Any] = {}
         extra_data = extra_data or {}
         extra_data.update(
             {

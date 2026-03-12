@@ -37,10 +37,10 @@ class IbContract:
         self.local_symbol = local_symbol  # 本地品种代码
         self.trading_class = trading_class  # 交易类别
 
-    def to_dict(self) -> None:
+    def to_dict(self) -> dict[str, Any]:
         return {k: v for k, v in self.__dict__.items() if v}
 
-    def __str__(self) -> None:
+    def __str__(self) -> str:
         parts = [self.symbol, self.sec_type, self.exchange, self.currency]
         if self.last_trade_date:
             parts.append(self.last_trade_date)
@@ -50,22 +50,24 @@ class IbContract:
             parts.append(self.right)
         return " ".join(parts)
 
-    def __repr__(self) -> None:
+    def __repr__(self) -> str:
         return f"IbContract({self.__str__()})"
 
     @classmethod
-    def stock(cls: Any, symbol: Any, exchange: Any = "SMART", currency: Any = "USD") -> None:
+    def stock(
+        cls: type["IbContract"], symbol: Any, exchange: Any = "SMART", currency: Any = "USD"
+    ) -> "IbContract":
         """快速创建股票合约"""
         return cls(symbol=symbol, sec_type="STK", exchange=exchange, currency=currency)
 
     @classmethod
     def future(
-        cls: Any,
+        cls: type["IbContract"],
         symbol: Any,
         exchange: Any = "GLOBEX",
         currency: Any = "USD",
         last_trade_date: Any = "",
-    ) -> None:
+    ) -> "IbContract":
         """快速创建期货合约"""
         return cls(
             symbol=symbol,
@@ -77,14 +79,14 @@ class IbContract:
 
     @classmethod
     def option(
-        cls: Any,
+        cls: type["IbContract"],
         symbol: Any,
         last_trade_date: Any,
         strike: Any,
         right: Any,
         exchange: Any = "SMART",
         currency: Any = "USD",
-    ) -> None:
+    ) -> "IbContract":
         """快速创建期权合约"""
         return cls(
             symbol=symbol,
@@ -97,6 +99,8 @@ class IbContract:
         )
 
     @classmethod
-    def forex(cls: Any, symbol: Any, exchange: Any = "IDEALPRO", currency: Any = "USD") -> None:
+    def forex(
+        cls: type["IbContract"], symbol: Any, exchange: Any = "IDEALPRO", currency: Any = "USD"
+    ) -> "IbContract":
         """快速创建外汇合约"""
         return cls(symbol=symbol, sec_type="CASH", exchange=exchange, currency=currency)

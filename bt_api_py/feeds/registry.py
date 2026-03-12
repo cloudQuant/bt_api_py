@@ -140,8 +140,8 @@ def get_registry() -> dict[str, type]:
 def initialize_default_feeds():
     """Explicitly initialize the legacy default feeds."""
     try:
-        import bt_api_py.exchange_registers.register_binance  # noqa: F401
-        import bt_api_py.exchange_registers.register_hitbtc  # noqa: F401
+        import bt_api_py.exchange_registers.register_binance
+        import bt_api_py.exchange_registers.register_hitbtc
         import bt_api_py.exchange_registers.register_okx  # noqa: F401
     except ImportError as exc:
         _logger.warning(f"Failed to initialize default feeds: {exc}")

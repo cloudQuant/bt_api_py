@@ -2,6 +2,8 @@
 BYDFi Spot Feed implementation.
 """
 
+from typing import Any
+
 from bt_api_py.feeds.capability import Capability
 from bt_api_py.feeds.live_bydfi.request_base import BYDFiRequestData
 
@@ -10,7 +12,7 @@ class BYDFiRequestDataSpot(BYDFiRequestData):
     """BYDFi Spot Feed for market data."""
 
     @classmethod
-    def _capabilities(cls):
+    def _capabilities(cls) -> set[Capability]:
         return {
             Capability.GET_TICK,
             Capability.GET_DEPTH,
@@ -22,7 +24,7 @@ class BYDFiRequestDataSpot(BYDFiRequestData):
             Capability.CANCEL_ORDER,
         }
 
-    def __init__(self, data_queue, **kwargs):
+    def __init__(self, data_queue: Any = None, **kwargs: Any) -> None:
         super().__init__(data_queue, **kwargs)
         self.exchange_name = kwargs.get("exchange_name", "BYDFI___SPOT")
 
@@ -245,7 +247,7 @@ class BYDFiRequestDataSpot(BYDFiRequestData):
     def _get_balance(self, symbol=None, extra_data=None, **kwargs):
         """Get account balance. Returns (path, params, extra_data)."""
         path = "GET /v1/account/balance"
-        params = {}
+        params: dict[str, Any] = {}
         if symbol:
             params["currency"] = symbol
         if extra_data is None:
@@ -390,7 +392,7 @@ class BYDFiRequestDataSpot(BYDFiRequestData):
     def _get_open_orders(self, symbol=None, extra_data=None, **kwargs):
         """Get open orders. Returns (path, params, extra_data)."""
         path = "GET /v1/openOrders"
-        params = {}
+        params: dict[str, Any] = {}
         if symbol:
             params["symbol"] = self._params.get_symbol(symbol)
         if extra_data is None:

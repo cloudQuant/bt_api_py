@@ -3,6 +3,7 @@ OKX API - AccountMixin
 Auto-generated from request_base.py
 """
 
+from collections.abc import Callable
 from typing import Any
 
 from bt_api_py.containers.accounts.okx_account import OkxAccountData
@@ -13,9 +14,19 @@ from bt_api_py.functions.utils import update_extra_data
 class AccountMixin:
     """Mixin providing OKX API methods."""
 
+    _params: Any
+    asset_type: str
+    exchange_name: str
+    request: Callable[..., Any]
+    submit: Callable[..., Any]
+    async_request: Callable[..., Any]
+    async_callback: Callable[..., Any]
+
     # ==================== Account APIs ====================
 
-    def _get_account(self, symbol: Any = None, extra_data: Any = None, **kwargs: Any) -> None:
+    def _get_account(
+        self, symbol: Any = None, extra_data: Any = None, **kwargs: Any
+    ) -> tuple[str, dict[str, Any], dict[str, Any]]:
         """
         get account info using async
         :param symbol: default None, get all the currency, can be string, e.g. "BTC-USDT".
@@ -54,7 +65,7 @@ class AccountMixin:
         return path, params, extra_data
 
     @staticmethod
-    def _get_account_normalize_function(input_data: Any, extra_data: Any) -> None:
+    def _get_account_normalize_function(input_data: Any, extra_data: Any) -> tuple[Any, bool]:
         status = input_data["code"] == "0"
         if "data" not in input_data or not input_data["data"]:
             return [], status
@@ -68,12 +79,12 @@ class AccountMixin:
             target_data = []
         return target_data, status
 
-    def get_account(self, symbol: Any = None, extra_data: Any = None, **kwargs: Any) -> None:
+    def get_account(self, symbol: Any = None, extra_data: Any = None, **kwargs: Any) -> Any:
         path, params, extra_data = self._get_account(symbol, extra_data, **kwargs)
         data = self.request(path, params=params, extra_data=extra_data)
         return data
 
-    def get_balance(self, symbol: Any = None, extra_data: Any = None, **kwargs: Any) -> None:
+    def get_balance(self, symbol: Any = None, extra_data: Any = None, **kwargs: Any) -> Any:
         return self.get_account(symbol, extra_data, **kwargs)
 
     def async_get_account(self, symbol: Any = None, extra_data: Any = None, **kwargs: Any) -> None:
@@ -94,7 +105,9 @@ class AccountMixin:
 
     # ==================== Position APIs ====================
 
-    def _get_position(self, symbol: Any, extra_data: Any = None, **kwargs: Any) -> None:
+    def _get_position(
+        self, symbol: Any, extra_data: Any = None, **kwargs: Any
+    ) -> tuple[str, dict[str, Any], dict[str, Any]]:
         """
         get position info from okx by symbol
         :param symbol: default None, get all the currency, can be string, e.g. "BTC-USDT".
@@ -121,7 +134,7 @@ class AccountMixin:
         return path, params, extra_data
 
     @staticmethod
-    def _get_position_normalize_function(input_data: Any, extra_data: Any) -> None:
+    def _get_position_normalize_function(input_data: Any, extra_data: Any) -> tuple[Any, bool]:
         status = input_data["code"] == "0"
         if "data" not in input_data:
             return [], status
@@ -135,7 +148,7 @@ class AccountMixin:
             target_data = []
         return target_data, status
 
-    def get_position(self, symbol: Any, extra_data: Any = None, **kwargs: Any) -> None:
+    def get_position(self, symbol: Any, extra_data: Any = None, **kwargs: Any) -> Any:
         path, params, extra_data = self._get_position(symbol, extra_data, **kwargs)
         data = self.request(path, params=params, extra_data=extra_data)
         return data
@@ -159,7 +172,7 @@ class AccountMixin:
         limit: Any = None,
         extra_data: Any = None,
         **kwargs: Any,
-    ) -> None:
+    ) -> tuple[str, dict[str, Any], dict[str, Any]]:
         """
         Get positions history
         :param inst_type: Instrument type, e.g. SPOT, MARGIN, SWAP, FUTURES, OPTION
@@ -175,7 +188,7 @@ class AccountMixin:
         :return: path, params, extra_data
         """
         request_type = "get_positions_history"
-        params = {}
+        params: dict[str, Any] = {}
         if inst_type:
             params["instType"] = inst_type
         if uly:
@@ -208,7 +221,9 @@ class AccountMixin:
         return path, params, extra_data
 
     @staticmethod
-    def _get_positions_history_normalize_function(input_data: Any, extra_data: Any) -> None:
+    def _get_positions_history_normalize_function(
+        input_data: Any, extra_data: Any
+    ) -> tuple[Any, bool]:
         """Normalize positions history data"""
         status = input_data["code"] == "0"
         if "data" not in input_data:
@@ -236,7 +251,7 @@ class AccountMixin:
         limit: Any = None,
         extra_data: Any = None,
         **kwargs: Any,
-    ) -> None:
+    ) -> Any:
         """Get positions history"""
         path, params, extra_data = self._get_positions_history(
             inst_type, uly, inst_id, mgn_mode, ccy, after, before, limit, extra_data, **kwargs
@@ -268,8 +283,8 @@ class AccountMixin:
 
     # ==================== Config APIs ====================
 
-    def _get_config(self, extra_data: Any = None) -> None:
-        params = {}
+    def _get_config(self, extra_data: Any = None) -> tuple[str, dict[str, Any], dict[str, Any]]:
+        params: dict[str, Any] = {}
         path = self._params.get_rest_path("get_config")
         extra_data = update_extra_data(
             extra_data,
@@ -284,7 +299,7 @@ class AccountMixin:
         return path, params, extra_data
 
     @staticmethod
-    def _generic_normalize_function(input_data: Any, extra_data: Any) -> None:
+    def _generic_normalize_function(input_data: Any, extra_data: Any) -> tuple[Any, bool]:
         """Generic normalize function for OKX API responses.
         Extracts 'data' list and checks 'code' for status."""
         status = input_data.get("code") == "0"
@@ -296,7 +311,7 @@ class AccountMixin:
         return [data] if data else [], status
 
     @staticmethod
-    def _get_config_normalize_function(input_data: Any, extra_data: Any) -> None:
+    def _get_config_normalize_function(input_data: Any, extra_data: Any) -> tuple[Any, bool]:
         status = input_data["code"] == "0"
         if "data" not in input_data:
             return [], status
@@ -306,7 +321,7 @@ class AccountMixin:
         data = data if len(data) > 0 else []
         return data, status
 
-    def get_config(self, extra_data: Any = None) -> None:
+    def get_config(self, extra_data: Any = None) -> Any:
         path, params, extra_data = self._get_config(extra_data=extra_data)
         data = self.request(path, params=params, extra_data=extra_data)
         return data
@@ -315,13 +330,13 @@ class AccountMixin:
         path, params, extra_data = self._get_config(extra_data=extra_data)
         self.submit(self.async_request(path, extra_data=extra_data), callback=self.async_callback)
 
-    def set_mode(self) -> None:
+    def set_mode(self) -> Any:
         params = {"posMode": "long_short_mode"}
         path = self._params.get_rest_path("set_mode")
         data = self.request(path, body=params)
         return data
 
-    def set_lever(self, symbol: Any, lever: Any = 10, mgn_mode: Any = "cross") -> None:
+    def set_lever(self, symbol: Any, lever: Any = 10, mgn_mode: Any = "cross") -> Any:
         symbol = self._params.get_symbol(symbol)
         params = {"instId": symbol, "lever": lever, "mgnMode": mgn_mode}
         path = self._params.get_rest_path("set_lever")
@@ -348,7 +363,7 @@ class AccountMixin:
         qty: Any = None,
         extra_data: Any = None,
         **kwargs: Any,
-    ) -> None:
+    ) -> tuple[str, dict[str, Any], dict[str, Any]]:
         """
         Get fee rate
         :param inst_type: Instrument type, e.g. SPOT, MARGIN, SWAP, FUTURES, OPTION
@@ -386,7 +401,7 @@ class AccountMixin:
         return path, params, extra_data
 
     @staticmethod
-    def _get_fee_normalize_function(input_data: Any, extra_data: Any) -> None:
+    def _get_fee_normalize_function(input_data: Any, extra_data: Any) -> tuple[Any, bool]:
         """Normalize fee data"""
         status = input_data["code"] == "0"
         if "data" not in input_data:
@@ -411,7 +426,7 @@ class AccountMixin:
         qty: Any = None,
         extra_data: Any = None,
         **kwargs: Any,
-    ) -> None:
+    ) -> Any:
         """Get fee rate"""
         path, params, extra_data = self._get_fee(
             inst_type, uly, inst_id, ccy, qty, extra_data, **kwargs
@@ -446,7 +461,7 @@ class AccountMixin:
         px: Any = None,
         extra_data: Any = None,
         **kwargs: Any,
-    ) -> None:
+    ) -> tuple[str, dict[str, Any], dict[str, Any]]:
         """
         Get maximum open position size
         :param symbol: Instrument ID, e.g. BTC-USDT
@@ -483,7 +498,7 @@ class AccountMixin:
         return path, params, extra_data
 
     @staticmethod
-    def _get_max_size_normalize_function(input_data: Any, extra_data: Any) -> None:
+    def _get_max_size_normalize_function(input_data: Any, extra_data: Any) -> tuple[Any, bool]:
         """Normalize max size data"""
         status = input_data["code"] == "0"
         if "data" not in input_data:
@@ -507,7 +522,7 @@ class AccountMixin:
         px: Any = None,
         extra_data: Any = None,
         **kwargs: Any,
-    ) -> None:
+    ) -> Any:
         """Get maximum open position size"""
         path, params, extra_data = self._get_max_size(
             symbol, td_mode, ccy, px, extra_data, **kwargs
@@ -541,7 +556,7 @@ class AccountMixin:
         px: Any = None,
         extra_data: Any = None,
         **kwargs: Any,
-    ) -> None:
+    ) -> tuple[str, dict[str, Any], dict[str, Any]]:
         """
         Get maximum available open position size
         :param symbol: Instrument ID, e.g. BTC-USDT
@@ -578,7 +593,9 @@ class AccountMixin:
         return path, params, extra_data
 
     @staticmethod
-    def _get_max_avail_size_normalize_function(input_data: Any, extra_data: Any) -> None:
+    def _get_max_avail_size_normalize_function(
+        input_data: Any, extra_data: Any
+    ) -> tuple[Any, bool]:
         """Normalize max avail size data"""
         status = input_data["code"] == "0"
         if "data" not in input_data:
@@ -602,7 +619,7 @@ class AccountMixin:
         px: Any = None,
         extra_data: Any = None,
         **kwargs: Any,
-    ) -> None:
+    ) -> Any:
         """Get maximum available open position size"""
         path, params, extra_data = self._get_max_avail_size(
             symbol, td_mode, ccy, px, extra_data, **kwargs
@@ -639,7 +656,7 @@ class AccountMixin:
         ccy: Any = None,
         extra_data: Any = None,
         **kwargs: Any,
-    ) -> None:
+    ) -> tuple[str, dict[str, Any], dict[str, Any]]:
         """
         Set margin balance (add/reduce margin)
         :param symbol: Instrument ID, e.g. BTC-USDT
@@ -691,7 +708,7 @@ class AccountMixin:
         ccy: Any = None,
         extra_data: Any = None,
         **kwargs: Any,
-    ) -> None:
+    ) -> Any:
         """Set margin balance (add/reduce margin)"""
         path, body, extra_data = self._set_margin_balance(
             symbol, pos_id, amt, mgn_mode, action_type, pos_side, ccy, extra_data, **kwargs

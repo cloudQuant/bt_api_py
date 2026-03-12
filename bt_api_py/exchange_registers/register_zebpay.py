@@ -17,7 +17,6 @@ def _zebpay_spot_subscribe_handler(feed: Any, topics: list[Any]) -> None:
         feed: Feed instance.
         topics: List of topics to subscribe.
     """
-    pass
 
 
 def register_zebpay() -> None:

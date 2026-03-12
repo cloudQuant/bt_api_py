@@ -8,6 +8,7 @@ import time
 from typing import Any
 
 from bt_api_py.containers.tickers.ticker import TickerData
+from bt_api_py.containers.tickers.ticker_utils import parse_float
 
 
 class GmxRequestTickerData(TickerData):
@@ -30,13 +31,18 @@ class GmxRequestTickerData(TickerData):
 
         """
         super().__init__(ticker_info, has_been_json_encoded)
-        self.ticker_symbol_name = symbol_name
+        self.ticker_symbol_name: str | None = symbol_name
         self.asset_type = asset_type
         self.exchange_name = "GMX"
         self.local_update_time = time.time()
         self.ticker_data: dict[str, Any] | None = (
             ticker_info if has_been_json_encoded and isinstance(ticker_info, dict) else None
         )
+        self.last_price: float | None = None
+        self.bid_price: float | None = None
+        self.ask_price: float | None = None
+        self.high_24h: float | None = None
+        self.low_24h: float | None = None
         self.has_been_init_data = False
 
     def init_data(self) -> "GmxRequestTickerData":
@@ -70,14 +76,14 @@ class GmxRequestTickerData(TickerData):
                 ticker = next(iter(data.values())) if data else {}
 
             if isinstance(ticker, dict):
-                self.ticker_symbol_name = self.ticker_symbol_name or ticker.get("symbol")
-                self.last_price = self._parse_float(
+                self.ticker_symbol_name = self.ticker_symbol_name or (ticker.get("symbol") or None)
+                self.last_price = parse_float(
                     ticker.get("minPrice") or ticker.get("maxPrice") or ticker.get("price")
                 )
-                self.bid_price = self._parse_float(ticker.get("minPrice"))
-                self.ask_price = self._parse_float(ticker.get("maxPrice"))
-                self.high_24h = self._parse_float(ticker.get("maxPrice"))
-                self.low_24h = self._parse_float(ticker.get("minPrice"))
+                self.bid_price = parse_float(ticker.get("minPrice"))
+                self.ask_price = parse_float(ticker.get("maxPrice"))
+                self.high_24h = parse_float(ticker.get("maxPrice"))
+                self.low_24h = parse_float(ticker.get("minPrice"))
 
         self.has_been_init_data = True
         return self
@@ -85,7 +91,7 @@ class GmxRequestTickerData(TickerData):
     # ── Standard getters ────────────────────────────────────────
 
     def get_symbol_name(self) -> str:
-        return self.ticker_symbol_name
+        return str(self.ticker_symbol_name) if self.ticker_symbol_name else ""
 
     def get_ticker_symbol_name(self) -> str | None:
         return self.ticker_symbol_name
@@ -103,7 +109,7 @@ class GmxRequestTickerData(TickerData):
         return self.asset_type
 
     def get_all_data(self) -> dict[str, Any]:
-        return self.ticker_data
+        return self.ticker_data or {}
 
     def get_server_time(self) -> float | None:
         return self.local_update_time
@@ -113,21 +119,3 @@ class GmxRequestTickerData(TickerData):
 
     def get_ask_price(self) -> float | None:
         return getattr(self, "ask_price", None)
-
-    @staticmethod
-    def _parse_float(value: Any) -> float | None:
-        """Parse value to float.
-
-        Args:
-            value: Value to parse.
-
-        Returns:
-            Parsed float value or None if parsing fails.
-
-        """
-        if value is None:
-            return None
-        try:
-            return float(value)
-        except (ValueError, TypeError):
-            return None

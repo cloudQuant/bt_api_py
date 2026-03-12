@@ -626,14 +626,15 @@ class AdvancedWebSocketManager:
 
             async with self._pool_locks[exchange_name]:
                 # Find idle connections
-                idle_wrappers = []
-                for wrapper in pool:
+                idle_wrappers = [
+                    wrapper
+                    for wrapper in pool
                     if (
                         not wrapper.in_use
                         and len(pool) > pool_config.min_connections
                         and time.time() - wrapper.last_used > pool_config.connection_timeout
-                    ):
-                        idle_wrappers.append(wrapper)
+                    )
+                ]
 
                 # Remove idle connections
                 for wrapper in idle_wrappers:
@@ -643,13 +644,17 @@ class AdvancedWebSocketManager:
 
     def get_pool_stats(self) -> dict[str, Any]:
         """Get comprehensive WebSocket pool statistics."""
-        stats = {"global_metrics": self._global_metrics.copy(), "pools": {}}
+        stats: dict[str, Any] = {
+            "global_metrics": self._global_metrics.copy(),
+            "pools": {},
+        }
 
         for exchange_name, pool in self._pools.items():
             pool_config = self._pool_metadata[exchange_name]
             monitor = self._monitors[exchange_name]
 
-            pool_stats = {
+            connections_list: list[dict[str, Any]] = []
+            pool_stats: dict[str, Any] = {
                 "total_connections": len(pool),
                 "active_connections": sum(
                     1 for w in pool if w.connection.get_state() == ConnectionState.CONNECTED
@@ -662,7 +667,7 @@ class AdvancedWebSocketManager:
                     "max_connections": pool_config.max_connections,
                     "load_balance_strategy": pool_config.load_balance_strategy,
                 },
-                "connections": [],
+                "connections": connections_list,
             }
 
             for wrapper in pool:
@@ -693,7 +698,7 @@ class AdvancedWebSocketManager:
                     },
                 }
 
-                pool_stats["connections"].append(conn_stats)
+                connections_list.append(conn_stats)
 
             # Add performance summary
             pool_stats["performance_summary"] = monitor.get_performance_summary()

@@ -4,7 +4,7 @@
 """
 
 import time
-from typing import Any
+from typing import Any, cast
 
 import numpy as np
 from sklearn.ensemble import GradientBoostingClassifier, RandomForestClassifier
@@ -30,20 +30,20 @@ class ModelWeight:
 
     def __init__(
         self, model_name: str, weight: float, min_confidence: float = 0.5, max_weight: float = 1.0
-    ) -> Any | None:
+    ) -> None:
         self.model_name = model_name
         self.weight = weight
         self.min_confidence = min_confidence
         self.max_weight = max_weight
         self.performance_history: list[float] = []
-        self.current_performance = 0.5
+        self.current_performance: float = 0.5
 
     def update_performance(self, performance: float) -> None:
         """更新模型性能."""
         self.performance_history.append(performance)
         if len(self.performance_history) > 100:
             self.performance_history = self.performance_history[-50:]
-        self.current_performance = np.mean(self.performance_history)
+        self.current_performance = float(np.mean(self.performance_history))
 
     def get_dynamic_weight(self) -> float:
         """获取动态权重."""
@@ -68,7 +68,7 @@ class RiskEnsembleModel(BaseMLModel):
     5. 动态权重调整 - 基于性能自适应
     """
 
-    def __init__(self, config: dict[str, Any] | None = None) -> Any | None:
+    def __init__(self, config: dict[str, Any] | None = None) -> None:
         """初始化集成模型.
 
         Args:
@@ -454,10 +454,10 @@ class RiskEnsembleModel(BaseMLModel):
         if not self.is_trained:
             return {}
 
-        feature_importance = {}
+        feature_importance: dict[str, list[float]] = {}
 
         # 获取各模型的特征重要性
-        for _name, model in self.models.items():
+        for model in self.models.values():
             if hasattr(model, "feature_importances_"):
                 importance = model.feature_importances_
                 for i, imp in enumerate(importance):
@@ -469,9 +469,9 @@ class RiskEnsembleModel(BaseMLModel):
                     feature_importance[feature_name].append(imp)
 
         # 计算平均重要性
-        avg_importance = {}
+        avg_importance: dict[str, float] = {}
         for feature, values in feature_importance.items():
-            avg_importance[feature] = np.mean(values)
+            avg_importance[feature] = float(np.mean(values))
 
         self.feature_importance = avg_importance
         return avg_importance
@@ -486,7 +486,7 @@ class RiskEnsembleModel(BaseMLModel):
         meta_features_train = []
         meta_features_val = []
 
-        for _name, model in self.models.items():
+        for model in self.models.values():
             # 训练集预测 (使用交叉验证避免过拟合)
             if hasattr(model, "predict_proba"):
                 train_proba = model.predict_proba(X_train)
@@ -519,7 +519,7 @@ class RiskEnsembleModel(BaseMLModel):
                 meta_features.append(pred)
 
         X_meta = np.hstack(meta_features)
-        return self.meta_learner.predict(X_meta)
+        return cast("np.ndarray", self.meta_learner.predict(X_meta))
 
     def _predict_proba_stacking(self, X: np.ndarray) -> np.ndarray:
         """使用stacking方法预测概率."""
@@ -534,20 +534,20 @@ class RiskEnsembleModel(BaseMLModel):
                 meta_features.append(pred)
 
         X_meta = np.hstack(meta_features)
-        return self.meta_learner.predict_proba(X_meta)
+        return cast("np.ndarray", self.meta_learner.predict_proba(X_meta))
 
     def _predict_voting(self, X: np.ndarray) -> np.ndarray:
         """使用投票法预测."""
-        predictions = []
+        predictions_list: list[np.ndarray] = []
 
         for model in self.models.values():
             pred = model.predict(X)
-            predictions.append(pred)
+            predictions_list.append(pred)
 
         # 多数投票
-        predictions = np.array(predictions)
+        predictions_arr = np.array(predictions_list)
         majority_vote = np.apply_along_axis(
-            lambda x: np.bincount(x).argmax(), axis=0, arr=predictions
+            lambda x: np.bincount(x).argmax(), axis=0, arr=predictions_arr
         )
 
         return majority_vote
@@ -563,37 +563,37 @@ class RiskEnsembleModel(BaseMLModel):
 
         # 平均概率
         avg_proba = np.mean(probabilities, axis=0)
-        return avg_proba
+        return cast("np.ndarray", avg_proba)
 
     def _predict_weighted_average(self, X: np.ndarray) -> np.ndarray:
         """使用加权平均预测."""
-        weighted_predictions = []
-        total_weight = 0
+        weighted_predictions: list[np.ndarray] = []
+        total_weight: float = 0.0
 
         for name, model in self.models.items():
             weight = self.model_weights[name].weight
             pred = model.predict(X)
             weighted_predictions.append(pred * weight)
-            total_weight += weight
+            total_weight += float(weight)
 
         ensemble_pred = np.sum(weighted_predictions, axis=0) / total_weight
-        return np.round(ensemble_pred).astype(int)
+        return np.round(ensemble_pred).astype(int)  # type: ignore[no-any-return]
 
     def _predict_proba_weighted_average(self, X: np.ndarray) -> np.ndarray:
         """使用加权平均预测概率."""
-        weighted_probabilities = []
-        total_weight = 0
+        weighted_probabilities: list[np.ndarray] = []
+        total_weight: float = 0.0
 
         for name, model in self.models.items():
             if hasattr(model, "predict_proba"):
                 weight = self.model_weights[name].weight
                 proba = model.predict_proba(X)
                 weighted_probabilities.append(proba * weight)
-                total_weight += weight
+                total_weight += float(weight)
 
         if weighted_probabilities:
             ensemble_proba = np.sum(weighted_probabilities, axis=0) / total_weight
-            return ensemble_proba
+            return ensemble_proba  # type: ignore[no-any-return]
         else:
             # 如果没有模型能预测概率，返回默认值
             n_samples = X.shape[0]
@@ -601,33 +601,33 @@ class RiskEnsembleModel(BaseMLModel):
 
     def _predict_dynamic_weighting(self, X: np.ndarray) -> np.ndarray:
         """使用动态权重预测."""
-        weighted_predictions = []
-        total_weight = 0
+        weighted_predictions_list: list[np.ndarray] = []
+        total_weight: float = 0.0
 
         for name, model in self.models.items():
             weight = self.model_weights[name].get_dynamic_weight()
             pred = model.predict(X)
-            weighted_predictions.append(pred * weight)
+            weighted_predictions_list.append(pred * weight)
             total_weight += weight
 
-        ensemble_pred = np.sum(weighted_predictions, axis=0) / total_weight
-        return np.round(ensemble_pred).astype(int)
+        ensemble_pred = np.sum(weighted_predictions_list, axis=0) / total_weight
+        return np.round(ensemble_pred).astype(int)  # type: ignore[no-any-return]
 
     def _predict_proba_dynamic_weighting(self, X: np.ndarray) -> np.ndarray:
         """使用动态权重预测概率."""
-        weighted_probabilities = []
-        total_weight = 0
+        weighted_probabilities_dyn: list[np.ndarray] = []
+        total_weight_dyn: float = 0.0
 
         for name, model in self.models.items():
             if hasattr(model, "predict_proba"):
                 weight = self.model_weights[name].get_dynamic_weight()
                 proba = model.predict_proba(X)
-                weighted_probabilities.append(proba * weight)
-                total_weight += weight
+                weighted_probabilities_dyn.append(proba * weight)
+                total_weight_dyn += weight
 
-        if weighted_probabilities:
-            ensemble_proba = np.sum(weighted_probabilities, axis=0) / total_weight
-            return ensemble_proba
+        if weighted_probabilities_dyn:
+            ensemble_proba_dyn = np.sum(weighted_probabilities_dyn, axis=0) / total_weight_dyn
+            return ensemble_proba_dyn  # type: ignore[no-any-return]
         else:
             n_samples = X.shape[0]
             return np.array([[0.5, 0.5]] * n_samples)
@@ -662,7 +662,7 @@ class RiskEnsembleModel(BaseMLModel):
         f1_score = performance_metrics.get("f1_score", 0.5)
 
         # 基于整体性能调整各模型权重
-        for _name, weight_config in self.model_weights.items():
+        for weight_config in self.model_weights.values():
             # 简单的权重更新策略
             if f1_score > 0.8:
                 # 高性能，略微增加权重
@@ -713,10 +713,7 @@ class RiskEnsembleModel(BaseMLModel):
         if not self.feature_names:
             self.feature_names = list(data.keys())
 
-        features = []
-        for name in self.feature_names:
-            features.append(float(data.get(name, 0)))
-
+        features = [float(data.get(name, 0)) for name in self.feature_names]
         return np.array(features).reshape(1, -1)
 
     def _generate_cache_key(self, features: np.ndarray | dict[str, Any]) -> str:

@@ -32,7 +32,7 @@ def _get_dydx_config() -> Any | None:
             _dydx_config = load_exchange_config(config_path)
         _dydx_config_loaded = True
     except Exception as e:
-        logger.warn(f"Failed to load dydx.yaml config: {e}")
+        logger.warning(f"Failed to load dydx.yaml config: {e}")
     return _dydx_config
 
 

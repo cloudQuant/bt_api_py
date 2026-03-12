@@ -6,7 +6,7 @@ These are used across multiple mixin modules.
 from typing import Any
 
 
-def generic_normalize_function(input_data: Any, extra_data: Any) -> None:
+def generic_normalize_function(input_data: Any, extra_data: Any) -> tuple[list[Any], bool]:
     """Generic normalize function for OKX API responses.
     Extracts 'data' list and checks 'code' for status."""
     status = input_data.get("code") == "0"

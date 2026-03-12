@@ -5,6 +5,7 @@ import time
 from typing import Any
 
 from bt_api_py.containers.tickers.ticker import TickerData
+from bt_api_py.containers.tickers.ticker_utils import parse_float
 
 
 class BitrueRequestTickerData(TickerData):
@@ -34,15 +35,15 @@ class BitrueRequestTickerData(TickerData):
         self.ticker_data: dict[str, Any] | None = (
             ticker_info if has_been_json_encoded and isinstance(ticker_info, dict) else None
         )
-        self.ticker_symbol_name = None
-        self.server_time = None
-        self.bid_price = None
-        self.ask_price = None
-        self.bid_volume = None
-        self.ask_volume = None
-        self.last_price = None
-        self.last_volume = None
-        self.all_data = None
+        self.ticker_symbol_name: str | None = None
+        self.server_time: float | None = None
+        self.bid_price: float | None = None
+        self.ask_price: float | None = None
+        self.bid_volume: float | None = None
+        self.ask_volume: float | None = None
+        self.last_price: float | None = None
+        self.last_volume: float | None = None
+        self.all_data: dict[str, Any] | None = None
         self.has_been_init_data = False
 
     def init_data(self) -> "BitrueRequestTickerData":
@@ -53,38 +54,20 @@ class BitrueRequestTickerData(TickerData):
         if self.has_been_init_data:
             return self
 
-        data = self.ticker_data
+        data = self.ticker_data or {}
         if data:
             # Bitrue 24hr ticker format
             self.ticker_symbol_name = data.get("symbol")
             self.server_time = data.get("timestamp")
-            self.last_price = self._parse_float(data.get("lastPrice") or data.get("price"))
-            self.bid_price = self._parse_float(data.get("bidPrice") or data.get("bid"))
-            self.ask_price = self._parse_float(data.get("askPrice") or data.get("ask"))
-            self.bid_volume = self._parse_float(data.get("bidQty"))
-            self.ask_volume = self._parse_float(data.get("askQty"))
-            self.last_volume = self._parse_float(data.get("volume"))
+            self.last_price = parse_float(data.get("lastPrice") or data.get("price"))
+            self.bid_price = parse_float(data.get("bidPrice") or data.get("bid"))
+            self.ask_price = parse_float(data.get("askPrice") or data.get("ask"))
+            self.bid_volume = parse_float(data.get("bidQty"))
+            self.ask_volume = parse_float(data.get("askQty"))
+            self.last_volume = parse_float(data.get("volume"))
 
         self.has_been_init_data = True
         return self
-
-    @staticmethod
-    def _parse_float(value: Any) -> float | None:
-        """Parse value to float.
-
-        Args:
-            value: Value to parse.
-
-        Returns:
-            Parsed float value or None if parsing fails.
-
-        """
-        if value is None:
-            return None
-        try:
-            return float(value)
-        except (ValueError, TypeError):
-            return None
 
     def get_all_data(self) -> dict[str, Any]:
         """Get all ticker data as dictionary."""
@@ -103,7 +86,7 @@ class BitrueRequestTickerData(TickerData):
                 "last_price": self.last_price,
                 "last_volume": self.last_volume,
             }
-        return self.all_data
+        return self.all_data or {}
 
     def __str__(self) -> str:
         self.init_data()

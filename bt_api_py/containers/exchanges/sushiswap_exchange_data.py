@@ -43,7 +43,7 @@ def _get_sushiswap_config() -> Any | None:
         from bt_api_py.logging_factory import get_logger
 
         logger = get_logger("sushiswap_exchange_data")
-        logger.warn(f"Failed to load sushiswap.yaml config: {e}")
+        logger.warning(f"Failed to load sushiswap.yaml config: {e}")
     return _sushiswap_config
 
 

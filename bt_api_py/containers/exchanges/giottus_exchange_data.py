@@ -29,7 +29,7 @@ def _get_giottus_config() -> Any | None:
             _giottus_config = load_exchange_config(config_path)
         _giottus_config_loaded = True
     except Exception as e:
-        logger.warn(f"Failed to load giottus.yaml config: {e}")
+        logger.warning(f"Failed to load giottus.yaml config: {e}")
     return _giottus_config
 
 

@@ -3,6 +3,7 @@ OKX API - TradingAccountMixin
 Auto-generated from request_base.py
 """
 
+from collections.abc import Callable
 from typing import Any
 
 from bt_api_py.feeds.live_okx.mixins.normalizers import generic_normalize_function
@@ -10,7 +11,20 @@ from bt_api_py.functions.utils import update_extra_data
 
 
 class TradingAccountMixin:
-    """Mixin providing OKX API methods."""
+    """Mixin providing OKX API methods.
+
+    Expects host class to provide: _params, asset_type, exchange_name,
+    request, submit, async_request, async_callback.
+    """
+
+    # Declare for mypy; host class provides these
+    _params: Any
+    asset_type: str
+    exchange_name: str
+    request: Callable[..., Any]
+    submit: Callable[..., Any]
+    async_request: Callable[..., Any]
+    async_callback: Callable[..., Any]
 
     # ==================== Trading Account APIs ====================
 
@@ -23,7 +37,7 @@ class TradingAccountMixin:
         inst_family: Any = None,
         extra_data: Any = None,
         **kwargs: Any,
-    ) -> None:
+    ) -> tuple[str, dict[str, Any], dict[str, Any]]:
         """
         Get interest limit and interest rate
         :param ccy: Currency
@@ -36,7 +50,7 @@ class TradingAccountMixin:
         :return: path, params, extra_data
         """
         request_type = "get_interest_limits"
-        params = {}
+        params: dict[str, Any] = {}
         if ccy:
             params["ccy"] = ccy
         if inst_type:
@@ -63,7 +77,9 @@ class TradingAccountMixin:
         return path, params, extra_data
 
     @staticmethod
-    def _get_interest_limits_normalize_function(input_data: Any, extra_data: Any) -> None:
+    def _get_interest_limits_normalize_function(
+        input_data: Any, extra_data: Any
+    ) -> tuple[list[Any], bool]:
         status = input_data["code"] == "0"
         if "data" not in input_data:
             return [], status
@@ -80,7 +96,7 @@ class TradingAccountMixin:
         inst_family: Any = None,
         extra_data: Any = None,
         **kwargs: Any,
-    ) -> None:
+    ) -> Any:
         """Get interest limit and interest rate"""
         path, params, extra_data = self._get_interest_limits(
             ccy, inst_type, mgn_mode, uly, inst_family, extra_data, **kwargs
@@ -107,7 +123,9 @@ class TradingAccountMixin:
             callback=self.async_callback,
         )
 
-    def _set_fee_type(self, fee_type: Any, extra_data: Any = None, **kwargs: Any) -> None:
+    def _set_fee_type(
+        self, fee_type: Any, extra_data: Any = None, **kwargs: Any
+    ) -> tuple[str, dict[str, Any], dict[str, Any]]:
         """
         Set fee rate tier
         :param fee_type: Fee rate tier, default is 1, 2, 3, 4, 5
@@ -135,7 +153,9 @@ class TradingAccountMixin:
         return path, body, extra_data
 
     @staticmethod
-    def _set_fee_type_normalize_function(input_data: Any, extra_data: Any) -> None:
+    def _set_fee_type_normalize_function(
+        input_data: Any, extra_data: Any
+    ) -> tuple[list[Any], bool]:
         status = input_data["code"] == "0"
         if "data" not in input_data:
             return [], status
@@ -143,7 +163,7 @@ class TradingAccountMixin:
         target_data = [data[0]] if len(data) > 0 else []
         return target_data, status
 
-    def set_fee_type(self, fee_type: Any, extra_data: Any = None, **kwargs: Any) -> None:
+    def set_fee_type(self, fee_type: Any, extra_data: Any = None, **kwargs: Any) -> Any:
         """Set fee rate tier"""
         path, body, extra_data = self._set_fee_type(fee_type, extra_data, **kwargs)
         data = self.request(path, body=body, extra_data=extra_data)
@@ -156,7 +176,9 @@ class TradingAccountMixin:
             self.async_request(path, body=body, extra_data=extra_data), callback=self.async_callback
         )
 
-    def _set_greeks(self, greeks_type: Any, extra_data: Any = None, **kwargs: Any) -> None:
+    def _set_greeks(
+        self, greeks_type: Any, extra_data: Any = None, **kwargs: Any
+    ) -> tuple[str, dict[str, Any], dict[str, Any]]:
         """
         Set Greeks display type
         :param greeks_type: Greeks display type: `PA` PA price, `IV` IV
@@ -184,7 +206,7 @@ class TradingAccountMixin:
         return path, body, extra_data
 
     @staticmethod
-    def _set_greeks_normalize_function(input_data: Any, extra_data: Any) -> None:
+    def _set_greeks_normalize_function(input_data: Any, extra_data: Any) -> tuple[list[Any], bool]:
         status = input_data["code"] == "0"
         if "data" not in input_data:
             return [], status
@@ -192,7 +214,7 @@ class TradingAccountMixin:
         target_data = [data[0]] if len(data) > 0 else []
         return target_data, status
 
-    def set_greeks(self, greeks_type: Any, extra_data: Any = None, **kwargs: Any) -> None:
+    def set_greeks(self, greeks_type: Any, extra_data: Any = None, **kwargs: Any) -> Any:
         """Set Greeks display type"""
         path, body, extra_data = self._set_greeks(greeks_type, extra_data, **kwargs)
         data = self.request(path, body=body, extra_data=extra_data)
@@ -207,7 +229,7 @@ class TradingAccountMixin:
 
     def _set_isolated_mode(
         self, symbol: Any, iso_mode: Any, extra_data: Any = None, **kwargs: Any
-    ) -> None:
+    ) -> tuple[str, dict[str, Any], dict[str, Any]]:
         """
         Set isolated margin mode
         :param symbol: Instrument ID, e.g. "BTC-USDT"
@@ -238,7 +260,9 @@ class TradingAccountMixin:
         return path, body, extra_data
 
     @staticmethod
-    def _set_isolated_mode_normalize_function(input_data: Any, extra_data: Any) -> None:
+    def _set_isolated_mode_normalize_function(
+        input_data: Any, extra_data: Any
+    ) -> tuple[list[Any], bool]:
         status = input_data["code"] == "0"
         if "data" not in input_data:
             return [], status
@@ -248,7 +272,7 @@ class TradingAccountMixin:
 
     def set_isolated_mode(
         self, symbol: Any, iso_mode: Any, extra_data: Any = None, **kwargs: Any
-    ) -> None:
+    ) -> Any:
         """Set isolated margin mode"""
         path, body, extra_data = self._set_isolated_mode(symbol, iso_mode, extra_data, **kwargs)
         data = self.request(path, body=body, extra_data=extra_data)
@@ -273,7 +297,7 @@ class TradingAccountMixin:
         auto: Any = None,
         extra_data: Any = None,
         **kwargs: Any,
-    ) -> None:
+    ) -> tuple[str, dict[str, Any], dict[str, Any]]:
         """
         Manual borrow or repay for cross/isolated margin
         :param ccy: Currency, e.g. `BTC`
@@ -315,7 +339,9 @@ class TradingAccountMixin:
         return path, body, extra_data
 
     @staticmethod
-    def _borrow_repay_normalize_function(input_data: Any, extra_data: Any) -> None:
+    def _borrow_repay_normalize_function(
+        input_data: Any, extra_data: Any
+    ) -> tuple[list[Any], bool]:
         status = input_data["code"] == "0"
         if "data" not in input_data:
             return [], status
@@ -333,7 +359,7 @@ class TradingAccountMixin:
         auto: Any = None,
         extra_data: Any = None,
         **kwargs: Any,
-    ) -> None:
+    ) -> Any:
         """Manual borrow or repay for cross/isolated margin"""
         path, body, extra_data = self._borrow_repay(
             ccy, side, amt, mgn_mode, symbol, auto, extra_data, **kwargs
@@ -360,7 +386,9 @@ class TradingAccountMixin:
             self.async_request(path, body=body, extra_data=extra_data), callback=self.async_callback
         )
 
-    def _set_auto_repay(self, auto_repay: Any, extra_data: Any = None, **kwargs: Any) -> None:
+    def _set_auto_repay(
+        self, auto_repay: Any, extra_data: Any = None, **kwargs: Any
+    ) -> tuple[str, dict[str, Any], dict[str, Any]]:
         """
         Set auto loan repayment
         :param auto_repay: Auto loan repayment: `true`, `false`
@@ -388,7 +416,9 @@ class TradingAccountMixin:
         return path, body, extra_data
 
     @staticmethod
-    def _set_auto_repay_normalize_function(input_data: Any, extra_data: Any) -> None:
+    def _set_auto_repay_normalize_function(
+        input_data: Any, extra_data: Any
+    ) -> tuple[list[Any], bool]:
         status = input_data["code"] == "0"
         if "data" not in input_data:
             return [], status
@@ -396,7 +426,7 @@ class TradingAccountMixin:
         target_data = [data[0]] if len(data) > 0 else []
         return target_data, status
 
-    def set_auto_repay(self, auto_repay: Any, extra_data: Any = None, **kwargs: Any) -> None:
+    def set_auto_repay(self, auto_repay: Any, extra_data: Any = None, **kwargs: Any) -> Any:
         """Set auto loan repayment"""
         path, body, extra_data = self._set_auto_repay(auto_repay, extra_data, **kwargs)
         data = self.request(path, body=body, extra_data=extra_data)
@@ -418,7 +448,7 @@ class TradingAccountMixin:
         limit: Any = None,
         extra_data: Any = None,
         **kwargs: Any,
-    ) -> None:
+    ) -> tuple[str, dict[str, Any], dict[str, Any]]:
         """
         Get borrowing and repayment history (last 3 months)
         :param ccy: Currency, e.g. `BTC`
@@ -431,7 +461,7 @@ class TradingAccountMixin:
         :return: path, params, extra_data
         """
         request_type = "get_borrow_repay_history"
-        params = {}
+        params: dict[str, Any] = {}
         if ccy:
             params["ccy"] = ccy
         if mgn_mode:
@@ -458,7 +488,9 @@ class TradingAccountMixin:
         return path, params, extra_data
 
     @staticmethod
-    def _get_borrow_repay_history_normalize_function(input_data: Any, extra_data: Any) -> None:
+    def _get_borrow_repay_history_normalize_function(
+        input_data: Any, extra_data: Any
+    ) -> tuple[list[Any], bool]:
         status = input_data["code"] == "0"
         if "data" not in input_data:
             return [], status
@@ -475,7 +507,7 @@ class TradingAccountMixin:
         limit: Any = None,
         extra_data: Any = None,
         **kwargs: Any,
-    ) -> None:
+    ) -> Any:
         """Get borrowing and repayment history (last 3 months)"""
         path, params, extra_data = self._get_borrow_repay_history(
             ccy, mgn_mode, after, before, limit, extra_data, **kwargs
@@ -506,7 +538,7 @@ class TradingAccountMixin:
 
     def _mmp_reset(
         self, inst_type: Any, symbol: Any = None, extra_data: Any = None, **kwargs: Any
-    ) -> None:
+    ) -> tuple[str, dict[str, Any], dict[str, Any]]:
         """
         Reset MMP (Market Maker Protection) status
         :param inst_type: Instrument type, e.g. `SPOT`, `MARGIN`, `SWAP`, `FUTURES`, `OPTION`
@@ -537,7 +569,7 @@ class TradingAccountMixin:
         return path, params, extra_data
 
     @staticmethod
-    def _mmp_reset_normalize_function(input_data: Any, extra_data: Any) -> None:
+    def _mmp_reset_normalize_function(input_data: Any, extra_data: Any) -> tuple[list[Any], bool]:
         status = input_data["code"] == "0"
         if "data" not in input_data:
             return [], status
@@ -547,7 +579,7 @@ class TradingAccountMixin:
 
     def mmp_reset(
         self, inst_type: Any, symbol: Any = None, extra_data: Any = None, **kwargs: Any
-    ) -> None:
+    ) -> Any:
         """Reset MMP (Market Maker Protection) status"""
         path, params, extra_data = self._mmp_reset(inst_type, symbol, extra_data, **kwargs)
         data = self.request(path, body=params, extra_data=extra_data)
@@ -571,7 +603,7 @@ class TradingAccountMixin:
         algo_orders_frozen: Any = None,
         extra_data: Any = None,
         **kwargs: Any,
-    ) -> None:
+    ) -> tuple[str, dict[str, Any], dict[str, Any]]:
         """
         Set MMP (Market Maker Protection) configuration
         :param inst_type: Instrument type, e.g. `SPOT`, `MARGIN`, `SWAP`, `FUTURES`, `OPTION`
@@ -608,7 +640,9 @@ class TradingAccountMixin:
         return path, params, extra_data
 
     @staticmethod
-    def _set_mmp_config_normalize_function(input_data: Any, extra_data: Any) -> None:
+    def _set_mmp_config_normalize_function(
+        input_data: Any, extra_data: Any
+    ) -> tuple[list[Any], bool]:
         status = input_data["code"] == "0"
         if "data" not in input_data:
             return [], status
@@ -624,7 +658,7 @@ class TradingAccountMixin:
         algo_orders_frozen: Any = None,
         extra_data: Any = None,
         **kwargs: Any,
-    ) -> None:
+    ) -> Any:
         """Set MMP (Market Maker Protection) configuration"""
         path, params, extra_data = self._set_mmp_config(
             inst_type, symbol, time_interval_frozen, algo_orders_frozen, extra_data, **kwargs
@@ -650,7 +684,9 @@ class TradingAccountMixin:
             callback=self.async_callback,
         )
 
-    def _get_mmp_config(self, inst_type: Any, extra_data: Any = None, **kwargs: Any) -> None:
+    def _get_mmp_config(
+        self, inst_type: Any, extra_data: Any = None, **kwargs: Any
+    ) -> tuple[str, dict[str, Any], dict[str, Any]]:
         """
         Get MMP (Market Maker Protection) configuration
         :param inst_type: Instrument type, e.g. `SPOT`, `MARGIN`, `SWAP`, `FUTURES`, `OPTION`
@@ -678,7 +714,9 @@ class TradingAccountMixin:
         return path, params, extra_data
 
     @staticmethod
-    def _get_mmp_config_normalize_function(input_data: Any, extra_data: Any) -> None:
+    def _get_mmp_config_normalize_function(
+        input_data: Any, extra_data: Any
+    ) -> tuple[list[Any], bool]:
         status = input_data["code"] == "0"
         if "data" not in input_data:
             return [], status
@@ -686,7 +724,7 @@ class TradingAccountMixin:
         target_data = data if len(data) > 0 else []
         return target_data, status
 
-    def get_mmp_config(self, inst_type: Any, extra_data: Any = None, **kwargs: Any) -> None:
+    def get_mmp_config(self, inst_type: Any, extra_data: Any = None, **kwargs: Any) -> Any:
         """Get MMP (Market Maker Protection) configuration"""
         path, params, extra_data = self._get_mmp_config(inst_type, extra_data, **kwargs)
         data = self.request(path, params=params, extra_data=extra_data)
@@ -710,7 +748,7 @@ class TradingAccountMixin:
         before: Any = None,
         extra_data: Any = None,
         **kwargs: Any,
-    ) -> None:
+    ) -> tuple[str, dict[str, Any], dict[str, Any]]:
         """
         Apply for historical bills archive (from 2021)
         :param year: Year, e.g. `2023`, `2024`
@@ -747,7 +785,9 @@ class TradingAccountMixin:
         return path, params, extra_data
 
     @staticmethod
-    def _apply_bills_history_archive_normalize_function(input_data: Any, extra_data: Any) -> None:
+    def _apply_bills_history_archive_normalize_function(
+        input_data: Any, extra_data: Any
+    ) -> tuple[list[Any], bool]:
         status = input_data["code"] == "0"
         if "data" not in input_data:
             return [], status
@@ -763,7 +803,7 @@ class TradingAccountMixin:
         before: Any = None,
         extra_data: Any = None,
         **kwargs: Any,
-    ) -> None:
+    ) -> Any:
         """Apply for historical bills archive (from 2021)"""
         path, params, extra_data = self._apply_bills_history_archive(
             year, ccy, after, before, extra_data, **kwargs
@@ -797,7 +837,7 @@ class TradingAccountMixin:
         before: Any = None,
         extra_data: Any = None,
         **kwargs: Any,
-    ) -> None:
+    ) -> tuple[str, dict[str, Any], dict[str, Any]]:
         """
         Get historical bills archive (from 2021)
         :param year: Year, e.g. `2023`, `2024`
@@ -834,7 +874,9 @@ class TradingAccountMixin:
         return path, params, extra_data
 
     @staticmethod
-    def _get_bills_history_archive_normalize_function(input_data: Any, extra_data: Any) -> None:
+    def _get_bills_history_archive_normalize_function(
+        input_data: Any, extra_data: Any
+    ) -> tuple[list[Any], bool]:
         status = input_data["code"] == "0"
         if "data" not in input_data:
             return [], status
@@ -850,7 +892,7 @@ class TradingAccountMixin:
         before: Any = None,
         extra_data: Any = None,
         **kwargs: Any,
-    ) -> None:
+    ) -> Any:
         """Get historical bills archive (from 2021)"""
         path, params, extra_data = self._get_bills_history_archive(
             year, ccy, after, before, extra_data, **kwargs
@@ -886,7 +928,7 @@ class TradingAccountMixin:
         mgn_mode: Any = None,
         extra_data: Any = None,
         **kwargs: Any,
-    ) -> None:
+    ) -> tuple[str, dict[str, Any], dict[str, Any]]:
         """
         Set auto loan status
         :param auto_loan: Auto loan status: `true` for on, `false` for off
@@ -921,7 +963,9 @@ class TradingAccountMixin:
         return path, body, extra_data
 
     @staticmethod
-    def _set_auto_loan_normalize_function(input_data: Any, extra_data: Any) -> None:
+    def _set_auto_loan_normalize_function(
+        input_data: Any, extra_data: Any
+    ) -> tuple[list[Any], bool]:
         status = input_data["code"] == "0"
         if "data" not in input_data:
             return [], status
@@ -937,7 +981,7 @@ class TradingAccountMixin:
         mgn_mode: Any = None,
         extra_data: Any = None,
         **kwargs: Any,
-    ) -> None:
+    ) -> Any:
         """Set auto loan status"""
         path, body, extra_data = self._set_auto_loan(
             auto_loan, ccy, iso_mode, mgn_mode, extra_data, **kwargs
@@ -973,7 +1017,7 @@ class TradingAccountMixin:
         uly: Any = None,
         extra_data: Any = None,
         **kwargs: Any,
-    ) -> None:
+    ) -> tuple[str, dict[str, Any], dict[str, Any]]:
         """
         Set account level
         :param acct_lv: Account level: `1` Simple mode, `2` Single-currency margin, `3` Multi-currency margin, `4` Portfolio margin
@@ -1018,7 +1062,9 @@ class TradingAccountMixin:
         return path, body, extra_data
 
     @staticmethod
-    def _set_account_level_normalize_function(input_data: Any, extra_data: Any) -> None:
+    def _set_account_level_normalize_function(
+        input_data: Any, extra_data: Any
+    ) -> tuple[list[Any], bool]:
         status = input_data["code"] == "0"
         if "data" not in input_data:
             return [], status
@@ -1037,7 +1083,7 @@ class TradingAccountMixin:
         uly: Any = None,
         extra_data: Any = None,
         **kwargs: Any,
-    ) -> None:
+    ) -> Any:
         """Set account level"""
         path, body, extra_data = self._set_account_level(
             acct_lv, inst_type, inst_id, ccy, td_mode, pos_side, uly, extra_data, **kwargs
@@ -1074,7 +1120,7 @@ class TradingAccountMixin:
         inst_type: Any = None,
         extra_data: Any = None,
         **kwargs: Any,
-    ) -> None:
+    ) -> tuple[str, dict[str, Any], dict[str, Any]]:
         """
         Account level switch preset
         :param acct_lv: Target account level: `2` Single-currency margin, `3` Multi-currency margin, `4` Portfolio margin
@@ -1112,7 +1158,9 @@ class TradingAccountMixin:
         return path, body, extra_data
 
     @staticmethod
-    def _account_level_switch_preset_normalize_function(input_data: Any, extra_data: Any) -> None:
+    def _account_level_switch_preset_normalize_function(
+        input_data: Any, extra_data: Any
+    ) -> tuple[list[Any], bool]:
         status = input_data["code"] == "0"
         if "data" not in input_data:
             return [], status
@@ -1129,7 +1177,7 @@ class TradingAccountMixin:
         inst_type: Any = None,
         extra_data: Any = None,
         **kwargs: Any,
-    ) -> None:
+    ) -> Any:
         """Account level switch preset"""
         path, body, extra_data = self._account_level_switch_preset(
             acct_lv, pos_side, ccy_list, uly, inst_type, extra_data, **kwargs
@@ -1162,7 +1210,7 @@ class TradingAccountMixin:
         uly: Any = None,
         extra_data: Any = None,
         **kwargs: Any,
-    ) -> None:
+    ) -> tuple[str, dict[str, Any], dict[str, Any]]:
         """
         Account level switch precheck
         :param acct_lv: Target account level: `2` Single-currency margin, `3` Multi-currency margin, `4` Portfolio margin
@@ -1194,7 +1242,9 @@ class TradingAccountMixin:
         return path, params, extra_data
 
     @staticmethod
-    def _account_level_switch_precheck_normalize_function(input_data: Any, extra_data: Any) -> None:
+    def _account_level_switch_precheck_normalize_function(
+        input_data: Any, extra_data: Any
+    ) -> tuple[list[Any], bool]:
         status = input_data["code"] == "0"
         if "data" not in input_data:
             return [], status
@@ -1209,7 +1259,7 @@ class TradingAccountMixin:
         uly: Any = None,
         extra_data: Any = None,
         **kwargs: Any,
-    ) -> None:
+    ) -> Any:
         """Account level switch precheck"""
         path, params, extra_data = self._account_level_switch_precheck(
             acct_lv, inst_type, uly, extra_data, **kwargs
@@ -1236,7 +1286,7 @@ class TradingAccountMixin:
 
     def _set_collateral_assets(
         self, ccy_list: Any, auto_loan: Any = None, extra_data: Any = None, **kwargs: Any
-    ) -> None:
+    ) -> tuple[str, dict[str, Any], dict[str, Any]]:
         """
         Set collateral assets
         :param ccy_list: Currency list, comma-separated, e.g. "BTC,USDT,ETH"
@@ -1267,7 +1317,9 @@ class TradingAccountMixin:
         return path, body, extra_data
 
     @staticmethod
-    def _set_collateral_assets_normalize_function(input_data: Any, extra_data: Any) -> None:
+    def _set_collateral_assets_normalize_function(
+        input_data: Any, extra_data: Any
+    ) -> tuple[list[Any], bool]:
         status = input_data["code"] == "0"
         if "data" not in input_data:
             return [], status
@@ -1277,7 +1329,7 @@ class TradingAccountMixin:
 
     def set_collateral_assets(
         self, ccy_list: Any, auto_loan: Any = None, extra_data: Any = None, **kwargs: Any
-    ) -> None:
+    ) -> Any:
         """Set collateral assets"""
         path, body, extra_data = self._set_collateral_assets(
             ccy_list, auto_loan, extra_data, **kwargs
@@ -1298,7 +1350,7 @@ class TradingAccountMixin:
 
     def _get_collateral_assets(
         self, ccy: Any = None, extra_data: Any = None, **kwargs: Any
-    ) -> None:
+    ) -> tuple[str, dict[str, Any], dict[str, Any]]:
         """
         Get collateral assets
         :param ccy: Currency, e.g. `BTC`
@@ -1307,7 +1359,7 @@ class TradingAccountMixin:
         :return: path, params, extra_data
         """
         request_type = "get_collateral_assets"
-        params = {}
+        params: dict[str, Any] = {}
         if ccy:
             params["ccy"] = ccy
         path = self._params.get_rest_path(request_type)
@@ -1326,7 +1378,9 @@ class TradingAccountMixin:
         return path, params, extra_data
 
     @staticmethod
-    def _get_collateral_assets_normalize_function(input_data: Any, extra_data: Any) -> None:
+    def _get_collateral_assets_normalize_function(
+        input_data: Any, extra_data: Any
+    ) -> tuple[list[Any], bool]:
         status = input_data["code"] == "0"
         if "data" not in input_data:
             return [], status
@@ -1334,7 +1388,7 @@ class TradingAccountMixin:
         target_data = data if len(data) > 0 else []
         return target_data, status
 
-    def get_collateral_assets(self, ccy: Any = None, extra_data: Any = None, **kwargs: Any) -> None:
+    def get_collateral_assets(self, ccy: Any = None, extra_data: Any = None, **kwargs: Any) -> Any:
         """Get collateral assets"""
         path, params, extra_data = self._get_collateral_assets(ccy, extra_data, **kwargs)
         data = self.request(path, params=params, extra_data=extra_data)
@@ -1362,7 +1416,7 @@ class TradingAccountMixin:
         pos_side: Any = None,
         extra_data: Any = None,
         **kwargs: Any,
-    ) -> None:
+    ) -> tuple[str, dict[str, Any], dict[str, Any]]:
         """
         Set risk offset amount
         :param amt_type: Offset amount type: `1` Add, `2` Reduce
@@ -1410,7 +1464,9 @@ class TradingAccountMixin:
         return path, body, extra_data
 
     @staticmethod
-    def _set_risk_offset_amt_normalize_function(input_data: Any, extra_data: Any) -> None:
+    def _set_risk_offset_amt_normalize_function(
+        input_data: Any, extra_data: Any
+    ) -> tuple[list[Any], bool]:
         status = input_data["code"] == "0"
         if "data" not in input_data:
             return [], status
@@ -1430,7 +1486,7 @@ class TradingAccountMixin:
         pos_side: Any = None,
         extra_data: Any = None,
         **kwargs: Any,
-    ) -> None:
+    ) -> Any:
         """Set risk offset amount"""
         path, body, extra_data = self._set_risk_offset_amt(
             amt_type,
@@ -1487,7 +1543,7 @@ class TradingAccountMixin:
         amend_px_on: Any = None,
         extra_data: Any = None,
         **kwargs: Any,
-    ) -> None:
+    ) -> tuple[str, dict[str, Any], dict[str, Any]]:
         """
         Activate option trading
         :param uly: Underlying, e.g. `BTC-USD`
@@ -1524,7 +1580,9 @@ class TradingAccountMixin:
         return path, params, extra_data
 
     @staticmethod
-    def _activate_option_normalize_function(input_data: Any, extra_data: Any) -> None:
+    def _activate_option_normalize_function(
+        input_data: Any, extra_data: Any
+    ) -> tuple[list[Any], bool]:
         status = input_data["code"] == "0"
         if "data" not in input_data:
             return [], status
@@ -1540,7 +1598,7 @@ class TradingAccountMixin:
         amend_px_on: Any = None,
         extra_data: Any = None,
         **kwargs: Any,
-    ) -> None:
+    ) -> Any:
         """Activate option trading"""
         path, params, extra_data = self._activate_option(
             uly, inst_id, cnt, amend_px_on, extra_data, **kwargs
@@ -1574,7 +1632,7 @@ class TradingAccountMixin:
         algo_id: Any = None,
         extra_data: Any = None,
         **kwargs: Any,
-    ) -> None:
+    ) -> tuple[str, list[dict[str, Any]], dict[str, Any]]:
         """
         Move positions between currencies
         :param symbol: Instrument ID
@@ -1612,7 +1670,9 @@ class TradingAccountMixin:
         return path, params, extra_data
 
     @staticmethod
-    def _move_positions_normalize_function(input_data: Any, extra_data: Any) -> None:
+    def _move_positions_normalize_function(
+        input_data: Any, extra_data: Any
+    ) -> tuple[list[Any], bool]:
         status = input_data["code"] == "0"
         if "data" not in input_data:
             return [], status
@@ -1628,7 +1688,7 @@ class TradingAccountMixin:
         algo_id: Any = None,
         extra_data: Any = None,
         **kwargs: Any,
-    ) -> None:
+    ) -> Any:
         """Move positions between currencies"""
         path, params, extra_data = self._move_positions(
             symbol, pos_id, ccy, algo_id, extra_data, **kwargs
@@ -1663,7 +1723,7 @@ class TradingAccountMixin:
         limit: Any = None,
         extra_data: Any = None,
         **kwargs: Any,
-    ) -> None:
+    ) -> tuple[str, dict[str, Any], dict[str, Any]]:
         """
         Get move positions history
         :param symbol: Instrument ID
@@ -1676,7 +1736,7 @@ class TradingAccountMixin:
         :return: path, params, extra_data
         """
         request_type = "get_move_positions_history"
-        params = {}
+        params: dict[str, Any] = {}
         if symbol:
             params["instId"] = symbol
         if ccy:
@@ -1703,7 +1763,9 @@ class TradingAccountMixin:
         return path, params, extra_data
 
     @staticmethod
-    def _get_move_positions_history_normalize_function(input_data: Any, extra_data: Any) -> None:
+    def _get_move_positions_history_normalize_function(
+        input_data: Any, extra_data: Any
+    ) -> tuple[list[Any], bool]:
         status = input_data["code"] == "0"
         if "data" not in input_data:
             return [], status
@@ -1720,7 +1782,7 @@ class TradingAccountMixin:
         limit: Any = None,
         extra_data: Any = None,
         **kwargs: Any,
-    ) -> None:
+    ) -> Any:
         """Get move positions history"""
         path, params, extra_data = self._get_move_positions_history(
             symbol, ccy, after, before, limit, extra_data, **kwargs
@@ -1754,7 +1816,7 @@ class TradingAccountMixin:
         auto_earn_type: Any = None,
         extra_data: Any = None,
         **kwargs: Any,
-    ) -> None:
+    ) -> tuple[str, dict[str, Any], dict[str, Any]]:
         """
         Set auto earn (automatic savings)
         :param ccy: Currency, e.g. `USDT`
@@ -1787,7 +1849,9 @@ class TradingAccountMixin:
         return path, params, extra_data
 
     @staticmethod
-    def _set_auto_earn_normalize_function(input_data: Any, extra_data: Any) -> None:
+    def _set_auto_earn_normalize_function(
+        input_data: Any, extra_data: Any
+    ) -> tuple[list[Any], bool]:
         status = input_data["code"] == "0"
         if "data" not in input_data:
             return [], status
@@ -1802,7 +1866,7 @@ class TradingAccountMixin:
         auto_earn_type: Any = None,
         extra_data: Any = None,
         **kwargs: Any,
-    ) -> None:
+    ) -> Any:
         """Set auto earn (automatic savings)"""
         path, params, extra_data = self._set_auto_earn(
             ccy, auto_earn, auto_earn_type, extra_data, **kwargs
@@ -1829,7 +1893,7 @@ class TradingAccountMixin:
 
     def _set_settle_currency(
         self, symbol: Any, ccy: Any, extra_data: Any = None, **kwargs: Any
-    ) -> None:
+    ) -> tuple[str, dict[str, Any], dict[str, Any]]:
         """
         Set settlement currency
         :param symbol: Instrument ID
@@ -1860,7 +1924,9 @@ class TradingAccountMixin:
         return path, params, extra_data
 
     @staticmethod
-    def _set_settle_currency_normalize_function(input_data: Any, extra_data: Any) -> None:
+    def _set_settle_currency_normalize_function(
+        input_data: Any, extra_data: Any
+    ) -> tuple[list[Any], bool]:
         status = input_data["code"] == "0"
         if "data" not in input_data:
             return [], status
@@ -1870,7 +1936,7 @@ class TradingAccountMixin:
 
     def set_settle_currency(
         self, symbol: Any, ccy: Any, extra_data: Any = None, **kwargs: Any
-    ) -> None:
+    ) -> Any:
         """Set settlement currency"""
         path, params, extra_data = self._set_settle_currency(symbol, ccy, extra_data, **kwargs)
         data = self.request(path, body=params, extra_data=extra_data)
@@ -1895,7 +1961,7 @@ class TradingAccountMixin:
         auto_mul: Any = None,
         extra_data: Any = None,
         **kwargs: Any,
-    ) -> None:
+    ) -> tuple[str, dict[str, Any], dict[str, Any]]:
         """
         Set trading config
         :param symbol: Instrument ID
@@ -1936,7 +2002,9 @@ class TradingAccountMixin:
         return path, params, extra_data
 
     @staticmethod
-    def _set_trading_config_normalize_function(input_data: Any, extra_data: Any) -> None:
+    def _set_trading_config_normalize_function(
+        input_data: Any, extra_data: Any
+    ) -> tuple[list[Any], bool]:
         status = input_data["code"] == "0"
         if "data" not in input_data:
             return [], status
@@ -1953,7 +2021,7 @@ class TradingAccountMixin:
         auto_mul: Any = None,
         extra_data: Any = None,
         **kwargs: Any,
-    ) -> None:
+    ) -> Any:
         """Set trading config"""
         path, params, extra_data = self._set_trading_config(
             symbol, pos_mode, auto_loan, auto_margin, auto_mul, extra_data, **kwargs
@@ -1982,7 +2050,7 @@ class TradingAccountMixin:
 
     def _set_delta_neutral_precheck(
         self, symbol: Any, delta_neutral_precheck: Any, extra_data: Any = None, **kwargs: Any
-    ) -> None:
+    ) -> tuple[str, dict[str, Any], dict[str, Any]]:
         """
         Set delta neutral precheck
         :param symbol: Instrument ID
@@ -2013,7 +2081,9 @@ class TradingAccountMixin:
         return path, params, extra_data
 
     @staticmethod
-    def _set_delta_neutral_precheck_normalize_function(input_data: Any, extra_data: Any) -> None:
+    def _set_delta_neutral_precheck_normalize_function(
+        input_data: Any, extra_data: Any
+    ) -> tuple[list[Any], bool]:
         status = input_data["code"] == "0"
         if "data" not in input_data:
             return [], status
@@ -2023,7 +2093,7 @@ class TradingAccountMixin:
 
     def set_delta_neutral_precheck(
         self, symbol: Any, delta_neutral_precheck: Any, extra_data: Any = None, **kwargs: Any
-    ) -> None:
+    ) -> Any:
         """Set delta neutral precheck"""
         path, params, extra_data = self._set_delta_neutral_precheck(
             symbol, delta_neutral_precheck, extra_data, **kwargs
@@ -2045,10 +2115,12 @@ class TradingAccountMixin:
 
     # ==================== Missing Trading Account APIs ====================
 
-    def _get_account_position_risk(self, extra_data: Any = None, **kwargs: Any) -> None:
+    def _get_account_position_risk(
+        self, extra_data: Any = None, **kwargs: Any
+    ) -> tuple[str, dict[str, Any], dict[str, Any]]:
         """Get account position risk"""
         request_type = "get_account_position_risk"
-        params = {}
+        params: dict[str, Any] = {}
         path = self._params.get_rest_path(request_type)
         extra_data = update_extra_data(
             extra_data,
@@ -2064,7 +2136,7 @@ class TradingAccountMixin:
             extra_data.update(kwargs)
         return path, params, extra_data
 
-    def get_account_position_risk(self, extra_data: Any = None, **kwargs: Any) -> None:
+    def get_account_position_risk(self, extra_data: Any = None, **kwargs: Any) -> Any:
         """Get account position risk"""
         path, params, extra_data = self._get_account_position_risk(extra_data, **kwargs)
         data = self.request(path, params=params, extra_data=extra_data)
@@ -2087,10 +2159,10 @@ class TradingAccountMixin:
         limit: Any = None,
         extra_data: Any = None,
         **kwargs: Any,
-    ) -> None:
+    ) -> tuple[str, dict[str, Any], dict[str, Any]]:
         """Get bills archive"""
         request_type = "get_bills_archive"
-        params = {}
+        params: dict[str, Any] = {}
         if year:
             params["year"] = str(year)
         if ccy:
@@ -2125,7 +2197,7 @@ class TradingAccountMixin:
         limit: Any = None,
         extra_data: Any = None,
         **kwargs: Any,
-    ) -> None:
+    ) -> Any:
         """Get bills archive"""
         path, params, extra_data = self._get_bills_archive(
             year, ccy, after, before, limit, extra_data, **kwargs
@@ -2160,7 +2232,7 @@ class TradingAccountMixin:
         mgn_mode: Any = None,
         extra_data: Any = None,
         **kwargs: Any,
-    ) -> None:
+    ) -> tuple[str, dict[str, Any], dict[str, Any]]:
         """Get adjust leverage info"""
         request_type = "get_adjust_leverage_info"
         params = {"instType": inst_type}
@@ -2193,7 +2265,7 @@ class TradingAccountMixin:
         mgn_mode: Any = None,
         extra_data: Any = None,
         **kwargs: Any,
-    ) -> None:
+    ) -> Any:
         """Get adjust leverage info"""
         path, params, extra_data = self._get_adjust_leverage_info(
             inst_type, uly, inst_id, mgn_mode, extra_data, **kwargs
@@ -2229,10 +2301,10 @@ class TradingAccountMixin:
         ccy: Any = None,
         extra_data: Any = None,
         **kwargs: Any,
-    ) -> None:
+    ) -> tuple[str, dict[str, Any], dict[str, Any]]:
         """Get max loan"""
         request_type = "get_max_loan"
-        params = {}
+        params: dict[str, Any] = {}
         if inst_type:
             params["instType"] = inst_type
         if symbol:
@@ -2271,7 +2343,7 @@ class TradingAccountMixin:
         ccy: Any = None,
         extra_data: Any = None,
         **kwargs: Any,
-    ) -> None:
+    ) -> Any:
         """Get max loan"""
         path, params, extra_data = self._get_max_loan(
             inst_type, symbol, uly, inst_id, mgn_mode, ccy, extra_data, **kwargs
@@ -2308,10 +2380,10 @@ class TradingAccountMixin:
         ccy: Any = None,
         extra_data: Any = None,
         **kwargs: Any,
-    ) -> None:
+    ) -> tuple[str, dict[str, Any], dict[str, Any]]:
         """Get interest accrued"""
         request_type = "get_interest_accrued"
-        params = {}
+        params: dict[str, Any] = {}
         if inst_type:
             params["instType"] = inst_type
         if uly:
@@ -2346,7 +2418,7 @@ class TradingAccountMixin:
         ccy: Any = None,
         extra_data: Any = None,
         **kwargs: Any,
-    ) -> None:
+    ) -> Any:
         """Get interest accrued"""
         path, params, extra_data = self._get_interest_accrued(
             inst_type, uly, inst_id, mgn_mode, ccy, extra_data, **kwargs
@@ -2380,10 +2452,10 @@ class TradingAccountMixin:
         inst_id: Any = None,
         extra_data: Any = None,
         **kwargs: Any,
-    ) -> None:
+    ) -> tuple[str, dict[str, Any], dict[str, Any]]:
         """Get greeks"""
         request_type = "get_greeks"
-        params = {}
+        params: dict[str, Any] = {}
         if inst_type:
             params["instType"] = inst_type
         if uly:
@@ -2412,7 +2484,7 @@ class TradingAccountMixin:
         inst_id: Any = None,
         extra_data: Any = None,
         **kwargs: Any,
-    ) -> None:
+    ) -> Any:
         """Get greeks"""
         path, params, extra_data = self._get_greeks(inst_type, uly, inst_id, extra_data, **kwargs)
         data = self.request(path, params=params, extra_data=extra_data)
@@ -2441,7 +2513,7 @@ class TradingAccountMixin:
         tier: Any = None,
         extra_data: Any = None,
         **kwargs: Any,
-    ) -> None:
+    ) -> tuple[str, dict[str, Any], dict[str, Any]]:
         """Get position tiers"""
         request_type = "get_position_tiers"
         params = {"instType": inst_type}
@@ -2474,7 +2546,7 @@ class TradingAccountMixin:
         tier: Any = None,
         extra_data: Any = None,
         **kwargs: Any,
-    ) -> None:
+    ) -> Any:
         """Get position tiers"""
         path, params, extra_data = self._get_position_tiers(
             inst_type, uly, inst_id, tier, extra_data, **kwargs
@@ -2500,10 +2572,12 @@ class TradingAccountMixin:
             callback=self.async_callback,
         )
 
-    def _get_max_withdrawal(self, ccy: Any = None, extra_data: Any = None, **kwargs: Any) -> None:
+    def _get_max_withdrawal(
+        self, ccy: Any = None, extra_data: Any = None, **kwargs: Any
+    ) -> tuple[str, dict[str, Any], dict[str, Any]]:
         """Get max withdrawal"""
         request_type = "get_max_withdrawal"
-        params = {}
+        params: dict[str, Any] = {}
         if ccy:
             params["ccy"] = ccy
         path = self._params.get_rest_path(request_type)
@@ -2521,7 +2595,7 @@ class TradingAccountMixin:
             extra_data.update(kwargs)
         return path, params, extra_data
 
-    def get_max_withdrawal(self, ccy: Any = None, extra_data: Any = None, **kwargs: Any) -> None:
+    def get_max_withdrawal(self, ccy: Any = None, extra_data: Any = None, **kwargs: Any) -> Any:
         """Get max withdrawal"""
         path, params, extra_data = self._get_max_withdrawal(ccy, extra_data, **kwargs)
         data = self.request(path, params=params, extra_data=extra_data)
@@ -2537,10 +2611,12 @@ class TradingAccountMixin:
             callback=self.async_callback,
         )
 
-    def _get_risk_state(self, extra_data: Any = None, **kwargs: Any) -> None:
+    def _get_risk_state(
+        self, extra_data: Any = None, **kwargs: Any
+    ) -> tuple[str, dict[str, Any], dict[str, Any]]:
         """Get risk state"""
         request_type = "get_risk_state"
-        params = {}
+        params: dict[str, Any] = {}
         path = self._params.get_rest_path(request_type)
         extra_data = update_extra_data(
             extra_data,
@@ -2556,7 +2632,7 @@ class TradingAccountMixin:
             extra_data.update(kwargs)
         return path, params, extra_data
 
-    def get_risk_state(self, extra_data: Any = None, **kwargs: Any) -> None:
+    def get_risk_state(self, extra_data: Any = None, **kwargs: Any) -> Any:
         """Get risk state"""
         path, params, extra_data = self._get_risk_state(extra_data, **kwargs)
         data = self.request(path, params=params, extra_data=extra_data)
@@ -2582,10 +2658,10 @@ class TradingAccountMixin:
         limit: Any = None,
         extra_data: Any = None,
         **kwargs: Any,
-    ) -> None:
+    ) -> tuple[str, dict[str, Any], dict[str, Any]]:
         """Get bills"""
         request_type = "get_bills"
-        params = {}
+        params: dict[str, Any] = {}
         if inst_type:
             params["instType"] = inst_type
         if uly:
@@ -2629,7 +2705,7 @@ class TradingAccountMixin:
         limit: Any = None,
         extra_data: Any = None,
         **kwargs: Any,
-    ) -> None:
+    ) -> Any:
         """Get bills"""
         path, params, extra_data = self._get_bills(
             inst_type, uly, inst_id, ccy, mgn_mode, after, before, limit, extra_data, **kwargs
@@ -2667,7 +2743,7 @@ class TradingAccountMixin:
         mgn_mode: Any = None,
         extra_data: Any = None,
         **kwargs: Any,
-    ) -> None:
+    ) -> tuple[str, dict[str, Any], dict[str, Any]]:
         """Get leverage info"""
         request_type = "get_lever"
         params = {"instType": inst_type}
@@ -2700,7 +2776,7 @@ class TradingAccountMixin:
         mgn_mode: Any = None,
         extra_data: Any = None,
         **kwargs: Any,
-    ) -> None:
+    ) -> Any:
         """Get leverage info"""
         path, params, extra_data = self._get_lever(
             inst_type, uly, inst_id, mgn_mode, extra_data, **kwargs

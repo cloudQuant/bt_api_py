@@ -12,7 +12,6 @@ from bt_api_py.registry import ExchangeRegistry
 
 def _wazirx_spot_subscribe_handler(feed: Any, topics: Any) -> None:
     """Placeholder subscribe handler for WazirX WebSocket."""
-    pass
 
 
 def register_wazirx() -> None:

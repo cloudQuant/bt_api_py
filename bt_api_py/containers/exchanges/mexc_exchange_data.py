@@ -34,7 +34,7 @@ def _get_mexc_config() -> Any | None:
             _mexc_config = load_exchange_config(config_path)
         _mexc_config_loaded = True
     except Exception as e:
-        logger.warn(f"Failed to load mexc.yaml config: {e}")
+        logger.warning(f"Failed to load mexc.yaml config: {e}")
     return _mexc_config
 
 
@@ -117,7 +117,7 @@ class MexcExchangeData(ExchangeData):
 
         # wss_paths: YAML 模板字符串 → {'params': [template], 'method': 'SUBSCRIBE', 'id': 1}
         if asset_cfg.wss_paths:
-            converted = {}
+            converted: dict[str, Any] = {}
             for key, value in asset_cfg.wss_paths.items():
                 if isinstance(value, str):
                     if value:
@@ -159,10 +159,10 @@ class MexcExchangeData(ExchangeData):
             return self.kline_periods[key]
         return key
 
-    def get_rest_path(self, key: str, **kwargs) -> str:
+    def get_rest_path(self, key: str, **kwargs: Any) -> str:
         if key not in self.rest_paths or self.rest_paths[key] == "":
             self.raise_path_error(self.exchange_name, key)
-        return self.rest_paths[key]
+        return str(self.rest_paths[key])
 
     def get_wss_path(self, **kwargs) -> str:
         """Get wss key path

@@ -42,11 +42,9 @@ def test_hyperliquid_data_container():
         assert data.get_leverage_limit("ETH") == 50
 
         print("✓ Hyperliquid data container tests passed")
-        pass
 
     except Exception as e:
         print(f"✗ Hyperliquid data container test failed: {e}")
-        pass
 
 
 def test_hyperliquid_request_data():
@@ -84,11 +82,9 @@ def test_hyperliquid_request_data():
         assert callable(request_data.get_recent_trades)
 
         print("✓ Hyperliquid request data tests passed")
-        pass
 
     except Exception as e:
         print(f"✗ Hyperliquid request data test failed: {e}")
-        pass
 
 
 def test_hyperliquid_error_translator():
@@ -119,11 +115,9 @@ def test_hyperliquid_error_translator():
             assert result == expected, f"Expected {expected}, got {result} for {error_msg}"
 
         print("✓ Hyperliquid error translator tests passed")
-        pass
 
     except Exception as e:
         print(f"✗ Hyperliquid error translator test failed: {e}")
-        pass
 
 
 def main():

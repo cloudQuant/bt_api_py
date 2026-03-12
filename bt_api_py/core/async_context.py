@@ -4,12 +4,22 @@ Async context manager utilities for modern bt_api_py.
 
 import asyncio
 import time
-from collections.abc import AsyncGenerator, Callable
+from collections.abc import AsyncGenerator, Awaitable, Callable
 from contextlib import asynccontextmanager
+from dataclasses import dataclass
 from functools import wraps
 from typing import Any, TypeVar
 
 T = TypeVar("T")
+
+
+@dataclass
+class _CircuitState:
+    """Circuit breaker state with proper types for mypy."""
+
+    failures: int = 0
+    last_failure: float | None = None
+    state: str = "CLOSED"
 
 
 class AsyncContextManager:
@@ -63,31 +73,32 @@ class AsyncContextManager:
     async def circuit_breaker(
         failure_threshold: int = 5,
         recovery_timeout: float = 60.0,
-        expected_exception: type = Exception,
+        expected_exception: type[BaseException] = Exception,
     ) -> AsyncGenerator[None, None]:
         """Async context manager with circuit breaker pattern."""
-        state = {"failures": 0, "last_failure": None, "state": "CLOSED"}
+        state = _CircuitState()
 
-        def should_attempt():
-            if state["state"] == "CLOSED":
+        def should_attempt() -> bool:
+            if state.state == "CLOSED":
                 return True
-            elif state["state"] == "OPEN":
-                if time.time() - state["last_failure"] > recovery_timeout:
-                    state["state"] = "HALF_OPEN"
+            elif state.state == "OPEN":
+                last_f = state.last_failure
+                if last_f is not None and time.time() - last_f > recovery_timeout:
+                    state.state = "HALF_OPEN"
                     return True
                 return False
             else:  # HALF_OPEN
                 return True
 
-        def on_success():
-            state["failures"] = 0
-            state["state"] = "CLOSED"
+        def on_success() -> None:
+            state.failures = 0
+            state.state = "CLOSED"
 
-        def on_failure():
-            state["failures"] += 1
-            state["last_failure"] = time.time()
-            if state["failures"] >= failure_threshold:
-                state["state"] = "OPEN"
+        def on_failure() -> None:
+            state.failures += 1
+            state.last_failure = time.time()
+            if state.failures >= failure_threshold:
+                state.state = "OPEN"
 
         if not should_attempt():
             raise RuntimeError("Circuit breaker is OPEN")
@@ -108,15 +119,16 @@ def async_retry(
 ):
     """Decorator for async functions with retry logic."""
 
-    def decorator(func: Callable[..., T]) -> Callable[..., T]:
+    def decorator(func: Callable[..., Awaitable[T]]) -> Callable[..., Awaitable[T]]:
         @wraps(func)
-        async def wrapper(*args, **kwargs) -> T:
+        async def wrapper(*args: Any, **kwargs: Any) -> T:
             attempt = 0
             current_delay = delay
 
             while attempt < max_attempts:
                 try:
-                    return await func(*args, **kwargs)
+                    result = await func(*args, **kwargs)
+                    return result
                 except exceptions:
                     attempt += 1
                     if attempt >= max_attempts:
@@ -124,6 +136,8 @@ def async_retry(
 
                     await asyncio.sleep(current_delay)
                     current_delay *= backoff
+
+            raise RuntimeError("Unreachable")  # satisfy mypy
 
         return wrapper
 
@@ -133,9 +147,9 @@ def async_retry(
 def async_timeout(timeout_seconds: float):
     """Decorator for async functions with timeout."""
 
-    def decorator(func: Callable[..., T]) -> Callable[..., T]:
+    def decorator(func: Callable[..., Awaitable[T]]) -> Callable[..., Awaitable[T]]:
         @wraps(func)
-        async def wrapper(*args, **kwargs) -> T:
+        async def wrapper(*args: Any, **kwargs: Any) -> T:
             return await asyncio.wait_for(func(*args, **kwargs), timeout=timeout_seconds)
 
         return wrapper
@@ -144,36 +158,38 @@ def async_timeout(timeout_seconds: float):
 
 
 def async_circuit_breaker(
-    failure_threshold: int = 5, recovery_timeout: float = 60.0, expected_exception: type = Exception
-):
+    failure_threshold: int = 5,
+    recovery_timeout: float = 60.0,
+    expected_exception: type[BaseException] = Exception,
+) -> Callable[[Callable[..., Awaitable[T]]], Callable[..., Awaitable[T]]]:
     """Decorator for async functions with circuit breaker."""
 
-    def decorator(func: Callable[..., T]) -> Callable[..., T]:
-        # Store circuit breaker state in function attribute
-        state = {"failures": 0, "last_failure": None, "state": "CLOSED"}
+    def decorator(func: Callable[..., Awaitable[T]]) -> Callable[..., Awaitable[T]]:
+        state = _CircuitState()
 
         @wraps(func)
-        async def wrapper(*args, **kwargs) -> T:
-            def should_attempt():
-                if state["state"] == "CLOSED":
+        async def wrapper(*args: Any, **kwargs: Any) -> T:
+            def should_attempt() -> bool:
+                if state.state == "CLOSED":
                     return True
-                elif state["state"] == "OPEN":
-                    if time.time() - state["last_failure"] > recovery_timeout:
-                        state["state"] = "HALF_OPEN"
+                elif state.state == "OPEN":
+                    last_f = state.last_failure
+                    if last_f is not None and time.time() - last_f > recovery_timeout:
+                        state.state = "HALF_OPEN"
                         return True
                     return False
                 else:  # HALF_OPEN
                     return True
 
-            def on_success():
-                state["failures"] = 0
-                state["state"] = "CLOSED"
+            def on_success() -> None:
+                state.failures = 0
+                state.state = "CLOSED"
 
-            def on_failure():
-                state["failures"] += 1
-                state["last_failure"] = time.time()
-                if state["failures"] >= failure_threshold:
-                    state["state"] = "OPEN"
+            def on_failure() -> None:
+                state.failures += 1
+                state.last_failure = time.time()
+                if state.failures >= failure_threshold:
+                    state.state = "OPEN"
 
             if not should_attempt():
                 raise RuntimeError("Circuit breaker is OPEN")
@@ -194,10 +210,10 @@ def async_circuit_breaker(
 class AsyncRateLimiter:
     """Async rate limiter implementation."""
 
-    def __init__(self, max_requests: int, time_window: float) -> Any | None:
+    def __init__(self, max_requests: int, time_window: float) -> None:
         self.max_requests = max_requests
         self.time_window = time_window
-        self.requests = []
+        self.requests: list[float] = []
         self._lock = asyncio.Lock()
 
     async def acquire(self) -> None:
@@ -227,7 +243,7 @@ class AsyncRateLimiter:
 class AsyncSemaphore:
     """Async semaphore with timeout support."""
 
-    def __init__(self, max_concurrent: int) -> Any | None:
+    def __init__(self, max_concurrent: int) -> None:
         self._semaphore = asyncio.Semaphore(max_concurrent)
 
     async def acquire(self, timeout: float | None = None) -> None:
@@ -257,8 +273,8 @@ class AsyncSemaphore:
 class AsyncQueue:
     """Async queue with timeout and priority support."""
 
-    def __init__(self, maxsize: int = 0) -> Any | None:
-        self._queue = asyncio.Queue(maxsize=maxsize)
+    def __init__(self, maxsize: int = 0) -> None:
+        self._queue: asyncio.Queue[Any] = asyncio.Queue(maxsize=maxsize)
 
     async def put(self, item: Any, timeout: float | None = None) -> None:
         """Put item with optional timeout."""
@@ -296,8 +312,8 @@ class AsyncQueue:
 class AsyncTaskGroup:
     """Manage group of async tasks with proper cleanup."""
 
-    def __init__(self) -> Any | None:
-        self._tasks = set()
+    def __init__(self) -> None:
+        self._tasks: set[asyncio.Task[Any]] = set()
         self._shutdown = False
 
     async def create_task(self, coro) -> asyncio.Task:

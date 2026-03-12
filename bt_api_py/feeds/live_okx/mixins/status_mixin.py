@@ -3,6 +3,7 @@ OKX API - StatusMixin
 Auto-generated from request_base.py
 """
 
+from collections.abc import Callable
 from typing import Any
 
 from bt_api_py.functions.utils import update_extra_data
@@ -11,9 +12,19 @@ from bt_api_py.functions.utils import update_extra_data
 class StatusMixin:
     """Mixin providing OKX API methods."""
 
+    _params: Any
+    asset_type: str
+    exchange_name: str
+    request: Callable[..., Any]
+    submit: Callable[..., Any]
+    async_request: Callable[..., Any]
+    async_callback: Callable[..., Any]
+
     # ==================== Status/Announcement APIs ====================
 
-    def _get_system_status(self, state: Any = None, extra_data: Any = None, **kwargs: Any) -> None:
+    def _get_system_status(
+        self, state: Any = None, extra_data: Any = None, **kwargs: Any
+    ) -> tuple[str, dict[str, Any], dict[str, Any]]:
         """Get system status (maintenance, degraded, etc.)
         Args:
             state: Status type. "scheduled" for maintenance announcements. Default is empty for current system status.
@@ -21,7 +32,7 @@ class StatusMixin:
             kwargs: pass key-worded, variable-length arguments.
         """
         request_type = "get_system_status"
-        params = {}
+        params: dict[str, Any] = {}
         if state is not None:
             params["state"] = state
         path = self._params.get_rest_path(request_type)
@@ -40,7 +51,9 @@ class StatusMixin:
         return path, params, extra_data
 
     @staticmethod
-    def _get_system_status_normalize_function(input_data: Any, extra_data: Any) -> None:
+    def _get_system_status_normalize_function(
+        input_data: Any, extra_data: Any
+    ) -> tuple[list[Any], bool]:
         """Normalize system status response
         Returns: (status_list, status_bool) where status_list contains system status data
         """
@@ -49,7 +62,7 @@ class StatusMixin:
             return [], status
         return input_data["data"], status
 
-    def get_system_status(self, state: Any = None, extra_data: Any = None, **kwargs: Any) -> None:
+    def get_system_status(self, state: Any = None, extra_data: Any = None, **kwargs: Any) -> Any:
         """Get system status
         Args:
             state: Status type. "scheduled" for maintenance announcements. Default is empty for current system status.
@@ -80,7 +93,7 @@ class StatusMixin:
         limit: Any = None,
         extra_data: Any = None,
         **kwargs: Any,
-    ) -> None:
+    ) -> tuple[str, dict[str, Any], dict[str, Any]]:
         """Get announcements
         Args:
             announcement_type: Announcement type. Default is empty for all types.
@@ -90,7 +103,7 @@ class StatusMixin:
             kwargs: pass key-worded, variable-length arguments.
         """
         request_type = "get_announcements"
-        params = {}
+        params: dict[str, Any] = {}
         if announcement_type is not None:
             params["announcementType"] = announcement_type
         if page is not None:
@@ -113,7 +126,9 @@ class StatusMixin:
         return path, params, extra_data
 
     @staticmethod
-    def _get_announcements_normalize_function(input_data: Any, extra_data: Any) -> None:
+    def _get_announcements_normalize_function(
+        input_data: Any, extra_data: Any
+    ) -> tuple[list[Any], bool]:
         """Normalize announcements response
         Returns: (announcement_list, status_bool) where announcement_list contains announcement data
         """
@@ -132,7 +147,7 @@ class StatusMixin:
         limit: Any = None,
         extra_data: Any = None,
         **kwargs: Any,
-    ) -> None:
+    ) -> Any:
         """Get announcements
         Args:
             announcement_type: Announcement type. Default is empty for all types.
@@ -169,14 +184,16 @@ class StatusMixin:
             callback=self.async_callback,
         )
 
-    def _get_announcement_types(self, extra_data: Any = None, **kwargs: Any) -> None:
+    def _get_announcement_types(
+        self, extra_data: Any = None, **kwargs: Any
+    ) -> tuple[str, dict[str, Any], dict[str, Any]]:
         """Get announcement types
         Args:
             extra_data: extra_data, default is None, can be a dict passed by user
             kwargs: pass key-worded, variable-length arguments.
         """
         request_type = "get_announcement_types"
-        params = {}
+        params: dict[str, Any] = {}
         path = self._params.get_rest_path(request_type)
         extra_data = update_extra_data(
             extra_data,
@@ -193,7 +210,9 @@ class StatusMixin:
         return path, params, extra_data
 
     @staticmethod
-    def _get_announcement_types_normalize_function(input_data: Any, extra_data: Any) -> None:
+    def _get_announcement_types_normalize_function(
+        input_data: Any, extra_data: Any
+    ) -> tuple[Any, bool]:
         """Normalize announcement types response
         Returns: (type_list, status_bool) where type_list contains announcement type data
         """
@@ -205,7 +224,7 @@ class StatusMixin:
             return input_data["data"][0]["announcementType"], status
         return input_data["data"], status
 
-    def get_announcement_types(self, extra_data: Any = None, **kwargs: Any) -> None:
+    def get_announcement_types(self, extra_data: Any = None, **kwargs: Any) -> Any:
         """Get announcement types
         Args:
             extra_data: extra_data, default is None, can be a dict passed by user

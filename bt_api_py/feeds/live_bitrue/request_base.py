@@ -10,6 +10,7 @@ Symbol format: BTCUSDT (concatenated uppercase).
 import hashlib
 import hmac
 import time
+from typing import Any
 from urllib.parse import urlencode
 
 from bt_api_py.containers.exchanges.bitrue_exchange_data import BitrueExchangeDataSpot
@@ -23,7 +24,7 @@ class BitrueRequestData(Feed):
     """Bitrue REST API Feed base class."""
 
     @classmethod
-    def _capabilities(cls):
+    def _capabilities(cls) -> set[Capability]:
         return {
             Capability.GET_TICK,
             Capability.GET_DEPTH,
@@ -39,7 +40,7 @@ class BitrueRequestData(Feed):
             Capability.GET_SERVER_TIME,
         }
 
-    def __init__(self, data_queue, **kwargs):
+    def __init__(self, data_queue: Any = None, **kwargs: Any) -> None:
         super().__init__(data_queue, **kwargs)
         self.data_queue = data_queue
         self._api_key = kwargs.get("public_key") or kwargs.get("api_key") or ""
@@ -79,7 +80,7 @@ class BitrueRequestData(Feed):
     def request(self, path, params=None, body=None, extra_data=None, timeout=10, is_sign=False):
         """Synchronous HTTP request using Feed.http_request()."""
         if params is None:
-            params = {}
+            params: dict[str, Any] = {}
         method, endpoint = path.split(" ", 1)
 
         headers = {"Content-Type": "application/json"}
@@ -110,7 +111,7 @@ class BitrueRequestData(Feed):
     ):
         """Async HTTP request using Feed.async_http_request()."""
         if params is None:
-            params = {}
+            params: dict[str, Any] = {}
         method, endpoint = path.split(" ", 1)
 
         headers = {"Content-Type": "application/json"}
@@ -144,7 +145,7 @@ class BitrueRequestData(Feed):
 
     def _get_server_time(self, extra_data=None, **kwargs):
         path = self._params.get_rest_path("get_server_time")
-        params = {}
+        params: dict[str, Any] = {}
         extra_data = extra_data or {}
         extra_data.update(
             {
@@ -159,7 +160,7 @@ class BitrueRequestData(Feed):
 
     def _get_exchange_info(self, extra_data=None, **kwargs):
         path = self._params.get_rest_path("get_exchange_info")
-        params = {}
+        params: dict[str, Any] = {}
         extra_data = extra_data or {}
         extra_data.update(
             {
@@ -271,7 +272,7 @@ class BitrueRequestData(Feed):
 
     def _cancel_order(self, symbol=None, order_id=None, extra_data=None, **kwargs):
         path = self._params.get_rest_path("cancel_order")
-        params = {}
+        params: dict[str, Any] = {}
         if symbol:
             params["symbol"] = self._params.get_symbol(symbol)
         if order_id:
@@ -290,7 +291,7 @@ class BitrueRequestData(Feed):
 
     def _query_order(self, symbol=None, order_id=None, extra_data=None, **kwargs):
         path = self._params.get_rest_path("query_order")
-        params = {}
+        params: dict[str, Any] = {}
         if symbol:
             params["symbol"] = self._params.get_symbol(symbol)
         if order_id:
@@ -309,7 +310,7 @@ class BitrueRequestData(Feed):
 
     def _get_open_orders(self, symbol=None, extra_data=None, **kwargs):
         path = self._params.get_rest_path("get_open_orders")
-        params = {}
+        params: dict[str, Any] = {}
         if symbol:
             params["symbol"] = self._params.get_symbol(symbol)
         extra_data = extra_data or {}
@@ -326,7 +327,7 @@ class BitrueRequestData(Feed):
 
     def _get_deals(self, symbol=None, extra_data=None, **kwargs):
         path = self._params.get_rest_path("get_deals")
-        params = {}
+        params: dict[str, Any] = {}
         if symbol:
             params["symbol"] = self._params.get_symbol(symbol)
         params["limit"] = kwargs.get("limit", 50)
@@ -344,7 +345,7 @@ class BitrueRequestData(Feed):
 
     def _get_account(self, extra_data=None, **kwargs):
         path = self._params.get_rest_path("get_account")
-        params = {}
+        params: dict[str, Any] = {}
         extra_data = extra_data or {}
         extra_data.update(
             {
@@ -359,7 +360,7 @@ class BitrueRequestData(Feed):
 
     def _get_balance(self, extra_data=None, **kwargs):
         path = self._params.get_rest_path("get_balance")
-        params = {}
+        params: dict[str, Any] = {}
         extra_data = extra_data or {}
         extra_data.update(
             {

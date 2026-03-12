@@ -173,7 +173,7 @@ class ConnectionPool(Generic[T]):
         """Remove idle connections exceeding max_idle_time."""
         with self._lock:
             now = time.time()
-            new_pool = deque()
+            new_pool: deque[tuple[T, float]] = deque()
 
             for conn, last_used in self._pool:
                 if now - last_used > self._max_idle_time:
@@ -193,8 +193,8 @@ class ConnectionPool(Generic[T]):
         """Close a connection (override for custom cleanup)."""
         if hasattr(conn, "close"):
             try:
-                conn.close()  # type: ignore
-            except Exception as e:
+                conn.close()
+            except (OSError, ConnectionError) as e:
                 _logger.debug(f"Error closing connection: {e}")
 
     def size(self) -> tuple[int, int]:

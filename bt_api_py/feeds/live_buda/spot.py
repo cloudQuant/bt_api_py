@@ -2,6 +2,8 @@
 Buda Spot Feed implementation.
 """
 
+from typing import Any
+
 from bt_api_py.feeds.capability import Capability
 from bt_api_py.feeds.live_buda.request_base import BudaRequestData
 
@@ -10,7 +12,7 @@ class BudaRequestDataSpot(BudaRequestData):
     """Buda Spot Feed for market data."""
 
     @classmethod
-    def _capabilities(cls):
+    def _capabilities(cls) -> set[Capability]:
         return {
             Capability.GET_TICK,
             Capability.GET_DEPTH,
@@ -22,7 +24,7 @@ class BudaRequestDataSpot(BudaRequestData):
             Capability.CANCEL_ORDER,
         }
 
-    def __init__(self, data_queue, **kwargs):
+    def __init__(self, data_queue: Any = None, **kwargs: Any) -> None:
         super().__init__(data_queue, **kwargs)
         self.exchange_name = kwargs.get("exchange_name", "BUDA___SPOT")
 

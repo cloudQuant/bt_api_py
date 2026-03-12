@@ -17,7 +17,7 @@ from bt_api_py.logging_factory import get_logger
 class GateioRequestDataSpot(GateioRequestData):
     """Gate.io Spot Trading Feed"""
 
-    def __init__(self, data_queue, **kwargs) -> None:
+    def __init__(self, data_queue: Any = None, **kwargs: Any) -> None:
         kwargs["asset_type"] = "spot"
         kwargs.setdefault("logger_name", "gateio_spot_feed.log")
         super().__init__(data_queue, **kwargs)
@@ -179,7 +179,7 @@ class GateioRequestDataSpot(GateioRequestData):
     def get_exchange_info(self, symbol=None, extra_data=None, **kwargs) -> Any:
         request_type = "get_currency_pairs"
         path = self._params.get_rest_path(request_type)
-        params = {}
+        params: dict[str, Any] = {}
         extra_data = update_extra_data(
             extra_data,
             request_type=request_type,
@@ -195,7 +195,7 @@ class GateioRequestDataSpot(GateioRequestData):
     def _get_balance(self, extra_data=None, **kwargs) -> Any:
         request_type = "get_account"
         path = self._params.get_rest_path(request_type)
-        params = {}
+        params: dict[str, Any] = {}
         extra_data = update_extra_data(
             extra_data,
             request_type=request_type,
@@ -427,10 +427,6 @@ class GateioRequestDataSpot(GateioRequestData):
 class GateioMarketWssDataSpot:
     """Placeholder for Gate.io Spot Market WebSocket data handler."""
 
-    pass
-
 
 class GateioAccountWssDataSpot:
     """Placeholder for Gate.io Spot Account WebSocket data handler."""
-
-    pass

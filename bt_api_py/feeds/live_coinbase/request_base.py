@@ -44,7 +44,7 @@ class CoinbaseRequestData(Feed):
     # noinspection PyMethodMayBeStatic
     def signature(
         self, timestamp: Any, method: Any, request_path: Any, secret_key: Any, body: Any = ""
-    ) -> None:
+    ) -> str:
         """Generate Coinbase API signature (HMAC SHA256).
 
         Args:
@@ -66,7 +66,7 @@ class CoinbaseRequestData(Feed):
         return base64.b64encode(mac.digest()).decode()
 
     # noinspection PyMethodMayBeStatic
-    def get_header(self, api_key: Any, sign: Any, timestamp: Any) -> None:
+    def get_header(self, api_key: Any, sign: Any, timestamp: Any) -> dict[str, str]:
         """Generate request headers with authentication.
 
         Args:
@@ -100,7 +100,7 @@ class CoinbaseRequestData(Feed):
         extra_data: Any = None,
         timeout: Any = 10,
         is_sign: Any = False,
-    ) -> None:
+    ) -> RequestData:
         """HTTP request function using Feed.http_request().
 
         Args:
@@ -115,7 +115,7 @@ class CoinbaseRequestData(Feed):
             RequestData object
         """
         if params is None:
-            params = {}
+            params: dict[str, Any] = {}
         method, endpoint = path.split(" ", 1)
 
         # Build URL with query string
@@ -154,7 +154,7 @@ class CoinbaseRequestData(Feed):
             RequestData object
         """
         if params is None:
-            params = {}
+            params: dict[str, Any] = {}
         method, endpoint = path.split(" ", 1)
 
         query_string = parse.urlencode(params) if params else ""
@@ -185,4 +185,4 @@ class CoinbaseRequestData(Feed):
             result = future.result()
             self.push_data_to_queue(result)
         except Exception as e:
-            self.async_logger.warn(f"async_callback::{e}")
+            self.async_logger.warning(f"async_callback::{e}")

@@ -29,6 +29,8 @@ class CtpGatewayAdapter(BaseGatewayAdapter):
         self.feed = CtpRequestDataFuture(None, **normalized)
         self.aliases: dict[str, set[str]] = defaultdict(set)
         self.last_volume: dict[str, float] = {}
+        self.last_price: dict[str, float] = {}
+        self._price_ticks: dict[str, float] = {}
         self.running = False
         self.thread: threading.Thread | None = None
         self.timeout = float(normalized.get("gateway_startup_timeout_sec", 10.0) or 10.0)
@@ -86,12 +88,45 @@ class CtpGatewayAdapter(BaseGatewayAdapter):
             out.append({"instrument": row.get_symbol_name(), "direction": row.get_position_direction(), "volume": row.get_position_volume(), "price": row.get_avg_price(), "exchange_id": row.exchange_id})
         return out
 
+    def _get_price_tick(self, instrument: str) -> float:
+        """Return the minimum price tick for *instrument*."""
+        cached = self._price_ticks.get(instrument)
+        if cached is not None:
+            return cached
+        try:
+            trader = self.feed.trader_client
+            if trader and hasattr(trader, "query_instrument"):
+                info = trader.query_instrument(instrument, timeout=2)
+                if info and hasattr(info, "PriceTick"):
+                    tick = float(info.PriceTick or 0)
+                    if tick > 0:
+                        self._price_ticks[instrument] = tick
+                        return tick
+        except Exception:
+            pass
+        return 1.0
+
     def place_order(self, payload: dict[str, Any]) -> dict[str, Any]:
         name = str(payload.get("data_name") or payload.get("symbol") or "").strip()
         instrument, exchange_id = _split(name)
         side = str(payload.get("side") or "buy").lower()
-        kind = "market" if "market" in str(payload.get("order_type") or "").lower() else "limit"
-        rsp = self.feed.make_order(instrument or name, volume=payload.get("size") or 0, price=payload.get("price"), order_type=f"{side}-{kind}", offset=str(payload.get("offset") or "open"), client_order_id=payload.get("client_order_id") or payload.get("bt_order_ref"), exchange_id=exchange_id or payload.get("exchange_id") or "")
+        is_market = "market" in str(payload.get("order_type") or "").lower()
+        price = payload.get("price")
+
+        if is_market or (price is not None and float(price) <= 0):
+            lp = self.last_price.get(instrument or name)
+            if not lp or lp <= 0:
+                raise RuntimeError(
+                    f"CTP market order for {instrument or name} rejected: "
+                    f"no recent tick price available to convert to limit order"
+                )
+            pt = self._get_price_tick(instrument or name)
+            slippage = pt * 5
+            price = (lp + slippage) if side == "buy" else max(lp - slippage, pt)
+            price = round(price, 4)
+
+        kind = "limit"
+        rsp = self.feed.make_order(instrument or name, volume=payload.get("size") or 0, price=price, order_type=f"{side}-{kind}", offset=str(payload.get("offset") or "open"), client_order_id=payload.get("client_order_id") or payload.get("bt_order_ref"), exchange_id=exchange_id or payload.get("exchange_id") or "")
         if not rsp.get_status():
             raise RuntimeError("ctp order failed")
         row = rsp.get_data()[0].init_data()
@@ -125,6 +160,7 @@ class CtpGatewayAdapter(BaseGatewayAdapter):
         price = float(row.get_last_price() or 0.0)
         if not instrument or price <= 0:
             return
+        self.last_price[instrument] = price
         total = float(row.get_last_volume() or 0.0)
         prev = self.last_volume.get(instrument)
         self.last_volume[instrument] = total

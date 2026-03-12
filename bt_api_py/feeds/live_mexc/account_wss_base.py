@@ -7,6 +7,7 @@ Provides base functionality for MEXC account data WebSocket connections.
 import json
 import threading
 import time
+from typing import Any
 
 import websocket
 
@@ -16,33 +17,27 @@ from bt_api_py.logging_factory import get_logger
 class MexcAccountWssData:
     """Base class for MEXC account data WebSocket connections"""
 
-    def __init__(self, data_queue, **kwargs):
+    def __init__(self, data_queue: Any = None, **kwargs: Any) -> None:
         self.data_queue = data_queue
         self.wss_url = kwargs.get("wss_url", "")
         self.exchange_data = kwargs.get("exchange_data")
         self.topics = kwargs.get("topics", [])
         self.logger_name = kwargs.get("logger_name", "mexc_account_wss.log")
-        self.request_logger = None
+        self.request_logger = get_logger("mexc_account_wss")
+        self.logger = self.request_logger
 
         # WebSocket connection state
-        self.ws = None
+        self.ws: websocket.WebSocketApp | None = None
         self.is_running = False
         self.reconnect_interval = 5
         self.max_reconnect_attempts = 10
         self.reconnect_attempts = 0
 
         # Thread management
-        self.thread = None
+        self.thread: threading.Thread | None = None
 
         # Listen key for user data stream
-        self.listen_key = None
-
-        # Create logger
-        self._setup_logger()
-
-    def _setup_logger(self):
-        """Setup logger for the WebSocket connection"""
-        self.request_logger = get_logger("mexc_account_wss")
+        self.listen_key: str | None = None
 
     def start(self):
         """Start the WebSocket connection"""
@@ -136,7 +131,8 @@ class MexcAccountWssData:
             subscription = {"method": "SUBSCRIPTION", "params": [topic]}
 
             message = json.dumps(subscription)
-            self.ws.send(message)
+            if self.ws is not None:
+                self.ws.send(message)
             self.logger.info(f"Subscribed to: {topic}")
 
         except Exception as e:
@@ -155,7 +151,6 @@ class MexcAccountWssData:
     def _process_message(self, data):
         """Process incoming message data"""
         # This method should be overridden by subclasses
-        pass
 
     def _on_error(self, ws, error):
         """Handle WebSocket errors"""

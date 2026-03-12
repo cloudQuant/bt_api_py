@@ -28,7 +28,7 @@ def _get_pancakeswap_config() -> Any | None:
             _pancakeswap_config = load_exchange_config(config_path)
         _pancakeswap_config_loaded = True
     except Exception as e:
-        logger.warn(f"Failed to load pancakeswap.yaml config: {e}")
+        logger.warning(f"Failed to load pancakeswap.yaml config: {e}")
     return _pancakeswap_config
 
 
@@ -223,16 +223,16 @@ class PancakeSwapExchangeData(ExchangeData):
 
         # 添加稳定币
         stablecoins = tokens_dict.get("stablecoins", [])
-        for stable in stablecoins:
-            tokens.append(
-                {
-                    "symbol": stable.get("symbol", ""),
-                    "name": stable.get("name", ""),
-                    "address": stable.get("address", ""),
-                    "decimals": stable.get("decimals", 18),
-                    "type": "stablecoin",
-                }
-            )
+        tokens.extend(
+            {
+                "symbol": s.get("symbol", ""),
+                "name": s.get("name", ""),
+                "address": s.get("address", ""),
+                "decimals": s.get("decimals", 18),
+                "type": "stablecoin",
+            }
+            for s in stablecoins
+        )
 
         return tokens
 
@@ -256,8 +256,9 @@ class PancakeSwapExchangeData(ExchangeData):
         pairs_dict = asset_cfg.pairs if hasattr(asset_cfg, "pairs") else {}
         for category in ["major", "popular", "emerging"]:
             category_pairs = pairs_dict.get(category, [])
-            for pair in category_pairs:
-                pairs.append({"symbol": pair, "category": category, "enabled": True})
+            pairs.extend(
+                {"symbol": p, "category": category, "enabled": True} for p in category_pairs
+            )
 
         return pairs
 
@@ -518,7 +519,7 @@ class PancakeSwapExchangeData(ExchangeData):
         if config is None:
             return False
 
-        for _network_name, network_config in config.networks.items():
+        for network_config in config.networks.values():
             if network_config.chain_id == chain_id:
                 return True
 

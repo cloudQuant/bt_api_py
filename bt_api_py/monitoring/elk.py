@@ -7,7 +7,7 @@ Provides Elasticsearch, Logstash, and Kibana integration for log aggregation and
 import asyncio
 import logging
 from datetime import datetime
-from typing import Any
+from typing import Any, cast
 
 from bt_api_py.logging_factory import get_logger
 from bt_api_py.logging_system import LogEvent
@@ -35,7 +35,7 @@ class ElasticsearchClient:
         self.password = password
         self.use_ssl = use_ssl
         self.verify_certs = verify_certs
-        self._session = None
+        self._session: Any = None
 
     async def connect(self) -> None:
         """Connect to Elasticsearch."""
@@ -53,7 +53,7 @@ class ElasticsearchClient:
         if self.username and self.password:
             auth = aiohttp.BasicAuth(self.username, self.password)
 
-        connector = aiohttp.TCPConnector(ssl=self.verify_certs if self.use_ssl else None)
+        connector = aiohttp.TCPConnector(ssl=self.verify_certs if self.use_ssl else False)
 
         self._session = aiohttp.ClientSession(base_url=base_url, auth=auth, connector=connector)
 
@@ -97,7 +97,8 @@ class ElasticsearchClient:
                 error_text = await response.text()
                 raise RuntimeError(f"Failed to index document: {response.status} - {error_text}")
 
-            return await response.json()
+            result = await response.json()
+            return cast("dict[str, Any]", result)
 
     async def create_index_template(self) -> None:
         """Create index template for bt_api_py logs."""
@@ -163,7 +164,7 @@ class LogstashHandler(logging.Handler):
         self.host = host
         self.port = port
         self.transport = transport
-        self._writer = None
+        self._writer: Any = None
         self._kwargs = kwargs
 
     async def connect(self) -> None:
@@ -201,7 +202,7 @@ class LogstashHandler(logging.Handler):
     def format_to_logstash(self, record: logging.LogRecord) -> dict[str, Any]:
         """Format log record for Logstash."""
         # Create base log event
-        log_data = {
+        log_data: dict[str, Any] = {
             "@timestamp": datetime.fromtimestamp(record.created).isoformat(),
             "level": record.levelname,
             "message": record.getMessage(),
@@ -237,11 +238,11 @@ class LogstashHandler(logging.Handler):
             log_data["session_id"] = session_id
 
         # Add exception info if present
-        if record.exc_info:
+        if record.exc_info and record.exc_info[0] is not None:
             log_data["exception"] = {
                 "type": record.exc_info[0].__name__,
                 "message": str(record.exc_info[1]),
-                "traceback": self.formatException(record.exc_info),
+                "traceback": logging.Formatter().formatException(record.exc_info),
             }
 
         # Add file and line info
@@ -292,9 +293,9 @@ class LogstashHandler(logging.Handler):
                         # Log error but don't raise to avoid recursion
                         logger.warning(f"Failed to send log to Logstash: {response.status}")
 
-        except Exception:
-            # Silently ignore to avoid recursion
-            pass
+        except Exception as e:
+            # Log at debug to avoid recursion (don't ship this to Logstash)
+            logger.debug("Failed to send log to Logstash: %s", e, exc_info=True)
 
 
 class ELKIntegration:
@@ -354,7 +355,7 @@ class ELKIntegration:
             raise RuntimeError("Not connected to ELK stack")
 
         # Convert event to document
-        doc = {
+        doc: dict[str, Any] = {
             "timestamp": datetime.fromtimestamp(event.timestamp).isoformat(),
             "level": event.level,
             "message": event.message,
@@ -375,11 +376,11 @@ class ELKIntegration:
             doc["component"] = event.component
         if event.function:
             doc["function"] = event.function
-        if event.line_number:
+        if event.line_number is not None:
             doc["line_number"] = event.line_number
-        if event.duration_ms:
+        if event.duration_ms is not None:
             doc["duration_ms"] = event.duration_ms
-        if event.error:
+        if event.error is not None:
             doc["error"] = event.error
         if event.metadata:
             doc["metadata"] = event.metadata
@@ -405,7 +406,7 @@ class ELKIntegration:
             raise RuntimeError("Not connected to ELK stack")
 
         # Build Elasticsearch query
-        es_query = {"query": {"bool": {"must": []}}}
+        es_query: dict[str, Any] = {"query": {"bool": {"must": []}}}
 
         # Add filters
         if level:
@@ -451,15 +452,17 @@ class ELKIntegration:
 
         # Search across all indices
         index_pattern = f"{self.elasticsearch_client.index_prefix}-*"
+        session = self.elasticsearch_client._session
+        if session is None:
+            raise RuntimeError("Not connected to Elasticsearch")
 
-        async with self.elasticsearch_client._session.post(
-            f"/{index_pattern}/_search", json=es_query
-        ) as response:
+        async with session.post(f"/{index_pattern}/_search", json=es_query) as response:
             if response.status != 200:
                 error_text = await response.text()
                 raise RuntimeError(f"Search failed: {response.status} - {error_text}")
 
-            return await response.json()
+            result = await response.json()
+            return cast("dict[str, Any]", result)
 
 
 # Global ELK integration

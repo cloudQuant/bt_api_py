@@ -8,7 +8,7 @@
 
 import asyncio
 import functools
-from typing import Any, Protocol, runtime_checkable
+from typing import Any, Protocol, cast, runtime_checkable
 
 
 @runtime_checkable
@@ -59,7 +59,7 @@ class AbstractVenueFeed(Protocol):
         order_type: str,
         offset: str = "open",
         post_only: bool = False,
-        client_order_id: str = None,
+        client_order_id: str | None = None,
         extra_data=None,
         **kwargs,
     ) -> Any:
@@ -108,7 +108,7 @@ class AbstractVenueFeed(Protocol):
         order_type: str,
         offset: str = "open",
         post_only: bool = False,
-        client_order_id: str = None,
+        client_order_id: str | None = None,
         extra_data=None,
         **kwargs,
     ) -> Any: ...
@@ -140,25 +140,32 @@ class AsyncWrapperMixin:
             # async_get_tick 自动由 AsyncWrapperMixin 提供
     """
 
+    def _sync_feed(self) -> "AbstractVenueFeed":
+        """Cast self to AbstractVenueFeed for mixin; concrete class provides sync methods."""
+        return cast("AbstractVenueFeed", self)
+
     async def async_get_tick(self, symbol, extra_data=None, **kwargs):
         loop = asyncio.get_running_loop()
+        feed = self._sync_feed()
         return await loop.run_in_executor(
-            None, functools.partial(self.get_tick, symbol, extra_data=extra_data, **kwargs)
+            None, functools.partial(feed.get_tick, symbol, extra_data=extra_data, **kwargs)
         )
 
     async def async_get_depth(self, symbol, count=20, extra_data=None, **kwargs):
         loop = asyncio.get_running_loop()
+        feed = self._sync_feed()
         return await loop.run_in_executor(
             None,
-            functools.partial(self.get_depth, symbol, count=count, extra_data=extra_data, **kwargs),
+            functools.partial(feed.get_depth, symbol, count=count, extra_data=extra_data, **kwargs),
         )
 
     async def async_get_kline(self, symbol, period, count=20, extra_data=None, **kwargs):
         loop = asyncio.get_running_loop()
+        feed = self._sync_feed()
         return await loop.run_in_executor(
             None,
             functools.partial(
-                self.get_kline, symbol, period, count=count, extra_data=extra_data, **kwargs
+                feed.get_kline, symbol, period, count=count, extra_data=extra_data, **kwargs
             ),
         )
 
@@ -175,10 +182,11 @@ class AsyncWrapperMixin:
         **kwargs,
     ):
         loop = asyncio.get_running_loop()
+        feed = self._sync_feed()
         return await loop.run_in_executor(
             None,
             functools.partial(
-                self.make_order,
+                feed.make_order,
                 symbol,
                 volume,
                 price,
@@ -193,46 +201,53 @@ class AsyncWrapperMixin:
 
     async def async_cancel_order(self, symbol, order_id, extra_data=None, **kwargs):
         loop = asyncio.get_running_loop()
+        feed = self._sync_feed()
         return await loop.run_in_executor(
             None,
-            functools.partial(self.cancel_order, symbol, order_id, extra_data=extra_data, **kwargs),
+            functools.partial(feed.cancel_order, symbol, order_id, extra_data=extra_data, **kwargs),
         )
 
     async def async_cancel_all(self, symbol=None, extra_data=None, **kwargs):
         loop = asyncio.get_running_loop()
+        feed = self._sync_feed()
         return await loop.run_in_executor(
-            None, functools.partial(self.cancel_all, symbol, extra_data=extra_data, **kwargs)
+            None, functools.partial(feed.cancel_all, symbol, extra_data=extra_data, **kwargs)
         )
 
     async def async_query_order(self, symbol, order_id, extra_data=None, **kwargs):
         loop = asyncio.get_running_loop()
+        feed = self._sync_feed()
         return await loop.run_in_executor(
             None,
-            functools.partial(self.query_order, symbol, order_id, extra_data=extra_data, **kwargs),
+            functools.partial(feed.query_order, symbol, order_id, extra_data=extra_data, **kwargs),
         )
 
     async def async_get_open_orders(self, symbol=None, extra_data=None, **kwargs):
         loop = asyncio.get_running_loop()
+        feed = self._sync_feed()
         return await loop.run_in_executor(
-            None, functools.partial(self.get_open_orders, symbol, extra_data=extra_data, **kwargs)
+            None, functools.partial(feed.get_open_orders, symbol, extra_data=extra_data, **kwargs)
         )
 
     async def async_get_balance(self, symbol=None, extra_data=None, **kwargs):
         loop = asyncio.get_running_loop()
+        feed = self._sync_feed()
         return await loop.run_in_executor(
-            None, functools.partial(self.get_balance, symbol, extra_data=extra_data, **kwargs)
+            None, functools.partial(feed.get_balance, symbol, extra_data=extra_data, **kwargs)
         )
 
     async def async_get_account(self, symbol="ALL", extra_data=None, **kwargs):
         loop = asyncio.get_running_loop()
+        feed = self._sync_feed()
         return await loop.run_in_executor(
-            None, functools.partial(self.get_account, symbol, extra_data=extra_data, **kwargs)
+            None, functools.partial(feed.get_account, symbol, extra_data=extra_data, **kwargs)
         )
 
     async def async_get_position(self, symbol=None, extra_data=None, **kwargs):
         loop = asyncio.get_running_loop()
+        feed = self._sync_feed()
         return await loop.run_in_executor(
-            None, functools.partial(self.get_position, symbol, extra_data=extra_data, **kwargs)
+            None, functools.partial(feed.get_position, symbol, extra_data=extra_data, **kwargs)
         )
 
 
@@ -262,10 +277,10 @@ def check_protocol_compliance(feed_class) -> list:
         "async_cancel_order",
         "async_get_balance",
     ]
-    missing = []
-    for method_name in required_methods:
-        if not hasattr(feed_class, method_name) or not callable(
-            getattr(feed_class, method_name, None)
-        ):
-            missing.append(method_name)
+    missing = [
+        method_name
+        for method_name in required_methods
+        if not hasattr(feed_class, method_name)
+        or not callable(getattr(feed_class, method_name, None))
+    ]
     return missing

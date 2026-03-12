@@ -463,7 +463,7 @@ class TestAuth:
     def test_auth_with_keys(self):
         q = queue.Queue()
         try:
-            import jwt
+            import jwt  # noqa: F401  # availability check
 
             feed = UpbitRequestDataSpot(q, access_key="mykey", secret_key="mysecret")
             headers = feed._generate_auth_headers()
@@ -475,7 +475,7 @@ class TestAuth:
     def test_jwt_token_with_params(self):
         q = queue.Queue()
         try:
-            import jwt
+            import jwt  # availability check
 
             feed = UpbitRequestDataSpot(q, access_key="mykey", secret_key="mysecret")
             token = feed._generate_jwt_token({"market": "KRW-BTC"})

@@ -5,6 +5,7 @@ YoBit REST API request base class – Feed pattern.
 import hashlib
 import hmac
 import time
+from typing import Any
 from urllib.parse import urlencode
 
 from bt_api_py.containers.exchanges.yobit_exchange_data import YobitExchangeDataSpot
@@ -18,7 +19,7 @@ class YobitRequestData(Feed):
     """YoBit REST API Feed base class."""
 
     @classmethod
-    def _capabilities(cls):
+    def _capabilities(cls) -> set[Capability]:
         return {
             Capability.GET_TICK,
             Capability.GET_DEPTH,
@@ -31,7 +32,7 @@ class YobitRequestData(Feed):
             Capability.QUERY_ORDER,
         }
 
-    def __init__(self, data_queue, **kwargs):
+    def __init__(self, data_queue: Any = None, **kwargs: Any) -> None:
         super().__init__(data_queue, **kwargs)
         self.data_queue = data_queue
         self.exchange_name = kwargs.get("exchange_name", "YOBIT___SPOT")
@@ -109,7 +110,7 @@ class YobitRequestData(Feed):
             result = future.result()
             self.push_data_to_queue(result)
         except Exception as e:
-            self.async_logger.warn(f"async_callback::{e}")
+            self.async_logger.warning(f"async_callback::{e}")
 
     def connect(self):
         pass
@@ -311,7 +312,7 @@ class YobitRequestData(Feed):
         if YobitRequestData._is_error(data):
             return [], False
         if isinstance(data, dict):
-            for _key, value in data.items():
+            for value in data.values():
                 if isinstance(value, dict):
                     return [value], True
             return [data], True
@@ -322,7 +323,7 @@ class YobitRequestData(Feed):
         if YobitRequestData._is_error(data):
             return [], False
         if isinstance(data, dict):
-            for _key, value in data.items():
+            for value in data.values():
                 if isinstance(value, dict):
                     return [value], True
             return [data], True

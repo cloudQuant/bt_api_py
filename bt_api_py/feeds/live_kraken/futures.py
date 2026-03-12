@@ -2,6 +2,8 @@
 Kraken Futures Trading Feed Implementation
 """
 
+from typing import Any
+
 from bt_api_py.containers.exchanges.kraken_exchange_data import KrakenExchangeDataFutures
 from bt_api_py.feeds.live_kraken.request_base import KrakenRequestData
 from bt_api_py.functions.utils import update_extra_data
@@ -11,7 +13,7 @@ from bt_api_py.logging_factory import get_logger
 class KrakenRequestDataFutures(KrakenRequestData):
     """Kraken Futures Trading Feed"""
 
-    def __init__(self, data_queue, **kwargs):
+    def __init__(self, data_queue: Any = None, **kwargs: Any) -> None:
         kwargs.setdefault("asset_type", "FUTURES")
         kwargs.setdefault("logger_name", "kraken_futures_feed.log")
         super().__init__(data_queue, **kwargs)
@@ -101,7 +103,7 @@ class KrakenRequestDataFutures(KrakenRequestData):
     def get_exchange_info(self, symbol=None, extra_data=None, **kwargs):
         request_type = "get_exchange_info"
         path = self._params.get_rest_path(request_type)
-        params = {}
+        params: dict[str, Any] = {}
         extra_data = update_extra_data(
             extra_data,
             request_type=request_type,
@@ -217,10 +219,6 @@ class KrakenRequestDataFutures(KrakenRequestData):
 class KrakenMarketWssDataFutures:
     """Placeholder for Kraken Futures Market WebSocket data handler."""
 
-    pass
-
 
 class KrakenAccountWssDataFutures:
     """Placeholder for Kraken Futures Account WebSocket data handler."""
-
-    pass

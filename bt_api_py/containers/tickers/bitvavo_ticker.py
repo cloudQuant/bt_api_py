@@ -5,6 +5,7 @@ import time
 from typing import Any
 
 from bt_api_py.containers.tickers.ticker import TickerData
+from bt_api_py.containers.tickers.ticker_utils import parse_float
 
 
 class BitvavoRequestTickerData(TickerData):
@@ -48,32 +49,14 @@ class BitvavoRequestTickerData(TickerData):
         data = self.ticker_data if isinstance(self.ticker_data, dict) else {}
         if data:
             self.ticker_symbol_name = data.get("market")
-            self.last_price = self._parse_float(data.get("last"))
-            self.bid_price = self._parse_float(data.get("bid"))
-            self.ask_price = self._parse_float(data.get("ask"))
-            self.bid_volume = self._parse_float(data.get("bidSize"))
-            self.ask_volume = self._parse_float(data.get("askSize"))
-            self.volume_24h = self._parse_float(data.get("volume"))
-            self.high_24h = self._parse_float(data.get("high"))
-            self.low_24h = self._parse_float(data.get("low"))
+            self.last_price = parse_float(data.get("last"))
+            self.bid_price = parse_float(data.get("bid"))
+            self.ask_price = parse_float(data.get("ask"))
+            self.bid_volume = parse_float(data.get("bidSize"))
+            self.ask_volume = parse_float(data.get("askSize"))
+            self.volume_24h = parse_float(data.get("volume"))
+            self.high_24h = parse_float(data.get("high"))
+            self.low_24h = parse_float(data.get("low"))
 
         self.has_been_init_data = True
         return self
-
-    @staticmethod
-    def _parse_float(value: Any) -> float | None:
-        """Parse value to float.
-
-        Args:
-            value: Value to parse.
-
-        Returns:
-            Parsed float value or None if parsing fails.
-
-        """
-        if value is None:
-            return None
-        try:
-            return float(value)
-        except (ValueError, TypeError):
-            return None

@@ -37,7 +37,6 @@ def test_phemex_req_server_time():
     """Test Phemex server time endpoint."""
     # Phemex doesn't have a dedicated server time endpoint
     # Timestamps are included in ticker and orderbook responses
-    pass
 
 
 @pytest.mark.ticker
@@ -85,7 +84,6 @@ def test_phemex_async_tick_data():
 
     # Note: Phemex's current implementation uses sync requests
     # This test would require async implementation
-    pass
 
 
 @pytest.mark.kline
@@ -150,7 +148,6 @@ def test_phemex_async_kline_data():
 
     # Note: Phemex's current implementation uses sync requests
     # This test would require async implementation
-    pass
 
 
 def order_book_value_equals(order_book):

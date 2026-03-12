@@ -10,7 +10,7 @@ from bt_api_py.functions.utils import read_yaml_file
 
 
 def get_spot_symbol_list():
-    res = requests.get("https://www.okx.com/api/futures/v3/instruments")
+    res = requests.get("https://www.okx.com/api/futures/v3/instruments", timeout=30)
     result = res.json()
     print(result)
     # result = result['symbols']

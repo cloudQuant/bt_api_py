@@ -48,8 +48,6 @@ from bt_api_py.exceptions import BtApiError
 class MFAError(BtApiError):
     """Multi-factor authentication related errors."""
 
-    pass
-
 
 class MFAType(Enum):
     """Types of MFA methods."""
@@ -313,7 +311,7 @@ class MFAProvider:
         if not stored_challenge:
             return False
 
-        if time.time() > stored_challenge["expires_at"]:
+        if time.time() > float(stored_challenge["expires_at"]):  # type: ignore[arg-type]
             del self._webauthn_challenges[user_id]
             return False
 
@@ -448,7 +446,7 @@ class MFAProvider:
         if not stored_challenge:
             return False
 
-        if time.time() > stored_challenge["expires_at"]:
+        if time.time() > float(stored_challenge["expires_at"]):  # type: ignore[arg-type]
             del self._webauthn_challenges[challenge_key]
             return False
 

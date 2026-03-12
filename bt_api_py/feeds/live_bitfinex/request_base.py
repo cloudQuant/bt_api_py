@@ -7,6 +7,7 @@ import hashlib
 import hmac
 import json
 import time
+from typing import Any
 from urllib.parse import urlencode
 
 from bt_api_py.containers.balances.bitfinex_balance import BitfinexSpotRequestBalanceData
@@ -32,7 +33,7 @@ class BitfinexRequestData(Feed):
     """
 
     @classmethod
-    def _capabilities(cls):
+    def _capabilities(cls) -> set[Capability]:
         return {
             Capability.GET_TICK,
             Capability.GET_DEPTH,
@@ -48,7 +49,7 @@ class BitfinexRequestData(Feed):
             Capability.GET_SERVER_TIME,
         }
 
-    def __init__(self, data_queue, **kwargs):
+    def __init__(self, data_queue: Any = None, **kwargs: Any) -> None:
         super().__init__(data_queue, **kwargs)
         self.data_queue = data_queue
         self.api_key = kwargs.get("api_key") or kwargs.get("public_key")
@@ -104,7 +105,7 @@ class BitfinexRequestData(Feed):
             RequestData object
         """
         if params is None:
-            params = {}
+            params: dict[str, Any] = {}
         method, endpoint = path.split(" ", 1)
 
         # Build URL with query string
@@ -149,7 +150,7 @@ class BitfinexRequestData(Feed):
             RequestData object
         """
         if params is None:
-            params = {}
+            params: dict[str, Any] = {}
         method, endpoint = path.split(" ", 1)
 
         # Build URL with query string
@@ -189,7 +190,7 @@ class BitfinexRequestData(Feed):
             result = future.result()
             self.push_data_to_queue(result)
         except Exception as e:
-            self.async_logger.warn(f"async_callback::{e}")
+            self.async_logger.warning(f"async_callback::{e}")
 
     # ==================== Market Data APIs ====================
 
@@ -197,7 +198,7 @@ class BitfinexRequestData(Feed):
         """Get server time"""
         request_type = "get_server_time"
         path = self._params.get_rest_path(request_type)
-        params = {}
+        params: dict[str, Any] = {}
 
         extra_data = update_extra_data(
             extra_data,
@@ -224,7 +225,7 @@ class BitfinexRequestData(Feed):
         """Get exchange information"""
         request_type = "get_exchange_info"
         path = self._params.get_rest_path(request_type)
-        params = {}
+        params: dict[str, Any] = {}
 
         extra_data = update_extra_data(
             extra_data,
@@ -254,7 +255,7 @@ class BitfinexRequestData(Feed):
         # Replace {symbol} placeholder
         path = path.replace("{symbol}", request_symbol)
 
-        params = {}
+        params: dict[str, Any] = {}
 
         extra_data = update_extra_data(
             extra_data,
@@ -292,7 +293,7 @@ class BitfinexRequestData(Feed):
         path = path.replace("{precision}", precision)
         path = path.replace("{len}", length)
 
-        params = {}
+        params: dict[str, Any] = {}
 
         extra_data = update_extra_data(
             extra_data,
@@ -333,7 +334,7 @@ class BitfinexRequestData(Feed):
         # Remove unused placeholders
         path = path.replace("&start={start}", "").replace("&end={end}", "")
 
-        params = {}
+        params: dict[str, Any] = {}
 
         extra_data = update_extra_data(
             extra_data,
@@ -370,7 +371,7 @@ class BitfinexRequestData(Feed):
         path = path.replace("{symbol}", request_symbol)
         path = path.replace("{limit}", str(limit))
 
-        params = {}
+        params: dict[str, Any] = {}
 
         extra_data = update_extra_data(
             extra_data,
@@ -475,7 +476,7 @@ class BitfinexRequestData(Feed):
         request_type = "cancel_order"
         path = self._params.get_rest_path(request_type)
 
-        params = {}
+        params: dict[str, Any] = {}
         if order_id is not None:
             params["id"] = order_id
         if client_order_id is not None:
@@ -519,7 +520,7 @@ class BitfinexRequestData(Feed):
         if order_id is not None:
             path = path.replace("{id}", str(order_id))
 
-        params = {}
+        params: dict[str, Any] = {}
 
         extra_data = update_extra_data(
             extra_data,
@@ -554,7 +555,7 @@ class BitfinexRequestData(Feed):
         request_type = "get_open_orders"
         path = self._params.get_rest_path(request_type)
 
-        params = {}
+        params: dict[str, Any] = {}
         if symbol:
             request_symbol = self._params.get_symbol(symbol)
             path = path.replace("{symbol}", request_symbol)
@@ -590,7 +591,7 @@ class BitfinexRequestData(Feed):
         """Get account information"""
         request_type = "get_account"
         path = self._params.get_rest_path(request_type)
-        params = {}
+        params: dict[str, Any] = {}
 
         extra_data = update_extra_data(
             extra_data,

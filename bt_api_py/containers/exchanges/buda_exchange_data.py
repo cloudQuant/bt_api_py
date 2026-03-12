@@ -29,7 +29,7 @@ def _get_buda_config() -> Any | None:
             _buda_config = load_exchange_config(config_path)
         _buda_config_loaded = True
     except Exception as e:
-        logger.warn(f"Failed to load buda.yaml config: {e}")
+        logger.warning(f"Failed to load buda.yaml config: {e}")
     return _buda_config
 
 

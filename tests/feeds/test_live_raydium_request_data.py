@@ -79,7 +79,6 @@ class TestRaydiumIntegration:
 
     def test_get_pools_live(self, raydium_feed):
         """Test live pool data retrieval"""
-        pass
 
 
 if __name__ == "__main__":

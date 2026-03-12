@@ -8,6 +8,7 @@ import hashlib
 import hmac
 import json
 import time
+from typing import Any
 from urllib.parse import urlencode
 
 from bt_api_py.containers.exchanges.bybit_exchange_data import BybitExchangeData
@@ -22,7 +23,7 @@ class BybitRequestData(Feed):
     """Bybit REST API base request class with HMAC SHA256 authentication."""
 
     @classmethod
-    def _capabilities(cls):
+    def _capabilities(cls) -> set[Capability]:
         return {
             Capability.GET_TICK,
             Capability.GET_DEPTH,
@@ -38,7 +39,7 @@ class BybitRequestData(Feed):
             Capability.GET_DEALS,
         }
 
-    def __init__(self, data_queue, **kwargs):
+    def __init__(self, data_queue: Any = None, **kwargs: Any) -> None:
         super().__init__(data_queue, **kwargs)
         self.data_queue = data_queue
         self.public_key = kwargs.get("public_key")
@@ -75,7 +76,9 @@ class BybitRequestData(Feed):
             str: Hex digest of HMAC SHA256 signature
         """
         return hmac.new(
-            self.private_key.encode("utf-8"), payload_string.encode("utf-8"), hashlib.sha256
+            (self.private_key or "").encode("utf-8"),
+            (payload_string or "").encode("utf-8"),
+            hashlib.sha256,
         ).hexdigest()
 
     def request(self, path, params=None, body=None, extra_data=None, timeout=10):
@@ -92,7 +95,7 @@ class BybitRequestData(Feed):
             RequestData: Response data
         """
         if params is None:
-            params = {}
+            params: dict[str, Any] = {}
 
         # Split method and path
         parts = path.split(" ", 1)
@@ -179,7 +182,7 @@ class BybitRequestData(Feed):
             RequestData: Response data
         """
         if params is None:
-            params = {}
+            params: dict[str, Any] = {}
 
         # Split method and path
         parts = path.split(" ", 1)
@@ -249,7 +252,7 @@ class BybitRequestData(Feed):
             result = future.result()
             self.push_data_to_queue(result)
         except Exception as e:
-            self.async_logger.warn(f"async_callback::{e}")
+            self.async_logger.warning(f"async_callback::{e}")
 
     @staticmethod
     def _generic_normalize_function(input_data, extra_data):

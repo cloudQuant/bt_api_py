@@ -24,7 +24,7 @@ class KuCoinRequestData(Feed):
     """KuCoin REST API base class with authentication and signing."""
 
     @classmethod
-    def _capabilities(cls) -> Any | None:
+    def _capabilities(cls) -> set[Capability]:
         return {
             Capability.GET_TICK,
             Capability.GET_DEPTH,
@@ -40,7 +40,7 @@ class KuCoinRequestData(Feed):
             Capability.GET_SERVER_TIME,
         }
 
-    def __init__(self, data_queue, **kwargs) -> Any | None:
+    def __init__(self, data_queue: Any = None, **kwargs: Any) -> None:
         super().__init__(data_queue, **kwargs)
         self.data_queue = data_queue
         self.public_key = kwargs.get("public_key")
@@ -172,7 +172,7 @@ class KuCoinRequestData(Feed):
             RequestData object
         """
         if params is None:
-            params = {}
+            params: dict[str, Any] = {}
         method, endpoint = path.split(" ", 1)
 
         # Build URL with query string
@@ -213,7 +213,7 @@ class KuCoinRequestData(Feed):
             RequestData object
         """
         if params is None:
-            params = {}
+            params: dict[str, Any] = {}
         method, endpoint = path.split(" ", 1)
 
         query_string = parse.urlencode(params) if params else ""
@@ -245,7 +245,7 @@ class KuCoinRequestData(Feed):
             result = future.result()
             self.push_data_to_queue(result)
         except Exception as e:
-            self.async_logger.warn(f"async_callback::{e}")
+            self.async_logger.warning(f"async_callback::{e}")
 
     @staticmethod
     def _generic_normalize_function(input_data, extra_data) -> Any | None:

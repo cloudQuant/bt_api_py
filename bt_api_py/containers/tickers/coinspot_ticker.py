@@ -5,6 +5,7 @@ import time
 from typing import Any
 
 from bt_api_py.containers.tickers.ticker import TickerData
+from bt_api_py.containers.tickers.ticker_utils import parse_float
 
 
 class CoinSpotRequestTickerData(TickerData):
@@ -34,7 +35,7 @@ class CoinSpotRequestTickerData(TickerData):
         self.ticker_data: dict[str, Any] | None = (
             ticker_info if has_been_json_encoded and isinstance(ticker_info, dict) else None
         )
-        self.ticker_symbol_name = None
+        self.ticker_symbol_name = symbol_name
         self.has_been_init_data = False
 
     def init_data(self) -> "CoinSpotRequestTickerData":
@@ -46,35 +47,18 @@ class CoinSpotRequestTickerData(TickerData):
             return self
 
         # CoinSpot API returns {"status": "ok", "prices": {"BTC": {"bid": ..., "ask": ..., "last": ...}}}
-        if self.ticker_data.get("status") == "ok":
-            prices = self.ticker_data.get("prices", {})
+        ticker = self.ticker_data or {}
+        if ticker.get("status") == "ok":
+            prices = ticker.get("prices", {})
             # prices may contain the specific symbol data or all symbols
             if self.ticker_symbol_name in prices:
                 data = prices.get(self.ticker_symbol_name, {})
             else:
                 data = prices
 
-            self.last_price = self._parse_float(data.get("last"))
-            self.bid_price = self._parse_float(data.get("bid"))
-            self.ask_price = self._parse_float(data.get("ask"))
+            self.last_price = parse_float(data.get("last"))
+            self.bid_price = parse_float(data.get("bid"))
+            self.ask_price = parse_float(data.get("ask"))
 
         self.has_been_init_data = True
         return self
-
-    @staticmethod
-    def _parse_float(value: Any) -> float | None:
-        """Parse value to float.
-
-        Args:
-            value: Value to parse.
-
-        Returns:
-            Parsed float value or None if parsing fails.
-
-        """
-        if value is None:
-            return None
-        try:
-            return float(value)
-        except (ValueError, TypeError):
-            return None

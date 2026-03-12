@@ -28,7 +28,7 @@ def _get_hyperliquid_config() -> Any | None:
             _hyperliquid_config = load_exchange_config(config_path)
         _hyperliquid_config_loaded = True
     except Exception as e:
-        logger.warn(f"Failed to load hyperliquid.yaml config: {e}")
+        logger.warning(f"Failed to load hyperliquid.yaml config: {e}")
     return _hyperliquid_config
 
 

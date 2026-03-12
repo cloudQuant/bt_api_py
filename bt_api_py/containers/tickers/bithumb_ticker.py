@@ -5,6 +5,7 @@ import time
 from typing import Any
 
 from bt_api_py.containers.tickers.ticker import TickerData
+from bt_api_py.containers.tickers.ticker_utils import parse_float
 
 
 class BithumbRequestTickerData(TickerData):
@@ -34,12 +35,12 @@ class BithumbRequestTickerData(TickerData):
         self.ticker_data: dict[str, Any] | None = (
             ticker_info if has_been_json_encoded and isinstance(ticker_info, dict) else None
         )
-        self.ticker_symbol_name = None
-        self.last_price = None
-        self.high_24h = None
-        self.low_24h = None
-        self.volume_24h = None
-        self.price_change_percent_24h = None
+        self.ticker_symbol_name: str | None = None
+        self.last_price: float | None = None
+        self.high_24h: float | None = None
+        self.low_24h: float | None = None
+        self.volume_24h: float | None = None
+        self.price_change_percent_24h: float | None = None
         self.has_been_init_data = False
 
     def init_data(self) -> "BithumbRequestTickerData":
@@ -61,35 +62,17 @@ class BithumbRequestTickerData(TickerData):
         if self.has_been_init_data:
             return self
 
-        data = self.ticker_data
+        data = self.ticker_data or {}
         if data:
             self.ticker_symbol_name = data.get("s")
-            self.last_price = self._parse_float(data.get("c"))
-            self.high_24h = self._parse_float(data.get("h"))
-            self.low_24h = self._parse_float(data.get("l"))
-            self.volume_24h = self._parse_float(data.get("v"))
-            self.price_change_percent_24h = self._parse_float(data.get("p"))
+            self.last_price = parse_float(data.get("c"))
+            self.high_24h = parse_float(data.get("h"))
+            self.low_24h = parse_float(data.get("l"))
+            self.volume_24h = parse_float(data.get("v"))
+            self.price_change_percent_24h = parse_float(data.get("p"))
 
         self.has_been_init_data = True
         return self
-
-    @staticmethod
-    def _parse_float(value: Any) -> float | None:
-        """Parse value to float.
-
-        Args:
-            value: Value to parse.
-
-        Returns:
-            Parsed float value or None if parsing fails.
-
-        """
-        if value is None:
-            return None
-        try:
-            return float(value)
-        except (ValueError, TypeError):
-            return None
 
     def get_exchange_name(self) -> str:
         return self.exchange_name

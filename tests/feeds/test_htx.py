@@ -406,7 +406,6 @@ class TestHtxIntegration:
 
     def test_trading_api(self):
         """Test trading API calls (requires API keys)"""
-        pass
 
 
 # ==================== Additional Binance/OKX Standard Tests =============

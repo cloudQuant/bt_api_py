@@ -498,9 +498,11 @@ class TestAuth:
 
     def test_private_endpoint_requires_keys(self):
         feed = _make_feed(public_key=None, private_key=None)
-        with pytest.raises(ValueError, match="API keys required"):
-            with patch.object(feed, "http_request"):
-                feed.get_balance()
+        with (
+            pytest.raises(ValueError, match="API keys required"),
+            patch.object(feed, "http_request"),
+        ):
+            feed.get_balance()
 
 
 # ── 6. Registry ──────────────────────────────────────────────

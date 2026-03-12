@@ -237,6 +237,6 @@ def cal_sum_of_key_values(zheng_order_dict, key):
     :return: float sum_value
     """
     sum_value = 0
-    for _trade_id, value in zheng_order_dict.items():
+    for value in zheng_order_dict.values():
         sum_value += value[key]
     return sum_value

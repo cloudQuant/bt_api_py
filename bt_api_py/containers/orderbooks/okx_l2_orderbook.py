@@ -52,13 +52,14 @@ class OkxL2OrderBookData(OrderBookData):
                 self.order_book_info["arg"], "instId"
             )
 
-        self.action = from_dict_get_string(self.order_book_data, "action")
-        self.server_time = from_dict_get_float(self.order_book_data, "ts")
-        self.checksum = from_dict_get_string(self.order_book_data, "checksum")
+        data = self.order_book_data or {}
+        self.action = from_dict_get_string(data, "action")
+        self.server_time = from_dict_get_float(data, "ts")
+        self.checksum = from_dict_get_string(data, "checksum")
 
         # books-l2-tbt has bids/asks in format: [price, size, orders, liquidation]
-        bids = self.order_book_data.get("bids", [])
-        asks = self.order_book_data.get("asks", [])
+        bids = data.get("bids", [])
+        asks = data.get("asks", [])
 
         self.bid_price_list = [float(i[0]) if len(i) > 0 else None for i in bids]
         self.bid_volume_list = [float(i[1]) if len(i) > 1 else None for i in bids]

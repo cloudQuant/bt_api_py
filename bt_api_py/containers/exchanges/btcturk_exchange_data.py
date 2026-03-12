@@ -39,6 +39,37 @@ def _get_btcturk_config() -> Any | None:
     return None
 
 
+def _config_to_dict(config: Any) -> dict[str, Any]:
+    """Extract asset_types.spot config as dict from ExchangeConfig (Pydantic)."""
+    if hasattr(config, "asset_types") and config.asset_types and "spot" in config.asset_types:
+        ac = config.asset_types["spot"]
+        d: dict[str, Any] = {}
+        if getattr(ac, "exchange_name", None):
+            d["exchange_name"] = ac.exchange_name
+        if getattr(ac, "rest_paths", None):
+            d["rest_paths"] = dict(ac.rest_paths)
+        if getattr(ac, "wss_paths", None):
+            d["wss_paths"] = dict(ac.wss_paths)
+        d["kline_periods"] = getattr(ac, "kline_periods", None) or (
+            getattr(config, "kline_periods", None) or {}
+        )
+        d["legal_currency"] = getattr(ac, "legal_currency", None) or (
+            getattr(config, "legal_currency", None) or []
+        )
+        d["symbols"] = getattr(ac, "symbols", None) or {}
+        if config.base_urls:
+            d["rest_url"] = config.base_urls.rest.get("spot") or config.base_urls.rest.get(
+                "default", ""
+            )
+            d["wss_url"] = config.base_urls.wss.get("spot") or config.base_urls.wss.get(
+                "default", ""
+            )
+        return d
+    if isinstance(config, dict):
+        return config
+    return {}
+
+
 class BTCTurkExchangeData(ExchangeData):
     """BTCTurk Exchange Data Configuration."""
 
@@ -46,22 +77,19 @@ class BTCTurkExchangeData(ExchangeData):
         """Initialize BTCTurk exchange data.
 
         Args:
-            config: Optional configuration dictionary
+            config: Optional configuration (ExchangeConfig or dict)
         """
         if config is None:
             config = _get_btcturk_config()
         if config is None:
             raise ValueError("BTCTurk configuration not found")
-        super().__init__(config or {})
-        self.exchange_name = "BTCTURK"
-        self._load_from_config(config)
+        super().__init__()
+        cfg = _config_to_dict(config)
+        self.exchange_name = cfg.get("exchange_name", "BTCTURK")
+        self._load_from_config(cfg)
 
     def _load_from_config(self, config: dict[str, Any]) -> None:
-        """Load configuration from dict.
-
-        Args:
-            config: Configuration dictionary
-        """
+        """Load configuration from dict."""
         self.rest_url = config.get("rest_url", "")
         self.wss_url = config.get("wss_url", "")
         self.api_version = config.get("api_version", "")
@@ -70,17 +98,8 @@ class BTCTurkExchangeData(ExchangeData):
         self.wss_paths = config.get("wss_paths", {})
         self.legal_currency = config.get("legal_currency", [])
         self.symbols = config.get("symbols", {})
-        self._parse_exchange_info(config)
-
-    def _parse_exchange_info(self, config: dict[str, Any]) -> None:
-        """Parse exchange information from config.
-
-        Args:
-            config: Configuration dictionary
-        """
         if "exchange_info" in config:
-            for key, value in config["exchange_info"].items():
-                self.exchange_info[key] = value
+            self.exchange_info = dict(config["exchange_info"])
         else:
             self.exchange_info = {}
 
@@ -92,7 +111,7 @@ class BTCTurkExchangeDataSpot(BTCTurkExchangeData):
         """Initialize BTCTurk spot exchange data.
 
         Args:
-            config: Optional configuration dictionary
+            config: Optional configuration (ExchangeConfig or dict)
         """
-        super().__init__(config or {})
-        self.asset_type = "SPOT"
+        super().__init__(config)
+        self.asset_type = "spot"

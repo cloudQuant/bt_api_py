@@ -366,12 +366,10 @@ class TestDydxIntegration:
     @pytest.mark.ticker
     def test_get_ticker_live(self, dydx_spot):
         """Test live ticker request (requires network)"""
-        pass
 
     @pytest.mark.skip(reason="Integration test - requires API credentials")
     def test_get_balance_live(self, dydx_spot):
         """Test live balance request (requires network)"""
-        pass
 
 
 if __name__ == "__main__":

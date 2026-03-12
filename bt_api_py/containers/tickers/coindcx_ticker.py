@@ -5,6 +5,7 @@ import time
 from typing import Any
 
 from bt_api_py.containers.tickers.ticker import TickerData
+from bt_api_py.containers.tickers.ticker_utils import parse_float
 
 
 class CoinDCXRequestTickerData(TickerData):
@@ -34,14 +35,14 @@ class CoinDCXRequestTickerData(TickerData):
         self.ticker_data: dict[str, Any] | None = (
             ticker_info if has_been_json_encoded and isinstance(ticker_info, dict) else None
         )
-        self.ticker_symbol_name = None
+        self.ticker_symbol_name: str | None = None
         self.has_been_init_data = False
-        self.last_price = None
-        self.bid_price = None
-        self.ask_price = None
-        self.volume_24h = None
-        self.high_24h = None
-        self.low_24h = None
+        self.last_price: float | None = None
+        self.bid_price: float | None = None
+        self.ask_price: float | None = None
+        self.volume_24h: float | None = None
+        self.high_24h: float | None = None
+        self.low_24h: float | None = None
 
     def init_data(self) -> "CoinDCXRequestTickerData":
         """Parse CoinDCX ticker response."""
@@ -60,36 +61,19 @@ class CoinDCXRequestTickerData(TickerData):
         self.high_24h = None
         self.low_24h = None
 
-        data = self.ticker_data.get("data", {})
+        ticker_data = self.ticker_data or {}
+        data = ticker_data.get("data") or {}
         if data:
             self.ticker_symbol_name = data.get("market")
-            self.last_price = self._parse_float(data.get("last_price"))
-            self.bid_price = self._parse_float(data.get("bid"))
-            self.ask_price = self._parse_float(data.get("ask"))
-            self.volume_24h = self._parse_float(data.get("volume"))
-            self.high_24h = self._parse_float(data.get("high"))
-            self.low_24h = self._parse_float(data.get("low"))
+            self.last_price = parse_float(data.get("last_price"))
+            self.bid_price = parse_float(data.get("bid"))
+            self.ask_price = parse_float(data.get("ask"))
+            self.volume_24h = parse_float(data.get("volume"))
+            self.high_24h = parse_float(data.get("high"))
+            self.low_24h = parse_float(data.get("low"))
 
         self.has_been_init_data = True
         return self
-
-    @staticmethod
-    def _parse_float(value: Any) -> float | None:
-        """Parse value to float.
-
-        Args:
-            value: Value to parse.
-
-        Returns:
-            Parsed float value or None if parsing fails.
-
-        """
-        if value is None:
-            return None
-        try:
-            return float(value)
-        except (ValueError, TypeError):
-            return None
 
     def get_exchange_name(self) -> str:
         return self.exchange_name

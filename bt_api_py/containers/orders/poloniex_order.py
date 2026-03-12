@@ -19,7 +19,7 @@ class PoloniexOrderData(OrderData):
         self.local_update_time = time.time()
         self.symbol_name = symbol_name
         self.asset_type = asset_type
-        self.order_data = order_info if has_been_json_encoded else None
+        self.order_data: dict[str, Any] | None = order_info if has_been_json_encoded else None
         self.order_id = None
         self.client_order_id = None
         self.symbol = None
@@ -29,10 +29,10 @@ class PoloniexOrderData(OrderData):
         self.order_qty = None
         self.order_filled_qty = None
         self.order_avg_price = None
-        self.order_status = None
+        self.order_status: OrderStatus | None = None
         self.order_time = None
         self.update_time = None
-        self.all_data = None
+        self.all_data: dict[str, Any] | None = None
         self.has_been_init_data = False
 
     def init_data(self) -> None:
@@ -40,6 +40,9 @@ class PoloniexOrderData(OrderData):
 
     def get_all_data(self) -> dict[str, Any]:
         if self.all_data is None:
+            status_val: str | None = None
+            if self.order_status is not None:
+                status_val = self.order_status.value
             self.all_data = {
                 "exchange_name": self.exchange_name,
                 "symbol_name": self.symbol_name,
@@ -54,15 +57,16 @@ class PoloniexOrderData(OrderData):
                 "order_qty": self.order_qty,
                 "order_filled_qty": self.order_filled_qty,
                 "order_avg_price": self.order_avg_price,
-                "order_status": self.order_status.value if self.order_status else None,
+                "order_status": status_val,
                 "order_time": self.order_time,
                 "update_time": self.update_time,
             }
+        assert self.all_data is not None
         return self.all_data
 
     def __str__(self) -> str:
         self.init_data()
-        return json.dumps(self.get_all_data())
+        return str(json.dumps(self.get_all_data()))
 
     def __repr__(self) -> str:
         return self.__str__()
@@ -74,10 +78,10 @@ class PoloniexOrderData(OrderData):
         return self.local_update_time
 
     def get_symbol_name(self) -> str:
-        return self.symbol_name
+        return str(self.symbol_name)
 
     def get_asset_type(self) -> str:
-        return self.asset_type
+        return str(self.asset_type)
 
     def get_order_id(self) -> Any:
         return self.order_id
@@ -124,8 +128,9 @@ class PoloniexRequestOrderData(PoloniexOrderData):
             self.order_data = json.loads(self.order_info)
             self.has_been_json_encoded = True
         if self.has_been_init_data:
-            return self
+            return
 
+        assert self.order_data is not None
         self.order_id = from_dict_get_string(self.order_data, "id")
         self.client_order_id = from_dict_get_string(self.order_data, "clientOrderId")
         self.symbol = from_dict_get_string(self.order_data, "symbol")
@@ -151,7 +156,6 @@ class PoloniexRequestOrderData(PoloniexOrderData):
         self.order_status = status_map.get(status_str, OrderStatus.UNKNOWN)
 
         self.has_been_init_data = True
-        return self
 
 
 class PoloniexWssOrderData(PoloniexOrderData):
@@ -162,8 +166,9 @@ class PoloniexWssOrderData(PoloniexOrderData):
             self.order_data = json.loads(self.order_info)
             self.has_been_json_encoded = True
         if self.has_been_init_data:
-            return self
+            return
 
+        assert self.order_data is not None
         # WebSocket format may differ slightly
         self.order_id = from_dict_get_string(self.order_data, "orderId") or from_dict_get_string(
             self.order_data, "id"
@@ -199,4 +204,3 @@ class PoloniexWssOrderData(PoloniexOrderData):
         self.order_status = status_map.get(status_str, OrderStatus.UNKNOWN)
 
         self.has_been_init_data = True
-        return self

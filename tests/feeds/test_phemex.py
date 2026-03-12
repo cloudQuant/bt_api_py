@@ -227,7 +227,7 @@ class TestExchangeData:
 
     def test_get_rest_path_missing_raises(self):
         d = PhemexExchangeDataSpot()
-        with pytest.raises(Exception):
+        with pytest.raises(NotImplementedError):
             d.get_rest_path("nonexistent_path")
 
 

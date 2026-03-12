@@ -208,7 +208,6 @@ class TestIntelligentCircuitBreaker:
         assert cb.get_state() == "CLOSED"
 
 
-@pytest.mark.asyncio
 class TestBinanceWebSocketAdapter:
     """Test Binance WebSocket adapter."""
 
@@ -276,7 +275,6 @@ class TestBinanceWebSocketAdapter:
         assert normalized["change_24h"] == 2.5
 
 
-@pytest.mark.asyncio
 class TestOKXWebSocketAdapter:
     """Test OKX WebSocket adapter."""
 
@@ -628,9 +626,7 @@ class TestWebSocketIntegration:
     async def test_pool_load_balancing(self):
         """Test connection pool load balancing."""
         # This would test the actual pool behavior
-        pass
 
     async def test_monitoring_integration(self):
         """Test monitoring system integration."""
         # This would test the monitoring components working together
-        pass

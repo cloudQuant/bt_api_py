@@ -8,6 +8,8 @@
 - 小额资产转换 (Dust)
 """
 
+from typing import Any
+
 from bt_api_py.containers.exchanges.binance_exchange_data import BinanceExchangeDataWallet
 from bt_api_py.feeds.live_binance.request_base import BinanceRequestData
 from bt_api_py.functions.utils import update_extra_data
@@ -20,7 +22,7 @@ class BinanceRequestDataWallet(BinanceRequestData):
     处理所有钱包相关的请求，包括资产查询、划转、充值、提现等。
     """
 
-    def __init__(self, data_queue, **kwargs):
+    def __init__(self, data_queue: Any = None, **kwargs: Any) -> None:
         kwargs.setdefault("exchange_data", BinanceExchangeDataWallet())
         kwargs.setdefault("exchange_name", "binance_wallet")
         super().__init__(data_queue, **kwargs)
@@ -45,7 +47,7 @@ class BinanceRequestDataWallet(BinanceRequestData):
         """
         request_type = "get_wallet_balance"
         path = self._params.get_rest_path(request_type)
-        params = {}
+        params: dict[str, Any] = {}
         extra_data = update_extra_data(
             extra_data,
             **{
@@ -82,7 +84,7 @@ class BinanceRequestDataWallet(BinanceRequestData):
         """
         request_type = "get_asset_detail"
         path = self._params.get_rest_path(request_type)
-        params = {}
+        params: dict[str, Any] = {}
         extra_data = update_extra_data(
             extra_data,
             **{
@@ -125,7 +127,7 @@ class BinanceRequestDataWallet(BinanceRequestData):
         """
         request_type = "get_asset_ledger"
         path = self._params.get_rest_path(request_type)
-        params = {}
+        params: dict[str, Any] = {}
         if asset is not None:
             params["asset"] = asset
         if startTime is not None:
@@ -185,7 +187,7 @@ class BinanceRequestDataWallet(BinanceRequestData):
         """
         request_type = "get_asset_dividend"
         path = self._params.get_rest_path(request_type)
-        params = {}
+        params: dict[str, Any] = {}
         if asset is not None:
             params["asset"] = asset
         if startTime is not None:
@@ -329,7 +331,7 @@ class BinanceRequestDataWallet(BinanceRequestData):
         """
         request_type = "get_asset_transfer"
         path = self._params.get_rest_path(request_type)
-        params = {}
+        params: dict[str, Any] = {}
         if transfer_type is not None:
             params["type"] = transfer_type
         if startTime is not None:
@@ -630,7 +632,7 @@ class BinanceRequestDataWallet(BinanceRequestData):
         """
         request_type = "get_deposit_history"
         path = self._params.get_rest_path(request_type)
-        params = {}
+        params: dict[str, Any] = {}
         if coin is not None:
             params["coin"] = coin
         if startTime is not None:
@@ -792,7 +794,7 @@ class BinanceRequestDataWallet(BinanceRequestData):
         """
         request_type = "get_withdraw_history"
         path = self._params.get_rest_path(request_type)
-        params = {}
+        params: dict[str, Any] = {}
         if coin is not None:
             params["coin"] = coin
         if startTime is not None:
@@ -857,7 +859,7 @@ class BinanceRequestDataWallet(BinanceRequestData):
         """
         request_type = "get_withdraw_address"
         path = self._params.get_rest_path(request_type)
-        params = {}
+        params: dict[str, Any] = {}
         if coin is not None:
             params["coin"] = coin
         extra_data = update_extra_data(
@@ -900,7 +902,7 @@ class BinanceRequestDataWallet(BinanceRequestData):
         """
         request_type = "get_dust"
         path = self._params.get_rest_path(request_type)
-        params = {}
+        params: dict[str, Any] = {}
         extra_data = update_extra_data(
             extra_data,
             **{

@@ -9,7 +9,10 @@ import time
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from threading import Event, Thread
 
+from bt_api_py.logging_factory import get_logger
 from bt_api_py.monitoring.metrics import MetricRegistry, get_registry
+
+_logger = get_logger("prometheus")
 
 
 class PrometheusFormatter:
@@ -178,7 +181,7 @@ class MetricsHandler(BaseHTTPRequestHandler):
 
     def log_message(self, format: str, *args) -> None:
         """Override to disable default logging."""
-        pass  # Suppress default HTTP server logging
+        # Suppress default HTTP server logging
 
 
 class PrometheusExporter:
@@ -235,12 +238,13 @@ class PrometheusExporter:
         """Server loop with graceful shutdown."""
         while not self.stop_event.is_set():
             try:
-                self.server.handle_request()
+                if self.server is not None:
+                    self.server.handle_request()
             except (OSError, ValueError):
                 # Handle server shutdown gracefully
                 break
-            except Exception:
-                # Continue serving even on other errors
+            except Exception as e:
+                _logger.debug("Prometheus server loop error, continuing: %s", e, exc_info=True)
                 continue
 
     def is_running(self) -> bool:

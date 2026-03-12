@@ -1,6 +1,7 @@
 """feed类, 用于处理数据、获取数据、向交易所传递数据"""
 
 import time as _time
+from typing import Any
 
 from bt_api_py.exceptions import RequestError, RequestFailedError, RequestTimeoutError
 from bt_api_py.feeds.capability import CapabilityMixin
@@ -11,7 +12,7 @@ from bt_api_py.logging_factory import get_logger
 
 
 class Feed(AsyncBase, ConnectionMixin, CapabilityMixin):
-    def __init__(self, data_queue, **kwargs):
+    def __init__(self, data_queue: Any = None, **kwargs: Any) -> None:
         """
         feed initial
         :param data_queue: queue.Queue()
@@ -39,7 +40,7 @@ class Feed(AsyncBase, ConnectionMixin, CapabilityMixin):
         :param e: exception type, exception value, exception traceback
         :return: None
         """
-        self.logger.warn(
+        self.logger.warning(
             f"exchange -> {self.exchange_name}\n "
             f"url -> {url},\n "
             f"method -> {method},\n "
@@ -58,7 +59,7 @@ class Feed(AsyncBase, ConnectionMixin, CapabilityMixin):
         :param exception: exception type, exception value, exception traceback
         :return: None
         """
-        self.logger.warn(
+        self.logger.warning(
             f"exchange -> {self.exchange_name}\n "
             f"rest error -> \n "
             f"URL -> {url}\n"
@@ -77,7 +78,7 @@ class Feed(AsyncBase, ConnectionMixin, CapabilityMixin):
         :param e: exception type, exception value, exception traceback
         :return: None
         """
-        self.logger.warn(f"url -> {url},\n headers -> {headers},\n body:{body},\n e:{e}")
+        self.logger.warning(f"url -> {url},\n headers -> {headers},\n body:{body},\n e:{e}")
         self.raise400(self.exchange_name)
 
     def raise_path_error(self, *args):
@@ -145,7 +146,7 @@ class Feed(AsyncBase, ConnectionMixin, CapabilityMixin):
                     ) from None
                 # Retryable errors (timeout, connection, etc.)
                 if attempt < max_retries - 1:
-                    self.logger.warn(f"Retry {attempt + 1}/{max_retries} for {url}: {e}")
+                    self.logger.warning(f"Retry {attempt + 1}/{max_retries} for {url}: {e}")
                     _time.sleep(1)
                     continue
                 # Final attempt failed
@@ -155,7 +156,7 @@ class Feed(AsyncBase, ConnectionMixin, CapabilityMixin):
                     self.handle_request_exception(url, method, body, e)
             except Exception as e:
                 if attempt < max_retries - 1:
-                    self.logger.warn(
+                    self.logger.warning(
                         f"Retry {attempt + 1}/{max_retries} unexpected error for {url}: {e}"
                     )
                     _time.sleep(1)
@@ -270,7 +271,7 @@ class Feed(AsyncBase, ConnectionMixin, CapabilityMixin):
         raise NotImplementedError
 
     def async_get_deals(
-        self, symbol, count=100, start_time=None, end_time=None, extra_data="", **kwargs
+        self, symbol, count=100, start_time=None, end_time=None, extra_data=None, **kwargs
     ):
         """
         get trade history by symbol using async
@@ -284,7 +285,7 @@ class Feed(AsyncBase, ConnectionMixin, CapabilityMixin):
         """
         raise NotImplementedError
 
-    def get_depth(self, symbol, count=20, extra_data=None, **kwargs):
+    def get_depth(self, symbol: str, count: int = 20, extra_data: Any = None, **kwargs: Any) -> Any:
         """
         get order_book_data by symbol
         :param symbol: default None, get all the currency, can be string, e.g. "BTC-USDT".
@@ -326,7 +327,14 @@ class Feed(AsyncBase, ConnectionMixin, CapabilityMixin):
         """
         raise NotImplementedError
 
-    def get_kline(self, symbol, period, count=20, extra_data=None, **kwargs):
+    def get_kline(
+        self,
+        symbol: str,
+        period: str,
+        count: int = 20,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> Any:
         """
         get kline or bars by symbol
         :param symbol: default None, get all the currency, can be string, e.g. "BTC-USDT".
@@ -392,16 +400,16 @@ class Feed(AsyncBase, ConnectionMixin, CapabilityMixin):
 
     def make_order(
         self,
-        symbol,
-        volume,
-        price,
-        order_type,
-        offset="open",
-        post_only=False,
-        client_order_id=None,
-        extra_data=None,
-        **kwargs,
-    ):
+        symbol: str,
+        volume: float,
+        price: float,
+        order_type: str,
+        offset: str = "open",
+        post_only: bool = False,
+        client_order_id: str | None = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> Any:
         """
         make order by symbol
         :param symbol: default None, get all the currency, can be string, e.g. "BTC-USDT".
@@ -486,7 +494,7 @@ class Feed(AsyncBase, ConnectionMixin, CapabilityMixin):
         """
         raise NotImplementedError
 
-    def get_position(self, symbol=None, extra_data=None, **kwargs):
+    def get_position(self, symbol: str | None = None, extra_data: Any = None, **kwargs: Any) -> Any:
         """
         get position info by symbol (futures/options)
         :param symbol: default None, get all positions.
@@ -496,7 +504,7 @@ class Feed(AsyncBase, ConnectionMixin, CapabilityMixin):
         """
         raise NotImplementedError
 
-    def async_get_position(self, symbol=None, extra_data=None, **kwargs):
+    def async_get_position(self, symbol: str | None = None, extra_data: Any = None, **kwargs: Any) -> Any:
         """
         get position info by symbol using async
         :param symbol: default None, get all positions.

@@ -32,7 +32,7 @@ def _get_phemex_config() -> Any | None:
             _phemex_config = load_exchange_config(config_path)
         _phemex_config_loaded = True
     except Exception as e:
-        logger.warn(f"Failed to load phemex.yaml config: {e}")
+        logger.warning(f"Failed to load phemex.yaml config: {e}")
     return _phemex_config
 
 

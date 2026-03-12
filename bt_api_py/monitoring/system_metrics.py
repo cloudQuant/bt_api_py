@@ -13,7 +13,7 @@ from typing import Any
 
 import psutil
 
-from bt_api_py.monitoring.metrics import Counter, Gauge, Histogram, MetricRegistry
+from bt_api_py.monitoring.metrics import Counter, Gauge, Histogram, Metric, MetricRegistry
 
 
 @dataclass
@@ -143,8 +143,8 @@ class SystemMetricsCollector:
             # Memory metrics
             memory = psutil.virtual_memory()
 
-            # Process metrics
-            self._process.cpu_percent()
+            # Process metrics (cpu_percent needs interval=None for non-blocking; first call may return 0)
+            process_cpu_percent = self._process.cpu_percent(interval=None)
             process_memory = self._process.memory_info()
             process_threads = self._process.num_threads()
 
@@ -179,7 +179,9 @@ class SystemMetricsCollector:
             )
 
             # Update gauge metrics
-            self.update_gauges(metrics, cpu_times, memory, process_memory, fd_count)
+            self.update_gauges(
+                metrics, cpu_times, memory, process_memory, fd_count, process_cpu_percent
+            )
 
             return metrics
 
@@ -194,6 +196,7 @@ class SystemMetricsCollector:
         memory: Any,
         process_memory: Any,
         fd_count: int,
+        process_cpu_percent: float = 0.0,
     ) -> None:
         """Update all gauge metrics."""
         # System metrics
@@ -205,8 +208,8 @@ class SystemMetricsCollector:
         self.memory_bytes_gauge.set(memory.used)
         self.memory_available_gauge.set(memory.available)
 
-        # Process metrics
-        self.process_cpu_gauge.set(metrics.process_count)
+        # Process metrics (process_cpu_percent = current process CPU usage %)
+        self.process_cpu_gauge.set(process_cpu_percent)
         self.process_memory_gauge.set(process_memory.rss)
         self.process_memory_rss_gauge.set(process_memory.rss)
         self.process_threads_gauge.set(metrics.thread_count)
@@ -302,7 +305,7 @@ class BusinessMetricsCollector:
         self.connection_errors = Counter("btapi_connection_errors_total", "Total connection errors")
 
         # Register all metrics
-        metrics = [
+        metrics: list[Metric] = [
             self.orders_total,
             self.orders_success,
             self.orders_failed,

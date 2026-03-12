@@ -5,6 +5,7 @@ import time
 from typing import Any
 
 from bt_api_py.containers.tickers.ticker import TickerData
+from bt_api_py.containers.tickers.ticker_utils import parse_float
 
 
 class CoinExRequestTickerData(TickerData):
@@ -34,18 +35,18 @@ class CoinExRequestTickerData(TickerData):
         self.ticker_data: dict[str, Any] | None = (
             ticker_info if has_been_json_encoded and isinstance(ticker_info, dict) else None
         )
-        self.ticker_symbol_name = None
-        self.server_time = None
-        self.bid_price = None
-        self.ask_price = None
-        self.bid_volume = None
-        self.ask_volume = None
-        self.last_price = None
-        self.last_volume = None
-        self.volume_24h = None
-        self.high_24h = None
-        self.low_24h = None
-        self.all_data = None
+        self.ticker_symbol_name: str | None = None
+        self.server_time: float | None = None
+        self.bid_price: float | None = None
+        self.ask_price: float | None = None
+        self.bid_volume: float | None = None
+        self.ask_volume: float | None = None
+        self.last_price: float | None = None
+        self.last_volume: float | None = None
+        self.volume_24h: float | None = None
+        self.high_24h: float | None = None
+        self.low_24h: float | None = None
+        self.all_data: dict[str, Any] | None = None
         self.has_been_init_data = False
 
     def init_data(self) -> "CoinExRequestTickerData":
@@ -56,15 +57,15 @@ class CoinExRequestTickerData(TickerData):
         if self.has_been_init_data:
             return self
 
-        data = self.ticker_data.get("data", {})
+        data = (self.ticker_data or {}).get("data", {})
         if data:
             self.ticker_symbol_name = data.get("market")
-            self.last_price = self._parse_float(data.get("last"))
-            self.bid_price = self._parse_float(data.get("bid"))
-            self.ask_price = self._parse_float(data.get("ask"))
-            self.volume_24h = self._parse_float(data.get("volume_24h"))
-            self.high_24h = self._parse_float(data.get("high_24h"))
-            self.low_24h = self._parse_float(data.get("low_24h"))
+            self.last_price = parse_float(data.get("last"))
+            self.bid_price = parse_float(data.get("bid"))
+            self.ask_price = parse_float(data.get("ask"))
+            self.volume_24h = parse_float(data.get("volume_24h"))
+            self.high_24h = parse_float(data.get("high_24h"))
+            self.low_24h = parse_float(data.get("low_24h"))
 
         self.has_been_init_data = True
         return self
@@ -89,7 +90,7 @@ class CoinExRequestTickerData(TickerData):
                 "high_24h": self.high_24h,
                 "low_24h": self.low_24h,
             }
-        return self.all_data
+        return self.all_data or {}
 
     def get_exchange_name(self) -> str:
         """Get exchange name."""
@@ -147,13 +148,3 @@ class CoinExRequestTickerData(TickerData):
     def __repr__(self) -> str:
         """Repr representation."""
         return self.__str__()
-
-    @staticmethod
-    def _parse_float(value: Any) -> float | None:
-        """Parse float value safely."""
-        if value is None:
-            return None
-        try:
-            return float(value)
-        except (ValueError, TypeError):
-            return None

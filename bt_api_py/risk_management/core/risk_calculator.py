@@ -6,7 +6,7 @@
 import math
 import statistics
 from decimal import Decimal
-from typing import Any
+from typing import Any, cast
 
 import numpy as np
 
@@ -40,7 +40,7 @@ class RiskCalculator:
     6. 压力测试和情景分析
     """
 
-    def __init__(self, config: dict[str, Any] | None = None) -> Any | None:
+    def __init__(self, config: dict[str, Any] | None = None) -> None:
         """初始化风险计算器
 
         Args:
@@ -428,7 +428,7 @@ class RiskCalculator:
         self, asset_returns: dict[str, list[float]]
     ) -> dict[str, dict[str, float]]:
         """计算相关性矩阵"""
-        correlation_matrix = {}
+        correlation_matrix: dict[str, dict[str, float]] = {}
         assets = list(asset_returns.keys())
 
         for asset1 in assets:
@@ -569,7 +569,7 @@ class RiskCalculator:
             return SectorExposure({})
 
         # 简化的行业分类
-        sector_exposure = {}
+        sector_exposure: dict[str, float] = {}
         for pos in positions:
             sector = pos.get("sector", "other")
             value = pos.get("value", 0)
@@ -830,7 +830,7 @@ class RiskCalculator:
 
     def _get_regulatory_violations(self, account_data: dict[str, Any]) -> list[dict[str, Any]]:
         """获取监管违规记录"""
-        return account_data.get("regulatory_violations", [])
+        return cast("list[dict[str, Any]]", account_data.get("regulatory_violations", []))
 
     def _calculate_reporting_compliance(self, account_data: dict[str, Any]) -> Decimal:
         """计算报告合规度"""
@@ -842,7 +842,7 @@ class RiskCalculator:
 
     def _get_audit_findings(self, account_data: dict[str, Any]) -> list[dict[str, Any]]:
         """获取审计发现"""
-        return account_data.get("audit_findings", [])
+        return cast("list[dict[str, Any]]", account_data.get("audit_findings", []))
 
     def _calculate_policy_adherence(self, account_data: dict[str, Any]) -> Decimal:
         """计算政策遵循度"""
@@ -857,7 +857,7 @@ class RiskCalculator:
 
     def _get_aml_flags(self, account_data: dict[str, Any]) -> list[str]:
         """获取AML标志"""
-        return account_data.get("aml_flags", [])
+        return cast("list[str]", account_data.get("aml_flags", []))
 
     def _check_all_risk_limits(
         self,
@@ -950,8 +950,8 @@ class RiskCalculator:
 
         return actions
 
-    def _serialize_metrics(self, obj: Any) -> dict[str, Any]:
-        """序列化指标对象为字典"""
+    def _serialize_metrics(self, obj: Any) -> Any:
+        """序列化指标对象为字典或可序列化类型"""
         if isinstance(obj, Decimal):
             return str(obj)
         if isinstance(obj, dict):

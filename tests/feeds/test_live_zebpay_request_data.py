@@ -81,8 +81,7 @@ class TestZebpayTickerData:
         """Test getting multiple tickers."""
         # Test with different pairs
         symbols = ["BTC/INR", "ETH/INR", "BTC/USDT"]
-        for symbol in symbols:
-            pass
+        symbol = symbols[-1]
         data = zebpay_feed.get_tick(symbol)
         assert data is not None
 
@@ -129,8 +128,7 @@ class TestZebpayKlineData:
         """Test kline data for multiple timeframes."""
         timeframes = ["1m", "5m", "15m", "1h", "1d"]
 
-        for tf in timeframes:
-            pass
+        tf = timeframes[-1]
         data = zebpay_feed.get_kline("BTC/INR", tf, count=1)
         assert data is not None
 
@@ -180,11 +178,9 @@ class TestZebpayMarketInfo:
 
     def test_zebpay_market_all(self, zebpay_feed):
         """Test getting all market information."""
-        pass
 
     def test_zebpay_symbol_info(self, zebpay_feed):
         """Test getting symbol information."""
-        pass
 
 
 # ==================== Exchange Data Tests ====================
@@ -368,7 +364,6 @@ class TestZebpayIntegration:
     @pytest.mark.integration
     def test_websocket_connection(self):
         """Test WebSocket connection."""
-        pass
 
 
 if __name__ == "__main__":

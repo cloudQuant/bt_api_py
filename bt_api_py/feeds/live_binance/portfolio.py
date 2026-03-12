@@ -45,7 +45,7 @@ class BinanceRequestDataPortfolio(BinanceRequestData):
         """
         request_type = "get_portfolio_account"
         path = self._params.get_rest_path(request_type)
-        params = {}
+        params: dict[str, Any] = {}
         extra_data = update_extra_data(
             extra_data,
             **{
@@ -83,7 +83,7 @@ class BinanceRequestDataPortfolio(BinanceRequestData):
         """
         request_type = "get_portfolio_collateral_rate"
         path = self._params.get_rest_path(request_type)
-        params = {}
+        params: dict[str, Any] = {}
         if asset_type is not None:
             params["assetType"] = asset_type
         extra_data = update_extra_data(

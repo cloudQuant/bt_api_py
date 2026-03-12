@@ -19,7 +19,7 @@ class PancakeSpotRequestData(PancakeSwapRequestData):
     """PancakeSpot Spot Trading Request Data"""
 
     @classmethod
-    def _capabilities(cls):
+    def _capabilities(cls) -> set[Capability]:
         return {
             Capability.GET_TICK,
             Capability.GET_DEPTH,
@@ -31,7 +31,7 @@ class PancakeSpotRequestData(PancakeSwapRequestData):
             Capability.CANCEL_ORDER,
         }
 
-    def __init__(self, data_queue, **kwargs):
+    def __init__(self, data_queue: Any = None, **kwargs: Any) -> None:
         super().__init__(data_queue, **kwargs)
         self.asset_type = kwargs.get("asset_type", "SPOT")
         self.logger_name = kwargs.get("logger_name", "pancakeswap_spot.log")
@@ -381,7 +381,7 @@ class PancakeSpotRequestData(PancakeSwapRequestData):
             },
         )
 
-        params = {}
+        params: dict[str, Any] = {}
         path = (
             self._params.get_rest_path(request_type)
             if hasattr(self._params, "get_rest_path")

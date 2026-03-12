@@ -19,8 +19,8 @@ class HtxRequestOrderData(OrderData):
         self.local_update_time = time.time()
         self.symbol_name = symbol_name
         self.asset_type = asset_type
-        self.order_data = order_info if has_been_json_encoded else None
-        self.order_id = None
+        self.order_data: dict[str, Any] | None = order_info if has_been_json_encoded else None
+        self.order_id: str | None = None
         self.client_order_id = None
         self.order_symbol_name = None
         self.order_side = None
@@ -32,7 +32,7 @@ class HtxRequestOrderData(OrderData):
         self.order_status = None
         self.create_time = None
         self.update_time = None
-        self.all_data = None
+        self.all_data: dict[str, Any] | None = None
         self.has_been_init_data = False
 
     def init_data(self) -> None:
@@ -63,7 +63,8 @@ class HtxRequestOrderData(OrderData):
             self.order_data = json.loads(self.order_info)
 
         # Order ID
-        self.order_id = str(from_dict_get_float(self.order_data, "id"))
+        assert self.order_data is not None
+        self.order_id = str(int(from_dict_get_float(self.order_data, "id") or 0))
 
         # Client order ID (if provided)
         self.client_order_id = from_dict_get_string(self.order_data, "client-order-id")
@@ -102,6 +103,9 @@ class HtxRequestOrderData(OrderData):
 
     def get_all_data(self) -> dict[str, Any]:
         if self.all_data is None:
+            order_status_val = ""
+            if self.order_status is not None:
+                order_status_val = self.order_status.value
             self.all_data = {
                 "exchange_name": self.exchange_name,
                 "symbol_name": self.symbol_name,
@@ -116,7 +120,7 @@ class HtxRequestOrderData(OrderData):
                 "order_qty": self.order_qty,
                 "order_avg_price": self.order_avg_price,
                 "order_filled_qty": self.order_filled_qty,
-                "order_status": self.order_status.value if self.order_status else None,
+                "order_status": order_status_val,
                 "create_time": self.create_time,
                 "update_time": self.update_time,
             }
@@ -136,10 +140,10 @@ class HtxRequestOrderData(OrderData):
         return self.local_update_time
 
     def get_symbol_name(self) -> str:
-        return self.symbol_name
+        return str(self.symbol_name)
 
     def get_asset_type(self) -> str:
-        return self.asset_type
+        return str(self.asset_type)
 
     def get_order_id(self) -> Any:
         self.init_data()

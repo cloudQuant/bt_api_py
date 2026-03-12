@@ -14,6 +14,7 @@ CTP Feed 实现
 """
 
 import time
+from typing import Any
 
 from bt_api_py.containers.ctp.ctp_account import CtpAccountData
 from bt_api_py.containers.ctp.ctp_order import CtpOrderData
@@ -91,7 +92,7 @@ class CtpRequestData(Feed):
             Capability.ACCOUNT_STREAM,
         }
 
-    def __init__(self, data_queue, **kwargs):
+    def __init__(self, data_queue: Any = None, **kwargs: Any) -> None:
         super().__init__(data_queue)
         self.data_queue = data_queue
         self.broker_id = kwargs.get("broker_id", "")
@@ -203,19 +204,21 @@ class CtpRequestData(Feed):
         """查询最新行情快照
         注意: CTP 行情快照查询能力有限，推荐使用 CtpMarketStream 订阅实时 tick
         """
-        self.request_logger.warn("CTP get_tick is limited; use CtpMarketStream for real-time ticks")
+        self.request_logger.warning(
+            "CTP get_tick is limited; use CtpMarketStream for real-time ticks"
+        )
         return self._make_request_data([], "get_tick", symbol, extra_data, status=False)
 
     def get_depth(self, symbol, count=5, extra_data=None, **kwargs):
         """查询深度行情 (CTP tick 数据自带5档买卖盘，通过 CtpMarketStream 获取)"""
-        self.request_logger.warn("CTP depth is included in tick data; use CtpMarketStream")
+        self.request_logger.warning("CTP depth is included in tick data; use CtpMarketStream")
         return self._make_request_data([], "get_depth", symbol, extra_data, status=False)
 
     def get_kline(
         self, symbol, period, count=100, start_time=None, end_time=None, extra_data=None, **kwargs
     ):
         """获取K线 (CTP 不直接提供，需从 tick 数据合成或从第三方获取)"""
-        self.request_logger.warn("CTP does not provide kline API directly")
+        self.request_logger.warning("CTP does not provide kline API directly")
         return self._make_request_data([], "get_kline", symbol, extra_data, status=False)
 
     def make_order(
@@ -265,10 +268,27 @@ class CtpRequestData(Feed):
         field.ContingentCondition = "1"
 
         if otype.lower() == "market":
-            field.OrderPriceType = "1"  # 市价
-            field.TimeCondition = "1"  # IOC
-            field.VolumeCondition = "1"  # 任意数量
-            field.LimitPrice = 0.0
+            # Chinese futures exchanges reject true market orders (AnyPrice).
+            # If a price is supplied, use it as an aggressive limit price;
+            # otherwise fall back to limit with price=0 which the caller
+            # should have already converted via last_tick ± 5 ticks.
+            if price and float(price) > 0:
+                self.request_logger.info(
+                    "CTP market order converted to limit: %s price=%s", symbol, price
+                )
+                field.OrderPriceType = "2"  # 限价
+                field.TimeCondition = "3"  # GFD
+                field.VolumeCondition = "1"
+                field.LimitPrice = float(price)
+            else:
+                self.request_logger.warning(
+                    "CTP market order for %s has no price — sending as AnyPrice (may be rejected)",
+                    symbol,
+                )
+                field.OrderPriceType = "1"  # 市价 (fallback)
+                field.TimeCondition = "1"  # IOC
+                field.VolumeCondition = "1"
+                field.LimitPrice = 0.0
         else:
             field.OrderPriceType = "2"  # 限价
             field.TimeCondition = "3"  # GFD (当日有效)
@@ -342,19 +362,19 @@ class CtpRequestData(Feed):
 
     def query_order(self, symbol=None, order_id=None, extra_data=None, **kwargs):
         """查询订单 (CTP 暂不直接支持单笔查询，返回空)"""
-        self.request_logger.warn("CTP single order query not implemented; use on_order callback")
+        self.request_logger.warning("CTP single order query not implemented; use on_order callback")
         return self._make_request_data([], "query_order", symbol, extra_data, status=False)
 
     def get_open_orders(self, symbol=None, extra_data=None, **kwargs):
         """查询未成交委托 (CTP 暂不直接支持，返回空)"""
-        self.request_logger.warn("CTP open orders query not implemented; use on_order callback")
+        self.request_logger.warning("CTP open orders query not implemented; use on_order callback")
         return self._make_request_data([], "get_open_orders", symbol, extra_data, status=False)
 
     def get_deals(
         self, symbol=None, count=100, start_time=None, end_time=None, extra_data=None, **kwargs
     ):
         """查询成交记录 (CTP 暂不直接支持，返回空)"""
-        self.request_logger.warn("CTP deals query not implemented; use on_trade callback")
+        self.request_logger.warning("CTP deals query not implemented; use on_trade callback")
         return self._make_request_data([], "get_deals", symbol, extra_data, status=False)
 
     def get_server_time(self):
@@ -375,7 +395,7 @@ class CtpMarketStream(BaseDataStream):
     接收实时 tick 数据并推送到 data_queue
     """
 
-    def __init__(self, data_queue, **kwargs):
+    def __init__(self, data_queue: Any = None, **kwargs: Any) -> None:
         super().__init__(data_queue, **kwargs)
         self.md_front = kwargs.get("md_front", "")
         self.broker_id = kwargs.get("broker_id", "")
@@ -457,7 +477,7 @@ class CtpTradeStream(BaseDataStream):
     接收订单回报、成交回报推送到 data_queue
     """
 
-    def __init__(self, data_queue, **kwargs):
+    def __init__(self, data_queue: Any = None, **kwargs: Any) -> None:
         super().__init__(data_queue, **kwargs)
         self.td_front = kwargs.get("td_front", "")
         self.broker_id = kwargs.get("broker_id", "")
@@ -520,7 +540,6 @@ class CtpTradeStream(BaseDataStream):
 
     def subscribe_topics(self, topics):
         """CTP 交易推送是自动的，不需要显式订阅"""
-        pass
 
     def _run_loop(self):
         """启动 TraderClient 并保持存活"""
@@ -537,7 +556,7 @@ class CtpTradeStream(BaseDataStream):
 class CtpRequestDataFuture(CtpRequestData):
     """CTP 期货 Feed"""
 
-    def __init__(self, data_queue, **kwargs):
+    def __init__(self, data_queue: Any = None, **kwargs: Any) -> None:
         super().__init__(data_queue, **kwargs)
         self.asset_type = kwargs.get("asset_type", "FUTURE")
         self._params = CtpExchangeDataFuture()

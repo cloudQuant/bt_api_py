@@ -29,7 +29,7 @@ def _get_btc_markets_config() -> Any | None:
             _btc_markets_config = load_exchange_config(config_path)
         _btc_markets_config_loaded = True
     except Exception as e:
-        logger.warn(f"Failed to load btc-markets.yaml config: {e}")
+        logger.warning(f"Failed to load btc-markets.yaml config: {e}")
     return _btc_markets_config
 
 

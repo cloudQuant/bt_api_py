@@ -134,8 +134,7 @@ class TestUpbitKlineData:
         """Test kline data for multiple timeframes."""
         timeframes = ["1m", "5m", "15m", "1h", "1d"]
 
-        for tf in timeframes:
-            pass
+        tf = timeframes[-1]
         data = upbit_feed.get_kline("KRW-BTC", tf, count=1)
         assert data is not None
 
@@ -295,7 +294,6 @@ class TestUpbitIntegration:
     def test_websocket_connection(self):
         """Test WebSocket connection."""
         # WebSocket tests are marked as integration
-        pass
 
 
 if __name__ == "__main__":

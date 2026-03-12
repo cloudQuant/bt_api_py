@@ -44,10 +44,10 @@ class LocalBitcoinsRequestData(Feed):
         body: Any = None,
         extra_data: Any = None,
         timeout: Any = 10,
-    ) -> None:
+    ) -> RequestData:
         """Synchronous HTTP request."""
         if params is None:
-            params = {}
+            params: dict[str, Any] = {}
         method, endpoint = path.split(" ", 1)
         headers = self._get_headers(method=method, path=endpoint)
 
@@ -63,7 +63,7 @@ class LocalBitcoinsRequestData(Feed):
 
         res = self.http_request(method, url, headers, json_body, timeout)
         self.request_logger.info(f"{method} {url} -> {type(res)}")
-        return RequestData(res, extra_data)
+        return RequestData(res, extra_data or {})
 
     async def async_request(
         self,
@@ -72,10 +72,10 @@ class LocalBitcoinsRequestData(Feed):
         body: Any = None,
         extra_data: Any = None,
         timeout: Any = 5,
-    ) -> None:
+    ) -> RequestData:
         """Async HTTP request."""
         if params is None:
-            params = {}
+            params: dict[str, Any] = {}
         method, endpoint = path.split(" ", 1)
         headers = self._get_headers(method=method, path=endpoint)
 
@@ -91,7 +91,7 @@ class LocalBitcoinsRequestData(Feed):
 
         res = await self.async_http_request(method, url, headers, json_body, timeout)
         self.async_logger.info(f"async {method} {url} -> {type(res)}")
-        return RequestData(res, extra_data)
+        return RequestData(res, extra_data or {})
 
     def async_callback(self, request_data: Any) -> None:
         if request_data is not None:
@@ -100,7 +100,7 @@ class LocalBitcoinsRequestData(Feed):
     # ── capabilities ────────────────────────────────────────────
 
     @classmethod
-    def _capabilities(cls: Any) -> None:
+    def _capabilities(cls: Any) -> set[Capability]:
         return {
             Capability.GET_TICK,
             Capability.GET_EXCHANGE_INFO,
@@ -110,15 +110,18 @@ class LocalBitcoinsRequestData(Feed):
 
     def _generate_signature(
         self, method: Any, path: Any, params_str: Any = "", body_str: Any = ""
-    ) -> None:
+    ) -> tuple[str, str]:
         """HMAC-SHA256 → hex digest.  nonce+key+path+query+body."""
         nonce = str(int(time.time() * 1000))
         msg = f"{nonce}{self.api_key}{path}{params_str}{body_str}"
-        sig = hmac.new(self.api_secret.encode(), msg.encode(), hashlib.sha256).hexdigest()
+        secret = self.api_secret or ""
+        sig = hmac.new(secret.encode(), msg.encode(), hashlib.sha256).hexdigest()
         return nonce, sig
 
-    def _get_headers(self, method: Any = "GET", path: Any = "", params: Any = None) -> None:
-        headers = {"Content-Type": "application/json", "Accept": "application/json"}
+    def _get_headers(
+        self, method: Any = "GET", path: Any = "", params: Any = None
+    ) -> dict[str, str]:
+        headers: dict[str, str] = {"Content-Type": "application/json", "Accept": "application/json"}
         if self.api_key and self.api_secret and "/api/" in path:
             qs = urlencode(params) if params else ""
             nonce, sig = self._generate_signature(method, path, qs)
@@ -130,14 +133,16 @@ class LocalBitcoinsRequestData(Feed):
     # ── error detection ─────────────────────────────────────────
 
     @staticmethod
-    def _is_error(data: Any) -> None:
+    def _is_error(data: Any) -> bool:
         if data is None:
             return True
         return bool(isinstance(data, dict) and "error" in data)
 
     # ── _get_xxx internal methods ───────────────────────────────
 
-    def _get_tick(self, symbol: Any, extra_data: Any = None, **kwargs: Any) -> None:
+    def _get_tick(
+        self, symbol: Any, extra_data: Any = None, **kwargs: Any
+    ) -> tuple[str, dict[str, Any], dict[str, Any]]:
         path = self._params.get_rest_path("get_tick")
         extra_data = update_extra_data(
             extra_data,
@@ -151,7 +156,9 @@ class LocalBitcoinsRequestData(Feed):
         )
         return path, {}, extra_data
 
-    def _get_exchange_info(self, extra_data: Any = None, **kwargs: Any) -> None:
+    def _get_exchange_info(
+        self, extra_data: Any = None, **kwargs: Any
+    ) -> tuple[str, dict[str, Any], dict[str, Any]]:
         path = self._params.get_rest_path("get_exchange_info")
         extra_data = update_extra_data(
             extra_data,
@@ -165,7 +172,9 @@ class LocalBitcoinsRequestData(Feed):
         )
         return path, {}, extra_data
 
-    def _get_server_time(self, extra_data: Any = None, **kwargs: Any) -> None:
+    def _get_server_time(
+        self, extra_data: Any = None, **kwargs: Any
+    ) -> tuple[str, dict[str, Any], dict[str, Any]]:
         path = self._params.get_rest_path("get_server_time")
         extra_data = update_extra_data(
             extra_data,
@@ -177,7 +186,9 @@ class LocalBitcoinsRequestData(Feed):
         )
         return path, {}, extra_data
 
-    def _get_ads(self, ad_id: Any, extra_data: Any = None, **kwargs: Any) -> None:
+    def _get_ads(
+        self, ad_id: Any, extra_data: Any = None, **kwargs: Any
+    ) -> tuple[str, dict[str, Any], dict[str, Any]]:
         path = self._params.get_rest_path("get_ads", id=ad_id)
         extra_data = update_extra_data(
             extra_data,
@@ -197,7 +208,7 @@ class LocalBitcoinsRequestData(Feed):
         country_code: Any = "all",
         extra_data: Any = None,
         **kwargs: Any,
-    ) -> None:
+    ) -> tuple[str, dict[str, Any], dict[str, Any]]:
         path = self._params.get_rest_path(
             "get_online_ads", currency=currency.lower(), country_code=country_code.lower()
         )
@@ -214,7 +225,9 @@ class LocalBitcoinsRequestData(Feed):
         )
         return path, {}, extra_data
 
-    def _get_balance(self, extra_data: Any = None, **kwargs: Any) -> None:
+    def _get_balance(
+        self, extra_data: Any = None, **kwargs: Any
+    ) -> tuple[str, dict[str, Any], dict[str, Any]]:
         path = self._params.get_rest_path("get_balance")
         extra_data = update_extra_data(
             extra_data,
@@ -227,7 +240,9 @@ class LocalBitcoinsRequestData(Feed):
         )
         return path, {}, extra_data
 
-    def _get_account(self, extra_data: Any = None, **kwargs: Any) -> None:
+    def _get_account(
+        self, extra_data: Any = None, **kwargs: Any
+    ) -> tuple[str, dict[str, Any], dict[str, Any]]:
         path = self._params.get_rest_path("get_account")
         extra_data = update_extra_data(
             extra_data,
@@ -243,7 +258,7 @@ class LocalBitcoinsRequestData(Feed):
     # ── normalization functions ──────────────────────────────────
 
     @staticmethod
-    def _get_tick_normalize_function(input_data: Any, extra_data: Any) -> None:
+    def _get_tick_normalize_function(input_data: Any, extra_data: Any) -> tuple[Any, bool]:
         if LocalBitcoinsRequestData._is_error(input_data):
             return input_data, False
         if isinstance(input_data, dict):
@@ -251,7 +266,7 @@ class LocalBitcoinsRequestData(Feed):
         return input_data, False
 
     @staticmethod
-    def _get_exchange_info_normalize_function(input_data: Any, extra_data: Any) -> None:
+    def _get_exchange_info_normalize_function(input_data: Any, extra_data: Any) -> tuple[Any, bool]:
         if LocalBitcoinsRequestData._is_error(input_data):
             return input_data, False
         if isinstance(input_data, dict):
@@ -261,13 +276,13 @@ class LocalBitcoinsRequestData(Feed):
         return input_data, False
 
     @staticmethod
-    def _get_server_time_normalize_function(input_data: Any, extra_data: Any) -> None:
+    def _get_server_time_normalize_function(input_data: Any, extra_data: Any) -> tuple[Any, bool]:
         if input_data is None:
             return None, False
         return [input_data], True
 
     @staticmethod
-    def _get_ads_normalize_function(input_data: Any, extra_data: Any) -> None:
+    def _get_ads_normalize_function(input_data: Any, extra_data: Any) -> tuple[Any, bool]:
         if LocalBitcoinsRequestData._is_error(input_data):
             return input_data, False
         if isinstance(input_data, dict):
@@ -277,7 +292,7 @@ class LocalBitcoinsRequestData(Feed):
         return input_data, False
 
     @staticmethod
-    def _get_balance_normalize_function(input_data: Any, extra_data: Any) -> None:
+    def _get_balance_normalize_function(input_data: Any, extra_data: Any) -> tuple[Any, bool]:
         if LocalBitcoinsRequestData._is_error(input_data):
             return input_data, False
         if isinstance(input_data, dict):
@@ -285,7 +300,7 @@ class LocalBitcoinsRequestData(Feed):
         return input_data, False
 
     @staticmethod
-    def _get_account_normalize_function(input_data: Any, extra_data: Any) -> None:
+    def _get_account_normalize_function(input_data: Any, extra_data: Any) -> tuple[Any, bool]:
         if LocalBitcoinsRequestData._is_error(input_data):
             return input_data, False
         if isinstance(input_data, dict):

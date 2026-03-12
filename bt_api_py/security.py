@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 try:
     from cryptography.fernet import Fernet
     from cryptography.hazmat.primitives import hashes
-    from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2
+    from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 
     CRYPTO_AVAILABLE = True
 except ImportError:
@@ -67,7 +67,7 @@ class SecureCredentialManager:
         """
         if salt is None:
             salt = os.urandom(16)
-        kdf = PBKDF2(
+        kdf = PBKDF2HMAC(
             algorithm=hashes.SHA256(),
             length=32,
             salt=salt,
@@ -166,14 +166,14 @@ class SecureCredentialManager:
             credentials = {
                 "api_key": self.load_from_env("BINANCE_API_KEY"),
                 "secret": self.load_from_env("BINANCE_SECRET"),
-                "testnet": self.load_from_env("BINANCE_TESTNET", "false").lower() == "true",
+                "testnet": (self.load_from_env("BINANCE_TESTNET", "false") or "").lower() == "true",
             }
         elif exchange == "OKX":
             credentials = {
                 "api_key": self.load_from_env("OKX_API_KEY"),
                 "secret": self.load_from_env("OKX_SECRET"),
                 "passphrase": self.load_from_env("OKX_PASSPHRASE"),
-                "testnet": self.load_from_env("OKX_TESTNET", "false").lower() == "true",
+                "testnet": (self.load_from_env("OKX_TESTNET", "false") or "").lower() == "true",
             }
         elif exchange == "CTP":
             credentials = {
@@ -202,7 +202,7 @@ class SecureCredentialManager:
         return credentials
 
 
-def load_credentials_from_env_file(env_file: str | Path = ".env") -> dict[str, str]:
+def load_credentials_from_env_file(env_file: str | Path = ".env") -> dict[str, str | None]:
     """
     Load credentials from .env file.
 
@@ -218,7 +218,7 @@ def load_credentials_from_env_file(env_file: str | Path = ".env") -> dict[str, s
         return dotenv_values(env_file)
     except ImportError:
         # Fallback: manual parsing
-        env_vars = {}
+        env_vars: dict[str, str | None] = {}
         env_path = Path(env_file)
 
         if not env_path.exists():

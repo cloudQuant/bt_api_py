@@ -39,15 +39,15 @@ def _ctp_future_subscribe_handler(
         market_kwargs = dict(exchange_params.items())
         market_kwargs["stream_name"] = "ctp_market_stream"
         market_kwargs["topics"] = topics
-        stream = CtpMarketStream(data_queue, **market_kwargs)
-        stream.start()
+        market_stream = CtpMarketStream(data_queue, **market_kwargs)
+        market_stream.start()
         bt_api.log("CTP market stream started")
 
     if not bt_api._subscription_flags.get("CTP___FUTURE_account", False):
         trade_kwargs = dict(exchange_params.items())
         trade_kwargs["stream_name"] = "ctp_trade_stream"
-        stream = CtpTradeStream(data_queue, **trade_kwargs)
-        stream.start()
+        trade_stream = CtpTradeStream(data_queue, **trade_kwargs)
+        trade_stream.start()
         bt_api._subscription_flags["CTP___FUTURE_account"] = True
         bt_api.log("CTP trade stream started")
 

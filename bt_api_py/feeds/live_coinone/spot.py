@@ -10,7 +10,7 @@ from bt_api_py.feeds.live_coinone.request_base import CoinoneRequestData
 class CoinoneRequestDataSpot(CoinoneRequestData):
     """Coinone Spot REST Feed."""
 
-    def __init__(self, data_queue, **kwargs) -> None:
+    def __init__(self, data_queue: Any = None, **kwargs: Any) -> None:
         super().__init__(data_queue, **kwargs)
 
     # ── market data (public GET) ────────────────────────────────

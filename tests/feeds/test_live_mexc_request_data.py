@@ -62,7 +62,6 @@ def test_mexc_async_tick_data():
 
     # Note: MEXC's current implementation uses sync requests
     # This test would require async implementation
-    pass
 
 
 @pytest.mark.kline
@@ -86,7 +85,6 @@ def test_mexc_async_kline_data():
 
     # Note: MEXC's current implementation uses sync requests
     # This test would require async implementation
-    pass
 
 
 def order_book_value_equals(order_book):

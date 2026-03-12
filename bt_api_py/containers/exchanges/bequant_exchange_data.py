@@ -37,7 +37,7 @@ def _get_bequant_config() -> Any | None:
             _bequant_config = load_exchange_config(config_path)
         _bequant_config_loaded = True
     except Exception as e:
-        logger.warn(f"Failed to load bequant.yaml config: {e}")
+        logger.warning(f"Failed to load bequant.yaml config: {e}")
     return _bequant_config
 
 

@@ -26,7 +26,7 @@ class BalancerRequestDataSpot(BalancerRequestData):
     """
 
     @classmethod
-    def _capabilities(cls: Any) -> None:
+    def _capabilities(cls: Any) -> set[Capability]:
         """Declare supported capabilities."""
         return {
             Capability.GET_TICK,
@@ -129,7 +129,9 @@ class BalancerRequestDataSpot(BalancerRequestData):
         return self._params.get_rest_path(request_type), {}, extra_data
 
     @staticmethod
-    def _get_pool_normalize_function(input_data: Any, extra_data: Any) -> None:
+    def _get_pool_normalize_function(
+        input_data: Any, extra_data: Any
+    ) -> tuple[list[dict[str, Any]], bool]:
         """Normalize pool query response."""
         if not input_data:
             return [], False
@@ -143,7 +145,7 @@ class BalancerRequestDataSpot(BalancerRequestData):
         # Return as list for consistency with other APIs
         return [pool_data], status
 
-    def get_pool(self, pool_id: str, extra_data: Any = None, **kwargs: dict[str, Any]) -> None:
+    def get_pool(self, pool_id: str, extra_data: Any = None, **kwargs: dict[str, Any]) -> Any:
         """Get pool details.
 
         Args:
@@ -231,7 +233,7 @@ class BalancerRequestDataSpot(BalancerRequestData):
         return self._params.get_rest_path(request_type), {}, extra_data
 
     @staticmethod
-    def _get_pools_normalize_function(input_data: Any, extra_data: Any) -> None:
+    def _get_pools_normalize_function(input_data: Any, extra_data: Any) -> tuple[list[Any], bool]:
         """Normalize pools query response."""
         if not input_data:
             return [], False
@@ -247,7 +249,7 @@ class BalancerRequestDataSpot(BalancerRequestData):
         min_tvl: float | None = None,
         extra_data: Any = None,
         **kwargs: dict[str, Any],
-    ) -> None:
+    ) -> Any:
         """Get list of pools sorted by TVL.
 
         Args:
@@ -259,7 +261,10 @@ class BalancerRequestDataSpot(BalancerRequestData):
         Returns:
             RequestData with list of pools
         """
-        path, params, extra_data = self._get_pools(extra_data, first, min_tvl, **kwargs)
+        skip = kwargs.get("skip", 0) if isinstance(kwargs.get("skip"), int) else 0
+        path, params, extra_data = self._get_pools(
+            extra_data=extra_data, first=first, min_tvl=min_tvl, skip=skip
+        )
         return self.request(path, params=params, extra_data=extra_data)
 
     # ==================== Token Price Queries ====================
@@ -308,7 +313,7 @@ class BalancerRequestDataSpot(BalancerRequestData):
         return self._params.get_rest_path(request_type), {}, extra_data
 
     @staticmethod
-    def _get_tick_normalize_function(input_data: Any, extra_data: Any) -> None:
+    def _get_tick_normalize_function(input_data: Any, extra_data: Any) -> tuple[list[Any], bool]:
         """Normalize ticker response."""
         if not input_data:
             return [], False
@@ -321,7 +326,7 @@ class BalancerRequestDataSpot(BalancerRequestData):
 
         return [ticker_data], status
 
-    def get_tick(self, symbol: str, extra_data: Any = None, **kwargs: dict[str, Any]) -> None:
+    def get_tick(self, symbol: str, extra_data: Any = None, **kwargs: dict[str, Any]) -> Any:
         """Get token price and 24h statistics.
 
         Args:
@@ -415,7 +420,9 @@ class BalancerRequestDataSpot(BalancerRequestData):
         return self._params.get_rest_path(request_type), {}, extra_data
 
     @staticmethod
-    def _get_swap_path_normalize_function(input_data: Any, extra_data: Any) -> None:
+    def _get_swap_path_normalize_function(
+        input_data: Any, extra_data: Any
+    ) -> tuple[list[Any], bool]:
         """Normalize swap path response."""
         if not input_data:
             return [], False
@@ -436,7 +443,7 @@ class BalancerRequestDataSpot(BalancerRequestData):
         swap_type: str = "EXACT_IN",
         extra_data: Any = None,
         **kwargs: dict[str, Any],
-    ) -> None:
+    ) -> Any:
         """Get optimal swap path for a token swap.
 
         Args:
@@ -492,7 +499,7 @@ class BalancerRequestDataSpot(BalancerRequestData):
         return self._params.get_rest_path(request_type), {}, extra_data
 
     @staticmethod
-    def _get_depth_normalize_function(input_data: Any, extra_data: Any) -> None:
+    def _get_depth_normalize_function(input_data: Any, extra_data: Any) -> tuple[list[Any], bool]:
         """Normalize depth response."""
         # Balancer pools don't have order books
         # Return liquidity information instead
@@ -503,7 +510,7 @@ class BalancerRequestDataSpot(BalancerRequestData):
 
     def get_depth(
         self, symbol: str, count: int = 20, extra_data: Any = None, **kwargs: dict[str, Any]
-    ) -> None:
+    ) -> Any:
         """Get liquidity depth.
 
         Note: This is not a traditional order book. For Balancer pools,
@@ -559,7 +566,7 @@ class BalancerRequestDataSpot(BalancerRequestData):
         return self._params.get_rest_path(request_type), {}, extra_data
 
     @staticmethod
-    def _get_kline_normalize_function(input_data: Any, extra_data: Any) -> None:
+    def _get_kline_normalize_function(input_data: Any, extra_data: Any) -> tuple[list[Any], bool]:
         """Normalize kline response."""
         # Balancer doesn't have direct kline data
         return [], True
@@ -571,7 +578,7 @@ class BalancerRequestDataSpot(BalancerRequestData):
         count: int = 20,
         extra_data: Any = None,
         **kwargs: dict[str, Any],
-    ) -> None:
+    ) -> Any:
         """Get kline data.
 
         Note: Balancer doesn't provide direct kline data through GraphQL.
@@ -610,7 +617,7 @@ class BalancerRequestDataSpot(BalancerRequestData):
         # For Balancer, exchange info is the list of pools
         return self._get_pools(extra_data=extra_data, **kwargs)
 
-    def get_exchange_info(self, extra_data: Any = None, **kwargs: Any) -> None:
+    def get_exchange_info(self, extra_data: Any = None, **kwargs: Any) -> Any:
         """Get exchange information.
 
         Returns:
@@ -707,7 +714,9 @@ class BalancerRequestDataSpot(BalancerRequestData):
         return self._params.get_rest_path(request_type), {}, extra_data
 
     @staticmethod
-    def _get_pool_events_normalize_function(input_data: Any, extra_data: Any) -> None:
+    def _get_pool_events_normalize_function(
+        input_data: Any, extra_data: Any
+    ) -> tuple[list[Any], bool]:
         """Normalize pool events response."""
         if not input_data:
             return [], False
@@ -725,7 +734,7 @@ class BalancerRequestDataSpot(BalancerRequestData):
         end_time: int | None = None,
         extra_data: Any = None,
         **kwargs: dict[str, Any],
-    ) -> None:
+    ) -> Any:
         """Get pool events (swaps, joins, exits).
 
         Args:
@@ -759,7 +768,7 @@ class BalancerRequestDataSpot(BalancerRequestData):
         client_order_id: Any = None,
         extra_data: Any = None,
         **kwargs: Any,
-    ) -> None:
+    ) -> tuple[str, dict[str, Any], dict[str, Any]]:
         """Prepare swap order parameters. Returns (path, body, extra_data).
 
         For Balancer DEX, 'making an order' means preparing a swap path.
@@ -807,7 +816,7 @@ class BalancerRequestDataSpot(BalancerRequestData):
         client_order_id: Any = None,
         extra_data: Any = None,
         **kwargs: Any,
-    ) -> None:
+    ) -> Any:
         """Place a swap order following standard Feed interface. Returns RequestData.
 
         Note: Balancer swaps require on-chain transaction signing.
@@ -828,7 +837,7 @@ class BalancerRequestDataSpot(BalancerRequestData):
 
     def _cancel_order(
         self, symbol: Any, order_id: Any, extra_data: Any = None, **kwargs: Any
-    ) -> None:
+    ) -> tuple[str, dict[str, Any], dict[str, Any]]:
         """Prepare cancel order parameters. Returns (path, params, extra_data).
 
         Note: Balancer is a DEX — on-chain swaps cannot be cancelled
@@ -849,7 +858,7 @@ class BalancerRequestDataSpot(BalancerRequestData):
 
     def cancel_order(
         self, symbol: Any, order_id: Any, extra_data: Any = None, **kwargs: Any
-    ) -> None:
+    ) -> Any:
         """Cancel order. Returns RequestData.
 
         Note: DEX swaps are atomic and cannot be cancelled once on-chain.
@@ -859,7 +868,7 @@ class BalancerRequestDataSpot(BalancerRequestData):
 
     def _query_order(
         self, symbol: Any, order_id: Any, extra_data: Any = None, **kwargs: Any
-    ) -> None:
+    ) -> tuple[str, dict[str, Any], dict[str, Any]]:
         """Prepare query order parameters. Returns (path, params, extra_data).
 
         For DEX, this queries transaction status on-chain.
@@ -877,14 +886,14 @@ class BalancerRequestDataSpot(BalancerRequestData):
         )
         return "GET /order", {}, extra_data
 
-    def query_order(
-        self, symbol: Any, order_id: Any, extra_data: Any = None, **kwargs: Any
-    ) -> None:
+    def query_order(self, symbol: Any, order_id: Any, extra_data: Any = None, **kwargs: Any) -> Any:
         """Query order status. Returns RequestData."""
         path, params, extra_data = self._query_order(symbol, order_id, extra_data, **kwargs)
         return self.request(path, params=params, extra_data=extra_data)
 
-    def _get_open_orders(self, symbol: Any = None, extra_data: Any = None, **kwargs: Any) -> None:
+    def _get_open_orders(
+        self, symbol: Any = None, extra_data: Any = None, **kwargs: Any
+    ) -> tuple[str, dict[str, Any], dict[str, Any]]:
         """Prepare get open orders parameters. Returns (path, params, extra_data).
 
         Note: DEX has no open orders concept — swaps are atomic.
@@ -901,7 +910,7 @@ class BalancerRequestDataSpot(BalancerRequestData):
         )
         return "GET /open_orders", {}, extra_data
 
-    def get_open_orders(self, symbol: Any = None, extra_data: Any = None, **kwargs: Any) -> None:
+    def get_open_orders(self, symbol: Any = None, extra_data: Any = None, **kwargs: Any) -> Any:
         """Get open orders. Returns RequestData.
 
         Note: DEX swaps are atomic; no pending orders.
@@ -912,7 +921,9 @@ class BalancerRequestDataSpot(BalancerRequestData):
     # ==================== Standard Account Interfaces ====================
     # Note: Balancer is a DEX. Account/balance queries require Web3/on-chain.
 
-    def _get_account(self, symbol: Any = None, extra_data: Any = None, **kwargs: Any) -> None:
+    def _get_account(
+        self, symbol: Any = None, extra_data: Any = None, **kwargs: Any
+    ) -> tuple[str, dict[str, Any], dict[str, Any]]:
         """Prepare get account parameters. Returns (path, params, extra_data).
 
         For DEX, account info is the wallet address and connected chain.
@@ -930,7 +941,7 @@ class BalancerRequestDataSpot(BalancerRequestData):
         )
         return "GET /account", {}, extra_data
 
-    def get_account(self, symbol: Any = None, extra_data: Any = None, **kwargs: Any) -> None:
+    def get_account(self, symbol: Any = None, extra_data: Any = None, **kwargs: Any) -> Any:
         """Get account info. Returns RequestData.
 
         Note: DEX account info is chain/wallet-based.
@@ -938,7 +949,9 @@ class BalancerRequestDataSpot(BalancerRequestData):
         path, params, extra_data = self._get_account(symbol, extra_data, **kwargs)
         return self.request(path, params=params, extra_data=extra_data)
 
-    def _get_balance(self, symbol: Any = None, extra_data: Any = None, **kwargs: Any) -> None:
+    def _get_balance(
+        self, symbol: Any = None, extra_data: Any = None, **kwargs: Any
+    ) -> tuple[str, dict[str, Any], dict[str, Any]]:
         """Prepare get balance parameters. Returns (path, params, extra_data).
 
         For DEX, balance queries require Web3 connection to read on-chain data.
@@ -956,7 +969,7 @@ class BalancerRequestDataSpot(BalancerRequestData):
         )
         return "GET /balance", {}, extra_data
 
-    def get_balance(self, symbol: Any = None, extra_data: Any = None, **kwargs: Any) -> None:
+    def get_balance(self, symbol: Any = None, extra_data: Any = None, **kwargs: Any) -> Any:
         """Get token balance. Returns RequestData.
 
         Note: DEX balance requires Web3/on-chain query.

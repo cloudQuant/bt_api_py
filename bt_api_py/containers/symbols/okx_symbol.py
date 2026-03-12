@@ -26,19 +26,19 @@ class OkxSymbolData(SymbolData):
         self.base_asset_digital = None
         self.min_qty = None
         self.max_qty = None
-        self.qty_digital = None
-        self.qty_unit = None
+        self.qty_digital: float | None = None
+        self.qty_unit: float | None = None
         self.max_price = None
         self.min_price = None
-        self.price_digital = None
-        self.price_unit = None
+        self.price_digital: float | None = None
+        self.price_unit: float | None = None
         self.contract_multiplier = None
         self.min_amount = None
         self.quote_asset = None
         self.base_asset = None
         self.required_margin_percent = None
         self.maintain_margin_percent = None
-        self.all_data = None
+        self.all_data: dict[str, Any] | None = None
         self.underlying_index_name = None
         self.underlying_symbol_name = None
         self.max_twap_qty = None
@@ -68,39 +68,42 @@ class OkxSymbolData(SymbolData):
             self.has_been_json_encoded = True
         if self.has_been_init_data:
             return self
-        self.symbol_name = from_dict_get_string(self.symbol_data, "instId")
-        self.asset_type = from_dict_get_string(self.symbol_data, "instType")
-        self.base_asset = from_dict_get_string(self.symbol_data, "baseCcy")
-        self.quote_asset = from_dict_get_string(self.symbol_data, "quoteCcy")
-        self.contract_multiplier = from_dict_get_float(self.symbol_data, "ctMult")
-        self.contract_notional_value = from_dict_get_float(self.symbol_data, "ctVal")
-        self.min_amount = from_dict_get_float(self.symbol_data, "notional")
-        self.price_unit = from_dict_get_float(self.symbol_data, "tickSz")
-        self.price_digital = 1 / self.price_unit if self.price_unit else 1.0
-        self.qty_unit = from_dict_get_float(self.symbol_data, "lotSz")
-        self.qty_digital = 1 / self.qty_unit if self.qty_unit else 1.0
-        self.max_qty = from_dict_get_float(self.symbol_data, "maxLmtAmt")
-        self.min_qty = from_dict_get_float(self.symbol_data, "minSz")
-        self.fee_currency = from_dict_get_string(self.symbol_data, "settleCcy")
-        self.underlying_index_name = from_dict_get_string(self.symbol_data, "uly")
-        self.underlying_symbol_name = from_dict_get_string(self.symbol_data, "instFamily")
-        self.option_type = from_dict_get_string(self.symbol_data, "optType")
-        self.option_strike_price = from_dict_get_float(self.symbol_data, "stk")
-        self.list_time = from_dict_get_float(self.symbol_data, "listTime")
-        self.auction_end_time = from_dict_get_float(self.symbol_data, "auctionEndTime")
-        self.delist_time = from_dict_get_float(self.symbol_data, "expTime")
-        self.max_leverage = from_dict_get_float(self.symbol_data, "lever")
-        self.contract_type = from_dict_get_string(self.symbol_data, "ctType")
-        self.symbol_status = from_dict_get_string(self.symbol_data, "state")
-        self.symbol_trading_type = from_dict_get_string(self.symbol_data, "ruleType")
-        self.max_limit_qty = from_dict_get_float(self.symbol_data, "maxLmtSz")
-        self.max_market_qty = from_dict_get_float(self.symbol_data, "maxMktSz")
-        self.max_limit_amount = from_dict_get_float(self.symbol_data, "maxLmtAmt")
-        self.max_market_amount = from_dict_get_float(self.symbol_data, "maxMktAmt")
-        self.max_twap_qty = from_dict_get_float(self.symbol_data, "maxTwapSz")
-        self.max_iceberg_qty = from_dict_get_float(self.symbol_data, "maxIcebergSz")
-        self.max_stop_qty = from_dict_get_float(self.symbol_data, "maxStopSz")
-        self.future_settlement = from_dict_get_bool(self.symbol_data, "futureSettlement")
+        data = self.symbol_data or {}
+        self.symbol_name = from_dict_get_string(data, "instId")
+        self.asset_type = from_dict_get_string(data, "instType")
+        self.base_asset = from_dict_get_string(data, "baseCcy")
+        self.quote_asset = from_dict_get_string(data, "quoteCcy")
+        self.contract_multiplier = from_dict_get_float(data, "ctMult")
+        self.contract_notional_value = from_dict_get_float(data, "ctVal")
+        self.min_amount = from_dict_get_float(data, "notional")
+        self.price_unit = from_dict_get_float(data, "tickSz")
+        pu = self.price_unit
+        self.price_digital = (1.0 / pu) if pu is not None and pu != 0 else 1.0
+        self.qty_unit = from_dict_get_float(data, "lotSz")
+        qu = self.qty_unit
+        self.qty_digital = (1.0 / qu) if qu is not None and qu != 0 else 1.0
+        self.max_qty = from_dict_get_float(data, "maxLmtAmt")
+        self.min_qty = from_dict_get_float(data, "minSz")
+        self.fee_currency = from_dict_get_string(data, "settleCcy")
+        self.underlying_index_name = from_dict_get_string(data, "uly")
+        self.underlying_symbol_name = from_dict_get_string(data, "instFamily")
+        self.option_type = from_dict_get_string(data, "optType")
+        self.option_strike_price = from_dict_get_float(data, "stk")
+        self.list_time = from_dict_get_float(data, "listTime")
+        self.auction_end_time = from_dict_get_float(data, "auctionEndTime")
+        self.delist_time = from_dict_get_float(data, "expTime")
+        self.max_leverage = from_dict_get_float(data, "lever")
+        self.contract_type = from_dict_get_string(data, "ctType")
+        self.symbol_status = from_dict_get_string(data, "state")
+        self.symbol_trading_type = from_dict_get_string(data, "ruleType")
+        self.max_limit_qty = from_dict_get_float(data, "maxLmtSz")
+        self.max_market_qty = from_dict_get_float(data, "maxMktSz")
+        self.max_limit_amount = from_dict_get_float(data, "maxLmtAmt")
+        self.max_market_amount = from_dict_get_float(data, "maxMktAmt")
+        self.max_twap_qty = from_dict_get_float(data, "maxTwapSz")
+        self.max_iceberg_qty = from_dict_get_float(data, "maxIcebergSz")
+        self.max_stop_qty = from_dict_get_float(data, "maxStopSz")
+        self.future_settlement = from_dict_get_bool(data, "futureSettlement")
         self.has_been_init_data = True
         return self
 
@@ -158,7 +161,7 @@ class OkxSymbolData(SymbolData):
                 "max_stop_qty": self.max_stop_qty,
                 "future_settlement": self.future_settlement,
             }
-        return self.all_data
+        return self.all_data or {}
 
     def get_maintain_margin_percent(self) -> Any:
         return self.maintain_margin_percent

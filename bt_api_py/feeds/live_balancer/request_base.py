@@ -27,7 +27,7 @@ class BalancerRequestData(Feed):
     """
 
     @classmethod
-    def _capabilities(cls: Any) -> None:
+    def _capabilities(cls: Any) -> set[Capability]:
         """Declare supported capabilities for Balancer."""
         return {
             Capability.GET_TICK,
@@ -73,7 +73,7 @@ class BalancerRequestData(Feed):
         Returns:
             Dictionary with query and variables
         """
-        payload = {"query": query}
+        payload: dict[str, Any] = {"query": query}
         if variables:
             payload["variables"] = variables
         return payload
@@ -115,7 +115,7 @@ class BalancerRequestData(Feed):
             if "errors" in response:
                 self.request_logger.error(f"GraphQL errors: {response['errors']}")
 
-            return RequestData(response, extra_data)
+            return RequestData(response, extra_data or {})
 
         except Exception as e:
             self.request_logger.error(f"GraphQL query failed: {e}")
@@ -157,7 +157,7 @@ class BalancerRequestData(Feed):
             if "errors" in response:
                 self.async_logger.error(f"GraphQL errors: {response['errors']}")
 
-            return RequestData(response, extra_data)
+            return RequestData(response, extra_data or {})
 
         except Exception as e:
             self.async_logger.error(f"Async GraphQL query failed: {e}")
@@ -170,7 +170,7 @@ class BalancerRequestData(Feed):
         body: Any = None,
         extra_data: Any = None,
         timeout: Any = 10,
-    ) -> None:
+    ) -> RequestData:
         """Execute a request. For Balancer, delegates to GraphQL execution.
 
         If extra_data contains '_graphql_query' and '_graphql_variables',
@@ -190,7 +190,7 @@ class BalancerRequestData(Feed):
         body: Any = None,
         extra_data: Any = None,
         timeout: Any = 5,
-    ) -> None:
+    ) -> RequestData:
         """Async request. For Balancer, delegates to async GraphQL execution.
 
         If extra_data contains '_graphql_query' and '_graphql_variables',
@@ -200,7 +200,7 @@ class BalancerRequestData(Feed):
             query = extra_data.pop("_graphql_query")
             variables = extra_data.pop("_graphql_variables", None)
             return await self._async_execute_graphql_query(query, variables, extra_data)
-        return RequestData(body or params or {}, extra_data)
+        return RequestData(body or params or {}, extra_data or {})
 
     def async_callback(self, future: Any) -> None:
         """Callback function for async requests, push result to data_queue."""
@@ -213,7 +213,9 @@ class BalancerRequestData(Feed):
 
     # ── Standard Interface: get_server_time ───────────────────────
 
-    def _get_server_time(self, extra_data: Any = None, **kwargs: Any) -> None:
+    def _get_server_time(
+        self, extra_data: Any = None, **kwargs: Any
+    ) -> tuple[str, dict[str, Any], dict[str, Any]]:
         """Prepare server time request. Returns (path, params, extra_data).
 
         Note: Balancer is a DEX without a server time endpoint.
@@ -234,7 +236,7 @@ class BalancerRequestData(Feed):
         )
         return "GET /server_time", {}, extra_data
 
-    def get_server_time(self, extra_data: Any = None, **kwargs: Any) -> None:
+    def get_server_time(self, extra_data: Any = None, **kwargs: Any) -> RequestData:
         """Get server time. Returns RequestData.
 
         Balancer is a DEX — returns local timestamp as proxy.
@@ -253,11 +255,9 @@ class BalancerRequestData(Feed):
 
     def connect(self) -> None:
         """No-op for HTTP-based GraphQL API."""
-        pass
 
     def disconnect(self) -> None:
         """No-op for HTTP-based GraphQL API."""
-        pass
 
     def is_connected(self) -> bool:
         """Always return True for HTTP-based GraphQL API."""

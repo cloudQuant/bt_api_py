@@ -5,6 +5,8 @@ Handles authentication, signing, and all REST API methods for Hyperliquid.
 Hyperliquid uses EIP-712 signatures for authenticated requests.
 """
 
+from typing import Any
+
 import requests
 from eth_account import Account
 
@@ -52,7 +54,7 @@ class HyperliquidRequestData(Feed):
     """Base class for Hyperliquid API requests"""
 
     @classmethod
-    def _capabilities(cls):
+    def _capabilities(cls) -> set[Capability]:
         return {
             Capability.GET_TICK,
             Capability.GET_DEPTH,
@@ -68,18 +70,19 @@ class HyperliquidRequestData(Feed):
             Capability.ACCOUNT_STREAM,
         }
 
-    def __init__(self, data_queue, **kwargs):
+    def __init__(self, data_queue: Any = None, **kwargs: Any) -> None:
         super().__init__(data_queue, **kwargs)
 
         self.asset_type = kwargs.get("asset_type", "SPOT")
         self.logger_name = kwargs.get("logger_name", "hyperliquid_feed.log")
-        self._params = kwargs.get("exchange_data")
-
-        if self._params is None:
-            if self.asset_type == "SPOT":
-                self._params = HyperliquidExchangeDataSpot()
-            else:
-                self._params = HyperliquidExchangeDataSwap()
+        params = kwargs.get("exchange_data")
+        if params is None:
+            params = (
+                HyperliquidExchangeDataSpot()
+                if self.asset_type == "SPOT"
+                else HyperliquidExchangeDataSwap()
+            )
+        self._params: HyperliquidExchangeDataSpot | HyperliquidExchangeDataSwap = params
 
         self.request_logger = get_logger("hyperliquid_feed")
         self.async_logger = get_logger("hyperliquid_feed")
@@ -166,7 +169,7 @@ class HyperliquidRequestData(Feed):
             result = future.result()
             self.data_queue.put(result)
         except Exception as e:
-            self.async_logger.warn(f"async_callback::{e}")
+            self.async_logger.warning(f"async_callback::{e}")
 
     def _make_request(self, request_type, **kwargs):
         """Make HTTP request to Hyperliquid API (legacy helper)"""

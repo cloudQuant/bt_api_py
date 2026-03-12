@@ -17,22 +17,22 @@ class BybitTickerData(TickerData):
         self.local_update_time = time.time()  # 本地时间戳
         self.symbol_name = symbol_name
         self.asset_type = asset_type  # ticker的类型
-        self.ticker_data = ticker_info if has_been_json_encoded else None
-        self.ticker_symbol_name = None
-        self.server_time = None
-        self.bid_price = None
-        self.ask_price = None
-        self.bid_volume = None
-        self.ask_volume = None
-        self.last_price = None
-        self.last_volume = None
-        self.high_price_24h = None
-        self.low_price_24h = None
-        self.volume_24h = None
-        self.turnover_24h = None
-        self.price_change_24h = None
-        self.price_change_percent_24h = None
-        self.all_data = None
+        self.ticker_data: dict[str, Any] | None = ticker_info if has_been_json_encoded else None
+        self.ticker_symbol_name: str | None = None
+        self.server_time: float | None = None
+        self.bid_price: float | None = None
+        self.ask_price: float | None = None
+        self.bid_volume: float | None = None
+        self.ask_volume: float | None = None
+        self.last_price: float | None = None
+        self.last_volume: float | None = None
+        self.high_price_24h: float | None = None
+        self.low_price_24h: float | None = None
+        self.volume_24h: float | None = None
+        self.turnover_24h: float | None = None
+        self.price_change_24h: float | None = None
+        self.price_change_percent_24h: float | None = None
+        self.all_data: dict[str, Any] | None = None
         self.has_been_init_data = False
 
     def init_data(self) -> "Self":
@@ -41,11 +41,11 @@ class BybitTickerData(TickerData):
             return self
 
         try:
-            result = self.ticker_data.get("result", {})
+            result = (self.ticker_data or {}).get("result", {})
             list_data = result.get("list", [])
 
             if not list_data:
-                return
+                return self
 
             ticker = list_data[0]  # Bybit 返回列表，取第一个
 
@@ -107,7 +107,7 @@ class BybitTickerData(TickerData):
                 "price_change_24h": self.price_change_24h,
                 "price_change_percent_24h": self.price_change_percent_24h,
             }
-        return self.all_data
+        return self.all_data or {}
 
     def __str__(self) -> str:
         """返回 ticker 的字符串表示."""

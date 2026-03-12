@@ -151,6 +151,11 @@ class IEventBus(ABC):
         ...
 
     @abstractmethod
+    async def publish_async(self, event_type: str, data: Any) -> None:
+        """Publish an event asynchronously."""
+        ...
+
+    @abstractmethod
     def subscribe(self, event_type: str, handler) -> None:
         """Subscribe to an event type."""
         ...
@@ -187,6 +192,9 @@ class ICache(ABC):
 
 class IRateLimiter(ABC):
     """Rate limiting interface."""
+
+    def configure_limit(self, resource: str, max_requests: int, time_window: float) -> None:  # noqa: B027
+        """Configure rate limit for a resource. Default no-op."""
 
     @abstractmethod
     async def acquire(self, resource: str, tokens: int = 1) -> None:

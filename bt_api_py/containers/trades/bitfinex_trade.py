@@ -60,7 +60,7 @@ class BitfinexRequestTradeData(TradeData):
                 "local_update_time": self.local_update_time,
                 "trade_id": self.trade_id,
                 "price": self.price,
-                "amount": abs(self.amount),
+                "amount": abs(self.amount) if self.amount is not None else 0.0,
                 "timestamp": self.timestamp,
                 "side": self.side,
                 "fee": self.fee,
@@ -81,7 +81,7 @@ class BitfinexRequestTradeData(TradeData):
         return self.price
 
     def get_amount(self):
-        return abs(self.amount)
+        return abs(self.amount) if self.amount is not None else 0.0
 
     def get_timestamp(self):
         return self.timestamp
@@ -95,7 +95,7 @@ class BitfinexRequestTradeData(TradeData):
     def get_value(self):
         """Get trade value"""
         return (
-            self.price * abs(self.amount)
+            self.price * (abs(self.amount) if self.amount is not None else 0.0)
             if self.price is not None and self.amount is not None
             else 0
         )
@@ -112,4 +112,4 @@ class BitfinexRequestTradeData(TradeData):
 class BitfinexSpotWssTradeData(BitfinexRequestTradeData):
     """Bitfinex Spot WebSocket Trade Data"""
 
-    pass  # Same structure as request data
+    # Same structure as request data

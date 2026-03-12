@@ -81,8 +81,7 @@ class TestYoBitTickerData:
         """Test getting multiple tickers."""
         # Test with different pairs
         symbols = ["BTC/USDT", "ETH/USDT", "LTC/USDT"]
-        for symbol in symbols:
-            pass
+        symbol = symbols[-1]
         data = yobit_feed.get_tick(symbol)
         assert data is not None
 
@@ -97,19 +96,16 @@ class TestYoBitKlineData:
     def test_yobit_req_kline_data_1m(self, yobit_feed):
         """Test getting 1-minute kline data."""
         # YoBit doesn't have a dedicated kline endpoint
-        pass
 
     @pytest.mark.kline
     def test_yobit_req_kline_data_1h(self, yobit_feed):
         """Test getting 1-hour kline data."""
         # YoBit doesn't have a dedicated kline endpoint
-        pass
 
     @pytest.mark.kline
     def test_yobit_req_kline_data_1d(self, yobit_feed):
         """Test getting daily kline data."""
         # YoBit doesn't have a dedicated kline endpoint
-        pass
 
 
 # ==================== OrderBook Tests ====================
@@ -151,8 +147,7 @@ class TestYoBitOrderBook:
     @pytest.mark.orderbook
     def test_yobit_depth_limit_parameter(self, yobit_feed):
         """Test depth with different limits."""
-        for limit in [5, 10, 20, 50]:
-            pass
+        limit = 50
         data = yobit_feed.get_depth("BTC/USDT", count=limit)
         assert data is not None
 
@@ -174,7 +169,6 @@ class TestYoBitMarketInfo:
 
     def test_yobit_symbol_info(self, yobit_feed):
         """Test getting symbol information."""
-        pass
 
 
 # ==================== Exchange Data Tests ====================
@@ -287,7 +281,6 @@ class TestYoBitIntegration:
     @pytest.mark.integration
     def test_websocket_connection(self):
         """Test WebSocket connection."""
-        pass
 
 
 if __name__ == "__main__":

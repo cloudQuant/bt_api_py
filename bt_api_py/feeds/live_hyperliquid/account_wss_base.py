@@ -6,6 +6,7 @@ Provides common functionality for account WebSocket data handling.
 
 import json
 import threading
+from typing import Any
 
 import websocket
 
@@ -16,7 +17,7 @@ from bt_api_py.logging_factory import get_logger
 class HyperliquidAccountWssData(Feed):
     """Base class for Hyperliquid account WebSocket data"""
 
-    def __init__(self, data_queue, **kwargs):
+    def __init__(self, data_queue: Any = None, **kwargs: Any) -> None:
         super().__init__(data_queue, **kwargs)
         self.asset_type = kwargs.get("asset_type", "SPOT")
         self.logger_name = kwargs.get("logger_name", "hyperliquid_account_wss.log")
@@ -28,9 +29,9 @@ class HyperliquidAccountWssData(Feed):
             "ws_url", self._params.wss_url if self._params else "wss://api.hyperliquid.xyz/ws"
         )
         self.user_address = kwargs.get("user_address", "")
-        self.subscriptions = []
+        self.subscriptions: list[dict[str, Any]] = []
         self.is_running = False
-        self.ws_thread = None
+        self.ws_thread: threading.Thread | None = None
 
     def _get_request_data(self, data, extra_data):
         """Create RequestData object"""
@@ -48,7 +49,6 @@ class HyperliquidAccountWssData(Feed):
 
     def process_message(self, data):
         """Process incoming message - to be overridden by subclasses"""
-        pass
 
     def on_open(self, ws):
         """Handle WebSocket connection open"""

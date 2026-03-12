@@ -32,7 +32,7 @@ def _get_ripio_config() -> Any | None:
             _ripio_config = load_exchange_config(config_path)
         _ripio_config_loaded = True
     except Exception as e:
-        logger.warn(f"Failed to load ripio.yaml config: {e}")
+        logger.warning(f"Failed to load ripio.yaml config: {e}")
     return _ripio_config
 
 

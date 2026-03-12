@@ -35,7 +35,7 @@ def _get_coinone_config() -> Any | None:
             _coinone_config = load_exchange_config(config_path)
         _coinone_config_loaded = True
     except Exception as e:
-        logger.warn(f"Failed to load coinone.yaml config: {e}")
+        logger.warning(f"Failed to load coinone.yaml config: {e}")
     return _coinone_config
 
 

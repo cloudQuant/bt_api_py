@@ -2,6 +2,8 @@
 Latoken Spot Feed – three-layer sync / async wrappers + WSS stubs.
 """
 
+from typing import Any
+
 from bt_api_py.containers.exchanges.latoken_exchange_data import LatokenExchangeDataSpot
 from bt_api_py.feeds.live_latoken.request_base import LatokenRequestData
 from bt_api_py.logging_factory import get_logger
@@ -10,7 +12,7 @@ from bt_api_py.logging_factory import get_logger
 class LatokenRequestDataSpot(LatokenRequestData):
     """Latoken Spot REST Feed."""
 
-    def __init__(self, data_queue, **kwargs):
+    def __init__(self, data_queue: Any = None, **kwargs: Any) -> None:
         super().__init__(data_queue, **kwargs)
 
     # ── server time ─────────────────────────────────────────────
@@ -134,7 +136,7 @@ class LatokenRequestDataSpot(LatokenRequestData):
 class LatokenMarketWssDataSpot:
     """Latoken Spot Market WebSocket Data Handler (stub)."""
 
-    def __init__(self, data_queue, **kwargs):
+    def __init__(self, data_queue: Any = None, **kwargs: Any) -> None:
         self.data_queue = data_queue
         self._params = LatokenExchangeDataSpot()
         self.logger_name = kwargs.get("logger_name", "latoken_spot_market_wss.log")
@@ -153,7 +155,7 @@ class LatokenMarketWssDataSpot:
 class LatokenAccountWssDataSpot:
     """Latoken Spot Account WebSocket Data Handler (stub)."""
 
-    def __init__(self, data_queue, **kwargs):
+    def __init__(self, data_queue: Any = None, **kwargs: Any) -> None:
         self.data_queue = data_queue
         self._params = LatokenExchangeDataSpot()
         self.logger_name = kwargs.get("logger_name", "latoken_spot_account_wss.log")

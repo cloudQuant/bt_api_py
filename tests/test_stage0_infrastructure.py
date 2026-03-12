@@ -209,7 +209,7 @@ class TestInstrument:
             venue_symbol="BTCUSDT",
             asset_type=AssetType.SPOT,
         )
-        with pytest.raises(Exception):  # FrozenInstanceError
+        with pytest.raises(AttributeError):  # FrozenInstanceError from frozen dataclass
             inst.internal = "ETH-USDT"
 
     def test_with_params(self):
@@ -567,6 +567,8 @@ class TestRateLimiter:
 
 class TestConfigLoader:
     def test_cex_must_have_base_urls(self):
+        from pydantic import ValidationError
+
         from bt_api_py.config_loader import (
             ConnectionConfig,
             ConnectionType,
@@ -574,7 +576,7 @@ class TestConfigLoader:
             VenueType,
         )
 
-        with pytest.raises(Exception):
+        with pytest.raises(ValidationError):
             ExchangeConfig(
                 id="test",
                 display_name="Test",
@@ -619,6 +621,9 @@ class TestConfigLoader:
         assert config.base_urls is None
 
     def test_cex_must_use_http_ws_or_spi(self):
+        # TWS is not allowed for CEX
+        from pydantic import ValidationError
+
         from bt_api_py.config_loader import (
             BaseUrlsConfig,
             ConnectionConfig,
@@ -627,8 +632,7 @@ class TestConfigLoader:
             VenueType,
         )
 
-        # TWS is not allowed for CEX
-        with pytest.raises(Exception):
+        with pytest.raises(ValidationError):
             ExchangeConfig(
                 id="bad",
                 display_name="Bad",

@@ -7,6 +7,7 @@ import contextlib
 import json
 import time
 from collections import defaultdict
+from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
@@ -40,11 +41,11 @@ class ConnectionConfig:
     retry_delay: float = 1.0
 
 
-@singleton(IConnectionManager)
+@singleton(IConnectionManager)  # type: ignore[type-abstract]
 class ConnectionService(IConnectionManager):
     """Manages connection pools for multiple exchanges."""
 
-    def __init__(self, logger=None) -> Any | None:
+    def __init__(self, logger=None) -> None:
         self.logger = logger or get_logger("connection_service")
         self._pools: dict[str, dict[str, Any]] = {}
         self._semaphores: dict[str, AsyncSemaphore] = {}
@@ -119,14 +120,14 @@ class ConnectionService(IConnectionManager):
         return dict(self._stats)
 
 
-@singleton(IEventBus)
+@singleton(IEventBus)  # type: ignore[type-abstract]
 class EventService(IEventBus):
     """Enhanced event bus with async support and persistence."""
 
-    def __init__(self, logger=None) -> Any | None:
+    def __init__(self, logger=None) -> None:
         self.logger = logger or get_logger("event_service")
-        self._handlers: dict[str, list[callable]] = defaultdict(list)
-        self._async_handlers: dict[str, list[callable]] = defaultdict(list)
+        self._handlers: dict[str, list[Callable[..., Any]]] = defaultdict(list)
+        self._async_handlers: dict[str, list[Callable[..., Any]]] = defaultdict(list)
         self._event_queue: asyncio.Queue | None = None
         self._running = False
         self._stats: dict[str, int] = defaultdict(int)
@@ -170,7 +171,7 @@ class EventService(IEventBus):
 
         self._stats[f"events_{event_type}_published"] += 1
 
-    def subscribe(self, event_type: str, handler: callable) -> None:
+    def subscribe(self, event_type: str, handler: Callable[..., Any]) -> None:
         """Subscribe to an event type."""
         if asyncio.iscoroutinefunction(handler):
             self._async_handlers[event_type].append(handler)
@@ -178,7 +179,7 @@ class EventService(IEventBus):
             self._handlers[event_type].append(handler)
         self.logger.debug(f"Subscribed {handler} to {event_type}")
 
-    def unsubscribe(self, event_type: str, handler: callable) -> None:
+    def unsubscribe(self, event_type: str, handler: Callable[..., Any]) -> None:
         """Unsubscribe from an event type."""
         with contextlib.suppress(ValueError):
             self._handlers[event_type].remove(handler)
@@ -188,9 +189,12 @@ class EventService(IEventBus):
 
     async def _process_events(self) -> None:
         """Process events from the queue."""
+        queue = self._event_queue
+        if queue is None:
+            return
         while self._running:
             try:
-                event_data = await self._event_queue.get()
+                event_data = await queue.get()
                 if event_data is None:  # Stop signal
                     break
 
@@ -214,14 +218,15 @@ class EventService(IEventBus):
         self._emit_sync(event_type, data)
 
         # Process async handlers
-        tasks = []
-        for handler in self._async_handlers[event_type]:
-            tasks.append(asyncio.create_task(self._safe_call_handler(handler, data)))
+        tasks = [
+            asyncio.create_task(self._safe_call_handler(handler, data))
+            for handler in self._async_handlers[event_type]
+        ]
 
         if tasks:
             await asyncio.gather(*tasks, return_exceptions=True)
 
-    async def _safe_call_handler(self, handler: callable, data: Any) -> None:
+    async def _safe_call_handler(self, handler: Callable[..., Any], data: Any) -> None:
         """Safely call async handler."""
         try:
             await handler(data)
@@ -233,11 +238,11 @@ class EventService(IEventBus):
         return dict(self._stats)
 
 
-@singleton(ICache)
+@singleton(ICache)  # type: ignore[type-abstract]
 class CacheService(ICache):
     """Distributed cache service with Redis support."""
 
-    def __init__(self, redis_url: str | None = None, logger=None) -> Any | None:
+    def __init__(self, redis_url: str | None = None, logger=None) -> None:
         self.logger = logger or get_logger("cache_service")
         self._redis_client = None
         self._local_cache: dict[str, Any] = {}
@@ -322,11 +327,11 @@ class CacheService(ICache):
             self._local_ttl.clear()
 
 
-@singleton(IRateLimiter)
+@singleton(IRateLimiter)  # type: ignore[type-abstract]
 class RateLimitService(IRateLimiter):
     """Advanced rate limiting with multiple strategies."""
 
-    def __init__(self, logger=None) -> Any | None:
+    def __init__(self, logger=None) -> None:
         self.logger = logger or get_logger("rate_limit_service")
         self._limiters: dict[str, AsyncRateLimiter] = {}
         self._limits: dict[str, dict[str, Any]] = {}
@@ -371,10 +376,10 @@ class MarketDataService:
 
     def __init__(
         self,
-        connection_manager: IConnectionManager = inject(IConnectionManager),
-        cache_service: ICache = inject(ICache),
-        rate_limiter: IRateLimiter = inject(IRateLimiter),
-        event_bus: IEventBus = inject(IEventBus),
+        connection_manager: IConnectionManager = inject(IConnectionManager),  # type: ignore[type-abstract]
+        cache_service: ICache = inject(ICache),  # type: ignore[type-abstract]
+        rate_limiter: IRateLimiter = inject(IRateLimiter),  # type: ignore[type-abstract]
+        event_bus: IEventBus = inject(IEventBus),  # type: ignore[type-abstract]
     ):
         self.connection_manager = connection_manager
         self.cache_service = cache_service
@@ -398,8 +403,8 @@ class MarketDataService:
         # Try cache first
         if use_cache:
             cached_data = await self.cache_service.get(cache_key)
-            if cached_data:
-                return cached_data
+            if cached_data is not None and isinstance(cached_data, dict):
+                return dict(cached_data)
 
         # Rate limit
         await self.rate_limiter.acquire("ticker")
@@ -442,13 +447,14 @@ class MarketDataService:
 
         results = await asyncio.gather(*tasks, return_exceptions=True)
 
-        output = {}
+        output: dict[str, dict[str, Any]] = {}
         for i, req in enumerate(requests):
             key = f"{req['exchange']}:{req['symbol']}"
-            if not isinstance(results[i], Exception):
-                output[key] = results[i]
+            r = results[i]
+            if not isinstance(r, Exception) and isinstance(r, dict):
+                output[key] = r
             else:
-                self.logger.error(f"Error getting ticker for {key}: {results[i]}")
+                self.logger.error(f"Error getting ticker for {key}: {r}")
 
         return output
 
@@ -458,9 +464,9 @@ class TradingService:
 
     def __init__(
         self,
-        connection_manager: IConnectionManager = inject(IConnectionManager),
-        event_bus: IEventBus = inject(IEventBus),
-        rate_limiter: IRateLimiter = inject(IRateLimiter),
+        connection_manager: IConnectionManager = inject(IConnectionManager),  # type: ignore[type-abstract]
+        event_bus: IEventBus = inject(IEventBus),  # type: ignore[type-abstract]
+        rate_limiter: IRateLimiter = inject(IRateLimiter),  # type: ignore[type-abstract]
     ):
         self.connection_manager = connection_manager
         self.event_bus = event_bus
@@ -515,9 +521,9 @@ class AccountService:
 
     def __init__(
         self,
-        connection_manager: IConnectionManager = inject(IConnectionManager),
-        cache_service: ICache = inject(ICache),
-        event_bus: IEventBus = inject(IEventBus),
+        connection_manager: IConnectionManager = inject(IConnectionManager),  # type: ignore[type-abstract]
+        cache_service: ICache = inject(ICache),  # type: ignore[type-abstract]
+        event_bus: IEventBus = inject(IEventBus),  # type: ignore[type-abstract]
     ):
         self.connection_manager = connection_manager
         self.cache_service = cache_service
@@ -530,8 +536,8 @@ class AccountService:
 
         if use_cache:
             cached_data = await self.cache_service.get(cache_key)
-            if cached_data:
-                return cached_data
+            if cached_data is not None and isinstance(cached_data, dict):
+                return dict(cached_data)
 
         connection = await self.connection_manager.get_connection(exchange_name)
         try:

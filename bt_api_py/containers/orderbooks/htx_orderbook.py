@@ -55,9 +55,10 @@ class HtxRequestOrderBookData(OrderBookData):
             self.order_book_data = json.loads(self.order_book_info)
 
         # Extract tick data
-        tick = self.order_book_data.get("tick", {})
+        data = self.order_book_data or {}
+        tick = data.get("tick", {})
 
-        self.server_time = from_dict_get_float(self.order_book_data, "ts")
+        self.server_time = from_dict_get_float(data, "ts")
         self.order_book_symbol_name = self.symbol_name
 
         # Parse bids

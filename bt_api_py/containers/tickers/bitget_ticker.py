@@ -15,25 +15,25 @@ class BitgetTickerData(TickerData):
         super().__init__(ticker_info, has_been_json_encoded)
         self.exchange_name = "BITGET"
         self.local_update_time = time.time()
-        self.ticker_data = ticker_info if has_been_json_encoded else None
-        self.ticker_symbol_name = None
-        self.has_been_init_data = False
         self.symbol_name = symbol_name
         self.asset_type = asset_type
-        self.ticker_data = ticker_info if has_been_json_encoded else None
-        self.ticker_symbol_name = None
-        self.server_time = None
-        self.last_price = None
-        self.last_volume = None
-        self.bid_price = None
-        self.ask_price = None
-        self.bid_volume = None
-        self.ask_volume = None
-        self.price_24h_high = None
-        self.price_24h_low = None
-        self.volume_24h = None
-        self.turnover_24h = None
-        self.count_24h = None
+        self.ticker_data: dict[str, Any] | None = (
+            ticker_info if has_been_json_encoded and isinstance(ticker_info, dict) else None
+        )
+        self.ticker_symbol_name: str | None = None
+        self.server_time: float | None = None
+        self.last_price: float | None = None
+        self.last_volume: float | None = None
+        self.bid_price: float | None = None
+        self.ask_price: float | None = None
+        self.bid_volume: float | None = None
+        self.ask_volume: float | None = None
+        self.price_24h_high: float | None = None
+        self.price_24h_low: float | None = None
+        self.volume_24h: float | None = None
+        self.turnover_24h: float | None = None
+        self.count_24h: float | None = None
+        self.all_data: dict[str, Any] | None = None
         self.has_been_init_data = False
 
     def init_data(self) -> "Self":
@@ -43,21 +43,20 @@ class BitgetTickerData(TickerData):
         if self.has_been_init_data:
             return self
 
-        self.ticker_symbol_name = from_dict_get_string(self.ticker_data, "symbol")
-        self.server_time = from_dict_get_float(self.ticker_data, "ts") or from_dict_get_float(
-            self.ticker_data, "time"
-        )
-        self.last_price = from_dict_get_float(self.ticker_data, "last")
-        self.last_volume = from_dict_get_float(self.ticker_data, "volume")
-        self.bid_price = from_dict_get_float(self.ticker_data, "bidPx")
-        self.ask_price = from_dict_get_float(self.ticker_data, "askPx")
-        self.bid_volume = from_dict_get_float(self.ticker_data, "bidSz")
-        self.ask_volume = from_dict_get_float(self.ticker_data, "askSz")
-        self.price_24h_high = from_dict_get_float(self.ticker_data, "high24h")
-        self.price_24h_low = from_dict_get_float(self.ticker_data, "low24h")
-        self.volume_24h = from_dict_get_float(self.ticker_data, "volume24h")
-        self.turnover_24h = from_dict_get_float(self.ticker_data, "turnover24h")
-        self.count_24h = from_dict_get_float(self.ticker_data, "count24h")
+        data = self.ticker_data or {}
+        self.ticker_symbol_name = from_dict_get_string(data, "symbol")
+        self.server_time = from_dict_get_float(data, "ts") or from_dict_get_float(data, "time")
+        self.last_price = from_dict_get_float(data, "last")
+        self.last_volume = from_dict_get_float(data, "volume")
+        self.bid_price = from_dict_get_float(data, "bidPx")
+        self.ask_price = from_dict_get_float(data, "askPx")
+        self.bid_volume = from_dict_get_float(data, "bidSz")
+        self.ask_volume = from_dict_get_float(data, "askSz")
+        self.price_24h_high = from_dict_get_float(data, "high24h")
+        self.price_24h_low = from_dict_get_float(data, "low24h")
+        self.volume_24h = from_dict_get_float(data, "volume24h")
+        self.turnover_24h = from_dict_get_float(data, "turnover24h")
+        self.count_24h = from_dict_get_float(data, "count24h")
         self.has_been_init_data = True
         return self
 
@@ -83,7 +82,7 @@ class BitgetTickerData(TickerData):
                 "turnover_24h": self.turnover_24h,
                 "count_24h": self.count_24h,
             }
-        return self.all_data
+        return self.all_data or {}
 
     def __str__(self) -> str:
         self.init_data()
@@ -93,19 +92,20 @@ class BitgetTickerData(TickerData):
         return self.__str__()
 
     def get_exchange_name(self) -> str:
-        return self.exchange_name
+        return str(self.exchange_name)
 
     def get_local_update_time(self) -> float:
-        return self.local_update_time
+        return float(self.local_update_time)
 
     def get_symbol_name(self) -> str:
-        return self.symbol_name
+        return str(self.symbol_name)
 
     def get_ticker_symbol_name(self) -> str | None:
-        return self.ticker_symbol_name
+        val = self.ticker_symbol_name
+        return None if val is None else str(val)
 
     def get_asset_type(self) -> str:
-        return self.asset_type
+        return str(self.asset_type)
 
     def get_server_time(self) -> float | None:
         return self.server_time
@@ -154,19 +154,20 @@ class BitgetWssTickerData(BitgetTickerData):
         if self.has_been_init_data:
             return self
 
-        self.ticker_symbol_name = from_dict_get_string(self.ticker_data, "s")
-        self.server_time = from_dict_get_float(self.ticker_data, "E")
-        self.last_price = from_dict_get_float(self.ticker_data, "c")
-        self.last_volume = from_dict_get_float(self.ticker_data, "v")
-        self.bid_price = from_dict_get_float(self.ticker_data, "b")
-        self.ask_price = from_dict_get_float(self.ticker_data, "a")
-        self.bid_volume = from_dict_get_float(self.ticker_data, "B")
-        self.ask_volume = from_dict_get_float(self.ticker_data, "A")
-        self.price_24h_high = from_dict_get_float(self.ticker_data, "h")
-        self.price_24h_low = from_dict_get_float(self.ticker_data, "l")
-        self.volume_24h = from_dict_get_float(self.ticker_data, "q")
-        self.turnover_24h = from_dict_get_float(self.ticker_data, "Q")
-        self.count_24h = from_dict_get_float(self.ticker_data, "n")
+        data = self.ticker_data or {}
+        self.ticker_symbol_name = from_dict_get_string(data, "s")
+        self.server_time = from_dict_get_float(data, "E")
+        self.last_price = from_dict_get_float(data, "c")
+        self.last_volume = from_dict_get_float(data, "v")
+        self.bid_price = from_dict_get_float(data, "b")
+        self.ask_price = from_dict_get_float(data, "a")
+        self.bid_volume = from_dict_get_float(data, "B")
+        self.ask_volume = from_dict_get_float(data, "A")
+        self.price_24h_high = from_dict_get_float(data, "h")
+        self.price_24h_low = from_dict_get_float(data, "l")
+        self.volume_24h = from_dict_get_float(data, "q")
+        self.turnover_24h = from_dict_get_float(data, "Q")
+        self.count_24h = from_dict_get_float(data, "n")
         self.has_been_init_data = True
         return self
 
@@ -181,20 +182,19 @@ class BitgetRequestTickerData(BitgetTickerData):
         if self.has_been_init_data:
             return self
 
-        self.ticker_symbol_name = from_dict_get_string(self.ticker_data, "symbol")
-        self.server_time = from_dict_get_float(self.ticker_data, "ts") or from_dict_get_float(
-            self.ticker_data, "time"
-        )
-        self.last_price = from_dict_get_float(self.ticker_data, "last")
-        self.last_volume = from_dict_get_float(self.ticker_data, "volume")
-        self.bid_price = from_dict_get_float(self.ticker_data, "bidPx")
-        self.ask_price = from_dict_get_float(self.ticker_data, "askPx")
-        self.bid_volume = from_dict_get_float(self.ticker_data, "bidSz")
-        self.ask_volume = from_dict_get_float(self.ticker_data, "askSz")
-        self.price_24h_high = from_dict_get_float(self.ticker_data, "high24h")
-        self.price_24h_low = from_dict_get_float(self.ticker_data, "low24h")
-        self.volume_24h = from_dict_get_float(self.ticker_data, "volume24h")
-        self.turnover_24h = from_dict_get_float(self.ticker_data, "usdVolume24h")
-        self.count_24h = from_dict_get_float(self.ticker_data, "count24h")
+        data = self.ticker_data or {}
+        self.ticker_symbol_name = from_dict_get_string(data, "symbol")
+        self.server_time = from_dict_get_float(data, "ts") or from_dict_get_float(data, "time")
+        self.last_price = from_dict_get_float(data, "last")
+        self.last_volume = from_dict_get_float(data, "volume")
+        self.bid_price = from_dict_get_float(data, "bidPx")
+        self.ask_price = from_dict_get_float(data, "askPx")
+        self.bid_volume = from_dict_get_float(data, "bidSz")
+        self.ask_volume = from_dict_get_float(data, "askSz")
+        self.price_24h_high = from_dict_get_float(data, "high24h")
+        self.price_24h_low = from_dict_get_float(data, "low24h")
+        self.volume_24h = from_dict_get_float(data, "volume24h")
+        self.turnover_24h = from_dict_get_float(data, "usdVolume24h")
+        self.count_24h = from_dict_get_float(data, "count24h")
         self.has_been_init_data = True
         return self

@@ -5,6 +5,8 @@ Symbol format: BTC-USD (uppercase, dash-separated).
 Market data uses 'contract_code' parameter instead of 'symbol'.
 """
 
+from typing import Any
+
 from bt_api_py.containers.exchanges.htx_exchange_data import HtxExchangeDataCoinSwap
 from bt_api_py.feeds.live_htx.spot import HtxAccountWssDataSpot, HtxMarketWssDataSpot
 from bt_api_py.feeds.live_htx.usdt_swap import HtxRequestDataUsdtSwap
@@ -18,7 +20,7 @@ class HtxRequestDataCoinSwap(HtxRequestDataUsdtSwap):
     just with different exchange data (paths, base URL, symbol format).
     """
 
-    def __init__(self, data_queue, **kwargs):
+    def __init__(self, data_queue: Any = None, **kwargs: Any) -> None:
         super().__init__(data_queue, **kwargs)
         self.asset_type = kwargs.get("asset_type", "COIN_SWAP")
         self.logger_name = kwargs.get("logger_name", "htx_coin_swap_feed.log")
@@ -30,7 +32,7 @@ class HtxRequestDataCoinSwap(HtxRequestDataUsdtSwap):
 class HtxMarketWssDataCoinSwap(HtxMarketWssDataSpot):
     """HTX Coin Swap Market WebSocket data feed."""
 
-    def __init__(self, data_queue, **kwargs):
+    def __init__(self, data_queue: Any = None, **kwargs: Any) -> None:
         kwargs.setdefault("exchange_data", HtxExchangeDataCoinSwap())
         kwargs.setdefault("asset_type", "COIN_SWAP")
         super().__init__(data_queue, **kwargs)
@@ -39,7 +41,7 @@ class HtxMarketWssDataCoinSwap(HtxMarketWssDataSpot):
 class HtxAccountWssDataCoinSwap(HtxAccountWssDataSpot):
     """HTX Coin Swap Account WebSocket data feed."""
 
-    def __init__(self, data_queue, **kwargs):
+    def __init__(self, data_queue: Any = None, **kwargs: Any) -> None:
         kwargs.setdefault("exchange_data", HtxExchangeDataCoinSwap())
         kwargs.setdefault("asset_type", "COIN_SWAP")
         super().__init__(data_queue, **kwargs)

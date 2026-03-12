@@ -7,6 +7,8 @@ class LatokenSpotWssTradeData(TradeData):
     """保存 Latoken WebSocket 成交信息"""
 
     def __init__(self, trade_info, symbol_name, asset_type, has_been_json_encoded=False):
-        super().__init__(trade_info, symbol_name, asset_type, has_been_json_encoded)
+        super().__init__(
+            trade_info, has_been_json_encoded, symbol_name=symbol_name, asset_type=asset_type
+        )
         self.exchange_name = "LATOKEN"
         self.local_update_time = time.time()

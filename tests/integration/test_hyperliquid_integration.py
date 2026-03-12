@@ -38,8 +38,6 @@ def test_market_data_queries():
 
         request_data.get_exchange_status()
 
-        pass
-
     except Exception:
         pass
 
@@ -63,8 +61,6 @@ def test_authenticated_queries():
             request_data.place_order(
                 symbol="BTC", side="buy", quantity=0.001, price=40000, order_type="limit"
             )
-
-        pass
 
     except Exception:
         pass
@@ -121,8 +117,6 @@ def test_websocket_subscription():
         }
         wss_data.process_trades_message(trades_message)
 
-        pass
-
     except Exception:
         pass
 
@@ -142,8 +136,6 @@ def test_config_loading():
             pass
 
         # Check API endpoints
-
-        pass
 
     except Exception:
         pass

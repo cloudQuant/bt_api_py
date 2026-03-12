@@ -55,7 +55,7 @@ class ActionType:
 class RuleCondition:
     """规则条件"""
 
-    def __init__(self, field: str, operator: str, value: Any, description: str = "") -> Any | None:
+    def __init__(self, field: str, operator: str, value: Any, description: str = "") -> None:
         self.field = field
         self.operator = operator  # eq, ne, gt, gte, lt, lte, in, contains
         self.value = value
@@ -73,17 +73,17 @@ class RuleCondition:
         field_value = self._get_nested_value(data, self.field)
 
         if self.operator == "eq":
-            return field_value == self.value
+            return bool(field_value == self.value)
         elif self.operator == "ne":
-            return field_value != self.value
+            return bool(field_value != self.value)
         elif self.operator == "gt":
-            return float(field_value) > float(self.value)
+            return float(field_value) > float(str(self.value))
         elif self.operator == "gte":
-            return float(field_value) >= float(self.value)
+            return float(field_value) >= float(str(self.value))
         elif self.operator == "lt":
-            return float(field_value) < float(self.value)
+            return float(field_value) < float(str(self.value))
         elif self.operator == "lte":
-            return float(field_value) <= float(self.value)
+            return float(field_value) <= float(str(self.value))
         elif self.operator == "in":
             return field_value in self.value
         elif self.operator == "contains":
@@ -190,7 +190,7 @@ class PolicyEngine:
     6. 性能监控 - 规则执行性能统计
     """
 
-    def __init__(self, config: dict[str, Any] | None = None) -> Any | None:
+    def __init__(self, config: dict[str, Any] | None = None) -> None:
         """初始化策略引擎
 
         Args:
@@ -217,11 +217,11 @@ class PolicyEngine:
         self.enable_rule_cache = self.config.get("enable_rule_cache", True)
 
         # 性能统计
-        self.performance_stats = {
+        self.performance_stats: dict[str, Any] = {
             "total_evaluations": 0,
             "total_triggers": 0,
             "total_actions": 0,
-            "average_evaluation_time_ms": 0,
+            "average_evaluation_time_ms": 0.0,
             "rule_hit_rates": {},
         }
 
@@ -272,7 +272,7 @@ class PolicyEngine:
                 self._update_active_rules()
 
                 # 从规则组中移除
-                for _group_id, rule_ids in self.rule_groups.items():
+                for rule_ids in self.rule_groups.values():
                     if rule_id in rule_ids:
                         rule_ids.remove(rule_id)
 
@@ -757,7 +757,7 @@ class PolicyEngine:
 
         # 限制历史记录大小
         if len(self.execution_history) > 10000:
-            self.execution_history = self.execution_history[-5000]
+            self.execution_history = self.execution_history[-5000:]
 
     def _initialize_default_rules(self) -> None:
         """初始化默认规则"""

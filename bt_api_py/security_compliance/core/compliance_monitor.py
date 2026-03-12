@@ -4,6 +4,7 @@ Implements automated compliance checking for SOX, MiFID II, PCI DSS,
 and other financial industry regulations.
 """
 
+from collections.abc import Callable
 from dataclasses import dataclass
 from enum import Enum
 from typing import Any
@@ -27,7 +28,7 @@ class ComplianceRule:
     rule_id: str
     standard: ComplianceStandard
     description: str
-    check_function: callable
+    check_function: Callable[[], bool]
     severity: str = "high"
 
 
@@ -133,7 +134,7 @@ class ComplianceMonitor:
 
     def _group_by_standard(self, results: dict[str, Any]) -> dict[str, Any]:
         """Group results by compliance standard."""
-        grouped = {}
+        grouped: dict[str, dict[str, Any]] = {}
 
         for rule_id, result in results.items():
             standard = result["standard"]

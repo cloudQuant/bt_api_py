@@ -253,7 +253,7 @@ class MetricsCollector(IMetricsCollector):
         with self._lock:
             cutoff = time.time() - self.retention_period
 
-            for _key, points in self._metrics.items():
+            for points in self._metrics.values():
                 # Remove old points
                 while points and points[0].timestamp < cutoff:
                     points.popleft()
@@ -390,19 +390,19 @@ class AlertManager:
                 metrics = self.metrics_collector.get_aggregated_metrics(
                     "websocket_latency", time_window=60
                 )
-                return metrics.get("mean", 0)
+                return float(metrics.get("mean", 0))
             elif "error_rate" in condition:
                 # Get error rate
                 metrics = self.metrics_collector.get_aggregated_metrics(
                     "websocket_errors", time_window=60
                 )
-                return metrics.get("mean", 0)
+                return float(metrics.get("mean", 0))
             elif "memory_usage" in condition:
                 # Get memory usage
-                return psutil.virtual_memory().percent
+                return float(psutil.virtual_memory().percent)
             elif "cpu_usage" in condition:
                 # Get CPU usage
-                return psutil.cpu_percent(interval=1)
+                return float(psutil.cpu_percent(interval=1))
 
             return None
         except Exception as e:
@@ -677,7 +677,7 @@ class WebSocketBenchmark:
             return {"success_rate": 0, "total_runs": len(results), "successful_runs": 0}
 
         # Calculate summary statistics for each metric
-        all_metrics = {}
+        all_metrics: dict[str, list[float]] = {}
         for result in successful_results:
             for metric_name, metric_value in result.metrics.items():
                 if metric_name not in all_metrics:

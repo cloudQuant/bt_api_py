@@ -30,7 +30,7 @@ def _load_yaml() -> Any | None:
             with open(cfg_path, encoding="utf-8") as f:
                 _config_cache = yaml.safe_load(f)
     except Exception as e:
-        logger.warn(f"Failed to load localbitcoins.yaml: {e}")
+        logger.warning(f"Failed to load localbitcoins.yaml: {e}")
     return _config_cache
 
 
@@ -95,7 +95,7 @@ class LocalBitcoinsExchangeData(ExchangeData):
         if kwargs:
             for k, v in kwargs.items():
                 path = path.replace(f"{{{k}}}", str(v).lower())
-        return path
+        return str(path)
 
 
 # ── Spot class ────────────────────────────────────────────────

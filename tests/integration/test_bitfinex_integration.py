@@ -59,14 +59,10 @@ def test_bitfinex_import():
 
         print("✓ Successfully imported Bitfinex error translator")
 
-        pass
-
     except ImportError as e:
         print(f"✗ Import error: {e}")
-        pass
     except Exception as e:
         print(f"✗ Unexpected error: {e}")
-        pass
 
 
 def test_bitfinex_instantiation():
@@ -87,14 +83,14 @@ def test_bitfinex_instantiation():
         }
 
         # Test instantiating request data
-        from bt_api_py.feeds.live_bitfinex import BitfinexRequestData  # noqa: F401
+        from bt_api_py.feeds.live_bitfinex import BitfinexRequestData
 
         BitfinexRequestData(data_queue, **test_params)
         print("✓ Successfully instantiated BitfinexRequestData")
 
         # Test exchange data
         from bt_api_py.containers.exchanges.bitfinex_exchange_data import (
-            BitfinexExchangeDataSpot,  # noqa: F401
+            BitfinexExchangeDataSpot,
         )
 
         exchange_data = BitfinexExchangeDataSpot()
@@ -110,7 +106,7 @@ def test_bitfinex_instantiation():
 
         # Test data container instantiation
         from bt_api_py.containers.tickers.bitfinex_ticker import (
-            BitfinexRequestTickerData,  # noqa: F401
+            BitfinexRequestTickerData,
         )
 
         # Create sample ticker data
@@ -138,7 +134,7 @@ def test_bitfinex_instantiation():
 
         # Test order book data
         from bt_api_py.containers.orderbooks.bitfinex_orderbook import (
-            BitfinexRequestOrderBookData,  # noqa: F401
+            BitfinexRequestOrderBookData,
         )
 
         orderbook_data = [
@@ -155,14 +151,11 @@ def test_bitfinex_instantiation():
         print(f"  - Ask levels: {len(orderbook.get_asks())}")
         print(f"  - Spread: {orderbook.get_spread()}")
 
-        pass
-
     except Exception as e:
         print(f"✗ Instantiation error: {e}")
         import traceback
 
         traceback.print_exc()
-        pass
 
 
 def test_bitfinex_registration():
@@ -176,14 +169,11 @@ def test_bitfinex_registration():
         # Note: We won't actually call register() as it modifies global state
         print("  - Registration function available (ready to use)")
 
-        pass
-
     except Exception as e:
         print(f"✗ Registration test error: {e}")
         import traceback
 
         traceback.print_exc()
-        pass
 
 
 def main():

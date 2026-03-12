@@ -28,13 +28,13 @@ class BitfinexTickerData(TickerData):
         super().__init__(ticker_info, has_been_json_encoded)
         self.exchange_name = "BITFINEX"
         self.local_update_time = time.time()
-        self.ticker_data = ticker_info if has_been_json_encoded else None
+        self.ticker_data: dict[str, Any] | list[Any] | None = (
+            ticker_info if has_been_json_encoded and isinstance(ticker_info, (dict, list)) else None
+        )
         self.ticker_symbol_name: str | None = None
         self.has_been_init_data = False
         self.symbol_name = symbol_name
         self.asset_type = asset_type
-        self.ticker_data = ticker_info if has_been_json_encoded else None
-        self.ticker_symbol_name: str | None = None
         self.server_time: float | None = None
         self.bid_price: float | None = None
         self.ask_price: float | None = None
@@ -46,7 +46,7 @@ class BitfinexTickerData(TickerData):
         self.volume: float | None = None
         self.high: float | None = None
         self.low: float | None = None
-        self.has_been_init_data = False
+        self.all_data: dict[str, Any] | None = None
 
     def init_data(self) -> "BitfinexTickerData":
         """Parse Bitfinex ticker response.
@@ -115,7 +115,7 @@ class BitfinexTickerData(TickerData):
                 "high": self.high,
                 "low": self.low,
             }
-        return self.all_data
+        return self.all_data or {}
 
     def __str__(self) -> str:
         self.init_data()

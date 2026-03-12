@@ -11,6 +11,7 @@ import hashlib
 import hmac
 import json
 import time
+from typing import Any
 from urllib.parse import urlencode
 
 from bt_api_py.containers.exchanges.coinspot_exchange_data import CoinSpotExchangeDataSpot
@@ -24,7 +25,7 @@ class CoinSpotRequestData(Feed):
     """CoinSpot REST API Feed base class."""
 
     @classmethod
-    def _capabilities(cls):
+    def _capabilities(cls) -> set[Capability]:
         return {
             Capability.GET_TICK,
             Capability.GET_EXCHANGE_INFO,
@@ -36,7 +37,7 @@ class CoinSpotRequestData(Feed):
             Capability.GET_ACCOUNT,
         }
 
-    def __init__(self, data_queue, **kwargs) -> None:
+    def __init__(self, data_queue: Any = None, **kwargs: Any) -> None:
         super().__init__(data_queue, **kwargs)
         self.data_queue = data_queue
         self._api_key = kwargs.get("public_key") or kwargs.get("api_key") or ""
@@ -93,7 +94,7 @@ class CoinSpotRequestData(Feed):
     def request(self, path, params=None, body=None, extra_data=None, timeout=10, is_sign=False):
         """Synchronous HTTP request."""
         if params is None:
-            params = {}
+            params: dict[str, Any] = {}
         method, endpoint = path.split(" ", 1)
         headers = {"Content-Type": "application/json"}
 
@@ -120,7 +121,7 @@ class CoinSpotRequestData(Feed):
     ):
         """Async HTTP request."""
         if params is None:
-            params = {}
+            params: dict[str, Any] = {}
         method, endpoint = path.split(" ", 1)
         headers = {"Content-Type": "application/json"}
 
@@ -149,7 +150,7 @@ class CoinSpotRequestData(Feed):
 
     def _get_exchange_info(self, extra_data=None, **kwargs):
         path = self._params.get_rest_path("get_exchange_info")
-        params = {}
+        params: dict[str, Any] = {}
         extra_data = extra_data or {}
         extra_data.update(
             {
@@ -167,7 +168,7 @@ class CoinSpotRequestData(Feed):
         method_prefix = base_path.split(" ", 1)[0]
         rest_part = base_path.split(" ", 1)[1]
         path = f"{method_prefix} {rest_part}/{symbol}"
-        params = {}
+        params: dict[str, Any] = {}
         extra_data = extra_data or {}
         extra_data.update(
             {
@@ -182,7 +183,7 @@ class CoinSpotRequestData(Feed):
 
     def _get_all_tickers(self, extra_data=None, **kwargs):
         path = self._params.get_rest_path("get_tick")
-        params = {}
+        params: dict[str, Any] = {}
         extra_data = extra_data or {}
         extra_data.update(
             {
@@ -200,7 +201,7 @@ class CoinSpotRequestData(Feed):
         method_prefix = base_path.split(" ", 1)[0]
         rest_part = base_path.split(" ", 1)[1]
         path = f"{method_prefix} {rest_part}/{symbol}"
-        params = {}
+        params: dict[str, Any] = {}
         extra_data = extra_data or {}
         extra_data.update(
             {
@@ -218,7 +219,7 @@ class CoinSpotRequestData(Feed):
         method_prefix = base_path.split(" ", 1)[0]
         rest_part = base_path.split(" ", 1)[1]
         path = f"{method_prefix} {rest_part}/{symbol}"
-        params = {}
+        params: dict[str, Any] = {}
         extra_data = extra_data or {}
         extra_data.update(
             {

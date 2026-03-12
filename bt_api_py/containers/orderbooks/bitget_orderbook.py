@@ -41,6 +41,7 @@ class BitgetOrderBookData(OrderBookData):
         self.bids: list[tuple[float, float]] = []
         self.asks: list[tuple[float, float]] = []
         self.level: int | None = None
+        self.all_data: dict[str, Any] | None = None
         self.has_been_init_data = False
 
     def init_data(self) -> "BitgetOrderBookData":

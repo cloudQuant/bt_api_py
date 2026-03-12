@@ -5,6 +5,7 @@ import time
 from typing import Any
 
 from bt_api_py.containers.tickers.ticker import TickerData
+from bt_api_py.containers.tickers.ticker_utils import parse_float
 
 
 class BitbnsRequestTickerData(TickerData):
@@ -34,7 +35,13 @@ class BitbnsRequestTickerData(TickerData):
         self.ticker_data: dict[str, Any] | None = (
             ticker_info if has_been_json_encoded and isinstance(ticker_info, dict) else None
         )
-        self.ticker_symbol_name = None
+        self.ticker_symbol_name: str | None = None
+        self.last_price: float | None = None
+        self.bid_price: float | None = None
+        self.ask_price: float | None = None
+        self.volume_24h: float | None = None
+        self.high_24h: float | None = None
+        self.low_24h: float | None = None
         self.has_been_init_data = False
 
     def init_data(self) -> "BitbnsRequestTickerData":
@@ -45,7 +52,7 @@ class BitbnsRequestTickerData(TickerData):
         if self.has_been_init_data:
             return self
 
-        data = self.ticker_data.get("data", {})
+        data = (self.ticker_data or {}).get("data", {})
 
         # Handle nested data structure - symbol is the key
         if data and isinstance(data, dict):
@@ -66,39 +73,21 @@ class BitbnsRequestTickerData(TickerData):
 
             if ticker_data:
                 self.ticker_symbol_name = symbol
-                self.last_price = self._parse_float(ticker_data.get("last_traded_price"))
-                self.bid_price = self._parse_float(ticker_data.get("highest_buy_bid"))
-                self.ask_price = self._parse_float(ticker_data.get("lowest_sell_bid"))
+                self.last_price = parse_float(ticker_data.get("last_traded_price"))
+                self.bid_price = parse_float(ticker_data.get("highest_buy_bid"))
+                self.ask_price = parse_float(ticker_data.get("lowest_sell_bid"))
 
                 # Volume data is nested
                 volume_info = ticker_data.get("volume", {})
                 if isinstance(volume_info, dict):
-                    self.volume_24h = self._parse_float(volume_info.get("volume"))
+                    self.volume_24h = parse_float(volume_info.get("volume"))
                 else:
-                    self.volume_24h = self._parse_float(volume_info)
+                    self.volume_24h = parse_float(volume_info)
 
                 # High/Low from volume info
                 if isinstance(volume_info, dict):
-                    self.high_24h = self._parse_float(volume_info.get("max"))
-                    self.low_24h = self._parse_float(volume_info.get("min"))
+                    self.high_24h = parse_float(volume_info.get("max"))
+                    self.low_24h = parse_float(volume_info.get("min"))
 
         self.has_been_init_data = True
         return self
-
-    @staticmethod
-    def _parse_float(value: Any) -> float | None:
-        """Parse value to float.
-
-        Args:
-            value: Value to parse.
-
-        Returns:
-            Parsed float value or None if parsing fails.
-
-        """
-        if value is None:
-            return None
-        try:
-            return float(value)
-        except (ValueError, TypeError):
-            return None

@@ -68,7 +68,7 @@ def monitor_performance(
                 raise
 
         # Attach metrics to function for access
-        wrapper._monitoring_metrics = {
+        wrapper._monitoring_metrics = {  # type: ignore[attr-defined]
             "duration": duration_histogram,
             "calls": calls_counter,
             "errors": errors_counter,
@@ -119,7 +119,7 @@ def monitor_execution_time(
                 duration = time.perf_counter() - start_time
                 duration_histogram.observe(duration)
 
-        wrapper._monitoring_histogram = duration_histogram
+        wrapper._monitoring_histogram = duration_histogram  # type: ignore[attr-defined]
         return cast("F", wrapper)
 
     return decorator
@@ -178,7 +178,7 @@ def monitor_calls(
                     error_counter.inc()
                 raise
 
-        wrapper._monitoring_counters = {
+        wrapper._monitoring_counters = {  # type: ignore[attr-defined]
             "total": total_counter,
             "success": success_counter,
             "error": error_counter,
@@ -235,7 +235,7 @@ def monitor_async_performance(
                 errors_counter.inc()
                 raise
 
-        wrapper._monitoring_metrics = {
+        wrapper._monitoring_metrics = {  # type: ignore[attr-defined]
             "duration": duration_histogram,
             "calls": calls_counter,
             "errors": errors_counter,
@@ -256,11 +256,11 @@ def get_function_metrics(func: Callable) -> dict[str, Any] | None:
         Dictionary of metrics if available, None otherwise.
     """
     if hasattr(func, "_monitoring_metrics"):
-        return func._monitoring_metrics
+        return cast("dict[str, Any]", func._monitoring_metrics)
     elif hasattr(func, "_monitoring_histogram"):
         return {"histogram": func._monitoring_histogram}
     elif hasattr(func, "_monitoring_counters"):
-        return func._monitoring_counters
+        return cast("dict[str, Any]", func._monitoring_counters)
     return None
 
 

@@ -874,7 +874,6 @@ class AdvancedWebSocketConnection:
     async def _authenticate(self) -> None:
         """Perform authentication."""
         # Exchange-specific authentication would be implemented here
-        pass
 
     def _get_uptime_ratio(self) -> float:
         """Calculate connection uptime ratio."""

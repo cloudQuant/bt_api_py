@@ -245,37 +245,39 @@ class KuCoinLevel3OrderBookData(KuCoinOrderBookData):
         asks = self.order_book_data.get("asks", [])
 
         # For level3, we aggregate by price
-        bid_dict = {}
-        ask_dict = {}
+        bid_dict: dict[float | str, float] = {}
+        ask_dict: dict[float | str, float] = {}
 
         for _order_id, price, size in bids:
             price_float = float(price)
             size_float = float(size)
+            orders_key = f"{price_float}_orders"
             if price_float in bid_dict:
                 bid_dict[price_float] += size_float
-                bid_dict[price_float + "_orders"] = bid_dict.get(price_float + "_orders", 0) + 1
+                bid_dict[orders_key] = bid_dict.get(orders_key, 0) + 1
             else:
                 bid_dict[price_float] = size_float
-                bid_dict[price_float + "_orders"] = 1
+                bid_dict[orders_key] = 1
 
         for _order_id, price, size in asks:
             price_float = float(price)
             size_float = float(size)
+            orders_key = f"{price_float}_orders"
             if price_float in ask_dict:
                 ask_dict[price_float] += size_float
-                ask_dict[price_float + "_orders"] = ask_dict.get(price_float + "_orders", 0) + 1
+                ask_dict[orders_key] = ask_dict.get(orders_key, 0) + 1
             else:
                 ask_dict[price_float] = size_float
-                ask_dict[price_float + "_orders"] = 1
+                ask_dict[orders_key] = 1
 
         # Extract aggregated data
         self.bid_price_list = sorted([k for k in bid_dict if isinstance(k, float)], reverse=True)
         self.bid_volume_list = [bid_dict[p] for p in self.bid_price_list]
-        self.bid_trade_nums = [bid_dict.get(f"{p}_orders", 1) for p in self.bid_price_list]
+        self.bid_trade_nums = [int(bid_dict.get(f"{p}_orders", 1)) for p in self.bid_price_list]
 
         self.ask_price_list = sorted([k for k in ask_dict if isinstance(k, float)])
         self.ask_volume_list = [ask_dict[p] for p in self.ask_price_list]
-        self.ask_trade_nums = [ask_dict.get(f"{p}_orders", 1) for p in self.ask_price_list]
+        self.ask_trade_nums = [int(ask_dict.get(f"{p}_orders", 1)) for p in self.ask_price_list]
 
         self.has_been_init_data = True
         return self

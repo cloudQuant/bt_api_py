@@ -118,19 +118,23 @@ class HitBtcRequestOrderBookData(OrderBookData):
 
     def get_bid_price_list(self):
         """Get bid price list."""
-        return [level["price"] for level in self.bids if level.get("price") is not None]
+        bids = self.bids or []
+        return [level["price"] for level in bids if level.get("price") is not None]
 
     def get_ask_price_list(self):
         """Get ask price list."""
-        return [level["price"] for level in self.asks if level.get("price") is not None]
+        asks = self.asks or []
+        return [level["price"] for level in asks if level.get("price") is not None]
 
     def get_bid_volume_list(self):
         """Get bid volume list."""
-        return [level["quantity"] for level in self.bids if level.get("quantity") is not None]
+        bids = self.bids or []
+        return [level["quantity"] for level in bids if level.get("quantity") is not None]
 
     def get_ask_volume_list(self):
         """Get ask volume list."""
-        return [level["quantity"] for level in self.asks if level.get("quantity") is not None]
+        asks = self.asks or []
+        return [level["quantity"] for level in asks if level.get("quantity") is not None]
 
     def get_bid_trade_nums(self):
         """Get bid trade numbers (not supported by HitBTC)."""
@@ -145,7 +149,7 @@ class HitBtcRequestOrderBookData(OrderBookData):
         best_ask = self.get_best_ask()
         return f"HITBTC OrderBook {self.symbol_name}: Bid={best_bid}, Ask={best_ask}"
 
-    def __repr__(self):
-        return (
-            f"<HitBtcOrderBookData {self.symbol_name} bids={len(self.bids)} asks={len(self.asks)}>"
-        )
+    def __repr__(self) -> str:
+        bids_len = len(self.bids) if self.bids else 0
+        asks_len = len(self.asks) if self.asks else 0
+        return f"<HitBtcOrderBookData {self.symbol_name} bids={bids_len} asks={asks_len}>"

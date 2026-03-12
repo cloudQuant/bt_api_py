@@ -19,18 +19,18 @@ class CryptoComTicker(TickerData):
         self.symbol_name = symbol_name
         self.asset_type = asset_type
         self.ticker_data = ticker_info if has_been_json_encoded else None
-        self.ticker_symbol_name = None
-        self.server_time = None
-        self.bid_price = None
-        self.ask_price = None
-        self.bid_volume = None
-        self.ask_volume = None
-        self.last_price = None
-        self.high_24h = None
-        self.low_24h = None
-        self.volume_24h = None
-        self.quote_volume_24h = None
-        self.all_data = None
+        self.ticker_symbol_name: str | None = None
+        self.server_time: float | None = None
+        self.bid_price: float | None = None
+        self.ask_price: float | None = None
+        self.bid_volume: float | None = None
+        self.ask_volume: float | None = None
+        self.last_price: float | None = None
+        self.high_24h: float | None = None
+        self.low_24h: float | None = None
+        self.volume_24h: float | None = None
+        self.quote_volume_24h: float | None = None
+        self.all_data: dict[str, Any] | None = None
         self.has_been_init_data = False
 
     def init_data(self) -> "Self":
@@ -41,22 +41,24 @@ class CryptoComTicker(TickerData):
         if self.has_been_init_data:
             return self
 
+        data = self.ticker_data or {}
         self.ticker_symbol_name = self.symbol_name
-        self.server_time = (
-            float(self.ticker_data.get("t", 0)) / 1000 if self.ticker_data.get("t") else None
-        )
-        self.last_price = float(self.ticker_data.get("a", 0))
-        self.bid_price = float(self.ticker_data.get("b", 0))
-        self.ask_price = float(self.ticker_data.get("k", 0))
-        self.high_24h = float(self.ticker_data.get("h", 0))
-        self.low_24h = float(self.ticker_data.get("l", 0))
-        self.volume_24h = float(self.ticker_data.get("v", 0))
-        self.quote_volume_24h = float(self.ticker_data.get("vv", 0))
+        t_val = data.get("t")
+        self.server_time = float(t_val) / 1000 if t_val is not None else None
+        self.last_price = float(data.get("a", 0))
+        self.bid_price = float(data.get("b", 0))
+        self.ask_price = float(data.get("k", 0))
+        self.high_24h = float(data.get("h", 0))
+        self.low_24h = float(data.get("l", 0))
+        self.volume_24h = float(data.get("v", 0))
+        self.quote_volume_24h = float(data.get("vv", 0))
         self.has_been_init_data = True
         return self
 
     def get_all_data(self) -> dict[str, Any]:
         """Get all ticker data as dictionary."""
+        if not self.has_been_init_data:
+            self.init_data()
         if self.all_data is None:
             self.all_data = {
                 "exchange_name": self.exchange_name,
@@ -85,19 +87,19 @@ class CryptoComTicker(TickerData):
         return self.__str__()
 
     def get_exchange_name(self) -> str:
-        return self.exchange_name
+        return str(self.exchange_name)
 
     def get_local_update_time(self) -> float:
-        return self.local_update_time
+        return float(self.local_update_time)
 
     def get_symbol_name(self) -> str:
-        return self.symbol_name
+        return str(self.symbol_name) if self.symbol_name is not None else ""
 
     def get_ticker_symbol_name(self) -> str | None:
         return self.ticker_symbol_name
 
     def get_asset_type(self) -> str:
-        return self.asset_type
+        return str(self.asset_type)
 
     def get_server_time(self) -> float | None:
         return self.server_time

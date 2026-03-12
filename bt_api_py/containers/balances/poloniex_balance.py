@@ -19,12 +19,12 @@ class PoloniexBalanceData(BalanceData):
         self.local_update_time = time.time()
         self.symbol_name = symbol_name  # Currency code
         self.asset_type = asset_type
-        self.balance_data = balance_info if has_been_json_encoded else None
+        self.balance_data: dict[str, Any] | None = balance_info if has_been_json_encoded else None
         self.currency = None
         self.available_balance = None
         self.locked_balance = None
         self.total_balance = None
-        self.all_data = None
+        self.all_data: dict[str, Any] | None = None
         self.has_been_init_data = False
 
     def init_data(self) -> None:
@@ -42,6 +42,7 @@ class PoloniexBalanceData(BalanceData):
                 "locked_balance": self.locked_balance,
                 "total_balance": self.total_balance,
             }
+        assert self.all_data is not None
         return self.all_data
 
     def __str__(self) -> str:
@@ -52,19 +53,19 @@ class PoloniexBalanceData(BalanceData):
         return self.__str__()
 
     def get_exchange_name(self) -> str:
-        return self.exchange_name
+        return str(self.exchange_name)
 
     def get_local_update_time(self) -> float:
-        return self.local_update_time
+        return float(self.local_update_time)
 
     def get_symbol_name(self) -> str:
-        return self.symbol_name
+        return str(self.symbol_name)
 
     def get_asset_type(self) -> str:
         return self.asset_type
 
     def get_currency(self) -> str:
-        return self.currency
+        return str(self.currency) if self.currency is not None else ""
 
     def get_available_balance(self) -> Any:
         return self.available_balance
@@ -88,19 +89,17 @@ class PoloniexRequestBalanceData(PoloniexBalanceData):
                 self.balance_data = json.loads(self.balance_info)
             self.has_been_json_encoded = True
         if self.has_been_init_data:
-            return self
+            return
 
+        assert self.balance_data is not None
         self.currency = from_dict_get_string(self.balance_data, "currency")
         self.available_balance = from_dict_get_float(self.balance_data, "available")
         self.locked_balance = from_dict_get_float(self.balance_data, "hold")
-        self.total_balance = (
-            self.available_balance + self.locked_balance
-            if self.available_balance and self.locked_balance
-            else None
-        )
+        av = self.available_balance
+        lk = self.locked_balance
+        self.total_balance = (av + lk) if av is not None and lk is not None else None
 
         self.has_been_init_data = True
-        return self
 
 
 class PoloniexWssBalanceData(PoloniexBalanceData):
@@ -111,18 +110,16 @@ class PoloniexWssBalanceData(PoloniexBalanceData):
             self.balance_data = json.loads(self.balance_info)
             self.has_been_json_encoded = True
         if self.has_been_init_data:
-            return self
+            return
 
+        assert self.balance_data is not None
         self.currency = from_dict_get_string(self.balance_data, "currency")
         self.available_balance = from_dict_get_float(self.balance_data, "available")
         self.locked_balance = from_dict_get_float(
             self.balance_data, "locked"
         ) or from_dict_get_float(self.balance_data, "hold")
-        self.total_balance = (
-            self.available_balance + self.locked_balance
-            if self.available_balance and self.locked_balance
-            else None
-        )
+        av = self.available_balance
+        lk = self.locked_balance
+        self.total_balance = (av + lk) if av is not None and lk is not None else None
 
         self.has_been_init_data = True
-        return self

@@ -4,6 +4,7 @@ Core metrics collection and registry system.
 Provides a lightweight Prometheus-like metrics system for bt_api_py.
 """
 
+import logging
 import threading
 import time
 from contextlib import contextmanager
@@ -11,12 +12,16 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Protocol
 from weakref import WeakSet
 
+logger = logging.getLogger(__name__)
+
 if TYPE_CHECKING:
-    from collections.abc import Callable
+    from collections.abc import Callable, Iterator
 
 
 class Metric(Protocol):
     """Protocol for metric types."""
+
+    name: str
 
     def collect(self) -> dict[str, float]:
         """Collect current metric values."""
@@ -141,10 +146,10 @@ class Histogram:
 
         # Bucket counts
         for bucket, count in self._bucket_counts.items():
-            result[f'{self.name}_bucket{{le="{bucket}"}}'] = count
+            result[f'{self.name}_bucket{{le="{bucket}"}}'] = float(count)
 
         # Summary stats
-        result[f"{self.name}_count"] = self._count
+        result[f"{self.name}_count"] = float(self._count)
         result[f"{self.name}_sum"] = self._sum
 
         return result
@@ -175,7 +180,7 @@ class MetricRegistry:
         """Get metric by name."""
         return self._metrics.get(name)
 
-    def collect_all(self) -> dict[str, dict[str, float]]:
+    def collect_all(self) -> dict[str, float]:
         """Collect all registered metrics."""
         result = {}
         with self._lock:
@@ -184,8 +189,9 @@ class MetricRegistry:
         for metric in metrics_copy.values():
             try:
                 result.update(metric.collect())
-            except Exception:
+            except Exception as e:
                 # Skip problematic metrics
+                logger.debug("Metric %s collect failed: %s", metric.name, e)
                 continue
 
         return result
@@ -260,7 +266,7 @@ class PerformanceTimer:
 
 
 @contextmanager
-def timer(histogram: Histogram | None = None) -> PerformanceTimer:
+def timer(histogram: Histogram | None = None) -> "Iterator[PerformanceTimer]":
     """Context manager for timing operations."""
     perf_timer = PerformanceTimer(histogram)
     with perf_timer:

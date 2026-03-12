@@ -12,7 +12,7 @@ from bt_api_py.feeds.live_bitso.request_base import BitsoRequestData
 class BitsoRequestDataSpot(BitsoRequestData):
     """Bitso Spot Feed with three-layer method wrappers."""
 
-    def __init__(self, data_queue, **kwargs) -> None:
+    def __init__(self, data_queue: Any = None, **kwargs: Any) -> None:
         kwargs.setdefault("exchange_name", "BITSO___SPOT")
         kwargs.setdefault("asset_type", "SPOT")
         super().__init__(data_queue, **kwargs)

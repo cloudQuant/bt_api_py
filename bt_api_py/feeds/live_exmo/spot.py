@@ -3,6 +3,7 @@ EXMO Spot Feed implementation.
 """
 
 import time as tm
+from typing import Any
 
 from bt_api_py.feeds.capability import Capability
 from bt_api_py.feeds.live_exmo.request_base import ExmoRequestData
@@ -12,7 +13,7 @@ class ExmoRequestDataSpot(ExmoRequestData):
     """EXMO Spot Feed for market data."""
 
     @classmethod
-    def _capabilities(cls):
+    def _capabilities(cls) -> set[Capability]:
         return {
             Capability.GET_TICK,
             Capability.GET_DEPTH,
@@ -25,7 +26,7 @@ class ExmoRequestDataSpot(ExmoRequestData):
             Capability.CANCEL_ORDER,
         }
 
-    def __init__(self, data_queue, **kwargs):
+    def __init__(self, data_queue: Any = None, **kwargs: Any) -> None:
         super().__init__(data_queue, **kwargs)
         self.exchange_name = kwargs.get("exchange_name", "EXMO___SPOT")
 

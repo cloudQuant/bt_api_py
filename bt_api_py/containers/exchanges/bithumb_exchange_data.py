@@ -1,8 +1,8 @@
 """Bithumb Exchange Data Configuration."""
 
-import os
 from typing import Any
 
+from bt_api_py.config_loader import get_exchange_config_path, load_exchange_config
 from bt_api_py.containers.exchanges.exchange_data import ExchangeData
 from bt_api_py.logging_factory import get_logger
 
@@ -18,18 +18,12 @@ def _get_bithumb_config() -> Any | None:
     if _bithumb_config_loaded:
         return _bithumb_config
     try:
-        from bt_api_py.config_loader import load_exchange_config
-
-        config_path = os.path.join(
-            os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
-            "configs",
-            "bithumb.yaml",
-        )
-        if os.path.exists(config_path):
-            _bithumb_config = load_exchange_config(config_path)
+        config_path = get_exchange_config_path("bithumb.yaml")
+        if config_path.exists():
+            _bithumb_config = load_exchange_config(str(config_path))
         _bithumb_config_loaded = True
     except Exception as e:
-        logger.warn(f"Failed to load bithumb.yaml config: {e}")
+        logger.warning(f"Failed to load bithumb.yaml config: {e}")
     return _bithumb_config
 
 
@@ -129,6 +123,6 @@ class BithumbExchangeDataSpot(BithumbExchangeData):
 
         """
         if period not in self.kline_periods:
-            logger.warn(f"Unknown period '{period}', returning as-is")
+            logger.warning(f"Unknown period '{period}', returning as-is")
             return period
         return self.kline_periods[period]

@@ -1,5 +1,6 @@
 import json
 import time
+from typing import Any
 
 from bt_api_py.containers.orders.order import OrderData, OrderStatus
 from bt_api_py.functions.utils import from_dict_get_bool, from_dict_get_float, from_dict_get_string
@@ -35,10 +36,10 @@ class OkxOrderData(OrderData):
         self.stop_loss_price = None
         self.stop_loss_trigger_price = None
         self.stop_loss_trigger_price_type = None
-        self.all_data = None
+        self.all_data: dict[str, Any] | None = None
         self.has_been_init_data = False
 
-    def init_data(self):
+    def init_data(self) -> "OkxOrderData":
         if not self.has_been_json_encoded:
             self.order_info = json.loads(self.order_info)
             self.order_data = self.order_info["data"]
@@ -71,8 +72,11 @@ class OkxOrderData(OrderData):
         self.has_been_init_data = True
         return self
 
-    def get_all_data(self):
+    def get_all_data(self) -> dict[str, Any]:
         if self.all_data is None:
+            order_status_val = ""
+            if self.order_status is not None:
+                order_status_val = self.order_status.value
             self.all_data = {
                 "exchange_name": self.exchange_name,
                 "symbol_name": self.symbol_name,
@@ -83,7 +87,7 @@ class OkxOrderData(OrderData):
                 "client_order_id": self.client_order_id,
                 "order_symbol_name": self.order_symbol_name,
                 "order_type": self.order_type,
-                "order_status": self.order_status.value,
+                "order_status": order_status_val,
                 "order_size": self.order_size,
                 "order_price": self.order_price,
                 "trade_id": self.trade_id,

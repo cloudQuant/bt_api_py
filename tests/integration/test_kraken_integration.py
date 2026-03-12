@@ -57,14 +57,10 @@ def test_imports():
 
         print("✓ Successfully imported KrakenErrorTranslator")
 
-        pass
-
     except ImportError as e:
         print(f"✗ Import failed: {e}")
-        pass
     except Exception as e:
         print(f"✗ Unexpected error: {e}")
-        pass
 
 
 def test_instantiation():
@@ -139,14 +135,11 @@ def test_instantiation():
         print(f"✓ Order created: {order}")
         print(f"✓ Order validates: {order.validate()}")
 
-        pass
-
     except Exception as e:
         print(f"✗ Instantiation failed: {e}")
         import traceback
 
         traceback.print_exc()
-        pass
 
 
 def test_registration():
@@ -160,11 +153,8 @@ def test_registration():
         get_feed("KRKEN___SPOT", None, api_key="dummy", api_secret="dummy")
         print("✓ KrakenSpotFeed found in registry")
 
-        pass
-
     except Exception as e:
         print(f"⚠ Registration test may require full framework setup: {e}")
-        pass
 
 
 def main():

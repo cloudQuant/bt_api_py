@@ -1,8 +1,8 @@
 """Mercado Bitcoin Exchange Data Configuration."""
 
-import os
 from typing import Any
 
+from bt_api_py.config_loader import get_exchange_config_path, load_exchange_config
 from bt_api_py.containers.exchanges.exchange_data import ExchangeData
 from bt_api_py.logging_factory import get_logger
 
@@ -18,18 +18,12 @@ def _get_mercado_bitcoin_config() -> Any | None:
     if _mercado_bitcoin_config_loaded:
         return _mercado_bitcoin_config
     try:
-        from bt_api_py.config_loader import load_exchange_config
-
-        config_path = os.path.join(
-            os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
-            "configs",
-            "mercado_bitcoin.yaml",
-        )
-        if os.path.exists(config_path):
-            _mercado_bitcoin_config = load_exchange_config(config_path)
+        config_path = get_exchange_config_path("mercado_bitcoin.yaml")
+        if config_path.exists():
+            _mercado_bitcoin_config = load_exchange_config(str(config_path))
         _mercado_bitcoin_config_loaded = True
     except Exception as e:
-        logger.warn(f"Failed to load mercado_bitcoin.yaml config: {e}")
+        logger.warning(f"Failed to load mercado_bitcoin.yaml config: {e}")
     return _mercado_bitcoin_config
 
 

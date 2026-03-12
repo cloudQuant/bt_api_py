@@ -79,7 +79,6 @@ class TestCowSwapIntegration:
 
     def test_get_quote_live(self, cow_swap_feed):
         """Test live quote data retrieval"""
-        pass
 
 
 if __name__ == "__main__":

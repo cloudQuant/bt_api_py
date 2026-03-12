@@ -35,14 +35,14 @@ class HtxRequestTickerData(TickerData):
         self.ticker_data: dict[str, Any] | None = (
             ticker_info if has_been_json_encoded and isinstance(ticker_info, dict) else None
         )
-        self.ticker_symbol_name = None
-        self.server_time = None
-        self.bid_price = None
-        self.ask_price = None
-        self.bid_volume = None
-        self.ask_volume = None
-        self.last_price = None
-        self.all_data = None
+        self.ticker_symbol_name: str | None = None
+        self.server_time: float | None = None
+        self.bid_price: float | None = None
+        self.ask_price: float | None = None
+        self.bid_volume: float | None = None
+        self.ask_volume: float | None = None
+        self.last_price: float | None = None
+        self.all_data: dict[str, Any] | None = None
         self.has_been_init_data = False
 
     def init_data(self) -> "HtxRequestTickerData":
@@ -75,9 +75,10 @@ class HtxRequestTickerData(TickerData):
             self.ticker_data = json.loads(self.ticker_info)
 
         # Extract tick data
-        tick = self.ticker_data.get("tick", {})
+        data = self.ticker_data or {}
+        tick = data.get("tick", {})
 
-        self.server_time = from_dict_get_float(self.ticker_data, "ts")
+        self.server_time = from_dict_get_float(data, "ts")
         self.ticker_symbol_name = self.symbol_name
 
         # Best bid
@@ -100,6 +101,7 @@ class HtxRequestTickerData(TickerData):
 
     def get_all_data(self) -> dict[str, Any]:
         if self.all_data is None:
+            self.init_data()
             self.all_data = {
                 "exchange_name": self.exchange_name,
                 "symbol_name": self.symbol_name,
@@ -113,7 +115,7 @@ class HtxRequestTickerData(TickerData):
                 "ask_volume": self.ask_volume,
                 "last_price": self.last_price,
             }
-        return self.all_data
+        return self.all_data or {}
 
     def __str__(self) -> str:
         self.init_data()

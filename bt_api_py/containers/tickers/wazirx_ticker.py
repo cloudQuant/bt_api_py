@@ -5,6 +5,7 @@ import time
 from typing import Any
 
 from bt_api_py.containers.tickers.ticker import TickerData
+from bt_api_py.containers.tickers.ticker_utils import parse_float
 
 
 class WazirxRequestTickerData(TickerData):
@@ -48,31 +49,13 @@ class WazirxRequestTickerData(TickerData):
         data = self.ticker_data
         if data:
             self.ticker_symbol_name = data.get("symbol")
-            self.last_price = self._parse_float(data.get("lastPrice"))
-            self.bid_price = self._parse_float(data.get("bidPrice"))
-            self.ask_price = self._parse_float(data.get("askPrice"))
-            self.volume_24h = self._parse_float(data.get("volume"))
-            self.high_24h = self._parse_float(data.get("highPrice"))
-            self.low_24h = self._parse_float(data.get("lowPrice"))
-            self.open_24h = self._parse_float(data.get("openPrice"))
+            self.last_price = parse_float(data.get("lastPrice"))
+            self.bid_price = parse_float(data.get("bidPrice"))
+            self.ask_price = parse_float(data.get("askPrice"))
+            self.volume_24h = parse_float(data.get("volume"))
+            self.high_24h = parse_float(data.get("highPrice"))
+            self.low_24h = parse_float(data.get("lowPrice"))
+            self.open_24h = parse_float(data.get("openPrice"))
 
         self.has_been_init_data = True
         return self
-
-    @staticmethod
-    def _parse_float(value: Any) -> float | None:
-        """Parse value to float.
-
-        Args:
-            value: Value to parse.
-
-        Returns:
-            Parsed float value or None if parsing fails.
-
-        """
-        if value is None:
-            return None
-        try:
-            return float(value)
-        except (ValueError, TypeError):
-            return None

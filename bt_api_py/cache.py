@@ -7,7 +7,7 @@ trading pairs, and market data.
 
 import threading
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
 from functools import wraps
 from typing import Any, TypeVar
 
@@ -132,6 +132,10 @@ class SimpleCache:
         """
         with self._lock:
             return len(self._cache)
+
+    def __iter__(self) -> Iterator[str]:
+        """Iterate over cache keys (for 'for key in cache' support)."""
+        return iter(self.keys())
 
     def keys(self) -> list[str]:
         """

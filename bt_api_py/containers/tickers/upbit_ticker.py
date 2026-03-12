@@ -24,23 +24,25 @@ class UpbitTickerData(TickerData):
         self.local_update_time = time.time()
         self.symbol_name = symbol_name
         self.asset_type = asset_type
-        self.ticker_data = ticker_info if has_been_json_encoded else None
-        self.ticker_symbol_name = None
-        self.server_time = None
-        self.bid_price = None
-        self.ask_price = None
-        self.bid_volume = None
-        self.ask_volume = None
-        self.last_price = None
-        self.last_volume = None
-        self.high_price = None
-        self.low_price = None
-        self.open_price = None
-        self.prev_close_price = None
-        self.change = None
-        self.change_rate = None
-        self.timestamp = None
-        self.all_data = None
+        self.ticker_data: dict[str, Any] | None = (
+            ticker_info if has_been_json_encoded and isinstance(ticker_info, dict) else None
+        )
+        self.ticker_symbol_name: str | None = None
+        self.server_time: float | None = None
+        self.bid_price: float | None = None
+        self.ask_price: float | None = None
+        self.bid_volume: float | None = None
+        self.ask_volume: float | None = None
+        self.last_price: float | None = None
+        self.last_volume: float | None = None
+        self.high_price: float | None = None
+        self.low_price: float | None = None
+        self.open_price: float | None = None
+        self.prev_close_price: float | None = None
+        self.change: str | None = None
+        self.change_rate: float | None = None
+        self.timestamp: float | None = None
+        self.all_data: dict[str, Any] | None = None
         self.has_been_init_data = False
 
     def init_data(self) -> "Self":
@@ -50,34 +52,35 @@ class UpbitTickerData(TickerData):
                 self.ticker_data = json.loads(self.raw_data)
 
             # 基础信息
-            self.ticker_symbol_name = from_dict_get_string(self.ticker_data, "market")
-            self.server_time = from_dict_get_float(self.ticker_data, "timestamp") or time.time()
+            data = self.ticker_data or {}
+            self.ticker_symbol_name = from_dict_get_string(data, "market")
+            self.server_time = from_dict_get_float(data, "timestamp") or time.time()
 
             # 价格信息
-            self.last_price = from_dict_get_float(self.ticker_data, "trade_price")
-            self.open_price = from_dict_get_float(self.ticker_data, "opening_price")
-            self.high_price = from_dict_get_float(self.ticker_data, "high_price")
-            self.low_price = from_dict_get_float(self.ticker_data, "low_price")
-            self.prev_close_price = from_dict_get_float(self.ticker_data, "prev_closing_price")
+            self.last_price = from_dict_get_float(data, "trade_price")
+            self.open_price = from_dict_get_float(data, "opening_price")
+            self.high_price = from_dict_get_float(data, "high_price")
+            self.low_price = from_dict_get_float(data, "low_price")
+            self.prev_close_price = from_dict_get_float(data, "prev_closing_price")
 
             # 买卖价格和数量
-            self.bid_price = from_dict_get_float(self.ticker_data, "bid_price")
-            self.ask_price = from_dict_get_float(self.ticker_data, "ask_price")
-            self.bid_volume = from_dict_get_float(self.ticker_data, "bid_size")
-            self.ask_volume = from_dict_get_float(self.ticker_data, "ask_size")
+            self.bid_price = from_dict_get_float(data, "bid_price")
+            self.ask_price = from_dict_get_float(data, "ask_price")
+            self.bid_volume = from_dict_get_float(data, "bid_size")
+            self.ask_volume = from_dict_get_float(data, "ask_size")
 
             # 成交量
-            self.last_volume = from_dict_get_float(self.ticker_data, "trade_volume")
+            self.last_volume = from_dict_get_float(data, "trade_volume")
 
             # 涨跌幅
-            self.change = from_dict_get_string(self.ticker_data, "change")  # "RISE", "FALL", "EVEN"
-            self.change_rate = from_dict_get_float(self.ticker_data, "signed_change_rate")
+            self.change = from_dict_get_string(data, "change")  # "RISE", "FALL", "EVEN"
+            self.change_rate = from_dict_get_float(data, "signed_change_rate")
 
             # 时间戳
-            if "trade_date_utc" in self.ticker_data and "trade_time_utc" in self.ticker_data:
+            if "trade_date_utc" in data and "trade_time_utc" in data:
                 # Combine date and time
-                date_str = self.ticker_data["trade_date_utc"]
-                time_str = self.ticker_data["trade_time_utc"]
+                date_str = data["trade_date_utc"]
+                time_str = data["trade_time_utc"]
                 time_str = f"{date_str} {time_str}"
                 try:
                     import datetime
@@ -89,17 +92,19 @@ class UpbitTickerData(TickerData):
                     self.timestamp = time.time()
 
             self.has_been_init_data = True
+            return self
 
         except Exception as e:
             logger.error(f"Error initializing Upbit ticker data: {e}", exc_info=True)
+        return self
 
     def get_exchange_name(self) -> str:
         """获取交易所名称."""
-        return self.exchange_name
+        return str(self.exchange_name)
 
     def get_symbol_name(self) -> str:
         """获取交易对名称."""
-        return self.symbol_name
+        return str(self.symbol_name)
 
     def get_last_price(self) -> float | None:
         """获取最新价格."""
@@ -110,6 +115,7 @@ class UpbitTickerData(TickerData):
     def get_all_data(self) -> dict[str, Any]:
         """获取所有 ticker 数据."""
         if self.all_data is None:
+            self.init_data()
             self.all_data = {
                 "exchange_name": self.exchange_name,
                 "symbol_name": self.symbol_name,
@@ -131,16 +137,17 @@ class UpbitTickerData(TickerData):
                 "change_rate": self.change_rate,
                 "timestamp": self.timestamp,
             }
-        return self.all_data
+        return self.all_data or {}
 
     def __str__(self) -> str:
         """字符串表示."""
         if not self.has_been_init_data:
             self.init_data()
 
-        return (
+        change_val = self.change_rate if self.change_rate is not None else 0
+        return str(
             f"UpbitTicker(symbol={self.symbol_name}, "
             f"last={self.last_price}, "
             f"bid={self.bid_price}, ask={self.ask_price}, "
-            f"change={self.change_rate:.4f}%)"
+            f"change={change_val:.4f}%)"
         )

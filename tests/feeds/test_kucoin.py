@@ -246,7 +246,7 @@ class TestKuCoinExchangeData:
 
     def test_get_invalid_path_raises_error(self):
         ed = KuCoinExchangeDataSpot()
-        with pytest.raises(Exception):
+        with pytest.raises(NotImplementedError):
             ed.get_rest_path("invalid_path")
 
     @pytest.mark.kline

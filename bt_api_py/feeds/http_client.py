@@ -4,12 +4,12 @@
 支持连接池复用、统一错误处理、代理配置。
 """
 
-from typing import Any
+from typing import Any, cast
 
 try:
     import httpx
 except ImportError:
-    httpx = None
+    httpx = None  # type: ignore[assignment]
 
 from bt_api_py.error import (
     ServerError,
@@ -57,7 +57,7 @@ class HttpClient:
             else:
                 proxy_url = proxies
 
-        transport_kwargs = {}
+        transport_kwargs: dict[str, Any] = {}
         if proxy_url:
             transport_kwargs["proxy"] = proxy_url
 
@@ -72,7 +72,7 @@ class HttpClient:
 
         # 异步客户端（延迟初始化）
         self._async_client: httpx.AsyncClient | None = None
-        self._async_kwargs = {
+        self._async_kwargs: dict[str, Any] = {
             "timeout": timeout,
             "limits": limits,
             "verify": verify,
@@ -100,7 +100,7 @@ class HttpClient:
         **kwargs,
     ) -> dict[str, Any]:
         """同步请求"""
-        req_kwargs = {}
+        req_kwargs: dict[str, Any] = {}
         if headers:
             req_kwargs["headers"] = headers
         if params is not None:
@@ -143,7 +143,7 @@ class HttpClient:
         """异步请求"""
         client = self._get_async_client()
 
-        req_kwargs = {}
+        req_kwargs: dict[str, Any] = {}
         if headers:
             req_kwargs["headers"] = headers
         if params is not None:
@@ -182,7 +182,7 @@ class HttpClient:
         # 2xx success
         if response.is_success:
             try:
-                return response.json()
+                return cast("dict[str, Any]", response.json())
             except (ValueError, UnicodeDecodeError):
                 return {"text": response.text, "status_code": status}
 
@@ -191,9 +191,9 @@ class HttpClient:
         # 4xx responses that exchange-specific code handles via RequestData.
         # This matches the old requests-based behavior where only 404/410 raised.
         if 400 <= status < 500 and status not in (404, 410):
-            logger.warn(f"HTTP {status} response from {response.url}: {response.text[:200]}")
+            logger.warning(f"HTTP {status} response from {response.url}: {response.text[:200]}")
             try:
-                return response.json()
+                return cast("dict[str, Any]", response.json())
             except (ValueError, UnicodeDecodeError):
                 pass  # fall through to raise
 
@@ -237,13 +237,13 @@ class HttpClient:
         if self._async_client and not self._async_client.is_closed:
             await self._async_client.aclose()
 
-    def __enter__(self) -> None:
+    def __enter__(self) -> "HttpClient":
         return self
 
     def __exit__(self, *args: Any) -> None:
         self.close()
 
-    async def __aenter__(self) -> None:
+    async def __aenter__(self) -> "HttpClient":
         return self
 
     async def __aexit__(self, *args: Any) -> None:

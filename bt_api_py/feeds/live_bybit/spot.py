@@ -1,5 +1,7 @@
 """Bybit Spot Trading Feed"""
 
+from typing import Any
+
 from bt_api_py.containers.balances.bybit_balance import BybitSpotBalanceData
 from bt_api_py.containers.exchanges.bybit_exchange_data import BybitExchangeDataSpot
 from bt_api_py.containers.orderbooks.bybit_orderbook import BybitSpotOrderBookData
@@ -13,7 +15,7 @@ from bt_api_py.logging_factory import get_logger
 class BybitRequestDataSpot(BybitRequestData):
     """Bybit Spot trading REST API feed."""
 
-    def __init__(self, data_queue, **kwargs):
+    def __init__(self, data_queue: Any = None, **kwargs: Any) -> None:
         kwargs["asset_type"] = "spot"
         kwargs.setdefault("logger_name", "bybit_spot_feed.log")
         super().__init__(data_queue, **kwargs)
@@ -206,7 +208,7 @@ class BybitRequestDataSpot(BybitRequestData):
         """Get server time."""
         request_type = "get_server_time"
         path = self._params.get_rest_path(request_type)
-        params = {}
+        params: dict[str, Any] = {}
         extra_data = update_extra_data(
             extra_data,
             **{
@@ -223,7 +225,7 @@ class BybitRequestDataSpot(BybitRequestData):
         """Get exchange instruments info."""
         request_type = "get_contract"
         path = self._params.get_rest_path(request_type)
-        params = {}
+        params: dict[str, Any] = {}
         if symbol:
             params["symbol"] = self._params.get_symbol(symbol)
         extra_data = update_extra_data(

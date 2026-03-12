@@ -38,6 +38,7 @@ class CryptoComOrder(OrderData):
         if self.has_been_init_data:
             return self
 
+        assert self.order_data is not None
         self.order_id = self.order_data.get("order_id")
         self.client_oid = self.order_data.get("client_oid")
         self.side = self.order_data.get("side")

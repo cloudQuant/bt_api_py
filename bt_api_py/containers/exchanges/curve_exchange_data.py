@@ -45,7 +45,7 @@ def _get_curve_config() -> Any | None:
         from bt_api_py.logging_factory import get_logger
 
         logger = get_logger("curve_exchange_data")
-        logger.warn(f"Failed to load curve.yaml config: {e}")
+        logger.warning(f"Failed to load curve.yaml config: {e}")
     return _curve_config
 
 

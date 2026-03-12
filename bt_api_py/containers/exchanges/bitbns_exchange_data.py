@@ -29,7 +29,7 @@ def _get_bitbns_config() -> Any | None:
             _bitbns_config = load_exchange_config(config_path)
         _bitbns_config_loaded = True
     except Exception as e:
-        logger.warn(f"Failed to load bitbns.yaml config: {e}")
+        logger.warning(f"Failed to load bitbns.yaml config: {e}")
     return _bitbns_config
 
 

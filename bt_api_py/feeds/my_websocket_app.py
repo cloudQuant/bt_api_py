@@ -16,13 +16,15 @@ from bt_api_py.logging_factory import get_logger
 
 
 class MyWebsocketApp:
-    def __init__(self, data_queue, **kwargs) -> None:
-        self.ws = None
+    def __init__(self, data_queue: Any = None, **kwargs: Any) -> None:
+        self.ws: websocket.WebSocketApp | None = None
         self.data_queue = data_queue
         self.wss_name = kwargs.get("wss_name", "default_name")
         self._params = kwargs.get("exchange_data")
         self.wss_url = kwargs.get("wss_url")
-        self.wss_url = self._params.get_wss_url() if self.wss_url is None else self.wss_url
+        if self.wss_url is None:
+            assert self._params is not None, "exchange_data required when wss_url not provided"
+            self.wss_url = self._params.get_wss_url()
         self.ping_interval = kwargs.get("ping_interval", 10)
         self.ping_timeout = kwargs.get("ping_timeout", 5)
         self.sslopt = kwargs.get("sslopt", {"cert_reqs": ssl.CERT_NONE})
@@ -46,8 +48,10 @@ class MyWebsocketApp:
                     if parsed.scheme in ("http", "https"):
                         self.http_proxy_host = parsed.hostname
                         self.http_proxy_port = parsed.port
-            except Exception:
-                pass
+            except Exception as e:
+                get_logger("my_websocket_app").debug(
+                    "Failed to parse system proxy: %s", e, exc_info=True
+                )
         default_log = get_project_log_path("my_websocket_app.log")
         self.log_file_name = kwargs.get("log_file_name", default_log)
         self.wss_logger = get_logger("unknown")
@@ -72,8 +76,9 @@ class MyWebsocketApp:
         return timestamp
 
     def subscribe(self, **kwargs):
+        assert self._params is not None
         req = self._params.get_wss_path(**kwargs)
-        # print("req", req)
+        assert self.ws is not None
         self.ws.send(req)
         # time.sleep(0.3)
 
@@ -105,7 +110,7 @@ class MyWebsocketApp:
         try:
             self.open_rsp()
         except Exception as e:
-            self.wss_logger.warn(f"{self.wss_name},{self.wss_url},{e},{traceback.format_exc()}")
+            self.wss_logger.warning(f"{self.wss_name},{self.wss_url},{e},{traceback.format_exc()}")
         self._running_flag = True
         self._reset_backoff()
         self._emit_event("ws.connected")
@@ -117,7 +122,7 @@ class MyWebsocketApp:
         try:
             self.message_rsp(message)
         except Exception as e:
-            self.wss_logger.warn(f"{self.wss_name},{self.wss_url},{e},{traceback.format_exc()}")
+            self.wss_logger.warning(f"{self.wss_name},{self.wss_url},{e},{traceback.format_exc()}")
 
     # noinspection PyMethodMayBeStatic
     def message_rsp(self, message):
@@ -127,12 +132,12 @@ class MyWebsocketApp:
         try:
             self.error_rsp(f"error: {error}")
         except Exception as e:
-            self.wss_logger.warn(f"{self.wss_name},{self.wss_url},{e},{traceback.format_exc()}")
+            self.wss_logger.warning(f"{self.wss_name},{self.wss_url},{e},{traceback.format_exc()}")
         self._emit_event("ws.error", error=str(error))
 
     # noinspection PyMethodMayBeStatic
     def error_rsp(self, error):
-        self.wss_logger.warn(f"name: {self.wss_name}, url: {self.wss_url}, error: {error}")
+        self.wss_logger.warning(f"name: {self.wss_name}, url: {self.wss_url}, error: {error}")
 
     def on_close(self, _ws, _close_status_code, _close_msg):
         self._running_flag = False
@@ -140,13 +145,14 @@ class MyWebsocketApp:
         try:
             self.close_rsp(self._restart_flag)
         except Exception as e:
-            self.wss_logger.warn(f"{self.wss_name},{self.wss_url},{e},{traceback.format_exc()}")
+            self.wss_logger.warning(f"{self.wss_name},{self.wss_url},{e},{traceback.format_exc()}")
 
     def on_ping(self, _ws, ping):
         self.wss_logger.info(
             f"===== {time.strftime('%Y-%m-%d %H:%M:%S')} Websocket ping {ping} ====="
         )
-        self.ws.sock.pong("pong")
+        if self.ws is not None and self.ws.sock is not None:
+            self.ws.sock.pong(ping)
 
     def on_pong(self, _ws, pong):
         self.wss_logger.info(
@@ -165,6 +171,7 @@ class MyWebsocketApp:
         # 设置超时
         # print("run begin")
         websocket.setdefaulttimeout(self.ping_timeout)
+        assert self.wss_url is not None
         self.ws = websocket.WebSocketApp(
             self.wss_url,
             on_open=self.on_open,
@@ -181,7 +188,7 @@ class MyWebsocketApp:
                 self._max_reconnect_attempts > 0
                 and self._reconnect_attempt >= self._max_reconnect_attempts
             ):
-                self.wss_logger.warn(
+                self.wss_logger.warning(
                     f"{self.wss_name}: max reconnect attempts ({self._max_reconnect_attempts}) reached, giving up"
                 )
                 self._emit_event("ws.max_reconnect", attempts=self._reconnect_attempt)
@@ -198,10 +205,13 @@ class MyWebsocketApp:
                     run_kwargs["proxy_type"] = "http"
                     if self.http_proxy_port:
                         run_kwargs["http_proxy_port"] = self.http_proxy_port
-                self.ws.run_forever(**run_kwargs)
+                if self.ws is not None:
+                    self.ws.run_forever(**run_kwargs)
                 self.wss_logger.info("----------wss running----------------")
             except Exception as e:
-                self.wss_logger.warn(f"{self.wss_name},{self.wss_url},{e},{traceback.format_exc()}")
+                self.wss_logger.warning(
+                    f"{self.wss_name},{self.wss_url},{e},{traceback.format_exc()}"
+                )
 
             # 指数退避重连延迟
             self._reconnect_attempt += 1
@@ -215,7 +225,8 @@ class MyWebsocketApp:
     def start(self, connect_timeout=30):
         self.process = threading.Thread(target=self.run, daemon=True)
         self.process.start()
-        _elapsed = 0
+        _elapsed: float = 0.0
+        assert self._params is not None
         while not self._running_flag:
             self.wss_logger.info(
                 f"===== {time.strftime('%Y-%m-%d %H:%M:%S')} "
@@ -224,7 +235,7 @@ class MyWebsocketApp:
             time.sleep(0.5)
             _elapsed += 0.5
             if _elapsed >= connect_timeout:
-                self.wss_logger.warn(
+                self.wss_logger.warning(
                     f"===== {time.strftime('%Y-%m-%d %H:%M:%S')} "
                     f"{self._params.exchange_name} Websocket Connect Timeout ({connect_timeout}s)! ====="
                 )
@@ -256,7 +267,9 @@ class MyWebsocketApp:
                 self.wss_logger.info("restartTimer Working....")
                 self.restart()
             except Exception as e:
-                self.wss_logger.warn(f"{self.wss_name},{self.wss_url},{e},{traceback.format_exc()}")
+                self.wss_logger.warning(
+                    f"{self.wss_name},{self.wss_url},{e},{traceback.format_exc()}"
+                )
 
 
 if __name__ == "__main__":
@@ -268,5 +281,7 @@ if __name__ == "__main__":
                 for exc in task:
                     # print(exc.wss_name, "begin_to_run")
                     exc.start()
-            except Exception:
-                pass
+            except Exception as e:
+                get_logger("my_websocket_app").debug(
+                    "WebSocket restart task error: %s", e, exc_info=True
+                )

@@ -6,6 +6,7 @@ import time
 from typing import Any
 
 from bt_api_py.containers.tickers.ticker import TickerData
+from bt_api_py.containers.tickers.ticker_utils import parse_float
 from bt_api_py.logging_factory import get_logger
 
 
@@ -27,6 +28,22 @@ class RipioRequestTickerData(TickerData):
         super().__init__(data, has_been_json_encoded)
         self.symbol_name = symbol
         self.asset_type = asset_type
+        self.symbol: str = ""
+        self.last_price: float | None = None
+        self.high_price: float | None = None
+        self.low_price: float | None = None
+        self.open_price: float | None = None
+        self.bid_price: float | None = None
+        self.ask_price: float | None = None
+        self.volume_24h: float | None = None
+        self.quote_volume_24h: float | None = None
+        self.price_change: float | None = None
+        self.price_change_percentage: float | None = None
+        self.spread: float | None = None
+        self.spread_percentage: float | None = None
+        self.timestamp: float = 0.0
+        self.datetime: str = ""
+        self.exchange: str = ""
         self.logger = get_logger("ripio_ticker")
         self._parse_data(data)
 
@@ -62,25 +79,25 @@ class RipioRequestTickerData(TickerData):
             self.datetime = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(self.timestamp))
 
             # Price data (Ripio returns strings)
-            self.last_price = self._parse_float(result.get("last"))
-            self.high_price = self._parse_float(result.get("high"))
-            self.low_price = self._parse_float(result.get("low"))
-            self.open_price = self._parse_float(result.get("open"))
+            self.last_price = parse_float(result.get("last"))
+            self.high_price = parse_float(result.get("high"))
+            self.low_price = parse_float(result.get("low"))
+            self.open_price = parse_float(result.get("open"))
 
             # Bid/Ask
-            self.bid_price = self._parse_float(result.get("bid"))
-            self.ask_price = self._parse_float(result.get("ask"))
+            self.bid_price = parse_float(result.get("bid"))
+            self.ask_price = parse_float(result.get("ask"))
 
             # Volume data
-            self.volume_24h = self._parse_float(result.get("volume"))
-            self.quote_volume_24h = self._parse_float(result.get("quote_volume"))
+            self.volume_24h = parse_float(result.get("volume"))
+            self.quote_volume_24h = parse_float(result.get("quote_volume"))
 
             # Price change
-            self.price_change = self._parse_float(result.get("change"))
-            self.price_change_percentage = self._parse_float(result.get("percent_change"))
+            self.price_change = parse_float(result.get("change"))
+            self.price_change_percentage = parse_float(result.get("percent_change"))
 
             # Calculate spread
-            if self.ask_price and self.bid_price:
+            if self.ask_price is not None and self.bid_price is not None:
                 self.spread = self.ask_price - self.bid_price
                 self.spread_percentage = (
                     (self.spread / self.bid_price) * 100 if self.bid_price else None
@@ -93,23 +110,6 @@ class RipioRequestTickerData(TickerData):
             self.logger.error(f"Error parsing Ripio ticker data: {e}")
             self.logger.error(f"Raw data: {data}")
             raise
-
-    def _parse_float(self, value: Any) -> float | None:
-        """Parse a value to float.
-
-        Args:
-            value: Value to parse (string, float, int, or None)
-
-        Returns:
-            Float value or None
-
-        """
-        if value is None:
-            return None
-        try:
-            return float(value)
-        except (ValueError, TypeError):
-            return None
 
     def to_dict(self) -> dict[str, Any]:
         """Convert ticker data to dictionary."""
@@ -149,10 +149,11 @@ class RipioRequestTickerData(TickerData):
         # Validate price change
         if (
             self.price_change is not None
-            and self.open_price
+            and self.open_price is not None
+            and self.price_change_percentage is not None
             and abs(self.price_change_percentage) > 100  # Unusual percentage change
         ):
-            self.logger.warn(f"Unusual price change: {self.price_change_percentage}%")
+            self.logger.warning(f"Unusual price change: {self.price_change_percentage}%")
 
         return True
 
@@ -164,10 +165,11 @@ class RipioRequestTickerData(TickerData):
 
     def __str__(self) -> str:
         """String representation of ticker."""
+        pc = self.price_change_percentage if self.price_change_percentage is not None else 0
         return (
             f"RipioTicker({self.symbol}: {self.last_price} "
             f"Bid:{self.bid_price} Ask:{self.ask_price} "
-            f"Vol24h:{self.volume_24h} Chg:{self.price_change_percentage:.2f}%)"
+            f"Vol24h:{self.volume_24h} Chg:{pc:.2f}%)"
         )
 
     def __repr__(self) -> str:

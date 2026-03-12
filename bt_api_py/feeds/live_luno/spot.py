@@ -3,6 +3,7 @@ Luno Spot Feed implementation.
 """
 
 import time
+from typing import Any
 
 from bt_api_py.feeds.capability import Capability
 from bt_api_py.feeds.live_luno.request_base import LunoRequestData
@@ -13,7 +14,7 @@ class LunoRequestDataSpot(LunoRequestData):
     """Luno Spot Feed for market data."""
 
     @classmethod
-    def _capabilities(cls):
+    def _capabilities(cls) -> set[Capability]:
         return {
             Capability.GET_TICK,
             Capability.GET_DEPTH,
@@ -25,7 +26,7 @@ class LunoRequestDataSpot(LunoRequestData):
             Capability.CANCEL_ORDER,
         }
 
-    def __init__(self, data_queue, **kwargs):
+    def __init__(self, data_queue: Any = None, **kwargs: Any) -> None:
         super().__init__(data_queue, **kwargs)
         self.exchange_name = kwargs.get("exchange_name", "LUNO___SPOT")
 

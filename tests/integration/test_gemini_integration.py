@@ -8,15 +8,15 @@ This script tests the Gemini exchange integration implementation.
 import logging
 import os
 import sys
-from unittest.mock import MagicMock  # noqa: F401
+from unittest.mock import MagicMock
 
 # Add the project root to the path
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 import contextlib
 
-from bt_api_py.config_loader import load_exchange_config  # noqa: F401
-from bt_api_py.feeds.live_gemini.spot import GeminiRequestDataSpot  # noqa: F401
+from bt_api_py.config_loader import load_exchange_config
+from bt_api_py.feeds.live_gemini.spot import GeminiRequestDataSpot
 
 # Set up logging
 logging.basicConfig(
@@ -30,15 +30,13 @@ def test_gemini_config():
 
     try:
         config = load_exchange_config("bt_api_py/configs/gemini.yaml")
-        if config:
-            # Check asset types
-            if hasattr(config, "asset_types") and config.asset_types:
-                # Check spot configuration
-                if "spot" in config.asset_types:
-                    config.asset_types["spot"]
-            pass
-        else:
-            pass
+        if (
+            config
+            and hasattr(config, "asset_types")
+            and config.asset_types
+            and "spot" in config.asset_types
+        ):
+            config.asset_types["spot"]
     except Exception:
         pass
 
@@ -62,7 +60,6 @@ def test_gemini_feed_initialization():
         # Test capabilities
         feed._capabilities()
 
-        pass
     except Exception:
         pass
 
@@ -86,7 +83,6 @@ def test_gemini_symbol_handling():
         # Test period mapping
         feed._params.get_period("1h")
 
-        pass
     except Exception:
         pass
 
@@ -129,7 +125,6 @@ def test_gemini_api_methods():
             with contextlib.suppress(Exception):
                 method_call()
 
-        pass
     except Exception:
         pass
 
@@ -138,7 +133,7 @@ def test_gemini_error_handling():
     """Test Gemini error handling"""
 
     try:
-        from bt_api_py.errors.error_framework_gemini import GeminiErrorTranslator  # noqa: F401
+        from bt_api_py.errors.error_framework_gemini import GeminiErrorTranslator
 
         # Test error translation
         test_errors = [
@@ -160,7 +155,6 @@ def test_gemini_error_handling():
             except Exception:
                 pass
 
-        pass
     except Exception:
         pass
 

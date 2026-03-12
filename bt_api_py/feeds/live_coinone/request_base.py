@@ -26,7 +26,7 @@ class CoinoneRequestData(Feed):
     """Coinone REST API Feed base class."""
 
     @classmethod
-    def _capabilities(cls):
+    def _capabilities(cls) -> set[Capability]:
         return {
             Capability.GET_TICK,
             Capability.GET_DEPTH,
@@ -41,7 +41,7 @@ class CoinoneRequestData(Feed):
             Capability.GET_EXCHANGE_INFO,
         }
 
-    def __init__(self, data_queue, **kwargs) -> None:
+    def __init__(self, data_queue: Any = None, **kwargs: Any) -> None:
         super().__init__(data_queue, **kwargs)
         self.data_queue = data_queue
         self._api_key = (
@@ -109,7 +109,7 @@ class CoinoneRequestData(Feed):
     def request(self, path, params=None, body=None, extra_data=None, timeout=10, is_sign=False):
         """Synchronous HTTP request using Feed.http_request()."""
         if params is None:
-            params = {}
+            params: dict[str, Any] = {}
         method, endpoint = path.split(" ", 1)
         headers = {"Content-Type": "application/json"}
 
@@ -137,7 +137,7 @@ class CoinoneRequestData(Feed):
     ):
         """Async HTTP request."""
         if params is None:
-            params = {}
+            params: dict[str, Any] = {}
         method, endpoint = path.split(" ", 1)
         headers = {"Content-Type": "application/json"}
 
@@ -167,7 +167,7 @@ class CoinoneRequestData(Feed):
 
     def _get_exchange_info(self, extra_data=None, **kwargs) -> Any:
         path = self._params.get_rest_path("get_exchange_info")
-        params = {}
+        params: dict[str, Any] = {}
         extra_data = extra_data or {}
         extra_data.update(
             {
@@ -186,7 +186,7 @@ class CoinoneRequestData(Feed):
         method_prefix = base_path.split(" ", 1)[0]
         rest_part = base_path.split(" ", 1)[1]
         path = f"{method_prefix} {rest_part}/{target}"
-        params = {}
+        params: dict[str, Any] = {}
         extra_data = extra_data or {}
         extra_data.update(
             {
@@ -245,7 +245,7 @@ class CoinoneRequestData(Feed):
         method_prefix = base_path.split(" ", 1)[0]
         rest_part = base_path.split(" ", 1)[1]
         path = f"{method_prefix} {rest_part}/{target}"
-        params = {}
+        params: dict[str, Any] = {}
         extra_data = extra_data or {}
         extra_data.update(
             {

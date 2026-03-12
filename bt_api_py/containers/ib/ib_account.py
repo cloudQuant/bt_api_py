@@ -3,7 +3,7 @@ IB 账户数据容器
 对应 IB TWS API 的 AccountSummary / AccountValue
 """
 
-from typing import Any
+from typing import Any, Self
 
 from bt_api_py.containers.accounts.account import AccountData
 
@@ -23,18 +23,18 @@ class IbAccountData(AccountData):
         self.asset_type = asset_type
         self.exchange_name = "IB"
         self._initialized = False
-        self.account_id = None
-        self.net_liquidation = None  # 净清算价值
-        self.total_cash_value = None  # 总现金
-        self.buying_power = None  # 购买力
-        self.gross_position_value = None  # 总持仓价值
-        self.maintenance_margin = None  # 维持保证金
-        self.available_funds = None  # 可用资金
-        self.unrealized_pnl = None  # 未实现盈亏
-        self.realized_pnl = None  # 已实现盈亏
-        self.currency = None
+        self.account_id: str | None = None
+        self.net_liquidation: float | None = None  # 净清算价值
+        self.total_cash_value: float | None = None  # 总现金
+        self.buying_power: float | None = None  # 购买力
+        self.gross_position_value: float | None = None  # 总持仓价值
+        self.maintenance_margin: float | None = None  # 维持保证金
+        self.available_funds: float | None = None  # 可用资金
+        self.unrealized_pnl: float | None = None  # 未实现盈亏
+        self.realized_pnl: float | None = None  # 已实现盈亏
+        self.currency: str | None = None
 
-    def init_data(self) -> None:
+    def init_data(self) -> Self:
         if self._initialized:
             return self
         info = self.account_info
@@ -52,37 +52,37 @@ class IbAccountData(AccountData):
         self._initialized = True
         return self
 
-    def get_exchange_name(self) -> None:
-        return self.exchange_name
+    def get_exchange_name(self) -> str:
+        return str(self.exchange_name)
 
-    def get_asset_type(self) -> None:
-        return self.asset_type
+    def get_asset_type(self) -> str:
+        return str(self.asset_type)
 
-    def get_account_type(self) -> None:
-        return self.currency or "USD"
+    def get_account_type(self) -> str:
+        return str(self.currency or "USD")
 
-    def get_server_time(self) -> None:
-        return None
+    def get_server_time(self) -> int | float:
+        return 0.0
 
-    def get_total_wallet_balance(self) -> None:
-        return self.net_liquidation
-
-    def get_margin(self) -> None:
+    def get_total_wallet_balance(self) -> float:
         return self.net_liquidation or 0.0
 
-    def get_available_margin(self) -> None:
+    def get_margin(self) -> float:
+        return self.net_liquidation or 0.0
+
+    def get_available_margin(self) -> float:
         return self.available_funds or 0.0
 
-    def get_unrealized_profit(self) -> None:
+    def get_unrealized_profit(self) -> float:
         return self.unrealized_pnl or 0.0
 
-    def get_balances(self) -> None:
+    def get_balances(self) -> list[Any]:
         return [self]
 
-    def get_positions(self) -> None:
+    def get_positions(self) -> list[Any]:
         return []
 
-    def get_all_data(self) -> None:
+    def get_all_data(self) -> dict[str, Any]:
         return {
             "exchange_name": self.exchange_name,
             "account_id": self.account_id,

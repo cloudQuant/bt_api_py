@@ -17,18 +17,18 @@ class OkxBarData(BarData):
         self.asset_type = asset_type
         self.local_update_time = time.time()
         self.bar_data = bar_info if has_been_json_encoded else None
-        self.server_time = None
-        self.open_time = None
-        self.close_time = None
-        self.open_price = None
-        self.high_price = None
-        self.low_price = None
-        self.close_price = None
-        self.volume = None
-        self.base_asset_volume = None
-        self.quote_asset_volume = None
-        self.bar_status = None
-        self.all_data = None
+        self.server_time: float | None = None
+        self.open_time: float | None = None
+        self.close_time: float | None = None
+        self.open_price: float | None = None
+        self.high_price: float | None = None
+        self.low_price: float | None = None
+        self.close_price: float | None = None
+        self.volume: float | None = None
+        self.base_asset_volume: float | None = None
+        self.quote_asset_volume: float | None = None
+        self.bar_status: bool | None = None
+        self.all_data: dict[str, Any] | None = None
         self.has_been_init_data = False
 
     def init_data(self) -> None:
@@ -36,7 +36,8 @@ class OkxBarData(BarData):
             self.bar_data = json.loads(self.bar_info)
             self.has_been_json_encoded = True
         if self.has_been_init_data:
-            return self
+            return
+        assert self.bar_data is not None
         self.server_time = self.open_time = float(self.bar_data[0])
         self.open_price = float(self.bar_data[1])
         self.high_price = float(self.bar_data[2])
@@ -47,7 +48,6 @@ class OkxBarData(BarData):
         self.quote_asset_volume = float(self.bar_data[7])
         self.bar_status = float(self.bar_data[-1]) == 1
         self.has_been_init_data = True
-        return self
 
     def get_all_data(self) -> dict[str, Any]:
         if self.all_data is None:
@@ -81,16 +81,16 @@ class OkxBarData(BarData):
         return self.event
 
     def get_exchange_name(self) -> str:
-        return self.exchange_name
+        return str(self.exchange_name)
 
     def get_symbol_name(self) -> str:
-        return self.symbol_name
+        return str(self.symbol_name)
 
     def get_asset_type(self) -> str:
-        return self.asset_type
+        return str(self.asset_type)
 
     def get_server_time(self) -> float:
-        return self.server_time
+        return float(self.server_time) if self.server_time is not None else 0.0
 
     def get_local_update_time(self) -> float:
         return self.local_update_time

@@ -10,7 +10,7 @@ from bt_api_py.functions.utils import read_yaml_file
 
 
 def get_swap_symbol_list():
-    res = requests.get("https://fapi.binance.com/fapi/v1/exchangeInfo")
+    res = requests.get("https://fapi.binance.com/fapi/v1/exchangeInfo", timeout=30)
     result = res.json()
     result = result["symbols"]
     # swap_symbol_list = [i['symbol'] for i in result if i['contractType']=='PERPETUAL']

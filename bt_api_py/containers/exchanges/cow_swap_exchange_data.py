@@ -31,7 +31,7 @@ def _get_cow_swap_config() -> Any | None:
             _cow_swap_config = load_exchange_config(config_path)
         _cow_swap_config_loaded = True
     except Exception as e:
-        logger.warn(f"Failed to load cow_swap.yaml config: {e}")
+        logger.warning(f"Failed to load cow_swap.yaml config: {e}")
     return _cow_swap_config
 
 

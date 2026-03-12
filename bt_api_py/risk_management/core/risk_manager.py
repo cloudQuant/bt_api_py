@@ -33,7 +33,7 @@ class RiskManager:
 
     def __init__(
         self, event_bus: EventBus | None = None, config: dict[str, Any] | None = None
-    ) -> Any | None:
+    ) -> None:
         self.logger = get_logger("risk_manager")
         self.event_bus = event_bus or EventBus()
         self.config = config or {}
@@ -204,9 +204,9 @@ class RiskManager:
                 **kwargs,
             }
         )
-        risk_event.event_type = risk_event.event_type.value
-        risk_event.risk_level = risk_event.risk_level.value
-        risk_event.event_status = risk_event.event_status.value
+        risk_event.event_type = risk_event.event_type.value  # type: ignore[assignment]
+        risk_event.risk_level = risk_event.risk_level.value  # type: ignore[assignment]
+        risk_event.event_status = risk_event.event_status.value  # type: ignore[assignment]
 
         with self._lock:
             self.active_events[risk_event.event_id] = risk_event
@@ -247,7 +247,7 @@ class RiskManager:
                 risk_level = str(risk_metrics.risk_level)
                 risk_score = float(risk_metrics.overall_risk_score)
 
-            result = {
+            result: dict[str, Any] = {
                 "approved": True,
                 "risk_level": risk_level,
                 "risk_score": risk_score,
@@ -285,10 +285,7 @@ class RiskManager:
                 exchange_name=exchange_name,
                 account_id=account_id,
                 order_data=order_data,
-                risk_metrics={
-                    "risk_level": risk_level,
-                    "overall_risk_score": risk_score,
-                },
+                risk_metrics=risk_metrics,
             )
 
             result["warnings"].extend(limits_result.get("warnings", []))
@@ -299,9 +296,10 @@ class RiskManager:
             result["triggered_rules"] = policy_result.get("triggered_rules", [])
             result["actions_executed"] = policy_result.get("actions_executed", 0)
             result["mitigation_required"] = result["mitigation_required"] or not result["approved"]
-            result["evaluation_time_ms"] = round((time.time() - start) * 1000, 3)
+            eval_time_ms = round((time.time() - start) * 1000, 3)
+            result["evaluation_time_ms"] = eval_time_ms
 
-            self._update_performance_metrics(result["evaluation_time_ms"])
+            self._update_performance_metrics(float(eval_time_ms))
             return result
         except Exception as exc:
             self.logger.error(f"Error checking order risk: {exc}")

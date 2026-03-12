@@ -12,19 +12,23 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 try:
     from cryptography.fernet import Fernet
     from cryptography.hazmat.backends import default_backend
     from cryptography.hazmat.primitives import hashes, serialization
     from cryptography.hazmat.primitives.asymmetric import padding, rsa
+    from cryptography.hazmat.primitives.asymmetric.rsa import RSAPrivateKey, RSAPublicKey
     from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
+    from cryptography.hazmat.primitives.ciphers.aead import ChaCha20Poly1305
     from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 
     CRYPTOGRAPHY_AVAILABLE = True
 except ImportError:
     CRYPTOGRAPHY_AVAILABLE = False
+    RSAPrivateKey = object  # type: ignore[misc, assignment]
+    RSAPublicKey = object  # type: ignore[misc, assignment]
 
 try:
     import boto3
@@ -45,8 +49,6 @@ from bt_api_py.exceptions import BtApiError
 
 class EncryptionError(BtApiError):
     """Encryption-related errors."""
-
-    pass
 
 
 class KeyProvider(Enum):
@@ -96,22 +98,18 @@ class KeyManager(ABC):
     @abstractmethod
     def generate_key(self, algorithm: EncryptionAlgorithm) -> EncryptionKey:
         """Generate a new encryption key."""
-        pass
 
     @abstractmethod
     def get_key(self, key_id: str) -> EncryptionKey | None:
         """Retrieve an existing key."""
-        pass
 
     @abstractmethod
     def rotate_key(self, key_id: str) -> EncryptionKey:
         """Rotate an existing key."""
-        pass
 
     @abstractmethod
     def delete_key(self, key_id: str) -> None:
         """Delete a key."""
-        pass
 
 
 class LocalKeyManager(KeyManager):
@@ -293,7 +291,12 @@ class AWSKMSKeyManager(KeyManager):
         """Rotate KMS key."""
         try:
             self.kms_client.rotate_key(KeyId=key_id)
-            return self.get_key(key_id)
+            key = self.get_key(key_id)
+            if key is None:
+                raise EncryptionError(f"Key {key_id} not found after rotation")
+            return key
+        except EncryptionError:
+            raise
         except Exception as e:
             raise EncryptionError(f"Failed to rotate KMS key {key_id}: {e}") from e
 
@@ -377,7 +380,12 @@ class HashiCorpVaultKeyManager(KeyManager):
         """Rotate Vault key."""
         try:
             self.client.secrets.transit.rotate_key(name=key_id)
-            return self.get_key(key_id)
+            key = self.get_key(key_id)
+            if key is None:
+                raise EncryptionError(f"Key {key_id} not found after rotation")
+            return key
+        except EncryptionError:
+            raise
         except Exception as e:
             raise EncryptionError(f"Failed to rotate Vault key {key_id}: {e}") from e
 
@@ -464,17 +472,13 @@ class EncryptionManager:
     def _encrypt_chacha20(self, data: bytes, key: EncryptionKey) -> dict[str, bytes]:
         """Encrypt using ChaCha20-Poly1305."""
         nonce = os.urandom(12)  # 96-bit nonce
-        cipher = Cipher(
-            algorithms.ChaCha20(key.key_data, nonce), modes.Poly1305(b""), backend=default_backend()
-        )
-
-        encryptor = cipher.encryptor()
-        ciphertext = encryptor.update(data) + encryptor.finalize()
-
+        chacha = ChaCha20Poly1305(key.key_data)
+        ciphertext_with_tag = chacha.encrypt(nonce, data, None)
+        # AEAD returns ciphertext + 16-byte tag appended
         return {
-            "ciphertext": ciphertext,
+            "ciphertext": ciphertext_with_tag,
             "nonce": nonce,
-            "tag": encryptor.tag,
+            "tag": ciphertext_with_tag[-16:],
         }
 
     def decrypt(self, encrypted_data: dict[str, Any]) -> bytes:
@@ -490,13 +494,17 @@ class EncryptionManager:
         # Decode components
         ciphertext = base64.b64decode(encrypted_data["encrypted_data"])
         nonce = base64.b64decode(encrypted_data["nonce"])
-        tag = base64.b64decode(encrypted_data["tag"]) if encrypted_data.get("tag") else None
+        tag_b64 = encrypted_data.get("tag")
+        tag = base64.b64decode(tag_b64) if tag_b64 else None
 
         # Decrypt based on algorithm
         if algorithm == EncryptionAlgorithm.AES_256_GCM.value:
+            if tag is None:
+                raise EncryptionError("AES-GCM requires tag for decryption")
             return self._decrypt_aes_gcm(ciphertext, key, nonce, tag)
         elif algorithm == EncryptionAlgorithm.CHACHA20_POLY1305.value:
-            return self._decrypt_chacha20(ciphertext, key, nonce, tag)
+            # ChaCha20Poly1305 AEAD uses combined ciphertext+tag
+            return self._decrypt_chacha20(ciphertext, key, nonce)
         else:
             raise EncryptionError(f"Unsupported algorithm: {algorithm}")
 
@@ -511,20 +519,15 @@ class EncryptionManager:
         decryptor = cipher.decryptor()
         return decryptor.update(ciphertext) + decryptor.finalize()
 
-    def _decrypt_chacha20(
-        self, ciphertext: bytes, key: EncryptionKey, nonce: bytes, tag: bytes
-    ) -> bytes:
-        """Decrypt ChaCha20-Poly1305 data."""
-        cipher = Cipher(
-            algorithms.ChaCha20(key.key_data, nonce), modes.Poly1305(tag), backend=default_backend()
-        )
-
-        decryptor = cipher.decryptor()
-        return decryptor.update(ciphertext) + decryptor.finalize()
+    def _decrypt_chacha20(self, ciphertext: bytes, key: EncryptionKey, nonce: bytes) -> bytes:
+        """Decrypt ChaCha20-Poly1305 data (ciphertext includes 16-byte tag)."""
+        chacha = ChaCha20Poly1305(key.key_data)
+        return chacha.decrypt(nonce, ciphertext, None)
 
     def rotate_keys(self) -> EncryptionKey:
         """Rotate the active encryption key."""
-        new_key = self.key_manager.rotate_key(self._active_key.key_id)
+        active = self._get_active_key()
+        new_key = self.key_manager.rotate_key(active.key_id)
         self._active_key = new_key
         return new_key
 
@@ -558,7 +561,8 @@ class EncryptionManager:
             data = data.encode("utf-8")
 
         public_key_bytes = base64.b64decode(public_key_pem)
-        public_key = serialization.load_pem_public_key(public_key_bytes, backend=default_backend())
+        pub_key = serialization.load_pem_public_key(public_key_bytes, backend=default_backend())
+        public_key = cast("RSAPublicKey", pub_key)
 
         encrypted = public_key.encrypt(
             data,
@@ -572,9 +576,10 @@ class EncryptionManager:
     def decrypt_with_private_key(self, encrypted_data: str, private_key_pem: str) -> bytes:
         """Decrypt data with RSA private key."""
         private_key_bytes = base64.b64decode(private_key_pem)
-        private_key = serialization.load_pem_private_key(
+        priv_key = serialization.load_pem_private_key(
             private_key_bytes, password=None, backend=default_backend()
         )
+        private_key = cast("RSAPrivateKey", priv_key)
 
         encrypted_bytes = base64.b64decode(encrypted_data)
 
@@ -599,9 +604,13 @@ def create_key_manager(provider: KeyProvider, **kwargs) -> KeyManager:
     elif provider == KeyProvider.AWS_KMS:
         return AWSKMSKeyManager(region_name=kwargs.get("region", "us-east-1"))
     elif provider == KeyProvider.HASHICORP_VAULT:
+        vault_url = kwargs.get("vault_url")
+        token = kwargs.get("token")
+        if not isinstance(vault_url, str) or not isinstance(token, str):
+            raise EncryptionError("HashiCorp Vault requires vault_url and token")
         return HashiCorpVaultKeyManager(
-            vault_url=kwargs.get("vault_url"),
-            token=kwargs.get("token"),
+            vault_url=vault_url,
+            token=token,
             mount_path=kwargs.get("mount_path", "transit"),
         )
     else:

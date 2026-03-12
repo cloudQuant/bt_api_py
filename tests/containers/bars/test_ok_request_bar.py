@@ -15,7 +15,7 @@ def test_get_history_bar():
     )
     # url = "https://www.okx.com/api/v5/market/history-candles?instId=BTC-USDT-SWAP"
     begin_time = time.perf_counter()
-    r = requests.get(url)
+    r = requests.get(url, timeout=30)
     end_time = time.perf_counter()
     print(f"request.get(url) consume time = {end_time - begin_time}")
     assert r.status_code == 200

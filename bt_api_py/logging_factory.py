@@ -42,14 +42,20 @@ class _LoggerProxy:
     def warning(self, *args: Any, **kwargs: Any) -> None:
         warning_method = getattr(self._logger, "warning", None)
         if warning_method is not None:
-            return warning_method(*args, **kwargs)
-        return self._logger.warn(*args, **kwargs)
+            warning_method(*args, **kwargs)
+            return
+        warn_method = getattr(self._logger, "warn", None)
+        if warn_method is not None:
+            warn_method(*args, **kwargs)
 
     def warn(self, *args: Any, **kwargs: Any) -> None:
         warn_method = getattr(self._logger, "warn", None)
         if warn_method is not None:
-            return warn_method(*args, **kwargs)
-        return self._logger.warning(*args, **kwargs)
+            warn_method(*args, **kwargs)
+            return
+        warning_method = getattr(self._logger, "warning", None)
+        if warning_method is not None:
+            warning_method(*args, **kwargs)
 
     def __getattr__(self, name: str):
         return getattr(self._logger, name)

@@ -5,6 +5,7 @@ import time
 from typing import Any
 
 from bt_api_py.containers.tickers.ticker import TickerData
+from bt_api_py.containers.tickers.ticker_utils import parse_float
 
 
 class YobitRequestTickerData(TickerData):
@@ -49,37 +50,19 @@ class YobitRequestTickerData(TickerData):
         data = self.ticker_data
         if isinstance(data, dict):
             # Get the first ticker data
-            for _key, value in data.items():
+            for value in data.values():
                 if isinstance(value, dict) and "last" in value:
                     data = value
                     break
 
         if data and isinstance(data, dict):
             self.ticker_symbol_name = data.get("symbol")
-            self.last_price = self._parse_float(data.get("last"))
-            self.bid_price = self._parse_float(data.get("buy"))
-            self.ask_price = self._parse_float(data.get("sell"))
-            self.volume_24h = self._parse_float(data.get("vol"))
-            self.high_24h = self._parse_float(data.get("high"))
-            self.low_24h = self._parse_float(data.get("low"))
+            self.last_price = parse_float(data.get("last"))
+            self.bid_price = parse_float(data.get("buy"))
+            self.ask_price = parse_float(data.get("sell"))
+            self.volume_24h = parse_float(data.get("vol"))
+            self.high_24h = parse_float(data.get("high"))
+            self.low_24h = parse_float(data.get("low"))
 
         self.has_been_init_data = True
         return self
-
-    @staticmethod
-    def _parse_float(value: Any) -> float | None:
-        """Parse value to float.
-
-        Args:
-            value: Value to parse.
-
-        Returns:
-            Parsed float value or None if parsing fails.
-
-        """
-        if value is None:
-            return None
-        try:
-            return float(value)
-        except (ValueError, TypeError):
-            return None

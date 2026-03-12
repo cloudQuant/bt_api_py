@@ -5,6 +5,7 @@ import time
 from typing import Any
 
 from bt_api_py.containers.tickers.ticker import TickerData
+from bt_api_py.containers.tickers.ticker_utils import parse_float
 
 
 class FoxbitRequestTickerData(TickerData):
@@ -34,7 +35,7 @@ class FoxbitRequestTickerData(TickerData):
         self.ticker_data: dict[str, Any] | None = (
             ticker_info if has_been_json_encoded and isinstance(ticker_info, dict) else None
         )
-        self.ticker_symbol_name = None
+        self.ticker_symbol_name: str | None = None
         self.has_been_init_data = False
 
     def init_data(self) -> "FoxbitRequestTickerData":
@@ -46,7 +47,8 @@ class FoxbitRequestTickerData(TickerData):
             return self
 
         # Foxbit ticker format
-        data = self.ticker_data.get("data", self.ticker_data)
+        ticker = self.ticker_data or {}
+        data = ticker.get("data", ticker)
         # Handle both list (API response) and dict (test format)
         if isinstance(data, list) and len(data) > 0:
             data = data[0]
@@ -61,37 +63,15 @@ class FoxbitRequestTickerData(TickerData):
             best = data.get("best", {})
             rolling_24h = data.get("rolling_24h", {})
 
-            self.last_price = self._parse_float(last_trade.get("price") or data.get("lastPrice"))
-            self.bid_price = self._parse_float(
-                best.get("bid", {}).get("price") or data.get("bidPrice")
-            )
-            self.ask_price = self._parse_float(
-                best.get("ask", {}).get("price") or data.get("askPrice")
-            )
-            self.volume_24h = self._parse_float(rolling_24h.get("volume") or data.get("vol"))
-            self.high_24h = self._parse_float(rolling_24h.get("high") or data.get("highPrice"))
-            self.low_24h = self._parse_float(rolling_24h.get("low") or data.get("lowPrice"))
-            self.quote_volume_24h = self._parse_float(
+            self.last_price = parse_float(last_trade.get("price") or data.get("lastPrice"))
+            self.bid_price = parse_float(best.get("bid", {}).get("price") or data.get("bidPrice"))
+            self.ask_price = parse_float(best.get("ask", {}).get("price") or data.get("askPrice"))
+            self.volume_24h = parse_float(rolling_24h.get("volume") or data.get("vol"))
+            self.high_24h = parse_float(rolling_24h.get("high") or data.get("highPrice"))
+            self.low_24h = parse_float(rolling_24h.get("low") or data.get("lowPrice"))
+            self.quote_volume_24h = parse_float(
                 rolling_24h.get("quote_volume") or data.get("volQuote")
             )
 
         self.has_been_init_data = True
         return self
-
-    @staticmethod
-    def _parse_float(value: Any) -> float | None:
-        """Parse value to float.
-
-        Args:
-            value: Value to parse.
-
-        Returns:
-            Parsed float value or None if parsing fails.
-
-        """
-        if value is None:
-            return None
-        try:
-            return float(value)
-        except (ValueError, TypeError):
-            return None

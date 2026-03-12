@@ -77,13 +77,15 @@ class BinanceAccountWssData(MyWebsocketApp, BinanceRequestData):
                 result = data.get_data()
                 if isinstance(result, dict) and "listenKey" in result:
                     return result
-                self.logger.warn(
+                self.logger.warning(
                     f"get_listen_key attempt {attempt + 1}/{max_retries} "
                     f"unexpected response: {result}"
                 )
             except Exception as e:
                 last_err = e
-                self.logger.warn(f"get_listen_key attempt {attempt + 1}/{max_retries} error: {e}")
+                self.logger.warning(
+                    f"get_listen_key attempt {attempt + 1}/{max_retries} error: {e}"
+                )
             if attempt < max_retries - 1:
                 time.sleep(2)
         raise RuntimeError(f"Failed to get listen key after {max_retries} attempts: {last_err}")

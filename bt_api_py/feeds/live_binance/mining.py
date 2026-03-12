@@ -45,7 +45,7 @@ class BinanceRequestDataMining(BinanceRequestData):
         """
         request_type = "get_mining_algo_list"
         path = self._params.get_rest_path(request_type)
-        params = {}
+        params: dict[str, Any] = {}
         extra_data = update_extra_data(
             extra_data,
             **{

@@ -2,13 +2,15 @@
 CoinSwitch Spot Feed – three-layer sync / async wrappers.
 """
 
+from typing import Any
+
 from bt_api_py.feeds.live_coinswitch.request_base import CoinSwitchRequestData
 
 
 class CoinSwitchRequestDataSpot(CoinSwitchRequestData):
     """CoinSwitch Spot REST Feed."""
 
-    def __init__(self, data_queue, **kwargs):
+    def __init__(self, data_queue: Any = None, **kwargs: Any) -> None:
         super().__init__(data_queue, **kwargs)
 
     # ── market data ─────────────────────────────────────────────

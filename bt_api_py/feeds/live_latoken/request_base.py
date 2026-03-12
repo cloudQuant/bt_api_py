@@ -4,6 +4,7 @@ Latoken REST Feed – base class with HMAC-SHA512 auth and _get_xxx internal met
 
 import hashlib
 import hmac
+from typing import Any
 from urllib.parse import urlencode
 
 from bt_api_py.containers.exchanges.latoken_exchange_data import LatokenExchangeDataSpot
@@ -17,7 +18,7 @@ from bt_api_py.logging_factory import get_logger
 class LatokenRequestData(Feed):
     """Latoken REST Feed base – HMAC-SHA512 auth, _get_xxx pattern."""
 
-    def __init__(self, data_queue, **kwargs) -> None:
+    def __init__(self, data_queue: Any = None, **kwargs: Any) -> None:
         super().__init__(data_queue, **kwargs)
         self.exchange_name = kwargs.get("exchange_name", "LATOKEN___SPOT")
         self.asset_type = kwargs.get("asset_type", "SPOT")
@@ -40,7 +41,7 @@ class LatokenRequestData(Feed):
     def request(self, path, params=None, body=None, extra_data=None, timeout=10):
         """Synchronous HTTP request."""
         if params is None:
-            params = {}
+            params: dict[str, Any] = {}
         method, endpoint = path.split(" ", 1)
         headers = self._get_headers(method, endpoint, params)
 
@@ -61,7 +62,7 @@ class LatokenRequestData(Feed):
     async def async_request(self, path, params=None, body=None, extra_data=None, timeout=5):
         """Async HTTP request."""
         if params is None:
-            params = {}
+            params: dict[str, Any] = {}
         method, endpoint = path.split(" ", 1)
         headers = self._get_headers(method, endpoint, params)
 
@@ -86,7 +87,7 @@ class LatokenRequestData(Feed):
     # ── capabilities ────────────────────────────────────────────
 
     @classmethod
-    def _capabilities(cls):
+    def _capabilities(cls) -> set[Capability]:
         return {
             Capability.GET_TICK,
             Capability.GET_DEPTH,
@@ -140,7 +141,7 @@ class LatokenRequestData(Feed):
     def _get_tick(self, symbol, extra_data=None, **kwargs):
         base, quote = self._split_symbol(symbol)
         path = self._params.get_rest_path("get_tick", base=base, quote=quote)
-        params = {}
+        params: dict[str, Any] = {}
         extra_data = update_extra_data(
             extra_data,
             **{
@@ -166,7 +167,7 @@ class LatokenRequestData(Feed):
     def _get_depth(self, symbol, extra_data=None, **kwargs):
         base, quote = self._split_symbol(symbol)
         path = self._params.get_rest_path("get_depth", currency=base, quote=quote)
-        params = {}
+        params: dict[str, Any] = {}
         extra_data = update_extra_data(
             extra_data,
             **{
@@ -189,7 +190,7 @@ class LatokenRequestData(Feed):
 
     def _get_exchange_info(self, extra_data=None, **kwargs):
         path = self._params.get_rest_path("get_exchange_info")
-        params = {}
+        params: dict[str, Any] = {}
         extra_data = update_extra_data(
             extra_data,
             **{
@@ -213,7 +214,7 @@ class LatokenRequestData(Feed):
     def _get_deals(self, symbol, extra_data=None, **kwargs):
         base, quote = self._split_symbol(symbol)
         path = self._params.get_rest_path("get_deals", currency=base, quote=quote)
-        params = {}
+        params: dict[str, Any] = {}
         extra_data = update_extra_data(
             extra_data,
             **{
@@ -237,7 +238,7 @@ class LatokenRequestData(Feed):
     def _get_kline(self, symbol, period="1h", count=100, extra_data=None, **kwargs):
         base, quote = self._split_symbol(symbol)
         path = self._params.get_rest_path("get_kline", currency=base, quote=quote)
-        params = {}
+        params: dict[str, Any] = {}
         extra_data = update_extra_data(
             extra_data,
             **{
@@ -260,7 +261,7 @@ class LatokenRequestData(Feed):
 
     def _get_server_time(self, extra_data=None, **kwargs):
         path = self._params.get_rest_path("get_server_time")
-        params = {}
+        params: dict[str, Any] = {}
         extra_data = update_extra_data(
             extra_data,
             **{
@@ -334,7 +335,7 @@ class LatokenRequestData(Feed):
             path = self._params.get_rest_path("get_open_orders", currency=base, quote=quote)
         else:
             path = self._params.get_rest_path("get_balance")  # fallback
-        params = {}
+        params: dict[str, Any] = {}
         extra_data = update_extra_data(
             extra_data,
             **{
@@ -357,7 +358,7 @@ class LatokenRequestData(Feed):
 
     def _get_balance(self, extra_data=None, **kwargs):
         path = self._params.get_rest_path("get_balance")
-        params = {}
+        params: dict[str, Any] = {}
         extra_data = update_extra_data(
             extra_data,
             **{
@@ -378,7 +379,7 @@ class LatokenRequestData(Feed):
 
     def _get_account(self, extra_data=None, **kwargs):
         path = self._params.get_rest_path("get_account")
-        params = {}
+        params: dict[str, Any] = {}
         extra_data = update_extra_data(
             extra_data,
             **{

@@ -34,7 +34,7 @@ def _get_bingx_config() -> Any | None:
             _bingx_config = load_exchange_config(config_path)
         _bingx_config_loaded = True
     except Exception as e:
-        logger.warn(f"Failed to load bingx.yaml config: {e}")
+        logger.warning(f"Failed to load bingx.yaml config: {e}")
     return _bingx_config
 
 

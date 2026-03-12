@@ -31,22 +31,22 @@ class GeminiRequestOrderData(RequestData):
         self.asset_type = asset_type
         self.is_rest = is_rest
 
-        # Default values
-        self.order_id = None
-        self.client_order_id = None
-        self.symbol_name = None
-        self.side = None
-        self.type = None
-        self.status = None
-        self.price = None
-        self.original_amount = None
-        self.executed_amount = None
-        self.remaining_amount = None
-        self.timestamp = None
-        self.exchange_timestamp = None
-        self.fee = None
-        self.fee_currency = None
-        self.avg_price = None
+        # Default values (status shadows RequestData.status for order lifecycle)
+        self.order_id: str | None = None
+        self.client_order_id: str | None = None
+        self.symbol_name = symbol
+        self.side: str | None = None
+        self.type: str | None = None
+        self.status: str | None = None  # type: ignore[assignment]
+        self.price: float | None = None
+        self.original_amount: float | None = None
+        self.executed_amount: float | None = None
+        self.remaining_amount: float | None = None
+        self.timestamp: int | float | None = None
+        self.exchange_timestamp: float | None = None
+        self.fee: float | None = None
+        self.fee_currency: str | None = None
+        self.avg_price: float | None = None
 
         if data:
             self._parse_data(data)

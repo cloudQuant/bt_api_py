@@ -2,6 +2,8 @@
 Bitinka Spot Feed implementation.
 """
 
+from typing import Any
+
 from bt_api_py.feeds.capability import Capability
 from bt_api_py.feeds.live_bitinka.request_base import BitinkaRequestData
 
@@ -10,7 +12,7 @@ class BitinkaRequestDataSpot(BitinkaRequestData):
     """Bitinka Spot Feed for market data."""
 
     @classmethod
-    def _capabilities(cls):
+    def _capabilities(cls) -> set[Capability]:
         return {
             Capability.GET_TICK,
             Capability.GET_DEPTH,
@@ -21,7 +23,7 @@ class BitinkaRequestDataSpot(BitinkaRequestData):
             Capability.CANCEL_ORDER,
         }
 
-    def __init__(self, data_queue, **kwargs):
+    def __init__(self, data_queue: Any = None, **kwargs: Any) -> None:
         super().__init__(data_queue, **kwargs)
         self.exchange_name = kwargs.get("exchange_name", "BITINKA___SPOT")
 
@@ -236,7 +238,7 @@ class BitinkaRequestDataSpot(BitinkaRequestData):
                 "normalize_function": self._get_balance_normalize_function,
             }
         )
-        params = {}
+        params: dict[str, Any] = {}
         if symbol:
             params["currency"] = symbol
         return path, params, extra_data
@@ -375,7 +377,7 @@ class BitinkaRequestDataSpot(BitinkaRequestData):
                 "request_type": "get_open_orders",
             }
         )
-        params = {}
+        params: dict[str, Any] = {}
         if symbol:
             bitinka_symbol = self._convert_symbol(symbol)
             params["market"] = bitinka_symbol

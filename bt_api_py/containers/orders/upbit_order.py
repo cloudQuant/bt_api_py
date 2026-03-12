@@ -1,5 +1,6 @@
 import json
 import time
+from typing import Any
 
 from bt_api_py.containers.orders.order import OrderData
 from bt_api_py.functions.utils import from_dict_get_float, from_dict_get_string
@@ -38,6 +39,7 @@ class UpbitOrderData(OrderData):
         self.market = None
         self.type = None
         self.price_avg = None
+        self.all_data: dict[str, Any] | None = None
         self.has_been_init_data = False
 
     def init_data(self):

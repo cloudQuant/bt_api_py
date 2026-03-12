@@ -6,6 +6,7 @@ Response: {"data": ...} or {"error": ...}
 Symbol: pair string "BTCINR"
 """
 
+from typing import Any
 from urllib.parse import urlencode
 
 from bt_api_py.containers.exchanges.coinswitch_exchange_data import CoinSwitchExchangeDataSpot
@@ -19,7 +20,7 @@ class CoinSwitchRequestData(Feed):
     """CoinSwitch REST API Feed base class."""
 
     @classmethod
-    def _capabilities(cls):
+    def _capabilities(cls) -> set[Capability]:
         return {
             Capability.GET_TICK,
             Capability.GET_EXCHANGE_INFO,
@@ -31,7 +32,7 @@ class CoinSwitchRequestData(Feed):
             Capability.QUERY_OPEN_ORDERS,
         }
 
-    def __init__(self, data_queue, **kwargs) -> None:
+    def __init__(self, data_queue: Any = None, **kwargs: Any) -> None:
         super().__init__(data_queue, **kwargs)
         self.data_queue = data_queue
         self._api_key = kwargs.get("public_key") or kwargs.get("api_key") or ""
@@ -65,7 +66,7 @@ class CoinSwitchRequestData(Feed):
     def request(self, path, params=None, body=None, extra_data=None, timeout=10):
         """Synchronous HTTP request."""
         if params is None:
-            params = {}
+            params: dict[str, Any] = {}
         method, endpoint = path.split(" ", 1)
         headers = self._get_headers()
 
@@ -84,7 +85,7 @@ class CoinSwitchRequestData(Feed):
     async def async_request(self, path, params=None, body=None, extra_data=None, timeout=5):
         """Async HTTP request."""
         if params is None:
-            params = {}
+            params: dict[str, Any] = {}
         method, endpoint = path.split(" ", 1)
         headers = self._get_headers()
 
@@ -111,7 +112,7 @@ class CoinSwitchRequestData(Feed):
         method_prefix = base_path.split(" ", 1)[0]
         rest_part = base_path.split(" ", 1)[1]
         path = f"{method_prefix} {rest_part}/{symbol}"
-        params = {}
+        params: dict[str, Any] = {}
         extra_data = extra_data or {}
         extra_data.update(
             {
@@ -126,7 +127,7 @@ class CoinSwitchRequestData(Feed):
 
     def _get_all_tickers(self, extra_data=None, **kwargs):
         path = self._params.get_rest_path("get_tick")
-        params = {}
+        params: dict[str, Any] = {}
         extra_data = extra_data or {}
         extra_data.update(
             {
@@ -141,7 +142,7 @@ class CoinSwitchRequestData(Feed):
 
     def _get_exchange_info(self, extra_data=None, **kwargs):
         path = self._params.get_rest_path("get_exchange_info")
-        params = {}
+        params: dict[str, Any] = {}
         extra_data = extra_data or {}
         extra_data.update(
             {
@@ -191,7 +192,7 @@ class CoinSwitchRequestData(Feed):
         method_prefix = base_path.split(" ", 1)[0]
         rest_part = base_path.split(" ", 1)[1]
         path = f"{method_prefix} {rest_part}/{order_id}"
-        params = {}
+        params: dict[str, Any] = {}
         extra_data = extra_data or {}
         extra_data.update(
             {
@@ -206,7 +207,7 @@ class CoinSwitchRequestData(Feed):
 
     def _get_open_orders(self, extra_data=None, **kwargs):
         path = self._params.get_rest_path("get_open_orders")
-        params = {}
+        params: dict[str, Any] = {}
         extra_data = extra_data or {}
         extra_data.update(
             {
@@ -221,7 +222,7 @@ class CoinSwitchRequestData(Feed):
 
     def _get_balance(self, extra_data=None, **kwargs):
         path = self._params.get_rest_path("get_balance")
-        params = {}
+        params: dict[str, Any] = {}
         extra_data = extra_data or {}
         extra_data.update(
             {
@@ -236,7 +237,7 @@ class CoinSwitchRequestData(Feed):
 
     def _get_account(self, extra_data=None, **kwargs):
         path = self._params.get_rest_path("get_account")
-        params = {}
+        params: dict[str, Any] = {}
         extra_data = extra_data or {}
         extra_data.update(
             {

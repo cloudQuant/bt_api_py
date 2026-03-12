@@ -38,14 +38,15 @@ class OkxCurrencyData:
             )
             self.has_been_json_encoded = True
 
-        self.currency = from_dict_get_string(self.currency_info, "ccy")
-        self.name = from_dict_get_string(self.currency_info, "name")
-        self.chain = from_dict_get_string(self.currency_info, "chain")
-        self.min_withdrawal_amt = from_dict_get_float(self.currency_info, "minWd")
-        self.withdrawal_fee = from_dict_get_float(self.currency_info, "wdFee")
-        self.can_withdraw = self.currency_info.get("canWd") == "1"
-        self.can_deposit = self.currency_info.get("canDep") == "1"
-        self.can_internal = self.currency_info.get("canInternal") == "1"
+        data = self.currency_info or {}
+        self.currency = from_dict_get_string(data, "ccy")
+        self.name = from_dict_get_string(data, "name")
+        self.chain = from_dict_get_string(data, "chain")
+        self.min_withdrawal_amt = from_dict_get_float(data, "minWd")
+        self.withdrawal_fee = from_dict_get_float(data, "wdFee")
+        self.can_withdraw = data.get("canWd") == "1"
+        self.can_deposit = data.get("canDep") == "1"
+        self.can_internal = data.get("canInternal") == "1"
 
         self.has_been_init_data = True
         return self

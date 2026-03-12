@@ -10,7 +10,6 @@ from bt_api_py.registry import ExchangeRegistry
 
 def _valr_spot_subscribe_handler(feed, topics):
     """Placeholder subscribe handler for VALR WebSocket."""
-    pass
 
 
 def register_valr():

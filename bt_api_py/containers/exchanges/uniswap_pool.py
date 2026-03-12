@@ -21,6 +21,20 @@ class UniswapPoolToken:
     price_usd: Decimal | None = None
     price_in_pool: Decimal | None = None
 
+    def to_dict(self) -> dict:
+        """Convert token to dictionary."""
+        return {
+            "address": self.address,
+            "symbol": self.symbol,
+            "name": self.name,
+            "decimals": self.decimals,
+            "reserve": str(self.reserve) if self.reserve is not None else None,
+            "reserve_usd": str(self.reserve_usd) if self.reserve_usd is not None else None,
+            "weight": str(self.weight) if self.weight is not None else None,
+            "price_usd": str(self.price_usd) if self.price_usd is not None else None,
+            "price_in_pool": str(self.price_in_pool) if self.price_in_pool is not None else None,
+        }
+
 
 @dataclass
 class UniswapPoolFee:
@@ -70,7 +84,7 @@ class UniswapPool:
     # Tokens in the pool
     token0: UniswapPoolToken | None = None
     token1: UniswapPoolToken | None = None
-    tokens: list[UniswapPoolToken] = None
+    tokens: list[UniswapPoolToken] | None = None
 
     # Pool fees
     fees: UniswapPoolFee | None = None
@@ -230,7 +244,7 @@ class UniswapPool:
             stats.apr_breakdown = apr_breakdown
             # Use total APR if available, otherwise calculate from breakdown
             total_apr = sum(apr_breakdown.values())
-            stats.apr = total_apr
+            stats.apr = total_apr if total_apr else Decimal("0")
 
         return cls(
             pool_id=pool_id,
@@ -311,9 +325,10 @@ class UniswapPool:
             Token balance in the pool
 
         """
-        for token in self.tokens:
-            if token.address.lower() == token_address.lower():
-                return token.reserve
+        if self.tokens:
+            for token in self.tokens:
+                if token.address.lower() == token_address.lower():
+                    return token.reserve
         return None
 
     def get_token_price(self, token_address: str) -> Decimal | None:
@@ -326,9 +341,10 @@ class UniswapPool:
             Token price in USD
 
         """
-        for token in self.tokens:
-            if token.address.lower() == token_address.lower():
-                return token.price_usd
+        if self.tokens:
+            for token in self.tokens:
+                if token.address.lower() == token_address.lower():
+                    return token.price_usd
         return None
 
     def get_pool_value_usd(self) -> Decimal | None:
@@ -352,11 +368,8 @@ class UniswapPool:
             True if pool is liquid
 
         """
-        return (
-            self.has_liquidity
-            and self.get_pool_value_usd()
-            and self.get_pool_value_usd() >= min_tvl_usd
-        )
+        tvl = self.get_pool_value_usd()
+        return bool(self.has_liquidity and tvl is not None and tvl >= min_tvl_usd)
 
     def get_fee_rate(self) -> Decimal | None:
         """Get pool fee rate.

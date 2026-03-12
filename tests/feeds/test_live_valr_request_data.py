@@ -83,8 +83,7 @@ class TestValrTickerData:
         """Test getting multiple tickers."""
         # Test with different pairs
         symbols = ["BTCZAR", "ETHZAR"]
-        for symbol in symbols:
-            pass
+        symbol = symbols[-1]
         data = valr_feed.get_tick(symbol)
         assert data is not None
 
@@ -99,17 +98,14 @@ class TestValrKlineData:
     def test_valr_req_kline_data_1m(self, valr_feed):
         """Test getting 1-minute kline data."""
         # Valr API kline support needs to be verified
-        pass
 
     @pytest.mark.kline
     def test_valr_req_kline_data_1h(self, valr_feed):
         """Test getting 1-hour kline data."""
-        pass
 
     @pytest.mark.kline
     def test_valr_req_kline_data_1d(self, valr_feed):
         """Test getting daily kline data."""
-        pass
 
 
 # ==================== OrderBook Tests ====================
@@ -152,11 +148,9 @@ class TestValrMarketInfo:
 
     def test_valr_market_all(self, valr_feed):
         """Test getting all market information."""
-        pass
 
     def test_valr_symbol_info(self, valr_feed):
         """Test getting symbol information."""
-        pass
 
 
 # ==================== Exchange Data Tests ====================
@@ -238,7 +232,6 @@ class TestValrIntegration:
     @pytest.mark.integration
     def test_websocket_connection(self):
         """Test WebSocket connection."""
-        pass
 
 
 if __name__ == "__main__":

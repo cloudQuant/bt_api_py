@@ -32,16 +32,20 @@ class BitfinexSpotRequestBalanceData(BalanceData):
         self.balance: float | None = None
         self.available: float | None = None
         self.reserved: float | None = None
+        self.all_data: dict[str, Any] | None = None
         self.has_been_init_data = False
 
-    def init_data(self) -> "BitfinexSpotRequestBalanceData":
+    def init_data(self) -> "BitfinexSpotRequestBalanceData":  # type: ignore[override]
         """Initialize and parse the balance data.
 
         Returns:
             Self for method chaining
         """
         if not self.has_been_json_encoded:
-            self.balance_data = json.loads(self.balance_info)
+            if isinstance(self.balance_info, str):
+                self.balance_data = json.loads(self.balance_info)
+            else:
+                self.balance_data = self.balance_info
             self.has_been_json_encoded = True
         if self.has_been_init_data:
             return self
@@ -71,7 +75,7 @@ class BitfinexSpotRequestBalanceData(BalanceData):
         """
         if self.all_data is None:
             self.init_data()
-            self.all_data = {
+            all_data: dict[str, Any] = {
                 "exchange_name": self.exchange_name,
                 "asset_type": self.asset_type,
                 "local_update_time": self.local_update_time,
@@ -80,6 +84,7 @@ class BitfinexSpotRequestBalanceData(BalanceData):
                 "available": self.available,
                 "reserved": self.reserved,
             }
+            self.all_data = all_data
         return self.all_data
 
     def __str__(self) -> str:

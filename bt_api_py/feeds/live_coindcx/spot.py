@@ -2,6 +2,8 @@
 CoinDCX Spot Feed implementation.
 """
 
+from typing import Any
+
 from bt_api_py.feeds.capability import Capability
 from bt_api_py.feeds.live_coindcx.request_base import CoinDCXRequestData
 
@@ -10,7 +12,7 @@ class CoinDCXRequestDataSpot(CoinDCXRequestData):
     """CoinDCX Spot Feed for market data."""
 
     @classmethod
-    def _capabilities(cls):
+    def _capabilities(cls) -> set[Capability]:
         return {
             Capability.GET_TICK,
             Capability.GET_DEPTH,
@@ -22,7 +24,7 @@ class CoinDCXRequestDataSpot(CoinDCXRequestData):
             Capability.CANCEL_ORDER,
         }
 
-    def __init__(self, data_queue, **kwargs):
+    def __init__(self, data_queue: Any = None, **kwargs: Any) -> None:
         super().__init__(data_queue, **kwargs)
         self.exchange_name = kwargs.get("exchange_name", "COINDCX___SPOT")
 
@@ -343,7 +345,7 @@ class CoinDCXRequestDataSpot(CoinDCXRequestData):
     def _get_open_orders(self, symbol=None, extra_data=None, **kwargs):
         """Get open orders. Returns (path, params, extra_data)."""
         path = "POST /exchange/v1/orders/active_orders"
-        params = {}
+        params: dict[str, Any] = {}
         if symbol:
             params["market"] = symbol
         if extra_data is None:

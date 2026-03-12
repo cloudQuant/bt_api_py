@@ -31,7 +31,7 @@ def _get_gateio_config() -> Any | None:
             _gateio_config = load_exchange_config(config_path)
         _gateio_config_loaded = True
     except Exception as e:
-        logger.warn(f"Failed to load gateio.yaml config: {e}")
+        logger.warning(f"Failed to load gateio.yaml config: {e}")
     return _gateio_config
 
 

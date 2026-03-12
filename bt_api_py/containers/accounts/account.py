@@ -1,6 +1,6 @@
 """账户类,用于确定账户数据的属性和方法。"""
 
-from typing import Any
+from typing import Any, Self
 
 from bt_api_py.containers.auto_init_mixin import AutoInitMixin
 
@@ -9,11 +9,15 @@ class AccountData(AutoInitMixin):
     """账户数据基类,提供账户信息的统一接口。
 
     Args:
-        account_info: 账户信息数据
+        account_info: 账户信息数据（dict 或 JSON 字符串）
         has_been_json_encoded: 是否已进行JSON编码
     """
 
-    def __init__(self, account_info: dict[str, Any], has_been_json_encoded: bool = False) -> None:
+    def __init__(
+        self,
+        account_info: dict[str, Any] | str,
+        has_been_json_encoded: bool = False,
+    ) -> None:
         """初始化账户数据。
 
         Args:
@@ -32,8 +36,11 @@ class AccountData(AutoInitMixin):
         """
         return self.event
 
-    def init_data(self) -> None:
+    def init_data(self) -> Self:
         """初始化账户数据。
+
+        Returns:
+            Self for method chaining.
 
         Raises:
             NotImplementedError: 子类必须实现此方法

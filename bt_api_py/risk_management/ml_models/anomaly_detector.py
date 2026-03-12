@@ -4,7 +4,7 @@
 """
 
 import time
-from typing import Any
+from typing import Any, cast
 
 import numpy as np
 from sklearn.ensemble import IsolationForest
@@ -62,7 +62,7 @@ class AnomalyDetectionResult:
         explanation: str,
         timestamp: int,
         features_used: list[str],
-    ) -> Any | None:
+    ) -> None:
         self.is_anomaly = is_anomaly
         self.anomaly_score = anomaly_score
         self.anomaly_type = anomaly_type
@@ -97,7 +97,7 @@ class AnomalyDetector(BaseMLModel):
     5. 模式识别异常检测
     """
 
-    def __init__(self, config: dict[str, Any] | None = None) -> Any | None:
+    def __init__(self, config: dict[str, Any] | None = None) -> None:
         """初始化异常检测器
 
         Args:
@@ -299,7 +299,7 @@ class AnomalyDetector(BaseMLModel):
 
             return np.array(predictions)
         else:
-            return self.isolation_forest.predict(X_processed)
+            return self.isolation_forest.predict(X_processed)  # type: ignore[no-any-return]
 
     def predict_proba(self, X: np.ndarray) -> np.ndarray:
         """预测异常概率
@@ -327,13 +327,15 @@ class AnomalyDetector(BaseMLModel):
             # 平均分数
             ensemble_scores = (if_scores + svm_scores) / 2
         else:
-            ensemble_scores = self.isolation_forest.decision_function(X_processed)
+            ensemble_scores = cast(
+                "np.ndarray", self.isolation_forest.decision_function(X_processed)
+            )
 
         # 转换为概率 (使用sigmoid函数)
         probabilities = 1 / (1 + np.exp(-ensemble_scores))
 
         # 返回异常概率 (1 - 正常概率)
-        return 1 - probabilities.reshape(-1, 1)
+        return 1 - probabilities.reshape(-1, 1)  # type: ignore[no-any-return]
 
     def detect_trading_anomalies(
         self, trading_data: dict[str, Any]
@@ -864,10 +866,7 @@ class AnomalyDetector(BaseMLModel):
         if not self.feature_names:
             self.feature_names = list(data.keys())
 
-        features = []
-        for name in self.feature_names:
-            features.append(float(data.get(name, 0)))
-
+        features = [float(data.get(name, 0)) for name in self.feature_names]
         return np.array(features).reshape(1, -1)
 
     def _load_anomaly_patterns(self) -> dict[str, Any]:
@@ -892,8 +891,8 @@ class AnomalyDetector(BaseMLModel):
         total_detections = len(self.detection_history)
         anomaly_count = sum(1 for d in self.detection_history if d.is_anomaly)
 
-        severity_counts = {}
-        type_counts = {}
+        severity_counts: dict[str, int] = {}
+        type_counts: dict[str, int] = {}
 
         for detection in self.detection_history:
             if detection.is_anomaly:

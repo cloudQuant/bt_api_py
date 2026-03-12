@@ -10,7 +10,6 @@ from bt_api_py.registry import ExchangeRegistry
 
 def _swyftx_spot_subscribe_handler(feed, topics):
     """Placeholder subscribe handler (Swyftx WSS not publicly documented)."""
-    pass
 
 
 def register_swyftx():

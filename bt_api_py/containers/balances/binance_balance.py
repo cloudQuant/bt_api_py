@@ -20,7 +20,7 @@ class BinanceWssBalanceData:
             self.balance_data = json.loads(self.balance_info)
             self.has_been_json_encoded = True
 
-        balances = self.balance_data.get("a", {}).get("B", [])
+        balances = (self.balance_data or {}).get("a", {}).get("B", [])
         self.accounts = [
             {
                 "asset": from_dict_get_string(item, "a"),
@@ -60,9 +60,10 @@ class BinanceSpotRequestBalanceData(BalanceData):
             self.has_been_json_encoded = True
         if self.has_been_init_data:
             return self
-        self.symbol_name = from_dict_get_string(self.balance_data, "asset")
-        self.used_margin = from_dict_get_float(self.balance_data, "locked")
-        self.available_margin = from_dict_get_float(self.balance_data, "free")
+        data = self.balance_data or {}
+        self.symbol_name = from_dict_get_string(data, "asset")
+        self.used_margin = from_dict_get_float(data, "locked")
+        self.available_margin = from_dict_get_float(data, "free")
         self.has_been_init_data = True
         return self
 
@@ -182,24 +183,21 @@ class BinanceSwapRequestBalanceData(BalanceData):
             self.has_been_json_encoded = True
         if self.has_been_init_data:
             return self
-        self.server_time = from_dict_get_float(self.balance_data, "updateTime")
-        self.account_id = from_dict_get_string(self.balance_data, "accountAlias")
-        self.account_type = from_dict_get_string(self.balance_data, "asset")
-        self.max_withdraw_amount = from_dict_get_float(self.balance_data, "maxWithdrawAmount")
+        data = self.balance_data or {}
+        self.server_time = from_dict_get_float(data, "updateTime")
+        self.account_id = from_dict_get_string(data, "accountAlias")
+        self.account_type = from_dict_get_string(data, "asset")
+        self.max_withdraw_amount = from_dict_get_float(data, "maxWithdrawAmount")
         self.margin = (
-            from_dict_get_float(self.balance_data, "marginBalance")
-            if "marginBalance" in self.balance_data
-            else from_dict_get_float(self.balance_data, "balance")
+            from_dict_get_float(data, "marginBalance")
+            if "marginBalance" in data
+            else from_dict_get_float(data, "balance")
         )
-        self.maintain_margin = from_dict_get_float(self.balance_data, "maintMargin")
-        self.available_margin = from_dict_get_float(self.balance_data, "availableBalance")
-        self.open_order_initial_margin = from_dict_get_float(
-            self.balance_data, "openOrderInitialMargin"
-        )
-        self.position_initial_margin = from_dict_get_float(
-            self.balance_data, "positionInitialMargin"
-        )
-        self.unrealized_profit = from_dict_get_float(self.balance_data, "crossUnPnl")
+        self.maintain_margin = from_dict_get_float(data, "maintMargin")
+        self.available_margin = from_dict_get_float(data, "availableBalance")
+        self.open_order_initial_margin = from_dict_get_float(data, "openOrderInitialMargin")
+        self.position_initial_margin = from_dict_get_float(data, "positionInitialMargin")
+        self.unrealized_profit = from_dict_get_float(data, "crossUnPnl")
         self.has_been_init_data = True
         return self
 
@@ -320,8 +318,9 @@ class BinanceSwapWssBalanceData(BalanceData):
             self.has_been_json_encoded = True
         if self.has_been_init_data:
             return self
-        self.account_type = from_dict_get_string(self.balance_data, "a")
-        self.margin = from_dict_get_float(self.balance_data, "wb")
+        data = self.balance_data or {}
+        self.account_type = from_dict_get_string(data, "a")
+        self.margin = from_dict_get_float(data, "wb")
         self.has_been_init_data = True
         return self
 
@@ -435,9 +434,10 @@ class BinanceSpotWssBalanceData(BalanceData):
             self.has_been_json_encoded = True
         if self.has_been_init_data:
             return self
-        self.server_time = from_dict_get_float(self.balance_data, "E")
-        self.used_margin = from_dict_get_float(self.balance_data, "l")
-        self.available_margin = from_dict_get_float(self.balance_data, "f")
+        data = self.balance_data or {}
+        self.server_time = from_dict_get_float(data, "E")
+        self.used_margin = from_dict_get_float(data, "l")
+        self.available_margin = from_dict_get_float(data, "f")
         self.has_been_init_data = True
         return self
 

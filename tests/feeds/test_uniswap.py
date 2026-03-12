@@ -239,17 +239,14 @@ class TestUniswapIntegration:
     @pytest.mark.integration
     def test_get_token_price_live(self):
         """Test getting token price from live API."""
-        pass
 
     @pytest.mark.integration
     def test_get_pool_info_live(self):
         """Test getting pool info from live API."""
-        pass
 
     @pytest.mark.integration
     def test_get_swap_quote_live(self):
         """Test getting swap quote from live API."""
-        pass
 
 
 if __name__ == "__main__":

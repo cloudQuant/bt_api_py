@@ -17,7 +17,7 @@ from bt_api_py.logging_factory import get_logger
 class GateioRequestDataSwap(GateioRequestData):
     """Gate.io Futures (USDT-M) Trading Feed"""
 
-    def __init__(self, data_queue, **kwargs) -> None:
+    def __init__(self, data_queue: Any = None, **kwargs: Any) -> None:
         kwargs["asset_type"] = "swap"
         kwargs.setdefault("logger_name", "gateio_swap_feed.log")
         super().__init__(data_queue, **kwargs)
@@ -161,7 +161,7 @@ class GateioRequestDataSwap(GateioRequestData):
     def _get_balance(self, extra_data=None, **kwargs) -> Any:
         request_type = "get_account"
         path = self._params.get_rest_path(request_type)
-        params = {}
+        params: dict[str, Any] = {}
         extra_data = update_extra_data(
             extra_data,
             request_type=request_type,
@@ -298,7 +298,7 @@ class GateioRequestDataSwap(GateioRequestData):
     ) -> Any:
         request_type = "cancel_order"
         path = self._params.get_rest_path(request_type)
-        params = {}
+        params: dict[str, Any] = {}
         body = {}
         extra_data = update_extra_data(
             extra_data,
@@ -322,7 +322,7 @@ class GateioRequestDataSwap(GateioRequestData):
     ) -> Any:
         request_type = "query_order"
         path = self._params.get_rest_path(request_type)
-        params = {}
+        params: dict[str, Any] = {}
         extra_data = update_extra_data(
             extra_data,
             request_type=request_type,
@@ -386,10 +386,6 @@ class GateioRequestDataSwap(GateioRequestData):
 class GateioMarketWssDataSwap:
     """Placeholder for Gate.io Futures Market WebSocket data handler."""
 
-    pass
-
 
 class GateioAccountWssDataSwap:
     """Placeholder for Gate.io Futures Account WebSocket data handler."""
-
-    pass

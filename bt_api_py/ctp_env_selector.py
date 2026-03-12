@@ -70,7 +70,7 @@ def _is_set1_available(now: datetime) -> bool:
 
 def get_ctp_fronts(
     env: str = "",
-    now: datetime = None,
+    now: datetime | None = None,
 ) -> tuple:
     """
     获取 CTP 前置地址。

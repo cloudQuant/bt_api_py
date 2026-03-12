@@ -41,17 +41,19 @@ class RequestData:
             status: Request status, defaults to False.
             normalize_func: Function to normalize input data, defaults to None.
         """
-        self.event = "RequestEvent"
+        self.event: str = "RequestEvent"
         self.input_data = data
         self.extra_data = extra_data
         self.data: list[Any] = []
-        self.status = status
+        self.status: bool | None = status
         self.normalize_func = normalize_func
         self.local_update_time = time.time()
-        self.exchange_name = extra_data.get("exchange_name", "")
-        self.symbol_name = extra_data.get("symbol_name", "")
-        self.asset_type = extra_data.get("asset_type", "")
-        self.request_type = extra_data.get("request_type", "")
+        self.exchange_name: str = str(extra_data.get("exchange_name", ""))
+        _sn = extra_data.get("symbol_name")
+        self.symbol_name: str | None = str(_sn) if _sn else None
+        _at = extra_data.get("asset_type")
+        self.asset_type: str | None = str(_at) if _at else None
+        self.request_type: str = str(extra_data.get("request_type", ""))
         self.has_been_init_data = False
 
     def init_data(self) -> None:
@@ -157,7 +159,7 @@ class RequestData:
         Returns:
             Trading symbol name.
         """
-        return self.symbol_name
+        return self.symbol_name or ""
 
     def get_asset_type(self) -> str:
         """Get asset type.
@@ -165,4 +167,4 @@ class RequestData:
         Returns:
             Asset type.
         """
-        return self.asset_type
+        return self.asset_type or ""

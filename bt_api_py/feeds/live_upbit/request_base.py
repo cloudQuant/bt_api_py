@@ -9,6 +9,7 @@ Response: direct JSON array/object. Errors: {"error": {"name": ..., "message": .
 
 import hashlib
 import uuid as _uuid
+from typing import Any
 from urllib.parse import unquote, urlencode
 
 try:
@@ -27,7 +28,7 @@ class UpbitRequestData(Feed):
     """Upbit REST API Feed base class."""
 
     @classmethod
-    def _capabilities(cls):
+    def _capabilities(cls) -> set[Capability]:
         return {
             Capability.GET_TICK,
             Capability.GET_DEPTH,
@@ -45,7 +46,7 @@ class UpbitRequestData(Feed):
     # ── minute-value → period key mapping ───────────────────────
     _MINUTE_PERIODS = {"1", "3", "5", "10", "15", "30", "60", "120", "240", "360", "480", "720"}
 
-    def __init__(self, data_queue, **kwargs) -> None:
+    def __init__(self, data_queue: Any = None, **kwargs: Any) -> None:
         super().__init__(data_queue, **kwargs)
         self.data_queue = data_queue
         self._api_key = (
@@ -109,7 +110,7 @@ class UpbitRequestData(Feed):
     def request(self, path, params=None, body=None, extra_data=None, timeout=10, is_sign=False):
         """Synchronous HTTP request using Feed.http_request()."""
         if params is None:
-            params = {}
+            params: dict[str, Any] = {}
         method, endpoint = path.split(" ", 1)
         headers = {}
 
@@ -137,7 +138,7 @@ class UpbitRequestData(Feed):
     ):
         """Async HTTP request using Feed.async_http_request()."""
         if params is None:
-            params = {}
+            params: dict[str, Any] = {}
         method, endpoint = path.split(" ", 1)
         headers = {}
 
@@ -289,7 +290,7 @@ class UpbitRequestData(Feed):
 
     def _cancel_order(self, symbol=None, order_id=None, extra_data=None, **kwargs):
         path = self._params.get_rest_path("cancel_order")
-        params = {}
+        params: dict[str, Any] = {}
         if order_id:
             params["uuid"] = str(order_id)
         extra_data = extra_data or {}
@@ -306,7 +307,7 @@ class UpbitRequestData(Feed):
 
     def _query_order(self, symbol=None, order_id=None, extra_data=None, **kwargs):
         path = self._params.get_rest_path("query_order")
-        params = {}
+        params: dict[str, Any] = {}
         if order_id:
             params["uuid"] = str(order_id)
         extra_data = extra_data or {}
@@ -357,7 +358,7 @@ class UpbitRequestData(Feed):
 
     def _get_account(self, extra_data=None, **kwargs):
         path = self._params.get_rest_path("get_account")
-        params = {}
+        params: dict[str, Any] = {}
         extra_data = extra_data or {}
         extra_data.update(
             {
@@ -372,7 +373,7 @@ class UpbitRequestData(Feed):
 
     def _get_balance(self, extra_data=None, **kwargs):
         path = self._params.get_rest_path("get_balance")
-        params = {}
+        params: dict[str, Any] = {}
         extra_data = extra_data or {}
         extra_data.update(
             {

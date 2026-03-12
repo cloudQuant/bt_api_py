@@ -179,7 +179,7 @@ def example_async_get_sub_account_list():
             print(f"Found {len(sub_accounts)} sub-account(s) (async)")
         else:
             print("Failed to get sub-account list (async)")
-    except:
+    except Exception:
         print("No data received from async request")
 
     print()

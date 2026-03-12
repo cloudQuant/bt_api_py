@@ -5,6 +5,7 @@ Demonstrates high-performance WebSocket connections with monitoring and error ha
 
 import asyncio
 import logging
+import os
 from typing import Dict, Any
 
 from bt_api_py.websocket import (
@@ -188,15 +189,27 @@ async def setup_exchange_with_credentials(exchange_name: str) -> None:
     monitor = await get_websocket_monitor()
 
     # Create credentials for exchanges that require authentication
+    # SECURITY: Load from env vars only. Never hardcode real API keys.
     if exchange_name.upper() in ["BINANCE", "OKX"]:
-        # Example credentials - in production, these would come from secure config
-        credentials = ExchangeCredentials(
-            exchange_name=exchange_name.upper(),
-            auth_type=AuthenticationType.API_KEY_SECRET,
-            api_key="your_api_key_here",
-            api_secret="your_api_secret_here",
-            passphrase="your_passphrase_here",  # Required for OKX
-        )
+        api_key = os.environ.get("BT_API_KEY") or os.environ.get("API_KEY")
+        api_secret = os.environ.get("BT_API_SECRET") or os.environ.get("API_SECRET")
+        passphrase = os.environ.get("BT_PASSPHRASE") or os.environ.get("PASSPHRASE", "")
+        if not api_key or not api_secret:
+            logger.warning(
+                "Set BT_API_KEY/BT_API_SECRET (or API_KEY/API_SECRET) env vars for auth. "
+                "Using None - private channel subscriptions will fail."
+            )
+            credentials = None
+        elif exchange_name.upper() == "OKX" and not passphrase:
+            logger.warning("OKX requires BT_PASSPHRASE or PASSPHRASE env var. Using empty.")
+        if api_key and api_secret:
+            credentials = ExchangeCredentials(
+                exchange_name=exchange_name.upper(),
+                auth_type=AuthenticationType.API_KEY_SECRET,
+                api_key=api_key,
+                api_secret=api_secret,
+                passphrase=passphrase or "",
+            )
     else:
         credentials = None
 

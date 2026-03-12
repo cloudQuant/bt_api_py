@@ -6,12 +6,11 @@ Setup complete monitoring system for production trading environment.
 
 from pathlib import Path
 
-from bt_api_py.logging_system import get_logger
+from bt_api_py.logging_system import get_logger, setup_logging_for_production
 from bt_api_py.monitoring import (
     get_all_dashboard_configs,
     save_dashboard_to_file,
     setup_elk_integration,
-    setup_logging_for_production,
     start_global_monitoring,
     start_prometheus_exporter,
 )
@@ -52,6 +51,33 @@ class MonitoringConfig:
     # Exchange health monitoring
     health_check_interval: float = 30.0
     health_check_timeout: float = 5.0
+
+    def __init__(self, **kwargs: object) -> None:
+        """Initialize config from kwargs with defaults from class attributes."""
+        for key, default in {
+            "metrics_collection_interval": 5.0,
+            "prometheus_host": "0.0.0.0",
+            "prometheus_port": 8080,
+            "prometheus_async": False,
+            "log_level": "INFO",
+            "log_file": "logs/bt_api_py.log",
+            "log_rotation": True,
+            "log_max_size": 100 * 1024 * 1024,
+            "log_backup_count": 5,
+            "elk_enabled": False,
+            "elasticsearch_host": "localhost",
+            "elasticsearch_port": 9200,
+            "elasticsearch_username": "",
+            "elasticsearch_password": "",
+            "elasticsearch_index_prefix": "bt_api_py",
+            "logstash_host": "localhost",
+            "logstash_port": 5000,
+            "logstash_transport": "tcp",
+            "dashboards_output_dir": "monitoring/grafana/dashboards",
+            "health_check_interval": 30.0,
+            "health_check_timeout": 5.0,
+        }.items():
+            setattr(self, key, kwargs.get(key, default))
 
 
 async def setup_monitoring(config: MonitoringConfig) -> None:
@@ -130,8 +156,8 @@ async def cleanup_monitoring() -> None:
         await stop_global_monitoring()
         stop_prometheus_exporter()
         await shutdown_elk_integration()
-    except Exception:
-        pass  # Ignore cleanup errors
+    except Exception as e:
+        get_logger("monitoring").debug("Cleanup monitoring resources failed: %s", e, exc_info=True)
 
 
 # Production configuration

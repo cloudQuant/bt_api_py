@@ -18,16 +18,16 @@ class HyperliquidTickerData(TickerData):
         self.local_update_time = time.time()  # 本地时间戳
         self.symbol_name = symbol_name
         self.asset_type = asset_type  # ticker的类型
-        self.ticker_data = ticker_info if has_been_json_encoded else None
-        self.ticker_symbol_name = None
-        self.server_time = None
-        self.bid_price = None
-        self.ask_price = None
-        self.bid_volume = None
-        self.ask_volume = None
-        self.last_price = None
-        self.last_volume = None
-        self.all_data = None
+        self.ticker_data: dict[str, Any] | None = ticker_info if has_been_json_encoded else None
+        self.ticker_symbol_name: str | None = None
+        self.server_time: float | None = None
+        self.bid_price: float | None = None
+        self.ask_price: float | None = None
+        self.bid_volume: float | None = None
+        self.ask_volume: float | None = None
+        self.last_price: float | None = None
+        self.last_volume: float | None = None
+        self.all_data: dict[str, Any] | None = None
         self.has_been_init_data = False
 
     def init_data(self) -> "Self":
@@ -40,10 +40,11 @@ class HyperliquidTickerData(TickerData):
                 self.ticker_data = json.loads(self.ticker_info)
 
             # Hyperliquid ticker format from allMids response
+            td = self.ticker_data or {}
             if self.asset_type == "SWAP":
                 # For perpetual futures
                 self.ticker_symbol_name = self.symbol_name
-                self.last_price = from_dict_get_float(self.ticker_data, self.symbol_name)
+                self.last_price = from_dict_get_float(td, self.symbol_name)
                 # Hyperliquid doesn't provide bid/ask in allMids, use last price for both
                 self.bid_price = self.last_price
                 self.ask_price = self.last_price
@@ -53,11 +54,12 @@ class HyperliquidTickerData(TickerData):
                 self.ticker_symbol_name = self.symbol_name
                 # Spot ticker might have different format
                 if isinstance(self.ticker_data, dict):
-                    self.last_price = from_dict_get_float(self.ticker_data, "last")
-                    self.bid_price = from_dict_get_float(self.ticker_data, "bid")
-                    self.ask_price = from_dict_get_float(self.ticker_data, "ask")
-                    self.last_volume = from_dict_get_float(self.ticker_data, "volume")
-                    self.server_time = from_dict_get_float(self.ticker_data, "time")
+                    td = self.ticker_data  # td already set above
+                    self.last_price = from_dict_get_float(td, "last")
+                    self.bid_price = from_dict_get_float(td, "bid")
+                    self.ask_price = from_dict_get_float(td, "ask")
+                    self.last_volume = from_dict_get_float(td, "volume")
+                    self.server_time = from_dict_get_float(td, "time")
                 else:
                     # Fallback
                     self.last_price = self.ticker_data
@@ -88,22 +90,23 @@ class HyperliquidTickerData(TickerData):
                 "last_price": self.last_price,
                 "last_volume": self.last_volume,
             }
-        return self.all_data
+        return self.all_data or {}
 
     def get_exchange_name(self) -> str:
-        return self.exchange_name
+        return str(self.exchange_name)
 
     def get_local_update_time(self) -> float:
-        return self.local_update_time
+        return float(self.local_update_time)
 
     def get_symbol_name(self) -> str:
-        return self.symbol_name
+        return str(self.symbol_name)
 
     def get_ticker_symbol_name(self) -> str | None:
-        return self.ticker_symbol_name
+        val = self.ticker_symbol_name
+        return None if val is None else str(val)
 
     def get_asset_type(self) -> str:
-        return self.asset_type
+        return str(self.asset_type)
 
     def get_server_time(self) -> float | None:
         return self.server_time

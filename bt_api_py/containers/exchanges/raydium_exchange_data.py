@@ -34,7 +34,7 @@ def _get_raydium_config() -> Any | None:
             _raydium_config_loaded = True
             return _raydium_config
     except Exception as e:
-        logger.warn(f"Failed to load raydium.yaml config: {e}")
+        logger.warning(f"Failed to load raydium.yaml config: {e}")
         _raydium_config_loaded = True
         return None
     return None

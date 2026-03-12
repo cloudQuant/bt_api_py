@@ -108,7 +108,7 @@ pytest tests -m "auth_account or auth_order or auth_position or auth_private_tra
 
 详见 [docs/test-markers-guide.md](docs/test-markers-guide.md)
 
-### Linting and Formatting### Linting and Formatting
+### Linting and Formatting
 
 ```bash
 # Format code (auto-fix)

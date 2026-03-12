@@ -1,9 +1,8 @@
 import asyncio
 import json
-
-# import queue
 import traceback
 from threading import Thread
+from typing import Any, cast
 
 # import aiohttp
 # from aiohttp import ClientTimeout
@@ -40,23 +39,30 @@ class AsyncBase:
 
     # noinspection PyBroadException
     def _start_thread_loop(self):
-        asyncio.set_event_loop(self.loop)
+        loop = self.loop
+        if loop is None:
+            return
+        asyncio.set_event_loop(loop)
         while True:
             try:
-                if self.loop.is_closed():
+                if loop.is_closed():
                     loop = asyncio.new_event_loop()
                     asyncio.set_event_loop(loop)
                     self.loop = loop
-                self.loop.run_forever()
+                loop.run_forever()
             except Exception:
                 print(traceback.format_exc())
-                self.loop.close()
+                loop.close()
 
     def release(self):
-        self.loop.stop()
+        if self.loop is not None:
+            self.loop.stop()
 
     def submit(self, func, callback=None):
-        future = asyncio.run_coroutine_threadsafe(func, self.loop)
+        loop = self.loop
+        if loop is None:
+            return
+        future = asyncio.run_coroutine_threadsafe(func, loop)
         if callback is not None:
             future.add_done_callback(callback)
 
@@ -66,8 +72,9 @@ class AsyncBase:
         return session
 
     def close(self):
-        self.submit(self.session.close())
-        self.release()
+        if self.loop is not None and self.session is not None:
+            self.submit(self.session.close())
+            self.release()
 
     async def async_http_request(
         self, method: str, url, headers=None, body=None, timeout=None
@@ -78,9 +85,9 @@ class AsyncBase:
             if session is None or session.closed:
                 session = self.get_session()
                 self.session = session
-            params = {}
+            params: dict[str, object] = {}
             if timeout is not None:
-                params["timeout"] = ClientTimeout(total=timeout)
+                params["timeout"] = ClientTimeout(total=float(timeout))
             if headers is not None:
                 params["headers"] = headers
             if body is not None:
@@ -94,7 +101,7 @@ class AsyncBase:
             # print(f' func: {func.__name__}')
             async with func(url, **params) as resp:
                 ret = await resp.json(content_type=None)
-            return ret
+            return cast("dict[Any, Any]", ret)
         except Exception as e:
             # print(traceback.format_exc())
             self.async_base_logger.info(

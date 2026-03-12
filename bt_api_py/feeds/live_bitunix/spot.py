@@ -12,7 +12,7 @@ class BitunixRequestDataSpot(BitunixRequestData):
     """Bitunix Spot Feed for market data."""
 
     @classmethod
-    def _capabilities(cls):
+    def _capabilities(cls) -> set[Capability]:
         return {
             Capability.GET_TICK,
             Capability.GET_DEPTH,
@@ -24,7 +24,7 @@ class BitunixRequestDataSpot(BitunixRequestData):
             Capability.CANCEL_ORDER,
         }
 
-    def __init__(self, data_queue, **kwargs) -> None:
+    def __init__(self, data_queue: Any = None, **kwargs: Any) -> None:
         super().__init__(data_queue, **kwargs)
         self.exchange_name = kwargs.get("exchange_name", "BITUNIX___SPOT")
 
@@ -224,7 +224,7 @@ class BitunixRequestDataSpot(BitunixRequestData):
                 "normalize_function": self._get_balance_normalize_function,
             }
         )
-        params = {}
+        params: dict[str, Any] = {}
         if symbol:
             params["currency"] = symbol
         return path, params, extra_data
@@ -361,7 +361,7 @@ class BitunixRequestDataSpot(BitunixRequestData):
                 "request_type": "get_open_orders",
             }
         )
-        params = {}
+        params: dict[str, Any] = {}
         if symbol:
             params["symbol"] = symbol
         return path, params, extra_data

@@ -86,11 +86,9 @@ class TestCurveIntegration:
 
     def test_get_pools_live(self, curve_feed):
         """Test live pool data retrieval"""
-        pass
 
     def test_get_tvl_live(self, curve_feed):
         """Test live TVL data retrieval"""
-        pass
 
 
 if __name__ == "__main__":

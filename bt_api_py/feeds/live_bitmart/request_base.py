@@ -24,7 +24,7 @@ class BitmartRequestData(Feed):
     """BitMart REST API Feed base class."""
 
     @classmethod
-    def _capabilities(cls: Any) -> None:
+    def _capabilities(cls: Any) -> set[Capability]:
         return {
             Capability.GET_TICK,
             Capability.GET_DEPTH,
@@ -53,20 +53,20 @@ class BitmartRequestData(Feed):
         self.async_logger = get_logger("bitmart_feed")
 
     @property
-    def api_key(self) -> None:
+    def api_key(self) -> Any:
         return self._api_key
 
     @property
-    def api_secret(self) -> None:
+    def api_secret(self) -> Any:
         return self._api_secret
 
     @property
-    def api_memo(self) -> None:
+    def api_memo(self) -> Any:
         return self._api_memo
 
     # ── authentication ──────────────────────────────────────────
 
-    def _generate_signature(self, timestamp: Any, body_str: Any = "") -> None:
+    def _generate_signature(self, timestamp: Any, body_str: Any = "") -> str:
         """Generate HMAC SHA256 signature: timestamp + '#' + memo + '#' + body_str."""
         if not self._api_secret:
             return ""
@@ -87,15 +87,15 @@ class BitmartRequestData(Feed):
     def request(
         self,
         path: Any,
-        params: Any = None,
+        params: dict[str, Any] | None = None,
         body: Any = None,
         extra_data: Any = None,
         timeout: Any = 10,
         is_sign: Any = False,
-    ) -> None:
+    ) -> RequestData:
         """Synchronous HTTP request using Feed.http_request()."""
         if params is None:
-            params = {}
+            params: dict[str, Any] = {}
         method, endpoint = path.split(" ", 1)
 
         timestamp = str(int(time.time() * 1000))
@@ -127,15 +127,15 @@ class BitmartRequestData(Feed):
     async def async_request(
         self,
         path: Any,
-        params: Any = None,
+        params: dict[str, Any] | None = None,
         body: Any = None,
         extra_data: Any = None,
         timeout: Any = 5,
         is_sign: Any = False,
-    ) -> None:
+    ) -> RequestData:
         """Async HTTP request using Feed.async_http_request()."""
         if params is None:
-            params = {}
+            params: dict[str, Any] = {}
         method, endpoint = path.split(" ", 1)
 
         timestamp = str(int(time.time() * 1000))
@@ -171,9 +171,11 @@ class BitmartRequestData(Feed):
 
     # ── _get_xxx internal methods ───────────────────────────────
 
-    def _get_server_time(self, extra_data: Any = None, **kwargs: Any) -> None:
+    def _get_server_time(
+        self, extra_data: Any = None, **kwargs: Any
+    ) -> tuple[str, dict[str, Any], dict[str, Any]]:
         path = self._params.get_rest_path("get_server_time")
-        params = {}
+        params: dict[str, Any] = {}
         extra_data = extra_data or {}
         extra_data.update(
             {
@@ -186,9 +188,11 @@ class BitmartRequestData(Feed):
         )
         return path, params, extra_data
 
-    def _get_exchange_info(self, extra_data: Any = None, **kwargs: Any) -> None:
+    def _get_exchange_info(
+        self, extra_data: Any = None, **kwargs: Any
+    ) -> tuple[str, dict[str, Any], dict[str, Any]]:
         path = self._params.get_rest_path("get_exchange_info")
-        params = {}
+        params: dict[str, Any] = {}
         extra_data = extra_data or {}
         extra_data.update(
             {
@@ -201,10 +205,12 @@ class BitmartRequestData(Feed):
         )
         return path, params, extra_data
 
-    def _get_tick(self, symbol: Any, extra_data: Any = None, **kwargs: Any) -> None:
+    def _get_tick(
+        self, symbol: Any, extra_data: Any = None, **kwargs: Any
+    ) -> tuple[str, dict[str, Any], dict[str, Any]]:
         bm_symbol = self._params.get_symbol(symbol)
         path = self._params.get_rest_path("get_tick")
-        params = {"symbol": bm_symbol}
+        params: dict[str, Any] = {"symbol": bm_symbol}
         extra_data = extra_data or {}
         extra_data.update(
             {
@@ -219,10 +225,10 @@ class BitmartRequestData(Feed):
 
     def _get_depth(
         self, symbol: Any, count: Any = 35, extra_data: Any = None, **kwargs: Any
-    ) -> None:
+    ) -> tuple[str, dict[str, Any], dict[str, Any]]:
         bm_symbol = self._params.get_symbol(symbol)
         path = self._params.get_rest_path("get_depth")
-        params = {"symbol": bm_symbol, "limit": min(count, 50)}
+        params: dict[str, Any] = {"symbol": bm_symbol, "limit": min(count, 50)}
         extra_data = extra_data or {}
         extra_data.update(
             {
@@ -242,11 +248,11 @@ class BitmartRequestData(Feed):
         count: Any = 100,
         extra_data: Any = None,
         **kwargs: Any,
-    ) -> None:
+    ) -> tuple[str, dict[str, Any], dict[str, Any]]:
         bm_symbol = self._params.get_symbol(symbol)
         path = self._params.get_rest_path("get_kline")
         bm_step = self._params.get_period(period)
-        params = {"symbol": bm_symbol, "step": bm_step, "limit": count}
+        params: dict[str, Any] = {"symbol": bm_symbol, "step": bm_step, "limit": count}
         extra_data = extra_data or {}
         extra_data.update(
             {
@@ -262,10 +268,10 @@ class BitmartRequestData(Feed):
 
     def _get_trade_history(
         self, symbol: Any, count: Any = 50, extra_data: Any = None, **kwargs: Any
-    ) -> None:
+    ) -> tuple[str, dict[str, Any], dict[str, Any]]:
         bm_symbol = self._params.get_symbol(symbol)
         path = self._params.get_rest_path("get_trades")
-        params = {"symbol": bm_symbol, "limit": min(count, 50)}
+        params: dict[str, Any] = {"symbol": bm_symbol, "limit": min(count, 50)}
         extra_data = extra_data or {}
         extra_data.update(
             {
@@ -286,7 +292,7 @@ class BitmartRequestData(Feed):
         order_type: Any = "buy-limit",
         extra_data: Any = None,
         **kwargs: Any,
-    ) -> None:
+    ) -> tuple[str, dict[str, Any], dict[str, Any]]:
         path = self._params.get_rest_path("make_order")
         bm_symbol = self._params.get_symbol(symbol)
         parts = order_type.lower().replace("-", " ").split()
@@ -318,7 +324,7 @@ class BitmartRequestData(Feed):
 
     def _cancel_order(
         self, symbol: Any = None, order_id: Any = None, extra_data: Any = None, **kwargs: Any
-    ) -> None:
+    ) -> tuple[str, dict[str, Any], dict[str, Any]]:
         path = self._params.get_rest_path("cancel_order")
         body = {}
         if symbol:
@@ -341,7 +347,7 @@ class BitmartRequestData(Feed):
 
     def _query_order(
         self, symbol: Any = None, order_id: Any = None, extra_data: Any = None, **kwargs: Any
-    ) -> None:
+    ) -> tuple[str, dict[str, Any], dict[str, Any]]:
         path = self._params.get_rest_path("query_order")
         body = {}
         if symbol:
@@ -360,7 +366,9 @@ class BitmartRequestData(Feed):
         )
         return path, body, extra_data
 
-    def _get_open_orders(self, symbol: Any = None, extra_data: Any = None, **kwargs: Any) -> None:
+    def _get_open_orders(
+        self, symbol: Any = None, extra_data: Any = None, **kwargs: Any
+    ) -> tuple[str, dict[str, Any], dict[str, Any]]:
         path = self._params.get_rest_path("get_open_orders")
         body = {}
         if symbol:
@@ -378,7 +386,9 @@ class BitmartRequestData(Feed):
         )
         return path, body, extra_data
 
-    def _get_deals(self, symbol: Any = None, extra_data: Any = None, **kwargs: Any) -> None:
+    def _get_deals(
+        self, symbol: Any = None, extra_data: Any = None, **kwargs: Any
+    ) -> tuple[str, dict[str, Any], dict[str, Any]]:
         path = self._params.get_rest_path("get_deals")
         body = {}
         if symbol:
@@ -396,9 +406,11 @@ class BitmartRequestData(Feed):
         )
         return path, body, extra_data
 
-    def _get_account(self, extra_data: Any = None, **kwargs: Any) -> None:
+    def _get_account(
+        self, extra_data: Any = None, **kwargs: Any
+    ) -> tuple[str, dict[str, Any], dict[str, Any]]:
         path = self._params.get_rest_path("get_account")
-        params = {}
+        params: dict[str, Any] = {}
         extra_data = extra_data or {}
         extra_data.update(
             {
@@ -411,9 +423,11 @@ class BitmartRequestData(Feed):
         )
         return path, params, extra_data
 
-    def _get_balance(self, extra_data: Any = None, **kwargs: Any) -> None:
+    def _get_balance(
+        self, extra_data: Any = None, **kwargs: Any
+    ) -> tuple[str, dict[str, Any], dict[str, Any]]:
         path = self._params.get_rest_path("get_balance")
-        params = {}
+        params: dict[str, Any] = {}
         extra_data = extra_data or {}
         extra_data.update(
             {
@@ -430,7 +444,7 @@ class BitmartRequestData(Feed):
     # BitMart wraps responses in {"code": 1000, "message": "OK", "data": {...}}
 
     @staticmethod
-    def _is_error(input_data: Any) -> None:
+    def _is_error(input_data: Any) -> bool:
         if not input_data:
             return True
         if isinstance(input_data, dict):
@@ -440,21 +454,25 @@ class BitmartRequestData(Feed):
         return False
 
     @staticmethod
-    def _unwrap(input_data: Any) -> None:
+    def _unwrap(input_data: Any) -> Any:
         """Unwrap BitMart {"code":1000,"data":...} envelope."""
         if isinstance(input_data, dict) and "data" in input_data:
             return input_data["data"]
         return input_data
 
     @staticmethod
-    def _get_server_time_normalize_function(input_data: Any, extra_data: Any) -> None:
+    def _get_server_time_normalize_function(
+        input_data: Any, extra_data: Any
+    ) -> tuple[list[Any], bool]:
         if BitmartRequestData._is_error(input_data):
             return [], False
         data = BitmartRequestData._unwrap(input_data)
         return [{"server_time": data}], True
 
     @staticmethod
-    def _get_exchange_info_normalize_function(input_data: Any, extra_data: Any) -> None:
+    def _get_exchange_info_normalize_function(
+        input_data: Any, extra_data: Any
+    ) -> tuple[list[Any], bool]:
         if BitmartRequestData._is_error(input_data):
             return [], False
         data = BitmartRequestData._unwrap(input_data)
@@ -464,7 +482,7 @@ class BitmartRequestData(Feed):
         return [{"currencies": data}], True
 
     @staticmethod
-    def _get_tick_normalize_function(input_data: Any, extra_data: Any) -> None:
+    def _get_tick_normalize_function(input_data: Any, extra_data: Any) -> tuple[list[Any], bool]:
         if BitmartRequestData._is_error(input_data):
             return [], False
         data = BitmartRequestData._unwrap(input_data)
@@ -473,7 +491,7 @@ class BitmartRequestData(Feed):
         return [data], True
 
     @staticmethod
-    def _get_depth_normalize_function(input_data: Any, extra_data: Any) -> None:
+    def _get_depth_normalize_function(input_data: Any, extra_data: Any) -> tuple[list[Any], bool]:
         if BitmartRequestData._is_error(input_data):
             return [], False
         data = BitmartRequestData._unwrap(input_data)
@@ -482,7 +500,7 @@ class BitmartRequestData(Feed):
         return [data], True
 
     @staticmethod
-    def _get_kline_normalize_function(input_data: Any, extra_data: Any) -> None:
+    def _get_kline_normalize_function(input_data: Any, extra_data: Any) -> tuple[list[Any], bool]:
         if BitmartRequestData._is_error(input_data):
             return [], False
         data = BitmartRequestData._unwrap(input_data)
@@ -496,7 +514,9 @@ class BitmartRequestData(Feed):
         return [], False
 
     @staticmethod
-    def _get_trade_history_normalize_function(input_data: Any, extra_data: Any) -> None:
+    def _get_trade_history_normalize_function(
+        input_data: Any, extra_data: Any
+    ) -> tuple[list[Any], bool]:
         if BitmartRequestData._is_error(input_data):
             return [], False
         data = BitmartRequestData._unwrap(input_data)
@@ -508,7 +528,7 @@ class BitmartRequestData(Feed):
         return [], False
 
     @staticmethod
-    def _make_order_normalize_function(input_data: Any, extra_data: Any) -> None:
+    def _make_order_normalize_function(input_data: Any, extra_data: Any) -> tuple[list[Any], bool]:
         if BitmartRequestData._is_error(input_data):
             return [], False
         data = BitmartRequestData._unwrap(input_data)
@@ -517,13 +537,15 @@ class BitmartRequestData(Feed):
         return [data], True
 
     @staticmethod
-    def _cancel_order_normalize_function(input_data: Any, extra_data: Any) -> None:
+    def _cancel_order_normalize_function(
+        input_data: Any, extra_data: Any
+    ) -> tuple[list[Any], bool]:
         if BitmartRequestData._is_error(input_data):
             return [], False
         return [{"success": True}], True
 
     @staticmethod
-    def _query_order_normalize_function(input_data: Any, extra_data: Any) -> None:
+    def _query_order_normalize_function(input_data: Any, extra_data: Any) -> tuple[list[Any], bool]:
         if BitmartRequestData._is_error(input_data):
             return [], False
         data = BitmartRequestData._unwrap(input_data)
@@ -532,7 +554,9 @@ class BitmartRequestData(Feed):
         return [data], True
 
     @staticmethod
-    def _get_open_orders_normalize_function(input_data: Any, extra_data: Any) -> None:
+    def _get_open_orders_normalize_function(
+        input_data: Any, extra_data: Any
+    ) -> tuple[list[Any], bool]:
         if BitmartRequestData._is_error(input_data):
             return [], False
         data = BitmartRequestData._unwrap(input_data)
@@ -544,7 +568,7 @@ class BitmartRequestData(Feed):
         return [], False
 
     @staticmethod
-    def _get_deals_normalize_function(input_data: Any, extra_data: Any) -> None:
+    def _get_deals_normalize_function(input_data: Any, extra_data: Any) -> tuple[list[Any], bool]:
         if BitmartRequestData._is_error(input_data):
             return [], False
         data = BitmartRequestData._unwrap(input_data)
@@ -556,7 +580,7 @@ class BitmartRequestData(Feed):
         return [], False
 
     @staticmethod
-    def _get_account_normalize_function(input_data: Any, extra_data: Any) -> None:
+    def _get_account_normalize_function(input_data: Any, extra_data: Any) -> tuple[list[Any], bool]:
         if BitmartRequestData._is_error(input_data):
             return [], False
         data = BitmartRequestData._unwrap(input_data)
@@ -568,7 +592,7 @@ class BitmartRequestData(Feed):
         return [data], True
 
     @staticmethod
-    def _get_balance_normalize_function(input_data: Any, extra_data: Any) -> None:
+    def _get_balance_normalize_function(input_data: Any, extra_data: Any) -> tuple[list[Any], bool]:
         if BitmartRequestData._is_error(input_data):
             return [], False
         data = BitmartRequestData._unwrap(input_data)

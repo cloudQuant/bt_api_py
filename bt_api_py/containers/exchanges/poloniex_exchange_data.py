@@ -34,7 +34,7 @@ def _get_poloniex_config() -> Any | None:
             _poloniex_config = load_exchange_config(config_path)
         _poloniex_config_loaded = True
     except Exception as e:
-        logger.warn(f"Failed to load poloniex.yaml config: {e}")
+        logger.warning(f"Failed to load poloniex.yaml config: {e}")
     return _poloniex_config
 
 

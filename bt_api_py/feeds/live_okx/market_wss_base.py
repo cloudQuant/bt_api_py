@@ -649,7 +649,7 @@ class OkxWssData(MyWebsocketApp):
             order_book_data = OkxL2OrderBookData(order_book_info, symbol, self.asset_type, True)
             self.data_queue.put(order_book_data)
         except Exception as e:
-            self.wss_logger.warn(f"Error in push_l2_order_book: {e}")
+            self.wss_logger.warning(f"Error in push_l2_order_book: {e}")
 
     def push_market_trades(self, content: Any) -> None:
         """Handle trades/trades-all channel data (public market trades)."""
@@ -927,7 +927,6 @@ class OkxWssData(MyWebsocketApp):
                     self.ws.restart()
             elif rsp["event"] == "subscribe":
                 self.wss_logger.info(f"===== Data Websocket {rsp} =====")
-                pass
         elif "arg" in rsp:
             self.handle_data(rsp)
             return

@@ -76,7 +76,7 @@ class IdentityManager:
         self._user_groups: dict[str, set[str]] = {}
 
         # Provider configurations
-        self._providers = {}
+        self._providers: dict[IdentityProvider, dict[str, Any]] = {}
         self._init_default_providers()
 
         # Default groups
@@ -136,8 +136,11 @@ class IdentityManager:
             username=username,
             email=email,
             full_name=full_name,
+            department=None,
+            title=None,
+            manager_id=None,
             provider=provider,
-            attributes=attributes,
+            attributes=dict(attributes),
         )
 
         self._identities[identity_id] = identity
@@ -371,9 +374,10 @@ class IdentityManager:
     def get_user_permissions(self, identity_id: str) -> dict[str, Any]:
         """Get all permissions for a user through group memberships."""
         user_groups = self.get_user_groups(identity_id)
-        permissions = {
+        direct_permissions: set[str] = set()
+        permissions: dict[str, Any] = {
             "groups": list(user_groups),
-            "direct_permissions": set(),
+            "direct_permissions": direct_permissions,
             "inherited_permissions": set(),
         }
 
@@ -381,14 +385,21 @@ class IdentityManager:
         for group_id in user_groups:
             group = self._groups.get(group_id)
             if group and "permissions" in group.attributes:
-                permissions["direct_permissions"].update(group.attributes["permissions"])
+                perms = group.attributes["permissions"]
+                if isinstance(perms, (set, list)):
+                    direct_permissions.update(str(p) for p in perms)
 
         # In a real implementation, this would resolve permission hierarchies
         return permissions
 
     def sync_with_external_provider(self, provider: IdentityProvider) -> dict[str, Any]:
         """Synchronize identities with external provider."""
-        sync_results = {"provider": provider.value, "created": 0, "updated": 0, "errors": []}
+        sync_results: dict[str, Any] = {
+            "provider": provider.value,
+            "created": 0,
+            "updated": 0,
+            "errors": [],
+        }
 
         if provider == IdentityProvider.LDAP:
             sync_results.update(self._sync_ldap())
@@ -422,8 +433,8 @@ class IdentityManager:
     def get_identity_summary(self) -> dict[str, Any]:
         """Get summary of identity management statistics."""
         total_identities = len(self._identities)
-        status_counts = {}
-        provider_counts = {}
+        status_counts: dict[str, int] = {}
+        provider_counts: dict[str, int] = {}
 
         for identity in self._identities.values():
             # Count by status

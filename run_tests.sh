@@ -10,6 +10,7 @@ PARALLEL=8
 COVERAGE=false
 HTML_REPORT=false
 MARKERS=""
+FAST_MODE=false
 
 # Log setup
 LOG_DIR="logs"
@@ -40,6 +41,10 @@ while [[ $# -gt 0 ]]; do
             HTML_REPORT=true
             shift
             ;;
+        -f|--fast)
+            FAST_MODE=true
+            shift
+            ;;
         -m|--markers)
             if [[ -n "$2" ]]; then
                 MARKERS="$2"
@@ -55,6 +60,7 @@ while [[ $# -gt 0 ]]; do
             echo "Options:"
             echo "  -c, --ctp              Run CTP related tests (default: false)"
             echo "  -p, --parallel NUM     Number of parallel processes (default: 8)"
+            echo "  -f, --fast             Run non-network, non-slow tests only (8 workers)"
             echo "  --cov, --coverage      Generate coverage report"
             echo "  --html                 Generate HTML test report (requires pytest-html)"
             echo "  -m, --markers EXPR     Run tests matching marker expression"
@@ -66,10 +72,11 @@ while [[ $# -gt 0 ]]; do
             echo ""
             echo "Examples:"
             echo "  ./run_tests.sh                      # Run all tests (no CTP), 8 processes"
+            echo "  ./run_tests.sh --fast               # Run fast tests only (no network/slow)"
             echo "  ./run_tests.sh --ctp --cov          # Run with CTP and coverage"
-            echo "  ./run_tests.sh -m unit              # Run only unit tests"
-            echo "  ./run_tests.sh -m 'not slow' --cov  # Fast tests with coverage"
-            echo "  ./run_tests.sh --html               # Generate HTML report"
+            echo "  ./run_tests.sh -m unit               # Run only unit tests"
+            echo "  ./run_tests.sh -m 'not slow' --cov   # Fast tests with coverage"
+            echo "  ./run_tests.sh --html                # Generate HTML report"
             exit 0
             ;;
         *)
@@ -79,6 +86,15 @@ while [[ $# -gt 0 ]]; do
             ;;
     esac
 done
+
+# --fast implies markers for non-network, non-slow
+if [ "$FAST_MODE" = true ]; then
+    if [ -n "$MARKERS" ]; then
+        echo "Warning: --fast overrides -m/--markers"
+    fi
+    MARKERS="not network and not slow"
+    echo "Fast mode: running non-network, non-slow tests only"
+fi
 
 # Build pytest command
 PYTEST_CMD="pytest -v"
@@ -126,4 +142,34 @@ echo ""
 echo "Log file: $LOG_FILE"
 echo ""
 eval "$PYTEST_CMD" 2>&1 | tee "$LOG_FILE"
-exit ${PIPESTATUS[0]}
+EXIT_CODE=${PIPESTATUS[0]}
+
+# Analyze log for failures and errors (short summary lines only, with error detail)
+if [ -f "$LOG_FILE" ]; then
+    FAILED_LINES=$(grep "FAILED tests/.* - " "$LOG_FILE" 2>/dev/null | sort -u || true)
+    ERROR_LINES=$(grep "ERROR tests/.* - " "$LOG_FILE" 2>/dev/null | sort -u || true)
+    FAILED_COUNT=$(echo "$FAILED_LINES" | grep -c . 2>/dev/null) || FAILED_COUNT=0
+    ERROR_COUNT=$(echo "$ERROR_LINES" | grep -c . 2>/dev/null) || ERROR_COUNT=0
+    FAILED_COUNT=$((FAILED_COUNT + 0))
+    ERROR_COUNT=$((ERROR_COUNT + 0))
+    if [ "$FAILED_COUNT" -gt 0 ] || [ "$ERROR_COUNT" -gt 0 ]; then
+        echo ""
+        echo "========== FAILURES & ERRORS SUMMARY =========="
+        echo ""
+        if [ -n "$FAILED_LINES" ]; then
+            echo "--- FAILED tests ---"
+            echo "$FAILED_LINES" | sed 's/^/  /'
+        fi
+        if [ -n "$ERROR_LINES" ]; then
+            echo ""
+            echo "--- ERROR tests ---"
+            echo "$ERROR_LINES" | sed 's/^/  /'
+        fi
+        echo ""
+        echo "Total: $FAILED_COUNT failed, $ERROR_COUNT errors"
+        echo "Log file: $LOG_FILE"
+        echo "================================================"
+    fi
+fi
+
+exit "$EXIT_CODE"

@@ -5,6 +5,7 @@ for trading operations across multiple exchanges.
 """
 
 import asyncio
+import contextlib
 import statistics
 import time
 from dataclasses import dataclass
@@ -70,18 +71,18 @@ class PerformanceTestSuite:
         for operation in operations:
             for _ in range(iterations):
                 if operation == "get_ticker":
-                    with PerformanceMetrics.measure(operation, exchange) as pm:
-                        try:
-                            await self.api.async_get_ticker(f"{exchange}___SPOT", "BTCUSDT")
-                        except Exception:
-                            pass
+                    with (
+                        PerformanceMetrics.measure(operation, exchange) as pm,
+                        contextlib.suppress(Exception),
+                    ):
+                        await self.api.async_get_ticker(f"{exchange}___SPOT", "BTCUSDT")
 
                 elif operation == "get_balance":
-                    with PerformanceMetrics.measure(operation, exchange) as pm:
-                        try:
-                            await self.api.async_get_balance(f"{exchange}___SPOT")
-                        except Exception:
-                            pass
+                    with (
+                        PerformanceMetrics.measure(operation, exchange) as pm,
+                        contextlib.suppress(Exception),
+                    ):
+                        await self.api.async_get_balance(f"{exchange}___SPOT")
 
                 self.metrics.append(pm.metrics)
 
@@ -155,7 +156,11 @@ class PerformanceTestSuite:
 
         successful_metrics = [m for m in self.metrics if m.success]
         success_rate = sum(1 for m in self.metrics if m.success) / len(self.metrics) * 100
-        avg_latency = statistics.mean([m.duration_ms for m in successful_metrics]) if successful_metrics else 0.0
+        avg_latency = (
+            statistics.mean([m.duration_ms for m in successful_metrics])
+            if successful_metrics
+            else 0.0
+        )
 
         report = {
             "summary": {
@@ -280,4 +285,4 @@ class TestEndToEndWorkflows:
         """Test WebSocket data consistency with REST API."""
         # This test would set up a WebSocket connection and compare
         # real-time data with REST API snapshots
-        pass  # Implementation depends on WebSocket testing infrastructure
+        # Implementation depends on WebSocket testing infrastructure

@@ -76,7 +76,6 @@ class TestBalancerIntegration:
 
     def test_get_pools_live(self, balancer_feed):
         """Test live pool data retrieval"""
-        pass
 
 
 if __name__ == "__main__":

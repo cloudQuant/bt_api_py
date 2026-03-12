@@ -7,16 +7,16 @@ CTP Python wrapper — 向后兼容垫片
 本文件从各子模块重新导入全部符号，保持 ``from .ctp import *`` 的兼容性。
 """
 
-from ._ctp_base import *  # noqa: F401,F403  — SWIG infrastructure
-from .ctp_constants import *  # noqa: F401,F403
-from .ctp_md_api import *  # noqa: F401,F403
-from .ctp_structs_account import *  # noqa: F401,F403
-from .ctp_structs_common import *  # noqa: F401,F403
-from .ctp_structs_market import *  # noqa: F401,F403
-from .ctp_structs_order import *  # noqa: F401,F403
-from .ctp_structs_position import *  # noqa: F401,F403
-from .ctp_structs_query import *  # noqa: F401,F403
-from .ctp_structs_risk import *  # noqa: F401,F403
-from .ctp_structs_trade import *  # noqa: F401,F403
-from .ctp_structs_transfer import *  # noqa: F401,F403
-from .ctp_trader_api import *  # noqa: F401,F403
+from ._ctp_base import *  # noqa: F403  — SWIG infrastructure
+from .ctp_constants import *  # noqa: F403
+from .ctp_md_api import *  # noqa: F403
+from .ctp_structs_account import *  # noqa: F403
+from .ctp_structs_common import *  # noqa: F403
+from .ctp_structs_market import *  # noqa: F403
+from .ctp_structs_order import *  # noqa: F403
+from .ctp_structs_position import *  # noqa: F403
+from .ctp_structs_query import *  # noqa: F403
+from .ctp_structs_risk import *  # noqa: F403
+from .ctp_structs_trade import *  # noqa: F403
+from .ctp_structs_transfer import *  # noqa: F403
+from .ctp_trader_api import *  # noqa: F403

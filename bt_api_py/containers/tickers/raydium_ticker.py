@@ -24,7 +24,10 @@ class RaydiumRequestTickerData(TickerData):
             asset_type: Asset type (e.g., 'DEX')
 
         """
-        super().__init__(data, symbol, asset_type)
+        super().__init__(data, has_been_json_encoded=True)
+        self.symbol_name = symbol
+        self.asset_type = asset_type
+        self.symbol: str = symbol
         self.logger = get_logger("raydium_ticker")
         self._parse_data(data)
 
@@ -78,7 +81,7 @@ class RaydiumRequestTickerData(TickerData):
                 result = data
 
             # Basic information
-            self.symbol = result.get("name", self.symbol)
+            self.symbol = result.get("name", self.symbol) or self.symbol
             self.exchange = "raydium"
             self.timestamp = time.time()
             self.datetime = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(self.timestamp))
@@ -182,7 +185,7 @@ class RaydiumRequestTickerData(TickerData):
 
     def calculate_slippage(
         self, input_amount: float, input_token: str = "base"
-    ) -> dict[str, float]:
+    ) -> dict[str, float | None]:
         """Calculate price impact for a swap.
 
         This is a simplified calculation. Actual DEX swaps use
@@ -214,7 +217,10 @@ class RaydiumRequestTickerData(TickerData):
             )
             price_impact = (1 - (output / (input_amount / self.last_price))) if output else None
 
-        return {"output_amount": output, "price_impact": price_impact}
+        return {
+            "output_amount": output,
+            "price_impact": price_impact if price_impact is not None else None,
+        }
 
     def __str__(self) -> str:
         """String representation of ticker."""

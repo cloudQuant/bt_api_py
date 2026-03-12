@@ -35,7 +35,7 @@ class BinanceRequestDataMargin(BinanceRequestData):
         """
         request_type = "get_cross_margin_data"
         path = self._params.get_rest_path(request_type)
-        params = {}
+        params: dict[str, object] = {}
         extra_data = update_extra_data(
             extra_data,
             **{
@@ -73,7 +73,7 @@ class BinanceRequestDataMargin(BinanceRequestData):
         """
         request_type = "get_isolated_margin_data"
         path = self._params.get_rest_path(request_type)
-        params = {}
+        params: dict[str, Any] = {}
         if symbols is not None:
             params["symbols"] = symbols
         extra_data = update_extra_data(
@@ -120,7 +120,7 @@ class BinanceRequestDataMargin(BinanceRequestData):
         """
         request_type = "get_capital_flow"
         path = self._params.get_rest_path(request_type)
-        params = {}
+        params: dict[str, Any] = {}
         if asset is not None:
             params["asset"] = asset
         if start_time is not None:
@@ -176,7 +176,7 @@ class BinanceRequestDataMargin(BinanceRequestData):
         """
         request_type = "get_bnb_burn"
         path = self._params.get_rest_path(request_type)
-        params = {}
+        params: dict[str, object] = {}
         extra_data = update_extra_data(
             extra_data,
             **{
@@ -213,7 +213,7 @@ class BinanceRequestDataMargin(BinanceRequestData):
         """
         request_type = "toggle_bnb_burn"
         path = self._params.get_rest_path(request_type)
-        params = {}
+        params: dict[str, object] = {}
         extra_data = update_extra_data(
             extra_data,
             **{
@@ -253,7 +253,7 @@ class BinanceRequestDataMargin(BinanceRequestData):
         """
         request_type = "manual_liquidation"
         path = self._params.get_rest_path(request_type)
-        params = {}
+        params: dict[str, Any] = {}
         if symbol is not None:
             request_symbol = self._params.get_symbol(symbol)
             params["symbol"] = request_symbol
@@ -296,7 +296,7 @@ class BinanceRequestDataMargin(BinanceRequestData):
         """
         request_type = "exchange_small_liability"
         path = self._params.get_rest_path(request_type)
-        params = {}
+        params: dict[str, Any] = {}
         if asset_names is not None:
             params["assetNames"] = asset_names
         extra_data = update_extra_data(
@@ -343,7 +343,7 @@ class BinanceRequestDataMargin(BinanceRequestData):
         """
         request_type = "get_small_liability_history"
         path = self._params.get_rest_path(request_type)
-        params = {}
+        params: dict[str, Any] = {}
         if asset is not None:
             params["asset"] = asset
         if start_time is not None:

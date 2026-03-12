@@ -2,6 +2,8 @@
 Korbit Spot Feed – three-layer sync / async wrappers + WSS stubs.
 """
 
+from typing import Any
+
 from bt_api_py.containers.exchanges.korbit_exchange_data import KorbitExchangeDataSpot
 from bt_api_py.feeds.live_korbit.request_base import KorbitRequestData
 from bt_api_py.logging_factory import get_logger
@@ -10,7 +12,7 @@ from bt_api_py.logging_factory import get_logger
 class KorbitRequestDataSpot(KorbitRequestData):
     """Korbit Spot REST Feed."""
 
-    def __init__(self, data_queue, **kwargs):
+    def __init__(self, data_queue: Any = None, **kwargs: Any) -> None:
         super().__init__(data_queue, **kwargs)
 
     # ── market data ─────────────────────────────────────────────
@@ -124,7 +126,7 @@ class KorbitRequestDataSpot(KorbitRequestData):
 class KorbitMarketWssDataSpot:
     """Korbit Spot Market WebSocket Data Handler (stub)."""
 
-    def __init__(self, data_queue, **kwargs):
+    def __init__(self, data_queue: Any = None, **kwargs: Any) -> None:
         self.data_queue = data_queue
         self._params = KorbitExchangeDataSpot()
         self.logger_name = kwargs.get("logger_name", "korbit_spot_market_wss.log")
@@ -143,7 +145,7 @@ class KorbitMarketWssDataSpot:
 class KorbitAccountWssDataSpot:
     """Korbit Spot Account WebSocket Data Handler (stub)."""
 
-    def __init__(self, data_queue, **kwargs):
+    def __init__(self, data_queue: Any = None, **kwargs: Any) -> None:
         self.data_queue = data_queue
         self._params = KorbitExchangeDataSpot()
         self.logger_name = kwargs.get("logger_name", "korbit_spot_account_wss.log")

@@ -15,7 +15,7 @@ from bt_api_py.logging_factory import get_logger
 class BitgetRequestDataSwap(BitgetRequestData):
     """Bitget Swap (USDT-M Futures) trading REST API feed."""
 
-    def __init__(self, data_queue, **kwargs) -> None:
+    def __init__(self, data_queue: Any = None, **kwargs: Any) -> None:
         kwargs["asset_type"] = "swap"
         kwargs.setdefault("logger_name", "bitget_swap_feed.log")
         super().__init__(data_queue, **kwargs)
@@ -138,7 +138,7 @@ class BitgetRequestDataSwap(BitgetRequestData):
     def get_server_time(self, extra_data=None, **kwargs) -> float:
         request_type = "get_server_time"
         path = self._params.get_rest_path(request_type)
-        params = {}
+        params: dict[str, Any] = {}
         extra_data = update_extra_data(
             extra_data,
             request_type=request_type,
@@ -152,7 +152,7 @@ class BitgetRequestDataSwap(BitgetRequestData):
     def get_exchange_info(self, symbol=None, extra_data=None, **kwargs) -> Any:
         request_type = "get_contract"
         path = self._params.get_rest_path(request_type)
-        params = {}
+        params: dict[str, Any] = {}
         if symbol:
             params["symbol"] = self._params.get_symbol(symbol)
         extra_data = update_extra_data(
@@ -170,7 +170,7 @@ class BitgetRequestDataSwap(BitgetRequestData):
     def _get_balance(self, extra_data=None, **kwargs):
         request_type = "get_balance"
         path = self._params.get_rest_path(request_type)
-        params = {}
+        params: dict[str, Any] = {}
         extra_data = update_extra_data(
             extra_data,
             request_type=request_type,
@@ -364,10 +364,18 @@ class BitgetRequestDataSwap(BitgetRequestData):
 class BitgetMarketWssDataSwap:
     """Placeholder for Bitget Swap Market WebSocket data handler."""
 
-    pass
+    def __init__(self, data_queue: str, **kwargs: object) -> None:
+        pass
+
+    def start(self) -> None:
+        pass
 
 
 class BitgetAccountWssDataSwap:
     """Placeholder for Bitget Swap Account WebSocket data handler."""
 
-    pass
+    def __init__(self, data_queue: str, **kwargs: object) -> None:
+        pass
+
+    def start(self) -> None:
+        pass

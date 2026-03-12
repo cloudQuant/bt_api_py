@@ -5,6 +5,7 @@ import time
 from typing import Any
 
 from bt_api_py.containers.tickers.ticker import TickerData
+from bt_api_py.containers.tickers.ticker_utils import parse_float
 
 
 class BitmartRequestTickerData(TickerData):
@@ -61,34 +62,16 @@ class BitmartRequestTickerData(TickerData):
         data = self.ticker_data
         if data:
             self.ticker_symbol_name = data.get("symbol")
-            self.last_price = self._parse_float(data.get("last_price"))
-            self.bid_price = self._parse_float(data.get("bid_1"))
-            self.ask_price = self._parse_float(data.get("ask_1"))
-            self.volume_24h = self._parse_float(data.get("volume_24h"))
-            self.high_24h = self._parse_float(data.get("high_24h"))
-            self.low_24h = self._parse_float(data.get("low_24h"))
-            self.quote_volume_24h = self._parse_float(data.get("quote_volume_24h"))
+            self.last_price = parse_float(data.get("last_price"))
+            self.bid_price = parse_float(data.get("bid_1"))
+            self.ask_price = parse_float(data.get("ask_1"))
+            self.volume_24h = parse_float(data.get("volume_24h"))
+            self.high_24h = parse_float(data.get("high_24h"))
+            self.low_24h = parse_float(data.get("low_24h"))
+            self.quote_volume_24h = parse_float(data.get("quote_volume_24h"))
 
         self.has_been_init_data = True
         return self
-
-    @staticmethod
-    def _parse_float(value: Any) -> float | None:
-        """Parse value to float.
-
-        Args:
-            value: Value to parse.
-
-        Returns:
-            Parsed float value or None if parsing fails.
-
-        """
-        if value is None:
-            return None
-        try:
-            return float(value)
-        except (ValueError, TypeError):
-            return None
 
     def get_symbol_name(self) -> str:
         return self.symbol_name

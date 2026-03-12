@@ -13,7 +13,7 @@ def setg_optimize_option(arg: str) -> str:
         return f"/O{arg}"
     elif sys.platform == "linux":
         return f"-O{arg}"
-    # if
+    return f"-O{arg}"  # fallback for darwin, etc.
 
 
 # def
@@ -24,7 +24,7 @@ def set_compile_args(arg: str) -> str:
         return f"/{arg}"
     elif sys.platform == "linux":
         return f"-f{arg}"
-    # if
+    return f"-f{arg}"  # fallback for darwin, etc.
 
 
 # def
@@ -35,7 +35,7 @@ def set_extra_link_args(arg: str) -> str:
         return f"/{arg}"
     elif sys.platform == "linux":
         return f"-{arg}"
-    # if
+    return f"-{arg}"  # fallback for darwin, etc.
 
 
 # def
@@ -46,7 +46,7 @@ def set_cpp_version(ver: str) -> str:
         return f"-std:{ver}"
     elif sys.platform == "linux":
         return f"-std={ver}"
-    # if
+    return f"-std={ver}"  # fallback for darwin, etc.
 
 
 # def

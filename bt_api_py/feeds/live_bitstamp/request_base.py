@@ -11,6 +11,7 @@ import hashlib
 import hmac
 import time
 import uuid
+from typing import Any
 from urllib.parse import urlencode
 
 from bt_api_py.containers.exchanges.bitstamp_exchange_data import BitstampExchangeDataSpot
@@ -24,7 +25,7 @@ class BitstampRequestData(Feed):
     """Bitstamp REST API Feed base class."""
 
     @classmethod
-    def _capabilities(cls):
+    def _capabilities(cls) -> set[Capability]:
         return {
             Capability.GET_TICK,
             Capability.GET_DEPTH,
@@ -40,7 +41,7 @@ class BitstampRequestData(Feed):
             Capability.GET_SERVER_TIME,
         }
 
-    def __init__(self, data_queue, **kwargs):
+    def __init__(self, data_queue: Any = None, **kwargs: Any) -> None:
         super().__init__(data_queue, **kwargs)
         self.data_queue = data_queue
         self._api_key = kwargs.get("public_key") or kwargs.get("api_key") or ""
@@ -100,7 +101,7 @@ class BitstampRequestData(Feed):
     def request(self, path, params=None, body=None, extra_data=None, timeout=10, is_sign=False):
         """Synchronous HTTP request using Feed.http_request()."""
         if params is None:
-            params = {}
+            params: dict[str, Any] = {}
         method, endpoint = path.split(" ", 1)
         headers = {}
 
@@ -135,7 +136,7 @@ class BitstampRequestData(Feed):
     ):
         """Async HTTP request using Feed.async_http_request()."""
         if params is None:
-            params = {}
+            params: dict[str, Any] = {}
         method, endpoint = path.split(" ", 1)
         headers = {}
 
@@ -173,7 +174,7 @@ class BitstampRequestData(Feed):
 
     def _get_server_time(self, extra_data=None, **kwargs):
         path = self._params.get_rest_path("get_server_time")
-        params = {}
+        params: dict[str, Any] = {}
         extra_data = extra_data or {}
         extra_data.update(
             {
@@ -188,7 +189,7 @@ class BitstampRequestData(Feed):
 
     def _get_exchange_info(self, extra_data=None, **kwargs):
         path = self._params.get_rest_path("get_exchange_info")
-        params = {}
+        params: dict[str, Any] = {}
         extra_data = extra_data or {}
         extra_data.update(
             {
@@ -206,7 +207,7 @@ class BitstampRequestData(Feed):
         base_path = self._params.get_rest_path("get_tick")
         method, ep = base_path.split(" ", 1)
         path = f"{method} {ep}/{pair}/"
-        params = {}
+        params: dict[str, Any] = {}
         extra_data = extra_data or {}
         extra_data.update(
             {
@@ -224,7 +225,7 @@ class BitstampRequestData(Feed):
         base_path = self._params.get_rest_path("get_depth")
         method, ep = base_path.split(" ", 1)
         path = f"{method} {ep}/{pair}/"
-        params = {}
+        params: dict[str, Any] = {}
         extra_data = extra_data or {}
         extra_data.update(
             {
@@ -262,7 +263,7 @@ class BitstampRequestData(Feed):
         base_path = self._params.get_rest_path("get_trades")
         method, ep = base_path.split(" ", 1)
         path = f"{method} {ep}/{pair}/"
-        params = {}
+        params: dict[str, Any] = {}
         extra_data = extra_data or {}
         extra_data.update(
             {

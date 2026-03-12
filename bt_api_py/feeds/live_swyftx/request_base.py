@@ -16,7 +16,7 @@ class SwyftxRequestData(Feed):
     """Swyftx REST API Feed base class."""
 
     @classmethod
-    def _capabilities(cls: Any) -> None:
+    def _capabilities(cls: Any) -> set[Capability]:
         return {
             Capability.GET_TICK,
             Capability.GET_DEPTH,
@@ -36,7 +36,7 @@ class SwyftxRequestData(Feed):
 
     # ── auth ────────────────────────────────────────────────────
 
-    def _get_headers(self, **kwargs: Any) -> None:
+    def _get_headers(self, **kwargs: Any) -> dict[str, str]:
         headers = {"Content-Type": "application/json"}
         if self.api_key:
             headers["Authorization"] = f"Bearer {self.api_key}"
@@ -51,7 +51,7 @@ class SwyftxRequestData(Feed):
         body: Any = None,
         extra_data: Any = None,
         timeout: Any = 10,
-    ) -> None:
+    ) -> RequestData:
         method = path.split()[0] if " " in path else "GET"
         endpoint = path.split()[1] if " " in path else path
         url = self._params.rest_url + endpoint
@@ -74,7 +74,7 @@ class SwyftxRequestData(Feed):
         body: Any = None,
         extra_data: Any = None,
         timeout: Any = 10,
-    ) -> None:
+    ) -> RequestData:
         method = path.split()[0] if " " in path else "GET"
         endpoint = path.split()[1] if " " in path else path
         url = self._params.rest_url + endpoint
@@ -90,7 +90,7 @@ class SwyftxRequestData(Feed):
         )
         return self._process_response(response, extra_data)
 
-    def _process_response(self, response: Any, extra_data: Any = None) -> None:
+    def _process_response(self, response: Any, extra_data: Any = None) -> RequestData:
         return RequestData(response, extra_data)
 
     def push_data_to_queue(self, data: Any) -> None:
@@ -102,7 +102,7 @@ class SwyftxRequestData(Feed):
             result = future.result()
             self.push_data_to_queue(result)
         except Exception as e:
-            self.async_logger.warn(f"async_callback::{e}")
+            self.async_logger.warning(f"async_callback::{e}")
 
     def connect(self) -> None:
         pass
@@ -110,20 +110,22 @@ class SwyftxRequestData(Feed):
     def disconnect(self) -> None:
         pass
 
-    def is_connected(self) -> None:
+    def is_connected(self) -> bool:
         return True
 
     # ── error detection ─────────────────────────────────────────
 
     @staticmethod
-    def _is_error(data: Any) -> None:
+    def _is_error(data: Any) -> bool:
         if data is None:
             return True
         return bool(isinstance(data, dict) and ("error" in data or "errors" in data))
 
     # ── _get_xxx internal methods ───────────────────────────────
 
-    def _get_server_time(self, extra_data: Any = None, **kwargs: Any) -> None:
+    def _get_server_time(
+        self, extra_data: Any = None, **kwargs: Any
+    ) -> tuple[str, dict[str, Any] | None, dict[str, Any]]:
         path = self._params.get_rest_path("get_server_time")
         extra_data = extra_data or {}
         extra_data.update(
@@ -134,7 +136,9 @@ class SwyftxRequestData(Feed):
         )
         return path, None, extra_data
 
-    def _get_tick(self, symbol: Any, extra_data: Any = None, **kwargs: Any) -> None:
+    def _get_tick(
+        self, symbol: Any, extra_data: Any = None, **kwargs: Any
+    ) -> tuple[str, dict[str, Any] | None, dict[str, Any]]:
         path = self._params.get_rest_path("get_tick", symbol=symbol)
         extra_data = extra_data or {}
         extra_data.update(
@@ -148,7 +152,7 @@ class SwyftxRequestData(Feed):
 
     def _get_depth(
         self, symbol: Any, count: Any = 20, extra_data: Any = None, **kwargs: Any
-    ) -> None:
+    ) -> tuple[str, dict[str, Any], dict[str, Any]]:
         path = self._params.get_rest_path("get_depth", symbol=symbol)
         extra_data = extra_data or {}
         extra_data.update(
@@ -162,7 +166,7 @@ class SwyftxRequestData(Feed):
 
     def _get_kline(
         self, symbol: Any, period: Any, count: Any = 20, extra_data: Any = None, **kwargs: Any
-    ) -> None:
+    ) -> tuple[str, dict[str, Any], dict[str, Any]]:
         path = self._params.get_rest_path("get_kline", symbol=symbol)
         extra_data = extra_data or {}
         extra_data.update(
@@ -181,7 +185,9 @@ class SwyftxRequestData(Feed):
             extra_data,
         )
 
-    def _get_exchange_info(self, extra_data: Any = None, **kwargs: Any) -> None:
+    def _get_exchange_info(
+        self, extra_data: Any = None, **kwargs: Any
+    ) -> tuple[str, dict[str, Any] | None, dict[str, Any]]:
         path = self._params.get_rest_path("get_exchange_info")
         extra_data = extra_data or {}
         extra_data.update(
@@ -192,7 +198,9 @@ class SwyftxRequestData(Feed):
         )
         return path, None, extra_data
 
-    def _get_balance(self, extra_data: Any = None, **kwargs: Any) -> None:
+    def _get_balance(
+        self, extra_data: Any = None, **kwargs: Any
+    ) -> tuple[str, dict[str, Any] | None, dict[str, Any]]:
         path = self._params.get_rest_path("get_balance")
         extra_data = extra_data or {}
         extra_data.update(
@@ -203,7 +211,9 @@ class SwyftxRequestData(Feed):
         )
         return path, None, extra_data
 
-    def _get_account(self, extra_data: Any = None, **kwargs: Any) -> None:
+    def _get_account(
+        self, extra_data: Any = None, **kwargs: Any
+    ) -> tuple[str, dict[str, Any] | None, dict[str, Any]]:
         path = self._params.get_rest_path("get_account")
         extra_data = extra_data or {}
         extra_data.update(
@@ -217,13 +227,13 @@ class SwyftxRequestData(Feed):
     # ── normalization functions ──────────────────────────────────
 
     @staticmethod
-    def _get_server_time_normalize_function(data: Any, extra_data: Any) -> None:
+    def _get_server_time_normalize_function(data: Any, extra_data: Any) -> tuple[list[Any], bool]:
         if data is None:
             return [], False
         return [data] if isinstance(data, dict) else [{"serverTime": data}], True
 
     @staticmethod
-    def _get_tick_normalize_function(data: Any, extra_data: Any) -> None:
+    def _get_tick_normalize_function(data: Any, extra_data: Any) -> tuple[list[Any], bool]:
         if SwyftxRequestData._is_error(data):
             return [], False
         if isinstance(data, dict):
@@ -233,7 +243,7 @@ class SwyftxRequestData(Feed):
         return [], False
 
     @staticmethod
-    def _get_depth_normalize_function(data: Any, extra_data: Any) -> None:
+    def _get_depth_normalize_function(data: Any, extra_data: Any) -> tuple[list[Any], bool]:
         if SwyftxRequestData._is_error(data):
             return [], False
         if isinstance(data, dict):
@@ -241,7 +251,7 @@ class SwyftxRequestData(Feed):
         return [], False
 
     @staticmethod
-    def _get_kline_normalize_function(data: Any, extra_data: Any) -> None:
+    def _get_kline_normalize_function(data: Any, extra_data: Any) -> tuple[list[Any], bool]:
         if SwyftxRequestData._is_error(data):
             return [], False
         if isinstance(data, list):
@@ -249,17 +259,7 @@ class SwyftxRequestData(Feed):
         return [], False
 
     @staticmethod
-    def _get_exchange_info_normalize_function(data: Any, extra_data: Any) -> None:
-        if SwyftxRequestData._is_error(data):
-            return [], False
-        if isinstance(data, dict):
-            return [data], True
-        if isinstance(data, list):
-            return data, bool(data)
-        return [], False
-
-    @staticmethod
-    def _get_balance_normalize_function(data: Any, extra_data: Any) -> None:
+    def _get_exchange_info_normalize_function(data: Any, extra_data: Any) -> tuple[list[Any], bool]:
         if SwyftxRequestData._is_error(data):
             return [], False
         if isinstance(data, dict):
@@ -269,7 +269,17 @@ class SwyftxRequestData(Feed):
         return [], False
 
     @staticmethod
-    def _get_account_normalize_function(data: Any, extra_data: Any) -> None:
+    def _get_balance_normalize_function(data: Any, extra_data: Any) -> tuple[list[Any], bool]:
+        if SwyftxRequestData._is_error(data):
+            return [], False
+        if isinstance(data, dict):
+            return [data], True
+        if isinstance(data, list):
+            return data, bool(data)
+        return [], False
+
+    @staticmethod
+    def _get_account_normalize_function(data: Any, extra_data: Any) -> tuple[list[Any], bool]:
         if SwyftxRequestData._is_error(data):
             return [], False
         if isinstance(data, dict):

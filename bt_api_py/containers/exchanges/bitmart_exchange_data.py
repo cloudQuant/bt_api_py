@@ -35,7 +35,7 @@ def _get_bitmart_config() -> Any | None:
             _bitmart_config = load_exchange_config(config_path)
         _bitmart_config_loaded = True
     except Exception as e:
-        logger.warn(f"Failed to load bitmart.yaml config: {e}")
+        logger.warning(f"Failed to load bitmart.yaml config: {e}")
     return _bitmart_config
 
 
@@ -129,14 +129,14 @@ class BitmartExchangeData(ExchangeData):
             raise ValueError(
                 f"Unknown rest path: {request_type}. Available: {list(self.rest_paths.keys())}"
             )
-        return path
+        return str(path)
 
     def get_wss_path(self, channel_type, symbol: str | None = None, **kwargs) -> str:
         """Get WebSocket subscription path."""
         path = self.wss_paths.get(channel_type, "")
         if symbol and "{symbol}" in str(path):
             path = str(path).replace("{symbol}", self.get_symbol(symbol))
-        return path
+        return str(path)
 
 
 class BitmartExchangeDataSpot(BitmartExchangeData):

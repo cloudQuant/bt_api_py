@@ -10,7 +10,7 @@ from bt_api_py.functions.utils import read_yaml_file
 
 
 def get_spot_symbol_list():
-    res = requests.get("https://api.binance.com/api/v3/exchangeInfo")
+    res = requests.get("https://api.binance.com/api/v3/exchangeInfo", timeout=30)
     result = res.json()
     result = result["symbols"]
     # swap_symbol_list = [i['symbol'] for i in result if i['contractType']=='PERPETUAL']

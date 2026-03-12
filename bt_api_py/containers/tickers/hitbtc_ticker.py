@@ -1,3 +1,4 @@
+import json
 import time
 from typing import Any
 
@@ -30,48 +31,55 @@ class HitBtcRequestTickerData(TickerData):
         self.symbol_name = symbol_name
         self.asset_type = asset_type  # ticker的类型
         # Always store ticker_info for init_data() to parse
-        self.ticker_data = ticker_info
-        self.ticker_symbol_name = None
-        self.server_time = None
-        self.bid_price = None
-        self.ask_price = None
-        self.bid_volume = None
-        self.ask_volume = None
-        self.last_price = None
-        self.last_volume = None
-        self.high_price = None
-        self.low_price = None
-        self.open_price = None
-        self.price_change = None
-        self.price_change_percent = None
-        self.count = None
-        self.all_data = None
+        self.ticker_data: str | dict[str, Any] = ticker_info
+        self.ticker_symbol_name: str | None = None
+        self.server_time: float | None = None
+        self.bid_price: float | None = None
+        self.ask_price: float | None = None
+        self.bid_volume: float | None = None
+        self.ask_volume: float | None = None
+        self.last_price: float | None = None
+        self.last_volume: float | None = None
+        self.high_price: float | None = None
+        self.low_price: float | None = None
+        self.open_price: float | None = None
+        self.price_change: float | None = None
+        self.price_change_percent: float | None = None
+        self.count: float | None = None
+        self.all_data: dict[str, Any] | None = None
         self.has_been_init_data = False
 
     def init_data(self) -> "HitBtcRequestTickerData":
         if self.has_been_init_data:
-            return
+            return self
 
-        if self.ticker_data is None:
-            return
+        raw = self.ticker_data
+        if isinstance(raw, str):
+            ticker_data: dict[str, Any] | None = json.loads(raw)
+        else:
+            ticker_data = raw
+        if ticker_data is None:
+            return self
+        self.ticker_data = ticker_data
 
         # 提取数据
-        self.ticker_symbol_name = from_dict_get_string(self.ticker_data, "symbol")
-        self.server_time = from_dict_get_float(self.ticker_data, "timestamp")
-        self.last_price = from_dict_get_float(self.ticker_data, "last")
-        self.bid_price = from_dict_get_float(self.ticker_data, "bid")
-        self.ask_price = from_dict_get_float(self.ticker_data, "ask")
-        self.last_volume = from_dict_get_float(self.ticker_data, "volume")
-        self.high_price = from_dict_get_float(self.ticker_data, "high")
-        self.low_price = from_dict_get_float(self.ticker_data, "low")
-        self.open_price = from_dict_get_float(self.ticker_data, "open")
-        self.price_change = from_dict_get_float(self.ticker_data, "volume")
-        self.price_change_percent = from_dict_get_float(self.ticker_data, "volumeQuote")
-        self.count = from_dict_get_float(self.ticker_data, "count")
-        self.ask_volume = from_dict_get_float(self.ticker_data, "askVolume")
-        self.bid_volume = from_dict_get_float(self.ticker_data, "bidVolume")
+        self.ticker_symbol_name = from_dict_get_string(ticker_data, "symbol")
+        self.server_time = from_dict_get_float(ticker_data, "timestamp")
+        self.last_price = from_dict_get_float(ticker_data, "last")
+        self.bid_price = from_dict_get_float(ticker_data, "bid")
+        self.ask_price = from_dict_get_float(ticker_data, "ask")
+        self.last_volume = from_dict_get_float(ticker_data, "volume")
+        self.high_price = from_dict_get_float(ticker_data, "high")
+        self.low_price = from_dict_get_float(ticker_data, "low")
+        self.open_price = from_dict_get_float(ticker_data, "open")
+        self.price_change = from_dict_get_float(ticker_data, "volume")
+        self.price_change_percent = from_dict_get_float(ticker_data, "volumeQuote")
+        self.count = from_dict_get_float(ticker_data, "count")
+        self.ask_volume = from_dict_get_float(ticker_data, "askVolume")
+        self.bid_volume = from_dict_get_float(ticker_data, "bidVolume")
 
         self.has_been_init_data = True
+        return self
 
     def get_all_data(self) -> dict[str, Any]:
         if self.all_data is None:
@@ -95,7 +103,7 @@ class HitBtcRequestTickerData(TickerData):
                 "price_change_percent": self.price_change_percent,
                 "count": self.count,
             }
-        return self.all_data
+        return self.all_data or {}
 
     def get_exchange_name(self) -> str:
         """Get exchange name."""

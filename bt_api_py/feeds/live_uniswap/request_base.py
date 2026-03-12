@@ -28,7 +28,7 @@ class UniswapRequestData(Feed):
     """
 
     @classmethod
-    def _capabilities(cls):
+    def _capabilities(cls) -> set[Capability]:
         """Declare supported capabilities for Uniswap."""
         return {
             Capability.GET_TICK,
@@ -41,7 +41,7 @@ class UniswapRequestData(Feed):
             Capability.CANCEL_ORDER,
         }
 
-    def __init__(self, data_queue, **kwargs):
+    def __init__(self, data_queue: Any = None, **kwargs: Any) -> None:
         super().__init__(data_queue, **kwargs)
         self.data_queue = data_queue
         self.exchange_name = kwargs.get("exchange_name", "UNISWAP___DEX")
@@ -251,11 +251,9 @@ class UniswapRequestData(Feed):
 
     def connect(self) -> None:
         """No-op for HTTP-based GraphQL API."""
-        pass
 
     def disconnect(self) -> None:
         """No-op for HTTP-based GraphQL API."""
-        pass
 
     def is_connected(self) -> bool:
         """Always return True for HTTP-based GraphQL API."""

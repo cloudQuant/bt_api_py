@@ -13,26 +13,24 @@ class DydxTickerData(TickerData):
         super().__init__(ticker_info, has_been_json_encoded)
         self.exchange_name = "DYDX"  # 交易所名称
         self.local_update_time = time.time()
-        self.ticker_data = ticker_info if has_been_json_encoded else None
-        self.ticker_symbol_name = None
-        self.has_been_init_data = False  # 本地时间戳
+        self.ticker_data: dict[str, Any] | None = ticker_info if has_been_json_encoded else None
+        self.ticker_symbol_name: str | None = None
+        self.has_been_init_data = False
         self.symbol_name = symbol_name
-        self.asset_type = asset_type  # ticker的类型
-        self.ticker_data = ticker_info if has_been_json_encoded else None
-        self.ticker_symbol_name = None
-        self.server_time = None
-        self.last_price = None
-        self.last_volume = None
-        self.high_24h = None
-        self.low_24h = None
-        self.volume_24h = None
-        self.volume_24h_usd = None
-        self.funding_rate = None
-        self.next_funding_rate = None
-        self.next_funding_at = None
-        self.mark_price = None
-        self.oracle_price = None
-        self.all_data = None
+        self.asset_type = asset_type
+        self.server_time: float | str | None = None
+        self.last_price: float | None = None
+        self.last_volume: float | None = None
+        self.high_24h: float | None = None
+        self.low_24h: float | None = None
+        self.volume_24h: float | None = None
+        self.volume_24h_usd: float | None = None
+        self.funding_rate: float | None = None
+        self.next_funding_rate: float | None = None
+        self.next_funding_at: str | None = None
+        self.mark_price: float | None = None
+        self.oracle_price: float | None = None
+        self.all_data: dict[str, Any] | None = None
         self.has_been_init_data = False
 
     def init_data(self) -> "Self":
@@ -59,7 +57,7 @@ class DydxTickerData(TickerData):
                 "mark_price": self.mark_price,
                 "oracle_price": self.oracle_price,
             }
-        return self.all_data
+        return self.all_data or {}
 
     def __str__(self) -> str:
         self.init_data()
@@ -69,22 +67,31 @@ class DydxTickerData(TickerData):
         return self.__str__()
 
     def get_exchange_name(self) -> str:
-        return self.exchange_name
+        return str(self.exchange_name)
 
     def get_local_update_time(self) -> float:
-        return self.local_update_time
+        return float(self.local_update_time)
 
     def get_symbol_name(self) -> str:
-        return self.symbol_name
+        return str(self.symbol_name)
 
     def get_ticker_symbol_name(self) -> str | None:
-        return self.ticker_symbol_name
+        val = self.ticker_symbol_name
+        return None if val is None else str(val)
 
     def get_asset_type(self) -> str:
-        return self.asset_type
+        return str(self.asset_type)
 
     def get_server_time(self) -> float | None:
-        return self.server_time
+        st = self.server_time
+        if st is None:
+            return None
+        if isinstance(st, (int, float)):
+            return float(st)
+        try:
+            return float(st)
+        except (TypeError, ValueError):
+            return None
 
     def get_last_price(self) -> float | None:
         return self.last_price
@@ -131,10 +138,11 @@ class DydxWssTickerData(DydxTickerData):
             return self
 
         # 处理单个 ticker 数据
-        if "markets" in self.ticker_data:
+        ticker_data = self.ticker_data or {}
+        if "markets" in ticker_data:
             # markets 响应格式
-            markets = self.ticker_data["markets"]
-            if self.symbol_name in markets:
+            markets = ticker_data["markets"]
+            if isinstance(markets, dict) and self.symbol_name in markets:
                 market_data = markets[self.symbol_name]
                 self.last_price = from_dict_get_float(market_data, "oraclePrice")
                 self.volume_24h = from_dict_get_float(market_data, "volume24H")
@@ -156,9 +164,10 @@ class DydxRequestTickerData(DydxTickerData):
             return self
 
         # 处理 perpetualMarkets 响应
-        if "markets" in self.ticker_data:
-            markets = self.ticker_data["markets"]
-            if self.symbol_name in markets:
+        ticker_data = self.ticker_data or {}
+        if "markets" in ticker_data:
+            markets = ticker_data["markets"]
+            if isinstance(markets, dict) and self.symbol_name in markets:
                 market_data = markets[self.symbol_name]
                 self.ticker_symbol_name = self.symbol_name
                 self.server_time = from_dict_get_string(market_data, "snapshotAt")

@@ -257,11 +257,9 @@ class TestBtcMarketsIntegration:
 
     def test_market_data_api(self):
         """Test market data API calls (requires network)."""
-        pass
 
     def test_trading_api(self):
         """Test trading API calls (requires API keys)."""
-        pass
 
 
 if __name__ == "__main__":

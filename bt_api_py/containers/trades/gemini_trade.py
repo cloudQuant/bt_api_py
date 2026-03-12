@@ -6,7 +6,12 @@ class GeminiRequestTradeData(RequestData):
     """Gemini Trade Data Container"""
 
     def __init__(self, data, symbol=None, asset_type=None, is_rest=True):
-        super().__init__(data)
+        extra = {
+            "exchange_name": "GEMINI",
+            "symbol_name": symbol or "",
+            "asset_type": asset_type or "",
+        }
+        super().__init__(data, extra)
         self.symbol = symbol
         self.asset_type = asset_type
         self.is_rest = is_rest

@@ -37,7 +37,6 @@ def test_ripio_req_server_time():
     """Test Ripio server time endpoint."""
     # Ripio doesn't have a dedicated server time endpoint
     # Timestamps are included in ticker responses
-    pass
 
 
 @pytest.mark.ticker
@@ -93,7 +92,6 @@ def test_ripio_async_tick_data():
 
     # Note: Ripio's current implementation uses sync requests
     # This test would require async implementation
-    pass
 
 
 @pytest.mark.kline
@@ -156,7 +154,6 @@ def test_ripio_async_kline_data():
 
     # Note: Ripio's current implementation uses sync requests
     # This test would require async implementation
-    pass
 
 
 def order_book_value_equals(order_book):

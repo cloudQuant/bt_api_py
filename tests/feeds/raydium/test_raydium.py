@@ -183,13 +183,11 @@ class TestRaydiumRequestDataSpot:
     @pytest.mark.skip(reason="Requires actual API call")
     def test_integration_get_pools(self, raydium_spot):
         """Integration test for get_pools - skipped."""
-        pass
 
     @pytest.mark.skip(reason="Requires actual API call")
     @pytest.mark.ticker
     def test_integration_get_tick(self, raydium_spot):
         """Integration test for get_tick - skipped."""
-        pass
 
 
 class TestRaydiumExchangeDataSpot:

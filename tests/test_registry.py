@@ -32,6 +32,7 @@ class TestRegistryInstance:
 
     def setup_method(self):
         self.reg = ExchangeRegistry()
+        self.reg.clear()  # Start each test with clean state (singleton shared across tests)
 
     def test_register_and_create_feed(self):
         self.reg.register_feed("TEST___SPOT", _MockFeed)
@@ -96,12 +97,13 @@ class TestRegistryInstance:
         assert self.reg.get_balance_handler("X") is None
 
     def test_instance_isolation(self):
-        """Two independent instances should not share state."""
+        """ExchangeRegistry is a singleton; reg1 and reg2 are the same instance."""
         reg1 = ExchangeRegistry()
         reg2 = ExchangeRegistry()
+        assert reg1 is reg2  # Singleton: same object
         reg1.register_feed("ONLY_IN_REG1", _MockFeed)
         assert reg1.has_exchange("ONLY_IN_REG1")
-        assert not reg2.has_exchange("ONLY_IN_REG1")
+        assert reg2.has_exchange("ONLY_IN_REG1")  # Same instance, shared state
 
 
 # ── 全局类级调用（向后兼容）测试 ─────────────────────────────────

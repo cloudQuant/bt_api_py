@@ -4,7 +4,7 @@
 """
 
 import time
-from typing import Any
+from typing import Any, cast
 
 from bt_api_py.logging_factory import get_logger
 
@@ -56,7 +56,7 @@ class DynamicLimit:
         adjustment_factors: dict[str, float],
         min_value: float | None = None,
         max_value: float | None = None,
-    ) -> Any | None:
+    ) -> None:
         self.limit_type = limit_type
         self.base_value = base_value
         self.adjustment_factors = adjustment_factors
@@ -94,7 +94,7 @@ class LimitsManager:
     5. 合规限制 - 监管要求的限制
     """
 
-    def __init__(self, config: dict[str, Any] | None = None) -> Any | None:
+    def __init__(self, config: dict[str, Any] | None = None) -> None:
         """初始化限制管理器
 
         Args:
@@ -104,9 +104,9 @@ class LimitsManager:
         self.config = config or {}
 
         # 限制存储
-        self.static_limits: dict[str, dict[str, float]] = {}  # 静态限制
+        self.static_limits: dict[str, dict[str, Any]] = {}  # 静态限制
         self.dynamic_limits: dict[str, DynamicLimit] = {}  # 动态限制
-        self.user_limits: dict[str, dict[str, float]] = {}  # 用户特定限制
+        self.user_limits: dict[str, dict[str, Any]] = {}  # 用户特定限制
         self.exchange_limits: dict[str, dict[str, float]] = {}  # 交易所限制
 
         # 限制检查历史
@@ -207,7 +207,7 @@ class LimitsManager:
         if cache_key in self.check_cache:
             cached_result = self.check_cache[cache_key]
             if int(time.time()) - cached_result["timestamp"] < self.check_cache_ttl:
-                return cached_result["result"]
+                return cast("dict[str, Any]", cached_result["result"])
 
         try:
             checks = []
@@ -378,7 +378,7 @@ class LimitsManager:
             Dict[str, Any]: 当前限制值
         """
         key = f"{exchange_name}:{account_id}"
-        current_limits = {}
+        current_limits: dict[str, Any] = {}
 
         # 获取静态限制
         if key in self.static_limits:
@@ -487,7 +487,7 @@ class LimitsManager:
         Returns:
             Dict[str, float]: 各限制的使用率
         """
-        utilization = {}
+        utilization: dict[str, float] = {}
 
         # 从最近的检查记录中计算使用率
         recent_checks = [
@@ -942,4 +942,4 @@ class LimitsManager:
 
         # 限制历史记录大小
         if len(self.check_history) > 10000:
-            self.check_history = self.check_history[-5000]
+            self.check_history = self.check_history[-5000:]

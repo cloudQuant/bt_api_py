@@ -9,7 +9,7 @@ import logging
 import logging.handlers
 import time
 import uuid
-from contextvars import ContextVar
+from contextvars import ContextVar, Token
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any, Optional, Union
@@ -79,7 +79,7 @@ class StructuredFormatter(logging.Formatter):
             event.duration_ms = record.duration_ms
 
         # Add error information
-        if record.exc_info:
+        if record.exc_info and record.exc_info[0] is not None:
             event.error = {
                 "type": record.exc_info[0].__name__,
                 "message": str(record.exc_info[1]),
@@ -143,24 +143,23 @@ class StructuredLogger:
         function: str | None = None,
         line_number: int | None = None,
         duration_ms: float | None = None,
-        **kwargs,
+        **kwargs: Any,
     ) -> None:
         """Log message with additional context."""
-        extra = {}
+        extra: dict[str, Any] = {}
         if exchange_name:
             extra["exchange_name"] = exchange_name
         if component:
             extra["component"] = component
         if function:
             extra["function"] = function
-        if line_number:
+        if line_number is not None:
             extra["line_number"] = line_number
-        if duration_ms:
+        if duration_ms is not None:
             extra["duration_ms"] = duration_ms
 
         # Add any additional kwargs to extra
-        for key, value in kwargs.items():
-            extra[key] = value
+        extra.update(kwargs)
 
         self.logger.log(level, message, extra=extra)
 
@@ -205,7 +204,7 @@ class StructuredLogger:
         if error:
             message += f" (ERROR: {error})"
 
-        metadata = {
+        metadata: dict[str, Any] = {
             "method": method,
             "endpoint": endpoint,
             "status_code": status_code,
@@ -247,7 +246,7 @@ class StructuredLogger:
         if error:
             message += f" ERROR: {error}"
 
-        metadata = {
+        metadata_dict: dict[str, Any] = {
             "event_type": event_type,
             "symbol": symbol,
             "order_id": order_id,
@@ -257,11 +256,11 @@ class StructuredLogger:
             "status": status,
         }
         if error:
-            metadata["error"] = error
+            metadata_dict["error"] = error
 
         level = logging.ERROR if error else logging.INFO
         self._log_with_context(
-            level, message, exchange_name=exchange_name, component="order", **metadata
+            level, message, exchange_name=exchange_name, component="order", **metadata_dict
         )
 
     def connection_event(
@@ -277,18 +276,18 @@ class StructuredLogger:
         if error:
             message += f" ERROR: {error}"
 
-        metadata = {
+        metadata_conn: dict[str, Any] = {
             "event_type": event_type,
             "connection_type": connection_type,
         }
         if error:
-            metadata["error"] = error
+            metadata_conn["error"] = error
         if details:
-            metadata["details"] = details
+            metadata_conn["details"] = details
 
         level = logging.ERROR if error else logging.INFO
         self._log_with_context(
-            level, message, exchange_name=exchange_name, component="connection", **metadata
+            level, message, exchange_name=exchange_name, component="connection", **metadata_conn
         )
 
     def market_data_event(
@@ -311,7 +310,7 @@ class StructuredLogger:
         if lag_ms:
             message += f" lag={lag_ms:.1f}ms"
 
-        metadata = {
+        metadata_md: dict[str, Any] = {
             "event_type": event_type,
             "data_type": data_type,
             "symbol": symbol,
@@ -320,7 +319,11 @@ class StructuredLogger:
         }
 
         self._log_with_context(
-            logging.DEBUG, message, exchange_name=exchange_name, component="market_data", **metadata
+            logging.DEBUG,
+            message,
+            exchange_name=exchange_name,
+            component="market_data",
+            **metadata_md,
         )
 
 
@@ -351,6 +354,7 @@ class LoggingManager:
         root_logger.handlers.clear()
 
         # Create formatter
+        formatter: logging.Formatter
         if json_format:
             formatter = StructuredFormatter(compact=compact_json)
         else:
@@ -367,6 +371,7 @@ class LoggingManager:
             log_path = Path(log_file)
             log_path.parent.mkdir(parents=True, exist_ok=True)
 
+            file_handler: logging.Handler
             if enable_rotation:
                 file_handler = logging.handlers.RotatingFileHandler(
                     log_path,
@@ -425,14 +430,15 @@ class _CorrelationIdContext:
 
     def __init__(self, correlation_id: str) -> None:
         self.correlation_id = correlation_id
-        self.token = None
+        self.token: Token[str | None] | None = None
 
-    def __enter__(self) -> None:
+    def __enter__(self) -> "_CorrelationIdContext":
         self.token = correlation_id_var.set(self.correlation_id)
         return self
 
     def __exit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:
-        correlation_id_var.reset(self.token)
+        if self.token is not None:
+            correlation_id_var.reset(self.token)
 
 
 # Global logging manager

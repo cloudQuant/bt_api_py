@@ -4,6 +4,8 @@ MEXC Spot Trading Feed
 Implements spot trading functionality for MEXC exchange.
 """
 
+from typing import Any
+
 from bt_api_py.containers.balances.mexc_balance import MexcRequestBalanceData
 from bt_api_py.containers.exchanges.mexc_exchange_data import MexcExchangeDataSpot
 from bt_api_py.containers.orderbooks.mexc_orderbook import MexcRequestOrderBookData
@@ -16,7 +18,7 @@ from bt_api_py.logging_factory import get_logger
 
 
 class MexcRequestDataSpot(MexcRequestData):
-    def __init__(self, data_queue, **kwargs):
+    def __init__(self, data_queue: Any = None, **kwargs: Any) -> None:
         super().__init__(data_queue, **kwargs)
         self.asset_type = kwargs.get("asset_type", "SPOT")
         self.logger_name = kwargs.get("logger_name", "mexc_spot_feed.log")
@@ -24,7 +26,7 @@ class MexcRequestDataSpot(MexcRequestData):
         self.request_logger = get_logger("mexc_spot_feed")
         self.async_logger = get_logger("mexc_spot_feed")
 
-    def _make_order(
+    def _make_order(  # type: ignore[override]
         self,
         symbol,
         vol,
@@ -314,7 +316,7 @@ class MexcRequestDataSpot(MexcRequestData):
         """
         request_type = "get_server_time"
         path = self._params.get_rest_path(request_type)
-        params = {}
+        params: dict[str, str | int] = {}
 
         extra_data = update_extra_data(
             extra_data,
@@ -351,7 +353,7 @@ class MexcRequestDataSpot(MexcRequestData):
         """
         request_type = "get_exchange_info"
         path = self._params.get_rest_path(request_type)
-        params = {}
+        params: dict[str, Any] = {}
 
         if symbol:
             params["symbol"] = self._params.get_symbol(symbol)
@@ -490,7 +492,7 @@ class MexcRequestDataSpot(MexcRequestData):
         """
         request_type = "get_open_orders"
         path = self._params.get_rest_path(request_type)
-        params = {}
+        params: dict[str, Any] = {}
 
         if symbol:
             params["symbol"] = self._params.get_symbol(symbol)
@@ -578,7 +580,7 @@ class MexcRequestDataSpot(MexcRequestData):
         """
         request_type = "get_account"
         path = self._params.get_rest_path(request_type)
-        params = {}
+        params: dict[str, str | int] = {}
 
         extra_data = update_extra_data(
             extra_data,
@@ -797,7 +799,7 @@ class MexcRequestDataSpot(MexcRequestData):
     def make_order(
         self,
         symbol,
-        vol,
+        volume,
         price=None,
         order_type="buy-limit",
         offset="open",
@@ -810,12 +812,12 @@ class MexcRequestDataSpot(MexcRequestData):
 
         Args:
             symbol (str): Trading symbol
-            vol (str): Order quantity
-            price (str, optional): Order price
-            order_type (str, optional): Order type
-            offset (str, optional): Offset type
-            post_only (bool, optional): Whether to post only
-            client_order_id (str, optional): Client order ID
+            volume: Order quantity
+            price: Order price
+            order_type: Order type
+            offset: Offset type
+            post_only: Whether to post only
+            client_order_id: Client order ID
             extra_data: Extra data for processing
             **kwargs: Additional parameters
 
@@ -824,7 +826,7 @@ class MexcRequestDataSpot(MexcRequestData):
         """
         path, params, extra_data = self._make_order(
             symbol=symbol,
-            vol=vol,
+            vol=volume,
             price=price,
             order_type=order_type,
             offset=offset,
@@ -835,7 +837,7 @@ class MexcRequestDataSpot(MexcRequestData):
         )
         return self.request(path, params=params, extra_data=extra_data, is_sign=True)
 
-    def cancel_order(self, symbol, order_id=None, client_order_id=None, extra_data=None, **kwargs):
+    def cancel_order(self, symbol, order_id=None, client_order_id=None, extra_data=None, **kwargs):  # type: ignore[override]
         """Cancel an existing order
 
         Args:
@@ -857,7 +859,7 @@ class MexcRequestDataSpot(MexcRequestData):
         )
         return self.request(path, params=params, extra_data=extra_data, is_sign=True)
 
-    def query_order(self, symbol, order_id=None, client_order_id=None, extra_data=None, **kwargs):
+    def query_order(self, symbol, order_id=None, client_order_id=None, extra_data=None, **kwargs):  # type: ignore[override]
         """Query an order's status
 
         Args:
@@ -895,7 +897,7 @@ class MexcRequestDataSpot(MexcRequestData):
         )
         return self.request(path, params=params, extra_data=extra_data, is_sign=True)
 
-    def get_account(self, extra_data=None, **kwargs):
+    def get_account(self, symbol="ALL", extra_data=None, **kwargs):
         """Get account information
 
         Args:
@@ -908,7 +910,7 @@ class MexcRequestDataSpot(MexcRequestData):
         path, params, extra_data = self._get_account(extra_data=extra_data, **kwargs)
         return self.request(path, params=params, extra_data=extra_data, is_sign=True)
 
-    def get_balance(self, extra_data=None, **kwargs):
+    def get_balance(self, symbol=None, extra_data=None, **kwargs):
         """Get balance data — delegates to get_account.
 
         Returns:
@@ -939,7 +941,7 @@ class MexcRequestDataSpot(MexcRequestData):
     def async_make_order(
         self,
         symbol,
-        vol,
+        volume,
         price=None,
         order_type="buy-limit",
         offset="open",
@@ -951,7 +953,7 @@ class MexcRequestDataSpot(MexcRequestData):
         """Place a new order asynchronously"""
         path, params, extra_data = self._make_order(
             symbol=symbol,
-            vol=vol,
+            vol=volume,
             price=price,
             order_type=order_type,
             offset=offset,
@@ -965,7 +967,7 @@ class MexcRequestDataSpot(MexcRequestData):
             callback=self.async_callback,
         )
 
-    def async_cancel_order(
+    def async_cancel_order(  # type: ignore[override]
         self, symbol, order_id=None, client_order_id=None, extra_data=None, **kwargs
     ):
         """Cancel an order asynchronously"""
@@ -981,7 +983,7 @@ class MexcRequestDataSpot(MexcRequestData):
             callback=self.async_callback,
         )
 
-    def async_query_order(
+    def async_query_order(  # type: ignore[override]
         self, symbol, order_id=None, client_order_id=None, extra_data=None, **kwargs
     ):
         """Query an order asynchronously"""
@@ -1007,7 +1009,7 @@ class MexcRequestDataSpot(MexcRequestData):
             callback=self.async_callback,
         )
 
-    def async_get_account(self, extra_data=None, **kwargs):
+    def async_get_account(self, symbol="ALL", extra_data=None, **kwargs):
         """Get account information asynchronously"""
         path, params, extra_data = self._get_account(extra_data=extra_data, **kwargs)
         self.submit(
@@ -1015,6 +1017,6 @@ class MexcRequestDataSpot(MexcRequestData):
             callback=self.async_callback,
         )
 
-    def async_get_balance(self, extra_data=None, **kwargs):
+    def async_get_balance(self, symbol=None, extra_data=None, **kwargs):
         """Get account balance asynchronously"""
         self.async_get_account(extra_data=extra_data, **kwargs)

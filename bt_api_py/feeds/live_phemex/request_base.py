@@ -30,7 +30,7 @@ class PhemexRequestData(Feed):
     """
 
     @classmethod
-    def _capabilities(cls):
+    def _capabilities(cls) -> set[Capability]:
         return {
             Capability.GET_TICK,
             Capability.GET_DEPTH,
@@ -46,7 +46,7 @@ class PhemexRequestData(Feed):
             Capability.GET_SERVER_TIME,
         }
 
-    def __init__(self, data_queue, **kwargs) -> None:
+    def __init__(self, data_queue: Any = None, **kwargs: Any) -> None:
         super().__init__(data_queue, **kwargs)
         self.data_queue = data_queue
         self.api_key = kwargs.get("public_key") or kwargs.get("api_key") or ""
@@ -92,7 +92,7 @@ class PhemexRequestData(Feed):
             is_sign: Whether to sign the request
         """
         if params is None:
-            params = {}
+            params: dict[str, Any] = {}
 
         method, endpoint = path.split(" ", 1)
         query_string = urlencode(params) if params else ""
@@ -120,7 +120,7 @@ class PhemexRequestData(Feed):
     ):
         """Async HTTP request function using Feed.async_http_request()."""
         if params is None:
-            params = {}
+            params: dict[str, Any] = {}
 
         method, endpoint = path.split(" ", 1)
         query_string = urlencode(params) if params else ""
@@ -147,7 +147,7 @@ class PhemexRequestData(Feed):
 
     def _get_server_time(self, extra_data=None, **kwargs) -> Any:
         path = self._params.get_rest_path("get_server_time")
-        params = {}
+        params: dict[str, Any] = {}
         extra_data = update_extra_data(
             extra_data,
             **{
@@ -162,7 +162,7 @@ class PhemexRequestData(Feed):
 
     def _get_exchange_info(self, extra_data=None, **kwargs) -> Any:
         path = self._params.get_rest_path("get_exchange_info")
-        params = {}
+        params: dict[str, Any] = {}
         extra_data = update_extra_data(
             extra_data,
             **{
@@ -329,7 +329,7 @@ class PhemexRequestData(Feed):
 
     def _get_account(self, extra_data=None, **kwargs) -> Any:
         path = self._params.get_rest_path("get_account")
-        params = {}
+        params: dict[str, Any] = {}
         extra_data = update_extra_data(
             extra_data,
             **{
@@ -344,7 +344,7 @@ class PhemexRequestData(Feed):
 
     def _get_balance(self, extra_data=None, **kwargs) -> Any:
         path = self._params.get_rest_path("get_balance")
-        params = {}
+        params: dict[str, Any] = {}
         extra_data = update_extra_data(
             extra_data,
             **{

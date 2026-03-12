@@ -2,6 +2,8 @@
 Kraken Spot Trading Feed Implementation
 """
 
+from typing import Any
+
 from bt_api_py.containers.balances.kraken_balance import KrakenSpotWssBalanceData
 from bt_api_py.containers.exchanges.kraken_exchange_data import KrakenExchangeDataSpot
 from bt_api_py.containers.orderbooks.kraken_orderbook import KrakenRequestOrderBookData
@@ -15,7 +17,7 @@ from bt_api_py.logging_factory import get_logger
 class KrakenRequestDataSpot(KrakenRequestData):
     """Kraken Spot Trading Feed"""
 
-    def __init__(self, data_queue, **kwargs):
+    def __init__(self, data_queue: Any = None, **kwargs: Any) -> None:
         kwargs.setdefault("asset_type", "SPOT")
         kwargs.setdefault("logger_name", "kraken_spot_feed.log")
         super().__init__(data_queue, **kwargs)
@@ -185,7 +187,7 @@ class KrakenRequestDataSpot(KrakenRequestData):
     def get_exchange_info(self, symbol=None, extra_data=None, **kwargs):
         request_type = "get_exchange_info"
         path = self._params.get_rest_path(request_type)
-        params = {}
+        params: dict[str, Any] = {}
         if symbol:
             params["pair"] = self._params.get_symbol(symbol)
         extra_data = update_extra_data(
@@ -206,7 +208,7 @@ class KrakenRequestDataSpot(KrakenRequestData):
     def _get_balance(self, extra_data=None, **kwargs):
         request_type = "get_balance"
         path = self._params.get_rest_path(request_type)
-        params = {}
+        params: dict[str, Any] = {}
         extra_data = update_extra_data(
             extra_data,
             request_type=request_type,
@@ -499,10 +501,6 @@ class KrakenRequestDataSpot(KrakenRequestData):
 class KrakenMarketWssDataSpot:
     """Placeholder for Kraken Spot Market WebSocket data handler."""
 
-    pass
-
 
 class KrakenAccountWssDataSpot:
     """Placeholder for Kraken Spot Account WebSocket data handler."""
-
-    pass

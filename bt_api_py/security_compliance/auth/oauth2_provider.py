@@ -14,9 +14,9 @@ from pathlib import Path
 from typing import Any
 
 try:
-    from cryptography.hazmat.backends import default_backend  # noqa: F401
+    from cryptography.hazmat.backends import default_backend
     from cryptography.hazmat.primitives import hashes, serialization  # noqa: F401
-    from cryptography.hazmat.primitives.asymmetric import rsa  # noqa: F401
+    from cryptography.hazmat.primitives.asymmetric import rsa
     from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC  # noqa: F401
 
     CRYPTO_AVAILABLE = True
@@ -28,8 +28,6 @@ from bt_api_py.exceptions import BtApiError
 
 class OAuthError(BtApiError):
     """OAuth 2.0 related errors."""
-
-    pass
 
 
 class GrantType(Enum):

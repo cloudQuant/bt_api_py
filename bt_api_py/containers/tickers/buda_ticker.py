@@ -5,6 +5,7 @@ import time
 from typing import Any
 
 from bt_api_py.containers.tickers.ticker import TickerData
+from bt_api_py.containers.tickers.ticker_utils import parse_float, parse_int
 
 
 class BudaRequestTickerData(TickerData):
@@ -34,15 +35,15 @@ class BudaRequestTickerData(TickerData):
         self.ticker_data: dict[str, Any] | None = (
             ticker_info if has_been_json_encoded and isinstance(ticker_info, dict) else None
         )
-        self.ticker_symbol_name = None
+        self.ticker_symbol_name: str | None = None
+        self.last_price: float | None = None
+        self.bid_price: float | None = None
+        self.ask_price: float | None = None
+        self.volume_24h: float | None = None
+        self.high_24h: float | None = None
+        self.low_24h: float | None = None
+        self.timestamp: int | None = None
         self.has_been_init_data = False
-        self.last_price = None
-        self.bid_price = None
-        self.ask_price = None
-        self.volume_24h = None
-        self.high_24h = None
-        self.low_24h = None
-        self.timestamp = None
 
     def init_data(self) -> "BudaRequestTickerData":
         """Parse Buda ticker response."""
@@ -52,66 +53,21 @@ class BudaRequestTickerData(TickerData):
         if self.has_been_init_data:
             return self
 
-        # Initialize all attributes to None
-        self.ticker_symbol_name = None
-        self.last_price = None
-        self.bid_price = None
-        self.ask_price = None
-        self.volume_24h = None
-        self.high_24h = None
-        self.low_24h = None
-        self.timestamp = None
-
-        ticker = self.ticker_data.get("ticker", {})
+        data = self.ticker_data or {}
+        ticker = data.get("ticker", {})
 
         if ticker:
             self.ticker_symbol_name = ticker.get("market_id")
-            self.last_price = self._parse_float(ticker.get("last_price", [0])[0])
-            self.bid_price = self._parse_float(ticker.get("min_ask", [0])[0])
-            self.ask_price = self._parse_float(ticker.get("max_bid", [0])[0])
-            self.volume_24h = self._parse_float(ticker.get("volume", [0])[0])
-            self.high_24h = self._parse_float(ticker.get("max_price", [0])[0])
-            self.low_24h = self._parse_float(ticker.get("min_price", [0])[0])
-            self.timestamp = self._parse_int(ticker.get("timestamp"))
+            self.last_price = parse_float(ticker.get("last_price", [0])[0])
+            self.bid_price = parse_float(ticker.get("min_ask", [0])[0])
+            self.ask_price = parse_float(ticker.get("max_bid", [0])[0])
+            self.volume_24h = parse_float(ticker.get("volume", [0])[0])
+            self.high_24h = parse_float(ticker.get("max_price", [0])[0])
+            self.low_24h = parse_float(ticker.get("min_price", [0])[0])
+            self.timestamp = parse_int(ticker.get("timestamp"))
 
         self.has_been_init_data = True
         return self
-
-    @staticmethod
-    def _parse_float(value: Any) -> float | None:
-        """Parse value to float.
-
-        Args:
-            value: Value to parse.
-
-        Returns:
-            Parsed float value or None if parsing fails.
-
-        """
-        if value is None:
-            return None
-        try:
-            return float(value)
-        except (ValueError, TypeError):
-            return None
-
-    @staticmethod
-    def _parse_int(value: Any) -> int | None:
-        """Parse value to int.
-
-        Args:
-            value: Value to parse.
-
-        Returns:
-            Parsed int value or None if parsing fails.
-
-        """
-        if value is None:
-            return None
-        try:
-            return int(value)
-        except (ValueError, TypeError):
-            return None
 
     def get_exchange_name(self) -> str:
         return self.exchange_name

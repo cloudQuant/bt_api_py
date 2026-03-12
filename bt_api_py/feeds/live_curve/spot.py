@@ -4,6 +4,8 @@ Curve Spot Feed implementation.
 Provides market data for Curve DEX pools.
 """
 
+from typing import Any
+
 from bt_api_py.containers.exchanges.curve_exchange_data import CurveChain
 from bt_api_py.feeds.capability import Capability
 from bt_api_py.feeds.live_curve.request_base import CurveRequestData
@@ -14,7 +16,7 @@ class CurveRequestDataSpot(CurveRequestData):
     """Curve DEX Feed for pool data."""
 
     @classmethod
-    def _capabilities(cls):
+    def _capabilities(cls) -> set[Capability]:
         return {
             Capability.GET_TICK,
             Capability.GET_DEPTH,
@@ -26,7 +28,7 @@ class CurveRequestDataSpot(CurveRequestData):
             Capability.CANCEL_ORDER,
         }
 
-    def __init__(self, data_queue, **kwargs) -> None:
+    def __init__(self, data_queue: Any = None, **kwargs: Any) -> None:
         super().__init__(data_queue, **kwargs)
         self.exchange_name = kwargs.get("exchange_name", "CURVE___DEX")
 

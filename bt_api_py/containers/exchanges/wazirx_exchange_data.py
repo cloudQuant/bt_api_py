@@ -27,7 +27,7 @@ def _load_wazirx_yaml() -> Any | None:
             with open(cfg_path, encoding="utf-8") as f:
                 _wazirx_yaml_cache = yaml.safe_load(f) or {}
     except Exception as e:
-        logger.warn(f"Failed to load wazirx.yaml: {e}")
+        logger.warning(f"Failed to load wazirx.yaml: {e}")
         _wazirx_yaml_cache = {}
     return _wazirx_yaml_cache
 
@@ -104,7 +104,7 @@ class WazirxExchangeDataSpot(WazirxExchangeData):
         self._load_yaml()
 
     def _load_yaml(self) -> None:
-        cfg = _load_wazirx_yaml()
+        cfg = _load_wazirx_yaml() or {}
         spot = cfg.get("WAZIRX___SPOT", {})
         if not spot:
             return

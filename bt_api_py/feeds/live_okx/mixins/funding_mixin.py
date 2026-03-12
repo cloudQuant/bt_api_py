@@ -3,6 +3,7 @@ OKX API - FundingMixin
 Auto-generated from request_base.py
 """
 
+from collections.abc import Callable
 from typing import Any
 
 from bt_api_py.feeds.live_okx.mixins.normalizers import generic_normalize_function
@@ -12,12 +13,22 @@ from bt_api_py.functions.utils import update_extra_data
 class FundingMixin:
     """Mixin providing OKX API methods."""
 
+    _params: Any
+    asset_type: str
+    exchange_name: str
+    request: Callable[..., Any]
+    submit: Callable[..., Any]
+    async_request: Callable[..., Any]
+    async_callback: Callable[..., Any]
+
     # ==================== Missing Funding Account APIs ====================
 
-    def _get_currencies(self, ccy: Any = None, extra_data: Any = None, **kwargs: Any) -> None:
+    def _get_currencies(
+        self, ccy: Any = None, extra_data: Any = None, **kwargs: Any
+    ) -> tuple[str, dict[str, Any], dict[str, Any]]:
         """Get currencies"""
         request_type = "get_currencies"
-        params = {}
+        params: dict[str, Any] = {}
         if ccy:
             params["ccy"] = ccy
         path = self._params.get_rest_path(request_type)
@@ -35,7 +46,7 @@ class FundingMixin:
             extra_data.update(kwargs)
         return path, params, extra_data
 
-    def get_currencies(self, ccy: Any = None, extra_data: Any = None, **kwargs: Any) -> None:
+    def get_currencies(self, ccy: Any = None, extra_data: Any = None, **kwargs: Any) -> Any:
         """Get currencies"""
         path, params, extra_data = self._get_currencies(ccy, extra_data, **kwargs)
         data = self.request(path, params=params, extra_data=extra_data)
@@ -49,10 +60,12 @@ class FundingMixin:
             callback=self.async_callback,
         )
 
-    def _get_asset_balances(self, ccy: Any = None, extra_data: Any = None, **kwargs: Any) -> None:
+    def _get_asset_balances(
+        self, ccy: Any = None, extra_data: Any = None, **kwargs: Any
+    ) -> tuple[str, dict[str, Any], dict[str, Any]]:
         """Get asset balances"""
         request_type = "get_asset_balances"
-        params = {}
+        params: dict[str, Any] = {}
         if ccy:
             params["ccy"] = ccy
         path = self._params.get_rest_path(request_type)
@@ -70,7 +83,7 @@ class FundingMixin:
             extra_data.update(kwargs)
         return path, params, extra_data
 
-    def get_asset_balances(self, ccy: Any = None, extra_data: Any = None, **kwargs: Any) -> None:
+    def get_asset_balances(self, ccy: Any = None, extra_data: Any = None, **kwargs: Any) -> Any:
         """Get asset balances"""
         path, params, extra_data = self._get_asset_balances(ccy, extra_data, **kwargs)
         data = self.request(path, params=params, extra_data=extra_data)
@@ -88,10 +101,10 @@ class FundingMixin:
 
     def _get_non_tradable_assets(
         self, ccy: Any = None, extra_data: Any = None, **kwargs: Any
-    ) -> None:
+    ) -> tuple[str, dict[str, Any], dict[str, Any]]:
         """Get non-tradable assets"""
         request_type = "get_non_tradable_assets"
-        params = {}
+        params: dict[str, Any] = {}
         if ccy:
             params["ccy"] = ccy
         path = self._params.get_rest_path(request_type)
@@ -111,7 +124,7 @@ class FundingMixin:
 
     def get_non_tradable_assets(
         self, ccy: Any = None, extra_data: Any = None, **kwargs: Any
-    ) -> None:
+    ) -> Any:
         """Get non-tradable assets"""
         path, params, extra_data = self._get_non_tradable_assets(ccy, extra_data, **kwargs)
         data = self.request(path, params=params, extra_data=extra_data)
@@ -127,10 +140,12 @@ class FundingMixin:
             callback=self.async_callback,
         )
 
-    def _get_asset_valuation(self, ccy: Any = None, extra_data: Any = None, **kwargs: Any) -> None:
+    def _get_asset_valuation(
+        self, ccy: Any = None, extra_data: Any = None, **kwargs: Any
+    ) -> tuple[str, dict[str, Any], dict[str, Any]]:
         """Get asset valuation"""
         request_type = "get_asset_valuation"
-        params = {}
+        params: dict[str, Any] = {}
         if ccy:
             params["ccy"] = ccy
         path = self._params.get_rest_path(request_type)
@@ -148,7 +163,7 @@ class FundingMixin:
             extra_data.update(kwargs)
         return path, params, extra_data
 
-    def get_asset_valuation(self, ccy: Any = None, extra_data: Any = None, **kwargs: Any) -> None:
+    def get_asset_valuation(self, ccy: Any = None, extra_data: Any = None, **kwargs: Any) -> Any:
         """Get asset valuation"""
         path, params, extra_data = self._get_asset_valuation(ccy, extra_data, **kwargs)
         data = self.request(path, params=params, extra_data=extra_data)
@@ -174,7 +189,7 @@ class FundingMixin:
         client_bill_id: Any = None,
         extra_data: Any = None,
         **kwargs: Any,
-    ) -> None:
+    ) -> tuple[str, dict[str, Any], dict[str, Any]]:
         """Asset transfer"""
         request_type = "transfer"
         params = {
@@ -214,7 +229,7 @@ class FundingMixin:
         client_bill_id: Any = None,
         extra_data: Any = None,
         **kwargs: Any,
-    ) -> None:
+    ) -> Any:
         """Asset transfer"""
         path, params, extra_data = self._transfer(
             ccy, amt, from_acct, to_acct, type, client_bill_id, extra_data, **kwargs
@@ -249,10 +264,10 @@ class FundingMixin:
         type: Any = None,
         extra_data: Any = None,
         **kwargs: Any,
-    ) -> None:
+    ) -> tuple[str, dict[str, Any], dict[str, Any]]:
         """Get transfer state"""
         request_type = "get_transfer_state"
-        params = {}
+        params: dict[str, Any] = {}
         if transfer_id:
             params["transId"] = transfer_id
         if client_bill_id:
@@ -281,7 +296,7 @@ class FundingMixin:
         type: Any = None,
         extra_data: Any = None,
         **kwargs: Any,
-    ) -> None:
+    ) -> Any:
         """Get transfer state"""
         path, params, extra_data = self._get_transfer_state(
             transfer_id, client_bill_id, type, extra_data, **kwargs
@@ -315,10 +330,10 @@ class FundingMixin:
         limit: Any = None,
         extra_data: Any = None,
         **kwargs: Any,
-    ) -> None:
+    ) -> tuple[str, dict[str, Any], dict[str, Any]]:
         """Get asset bills"""
         request_type = "get_asset_bills"
-        params = {}
+        params: dict[str, Any] = {}
         if ccy:
             params["ccy"] = ccy
         if type:
@@ -353,7 +368,7 @@ class FundingMixin:
         limit: Any = None,
         extra_data: Any = None,
         **kwargs: Any,
-    ) -> None:
+    ) -> Any:
         """Get asset bills"""
         path, params, extra_data = self._get_asset_bills(
             ccy, type, after, before, limit, extra_data, **kwargs
@@ -389,10 +404,10 @@ class FundingMixin:
         limit: Any = None,
         extra_data: Any = None,
         **kwargs: Any,
-    ) -> None:
+    ) -> tuple[str, dict[str, Any], dict[str, Any]]:
         """Get asset bills history"""
         request_type = "get_asset_bills_history"
-        params = {}
+        params: dict[str, Any] = {}
         if ccy:
             params["ccy"] = ccy
         if type:
@@ -427,7 +442,7 @@ class FundingMixin:
         limit: Any = None,
         extra_data: Any = None,
         **kwargs: Any,
-    ) -> None:
+    ) -> Any:
         """Get asset bills history"""
         path, params, extra_data = self._get_asset_bills_history(
             ccy, type, after, before, limit, extra_data, **kwargs
@@ -456,7 +471,7 @@ class FundingMixin:
 
     def _get_deposit_address(
         self, ccy: Any, to: Any = None, chain: Any = None, extra_data: Any = None, **kwargs: Any
-    ) -> None:
+    ) -> tuple[str, dict[str, Any], dict[str, Any]]:
         """Get deposit address"""
         request_type = "get_deposit_address"
         params = {"ccy": ccy}
@@ -481,7 +496,7 @@ class FundingMixin:
 
     def get_deposit_address(
         self, ccy: Any, to: Any = None, chain: Any = None, extra_data: Any = None, **kwargs: Any
-    ) -> None:
+    ) -> Any:
         """Get deposit address"""
         path, params, extra_data = self._get_deposit_address(ccy, to, chain, extra_data, **kwargs)
         data = self.request(path, params=params, extra_data=extra_data)
@@ -505,10 +520,10 @@ class FundingMixin:
         limit: Any = None,
         extra_data: Any = None,
         **kwargs: Any,
-    ) -> None:
+    ) -> tuple[str, dict[str, Any], dict[str, Any]]:
         """Get deposit history"""
         request_type = "get_deposit_history"
-        params = {}
+        params: dict[str, Any] = {}
         if ccy:
             params["ccy"] = ccy
         if after:
@@ -540,7 +555,7 @@ class FundingMixin:
         limit: Any = None,
         extra_data: Any = None,
         **kwargs: Any,
-    ) -> None:
+    ) -> Any:
         """Get deposit history"""
         path, params, extra_data = self._get_deposit_history(
             ccy, after, before, limit, extra_data, **kwargs
@@ -574,10 +589,10 @@ class FundingMixin:
         limit: Any = None,
         extra_data: Any = None,
         **kwargs: Any,
-    ) -> None:
+    ) -> tuple[str, dict[str, Any], dict[str, Any]]:
         """Get deposit withdraw status"""
         request_type = "get_deposit_withdraw_status"
-        params = {}
+        params: dict[str, Any] = {}
         if ccy:
             params["ccy"] = ccy
         if after:
@@ -609,7 +624,7 @@ class FundingMixin:
         limit: Any = None,
         extra_data: Any = None,
         **kwargs: Any,
-    ) -> None:
+    ) -> Any:
         """Get deposit withdraw status"""
         path, params, extra_data = self._get_deposit_withdraw_status(
             ccy, after, before, limit, extra_data, **kwargs
@@ -647,7 +662,7 @@ class FundingMixin:
         client_chain_id: Any = None,
         extra_data: Any = None,
         **kwargs: Any,
-    ) -> None:
+    ) -> tuple[str, dict[str, Any], dict[str, Any]]:
         """Withdrawal"""
         request_type = "withdrawal"
         params = {
@@ -691,7 +706,7 @@ class FundingMixin:
         client_chain_id: Any = None,
         extra_data: Any = None,
         **kwargs: Any,
-    ) -> None:
+    ) -> Any:
         """Withdrawal"""
         path, params, extra_data = self._withdrawal(
             ccy, amt, dest, to_addr, fee, chain, area_code, client_chain_id, extra_data, **kwargs
@@ -723,7 +738,7 @@ class FundingMixin:
 
     def _cancel_withdrawal(
         self, wd_id: Any, ccy: Any = None, extra_data: Any = None, **kwargs: Any
-    ) -> None:
+    ) -> tuple[str, dict[str, Any], dict[str, Any]]:
         """Cancel withdrawal"""
         request_type = "cancel_withdrawal"
         params = {"wdId": wd_id}
@@ -746,7 +761,7 @@ class FundingMixin:
 
     def cancel_withdrawal(
         self, wd_id: Any, ccy: Any = None, extra_data: Any = None, **kwargs: Any
-    ) -> None:
+    ) -> Any:
         """Cancel withdrawal"""
         path, params, extra_data = self._cancel_withdrawal(wd_id, ccy, extra_data, **kwargs)
         data = self.request(path, body=params, extra_data=extra_data)
@@ -770,10 +785,10 @@ class FundingMixin:
         limit: Any = None,
         extra_data: Any = None,
         **kwargs: Any,
-    ) -> None:
+    ) -> tuple[str, dict[str, Any], dict[str, Any]]:
         """Get withdrawal history"""
         request_type = "get_withdrawal_history"
-        params = {}
+        params: dict[str, Any] = {}
         if ccy:
             params["ccy"] = ccy
         if after:
@@ -805,7 +820,7 @@ class FundingMixin:
         limit: Any = None,
         extra_data: Any = None,
         **kwargs: Any,
-    ) -> None:
+    ) -> Any:
         """Get withdrawal history"""
         path, params, extra_data = self._get_withdrawal_history(
             ccy, after, before, limit, extra_data, **kwargs
@@ -833,10 +848,12 @@ class FundingMixin:
 
     # ==================== Funding Account (P2) - Remaining Interfaces ====================
 
-    def _get_exchange_list(self, ccy: Any = None, extra_data: Any = None, **kwargs: Any) -> None:
+    def _get_exchange_list(
+        self, ccy: Any = None, extra_data: Any = None, **kwargs: Any
+    ) -> tuple[str, dict[str, Any], dict[str, Any]]:
         """Get exchange list"""
         request_type = "get_exchange_list"
-        params = {}
+        params: dict[str, Any] = {}
         if ccy:
             params["ccy"] = ccy
         path = self._params.get_rest_path(request_type)
@@ -854,7 +871,7 @@ class FundingMixin:
             extra_data.update(kwargs)
         return path, params, extra_data
 
-    def get_exchange_list(self, ccy: Any = None, extra_data: Any = None, **kwargs: Any) -> None:
+    def get_exchange_list(self, ccy: Any = None, extra_data: Any = None, **kwargs: Any) -> Any:
         """Get exchange list"""
         path, params, extra_data = self._get_exchange_list(ccy, extra_data, **kwargs)
         data = self.request(path, params=params, extra_data=extra_data)
@@ -872,10 +889,10 @@ class FundingMixin:
 
     def _apply_monthly_statement(
         self, month: Any = None, extra_data: Any = None, **kwargs: Any
-    ) -> None:
+    ) -> tuple[str, dict[str, Any], dict[str, Any]]:
         """Apply for monthly statement (last year)"""
         request_type = "apply_monthly_statement"
-        params = {}
+        params: dict[str, Any] = {}
         if month:
             params["month"] = month
         path = self._params.get_rest_path(request_type)
@@ -895,7 +912,7 @@ class FundingMixin:
 
     def apply_monthly_statement(
         self, month: Any = None, extra_data: Any = None, **kwargs: Any
-    ) -> None:
+    ) -> Any:
         """Apply for monthly statement (last year)"""
         path, params, extra_data = self._apply_monthly_statement(month, extra_data, **kwargs)
         data = self.request(path, body=params, extra_data=extra_data)
@@ -913,10 +930,10 @@ class FundingMixin:
 
     def _get_monthly_statement(
         self, month: Any = None, extra_data: Any = None, **kwargs: Any
-    ) -> None:
+    ) -> tuple[str, dict[str, Any], dict[str, Any]]:
         """Get monthly statement (last year)"""
         request_type = "get_monthly_statement"
-        params = {}
+        params: dict[str, Any] = {}
         if month:
             params["month"] = month
         path = self._params.get_rest_path(request_type)
@@ -936,7 +953,7 @@ class FundingMixin:
 
     def get_monthly_statement(
         self, month: Any = None, extra_data: Any = None, **kwargs: Any
-    ) -> None:
+    ) -> Any:
         """Get monthly statement (last year)"""
         path, params, extra_data = self._get_monthly_statement(month, extra_data, **kwargs)
         data = self.request(path, params=params, extra_data=extra_data)
@@ -952,10 +969,12 @@ class FundingMixin:
             callback=self.async_callback,
         )
 
-    def _get_convert_currencies(self, extra_data: Any = None, **kwargs: Any) -> None:
+    def _get_convert_currencies(
+        self, extra_data: Any = None, **kwargs: Any
+    ) -> tuple[str, dict[str, Any], dict[str, Any]]:
         """Get convert currencies list"""
         request_type = "get_convert_currencies"
-        params = {}
+        params: dict[str, Any] = {}
         path = self._params.get_rest_path(request_type)
         extra_data = update_extra_data(
             extra_data,
@@ -971,7 +990,7 @@ class FundingMixin:
             extra_data.update(kwargs)
         return path, params, extra_data
 
-    def get_convert_currencies(self, extra_data: Any = None, **kwargs: Any) -> None:
+    def get_convert_currencies(self, extra_data: Any = None, **kwargs: Any) -> Any:
         """Get convert currencies list"""
         path, params, extra_data = self._get_convert_currencies(extra_data, **kwargs)
         data = self.request(path, params=params, extra_data=extra_data)
@@ -987,10 +1006,10 @@ class FundingMixin:
 
     def _get_convert_currency_pair(
         self, from_ccy: Any = None, to_ccy: Any = None, extra_data: Any = None, **kwargs: Any
-    ) -> None:
+    ) -> tuple[str, dict[str, Any], dict[str, Any]]:
         """Get convert currency pair"""
         request_type = "get_convert_currency_pair"
-        params = {}
+        params: dict[str, Any] = {}
         if from_ccy:
             params["fromCcy"] = from_ccy
         if to_ccy:
@@ -1012,7 +1031,7 @@ class FundingMixin:
 
     def get_convert_currency_pair(
         self, from_ccy: Any = None, to_ccy: Any = None, extra_data: Any = None, **kwargs: Any
-    ) -> None:
+    ) -> Any:
         """Get convert currency pair"""
         path, params, extra_data = self._get_convert_currency_pair(
             from_ccy, to_ccy, extra_data, **kwargs
@@ -1040,7 +1059,7 @@ class FundingMixin:
         type: Any = "buy",
         extra_data: Any = None,
         **kwargs: Any,
-    ) -> None:
+    ) -> tuple[str, dict[str, Any], dict[str, Any]]:
         """Convert estimate quote"""
         request_type = "convert_estimate_quote"
         params = {
@@ -1072,7 +1091,7 @@ class FundingMixin:
         type: Any = "buy",
         extra_data: Any = None,
         **kwargs: Any,
-    ) -> None:
+    ) -> Any:
         """Convert estimate quote"""
         path, params, extra_data = self._convert_estimate_quote(
             from_ccy, to_ccy, amount, type, extra_data, **kwargs
@@ -1106,7 +1125,7 @@ class FundingMixin:
         type: Any = "buy",
         extra_data: Any = None,
         **kwargs: Any,
-    ) -> None:
+    ) -> tuple[str, dict[str, Any], dict[str, Any]]:
         """Convert trade"""
         request_type = "convert_trade"
         params = {
@@ -1138,7 +1157,7 @@ class FundingMixin:
         type: Any = "buy",
         extra_data: Any = None,
         **kwargs: Any,
-    ) -> None:
+    ) -> Any:
         """Convert trade"""
         path, params, extra_data = self._convert_trade(
             from_ccy, to_ccy, amount, type, extra_data, **kwargs
@@ -1171,10 +1190,10 @@ class FundingMixin:
         limit: Any = None,
         extra_data: Any = None,
         **kwargs: Any,
-    ) -> None:
+    ) -> tuple[str, dict[str, Any], dict[str, Any]]:
         """Get convert history"""
         request_type = "get_convert_history"
-        params = {}
+        params: dict[str, Any] = {}
         if after:
             params["after"] = after
         if before:
@@ -1203,7 +1222,7 @@ class FundingMixin:
         limit: Any = None,
         extra_data: Any = None,
         **kwargs: Any,
-    ) -> None:
+    ) -> Any:
         """Get convert history"""
         path, params, extra_data = self._get_convert_history(
             after, before, limit, extra_data, **kwargs
@@ -1230,10 +1249,10 @@ class FundingMixin:
 
     def _get_deposit_payment_methods(
         self, ccy: Any = None, extra_data: Any = None, **kwargs: Any
-    ) -> None:
+    ) -> tuple[str, dict[str, Any], dict[str, Any]]:
         """Get deposit payment methods"""
         request_type = "get_deposit_payment_methods"
-        params = {}
+        params: dict[str, Any] = {}
         if ccy:
             params["ccy"] = ccy
         path = self._params.get_rest_path(request_type)
@@ -1253,7 +1272,7 @@ class FundingMixin:
 
     def get_deposit_payment_methods(
         self, ccy: Any = None, extra_data: Any = None, **kwargs: Any
-    ) -> None:
+    ) -> Any:
         """Get deposit payment methods"""
         path, params, extra_data = self._get_deposit_payment_methods(ccy, extra_data, **kwargs)
         data = self.request(path, params=params, extra_data=extra_data)
@@ -1271,10 +1290,10 @@ class FundingMixin:
 
     def _get_withdrawal_payment_methods(
         self, ccy: Any = None, extra_data: Any = None, **kwargs: Any
-    ) -> None:
+    ) -> tuple[str, dict[str, Any], dict[str, Any]]:
         """Get withdrawal payment methods"""
         request_type = "get_withdrawal_payment_methods"
-        params = {}
+        params: dict[str, Any] = {}
         if ccy:
             params["ccy"] = ccy
         path = self._params.get_rest_path(request_type)
@@ -1294,7 +1313,7 @@ class FundingMixin:
 
     def get_withdrawal_payment_methods(
         self, ccy: Any = None, extra_data: Any = None, **kwargs: Any
-    ) -> None:
+    ) -> Any:
         """Get withdrawal payment methods"""
         path, params, extra_data = self._get_withdrawal_payment_methods(ccy, extra_data, **kwargs)
         data = self.request(path, params=params, extra_data=extra_data)
@@ -1322,7 +1341,7 @@ class FundingMixin:
         area_code: Any = None,
         extra_data: Any = None,
         **kwargs: Any,
-    ) -> None:
+    ) -> tuple[str, dict[str, Any], dict[str, Any]]:
         """Create withdrawal order"""
         request_type = "create_withdrawal_order"
         params = {
@@ -1367,7 +1386,7 @@ class FundingMixin:
         area_code: Any = None,
         extra_data: Any = None,
         **kwargs: Any,
-    ) -> None:
+    ) -> Any:
         """Create withdrawal order"""
         path, params, extra_data = self._create_withdrawal_order(
             ccy, amt, dest, to_addr, pwd, fee, chain, area_code, extra_data, **kwargs
@@ -1397,7 +1416,9 @@ class FundingMixin:
             callback=self.async_callback,
         )
 
-    def _cancel_withdrawal_order(self, wd_id: Any, extra_data: Any = None, **kwargs: Any) -> None:
+    def _cancel_withdrawal_order(
+        self, wd_id: Any, extra_data: Any = None, **kwargs: Any
+    ) -> tuple[str, dict[str, Any], dict[str, Any]]:
         """Cancel withdrawal order"""
         request_type = "cancel_withdrawal_order"
         params = {
@@ -1418,7 +1439,7 @@ class FundingMixin:
             extra_data.update(kwargs)
         return path, params, extra_data
 
-    def cancel_withdrawal_order(self, wd_id: Any, extra_data: Any = None, **kwargs: Any) -> None:
+    def cancel_withdrawal_order(self, wd_id: Any, extra_data: Any = None, **kwargs: Any) -> Any:
         """Cancel withdrawal order"""
         path, params, extra_data = self._cancel_withdrawal_order(wd_id, extra_data, **kwargs)
         data = self.request(path, body=params, extra_data=extra_data)
@@ -1443,10 +1464,10 @@ class FundingMixin:
         limit: Any = None,
         extra_data: Any = None,
         **kwargs: Any,
-    ) -> None:
+    ) -> tuple[str, dict[str, Any], dict[str, Any]]:
         """Get withdrawal order history"""
         request_type = "get_withdrawal_order_history"
-        params = {}
+        params: dict[str, Any] = {}
         if ccy:
             params["ccy"] = ccy
         if wd_id:
@@ -1481,7 +1502,7 @@ class FundingMixin:
         limit: Any = None,
         extra_data: Any = None,
         **kwargs: Any,
-    ) -> None:
+    ) -> Any:
         """Get withdrawal order history"""
         path, params, extra_data = self._get_withdrawal_order_history(
             ccy, wd_id, after, before, limit, extra_data, **kwargs
@@ -1510,7 +1531,7 @@ class FundingMixin:
 
     def _get_withdrawal_order_detail(
         self, wd_id: Any, extra_data: Any = None, **kwargs: Any
-    ) -> None:
+    ) -> tuple[str, dict[str, Any], dict[str, Any]]:
         """Get withdrawal order detail"""
         request_type = "get_withdrawal_order_detail"
         params = {
@@ -1531,9 +1552,7 @@ class FundingMixin:
             extra_data.update(kwargs)
         return path, params, extra_data
 
-    def get_withdrawal_order_detail(
-        self, wd_id: Any, extra_data: Any = None, **kwargs: Any
-    ) -> None:
+    def get_withdrawal_order_detail(self, wd_id: Any, extra_data: Any = None, **kwargs: Any) -> Any:
         """Get withdrawal order detail"""
         path, params, extra_data = self._get_withdrawal_order_detail(wd_id, extra_data, **kwargs)
         data = self.request(path, params=params, extra_data=extra_data)
@@ -1558,10 +1577,10 @@ class FundingMixin:
         limit: Any = None,
         extra_data: Any = None,
         **kwargs: Any,
-    ) -> None:
+    ) -> tuple[str, dict[str, Any], dict[str, Any]]:
         """Get deposit order history"""
         request_type = "get_deposit_order_history"
-        params = {}
+        params: dict[str, Any] = {}
         if ccy:
             params["ccy"] = ccy
         if dep_id:
@@ -1596,7 +1615,7 @@ class FundingMixin:
         limit: Any = None,
         extra_data: Any = None,
         **kwargs: Any,
-    ) -> None:
+    ) -> Any:
         """Get deposit order history"""
         path, params, extra_data = self._get_deposit_order_history(
             ccy, dep_id, after, before, limit, extra_data, **kwargs
@@ -1623,7 +1642,9 @@ class FundingMixin:
             callback=self.async_callback,
         )
 
-    def _get_deposit_order_detail(self, dep_id: Any, extra_data: Any = None, **kwargs: Any) -> None:
+    def _get_deposit_order_detail(
+        self, dep_id: Any, extra_data: Any = None, **kwargs: Any
+    ) -> tuple[str, dict[str, Any], dict[str, Any]]:
         """Get deposit order detail"""
         request_type = "get_deposit_order_detail"
         params = {
@@ -1644,7 +1665,7 @@ class FundingMixin:
             extra_data.update(kwargs)
         return path, params, extra_data
 
-    def get_deposit_order_detail(self, dep_id: Any, extra_data: Any = None, **kwargs: Any) -> None:
+    def get_deposit_order_detail(self, dep_id: Any, extra_data: Any = None, **kwargs: Any) -> Any:
         """Get deposit order detail"""
         path, params, extra_data = self._get_deposit_order_detail(dep_id, extra_data, **kwargs)
         data = self.request(path, params=params, extra_data=extra_data)
@@ -1660,10 +1681,12 @@ class FundingMixin:
             callback=self.async_callback,
         )
 
-    def _get_buy_sell_currencies(self, extra_data: Any = None, **kwargs: Any) -> None:
+    def _get_buy_sell_currencies(
+        self, extra_data: Any = None, **kwargs: Any
+    ) -> tuple[str, dict[str, Any], dict[str, Any]]:
         """Get buy/sell currencies list"""
         request_type = "get_buy_sell_currencies"
-        params = {}
+        params: dict[str, Any] = {}
         path = self._params.get_rest_path(request_type)
         extra_data = update_extra_data(
             extra_data,
@@ -1679,7 +1702,7 @@ class FundingMixin:
             extra_data.update(kwargs)
         return path, params, extra_data
 
-    def get_buy_sell_currencies(self, extra_data: Any = None, **kwargs: Any) -> None:
+    def get_buy_sell_currencies(self, extra_data: Any = None, **kwargs: Any) -> Any:
         """Get buy/sell currencies list"""
         path, params, extra_data = self._get_buy_sell_currencies(extra_data, **kwargs)
         data = self.request(path, params=params, extra_data=extra_data)
@@ -1693,10 +1716,12 @@ class FundingMixin:
             callback=self.async_callback,
         )
 
-    def _get_buy_sell_currency_pair(self, extra_data: Any = None, **kwargs: Any) -> None:
+    def _get_buy_sell_currency_pair(
+        self, extra_data: Any = None, **kwargs: Any
+    ) -> tuple[str, dict[str, Any], dict[str, Any]]:
         """Get buy/sell currency pair"""
         request_type = "get_buy_sell_currency_pair"
-        params = {}
+        params: dict[str, Any] = {}
         path = self._params.get_rest_path(request_type)
         extra_data = update_extra_data(
             extra_data,
@@ -1712,7 +1737,7 @@ class FundingMixin:
             extra_data.update(kwargs)
         return path, params, extra_data
 
-    def get_buy_sell_currency_pair(self, extra_data: Any = None, **kwargs: Any) -> None:
+    def get_buy_sell_currency_pair(self, extra_data: Any = None, **kwargs: Any) -> Any:
         """Get buy/sell currency pair"""
         path, params, extra_data = self._get_buy_sell_currency_pair(extra_data, **kwargs)
         data = self.request(path, params=params, extra_data=extra_data)
@@ -1734,7 +1759,7 @@ class FundingMixin:
         amount: Any = None,
         extra_data: Any = None,
         **kwargs: Any,
-    ) -> None:
+    ) -> tuple[str, dict[str, Any], dict[str, Any]]:
         """Get buy/sell quote"""
         request_type = "get_buy_sell_quote"
         params = {
@@ -1767,7 +1792,7 @@ class FundingMixin:
         amount: Any = None,
         extra_data: Any = None,
         **kwargs: Any,
-    ) -> None:
+    ) -> Any:
         """Get buy/sell quote"""
         path, params, extra_data = self._get_buy_sell_quote(
             side, quote_ccy, base_ccy, amount, extra_data, **kwargs
@@ -1802,7 +1827,7 @@ class FundingMixin:
         quote_id: Any = None,
         extra_data: Any = None,
         **kwargs: Any,
-    ) -> None:
+    ) -> tuple[str, dict[str, Any], dict[str, Any]]:
         """Buy/sell trade"""
         request_type = "buy_sell_trade"
         params = {
@@ -1837,7 +1862,7 @@ class FundingMixin:
         quote_id: Any = None,
         extra_data: Any = None,
         **kwargs: Any,
-    ) -> None:
+    ) -> Any:
         """Buy/sell trade"""
         path, params, extra_data = self._buy_sell_trade(
             side, quote_ccy, base_ccy, amount, quote_id, extra_data, **kwargs
@@ -1871,10 +1896,10 @@ class FundingMixin:
         limit: Any = None,
         extra_data: Any = None,
         **kwargs: Any,
-    ) -> None:
+    ) -> tuple[str, dict[str, Any], dict[str, Any]]:
         """Get buy/sell history"""
         request_type = "get_buy_sell_history"
-        params = {}
+        params: dict[str, Any] = {}
         if after:
             params["after"] = after
         if before:
@@ -1903,7 +1928,7 @@ class FundingMixin:
         limit: Any = None,
         extra_data: Any = None,
         **kwargs: Any,
-    ) -> None:
+    ) -> Any:
         """Get buy/sell history"""
         path, params, extra_data = self._get_buy_sell_history(
             after, before, limit, extra_data, **kwargs

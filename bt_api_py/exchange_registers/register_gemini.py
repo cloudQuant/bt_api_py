@@ -52,19 +52,15 @@ class GeminiMarketWssData:
 
     def subscribe_ticker(self, symbol):
         """Subscribe to ticker updates"""
-        pass
 
     def subscribe_depth(self, symbol, limit_bids=50, limit_asks=50):
         """Subscribe to order book updates"""
-        pass
 
     def subscribe_trades(self, symbol):
         """Subscribe to trade updates"""
-        pass
 
     def subscribe_kline(self, symbol, time_frame):
         """Subscribe to kline updates"""
-        pass
 
 
 class GeminiAccountWssData:
@@ -76,15 +72,12 @@ class GeminiAccountWssData:
 
     def subscribe_orders(self):
         """Subscribe to order updates"""
-        pass
 
     def subscribe_balances(self):
         """Subscribe to balance updates"""
-        pass
 
     def subscribe_positions(self):
         """Subscribe to position updates"""
-        pass
 
 
 class GeminiWssData:
@@ -96,11 +89,9 @@ class GeminiWssData:
 
     def subscribe_market_data(self, symbol, channels):
         """Subscribe to market data channels"""
-        pass
 
     def subscribe_account_data(self):
         """Subscribe to account data channels"""
-        pass
 
 
 def register_gemini() -> None:

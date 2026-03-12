@@ -11,7 +11,7 @@ class BTCTurkRequestDataSpot(BTCTurkRequestData):
     """BTCTurk Spot Feed for market data."""
 
     @classmethod
-    def _capabilities(cls):
+    def _capabilities(cls) -> set[Capability]:
         return {
             Capability.GET_TICK,
             Capability.GET_DEPTH,
@@ -23,7 +23,7 @@ class BTCTurkRequestDataSpot(BTCTurkRequestData):
             Capability.CANCEL_ORDER,
         }
 
-    def __init__(self, data_queue, **kwargs) -> None:
+    def __init__(self, data_queue: Any = None, **kwargs: Any) -> None:
         super().__init__(data_queue, **kwargs)
         self.exchange_name = kwargs.get("exchange_name", "BTCTURK___SPOT")
 
@@ -396,7 +396,7 @@ class BTCTurkRequestDataSpot(BTCTurkRequestData):
                 "request_type": "get_open_orders",
             }
         )
-        params = {}
+        params: dict[str, Any] = {}
         if symbol:
             params["pairSymbol"] = symbol
         return path, params, extra_data

@@ -374,12 +374,14 @@ class KrakenRequestOrderBookData(OrderBookData):
             if not self.bids:
                 return None
             # Simple estimation: use best bid as reference
-            return self.bids[0]["price"] * (1 - 0.01 * leverage)  # 1% buffer per leverage
+            price = self.bids[0]["price"]
+            return float(price) * (1 - 0.01 * leverage)  # 1% buffer per leverage
         else:
             # For short positions
             if not self.asks:
                 return None
-            return self.asks[0]["price"] * (1 + 0.01 * leverage)  # 1% buffer per leverage
+            price = self.asks[0]["price"]
+            return float(price) * (1 + 0.01 * leverage)  # 1% buffer per leverage
 
     def get_vwap(self, side: str, volume: float) -> float | None:
         """Calculate Volume Weighted Average Price for given volume.

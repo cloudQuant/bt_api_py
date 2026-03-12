@@ -5,6 +5,7 @@ import time
 from typing import Any
 
 from bt_api_py.containers.tickers.ticker import TickerData
+from bt_api_py.containers.tickers.ticker_utils import parse_float
 
 
 class GiottusRequestTickerData(TickerData):
@@ -34,16 +35,15 @@ class GiottusRequestTickerData(TickerData):
         self.ticker_data: dict[str, Any] | None = (
             ticker_info if has_been_json_encoded and isinstance(ticker_info, dict) else None
         )
-        self.ticker_symbol_name = None
+        self.ticker_symbol_name: str | None = None
+        self.last_price: float | None = None
+        self.bid_price: float | None = None
+        self.ask_price: float | None = None
+        self.volume_24h: float | None = None
+        self.high_24h: float | None = None
+        self.low_24h: float | None = None
+        self.price_change_24h: float | None = None
         self.has_been_init_data = False
-        # Initialize all attributes to None
-        self.last_price = None
-        self.bid_price = None
-        self.ask_price = None
-        self.volume_24h = None
-        self.high_24h = None
-        self.low_24h = None
-        self.price_change_24h = None
 
     def init_data(self) -> "GiottusRequestTickerData":
         """Parse Giottus ticker response."""
@@ -53,52 +53,24 @@ class GiottusRequestTickerData(TickerData):
         if self.has_been_init_data:
             return self
 
-        # Initialize all attributes to None
-        self.ticker_symbol_name = None
-        self.last_price = None
-        self.bid_price = None
-        self.ask_price = None
-        self.volume_24h = None
-        self.high_24h = None
-        self.low_24h = None
-        self.price_change_24h = None
-
         data = self.ticker_data if isinstance(self.ticker_data, dict) else {}
         # Adapt to Giottus API response format when available
         ticker = data.get("data", data) if isinstance(data, dict) else {}
 
         if ticker:
-            self.ticker_symbol_name = ticker.get("symbol") or self.symbol_name
-            self.last_price = self._parse_float(ticker.get("last") or ticker.get("lastPrice"))
-            self.bid_price = self._parse_float(ticker.get("bid") or ticker.get("buy"))
-            self.ask_price = self._parse_float(ticker.get("ask") or ticker.get("sell"))
-            self.volume_24h = self._parse_float(ticker.get("volume") or ticker.get("volume_24h"))
-            self.high_24h = self._parse_float(ticker.get("high") or ticker.get("high_24h"))
-            self.low_24h = self._parse_float(ticker.get("low") or ticker.get("low_24h"))
-            self.price_change_24h = self._parse_float(
+            self.ticker_symbol_name = str(ticker.get("symbol") or self.symbol_name)
+            self.last_price = parse_float(ticker.get("last") or ticker.get("lastPrice"))
+            self.bid_price = parse_float(ticker.get("bid") or ticker.get("buy"))
+            self.ask_price = parse_float(ticker.get("ask") or ticker.get("sell"))
+            self.volume_24h = parse_float(ticker.get("volume") or ticker.get("volume_24h"))
+            self.high_24h = parse_float(ticker.get("high") or ticker.get("high_24h"))
+            self.low_24h = parse_float(ticker.get("low") or ticker.get("low_24h"))
+            self.price_change_24h = parse_float(
                 ticker.get("price_change") or ticker.get("priceChange24h") or ticker.get("change")
             )
 
         self.has_been_init_data = True
         return self
-
-    @staticmethod
-    def _parse_float(value: Any) -> float | None:
-        """Parse value to float.
-
-        Args:
-            value: Value to parse.
-
-        Returns:
-            Parsed float value or None if parsing fails.
-
-        """
-        if value is None:
-            return None
-        try:
-            return float(value)
-        except (ValueError, TypeError):
-            return None
 
     def get_exchange_name(self) -> str:
         return self.exchange_name

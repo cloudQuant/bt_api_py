@@ -11,8 +11,8 @@ from bt_api_py.feeds.live_binance_feed import BinanceRequestDataSwap
 from bt_api_py.functions.utils import read_yaml_file
 
 
-def download_funding_rate_from_binance():
-    data_queue_ = queue.Queue()
+def download_funding_rate_from_binance() -> None:
+    data_queue_: queue.Queue[object] = queue.Queue()
     data_ = read_yaml_file("account_config.yaml")
     kwargs_ = {
         "public_key": data_["binance"]["public_key"],
@@ -21,7 +21,7 @@ def download_funding_rate_from_binance():
         "topics": {"tick": {"symbol": "BTC-USDT"}},
     }
     live_binance_swap_feed = BinanceRequestDataSwap(data_queue_, **kwargs_)
-    res = requests.get("https://fapi.binance.com/fapi/v1/exchangeInfo")
+    res = requests.get("https://fapi.binance.com/fapi/v1/exchangeInfo", timeout=30)
     result = res.json()
     # print(result)
     symbol_list = [

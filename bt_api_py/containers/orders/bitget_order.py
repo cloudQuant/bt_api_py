@@ -34,7 +34,9 @@ class BitgetOrderData(OrderData):
         self.local_update_time = time.time()
         self.symbol_name = symbol_name
         self.asset_type = asset_type
-        self.order_data: dict[str, Any] | None = order_info if has_been_json_encoded else None
+        self.order_data: dict[str, Any] | None = (
+            order_info if (has_been_json_encoded and isinstance(order_info, dict)) else None
+        )
         self.order_id: str | None = None
         self.client_order_id: str | None = None
         self.symbol: str | None = None
@@ -59,6 +61,7 @@ class BitgetOrderData(OrderData):
         self.reduce_only: str | None = None
         self.iceberg: str | None = None
         self.iceberg_size: float | None = None
+        self.all_data: dict[str, Any] | None = None
         self.has_been_init_data = False
 
     def init_data(self) -> "BitgetOrderData":

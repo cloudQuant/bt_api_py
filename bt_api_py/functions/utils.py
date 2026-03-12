@@ -22,7 +22,7 @@ def _get_logger():
 def get_public_ip():
     try:
         # 使用一个查询公共 IP 地址的服务
-        response = requests.get("https://api.ipify.org")
+        response = requests.get("https://api.ipify.org", timeout=10)
         # 如果请求成功，返回响应的文本内容，即当前设备的公共 IP 地址
         if response.status_code == 200:
             return response.text
@@ -30,7 +30,7 @@ def get_public_ip():
         _get_logger().error(f"Error occurred: {e}", exc_info=True)
 
         try:
-            response = requests.get("https://api.myip.com")
+            response = requests.get("https://api.myip.com", timeout=10)
             response.raise_for_status()  # 检查请求是否成功
             data = response.json()
             return data.get("ip")

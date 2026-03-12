@@ -21,7 +21,7 @@ def update_okex_symbol_info(instrument_type="SWAP"):
     :return: 返回okex合约的symbol的数据
     """
     url = "https://www.okx.com/api/v5/public/instruments?instType=" + instrument_type
-    page = requests.get(url)
+    page = requests.get(url, timeout=30)
     data = page.json()["data"]
     df = pd.DataFrame(data)
     root = get_package_path("lv")
@@ -30,7 +30,7 @@ def update_okex_symbol_info(instrument_type="SWAP"):
 
 
 def update_binance_swap_symbol_info():
-    res = requests.get("https://fapi.binance.com/fapi/v1/exchangeInfo")
+    res = requests.get("https://fapi.binance.com/fapi/v1/exchangeInfo", timeout=30)
     result = res.json()
     data = {}
     for symbol_info in result["symbols"]:
@@ -44,7 +44,7 @@ def update_binance_swap_symbol_info():
 
 
 def update_binance_spot_symbol_info():
-    res = requests.get("https://api.binance.com/api/v3/exchangeInfo")
+    res = requests.get("https://api.binance.com/api/v3/exchangeInfo", timeout=30)
     result = res.json()
     data = {}
     for symbol_info in result["symbols"]:

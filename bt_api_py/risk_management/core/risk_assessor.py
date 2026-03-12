@@ -5,7 +5,7 @@
 
 import time
 from decimal import Decimal
-from typing import Any
+from typing import Any, cast
 
 from bt_api_py.logging_factory import get_logger
 
@@ -16,7 +16,7 @@ from ..containers.risk_metrics import RiskMetrics
 class RiskAssessmentResult:
     """风险评估结果"""
 
-    def __init__(self, data: dict[str, Any]) -> Any | None:
+    def __init__(self, data: dict[str, Any]) -> None:
         self.score = Decimal(str(data.get("score", 0)))  # 风险评分 0-1
         self.level = RiskLevel(data.get("level", "LOW"))  # 风险级别
         self.confidence = Decimal(str(data.get("confidence", 0)))  # 置信度 0-1
@@ -30,7 +30,7 @@ class RiskAssessmentResult:
 class RiskFactor:
     """风险因素"""
 
-    def __init__(self, name: str, weight: float, score: float, description: str = "") -> Any | None:
+    def __init__(self, name: str, weight: float, score: float, description: str = "") -> None:
         self.name = name
         self.weight = weight  # 权重 0-1
         self.score = score  # 评分 0-1
@@ -52,7 +52,7 @@ class RiskAssessor:
     6. 压力测试集成
     """
 
-    def __init__(self, config: dict[str, Any] | None = None) -> Any | None:
+    def __init__(self, config: dict[str, Any] | None = None) -> None:
         """初始化风险评估器
 
         Args:
@@ -181,7 +181,8 @@ class RiskAssessor:
             # 更新统计
             self._update_statistics(result)
 
-            self.assessment_stats["total_assessments"] += 1
+            total = cast("int", self.assessment_stats["total_assessments"])
+            self.assessment_stats["total_assessments"] = total + 1
 
             return result
 
@@ -529,15 +530,16 @@ class RiskAssessor:
         Args:
             result: 评估结果
         """
-        total = self.assessment_stats["total_assessments"]
-        current_avg = self.assessment_stats["average_score"]
+        total = cast("int", self.assessment_stats["total_assessments"])
+        current_avg = cast("float", self.assessment_stats["average_score"])
         new_score = float(result.score)
 
         # 更新平均评分
         self.assessment_stats["average_score"] = (current_avg * (total - 1) + new_score) / total
 
         # 更新分布
-        self.assessment_stats["score_distribution"][result.level.value] += 1
+        dist = cast("dict[str, int]", self.assessment_stats["score_distribution"])
+        dist[result.level.value] = dist.get(result.level.value, 0) + 1
 
     def get_risk_statistics(self) -> dict[str, Any]:
         """获取风险统计信息

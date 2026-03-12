@@ -2,7 +2,7 @@
 
 import json
 import time
-from typing import Any
+from typing import Any, Self
 
 from bt_api_py.containers.markprices.mark_price import MarkPriceData
 from bt_api_py.functions.utils import from_dict_get_float, from_dict_get_string
@@ -27,13 +27,13 @@ class BinanceMarkPrice(MarkPriceData):
         self.mark_price = None
         self.index_price = None
         self.settlement_price = None
-        self.all_data = None
+        self.all_data: dict[str, Any] | None = None
         self.has_been_init_data = False
 
-    def init_data(self) -> None:
+    def init_data(self) -> Self:
         raise NotImplementedError
 
-    def get_all_data(self) -> None:
+    def get_all_data(self) -> dict[str, Any]:
         if self.all_data is None:
             self.all_data = {
                 "exchange_name": self.exchange_name,
@@ -46,43 +46,45 @@ class BinanceMarkPrice(MarkPriceData):
                 "settlement_price": self.settlement_price,
                 "mark_price_symbol_name": self.mark_price_symbol_name,
             }
+        assert self.all_data is not None
         return self.all_data
 
-    def __str__(self) -> None:
+    def __str__(self) -> str:
         self.init_data()
-        return json.dumps(self.get_all_data())
+        return str(json.dumps(self.get_all_data()))
 
-    def __repr__(self) -> None:
+    def __repr__(self) -> str:
         return self.__str__()
 
-    def get_exchange_name(self) -> None:
-        return self.exchange_name
+    def get_exchange_name(self) -> str:
+        return str(self.exchange_name)
 
-    def get_server_time(self) -> None:
-        return self.server_time
+    def get_server_time(self) -> float:
+        st = self.server_time
+        return float(st) if st is not None else 0.0  # type: ignore[arg-type]
 
-    def get_local_update_time(self) -> None:
-        return self.local_update_time
+    def get_local_update_time(self) -> float:
+        return float(self.local_update_time)
 
-    def get_symbol_name(self) -> None:
-        return self.symbol_name
+    def get_symbol_name(self) -> str:
+        return str(self.symbol_name)
 
-    def get_mark_price_symbol_name(self) -> None:
-        return self.mark_price_symbol_name
+    def get_mark_price_symbol_name(self) -> str:
+        return str(self.mark_price_symbol_name) if self.mark_price_symbol_name else ""
 
-    def get_asset_type(self) -> None:
-        return self.asset_type
+    def get_asset_type(self) -> str:
+        return str(self.asset_type)
 
-    def get_mark_price(self) -> None:
+    def get_mark_price(self) -> float | None:
         return self.mark_price
 
-    def get_index_price(self) -> None:
+    def get_index_price(self) -> float | None:
         """Get index_price from binance api
         :return: float, index price.
         """
         return self.index_price
 
-    def get_settlement_price(self) -> None:
+    def get_settlement_price(self) -> float | None:
         """Get settlement_price from binance api
         :return: float, settlement price.
         """
@@ -92,12 +94,13 @@ class BinanceMarkPrice(MarkPriceData):
 class BinanceRequestMarkPriceData(BinanceMarkPrice):
     """保存标记价格信息."""
 
-    def init_data(self) -> None:
+    def init_data(self) -> Self:
         if not self.has_been_json_encoded:
             self.mark_price_data = json.loads(self.mark_price_info)
             self.has_been_json_encoded = True
         if self.has_been_init_data:
             return self
+        assert self.mark_price_data is not None
         self.server_time = from_dict_get_float(self.mark_price_data, "time")
         self.mark_price_symbol_name = from_dict_get_string(self.mark_price_data, "symbol")
         self.mark_price = from_dict_get_float(self.mark_price_data, "markPrice")
@@ -110,12 +113,13 @@ class BinanceRequestMarkPriceData(BinanceMarkPrice):
 class BinanceWssMarkPriceData(BinanceMarkPrice):
     """保存标记价格信息."""
 
-    def init_data(self) -> None:
+    def init_data(self) -> Self:
         if not self.has_been_json_encoded:
             self.mark_price_data = json.loads(self.mark_price_info)
             self.has_been_json_encoded = True
         if self.has_been_init_data:
             return self
+        assert self.mark_price_data is not None
         self.server_time = from_dict_get_float(self.mark_price_data, "E")
         self.mark_price_symbol_name = from_dict_get_string(self.mark_price_data, "s")
         self.mark_price = from_dict_get_float(self.mark_price_data, "p")

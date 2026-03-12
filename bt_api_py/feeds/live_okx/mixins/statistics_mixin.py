@@ -3,6 +3,7 @@ OKX API - StatisticsMixin
 Auto-generated from request_base.py
 """
 
+from collections.abc import Callable
 from typing import Any
 
 from bt_api_py.feeds.live_okx.mixins.normalizers import generic_normalize_function
@@ -11,6 +12,14 @@ from bt_api_py.functions.utils import update_extra_data
 
 class StatisticsMixin:
     """Mixin providing OKX API methods."""
+
+    _params: Any
+    asset_type: str
+    exchange_name: str
+    request: Callable[..., Any]
+    submit: Callable[..., Any]
+    async_request: Callable[..., Any]
+    async_callback: Callable[..., Any]
 
     # ==================== Trading Statistics APIs ====================
 
@@ -24,7 +33,7 @@ class StatisticsMixin:
         limit: Any = None,
         extra_data: Any = None,
         **kwargs: Any,
-    ) -> None:
+    ) -> tuple[str, dict[str, Any], dict[str, Any]]:
         """
         Get contract active buy/sell volume (taker volume)
         :param ccy: Currency, e.g. "BTC"
@@ -38,7 +47,7 @@ class StatisticsMixin:
         :return: path, params, extra_data
         """
         request_type = "get_taker_volume_contract"
-        params = {}
+        params: dict[str, Any] = {}
         if ccy:
             params["ccy"] = ccy
         if inst_type:
@@ -67,7 +76,9 @@ class StatisticsMixin:
         return path, params, extra_data
 
     @staticmethod
-    def _get_taker_volume_contract_normalize_function(input_data: Any, extra_data: Any) -> None:
+    def _get_taker_volume_contract_normalize_function(
+        input_data: Any, extra_data: Any
+    ) -> tuple[Any, bool]:
         status = input_data["code"] == "0"
         if "data" not in input_data:
             return [], status
@@ -85,7 +96,7 @@ class StatisticsMixin:
         limit: Any = None,
         extra_data: Any = None,
         **kwargs: Any,
-    ) -> None:
+    ) -> Any:
         """Get contract active buy/sell volume (taker volume)"""
         path, params, extra_data = self._get_taker_volume_contract(
             ccy, inst_type, begin, end, period, limit, extra_data, **kwargs
@@ -122,7 +133,7 @@ class StatisticsMixin:
         limit: Any = None,
         extra_data: Any = None,
         **kwargs: Any,
-    ) -> None:
+    ) -> tuple[str, dict[str, Any], dict[str, Any]]:
         """
         Get margin loan ratio (spot long/short ratio)
         :param ccy: Currency, e.g. "BTC"
@@ -135,7 +146,7 @@ class StatisticsMixin:
         :return: path, params, extra_data
         """
         request_type = "get_margin_loan_ratio"
-        params = {}
+        params: dict[str, Any] = {}
         if ccy:
             params["ccy"] = ccy
         if begin:
@@ -162,7 +173,9 @@ class StatisticsMixin:
         return path, params, extra_data
 
     @staticmethod
-    def _get_margin_loan_ratio_normalize_function(input_data: Any, extra_data: Any) -> None:
+    def _get_margin_loan_ratio_normalize_function(
+        input_data: Any, extra_data: Any
+    ) -> tuple[Any, bool]:
         status = input_data["code"] == "0"
         if "data" not in input_data:
             return [], status
@@ -179,7 +192,7 @@ class StatisticsMixin:
         limit: Any = None,
         extra_data: Any = None,
         **kwargs: Any,
-    ) -> None:
+    ) -> Any:
         """Get margin loan ratio (spot long/short ratio)"""
         path, params, extra_data = self._get_margin_loan_ratio(
             ccy, begin, end, period, limit, extra_data, **kwargs
@@ -216,7 +229,7 @@ class StatisticsMixin:
         limit: Any = None,
         extra_data: Any = None,
         **kwargs: Any,
-    ) -> None:
+    ) -> tuple[str, dict[str, Any], dict[str, Any]]:
         """
         Get option long/short ratio
         :param ccy: Underlying index, e.g. "BTC-USD"
@@ -230,7 +243,7 @@ class StatisticsMixin:
         :return: path, params, extra_data
         """
         request_type = "get_option_long_short_ratio"
-        params = {}
+        params: dict[str, Any] = {}
         if ccy:
             params["ccy"] = ccy
         if currency:
@@ -259,7 +272,9 @@ class StatisticsMixin:
         return path, params, extra_data
 
     @staticmethod
-    def _get_option_long_short_ratio_normalize_function(input_data: Any, extra_data: Any) -> None:
+    def _get_option_long_short_ratio_normalize_function(
+        input_data: Any, extra_data: Any
+    ) -> tuple[Any, bool]:
         status = input_data["code"] == "0"
         if "data" not in input_data:
             return [], status
@@ -277,7 +292,7 @@ class StatisticsMixin:
         limit: Any = None,
         extra_data: Any = None,
         **kwargs: Any,
-    ) -> None:
+    ) -> Any:
         """Get option long/short ratio"""
         path, params, extra_data = self._get_option_long_short_ratio(
             ccy, currency, begin, end, period, limit, extra_data, **kwargs
@@ -314,7 +329,7 @@ class StatisticsMixin:
         limit: Any = None,
         extra_data: Any = None,
         **kwargs: Any,
-    ) -> None:
+    ) -> tuple[str, dict[str, Any], dict[str, Any]]:
         """
         Get contract open interest and volume
         :param ccy: Currency, e.g. "BTC"
@@ -327,7 +342,7 @@ class StatisticsMixin:
         :return: path, params, extra_data
         """
         request_type = "get_contracts_oi_volume"
-        params = {}
+        params: dict[str, Any] = {}
         if ccy:
             params["ccy"] = ccy
         if begin:
@@ -354,7 +369,9 @@ class StatisticsMixin:
         return path, params, extra_data
 
     @staticmethod
-    def _get_contracts_oi_volume_normalize_function(input_data: Any, extra_data: Any) -> None:
+    def _get_contracts_oi_volume_normalize_function(
+        input_data: Any, extra_data: Any
+    ) -> tuple[Any, bool]:
         status = input_data["code"] == "0"
         if "data" not in input_data:
             return [], status
@@ -371,7 +388,7 @@ class StatisticsMixin:
         limit: Any = None,
         extra_data: Any = None,
         **kwargs: Any,
-    ) -> None:
+    ) -> Any:
         """Get contract open interest and volume"""
         path, params, extra_data = self._get_contracts_oi_volume(
             ccy, begin, end, period, limit, extra_data, **kwargs
@@ -408,7 +425,7 @@ class StatisticsMixin:
         limit: Any = None,
         extra_data: Any = None,
         **kwargs: Any,
-    ) -> None:
+    ) -> tuple[str, dict[str, Any], dict[str, Any]]:
         """
         Get option open interest and volume
         :param ccy: Underlying index, e.g. "BTC-USD"
@@ -422,7 +439,7 @@ class StatisticsMixin:
         :return: path, params, extra_data
         """
         request_type = "get_option_oi_volume"
-        params = {}
+        params: dict[str, Any] = {}
         if ccy:
             params["ccy"] = ccy
         if currency:
@@ -451,7 +468,9 @@ class StatisticsMixin:
         return path, params, extra_data
 
     @staticmethod
-    def _get_option_oi_volume_normalize_function(input_data: Any, extra_data: Any) -> None:
+    def _get_option_oi_volume_normalize_function(
+        input_data: Any, extra_data: Any
+    ) -> tuple[Any, bool]:
         status = input_data["code"] == "0"
         if "data" not in input_data:
             return [], status
@@ -469,7 +488,7 @@ class StatisticsMixin:
         limit: Any = None,
         extra_data: Any = None,
         **kwargs: Any,
-    ) -> None:
+    ) -> Any:
         """Get option open interest and volume"""
         path, params, extra_data = self._get_option_oi_volume(
             ccy, currency, begin, end, period, limit, extra_data, **kwargs
@@ -507,7 +526,7 @@ class StatisticsMixin:
         limit: Any = None,
         extra_data: Any = None,
         **kwargs: Any,
-    ) -> None:
+    ) -> tuple[str, dict[str, Any], dict[str, Any]]:
         """
         Get option open interest and volume by expiry
         :param ccy: Underlying index, e.g. "BTC-USD"
@@ -521,7 +540,7 @@ class StatisticsMixin:
         :return: path, params, extra_data
         """
         request_type = "get_option_oi_volume_expiry"
-        params = {}
+        params: dict[str, Any] = {}
         if ccy:
             params["ccy"] = ccy
         if currency:
@@ -550,7 +569,9 @@ class StatisticsMixin:
         return path, params, extra_data
 
     @staticmethod
-    def _get_option_oi_volume_expiry_normalize_function(input_data: Any, extra_data: Any) -> None:
+    def _get_option_oi_volume_expiry_normalize_function(
+        input_data: Any, extra_data: Any
+    ) -> tuple[Any, bool]:
         status = input_data["code"] == "0"
         if "data" not in input_data:
             return [], status
@@ -568,7 +589,7 @@ class StatisticsMixin:
         limit: Any = None,
         extra_data: Any = None,
         **kwargs: Any,
-    ) -> None:
+    ) -> Any:
         """Get option open interest and volume by expiry"""
         path, params, extra_data = self._get_option_oi_volume_expiry(
             ccy, currency, begin, end, period, limit, extra_data, **kwargs
@@ -606,7 +627,7 @@ class StatisticsMixin:
         limit: Any = None,
         extra_data: Any = None,
         **kwargs: Any,
-    ) -> None:
+    ) -> tuple[str, dict[str, Any], dict[str, Any]]:
         """
         Get option open interest and volume by strike price
         :param ccy: Underlying index, e.g. "BTC-USD"
@@ -620,7 +641,7 @@ class StatisticsMixin:
         :return: path, params, extra_data
         """
         request_type = "get_option_oi_volume_strike"
-        params = {}
+        params: dict[str, Any] = {}
         if ccy:
             params["ccy"] = ccy
         if currency:
@@ -649,7 +670,9 @@ class StatisticsMixin:
         return path, params, extra_data
 
     @staticmethod
-    def _get_option_oi_volume_strike_normalize_function(input_data: Any, extra_data: Any) -> None:
+    def _get_option_oi_volume_strike_normalize_function(
+        input_data: Any, extra_data: Any
+    ) -> tuple[Any, bool]:
         status = input_data["code"] == "0"
         if "data" not in input_data:
             return [], status
@@ -667,7 +690,7 @@ class StatisticsMixin:
         limit: Any = None,
         extra_data: Any = None,
         **kwargs: Any,
-    ) -> None:
+    ) -> Any:
         """Get option open interest and volume by strike price"""
         path, params, extra_data = self._get_option_oi_volume_strike(
             ccy, currency, begin, end, period, limit, extra_data, **kwargs
@@ -705,7 +728,7 @@ class StatisticsMixin:
         limit: Any = None,
         extra_data: Any = None,
         **kwargs: Any,
-    ) -> None:
+    ) -> tuple[str, dict[str, Any], dict[str, Any]]:
         """
         Get option taker block volume (large trades)
         :param ccy: Underlying index, e.g. "BTC-USD"
@@ -719,7 +742,7 @@ class StatisticsMixin:
         :return: path, params, extra_data
         """
         request_type = "get_option_taker_flow"
-        params = {}
+        params: dict[str, Any] = {}
         if ccy:
             params["ccy"] = ccy
         if currency:
@@ -748,7 +771,9 @@ class StatisticsMixin:
         return path, params, extra_data
 
     @staticmethod
-    def _get_option_taker_flow_normalize_function(input_data: Any, extra_data: Any) -> None:
+    def _get_option_taker_flow_normalize_function(
+        input_data: Any, extra_data: Any
+    ) -> tuple[Any, bool]:
         status = input_data["code"] == "0"
         if "data" not in input_data:
             return [], status
@@ -766,7 +791,7 @@ class StatisticsMixin:
         limit: Any = None,
         extra_data: Any = None,
         **kwargs: Any,
-    ) -> None:
+    ) -> Any:
         """Get option taker block volume (large trades)"""
         path, params, extra_data = self._get_option_taker_flow(
             ccy, currency, begin, end, period, limit, extra_data, **kwargs
@@ -808,7 +833,7 @@ class StatisticsMixin:
         auto_sz: Any = None,
         extra_data: Any = None,
         **kwargs: Any,
-    ) -> None:
+    ) -> tuple[str, dict[str, Any], dict[str, Any]]:
         """
         Position builder - Calculate the maximum open size
         :param inst_type: Instrument type, e.g. SPOT, MARGIN, SWAP, FUTURES, OPTION
@@ -855,7 +880,7 @@ class StatisticsMixin:
         return path, params, extra_data
 
     @staticmethod
-    def _position_builder_normalize_function(input_data: Any, extra_data: Any) -> None:
+    def _position_builder_normalize_function(input_data: Any, extra_data: Any) -> tuple[Any, bool]:
         """Normalize position builder response"""
         status = input_data.get("code") == "0"
         if "data" not in input_data:
@@ -876,7 +901,7 @@ class StatisticsMixin:
         auto_sz: Any = None,
         extra_data: Any = None,
         **kwargs: Any,
-    ) -> None:
+    ) -> Any:
         """Position builder - Calculate the maximum open size"""
         path, params, extra_data = self._position_builder(
             inst_type,
@@ -936,7 +961,7 @@ class StatisticsMixin:
         auto_sz: Any = None,
         extra_data: Any = None,
         **kwargs: Any,
-    ) -> None:
+    ) -> tuple[str, dict[str, Any], dict[str, Any]]:
         """
         Position builder trend - Get position builder trend data
         :param inst_type: Instrument type, e.g. SPOT, MARGIN, SWAP, FUTURES, OPTION
@@ -983,7 +1008,9 @@ class StatisticsMixin:
         return path, params, extra_data
 
     @staticmethod
-    def _position_builder_trend_normalize_function(input_data: Any, extra_data: Any) -> None:
+    def _position_builder_trend_normalize_function(
+        input_data: Any, extra_data: Any
+    ) -> tuple[Any, bool]:
         """Normalize position builder trend response"""
         status = input_data.get("code") == "0"
         if "data" not in input_data:
@@ -1004,7 +1031,7 @@ class StatisticsMixin:
         auto_sz: Any = None,
         extra_data: Any = None,
         **kwargs: Any,
-    ) -> None:
+    ) -> Any:
         """Position builder trend - Get position builder trend data"""
         path, params, extra_data = self._position_builder_trend(
             inst_type,
@@ -1055,7 +1082,7 @@ class StatisticsMixin:
     # ==================== Missing Trading Statistics APIs ====================
 
     @staticmethod
-    def _get_support_coin_normalize_function(input_data: Any, extra_data: Any) -> None:
+    def _get_support_coin_normalize_function(input_data: Any, extra_data: Any) -> tuple[Any, bool]:
         """Normalize get_support_coin response.
         API returns data with different coin types grouped by category.
         Response format: {"code": "0", "data": {"contract": [...], "option": [...], "spot": [...]}}
@@ -1068,10 +1095,12 @@ class StatisticsMixin:
         # Return dict as-is with keys: contract, option, spot
         return data, status
 
-    def _get_support_coin(self, extra_data: Any = None, **kwargs: Any) -> None:
+    def _get_support_coin(
+        self, extra_data: Any = None, **kwargs: Any
+    ) -> tuple[str, dict[str, Any], dict[str, Any]]:
         """Get support coin"""
         request_type = "get_support_coin"
-        params = {}
+        params: dict[str, Any] = {}
         path = self._params.get_rest_path(request_type)
         extra_data = update_extra_data(
             extra_data,
@@ -1087,7 +1116,7 @@ class StatisticsMixin:
             extra_data.update(kwargs)
         return path, params, extra_data
 
-    def get_support_coin(self, extra_data: Any = None, **kwargs: Any) -> None:
+    def get_support_coin(self, extra_data: Any = None, **kwargs: Any) -> Any:
         """Get support coin"""
         path, params, extra_data = self._get_support_coin(extra_data, **kwargs)
         data = self.request(path, params=params, extra_data=extra_data)
@@ -1112,10 +1141,10 @@ class StatisticsMixin:
         period: Any = None,
         extra_data: Any = None,
         **kwargs: Any,
-    ) -> None:
+    ) -> tuple[str, dict[str, Any], dict[str, Any]]:
         """Get contract open interest history"""
         request_type = "get_contract_oi_history"
-        params = {}
+        params: dict[str, Any] = {}
         if ccy:
             params["ccy"] = ccy
         if uly:
@@ -1156,7 +1185,7 @@ class StatisticsMixin:
         period: Any = None,
         extra_data: Any = None,
         **kwargs: Any,
-    ) -> None:
+    ) -> Any:
         """Get contract open interest history"""
         path, params, extra_data = self._get_contract_oi_history(
             ccy, uly, inst_id, after, before, limit, period, extra_data, **kwargs
@@ -1195,10 +1224,10 @@ class StatisticsMixin:
         period: Any = None,
         extra_data: Any = None,
         **kwargs: Any,
-    ) -> None:
+    ) -> tuple[str, dict[str, Any], dict[str, Any]]:
         """Get taker volume"""
         request_type = "get_taker_volume"
-        params = {}
+        params: dict[str, Any] = {}
         if ccy:
             params["ccy"] = ccy
         if uly:
@@ -1236,7 +1265,7 @@ class StatisticsMixin:
         period: Any = None,
         extra_data: Any = None,
         **kwargs: Any,
-    ) -> None:
+    ) -> Any:
         """Get taker volume"""
         path, params, extra_data = self._get_taker_volume(
             ccy, uly, inst_id, begin, end, period, extra_data, **kwargs
@@ -1272,10 +1301,10 @@ class StatisticsMixin:
         period: Any = None,
         extra_data: Any = None,
         **kwargs: Any,
-    ) -> None:
+    ) -> tuple[str, dict[str, Any], dict[str, Any]]:
         """Get long short ratio"""
         request_type = "get_long_short_ratio"
-        params = {}
+        params: dict[str, Any] = {}
         if ccy:
             params["ccy"] = ccy
         if begin:
@@ -1307,7 +1336,7 @@ class StatisticsMixin:
         period: Any = None,
         extra_data: Any = None,
         **kwargs: Any,
-    ) -> None:
+    ) -> Any:
         """Get long short ratio"""
         path, params, extra_data = self._get_long_short_ratio(
             ccy, begin, end, period, extra_data, **kwargs
@@ -1341,10 +1370,10 @@ class StatisticsMixin:
         period: Any = None,
         extra_data: Any = None,
         **kwargs: Any,
-    ) -> None:
+    ) -> tuple[str, dict[str, Any], dict[str, Any]]:
         """Get long short ratio (top trader)"""
         request_type = "get_long_short_ratio_top_trader"
-        params = {}
+        params: dict[str, Any] = {}
         if ccy:
             params["ccy"] = ccy
         if begin:
@@ -1376,7 +1405,7 @@ class StatisticsMixin:
         period: Any = None,
         extra_data: Any = None,
         **kwargs: Any,
-    ) -> None:
+    ) -> Any:
         """Get long short ratio (top trader)"""
         path, params, extra_data = self._get_long_short_ratio_top_trader(
             ccy, begin, end, period, extra_data, **kwargs
@@ -1413,10 +1442,10 @@ class StatisticsMixin:
         limit: Any = None,
         extra_data: Any = None,
         **kwargs: Any,
-    ) -> None:
+    ) -> tuple[str, dict[str, Any], dict[str, Any]]:
         """Get contract long short ratio"""
         request_type = "get_contract_long_short_ratio"
-        params = {}
+        params: dict[str, Any] = {}
         if ccy:
             params["ccy"] = ccy
         if uly:
@@ -1457,7 +1486,7 @@ class StatisticsMixin:
         limit: Any = None,
         extra_data: Any = None,
         **kwargs: Any,
-    ) -> None:
+    ) -> Any:
         """Get contract long short ratio"""
         path, params, extra_data = self._get_contract_long_short_ratio(
             ccy, uly, inst_id, begin, end, period, limit, extra_data, **kwargs
@@ -1495,10 +1524,10 @@ class StatisticsMixin:
         period: Any = None,
         extra_data: Any = None,
         **kwargs: Any,
-    ) -> None:
+    ) -> tuple[str, dict[str, Any], dict[str, Any]]:
         """Get put call ratio"""
         request_type = "get_put_call_ratio"
-        params = {}
+        params: dict[str, Any] = {}
         if ccy:
             params["ccy"] = ccy
         if uly:
@@ -1533,7 +1562,7 @@ class StatisticsMixin:
         period: Any = None,
         extra_data: Any = None,
         **kwargs: Any,
-    ) -> None:
+    ) -> Any:
         """Get put call ratio"""
         path, params, extra_data = self._get_put_call_ratio(
             ccy, uly, begin, end, period, extra_data, **kwargs

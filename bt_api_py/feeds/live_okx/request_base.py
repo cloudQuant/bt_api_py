@@ -49,7 +49,7 @@ class OkxRequestData(
     Feed,
 ):
     @classmethod
-    def _capabilities(cls: Any) -> None:
+    def _capabilities(cls: Any) -> set[Capability]:
         return {
             Capability.GET_TICK,
             Capability.GET_DEPTH,
@@ -93,7 +93,7 @@ class OkxRequestData(
         self._rate_limiter = kwargs.get("rate_limiter", self._create_default_rate_limiter())
 
     @staticmethod
-    def _create_default_rate_limiter() -> None:
+    def _create_default_rate_limiter() -> RateLimiter:
         rules = [
             RateLimitRule(
                 name="okx_general",
@@ -176,7 +176,7 @@ class OkxRequestData(
             timeout (int, optional): request timeout(s)
         """
         if params is None:
-            params = {}
+            params: dict[str, Any] = {}
         method, path = path.split(" ", 1)
         req = parse.urlencode(params)
         url = f"{self._params.rest_url}{path}?{req}"  # ?{req}
@@ -207,7 +207,7 @@ class OkxRequestData(
             extra_data(dict,None): extra_data, generate by user
         """
         if params is None:
-            params = {}
+            params: dict[str, Any] = {}
         method, path = path.split(" ", 1)
         req = parse.urlencode(params)
         url = f"{self._params.rest_url}{path}?{req}"  # ?{req}
@@ -236,7 +236,7 @@ class OkxRequestData(
             result = future.result()
             self.push_data_to_queue(result)
         except Exception as e:
-            self.async_logger.warn(f"async_callback::{e}")
+            self.async_logger.warning(f"async_callback::{e}")
 
     @staticmethod
     def _generic_normalize_function(input_data: Any, extra_data: Any) -> None:

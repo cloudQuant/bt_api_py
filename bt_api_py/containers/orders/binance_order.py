@@ -709,6 +709,8 @@ class BinanceSwapWssOrderData(BinanceOrderData):
             self.has_been_json_encoded = True
         if self.has_been_init_data:
             return self
+        if self.order_data is None:
+            return self
         self.server_time = from_dict_get_float(self.order_data, "E")
         order_dict = self.order_data["o"]
         self.trade_id = from_dict_get_float(order_dict, "t")

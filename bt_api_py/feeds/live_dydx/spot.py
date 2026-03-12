@@ -1,6 +1,7 @@
 from typing import Any
 
 from bt_api_py.containers.exchanges.dydx_exchange_data import DydxExchangeDataSwap
+from bt_api_py.containers.requestdatas.request_data import RequestData
 from bt_api_py.feeds.live_dydx.request_base import DydxRequestData
 from bt_api_py.functions.utils import update_extra_data
 from bt_api_py.logging_factory import get_logger
@@ -17,7 +18,9 @@ class DydxRequestDataSpot(DydxRequestData):
         self.request_logger = get_logger("dydx_spot_feed")
         self.async_logger = get_logger("dydx_spot_feed")
 
-    def get_ticker_spot(self, symbol: Any, extra_data: Any = None, **kwargs: Any) -> None:
+    def get_ticker_spot(
+        self, symbol: Any, extra_data: Any = None, **kwargs: Any
+    ) -> tuple[str, dict[str, Any], dict[str, Any]]:
         """Get spot ticker information."""
         request_symbol = self._params.get_symbol(symbol) if symbol is not None else ""
         request_type = "get_ticker"
@@ -40,7 +43,9 @@ class DydxRequestDataSpot(DydxRequestData):
         return path, params, extra_data
 
     @staticmethod
-    def _get_ticker_spot_normalize_function(input_data: Any, extra_data: Any) -> None:
+    def _get_ticker_spot_normalize_function(
+        input_data: Any, extra_data: Any
+    ) -> tuple[list[float] | None, bool]:
         if extra_data is None:
             pass
         status = input_data.get("code", 0) == 0
@@ -64,7 +69,7 @@ class DydxRequestDataSpot(DydxRequestData):
                 return ticker_info, status
         return None, False
 
-    def get_ticker(self, symbol: Any, extra_data: Any = None, **kwargs: Any) -> None:
+    def get_ticker(self, symbol: Any, extra_data: Any = None, **kwargs: Any) -> RequestData:
         """Get ticker information."""
         path, params, extra_data = self.get_ticker_spot(symbol, extra_data, **kwargs)
         data = self.request(path, params=params, extra_data=extra_data)
@@ -72,7 +77,7 @@ class DydxRequestDataSpot(DydxRequestData):
 
     def get_balance_spot(
         self, address: Any, subaccount_number: Any, extra_data: Any = None, **kwargs: Any
-    ) -> None:
+    ) -> tuple[str, None, dict[str, Any]]:
         """Get spot balance information."""
         request_type = "get_subaccount"
         path = self._params.get_rest_path(request_type)
@@ -93,7 +98,9 @@ class DydxRequestDataSpot(DydxRequestData):
         return path, None, extra_data
 
     @staticmethod
-    def _get_balance_spot_normalize_function(input_data: Any, extra_data: Any) -> None:
+    def _get_balance_spot_normalize_function(
+        input_data: Any, extra_data: Any
+    ) -> tuple[list[dict[str, Any]], bool]:
         if extra_data is None:
             pass
         status = True
@@ -116,10 +123,10 @@ class DydxRequestDataSpot(DydxRequestData):
         data = balance_info
         return data, status
 
-    def get_balance(
-        self, address: Any, subaccount_number: Any, extra_data: Any = None, **kwargs: Any
-    ) -> None:
+    def get_balance(self, symbol: Any = None, extra_data: Any = None, **kwargs: Any) -> RequestData:
         """Get balance information."""
+        address = kwargs.get("address", self.address or "")
+        subaccount_number = kwargs.get("subaccount_number", self.subaccount_number)
         path, params, extra_data = self.get_balance_spot(
             address, subaccount_number, extra_data, **kwargs
         )
@@ -130,7 +137,7 @@ class DydxRequestDataSpot(DydxRequestData):
 
     def get_kline_spot(
         self, symbol: Any, period: Any, extra_data: Any = None, **kwargs: Any
-    ) -> None:
+    ) -> tuple[str, dict[str, Any], dict[str, Any]]:
         """Get kline/candlestick data."""
         request_symbol = self._params.get_symbol(symbol)
         request_type = "get_candles"
@@ -160,30 +167,32 @@ class DydxRequestDataSpot(DydxRequestData):
         return path, params, extra_data
 
     @staticmethod
-    def _get_kline_normalize_function(input_data: Any, extra_data: Any) -> None:
+    def _get_kline_normalize_function(
+        input_data: Any, extra_data: Any
+    ) -> tuple[list[dict[str, Any]], bool]:
         """Normalize kline/candlestick data."""
         status = True
         candles = input_data.get("candles", [])
-        kline_info = []
-
-        for candle in candles:
-            kline_info.append(
-                {
-                    "timestamp": candle.get("startedAt", ""),
-                    "open": float(candle.get("open", 0)),
-                    "high": float(candle.get("high", 0)),
-                    "low": float(candle.get("low", 0)),
-                    "close": float(candle.get("close", 0)),
-                    "volume": float(candle.get("volume", 0)),
-                }
-            )
+        kline_info = [
+            {
+                "timestamp": c.get("startedAt", ""),
+                "open": float(c.get("open", 0)),
+                "high": float(c.get("high", 0)),
+                "low": float(c.get("low", 0)),
+                "close": float(c.get("close", 0)),
+                "volume": float(c.get("volume", 0)),
+            }
+            for c in candles
+        ]
 
         return kline_info, status
 
     # ==================== OrderBook Methods ====================
 
     @staticmethod
-    def _get_orderbook_normalize_function(input_data: Any, extra_data: Any) -> None:
+    def _get_orderbook_normalize_function(
+        input_data: Any, extra_data: Any
+    ) -> tuple[dict[str, Any], bool]:
         """Normalize orderbook data."""
         status = True
         if extra_data is None:
@@ -194,12 +203,14 @@ class DydxRequestDataSpot(DydxRequestData):
             "bids": input_data.get("bids", []),
             "asks": input_data.get("asks", []),
         }
-        return [orderbook_info], status
+        return orderbook_info, status
 
     # ==================== Exchange Info Methods ====================
 
     @staticmethod
-    def _get_exchange_info_normalize_function(input_data: Any, extra_data: Any) -> None:
+    def _get_exchange_info_normalize_function(
+        input_data: Any, extra_data: Any
+    ) -> tuple[list[dict[str, Any]], bool]:
         """Normalize exchange info response."""
         status = True
         markets = input_data.get("markets", {})
@@ -228,7 +239,7 @@ class DydxRequestDataSpot(DydxRequestData):
         client_order_id: Any = None,
         extra_data: Any = None,
         **kwargs: Any,
-    ) -> None:
+    ) -> tuple[str, dict[str, Any], dict[str, Any]]:
         """Prepare order request parameters. Returns (path, body, extra_data).
         Note: dYdX V4 trading requires wallet signature (on-chain tx).
         This method prepares the request data structure.
@@ -272,7 +283,7 @@ class DydxRequestDataSpot(DydxRequestData):
         client_order_id: Any = None,
         extra_data: Any = None,
         **kwargs: Any,
-    ) -> None:
+    ) -> RequestData:
         """Place order following standard Feed interface. Returns RequestData."""
         path, body, extra_data = self._make_order(
             symbol,
@@ -291,7 +302,7 @@ class DydxRequestDataSpot(DydxRequestData):
 
     def _cancel_order(
         self, symbol: Any, order_id: Any, extra_data: Any = None, **kwargs: Any
-    ) -> None:
+    ) -> tuple[str, None, dict[str, Any]]:
         """Prepare cancel order request. Returns (path, body, extra_data)."""
         if extra_data is None:
             extra_data = {}
@@ -308,17 +319,26 @@ class DydxRequestDataSpot(DydxRequestData):
         return f"DELETE /v4/orders/{order_id}", None, extra_data
 
     def cancel_order(
-        self, symbol: Any, order_id: Any, extra_data: Any = None, **kwargs: Any
-    ) -> None:
+        self,
+        symbol: Any = None,
+        order_id: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> RequestData:
         """Cancel order following standard Feed interface. Returns RequestData."""
-        path, body, extra_data = self._cancel_order(symbol, order_id, extra_data, **kwargs)
+        path, body, extra_data = self._cancel_order(
+            symbol or kwargs.get("symbol"),
+            order_id or kwargs.get("order_id"),
+            extra_data,
+            **kwargs,
+        )
         return self.request(path, body=body, extra_data=extra_data)
 
     # ── Standard Interface: query_order ─────────────────────────────
 
     def _query_order(
         self, symbol: Any, order_id: Any, extra_data: Any = None, **kwargs: Any
-    ) -> None:
+    ) -> tuple[str, dict[str, Any], dict[str, Any]]:
         """Prepare query order request. Returns (path, params, extra_data)."""
         if extra_data is None:
             extra_data = {}
@@ -338,14 +358,16 @@ class DydxRequestDataSpot(DydxRequestData):
 
     def query_order(
         self, symbol: Any, order_id: Any, extra_data: Any = None, **kwargs: Any
-    ) -> None:
+    ) -> RequestData:
         """Query order status. Returns RequestData."""
         path, params, extra_data = self._query_order(symbol, order_id, extra_data, **kwargs)
         return self.request(path, params=params, extra_data=extra_data)
 
     # ── Standard Interface: get_open_orders ─────────────────────────
 
-    def _get_open_orders(self, symbol: Any = None, extra_data: Any = None, **kwargs: Any) -> None:
+    def _get_open_orders(
+        self, symbol: Any = None, extra_data: Any = None, **kwargs: Any
+    ) -> tuple[str, dict[str, Any], dict[str, Any]]:
         """Prepare open orders request. Returns (path, params, extra_data)."""
         if extra_data is None:
             extra_data = {}
@@ -369,14 +391,18 @@ class DydxRequestDataSpot(DydxRequestData):
         )
         return path, params, extra_data
 
-    def get_open_orders(self, symbol: Any = None, extra_data: Any = None, **kwargs: Any) -> None:
+    def get_open_orders(
+        self, symbol: Any = None, extra_data: Any = None, **kwargs: Any
+    ) -> RequestData:
         """Get open orders. Returns RequestData."""
         path, params, extra_data = self._get_open_orders(symbol, extra_data, **kwargs)
         return self.request(path, params=params, extra_data=extra_data)
 
     # ── Standard Interface: get_account ─────────────────────────────
 
-    def _get_account(self, symbol: Any = "ALL", extra_data: Any = None, **kwargs: Any) -> None:
+    def _get_account(
+        self, symbol: Any = "ALL", extra_data: Any = None, **kwargs: Any
+    ) -> tuple[str, dict[str, Any], dict[str, Any]]:
         """Prepare account request. Returns (path, params, extra_data)."""
         if extra_data is None:
             extra_data = {}
@@ -395,14 +421,18 @@ class DydxRequestDataSpot(DydxRequestData):
         )
         return path, {}, extra_data
 
-    def get_account(self, symbol: Any = "ALL", extra_data: Any = None, **kwargs: Any) -> None:
+    def get_account(
+        self, symbol: Any = "ALL", extra_data: Any = None, **kwargs: Any
+    ) -> RequestData:
         """Get account info. Returns RequestData."""
         path, params, extra_data = self._get_account(symbol, extra_data, **kwargs)
         return self.request(path, params=params, extra_data=extra_data)
 
     # ── Standard Interface: get_balance (standard signature) ────────
 
-    def _get_balance_std(self, symbol: Any = None, extra_data: Any = None, **kwargs: Any) -> None:
+    def _get_balance_std(
+        self, symbol: Any = None, extra_data: Any = None, **kwargs: Any
+    ) -> tuple[str, dict[str, Any], dict[str, Any]]:
         """Prepare balance request with standard signature. Returns (path, params, extra_data)."""
         if extra_data is None:
             extra_data = {}

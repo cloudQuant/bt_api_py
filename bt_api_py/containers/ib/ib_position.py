@@ -3,7 +3,7 @@ IB 持仓数据容器
 对应 IB TWS API 的 Position
 """
 
-from typing import Any
+from typing import Any, Self
 
 from bt_api_py.containers.positions.position import PositionData
 
@@ -23,18 +23,18 @@ class IbPositionData(PositionData):
         self.asset_type = asset_type
         self.exchange_name = "IB"
         self._initialized = False
-        self.account = None
-        self.contract_symbol = None
-        self.sec_type = None
-        self.position_val = None
-        self.avg_cost = None
-        self.market_price_val = None
-        self.market_value = None
-        self.unrealized_pnl_val = None
-        self.realized_pnl_val = None
-        self.currency = None
+        self.account: str | None = None
+        self.contract_symbol: str | None = None
+        self.sec_type: str | None = None
+        self.position_val: float | None = None
+        self.avg_cost: float | None = None
+        self.market_price_val: float | None = None
+        self.market_value: float | None = None
+        self.unrealized_pnl_val: float | None = None
+        self.realized_pnl_val: float | None = None
+        self.currency: str | None = None
 
-    def init_data(self) -> None:
+    def init_data(self) -> Self:
         if self._initialized:
             return self
         info = self.position_info
@@ -52,40 +52,40 @@ class IbPositionData(PositionData):
         self._initialized = True
         return self
 
-    def get_exchange_name(self) -> None:
-        return self.exchange_name
+    def get_exchange_name(self) -> str:
+        return str(self.exchange_name)
 
-    def get_asset_type(self) -> None:
-        return self.sec_type or self.asset_type
+    def get_asset_type(self) -> str:
+        return str(self.sec_type or self.asset_type)
 
-    def get_symbol_name(self) -> None:
-        return self.contract_symbol or self.symbol_name
+    def get_symbol_name(self) -> str:
+        return str(self.contract_symbol or self.symbol_name or "")
 
-    def get_position_volume(self) -> None:
-        return self.position_val or 0
+    def get_position_volume(self) -> float:
+        return self.position_val or 0.0
 
-    def get_avg_price(self) -> None:
+    def get_avg_price(self) -> float:
         return self.avg_cost or 0.0
 
-    def get_mark_price(self) -> None:
+    def get_mark_price(self) -> float | None:
         return self.market_price_val
 
-    def get_liquidation_price(self) -> None:
+    def get_liquidation_price(self) -> float | None:
         return None
 
-    def get_initial_margin(self) -> None:
+    def get_initial_margin(self) -> float:
         return 0.0
 
-    def get_maintain_margin(self) -> None:
+    def get_maintain_margin(self) -> float:
         return 0.0
 
-    def get_position_unrealized_pnl(self) -> None:
+    def get_position_unrealized_pnl(self) -> float:
         return self.unrealized_pnl_val or 0.0
 
-    def get_position_funding_value(self) -> None:
+    def get_position_funding_value(self) -> float:
         return 0.0
 
-    def get_all_data(self) -> None:
+    def get_all_data(self) -> dict[str, Any]:
         return {
             "exchange_name": self.exchange_name,
             "account": self.account,

@@ -5,6 +5,7 @@ import time
 from typing import Any
 
 from bt_api_py.containers.tickers.ticker import TickerData
+from bt_api_py.containers.tickers.ticker_utils import parse_float
 
 
 class BitsoRequestTickerData(TickerData):
@@ -49,33 +50,15 @@ class BitsoRequestTickerData(TickerData):
         payload = self.ticker_data.get("payload", {}) if isinstance(self.ticker_data, dict) else {}
         if payload:
             self.ticker_symbol_name = payload.get("book")
-            self.last_price = self._parse_float(payload.get("last"))
-            self.bid_price = self._parse_float(payload.get("bid"))
-            self.ask_price = self._parse_float(payload.get("ask"))
-            self.volume_24h = self._parse_float(payload.get("volume"))
-            self.high_24h = self._parse_float(payload.get("high"))
-            self.low_24h = self._parse_float(payload.get("low"))
+            self.last_price = parse_float(payload.get("last"))
+            self.bid_price = parse_float(payload.get("bid"))
+            self.ask_price = parse_float(payload.get("ask"))
+            self.volume_24h = parse_float(payload.get("volume"))
+            self.high_24h = parse_float(payload.get("high"))
+            self.low_24h = parse_float(payload.get("low"))
 
         self.has_been_init_data = True
         return self
-
-    @staticmethod
-    def _parse_float(value: Any) -> float | None:
-        """Parse value to float.
-
-        Args:
-            value: Value to parse.
-
-        Returns:
-            Parsed float value or None if parsing fails.
-
-        """
-        if value is None:
-            return None
-        try:
-            return float(value)
-        except (ValueError, TypeError):
-            return None
 
     # Getter methods required by TickerData base class
     def get_exchange_name(self) -> str:

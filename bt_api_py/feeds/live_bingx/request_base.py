@@ -5,6 +5,7 @@ BingX REST API request base class.
 import hashlib
 import hmac
 import time
+from typing import Any
 from urllib.parse import urlencode
 
 from bt_api_py.containers.exchanges.bingx_exchange_data import BingXExchangeDataSpot
@@ -19,7 +20,7 @@ class BingXRequestData(Feed):
     """BingX REST API Feed base class."""
 
     @classmethod
-    def _capabilities(cls):
+    def _capabilities(cls) -> set[Capability]:
         return {
             Capability.GET_TICK,
             Capability.GET_DEPTH,
@@ -31,7 +32,7 @@ class BingXRequestData(Feed):
             Capability.CANCEL_ORDER,
         }
 
-    def __init__(self, data_queue, **kwargs) -> None:
+    def __init__(self, data_queue: Any = None, **kwargs: Any) -> None:
         super().__init__(data_queue, **kwargs)
         self.data_queue = data_queue
         self.exchange_name = kwargs.get("exchange_name", "BINGX___SPOT")
@@ -82,7 +83,7 @@ class BingXRequestData(Feed):
 
         # Add signature for private endpoints and timestamp for all requests
         if params is None:
-            params = {}
+            params: dict[str, Any] = {}
         # BingX requires timestamp for all requests
         params["timestamp"] = int(time.time() * 1000)
         if request_path.startswith(("/openApi/spot/v1/account", "/openApi/spot/v1/trade")):
@@ -109,7 +110,7 @@ class BingXRequestData(Feed):
         headers = self._get_headers(method, request_path, params, body)
 
         if params is None:
-            params = {}
+            params: dict[str, Any] = {}
         params["timestamp"] = int(time.time() * 1000)
         if request_path.startswith(("/openApi/spot/v1/account", "/openApi/spot/v1/trade")):
             params = self._add_signature(params.copy() if params else {})

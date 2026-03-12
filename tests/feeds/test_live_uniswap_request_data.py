@@ -129,10 +129,9 @@ class TestUniswapTickerData:
     def test_uniswap_multiple_token_prices(self, uniswap_feed):
         """Test getting multiple token prices."""
         tokens = [WETH_ADDRESS, USDC_ADDRESS, WBTC_ADDRESS]
-        for token in tokens:
-            pass
-        data = uniswap_feed.get_tick(token)
-        assert data is not None
+        for t in tokens:
+            data = uniswap_feed.get_tick(t)
+            assert data is not None
 
     @pytest.mark.ticker
     def test_uniswap_get_tick_params(self, uniswap_feed):
@@ -168,10 +167,9 @@ class TestUniswapPoolData:
     def test_uniswap_multiple_pools(self, uniswap_feed):
         """Test getting multiple pool data."""
         pools = [USDC_WETH_POOL, USDT_WETH_POOL]
-        for pool in pools:
-            pass
-        data = uniswap_feed.get_pool(pool)
-        assert data is not None
+        for p in pools:
+            data = uniswap_feed.get_pool(p)
+            assert data is not None
 
     def test_uniswap_get_pool_params(self, uniswap_feed):
         """Test get pool parameter generation."""

@@ -75,7 +75,7 @@ class SlidingWindowLimiter:
     def __init__(self, interval: int, limit: int) -> None:
         self.interval = interval
         self.limit = limit
-        self._requests: deque = deque()  # (timestamp, weight)
+        self._requests: deque[tuple[float, int]] = deque()
         self._lock = threading.Lock()
 
     def acquire(self, weight: int = 1) -> bool:

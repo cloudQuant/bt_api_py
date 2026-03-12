@@ -2,6 +2,8 @@
 bitFlyer Spot Feed implementation.
 """
 
+from typing import Any
+
 from bt_api_py.feeds.capability import Capability
 from bt_api_py.feeds.live_bitflyer.request_base import BitflyerRequestData
 
@@ -10,7 +12,7 @@ class BitflyerRequestDataSpot(BitflyerRequestData):
     """bitFlyer Spot Feed for market data."""
 
     @classmethod
-    def _capabilities(cls):
+    def _capabilities(cls) -> set[Capability]:
         return {
             Capability.GET_TICK,
             Capability.GET_DEPTH,
@@ -22,7 +24,7 @@ class BitflyerRequestDataSpot(BitflyerRequestData):
             Capability.CANCEL_ORDER,
         }
 
-    def __init__(self, data_queue, **kwargs):
+    def __init__(self, data_queue: Any = None, **kwargs: Any) -> None:
         super().__init__(data_queue, **kwargs)
         self.exchange_name = kwargs.get("exchange_name", "BITFLYER___SPOT")
 
@@ -245,7 +247,7 @@ class BitflyerRequestDataSpot(BitflyerRequestData):
                 "normalize_function": self._get_health_normalize_function,
             }
         )
-        params = {}
+        params: dict[str, Any] = {}
         if symbol:
             product_code = self._normalize_product_code(symbol)
             params["product_code"] = product_code

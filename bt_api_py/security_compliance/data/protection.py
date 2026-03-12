@@ -16,14 +16,13 @@ from bt_api_py.exceptions import BtApiError
 class DataProtectionError(BtApiError):
     """Data protection related errors."""
 
-    pass
-
 
 class SensitiveDataType(Enum):
     """Types of sensitive data."""
 
     PII = "personal_identifiable_information"
     FINANCIAL = "financial_data"
+    PCI_DSS = "pci_dss"  # Data requiring PCI DSS compliance (e.g. credit card)
     HEALTH = "health_data"
     BIOMETRIC = "biometric_data"
     LOCATION = "location_data"
@@ -157,7 +156,9 @@ class DataProtectionManager:
         elif mask_level == "email" and "@" in data:
             # Mask email while preserving domain
             local, domain = data.split("@", 1)
-            masked_local = local[:2] + "*" * (len(local) - 2) if len(local) > 3 else "*" * len(local)
+            masked_local = (
+                local[:2] + "*" * (len(local) - 2) if len(local) > 3 else "*" * len(local)
+            )
             return f"{masked_local}@{domain}"
         return data
 

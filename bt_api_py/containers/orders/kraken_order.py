@@ -34,6 +34,7 @@ class KrakenRequestOrderData(OrderData):
         # Store symbol and asset_type before parsing
         self.symbol = symbol
         self.asset_type = asset_type
+        self.average_price: float | None = None
         self.logger = get_logger("kraken_order")
         self.is_response_data = is_response_data
         self._parse_data(data)
@@ -131,14 +132,19 @@ class KrakenRequestOrderData(OrderData):
         self.symbol = descr.get("pair", self.symbol)
         self.side = descr.get("type", "unknown")
         self.order_type = descr.get("ordertype", "unknown")
-        self.price = float(descr.get("price")) if descr.get("price") else None
-        self.quantity = float(descr.get("vol")) if descr.get("vol") else None
+        p = descr.get("price")
+        self.price = float(p) if p is not None else None
+        v = descr.get("vol")
+        self.quantity = float(v) if v is not None else None
 
         # Execution info
-        self.executed_quantity = float(data.get("vol_exec", "0")) if data.get("vol_exec") else 0
+        ve = data.get("vol_exec", "0")
+        self.executed_quantity = float(ve) if ve is not None else 0.0
         self.remaining_quantity = self.quantity - self.executed_quantity if self.quantity else None
-        self.cost = float(data.get("cost", "0")) if data.get("cost") else 0
-        self.fee = float(data.get("fee", "0")) if data.get("fee") else 0
+        c = data.get("cost", "0")
+        self.cost = float(c) if c is not None else 0.0
+        f = data.get("fee", "0")
+        self.fee = float(f) if f is not None else 0.0
 
         # Additional fields
         self.userref = data.get("userref")
@@ -174,17 +180,23 @@ class KrakenRequestOrderData(OrderData):
         self.datetime = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(self.timestamp))
 
         # Order details
-        self.quantity = float(data.get("quantity")) if data.get("quantity") else None
-        self.price = float(data.get("price")) if data.get("price") else None
-        self.executed_quantity = float(data.get("executed_quantity", "0"))
+        qty = data.get("quantity")
+        self.quantity = float(qty) if qty is not None else None
+        prc = data.get("price")
+        self.price = float(prc) if prc is not None else None
+        eq = data.get("executed_quantity", "0")
+        self.executed_quantity = float(eq) if eq is not None else 0.0
         self.remaining_quantity = data.get("remaining_quantity")
         if self.remaining_quantity is None and self.quantity:
             self.remaining_quantity = self.quantity - self.executed_quantity
 
         # Cost and fees
-        self.cost = float(data.get("cost", "0"))
-        self.fee = float(data.get("fee", "0"))
-        self.average_price = float(data.get("average_price")) if data.get("average_price") else None
+        c = data.get("cost", "0")
+        self.cost = float(c) if c is not None else 0.0
+        f = data.get("fee", "0")
+        self.fee = float(f) if f is not None else 0.0
+        ap = data.get("average_price")
+        self.average_price = float(ap) if ap is not None else None
 
         # Additional fields
         self.userref = data.get("userref")
@@ -400,12 +412,9 @@ class KrakenRequestOrderData(OrderData):
             return False
 
         # Validate execution
-        if self.executed_quantity is not None and (
-            self.executed_quantity < 0 or self.executed_quantity > self.quantity
-        ):
-            return False
-
-        return True
+        if self.executed_quantity is None:
+            return True
+        return 0 <= self.executed_quantity <= self.quantity
 
     def is_open(self) -> bool:
         """Check if order is open."""
@@ -488,12 +497,14 @@ class KrakenSpotWssOrderData(OrderData):
         self.status = data.get("status", "unknown")
         self.side = data.get("side", "unknown")
         self.type = data.get("type", "unknown")
-        self.quantity = float(data.get("qty")) if data.get("qty") else None
-        self.price = float(data.get("price")) if data.get("price") else None
-        self.executed_quantity = float(data.get("executedQty", "0"))
-        self.remaining_quantity = (
-            float(data.get("remainingQty")) if data.get("remainingQty") else None
-        )
+        qty = data.get("qty")
+        self.quantity = float(qty) if qty is not None else None
+        prc = data.get("price")
+        self.price = float(prc) if prc is not None else None
+        eq = data.get("executedQty", "0")
+        self.executed_quantity = float(eq) if eq is not None else 0.0
+        rq = data.get("remainingQty")
+        self.remaining_quantity = float(rq) if rq is not None else None
         self.timestamp = data.get("time", time.time())
         self.datetime = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(self.timestamp))
         self.exchange = "kraken"

@@ -4,6 +4,8 @@ Hyperliquid Spot Trading Implementation
 Provides spot trading functionality for Hyperliquid exchange.
 """
 
+from typing import Any
+
 from bt_api_py.containers.exchanges.hyperliquid_exchange_data import HyperliquidExchangeDataSpot
 from bt_api_py.containers.orders.hyperliquid_order import (
     HyperliquidSpotWssOrderData,
@@ -24,7 +26,7 @@ from bt_api_py.utils.hyperliquid_types import (
 class HyperliquidRequestDataSpot(HyperliquidRequestData):
     """Hyperliquid spot trading request data"""
 
-    def __init__(self, data_queue, **kwargs):
+    def __init__(self, data_queue: Any = None, **kwargs: Any) -> None:
         super().__init__(data_queue, **kwargs)
         self.asset_type = kwargs.get("asset_type", "SPOT")
         self.logger_name = kwargs.get("logger_name", "hyperliquid_spot_feed.log")
@@ -299,7 +301,7 @@ class HyperliquidRequestDataSpot(HyperliquidRequestData):
 class HyperliquidMarketWssDataSpot(HyperliquidMarketWssData):
     """Hyperliquid spot market WebSocket data"""
 
-    def __init__(self, data_queue, **kwargs):
+    def __init__(self, data_queue: Any = None, **kwargs: Any) -> None:
         super().__init__(data_queue, **kwargs)
         self.asset_type = kwargs.get("asset_type", "SPOT")
         self.symbols = kwargs.get("symbols", [])
@@ -412,7 +414,7 @@ class HyperliquidMarketWssDataSpot(HyperliquidMarketWssData):
 class HyperliquidAccountWssDataSpot(HyperliquidAccountWssData):
     """Hyperliquid spot account WebSocket data"""
 
-    def __init__(self, data_queue, **kwargs):
+    def __init__(self, data_queue: Any = None, **kwargs: Any) -> None:
         super().__init__(data_queue, **kwargs)
         self.asset_type = kwargs.get("asset_type", "SPOT")
         self.user_address = kwargs.get("user_address", "")

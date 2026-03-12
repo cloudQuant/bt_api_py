@@ -3,6 +3,7 @@
 import hashlib
 import hmac
 import time
+from typing import Any
 
 from bt_api_py.containers.exchanges.coincheck_exchange_data import CoincheckExchangeDataSpot
 from bt_api_py.containers.requestdatas.request_data import RequestData
@@ -16,7 +17,7 @@ class CoincheckRequestData(Feed):
     """Coincheck REST API Feed base class."""
 
     @classmethod
-    def _capabilities(cls):
+    def _capabilities(cls) -> set[Capability]:
         return {
             Capability.GET_TICK,
             Capability.GET_DEPTH,
@@ -28,7 +29,7 @@ class CoincheckRequestData(Feed):
             Capability.CANCEL_ORDER,
         }
 
-    def __init__(self, data_queue, **kwargs) -> None:
+    def __init__(self, data_queue: Any = None, **kwargs: Any) -> None:
         super().__init__(data_queue, **kwargs)
         self.data_queue = data_queue
         self.exchange_name = kwargs.get("exchange_name", "COINCHECK___SPOT")

@@ -6,6 +6,7 @@ Raydium is a Solana-based DEX that doesn't require authentication for public dat
 """
 
 import time
+from typing import Any
 
 from bt_api_py.containers.exchanges.raydium_exchange_data import (
     RaydiumExchangeDataSpot,
@@ -25,7 +26,7 @@ class RaydiumRequestData(Feed):
     """
 
     @classmethod
-    def _capabilities(cls):
+    def _capabilities(cls) -> set[Capability]:
         """Declare supported capabilities for Raydium."""
         return {
             Capability.GET_TICK,
@@ -37,7 +38,7 @@ class RaydiumRequestData(Feed):
             Capability.CANCEL_ORDER,
         }
 
-    def __init__(self, data_queue, **kwargs):
+    def __init__(self, data_queue: Any = None, **kwargs: Any) -> None:
         super().__init__(data_queue, **kwargs)
         self.data_queue = data_queue
         self.exchange_name = kwargs.get("exchange_name", "RAYDIUM___DEX")
@@ -200,11 +201,9 @@ class RaydiumRequestData(Feed):
 
     def connect(self) -> None:
         """No-op for HTTP-based API."""
-        pass
 
     def disconnect(self) -> None:
         """No-op for HTTP-based API."""
-        pass
 
     def is_connected(self) -> bool:
         """Always return True for HTTP-based API."""

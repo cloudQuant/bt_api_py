@@ -146,7 +146,7 @@ class BinanceRequestDataSpot(BinanceRequestData):
         """
         request_type = "get_ticker_trading_day"
         path = self._params.get_rest_path(request_type)
-        params = {}
+        params: dict[str, Any] = {}
         if symbol is not None:
             request_symbol = self._params.get_symbol(symbol)
             params["symbol"] = request_symbol
@@ -260,7 +260,7 @@ class BinanceRequestDataSpot(BinanceRequestData):
         """
         request_type = "get_futures_transfer_history"
         path = self._params.get_rest_path(request_type)
-        params = {}
+        params: dict[str, Any] = {}
         if asset is not None:
             params["asset"] = asset
         if start_time is not None:
@@ -322,7 +322,7 @@ class BinanceRequestDataSpot(BinanceRequestData):
     def make_order(
         self,
         symbol,
-        vol,
+        volume,
         price=None,
         order_type="buy-limit",
         offset="open",
@@ -332,7 +332,15 @@ class BinanceRequestDataSpot(BinanceRequestData):
         **kwargs,
     ):
         path, params, extra_data = self._make_order(
-            symbol, vol, price, order_type, offset, post_only, client_order_id, extra_data, **kwargs
+            symbol,
+            volume,
+            price,
+            order_type,
+            offset,
+            post_only,
+            client_order_id,
+            extra_data,
+            **kwargs,
         )
         # print("params = ", params)
         data = self.request(path, params=params, extra_data=extra_data, is_sign=True)
@@ -463,7 +471,7 @@ class BinanceRequestDataSpot(BinanceRequestData):
         """
         request_type = "cancel_all"
         path = self._params.get_rest_path(request_type)
-        params = {}
+        params: dict[str, Any] = {}
         if symbol is not None:
             request_symbol = self._params.get_symbol(symbol)
             params["symbol"] = request_symbol
@@ -650,13 +658,15 @@ class BinanceAccountWssDataSpot(BinanceAccountWssData):
                 if result_holder[0] is not None:
                     return result_holder[0]
                 last_err = error_holder[0]
-                self.logger.warn(
+                self.logger.warning(
                     f"get_listen_key attempt {attempt + 1}/{max_retries} "
                     f"unexpected response: {last_err}"
                 )
             except Exception as e:
                 last_err = e
-                self.logger.warn(f"get_listen_key attempt {attempt + 1}/{max_retries} error: {e}")
+                self.logger.warning(
+                    f"get_listen_key attempt {attempt + 1}/{max_retries} error: {e}"
+                )
             if attempt < max_retries - 1:
                 time.sleep(2)
         raise RuntimeError(f"Failed to get listen key after {max_retries} attempts: {last_err}")

@@ -106,8 +106,11 @@ class BitfinexRequestBarData(BarData):
 
     def get_mid_price(self):
         """Get mid price"""
-        return (
-            (self.open + self.high + self.low + self.close) / 4
-            if all(v is not None for v in [self.open, self.high, self.low, self.close])
-            else None
-        )
+        if (
+            self.open is not None
+            and self.high is not None
+            and self.low is not None
+            and self.close is not None
+        ):
+            return (self.open + self.high + self.low + self.close) / 4
+        return None

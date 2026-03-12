@@ -7,6 +7,7 @@ import base64
 import hashlib
 import hmac
 import time
+from typing import Any
 from urllib.parse import urlencode
 
 import requests as req_lib
@@ -27,7 +28,7 @@ class KrakenRequestData(Feed):
     """
 
     @classmethod
-    def _capabilities(cls):
+    def _capabilities(cls) -> set[Capability]:
         return {
             Capability.GET_TICK,
             Capability.GET_DEPTH,
@@ -43,7 +44,7 @@ class KrakenRequestData(Feed):
             Capability.GET_EXCHANGE_INFO,
         }
 
-    def __init__(self, data_queue, **kwargs):
+    def __init__(self, data_queue: Any = None, **kwargs: Any) -> None:
         super().__init__(data_queue, **kwargs)
         self.public_key = kwargs.get("public_key")
         self.private_key = kwargs.get("private_key")
@@ -100,7 +101,7 @@ class KrakenRequestData(Feed):
             RequestData wrapping the response
         """
         if params is None:
-            params = {}
+            params: dict[str, Any] = {}
         if body is None:
             body = {}
         if extra_data is None:
@@ -125,14 +126,13 @@ class KrakenRequestData(Feed):
                     headers.update(auth_headers)
 
                 self.request_logger.info(f"POST {url}")
-                req_kwargs = {
+                req_kwargs: dict[str, Any] = {
                     "headers": headers,
                     "data": urlencode(post_data) if post_data else "",
-                    "timeout": timeout,
                 }
                 if self.proxies:
                     req_kwargs["proxies"] = self.proxies
-                res = req_lib.post(url, **req_kwargs)
+                res = req_lib.post(url, timeout=timeout, **req_kwargs)
                 response_data = res.json()
             else:
                 self.request_logger.info(f"{method} {url}")
@@ -151,7 +151,7 @@ class KrakenRequestData(Feed):
     async def async_request(self, path, params=None, body=None, extra_data=None, timeout=5):
         """Asynchronous HTTP request for Kraken API."""
         if params is None:
-            params = {}
+            params: dict[str, Any] = {}
         if body is None:
             body = {}
         if extra_data is None:
@@ -192,14 +192,13 @@ class KrakenRequestData(Feed):
             auth_headers = self._sign_request(endpoint, post_data)
             headers.update(auth_headers)
         try:
-            req_kwargs = {
+            req_kwargs: dict[str, Any] = {
                 "headers": headers,
                 "data": urlencode(post_data) if post_data else "",
-                "timeout": timeout,
             }
             if self.proxies:
                 req_kwargs["proxies"] = self.proxies
-            res = req_lib.post(url, **req_kwargs)
+            res = req_lib.post(url, timeout=timeout, **req_kwargs)
             return res.json()
         except Exception as e:
             self.async_logger.error(f"Sync POST error: {e}")

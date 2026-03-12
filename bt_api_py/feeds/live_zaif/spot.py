@@ -2,6 +2,8 @@
 Zaif Spot Feed – three-layer sync / async wrappers + WSS stubs.
 """
 
+from typing import Any
+
 from bt_api_py.containers.exchanges.zaif_exchange_data import ZaifExchangeDataSpot
 from bt_api_py.feeds.live_zaif.request_base import ZaifRequestData
 from bt_api_py.logging_factory import get_logger
@@ -10,7 +12,7 @@ from bt_api_py.logging_factory import get_logger
 class ZaifRequestDataSpot(ZaifRequestData):
     """Zaif Spot REST Feed."""
 
-    def __init__(self, data_queue, **kwargs):
+    def __init__(self, data_queue: Any = None, **kwargs: Any) -> None:
         super().__init__(data_queue, **kwargs)
 
     # ── server time ─────────────────────────────────────────────
@@ -186,7 +188,7 @@ class ZaifRequestDataSpot(ZaifRequestData):
 class ZaifMarketWssDataSpot:
     """Zaif Spot Market WebSocket Data Handler (stub)."""
 
-    def __init__(self, data_queue, **kwargs):
+    def __init__(self, data_queue: Any = None, **kwargs: Any) -> None:
         self.data_queue = data_queue
         self._params = ZaifExchangeDataSpot()
         self.logger_name = kwargs.get("logger_name", "zaif_spot_market_wss.log")
@@ -205,7 +207,7 @@ class ZaifMarketWssDataSpot:
 class ZaifAccountWssDataSpot:
     """Zaif Spot Account WebSocket Data Handler (stub)."""
 
-    def __init__(self, data_queue, **kwargs):
+    def __init__(self, data_queue: Any = None, **kwargs: Any) -> None:
         self.data_queue = data_queue
         self._params = ZaifExchangeDataSpot()
         self.logger_name = kwargs.get("logger_name", "zaif_spot_account_wss.log")

@@ -27,7 +27,7 @@ def _load_zaif_yaml() -> Any | None:
             with open(cfg_path, encoding="utf-8") as f:
                 _zaif_yaml_cache = yaml.safe_load(f) or {}
     except Exception as e:
-        logger.warn(f"Failed to load zaif.yaml: {e}")
+        logger.warning(f"Failed to load zaif.yaml: {e}")
         _zaif_yaml_cache = {}
     return _zaif_yaml_cache
 
@@ -99,7 +99,7 @@ class ZaifExchangeDataSpot(ZaifExchangeData):
         self._load_yaml()
 
     def _load_yaml(self) -> None:
-        cfg = _load_zaif_yaml()
+        cfg = _load_zaif_yaml() or {}
         spot = cfg.get("ZAIF___SPOT", {})
         if not spot:
             return

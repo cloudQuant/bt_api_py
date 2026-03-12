@@ -4,12 +4,12 @@
 支持从 YAML 文件加载交易所/场所配置，自动校验字段合法性。
 """
 
-import os
 from enum import Enum, unique
+from pathlib import Path
 from typing import Any
 
 try:
-    from pydantic import BaseModel, Field, field_validator
+    from pydantic import BaseModel, Field, ValidationError, field_validator
 except ImportError:
     raise ImportError(
         "pydantic is required for config_loader. Install with: pip install pydantic"
@@ -18,7 +18,10 @@ except ImportError:
 try:
     import yaml
 except ImportError:
-    yaml = None
+    yaml = None  # type: ignore[assignment]
+
+from bt_api_py.exceptions import ConfigurationError
+from bt_api_py.logging_factory import get_logger
 
 __all__ = [
     "VenueType",
@@ -30,6 +33,7 @@ __all__ = [
     "RateLimitRuleConfig",
     "AssetTypeConfig",
     "ExchangeConfig",
+    "get_exchange_config_path",
     "load_exchange_config",
     "load_all_exchange_configs",
 ]
@@ -115,6 +119,8 @@ class RateLimitRuleConfig(BaseModel):
 
 class AssetTypeConfig(BaseModel):
     exchange_name: str | None = Field(default=None, description="交易所子类型名称, 如 binance_swap")
+    rest_url: str | None = Field(default=None, description="REST API base URL for this asset type")
+    wss_url: str | None = Field(default=None, description="WebSocket URL for this asset type")
     symbol_format: str = Field(..., description="如 {base}{quote} 或 {base}-{quote}")
     rest_paths: dict[str, str] = Field(default_factory=dict)
     wss_paths: dict[str, Any] = Field(default_factory=dict)
@@ -190,6 +196,14 @@ class ExchangeConfig(BaseModel):
 # ── 加载函数 ──────────────────────────────────────────────────
 
 
+def get_exchange_config_path(filename: str) -> Path:
+    """Return Path to a config file in bt_api_py/configs/.
+
+    Use pathlib for cross-platform path handling and cleaner code.
+    """
+    return Path(__file__).resolve().parent / "configs" / filename
+
+
 def load_exchange_config(config_path: str) -> ExchangeConfig:
     """从 YAML 文件加载交易所配置
 
@@ -203,14 +217,15 @@ def load_exchange_config(config_path: str) -> ExchangeConfig:
             "PyYAML is required to load config files. Install with: pip install PyYAML"
         )
 
-    if not os.path.exists(config_path):
+    path = Path(config_path)
+    if not path.exists():
         raise FileNotFoundError(f"Config file not found: {config_path}")
 
-    with open(config_path, encoding="utf-8") as f:
+    with path.open(encoding="utf-8") as f:
         data = yaml.safe_load(f)
 
     if not data:
-        raise ValueError(f"Config file is empty: {config_path}")
+        raise ConfigurationError(f"Config file is empty: {config_path}")
 
     return ExchangeConfig(**data)
 
@@ -221,20 +236,26 @@ def load_all_exchange_configs(config_dir: str) -> dict[str, ExchangeConfig]:
     :param config_dir: 配置目录路径
     :return: {exchange_id: ExchangeConfig}
     """
-    configs = {}
-    if not os.path.isdir(config_dir):
+    configs: dict[str, ExchangeConfig] = {}
+    path = Path(config_dir)
+    if not path.is_dir():
         return configs
 
-    for filename in os.listdir(config_dir):
-        if filename.endswith((".yaml", ".yml")) and not filename.startswith("_"):
-            filepath = os.path.join(config_dir, filename)
-            try:
-                config = load_exchange_config(filepath)
-                configs[config.id] = config
-            except Exception as e:
-                from bt_api_py.logging_factory import get_logger
+    load_errors: tuple[type[Exception], ...] = (
+        ConfigurationError,
+        FileNotFoundError,
+        ValidationError,
+    )
+    if yaml is not None:
+        load_errors = (*load_errors, yaml.YAMLError)
 
+    for filepath in path.iterdir():
+        if filepath.suffix in (".yaml", ".yml") and not filepath.name.startswith("_"):
+            try:
+                config = load_exchange_config(str(filepath))
+                configs[config.id] = config
+            except load_errors as e:
                 logger = get_logger("config_loader")
-                logger.warning(f"Failed to load config {filepath}: {e}")
+                logger.warning(f"Failed to load config {filepath!s}: {e}")
 
     return configs

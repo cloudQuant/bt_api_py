@@ -6,6 +6,7 @@ Trading is done on-chain through smart contracts.
 """
 
 import time
+from typing import Any
 
 from bt_api_py.containers.exchanges.curve_exchange_data import CurveChain, CurveExchangeDataSpot
 from bt_api_py.containers.requestdatas.request_data import RequestData
@@ -19,7 +20,7 @@ class CurveRequestData(Feed):
     """Curve REST API Feed base class."""
 
     @classmethod
-    def _capabilities(cls):
+    def _capabilities(cls) -> set[Capability]:
         return {
             Capability.GET_TICK,
             Capability.GET_DEPTH,
@@ -31,7 +32,7 @@ class CurveRequestData(Feed):
             Capability.CANCEL_ORDER,
         }
 
-    def __init__(self, data_queue, **kwargs):
+    def __init__(self, data_queue: Any = None, **kwargs: Any) -> None:
         super().__init__(data_queue, **kwargs)
         self.data_queue = data_queue
         self.exchange_name = kwargs.get("exchange_name", "CURVE___DEX")

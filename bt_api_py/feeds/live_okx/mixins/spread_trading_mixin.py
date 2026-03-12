@@ -3,6 +3,7 @@ OKX API - SpreadTradingMixin
 Auto-generated from request_base.py
 """
 
+from collections.abc import Callable
 from typing import Any
 
 from bt_api_py.functions.utils import update_extra_data
@@ -10,6 +11,14 @@ from bt_api_py.functions.utils import update_extra_data
 
 class SpreadTradingMixin:
     """Mixin providing OKX API methods."""
+
+    _params: Any
+    asset_type: str
+    exchange_name: str
+    request: Callable[..., Any]
+    submit: Callable[..., Any]
+    async_request: Callable[..., Any]
+    async_callback: Callable[..., Any]
 
     # ==================== Spread Trading APIs ====================
 
@@ -26,7 +35,7 @@ class SpreadTradingMixin:
         pos_side: Any = None,
         extra_data: Any = None,
         **kwargs: Any,
-    ) -> None:
+    ) -> tuple[str, dict[str, Any], dict[str, Any]]:
         """
         Place spread order
         :param sprd_id: Spread instrument ID
@@ -76,7 +85,7 @@ class SpreadTradingMixin:
         return path, params, extra_data
 
     @staticmethod
-    def _sprd_order_normalize_function(input_data: Any, extra_data: Any) -> None:
+    def _sprd_order_normalize_function(input_data: Any, extra_data: Any) -> tuple[Any, bool]:
         """Normalize spread order response"""
         status = input_data["code"] == "0"
         if "data" not in input_data or not input_data["data"]:
@@ -112,7 +121,7 @@ class SpreadTradingMixin:
         pos_side: Any = None,
         extra_data: Any = None,
         **kwargs: Any,
-    ) -> None:
+    ) -> Any:
         """Place spread order"""
         path, params, extra_data = self._sprd_order(
             sprd_id, side, sz, px, reduce_only, ccy, cl_ord_id, tag, pos_side, extra_data, **kwargs
@@ -150,7 +159,7 @@ class SpreadTradingMixin:
         client_order_id: Any = None,
         extra_data: Any = None,
         **kwargs: Any,
-    ) -> None:
+    ) -> tuple[str, dict[str, Any], dict[str, Any]]:
         """
         Cancel spread order
         :param sprd_id: Spread instrument ID
@@ -182,7 +191,7 @@ class SpreadTradingMixin:
         return path, params, extra_data
 
     @staticmethod
-    def _sprd_cancel_order_normalize_function(input_data: Any, extra_data: Any) -> None:
+    def _sprd_cancel_order_normalize_function(input_data: Any, extra_data: Any) -> tuple[Any, bool]:
         """Normalize spread cancel order response"""
         status = input_data["code"] == "0"
         if "data" not in input_data or not input_data["data"]:
@@ -203,7 +212,7 @@ class SpreadTradingMixin:
         client_order_id: Any = None,
         extra_data: Any = None,
         **kwargs: Any,
-    ) -> None:
+    ) -> Any:
         """Cancel spread order"""
         path, params, extra_data = self._sprd_cancel_order(
             sprd_id, order_id, client_order_id, extra_data, **kwargs
@@ -235,7 +244,7 @@ class SpreadTradingMixin:
         client_order_id: Any = None,
         extra_data: Any = None,
         **kwargs: Any,
-    ) -> None:
+    ) -> tuple[str, dict[str, Any], dict[str, Any]]:
         """
         Get spread order details
         :param sprd_id: Spread instrument ID
@@ -267,7 +276,7 @@ class SpreadTradingMixin:
         return path, params, extra_data
 
     @staticmethod
-    def _sprd_get_order_normalize_function(input_data: Any, extra_data: Any) -> None:
+    def _sprd_get_order_normalize_function(input_data: Any, extra_data: Any) -> tuple[Any, bool]:
         """Normalize spread get order response"""
         status = input_data["code"] == "0"
         if "data" not in input_data or not input_data["data"]:
@@ -302,7 +311,7 @@ class SpreadTradingMixin:
         client_order_id: Any = None,
         extra_data: Any = None,
         **kwargs: Any,
-    ) -> None:
+    ) -> Any:
         """Get spread order details"""
         path, params, extra_data = self._sprd_get_order(
             sprd_id, order_id, client_order_id, extra_data, **kwargs
@@ -336,7 +345,7 @@ class SpreadTradingMixin:
         limit: Any = None,
         extra_data: Any = None,
         **kwargs: Any,
-    ) -> None:
+    ) -> tuple[str, dict[str, Any], dict[str, Any]]:
         """
         Get pending spread orders
         :param sprd_id: Spread instrument ID
@@ -349,7 +358,7 @@ class SpreadTradingMixin:
         :return: path, params, extra_data
         """
         request_type = "sprd_get_orders_pending"
-        params = {}
+        params: dict[str, Any] = {}
         if sprd_id:
             params["sprdId"] = sprd_id
         if inst_type:
@@ -376,7 +385,9 @@ class SpreadTradingMixin:
         return path, params, extra_data
 
     @staticmethod
-    def _sprd_get_orders_pending_normalize_function(input_data: Any, extra_data: Any) -> None:
+    def _sprd_get_orders_pending_normalize_function(
+        input_data: Any, extra_data: Any
+    ) -> tuple[Any, bool]:
         """Normalize spread pending orders response"""
         status = input_data["code"] == "0"
         if "data" not in input_data or not input_data["data"]:
@@ -414,7 +425,7 @@ class SpreadTradingMixin:
         limit: Any = None,
         extra_data: Any = None,
         **kwargs: Any,
-    ) -> None:
+    ) -> Any:
         """Get pending spread orders"""
         path, params, extra_data = self._sprd_get_orders_pending(
             sprd_id, inst_type, after, before, limit, extra_data, **kwargs
@@ -451,7 +462,7 @@ class SpreadTradingMixin:
         limit: Any = None,
         extra_data: Any = None,
         **kwargs: Any,
-    ) -> None:
+    ) -> tuple[str, dict[str, Any], dict[str, Any]]:
         """
         Get spread order history
         :param sprd_id: Spread instrument ID
@@ -465,7 +476,7 @@ class SpreadTradingMixin:
         :return: path, params, extra_data
         """
         request_type = "sprd_get_orders_history"
-        params = {}
+        params: dict[str, Any] = {}
         if sprd_id:
             params["sprdId"] = sprd_id
         if inst_type:
@@ -494,7 +505,9 @@ class SpreadTradingMixin:
         return path, params, extra_data
 
     @staticmethod
-    def _sprd_get_orders_history_normalize_function(input_data: Any, extra_data: Any) -> None:
+    def _sprd_get_orders_history_normalize_function(
+        input_data: Any, extra_data: Any
+    ) -> tuple[Any, bool]:
         """Normalize spread order history response"""
         status = input_data["code"] == "0"
         if "data" not in input_data or not input_data["data"]:
@@ -534,7 +547,7 @@ class SpreadTradingMixin:
         limit: Any = None,
         extra_data: Any = None,
         **kwargs: Any,
-    ) -> None:
+    ) -> Any:
         """Get spread order history"""
         path, params, extra_data = self._sprd_get_orders_history(
             sprd_id, inst_type, state, after, before, limit, extra_data, **kwargs
@@ -570,7 +583,7 @@ class SpreadTradingMixin:
         limit: Any = None,
         extra_data: Any = None,
         **kwargs: Any,
-    ) -> None:
+    ) -> tuple[str, dict[str, Any], dict[str, Any]]:
         """
         Get spread trade history
         :param sprd_id: Spread instrument ID
@@ -582,7 +595,7 @@ class SpreadTradingMixin:
         :return: path, params, extra_data
         """
         request_type = "sprd_get_trades"
-        params = {}
+        params: dict[str, Any] = {}
         if sprd_id:
             params["sprdId"] = sprd_id
         if after:
@@ -607,7 +620,7 @@ class SpreadTradingMixin:
         return path, params, extra_data
 
     @staticmethod
-    def _sprd_get_trades_normalize_function(input_data: Any, extra_data: Any) -> None:
+    def _sprd_get_trades_normalize_function(input_data: Any, extra_data: Any) -> tuple[Any, bool]:
         """Normalize spread trades response"""
         status = input_data["code"] == "0"
         if "data" not in input_data or not input_data["data"]:
@@ -640,7 +653,7 @@ class SpreadTradingMixin:
         limit: Any = None,
         extra_data: Any = None,
         **kwargs: Any,
-    ) -> None:
+    ) -> Any:
         """Get spread trade history"""
         path, params, extra_data = self._sprd_get_trades(
             sprd_id, after, before, limit, extra_data, **kwargs

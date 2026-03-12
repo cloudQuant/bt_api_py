@@ -29,7 +29,7 @@ def _get_bitvavo_config() -> Any | None:
             _bitvavo_config = load_exchange_config(config_path)
         _bitvavo_config_loaded = True
     except Exception as e:
-        logger.warn(f"Failed to load bitvavo.yaml config: {e}")
+        logger.warning(f"Failed to load bitvavo.yaml config: {e}")
     return _bitvavo_config
 
 

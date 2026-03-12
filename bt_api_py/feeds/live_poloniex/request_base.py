@@ -8,6 +8,7 @@ import hashlib
 import hmac
 import json
 import time
+from typing import Any
 from urllib.parse import urlencode
 
 from bt_api_py.containers.exchanges.poloniex_exchange_data import PoloniexExchangeDataSpot
@@ -71,7 +72,7 @@ class PoloniexRequestData(Feed):
     """
 
     @classmethod
-    def _capabilities(cls):
+    def _capabilities(cls) -> set[Capability]:
         return {
             Capability.GET_TICK,
             Capability.GET_DEPTH,
@@ -89,7 +90,7 @@ class PoloniexRequestData(Feed):
             Capability.GET_SERVER_TIME,
         }
 
-    def __init__(self, data_queue, **kwargs):
+    def __init__(self, data_queue: Any = None, **kwargs: Any) -> None:
         super().__init__(data_queue, **kwargs)
         self.data_queue = data_queue
         self.public_key = kwargs.get("public_key") or kwargs.get("api_key")
@@ -216,7 +217,7 @@ class PoloniexRequestData(Feed):
             RequestData object
         """
         if params is None:
-            params = {}
+            params: dict[str, Any] = {}
 
         # Parse method and path
         parts = path.split(" ", 1)
@@ -277,7 +278,7 @@ class PoloniexRequestData(Feed):
             RequestData object
         """
         if params is None:
-            params = {}
+            params: dict[str, Any] = {}
 
         parts = path.split(" ", 1)
         if len(parts) != 2:
@@ -325,7 +326,7 @@ class PoloniexRequestData(Feed):
             result = future.result()
             self.push_data_to_queue(result)
         except Exception as e:
-            self.async_logger.warn(f"async_callback::{e}")
+            self.async_logger.warning(f"async_callback::{e}")
 
     @staticmethod
     def _generic_normalize_function(input_data, extra_data):

@@ -45,7 +45,7 @@ def _get_uniswap_config() -> Any | None:
         from bt_api_py.logging_factory import get_logger
 
         logger = get_logger("uniswap_exchange_data")
-        logger.warn(f"Failed to load uniswap.yaml config: {e}")
+        logger.warning(f"Failed to load uniswap.yaml config: {e}")
     return _uniswap_config
 
 

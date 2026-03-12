@@ -2,13 +2,15 @@
 CoinEx Spot Feed – three-layer sync/async wrappers.
 """
 
+from typing import Any
+
 from bt_api_py.feeds.live_coinex.request_base import CoinExRequestData
 
 
 class CoinExRequestDataSpot(CoinExRequestData):
     """CoinEx Spot Feed."""
 
-    def __init__(self, data_queue, **kwargs):
+    def __init__(self, data_queue: Any = None, **kwargs: Any) -> None:
         kwargs.setdefault("exchange_name", "COINEX___SPOT")
         kwargs.setdefault("asset_type", "SPOT")
         super().__init__(data_queue, **kwargs)

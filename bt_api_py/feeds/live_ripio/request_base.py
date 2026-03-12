@@ -7,6 +7,7 @@ Handles HTTP requests to Ripio's API with optional HMAC SHA256 signature authent
 import hashlib
 import hmac
 import time
+from typing import Any
 
 from bt_api_py.containers.exchanges.ripio_exchange_data import (
     RipioExchangeDataSpot,
@@ -25,7 +26,7 @@ class RipioRequestData(Feed):
     """
 
     @classmethod
-    def _capabilities(cls):
+    def _capabilities(cls) -> set[Capability]:
         """Declare supported capabilities for Ripio."""
         return {
             Capability.GET_TICK,
@@ -38,7 +39,7 @@ class RipioRequestData(Feed):
             Capability.CANCEL_ORDER,
         }
 
-    def __init__(self, data_queue, **kwargs):
+    def __init__(self, data_queue: Any = None, **kwargs: Any) -> None:
         super().__init__(data_queue, **kwargs)
         self.data_queue = data_queue
         self.exchange_name = kwargs.get("exchange_name", "RIPIO___SPOT")
@@ -271,11 +272,9 @@ class RipioRequestData(Feed):
 
     def connect(self) -> None:
         """No-op for HTTP-based API."""
-        pass
 
     def disconnect(self) -> None:
         """No-op for HTTP-based API."""
-        pass
 
     def is_connected(self) -> bool:
         """Always return True for HTTP-based API."""

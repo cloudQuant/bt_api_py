@@ -6,6 +6,7 @@ Handles authentication, signing, and all REST API methods.
 import hashlib
 import hmac
 import time
+from typing import Any
 from urllib.parse import urlencode
 
 from bt_api_py.containers.exchanges.cryptocom_exchange_data import CryptoComExchangeDataSpot
@@ -28,7 +29,7 @@ class CryptoComRequestData(Feed):
     """
 
     @classmethod
-    def _capabilities(cls):
+    def _capabilities(cls) -> set[Capability]:
         return {
             Capability.GET_TICK,
             Capability.GET_DEPTH,
@@ -44,7 +45,7 @@ class CryptoComRequestData(Feed):
             Capability.GET_SERVER_TIME,
         }
 
-    def __init__(self, data_queue, **kwargs):
+    def __init__(self, data_queue: Any = None, **kwargs: Any) -> None:
         super().__init__(data_queue, **kwargs)
         self.data_queue = data_queue
         self.api_key = kwargs.get("public_key") or kwargs.get("api_key")
@@ -68,8 +69,7 @@ class CryptoComRequestData(Feed):
         for key in sorted_keys:
             value = params[key]
             if isinstance(value, list):
-                for item in value:
-                    parts.append(f"{key}{item}")
+                parts.extend(f"{key}{item}" for item in value)
             else:
                 parts.append(f"{key}{value}")
         return "".join(parts)
@@ -110,7 +110,7 @@ class CryptoComRequestData(Feed):
             RequestData object
         """
         if params is None:
-            params = {}
+            params: dict[str, Any] = {}
 
         method, endpoint = path.split(" ", 1)
         url = f"{self._params.rest_url}{endpoint}"
@@ -160,7 +160,7 @@ class CryptoComRequestData(Feed):
             RequestData object
         """
         if params is None:
-            params = {}
+            params: dict[str, Any] = {}
 
         method, endpoint = path.split(" ", 1)
         url = f"{self._params.rest_url}{endpoint}"
@@ -195,7 +195,7 @@ class CryptoComRequestData(Feed):
         """Get server time internal method."""
         request_type = "get_server_time"
         path = self._params.get_rest_path(request_type)
-        params = {}
+        params: dict[str, Any] = {}
         extra_data = update_extra_data(
             extra_data,
             **{
@@ -226,7 +226,7 @@ class CryptoComRequestData(Feed):
         """Get exchange information internal method."""
         request_type = "get_exchange_info"
         path = self._params.get_rest_path(request_type)
-        params = {}
+        params: dict[str, Any] = {}
         extra_data = update_extra_data(
             extra_data,
             **{
@@ -509,7 +509,7 @@ class CryptoComRequestData(Feed):
         request_type = "cancel_order"
         path = self._params.get_rest_path(request_type)
 
-        params = {}
+        params: dict[str, Any] = {}
         if symbol:
             params["instrument_name"] = self._params.get_symbol(symbol)
         if order_id is not None:
@@ -542,7 +542,7 @@ class CryptoComRequestData(Feed):
         request_type = "query_order"
         path = self._params.get_rest_path(request_type)
 
-        params = {}
+        params: dict[str, Any] = {}
         if order_id is not None:
             params["order_id"] = str(order_id)
 
@@ -579,7 +579,7 @@ class CryptoComRequestData(Feed):
         request_type = "get_open_orders"
         path = self._params.get_rest_path(request_type)
 
-        params = {}
+        params: dict[str, Any] = {}
         if symbol:
             params["instrument_name"] = self._params.get_symbol(symbol)
 
@@ -613,7 +613,7 @@ class CryptoComRequestData(Feed):
         """Get account summary internal method."""
         request_type = "get_account"
         path = self._params.get_rest_path(request_type)
-        params = {}
+        params: dict[str, Any] = {}
 
         extra_data = update_extra_data(
             extra_data,
@@ -641,7 +641,7 @@ class CryptoComRequestData(Feed):
         """Get balance internal method."""
         request_type = "get_balance"
         path = self._params.get_rest_path(request_type)
-        params = {}
+        params: dict[str, Any] = {}
 
         extra_data = update_extra_data(
             extra_data,

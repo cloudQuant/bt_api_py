@@ -28,18 +28,19 @@ class IbWebDataStream(BaseDataStream):
     每个 conid 需要单独订阅。
     """
 
-    def __init__(self, data_queue, **kwargs) -> None:
+    def __init__(self, data_queue: Any = None, **kwargs: Any) -> None:
         super().__init__(data_queue, **kwargs)
         self.base_url = kwargs.get("base_url", "https://localhost:5000")
         self.access_token = kwargs.get("access_token")
         self.verify_ssl = kwargs.get("verify_ssl", False)
         self.topics = kwargs.get("topics", [])
-        self._ws = None
+        self._ws: Any = None
         self._heartbeat_interval = 30  # 秒
-        self._heartbeat_thread = None
+        self._heartbeat_thread: threading.Thread | None = None
+        self._ws_thread: threading.Thread | None = None
         self._reconnect_delay = 5
         self._max_reconnect_delay = 60
-        self._subscribed_conids = set()
+        self._subscribed_conids: set[int] = set()
 
     def _build_ws_url(self) -> Any:
         """构建 WebSocket URL"""
@@ -115,7 +116,7 @@ class IbWebDataStream(BaseDataStream):
                 self._subscribed_conids.discard(conid)
                 self.logger.info(f"Unsubscribed market data: conid={conid}")
             except Exception as e:
-                self.logger.warn(f"Unsubscribe failed for conid={conid}: {e}")
+                self.logger.warning(f"Unsubscribe failed for conid={conid}: {e}")
 
     def _subscribe_market_data(self, conid, fields=None) -> Any:
         """发送市场数据订阅消息"""
@@ -129,7 +130,7 @@ class IbWebDataStream(BaseDataStream):
                 self._subscribed_conids.add(conid)
                 self.logger.info(f"Subscribed market data: conid={conid}, fields={fields}")
             except Exception as e:
-                self.logger.warn(f"Subscribe failed for conid={conid}: {e}")
+                self.logger.warning(f"Subscribe failed for conid={conid}: {e}")
 
     def _on_open(self, ws) -> Any:
         """WebSocket 连接建立回调"""
@@ -158,7 +159,7 @@ class IbWebDataStream(BaseDataStream):
         except json.JSONDecodeError:
             self.logger.debug(f"Non-JSON WS message: {message[:100]}")
         except Exception as e:
-            self.logger.warn(f"WS message processing error: {e}")
+            self.logger.warning(f"WS message processing error: {e}")
 
     def _process_message(self, data) -> Any:
         """处理解析后的 JSON 消息"""
@@ -210,7 +211,7 @@ class IbWebDataStream(BaseDataStream):
 
     def _on_error(self, ws, error) -> Any:
         """WebSocket 错误回调"""
-        self.logger.warn(f"IB WebSocket error: {error}")
+        self.logger.warning(f"IB WebSocket error: {error}")
         self.state = ConnectionState.ERROR
 
     def _on_close(self, ws, close_status_code, close_msg) -> Any:
@@ -229,7 +230,7 @@ class IbWebDataStream(BaseDataStream):
                 for conid in list(self._subscribed_conids):
                     self._subscribe_market_data(conid)
             except Exception as e:
-                self.logger.warn(f"Reconnect failed: {e}")
+                self.logger.warning(f"Reconnect failed: {e}")
 
     def _start_heartbeat(self) -> Any:
         """启动心跳发送线程"""
@@ -261,17 +262,18 @@ class IbWebAccountStream(BaseDataStream):
       - 盈亏更新 (spl)
     """
 
-    def __init__(self, data_queue, **kwargs) -> None:
+    def __init__(self, data_queue: Any = None, **kwargs: Any) -> None:
         super().__init__(data_queue, **kwargs)
         self.base_url = kwargs.get("base_url", "https://localhost:5000")
         self.access_token = kwargs.get("access_token")
         self.verify_ssl = kwargs.get("verify_ssl", False)
         self.account_id = kwargs.get("account_id")
         self.topics = kwargs.get("topics", [])
-        self._ws = None
+        self._ws: Any = None
         self._heartbeat_interval = 30
         self._reconnect_delay = 5
         self._max_reconnect_delay = 60
+        self._ws_thread: threading.Thread | None = None
 
     def _build_ws_url(self) -> Any:
         base = self.base_url.replace("https://", "wss://").replace("http://", "ws://")
@@ -279,7 +281,7 @@ class IbWebAccountStream(BaseDataStream):
             return f"{base}/ws"
         return f"{base}/v1/api/ws"
 
-    def connect(self):
+    def connect(self) -> None:
         try:
             import websocket
         except ImportError:
@@ -344,7 +346,7 @@ class IbWebAccountStream(BaseDataStream):
                 self._ws.send(msg)
                 self.logger.info(f"Sent WS message: {msg}")
             except Exception as e:
-                self.logger.warn(f"WS send failed: {e}")
+                self.logger.warning(f"WS send failed: {e}")
 
     def _on_open(self, ws) -> Any:
         self.state = ConnectionState.CONNECTED
@@ -365,7 +367,7 @@ class IbWebAccountStream(BaseDataStream):
         except json.JSONDecodeError:
             self.logger.debug(f"Non-JSON account WS message: {message[:100]}")
         except Exception as e:
-            self.logger.warn(f"Account WS message error: {e}")
+            self.logger.warning(f"Account WS message error: {e}")
 
     def _process_message(self, data) -> Any:
         if isinstance(data, dict):
@@ -412,7 +414,7 @@ class IbWebAccountStream(BaseDataStream):
                 )
 
     def _on_error(self, ws, error) -> Any:
-        self.logger.warn(f"IB Account WebSocket error: {error}")
+        self.logger.warning(f"IB Account WebSocket error: {error}")
         self.state = ConnectionState.ERROR
 
     def _on_close(self, ws, close_status_code, close_msg) -> Any:
@@ -425,7 +427,7 @@ class IbWebAccountStream(BaseDataStream):
             try:
                 self.connect()
             except Exception as e:
-                self.logger.warn(f"Account WS reconnect failed: {e}")
+                self.logger.warning(f"Account WS reconnect failed: {e}")
 
     def _start_heartbeat(self) -> Any:
         def heartbeat_loop():

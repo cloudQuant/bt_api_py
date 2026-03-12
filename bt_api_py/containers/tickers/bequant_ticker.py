@@ -5,6 +5,7 @@ import time
 from typing import Any
 
 from bt_api_py.containers.tickers.ticker import TickerData
+from bt_api_py.containers.tickers.ticker_utils import parse_float
 
 
 class BeQuantRequestTickerData(TickerData):
@@ -48,31 +49,13 @@ class BeQuantRequestTickerData(TickerData):
         # BeQuant ticker format
         if isinstance(self.ticker_data, dict):
             self.ticker_symbol_name = self.ticker_data.get("symbol")
-            self.last_price = self._parse_float(self.ticker_data.get("last"))
-            self.bid_price = self._parse_float(self.ticker_data.get("bid"))
-            self.ask_price = self._parse_float(self.ticker_data.get("ask"))
-            self.volume_24h = self._parse_float(self.ticker_data.get("volume"))
-            self.high_24h = self._parse_float(self.ticker_data.get("high"))
-            self.low_24h = self._parse_float(self.ticker_data.get("low"))
-            self.open_24h = self._parse_float(self.ticker_data.get("open"))
+            self.last_price = parse_float(self.ticker_data.get("last"))
+            self.bid_price = parse_float(self.ticker_data.get("bid"))
+            self.ask_price = parse_float(self.ticker_data.get("ask"))
+            self.volume_24h = parse_float(self.ticker_data.get("volume"))
+            self.high_24h = parse_float(self.ticker_data.get("high"))
+            self.low_24h = parse_float(self.ticker_data.get("low"))
+            self.open_24h = parse_float(self.ticker_data.get("open"))
 
         self.has_been_init_data = True
         return self
-
-    @staticmethod
-    def _parse_float(value: Any) -> float | None:
-        """Parse value to float.
-
-        Args:
-            value: Value to parse.
-
-        Returns:
-            Parsed float value or None if parsing fails.
-
-        """
-        if value is None:
-            return None
-        try:
-            return float(value)
-        except (ValueError, TypeError):
-            return None

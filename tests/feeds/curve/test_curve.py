@@ -223,17 +223,14 @@ class TestCurveRequestDataSpot:
     @pytest.mark.skip(reason="Requires actual API call")
     def test_integration_get_pools(self, curve_spot):
         """Integration test for get_pools - skipped."""
-        pass
 
     @pytest.mark.skip(reason="Requires actual API call")
     def test_integration_get_tvl(self, curve_spot):
         """Integration test for get_tvl - skipped."""
-        pass
 
     @pytest.mark.skip(reason="Requires actual API call")
     def test_integration_get_apys(self, curve_spot):
         """Integration test for get_apys - skipped."""
-        pass
 
 
 class TestCurveExchangeDataSpot:

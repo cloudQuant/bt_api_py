@@ -28,7 +28,7 @@ def _get_bybit_config() -> Any | None:
             _bybit_config = load_exchange_config(config_path)
         _bybit_config_loaded = True
     except Exception as e:
-        logger.warn(f"Failed to load bybit.yaml config: {e}")
+        logger.warning(f"Failed to load bybit.yaml config: {e}")
     return _bybit_config
 
 

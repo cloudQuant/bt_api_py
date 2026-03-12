@@ -10,6 +10,7 @@ Symbol: primaryCurrencyCode + secondaryCurrencyCode (e.g. Xbt, Aud)
 import hashlib
 import hmac
 import time
+from typing import Any
 from urllib.parse import urlencode
 
 from bt_api_py.containers.exchanges.independent_reserve_exchange_data import (
@@ -25,7 +26,7 @@ class IndependentReserveRequestData(Feed):
     """Independent Reserve REST API Feed base class."""
 
     @classmethod
-    def _capabilities(cls):
+    def _capabilities(cls) -> set[Capability]:
         return {
             Capability.GET_TICK,
             Capability.GET_DEPTH,
@@ -38,7 +39,7 @@ class IndependentReserveRequestData(Feed):
             Capability.QUERY_OPEN_ORDERS,
         }
 
-    def __init__(self, data_queue, **kwargs) -> None:
+    def __init__(self, data_queue: Any = None, **kwargs: Any) -> None:
         super().__init__(data_queue, **kwargs)
         self.data_queue = data_queue
         self._api_key = kwargs.get("public_key") or kwargs.get("api_key") or ""
@@ -100,7 +101,7 @@ class IndependentReserveRequestData(Feed):
     def request(self, path, params=None, body=None, extra_data=None, timeout=10):
         """Synchronous HTTP request."""
         if params is None:
-            params = {}
+            params: dict[str, Any] = {}
         method, endpoint = path.split(" ", 1)
         headers = self._get_headers()
 
@@ -121,7 +122,7 @@ class IndependentReserveRequestData(Feed):
     async def async_request(self, path, params=None, body=None, extra_data=None, timeout=5):
         """Async HTTP request."""
         if params is None:
-            params = {}
+            params: dict[str, Any] = {}
         method, endpoint = path.split(" ", 1)
         headers = self._get_headers()
 
@@ -179,7 +180,7 @@ class IndependentReserveRequestData(Feed):
 
     def _get_exchange_info(self, extra_data=None, **kwargs):
         path = self._params.get_rest_path("get_exchange_info")
-        params = {}
+        params: dict[str, Any] = {}
         extra_data = extra_data or {}
         extra_data.update(
             {

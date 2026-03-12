@@ -32,7 +32,7 @@ def _get_ctp_config() -> Any | None:
             _ctp_config = load_exchange_config(config_path)
         _ctp_config_loaded = True
     except Exception as e:
-        logger.warn(f"Failed to load ctp.yaml config: {e}")
+        logger.warning(f"Failed to load ctp.yaml config: {e}")
     return _ctp_config
 
 

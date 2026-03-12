@@ -1,4 +1,4 @@
-.PHONY: help install test test-cov test-fast test-unit test-integration test-performance test-contracts test-e2e clean lint format type-check docs analyze-coverage optimized-test
+.PHONY: help install test test-cov test-fast test-unit test-integration test-performance test-contracts test-e2e clean lint format type-check security-scan docs analyze-coverage optimized-test
 
 # Default target
 help:
@@ -27,6 +27,7 @@ help:
 	@echo "  make format           Format code with ruff"
 	@echo "  make type-check       Run mypy type checking"
 	@echo "  make check            Run all checks (lint + type-check)"
+	@echo "  make security-scan    Run bandit security scan"
 	@echo "  make pre-commit       Install pre-commit hooks"
 	@echo "  make pre-commit-run   Run pre-commit on all files"
 	@echo ""
@@ -102,6 +103,10 @@ type-check:
 
 check: lint type-check
 	@echo "All checks passed!"
+
+security-scan:
+	@echo "Running bandit security scan..."
+	bandit -r bt_api_py/ -c pyproject.toml
 
 pre-commit:
 	@echo "Installing pre-commit hooks..."

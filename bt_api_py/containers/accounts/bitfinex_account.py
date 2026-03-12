@@ -32,6 +32,7 @@ class BitfinexSpotRequestAccountData(AccountData):
         self.balance: float | None = None
         self.available: float | None = None
         self.timestamp: str | None = None
+        self.all_data: dict[str, Any] | None = None
         self.has_been_init_data = False
 
     def init_data(self) -> "BitfinexSpotRequestAccountData":
@@ -41,7 +42,10 @@ class BitfinexSpotRequestAccountData(AccountData):
             Self for method chaining
         """
         if not self.has_been_json_encoded:
-            self.account_data = json.loads(self.account_info)
+            if isinstance(self.account_info, str):
+                self.account_data = json.loads(self.account_info)
+            else:
+                self.account_data = self.account_info
             self.has_been_json_encoded = True
         if self.has_been_init_data:
             return self
@@ -65,7 +69,7 @@ class BitfinexSpotRequestAccountData(AccountData):
         """
         if self.all_data is None:
             self.init_data()
-            self.all_data = {
+            all_data: dict[str, Any] = {
                 "exchange_name": self.exchange_name,
                 "asset_type": self.asset_type,
                 "local_update_time": self.local_update_time,
@@ -76,6 +80,7 @@ class BitfinexSpotRequestAccountData(AccountData):
                 "available": self.available,
                 "timestamp": self.timestamp,
             }
+            self.all_data = all_data
         return self.all_data
 
     def __str__(self) -> str:
@@ -88,5 +93,3 @@ class BitfinexSpotRequestAccountData(AccountData):
 
 class BitfinexSpotWssAccountData(BitfinexSpotRequestAccountData):
     """Bitfinex Spot WebSocket Account Data"""
-
-    pass

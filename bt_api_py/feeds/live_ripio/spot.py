@@ -4,6 +4,8 @@ Ripio Spot Feed implementation.
 Provides market data access for Ripio spot trading.
 """
 
+from typing import Any
+
 from bt_api_py.containers.exchanges.ripio_exchange_data import RipioExchangeDataSpot
 from bt_api_py.feeds.capability import Capability
 from bt_api_py.feeds.live_ripio.request_base import RipioRequestData
@@ -23,7 +25,7 @@ class RipioRequestDataSpot(RipioRequestData):
     """
 
     @classmethod
-    def _capabilities(cls):
+    def _capabilities(cls) -> set[Capability]:
         """Declare supported capabilities."""
         return {
             Capability.GET_TICK,
@@ -36,7 +38,7 @@ class RipioRequestDataSpot(RipioRequestData):
             Capability.CANCEL_ORDER,
         }
 
-    def __init__(self, data_queue, **kwargs):
+    def __init__(self, data_queue: Any = None, **kwargs: Any) -> None:
         super().__init__(data_queue, **kwargs)
         self.exchange_name = kwargs.get("exchange_name", "RIPIO___SPOT")
         self.asset_type = kwargs.get("asset_type", "SPOT")
@@ -62,7 +64,7 @@ class RipioRequestDataSpot(RipioRequestData):
         # Ripio uses underscore format: BTC_USDT
         ripio_symbol = self._params.get_symbol(symbol)
 
-        params = {}
+        params: dict[str, Any] = {}
 
         # For GET requests with symbol in path
         path = path.replace(":symbol", ripio_symbol)
@@ -278,7 +280,7 @@ class RipioRequestDataSpot(RipioRequestData):
         request_type = "get_exchange_info"
         path = self._params.get_rest_path(request_type)
 
-        params = {}
+        params: dict[str, Any] = {}
 
         extra_data = update_extra_data(
             extra_data,

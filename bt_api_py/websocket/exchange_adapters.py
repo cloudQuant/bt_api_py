@@ -90,36 +90,30 @@ class ExchangeWebSocketAdapter(ABC):
     @abstractmethod
     async def authenticate(self, websocket: Any) -> None:
         """Perform exchange-specific authentication."""
-        pass
 
     @abstractmethod
     def format_subscription_message(
         self, subscription_id: str, topic: str, symbol: str, params: dict[str, Any]
     ) -> dict[str, Any]:
         """Format subscription message for the exchange."""
-        pass
 
     @abstractmethod
     def format_unsubscription_message(
         self, subscription_id: str, topic: str, symbol: str
     ) -> dict[str, Any]:
         """Format unsubscription message for the exchange."""
-        pass
 
     @abstractmethod
     def extract_topic_symbol(self, message: dict[str, Any]) -> tuple[str | None, str | None]:
         """Extract topic and symbol from incoming message."""
-        pass
 
     @abstractmethod
     def normalize_message(self, message: dict[str, Any]) -> dict[str, Any]:
         """Normalize message format to standard bt_api_py format."""
-        pass
 
     @abstractmethod
     def get_rate_limit_config(self) -> RateLimitConfig:
         """Get rate limiting configuration for the exchange."""
-        pass
 
     def get_endpoints(self, primary_url: str) -> list[str]:
         """Get failover endpoints for the exchange."""
@@ -424,7 +418,7 @@ class OKXWebSocketAdapter(ExchangeWebSocketAdapter):
             "account": "account",
         }
 
-        return mapping.get(topic, topic)
+        return str(mapping.get(topic, topic))
 
     def extract_topic_symbol(self, message: dict[str, Any]) -> tuple[str | None, str | None]:
         """Extract topic and symbol from OKX message."""
@@ -542,7 +536,7 @@ class OKXWebSocketAdapter(ExchangeWebSocketAdapter):
 class WebSocketAdapterFactory:
     """Factory for creating exchange-specific WebSocket adapters."""
 
-    _adapters = {
+    _adapters: dict[str, type[ExchangeWebSocketAdapter]] = {
         "BINANCE": BinanceWebSocketAdapter,
         "OKX": OKXWebSocketAdapter,
         # Add more exchanges as needed
@@ -559,14 +553,16 @@ class WebSocketAdapterFactory:
         adapter_class = cls._adapters.get(exchange_name.upper())
 
         if not adapter_class:
-            # Use generic adapter if exchange not supported
-            cls._adapters[exchange_name.upper()] = adapter_class
+            # Use generic adapter if exchange not supported; cache it
+            cls._adapters[exchange_name.upper()] = GenericWebSocketAdapter
             return GenericWebSocketAdapter(exchange_name, credentials)
 
-        return adapter_class(exchange_type, credentials)
+        return adapter_class(exchange_type, credentials)  # type: ignore[arg-type]
 
     @classmethod
-    def register_adapter(cls, exchange_name: str, adapter_class: type) -> None:
+    def register_adapter(
+        cls, exchange_name: str, adapter_class: type[ExchangeWebSocketAdapter]
+    ) -> None:
         """Register a new adapter class."""
         cls._adapters[exchange_name.upper()] = adapter_class
 
@@ -576,7 +572,6 @@ class GenericWebSocketAdapter(ExchangeWebSocketAdapter):
 
     async def authenticate(self, websocket: Any) -> None:
         """No authentication for generic adapter."""
-        pass
 
     def format_subscription_message(
         self, subscription_id: str, topic: str, symbol: str, params: dict[str, Any]

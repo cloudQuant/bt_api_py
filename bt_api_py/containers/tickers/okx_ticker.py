@@ -11,20 +11,22 @@ class OkxTickerData(TickerData):
 
     def __init__(self, ticker_info, symbol_name, asset_type, has_been_json_encoded=False) -> None:
         super().__init__(ticker_info, has_been_json_encoded)
-        self.exchange_name = "OKX"  # 交易所名称
-        self.local_update_time = time.time()  # 本地时间戳
-        self.asset_type = asset_type  # ticker的类型
+        self.exchange_name = "OKX"
+        self.local_update_time = time.time()
+        self.asset_type = asset_type
         self.symbol_name = symbol_name
-        self.ticker_data = self.ticker_info
-        self.ticker_symbol_name = None
-        self.server_time = None
-        self.bid_price = None
-        self.ask_price = None
-        self.bid_volume = None
-        self.ask_volume = None
-        self.last_price = None
-        self.last_volume = None
-        self.all_data = None
+        self.ticker_data: dict[str, Any] | None = (
+            self.ticker_info if isinstance(self.ticker_info, dict) else None
+        )
+        self.ticker_symbol_name: str | None = None
+        self.server_time: float | None = None
+        self.bid_price: float | None = None
+        self.ask_price: float | None = None
+        self.bid_volume: float | None = None
+        self.ask_volume: float | None = None
+        self.last_price: float | None = None
+        self.last_volume: float | None = None
+        self.all_data: dict[str, Any] | None = None
         self.has_been_init_data = False
 
     def init_data(self) -> "Self":
@@ -33,19 +35,21 @@ class OkxTickerData(TickerData):
             self.has_been_json_encoded = True
         if self.has_been_init_data:
             return self
-        self.ticker_symbol_name = from_dict_get_string(self.ticker_data, "instId")
-        self.server_time = from_dict_get_float(self.ticker_data, "ts")
-        self.bid_price = from_dict_get_float(self.ticker_data, "bidPx")
-        self.ask_price = from_dict_get_float(self.ticker_data, "askPx")
-        self.bid_volume = from_dict_get_float(self.ticker_data, "bidSz")
-        self.ask_volume = from_dict_get_float(self.ticker_data, "askSz")
-        self.last_price = from_dict_get_float(self.ticker_data, "last")
-        self.last_volume = from_dict_get_float(self.ticker_data, "lastSz")
+        data = self.ticker_data or {}
+        self.ticker_symbol_name = from_dict_get_string(data, "instId")
+        self.server_time = from_dict_get_float(data, "ts")
+        self.bid_price = from_dict_get_float(data, "bidPx")
+        self.ask_price = from_dict_get_float(data, "askPx")
+        self.bid_volume = from_dict_get_float(data, "bidSz")
+        self.ask_volume = from_dict_get_float(data, "askSz")
+        self.last_price = from_dict_get_float(data, "last")
+        self.last_volume = from_dict_get_float(data, "lastSz")
         self.has_been_init_data = True
         return self
 
     def get_all_data(self) -> dict[str, Any]:
         if self.all_data is None:
+            self.init_data()
             self.all_data = {
                 "exchange_name": self.exchange_name,
                 "symbol_name": self.symbol_name,
@@ -60,29 +64,30 @@ class OkxTickerData(TickerData):
                 "last_price": self.last_price,
                 "last_volume": self.last_volume,
             }
-        return self.all_data
+        return self.all_data or {}
 
     def __str__(self) -> str:
         self.init_data()
-        return json.dumps(self.get_all_data())
+        return str(json.dumps(self.get_all_data()))
 
     def __repr__(self) -> str:
-        return self.__str__()
+        return str(self.__str__())
 
     def get_exchange_name(self) -> str:
-        return self.exchange_name
+        return str(self.exchange_name)
 
     def get_local_update_time(self) -> float:
-        return self.local_update_time
+        return float(self.local_update_time)
 
     def get_symbol_name(self) -> str:
-        return self.symbol_name
+        return str(self.symbol_name)
 
     def get_ticker_symbol_name(self) -> str | None:
-        return self.ticker_symbol_name
+        val = self.ticker_symbol_name
+        return None if val is None else str(val)
 
     def get_asset_type(self) -> str:
-        return self.asset_type
+        return str(self.asset_type)
 
     def get_server_time(self) -> float | None:
         return self.server_time

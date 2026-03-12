@@ -555,8 +555,8 @@ def test_okx_cancel_all():
     print("cancel_all status:", data.get_status())
 
 
-def test_okx_async_cancel_all():
-    """Test async_cancel_all interface"""
+def test_okx_async_cancel_all_with_inst_id():
+    """Test async_cancel_all with inst_id and extra_data."""
     data_queue = queue.Queue()
     live_okx_swap_feed = init_async_feed(data_queue)
     live_okx_swap_feed.async_cancel_all(
@@ -590,8 +590,8 @@ def test_okx_order_precheck():
         print("Order precheck data:", data_list[:1] if data_list else "No data")
 
 
-def test_okx_async_order_precheck():
-    """Test async_order_precheck interface"""
+def test_okx_async_order_precheck_with_extra_data():
+    """Test async_order_precheck with extra_data."""
     data_queue = queue.Queue()
     live_okx_swap_feed = init_async_feed(data_queue)
     live_okx_swap_feed.async_order_precheck(

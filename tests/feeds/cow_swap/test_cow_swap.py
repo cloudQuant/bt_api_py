@@ -201,17 +201,14 @@ class TestCowSwapRequestDataSpot:
     @pytest.mark.skip(reason="Requires actual API call")
     def test_integration_get_order(self, cow_swap_spot):
         """Integration test for get_order - skipped."""
-        pass
 
     @pytest.mark.skip(reason="Requires actual API call")
     def test_integration_get_trades(self, cow_swap_spot):
         """Integration test for get_trades - skipped."""
-        pass
 
     @pytest.mark.skip(reason="Requires actual API call")
     def test_integration_get_quote(self, cow_swap_spot):
         """Integration test for get_quote - skipped."""
-        pass
 
 
 class TestCowSwapExchangeDataSpot:

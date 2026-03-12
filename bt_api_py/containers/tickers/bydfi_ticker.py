@@ -5,6 +5,7 @@ import time
 from typing import Any, Self
 
 from bt_api_py.containers.tickers.ticker import TickerData
+from bt_api_py.containers.tickers.ticker_utils import parse_float, parse_int
 
 
 class BYDFiRequestTickerData(TickerData):
@@ -17,7 +18,14 @@ class BYDFiRequestTickerData(TickerData):
         self.exchange_name = "BYDFI"
         self.local_update_time = time.time()
         self.ticker_data = ticker_info if has_been_json_encoded else None
-        self.ticker_symbol_name = None
+        self.ticker_symbol_name: str | None = None
+        self.last_price: float | None = None
+        self.bid_price: float | None = None
+        self.ask_price: float | None = None
+        self.volume_24h: float | None = None
+        self.high_24h: float | None = None
+        self.low_24h: float | None = None
+        self.timestamp: int | None = None
         self.has_been_init_data = False
 
     def init_data(self) -> "Self":
@@ -28,24 +36,24 @@ class BYDFiRequestTickerData(TickerData):
         if self.has_been_init_data:
             return self
 
-        data = self.ticker_data.get("data", {})
+        data = (self.ticker_data or {}).get("data", {})
 
         if data:
             self.ticker_symbol_name = data.get("symbol")
-            self.last_price = self._parse_float(data.get("price"))
-            self.bid_price = self._parse_float(data.get("bidPrice"))
-            self.ask_price = self._parse_float(data.get("askPrice"))
-            self.volume_24h = self._parse_float(data.get("quoteVolume"))
-            self.high_24h = self._parse_float(data.get("highPrice"))
-            self.low_24h = self._parse_float(data.get("lowPrice"))
-            self.timestamp = self._parse_int(data.get("time"))
+            self.last_price = parse_float(data.get("price"))
+            self.bid_price = parse_float(data.get("bidPrice"))
+            self.ask_price = parse_float(data.get("askPrice"))
+            self.volume_24h = parse_float(data.get("quoteVolume"))
+            self.high_24h = parse_float(data.get("highPrice"))
+            self.low_24h = parse_float(data.get("lowPrice"))
+            self.timestamp = parse_int(data.get("time"))
 
         self.has_been_init_data = True
         return self
 
     def get_symbol_name(self) -> str:
         """Get the symbol name."""
-        return self.symbol_name
+        return str(self.symbol_name)
 
     def get_exchange_name(self) -> str:
         """Get the exchange name."""
@@ -53,7 +61,7 @@ class BYDFiRequestTickerData(TickerData):
 
     def get_asset_type(self) -> str:
         """Get the asset type."""
-        return self.asset_type
+        return str(self.asset_type)
 
     def get_local_update_time(self) -> float:
         """Get local update time."""
@@ -97,21 +105,3 @@ class BYDFiRequestTickerData(TickerData):
 
     def __repr__(self) -> str:
         return self.__str__()
-
-    @staticmethod
-    def _parse_float(value):
-        if value is None:
-            return None
-        try:
-            return float(value)
-        except (ValueError, TypeError):
-            return None
-
-    @staticmethod
-    def _parse_int(value):
-        if value is None:
-            return None
-        try:
-            return int(value)
-        except (ValueError, TypeError):
-            return None

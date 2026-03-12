@@ -4,13 +4,13 @@ from bt_api_py.containers.symbols.binance_symbol import BinanceSpotSymbolData, B
 
 
 def get_binance_swap_symbol_info():
-    res = requests.get("https://fapi.binance.com/fapi/v1/exchangeInfo")
+    res = requests.get("https://fapi.binance.com/fapi/v1/exchangeInfo", timeout=30)
     result = res.json()
     return result
 
 
 def get_binance_spot_symbol_info():
-    res = requests.get("https://api.binance.com/fapi/v3/exchangeInfo")
+    res = requests.get("https://api.binance.com/fapi/v3/exchangeInfo", timeout=30)
     result = res.json()
     return result
 

@@ -1,6 +1,11 @@
 import os
+import pickle
 
-from bt_api_py.functions.update_data.update_exchange_symbol_info import *
+from bt_api_py.functions.update_data.update_exchange_symbol_info import (
+    get_package_path,
+    update_binance_spot_symbol_info,
+    update_binance_swap_symbol_info,
+)
 
 
 def test_update_binance_swap_symbol_info():

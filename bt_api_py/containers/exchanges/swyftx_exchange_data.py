@@ -28,7 +28,7 @@ def _load_swyftx_yaml() -> Any | None:
             with open(cfg_path, encoding="utf-8") as f:
                 _swyftx_yaml_cache = yaml.safe_load(f) or {}
     except Exception as e:
-        logger.warn(f"Failed to load swyftx.yaml: {e}")
+        logger.warning(f"Failed to load swyftx.yaml: {e}")
         _swyftx_yaml_cache = {}
     return _swyftx_yaml_cache
 
@@ -103,7 +103,7 @@ class SwyftxExchangeDataSpot(SwyftxExchangeData):
         self._load_yaml()
 
     def _load_yaml(self) -> None:
-        cfg = _load_swyftx_yaml()
+        cfg = _load_swyftx_yaml() or {}
         spot = cfg.get("SWYFTX___SPOT", {})
         if not spot:
             return
@@ -127,4 +127,4 @@ class SwyftxExchangeDataSpot(SwyftxExchangeData):
             raise ValueError(f"[{self.exchange_name}] REST path not found: {key}")
         if kwargs:
             path = path.format(**kwargs)
-        return path
+        return str(path)

@@ -14,6 +14,13 @@ from pathlib import Path
 from urllib.parse import urlparse
 
 
+def _get_logger():
+    """Lazy logger to avoid import cycle."""
+    from bt_api_py.logging_factory import get_logger
+
+    return get_logger("browser_cookies")
+
+
 def extract_cookie_string(cookie_str: str) -> dict[str, str]:
     """从 Cookie 字符串解析为字典
     Args:
@@ -21,7 +28,7 @@ def extract_cookie_string(cookie_str: str) -> dict[str, str]:
     Returns:
         Dict[str, str]: Cookie 字典
     """
-    cookies = {}
+    cookies: dict[str, str] = {}
     if not cookie_str:
         return cookies
 
@@ -35,7 +42,7 @@ def extract_cookie_string(cookie_str: str) -> dict[str, str]:
 
 
 def get_cookies_from_browser(
-    domain: str = "localhost:5000", browser: str = "chrome", path: str = None
+    domain: str = "localhost:5000", browser: str = "chrome", path: str | None = None
 ) -> dict[str, str]:
     """从浏览器提取指定域名的 cookies
 
@@ -73,10 +80,13 @@ def get_cookies_from_browser(
                     cookie_jar = browser_func(domain_name=domain_parts)
                     if cookie_jar:
                         break
-                except Exception:
+                except Exception as e:
+                    _get_logger().debug(
+                        "Browser cookie extraction failed for %s: %s", browser_func.__name__, e
+                    )
                     continue
-    except Exception:
-        # 如果失败，返回空字典
+    except Exception as e:
+        _get_logger().debug("Cookie extraction failed for domain %s: %s", domain_parts, e)
         return {}
 
     if not cookie_jar:
@@ -105,23 +115,24 @@ def get_cookies_from_file(file_path: str) -> dict[str, str]:
     Returns:
         Dict[str, str]: Cookie 字典
     """
-    file_path = Path(file_path).expanduser()
-    if not file_path.exists():
+    resolved_path = Path(file_path).expanduser()
+    if not resolved_path.exists():
         return {}
 
     try:
-        with open(file_path) as f:
+        with open(resolved_path, encoding="utf-8") as f:
             data = json.load(f)
             if isinstance(data, dict):
                 return data
             elif isinstance(data, list):
                 # 浏览器导出的格式可能是 list
                 return {
-                    item.get("name", item.get("key")): item.get("value")
+                    str(item.get("name", item.get("key")) or ""): str(item.get("value") or "")
                     for item in data
                     if isinstance(item, dict)
                 }
-    except Exception:
+    except (OSError, json.JSONDecodeError) as e:
+        _get_logger().debug("Failed to read cookie file %s: %s", file_path, e)
         return {}
 
     return {}
@@ -136,13 +147,13 @@ def get_cookies_from_netscape(file_path: str) -> dict[str, str]:
     Returns:
         Dict[str, str]: Cookie 字典
     """
-    file_path = Path(file_path).expanduser()
-    if not file_path.exists():
+    resolved_path = Path(file_path).expanduser()
+    if not resolved_path.exists():
         return {}
 
-    cookies = {}
+    cookies: dict[str, str] = {}
     try:
-        with open(file_path) as f:
+        with open(resolved_path, encoding="utf-8") as f:
             for line in f:
                 line = line.strip()
                 if not line or line.startswith("#"):
@@ -153,8 +164,8 @@ def get_cookies_from_netscape(file_path: str) -> dict[str, str]:
                     name = parts[5]
                     value = parts[6]
                     cookies[name] = value
-    except Exception:
-        pass
+    except (OSError, UnicodeDecodeError) as e:
+        _get_logger().debug("Failed to read Netscape cookie file %s: %s", file_path, e)
 
     return cookies
 
@@ -205,17 +216,17 @@ def get_ibkr_cookies(
     return cookies
 
 
-def save_cookies_to_file(cookies: dict[str, str], file_path: str):
+def save_cookies_to_file(cookies: dict[str, str], file_path: str) -> None:
     """将 cookies 保存到 JSON 文件
 
     Args:
         cookies: Cookie 字典
         file_path: 目标文件路径
     """
-    file_path = Path(file_path).expanduser()
-    file_path.parent.mkdir(parents=True, exist_ok=True)
+    resolved_path = Path(file_path).expanduser()
+    resolved_path.parent.mkdir(parents=True, exist_ok=True)
 
-    with open(file_path, "w") as f:
+    with open(resolved_path, "w", encoding="utf-8") as f:
         json.dump(cookies, f, indent=2)
 
 

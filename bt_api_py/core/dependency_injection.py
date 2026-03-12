@@ -7,7 +7,7 @@ import threading
 from collections.abc import Callable
 from contextlib import contextmanager
 from functools import wraps
-from typing import Any, TypeVar
+from typing import Any, TypeVar, cast
 
 T = TypeVar("T")
 
@@ -62,30 +62,30 @@ class DIContainer:
         with self._lock:
             # Check if we have a pre-registered singleton
             if interface in self._singletons:
-                return self._singletons[interface]
+                return cast("T", self._singletons[interface])
 
             # Check if service is registered as singleton
             if interface in self._services:
                 implementation = self._services[interface]
                 instance = self._create_instance(implementation)
                 self._singletons[interface] = instance
-                return instance
+                return cast("T", instance)
 
             # Check if service is registered as transient
             if interface in self._factories:
                 implementation = self._factories[interface]
-                return self._create_instance(implementation)
+                return cast("T", self._create_instance(implementation))
 
             # Check scoped services
             if self._current_scope and interface in self._scoped:
-                return self._scoped[interface]
+                return cast("T", self._scoped[interface])
 
             if interface in self._services and interface in self._scoped:
                 implementation = self._services[interface]
                 instance = self._create_instance(implementation)
                 if self._current_scope is not None:
                     self._scoped[interface] = instance
-                return instance
+                return cast("T", instance)
 
             raise ValueError(f"Service {interface} not registered")
 

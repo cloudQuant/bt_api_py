@@ -215,7 +215,7 @@ class BinanceRequestDataStaking(BinanceRequestData):
         """
         request_type = "get_staking_position"
         path = self._params.get_rest_path(request_type)
-        params = {}
+        params: dict[str, Any] = {}
         if product_type is not None:
             params["type"] = product_type
         if asset is not None:
@@ -285,7 +285,7 @@ class BinanceRequestDataStaking(BinanceRequestData):
         """
         request_type = "get_staking_history"
         path = self._params.get_rest_path(request_type)
-        params = {}
+        params: dict[str, Any] = {}
         if product_type is not None:
             params["type"] = product_type
         if asset is not None:

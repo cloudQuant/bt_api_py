@@ -2,6 +2,7 @@
 __pycache__/
 *.py[cod]
 *$py.class
+*.bak
 */.DS_Store
 .DS_Store
 */.virtual_documents/*

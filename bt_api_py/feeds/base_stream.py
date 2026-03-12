@@ -6,6 +6,7 @@
 import threading
 from abc import ABC, abstractmethod
 from enum import Enum
+from typing import Any
 
 from bt_api_py.logging_factory import get_logger
 
@@ -30,12 +31,12 @@ class BaseDataStream(ABC):
       - _run_loop(): 主循环（在独立线程中运行）
     """
 
-    def __init__(self, data_queue, **kwargs):
+    def __init__(self, data_queue: Any = None, **kwargs: Any) -> None:
         self.data_queue = data_queue
         self.stream_name = kwargs.get("stream_name", self.__class__.__name__)
         self._running = False
         self._state = ConnectionState.DISCONNECTED
-        self._thread = None
+        self._thread: threading.Thread | None = None
         self.logger = get_logger("unknown")
 
     @property
@@ -74,7 +75,7 @@ class BaseDataStream(ABC):
         """主循环，在独立 daemon 线程中运行"""
         ...
 
-    def start(self):
+    def start(self) -> None:
         """启动流式数据连接"""
         self._running = True
         self._thread = threading.Thread(target=self._run_loop, daemon=True)
@@ -93,7 +94,7 @@ class BaseDataStream(ABC):
         if self.data_queue is not None:
             self.data_queue.put(data)
         else:
-            self.logger.warn(f"{self.stream_name}: data_queue is None, data dropped")
+            self.logger.warning(f"{self.stream_name}: data_queue is None, data dropped")
 
     def wait_connected(self, timeout=30, interval=0.5):
         """阻塞等待连接建立
@@ -109,5 +110,5 @@ class BaseDataStream(ABC):
                 return True
             time.sleep(interval)
             elapsed += interval
-        self.logger.warn(f"{self.stream_name}: wait_connected timeout after {timeout}s")
+        self.logger.warning(f"{self.stream_name}: wait_connected timeout after {timeout}s")
         return False

@@ -5,6 +5,7 @@ import time
 from typing import Any, Self
 
 from bt_api_py.containers.tickers.ticker import TickerData
+from bt_api_py.containers.tickers.ticker_utils import parse_float
 
 
 class BitstampRequestTickerData(TickerData):
@@ -16,8 +17,15 @@ class BitstampRequestTickerData(TickerData):
         self.asset_type = asset_type
         self.exchange_name = "BITSTAMP"
         self.local_update_time = time.time()
-        self.ticker_data = ticker_info if has_been_json_encoded else None
-        self.ticker_symbol_name = None
+        self.ticker_data: dict[str, Any] | None = ticker_info if has_been_json_encoded else None
+        self.ticker_symbol_name: str | None = None
+        self.last_price: float | None = None
+        self.bid_price: float | None = None
+        self.ask_price: float | None = None
+        self.volume_24h: float | None = None
+        self.high_24h: float | None = None
+        self.low_24h: float | None = None
+        self.open_24h: float | None = None
         self.has_been_init_data = False
 
     def init_data(self) -> "Self":
@@ -28,45 +36,36 @@ class BitstampRequestTickerData(TickerData):
         if self.has_been_init_data:
             return self
 
-        data = self.ticker_data
+        data = self.ticker_data or {}
         if data:
             # Bitstamp ticker format (all values are strings)
             self.ticker_symbol_name = self.symbol_name  # Bitstamp doesn't return symbol in ticker
-            self.last_price = self._parse_float(data.get("last"))
-            self.bid_price = self._parse_float(data.get("bid"))
-            self.ask_price = self._parse_float(data.get("ask"))
-            self.volume_24h = self._parse_float(data.get("volume"))
-            self.high_24h = self._parse_float(data.get("high"))
-            self.low_24h = self._parse_float(data.get("low"))
-            self.open_24h = self._parse_float(data.get("open"))
+            self.last_price = parse_float(data.get("last"))
+            self.bid_price = parse_float(data.get("bid"))
+            self.ask_price = parse_float(data.get("ask"))
+            self.volume_24h = parse_float(data.get("volume"))
+            self.high_24h = parse_float(data.get("high"))
+            self.low_24h = parse_float(data.get("low"))
+            self.open_24h = parse_float(data.get("open"))
 
         self.has_been_init_data = True
         return self
 
-    @staticmethod
-    def _parse_float(value):
-        if value is None:
-            return None
-        try:
-            return float(value)
-        except (ValueError, TypeError):
-            return None
-
     # Getter methods required by TickerData base class
     def get_exchange_name(self) -> str:
-        return self.exchange_name
+        return str(self.exchange_name)
 
     def get_symbol_name(self) -> str:
-        return self.symbol_name
+        return str(self.symbol_name)
 
     def get_ticker_symbol_name(self) -> str | None:
         return self.ticker_symbol_name
 
     def get_asset_type(self) -> str:
-        return self.asset_type
+        return str(self.asset_type)
 
     def get_local_update_time(self) -> float:
-        return self.local_update_time
+        return float(self.local_update_time)
 
     def get_server_time(self) -> float | None:
         return None

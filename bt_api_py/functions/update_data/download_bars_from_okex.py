@@ -12,7 +12,7 @@ def get_okex_instrument_info(instrument_type="SWAP"):
     :return: data
     """
     url = f"https://www.okx.com/api/v5/public/instruments?instType={instrument_type}"
-    data = requests.get(url).json()
+    data = requests.get(url, timeout=30).json()
     return data
 
 
@@ -64,7 +64,7 @@ def download_okex_bars(symbol, period, begin_time, end_time, dst="okex_btc-usdt.
             # data = task.getKline_2("BTC-USDT", '1m', after=str(int(end_stamp)), before=str(int(begin_stamp)))
             # data = task.getKline_2("BTC-USDT", '1m')
             url = f"https://www.okex.com/api/v5/market/history-candles?instId={symbol}&bar={period}&after={int(end_stamp)}&before={int(begin_stamp)}"
-            data = requests.get(url).json()
+            data = requests.get(url, timeout=30).json()
             if not data["data"]:
                 print(f"下载失败: {symbol}, {count}, 开始时间: {begin_time}, 结束时间: {end_time}")
                 print(url)

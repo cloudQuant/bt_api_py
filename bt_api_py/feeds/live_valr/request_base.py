@@ -3,6 +3,7 @@
 import hashlib
 import hmac
 import time
+from typing import Any
 from urllib.parse import urlencode
 
 from bt_api_py.containers.exchanges.valr_exchange_data import ValrExchangeDataSpot
@@ -16,7 +17,7 @@ class ValrRequestData(Feed):
     """VALR REST API Feed base class."""
 
     @classmethod
-    def _capabilities(cls):
+    def _capabilities(cls) -> set[Capability]:
         return {
             Capability.GET_TICK,
             Capability.GET_DEPTH,
@@ -24,7 +25,7 @@ class ValrRequestData(Feed):
             Capability.GET_EXCHANGE_INFO,
         }
 
-    def __init__(self, data_queue, **kwargs) -> None:
+    def __init__(self, data_queue: Any = None, **kwargs: Any) -> None:
         super().__init__(data_queue, **kwargs)
         self.data_queue = data_queue
         self.exchange_name = kwargs.get("exchange_name", "VALR___SPOT")
@@ -102,7 +103,7 @@ class ValrRequestData(Feed):
             result = future.result()
             self.push_data_to_queue(result)
         except Exception as e:
-            self.async_logger.warn(f"async_callback::{e}")
+            self.async_logger.warning(f"async_callback::{e}")
 
     def connect(self):
         pass

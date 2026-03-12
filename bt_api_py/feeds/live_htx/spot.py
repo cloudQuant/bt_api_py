@@ -21,7 +21,7 @@ from bt_api_py.logging_factory import get_logger
 class HtxRequestDataSpot(HtxRequestData):
     """HTX Spot trading REST API feed."""
 
-    def __init__(self, data_queue, **kwargs) -> None:
+    def __init__(self, data_queue: Any = None, **kwargs: Any) -> None:
         super().__init__(data_queue, **kwargs)
         self.asset_type = kwargs.get("asset_type", "SPOT")
         self.logger_name = kwargs.get("logger_name", "htx_spot_feed.log")
@@ -154,7 +154,7 @@ class HtxRequestDataSpot(HtxRequestData):
         """Get server time."""
         request_type = "get_server_time"
         path = self._params.get_rest_path(request_type)
-        params = {}
+        params: dict[str, Any] = {}
         extra_data = update_extra_data(
             extra_data,
             **{
@@ -171,7 +171,7 @@ class HtxRequestDataSpot(HtxRequestData):
         """Get trading symbols list."""
         request_type = "get_symbols"
         path = self._params.get_rest_path(request_type)
-        params = {}
+        params: dict[str, Any] = {}
         extra_data = update_extra_data(
             extra_data,
             **{
@@ -191,7 +191,7 @@ class HtxRequestDataSpot(HtxRequestData):
     def get_currencies(self, extra_data=None, **kwargs) -> Any:
         """Get supported currencies list."""
         path = "GET /v1/common/currencys"
-        params = {}
+        params: dict[str, Any] = {}
         extra_data = update_extra_data(
             extra_data,
             **{
@@ -290,7 +290,7 @@ class HtxRequestDataSpot(HtxRequestData):
         """
         request_type = "get_accounts"
         path = self._params.get_rest_path(request_type)
-        params = {}
+        params: dict[str, Any] = {}
         extra_data = update_extra_data(
             extra_data,
             **{
@@ -345,7 +345,7 @@ class HtxRequestDataSpot(HtxRequestData):
 
         request_type = "get_balance"
         path = self._params.get_rest_path(request_type).replace("{account-id}", str(account_id))
-        params = {}
+        params: dict[str, Any] = {}
         extra_data = update_extra_data(
             extra_data,
             **{
@@ -500,7 +500,7 @@ class HtxRequestDataSpot(HtxRequestData):
         """
         request_type = "cancel_order"
         path = self._params.get_rest_path("cancel_order").replace("{order-id}", str(order_id))
-        params = {}
+        params: dict[str, Any] = {}
         extra_data = update_extra_data(
             extra_data,
             **{
@@ -539,7 +539,7 @@ class HtxRequestDataSpot(HtxRequestData):
         """
         request_type = "get_order"
         path = self._params.get_rest_path("get_order").replace("{order-id}", str(order_id))
-        params = {}
+        params: dict[str, Any] = {}
         extra_data = update_extra_data(
             extra_data,
             **{
@@ -658,7 +658,7 @@ class HtxRequestDataSpot(HtxRequestData):
         """
         request_type = "get_open_orders"
         path = self._params.get_rest_path(request_type)
-        params = {}
+        params: dict[str, Any] = {}
         if symbol:
             request_symbol = self._params.get_symbol(symbol)
             params["symbol"] = request_symbol
@@ -730,7 +730,7 @@ class HtxMarketWssDataSpot(MyWebsocketApp):
     Subscription: {"sub": "market.btcusdt.ticker", "id": "..."}
     """
 
-    def __init__(self, data_queue, **kwargs) -> None:
+    def __init__(self, data_queue: Any = None, **kwargs: Any) -> None:
         kwargs.setdefault("exchange_data", HtxExchangeDataSpot())
         # HTX uses application-level JSON ping/pong, disable protocol-level pings
         kwargs.setdefault("ping_interval", 0)
@@ -778,7 +778,7 @@ class HtxMarketWssDataSpot(MyWebsocketApp):
                 message = gzip.decompress(message).decode("utf-8")
             data = json.loads(message)
         except Exception as e:
-            self.wss_logger.warn(f"Failed to parse message: {e}")
+            self.wss_logger.warning(f"Failed to parse message: {e}")
             return
 
         # Handle ping/pong heartbeat
@@ -848,7 +848,7 @@ class HtxAccountWssDataSpot(MyWebsocketApp):
     Heartbeat: responds to {"action":"ping","data":{"ts":...}} with pong.
     """
 
-    def __init__(self, data_queue, **kwargs) -> None:
+    def __init__(self, data_queue: Any = None, **kwargs: Any) -> None:
         kwargs.setdefault("exchange_data", HtxExchangeDataSpot())
         # Use acct_wss_url for account WebSocket
         params = kwargs.get("exchange_data", HtxExchangeDataSpot())
@@ -931,7 +931,7 @@ class HtxAccountWssDataSpot(MyWebsocketApp):
         try:
             data = json.loads(message)
         except Exception as e:
-            self.wss_logger.warn(f"Failed to parse message: {e}")
+            self.wss_logger.warning(f"Failed to parse message: {e}")
             return
 
         action = data.get("action", "")
@@ -948,7 +948,7 @@ class HtxAccountWssDataSpot(MyWebsocketApp):
                 self.wss_logger.info("Account WSS authentication successful")
                 self._subscribe_topics()
             else:
-                self.wss_logger.warn(f"Account WSS auth failed: {data}")
+                self.wss_logger.warning(f"Account WSS auth failed: {data}")
             return
 
         # Handle subscription confirmation

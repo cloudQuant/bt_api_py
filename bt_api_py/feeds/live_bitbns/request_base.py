@@ -5,6 +5,7 @@ Bitbns REST API request base class.
 import hashlib
 import hmac
 import time
+from typing import Any
 
 from bt_api_py.containers.exchanges.bitbns_exchange_data import BitbnsExchangeDataSpot
 from bt_api_py.containers.requestdatas.request_data import RequestData
@@ -18,7 +19,7 @@ class BitbnsRequestData(Feed):
     """Bitbns REST API Feed base class."""
 
     @classmethod
-    def _capabilities(cls):
+    def _capabilities(cls) -> set[Capability]:
         return {
             Capability.GET_TICK,
             Capability.GET_DEPTH,
@@ -30,7 +31,7 @@ class BitbnsRequestData(Feed):
             Capability.CANCEL_ORDER,
         }
 
-    def __init__(self, data_queue, **kwargs):
+    def __init__(self, data_queue: Any = None, **kwargs: Any) -> None:
         super().__init__(data_queue, **kwargs)
         self.data_queue = data_queue
         self.exchange_name = kwargs.get("exchange_name", "BITBNS___SPOT")

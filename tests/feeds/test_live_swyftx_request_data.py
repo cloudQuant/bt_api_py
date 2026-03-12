@@ -37,7 +37,6 @@ def test_swyftx_req_server_time():
     """Test Swyftx server time endpoint."""
     # Swyftx doesn't have a dedicated server time endpoint
     # Timestamps are included in ticker responses
-    pass
 
 
 @pytest.mark.ticker
@@ -90,7 +89,6 @@ def test_swyftx_async_tick_data():
 
     # Note: Swyftx's current implementation uses sync requests
     # This test would require async implementation
-    pass
 
 
 @pytest.mark.kline
@@ -149,7 +147,6 @@ def test_swyftx_async_kline_data():
 
     # Note: Swyftx's current implementation uses sync requests
     # This test would require async implementation
-    pass
 
 
 def order_book_value_equals(order_book):

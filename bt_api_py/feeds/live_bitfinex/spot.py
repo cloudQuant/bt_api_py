@@ -3,6 +3,8 @@ Bitfinex Spot trading feed implementation.
 Three-layer pattern: _get_xxx() -> get_xxx() / async_get_xxx()
 """
 
+from typing import Any
+
 from bt_api_py.containers.exchanges.bitfinex_exchange_data import BitfinexExchangeDataSpot
 from bt_api_py.feeds.live_bitfinex.request_base import BitfinexRequestData
 from bt_api_py.logging_factory import get_logger
@@ -11,7 +13,7 @@ from bt_api_py.logging_factory import get_logger
 class BitfinexRequestDataSpot(BitfinexRequestData):
     """Bitfinex Spot Trading REST API implementation."""
 
-    def __init__(self, data_queue, **kwargs):
+    def __init__(self, data_queue: Any = None, **kwargs: Any) -> None:
         super().__init__(data_queue, **kwargs)
         self.asset_type = kwargs.get("asset_type", "SPOT")
         self.exchange_name = kwargs.get("exchange_name", "BITFINEX___SPOT")

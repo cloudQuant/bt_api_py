@@ -201,14 +201,18 @@ class TestBitvavoOrderBook:
                 assert ask_volume >= 0, f"Invalid ask_volume: {ask_volume}"
 
         # Verify bids[0] <= asks[0] (best bid <= best ask)
-        if "bids" in order_book_data and "asks" in order_book_data:
-            if len(order_book_data["bids"]) > 0 and len(order_book_data["asks"]) > 0:
-                best_bid = float(order_book_data["bids"][0].get("price", 0))
-                best_ask = float(order_book_data["asks"][0].get("price", 0))
-                if best_bid > 0 and best_ask > 0:
-                    assert best_bid <= best_ask, (
-                        f"best_bid ({best_bid}) should be <= best_ask ({best_ask})"
-                    )
+        if (
+            "bids" in order_book_data
+            and "asks" in order_book_data
+            and len(order_book_data["bids"]) > 0
+            and len(order_book_data["asks"]) > 0
+        ):
+            best_bid = float(order_book_data["bids"][0].get("price", 0))
+            best_ask = float(order_book_data["asks"][0].get("price", 0))
+            if best_bid > 0 and best_ask > 0:
+                assert best_bid <= best_ask, (
+                    f"best_bid ({best_bid}) should be <= best_ask ({best_ask})"
+                )
 
     @pytest.mark.orderbook
     def test_bitvavo_async_orderbook_data(self):
@@ -244,11 +248,9 @@ class TestBitvavoIntegration:
 
     def test_market_data_api(self):
         """Test market data API calls (requires network)."""
-        pass
 
     def test_trading_api(self):
         """Test trading API calls (requires API keys)."""
-        pass
 
 
 if __name__ == "__main__":

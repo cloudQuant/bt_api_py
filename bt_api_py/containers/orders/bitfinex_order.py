@@ -56,6 +56,7 @@ class BitfinexOrderData(OrderData):
         self.placed_id: int | None = None
         self.routing: str | None = None
         self.meta: Any = None
+        self.all_data: dict[str, Any] | None = None
         self.has_been_init_data = False
 
     def init_data(self) -> "BitfinexOrderData":
@@ -446,10 +447,6 @@ class BitfinexOrderData(OrderData):
 class BitfinexWssOrderData(BitfinexOrderData):
     """Bitfinex WebSocket order data container."""
 
-    pass
-
 
 class BitfinexRequestOrderData(BitfinexOrderData):
     """Bitfinex REST API order data container."""
-
-    pass

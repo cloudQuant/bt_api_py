@@ -3,6 +3,7 @@ Foxbit Spot Feed implementation.
 """
 
 import json
+from typing import Any
 
 from bt_api_py.containers.tickers.foxbit_ticker import FoxbitRequestTickerData
 from bt_api_py.feeds.capability import Capability
@@ -13,7 +14,7 @@ class FoxbitRequestDataSpot(FoxbitRequestData):
     """Foxbit Spot Feed for market data."""
 
     @classmethod
-    def _capabilities(cls):
+    def _capabilities(cls) -> set[Capability]:
         return {
             Capability.GET_TICK,
             Capability.GET_DEPTH,
@@ -25,7 +26,7 @@ class FoxbitRequestDataSpot(FoxbitRequestData):
             Capability.CANCEL_ORDER,
         }
 
-    def __init__(self, data_queue, **kwargs):
+    def __init__(self, data_queue: Any = None, **kwargs: Any) -> None:
         super().__init__(data_queue, **kwargs)
         self.exchange_name = kwargs.get("exchange_name", "FOXBIT___SPOT")
 
@@ -413,7 +414,7 @@ class FoxbitRequestDataSpot(FoxbitRequestData):
     def _get_open_orders(self, symbol=None, extra_data=None, **kwargs):
         """Get open orders. Returns (path, params, extra_data)."""
         path = "GET /rest/v3/orders"
-        params = {}
+        params: dict[str, Any] = {}
         if symbol:
             params["market_symbol"] = self._format_market(symbol)
         if extra_data is None:

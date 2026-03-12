@@ -32,7 +32,7 @@ def _get_bitso_config() -> Any | None:
             _bitso_config = load_exchange_config(config_path)
         _bitso_config_loaded = True
     except Exception as e:
-        logger.warn(f"Failed to load bitso.yaml config: {e}")
+        logger.warning(f"Failed to load bitso.yaml config: {e}")
     return _bitso_config
 
 

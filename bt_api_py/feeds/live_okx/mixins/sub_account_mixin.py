@@ -3,6 +3,7 @@ OKX API - SubAccountMixin
 Auto-generated from request_base.py
 """
 
+from collections.abc import Callable
 from typing import Any
 
 from bt_api_py.feeds.live_okx.mixins.normalizers import generic_normalize_function
@@ -10,14 +11,29 @@ from bt_api_py.functions.utils import update_extra_data
 
 
 class SubAccountMixin:
-    """Mixin providing OKX API methods."""
+    """Mixin providing OKX API methods.
+
+    Expects host class to provide: _params, asset_type, exchange_name,
+    request, submit, async_request, async_callback.
+    """
+
+    # Declare for mypy; host class provides these
+    _params: Any
+    asset_type: str
+    exchange_name: str
+    request: Callable[..., Any]
+    submit: Callable[..., Any]
+    async_request: Callable[..., Any]
+    async_callback: Callable[..., Any]
 
     # ==================== Missing Sub-account APIs ====================
 
-    def _get_sub_account_list(self, extra_data: Any = None, **kwargs: Any) -> None:
+    def _get_sub_account_list(
+        self, extra_data: Any = None, **kwargs: Any
+    ) -> tuple[str, dict[str, Any], dict[str, Any]]:
         """Get sub account list"""
         request_type = "get_sub_account_list"
-        params = {}
+        params: dict[str, Any] = {}
         path = self._params.get_rest_path(request_type)
         extra_data = update_extra_data(
             extra_data,
@@ -33,7 +49,7 @@ class SubAccountMixin:
             extra_data.update(kwargs)
         return path, params, extra_data
 
-    def get_sub_account_list(self, extra_data: Any = None, **kwargs: Any) -> None:
+    def get_sub_account_list(self, extra_data: Any = None, **kwargs: Any) -> Any:
         """Get sub account list"""
         path, params, extra_data = self._get_sub_account_list(extra_data, **kwargs)
         data = self.request(path, params=params, extra_data=extra_data)
@@ -49,10 +65,10 @@ class SubAccountMixin:
 
     def _create_sub_account(
         self, sub_acct: Any, tag: Any = None, extra_data: Any = None, **kwargs: Any
-    ) -> None:
+    ) -> tuple[str, dict[str, Any], dict[str, Any]]:
         """Create sub account"""
         request_type = "create_sub_account"
-        params = {"subAcct": sub_acct}
+        params: dict[str, Any] = {"subAcct": sub_acct}
         if tag:
             params["tag"] = tag
         path = self._params.get_rest_path(request_type)
@@ -72,7 +88,7 @@ class SubAccountMixin:
 
     def create_sub_account(
         self, sub_acct: Any, tag: Any = None, extra_data: Any = None, **kwargs: Any
-    ) -> None:
+    ) -> Any:
         """Create sub account"""
         path, params, extra_data = self._create_sub_account(sub_acct, tag, extra_data, **kwargs)
         data = self.request(path, body=params, extra_data=extra_data)
@@ -96,10 +112,10 @@ class SubAccountMixin:
         perm: Any = None,
         extra_data: Any = None,
         **kwargs: Any,
-    ) -> None:
+    ) -> tuple[str, dict[str, Any], dict[str, Any]]:
         """Create sub account API key"""
         request_type = "create_sub_account_api_key"
-        params = {
+        params: dict[str, Any] = {
             "subAcct": sub_acct,
         }
         if label:
@@ -131,7 +147,7 @@ class SubAccountMixin:
         perm: Any = None,
         extra_data: Any = None,
         **kwargs: Any,
-    ) -> None:
+    ) -> Any:
         """Create sub account API key"""
         path, params, extra_data = self._create_sub_account_api_key(
             sub_acct, label, ip, perm, extra_data, **kwargs
@@ -159,10 +175,10 @@ class SubAccountMixin:
 
     def _get_sub_account_api_key(
         self, sub_acct: Any, extra_data: Any = None, **kwargs: Any
-    ) -> None:
+    ) -> tuple[str, dict[str, Any], dict[str, Any]]:
         """Get sub account API key"""
         request_type = "get_sub_account_api_key"
-        params = {"subAcct": sub_acct}
+        params: dict[str, Any] = {"subAcct": sub_acct}
         path = self._params.get_rest_path(request_type)
         extra_data = update_extra_data(
             extra_data,
@@ -178,7 +194,7 @@ class SubAccountMixin:
             extra_data.update(kwargs)
         return path, params, extra_data
 
-    def get_sub_account_api_key(self, sub_acct: Any, extra_data: Any = None, **kwargs: Any) -> None:
+    def get_sub_account_api_key(self, sub_acct: Any, extra_data: Any = None, **kwargs: Any) -> Any:
         """Get sub account API key"""
         path, params, extra_data = self._get_sub_account_api_key(sub_acct, extra_data, **kwargs)
         data = self.request(path, params=params, extra_data=extra_data)
@@ -203,10 +219,10 @@ class SubAccountMixin:
         perm: Any = None,
         extra_data: Any = None,
         **kwargs: Any,
-    ) -> None:
+    ) -> tuple[str, dict[str, Any], dict[str, Any]]:
         """Reset sub account API key"""
         request_type = "reset_sub_account_api_key"
-        params = {
+        params: dict[str, Any] = {
             "subAcct": sub_acct,
             "apiKey": api_key,
         }
@@ -240,7 +256,7 @@ class SubAccountMixin:
         perm: Any = None,
         extra_data: Any = None,
         **kwargs: Any,
-    ) -> None:
+    ) -> Any:
         """Reset sub account API key"""
         path, params, extra_data = self._reset_sub_account_api_key(
             sub_acct, api_key, label, ip, perm, extra_data, **kwargs
@@ -269,10 +285,10 @@ class SubAccountMixin:
 
     def _delete_sub_account_api_key(
         self, sub_acct: Any, api_key: Any, extra_data: Any = None, **kwargs: Any
-    ) -> None:
+    ) -> tuple[str, dict[str, Any], dict[str, Any]]:
         """Delete sub account API key"""
         request_type = "delete_sub_account_api_key"
-        params = {
+        params: dict[str, Any] = {
             "subAcct": sub_acct,
             "apiKey": api_key,
         }
@@ -293,7 +309,7 @@ class SubAccountMixin:
 
     def delete_sub_account_api_key(
         self, sub_acct: Any, api_key: Any, extra_data: Any = None, **kwargs: Any
-    ) -> None:
+    ) -> Any:
         """Delete sub account API key"""
         path, params, extra_data = self._delete_sub_account_api_key(
             sub_acct, api_key, extra_data, **kwargs
@@ -315,10 +331,10 @@ class SubAccountMixin:
 
     def _get_sub_account_funding_balance(
         self, sub_acct: Any, ccy: Any = None, extra_data: Any = None, **kwargs: Any
-    ) -> None:
+    ) -> tuple[str, dict[str, Any], dict[str, Any]]:
         """Get sub account funding balance"""
         request_type = "get_sub_account_funding_balance"
-        params = {"subAcct": sub_acct}
+        params: dict[str, Any] = {"subAcct": sub_acct}
         if ccy:
             params["ccy"] = ccy
         path = self._params.get_rest_path(request_type)
@@ -338,7 +354,7 @@ class SubAccountMixin:
 
     def get_sub_account_funding_balance(
         self, sub_acct: Any, ccy: Any = None, extra_data: Any = None, **kwargs: Any
-    ) -> None:
+    ) -> Any:
         """Get sub account funding balance"""
         path, params, extra_data = self._get_sub_account_funding_balance(
             sub_acct, ccy, extra_data, **kwargs
@@ -360,10 +376,10 @@ class SubAccountMixin:
 
     def _get_sub_account_max_withdrawal(
         self, sub_acct: Any, ccy: Any = None, extra_data: Any = None, **kwargs: Any
-    ) -> None:
+    ) -> tuple[str, dict[str, Any], dict[str, Any]]:
         """Get sub account max withdrawal"""
         request_type = "get_sub_account_max_withdrawal"
-        params = {"subAcct": sub_acct}
+        params: dict[str, Any] = {"subAcct": sub_acct}
         if ccy:
             params["ccy"] = ccy
         path = self._params.get_rest_path(request_type)
@@ -383,7 +399,7 @@ class SubAccountMixin:
 
     def get_sub_account_max_withdrawal(
         self, sub_acct: Any, ccy: Any = None, extra_data: Any = None, **kwargs: Any
-    ) -> None:
+    ) -> Any:
         """Get sub account max withdrawal"""
         path, params, extra_data = self._get_sub_account_max_withdrawal(
             sub_acct, ccy, extra_data, **kwargs
@@ -414,10 +430,10 @@ class SubAccountMixin:
         limit: Any = None,
         extra_data: Any = None,
         **kwargs: Any,
-    ) -> None:
+    ) -> tuple[str, dict[str, Any], dict[str, Any]]:
         """Get sub-account transfer history"""
         request_type = "get_sub_account_transfer_history"
-        params = {}
+        params: dict[str, Any] = {}
         if sub_acct:
             params["subAcct"] = sub_acct
         if ccy:
@@ -452,7 +468,7 @@ class SubAccountMixin:
         limit: Any = None,
         extra_data: Any = None,
         **kwargs: Any,
-    ) -> None:
+    ) -> Any:
         """Get sub-account transfer history"""
         path, params, extra_data = self._get_sub_account_transfer_history(
             sub_acct, ccy, after, before, limit, extra_data, **kwargs
@@ -488,10 +504,10 @@ class SubAccountMixin:
         limit: Any = None,
         extra_data: Any = None,
         **kwargs: Any,
-    ) -> None:
+    ) -> tuple[str, dict[str, Any], dict[str, Any]]:
         """Get managed sub-account bills"""
         request_type = "get_managed_sub_account_bills"
-        params = {}
+        params: dict[str, Any] = {}
         if sub_acct:
             params["subAcct"] = sub_acct
         if ccy:
@@ -526,7 +542,7 @@ class SubAccountMixin:
         limit: Any = None,
         extra_data: Any = None,
         **kwargs: Any,
-    ) -> None:
+    ) -> Any:
         """Get managed sub-account bills"""
         path, params, extra_data = self._get_managed_sub_account_bills(
             sub_acct, ccy, after, before, limit, extra_data, **kwargs
@@ -563,10 +579,10 @@ class SubAccountMixin:
         to_acc_type: Any = 6,
         extra_data: Any = None,
         **kwargs: Any,
-    ) -> None:
+    ) -> tuple[str, dict[str, Any], dict[str, Any]]:
         """Sub-account transfer"""
         request_type = "sub_account_transfer"
-        params = {
+        params: dict[str, Any] = {
             "ccy": ccy,
             "amt": str(amount),
             "fromAcct": from_acct,
@@ -600,7 +616,7 @@ class SubAccountMixin:
         to_acc_type: Any = 6,
         extra_data: Any = None,
         **kwargs: Any,
-    ) -> None:
+    ) -> Any:
         """Sub-account transfer"""
         path, params, extra_data = self._sub_account_transfer(
             ccy, amount, from_acct, to_acct, from_acc_type, to_acc_type, extra_data, **kwargs
@@ -635,10 +651,10 @@ class SubAccountMixin:
         allow: Any = False,
         extra_data: Any = None,
         **kwargs: Any,
-    ) -> None:
+    ) -> tuple[str, dict[str, Any], dict[str, Any]]:
         """Set sub-account transfer out permission"""
         request_type = "set_sub_account_transfer_out"
-        params = {
+        params: dict[str, Any] = {
             "subAcct": sub_acct or "",
             "ccy": ccy or "",
             "allow": "true" if allow else "false",
@@ -665,7 +681,7 @@ class SubAccountMixin:
         allow: Any = False,
         extra_data: Any = None,
         **kwargs: Any,
-    ) -> None:
+    ) -> Any:
         """Set sub-account transfer out permission"""
         path, params, extra_data = self._set_sub_account_transfer_out(
             sub_acct, ccy, allow, extra_data, **kwargs
@@ -690,10 +706,12 @@ class SubAccountMixin:
             callback=self.async_callback,
         )
 
-    def _get_custody_sub_account_list(self, extra_data: Any = None, **kwargs: Any) -> None:
+    def _get_custody_sub_account_list(
+        self, extra_data: Any = None, **kwargs: Any
+    ) -> tuple[str, dict[str, Any], dict[str, Any]]:
         """Get custody sub-account list"""
         request_type = "get_custody_sub_account_list"
-        params = {}
+        params: dict[str, Any] = {}
         path = self._params.get_rest_path(request_type)
         extra_data = update_extra_data(
             extra_data,
@@ -709,7 +727,7 @@ class SubAccountMixin:
             extra_data.update(kwargs)
         return path, params, extra_data
 
-    def get_custody_sub_account_list(self, extra_data: Any = None, **kwargs: Any) -> None:
+    def get_custody_sub_account_list(self, extra_data: Any = None, **kwargs: Any) -> Any:
         """Get custody sub-account list"""
         path, params, extra_data = self._get_custody_sub_account_list(extra_data, **kwargs)
         data = self.request(path, params=params, extra_data=extra_data)

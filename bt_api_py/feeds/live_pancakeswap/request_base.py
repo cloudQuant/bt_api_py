@@ -21,7 +21,7 @@ class PancakeSwapRequestData(Feed):
     """
 
     @classmethod
-    def _capabilities(cls):
+    def _capabilities(cls) -> set[Capability]:
         return {
             Capability.GET_TICK,
             Capability.GET_DEPTH,
@@ -33,7 +33,7 @@ class PancakeSwapRequestData(Feed):
             Capability.CANCEL_ORDER,
         }
 
-    def __init__(self, data_queue, **kwargs) -> None:
+    def __init__(self, data_queue: Any = None, **kwargs: Any) -> None:
         super().__init__(data_queue, **kwargs)
         self.data_queue = data_queue
         self.exchange_name = kwargs.get("exchange_name", "PANCAKESWAP___DEX")
@@ -276,11 +276,9 @@ class PancakeSwapRequestData(Feed):
 
     def connect(self) -> None:
         """No-op for HTTP-based REST API."""
-        pass
 
     def disconnect(self) -> None:
         """No-op for HTTP-based REST API."""
-        pass
 
     def is_connected(self) -> bool:
         """Always return True for HTTP-based REST API."""

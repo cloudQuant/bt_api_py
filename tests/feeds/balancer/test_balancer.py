@@ -271,19 +271,16 @@ class TestBalancerRequestDataSpot:
     @pytest.mark.skip(reason="Requires actual API call")
     def test_integration_pool_query(self, balancer_spot):
         """Integration test for pool query - skipped."""
-        pass
 
     @pytest.mark.skip(reason="Requires actual API call")
     @pytest.mark.ticker
     def test_integration_get_tick(self, balancer_spot):
         """Integration test for get_tick - skipped."""
-        pass
 
     @pytest.mark.skip(reason="Requires actual API call")
     @pytest.mark.orderbook
     def test_integration_get_depth(self, balancer_spot):
         """Integration test for get_depth - skipped."""
-        pass
 
 
 class TestBalancerExchangeDataSpot:

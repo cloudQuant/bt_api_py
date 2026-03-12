@@ -294,16 +294,13 @@ class TestWebSocketRealTimeData:
     async def test_ticker_stream_consistency(self):
         """Test ticker stream data consistency."""
         # This would connect to real WebSocket and verify data consistency
-        pass
 
     @pytest.mark.asyncio
     async def test_orderbook_stream_integrity(self):
         """Test orderbook stream data integrity."""
         # This would verify orderbook updates maintain consistency
-        pass
 
     @pytest.mark.asyncio
     async def test_multi_stream_synchronization(self):
         """Test synchronization between multiple WebSocket streams."""
         # This would test handling multiple concurrent streams
-        pass

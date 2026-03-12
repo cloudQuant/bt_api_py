@@ -1,4 +1,4 @@
-from typing import Any
+from typing import Any, Self
 
 from bt_api_py.containers.auto_init_mixin import AutoInitMixin
 
@@ -34,9 +34,12 @@ class BalanceData(AutoInitMixin):
         """
         return self.event
 
-    def init_data(self) -> None:
+    def init_data(self) -> None | Self:
         """
         Initialize data from balance_info.
+
+        Returns:
+            Self for method chaining, or None.
 
         Raises:
             NotImplementedError: Must be implemented by subclass.
@@ -103,7 +106,7 @@ class BalanceData(AutoInitMixin):
         """
         raise NotImplementedError
 
-    def get_account_id(self) -> str:
+    def get_account_id(self) -> str | None:
         """
         Get account ID.
 
@@ -111,11 +114,11 @@ class BalanceData(AutoInitMixin):
             NotImplementedError: Must be implemented by subclass.
 
         Returns:
-            Account ID string.
+            Account ID string or None.
         """
         raise NotImplementedError
 
-    def get_account_type(self) -> str:
+    def get_account_type(self) -> str | None:
         """
         Get account type.
 
@@ -123,11 +126,11 @@ class BalanceData(AutoInitMixin):
             NotImplementedError: Must be implemented by subclass.
 
         Returns:
-            Account type string.
+            Account type string or None.
         """
         raise NotImplementedError
 
-    def get_fee_tier(self) -> int:
+    def get_fee_tier(self) -> int | str | None:
         """
         Get fee tier level.
 
@@ -135,11 +138,11 @@ class BalanceData(AutoInitMixin):
             NotImplementedError: Must be implemented by subclass.
 
         Returns:
-            Fee tier level.
+            Fee tier level (int or str) or None.
         """
         raise NotImplementedError
 
-    def get_max_withdraw_amount(self) -> float:
+    def get_max_withdraw_amount(self) -> float | None:
         """
         Get maximum withdrawable amount.
 
@@ -147,11 +150,11 @@ class BalanceData(AutoInitMixin):
             NotImplementedError: Must be implemented by subclass.
 
         Returns:
-            Maximum withdrawable amount.
+            Maximum withdrawable amount or None.
         """
         raise NotImplementedError
 
-    def get_margin(self) -> float:
+    def get_margin(self) -> float | None:
         """
         Get total margin.
 
@@ -159,11 +162,11 @@ class BalanceData(AutoInitMixin):
             NotImplementedError: Must be implemented by subclass.
 
         Returns:
-            Total margin amount.
+            Total margin amount or None.
         """
         raise NotImplementedError
 
-    def get_used_margin(self) -> float:
+    def get_used_margin(self) -> float | None:
         """
         Get used margin.
 
@@ -171,11 +174,11 @@ class BalanceData(AutoInitMixin):
             NotImplementedError: Must be implemented by subclass.
 
         Returns:
-            Used margin amount.
+            Used margin amount or None.
         """
         raise NotImplementedError
 
-    def get_maintain_margin(self) -> float:
+    def get_maintain_margin(self) -> float | None:
         """
         Get maintenance margin.
 
@@ -183,11 +186,11 @@ class BalanceData(AutoInitMixin):
             NotImplementedError: Must be implemented by subclass.
 
         Returns:
-            Maintenance margin amount.
+            Maintenance margin amount or None.
         """
         raise NotImplementedError
 
-    def get_available_margin(self) -> float:
+    def get_available_margin(self) -> float | None:
         """
         Get available margin.
 
@@ -195,11 +198,11 @@ class BalanceData(AutoInitMixin):
             NotImplementedError: Must be implemented by subclass.
 
         Returns:
-            Available margin amount.
+            Available margin amount or None.
         """
         raise NotImplementedError
 
-    def get_open_order_initial_margin(self) -> float:
+    def get_open_order_initial_margin(self) -> float | None:
         """
         Get open order initial margin.
 
@@ -207,11 +210,11 @@ class BalanceData(AutoInitMixin):
             NotImplementedError: Must be implemented by subclass.
 
         Returns:
-            Open order initial margin amount.
+            Open order initial margin amount or None.
         """
         raise NotImplementedError
 
-    def get_open_order_maintenance_margin(self) -> float:
+    def get_open_order_maintenance_margin(self) -> float | None:
         """
         Get open order maintenance margin.
 
@@ -219,11 +222,11 @@ class BalanceData(AutoInitMixin):
             NotImplementedError: Must be implemented by subclass.
 
         Returns:
-            Open order maintenance margin amount.
+            Open order maintenance margin amount or None.
         """
         raise NotImplementedError
 
-    def get_unrealized_profit(self) -> float:
+    def get_unrealized_profit(self) -> float | None:
         """
         Get unrealized profit.
 
@@ -231,11 +234,11 @@ class BalanceData(AutoInitMixin):
             NotImplementedError: Must be implemented by subclass.
 
         Returns:
-            Unrealized profit amount.
+            Unrealized profit amount or None.
         """
         raise NotImplementedError
 
-    def get_interest(self) -> float:
+    def get_interest(self) -> float | None:
         """
         Get interest amount.
 
@@ -243,7 +246,7 @@ class BalanceData(AutoInitMixin):
             NotImplementedError: Must be implemented by subclass.
 
         Returns:
-            Interest amount.
+            Interest amount or None.
         """
         raise NotImplementedError
 

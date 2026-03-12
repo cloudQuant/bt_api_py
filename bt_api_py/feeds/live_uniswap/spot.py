@@ -27,7 +27,7 @@ class UniswapRequestDataSpot(UniswapRequestData):
     """
 
     @classmethod
-    def _capabilities(cls):
+    def _capabilities(cls) -> set[Capability]:
         """Declare supported capabilities."""
         return {
             Capability.GET_TICK,
@@ -40,7 +40,7 @@ class UniswapRequestDataSpot(UniswapRequestData):
             Capability.CANCEL_ORDER,
         }
 
-    def __init__(self, data_queue, **kwargs):
+    def __init__(self, data_queue: Any = None, **kwargs: Any) -> None:
         super().__init__(data_queue, **kwargs)
         self.exchange_name = kwargs.get("exchange_name", "UNISWAP___DEX")
         self.asset_type = kwargs.get("asset_type", "ethereum")

@@ -20,7 +20,7 @@ from bt_api_py.logging_factory import get_logger
 class KuCoinRequestDataSpot(KuCoinRequestData):
     """KuCoin Spot trading REST API implementation."""
 
-    def __init__(self, data_queue, **kwargs) -> Any | None:
+    def __init__(self, data_queue: Any = None, **kwargs: Any) -> None:
         super().__init__(data_queue, **kwargs)
         self.asset_type = kwargs.get("asset_type", "SPOT")
         self.logger_name = kwargs.get("logger_name", "kucoin_spot_feed.log")
@@ -169,7 +169,7 @@ class KuCoinRequestDataSpot(KuCoinRequestData):
 
         if order_id:
             path = f"DELETE /api/v1/orders/{order_id}"
-            params = {}
+            params: dict[str, Any] = {}
         else:
             path = "DELETE /api/v1/orders"
             params = {"clientOid": client_order_id}
@@ -214,7 +214,7 @@ class KuCoinRequestDataSpot(KuCoinRequestData):
         """
         request_type = "cancel_all"
         path = "DELETE /api/v1/orders"
-        params = {}
+        params: dict[str, Any] = {}
         if symbol:
             params["symbol"] = symbol
 
@@ -262,7 +262,7 @@ class KuCoinRequestDataSpot(KuCoinRequestData):
 
         if order_id:
             path = f"GET /api/v1/orders/{order_id}"
-            params = {}
+            params: dict[str, Any] = {}
         else:
             path = "GET /api/v1/orders"
             params = {"clientOid": client_order_id}
@@ -687,7 +687,7 @@ class KuCoinRequestDataSpot(KuCoinRequestData):
         """
         request_type = "get_account"
         path = self._params.get_rest_path(request_type)
-        params = {}
+        params: dict[str, Any] = {}
         if currency:
             params["currency"] = currency
         if account_type:
@@ -759,7 +759,7 @@ class KuCoinRequestDataSpot(KuCoinRequestData):
         """
         request_type = "get_server_time"
         path = self._params.get_rest_path(request_type)
-        params = {}
+        params: dict[str, Any] = {}
 
         extra_data = update_extra_data(
             extra_data,
@@ -794,7 +794,7 @@ class KuCoinRequestDataSpot(KuCoinRequestData):
         """
         request_type = "get_contract"
         path = self._params.get_rest_path(request_type)
-        params = {}
+        params: dict[str, Any] = {}
 
         extra_data = update_extra_data(
             extra_data,

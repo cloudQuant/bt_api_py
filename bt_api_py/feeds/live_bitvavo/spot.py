@@ -2,6 +2,8 @@
 Bitvavo Spot Feed implementation.
 """
 
+from typing import Any
+
 from bt_api_py.feeds.capability import Capability
 from bt_api_py.feeds.live_bitvavo.request_base import BitvavoRequestData
 
@@ -10,7 +12,7 @@ class BitvavoRequestDataSpot(BitvavoRequestData):
     """Bitvavo Spot Feed for market data."""
 
     @classmethod
-    def _capabilities(cls):
+    def _capabilities(cls) -> set[Capability]:
         return {
             Capability.GET_TICK,
             Capability.GET_DEPTH,
@@ -22,7 +24,7 @@ class BitvavoRequestDataSpot(BitvavoRequestData):
             Capability.CANCEL_ORDER,
         }
 
-    def __init__(self, data_queue, **kwargs):
+    def __init__(self, data_queue: Any = None, **kwargs: Any) -> None:
         super().__init__(data_queue, **kwargs)
         self.exchange_name = kwargs.get("exchange_name", "BITVAVO___SPOT")
 
@@ -220,7 +222,7 @@ class BitvavoRequestDataSpot(BitvavoRequestData):
                 "normalize_function": self._get_balance_normalize_function,
             }
         )
-        params = {}
+        params: dict[str, Any] = {}
         if symbol:
             params["symbol"] = symbol
         return path, params, extra_data
@@ -359,7 +361,7 @@ class BitvavoRequestDataSpot(BitvavoRequestData):
                 "request_type": "get_open_orders",
             }
         )
-        params = {}
+        params: dict[str, Any] = {}
         if symbol:
             params["market"] = symbol
         return path, params, extra_data

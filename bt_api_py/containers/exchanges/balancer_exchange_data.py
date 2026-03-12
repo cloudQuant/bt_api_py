@@ -3,8 +3,8 @@
 Defines API endpoints, chain enums, and path configurations for Balancer DEX.
 """
 
-import os
 from enum import Enum
+from pathlib import Path
 from typing import Any
 
 # ── 配置加载缓存 ──────────────────────────────────────────────
@@ -28,18 +28,14 @@ def _get_balancer_config() -> Any | None:
 
         from bt_api_py.config_loader import load_exchange_config
 
-        config_path = os.path.join(
-            os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
-            "configs",
-            "balancer.yaml",
-        )
-        if os.path.exists(config_path):
+        config_path = Path(__file__).resolve().parent.parent.parent / "configs" / "balancer.yaml"
+        if config_path.exists():
             # Load raw YAML first for custom fields
-            with open(config_path, encoding="utf-8") as f:
+            with config_path.open(encoding="utf-8") as f:
                 _balancer_config_raw = yaml.safe_load(f)
 
             # Then load with pydantic
-            _balancer_config = load_exchange_config(config_path)
+            _balancer_config = load_exchange_config(str(config_path))
 
             # Store raw config for custom fields
             _balancer_config._raw_config = _balancer_config_raw
@@ -49,7 +45,7 @@ def _get_balancer_config() -> Any | None:
         from bt_api_py.logging_factory import get_logger
 
         logger = get_logger("balancer_exchange_data")
-        logger.warn(f"Failed to load balancer.yaml config: {e}")
+        logger.warning(f"Failed to load balancer.yaml config: {e}")
     return _balancer_config
 
 
@@ -169,6 +165,10 @@ class BalancerExchangeData:
             self.graphql_queries = {}
 
         return True
+
+    def get_rest_path(self, request_type: str) -> str:
+        """Get REST/GraphQL path for request type. Base returns standard GraphQL endpoint."""
+        return f"POST {self.rest_url}/graphql"
 
     def get_rest_url(self) -> str:
         """Get the GraphQL API URL.

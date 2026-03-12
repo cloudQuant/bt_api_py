@@ -18,10 +18,8 @@ def test_mexc_import():
         from bt_api_py.feeds.live_mexc import MexcRequestData, MexcRequestDataSpot
 
         print("✓ Successfully imported MEXC feed classes")
-        pass
     except ImportError as e:
         print(f"✗ Failed to import MEXC feed classes: {e}")
-        pass
 
 
 def test_mexc_exchange_data():
@@ -37,10 +35,8 @@ def test_mexc_exchange_data():
         print(f"  - WebSocket URL: {exchange_data.wss_url}")
         print(f"  - Number of REST paths: {len(exchange_data.rest_paths)}")
         print(f"  - Number of WebSocket paths: {len(exchange_data.wss_paths)}")
-        pass
     except Exception as e:
         print(f"✗ Failed to create MexcExchangeDataSpot instance: {e}")
-        pass
 
 
 def test_mexc_data_containers():
@@ -53,10 +49,8 @@ def test_mexc_data_containers():
         from bt_api_py.containers.trades.mexc_trade import MexcRequestTradeData
 
         print("✓ Successfully imported all MEXC data container classes")
-        pass
     except ImportError as e:
         print(f"✗ Failed to import MEXC data container classes: {e}")
-        pass
 
 
 def test_mexc_registration():
@@ -65,10 +59,8 @@ def test_mexc_registration():
         # This should register the feed without errors
 
         print("✓ Successfully imported MEXC registration module")
-        pass
     except Exception as e:
         print(f"✗ Failed to import MEXC registration module: {e}")
-        pass
 
 
 def test_mexc_feed_instantiation():
@@ -96,10 +88,8 @@ def test_mexc_feed_instantiation():
         print("✓ Successfully created MexcRequestDataSpot instance")
         print(f"  - Asset type: {feed.asset_type}")
         print(f"  - Exchange name: {feed.exchange_name}")
-        pass
     except Exception as e:
         print(f"✗ Failed to create MexcRequestDataSpot instance: {e}")
-        pass
 
 
 def main():
@@ -128,10 +118,8 @@ def main():
 
     if passed == total:
         print("🎉 All tests passed! MEXC integration is working correctly.")
-        pass
     else:
         print("❌ Some tests failed. Please check the implementation.")
-        pass
 
 
 if __name__ == "__main__":

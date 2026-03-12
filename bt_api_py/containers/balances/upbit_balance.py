@@ -25,6 +25,7 @@ class UpbitBalanceData(BalanceData):
         self.unit_currency = None
         self.currency_name = None
         self.status = None
+        self.all_data: dict | None = None
         self.has_been_init_data = False
 
     def init_data(self):

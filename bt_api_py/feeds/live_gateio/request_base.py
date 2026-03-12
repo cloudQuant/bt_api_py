@@ -22,7 +22,7 @@ class GateioRequestData(Feed, RequestData):
     """Base class for Gate.io REST API requests"""
 
     @classmethod
-    def _capabilities(cls):
+    def _capabilities(cls) -> set[Capability]:
         return {
             Capability.GET_TICK,
             Capability.GET_DEPTH,
@@ -38,7 +38,7 @@ class GateioRequestData(Feed, RequestData):
             Capability.GET_SERVER_TIME,
         }
 
-    def __init__(self, data_queue, **kwargs) -> None:
+    def __init__(self, data_queue: Any = None, **kwargs: Any) -> None:
         super().__init__(data_queue, **kwargs)
         self.public_key = kwargs.get("public_key")
         self.private_key = kwargs.get("private_key")
@@ -105,7 +105,7 @@ class GateioRequestData(Feed, RequestData):
             RequestData wrapping the response
         """
         if params is None:
-            params = {}
+            params: dict[str, Any] = {}
         if body is None:
             body = {}
 
@@ -150,7 +150,7 @@ class GateioRequestData(Feed, RequestData):
     async def async_request(self, path, params=None, body=None, extra_data=None, timeout=5):
         """Asynchronous HTTP request following the framework pattern."""
         if params is None:
-            params = {}
+            params: dict[str, Any] = {}
         if body is None:
             body = {}
 

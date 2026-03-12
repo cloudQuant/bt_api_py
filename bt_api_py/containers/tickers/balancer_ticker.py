@@ -41,23 +41,19 @@ class BalancerRequestTickerData(TickerData):
         self.ticker_data: dict[str, Any] | None = (
             ticker_info if has_been_json_encoded and isinstance(ticker_info, dict) else None
         )
-        self.ticker_symbol_name = None
+        self.ticker_symbol_name: str | None = None
         self.has_been_init_data = False
-        self.ticker_data: dict[str, Any] | None = (
-            ticker_info if has_been_json_encoded and isinstance(ticker_info, dict) else None
-        )
-        self.ticker_symbol_name = None
-        self.server_time = None
-        self.bid_price = None
-        self.ask_price = None
-        self.bid_volume = None
-        self.ask_volume = None
-        self.last_price = None
-        self.last_volume = None
-        self.price_change_24h = None
-        self.volume_24h = None
-        self.market_cap = None
-        self.liquidity = None
+        self.server_time: float | None = None
+        self.bid_price: float | None = None
+        self.ask_price: float | None = None
+        self.bid_volume: float | None = None
+        self.ask_volume: float | None = None
+        self.last_price: float | None = None
+        self.last_volume: float | None = None
+        self.price_change_24h: float | None = None
+        self.volume_24h: float | None = None
+        self.market_cap: float | None = None
+        self.liquidity: float | None = None
 
     def init_data(self) -> "BalancerRequestTickerData":
         """Parse Balancer ticker response from GraphQL API."""
@@ -87,13 +83,14 @@ class BalancerRequestTickerData(TickerData):
             if inner:
                 self.ticker_data = inner
 
-        self.ticker_symbol_name = from_dict_get_string(self.ticker_data, "address")
+        self.ticker_symbol_name = from_dict_get_string(self.ticker_data or {}, "address")
         self.server_time = time.time()
-        self.last_price = from_dict_get_float(self.ticker_data, "price")
-        self.price_change_24h = from_dict_get_float(self.ticker_data, "priceChange24h")
-        self.volume_24h = from_dict_get_float(self.ticker_data, "volume24h")
-        self.market_cap = from_dict_get_float(self.ticker_data, "marketCap")
-        self.liquidity = from_dict_get_float(self.ticker_data, "liquidity")
+        td = self.ticker_data or {}
+        self.last_price = from_dict_get_float(td, "price")
+        self.price_change_24h = from_dict_get_float(td, "priceChange24h")
+        self.volume_24h = from_dict_get_float(td, "volume24h")
+        self.market_cap = from_dict_get_float(td, "marketCap")
+        self.liquidity = from_dict_get_float(td, "liquidity")
 
         # For AMM pools, bid/ask aren't directly applicable
         # Set them equal to last price for compatibility
@@ -110,12 +107,12 @@ class BalancerRequestTickerData(TickerData):
         return self.symbol_name
 
     def get_ticker_symbol_name(self) -> str:
-        return self.ticker_symbol_name or self.symbol_name
+        return str(self.ticker_symbol_name or self.symbol_name)
 
     def get_asset_type(self) -> str:
         return self.asset_type
 
-    def get_server_time(self) -> float:
+    def get_server_time(self) -> float | None:
         return self.server_time
 
     def get_bid_price(self) -> float | None:
@@ -141,6 +138,29 @@ class BalancerRequestTickerData(TickerData):
 
     def get_volume_24h(self) -> float | None:
         return self.volume_24h
+
+    def get_all_data(self) -> dict[str, Any]:
+        """Get all ticker data as dictionary."""
+        if not self.has_been_init_data:
+            self.init_data()
+        return {
+            "exchange_name": self.exchange_name,
+            "symbol_name": self.symbol_name,
+            "asset_type": self.asset_type,
+            "local_update_time": self.local_update_time,
+            "ticker_symbol_name": self.ticker_symbol_name,
+            "server_time": self.server_time,
+            "bid_price": self.bid_price,
+            "ask_price": self.ask_price,
+            "bid_volume": self.bid_volume,
+            "ask_volume": self.ask_volume,
+            "last_price": self.last_price,
+            "last_volume": self.last_volume,
+            "price_change_24h": self.price_change_24h,
+            "volume_24h": self.volume_24h,
+            "market_cap": self.market_cap,
+            "liquidity": self.liquidity,
+        }
 
 
 class BalancerWssTickerData(BalancerRequestTickerData):

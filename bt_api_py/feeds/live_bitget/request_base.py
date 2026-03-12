@@ -9,6 +9,7 @@ import hashlib
 import hmac
 import json
 import time
+from typing import Any
 from urllib.parse import urlencode
 
 from bt_api_py.containers.exchanges.bitget_exchange_data import BitgetExchangeData
@@ -23,7 +24,7 @@ class BitgetRequestData(Feed):
     """Bitget REST API base request class with HMAC SHA256 + Base64 auth."""
 
     @classmethod
-    def _capabilities(cls):
+    def _capabilities(cls) -> set[Capability]:
         return {
             Capability.GET_TICK,
             Capability.GET_DEPTH,
@@ -39,7 +40,7 @@ class BitgetRequestData(Feed):
             Capability.GET_DEALS,
         }
 
-    def __init__(self, data_queue, **kwargs) -> None:
+    def __init__(self, data_queue: Any = None, **kwargs: Any) -> None:
         super().__init__(data_queue, **kwargs)
         self.data_queue = data_queue
         self.public_key = kwargs.get("public_key")
@@ -66,7 +67,8 @@ class BitgetRequestData(Feed):
             assert 0, "Queue not initialized"
 
     def _generate_signature(self, message):
-        mac = hmac.new(self.private_key.encode("utf-8"), message.encode("utf-8"), hashlib.sha256)
+        pk = self.private_key or ""
+        mac = hmac.new(pk.encode("utf-8"), message.encode("utf-8"), hashlib.sha256)
         return base64.b64encode(mac.digest()).decode("utf-8")
 
     def _build_auth_headers(self, method, request_path, body_string=""):
@@ -84,7 +86,7 @@ class BitgetRequestData(Feed):
 
     def request(self, path, params=None, body=None, extra_data=None, timeout=10):
         if params is None:
-            params = {}
+            params: dict[str, Any] = {}
         parts = path.split(" ", 1)
         method, request_path = (parts[0], parts[1]) if len(parts) == 2 else ("GET", path)
         url = f"{self._params.rest_url}{request_path}"
@@ -113,7 +115,7 @@ class BitgetRequestData(Feed):
 
     async def async_request(self, path, params=None, body=None, extra_data=None, timeout=5):
         if params is None:
-            params = {}
+            params: dict[str, Any] = {}
         parts = path.split(" ", 1)
         method, request_path = (parts[0], parts[1]) if len(parts) == 2 else ("GET", path)
         url = f"{self._params.rest_url}{request_path}"
@@ -145,7 +147,7 @@ class BitgetRequestData(Feed):
             result = future.result()
             self.push_data_to_queue(result)
         except Exception as e:
-            self.async_logger.warn(f"async_callback::{e}")
+            self.async_logger.warning(f"async_callback::{e}")
 
     @staticmethod
     def _extract_data_normalize_function(input_data, extra_data):

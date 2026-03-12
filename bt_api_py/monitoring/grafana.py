@@ -12,7 +12,7 @@ class GrafanaDashboardBuilder:
     """Builds Grafana dashboards for bt_api_py monitoring."""
 
     def __init__(self, title: str = "BT API Py Dashboard") -> None:
-        self.dashboard = {
+        self.dashboard: dict[str, Any] = {
             "dashboard": {
                 "id": None,
                 "title": title,
@@ -30,12 +30,14 @@ class GrafanaDashboardBuilder:
 
     def add_panel(self, panel: dict[str, Any]) -> "GrafanaDashboardBuilder":
         """Add a panel to the dashboard."""
+        d: dict[str, Any] = self.dashboard["dashboard"]
+        panels: list[Any] = d["panels"]
         # Auto-generate ID and grid position
-        panel_id = len(self.dashboard["dashboard"]["panels"]) + 1
+        panel_id = len(panels) + 1
         panel["id"] = panel_id
 
         # Calculate grid position
-        existing_panels = len(self.dashboard["dashboard"]["panels"])
+        existing_panels = len(panels)
         row = existing_panels // 2  # 2 panels per row
         col = existing_panels % 2
 
@@ -46,7 +48,7 @@ class GrafanaDashboardBuilder:
             "y": row * 8,
         }
 
-        self.dashboard["dashboard"]["panels"].append(panel)
+        panels.append(panel)
         return self
 
     def add_system_metrics_row(self) -> "GrafanaDashboardBuilder":

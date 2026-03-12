@@ -15,25 +15,23 @@ class GateioTickerData(TickerData):
         super().__init__(ticker_info, has_been_json_encoded)
         self.exchange_name = "GATEIO"
         self.local_update_time = time.time()
-        self.ticker_data = ticker_info if has_been_json_encoded else None
-        self.ticker_symbol_name = None
+        self.ticker_data: dict[str, Any] | None = ticker_info if has_been_json_encoded else None
+        self.ticker_symbol_name: str | None = None
         self.has_been_init_data = False
         self.symbol_name = symbol_name
         self.asset_type = asset_type
-        self.ticker_data = ticker_info if has_been_json_encoded else None
-        self.ticker_symbol_name = None
-        self.server_time = None
-        self.last_price = None
-        self.high_24h = None
-        self.low_24h = None
-        self.volume_24h = None
-        self.volume_quote_24h = None
-        self.price_change_percentage = None
-        self.bid_price = None
-        self.ask_price = None
-        self.base_volume = None
-        self.quote_volume = None
-        self.all_data = None
+        self.server_time: float | None = None
+        self.last_price: float | None = None
+        self.high_24h: float | None = None
+        self.low_24h: float | None = None
+        self.volume_24h: float | None = None
+        self.volume_quote_24h: float | None = None
+        self.price_change_percentage: float | None = None
+        self.bid_price: float | None = None
+        self.ask_price: float | None = None
+        self.base_volume: float | None = None
+        self.quote_volume: float | None = None
+        self.all_data: dict[str, Any] | None = None
         self.has_been_init_data = False
 
     def init_data(self) -> "Self":
@@ -46,18 +44,19 @@ class GateioTickerData(TickerData):
             return self
 
         # Parse ticker data
-        self.ticker_symbol_name = from_dict_get_string(self.ticker_data, "currency_pair")
-        self.server_time = from_dict_get_float(self.ticker_data, "timestamp") or time.time()
-        self.last_price = from_dict_get_float(self.ticker_data, "last")
-        self.high_24h = from_dict_get_float(self.ticker_data, "high_24h")
-        self.low_24h = from_dict_get_float(self.ticker_data, "low_24h")
-        self.volume_24h = from_dict_get_float(self.ticker_data, "base_volume")
-        self.volume_quote_24h = from_dict_get_float(self.ticker_data, "quote_volume")
-        self.price_change_percentage = from_dict_get_float(self.ticker_data, "change_percentage")
-        self.bid_price = from_dict_get_float(self.ticker_data, "highest_bid")
-        self.ask_price = from_dict_get_float(self.ticker_data, "lowest_ask")
-        self.base_volume = from_dict_get_float(self.ticker_data, "base_volume")
-        self.quote_volume = from_dict_get_float(self.ticker_data, "quote_volume")
+        td = self.ticker_data or {}
+        self.ticker_symbol_name = from_dict_get_string(td, "currency_pair")
+        self.server_time = from_dict_get_float(td, "timestamp") or time.time()
+        self.last_price = from_dict_get_float(td, "last")
+        self.high_24h = from_dict_get_float(td, "high_24h")
+        self.low_24h = from_dict_get_float(td, "low_24h")
+        self.volume_24h = from_dict_get_float(td, "base_volume")
+        self.volume_quote_24h = from_dict_get_float(td, "quote_volume")
+        self.price_change_percentage = from_dict_get_float(td, "change_percentage")
+        self.bid_price = from_dict_get_float(td, "highest_bid")
+        self.ask_price = from_dict_get_float(td, "lowest_ask")
+        self.base_volume = from_dict_get_float(td, "base_volume")
+        self.quote_volume = from_dict_get_float(td, "quote_volume")
 
         self.has_been_init_data = True
         return self
@@ -84,7 +83,7 @@ class GateioTickerData(TickerData):
                 "base_volume": self.base_volume,
                 "quote_volume": self.quote_volume,
             }
-        return self.all_data
+        return self.all_data or {}
 
     def __str__(self) -> str:
         self.init_data()
@@ -94,19 +93,19 @@ class GateioTickerData(TickerData):
         return self.__str__()
 
     def get_exchange_name(self) -> str:
-        return self.exchange_name
+        return str(self.exchange_name)
 
     def get_local_update_time(self) -> float:
-        return self.local_update_time
+        return float(self.local_update_time)
 
     def get_symbol_name(self) -> str:
-        return self.symbol_name
+        return str(self.symbol_name)
 
     def get_ticker_symbol_name(self) -> str | None:
         return self.ticker_symbol_name
 
     def get_asset_type(self) -> str:
-        return self.asset_type
+        return str(self.asset_type)
 
     def get_server_time(self) -> float | None:
         return self.server_time

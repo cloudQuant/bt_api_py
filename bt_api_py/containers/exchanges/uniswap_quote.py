@@ -49,7 +49,7 @@ class UniswapQuote:
     price_impact_percentage: Decimal | None = None
 
     # Routes
-    routes: list[UniswapQuoteRoute] = None
+    routes: list[UniswapQuoteRoute] | None = None
     best_route: UniswapQuoteRoute | None = None
 
     # Timestamps
@@ -77,9 +77,9 @@ class UniswapQuote:
 
         # Calculate price impact percentage
         if self.price_impact is not None and self.amount_in > 0:
-            self.price_impact_percentage = (
-                abs(float(self.price_impact)) / float(self.amount_in)
-            ) * 100
+            self.price_impact_percentage = Decimal(
+                str((abs(float(self.price_impact)) / float(self.amount_in)) * 100)
+            )
 
         # Check price impact warning
         if (
@@ -208,7 +208,7 @@ class UniswapQuote:
                     "input_amount": str(route.input_amount) if route.input_amount else None,
                     "output_amount": str(route.output_amount) if route.output_amount else None,
                 }
-                for route in self.routes
+                for route in (self.routes or [])
             ],
             "best_route": {
                 "pool_address": self.best_route.pool_address,
@@ -327,6 +327,8 @@ class UniswapQuote:
             route: Route to add
 
         """
+        if self.routes is None:
+            self.routes = []
         self.routes.append(route)
         # Update best route if this is better (fewer hops, better price)
         if self.best_route is None or route.hop_count < self.best_route.hop_count:

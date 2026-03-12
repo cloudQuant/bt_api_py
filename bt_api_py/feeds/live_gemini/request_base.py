@@ -3,6 +3,7 @@ import hashlib
 import hmac
 import json
 import time
+from typing import Any
 from urllib.parse import urlencode
 
 from bt_api_py.containers.exchanges.gemini_exchange_data import GeminiExchangeDataSpot
@@ -18,7 +19,7 @@ class GeminiRequestData(Feed):
     """Base class for all Gemini REST API requests"""
 
     @classmethod
-    def _capabilities(cls):
+    def _capabilities(cls) -> set[Capability]:
         return {
             Capability.GET_TICK,
             Capability.GET_DEPTH,
@@ -33,7 +34,7 @@ class GeminiRequestData(Feed):
             Capability.ACCOUNT_STREAM,
         }
 
-    def __init__(self, data_queue, **kwargs) -> None:
+    def __init__(self, data_queue: Any = None, **kwargs: Any) -> None:
         super().__init__(data_queue, **kwargs)
         self.data_queue = data_queue
         self.public_key = kwargs.get("public_key")
@@ -77,7 +78,7 @@ class GeminiRequestData(Feed):
     def _sign_request(self, path, params=None):
         """Generate HMAC SHA384 signature for Gemini API"""
         if params is None:
-            params = {}
+            params: dict[str, Any] = {}
 
         # Create payload with nonce (milliseconds timestamp)
         payload = {
@@ -294,7 +295,7 @@ class GeminiRequestData(Feed):
         """Get open orders"""
         request_type = "get_open_orders"
         path = self._params.get_rest_path(request_type)
-        params = {}
+        params: dict[str, Any] = {}
         if symbol:
             params["symbol"] = symbol
 
@@ -359,7 +360,7 @@ class GeminiRequestData(Feed):
         """Cancel all orders"""
         request_type = "cancel_orders"
         path = self._params.get_rest_path(request_type)
-        params = {}
+        params: dict[str, Any] = {}
         if symbol:
             params["symbol"] = symbol
 

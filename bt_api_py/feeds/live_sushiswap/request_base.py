@@ -27,7 +27,7 @@ class SushiSwapRequestData(Feed):
     """
 
     @classmethod
-    def _capabilities(cls):
+    def _capabilities(cls) -> set[Capability]:
         """Declare supported capabilities for SushiSwap."""
         return {
             Capability.GET_TICK,
@@ -40,7 +40,7 @@ class SushiSwapRequestData(Feed):
             Capability.CANCEL_ORDER,
         }
 
-    def __init__(self, data_queue, **kwargs):
+    def __init__(self, data_queue: Any = None, **kwargs: Any) -> None:
         super().__init__(data_queue, **kwargs)
         self.data_queue = data_queue
         self.exchange_name = kwargs.get("exchange_name", "SUSHISWAP___DEX")
@@ -191,11 +191,9 @@ class SushiSwapRequestData(Feed):
 
     def connect(self) -> None:
         """No-op for HTTP-based REST API."""
-        pass
 
     def disconnect(self) -> None:
         """No-op for HTTP-based REST API."""
-        pass
 
     def is_connected(self) -> bool:
         """Always return True for HTTP-based REST API."""

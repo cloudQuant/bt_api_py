@@ -144,7 +144,11 @@ class HitBtcRequestOrderData(OrderData):
 
     def get_avg_price(self):
         """Get average filled price."""
-        if self.quantity_filled and self.quantity_filled > 0 and getattr(self, "price_filled", None):
+        if (
+            self.quantity_filled
+            and self.quantity_filled > 0
+            and getattr(self, "price_filled", None)
+        ):
             return self.price_filled
         return None
 

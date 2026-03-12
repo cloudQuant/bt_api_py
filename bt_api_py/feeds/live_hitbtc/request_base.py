@@ -5,6 +5,7 @@ HitBTC V3 uses HTTP Basic Auth with API key as username and secret as password.
 """
 
 import base64
+from typing import Any
 from urllib.parse import urlencode
 
 from bt_api_py.containers.exchanges.hitbtc_exchange_data import HitBtcExchangeDataSpot
@@ -24,7 +25,7 @@ class HitBtcRequestData(Feed):
     """
 
     @classmethod
-    def _capabilities(cls):
+    def _capabilities(cls) -> set[Capability]:
         return {
             Capability.GET_TICK,
             Capability.GET_DEPTH,
@@ -40,7 +41,7 @@ class HitBtcRequestData(Feed):
             Capability.GET_SERVER_TIME,
         }
 
-    def __init__(self, data_queue, **kwargs):
+    def __init__(self, data_queue: Any = None, **kwargs: Any) -> None:
         super().__init__(data_queue, **kwargs)
         self.data_queue = data_queue
         self.api_key = kwargs.get("public_key") or kwargs.get("api_key") or ""
@@ -79,7 +80,7 @@ class HitBtcRequestData(Feed):
             is_sign: Whether to add Basic Auth header
         """
         if params is None:
-            params = {}
+            params: dict[str, Any] = {}
 
         method, endpoint = path.split(" ", 1)
         query_string = urlencode(params) if params else ""
@@ -101,7 +102,7 @@ class HitBtcRequestData(Feed):
     ):
         """Async HTTP request function using Feed.async_http_request()."""
         if params is None:
-            params = {}
+            params: dict[str, Any] = {}
 
         method, endpoint = path.split(" ", 1)
         query_string = urlencode(params) if params else ""
@@ -127,7 +128,7 @@ class HitBtcRequestData(Feed):
 
     def _get_server_time(self, extra_data=None, **kwargs):
         path = self._params.get_rest_path("get_server_time")
-        params = {}
+        params: dict[str, Any] = {}
         extra_data = update_extra_data(
             extra_data,
             **{
@@ -142,7 +143,7 @@ class HitBtcRequestData(Feed):
 
     def _get_exchange_info(self, extra_data=None, **kwargs):
         path = self._params.get_rest_path("get_exchange_info")
-        params = {}
+        params: dict[str, Any] = {}
         extra_data = update_extra_data(
             extra_data,
             **{
@@ -158,7 +159,7 @@ class HitBtcRequestData(Feed):
     def _get_tick(self, symbol, extra_data=None, **kwargs):
         hitbtc_symbol = self._params.get_symbol(symbol)
         path = self._params.get_rest_path("get_tick").replace("{symbol}", hitbtc_symbol)
-        params = {}
+        params: dict[str, Any] = {}
         extra_data = update_extra_data(
             extra_data,
             **{
@@ -262,7 +263,7 @@ class HitBtcRequestData(Feed):
         path = self._params.get_rest_path("cancel_order").replace(
             "{client_order_id}", str(order_id or "")
         )
-        params = {}
+        params: dict[str, Any] = {}
         extra_data = update_extra_data(
             extra_data,
             **{
@@ -279,7 +280,7 @@ class HitBtcRequestData(Feed):
         path = self._params.get_rest_path("query_order").replace(
             "{client_order_id}", str(order_id or "")
         )
-        params = {}
+        params: dict[str, Any] = {}
         extra_data = update_extra_data(
             extra_data,
             **{
@@ -294,7 +295,7 @@ class HitBtcRequestData(Feed):
 
     def _get_open_orders(self, symbol=None, extra_data=None, **kwargs):
         path = self._params.get_rest_path("get_open_orders")
-        params = {}
+        params: dict[str, Any] = {}
         if symbol:
             params["symbol"] = self._params.get_symbol(symbol)
         extra_data = update_extra_data(
@@ -311,7 +312,7 @@ class HitBtcRequestData(Feed):
 
     def _get_account(self, extra_data=None, **kwargs):
         path = self._params.get_rest_path("get_account")
-        params = {}
+        params: dict[str, Any] = {}
         extra_data = update_extra_data(
             extra_data,
             **{
@@ -326,7 +327,7 @@ class HitBtcRequestData(Feed):
 
     def _get_balance(self, extra_data=None, **kwargs):
         path = self._params.get_rest_path("get_balance")
-        params = {}
+        params: dict[str, Any] = {}
         extra_data = update_extra_data(
             extra_data,
             **{

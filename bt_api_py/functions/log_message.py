@@ -1,24 +1,26 @@
-import os
+import logging
 from pathlib import Path
 
 import spdlog
 
 
-def _get_project_logs_dir():
+def _get_project_logs_dir() -> str:
     """获取项目根目录下的 logs/ 文件夹绝对路径。
     项目根目录 = bt_api_py 包的上一级目录。
     """
     try:
         import bt_api_py
 
-        pkg_dir = os.path.dirname(bt_api_py.__file__)
-        return os.path.join(str(Path(pkg_dir).parent), "logs")
-    except Exception:
-        return os.path.join(os.getcwd(), "logs")
+        pkg_path = Path(bt_api_py.__file__).resolve().parent
+        return str(pkg_path.parent / "logs")
+    except Exception as e:
+        # Fallback when package context unavailable (e.g. during early import)
+        logging.getLogger(__name__).debug("Using cwd for logs dir: %s", e)
+        return str(Path.cwd() / "logs")
 
 
 class SpdLogManager:
-    _logger_cache = {}
+    _logger_cache: dict[tuple[str, str, int, int, bool], object] = {}
     _project_logs_dir = _get_project_logs_dir()
 
     def __init__(
@@ -30,13 +32,15 @@ class SpdLogManager:
         print_info=False,
     ):
         # 将所有非绝对路径的日志文件统一重定向到项目根目录 logs/ 下
-        if not os.path.isabs(file_name):
+        path = Path(file_name)
+        if not path.is_absolute():
             # 去除 ./logs/ 或 ./  前缀，提取纯文件名
+            name = file_name
             if file_name.startswith("./logs/"):
-                file_name = file_name[len("./logs/") :]
+                name = file_name[len("./logs/") :]
             elif file_name.startswith("./"):
-                file_name = file_name[len("./") :]
-            file_name = os.path.join(SpdLogManager._project_logs_dir, file_name)
+                name = file_name[len("./") :]
+            file_name = str(Path(SpdLogManager._project_logs_dir) / name)
         self.file_name = file_name
         self.logger_name = logger_name
         self.rotation_hour = rotation_hour
@@ -57,9 +61,9 @@ class SpdLogManager:
             return SpdLogManager._logger_cache[key]
 
         # 确保日志目录存在
-        log_dir = os.path.dirname(self.file_name)
-        if log_dir:
-            os.makedirs(log_dir, exist_ok=True)
+        log_dir = Path(self.file_name).parent
+        if str(log_dir):
+            log_dir.mkdir(parents=True, exist_ok=True)
 
         # 创建sinks
         if self.print_info:

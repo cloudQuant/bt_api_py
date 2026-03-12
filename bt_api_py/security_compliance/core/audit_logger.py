@@ -8,7 +8,9 @@ import contextlib
 import enum
 import hashlib
 import json
+import logging
 import time
+from collections.abc import Callable
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any
@@ -16,11 +18,11 @@ from uuid import uuid4
 
 from bt_api_py.exceptions import BtApiError
 
+_logger = logging.getLogger(__name__)
+
 
 class AuditError(BtApiError):
     """Audit logging related errors."""
-
-    pass
 
 
 class EventType(enum.Enum):
@@ -160,7 +162,7 @@ class AuditLogger:
         self._load_last_hash()
 
         # Real-time monitoring
-        self._subscribers: list[callable] = []
+        self._subscribers: list[Callable[[AuditEvent], None]] = []
 
     def _load_last_hash(self) -> None:
         """Load the hash of the last event for chain integrity."""
@@ -277,11 +279,11 @@ class AuditLogger:
             with contextlib.suppress(Exception):
                 callback(event)
 
-    def subscribe(self, callback: callable) -> None:
+    def subscribe(self, callback: Callable[[AuditEvent], None]) -> None:
         """Subscribe to real-time audit events."""
         self._subscribers.append(callback)
 
-    def unsubscribe(self, callback: callable) -> None:
+    def unsubscribe(self, callback: Callable[[AuditEvent], None]) -> None:
         """Unsubscribe from real-time audit events."""
         if callback in self._subscribers:
             self._subscribers.remove(callback)
@@ -389,13 +391,16 @@ class AuditLogger:
                         if len(results) >= limit:
                             break
 
-                    except Exception:
-                        # Skip malformed events
+                    except Exception as e:
+                        _logger.debug("Skip malformed audit event: %s", e)
                         continue
 
-        except Exception:
-            # Return what we have if file read fails
-            pass
+        except Exception as e:
+            _logger.debug(
+                "Audit log file read failed, returning partial results: %s",
+                e,
+                exc_info=True,
+            )
 
         # Sort by timestamp (newest first)
         results.sort(key=lambda e: e.timestamp, reverse=True)
@@ -433,7 +438,7 @@ class AuditLogger:
         ]
 
         # Generate statistics
-        stats = {
+        stats: dict[str, Any] = {
             "total_events": len(compliance_events),
             "by_type": {},
             "by_severity": {},

@@ -214,18 +214,15 @@ class TestGmxRequestDataSpot:
     @pytest.mark.ticker
     def test_integration_get_ticker(self, gmx_spot):
         """Integration test for get_ticker - skipped."""
-        pass
 
     @pytest.mark.skip(reason="Requires actual API call")
     @pytest.mark.kline
     def test_integration_get_kline(self, gmx_spot):
         """Integration test for get_kline - skipped."""
-        pass
 
     @pytest.mark.skip(reason="Requires actual API call")
     def test_integration_get_exchange_info(self, gmx_spot):
         """Integration test for get_exchange_info - skipped."""
-        pass
 
 
 class TestGmxExchangeDataSpot:

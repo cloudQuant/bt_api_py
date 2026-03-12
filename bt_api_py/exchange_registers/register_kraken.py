@@ -18,7 +18,6 @@ from bt_api_py.registry import ExchangeRegistry
 
 def _kraken_subscribe_handler(data_queue, exchange_params, topics, bt_api):
     """Kraken 订阅处理函数 (placeholder)"""
-    pass
 
 
 def register_kraken():

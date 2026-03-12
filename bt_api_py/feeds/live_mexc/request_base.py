@@ -5,6 +5,7 @@ Handles authentication, signing, and all REST API methods.
 
 import hmac
 import time
+from typing import Any
 from urllib.parse import urlencode
 
 from bt_api_py.containers.exchanges.mexc_exchange_data import MexcExchangeDataSpot
@@ -19,7 +20,7 @@ from bt_api_py.logging_factory import get_logger
 
 class MexcRequestData(Feed):
     @classmethod
-    def _capabilities(cls):
+    def _capabilities(cls) -> set[Capability]:
         return {
             Capability.GET_TICK,
             Capability.GET_DEPTH,
@@ -35,7 +36,7 @@ class MexcRequestData(Feed):
             Capability.GET_SERVER_TIME,
         }
 
-    def __init__(self, data_queue, **kwargs) -> None:
+    def __init__(self, data_queue: Any = None, **kwargs: Any) -> None:
         super().__init__(data_queue, **kwargs)
         self.data_queue = data_queue
         self.public_key = kwargs.get("public_key")
@@ -48,7 +49,12 @@ class MexcRequestData(Feed):
         self._error_translator = MexcErrorTranslator()
         self._http_client = HttpClient(venue=self.exchange_name, timeout=30)
 
-    def sign(self, content):
+    def push_data_to_queue(self, data) -> None:
+        """Push request result to data queue."""
+        if self.data_queue is not None:
+            self.data_queue.put(data)
+
+    def sign(self, content: str) -> str:
         """Generate HMAC SHA256 signature
 
         Args:
@@ -57,6 +63,8 @@ class MexcRequestData(Feed):
         Returns:
             str: Hexadecimal signature
         """
+        if self.private_key is None:
+            raise ValueError("private_key is required for signing")
         signature = hmac.new(
             self.private_key.encode("utf-8"), content.encode("utf-8"), digestmod="sha256"
         ).hexdigest()
@@ -78,33 +86,38 @@ class MexcRequestData(Feed):
             RequestData: Response data container
         """
         if params is None:
-            params = {}
+            params: dict[str, Any] = {}
 
         method, path = path.split(" ", 1)
 
         if is_sign:
             # Add timestamp for signed requests
-            req = {
+            req_dict: dict[str, str | int] = {
                 "timestamp": int(time.time() * 1000),
             }
-            req.update(params)
+            req_dict.update(
+                {k: v if isinstance(v, (str, int)) else str(v) for k, v in params.items()}
+            )
 
             # Generate signature
-            query_string = urlencode(sorted(req.items()))
-            req["signature"] = self.sign(query_string)
+            query_string = urlencode(sorted(req_dict.items()))
+            req_dict["signature"] = self.sign(query_string)
 
             # Build URL with query parameters
-            req = urlencode(req)
-            url = f"{self._params.rest_url}{path}?{req}"
-            headers = {"X-MEXC-APIKEY": self.public_key, "Content-Type": "application/json"}
+            req_str = urlencode({k: str(v) for k, v in req_dict.items()})
+            url = f"{self._params.rest_url}{path}?{req_str}"
+            headers_dict: dict[str, str] = {
+                "X-MEXC-APIKEY": self.public_key or "",
+                "Content-Type": "application/json",
+            }
         else:
             # Public request
-            req = urlencode(params)
-            url = f"{self._params.rest_url}{path}?{req}"
-            headers = {"Content-Type": "application/json"}
+            req_str = urlencode(params)
+            url = f"{self._params.rest_url}{path}?{req_str}"
+            headers_dict = {"Content-Type": "application/json"}
 
         # Make HTTP request
-        response = self.http_request(method, url, headers, body, timeout)
+        response = self.http_request(method, url, headers_dict, body, timeout)
 
         return RequestData(response, extra_data)
 
@@ -125,36 +138,41 @@ class MexcRequestData(Feed):
             RequestData: Response data container
         """
         if params is None:
-            params = {}
+            params: dict[str, Any] = {}
 
         method, path = path.split(" ", 1)
 
         if is_sign:
             # Add timestamp for signed requests
-            req = {
+            req_dict: dict[str, str | int] = {
                 "timestamp": int(time.time() * 1000),
             }
-            req.update(params)
+            req_dict.update(
+                {k: v if isinstance(v, (str, int)) else str(v) for k, v in params.items()}
+            )
 
             # Generate signature
-            query_string = urlencode(sorted(req.items()))
-            req["signature"] = self.sign(query_string)
+            query_string = urlencode(sorted(req_dict.items()))
+            req_dict["signature"] = self.sign(query_string)
 
             # Build URL with query parameters
-            req = urlencode(req)
-            url = f"{self._params.rest_url}{path}?{req}"
-            headers = {"X-MEXC-APIKEY": self.public_key, "Content-Type": "application/json"}
+            req_str = urlencode({k: str(v) for k, v in req_dict.items()})
+            url = f"{self._params.rest_url}{path}?{req_str}"
+            headers_dict = {
+                "X-MEXC-APIKEY": self.public_key or "",
+                "Content-Type": "application/json",
+            }
         else:
             # Public request
-            req = urlencode(params)
-            url = f"{self._params.rest_url}{path}?{req}"
-            headers = {"Content-Type": "application/json"}
+            req_str = urlencode(params)
+            url = f"{self._params.rest_url}{path}?{req_str}"
+            headers_dict = {"Content-Type": "application/json"}
 
         # Make async HTTP request
         response = await self._http_client.async_request(
             method=method,
             url=url,
-            headers=headers,
+            headers=headers_dict,
             json_data=body if method in ["POST", "PUT", "DELETE"] else None,
         )
 
@@ -171,7 +189,7 @@ class MexcRequestData(Feed):
             result = future.result()
             self.push_data_to_queue(result)
         except Exception as e:
-            self.async_logger.warn(f"async_callback::{e}")
+            self.async_logger.warning(f"async_callback::{e}")
 
     # ==================== Market Data APIs ====================
 
@@ -187,7 +205,7 @@ class MexcRequestData(Feed):
         """
         request_type = "get_server_time"
         path = self._params.get_rest_path(request_type)
-        params = {}
+        params: dict[str, str | int] = {}
 
         extra_data = update_extra_data(
             extra_data,
@@ -225,7 +243,7 @@ class MexcRequestData(Feed):
         """
         request_type = "get_exchange_info"
         path = self._params.get_rest_path(request_type)
-        params = {}
+        params: dict[str, Any] = {}
 
         if symbol:
             params["symbol"] = symbol
@@ -331,10 +349,12 @@ class MexcRequestData(Feed):
         return path, params, extra_data
 
     @staticmethod
-    def _get_recent_trades_normalize_function(input_data, extra_data):
+    def _get_recent_trades_normalize_function(
+        input_data: Any, extra_data: Any
+    ) -> tuple[list[dict[str, Any]], bool]:
         """Normalize recent trades response"""
         status = input_data is not None
-        trades = []
+        trades: list[dict[str, Any]] = []
 
         if status and isinstance(input_data, list):
             trades = []
@@ -431,7 +451,7 @@ class MexcRequestData(Feed):
         """
         request_type = "get_24hr_ticker"
         path = self._params.get_rest_path(request_type)
-        params = {}
+        params: dict[str, Any] = {}
 
         if symbol:
             params["symbol"] = symbol
@@ -704,7 +724,7 @@ class MexcRequestData(Feed):
         """
         request_type = "get_open_orders"
         path = self._params.get_rest_path(request_type)
-        params = {}
+        params: dict[str, Any] = {}
 
         if symbol:
             params["symbol"] = symbol
@@ -826,7 +846,7 @@ class MexcRequestData(Feed):
         """
         request_type = "get_account"
         path = self._params.get_rest_path(request_type)
-        params = {}
+        params: dict[str, str | int] = {}
 
         extra_data = update_extra_data(
             extra_data,

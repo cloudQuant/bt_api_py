@@ -4,6 +4,8 @@ Raydium Spot Feed implementation.
 Provides market data access for Raydium DEX pools.
 """
 
+from typing import Any
+
 from bt_api_py.containers.exchanges.raydium_exchange_data import RaydiumExchangeDataSpot
 from bt_api_py.feeds.capability import Capability
 from bt_api_py.feeds.live_raydium.request_base import RaydiumRequestData
@@ -25,7 +27,7 @@ class RaydiumRequestDataSpot(RaydiumRequestData):
     """
 
     @classmethod
-    def _capabilities(cls):
+    def _capabilities(cls) -> set[Capability]:
         """Declare supported capabilities."""
         return {
             Capability.GET_TICK,
@@ -37,7 +39,7 @@ class RaydiumRequestDataSpot(RaydiumRequestData):
             Capability.CANCEL_ORDER,
         }
 
-    def __init__(self, data_queue, **kwargs):
+    def __init__(self, data_queue: Any = None, **kwargs: Any) -> None:
         super().__init__(data_queue, **kwargs)
         self.exchange_name = kwargs.get("exchange_name", "RAYDIUM___DEX")
         self.asset_type = kwargs.get("asset_type", "DEX")
@@ -327,7 +329,7 @@ class RaydiumRequestDataSpot(RaydiumRequestData):
         request_type = "get_mint_price"
         path = self._params.get_rest_path(request_type)
 
-        params = {}
+        params: dict[str, Any] = {}
 
         extra_data = update_extra_data(
             extra_data,

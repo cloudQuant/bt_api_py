@@ -42,9 +42,9 @@ class GeminiRequestBarData(RequestData):
             extra_data.setdefault("asset_type", asset_type)
 
         super().__init__(data, extra_data, status, normalize_func)
-        self.symbol = symbol
+        self.symbol: str | None = symbol
         self.asset_type = asset_type
-        self.time_frame = time_frame
+        self.time_frame: str | None = time_frame
         self.is_rest = is_rest
 
         self.open: float | None = None
@@ -64,7 +64,7 @@ class GeminiRequestBarData(RequestData):
         if self.is_rest:
             self._parse_rest_data(data)
         else:
-            self._parse_wss_data(data)
+            self._parse_rest_data(data)  # WSS uses same structure as REST
 
     def _parse_rest_data(self, data: Any) -> None:
         """Parse REST API response."""
@@ -125,13 +125,13 @@ class GeminiRequestBarData(RequestData):
         """Get exchange name."""
         return "GEMINI"
 
-    def get_asset_type(self) -> str | None:
+    def get_asset_type(self) -> str:
         """Get asset type."""
-        return self.asset_type
+        return self.asset_type or ""
 
-    def get_symbol_name(self) -> str | None:
+    def get_symbol_name(self) -> str:
         """Get symbol name."""
-        return self.symbol
+        return self.symbol or ""
 
     def get_server_time(self) -> int | None:
         """Get server time."""

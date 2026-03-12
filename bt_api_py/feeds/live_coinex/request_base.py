@@ -11,6 +11,7 @@ import hashlib
 import hmac
 import json
 import time
+from typing import Any
 from urllib.parse import urlencode
 
 from bt_api_py.containers.exchanges.coinex_exchange_data import CoinExExchangeDataSpot
@@ -24,7 +25,7 @@ class CoinExRequestData(Feed):
     """CoinEx REST API Feed base class."""
 
     @classmethod
-    def _capabilities(cls):
+    def _capabilities(cls) -> set[Capability]:
         return {
             Capability.GET_TICK,
             Capability.GET_DEPTH,
@@ -39,7 +40,7 @@ class CoinExRequestData(Feed):
             Capability.GET_EXCHANGE_INFO,
         }
 
-    def __init__(self, data_queue, **kwargs):
+    def __init__(self, data_queue: Any = None, **kwargs: Any) -> None:
         super().__init__(data_queue, **kwargs)
         self.data_queue = data_queue
         self._api_key = (
@@ -101,7 +102,7 @@ class CoinExRequestData(Feed):
     def request(self, path, params=None, body=None, extra_data=None, timeout=10, is_sign=False):
         """Synchronous HTTP request using Feed.http_request()."""
         if params is None:
-            params = {}
+            params: dict[str, Any] = {}
         method, endpoint = path.split(" ", 1)
         headers = {"Content-Type": "application/json"}
 
@@ -129,7 +130,7 @@ class CoinExRequestData(Feed):
     ):
         """Async HTTP request."""
         if params is None:
-            params = {}
+            params: dict[str, Any] = {}
         method, endpoint = path.split(" ", 1)
         headers = {"Content-Type": "application/json"}
 
@@ -160,7 +161,7 @@ class CoinExRequestData(Feed):
 
     def _get_exchange_info(self, extra_data=None, **kwargs):
         path = self._params.get_rest_path("get_exchange_info")
-        params = {}
+        params: dict[str, Any] = {}
         extra_data = extra_data or {}
         extra_data.update(
             {
@@ -271,7 +272,7 @@ class CoinExRequestData(Feed):
 
     def _cancel_order(self, symbol=None, order_id=None, extra_data=None, **kwargs):
         path = self._params.get_rest_path("cancel_order")
-        params = {}
+        params: dict[str, Any] = {}
         if symbol:
             params["market"] = self._params.get_symbol(symbol)
         if order_id:
@@ -290,7 +291,7 @@ class CoinExRequestData(Feed):
 
     def _query_order(self, symbol=None, order_id=None, extra_data=None, **kwargs):
         path = self._params.get_rest_path("query_order")
-        params = {}
+        params: dict[str, Any] = {}
         if symbol:
             params["market"] = self._params.get_symbol(symbol)
         if order_id:
@@ -343,7 +344,7 @@ class CoinExRequestData(Feed):
 
     def _get_account(self, extra_data=None, **kwargs):
         path = self._params.get_rest_path("get_account")
-        params = {}
+        params: dict[str, Any] = {}
         extra_data = extra_data or {}
         extra_data.update(
             {
@@ -358,7 +359,7 @@ class CoinExRequestData(Feed):
 
     def _get_balance(self, extra_data=None, **kwargs):
         path = self._params.get_rest_path("get_balance")
-        params = {}
+        params: dict[str, Any] = {}
         extra_data = extra_data or {}
         extra_data.update(
             {

@@ -15,20 +15,19 @@ class PoloniexTickerData(TickerData):
         super().__init__(ticker_info, has_been_json_encoded)
         self.exchange_name = "POLONIEX"
         self.local_update_time = time.time()
-        self.ticker_data = ticker_info if has_been_json_encoded else None
-        self.ticker_symbol_name = None
-        self.has_been_init_data = False
         self.symbol_name = symbol_name
         self.asset_type = asset_type
-        self.ticker_data = ticker_info if has_been_json_encoded else None
-        self.ticker_symbol_name = None
-        self.server_time = None
-        self.bid_price = None
-        self.ask_price = None
-        self.bid_volume = None
-        self.ask_volume = None
-        self.last_price = None
-        self.all_data = None
+        self.ticker_data: dict[str, Any] | None = (
+            ticker_info if has_been_json_encoded and isinstance(ticker_info, dict) else None
+        )
+        self.ticker_symbol_name: str | None = None
+        self.server_time: float | None = None
+        self.bid_price: float | None = None
+        self.ask_price: float | None = None
+        self.bid_volume: float | None = None
+        self.ask_volume: float | None = None
+        self.last_price: float | None = None
+        self.all_data: dict[str, Any] | None = None
         self.has_been_init_data = False
 
     def init_data(self) -> "Self":
@@ -36,6 +35,7 @@ class PoloniexTickerData(TickerData):
 
     def get_all_data(self) -> dict[str, Any]:
         if self.all_data is None:
+            self.init_data()
             self.all_data = {
                 "exchange_name": self.exchange_name,
                 "symbol_name": self.symbol_name,
@@ -49,29 +49,30 @@ class PoloniexTickerData(TickerData):
                 "ask_volume": self.ask_volume,
                 "last_price": self.last_price,
             }
-        return self.all_data
+        return self.all_data or {}
 
     def __str__(self) -> str:
         self.init_data()
-        return json.dumps(self.get_all_data())
+        return str(json.dumps(self.get_all_data()))
 
     def __repr__(self) -> str:
-        return self.__str__()
+        return str(self.__str__())
 
     def get_exchange_name(self) -> str:
-        return self.exchange_name
+        return str(self.exchange_name)
 
     def get_local_update_time(self) -> float:
-        return self.local_update_time
+        return float(self.local_update_time)
 
     def get_symbol_name(self) -> str:
-        return self.symbol_name
+        return str(self.symbol_name)
 
     def get_ticker_symbol_name(self) -> str | None:
-        return self.ticker_symbol_name
+        val = self.ticker_symbol_name
+        return None if val is None else str(val)
 
     def get_asset_type(self) -> str:
-        return self.asset_type
+        return str(self.asset_type)
 
     def get_server_time(self) -> float | None:
         return self.server_time
@@ -102,13 +103,14 @@ class PoloniexRequestTickerData(PoloniexTickerData):
         if self.has_been_init_data:
             return self
 
-        self.ticker_symbol_name = from_dict_get_string(self.ticker_data, "symbol")
-        self.server_time = from_dict_get_float(self.ticker_data, "ts") or time.time() * 1000
-        self.bid_price = from_dict_get_float(self.ticker_data, "bid")
-        self.ask_price = from_dict_get_float(self.ticker_data, "ask")
-        self.bid_volume = from_dict_get_float(self.ticker_data, "bidQuantity")
-        self.ask_volume = from_dict_get_float(self.ticker_data, "askQuantity")
-        self.last_price = from_dict_get_float(self.ticker_data, "close")
+        data = self.ticker_data or {}
+        self.ticker_symbol_name = from_dict_get_string(data, "symbol")
+        self.server_time = from_dict_get_float(data, "ts") or time.time() * 1000
+        self.bid_price = from_dict_get_float(data, "bid")
+        self.ask_price = from_dict_get_float(data, "ask")
+        self.bid_volume = from_dict_get_float(data, "bidQuantity")
+        self.ask_volume = from_dict_get_float(data, "askQuantity")
+        self.last_price = from_dict_get_float(data, "close")
         self.has_been_init_data = True
         return self
 
@@ -124,7 +126,7 @@ class PoloniexWssTickerData(PoloniexTickerData):
             return self
 
         # Poloniex WebSocket ticker format
-        data = self.ticker_data
+        data = self.ticker_data or {}
         self.ticker_symbol_name = from_dict_get_string(data, "symbol")
         self.server_time = from_dict_get_float(data, "ts") or time.time() * 1000
         self.bid_price = from_dict_get_float(data, "bid")

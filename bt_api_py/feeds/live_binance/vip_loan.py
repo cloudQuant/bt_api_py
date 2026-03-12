@@ -8,6 +8,8 @@
 - VIP还款历史记录查询
 """
 
+from typing import Any
+
 from bt_api_py.containers.exchanges.binance_exchange_data import BinanceExchangeDataVipLoan
 from bt_api_py.feeds.live_binance.request_base import BinanceRequestData
 from bt_api_py.functions.utils import update_extra_data
@@ -20,7 +22,7 @@ class BinanceRequestDataVipLoan(BinanceRequestData):
     处理所有VIP借贷相关的请求。
     """
 
-    def __init__(self, data_queue, **kwargs):
+    def __init__(self, data_queue: Any = None, **kwargs: Any) -> None:
         kwargs.setdefault("exchange_data", BinanceExchangeDataVipLoan())
         kwargs.setdefault("exchange_name", "binance_vip_loan")
         super().__init__(data_queue, **kwargs)
@@ -57,7 +59,7 @@ class BinanceRequestDataVipLoan(BinanceRequestData):
         """
         request_type = "get_vip_loan_ongoing_orders"
         path = self._params.get_rest_path(request_type)
-        params = {}
+        params: dict[str, Any] = {}
         if loan_coin is not None:
             params["loanCoin"] = loan_coin
         if collateral_coin is not None:
@@ -261,7 +263,7 @@ class BinanceRequestDataVipLoan(BinanceRequestData):
         """
         request_type = "get_vip_loan_history"
         path = self._params.get_rest_path(request_type)
-        params = {}
+        params: dict[str, Any] = {}
         if loan_coin is not None:
             params["loanCoin"] = loan_coin
         if collateral_coin is not None:
@@ -345,7 +347,7 @@ class BinanceRequestDataVipLoan(BinanceRequestData):
         """
         request_type = "get_vip_repayment_history"
         path = self._params.get_rest_path(request_type)
-        params = {}
+        params: dict[str, Any] = {}
         if loan_coin is not None:
             params["loanCoin"] = loan_coin
         if collateral_coin is not None:

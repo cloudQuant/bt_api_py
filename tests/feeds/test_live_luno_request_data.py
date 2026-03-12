@@ -38,7 +38,6 @@ def test_luno_req_server_time():
     """Test Luno server time endpoint."""
     # Luno doesn't have a dedicated server time endpoint
     # Timestamps are included in ticker and orderbook responses
-    pass
 
 
 @pytest.mark.integration
@@ -84,7 +83,6 @@ def test_luno_async_tick_data():
 
     # Note: Luno's current implementation uses sync requests
     # This test would require async implementation
-    pass
 
 
 @pytest.mark.integration
@@ -137,7 +135,6 @@ def test_luno_async_kline_data():
 
     # Note: Luno's current implementation uses sync requests
     # This test would require async implementation
-    pass
 
 
 def order_book_value_equals(order_book):

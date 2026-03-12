@@ -38,7 +38,6 @@ def test_mercado_bitcoin_req_server_time():
     """Test Mercado Bitcoin server time endpoint."""
     # Mercado Bitcoin doesn't have a dedicated server time endpoint
     # Timestamps are included in ticker responses
-    pass
 
 
 @pytest.mark.integration
@@ -83,7 +82,6 @@ def test_mercado_bitcoin_async_tick_data():
 
     # Note: Mercado Bitcoin's current implementation uses sync requests
     # This test would require async implementation
-    pass
 
 
 @pytest.mark.integration
@@ -134,7 +132,6 @@ def test_mercado_bitcoin_async_kline_data():
 
     # Note: Mercado Bitcoin's current implementation uses sync requests
     # This test would require async implementation
-    pass
 
 
 def order_book_value_equals(order_book):

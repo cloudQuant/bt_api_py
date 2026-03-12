@@ -190,8 +190,6 @@ class TestHitBtcIntegration:
         # This would require API keys to test
         # feed = HitBtcSpotRequestData(data_queue, public_key="key", private_key="secret")
 
-        pass
-
 
 if __name__ == "__main__":
     # Run tests

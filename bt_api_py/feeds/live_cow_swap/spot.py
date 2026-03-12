@@ -3,6 +3,8 @@ CoW Swap Spot Feed implementation.
 CoW Swap is a DEX - market data is primarily obtained through on-chain events and subgraphs.
 """
 
+from typing import Any
+
 from bt_api_py.feeds.capability import Capability
 from bt_api_py.feeds.live_cow_swap.request_base import CowSwapRequestData
 from bt_api_py.functions.utils import update_extra_data
@@ -12,7 +14,7 @@ class CowSwapRequestDataSpot(CowSwapRequestData):
     """CoW Swap Spot Feed for market data."""
 
     @classmethod
-    def _capabilities(cls):
+    def _capabilities(cls) -> set[Capability]:
         return {
             Capability.GET_TICK,
             Capability.GET_DEPTH,
@@ -24,7 +26,7 @@ class CowSwapRequestDataSpot(CowSwapRequestData):
             Capability.CANCEL_ORDER,
         }
 
-    def __init__(self, data_queue, **kwargs):
+    def __init__(self, data_queue: Any = None, **kwargs: Any) -> None:
         super().__init__(data_queue, **kwargs)
         self.exchange_name = kwargs.get("exchange_name", "COW_SWAP___SPOT")
 
@@ -196,7 +198,7 @@ class CowSwapRequestDataSpot(CowSwapRequestData):
             exchange_name=self.exchange_name,
             normalize_function=self._get_account_orders_normalize_function,
         )
-        params = {}
+        params: dict[str, Any] = {}
         if "offset" in kwargs:
             params["offset"] = kwargs["offset"]
         if "limit" in kwargs:
@@ -223,7 +225,7 @@ class CowSwapRequestDataSpot(CowSwapRequestData):
             exchange_name=self.exchange_name,
             normalize_function=self._get_trades_normalize_function,
         )
-        params = {}
+        params: dict[str, Any] = {}
         if "offset" in kwargs:
             params["offset"] = kwargs["offset"]
         if "limit" in kwargs:

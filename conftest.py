@@ -192,6 +192,21 @@ def pytest_runtest_call(item):
     exc = exc_info[1]
     exc_name = type(exc).__name__
     exc_msg = str(exc).lower()
+    # Use isinstance for exception type checks
+    if isinstance(exc, AssertionError) and any(
+        hint in exc_msg
+        for hint in [
+            "returned no data",
+            "returned none",
+            "is not none",
+            "no ticks",
+            "no response",
+            "empty response",
+            "failed to fetch",
+            "enough exchanges",
+        ]
+    ):
+        pytest.skip(f"Skipped (no data, likely network): {str(exc)[:80]}")
     network_indicators = [
         "authenticationerror",
         "requestfailederror",
@@ -228,24 +243,8 @@ def pytest_runtest_call(item):
     if any(ind in combined for ind in network_indicators):
         pytest.skip(f"Skipped (network/auth): {exc_name}: {str(exc)[:80]}")
     # Also skip pytest-timeout failures for network tests
-    if "failed" == exc_name.lower() and "timeout" in exc_msg:
+    if exc_name.lower() == "failed" and "timeout" in exc_msg:
         pytest.skip(f"Skipped (timeout): {str(exc)[:80]}")
-    # AssertionError with "returned no data/None" often means network call
-    # silently failed; skip for network-marked tests
-    if exc_name == "AssertionError" and any(
-        hint in exc_msg
-        for hint in [
-            "returned no data",
-            "returned none",
-            "is not none",
-            "no ticks",
-            "no response",
-            "empty response",
-            "failed to fetch",
-            "enough exchanges",
-        ]
-    ):
-        pytest.skip(f"Skipped (no data, likely network): {str(exc)[:80]}")
 
 
 @pytest.fixture(scope="session")

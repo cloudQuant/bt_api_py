@@ -5,6 +5,7 @@ Mercado Bitcoin REST API request base class.
 import hashlib
 import hmac
 import time
+from typing import Any
 from urllib.parse import urlencode
 
 from bt_api_py.containers.exchanges.mercado_bitcoin_exchange_data import (
@@ -21,7 +22,7 @@ class MercadoBitcoinRequestData(Feed):
     """Mercado Bitcoin REST API Feed base class."""
 
     @classmethod
-    def _capabilities(cls):
+    def _capabilities(cls) -> set[Capability]:
         return {
             Capability.GET_TICK,
             Capability.GET_DEPTH,
@@ -33,7 +34,7 @@ class MercadoBitcoinRequestData(Feed):
             Capability.CANCEL_ORDER,
         }
 
-    def __init__(self, data_queue, **kwargs):
+    def __init__(self, data_queue: Any = None, **kwargs: Any) -> None:
         super().__init__(data_queue, **kwargs)
         self.data_queue = data_queue
         self.exchange_name = kwargs.get("exchange_name", "MERCADO_BITCOIN___SPOT")

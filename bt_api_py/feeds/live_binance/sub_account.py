@@ -48,7 +48,7 @@ class BinanceRequestDataSubAccount(BinanceRequestData):
         """
         request_type = "get_sub_account_list"
         path = self._params.get_rest_path(request_type)
-        params = {}
+        params: dict[str, Any] = {}
         if email is not None:
             params["email"] = email
         if is_freeze is not None:
@@ -91,7 +91,7 @@ class BinanceRequestDataSubAccount(BinanceRequestData):
         """
         request_type = "get_sub_account_status"
         path = self._params.get_rest_path(request_type)
-        params = {}
+        params: dict[str, Any] = {}
         extra_data = update_extra_data(
             extra_data,
             **{
@@ -129,7 +129,7 @@ class BinanceRequestDataSubAccount(BinanceRequestData):
         """
         request_type = "get_sub_account_spot_summary"
         path = self._params.get_rest_path(request_type)
-        params = {}
+        params: dict[str, Any] = {}
         if email is not None:
             params["email"] = email
         extra_data = update_extra_data(
@@ -322,7 +322,7 @@ class BinanceRequestDataSubAccount(BinanceRequestData):
         """
         request_type = "get_sub_transfer_history"
         path = self._params.get_rest_path(request_type)
-        params = {}
+        params: dict[str, Any] = {}
         if startTime is not None:
             params["startTime"] = startTime
         if endTime is not None:

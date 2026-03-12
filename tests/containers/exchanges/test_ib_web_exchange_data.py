@@ -522,7 +522,7 @@ class TestRestPaths:
 
     # 不存在的路径
     def test_path_not_found_raises(self, stk):
-        with pytest.raises(Exception):
+        with pytest.raises(NotImplementedError):
             stk.get_rest_path("nonexistent_path")
 
 
@@ -788,7 +788,7 @@ class TestExchangeDataInheritance:
             assert key in d
 
     def test_raise_path_error(self):
-        with pytest.raises(Exception):
+        with pytest.raises(NotImplementedError):
             IbWebExchangeDataStock().raise_path_error("IB_WEB_STK", "nonexistent")
 
 

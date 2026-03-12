@@ -3,6 +3,8 @@ Poloniex Spot Trading Feed
 Implements spot trading functionality for Poloniex exchange.
 """
 
+from typing import Any
+
 from bt_api_py.containers.exchanges.poloniex_exchange_data import PoloniexExchangeDataSpot
 from bt_api_py.feeds.live_poloniex.request_base import PoloniexRequestData
 from bt_api_py.logging_factory import get_logger
@@ -11,7 +13,7 @@ from bt_api_py.logging_factory import get_logger
 class PoloniexRequestDataSpot(PoloniexRequestData):
     """Poloniex Spot Trading REST API Client."""
 
-    def __init__(self, data_queue, **kwargs):
+    def __init__(self, data_queue: Any = None, **kwargs: Any) -> None:
         super().__init__(data_queue, **kwargs)
         self.asset_type = kwargs.get("asset_type", "SPOT")
         self.logger_name = kwargs.get("logger_name", "poloniex_spot_feed.log")
@@ -25,7 +27,7 @@ class PoloniexRequestDataSpot(PoloniexRequestData):
     def _get_server_time(self, extra_data=None, **kwargs):
         request_type = "get_server_time"
         path = self._params.get_rest_path(request_type)
-        params = {}
+        params: dict[str, Any] = {}
         extra_data = extra_data or {}
         extra_data.update(
             {
@@ -52,7 +54,7 @@ class PoloniexRequestDataSpot(PoloniexRequestData):
     def _get_exchange_info(self, extra_data=None, **kwargs):
         request_type = "get_exchange_info"
         path = self._params.get_rest_path("get_markets")
-        params = {}
+        params: dict[str, Any] = {}
         extra_data = extra_data or {}
         extra_data.update(
             {
@@ -82,7 +84,7 @@ class PoloniexRequestDataSpot(PoloniexRequestData):
         request_symbol = self._params.get_symbol(symbol)
         request_type = "get_ticker"
         path = self._params.get_rest_path(request_type).replace("{symbol}", request_symbol)
-        params = {}
+        params: dict[str, Any] = {}
         extra_data = extra_data or {}
         extra_data.update(
             {
@@ -292,10 +294,10 @@ class PoloniexRequestDataSpot(PoloniexRequestData):
         request_type = "cancel_order"
         if order_id:
             path = f"DELETE /orders/{order_id}"
-            params = {}
+            params: dict[str, Any] = {}
         else:
             path = self._params.get_rest_path("cancel_orders")
-            params = {}
+            params: dict[str, Any] = {}
             if symbol:
                 params["symbol"] = self._params.get_symbol(symbol)
             if client_order_id:
@@ -326,7 +328,7 @@ class PoloniexRequestDataSpot(PoloniexRequestData):
     def _query_order(self, symbol=None, order_id=None, extra_data=None, **kwargs):
         request_type = "query_order"
         path = f"GET /orders/{order_id}"
-        params = {}
+        params: dict[str, Any] = {}
         extra_data = extra_data or {}
         extra_data.update(
             {
@@ -352,7 +354,7 @@ class PoloniexRequestDataSpot(PoloniexRequestData):
     def _get_open_orders(self, symbol=None, extra_data=None, **kwargs):
         request_type = "get_open_orders"
         path = self._params.get_rest_path(request_type)
-        params = {}
+        params: dict[str, Any] = {}
         if symbol:
             params["symbol"] = self._params.get_symbol(symbol)
         extra_data = extra_data or {}
@@ -382,7 +384,7 @@ class PoloniexRequestDataSpot(PoloniexRequestData):
     def _get_balance(self, currency=None, extra_data=None, **kwargs):
         request_type = "get_balance"
         path = self._params.get_rest_path(request_type)
-        params = {}
+        params: dict[str, Any] = {}
         extra_data = extra_data or {}
         extra_data.update(
             {
@@ -412,7 +414,7 @@ class PoloniexRequestDataSpot(PoloniexRequestData):
     def _get_account(self, extra_data=None, **kwargs):
         request_type = "get_account"
         path = self._params.get_rest_path(request_type)
-        params = {}
+        params: dict[str, Any] = {}
         extra_data = extra_data or {}
         extra_data.update(
             {

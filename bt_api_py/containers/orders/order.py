@@ -16,6 +16,12 @@ class OrderStatus(Enum):
     EXPIRED = "expired"
     MMP_CANCELED = "mmp_canceled"
     EXPIRED_IN_MATCH = "expired_in_match"
+    UNKNOWN = "unknown"
+
+    # Aliases for exchange-specific status names
+    LIVE = ACCEPTED
+    PARTIALLY_FILLED = PARTIAL
+    FILLED = COMPLETED
 
     def __str__(self):
         return self.value

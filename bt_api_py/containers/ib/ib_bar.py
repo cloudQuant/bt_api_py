@@ -3,7 +3,7 @@ IB K线数据容器
 对应 IB TWS API 的 BarData (reqHistoricalData / reqRealTimeBars)
 """
 
-from typing import Any
+from typing import Any, Self
 
 from bt_api_py.containers.bars.bar import BarData
 
@@ -23,16 +23,16 @@ class IbBarData(BarData):
         self.asset_type = asset_type
         self.exchange_name = "IB"
         self._initialized = False
-        self.date_val = None
-        self.open_val = None
-        self.high_val = None
-        self.low_val = None
-        self.close_val = None
-        self.volume_val = None
-        self.wap_val = None  # 加权平均价
-        self.bar_count = None  # 交易笔数
+        self.date_val: str | None = None
+        self.open_val: float = 0.0
+        self.high_val: float = 0.0
+        self.low_val: float = 0.0
+        self.close_val: float = 0.0
+        self.volume_val: int = 0
+        self.wap_val: float = 0.0  # 加权平均价
+        self.bar_count: int = 0  # 交易笔数
 
-    def init_data(self) -> None:
+    def init_data(self) -> Self:
         if self._initialized:
             return self
         info = self.bar_info
@@ -48,53 +48,53 @@ class IbBarData(BarData):
         self._initialized = True
         return self
 
-    def get_exchange_name(self) -> None:
-        return self.exchange_name
+    def get_exchange_name(self) -> str:
+        return str(self.exchange_name)
 
-    def get_symbol_name(self) -> None:
-        return self.symbol_name
+    def get_symbol_name(self) -> str:
+        return str(self.symbol_name or "")
 
-    def get_asset_type(self) -> None:
-        return self.asset_type
+    def get_asset_type(self) -> str:
+        return str(self.asset_type)
 
-    def get_server_time(self) -> None:
+    def get_server_time(self) -> str | None:
         return self.date_val
 
-    def get_open_time(self) -> None:
+    def get_open_time(self) -> str | None:
         return self.date_val
 
-    def get_open_price(self) -> None:
+    def get_open_price(self) -> float:
         return self.open_val
 
-    def get_high_price(self) -> None:
+    def get_high_price(self) -> float:
         return self.high_val
 
-    def get_low_price(self) -> None:
+    def get_low_price(self) -> float:
         return self.low_val
 
-    def get_close_price(self) -> None:
+    def get_close_price(self) -> float:
         return self.close_val
 
-    def get_volume(self) -> None:
+    def get_volume(self) -> int:
         return self.volume_val
 
-    def get_amount(self) -> None:
+    def get_amount(self) -> float | None:
         return None
 
-    def get_close_time(self) -> None:
+    def get_close_time(self) -> str | None:
         return self.date_val
 
-    def get_bar_status(self) -> None:
+    def get_bar_status(self) -> bool:
         return True
 
-    def get_num_trades(self) -> None:
+    def get_num_trades(self) -> int:
         return self.bar_count
 
-    def get_wap(self) -> None:
+    def get_wap(self) -> float:
         """加权平均价"""
         return self.wap_val
 
-    def get_all_data(self) -> None:
+    def get_all_data(self) -> dict[str, Any]:
         return {
             "exchange_name": self.exchange_name,
             "symbol_name": self.symbol_name,

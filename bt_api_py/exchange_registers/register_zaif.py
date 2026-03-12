@@ -10,7 +10,6 @@ from bt_api_py.registry import ExchangeRegistry
 
 def _zaif_spot_subscribe_handler(feed, topics):
     """Placeholder subscribe handler for Zaif WebSocket."""
-    pass
 
 
 def register_zaif():

@@ -11,6 +11,7 @@ Interactive Brokers Web API Feed 实现
 
 import threading
 import time
+from typing import Any
 
 from bt_api_py.containers.exchanges.ib_web_exchange_data import (
     IbWebExchangeDataFuture,
@@ -25,7 +26,7 @@ from bt_api_py.logging_factory import get_logger
 class IbWebRequestData(Feed):
     """IB Web API REST 请求封装"""
 
-    def __init__(self, data_queue, **kwargs):
+    def __init__(self, data_queue: Any = None, **kwargs: Any) -> None:
         super().__init__(data_queue)
         self.data_queue = data_queue
         self.exchange_name = "IB_WEB"
@@ -159,7 +160,7 @@ class IbWebRequestData(Feed):
             if not self._authenticated:
                 self.reauthenticate()
         except Exception as e:
-            self.request_logger.warn(f"IB Web connect failed: {e}")
+            self.request_logger.warning(f"IB Web connect failed: {e}")
             self._authenticated = False
 
     def disconnect(self):
@@ -180,7 +181,7 @@ class IbWebRequestData(Feed):
                         if not self._authenticated:
                             self.reauthenticate()
                     except Exception as e:
-                        self.request_logger.warn(f"Session check failed: {e}")
+                        self.request_logger.warning(f"Session check failed: {e}")
                     self._last_session_check = now
 
     # ── 会话管理 ──────────────────────────────────────────────
@@ -387,7 +388,7 @@ class IbWebRequestData(Feed):
                 try:
                     results.append(self.cancel_order(symbol, oid, extra_data=extra_data))
                 except Exception as e:
-                    self.request_logger.warn(f"Failed to cancel order {oid}: {e}")
+                    self.request_logger.warning(f"Failed to cancel order {oid}: {e}")
         return results
 
     def query_order(self, symbol, order_id, extra_data=None, **kwargs):
@@ -458,8 +459,10 @@ class IbWebRequestData(Feed):
         if self.has_cookies():
             try:
                 return self._get(f"/portfolio/{account_id}/positions/{page_id}")
-            except Exception:
-                pass
+            except Exception as e:
+                self.request_logger.debug(
+                    "Portfolio positions endpoint failed, falling back: %s", e
+                )
 
         # 回退到尝试其他方式
         raise NotImplementedError(
@@ -487,7 +490,7 @@ class IbWebRequestData(Feed):
 
     def get_accounts_list(self, status=None, limit=None, offset=None, extra_data=None, **kwargs):
         """GET /gw/api/v1/accounts"""
-        params = {}
+        params: dict[str, Any] = {}
         if status:
             params["status"] = status
         if limit:
@@ -689,7 +692,7 @@ class IbWebRequestData(Feed):
 class IbWebRequestDataStock(IbWebRequestData):
     """IB Web API 股票 Feed"""
 
-    def __init__(self, data_queue, **kwargs):
+    def __init__(self, data_queue: Any = None, **kwargs: Any) -> None:
         super().__init__(data_queue, **kwargs)
         self.asset_type = kwargs.get("asset_type", "STK")
         self._params = IbWebExchangeDataStock()
@@ -699,7 +702,7 @@ class IbWebRequestDataStock(IbWebRequestData):
 class IbWebRequestDataFuture(IbWebRequestData):
     """IB Web API 期货 Feed"""
 
-    def __init__(self, data_queue, **kwargs):
+    def __init__(self, data_queue: Any = None, **kwargs: Any) -> None:
         super().__init__(data_queue, **kwargs)
         self.asset_type = kwargs.get("asset_type", "FUT")
         self._params = IbWebExchangeDataFuture()

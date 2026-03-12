@@ -166,12 +166,10 @@ class TestPancakeSpotRequestData:
     @pytest.mark.skip(reason="Integration test - requires network access")
     def test_integration_real_api_calls(self, mock_feed):
         """Integration test for real API calls - skipped."""
-        pass
 
     @pytest.mark.skip(reason="Integration test - requires network access")
     def test_integration_config_loading(self):
         """Test configuration file loading - skipped."""
-        pass
 
 
 class TestPancakeSwapExchangeData:

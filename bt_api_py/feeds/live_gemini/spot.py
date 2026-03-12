@@ -1,3 +1,5 @@
+from typing import Any
+
 from bt_api_py.containers.exchanges.gemini_exchange_data import GeminiExchangeDataSpot
 from bt_api_py.containers.orders.gemini_order import (
     GeminiRequestOrderData,
@@ -8,7 +10,7 @@ from bt_api_py.logging_factory import get_logger
 
 
 class GeminiRequestDataSpot(GeminiRequestData):
-    def __init__(self, data_queue, **kwargs):
+    def __init__(self, data_queue: Any = None, **kwargs: Any) -> None:
         super().__init__(data_queue, **kwargs)
         self.exchange_name = kwargs.get("exchange_name", "GEMINI___SPOT")
         self.asset_type = kwargs.get("asset_type", "SPOT")
@@ -140,7 +142,7 @@ class GeminiRequestDataSpot(GeminiRequestData):
         """Get open orders. Returns (path, params, extra_data)."""
         request_type = "get_open_orders"
         path = self._params.get_rest_path(request_type)
-        params = {}
+        params: dict[str, Any] = {}
         if symbol:
             request_symbol = self._params.get_symbol(symbol)
             params["symbol"] = request_symbol
@@ -290,7 +292,7 @@ class GeminiRequestDataSpot(GeminiRequestData):
         """构建交易对列表请求参数"""
         request_type = "get_symbols"
         path = self._params.get_rest_path(request_type)
-        params = {}
+        params: dict[str, Any] = {}
         extra_data = update_extra_data(
             extra_data,
             **{
@@ -308,7 +310,7 @@ class GeminiRequestDataSpot(GeminiRequestData):
         request_symbol = self._params.get_symbol(symbol)
         request_type = "get_symbol_details"
         path = self._params.get_rest_path(request_type).format(symbol=request_symbol)
-        params = {}
+        params: dict[str, Any] = {}
         extra_data = update_extra_data(
             extra_data,
             **{
@@ -450,7 +452,7 @@ class GeminiRequestDataSpot(GeminiRequestData):
     def cancel_all_orders(self, symbol=None, extra_data=None, **kwargs):
         """Cancel all orders."""
         path = self._params.get_rest_path("cancel_orders")
-        params = {}
+        params: dict[str, Any] = {}
         if symbol:
             params["symbol"] = self._params.get_symbol(symbol)
         return self.request(path, method="POST", params=params, extra_data=extra_data)

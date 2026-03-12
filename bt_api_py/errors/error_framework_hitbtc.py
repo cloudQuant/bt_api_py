@@ -75,7 +75,7 @@ class HitBtcErrorTranslator(ErrorTranslator):
     }
 
     @classmethod
-    def translate(cls, raw_error: dict, venue: str) -> UnifiedError:
+    def translate(cls, raw_error: dict, venue: str) -> UnifiedError | None:
         """将原始错误转换为统一错误
 
         :param raw_error: 包含错误信息的字典 (code, message, description 等)

@@ -47,14 +47,16 @@ class MexcBalanceData(BalanceData):
         self.local_update_time = time.time()
         self.symbol_name = symbol_name
         self.asset_type = asset_type
-        self.balance_data: dict[str, Any] | None = balance_info if has_been_json_encoded else None
+        self.balance_data: dict[str, Any] | None = (
+            balance_info if has_been_json_encoded and isinstance(balance_info, dict) else None
+        )
         self.asset: str | None = None
         self.free: float | None = None
         self.locked: float | None = None
         self.all_data: dict[str, Any] | None = None
         self.has_been_init_data = False
 
-    def init_data(self) -> "MexcBalanceData":
+    def init_data(self) -> "MexcBalanceData":  # type: ignore[override]
         """Initialize balance data from MEXC response.
 
         Parses the balance data and extracts asset, free, and locked amounts.
@@ -138,13 +140,13 @@ class MexcBalanceData(BalanceData):
         """
         return self.symbol_name
 
-    def get_asset_type(self) -> str | None:
+    def get_asset_type(self) -> str:
         """Get asset type.
 
         Returns:
-            Asset type for the balance or None.
+            Asset type for the balance or empty string if None.
         """
-        return self.asset_type
+        return self.asset_type if self.asset_type is not None else ""
 
     def get_asset(self) -> str | None:
         """Get asset symbol.
@@ -256,7 +258,7 @@ class MexcRequestBalanceData(MexcBalanceData):
         """
         super().__init__(balance_info, symbol_name, asset_type, has_been_json_encoded)
 
-    def init_data(self) -> "MexcRequestBalanceData":
+    def init_data(self) -> "MexcRequestBalanceData":  # type: ignore[override]
         """Initialize balance data from REST API response.
 
         Returns:
@@ -307,7 +309,9 @@ class MexcAccountData(BalanceData):
         self.exchange_name = "MEXC"
         self.local_update_time = time.time()
         self.asset_type = asset_type
-        self.account_data: dict[str, Any] | None = account_info if has_been_json_encoded else None
+        self.account_data: dict[str, Any] | None = (
+            account_info if has_been_json_encoded and isinstance(account_info, dict) else None
+        )
         self.maker_commission: int | None = None
         self.taker_commission: int | None = None
         self.buyer_commission: int | None = None
@@ -320,7 +324,7 @@ class MexcAccountData(BalanceData):
         self.all_data: dict[str, Any] | None = None
         self.has_been_init_data = False
 
-    def init_data(self) -> "MexcAccountData":
+    def init_data(self) -> "MexcAccountData":  # type: ignore[override]
         """Initialize account data from MEXC response.
 
         Parses the MEXC account response and extracts commissions,
@@ -485,14 +489,14 @@ class MexcAccountData(BalanceData):
         self.init_data()
         return self.can_deposit
 
-    def get_account_type(self) -> str | None:
+    def get_account_type(self) -> str:
         """Get account type.
 
         Returns:
-            Account type or None if not initialized.
+            Account type or empty string if not initialized.
         """
         self.init_data()
-        return self.account_type
+        return self.account_type if self.account_type is not None else ""
 
     def get_balances(self) -> list[MexcBalanceData]:
         """Get all balances.

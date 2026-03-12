@@ -32,26 +32,29 @@ class KrakenRequestTickerData(TickerData):
         self._parse_data(data)
 
     def _parse_data(self, data: dict[str, Any]) -> None:
-        """Parse Kraken ticker data.
+        """Parse Kraken ticker data from API response."""
+        self.ask_price: float | None = None
+        self.ask_quantity: float | None = None
+        self.bid_price: float | None = None
+        self.bid_quantity: float | None = None
+        self.last_price: float | None = None
+        self.last_quantity: float | None = None
+        self.volume_1d: float | None = None
+        self.volume_24h: float | None = None
+        self.vwap_1d: float | None = None
+        self.vwap_24h: float | None = None
+        self.trades_1d: int | None = None
+        self.trades_24h: int | None = None
+        self.high_1d: float | None = None
+        self.high_24h: float | None = None
+        self.low_1d: float | None = None
+        self.low_24h: float | None = None
+        self.open_price: float | None = None
+        self.spread: float | None = None
+        self.spread_percentage: float | None = None
+        self.price_change: float | None = None
+        self.price_change_percentage: float | None = None
 
-        Kraken ticker response format:
-        {
-            "result": {
-                "XBTUSD": {
-                    "a": ["50000.00000", "1", "1.000"],  # ask [price, whole lot volume, lot volume]
-                    "b": ["49999.00000", "2", "2.000"],  # bid [price, whole lot volume, lot volume]
-                    "c": ["50000.00000", "0.00100000"],  # last trade [price, lot volume]
-                    "v": ["1234.56789012", "5678.90123456"],  # volume [today, last 24 hours]
-                    "p": ["49500.00000", "49800.00000"],  # volume weighted average price [today, last 24 hours]
-                    "t": [1000, 5000],  # number of trades [today, last 24 hours]
-                    "l": ["49000.00000", "48500.00000"],  # low [today, last 24 hours]
-                    "h": ["51000.00000", "51500.00000"],  # high [today, last 24 hours]
-                    "o": "49500.00000"  # today's opening price
-                }
-            },
-            "error": []
-        }
-        """
         try:
             # Extract ticker data
             result = data.get("result", {})
@@ -121,7 +124,7 @@ class KrakenRequestTickerData(TickerData):
                 self.spread_percentage = None
 
             # Calculate price change
-            if self.last_price and self.open_price:
+            if self.last_price is not None and self.open_price is not None:
                 self.price_change = self.last_price - self.open_price
                 self.price_change_percentage = (
                     (self.last_price - self.open_price) / self.open_price
@@ -188,15 +191,15 @@ class KrakenRequestTickerData(TickerData):
 
     def get_exchange_name(self) -> str:
         """Get exchange name."""
-        return self.exchange
+        return str(self.exchange)
 
     def get_local_update_time(self) -> float:
         """Get local update time."""
-        return self.timestamp
+        return float(self.timestamp)
 
     def get_symbol_name(self) -> str:
         """Get symbol name."""
-        return self.symbol
+        return str(self.symbol)
 
     def get_ticker_symbol_name(self) -> str | None:
         """Get ticker symbol name."""
@@ -208,7 +211,13 @@ class KrakenRequestTickerData(TickerData):
 
     def get_server_time(self) -> float | None:
         """Get server time."""
-        return self.timestamp
+        ts = self.timestamp
+        if ts is None:
+            return None
+        try:
+            return float(ts)
+        except (TypeError, ValueError):
+            return None
 
     def get_bid_price(self) -> float | None:
         """Get bid price."""
@@ -232,7 +241,14 @@ class KrakenRequestTickerData(TickerData):
 
     def get_last_volume(self) -> float | None:
         """Get last volume."""
-        return self.last_quantity
+        qty = self.last_quantity
+        if qty is None:
+            return None
+        try:
+            result: float = float(qty)
+            return result
+        except (TypeError, ValueError):
+            return None
 
     def validate(self) -> bool:
         """Validate ticker data integrity."""
@@ -250,10 +266,11 @@ class KrakenRequestTickerData(TickerData):
         # Validate price change
         if (
             self.price_change is not None
-            and self.open_price
+            and self.open_price is not None
+            and self.price_change_percentage is not None
             and abs(self.price_change_percentage) > 100  # Unusual percentage change
         ):
-            self.logger.warn(f"Unusual price change: {self.price_change_percentage}%")
+            self.logger.warning(f"Unusual price change: {self.price_change_percentage}%")
 
         return True
 
@@ -293,10 +310,12 @@ class KrakenRequestTickerData(TickerData):
 
     def __str__(self) -> str:
         """String representation of ticker."""
+        pct = self.price_change_percentage
+        pct_str = f"{pct:.2f}" if pct is not None else "N/A"
         return (
             f"KrakenTicker({self.symbol}: {self.last_price} "
             f"Bid:{self.bid_price} Ask:{self.ask_price} "
-            f"Vol24h:{self.volume_24h} Chg:{self.price_change_percentage:.2f}%)"
+            f"Vol24h:{self.volume_24h} Chg:{pct_str}%)"
         )
 
     def __repr__(self) -> str:

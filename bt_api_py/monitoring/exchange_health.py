@@ -8,8 +8,10 @@ import asyncio
 import contextlib
 import time
 from collections import deque
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from enum import Enum
+from typing import Any
 
 from bt_api_py.monitoring.metrics import Counter, Gauge, Histogram, get_registry
 
@@ -28,7 +30,7 @@ class HealthCheck:
     """Single health check configuration."""
 
     name: str
-    check_func: callable
+    check_func: Callable[..., Any]
     timeout: float = 5.0
     interval: float = 30.0
     critical: bool = True
@@ -175,15 +177,15 @@ class ExchangeHealthMonitor:
         results = await asyncio.gather(*tasks, return_exceptions=True)
 
         # Convert exceptions to failed health checks
-        health_results = []
+        health_results: list[HealthCheckResult] = []
         for i, result in enumerate(results):
-            if isinstance(result, Exception):
+            if isinstance(result, BaseException):
                 health_results.append(
                     HealthCheckResult(
                         name=self._checks[i].name,
                         status=HealthStatus.UNHEALTHY,
                         message=f"Health check error: {str(result)}",
-                        error=result,
+                        error=result if isinstance(result, Exception) else None,
                     )
                 )
             else:
@@ -227,10 +229,7 @@ class ExchangeHealthMonitor:
 
     def get_health_summary(self) -> ExchangeHealthSummary:
         """Get comprehensive health summary."""
-        results = []
-        for check_results in self._results.values():
-            if check_results:
-                results.append(check_results[-1])  # Get latest result
+        results = [check_results[-1] for check_results in self._results.values() if check_results]
 
         overall_status = self.get_overall_status()
 
@@ -290,10 +289,14 @@ class ExchangeHealthMonitor:
 
     async def _monitoring_loop(self) -> None:
         """Main monitoring loop."""
+        default_interval = 30.0
         while self._running:
             try:
                 await self.run_all_checks()
-                await asyncio.sleep(min(check.interval for check in self._checks))
+                interval = (
+                    min(c.interval for c in self._checks) if self._checks else default_interval
+                )
+                await asyncio.sleep(interval)
             except asyncio.CancelledError:
                 break
             except Exception:

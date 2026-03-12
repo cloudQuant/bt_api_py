@@ -1,5 +1,7 @@
 """Bitget Spot Trading Feed"""
 
+from typing import Any
+
 from bt_api_py.containers.balances.bitget_balance import BitgetBalanceData
 from bt_api_py.containers.exchanges.bitget_exchange_data import BitgetExchangeDataSpot
 from bt_api_py.containers.orderbooks.bitget_orderbook import BitgetOrderBookData
@@ -13,7 +15,7 @@ from bt_api_py.logging_factory import get_logger
 class BitgetRequestDataSpot(BitgetRequestData):
     """Bitget Spot trading REST API feed."""
 
-    def __init__(self, data_queue, **kwargs):
+    def __init__(self, data_queue: Any = None, **kwargs: Any) -> None:
         kwargs["asset_type"] = "spot"
         kwargs.setdefault("logger_name", "bitget_spot_feed.log")
         super().__init__(data_queue, **kwargs)
@@ -46,11 +48,10 @@ class BitgetRequestDataSpot(BitgetRequestData):
         data_list = input_data.get("data", []) if isinstance(input_data, dict) else []
         if isinstance(data_list, dict):
             data_list = [data_list]
-        result = []
-        for item in data_list:
-            result.append(
-                BitgetTickerData(item, extra_data["symbol_name"], extra_data["asset_type"], True)
-            )
+        result = [
+            BitgetTickerData(item, extra_data["symbol_name"], extra_data["asset_type"], True)
+            for item in data_list
+        ]
         return result, status
 
     def get_ticker(self, symbol, extra_data=None, **kwargs):
@@ -161,7 +162,7 @@ class BitgetRequestDataSpot(BitgetRequestData):
     def get_server_time(self, extra_data=None, **kwargs):
         request_type = "get_server_time"
         path = self._params.get_rest_path(request_type)
-        params = {}
+        params: dict[str, Any] = {}
         extra_data = update_extra_data(
             extra_data,
             request_type=request_type,
@@ -175,7 +176,7 @@ class BitgetRequestDataSpot(BitgetRequestData):
     def get_exchange_info(self, symbol=None, extra_data=None, **kwargs):
         request_type = "get_contract"
         path = self._params.get_rest_path(request_type)
-        params = {}
+        params: dict[str, Any] = {}
         if symbol:
             params["symbol"] = self._params.get_symbol(symbol)
         extra_data = update_extra_data(
@@ -196,7 +197,7 @@ class BitgetRequestDataSpot(BitgetRequestData):
     def _get_balance(self, extra_data=None, **kwargs):
         request_type = "get_balance"
         path = self._params.get_rest_path(request_type)
-        params = {}
+        params: dict[str, Any] = {}
         extra_data = update_extra_data(
             extra_data,
             request_type=request_type,
@@ -215,9 +216,9 @@ class BitgetRequestDataSpot(BitgetRequestData):
         data_list = input_data.get("data", []) if isinstance(input_data, dict) else []
         if isinstance(data_list, dict):
             data_list = [data_list]
-        result = []
-        for item in data_list:
-            result.append(BitgetBalanceData(item, "ALL", extra_data["asset_type"], True))
+        result = [
+            BitgetBalanceData(item, "ALL", extra_data["asset_type"], True) for item in data_list
+        ]
         return result, status
 
     def get_balance(self, extra_data=None, **kwargs):
@@ -227,7 +228,7 @@ class BitgetRequestDataSpot(BitgetRequestData):
     def get_account(self, symbol=None, extra_data=None, **kwargs):
         request_type = "get_account"
         path = self._params.get_rest_path(request_type)
-        params = {}
+        params: dict[str, Any] = {}
         extra_data = update_extra_data(
             extra_data,
             request_type=request_type,
@@ -438,10 +439,18 @@ class BitgetRequestDataSpot(BitgetRequestData):
 class BitgetMarketWssDataSpot:
     """Placeholder for Bitget Spot Market WebSocket data handler."""
 
-    pass
+    def __init__(self, data_queue: str, **kwargs: object) -> None:
+        pass
+
+    def start(self) -> None:
+        pass
 
 
 class BitgetAccountWssDataSpot:
     """Placeholder for Bitget Spot Account WebSocket data handler."""
 
-    pass
+    def __init__(self, data_queue: str, **kwargs: object) -> None:
+        pass
+
+    def start(self) -> None:
+        pass

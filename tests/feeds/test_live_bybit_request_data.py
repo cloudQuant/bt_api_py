@@ -148,13 +148,15 @@ class TestBybitOrderBook:
                 assert ask_volume >= 0, f"Invalid ask_volume: {ask_volume}"
 
         # Verify b[0][0] <= a[0][0] (best bid <= best ask)
-        if "b" in order_book_data and "a" in order_book_data:
-            if len(order_book_data["b"]) > 0 and len(order_book_data["a"]) > 0:
-                best_bid = float(order_book_data["b"][0][0])
-                best_ask = float(order_book_data["a"][0][0])
-                assert best_bid <= best_ask, (
-                    f"best_bid ({best_bid}) should be <= best_ask ({best_ask})"
-                )
+        if (
+            "b" in order_book_data
+            and "a" in order_book_data
+            and len(order_book_data["b"]) > 0
+            and len(order_book_data["a"]) > 0
+        ):
+            best_bid = float(order_book_data["b"][0][0])
+            best_ask = float(order_book_data["a"][0][0])
+            assert best_bid <= best_ask, f"best_bid ({best_bid}) should be <= best_ask ({best_ask})"
 
     @pytest.mark.orderbook
     def test_bybit_async_orderbook_data(self):
@@ -190,11 +192,9 @@ class TestBybitIntegration:
 
     def test_market_data_api(self):
         """Test market data API calls (requires network)."""
-        pass
 
     def test_trading_api(self):
         """Test trading API calls (requires API keys)."""
-        pass
 
 
 if __name__ == "__main__":

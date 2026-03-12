@@ -34,7 +34,7 @@ def _get_upbit_config() -> Any | None:
             _upbit_config = load_exchange_config(config_path)
         _upbit_config_loaded = True
     except Exception as e:
-        logger.warn(f"Failed to load upbit.yaml config: {e}")
+        logger.warning(f"Failed to load upbit.yaml config: {e}")
     return _upbit_config
 
 

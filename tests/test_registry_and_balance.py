@@ -27,16 +27,22 @@ from bt_api_py.registry import ExchangeRegistry
 class TestExchangeRegistry:
     def setup_method(self):
         """每个测试前保存注册表状态，测试后恢复"""
-        self._saved_feeds = dict(ExchangeRegistry._feed_classes)
-        self._saved_streams = {k: dict(v) for k, v in ExchangeRegistry._stream_classes.items()}
-        self._saved_ed = dict(ExchangeRegistry._exchange_data_classes)
-        self._saved_bh = dict(ExchangeRegistry._balance_handlers)
+        reg = ExchangeRegistry()
+        self._saved_feeds = dict(reg._feed_classes)
+        self._saved_streams = {k: dict(v) for k, v in reg._stream_classes.items()}
+        self._saved_ed = dict(reg._exchange_data_classes)
+        self._saved_bh = dict(reg._balance_handlers)
 
     def teardown_method(self):
-        ExchangeRegistry._feed_classes = self._saved_feeds
-        ExchangeRegistry._stream_classes = self._saved_streams
-        ExchangeRegistry._exchange_data_classes = self._saved_ed
-        ExchangeRegistry._balance_handlers = self._saved_bh
+        reg = ExchangeRegistry()
+        reg._feed_classes.clear()
+        reg._feed_classes.update(self._saved_feeds)
+        reg._stream_classes.clear()
+        reg._stream_classes.update({k: dict(v) for k, v in self._saved_streams.items()})
+        reg._exchange_data_classes.clear()
+        reg._exchange_data_classes.update(self._saved_ed)
+        reg._balance_handlers.clear()
+        reg._balance_handlers.update(self._saved_bh)
 
     def test_register_and_create_feed(self):
         class MockFeed:
@@ -77,18 +83,20 @@ class TestExchangeRegistry:
         assert "TEST___LIST" in exchanges
 
     def test_binance_registered(self):
-        """验证 Binance 在 import 后已注册"""
-        import bt_api_py.exchange_registers.register_binance  # noqa: F401
+        """验证 Binance 在 register_binance() 调用后已注册"""
+        from bt_api_py.exchange_registers.register_binance import register_binance
 
+        register_binance()  # 显式调用，避免并行测试中 import 顺序导致的问题
         assert ExchangeRegistry.has_exchange("BINANCE___SWAP")
         assert ExchangeRegistry.has_exchange("BINANCE___SPOT")
         assert ExchangeRegistry.get_balance_handler("BINANCE___SWAP") is not None
         assert ExchangeRegistry.get_stream_class("BINANCE___SWAP", "subscribe") is not None
 
     def test_okx_registered(self):
-        """验证 OKX 在 import 后已注册"""
-        import bt_api_py.exchange_registers.register_okx  # noqa: F401
+        """验证 OKX 在 register_okx() 调用后已注册"""
+        from bt_api_py.exchange_registers.register_okx import register_okx
 
+        register_okx()  # 显式调用，避免并行测试中 import 顺序导致的问题
         assert ExchangeRegistry.has_exchange("OKX___SWAP")
         assert ExchangeRegistry.has_exchange("OKX___SPOT")
         assert ExchangeRegistry.get_balance_handler("OKX___SWAP") is not None

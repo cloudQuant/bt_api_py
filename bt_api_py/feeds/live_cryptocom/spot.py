@@ -2,6 +2,8 @@
 Crypto.com Spot trading feed implementation.
 """
 
+from typing import Any
+
 from bt_api_py.containers.exchanges.cryptocom_exchange_data import CryptoComExchangeDataSpot
 from bt_api_py.feeds.live_cryptocom.request_base import CryptoComRequestData
 from bt_api_py.logging_factory import get_logger
@@ -16,7 +18,7 @@ class CryptoComRequestDataSpot(CryptoComRequestData):
       async_get_xxx() → async call via self.submit(self.async_request(...))
     """
 
-    def __init__(self, data_queue, **kwargs):
+    def __init__(self, data_queue: Any = None, **kwargs: Any) -> None:
         super().__init__(data_queue, **kwargs)
         self.asset_type = kwargs.get("asset_type", "SPOT")
         self.exchange_name = kwargs.get("exchange_name", "CRYPTOCOM___SPOT")

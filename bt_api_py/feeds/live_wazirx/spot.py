@@ -12,7 +12,7 @@ from bt_api_py.logging_factory import get_logger
 class WazirxRequestDataSpot(WazirxRequestData):
     """WazirX Spot REST Feed."""
 
-    def __init__(self, data_queue, **kwargs) -> None:
+    def __init__(self, data_queue: Any = None, **kwargs: Any) -> None:
         super().__init__(data_queue, **kwargs)
 
     # ── server time ─────────────────────────────────────────────
@@ -90,7 +90,7 @@ class WazirxRequestDataSpot(WazirxRequestData):
 class WazirxMarketWssDataSpot:
     """WazirX Spot Market WebSocket Data Handler (stub)."""
 
-    def __init__(self, data_queue, **kwargs) -> None:
+    def __init__(self, data_queue: Any = None, **kwargs: Any) -> None:
         self.data_queue = data_queue
         self._params = WazirxExchangeDataSpot()
         self.logger_name = kwargs.get("logger_name", "wazirx_spot_market_wss.log")
@@ -109,7 +109,7 @@ class WazirxMarketWssDataSpot:
 class WazirxAccountWssDataSpot:
     """WazirX Spot Account WebSocket Data Handler (stub)."""
 
-    def __init__(self, data_queue, **kwargs) -> None:
+    def __init__(self, data_queue: Any = None, **kwargs: Any) -> None:
         self.data_queue = data_queue
         self._params = WazirxExchangeDataSpot()
         self.logger_name = kwargs.get("logger_name", "wazirx_spot_account_wss.log")

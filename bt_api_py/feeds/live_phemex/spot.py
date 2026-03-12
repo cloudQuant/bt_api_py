@@ -13,7 +13,7 @@ from bt_api_py.logging_factory import get_logger
 class PhemexRequestDataSpot(PhemexRequestData):
     """Phemex Spot Feed — sync and async wrappers for all endpoints."""
 
-    def __init__(self, data_queue, **kwargs) -> None:
+    def __init__(self, data_queue: Any = None, **kwargs: Any) -> None:
         super().__init__(data_queue, **kwargs)
         self.exchange_name = kwargs.get("exchange_name", "PHEMEX___SPOT")
         self.asset_type = kwargs.get("asset_type", "SPOT")

@@ -49,7 +49,10 @@ class BitfinexOrderBookData(OrderBookData):
             BitfinexOrderBookData: 返回self以支持链式调用
         """
         if not self.has_been_json_encoded:
-            self.orderbook_data = json.loads(self.orderbook_info)
+            if isinstance(self.orderbook_info, str):
+                self.orderbook_data = json.loads(self.orderbook_info)
+            else:
+                self.orderbook_data = self.orderbook_info
             self.has_been_json_encoded = True
         if self.has_been_init_data:
             return self
@@ -190,7 +193,7 @@ class BitfinexOrderBookData(OrderBookData):
         if not self.has_been_init_data:
             self.init_data()
         if level < len(self.bids):
-            return self.bids[level]["price"]
+            return float(self.bids[level]["price"])
         return None
 
     def get_ask_price(self, level: int = 0) -> float | None:
@@ -205,7 +208,7 @@ class BitfinexOrderBookData(OrderBookData):
         if not self.has_been_init_data:
             self.init_data()
         if level < len(self.asks):
-            return self.asks[level]["price"]
+            return float(self.asks[level]["price"])
         return None
 
     def get_bid_volume(self, level: int = 0) -> float | None:
@@ -220,7 +223,7 @@ class BitfinexOrderBookData(OrderBookData):
         if not self.has_been_init_data:
             self.init_data()
         if level < len(self.bids):
-            return self.bids[level]["amount"]
+            return float(self.bids[level]["amount"])
         return None
 
     def get_ask_volume(self, level: int = 0) -> float | None:
@@ -235,7 +238,7 @@ class BitfinexOrderBookData(OrderBookData):
         if not self.has_been_init_data:
             self.init_data()
         if level < len(self.asks):
-            return self.asks[level]["amount"]
+            return float(self.asks[level]["amount"])
         return None
 
     def get_bid_count(self, level: int = 0) -> int | None:
@@ -250,7 +253,7 @@ class BitfinexOrderBookData(OrderBookData):
         if not self.has_been_init_data:
             self.init_data()
         if level < len(self.bids):
-            return self.bids[level]["count"]
+            return int(self.bids[level]["count"])
         return None
 
     def get_ask_count(self, level: int = 0) -> int | None:
@@ -265,7 +268,7 @@ class BitfinexOrderBookData(OrderBookData):
         if not self.has_been_init_data:
             self.init_data()
         if level < len(self.asks):
-            return self.asks[level]["count"]
+            return int(self.asks[level]["count"])
         return None
 
     def get_spread(self) -> float | None:
@@ -277,7 +280,7 @@ class BitfinexOrderBookData(OrderBookData):
         if not self.has_been_init_data:
             self.init_data()
         if self.bids and self.asks:
-            return self.asks[0]["price"] - self.bids[0]["price"]
+            return float(self.asks[0]["price"]) - float(self.bids[0]["price"])
         return None
 
     def get_mid_price(self) -> float | None:
@@ -289,7 +292,7 @@ class BitfinexOrderBookData(OrderBookData):
         if not self.has_been_init_data:
             self.init_data()
         if self.bids and self.asks:
-            return (self.bids[0]["price"] + self.asks[0]["price"]) / 2
+            return (float(self.bids[0]["price"]) + float(self.asks[0]["price"])) / 2
         return None
 
     def get_total_bid_volume(self) -> float:
@@ -300,7 +303,7 @@ class BitfinexOrderBookData(OrderBookData):
         """
         if not self.has_been_init_data:
             self.init_data()
-        return sum(bid["amount"] for bid in self.bids)
+        return sum(float(bid["amount"]) for bid in self.bids)
 
     def get_total_ask_volume(self) -> float:
         """获取卖单总数量.
@@ -310,7 +313,7 @@ class BitfinexOrderBookData(OrderBookData):
         """
         if not self.has_been_init_data:
             self.init_data()
-        return sum(ask["amount"] for ask in self.asks)
+        return sum(float(ask["amount"]) for ask in self.asks)
 
     def get_total_bid_value(self) -> float:
         """获取买单总价值.
@@ -320,7 +323,7 @@ class BitfinexOrderBookData(OrderBookData):
         """
         if not self.has_been_init_data:
             self.init_data()
-        return sum(bid["total"] for bid in self.bids)
+        return sum(float(bid["total"]) for bid in self.bids)
 
     def get_total_ask_value(self) -> float:
         """获取卖单总价值.
@@ -330,7 +333,7 @@ class BitfinexOrderBookData(OrderBookData):
         """
         if not self.has_been_init_data:
             self.init_data()
-        return sum(ask["total"] for ask in self.asks)
+        return sum(float(ask["total"]) for ask in self.asks)
 
     def get_bid_levels(self, levels: int = 5) -> list[dict[str, Any]]:
         """获取指定档数的买单数据.

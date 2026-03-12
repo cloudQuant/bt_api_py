@@ -197,7 +197,7 @@ class CryptoComOrderBook(OrderBookData):
         Returns:
             list: 买单订单数量列表
         """
-        return [b[2] if len(b) > 2 else 0 for b in self.bids]
+        return [int(b[2]) if len(b) > 2 else 0 for b in self.bids]
 
     def get_ask_trade_nums(self) -> list[int]:
         """获取卖单订单数量列表.
@@ -205,7 +205,7 @@ class CryptoComOrderBook(OrderBookData):
         Returns:
             list: 卖单订单数量列表
         """
-        return [a[2] if len(a) > 2 else 0 for a in self.asks]
+        return [int(a[2]) if len(a) > 2 else 0 for a in self.asks]
 
     def get_price_levels(self, side: str, levels: int = 10) -> list[list[float | int]]:
         """获取指定方向的指定档数价格数据.

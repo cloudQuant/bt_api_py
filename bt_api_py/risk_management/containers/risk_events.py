@@ -119,7 +119,7 @@ class RiskEvent(AutoInitMixin):
 
     def __init__(
         self, data: dict[str, Any] | None = None, has_been_json_encoded: bool = False
-    ) -> Any | None:
+    ) -> None:
         if data is None:
             data = {}
 
@@ -204,7 +204,7 @@ class RiskEvent(AutoInitMixin):
 class EventHistoryEntry:
     """事件历史记录条目"""
 
-    def __init__(self, data: dict[str, Any]) -> Any | None:
+    def __init__(self, data: dict[str, Any]) -> None:
         self.timestamp = data.get("timestamp", int(time.time()))
         self.action = data.get("action", "")  # 状态变更或行动
         self.previous_value = data.get("previous_value", "")
@@ -218,7 +218,7 @@ class EventHistoryEntry:
 class EventNote:
     """事件备注"""
 
-    def __init__(self, data: dict[str, Any]) -> Any | None:
+    def __init__(self, data: dict[str, Any]) -> None:
         self.timestamp = data.get("timestamp", int(time.time()))
         self.author = data.get("author", "")
         self.content = data.get("content", "")
@@ -233,7 +233,7 @@ class EventNote:
 class EventEscalation:
     """事件升级信息"""
 
-    def __init__(self, data: dict[str, Any]) -> Any | None:
+    def __init__(self, data: dict[str, Any]) -> None:
         self.escalation_level = data.get("escalation_level", 1)  # 升级级别
         self.escalation_criteria = data.get("escalation_criteria", [])  # 升级条件
         self.escalation_time = data.get("escalation_time")  # 升级时间
@@ -246,7 +246,7 @@ class EventEscalation:
 class EventMetrics:
     """事件指标"""
 
-    def __init__(self, data: dict[str, Any]) -> Any | None:
+    def __init__(self, data: dict[str, Any]) -> None:
         self.detection_latency = data.get("detection_latency", 0)  # 检测延迟(秒)
         self.resolution_time = data.get("resolution_time", 0)  # 解决时间(秒)
         self.mitigation_effectiveness = data.get("mitigation_effectiveness", 0)  # 缓解效果(0-1)
@@ -273,7 +273,7 @@ class EventMetrics:
 class EventPattern:
     """事件模式"""
 
-    def __init__(self, data: dict[str, Any]) -> Any | None:
+    def __init__(self, data: dict[str, Any]) -> None:
         self.pattern_id = data.get("pattern_id", "")
         self.pattern_name = data.get("pattern_name", "")
         self.pattern_type = data.get("pattern_type", "")

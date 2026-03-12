@@ -5,6 +5,8 @@ Symbol format: BTC-USDT (uppercase, dash-separated).
 Market data uses 'contract_code' parameter instead of 'symbol'.
 """
 
+from typing import Any
+
 from bt_api_py.containers.exchanges.htx_exchange_data import HtxExchangeDataUsdtSwap
 from bt_api_py.feeds.live_htx.request_base import HtxRequestData
 from bt_api_py.feeds.live_htx.spot import HtxAccountWssDataSpot, HtxMarketWssDataSpot
@@ -20,7 +22,7 @@ class HtxRequestDataUsdtSwap(HtxRequestData):
     - POST body instead of query params for private endpoints
     """
 
-    def __init__(self, data_queue, **kwargs):
+    def __init__(self, data_queue: Any = None, **kwargs: Any) -> None:
         super().__init__(data_queue, **kwargs)
         self.asset_type = kwargs.get("asset_type", "USDT_SWAP")
         self.logger_name = kwargs.get("logger_name", "htx_usdt_swap_feed.log")
@@ -83,7 +85,7 @@ class HtxRequestDataUsdtSwap(HtxRequestData):
         )
         return path, params, extra_data
 
-    def get_depth(self, symbol, depth_type="step0", extra_data=None, **kwargs):
+    def get_depth(self, symbol, count=None, depth_type="step0", extra_data=None, **kwargs):
         """Get orderbook depth for a contract."""
         path, params, extra_data = self._get_depth(symbol, depth_type, extra_data, **kwargs)
         return self.request(path, params=params, extra_data=extra_data)
@@ -174,9 +176,10 @@ class HtxRequestDataUsdtSwap(HtxRequestData):
         """Get account info (alias)."""
         return self.get_account(extra_data=extra_data, **kwargs)
 
-    def get_balance(self, account_id=None, extra_data=None, **kwargs):
+    def get_balance(self, symbol=None, account_id=None, extra_data=None, **kwargs):
         """Get account balance."""
-        return self.get_account(extra_data=extra_data, **kwargs)
+        aid = account_id if account_id is not None else symbol
+        return self.get_account(symbol=aid, extra_data=extra_data, **kwargs)
 
     def get_position(self, symbol=None, extra_data=None, **kwargs):
         """Get position info."""
@@ -242,11 +245,12 @@ class HtxRequestDataUsdtSwap(HtxRequestData):
     def make_order(
         self,
         symbol,
-        vol,
+        volume,
         price=None,
         order_type="limit",
         direction="buy",
         offset="open",
+        post_only=False,
         lever_rate=1,
         client_order_id=None,
         extra_data=None,
@@ -255,7 +259,7 @@ class HtxRequestDataUsdtSwap(HtxRequestData):
         """Create an order."""
         path, body, extra_data = self._make_order(
             symbol,
-            vol,
+            volume,
             price,
             order_type,
             direction,
@@ -267,11 +271,11 @@ class HtxRequestDataUsdtSwap(HtxRequestData):
         )
         return self.request(path, params={}, body=body, extra_data=extra_data)
 
-    def _cancel_order(self, order_id, symbol=None, extra_data=None, **kwargs):
+    def _cancel_order(self, symbol=None, order_id=None, extra_data=None, **kwargs):
         """Cancel an order."""
         request_type = "cancel_order"
         path = self._params.get_rest_path(request_type)
-        body = {"order_id": str(order_id)}
+        body = {"order_id": str(order_id) if order_id is not None else ""}
         if symbol:
             body["contract_code"] = self._params.get_symbol(symbol)
         extra_data = update_extra_data(
@@ -286,9 +290,11 @@ class HtxRequestDataUsdtSwap(HtxRequestData):
         )
         return path, body, extra_data
 
-    def cancel_order(self, order_id, symbol=None, extra_data=None, **kwargs):
+    def cancel_order(self, symbol, order_id, extra_data=None, **kwargs):
         """Cancel an order."""
-        path, body, extra_data = self._cancel_order(order_id, symbol, extra_data, **kwargs)
+        path, body, extra_data = self._cancel_order(
+            symbol=symbol, order_id=order_id, extra_data=extra_data, **kwargs
+        )
         return self.request(path, params={}, body=body, extra_data=extra_data)
 
     def query_order(self, symbol, order_id, extra_data=None, **kwargs):
@@ -331,7 +337,7 @@ class HtxRequestDataUsdtSwap(HtxRequestData):
 class HtxMarketWssDataUsdtSwap(HtxMarketWssDataSpot):
     """HTX USDT Swap Market WebSocket data feed."""
 
-    def __init__(self, data_queue, **kwargs):
+    def __init__(self, data_queue: Any = None, **kwargs: Any) -> None:
         kwargs.setdefault("exchange_data", HtxExchangeDataUsdtSwap())
         kwargs.setdefault("asset_type", "USDT_SWAP")
         super().__init__(data_queue, **kwargs)
@@ -340,7 +346,7 @@ class HtxMarketWssDataUsdtSwap(HtxMarketWssDataSpot):
 class HtxAccountWssDataUsdtSwap(HtxAccountWssDataSpot):
     """HTX USDT Swap Account WebSocket data feed."""
 
-    def __init__(self, data_queue, **kwargs):
+    def __init__(self, data_queue: Any = None, **kwargs: Any) -> None:
         kwargs.setdefault("exchange_data", HtxExchangeDataUsdtSwap())
         kwargs.setdefault("asset_type", "USDT_SWAP")
         super().__init__(data_queue, **kwargs)

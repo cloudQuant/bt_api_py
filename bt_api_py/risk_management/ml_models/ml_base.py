@@ -20,7 +20,7 @@ class BaseMLModel(ABC):
     定义所有ML模型的通用接口和基础功能
     """
 
-    def __init__(self, model_name: str, config: dict[str, Any] | None = None) -> Any | None:
+    def __init__(self, model_name: str, config: dict[str, Any] | None = None) -> None:
         """初始化ML模型
 
         Args:
@@ -32,10 +32,10 @@ class BaseMLModel(ABC):
         self.logger = get_logger(f"ml_model_{model_name}")
 
         # 模型状态
-        self.model = None
+        self.model: Any = None
         self.is_trained = False
-        self.training_time = 0
-        self.last_training_time = 0
+        self.training_time = 0.0
+        self.last_training_time = 0.0
 
         # 性能指标
         self.metrics = {
@@ -78,7 +78,6 @@ class BaseMLModel(ABC):
         Returns:
             Dict[str, Any]: 训练结果
         """
-        pass
 
     @abstractmethod
     def predict(self, X: np.ndarray) -> np.ndarray:
@@ -90,7 +89,6 @@ class BaseMLModel(ABC):
         Returns:
             np.ndarray: 预测结果
         """
-        pass
 
     @abstractmethod
     def predict_proba(self, X: np.ndarray) -> np.ndarray:
@@ -102,7 +100,6 @@ class BaseMLModel(ABC):
         Returns:
             np.ndarray: 预测概率
         """
-        pass
 
     def evaluate(self, X: np.ndarray, y: np.ndarray) -> dict[str, float]:
         """评估模型性能
@@ -316,13 +313,18 @@ class RiskPredictionResult:
         model_name: str,
         timestamp: int,
         features_used: list[str],
-    ) -> Any | None:
+    ) -> None:
         self.prediction = prediction
         self.probability = probability
         self.confidence = confidence
         self.model_name = model_name
         self.timestamp = timestamp
         self.features_used = features_used
+        # Optional attributes for ensemble model details
+        self.individual_predictions: dict[str, Any] = {}
+        self.individual_probabilities: dict[str, Any] = {}
+        self.current_weights: dict[str, float] = {}
+        self.ensemble_method: str = ""
 
     def to_dict(self) -> dict[str, Any]:
         """转换为字典格式"""
@@ -339,15 +341,15 @@ class RiskPredictionResult:
 class ModelMetrics:
     """模型性能指标"""
 
-    def __init__(self) -> Any | None:
+    def __init__(self) -> None:
         self.accuracy = 0.0
         self.precision = 0.0
         self.recall = 0.0
         self.f1_score = 0.0
         self.roc_auc = 0.0
-        self.confusion_matrix = None
-        self.classification_report = {}
-        self.feature_importance = {}
+        self.confusion_matrix: Any = None
+        self.classification_report: dict[str, Any] = {}
+        self.feature_importance: dict[str, Any] = {}
         self.training_time = 0.0
         self.prediction_time = 0.0
 
@@ -370,8 +372,8 @@ class ModelMetrics:
         self.recall = recall_score(y_true, y_pred, average="weighted", zero_division=0)
         self.f1_score = f1_score(y_true, y_pred, average="weighted", zero_division=0)
         self.confusion_matrix = confusion_matrix(y_true, y_pred).tolist()
-        self.classification_report = classification_report(
-            y_true, y_pred, output_dict=True, zero_division=0
+        self.classification_report = dict(
+            classification_report(y_true, y_pred, output_dict=True, zero_division=0)
         )
 
         if y_proba is not None and len(np.unique(y_true)) == 2:
@@ -399,9 +401,9 @@ class ModelMetrics:
 class ModelComparator:
     """模型比较器"""
 
-    def __init__(self) -> Any | None:
+    def __init__(self) -> None:
         self.models: dict[str, BaseMLModel] = {}
-        self.test_results: dict[str, dict[str, float]] = {}
+        self.test_results: dict[str, dict[str, Any]] = {}
 
     def add_model(self, name: str, model: BaseMLModel) -> None:
         """添加模型
@@ -412,7 +414,7 @@ class ModelComparator:
         """
         self.models[name] = model
 
-    def compare_models(self, X_test: np.ndarray, y_test: np.ndarray) -> dict[str, dict[str, float]]:
+    def compare_models(self, X_test: np.ndarray, y_test: np.ndarray) -> dict[str, dict[str, Any]]:
         """比较模型性能
 
         Args:
@@ -420,9 +422,9 @@ class ModelComparator:
             y_test: 测试目标
 
         Returns:
-            Dict[str, Dict[str, float]]: 各模型的性能指标
+            Dict[str, Dict[str, Any]]: 各模型的性能指标
         """
-        results = {}
+        results: dict[str, dict[str, Any]] = {}
 
         for name, model in self.models.items():
             if model.is_trained:
@@ -434,24 +436,24 @@ class ModelComparator:
         self.test_results = results
         return results
 
-    def get_best_model(self, metric: str = "f1_score") -> tuple[str, BaseMLModel]:
+    def get_best_model(self, metric: str = "f1_score") -> tuple[str | None, BaseMLModel | None]:
         """获取最佳模型
 
         Args:
             metric: 评估指标
 
         Returns:
-            Tuple[str, BaseMLModel]: (模型名称, 模型实例)
+            Tuple[str | None, BaseMLModel | None]: (模型名称, 模型实例)
         """
-        best_name = None
-        best_score = -1
-        best_model = None
+        best_name: str | None = None
+        best_score: float = -1.0
+        best_model: BaseMLModel | None = None
 
         for name, model in self.models.items():
             if model.is_trained and name in self.test_results:
                 score = self.test_results[name].get(metric, 0)
-                if score > best_score:
-                    best_score = score
+                if isinstance(score, (int, float)) and score > best_score:
+                    best_score = float(score)
                     best_name = name
                     best_model = model
 
@@ -463,12 +465,12 @@ class ModelComparator:
             return {"error": "No test results available"}
 
         # 计算各指标的最佳模型
-        best_models = {}
+        best_models: dict[str, str | None] = {}
         metrics = ["accuracy", "precision", "recall", "f1_score"]
 
         for metric in metrics:
-            best_model, _ = self.get_best_model(metric)
-            best_models[metric] = best_model
+            best_model_name, _ = self.get_best_model(metric)
+            best_models[metric] = best_model_name
 
         return {
             "test_results": self.test_results,

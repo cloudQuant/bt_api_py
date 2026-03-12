@@ -1,10 +1,10 @@
 """Zebpay Exchange Data Configuration – Feed pattern."""
 
-import os
 from typing import Any
 
 import yaml
 
+from bt_api_py.config_loader import get_exchange_config_path
 from bt_api_py.containers.exchanges.exchange_data import ExchangeData
 from bt_api_py.logging_factory import get_logger
 
@@ -18,16 +18,12 @@ def _load_zebpay_yaml() -> Any | None:
     if _zebpay_yaml_cache is not None:
         return _zebpay_yaml_cache
     try:
-        cfg_path = os.path.join(
-            os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
-            "configs",
-            "zebpay.yaml",
-        )
-        if os.path.exists(cfg_path):
-            with open(cfg_path, encoding="utf-8") as f:
+        cfg_path = get_exchange_config_path("zebpay.yaml")
+        if cfg_path.exists():
+            with cfg_path.open(encoding="utf-8") as f:
                 _zebpay_yaml_cache = yaml.safe_load(f) or {}
     except Exception as e:
-        logger.warn(f"Failed to load zebpay.yaml: {e}")
+        logger.warning(f"Failed to load zebpay.yaml: {e}")
         _zebpay_yaml_cache = {}
     return _zebpay_yaml_cache
 
@@ -99,7 +95,7 @@ class ZebpayExchangeDataSpot(ZebpayExchangeData):
         self._load_yaml()
 
     def _load_yaml(self) -> None:
-        cfg = _load_zebpay_yaml()
+        cfg = _load_zebpay_yaml() or {}
         spot = cfg.get("ZEBPAY___SPOT", {})
         if not spot:
             return

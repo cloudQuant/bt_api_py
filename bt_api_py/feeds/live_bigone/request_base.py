@@ -6,6 +6,7 @@ All responses are wrapped in {"data": ...}.
 """
 
 import time
+from typing import Any
 from urllib.parse import urlencode
 
 try:
@@ -24,7 +25,7 @@ class BigONERequestData(Feed):
     """BigONE REST API Feed base class."""
 
     @classmethod
-    def _capabilities(cls):
+    def _capabilities(cls) -> set[Capability]:
         return {
             Capability.GET_TICK,
             Capability.GET_DEPTH,
@@ -40,7 +41,7 @@ class BigONERequestData(Feed):
             Capability.GET_SERVER_TIME,
         }
 
-    def __init__(self, data_queue, **kwargs) -> None:
+    def __init__(self, data_queue: Any = None, **kwargs: Any) -> None:
         super().__init__(data_queue, **kwargs)
         self.data_queue = data_queue
         self._api_key = kwargs.get("public_key") or kwargs.get("api_key") or ""
@@ -84,7 +85,7 @@ class BigONERequestData(Feed):
     def request(self, path, params=None, body=None, extra_data=None, timeout=10, is_sign=False):
         """Synchronous HTTP request using Feed.http_request()."""
         if params is None:
-            params = {}
+            params: dict[str, Any] = {}
         method, endpoint = path.split(" ", 1)
         query_string = urlencode(params) if params else ""
         url = f"{self._params.rest_url}{endpoint}"
@@ -107,7 +108,7 @@ class BigONERequestData(Feed):
     ):
         """Async HTTP request using Feed.async_http_request()."""
         if params is None:
-            params = {}
+            params: dict[str, Any] = {}
         method, endpoint = path.split(" ", 1)
         query_string = urlencode(params) if params else ""
         url = f"{self._params.rest_url}{endpoint}"
@@ -134,7 +135,7 @@ class BigONERequestData(Feed):
 
     def _get_server_time(self, extra_data=None, **kwargs) -> float:
         path = self._params.get_rest_path("get_server_time")
-        params = {}
+        params: dict[str, Any] = {}
         extra_data = extra_data or {}
         extra_data.update(
             {
@@ -149,7 +150,7 @@ class BigONERequestData(Feed):
 
     def _get_exchange_info(self, extra_data=None, **kwargs):
         path = self._params.get_rest_path("get_exchange_info")
-        params = {}
+        params: dict[str, Any] = {}
         extra_data = extra_data or {}
         extra_data.update(
             {
@@ -165,7 +166,7 @@ class BigONERequestData(Feed):
     def _get_tick(self, symbol, extra_data=None, **kwargs):
         bo_symbol = self._params.get_symbol(symbol)
         path = self._params.get_rest_path("get_tick").replace("{symbol}", bo_symbol)
-        params = {}
+        params: dict[str, Any] = {}
         extra_data = extra_data or {}
         extra_data.update(
             {
@@ -263,7 +264,7 @@ class BigONERequestData(Feed):
 
     def _cancel_order(self, symbol=None, order_id=None, extra_data=None, **kwargs):
         path = self._params.get_rest_path("cancel_order").replace("{order_id}", str(order_id or ""))
-        params = {}
+        params: dict[str, Any] = {}
         extra_data = extra_data or {}
         extra_data.update(
             {
@@ -278,7 +279,7 @@ class BigONERequestData(Feed):
 
     def _query_order(self, symbol=None, order_id=None, extra_data=None, **kwargs):
         path = self._params.get_rest_path("query_order").replace("{order_id}", str(order_id or ""))
-        params = {}
+        params: dict[str, Any] = {}
         extra_data = extra_data or {}
         extra_data.update(
             {
@@ -310,7 +311,7 @@ class BigONERequestData(Feed):
 
     def _get_account(self, extra_data=None, **kwargs):
         path = self._params.get_rest_path("get_account")
-        params = {}
+        params: dict[str, Any] = {}
         extra_data = extra_data or {}
         extra_data.update(
             {
@@ -325,7 +326,7 @@ class BigONERequestData(Feed):
 
     def _get_balance(self, extra_data=None, **kwargs):
         path = self._params.get_rest_path("get_balance")
-        params = {}
+        params: dict[str, Any] = {}
         extra_data = extra_data or {}
         extra_data.update(
             {

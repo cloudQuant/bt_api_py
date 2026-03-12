@@ -3,6 +3,8 @@
 Provides WebSocket feed implementations for MEXC exchange.
 """
 
+from typing import Any
+
 from bt_api_py.containers.exchanges.mexc_exchange_data import MexcExchangeDataSpot
 from bt_api_py.containers.orderbooks.mexc_orderbook import MexcWssOrderBookData
 from bt_api_py.containers.orders.mexc_order import MexcWssOrderData
@@ -53,7 +55,7 @@ class MexcAccountWssFeed(MexcAccountWssDataBase):
 class MexcMarketWssDataSpot(MexcMarketWssFeed):
     """MEXC Spot 市场数据 WebSocket 实现."""
 
-    def __init__(self, data_queue, **kwargs) -> None:
+    def __init__(self, data_queue: Any = None, **kwargs: Any) -> None:
         super().__init__(data_queue, **kwargs)
         self.asset_type = "SPOT"
 
@@ -120,7 +122,7 @@ class MexcMarketWssDataSpot(MexcMarketWssFeed):
 class MexcAccountWssDataSpot(MexcAccountWssFeed):
     """MEXC Spot 账户数据 WebSocket 实现."""
 
-    def __init__(self, data_queue, **kwargs) -> None:
+    def __init__(self, data_queue: Any = None, **kwargs: Any) -> None:
         super().__init__(data_queue, **kwargs)
         self.asset_type = "SPOT"
 

@@ -1,7 +1,6 @@
 import hmac
-
-# import urllib
 import time
+from typing import Any
 
 # import threading
 # from urllib import parse
@@ -62,7 +61,7 @@ from bt_api_py.rate_limiter import RateLimiter, RateLimitRule, RateLimitScope, R
 
 class BinanceRequestData(Feed):
     @classmethod
-    def _capabilities(cls):
+    def _capabilities(cls) -> set[Capability]:
         return {
             Capability.GET_TICK,
             Capability.GET_DEPTH,
@@ -88,7 +87,7 @@ class BinanceRequestData(Feed):
             Capability.GET_SERVER_TIME,
         }
 
-    def __init__(self, data_queue, **kwargs):
+    def __init__(self, data_queue: Any = None, **kwargs: Any) -> None:
         super().__init__(data_queue, **kwargs)
         self.data_queue = data_queue
         self.public_key = kwargs.get("public_key")
@@ -155,8 +154,9 @@ class BinanceRequestData(Feed):
             content (TYPE): Description
 
         """
+        pk = self.private_key or ""
         sign = hmac.new(
-            self.private_key.encode("utf-8"), content.encode("utf-8"), digestmod="sha256"
+            pk.encode("utf-8"), (content or "").encode("utf-8"), digestmod="sha256"
         ).hexdigest()
 
         return sign
@@ -174,7 +174,7 @@ class BinanceRequestData(Feed):
             is_sign (bool, optional): is need signature.
         """
         if params is None:
-            params = {}
+            params: dict[str, Any] = {}
         # if body is None:
         #     body = {}
         method, path = path.split(" ", 1)
@@ -214,7 +214,7 @@ class BinanceRequestData(Feed):
         """
         request_type = "get_account"
         path = self._params.get_rest_path(request_type)
-        params = {}
+        params: dict[str, Any] = {}
         extra_data = update_extra_data(
             extra_data,
             **{
@@ -263,7 +263,7 @@ class BinanceRequestData(Feed):
         request_type = "get_balance"
         # request_symbol = self._params.get_symbol(symbol)
         path = self._params.get_rest_path(request_type)
-        params = {}
+        params: dict[str, Any] = {}
         extra_data = update_extra_data(
             extra_data,
             **{
@@ -290,7 +290,7 @@ class BinanceRequestData(Feed):
         elif isinstance(input_data, dict) and asset_type == "SWAP":
             data = [BinanceSwapRequestBalanceData(input_data, symbol_name, asset_type, True)]
         elif isinstance(input_data, list) and asset_type == "SPOT":
-            data = [
+            data: list[Any] = [
                 BinanceSpotRequestAccountData(i, symbol_name, asset_type, True) for i in input_data
             ]
         elif isinstance(input_data, dict) and asset_type == "SPOT":
@@ -344,7 +344,7 @@ class BinanceRequestData(Feed):
             data = []
         return data, status
 
-    def get_position(self, symbol, extra_data=None, **kwargs):
+    def get_position(self, symbol: Any = None, extra_data: Any = None, **kwargs: Any) -> Any:
         """Get position info from okx by symbol
         :param symbol: default None, get all the currency, can be string, e.g. "BTC-USDT".
         :param extra_data: extra_data, default is None, can be a dict passed by user
@@ -370,7 +370,7 @@ class BinanceRequestData(Feed):
                 "symbol": request_symbol,
             }
         else:
-            params = {}
+            params: dict[str, Any] = {}
         extra_data = update_extra_data(
             extra_data,
             **{
@@ -445,8 +445,8 @@ class BinanceRequestData(Feed):
             data = []
         return data, status
 
-    def get_depth(self, symbol, size=20, extra_data=None, **kwargs):
-        path, params, extra_data = self._get_depth(symbol, size, extra_data, **kwargs)
+    def get_depth(self, symbol: Any, count: Any = 20, extra_data: Any = None, **kwargs: Any) -> Any:
+        path, params, extra_data = self._get_depth(symbol, count, extra_data, **kwargs)
         data = self.request(path, params=params, extra_data=extra_data, is_sign=False)
         return data
 
@@ -515,8 +515,15 @@ class BinanceRequestData(Feed):
         return data, status
 
     def get_kline(
-        self, symbol, period, count=100, start_time=None, end_time=None, extra_data=None, **kwargs
-    ):
+        self,
+        symbol: Any,
+        period: Any,
+        count: Any = 100,
+        start_time: Any = None,
+        end_time: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> Any:
         path, params, extra_data = self._get_kline(
             symbol, period, count, start_time, end_time, extra_data, **kwargs
         )
@@ -704,7 +711,7 @@ class BinanceRequestData(Feed):
         return data
 
     def get_config(self, extra_data=None):
-        params = {}
+        params: dict[str, Any] = {}
         path = self._params.get_rest_path("get_config")
         extra_data = update_extra_data(
             extra_data,
@@ -877,7 +884,7 @@ class BinanceRequestData(Feed):
             extra_data = kwargs
         else:
             extra_data.update(kwargs)
-        params = {}
+        params: dict[str, Any] = {}
         extra_data = update_extra_data(
             extra_data,
             **{
@@ -966,7 +973,7 @@ class BinanceRequestData(Feed):
             params = {"symbol": request_symbol}
         else:
             request_symbol = ""
-            params = {}
+            params: dict[str, Any] = {}
         request_type = "get_open_orders"
         if "recv_window" in kwargs:
             params["recvWindow"] = kwargs["recv_window"]
@@ -1021,7 +1028,7 @@ class BinanceRequestData(Feed):
             params = {"symbol": request_symbol}
         else:
             request_symbol = ""
-            params = {}
+            params: dict[str, Any] = {}
         request_type = "get_deals"
         if count:
             params["limit"] = count
@@ -1296,7 +1303,7 @@ class BinanceRequestData(Feed):
 
     def _get_funding_info(self, extra_data=None, **kwargs):
         request_type = "get_funding_info"
-        params = {}
+        params: dict[str, Any] = {}
         path = self._params.get_rest_path(request_type)
         extra_data = update_extra_data(
             extra_data,
@@ -1603,7 +1610,7 @@ class BinanceRequestData(Feed):
 
     def _get_leverage_bracket(self, symbol=None, extra_data=None, **kwargs):
         request_type = "get_leverage_bracket"
-        params = {}
+        params: dict[str, Any] = {}
         if symbol is not None:
             params["symbol"] = self._params.get_symbol(symbol)
         path = self._params.get_rest_path(request_type)
@@ -1628,7 +1635,7 @@ class BinanceRequestData(Feed):
 
     def _get_position_mode(self, extra_data=None, **kwargs):
         request_type = "get_position_mode"
-        params = {}
+        params: dict[str, Any] = {}
         path = self._params.get_rest_path(request_type)
         extra_data = update_extra_data(
             extra_data,
@@ -2023,7 +2030,7 @@ class BinanceRequestData(Feed):
 
         """
         request_type = "get_force_orders"
-        params = {}
+        params: dict[str, Any] = {}
         if symbol is not None:
             request_symbol = self._params.get_symbol(symbol)
             params["symbol"] = request_symbol
@@ -2078,7 +2085,7 @@ class BinanceRequestData(Feed):
             is_sign (bool, optional): whether to signature.
         """
         if params is None:
-            params = {}
+            params: dict[str, Any] = {}
         # if body is None:
         #     body = {}
         method, path = path.split(" ", 1)
@@ -2150,7 +2157,7 @@ class BinanceRequestData(Feed):
         except Exception as e:
             import traceback
 
-            self.async_logger.warn(f"async_callback::{e}\n{traceback.format_exc()}")
+            self.async_logger.warning(f"async_callback::{e}\n{traceback.format_exc()}")
 
     def async_get_tick(self, symbol, extra_data=None, **kwargs):
         path, params, extra_data = self._get_tick(symbol, extra_data, **kwargs)

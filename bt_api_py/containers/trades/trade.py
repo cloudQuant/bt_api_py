@@ -2,36 +2,46 @@
 # 参考接口：https://binance-docs.github.io/apidocs/futures/cn/#060a012f0b
 """
 
+from __future__ import annotations
+
+from typing import Any
+
 from bt_api_py.containers.auto_init_mixin import AutoInitMixin
 
 
 class TradeData(AutoInitMixin):
     """交易类，用于保存成交信息"""
 
-    def __init__(self, trade_info, has_been_json_encoded=False):
+    def __init__(
+        self,
+        trade_info: Any,
+        has_been_json_encoded: bool = False,
+        symbol_name: str | None = None,
+        asset_type: str | None = None,
+    ) -> None:
         self.event = "TradeEvent"
         self.trade_info = trade_info
         self.has_been_json_encoded = has_been_json_encoded
-        self.exchange_name = None
-        self.local_update_time = None
-        self.asset_type = None
-        self.symbol_name = None
-        self.trade_data = trade_info if has_been_json_encoded else None
-        self.server_time = None
-        self.trade_id = None
-        self.trade_symbol_name = None
-        self.order_id = None
-        self.client_order_id = None
-        self.trade_side = None
-        self.trade_offset = None
-        self.trade_price = None
-        self.trade_volume = None
-        self.trade_type = None
-        self.trade_time = None
-        self.trade_fee = None
-        self.trade_fee_symbol = None
-        self.trade_accumulate_volume = None
-        self.all_data = None
+        self.exchange_name: str | None = None
+        self.local_update_time: float | None = None
+        self.asset_type = asset_type
+        self.symbol_name = symbol_name
+        self.trade_data: Any = trade_info if has_been_json_encoded else None
+        self.server_time: float | None = None
+        self.trade_id: str | None = None
+        self.trade_symbol_name: str | None = None
+        self.order_id: str | None = None
+        self.client_order_id: str | None = None
+        self.trade_side: str | None = None
+        self.trade_offset: str | None = None
+        self.trade_price: float | None = None
+        self.trade_volume: float | None = None
+        self.trade_type: str | None = None
+        self.trade_time: float | None = None
+        self.trade_fee: float | None = None
+        self.trade_fee_symbol: str | None = None
+        self.trade_accumulate_volume: float | None = None
+        self.all_data: dict[str, Any] | None = None
 
     def get_event(self):
         """# 事件类型"""
@@ -40,7 +50,7 @@ class TradeData(AutoInitMixin):
     def init_data(self):
         raise NotImplementedError
 
-    def get_all_data(self):
+    def get_all_data(self) -> dict[str, Any]:
         if self.all_data is None:
             self.all_data = {
                 "exchange_name": self.exchange_name,

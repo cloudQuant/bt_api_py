@@ -36,7 +36,7 @@ def _get_coinspot_config() -> Any | None:
             _coinspot_config = load_exchange_config(config_path)
         _coinspot_config_loaded = True
     except Exception as e:
-        logger.warn(f"Failed to load coinspot.yaml config: {e}")
+        logger.warning(f"Failed to load coinspot.yaml config: {e}")
     return _coinspot_config
 
 

@@ -17,7 +17,7 @@ from bt_api_py.logging_factory import get_logger
 class KuCoinRequestDataFutures(KuCoinRequestData):
     """KuCoin Futures trading REST API implementation."""
 
-    def __init__(self, data_queue, **kwargs) -> Any | None:
+    def __init__(self, data_queue: Any = None, **kwargs: Any) -> None:
         kwargs.setdefault("asset_type", "FUTURES")
         kwargs.setdefault("logger_name", "kucoin_futures_feed.log")
         super().__init__(data_queue, **kwargs)
@@ -230,7 +230,7 @@ class KuCoinRequestDataFutures(KuCoinRequestData):
     def _get_account(self, currency=None, extra_data=None, **kwargs) -> Any | None:
         request_type = "get_account"
         path = self._params.get_rest_path(request_type)
-        params = {}
+        params: dict[str, Any] = {}
         if currency:
             params["currency"] = currency
         extra_data = update_extra_data(
@@ -343,7 +343,7 @@ class KuCoinRequestDataFutures(KuCoinRequestData):
         if order_id is None:
             raise ValueError("order_id must be provided")
         path = f"DELETE /api/v1/orders/{order_id}"
-        params = {}
+        params: dict[str, Any] = {}
         extra_data = update_extra_data(
             extra_data,
             request_type="cancel_order",
@@ -363,7 +363,7 @@ class KuCoinRequestDataFutures(KuCoinRequestData):
     def _get_open_orders(self, symbol=None, extra_data=None, **kwargs) -> Any | None:
         request_type = "get_open_orders"
         path = self._params.get_rest_path(request_type)
-        params = {}
+        params: dict[str, Any] = {}
         if symbol:
             params["symbol"] = symbol
         extra_data = update_extra_data(
@@ -386,7 +386,7 @@ class KuCoinRequestDataFutures(KuCoinRequestData):
         if order_id is None:
             raise ValueError("order_id must be provided")
         path = f"GET /api/v1/orders/{order_id}"
-        params = {}
+        params: dict[str, Any] = {}
         extra_data = update_extra_data(
             extra_data,
             request_type="query_order",
@@ -404,10 +404,6 @@ class KuCoinRequestDataFutures(KuCoinRequestData):
 class KuCoinMarketWssDataFutures:
     """Placeholder for KuCoin Futures Market WebSocket data handler."""
 
-    pass
-
 
 class KuCoinAccountWssDataFutures:
     """Placeholder for KuCoin Futures Account WebSocket data handler."""
-
-    pass

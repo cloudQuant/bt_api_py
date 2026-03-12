@@ -29,7 +29,7 @@ def _get_bitbank_config() -> Any | None:
             _bitbank_config = load_exchange_config(config_path)
         _bitbank_config_loaded = True
     except Exception as e:
-        logger.warn(f"Failed to load bitbank.yaml config: {e}")
+        logger.warning(f"Failed to load bitbank.yaml config: {e}")
     return _bitbank_config
 
 

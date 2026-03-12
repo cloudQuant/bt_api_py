@@ -5,6 +5,7 @@ import time
 from typing import Any
 
 from bt_api_py.containers.tickers.ticker import TickerData
+from bt_api_py.containers.tickers.ticker_utils import parse_float
 
 
 class BitflyerRequestTickerData(TickerData):
@@ -34,17 +35,17 @@ class BitflyerRequestTickerData(TickerData):
         self.ticker_data: dict[str, Any] | None = (
             ticker_info if has_been_json_encoded and isinstance(ticker_info, dict) else None
         )
-        self.ticker_symbol_name = None
-        self.last_price = None
-        self.bid_price = None
-        self.ask_price = None
-        self.volume_24h = None
-        self.volume_quote_24h = None
-        self.bid_size = None
-        self.ask_size = None
-        self.total_bid_depth = None
-        self.total_ask_depth = None
-        self.timestamp = None
+        self.ticker_symbol_name: str | None = None
+        self.last_price: float | None = None
+        self.bid_price: float | None = None
+        self.ask_price: float | None = None
+        self.volume_24h: float | None = None
+        self.volume_quote_24h: float | None = None
+        self.bid_size: float | None = None
+        self.ask_size: float | None = None
+        self.total_bid_depth: float | None = None
+        self.total_ask_depth: float | None = None
+        self.timestamp: int | None = None
         self.has_been_init_data = False
 
     def init_data(self) -> "BitflyerRequestTickerData":
@@ -60,15 +61,15 @@ class BitflyerRequestTickerData(TickerData):
             data = self.ticker_data
             if "product_code" in data:
                 self.ticker_symbol_name = data.get("product_code")
-                self.last_price = self._parse_float(data.get("ltp"))  # Last traded price
-                self.bid_price = self._parse_float(data.get("best_bid"))
-                self.ask_price = self._parse_float(data.get("best_ask"))
-                self.volume_24h = self._parse_float(data.get("volume"))
-                self.volume_quote_24h = self._parse_float(data.get("volume_by_product"))
-                self.bid_size = self._parse_float(data.get("best_bid_size"))
-                self.ask_size = self._parse_float(data.get("best_ask_size"))
-                self.total_bid_depth = self._parse_float(data.get("total_bid_depth"))
-                self.total_ask_depth = self._parse_float(data.get("total_ask_depth"))
+                self.last_price = parse_float(data.get("ltp"))  # Last traded price
+                self.bid_price = parse_float(data.get("best_bid"))
+                self.ask_price = parse_float(data.get("best_ask"))
+                self.volume_24h = parse_float(data.get("volume"))
+                self.volume_quote_24h = parse_float(data.get("volume_by_product"))
+                self.bid_size = parse_float(data.get("best_bid_size"))
+                self.ask_size = parse_float(data.get("best_ask_size"))
+                self.total_bid_depth = parse_float(data.get("total_bid_depth"))
+                self.total_ask_depth = parse_float(data.get("total_ask_depth"))
 
                 # Parse timestamp
                 timestamp_str = data.get("timestamp")
@@ -77,24 +78,6 @@ class BitflyerRequestTickerData(TickerData):
 
         self.has_been_init_data = True
         return self
-
-    @staticmethod
-    def _parse_float(value: Any) -> float | None:
-        """Parse value to float.
-
-        Args:
-            value: Value to parse.
-
-        Returns:
-            Parsed float value or None if parsing fails.
-
-        """
-        if value is None:
-            return None
-        try:
-            return float(value)
-        except (ValueError, TypeError):
-            return None
 
     @staticmethod
     def _parse_timestamp(timestamp_str: str) -> int | None:

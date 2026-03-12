@@ -269,17 +269,14 @@ class TestSushiSwapRequestDataSpot:
     @pytest.mark.ticker
     def test_integration_get_tick(self, sushiswap_spot):
         """Integration test for get_tick - skipped."""
-        pass
 
     @pytest.mark.skip(reason="Requires actual API call")
     def test_integration_get_pool(self, sushiswap_spot):
         """Integration test for get_pool - skipped."""
-        pass
 
     @pytest.mark.skip(reason="Requires actual API call")
     def test_integration_get_swap_quote(self, sushiswap_spot):
         """Integration test for get_swap_quote - skipped."""
-        pass
 
 
 class TestSushiSwapExchangeDataSpot:

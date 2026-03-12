@@ -6,7 +6,7 @@ Handles pool information data from Balancer's GraphQL API.
 
 import json
 import time
-from typing import Any
+from typing import Any, cast
 
 
 class BalancerPoolData:
@@ -150,8 +150,8 @@ class BalancerPoolData:
     def get_token_symbols(self) -> list[str]:
         return self.token_symbols
 
-    def get_pool_tokens_with_balances(self) -> list[dict]:
-        return self.pool_tokens
+    def get_pool_tokens_with_balances(self) -> list[dict[Any, Any]]:
+        return cast("list[dict[Any, Any]]", self.pool_tokens)
 
 
 class BalancerWssPoolData(BalancerPoolData):

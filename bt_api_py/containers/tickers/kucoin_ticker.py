@@ -15,21 +15,19 @@ class KuCoinTickerData(TickerData):
         super().__init__(ticker_info, has_been_json_encoded)
         self.exchange_name = "KUCOIN"
         self.local_update_time = time.time()
-        self.ticker_data = ticker_info if has_been_json_encoded else None
-        self.ticker_symbol_name = None
+        self.ticker_data: dict[str, Any] | None = ticker_info if has_been_json_encoded else None
+        self.ticker_symbol_name: str | None = None
         self.has_been_init_data = False
         self.symbol_name = symbol_name
         self.asset_type = asset_type
-        self.ticker_data = ticker_info if has_been_json_encoded else None
-        self.ticker_symbol_name = None
-        self.server_time = None
-        self.bid_price = None
-        self.ask_price = None
-        self.bid_volume = None
-        self.ask_volume = None
-        self.last_price = None
-        self.last_volume = None
-        self.all_data = None
+        self.server_time: float | None = None
+        self.bid_price: float | None = None
+        self.ask_price: float | None = None
+        self.bid_volume: float | None = None
+        self.ask_volume: float | None = None
+        self.last_price: float | None = None
+        self.last_volume: float | None = None
+        self.all_data: dict[str, Any] | None = None
         self.has_been_init_data = False
 
     def init_data(self) -> "Self":
@@ -51,7 +49,7 @@ class KuCoinTickerData(TickerData):
                 "last_price": self.last_price,
                 "last_volume": self.last_volume,
             }
-        return self.all_data
+        return self.all_data or {}
 
     def __str__(self) -> str:
         self.init_data()
@@ -61,19 +59,19 @@ class KuCoinTickerData(TickerData):
         return self.__str__()
 
     def get_exchange_name(self) -> str:
-        return self.exchange_name
+        return str(self.exchange_name)
 
     def get_local_update_time(self) -> float:
-        return self.local_update_time
+        return float(self.local_update_time)
 
     def get_symbol_name(self) -> str:
-        return self.symbol_name
+        return str(self.symbol_name)
 
     def get_ticker_symbol_name(self) -> str | None:
         return self.ticker_symbol_name
 
     def get_asset_type(self) -> str:
-        return self.asset_type
+        return str(self.asset_type)
 
     def get_server_time(self) -> float | None:
         return self.server_time
@@ -127,7 +125,7 @@ class KuCoinRequestTickerData(KuCoinTickerData):
             return self
 
         # Extract data field from response
-        data = self.ticker_data.get("data", {})
+        data = (self.ticker_data or {}).get("data", {})
         self.ticker_symbol_name = self.symbol_name
         self.server_time = from_dict_get_float(data, "time")
         self.last_price = from_dict_get_float(data, "price")
@@ -168,7 +166,7 @@ class KuCoinWssTickerData(KuCoinTickerData):
             return self
 
         # Extract data field from WebSocket message
-        data = self.ticker_data.get("data", {})
+        data = (self.ticker_data or {}).get("data", {})
         self.ticker_symbol_name = self.symbol_name
         self.server_time = from_dict_get_float(data, "time")
         self.last_price = from_dict_get_float(data, "price")
@@ -211,7 +209,7 @@ class KuCoinStatsTickerData(KuCoinTickerData):
         if self.has_been_init_data:
             return self
 
-        data = self.ticker_data.get("data", {})
+        data = (self.ticker_data or {}).get("data", {})
         self.ticker_symbol_name = from_dict_get_string(data, "symbol")
         self.server_time = from_dict_get_float(data, "time")
         self.last_price = from_dict_get_float(data, "last")

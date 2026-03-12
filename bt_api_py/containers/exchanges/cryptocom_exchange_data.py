@@ -31,7 +31,7 @@ def _get_cryptocom_config() -> Any | None:
             _cryptocom_config = load_exchange_config(config_path)
         _cryptocom_config_loaded = True
     except Exception as e:
-        logger.warn(f"Failed to load cryptocom.yaml config: {e}")
+        logger.warning(f"Failed to load cryptocom.yaml config: {e}")
     return _cryptocom_config
 
 

@@ -569,7 +569,7 @@ def test_binance_futures_transfer_history():
     print("futures_transfer_history:", result)
     # 验证返回数据结构
     if result and isinstance(result, list):
-        assert isinstance(result[0], dict) or isinstance(result[0], str)
+        assert isinstance(result[0], (dict, str))
 
 
 # ==================== 高级订单接口测试 ====================
