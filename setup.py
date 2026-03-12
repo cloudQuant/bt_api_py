@@ -52,6 +52,40 @@ ctp_lib_names = []
 ctp_link_args = []
 ctp_compile_args = []
 
+
+def _existing_paths(paths: list[str]) -> list[str]:
+    result = []
+    seen = set()
+    for path in paths:
+        if not path or path in seen or not os.path.exists(path):
+            continue
+        seen.add(path)
+        result.append(path)
+    return result
+
+
+def _windows_iconv_prefixes() -> list[str]:
+    user_home = os.path.expanduser("~")
+    prefixes = _existing_paths(
+        [
+            os.environ.get("CONDA_PREFIX"),
+            os.environ.get("MAMBA_ROOT_PREFIX"),
+            os.path.join(user_home, "miniconda3"),
+            os.path.join(user_home, "anaconda3"),
+            r"C:\miniconda3",
+            r"C:\Miniconda3",
+            r"C:\anaconda3",
+            r"C:\Anaconda3",
+        ]
+    )
+    result = []
+    for prefix in prefixes:
+        include_file = os.path.join(prefix, "Library", "include", "iconv.h")
+        library_file = os.path.join(prefix, "Library", "lib", "iconv.lib")
+        if os.path.exists(include_file) and os.path.exists(library_file):
+            result.append(prefix)
+    return result
+
 if sys.platform.startswith("darwin"):
     # ---- macOS: 使用 .framework ----
     API_PLAT_DIR = os.path.join(CTP_API_DIR, "darwin")
@@ -95,14 +129,22 @@ elif sys.platform.startswith("win"):
     API_PLAT_DIR = os.path.join(CTP_API_DIR, "windows")
     API_DLLS = glob.glob(os.path.join(API_PLAT_DIR, "*.dll"))
     ctp_lib_names = [pathlib.Path(p).stem for p in API_DLLS] + ["iconv"]
-    ctp_inc_dirs = [
-        API_PLAT_DIR,
-        os.path.join(sysconfig.get_config_var("base"), "Library", "include"),
-    ]
-    ctp_lib_dirs = [
-        API_PLAT_DIR,
-        os.path.join(sysconfig.get_config_var("base"), "Library", "lib"),
-    ]
+    base_prefix = sysconfig.get_config_var("base") or sys.prefix
+    iconv_prefixes = _windows_iconv_prefixes()
+    ctp_inc_dirs = _existing_paths(
+        [
+            API_PLAT_DIR,
+            os.path.join(base_prefix, "Library", "include"),
+            *[os.path.join(prefix, "Library", "include") for prefix in iconv_prefixes],
+        ]
+    )
+    ctp_lib_dirs = _existing_paths(
+        [
+            API_PLAT_DIR,
+            os.path.join(base_prefix, "Library", "lib"),
+            *[os.path.join(prefix, "Library", "lib") for prefix in iconv_prefixes],
+        ]
+    )
     ctp_link_args = []
     ctp_compile_args = ["/utf-8", "/wd4101"]
     ctp_package_data = [

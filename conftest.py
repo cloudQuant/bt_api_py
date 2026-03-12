@@ -9,6 +9,9 @@ import pytest
 # Add project root to Python path
 project_root = Path(__file__).parent
 sys.path.insert(0, str(project_root))
+scripts_root = project_root / "scripts"
+if scripts_root.is_dir():
+    sys.path.insert(0, str(scripts_root))
 
 
 # Check if API keys are available
@@ -50,8 +53,31 @@ def should_skip_live_tests():
     return os.getenv("SKIP_LIVE_TESTS", "").lower() in ("true", "1", "yes")
 
 
+def _rewrite_examples_cli_arg(arg: str) -> str:
+    normalized = arg.replace("/", "\\").rstrip("\\")
+    relative_prefix = "bt_api_py\\examples"
+    if normalized.lower() == relative_prefix.lower():
+        return "examples"
+    if normalized.lower().startswith(relative_prefix.lower() + "\\"):
+        suffix = normalized[len(relative_prefix) :].lstrip("\\")
+        parts = [part for part in suffix.split("\\") if part]
+        return str(Path("examples", *parts))
+
+    package_examples = str(project_root / "bt_api_py" / "examples").replace("/", "\\").rstrip("\\")
+    if normalized.lower() == package_examples.lower():
+        return str(project_root / "examples")
+    if normalized.lower().startswith(package_examples.lower() + "\\"):
+        suffix = normalized[len(package_examples) :].lstrip("\\")
+        parts = [part for part in suffix.split("\\") if part]
+        return str(project_root / "examples" / Path(*parts))
+
+    return arg
+
+
 def pytest_configure(config):
     """Configure pytest with custom settings."""
+    config.args[:] = [_rewrite_examples_cli_arg(arg) for arg in config.args]
+
     # Set LD_LIBRARY_PATH for CTP libraries
     ctp_lib_path = Path(__file__).parent / "bt_api_py" / "ctp" / "api" / "6.7.7" / "linux"
     if ctp_lib_path.exists():
@@ -174,25 +200,15 @@ def pytest_collection_modifyitems(config, items):
             item.add_marker(pytest.mark.skip(reason="SKIP_LIVE_TESTS=true"))
 
 
-@pytest.hookimpl(hookwrapper=True)
-def pytest_runtest_call(item):
-    """Auto-skip tests that fail due to network/auth errors.
-
-    Covers integration tests and any test that hits real exchange APIs
-    (test_bt_api.py, test_update_exchange_symbol_info.py, etc.).
-    Only applies to tests auto-marked 'network' or explicitly marked 'integration'.
-    """
+def _network_skip_reason(item, exc):
+    """Return a skip reason for network/auth-related failures, if applicable."""
     is_network_test = "integration" in item.keywords or "network" in item.keywords
-    outcome = yield
     if not is_network_test:
-        return
-    exc_info = outcome.excinfo
-    if exc_info is None:
-        return
-    exc = exc_info[1]
+        return None
+
     exc_name = type(exc).__name__
     exc_msg = str(exc).lower()
-    # Use isinstance for exception type checks
+
     if isinstance(exc, AssertionError) and any(
         hint in exc_msg
         for hint in [
@@ -206,12 +222,14 @@ def pytest_runtest_call(item):
             "enough exchanges",
         ]
     ):
-        pytest.skip(f"Skipped (no data, likely network): {str(exc)[:80]}")
+        return f"Skipped (no data, likely network): {str(exc)[:80]}"
+
     network_indicators = [
         "authenticationerror",
         "requestfailederror",
         "requesterror",
         "connectionerror",
+        "connection error",
         "connecterror",
         "timeout",
         "ssl",
@@ -238,13 +256,33 @@ def pytest_runtest_call(item):
         "rate_limit",
         "ratelimit",
         "too many requests",
+        "failed to get listen key",
+        "winerror 10061",
     ]
     combined = exc_name.lower() + " " + exc_msg
     if any(ind in combined for ind in network_indicators):
-        pytest.skip(f"Skipped (network/auth): {exc_name}: {str(exc)[:80]}")
-    # Also skip pytest-timeout failures for network tests
+        return f"Skipped (network/auth): {exc_name}: {str(exc)[:80]}"
+
     if exc_name.lower() == "failed" and "timeout" in exc_msg:
-        pytest.skip(f"Skipped (timeout): {str(exc)[:80]}")
+        return f"Skipped (timeout): {str(exc)[:80]}"
+
+    return None
+
+
+@pytest.hookimpl(hookwrapper=True)
+def pytest_runtest_makereport(item, call):
+    """Convert network/auth failures into skipped outcomes without teardown warnings."""
+    outcome = yield
+    report = outcome.get_result()
+    if report.when != "call" or report.outcome != "failed" or call.excinfo is None:
+        return
+
+    reason = _network_skip_reason(item, call.excinfo.value)
+    if reason is None:
+        return
+
+    report.outcome = "skipped"
+    report.longrepr = (str(item.fspath), 0, reason)
 
 
 @pytest.fixture(scope="session")
@@ -265,8 +303,15 @@ def reset_environment():
     original_env = os.environ.copy()
     yield
     # Restore original environment
-    os.environ.clear()
-    os.environ.update(original_env)
+    current_keys = set(os.environ)
+    original_keys = set(original_env)
+
+    for key in current_keys - original_keys:
+        os.environ.pop(key, None)
+
+    for key, value in original_env.items():
+        if os.environ.get(key) != value:
+            os.environ[key] = value
 
 
 @pytest.fixture

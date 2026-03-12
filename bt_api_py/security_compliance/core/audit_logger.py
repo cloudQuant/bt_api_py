@@ -9,6 +9,7 @@ import enum
 import hashlib
 import json
 import logging
+import tempfile
 import time
 from collections.abc import Callable
 from dataclasses import asdict, dataclass, field
@@ -253,24 +254,32 @@ class AuditLogger:
 
     def _write_event_atomic(self, event_json: str) -> None:
         """Write event atomically to prevent corruption."""
-        temp_file = self.log_file.with_suffix(".tmp")
+        temp_file: Path | None = None
 
         try:
-            # Write to temp file
-            with open(temp_file, "w") as f:
+            self.log_file.parent.mkdir(parents=True, exist_ok=True)
+            with tempfile.NamedTemporaryFile(
+                mode="w",
+                delete=False,
+                dir=self.log_file.parent,
+                prefix=f"{self.log_file.stem}_",
+                suffix=".tmp",
+            ) as f:
                 f.write(event_json + "\n")
+                temp_file = Path(f.name)
 
-            # Append to main file
             with open(self.log_file, "a") as f:
                 f.write(event_json + "\n")
 
-            # Remove temp file
-            temp_file.unlink()
         except Exception as e:
-            # Clean up temp file on error
-            if temp_file.exists():
-                temp_file.unlink()
+            if temp_file is not None and temp_file.exists():
+                with contextlib.suppress(OSError):
+                    temp_file.unlink()
             raise AuditError(f"Failed to write audit event: {e}") from e
+        finally:
+            if temp_file is not None and temp_file.exists():
+                with contextlib.suppress(OSError):
+                    temp_file.unlink()
 
     def _notify_subscribers(self, event: AuditEvent) -> None:
         """Notify real-time monitoring subscribers."""

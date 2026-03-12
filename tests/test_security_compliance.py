@@ -4,6 +4,8 @@ Tests for the security compliance framework to ensure
 proper functioning of all security components.
 """
 
+import shutil
+import tempfile
 from pathlib import Path
 
 import pytest
@@ -87,16 +89,13 @@ class TestAuditLogger:
 
     def setup_method(self):
         """Setup test environment."""
-        self.temp_dir = Path("/tmp/test_audit")
-        self.temp_dir.mkdir(exist_ok=True)
+        self.temp_dir = Path(tempfile.mkdtemp(prefix="test_audit_"))
         self.audit_logger = AuditLogger(log_file=self.temp_dir / "test_audit.log")
 
     def teardown_method(self):
         """Cleanup test environment."""
-        import shutil
-
         if self.temp_dir.exists():
-            shutil.rmtree(self.temp_dir)
+            shutil.rmtree(self.temp_dir, ignore_errors=True)
 
     def test_log_event(self):
         """Test event logging."""
@@ -355,11 +354,17 @@ class TestSecurityFramework:
 
     def setup_method(self):
         """Setup test environment."""
+        self.temp_dir = Path(tempfile.mkdtemp(prefix="test_framework_audit_"))
         config = {
             "encryption": {"provider": "local", "algorithm": "aes_256_gcm"},
-            "audit": {"log_file": "/tmp/test_framework_audit.log"},
+            "audit": {"log_file": str(self.temp_dir / "test_framework_audit.log")},
         }
         self.framework = SecurityFramework(config)
+
+    def teardown_method(self):
+        """Cleanup test environment."""
+        if self.temp_dir.exists():
+            shutil.rmtree(self.temp_dir, ignore_errors=True)
 
     def test_framework_initialization(self):
         """Test framework initialization."""

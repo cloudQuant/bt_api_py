@@ -124,6 +124,15 @@ class GatewayClient:
         }
         return dict(self._command("cancel_order", payload))
 
+    def fetch_bars(self, symbol: str, timeframe: str = "M1", count: int = 100) -> list[dict[str, Any]]:
+        return list(self._command("get_bars", {"symbol": symbol, "timeframe": timeframe, "count": count}) or [])
+
+    def fetch_symbol_info(self, symbol: str) -> dict[str, Any]:
+        return dict(self._command("get_symbol_info", {"symbol": symbol}) or {})
+
+    def fetch_open_orders(self) -> list[dict[str, Any]]:
+        return list(self._command("get_open_orders") or [])
+
     def _command(self, command: str, payload: dict[str, Any] | None = None) -> Any:
         if self.command_socket is None:
             raise RuntimeError("gateway client is not connected")

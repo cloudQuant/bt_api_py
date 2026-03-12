@@ -133,13 +133,38 @@
 pip install bt_api_py
 ```
 
-### 方式二：从源码安装
+### 方式二：从源码安装（开发模式）
+
+从源码安装会编译 Cython 扩展和 CTP SWIG C++ 扩展，请先安装对应平台的编译环境。
+
+#### macOS
+
+```bash
+xcode-select --install
+brew install swig
+```
+
+#### Linux（Debian/Ubuntu）
+
+```bash
+sudo apt install swig g++
+```
+
+#### Windows 11
+
+```bash
+winget install Microsoft.VisualStudio.2022.BuildTools
+# 打开 Visual Studio Installer，勾选"使用C++的桌面开发"
+winget install miniconda3
+conda install -c conda-forge swig libiconv
+```
+
+完成前置环境后，再执行源码安装：
 
 ```bash
 git clone https://github.com/cloudQuant/bt_api_py
 cd bt_api_py
-pip install -r requirements.txt
-pip install .
+pip install -e .
 ```
 
 ### 可选依赖

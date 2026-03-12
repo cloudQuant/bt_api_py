@@ -1,3 +1,4 @@
+from datetime import datetime
 from typing import Any
 
 from bt_api_py.containers.exchanges.dydx_exchange_data import DydxExchangeDataSwap
@@ -46,6 +47,21 @@ class DydxRequestDataSpot(DydxRequestData):
     def _get_ticker_spot_normalize_function(
         input_data: Any, extra_data: Any
     ) -> tuple[list[float] | None, bool]:
+        def _normalize_timestamp(value: Any) -> float:
+            if value is None:
+                return 0.0
+            if isinstance(value, (int, float)):
+                return float(value)
+            if isinstance(value, str):
+                try:
+                    return float(value)
+                except ValueError:
+                    try:
+                        return datetime.fromisoformat(value.replace("Z", "+00:00")).timestamp()
+                    except ValueError:
+                        return 0.0
+            return 0.0
+
         if extra_data is None:
             pass
         status = input_data.get("code", 0) == 0
@@ -54,7 +70,7 @@ class DydxRequestDataSpot(DydxRequestData):
             symbol = extra_data.get("symbol_name", "")
             if symbol in markets:
                 data = markets[symbol]
-                timestamp = float(data.get("snapshotAt", 0))
+                timestamp = _normalize_timestamp(data.get("snapshotAt", 0))
                 ticker_info = [
                     timestamp,
                     float(data.get("oraclePrice", 0)),
@@ -125,8 +141,8 @@ class DydxRequestDataSpot(DydxRequestData):
 
     def get_balance(self, symbol: Any = None, extra_data: Any = None, **kwargs: Any) -> RequestData:
         """Get balance information."""
-        address = kwargs.get("address", self.address or "")
-        subaccount_number = kwargs.get("subaccount_number", self.subaccount_number)
+        address = kwargs.pop("address", self.address or "")
+        subaccount_number = kwargs.pop("subaccount_number", self.subaccount_number)
         path, params, extra_data = self.get_balance_spot(
             address, subaccount_number, extra_data, **kwargs
         )

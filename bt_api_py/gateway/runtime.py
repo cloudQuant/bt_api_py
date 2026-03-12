@@ -12,6 +12,7 @@ from bt_api_py.gateway.adapters import (
     BinanceGatewayAdapter,
     CtpGatewayAdapter,
     IbWebGatewayAdapter,
+    Mt5GatewayAdapter,
     OkxGatewayAdapter,
 )
 from bt_api_py.gateway.health import ConnectionState, GatewayHealth, GatewayState
@@ -34,6 +35,7 @@ class GatewayRuntime:
         "IB_WEB": IbWebGatewayAdapter,
         "BINANCE": BinanceGatewayAdapter,
         "OKX": OkxGatewayAdapter,
+        **({"MT5": Mt5GatewayAdapter} if Mt5GatewayAdapter is not None else {}),
     }
 
     def __init__(self, config: GatewayConfig, **kwargs: Any) -> None:
@@ -217,6 +219,16 @@ class GatewayRuntime:
             return self.adapter.place_order(payload)
         if command == "cancel_order":
             return self.adapter.cancel_order(payload)
+        if command == "get_bars":
+            symbol = str(payload.get("symbol") or "")
+            timeframe = str(payload.get("timeframe") or "M1")
+            count = int(payload.get("count") or 100)
+            return self.adapter.get_bars(symbol, timeframe, count)
+        if command == "get_symbol_info":
+            symbol = str(payload.get("symbol") or "")
+            return self.adapter.get_symbol_info(symbol)
+        if command == "get_open_orders":
+            return self.adapter.get_open_orders()
         if command == "health":
             return self.health.snapshot()
         raise ValueError(f"unsupported command: {command}")

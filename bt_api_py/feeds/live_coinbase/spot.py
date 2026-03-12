@@ -160,18 +160,20 @@ class CoinbaseRequestDataSpot(CoinbaseRequestData):
         Returns:
             RequestData with order book data
         """
+        limit = kwargs.pop("limit", count)
         path, params, extra_data = self._get_depth(
-            symbol=symbol, limit=count, extra_data=extra_data, **kwargs
+            symbol=symbol, limit=limit, extra_data=extra_data, **kwargs
         )
         data = self.request(path, params=params, extra_data=extra_data, is_sign=False)
         return data
 
-    def async_get_depth(
+    async def async_get_depth(
         self, symbol: Any, count: Any = 50, extra_data: Any = None, **kwargs: Any
     ) -> None:
         """Get order book data asynchronously."""
+        limit = kwargs.pop("limit", count)
         path, params, extra_data = self._get_depth(
-            symbol=symbol, limit=count, extra_data=extra_data, **kwargs
+            symbol=symbol, limit=limit, extra_data=extra_data, **kwargs
         )
         self.submit(
             self.async_request(path, params=params, extra_data=extra_data, is_sign=False),

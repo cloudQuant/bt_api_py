@@ -16,6 +16,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import tempfile
 import threading
 from pathlib import Path
 from typing import Any
@@ -50,7 +51,7 @@ class OrderRefAllocator:
         self._account_id = account_id
         self._state_dir = Path(state_dir)
         self._state_file = self._state_dir / f"gateway_{account_id}_state.json"
-        self._lock = threading.Lock()
+        self._lock = threading.RLock()
         self._value: int = initial_value
 
         self._load()
@@ -67,8 +68,8 @@ class OrderRefAllocator:
         with self._lock:
             self._value += 1
             val = self._value
-        self._persist()
-        return str(val)
+            self._persist_locked()
+            return str(val)
 
     def current(self) -> int:
         """Return the current (last allocated) value without incrementing."""
@@ -95,13 +96,13 @@ class OrderRefAllocator:
                     max_val,
                 )
                 self._value = max_val
-        self._persist()
+            self._persist_locked()
 
     def reset(self, value: int = 0) -> None:
         """Reset the allocator to a specific value. Use with caution."""
         with self._lock:
             self._value = value
-        self._persist()
+            self._persist_locked()
 
     # ------------------------------------------------------------------
     # Persistence
@@ -132,21 +133,38 @@ class OrderRefAllocator:
 
     def _persist(self) -> None:
         """Persist the current value to the state file."""
+        with self._lock:
+            self._persist_locked()
+
+    def _persist_locked(self) -> None:
         try:
             self._state_dir.mkdir(parents=True, exist_ok=True)
-            # Read existing data to preserve other keys
             existing: dict[str, Any] = {}
             if self._state_file.exists():
                 try:
                     existing = json.loads(self._state_file.read_text(encoding="utf-8"))
                 except (json.JSONDecodeError, OSError):
                     pass
-            with self._lock:
-                existing[_STATE_KEY] = self._value
-            # Atomic write via tmp + rename
-            tmp_path = self._state_file.with_suffix(".tmp")
-            tmp_path.write_text(json.dumps(existing, indent=2), encoding="utf-8")
-            os.replace(str(tmp_path), str(self._state_file))
+            existing[_STATE_KEY] = self._value
+            tmp_path: Path | None = None
+            try:
+                with tempfile.NamedTemporaryFile(
+                    mode="w",
+                    delete=False,
+                    dir=self._state_dir,
+                    prefix=f"{self._state_file.stem}_",
+                    suffix=".tmp",
+                    encoding="utf-8",
+                ) as handle:
+                    json.dump(existing, handle, indent=2)
+                    tmp_path = Path(handle.name)
+                os.replace(str(tmp_path), str(self._state_file))
+            finally:
+                if tmp_path is not None and tmp_path.exists():
+                    try:
+                        tmp_path.unlink()
+                    except OSError:
+                        pass
         except OSError as exc:
             logger.warning(
                 "OrderRefAllocator[%s]: failed to persist state: %s",

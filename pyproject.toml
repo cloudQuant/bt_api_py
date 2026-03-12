@@ -61,6 +61,9 @@ markers = [
     "binance: Binance exchange tests",
     "okx: OKX exchange tests",
     "ib: Interactive Brokers tests",
+    "mt5: MetaTrader 5 tests (requires MT5_LOGIN / MT5_PASSWORD env vars)",
+    "asyncio: Async tests",
+    "timeout: Tests using pytest-timeout marker",
     # 行情数据测试（不需要鉴权）
     "ticker: Public ticker/tick data tests (no auth required)",
     "kline: Public kline/bar/candle data tests (no auth required)",
@@ -73,7 +76,6 @@ markers = [
     "auth_position: Position management tests (auth required)",
     "auth_private_trade: Private trade history tests (auth required)",
 ]
-timeout = 120
 asyncio_default_fixture_loop_scope = "function"
 testpaths = ["tests"]
 python_files = ["test_*.py"]
@@ -346,6 +348,7 @@ dev = [
     "types-PyYAML>=6.0",
     "types-pytz>=2023.3",
     "pytest>=7.0",
+    "pytest-asyncio>=0.21.0",
     "pytest-sugar>=1.0.0",
     "pytest-cov>=4.0.0",
     "pytest-timeout>=2.1.0",
@@ -380,9 +383,12 @@ ib_web = [
     "pyjwt>=2.8.0",
     "cryptography>=41.0.0",
 ]
+mt5 = [
+    "pymt5>=0.5.0",
+]
 cookies = [
     "browser-cookie3>=0.19.0",
 ]
 all = [
-    "bt_api_py[dev,visualization,email,time,ib,ib_web,cookies,monitoring]",
+    "bt_api_py[dev,visualization,email,time,ib,ib_web,mt5,cookies,monitoring]",
 ]

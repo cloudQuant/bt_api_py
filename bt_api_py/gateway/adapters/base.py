@@ -41,6 +41,18 @@ class BaseGatewayAdapter(ABC):
     def cancel_order(self, payload: dict[str, Any]) -> dict[str, Any]:
         ...
 
+    def get_bars(self, symbol: str, timeframe: str, count: int) -> list[dict[str, Any]]:
+        """Fetch historical OHLCV bars. Optional — default returns empty list."""
+        return []
+
+    def get_symbol_info(self, symbol: str) -> dict[str, Any]:
+        """Fetch contract/symbol specifications. Optional — default returns empty dict."""
+        return {}
+
+    def get_open_orders(self) -> list[dict[str, Any]]:
+        """Fetch current pending orders. Optional — default returns empty list."""
+        return []
+
     def poll_output(self) -> tuple[str, Any] | None:
         try:
             return self.output_queue.get_nowait()

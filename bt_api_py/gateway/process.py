@@ -30,7 +30,15 @@ import time
 from pathlib import Path
 from typing import Any
 
+if sys.platform.startswith("win"):
+    import ctypes
+    from ctypes import wintypes
+
 logger = logging.getLogger(__name__)
+
+if sys.platform.startswith("win"):
+    _PROCESS_QUERY_LIMITED_INFORMATION = 0x1000
+    _STILL_ACTIVE = 259
 
 
 class GatewayProcess:
@@ -89,6 +97,20 @@ class GatewayProcess:
     @staticmethod
     def is_running(pid: int) -> bool:
         """Check whether a process with *pid* is alive."""
+        if sys.platform.startswith("win"):
+            if pid <= 0:
+                return False
+            kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+            handle = kernel32.OpenProcess(_PROCESS_QUERY_LIMITED_INFORMATION, False, pid)
+            if not handle:
+                return False
+            exit_code = wintypes.DWORD()
+            try:
+                if not kernel32.GetExitCodeProcess(handle, ctypes.byref(exit_code)):
+                    return False
+                return exit_code.value == _STILL_ACTIVE
+            finally:
+                kernel32.CloseHandle(handle)
         try:
             os.kill(pid, 0)
             return True

@@ -59,7 +59,7 @@ class TestTickWriterBasic:
         writer.write(_make_tick("ETHUSDT"))
         assert writer.buffered_count == 2
 
-        writer.write(_make_tick("ETHUSDT"))  # triggers flush
+        writer.write(_make_tick("ETHUSDT"))
         assert writer._total_flushed == 3
         assert writer.buffered_count == 0
 
@@ -68,7 +68,6 @@ class TestTickWriterBasic:
         writer.write(_make_tick("BTC-USDT-SWAP", price=50000))
         writer.write(_make_tick("BTC-USDT-SWAP", price=50001))
 
-        # Find the parquet file
         parquet_files = list(tmp_path.rglob("*.parquet"))
         assert len(parquet_files) == 1
         assert "BTC-USDT-SWAP.parquet" in parquet_files[0].name
@@ -84,13 +83,12 @@ class TestTickWriterBasic:
         writer = TickWriter(tmp_path, "BINANCE", "SWAP", flush_count=1)
         writer.write(_make_tick("BTCUSDT"))
 
-        # Should be: base_dir/BINANCE/SWAP/{YYYYMMDD}/BTCUSDT.parquet
         parquet_files = list(tmp_path.rglob("*.parquet"))
         assert len(parquet_files) == 1
         parts = parquet_files[0].relative_to(tmp_path).parts
         assert parts[0] == "BINANCE"
         assert parts[1] == "SWAP"
-        assert len(parts[2]) == 8  # YYYYMMDD
+        assert len(parts[2]) == 8
         assert parts[3] == "BTCUSDT.parquet"
 
     def test_append_to_existing(self, tmp_path):
@@ -122,7 +120,7 @@ class TestTickWriterLifecycle:
         assert writer._running is True
 
         writer.write(_make_tick("BTCUSDT"))
-        time.sleep(0.5)  # wait for flush loop
+        time.sleep(0.5)
         assert writer._total_flushed >= 1
 
         writer.stop()
@@ -144,7 +142,7 @@ class TestTickWriterLifecycle:
     def test_double_start_is_safe(self, tmp_path):
         writer = TickWriter(tmp_path, "BINANCE", "SWAP")
         writer.start()
-        writer.start()  # should not crash or create second thread
+        writer.start()
         writer.stop()
 
 

@@ -1,15 +1,18 @@
+import sys
+
 from bt_api_py.gateway.config import GatewayConfig
 from bt_api_py.gateway.models import GatewayTick
 from bt_api_py.gateway.protocol import dumps_message, loads_message
 
 
-def test_gateway_config_builds_ipc_endpoints():
+def test_gateway_config_builds_local_endpoints():
     config = GatewayConfig.from_kwargs(exchange_type="ctp", asset_type="future", account_id="acc-1")
     assert config.exchange_type == "CTP"
     assert config.asset_type == "FUTURE"
-    assert config.command_endpoint.startswith("ipc://")
-    assert config.event_endpoint.startswith("ipc://")
-    assert config.market_endpoint.startswith("ipc://")
+    expected_prefix = "tcp://" if sys.platform.startswith("win") else "ipc://"
+    assert config.command_endpoint.startswith(expected_prefix)
+    assert config.event_endpoint.startswith(expected_prefix)
+    assert config.market_endpoint.startswith(expected_prefix)
 
 
 def test_gateway_protocol_roundtrip_tick_payload():

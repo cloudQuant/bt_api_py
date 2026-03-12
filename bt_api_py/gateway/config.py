@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import sys
 import tempfile
 from dataclasses import dataclass
 from pathlib import Path
@@ -26,6 +27,8 @@ class GatewayConfig:
         self.asset_type = str(self.asset_type or "FUTURE").upper()
         self.account_id = str(self.account_id or "default")
         self.transport = str(self.transport or "ipc").lower()
+        if self.transport == "ipc" and sys.platform.startswith("win"):
+            self.transport = "tcp"
         if not self.base_dir:
             self.base_dir = str(Path(tempfile.gettempdir()) / "btgw")
         if not self.runtime_name:
