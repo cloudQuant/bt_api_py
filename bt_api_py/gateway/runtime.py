@@ -48,6 +48,7 @@ class GatewayRuntime:
         self.poller = zmq.Poller()
         self.adapter = self._create_adapter()
         self.running = False
+        self._adapter_connected = False
         self.thread: threading.Thread | None = None
 
         # Core sub-systems
@@ -88,6 +89,7 @@ class GatewayRuntime:
         if self.running:
             return
         self.health.set_state(GatewayState.STARTING)
+        self._adapter_connected = False
         self.command_socket = self.context.socket(zmq.ROUTER)
         self.event_socket = self.context.socket(zmq.PUB)
         self.market_socket = self.context.socket(zmq.PUB)
@@ -95,17 +97,22 @@ class GatewayRuntime:
         self.event_socket.bind(self.config.event_endpoint)
         self.market_socket.bind(self.config.market_endpoint)
         self.poller.register(self.command_socket, zmq.POLLIN)
-        self.adapter.connect()
-        self.health.update_market_connection(ConnectionState.CONNECTED)
         if self.tick_writer is not None:
             self.tick_writer.start()
         self.running = True
         self.health.set_state(GatewayState.RUNNING)
+        # Connect adapter in a background thread so the command loop can
+        # immediately respond to ping / health requests.
+        adapter_thread = threading.Thread(
+            target=self._connect_adapter_background, daemon=True,
+        )
+        adapter_thread.start()
         logger.info("GatewayRuntime started: %s", self.config.exchange_type)
         while self.running:
             try:
                 self._handle_commands()
-                self._flush_adapter_output()
+                if self._adapter_connected:
+                    self._flush_adapter_output()
             except zmq.ZMQError:
                 if not self.running:
                     break
@@ -117,7 +124,10 @@ class GatewayRuntime:
             return
         self.thread = threading.Thread(target=self.start, daemon=True)
         self.thread.start()
-        time.sleep(0.2)
+        # Wait until the command loop is running so callers can ping immediately.
+        deadline = time.monotonic() + 2.0
+        while not self.running and time.monotonic() < deadline:
+            time.sleep(0.05)
 
     def stop(self) -> None:
         self.health.set_state(GatewayState.STOPPING)
@@ -175,15 +185,43 @@ class GatewayRuntime:
         self.command_socket.send_multipart([identity, dumps_message(response)])
         self._publish(CHANNEL_EVENT, {"kind": "command_result", **response, "command": command})
 
+    def _connect_adapter_background(self) -> None:
+        """Connect the exchange adapter with retries; runs in a background thread."""
+        max_retries = 3
+        for attempt in range(max_retries):
+            if not self.running:
+                return
+            try:
+                self.adapter.connect()
+                self._adapter_connected = True
+                self.health.update_market_connection(ConnectionState.CONNECTED)
+                logger.info(
+                    "Adapter connected: %s (attempt %d)",
+                    self.config.exchange_type, attempt + 1,
+                )
+                return
+            except Exception as exc:
+                logger.warning(
+                    "Adapter connect attempt %d/%d failed: %s",
+                    attempt + 1, max_retries, exc,
+                )
+                self.health.record_error("adapter_connect", str(exc))
+                if attempt < max_retries - 1 and self.running:
+                    time.sleep(2.0)
+        logger.error(
+            "Adapter failed to connect after %d attempts for %s",
+            max_retries, self.config.exchange_type,
+        )
+
     def _dispatch(self, command: str, payload: dict[str, Any]) -> Any:
         if command == "ping":
             self.health.record_heartbeat()
-            return {"ready": True}
+            return {"ready": self._adapter_connected}
         if command == "register_strategy":
             strategy_id = str(payload.get("strategy_id") or "")
             symbols = list(payload.get("symbols") or [])
             newly = self.subscriptions.add(strategy_id, symbols)
-            if newly:
+            if newly and self._adapter_connected:
                 self.adapter.subscribe_symbols(list(newly))
             self._sync_health_counts()
             return {"strategy_id": strategy_id, "newly_subscribed": sorted(newly)}
@@ -192,6 +230,12 @@ class GatewayRuntime:
             removed = self.subscriptions.remove_strategy(strategy_id)
             self._sync_health_counts()
             return {"strategy_id": strategy_id, "unsubscribed": sorted(removed)}
+        if command == "health":
+            return self.health.snapshot()
+        if not self._adapter_connected:
+            raise RuntimeError(
+                f"adapter not yet connected, cannot execute: {command}"
+            )
         if command == "subscribe":
             symbols = list(payload.get("symbols") or [])
             strategy_id = str(payload.get("strategy_id") or "default")
@@ -229,8 +273,6 @@ class GatewayRuntime:
             return self.adapter.get_symbol_info(symbol)
         if command == "get_open_orders":
             return self.adapter.get_open_orders()
-        if command == "health":
-            return self.health.snapshot()
         raise ValueError(f"unsupported command: {command}")
 
     def _flush_adapter_output(self) -> None:

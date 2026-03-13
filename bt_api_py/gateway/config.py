@@ -19,7 +19,7 @@ class GatewayConfig:
     event_endpoint: str = ""
     market_endpoint: str = ""
     command_timeout_sec: float = 5.0
-    startup_timeout_sec: float = 10.0
+    startup_timeout_sec: float = 30.0
     poll_timeout_ms: int = 100
 
     def __post_init__(self) -> None:

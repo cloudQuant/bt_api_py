@@ -213,11 +213,27 @@ def _ignore_ds(d, files):
 
 
 class _BuildExt(build_ext):
-    """编译后将 CTP runtime 库 (.so/.dll/.framework) 复制到扩展输出目录"""
+    """编译后将 CTP runtime 库 (.so/.dll/.framework) 复制到扩展输出目录
+
+    如果编译失败 (例如 LFS 指针文件未拉取、缺少 CTP 库)，
+    则打印警告并继续安装纯 Python 部分。
+    """
 
     def run(self):
-        super().run()
+        try:
+            super().run()
+        except Exception as e:
+            print(f"\n*** WARNING: Failed to build C/C++ extensions: {e}")
+            print("*** Pure-Python install will continue without native extensions.\n")
+            return
         self._copy_ctp_runtime_libs()
+
+    def build_extension(self, ext):
+        try:
+            super().build_extension(ext)
+        except Exception as e:
+            print(f"\n*** WARNING: Skipping extension '{ext.name}': {e}\n")
+            return
 
     def _copy_ctp_runtime_libs(self):
         # 找到 _ctp extension 的输出路径, 从中推导目标目录

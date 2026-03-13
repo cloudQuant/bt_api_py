@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import collections
+import logging
+import time
 import uuid
 from copy import deepcopy
 from typing import Any
@@ -45,6 +47,7 @@ class GatewayClient:
         self.event_socket.connect(self.config.event_endpoint)
         self._command("ping")
         self.connected = True
+        self._wait_for_adapter_ready()
 
     def start(self) -> None:
         self.connect()
@@ -63,6 +66,32 @@ class GatewayClient:
 
     def stop(self) -> None:
         self.disconnect()
+
+    def _wait_for_adapter_ready(self) -> None:
+        """Poll ping until the gateway adapter reports ready.
+
+        Uses ``startup_timeout_sec`` from the config (default 30s).
+        If the adapter does not become ready within the timeout, a warning
+        is logged but no exception is raised — individual commands will
+        return clear errors instead.
+        """
+        timeout = float(self.config.startup_timeout_sec or 30.0)
+        logger = logging.getLogger(__name__)
+        deadline = time.monotonic() + timeout
+        interval = 0.5
+        while time.monotonic() < deadline:
+            try:
+                result = self._command("ping")
+                if isinstance(result, dict) and result.get("ready"):
+                    logger.info("Gateway adapter ready")
+                    return
+            except Exception:
+                pass
+            time.sleep(interval)
+        logger.warning(
+            "Gateway adapter not ready after %.1fs — commands may fail until connected",
+            timeout,
+        )
 
     def subscribe(self, symbols) -> dict[str, Any]:
         values = [symbols] if isinstance(symbols, str) else list(symbols or [])

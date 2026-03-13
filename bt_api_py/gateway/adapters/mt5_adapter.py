@@ -115,7 +115,7 @@ class Mt5GatewayAdapter(BaseGatewayAdapter):
         self._thread.start()
         future = asyncio.run_coroutine_threadsafe(self._async_connect(), self._loop)
         future.result(timeout=self._timeout)
-        self.logger.info("Mt5GatewayAdapter connected (login=%s)", self._login)
+        self.logger.info(f"Mt5GatewayAdapter connected (login={self._login})")
 
     def disconnect(self) -> None:
         if not self._running:
@@ -146,18 +146,19 @@ class Mt5GatewayAdapter(BaseGatewayAdapter):
         return {"symbols": symbols}
 
     def get_balance(self) -> dict[str, Any]:
-        future = asyncio.run_coroutine_threadsafe(self._client.get_account(), self._loop)
-        raw = future.result(timeout=self._timeout)
-        if not isinstance(raw, dict):
-            raw = {}
+        future = asyncio.run_coroutine_threadsafe(self._client.get_account_summary(), self._loop)
+        acct = future.result(timeout=self._timeout)
         return {
-            "balance": raw.get("balance", 0.0),
-            "equity": raw.get("equity", 0.0),
-            "credit": raw.get("credit", 0.0),
-            "currency": raw.get("currency", ""),
-            "leverage": raw.get("leverage", 0),
-            "cash": raw.get("balance", 0.0),
-            "value": raw.get("equity", 0.0),
+            "balance": getattr(acct, "balance", 0.0),
+            "equity": getattr(acct, "equity", 0.0),
+            "credit": getattr(acct, "credit", 0.0),
+            "currency": getattr(acct, "currency", ""),
+            "leverage": getattr(acct, "leverage", 0),
+            "cash": getattr(acct, "balance", 0.0),
+            "value": getattr(acct, "equity", 0.0),
+            "margin": getattr(acct, "margin", 0.0),
+            "margin_free": getattr(acct, "margin_free", 0.0),
+            "profit": getattr(acct, "profit", 0.0),
         }
 
     def get_positions(self) -> list[dict[str, Any]]:
@@ -279,7 +280,7 @@ class Mt5GatewayAdapter(BaseGatewayAdapter):
             "max_reconnect_attempts": self._max_reconnect_attempts,
         }
         if self._ws_uri:
-            client_kwargs["ws_uri"] = self._ws_uri
+            client_kwargs["uri"] = self._ws_uri
         if self._heartbeat_interval:
             client_kwargs["heartbeat_interval"] = self._heartbeat_interval
         if self._timeout:
@@ -292,16 +293,13 @@ class Mt5GatewayAdapter(BaseGatewayAdapter):
 
         # Register push callbacks
         self._client.on_tick(self._on_tick_push)
-        self._client.on_trade_transaction(self._on_transaction_push)
-        self._client.on_trade_result(self._on_trade_result_push)
         self._client.on_disconnect(self._on_ws_disconnect)
-
         try:
-            self._client.on_account_update(self._on_account_push)
+            self._client.on_order_update(self._on_order_update_push)
         except Exception:
             pass
         try:
-            self._client.on_login_status(self._on_login_status_push)
+            self._client.on_position_update(self._on_position_update_push)
         except Exception:
             pass
 
@@ -437,80 +435,44 @@ class Mt5GatewayAdapter(BaseGatewayAdapter):
             )
             self.emit(CHANNEL_MARKET, gateway_tick)
 
-    def _on_transaction_push(self, data: dict) -> None:
-        update_type = data.get("update_type")
-
-        if update_type == 2:
-            # Balance update with deal fills — emit kind="trade" per deal
-            for deal in (data.get("deals") or []):
-                trade_action = deal.get("trade_action", -1)
-                side = "buy" if trade_action == 0 else "sell"
-                self.emit(CHANNEL_EVENT, {
-                    "kind": "trade",
-                    "exchange": "MT5",
-                    "trade_id": str(deal.get("deal") or deal.get("deal_id") or ""),
-                    "external_order_id": str(deal.get("trade_order") or ""),
-                    "order_ref": str(deal.get("trade_order") or ""),
-                    "data_name": deal.get("trade_symbol", ""),
-                    "side": side,
-                    "size": abs(float(deal.get("trade_volume") or 0)),
-                    "price": float(deal.get("price_open") or 0.0),
-                    "commission": float(deal.get("commission") or 0.0),
-                    "profit": float(deal.get("profit") or 0.0),
-                    "position_id": deal.get("position_id"),
-                })
-        else:
-            # Order transaction (add/update/delete) — emit kind="order"
-            order_data = data.get("order") or {}
-            txn_type = data.get("transaction_type", -1)
-            order_state = order_data.get("order_state")
+    def _on_order_update_push(self, orders: list[dict]) -> None:
+        for o in orders:
+            order_state = o.get("order_state")
             status = _MT5_ORDER_STATE_MAP.get(order_state, "submitted")
-            if txn_type == 2:  # delete
-                status = "canceled"
             self.emit(CHANNEL_EVENT, {
                 "kind": "order",
                 "exchange": "MT5",
                 "status": status,
-                "external_order_id": str(order_data.get("trade_order") or ""),
-                "order_ref": str(order_data.get("trade_order") or ""),
-                "data_name": order_data.get("trade_symbol", ""),
-                "side": "buy" if order_data.get("order_type", 0) in (0, 2, 4) else "sell",
-                "price": float(order_data.get("price_order") or 0.0),
-                "size": float(order_data.get("volume_initial") or 0.0),
-                "filled": float((order_data.get("volume_initial") or 0) - (order_data.get("volume_current") or 0)),
-                "remaining": float(order_data.get("volume_current") or 0.0),
-                "transaction_type": txn_type,
+                "external_order_id": str(o.get("order_id") or o.get("trade_order") or ""),
+                "order_ref": str(o.get("order_id") or o.get("trade_order") or ""),
+                "data_name": o.get("trade_symbol", ""),
+                "side": "buy" if o.get("order_type", 0) in (0, 2, 4) else "sell",
+                "price": float(o.get("price_order") or 0.0),
+                "size": float(o.get("volume_initial") or 0.0),
+                "filled": float(
+                    (o.get("volume_initial") or 0) - (o.get("volume_current") or 0)
+                ),
+                "remaining": float(o.get("volume_current") or 0.0),
             })
 
-    def _on_trade_result_push(self, data: dict) -> None:
-        result = data.get("result", {})
-        retcode = result.get("retcode", -1)
-        self.emit(CHANNEL_EVENT, {
-            "kind": "order",
-            "exchange": "MT5",
-            "status": _RETCODE_STATUS.get(retcode, "unknown"),
-            "retcode": retcode,
-            "order_id": result.get("order"),
-            "external_order_id": result.get("order"),
-            "deal": result.get("deal"),
-            "price": result.get("price"),
-            "volume": result.get("volume"),
-        })
-
-    def _on_account_push(self, data: dict) -> None:
-        self.emit(CHANNEL_EVENT, {
-            "kind": "account_update",
-            "exchange": "MT5",
-            "data": data,
-        })
-
-    def _on_login_status_push(self, data: Any) -> None:
-        self.emit(CHANNEL_EVENT, {
-            "kind": "health",
-            "exchange": "MT5",
-            "type": "login_status",
-            "data": str(data),
-        })
+    def _on_position_update_push(self, positions: list[dict]) -> None:
+        for p in positions:
+            trade_action = p.get("trade_action", -1)
+            side = "buy" if trade_action == 0 else "sell"
+            self.emit(CHANNEL_EVENT, {
+                "kind": "trade",
+                "exchange": "MT5",
+                "trade_id": str(p.get("position_id") or ""),
+                "external_order_id": str(p.get("order_id") or ""),
+                "order_ref": str(p.get("order_id") or ""),
+                "data_name": p.get("trade_symbol", ""),
+                "side": side,
+                "size": abs(float(p.get("trade_volume") or 0)),
+                "price": float(p.get("price_open") or 0.0),
+                "commission": float(p.get("commission") or 0.0),
+                "profit": float(p.get("profit") or 0.0),
+                "position_id": p.get("position_id"),
+            })
 
     def _on_ws_disconnect(self) -> None:
         self.emit(CHANNEL_EVENT, {
