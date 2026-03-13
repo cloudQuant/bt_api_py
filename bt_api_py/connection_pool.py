@@ -59,6 +59,7 @@ class ConnectionPool(Generic[T]):
         self._pool: deque[tuple[T, float]] = deque()
         self._in_use: set[T] = set()
         self._lock = threading.Lock()
+        self._condition = threading.Condition(self._lock)
         self._cleanup_thread: threading.Thread | None = None
         self._running = False
 
@@ -103,13 +104,16 @@ class ConnectionPool(Generic[T]):
                 self._close_connection(conn)
 
             # Close in-use connections
-            for conn in self._in_use:
+            for conn in tuple(self._in_use):
                 self._close_connection(conn)
             self._in_use.clear()
 
-    def acquire(self) -> T:
+    def acquire(self, timeout: float | None = None) -> T:
         """
         Acquire a connection from the pool.
+
+        Args:
+            timeout: Optional maximum seconds to wait for a released connection.
 
         Returns:
             A connection instance.
@@ -117,27 +121,31 @@ class ConnectionPool(Generic[T]):
         Raises:
             RuntimeError: If connection pool is exhausted.
         """
-        with self._lock:
-            # Try to get from pool
-            while self._pool:
-                conn, _ = self._pool.popleft()
+        deadline = None if timeout is None else time.monotonic() + timeout
+        with self._condition:
+            while True:
+                while self._pool:
+                    conn, _ = self._pool.popleft()
 
-                # Check health
-                if self._health_check and not self._health_check(conn):
-                    self._close_connection(conn)
-                    continue
+                    if self._health_check and not self._health_check(conn):
+                        self._close_connection(conn)
+                        continue
 
-                self._in_use.add(conn)
-                return conn
+                    self._in_use.add(conn)
+                    return conn
 
-            # Create new connection if under max size
-            if len(self._in_use) < self._max_size:
-                conn = self._factory()
-                self._in_use.add(conn)
-                return conn
+                if len(self._in_use) < self._max_size:
+                    conn = self._factory()
+                    self._in_use.add(conn)
+                    return conn
 
-            # Pool exhausted, wait and retry
-            raise RuntimeError("Connection pool exhausted")
+                if timeout is None:
+                    raise RuntimeError("Connection pool exhausted")
+
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    raise RuntimeError("Connection pool acquire timeout")
+                self._condition.wait(timeout=remaining)
 
     def release(self, conn: T) -> None:
         """
@@ -149,7 +157,7 @@ class ConnectionPool(Generic[T]):
         Returns:
             None
         """
-        with self._lock:
+        with self._condition:
             if conn not in self._in_use:
                 return
 
@@ -162,6 +170,7 @@ class ConnectionPool(Generic[T]):
 
             # Add back to pool with current timestamp
             self._pool.append((conn, time.time()))
+            self._condition.notify()
 
     def _cleanup_loop(self) -> None:
         """Background thread to cleanup idle connections."""
@@ -171,7 +180,7 @@ class ConnectionPool(Generic[T]):
 
     def _cleanup_idle_connections(self) -> None:
         """Remove idle connections exceeding max_idle_time."""
-        with self._lock:
+        with self._condition:
             now = time.time()
             new_pool: deque[tuple[T, float]] = deque()
 
@@ -188,6 +197,7 @@ class ConnectionPool(Generic[T]):
             while len(self._pool) < self._min_size:
                 conn = self._factory()
                 self._pool.append((conn, now))
+            self._condition.notify_all()
 
     def _close_connection(self, conn: T) -> None:
         """Close a connection (override for custom cleanup)."""
@@ -249,7 +259,8 @@ class AsyncConnectionPool(Generic[T]):
         Returns:
             A connection instance.
         """
-        async with self._semaphore, self._lock:
+        await self._semaphore.acquire()
+        async with self._lock:
             # Try to get from pool
             while self._pool:
                 conn, _ = self._pool.popleft()
@@ -279,6 +290,7 @@ class AsyncConnectionPool(Generic[T]):
             if conn in self._in_use:
                 self._in_use.remove(conn)
                 self._pool.append((conn, time.time()))
+                self._semaphore.release()
 
 
 class PooledConnection(Generic[T]):

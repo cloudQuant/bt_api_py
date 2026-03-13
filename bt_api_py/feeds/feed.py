@@ -1,7 +1,9 @@
 """feed类, 用于处理数据、获取数据、向交易所传递数据"""
 
 import time as _time
+from collections.abc import Mapping
 from typing import Any
+from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 from bt_api_py.exceptions import RequestError, RequestFailedError, RequestTimeoutError
 from bt_api_py.feeds.capability import CapabilityMixin
@@ -30,6 +32,55 @@ class Feed(AsyncBase, ConnectionMixin, CapabilityMixin):
             proxies=self.proxies,
         )
 
+    def _is_sensitive_key(self, key: Any) -> bool:
+        normalized = str(key).replace("-", "").replace("_", "").lower()
+        sensitive_tokens = (
+            "apikey",
+            "accesskey",
+            "secret",
+            "token",
+            "signature",
+            "password",
+            "passphrase",
+            "authorization",
+            "privatekey",
+            "publickey",
+        )
+        return any(token in normalized for token in sensitive_tokens)
+
+    def _sanitize_for_log(self, value: Any) -> Any:
+        if isinstance(value, Mapping):
+            return {
+                key: "***" if self._is_sensitive_key(key) else self._sanitize_for_log(item)
+                for key, item in value.items()
+            }
+        if isinstance(value, list):
+            return [self._sanitize_for_log(item) for item in value]
+        if isinstance(value, tuple):
+            return tuple(self._sanitize_for_log(item) for item in value)
+        return value
+
+    def _sanitize_url_for_log(self, url: Any) -> Any:
+        if not isinstance(url, str):
+            return url
+        parsed = urlsplit(url)
+        if not parsed.query:
+            return url
+        query_items = parse_qsl(parsed.query, keep_blank_values=True)
+        sanitized_query = [
+            (key, "***" if self._is_sensitive_key(key) else value)
+            for key, value in query_items
+        ]
+        return urlunsplit(
+            (
+                parsed.scheme,
+                parsed.netloc,
+                parsed.path,
+                urlencode(sanitized_query, doseq=True),
+                parsed.fragment,
+            )
+        )
+
     def handle_timeout_exception(self, url, method, body, timeout, e):
         """
         handle timeout exception
@@ -40,11 +91,13 @@ class Feed(AsyncBase, ConnectionMixin, CapabilityMixin):
         :param e: exception type, exception value, exception traceback
         :return: None
         """
+        sanitized_url = self._sanitize_url_for_log(url)
+        sanitized_body = self._sanitize_for_log(body)
         self.logger.warning(
             f"exchange -> {self.exchange_name}\n "
-            f"url -> {url},\n "
+            f"url -> {sanitized_url},\n "
             f"method -> {method},\n "
-            f"body -> {body},\n"
+            f"body -> {sanitized_body},\n"
             f"rest timeout -> {timeout}s,\n"
             f"e -> {e}"
         )
@@ -59,12 +112,14 @@ class Feed(AsyncBase, ConnectionMixin, CapabilityMixin):
         :param exception: exception type, exception value, exception traceback
         :return: None
         """
+        sanitized_url = self._sanitize_url_for_log(url)
+        sanitized_body = self._sanitize_for_log(body)
         self.logger.warning(
             f"exchange -> {self.exchange_name}\n "
             f"rest error -> \n "
-            f"URL -> {url}\n"
+            f"URL -> {sanitized_url}\n"
             f"METHOD -> {method}\n"
-            f"BODY -> {body}\n"
+            f"BODY -> {sanitized_body}\n"
             f"ERROR: {exception}"
         )
         raise exception
@@ -78,7 +133,12 @@ class Feed(AsyncBase, ConnectionMixin, CapabilityMixin):
         :param e: exception type, exception value, exception traceback
         :return: None
         """
-        self.logger.warning(f"url -> {url},\n headers -> {headers},\n body:{body},\n e:{e}")
+        sanitized_url = self._sanitize_url_for_log(url)
+        sanitized_headers = self._sanitize_for_log(headers)
+        sanitized_body = self._sanitize_for_log(body)
+        self.logger.warning(
+            f"url -> {sanitized_url},\n headers -> {sanitized_headers},\n body:{sanitized_body},\n e:{e}"
+        )
         self.raise400(self.exchange_name)
 
     def raise_path_error(self, *args):
@@ -138,18 +198,18 @@ class Feed(AsyncBase, ConnectionMixin, CapabilityMixin):
                 )
             except RequestFailedError as e:
                 msg = str(e)
-                # Non-retryable: 404/410 endpoint errors
-                if "404" in msg or "410" in msg:
+                status_code = getattr(e, "status_code", None)
+                if status_code in (404, 410) or "404" in msg or "410" in msg:
                     raise RequestError(
                         self.exchange_name,
                         detail=f"endpoint gone/not found: {url}",
                     ) from None
-                # Retryable errors (timeout, connection, etc.)
                 if attempt < max_retries - 1:
-                    self.logger.warning(f"Retry {attempt + 1}/{max_retries} for {url}: {e}")
-                    _time.sleep(1)
+                    self.logger.warning(
+                        f"Retry {attempt + 1}/{max_retries} for {self._sanitize_url_for_log(url)}: {e}"
+                    )
+                    _time.sleep(min(0.5 * (2**attempt), 2.0))
                     continue
-                # Final attempt failed
                 if "timeout" in msg.lower():
                     self.handle_timeout_exception(url, method, body, timeout, e)
                 else:
@@ -157,9 +217,10 @@ class Feed(AsyncBase, ConnectionMixin, CapabilityMixin):
             except Exception as e:
                 if attempt < max_retries - 1:
                     self.logger.warning(
-                        f"Retry {attempt + 1}/{max_retries} unexpected error for {url}: {e}"
+                        f"Retry {attempt + 1}/{max_retries} unexpected error for "
+                        f"{self._sanitize_url_for_log(url)}: {e}"
                     )
-                    _time.sleep(1)
+                    _time.sleep(min(0.5 * (2**attempt), 2.0))
                     continue
                 self.handle_request_exception(url, method, body, e)
 

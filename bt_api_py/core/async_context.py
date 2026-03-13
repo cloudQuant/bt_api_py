@@ -331,25 +331,27 @@ class AsyncTaskGroup:
         if not self._tasks:
             return
 
+        tasks_snapshot = set(self._tasks)
         if timeout is not None:
             try:
                 await asyncio.wait_for(
-                    asyncio.gather(*self._tasks, return_exceptions=True), timeout=timeout
+                    asyncio.gather(*tasks_snapshot, return_exceptions=True), timeout=timeout
                 )
             except TimeoutError:
                 # Cancel all tasks on timeout
-                for task in self._tasks:
+                for task in set(self._tasks):
                     task.cancel()
-                await asyncio.gather(*self._tasks, return_exceptions=True)
+                await asyncio.gather(*set(self._tasks), return_exceptions=True)
                 raise
         else:
-            await asyncio.gather(*self._tasks, return_exceptions=True)
+            await asyncio.gather(*tasks_snapshot, return_exceptions=True)
 
     async def cancel_all(self) -> None:
         """Cancel all tasks."""
-        for task in self._tasks:
+        tasks_snapshot = set(self._tasks)
+        for task in tasks_snapshot:
             task.cancel()
-        await asyncio.gather(*self._tasks, return_exceptions=True)
+        await asyncio.gather(*tasks_snapshot, return_exceptions=True)
 
     def task_count(self) -> int:
         """Get number of active tasks."""

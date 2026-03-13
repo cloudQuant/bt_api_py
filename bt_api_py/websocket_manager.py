@@ -11,6 +11,7 @@ from collections import defaultdict
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any
+from urllib.parse import urlparse
 
 import websockets
 
@@ -37,6 +38,23 @@ class WebSocketConfig:
     subscription_limits: dict[str, int] = field(
         default_factory=lambda: {"ticker": 100, "depth": 50, "trades": 100, "kline": 200}
     )
+
+    def __post_init__(self) -> None:
+        parsed = urlparse(self.url)
+        if parsed.scheme not in {"ws", "wss"} or not parsed.netloc:
+            raise ValueError("url must be a valid ws/wss URL")
+        if not isinstance(self.exchange_name, str) or not self.exchange_name.strip():
+            raise ValueError("exchange_name must be a non-empty string")
+        if not isinstance(self.max_connections, int) or self.max_connections <= 0:
+            raise ValueError("max_connections must be a positive integer")
+        if self.heartbeat_interval <= 0:
+            raise ValueError("heartbeat_interval must be > 0")
+        if self.reconnect_interval <= 0:
+            raise ValueError("reconnect_interval must be > 0")
+        if not isinstance(self.max_reconnect_attempts, int) or self.max_reconnect_attempts < 0:
+            raise ValueError("max_reconnect_attempts must be >= 0")
+        if not isinstance(self.message_queue_size, int) or self.message_queue_size <= 0:
+            raise ValueError("message_queue_size must be a positive integer")
 
 
 @dataclass
@@ -231,7 +249,7 @@ class WebSocketConnection:
                     self._stats["messages_received"] += 1
 
                     # Handle compression
-                    if self.config.compression and raw_message.startswith(b"\x78\x9c"):
+                    if self.config.compression and isinstance(raw_message, bytes) and raw_message.startswith(b"\x78\x9c"):
                         raw_message = zlib.decompress(raw_message)
 
                     # Parse message

@@ -39,16 +39,16 @@ show_help() {
 }
 
 # 默认参数
-VERBOSE=""
+VERBOSE_ARGS=()
 WORKERS=4
-HTML_REPORT=""
+HTML_REPORT_ARGS=()
 TEST_TYPE="all"
 
 # 解析参数
 while [[ $# -gt 0 ]]; do
     case $1 in
         -v|--verbose)
-            VERBOSE="-v"
+            VERBOSE_ARGS=(-v)
             shift
             ;;
         -n)
@@ -56,7 +56,7 @@ while [[ $# -gt 0 ]]; do
             shift 2
             ;;
         --html)
-            HTML_REPORT="--html=reports/market_tests.html --self-contained-html"
+            HTML_REPORT_ARGS=(--html=reports/market_tests.html --self-contained-html)
             shift
             ;;
         -h|--help)
@@ -111,12 +111,12 @@ mkdir -p reports
 echo -e "${YELLOW}开始测试...${NC}"
 echo ""
 
-CMD="pytest tests -m \"${MARKER}\" -n ${WORKERS} ${VERBOSE} ${HTML_REPORT} --tb=short"
+CMD=(pytest tests -m "$MARKER" -n "$WORKERS" "${VERBOSE_ARGS[@]}" "${HTML_REPORT_ARGS[@]}" --tb=short)
 
-echo "执行命令: $CMD"
+echo "执行命令: ${CMD[*]}"
 echo ""
 
-eval $CMD
+"${CMD[@]}"
 
 EXIT_CODE=$?
 
@@ -124,7 +124,7 @@ EXIT_CODE=$?
 echo ""
 if [ $EXIT_CODE -eq 0 ]; then
     echo -e "${GREEN}✅ 测试通过！${NC}"
-    if [ -n "$HTML_REPORT" ]; then
+    if [ ${#HTML_REPORT_ARGS[@]} -gt 0 ]; then
         echo -e "${GREEN}📊 HTML报告已生成: reports/market_tests.html${NC}"
     fi
 else

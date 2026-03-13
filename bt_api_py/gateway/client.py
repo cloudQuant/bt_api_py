@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import collections
 import uuid
+from copy import deepcopy
 from typing import Any
 
 import zmq
@@ -104,7 +105,7 @@ class GatewayClient:
     def submit_order(self, payload: dict[str, Any]) -> dict[str, Any]:
         response = dict(self._command("place_order", payload))
         if "data_name" not in response and payload.get("data_name") not in (None, ""):
-            response["data_name"] = payload["data_name"]
+            response = {**response, "data_name": payload["data_name"]}
         self._remember_order(response)
         return response
 
@@ -173,9 +174,14 @@ class GatewayClient:
             self.broker_updates.append(payload)
 
     def _remember_order(self, payload: dict[str, Any]) -> None:
-        keys = [payload.get("external_order_id"), payload.get("order_id"), payload.get("order_ref")]
+        payload_copy = deepcopy(payload)
+        keys = [
+            payload_copy.get("external_order_id"),
+            payload_copy.get("order_id"),
+            payload_copy.get("order_ref"),
+        ]
         for key in keys:
             if key not in (None, ""):
-                merged = dict(self.pending_orders.get(str(key), {}))
-                merged.update(payload)
+                existing = deepcopy(self.pending_orders.get(str(key), {}))
+                merged = {**existing, **payload_copy}
                 self.pending_orders[str(key)] = merged

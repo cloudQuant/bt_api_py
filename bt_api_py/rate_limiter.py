@@ -5,6 +5,7 @@
 """
 
 import asyncio
+import contextlib
 import fnmatch
 import threading
 import time
@@ -78,18 +79,27 @@ class SlidingWindowLimiter:
         self._requests: deque[tuple[float, int]] = deque()
         self._lock = threading.Lock()
 
+    def _prune_expired_locked(self, now: float) -> None:
+        cutoff = now - self.interval
+        while self._requests and self._requests[0][0] < cutoff:
+            self._requests.popleft()
+
     def acquire(self, weight: int = 1) -> bool:
         with self._lock:
             now = time.time()
-            cutoff = now - self.interval
-            while self._requests and self._requests[0][0] < cutoff:
-                self._requests.popleft()
-
+            self._prune_expired_locked(now)
             current_weight = sum(w for _, w in self._requests)
             if current_weight + weight <= self.limit:
                 self._requests.append((now, weight))
                 return True
             return False
+
+    def release(self, weight: int = 1) -> None:
+        with self._lock:
+            now = time.time()
+            self._prune_expired_locked(now)
+            if self._requests and self._requests[-1][1] == weight:
+                self._requests.pop()
 
     def wait_time(self) -> float:
         with self._lock:
@@ -102,8 +112,8 @@ class SlidingWindowLimiter:
     def current_usage(self) -> int:
         with self._lock:
             now = time.time()
-            cutoff = now - self.interval
-            return sum(w for t, w in self._requests if t >= cutoff)
+            self._prune_expired_locked(now)
+            return sum(w for _, w in self._requests)
 
 
 class FixedWindowLimiter:
@@ -129,6 +139,10 @@ class FixedWindowLimiter:
                 self._window_count += weight
                 return True
             return False
+
+    def release(self, weight: int = 1) -> None:
+        with self._lock:
+            self._window_count = max(0, self._window_count - weight)
 
     def wait_time(self) -> float:
         with self._lock:
@@ -176,12 +190,24 @@ class RateLimiter:
     def __init__(self, rules: list[RateLimitRule] | None = None) -> None:
         self.rules = rules or []
         self._limiters: dict[str, Any] = {}
+        self._lock = threading.Lock()
 
         for rule in self.rules:
             if rule.type == RateLimitType.SLIDING_WINDOW:
                 self._limiters[rule.name] = SlidingWindowLimiter(rule.interval, rule.limit)
             elif rule.type == RateLimitType.FIXED_WINDOW:
                 self._limiters[rule.name] = FixedWindowLimiter(rule.interval, rule.limit)
+
+    def _get_matched_rules(self, method: str, path: str) -> list[RateLimitRule]:
+        return [rule for rule in self.rules if rule.match(method, path)]
+
+    def _get_max_wait_time(self, method: str, path: str) -> float:
+        max_wait = 0.0
+        for rule in self._get_matched_rules(method, path):
+            limiter = self._limiters.get(rule.name)
+            if limiter is not None:
+                max_wait = max(max_wait, limiter.wait_time())
+        return max_wait
 
     def __enter__(self):
         """进入上下文管理器（阻塞等待获取许可）."""
@@ -196,18 +222,26 @@ class RateLimiter:
         if not self.rules:
             return True
 
-        matched_rules = [r for r in self.rules if r.match(method, path)]
+        matched_rules = self._get_matched_rules(method, path)
         if not matched_rules:
             return True
 
-        for rule in matched_rules:
-            limiter = self._limiters.get(rule.name)
-            if limiter is None:
-                continue
-            request_weight = rule.get_weight(method, path) * weight
-            if not limiter.acquire(request_weight):
+        with self._lock:
+            acquired_limiters: list[tuple[Any, int]] = []
+            for rule in matched_rules:
+                limiter = self._limiters.get(rule.name)
+                if limiter is None:
+                    continue
+                request_weight = rule.get_weight(method, path) * weight
+                if limiter.acquire(request_weight):
+                    acquired_limiters.append((limiter, request_weight))
+                    continue
+                for acquired_limiter, acquired_weight in reversed(acquired_limiters):
+                    release = getattr(acquired_limiter, "release", None)
+                    if release is not None:
+                        release(acquired_weight)
                 return False
-        return True
+            return True
 
     def wait_and_acquire(
         self,
@@ -217,27 +251,34 @@ class RateLimiter:
         timeout: float | None = None,
     ) -> bool:
         """同步阻塞获取许可."""
-        start = time.time()
+        start = time.monotonic()
         while True:
             if self.acquire(method, path, weight):
                 return True
-            # 找到最长等待时间
-            max_wait = 0.0
-            matched_rules = [r for r in self.rules if r.match(method, path)]
-            for rule in matched_rules:
-                limiter = self._limiters.get(rule.name)
-                if limiter:
-                    max_wait = max(max_wait, limiter.wait_time())
-            if timeout is not None and (time.time() - start + max_wait) > timeout:
+            wait_interval = self._get_max_wait_time(method, path)
+            effective_wait = wait_interval if wait_interval > 0 else 0.05
+            if timeout is not None and (time.monotonic() - start + effective_wait) > timeout:
                 return False
-            time.sleep(min(max_wait, 1.0) if max_wait > 0 else 0.05)
+            threading.Event().wait(min(effective_wait, 1.0))
 
-    async def async_acquire(self, method: str = "", path: str = "", weight: int = 1) -> bool:
+    async def async_acquire(
+        self,
+        method: str = "",
+        path: str = "",
+        weight: int = 1,
+        timeout: float | None = None,
+    ) -> bool:
         """异步获取限流许可（自动等待）."""
+        start = time.monotonic()
         while True:
             if self.acquire(method, path, weight):
                 return True
-            await asyncio.sleep(0.05)
+            wait_interval = self._get_max_wait_time(method, path)
+            effective_wait = wait_interval if wait_interval > 0 else 0.05
+            if timeout is not None and (time.monotonic() - start + effective_wait) > timeout:
+                return False
+            with contextlib.suppress(TimeoutError):
+                await asyncio.wait_for(asyncio.Event().wait(), timeout=effective_wait)
 
     def get_status(self) -> dict[str, dict]:
         """获取各限流器状态（用于监控）."""

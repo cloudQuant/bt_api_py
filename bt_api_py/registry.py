@@ -96,6 +96,15 @@ class ExchangeRegistry(metaclass=_RegistryMeta):
     def __init__(self):
         pass
 
+    def __getattribute__(self, name):
+        if name in _PUBLIC_METHODS:
+            internal_name = f"_{name}"
+            try:
+                return object.__getattribute__(self, internal_name)
+            except AttributeError:
+                pass
+        return object.__getattribute__(self, name)
+
     @classmethod
     def _get_default(cls) -> "ExchangeRegistry":
         """获取全局默认实例（延迟初始化）"""
@@ -103,6 +112,17 @@ class ExchangeRegistry(metaclass=_RegistryMeta):
             cls()  # triggers __new__ which creates the default
         assert cls._default is not None
         return cls._default
+
+    @classmethod
+    def create_isolated(cls) -> "ExchangeRegistry":
+        instance = object.__new__(cls)
+        instance._feed_classes = {}
+        instance._stream_classes = {}
+        instance._exchange_data_classes = {}
+        instance._balance_handlers = {}
+        instance._lock = threading.RLock()
+        instance._initialized = True
+        return instance
 
     # ── 类级 API（显式 classmethod，便于 mypy 理解）─────────────────
 

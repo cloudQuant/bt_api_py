@@ -5,10 +5,10 @@ This script analyzes test coverage across exchanges and modules to identify gaps
 """
 
 import json
+import os
 from pathlib import Path
-from typing import Dict, List, Set, Tuple
-import subprocess
-import sys
+
+import pytest
 
 
 class CoverageAnalyzer:
@@ -19,7 +19,7 @@ class CoverageAnalyzer:
         self.feeds_dir = self.project_root / "bt_api_py" / "feeds"
         self.tests_dir = self.project_root / "tests"
 
-    def get_all_exchanges(self) -> List[str]:
+    def get_all_exchanges(self) -> list[str]:
         """Get list of all exchange directories."""
         exchanges = []
         for item in self.feeds_dir.iterdir():
@@ -28,7 +28,7 @@ class CoverageAnalyzer:
                 exchanges.append(exchange_name)
         return sorted(exchanges)
 
-    def get_tested_exchanges(self) -> Set[str]:
+    def get_tested_exchanges(self) -> set[str]:
         """Get exchanges that have test files."""
         tested = set()
         for test_file in self.tests_dir.rglob("test_*.py"):
@@ -38,7 +38,7 @@ class CoverageAnalyzer:
                     tested.add(exchange)
         return tested
 
-    def analyze_module_coverage(self) -> Dict[str, Dict]:
+    def analyze_module_coverage(self) -> dict[str, dict]:
         """Analyze coverage by module."""
         modules = {
             "feeds": {"path": self.feeds_dir, "tests": 0, "coverage": 0},
@@ -79,27 +79,26 @@ class CoverageAnalyzer:
 
         return modules
 
-    def run_coverage_analysis(self) -> Dict:
+    def run_coverage_analysis(self) -> dict:
         """Run coverage analysis and return results."""
         try:
-            # Run coverage report in JSON format
-            result = subprocess.run(
-                [
-                    sys.executable,
-                    "-m",
-                    "pytest",
-                    "--cov=bt_api_py",
-                    "--cov-report=json",
-                    "--tb=no",
-                    "-q",
-                ],
-                capture_output=True,
-                text=True,
-                cwd=self.project_root,
-            )
+            coverage_json = self.project_root / "coverage.json"
+            previous_cwd = Path.cwd()
+            os.chdir(self.project_root)
+            try:
+                result = pytest.main(
+                    [
+                        "--cov=bt_api_py",
+                        "--cov-report=json",
+                        "--tb=no",
+                        "-q",
+                    ]
+                )
+            finally:
+                os.chdir(previous_cwd)
 
-            if result.returncode == 0 and Path("coverage.json").exists():
-                with open("coverage.json") as f:
+            if result == 0 and coverage_json.exists():
+                with coverage_json.open() as f:
                     coverage_data = json.load(f)
                 return coverage_data
         except Exception as e:
@@ -119,14 +118,15 @@ class CoverageAnalyzer:
         report = []
         report.append("# Test Coverage Analysis Report")
         report.append("=" * 50)
-        report.append()
+        report.append("")
 
         # Exchange coverage
+        tested_percentage = (
+            len(tested_exchanges) / len(all_exchanges) * 100 if all_exchanges else 0.0
+        )
         report.append("## Exchange Coverage")
         report.append(f"Total exchanges: {len(all_exchanges)}")
-        report.append(
-            f"Tested exchanges: {len(tested_exchanges)} ({len(tested_exchanges) / len(all_exchanges) * 100:.1f}%)"
-        )
+        report.append(f"Tested exchanges: {len(tested_exchanges)} ({tested_percentage:.1f}%)")
         report.append(f"Untested exchanges: {len(untested_exchanges)}")
 
         if untested_exchanges:
@@ -172,7 +172,7 @@ def main():
     with open("coverage_analysis.md", "w") as f:
         f.write(report)
 
-    print(f"\nReport saved to: coverage_analysis.md")
+    print("\nReport saved to: coverage_analysis.md")
 
 
 if __name__ == "__main__":

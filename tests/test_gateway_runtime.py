@@ -1,12 +1,8 @@
-import queue
 import time
 import uuid
 from collections import deque
 from typing import Any
 
-import pytest
-
-from bt_api_py.gateway.client import GatewayClient
 from bt_api_py.gateway.adapters import (
     BinanceGatewayAdapter,
     CtpGatewayAdapter,
@@ -15,6 +11,7 @@ from bt_api_py.gateway.adapters import (
 )
 from bt_api_py.gateway.adapters.binance_adapter import _normalize_asset_type as bn_normalize
 from bt_api_py.gateway.adapters.okx_adapter import _normalize_asset_type as okx_normalize
+from bt_api_py.gateway.client import GatewayClient
 from bt_api_py.gateway.config import GatewayConfig
 from bt_api_py.gateway.models import GatewayTick
 from bt_api_py.gateway.protocol import CHANNEL_EVENT, CHANNEL_MARKET
@@ -72,6 +69,38 @@ def _wait_until(predicate, timeout: float = 2.0, interval: float = 0.05) -> bool
             return True
         time.sleep(interval)
     return False
+
+
+def test_gateway_client_remember_order_copies_nested_payload():
+    client = GatewayClient(exchange_type="CTP", asset_type="FUTURE", account_id="immut-1")
+    payload = {
+        "order_id": "ord-immut-1",
+        "external_order_id": "ord-immut-1",
+        "meta": {"status": "submitted"},
+    }
+
+    client._remember_order(payload)
+    payload["meta"]["status"] = "mutated"
+
+    assert client.pending_orders["ord-immut-1"]["meta"]["status"] == "submitted"
+
+
+def test_gateway_client_submit_order_result_is_isolated_from_pending_state(monkeypatch):
+    client = GatewayClient(exchange_type="CTP", asset_type="FUTURE", account_id="immut-2")
+    monkeypatch.setattr(
+        client,
+        "_command",
+        lambda command, payload=None: {
+            "order_id": "ord-immut-2",
+            "external_order_id": "ord-immut-2",
+            "meta": {"tag": "original"},
+        },
+    )
+
+    order = client.submit_order({"data_name": "rb2510", "volume": 1})
+    order["meta"]["tag"] = "mutated"
+
+    assert client.pending_orders["ord-immut-2"]["meta"]["tag"] == "original"
 
 
 def test_gateway_runtime_registry_contains_all_exchanges():

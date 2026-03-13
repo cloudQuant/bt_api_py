@@ -29,7 +29,7 @@ class DIContainer:
         self._services: dict[type, Any] = {}
         self._factories: dict[type, Callable[[], Any]] = {}
         self._singletons: dict[type, Any] = {}
-        self._scoped: dict[type, Any] = {}
+        self._scoped_services: dict[type, Callable[[], Any]] = {}
         self._lock = threading.RLock()
         self._current_scope: dict[type, Any] | None = None
 
@@ -48,7 +48,7 @@ class DIContainer:
     def register_scoped(self, interface: type[T], implementation: type[T]) -> "DIContainer":
         """Register a scoped service (one instance per scope)."""
         with self._lock:
-            self._services[interface] = implementation
+            self._scoped_services[interface] = implementation
             return self
 
     def register_instance(self, interface: type[T], instance: T) -> "DIContainer":
@@ -64,6 +64,17 @@ class DIContainer:
             if interface in self._singletons:
                 return cast("T", self._singletons[interface])
 
+            # Check scoped services
+            if interface in self._scoped_services:
+                if self._current_scope is not None and interface in self._current_scope:
+                    return cast("T", self._current_scope[interface])
+
+                implementation = self._scoped_services[interface]
+                instance = self._create_instance(implementation)
+                if self._current_scope is not None:
+                    self._current_scope[interface] = instance
+                return cast("T", instance)
+
             # Check if service is registered as singleton
             if interface in self._services:
                 implementation = self._services[interface]
@@ -75,17 +86,6 @@ class DIContainer:
             if interface in self._factories:
                 implementation = self._factories[interface]
                 return cast("T", self._create_instance(implementation))
-
-            # Check scoped services
-            if self._current_scope and interface in self._scoped:
-                return cast("T", self._scoped[interface])
-
-            if interface in self._services and interface in self._scoped:
-                implementation = self._services[interface]
-                instance = self._create_instance(implementation)
-                if self._current_scope is not None:
-                    self._scoped[interface] = instance
-                return cast("T", instance)
 
             raise ValueError(f"Service {interface} not registered")
 
@@ -104,10 +104,15 @@ class DIContainer:
             if param.annotation != inspect.Parameter.empty:
                 try:
                     kwargs[param_name] = self.resolve(param.annotation)
-                except ValueError:
+                except ValueError as exc:
                     # Use default value if available
                     if param.default != inspect.Parameter.empty:
                         kwargs[param_name] = param.default
+                    else:
+                        raise ValueError(
+                            f"Unable to resolve required dependency '{param_name}' "
+                            f"for {implementation.__name__}"
+                        ) from exc
 
         return implementation(**kwargs)
 
@@ -116,12 +121,10 @@ class DIContainer:
         """Create a new dependency scope."""
         old_scope = self._current_scope
         self._current_scope = {}
-        self._scoped.clear()
         try:
             yield self
         finally:
             self._current_scope = old_scope
-            self._scoped.clear()
 
     def clear(self) -> None:
         """Clear all registered services."""
@@ -129,7 +132,8 @@ class DIContainer:
             self._services.clear()
             self._factories.clear()
             self._singletons.clear()
-            self._scoped.clear()
+            self._scoped_services.clear()
+            self._current_scope = None
 
 
 # Global container instance
@@ -185,9 +189,14 @@ def inject_method(func: Callable) -> Callable:
             if param.annotation != inspect.Parameter.empty:
                 try:
                     kwargs[param_name] = _global_container.resolve(param.annotation)
-                except ValueError:
+                except ValueError as exc:
                     if param.default != inspect.Parameter.empty:
                         kwargs[param_name] = param.default
+                    else:
+                        raise ValueError(
+                            f"Unable to resolve required dependency '{param_name}' "
+                            f"for {func.__name__}"
+                        ) from exc
 
         return func(*args, **kwargs)
 

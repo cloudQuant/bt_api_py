@@ -3,9 +3,40 @@
 
 set -euo pipefail
 
+detect_parallel_workers() {
+    if command -v nproc >/dev/null 2>&1; then
+        nproc
+        return
+    fi
+
+    if command -v sysctl >/dev/null 2>&1; then
+        sysctl -n hw.ncpu 2>/dev/null && return
+    fi
+
+    python - <<'PY'
+import os
+print(os.cpu_count() or 1)
+PY
+}
+
+detect_coverage_threshold() {
+    python - <<'PY'
+from pathlib import Path
+import tomllib
+
+pyproject = Path("pyproject.toml")
+if pyproject.exists():
+    data = tomllib.loads(pyproject.read_text())
+    report = data.get("tool", {}).get("coverage", {}).get("report", {})
+    print(report.get("fail_under", 80))
+else:
+    print(80)
+PY
+}
+
 # Configuration
-COVERAGE_THRESHOLD=80
-PARALLEL_WORKERS=${PARALLEL_WORKERS:-$(nproc)}
+COVERAGE_THRESHOLD=${COVERAGE_THRESHOLD:-$(detect_coverage_threshold)}
+PARALLEL_WORKERS=${PARALLEL_WORKERS:-$(detect_parallel_workers)}
 TEST_TIMEOUT=300
 FLAKY_TEST_ATTEMPTS=3
 

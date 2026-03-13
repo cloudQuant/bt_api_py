@@ -141,12 +141,16 @@ class SecureCredentialManager:
         if not api_key or not isinstance(api_key, str):
             return False
 
-        if len(api_key) < min_length:
+        normalized = api_key.strip()
+        if len(normalized) < min_length:
             return False
 
         # Check for common placeholder values
         placeholders = ["your_api_key", "api_key_here", "placeholder", "example"]
-        return api_key.lower() not in placeholders
+        normalized_lower = normalized.lower()
+        if normalized_lower in placeholders:
+            return False
+        return not (normalized_lower.startswith("your_") and normalized_lower.endswith("_here"))
 
     def get_exchange_credentials(self, exchange: str, encrypted: bool = False) -> dict[str, Any]:
         """
@@ -198,6 +202,7 @@ class SecureCredentialManager:
                         credentials[key] = self.decrypt_credential(value)
                     except Exception as e:
                         logger.warning(f"Failed to decrypt credential for {exchange}.{key}: {e}")
+                        credentials[key] = None
 
         return credentials
 

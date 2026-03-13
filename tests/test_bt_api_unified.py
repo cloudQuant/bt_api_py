@@ -3,7 +3,12 @@
 import pytest
 
 from bt_api_py.bt_api import BtApi
-from bt_api_py.exceptions import ExchangeNotFoundError
+from bt_api_py.exceptions import ExchangeNotFoundError, InvalidOrderError, SubscribeError
+
+
+class _ValidationFeed:
+    def make_order(self, *args, **kwargs):
+        return {"ok": True, "args": args, "kwargs": kwargs}
 
 
 class TestBtApiUnifiedInterface:
@@ -107,3 +112,23 @@ class TestBtApiUnifiedInterface:
         assert self.bt.get_all_balances() == {}
         assert self.bt.get_all_positions() == {}
         assert self.bt.cancel_all_orders() == {}
+
+    @pytest.mark.parametrize(
+        ("volume", "price", "order_type", "error_match"),
+        [
+            (0, 50000, "limit", "volume"),
+            (-1, 50000, "limit", "volume"),
+            (1, -1, "limit", "price"),
+            (1, 1, "stop_limit", "order_type"),
+        ],
+    )
+    def test_make_order_rejects_invalid_parameters(
+        self, volume: float, price: float, order_type: str, error_match: str
+    ):
+        self.bt.exchange_feeds["TEST_VALIDATION___SPOT"] = _ValidationFeed()
+        with pytest.raises(InvalidOrderError, match=error_match):
+            self.bt.make_order("TEST_VALIDATION___SPOT", "BTC-USDT", volume, price, order_type)
+
+    def test_subscribe_rejects_invalid_dataname_format(self):
+        with pytest.raises(SubscribeError, match="dataname"):
+            self.bt.subscribe("BINANCE_SPOT_BTCUSDT", [{"topic": "kline"}])

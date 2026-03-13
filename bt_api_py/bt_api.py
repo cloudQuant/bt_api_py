@@ -17,9 +17,11 @@ from bt_api_py.exceptions import (
     BtApiError,
     DataParseError,
     ExchangeNotFoundError,
+    InvalidOrderError,
     RequestError,
     RequestFailedError,
     RequestTimeoutError,
+    SubscribeError,
 )
 from bt_api_py.logging_factory import get_logger
 from bt_api_py.registry import ExchangeRegistry
@@ -98,6 +100,36 @@ class BtApi:
         else:
             self.logger.warning(f"Unknown log level '{level}', message: {txt}")
 
+    def _parse_dataname(self, dataname: str) -> tuple[str, str, str]:
+        parts = dataname.split(DATANAME_SEPARATOR)
+        if len(parts) != 3 or not all(parts):
+            raise SubscribeError("", detail=f"invalid dataname format: {dataname}")
+        return parts[0], parts[1], parts[2]
+
+    def _validate_order_args(
+        self,
+        exchange_name: str,
+        symbol: str,
+        volume: float,
+        price: float,
+        order_type: str,
+    ) -> str:
+        if volume <= 0:
+            raise InvalidOrderError(exchange_name, symbol, "volume must be > 0")
+        if price < 0:
+            raise InvalidOrderError(exchange_name, symbol, "price must be >= 0")
+
+        normalized_order_type = order_type.lower()
+        if normalized_order_type not in {"limit", "market"}:
+            raise InvalidOrderError(
+                exchange_name,
+                symbol,
+                "order_type must be one of: limit, market",
+            )
+        if normalized_order_type == "limit" and price <= 0:
+            raise InvalidOrderError(exchange_name, symbol, "price must be > 0 for limit order")
+        return normalized_order_type
+
     def add_exchange(self, exchange_name: str, exchange_params: dict[str, Any]) -> None:
         """通过 ExchangeRegistry 创建 feed，无需硬编码交易所类型"""
         if exchange_name not in self.exchange_feeds:
@@ -133,7 +165,7 @@ class BtApi:
 
     def subscribe(self, dataname: str, topics: list[dict[str, Any]]) -> None:
         """通过 ExchangeRegistry 查找订阅处理函数，无需硬编码交易所类型"""
-        exchange, asset_type, symbol = dataname.split(DATANAME_SEPARATOR)
+        exchange, asset_type, symbol = self._parse_dataname(dataname)
         exchange_name = exchange + DATANAME_SEPARATOR + asset_type
         exchange_params = self.exchange_kwargs.get(exchange_name, {})
         for topic in topics:
@@ -402,11 +434,18 @@ class BtApi:
         :param post_only: 是否只做 maker
         :param client_order_id: 客户端自定义订单ID
         """
+        normalized_order_type = self._validate_order_args(
+            exchange_name=exchange_name,
+            symbol=symbol,
+            volume=volume,
+            price=price,
+            order_type=order_type,
+        )
         return self._get_feed(exchange_name).make_order(
             symbol,
             volume,
             price,
-            order_type,
+            normalized_order_type,
             offset=offset,
             post_only=post_only,
             client_order_id=client_order_id,

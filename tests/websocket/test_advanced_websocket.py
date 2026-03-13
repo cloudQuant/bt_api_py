@@ -66,6 +66,22 @@ class TestWebSocketConfig:
         assert config.heartbeat_interval == 60.0
         assert config.compression is False
 
+    @pytest.mark.parametrize(
+        ("kwargs", "match"),
+        [
+            ({"url": "https://test.com", "exchange_name": "TEST"}, "url"),
+            ({"url": "wss://test.com", "exchange_name": ""}, "exchange_name"),
+            ({"url": "wss://test.com", "exchange_name": "TEST", "max_connections": 0}, "max_connections"),
+            (
+                {"url": "wss://test.com", "exchange_name": "TEST", "heartbeat_interval": 0},
+                "heartbeat_interval",
+            ),
+        ],
+    )
+    def test_invalid_config_values_raise_value_error(self, kwargs, match):
+        with pytest.raises(ValueError, match=match):
+            WebSocketConfig(**kwargs)
+
 
 class TestWebSocketMetrics:
     """Test WebSocket metrics collection."""
@@ -622,6 +638,8 @@ class TestWebSocketIntegration:
             # Test disconnection
             await connection.disconnect()
             assert connection.get_state() == ConnectionState.DISCONNECTED
+            assert connection._dlq is not None
+            assert connection._dlq._processing_task is None or connection._dlq._processing_task.done()
 
     async def test_pool_load_balancing(self):
         """Test connection pool load balancing."""

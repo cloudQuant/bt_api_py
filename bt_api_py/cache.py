@@ -7,11 +7,13 @@ trading pairs, and market data.
 
 import threading
 import time
+from collections import OrderedDict
 from collections.abc import Callable, Iterator
 from functools import wraps
 from typing import Any, TypeVar
 
 F = TypeVar("F", bound=Callable[..., Any])
+_CACHE_MISSING = object()
 
 __all__ = [
     "SimpleCache",
@@ -33,18 +35,36 @@ class SimpleCache:
     - Thread-safe operations (basic)
     """
 
-    def __init__(self, default_ttl: float = 300.0) -> None:
+    def __init__(self, default_ttl: float = 300.0, max_size: int | None = None) -> None:
         """
         Initialize cache.
 
         Args:
             default_ttl: Default time-to-live in seconds (default: 5 minutes)
         """
-        self._cache: dict[str, tuple[Any, float]] = {}
+        self._cache: OrderedDict[str, tuple[Any, float]] = OrderedDict()
         self._default_ttl = default_ttl
+        self._max_size = max_size
         self._lock = threading.RLock()
         self._hits = 0
         self._misses = 0
+
+    def _get_or_default(self, key: str, default: Any) -> Any:
+        with self._lock:
+            cached_entry = self._cache.get(key)
+            if cached_entry is None:
+                self._misses += 1
+                return default
+
+            value, expiry = cached_entry
+            if time.time() > expiry:
+                self._cache.pop(key, None)
+                self._misses += 1
+                return default
+
+            self._hits += 1
+            self._cache.move_to_end(key)
+            return value
 
     def get(self, key: str) -> Any | None:
         """
@@ -56,20 +76,7 @@ class SimpleCache:
         Returns:
             Cached value or None if not found/expired
         """
-        with self._lock:
-            cached_entry = self._cache.get(key)
-            if cached_entry is None:
-                self._misses += 1
-                return None
-
-            value, expiry = cached_entry
-            if time.time() > expiry:
-                self._cache.pop(key, None)
-                self._misses += 1
-                return None
-
-            self._hits += 1
-            return value
+        return self._get_or_default(key, None)
 
     def set(self, key: str, value: Any, ttl: float | None = None) -> None:
         """
@@ -85,7 +92,12 @@ class SimpleCache:
 
         expiry = time.time() + ttl
         with self._lock:
+            if key in self._cache:
+                self._cache.pop(key)
             self._cache[key] = (value, expiry)
+            if self._max_size is not None and self._max_size > 0:
+                while len(self._cache) > self._max_size:
+                    self._cache.popitem(last=False)
 
     def delete(self, key: str) -> None:
         """
@@ -118,10 +130,15 @@ class SimpleCache:
         """
         with self._lock:
             now = time.time()
-            expired_keys = [key for key, (_, expiry) in self._cache.items() if now > expiry]
-            for key in expired_keys:
-                self._cache.pop(key, None)
-            return len(expired_keys)
+            active_cache: OrderedDict[str, tuple[Any, float]] = OrderedDict()
+            removed = 0
+            for key, entry in self._cache.items():
+                if now > entry[1]:
+                    removed += 1
+                else:
+                    active_cache[key] = entry
+            self._cache = active_cache
+            return removed
 
     def size(self) -> int:
         """
@@ -315,7 +332,11 @@ class MarketDataCache:
         self._cache.set(f"{exchange}:{symbol}:orderbook", orderbook)
 
 
-def cached(ttl: float = 300.0, cache_instance: SimpleCache | None = None) -> Callable[[F], F]:
+def cached(
+    ttl: float = 300.0,
+    cache_instance: SimpleCache | None = None,
+    maxsize: int | None = None,
+) -> Callable[[F], F]:
     """
     Decorator for caching function results.
 
@@ -325,6 +346,7 @@ def cached(ttl: float = 300.0, cache_instance: SimpleCache | None = None) -> Cal
     Args:
         ttl: Time-to-live in seconds for cached results
         cache_instance: Cache instance to use (creates new if None)
+        maxsize: Optional max number of cached entries (LRU eviction)
 
     Returns:
         Decorator function that wraps the original function with caching
@@ -336,7 +358,7 @@ def cached(ttl: float = 300.0, cache_instance: SimpleCache | None = None) -> Cal
             return fetch_info(exchange)
     """
     if cache_instance is None:
-        cache_instance = SimpleCache(default_ttl=ttl)
+        cache_instance = SimpleCache(default_ttl=ttl, max_size=maxsize)
 
     def decorator(func: F) -> F:
         @wraps(func)
@@ -358,8 +380,8 @@ def cached(ttl: float = 300.0, cache_instance: SimpleCache | None = None) -> Cal
             cache_key = ":".join(key_parts)
 
             # Try to get from cache
-            cached_value = cache_instance.get(cache_key)
-            if cached_value is not None:
+            cached_value = cache_instance._get_or_default(cache_key, _CACHE_MISSING)
+            if cached_value is not _CACHE_MISSING:
                 return cached_value
 
             # Call function and cache result

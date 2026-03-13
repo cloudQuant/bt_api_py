@@ -25,6 +25,23 @@ class InstrumentManager:
     def register(self, instrument: Instrument) -> None:
         """注册 Instrument"""
         with self._lock:
+            previous = self._instruments.get(instrument.internal)
+            if previous is not None:
+                venue_instruments = self._by_venue.get(previous.venue)
+                if venue_instruments is not None:
+                    venue_instruments.pop(previous.venue_symbol, None)
+                    if not venue_instruments:
+                        self._by_venue.pop(previous.venue, None)
+
+                if previous.underlying:
+                    underlying_instruments = self._by_underlying.get(previous.underlying)
+                    if underlying_instruments is not None:
+                        filtered = [inst for inst in underlying_instruments if inst.internal != previous.internal]
+                        if filtered:
+                            self._by_underlying[previous.underlying] = filtered
+                        else:
+                            self._by_underlying.pop(previous.underlying, None)
+
             self._instruments[instrument.internal] = instrument
             self._by_venue.setdefault(instrument.venue, {})[instrument.venue_symbol] = instrument
             if instrument.underlying:

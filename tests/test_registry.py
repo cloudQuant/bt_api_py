@@ -105,6 +105,16 @@ class TestRegistryInstance:
         assert reg1.has_exchange("ONLY_IN_REG1")
         assert reg2.has_exchange("ONLY_IN_REG1")  # Same instance, shared state
 
+    def test_create_isolated_does_not_share_state_with_default_registry(self):
+        global_reg = ExchangeRegistry()
+        global_reg.clear()
+
+        isolated = ExchangeRegistry.create_isolated()
+        isolated.register_feed("ISO___SPOT", _MockFeed)
+
+        assert isolated.has_exchange("ISO___SPOT")
+        assert not global_reg.has_exchange("ISO___SPOT")
+
 
 # ── 全局类级调用（向后兼容）测试 ─────────────────────────────────
 

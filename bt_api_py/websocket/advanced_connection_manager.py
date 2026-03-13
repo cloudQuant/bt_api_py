@@ -14,6 +14,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any
+from urllib.parse import urlparse
 
 from bt_api_py.exceptions import RateLimitError, WebSocketError
 from bt_api_py.logging_factory import get_logger
@@ -209,6 +210,47 @@ class WebSocketConfig:
     # Exchange-specific settings
     exchange_config: dict[str, Any] = field(default_factory=dict)
 
+    def __post_init__(self) -> None:
+        parsed = urlparse(self.url)
+        if parsed.scheme not in {"ws", "wss"} or not parsed.netloc:
+            raise ValueError("url must be a valid ws/wss URL")
+        if not isinstance(self.exchange_name, str) or not self.exchange_name.strip():
+            raise ValueError("exchange_name must be a non-empty string")
+        if not isinstance(self.max_connections, int) or self.max_connections <= 0:
+            raise ValueError("max_connections must be a positive integer")
+        if not isinstance(self.min_connections, int) or self.min_connections <= 0:
+            raise ValueError("min_connections must be a positive integer")
+        if self.min_connections > self.max_connections:
+            raise ValueError("min_connections must be <= max_connections")
+        if self.heartbeat_interval <= 0:
+            raise ValueError("heartbeat_interval must be > 0")
+        if self.heartbeat_timeout <= 0:
+            raise ValueError("heartbeat_timeout must be > 0")
+        if self.connection_timeout <= 0:
+            raise ValueError("connection_timeout must be > 0")
+        if self.idle_timeout <= 0:
+            raise ValueError("idle_timeout must be > 0")
+        if self.reconnect_interval <= 0:
+            raise ValueError("reconnect_interval must be > 0")
+        if self.max_reconnect_attempts < 0:
+            raise ValueError("max_reconnect_attempts must be >= 0")
+        if self.reconnect_backoff_multiplier < 1:
+            raise ValueError("reconnect_backoff_multiplier must be >= 1")
+        if self.max_reconnect_delay <= 0:
+            raise ValueError("max_reconnect_delay must be > 0")
+        if self.message_buffer_size <= 0:
+            raise ValueError("message_buffer_size must be > 0")
+        if self.send_buffer_size <= 0:
+            raise ValueError("send_buffer_size must be > 0")
+        if self.receive_buffer_size <= 0:
+            raise ValueError("receive_buffer_size must be > 0")
+        if self.max_requests_per_second <= 0:
+            raise ValueError("max_requests_per_second must be > 0")
+        if self.max_subscriptions_per_connection <= 0:
+            raise ValueError("max_subscriptions_per_connection must be > 0")
+        if self.dead_letter_queue_size <= 0:
+            raise ValueError("dead_letter_queue_size must be > 0")
+
 
 class DeadLetterQueue:
     """Dead letter queue for failed messages."""
@@ -217,6 +259,7 @@ class DeadLetterQueue:
         self.max_size = max_size
         self._queue = asyncio.Queue(maxsize=max_size)
         self._processing = False
+        self._processing_task: asyncio.Task | None = None
         self.logger = get_logger("dlq")
 
     async def add_message(
@@ -248,11 +291,11 @@ class DeadLetterQueue:
 
     async def start_processing(self, processor_func: Callable) -> None:
         """Start processing dead letter messages."""
-        if self._processing:
+        if self._processing_task and not self._processing_task.done():
             return
 
         self._processing = True
-        asyncio.create_task(self._process_loop(processor_func))
+        self._processing_task = asyncio.create_task(self._process_loop(processor_func))
 
     async def _process_loop(self, processor_func: Callable) -> None:
         """Process messages from dead letter queue."""
@@ -270,6 +313,15 @@ class DeadLetterQueue:
     def stop_processing(self) -> None:
         """Stop processing dead letter messages."""
         self._processing = False
+        if self._processing_task and not self._processing_task.done():
+            self._processing_task.cancel()
+
+    async def shutdown(self) -> None:
+        self.stop_processing()
+        if self._processing_task:
+            with contextlib.suppress(asyncio.CancelledError):
+                await self._processing_task
+            self._processing_task = None
 
     def size(self) -> int:
         """Get queue size."""
@@ -537,7 +589,7 @@ class AdvancedWebSocketConnection:
 
         # Stop dead letter queue processing
         if self._dlq:
-            self._dlq.stop_processing()
+            await self._dlq.shutdown()
 
         self.logger.info("Disconnected")
 
