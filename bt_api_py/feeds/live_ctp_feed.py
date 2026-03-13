@@ -269,9 +269,9 @@ class CtpRequestData(Feed):
 
         if otype.lower() == "market":
             # Chinese futures exchanges reject true market orders (AnyPrice).
-            # If a price is supplied, use it as an aggressive limit price;
-            # otherwise fall back to limit with price=0 which the caller
-            # should have already converted via last_tick ± 5 ticks.
+            # Always convert to an aggressive limit order.  The caller
+            # (e.g. CtpGatewayAdapter.place_order) should have already
+            # resolved a valid price via last_tick ± slippage.
             if price and float(price) > 0:
                 self.request_logger.info(
                     "CTP market order converted to limit: %s price=%s", symbol, price
@@ -281,19 +281,21 @@ class CtpRequestData(Feed):
                 field.VolumeCondition = "1"
                 field.LimitPrice = float(price)
             else:
-                self.request_logger.warning(
-                    "CTP market order for %s has no price — sending as AnyPrice (may be rejected)",
-                    symbol,
+                raise ValueError(
+                    f"CTP market order for {symbol} rejected: price must be positive "
+                    f"(got {price!r}).  Chinese exchanges do not support AnyPrice orders."
                 )
-                field.OrderPriceType = "1"  # 市价 (fallback)
-                field.TimeCondition = "1"  # IOC
-                field.VolumeCondition = "1"
-                field.LimitPrice = 0.0
         else:
+            limit_price = float(price) if price else 0.0
+            if limit_price <= 0:
+                raise ValueError(
+                    f"CTP limit order for {symbol} rejected: price must be positive "
+                    f"(got {price!r}).  Cannot send LimitPrice=0 to exchange."
+                )
             field.OrderPriceType = "2"  # 限价
             field.TimeCondition = "3"  # GFD (当日有效)
             field.VolumeCondition = "1"  # 任意数量
-            field.LimitPrice = float(price) if price else 0.0
+            field.LimitPrice = limit_price
         if client_order_id is not None:
             field.OrderRef = str(client_order_id)
         elif hasattr(self._trader, "next_order_ref"):

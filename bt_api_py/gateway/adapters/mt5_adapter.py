@@ -88,7 +88,7 @@ class Mt5GatewayAdapter(BaseGatewayAdapter):
         self._login = int(kwargs.get("login") or 0)
         self._password = str(kwargs.get("password") or "")
         self._ws_uri = str(kwargs.get("ws_uri") or "")
-        self._timeout = float(kwargs.get("timeout") or 30.0)
+        self._timeout = float(kwargs.get("timeout") or 60.0)
         self._heartbeat_interval = float(kwargs.get("heartbeat_interval") or 30.0)
         self._auto_reconnect = bool(kwargs.get("auto_reconnect", True))
         self._max_reconnect_attempts = int(kwargs.get("max_reconnect_attempts") or 5)
@@ -114,7 +114,9 @@ class Mt5GatewayAdapter(BaseGatewayAdapter):
         self._thread = threading.Thread(target=self._run_loop, daemon=True)
         self._thread.start()
         future = asyncio.run_coroutine_threadsafe(self._async_connect(), self._loop)
-        future.result(timeout=self._timeout)
+        # connect+login+load_symbols can take >30s (6000+ symbols); use generous timeout
+        connect_timeout = max(self._timeout * 4, 120.0)
+        future.result(timeout=connect_timeout)
         self.logger.info(f"Mt5GatewayAdapter connected (login={self._login})")
 
     def disconnect(self) -> None:

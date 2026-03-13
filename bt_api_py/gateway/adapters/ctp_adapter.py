@@ -112,8 +112,9 @@ class CtpGatewayAdapter(BaseGatewayAdapter):
         side = str(payload.get("side") or "buy").lower()
         is_market = "market" in str(payload.get("order_type") or "").lower()
         price = payload.get("price")
+        needs_price_conversion = is_market or price is None or (price is not None and float(price) <= 0)
 
-        if is_market or (price is not None and float(price) <= 0):
+        if needs_price_conversion:
             lp = self.last_price.get(instrument or name)
             if not lp or lp <= 0:
                 raise RuntimeError(
@@ -124,6 +125,10 @@ class CtpGatewayAdapter(BaseGatewayAdapter):
             slippage = pt * 5
             price = (lp + slippage) if side == "buy" else max(lp - slippage, pt)
             price = round(price, 4)
+            self.logger.info(
+                "CTP order price converted: %s %s last=%.4f tick=%.4f -> limit=%.4f",
+                instrument, side, lp, pt, price,
+            )
 
         kind = "limit"
         rsp = self.feed.make_order(instrument or name, volume=payload.get("size") or 0, price=price, order_type=f"{side}-{kind}", offset=str(payload.get("offset") or "open"), client_order_id=payload.get("client_order_id") or payload.get("bt_order_ref"), exchange_id=exchange_id or payload.get("exchange_id") or "")
