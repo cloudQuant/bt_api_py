@@ -151,7 +151,20 @@ class BtApi:
         return normalized_order_type
 
     def add_exchange(self, exchange_name: str, exchange_params: dict[str, Any]) -> None:
-        """通过 ExchangeRegistry 创建 feed，无需硬编码交易所类型"""
+        """Add a new exchange to the API instance.
+
+        Args:
+            exchange_name: Exchange identifier (e.g., "BINANCE___SPOT", "OKX___SWAP")
+            exchange_params: Exchange-specific parameters (api_key, secret, etc.)
+
+        Example:
+            >>> api = BtApi()
+            >>> api.add_exchange("BINANCE___SPOT", {
+            ...     "api_key": "your_key",
+            ...     "secret": "your_secret",
+            ...     "testnet": True
+            ... })
+        """
         if exchange_name not in self.exchange_feeds:
             if exchange_name in self.data_queues:
                 raise ExchangeNotFoundError(
@@ -167,7 +180,19 @@ class BtApi:
             self.log(f"exchange_name: {exchange_name} already exists")
 
     def get_request_api(self, exchange_name: str) -> Any:
-        """获取指定交易所的 REST Feed 实例（同步 API）。"""
+        """Get the REST Feed instance for the specified exchange (synchronous API).
+
+        Args:
+            exchange_name: Exchange identifier (e.g., "BINANCE___SPOT")
+
+        Returns:
+            Feed instance if exchange exists, None otherwise
+
+        Example:
+            >>> api = BtApi({"BINANCE___SPOT": {...}})
+            >>> feed = api.get_request_api("BINANCE___SPOT")
+            >>> ticker = feed.get_tick("BTCUSDT")
+        """
         api = self.exchange_feeds.get(exchange_name)
         if api is None:
             self.log(f"exchange_name: {exchange_name} does not exist", level="error")
@@ -177,7 +202,21 @@ class BtApi:
         return self.get_request_api(exchange_name)
 
     def get_data_queue(self, exchange_name: str) -> queue.Queue | None:
-        """获取指定交易所的数据队列，用于接收行情/订单推送。"""
+        """Get the data queue for the specified exchange.
+
+        The data queue receives market data and order updates from WebSocket streams.
+
+        Args:
+            exchange_name: Exchange identifier (e.g., "BINANCE___SPOT")
+
+        Returns:
+            Queue instance if exchange exists, None otherwise
+
+        Example:
+            >>> api = BtApi({"BINANCE___SPOT": {...}})
+            >>> queue = api.get_data_queue("BINANCE___SPOT")
+            >>> data = queue.get()  # Blocks until data arrives
+        """
         data_queue = self.data_queues.get(exchange_name)
         if data_queue is None:
             self.log(f"exchange_name: {exchange_name} does not exist", level="error")
