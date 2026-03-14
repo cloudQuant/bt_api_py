@@ -22,7 +22,7 @@ def _get_binance_config() -> Any | None:
         if config_path.exists():
             _binance_config = load_exchange_config(str(config_path))
         _binance_config_loaded = True
-    except Exception as e:
+    except (OSError, ValueError, KeyError) as e:
         logger.warning(f"Failed to load binance.yaml config: {e}")
     return _binance_config
 

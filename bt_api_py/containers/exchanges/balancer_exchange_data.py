@@ -3,7 +3,7 @@
 Defines API endpoints, chain enums, and path configurations for Balancer DEX.
 """
 
-from enum import Enum
+import enum
 from pathlib import Path
 from typing import Any
 
@@ -40,7 +40,7 @@ def _get_balancer_config() -> Any | None:
             # Store raw config for custom fields
             _balancer_config._raw_config = _balancer_config_raw
         _balancer_config_loaded = True
-    except Exception as e:
+    except (OSError, ValueError, KeyError, ImportError) as e:
         # Import logger here to avoid circular imports
         from bt_api_py.logging_factory import get_logger
 
@@ -49,7 +49,7 @@ def _get_balancer_config() -> Any | None:
     return _balancer_config
 
 
-class GqlChain(str, Enum):
+class GqlChain(enum.StrEnum):
     """Balancer supported chains for GraphQL queries."""
 
     MAINNET = "MAINNET"
