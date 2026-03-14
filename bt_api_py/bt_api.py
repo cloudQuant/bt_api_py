@@ -620,6 +620,7 @@ class BtApi:
     #   bt_api.async_make_order("OKX___SWAP", "BTC-USDT", 0.001, 50000, "limit")
 
     def __getattr__(self, name: str) -> Any:
+        """动态代理 async_* 方法到对应 Feed 实例。"""
         if name.startswith("async_"):
 
             def _async_proxy(exchange_name: str, *args: Any, **kwargs: Any) -> Any:
