@@ -21,12 +21,12 @@ Usage (CLI)::
 
 from __future__ import annotations
 
+import contextlib
 import json
 import logging
 import os
 import signal
 import sys
-import time
 from pathlib import Path
 from typing import Any
 
@@ -53,9 +53,7 @@ class GatewayProcess:
 
     def __init__(self, config: dict[str, Any], *, pid_dir: str | None = None) -> None:
         self._config = dict(config)
-        self._pid_dir = Path(
-            pid_dir or config.get("gateway_base_dir", "/tmp/bt_gateway")
-        )
+        self._pid_dir = Path(pid_dir or config.get("gateway_base_dir", "/tmp/bt_gateway"))
         self._runtime = None
         self._stopped = False
 
@@ -78,10 +76,8 @@ class GatewayProcess:
         logger.info("PID %d written to %s", os.getpid(), self.pid_file)
 
     def _remove_pid(self) -> None:
-        try:
+        with contextlib.suppress(OSError):
             self.pid_file.unlink(missing_ok=True)
-        except OSError:
-            pass
 
     @staticmethod
     def read_pid(pid_file: str | Path) -> int | None:
@@ -159,11 +155,15 @@ class GatewayProcess:
             self._remove_pid()
             return False
         try:
-            os.kill(pid, signal.SIGTERM)
-            logger.info("Sent SIGTERM to PID %d", pid)
+            if sys.platform.startswith("win"):
+                os.kill(pid, signal.CTRL_BREAK_EVENT)
+                logger.info("Sent CTRL_BREAK_EVENT to PID %d", pid)
+            else:
+                os.kill(pid, signal.SIGTERM)
+                logger.info("Sent SIGTERM to PID %d", pid)
             return True
         except OSError as exc:
-            logger.error("Failed to send SIGTERM to %d: %s", pid, exc)
+            logger.error("Failed to send termination signal to %d: %s", pid, exc)
             return False
 
     def status(self) -> dict[str, Any]:
@@ -195,8 +195,11 @@ class GatewayProcess:
             logger.info("Received signal %s, initiating shutdown", signum)
             self._shutdown()
 
-        signal.signal(signal.SIGTERM, _handler)
         signal.signal(signal.SIGINT, _handler)
+        if sys.platform.startswith("win"):
+            signal.signal(signal.SIGBREAK, _handler)
+        else:
+            signal.signal(signal.SIGTERM, _handler)
 
 
 # ---------------------------------------------------------------------------
@@ -238,8 +241,12 @@ def _cli_main() -> None:  # pragma: no cover
     elif args.command == "stop":
         pid = GatewayProcess.read_pid(args.pid_file)
         if pid and GatewayProcess.is_running(pid):
-            os.kill(pid, signal.SIGTERM)
-            print(f"Sent SIGTERM to {pid}")
+            if sys.platform.startswith("win"):
+                os.kill(pid, signal.CTRL_BREAK_EVENT)
+                print(f"Sent CTRL_BREAK_EVENT to {pid}")
+            else:
+                os.kill(pid, signal.SIGTERM)
+                print(f"Sent SIGTERM to {pid}")
         else:
             print("Process not running")
 

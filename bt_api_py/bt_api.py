@@ -420,12 +420,12 @@ class BtApi:
             if client is not None and hasattr(client, "async_close"):
                 try:
                     await client.async_close()
-                except Exception as e:
+                except (OSError, ConnectionError, RuntimeError) as e:
                     self.log(f"Error async closing feed client: {e}", level="warning")
             elif client is not None and hasattr(client, "close"):
                 try:
                     client.close()
-                except (OSError, ConnectionError) as e:
+                except (OSError, ConnectionError, RuntimeError) as e:
                     self.log(f"Error closing feed client: {e}", level="warning")
 
     @staticmethod
