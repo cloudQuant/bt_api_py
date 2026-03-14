@@ -76,9 +76,11 @@ class MyWebsocketApp:
         return timestamp
 
     def subscribe(self, **kwargs):
-        assert self._params is not None
+        if self._params is None:
+            raise ValueError("exchange_data (params) is required for subscribe")
         req = self._params.get_wss_path(**kwargs)
-        assert self.ws is not None
+        if self.ws is None:
+            raise ConnectionError("WebSocket connection not established")
         self.ws.send(req)
         # time.sleep(0.3)
 
@@ -171,7 +173,8 @@ class MyWebsocketApp:
         # 设置超时
         # print("run begin")
         websocket.setdefaulttimeout(self.ping_timeout)
-        assert self.wss_url is not None
+        if self.wss_url is None:
+            raise ValueError("wss_url is required for WebSocket connection")
         self.ws = websocket.WebSocketApp(
             self.wss_url,
             on_open=self.on_open,
@@ -226,7 +229,8 @@ class MyWebsocketApp:
         self.process = threading.Thread(target=self.run, daemon=True)
         self.process.start()
         _elapsed: float = 0.0
-        assert self._params is not None
+        if self._params is None:
+            raise ValueError("exchange_data (params) is required to start WebSocket")
         while not self._running_flag:
             self.wss_logger.info(
                 f"===== {time.strftime('%Y-%m-%d %H:%M:%S')} "

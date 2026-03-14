@@ -16,45 +16,20 @@ from bt_api_py.exceptions import ExchangeNotFoundError
 __all__ = ["ExchangeRegistry"]
 
 
-_PUBLIC_METHODS = frozenset(
-    {
-        "register_feed",
-        "register_stream",
-        "register_exchange_data",
-        "register_balance_handler",
-        "unregister_feed",
-        "get_feed_class",
-        "get_feed_classes",
-        "create_feed",
-        "create_exchange_data",
-        "get_stream_classes",
-        "get_stream_class",
-        "get_balance_handler",
-        "has_exchange",
-        "list_exchanges",
-        "clear",
-    }
-)
+class _ClassMethodOrInstance:
+    """描述符：类调用时使用类方法，实例调用时使用实例方法"""
+
+    def __init__(self, class_method_name: str, instance_method_name: str):
+        self.class_method_name = class_method_name
+        self.instance_method_name = instance_method_name
+
+    def __get__(self, obj: Any, objtype: type | None = None) -> Any:
+        if obj is None:
+            return getattr(objtype, self.class_method_name)
+        return getattr(obj, self.instance_method_name)
 
 
-class _RegistryMeta(type):
-    """元类：将 ExchangeRegistry.method() 类级调用委托到全局默认实例，
-    保持向后兼容。显式 @classmethod 包装器便于 mypy 类型检查。
-    """
-
-    def __getattribute__(cls, name):
-        if name.startswith("__") or name in ("_default", "_get_default", "_default_lock"):
-            return type.__getattribute__(cls, name)
-        if name in _PUBLIC_METHODS:
-            return type.__getattribute__(cls, name)  # 使用显式 @classmethod
-        try:
-            default = type.__getattribute__(cls, "_get_default")()
-            return getattr(default, name)
-        except (AttributeError, TypeError):
-            return type.__getattribute__(cls, name)
-
-
-class ExchangeRegistry(metaclass=_RegistryMeta):
+class ExchangeRegistry:
     """交易所注册表，管理 feed 类、流式数据类、交易所配置类的注册与创建
 
     全局使用（向后兼容）:
@@ -66,19 +41,16 @@ class ExchangeRegistry(metaclass=_RegistryMeta):
         registry.register_feed("TEST___SPOT", MockFeed)
     """
 
-    _default: "ExchangeRegistry | None" = None  # 延迟初始化的全局默认实例
+    _default: "ExchangeRegistry | None" = None
     _default_lock = threading.Lock()
 
-    # 实例属性（在 __new__ 中初始化，此处声明以便 mypy 识别）
     _feed_classes: dict[str, type]
     _stream_classes: dict[str, dict[str, Any]]
     _exchange_data_classes: dict[str, type]
     _balance_handlers: dict[str, Callable[..., Any]]
     _lock: threading.RLock
-    _initialized: bool
 
     def __new__(cls):
-        """确保 ExchangeRegistry() 返回全局单例实例"""
         if cls._default is not None:
             return cls._default
         with cls._default_lock:
@@ -89,28 +61,18 @@ class ExchangeRegistry(metaclass=_RegistryMeta):
                 instance._exchange_data_classes = {}
                 instance._balance_handlers = {}
                 instance._lock = threading.RLock()
-                instance._initialized = True
                 cls._default = instance
             return cls._default
 
     def __init__(self):
         pass
 
-    def __getattribute__(self, name):
-        if name in _PUBLIC_METHODS:
-            internal_name = f"_{name}"
-            try:
-                return object.__getattribute__(self, internal_name)
-            except AttributeError:
-                pass
-        return object.__getattribute__(self, name)
-
     @classmethod
     def _get_default(cls) -> "ExchangeRegistry":
-        """获取全局默认实例（延迟初始化）"""
         if cls._default is None:
-            cls()  # triggers __new__ which creates the default
-        assert cls._default is not None
+            cls()
+            if cls._default is None:
+                raise RuntimeError("Failed to initialize ExchangeRegistry singleton")
         return cls._default
 
     @classmethod
@@ -121,87 +83,9 @@ class ExchangeRegistry(metaclass=_RegistryMeta):
         instance._exchange_data_classes = {}
         instance._balance_handlers = {}
         instance._lock = threading.RLock()
-        instance._initialized = True
         return instance
 
-    # ── 类级 API（显式 classmethod，便于 mypy 理解）─────────────────
-
-    @classmethod
-    def register_feed(cls, exchange_name: str, feed_class: type) -> None:
-        """注册 REST feed 类（类级调用）"""
-        cls._get_default()._register_feed(exchange_name, feed_class)
-
-    @classmethod
-    def register_stream(cls, exchange_name: str, stream_type: str, stream_class: Any) -> None:
-        """注册流式数据类（类级调用）"""
-        cls._get_default()._register_stream(exchange_name, stream_type, stream_class)
-
-    @classmethod
-    def register_exchange_data(cls, exchange_name: str, exchange_data_class: type) -> None:
-        """注册交易所配置类（类级调用）"""
-        cls._get_default()._register_exchange_data(exchange_name, exchange_data_class)
-
-    @classmethod
-    def register_balance_handler(cls, exchange_name: str, handler_func: Callable) -> None:
-        """注册余额解析处理函数（类级调用）"""
-        cls._get_default()._register_balance_handler(exchange_name, handler_func)
-
-    @classmethod
-    def unregister_feed(cls, exchange_name: str) -> bool:
-        """移除已注册的 REST feed 类（类级调用）"""
-        return cls._get_default()._unregister_feed(exchange_name)
-
-    @classmethod
-    def get_feed_class(cls, exchange_name: str) -> type | None:
-        """获取已注册的 REST feed 类（类级调用）"""
-        return cls._get_default()._get_feed_class(exchange_name)
-
-    @classmethod
-    def get_feed_classes(cls) -> dict[str, type]:
-        """获取所有已注册的 REST feed 类快照（类级调用）"""
-        return cls._get_default()._get_feed_classes()
-
-    @classmethod
-    def create_feed(cls, exchange_name: str, data_queue: Any, **kwargs: Any) -> Any:
-        """根据交易所标识创建 feed 实例（类级调用）"""
-        return cls._get_default()._create_feed(exchange_name, data_queue, **kwargs)
-
-    @classmethod
-    def create_exchange_data(cls, exchange_name: str) -> Any:
-        """根据交易所标识创建交易所配置实例（类级调用）"""
-        return cls._get_default()._create_exchange_data(exchange_name)
-
-    @classmethod
-    def get_stream_classes(cls, exchange_name: str) -> dict[str, Any]:
-        """获取某个交易所的所有流式数据类（类级调用）"""
-        return cls._get_default()._get_stream_classes(exchange_name)
-
-    @classmethod
-    def get_stream_class(cls, exchange_name: str, stream_type: str) -> Any | None:
-        """获取某个交易所的某种流式数据类（类级调用）"""
-        return cls._get_default()._get_stream_class(exchange_name, stream_type)
-
-    @classmethod
-    def get_balance_handler(cls, exchange_name: str) -> Callable | None:
-        """获取余额解析处理函数（类级调用）"""
-        return cls._get_default()._get_balance_handler(exchange_name)
-
-    @classmethod
-    def has_exchange(cls, exchange_name: str) -> bool:
-        """检查交易所是否已注册（类级调用）"""
-        return cls._get_default()._has_exchange(exchange_name)
-
-    @classmethod
-    def list_exchanges(cls) -> list[str]:
-        """列出所有已注册的交易所（类级调用）"""
-        return cls._get_default()._list_exchanges()
-
-    @classmethod
-    def clear(cls) -> None:
-        """清空所有注册（类级调用，主要用于测试）"""
-        cls._get_default()._clear()
-
-    # ── 实例实现方法（classmethod 和 instance.method() 均委托到此处）──
+    # ── 内部实现方法 ────────────────────────────────────────────────────
 
     def _register_feed(self, exchange_name: str, feed_class: type) -> None:
         with self._lock:
@@ -273,3 +157,89 @@ class ExchangeRegistry(metaclass=_RegistryMeta):
             self._stream_classes.clear()
             self._exchange_data_classes.clear()
             self._balance_handlers.clear()
+
+    # ── 类级方法（委托到默认实例）─────────────────────────────────────────
+
+    @classmethod
+    def _cls_register_feed(cls, exchange_name: str, feed_class: type) -> None:
+        cls._get_default()._register_feed(exchange_name, feed_class)
+
+    @classmethod
+    def _cls_register_stream(cls, exchange_name: str, stream_type: str, stream_class: Any) -> None:
+        cls._get_default()._register_stream(exchange_name, stream_type, stream_class)
+
+    @classmethod
+    def _cls_register_exchange_data(cls, exchange_name: str, exchange_data_class: type) -> None:
+        cls._get_default()._register_exchange_data(exchange_name, exchange_data_class)
+
+    @classmethod
+    def _cls_register_balance_handler(cls, exchange_name: str, handler_func: Callable) -> None:
+        cls._get_default()._register_balance_handler(exchange_name, handler_func)
+
+    @classmethod
+    def _cls_unregister_feed(cls, exchange_name: str) -> bool:
+        return cls._get_default()._unregister_feed(exchange_name)
+
+    @classmethod
+    def _cls_get_feed_class(cls, exchange_name: str) -> type | None:
+        return cls._get_default()._get_feed_class(exchange_name)
+
+    @classmethod
+    def _cls_get_feed_classes(cls) -> dict[str, type]:
+        return cls._get_default()._get_feed_classes()
+
+    @classmethod
+    def _cls_create_feed(cls, exchange_name: str, data_queue: Any, **kwargs: Any) -> Any:
+        return cls._get_default()._create_feed(exchange_name, data_queue, **kwargs)
+
+    @classmethod
+    def _cls_create_exchange_data(cls, exchange_name: str) -> Any:
+        return cls._get_default()._create_exchange_data(exchange_name)
+
+    @classmethod
+    def _cls_get_stream_classes(cls, exchange_name: str) -> dict[str, Any]:
+        return cls._get_default()._get_stream_classes(exchange_name)
+
+    @classmethod
+    def _cls_get_stream_class(cls, exchange_name: str, stream_type: str) -> Any | None:
+        return cls._get_default()._get_stream_class(exchange_name, stream_type)
+
+    @classmethod
+    def _cls_get_balance_handler(cls, exchange_name: str) -> Callable | None:
+        return cls._get_default()._get_balance_handler(exchange_name)
+
+    @classmethod
+    def _cls_has_exchange(cls, exchange_name: str) -> bool:
+        return cls._get_default()._has_exchange(exchange_name)
+
+    @classmethod
+    def _cls_list_exchanges(cls) -> list[str]:
+        return cls._get_default()._list_exchanges()
+
+    @classmethod
+    def _cls_clear(cls) -> None:
+        cls._get_default()._clear()
+
+    # ── 公共 API（描述符实现类/实例双模式）──────────────────────────────
+
+    register_feed = _ClassMethodOrInstance("_cls_register_feed", "_register_feed")
+    register_stream = _ClassMethodOrInstance("_cls_register_stream", "_register_stream")
+    register_exchange_data = _ClassMethodOrInstance(
+        "_cls_register_exchange_data", "_register_exchange_data"
+    )
+    register_balance_handler = _ClassMethodOrInstance(
+        "_cls_register_balance_handler", "_register_balance_handler"
+    )
+    unregister_feed = _ClassMethodOrInstance("_cls_unregister_feed", "_unregister_feed")
+    get_feed_class = _ClassMethodOrInstance("_cls_get_feed_class", "_get_feed_class")
+    get_feed_classes = _ClassMethodOrInstance("_cls_get_feed_classes", "_get_feed_classes")
+    create_feed = _ClassMethodOrInstance("_cls_create_feed", "_create_feed")
+    create_exchange_data = _ClassMethodOrInstance(
+        "_cls_create_exchange_data", "_create_exchange_data"
+    )
+    get_stream_classes = _ClassMethodOrInstance("_cls_get_stream_classes", "_get_stream_classes")
+    get_stream_class = _ClassMethodOrInstance("_cls_get_stream_class", "_get_stream_class")
+    get_balance_handler = _ClassMethodOrInstance("_cls_get_balance_handler", "_get_balance_handler")
+    has_exchange = _ClassMethodOrInstance("_cls_has_exchange", "_has_exchange")
+    list_exchanges = _ClassMethodOrInstance("_cls_list_exchanges", "_list_exchanges")
+    clear = _ClassMethodOrInstance("_cls_clear", "_clear")

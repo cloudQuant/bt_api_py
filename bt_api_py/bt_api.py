@@ -23,12 +23,11 @@ from bt_api_py.exceptions import (
     RequestTimeoutError,
     SubscribeError,
 )
-from bt_api_py.logging_factory import get_logger
+from bt_api_py.logging_factory import _LoggerProxy, get_logger
 from bt_api_py.registry import ExchangeRegistry
 
 __all__ = ["BtApi"]
 
-# Constants for K-line download and dataname parsing
 DATANAME_SEPARATOR = "___"
 DOWNLOAD_RETRY_DELAY_SEC = 3
 KLINE_PERIOD_DELTAS: dict[str, timedelta] = {
@@ -40,6 +39,27 @@ KLINE_PERIOD_DELTAS: dict[str, timedelta] = {
     "1H": timedelta(hours=100),
     "1D": timedelta(days=100),
 }
+
+
+def _calculate_time_delta(period: str) -> timedelta:
+    if period in KLINE_PERIOD_DELTAS:
+        return KLINE_PERIOD_DELTAS[period]
+    raise DataParseError(detail=f"Unsupported period: {period}")
+
+
+def _parse_time(input_time: str | datetime | None) -> datetime | None:
+    if isinstance(input_time, str):
+        local_time = datetime.fromisoformat(input_time)
+        return local_time.astimezone(UTC)
+    if isinstance(input_time, datetime):
+        local_time = (
+            input_time.replace(tzinfo=UTC).astimezone() if input_time.tzinfo is None else input_time
+        )
+        return local_time.astimezone(UTC)
+    if input_time is None:
+        return None
+    raise DataParseError(detail=f"Unsupported time format: {type(input_time)}")
+
 
 _reg_logger = get_logger("registry")
 
@@ -90,7 +110,7 @@ class BtApi:
             exchange_params = exchange_kwargs[exchange_name]
             self.add_exchange(exchange_name, exchange_params)
 
-    def init_logger(self) -> object:
+    def init_logger(self) -> _LoggerProxy:
         """Initialize and return the API logger instance."""
         return get_logger("api", print_info=bool(self.debug))
 
@@ -184,6 +204,8 @@ class BtApi:
 
     def push_bar_data_to_queue(self, exchange_name: str, data: Any) -> None:
         data_queue = self.get_data_queue(exchange_name)
+        if data_queue is None:
+            raise ExchangeNotFoundError(exchange_name, list(self.data_queues.keys()))
         bar_list = data.get_data()
         for bar in bar_list:
             data_queue.put(bar)
@@ -198,79 +220,92 @@ class BtApi:
         end_time: str | datetime | None = None,
         extra_data: Any = None,
     ) -> None:
-        def calculate_time_delta(period_: str) -> timedelta:
-            """根据 period 计算增量时间"""
-            if period_ in KLINE_PERIOD_DELTAS:
-                return KLINE_PERIOD_DELTAS[period_]
-            raise DataParseError(detail=f"Unsupported period: {period_}")
+        begin_time = _parse_time(start_time)
+        stop_time = _parse_time(end_time)
+        feed = self._get_feed(exchange_name)
 
-        def parse_time(input_time: str | datetime | None) -> datetime | None:
-            """解析时间，支持字符串和 datetime 类型，并将时间转换为 UTC"""
-            if isinstance(input_time, str):
-                local_time = datetime.fromisoformat(input_time)
-                return local_time.astimezone(UTC)
-            elif isinstance(input_time, datetime):
-                if input_time.tzinfo is None:
-                    local_time = input_time.replace(tzinfo=UTC).astimezone()
-                else:
-                    local_time = input_time
-                return local_time.astimezone(UTC)
-            elif input_time is None:
-                return None
-            else:
-                raise DataParseError(detail=f"Unsupported time format: {type(input_time)}")
-
-        begin_time = parse_time(start_time)
-        stop_time = parse_time(end_time)
-
-        feed = self.exchange_feeds[exchange_name]
-        if begin_time is None and count is not None:
-            data = feed.get_kline(symbol, period, count, extra_data=extra_data)
-            self.push_bar_data_to_queue(exchange_name, data)
-            self.log(f"download completely: {symbol}, new {count} bar")
+        if begin_time is None:
+            self._download_kline_by_count(feed, exchange_name, symbol, period, count, extra_data)
             return
 
-        if begin_time is not None:
-            if stop_time is None:
-                now = datetime.now(UTC)
-                period_seconds = int(period[:-1]) * 60 if "m" in period else int(period[:-1]) * 3600
-                stop_time = now - timedelta(seconds=now.timestamp() % period_seconds)
+        self._download_kline_by_range(
+            feed, exchange_name, symbol, period, begin_time, stop_time, extra_data
+        )
 
-            while begin_time < stop_time:
-                try:
-                    time_delta = calculate_time_delta(period)
-                    current_end_time = min(begin_time + time_delta, stop_time)
+    def _download_kline_by_count(
+        self,
+        feed: Any,
+        exchange_name: str,
+        symbol: str,
+        period: str,
+        count: int,
+        extra_data: Any,
+    ) -> None:
+        data = feed.get_kline(symbol, period, count, extra_data=extra_data)
+        self.push_bar_data_to_queue(exchange_name, data)
+        self.log(f"download completely: {symbol}, new {count} bar")
 
-                    begin_stamp = int(1000.0 * begin_time.timestamp())
-                    end_stamp = int(1000.0 * current_end_time.timestamp())
+    def _download_kline_by_range(
+        self,
+        feed: Any,
+        exchange_name: str,
+        symbol: str,
+        period: str,
+        begin_time: datetime,
+        stop_time: datetime | None,
+        extra_data: Any,
+    ) -> None:
+        if stop_time is None:
+            stop_time = self._calculate_aligned_stop_time(period)
 
-                    data = feed.get_kline(
-                        symbol,
-                        period,
-                        start_time=begin_stamp,
-                        end_time=end_stamp,
-                        extra_data=extra_data,
-                    )
-                    self.push_bar_data_to_queue(exchange_name, data)
-                    self.log(
-                        f"download successfully: {symbol}, period: {period}, "
-                        f"begin: {begin_time}, end: {current_end_time}"
-                    )
+        while begin_time < stop_time:
+            try:
+                begin_time = self._download_single_batch(
+                    feed, exchange_name, symbol, period, begin_time, stop_time, extra_data
+                )
+            except (
+                RequestError,
+                RequestTimeoutError,
+                RequestFailedError,
+                ValueError,
+                KeyError,
+            ) as e:
+                self.log(f"download fail, retry: {e}", level="warning")
+                time.sleep(DOWNLOAD_RETRY_DELAY_SEC)
 
-                    begin_time = current_end_time
+        self.log(f"download all data completely: {symbol}, period: {period}")
 
-                    if begin_time >= stop_time:
-                        break
-                except (
-                    RequestError,
-                    RequestTimeoutError,
-                    RequestFailedError,
-                    ValueError,
-                    KeyError,
-                ) as e:
-                    self.log(f"download fail, retry: {e}", level="warning")
-                    time.sleep(DOWNLOAD_RETRY_DELAY_SEC)
-            self.log(f"download all data completely: {symbol}, period: {period}")
+    def _calculate_aligned_stop_time(self, period: str) -> datetime:
+        now = datetime.now(UTC)
+        period_seconds = int(period[:-1]) * (60 if "m" in period else 3600)
+        return now - timedelta(seconds=now.timestamp() % period_seconds)
+
+    def _download_single_batch(
+        self,
+        feed: Any,
+        exchange_name: str,
+        symbol: str,
+        period: str,
+        begin_time: datetime,
+        stop_time: datetime,
+        extra_data: Any,
+    ) -> datetime:
+        time_delta = _calculate_time_delta(period)
+        current_end_time = min(begin_time + time_delta, stop_time)
+
+        begin_stamp = int(1000.0 * begin_time.timestamp())
+        end_stamp = int(1000.0 * current_end_time.timestamp())
+
+        data = feed.get_kline(
+            symbol, period, start_time=begin_stamp, end_time=end_stamp, extra_data=extra_data
+        )
+        self.push_bar_data_to_queue(exchange_name, data)
+        self.log(
+            f"download successfully: {symbol}, period: {period}, "
+            f"begin: {begin_time}, end: {current_end_time}"
+        )
+
+        return current_end_time
 
     def update_total_balance(self) -> None:
         """通过 ExchangeRegistry 查找余额解析函数，无需硬编码交易所类型"""
@@ -312,9 +347,17 @@ class BtApi:
                 )
 
     def get_cash(self, exchange_name: str, currency: str) -> float:
+        if exchange_name not in self._cash_dict:
+            raise ExchangeNotFoundError(exchange_name, list(self._cash_dict.keys()))
+        if currency not in self._cash_dict[exchange_name]:
+            raise KeyError(f"Currency '{currency}' not found in {exchange_name}")
         return self._cash_dict[exchange_name][currency]["cash"]
 
     def get_value(self, exchange_name: str, currency: str) -> float:
+        if exchange_name not in self._value_dict:
+            raise ExchangeNotFoundError(exchange_name, list(self._value_dict.keys()))
+        if currency not in self._value_dict[exchange_name]:
+            raise KeyError(f"Currency '{currency}' not found in {exchange_name}")
         return self._value_dict[exchange_name][currency]["value"]
 
     def get_total_cash(self) -> dict[str, Any]:
@@ -359,6 +402,32 @@ class BtApi:
     ) -> None:
         self.close()
 
+    async def __aenter__(self) -> "BtApi":
+        return self
+
+    async def __aexit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_val: BaseException | None,
+        exc_tb: Any,
+    ) -> None:
+        await self.async_close()
+
+    async def async_close(self) -> None:
+        """异步关闭所有 feed 的 HTTP 连接，释放资源。"""
+        for feed in self.exchange_feeds.values():
+            client = getattr(feed, "_http_client", None)
+            if client is not None and hasattr(client, "async_close"):
+                try:
+                    await client.async_close()
+                except Exception as e:
+                    self.log(f"Error async closing feed client: {e}", level="warning")
+            elif client is not None and hasattr(client, "close"):
+                try:
+                    client.close()
+                except (OSError, ConnectionError) as e:
+                    self.log(f"Error closing feed client: {e}", level="warning")
+
     @staticmethod
     def list_available_exchanges() -> list[str]:
         """列出所有已注册可用的交易所"""
@@ -373,7 +442,7 @@ class BtApi:
     # ══════════════════════════════════════════════════════════════
 
     def _get_feed(self, exchange_name: str) -> Any:
-        """获取 feed 实例，不存在时抛出 ExchangeNotFoundError"""
+        """获取指定交易所的 Feed 实例"""
         feed = self.exchange_feeds.get(exchange_name)
         if feed is None:
             raise ExchangeNotFoundError(exchange_name, list(self.exchange_feeds.keys()))
@@ -381,14 +450,23 @@ class BtApi:
 
     # ── 行情查询（同步）────────────────────────────────────────────
 
-    def get_tick(self, exchange_name: str, symbol: str, extra_data: Any = None, **kwargs: Any) -> Any:
+    def get_tick(
+        self, exchange_name: str, symbol: str, extra_data: Any = None, **kwargs: Any
+    ) -> Any:
         """获取最新行情
         :param exchange_name: 交易所标识, 如 "BINANCE___SWAP"
         :param symbol: 交易对, 如 "BTC-USDT"
         """
         return self._get_feed(exchange_name).get_tick(symbol, extra_data=extra_data, **kwargs)
 
-    def get_depth(self, exchange_name: str, symbol: str, count: int = 20, extra_data: Any = None, **kwargs: Any) -> Any:
+    def get_depth(
+        self,
+        exchange_name: str,
+        symbol: str,
+        count: int = 20,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> Any:
         """获取深度数据
         :param exchange_name: 交易所标识
         :param symbol: 交易对
@@ -398,7 +476,15 @@ class BtApi:
             symbol, count=count, extra_data=extra_data, **kwargs
         )
 
-    def get_kline(self, exchange_name: str, symbol: str, period: str, count: int = 20, extra_data: Any = None, **kwargs: Any) -> Any:
+    def get_kline(
+        self,
+        exchange_name: str,
+        symbol: str,
+        period: str,
+        count: int = 20,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> Any:
         """获取K线数据
         :param exchange_name: 交易所标识
         :param symbol: 交易对
@@ -453,7 +539,9 @@ class BtApi:
             **kwargs,
         )
 
-    def cancel_order(self, exchange_name: str, symbol: str, order_id: str, extra_data: Any = None, **kwargs: Any) -> Any:
+    def cancel_order(
+        self, exchange_name: str, symbol: str, order_id: str, extra_data: Any = None, **kwargs: Any
+    ) -> Any:
         """撤单
         :param exchange_name: 交易所标识
         :param symbol: 交易对
@@ -463,14 +551,18 @@ class BtApi:
             symbol, order_id, extra_data=extra_data, **kwargs
         )
 
-    def cancel_all(self, exchange_name: str, symbol: str | None = None, extra_data: Any = None, **kwargs: Any) -> Any:
+    def cancel_all(
+        self, exchange_name: str, symbol: str | None = None, extra_data: Any = None, **kwargs: Any
+    ) -> Any:
         """撤销所有订单
         :param exchange_name: 交易所标识
         :param symbol: 交易对 (None 表示所有品种)
         """
         return self._get_feed(exchange_name).cancel_all(symbol, extra_data=extra_data, **kwargs)
 
-    def query_order(self, exchange_name: str, symbol: str, order_id: str, extra_data: Any = None, **kwargs: Any) -> Any:
+    def query_order(
+        self, exchange_name: str, symbol: str, order_id: str, extra_data: Any = None, **kwargs: Any
+    ) -> Any:
         """查询订单
         :param exchange_name: 交易所标识
         :param symbol: 交易对
@@ -480,7 +572,9 @@ class BtApi:
             symbol, order_id, extra_data=extra_data, **kwargs
         )
 
-    def get_open_orders(self, exchange_name: str, symbol: str | None = None, extra_data: Any = None, **kwargs: Any) -> Any:
+    def get_open_orders(
+        self, exchange_name: str, symbol: str | None = None, extra_data: Any = None, **kwargs: Any
+    ) -> Any:
         """查询挂单
         :param exchange_name: 交易所标识
         :param symbol: 交易对 (None 表示所有品种)
@@ -491,21 +585,27 @@ class BtApi:
 
     # ── 账户查询（同步）────────────────────────────────────────────
 
-    def get_balance(self, exchange_name: str, symbol: str | None = None, extra_data: Any = None, **kwargs: Any) -> Any:
+    def get_balance(
+        self, exchange_name: str, symbol: str | None = None, extra_data: Any = None, **kwargs: Any
+    ) -> Any:
         """查询余额
         :param exchange_name: 交易所标识
         :param symbol: 币种 (None 表示全部)
         """
         return self._get_feed(exchange_name).get_balance(symbol, extra_data=extra_data, **kwargs)
 
-    def get_account(self, exchange_name: str, symbol: str = "ALL", extra_data: Any = None, **kwargs: Any) -> Any:
+    def get_account(
+        self, exchange_name: str, symbol: str = "ALL", extra_data: Any = None, **kwargs: Any
+    ) -> Any:
         """查询账户信息
         :param exchange_name: 交易所标识
         :param symbol: 币种
         """
         return self._get_feed(exchange_name).get_account(symbol, extra_data=extra_data, **kwargs)
 
-    def get_position(self, exchange_name: str, symbol: str | None = None, extra_data: Any = None, **kwargs: Any) -> Any:
+    def get_position(
+        self, exchange_name: str, symbol: str | None = None, extra_data: Any = None, **kwargs: Any
+    ) -> Any:
         """查询持仓
         :param exchange_name: 交易所标识
         :param symbol: 交易对 (None 表示所有品种)
@@ -519,10 +619,10 @@ class BtApi:
     #   bt_api.async_get_tick("BINANCE___SWAP", "BTC-USDT")
     #   bt_api.async_make_order("OKX___SWAP", "BTC-USDT", 0.001, 50000, "limit")
 
-    def __getattr__(self, name):
+    def __getattr__(self, name: str) -> Any:
         if name.startswith("async_"):
 
-            def _async_proxy(exchange_name, *args, **kwargs):
+            def _async_proxy(exchange_name: str, *args: Any, **kwargs: Any) -> Any:
                 feed = self._get_feed(exchange_name)
                 feed_method = getattr(feed, name, None)
                 if feed_method is None:
@@ -530,7 +630,6 @@ class BtApi:
                 return feed_method(*args, **kwargs)
 
             _async_proxy.__name__ = name
-            _async_proxy.__doc__ = f"异步代理 → feed.{name}()，结果推送到 data_queue"
             return _async_proxy
         raise AttributeError(f"'BtApi' object has no attribute {name!r}")
 
@@ -551,7 +650,9 @@ class BtApi:
                 self.log(f"get_tick failed for {exchange_name}: {e}", level="warning")
         return results
 
-    def get_all_balances(self, symbol: str | None = None, extra_data: Any = None, **kwargs: Any) -> dict[str, Any]:
+    def get_all_balances(
+        self, symbol: str | None = None, extra_data: Any = None, **kwargs: Any
+    ) -> dict[str, Any]:
         """从所有已连接的交易所查询余额
         :return: dict {exchange_name: balance_data}
         """
@@ -565,7 +666,9 @@ class BtApi:
                 self.log(f"get_balance failed for {exchange_name}: {e}", level="warning")
         return results
 
-    def get_all_positions(self, symbol: str | None = None, extra_data: Any = None, **kwargs: Any) -> dict[str, Any]:
+    def get_all_positions(
+        self, symbol: str | None = None, extra_data: Any = None, **kwargs: Any
+    ) -> dict[str, Any]:
         """从所有已连接的交易所查询持仓
         :return: dict {exchange_name: position_data}
         """
@@ -579,7 +682,9 @@ class BtApi:
                 self.log(f"get_position failed for {exchange_name}: {e}", level="warning")
         return results
 
-    def cancel_all_orders(self, symbol: str | None = None, extra_data: Any = None, **kwargs: Any) -> dict[str, Any]:
+    def cancel_all_orders(
+        self, symbol: str | None = None, extra_data: Any = None, **kwargs: Any
+    ) -> dict[str, Any]:
         """撤销所有已连接交易所的所有订单
         :return: dict {exchange_name: result}
         """
