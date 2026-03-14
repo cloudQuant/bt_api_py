@@ -43,6 +43,7 @@ class ExchangeRegistry:
 
     _default: "ExchangeRegistry | None" = None
     _default_lock = threading.Lock()
+    _initialized: bool = False
 
     _feed_classes: dict[str, type]
     _stream_classes: dict[str, dict[str, Any]]
@@ -50,7 +51,7 @@ class ExchangeRegistry:
     _balance_handlers: dict[str, Callable[..., Any]]
     _lock: threading.RLock
 
-    def __new__(cls):
+    def __new__(cls) -> "ExchangeRegistry":
         if cls._default is not None:
             return cls._default
         with cls._default_lock:
@@ -61,6 +62,7 @@ class ExchangeRegistry:
                 instance._exchange_data_classes = {}
                 instance._balance_handlers = {}
                 instance._lock = threading.RLock()
+                instance._initialized = True
                 cls._default = instance
             return cls._default
 
