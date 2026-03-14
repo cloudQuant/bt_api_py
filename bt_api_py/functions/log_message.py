@@ -1,7 +1,23 @@
+"""日志管理模块 — 支持 spdlog 高性能日志和标准库 logging 回退"""
+
 import logging
 from pathlib import Path
 
-import spdlog
+__all__ = ["SpdLogManager", "_HAS_SPDLOG"]
+
+_LOGGER = logging.getLogger(__name__)
+
+try:
+    import spdlog
+
+    _HAS_SPDLOG = hasattr(spdlog, "daily_file_sink_st")
+except ImportError:
+    spdlog = None  # type: ignore[assignment]
+    _HAS_SPDLOG = False
+except Exception as e:  # DLL load failure, segfault guard
+    spdlog = None  # type: ignore[assignment]
+    _HAS_SPDLOG = False
+    _LOGGER.debug("spdlog import failed, using stdlib logging fallback: %s", e)
 
 
 def _get_project_logs_dir() -> str:
@@ -65,18 +81,31 @@ class SpdLogManager:
         if str(log_dir):
             log_dir.mkdir(parents=True, exist_ok=True)
 
+        if not _HAS_SPDLOG:
+            # Fallback to stdlib logging when spdlog is unavailable
+            logger = logging.getLogger(self.logger_name)
+            if not logger.handlers:
+                fh = logging.FileHandler(self.file_name, encoding="utf-8")
+                fh.setFormatter(logging.Formatter("%(asctime)s [%(levelname)s] %(message)s"))
+                logger.addHandler(fh)
+                if self.print_info:
+                    logger.addHandler(logging.StreamHandler())
+                logger.setLevel(logging.DEBUG)
+            SpdLogManager._logger_cache[key] = logger
+            return logger
+
         # 创建sinks
         if self.print_info:
             sinks = [
-                spdlog.stdout_sink_st(),
-                spdlog.daily_file_sink_st(self.file_name, self.rotation_hour, self.rotation_minute),
+                spdlog.stdout_sink_st(),  # type: ignore[union-attr]
+                spdlog.daily_file_sink_st(self.file_name, self.rotation_hour, self.rotation_minute),  # type: ignore[union-attr]
             ]
         else:
             sinks = [
-                spdlog.daily_file_sink_st(self.file_name, self.rotation_hour, self.rotation_minute)
+                spdlog.daily_file_sink_st(self.file_name, self.rotation_hour, self.rotation_minute)  # type: ignore[union-attr]
             ]
 
         # 创建logger并缓存
-        logger = spdlog.SinkLogger(self.logger_name, sinks)
+        logger = spdlog.SinkLogger(self.logger_name, sinks)  # type: ignore[union-attr]
         SpdLogManager._logger_cache[key] = logger
         return logger

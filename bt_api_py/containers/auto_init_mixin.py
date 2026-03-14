@@ -15,6 +15,8 @@ Auto-init mixin for Container classes
   account.get_balance()  # 自动触发 init_data()
 """
 
+__all__ = ["AutoInitMixin"]
+
 
 class AutoInitMixin:
     """自动初始化 mixin，确保 init_data() 在数据访问前被调用
@@ -28,8 +30,17 @@ class AutoInitMixin:
         if not getattr(self, "_initialized", False):
             # Guard against re-entrant calls: init_data() may call get_*
             # methods on self, which would trigger _ensure_init() again.
+            # Set flag BEFORE init_data() to prevent recursion, but track
+            # success to handle exceptions properly.
             self._initialized = True
-            self.init_data()
+            try:
+                self.init_data()
+            except BaseException:
+                # Reset flag if init_data() fails, allowing retry
+                # BaseException catches all including KeyboardInterrupt/SystemExit
+                # but we re-raise immediately, preserving the original exception
+                self._initialized = False
+                raise
         return self
 
     def __getattribute__(self, name):
