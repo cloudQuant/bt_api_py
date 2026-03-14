@@ -15,6 +15,41 @@ from bt_api_py.gateway.protocol import dumps_message, loads_message, make_reques
 from bt_api_py.gateway.runtime import GatewayRuntime
 
 
+def _resolve_timeframe_str(timeframe: Any, compression: int = 1) -> str:
+    """Convert a backtrader-style (timeframe, compression) pair to an MT5 string.
+
+    Accepts either an already-correct string like ``"M15"`` or a numeric
+    backtrader ``TimeFrame`` enum value (e.g. ``TimeFrame.Minutes = 4``)
+    plus a compression integer.
+    """
+    if isinstance(timeframe, str) and timeframe:
+        return timeframe
+
+    tf_int = int(timeframe) if timeframe is not None else 0
+    _BT_TF_SECONDS = 3
+    _BT_TF_MINUTES = 4
+    _BT_TF_DAYS = 6
+    _BT_TF_WEEKS = 7
+    _BT_TF_MONTHS = 8
+
+    if tf_int == _BT_TF_SECONDS:
+        return "M1"
+    if tf_int == _BT_TF_MINUTES:
+        if compression <= 0:
+            compression = 1
+        if compression < 60:
+            return f"M{compression}"
+        hours = compression // 60
+        return f"H{hours}"
+    if tf_int == _BT_TF_DAYS:
+        return "D1"
+    if tf_int == _BT_TF_WEEKS:
+        return "W1"
+    if tf_int == _BT_TF_MONTHS:
+        return "MN1"
+    return "M1"
+
+
 class GatewayClient:
     def __init__(self, **kwargs: Any) -> None:
         self.kwargs = dict(kwargs)
@@ -154,8 +189,22 @@ class GatewayClient:
         }
         return dict(self._command("cancel_order", payload))
 
-    def fetch_bars(self, symbol: str, timeframe: str = "M1", count: int = 100) -> list[dict[str, Any]]:
-        return list(self._command("get_bars", {"symbol": symbol, "timeframe": timeframe, "count": count}) or [])
+    def fetch_bars(
+        self,
+        symbol: str,
+        timeframe: Any = "M1",
+        compression: int = 1,
+        count: int = 200,
+        since: Any = None,
+        limit: int | None = None,
+        **_kwargs: Any,
+    ) -> list[dict[str, Any]]:
+        tf_str = _resolve_timeframe_str(timeframe, compression)
+        bar_count = limit if limit and limit > 0 else count
+        return list(
+            self._command("get_bars", {"symbol": symbol, "timeframe": tf_str, "count": bar_count})
+            or []
+        )
 
     def fetch_symbol_info(self, symbol: str) -> dict[str, Any]:
         return dict(self._command("get_symbol_info", {"symbol": symbol}) or {})

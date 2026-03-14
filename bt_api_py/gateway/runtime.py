@@ -166,12 +166,13 @@ class GatewayRuntime:
         return adapter_cls(**self.kwargs)
 
     def _handle_commands(self) -> None:
-        if self.command_socket is None:
+        sock = self.command_socket
+        if sock is None:
             return
         events = dict(self.poller.poll(timeout=self.config.poll_timeout_ms))
-        if self.command_socket not in events:
+        if sock not in events:
             return
-        parts = self.command_socket.recv_multipart()
+        parts = sock.recv_multipart()
         identity = parts[0]
         payload = loads_message(parts[-1])
         request_id = str(payload.get("request_id") or "")
@@ -182,7 +183,8 @@ class GatewayRuntime:
             response = {"request_id": request_id, "status": "ok", "data": result}
         except Exception as exc:
             response = {"request_id": request_id, "status": "error", "error": str(exc)}
-        self.command_socket.send_multipart([identity, dumps_message(response)])
+        if self.command_socket is not None:
+            sock.send_multipart([identity, dumps_message(response)])
         self._publish(CHANNEL_EVENT, {"kind": "command_result", **response, "command": command})
 
     def _connect_adapter_background(self) -> None:
@@ -202,8 +204,8 @@ class GatewayRuntime:
                 return
             except Exception as exc:
                 logger.warning(
-                    "Adapter connect attempt %d/%d failed: %s",
-                    attempt + 1, max_retries, exc,
+                    "Adapter connect attempt %d/%d failed: %s: %s",
+                    attempt + 1, max_retries, type(exc).__name__, exc,
                 )
                 self.health.record_error("adapter_connect", str(exc))
                 if attempt < max_retries - 1 and self.running:

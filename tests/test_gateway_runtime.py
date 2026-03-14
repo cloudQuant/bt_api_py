@@ -9,6 +9,7 @@ from bt_api_py.gateway.adapters import (
     IbWebGatewayAdapter,
     OkxGatewayAdapter,
 )
+from bt_api_py.gateway.adapters.ctp_adapter import _split as ctp_split
 from bt_api_py.gateway.adapters.binance_adapter import _normalize_asset_type as bn_normalize
 from bt_api_py.gateway.adapters.okx_adapter import _normalize_asset_type as okx_normalize
 from bt_api_py.gateway.client import GatewayClient
@@ -204,6 +205,18 @@ def test_gateway_runtime_client_ipc_roundtrip(monkeypatch, tmp_path):
     finally:
         client.disconnect()
         runtime.stop()
+
+
+def test_ctp_split_normalizes_czce_with_exchange():
+    assert ctp_split("CF2609.CZCE") == ("CF609", "CZCE")
+
+
+def test_ctp_split_normalizes_known_czce_prefix_without_exchange():
+    assert ctp_split("TA2609") == ("TA609", "")
+
+
+def test_ctp_split_does_not_change_cffex_style_symbol_without_exchange():
+    assert ctp_split("IF2609") == ("IF2609", "")
 
 
 # ---------------------------------------------------------------------------

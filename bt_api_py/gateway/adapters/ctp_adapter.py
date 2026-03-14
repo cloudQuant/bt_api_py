@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import queue
+import re
 import threading
 import time
 from collections import defaultdict
@@ -14,6 +15,36 @@ from bt_api_py.feeds.live_ctp_feed import CtpMarketStream, CtpRequestDataFuture,
 from bt_api_py.gateway.adapters.base import BaseGatewayAdapter
 from bt_api_py.gateway.models import GatewayTick
 from bt_api_py.gateway.protocol import CHANNEL_EVENT, CHANNEL_MARKET
+
+_CTP_EXCHANGES = frozenset({"SHFE", "DCE", "CZCE", "CFFEX", "INE", "GFEX"})
+_CZCE_PRODUCT_PREFIXES = frozenset(
+    {
+        "AP",
+        "CF",
+        "CJ",
+        "CY",
+        "FG",
+        "JR",
+        "LR",
+        "MA",
+        "OI",
+        "PF",
+        "PK",
+        "PM",
+        "PX",
+        "RI",
+        "RM",
+        "RS",
+        "SA",
+        "SF",
+        "SM",
+        "SR",
+        "TA",
+        "UR",
+        "WH",
+        "ZC",
+    }
+)
 
 
 class CtpGatewayAdapter(BaseGatewayAdapter):
@@ -184,8 +215,28 @@ def _split(value: str) -> tuple[str, str]:
     text = str(value or "").strip()
     if "." in text:
         left, right = text.split(".", 1)
-        return left.strip(), right.strip().upper()
-    return text, ""
+        exchange = right.strip().upper()
+        return _normalize_instrument(left.strip(), exchange), exchange
+    if "_" in text:
+        exchange, instrument = text.split("_", 1)
+        exchange = exchange.strip().upper()
+        if exchange in _CTP_EXCHANGES:
+            return _normalize_instrument(instrument.strip(), exchange), exchange
+    return _normalize_instrument(text, ""), ""
+
+
+def _normalize_instrument(instrument: str, exchange_id: str = "") -> str:
+    text = str(instrument or "").strip()
+    if not text:
+        return ""
+    match = re.fullmatch(r"([A-Za-z]+)(\d{4})", text)
+    if not match:
+        return text
+    prefix, digits = match.groups()
+    exchange = str(exchange_id or "").strip().upper()
+    if exchange == "CZCE" or (not exchange and prefix.upper() in _CZCE_PRODUCT_PREFIXES):
+        return f"{prefix}{digits[-3:]}"
+    return text
 
 
 def _alias(aliases: dict[str, set[str]], instrument: str) -> str:
