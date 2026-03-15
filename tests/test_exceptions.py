@@ -534,6 +534,65 @@ class TestExceptionAttributes:
         assert exc.retry_after == 60
 
 
+class TestExceptionRepr:
+    """Test __repr__ method for debugging"""
+
+    def test_btapi_error_repr(self):
+        """BtApiError repr without attributes"""
+        exc = BtApiError("test error")
+        repr_str = repr(exc)
+        assert "BtApiError" in repr_str
+
+    def test_exchange_not_found_repr(self):
+        """ExchangeNotFoundError repr includes attributes"""
+        exc = ExchangeNotFoundError("BINANCE___SPOT", available=["OKX___SPOT"])
+        repr_str = repr(exc)
+        assert "ExchangeNotFoundError" in repr_str
+        assert "exchange_name" in repr_str
+        assert "BINANCE___SPOT" in repr_str
+        assert "available" in repr_str
+
+    def test_request_timeout_repr(self):
+        """RequestTimeoutError repr includes all attributes"""
+        exc = RequestTimeoutError("BINANCE___SPOT", url="https://api.binance.com", timeout=30)
+        repr_str = repr(exc)
+        assert "RequestTimeoutError" in repr_str
+        assert "exchange_name" in repr_str
+        assert "url" in repr_str
+        assert "timeout" in repr_str
+
+    def test_insufficient_balance_repr(self):
+        """InsufficientBalanceError repr includes required and available"""
+        exc = InsufficientBalanceError(
+            "BINANCE___SPOT", symbol="BTCUSDT", required=1.5, available=0.5
+        )
+        repr_str = repr(exc)
+        assert "InsufficientBalanceError" in repr_str
+        assert "required" in repr_str
+        assert "available" in repr_str
+
+    def test_order_not_found_repr(self):
+        """OrderNotFoundError repr includes order_id"""
+        exc = OrderNotFoundError("BINANCE___SPOT", order_id="12345", symbol="BTCUSDT")
+        repr_str = repr(exc)
+        assert "OrderNotFoundError" in repr_str
+        assert "order_id" in repr_str
+        assert "12345" in repr_str
+
+    def test_rate_limit_repr(self):
+        """RateLimitError repr includes retry_after"""
+        exc = RateLimitError("BINANCE___SPOT", retry_after=60)
+        repr_str = repr(exc)
+        assert "RateLimitError" in repr_str
+        assert "retry_after" in repr_str
+
+    def test_repr_is_valid_python(self):
+        """repr output should be eval-safe format"""
+        exc = ExchangeNotFoundError("TEST")
+        repr_str = repr(exc)
+        assert repr_str.startswith("ExchangeNotFoundError")
+
+
 class TestEdgeCases:
     """Test edge cases and special scenarios"""
 

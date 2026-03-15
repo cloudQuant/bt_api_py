@@ -33,6 +33,14 @@ class BtApiError(Exception):
 
     __slots__ = ()
 
+    def __repr__(self) -> str:
+        cls_name = self.__class__.__name__
+        args = []
+        for slot in self.__slots__:
+            if hasattr(self, slot):
+                args.append(f"{slot}={getattr(self, slot)!r}")
+        return f"{cls_name}({', '.join(args)})" if args else f"{cls_name}()"
+
 
 class ExchangeNotFoundError(BtApiError):
     """交易所未注册或未添加"""
