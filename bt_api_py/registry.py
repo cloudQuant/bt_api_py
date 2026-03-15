@@ -43,6 +43,7 @@ class ExchangeRegistry:
 
     _default: "ExchangeRegistry | None" = None
     _default_lock = threading.Lock()
+    _singleton_initialized: bool
 
     _feed_classes: dict[str, type[Any]]
     _stream_classes: dict[str, dict[str, Any]]
@@ -61,11 +62,15 @@ class ExchangeRegistry:
                 instance._exchange_data_classes = {}
                 instance._balance_handlers = {}
                 instance._lock = threading.RLock()
+                instance._singleton_initialized = False
                 cls._default = instance
             return cls._default
 
     def __init__(self) -> None:
         """Initialize registry instance (singleton pattern handled by __new__)."""
+        if getattr(self, "_singleton_initialized", False):
+            return
+        self._singleton_initialized = True
 
     @classmethod
     def _get_default(cls) -> "ExchangeRegistry":

@@ -9,6 +9,7 @@ import importlib
 import pkgutil
 import queue
 import time
+from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
@@ -78,6 +79,18 @@ for _finder, _name, _ispkg in pkgutil.iter_modules(_exchange_reg_pkg.__path__):
 class BtApi:
     """统一多交易所 API 入口，通过 ExchangeRegistry 实现交易所即插即用。"""
 
+    exchange_kwargs: dict[str, Any]
+    debug: bool
+    data_queues: dict[str, queue.Queue[Any]]
+    exchange_feeds: dict[str, Any]
+    logger: _LoggerProxy
+    _value_dict: dict[str, Any]
+    _cash_dict: dict[str, Any]
+    subscribe_bar_num: int
+    event_bus: EventBus
+    _subscription_flags: dict[str, bool]
+    _async_proxy_cache: dict[str, Callable[..., Any]]
+
     def __init__(
         self,
         exchange_kwargs: dict[str, Any] | None = None,
@@ -92,16 +105,17 @@ class BtApi:
             event_bus: 事件总线实例，用于 BarEvent/OrderEvent 等回调；None 则创建默认实例。
         """
         self.exchange_kwargs = exchange_kwargs or {}
-        self.debug = debug  # 是否是debug模式，默认是
-        self.data_queues = {}  # 保存各个交易所的数据队列
-        self.exchange_feeds = {}  # 保存各个交易所的feed接口
-        self.logger = self.init_logger()  # 初始化日志
-        self._value_dict = {}  # 保存各个交易所账户的净值
-        self._cash_dict = {}  # 保存各个交易所账户的现金
-        self.subscribe_bar_num = 0  # 记录订阅了多少个品种的K线
-        self.event_bus = event_bus or EventBus()  # 事件总线，支持回调模式
-        self._subscription_flags = {}  # 跟踪各交易所账户订阅状态
-        self.init_exchange(exchange_kwargs or {})  # 根据提供的交易所列表进行相应的初始化
+        self.debug = debug
+        self.data_queues = {}
+        self.exchange_feeds = {}
+        self.logger = self.init_logger()
+        self._value_dict = {}
+        self._cash_dict = {}
+        self.subscribe_bar_num = 0
+        self.event_bus = event_bus or EventBus()
+        self._subscription_flags = {}
+        self._async_proxy_cache = {}
+        self.init_exchange(exchange_kwargs or {})
 
     def init_exchange(self, exchange_kwargs: dict[str, Any]) -> None:
         """根据 exchange_kwargs 初始化并添加交易所。
@@ -662,8 +676,11 @@ class BtApi:
     #   bt_api.async_make_order("OKX___SWAP", "BTC-USDT", 0.001, 50000, "limit")
 
     def __getattr__(self, name: str) -> Any:
-        """动态代理 async_* 方法到对应 Feed 实例。"""
+        """动态代理 async_* 方法到对应 Feed 实例（带缓存）。"""
         if name.startswith("async_"):
+            cache = self.__dict__.setdefault("_async_proxy_cache", {})
+            if name in cache:
+                return cache[name]
 
             def _async_proxy(exchange_name: str, *args: Any, **kwargs: Any) -> Any:
                 feed = self._get_feed(exchange_name)
@@ -673,6 +690,7 @@ class BtApi:
                 return feed_method(*args, **kwargs)
 
             _async_proxy.__name__ = name
+            cache[name] = _async_proxy
             return _async_proxy
         raise AttributeError(f"'BtApi' object has no attribute {name!r}")
 
