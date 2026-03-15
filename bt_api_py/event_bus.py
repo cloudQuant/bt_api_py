@@ -74,20 +74,6 @@ class EventBus:
         for handler in handlers:
             try:
                 handler(data)
-            except (TypeError, ValueError, AttributeError, KeyError) as e:
-                handler_name = getattr(handler, "__name__", repr(handler))
-                error_info = (event_type, handler, e)
-                self._last_errors.append(error_info)
-                errors.append(e)
-
-                if self.error_mode == ErrorHandlerMode.RAISE:
-                    raise
-                elif self.error_mode == ErrorHandlerMode.LOG:
-                    self.logger.warning(
-                        f"EventBus handler error: event={event_type}, "
-                        f"handler={handler_name}, error={e}\n"
-                        f"{traceback.format_exc()}"
-                    )
             except Exception as e:
                 handler_name = getattr(handler, "__name__", repr(handler))
                 error_info = (event_type, handler, e)
@@ -96,11 +82,15 @@ class EventBus:
 
                 if self.error_mode == ErrorHandlerMode.RAISE:
                     raise
-                self.logger.error(
-                    f"EventBus unexpected error: event={event_type}, "
-                    f"handler={handler_name}, error={e}\n"
+
+                is_expected = isinstance(e, (TypeError, ValueError, AttributeError, KeyError))
+                log_level = "warning" if is_expected else "error"
+                log_msg = (
+                    f"EventBus {'handler error' if is_expected else 'unexpected error'}: "
+                    f"event={event_type}, handler={handler_name}, error={e}\n"
                     f"{traceback.format_exc()}"
                 )
+                getattr(self.logger, log_level)(log_msg)
 
         return errors
 
