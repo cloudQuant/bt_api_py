@@ -5,11 +5,12 @@ Capability 机制 — 声明场所支持的功能
 上层调用前可通过 require_capability() 检查，缺失能力时抛出 NotSupportedError。
 """
 
-from enum import Enum, unique
+import enum
+from enum import unique
 
 
 @unique
-class Capability(str, Enum):
+class Capability(enum.StrEnum):
     """场所能力枚举 — 覆盖所有可能的交易功能"""
 
     # ── 行情 ──

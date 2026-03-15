@@ -78,11 +78,11 @@ class KrakenRequestOrderBookData(OrderBookData):
 
     def get_bid_trade_nums(self):
         """Get bid trade numbers."""
-        return None
+        return
 
     def get_ask_trade_nums(self):
         """Get ask trade numbers."""
-        return None
+        return
 
     def _parse_data(self, data: dict[str, Any]):
         """Parse Kraken order book data.

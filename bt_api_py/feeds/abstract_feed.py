@@ -8,7 +8,9 @@
 
 import asyncio
 import functools
-from typing import Any, Protocol, cast, runtime_checkable
+from typing import Any, Protocol, TypeVar, cast, runtime_checkable
+
+T = TypeVar("T")
 
 
 @runtime_checkable
@@ -18,8 +20,6 @@ class AbstractVenueFeed(Protocol):
     所有场所 Feed（CEX/DEX/CTP/IB/QMT）都应满足此协议。
     使用 Protocol 而非 ABC，以便现有 Feed 子类无需修改继承链即可通过类型检查。
     """
-
-    # ── 连接管理 ──────────────────────────────────────────────
 
     def connect(self) -> None:
         """建立连接（HTTP 场所可为 no-op）."""
@@ -33,23 +33,24 @@ class AbstractVenueFeed(Protocol):
         """检查连接状态."""
         ...
 
-    # ── 行情查询（同步）── 签名与现有 Feed 保持一致 ────────────
-
-    def get_tick(self, symbol: str, extra_data=None, **kwargs) -> Any:
+    def get_tick(self, symbol: str, extra_data: Any = None, **kwargs: Any) -> Any:
         """获取最新价格."""
         ...
 
-    def get_depth(self, symbol: str, count: int = 20, extra_data=None, **kwargs) -> Any:
+    def get_depth(self, symbol: str, count: int = 20, extra_data: Any = None, **kwargs: Any) -> Any:
         """获取深度."""
         ...
 
     def get_kline(
-        self, symbol: str, period: str, count: int = 20, extra_data=None, **kwargs
+        self,
+        symbol: str,
+        period: str,
+        count: int = 20,
+        extra_data: Any = None,
+        **kwargs: Any,
     ) -> Any:
         """获取K线."""
         ...
-
-    # ── 交易操作（同步）── 签名与现有 Feed 保持一致 ────────────
 
     def make_order(
         self,
@@ -60,45 +61,45 @@ class AbstractVenueFeed(Protocol):
         offset: str = "open",
         post_only: bool = False,
         client_order_id: str | None = None,
-        extra_data=None,
-        **kwargs,
+        extra_data: Any = None,
+        **kwargs: Any,
     ) -> Any:
         """下单."""
         ...
 
-    def cancel_order(self, symbol: str, order_id: str, extra_data=None, **kwargs) -> Any:
+    def cancel_order(
+        self, symbol: str, order_id: str, extra_data: Any = None, **kwargs: Any
+    ) -> Any:
         """撤单."""
         ...
 
-    def cancel_all(self, symbol: str | None = None, extra_data=None, **kwargs) -> Any:
+    def cancel_all(self, symbol: str | None = None, extra_data: Any = None, **kwargs: Any) -> Any:
         """撤销所有订单（可选能力）."""
         ...
 
-    def query_order(self, symbol: str, order_id: str, extra_data=None, **kwargs) -> Any:
+    def query_order(self, symbol: str, order_id: str, extra_data: Any = None, **kwargs: Any) -> Any:
         """查询订单."""
         ...
 
-    def get_open_orders(self, symbol: str | None = None, extra_data=None, **kwargs) -> Any:
+    def get_open_orders(
+        self, symbol: str | None = None, extra_data: Any = None, **kwargs: Any
+    ) -> Any:
         """查询挂单."""
         ...
 
-    # ── 账户查询（同步）────────────────────────────────────────
-
-    def get_balance(self, symbol=None, extra_data=None, **kwargs) -> Any:
+    def get_balance(self, symbol: Any = None, extra_data: Any = None, **kwargs: Any) -> Any:
         """查询余额."""
         ...
 
-    def get_account(self, symbol="ALL", extra_data=None, **kwargs) -> Any:
+    def get_account(self, symbol: str = "ALL", extra_data: Any = None, **kwargs: Any) -> Any:
         """查询账户信息."""
         ...
 
-    def get_position(self, symbol: str | None = None, extra_data=None, **kwargs) -> Any:
+    def get_position(self, symbol: str | None = None, extra_data: Any = None, **kwargs: Any) -> Any:
         """查询持仓（期货/期权）."""
         ...
 
-    # ── 异步版本 ───────────────────────────────────────────────
-
-    def async_get_tick(self, symbol: str, extra_data=None, **kwargs) -> Any: ...
+    def async_get_tick(self, symbol: str, extra_data: Any = None, **kwargs: Any) -> Any: ...
 
     def async_make_order(
         self,
@@ -109,15 +110,17 @@ class AbstractVenueFeed(Protocol):
         offset: str = "open",
         post_only: bool = False,
         client_order_id: str | None = None,
-        extra_data=None,
-        **kwargs,
+        extra_data: Any = None,
+        **kwargs: Any,
     ) -> Any: ...
 
-    def async_cancel_order(self, symbol: str, order_id: str, extra_data=None, **kwargs) -> Any: ...
+    def async_cancel_order(
+        self, symbol: str, order_id: str, extra_data: Any = None, **kwargs: Any
+    ) -> Any: ...
 
-    def async_get_balance(self, symbol=None, extra_data=None, **kwargs) -> Any: ...
-
-    # ── 能力声明 ───────────────────────────────────────────────
+    def async_get_balance(
+        self, symbol: Any = None, extra_data: Any = None, **kwargs: Any
+    ) -> Any: ...
 
     @property
     def capabilities(self) -> set[str]:
@@ -130,28 +133,21 @@ class AsyncWrapperMixin:
 
     HTTP 场所应覆盖这些方法为真正的 httpx 异步实现。
     非 HTTP 场所继承此 Mixin，自动将同步方法包装为异步。
-
-    使用方式::
-
-        class CtpFeed(Feed, AsyncWrapperMixin):
-            def get_tick(self, symbol, extra_data=None, **kwargs) -> Any:
-                # CTP 同步实现
-                ...
-            # async_get_tick 自动由 AsyncWrapperMixin 提供
     """
 
     def _sync_feed(self) -> "AbstractVenueFeed":
-        """Cast self to AbstractVenueFeed for mixin; concrete class provides sync methods."""
         return cast("AbstractVenueFeed", self)
 
-    async def async_get_tick(self, symbol, extra_data=None, **kwargs):
+    async def async_get_tick(self, symbol: str, extra_data: Any = None, **kwargs: Any) -> Any:
         loop = asyncio.get_running_loop()
         feed = self._sync_feed()
         return await loop.run_in_executor(
             None, functools.partial(feed.get_tick, symbol, extra_data=extra_data, **kwargs)
         )
 
-    async def async_get_depth(self, symbol, count=20, extra_data=None, **kwargs):
+    async def async_get_depth(
+        self, symbol: str, count: int = 20, extra_data: Any = None, **kwargs: Any
+    ) -> Any:
         loop = asyncio.get_running_loop()
         feed = self._sync_feed()
         return await loop.run_in_executor(
@@ -159,7 +155,14 @@ class AsyncWrapperMixin:
             functools.partial(feed.get_depth, symbol, count=count, extra_data=extra_data, **kwargs),
         )
 
-    async def async_get_kline(self, symbol, period, count=20, extra_data=None, **kwargs):
+    async def async_get_kline(
+        self,
+        symbol: str,
+        period: str,
+        count: int = 20,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> Any:
         loop = asyncio.get_running_loop()
         feed = self._sync_feed()
         return await loop.run_in_executor(
@@ -171,16 +174,16 @@ class AsyncWrapperMixin:
 
     async def async_make_order(
         self,
-        symbol,
-        volume,
-        price,
-        order_type,
-        offset="open",
-        post_only=False,
-        client_order_id=None,
-        extra_data=None,
-        **kwargs,
-    ):
+        symbol: str,
+        volume: float,
+        price: float,
+        order_type: str,
+        offset: str = "open",
+        post_only: bool = False,
+        client_order_id: str | None = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> Any:
         loop = asyncio.get_running_loop()
         feed = self._sync_feed()
         return await loop.run_in_executor(
@@ -199,7 +202,9 @@ class AsyncWrapperMixin:
             ),
         )
 
-    async def async_cancel_order(self, symbol, order_id, extra_data=None, **kwargs):
+    async def async_cancel_order(
+        self, symbol: str, order_id: str, extra_data: Any = None, **kwargs: Any
+    ) -> Any:
         loop = asyncio.get_running_loop()
         feed = self._sync_feed()
         return await loop.run_in_executor(
@@ -207,14 +212,18 @@ class AsyncWrapperMixin:
             functools.partial(feed.cancel_order, symbol, order_id, extra_data=extra_data, **kwargs),
         )
 
-    async def async_cancel_all(self, symbol=None, extra_data=None, **kwargs):
+    async def async_cancel_all(
+        self, symbol: str | None = None, extra_data: Any = None, **kwargs: Any
+    ) -> Any:
         loop = asyncio.get_running_loop()
         feed = self._sync_feed()
         return await loop.run_in_executor(
             None, functools.partial(feed.cancel_all, symbol, extra_data=extra_data, **kwargs)
         )
 
-    async def async_query_order(self, symbol, order_id, extra_data=None, **kwargs):
+    async def async_query_order(
+        self, symbol: str, order_id: str, extra_data: Any = None, **kwargs: Any
+    ) -> Any:
         loop = asyncio.get_running_loop()
         feed = self._sync_feed()
         return await loop.run_in_executor(
@@ -222,28 +231,36 @@ class AsyncWrapperMixin:
             functools.partial(feed.query_order, symbol, order_id, extra_data=extra_data, **kwargs),
         )
 
-    async def async_get_open_orders(self, symbol=None, extra_data=None, **kwargs):
+    async def async_get_open_orders(
+        self, symbol: str | None = None, extra_data: Any = None, **kwargs: Any
+    ) -> Any:
         loop = asyncio.get_running_loop()
         feed = self._sync_feed()
         return await loop.run_in_executor(
             None, functools.partial(feed.get_open_orders, symbol, extra_data=extra_data, **kwargs)
         )
 
-    async def async_get_balance(self, symbol=None, extra_data=None, **kwargs):
+    async def async_get_balance(
+        self, symbol: Any = None, extra_data: Any = None, **kwargs: Any
+    ) -> Any:
         loop = asyncio.get_running_loop()
         feed = self._sync_feed()
         return await loop.run_in_executor(
             None, functools.partial(feed.get_balance, symbol, extra_data=extra_data, **kwargs)
         )
 
-    async def async_get_account(self, symbol="ALL", extra_data=None, **kwargs):
+    async def async_get_account(
+        self, symbol: str = "ALL", extra_data: Any = None, **kwargs: Any
+    ) -> Any:
         loop = asyncio.get_running_loop()
         feed = self._sync_feed()
         return await loop.run_in_executor(
             None, functools.partial(feed.get_account, symbol, extra_data=extra_data, **kwargs)
         )
 
-    async def async_get_position(self, symbol=None, extra_data=None, **kwargs):
+    async def async_get_position(
+        self, symbol: str | None = None, extra_data: Any = None, **kwargs: Any
+    ) -> Any:
         loop = asyncio.get_running_loop()
         feed = self._sync_feed()
         return await loop.run_in_executor(

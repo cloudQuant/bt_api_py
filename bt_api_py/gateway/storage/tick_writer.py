@@ -15,11 +15,10 @@ event-dispatch thread while ``_flush_loop`` runs in a background thread.
 from __future__ import annotations
 
 import logging
-import os
 import threading
 import time
 from collections import defaultdict
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -221,7 +220,7 @@ class TickWriter:
 
     def _trading_day(self, timestamp: float) -> str:
         """Derive trading-day string from a unix timestamp."""
-        dt = datetime.fromtimestamp(timestamp, tz=timezone.utc)
+        dt = datetime.fromtimestamp(timestamp, tz=UTC)
         return dt.strftime(self.trading_day_fmt)
 
     # ------------------------------------------------------------------

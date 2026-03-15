@@ -69,31 +69,31 @@ class OkxAccountData(AccountData):
 
     def get_account_id(self):
         """# 账户id"""
-        return None
+        return
 
     def get_account_type(self):
         """# 账户类型"""
-        return None
+        return
 
     def get_can_deposit(self):
         """# 是否可以存钱"""
-        return None
+        return
 
     def get_can_trade(self):
         """# 是否可以交易"""
-        return None
+        return
 
     def get_can_withdraw(self):
         """# 是否可以取钱"""
-        return None
+        return
 
     def get_fee_tier(self):
         """# 资金费率等级"""
-        return None
+        return
 
     def get_max_withdraw_amount(self):
         """# 最大可取资金"""
-        return None
+        return
 
     def get_total_margin(self):
         """# 总的保证金"""
@@ -117,7 +117,7 @@ class OkxAccountData(AccountData):
 
     def get_total_position_initial_margin(self):
         """# 总的持仓初始化保证金"""
-        return None
+        return
 
     def get_total_unrealized_profit(self):
         """# 总的未实现利润"""
@@ -133,7 +133,7 @@ class OkxAccountData(AccountData):
 
     def get_positions(self):
         """# 获取持仓数据"""
-        return None
+        return
 
     def get_spot_maker_commission_rate(self):
         # maker佣金费率

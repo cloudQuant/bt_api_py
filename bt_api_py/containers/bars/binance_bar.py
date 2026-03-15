@@ -251,7 +251,7 @@ class BinanceRequestBarData(BarData):
         Returns:
             Always None for this implementation.
         """
-        return None
+        return
 
     def get_base_asset_volume(self) -> None:
         """
@@ -260,7 +260,7 @@ class BinanceRequestBarData(BarData):
         Returns:
             Always None for this implementation.
         """
-        return None
+        return
 
     def get_num_trades(self) -> float | None:
         """
@@ -544,7 +544,7 @@ class BinanceWssBarData(BarData):
         Returns:
             Always None for this implementation.
         """
-        return None
+        return
 
     def get_base_asset_volume(self) -> None:
         """
@@ -553,7 +553,7 @@ class BinanceWssBarData(BarData):
         Returns:
             Always None for this implementation.
         """
-        return None
+        return
 
     def get_num_trades(self) -> float | None:
         """

@@ -207,12 +207,12 @@ class OrderData(AutoInitMixin):
     def get_order_offset(self):
         """# 开平方向: open / close / close_today / close_yesterday
         CTP 下单必填; 加密货币交易所可返回 None"""
-        return None
+        return
 
     def get_order_exchange_id(self):
         """# 交易所代码, 如 'CFFEX', 'SHFE', 'SMART' 等
         CTP/IB 需要; 加密货币交易所可返回 None"""
-        return None
+        return
 
     def __str__(self):
         raise NotImplementedError

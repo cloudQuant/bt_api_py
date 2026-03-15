@@ -13,6 +13,7 @@ State file path: ``{state_dir}/gateway_{account_id}_state.json``
 
 from __future__ import annotations
 
+import contextlib
 import json
 import logging
 import os
@@ -141,10 +142,8 @@ class OrderRefAllocator:
             self._state_dir.mkdir(parents=True, exist_ok=True)
             existing: dict[str, Any] = {}
             if self._state_file.exists():
-                try:
+                with contextlib.suppress(json.JSONDecodeError, OSError):
                     existing = json.loads(self._state_file.read_text(encoding="utf-8"))
-                except (json.JSONDecodeError, OSError):
-                    pass
             existing[_STATE_KEY] = self._value
             tmp_path: Path | None = None
             try:
@@ -161,10 +160,8 @@ class OrderRefAllocator:
                 os.replace(str(tmp_path), str(self._state_file))
             finally:
                 if tmp_path is not None and tmp_path.exists():
-                    try:
+                    with contextlib.suppress(OSError):
                         tmp_path.unlink()
-                    except OSError:
-                        pass
         except OSError as exc:
             logger.warning(
                 "OrderRefAllocator[%s]: failed to persist state: %s",

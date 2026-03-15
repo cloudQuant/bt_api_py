@@ -6,12 +6,13 @@
 
 import asyncio
 import contextlib
+import enum
 import fnmatch
 import threading
 import time
 from collections import deque
 from dataclasses import dataclass
-from enum import Enum, unique
+from enum import unique
 from typing import Any
 
 __all__ = [
@@ -25,14 +26,14 @@ __all__ = [
 
 
 @unique
-class RateLimitType(str, Enum):
+class RateLimitType(enum.StrEnum):
     SLIDING_WINDOW = "sliding_window"
     FIXED_WINDOW = "fixed_window"
     TOKEN_BUCKET = "token_bucket"
 
 
 @unique
-class RateLimitScope(str, Enum):
+class RateLimitScope(enum.StrEnum):
     GLOBAL = "global"
     ENDPOINT = "endpoint"
     IP = "ip"

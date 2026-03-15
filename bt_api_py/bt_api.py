@@ -31,13 +31,13 @@ __all__ = ["BtApi"]
 DATANAME_SEPARATOR = "___"
 DOWNLOAD_RETRY_DELAY_SEC = 3
 KLINE_PERIOD_DELTAS: dict[str, timedelta] = {
-    "1m": timedelta(hours=1),
-    "3m": timedelta(hours=5),
-    "5m": timedelta(hours=9),
-    "15m": timedelta(hours=25),
-    "30m": timedelta(hours=50),
-    "1H": timedelta(hours=100),
-    "1D": timedelta(days=100),
+    "1m": timedelta(minutes=1),
+    "3m": timedelta(minutes=3),
+    "5m": timedelta(minutes=5),
+    "15m": timedelta(minutes=15),
+    "30m": timedelta(minutes=30),
+    "1H": timedelta(hours=1),
+    "1D": timedelta(days=1),
 }
 
 

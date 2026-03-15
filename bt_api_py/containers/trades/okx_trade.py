@@ -84,7 +84,7 @@ class OkxTradeData(TradeData):
 
     def get_trade_offset(self):
         """# offset用于确定是开仓还是平仓"""
-        return None
+        return
 
     def get_trade_price(self):
         """# 成交价格"""

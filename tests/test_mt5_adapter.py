@@ -3,28 +3,25 @@
 from __future__ import annotations
 
 import asyncio
-import time
 import uuid
 from collections import deque
 from dataclasses import dataclass
 from typing import Any
-from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
 from bt_api_py.gateway.adapters.base import BaseGatewayAdapter
 from bt_api_py.gateway.adapters.mt5_adapter import (
-    Mt5GatewayAdapter,
     _MT5_ORDER_STATE_MAP,
     _RETCODE_STATUS,
     _TIMEFRAME_MAP,
+    Mt5GatewayAdapter,
 )
 from bt_api_py.gateway.client import GatewayClient
 from bt_api_py.gateway.config import GatewayConfig
 from bt_api_py.gateway.models import GatewayTick
 from bt_api_py.gateway.protocol import CHANNEL_EVENT, CHANNEL_MARKET
 from bt_api_py.gateway.runtime import GatewayRuntime
-
 
 # ---------------------------------------------------------------------------
 # Mock MT5WebClient for unit testing

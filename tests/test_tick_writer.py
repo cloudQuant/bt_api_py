@@ -4,10 +4,8 @@ from __future__ import annotations
 
 import time
 from dataclasses import dataclass
-from pathlib import Path
 
 import pyarrow.parquet as pq
-import pytest
 
 from bt_api_py.gateway.storage.tick_writer import TICK_SCHEMA, TickWriter
 

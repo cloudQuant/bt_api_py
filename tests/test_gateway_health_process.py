@@ -2,12 +2,8 @@
 
 from __future__ import annotations
 
-import json
 import os
 import time
-from pathlib import Path
-
-import pytest
 
 from bt_api_py.gateway.health import (
     ConnectionState,
@@ -15,7 +11,6 @@ from bt_api_py.gateway.health import (
     GatewayState,
 )
 from bt_api_py.gateway.process import GatewayProcess
-
 
 # ---------------------------------------------------------------------------
 # GatewayHealth

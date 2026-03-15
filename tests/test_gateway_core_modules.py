@@ -4,14 +4,10 @@ from __future__ import annotations
 
 import json
 import threading
-from pathlib import Path
 
-import pytest
-
-from bt_api_py.gateway.order_identity_map import OrderEntry, OrderIdentityMap
+from bt_api_py.gateway.order_identity_map import OrderIdentityMap
 from bt_api_py.gateway.order_ref_allocator import OrderRefAllocator
 from bt_api_py.gateway.subscription_manager import SubscriptionManager
-
 
 # ---------------------------------------------------------------------------
 # SubscriptionManager

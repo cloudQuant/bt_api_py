@@ -171,7 +171,11 @@ class HitBtcRequestOrderData(OrderData):
         return self.status == "canceled"
 
     def __str__(self):
-        return f"HITBTC Order {self.symbol_name}: {self.side} {self.quantity} @ {self.price} [{self.status}]"
+        return (
+            f"HITBTC Order {self.symbol_name}: "
+            f"{self.side} {self.quantity} @ {self.price} "
+            f"[{self.status}]"
+        )
 
     def __repr__(self):
         return f"<HitBtcOrderData {self.symbol_name} {self.side} {self.type}>"

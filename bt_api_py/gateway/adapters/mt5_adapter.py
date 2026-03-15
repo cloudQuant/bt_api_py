@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import logging
 import threading
 import time
@@ -296,14 +297,10 @@ class Mt5GatewayAdapter(BaseGatewayAdapter):
         # Register push callbacks
         self._client.on_tick(self._on_tick_push)
         self._client.on_disconnect(self._on_ws_disconnect)
-        try:
+        with contextlib.suppress(Exception):
             self._client.on_order_update(self._on_order_update_push)
-        except Exception:
-            pass
-        try:
+        with contextlib.suppress(Exception):
             self._client.on_position_update(self._on_position_update_push)
-        except Exception:
-            pass
 
     async def _async_subscribe(self, standard_symbols: list[str], resolved_symbols: list[str]) -> None:
         await self._client.subscribe_symbols(resolved_symbols)

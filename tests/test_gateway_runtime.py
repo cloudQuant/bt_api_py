@@ -9,8 +9,8 @@ from bt_api_py.gateway.adapters import (
     IbWebGatewayAdapter,
     OkxGatewayAdapter,
 )
-from bt_api_py.gateway.adapters.ctp_adapter import _split as ctp_split
 from bt_api_py.gateway.adapters.binance_adapter import _normalize_asset_type as bn_normalize
+from bt_api_py.gateway.adapters.ctp_adapter import _split as ctp_split
 from bt_api_py.gateway.adapters.okx_adapter import _normalize_asset_type as okx_normalize
 from bt_api_py.gateway.client import GatewayClient
 from bt_api_py.gateway.config import GatewayConfig

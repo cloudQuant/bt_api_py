@@ -241,7 +241,7 @@ class KrakenRequestOrderData(OrderData):
 
     def get_trade_id(self):
         """Get trade ID."""
-        return None
+        return
 
     def get_client_order_id(self):
         """Get client order ID."""
@@ -269,7 +269,7 @@ class KrakenRequestOrderData(OrderData):
 
     def get_reduce_only(self):
         """Get reduce only flag."""
-        return None
+        return
 
     def get_order_side(self):
         """Get order side."""
@@ -285,7 +285,7 @@ class KrakenRequestOrderData(OrderData):
 
     def get_order_time_in_force(self):
         """Get order time in force."""
-        return None
+        return
 
     def get_order_type(self):
         """Get order type."""
@@ -301,55 +301,55 @@ class KrakenRequestOrderData(OrderData):
 
     def get_position_side(self):
         """Get position side."""
-        return None
+        return
 
     def get_trailing_stop_price(self):
         """Get trailing stop price."""
-        return None
+        return
 
     def get_trailing_stop_trigger_price(self):
         """Get trailing stop trigger price."""
-        return None
+        return
 
     def get_trailing_stop_callback_rate(self):
         """Get trailing stop callback rate."""
-        return None
+        return
 
     def get_trailing_stop_trigger_price_type(self):
         """Get trailing stop trigger price type."""
-        return None
+        return
 
     def get_stop_loss_price(self):
         """Get stop loss price."""
-        return None
+        return
 
     def get_stop_loss_trigger_price(self):
         """Get stop loss trigger price."""
-        return None
+        return
 
     def get_stop_loss_trigger_price_type(self):
         """Get stop loss trigger price type."""
-        return None
+        return
 
     def get_take_profit_price(self):
         """Get take profit price."""
-        return None
+        return
 
     def get_take_profit_trigger_price(self):
         """Get take profit trigger price."""
-        return None
+        return
 
     def get_take_profit_trigger_price_type(self):
         """Get take profit trigger price type."""
-        return None
+        return
 
     def get_close_position(self):
         """Get close position flag."""
-        return None
+        return
 
     def get_order_offset(self):
         """Get order offset."""
-        return None
+        return
 
     def get_order_exchange_id(self):
         """Get order exchange ID."""

@@ -3,8 +3,8 @@
 Defines API endpoints, chain enums, and path configurations for SushiSwap DEX.
 """
 
+import enum
 import os
-from enum import Enum
 from typing import Any
 
 # Config loading cache
@@ -47,7 +47,7 @@ def _get_sushiswap_config() -> Any | None:
     return _sushiswap_config
 
 
-class SushiSwapChain(str, Enum):
+class SushiSwapChain(enum.StrEnum):
     """SushiSwap supported chains."""
 
     ETHEREUM = "ETHEREUM"

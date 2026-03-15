@@ -83,11 +83,11 @@ class HitBtcRequestTradeData(TradeData):
 
     def get_order_id(self):
         """Get order ID (not available in HitBTC trade data)."""
-        return None
+        return
 
     def get_client_order_id(self):
         """Get client order ID (not available in HitBTC trade data)."""
-        return None
+        return
 
     def get_trade_side(self):
         """Get trade side."""
@@ -95,7 +95,7 @@ class HitBtcRequestTradeData(TradeData):
 
     def get_trade_offset(self):
         """Get trade offset (not applicable for spot trading)."""
-        return None
+        return
 
     def get_trade_price(self):
         """Get trade price."""
@@ -107,7 +107,7 @@ class HitBtcRequestTradeData(TradeData):
 
     def get_trade_type(self):
         """Get trade type (not available in HitBTC trade data)."""
-        return None
+        return
 
     def get_trade_time(self):
         """Get trade time."""
@@ -115,15 +115,15 @@ class HitBtcRequestTradeData(TradeData):
 
     def get_trade_fee(self):
         """Get trade fee (not available in HitBTC trade data)."""
-        return None
+        return
 
     def get_trade_fee_symbol(self):
         """Get trade fee symbol (not available in HitBTC trade data)."""
-        return None
+        return
 
     def get_trade_accumulate_volume(self):
         """Get accumulated volume (not available in HitBTC trade data)."""
-        return None
+        return
 
     def __str__(self):
         return f"HITBTC Trade {self.symbol_name}: {self.side} {self.quantity} @ {self.price}"

@@ -239,6 +239,7 @@ class ConfigurationError(BtApiError):
         if detail:
             msg += f": {detail}"
         super().__init__(msg)
+        self.detail = detail
 
 
 class WebSocketError(BtApiError):

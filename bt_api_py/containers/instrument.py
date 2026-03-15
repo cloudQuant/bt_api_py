@@ -6,15 +6,16 @@
 """
 
 import dataclasses
+import enum
 from dataclasses import dataclass, field
 from datetime import datetime
 from decimal import Decimal
-from enum import Enum, unique
+from enum import unique
 from typing import Any
 
 
 @unique
-class AssetType(str, Enum):
+class AssetType(enum.StrEnum):
     """资产类型枚举"""
 
     SPOT = "spot"

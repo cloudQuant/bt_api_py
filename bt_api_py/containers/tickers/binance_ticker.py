@@ -7,7 +7,7 @@ from bt_api_py.functions.utils import from_dict_get_float, from_dict_get_string
 
 
 class BinanceTickerData(TickerData):
-    """Binance ticker data container."""
+    """Binance ticker data container (supports REST API and WebSocket)."""
 
     def __init__(self, ticker_info, symbol_name, asset_type, has_been_json_encoded=False) -> None:
         super().__init__(ticker_info, has_been_json_encoded)
@@ -91,7 +91,7 @@ class BinanceTickerData(TickerData):
 
 
 class BinanceWssTickerData(BinanceTickerData):
-    """保存ticker信息."""
+    """Binance WebSocket ticker data container."""
 
     def init_data(self) -> "Self":
         if not self.has_been_json_encoded:
@@ -111,7 +111,7 @@ class BinanceWssTickerData(BinanceTickerData):
 
 
 class BinanceRequestTickerData(BinanceTickerData):
-    """保存ticker信息."""
+    """Binance REST API ticker data container."""
 
     def init_data(self) -> "Self":
         if not self.has_been_json_encoded:

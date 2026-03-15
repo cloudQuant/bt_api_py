@@ -9,9 +9,12 @@
 
 import threading
 from collections.abc import Callable
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from bt_api_py.exceptions import ExchangeNotFoundError
+
+if TYPE_CHECKING:
+    from bt_api_py.feeds.abstract_feed import AbstractVenueFeed
 
 __all__ = ["ExchangeRegistry"]
 
@@ -45,7 +48,7 @@ class ExchangeRegistry:
     _default_lock = threading.Lock()
     _initialized: bool = False
 
-    _feed_classes: dict[str, type]
+    _feed_classes: dict[str, type[Any]]
     _stream_classes: dict[str, dict[str, Any]]
     _exchange_data_classes: dict[str, type]
     _balance_handlers: dict[str, Callable[..., Any]]

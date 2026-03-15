@@ -3,8 +3,8 @@
 Defines API endpoints, chain enums, and path configurations for Uniswap DEX.
 """
 
+import enum
 import os
-from enum import Enum
 from typing import Any
 
 # ── 配置加载缓存 ──────────────────────────────────────────────
@@ -49,7 +49,7 @@ def _get_uniswap_config() -> Any | None:
     return _uniswap_config
 
 
-class UniswapChain(str, Enum):
+class UniswapChain(enum.StrEnum):
     """Uniswap supported chains for GraphQL queries."""
 
     ETHEREUM = "ETHEREUM"

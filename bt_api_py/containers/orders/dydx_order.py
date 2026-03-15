@@ -148,7 +148,7 @@ class DydxOrderData(OrderData):
 
     def get_cum_quote(self):
         """累计报价金额"""
-        return None  # dYdX 可能没有这个字段
+        return  # dYdX 可能没有这个字段
 
     def get_executed_qty(self):
         """已执行的成交量"""
@@ -180,19 +180,19 @@ class DydxOrderData(OrderData):
 
     def get_trailing_stop_price(self):
         """跟踪止损价"""
-        return None  # dYdX 可能不支持跟踪止损
+        return  # dYdX 可能不支持跟踪止损
 
     def get_trailing_stop_trigger_price(self):
         """跟踪止损触发价"""
-        return None
+        return
 
     def get_trailing_stop_trigger_price_type(self):
         """跟踪止损触发价类型"""
-        return None
+        return
 
     def get_trailing_stop_callback_rate(self):
         """跟踪止损回调比例"""
-        return None
+        return
 
     def get_order_symbol_name(self):
         """品种"""
@@ -221,19 +221,19 @@ class DydxOrderData(OrderData):
 
     def get_close_position(self):
         """是否为触发平仓单; 仅在条件订单情况下会推送此字段"""
-        return None
+        return
 
     def get_take_profit_price(self):
         """止盈价"""
-        return None  # dYdX 的止盈通过 stopLossTriggerPrice 实现
+        return  # dYdX 的止盈通过 stopLossTriggerPrice 实现
 
     def get_take_profit_trigger_price(self):
         """止盈触发价"""
-        return None
+        return
 
     def get_take_profit_trigger_price_type(self):
         """止盈触发价类型"""
-        return None
+        return
 
     def get_stop_loss_price(self):
         """止损价"""
@@ -245,7 +245,7 @@ class DydxOrderData(OrderData):
 
     def get_stop_loss_trigger_price_type(self):
         """止损价触发类型"""
-        return None
+        return
 
     def get_subaccount_number(self):
         """子账户编号"""

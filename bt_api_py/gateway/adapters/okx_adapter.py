@@ -107,7 +107,9 @@ class OkxGatewayAdapter(BaseGatewayAdapter):
                 {"topic": "positions"},
             ]
             if self.asset_type == "SPOT":
-                from bt_api_py.feeds.live_okx.spot import OkxAccountWssDataSwap as OkxAccountWssDataSpot
+                from bt_api_py.feeds.live_okx.spot import (
+                    OkxAccountWssDataSwap as OkxAccountWssDataSpot,
+                )
 
                 # OKX spot uses the same account WSS class
                 self.account_stream = OkxAccountWssDataSpot(self.q, **account_kwargs)

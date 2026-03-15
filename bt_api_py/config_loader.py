@@ -4,7 +4,8 @@
 支持从 YAML 文件加载交易所/场所配置，自动校验字段合法性。
 """
 
-from enum import Enum, unique
+import enum
+from enum import unique
 from pathlib import Path
 from typing import Any
 
@@ -43,14 +44,14 @@ __all__ = [
 
 
 @unique
-class VenueType(str, Enum):
+class VenueType(enum.StrEnum):
     CEX = "cex"
     DEX = "dex"
     BROKER = "broker"
 
 
 @unique
-class AuthType(str, Enum):
+class AuthType(enum.StrEnum):
     NONE = "none"
     API_KEY = "api_key"
     HMAC_SHA256 = "hmac_sha256"
@@ -63,7 +64,7 @@ class AuthType(str, Enum):
 
 
 @unique
-class ConnectionType(str, Enum):
+class ConnectionType(enum.StrEnum):
     HTTP = "http"
     WEBSOCKET = "websocket"
     SPI = "spi"

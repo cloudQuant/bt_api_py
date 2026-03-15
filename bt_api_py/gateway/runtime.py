@@ -62,16 +62,16 @@ class GatewayRuntime:
         if config.exchange_type == "CTP":
             state_dir = kwargs.get(
                 "state_dir",
-                config.gateway_base_dir if hasattr(config, "gateway_base_dir") else "/tmp/bt_gateway_state",
+                config.gateway_base_dir
+                if hasattr(config, "gateway_base_dir")
+                else "/tmp/bt_gateway_state",
             )
-            self.order_ref_allocator = OrderRefAllocator(
-                config.account_id, state_dir=state_dir
-            )
+            self.order_ref_allocator = OrderRefAllocator(config.account_id, state_dir=state_dir)
 
         # Initialise TickWriter if tick_writer config provided
         tick_writer_cfg = kwargs.get("tick_writer")
         if isinstance(tick_writer_cfg, dict):
-            from bt_api_py.gateway.storage.tick_writer import TickWriter as _TW
+            from bt_api_py.gateway.storage.tick_writer import TickWriter as _TW  # noqa: N814
 
             self.tick_writer = _TW(
                 base_dir=tick_writer_cfg.get("base_dir", "/tmp/bt_ticks"),
@@ -104,7 +104,8 @@ class GatewayRuntime:
         # Connect adapter in a background thread so the command loop can
         # immediately respond to ping / health requests.
         adapter_thread = threading.Thread(
-            target=self._connect_adapter_background, daemon=True,
+            target=self._connect_adapter_background,
+            daemon=True,
         )
         adapter_thread.start()
         logger.info("GatewayRuntime started: %s", self.config.exchange_type)
@@ -144,7 +145,11 @@ class GatewayRuntime:
         self.command_socket = None
         self.event_socket = None
         self.market_socket = None
-        if self.thread is not None and self.thread.is_alive() and threading.current_thread() is not self.thread:
+        if (
+            self.thread is not None
+            and self.thread.is_alive()
+            and threading.current_thread() is not self.thread
+        ):
             self.thread.join(timeout=1.0)
         self.health.set_state(GatewayState.STOPPED)
         logger.info("GatewayRuntime stopped: %s", self.config.exchange_type)
@@ -199,20 +204,25 @@ class GatewayRuntime:
                 self.health.update_market_connection(ConnectionState.CONNECTED)
                 logger.info(
                     "Adapter connected: %s (attempt %d)",
-                    self.config.exchange_type, attempt + 1,
+                    self.config.exchange_type,
+                    attempt + 1,
                 )
                 return
             except Exception as exc:
                 logger.warning(
                     "Adapter connect attempt %d/%d failed: %s: %s",
-                    attempt + 1, max_retries, type(exc).__name__, exc,
+                    attempt + 1,
+                    max_retries,
+                    type(exc).__name__,
+                    exc,
                 )
                 self.health.record_error("adapter_connect", str(exc))
                 if attempt < max_retries - 1 and self.running:
                     time.sleep(2.0)
         logger.error(
             "Adapter failed to connect after %d attempts for %s",
-            max_retries, self.config.exchange_type,
+            max_retries,
+            self.config.exchange_type,
         )
 
     def _dispatch(self, command: str, payload: dict[str, Any]) -> Any:
@@ -235,9 +245,7 @@ class GatewayRuntime:
         if command == "health":
             return self.health.snapshot()
         if not self._adapter_connected:
-            raise RuntimeError(
-                f"adapter not yet connected, cannot execute: {command}"
-            )
+            raise RuntimeError(f"adapter not yet connected, cannot execute: {command}")
         if command == "subscribe":
             symbols = list(payload.get("symbols") or [])
             strategy_id = str(payload.get("strategy_id") or "default")
@@ -253,8 +261,9 @@ class GatewayRuntime:
         if command == "place_order":
             request_id = str(payload.get("request_id") or "")
             strategy_id = str(payload.get("strategy_id") or "default")
-            entry = self.order_map.register(
-                request_id, strategy_id,
+            self.order_map.register(
+                request_id,
+                strategy_id,
                 symbol=payload.get("symbol"),
             )
             if self.order_ref_allocator is not None:

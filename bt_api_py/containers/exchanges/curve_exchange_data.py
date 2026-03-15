@@ -3,8 +3,8 @@
 Defines API endpoints, chain enums, and path configurations for Curve DEX.
 """
 
+import enum
 import os
-from enum import Enum
 from typing import Any
 
 # Config loading cache
@@ -49,7 +49,7 @@ def _get_curve_config() -> Any | None:
     return _curve_config
 
 
-class CurveChain(str, Enum):
+class CurveChain(enum.StrEnum):
     """Curve supported chains for API queries."""
 
     ETHEREUM = "ETHEREUM"
