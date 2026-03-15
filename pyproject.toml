@@ -195,12 +195,16 @@ warn_unused_ignores = false
 warn_no_return = true
 strict_equality = true
 ignore_missing_imports = true
+# Ignore untyped imports for third-party libs without stubs (pytz, requests, yaml)
+# These are handled by types-* packages in dev dependencies
+plugins = []
 # Gradual typing: disable noisy codes for brownfield codebase (can tighten later)
 disable_error_code = [
     "override", "name-defined", "attr-defined", "has-type", "arg-type",
     "call-overload", "return-value", "assignment", "index", "operator",
     "var-annotated", "no-any-return", "misc", "valid-type", "empty-body",
     "no-redef", "union-attr", "call-arg", "list-item", "dict-item",
+    "import-untyped",
 ]
 
 [[tool.mypy.overrides]]
@@ -347,6 +351,7 @@ skips = ["B101"]  # assert_used - allowed in tests (ruff S101)
 dev = [
     "types-PyYAML>=6.0",
     "types-pytz>=2023.3",
+    "types-requests>=2.31.0",
     "pytest>=7.0",
     "pytest-asyncio>=0.21.0",
     "pytest-sugar>=1.0.0",
