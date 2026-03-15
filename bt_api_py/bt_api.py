@@ -16,6 +16,7 @@ from typing import Any
 from bt_api_py.event_bus import EventBus
 from bt_api_py.exceptions import (
     BtApiError,
+    CurrencyNotFoundError,
     DataParseError,
     ExchangeNotFoundError,
     InvalidOrderError,
@@ -406,14 +407,14 @@ class BtApi:
         if exchange_name not in self._cash_dict:
             raise ExchangeNotFoundError(exchange_name, list(self._cash_dict.keys()))
         if currency not in self._cash_dict[exchange_name]:
-            raise KeyError(f"Currency '{currency}' not found in {exchange_name}")
+            raise CurrencyNotFoundError(exchange_name, currency)
         return self._cash_dict[exchange_name][currency]["cash"]
 
     def get_value(self, exchange_name: str, currency: str) -> float:
         if exchange_name not in self._value_dict:
             raise ExchangeNotFoundError(exchange_name, list(self._value_dict.keys()))
         if currency not in self._value_dict[exchange_name]:
-            raise KeyError(f"Currency '{currency}' not found in {exchange_name}")
+            raise CurrencyNotFoundError(exchange_name, currency)
         return self._value_dict[exchange_name][currency]["value"]
 
     def get_total_cash(self) -> dict[str, Any]:
