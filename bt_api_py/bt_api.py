@@ -32,6 +32,7 @@ __all__ = ["BtApi"]
 
 DATANAME_SEPARATOR = "___"
 DOWNLOAD_RETRY_DELAY_SEC = 3
+DOWNLOAD_MAX_RETRIES = 10
 KLINE_PERIOD_DELTAS: dict[str, timedelta] = {
     "1m": timedelta(minutes=1),
     "3m": timedelta(minutes=3),
@@ -315,11 +316,19 @@ class BtApi:
         if stop_time is None:
             stop_time = self._calculate_aligned_stop_time(period)
 
+        retry_count = 0
         while begin_time < stop_time:
+            if retry_count >= DOWNLOAD_MAX_RETRIES:
+                self.log(
+                    f"download aborted: max retries ({DOWNLOAD_MAX_RETRIES}) exceeded for {symbol}",
+                    level="error",
+                )
+                return
             try:
                 begin_time = self._download_single_batch(
                     feed, exchange_name, symbol, period, begin_time, stop_time, extra_data
                 )
+                retry_count = 0
             except (
                 RequestError,
                 RequestTimeoutError,
@@ -327,7 +336,8 @@ class BtApi:
                 ValueError,
                 KeyError,
             ) as e:
-                self.log(f"download fail, retry: {e}", level="warning")
+                retry_count += 1
+                self.log(f"download fail (attempt {retry_count}), retry: {e}", level="warning")
                 time.sleep(DOWNLOAD_RETRY_DELAY_SEC)
 
         self.log(f"download all data completely: {symbol}, period: {period}")
