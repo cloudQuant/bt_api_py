@@ -66,8 +66,8 @@ class ExchangeRegistry:
                 cls._default = instance
             return cls._default
 
-    def __init__(self):
-        pass
+    def __init__(self) -> None:
+        """Initialize registry instance (singleton pattern handled by __new__)."""
 
     @classmethod
     def _get_default(cls) -> "ExchangeRegistry":
