@@ -22,7 +22,7 @@ def _load_zebpay_yaml() -> Any | None:
         if cfg_path.exists():
             with cfg_path.open(encoding="utf-8") as f:
                 _zebpay_yaml_cache = yaml.safe_load(f) or {}
-    except Exception as e:
+    except (OSError, ValueError, KeyError, ImportError) as e:
         logger.warning(f"Failed to load zebpay.yaml: {e}")
         _zebpay_yaml_cache = {}
     return _zebpay_yaml_cache

@@ -33,7 +33,7 @@ def _get_raydium_config() -> Any | None:
             _raydium_config = load_exchange_config(config_path)
             _raydium_config_loaded = True
             return _raydium_config
-    except Exception as e:
+    except (OSError, ValueError, KeyError, ImportError) as e:
         logger.warning(f"Failed to load raydium.yaml config: {e}")
         _raydium_config_loaded = True
         return None

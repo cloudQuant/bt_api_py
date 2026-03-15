@@ -22,7 +22,7 @@ def _get_bitfinex_config() -> Any | None:
         if config_path.exists():
             _bitfinex_config = load_exchange_config(str(config_path))
         _bitfinex_config_loaded = True
-    except Exception as e:
+    except (OSError, ValueError, KeyError, ImportError) as e:
         logger.warning(f"Failed to load bitfinex.yaml config: {e}")
     return _bitfinex_config
 

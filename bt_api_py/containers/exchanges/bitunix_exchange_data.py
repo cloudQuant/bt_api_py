@@ -22,7 +22,7 @@ def _get_bitunix_config() -> Any | None:
         if config_path.exists():
             _bitunix_config = load_exchange_config(str(config_path))
         _bitunix_config_loaded = True
-    except Exception as e:
+    except (OSError, ValueError, KeyError, ImportError) as e:
         logger.warning(f"Failed to load bitunix.yaml config: {e}")
     return _bitunix_config
 

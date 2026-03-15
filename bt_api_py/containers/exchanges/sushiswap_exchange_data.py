@@ -39,7 +39,7 @@ def _get_sushiswap_config() -> Any | None:
             # Store raw config for custom fields
             _sushiswap_config._raw_config = _sushiswap_config_raw
         _sushiswap_config_loaded = True
-    except Exception as e:
+    except (OSError, ValueError, KeyError, ImportError) as e:
         from bt_api_py.logging_factory import get_logger
 
         logger = get_logger("sushiswap_exchange_data")

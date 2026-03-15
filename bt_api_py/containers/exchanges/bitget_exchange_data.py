@@ -33,7 +33,7 @@ def _get_bitget_config() -> Any | None:
             _bitget_config = load_exchange_config(config_path)
         _bitget_config_loaded = True
         return _bitget_config
-    except Exception as e:
+    except (OSError, ValueError, KeyError, ImportError) as e:
         logger.error(f"Failed to load bitget.yaml config: {e}")
         _bitget_config_loaded = True
         return None

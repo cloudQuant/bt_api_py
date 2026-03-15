@@ -28,7 +28,7 @@ def _get_bydfi_config() -> Any | None:
         if os.path.exists(config_path):
             _bydfi_config = load_exchange_config(config_path)
         _bydfi_config_loaded = True
-    except Exception as e:
+    except (OSError, ValueError, KeyError, ImportError) as e:
         logger.warning(f"Failed to load bydfi.yaml config: {e}")
     return _bydfi_config
 

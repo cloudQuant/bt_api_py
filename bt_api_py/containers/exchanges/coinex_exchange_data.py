@@ -34,7 +34,7 @@ def _get_coinex_config() -> Any | None:
         if os.path.exists(config_path):
             _coinex_config = load_exchange_config(config_path)
         _coinex_config_loaded = True
-    except Exception as e:
+    except (OSError, ValueError, KeyError, ImportError) as e:
         logger.warning(f"Failed to load coinex.yaml config: {e}")
     return _coinex_config
 

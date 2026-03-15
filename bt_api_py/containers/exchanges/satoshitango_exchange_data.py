@@ -22,7 +22,7 @@ def _get_satoshitango_config() -> Any | None:
         if config_path.exists():
             _satoshitango_config = load_exchange_config(str(config_path))
         _satoshitango_config_loaded = True
-    except Exception as e:
+    except (OSError, ValueError, KeyError, ImportError) as e:
         logger.warning(f"Failed to load satoshitango.yaml config: {e}")
     return _satoshitango_config
 

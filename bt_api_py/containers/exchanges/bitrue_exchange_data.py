@@ -29,7 +29,7 @@ def _get_bitrue_config() -> Any | None:
         if config_path.exists():
             _bitrue_config = load_exchange_config(str(config_path))
         _bitrue_config_loaded = True
-    except Exception as e:
+    except (OSError, ValueError, KeyError, ImportError) as e:
         logger.warning(f"Failed to load bitrue.yaml config: {e}")
     return _bitrue_config
 

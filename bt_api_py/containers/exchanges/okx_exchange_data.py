@@ -26,7 +26,7 @@ def _get_okx_config() -> Any | None:
         if config_path.exists():
             _okx_config = load_exchange_config(str(config_path))
         _okx_config_loaded = True
-    except Exception as e:
+    except (OSError, ValueError, KeyError, ImportError) as e:
         logger.warning(f"Failed to load okx.yaml config: {e}")
     return _okx_config
 

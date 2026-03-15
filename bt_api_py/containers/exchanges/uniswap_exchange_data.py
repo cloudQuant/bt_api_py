@@ -40,7 +40,7 @@ def _get_uniswap_config() -> Any | None:
             # Store raw config for custom fields
             _uniswap_config._raw_config = _uniswap_config_raw
         _uniswap_config_loaded = True
-    except Exception as e:
+    except (OSError, ValueError, KeyError, ImportError) as e:
         # Import logger here to avoid circular imports
         from bt_api_py.logging_factory import get_logger
 

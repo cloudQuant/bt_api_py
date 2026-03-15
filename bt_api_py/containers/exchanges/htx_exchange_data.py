@@ -30,7 +30,7 @@ def _get_htx_config() -> Any | None:
         if os.path.exists(config_path):
             _htx_config = load_exchange_config(config_path)
         _htx_config_loaded = True
-    except Exception as e:
+    except (OSError, ValueError, KeyError, ImportError) as e:
         logger.warning(f"Failed to load htx.yaml config: {e}")
     return _htx_config
 

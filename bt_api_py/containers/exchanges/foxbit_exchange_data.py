@@ -28,7 +28,7 @@ def _get_foxbit_config() -> Any | None:
         if os.path.exists(config_path):
             _foxbit_config = load_exchange_config(config_path)
         _foxbit_config_loaded = True
-    except Exception as e:
+    except (OSError, ValueError, KeyError, ImportError) as e:
         logger.warning(f"Failed to load foxbit.yaml config: {e}")
     return _foxbit_config
 

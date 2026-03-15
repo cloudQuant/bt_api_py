@@ -34,7 +34,7 @@ def _get_bitmart_config() -> Any | None:
         if os.path.exists(config_path):
             _bitmart_config = load_exchange_config(config_path)
         _bitmart_config_loaded = True
-    except Exception as e:
+    except (OSError, ValueError, KeyError, ImportError) as e:
         logger.warning(f"Failed to load bitmart.yaml config: {e}")
     return _bitmart_config
 

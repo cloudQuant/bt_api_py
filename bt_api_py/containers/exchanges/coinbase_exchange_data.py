@@ -31,7 +31,7 @@ def _get_coinbase_config() -> Any | None:
         if os.path.exists(config_path):
             _coinbase_config = load_exchange_config(config_path)
         _coinbase_config_loaded = True
-    except Exception as e:
+    except (OSError, ValueError, KeyError, ImportError) as e:
         logger.error("Failed to load coinbase.yaml config: %s", e)
     return _coinbase_config
 

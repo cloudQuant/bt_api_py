@@ -19,7 +19,7 @@ __all__ = ["ExchangeRegistry"]
 class _ClassMethodOrInstance:
     """描述符：类调用时使用类方法，实例调用时使用实例方法"""
 
-    def __init__(self, class_method_name: str, instance_method_name: str):
+    def __init__(self, class_method_name: str, instance_method_name: str) -> None:
         self.class_method_name = class_method_name
         self.instance_method_name = instance_method_name
 

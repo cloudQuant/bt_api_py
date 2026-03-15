@@ -28,7 +28,7 @@ def _get_coindcx_config() -> Any | None:
         if os.path.exists(config_path):
             _coindcx_config = load_exchange_config(config_path)
         _coindcx_config_loaded = True
-    except Exception as e:
+    except (OSError, ValueError, KeyError, ImportError) as e:
         logger.debug("CoinDCX config loading skipped or failed: %s", e)
     return _coindcx_config
 

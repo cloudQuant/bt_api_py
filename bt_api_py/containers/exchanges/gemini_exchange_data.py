@@ -32,7 +32,7 @@ def _get_gemini_config() -> Any | None:
             _gemini_config = load_exchange_config(config_path)
             _gemini_config_loaded = True
             return _gemini_config
-    except Exception as e:
+    except (OSError, ValueError, KeyError, ImportError) as e:
         logger.info(f"Failed to load gemini.yaml config: {e}")
         _gemini_config_loaded = True
         return None

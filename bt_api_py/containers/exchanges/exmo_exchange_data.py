@@ -28,7 +28,7 @@ def _get_exmo_config() -> Any | None:
         if os.path.exists(config_path):
             _exmo_config = load_exchange_config(config_path)
         _exmo_config_loaded = True
-    except Exception as e:
+    except (OSError, ValueError, KeyError, ImportError) as e:
         logger.warning("Failed to load exmo.yaml config: %s", e)
     return _exmo_config
 

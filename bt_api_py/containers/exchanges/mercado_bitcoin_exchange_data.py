@@ -22,7 +22,7 @@ def _get_mercado_bitcoin_config() -> Any | None:
         if config_path.exists():
             _mercado_bitcoin_config = load_exchange_config(str(config_path))
         _mercado_bitcoin_config_loaded = True
-    except Exception as e:
+    except (OSError, ValueError, KeyError, ImportError) as e:
         logger.warning(f"Failed to load mercado_bitcoin.yaml config: {e}")
     return _mercado_bitcoin_config
 

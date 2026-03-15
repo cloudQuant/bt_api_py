@@ -45,7 +45,7 @@ def _get_gmx_config() -> Any | None:
             # Store raw config for custom fields
             _gmx_config._raw_config = _gmx_config_raw
         _gmx_config_loaded = True
-    except Exception as e:
+    except (OSError, ValueError, KeyError, ImportError) as e:
         logger.warning(f"Failed to load gmx.yaml config: {e}")
     return _gmx_config
 

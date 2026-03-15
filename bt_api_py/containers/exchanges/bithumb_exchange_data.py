@@ -22,7 +22,7 @@ def _get_bithumb_config() -> Any | None:
         if config_path.exists():
             _bithumb_config = load_exchange_config(str(config_path))
         _bithumb_config_loaded = True
-    except Exception as e:
+    except (OSError, ValueError, KeyError, ImportError) as e:
         logger.warning(f"Failed to load bithumb.yaml config: {e}")
     return _bithumb_config
 

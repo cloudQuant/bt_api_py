@@ -31,7 +31,7 @@ def _load_valr_yaml() -> dict[str, Any] | None:
         if os.path.exists(cfg_path):
             with open(cfg_path, encoding="utf-8") as f:
                 _valr_yaml_cache = yaml.safe_load(f) or {}
-    except Exception as e:
+    except (OSError, ValueError, KeyError, ImportError) as e:
         logger.warning(f"Failed to load valr.yaml: {e}")
         _valr_yaml_cache = {}
     return _valr_yaml_cache

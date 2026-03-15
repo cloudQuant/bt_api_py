@@ -28,7 +28,7 @@ def _get_bitinka_config() -> Any | None:
         if os.path.exists(config_path):
             _bitinka_config = load_exchange_config(config_path)
         _bitinka_config_loaded = True
-    except Exception as e:
+    except (OSError, ValueError, KeyError, ImportError) as e:
         logger.warning(f"Failed to load bitinka.yaml config: {e}")
     return _bitinka_config
 

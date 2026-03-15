@@ -27,7 +27,7 @@ def _get_pancakeswap_config() -> Any | None:
         if os.path.exists(config_path):
             _pancakeswap_config = load_exchange_config(config_path)
         _pancakeswap_config_loaded = True
-    except Exception as e:
+    except (OSError, ValueError, KeyError, ImportError) as e:
         logger.warning(f"Failed to load pancakeswap.yaml config: {e}")
     return _pancakeswap_config
 

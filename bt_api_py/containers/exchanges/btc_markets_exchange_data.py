@@ -28,7 +28,7 @@ def _get_btc_markets_config() -> Any | None:
         if os.path.exists(config_path):
             _btc_markets_config = load_exchange_config(config_path)
         _btc_markets_config_loaded = True
-    except Exception as e:
+    except (OSError, ValueError, KeyError, ImportError) as e:
         logger.warning(f"Failed to load btc-markets.yaml config: {e}")
     return _btc_markets_config
 

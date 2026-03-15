@@ -26,7 +26,7 @@ def _load_zaif_yaml() -> Any | None:
         if os.path.exists(cfg_path):
             with open(cfg_path, encoding="utf-8") as f:
                 _zaif_yaml_cache = yaml.safe_load(f) or {}
-    except Exception as e:
+    except (OSError, ValueError, KeyError, ImportError) as e:
         logger.warning(f"Failed to load zaif.yaml: {e}")
         _zaif_yaml_cache = {}
     return _zaif_yaml_cache
