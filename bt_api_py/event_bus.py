@@ -107,12 +107,6 @@ class EventBus:
                     raise
 
                 severity = _classify_error(e)
-                log_level = {
-                    ErrorSeverity.USER_ERROR: "warning",
-                    ErrorSeverity.BUSINESS_ERROR: "warning",
-                    ErrorSeverity.SYSTEM_ERROR: "error",
-                }[severity]
-
                 severity_label = {
                     ErrorSeverity.USER_ERROR: "handler error",
                     ErrorSeverity.BUSINESS_ERROR: "business error",
@@ -124,7 +118,11 @@ class EventBus:
                     f"event={event_type}, handler={handler_name}, error={e}\n"
                     f"{traceback.format_exc()}"
                 )
-                getattr(self.logger, log_level)(log_msg)
+
+                if severity == ErrorSeverity.SYSTEM_ERROR:
+                    self.logger.error(log_msg)
+                else:
+                    self.logger.warning(log_msg)
 
         return errors
 
