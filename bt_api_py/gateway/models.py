@@ -29,6 +29,10 @@ class GatewayTick:
     action_day: str = ""
     update_time: str = ""
     update_millisec: int = 0
+    high_price: float | None = None
+    low_price: float | None = None
+    open_price: float | None = None
+    prev_close: float | None = None
 
     def to_dict(self) -> dict[str, Any]:
         payload = asdict(self)
@@ -44,4 +48,6 @@ class GatewayTick:
             data["datetime"] = datetime.fromisoformat(dt_value)
         else:
             data["datetime"] = None
+        known = {f.name for f in cls.__dataclass_fields__.values()}
+        data = {k: v for k, v in data.items() if k in known}
         return cls(**data)

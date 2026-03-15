@@ -233,19 +233,26 @@ class BinanceGatewayAdapter(BaseGatewayAdapter):
         symbol = ticker.get_symbol_name() or ""
         server_time = ticker.get_server_time() or 0.0
         ts = server_time / 1000.0 if server_time > 1e12 else server_time
+        bid = ticker.get_bid_price() or 0.0
+        ask = ticker.get_ask_price() or 0.0
+        last = ticker.get_last_price() or 0.0
         tick = GatewayTick(
             timestamp=ts,
             symbol=symbol,
             exchange="BINANCE",
             asset_type=self.asset_type,
             local_time=time.time(),
-            bid_price=ticker.get_bid_price() or 0.0,
-            ask_price=ticker.get_ask_price() or 0.0,
+            price=last if last else (bid + ask) / 2.0 if bid and ask else 0.0,
+            bid_price=bid,
+            ask_price=ask,
             bid_volume=ticker.get_bid_volume() or 0.0,
             ask_volume=ticker.get_ask_volume() or 0.0,
-            price=(ticker.get_bid_price() or 0.0 + (ticker.get_ask_price() or 0.0)) / 2.0
-            if ticker.get_bid_price() and ticker.get_ask_price()
-            else 0.0,
+            volume=ticker.get_volume_24h() or 0.0,
+            turnover=ticker.get_turnover_24h() or 0.0,
+            high_price=ticker.get_high_price(),
+            low_price=ticker.get_low_price(),
+            open_price=ticker.get_open_price(),
+            prev_close=ticker.get_prev_close(),
         )
         self.emit(CHANNEL_MARKET, tick)
 

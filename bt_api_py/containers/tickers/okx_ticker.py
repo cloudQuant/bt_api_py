@@ -26,6 +26,11 @@ class OkxTickerData(TickerData):
         self.ask_volume: float | None = None
         self.last_price: float | None = None
         self.last_volume: float | None = None
+        self.open_24h: float | None = None
+        self.high_24h: float | None = None
+        self.low_24h: float | None = None
+        self.vol_24h: float | None = None
+        self.vol_ccy_24h: float | None = None
         self.all_data: dict[str, Any] | None = None
         self.has_been_init_data = False
 
@@ -44,6 +49,11 @@ class OkxTickerData(TickerData):
         self.ask_volume = from_dict_get_float(data, "askSz")
         self.last_price = from_dict_get_float(data, "last")
         self.last_volume = from_dict_get_float(data, "lastSz")
+        self.open_24h = from_dict_get_float(data, "open24h")
+        self.high_24h = from_dict_get_float(data, "high24h")
+        self.low_24h = from_dict_get_float(data, "low24h")
+        self.vol_24h = from_dict_get_float(data, "vol24h")
+        self.vol_ccy_24h = from_dict_get_float(data, "volCcy24h")
         self.has_been_init_data = True
         return self
 
@@ -63,6 +73,11 @@ class OkxTickerData(TickerData):
                 "ask_volume": self.ask_volume,
                 "last_price": self.last_price,
                 "last_volume": self.last_volume,
+                "open_24h": self.open_24h,
+                "high_24h": self.high_24h,
+                "low_24h": self.low_24h,
+                "vol_24h": self.vol_24h,
+                "vol_ccy_24h": self.vol_ccy_24h,
             }
         return self.all_data or {}
 
@@ -109,3 +124,18 @@ class OkxTickerData(TickerData):
 
     def get_last_volume(self) -> float | None:
         return self.last_volume
+
+    def get_open_24h(self) -> float | None:
+        return self.open_24h
+
+    def get_high_24h(self) -> float | None:
+        return self.high_24h
+
+    def get_low_24h(self) -> float | None:
+        return self.low_24h
+
+    def get_vol_24h(self) -> float | None:
+        return self.vol_24h
+
+    def get_vol_ccy_24h(self) -> float | None:
+        return self.vol_ccy_24h

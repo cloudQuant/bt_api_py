@@ -243,6 +243,11 @@ class OkxGatewayAdapter(BaseGatewayAdapter):
             ask_price=ask,
             bid_volume=ticker.get_bid_volume() or 0.0,
             ask_volume=ticker.get_ask_volume() or 0.0,
+            volume=ticker.get_vol_24h() or 0.0,
+            turnover=ticker.get_vol_ccy_24h() or 0.0,
+            high_price=ticker.get_high_24h(),
+            low_price=ticker.get_low_24h(),
+            open_price=ticker.get_open_24h(),
         )
         self.emit(CHANNEL_MARKET, tick)
 

@@ -22,6 +22,16 @@ class BinanceTickerData(TickerData):
         self.ask_price: float | None = None
         self.bid_volume: float | None = None
         self.ask_volume: float | None = None
+        self.last_price: float | None = None
+        self.last_volume: float | None = None
+        self.open_price: float | None = None
+        self.high_price: float | None = None
+        self.low_price: float | None = None
+        self.prev_close: float | None = None
+        self.volume_24h: float | None = None
+        self.turnover_24h: float | None = None
+        self.price_change: float | None = None
+        self.price_change_pct: float | None = None
         self.all_data: dict[str, Any] | None = None
         self.has_been_init_data = False
 
@@ -41,8 +51,16 @@ class BinanceTickerData(TickerData):
                 "ask_price": self.ask_price,
                 "bid_volume": self.bid_volume,
                 "ask_volume": self.ask_volume,
-                # "last_price": self.last_price,
-                # "last_volume": self.last_volume,
+                "last_price": self.last_price,
+                "last_volume": self.last_volume,
+                "open_price": self.open_price,
+                "high_price": self.high_price,
+                "low_price": self.low_price,
+                "prev_close": self.prev_close,
+                "volume_24h": self.volume_24h,
+                "turnover_24h": self.turnover_24h,
+                "price_change": self.price_change,
+                "price_change_pct": self.price_change_pct,
             }
         return self.all_data or {}
 
@@ -84,10 +102,34 @@ class BinanceTickerData(TickerData):
         return self.ask_volume
 
     def get_last_price(self) -> float | None:
-        return None
+        return self.last_price
 
     def get_last_volume(self) -> float | None:
-        return None
+        return self.last_volume
+
+    def get_open_price(self) -> float | None:
+        return self.open_price
+
+    def get_high_price(self) -> float | None:
+        return self.high_price
+
+    def get_low_price(self) -> float | None:
+        return self.low_price
+
+    def get_prev_close(self) -> float | None:
+        return self.prev_close
+
+    def get_volume_24h(self) -> float | None:
+        return self.volume_24h
+
+    def get_turnover_24h(self) -> float | None:
+        return self.turnover_24h
+
+    def get_price_change(self) -> float | None:
+        return self.price_change
+
+    def get_price_change_pct(self) -> float | None:
+        return self.price_change_pct
 
 
 class BinanceWssTickerData(BinanceTickerData):
@@ -106,6 +148,16 @@ class BinanceWssTickerData(BinanceTickerData):
         self.ask_price = from_dict_get_float(data, "a")
         self.bid_volume = from_dict_get_float(data, "B")
         self.ask_volume = from_dict_get_float(data, "A")
+        self.last_price = from_dict_get_float(data, "c")
+        self.last_volume = from_dict_get_float(data, "Q")
+        self.open_price = from_dict_get_float(data, "o")
+        self.high_price = from_dict_get_float(data, "h")
+        self.low_price = from_dict_get_float(data, "l")
+        self.prev_close = from_dict_get_float(data, "x")
+        self.volume_24h = from_dict_get_float(data, "v")
+        self.turnover_24h = from_dict_get_float(data, "q")
+        self.price_change = from_dict_get_float(data, "p")
+        self.price_change_pct = from_dict_get_float(data, "P")
         self.has_been_init_data = True
         return self
 
