@@ -80,7 +80,7 @@ class ConnectionService(IConnectionManager):
                     # For WebSocket exchanges, return the connection
                     self._stats[exchange_name]["active_connections"] += 1
                     return pool["connection"]
-            except Exception:
+            except BaseException:
                 semaphore.release()
                 raise
 

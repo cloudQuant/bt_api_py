@@ -25,25 +25,12 @@ def parse_iso_time_to_timestamp(time_str: str) -> float | None:
     if not time_str:
         return None
     try:
-        # Handle various ISO formats
         time_str = time_str.replace("Z", "+00:00")
-        # Remove microseconds if present
         if "." in time_str:
-            time_str = time_str.split(".")[0] + time_str.split(".")[1][-6:]  # Keep timezone
+            time_str = time_str.split(".")[0] + time_str.split(".")[1][-6:]
         dt = datetime.fromisoformat(time_str)
         return dt.timestamp()
-    except Exception:
-        return None
-
-    try:
-        # Handle various ISO formats
-        time_str = time_str.replace("Z", "+00:00")
-        # Remove microseconds if present
-        if "." in time_str:
-            time_str = time_str.split(".")[0] + time_str.split(".")[1][-6:]  # Keep timezone
-        dt = datetime.fromisoformat(time_str)
-        return dt.timestamp()
-    except Exception:
+    except (ValueError, TypeError):
         return None
 
 
@@ -92,16 +79,6 @@ class CoinbaseTickerData(TickerData):
         self.high_24h: float | None = None
         self.low_24h: float | None = None
         self.all_data: dict[str, Any] | None = None
-        self.has_been_init_data = False
-        self.ask_volume = None
-        self.last_price = None
-        self.last_volume = None
-        self.price_24h_change = None
-        self.price_24h_change_percent = None
-        self.volume_24h = None
-        self.high_24h = None
-        self.low_24h = None
-        self.all_data = None
         self.has_been_init_data = False
 
     def init_data(self) -> "Self":
