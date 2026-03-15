@@ -9,12 +9,9 @@
 
 import threading
 from collections.abc import Callable
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 from bt_api_py.exceptions import ExchangeNotFoundError
-
-if TYPE_CHECKING:
-    from bt_api_py.feeds.abstract_feed import AbstractVenueFeed
 
 __all__ = ["ExchangeRegistry"]
 
@@ -46,7 +43,6 @@ class ExchangeRegistry:
 
     _default: "ExchangeRegistry | None" = None
     _default_lock = threading.Lock()
-    _initialized: bool = False
 
     _feed_classes: dict[str, type[Any]]
     _stream_classes: dict[str, dict[str, Any]]
@@ -65,7 +61,6 @@ class ExchangeRegistry:
                 instance._exchange_data_classes = {}
                 instance._balance_handlers = {}
                 instance._lock = threading.RLock()
-                instance._initialized = True
                 cls._default = instance
             return cls._default
 

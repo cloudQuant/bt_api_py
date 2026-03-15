@@ -49,7 +49,10 @@ def _calculate_time_delta(period: str) -> timedelta:
 
 def _parse_time(input_time: str | datetime | None) -> datetime | None:
     if isinstance(input_time, str):
-        local_time = datetime.fromisoformat(input_time)
+        try:
+            local_time = datetime.fromisoformat(input_time)
+        except ValueError as e:
+            raise DataParseError(detail=f"Invalid ISO time format: {input_time}") from e
         return local_time.astimezone(UTC)
     if isinstance(input_time, datetime):
         local_time = (
