@@ -25,7 +25,45 @@ __all__ = [
     "OrderNotFoundError",
     "ConfigurationError",
     "WebSocketError",
+    "QueueNotInitializedError",
+    "is_network_error",
+    "is_auth_error",
+    "is_rate_limit_error",
+    "is_order_error",
+    "is_user_recoverable",
 ]
+
+
+def is_network_error(error: Exception) -> bool:
+    """Check if error is network-related (connection, timeout, etc.)."""
+    return isinstance(error, (NetworkError, RequestTimeoutError, WebSocketError, ConnectionError))
+
+
+def is_auth_error(error: Exception) -> bool:
+    """Check if error is authentication-related."""
+    return isinstance(error, AuthenticationError)
+
+
+def is_rate_limit_error(error: Exception) -> bool:
+    """Check if error is rate-limit-related."""
+    return isinstance(error, RateLimitError)
+
+
+def is_order_error(error: Exception) -> bool:
+    """Check if error is order-related (insufficient balance, invalid order, etc.)."""
+    return isinstance(error, OrderError)
+
+
+def is_user_recoverable(error: Exception) -> bool:
+    """Check if error can be recovered by user action (e.g., fix params, retry later)."""
+    recoverable_types = (
+        InvalidSymbolError,
+        InsufficientBalanceError,
+        InvalidOrderError,
+        ConfigurationError,
+        RateLimitError,
+    )
+    return isinstance(error, recoverable_types)
 
 
 class BtApiError(Exception):
@@ -265,9 +303,34 @@ class WebSocketError(BtApiError):
         self.exchange_name = exchange_name
 
 
+class CurrencyNotFoundError(BtApiError):
+    """Currency not found in exchange account."""
+
+    __slots__ = ("exchange_name", "currency")
+
+    def __init__(self, exchange_name: str, currency: str) -> None:
+        msg = f"Currency '{currency}' not found in {exchange_name}"
+        super().__init__(msg)
+        self.exchange_name = exchange_name
+        self.currency = currency
+
+
 class QueueNotInitializedError(DataParseError):
     """Raised when data_queue is not initialized before data parsing."""
 
+    __slots__ = ("queue_name",)
+
+    def __init__(self, queue_name: str = "", detail: str = "") -> None:
+        msg = "Data queue not initialized"
+        if queue_name:
+            msg += f": {queue_name}"
+        if detail:
+            msg += f" — {detail}"
+        super().__init__(container_class="DataQueue", detail=msg)
+        self.queue_name = queue_name
+
+
+class RequestFailedError(RequestError):
     """通用请求失败错误（用于 HTTP 客户端）"""
 
     __slots__ = ("venue", "status_code")
@@ -290,6 +353,6 @@ class QueueNotInitializedError(DataParseError):
         if status_code is not None:
             msg = f"{msg} (HTTP {status_code})"
 
-        super().__init__(name or "unknown", url=url, detail=msg)
+        super().__init__(exchange_name=name or "unknown", url=url, detail=msg)
         self.venue = name
         self.status_code = status_code

@@ -10,9 +10,10 @@ from collections.abc import Callable
 from enum import Enum
 from typing import Any
 
+from bt_api_py.exceptions import BtApiError
 from bt_api_py.logging_factory import get_logger
 
-__all__ = ["EventBus", "ErrorHandlerMode"]
+__all__ = ["EventBus", "ErrorHandlerMode", "ErrorSeverity"]
 
 
 class ErrorHandlerMode(Enum):
@@ -21,6 +22,37 @@ class ErrorHandlerMode(Enum):
     LOG = "log"  # 记录日志并继续（默认）
     RAISE = "raise"  # 立即抛出异常
     COLLECT = "collect"  # 收集所有错误，最后统一处理
+
+
+class ErrorSeverity(Enum):
+    """错误严重程度分类"""
+
+    USER_ERROR = "user_error"  # 用户代码错误（TypeError, ValueError 等）
+    BUSINESS_ERROR = "business_error"  # 业务逻辑错误（BtApiError 子类）
+    SYSTEM_ERROR = "system_error"  # 系统/网络错误（ConnectionError, OSError 等）
+
+
+def _classify_error(error: Exception) -> ErrorSeverity:
+    """根据异常类型分类错误严重程度
+
+    Args:
+        error: 捕获的异常
+
+    Returns:
+        ErrorSeverity 枚举值
+    """
+    if isinstance(error, BtApiError):
+        return ErrorSeverity.BUSINESS_ERROR
+
+    user_error_types = (TypeError, ValueError, AttributeError, KeyError, IndexError)
+    system_error_types = (ConnectionError, OSError, TimeoutError, RuntimeError)
+
+    if isinstance(error, user_error_types):
+        return ErrorSeverity.USER_ERROR
+    if isinstance(error, system_error_types):
+        return ErrorSeverity.SYSTEM_ERROR
+
+    return ErrorSeverity.SYSTEM_ERROR
 
 
 class EventBus:
@@ -56,15 +88,6 @@ class EventBus:
                     handlers.remove(handler)
 
     def emit(self, event_type: str, data: Any) -> list[Exception]:
-        """触发事件，调用所有注册的处理函数
-
-        Args:
-            event_type: 事件类型字符串
-            data: 事件数据
-
-        Returns:
-            错误列表（仅在 LOG 和 COLLECT 模式下收集）
-        """
         with self._lock:
             handlers = list(self._handlers.get(event_type, []))
 
@@ -83,10 +106,21 @@ class EventBus:
                 if self.error_mode == ErrorHandlerMode.RAISE:
                     raise
 
-                is_expected = isinstance(e, (TypeError, ValueError, AttributeError, KeyError))
-                log_level = "warning" if is_expected else "error"
+                severity = _classify_error(e)
+                log_level = {
+                    ErrorSeverity.USER_ERROR: "warning",
+                    ErrorSeverity.BUSINESS_ERROR: "warning",
+                    ErrorSeverity.SYSTEM_ERROR: "error",
+                }[severity]
+
+                severity_label = {
+                    ErrorSeverity.USER_ERROR: "handler error",
+                    ErrorSeverity.BUSINESS_ERROR: "business error",
+                    ErrorSeverity.SYSTEM_ERROR: "system error",
+                }[severity]
+
                 log_msg = (
-                    f"EventBus {'handler error' if is_expected else 'unexpected error'}: "
+                    f"EventBus {severity_label}: "
                     f"event={event_type}, handler={handler_name}, error={e}\n"
                     f"{traceback.format_exc()}"
                 )
