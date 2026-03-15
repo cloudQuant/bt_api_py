@@ -36,9 +36,11 @@ class BtApiError(Exception):
     def __repr__(self) -> str:
         cls_name = self.__class__.__name__
         args = []
-        for slot in self.__slots__:
-            if hasattr(self, slot):
-                args.append(f"{slot}={getattr(self, slot)!r}")
+        for cls in type(self).__mro__:
+            slots = getattr(cls, "__slots__", ())
+            for slot in slots:
+                if hasattr(self, slot):
+                    args.append(f"{slot}={getattr(self, slot)!r}")
         return f"{cls_name}({', '.join(args)})" if args else f"{cls_name}()"
 
 
@@ -263,7 +265,9 @@ class WebSocketError(BtApiError):
         self.exchange_name = exchange_name
 
 
-class RequestFailedError(RequestError):
+class QueueNotInitializedError(DataParseError):
+    """Raised when data_queue is not initialized before data parsing."""
+
     """通用请求失败错误（用于 HTTP 客户端）"""
 
     __slots__ = ("venue", "status_code")
