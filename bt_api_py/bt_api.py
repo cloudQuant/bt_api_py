@@ -33,6 +33,8 @@ __all__ = ["BtApi"]
 DATANAME_SEPARATOR = "___"
 DOWNLOAD_RETRY_DELAY_SEC = 3
 DOWNLOAD_MAX_RETRIES = 10
+DOWNLOAD_RETRY_BACKOFF_FACTOR = 2.0
+DOWNLOAD_RETRY_MAX_DELAY_SEC = 60
 KLINE_PERIOD_DELTAS: dict[str, timedelta] = {
     "1m": timedelta(minutes=1),
     "3m": timedelta(minutes=3),
@@ -317,6 +319,7 @@ class BtApi:
             stop_time = self._calculate_aligned_stop_time(period)
 
         retry_count = 0
+        current_delay = DOWNLOAD_RETRY_DELAY_SEC
         while begin_time < stop_time:
             if retry_count >= DOWNLOAD_MAX_RETRIES:
                 self.log(
@@ -329,6 +332,7 @@ class BtApi:
                     feed, exchange_name, symbol, period, begin_time, stop_time, extra_data
                 )
                 retry_count = 0
+                current_delay = DOWNLOAD_RETRY_DELAY_SEC
             except (
                 RequestError,
                 RequestTimeoutError,
@@ -337,8 +341,16 @@ class BtApi:
                 KeyError,
             ) as e:
                 retry_count += 1
-                self.log(f"download fail (attempt {retry_count}), retry: {e}", level="warning")
-                time.sleep(DOWNLOAD_RETRY_DELAY_SEC)
+                self.log(
+                    f"download fail (attempt {retry_count}/{DOWNLOAD_MAX_RETRIES}), "
+                    f"retry in {current_delay}s: {e}",
+                    level="warning",
+                )
+                time.sleep(current_delay)
+                current_delay = min(
+                    current_delay * DOWNLOAD_RETRY_BACKOFF_FACTOR,
+                    DOWNLOAD_RETRY_MAX_DELAY_SEC,
+                )
 
         self.log(f"download all data completely: {symbol}, period: {period}")
 
@@ -450,13 +462,16 @@ class BtApi:
 
     def close(self) -> None:
         """关闭所有 feed 的 HTTP 连接，释放资源。"""
-        for feed in self.exchange_feeds.values():
+        for exchange_name, feed in self.exchange_feeds.items():
             client = getattr(feed, "_http_client", None)
             if client is not None and hasattr(client, "close"):
                 try:
                     client.close()
-                except (OSError, ConnectionError) as e:
-                    self.log(f"Error closing feed client: {e}", level="warning")
+                except Exception as e:
+                    self.log(
+                        f"Error closing feed client for {exchange_name}: {type(e).__name__}: {e}",
+                        level="warning",
+                    )
 
     def __enter__(self) -> "BtApi":
         return self
@@ -482,18 +497,25 @@ class BtApi:
 
     async def async_close(self) -> None:
         """异步关闭所有 feed 的 HTTP 连接，释放资源。"""
-        for feed in self.exchange_feeds.values():
+        for exchange_name, feed in self.exchange_feeds.items():
             client = getattr(feed, "_http_client", None)
             if client is not None and hasattr(client, "async_close"):
                 try:
                     await client.async_close()
-                except (OSError, ConnectionError, RuntimeError) as e:
-                    self.log(f"Error async closing feed client: {e}", level="warning")
+                except Exception as e:
+                    self.log(
+                        f"Error async closing feed client for {exchange_name}: "
+                        f"{type(e).__name__}: {e}",
+                        level="warning",
+                    )
             elif client is not None and hasattr(client, "close"):
                 try:
                     client.close()
-                except (OSError, ConnectionError, RuntimeError) as e:
-                    self.log(f"Error closing feed client: {e}", level="warning")
+                except Exception as e:
+                    self.log(
+                        f"Error closing feed client for {exchange_name}: {type(e).__name__}: {e}",
+                        level="warning",
+                    )
 
     @staticmethod
     def list_available_exchanges() -> list[str]:
