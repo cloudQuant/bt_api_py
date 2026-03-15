@@ -25,6 +25,7 @@ __all__ = [
     "OrderNotFoundError",
     "ConfigurationError",
     "WebSocketError",
+    "CurrencyNotFoundError",
     "QueueNotInitializedError",
     "is_network_error",
     "is_auth_error",

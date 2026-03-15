@@ -7,6 +7,7 @@ HashiCorp Vault, and hardware security modules (HSMs).
 import base64
 import hashlib
 import os
+import threading
 import time
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
@@ -618,16 +619,27 @@ def create_key_manager(provider: KeyProvider, **kwargs) -> KeyManager:
 
 
 # Global encryption manager instance
+_global_lock = threading.Lock()
 _encryption_manager: EncryptionManager | None = None
 
 
 def get_encryption_manager() -> EncryptionManager | None:
-    """Get the global encryption manager instance."""
-    return _encryption_manager
+    """Get the global encryption manager instance (thread-safe)."""
+    with _global_lock:
+        return _encryption_manager
 
 
 def initialize_encryption_manager(key_manager: KeyManager) -> EncryptionManager:
-    """Initialize the global encryption manager."""
+    """Initialize the global encryption manager (thread-safe).
+
+    Args:
+        key_manager: The key manager to use for encryption operations.
+
+    Returns:
+        The initialized EncryptionManager instance.
+    """
     global _encryption_manager
-    _encryption_manager = EncryptionManager(key_manager)
-    return _encryption_manager
+    with _global_lock:
+        if _encryption_manager is None:
+            _encryption_manager = EncryptionManager(key_manager)
+        return _encryption_manager

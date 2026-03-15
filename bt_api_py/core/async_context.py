@@ -3,6 +3,7 @@ Async context manager utilities for modern bt_api_py.
 """
 
 import asyncio
+import sys
 import time
 from collections.abc import AsyncGenerator, Awaitable, Callable
 from contextlib import asynccontextmanager
@@ -11,6 +12,8 @@ from functools import wraps
 from typing import Any, TypeVar
 
 T = TypeVar("T")
+
+HAS_ASYNCIO_TIMEOUT = sys.version_info >= (3, 11)
 
 
 @dataclass
@@ -22,27 +25,57 @@ class _CircuitState:
     state: str = "CLOSED"
 
 
+class _TimeoutContext:
+    """Timeout context wrapper for Python 3.10 compatibility."""
+
+    __slots__ = ("_timeout_seconds", "_task", "_cancelled", "_cancel_handler")
+
+    def __init__(self, timeout_seconds: float) -> None:
+        self._timeout_seconds = timeout_seconds
+        self._task: asyncio.Task[None] | None = None
+        self._cancelled = False
+        self._cancel_handler: asyncio.TimerHandle | None = None
+
+    def _cancel_task(self) -> None:
+        if self._task is not None and not self._task.done():
+            self._cancelled = True
+            self._task.cancel()
+
+    async def __aenter__(self) -> "_TimeoutContext":
+        self._task = asyncio.current_task()
+        loop = asyncio.get_running_loop()
+        self._cancel_handler = loop.call_later(self._timeout_seconds, self._cancel_task)
+        return self
+
+    async def __aexit__(self, exc_type, exc_val, exc_tb) -> bool:
+        if self._cancel_handler is not None:
+            self._cancel_handler.cancel()
+
+        if exc_type is asyncio.CancelledError and self._cancelled:
+            raise TimeoutError(
+                f"Operation timed out after {self._timeout_seconds} seconds"
+            ) from None
+
+        return False
+
+
 class AsyncContextManager:
     """Utilities for async context management."""
 
     @staticmethod
     @asynccontextmanager
     async def timeout(timeout_seconds: float) -> AsyncGenerator[None, None]:
-        """Async context manager with timeout."""
-        try:
-            yield
-        except TimeoutError:
-            raise
-        else:
-            # Use asyncio.wait_for for timeout
-            async def _inner() -> Any | None:
-                await asyncio.sleep(0)  # Dummy async function
-                return None
+        """Async context manager with timeout.
 
-            try:
-                await asyncio.wait_for(_inner(), timeout=timeout_seconds)
-            except TimeoutError:
-                raise TimeoutError(f"Operation timed out after {timeout_seconds} seconds") from None
+        Uses asyncio.timeout() on Python 3.11+ for optimal performance,
+        or a custom implementation for Python 3.10 compatibility.
+        """
+        if HAS_ASYNCIO_TIMEOUT:
+            async with asyncio.timeout(timeout_seconds):
+                yield
+        else:
+            async with _TimeoutContext(timeout_seconds):
+                yield
 
     @staticmethod
     @asynccontextmanager

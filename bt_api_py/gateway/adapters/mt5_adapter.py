@@ -544,21 +544,41 @@ class Mt5GatewayAdapter(BaseGatewayAdapter):
                 )
 
     def _on_trade_result_push(self, result: Any) -> None:
-        retcode = getattr(result, "retcode", -1)
+        if isinstance(result, dict) and "result" in result:
+            result = result["result"]
+        if isinstance(result, dict):
+            retcode = result.get("retcode", -1)
+            order_id = result.get("order")
+            deal = result.get("deal")
+            price = result.get("price")
+            volume = result.get("volume")
+            description = result.get("description", "")
+            success = retcode in (10008, 10009, 10010)
+        else:
+            retcode = getattr(result, "retcode", -1)
+            order_id = getattr(result, "order", None)
+            deal = getattr(result, "deal", None)
+            price = getattr(result, "price", None)
+            volume = getattr(result, "volume", None)
+            description = getattr(result, "description", "")
+            success = getattr(result, "success", False)
+        status = _RETCODE_STATUS.get(retcode, "unknown")
+        if retcode == 10009:
+            status = "completed"
         self.emit(
             CHANNEL_EVENT,
             {
-                "kind": "order_result",
+                "kind": "order",
                 "exchange": "MT5",
-                "status": _RETCODE_STATUS.get(retcode, "unknown"),
+                "status": status,
                 "retcode": retcode,
-                "description": getattr(result, "description", ""),
-                "success": getattr(result, "success", False),
-                "order_id": getattr(result, "order", None),
-                "external_order_id": getattr(result, "order", None),
-                "deal": getattr(result, "deal", None),
-                "volume": getattr(result, "volume", None),
-                "price": getattr(result, "price", None),
+                "description": description,
+                "success": success,
+                "order_id": order_id,
+                "external_order_id": str(order_id) if order_id else "",
+                "deal": deal,
+                "volume": volume,
+                "price": price,
             },
         )
 
