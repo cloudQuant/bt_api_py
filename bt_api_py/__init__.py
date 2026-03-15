@@ -1,3 +1,9 @@
+"""bt_api_py - Unified Multi-Exchange Trading API Framework.
+
+This package provides a unified API for interacting with multiple cryptocurrency exchanges
+ and traditional financial markets (CTP, Interactive Brokers).
+"""
+
 from bt_api_py.auth_config import (
     AuthConfig,
     CryptoAuthConfig,
