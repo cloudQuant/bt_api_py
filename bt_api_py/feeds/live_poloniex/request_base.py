@@ -14,6 +14,7 @@ from urllib.parse import urlencode
 from bt_api_py.containers.exchanges.poloniex_exchange_data import PoloniexExchangeDataSpot
 from bt_api_py.containers.requestdatas.request_data import RequestData
 from bt_api_py.error import ErrorTranslator
+from bt_api_py.exceptions import QueueNotInitializedError
 from bt_api_py.feeds.capability import Capability
 from bt_api_py.feeds.feed import Feed
 from bt_api_py.logging_factory import get_logger
@@ -157,7 +158,7 @@ class PoloniexRequestData(Feed):
         if self.data_queue is not None:
             self.data_queue.put(data)
         else:
-            assert 0, "Queue not initialized"
+            raise QueueNotInitializedError("data_queue not initialized")
 
     def signature(self, timestamp, method, request_path, secret_key, body=None):
         """

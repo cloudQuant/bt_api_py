@@ -14,6 +14,7 @@ from urllib import parse
 from bt_api_py.containers.exchanges.okx_exchange_data import OkxExchangeDataSwap
 from bt_api_py.containers.requestdatas.request_data import RequestData
 from bt_api_py.error import OKXErrorTranslator
+from bt_api_py.exceptions import QueueNotInitializedError
 from bt_api_py.feeds.capability import Capability
 from bt_api_py.feeds.feed import Feed
 from bt_api_py.feeds.live_okx.mixins.account_mixin import AccountMixin
@@ -134,7 +135,7 @@ class OkxRequestData(
         if self.data_queue is not None:
             self.data_queue.put(data)
         else:
-            assert 0, "队列未初始化"
+            raise QueueNotInitializedError("data_queue not initialized")
 
     # noinspection PyMethodMayBeStatic
     def signature(

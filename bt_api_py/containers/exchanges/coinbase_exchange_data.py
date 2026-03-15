@@ -6,6 +6,7 @@ import os
 from typing import Any, Never
 
 from bt_api_py.containers.exchanges.exchange_data import ExchangeData
+from bt_api_py.exceptions import ConfigurationError
 from bt_api_py.logging_factory import get_logger
 
 logger = get_logger("coinbase_exchange_data")
@@ -170,7 +171,7 @@ class CoinbaseExchangeData(ExchangeData):
             *args: Arguments for error message
 
         """
-        raise Exception(f"API path not found: {args}")
+        raise ConfigurationError(f"API path not found: {args}")
 
 
 class CoinbaseExchangeDataSpot(CoinbaseExchangeData):

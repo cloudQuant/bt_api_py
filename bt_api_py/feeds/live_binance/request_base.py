@@ -41,6 +41,7 @@ from bt_api_py.containers.trades.binance_trade import (
     BinanceRequestTradeData,
 )
 from bt_api_py.error import BinanceErrorTranslator
+from bt_api_py.exceptions import QueueNotInitializedError
 from bt_api_py.feeds.capability import Capability
 from bt_api_py.feeds.feed import Feed
 from bt_api_py.functions.calculate_time import datetime2timestamp
@@ -134,7 +135,7 @@ class BinanceRequestData(Feed):
         if self.data_queue is not None:
             self.data_queue.put(data)
         else:
-            assert 0, "队列未初始化"
+            raise QueueNotInitializedError("data_queue not initialized")
 
     # noinspection PyMethodMayBeStatic
     # def signature(self, timestamp, method, request_path, secret_key, body=None):

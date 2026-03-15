@@ -27,6 +27,7 @@ from bt_api_py.gateway.runtime import GatewayRuntime
 # Mock MT5WebClient for unit testing
 # ---------------------------------------------------------------------------
 
+
 @dataclass
 class FakeTradeResult:
     retcode: int = 10009
@@ -47,13 +48,22 @@ class FakeSymbolInfo:
     name: str = "EURUSD"
     symbol_id: int = 1
     digits: int = 5
-    description: str = "Euro vs US Dollar"
-    path: str = "Forex\\EURUSD"
-    trade_calc_mode: int = 0
-    basis: str = ""
-    sector: str = ""
+    description: str = "test symbol"
 
 
+@dataclass
+class FakeAccountSummary:
+    balance: float = 0.0
+    equity: float = 0.0
+    credit: float = 0.0
+    currency: str = "USD"
+    leverage: int = 100
+    margin: float = 0.0
+    margin_free: float = 0.0
+    profit: float = 1.0
+
+
+@dataclass
 class FakeMT5WebClient:
     """Mock MT5WebClient for unit testing without real WebSocket."""
 
@@ -105,6 +115,18 @@ class FakeMT5WebClient:
             "leverage": 100,
         }
 
+    async def get_account_summary(self) -> FakeAccountSummary:
+        return FakeAccountSummary(
+            balance=10000.0,
+            equity=10050.0,
+            credit=0.0,
+            currency="USD",
+            leverage=100,
+            margin=100.0,
+            margin_free=9900.0,
+            profit=50.0,
+        )
+
     async def get_positions(self) -> list[dict]:
         return [
             {
@@ -137,7 +159,9 @@ class FakeMT5WebClient:
             }
         ]
 
-    async def get_rates(self, symbol: str, period_minutes: int, from_ts: int, to_ts: int) -> list[dict]:
+    async def get_rates(
+        self, symbol: str, period_minutes: int, from_ts: int, to_ts: int
+    ) -> list[dict]:
         base_time = from_ts
         return [
             {
@@ -215,6 +239,7 @@ class FakeMT5WebClient:
 # Fixtures
 # ---------------------------------------------------------------------------
 
+
 @pytest.fixture
 def fake_mt5_client():
     return FakeMT5WebClient()
@@ -238,6 +263,7 @@ def _make_adapter(fake_client: FakeMT5WebClient, **overrides) -> Mt5GatewayAdapt
 
     # Start the loop in a background thread
     import threading
+
     t = threading.Thread(target=adapter._loop.run_forever, daemon=True)
     t.start()
     adapter._thread = t
@@ -262,6 +288,7 @@ def _stop_adapter(adapter: Mt5GatewayAdapter):
 # BaseGatewayAdapter default method tests
 # ---------------------------------------------------------------------------
 
+
 class TestBaseGatewayAdapterDefaults:
     """Test that the new optional methods on BaseGatewayAdapter return defaults."""
 
@@ -269,11 +296,20 @@ class TestBaseGatewayAdapterDefaults:
         class StubAdapter(BaseGatewayAdapter):
             def connect(self): ...
             def disconnect(self): ...
-            def subscribe_symbols(self, symbols): return {}
-            def get_balance(self): return {}
-            def get_positions(self): return []
-            def place_order(self, payload): return {}
-            def cancel_order(self, payload): return {}
+            def subscribe_symbols(self, symbols):
+                return {}
+
+            def get_balance(self):
+                return {}
+
+            def get_positions(self):
+                return []
+
+            def place_order(self, payload):
+                return {}
+
+            def cancel_order(self, payload):
+                return {}
 
         adapter = StubAdapter()
         assert adapter.get_bars("EURUSD", "M1", 100) == []
@@ -284,6 +320,7 @@ class TestBaseGatewayAdapterDefaults:
 # ---------------------------------------------------------------------------
 # Mt5GatewayAdapter unit tests
 # ---------------------------------------------------------------------------
+
 
 class TestMt5AdapterSymbolMapping:
     def test_no_mapping(self):
@@ -296,7 +333,8 @@ class TestMt5AdapterSymbolMapping:
 
     def test_manual_map_overrides_suffix(self):
         adapter = Mt5GatewayAdapter(
-            login=1, password="x",
+            login=1,
+            password="x",
             symbol_suffix=".r",
             symbol_map={"XAUUSD": "GOLD.r"},
         )
@@ -308,7 +346,9 @@ class TestMt5AdapterVolumeNormalization:
     def test_basic_normalization(self):
         adapter = Mt5GatewayAdapter(login=1, password="x")
         adapter._symbol_specs["EURUSD"] = {
-            "volume_min": 0.01, "volume_max": 100.0, "volume_step": 0.01,
+            "volume_min": 0.01,
+            "volume_max": 100.0,
+            "volume_step": 0.01,
         }
         assert adapter._normalize_volume("EURUSD", 0.015) == 0.02
         assert adapter._normalize_volume("EURUSD", 0.005) == 0.01
@@ -328,13 +368,13 @@ class TestMt5AdapterRetcodeMapping:
         assert _RETCODE_STATUS[10008] == "submitted"
 
     def test_order_state_map(self):
-        assert _MT5_ORDER_STATE_MAP[0] == "submitted"   # STARTED
-        assert _MT5_ORDER_STATE_MAP[1] == "accepted"     # PLACED
-        assert _MT5_ORDER_STATE_MAP[2] == "canceled"     # CANCELED
-        assert _MT5_ORDER_STATE_MAP[3] == "partial"      # PARTIAL
-        assert _MT5_ORDER_STATE_MAP[4] == "completed"    # FILLED
-        assert _MT5_ORDER_STATE_MAP[5] == "rejected"     # REJECTED
-        assert _MT5_ORDER_STATE_MAP[6] == "canceled"     # EXPIRED
+        assert _MT5_ORDER_STATE_MAP[0] == "submitted"  # STARTED
+        assert _MT5_ORDER_STATE_MAP[1] == "accepted"  # PLACED
+        assert _MT5_ORDER_STATE_MAP[2] == "canceled"  # CANCELED
+        assert _MT5_ORDER_STATE_MAP[3] == "partial"  # PARTIAL
+        assert _MT5_ORDER_STATE_MAP[4] == "completed"  # FILLED
+        assert _MT5_ORDER_STATE_MAP[5] == "rejected"  # REJECTED
+        assert _MT5_ORDER_STATE_MAP[6] == "canceled"  # EXPIRED
 
     def test_trade_result_to_dict(self):
         result = FakeTradeResult(retcode=10009, order=999, deal=888, volume=0.1, price=1.23)
@@ -409,44 +449,72 @@ class TestMt5AdapterWithFakeClient:
         assert "XAUUSD" in self.client._subscribed
 
     def test_place_order_market_buy(self):
-        result = self.adapter.place_order({
-            "data_name": "EURUSD", "side": "buy", "order_type": "market", "volume": 0.01,
-        })
+        result = self.adapter.place_order(
+            {
+                "data_name": "EURUSD",
+                "side": "buy",
+                "order_type": "market",
+                "volume": 0.01,
+            }
+        )
         assert result["status"] == "completed"
         assert result["order_id"] == 12345
         assert result["data_name"] == "EURUSD"
 
     def test_place_order_market_sell(self):
-        result = self.adapter.place_order({
-            "data_name": "EURUSD", "side": "sell", "order_type": "market", "volume": 0.01,
-        })
+        result = self.adapter.place_order(
+            {
+                "data_name": "EURUSD",
+                "side": "sell",
+                "order_type": "market",
+                "volume": 0.01,
+            }
+        )
         assert result["status"] == "completed"
 
     def test_place_order_limit(self):
-        result = self.adapter.place_order({
-            "data_name": "EURUSD", "side": "buy", "order_type": "limit",
-            "volume": 0.01, "price": 1.1000,
-        })
+        result = self.adapter.place_order(
+            {
+                "data_name": "EURUSD",
+                "side": "buy",
+                "order_type": "limit",
+                "volume": 0.01,
+                "price": 1.1000,
+            }
+        )
         assert result["status"] == "submitted"
 
     def test_place_order_stop(self):
-        result = self.adapter.place_order({
-            "data_name": "EURUSD", "side": "sell", "order_type": "stop",
-            "volume": 0.01, "price": 1.1200,
-        })
+        result = self.adapter.place_order(
+            {
+                "data_name": "EURUSD",
+                "side": "sell",
+                "order_type": "stop",
+                "volume": 0.01,
+                "price": 1.1200,
+            }
+        )
         assert result["status"] == "submitted"
 
     def test_place_order_close(self):
-        result = self.adapter.place_order({
-            "data_name": "EURUSD", "order_type": "close",
-            "volume": 0.01, "position_id": 100,
-        })
+        result = self.adapter.place_order(
+            {
+                "data_name": "EURUSD",
+                "order_type": "close",
+                "volume": 0.01,
+                "position_id": 100,
+            }
+        )
         assert result["status"] == "completed"
 
     def test_place_order_unsupported_type(self):
-        result = self.adapter.place_order({
-            "data_name": "EURUSD", "order_type": "exotic", "volume": 0.01,
-        })
+        result = self.adapter.place_order(
+            {
+                "data_name": "EURUSD",
+                "order_type": "exotic",
+                "volume": 0.01,
+            }
+        )
         assert result["status"] == "error"
 
     def test_cancel_order(self):
@@ -460,7 +528,13 @@ class TestMt5AdapterWithFakeClient:
 
     def test_tick_push_emits_market_event(self):
         ticks = [
-            {"symbol_id": 1, "tick_time": 1700000000.0, "bid": 1.1050, "ask": 1.1052, "tick_volume": 10}
+            {
+                "symbol_id": 1,
+                "tick_time": 1700000000.0,
+                "bid": 1.1050,
+                "ask": 1.1052,
+                "tick_volume": 10,
+            }
         ]
         self.adapter._on_tick_push(ticks)
 
@@ -474,7 +548,9 @@ class TestMt5AdapterWithFakeClient:
         assert payload.ask_price == 1.1052
 
     def test_trade_result_push_emits_event(self):
-        data = {"result": {"retcode": 10009, "order": 999, "deal": 888, "price": 1.23, "volume": 0.1}}
+        data = {
+            "result": {"retcode": 10009, "order": 999, "deal": 888, "price": 1.23, "volume": 0.1}
+        }
         self.adapter._on_trade_result_push(data)
 
         output = self.adapter.poll_output()
@@ -593,6 +669,7 @@ class TestMt5AdapterWithFakeClient:
 # FakeGatewayAdapter with get_bars/get_symbol_info/get_open_orders for IPC tests
 # ---------------------------------------------------------------------------
 
+
 class FakeGatewayAdapterWithBars:
     """Fake adapter with get_bars/get_symbol_info/get_open_orders for runtime dispatch tests."""
 
@@ -623,9 +700,16 @@ class FakeGatewayAdapterWithBars:
 
     def get_bars(self, symbol, timeframe, count):
         return [
-            {"timestamp": 1700000000.0 + i * 60, "open": 1.1 + i * 0.001,
-             "high": 1.101 + i * 0.001, "low": 1.099 + i * 0.001,
-             "close": 1.1005 + i * 0.001, "volume": 100.0, "symbol": symbol, "timeframe": timeframe}
+            {
+                "timestamp": 1700000000.0 + i * 60,
+                "open": 1.1 + i * 0.001,
+                "high": 1.101 + i * 0.001,
+                "low": 1.099 + i * 0.001,
+                "close": 1.1005 + i * 0.001,
+                "volume": 100.0,
+                "symbol": symbol,
+                "timeframe": timeframe,
+            }
             for i in range(count)
         ]
 
@@ -650,24 +734,39 @@ class FakeGatewayAdapterWithBars:
 # Runtime dispatch tests for new commands
 # ---------------------------------------------------------------------------
 
+
 def _tcp_config_and_client(monkeypatch, adapter, account_id):
     """Helper: create GatewayConfig, Runtime, Client over tcp (Windows-safe)."""
     monkeypatch.setattr(GatewayRuntime, "_create_adapter", lambda self: adapter)
     runtime_name = f"mt5-test-{uuid.uuid4().hex[:8]}"
     config = GatewayConfig.from_kwargs(
-        exchange_type="MT5", asset_type="OTC", account_id=account_id,
-        transport="tcp", gateway_runtime_name=runtime_name,
-        gateway_poll_timeout_ms=10, gateway_command_timeout_sec=2.0,
+        exchange_type="MT5",
+        asset_type="OTC",
+        account_id=account_id,
+        transport="tcp",
+        gateway_runtime_name=runtime_name,
+        gateway_poll_timeout_ms=10,
+        gateway_command_timeout_sec=2.0,
     )
-    runtime = GatewayRuntime(config, exchange_type="MT5", asset_type="OTC", account_id=account_id,
-                             transport="tcp", gateway_runtime_name=runtime_name)
+    runtime = GatewayRuntime(
+        config,
+        exchange_type="MT5",
+        asset_type="OTC",
+        account_id=account_id,
+        transport="tcp",
+        gateway_runtime_name=runtime_name,
+    )
     client = GatewayClient(
-        exchange_type="MT5", asset_type="OTC", account_id=account_id,
+        exchange_type="MT5",
+        asset_type="OTC",
+        account_id=account_id,
         gateway_command_endpoint=config.command_endpoint,
         gateway_event_endpoint=config.event_endpoint,
         gateway_market_endpoint=config.market_endpoint,
-        transport="tcp", gateway_runtime_name=runtime_name,
-        gateway_poll_timeout_ms=10, gateway_command_timeout_sec=2.0,
+        transport="tcp",
+        gateway_runtime_name=runtime_name,
+        gateway_poll_timeout_ms=10,
+        gateway_command_timeout_sec=2.0,
         gateway_start_local_runtime=False,
     )
     return config, runtime, client
@@ -725,6 +824,7 @@ def test_runtime_dispatches_get_open_orders(monkeypatch):
 # MT5 registry test
 # ---------------------------------------------------------------------------
 
+
 def test_mt5_registered_in_adapter_registry():
     """MT5 should be in the registry when pymt5 is available."""
     assert GatewayRuntime.get_adapter_class("MT5") is Mt5GatewayAdapter
@@ -734,6 +834,7 @@ def test_mt5_registered_in_adapter_registry():
 # ---------------------------------------------------------------------------
 # Timeframe map coverage
 # ---------------------------------------------------------------------------
+
 
 def test_timeframe_map_completeness():
     expected = {"M1", "M5", "M15", "M30", "H1", "H4", "D1", "W1", "MN1"}

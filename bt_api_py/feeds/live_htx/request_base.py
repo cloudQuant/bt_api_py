@@ -12,6 +12,7 @@ from typing import Any
 
 from bt_api_py.containers.requestdatas.request_data import RequestData
 from bt_api_py.errors.error_framework_htx import HtxErrorTranslator
+from bt_api_py.exceptions import QueueNotInitializedError
 from bt_api_py.feeds.capability import Capability
 from bt_api_py.feeds.feed import Feed
 from bt_api_py.logging_factory import get_logger
@@ -97,7 +98,7 @@ class HtxRequestData(Feed):
         if self.data_queue is not None:
             self.data_queue.put(data)
         else:
-            assert 0, "Queue not initialized"
+            raise QueueNotInitializedError("data_queue not initialized")
 
     # noinspection PyMethodMayBeStatic
     def create_signature(self, method, host, path, params):

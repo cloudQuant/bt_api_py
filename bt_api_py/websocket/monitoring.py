@@ -516,7 +516,7 @@ class WebSocketBenchmark:
                 self._results.append(result)
                 return result
             else:
-                raise Exception("No latency samples collected")
+                raise RuntimeError("No latency samples collected")
 
         except Exception as e:
             result = BenchmarkResult(

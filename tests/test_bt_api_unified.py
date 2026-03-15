@@ -4,7 +4,7 @@ from datetime import timedelta
 
 import pytest
 
-from bt_api_py.bt_api import BtApi, KLINE_PERIOD_DELTAS
+from bt_api_py.bt_api import KLINE_PERIOD_DELTAS, BtApi
 from bt_api_py.exceptions import ExchangeNotFoundError, InvalidOrderError, SubscribeError
 
 

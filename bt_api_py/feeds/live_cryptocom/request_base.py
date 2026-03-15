@@ -14,6 +14,7 @@ from bt_api_py.containers.orderbooks.cryptocom_orderbook import CryptoComOrderBo
 from bt_api_py.containers.orders.cryptocom_order import CryptoComOrder
 from bt_api_py.containers.requestdatas.request_data import RequestData
 from bt_api_py.containers.tickers.cryptocom_ticker import CryptoComTicker
+from bt_api_py.exceptions import QueueNotInitializedError
 from bt_api_py.feeds.capability import Capability
 from bt_api_py.feeds.feed import Feed
 from bt_api_py.functions.utils import update_extra_data
@@ -93,7 +94,7 @@ class CryptoComRequestData(Feed):
         if self.data_queue is not None:
             self.data_queue.put(data)
         else:
-            assert 0, "Queue not initialized"
+            raise QueueNotInitializedError("data_queue not initialized")
 
     def request(self, path, params=None, body=None, extra_data=None, timeout=10, is_sign=False):
         """HTTP request function using Feed.http_request().

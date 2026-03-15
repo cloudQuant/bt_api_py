@@ -10,6 +10,7 @@ from urllib.parse import urlencode
 from bt_api_py.containers.exchanges.dydx_exchange_data import DydxExchangeDataSwap
 from bt_api_py.containers.requestdatas.request_data import RequestData
 from bt_api_py.error import ErrorTranslator
+from bt_api_py.exceptions import QueueNotInitializedError
 from bt_api_py.feeds.capability import Capability
 from bt_api_py.feeds.feed import Feed
 from bt_api_py.logging_factory import get_logger
@@ -104,7 +105,7 @@ class DydxRequestData(Feed):
         if self.data_queue is not None:
             self.data_queue.put(data)
         else:
-            assert 0, "队列未初始化"
+            raise QueueNotInitializedError("data_queue not initialized")
 
     def request(
         self,
