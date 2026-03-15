@@ -199,8 +199,18 @@ class GatewayClient:
         limit: int | None = None,
         **_kwargs: Any,
     ) -> list[dict[str, Any]]:
-        tf_str = _resolve_timeframe_str(timeframe, compression)
-        bar_count = limit if limit and limit > 0 else count
+        if (
+            isinstance(timeframe, str)
+            and compression != 1
+            and count == 200
+            and limit is None
+            and since is None
+        ):
+            tf_str = timeframe
+            bar_count = compression
+        else:
+            tf_str = _resolve_timeframe_str(timeframe, compression)
+            bar_count = limit if limit and limit > 0 else count
         return list(
             self._command("get_bars", {"symbol": symbol, "timeframe": tf_str, "count": bar_count})
             or []

@@ -502,19 +502,23 @@ class Mt5GatewayAdapter(BaseGatewayAdapter):
         for txn in transactions:
             deals = txn.get("deals", [])
             orders = txn.get("orders", [])
+            if not deals and isinstance(txn.get("deal"), dict):
+                deals = [txn["deal"]]
+            if not orders and isinstance(txn.get("order"), dict):
+                orders = [txn["order"]]
             for deal in deals:
                 self.emit(
                     CHANNEL_EVENT,
                     {
                         "kind": "trade",
                         "exchange": "MT5",
-                        "trade_id": str(deal.get("deal_id") or ""),
-                        "external_order_id": str(deal.get("order_id") or ""),
-                        "order_ref": str(deal.get("order_id") or ""),
-                        "data_name": deal.get("symbol", ""),
-                        "side": "buy" if deal.get("entry", 0) == 0 else "sell",
-                        "size": abs(float(deal.get("volume") or 0)),
-                        "price": float(deal.get("price") or 0.0),
+                        "trade_id": str(deal.get("deal_id") or deal.get("deal") or ""),
+                        "external_order_id": str(deal.get("order_id") or deal.get("trade_order") or ""),
+                        "order_ref": str(deal.get("order_id") or deal.get("trade_order") or ""),
+                        "data_name": deal.get("symbol") or deal.get("trade_symbol") or "",
+                        "side": "buy" if (deal.get("entry", deal.get("trade_action", 0)) == 0) else "sell",
+                        "size": abs(float(deal.get("volume") or deal.get("trade_volume") or 0)),
+                        "price": float(deal.get("price") or deal.get("price_open") or 0.0),
                         "commission": float(deal.get("commission") or 0.0),
                         "profit": float(deal.get("profit") or 0.0),
                     },
@@ -530,11 +534,11 @@ class Mt5GatewayAdapter(BaseGatewayAdapter):
                         "kind": "order",
                         "exchange": "MT5",
                         "status": status,
-                        "external_order_id": str(order.get("order_id") or ""),
-                        "order_ref": str(order.get("order_id") or ""),
-                        "data_name": order.get("symbol", ""),
+                        "external_order_id": str(order.get("order_id") or order.get("trade_order") or ""),
+                        "order_ref": str(order.get("order_id") or order.get("trade_order") or ""),
+                        "data_name": order.get("symbol") or order.get("trade_symbol") or "",
                         "side": "buy" if order.get("order_type", 0) in (0, 2, 4) else "sell",
-                        "price": float(order.get("price") or 0.0),
+                        "price": float(order.get("price") or order.get("price_order") or 0.0),
                         "size": float(order.get("volume_initial") or 0.0),
                         "filled": float(
                             (order.get("volume_initial") or 0) - (order.get("volume_current") or 0)

@@ -122,7 +122,10 @@ class OkxExchangeData(ExchangeData):
 
     # noinspection PyMethodMayBeStatic
     def get_symbol(self, symbol: str) -> str:
-        return symbol.replace("/", "-").upper() + "-SWAP"
+        result = symbol.replace("/", "-").upper()
+        if not result.endswith("-SWAP"):
+            result += "-SWAP"
+        return result
 
     # noinspection PyMethodMayBeStatic
     def get_symbol_re(self, symbol):
