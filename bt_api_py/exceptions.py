@@ -31,9 +31,13 @@ __all__ = [
 class BtApiError(Exception):
     """bt_api_py 所有异常的基类"""
 
+    __slots__ = ()
+
 
 class ExchangeNotFoundError(BtApiError):
     """交易所未注册或未添加"""
+
+    __slots__ = ("exchange_name", "available")
 
     def __init__(self, exchange_name: str, available: str | list[str] | None = None) -> None:
         msg = f"Exchange not found: {exchange_name}"
@@ -46,6 +50,8 @@ class ExchangeNotFoundError(BtApiError):
 
 class ExchangeConnectionError(BtApiError):
     """交易所连接失败"""
+
+    __slots__ = ("exchange_name",)
 
     def __init__(self, exchange_name: str, detail: str = "") -> None:
         msg = f"Connection failed: {exchange_name}"
@@ -63,9 +69,13 @@ ExchangeConnectionAlias = ExchangeConnectionError
 class AuthenticationError(ExchangeConnectionError):
     """认证失败（API Key / 密码 / 穿透式认证错误）"""
 
+    __slots__ = ()
+
 
 class RequestTimeoutError(BtApiError):
     """REST / 查询请求超时"""
+
+    __slots__ = ("exchange_name", "url", "timeout")
 
     def __init__(self, exchange_name: str, url: str = "", timeout: int | float = 0) -> None:
         msg = f"{exchange_name} request timeout ({timeout}s)"
@@ -80,6 +90,8 @@ class RequestTimeoutError(BtApiError):
 class RequestError(BtApiError):
     """REST 请求失败（非超时）"""
 
+    __slots__ = ("exchange_name",)
+
     def __init__(self, exchange_name: str, url: str = "", detail: str = "") -> None:
         msg = f"{exchange_name} request error"
         if url:
@@ -92,6 +104,8 @@ class RequestError(BtApiError):
 
 class OrderError(BtApiError):
     """下单 / 撤单操作失败"""
+
+    __slots__ = ("exchange_name", "symbol")
 
     def __init__(self, exchange_name: str, symbol: str = "", detail: str = "") -> None:
         msg = f"{exchange_name} order error"
@@ -107,6 +121,8 @@ class OrderError(BtApiError):
 class SubscribeError(BtApiError):
     """订阅失败"""
 
+    __slots__ = ("exchange_name",)
+
     def __init__(self, exchange_name: str, detail: str = "") -> None:
         msg = f"{exchange_name} subscribe error"
         if detail:
@@ -118,6 +134,8 @@ class SubscribeError(BtApiError):
 class DataParseError(BtApiError):
     """数据解析失败"""
 
+    __slots__ = ("container_class", "detail")
+
     def __init__(self, container_class: str = "", detail: str = "") -> None:
         msg = "Data parse error"
         if container_class:
@@ -125,10 +143,14 @@ class DataParseError(BtApiError):
         if detail:
             msg += f": {detail}"
         super().__init__(msg)
+        self.container_class = container_class
+        self.detail = detail
 
 
 class RateLimitError(BtApiError):
     """API 速率限制错误"""
+
+    __slots__ = ("exchange_name", "retry_after")
 
     def __init__(
         self, exchange_name: str, retry_after: int | float | None = None, detail: str = ""
@@ -146,6 +168,8 @@ class RateLimitError(BtApiError):
 class NetworkError(BtApiError):
     """网络错误（连接失败、DNS 解析失败等）"""
 
+    __slots__ = ("exchange_name",)
+
     def __init__(self, exchange_name: str, detail: str = "") -> None:
         msg = f"{exchange_name} network error"
         if detail:
@@ -156,6 +180,8 @@ class NetworkError(BtApiError):
 
 class InvalidSymbolError(BtApiError):
     """无效的交易对符号"""
+
+    __slots__ = ("exchange_name", "symbol")
 
     def __init__(self, exchange_name: str, symbol: str, detail: str = "") -> None:
         msg = f"{exchange_name} invalid symbol: {symbol}"
@@ -168,6 +194,8 @@ class InvalidSymbolError(BtApiError):
 
 class InsufficientBalanceError(OrderError):
     """余额不足"""
+
+    __slots__ = ("required", "available")
 
     def __init__(
         self,
@@ -187,9 +215,13 @@ class InsufficientBalanceError(OrderError):
 class InvalidOrderError(OrderError):
     """无效的订单参数（价格、数量等）"""
 
+    __slots__ = ()
+
 
 class OrderNotFoundError(OrderError):
     """订单不存在"""
+
+    __slots__ = ("order_id",)
 
     def __init__(self, exchange_name: str, order_id: str, symbol: str = "") -> None:
         detail = f"Order not found: {order_id}"
@@ -199,6 +231,8 @@ class OrderNotFoundError(OrderError):
 
 class ConfigurationError(BtApiError):
     """配置错误（缺少必需参数、配置格式错误等）"""
+
+    __slots__ = ("detail",)
 
     def __init__(self, detail: str = "") -> None:
         msg = "Configuration error"
@@ -210,6 +244,8 @@ class ConfigurationError(BtApiError):
 class WebSocketError(BtApiError):
     """WebSocket 连接或订阅错误"""
 
+    __slots__ = ("exchange_name",)
+
     def __init__(self, exchange_name: str, detail: str = "") -> None:
         msg = f"{exchange_name} WebSocket error"
         if detail:
@@ -220,6 +256,8 @@ class WebSocketError(BtApiError):
 
 class RequestFailedError(RequestError):
     """通用请求失败错误（用于 HTTP 客户端）"""
+
+    __slots__ = ("venue", "status_code")
 
     def __init__(
         self,
