@@ -30,32 +30,32 @@ _TIMEFRAME_MAP: dict[str, int] = {
 
 # MT5 order_state → gateway status (from pymt5.constants ORDER_STATE_*)
 _MT5_ORDER_STATE_MAP: dict[int, str] = {
-    0: "submitted",    # ORDER_STATE_STARTED
-    1: "accepted",     # ORDER_STATE_PLACED
-    2: "canceled",     # ORDER_STATE_CANCELED
-    3: "partial",      # ORDER_STATE_PARTIAL
-    4: "completed",    # ORDER_STATE_FILLED
-    5: "rejected",     # ORDER_STATE_REJECTED
-    6: "canceled",     # ORDER_STATE_EXPIRED
+    0: "submitted",  # ORDER_STATE_STARTED
+    1: "accepted",  # ORDER_STATE_PLACED
+    2: "canceled",  # ORDER_STATE_CANCELED
+    3: "partial",  # ORDER_STATE_PARTIAL
+    4: "completed",  # ORDER_STATE_FILLED
+    5: "rejected",  # ORDER_STATE_REJECTED
+    6: "canceled",  # ORDER_STATE_EXPIRED
 }
 
 # MT5 trade return codes → gateway status
 _RETCODE_STATUS: dict[int, str] = {
-    10004: "rejected",     # REQUOTE
-    10006: "rejected",     # REJECT
-    10007: "canceled",     # CANCEL
-    10008: "submitted",    # PLACED
-    10009: "completed",    # DONE
-    10010: "partial",      # DONE_PARTIAL
-    10013: "rejected",     # INVALID
-    10014: "rejected",     # INVALID_VOLUME
-    10015: "rejected",     # INVALID_PRICE
-    10016: "rejected",     # INVALID_STOPS
-    10017: "rejected",     # TRADE_DISABLED
-    10018: "rejected",     # MARKET_CLOSED
-    10019: "rejected",     # NO_MONEY
-    10030: "rejected",     # INVALID_FILL
-    10031: "rejected",     # CONNECTION
+    10004: "rejected",  # REQUOTE
+    10006: "rejected",  # REJECT
+    10007: "canceled",  # CANCEL
+    10008: "submitted",  # PLACED
+    10009: "completed",  # DONE
+    10010: "partial",  # DONE_PARTIAL
+    10013: "rejected",  # INVALID
+    10014: "rejected",  # INVALID_VOLUME
+    10015: "rejected",  # INVALID_PRICE
+    10016: "rejected",  # INVALID_STOPS
+    10017: "rejected",  # TRADE_DISABLED
+    10018: "rejected",  # MARKET_CLOSED
+    10019: "rejected",  # NO_MONEY
+    10030: "rejected",  # INVALID_FILL
+    10031: "rejected",  # CONNECTION
 }
 
 
@@ -168,26 +168,26 @@ class Mt5GatewayAdapter(BaseGatewayAdapter):
         future = asyncio.run_coroutine_threadsafe(self._client.get_positions(), self._loop)
         positions = future.result(timeout=self._timeout)
         result = []
-        for p in (positions or []):
-            result.append({
-                "instrument": p.get("trade_symbol", ""),
-                "position_id": p.get("position_id"),
-                "direction": "buy" if p.get("trade_action") == 0 else "sell",
-                "volume": p.get("trade_volume", 0),
-                "price": p.get("price_open", 0.0),
-                "sl": p.get("sl", 0.0),
-                "tp": p.get("tp", 0.0),
-                "profit": p.get("profit", 0.0),
-                "commission": p.get("commission", 0.0),
-                "swap": p.get("storage", 0.0),
-                "comment": p.get("comment", ""),
-            })
+        for p in positions or []:
+            result.append(
+                {
+                    "instrument": p.get("trade_symbol", ""),
+                    "position_id": p.get("position_id"),
+                    "direction": "buy" if p.get("trade_action") == 0 else "sell",
+                    "volume": p.get("trade_volume", 0),
+                    "price": p.get("price_open", 0.0),
+                    "sl": p.get("sl", 0.0),
+                    "tp": p.get("tp", 0.0),
+                    "profit": p.get("profit", 0.0),
+                    "commission": p.get("commission", 0.0),
+                    "swap": p.get("storage", 0.0),
+                    "comment": p.get("comment", ""),
+                }
+            )
         return result
 
     def place_order(self, payload: dict[str, Any]) -> dict[str, Any]:
-        future = asyncio.run_coroutine_threadsafe(
-            self._async_place_order(payload), self._loop
-        )
+        future = asyncio.run_coroutine_threadsafe(self._async_place_order(payload), self._loop)
         return future.result(timeout=self._timeout)
 
     def cancel_order(self, payload: dict[str, Any]) -> dict[str, Any]:
@@ -255,18 +255,20 @@ class Mt5GatewayAdapter(BaseGatewayAdapter):
         future = asyncio.run_coroutine_threadsafe(self._client.get_orders(), self._loop)
         orders = future.result(timeout=self._timeout)
         result = []
-        for o in (orders or []):
-            result.append({
-                "order_id": o.get("order_id"),
-                "symbol": o.get("trade_symbol", ""),
-                "type": o.get("trade_type"),
-                "volume": o.get("trade_volume", 0),
-                "price": o.get("price_order", 0.0),
-                "sl": o.get("sl", 0.0),
-                "tp": o.get("tp", 0.0),
-                "state": o.get("order_state"),
-                "comment": o.get("comment", ""),
-            })
+        for o in orders or []:
+            result.append(
+                {
+                    "order_id": o.get("order_id"),
+                    "symbol": o.get("trade_symbol", ""),
+                    "type": o.get("trade_type"),
+                    "volume": o.get("trade_volume", 0),
+                    "price": o.get("price_order", 0.0),
+                    "sl": o.get("sl", 0.0),
+                    "tp": o.get("tp", 0.0),
+                    "state": o.get("order_state"),
+                    "comment": o.get("comment", ""),
+                }
+            )
         return result
 
     # ---- Internal async methods ----
@@ -302,7 +304,9 @@ class Mt5GatewayAdapter(BaseGatewayAdapter):
         with contextlib.suppress(Exception):
             self._client.on_position_update(self._on_position_update_push)
 
-    async def _async_subscribe(self, standard_symbols: list[str], resolved_symbols: list[str]) -> None:
+    async def _async_subscribe(
+        self, standard_symbols: list[str], resolved_symbols: list[str]
+    ) -> None:
         await self._client.subscribe_symbols(resolved_symbols)
         for std_sym in standard_symbols:
             try:
@@ -438,48 +442,125 @@ class Mt5GatewayAdapter(BaseGatewayAdapter):
         for o in orders:
             order_state = o.get("order_state")
             status = _MT5_ORDER_STATE_MAP.get(order_state, "submitted")
-            self.emit(CHANNEL_EVENT, {
-                "kind": "order",
-                "exchange": "MT5",
-                "status": status,
-                "external_order_id": str(o.get("order_id") or o.get("trade_order") or ""),
-                "order_ref": str(o.get("order_id") or o.get("trade_order") or ""),
-                "data_name": o.get("trade_symbol", ""),
-                "side": "buy" if o.get("order_type", 0) in (0, 2, 4) else "sell",
-                "price": float(o.get("price_order") or 0.0),
-                "size": float(o.get("volume_initial") or 0.0),
-                "filled": float(
-                    (o.get("volume_initial") or 0) - (o.get("volume_current") or 0)
-                ),
-                "remaining": float(o.get("volume_current") or 0.0),
-            })
+            self.emit(
+                CHANNEL_EVENT,
+                {
+                    "kind": "order",
+                    "exchange": "MT5",
+                    "status": status,
+                    "external_order_id": str(o.get("order_id") or o.get("trade_order") or ""),
+                    "order_ref": str(o.get("order_id") or o.get("trade_order") or ""),
+                    "data_name": o.get("trade_symbol", ""),
+                    "side": "buy" if o.get("order_type", 0) in (0, 2, 4) else "sell",
+                    "price": float(o.get("price_order") or 0.0),
+                    "size": float(o.get("volume_initial") or 0.0),
+                    "filled": float(
+                        (o.get("volume_initial") or 0) - (o.get("volume_current") or 0)
+                    ),
+                    "remaining": float(o.get("volume_current") or 0.0),
+                },
+            )
 
     def _on_position_update_push(self, positions: list[dict]) -> None:
         for p in positions:
             trade_action = p.get("trade_action", -1)
             side = "buy" if trade_action == 0 else "sell"
-            self.emit(CHANNEL_EVENT, {
-                "kind": "trade",
-                "exchange": "MT5",
-                "trade_id": str(p.get("position_id") or ""),
-                "external_order_id": str(p.get("order_id") or ""),
-                "order_ref": str(p.get("order_id") or ""),
-                "data_name": p.get("trade_symbol", ""),
-                "side": side,
-                "size": abs(float(p.get("trade_volume") or 0)),
-                "price": float(p.get("price_open") or 0.0),
-                "commission": float(p.get("commission") or 0.0),
-                "profit": float(p.get("profit") or 0.0),
-                "position_id": p.get("position_id"),
-            })
+            self.emit(
+                CHANNEL_EVENT,
+                {
+                    "kind": "trade",
+                    "exchange": "MT5",
+                    "trade_id": str(p.get("position_id") or ""),
+                    "external_order_id": str(p.get("order_id") or ""),
+                    "order_ref": str(p.get("order_id") or ""),
+                    "data_name": p.get("trade_symbol", ""),
+                    "side": side,
+                    "size": abs(float(p.get("trade_volume") or 0)),
+                    "price": float(p.get("price_open") or 0.0),
+                    "commission": float(p.get("commission") or 0.0),
+                    "profit": float(p.get("profit") or 0.0),
+                    "position_id": p.get("position_id"),
+                },
+            )
 
     def _on_ws_disconnect(self) -> None:
-        self.emit(CHANNEL_EVENT, {
-            "kind": "health",
-            "exchange": "MT5",
-            "type": "disconnected",
-            "message": "MT5 WebSocket connection lost",
-        })
+        self.emit(
+            CHANNEL_EVENT,
+            {
+                "kind": "health",
+                "exchange": "MT5",
+                "type": "disconnected",
+                "message": "MT5 WebSocket connection lost",
+            },
+        )
+
+    def _on_transaction_push(self, transactions: list[dict] | dict | None) -> None:
+        if transactions is None:
+            return
+        if isinstance(transactions, dict):
+            transactions = [transactions]
+        for txn in transactions:
+            deals = txn.get("deals", [])
+            orders = txn.get("orders", [])
+            for deal in deals:
+                self.emit(
+                    CHANNEL_EVENT,
+                    {
+                        "kind": "trade",
+                        "exchange": "MT5",
+                        "trade_id": str(deal.get("deal_id") or ""),
+                        "external_order_id": str(deal.get("order_id") or ""),
+                        "order_ref": str(deal.get("order_id") or ""),
+                        "data_name": deal.get("symbol", ""),
+                        "side": "buy" if deal.get("entry", 0) == 0 else "sell",
+                        "size": abs(float(deal.get("volume") or 0)),
+                        "price": float(deal.get("price") or 0.0),
+                        "commission": float(deal.get("commission") or 0.0),
+                        "profit": float(deal.get("profit") or 0.0),
+                    },
+                )
+            for order in orders:
+                order_state = order.get("order_state")
+                status = _MT5_ORDER_STATE_MAP.get(order_state, "submitted")
+                if order_state == 6:
+                    status = "canceled"
+                self.emit(
+                    CHANNEL_EVENT,
+                    {
+                        "kind": "order",
+                        "exchange": "MT5",
+                        "status": status,
+                        "external_order_id": str(order.get("order_id") or ""),
+                        "order_ref": str(order.get("order_id") or ""),
+                        "data_name": order.get("symbol", ""),
+                        "side": "buy" if order.get("order_type", 0) in (0, 2, 4) else "sell",
+                        "price": float(order.get("price") or 0.0),
+                        "size": float(order.get("volume_initial") or 0.0),
+                        "filled": float(
+                            (order.get("volume_initial") or 0) - (order.get("volume_current") or 0)
+                        ),
+                        "remaining": float(order.get("volume_current") or 0.0),
+                    },
+                )
+
+    def _on_trade_result_push(self, result: Any) -> None:
+        retcode = getattr(result, "retcode", -1)
+        self.emit(
+            CHANNEL_EVENT,
+            {
+                "kind": "order_result",
+                "exchange": "MT5",
+                "status": _RETCODE_STATUS.get(retcode, "unknown"),
+                "retcode": retcode,
+                "description": getattr(result, "description", ""),
+                "success": getattr(result, "success", False),
+                "order_id": getattr(result, "order", None),
+                "external_order_id": getattr(result, "order", None),
+                "deal": getattr(result, "deal", None),
+                "volume": getattr(result, "volume", None),
+                "price": getattr(result, "price", None),
+            },
+        )
 
     # ---- Helpers ----
 
