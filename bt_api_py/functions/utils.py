@@ -1,98 +1,93 @@
+"""Shared utility helpers for package paths, config loading, and dict parsing."""
+
+from __future__ import annotations
+
 import importlib
 import os
-import sys
+from collections.abc import Mapping
 from pathlib import Path
+from typing import Any
 
 import requests
 import yaml
 from dotenv import find_dotenv, load_dotenv
 
-# Lazy import to avoid circular dependency
-# from bt_api_py.logging_factory import get_logger
-# logger = get_logger("function")
 
-
-def _get_logger():
+def _get_logger() -> Any:
     """Lazy logger initialization to avoid circular imports."""
     from bt_api_py.logging_factory import get_logger
 
     return get_logger("function")
 
 
-def get_public_ip():
+def get_public_ip() -> str | None:
+    """Return the current public IP address, or ``None`` if both services fail."""
     try:
-        # 使用一个查询公共 IP 地址的服务
         response = requests.get("https://api.ipify.org", timeout=10)
-        # 如果请求成功，返回响应的文本内容，即当前设备的公共 IP 地址
         if response.status_code == 200:
             return response.text
-    except Exception as e:
-        _get_logger().error(f"Error occurred: {e}", exc_info=True)
+    except requests.RequestException as exc:
+        _get_logger().error(f"Error occurred: {exc}", exc_info=True)
 
-        try:
-            response = requests.get("https://api.myip.com", timeout=10)
-            response.raise_for_status()  # 检查请求是否成功
-            data = response.json()
-            return data.get("ip")
-        except requests.RequestException as e:
-            _get_logger().error(f"Error fetching IP: {e}", exc_info=True)
-
-            return None
-    # 如果发生任何异常或请求失败，返回 None
+    try:
+        response = requests.get("https://api.myip.com", timeout=10)
+        response.raise_for_status()
+        data = response.json()
+        if isinstance(data, Mapping):
+            ip = data.get("ip")
+            return ip if isinstance(ip, str) else None
+    except requests.RequestException as exc:
+        _get_logger().error(f"Error fetching IP: {exc}", exc_info=True)
     return None
 
 
-def get_package_path(package_name="lv"):
-    """获取包的路径值
-    :param package_name: 包的名称
-    :return: 返回的路径值
-    """
+def get_package_path(package_name: str = "lv") -> str | None:
+    """Return the filesystem path of an importable package."""
     try:
-        importlib.import_module(package_name)
-        package = sys.modules[package_name]
-    except KeyError:
+        package = importlib.import_module(package_name)
+    except ModuleNotFoundError:
         _get_logger().error(f"Package {package_name} not found")
-
         return None
-    if package.__file__ is not None:
-        return os.path.dirname(package.__file__)
-    else:
-        return package.__path__.__dict__["_path"][0]
+
+    package_file = getattr(package, "__file__", None)
+    if package_file is not None:
+        return str(Path(package_file).parent)
+
+    package_paths = getattr(package, "__path__", None)
+    if package_paths is None:
+        return None
+
+    for package_path in package_paths:
+        return str(package_path)
+    return None
 
 
-def get_project_log_path(log_filename):
-    """获取项目根目录下 logs/ 文件夹中的日志路径。
-    项目根目录 = bt_api_py 包的上一级目录。
-    :param log_filename: 日志文件名 (e.g. "htx_spot_feed.log")
-    :return: 完整日志路径 (e.g. "/path/to/project/logs/htx_spot_feed.log")
-    """
+def _resolve_config_root(data_root: str | Path | None = None) -> Path:
+    if data_root is not None:
+        return Path(data_root)
+
     package_path = get_package_path("bt_api_py")
-    project_root = str(Path(package_path).parent) if package_path else os.getcwd()
-    log_dir = os.path.join(project_root, "logs")
-    return os.path.join(log_dir, log_filename)
+    if package_path is None:
+        raise RuntimeError("Package path for 'bt_api_py' is not available")
+    return Path(package_path)
 
 
-def read_yaml_file(file_name, data_root=None):
-    """读取放在btpy根目录中的yaml文件
-    :param data_root: 文件所在目录
-    :param file_name: 文件名称
-    :return: 返回的yaml文件的内容
-    """
-    if data_root is None:
-        package_path = get_package_path("bt_api_py")
-        file_path = package_path + "/configs/" + file_name
-    else:
-        file_path = data_root + "/configs/" + file_name
-    with open(file_path) as file:
-        file_content = yaml.load(file, Loader=yaml.FullLoader)
-    return file_content
+def get_project_log_path(log_filename: str) -> str:
+    """Return the path to a log file under the project-level ``logs`` directory."""
+    package_path = get_package_path("bt_api_py")
+    project_root = Path(package_path).parent if package_path else Path.cwd()
+    return str(project_root / "logs" / log_filename)
 
 
-def read_account_config():
-    """从 .env 文件读取账号配置，返回与 read_yaml_file("account_config.yaml") 相同格式的字典。
-    .env 文件查找顺序: 项目根目录（bt_api_py 包的上一级）、当前工作目录。
-    """
-    # 尝试从项目根目录加载 .env
+def read_yaml_file(file_name: str, data_root: str | Path | None = None) -> Any:
+    """Read a YAML file from the package ``configs`` directory."""
+    file_path = _resolve_config_root(data_root) / "configs" / file_name
+    with file_path.open(encoding="utf-8") as file:
+        return yaml.load(file, Loader=yaml.FullLoader)
+
+
+def read_account_config() -> dict[str, Any]:
+    """Load account configuration from ``.env`` using the project's expected schema."""
     env_loaded = False
     package_path = get_package_path("bt_api_py")
     if package_path:
@@ -101,15 +96,15 @@ def read_account_config():
         if env_file.exists():
             load_dotenv(env_file, override=True)
             env_loaded = True
+
     if not env_loaded:
-        # 回退: 从当前工作目录向上查找 .env
         load_dotenv(find_dotenv(usecwd=True), override=True)
 
-    # 代理配置
     http_proxy = os.environ.get("HTTP_PROXY", "") or os.environ.get("http_proxy", "")
     https_proxy = os.environ.get("HTTPS_PROXY", "") or os.environ.get("https_proxy", "")
-    proxies = None
-    async_proxy = None
+
+    proxies: dict[str, str] | None = None
+    async_proxy: str | None = None
     if http_proxy or https_proxy:
         proxies = {}
         if http_proxy:
@@ -118,7 +113,7 @@ def read_account_config():
             proxies["https"] = https_proxy
         async_proxy = https_proxy or http_proxy
 
-    config = {
+    return {
         "okx": {
             "public_key": os.environ.get("OKX_API_KEY", ""),
             "private_key": os.environ.get("OKX_SECRET", ""),
@@ -160,82 +155,79 @@ def read_account_config():
         "proxies": proxies,
         "async_proxy": async_proxy,
     }
-    return config
 
 
-def update_extra_data(extra_data, **kwargs):
-    """
-    update extra_data using kwargs
-    :param extra_data: extra_data is None or dict
-    :param kwargs: kwargs is dict
-    :return: extra_data, dict
-    """
+def update_extra_data(extra_data: dict[str, Any] | None, **kwargs: Any) -> dict[str, Any]:
+    """Merge ``kwargs`` into ``extra_data`` and return the resulting mapping."""
     if extra_data is None:
-        extra_data = kwargs
-    else:
-        extra_data.update(kwargs)
+        return dict(kwargs)
+    extra_data.update(kwargs)
     return extra_data
 
 
-def from_dict_get_string(content, key, default=None):
+def from_dict_get_string(
+    content: Mapping[Any, Any], key: Any, default: str | None = None
+) -> str | None:
     if key not in content:
         return default
-    else:
-        val = content[key]
-        if isinstance(val, str):
-            return val
-        else:
-            return str(val)
+    value = content[key]
+    return value if isinstance(value, str) else str(value)
 
 
-def from_dict_get_bool(content, key, default=None):
+def from_dict_get_bool(
+    content: Mapping[Any, Any], key: Any, default: bool | None = None
+) -> bool | None:
     if key not in content:
         return default
-    else:
-        value = content[key]
-        if isinstance(value, bool):
-            return value
-        elif isinstance(value, str):
-            return value == "true"
-        else:
-            raise TypeError(f"value {value} is not considered")
+    value = content[key]
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        return value == "true"
+    raise TypeError(f"value {value} is not considered")
 
 
-def from_dict_get_float(content, key, default=None):
+def from_dict_get_float(
+    content: Mapping[Any, Any], key: Any, default: float | None = None
+) -> float | None:
     if key not in content:
         return default
     value = content[key]
     if value == "" or value is None:
         return None
-    elif isinstance(value, float):
+    if isinstance(value, float):
         return value
-    else:
-        try:
-            return float(value)
-        except (TypeError, ValueError):
-            return default
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return default
 
 
-def from_dict_get_int(content, key, default=None):
+def from_dict_get_int(
+    content: Mapping[Any, Any], key: Any, default: int | None = None
+) -> int | None:
     if key not in content:
         return default
     value = content[key]
     if value == "" or value is None:
         return None
-    elif isinstance(value, int):
+    if isinstance(value, int):
         return value
-    else:
-        try:
-            return int(value)
-        except (TypeError, ValueError):
-            return default
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return default
 
 
-if __name__ == "__main__":
-    print(get_package_path("bt_api_py"))
-    # 获取并打印当前设备的公共 IP 地址
+def _main() -> None:
+    package_path = get_package_path("bt_api_py")
+    print(package_path)
     public_ip = get_public_ip()
     if public_ip:
         print(f"Public IP address: {public_ip}")
     else:
         print("Failed to retrieve public IP address.")
+
+
+if __name__ == "__main__":
+    _main()

@@ -2,6 +2,8 @@
 BingX REST API request base class.
 """
 
+from __future__ import annotations
+
 import hashlib
 import hmac
 import time
@@ -14,6 +16,10 @@ from bt_api_py.feeds.capability import Capability
 from bt_api_py.feeds.feed import Feed
 from bt_api_py.feeds.http_client import HttpClient
 from bt_api_py.logging_factory import get_logger
+
+RequestParams = dict[str, Any]
+RequestExtraData = dict[str, Any]
+RequestSpec = tuple[str, RequestParams, RequestExtraData]
 
 
 class BingXRequestData(Feed):
@@ -38,20 +44,29 @@ class BingXRequestData(Feed):
         self.exchange_name = kwargs.get("exchange_name", "BINGX___SPOT")
         self.asset_type = kwargs.get("asset_type", "SPOT")
         self._params = BingXExchangeDataSpot()
+        if "public_key" in kwargs:
+            self._params.api_key = kwargs["public_key"]
+        if "private_key" in kwargs:
+            self._params.api_secret = kwargs["private_key"]
         self.request_logger = get_logger("bingx_feed")
         self.async_logger = get_logger("bingx_feed")
         self._http_client = HttpClient(venue=self.exchange_name, timeout=10)
 
-    def _generate_signature(self, params, secret_key):
+    def _generate_signature(self, params: RequestParams, secret_key: str) -> str:
         """Generate HMAC SHA256 signature for BingX API."""
-        # Sort params and create query string
         query_string = urlencode(sorted(params.items()))
         signature = hmac.new(
             secret_key.encode("utf-8"), query_string.encode("utf-8"), hashlib.sha256
         ).hexdigest()
         return signature
 
-    def _get_headers(self, method, request_path, params=None, body=""):
+    def _get_headers(
+        self,
+        method: str,
+        request_path: str,
+        params: RequestParams | None = None,
+        body: Any = "",
+    ) -> dict[str, str]:
         """Generate request headers."""
         headers = {
             "Content-Type": "application/json",
@@ -66,25 +81,29 @@ class BingXRequestData(Feed):
 
         return headers
 
-    def _add_signature(self, params):
+    def _add_signature(self, params: RequestParams) -> RequestParams:
         """Add signature to params for private endpoints."""
         api_secret = getattr(self._params, "api_secret", None)
         if api_secret:
-            # Timestamp is already added in request() method
             params["signature"] = self._generate_signature(params, api_secret)
         return params
 
-    def request(self, path, params=None, body=None, extra_data=None, timeout=10):
+    def request(
+        self,
+        path: str,
+        params: RequestParams | None = None,
+        body: Any | None = None,
+        extra_data: RequestExtraData | None = None,
+        timeout: int = 10,
+    ) -> RequestData:
         """HTTP request for BingX API."""
         method = path.split()[0] if " " in path else "GET"
         request_path = path.split()[1] if " " in path else path
 
         headers = self._get_headers(method, request_path, params, body)
 
-        # Add signature for private endpoints and timestamp for all requests
         if params is None:
-            params: dict[str, Any] = {}
-        # BingX requires timestamp for all requests
+            params = {}
         params["timestamp"] = int(time.time() * 1000)
         if request_path.startswith(("/openApi/spot/v1/account", "/openApi/spot/v1/trade")):
             params = self._add_signature(params.copy() if params else {})
@@ -102,7 +121,14 @@ class BingXRequestData(Feed):
             self.request_logger.error(f"Request failed: {e}")
             raise
 
-    async def async_request(self, path, params=None, body=None, extra_data=None, timeout=5):
+    async def async_request(
+        self,
+        path: str,
+        params: RequestParams | None = None,
+        body: Any | None = None,
+        extra_data: RequestExtraData | None = None,
+        timeout: int = 5,
+    ) -> RequestData:
         """Async HTTP request for BingX API."""
         method = path.split()[0] if " " in path else "GET"
         request_path = path.split()[1] if " " in path else path
@@ -110,7 +136,7 @@ class BingXRequestData(Feed):
         headers = self._get_headers(method, request_path, params, body)
 
         if params is None:
-            params: dict[str, Any] = {}
+            params = {}
         params["timestamp"] = int(time.time() * 1000)
         if request_path.startswith(("/openApi/spot/v1/account", "/openApi/spot/v1/trade")):
             params = self._add_signature(params.copy() if params else {})
@@ -128,7 +154,7 @@ class BingXRequestData(Feed):
             self.async_logger.error(f"Async request failed: {e}")
             raise
 
-    def async_callback(self, future):
+    def async_callback(self, future: Any) -> None:
         """Callback function for async requests, push result to data_queue."""
         try:
             result = future.result()
@@ -137,7 +163,9 @@ class BingXRequestData(Feed):
         except Exception as e:
             self.async_logger.error(f"Async callback error: {e}")
 
-    def _process_response(self, response, extra_data=None):
+    def _process_response(
+        self, response: dict[str, Any], extra_data: RequestExtraData | None = None
+    ) -> RequestData:
         """Process API response."""
         if extra_data is None:
             extra_data = {}
@@ -145,7 +173,9 @@ class BingXRequestData(Feed):
 
     # ── Standard Interface: get_server_time ───────────────────────
 
-    def _get_server_time(self, extra_data=None, **kwargs):
+    def _get_server_time(
+        self, extra_data: RequestExtraData | None = None, **kwargs: Any
+    ) -> RequestSpec:
         """Prepare server time request. Returns (path, params, extra_data)."""
         if extra_data is None:
             extra_data = {}
@@ -159,21 +189,23 @@ class BingXRequestData(Feed):
         )
         return "GET /openApi/server/time", {}, extra_data
 
-    def get_server_time(self, extra_data=None, **kwargs):
+    def get_server_time(
+        self, extra_data: RequestExtraData | None = None, **kwargs: Any
+    ) -> RequestData:
         """Get server time. Returns RequestData."""
         path, params, extra_data = self._get_server_time(extra_data, **kwargs)
         return self.request(path, params=params, extra_data=extra_data)
 
-    def push_data_to_queue(self, data):
+    def push_data_to_queue(self, data: Any) -> None:
         """Push data to the queue."""
         if self.data_queue is not None:
             self.data_queue.put(data)
 
-    def connect(self):
+    def connect(self) -> None:
         pass
 
-    def disconnect(self):
+    def disconnect(self) -> None:
         pass
 
-    def is_connected(self):
+    def is_connected(self) -> bool:
         return True

@@ -43,11 +43,11 @@ class TradeData(AutoInitMixin):
         self.trade_accumulate_volume: float | None = None
         self.all_data: dict[str, Any] | None = None
 
-    def get_event(self):
+    def get_event(self) -> str:
         """# 事件类型"""
         return self.event
 
-    def init_data(self):
+    def init_data(self) -> TradeData:
         raise NotImplementedError
 
     def get_all_data(self) -> dict[str, Any]:
@@ -72,80 +72,80 @@ class TradeData(AutoInitMixin):
             }
         return self.all_data
 
-    def get_exchange_name(self):
+    def get_exchange_name(self) -> str:
         """# 交易所名称"""
         raise NotImplementedError
 
-    def get_asset_type(self):
+    def get_asset_type(self) -> str | None:
         """# 资产类型"""
         raise NotImplementedError
 
-    def get_symbol_name(self):
+    def get_symbol_name(self) -> str | None:
         """# symbol名称"""
         raise NotImplementedError
 
-    def get_server_time(self):
+    def get_server_time(self) -> float | None:
         """# 服务器时间戳"""
         raise NotImplementedError
 
-    def get_local_update_time(self):
+    def get_local_update_time(self) -> float | None:
         """# 本地时间戳"""
         raise NotImplementedError
 
-    def get_trade_id(self):
+    def get_trade_id(self) -> str | None:
         """# 交易所返回唯一成交id"""
         raise NotImplementedError
 
-    def get_trade_symbol_name(self):
+    def get_trade_symbol_name(self) -> str | None:
         """# 返回成交的symbol"""
         raise NotImplementedError
 
-    def get_order_id(self):
+    def get_order_id(self) -> str | None:
         """# 返回下单的id"""
         raise NotImplementedError
 
-    def get_client_order_id(self):
+    def get_client_order_id(self) -> str | None:
         """# 返回下单的客户自定义Id"""
         raise NotImplementedError
 
-    def get_trade_side(self):
+    def get_trade_side(self) -> str | None:
         """# 返回交易的方向"""
         raise NotImplementedError
 
-    def get_trade_offset(self):
+    def get_trade_offset(self) -> str | None:
         """# offset用于确定是开仓还是平仓"""
         raise NotImplementedError
 
-    def get_trade_price(self):
+    def get_trade_price(self) -> float | None:
         """# 成交价格"""
         raise NotImplementedError
 
-    def get_trade_volume(self):
+    def get_trade_volume(self) -> float | None:
         """# 成交量"""
         raise NotImplementedError
 
-    def get_trade_accumulate_volume(self):
+    def get_trade_accumulate_volume(self) -> float | None:
         """# 累计成交量"""
         raise NotImplementedError
 
-    def get_trade_type(self):
+    def get_trade_type(self) -> str | None:
         """# 成交类型，maker还是taker"""
         raise NotImplementedError
 
-    def get_trade_time(self):
+    def get_trade_time(self) -> float | None:
         """# 成交时间"""
         raise NotImplementedError
 
-    def get_trade_fee(self):
+    def get_trade_fee(self) -> float | None:
         """# 成交手续费"""
         raise NotImplementedError
 
-    def get_trade_fee_symbol(self):
+    def get_trade_fee_symbol(self) -> str | None:
         """成交手续费币种"""
         raise NotImplementedError
 
-    def __str__(self):
+    def __str__(self) -> str:
         raise NotImplementedError
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         raise NotImplementedError

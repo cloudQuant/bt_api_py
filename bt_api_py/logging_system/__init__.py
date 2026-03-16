@@ -3,7 +3,6 @@
 Provides correlation IDs, structured JSON logging, and integration with monitoring.
 """
 
-import asyncio
 import json
 import logging
 import logging.handlers
@@ -12,7 +11,7 @@ import uuid
 from contextvars import ContextVar, Token
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
-from typing import Any, Optional, Union
+from typing import Any
 
 # Context variables for correlation tracking
 correlation_id_var: ContextVar[str | None] = ContextVar("correlation_id", default=None)
@@ -163,27 +162,27 @@ class StructuredLogger:
 
         self.logger.log(level, message, extra=extra)
 
-    def debug(self, message: str, **kwargs) -> None:
+    def debug(self, message: str, **kwargs: Any) -> None:
         """Log debug message."""
         self._log_with_context(logging.DEBUG, message, **kwargs)
 
-    def info(self, message: str, **kwargs) -> None:
+    def info(self, message: str, **kwargs: Any) -> None:
         """Log info message."""
         self._log_with_context(logging.INFO, message, **kwargs)
 
-    def warning(self, message: str, **kwargs) -> None:
+    def warning(self, message: str, **kwargs: Any) -> None:
         """Log warning message."""
         self._log_with_context(logging.WARNING, message, **kwargs)
 
-    def error(self, message: str, **kwargs) -> None:
+    def error(self, message: str, **kwargs: Any) -> None:
         """Log error message."""
         self._log_with_context(logging.ERROR, message, **kwargs)
 
-    def critical(self, message: str, **kwargs) -> None:
+    def critical(self, message: str, **kwargs: Any) -> None:
         """Log critical message."""
         self._log_with_context(logging.CRITICAL, message, **kwargs)
 
-    def exception(self, message: str, **kwargs) -> None:
+    def exception(self, message: str, **kwargs: Any) -> None:
         """Log exception message."""
         kwargs["exc_info"] = True
         self.error(message, **kwargs)
@@ -199,7 +198,7 @@ class StructuredLogger:
     ) -> None:
         """Log API request."""
         message = f"API {method} {endpoint}"
-        if status_code:
+        if status_code is not None:
             message += f" -> {status_code}"
         if error:
             message += f" (ERROR: {error})"
@@ -235,9 +234,9 @@ class StructuredLogger:
     ) -> None:
         """Log order event."""
         message = f"Order {event_type}: {symbol}"
-        if side and quantity:
+        if side and quantity is not None:
             message += f" {side} {quantity}"
-        if price:
+        if price is not None:
             message += f" @ {price}"
         if status:
             message += f" ({status})"
@@ -305,9 +304,9 @@ class StructuredLogger:
             message += f" {symbol}"
         if data_type:
             message += f" ({data_type})"
-        if count:
+        if count is not None:
             message += f" count={count}"
-        if lag_ms:
+        if lag_ms is not None:
             message += f" lag={lag_ms:.1f}ms"
 
         metadata_md: dict[str, Any] = {
@@ -346,12 +345,9 @@ class LoggingManager:
         enable_rotation: bool = True,
     ) -> None:
         """Configure logging for the application."""
-        # Set root logger level
-        logging.getLogger().setLevel(level)
-
-        # Clear existing handlers
         root_logger = logging.getLogger()
-        root_logger.handlers.clear()
+        self._close_handlers(root_logger)
+        root_logger.setLevel(level)
 
         # Create formatter
         formatter: logging.Formatter
@@ -389,6 +385,13 @@ class LoggingManager:
             root_logger.addHandler(file_handler)
 
         self.configured = True
+
+    @staticmethod
+    def _close_handlers(logger: logging.Logger) -> None:
+        """Detach and close existing handlers before reconfiguration."""
+        for handler in list(logger.handlers):
+            logger.removeHandler(handler)
+            handler.close()
 
     def get_logger(self, name: str) -> StructuredLogger:
         """Get structured logger."""
@@ -458,9 +461,28 @@ def get_logger(name: str) -> StructuredLogger:
     return get_logging_manager().get_logger(name)
 
 
-def configure_logging(**kwargs) -> None:
+def configure_logging(
+    *,
+    level: str | int = logging.INFO,
+    log_file: str | Path | None = None,
+    max_file_size: int = 100 * 1024 * 1024,
+    backup_count: int = 5,
+    console_output: bool = True,
+    json_format: bool = True,
+    compact_json: bool = False,
+    enable_rotation: bool = True,
+) -> None:
     """Configure logging for the application."""
-    get_logging_manager().configure(**kwargs)
+    get_logging_manager().configure(
+        level=level,
+        log_file=log_file,
+        max_file_size=max_file_size,
+        backup_count=backup_count,
+        console_output=console_output,
+        json_format=json_format,
+        compact_json=compact_json,
+        enable_rotation=enable_rotation,
+    )
 
 
 def setup_logging_for_production(

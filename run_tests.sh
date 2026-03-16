@@ -97,20 +97,20 @@ if [ "$FAST_MODE" = true ]; then
 fi
 
 # Build pytest command
-PYTEST_CMD="pytest -v"
+PYTEST_CMD=(pytest -v)
 
 # Add parallel option
 if [ "$PARALLEL" -eq 1 ]; then
     echo "Running tests in single process mode..."
 else
     echo "Running tests with $PARALLEL parallel processes..."
-    PYTEST_CMD="$PYTEST_CMD -n $PARALLEL"
+    PYTEST_CMD+=(-n "$PARALLEL")
 fi
 
 # Add CTP exclusion/inclusion
 if [ "$RUN_CTP" = false ]; then
     echo "Excluding CTP related tests..."
-    PYTEST_CMD="$PYTEST_CMD --ignore=tests/test_ctp_feed.py"
+    PYTEST_CMD+=(--ignore=tests/test_ctp_feed.py)
 else
     echo "Including CTP related tests..."
 fi
@@ -118,30 +118,33 @@ fi
 # Add coverage options
 if [ "$COVERAGE" = true ]; then
     echo "Enabling coverage reporting..."
-    PYTEST_CMD="$PYTEST_CMD --cov=bt_api_py --cov-report=term-missing --cov-report=html"
+    PYTEST_CMD+=(--cov=bt_api_py --cov-report=term-missing --cov-report=html)
 fi
 
 # Add HTML report
 if [ "$HTML_REPORT" = true ]; then
     echo "Enabling HTML test report..."
-    PYTEST_CMD="$PYTEST_CMD --html=logs/report_$(date '+%Y%m%d_%H%M%S').html --self-contained-html"
+    HTML_REPORT_FILE="logs/report_$(date '+%Y%m%d_%H%M%S').html"
+    PYTEST_CMD+=("--html=$HTML_REPORT_FILE" --self-contained-html)
 fi
 
 # Add marker filtering
 if [ -n "$MARKERS" ]; then
     echo "Filtering tests with markers: $MARKERS"
-    PYTEST_CMD="$PYTEST_CMD -m \"$MARKERS\""
+    PYTEST_CMD+=(-m "$MARKERS")
 fi
 
 # Print command
 echo ""
-echo "Command: $PYTEST_CMD"
+printf "Command:"
+printf " %q" "${PYTEST_CMD[@]}"
+echo ""
 echo ""
 
 # Run tests (output to both terminal and log file)
 echo "Log file: $LOG_FILE"
 echo ""
-eval "$PYTEST_CMD" 2>&1 | tee "$LOG_FILE"
+"${PYTEST_CMD[@]}" 2>&1 | tee "$LOG_FILE"
 EXIT_CODE=${PIPESTATUS[0]}
 
 # Analyze log for failures and errors (short summary lines only, with error detail)

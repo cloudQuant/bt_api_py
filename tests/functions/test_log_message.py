@@ -1,5 +1,6 @@
 import os
 from datetime import datetime
+from unittest.mock import patch
 
 import spdlog
 
@@ -257,3 +258,20 @@ class TestSpdLogManager:
         # 清理测试生成的文件
         if os.path.exists(new_file_name):
             os.remove(new_file_name)
+
+    def test_normalize_relative_log_path_to_project_logs_dir(self):
+        manager = SpdLogManager(file_name="./logs/nested/test.log")
+        assert manager.file_name.endswith("logs/nested/test.log")
+
+    def test_stdlib_fallback_disables_propagation(self, tmp_path):
+        log_path = tmp_path / "fallback.log"
+        cache_key = (str(log_path), "fallback_logger", 0, 0, True)
+        SpdLogManager._logger_cache.pop(cache_key, None)
+
+        with patch("bt_api_py.functions.log_message._HAS_SPDLOG", False):
+            logger = SpdLogManager(
+                file_name=str(log_path), logger_name="fallback_logger", print_info=True
+            ).create_logger()
+
+        assert logger.propagate is False
+        assert logger.handlers

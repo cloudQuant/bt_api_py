@@ -248,6 +248,7 @@ open htmlcov/index.html
 
 ### 3.2 交易所能力矩阵更新
 
+- [ ] 运行 `python scripts/generate_exchange_support_docs.py`
 - [ ] 更新 `docs/exchanges/EXCHANGE_CAPABILITY_MATRIX.md`
 - [ ] 更新 `docs/exchanges/EXCHANGE_STATUS.md`
 - [ ] 新增交易所添加到矩阵

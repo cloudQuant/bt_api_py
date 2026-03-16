@@ -1,75 +1,87 @@
-"""用于分析日志中函数运行开始和结束之间的时间间隔，画出箱体图和统计指标"""
+"""Analyze log timing data without side effects during import."""
 
-# import os
+from __future__ import annotations
+
 import re
 from datetime import datetime
+from pathlib import Path
 
-# import numpy as np
 import pandas as pd
 from pyecharts import options as opts
 from pyecharts.charts import Boxplot, Page
 from pyecharts.components import Table
 from pyecharts.options import ComponentTitleOpts
 
-# from matplotlib import pyplot as plt
 from bt_api_py.functions import get_package_path
 
-# log_filename = './log_print.log'
-data_root = get_package_path("lv")
-num = 100000
-log_filename = data_root + f"/tests/base_functions/datas/swap_hedge_{num}.log"
+TIME_PATTERN = re.compile(
+    r"deal trade_data, time = (\d{4}-\d{1,2}-\d{1,2}\s\d{1,2}:\d{1,2}:\d{1,2}.\d{1,6})"
+)
 
 
-def time_subtraction(start_time_str, end_time_str):
+def _require_package_path(package_name: str) -> Path:
+    package_path = get_package_path(package_name)
+    if package_path is None:
+        raise RuntimeError(f"Package path for '{package_name}' is not available")
+    return Path(package_path)
+
+
+def time_subtraction(start_time_str: str, end_time_str: str) -> float:
+    """Return the elapsed milliseconds between two log timestamps."""
     start_time = datetime.strptime(start_time_str, "%Y-%m-%d %H:%M:%S.%f")
     end_time = datetime.strptime(end_time_str, "%Y-%m-%d %H:%M:%S.%f")
-    sub_time = end_time - start_time
-    return sub_time.total_seconds() * 1000
+    return (end_time - start_time).total_seconds() * 1000
 
 
-with open(log_filename) as fp:
-    all_slam_times = []
-    for line in fp.readlines():
-        a = "enter deal trade_data"
-        b = "exit deal trade_data"
-        # pattern = re.compile(r"""(\d{4}-\d{1,2}-\d{1,2}\s\d{1,2}:\d{1,2}:\d{1,2},\d{1,3} --- .*?_begin|\d{4}-\d{1,2}-\d{1,2}\s\d{1,2}:\d{1,2}:\d{1,2},\d{1,3} --- .*?_end])""")
-        pattern = re.compile(
-            r"""deal trade_data, time = (\d{4}-\d{1,2}-\d{1,2}\s\d{1,2}:\d{1,2}:\d{1,2}.\d{1,6})"""
-        )
-        slam_time_list = re.findall(pattern, line)
-        if len(slam_time_list) > 0:
-            # print(slam_time_list)
-            all_slam_times.append(slam_time_list[0])
-    # print(all_slam_times)
+def extract_slam_times(log_filename: Path) -> list[str]:
+    """Extract ordered timestamps from the raw log file."""
+    all_slam_times: list[str] = []
+    with log_filename.open(encoding="utf-8") as fp:
+        for line in fp:
+            all_slam_times.extend(re.findall(TIME_PATTERN, line))
+    return all_slam_times
 
-result = []
-for i in range(len(all_slam_times)):
-    if i % 2 == 1:
-        value = time_subtraction(all_slam_times[i - 1], all_slam_times[i])
-        result.append(value)
 
-c = Boxplot()
-c.add_xaxis(["时间(ms)"])
-c.add_yaxis("swap合约对冲", c.prepare_data([result]))
-c.set_global_opts(title_opts=opts.TitleOpts(title="箱体图"))
+def build_duration_series(log_filename: Path) -> list[float]:
+    """Compute the per-pair timing durations from a log file."""
+    all_slam_times = extract_slam_times(log_filename)
+    result: list[float] = []
+    for index in range(1, len(all_slam_times), 2):
+        result.append(time_subtraction(all_slam_times[index - 1], all_slam_times[index]))
+    return result
 
-table = Table()
-result_df = pd.DataFrame(result, columns=["consume_time"])
-df = result_df[["consume_time"]].describe()
 
-headers = list(df.T.columns)
-rows = [list(df.values)]
-table.add(headers, rows)
-table.set_global_opts(title_opts=ComponentTitleOpts(title="swap合约对冲时间统计(ms)", subtitle=""))
+def render_report(durations: list[float], output_path: Path) -> pd.DataFrame:
+    """Render the timing boxplot and table report to an HTML file."""
+    chart = Boxplot()
+    chart.add_xaxis(["时间(ms)"])
+    chart.add_yaxis("swap合约对冲", chart.prepare_data([durations]))
+    chart.set_global_opts(title_opts=opts.TitleOpts(title="箱体图"))
 
-page = Page(layout=Page.DraggablePageLayout).add(c).add(table)
-page.render(data_root + f"/configs/system_speed/swap合约对冲时间分析_{num}_num.html")
-# c.render("./bit新框架对冲时间分析.html")
-# page.save_resize_html(
-#     # Page 第一次渲染后的 HTML 文件
-#     source=data_root+f'/configs/system_speed/swap合约摆盘时间分析_{num}_num.html',
-#     # 布局配置文件
-#     cfg_file="./chart_config.json",
-#     # 重新生成的 .html 存放路径
-#     dest=data_root+f'/configs/system_speed/swap合约摆盘时间分析_{num}_num.html'
-# )
+    table = Table()
+    result_df = pd.DataFrame(durations, columns=["consume_time"])
+    summary_df = result_df[["consume_time"]].describe()
+
+    headers = list(summary_df.T.columns)
+    rows = [list(summary_df.values)]
+    table.add(headers, rows)
+    table.set_global_opts(
+        title_opts=ComponentTitleOpts(title="swap合约对冲时间统计(ms)", subtitle="")
+    )
+
+    page = Page(layout=Page.DraggablePageLayout).add(chart).add(table)
+    page.render(str(output_path))
+    return result_df
+
+
+def main() -> None:
+    data_root = _require_package_path("lv")
+    num = 100000
+    log_filename = data_root / f"tests/base_functions/datas/swap_hedge_{num}.log"
+    output_path = data_root / f"configs/system_speed/swap合约对冲时间分析_{num}_num.html"
+    durations = build_duration_series(log_filename)
+    render_report(durations, output_path)
+
+
+if __name__ == "__main__":
+    main()

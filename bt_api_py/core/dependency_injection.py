@@ -7,9 +7,10 @@ import threading
 from collections.abc import Callable
 from contextlib import contextmanager
 from functools import wraps
-from typing import Any, TypeVar, cast
+from typing import Any, ParamSpec, TypeVar, cast
 
 T = TypeVar("T")
+P = ParamSpec("P")
 
 __all__ = [
     "DIContainer",
@@ -36,24 +37,28 @@ class DIContainer:
     def register_singleton(self, interface: type[T], implementation: type[T]) -> "DIContainer":
         """Register a singleton service."""
         with self._lock:
+            self._clear_registration(interface)
             self._services[interface] = implementation
             return self
 
     def register_transient(self, interface: type[T], implementation: type[T]) -> "DIContainer":
         """Register a transient service (new instance each time)."""
         with self._lock:
+            self._clear_registration(interface)
             self._factories[interface] = implementation
             return self
 
     def register_scoped(self, interface: type[T], implementation: type[T]) -> "DIContainer":
         """Register a scoped service (one instance per scope)."""
         with self._lock:
+            self._clear_registration(interface)
             self._scoped_services[interface] = implementation
             return self
 
     def register_instance(self, interface: type[T], instance: T) -> "DIContainer":
         """Register a specific instance."""
         with self._lock:
+            self._clear_registration(interface)
             self._singletons[interface] = instance
             return self
 
@@ -116,8 +121,17 @@ class DIContainer:
 
         return implementation(**kwargs)
 
+    def _clear_registration(self, interface: type[Any]) -> None:
+        """Clear previous registrations and cached instances for an interface."""
+        self._services.pop(interface, None)
+        self._factories.pop(interface, None)
+        self._singletons.pop(interface, None)
+        self._scoped_services.pop(interface, None)
+        if self._current_scope is not None:
+            self._current_scope.pop(interface, None)
+
     @contextmanager
-    def create_scope(self):
+    def create_scope(self) -> Any:
         """Create a new dependency scope."""
         old_scope = self._current_scope
         self._current_scope = {}
@@ -175,12 +189,12 @@ def inject(interface: type[T]) -> T:
     return _global_container.resolve(interface)
 
 
-def inject_method(func: Callable) -> Callable:
+def inject_method(func: Callable[P, T]) -> Callable[P, T]:
     """Decorator to inject dependencies into method parameters."""
     sig = inspect.signature(func)
 
     @wraps(func)
-    def wrapper(*args, **kwargs):
+    def wrapper(*args: P.args, **kwargs: P.kwargs) -> T:
         # Resolve parameters from container
         for param_name, param in sig.parameters.items():
             if param_name in kwargs:
@@ -238,6 +252,6 @@ class Container:
         """Resolve a service."""
         return self._container.resolve(interface)
 
-    def create_scope(self):
+    def create_scope(self) -> Any:
         """Create a new scope."""
         return self._container.create_scope()

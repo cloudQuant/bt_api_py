@@ -9,10 +9,10 @@ import time
 from collections import defaultdict
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, cast
 
 from bt_api_py.core.async_context import AsyncTaskGroup
-from bt_api_py.core.dependency_injection import inject, singleton
+from bt_api_py.core.dependency_injection import inject
 from bt_api_py.core.interfaces import IEventBus
 from bt_api_py.logging_factory import get_logger
 from bt_api_py.websocket.advanced_connection_manager import (
@@ -307,12 +307,38 @@ class PerformanceMonitor:
         return [alert for alert in self._alerts if alert["timestamp"] > cutoff_time]
 
 
-@singleton
+class _NullEventBus:
+    """Fallback event bus used when DI is unavailable."""
+
+    def publish(self, event_type: str, data: Any) -> None:
+        return None
+
+    async def publish_async(self, event_type: str, data: Any) -> None:
+        return None
+
+    def subscribe(self, event_type: str, handler: Any) -> None:
+        return None
+
+    def unsubscribe(self, event_type: str, handler: Any) -> None:
+        return None
+
+
+def _resolve_event_bus(event_bus: IEventBus | None) -> IEventBus:
+    """Resolve an event bus from the explicit value, DI container, or a null fallback."""
+    if event_bus is not None:
+        return event_bus
+
+    with contextlib.suppress(Exception):
+        return cast("IEventBus", inject(cast("type[Any]", IEventBus)))
+
+    return cast("IEventBus", _NullEventBus())
+
+
 class AdvancedWebSocketManager:
     """Advanced WebSocket connection manager with intelligent pooling and monitoring."""
 
-    def __init__(self, event_bus: IEventBus = inject(IEventBus)):
-        self.event_bus = event_bus
+    def __init__(self, event_bus: IEventBus | None = None):
+        self.event_bus = _resolve_event_bus(event_bus)
         self.logger = get_logger("advanced_websocket_manager")
 
         # Connection pools
@@ -366,6 +392,7 @@ class AdvancedWebSocketManager:
             self._cleanup_task.cancel()
             with contextlib.suppress(asyncio.CancelledError):
                 await self._cleanup_task
+            self._cleanup_task = None
 
         # Close all connections
         await self.close_all()
@@ -516,7 +543,13 @@ class AdvancedWebSocketManager:
         for exchange_name, pool in self._pools.items():
             for wrapper in pool:
                 await wrapper.connection.disconnect()
+                wrapper.in_use = False
             self.logger.info(f"Closed {len(pool)} connections for {exchange_name}")
+            pool.clear()
+
+        self._global_metrics["total_connections"] = 0
+        self._global_metrics["active_connections"] = 0
+        self._global_metrics["total_subscriptions"] = 0
 
     async def _monitor_connection(self, exchange_name: str, wrapper: ConnectionWrapper) -> None:
         """Monitor connection health and performance."""

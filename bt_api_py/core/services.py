@@ -45,7 +45,7 @@ class ConnectionConfig:
 class ConnectionService(IConnectionManager):
     """Manages connection pools for multiple exchanges."""
 
-    def __init__(self, logger=None) -> None:
+    def __init__(self, logger: Any | None = None) -> None:
         self.logger = logger or get_logger("connection_service")
         self._pools: dict[str, dict[str, Any]] = {}
         self._semaphores: dict[str, AsyncSemaphore] = {}
@@ -104,6 +104,8 @@ class ConnectionService(IConnectionManager):
                     self.logger.info(f"Closed connections for {exchange_name}")
                 except Exception as e:
                     self.logger.error(f"Error closing {exchange_name}: {e}")
+                finally:
+                    self._stats[exchange_name]["active_connections"] = 0
 
             self._pools.clear()
             self._semaphores.clear()
@@ -124,11 +126,12 @@ class ConnectionService(IConnectionManager):
 class EventService(IEventBus):
     """Enhanced event bus with async support and persistence."""
 
-    def __init__(self, logger=None) -> None:
+    def __init__(self, logger: Any | None = None) -> None:
         self.logger = logger or get_logger("event_service")
-        self._handlers: dict[str, list[Callable[..., Any]]] = defaultdict(list)
-        self._async_handlers: dict[str, list[Callable[..., Any]]] = defaultdict(list)
-        self._event_queue: asyncio.Queue | None = None
+        self._handlers: dict[str, list[Callable[[Any], Any]]] = defaultdict(list)
+        self._async_handlers: dict[str, list[Callable[[Any], Any]]] = defaultdict(list)
+        self._event_queue: asyncio.Queue[tuple[str, Any] | None] | None = None
+        self._processor_task: asyncio.Task[Any] | None = None
         self._running = False
         self._stats: dict[str, int] = defaultdict(int)
         self._lock = asyncio.Lock()
@@ -139,7 +142,7 @@ class EventService(IEventBus):
             if not self._running:
                 self._event_queue = asyncio.Queue()
                 self._running = True
-                asyncio.create_task(self._process_events())
+                self._processor_task = asyncio.create_task(self._process_events())
                 self.logger.info("Event service started")
 
     async def stop(self) -> None:
@@ -149,13 +152,23 @@ class EventService(IEventBus):
             if self._event_queue:
                 # Signal stop with None
                 await self._event_queue.put(None)
+            if self._processor_task:
+                with contextlib.suppress(asyncio.CancelledError):
+                    await self._processor_task
+                self._processor_task = None
+            self._event_queue = None
             self.logger.info("Event service stopped")
 
     def publish(self, event_type: str, data: Any) -> None:
         """Publish an event (sync for backward compatibility)."""
         if self._event_queue and self._running:
             # Add to async queue if available
-            asyncio.create_task(self._event_queue.put((event_type, data)))
+            with contextlib.suppress(RuntimeError):
+                loop = asyncio.get_running_loop()
+                loop.create_task(self._event_queue.put((event_type, data)))
+                self._stats[f"events_{event_type}_published"] += 1
+                return
+            self._emit_sync(event_type, data)
         else:
             # Direct call if not running
             self._emit_sync(event_type, data)
@@ -171,7 +184,7 @@ class EventService(IEventBus):
 
         self._stats[f"events_{event_type}_published"] += 1
 
-    def subscribe(self, event_type: str, handler: Callable[..., Any]) -> None:
+    def subscribe(self, event_type: str, handler: Callable[[Any], Any]) -> None:
         """Subscribe to an event type."""
         if asyncio.iscoroutinefunction(handler):
             self._async_handlers[event_type].append(handler)
@@ -179,7 +192,7 @@ class EventService(IEventBus):
             self._handlers[event_type].append(handler)
         self.logger.debug(f"Subscribed {handler} to {event_type}")
 
-    def unsubscribe(self, event_type: str, handler: Callable[..., Any]) -> None:
+    def unsubscribe(self, event_type: str, handler: Callable[[Any], Any]) -> None:
         """Unsubscribe from an event type."""
         with contextlib.suppress(ValueError):
             self._handlers[event_type].remove(handler)
@@ -226,7 +239,7 @@ class EventService(IEventBus):
         if tasks:
             await asyncio.gather(*tasks, return_exceptions=True)
 
-    async def _safe_call_handler(self, handler: Callable[..., Any], data: Any) -> None:
+    async def _safe_call_handler(self, handler: Callable[[Any], Any], data: Any) -> None:
         """Safely call async handler."""
         try:
             await handler(data)
@@ -242,7 +255,7 @@ class EventService(IEventBus):
 class CacheService(ICache):
     """Distributed cache service with Redis support."""
 
-    def __init__(self, redis_url: str | None = None, logger=None) -> None:
+    def __init__(self, redis_url: str | None = None, logger: Any | None = None) -> None:
         self.logger = logger or get_logger("cache_service")
         self._redis_client = None
         self._local_cache: dict[str, Any] = {}
@@ -331,7 +344,7 @@ class CacheService(ICache):
 class RateLimitService(IRateLimiter):
     """Advanced rate limiting with multiple strategies."""
 
-    def __init__(self, logger=None) -> None:
+    def __init__(self, logger: Any | None = None) -> None:
         self.logger = logger or get_logger("rate_limit_service")
         self._limiters: dict[str, AsyncRateLimiter] = {}
         self._limits: dict[str, dict[str, Any]] = {}
@@ -380,7 +393,7 @@ class MarketDataService:
         cache_service: ICache = inject(ICache),  # type: ignore[type-abstract]
         rate_limiter: IRateLimiter = inject(IRateLimiter),  # type: ignore[type-abstract]
         event_bus: IEventBus = inject(IEventBus),  # type: ignore[type-abstract]
-    ):
+    ) -> None:
         self.connection_manager = connection_manager
         self.cache_service = cache_service
         self.rate_limiter = rate_limiter
@@ -467,7 +480,7 @@ class TradingService:
         connection_manager: IConnectionManager = inject(IConnectionManager),  # type: ignore[type-abstract]
         event_bus: IEventBus = inject(IEventBus),  # type: ignore[type-abstract]
         rate_limiter: IRateLimiter = inject(IRateLimiter),  # type: ignore[type-abstract]
-    ):
+    ) -> None:
         self.connection_manager = connection_manager
         self.event_bus = event_bus
         self.rate_limiter = rate_limiter
@@ -487,7 +500,7 @@ class TradingService:
         order_type: str,
         quantity: float,
         price: float | None = None,
-        **kwargs,
+        **kwargs: Any,
     ) -> dict[str, Any]:
         """Place an order with circuit breaker and retry."""
         await self.rate_limiter.acquire("order")
@@ -524,7 +537,7 @@ class AccountService:
         connection_manager: IConnectionManager = inject(IConnectionManager),  # type: ignore[type-abstract]
         cache_service: ICache = inject(ICache),  # type: ignore[type-abstract]
         event_bus: IEventBus = inject(IEventBus),  # type: ignore[type-abstract]
-    ):
+    ) -> None:
         self.connection_manager = connection_manager
         self.cache_service = cache_service
         self.event_bus = event_bus

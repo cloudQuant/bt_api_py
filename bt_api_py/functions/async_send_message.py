@@ -4,10 +4,13 @@ import hmac
 import random
 import time
 import traceback
+from collections.abc import Sequence
 from email.header import Header
 from email.mime.application import MIMEApplication
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
+from pathlib import Path
+from typing import Any
 
 import aiosmtplib
 
@@ -23,24 +26,23 @@ logger = get_logger("function")
 
 
 class FeishuManagerAsync(AsyncBase):
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__()
         self.host = "https://open.larksuite.com/open-apis/bot/v2/hook/"
 
-    # noinspection PyMethodMayBeStatic
-    def gen_sign(self, timestamp, secret):
-        # 拼接timestamp和secret
-
+    def gen_sign(self, timestamp: int, secret: str) -> str:
         string_to_sign = f"{timestamp}\n{secret}"
         hmac_code = hmac.new(string_to_sign.encode("utf-8"), digestmod=hashlib.sha256).digest()
-
-        # 对结果进行base64处理
         sign = base64.b64encode(hmac_code).decode("utf-8")
-
         return sign
 
-    def async_send(self, content, bot="4b90880c-3015-4e98-aac5-1248c55e8730", secret=None):
-        data = {"msg_type": "text", "content": {"text": content}}
+    def async_send(
+        self,
+        content: str,
+        bot: str = "4b90880c-3015-4e98-aac5-1248c55e8730",
+        secret: str | None = None,
+    ) -> None:
+        data: dict[str, Any] = {"msg_type": "text", "content": {"text": content}}
         timestamp = int(time.time())
         if secret:
             sign = self.gen_sign(timestamp, secret)
@@ -50,18 +52,23 @@ class FeishuManagerAsync(AsyncBase):
 
 
 class EmailManagerAsync(AsyncBase):
-    def __init__(self, from_email_list=None, to_email_list=None):
+    def __init__(
+        self,
+        from_email_list: list[dict[str, Any]] | None = None,
+        to_email_list: list[Sequence[str]] | None = None,
+    ) -> None:
         super().__init__()
-        if from_email_list is None:
-            self.from_email_list = []
-        else:
-            self.from_email_list = from_email_list
-        if to_email_list is None:
-            self.to_email_list = []
-        else:
-            self.to_email_list = to_email_list
+        self.from_email_list = from_email_list or []
+        self.to_email_list = to_email_list or []
 
-    async def __send_email(self, title, content, sender=None, receiver=None, files=None):
+    async def __send_email(
+        self,
+        title: str,
+        content: str,
+        sender: dict[str, Any] | None = None,
+        receiver: Sequence[str] | None = None,
+        files: Sequence[str | Path] | None = None,
+    ) -> None:
         if sender is None:
             sender = random.choice(self.from_email_list)
         if receiver is None:
@@ -73,14 +80,14 @@ class EmailManagerAsync(AsyncBase):
         msg_root["subject"] = Header(title, "utf-8")
         text_sub = MIMEText(content, "html", "utf-8")
         msg_root.attach(text_sub)
-        # 发送附件
-        if files and isinstance(files, list):
-            for i in files:
-                with open(i, "rb") as f:
-                    part_attach1 = MIMEApplication(f.read())  # 打开附件
+        if files:
+            for file_path in files:
+                resolved_path = Path(file_path)
+                with resolved_path.open("rb") as f:
+                    part_attach1 = MIMEApplication(f.read())
                 part_attach1.add_header(
-                    "Content-Disposition", "attachment", filename=i
-                )  # 为附件命名
+                    "Content-Disposition", "attachment", filename=resolved_path.name
+                )
                 msg_root.attach(part_attach1)
         try:
             async with aiosmtplib.SMTP(
@@ -92,14 +99,21 @@ class EmailManagerAsync(AsyncBase):
             ) as smtp:
                 await smtp.login(sender_mail, sender.get("sender_pass"))
                 await smtp.sendmail(sender_mail, receiver, msg_root.as_string())
-        except Exception as e:
-            logger.error(traceback.format_exc(), e, exc_info=True)
+        except Exception:
+            logger.error(traceback.format_exc(), exc_info=True)
 
-    def async_send(self, title, content, sender=None, receiver=None, files=None):
+    def async_send(
+        self,
+        title: str,
+        content: str,
+        sender: dict[str, Any] | None = None,
+        receiver: Sequence[str] | None = None,
+        files: Sequence[str | Path] | None = None,
+    ) -> None:
         self.submit(self.__send_email(title, content, sender, receiver, files))
 
 
-if __name__ == "__main__":
+def _main() -> None:
     a1 = time.perf_counter()
     print("test feishu function")
     feishu_manager = FeishuManagerAsync()
@@ -108,3 +122,7 @@ if __name__ == "__main__":
     b1 = time.perf_counter()
     print(f"call feishu_function consume time is {b1 - a1}")
     time.sleep(5)
+
+
+if __name__ == "__main__":
+    _main()

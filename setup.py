@@ -12,6 +12,7 @@ bt_api_py 安装脚本
 import glob
 import os
 import pathlib
+import re
 import shutil
 import sys
 import sysconfig
@@ -36,7 +37,21 @@ finally:
 # ---------------------------------------------------------------------------
 #  版本
 # ---------------------------------------------------------------------------
-VERSION = "0.15"
+
+
+def _load_version() -> str:
+    version_file = pathlib.Path(__file__).parent / "bt_api_py" / "_version.py"
+    match = re.search(
+        r'^__version__\s*=\s*"(?P<version>[^"]+)"',
+        version_file.read_text(encoding="utf-8"),
+        re.MULTILINE,
+    )
+    if match is None:
+        raise RuntimeError(f"Unable to load package version from {version_file}")
+    return match.group("version")
+
+
+VERSION = _load_version()
 CTP_API_VER = "6.7.7"
 
 # ---------------------------------------------------------------------------
@@ -103,8 +118,8 @@ if sys.platform.startswith("darwin"):
     ctp_compile_args = []
     # 打包时需要复制的 framework 文件 (glob 相对 bt_api_py/ctp/)
     ctp_package_data = [
-        "api/%s/darwin/thostmduserapi_se.framework/**/*" % CTP_API_VER,
-        "api/%s/darwin/thosttraderapi_se.framework/**/*" % CTP_API_VER,
+        f"api/{CTP_API_VER}/darwin/thostmduserapi_se.framework/**/*",
+        f"api/{CTP_API_VER}/darwin/thosttraderapi_se.framework/**/*",
     ]
     _CTP_RUNTIME_LIBS = [MD_LIB, TRADER_LIB]  # framework dylib 路径
 
@@ -117,7 +132,7 @@ elif sys.platform.startswith("linux"):
     ctp_lib_names = [pathlib.Path(p).stem[3:] for p in API_LIBS]  # strip "lib" prefix
     ctp_link_args = ["-Wl,-rpath,$ORIGIN"]
     ctp_compile_args = []
-    ctp_package_data = ["api/%s/linux/*.so" % CTP_API_VER]
+    ctp_package_data = [f"api/{CTP_API_VER}/linux/*.so"]
     _CTP_RUNTIME_LIBS = API_LIBS
     # Add libiconv if available (needed by CTP libraries)
     if os.path.exists(os.path.join(sys.prefix, "lib", "libiconv.so")):
@@ -148,7 +163,7 @@ elif sys.platform.startswith("win"):
     ctp_link_args = []
     ctp_compile_args = ["/utf-8", "/wd4101"]
     ctp_package_data = [
-        "api/%s/windows/*.dll" % CTP_API_VER,
+        f"api/{CTP_API_VER}/windows/*.dll",
     ]
     _CTP_RUNTIME_LIBS = API_DLLS
 else:

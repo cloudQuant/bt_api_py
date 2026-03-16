@@ -1,6 +1,8 @@
-"""资金费率类，用于确定资金费率的属性和方法
-# fundingRate的数据推送和请求频率不是特别高，传入的数据直接使用json格式
-"""
+"""资金费率类，用于确定资金费率的属性和方法。"""
+
+from __future__ import annotations
+
+from typing import Any, Self
 
 from bt_api_py.containers.auto_init_mixin import AutoInitMixin
 
@@ -8,146 +10,112 @@ from bt_api_py.containers.auto_init_mixin import AutoInitMixin
 class FundingRateData(AutoInitMixin):
     """保存资金费率信息"""
 
-    def __init__(self, funding_rate_info, has_been_json_encoded):
+    def __init__(self, funding_rate_info: Any, has_been_json_encoded: bool) -> None:
         self.event = "FundingEvent"
         self.funding_rate_info = funding_rate_info
         self.has_been_json_encoded = has_been_json_encoded
+        self.exchange_name: str | None = None
+        self.symbol_name: str | None = None
+        self.asset_type: str | None = None
+        self.funding_rate_data: Any = funding_rate_info if has_been_json_encoded else None
+        self.local_update_time: float | None = None
+        self.server_time: float | None = None
+        self.funding_rate_symbol_name: str | None = None
+        self.pre_funding_rate: float | None = None
+        self.pre_funding_time: float | None = None
+        self.next_funding_rate: float | None = None
+        self.next_funding_time: float | None = None
+        self.max_funding_rate: float | None = None
+        self.min_funding_rate: float | None = None
+        self.current_funding_rate: float | None = None
+        self.current_funding_time: float | None = None
+        self.settlement_funding_rate: float | None = None
+        self.settlement_status: str | None = None
+        self.method: str | None = None
+        self.all_data: dict[str, Any] | None = None
 
-    def get_event_type(self):
-        """
-        get the data type and event type
-        :return: str
-        """
+    def get_event(self) -> str:
         return self.event
 
-    def init_data(self):
-        """
-        init params, to get data
-        :return: None
-        """
+    def get_event_type(self) -> str:
+        return self.get_event()
+
+    def init_data(self) -> None | Self:
         raise NotImplementedError
 
-    def get_exchange_name(self):
-        """
-        get exchange name
-        :return: str
-        """
+    def get_all_data(self) -> dict[str, Any]:
+        if self.all_data is None:
+            self.all_data = {
+                "exchange_name": self.exchange_name,
+                "symbol_name": self.symbol_name,
+                "asset_type": self.asset_type,
+                "local_update_time": self.local_update_time,
+                "server_time": self.server_time,
+                "funding_rate_symbol_name": self.funding_rate_symbol_name,
+                "pre_funding_rate": self.pre_funding_rate,
+                "pre_funding_time": self.pre_funding_time,
+                "next_funding_rate": self.next_funding_rate,
+                "next_funding_time": self.next_funding_time,
+                "max_funding_rate": self.max_funding_rate,
+                "min_funding_rate": self.min_funding_rate,
+                "current_funding_rate": self.current_funding_rate,
+                "current_funding_time": self.current_funding_time,
+                "settlement_funding_rate": self.settlement_funding_rate,
+                "settlement_status": self.settlement_status,
+                "method": self.method,
+            }
+        return self.all_data
+
+    def get_exchange_name(self) -> str:
         raise NotImplementedError
 
-    def get_server_time(self):
-        """
-        get server time for the data generate
-        :return: float timestamp
-        """
+    def get_server_time(self) -> float | None:
         raise NotImplementedError
 
-    def get_local_update_time(self):
-        """
-        get local update time for the computer generate the data
-        :return: float timestamp
-        """
+    def get_local_update_time(self) -> float | None:
         raise NotImplementedError
 
-    def get_asset_type(self):
-        """
-        get asset type, eg swap & spot
-        :return: str
-        """
+    def get_asset_type(self) -> str | None:
         raise NotImplementedError
 
-    def get_symbol_name(self):
-        """
-        get symbol name for the data
-        :return: str
-        """
+    def get_symbol_name(self) -> str | None:
         raise NotImplementedError
 
-    def get_pre_funding_rate(self):
-        """
-        get previous period funding rate
-        :return: float
-        """
+    def get_pre_funding_rate(self) -> float | None:
         raise NotImplementedError
 
-    def get_pre_funding_time(self):
-        """
-        get previous period funding time
-        :return: float timestamp
-        """
+    def get_pre_funding_time(self) -> float | None:
         raise NotImplementedError
 
-    # def get_funding_rate(self):
-    #     raise NotImplementedError
-    #
-    # def get_funding_time(self):
-    #     raise NotImplementedError
-
-    def get_next_funding_rate(self):
-        """
-        get the next period funding rate
-        :return: float
-        """
+    def get_next_funding_rate(self) -> float | None:
         raise NotImplementedError
 
-    def get_next_funding_time(self):
-        """
-        get the next period funding rate time
-        :return: float
-        """
+    def get_next_funding_time(self) -> float | None:
         raise NotImplementedError
 
-    def get_max_funding_rate(self):
-        """
-        get max funding rate
-        :return: float
-        """
+    def get_max_funding_rate(self) -> float | None:
         raise NotImplementedError
 
-    def get_min_funding_rate(self):
-        """
-        get min funding rate
-        :return: float
-        """
+    def get_min_funding_rate(self) -> float | None:
         raise NotImplementedError
 
-    def get_current_funding_rate(self):
-        """
-        get current funding rate
-        :return: float
-        """
+    def get_current_funding_rate(self) -> float | None:
         raise NotImplementedError
 
-    def get_current_funding_time(self):
-        """
-        get current funding time
-        :return: float, timestamp
-        """
+    def get_current_funding_time(self) -> float | None:
         raise NotImplementedError
 
-    def get_settlement_funding_rate(self):
-        """
-        get settlement funding rate,若 settlement_status = processing，该字段代表用于本轮结算的资金费率；
-        若 settlement_status = settled，该字段代表用于上轮结算的资金费率
-        :return: float
-        """
+    def get_settlement_funding_rate(self) -> float | None:
         raise NotImplementedError
 
-    def get_settlement_status(self):
-        """
-        get settlement_status, processing：结算中 settled：已结算
-        :return: str, processing or settled
-        """
+    def get_settlement_status(self) -> str | None:
         raise NotImplementedError
 
-    def get_method(self):
-        """
-        get funding income type, current_period：当期收 next_period：跨期收
-        :return: str, current_period or next_period
-        """
+    def get_method(self) -> str | None:
         raise NotImplementedError
 
-    def __str__(self):
+    def __str__(self) -> str:
         raise NotImplementedError
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         raise NotImplementedError

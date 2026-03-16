@@ -4,13 +4,14 @@ WebSocket connection management with optimized pooling and backpressure.
 
 import asyncio
 import contextlib
+import inspect
 import json
 import time
 import zlib
 from collections import defaultdict
 from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, cast
 from urllib.parse import urlparse
 
 import websockets
@@ -65,7 +66,7 @@ class Subscription:
     topic: str
     symbol: str
     params: dict[str, Any]
-    callback: Callable | None = None
+    callback: Callable[..., Any] | None = None
     created_at: float = field(default_factory=time.time)
 
 
@@ -78,7 +79,7 @@ class WebSocketConnection:
         self.logger = get_logger(f"ws_{config.exchange_name}_{connection_id}")
 
         # Connection state
-        self._websocket: websockets.WebSocketServerProtocol | None = None
+        self._websocket: Any | None = None
         self._connected = False
         self._running = False
 
@@ -110,6 +111,8 @@ class WebSocketConnection:
             return
 
         try:
+            if self._websocket is not None:
+                await self._close_websocket()
             self._websocket = await websockets.connect(
                 self.config.url,
                 ping_interval=self.config.heartbeat_interval,
@@ -135,13 +138,15 @@ class WebSocketConnection:
         """Disconnect from WebSocket."""
         self._running = False
 
-        if self._processing_task:
-            self._processing_task.cancel()
+        current_task = asyncio.current_task()
+        processing_task = self._processing_task
+        self._processing_task = None
+        if processing_task and processing_task is not current_task:
+            processing_task.cancel()
             with contextlib.suppress(asyncio.CancelledError):
-                await self._processing_task
+                await processing_task
 
-        if self._websocket:
-            await self._websocket.close()
+        await self._close_websocket()
 
         self._connected = False
         self.logger.info("Disconnected")
@@ -299,7 +304,9 @@ class WebSocketConnection:
                     and subscription.callback
                 ):
                     try:
-                        await subscription.callback(message)
+                        callback_result = subscription.callback(message)
+                        if inspect.isawaitable(callback_result):
+                            await callback_result
                     except Exception as e:
                         self.logger.error(
                             f"Callback error for {self.config.exchange_name} {symbol}@{topic}: {e}"
@@ -336,6 +343,7 @@ class WebSocketConnection:
         """Handle disconnection."""
         self._connected = False
         self._last_disconnect = time.time()
+        await self._close_websocket()
 
         # Attempt reconnection
         if self._reconnect_attempts < self.config.max_reconnect_attempts:
@@ -358,7 +366,17 @@ class WebSocketConnection:
                 self.logger.error(f"Reconnection failed: {e}")
                 await self._handle_disconnect()
         else:
+            self._running = False
             self.logger.error("Max reconnection attempts reached")
+
+    async def _close_websocket(self) -> None:
+        """Close and clear the underlying websocket if present."""
+        websocket = self._websocket
+        self._websocket = None
+        if websocket is None:
+            return
+        with contextlib.suppress(Exception):
+            await websocket.close()
 
     @property
     def connected(self) -> bool:
@@ -390,11 +408,11 @@ class WebSocketConnection:
         }
 
 
-@singleton(IConnectionManager)
+@singleton(cast(type[Any], IConnectionManager))
 class WebSocketManager(IConnectionManager):
     """WebSocket connection manager with pooling and load balancing."""
 
-    def __init__(self, event_bus: IEventBus = inject(IEventBus)):
+    def __init__(self, event_bus: IEventBus = inject(cast(type[Any], IEventBus))):
         self.event_bus = event_bus
         self.logger = get_logger("websocket_manager")
 
@@ -545,3 +563,7 @@ class WebSocketManager(IConnectionManager):
             stats[exchange_name] = exchange_stats
 
         return stats
+
+    def get_connection_stats(self) -> dict[str, Any]:
+        """Compatibility alias for the connection manager interface."""
+        return self.get_pool_stats()

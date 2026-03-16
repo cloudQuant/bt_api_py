@@ -195,6 +195,12 @@ class TestBalanceUtils:
         assert value_result == {}
         assert cash_result == {}
 
+    def test_simple_balance_handler_tolerates_missing_numeric_values(self):
+        accounts = [MockAccount("USDT", None, None, None)]
+        value_result, cash_result = simple_balance_handler(accounts)
+        assert value_result["USDT"]["value"] == 0.0
+        assert cash_result["USDT"]["cash"] == 0.0
+
     def test_nested_balance_handler(self):
         balances = [
             MockBalance("USDT", 5000.0, 4000.0, 200.0),
@@ -206,6 +212,13 @@ class TestBalanceUtils:
         assert cash_result["USDT"]["cash"] == 4000.0
         assert value_result["BTC"]["value"] == 2.05
         assert cash_result["BTC"]["cash"] == 1.5
+
+    def test_nested_balance_handler_tolerates_missing_numeric_values(self):
+        balances = [MockBalance("USDT", None, None, None)]
+        accounts = [MockNestedAccount(balances)]
+        value_result, cash_result = nested_balance_handler(accounts)
+        assert value_result["USDT"]["value"] == 0.0
+        assert cash_result["USDT"]["cash"] == 0.0
 
 
 # ========================================================================

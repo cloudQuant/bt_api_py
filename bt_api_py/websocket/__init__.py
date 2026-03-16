@@ -3,10 +3,8 @@ WebSocket module initialization and integration.
 Provides unified API for advanced WebSocket functionality with monitoring and optimizations.
 """
 
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 from typing import Any
-
-from bt_api_py.core.dependency_injection import singleton
 
 from .advanced_connection_manager import (
     AdvancedWebSocketConnection,
@@ -48,7 +46,7 @@ class WebSocketSystem:
         if self._initialized:
             return
 
-        self.manager = AdvancedWebSocketManager(event_bus=None)
+        self.manager = AdvancedWebSocketManager()
         self.monitor = WebSocketMonitor(self.manager)
 
         await self.manager.start()
@@ -67,7 +65,31 @@ class WebSocketSystem:
         if self.manager:
             await self.manager.stop()
 
+        self.manager = None
+        self.monitor = None
         self._initialized = False
+
+
+async def _ensure_exchange_registered(
+    manager: AdvancedWebSocketManager,
+    exchange_name: str,
+    pool_config: PoolConfiguration | None,
+) -> None:
+    """Register an exchange with default adapter-derived websocket config if missing."""
+    if exchange_name in manager._pools:
+        return
+
+    adapter = WebSocketAdapterFactory.create_adapter(exchange_name)
+    endpoints = adapter.get_endpoints(f"wss://stream.{exchange_name.lower()}.com")
+
+    config = WebSocketConfig(
+        url=endpoints[0],
+        exchange_name=exchange_name,
+        endpoints=endpoints[1:],
+        subscription_limits=adapter.get_subscription_limits(),
+    )
+
+    await manager.add_exchange(config, pool_config)
 
     def get_manager(self) -> AdvancedWebSocketManager:
         """Get WebSocket manager.
@@ -116,7 +138,7 @@ async def get_websocket_monitor() -> WebSocketMonitor:
 async def subscribe_to_ticker(
     exchange_name: str,
     symbol: str,
-    callback: Callable,
+    callback: Callable[..., Any] | Callable[..., Awaitable[Any]],
     pool_config: PoolConfiguration | None = None,
 ) -> str:
     """Subscribe to ticker data for a symbol.
@@ -131,22 +153,7 @@ async def subscribe_to_ticker(
         Subscription ID.
     """
     manager = await get_websocket_manager()
-
-    from .advanced_connection_manager import WebSocketConfig
-    from .exchange_adapters import WebSocketAdapterFactory
-
-    if exchange_name not in manager._pools:
-        adapter = WebSocketAdapterFactory.create_adapter(exchange_name)
-        endpoints = adapter.get_endpoints(f"wss://stream.{exchange_name.lower()}.com")
-
-        config = WebSocketConfig(
-            url=endpoints[0],
-            exchange_name=exchange_name,
-            endpoints=endpoints[1:],
-            subscription_limits=adapter.get_subscription_limits(),
-        )
-
-        await manager.add_exchange(config, pool_config)
+    await _ensure_exchange_registered(manager, exchange_name, pool_config)
 
     return await manager.subscribe(exchange_name, "ticker", symbol, callback)
 
@@ -154,7 +161,7 @@ async def subscribe_to_ticker(
 async def subscribe_to_depth(
     exchange_name: str,
     symbol: str,
-    callback: Callable,
+    callback: Callable[..., Any] | Callable[..., Awaitable[Any]],
     level: int = 20,
     pool_config: PoolConfiguration | None = None,
 ) -> str:
@@ -171,22 +178,7 @@ async def subscribe_to_depth(
         Subscription ID.
     """
     manager = await get_websocket_manager()
-
-    from .advanced_connection_manager import WebSocketConfig
-    from .exchange_adapters import WebSocketAdapterFactory
-
-    if exchange_name not in manager._pools:
-        adapter = WebSocketAdapterFactory.create_adapter(exchange_name)
-        endpoints = adapter.get_endpoints(f"wss://stream.{exchange_name.lower()}.com")
-
-        config = WebSocketConfig(
-            url=endpoints[0],
-            exchange_name=exchange_name,
-            endpoints=endpoints[1:],
-            subscription_limits=adapter.get_subscription_limits(),
-        )
-
-        await manager.add_exchange(config, pool_config)
+    await _ensure_exchange_registered(manager, exchange_name, pool_config)
 
     params = {"level": str(level)} if level != 20 else {}
     return await manager.subscribe(exchange_name, "depth", symbol, callback, params)
@@ -195,7 +187,7 @@ async def subscribe_to_depth(
 async def subscribe_to_trades(
     exchange_name: str,
     symbol: str,
-    callback: Callable,
+    callback: Callable[..., Any] | Callable[..., Awaitable[Any]],
     pool_config: PoolConfiguration | None = None,
 ) -> str:
     """Subscribe to trade data for a symbol.
@@ -210,22 +202,7 @@ async def subscribe_to_trades(
         Subscription ID.
     """
     manager = await get_websocket_manager()
-
-    from .advanced_connection_manager import WebSocketConfig
-    from .exchange_adapters import WebSocketAdapterFactory
-
-    if exchange_name not in manager._pools:
-        adapter = WebSocketAdapterFactory.create_adapter(exchange_name)
-        endpoints = adapter.get_endpoints(f"wss://stream.{exchange_name.lower()}.com")
-
-        config = WebSocketConfig(
-            url=endpoints[0],
-            exchange_name=exchange_name,
-            endpoints=endpoints[1:],
-            subscription_limits=adapter.get_subscription_limits(),
-        )
-
-        await manager.add_exchange(config, pool_config)
+    await _ensure_exchange_registered(manager, exchange_name, pool_config)
 
     return await manager.subscribe(exchange_name, "trades", symbol, callback)
 
@@ -234,7 +211,7 @@ async def subscribe_to_klines(
     exchange_name: str,
     symbol: str,
     interval: str,
-    callback: Callable,
+    callback: Callable[..., Any] | Callable[..., Awaitable[Any]],
     pool_config: PoolConfiguration | None = None,
 ) -> str:
     """Subscribe to candlestick data for a symbol.
@@ -250,22 +227,7 @@ async def subscribe_to_klines(
         Subscription ID.
     """
     manager = await get_websocket_manager()
-
-    from .advanced_connection_manager import WebSocketConfig
-    from .exchange_adapters import WebSocketAdapterFactory
-
-    if exchange_name not in manager._pools:
-        adapter = WebSocketAdapterFactory.create_adapter(exchange_name)
-        endpoints = adapter.get_endpoints(f"wss://stream.{exchange_name.lower()}.com")
-
-        config = WebSocketConfig(
-            url=endpoints[0],
-            exchange_name=exchange_name,
-            endpoints=endpoints[1:],
-            subscription_limits=adapter.get_subscription_limits(),
-        )
-
-        await manager.add_exchange(config, pool_config)
+    await _ensure_exchange_registered(manager, exchange_name, pool_config)
 
     params = {"interval": interval}
     return await manager.subscribe(exchange_name, "kline", symbol, callback, params)

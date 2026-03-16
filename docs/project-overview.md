@@ -60,23 +60,20 @@
 
 ## 核心特性
 
+<!-- BEGIN GENERATED:EXCHANGE_SUPPORT_OVERVIEW -->
 ### 1. 多交易所统一接口
 
 **支持73+交易所：**
 
 **✅ 完整支持（REST + WebSocket + 测试通过）：**
-- Binance（现货/合约/期权）
-- HTX/Huobi（现货/合约/期权）
-- CTP（中国期货）
-- Interactive Brokers（股票/期货）
+- Binance、HTX (Huobi)、CTP (中国期货)、Interactive Brokers
 
-**🔧 已实现REST API：**
-- OKX, Bybit, Bitget, Kraken, Gate.io, Upbit, Crypto.com
-- HitBTC, Phemex, Gemini, KuCoin, MEXC, Bitfinex
-- Coinbase, Hyperliquid, dYdX, BYDFi
+**🔧 已实现 API（仍需继续验证或补齐能力）：**
+- OKX、Bybit、Bitget、Kraken、Gate.io、Upbit、Crypto.com、HitBTC、Phemex、Gemini、KuCoin、MEXC、Bitfinex、Coinbase、Hyperliquid、dYdX、BYDFi
 
 **📋 已注册框架：**
-- 40+个交易所完成基础框架和注册
+- 40+ 个交易所完成基础框架和注册，等待继续补实现、测试或文档
+<!-- END GENERATED:EXCHANGE_SUPPORT_OVERVIEW -->
 
 ### 2. 三种API模式
 

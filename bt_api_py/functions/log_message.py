@@ -2,6 +2,7 @@
 
 import logging
 from pathlib import Path
+from typing import Any
 
 __all__ = ["SpdLogManager", "_HAS_SPDLOG"]
 
@@ -41,29 +42,35 @@ class SpdLogManager:
 
     def __init__(
         self,
-        file_name="log_strategy_info.log",
-        logger_name="hello",
-        rotation_hour=0,
-        rotation_minute=0,
-        print_info=False,
-    ):
+        file_name: str = "log_strategy_info.log",
+        logger_name: str = "hello",
+        rotation_hour: int = 0,
+        rotation_minute: int = 0,
+        print_info: bool = False,
+    ) -> None:
         # 将所有非绝对路径的日志文件统一重定向到项目根目录 logs/ 下
-        path = Path(file_name)
-        if not path.is_absolute():
-            # 去除 ./logs/ 或 ./  前缀，提取纯文件名
-            name = file_name
-            if file_name.startswith("./logs/"):
-                name = file_name[len("./logs/") :]
-            elif file_name.startswith("./"):
-                name = file_name[len("./") :]
-            file_name = str(Path(SpdLogManager._project_logs_dir) / name)
-        self.file_name = file_name
+        self.file_name = self._normalize_file_name(file_name)
         self.logger_name = logger_name
         self.rotation_hour = rotation_hour
         self.rotation_minute = rotation_minute
         self.print_info = print_info
 
-    def create_logger(self):
+    @classmethod
+    def _normalize_file_name(cls, file_name: str) -> str:
+        """Normalize relative log file names into the project logs directory."""
+        path = Path(file_name)
+        if path.is_absolute():
+            return file_name
+
+        name = file_name
+        if file_name.startswith("./logs/"):
+            name = file_name[len("./logs/") :]
+        elif file_name.startswith("./"):
+            name = file_name[len("./") :]
+
+        return str(Path(cls._project_logs_dir) / name)
+
+    def create_logger(self) -> Any:
         # 创建缓存键
         key = (
             self.file_name,
@@ -86,11 +93,15 @@ class SpdLogManager:
             logger = logging.getLogger(self.logger_name)
             if not logger.handlers:
                 fh = logging.FileHandler(self.file_name, encoding="utf-8")
-                fh.setFormatter(logging.Formatter("%(asctime)s [%(levelname)s] %(message)s"))
+                formatter = logging.Formatter("%(asctime)s [%(levelname)s] %(message)s")
+                fh.setFormatter(formatter)
                 logger.addHandler(fh)
                 if self.print_info:
-                    logger.addHandler(logging.StreamHandler())
+                    stream_handler = logging.StreamHandler()
+                    stream_handler.setFormatter(formatter)
+                    logger.addHandler(stream_handler)
                 logger.setLevel(logging.DEBUG)
+                logger.propagate = False
             SpdLogManager._logger_cache[key] = logger
             return logger
 

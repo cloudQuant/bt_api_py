@@ -14,7 +14,7 @@ from pathlib import Path
 from urllib.parse import urlparse
 
 
-def _get_logger():
+def _get_logger() -> object:
     """Lazy logger to avoid import cycle."""
     from bt_api_py.logging_factory import get_logger
 
@@ -120,12 +120,11 @@ def get_cookies_from_file(file_path: str) -> dict[str, str]:
         return {}
 
     try:
-        with open(resolved_path, encoding="utf-8") as f:
+        with resolved_path.open(encoding="utf-8") as f:
             data = json.load(f)
             if isinstance(data, dict):
-                return data
-            elif isinstance(data, list):
-                # 浏览器导出的格式可能是 list
+                return {str(key): str(value) for key, value in data.items()}
+            if isinstance(data, list):
                 return {
                     str(item.get("name", item.get("key")) or ""): str(item.get("value") or "")
                     for item in data
@@ -153,7 +152,7 @@ def get_cookies_from_netscape(file_path: str) -> dict[str, str]:
 
     cookies: dict[str, str] = {}
     try:
-        with open(resolved_path, encoding="utf-8") as f:
+        with resolved_path.open(encoding="utf-8") as f:
             for line in f:
                 line = line.strip()
                 if not line or line.startswith("#"):
@@ -226,13 +225,13 @@ def save_cookies_to_file(cookies: dict[str, str], file_path: str) -> None:
     resolved_path = Path(file_path).expanduser()
     resolved_path.parent.mkdir(parents=True, exist_ok=True)
 
-    with open(resolved_path, "w", encoding="utf-8") as f:
+    with resolved_path.open("w", encoding="utf-8") as f:
         json.dump(cookies, f, indent=2)
 
 
 def export_browser_cookies_to_file(
     output_path: str, domain: str = "localhost:5000", browser: str = "chrome"
-):
+) -> dict[str, str]:
     """从浏览器导出 cookies 到文件
 
     Args:
@@ -257,20 +256,29 @@ def cookies_to_header(cookies: dict[str, str]) -> str:
     return "; ".join(f"{k}={v}" for k, v in cookies.items())
 
 
-if __name__ == "__main__":
-    # 测试代码
+def _format_cookie_preview(cookies: dict[str, str]) -> list[str]:
+    preview: list[str] = []
+    for name, value in cookies.items():
+        display_value = value[:20] + "..." if len(value) > 20 else value
+        preview.append(f"  {name}: {display_value}")
+    return preview
+
+
+def _main(argv: list[str] | None = None) -> None:
+    """CLI helper for exporting or previewing cookies."""
     import sys
 
-    if len(sys.argv) > 1:
-        # 从浏览器导出 cookies
-        output_file = sys.argv[1]
+    args = argv if argv is not None else sys.argv[1:]
+    if args:
+        output_file = args[0]
         cookies = export_browser_cookies_to_file(output_file)
         print(f"Exported {len(cookies)} cookies to {output_file}")
     else:
-        # 打印当前可用的 cookies
         cookies = get_ibkr_cookies()
         print(f"Found {len(cookies)} cookies for localhost:5000:")
-        for name, value in cookies.items():
-            # 隐藏过长的值
-            display_value = value[:20] + "..." if len(value) > 20 else value
-            print(f"  {name}: {display_value}")
+        for line in _format_cookie_preview(cookies):
+            print(line)
+
+
+if __name__ == "__main__":
+    _main()

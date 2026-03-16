@@ -268,7 +268,7 @@ class AsyncWrapperMixin:
         )
 
 
-def check_protocol_compliance(feed_class) -> list:
+def check_protocol_compliance(feed_class: type[Any]) -> list[str]:
     """检查 feed_class 是否符合 AbstractVenueFeed 协议.
 
     :param feed_class: Feed 类（非实例）

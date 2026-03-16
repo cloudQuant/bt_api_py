@@ -25,7 +25,7 @@ class AutoInitMixin:
     直接调用 init_data() 仍然有效，不会重复执行。
     """
 
-    def _ensure_init(self):
+    def _ensure_init(self) -> "AutoInitMixin":
         """如果尚未初始化，自动调用 init_data()"""
         if not getattr(self, "_initialized", False):
             # Guard against re-entrant calls: init_data() may call get_*
@@ -43,7 +43,7 @@ class AutoInitMixin:
                 raise
         return self
 
-    def __getattribute__(self, name):
+    def __getattribute__(self, name: str) -> object:
         # 对 get_* 方法（排除 get_event/get_event_type/get_data 等无需解析的方法）
         # 自动触发 _ensure_init()
         attr = super().__getattribute__(name)

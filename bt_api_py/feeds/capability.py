@@ -58,7 +58,7 @@ class Capability(enum.StrEnum):
 class NotSupportedError(Exception):
     """场所不支持该能力"""
 
-    def __init__(self, capability, venue: str = ""):
+    def __init__(self, capability: Capability | str, venue: str = "") -> None:
         self.capability = capability
         self.venue = venue
         cap_name = capability.value if isinstance(capability, Capability) else str(capability)
@@ -100,7 +100,7 @@ class CapabilityMixin:
         """检查是否支持指定能力"""
         return cap in self.capabilities
 
-    def require_capability(self, cap: Capability):
+    def require_capability(self, cap: Capability) -> None:
         """要求指定能力，不支持时抛出 NotSupportedError"""
         if not self.has_capability(cap):
             venue = getattr(self, "exchange_name", self.__class__.__name__)

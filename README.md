@@ -54,76 +54,48 @@
 
 ## 支持的交易所
 
-> 测试状态通过 `bash scripts/run_exchange_tests.sh <name>` 验证（迭代5，2026-03）
+<!-- BEGIN GENERATED:EXCHANGE_SUPPORT_OVERVIEW -->
+> 测试状态建议通过 `bash scripts/run_exchange_tests.sh <name>` 复核，当前口径更新于 2026-03-16。
 
 ### ✅ 已完整支持（REST + WebSocket + 测试通过）
 
-| 交易所 | 代码 | 现货 | 合约 | 期权 | 股票 | 单元测试 | 说明 |
-|--------|------|:----:|:----:|:----:|:----:|:--------:|------|
+| 交易所 | 代码 | 现货 | 合约 | 期权 | 股票 | 测试状态 | 说明 |
+| -------- | -------- | -------- | -------- | -------- | -------- | -------- | -------- |
 | **Binance** | `BINANCE___SPOT` / `BINANCE___SWAP` 等 | ✅ | ✅ | ✅ | — | ✅ 通过 | 现货、合约、杠杆、期权、算法交易、网格、挖矿、质押、钱包、子账户、VIP借币 |
 | **HTX (Huobi)** | `HTX___SPOT` / `HTX___USDT_SWAP` 等 | ✅ | ✅ | ✅ | — | ✅ 通过 | 现货、杠杆、U本位永续、币本位永续、期权 |
-| **CTP** (中国期货) | `CTP___FUTURE` | — | ✅ | — | — | ✅ 通过 | 中国期货市场（上期所、大商所、郑商所、中金所） |
+| **CTP (中国期货)** | `CTP___FUTURE` | — | ✅ | — | — | ✅ 通过 | 中国期货市场（上期所、大商所、郑商所、中金所） |
 | **Interactive Brokers** | `IB_WEB___STK` / `IB_WEB___FUT` | — | — | — | ✅ | ✅ 通过 | 美股、期货（通过 Web API） |
 
-### 🔧 已实现 REST API（单元测试部分通过）
+### 🔧 已实现 API（仍需继续验证或补齐能力）
 
-| 交易所 | 类型 | 单元测试 | 备注 |
-|--------|------|:--------:|------|
-| **OKX** | CEX | ⚠️ 部分失败 | mock 目标路径问题（httpx），主体逻辑正确 |
-| **Bybit** | CEX | ✅ 37 通过 | |
-| **Bitget** | CEX | ✅ 45 通过 | |
-| **Kraken** | CEX | ✅ 46 通过 | |
-| **Gate.io** | CEX | ✅ 56 通过 | |
-| **Upbit** | CEX | ✅ 101 通过 (4 skip) | |
-| **Crypto.com** | CEX | ✅ 97 通过 | |
-| **HitBTC** | CEX | ✅ 103 通过 (5 skip) | |
-| **Phemex** | CEX | ✅ 65 通过 (5 skip) | |
-| **Gemini** | CEX | ✅ 20 通过 | |
-| **KuCoin** | CEX | ⚠️ 16 失败 / 47 通过 | mock 目标路径问题 |
-| **MEXC** | CEX | ⚠️ 11 失败 / 42 通过 | mock 目标路径问题 |
-| **Bitfinex** | CEX | ⚠️ 13 失败 / 43 通过 | mock 目标路径问题 |
-| **Coinbase** | CEX | ⚠️ 19 失败 / 45 通过 | 部分 import 路径变更 |
-| **Hyperliquid** | DEX | ⚠️ 5 失败 / 32 通过 | mock 问题 |
-| **dYdX** | DEX | ✅ 通过 | |
-| **BYDFi** | CEX | ⚠️ 1 失败 / 17 通过 | JSON 解析 bug |
+| 交易所 | 类型 | 当前状态 | 测试状态 | 备注 |
+| -------- | -------- | -------- | -------- | -------- |
+| **OKX** | CEX | REST 已实现，WebSocket 部分实现 | ⚠️ 部分失败 | mock 目标路径问题（httpx），主体逻辑正确 |
+| **Bybit** | CEX | REST 已实现，WebSocket 待继续补齐 | ✅ 37 通过 | 建议补 WebSocket 覆盖后再提升状态 |
+| **Bitget** | CEX | REST 已实现，WebSocket 待继续补齐 | ✅ 45 通过 | 建议补 WebSocket 覆盖后再提升状态 |
+| **Kraken** | CEX | REST 已实现，WebSocket 待继续补齐 | ✅ 46 通过 | 建议补 WebSocket 覆盖后再提升状态 |
+| **Gate.io** | CEX | REST 已实现，WebSocket 待继续补齐 | ✅ 56 通过 | 建议补 WebSocket 覆盖后再提升状态 |
+| **Upbit** | CEX | REST 已实现，WebSocket 待继续补齐 | ✅ 101 通过 (4 skip) | 建议补 WebSocket 覆盖后再提升状态 |
+| **Crypto.com** | CEX | REST 已实现，WebSocket 待继续补齐 | ✅ 97 通过 | 建议补 WebSocket 覆盖后再提升状态 |
+| **HitBTC** | CEX | REST 已实现，WebSocket 待继续补齐 | ✅ 103 通过 (5 skip) | 建议补 WebSocket 覆盖后再提升状态 |
+| **Phemex** | CEX | REST 已实现，WebSocket 待继续补齐 | ✅ 65 通过 (5 skip) | 建议补 WebSocket 覆盖后再提升状态 |
+| **Gemini** | CEX | REST 已实现，WebSocket 待继续补齐 | ✅ 20 通过 | 建议补 WebSocket 覆盖后再提升状态 |
+| **KuCoin** | CEX | REST 已实现，仍需补稳定性验证 | ⚠️ 16 失败 / 47 通过 | mock 目标路径问题 |
+| **MEXC** | CEX | REST 已实现，仍需补稳定性验证 | ⚠️ 11 失败 / 42 通过 | mock 目标路径问题 |
+| **Bitfinex** | CEX | REST 已实现，仍需补稳定性验证 | ⚠️ 13 失败 / 43 通过 | mock 目标路径问题 |
+| **Coinbase** | CEX | REST 已实现，仍需补稳定性验证 | ⚠️ 19 失败 / 45 通过 | 部分 import 路径变更 |
+| **Hyperliquid** | DEX | 实现存在，但当前仓库测试资产不足以提升到完整支持 | ⚠️ 待补验证 | 当前仓库缺少可执行的 Hyperliquid 测试文件 |
+| **dYdX** | DEX | 实现存在，但当前仓库测试资产不足以提升到完整支持 | ⚠️ 待补验证 | 当前仓库缺少可执行的 dYdX 测试文件 |
+| **BYDFi** | CEX | REST 已实现，仍需补稳定性验证 | ⚠️ 1 失败 / 17 通过 | JSON 解析 bug |
 
-### 📋 已注册（基础框架就绪，单元测试通过）
+### 📋 已注册（基础框架就绪）
 
-以下交易所已完成注册和基础代码框架，单元测试全部通过：
+40+ 个交易所已完成注册或基础框架接入，但还需要继续补实现、测试或文档后，再提升对外状态。
 
-<details>
-<summary>点击展开全部已注册交易所及测试状态</summary>
-
-**中心化交易所 (CEX) — 测试全部通过 ✅**
-
-| 交易所 | 测试数 | 交易所 | 测试数 | 交易所 | 测试数 |
-|--------|--------|--------|--------|--------|--------|
-| **Bequant** | 96 passed | **BigONE** | 96 passed | **BingX** | 11 passed |
-| **Bitbank** | 12 passed | **BitBNS** | 12 passed | **Bitflyer** | 17 passed |
-| **Bithumb** | 17 passed | **Bitinka** | 16 passed | **BitMart** | 94 passed |
-| **Bitrue** | 99 passed | **Bitso** | 98 passed | **Bitstamp** | 101 passed |
-| **Bitunix** | 16 passed | **Bitvavo** | 16 passed | **BTC Markets** | 19 passed |
-| **BTCTurk** | 20 passed | **Buda** | 20 passed | **Coincheck** | 18 passed |
-| **CoinDCX** | 18 passed | **CoinEx** | 96 passed | **Coinone** | 98 passed |
-| **CoinSpot** | 77 passed | **CoinSwitch** | 75 passed | **EXMO** | 19 passed |
-| **Foxbit** | 19 passed | **Giottus** | 18 passed | **Independent Reserve** | 78 passed |
-| **Korbit** | 84 passed | **LATOKEN** | 90 passed | **LocalBitcoins** | 71 passed |
-| **Luno** | 15 passed | **Mercado Bitcoin** | 18 passed | **Ripio** | 22 passed |
-| **SatoshiTango** | 20 passed | **Swyftx** | 73 passed | **VALR** | 73 passed |
-| **WazirX** | 74 passed | **YoBit** | 83 passed | **Zaif** | 92 passed |
-| **Zebpay** | 93 passed | | | |
-
-**去中心化交易所 (DEX) — 测试通过 ✅**
-
-| 交易所 | 测试数 |
-|--------|--------|
-| Balancer / Cow Swap / Curve / GMX / PancakeSwap / Raydium / SushiSwap / Uniswap | 172 passed |
-
-</details>
-
-> **总计**: 4 个完整支持 + 17 个 REST API 实现 + 40+ 个已注册 = **73 个交易所**
+> **总计**: 4 个完整支持 + 17 个已实现 API + 40+ 个已注册 = **73+ 个交易所**
 >
-> **提示**: 欢迎提交 Issue 或 PR 帮助完善更多交易所的支持！
+> **说明**: 该分级采用保守口径；只有 REST、WebSocket 和测试资产同时满足时，才会提升到“完整支持”。
+<!-- END GENERATED:EXCHANGE_SUPPORT_OVERVIEW -->
 
 ## 安装
 

@@ -81,7 +81,14 @@ class Feed(AsyncBase, ConnectionMixin, CapabilityMixin):
             )
         )
 
-    def handle_timeout_exception(self, url, method, body, timeout, e):
+    def handle_timeout_exception(
+        self,
+        url: str,
+        method: str,
+        body: Any,
+        timeout: float | int,
+        e: Exception,
+    ) -> None:
         """
         handle timeout exception
         :param url: str, url
@@ -103,7 +110,9 @@ class Feed(AsyncBase, ConnectionMixin, CapabilityMixin):
         )
         self.raise_timeout(timeout, self.exchange_name)
 
-    def handle_request_exception(self, url, method, body, exception):
+    def handle_request_exception(
+        self, url: str, method: str, body: Any, exception: Exception
+    ) -> None:
         """
         handle request exception
         :param url: str, url
@@ -124,7 +133,13 @@ class Feed(AsyncBase, ConnectionMixin, CapabilityMixin):
         )
         raise exception
 
-    def handle_json_decode_error(self, url, headers, body, e):
+    def handle_json_decode_error(
+        self,
+        url: str,
+        headers: Mapping[str, Any] | None,
+        body: Any,
+        e: Exception,
+    ) -> None:
         """
         handle json decode error
         :param url: str, url
@@ -141,7 +156,7 @@ class Feed(AsyncBase, ConnectionMixin, CapabilityMixin):
         )
         self.raise400(self.exchange_name)
 
-    def raise_path_error(self, *args):
+    def raise_path_error(self, *args: Any) -> None:
         """
         raise path error
         :param args: pass a variable number of arguments
@@ -149,7 +164,7 @@ class Feed(AsyncBase, ConnectionMixin, CapabilityMixin):
         """
         raise RequestError(self.exchange_name, detail=f"api not access {args}")
 
-    def raise_timeout(self, timeout, *args):
+    def raise_timeout(self, timeout: float | int, *args: Any) -> None:
         """
         raise timeout error
         :param timeout: int, timeout
@@ -158,7 +173,7 @@ class Feed(AsyncBase, ConnectionMixin, CapabilityMixin):
         """
         raise RequestTimeoutError(self.exchange_name, timeout=timeout)
 
-    def raise400(self, *args):
+    def raise400(self, *args: Any) -> None:
         """
         raise 400 error
         :param args: pass a variable number of arguments
@@ -166,7 +181,7 @@ class Feed(AsyncBase, ConnectionMixin, CapabilityMixin):
         """
         raise RequestError(self.exchange_name, detail="rest request response <400>")
 
-    def raise_proxy_error(self, *args):
+    def raise_proxy_error(self, *args: Any) -> None:
         """
         raise proxy error
         :param args: pass a variable number of arguments
@@ -174,7 +189,15 @@ class Feed(AsyncBase, ConnectionMixin, CapabilityMixin):
         """
         raise RequestError(self.exchange_name, detail="proxy_error")
 
-    def http_request(self, method, url, headers=None, body=None, timeout=10, max_retries=3):
+    def http_request(
+        self,
+        method: str,
+        url: str,
+        headers: Mapping[str, str] | None = None,
+        body: Any = None,
+        timeout: float = 10,
+        max_retries: int = 3,
+    ) -> Any:
         """
         request http function
         :param method: str, request method, get, post, put, delete
@@ -224,7 +247,7 @@ class Feed(AsyncBase, ConnectionMixin, CapabilityMixin):
                     continue
                 self.handle_request_exception(url, method, body, e)
 
-    def cancel_all(self, symbol, extra_data=None, **kwargs):
+    def cancel_all(self, symbol: Any, extra_data: Any = None, **kwargs: Any) -> Any:
         """
         cancel all order
         :param symbol: default None, get all the currency, can be string, e.g. "BTC-USDT".
@@ -234,7 +257,9 @@ class Feed(AsyncBase, ConnectionMixin, CapabilityMixin):
         """
         raise NotImplementedError
 
-    def cancel_order(self, symbol, order_id, extra_data=None, **kwargs):
+    def cancel_order(
+        self, symbol: Any, order_id: Any, extra_data: Any = None, **kwargs: Any
+    ) -> Any:
         """
         cancel order by order_id
         :param symbol: default None, get all the currency, can be string, e.g. "BTC-USDT".
@@ -245,7 +270,9 @@ class Feed(AsyncBase, ConnectionMixin, CapabilityMixin):
         """
         raise NotImplementedError
 
-    def async_cancel_order(self, symbol, order_id, extra_data=None, **kwargs):
+    def async_cancel_order(
+        self, symbol: Any, order_id: Any, extra_data: Any = None, **kwargs: Any
+    ) -> Any:
         """
         cancel order by order_id using async
         :param symbol: default None, get all the currency, can be string, e.g. "BTC-USDT".
@@ -256,7 +283,7 @@ class Feed(AsyncBase, ConnectionMixin, CapabilityMixin):
         """
         raise NotImplementedError
 
-    def get_account(self, symbol="ALL", extra_data=None, **kwargs):
+    def get_account(self, symbol: Any = "ALL", extra_data: Any = None, **kwargs: Any) -> Any:
         """
         get account info
         :param symbol: default None, get all the currency, can be string, e.g. "BTC-USDT".
@@ -266,7 +293,9 @@ class Feed(AsyncBase, ConnectionMixin, CapabilityMixin):
         """
         raise NotImplementedError
 
-    def async_get_account(self, symbol="ALL", extra_data=None, **kwargs):
+    def async_get_account(
+        self, symbol: Any = "ALL", extra_data: Any = None, **kwargs: Any
+    ) -> Any:
         """
         get account info using async
         :param symbol: default None, get all the currency, can be string, e.g. "BTC-USDT".
@@ -276,7 +305,7 @@ class Feed(AsyncBase, ConnectionMixin, CapabilityMixin):
         """
         raise NotImplementedError
 
-    def get_balance(self, symbol, extra_data=None, **kwargs):
+    def get_balance(self, symbol: Any, extra_data: Any = None, **kwargs: Any) -> Any:
         """
         get balance by symbol
         :param symbol: default None, get all the currency, can be string, e.g. "BTC-USDT".
@@ -286,7 +315,9 @@ class Feed(AsyncBase, ConnectionMixin, CapabilityMixin):
         """
         raise NotImplementedError
 
-    def async_get_balance(self, symbol=None, extra_data=None, **kwargs):
+    def async_get_balance(
+        self, symbol: Any = None, extra_data: Any = None, **kwargs: Any
+    ) -> Any:
         """
         get balance by symbol using async
         :param symbol: default None, get all the currency, can be string, e.g. "BTC-USDT".
@@ -296,7 +327,7 @@ class Feed(AsyncBase, ConnectionMixin, CapabilityMixin):
         """
         raise NotImplementedError
 
-    def get_clear_price(self, symbol, extra_data=None, **kwargs):
+    def get_clear_price(self, symbol: Any, extra_data: Any = None, **kwargs: Any) -> Any:
         """
         get clear price by symbol
         :param symbol: default None, get all the currency, can be string, e.g. "BTC-USDT".
@@ -306,7 +337,9 @@ class Feed(AsyncBase, ConnectionMixin, CapabilityMixin):
         """
         raise NotImplementedError
 
-    def async_get_clear_price(self, symbol, extra_data=None, **kwargs):
+    def async_get_clear_price(
+        self, symbol: Any, extra_data: Any = None, **kwargs: Any
+    ) -> Any:
         """
         get clear price by symbol using async
         :param symbol: default None, get all the currency, can be string, e.g. "BTC-USDT".
@@ -317,8 +350,14 @@ class Feed(AsyncBase, ConnectionMixin, CapabilityMixin):
         raise NotImplementedError
 
     def get_deals(
-        self, symbol, count=100, start_time=None, end_time=None, extra_data=None, **kwargs
-    ):
+        self,
+        symbol: Any,
+        count: int = 100,
+        start_time: Any = None,
+        end_time: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> Any:
         """
         get trade history by symbol
         :param symbol: default None, get all the currency, can be string, e.g. "BTC-USDT".
@@ -332,8 +371,14 @@ class Feed(AsyncBase, ConnectionMixin, CapabilityMixin):
         raise NotImplementedError
 
     def async_get_deals(
-        self, symbol, count=100, start_time=None, end_time=None, extra_data=None, **kwargs
-    ):
+        self,
+        symbol: Any,
+        count: int = 100,
+        start_time: Any = None,
+        end_time: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> Any:
         """
         get trade history by symbol using async
         :param symbol: default None, get all the currency, can be string, e.g. "BTC-USDT".
@@ -357,7 +402,9 @@ class Feed(AsyncBase, ConnectionMixin, CapabilityMixin):
         """
         raise NotImplementedError
 
-    def async_get_depth(self, symbol, count=20, extra_data=None, **kwargs):
+    def async_get_depth(
+        self, symbol: Any, count: int = 20, extra_data: Any = None, **kwargs: Any
+    ) -> Any:
         """
         get order_book_data by symbol using async
         :param symbol: default None, get all the currency, can be string, e.g. "BTC-USDT".
@@ -368,7 +415,7 @@ class Feed(AsyncBase, ConnectionMixin, CapabilityMixin):
         """
         raise NotImplementedError
 
-    def get_funding_rate(self, symbol, extra_data=None, **kwargs):
+    def get_funding_rate(self, symbol: Any, extra_data: Any = None, **kwargs: Any) -> Any:
         """
         get funding rate by symbol
         :param symbol: default None, get all the currency, can be string, e.g. "BTC-USDT".
@@ -378,7 +425,9 @@ class Feed(AsyncBase, ConnectionMixin, CapabilityMixin):
         """
         raise NotImplementedError
 
-    def async_get_funding_rate(self, symbol, extra_data=None, **kwargs):
+    def async_get_funding_rate(
+        self, symbol: Any, extra_data: Any = None, **kwargs: Any
+    ) -> Any:
         """
         get funding rate by symbol using async
         :param symbol: default None, get all the currency, can be string, e.g. "BTC-USDT".
@@ -407,7 +456,14 @@ class Feed(AsyncBase, ConnectionMixin, CapabilityMixin):
         """
         raise NotImplementedError
 
-    def async_get_kline(self, symbol, period, count=20, extra_data=None, **kwargs):
+    def async_get_kline(
+        self,
+        symbol: Any,
+        period: Any,
+        count: int = 20,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> Any:
         """
         get kline or bars by symbol using async
         :param symbol: default None, get all the currency, can be string, e.g. "BTC-USDT".
@@ -419,7 +475,7 @@ class Feed(AsyncBase, ConnectionMixin, CapabilityMixin):
         """
         raise NotImplementedError
 
-    def get_open_orders(self, symbol, extra_data=None, **kwargs):
+    def get_open_orders(self, symbol: Any, extra_data: Any = None, **kwargs: Any) -> Any:
         """
         get open orders by symbol
         :param symbol: default None, get all the currency, can be string, e.g. "BTC-USDT".
@@ -429,7 +485,9 @@ class Feed(AsyncBase, ConnectionMixin, CapabilityMixin):
         """
         raise NotImplementedError
 
-    def async_get_open_orders(self, symbol, extra_data=None, **kwargs):
+    def async_get_open_orders(
+        self, symbol: Any, extra_data: Any = None, **kwargs: Any
+    ) -> Any:
         """
         get open orders by symbol using async
         :param symbol: default None, get all the currency, can be string, e.g. "BTC-USDT".
@@ -439,7 +497,7 @@ class Feed(AsyncBase, ConnectionMixin, CapabilityMixin):
         """
         raise NotImplementedError
 
-    def get_tick(self, symbol, extra_data=None, **kwargs):
+    def get_tick(self, symbol: Any, extra_data: Any = None, **kwargs: Any) -> Any:
         """
         get tick price by symbol
         :param symbol: default None, get all the currency, can be string, e.g. "BTC-USDT".
@@ -449,7 +507,7 @@ class Feed(AsyncBase, ConnectionMixin, CapabilityMixin):
         """
         raise NotImplementedError
 
-    def async_get_tick(self, symbol, extra_data=None, **kwargs):
+    def async_get_tick(self, symbol: Any, extra_data: Any = None, **kwargs: Any) -> Any:
         """
         get tick price by symbol using async
         :param symbol: default None, get all the currency, can be string, e.g. "BTC-USDT".
@@ -488,16 +546,16 @@ class Feed(AsyncBase, ConnectionMixin, CapabilityMixin):
 
     def async_make_order(
         self,
-        symbol,
-        volume,
-        price,
-        order_type,
-        offset="open",
-        post_only=False,
-        client_order_id=None,
-        extra_data=None,
-        **kwargs,
-    ):
+        symbol: Any,
+        volume: Any,
+        price: Any,
+        order_type: Any,
+        offset: str = "open",
+        post_only: bool = False,
+        client_order_id: Any = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> Any:
         """
         make order by symbol
         :param symbol: default None, get all the currency, can be string, e.g. "BTC-USDT".
@@ -513,7 +571,9 @@ class Feed(AsyncBase, ConnectionMixin, CapabilityMixin):
         """
         raise NotImplementedError
 
-    def query_order(self, symbol, order_id, extra_data=None, **kwargs):
+    def query_order(
+        self, symbol: Any, order_id: Any, extra_data: Any = None, **kwargs: Any
+    ) -> Any:
         """
         query order by order_id
         :param symbol: default None, get all the currency, can be string, e.g. "BTC-USDT".
@@ -524,7 +584,9 @@ class Feed(AsyncBase, ConnectionMixin, CapabilityMixin):
         """
         raise NotImplementedError
 
-    def async_query_order(self, symbol, order_id, extra_data=None, **kwargs):
+    def async_query_order(
+        self, symbol: Any, order_id: Any, extra_data: Any = None, **kwargs: Any
+    ) -> Any:
         """
         query order by order_id using async
         :param symbol: default None, get all the currency, can be string, e.g. "BTC-USDT".
@@ -535,7 +597,7 @@ class Feed(AsyncBase, ConnectionMixin, CapabilityMixin):
         """
         raise NotImplementedError
 
-    def get_mark_price(self, symbol, extra_data=None, **kwargs):
+    def get_mark_price(self, symbol: Any, extra_data: Any = None, **kwargs: Any) -> Any:
         """
         get mark price from okx
         :param symbol: symbol name, eg: BTC-USDT.
@@ -545,7 +607,9 @@ class Feed(AsyncBase, ConnectionMixin, CapabilityMixin):
         """
         raise NotImplementedError
 
-    def async_get_mark_price(self, symbol, extra_data=None, **kwargs):
+    def async_get_mark_price(
+        self, symbol: Any, extra_data: Any = None, **kwargs: Any
+    ) -> Any:
         """
         get mark price from okx using async, it is not blocked and push data to data_queue
         :param symbol: symbol name, eg: BTC-USDT.

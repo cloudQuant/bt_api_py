@@ -70,6 +70,13 @@ def _resolve_log_file_name(file_name: str) -> str:
     return str(Path(log_dir).expanduser() / file_name)
 
 
+def _build_custom_log_file_name(module: str) -> str:
+    """Build a safe log file name for custom module keys."""
+    sanitized = "".join(ch if ch.isalnum() or ch in {"_", "-", "."} else "_" for ch in module)
+    sanitized = sanitized.strip("._") or "bt_api"
+    return f"{sanitized}.log"
+
+
 def get_logger(module: str, print_info: bool = False) -> _LoggerProxy:
     """获取指定模块的 logger
 
@@ -86,7 +93,7 @@ def get_logger(module: str, print_info: bool = False) -> _LoggerProxy:
         if module in _MODULE_LOG_MAP:
             file_name, logger_name = _MODULE_LOG_MAP[module]
         else:
-            file_name = f"{module}.log"
+            file_name = _build_custom_log_file_name(module)
             logger_name = module
 
         logger = _LoggerProxy(

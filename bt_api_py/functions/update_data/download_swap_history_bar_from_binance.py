@@ -1,26 +1,35 @@
-import os
+"""Download Binance swap history bars without import-time side effects."""
+
+from __future__ import annotations
+
 import random
 import time
+from pathlib import Path
 
 import pandas as pd
 import requests
-from backtrader.stores.cryptostore import CryptoStore
 
 from bt_api_py.functions.utils import read_yaml_file
 
-
-def get_swap_symbol_list():
-    res = requests.get("https://fapi.binance.com/fapi/v1/exchangeInfo", timeout=30)
-    result = res.json()
-    result = result["symbols"]
-    # swap_symbol_list = [i['symbol'] for i in result if i['contractType']=='PERPETUAL']
-    swap_symbol_list = [i["symbol"] for i in result]
-    return swap_symbol_list
+OUTPUT_DIR = Path("binance_swap_history_bar_data")
+BAR_PERIOD = "15m"
+BAR_LIMIT = 1500
+DEFAULT_START_TIME = "2019-12-31 00:00:00"
+DEFAULT_END_TIME = "2025-03-08 00:00:00"
+SKIPPED_SYMBOLS = {"BTCSTUSDT"}
 
 
-def download_swap_history_bar_from_binance():
+def get_swap_symbol_list() -> list[str]:
+    """Fetch the Binance futures symbol universe."""
+    response = requests.get("https://fapi.binance.com/fapi/v1/exchangeInfo", timeout=30)
+    result = response.json()
+    return [item["symbol"] for item in result["symbols"]]
+
+
+def build_swap_exchange_params() -> dict[str, dict[str, str]]:
+    """Build exchange configuration for swap bar downloads."""
     account_config_data = read_yaml_file("account_config.yaml")
-    exchange_params = {
+    return {
         "OKX___SWAP": {
             "public_key": account_config_data["okx"]["public_key"],
             "private_key": account_config_data["okx"]["private_key"],
@@ -31,43 +40,65 @@ def download_swap_history_bar_from_binance():
             "private_key": account_config_data["binance"]["private_key"],
         },
     }
-    crypto_store = CryptoStore(exchange_params, debug=True)
+
+
+def download_swap_history_bar_from_binance(
+    *,
+    output_dir: Path = OUTPUT_DIR,
+    sleep_seconds: float = 0,
+    shuffle_symbols: bool = True,
+    start_time: str = DEFAULT_START_TIME,
+    end_time: str = DEFAULT_END_TIME,
+) -> list[str]:
+    """Download Binance swap bars and return the list of newly written symbols."""
+    from backtrader.stores.cryptostore import CryptoStore
+
+    crypto_store = CryptoStore(build_swap_exchange_params(), debug=True)
     symbol_list = get_swap_symbol_list()
-    random.shuffle(symbol_list)
-    # 如果不存在这个文件夹，创建一个
-    if not os.path.exists("./binance_swap_history_bar_data/"):
-        os.mkdir("binance_swap_history_bar_data/")
-    file_list = os.listdir("./binance_swap_history_bar_data/")
-    # symbol_list = ["GASUSDT", "TOKENUSDT"]
+    if shuffle_symbols:
+        random.shuffle(symbol_list)
+
+    output_dir.mkdir(exist_ok=True)
+    existing_files = {path.name for path in output_dir.iterdir() if path.is_file()}
+    downloaded_symbols: list[str] = []
+
     for symbol in symbol_list:
-        if symbol == "BTCSTUSDT":
+        if symbol in SKIPPED_SYMBOLS:
             continue
+
         file_name = f"swap_history_bar_{symbol}.csv"
-        if file_name in file_list:
-            print(f"{symbol} already downloaded")
+        if file_name in existing_files:
             continue
-        # data = pd.DataFrame(columns=['symbol', 'current_funding_rate', 'funding_rate_time'])
+
         bar_data_list = crypto_store.download_history_bars(
-            "BINANCE___SWAP___" + symbol, "15m", 1500, "2019-12-31 00:00:00", "2025-03-08 00:00:00"
+            f"BINANCE___SWAP___{symbol}",
+            BAR_PERIOD,
+            BAR_LIMIT,
+            start_time,
+            end_time,
         )
-        if len(bar_data_list) == 0:
+        if not bar_data_list:
             continue
-        bar_data_list = [i.get_all_data() for i in bar_data_list]
-        data = pd.DataFrame(bar_data_list)
-        if len(data) == 0:
-            print(f"{symbol} cannot get data")
-            time.sleep(30)
+
+        normalized_rows = [bar_data.get_all_data() for bar_data in bar_data_list]
+        data = pd.DataFrame(normalized_rows)
+        if data.empty:
+            if sleep_seconds > 0:
+                time.sleep(sleep_seconds)
             continue
-        data.to_csv(f"binance_swap_history_bar_data/swap_history_bar_{symbol}.csv", index=False)
-        print(f"{symbol} done")
+
+        data.to_csv(output_dir / file_name, index=False)
+        downloaded_symbols.append(symbol)
+        if sleep_seconds > 0:
+            time.sleep(sleep_seconds)
+
+    return downloaded_symbols
+
+
+def _main() -> None:
+    downloaded = download_swap_history_bar_from_binance()
+    print(f"Downloaded {len(downloaded)} Binance swap history bar files.")
 
 
 if __name__ == "__main__":
-    # get_swap_symbol_list()
-    download_swap_history_bar_from_binance()
-    # while True:
-    #     try:
-    #         download_funding_rate_from_binance()
-    #     except Exception as e:
-    #         print(e)
-    #         time.sleep(6)
+    _main()

@@ -2,10 +2,17 @@
 bitFlyer Spot Feed implementation.
 """
 
+from __future__ import annotations
+
 from typing import Any
 
 from bt_api_py.feeds.capability import Capability
 from bt_api_py.feeds.live_bitflyer.request_base import BitflyerRequestData
+
+RequestParams = dict[str, Any]
+RequestExtraData = dict[str, Any]
+RequestSpec = tuple[str, RequestParams | None, RequestExtraData]
+NormalizeResult = tuple[list[Any], bool]
 
 
 class BitflyerRequestDataSpot(BitflyerRequestData):
@@ -28,14 +35,16 @@ class BitflyerRequestDataSpot(BitflyerRequestData):
         super().__init__(data_queue, **kwargs)
         self.exchange_name = kwargs.get("exchange_name", "BITFLYER___SPOT")
 
-    def _normalize_product_code(self, symbol):
+    def _normalize_product_code(self, symbol: str) -> str:
         """Normalize symbol to bitFlyer product_code format (e.g., BTC_JPY)."""
         symbol = symbol.upper().replace("/", "_").replace("-", "_")
         return symbol
 
     # ==================== Ticker ====================
 
-    def _get_tick(self, symbol, extra_data=None, **kwargs):
+    def _get_tick(
+        self, symbol: str, extra_data: RequestExtraData | None = None, **kwargs: Any
+    ) -> RequestSpec:
         """Prepare ticker request. Returns (path, params, extra_data)."""
         product_code = self._normalize_product_code(symbol)
         path = "GET /v1/ticker"
@@ -54,7 +63,9 @@ class BitflyerRequestDataSpot(BitflyerRequestData):
         return path, params, extra_data
 
     @staticmethod
-    def _get_tick_normalize_function(input_data, extra_data):
+    def _get_tick_normalize_function(
+        input_data: dict[str, Any], extra_data: Any
+    ) -> NormalizeResult:
         """Normalize ticker data."""
         if not input_data:
             return [], False
@@ -62,12 +73,16 @@ class BitflyerRequestDataSpot(BitflyerRequestData):
             return [input_data], True
         return [], False
 
-    def get_tick(self, symbol, extra_data=None, **kwargs):
+    def get_tick(
+        self, symbol: str, extra_data: RequestExtraData | None = None, **kwargs: Any
+    ) -> Any:
         """Get symbol ticker."""
         path, params, extra_data = self._get_tick(symbol, extra_data, **kwargs)
         return self.request(path, params=params, extra_data=extra_data)
 
-    def async_get_tick(self, symbol, extra_data=None, **kwargs):
+    def async_get_tick(
+        self, symbol: str, extra_data: RequestExtraData | None = None, **kwargs: Any
+    ) -> None:
         """Async get ticker."""
         path, params, extra_data = self._get_tick(symbol, extra_data, **kwargs)
         self.submit(
@@ -77,7 +92,13 @@ class BitflyerRequestDataSpot(BitflyerRequestData):
 
     # ==================== Depth ====================
 
-    def _get_depth(self, symbol, count=20, extra_data=None, **kwargs):
+    def _get_depth(
+        self,
+        symbol: str,
+        count: int = 20,
+        extra_data: RequestExtraData | None = None,
+        **kwargs: Any,
+    ) -> RequestSpec:
         """Prepare depth request. Returns (path, params, extra_data)."""
         product_code = self._normalize_product_code(symbol)
         path = "GET /v1/board"
@@ -96,7 +117,9 @@ class BitflyerRequestDataSpot(BitflyerRequestData):
         return path, params, extra_data
 
     @staticmethod
-    def _get_depth_normalize_function(input_data, extra_data):
+    def _get_depth_normalize_function(
+        input_data: dict[str, Any], extra_data: Any
+    ) -> NormalizeResult:
         """Normalize depth data."""
         if not input_data:
             return [], False
@@ -104,12 +127,24 @@ class BitflyerRequestDataSpot(BitflyerRequestData):
             return [input_data], True
         return [], False
 
-    def get_depth(self, symbol, count=20, extra_data=None, **kwargs):
+    def get_depth(
+        self,
+        symbol: str,
+        count: int = 20,
+        extra_data: RequestExtraData | None = None,
+        **kwargs: Any,
+    ) -> Any:
         """Get order book."""
         path, params, extra_data = self._get_depth(symbol, count, extra_data, **kwargs)
         return self.request(path, params=params, extra_data=extra_data)
 
-    def async_get_depth(self, symbol, count=20, extra_data=None, **kwargs):
+    def async_get_depth(
+        self,
+        symbol: str,
+        count: int = 20,
+        extra_data: RequestExtraData | None = None,
+        **kwargs: Any,
+    ) -> None:
         """Async get orderbook."""
         path, params, extra_data = self._get_depth(symbol, count, extra_data, **kwargs)
         self.submit(
@@ -119,7 +154,14 @@ class BitflyerRequestDataSpot(BitflyerRequestData):
 
     # ==================== Kline ====================
 
-    def _get_kline(self, symbol, period, count=20, extra_data=None, **kwargs):
+    def _get_kline(
+        self,
+        symbol: str,
+        period: str,
+        count: int = 20,
+        extra_data: RequestExtraData | None = None,
+        **kwargs: Any,
+    ) -> RequestSpec:
         """Prepare kline request. Returns (path, params, extra_data).
 
         bitFlyer doesn't have a dedicated kline endpoint.
@@ -143,7 +185,7 @@ class BitflyerRequestDataSpot(BitflyerRequestData):
         return path, params, extra_data
 
     @staticmethod
-    def _get_kline_normalize_function(input_data, extra_data):
+    def _get_kline_normalize_function(input_data: Any, extra_data: Any) -> NormalizeResult:
         """Normalize kline data from executions."""
         if not input_data:
             return [], False
@@ -153,12 +195,26 @@ class BitflyerRequestDataSpot(BitflyerRequestData):
             return [input_data["data"]], True
         return [], False
 
-    def get_kline(self, symbol, period, count=20, extra_data=None, **kwargs):
+    def get_kline(
+        self,
+        symbol: str,
+        period: str,
+        count: int = 20,
+        extra_data: RequestExtraData | None = None,
+        **kwargs: Any,
+    ) -> Any:
         """Get kline data."""
         path, params, extra_data = self._get_kline(symbol, period, count, extra_data, **kwargs)
         return self.request(path, params=params, extra_data=extra_data)
 
-    def async_get_kline(self, symbol, period="1m", count=20, extra_data=None, **kwargs):
+    def async_get_kline(
+        self,
+        symbol: str,
+        period: str = "1m",
+        count: int = 20,
+        extra_data: RequestExtraData | None = None,
+        **kwargs: Any,
+    ) -> None:
         """Async get kline."""
         path, params, extra_data = self._get_kline(symbol, period, count, extra_data, **kwargs)
         self.submit(
@@ -168,7 +224,13 @@ class BitflyerRequestDataSpot(BitflyerRequestData):
 
     # ==================== Trades ====================
 
-    def _get_trades(self, symbol, limit=100, extra_data=None, **kwargs):
+    def _get_trades(
+        self,
+        symbol: str,
+        limit: int = 100,
+        extra_data: RequestExtraData | None = None,
+        **kwargs: Any,
+    ) -> RequestSpec:
         """Prepare trades request. Returns (path, params, extra_data)."""
         product_code = self._normalize_product_code(symbol)
         path = "GET /v1/executions"
@@ -187,7 +249,7 @@ class BitflyerRequestDataSpot(BitflyerRequestData):
         return path, params, extra_data
 
     @staticmethod
-    def _get_trades_normalize_function(input_data, extra_data):
+    def _get_trades_normalize_function(input_data: Any, extra_data: Any) -> NormalizeResult:
         """Normalize trades data."""
         if not input_data:
             return [], False
@@ -197,14 +259,22 @@ class BitflyerRequestDataSpot(BitflyerRequestData):
             return [input_data["data"]], True
         return [], False
 
-    def get_trades(self, symbol, limit=100, extra_data=None, **kwargs):
+    def get_trades(
+        self,
+        symbol: str,
+        limit: int = 100,
+        extra_data: RequestExtraData | None = None,
+        **kwargs: Any,
+    ) -> Any:
         """Get recent trades."""
         path, params, extra_data = self._get_trades(symbol, limit, extra_data, **kwargs)
         return self.request(path, params=params, extra_data=extra_data)
 
     # ==================== Exchange Info ====================
 
-    def _get_exchange_info(self, extra_data=None, **kwargs):
+    def _get_exchange_info(
+        self, extra_data: RequestExtraData | None = None, **kwargs: Any
+    ) -> RequestSpec:
         """Prepare exchange info (markets) request. Returns (path, params, extra_data)."""
         path = "GET /v1/getmarkets"
         if extra_data is None:
@@ -221,7 +291,7 @@ class BitflyerRequestDataSpot(BitflyerRequestData):
         return path, None, extra_data
 
     @staticmethod
-    def _get_exchange_info_normalize_function(input_data, extra_data):
+    def _get_exchange_info_normalize_function(input_data: Any, extra_data: Any) -> NormalizeResult:
         """Normalize exchange info data."""
         if not input_data:
             return [], False
@@ -229,14 +299,18 @@ class BitflyerRequestDataSpot(BitflyerRequestData):
             return [input_data], True
         return [], False
 
-    def get_exchange_info(self, extra_data=None, **kwargs):
+    def get_exchange_info(
+        self, extra_data: RequestExtraData | None = None, **kwargs: Any
+    ) -> Any:
         """Get exchange info (markets)."""
         path, params, extra_data = self._get_exchange_info(extra_data, **kwargs)
         return self.request(path, params=params, extra_data=extra_data)
 
     # ==================== Health ====================
 
-    def _get_health(self, symbol=None, extra_data=None, **kwargs):
+    def _get_health(
+        self, symbol: str | None = None, extra_data: RequestExtraData | None = None, **kwargs: Any
+    ) -> RequestSpec:
         """Prepare health request. Returns (path, params, extra_data)."""
         path = "GET /v1/gethealth"
         if extra_data is None:
@@ -254,7 +328,9 @@ class BitflyerRequestDataSpot(BitflyerRequestData):
         return path, params, extra_data
 
     @staticmethod
-    def _get_health_normalize_function(input_data, extra_data):
+    def _get_health_normalize_function(
+        input_data: dict[str, Any], extra_data: Any
+    ) -> NormalizeResult:
         """Normalize health data."""
         if not input_data:
             return [], False
@@ -262,7 +338,9 @@ class BitflyerRequestDataSpot(BitflyerRequestData):
             return [input_data], True
         return [], False
 
-    def get_health(self, symbol=None, extra_data=None, **kwargs):
+    def get_health(
+        self, symbol: str | None = None, extra_data: RequestExtraData | None = None, **kwargs: Any
+    ) -> Any:
         """Get health status."""
         path, params, extra_data = self._get_health(symbol, extra_data, **kwargs)
         return self.request(path, params=params, extra_data=extra_data)
@@ -271,16 +349,16 @@ class BitflyerRequestDataSpot(BitflyerRequestData):
 
     def _make_order(
         self,
-        symbol,
-        volume,
-        price,
-        order_type,
-        offset="open",
-        post_only=False,
-        client_order_id=None,
-        extra_data=None,
-        **kwargs,
-    ):
+        symbol: str,
+        volume: Any,
+        price: Any,
+        order_type: str,
+        offset: str = "open",
+        post_only: bool = False,
+        client_order_id: str | None = None,
+        extra_data: RequestExtraData | None = None,
+        **kwargs: Any,
+    ) -> RequestSpec:
         """Prepare order. Returns (path, params, extra_data)."""
         product_code = self._normalize_product_code(symbol)
         path = "POST /v1/me/sendchildorder"
@@ -305,16 +383,16 @@ class BitflyerRequestDataSpot(BitflyerRequestData):
 
     def make_order(
         self,
-        symbol,
-        volume,
-        price,
-        order_type,
-        offset="open",
-        post_only=False,
-        client_order_id=None,
-        extra_data=None,
-        **kwargs,
-    ):
+        symbol: str,
+        volume: Any,
+        price: Any,
+        order_type: str,
+        offset: str = "open",
+        post_only: bool = False,
+        client_order_id: str | None = None,
+        extra_data: RequestExtraData | None = None,
+        **kwargs: Any,
+    ) -> Any:
         """Place an order."""
         path, params, extra_data = self._make_order(
             symbol,
@@ -329,7 +407,13 @@ class BitflyerRequestDataSpot(BitflyerRequestData):
         )
         return self.request(path, body=params, extra_data=extra_data)
 
-    def _cancel_order(self, symbol, order_id, extra_data=None, **kwargs):
+    def _cancel_order(
+        self,
+        symbol: str,
+        order_id: str | int,
+        extra_data: RequestExtraData | None = None,
+        **kwargs: Any,
+    ) -> RequestSpec:
         """Cancel order. Returns (path, params, extra_data)."""
         product_code = self._normalize_product_code(symbol)
         path = "POST /v1/me/cancelchildorder"
@@ -347,12 +431,24 @@ class BitflyerRequestDataSpot(BitflyerRequestData):
         params = {"product_code": product_code, "child_order_acceptance_id": order_id}
         return path, params, extra_data
 
-    def cancel_order(self, symbol, order_id, extra_data=None, **kwargs):
+    def cancel_order(
+        self,
+        symbol: str,
+        order_id: str | int,
+        extra_data: RequestExtraData | None = None,
+        **kwargs: Any,
+    ) -> Any:
         """Cancel order."""
         path, params, extra_data = self._cancel_order(symbol, order_id, extra_data, **kwargs)
         return self.request(path, body=params, extra_data=extra_data)
 
-    def _query_order(self, symbol, order_id, extra_data=None, **kwargs):
+    def _query_order(
+        self,
+        symbol: str,
+        order_id: str | int,
+        extra_data: RequestExtraData | None = None,
+        **kwargs: Any,
+    ) -> RequestSpec:
         """Query order. Returns (path, params, extra_data)."""
         product_code = self._normalize_product_code(symbol)
         path = "GET /v1/me/getchildorders"
@@ -370,12 +466,20 @@ class BitflyerRequestDataSpot(BitflyerRequestData):
         params = {"product_code": product_code, "child_order_acceptance_id": order_id}
         return path, params, extra_data
 
-    def query_order(self, symbol, order_id, extra_data=None, **kwargs):
+    def query_order(
+        self,
+        symbol: str,
+        order_id: str | int,
+        extra_data: RequestExtraData | None = None,
+        **kwargs: Any,
+    ) -> Any:
         """Query order status."""
         path, params, extra_data = self._query_order(symbol, order_id, extra_data, **kwargs)
         return self.request(path, params=params, extra_data=extra_data)
 
-    def _get_open_orders(self, symbol=None, extra_data=None, **kwargs):
+    def _get_open_orders(
+        self, symbol: str | None = None, extra_data: RequestExtraData | None = None, **kwargs: Any
+    ) -> RequestSpec:
         """Get open orders. Returns (path, params, extra_data)."""
         path = "GET /v1/me/getchildorders"
         if extra_data is None:
@@ -394,14 +498,18 @@ class BitflyerRequestDataSpot(BitflyerRequestData):
             params["product_code"] = product_code
         return path, params, extra_data
 
-    def get_open_orders(self, symbol=None, extra_data=None, **kwargs):
+    def get_open_orders(
+        self, symbol: str | None = None, extra_data: RequestExtraData | None = None, **kwargs: Any
+    ) -> Any:
         """Get open orders."""
         path, params, extra_data = self._get_open_orders(symbol, extra_data, **kwargs)
         return self.request(path, params=params, extra_data=extra_data)
 
     # ==================== Account Interfaces ====================
 
-    def _get_account(self, symbol=None, extra_data=None, **kwargs):
+    def _get_account(
+        self, symbol: str | None = None, extra_data: RequestExtraData | None = None, **kwargs: Any
+    ) -> RequestSpec:
         """Get account info. Returns (path, params, extra_data)."""
         path = "GET /v1/me/getpermissions"
         if extra_data is None:
@@ -416,12 +524,16 @@ class BitflyerRequestDataSpot(BitflyerRequestData):
         )
         return path, None, extra_data
 
-    def get_account(self, symbol=None, extra_data=None, **kwargs):
+    def get_account(
+        self, symbol: str | None = None, extra_data: RequestExtraData | None = None, **kwargs: Any
+    ) -> Any:
         """Get account info."""
         path, params, extra_data = self._get_account(symbol, extra_data, **kwargs)
         return self.request(path, params=params, extra_data=extra_data)
 
-    def _get_balance(self, symbol=None, extra_data=None, **kwargs):
+    def _get_balance(
+        self, symbol: str | None = None, extra_data: RequestExtraData | None = None, **kwargs: Any
+    ) -> RequestSpec:
         """Get balance. Returns (path, params, extra_data)."""
         path = "GET /v1/me/getbalance"
         if extra_data is None:
@@ -436,7 +548,9 @@ class BitflyerRequestDataSpot(BitflyerRequestData):
         )
         return path, None, extra_data
 
-    def get_balance(self, symbol=None, extra_data=None, **kwargs):
+    def get_balance(
+        self, symbol: str | None = None, extra_data: RequestExtraData | None = None, **kwargs: Any
+    ) -> Any:
         """Get token balance."""
         path, params, extra_data = self._get_balance(symbol, extra_data, **kwargs)
         return self.request(path, params=params, extra_data=extra_data)

@@ -6,13 +6,18 @@
 
 ### 快速开始
 
-1. **[NEXT_STEPS.md](NEXT_STEPS.md)** - 快速开始指南
+1. **[plans/2026-03-16-stability-roadmap.md](plans/2026-03-16-stability-roadmap.md)** - 长期稳定化路线图
+   - 面向中长期稳定的阶段性规划
+   - 基础设施、质量门禁、架构与文档收敛顺序
+   - **如果目标是长期稳定，先读这个**
+
+2. **[NEXT_STEPS.md](NEXT_STEPS.md)** - 快速开始指南
    - 推荐的下一步工作
    - 3个月实施路径
    - BMAD 工具使用建议
    - **从这里开始！**
 
-2. **[project-improvement-recommendations.md](project-improvement-recommendations.md)** - 完整改进建议
+3. **[project-improvement-recommendations.md](project-improvement-recommendations.md)** - 完整改进建议
    - 8大类改进方向
    - 详细的实施步骤
    - 度量指标和成功标准
@@ -20,29 +25,29 @@
 
 ### 测试相关文档
 
-3. **[test-optimization-complete.md](test-optimization-complete.md)** - 测试优化完整报告
+4. **[test-optimization-complete.md](test-optimization-complete.md)** - 测试优化完整报告
    - 细粒度测试标记系统
    - 测试分类和统计
    - 使用示例和最佳实践
 
-4. **[test-verification-complete.md](test-verification-complete.md)** - 测试验证报告
+5. **[test-verification-complete.md](test-verification-complete.md)** - 测试验证报告
    - 问题发现和修复
    - 验证结果
    - 修复清单
 
-5. **[test-markers-guide.md](test-markers-guide.md)** - 测试标记使用指南
+6. **[test-markers-guide.md](test-markers-guide.md)** - 测试标记使用指南
    - 标记分类
    - 使用方法
    - CI/CD 集成
 
-6. **[QUICK_START_TESTING.md](QUICK_START_TESTING.md)** - 测试快速上手
+7. **[QUICK_START_TESTING.md](QUICK_START_TESTING.md)** - 测试快速上手
    - 一分钟快速开始
    - 常用命令
    - 标记速查表
 
 ### Phase 3 相关文档
 
-7. **[../docs/phase3-completion-report.md](phase3-completion-report.md)** - Phase 3 完成报告
+8. **[../docs/phase3-completion-report.md](phase3-completion-report.md)** - Phase 3 完成报告
    - 6个任务完成情况
    - 质量改进成果
    - 遗留问题和建议

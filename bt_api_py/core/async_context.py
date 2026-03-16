@@ -9,9 +9,11 @@ from collections.abc import AsyncGenerator, Awaitable, Callable
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from functools import wraps
-from typing import Any, TypeVar
+from types import TracebackType
+from typing import Any, ParamSpec, TypeVar
 
 T = TypeVar("T")
+P = ParamSpec("P")
 
 HAS_ASYNCIO_TIMEOUT = sys.version_info >= (3, 11)
 
@@ -47,7 +49,12 @@ class _TimeoutContext:
         self._cancel_handler = loop.call_later(self._timeout_seconds, self._cancel_task)
         return self
 
-    async def __aexit__(self, exc_type, exc_val, exc_tb) -> bool:
+    async def __aexit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_val: BaseException | None,
+        exc_tb: TracebackType | None,
+    ) -> bool:
         if self._cancel_handler is not None:
             self._cancel_handler.cancel()
 
@@ -148,13 +155,13 @@ def async_retry(
     max_attempts: int = 3,
     delay: float = 1.0,
     backoff: float = 2.0,
-    exceptions: tuple = (Exception,),
-):
+    exceptions: tuple[type[BaseException], ...] = (Exception,),
+) -> Callable[[Callable[P, Awaitable[T]]], Callable[P, Awaitable[T]]]:
     """Decorator for async functions with retry logic."""
 
-    def decorator(func: Callable[..., Awaitable[T]]) -> Callable[..., Awaitable[T]]:
+    def decorator(func: Callable[P, Awaitable[T]]) -> Callable[P, Awaitable[T]]:
         @wraps(func)
-        async def wrapper(*args: Any, **kwargs: Any) -> T:
+        async def wrapper(*args: P.args, **kwargs: P.kwargs) -> T:
             attempt = 0
             current_delay = delay
 
@@ -177,12 +184,12 @@ def async_retry(
     return decorator
 
 
-def async_timeout(timeout_seconds: float):
+def async_timeout(timeout_seconds: float) -> Callable[[Callable[P, Awaitable[T]]], Callable[P, Awaitable[T]]]:
     """Decorator for async functions with timeout."""
 
-    def decorator(func: Callable[..., Awaitable[T]]) -> Callable[..., Awaitable[T]]:
+    def decorator(func: Callable[P, Awaitable[T]]) -> Callable[P, Awaitable[T]]:
         @wraps(func)
-        async def wrapper(*args: Any, **kwargs: Any) -> T:
+        async def wrapper(*args: P.args, **kwargs: P.kwargs) -> T:
             return await asyncio.wait_for(func(*args, **kwargs), timeout=timeout_seconds)
 
         return wrapper
@@ -197,11 +204,11 @@ def async_circuit_breaker(
 ) -> Callable[[Callable[..., Awaitable[T]]], Callable[..., Awaitable[T]]]:
     """Decorator for async functions with circuit breaker."""
 
-    def decorator(func: Callable[..., Awaitable[T]]) -> Callable[..., Awaitable[T]]:
+    def decorator(func: Callable[P, Awaitable[T]]) -> Callable[P, Awaitable[T]]:
         state = _CircuitState()
 
         @wraps(func)
-        async def wrapper(*args: Any, **kwargs: Any) -> T:
+        async def wrapper(*args: P.args, **kwargs: P.kwargs) -> T:
             def should_attempt() -> bool:
                 if state.state == "CLOSED":
                     return True
@@ -299,7 +306,12 @@ class AsyncSemaphore:
         await self.acquire()
         return self
 
-    async def __aexit__(self, exc_type, exc_val, exc_tb) -> None:
+    async def __aexit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_val: BaseException | None,
+        exc_tb: TracebackType | None,
+    ) -> None:
         self.release()
 
 
@@ -349,7 +361,7 @@ class AsyncTaskGroup:
         self._tasks: set[asyncio.Task[Any]] = set()
         self._shutdown = False
 
-    async def create_task(self, coro) -> asyncio.Task:
+    async def create_task(self, coro: Awaitable[T]) -> asyncio.Task[T]:
         """Create and track a task."""
         if self._shutdown:
             raise RuntimeError("TaskGroup is shutting down")

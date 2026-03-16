@@ -123,6 +123,7 @@ class MetricsCollector(IMetricsCollector):
             self._cleanup_task.cancel()
             with contextlib.suppress(asyncio.CancelledError):
                 await self._cleanup_task
+            self._cleanup_task = None
 
         self.logger.info("Metrics collector stopped")
 
@@ -326,13 +327,14 @@ class AlertManager:
             self._monitoring_task.cancel()
             with contextlib.suppress(asyncio.CancelledError):
                 await self._monitoring_task
+            self._monitoring_task = None
 
         self.logger.info("Alert manager stopped")
 
     def add_alert(self, alert: PerformanceAlert) -> None:
         """Add a new alert definition."""
         self._alerts[alert.alert_id] = alert
-        self._alert_states[alert.alert_id] = alert.resolved
+        self._alert_states[alert.alert_id] = not alert.resolved
         self.logger.info(f"Added alert: {alert.name}")
 
     def remove_alert(self, alert_id: str) -> None:
@@ -368,7 +370,7 @@ class AlertManager:
                 return
 
             triggered = current_value > alert.threshold
-            was_triggered = not self._alert_states[alert.alert_id]
+            was_triggered = self._alert_states[alert.alert_id]
 
             if triggered and not was_triggered:
                 # Alert just triggered
@@ -726,6 +728,7 @@ class WebSocketMonitor:
             return
 
         self._running = True
+        self._monitoring_tasks = []
 
         # Start components
         await self.metrics_collector.start()
@@ -756,6 +759,7 @@ class WebSocketMonitor:
 
         if self._monitoring_tasks:
             await asyncio.gather(*self._monitoring_tasks, return_exceptions=True)
+            self._monitoring_tasks = []
 
         self.logger.info("WebSocket monitoring stopped")
 

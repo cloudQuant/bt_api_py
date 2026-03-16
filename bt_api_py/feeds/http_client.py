@@ -32,9 +32,9 @@ class HttpClient:
         max_connections: int = 100,
         max_keepalive_connections: int = 20,
         verify: bool = True,
-        proxies: str | None = None,
-        **kwargs,
-    ):
+        proxies: str | dict[str, str] | None = None,
+        **kwargs: Any,
+    ) -> None:
         if httpx is None:
             raise ImportError(
                 "httpx is required for HttpClient. Install it with: pip install httpx"
@@ -97,7 +97,7 @@ class HttpClient:
         data: Any | None = None,
         timeout: float | None = None,
         cookies: dict[str, str] | None = None,
-        **kwargs,
+        **kwargs: Any,
     ) -> dict[str, Any]:
         """同步请求"""
         req_kwargs: dict[str, Any] = {}
@@ -138,7 +138,7 @@ class HttpClient:
         data: Any | None = None,
         timeout: float | None = None,
         cookies: dict[str, str] | None = None,
-        **kwargs,
+        **kwargs: Any,
     ) -> dict[str, Any]:
         """异步请求"""
         client = self._get_async_client()
@@ -240,11 +240,21 @@ class HttpClient:
     def __enter__(self) -> "HttpClient":
         return self
 
-    def __exit__(self, *args: Any) -> None:
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_val: BaseException | None,
+        exc_tb: Any,
+    ) -> None:
         self.close()
 
     async def __aenter__(self) -> "HttpClient":
         return self
 
-    async def __aexit__(self, *args: Any) -> None:
+    async def __aexit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_val: BaseException | None,
+        exc_tb: Any,
+    ) -> None:
         await self.aclose()

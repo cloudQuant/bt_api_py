@@ -324,7 +324,12 @@ class PooledConnection(Generic[T]):
         self._conn = conn
         return conn
 
-    def __exit__(self, exc_type, exc_val, exc_tb) -> None:
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_val: BaseException | None,
+        exc_tb: Any,
+    ) -> None:
         """Release connection."""
         if self._conn:
             self._pool.release(self._conn)

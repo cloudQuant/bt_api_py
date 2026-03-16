@@ -13,7 +13,7 @@ import time
 from collections import deque
 from dataclasses import dataclass
 from enum import unique
-from typing import Any
+from typing import Any, Literal
 
 __all__ = [
     "RateLimitType",
@@ -210,11 +210,16 @@ class RateLimiter:
                 max_wait = max(max_wait, limiter.wait_time())
         return max_wait
 
-    def __enter__(self):
+    def __enter__(self) -> "RateLimiter":
         """进入上下文管理器（阻塞等待获取许可）."""
         return self
 
-    def __exit__(self, exc_type, exc_val, exc_tb):
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_val: BaseException | None,
+        exc_tb: Any,
+    ) -> Literal[False]:
         """退出上下文管理器."""
         return False
 

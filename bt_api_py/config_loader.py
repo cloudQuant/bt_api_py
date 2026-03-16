@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Any
 
 try:
-    from pydantic import BaseModel, Field, ValidationError, field_validator
+    from pydantic import BaseModel, Field, ValidationError, ValidationInfo, field_validator
 except ImportError:
     raise ImportError(
         "pydantic is required for config_loader. Install with: pip install pydantic"
@@ -171,7 +171,9 @@ class ExchangeConfig(BaseModel):
 
     @field_validator("base_urls")
     @classmethod
-    def validate_base_urls(cls, v, info):
+    def validate_base_urls(
+        cls, v: BaseUrlsConfig | None, info: ValidationInfo
+    ) -> BaseUrlsConfig | None:
         venue_type = info.data.get("venue_type")
         # CEX 必须有 base_urls
         if venue_type == VenueType.CEX and not v:
@@ -181,7 +183,9 @@ class ExchangeConfig(BaseModel):
 
     @field_validator("connection")
     @classmethod
-    def validate_connection(cls, v, info):
+    def validate_connection(
+        cls, v: ConnectionConfig, info: ValidationInfo
+    ) -> ConnectionConfig:
         venue_type = info.data.get("venue_type")
         conn_type = v.type
         # CEX 必须使用 HTTP、WEBSOCKET 或 SPI（如 CTP）

@@ -14,7 +14,7 @@ __all__ = ["InstrumentManager", "get_instrument_manager"]
 class InstrumentManager:
     """Instrument 管理器"""
 
-    def __init__(self):
+    def __init__(self) -> None:
         self._instruments: dict[str, Instrument] = {}  # internal -> Instrument
         self._by_venue: dict[
             str, dict[str, Instrument]

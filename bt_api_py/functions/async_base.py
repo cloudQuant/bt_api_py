@@ -1,6 +1,7 @@
 import asyncio
 import json
 import traceback
+from collections.abc import Callable, Coroutine
 from threading import Thread
 from typing import Any, cast
 
@@ -15,13 +16,13 @@ __all__ = ["AsyncBase"]
 
 
 class AsyncBase:
-    def __init__(self, **kwargs):
-        self.loop = None
+    def __init__(self, **kwargs: Any) -> None:
+        self.loop: asyncio.AbstractEventLoop | None = None
         self.keepalive_timeout = 30
         self.client_timeout = 5
         self.limit = 100
-        self.session = None
-        self.async_proxy = kwargs.get("async_proxy")
+        self.session: ClientSession | None = None
+        self.async_proxy: str | None = kwargs.get("async_proxy")
         if self.async_proxy is None:
             import urllib.request
 
@@ -30,15 +31,14 @@ class AsyncBase:
         self.async_base_logger = get_logger("async_data")
         self.start_loop()
 
-    def start_loop(self):
+    def start_loop(self) -> tuple[asyncio.AbstractEventLoop, Thread]:
         if self.loop is None:
             self.loop = asyncio.new_event_loop()
         loop_thread = Thread(target=self._start_thread_loop, daemon=True)
         loop_thread.start()
         return self.loop, loop_thread
 
-    # noinspection PyBroadException
-    def _start_thread_loop(self):
+    def _start_thread_loop(self) -> None:
         loop = self.loop
         if loop is None:
             return
@@ -51,14 +51,19 @@ class AsyncBase:
                     self.loop = loop
                 loop.run_forever()
             except Exception:
-                print(traceback.format_exc())
-                loop.close()
+                self.async_base_logger.error(traceback.format_exc(), exc_info=True)
+                if not loop.is_closed():
+                    loop.close()
 
-    def release(self):
+    def release(self) -> None:
         if self.loop is not None:
             self.loop.stop()
 
-    def submit(self, func, callback=None):
+    def submit(
+        self,
+        func: Coroutine[Any, Any, Any],
+        callback: Callable[[Any], Any] | None = None,
+    ) -> None:
         loop = self.loop
         if loop is None:
             return
@@ -66,21 +71,25 @@ class AsyncBase:
         if callback is not None:
             future.add_done_callback(callback)
 
-    def get_session(self):
+    def get_session(self) -> ClientSession:
         conn = TCPConnector(ssl=False, keepalive_timeout=self.keepalive_timeout, limit=100)
         session = ClientSession(connector=conn)
         return session
 
-    def close(self):
+    def close(self) -> None:
         if self.loop is not None and self.session is not None:
             self.submit(self.session.close())
             self.release()
 
     async def async_http_request(
-        self, method: str, url, headers=None, body=None, timeout=None
-    ) -> dict:
+        self,
+        method: str,
+        url: str,
+        headers: dict[str, str] | None = None,
+        body: dict[str, Any] | str | None = None,
+        timeout: float | None = None,
+    ) -> dict[Any, Any]:
         try:
-            # if not hasattr(self, 'session'):
             session = self.session
             if session is None or session.closed:
                 session = self.get_session()
@@ -94,23 +103,20 @@ class AsyncBase:
                 params["data"] = (
                     body if isinstance(body, str) else json.dumps(body, ensure_ascii=False)
                 )
-            # print(f' rest _ async httpRequest params: {params}')
             if self.async_proxy:
                 params["proxy"] = self.async_proxy
             func = getattr(session, method.lower())
-            # print(f' func: {func.__name__}')
             async with func(url, **params) as resp:
                 ret = await resp.json(content_type=None)
             return cast("dict[Any, Any]", ret)
-        except Exception as e:
-            # print(traceback.format_exc())
+        except Exception:
             self.async_base_logger.info(
                 f"""rest_async错误:{get_string_tz_time()} {traceback.format_exc()}"""
             )
-            raise e
+            raise
 
 
-if __name__ == "__main__":
+def _main() -> None:
     r = AsyncBase()
     _loop = asyncio.get_event_loop()
     _loop.run_until_complete(
@@ -118,3 +124,7 @@ if __name__ == "__main__":
             "get", "https://fapi.binance.com/fapi/v1/depth?symbol=BTCUSDT&limit=10"
         )
     )
+
+
+if __name__ == "__main__":
+    _main()

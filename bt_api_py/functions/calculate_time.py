@@ -1,5 +1,4 @@
-from datetime import UTC, datetime
-from typing import Any
+from datetime import UTC, datetime, tzinfo
 
 import pytz
 
@@ -14,7 +13,7 @@ def get_utc_time() -> str:
 
 
 def convert_utc_local_datetime(
-    datetime_utc: datetime, timezone: Any = pytz.timezone("Asia/Shanghai")
+    datetime_utc: datetime, timezone: tzinfo = pytz.timezone("Asia/Shanghai")
 ) -> datetime:
     """Convert UTC datetime to local datetime in given timezone.
 
@@ -108,7 +107,7 @@ def datetime2str(datetime_obj: datetime, string_format: str = "%Y-%m-%d %H:%M:%S
     return datetime_obj.strftime(string_format)
 
 
-if __name__ == "__main__":
+def _main() -> None:
     print("获取当前的UTC时间:", get_utc_time())
     _timestamp = 1692611135.737
     print(timestamp2datetime(_timestamp))
@@ -122,3 +121,7 @@ if __name__ == "__main__":
     print(datetime_obj_)
     datetime_str = datetime2str(datetime_obj_)
     print(datetime_str)
+
+
+if __name__ == "__main__":
+    _main()
