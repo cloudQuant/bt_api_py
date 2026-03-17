@@ -20,6 +20,7 @@ from bt_api_py.containers.exchanges.ib_web_exchange_data import (
 from bt_api_py.feeds.capability import Capability
 from bt_api_py.feeds.feed import Feed
 from bt_api_py.feeds.http_client import HttpClient
+from bt_api_py.functions.ib_web_session import ensure_authenticated_session, load_ib_web_settings
 from bt_api_py.logging_factory import get_logger
 
 
@@ -29,13 +30,32 @@ class IbWebRequestData(Feed):
     def __init__(self, data_queue: Any = None, **kwargs: Any) -> None:
         super().__init__(data_queue)
         self.data_queue = data_queue
+        auth_settings = load_ib_web_settings(
+            overrides={
+                "base_url": kwargs.get("base_url", "https://localhost:5000"),
+                "account_id": kwargs.get("account_id"),
+                "verify_ssl": kwargs.get("verify_ssl", False),
+                "timeout": kwargs.get("timeout", 10),
+                "cookie_source": kwargs.get("cookie_source"),
+                "cookie_browser": kwargs.get("cookie_browser", "chrome"),
+                "cookie_path": kwargs.get("cookie_path", "/sso"),
+                "username": kwargs.get("username"),
+                "password": kwargs.get("password"),
+                "login_mode": kwargs.get("login_mode"),
+                "login_browser": kwargs.get("login_browser"),
+                "login_headless": kwargs.get("login_headless"),
+                "login_timeout": kwargs.get("login_timeout"),
+                "cookie_output": kwargs.get("cookie_output"),
+            },
+            base_dir=kwargs.get("cookie_base_dir") or None,
+        )
         self.exchange_name = "IB_WEB"
-        self.base_url = kwargs.get("base_url", "https://localhost:5000")
-        self.account_id = kwargs.get("account_id")
+        self.base_url = str(auth_settings.get("base_url") or "https://localhost:5000")
+        self.account_id = kwargs.get("account_id") or auth_settings.get("account_id")
         self.access_token = kwargs.get("access_token")
-        self.verify_ssl = kwargs.get("verify_ssl", False)
+        self.verify_ssl = auth_settings.get("verify_ssl", False)
         self.proxies = kwargs.get("proxies")
-        self.timeout = kwargs.get("timeout", 10)
+        self.timeout = auth_settings.get("timeout", 10)
         self.asset_type = kwargs.get("asset_type", "STK")
         self._params = IbWebExchangeDataStock()
         self._params.rest_url = self.base_url
@@ -52,12 +72,22 @@ class IbWebRequestData(Feed):
         self._last_session_check = 0
         self._session_check_interval = 60
         self._subscribed_conids = set()
+        self._cookie_load_error: Exception | None = None
+        self._last_connect_error: Exception | None = None
 
         # Cookie 支持
         self._cookies = kwargs.get("cookies")
-        self._cookie_source = kwargs.get("cookie_source")
-        self._cookie_browser = kwargs.get("cookie_browser", "chrome")
-        self._cookie_path = kwargs.get("cookie_path", "/sso")  # IBKR Gateway 认证路径
+        self._cookie_source = auth_settings.get("cookie_source")
+        self._cookie_browser = auth_settings.get("cookie_browser", "chrome")
+        self._cookie_path = auth_settings.get("cookie_path", "/sso")  # IBKR Gateway 认证路径
+        self._cookie_output = auth_settings.get("cookie_output")
+        self._cookie_base_dir = auth_settings.get("cookie_base_dir")
+        self._username = auth_settings.get("username", "")
+        self._password = auth_settings.get("password", "")
+        self._login_mode = auth_settings.get("login_mode", "paper")
+        self._login_browser = auth_settings.get("login_browser", "chrome")
+        self._login_headless = auth_settings.get("login_headless", False)
+        self._login_timeout = auth_settings.get("login_timeout", 180)
         self._loaded_cookies = {}
         self._load_cookies()
 
@@ -124,18 +154,23 @@ class IbWebRequestData(Feed):
 
     def _load_cookies(self):
         """加载浏览器 cookies"""
+        self._cookie_load_error = None
         if self._cookies:
-            # 直接传入的 cookie 字典
             self._loaded_cookies = self._cookies
         elif self._cookie_source:
-            from bt_api_py.functions.browser_cookies import get_ibkr_cookies
+            try:
+                from bt_api_py.functions.browser_cookies import get_ibkr_cookies
 
-            self._loaded_cookies = get_ibkr_cookies(
-                base_url=self.base_url,
-                cookie_source=self._cookie_source,
-                browser=self._cookie_browser,
-                cookie_path=self._cookie_path,
-            )
+                self._loaded_cookies = get_ibkr_cookies(
+                    base_url=self.base_url,
+                    cookie_source=self._cookie_source,
+                    browser=self._cookie_browser,
+                    cookie_path=self._cookie_path,
+                )
+            except Exception as e:
+                self._cookie_load_error = e
+                self._loaded_cookies = {}
+                self.request_logger.warning(f"IB Web cookie load failed: {e}")
         else:
             self._loaded_cookies = {}
 
@@ -151,17 +186,77 @@ class IbWebRequestData(Feed):
         """检查是否有可用的 cookies"""
         return bool(self._loaded_cookies)
 
+    def get_last_connect_error(self):
+        return self._last_connect_error or self._cookie_load_error
+
+    def _can_initialize_session(self):
+        return bool(self._username and self._password)
+
+    def _update_auth_state(self):
+        result = self.check_auth_status()
+        self._authenticated = bool(result.get("authenticated", False) or result.get("connected", False))
+        return self._authenticated
+
+    def _initialize_authenticated_session(self):
+        session = ensure_authenticated_session(
+            overrides={
+                "base_url": self.base_url,
+                "account_id": self.account_id or "",
+                "verify_ssl": self.verify_ssl,
+                "timeout": int(float(self.timeout)),
+                "cookie_source": self._cookie_source or "",
+                "cookie_browser": self._cookie_browser,
+                "cookie_path": self._cookie_path,
+                "username": self._username,
+                "password": self._password,
+                "login_mode": self._login_mode,
+                "login_browser": self._login_browser,
+                "login_headless": self._login_headless,
+                "login_timeout": self._login_timeout,
+                "cookie_output": self._cookie_output or "",
+            },
+            base_dir=self._cookie_base_dir or None,
+        )
+        self._loaded_cookies = dict(session.get("cookies") or {})
+        cookie_output = session.get("cookie_output")
+        if cookie_output:
+            self._cookie_source = f"file:{cookie_output}"
+            self._cookie_output = cookie_output
+        account_id = str(session.get("account_id") or "").strip()
+        if account_id:
+            self.account_id = account_id
+        return session
+
     # ── 连接管理 ──────────────────────────────────────────────
 
     def connect(self):
-        try:
-            result = self.check_auth_status()
-            self._authenticated = result.get("authenticated", False)
-            if not self._authenticated:
+        self._last_connect_error = None
+        self._load_cookies()
+        last_error: Exception | None = None
+        for attempt in ("existing", "initialize"):
+            if attempt == "initialize":
+                if not self._can_initialize_session():
+                    break
+                try:
+                    self._initialize_authenticated_session()
+                except Exception as e:
+                    last_error = e
+                    break
+            try:
+                if self._update_auth_state():
+                    return
                 self.reauthenticate()
-        except Exception as e:
-            self.request_logger.warning(f"IB Web connect failed: {e}")
-            self._authenticated = False
+                if self._update_auth_state():
+                    return
+                last_error = RuntimeError("IB Web authentication failed")
+            except Exception as e:
+                last_error = e
+            if attempt == "existing" and not self._can_initialize_session():
+                break
+        if last_error is not None:
+            self.request_logger.warning(f"IB Web connect failed: {last_error}")
+        self._authenticated = False
+        self._last_connect_error = last_error or RuntimeError("IB Web authentication failed")
 
     def disconnect(self):
         self._authenticated = False
@@ -176,10 +271,9 @@ class IbWebRequestData(Feed):
             with self._session_lock:
                 if now - self._last_session_check > self._session_check_interval:
                     try:
-                        result = self.check_auth_status()
-                        self._authenticated = result.get("authenticated", False)
+                        self._authenticated = self._update_auth_state()
                         if not self._authenticated:
-                            self.reauthenticate()
+                            self.connect()
                     except Exception as e:
                         self.request_logger.warning(f"Session check failed: {e}")
                     self._last_session_check = now

@@ -35,6 +35,11 @@ class IbWebGatewayAdapter(BaseGatewayAdapter):
             return
         self.feed.connect()
         if not self.feed.is_connected():
+            cause = getattr(self.feed, "get_last_connect_error", lambda: None)()
+            if cause is not None:
+                raise RuntimeError(
+                    f"ib_web feed not ready: {type(cause).__name__}: {cause}"
+                ) from cause
             raise RuntimeError("ib_web feed not ready")
         self._ensure_account_stream()
         self.running = True

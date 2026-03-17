@@ -29,11 +29,18 @@ def test_read_account_config():
     assert config is not None
     assert "okx" in config
     assert "binance" in config
+    assert "ib_web" in config
     assert "public_key" in config["okx"]
     assert "private_key" in config["okx"]
     assert "passphrase" in config["okx"]
     assert "public_key" in config["binance"]
     assert "private_key" in config["binance"]
+    assert "username" in config["ib_web"]
+    assert "password" in config["ib_web"]
+    assert "login_mode" in config["ib_web"]
+    assert "login_browser" in config["ib_web"]
+    assert "cookie_output" in config["ib_web"]
+    assert "cookie_path" in config["ib_web"]
 
 
 if __name__ == "__main__":
