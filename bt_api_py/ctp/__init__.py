@@ -16,5 +16,10 @@ from . import (
     ctp_structs_transfer,
     ctp_trader_api,
 )
-from ._ctp import *
+
+try:
+    from ._ctp import *
+except Exception:
+    pass
+
 from .ctp import *

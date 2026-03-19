@@ -20,14 +20,46 @@ def _get_logger() -> Any:
     return get_logger("function")
 
 
+_TRUTHY_STRINGS = {"true", "1", "yes", "y", "on"}
+_FALSY_STRINGS = {"false", "0", "no", "n", "off"}
+
+
+def _parse_env_int(name: str, default: int) -> int:
+    value = os.environ.get(name)
+    if value in (None, ""):
+        return default
+    try:
+        return int(value)
+    except ValueError:
+        _get_logger().warning(f"Invalid integer env {name}={value!r}, using default {default}")
+        return default
+
+
+def _parse_env_bool(name: str, default: bool) -> bool:
+    value = os.environ.get(name)
+    if value in (None, ""):
+        return default
+
+    normalized = value.strip().lower()
+    if normalized in _TRUTHY_STRINGS:
+        return True
+    if normalized in _FALSY_STRINGS:
+        return False
+
+    _get_logger().warning(f"Invalid boolean env {name}={value!r}, using default {default}")
+    return default
+
+
 def get_public_ip() -> str | None:
     """Return the current public IP address, or ``None`` if both services fail."""
     try:
         response = requests.get("https://api.ipify.org", timeout=10)
         if response.status_code == 200:
-            return response.text
+            ip_text = response.text.strip()
+            if ip_text:
+                return ip_text
     except requests.RequestException as exc:
-        _get_logger().error(f"Error occurred: {exc}", exc_info=True)
+        _get_logger().error(f"Error occurred: {exc}")
 
     try:
         response = requests.get("https://api.myip.com", timeout=10)
@@ -36,8 +68,8 @@ def get_public_ip() -> str | None:
         if isinstance(data, Mapping):
             ip = data.get("ip")
             return ip if isinstance(ip, str) else None
-    except requests.RequestException as exc:
-        _get_logger().error(f"Error fetching IP: {exc}", exc_info=True)
+    except (requests.RequestException, ValueError) as exc:
+        _get_logger().error(f"Error fetching IP: {exc}")
     return None
 
 
@@ -138,14 +170,14 @@ def read_account_config() -> dict[str, Any]:
         },
         "ib": {
             "host": os.environ.get("IB_HOST", "127.0.0.1"),
-            "port": int(os.environ.get("IB_PORT", "7497")),
-            "client_id": int(os.environ.get("IB_CLIENT_ID", "1")),
+            "port": _parse_env_int("IB_PORT", 7497),
+            "client_id": _parse_env_int("IB_CLIENT_ID", 1),
         },
         "ib_web": {
             "base_url": os.environ.get("IB_WEB_BASE_URL", "https://localhost:5000"),
             "account_id": os.environ.get("IB_WEB_ACCOUNT_ID", ""),
-            "verify_ssl": os.environ.get("IB_WEB_VERIFY_SSL", "false").lower() == "true",
-            "timeout": int(os.environ.get("IB_WEB_TIMEOUT", "10")),
+            "verify_ssl": _parse_env_bool("IB_WEB_VERIFY_SSL", False),
+            "timeout": _parse_env_int("IB_WEB_TIMEOUT", 10),
             "access_token": os.environ.get("IB_WEB_ACCESS_TOKEN", ""),
             "client_id": os.environ.get("IB_WEB_CLIENT_ID", ""),
             "private_key_path": os.environ.get("IB_WEB_PRIVATE_KEY_PATH", ""),
@@ -159,10 +191,9 @@ def read_account_config() -> dict[str, Any]:
 
 def update_extra_data(extra_data: dict[str, Any] | None, **kwargs: Any) -> dict[str, Any]:
     """Merge ``kwargs`` into ``extra_data`` and return the resulting mapping."""
-    if extra_data is None:
-        return dict(kwargs)
-    extra_data.update(kwargs)
-    return extra_data
+    updated = dict(extra_data) if extra_data is not None else {}
+    updated.update(kwargs)
+    return updated
 
 
 def from_dict_get_string(
@@ -183,7 +214,13 @@ def from_dict_get_bool(
     if isinstance(value, bool):
         return value
     if isinstance(value, str):
-        return value == "true"
+        normalized = value.strip().lower()
+        if normalized in _TRUTHY_STRINGS:
+            return True
+        if normalized in _FALSY_STRINGS:
+            return False
+    if isinstance(value, int) and value in (0, 1):
+        return bool(value)
     raise TypeError(f"value {value} is not considered")
 
 
