@@ -1,9 +1,10 @@
 """Shared SWIG infrastructure for split CTP wrapper modules."""
 
 import weakref
-from types import ModuleType
 from sys import float_info, stderr
 from traceback import print_exception
+from types import ModuleType
+
 
 # Import the low-level C/C++ module.
 class _FallbackSwigHandle:
@@ -110,20 +111,6 @@ try:
         import _ctp
 except Exception as _ctp_import_error:
     _ctp = _FallbackCtpModule(_ctp_import_error)
-
-try:
-    import builtins as __builtin__
-except ImportError:
-    import __builtin__
-
-
-def _swig_repr(self):
-    try:
-        strthis = "proxy of " + self.this.__repr__()
-    except __builtin__.Exception:
-        strthis = ""
-    return f"<{self.__class__.__module__}.{self.__class__.__name__}; {strthis} >"
-
 
 def _swig_setattr_nondynamic_instance_variable(setter):
     def set_instance_attr(self, name, value):

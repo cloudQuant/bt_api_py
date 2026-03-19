@@ -1,6 +1,8 @@
 # 拆分后的子模块 — 提供按功能分类的导入路径
 # 例如: from bt_api_py.ctp.ctp_trader_api import CThostFtdcTraderApi
 # 例如: from bt_api_py.ctp.ctp_structs_order import CThostFtdcInputOrderField
+import contextlib
+
 from . import (
     _ctp_base,
     ctp_constants,
@@ -17,9 +19,7 @@ from . import (
     ctp_trader_api,
 )
 
-try:
+with contextlib.suppress(Exception):
     from ._ctp import *
-except Exception:
-    pass
 
 from .ctp import *

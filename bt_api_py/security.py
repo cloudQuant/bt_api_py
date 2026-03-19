@@ -229,7 +229,7 @@ def load_credentials_from_env_file(env_file: str | Path = ".env") -> dict[str, s
         if not env_path.exists():
             return env_vars
 
-        with open(env_path) as f:
+        with open(env_path, encoding="utf-8") as f:
             for line in f:
                 line = line.strip()
                 if line and not line.startswith("#") and "=" in line:
@@ -276,5 +276,5 @@ ENCRYPTION_KEY=your_encryption_key_here
 SKIP_LIVE_TESTS=true
 """
 
-    with open(output_file, "w") as f:
+    with open(output_file, "w", encoding="utf-8") as f:
         f.write(template)

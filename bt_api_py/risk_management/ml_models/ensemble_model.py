@@ -501,7 +501,6 @@ class RiskEnsembleModel(BaseMLModel):
 
         # 合并元特征
         X_meta_train = np.hstack(meta_features_train)
-        np.hstack(meta_features_val)
 
         # 训练元学习器
         self.meta_learner.fit(X_meta_train, y_train)
@@ -576,6 +575,8 @@ class RiskEnsembleModel(BaseMLModel):
             weighted_predictions.append(pred * weight)
             total_weight += float(weight)
 
+        if total_weight == 0.0:
+            return np.zeros(X.shape[0], dtype=int)
         ensemble_pred = np.sum(weighted_predictions, axis=0) / total_weight
         return np.round(ensemble_pred).astype(int)  # type: ignore[no-any-return]
 
@@ -610,6 +611,8 @@ class RiskEnsembleModel(BaseMLModel):
             weighted_predictions_list.append(pred * weight)
             total_weight += weight
 
+        if total_weight == 0.0:
+            return np.zeros(X.shape[0], dtype=int)
         ensemble_pred = np.sum(weighted_predictions_list, axis=0) / total_weight
         return np.round(ensemble_pred).astype(int)  # type: ignore[no-any-return]
 
