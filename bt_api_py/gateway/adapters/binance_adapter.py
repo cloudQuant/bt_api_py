@@ -79,8 +79,13 @@ class BinanceGatewayAdapter(BaseGatewayAdapter):
 
     def disconnect(self) -> None:
         self.running = False
-        if self.thread is not None and self.thread.is_alive():
-            self.thread.join(timeout=2.0)
+        thread = self.thread
+        if thread is not None and thread.is_alive():
+            thread.join(timeout=2.0)
+        self.thread = None
+        self.market_stream = None
+        self.account_stream = None
+        self.aliases = defaultdict(set)
         self.logger.info("BinanceGatewayAdapter disconnected")
 
     def subscribe_symbols(self, symbols: list[str]) -> dict[str, Any]:
@@ -233,19 +238,19 @@ class BinanceGatewayAdapter(BaseGatewayAdapter):
         symbol = ticker.get_symbol_name() or ""
         server_time = ticker.get_server_time() or 0.0
         ts = server_time / 1000.0 if server_time > 1e12 else server_time
+        bid = ticker.get_bid_price() or 0.0
+        ask = ticker.get_ask_price() or 0.0
         tick = GatewayTick(
             timestamp=ts,
             symbol=symbol,
             exchange="BINANCE",
             asset_type=self.asset_type,
             local_time=time.time(),
-            bid_price=ticker.get_bid_price() or 0.0,
-            ask_price=ticker.get_ask_price() or 0.0,
+            bid_price=bid,
+            ask_price=ask,
             bid_volume=ticker.get_bid_volume() or 0.0,
             ask_volume=ticker.get_ask_volume() or 0.0,
-            price=(ticker.get_bid_price() or 0.0 + (ticker.get_ask_price() or 0.0)) / 2.0
-            if ticker.get_bid_price() and ticker.get_ask_price()
-            else 0.0,
+            price=(bid + ask) / 2.0 if bid and ask else 0.0,
         )
         self.emit(CHANNEL_MARKET, tick)
 

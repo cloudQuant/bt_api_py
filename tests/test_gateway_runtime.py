@@ -1,7 +1,11 @@
+import threading
 import time
 import uuid
 from collections import deque
 from typing import Any
+
+import pytest
+import zmq
 
 from bt_api_py.gateway.adapters import (
     BinanceGatewayAdapter,
@@ -14,6 +18,7 @@ from bt_api_py.gateway.adapters.ctp_adapter import _split as ctp_split
 from bt_api_py.gateway.adapters.okx_adapter import _normalize_asset_type as okx_normalize
 from bt_api_py.gateway.client import GatewayClient
 from bt_api_py.gateway.config import GatewayConfig
+from bt_api_py.gateway.health import ConnectionState, GatewayState
 from bt_api_py.gateway.models import GatewayTick
 from bt_api_py.gateway.protocol import CHANNEL_EVENT, CHANNEL_MARKET
 from bt_api_py.gateway.runtime import GatewayRuntime
@@ -63,6 +68,19 @@ class FakeGatewayAdapter:
         self.outputs.append((channel, payload))
 
 
+class FakeJoinableThread:
+    def __init__(self, alive: bool = True) -> None:
+        self.alive = alive
+        self.join_calls: list[float] = []
+
+    def is_alive(self) -> bool:
+        return self.alive
+
+    def join(self, timeout: float | None = None) -> None:
+        self.join_calls.append(0.0 if timeout is None else timeout)
+        self.alive = False
+
+
 def _wait_until(predicate, timeout: float = 2.0, interval: float = 0.05) -> bool:
     deadline = time.time() + timeout
     while time.time() < deadline:
@@ -104,6 +122,180 @@ def test_gateway_client_submit_order_result_is_isolated_from_pending_state(monke
     assert client.pending_orders["ord-immut-2"]["meta"]["tag"] == "original"
 
 
+def test_gateway_client_wait_for_adapter_ready_logs_last_error(monkeypatch, caplog):
+    client = GatewayClient(exchange_type="CTP", asset_type="FUTURE", account_id="wait-1")
+    client.config.startup_timeout_sec = 0.01
+
+    monkeypatch.setattr(client, "_command", lambda command, payload=None: (_ for _ in ()).throw(RuntimeError("ping failed")))
+    monkeypatch.setattr("bt_api_py.gateway.client.time.sleep", lambda _: None)
+
+    with caplog.at_level("WARNING"):
+        client._wait_for_adapter_ready()
+
+    assert "Gateway adapter not ready after 0.0s" in caplog.text
+    assert "RuntimeError: ping failed" in caplog.text
+
+
+def test_gateway_client_connect_cleans_up_after_initial_ping_failure(monkeypatch):
+    class FakeSocket:
+        def __init__(self) -> None:
+            self.closed = False
+            self.options: list[tuple[Any, Any]] = []
+            self.endpoints: list[str] = []
+
+        def setsockopt(self, option: Any, value: Any) -> None:
+            self.options.append((option, value))
+
+        def connect(self, endpoint: str) -> None:
+            self.endpoints.append(endpoint)
+
+        def close(self, linger: int = 0) -> None:
+            self.closed = True
+
+    class FakeContext:
+        def __init__(self) -> None:
+            self.sockets: list[FakeSocket] = []
+
+        def socket(self, socket_type: int) -> FakeSocket:
+            sock = FakeSocket()
+            self.sockets.append(sock)
+            return sock
+
+    class FakeRuntime:
+        def __init__(self) -> None:
+            self.started = False
+            self.stopped = False
+
+        def start_in_thread(self) -> None:
+            self.started = True
+
+        def stop(self) -> None:
+            self.stopped = True
+
+    fake_runtime = FakeRuntime()
+    monkeypatch.setattr("bt_api_py.gateway.client.GatewayRuntime", lambda config, **kwargs: fake_runtime)
+
+    client = GatewayClient(exchange_type="CTP", asset_type="FUTURE", account_id="connect-fail-1")
+    fake_context = FakeContext()
+    client.context = fake_context
+    monkeypatch.setattr(client, "_command", lambda command, payload=None: (_ for _ in ()).throw(RuntimeError("initial ping failed")))
+
+    with pytest.raises(RuntimeError, match="initial ping failed"):
+        client.connect()
+
+    assert fake_runtime.started is True
+    assert fake_runtime.stopped is True
+    assert client.connected is False
+    assert client.runtime is None
+    assert client.command_socket is None
+    assert client.market_socket is None
+    assert client.event_socket is None
+    assert len(fake_context.sockets) == 3
+    assert all(socket.closed for socket in fake_context.sockets)
+
+
+def test_gateway_client_disconnect_cleans_up_even_if_socket_close_fails(caplog):
+    class FakeSocket:
+        def __init__(self, name: str) -> None:
+            self.name = name
+
+        def close(self, linger: int = 0) -> None:
+            raise RuntimeError(f"{self.name} close failed")
+
+    client = GatewayClient(exchange_type="CTP", asset_type="FUTURE", account_id="disconnect-close-1")
+    client.connected = True
+    client.command_socket = FakeSocket("command")
+    client.market_socket = FakeSocket("market")
+    client.event_socket = FakeSocket("event")
+
+    with caplog.at_level("WARNING"):
+        client.disconnect()
+
+    assert client.connected is False
+    assert client.command_socket is None
+    assert client.market_socket is None
+    assert client.event_socket is None
+    assert "Gateway client socket close failed during cleanup" in caplog.text
+    assert "command close failed" in caplog.text
+    assert "market close failed" in caplog.text
+    assert "event close failed" in caplog.text
+
+
+def test_gateway_client_disconnect_cleans_up_even_if_runtime_stop_fails(caplog):
+    class BadRuntime:
+        def stop(self) -> None:
+            raise RuntimeError("runtime stop failed")
+
+    client = GatewayClient(exchange_type="CTP", asset_type="FUTURE", account_id="disconnect-stop-1")
+    client.runtime = BadRuntime()
+    client.connected = True
+
+    with caplog.at_level("WARNING"):
+        client.disconnect()
+
+    assert client.connected is False
+    assert client.runtime is None
+    assert "Gateway client runtime stop failed during disconnect" in caplog.text
+    assert "runtime stop failed" in caplog.text
+
+
+def test_gateway_client_disconnect_clears_subscription_and_event_state() -> None:
+    client = GatewayClient(exchange_type="CTP", asset_type="FUTURE", account_id="disconnect-state-1")
+    client.connected = True
+    client.subscribed.update({"rb2510"})
+    client.tick_queues["rb2510"].append(GatewayTick(timestamp=1.0, symbol="rb2510", price=100.0))
+    client.broker_updates.append({"kind": "order", "order_id": "ord-1"})
+    client.pending_orders["ord-1"] = {"order_id": "ord-1"}
+
+    client.disconnect()
+
+    assert client.supports_live_ticks("rb2510") is False
+    assert client.has_pending_tick("rb2510") is False
+    assert client.poll_broker_update() is None
+    assert client.pending_orders == {}
+
+
+def test_gateway_client_connect_failure_clears_subscription_and_event_state(monkeypatch):
+    class FakeSocket:
+        def setsockopt(self, option: Any, value: Any) -> None:
+            return None
+
+        def connect(self, endpoint: str) -> None:
+            return None
+
+        def close(self, linger: int = 0) -> None:
+            return None
+
+    class FakeContext:
+        def socket(self, socket_type: int) -> FakeSocket:
+            return FakeSocket()
+
+    client = GatewayClient(
+        exchange_type="CTP",
+        asset_type="FUTURE",
+        account_id="connect-state-1",
+        gateway_start_local_runtime=False,
+    )
+    client.context = FakeContext()
+    client.subscribed.update({"rb2510"})
+    client.tick_queues["rb2510"].append(GatewayTick(timestamp=1.0, symbol="rb2510", price=100.0))
+    client.broker_updates.append({"kind": "order", "order_id": "ord-1"})
+    client.pending_orders["ord-1"] = {"order_id": "ord-1"}
+    monkeypatch.setattr(
+        client,
+        "_command",
+        lambda command, payload=None: (_ for _ in ()).throw(RuntimeError("initial ping failed")),
+    )
+
+    with pytest.raises(RuntimeError, match="initial ping failed"):
+        client.connect()
+
+    assert client.supports_live_ticks("rb2510") is False
+    assert client.has_pending_tick("rb2510") is False
+    assert client.poll_broker_update() is None
+    assert client.pending_orders == {}
+
+
 def test_gateway_runtime_registry_contains_all_exchanges():
     assert GatewayRuntime.get_adapter_class("ctp") is CtpGatewayAdapter
     assert GatewayRuntime.get_adapter_class("IB_WEB") is IbWebGatewayAdapter
@@ -120,6 +312,303 @@ def test_gateway_runtime_register_adapter_supports_extension():
     GatewayRuntime.register_adapter("customx", CustomGatewayAdapter)
 
     assert GatewayRuntime.get_adapter_class("CUSTOMX") is CustomGatewayAdapter
+
+
+def test_gateway_runtime_connect_background_updates_health_on_retry(monkeypatch):
+    class FlakyGatewayAdapter(FakeGatewayAdapter):
+        def __init__(self) -> None:
+            super().__init__()
+            self.connect_calls = 0
+
+        def connect(self) -> None:
+            self.connect_calls += 1
+            if self.connect_calls == 1:
+                raise RuntimeError("temporary connect failure")
+            self.connected = True
+
+    adapter = FlakyGatewayAdapter()
+    monkeypatch.setattr(GatewayRuntime, "_create_adapter", lambda self: adapter)
+    monkeypatch.setattr("bt_api_py.gateway.runtime.time.sleep", lambda _: None)
+
+    config = GatewayConfig.from_kwargs(
+        exchange_type="binance",
+        asset_type="swap",
+        account_id="acc-retry",
+        gateway_runtime_name=f"gw-{uuid.uuid4().hex[:8]}",
+        gateway_poll_timeout_ms=10,
+    )
+    runtime = GatewayRuntime(
+        config,
+        exchange_type="BINANCE",
+        asset_type="SWAP",
+        account_id="acc-retry",
+    )
+    runtime.running = True
+
+    runtime._connect_adapter_background()
+
+    snap = runtime.health.snapshot()
+    assert adapter.connect_calls == 2
+    assert runtime._adapter_connected is True
+    assert snap["market_connection"] == ConnectionState.CONNECTED.value
+    assert snap["recent_errors"][-1]["source"] == "adapter_connect"
+    assert "attempt 1/3 RuntimeError: temporary connect failure" in snap["recent_errors"][-1]["message"]
+
+
+def test_gateway_runtime_stop_records_disconnect_errors(monkeypatch):
+    class BadDisconnectAdapter(FakeGatewayAdapter):
+        def disconnect(self) -> None:
+            raise RuntimeError("disconnect failed")
+
+    adapter = BadDisconnectAdapter()
+    monkeypatch.setattr(GatewayRuntime, "_create_adapter", lambda self: adapter)
+
+    config = GatewayConfig.from_kwargs(
+        exchange_type="binance",
+        asset_type="swap",
+        account_id="acc-stop",
+        gateway_runtime_name=f"gw-{uuid.uuid4().hex[:8]}",
+        gateway_poll_timeout_ms=10,
+    )
+    runtime = GatewayRuntime(
+        config,
+        exchange_type="BINANCE",
+        asset_type="SWAP",
+        account_id="acc-stop",
+    )
+    runtime._adapter_connected = True
+    runtime.health.update_trade_connection(ConnectionState.CONNECTED)
+
+    runtime.stop()
+
+    snap = runtime.health.snapshot()
+    assert runtime._adapter_connected is False
+    assert snap["state"] == GatewayState.STOPPED.value
+    assert snap["market_connection"] == ConnectionState.DISCONNECTED.value
+    assert snap["trade_connection"] == ConnectionState.DISCONNECTED.value
+    assert snap["recent_errors"][-1]["source"] == "runtime_stop"
+    assert "RuntimeError: disconnect failed" in snap["recent_errors"][-1]["message"]
+
+
+def test_gateway_runtime_start_records_bind_errors(monkeypatch):
+    class BindFailingSocket:
+        def bind(self, endpoint: str) -> None:
+            raise zmq.ZMQError(f"bind failed for {endpoint}")
+
+        def close(self, linger: int = 0) -> None:
+            return None
+
+    class BindFailingContext:
+        def socket(self, socket_type: int) -> BindFailingSocket:
+            return BindFailingSocket()
+
+    adapter = FakeGatewayAdapter()
+    monkeypatch.setattr(GatewayRuntime, "_create_adapter", lambda self: adapter)
+
+    config = GatewayConfig.from_kwargs(
+        exchange_type="binance",
+        asset_type="swap",
+        account_id="acc-bind",
+        gateway_runtime_name=f"gw-{uuid.uuid4().hex[:8]}",
+        gateway_poll_timeout_ms=10,
+    )
+    runtime = GatewayRuntime(
+        config,
+        exchange_type="BINANCE",
+        asset_type="SWAP",
+        account_id="acc-bind",
+    )
+    runtime.context = BindFailingContext()
+
+    runtime.start()
+
+    snap = runtime.health.snapshot()
+    assert runtime.running is False
+    assert snap["state"] == GatewayState.ERROR.value
+    assert snap["recent_errors"][-1]["source"] == "runtime_start"
+    assert "bind failed" in snap["recent_errors"][-1]["message"]
+
+
+def test_gateway_runtime_main_loop_errors_transition_health_to_error(monkeypatch):
+    adapter = FakeGatewayAdapter()
+    monkeypatch.setattr(GatewayRuntime, "_create_adapter", lambda self: adapter)
+
+    config = GatewayConfig.from_kwargs(
+        exchange_type="binance",
+        asset_type="swap",
+        account_id="acc-loop",
+        gateway_runtime_name=f"gw-{uuid.uuid4().hex[:8]}",
+        gateway_poll_timeout_ms=10,
+    )
+    runtime = GatewayRuntime(
+        config,
+        exchange_type="BINANCE",
+        asset_type="SWAP",
+        account_id="acc-loop",
+    )
+    runtime.health.update_trade_connection(ConnectionState.CONNECTED)
+    monkeypatch.setattr(
+        runtime,
+        "_handle_commands",
+        lambda: (_ for _ in ()).throw(zmq.ZMQError("loop exploded")),
+    )
+
+    runtime.start()
+
+    snap = runtime.health.snapshot()
+    assert runtime.running is False
+    assert snap["state"] == GatewayState.ERROR.value
+    assert snap["market_connection"] == ConnectionState.ERROR.value
+    assert snap["trade_connection"] == ConnectionState.ERROR.value
+    assert snap["recent_errors"][-1]["source"] == "runtime_loop"
+    assert "loop exploded" in snap["recent_errors"][-1]["message"]
+
+
+def test_gateway_runtime_failure_records_disconnect_errors(monkeypatch, caplog):
+    class BadDisconnectAdapter(FakeGatewayAdapter):
+        def disconnect(self) -> None:
+            raise RuntimeError("disconnect exploded")
+
+    adapter = BadDisconnectAdapter()
+    monkeypatch.setattr(GatewayRuntime, "_create_adapter", lambda self: adapter)
+
+    config = GatewayConfig.from_kwargs(
+        exchange_type="binance",
+        asset_type="swap",
+        account_id="acc-loop-disconnect",
+        gateway_runtime_name=f"gw-{uuid.uuid4().hex[:8]}",
+        gateway_poll_timeout_ms=10,
+    )
+    runtime = GatewayRuntime(
+        config,
+        exchange_type="BINANCE",
+        asset_type="SWAP",
+        account_id="acc-loop-disconnect",
+    )
+    monkeypatch.setattr(
+        runtime,
+        "_handle_commands",
+        lambda: (_ for _ in ()).throw(RuntimeError("loop exploded")),
+    )
+
+    with caplog.at_level("WARNING"):
+        runtime.start()
+
+    snap = runtime.health.snapshot()
+    assert snap["state"] == GatewayState.ERROR.value
+    assert snap["trade_connection"] == ConnectionState.ERROR.value
+    assert snap["recent_errors"][-1]["source"] == "runtime_loop_disconnect"
+    assert "RuntimeError: disconnect exploded" in snap["recent_errors"][-1]["message"]
+    assert "GatewayRuntime adapter disconnect failed during runtime_loop" in caplog.text
+
+
+def test_gateway_runtime_start_cleans_up_sockets_after_loop_exit(monkeypatch):
+    class FakeSocket:
+        def __init__(self) -> None:
+            self.closed = False
+
+        def bind(self, endpoint: str) -> None:
+            return None
+
+        def close(self, linger: int = 0) -> None:
+            self.closed = True
+
+    class FakeContext:
+        def __init__(self) -> None:
+            self.sockets: list[FakeSocket] = []
+
+        def socket(self, socket_type: int) -> FakeSocket:
+            sock = FakeSocket()
+            self.sockets.append(sock)
+            return sock
+
+    class FakePoller:
+        def register(self, socket: Any, flags: Any) -> None:
+            return None
+
+        def unregister(self, socket: Any) -> None:
+            return None
+
+        def poll(self, timeout: int = 0) -> list[Any]:
+            return []
+
+    adapter = FakeGatewayAdapter()
+    monkeypatch.setattr(GatewayRuntime, "_create_adapter", lambda self: adapter)
+    monkeypatch.setattr(threading.Thread, "start", lambda self: None)
+
+    config = GatewayConfig.from_kwargs(
+        exchange_type="binance",
+        asset_type="swap",
+        account_id="acc-cleanup",
+        gateway_runtime_name=f"gw-{uuid.uuid4().hex[:8]}",
+        gateway_poll_timeout_ms=10,
+    )
+    runtime = GatewayRuntime(
+        config,
+        exchange_type="BINANCE",
+        asset_type="SWAP",
+        account_id="acc-cleanup",
+    )
+    fake_context = FakeContext()
+    runtime.context = fake_context
+    runtime.poller = FakePoller()
+    monkeypatch.setattr(runtime, "_handle_commands", lambda: setattr(runtime, "running", False))
+
+    runtime.start()
+
+    assert all(sock.closed for sock in fake_context.sockets)
+    assert runtime.command_socket is None
+    assert runtime.event_socket is None
+    assert runtime.market_socket is None
+
+
+def test_gateway_runtime_cleanup_sockets_continues_after_close_failure(caplog):
+    class FakeSocket:
+        def __init__(self, name: str, should_fail: bool = False) -> None:
+            self.name = name
+            self.should_fail = should_fail
+            self.closed = False
+
+        def close(self, linger: int = 0) -> None:
+            if self.should_fail:
+                raise RuntimeError(f"{self.name} close failed")
+            self.closed = True
+
+    class FakePoller:
+        def unregister(self, socket: FakeSocket) -> None:
+            return None
+
+    config = GatewayConfig.from_kwargs(
+        exchange_type="binance",
+        asset_type="swap",
+        account_id="acc-cleanup-fail",
+        gateway_runtime_name=f"gw-{uuid.uuid4().hex[:8]}",
+        gateway_poll_timeout_ms=10,
+    )
+    runtime = GatewayRuntime(
+        config,
+        exchange_type="BINANCE",
+        asset_type="SWAP",
+        account_id="acc-cleanup-fail",
+    )
+    command_socket = FakeSocket("command", should_fail=True)
+    event_socket = FakeSocket("event")
+    market_socket = FakeSocket("market")
+    runtime.command_socket = command_socket
+    runtime.event_socket = event_socket
+    runtime.market_socket = market_socket
+    runtime.poller = FakePoller()
+
+    with caplog.at_level("WARNING"):
+        runtime._cleanup_sockets()
+
+    assert event_socket.closed is True
+    assert market_socket.closed is True
+    assert runtime.command_socket is None
+    assert runtime.event_socket is None
+    assert runtime.market_socket is None
+    assert "GatewayRuntime socket cleanup failed" in caplog.text
+    assert "command close failed" in caplog.text
 
 
 def test_gateway_runtime_client_ipc_roundtrip(monkeypatch, tmp_path):
@@ -311,6 +800,30 @@ def test_binance_adapter_emit_ticker():
     assert payload.exchange == "BINANCE"
     assert payload.bid_price == 42000.0
     assert payload.ask_price == 42001.0
+    assert payload.price == 42000.5
+
+
+def test_binance_adapter_disconnect_resets_stream_state():
+    adapter = BinanceGatewayAdapter(
+        asset_type="SWAP",
+        public_key="k",
+        private_key="s",
+    )
+    thread = FakeJoinableThread()
+    adapter.running = True
+    adapter.thread = thread
+    adapter.market_stream = object()
+    adapter.account_stream = object()
+    adapter.aliases["BTCUSDT"].add("BTCUSDT")
+
+    adapter.disconnect()
+
+    assert adapter.running is False
+    assert adapter.thread is None
+    assert adapter.market_stream is None
+    assert adapter.account_stream is None
+    assert dict(adapter.aliases) == {}
+    assert thread.join_calls == [2.0]
 
 
 def test_okx_adapter_emit_ticker():
@@ -346,6 +859,30 @@ def test_okx_adapter_emit_ticker():
     assert payload.bid_price == 42000.0
     assert payload.ask_price == 42001.0
     assert payload.price == 42000.5
+
+
+def test_okx_adapter_disconnect_resets_stream_state():
+    adapter = OkxGatewayAdapter(
+        asset_type="SWAP",
+        public_key="k",
+        private_key="s",
+        passphrase="p",
+    )
+    thread = FakeJoinableThread()
+    adapter.running = True
+    adapter.thread = thread
+    adapter.market_stream = object()
+    adapter.account_stream = object()
+    adapter.aliases["BTC-USDT-SWAP"].add("BTC-USDT-SWAP")
+
+    adapter.disconnect()
+
+    assert adapter.running is False
+    assert adapter.thread is None
+    assert adapter.market_stream is None
+    assert adapter.account_stream is None
+    assert dict(adapter.aliases) == {}
+    assert thread.join_calls == [2.0]
 
 
 def test_binance_adapter_dispatch_routes_ticker():

@@ -80,8 +80,13 @@ class OkxGatewayAdapter(BaseGatewayAdapter):
 
     def disconnect(self) -> None:
         self.running = False
-        if self.thread is not None and self.thread.is_alive():
-            self.thread.join(timeout=2.0)
+        thread = self.thread
+        if thread is not None and thread.is_alive():
+            thread.join(timeout=2.0)
+        self.thread = None
+        self.market_stream = None
+        self.account_stream = None
+        self.aliases = defaultdict(set)
         self.logger.info("OkxGatewayAdapter disconnected")
 
     def subscribe_symbols(self, symbols: list[str]) -> dict[str, Any]:
