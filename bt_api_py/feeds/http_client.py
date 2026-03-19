@@ -4,6 +4,7 @@
 支持连接池复用、统一错误处理、代理配置。
 """
 
+import asyncio
 from typing import Any, cast
 
 try:
@@ -125,6 +126,8 @@ class HttpClient:
             raise RequestFailedError(venue=self._venue, message=f"Request timeout: {e}") from e
         except httpx.ConnectError as e:
             raise RequestFailedError(venue=self._venue, message=f"Connection error: {e}") from e
+        except httpx.RequestError as e:
+            raise RequestFailedError(venue=self._venue, message=f"HTTP client error: {e}") from e
 
         return self._process_response(response)
 
@@ -171,6 +174,10 @@ class HttpClient:
         except httpx.ConnectError as e:
             raise RequestFailedError(
                 venue=self._venue, message=f"Async connection error: {e}"
+            ) from e
+        except httpx.RequestError as e:
+            raise RequestFailedError(
+                venue=self._venue, message=f"Async HTTP client error: {e}"
             ) from e
 
         return self._process_response(response)
@@ -229,6 +236,38 @@ class HttpClient:
         """关闭同步客户端"""
         if not self._sync_client.is_closed:
             self._sync_client.close()
+        self._close_async_client()
+
+    def _close_async_client(self) -> None:
+        async_client = self._async_client
+        self._async_client = None
+        if async_client is None or async_client.is_closed:
+            return
+
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            try:
+                asyncio.run(async_client.aclose())
+            except Exception as exc:
+                logger.warning(
+                    f"Failed to close async HTTP client for {self._venue}: "
+                    f"{type(exc).__name__}: {exc}"
+                )
+            return
+
+        task = loop.create_task(async_client.aclose())
+        task.add_done_callback(self._handle_async_close_result)
+
+    def _handle_async_close_result(self, task: "asyncio.Task[None]") -> None:
+        if task.cancelled():
+            return
+        exc = task.exception()
+        if exc is not None:
+            logger.warning(
+                f"Failed to close async HTTP client for {self._venue}: "
+                f"{type(exc).__name__}: {exc}"
+            )
 
     async def aclose(self) -> None:
         """异步关闭所有客户端"""

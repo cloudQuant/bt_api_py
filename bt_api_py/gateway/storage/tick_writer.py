@@ -119,6 +119,12 @@ class TickWriter:
         self._running = False
         if self._flush_thread is not None:
             self._flush_thread.join(timeout=10.0)
+            if self._flush_thread.is_alive():
+                logger.warning(
+                    "TickWriter flush thread did not stop within timeout for %s/%s",
+                    self.exchange,
+                    self.asset_type,
+                )
             self._flush_thread = None
         self._flush_all()
         logger.info(

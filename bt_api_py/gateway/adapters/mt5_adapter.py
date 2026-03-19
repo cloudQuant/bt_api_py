@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import asyncio
-import contextlib
 import logging
 import threading
 import time
@@ -128,8 +127,10 @@ class Mt5GatewayAdapter(BaseGatewayAdapter):
             try:
                 future = asyncio.run_coroutine_threadsafe(self._client.close(), self._loop)
                 future.result(timeout=5.0)
-            except Exception:
-                pass
+            except Exception as exc:
+                self.logger.warning(
+                    f"Mt5GatewayAdapter close failed during disconnect: {type(exc).__name__}: {exc}"
+                )
         if self._loop is not None:
             self._loop.call_soon_threadsafe(self._loop.stop)
         if self._thread is not None and self._thread.is_alive():
@@ -299,10 +300,18 @@ class Mt5GatewayAdapter(BaseGatewayAdapter):
         # Register push callbacks
         self._client.on_tick(self._on_tick_push)
         self._client.on_disconnect(self._on_ws_disconnect)
-        with contextlib.suppress(Exception):
+        try:
             self._client.on_order_update(self._on_order_update_push)
-        with contextlib.suppress(Exception):
+        except Exception as exc:
+            self.logger.warning(
+                f"Mt5GatewayAdapter failed to register order update callback: {type(exc).__name__}: {exc}"
+            )
+        try:
             self._client.on_position_update(self._on_position_update_push)
+        except Exception as exc:
+            self.logger.warning(
+                f"Mt5GatewayAdapter failed to register position update callback: {type(exc).__name__}: {exc}"
+            )
 
     async def _async_subscribe(
         self, standard_symbols: list[str], resolved_symbols: list[str]

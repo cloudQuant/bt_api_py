@@ -95,6 +95,8 @@ class CoinSpotRequestData(Feed):
         """Synchronous HTTP request."""
         if params is None:
             params: dict[str, Any] = {}
+        if extra_data is None:
+            extra_data = {}
         method, endpoint = path.split(" ", 1)
         headers = {"Content-Type": "application/json"}
 
@@ -122,6 +124,8 @@ class CoinSpotRequestData(Feed):
         """Async HTTP request."""
         if params is None:
             params: dict[str, Any] = {}
+        if extra_data is None:
+            extra_data = {}
         method, endpoint = path.split(" ", 1)
         headers = {"Content-Type": "application/json"}
 

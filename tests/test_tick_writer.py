@@ -143,6 +143,28 @@ class TestTickWriterLifecycle:
         writer.start()
         writer.stop()
 
+    def test_stop_logs_warning_when_flush_thread_does_not_exit(self, tmp_path, caplog):
+        class StuckThread:
+            def __init__(self) -> None:
+                self.join_calls: list[float] = []
+
+            def join(self, timeout: float | None = None) -> None:
+                self.join_calls.append(timeout if timeout is not None else -1.0)
+
+            def is_alive(self) -> bool:
+                return True
+
+        writer = TickWriter(tmp_path, "BINANCE", "SWAP")
+        writer._running = True
+        writer._flush_thread = StuckThread()
+
+        with caplog.at_level("WARNING"):
+            writer.stop()
+
+        assert writer._running is False
+        assert writer._flush_thread is None
+        assert "TickWriter flush thread did not stop within timeout" in caplog.text
+
 
 class TestTickWriterDiagnostics:
     def test_snapshot(self, tmp_path):

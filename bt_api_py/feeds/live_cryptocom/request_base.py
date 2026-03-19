@@ -17,6 +17,7 @@ from bt_api_py.containers.tickers.cryptocom_ticker import CryptoComTicker
 from bt_api_py.exceptions import QueueNotInitializedError
 from bt_api_py.feeds.capability import Capability
 from bt_api_py.feeds.feed import Feed
+from bt_api_py.feeds.http_client import HttpClient
 from bt_api_py.functions.utils import update_extra_data
 from bt_api_py.logging_factory import get_logger
 
@@ -57,6 +58,7 @@ class CryptoComRequestData(Feed):
         self._params = CryptoComExchangeDataSpot()
         self.request_logger = get_logger("cryptocom_spot_feed")
         self.async_logger = get_logger("cryptocom_spot_feed")
+        self._http_client = HttpClient(venue=self.exchange_name, timeout=10)
 
     # ── authentication ──────────────────────────────────────────
 
@@ -112,6 +114,8 @@ class CryptoComRequestData(Feed):
         """
         if params is None:
             params: dict[str, Any] = {}
+        if extra_data is None:
+            extra_data = {}
 
         method, endpoint = path.split(" ", 1)
         url = f"{self._params.rest_url}{endpoint}"
@@ -162,6 +166,8 @@ class CryptoComRequestData(Feed):
         """
         if params is None:
             params: dict[str, Any] = {}
+        if extra_data is None:
+            extra_data = {}
 
         method, endpoint = path.split(" ", 1)
         url = f"{self._params.rest_url}{endpoint}"
@@ -187,7 +193,13 @@ class CryptoComRequestData(Feed):
             }
             method = "POST"
 
-        res = await self._http_client.async_request(method, url, headers, req_body, timeout)
+        res = await self._http_client.async_request(
+            method=method,
+            url=url,
+            headers=headers,
+            json_data=req_body,
+            timeout=timeout,
+        )
         return RequestData(res, extra_data)
 
     # ==================== Server Time ====================

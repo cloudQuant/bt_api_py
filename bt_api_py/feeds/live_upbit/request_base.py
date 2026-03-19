@@ -111,6 +111,8 @@ class UpbitRequestData(Feed):
         """Synchronous HTTP request using Feed.http_request()."""
         if params is None:
             params: dict[str, Any] = {}
+        if extra_data is None:
+            extra_data = {}
         method, endpoint = path.split(" ", 1)
         headers = {}
 
@@ -139,6 +141,8 @@ class UpbitRequestData(Feed):
         """Async HTTP request using Feed.async_http_request()."""
         if params is None:
             params: dict[str, Any] = {}
+        if extra_data is None:
+            extra_data = {}
         method, endpoint = path.split(" ", 1)
         headers = {}
 

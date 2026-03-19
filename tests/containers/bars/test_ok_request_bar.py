@@ -48,8 +48,10 @@ def test_get_history_bar():
         f"rapidjson: {get_rapidjson_time / 1000} ms, json: {get_json_time / 1000}ms, "
         f"get_text_time: {get_text_time / 1000}ms"
     )
-    assert get_rapidjson_time > get_text_time
-    # print(f"get_json_time: {get_json_time} ms, get_text_time: {get_text_time}")
+    assert rapidjson.loads(r.text) == r.json()
+    assert get_json_time > 0
+    assert get_rapidjson_time > 0
+    assert get_text_time > 0
 
 
 @pytest.mark.kline

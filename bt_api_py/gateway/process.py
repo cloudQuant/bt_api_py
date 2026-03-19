@@ -21,7 +21,6 @@ Usage (CLI)::
 
 from __future__ import annotations
 
-import contextlib
 import json
 import logging
 import os
@@ -71,13 +70,19 @@ class GatewayProcess:
         return self._pid_dir / f"{name}.pid"
 
     def _write_pid(self) -> None:
-        self._pid_dir.mkdir(parents=True, exist_ok=True)
-        self.pid_file.write_text(str(os.getpid()), encoding="utf-8")
+        try:
+            self._pid_dir.mkdir(parents=True, exist_ok=True)
+            self.pid_file.write_text(str(os.getpid()), encoding="utf-8")
+        except OSError as exc:
+            logger.exception("Failed to write PID file %s: %s", self.pid_file, exc)
+            raise
         logger.info("PID %d written to %s", os.getpid(), self.pid_file)
 
     def _remove_pid(self) -> None:
-        with contextlib.suppress(OSError):
+        try:
             self.pid_file.unlink(missing_ok=True)
+        except OSError as exc:
+            logger.warning("Failed to remove PID file %s: %s", self.pid_file, exc)
 
     @staticmethod
     def read_pid(pid_file: str | Path) -> int | None:
@@ -129,14 +134,22 @@ class GatewayProcess:
         cfg = GatewayConfig.from_kwargs(**self._config)
         self._runtime = GatewayRuntime(cfg, **self._config)
 
-        self._write_pid()
-        self._install_signal_handlers()
+        try:
+            self._write_pid()
+            self._install_signal_handlers()
+        except Exception:
+            self._runtime = None
+            self._remove_pid()
+            raise
 
         logger.info("Gateway process starting …")
         try:
             self._runtime.start()
         except KeyboardInterrupt:
-            pass
+            logger.info("Gateway process interrupted by KeyboardInterrupt")
+        except Exception as exc:
+            logger.exception("Gateway process start failed: %s", exc)
+            raise
         finally:
             self._shutdown()
 
@@ -148,6 +161,13 @@ class GatewayProcess:
         """
         pid = self.read_pid(self.pid_file)
         if pid is None:
+            if self.pid_file.exists():
+                logger.warning(
+                    "PID file %s is invalid during stop request; cleaning it up",
+                    self.pid_file,
+                )
+                self._remove_pid()
+                return False
             logger.warning("No PID file found at %s", self.pid_file)
             return False
         if not self.is_running(pid):
@@ -162,6 +182,14 @@ class GatewayProcess:
                 os.kill(pid, signal.SIGTERM)
                 logger.info("Sent SIGTERM to PID %d", pid)
             return True
+        except ProcessLookupError as exc:
+            logger.warning(
+                "Process %d disappeared before signal delivery; cleaning up PID file: %s",
+                pid,
+                exc,
+            )
+            self._remove_pid()
+            return False
         except OSError as exc:
             logger.error("Failed to send termination signal to %d: %s", pid, exc)
             return False
@@ -169,7 +197,13 @@ class GatewayProcess:
     def status(self) -> dict[str, Any]:
         """Return a status dict for the gateway process."""
         pid = self.read_pid(self.pid_file)
+        if pid is None and self.pid_file.exists():
+            logger.warning("PID file %s is invalid during status check; cleaning it up", self.pid_file)
+            self._remove_pid()
         running = pid is not None and self.is_running(pid)
+        if pid is not None and not running:
+            logger.warning("Process %d is not running during status check; cleaning up PID file", pid)
+            self._remove_pid()
         return {
             "pid_file": str(self.pid_file),
             "pid": pid,
@@ -185,9 +219,14 @@ class GatewayProcess:
             return
         self._stopped = True
         logger.info("Gateway process shutting down …")
-        if self._runtime is not None:
-            self._runtime.stop()
-        self._remove_pid()
+        try:
+            if self._runtime is not None:
+                self._runtime.stop()
+        except Exception as exc:
+            logger.exception("Gateway process stop failed: %s", exc)
+        finally:
+            self._runtime = None
+            self._remove_pid()
         logger.info("Gateway process stopped.")
 
     def _install_signal_handlers(self) -> None:

@@ -97,6 +97,7 @@ class PoloniexRequestData(Feed):
         self.public_key = kwargs.get("public_key") or kwargs.get("api_key")
         self.private_key = kwargs.get("private_key") or kwargs.get("api_secret")
         self.topics = kwargs.get("topics", {})
+        self.exchange_name = kwargs.get("exchange_name", "POLONIEX___SPOT")
         self.asset_type = kwargs.get("asset_type", "SPOT")
         self.logger_name = kwargs.get("logger_name", "poloniex_feed.log")
         self._params = PoloniexExchangeDataSpot()
@@ -219,6 +220,8 @@ class PoloniexRequestData(Feed):
         """
         if params is None:
             params: dict[str, Any] = {}
+        if extra_data is None:
+            extra_data = {}
 
         # Parse method and path
         parts = path.split(" ", 1)
@@ -280,6 +283,8 @@ class PoloniexRequestData(Feed):
         """
         if params is None:
             params: dict[str, Any] = {}
+        if extra_data is None:
+            extra_data = {}
 
         parts = path.split(" ", 1)
         if len(parts) != 2:

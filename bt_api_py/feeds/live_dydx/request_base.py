@@ -60,8 +60,8 @@ class DydxRequestData(Feed):
         self._params = DydxExchangeDataSwap()
 
         # Configuration
-        self.api_key = kwargs.get("api_key")
-        self.private_key = kwargs.get("private_key")
+        self.api_key = kwargs.get("public_key") or kwargs.get("api_key")
+        self.private_key = kwargs.get("private_key") or kwargs.get("api_secret")
         self.mnemonic = kwargs.get("mnemonic")
         self.subaccount_number = kwargs.get("subaccount_number", 0)
         self.address = kwargs.get("address")

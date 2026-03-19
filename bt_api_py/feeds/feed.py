@@ -247,6 +247,10 @@ class Feed(AsyncBase, ConnectionMixin, CapabilityMixin):
                     continue
                 self.handle_request_exception(url, method, body, e)
 
+    def disconnect(self) -> None:
+        self._http_client.close()
+        ConnectionMixin.disconnect(self)
+
     def cancel_all(self, symbol: Any, extra_data: Any = None, **kwargs: Any) -> Any:
         """
         cancel all order

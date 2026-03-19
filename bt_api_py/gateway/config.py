@@ -1,10 +1,31 @@
 from __future__ import annotations
 
+import os
+import socket
 import sys
 import tempfile
+import zlib
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
+
+_TCP_PORT_ASSIGNMENTS: dict[str, int] = {}
+_TCP_RESERVED_BASE_PORTS: set[int] = set()
+
+
+def _tcp_port_triplet_available(base_port: int, host: str = "127.0.0.1") -> bool:
+    sockets: list[socket.socket] = []
+    try:
+        for port in range(base_port, base_port + 3):
+            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            sockets.append(sock)
+            sock.bind((host, port))
+        return True
+    except OSError:
+        return False
+    finally:
+        for sock in sockets:
+            sock.close()
 
 
 @dataclass(slots=True)
@@ -98,5 +119,25 @@ class GatewayConfig:
         )
 
     def _tcp_base_port(self) -> int:
-        seed = sum(ord(ch) for ch in self.runtime_name)
-        return 32000 + (seed % 1000) * 3
+        # Use a stable per-process allocation keyed by runtime name. Under
+        # pytest-xdist, include the worker id so parallel workers do not share
+        # the same deterministic port space. If two runtime names hash to the
+        # same base port, probe forward to the next free triplet.
+        seed_input = self.runtime_name
+        worker_id = os.environ.get("PYTEST_XDIST_WORKER", "")
+        if worker_id:
+            seed_input = f"{worker_id}:{seed_input}"
+        assigned = _TCP_PORT_ASSIGNMENTS.get(seed_input)
+        if assigned is not None:
+            return assigned
+
+        seed = zlib.crc32(seed_input.encode("utf-8")) % 10000
+        for offset in range(10000):
+            slot = (seed + offset) % 10000
+            candidate = 32000 + slot * 3
+            if candidate not in _TCP_RESERVED_BASE_PORTS and _tcp_port_triplet_available(candidate):
+                _TCP_RESERVED_BASE_PORTS.add(candidate)
+                _TCP_PORT_ASSIGNMENTS[seed_input] = candidate
+                return candidate
+
+        raise RuntimeError("no available TCP gateway ports")

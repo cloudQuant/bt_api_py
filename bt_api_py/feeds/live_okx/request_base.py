@@ -81,10 +81,13 @@ class OkxRequestData(
     def __init__(self, data_queue: Any, **kwargs: Any) -> None:
         super().__init__(data_queue, **kwargs)
         self.data_queue = data_queue
-        self.public_key = kwargs.get("public_key")
-        self.private_key = kwargs.get("private_key")
+        self.public_key = kwargs.get("public_key") or kwargs.get("api_key")
+        self.private_key = (
+            kwargs.get("private_key") or kwargs.get("secret_key") or kwargs.get("api_secret")
+        )
         self.passphrase = kwargs.get("passphrase")
         self.topics = kwargs.get("topics", {})
+        self.exchange_name = kwargs.get("exchange_name", "OKX___SWAP")
         self.asset_type = kwargs.get("asset_type", "SWAP")
         self.logger_name = kwargs.get("logger_name", "okx_swap_feed.log")
         self._params = OkxExchangeDataSwap()
@@ -178,6 +181,8 @@ class OkxRequestData(
         """
         if params is None:
             params: dict[str, Any] = {}
+        if extra_data is None:
+            extra_data = {}
         method, path = path.split(" ", 1)
         req = parse.urlencode(params)
         url = f"{self._params.rest_url}{path}?{req}"  # ?{req}
@@ -209,6 +214,8 @@ class OkxRequestData(
         """
         if params is None:
             params: dict[str, Any] = {}
+        if extra_data is None:
+            extra_data = {}
         method, path = path.split(" ", 1)
         req = parse.urlencode(params)
         url = f"{self._params.rest_url}{path}?{req}"  # ?{req}

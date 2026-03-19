@@ -102,8 +102,10 @@ class HyperliquidRequestData(Feed):
         )
 
         # API key and private key for authentication
-        self.api_key = kwargs.get("api_key", "")
-        self.private_key = kwargs.get("private_key", "")
+        self.api_key = kwargs.get("public_key") or kwargs.get("api_key", "")
+        self.private_key = (
+            kwargs.get("private_key") or kwargs.get("api_secret") or kwargs.get("secret_key") or ""
+        )
         self.address = None
 
         if self.private_key:

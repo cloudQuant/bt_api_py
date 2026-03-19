@@ -665,6 +665,65 @@ class TestMt5AdapterWithFakeClient:
         assert self.adapter._symbol_specs["EURUSD"]["digits"] == 5
 
 
+def test_mt5_adapter_disconnect_logs_close_failures(monkeypatch):
+    class BrokenCloseMT5WebClient(FakeMT5WebClient):
+        async def close(self):
+            raise RuntimeError("close failed")
+
+    adapter = _make_adapter(BrokenCloseMT5WebClient())
+    warning_messages: list[str] = []
+    monkeypatch.setattr(adapter.logger, "warning", warning_messages.append)
+    try:
+        adapter.disconnect()
+
+        assert warning_messages
+        assert "Mt5GatewayAdapter close failed during disconnect" in warning_messages[0]
+        assert "RuntimeError: close failed" in warning_messages[0]
+        assert adapter._running is False
+        assert adapter._loop is None
+        assert adapter._thread is None
+        assert adapter._client is None
+    finally:
+        _stop_adapter(adapter)
+
+
+@pytest.mark.asyncio
+async def test_mt5_adapter_async_connect_logs_optional_callback_registration_failures(
+    monkeypatch,
+):
+    class CallbackFailingClient(FakeMT5WebClient):
+        def on_order_update(self, callback):
+            raise RuntimeError("order callback failed")
+
+        def on_position_update(self, callback):
+            raise RuntimeError("position callback failed")
+
+    fake_client = CallbackFailingClient()
+    adapter = Mt5GatewayAdapter(
+        login=12345678,
+        password="test_pass",
+        exchange_type="MT5",
+        asset_type="OTC",
+    )
+    warning_messages: list[str] = []
+    monkeypatch.setattr(adapter.logger, "warning", warning_messages.append)
+
+    class FakeModule:
+        MT5WebClient = lambda *args, **kwargs: fake_client  # noqa: E731
+
+    monkeypatch.setitem(__import__("sys").modules, "pymt5", FakeModule())
+
+    await adapter._async_connect()
+
+    assert fake_client.is_connected is True
+    assert fake_client._logged_in is True
+    assert len(warning_messages) == 2
+    assert "failed to register order update callback" in warning_messages[0]
+    assert "order callback failed" in warning_messages[0]
+    assert "failed to register position update callback" in warning_messages[1]
+    assert "position callback failed" in warning_messages[1]
+
+
 # ---------------------------------------------------------------------------
 # FakeGatewayAdapter with get_bars/get_symbol_info/get_open_orders for IPC tests
 # ---------------------------------------------------------------------------

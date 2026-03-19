@@ -72,6 +72,8 @@ class BeQuantRequestData(Feed):
         """Synchronous HTTP request using Feed.http_request()."""
         if params is None:
             params: dict[str, Any] = {}
+        if extra_data is None:
+            extra_data = {}
         method, endpoint = path.split(" ", 1)
         query_string = urlencode(params) if params else ""
         url = f"{self._params.rest_url}{endpoint}"
@@ -93,6 +95,8 @@ class BeQuantRequestData(Feed):
         """Async HTTP request using Feed.async_http_request()."""
         if params is None:
             params: dict[str, Any] = {}
+        if extra_data is None:
+            extra_data = {}
         method, endpoint = path.split(" ", 1)
         query_string = urlencode(params) if params else ""
         url = f"{self._params.rest_url}{endpoint}"

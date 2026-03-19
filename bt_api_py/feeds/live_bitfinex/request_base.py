@@ -107,6 +107,8 @@ class BitfinexRequestData(Feed):
         """
         if params is None:
             params: dict[str, Any] = {}
+        if extra_data is None:
+            extra_data = {}
         method, endpoint = path.split(" ", 1)
 
         # Build URL with query string
@@ -152,6 +154,8 @@ class BitfinexRequestData(Feed):
         """
         if params is None:
             params: dict[str, Any] = {}
+        if extra_data is None:
+            extra_data = {}
         method, endpoint = path.split(" ", 1)
 
         # Build URL with query string

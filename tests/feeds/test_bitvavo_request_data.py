@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from queue import Queue
 from typing import Any
+from unittest.mock import MagicMock
 
 from bt_api_py.feeds.live_bitvavo.request_base import BitvavoRequestData
 from bt_api_py.feeds.live_bitvavo.spot import BitvavoRequestDataSpot
@@ -53,3 +54,28 @@ def test_bitvavo_async_callback_pushes_result_to_queue() -> None:
     request_data.async_callback(_Future())
 
     assert queue.get_nowait() == {"ok": True}
+
+
+def test_bitvavo_disconnect_closes_http_client() -> None:
+    request_data = BitvavoRequestData(public_key="public-key", private_key="secret-key")
+    request_data._http_client.close = MagicMock()
+
+    request_data.disconnect()
+
+    request_data._http_client.close.assert_called_once_with()
+
+
+def test_bitvavo_falls_back_to_api_credentials_when_aliases_are_empty(monkeypatch: Any) -> None:
+    request_data = BitvavoRequestData(
+        public_key="",
+        api_key="public-key",
+        private_key="",
+        api_secret="secret-key",
+    )
+    monkeypatch.setattr("bt_api_py.feeds.live_bitvavo.request_base.time.time", lambda: 1700000000.0)
+
+    headers = request_data._get_headers("GET", "/balance", {"symbol": "BTC"})
+
+    assert request_data._params.api_key == "public-key"
+    assert request_data._params.api_secret == "secret-key"
+    assert headers["Bitvavo-Access-Key"] == "public-key"

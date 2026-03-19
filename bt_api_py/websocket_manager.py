@@ -346,7 +346,7 @@ class WebSocketConnection:
         await self._close_websocket()
 
         # Attempt reconnection
-        if self._reconnect_attempts < self.config.max_reconnect_attempts:
+        while self._running and self._reconnect_attempts < self.config.max_reconnect_attempts:
             self._reconnect_attempts += 1
             self._stats["reconnects"] += 1
 
@@ -357,17 +357,26 @@ class WebSocketConnection:
 
             try:
                 await self.connect()
+                await self._restore_subscriptions()
+                return
+            except WebSocketError as e:
+                self.logger.warning(
+                    "Reconnection attempt %d/%d failed for %s: %s",
+                    self._reconnect_attempts,
+                    self.config.max_reconnect_attempts,
+                    self.connection_id,
+                    e,
+                )
+                self._connected = False
+                await self._close_websocket()
 
-                # Resubscribe to all topics
-                for subscription in list(self._subscriptions.values()):
-                    await self._send_subscription(subscription)
+        self._running = False
+        self.logger.error("Max reconnection attempts reached")
 
-            except (OSError, websockets.exceptions.WebSocketException) as e:
-                self.logger.error(f"Reconnection failed: {e}")
-                await self._handle_disconnect()
-        else:
-            self._running = False
-            self.logger.error("Max reconnection attempts reached")
+    async def _restore_subscriptions(self) -> None:
+        """Restore in-memory subscriptions after reconnecting."""
+        for subscription in list(self._subscriptions.values()):
+            await self._send_subscription(subscription)
 
     async def _close_websocket(self) -> None:
         """Close and clear the underlying websocket if present."""
@@ -408,11 +417,11 @@ class WebSocketConnection:
         }
 
 
-@singleton(cast(type[Any], IConnectionManager))
+@singleton(cast("type[Any]", IConnectionManager))
 class WebSocketManager(IConnectionManager):
     """WebSocket connection manager with pooling and load balancing."""
 
-    def __init__(self, event_bus: IEventBus = inject(cast(type[Any], IEventBus))):
+    def __init__(self, event_bus: IEventBus = inject(cast("type[Any]", IEventBus))):
         self.event_bus = event_bus
         self.logger = get_logger("websocket_manager")
 

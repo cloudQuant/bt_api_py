@@ -3,6 +3,7 @@ from __future__ import annotations
 import base64
 import queue
 from concurrent.futures import Future
+from unittest.mock import MagicMock
 
 from bt_api_py.feeds.live_luno.request_base import LunoRequestData
 from bt_api_py.feeds.live_luno.spot import LunoRequestDataSpot
@@ -12,6 +13,15 @@ def test_luno_request_data_builds_basic_auth_header() -> None:
     feed = LunoRequestData()
     feed._params.api_key = "key"
     feed._params.api_secret = "secret"
+
+    headers = feed._get_auth_headers()
+
+    expected = base64.b64encode(b"key:secret").decode("utf-8")
+    assert headers["Authorization"] == f"Basic {expected}"
+
+
+def test_luno_request_data_accepts_public_private_key_aliases() -> None:
+    feed = LunoRequestData(public_key="key", private_key="secret")
 
     headers = feed._get_auth_headers()
 
@@ -57,3 +67,12 @@ def test_luno_request_data_async_callback_pushes_result_to_queue() -> None:
     feed.async_callback(future)
 
     assert data_queue.get_nowait() == {"ok": True}
+
+
+def test_luno_disconnect_closes_http_client() -> None:
+    feed = LunoRequestData()
+    feed._http_client.close = MagicMock()
+
+    feed.disconnect()
+
+    feed._http_client.close.assert_called_once_with()

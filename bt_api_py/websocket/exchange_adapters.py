@@ -131,7 +131,8 @@ class ExchangeWebSocketAdapter(ABC):
 
         if current_count >= limits.get(topic, 100):
             raise RateLimitError(
-                f"Subscription limit exceeded for {topic}: {current_count}/{limits[topic]}"
+                self.exchange_name,
+                detail=f"Subscription limit exceeded for {topic}: {current_count}/{limits[topic]}",
             )
 
     def increment_subscription_count(self, topic: str) -> None:
@@ -382,7 +383,7 @@ class OKXWebSocketAdapter(ExchangeWebSocketAdapter):
     def _generate_signature(self, timestamp: str, method: str, path: str) -> str:
         """Generate OKX API signature."""
         if not self.credentials or not self.credentials.api_secret:
-            raise AuthenticationError("Missing API credentials")
+            raise AuthenticationError(self.exchange_name, detail="Missing API credentials")
 
         message = timestamp + method + path
         signature = hmac.new(

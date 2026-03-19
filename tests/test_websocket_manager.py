@@ -5,6 +5,7 @@ from typing import Any
 
 import pytest
 
+from bt_api_py.exceptions import WebSocketError
 from bt_api_py.websocket_manager import (
     Subscription,
     WebSocketConfig,
@@ -132,3 +133,82 @@ async def test_handle_disconnect_closes_stale_websocket_when_retries_exhausted()
     assert connection._websocket is None
     assert connection.connected is False
     assert connection.running is False
+
+
+@pytest.mark.asyncio
+async def test_handle_disconnect_retries_after_websocket_error_and_recovers(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    config = WebSocketConfig(
+        url="wss://example.com/ws",
+        exchange_name="TEST___SPOT",
+        reconnect_interval=0.01,
+        max_reconnect_attempts=2,
+    )
+    connection = WebSocketConnection(config, "test_3")
+    websocket = _DummyWebSocket()
+    connection._websocket = websocket
+    connection._connected = True
+    connection._running = True
+
+    attempts = 0
+
+    async def fake_sleep(_: float) -> None:
+        return None
+
+    async def fake_connect() -> None:
+        nonlocal attempts
+        attempts += 1
+        if attempts == 1:
+            raise WebSocketError(config.exchange_name, detail="temporary failure")
+        connection._connected = True
+        connection._websocket = _DummyWebSocket()
+
+    monkeypatch.setattr(asyncio, "sleep", fake_sleep)
+    monkeypatch.setattr(connection, "connect", fake_connect)
+
+    await connection._handle_disconnect()
+
+    assert websocket.closed is True
+    assert attempts == 2
+    assert connection.connected is True
+    assert connection.running is True
+    assert connection._reconnect_attempts == 2
+
+
+@pytest.mark.asyncio
+async def test_handle_disconnect_stops_after_websocket_error_retries_exhausted(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    config = WebSocketConfig(
+        url="wss://example.com/ws",
+        exchange_name="TEST___SPOT",
+        reconnect_interval=0.01,
+        max_reconnect_attempts=2,
+    )
+    connection = WebSocketConnection(config, "test_4")
+    websocket = _DummyWebSocket()
+    connection._websocket = websocket
+    connection._connected = True
+    connection._running = True
+
+    attempts = 0
+
+    async def fake_sleep(_: float) -> None:
+        return None
+
+    async def fake_connect() -> None:
+        nonlocal attempts
+        attempts += 1
+        raise WebSocketError(config.exchange_name, detail="still down")
+
+    monkeypatch.setattr(asyncio, "sleep", fake_sleep)
+    monkeypatch.setattr(connection, "connect", fake_connect)
+
+    await connection._handle_disconnect()
+
+    assert websocket.closed is True
+    assert attempts == 2
+    assert connection.connected is False
+    assert connection.running is False
+    assert connection._websocket is None

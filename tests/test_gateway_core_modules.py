@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import threading
+from pathlib import Path
 
 from bt_api_py.gateway.order_identity_map import OrderIdentityMap
 from bt_api_py.gateway.order_ref_allocator import OrderRefAllocator
@@ -317,6 +318,91 @@ class TestOrderRefAllocator:
         # Should not crash, falls back to initial
         assert alloc.current() == 0
         assert alloc.next() == "1"
+
+    def test_non_numeric_last_order_ref_in_state_file(self, tmp_path, caplog):
+        state_file = tmp_path / "gateway_acc-1_state.json"
+        state_file.write_text('{"last_order_ref": "oops"}', encoding="utf-8")
+
+        with caplog.at_level("WARNING"):
+            alloc = OrderRefAllocator("acc-1", state_dir=tmp_path)
+
+        assert alloc.current() == 0
+        assert "failed to load state" in caplog.text
+
+    def test_non_mapping_state_file_payload(self, tmp_path, caplog):
+        state_file = tmp_path / "gateway_acc-1_state.json"
+        state_file.write_text("[]", encoding="utf-8")
+
+        with caplog.at_level("WARNING"):
+            alloc = OrderRefAllocator("acc-1", state_dir=tmp_path)
+
+        assert alloc.current() == 0
+        assert "state payload must be an object" in caplog.text
+
+    def test_persist_logs_warning_and_recovers_from_corrupt_existing_state(self, tmp_path, caplog):
+        state_file = tmp_path / "gateway_acc-1_state.json"
+        state_file.write_text("NOT JSON!!!", encoding="utf-8")
+        alloc = OrderRefAllocator("acc-1", state_dir=tmp_path)
+
+        with caplog.at_level("WARNING"):
+            result = alloc.next()
+
+        assert result == "1"
+        assert "failed to read existing state during persist" in caplog.text
+        data = json.loads(state_file.read_text(encoding="utf-8"))
+        assert data["last_order_ref"] == 1
+
+    def test_persist_recovers_from_non_mapping_existing_state(self, tmp_path, caplog):
+        state_file = tmp_path / "gateway_acc-1_state.json"
+        state_file.write_text("[]", encoding="utf-8")
+        alloc = OrderRefAllocator("acc-1", state_dir=tmp_path)
+
+        with caplog.at_level("WARNING"):
+            result = alloc.next()
+
+        assert result == "1"
+        assert "failed to read existing state during persist" in caplog.text
+        data = json.loads(state_file.read_text(encoding="utf-8"))
+        assert data["last_order_ref"] == 1
+
+    def test_persist_logs_warning_when_temp_state_cleanup_fails(self, tmp_path, monkeypatch, caplog):
+        alloc = OrderRefAllocator("acc-1", state_dir=tmp_path)
+        original_unlink = Path.unlink
+        original_exists = Path.exists
+        temp_paths: list[Path] = []
+
+        def fail_temp_unlink(self, missing_ok=False):
+            if self.suffix == ".tmp":
+                temp_paths.append(self)
+                raise OSError("temp unlink failed")
+            return original_unlink(self, missing_ok=missing_ok)
+
+        def fake_exists(self):
+            if self.suffix == ".tmp":
+                return True
+            return original_exists(self)
+
+        monkeypatch.setattr(Path, "unlink", fail_temp_unlink)
+        monkeypatch.setattr(Path, "exists", fake_exists)
+
+        with caplog.at_level("WARNING"):
+            result = alloc.next()
+
+        assert result == "1"
+        assert temp_paths
+        assert "failed to clean up temp state file" in caplog.text
+        data = json.loads((tmp_path / "gateway_acc-1_state.json").read_text(encoding="utf-8"))
+        assert data["last_order_ref"] == 1
+
+    def test_persist_rejects_non_numeric_internal_value(self, tmp_path, caplog):
+        alloc = OrderRefAllocator("acc-1", state_dir=tmp_path)
+        alloc._value = "oops"  # type: ignore[assignment]
+
+        with caplog.at_level("WARNING"):
+            alloc._persist()
+
+        assert "failed to persist state" in caplog.text
+        assert (tmp_path / "gateway_acc-1_state.json").exists() is False
 
     def test_thread_safety(self, tmp_path):
         alloc = OrderRefAllocator("acc-1", state_dir=tmp_path)

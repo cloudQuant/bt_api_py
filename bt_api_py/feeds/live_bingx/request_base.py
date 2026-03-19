@@ -44,10 +44,10 @@ class BingXRequestData(Feed):
         self.exchange_name = kwargs.get("exchange_name", "BINGX___SPOT")
         self.asset_type = kwargs.get("asset_type", "SPOT")
         self._params = BingXExchangeDataSpot()
-        if "public_key" in kwargs:
-            self._params.api_key = kwargs["public_key"]
-        if "private_key" in kwargs:
-            self._params.api_secret = kwargs["private_key"]
+        self._params.api_key = kwargs.get("public_key") or kwargs.get("api_key")
+        self._params.api_secret = (
+            kwargs.get("private_key") or kwargs.get("secret_key") or kwargs.get("api_secret")
+        )
         self.request_logger = get_logger("bingx_feed")
         self.async_logger = get_logger("bingx_feed")
         self._http_client = HttpClient(venue=self.exchange_name, timeout=10)
@@ -205,7 +205,7 @@ class BingXRequestData(Feed):
         pass
 
     def disconnect(self) -> None:
-        pass
+        super().disconnect()
 
     def is_connected(self) -> bool:
         return True

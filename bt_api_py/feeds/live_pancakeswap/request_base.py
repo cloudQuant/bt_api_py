@@ -38,8 +38,8 @@ class PancakeSwapRequestData(Feed):
         super().__init__(data_queue, **kwargs)
         self.data_queue = data_queue
         self.exchange_name = kwargs.get("exchange_name", "PANCAKESWAP___DEX")
-        self.api_key = kwargs.get("api_key")
-        self.api_secret = kwargs.get("api_secret")
+        self.api_key = kwargs.get("public_key") or kwargs.get("api_key")
+        self.api_secret = kwargs.get("private_key") or kwargs.get("api_secret")
         self.asset_type = kwargs.get("asset_type", "SPOT")
         self.logger_name = kwargs.get("logger_name", "pancakeswap_feed.log")
         self._params = kwargs.get("exchange_data")

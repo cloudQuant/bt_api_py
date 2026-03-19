@@ -30,7 +30,9 @@ class CoinbaseRequestData(Feed):
         super().__init__(data_queue, **kwargs)
         self.data_queue = data_queue
         self.api_key = kwargs.get("api_key") or kwargs.get("public_key")
-        self.private_key = kwargs.get("private_key")
+        self.private_key = (
+            kwargs.get("private_key") or kwargs.get("secret_key") or kwargs.get("api_secret")
+        )
         self.passphrase = kwargs.get("passphrase", "")
         self.asset_type = kwargs.get("asset_type", "SPOT")
         self.exchange_name = kwargs.get("exchange_name", "COINBASE___SPOT")
@@ -117,6 +119,8 @@ class CoinbaseRequestData(Feed):
         """
         if params is None:
             params: dict[str, Any] = {}
+        if extra_data is None:
+            extra_data = {}
         method, endpoint = path.split(" ", 1)
 
         # Build URL with query string
@@ -156,6 +160,8 @@ class CoinbaseRequestData(Feed):
         """
         if params is None:
             params: dict[str, Any] = {}
+        if extra_data is None:
+            extra_data = {}
         method, endpoint = path.split(" ", 1)
 
         query_string = parse.urlencode(params) if params else ""

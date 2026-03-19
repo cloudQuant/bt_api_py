@@ -42,10 +42,13 @@ class HtxRequestData(Feed):
     def __init__(self, data_queue: Any = None, **kwargs: Any) -> None:
         super().__init__(data_queue, **kwargs)
         self.data_queue = data_queue
-        self.public_key = kwargs.get("public_key")
-        self.private_key = kwargs.get("private_key")
+        self.public_key = kwargs.get("public_key") or kwargs.get("api_key")
+        self.private_key = (
+            kwargs.get("private_key") or kwargs.get("secret_key") or kwargs.get("api_secret")
+        )
         self.account_id = kwargs.get("account_id")  # HTX requires account ID for trading
         self.topics = kwargs.get("topics", {})
+        self.exchange_name = kwargs.get("exchange_name", "HTX___SPOT")
         self.asset_type = kwargs.get("asset_type", "SPOT")
         self.logger_name = kwargs.get("logger_name", "htx_feed.log")
         from bt_api_py.containers.exchanges.htx_exchange_data import HtxExchangeData
@@ -180,6 +183,8 @@ class HtxRequestData(Feed):
         """
         if params is None:
             params: dict[str, Any] = {}
+        if extra_data is None:
+            extra_data = {}
 
         # Split method and path
         parts = path.split(" ", 1)
@@ -244,6 +249,8 @@ class HtxRequestData(Feed):
         """
         if params is None:
             params: dict[str, Any] = {}
+        if extra_data is None:
+            extra_data = {}
 
         # Split method and path
         parts = path.split(" ", 1)

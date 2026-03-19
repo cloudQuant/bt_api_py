@@ -68,39 +68,81 @@ class GatewayClient:
     def connect(self) -> None:
         if self.connected:
             return
-        if bool(self.kwargs.get("gateway_start_local_runtime", True)):
-            self.runtime = GatewayRuntime(self.config, **self.kwargs)
-            self.runtime.start_in_thread()
-        self.command_socket = self.context.socket(zmq.DEALER)
-        self.command_socket.setsockopt(zmq.IDENTITY, uuid.uuid4().hex.encode("utf-8"))
-        self.market_socket = self.context.socket(zmq.SUB)
-        self.event_socket = self.context.socket(zmq.SUB)
-        self.market_socket.setsockopt(zmq.SUBSCRIBE, b"")
-        self.event_socket.setsockopt(zmq.SUBSCRIBE, b"")
-        self.command_socket.connect(self.config.command_endpoint)
-        self.market_socket.connect(self.config.market_endpoint)
-        self.event_socket.connect(self.config.event_endpoint)
-        self._command("ping")
-        self.connected = True
-        self._wait_for_adapter_ready()
+        try:
+            if bool(self.kwargs.get("gateway_start_local_runtime", True)):
+                self.runtime = GatewayRuntime(self.config, **self.kwargs)
+                self.runtime.start_in_thread()
+            self.command_socket = self.context.socket(zmq.DEALER)
+            self.command_socket.setsockopt(zmq.IDENTITY, uuid.uuid4().hex.encode("utf-8"))
+            self.market_socket = self.context.socket(zmq.SUB)
+            self.event_socket = self.context.socket(zmq.SUB)
+            self.market_socket.setsockopt(zmq.SUBSCRIBE, b"")
+            self.event_socket.setsockopt(zmq.SUBSCRIBE, b"")
+            self.command_socket.connect(self.config.command_endpoint)
+            self.market_socket.connect(self.config.market_endpoint)
+            self.event_socket.connect(self.config.event_endpoint)
+            self._command("ping")
+            self.connected = True
+            self._wait_for_adapter_ready()
+        except Exception:
+            self._cleanup_after_connect_failure()
+            raise
 
     def start(self) -> None:
         self.connect()
 
     def disconnect(self) -> None:
+        logger = logging.getLogger(__name__)
         self.connected = False
-        for socket in (self.command_socket, self.market_socket, self.event_socket):
-            if socket is not None:
-                socket.close(0)
-        self.command_socket = None
-        self.market_socket = None
-        self.event_socket = None
+        self._close_sockets()
+        self._reset_runtime_state()
         if self.runtime is not None:
-            self.runtime.stop()
-            self.runtime = None
+            try:
+                self.runtime.stop()
+            except Exception as exc:
+                logger.warning(
+                    "Gateway client runtime stop failed during disconnect: %s: %s",
+                    type(exc).__name__,
+                    exc,
+                )
+            finally:
+                self.runtime = None
 
     def stop(self) -> None:
         self.disconnect()
+
+    def _close_sockets(self) -> None:
+        logger = logging.getLogger(__name__)
+        for socket in (self.command_socket, self.market_socket, self.event_socket):
+            if socket is not None:
+                try:
+                    socket.close(0)
+                except Exception as exc:
+                    logger.warning(
+                        "Gateway client socket close failed during cleanup: %s: %s",
+                        type(exc).__name__,
+                        exc,
+                    )
+        self.command_socket = None
+        self.market_socket = None
+        self.event_socket = None
+
+    def _cleanup_after_connect_failure(self) -> None:
+        self.connected = False
+        self._close_sockets()
+        self._reset_runtime_state()
+        if self.runtime is not None:
+            logger = logging.getLogger(__name__)
+            try:
+                self.runtime.stop()
+            except Exception as exc:
+                logger.warning(
+                    "Gateway client cleanup failed after connect error: %s: %s",
+                    type(exc).__name__,
+                    exc,
+                )
+            finally:
+                self.runtime = None
 
     def _wait_for_adapter_ready(self) -> None:
         """Poll ping until the gateway adapter reports ready.
@@ -114,19 +156,34 @@ class GatewayClient:
         logger = logging.getLogger(__name__)
         deadline = time.monotonic() + timeout
         interval = 0.5
+        last_error: Exception | None = None
         while time.monotonic() < deadline:
             try:
                 result = self._command("ping")
                 if isinstance(result, dict) and result.get("ready"):
                     logger.info("Gateway adapter ready")
                     return
-            except Exception:
-                pass
+            except Exception as exc:
+                last_error = exc
             time.sleep(interval)
-        logger.warning(
-            "Gateway adapter not ready after %.1fs — commands may fail until connected",
-            timeout,
-        )
+        if last_error is None:
+            logger.warning(
+                "Gateway adapter not ready after %.1fs — commands may fail until connected",
+                timeout,
+            )
+        else:
+            logger.warning(
+                "Gateway adapter not ready after %.1fs — last error: %s: %s",
+                timeout,
+                type(last_error).__name__,
+                last_error,
+            )
+
+    def _reset_runtime_state(self) -> None:
+        self.tick_queues.clear()
+        self.broker_updates.clear()
+        self.pending_orders.clear()
+        self.subscribed.clear()
 
     def subscribe(self, symbols) -> dict[str, Any]:
         values = [symbols] if isinstance(symbols, str) else list(symbols or [])

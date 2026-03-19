@@ -90,13 +90,26 @@ class GatewayRuntime:
             return
         self.health.set_state(GatewayState.STARTING)
         self._adapter_connected = False
-        self.command_socket = self.context.socket(zmq.ROUTER)
-        self.event_socket = self.context.socket(zmq.PUB)
-        self.market_socket = self.context.socket(zmq.PUB)
-        self.command_socket.bind(self.config.command_endpoint)
-        self.event_socket.bind(self.config.event_endpoint)
-        self.market_socket.bind(self.config.market_endpoint)
-        self.poller.register(self.command_socket, zmq.POLLIN)
+        try:
+            self.command_socket = self.context.socket(zmq.ROUTER)
+            self.event_socket = self.context.socket(zmq.PUB)
+            self.market_socket = self.context.socket(zmq.PUB)
+            self.command_socket.bind(self.config.command_endpoint)
+            self.event_socket.bind(self.config.event_endpoint)
+            self.market_socket.bind(self.config.market_endpoint)
+            self.poller.register(self.command_socket, zmq.POLLIN)
+        except zmq.ZMQError as exc:
+            self.health.set_state(GatewayState.ERROR)
+            self.health.record_error("runtime_start", f"{type(exc).__name__}: {exc}")
+            logger.error(
+                "GatewayRuntime failed to bind sockets for %s: %s: %s",
+                self.config.exchange_type,
+                type(exc).__name__,
+                exc,
+            )
+            self._cleanup_sockets()
+            self.running = False
+            return
         if self.tick_writer is not None:
             self.tick_writer.start()
         self.running = True
@@ -109,16 +122,24 @@ class GatewayRuntime:
         )
         adapter_thread.start()
         logger.info("GatewayRuntime started: %s", self.config.exchange_type)
-        while self.running:
-            try:
-                self._handle_commands()
-                if self._adapter_connected:
-                    self._flush_adapter_output()
-            except zmq.ZMQError:
-                if not self.running:
-                    break
-                self.health.record_error("runtime", "ZMQError in main loop")
-                raise
+        try:
+            while self.running:
+                try:
+                    self._handle_commands()
+                    if self._adapter_connected:
+                        self._flush_adapter_output()
+                except zmq.ZMQError as exc:
+                    if not self.running:
+                        break
+                    self._handle_runtime_failure("runtime_loop", exc)
+                    return
+                except Exception as exc:
+                    if not self.running:
+                        break
+                    self._handle_runtime_failure("runtime_loop", exc)
+                    return
+        finally:
+            self._cleanup_sockets()
 
     def start_in_thread(self) -> None:
         if self.thread is not None and self.thread.is_alive():
@@ -127,30 +148,38 @@ class GatewayRuntime:
         self.thread.start()
         # Wait until the command loop is running so callers can ping immediately.
         deadline = time.monotonic() + 2.0
-        while not self.running and time.monotonic() < deadline:
+        while (
+            not self.running
+            and self.health.state != GatewayState.ERROR
+            and time.monotonic() < deadline
+        ):
             time.sleep(0.05)
 
     def stop(self) -> None:
         self.health.set_state(GatewayState.STOPPING)
         self.running = False
-        self.adapter.disconnect()
+        self._adapter_connected = False
+        try:
+            self.adapter.disconnect()
+        except Exception as exc:
+            logger.warning(
+                "GatewayRuntime adapter disconnect failed for %s: %s: %s",
+                self.config.exchange_type,
+                type(exc).__name__,
+                exc,
+            )
+            self.health.record_error("runtime_stop", f"{type(exc).__name__}: {exc}")
         self.health.update_market_connection(ConnectionState.DISCONNECTED)
+        self.health.update_trade_connection(ConnectionState.DISCONNECTED)
         if self.tick_writer is not None:
             self.tick_writer.stop()
-        for socket in (self.command_socket, self.event_socket, self.market_socket):
-            if socket is not None:
-                with contextlib.suppress(KeyError):
-                    self.poller.unregister(socket)
-                socket.close(0)
-        self.command_socket = None
-        self.event_socket = None
-        self.market_socket = None
         if (
             self.thread is not None
             and self.thread.is_alive()
             and threading.current_thread() is not self.thread
         ):
             self.thread.join(timeout=1.0)
+        self._cleanup_sockets()
         self.health.set_state(GatewayState.STOPPED)
         logger.info("GatewayRuntime stopped: %s", self.config.exchange_type)
 
@@ -187,6 +216,15 @@ class GatewayRuntime:
             result = self._dispatch(command, data)
             response = {"request_id": request_id, "status": "ok", "data": result}
         except Exception as exc:
+            self.health.record_error("command", f"{command or '<empty>'}: {type(exc).__name__}: {exc}")
+            logger.warning(
+                "Gateway command failed for %s request_id=%s command=%s: %s: %s",
+                self.config.exchange_type,
+                request_id,
+                command or "<empty>",
+                type(exc).__name__,
+                exc,
+            )
             response = {"request_id": request_id, "status": "error", "error": str(exc)}
         if self.command_socket is not None:
             sock.send_multipart([identity, dumps_message(response)])
@@ -195,6 +233,7 @@ class GatewayRuntime:
     def _connect_adapter_background(self) -> None:
         """Connect the exchange adapter with retries; runs in a background thread."""
         max_retries = 3
+        self.health.update_market_connection(ConnectionState.CONNECTING)
         for attempt in range(max_retries):
             if not self.running:
                 return
@@ -209,6 +248,12 @@ class GatewayRuntime:
                 )
                 return
             except Exception as exc:
+                next_state = (
+                    ConnectionState.RECONNECTING
+                    if attempt < max_retries - 1 and self.running
+                    else ConnectionState.ERROR
+                )
+                self.health.update_market_connection(next_state)
                 logger.warning(
                     "Adapter connect attempt %d/%d failed: %s: %s",
                     attempt + 1,
@@ -216,9 +261,14 @@ class GatewayRuntime:
                     type(exc).__name__,
                     exc,
                 )
-                self.health.record_error("adapter_connect", str(exc))
+                self.health.record_error(
+                    "adapter_connect",
+                    f"attempt {attempt + 1}/{max_retries} {type(exc).__name__}: {exc}",
+                )
                 if attempt < max_retries - 1 and self.running:
                     time.sleep(2.0)
+        self._adapter_connected = False
+        self.health.update_market_connection(ConnectionState.ERROR)
         logger.error(
             "Adapter failed to connect after %d attempts for %s",
             max_retries,
@@ -315,3 +365,51 @@ class GatewayRuntime:
         except zmq.ZMQError:
             if self.running:
                 raise
+
+    def _handle_runtime_failure(self, source: str, exc: Exception) -> None:
+        self.running = False
+        self._adapter_connected = False
+        self.health.set_state(GatewayState.ERROR)
+        self.health.update_market_connection(ConnectionState.ERROR)
+        self.health.update_trade_connection(ConnectionState.ERROR)
+        self.health.record_error(source, f"{type(exc).__name__}: {exc}")
+        logger.error(
+            "GatewayRuntime failed for %s: %s: %s",
+            self.config.exchange_type,
+            type(exc).__name__,
+            exc,
+        )
+        if self.tick_writer is not None:
+            self.tick_writer.stop()
+        try:
+            self.adapter.disconnect()
+        except Exception as disconnect_exc:
+            logger.warning(
+                "GatewayRuntime adapter disconnect failed during %s for %s: %s: %s",
+                source,
+                self.config.exchange_type,
+                type(disconnect_exc).__name__,
+                disconnect_exc,
+            )
+            self.health.record_error(
+                f"{source}_disconnect",
+                f"{type(disconnect_exc).__name__}: {disconnect_exc}",
+            )
+
+    def _cleanup_sockets(self) -> None:
+        for socket in (self.command_socket, self.event_socket, self.market_socket):
+            if socket is not None:
+                with contextlib.suppress(KeyError):
+                    self.poller.unregister(socket)
+                try:
+                    socket.close(0)
+                except Exception as exc:
+                    logger.warning(
+                        "GatewayRuntime socket cleanup failed for %s: %s: %s",
+                        self.config.exchange_type,
+                        type(exc).__name__,
+                        exc,
+                    )
+        self.command_socket = None
+        self.event_socket = None
+        self.market_socket = None

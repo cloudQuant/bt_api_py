@@ -94,6 +94,8 @@ class PhemexRequestData(Feed):
         """
         if params is None:
             params: dict[str, Any] = {}
+        if extra_data is None:
+            extra_data = {}
 
         method, endpoint = path.split(" ", 1)
         query_string = urlencode(params) if params else ""
@@ -122,6 +124,8 @@ class PhemexRequestData(Feed):
         """Async HTTP request function using Feed.async_http_request()."""
         if params is None:
             params: dict[str, Any] = {}
+        if extra_data is None:
+            extra_data = {}
 
         method, endpoint = path.split(" ", 1)
         query_string = urlencode(params) if params else ""
