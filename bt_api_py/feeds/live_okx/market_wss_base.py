@@ -59,6 +59,9 @@ class OkxWssData(MyWebsocketApp):
         return sign
 
     def author(self) -> None:
+        if not self.public_key or not self.private_key:
+            self.wss_logger.info("Skipping auth (no credentials) — public channels only")
+            return
         timestamp = str(round(time.time()))
         sign_content = f"{timestamp}GET/users/self/verify"
         sign = self.sign(sign_content)
@@ -87,7 +90,7 @@ class OkxWssData(MyWebsocketApp):
         for topics in self.topics:
             self.count += 1
             if "orders" in topics["topic"]:
-                symbol = topics.get("symbol", "BTC—USDT")
+                symbol = topics.get("symbol", "BTC-USDT")
                 self.subscribe(topic="orders", symbol=symbol)
                 self.logger.info(
                     f"subscribe {self.count} data, OKX, {self.asset_type}, {symbol}, orders"
@@ -109,7 +112,7 @@ class OkxWssData(MyWebsocketApp):
                 )
 
             if "fills" in topics["topic"]:
-                symbol = topics.get("symbol", "BTC—USDT")
+                symbol = topics.get("symbol", "BTC-USDT")
                 self.subscribe(topic="fills", symbol=symbol)
                 self.logger.info(
                     f"subscribe {self.count} data, OKX, {self.asset_type}, {symbol}, fills"
@@ -128,7 +131,7 @@ class OkxWssData(MyWebsocketApp):
                 )
 
             if "account" in topics["topic"]:
-                symbol = topics.get("symbol", "BTC—USDT")
+                symbol = topics.get("symbol", "BTC-USDT")
                 currency = topics.get("currency", "USDT")
                 self.subscribe(topic="account", symbol=symbol, currency=currency)
                 self.logger.info(
@@ -136,7 +139,7 @@ class OkxWssData(MyWebsocketApp):
                 )
 
             if "positions" in topics["topic"]:
-                symbol = topics.get("symbol", "BTC—USDT")
+                symbol = topics.get("symbol", "BTC-USDT")
                 self.subscribe(topic="positions", symbol=symbol)
                 self.logger.info(
                     f"subscribe {self.count} data, OKX, {self.asset_type}, {symbol}, positions"
@@ -150,7 +153,7 @@ class OkxWssData(MyWebsocketApp):
 
             # Orderbook channels - check specific ones first to avoid substring conflicts
             if topics["topic"] == "books_l2_tbt" or topics["topic"] == "books_l2_tbt":
-                symbol = topics.get("symbol", "BTC—USDT")
+                symbol = topics.get("symbol", "BTC-USDT")
                 self.subscribe(topic="books_l2_tbt", symbol=symbol)
                 self.logger.info(
                     f"subscribe {self.count} data, OKX, {self.asset_type}, {symbol}, books_l2_tbt"
@@ -161,42 +164,42 @@ class OkxWssData(MyWebsocketApp):
                 and "_l2" not in topics["topic"]
                 and "50-l2" not in topics["topic"]
             ):
-                symbol = topics.get("symbol", "BTC—USDT")
+                symbol = topics.get("symbol", "BTC-USDT")
                 self.subscribe(topic="books", symbol=symbol, type="step0")
                 self.logger.info(
                     f"subscribe {self.count} data, OKX, {self.asset_type}, {symbol}, orderbook"
                 )
 
             if topics["topic"] == "ticker" or "ticker" in topics["topic"]:
-                symbol = topics.get("symbol", "BTC—USDT")
+                symbol = topics.get("symbol", "BTC-USDT")
                 self.subscribe(topic="tick", symbol=symbol)
                 self.logger.info(
                     f"subscribe {self.count} data, OKX, {self.asset_type}, {symbol}, ticker"
                 )
 
             if topics["topic"] == "depth" or "depth" in topics["topic"]:
-                symbol = topics.get("symbol", "BTC—USDT")
+                symbol = topics.get("symbol", "BTC-USDT")
                 self.subscribe(topic="depth", symbol=symbol, type="step0")
                 self.logger.info(
                     f"subscribe {self.count} data, OKX, {self.asset_type}, {symbol}, depth"
                 )
 
             if topics["topic"] == "bidAsk" or "bidAsk" in topics["topic"]:
-                symbol = topics.get("symbol", "BTC—USDT")
+                symbol = topics.get("symbol", "BTC-USDT")
                 self.subscribe(topic="bidAsk", symbol=symbol, type="step0")
                 self.logger.info(
                     f"subscribe {self.count} data, OKX, {self.asset_type}, {symbol}, bidAsk"
                 )
 
             if topics["topic"] == "funding_rate" or "funding_rate" in topics["topic"]:
-                symbol = topics.get("symbol", "BTC—USDT")
+                symbol = topics.get("symbol", "BTC-USDT")
                 self.subscribe(topic="funding_rate", symbol=symbol)
                 self.logger.info(
                     f"subscribe {self.count} data, OKX, {self.asset_type}, {symbol}, funding_rate"
                 )
 
             if topics["topic"] == "mark_price" or "mark_price" in topics["topic"]:
-                symbol = topics.get("symbol", "BTC—USDT")
+                symbol = topics.get("symbol", "BTC-USDT")
                 self.subscribe(topic="mark_price", symbol=symbol)
                 self.logger.info(
                     f"subscribe {self.count} data, OKX, {self.asset_type}, {symbol}, mark_price"
@@ -204,7 +207,7 @@ class OkxWssData(MyWebsocketApp):
 
             if topics["topic"] == "kline" or "kline" in topics["topic"]:
                 period = topics.get("period", "1m")
-                symbol = topics.get("symbol", "BTC—USDT")
+                symbol = topics.get("symbol", "BTC-USDT")
                 self.subscribe(topic="kline", symbol=symbol, period=period)
                 self.logger.info(
                     f"subscribe {self.count} data, OKX, {self.asset_type}, {symbol}, kline"
@@ -213,28 +216,28 @@ class OkxWssData(MyWebsocketApp):
             if topics["topic"] == "trades" or (
                 "trades" in topics["topic"] and "trades_all" not in topics["topic"]
             ):
-                symbol = topics.get("symbol", "BTC—USDT")
+                symbol = topics.get("symbol", "BTC-USDT")
                 self.subscribe(topic="trades", symbol=symbol)
                 self.logger.info(
                     f"subscribe {self.count} data, OKX, {self.asset_type}, {symbol}, trades"
                 )
 
             if topics["topic"] == "trades_all" or "trades_all" in topics["topic"]:
-                symbol = topics.get("symbol", "BTC—USDT")
+                symbol = topics.get("symbol", "BTC-USDT")
                 self.subscribe(topic="trades_all", symbol=symbol)
                 self.logger.info(
                     f"subscribe {self.count} data, OKX, {self.asset_type}, {symbol}, trades_all"
                 )
 
             if topics["topic"] == "open_interest" or "open_interest" in topics["topic"]:
-                symbol = topics.get("symbol", "BTC—USDT")
+                symbol = topics.get("symbol", "BTC-USDT")
                 self.subscribe(topic="open_interest", symbol=symbol)
                 self.logger.info(
                     f"subscribe {self.count} data, OKX, {self.asset_type}, {symbol}, open_interest"
                 )
 
             if topics["topic"] == "price_limit" or "price_limit" in topics["topic"]:
-                symbol = topics.get("symbol", "BTC—USDT")
+                symbol = topics.get("symbol", "BTC-USDT")
                 self.subscribe(topic="price_limit", symbol=symbol)
                 self.logger.info(
                     f"subscribe {self.count} data, OKX, {self.asset_type}, {symbol}, price_limit"

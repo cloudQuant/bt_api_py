@@ -96,6 +96,10 @@ class Mt5GatewayAdapter(BaseGatewayAdapter):
         # Symbol mapping
         self._symbol_suffix = str(kwargs.get("symbol_suffix") or "")
         self._symbol_map: dict[str, str] = dict(kwargs.get("symbol_map") or {})
+        self._resolved_symbols: dict[str, str] = {}
+        self._reverse_resolved_symbols: dict[str, str] = {
+            str(v): str(k) for k, v in self._symbol_map.items()
+        }
 
         # State
         self._subscribed_symbols: list[str] = []
@@ -148,19 +152,40 @@ class Mt5GatewayAdapter(BaseGatewayAdapter):
         return {"symbols": symbols}
 
     def get_balance(self) -> dict[str, Any]:
-        future = asyncio.run_coroutine_threadsafe(self._client.get_account_summary(), self._loop)
+        getter = getattr(self._client, "get_account_summary", None)
+        if getter is None:
+            getter = getattr(self._client, "get_account")
+        future = asyncio.run_coroutine_threadsafe(getter(), self._loop)
         acct = future.result(timeout=self._timeout)
+        if isinstance(acct, dict):
+            balance = acct.get("balance", 0.0)
+            equity = acct.get("equity", 0.0)
+            credit = acct.get("credit", 0.0)
+            currency = acct.get("currency", "")
+            leverage = acct.get("leverage", 0)
+            margin = acct.get("margin", 0.0)
+            margin_free = acct.get("margin_free", 0.0)
+            profit = acct.get("profit", 0.0)
+        else:
+            balance = getattr(acct, "balance", 0.0)
+            equity = getattr(acct, "equity", 0.0)
+            credit = getattr(acct, "credit", 0.0)
+            currency = getattr(acct, "currency", "")
+            leverage = getattr(acct, "leverage", 0)
+            margin = getattr(acct, "margin", 0.0)
+            margin_free = getattr(acct, "margin_free", 0.0)
+            profit = getattr(acct, "profit", 0.0)
         return {
-            "balance": getattr(acct, "balance", 0.0),
-            "equity": getattr(acct, "equity", 0.0),
-            "credit": getattr(acct, "credit", 0.0),
-            "currency": getattr(acct, "currency", ""),
-            "leverage": getattr(acct, "leverage", 0),
-            "cash": getattr(acct, "balance", 0.0),
-            "value": getattr(acct, "equity", 0.0),
-            "margin": getattr(acct, "margin", 0.0),
-            "margin_free": getattr(acct, "margin_free", 0.0),
-            "profit": getattr(acct, "profit", 0.0),
+            "balance": balance,
+            "equity": equity,
+            "credit": credit,
+            "currency": currency,
+            "leverage": leverage,
+            "cash": balance,
+            "value": equity,
+            "margin": margin,
+            "margin_free": margin_free,
+            "profit": profit,
         }
 
     def get_positions(self) -> list[dict[str, Any]]:
@@ -297,6 +322,14 @@ class Mt5GatewayAdapter(BaseGatewayAdapter):
         self._client.on_tick(self._on_tick_push)
         self._client.on_disconnect(self._on_ws_disconnect)
         try:
+            self._client.on_trade_transaction(self._on_transaction_push)
+        except Exception:
+            pass
+        try:
+            self._client.on_trade_result(self._on_trade_result_push)
+        except Exception:
+            pass
+        try:
             self._client.on_order_update(self._on_order_update_push)
         except Exception:
             pass
@@ -307,9 +340,10 @@ class Mt5GatewayAdapter(BaseGatewayAdapter):
 
     async def _async_subscribe(self, standard_symbols: list[str], resolved_symbols: list[str]) -> None:
         await self._client.subscribe_symbols(resolved_symbols)
-        for std_sym in standard_symbols:
+        for std_sym, mt5_sym in zip(standard_symbols, resolved_symbols, strict=False):
+            self._resolved_symbols[std_sym] = mt5_sym
+            self._reverse_resolved_symbols[mt5_sym] = std_sym
             try:
-                mt5_sym = self._resolve_symbol(std_sym)
                 info = await self._client.get_full_symbol_info(mt5_sym)
                 if info:
                     self._symbol_specs[std_sym] = {
@@ -424,9 +458,10 @@ class Mt5GatewayAdapter(BaseGatewayAdapter):
                     info = self._client._symbols_by_id.get(sym_id)
                     if info:
                         symbol_name = info.name
+            standard_symbol = self._to_standard_symbol(symbol_name)
             gateway_tick = GatewayTick(
                 timestamp=tick.get("tick_time", 0),
-                symbol=symbol_name,
+                symbol=standard_symbol,
                 exchange="MT5",
                 asset_type="OTC",
                 local_time=time.time(),
@@ -434,6 +469,7 @@ class Mt5GatewayAdapter(BaseGatewayAdapter):
                 ask_price=tick.get("ask", 0.0),
                 price=((tick.get("bid") or 0.0) + (tick.get("ask") or 0.0)) / 2.0,
                 volume=tick.get("tick_volume", 0.0),
+                instrument_id=symbol_name,
             )
             self.emit(CHANNEL_MARKET, gateway_tick)
 
@@ -476,6 +512,75 @@ class Mt5GatewayAdapter(BaseGatewayAdapter):
                 "position_id": p.get("position_id"),
             })
 
+    def _on_trade_result_push(self, data: dict[str, Any]) -> None:
+        result = data.get("result") if isinstance(data, dict) else None
+        if not isinstance(result, dict):
+            return
+        retcode = int(result.get("retcode", -1))
+        status = _RETCODE_STATUS.get(retcode, "unknown")
+        self.emit(CHANNEL_EVENT, {
+            "kind": "order",
+            "exchange": "MT5",
+            "status": status,
+            "order_id": result.get("order"),
+            "external_order_id": str(result.get("order") or ""),
+            "deal": result.get("deal"),
+            "price": float(result.get("price") or 0.0),
+            "size": float(result.get("volume") or 0.0),
+        })
+
+    def _on_transaction_push(self, data: dict[str, Any]) -> None:
+        if not isinstance(data, dict):
+            return
+        update_type = data.get("update_type")
+        if update_type == 2:
+            deals = data.get("deals")
+            if isinstance(deals, dict):
+                deals = [deals]
+            elif deals is None and isinstance(data.get("deal"), dict):
+                deals = [data["deal"]]
+            for deal in deals or []:
+                trade_action = deal.get("trade_action", -1)
+                side = "buy" if trade_action == 0 else "sell"
+                self.emit(CHANNEL_EVENT, {
+                    "kind": "trade",
+                    "exchange": "MT5",
+                    "trade_id": str(deal.get("deal_id") or deal.get("deal") or ""),
+                    "external_order_id": str(deal.get("trade_order") or deal.get("order_id") or ""),
+                    "order_ref": str(deal.get("trade_order") or deal.get("order_id") or ""),
+                    "data_name": deal.get("trade_symbol", ""),
+                    "side": side,
+                    "size": abs(float(deal.get("trade_volume") or 0.0)),
+                    "price": float(deal.get("price_order") or deal.get("price_open") or 0.0),
+                    "commission": float(deal.get("commission") or 0.0),
+                    "profit": float(deal.get("profit") or 0.0),
+                    "position_id": deal.get("position_id"),
+                })
+            return
+
+        order = data.get("order")
+        if order is None and isinstance(data.get("orders"), list) and data["orders"]:
+            order = data["orders"][0]
+        if not isinstance(order, dict):
+            return
+        order_state = order.get("order_state")
+        status = _MT5_ORDER_STATE_MAP.get(order_state, "submitted")
+        self.emit(CHANNEL_EVENT, {
+            "kind": "order",
+            "exchange": "MT5",
+            "status": status,
+            "external_order_id": str(order.get("trade_order") or order.get("order_id") or ""),
+            "order_ref": str(order.get("trade_order") or order.get("order_id") or ""),
+            "data_name": order.get("trade_symbol", ""),
+            "side": "buy" if order.get("order_type", 0) in (0, 2, 4) else "sell",
+            "price": float(order.get("price_order") or order.get("price_open") or 0.0),
+            "size": float(order.get("volume_initial") or order.get("trade_volume") or 0.0),
+            "filled": float(
+                (order.get("volume_initial") or 0.0) - (order.get("volume_current") or 0.0)
+            ),
+            "remaining": float(order.get("volume_current") or 0.0),
+        })
+
     def _on_ws_disconnect(self) -> None:
         self.emit(CHANNEL_EVENT, {
             "kind": "health",
@@ -487,11 +592,60 @@ class Mt5GatewayAdapter(BaseGatewayAdapter):
     # ---- Helpers ----
 
     def _resolve_symbol(self, standard_symbol: str) -> str:
+        cached = self._resolved_symbols.get(standard_symbol)
+        if cached:
+            return cached
         if self._symbol_map and standard_symbol in self._symbol_map:
-            return self._symbol_map[standard_symbol]
+            resolved = self._symbol_map[standard_symbol]
+            self._resolved_symbols[standard_symbol] = resolved
+            self._reverse_resolved_symbols[resolved] = standard_symbol
+            return resolved
         if self._symbol_suffix:
-            return standard_symbol + self._symbol_suffix
+            resolved = standard_symbol + self._symbol_suffix
+            self._resolved_symbols[standard_symbol] = resolved
+            self._reverse_resolved_symbols[resolved] = standard_symbol
+            return resolved
+        discovered = self._discover_symbol(standard_symbol)
+        if discovered:
+            self._resolved_symbols[standard_symbol] = discovered
+            self._reverse_resolved_symbols[discovered] = standard_symbol
+            return discovered
         return standard_symbol
+
+    def _discover_symbol(self, standard_symbol: str) -> str | None:
+        client = self._client
+        if client is None:
+            return None
+        symbol_names = list(getattr(client, "symbol_names", []) or [])
+        target = standard_symbol.upper()
+        if standard_symbol in symbol_names:
+            return standard_symbol
+        exact = next((str(name) for name in symbol_names if str(name).upper() == target), None)
+        if exact:
+            return exact
+        prefix_matches = [str(name) for name in symbol_names if str(name).upper().startswith(target)]
+        if len(prefix_matches) == 1:
+            return prefix_matches[0]
+        return None
+
+    def _to_standard_symbol(self, raw_symbol: str) -> str:
+        if not raw_symbol:
+            return raw_symbol
+        mapped = self._reverse_resolved_symbols.get(raw_symbol)
+        if mapped:
+            return mapped
+        raw_upper = raw_symbol.upper()
+        prefix_matches = sorted(
+            (sym for sym in self._subscribed_symbols if raw_upper.startswith(sym.upper())),
+            key=len,
+            reverse=True,
+        )
+        if prefix_matches:
+            standard = prefix_matches[0]
+            self._resolved_symbols.setdefault(standard, raw_symbol)
+            self._reverse_resolved_symbols[raw_symbol] = standard
+            return standard
+        return raw_symbol
 
     def _normalize_volume(self, symbol: str, volume: float) -> float:
         spec = self._symbol_specs.get(symbol, {})

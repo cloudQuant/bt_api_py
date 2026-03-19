@@ -65,6 +65,7 @@ class BinanceGatewayAdapter(BaseGatewayAdapter):
         self.market_stream = None
         self.account_stream = None
         self.aliases: dict[str, set[str]] = defaultdict(set)
+        self._latest_ticks: dict[str, dict[str, Any]] = {}
         self.running = False
         self.thread: threading.Thread | None = None
         self.timeout = float(normalized.get("gateway_startup_timeout_sec", 10.0) or 10.0)
@@ -84,7 +85,10 @@ class BinanceGatewayAdapter(BaseGatewayAdapter):
         self.logger.info("BinanceGatewayAdapter disconnected")
 
     def subscribe_symbols(self, symbols: list[str]) -> dict[str, Any]:
-        topics = [{"topic": "ticker", "symbol": s} for s in symbols]
+        topics: list[dict[str, Any]] = []
+        for symbol in symbols:
+            topics.append({"topic": "ticker", "symbol": symbol})
+            topics.append({"topic": "book_ticker", "symbol": symbol})
         wss_kwargs = dict(self.kwargs)
         if self.asset_type == "SPOT":
             wss_url = "wss://stream.binance.com:9443/ws"
@@ -231,28 +235,67 @@ class BinanceGatewayAdapter(BaseGatewayAdapter):
     def _emit_ticker(self, ticker: BinanceWssTickerData) -> None:
         ticker.init_data()
         symbol = ticker.get_symbol_name() or ""
+        if not symbol:
+            return
         server_time = ticker.get_server_time() or 0.0
         ts = server_time / 1000.0 if server_time > 1e12 else server_time
-        bid = ticker.get_bid_price() or 0.0
-        ask = ticker.get_ask_price() or 0.0
-        last = ticker.get_last_price() or 0.0
+        previous = dict(self._latest_ticks.get(symbol, {}))
+
+        def _coalesce(current: Any, cached: Any) -> Any:
+            if current in (None, "", 0, 0.0):
+                return cached
+            return current
+
+        bid = _coalesce(ticker.get_bid_price(), previous.get("bid_price"))
+        ask = _coalesce(ticker.get_ask_price(), previous.get("ask_price"))
+        last = _coalesce(ticker.get_last_price(), previous.get("last_price"))
+        bid_volume = _coalesce(ticker.get_bid_volume(), previous.get("bid_volume"))
+        ask_volume = _coalesce(ticker.get_ask_volume(), previous.get("ask_volume"))
+        volume = _coalesce(ticker.get_volume_24h(), previous.get("volume"))
+        turnover = _coalesce(ticker.get_turnover_24h(), previous.get("turnover"))
+        high_price = _coalesce(ticker.get_high_price(), previous.get("high_price"))
+        low_price = _coalesce(ticker.get_low_price(), previous.get("low_price"))
+        open_price = _coalesce(ticker.get_open_price(), previous.get("open_price"))
+        prev_close = _coalesce(ticker.get_prev_close(), previous.get("prev_close"))
+        merged_ts = ts or previous.get("timestamp") or 0.0
+        merged_price = (
+            float(last) if last not in (None, "", 0, 0.0)
+            else (float(bid) + float(ask)) / 2.0
+            if bid not in (None, "", 0, 0.0) and ask not in (None, "", 0, 0.0)
+            else float(previous.get("price") or 0.0)
+        )
+        self._latest_ticks[symbol] = {
+            "timestamp": merged_ts,
+            "price": merged_price,
+            "last_price": last,
+            "bid_price": bid,
+            "ask_price": ask,
+            "bid_volume": bid_volume,
+            "ask_volume": ask_volume,
+            "volume": volume,
+            "turnover": turnover,
+            "high_price": high_price,
+            "low_price": low_price,
+            "open_price": open_price,
+            "prev_close": prev_close,
+        }
         tick = GatewayTick(
-            timestamp=ts,
+            timestamp=float(merged_ts or 0.0),
             symbol=symbol,
             exchange="BINANCE",
             asset_type=self.asset_type,
             local_time=time.time(),
-            price=last if last else (bid + ask) / 2.0 if bid and ask else 0.0,
-            bid_price=bid,
-            ask_price=ask,
-            bid_volume=ticker.get_bid_volume() or 0.0,
-            ask_volume=ticker.get_ask_volume() or 0.0,
-            volume=ticker.get_volume_24h() or 0.0,
-            turnover=ticker.get_turnover_24h() or 0.0,
-            high_price=ticker.get_high_price(),
-            low_price=ticker.get_low_price(),
-            open_price=ticker.get_open_price(),
-            prev_close=ticker.get_prev_close(),
+            price=float(merged_price),
+            bid_price=float(bid) if bid not in (None, "") else None,
+            ask_price=float(ask) if ask not in (None, "") else None,
+            bid_volume=float(bid_volume) if bid_volume not in (None, "") else None,
+            ask_volume=float(ask_volume) if ask_volume not in (None, "") else None,
+            volume=float(volume or 0.0),
+            turnover=float(turnover or 0.0),
+            high_price=float(high_price) if high_price not in (None, "") else None,
+            low_price=float(low_price) if low_price not in (None, "") else None,
+            open_price=float(open_price) if open_price not in (None, "") else None,
+            prev_close=float(prev_close) if prev_close not in (None, "") else None,
         )
         self.emit(CHANNEL_MARKET, tick)
 

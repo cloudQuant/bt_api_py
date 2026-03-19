@@ -122,7 +122,10 @@ class OkxExchangeData(ExchangeData):
 
     # noinspection PyMethodMayBeStatic
     def get_symbol(self, symbol: str) -> str:
-        return symbol.replace("/", "-").upper() + "-SWAP"
+        result = symbol.replace("/", "-").upper()
+        if not result.endswith("-SWAP"):
+            result += "-SWAP"
+        return result
 
     # noinspection PyMethodMayBeStatic
     def get_symbol_re(self, symbol):
@@ -167,7 +170,8 @@ class OkxExchangeData(ExchangeData):
             symbol = kwargs.get("symbol", "")
             # print("symbol", symbol, "k = ", k, "v = ", v)
             req["args"][0][k] = req["args"][0][k].replace("<symbol>", symbol)
-            currency = symbol.split("-")[1] if "USDT" in symbol else symbol.split("-")[0]
+            parts = symbol.split("-")
+            currency = parts[1] if len(parts) > 1 and "USDT" in symbol else parts[0]
             req["args"][0][k] = req["args"][0][k].replace("<currency>", currency)
             req["args"][0][k] = req["args"][0][k].replace("<period>", kwargs.get("period", ""))
         req = json.dumps(req)

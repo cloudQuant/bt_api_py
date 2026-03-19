@@ -306,6 +306,15 @@ class TestMt5AdapterSymbolMapping:
         assert adapter._resolve_symbol("XAUUSD") == "GOLD.r"
         assert adapter._resolve_symbol("EURUSD") == "EURUSD.r"
 
+    def test_discover_symbol_from_client_names(self):
+        client = FakeMT5WebClient()
+        client.symbol_names = ["EURUSDm", "XAUUSD.pro"]
+        adapter = Mt5GatewayAdapter(login=1, password="x")
+        adapter._client = client
+        adapter._subscribed_symbols = ["EURUSD", "XAUUSD"]
+        assert adapter._resolve_symbol("EURUSD") == "EURUSDm"
+        assert adapter._to_standard_symbol("XAUUSD.pro") == "XAUUSD"
+
 
 class TestMt5AdapterVolumeNormalization:
     def test_basic_normalization(self):
@@ -410,6 +419,7 @@ class TestMt5AdapterWithFakeClient:
         assert result["symbols"] == ["EURUSD", "XAUUSD"]
         assert "EURUSD" in self.client._subscribed
         assert "XAUUSD" in self.client._subscribed
+        assert self.adapter._resolved_symbols["EURUSD"] == "EURUSD"
 
     def test_place_order_market_buy(self):
         result = self.adapter.place_order({
@@ -473,8 +483,27 @@ class TestMt5AdapterWithFakeClient:
         assert channel == CHANNEL_MARKET
         assert isinstance(payload, GatewayTick)
         assert payload.exchange == "MT5"
+        assert payload.symbol == "EURUSD"
         assert payload.bid_price == 1.1050
         assert payload.ask_price == 1.1052
+
+    def test_tick_push_maps_broker_suffix_symbol_back_to_standard_symbol(self):
+        self.client.symbol_names = ["EURUSDm", "XAUUSDm"]
+        self.client._symbols["EURUSDm"] = FakeSymbolInfo(name="EURUSDm", symbol_id=11, digits=5)
+        self.client._symbols_by_id[11] = self.client._symbols["EURUSDm"]
+        self.adapter._subscribed_symbols = ["EURUSD"]
+        self.adapter._resolved_symbols["EURUSD"] = "EURUSDm"
+        self.adapter._reverse_resolved_symbols["EURUSDm"] = "EURUSD"
+
+        self.adapter._on_tick_push([
+            {"symbol": "EURUSDm", "tick_time": 1700000000.0, "bid": 1.2050, "ask": 1.2052, "tick_volume": 8}
+        ])
+
+        output = self.adapter.poll_output()
+        assert output is not None
+        _, payload = output
+        assert payload.symbol == "EURUSD"
+        assert payload.instrument_id == "EURUSDm"
 
     def test_trade_result_push_emits_event(self):
         data = {"result": {"retcode": 10009, "order": 999, "deal": 888, "price": 1.23, "volume": 0.1}}

@@ -368,6 +368,53 @@ def test_binance_adapter_dispatch_routes_ticker():
     assert result[1].symbol == "ETHUSDT"
 
 
+def test_binance_adapter_merges_book_ticker_and_24hr_ticker_fields():
+    from bt_api_py.containers.tickers.binance_ticker import BinanceWssTickerData
+
+    adapter = BinanceGatewayAdapter(
+        asset_type="SWAP",
+        public_key="k",
+        private_key="s",
+    )
+
+    book_ticker = BinanceWssTickerData(
+        {"e": "bookTicker", "s": "BTCUSDT", "E": 1700000000000, "b": "42000.0", "a": "42001.0"},
+        "BTCUSDT",
+        "SWAP",
+        True,
+    )
+    day_ticker = BinanceWssTickerData(
+        {
+            "e": "24hrTicker",
+            "s": "BTCUSDT",
+            "E": 1700000001000,
+            "c": "42000.5",
+            "o": "41000.0",
+            "h": "43000.0",
+            "l": "40000.0",
+            "v": "123.4",
+            "q": "567890.0",
+        },
+        "BTCUSDT",
+        "SWAP",
+        True,
+    )
+
+    adapter._emit_ticker(book_ticker)
+    adapter.poll_output()
+    adapter._emit_ticker(day_ticker)
+
+    result = adapter.poll_output()
+    assert result is not None
+    assert result[0] == CHANNEL_MARKET
+    payload = result[1]
+    assert payload.symbol == "BTCUSDT"
+    assert payload.bid_price == 42000.0
+    assert payload.ask_price == 42001.0
+    assert payload.price == 42000.5
+    assert payload.open_price == 41000.0
+
+
 def test_okx_adapter_dispatch_routes_ticker():
     """_dispatch_item routes OkxTickerData to market channel."""
     from bt_api_py.containers.tickers.okx_ticker import OkxTickerData

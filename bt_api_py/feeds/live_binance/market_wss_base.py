@@ -76,6 +76,13 @@ class BinanceMarketWssData(MyWebsocketApp, BinanceRequestData):
                     f"subscribe {self.count} data, BINANCE, {self.asset_type}, {symbol}, ticker"
                 )
 
+            if topics["topic"] == "book_ticker":
+                symbol = topics.get("symbol", "BTC-USDT")
+                self.subscribe(topic="book_ticker", symbol=symbol)
+                self.logger.info(
+                    f"subscribe {self.count} data, BINANCE, {self.asset_type}, {symbol}, book_ticker"
+                )
+
             if topics["topic"] == "depth":
                 # self.logger.info(topics)
                 if "symbol" in topics:
