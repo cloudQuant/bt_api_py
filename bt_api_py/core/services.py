@@ -4,6 +4,7 @@ Core services for modern bt_api_py architecture.
 
 import asyncio
 import contextlib
+import copy
 import json
 import time
 from collections import defaultdict
@@ -180,7 +181,7 @@ class EventService(IEventBus):
         if self._event_queue and self._running:
             await self._event_queue.put((event_type, data))
         else:
-            self._emit_sync(event_type, data)
+            await self._emit_async(event_type, data)
 
         self._stats[f"events_{event_type}_published"] += 1
 
@@ -288,7 +289,7 @@ class CacheService(ICache):
         # Fallback to local cache
         async with self._lock:
             if key in self._local_ttl and time.time() < self._local_ttl[key]:
-                return self._local_cache.get(key)
+                return copy.deepcopy(self._local_cache.get(key))
             else:
                 self._local_cache.pop(key, None)
                 self._local_ttl.pop(key, None)
@@ -309,7 +310,7 @@ class CacheService(ICache):
 
         # Always update local cache as fallback
         async with self._lock:
-            self._local_cache[key] = value
+            self._local_cache[key] = copy.deepcopy(value)
             if ttl:
                 self._local_ttl[key] = time.time() + ttl
             else:
@@ -353,9 +354,13 @@ class RateLimitService(IRateLimiter):
     def configure_limit(self, resource: str, max_requests: int, time_window: float) -> None:
         """Configure rate limit for a resource."""
         self._limits[resource] = {"max_requests": max_requests, "time_window": time_window}
+        self._limiters.pop(resource, None)
 
     async def acquire(self, resource: str, tokens: int = 1) -> None:
         """Acquire tokens for a resource."""
+        if tokens <= 0:
+            raise ValueError("tokens must be > 0")
+
         async with self._lock:
             if resource not in self._limiters:
                 if resource in self._limits:
@@ -367,19 +372,36 @@ class RateLimitService(IRateLimiter):
                     # Default limiter
                     self._limiters[resource] = AsyncRateLimiter(10, 1.0)
 
-        await self._limiters[resource].acquire()
+        limiter = self._limiters[resource]
+        for _ in range(tokens):
+            await limiter.acquire()
 
     def get_remaining_tokens(self, resource: str) -> int:
         """Get remaining tokens for a resource."""
         limiter = self._limiters.get(resource)
-        if limiter:
-            return limiter.max_requests - len(limiter.requests)
-        return 0
+        if limiter is None:
+            configured_limit = self._limits.get(resource)
+            if configured_limit is not None:
+                return int(configured_limit["max_requests"])
+            return 0
+
+        now = time.time()
+        limiter.requests = [
+            req_time for req_time in limiter.requests if now - req_time < limiter.time_window
+        ]
+        return max(0, limiter.max_requests - len(limiter.requests))
 
     def get_reset_time(self, resource: str) -> float | None:
         """Get reset time for a resource."""
         limiter = self._limiters.get(resource)
-        if limiter and limiter.requests:
+        if limiter is None:
+            return None
+
+        now = time.time()
+        limiter.requests = [
+            req_time for req_time in limiter.requests if now - req_time < limiter.time_window
+        ]
+        if limiter.requests:
             return limiter.requests[0] + limiter.time_window
         return None
 
