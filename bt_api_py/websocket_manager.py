@@ -15,6 +15,7 @@ from typing import Any, cast
 from urllib.parse import urlparse
 
 import websockets
+from websockets import ConnectionClosed, WebSocketException
 
 from bt_api_py.exceptions import RateLimitError, WebSocketError
 from bt_api_py.logging_factory import get_logger
@@ -130,7 +131,7 @@ class WebSocketConnection:
 
             self.logger.info(f"Connected to {self.config.url}")
 
-        except (OSError, websockets.exceptions.WebSocketException) as e:
+        except (OSError, WebSocketException) as e:
             self.logger.error(f"Connection failed: {e}")
             raise WebSocketError(self.config.exchange_name, detail=str(e)) from e
 
@@ -240,7 +241,7 @@ class WebSocketConnection:
         try:
             await self._websocket.send(json.dumps(message))
             self._stats["messages_sent"] += 1
-        except (OSError, websockets.exceptions.WebSocketException) as e:
+        except (OSError, WebSocketException) as e:
             self.logger.error(f"Send failed: {e}")
             raise WebSocketError(self.config.exchange_name, detail=str(e)) from e
 
@@ -266,7 +267,7 @@ class WebSocketConnection:
                     # Process message
                     await self._handle_message(message)
 
-            except websockets.exceptions.ConnectionClosed:
+            except ConnectionClosed:
                 self.logger.warning("WebSocket connection closed")
                 await self._handle_disconnect()
                 break
@@ -490,6 +491,8 @@ class WebSocketManager(IConnectionManager):
             for connection in pool:
                 await connection.disconnect()
             self.logger.info(f"Closed {len(pool)} connections for {exchange_name}")
+            pool.clear()
+            self._round_robin[exchange_name] = 0
 
         await self._task_group.cancel_all()
 
@@ -526,6 +529,9 @@ class WebSocketManager(IConnectionManager):
 
     async def unsubscribe(self, exchange_name: str, subscription_id: str) -> None:
         """Unsubscribe from WebSocket topic."""
+        if exchange_name not in self._pool_locks:
+            raise ValueError(f"Exchange {exchange_name} not configured")
+
         async with self._pool_locks[exchange_name]:
             pool = self._pools[exchange_name]
 
@@ -551,7 +557,7 @@ class WebSocketManager(IConnectionManager):
                     await connection._websocket.ping()
                     connection._stats["last_heartbeat"] = time.time()
 
-            except (OSError, websockets.exceptions.WebSocketException) as e:
+            except (OSError, WebSocketException) as e:
                 self.logger.error(f"Connection monitoring error: {e}")
                 break
 

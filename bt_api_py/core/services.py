@@ -74,24 +74,36 @@ class ConnectionService(IConnectionManager):
 
             try:
                 # For HTTP exchanges, we return the client session
-                if "session" in pool:
+                if "session" in pool and pool["session"] is not None:
                     self._stats[exchange_name]["active_connections"] += 1
                     return pool["session"]
-                else:
-                    # For WebSocket exchanges, return the connection
+                if "connection" in pool and pool["connection"] is not None:
                     self._stats[exchange_name]["active_connections"] += 1
                     return pool["connection"]
+                raise RuntimeError(f"Connection pool for {exchange_name} is not configured")
             except BaseException:
                 semaphore.release()
                 raise
 
     async def release_connection(self, exchange_name: str, connection: Any) -> None:
         """Release a connection back to the pool."""
-        if exchange_name in self._semaphores:
-            self._semaphores[exchange_name].release()
-            self._stats[exchange_name]["active_connections"] = max(
-                0, self._stats[exchange_name]["active_connections"] - 1
-            )
+        if exchange_name not in self._semaphores:
+            return
+
+        pool = self._pools.get(exchange_name, {})
+        managed_connection = None
+        if "session" in pool:
+            managed_connection = pool["session"]
+        elif "connection" in pool:
+            managed_connection = pool["connection"]
+
+        if managed_connection is not connection:
+            return
+
+        self._semaphores[exchange_name].release()
+        self._stats[exchange_name]["active_connections"] = max(
+            0, self._stats[exchange_name]["active_connections"] - 1
+        )
 
     async def close_all(self) -> None:
         """Close all connections."""

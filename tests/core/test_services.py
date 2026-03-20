@@ -8,6 +8,7 @@ from unittest.mock import patch
 
 import pytest
 
+from bt_api_py.core.async_context import AsyncSemaphore
 from bt_api_py.core.services import (
     AccountService,
     ConnectionService,
@@ -106,14 +107,6 @@ class TestEventService:
         assert received == [{"data": "sync"}]
 
 
-class _Closable:
-    def __init__(self) -> None:
-        self.closed = False
-
-    async def close(self) -> None:
-        self.closed = True
-
-
 class TestConnectionService:
     @pytest.mark.asyncio
     async def test_close_all_resets_active_connection_stats(self):
@@ -126,6 +119,38 @@ class TestConnectionService:
 
         assert session.closed is True
         assert service._stats["BINANCE___SPOT"]["active_connections"] == 0
+
+    @pytest.mark.asyncio
+    async def test_get_connection_raises_clear_error_for_unconfigured_pool(self):
+        service = ConnectionService()
+
+        with pytest.raises(RuntimeError, match="Connection pool for BINANCE___SPOT is not configured"):
+            await service.get_connection("BINANCE___SPOT")
+
+        assert service._stats["BINANCE___SPOT"]["active_connections"] == 0
+
+    @pytest.mark.asyncio
+    async def test_release_connection_ignores_unmanaged_object(self):
+        service = ConnectionService()
+        managed_connection = object()
+        service._pools["BINANCE___SPOT"] = {"session": managed_connection}
+        service._semaphores["BINANCE___SPOT"] = AsyncSemaphore(max_concurrent=1)
+
+        acquired = await service.get_connection("BINANCE___SPOT")
+
+        await service.release_connection("BINANCE___SPOT", object())
+        assert service._stats["BINANCE___SPOT"]["active_connections"] == 1
+
+        await service.release_connection("BINANCE___SPOT", acquired)
+        assert service._stats["BINANCE___SPOT"]["active_connections"] == 0
+
+
+class _Closable:
+    def __init__(self) -> None:
+        self.closed = False
+
+    async def close(self) -> None:
+        self.closed = True
 
 
 class _StubConnectionManager:

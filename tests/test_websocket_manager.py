@@ -4,6 +4,7 @@ import asyncio
 from typing import Any
 
 import pytest
+from websockets import WebSocketException
 
 from bt_api_py.exceptions import WebSocketError
 from bt_api_py.websocket_manager import (
@@ -212,3 +213,83 @@ async def test_handle_disconnect_stops_after_websocket_error_retries_exhausted(
     assert connection.connected is False
     assert connection.running is False
     assert connection._websocket is None
+
+
+@pytest.mark.asyncio
+async def test_close_all_clears_pools_and_resets_round_robin() -> None:
+    manager = WebSocketManager(event_bus=_DummyEventBus())
+    config = WebSocketConfig(url="wss://example.com/ws", exchange_name="TEST___SPOT")
+    connection = WebSocketConnection(config, "test_5")
+    websocket = _DummyWebSocket()
+    connection._websocket = websocket
+    connection._connected = True
+    connection._running = True
+    manager._pools[config.exchange_name] = [connection]
+    manager._pool_configs[config.exchange_name] = config
+    manager._pool_locks[config.exchange_name] = asyncio.Lock()
+    manager._round_robin[config.exchange_name] = 7
+
+    await manager.close_all()
+
+    assert websocket.closed is True
+    assert manager._pools[config.exchange_name] == []
+    assert manager._round_robin[config.exchange_name] == 0
+    assert manager.get_pool_stats()[config.exchange_name]["total_connections"] == 0
+
+
+@pytest.mark.asyncio
+async def test_get_connection_creates_fresh_connection_after_close_all(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    manager = WebSocketManager(event_bus=_DummyEventBus())
+    config = WebSocketConfig(
+        url="wss://example.com/ws",
+        exchange_name="TEST___SPOT",
+        max_connections=1,
+    )
+    await manager.add_exchange(config)
+
+    async def fake_connect(self: WebSocketConnection) -> None:
+        self._connected = True
+        self._running = True
+        self._websocket = _DummyWebSocket()
+
+    async def fake_disconnect(self: WebSocketConnection) -> None:
+        self._running = False
+        await self._close_websocket()
+        self._connected = False
+
+    monkeypatch.setattr(WebSocketConnection, "connect", fake_connect)
+    monkeypatch.setattr(WebSocketConnection, "disconnect", fake_disconnect)
+
+    first = await manager.get_connection(config.exchange_name)
+    await manager.close_all()
+    second = await manager.get_connection(config.exchange_name)
+
+    assert first is not second
+    assert second.connected is True
+
+
+@pytest.mark.asyncio
+async def test_monitor_connection_handles_top_level_websocket_exception(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    manager = WebSocketManager(event_bus=_DummyEventBus())
+    config = WebSocketConfig(url="wss://example.com/ws", exchange_name="TEST___SPOT")
+    connection = WebSocketConnection(config, "test_6")
+
+    class _FailingPingWebSocket:
+        async def ping(self) -> None:
+            raise WebSocketException("ping failed")
+
+    async def fake_sleep(_: float) -> None:
+        return None
+
+    connection._connected = True
+    connection._running = True
+    connection._websocket = _FailingPingWebSocket()
+    monkeypatch.setattr(asyncio, "sleep", fake_sleep)
+
+    await manager._monitor_connection(connection)
+
+    assert connection._stats["last_heartbeat"] == 0.0
