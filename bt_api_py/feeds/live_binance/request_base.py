@@ -41,6 +41,7 @@ from bt_api_py.containers.trades.binance_trade import (
     BinanceRequestTradeData,
 )
 from bt_api_py.error import BinanceErrorTranslator
+from bt_api_py.exceptions import QueueNotInitializedError
 from bt_api_py.feeds.capability import Capability
 from bt_api_py.feeds.feed import Feed
 from bt_api_py.functions.calculate_time import datetime2timestamp
@@ -90,8 +91,11 @@ class BinanceRequestData(Feed):
     def __init__(self, data_queue: Any = None, **kwargs: Any) -> None:
         super().__init__(data_queue, **kwargs)
         self.data_queue = data_queue
-        self.public_key = kwargs.get("public_key")
-        self.private_key = kwargs.get("private_key")
+        self.public_key = kwargs.get("public_key") or kwargs.get("api_key")
+        self.private_key = (
+            kwargs.get("private_key") or kwargs.get("secret_key") or kwargs.get("api_secret")
+        )
+        self.exchange_name = kwargs.get("exchange_name", "BINANCE___SWAP")
         self.asset_type = kwargs.get("asset_type", "SWAP")
         self.logger_name = kwargs.get("logger_name", "binance_swap_feed.log")
         self._params = kwargs.get("exchange_data", BinanceExchangeDataSwap())
@@ -134,7 +138,7 @@ class BinanceRequestData(Feed):
         if self.data_queue is not None:
             self.data_queue.put(data)
         else:
-            assert 0, "队列未初始化"
+            raise QueueNotInitializedError("data_queue not initialized")
 
     # noinspection PyMethodMayBeStatic
     # def signature(self, timestamp, method, request_path, secret_key, body=None):
@@ -175,6 +179,8 @@ class BinanceRequestData(Feed):
         """
         if params is None:
             params: dict[str, Any] = {}
+        if extra_data is None:
+            extra_data = {}
         # if body is None:
         #     body = {}
         method, path = path.split(" ", 1)
@@ -192,7 +198,6 @@ class BinanceRequestData(Feed):
         req = urlencode(req)
         url = f"{self._params.rest_url}{path}?{req}"
         headers = {"X-MBX-APIKEY": self.public_key}
-        extra_data.get("request_type")
         # print("url ", url)
         # print("headers ", headers)
         # print("method ", method)
@@ -2086,6 +2091,8 @@ class BinanceRequestData(Feed):
         """
         if params is None:
             params: dict[str, Any] = {}
+        if extra_data is None:
+            extra_data = {}
         # if body is None:
         #     body = {}
         method, path = path.split(" ", 1)

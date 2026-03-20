@@ -10,7 +10,7 @@ from bt_api_py.containers.auto_init_mixin import AutoInitMixin
 class TickerData(AutoInitMixin):
     """保存ticker信息."""
 
-    def __init__(self, ticker_info, has_been_json_encoded=False) -> None:
+    def __init__(self, ticker_info: Any, has_been_json_encoded: bool = False) -> None:
         self.event = "TickerEvent"
         self.ticker_info = ticker_info
         self.has_been_json_encoded = has_been_json_encoded

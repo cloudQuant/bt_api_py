@@ -40,6 +40,8 @@ class MercadoBitcoinRequestData(Feed):
         self.exchange_name = kwargs.get("exchange_name", "MERCADO_BITCOIN___SPOT")
         self.asset_type = kwargs.get("asset_type", "SPOT")
         self._params = MercadoBitcoinExchangeDataSpot()
+        self._params.api_key = kwargs.get("public_key") or kwargs.get("api_key")
+        self._params.api_secret = kwargs.get("private_key") or kwargs.get("api_secret")
         self.request_logger = get_logger("mercado_bitcoin_feed")
         self.async_logger = get_logger("mercado_bitcoin_feed")
         self._http_client = HttpClient(venue=self.exchange_name, timeout=10)
@@ -185,7 +187,7 @@ class MercadoBitcoinRequestData(Feed):
         pass
 
     def disconnect(self):
-        pass
+        super().disconnect()
 
     def is_connected(self):
         return True

@@ -4,12 +4,13 @@
 支持从 YAML 文件加载交易所/场所配置，自动校验字段合法性。
 """
 
-from enum import Enum, unique
+import enum
+from enum import unique
 from pathlib import Path
 from typing import Any
 
 try:
-    from pydantic import BaseModel, Field, ValidationError, field_validator
+    from pydantic import BaseModel, Field, ValidationError, ValidationInfo, field_validator
 except ImportError:
     raise ImportError(
         "pydantic is required for config_loader. Install with: pip install pydantic"
@@ -43,14 +44,14 @@ __all__ = [
 
 
 @unique
-class VenueType(str, Enum):
+class VenueType(enum.StrEnum):
     CEX = "cex"
     DEX = "dex"
     BROKER = "broker"
 
 
 @unique
-class AuthType(str, Enum):
+class AuthType(enum.StrEnum):
     NONE = "none"
     API_KEY = "api_key"
     HMAC_SHA256 = "hmac_sha256"
@@ -63,7 +64,7 @@ class AuthType(str, Enum):
 
 
 @unique
-class ConnectionType(str, Enum):
+class ConnectionType(enum.StrEnum):
     HTTP = "http"
     WEBSOCKET = "websocket"
     SPI = "spi"
@@ -170,7 +171,9 @@ class ExchangeConfig(BaseModel):
 
     @field_validator("base_urls")
     @classmethod
-    def validate_base_urls(cls, v, info):
+    def validate_base_urls(
+        cls, v: BaseUrlsConfig | None, info: ValidationInfo
+    ) -> BaseUrlsConfig | None:
         venue_type = info.data.get("venue_type")
         # CEX 必须有 base_urls
         if venue_type == VenueType.CEX and not v:
@@ -180,7 +183,9 @@ class ExchangeConfig(BaseModel):
 
     @field_validator("connection")
     @classmethod
-    def validate_connection(cls, v, info):
+    def validate_connection(
+        cls, v: ConnectionConfig, info: ValidationInfo
+    ) -> ConnectionConfig:
         venue_type = info.data.get("venue_type")
         conn_type = v.type
         # CEX 必须使用 HTTP、WEBSOCKET 或 SPI（如 CTP）
@@ -226,6 +231,8 @@ def load_exchange_config(config_path: str) -> ExchangeConfig:
 
     if not data:
         raise ConfigurationError(f"Config file is empty: {config_path}")
+    if not isinstance(data, dict):
+        raise ConfigurationError(f"Config file must contain a mapping object: {config_path}")
 
     return ExchangeConfig(**data)
 
@@ -249,13 +256,14 @@ def load_all_exchange_configs(config_dir: str) -> dict[str, ExchangeConfig]:
     if yaml is not None:
         load_errors = (*load_errors, yaml.YAMLError)
 
-    for filepath in path.iterdir():
+    logger = get_logger("config_loader")
+
+    for filepath in sorted(path.iterdir(), key=lambda item: item.name):
         if filepath.suffix in (".yaml", ".yml") and not filepath.name.startswith("_"):
             try:
                 config = load_exchange_config(str(filepath))
                 configs[config.id] = config
             except load_errors as e:
-                logger = get_logger("config_loader")
                 logger.warning(f"Failed to load config {filepath!s}: {e}")
 
     return configs

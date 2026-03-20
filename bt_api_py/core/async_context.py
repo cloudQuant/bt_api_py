@@ -3,14 +3,51 @@ Async context manager utilities for modern bt_api_py.
 """
 
 import asyncio
+import sys
 import time
 from collections.abc import AsyncGenerator, Awaitable, Callable
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from functools import wraps
-from typing import Any, TypeVar
+from types import TracebackType
+from typing import Any, ParamSpec, TypeVar
 
 T = TypeVar("T")
+P = ParamSpec("P")
+
+HAS_ASYNCIO_TIMEOUT = sys.version_info >= (3, 11)
+
+
+def _validate_positive_number(name: str, value: float) -> None:
+    if value <= 0:
+        raise ValueError(f"{name} must be > 0")
+
+
+def _validate_non_negative_number(name: str, value: float) -> None:
+    if value < 0:
+        raise ValueError(f"{name} must be >= 0")
+
+
+def _validate_positive_int(name: str, value: int) -> None:
+    if value <= 0:
+        raise ValueError(f"{name} must be > 0")
+
+
+def _validate_timeout(timeout: float | None) -> None:
+    if timeout is not None:
+        _validate_positive_number("timeout", timeout)
+
+
+def _validate_exception_types(exceptions: tuple[type[BaseException], ...]) -> None:
+    if not exceptions:
+        raise ValueError("exceptions must not be empty")
+    if not all(isinstance(exc, type) and issubclass(exc, BaseException) for exc in exceptions):
+        raise TypeError("exceptions must contain only BaseException subclasses")
+
+
+def _validate_expected_exception(expected_exception: type[BaseException]) -> None:
+    if not isinstance(expected_exception, type) or not issubclass(expected_exception, BaseException):
+        raise TypeError("expected_exception must be a BaseException subclass")
 
 
 @dataclass
@@ -22,27 +59,64 @@ class _CircuitState:
     state: str = "CLOSED"
 
 
+class _TimeoutContext:
+    """Timeout context wrapper for Python 3.10 compatibility."""
+
+    __slots__ = ("_timeout_seconds", "_task", "_cancelled", "_cancel_handler")
+
+    def __init__(self, timeout_seconds: float) -> None:
+        _validate_positive_number("timeout_seconds", timeout_seconds)
+        self._timeout_seconds = timeout_seconds
+        self._task: asyncio.Task[None] | None = None
+        self._cancelled = False
+        self._cancel_handler: asyncio.TimerHandle | None = None
+
+    def _cancel_task(self) -> None:
+        if self._task is not None and not self._task.done():
+            self._cancelled = True
+            self._task.cancel()
+
+    async def __aenter__(self) -> "_TimeoutContext":
+        self._task = asyncio.current_task()
+        loop = asyncio.get_running_loop()
+        self._cancel_handler = loop.call_later(self._timeout_seconds, self._cancel_task)
+        return self
+
+    async def __aexit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_val: BaseException | None,
+        exc_tb: TracebackType | None,
+    ) -> bool:
+        if self._cancel_handler is not None:
+            self._cancel_handler.cancel()
+
+        if exc_type is asyncio.CancelledError and self._cancelled:
+            raise TimeoutError(
+                f"Operation timed out after {self._timeout_seconds} seconds"
+            ) from None
+
+        return False
+
+
 class AsyncContextManager:
     """Utilities for async context management."""
 
     @staticmethod
     @asynccontextmanager
     async def timeout(timeout_seconds: float) -> AsyncGenerator[None, None]:
-        """Async context manager with timeout."""
-        try:
-            yield
-        except TimeoutError:
-            raise
-        else:
-            # Use asyncio.wait_for for timeout
-            async def _inner() -> Any | None:
-                await asyncio.sleep(0)  # Dummy async function
-                return None
+        """Async context manager with timeout.
 
-            try:
-                await asyncio.wait_for(_inner(), timeout=timeout_seconds)
-            except TimeoutError:
-                raise TimeoutError(f"Operation timed out after {timeout_seconds} seconds") from None
+        Uses asyncio.timeout() on Python 3.11+ for optimal performance,
+        or a custom implementation for Python 3.10 compatibility.
+        """
+        _validate_positive_number("timeout_seconds", timeout_seconds)
+        if HAS_ASYNCIO_TIMEOUT:
+            async with asyncio.timeout(timeout_seconds):
+                yield
+        else:
+            async with _TimeoutContext(timeout_seconds):
+                yield
 
     @staticmethod
     @asynccontextmanager
@@ -53,6 +127,10 @@ class AsyncContextManager:
         exceptions: tuple = (Exception,),
     ) -> AsyncGenerator[None, None]:
         """Async context manager with retry logic."""
+        _validate_positive_int("max_attempts", max_attempts)
+        _validate_non_negative_number("delay", delay)
+        _validate_positive_number("backoff", backoff)
+        _validate_exception_types(exceptions)
         attempt = 0
         current_delay = delay
 
@@ -76,6 +154,9 @@ class AsyncContextManager:
         expected_exception: type[BaseException] = Exception,
     ) -> AsyncGenerator[None, None]:
         """Async context manager with circuit breaker pattern."""
+        _validate_positive_int("failure_threshold", failure_threshold)
+        _validate_non_negative_number("recovery_timeout", recovery_timeout)
+        _validate_expected_exception(expected_exception)
         state = _CircuitState()
 
         def should_attempt() -> bool:
@@ -115,13 +196,18 @@ def async_retry(
     max_attempts: int = 3,
     delay: float = 1.0,
     backoff: float = 2.0,
-    exceptions: tuple = (Exception,),
-):
+    exceptions: tuple[type[BaseException], ...] = (Exception,),
+) -> Callable[[Callable[P, Awaitable[T]]], Callable[P, Awaitable[T]]]:
     """Decorator for async functions with retry logic."""
 
-    def decorator(func: Callable[..., Awaitable[T]]) -> Callable[..., Awaitable[T]]:
+    _validate_positive_int("max_attempts", max_attempts)
+    _validate_non_negative_number("delay", delay)
+    _validate_positive_number("backoff", backoff)
+    _validate_exception_types(exceptions)
+
+    def decorator(func: Callable[P, Awaitable[T]]) -> Callable[P, Awaitable[T]]:
         @wraps(func)
-        async def wrapper(*args: Any, **kwargs: Any) -> T:
+        async def wrapper(*args: P.args, **kwargs: P.kwargs) -> T:
             attempt = 0
             current_delay = delay
 
@@ -144,12 +230,14 @@ def async_retry(
     return decorator
 
 
-def async_timeout(timeout_seconds: float):
+def async_timeout(timeout_seconds: float) -> Callable[[Callable[P, Awaitable[T]]], Callable[P, Awaitable[T]]]:
     """Decorator for async functions with timeout."""
 
-    def decorator(func: Callable[..., Awaitable[T]]) -> Callable[..., Awaitable[T]]:
+    _validate_positive_number("timeout_seconds", timeout_seconds)
+
+    def decorator(func: Callable[P, Awaitable[T]]) -> Callable[P, Awaitable[T]]:
         @wraps(func)
-        async def wrapper(*args: Any, **kwargs: Any) -> T:
+        async def wrapper(*args: P.args, **kwargs: P.kwargs) -> T:
             return await asyncio.wait_for(func(*args, **kwargs), timeout=timeout_seconds)
 
         return wrapper
@@ -164,11 +252,15 @@ def async_circuit_breaker(
 ) -> Callable[[Callable[..., Awaitable[T]]], Callable[..., Awaitable[T]]]:
     """Decorator for async functions with circuit breaker."""
 
-    def decorator(func: Callable[..., Awaitable[T]]) -> Callable[..., Awaitable[T]]:
+    _validate_positive_int("failure_threshold", failure_threshold)
+    _validate_non_negative_number("recovery_timeout", recovery_timeout)
+    _validate_expected_exception(expected_exception)
+
+    def decorator(func: Callable[P, Awaitable[T]]) -> Callable[P, Awaitable[T]]:
         state = _CircuitState()
 
         @wraps(func)
-        async def wrapper(*args: Any, **kwargs: Any) -> T:
+        async def wrapper(*args: P.args, **kwargs: P.kwargs) -> T:
             def should_attempt() -> bool:
                 if state.state == "CLOSED":
                     return True
@@ -211,6 +303,8 @@ class AsyncRateLimiter:
     """Async rate limiter implementation."""
 
     def __init__(self, max_requests: int, time_window: float) -> None:
+        _validate_positive_int("max_requests", max_requests)
+        _validate_positive_number("time_window", time_window)
         self.max_requests = max_requests
         self.time_window = time_window
         self.requests: list[float] = []
@@ -244,10 +338,12 @@ class AsyncSemaphore:
     """Async semaphore with timeout support."""
 
     def __init__(self, max_concurrent: int) -> None:
+        _validate_positive_int("max_concurrent", max_concurrent)
         self._semaphore = asyncio.Semaphore(max_concurrent)
 
     async def acquire(self, timeout: float | None = None) -> None:
         """Acquire semaphore with optional timeout."""
+        _validate_timeout(timeout)
         if timeout is not None:
             try:
                 await asyncio.wait_for(self._semaphore.acquire(), timeout=timeout)
@@ -266,7 +362,12 @@ class AsyncSemaphore:
         await self.acquire()
         return self
 
-    async def __aexit__(self, exc_type, exc_val, exc_tb) -> None:
+    async def __aexit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_val: BaseException | None,
+        exc_tb: TracebackType | None,
+    ) -> None:
         self.release()
 
 
@@ -274,10 +375,13 @@ class AsyncQueue:
     """Async queue with timeout and priority support."""
 
     def __init__(self, maxsize: int = 0) -> None:
+        if maxsize < 0:
+            raise ValueError("maxsize must be >= 0")
         self._queue: asyncio.Queue[Any] = asyncio.Queue(maxsize=maxsize)
 
     async def put(self, item: Any, timeout: float | None = None) -> None:
         """Put item with optional timeout."""
+        _validate_timeout(timeout)
         if timeout is not None:
             try:
                 await asyncio.wait_for(self._queue.put(item), timeout=timeout)
@@ -288,6 +392,7 @@ class AsyncQueue:
 
     async def get(self, timeout: float | None = None) -> Any:
         """Get item with optional timeout."""
+        _validate_timeout(timeout)
         if timeout is not None:
             try:
                 return await asyncio.wait_for(self._queue.get(), timeout=timeout)
@@ -316,7 +421,7 @@ class AsyncTaskGroup:
         self._tasks: set[asyncio.Task[Any]] = set()
         self._shutdown = False
 
-    async def create_task(self, coro) -> asyncio.Task:
+    async def create_task(self, coro: Awaitable[T]) -> asyncio.Task[T]:
         """Create and track a task."""
         if self._shutdown:
             raise RuntimeError("TaskGroup is shutting down")
@@ -328,6 +433,7 @@ class AsyncTaskGroup:
 
     async def wait_all(self, timeout: float | None = None) -> None:
         """Wait for all tasks to complete."""
+        _validate_timeout(timeout)
         if not self._tasks:
             return
 

@@ -1,8 +1,13 @@
 """Request Data Container."""
 
+from __future__ import annotations
+
 import time
 from collections.abc import Callable
 from typing import Any
+
+NormalizeResult = tuple[Any, bool | None]
+NormalizeFunction = Callable[[Any, dict[str, Any]], NormalizeResult]
 
 
 class RequestData:
@@ -31,7 +36,7 @@ class RequestData:
         data: Any,
         extra_data: dict[str, Any],
         status: bool = False,
-        normalize_func: Callable | None = None,
+        normalize_func: NormalizeFunction | None = None,
     ) -> None:
         """Initialize request data container.
 
@@ -44,7 +49,7 @@ class RequestData:
         self.event: str = "RequestEvent"
         self.input_data = data
         self.extra_data = extra_data
-        self.data: list[Any] = []
+        self.data: Any = []
         self.status: bool | None = status
         self.normalize_func = normalize_func
         self.local_update_time = time.time()
@@ -62,7 +67,7 @@ class RequestData:
         Processes the input data using the normalize function if provided,
         otherwise uses the input data directly.
         """
-        normalize_func = self.extra_data.get("normalize_function", None)
+        normalize_func = self.normalize_func or self.extra_data.get("normalize_function", None)
         if normalize_func is None:
             self.data = self.input_data
             self.status = None
@@ -71,11 +76,11 @@ class RequestData:
 
         self.has_been_init_data = True
 
-    def set_data(self, data: list[Any]) -> None:
+    def set_data(self, data: Any) -> None:
         """Set data to request.
 
         Args:
-            data: List type data to set.
+            data: Data to set.
         """
         self.data = data
 
@@ -119,17 +124,16 @@ class RequestData:
         """
         return self.extra_data
 
-    def get_data(self) -> list[Any]:
+    def get_data(self) -> Any:
         """Get data from request data info.
 
         Initializes data if not already done.
 
         Returns:
-            List of different data instances.
+            Processed request data.
         """
         if not self.has_been_init_data:
             self.init_data()
-            self.has_been_init_data = True
         return self.data
 
     def get_status(self) -> bool | None:
@@ -142,7 +146,6 @@ class RequestData:
         """
         if not self.has_been_init_data:
             self.init_data()
-            self.has_been_init_data = True
         return self.status
 
     def get_exchange_name(self) -> str:

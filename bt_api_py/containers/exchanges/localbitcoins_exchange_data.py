@@ -29,7 +29,7 @@ def _load_yaml() -> Any | None:
         if os.path.exists(cfg_path):
             with open(cfg_path, encoding="utf-8") as f:
                 _config_cache = yaml.safe_load(f)
-    except Exception as e:
+    except (OSError, ValueError, KeyError, ImportError) as e:
         logger.warning(f"Failed to load localbitcoins.yaml: {e}")
     return _config_cache
 

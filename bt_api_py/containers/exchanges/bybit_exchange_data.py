@@ -27,7 +27,7 @@ def _get_bybit_config() -> Any | None:
         if os.path.exists(config_path):
             _bybit_config = load_exchange_config(config_path)
         _bybit_config_loaded = True
-    except Exception as e:
+    except (OSError, ValueError, KeyError, ImportError) as e:
         logger.warning(f"Failed to load bybit.yaml config: {e}")
     return _bybit_config
 

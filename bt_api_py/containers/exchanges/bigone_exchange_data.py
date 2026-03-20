@@ -27,7 +27,7 @@ def _get_bigone_config() -> Any | None:
         if config_path.exists():
             _bigone_config = load_exchange_config(str(config_path))
         _bigone_config_loaded = True
-    except Exception as e:
+    except (OSError, ValueError, KeyError, ImportError) as e:
         logger.warning(f"Failed to load bigone.yaml config: {e}")
     return _bigone_config
 

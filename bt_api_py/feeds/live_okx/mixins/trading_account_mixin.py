@@ -30,12 +30,12 @@ class TradingAccountMixin:
 
     def _get_interest_limits(
         self,
-        ccy: Any = None,
-        inst_type: Any = None,
-        mgn_mode: Any = None,
-        uly: Any = None,
-        inst_family: Any = None,
-        extra_data: Any = None,
+        ccy: str | None = None,
+        inst_type: str | None = None,
+        mgn_mode: str | None = None,
+        uly: str | None = None,
+        inst_family: str | None = None,
+        extra_data: dict[str, Any] | None = None,
         **kwargs: Any,
     ) -> tuple[str, dict[str, Any], dict[str, Any]]:
         """
@@ -78,7 +78,7 @@ class TradingAccountMixin:
 
     @staticmethod
     def _get_interest_limits_normalize_function(
-        input_data: Any, extra_data: Any
+        input_data: dict[str, Any], extra_data: dict[str, Any]
     ) -> tuple[list[Any], bool]:
         status = input_data["code"] == "0"
         if "data" not in input_data:
@@ -89,14 +89,14 @@ class TradingAccountMixin:
 
     def get_interest_limits(
         self,
-        ccy: Any = None,
-        inst_type: Any = None,
-        mgn_mode: Any = None,
-        uly: Any = None,
-        inst_family: Any = None,
-        extra_data: Any = None,
+        ccy: str | None = None,
+        inst_type: str | None = None,
+        mgn_mode: str | None = None,
+        uly: str | None = None,
+        inst_family: str | None = None,
+        extra_data: dict[str, Any] | None = None,
         **kwargs: Any,
-    ) -> Any:
+    ) -> list[Any]:
         """Get interest limit and interest rate"""
         path, params, extra_data = self._get_interest_limits(
             ccy, inst_type, mgn_mode, uly, inst_family, extra_data, **kwargs

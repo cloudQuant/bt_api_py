@@ -100,11 +100,11 @@ class OkxPositionData(PositionData):
 
     def get_account_id(self):
         """# 账户id"""
-        return None
+        return
 
     def get_position_id(self):
         """# 持仓id"""
-        return None
+        return
 
     def get_is_isolated(self):
         """# 是否是逐仓模式"""
@@ -116,7 +116,7 @@ class OkxPositionData(PositionData):
 
     def get_is_auto_add_margin(self):
         """# 是否可以自动增加保证金"""
-        return None
+        return
 
     def get_leverage(self):
         """# 杠杆倍率"""
@@ -124,7 +124,7 @@ class OkxPositionData(PositionData):
 
     def get_max_notional_value(self):
         """# 当前杠杆下用户可用的最大名义价值"""
-        return None
+        return
 
     def get_position_symbol_name(self):
         """# 仓位的品种名称"""
@@ -140,7 +140,7 @@ class OkxPositionData(PositionData):
 
     def get_trade_num(self):
         """# trade的个数"""
-        return None
+        return
 
     def get_avg_price(self):
         """# 持仓成本价"""
@@ -152,7 +152,7 @@ class OkxPositionData(PositionData):
 
     def get_liquidation_price(self):
         """# 清算价格"""
-        return None
+        return
 
     def get_initial_margin(self):
         """# 当前所需起始保证金"""
@@ -164,11 +164,11 @@ class OkxPositionData(PositionData):
 
     def open_order_initial_margin(self):
         """# 当前挂单所需起始保证金(基于最新标记价格)"""
-        return None
+        return
 
     def get_position_initial_margin(self):
         """# 持仓所需起始保证金(基于最新标记价格)"""
-        return None
+        return
 
     def get_position_fee(self):
         """# 这个position交易所耗费的手续费"""

@@ -140,7 +140,7 @@ class OkxOrderData(OrderData):
 
     def get_cum_quote(self):
         """# ?"""
-        return None
+        return
 
     def get_executed_qty(self):
         """# 已执行的成交量"""
@@ -181,7 +181,7 @@ class OkxOrderData(OrderData):
 
     def get_trailing_stop_callback_rate(self):
         """# 跟踪止损回调比例"""
-        return None
+        return
 
     def get_order_symbol_name(self):
         """# 品种"""
@@ -201,7 +201,7 @@ class OkxOrderData(OrderData):
 
     def get_origin_order_type(self):
         """# 原始订单类型"""
-        return None
+        return
 
     def get_position_side(self):
         """# 持仓方向"""
@@ -209,7 +209,7 @@ class OkxOrderData(OrderData):
 
     def get_close_position(self):
         """# 是否为触发平仓单; 仅在条件订单情况下会推送此字段"""
-        return None
+        return
 
     def get_take_profit_price(self):
         """# get_take_profit_price"""

@@ -5,6 +5,7 @@ Production-grade implementation supporting 73+ exchanges with high reliability a
 
 import asyncio
 import contextlib
+import inspect
 import json
 import statistics
 import time
@@ -464,6 +465,7 @@ class AdvancedWebSocketConnection:
         self._send_queue = asyncio.Queue(maxsize=config.send_buffer_size)
         self._processing_task: asyncio.Task | None = None
         self._sender_task: asyncio.Task | None = None
+        self._health_task: asyncio.Task | None = None
 
         # Dead letter queue
         self._dlq = (
@@ -494,6 +496,7 @@ class AdvancedWebSocketConnection:
             return
 
         self._state = ConnectionState.CONNECTING
+        await self._close_websocket()
 
         # Try endpoints in order of health
         endpoints = sorted(
@@ -527,7 +530,7 @@ class AdvancedWebSocketConnection:
                 self._sender_task = asyncio.create_task(self._send_messages())
 
                 # Start health monitoring
-                asyncio.create_task(self._health_monitor_loop())
+                self._health_task = asyncio.create_task(self._health_monitor_loop())
 
                 # Start dead letter queue processing
                 if self._dlq:
@@ -548,7 +551,9 @@ class AdvancedWebSocketConnection:
         # All endpoints failed
         self._state = ConnectionState.ERROR
         self._metrics.record_error(ErrorCategory.NETWORK)
-        raise WebSocketError(f"All connection endpoints failed: {last_exception}")
+        raise WebSocketError(
+            self.config.exchange_name, detail=f"All connection endpoints failed: {last_exception}"
+        )
 
     async def _do_connect(self, endpoint: str) -> None:
         """Perform actual WebSocket connection."""
@@ -572,20 +577,8 @@ class AdvancedWebSocketConnection:
         self._running = False
         self._state = ConnectionState.DISCONNECTED
 
-        # Stop processing tasks
-        if self._processing_task:
-            self._processing_task.cancel()
-            with contextlib.suppress(asyncio.CancelledError):
-                await self._processing_task
-
-        if self._sender_task:
-            self._sender_task.cancel()
-            with contextlib.suppress(asyncio.CancelledError):
-                await self._sender_task
-
-        # Close WebSocket
-        if self._websocket:
-            await self._websocket.close()
+        await self._cancel_background_tasks(exclude_task=asyncio.current_task())
+        await self._close_websocket()
 
         # Stop dead letter queue processing
         if self._dlq:
@@ -604,11 +597,17 @@ class AdvancedWebSocketConnection:
         """Subscribe to a topic with rate limiting and validation."""
         # Check subscription limits
         if self._subscription_count[topic] >= self.config.subscription_limits.get(topic, 100):
-            raise RateLimitError(f"Subscription limit exceeded for {topic}")
+            raise RateLimitError(
+                self.config.exchange_name,
+                detail=f"Subscription limit exceeded for {topic}",
+            )
 
         # Check circuit breaker
         if self._circuit_breaker and self._circuit_breaker.get_state() == "OPEN":
-            raise WebSocketError("Circuit breaker is OPEN - cannot subscribe")
+            raise WebSocketError(
+                self.config.exchange_name,
+                detail="Circuit breaker is OPEN - cannot subscribe",
+            )
 
         subscription = {
             "id": subscription_id,
@@ -770,7 +769,9 @@ class AdvancedWebSocketConnection:
                     and subscription["callback"]
                 ):
                     try:
-                        await subscription["callback"](message)
+                        callback_result = subscription["callback"](message)
+                        if inspect.isawaitable(callback_result):
+                            await callback_result
                     except Exception as e:
                         self.logger.error(f"Callback error: {e}")
                         self._metrics.record_error(ErrorCategory.EXCHANGE_SPECIFIC)
@@ -806,10 +807,14 @@ class AdvancedWebSocketConnection:
         """Handle disconnection with intelligent reconnection."""
         self._state = ConnectionState.DISCONNECTED
         self._authenticated = False
+        await self._cancel_background_tasks(exclude_task=asyncio.current_task())
+        await self._close_websocket()
 
         # Attempt reconnection if enabled
         if self.config.reconnect_enabled and self._running:
             await self._attempt_reconnection()
+        else:
+            self._running = False
 
     async def _attempt_reconnection(self) -> None:
         """Attempt reconnection with exponential backoff."""
@@ -831,10 +836,7 @@ class AdvancedWebSocketConnection:
 
             try:
                 await self.connect()
-
-                # Resubscribe to all topics
-                for _subscription_id, subscription in list(self._subscriptions.items()):
-                    await self._send_subscription_message(subscription)
+                await self._restore_subscriptions()
 
                 self.logger.info("Reconnection successful")
                 return
@@ -845,6 +847,7 @@ class AdvancedWebSocketConnection:
 
         self.logger.error("Max reconnection attempts reached")
         self._state = ConnectionState.ERROR
+        self._running = False
 
     async def _health_monitor_loop(self) -> None:
         """Monitor connection health."""
@@ -885,6 +888,31 @@ class AdvancedWebSocketConnection:
                 await self._dlq.add_message(message, e, retry_count + 1)
         else:
             self.logger.error(f"DLQ message permanently failed: {message}")
+
+    async def _restore_subscriptions(self) -> None:
+        """Restore in-memory subscriptions after reconnecting."""
+        for subscription in list(self._subscriptions.values()):
+            await self._send_subscription_message(subscription)
+
+    async def _close_websocket(self) -> None:
+        """Close and clear the underlying websocket if present."""
+        websocket = self._websocket
+        self._websocket = None
+        if websocket is None:
+            return
+        with contextlib.suppress(Exception):
+            await websocket.close()
+
+    async def _cancel_background_tasks(self, exclude_task: asyncio.Task | None = None) -> None:
+        """Cancel background tasks, excluding the current task when required."""
+        for task_attr in ("_processing_task", "_sender_task", "_health_task"):
+            task = getattr(self, task_attr)
+            setattr(self, task_attr, None)
+            if task is None or task is exclude_task or task.done():
+                continue
+            task.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await task
 
     def _is_data_message(self, message: dict[str, Any]) -> bool:
         """Check if message is data message."""

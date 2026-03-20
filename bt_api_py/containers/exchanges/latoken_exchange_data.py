@@ -21,7 +21,7 @@ def _get_latoken_config() -> Any | None:
         if config_path.exists():
             _latoken_config = load_exchange_config(str(config_path))
         _latoken_config_loaded = True
-    except Exception as e:
+    except (OSError, ValueError, KeyError, ImportError) as e:
         logger.warning(f"Failed to load latoken.yaml config: {e}")
     return _latoken_config
 

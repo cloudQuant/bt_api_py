@@ -40,38 +40,38 @@ class BaseDataStream(ABC):
         self.logger = get_logger("unknown")
 
     @property
-    def state(self):
+    def state(self) -> ConnectionState:
         return self._state
 
     @state.setter
-    def state(self, new_state):
+    def state(self, new_state: ConnectionState) -> None:
         old_state = self._state
         self._state = new_state
         self.on_state_change(old_state, new_state)
 
-    def on_state_change(self, old_state, new_state):
+    def on_state_change(self, old_state: ConnectionState, new_state: ConnectionState) -> None:
         """连接状态变化回调，子类可重写"""
         self.logger.info(f"{self.stream_name} state: {old_state.value} -> {new_state.value}")
 
     @abstractmethod
-    def connect(self):
+    def connect(self) -> None:
         """建立连接"""
         ...
 
     @abstractmethod
-    def disconnect(self):
+    def disconnect(self) -> None:
         """断开连接"""
         ...
 
     @abstractmethod
-    def subscribe_topics(self, topics):
+    def subscribe_topics(self, topics: list[dict[str, Any]]) -> None:
         """订阅主题
         :param topics: list of topic dicts, e.g. [{"topic": "kline", "symbol": "BTC-USDT", "period": "1m"}]
         """
         ...
 
     @abstractmethod
-    def _run_loop(self):
+    def _run_loop(self) -> None:
         """主循环，在独立 daemon 线程中运行"""
         ...
 
@@ -81,22 +81,22 @@ class BaseDataStream(ABC):
         self._thread = threading.Thread(target=self._run_loop, daemon=True)
         self._thread.start()
 
-    def stop(self):
+    def stop(self) -> None:
         """停止流式数据连接"""
         self._running = False
         self.disconnect()
 
-    def is_running(self):
+    def is_running(self) -> bool:
         return self._running
 
-    def push_data(self, data):
+    def push_data(self, data: Any) -> None:
         """推送数据到队列"""
         if self.data_queue is not None:
             self.data_queue.put(data)
         else:
             self.logger.warning(f"{self.stream_name}: data_queue is None, data dropped")
 
-    def wait_connected(self, timeout=30, interval=0.5):
+    def wait_connected(self, timeout: float = 30, interval: float = 0.5) -> bool:
         """阻塞等待连接建立
         :param timeout: 最大等待秒数
         :param interval: 轮询间隔秒数

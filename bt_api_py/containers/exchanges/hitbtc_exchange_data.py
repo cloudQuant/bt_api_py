@@ -33,7 +33,7 @@ def _get_hitbtc_config() -> Any | None:
         if os.path.exists(config_path):
             _hitbtc_config = load_exchange_config(config_path)
         _hitbtc_config_loaded = True
-    except Exception as e:
+    except (OSError, ValueError, KeyError, ImportError) as e:
         logger.warning(f"Failed to load hitbtc.yaml config: {e}")
     return _hitbtc_config
 
@@ -87,7 +87,7 @@ class HitBtcExchangeData(ExchangeData):
             if getattr(asset_cfg, "wss_paths", None):
                 self.wss_paths.update(dict(asset_cfg.wss_paths))
             return True
-        except Exception as e:
+        except (OSError, ValueError, KeyError, ImportError) as e:
             logger.warning(f"Failed to load hitbtc config for {asset_type}: {e}")
             return False
 

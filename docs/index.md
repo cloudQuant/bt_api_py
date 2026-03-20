@@ -215,40 +215,42 @@ price = order.get_price()
 
 ## 支持的交易所
 
-### ✅ 完整支持（REST + WebSocket + 测试通过）
+<!-- BEGIN GENERATED:EXCHANGE_SUPPORT_OVERVIEW -->
+### ✅ 已完整支持（REST + WebSocket + 测试通过）
 
-| 交易所 | 代码 | 现货 | 合约 | 期权 | 股票 | 单元测试 |
-|--------|------|:----:|:----:|:----:|:----:|:--------:|
-| **Binance** | `BINANCE___SPOT` / `BINANCE___SWAP` | ✅ | ✅ | ✅ | — | ✅ |
-| **HTX (Huobi)** | `HTX___SPOT` / `HTX___USDT_SWAP` | ✅ | ✅ | ✅ | — | ✅ |
-| **CTP** (中国期货) | `CTP___FUTURE` | — | — | — | — | ✅ |
-| **Interactive Brokers** | `IB_WEB___STK` / `IB_WEB___FUT` | — | — | — | ✅ | ✅ |
+| 交易所 | 代码 | 现货 | 合约 | 期权 | 股票 | 测试状态 |
+| -------- | -------- | -------- | -------- | -------- | -------- | -------- |
+| **Binance** | `BINANCE___SPOT` / `BINANCE___SWAP` 等 | ✅ | ✅ | ✅ | — | ✅ 通过 |
+| **HTX (Huobi)** | `HTX___SPOT` / `HTX___USDT_SWAP` 等 | ✅ | ✅ | ✅ | — | ✅ 通过 |
+| **CTP (中国期货)** | `CTP___FUTURE` | — | ✅ | — | — | ✅ 通过 |
+| **Interactive Brokers** | `IB_WEB___STK` / `IB_WEB___FUT` | — | — | — | ✅ | ✅ 通过 |
 
-### 🔧 已实现REST API（单元测试部分通过）
+### 🔧 已实现 API（仍需继续验证或补齐能力）
 
-| 交易所 | 类型 | 测试状态 |
-|--------|------|:--------:|
-| OKX | CEX | ⚠️ 部分失败 |
-| Bybit | CEX | ✅ 37通过 |
-| Bitget | CEX | ✅ 45通过 |
-| Kraken | CEX | ✅ 46通过 |
-| Gate.io | CEX | ✅ 56通过 |
-| Upbit | CEX | ✅ 101通过 |
-| Crypto.com | CEX | ✅ 97通过 |
-| HitBTC | CEX | ✅ 103通过 |
-| Phemex | CEX | ✅ 65通过 |
-| Gemini | CEX | ✅ 20通过 |
-| KuCoin | CEX | ⚠️ 16失败/47通过 |
-| MEXC | CEX | ⚠️ 11失败/42通过 |
-| Bitfinex | CEX | ⚠️ 13失败/43通过 |
-| Coinbase | CEX | ⚠️ 19失败/45通过 |
-| Hyperliquid | DEX | ⚠️ 5失败/32通过 |
-| dYdX | DEX | ✅ 通过 |
-| BYDFi | CEX | ⚠️ 1失败/17通过 |
+| 交易所 | 类型 | 测试状态 | 备注 |
+| -------- | -------- | -------- | -------- |
+| OKX | CEX | ⚠️ 部分失败 | mock 目标路径问题（httpx），主体逻辑正确 |
+| Bybit | CEX | ✅ 37 通过 | 建议补 WebSocket 覆盖后再提升状态 |
+| Bitget | CEX | ✅ 45 通过 | 建议补 WebSocket 覆盖后再提升状态 |
+| Kraken | CEX | ✅ 46 通过 | 建议补 WebSocket 覆盖后再提升状态 |
+| Gate.io | CEX | ✅ 56 通过 | 建议补 WebSocket 覆盖后再提升状态 |
+| Upbit | CEX | ✅ 101 通过 (4 skip) | 建议补 WebSocket 覆盖后再提升状态 |
+| Crypto.com | CEX | ✅ 97 通过 | 建议补 WebSocket 覆盖后再提升状态 |
+| HitBTC | CEX | ✅ 103 通过 (5 skip) | 建议补 WebSocket 覆盖后再提升状态 |
+| Phemex | CEX | ✅ 65 通过 (5 skip) | 建议补 WebSocket 覆盖后再提升状态 |
+| Gemini | CEX | ✅ 20 通过 | 建议补 WebSocket 覆盖后再提升状态 |
+| KuCoin | CEX | ⚠️ 16 失败 / 47 通过 | mock 目标路径问题 |
+| MEXC | CEX | ⚠️ 11 失败 / 42 通过 | mock 目标路径问题 |
+| Bitfinex | CEX | ⚠️ 13 失败 / 43 通过 | mock 目标路径问题 |
+| Coinbase | CEX | ⚠️ 19 失败 / 45 通过 | 部分 import 路径变更 |
+| Hyperliquid | DEX | ⚠️ 待补验证 | 当前仓库缺少可执行的 Hyperliquid 测试文件 |
+| dYdX | DEX | ⚠️ 待补验证 | 当前仓库缺少可执行的 dYdX 测试文件 |
+| BYDFi | CEX | ⚠️ 1 失败 / 17 通过 | JSON 解析 bug |
 
 ### 📋 已注册（基础框架就绪）
 
-40+个交易所已完成注册和基础代码框架，单元测试全部通过。
+40+ 个交易所已完成注册和基础框架接入，但仍需继续补实现、测试或文档。
+<!-- END GENERATED:EXCHANGE_SUPPORT_OVERVIEW -->
 
 ---
 

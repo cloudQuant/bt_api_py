@@ -22,7 +22,7 @@ def _get_bitflyer_config() -> Any | None:
         if config_path.exists():
             _bitflyer_config = load_exchange_config(str(config_path))
         _bitflyer_config_loaded = True
-    except Exception as e:
+    except (OSError, ValueError, KeyError, ImportError) as e:
         logger.warning(f"Failed to load bitflyer.yaml config: {e}")
     return _bitflyer_config
 

@@ -18,6 +18,7 @@ from bt_api_py.containers.orders.bitfinex_order import BitfinexRequestOrderData
 from bt_api_py.containers.requestdatas.request_data import RequestData
 from bt_api_py.containers.tickers.bitfinex_ticker import BitfinexRequestTickerData
 from bt_api_py.containers.trades.bitfinex_trade import BitfinexRequestTradeData
+from bt_api_py.exceptions import QueueNotInitializedError
 from bt_api_py.feeds.capability import Capability
 from bt_api_py.feeds.feed import Feed
 from bt_api_py.feeds.http_client import HttpClient
@@ -88,7 +89,7 @@ class BitfinexRequestData(Feed):
         if self.data_queue is not None:
             self.data_queue.put(data)
         else:
-            assert 0, "Queue not initialized"
+            raise QueueNotInitializedError("data_queue not initialized")
 
     def request(self, path, params=None, body=None, extra_data=None, timeout=10, is_sign=False):
         """HTTP request function using Feed.http_request().
@@ -106,6 +107,8 @@ class BitfinexRequestData(Feed):
         """
         if params is None:
             params: dict[str, Any] = {}
+        if extra_data is None:
+            extra_data = {}
         method, endpoint = path.split(" ", 1)
 
         # Build URL with query string
@@ -151,6 +154,8 @@ class BitfinexRequestData(Feed):
         """
         if params is None:
             params: dict[str, Any] = {}
+        if extra_data is None:
+            extra_data = {}
         method, endpoint = path.split(" ", 1)
 
         # Build URL with query string

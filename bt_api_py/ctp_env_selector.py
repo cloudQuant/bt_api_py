@@ -71,7 +71,7 @@ def _is_set1_available(now: datetime) -> bool:
 def get_ctp_fronts(
     env: str = "",
     now: datetime | None = None,
-) -> tuple:
+) -> tuple[str, str, str]:
     """
     获取 CTP 前置地址。
 
@@ -106,7 +106,7 @@ def get_ctp_fronts(
             return _get_set2_fronts()
 
 
-def _get_set1_fronts() -> tuple:
+def _get_set1_fronts() -> tuple[str, str, str]:
     """获取第一套环境前置地址（根据 CTP_SET1_GROUP 选组）"""
     group = os.environ.get("CTP_SET1_GROUP", "1").strip()
     td = os.environ.get(f"CTP_SET1_TD_FRONT_{group}", "tcp://182.254.243.31:30001")
@@ -117,7 +117,7 @@ def _get_set1_fronts() -> tuple:
     return td, md, f"set1_group{group}"
 
 
-def _get_set2_fronts() -> tuple:
+def _get_set2_fronts() -> tuple[str, str, str]:
     """获取第二套 7x24 环境前置地址"""
     td = os.environ.get("CTP_SET2_TD_FRONT", "tcp://182.254.243.31:40001")
     md = os.environ.get("CTP_SET2_MD_FRONT", "tcp://182.254.243.31:40011")
@@ -127,7 +127,7 @@ def _get_set2_fronts() -> tuple:
     return td, md, "set2_7x24"
 
 
-def apply_ctp_env():
+def apply_ctp_env() -> tuple[str, str, str]:
     """
     一键应用 CTP 环境选择，更新 CTP_TD_FRONT / CTP_MD_FRONT 环境变量。
     建议在 load_dotenv() 之后立即调用。

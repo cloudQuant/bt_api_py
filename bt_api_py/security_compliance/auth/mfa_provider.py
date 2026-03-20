@@ -120,6 +120,7 @@ class MFAProvider:
         # Storage
         self._mfa_configs: dict[str, MFAConfig] = {}
         self._webauthn_credentials: dict[str, WebAuthnCredential] = {}
+        self._webauthn_challenges: dict[str, dict[str, str | float]] = {}
 
     def setup_totp(self, user_id: str, account_name: str | None = None) -> dict[str, Any]:
         """Setup TOTP for a user."""
@@ -141,7 +142,7 @@ class MFAProvider:
             mfa_type=MFAType.TOTP,
             is_enabled=False,  # Needs verification first
             secret=secret,
-            backup_codes=backup_codes,
+            backup_codes=list(backup_codes),
         )
 
         self._mfa_configs[user_id] = config
@@ -149,15 +150,19 @@ class MFAProvider:
         return {
             "secret": secret,
             "provisioning_uri": provisioning_uri,
-            "backup_codes": backup_codes,
+            "backup_codes": list(backup_codes),
             "qr_code": self._generate_qr_code(provisioning_uri) if QR_CODE_AVAILABLE else None,
         }
 
     def _generate_backup_codes(self) -> list[str]:
         """Generate backup codes for MFA."""
-        codes = []
-        for _ in range(self.backup_codes_count):
+        codes: list[str] = []
+        seen: set[str] = set()
+        while len(codes) < self.backup_codes_count:
             code = f"{secrets.randbelow(1000000):06d}"
+            if code in seen:
+                continue
+            seen.add(code)
             codes.append(code)
         return codes
 
@@ -221,7 +226,7 @@ class MFAProvider:
             mfa_type=MFAType.HOTP,
             is_enabled=False,
             secret=secret,
-            backup_codes=backup_codes,
+            backup_codes=list(backup_codes),
             counter=self.hotp_counter_start,
         )
 
@@ -229,7 +234,7 @@ class MFAProvider:
 
         return {
             "secret": secret,
-            "backup_codes": backup_codes,
+            "backup_codes": list(backup_codes),
             "initial_counter": self.hotp_counter_start,
         }
 
@@ -290,10 +295,6 @@ class MFAProvider:
             },
         }
 
-        # Store challenge temporarily
-        if not hasattr(self, "_webauthn_challenges"):
-            self._webauthn_challenges = {}
-
         self._webauthn_challenges[user_id] = {
             "challenge": challenge,
             "expires_at": time.time() + 300,  # 5 minutes
@@ -303,10 +304,6 @@ class MFAProvider:
 
     def verify_webauthn_registration(self, user_id: str, credential_data: dict[str, Any]) -> bool:
         """Verify WebAuthn registration response."""
-        # Get stored challenge
-        if not hasattr(self, "_webauthn_challenges"):
-            return False
-
         stored_challenge = self._webauthn_challenges.get(user_id)
         if not stored_challenge:
             return False
@@ -424,10 +421,6 @@ class MFAProvider:
             "userVerification": "required",
         }
 
-        # Store challenge temporarily
-        if not hasattr(self, "_webauthn_challenges"):
-            self._webauthn_challenges = {}
-
         self._webauthn_challenges[f"auth_{user_id}"] = {
             "challenge": challenge,
             "expires_at": time.time() + 300,  # 5 minutes
@@ -437,11 +430,7 @@ class MFAProvider:
 
     def verify_webauthn_authentication(self, user_id: str, assertion_data: dict[str, Any]) -> bool:
         """Verify WebAuthn authentication response."""
-        # Get stored challenge
         challenge_key = f"auth_{user_id}"
-        if not hasattr(self, "_webauthn_challenges"):
-            return False
-
         stored_challenge = self._webauthn_challenges.get(challenge_key)
         if not stored_challenge:
             return False
@@ -531,6 +520,10 @@ class MFAProvider:
         # Require backup code to disable MFA
         if backup_code and backup_code in config.backup_codes:
             config.backup_codes.remove(backup_code)
+            if config.credential_id is not None:
+                self._webauthn_credentials.pop(config.credential_id, None)
+            self._webauthn_challenges.pop(user_id, None)
+            self._webauthn_challenges.pop(f"auth_{user_id}", None)
             del self._mfa_configs[user_id]
             return True
 
@@ -547,9 +540,9 @@ class MFAProvider:
             raise MFAError("MFA not configured for user")
 
         backup_codes = self._generate_backup_codes()
-        config.backup_codes = backup_codes
+        config.backup_codes = list(backup_codes)
 
-        return backup_codes
+        return list(backup_codes)
 
     def is_mfa_enabled(self, user_id: str) -> bool:
         """Check if MFA is enabled for a user."""

@@ -457,6 +457,12 @@ class TestErrorFramework:
         err = BinanceErrorTranslator.translate({"status": 429, "msg": "Rate limited"}, "BINANCE")
         assert err.code == UnifiedErrorCode.RATE_LIMIT_EXCEEDED
 
+    def test_error_module_lazy_export_invalid_name(self):
+        import bt_api_py.error as error_module
+
+        with pytest.raises(AttributeError):
+            error_module.__getattr__("DefinitelyMissingTranslator")
+
 
 # ══════════════════════════════════════════════════════════════
 # 0.5 RateLimiter

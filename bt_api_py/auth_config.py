@@ -1,4 +1,5 @@
-"""认证配置 — 统一管理不同交易所的认证方式
+"""认证配置 — 统一管理不同交易所的认证方式。
+
 加密货币交易所使用 API Key，CTP 使用 Broker/User/Password，IB 使用 TWS 连接参数.
 """
 
@@ -108,7 +109,9 @@ class CryptoAuthConfig(AuthConfig):
             raise ValueError("private_key is required when public_key is provided")
         self.public_key = public_key
         self.private_key = private_key
-        self.passphrase = _require_non_empty_str(passphrase, "passphrase") if passphrase is not None else None
+        self.passphrase = (
+            _require_non_empty_str(passphrase, "passphrase") if passphrase is not None else None
+        )
 
 
 class CtpAuthConfig(AuthConfig):
@@ -218,11 +221,14 @@ class IbWebAuthConfig(AuthConfig):
         """Initialize Interactive Brokers Web API authentication configuration.
 
         Supports three authentication methods:
-            1. Client Portal Gateway (individual): base_url="https://localhost:5000", verify_ssl=False
-            2. OAuth 2.0 (institutional): base_url="https://api.interactivebrokers.com",
+            1. Client Portal Gateway (individual):
+               base_url="https://localhost:5000", verify_ssl=False
+            2. OAuth 2.0 (institutional):
+               base_url="https://api.interactivebrokers.com",
                requires client_id + private_key_path or access_token
-            3. Browser Cookie (enhanced auth): extract cookies from logged-in browser,
-               used for endpoints requiring browser session (/portfolio/{id}/summary etc.)
+            3. Browser Cookie (enhanced auth): extract cookies from
+               logged-in browser, used for endpoints requiring browser
+               session (/portfolio/{id}/summary etc.)
 
         Args:
             exchange: Exchange identifier. Defaults to "IB_WEB".

@@ -4,16 +4,18 @@ WebSocket connection management with optimized pooling and backpressure.
 
 import asyncio
 import contextlib
+import inspect
 import json
 import time
 import zlib
 from collections import defaultdict
 from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, cast
 from urllib.parse import urlparse
 
 import websockets
+from websockets import ConnectionClosed, WebSocketException
 
 from bt_api_py.exceptions import RateLimitError, WebSocketError
 from bt_api_py.logging_factory import get_logger
@@ -65,7 +67,7 @@ class Subscription:
     topic: str
     symbol: str
     params: dict[str, Any]
-    callback: Callable | None = None
+    callback: Callable[..., Any] | None = None
     created_at: float = field(default_factory=time.time)
 
 
@@ -78,7 +80,7 @@ class WebSocketConnection:
         self.logger = get_logger(f"ws_{config.exchange_name}_{connection_id}")
 
         # Connection state
-        self._websocket: websockets.WebSocketServerProtocol | None = None
+        self._websocket: Any | None = None
         self._connected = False
         self._running = False
 
@@ -110,6 +112,8 @@ class WebSocketConnection:
             return
 
         try:
+            if self._websocket is not None:
+                await self._close_websocket()
             self._websocket = await websockets.connect(
                 self.config.url,
                 ping_interval=self.config.heartbeat_interval,
@@ -127,7 +131,7 @@ class WebSocketConnection:
 
             self.logger.info(f"Connected to {self.config.url}")
 
-        except (OSError, websockets.exceptions.WebSocketException) as e:
+        except (OSError, WebSocketException) as e:
             self.logger.error(f"Connection failed: {e}")
             raise WebSocketError(self.config.exchange_name, detail=str(e)) from e
 
@@ -135,13 +139,15 @@ class WebSocketConnection:
         """Disconnect from WebSocket."""
         self._running = False
 
-        if self._processing_task:
-            self._processing_task.cancel()
+        current_task = asyncio.current_task()
+        processing_task = self._processing_task
+        self._processing_task = None
+        if processing_task and processing_task is not current_task:
+            processing_task.cancel()
             with contextlib.suppress(asyncio.CancelledError):
-                await self._processing_task
+                await processing_task
 
-        if self._websocket:
-            await self._websocket.close()
+        await self._close_websocket()
 
         self._connected = False
         self.logger.info("Disconnected")
@@ -235,7 +241,7 @@ class WebSocketConnection:
         try:
             await self._websocket.send(json.dumps(message))
             self._stats["messages_sent"] += 1
-        except (OSError, websockets.exceptions.WebSocketException) as e:
+        except (OSError, WebSocketException) as e:
             self.logger.error(f"Send failed: {e}")
             raise WebSocketError(self.config.exchange_name, detail=str(e)) from e
 
@@ -261,7 +267,7 @@ class WebSocketConnection:
                     # Process message
                     await self._handle_message(message)
 
-            except websockets.exceptions.ConnectionClosed:
+            except ConnectionClosed:
                 self.logger.warning("WebSocket connection closed")
                 await self._handle_disconnect()
                 break
@@ -299,7 +305,9 @@ class WebSocketConnection:
                     and subscription.callback
                 ):
                     try:
-                        await subscription.callback(message)
+                        callback_result = subscription.callback(message)
+                        if inspect.isawaitable(callback_result):
+                            await callback_result
                     except Exception as e:
                         self.logger.error(
                             f"Callback error for {self.config.exchange_name} {symbol}@{topic}: {e}"
@@ -336,9 +344,10 @@ class WebSocketConnection:
         """Handle disconnection."""
         self._connected = False
         self._last_disconnect = time.time()
+        await self._close_websocket()
 
         # Attempt reconnection
-        if self._reconnect_attempts < self.config.max_reconnect_attempts:
+        while self._running and self._reconnect_attempts < self.config.max_reconnect_attempts:
             self._reconnect_attempts += 1
             self._stats["reconnects"] += 1
 
@@ -349,16 +358,35 @@ class WebSocketConnection:
 
             try:
                 await self.connect()
+                await self._restore_subscriptions()
+                return
+            except WebSocketError as e:
+                self.logger.warning(
+                    "Reconnection attempt %d/%d failed for %s: %s",
+                    self._reconnect_attempts,
+                    self.config.max_reconnect_attempts,
+                    self.connection_id,
+                    e,
+                )
+                self._connected = False
+                await self._close_websocket()
 
-                # Resubscribe to all topics
-                for subscription in list(self._subscriptions.values()):
-                    await self._send_subscription(subscription)
+        self._running = False
+        self.logger.error("Max reconnection attempts reached")
 
-            except (OSError, websockets.exceptions.WebSocketException) as e:
-                self.logger.error(f"Reconnection failed: {e}")
-                await self._handle_disconnect()
-        else:
-            self.logger.error("Max reconnection attempts reached")
+    async def _restore_subscriptions(self) -> None:
+        """Restore in-memory subscriptions after reconnecting."""
+        for subscription in list(self._subscriptions.values()):
+            await self._send_subscription(subscription)
+
+    async def _close_websocket(self) -> None:
+        """Close and clear the underlying websocket if present."""
+        websocket = self._websocket
+        self._websocket = None
+        if websocket is None:
+            return
+        with contextlib.suppress(Exception):
+            await websocket.close()
 
     @property
     def connected(self) -> bool:
@@ -390,11 +418,11 @@ class WebSocketConnection:
         }
 
 
-@singleton(IConnectionManager)
+@singleton(cast("type[Any]", IConnectionManager))
 class WebSocketManager(IConnectionManager):
     """WebSocket connection manager with pooling and load balancing."""
 
-    def __init__(self, event_bus: IEventBus = inject(IEventBus)):
+    def __init__(self, event_bus: IEventBus = inject(cast("type[Any]", IEventBus))):
         self.event_bus = event_bus
         self.logger = get_logger("websocket_manager")
 
@@ -463,6 +491,8 @@ class WebSocketManager(IConnectionManager):
             for connection in pool:
                 await connection.disconnect()
             self.logger.info(f"Closed {len(pool)} connections for {exchange_name}")
+            pool.clear()
+            self._round_robin[exchange_name] = 0
 
         await self._task_group.cancel_all()
 
@@ -499,6 +529,9 @@ class WebSocketManager(IConnectionManager):
 
     async def unsubscribe(self, exchange_name: str, subscription_id: str) -> None:
         """Unsubscribe from WebSocket topic."""
+        if exchange_name not in self._pool_locks:
+            raise ValueError(f"Exchange {exchange_name} not configured")
+
         async with self._pool_locks[exchange_name]:
             pool = self._pools[exchange_name]
 
@@ -524,7 +557,7 @@ class WebSocketManager(IConnectionManager):
                     await connection._websocket.ping()
                     connection._stats["last_heartbeat"] = time.time()
 
-            except (OSError, websockets.exceptions.WebSocketException) as e:
+            except (OSError, WebSocketException) as e:
                 self.logger.error(f"Connection monitoring error: {e}")
                 break
 
@@ -545,3 +578,7 @@ class WebSocketManager(IConnectionManager):
             stats[exchange_name] = exchange_stats
 
         return stats
+
+    def get_connection_stats(self) -> dict[str, Any]:
+        """Compatibility alias for the connection manager interface."""
+        return self.get_pool_stats()

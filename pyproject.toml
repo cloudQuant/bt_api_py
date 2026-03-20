@@ -195,12 +195,16 @@ warn_unused_ignores = false
 warn_no_return = true
 strict_equality = true
 ignore_missing_imports = true
+# Ignore untyped imports for third-party libs without stubs (pytz, requests, yaml)
+# These are handled by types-* packages in dev dependencies
+plugins = []
 # Gradual typing: disable noisy codes for brownfield codebase (can tighten later)
 disable_error_code = [
     "override", "name-defined", "attr-defined", "has-type", "arg-type",
     "call-overload", "return-value", "assignment", "index", "operator",
     "var-annotated", "no-any-return", "misc", "valid-type", "empty-body",
     "no-redef", "union-attr", "call-arg", "list-item", "dict-item",
+    "import-untyped",
 ]
 
 [[tool.mypy.overrides]]
@@ -208,7 +212,115 @@ module = "bt_api_py.exceptions"
 disallow_untyped_defs = true
 
 [[tool.mypy.overrides]]
+module = "bt_api_py.error"
+disallow_untyped_defs = true
+
+[[tool.mypy.overrides]]
 module = "bt_api_py.event_bus"
+disallow_untyped_defs = true
+
+[[tool.mypy.overrides]]
+module = "bt_api_py.auth_config"
+disallow_untyped_defs = true
+
+[[tool.mypy.overrides]]
+module = "bt_api_py.core.interfaces"
+disallow_untyped_defs = true
+
+[[tool.mypy.overrides]]
+module = "bt_api_py.core.async_context"
+disallow_untyped_defs = true
+
+[[tool.mypy.overrides]]
+module = "bt_api_py.core.services"
+disallow_untyped_defs = true
+
+[[tool.mypy.overrides]]
+module = "bt_api_py.core.dependency_injection"
+disallow_untyped_defs = true
+
+[[tool.mypy.overrides]]
+module = "bt_api_py.logging_factory"
+disallow_untyped_defs = true
+
+[[tool.mypy.overrides]]
+module = "bt_api_py.logging_system"
+disallow_untyped_defs = true
+
+[[tool.mypy.overrides]]
+module = "bt_api_py.instrument_manager"
+disallow_untyped_defs = true
+
+[[tool.mypy.overrides]]
+module = "bt_api_py.containers.instrument"
+disallow_untyped_defs = true
+
+[[tool.mypy.overrides]]
+module = "bt_api_py.balance_utils"
+disallow_untyped_defs = true
+
+[[tool.mypy.overrides]]
+module = "bt_api_py.ctp_env_selector"
+disallow_untyped_defs = true
+
+[[tool.mypy.overrides]]
+module = "bt_api_py.bt_api"
+disallow_untyped_defs = true
+
+[[tool.mypy.overrides]]
+module = "bt_api_py.registry"
+disallow_untyped_defs = true
+
+[[tool.mypy.overrides]]
+module = "bt_api_py.functions.utils"
+disallow_untyped_defs = true
+
+[[tool.mypy.overrides]]
+module = "bt_api_py.functions.calculate_time"
+disallow_untyped_defs = true
+
+[[tool.mypy.overrides]]
+module = "bt_api_py.functions.timer_event"
+disallow_untyped_defs = true
+
+[[tool.mypy.overrides]]
+module = "bt_api_py.functions.async_base"
+disallow_untyped_defs = true
+
+[[tool.mypy.overrides]]
+module = "bt_api_py.functions.async_send_message"
+disallow_untyped_defs = true
+
+[[tool.mypy.overrides]]
+module = "bt_api_py.functions.browser_cookies"
+disallow_untyped_defs = true
+
+[[tool.mypy.overrides]]
+module = "bt_api_py.functions.log_message"
+disallow_untyped_defs = true
+
+[[tool.mypy.overrides]]
+module = "bt_api_py.functions.update_data.update_exchange_symbol_info"
+disallow_untyped_defs = true
+
+[[tool.mypy.overrides]]
+module = "bt_api_py.functions.update_data.download_spot_history_bar_from_binance"
+disallow_untyped_defs = true
+
+[[tool.mypy.overrides]]
+module = "bt_api_py.functions.update_data.download_swap_history_bar_from_binance"
+disallow_untyped_defs = true
+
+[[tool.mypy.overrides]]
+module = "bt_api_py.functions.update_data.download_funding_rate_from_binance"
+disallow_untyped_defs = true
+
+[[tool.mypy.overrides]]
+module = "bt_api_py.functions.update_data.download_spot_history_bar_from_okx"
+disallow_untyped_defs = true
+
+[[tool.mypy.overrides]]
+module = "bt_api_py.functions.update_data.download_bars_from_okex"
 disallow_untyped_defs = true
 
 [[tool.mypy.overrides]]
@@ -273,7 +385,19 @@ ignore_errors = true
 
 [[tool.mypy.overrides]]
 module = "bt_api_py.websocket_manager"
-ignore_errors = true
+disallow_untyped_defs = true
+
+[[tool.mypy.overrides]]
+module = "bt_api_py.websocket"
+disallow_untyped_defs = true
+
+[[tool.mypy.overrides]]
+module = "bt_api_py.websocket.advanced_websocket_manager"
+disallow_untyped_defs = true
+
+[[tool.mypy.overrides]]
+module = "bt_api_py.websocket.monitoring"
+disallow_untyped_defs = true
 
 [[tool.mypy.overrides]]
 module = "bt_api_py.websocket.*"
@@ -312,6 +436,170 @@ module = "bt_api_py.containers.accounts.*"
 disable_error_code = ["override", "arg-type", "has-type", "assignment", "index", "return-value"]
 
 [[tool.mypy.overrides]]
+module = "bt_api_py.containers.auto_init_mixin"
+disallow_untyped_defs = true
+
+[[tool.mypy.overrides]]
+module = "bt_api_py.containers.bars.bar"
+disallow_untyped_defs = true
+
+[[tool.mypy.overrides]]
+module = "bt_api_py.containers.tickers.ticker"
+disallow_untyped_defs = true
+
+[[tool.mypy.overrides]]
+module = "bt_api_py.containers.trades.trade"
+disallow_untyped_defs = true
+
+[[tool.mypy.overrides]]
+module = "bt_api_py.containers.symbols.symbol"
+disallow_untyped_defs = true
+
+[[tool.mypy.overrides]]
+module = "bt_api_py.containers.accounts.account"
+disallow_untyped_defs = true
+
+[[tool.mypy.overrides]]
+module = "bt_api_py.containers.positions.position"
+disallow_untyped_defs = true
+
+[[tool.mypy.overrides]]
+module = "bt_api_py.containers.orders.order"
+disallow_untyped_defs = true
+
+[[tool.mypy.overrides]]
+module = "bt_api_py.containers.balances.balance"
+disallow_untyped_defs = true
+
+[[tool.mypy.overrides]]
+module = "bt_api_py.containers.fundingrates.funding_rate"
+disallow_untyped_defs = true
+
+[[tool.mypy.overrides]]
+module = "bt_api_py.containers.markprices.mark_price"
+disallow_untyped_defs = true
+
+[[tool.mypy.overrides]]
+module = "bt_api_py.containers.orderbooks.orderbook"
+disallow_untyped_defs = true
+
+[[tool.mypy.overrides]]
+module = "bt_api_py.containers.liquidations.liquidation"
+disallow_untyped_defs = true
+
+[[tool.mypy.overrides]]
+module = "bt_api_py.containers.incomes.income"
+disallow_untyped_defs = true
+
+[[tool.mypy.overrides]]
+module = "bt_api_py.containers.requestdatas.request_data"
+disallow_untyped_defs = true
+
+[[tool.mypy.overrides]]
+module = "bt_api_py.cache"
+disallow_untyped_defs = true
+
+[[tool.mypy.overrides]]
+module = "bt_api_py.rate_limiter"
+disallow_untyped_defs = true
+
+[[tool.mypy.overrides]]
+module = "bt_api_py.connection_pool"
+disallow_untyped_defs = true
+
+[[tool.mypy.overrides]]
+module = "bt_api_py.config_loader"
+disallow_untyped_defs = true
+
+[[tool.mypy.overrides]]
+module = "bt_api_py.feeds.capability"
+disallow_untyped_defs = true
+
+[[tool.mypy.overrides]]
+module = "bt_api_py.feeds.connection_mixin"
+disallow_untyped_defs = true
+
+[[tool.mypy.overrides]]
+module = "bt_api_py.feeds.base_stream"
+disallow_untyped_defs = true
+
+[[tool.mypy.overrides]]
+module = "bt_api_py.feeds.http_client"
+disallow_untyped_defs = true
+
+[[tool.mypy.overrides]]
+module = "bt_api_py.feeds.abstract_feed"
+disallow_untyped_defs = true
+
+[[tool.mypy.overrides]]
+module = "bt_api_py.feeds.feed"
+disallow_untyped_defs = true
+
+[[tool.mypy.overrides]]
+module = "bt_api_py.feeds.live_luno.request_base"
+disallow_untyped_defs = true
+
+[[tool.mypy.overrides]]
+module = "bt_api_py.feeds.live_luno.spot"
+disallow_untyped_defs = true
+
+[[tool.mypy.overrides]]
+module = "bt_api_py.feeds.live_bingx.request_base"
+disallow_untyped_defs = true
+
+[[tool.mypy.overrides]]
+module = "bt_api_py.feeds.live_bingx.spot"
+disallow_untyped_defs = true
+
+[[tool.mypy.overrides]]
+module = "bt_api_py.feeds.live_bitbank.request_base"
+disallow_untyped_defs = true
+
+[[tool.mypy.overrides]]
+module = "bt_api_py.feeds.live_bitbank.spot"
+disallow_untyped_defs = true
+
+[[tool.mypy.overrides]]
+module = "bt_api_py.feeds.live_bitflyer.request_base"
+disallow_untyped_defs = true
+
+[[tool.mypy.overrides]]
+module = "bt_api_py.feeds.live_bitflyer.spot"
+disallow_untyped_defs = true
+
+[[tool.mypy.overrides]]
+module = "bt_api_py.feeds.live_btcturk.request_base"
+disallow_untyped_defs = true
+
+[[tool.mypy.overrides]]
+module = "bt_api_py.feeds.live_btcturk.spot"
+disallow_untyped_defs = true
+
+[[tool.mypy.overrides]]
+module = "bt_api_py.feeds.live_bitvavo.request_base"
+disallow_untyped_defs = true
+
+[[tool.mypy.overrides]]
+module = "bt_api_py.feeds.live_bitvavo.spot"
+disallow_untyped_defs = true
+
+[[tool.mypy.overrides]]
+module = "bt_api_py.feeds.live_bitinka.request_base"
+disallow_untyped_defs = true
+
+[[tool.mypy.overrides]]
+module = "bt_api_py.feeds.live_bitinka.spot"
+disallow_untyped_defs = true
+
+[[tool.mypy.overrides]]
+module = "bt_api_py.feeds.live_bitunix.request_base"
+disallow_untyped_defs = true
+
+[[tool.mypy.overrides]]
+module = "bt_api_py.feeds.live_bitunix.spot"
+disallow_untyped_defs = true
+
+[[tool.mypy.overrides]]
 module = "bt_api_py.containers.exchanges.*"
 ignore_errors = true
 
@@ -347,6 +635,7 @@ skips = ["B101"]  # assert_used - allowed in tests (ruff S101)
 dev = [
     "types-PyYAML>=6.0",
     "types-pytz>=2023.3",
+    "types-requests>=2.31.0",
     "pytest>=7.0",
     "pytest-asyncio>=0.21.0",
     "pytest-sugar>=1.0.0",

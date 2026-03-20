@@ -5,11 +5,12 @@ Capability 机制 — 声明场所支持的功能
 上层调用前可通过 require_capability() 检查，缺失能力时抛出 NotSupportedError。
 """
 
-from enum import Enum, unique
+import enum
+from enum import unique
 
 
 @unique
-class Capability(str, Enum):
+class Capability(enum.StrEnum):
     """场所能力枚举 — 覆盖所有可能的交易功能"""
 
     # ── 行情 ──
@@ -57,7 +58,7 @@ class Capability(str, Enum):
 class NotSupportedError(Exception):
     """场所不支持该能力"""
 
-    def __init__(self, capability, venue: str = ""):
+    def __init__(self, capability: Capability | str, venue: str = "") -> None:
         self.capability = capability
         self.venue = venue
         cap_name = capability.value if isinstance(capability, Capability) else str(capability)
@@ -99,7 +100,7 @@ class CapabilityMixin:
         """检查是否支持指定能力"""
         return cap in self.capabilities
 
-    def require_capability(self, cap: Capability):
+    def require_capability(self, cap: Capability) -> None:
         """要求指定能力，不支持时抛出 NotSupportedError"""
         if not self.has_capability(cap):
             venue = getattr(self, "exchange_name", self.__class__.__name__)

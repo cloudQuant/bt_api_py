@@ -30,8 +30,8 @@ class ValrRequestData(Feed):
         self.data_queue = data_queue
         self.exchange_name = kwargs.get("exchange_name", "VALR___SPOT")
         self.asset_type = kwargs.get("asset_type", "SPOT")
-        self.api_key = kwargs.get("public_key", kwargs.get("api_key"))
-        self.api_secret = kwargs.get("secret_key", kwargs.get("api_secret"))
+        self.api_key = kwargs.get("public_key") or kwargs.get("api_key")
+        self.api_secret = kwargs.get("secret_key") or kwargs.get("api_secret")
         self._params = ValrExchangeDataSpot()
         self.request_logger = get_logger("valr_feed")
         self.async_logger = get_logger("valr_feed")
@@ -109,7 +109,7 @@ class ValrRequestData(Feed):
         pass
 
     def disconnect(self):
-        pass
+        super().disconnect()
 
     def is_connected(self):
         return True

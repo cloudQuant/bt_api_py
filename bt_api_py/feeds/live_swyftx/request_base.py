@@ -29,7 +29,7 @@ class SwyftxRequestData(Feed):
         self.data_queue = data_queue
         self.exchange_name = kwargs.get("exchange_name", "SWYFTX___SPOT")
         self.asset_type = kwargs.get("asset_type", "SPOT")
-        self.api_key = kwargs.get("public_key", kwargs.get("api_key"))
+        self.api_key = kwargs.get("public_key") or kwargs.get("api_key")
         self._params = SwyftxExchangeDataSpot()
         self.request_logger = get_logger("swyftx_feed")
         self.async_logger = get_logger("swyftx_feed")
@@ -108,7 +108,7 @@ class SwyftxRequestData(Feed):
         pass
 
     def disconnect(self) -> None:
-        pass
+        super().disconnect()
 
     def is_connected(self) -> bool:
         return True

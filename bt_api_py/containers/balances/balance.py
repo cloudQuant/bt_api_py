@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from typing import Any, Self
 
 from bt_api_py.containers.auto_init_mixin import AutoInitMixin
@@ -70,7 +72,7 @@ class BalanceData(AutoInitMixin):
         """
         raise NotImplementedError
 
-    def get_asset_type(self) -> str:
+    def get_asset_type(self) -> str | None:
         """
         Get asset type.
 
@@ -94,7 +96,7 @@ class BalanceData(AutoInitMixin):
         """
         raise NotImplementedError
 
-    def get_local_update_time(self) -> float:
+    def get_local_update_time(self) -> float | None:
         """
         Get local update timestamp.
 

@@ -2,7 +2,7 @@ from bt_api_py.containers.orders.binance_order import BinanceRequestOrderData
 from bt_api_py.containers.requestdatas.request_data import RequestData
 
 
-def test_request_data():
+def test_request_data() -> None:
     datas = {
         "clientOrderId": "testOrder",  # 用户自定义的订单号
         "cumQty": "0",
@@ -32,10 +32,13 @@ def test_request_data():
         "goodTillDate": 1693207680000,  # 订单TIF为GTD时的自动取消时间
     }
 
-    def _get_open_orders_normalize_function(input_data, extra_data_):
+    def _get_open_orders_normalize_function(
+        input_data: dict[str, object] | list[dict[str, object]],
+        extra_data_: dict[str, object],
+    ) -> tuple[list[BinanceRequestOrderData], bool]:
         status = input_data is not None
-        symbol_name = extra_data_["symbol_name"]
-        asset_type = extra_data_["asset_type"]
+        symbol_name = str(extra_data_["symbol_name"])
+        asset_type = str(extra_data_["asset_type"])
         if isinstance(input_data, list):
             data = [BinanceRequestOrderData(i, symbol_name, asset_type, True) for i in input_data]
         elif isinstance(input_data, dict):
@@ -61,3 +64,35 @@ def test_request_data():
     assert request_data.get_exchange_name() == "BINANCE"
     assert len(request_data.get_data()) > 0
     assert isinstance(request_data.get_extra_data(), dict)
+
+
+def test_request_data_uses_constructor_normalize_func() -> None:
+    calls: list[tuple[object, dict[str, object]]] = []
+
+    def normalize_func(
+        input_data: object, extra_data: dict[str, object]
+    ) -> tuple[list[dict[str, object]], bool]:
+        calls.append((input_data, extra_data))
+        return [{"normalized": True}], True
+
+    request_data = RequestData(
+        {"payload": 1},
+        extra_data={"exchange_name": "BINANCE", "request_type": "ping"},
+        normalize_func=normalize_func,
+    )
+
+    assert request_data.get_status() is True
+    assert request_data.get_data() == [{"normalized": True}]
+    assert len(calls) == 1
+
+
+def test_request_data_without_normalizer_returns_raw_input() -> None:
+    raw_payload = {"pong": True}
+    request_data = RequestData(
+        raw_payload,
+        extra_data={"exchange_name": "BINANCE", "request_type": "ping"},
+        status=False,
+    )
+
+    assert request_data.get_data() == raw_payload
+    assert request_data.get_status() is None

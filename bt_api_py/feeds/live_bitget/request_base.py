@@ -15,6 +15,7 @@ from urllib.parse import urlencode
 from bt_api_py.containers.exchanges.bitget_exchange_data import BitgetExchangeData
 from bt_api_py.containers.requestdatas.request_data import RequestData
 from bt_api_py.error import BitgetErrorTranslator
+from bt_api_py.exceptions import QueueNotInitializedError
 from bt_api_py.feeds.capability import Capability
 from bt_api_py.feeds.feed import Feed
 from bt_api_py.logging_factory import get_logger
@@ -43,9 +44,12 @@ class BitgetRequestData(Feed):
     def __init__(self, data_queue: Any = None, **kwargs: Any) -> None:
         super().__init__(data_queue, **kwargs)
         self.data_queue = data_queue
-        self.public_key = kwargs.get("public_key")
-        self.private_key = kwargs.get("private_key")
+        self.public_key = kwargs.get("public_key") or kwargs.get("api_key")
+        self.private_key = (
+            kwargs.get("private_key") or kwargs.get("secret_key") or kwargs.get("api_secret")
+        )
         self.passphrase = kwargs.get("passphrase", "")
+        self.exchange_name = kwargs.get("exchange_name", "BITGET___SPOT")
         self.asset_type = kwargs.get("asset_type", "spot")
         self.logger_name = kwargs.get("logger_name", "bitget_feed.log")
         self._params = BitgetExchangeData()
@@ -64,7 +68,7 @@ class BitgetRequestData(Feed):
         if self.data_queue is not None:
             self.data_queue.put(data)
         else:
-            assert 0, "Queue not initialized"
+            raise QueueNotInitializedError("data_queue not initialized")
 
     def _generate_signature(self, message):
         pk = self.private_key or ""
@@ -87,6 +91,8 @@ class BitgetRequestData(Feed):
     def request(self, path, params=None, body=None, extra_data=None, timeout=10):
         if params is None:
             params: dict[str, Any] = {}
+        if extra_data is None:
+            extra_data = {}
         parts = path.split(" ", 1)
         method, request_path = (parts[0], parts[1]) if len(parts) == 2 else ("GET", path)
         url = f"{self._params.rest_url}{request_path}"
@@ -116,6 +122,8 @@ class BitgetRequestData(Feed):
     async def async_request(self, path, params=None, body=None, extra_data=None, timeout=5):
         if params is None:
             params: dict[str, Any] = {}
+        if extra_data is None:
+            extra_data = {}
         parts = path.split(" ", 1)
         method, request_path = (parts[0], parts[1]) if len(parts) == 2 else ("GET", path)
         url = f"{self._params.rest_url}{request_path}"

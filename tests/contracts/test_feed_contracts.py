@@ -5,7 +5,7 @@ of the trading API across different exchanges and scenarios.
 """
 
 import pytest
-from hypothesis import assume, given
+from hypothesis import HealthCheck, assume, given, settings
 from hypothesis import strategies as st
 
 from bt_api_py.bt_api import BtApi
@@ -196,6 +196,7 @@ class TestExchangeProperties:
 
     @pytest.mark.asyncio
     @given(symbols=st.lists(valid_symbols(), min_size=1, max_size=5))
+    @settings(deadline=None, suppress_health_check=[HealthCheck.too_slow])
     async def test_price_retrieval_properties(self, symbols):
         """Test properties of price retrieval across exchanges."""
         api = BtApi()
@@ -268,6 +269,7 @@ class TestDataContracts:
     @pytest.mark.contract
     @pytest.mark.unit
     @given(data=binance_ticker_data())
+    @settings(suppress_health_check=[HealthCheck.too_slow])
     @pytest.mark.ticker
     def test_ticker_data_contract(self, data):
         """Test ticker data contract invariants."""

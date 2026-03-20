@@ -35,12 +35,13 @@ class SimpleCache:
     - Thread-safe operations (basic)
     """
 
-    def __init__(self, default_ttl: float = 300.0, max_size: int | None = None) -> None:
+    def __init__(self, default_ttl: float = 300.0, max_size: int | None = 10000) -> None:
         """
         Initialize cache.
 
         Args:
             default_ttl: Default time-to-live in seconds (default: 5 minutes)
+            max_size: Maximum number of cached entries (default: 10000, prevents unbounded memory growth)
         """
         self._cache: OrderedDict[str, tuple[Any, float]] = OrderedDict()
         self._default_ttl = default_ttl

@@ -7,6 +7,7 @@ from typing import Any
 
 from bt_api_py.containers.requestdatas.request_data import RequestData
 from bt_api_py.errors.error_framework_pancakeswap_error_translator import PancakeSwapErrorTranslator
+from bt_api_py.exceptions import RequestError
 from bt_api_py.feeds.capability import Capability
 from bt_api_py.feeds.feed import Feed
 from bt_api_py.feeds.http_client import HttpClient
@@ -37,8 +38,8 @@ class PancakeSwapRequestData(Feed):
         super().__init__(data_queue, **kwargs)
         self.data_queue = data_queue
         self.exchange_name = kwargs.get("exchange_name", "PANCAKESWAP___DEX")
-        self.api_key = kwargs.get("api_key")
-        self.api_secret = kwargs.get("api_secret")
+        self.api_key = kwargs.get("public_key") or kwargs.get("api_key")
+        self.api_secret = kwargs.get("private_key") or kwargs.get("api_secret")
         self.asset_type = kwargs.get("asset_type", "SPOT")
         self.logger_name = kwargs.get("logger_name", "pancakeswap_feed.log")
         self._params = kwargs.get("exchange_data")
@@ -120,7 +121,7 @@ class PancakeSwapRequestData(Feed):
         if response.status_code != 200:
             error_msg = f"PancakeSwap API error: {response.status_code} - {response.text}"
             self.request_logger.error(error_msg)
-            raise Exception(error_msg)
+            raise RequestError(self.exchange_name, url=url, detail=error_msg)
 
         # Parse JSON response
         try:
@@ -128,7 +129,7 @@ class PancakeSwapRequestData(Feed):
         except ValueError as exc:
             error_msg = "Invalid JSON response from PancakeSwap API"
             self.request_logger.error(error_msg)
-            raise Exception(error_msg) from exc
+            raise RequestError(self.exchange_name, url=url, detail=error_msg) from exc
 
         # Check for GraphQL errors
         if is_graphql and "errors" in result:
@@ -136,7 +137,7 @@ class PancakeSwapRequestData(Feed):
             error_msg = error.get("message", "Unknown GraphQL error")
             unified_code, unified_msg = self._error_translator.translate_error(result)
             self.request_logger.error(f"GraphQL error: {error_msg} -> {unified_msg}")
-            raise Exception(unified_msg)
+            raise RequestError(self.exchange_name, url=url, detail=unified_msg)
 
         return result
 

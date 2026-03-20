@@ -35,11 +35,15 @@ class LunoRequestData(Feed):
         self.exchange_name = kwargs.get("exchange_name", "LUNO___SPOT")
         self.asset_type = kwargs.get("asset_type", "SPOT")
         self._params = LunoExchangeDataSpot()
+        self._params.api_key = kwargs.get("public_key") or kwargs.get("api_key")
+        self._params.api_secret = (
+            kwargs.get("private_key") or kwargs.get("secret_key") or kwargs.get("api_secret")
+        )
         self.request_logger = get_logger("luno_feed")
         self.async_logger = get_logger("luno_feed")
         self._http_client = HttpClient(venue=self.exchange_name, timeout=10)
 
-    def _get_auth_headers(self):
+    def _get_auth_headers(self) -> dict[str, str]:
         """Generate HTTP Basic Auth headers for Luno API."""
         headers = {
             "Content-Type": "application/json",
@@ -51,14 +55,21 @@ class LunoRequestData(Feed):
             headers["Authorization"] = f"Basic {credentials}"
         return headers
 
-    def _resolve_url(self, request_path):
+    def _resolve_url(self, request_path: str) -> str:
         """Resolve base URL based on request path."""
         base_url = self._params.rest_url
         if "candles" in request_path or "markets" in request_path:
             base_url = getattr(self._params, "rest_exchange_url", self._params.rest_url)
         return base_url
 
-    def request(self, path, params=None, body=None, extra_data=None, timeout=10):
+    def request(
+        self,
+        path: str,
+        params: dict[str, Any] | None = None,
+        body: dict[str, Any] | None = None,
+        extra_data: dict[str, Any] | None = None,
+        timeout: float = 10,
+    ) -> RequestData:
         """HTTP request for Luno API."""
         method = path.split()[0] if " " in path else "GET"
         request_path = "/" + path.split()[1] if " " in path else path
@@ -78,7 +89,14 @@ class LunoRequestData(Feed):
             self.request_logger.error(f"Request failed: {e}")
             raise
 
-    async def async_request(self, path, params=None, body=None, extra_data=None, timeout=5):
+    async def async_request(
+        self,
+        path: str,
+        params: dict[str, Any] | None = None,
+        body: dict[str, Any] | None = None,
+        extra_data: dict[str, Any] | None = None,
+        timeout: float = 5,
+    ) -> RequestData:
         """Async HTTP request for Luno API."""
         method = path.split()[0] if " " in path else "GET"
         request_path = "/" + path.split()[1] if " " in path else path
@@ -97,7 +115,7 @@ class LunoRequestData(Feed):
             self.async_logger.error(f"Async request failed: {e}")
             raise
 
-    def async_callback(self, future):
+    def async_callback(self, future: Any) -> None:
         """Callback for async requests, push result to data_queue."""
         try:
             result = future.result()
@@ -106,13 +124,17 @@ class LunoRequestData(Feed):
         except Exception as e:
             self.async_logger.error(f"Async callback error: {e}")
 
-    def _process_response(self, response, extra_data=None):
+    def _process_response(
+        self, response: dict[str, Any], extra_data: dict[str, Any] | None = None
+    ) -> RequestData:
         """Process API response."""
         if extra_data is None:
             extra_data = {}
         return RequestData(response, extra_data)
 
-    def _get_server_time(self, extra_data=None, **kwargs):
+    def _get_server_time(
+        self, extra_data: dict[str, Any] | None = None, **kwargs: Any
+    ) -> tuple[str, dict[str, str], dict[str, Any]]:
         """Prepare server time request. Returns (path, params, extra_data)."""
         path = "GET /ticker"
         if extra_data is None:
@@ -128,13 +150,17 @@ class LunoRequestData(Feed):
         )
         return path, {"pair": "XBTZAR"}, extra_data
 
-    def get_server_time(self, extra_data=None, **kwargs):
+    def get_server_time(
+        self, extra_data: dict[str, Any] | None = None, **kwargs: Any
+    ) -> RequestData:
         """Get server time (uses ticker timestamp)."""
         path, params, extra_data = self._get_server_time(extra_data, **kwargs)
         return self.request(path, params=params, extra_data=extra_data)
 
     @staticmethod
-    def _get_server_time_normalize_function(input_data, extra_data):
+    def _get_server_time_normalize_function(
+        input_data: Any, extra_data: dict[str, Any]
+    ) -> tuple[Any, bool]:
         if not input_data:
             return None, False
         if isinstance(input_data, dict):
@@ -142,16 +168,16 @@ class LunoRequestData(Feed):
             return ts, True
         return input_data, True
 
-    def push_data_to_queue(self, data):
+    def push_data_to_queue(self, data: Any) -> None:
         """Push data to the queue."""
         if self.data_queue is not None:
             self.data_queue.put(data)
 
-    def connect(self):
+    def connect(self) -> None:
         pass
 
-    def disconnect(self):
-        pass
+    def disconnect(self) -> None:
+        super().disconnect()
 
-    def is_connected(self):
+    def is_connected(self) -> bool:
         return True

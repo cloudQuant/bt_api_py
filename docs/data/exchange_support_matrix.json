@@ -1,0 +1,183 @@
+{
+  "metadata": {
+    "version": "0.15",
+    "last_updated": "2026-03-16",
+    "verification_command": "bash scripts/run_exchange_tests.sh <name>",
+    "status_policy": "Conservative: only mark an exchange as fully supported when its REST and WebSocket support are both documented and the current repository keeps corresponding tests in place."
+  },
+  "summary": {
+    "total_supported_label": "73+",
+    "framework_ready_label": "40+"
+  },
+  "fully_supported": [
+    {
+      "name": "Binance",
+      "codes": "`BINANCE___SPOT` / `BINANCE___SWAP` 等",
+      "market_type": "CEX",
+      "spot": "✅",
+      "contract": "✅",
+      "options": "✅",
+      "stocks": "—",
+      "test_status": "✅ 通过",
+      "note": "现货、合约、杠杆、期权、算法交易、网格、挖矿、质押、钱包、子账户、VIP借币"
+    },
+    {
+      "name": "HTX (Huobi)",
+      "codes": "`HTX___SPOT` / `HTX___USDT_SWAP` 等",
+      "market_type": "CEX",
+      "spot": "✅",
+      "contract": "✅",
+      "options": "✅",
+      "stocks": "—",
+      "test_status": "✅ 通过",
+      "note": "现货、杠杆、U本位永续、币本位永续、期权"
+    },
+    {
+      "name": "CTP (中国期货)",
+      "codes": "`CTP___FUTURE`",
+      "market_type": "传统金融",
+      "spot": "—",
+      "contract": "✅",
+      "options": "—",
+      "stocks": "—",
+      "test_status": "✅ 通过",
+      "note": "中国期货市场（上期所、大商所、郑商所、中金所）"
+    },
+    {
+      "name": "Interactive Brokers",
+      "codes": "`IB_WEB___STK` / `IB_WEB___FUT`",
+      "market_type": "传统金融",
+      "spot": "—",
+      "contract": "—",
+      "options": "—",
+      "stocks": "✅",
+      "test_status": "✅ 通过",
+      "note": "美股、期货（通过 Web API）"
+    }
+  ],
+  "implemented_api": [
+    {
+      "name": "OKX",
+      "market_type": "CEX",
+      "status": "REST 已实现，WebSocket 部分实现",
+      "test_status": "⚠️ 部分失败",
+      "note": "mock 目标路径问题（httpx），主体逻辑正确"
+    },
+    {
+      "name": "Bybit",
+      "market_type": "CEX",
+      "status": "REST 已实现，WebSocket 待继续补齐",
+      "test_status": "✅ 37 通过",
+      "note": "建议补 WebSocket 覆盖后再提升状态"
+    },
+    {
+      "name": "Bitget",
+      "market_type": "CEX",
+      "status": "REST 已实现，WebSocket 待继续补齐",
+      "test_status": "✅ 45 通过",
+      "note": "建议补 WebSocket 覆盖后再提升状态"
+    },
+    {
+      "name": "Kraken",
+      "market_type": "CEX",
+      "status": "REST 已实现，WebSocket 待继续补齐",
+      "test_status": "✅ 46 通过",
+      "note": "建议补 WebSocket 覆盖后再提升状态"
+    },
+    {
+      "name": "Gate.io",
+      "market_type": "CEX",
+      "status": "REST 已实现，WebSocket 待继续补齐",
+      "test_status": "✅ 56 通过",
+      "note": "建议补 WebSocket 覆盖后再提升状态"
+    },
+    {
+      "name": "Upbit",
+      "market_type": "CEX",
+      "status": "REST 已实现，WebSocket 待继续补齐",
+      "test_status": "✅ 101 通过 (4 skip)",
+      "note": "建议补 WebSocket 覆盖后再提升状态"
+    },
+    {
+      "name": "Crypto.com",
+      "market_type": "CEX",
+      "status": "REST 已实现，WebSocket 待继续补齐",
+      "test_status": "✅ 97 通过",
+      "note": "建议补 WebSocket 覆盖后再提升状态"
+    },
+    {
+      "name": "HitBTC",
+      "market_type": "CEX",
+      "status": "REST 已实现，WebSocket 待继续补齐",
+      "test_status": "✅ 103 通过 (5 skip)",
+      "note": "建议补 WebSocket 覆盖后再提升状态"
+    },
+    {
+      "name": "Phemex",
+      "market_type": "CEX",
+      "status": "REST 已实现，WebSocket 待继续补齐",
+      "test_status": "✅ 65 通过 (5 skip)",
+      "note": "建议补 WebSocket 覆盖后再提升状态"
+    },
+    {
+      "name": "Gemini",
+      "market_type": "CEX",
+      "status": "REST 已实现，WebSocket 待继续补齐",
+      "test_status": "✅ 20 通过",
+      "note": "建议补 WebSocket 覆盖后再提升状态"
+    },
+    {
+      "name": "KuCoin",
+      "market_type": "CEX",
+      "status": "REST 已实现，仍需补稳定性验证",
+      "test_status": "⚠️ 16 失败 / 47 通过",
+      "note": "mock 目标路径问题"
+    },
+    {
+      "name": "MEXC",
+      "market_type": "CEX",
+      "status": "REST 已实现，仍需补稳定性验证",
+      "test_status": "⚠️ 11 失败 / 42 通过",
+      "note": "mock 目标路径问题"
+    },
+    {
+      "name": "Bitfinex",
+      "market_type": "CEX",
+      "status": "REST 已实现，仍需补稳定性验证",
+      "test_status": "⚠️ 13 失败 / 43 通过",
+      "note": "mock 目标路径问题"
+    },
+    {
+      "name": "Coinbase",
+      "market_type": "CEX",
+      "status": "REST 已实现，仍需补稳定性验证",
+      "test_status": "⚠️ 19 失败 / 45 通过",
+      "note": "部分 import 路径变更"
+    },
+    {
+      "name": "Hyperliquid",
+      "market_type": "DEX",
+      "status": "实现存在，但当前仓库测试资产不足以提升到完整支持",
+      "test_status": "⚠️ 待补验证",
+      "note": "当前仓库缺少可执行的 Hyperliquid 测试文件"
+    },
+    {
+      "name": "dYdX",
+      "market_type": "DEX",
+      "status": "实现存在，但当前仓库测试资产不足以提升到完整支持",
+      "test_status": "⚠️ 待补验证",
+      "note": "当前仓库缺少可执行的 dYdX 测试文件"
+    },
+    {
+      "name": "BYDFi",
+      "market_type": "CEX",
+      "status": "REST 已实现，仍需补稳定性验证",
+      "test_status": "⚠️ 1 失败 / 17 通过",
+      "note": "JSON 解析 bug"
+    }
+  ],
+  "framework_ready": {
+    "count_label": "40+",
+    "note": "其余交易所已完成注册或基础框架接入，但还需要继续补实现、测试或文档后，再提升对外状态。"
+  }
+}

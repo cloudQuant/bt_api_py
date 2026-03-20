@@ -13,6 +13,7 @@ from urllib import parse
 
 from bt_api_py.containers.exchanges.coinbase_exchange_data import CoinbaseExchangeDataSpot
 from bt_api_py.containers.requestdatas.request_data import RequestData
+from bt_api_py.exceptions import QueueNotInitializedError
 from bt_api_py.feeds.feed import Feed
 from bt_api_py.logging_factory import get_logger
 
@@ -29,7 +30,9 @@ class CoinbaseRequestData(Feed):
         super().__init__(data_queue, **kwargs)
         self.data_queue = data_queue
         self.api_key = kwargs.get("api_key") or kwargs.get("public_key")
-        self.private_key = kwargs.get("private_key")
+        self.private_key = (
+            kwargs.get("private_key") or kwargs.get("secret_key") or kwargs.get("api_secret")
+        )
         self.passphrase = kwargs.get("passphrase", "")
         self.asset_type = kwargs.get("asset_type", "SPOT")
         self.exchange_name = kwargs.get("exchange_name", "COINBASE___SPOT")
@@ -90,7 +93,7 @@ class CoinbaseRequestData(Feed):
         if self.data_queue is not None:
             self.data_queue.put(data)
         else:
-            assert 0, "Queue not initialized"
+            raise QueueNotInitializedError("data_queue not initialized")
 
     def request(
         self,
@@ -116,6 +119,8 @@ class CoinbaseRequestData(Feed):
         """
         if params is None:
             params: dict[str, Any] = {}
+        if extra_data is None:
+            extra_data = {}
         method, endpoint = path.split(" ", 1)
 
         # Build URL with query string
@@ -155,6 +160,8 @@ class CoinbaseRequestData(Feed):
         """
         if params is None:
             params: dict[str, Any] = {}
+        if extra_data is None:
+            extra_data = {}
         method, endpoint = path.split(" ", 1)
 
         query_string = parse.urlencode(params) if params else ""

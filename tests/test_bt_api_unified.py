@@ -1,8 +1,10 @@
 """验证 BtApi 统一接口的基本正确性（不需要真实API密钥）"""
 
+from datetime import timedelta
+
 import pytest
 
-from bt_api_py.bt_api import BtApi
+from bt_api_py.bt_api import KLINE_PERIOD_DELTAS, BtApi
 from bt_api_py.exceptions import ExchangeNotFoundError, InvalidOrderError, SubscribeError
 
 
@@ -132,3 +134,33 @@ class TestBtApiUnifiedInterface:
     def test_subscribe_rejects_invalid_dataname_format(self):
         with pytest.raises(SubscribeError, match="dataname"):
             self.bt.subscribe("BINANCE_SPOT_BTCUSDT", [{"topic": "kline"}])
+
+
+class TestKlinePeriodDeltas:
+    """测试 K 线周期时间映射的正确性"""
+
+    def test_kline_period_deltas_correctness(self):
+        """验证 K 线周期时间映射正确"""
+        expected = {
+            "1m": timedelta(minutes=1),
+            "3m": timedelta(minutes=3),
+            "5m": timedelta(minutes=5),
+            "15m": timedelta(minutes=15),
+            "30m": timedelta(minutes=30),
+            "1H": timedelta(hours=1),
+            "1D": timedelta(days=1),
+        }
+        for period, expected_delta in expected.items():
+            actual = KLINE_PERIOD_DELTAS.get(period)
+            assert actual is not None, f"Missing period: {period}"
+            assert actual == expected_delta, (
+                f"Period {period}: expected {expected_delta}, got {actual}"
+            )
+
+    def test_kline_period_delta_minutes_not_hours(self):
+        """确保分钟周期不会被错误映射为小时"""
+        assert KLINE_PERIOD_DELTAS["1m"] == timedelta(minutes=1), (
+            "1m should be 1 minute, not 1 hour"
+        )
+        assert KLINE_PERIOD_DELTAS["1H"] == timedelta(hours=1), "1H should be 1 hour"
+        assert KLINE_PERIOD_DELTAS["1D"] == timedelta(days=1), "1D should be 1 day"

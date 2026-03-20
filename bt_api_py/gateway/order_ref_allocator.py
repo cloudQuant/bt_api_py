@@ -114,7 +114,9 @@ class OrderRefAllocator:
             return
         try:
             data = json.loads(self._state_file.read_text(encoding="utf-8"))
-            saved = data.get(_STATE_KEY, 0)
+            if not isinstance(data, dict):
+                raise TypeError(f"state payload must be an object, got {type(data).__name__}")
+            saved = int(data.get(_STATE_KEY, 0) or 0)
             with self._lock:
                 if saved > self._value:
                     self._value = saved
@@ -124,7 +126,7 @@ class OrderRefAllocator:
                 self._value,
                 self._state_file,
             )
-        except (json.JSONDecodeError, OSError) as exc:
+        except (TypeError, ValueError, json.JSONDecodeError, OSError) as exc:
             logger.warning(
                 "OrderRefAllocator[%s]: failed to load state: %s",
                 self._account_id,
@@ -142,10 +144,19 @@ class OrderRefAllocator:
             existing: dict[str, Any] = {}
             if self._state_file.exists():
                 try:
-                    existing = json.loads(self._state_file.read_text(encoding="utf-8"))
-                except (json.JSONDecodeError, OSError):
-                    pass
-            existing[_STATE_KEY] = self._value
+                    loaded = json.loads(self._state_file.read_text(encoding="utf-8"))
+                    if not isinstance(loaded, dict):
+                        raise TypeError(
+                            f"state payload must be an object, got {type(loaded).__name__}"
+                        )
+                    existing = loaded
+                except (TypeError, json.JSONDecodeError, OSError) as exc:
+                    logger.warning(
+                        "OrderRefAllocator[%s]: failed to read existing state during persist: %s",
+                        self._account_id,
+                        exc,
+                    )
+            existing[_STATE_KEY] = int(self._value)
             tmp_path: Path | None = None
             try:
                 with tempfile.NamedTemporaryFile(
@@ -163,9 +174,14 @@ class OrderRefAllocator:
                 if tmp_path is not None and tmp_path.exists():
                     try:
                         tmp_path.unlink()
-                    except OSError:
-                        pass
-        except OSError as exc:
+                    except OSError as exc:
+                        logger.warning(
+                            "OrderRefAllocator[%s]: failed to clean up temp state file %s: %s",
+                            self._account_id,
+                            tmp_path,
+                            exc,
+                        )
+        except (TypeError, ValueError, OSError) as exc:
             logger.warning(
                 "OrderRefAllocator[%s]: failed to persist state: %s",
                 self._account_id,

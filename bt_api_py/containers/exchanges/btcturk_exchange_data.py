@@ -32,7 +32,7 @@ def _get_btcturk_config() -> Any | None:
             _btcturk_config = load_exchange_config(config_path)
             _btcturk_config_loaded = True
             return _btcturk_config
-    except Exception as e:
+    except (OSError, ValueError, KeyError, ImportError) as e:
         logger.error(f"Failed to load btcturk.yaml config: {e}")
         _btcturk_config_loaded = True
         return None

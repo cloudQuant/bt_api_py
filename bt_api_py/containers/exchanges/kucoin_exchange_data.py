@@ -26,7 +26,7 @@ def _get_kucoin_config() -> Any | None:
             _kucoin_config = load_exchange_config(str(config_path))
             _kucoin_config_loaded = True
             return _kucoin_config
-    except Exception as e:
+    except (OSError, ValueError, KeyError, ImportError) as e:
         logger.info(f"Failed to load kucoin.yaml config: {e}")
         _kucoin_config_loaded = True
         return None

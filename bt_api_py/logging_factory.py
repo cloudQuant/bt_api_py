@@ -16,7 +16,7 @@ from typing import Any
 
 from bt_api_py.functions.log_message import SpdLogManager
 
-__all__ = ["get_logger"]
+__all__ = ["get_logger", "_LoggerProxy"]
 
 # 预定义的模块日志名称映射: module_key -> (file_name, logger_name)
 _MODULE_LOG_MAP = {
@@ -29,14 +29,14 @@ _MODULE_LOG_MAP = {
 }
 
 # 缓存已创建的 logger，避免重复创建
-_logger_cache: dict[tuple[str, bool], object] = {}
+_logger_cache: dict[tuple[str, bool], "_LoggerProxy"] = {}
 _logger_cache_lock = threading.Lock()
 
 
 class _LoggerProxy:
     """Compatibility wrapper exposing both `warn` and `warning`."""
 
-    def __init__(self, logger: object):
+    def __init__(self, logger: object) -> None:
         self._logger = logger
 
     def warning(self, *args: Any, **kwargs: Any) -> None:
@@ -57,7 +57,7 @@ class _LoggerProxy:
         if warning_method is not None:
             warning_method(*args, **kwargs)
 
-    def __getattr__(self, name: str):
+    def __getattr__(self, name: str) -> Any:
         return getattr(self._logger, name)
 
 
@@ -70,23 +70,30 @@ def _resolve_log_file_name(file_name: str) -> str:
     return str(Path(log_dir).expanduser() / file_name)
 
 
-def get_logger(module: str, print_info: bool = False):
+def _build_custom_log_file_name(module: str) -> str:
+    """Build a safe log file name for custom module keys."""
+    sanitized = "".join(ch if ch.isalnum() or ch in {"_", "-", "."} else "_" for ch in module)
+    sanitized = sanitized.strip("._") or "bt_api"
+    return f"{sanitized}.log"
+
+
+def get_logger(module: str, print_info: bool = False) -> _LoggerProxy:
     """获取指定模块的 logger
 
     :param module: 模块标识，如 "api", "feed", "event_bus"，
                    或任意自定义名称（会自动创建 {module}.log）
     :param print_info: 是否同时输出到控制台
-    :return: spdlog logger 实例
+    :return: spdlog logger 实例（通过 _LoggerProxy 包装）
     """
     cache_key = (module, print_info)
     with _logger_cache_lock:
-        cached_logger = _logger_cache.get(cache_key)
+        cached_logger: _LoggerProxy | None = _logger_cache.get(cache_key)
         if cached_logger is not None:
             return cached_logger
         if module in _MODULE_LOG_MAP:
             file_name, logger_name = _MODULE_LOG_MAP[module]
         else:
-            file_name = f"{module}.log"
+            file_name = _build_custom_log_file_name(module)
             logger_name = module
 
         logger = _LoggerProxy(

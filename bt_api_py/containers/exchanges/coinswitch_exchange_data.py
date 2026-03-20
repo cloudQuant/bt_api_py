@@ -32,7 +32,7 @@ def _get_coinswitch_config() -> Any | None:
             _coinswitch_config = load_exchange_config(config_path)
         _coinswitch_config_loaded = True
         return _coinswitch_config
-    except Exception as e:
+    except (OSError, ValueError, KeyError, ImportError) as e:
         logger.error(f"Failed to load coinswitch.yaml config: {e}")
         _coinswitch_config_loaded = True
         return None

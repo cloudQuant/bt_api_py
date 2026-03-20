@@ -1,7 +1,10 @@
 """Core interfaces for the modernized bt_api_py architecture."""
 
 from abc import ABC, abstractmethod
-from typing import Any, Protocol, runtime_checkable
+from collections.abc import Awaitable, Callable
+from typing import Any, ParamSpec, Protocol, runtime_checkable
+
+P = ParamSpec("P")
 
 
 @runtime_checkable
@@ -24,39 +27,39 @@ class IExchangeAdapter(Protocol):
         ...
 
     @abstractmethod
-    def get_tick(self, symbol: str, **kwargs) -> Any:
+    def get_tick(self, symbol: str, **kwargs: Any) -> Any:
         """Get ticker data."""
         ...
 
     @abstractmethod
-    def get_depth(self, symbol: str, count: int = 20, **kwargs) -> Any:
+    def get_depth(self, symbol: str, count: int = 20, **kwargs: Any) -> Any:
         """Get order book depth."""
         ...
 
     @abstractmethod
-    def get_kline(self, symbol: str, period: str, count: int = 20, **kwargs) -> Any:
+    def get_kline(self, symbol: str, period: str, count: int = 20, **kwargs: Any) -> Any:
         """Get candlestick data."""
         ...
 
     @abstractmethod
     def make_order(
-        self, symbol: str, volume: float, price: float, order_type: str, **kwargs
+        self, symbol: str, volume: float, price: float, order_type: str, **kwargs: Any
     ) -> Any:
         """Place an order."""
         ...
 
     @abstractmethod
-    def cancel_order(self, symbol: str, order_id: str, **kwargs) -> Any:
+    def cancel_order(self, symbol: str, order_id: str, **kwargs: Any) -> Any:
         """Cancel an order."""
         ...
 
     @abstractmethod
-    def get_balance(self, symbol: str | None = None, **kwargs) -> Any:
+    def get_balance(self, symbol: str | None = None, **kwargs: Any) -> Any:
         """Get account balance."""
         ...
 
     @abstractmethod
-    def get_position(self, symbol: str | None = None, **kwargs) -> Any:
+    def get_position(self, symbol: str | None = None, **kwargs: Any) -> Any:
         """Get account positions."""
         ...
 
@@ -81,39 +84,39 @@ class IAsyncExchangeAdapter(Protocol):
         ...
 
     @abstractmethod
-    async def get_tick(self, symbol: str, **kwargs) -> Any:
+    async def get_tick(self, symbol: str, **kwargs: Any) -> Any:
         """Get ticker data."""
         ...
 
     @abstractmethod
-    async def get_depth(self, symbol: str, count: int = 20, **kwargs) -> Any:
+    async def get_depth(self, symbol: str, count: int = 20, **kwargs: Any) -> Any:
         """Get order book depth."""
         ...
 
     @abstractmethod
-    async def get_kline(self, symbol: str, period: str, count: int = 20, **kwargs) -> Any:
+    async def get_kline(self, symbol: str, period: str, count: int = 20, **kwargs: Any) -> Any:
         """Get candlestick data."""
         ...
 
     @abstractmethod
     async def make_order(
-        self, symbol: str, volume: float, price: float, order_type: str, **kwargs
+        self, symbol: str, volume: float, price: float, order_type: str, **kwargs: Any
     ) -> Any:
         """Place an order."""
         ...
 
     @abstractmethod
-    async def cancel_order(self, symbol: str, order_id: str, **kwargs) -> Any:
+    async def cancel_order(self, symbol: str, order_id: str, **kwargs: Any) -> Any:
         """Cancel an order."""
         ...
 
     @abstractmethod
-    async def get_balance(self, symbol: str | None = None, **kwargs) -> Any:
+    async def get_balance(self, symbol: str | None = None, **kwargs: Any) -> Any:
         """Get account balance."""
         ...
 
     @abstractmethod
-    async def get_position(self, symbol: str | None = None, **kwargs) -> Any:
+    async def get_position(self, symbol: str | None = None, **kwargs: Any) -> Any:
         """Get account positions."""
         ...
 
@@ -156,12 +159,16 @@ class IEventBus(ABC):
         ...
 
     @abstractmethod
-    def subscribe(self, event_type: str, handler) -> None:
+    def subscribe(
+        self, event_type: str, handler: Callable[[Any], Any] | Callable[[Any], Awaitable[Any]]
+    ) -> None:
         """Subscribe to an event type."""
         ...
 
     @abstractmethod
-    def unsubscribe(self, event_type: str, handler) -> None:
+    def unsubscribe(
+        self, event_type: str, handler: Callable[[Any], Any] | Callable[[Any], Awaitable[Any]]
+    ) -> None:
         """Unsubscribe from an event type."""
         ...
 
@@ -216,7 +223,7 @@ class ICircuitBreaker(ABC):
     """Circuit breaker interface for fault tolerance."""
 
     @abstractmethod
-    async def call(self, func, *args, **kwargs) -> Any:
+    async def call(self, func: Callable[P, Any], *args: P.args, **kwargs: P.kwargs) -> Any:
         """Execute function through circuit breaker."""
         ...
 

@@ -604,7 +604,7 @@ class BinanceOrderData(OrderData):
             Stop loss price (not implemented)
 
         """
-        return None
+        return
 
     def get_stop_loss_trigger_price(self) -> None:
         """Get stop loss trigger price.
@@ -613,7 +613,7 @@ class BinanceOrderData(OrderData):
             Stop loss trigger price (not implemented)
 
         """
-        return None
+        return
 
     def get_stop_loss_trigger_price_type(self) -> None:
         """Get stop loss trigger price type.
@@ -622,7 +622,7 @@ class BinanceOrderData(OrderData):
             Stop loss trigger price type (not implemented)
 
         """
-        return None
+        return
 
     def get_take_profit_price(self) -> None:
         """Get take profit price.
@@ -631,7 +631,7 @@ class BinanceOrderData(OrderData):
             Take profit price (not implemented)
 
         """
-        return None
+        return
 
     def get_take_profit_trigger_price(self) -> None:
         """Get take profit trigger price.
@@ -640,7 +640,7 @@ class BinanceOrderData(OrderData):
             Take profit trigger price (not implemented)
 
         """
-        return None
+        return
 
     def get_take_profit_trigger_price_type(self) -> None:
         """Get take profit trigger price type.
@@ -649,7 +649,7 @@ class BinanceOrderData(OrderData):
             Take profit trigger price type (not implemented)
 
         """
-        return None
+        return
 
 
 class BinanceRequestOrderData(BinanceOrderData):

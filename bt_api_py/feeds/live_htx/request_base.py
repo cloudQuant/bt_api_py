@@ -12,6 +12,7 @@ from typing import Any
 
 from bt_api_py.containers.requestdatas.request_data import RequestData
 from bt_api_py.errors.error_framework_htx import HtxErrorTranslator
+from bt_api_py.exceptions import QueueNotInitializedError
 from bt_api_py.feeds.capability import Capability
 from bt_api_py.feeds.feed import Feed
 from bt_api_py.logging_factory import get_logger
@@ -41,10 +42,13 @@ class HtxRequestData(Feed):
     def __init__(self, data_queue: Any = None, **kwargs: Any) -> None:
         super().__init__(data_queue, **kwargs)
         self.data_queue = data_queue
-        self.public_key = kwargs.get("public_key")
-        self.private_key = kwargs.get("private_key")
+        self.public_key = kwargs.get("public_key") or kwargs.get("api_key")
+        self.private_key = (
+            kwargs.get("private_key") or kwargs.get("secret_key") or kwargs.get("api_secret")
+        )
         self.account_id = kwargs.get("account_id")  # HTX requires account ID for trading
         self.topics = kwargs.get("topics", {})
+        self.exchange_name = kwargs.get("exchange_name", "HTX___SPOT")
         self.asset_type = kwargs.get("asset_type", "SPOT")
         self.logger_name = kwargs.get("logger_name", "htx_feed.log")
         from bt_api_py.containers.exchanges.htx_exchange_data import HtxExchangeData
@@ -97,7 +101,7 @@ class HtxRequestData(Feed):
         if self.data_queue is not None:
             self.data_queue.put(data)
         else:
-            assert 0, "Queue not initialized"
+            raise QueueNotInitializedError("data_queue not initialized")
 
     # noinspection PyMethodMayBeStatic
     def create_signature(self, method, host, path, params):
@@ -179,6 +183,8 @@ class HtxRequestData(Feed):
         """
         if params is None:
             params: dict[str, Any] = {}
+        if extra_data is None:
+            extra_data = {}
 
         # Split method and path
         parts = path.split(" ", 1)
@@ -243,6 +249,8 @@ class HtxRequestData(Feed):
         """
         if params is None:
             params: dict[str, Any] = {}
+        if extra_data is None:
+            extra_data = {}
 
         # Split method and path
         parts = path.split(" ", 1)

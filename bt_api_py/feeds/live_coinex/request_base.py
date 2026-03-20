@@ -103,6 +103,8 @@ class CoinExRequestData(Feed):
         """Synchronous HTTP request using Feed.http_request()."""
         if params is None:
             params: dict[str, Any] = {}
+        if extra_data is None:
+            extra_data = {}
         method, endpoint = path.split(" ", 1)
         headers = {"Content-Type": "application/json"}
 
@@ -131,6 +133,8 @@ class CoinExRequestData(Feed):
         """Async HTTP request."""
         if params is None:
             params: dict[str, Any] = {}
+        if extra_data is None:
+            extra_data = {}
         method, endpoint = path.split(" ", 1)
         headers = {"Content-Type": "application/json"}
 

@@ -32,7 +32,7 @@ def _get_bitstamp_config() -> Any | None:
         if os.path.exists(config_path):
             _bitstamp_config = load_exchange_config(config_path)
         _bitstamp_config_loaded = True
-    except Exception as e:
+    except (OSError, ValueError, KeyError, ImportError) as e:
         logger.warning(f"Failed to load bitstamp.yaml config: {e}")
     return _bitstamp_config
 

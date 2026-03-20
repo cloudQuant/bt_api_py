@@ -100,7 +100,7 @@ class BinanceSpotRequestBalanceData(BalanceData):
 
     def get_server_time(self):
         """# 服务器时间戳"""
-        return None
+        return
 
     def get_local_update_time(self):
         """# 本地时间戳"""
@@ -108,7 +108,7 @@ class BinanceSpotRequestBalanceData(BalanceData):
 
     def get_account_id(self):
         """# 账户id"""
-        return None
+        return
 
     def get_account_type(self):
         """# 账户类型"""
@@ -116,11 +116,11 @@ class BinanceSpotRequestBalanceData(BalanceData):
 
     def get_fee_tier(self):
         """# 资金费率等级"""
-        return None
+        return
 
     def get_max_withdraw_amount(self):
         """# 最大可取资金"""
-        return None
+        return
 
     def get_margin(self):
         """# 总的保证金"""
@@ -132,7 +132,7 @@ class BinanceSpotRequestBalanceData(BalanceData):
 
     def get_maintain_margin(self):
         """# 总的维持资金"""
-        return None
+        return
 
     def get_available_margin(self):
         """# 总的可用保证金"""
@@ -140,7 +140,7 @@ class BinanceSpotRequestBalanceData(BalanceData):
 
     def get_open_order_initial_margin(self):
         """# 总的开仓订单初始保证金"""
-        return None
+        return
 
     def get_position_initial_margin(self):
         """# 总的持仓初始化保证金"""
@@ -149,11 +149,11 @@ class BinanceSpotRequestBalanceData(BalanceData):
 
     def get_unrealized_profit(self):
         """# 总的未实现利润"""
-        return None
+        return
 
     def get_interest(self):
         """# 获取应计利息"""
-        return None
+        return
 
 
 class BinanceSwapRequestBalanceData(BalanceData):
@@ -259,7 +259,7 @@ class BinanceSwapRequestBalanceData(BalanceData):
 
     def get_fee_tier(self):
         """# 资金费率等级"""
-        return None
+        return
 
     def get_max_withdraw_amount(self):
         """# 最大可取资金"""
@@ -295,7 +295,7 @@ class BinanceSwapRequestBalanceData(BalanceData):
 
     def get_interest(self):
         """# 获取应计利息"""
-        return None
+        return
 
 
 class BinanceSwapWssBalanceData(BalanceData):
@@ -357,7 +357,7 @@ class BinanceSwapWssBalanceData(BalanceData):
 
     def get_server_time(self):
         """# 服务器时间戳"""
-        return None
+        return
 
     def get_local_update_time(self):
         """# 本地时间戳"""
@@ -365,7 +365,7 @@ class BinanceSwapWssBalanceData(BalanceData):
 
     def get_account_id(self):
         """# 账户id"""
-        return None
+        return
 
     def get_account_type(self):
         """# 账户类型"""
@@ -373,11 +373,11 @@ class BinanceSwapWssBalanceData(BalanceData):
 
     def get_fee_tier(self):
         """# 资金费率等级"""
-        return None
+        return
 
     def get_max_withdraw_amount(self):
         """# 最大可取资金"""
-        return None
+        return
 
     def get_margin(self):
         """# 总的保证金"""
@@ -385,19 +385,19 @@ class BinanceSwapWssBalanceData(BalanceData):
 
     def get_used_margin(self):
         """# 总的使用的保证金"""
-        return None
+        return
 
     def get_maintain_margin(self):
         """# 总的维持资金"""
-        return None
+        return
 
     def get_available_margin(self):
         """# 总的可用保证金"""
-        return None
+        return
 
     def get_open_order_initial_margin(self):
         """# 总的开仓订单初始保证金"""
-        return None
+        return
 
     def get_position_initial_margin(self):
         """# 总的持仓初始化保证金"""
@@ -406,11 +406,11 @@ class BinanceSwapWssBalanceData(BalanceData):
 
     def get_unrealized_profit(self):
         """# 总的未实现利润"""
-        return None
+        return
 
     def get_interest(self):
         """# 获取应计利息"""
-        return None
+        return
 
 
 class BinanceSpotWssBalanceData(BalanceData):
@@ -482,19 +482,19 @@ class BinanceSpotWssBalanceData(BalanceData):
 
     def get_account_id(self):
         """# 账户id"""
-        return None
+        return
 
     def get_account_type(self):
         """# 账户类型"""
-        return None
+        return
 
     def get_fee_tier(self):
         """# 资金费率等级"""
-        return None
+        return
 
     def get_max_withdraw_amount(self):
         """# 最大可取资金"""
-        return None
+        return
 
     def get_margin(self):
         """# 总的保证金"""
@@ -506,7 +506,7 @@ class BinanceSpotWssBalanceData(BalanceData):
 
     def get_maintain_margin(self):
         """# 总的维持资金"""
-        return None
+        return
 
     def get_available_margin(self):
         """# 总的可用保证金"""
@@ -514,7 +514,7 @@ class BinanceSpotWssBalanceData(BalanceData):
 
     def get_open_order_initial_margin(self):
         """# 总的开仓订单初始保证金"""
-        return None
+        return
 
     def get_position_initial_margin(self):
         """# 总的持仓初始化保证金"""
@@ -522,8 +522,8 @@ class BinanceSpotWssBalanceData(BalanceData):
 
     def get_unrealized_profit(self):
         """# 总的未实现利润"""
-        return None
+        return
 
     def get_interest(self):
         """# 获取应计利息"""
-        return None
+        return

@@ -134,7 +134,12 @@ class HyperliquidRequestOrderData(OrderData):
         return self.timestamp
 
     def __str__(self):
-        return f"HyperliquidRequestOrderData(order_id={self.order_id}, status={self.status}, side={self.side}, quantity={self.quantity})"
+        return (
+            f"HyperliquidRequestOrderData("
+            f"order_id={self.order_id}, "
+            f"status={self.status}, "
+            f"side={self.side}, "
+        )
 
 
 class HyperliquidSpotWssOrderData(OrderData):

@@ -5,6 +5,7 @@ Provides pre-built dashboards for monitoring trading API performance.
 """
 
 import json
+from pathlib import Path
 from typing import Any
 
 
@@ -603,13 +604,10 @@ def create_exchange_dashboard(exchange_name: str) -> dict[str, Any]:
 
 def save_dashboard_to_file(dashboard: dict[str, Any], filename: str) -> None:
     """Save dashboard to file."""
-    import json
-    from pathlib import Path
-
     path = Path(filename)
     path.parent.mkdir(parents=True, exist_ok=True)
 
-    with open(path, "w") as f:
+    with path.open("w", encoding="utf-8") as f:
         json.dump(dashboard, f, indent=2)
 
 

@@ -9,6 +9,156 @@ from typing import Any
 from bt_api_py.containers.balances.balance import BalanceData
 from bt_api_py.logging_factory import get_logger
 
+_CURRENCY_DATA: dict[str, dict[str, Any]] = {
+    "XXBT": {"display_name": "Bitcoin", "decimal_places": 8, "is_stakable": True, "is_fiat": False},
+    "XBT": {"display_name": "Bitcoin", "decimal_places": 8, "is_stakable": True, "is_fiat": False},
+    "ETH": {"display_name": "Ethereum", "decimal_places": 8, "is_stakable": True, "is_fiat": False},
+    "XRP": {"display_name": "Ripple", "decimal_places": 6, "is_stakable": False, "is_fiat": False},
+    "LTC": {"display_name": "Litecoin", "decimal_places": 8, "is_stakable": True, "is_fiat": False},
+    "DASH": {"display_name": "Dash", "decimal_places": 8, "is_stakable": True, "is_fiat": False},
+    "ETC": {
+        "display_name": "Ethereum Classic",
+        "decimal_places": 8,
+        "is_stakable": True,
+        "is_fiat": False,
+    },
+    "XMR": {"display_name": "Monero", "decimal_places": 12, "is_stakable": True, "is_fiat": False},
+    "ZEC": {"display_name": "Zcash", "decimal_places": 8, "is_stakable": True, "is_fiat": False},
+    "USDT": {
+        "display_name": "Tether USD",
+        "decimal_places": 6,
+        "is_stakable": False,
+        "is_fiat": True,
+    },
+    "USDC": {"display_name": "USD Coin", "decimal_places": 6, "is_stakable": True, "is_fiat": True},
+    "DAI": {"display_name": "Dai", "decimal_places": 18, "is_stakable": False, "is_fiat": True},
+    "ZUSD": {
+        "display_name": "US Dollar",
+        "decimal_places": 4,
+        "is_stakable": False,
+        "is_fiat": True,
+    },
+    "ZEUR": {"display_name": "Euro", "decimal_places": 4, "is_stakable": False, "is_fiat": True},
+    "ZJPY": {
+        "display_name": "Japanese Yen",
+        "decimal_places": 2,
+        "is_stakable": False,
+        "is_fiat": True,
+    },
+    "ZCAD": {
+        "display_name": "Canadian Dollar",
+        "decimal_places": 4,
+        "is_stakable": False,
+        "is_fiat": True,
+    },
+    "ZGBP": {
+        "display_name": "British Pound",
+        "decimal_places": 4,
+        "is_stakable": False,
+        "is_fiat": True,
+    },
+    "REP": {"display_name": "Augur", "decimal_places": 8, "is_stakable": False, "is_fiat": False},
+    "NMC": {
+        "display_name": "Namecoin",
+        "decimal_places": 8,
+        "is_stakable": False,
+        "is_fiat": False,
+    },
+    "XLM": {"display_name": "Stellar", "decimal_places": 7, "is_stakable": True, "is_fiat": False},
+    "LSK": {"display_name": "Lisk", "decimal_places": 8, "is_stakable": False, "is_fiat": False},
+    "FCN": {
+        "display_name": "FairCoin",
+        "decimal_places": 8,
+        "is_stakable": False,
+        "is_fiat": False,
+    },
+    "FCT": {"display_name": "Factom", "decimal_places": 6, "is_stakable": False, "is_fiat": False},
+    "VTC": {
+        "display_name": "Vertcoin",
+        "decimal_places": 8,
+        "is_stakable": False,
+        "is_fiat": False,
+    },
+    "DGB": {
+        "display_name": "Dogecoin",
+        "decimal_places": 8,
+        "is_stakable": False,
+        "is_fiat": False,
+    },
+    "SC": {"display_name": "Siacoin", "decimal_places": 12, "is_stakable": False, "is_fiat": False},
+    "XBC": {
+        "display_name": "BlackCoin",
+        "decimal_places": 8,
+        "is_stakable": False,
+        "is_fiat": False,
+    },
+    "BTG": {
+        "display_name": "Bitcoin Gold",
+        "decimal_places": 8,
+        "is_stakable": False,
+        "is_fiat": False,
+    },
+    "BCH": {
+        "display_name": "Bitcoin Cash",
+        "decimal_places": 8,
+        "is_stakable": True,
+        "is_fiat": False,
+    },
+    "BSV": {
+        "display_name": "Bitcoin SV",
+        "decimal_places": 8,
+        "is_stakable": False,
+        "is_fiat": False,
+    },
+    "XDG": {
+        "display_name": "Dogecoin",
+        "decimal_places": 8,
+        "is_stakable": False,
+        "is_fiat": False,
+    },
+}
+
+_DEFAULT_PRICES: dict[str, float] = {
+    "XXBT": 45000.0,
+    "XBT": 45000.0,
+    "ETH": 3000.0,
+    "XRP": 0.5,
+    "LTC": 100.0,
+    "DASH": 150.0,
+    "ETC": 20.0,
+    "XMR": 200.0,
+    "ZEC": 50.0,
+    "USDT": 1.0,
+    "USDC": 1.0,
+    "DAI": 1.0,
+    "ZUSD": 1.0,
+    "ZEUR": 1.0,
+    "ZJPY": 0.0067,
+    "ZCAD": 0.75,
+    "ZGBP": 0.8,
+    "REP": 10.0,
+    "NMC": 5.0,
+    "XLM": 0.1,
+    "LSK": 2.0,
+    "FCN": 0.01,
+    "FCT": 15.0,
+    "VTC": 0.1,
+    "DGB": 0.005,
+    "SC": 0.001,
+    "XBC": 1.0,
+    "BTG": 50.0,
+    "BCH": 400.0,
+    "BSV": 100.0,
+    "XDG": 0.0001,
+}
+
+_DEFAULT_CURRENCY_INFO = {
+    "display_name": "",
+    "decimal_places": 8,
+    "is_stakable": False,
+    "is_fiat": False,
+}
+
 
 class KrakenRequestBalanceData(BalanceData):
     """Kraken Request Balance Data Container"""
@@ -144,251 +294,18 @@ class KrakenRequestBalanceData(BalanceData):
 
     def _get_currency_info(self, currency: str) -> dict[str, Any]:
         """Get currency information and price data."""
-        # Currency information (could be loaded from config or API)
-        currency_data = {
-            # Major cryptocurrencies
-            "XXBT": {
-                "display_name": "Bitcoin",
-                "decimal_places": 8,
-                "is_stakable": True,
-                "is_fiat": False,
-            },
-            "XBT": {
-                "display_name": "Bitcoin",
-                "decimal_places": 8,
-                "is_stakable": True,
-                "is_fiat": False,
-            },
-            "ETH": {
-                "display_name": "Ethereum",
-                "decimal_places": 8,
-                "is_stakable": True,
-                "is_fiat": False,
-            },
-            "XRP": {
-                "display_name": "Ripple",
-                "decimal_places": 6,
-                "is_stakable": False,
-                "is_fiat": False,
-            },
-            "LTC": {
-                "display_name": "Litecoin",
-                "decimal_places": 8,
-                "is_stakable": True,
-                "is_fiat": False,
-            },
-            "DASH": {
-                "display_name": "Dash",
-                "decimal_places": 8,
-                "is_stakable": True,
-                "is_fiat": False,
-            },
-            "ETC": {
-                "display_name": "Ethereum Classic",
-                "decimal_places": 8,
-                "is_stakable": True,
-                "is_fiat": False,
-            },
-            "XMR": {
-                "display_name": "Monero",
-                "decimal_places": 12,
-                "is_stakable": True,
-                "is_fiat": False,
-            },
-            "ZEC": {
-                "display_name": "Zcash",
-                "decimal_places": 8,
-                "is_stakable": True,
-                "is_fiat": False,
-            },
-            # Stablecoins
-            "USDT": {
-                "display_name": "Tether USD",
-                "decimal_places": 6,
-                "is_stakable": False,
-                "is_fiat": True,
-            },
-            "USDC": {
-                "display_name": "USD Coin",
-                "decimal_places": 6,
-                "is_stakable": True,
-                "is_fiat": True,
-            },
-            "DAI": {
-                "display_name": "Dai",
-                "decimal_places": 18,
-                "is_stakable": False,
-                "is_fiat": True,
-            },
-            # Fiat currencies
-            "ZUSD": {
-                "display_name": "US Dollar",
-                "decimal_places": 4,
-                "is_stakable": False,
-                "is_fiat": True,
-            },
-            "ZEUR": {
-                "display_name": "Euro",
-                "decimal_places": 4,
-                "is_stakable": False,
-                "is_fiat": True,
-            },
-            "ZJPY": {
-                "display_name": "Japanese Yen",
-                "decimal_places": 2,
-                "is_stakable": False,
-                "is_fiat": True,
-            },
-            "ZCAD": {
-                "display_name": "Canadian Dollar",
-                "decimal_places": 4,
-                "is_stakable": False,
-                "is_fiat": True,
-            },
-            "ZGBP": {
-                "display_name": "British Pound",
-                "decimal_places": 4,
-                "is_stakable": False,
-                "is_fiat": True,
-            },
-            # Other currencies
-            "REP": {
-                "display_name": "Augur",
-                "decimal_places": 8,
-                "is_stakable": False,
-                "is_fiat": False,
-            },
-            "NMC": {
-                "display_name": "Namecoin",
-                "decimal_places": 8,
-                "is_stakable": False,
-                "is_fiat": False,
-            },
-            "XLM": {
-                "display_name": "Stellar",
-                "decimal_places": 7,
-                "is_stakable": True,
-                "is_fiat": False,
-            },
-            "LSK": {
-                "display_name": "Lisk",
-                "decimal_places": 8,
-                "is_stakable": False,
-                "is_fiat": False,
-            },
-            "FCN": {
-                "display_name": "FairCoin",
-                "decimal_places": 8,
-                "is_stakable": False,
-                "is_fiat": False,
-            },
-            "FCT": {
-                "display_name": "Factom",
-                "decimal_places": 6,
-                "is_stakable": False,
-                "is_fiat": False,
-            },
-            "VTC": {
-                "display_name": "Vertcoin",
-                "decimal_places": 8,
-                "is_stakable": False,
-                "is_fiat": False,
-            },
-            "DGB": {
-                "display_name": "Dogecoin",
-                "decimal_places": 8,
-                "is_stakable": False,
-                "is_fiat": False,
-            },
-            "SC": {
-                "display_name": "Siacoin",
-                "decimal_places": 12,
-                "is_stakable": False,
-                "is_fiat": False,
-            },
-            "XBC": {
-                "display_name": "BlackCoin",
-                "decimal_places": 8,
-                "is_stakable": False,
-                "is_fiat": False,
-            },
-            "BTG": {
-                "display_name": "Bitcoin Gold",
-                "decimal_places": 8,
-                "is_stakable": False,
-                "is_fiat": False,
-            },
-            "BCH": {
-                "display_name": "Bitcoin Cash",
-                "decimal_places": 8,
-                "is_stakable": True,
-                "is_fiat": False,
-            },
-            "BSV": {
-                "display_name": "Bitcoin SV",
-                "decimal_places": 8,
-                "is_stakable": False,
-                "is_fiat": False,
-            },
-            "XDG": {
-                "display_name": "Dogecoin",
-                "decimal_places": 8,
-                "is_stakable": False,
-                "is_fiat": False,
-            },
-        }
-
-        # Get base currency info
-        info = currency_data.get(
-            currency,
-            {"display_name": currency, "decimal_places": 8, "is_stakable": False, "is_fiat": False},
-        )
-
-        # Get prices (these should be fetched from market data)
-        # For now, using approximate values
+        info = _CURRENCY_DATA.get(currency, {**_DEFAULT_CURRENCY_INFO, "display_name": currency})
         prices = self._get_prices()
-        usd_price = prices.get(currency)
-        eur_price = prices.get(f"{currency}EUR") if currency != "EUR" else None
-        btc_price = prices.get(f"{currency}XBT") if currency != "XBT" else None
-
-        return {**info, "usd_price": usd_price, "eur_price": eur_price, "btc_price": btc_price}
+        return {
+            **info,
+            "usd_price": prices.get(currency),
+            "eur_price": prices.get(f"{currency}EUR") if currency != "EUR" else None,
+            "btc_price": prices.get(f"{currency}XBT") if currency != "XBT" else None,
+        }
 
     def _get_prices(self) -> dict[str, float]:
         """Get currency prices (simplified - should fetch from market data)."""
-        # This is a simplified version - in practice, you'd fetch from market data
-        return {
-            "XXBT": 45000.0,
-            "XBT": 45000.0,
-            "ETH": 3000.0,
-            "XRP": 0.5,
-            "LTC": 100.0,
-            "DASH": 150.0,
-            "ETC": 20.0,
-            "XMR": 200.0,
-            "ZEC": 50.0,
-            "USDT": 1.0,
-            "USDC": 1.0,
-            "DAI": 1.0,
-            "ZUSD": 1.0,
-            "ZEUR": 1.0,
-            "ZJPY": 0.0067,  # JPY to USD
-            "ZCAD": 0.75,
-            "ZGBP": 0.8,
-            "REP": 10.0,
-            "NMC": 5.0,
-            "XLM": 0.1,
-            "LSK": 2.0,
-            "FCN": 0.01,
-            "FCT": 15.0,
-            "VTC": 0.1,
-            "DGB": 0.005,
-            "SC": 0.001,
-            "XBC": 1.0,
-            "BTG": 50.0,
-            "BCH": 400.0,
-            "BSV": 100.0,
-            "XDG": 0.0001,
-        }
+        return _DEFAULT_PRICES
 
     def _group_by_currency(self) -> dict[str, float]:
         """Group balances by currency type."""

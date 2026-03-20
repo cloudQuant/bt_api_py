@@ -88,19 +88,19 @@ class OkxBalanceData(BalanceData):
 
     def get_account_id(self):
         """# 账户id"""
-        return None
+        return
 
     def get_account_type(self):
         """# 账户类型"""
-        return None
+        return
 
     def get_fee_tier(self):
         """# 资金费率等级"""
-        return None
+        return
 
     def get_max_withdraw_amount(self):
         """# 最大可取资金"""
-        return None
+        return
 
     def get_margin(self):
         """# 总的保证金"""
@@ -112,7 +112,7 @@ class OkxBalanceData(BalanceData):
 
     def get_maintain_margin(self):
         """# 总的维持资金"""
-        return None
+        return
 
     def get_available_margin(self):
         """# 总的可用保证金"""

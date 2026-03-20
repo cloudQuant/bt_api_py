@@ -40,8 +40,10 @@ class GateioRequestData(Feed, RequestData):
 
     def __init__(self, data_queue: Any = None, **kwargs: Any) -> None:
         super().__init__(data_queue, **kwargs)
-        self.public_key = kwargs.get("public_key")
-        self.private_key = kwargs.get("private_key")
+        self.public_key = kwargs.get("public_key") or kwargs.get("api_key")
+        self.private_key = (
+            kwargs.get("private_key") or kwargs.get("secret_key") or kwargs.get("api_secret")
+        )
         self.asset_type = kwargs.get("asset_type", "spot")
         self.exchange_name = "GATEIO"
         self.logger_name = kwargs.get("logger_name", "gateio_feed.log")

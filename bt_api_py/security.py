@@ -14,13 +14,14 @@ from typing import Any
 logger = logging.getLogger(__name__)
 
 try:
-    from cryptography.fernet import Fernet
+    from cryptography.fernet import Fernet, InvalidToken
     from cryptography.hazmat.primitives import hashes
     from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 
     CRYPTO_AVAILABLE = True
 except ImportError:
     CRYPTO_AVAILABLE = False
+    InvalidToken = Exception  # type: ignore[misc, assignment]
 
 
 class SecureCredentialManager:
@@ -119,11 +120,12 @@ class SecureCredentialManager:
         Returns:
             Masked credential (e.g., "abcd****wxyz")
         """
+        visible_chars = max(0, visible_chars)
         if not credential or len(credential) <= visible_chars * 2:
             return "****"
 
         start = credential[:visible_chars]
-        end = credential[-visible_chars:]
+        end = credential[-visible_chars:] if visible_chars > 0 else ""
         return f"{start}{'*' * (len(credential) - visible_chars * 2)}{end}"
 
     @staticmethod
@@ -200,7 +202,7 @@ class SecureCredentialManager:
                 if value and isinstance(value, str) and key != "testnet":
                     try:
                         credentials[key] = self.decrypt_credential(value)
-                    except Exception as e:
+                    except (InvalidToken, ValueError, UnicodeDecodeError) as e:
                         logger.warning(f"Failed to decrypt credential for {exchange}.{key}: {e}")
                         credentials[key] = None
 
@@ -229,7 +231,7 @@ def load_credentials_from_env_file(env_file: str | Path = ".env") -> dict[str, s
         if not env_path.exists():
             return env_vars
 
-        with open(env_path) as f:
+        with env_path.open(encoding="utf-8") as f:
             for line in f:
                 line = line.strip()
                 if line and not line.startswith("#") and "=" in line:
@@ -276,5 +278,6 @@ ENCRYPTION_KEY=your_encryption_key_here
 SKIP_LIVE_TESTS=true
 """
 
-    with open(output_file, "w") as f:
+    output_path = Path(output_file)
+    with output_path.open("w", encoding="utf-8") as f:
         f.write(template)

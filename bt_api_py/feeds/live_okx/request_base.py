@@ -14,6 +14,7 @@ from urllib import parse
 from bt_api_py.containers.exchanges.okx_exchange_data import OkxExchangeDataSwap
 from bt_api_py.containers.requestdatas.request_data import RequestData
 from bt_api_py.error import OKXErrorTranslator
+from bt_api_py.exceptions import QueueNotInitializedError
 from bt_api_py.feeds.capability import Capability
 from bt_api_py.feeds.feed import Feed
 from bt_api_py.feeds.live_okx.mixins.account_mixin import AccountMixin
@@ -80,10 +81,13 @@ class OkxRequestData(
     def __init__(self, data_queue: Any, **kwargs: Any) -> None:
         super().__init__(data_queue, **kwargs)
         self.data_queue = data_queue
-        self.public_key = kwargs.get("public_key")
-        self.private_key = kwargs.get("private_key")
+        self.public_key = kwargs.get("public_key") or kwargs.get("api_key")
+        self.private_key = (
+            kwargs.get("private_key") or kwargs.get("secret_key") or kwargs.get("api_secret")
+        )
         self.passphrase = kwargs.get("passphrase")
         self.topics = kwargs.get("topics", {})
+        self.exchange_name = kwargs.get("exchange_name", "OKX___SWAP")
         self.asset_type = kwargs.get("asset_type", "SWAP")
         self.logger_name = kwargs.get("logger_name", "okx_swap_feed.log")
         self._params = OkxExchangeDataSwap()
@@ -134,7 +138,7 @@ class OkxRequestData(
         if self.data_queue is not None:
             self.data_queue.put(data)
         else:
-            assert 0, "队列未初始化"
+            raise QueueNotInitializedError("data_queue not initialized")
 
     # noinspection PyMethodMayBeStatic
     def signature(
@@ -177,6 +181,8 @@ class OkxRequestData(
         """
         if params is None:
             params: dict[str, Any] = {}
+        if extra_data is None:
+            extra_data = {}
         method, path = path.split(" ", 1)
         req = parse.urlencode(params)
         url = f"{self._params.rest_url}{path}?{req}"  # ?{req}
@@ -208,6 +214,8 @@ class OkxRequestData(
         """
         if params is None:
             params: dict[str, Any] = {}
+        if extra_data is None:
+            extra_data = {}
         method, path = path.split(" ", 1)
         req = parse.urlencode(params)
         url = f"{self._params.rest_url}{path}?{req}"  # ?{req}

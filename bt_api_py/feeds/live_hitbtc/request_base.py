@@ -11,6 +11,7 @@ from urllib.parse import urlencode
 from bt_api_py.containers.exchanges.hitbtc_exchange_data import HitBtcExchangeDataSpot
 from bt_api_py.containers.requestdatas.request_data import RequestData
 from bt_api_py.containers.tickers.hitbtc_ticker import HitBtcRequestTickerData
+from bt_api_py.exceptions import QueueNotInitializedError
 from bt_api_py.feeds.capability import Capability
 from bt_api_py.feeds.feed import Feed
 from bt_api_py.functions.utils import update_extra_data
@@ -66,7 +67,7 @@ class HitBtcRequestData(Feed):
         if self.data_queue is not None:
             self.data_queue.put(data)
         else:
-            assert 0, "Queue not initialized"
+            raise QueueNotInitializedError("data_queue not initialized")
 
     def request(self, path, params=None, body=None, extra_data=None, timeout=10, is_sign=False):
         """HTTP request function using Feed.http_request().
@@ -81,6 +82,8 @@ class HitBtcRequestData(Feed):
         """
         if params is None:
             params: dict[str, Any] = {}
+        if extra_data is None:
+            extra_data = {}
 
         method, endpoint = path.split(" ", 1)
         query_string = urlencode(params) if params else ""
@@ -103,6 +106,8 @@ class HitBtcRequestData(Feed):
         """Async HTTP request function using Feed.async_http_request()."""
         if params is None:
             params: dict[str, Any] = {}
+        if extra_data is None:
+            extra_data = {}
 
         method, endpoint = path.split(" ", 1)
         query_string = urlencode(params) if params else ""

@@ -6,8 +6,8 @@ GMX is a decentralized perpetual exchange that supports multiple blockchains:
 - Botanix
 """
 
+import enum
 import os
-from enum import Enum
 from typing import Any
 
 from bt_api_py.logging_factory import get_logger
@@ -45,12 +45,12 @@ def _get_gmx_config() -> Any | None:
             # Store raw config for custom fields
             _gmx_config._raw_config = _gmx_config_raw
         _gmx_config_loaded = True
-    except Exception as e:
+    except (OSError, ValueError, KeyError, ImportError) as e:
         logger.warning(f"Failed to load gmx.yaml config: {e}")
     return _gmx_config
 
 
-class GmxChain(str, Enum):
+class GmxChain(enum.StrEnum):
     """GMX supported chains."""
 
     ARBITRUM = "arbitrum"

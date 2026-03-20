@@ -33,7 +33,7 @@ def _get_poloniex_config() -> Any | None:
         if os.path.exists(config_path):
             _poloniex_config = load_exchange_config(config_path)
         _poloniex_config_loaded = True
-    except Exception as e:
+    except (OSError, ValueError, KeyError, ImportError) as e:
         logger.warning(f"Failed to load poloniex.yaml config: {e}")
     return _poloniex_config
 

@@ -33,7 +33,7 @@ def _get_mexc_config() -> Any | None:
         if os.path.exists(config_path):
             _mexc_config = load_exchange_config(config_path)
         _mexc_config_loaded = True
-    except Exception as e:
+    except (OSError, ValueError, KeyError, ImportError) as e:
         logger.warning(f"Failed to load mexc.yaml config: {e}")
     return _mexc_config
 

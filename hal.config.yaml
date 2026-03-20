@@ -1,0 +1,25 @@
+# HAL configuration
+# Full config docs: https://github.com/marcopeg/hal/blob/main/docs/config/README.md
+
+providers:
+  claude: null
+  codex: null
+  opencode: null
+  cursor: null
+  antigravity: null
+
+globals:
+  engine:
+    name: codex
+  logging:
+    persist: true
+  access:
+    allowedUserIds:
+      - ${TELEGRAM_USER_ID}
+
+projects:
+  prj1:
+    name: bt_api_py
+    cwd: .
+    telegram:
+      botToken: ${PRJ1_TELEGRAM_TOKEN}

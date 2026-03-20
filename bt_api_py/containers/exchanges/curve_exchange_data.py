@@ -3,8 +3,8 @@
 Defines API endpoints, chain enums, and path configurations for Curve DEX.
 """
 
+import enum
 import os
-from enum import Enum
 from typing import Any
 
 # Config loading cache
@@ -40,7 +40,7 @@ def _get_curve_config() -> Any | None:
             # Store raw config for custom fields
             _curve_config._raw_config = _curve_config_raw
         _curve_config_loaded = True
-    except Exception as e:
+    except (OSError, ValueError, KeyError, ImportError) as e:
         # Import logger here to avoid circular imports
         from bt_api_py.logging_factory import get_logger
 
@@ -49,7 +49,7 @@ def _get_curve_config() -> Any | None:
     return _curve_config
 
 
-class CurveChain(str, Enum):
+class CurveChain(enum.StrEnum):
     """Curve supported chains for API queries."""
 
     ETHEREUM = "ETHEREUM"

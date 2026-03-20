@@ -11,15 +11,15 @@ Collects and exposes a unified health snapshot covering:
 
 from __future__ import annotations
 
+import enum
 import threading
 import time
 from collections import deque
-from dataclasses import dataclass, field
-from enum import Enum
+from dataclasses import dataclass
 from typing import Any
 
 
-class GatewayState(str, Enum):
+class GatewayState(enum.StrEnum):
     STARTING = "starting"
     RUNNING = "running"
     STOPPING = "stopping"
@@ -27,7 +27,7 @@ class GatewayState(str, Enum):
     ERROR = "error"
 
 
-class ConnectionState(str, Enum):
+class ConnectionState(enum.StrEnum):
     DISCONNECTED = "disconnected"
     CONNECTING = "connecting"
     CONNECTED = "connected"
@@ -134,9 +134,7 @@ class GatewayHealth:
 
     def record_error(self, source: str, message: str) -> None:
         with self._lock:
-            self._errors.append(
-                ErrorRecord(timestamp=time.time(), source=source, message=message)
-            )
+            self._errors.append(ErrorRecord(timestamp=time.time(), source=source, message=message))
 
     # ------------------------------------------------------------------
     # Extra metadata

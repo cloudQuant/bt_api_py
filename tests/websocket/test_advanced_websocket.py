@@ -5,10 +5,12 @@ Comprehensive tests for the advanced WebSocket system.
 import asyncio
 import contextlib
 import time
+from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from bt_api_py.exceptions import AuthenticationError, RateLimitError, WebSocketError
 from bt_api_py.websocket.advanced_connection_manager import (
     AdvancedWebSocketConnection,
     ConnectionHealth,
@@ -36,6 +38,22 @@ from bt_api_py.websocket.monitoring import (
     PerformanceAlert,
     WebSocketBenchmark,
 )
+
+
+class _DummyWebSocket:
+    def __init__(self) -> None:
+        self.closed = False
+        self.sent: list[str] = []
+        self.ping_count = 0
+
+    async def send(self, payload: str) -> None:
+        self.sent.append(payload)
+
+    async def close(self) -> None:
+        self.closed = True
+
+    async def ping(self) -> None:
+        self.ping_count += 1
 
 
 class TestWebSocketConfig:
@@ -224,6 +242,154 @@ class TestIntelligentCircuitBreaker:
         assert cb.get_state() == "CLOSED"
 
 
+@pytest.mark.asyncio
+class TestAdvancedWebSocketConnection:
+    """Targeted regression tests for AdvancedWebSocketConnection."""
+
+    async def test_handle_data_message_supports_sync_and_async_callbacks(self):
+        config = WebSocketConfig(url="wss://test.com", exchange_name="TEST")
+        connection = AdvancedWebSocketConnection(config, "test_conn")
+
+        received: list[tuple[str, dict[str, Any]]] = []
+
+        def sync_callback(message: dict[str, Any]) -> None:
+            received.append(("sync", message))
+
+        async def async_callback(message: dict[str, Any]) -> None:
+            received.append(("async", message))
+
+        connection._subscriptions = {
+            "sync": {
+                "id": "sync",
+                "topic": "ticker",
+                "symbol": "BTCUSDT",
+                "params": {},
+                "callback": sync_callback,
+                "created_at": time.time(),
+            },
+            "async": {
+                "id": "async",
+                "topic": "ticker",
+                "symbol": "BTCUSDT",
+                "params": {},
+                "callback": async_callback,
+                "created_at": time.time(),
+            },
+        }
+        connection._extract_topic_symbol = MagicMock(return_value=("ticker", "BTCUSDT"))
+        message = {"stream": "btcusdt@ticker", "data": {"price": "100"}}
+
+        await connection._handle_data_message(message)
+
+        assert received == [("sync", message), ("async", message)]
+
+    async def test_subscribe_raises_contract_compliant_rate_limit_error(self):
+        config = WebSocketConfig(
+            url="wss://test.com",
+            exchange_name="TEST",
+            subscription_limits={"ticker": 1},
+        )
+        connection = AdvancedWebSocketConnection(config, "test_conn")
+        connection._subscription_count["ticker"] = 1
+
+        with pytest.raises(RateLimitError, match="TEST rate limit exceeded") as exc_info:
+            await connection.subscribe("sub2", "ticker", "BTCUSDT")
+
+        assert exc_info.value.exchange_name == "TEST"
+
+    async def test_subscribe_raises_contract_compliant_websocket_error_for_open_circuit_breaker(self):
+        config = WebSocketConfig(url="wss://test.com", exchange_name="TEST")
+        connection = AdvancedWebSocketConnection(config, "test_conn")
+        connection._circuit_breaker = MagicMock()
+        connection._circuit_breaker.get_state.return_value = "OPEN"
+
+        with pytest.raises(WebSocketError, match="TEST WebSocket error") as exc_info:
+            await connection.subscribe("sub3", "ticker", "BTCUSDT")
+
+        assert exc_info.value.exchange_name == "TEST"
+
+    async def test_connect_failure_raises_contract_compliant_websocket_error(self, monkeypatch):
+        config = WebSocketConfig(
+            url="wss://primary.test.com",
+            exchange_name="TEST",
+            endpoints=["wss://backup.test.com"],
+        )
+        connection = AdvancedWebSocketConnection(config, "test_conn")
+
+        async def always_fail(endpoint: str) -> None:
+            raise RuntimeError(f"cannot connect to {endpoint}")
+
+        monkeypatch.setattr(connection, "_do_connect", always_fail)
+
+        with pytest.raises(WebSocketError, match="TEST WebSocket error") as exc_info:
+            await connection.connect()
+
+        assert "All connection endpoints failed" in str(exc_info.value)
+        assert connection.get_state() == ConnectionState.ERROR
+
+    async def test_disconnect_clears_websocket_and_background_tasks(self):
+        config = WebSocketConfig(url="wss://test.com", exchange_name="TEST")
+        connection = AdvancedWebSocketConnection(config, "test_conn")
+        websocket = _DummyWebSocket()
+        connection._websocket = websocket
+        connection._state = ConnectionState.CONNECTED
+        connection._running = True
+        connection._processing_task = asyncio.create_task(asyncio.sleep(3600))
+        connection._sender_task = asyncio.create_task(asyncio.sleep(3600))
+        connection._health_task = asyncio.create_task(asyncio.sleep(3600))
+
+        await connection.disconnect()
+
+        assert websocket.closed is True
+        assert connection._websocket is None
+        assert connection._processing_task is None
+        assert connection._sender_task is None
+        assert connection._health_task is None
+        assert connection.get_state() == ConnectionState.DISCONNECTED
+
+    async def test_handle_disconnect_closes_stale_websocket_before_reconnect(
+        self, monkeypatch: pytest.MonkeyPatch
+    ):
+        config = WebSocketConfig(
+            url="wss://test.com",
+            exchange_name="TEST",
+            reconnect_enabled=True,
+            reconnect_interval=0.01,
+            max_reconnect_attempts=1,
+        )
+        connection = AdvancedWebSocketConnection(config, "test_conn")
+        stale_websocket = _DummyWebSocket()
+        replacement_websocket = _DummyWebSocket()
+        connection._websocket = stale_websocket
+        connection._state = ConnectionState.CONNECTED
+        connection._running = True
+        connection._sender_task = asyncio.create_task(asyncio.sleep(3600))
+        connection._health_task = asyncio.create_task(asyncio.sleep(3600))
+
+        attempts = 0
+
+        async def fake_sleep(_: float) -> None:
+            return None
+
+        async def fake_connect() -> None:
+            nonlocal attempts
+            attempts += 1
+            connection._state = ConnectionState.CONNECTED
+            connection._websocket = replacement_websocket
+
+        monkeypatch.setattr(asyncio, "sleep", fake_sleep)
+        monkeypatch.setattr(connection, "connect", fake_connect)
+
+        await connection._handle_disconnect()
+
+        assert stale_websocket.closed is True
+        assert attempts == 1
+        assert connection._websocket is replacement_websocket
+        assert connection._sender_task is None
+        assert connection._health_task is None
+        assert connection.get_state() == ConnectionState.CONNECTED
+
+
 class TestBinanceWebSocketAdapter:
     """Test Binance WebSocket adapter."""
 
@@ -320,6 +486,14 @@ class TestOKXWebSocketAdapter:
         assert message["args"][0]["channel"] == "tickers"
         assert message["args"][0]["instId"] == "BTC-USDT"
 
+    def test_generate_signature_requires_contract_compliant_credentials_error(self):
+        adapter = OKXWebSocketAdapter()
+
+        with pytest.raises(AuthenticationError, match="Connection failed: OKX") as exc_info:
+            adapter._generate_signature("1700000000", "GET", "/users/self/verify")
+
+        assert exc_info.value.exchange_name == "OKX"
+
     def test_extract_topic_symbol(self):
         """Test topic/symbol extraction."""
         adapter = OKXWebSocketAdapter()
@@ -383,6 +557,16 @@ class TestWebSocketAdapterFactory:
         adapter = WebSocketAdapterFactory.create_adapter("UNKNOWN_EXCHANGE")
 
         assert adapter.exchange_name == "UNKNOWN_EXCHANGE"
+
+    @pytest.mark.asyncio
+    async def test_check_rate_limits_raises_contract_compliant_error(self):
+        adapter = BinanceWebSocketAdapter()
+        adapter._subscription_counts["ticker"] = adapter.get_subscription_limits()["ticker"]
+
+        with pytest.raises(RateLimitError, match="BINANCE rate limit exceeded") as exc_info:
+            await adapter.check_rate_limits("ticker")
+
+        assert exc_info.value.exchange_name == "BINANCE"
 
 
 class TestLoadBalancer:

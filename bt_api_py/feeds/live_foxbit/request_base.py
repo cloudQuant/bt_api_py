@@ -38,9 +38,9 @@ class FoxbitRequestData(Feed):
         self.exchange_name = kwargs.get("exchange_name", "FOXBIT___SPOT")
         self.asset_type = kwargs.get("asset_type", "SPOT")
         self._params = FoxbitExchangeDataSpot()
-        # Set API credentials if provided
-        self._params.api_key = kwargs.get("api_key")
-        self._params.api_secret = kwargs.get("api_secret")
+        # Accept the project-standard public/private aliases and legacy api_* aliases.
+        self._params.api_key = kwargs.get("public_key") or kwargs.get("api_key")
+        self._params.api_secret = kwargs.get("private_key") or kwargs.get("api_secret")
         self.request_logger = get_logger("foxbit_feed")
         self.async_logger = get_logger("foxbit_feed")
         self._http_client = HttpClient(venue=self.exchange_name, timeout=10)
@@ -195,7 +195,7 @@ class FoxbitRequestData(Feed):
         pass
 
     def disconnect(self):
-        pass
+        super().disconnect()
 
     def is_connected(self):
         return True

@@ -143,7 +143,7 @@ class CowSwapRequestData(Feed):
         pass
 
     def disconnect(self):
-        pass
+        super().disconnect()
 
     def is_connected(self):
         return True

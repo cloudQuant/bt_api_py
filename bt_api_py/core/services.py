@@ -4,6 +4,7 @@ Core services for modern bt_api_py architecture.
 
 import asyncio
 import contextlib
+import copy
 import json
 import time
 from collections import defaultdict
@@ -45,7 +46,7 @@ class ConnectionConfig:
 class ConnectionService(IConnectionManager):
     """Manages connection pools for multiple exchanges."""
 
-    def __init__(self, logger=None) -> None:
+    def __init__(self, logger: Any | None = None) -> None:
         self.logger = logger or get_logger("connection_service")
         self._pools: dict[str, dict[str, Any]] = {}
         self._semaphores: dict[str, AsyncSemaphore] = {}
@@ -73,24 +74,36 @@ class ConnectionService(IConnectionManager):
 
             try:
                 # For HTTP exchanges, we return the client session
-                if "session" in pool:
+                if "session" in pool and pool["session"] is not None:
                     self._stats[exchange_name]["active_connections"] += 1
                     return pool["session"]
-                else:
-                    # For WebSocket exchanges, return the connection
+                if "connection" in pool and pool["connection"] is not None:
                     self._stats[exchange_name]["active_connections"] += 1
                     return pool["connection"]
-            except Exception:
+                raise RuntimeError(f"Connection pool for {exchange_name} is not configured")
+            except BaseException:
                 semaphore.release()
                 raise
 
     async def release_connection(self, exchange_name: str, connection: Any) -> None:
         """Release a connection back to the pool."""
-        if exchange_name in self._semaphores:
-            self._semaphores[exchange_name].release()
-            self._stats[exchange_name]["active_connections"] = max(
-                0, self._stats[exchange_name]["active_connections"] - 1
-            )
+        if exchange_name not in self._semaphores:
+            return
+
+        pool = self._pools.get(exchange_name, {})
+        managed_connection = None
+        if "session" in pool:
+            managed_connection = pool["session"]
+        elif "connection" in pool:
+            managed_connection = pool["connection"]
+
+        if managed_connection is not connection:
+            return
+
+        self._semaphores[exchange_name].release()
+        self._stats[exchange_name]["active_connections"] = max(
+            0, self._stats[exchange_name]["active_connections"] - 1
+        )
 
     async def close_all(self) -> None:
         """Close all connections."""
@@ -104,6 +117,8 @@ class ConnectionService(IConnectionManager):
                     self.logger.info(f"Closed connections for {exchange_name}")
                 except Exception as e:
                     self.logger.error(f"Error closing {exchange_name}: {e}")
+                finally:
+                    self._stats[exchange_name]["active_connections"] = 0
 
             self._pools.clear()
             self._semaphores.clear()
@@ -124,11 +139,12 @@ class ConnectionService(IConnectionManager):
 class EventService(IEventBus):
     """Enhanced event bus with async support and persistence."""
 
-    def __init__(self, logger=None) -> None:
+    def __init__(self, logger: Any | None = None) -> None:
         self.logger = logger or get_logger("event_service")
-        self._handlers: dict[str, list[Callable[..., Any]]] = defaultdict(list)
-        self._async_handlers: dict[str, list[Callable[..., Any]]] = defaultdict(list)
-        self._event_queue: asyncio.Queue | None = None
+        self._handlers: dict[str, list[Callable[[Any], Any]]] = defaultdict(list)
+        self._async_handlers: dict[str, list[Callable[[Any], Any]]] = defaultdict(list)
+        self._event_queue: asyncio.Queue[tuple[str, Any] | None] | None = None
+        self._processor_task: asyncio.Task[Any] | None = None
         self._running = False
         self._stats: dict[str, int] = defaultdict(int)
         self._lock = asyncio.Lock()
@@ -139,7 +155,7 @@ class EventService(IEventBus):
             if not self._running:
                 self._event_queue = asyncio.Queue()
                 self._running = True
-                asyncio.create_task(self._process_events())
+                self._processor_task = asyncio.create_task(self._process_events())
                 self.logger.info("Event service started")
 
     async def stop(self) -> None:
@@ -149,13 +165,23 @@ class EventService(IEventBus):
             if self._event_queue:
                 # Signal stop with None
                 await self._event_queue.put(None)
+            if self._processor_task:
+                with contextlib.suppress(asyncio.CancelledError):
+                    await self._processor_task
+                self._processor_task = None
+            self._event_queue = None
             self.logger.info("Event service stopped")
 
     def publish(self, event_type: str, data: Any) -> None:
         """Publish an event (sync for backward compatibility)."""
         if self._event_queue and self._running:
             # Add to async queue if available
-            asyncio.create_task(self._event_queue.put((event_type, data)))
+            with contextlib.suppress(RuntimeError):
+                loop = asyncio.get_running_loop()
+                loop.create_task(self._event_queue.put((event_type, data)))
+                self._stats[f"events_{event_type}_published"] += 1
+                return
+            self._emit_sync(event_type, data)
         else:
             # Direct call if not running
             self._emit_sync(event_type, data)
@@ -167,11 +193,11 @@ class EventService(IEventBus):
         if self._event_queue and self._running:
             await self._event_queue.put((event_type, data))
         else:
-            self._emit_sync(event_type, data)
+            await self._emit_async(event_type, data)
 
         self._stats[f"events_{event_type}_published"] += 1
 
-    def subscribe(self, event_type: str, handler: Callable[..., Any]) -> None:
+    def subscribe(self, event_type: str, handler: Callable[[Any], Any]) -> None:
         """Subscribe to an event type."""
         if asyncio.iscoroutinefunction(handler):
             self._async_handlers[event_type].append(handler)
@@ -179,7 +205,7 @@ class EventService(IEventBus):
             self._handlers[event_type].append(handler)
         self.logger.debug(f"Subscribed {handler} to {event_type}")
 
-    def unsubscribe(self, event_type: str, handler: Callable[..., Any]) -> None:
+    def unsubscribe(self, event_type: str, handler: Callable[[Any], Any]) -> None:
         """Unsubscribe from an event type."""
         with contextlib.suppress(ValueError):
             self._handlers[event_type].remove(handler)
@@ -226,7 +252,7 @@ class EventService(IEventBus):
         if tasks:
             await asyncio.gather(*tasks, return_exceptions=True)
 
-    async def _safe_call_handler(self, handler: Callable[..., Any], data: Any) -> None:
+    async def _safe_call_handler(self, handler: Callable[[Any], Any], data: Any) -> None:
         """Safely call async handler."""
         try:
             await handler(data)
@@ -242,7 +268,7 @@ class EventService(IEventBus):
 class CacheService(ICache):
     """Distributed cache service with Redis support."""
 
-    def __init__(self, redis_url: str | None = None, logger=None) -> None:
+    def __init__(self, redis_url: str | None = None, logger: Any | None = None) -> None:
         self.logger = logger or get_logger("cache_service")
         self._redis_client = None
         self._local_cache: dict[str, Any] = {}
@@ -275,7 +301,7 @@ class CacheService(ICache):
         # Fallback to local cache
         async with self._lock:
             if key in self._local_ttl and time.time() < self._local_ttl[key]:
-                return self._local_cache.get(key)
+                return copy.deepcopy(self._local_cache.get(key))
             else:
                 self._local_cache.pop(key, None)
                 self._local_ttl.pop(key, None)
@@ -296,7 +322,7 @@ class CacheService(ICache):
 
         # Always update local cache as fallback
         async with self._lock:
-            self._local_cache[key] = value
+            self._local_cache[key] = copy.deepcopy(value)
             if ttl:
                 self._local_ttl[key] = time.time() + ttl
             else:
@@ -331,7 +357,7 @@ class CacheService(ICache):
 class RateLimitService(IRateLimiter):
     """Advanced rate limiting with multiple strategies."""
 
-    def __init__(self, logger=None) -> None:
+    def __init__(self, logger: Any | None = None) -> None:
         self.logger = logger or get_logger("rate_limit_service")
         self._limiters: dict[str, AsyncRateLimiter] = {}
         self._limits: dict[str, dict[str, Any]] = {}
@@ -340,9 +366,13 @@ class RateLimitService(IRateLimiter):
     def configure_limit(self, resource: str, max_requests: int, time_window: float) -> None:
         """Configure rate limit for a resource."""
         self._limits[resource] = {"max_requests": max_requests, "time_window": time_window}
+        self._limiters.pop(resource, None)
 
     async def acquire(self, resource: str, tokens: int = 1) -> None:
         """Acquire tokens for a resource."""
+        if tokens <= 0:
+            raise ValueError("tokens must be > 0")
+
         async with self._lock:
             if resource not in self._limiters:
                 if resource in self._limits:
@@ -354,19 +384,36 @@ class RateLimitService(IRateLimiter):
                     # Default limiter
                     self._limiters[resource] = AsyncRateLimiter(10, 1.0)
 
-        await self._limiters[resource].acquire()
+        limiter = self._limiters[resource]
+        for _ in range(tokens):
+            await limiter.acquire()
 
     def get_remaining_tokens(self, resource: str) -> int:
         """Get remaining tokens for a resource."""
         limiter = self._limiters.get(resource)
-        if limiter:
-            return limiter.max_requests - len(limiter.requests)
-        return 0
+        if limiter is None:
+            configured_limit = self._limits.get(resource)
+            if configured_limit is not None:
+                return int(configured_limit["max_requests"])
+            return 0
+
+        now = time.time()
+        limiter.requests = [
+            req_time for req_time in limiter.requests if now - req_time < limiter.time_window
+        ]
+        return max(0, limiter.max_requests - len(limiter.requests))
 
     def get_reset_time(self, resource: str) -> float | None:
         """Get reset time for a resource."""
         limiter = self._limiters.get(resource)
-        if limiter and limiter.requests:
+        if limiter is None:
+            return None
+
+        now = time.time()
+        limiter.requests = [
+            req_time for req_time in limiter.requests if now - req_time < limiter.time_window
+        ]
+        if limiter.requests:
             return limiter.requests[0] + limiter.time_window
         return None
 
@@ -380,7 +427,7 @@ class MarketDataService:
         cache_service: ICache = inject(ICache),  # type: ignore[type-abstract]
         rate_limiter: IRateLimiter = inject(IRateLimiter),  # type: ignore[type-abstract]
         event_bus: IEventBus = inject(IEventBus),  # type: ignore[type-abstract]
-    ):
+    ) -> None:
         self.connection_manager = connection_manager
         self.cache_service = cache_service
         self.rate_limiter = rate_limiter
@@ -467,7 +514,7 @@ class TradingService:
         connection_manager: IConnectionManager = inject(IConnectionManager),  # type: ignore[type-abstract]
         event_bus: IEventBus = inject(IEventBus),  # type: ignore[type-abstract]
         rate_limiter: IRateLimiter = inject(IRateLimiter),  # type: ignore[type-abstract]
-    ):
+    ) -> None:
         self.connection_manager = connection_manager
         self.event_bus = event_bus
         self.rate_limiter = rate_limiter
@@ -487,7 +534,7 @@ class TradingService:
         order_type: str,
         quantity: float,
         price: float | None = None,
-        **kwargs,
+        **kwargs: Any,
     ) -> dict[str, Any]:
         """Place an order with circuit breaker and retry."""
         await self.rate_limiter.acquire("order")
@@ -524,7 +571,7 @@ class AccountService:
         connection_manager: IConnectionManager = inject(IConnectionManager),  # type: ignore[type-abstract]
         cache_service: ICache = inject(ICache),  # type: ignore[type-abstract]
         event_bus: IEventBus = inject(IEventBus),  # type: ignore[type-abstract]
-    ):
+    ) -> None:
         self.connection_manager = connection_manager
         self.cache_service = cache_service
         self.event_bus = event_bus

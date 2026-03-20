@@ -2,10 +2,8 @@
 
 from __future__ import annotations
 
-import json
 import os
 import time
-from pathlib import Path
 
 import pytest
 
@@ -15,7 +13,6 @@ from bt_api_py.gateway.health import (
     GatewayState,
 )
 from bt_api_py.gateway.process import GatewayProcess
-
 
 # ---------------------------------------------------------------------------
 # GatewayHealth
@@ -163,6 +160,23 @@ class TestGatewayProcess:
         pid = GatewayProcess.read_pid(proc.pid_file)
         assert pid == os.getpid()
 
+    def test_write_pid_logs_failure(self, tmp_path, monkeypatch, caplog):
+        proc = GatewayProcess(
+            {"gateway_runtime_name": "gw-pid-write-fail"},
+            pid_dir=str(tmp_path),
+        )
+
+        def fail_write_text(self, data, encoding=None):
+            raise OSError("write failed")
+
+        monkeypatch.setattr(type(proc.pid_file), "write_text", fail_write_text)
+
+        with pytest.raises(OSError, match="write failed"), caplog.at_level("ERROR"):
+            proc._write_pid()
+
+        assert "Failed to write PID file" in caplog.text
+        assert "write failed" in caplog.text
+
     def test_remove_pid(self, tmp_path):
         proc = GatewayProcess(
             {"gateway_runtime_name": "gw-rm"},
@@ -172,6 +186,25 @@ class TestGatewayProcess:
         assert proc.pid_file.exists()
         proc._remove_pid()
         assert not proc.pid_file.exists()
+
+    def test_remove_pid_logs_warning_when_unlink_fails(self, tmp_path, monkeypatch, caplog):
+        proc = GatewayProcess(
+            {"gateway_runtime_name": "gw-rm-fail"},
+            pid_dir=str(tmp_path),
+        )
+        proc._write_pid()
+
+        def fail_unlink(self, missing_ok=False):
+            raise OSError("unlink failed")
+
+        monkeypatch.setattr(type(proc.pid_file), "unlink", fail_unlink)
+
+        with caplog.at_level("WARNING"):
+            proc._remove_pid()
+
+        assert proc.pid_file.exists() is True
+        assert "Failed to remove PID file" in caplog.text
+        assert "unlink failed" in caplog.text
 
     def test_read_pid_missing(self, tmp_path):
         assert GatewayProcess.read_pid(tmp_path / "nonexistent.pid") is None
@@ -205,3 +238,199 @@ class TestGatewayProcess:
         st = proc.status()
         assert st["pid"] is None
         assert st["running"] is False
+
+    def test_status_cleans_invalid_pid_file(self, tmp_path, caplog):
+        proc = GatewayProcess(
+            {"gateway_runtime_name": "gw-invalid-status"},
+            pid_dir=str(tmp_path),
+        )
+        proc.pid_file.parent.mkdir(parents=True, exist_ok=True)
+        proc.pid_file.write_text("not-a-pid", encoding="utf-8")
+
+        with caplog.at_level("WARNING"):
+            st = proc.status()
+
+        assert st["pid"] is None
+        assert st["running"] is False
+        assert proc.pid_file.exists() is False
+        assert "is invalid during status check" in caplog.text
+
+    def test_status_cleans_stale_pid_file(self, tmp_path, monkeypatch, caplog):
+        proc = GatewayProcess(
+            {"gateway_runtime_name": "gw-stale-status"},
+            pid_dir=str(tmp_path),
+        )
+        proc._write_pid()
+        monkeypatch.setattr(proc, "is_running", lambda pid: False)
+
+        with caplog.at_level("WARNING"):
+            st = proc.status()
+
+        assert st["pid"] == os.getpid()
+        assert st["running"] is False
+        assert proc.pid_file.exists() is False
+        assert "not running during status check" in caplog.text
+
+    def test_shutdown_removes_pid_even_if_runtime_stop_fails(self, tmp_path):
+        class BadRuntime:
+            def stop(self) -> None:
+                raise RuntimeError("stop failed")
+
+        proc = GatewayProcess(
+            {"gateway_runtime_name": "gw-bad-stop"},
+            pid_dir=str(tmp_path),
+        )
+        proc._runtime = BadRuntime()
+        proc._write_pid()
+
+        proc._shutdown()
+
+        assert proc.pid_file.exists() is False
+        assert proc._stopped is True
+        assert proc._runtime is None
+
+    def test_start_logs_keyboard_interrupt_and_shuts_down(self, tmp_path, monkeypatch, caplog):
+        class FakeRuntime:
+            def __init__(self, *_args, **_kwargs) -> None:
+                return None
+
+            def start(self) -> None:
+                raise KeyboardInterrupt()
+
+            def stop(self) -> None:
+                return None
+
+        monkeypatch.setattr("bt_api_py.gateway.config.GatewayConfig.from_kwargs", lambda **kwargs: object())
+        monkeypatch.setattr("bt_api_py.gateway.runtime.GatewayRuntime", FakeRuntime)
+
+        proc = GatewayProcess(
+            {"gateway_runtime_name": "gw-keyboard-interrupt"},
+            pid_dir=str(tmp_path),
+        )
+        monkeypatch.setattr(proc, "_install_signal_handlers", lambda: None)
+
+        with caplog.at_level("INFO"):
+            proc.start()
+
+        assert proc._stopped is True
+        assert proc.pid_file.exists() is False
+        assert "Gateway process interrupted by KeyboardInterrupt" in caplog.text
+
+    def test_start_cleans_runtime_when_pid_write_fails(self, tmp_path, monkeypatch):
+        class FakeRuntime:
+            def __init__(self, *_args, **_kwargs) -> None:
+                return None
+
+            def start(self) -> None:
+                return None
+
+            def stop(self) -> None:
+                return None
+
+        monkeypatch.setattr("bt_api_py.gateway.config.GatewayConfig.from_kwargs", lambda **kwargs: object())
+        monkeypatch.setattr("bt_api_py.gateway.runtime.GatewayRuntime", FakeRuntime)
+
+        proc = GatewayProcess(
+            {"gateway_runtime_name": "gw-start-pid-fail"},
+            pid_dir=str(tmp_path),
+        )
+        monkeypatch.setattr(proc, "_write_pid", lambda: (_ for _ in ()).throw(OSError("pid write failed")))
+
+        with pytest.raises(OSError, match="pid write failed"):
+            proc.start()
+
+        assert proc._runtime is None
+        assert proc.pid_file.exists() is False
+
+    def test_start_cleans_pid_and_runtime_when_signal_setup_fails(self, tmp_path, monkeypatch):
+        class FakeRuntime:
+            def __init__(self, *_args, **_kwargs) -> None:
+                return None
+
+            def start(self) -> None:
+                return None
+
+            def stop(self) -> None:
+                return None
+
+        monkeypatch.setattr("bt_api_py.gateway.config.GatewayConfig.from_kwargs", lambda **kwargs: object())
+        monkeypatch.setattr("bt_api_py.gateway.runtime.GatewayRuntime", FakeRuntime)
+
+        proc = GatewayProcess(
+            {"gateway_runtime_name": "gw-start-signal-fail"},
+            pid_dir=str(tmp_path),
+        )
+        monkeypatch.setattr(
+            proc,
+            "_install_signal_handlers",
+            lambda: (_ for _ in ()).throw(RuntimeError("signal install failed")),
+        )
+
+        with pytest.raises(RuntimeError, match="signal install failed"):
+            proc.start()
+
+        assert proc._runtime is None
+        assert proc.pid_file.exists() is False
+
+    def test_start_logs_runtime_failure_and_shuts_down(self, tmp_path, monkeypatch, caplog):
+        class FakeRuntime:
+            def __init__(self, *_args, **_kwargs) -> None:
+                return None
+
+            def start(self) -> None:
+                raise RuntimeError("start failed")
+
+            def stop(self) -> None:
+                return None
+
+        monkeypatch.setattr("bt_api_py.gateway.config.GatewayConfig.from_kwargs", lambda **kwargs: object())
+        monkeypatch.setattr("bt_api_py.gateway.runtime.GatewayRuntime", FakeRuntime)
+
+        proc = GatewayProcess(
+            {"gateway_runtime_name": "gw-start-fail"},
+            pid_dir=str(tmp_path),
+        )
+        monkeypatch.setattr(proc, "_install_signal_handlers", lambda: None)
+
+        with pytest.raises(RuntimeError, match="start failed"), caplog.at_level("ERROR"):
+            proc.start()
+
+        assert proc._stopped is True
+        assert proc.pid_file.exists() is False
+        assert "Gateway process start failed" in caplog.text
+        assert "start failed" in caplog.text
+
+    def test_stop_remote_cleans_stale_pid_when_process_disappears(self, tmp_path, monkeypatch, caplog):
+        proc = GatewayProcess(
+            {"gateway_runtime_name": "gw-stop-remote-race"},
+            pid_dir=str(tmp_path),
+        )
+        proc._write_pid()
+
+        monkeypatch.setattr(proc, "is_running", lambda pid: True)
+        monkeypatch.setattr(
+            "os.kill",
+            lambda pid, sig: (_ for _ in ()).throw(ProcessLookupError("no such process")),
+        )
+
+        with caplog.at_level("WARNING"):
+            result = proc.stop_remote()
+
+        assert result is False
+        assert proc.pid_file.exists() is False
+        assert "disappeared before signal delivery" in caplog.text
+
+    def test_stop_remote_cleans_invalid_pid_file(self, tmp_path, caplog):
+        proc = GatewayProcess(
+            {"gateway_runtime_name": "gw-stop-invalid-pid"},
+            pid_dir=str(tmp_path),
+        )
+        proc.pid_file.parent.mkdir(parents=True, exist_ok=True)
+        proc.pid_file.write_text("not-a-pid", encoding="utf-8")
+
+        with caplog.at_level("WARNING"):
+            result = proc.stop_remote()
+
+        assert result is False
+        assert proc.pid_file.exists() is False
+        assert "is invalid during stop request" in caplog.text

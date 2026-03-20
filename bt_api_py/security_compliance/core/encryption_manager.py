@@ -6,7 +6,9 @@ HashiCorp Vault, and hardware security modules (HSMs).
 
 import base64
 import hashlib
+import json
 import os
+import threading
 import time
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
@@ -139,9 +141,9 @@ class LocalKeyManager(KeyManager):
 
     def generate_key(self, algorithm: EncryptionAlgorithm) -> EncryptionKey:
         """Generate a new encryption key."""
-        if (
-            algorithm == EncryptionAlgorithm.AES_256_GCM
-            or algorithm == EncryptionAlgorithm.CHACHA20_POLY1305
+        if algorithm in (
+            EncryptionAlgorithm.AES_256_GCM,
+            EncryptionAlgorithm.CHACHA20_POLY1305,
         ):
             key_data = os.urandom(32)  # 256 bits
         else:
@@ -168,13 +170,11 @@ class LocalKeyManager(KeyManager):
         metadata_file = self.key_dir / f"{key.key_id}.meta"
 
         # Store encrypted key
-        with open(key_file, "wb") as f:
+        with key_file.open("wb") as f:
             f.write(encrypted_data)
 
         # Store metadata
-        with open(metadata_file, "w") as f:
-            import json
-
+        with metadata_file.open("w", encoding="utf-8") as f:
             json.dump(key.to_dict(), f, indent=2)
 
     def get_key(self, key_id: str) -> EncryptionKey | None:
@@ -187,9 +187,7 @@ class LocalKeyManager(KeyManager):
 
         try:
             # Load metadata
-            with open(metadata_file) as f:
-                import json
-
+            with metadata_file.open(encoding="utf-8") as f:
                 metadata = json.load(f)
 
             # Decrypt key data
@@ -594,7 +592,7 @@ class EncryptionManager:
 
 
 # Factory function for creating key managers
-def create_key_manager(provider: KeyProvider, **kwargs) -> KeyManager:
+def create_key_manager(provider: KeyProvider, **kwargs: Any) -> KeyManager:
     """Create a key manager based on provider type."""
     if provider == KeyProvider.LOCAL:
         return LocalKeyManager(
@@ -618,16 +616,27 @@ def create_key_manager(provider: KeyProvider, **kwargs) -> KeyManager:
 
 
 # Global encryption manager instance
+_global_lock = threading.Lock()
 _encryption_manager: EncryptionManager | None = None
 
 
 def get_encryption_manager() -> EncryptionManager | None:
-    """Get the global encryption manager instance."""
-    return _encryption_manager
+    """Get the global encryption manager instance (thread-safe)."""
+    with _global_lock:
+        return _encryption_manager
 
 
 def initialize_encryption_manager(key_manager: KeyManager) -> EncryptionManager:
-    """Initialize the global encryption manager."""
+    """Initialize the global encryption manager (thread-safe).
+
+    Args:
+        key_manager: The key manager to use for encryption operations.
+
+    Returns:
+        The initialized EncryptionManager instance.
+    """
     global _encryption_manager
-    _encryption_manager = EncryptionManager(key_manager)
-    return _encryption_manager
+    with _global_lock:
+        if _encryption_manager is None:
+            _encryption_manager = EncryptionManager(key_manager)
+        return _encryption_manager

@@ -53,8 +53,10 @@ class RipioRequestData(Feed):
         self._http_client = HttpClient(venue=self.exchange_name, timeout=30)
 
         # API credentials (if provided)
-        self.api_key = kwargs.get("api_key", "")
-        self.api_secret = kwargs.get("api_secret", "")
+        self.api_key = kwargs.get("public_key") or kwargs.get("api_key", "")
+        self.api_secret = (
+            kwargs.get("private_key") or kwargs.get("api_secret") or kwargs.get("secret_key") or ""
+        )
 
     def _generate_signature(self, method: str, path: str, timestamp: str, body: str = "") -> str:
         """Generate Ripio HMAC SHA256 signature.

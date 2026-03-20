@@ -35,7 +35,7 @@ def _get_ib_config() -> Any | None:
             with config_path.open(encoding="utf-8") as f:
                 _ib_raw_config = yaml.safe_load(f)
         _ib_config_loaded = True
-    except Exception as e:
+    except (OSError, ValueError, KeyError, ImportError) as e:
         logger.warning(f"Failed to load ib.yaml config: {e}")
     return _ib_config
 

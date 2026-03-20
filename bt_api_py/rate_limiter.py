@@ -6,13 +6,14 @@
 
 import asyncio
 import contextlib
+import enum
 import fnmatch
 import threading
 import time
 from collections import deque
 from dataclasses import dataclass
-from enum import Enum, unique
-from typing import Any
+from enum import unique
+from typing import Any, Literal
 
 __all__ = [
     "RateLimitType",
@@ -25,14 +26,14 @@ __all__ = [
 
 
 @unique
-class RateLimitType(str, Enum):
+class RateLimitType(enum.StrEnum):
     SLIDING_WINDOW = "sliding_window"
     FIXED_WINDOW = "fixed_window"
     TOKEN_BUCKET = "token_bucket"
 
 
 @unique
-class RateLimitScope(str, Enum):
+class RateLimitScope(enum.StrEnum):
     GLOBAL = "global"
     ENDPOINT = "endpoint"
     IP = "ip"
@@ -209,11 +210,16 @@ class RateLimiter:
                 max_wait = max(max_wait, limiter.wait_time())
         return max_wait
 
-    def __enter__(self):
+    def __enter__(self) -> "RateLimiter":
         """进入上下文管理器（阻塞等待获取许可）."""
         return self
 
-    def __exit__(self, exc_type, exc_val, exc_tb):
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_val: BaseException | None,
+        exc_tb: Any,
+    ) -> Literal[False]:
         """退出上下文管理器."""
         return False
 

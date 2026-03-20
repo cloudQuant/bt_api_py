@@ -25,7 +25,7 @@ def _get_kraken_config() -> Any | None:
         if config_path.exists():
             _kraken_config = load_exchange_config(str(config_path))
         _kraken_config_loaded = True
-    except Exception as e:
+    except (OSError, ValueError, KeyError, ImportError) as e:
         logger.warning(f"Failed to load kraken.yaml config: {e}")
     return _kraken_config
 

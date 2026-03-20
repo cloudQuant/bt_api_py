@@ -42,6 +42,8 @@ class LatokenRequestData(Feed):
         """Synchronous HTTP request."""
         if params is None:
             params: dict[str, Any] = {}
+        if extra_data is None:
+            extra_data = {}
         method, endpoint = path.split(" ", 1)
         headers = self._get_headers(method, endpoint, params)
 
@@ -63,6 +65,8 @@ class LatokenRequestData(Feed):
         """Async HTTP request."""
         if params is None:
             params: dict[str, Any] = {}
+        if extra_data is None:
+            extra_data = {}
         method, endpoint = path.split(" ", 1)
         headers = self._get_headers(method, endpoint, params)
 

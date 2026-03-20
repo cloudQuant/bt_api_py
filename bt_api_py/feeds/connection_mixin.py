@@ -32,7 +32,7 @@ class ConnectionMixin:
     非 HTTP 场所（CTP/IB/QMT）：子类覆盖为显式连接管理。
     """
 
-    def __init_connection__(self):
+    def __init_connection__(self) -> None:
         """初始化连接状态 — 需由 Feed.__init__ 显式调用"""
         self._conn_state = FeedConnectionState.DISCONNECTED
         self._conn_lock = threading.Lock()
@@ -45,7 +45,7 @@ class ConnectionMixin:
                 return self._conn_state
         return getattr(self, "_conn_state", FeedConnectionState.DISCONNECTED)
 
-    def _set_connection_state(self, new_state: FeedConnectionState):
+    def _set_connection_state(self, new_state: FeedConnectionState) -> None:
         lock = getattr(self, "_conn_lock", None)
         if lock:
             with lock:

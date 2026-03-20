@@ -12,6 +12,7 @@
     因此 ``except RateLimitError`` 也能捕获 ``UnifiedRateLimitError``。
 """
 
+import enum
 import importlib
 from dataclasses import dataclass, field
 from enum import Enum, unique
@@ -28,7 +29,7 @@ from bt_api_py.exceptions import (
 
 
 @unique
-class ErrorCategory(str, Enum):
+class ErrorCategory(enum.StrEnum):
     NETWORK = "network"
     AUTH = "auth"
     RATE_LIMIT = "rate_limit"
@@ -126,10 +127,10 @@ class UnifiedError(BtApiError):
     original_error: str | None = None
     context: dict[str, Any] = field(default_factory=dict)
 
-    def __str__(self):
+    def __str__(self) -> str:
         return f"[{self.venue}] {self.code.name}: {self.message}"
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return f"UnifiedError(code={self.code.name}, venue={self.venue}, message={self.message!r})"
 
     def to_dict(self) -> dict[str, Any]:
@@ -154,7 +155,12 @@ class UnifiedRateLimitError(UnifiedError, RateLimitError):
     因此 ``except RateLimitError`` 可以捕获此异常。
     """
 
-    def __init__(self, venue: str, response=None, message: str = "Rate limit exceeded"):
+    def __init__(
+        self,
+        venue: str,
+        response: Any = None,
+        message: str = "Rate limit exceeded",
+    ) -> None:
         UnifiedError.__init__(
             self,
             code=UnifiedErrorCode.RATE_LIMIT_EXCEEDED,
@@ -175,7 +181,12 @@ class UnifiedAuthError(UnifiedError, AuthenticationError):
     因此 ``except AuthenticationError`` 可以捕获此异常。
     """
 
-    def __init__(self, venue: str, response=None, message: str = "Authentication failed"):
+    def __init__(
+        self,
+        venue: str,
+        response: Any = None,
+        message: str = "Authentication failed",
+    ) -> None:
         UnifiedError.__init__(
             self,
             code=UnifiedErrorCode.INVALID_API_KEY,
@@ -191,7 +202,13 @@ class UnifiedAuthError(UnifiedError, AuthenticationError):
 class ServerError(UnifiedError):
     """服务器端错误"""
 
-    def __init__(self, venue: str, status: int = 500, response=None, message: str = "Server error"):
+    def __init__(
+        self,
+        venue: str,
+        status: int = 500,
+        response: Any = None,
+        message: str = "Server error",
+    ) -> None:
         super().__init__(
             code=UnifiedErrorCode.INTERNAL_ERROR,
             category=ErrorCategory.SYSTEM,
@@ -208,7 +225,13 @@ class UnifiedRequestFailedError(UnifiedError, RequestFailedError):
     因此 ``except RequestFailedError`` 可以捕获此异常。
     """
 
-    def __init__(self, venue: str, status: int = 0, response=None, message: str = "Request failed"):
+    def __init__(
+        self,
+        venue: str,
+        status: int = 0,
+        response: Any = None,
+        message: str = "Request failed",
+    ) -> None:
         UnifiedError.__init__(
             self,
             code=UnifiedErrorCode.INTERNAL_ERROR,
@@ -229,10 +252,10 @@ class ErrorTranslator:
     """错误翻译器基类"""
 
     # 子类覆盖此映射: {原始错误码: (UnifiedErrorCode, 默认消息)}
-    ERROR_MAP: ClassVar[dict[Any, tuple]] = {}
+    ERROR_MAP: ClassVar[dict[Any, tuple[UnifiedErrorCode | None, str]]] = {}
 
     # 通用 HTTP 状态码映射
-    HTTP_STATUS_MAP: ClassVar[dict[int, tuple]] = {
+    HTTP_STATUS_MAP: ClassVar[dict[int, tuple[UnifiedErrorCode, str]]] = {
         400: (UnifiedErrorCode.INVALID_PARAMETER, "Invalid request parameters"),
         401: (UnifiedErrorCode.INVALID_API_KEY, "Invalid API key"),
         403: (UnifiedErrorCode.PERMISSION_DENIED, "Permission denied"),
@@ -244,7 +267,7 @@ class ErrorTranslator:
     }
 
     @classmethod
-    def translate(cls, raw_error: dict, venue: str) -> UnifiedError | None:
+    def translate(cls, raw_error: dict[str, Any], venue: str) -> UnifiedError | None:
         """将原始错误转换为统一错误
 
         :param raw_error: 包含错误信息的字典 (code, msg/message, status 等)
@@ -329,11 +352,12 @@ _TRANSLATOR_EXPORTS: dict[str, tuple[str, str]] = {
 }
 
 
-def __getattr__(name: str):
+def __getattr__(name: str) -> type[Any]:
     """Lazy re-export translators from `bt_api_py.errors.*` for backward compatibility."""
     if name in _TRANSLATOR_EXPORTS:
         module_name, attr = _TRANSLATOR_EXPORTS[name]
-        value = getattr(importlib.import_module(module_name), attr)
+        module = importlib.import_module(module_name)
+        value = getattr(module, attr)
         globals()[name] = value
         return value
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
