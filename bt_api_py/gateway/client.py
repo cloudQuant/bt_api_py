@@ -113,10 +113,35 @@ class GatewayClient:
 
     def _close_sockets(self) -> None:
         logger = logging.getLogger(__name__)
+        self._close_sockets()
+        self._reset_runtime_state()
+        if self.runtime is not None:
+            try:
+                self.runtime.stop()
+            except Exception as exc:
+                logger.warning(
+                    "Gateway client runtime stop failed during disconnect: %s: %s",
+                    type(exc).__name__,
+                    exc,
+                )
+            finally:
+                self.runtime = None
+
+    def stop(self) -> None:
+        self.disconnect()
+
+    def _close_sockets(self) -> None:
+        logger = logging.getLogger(__name__)
         for socket in (self.command_socket, self.market_socket, self.event_socket):
             if socket is not None:
                 try:
                     socket.close(0)
+                except Exception as exc:
+                    logger.warning(
+                        "Gateway client socket close failed during cleanup: %s: %s",
+                        type(exc).__name__,
+                        exc,
+                    )
                 except Exception as exc:
                     logger.warning(
                         "Gateway client socket close failed during cleanup: %s: %s",
