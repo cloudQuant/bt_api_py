@@ -130,3 +130,107 @@ class TestOAuth2ProviderQuality:
                 redirect_uri="https://app.example.com/callback",
                 scopes={"read"},
             )
+
+    @pytest.mark.parametrize(
+        ("kwargs", "error_match"),
+        [
+            ({"issuer_url": None}, "issuer_url"),
+            ({"issuer_url": "https://issuer.example.com", "token_lifetime": True}, "token_lifetime"),
+            (
+                {"issuer_url": "https://issuer.example.com", "refresh_token_lifetime": 0},
+                "refresh_token_lifetime",
+            ),
+            ({"issuer_url": "https://issuer.example.com", "enable_pkce": "yes"}, "enable_pkce"),
+            (
+                {"issuer_url": "https://issuer.example.com", "enable_token_rotation": 1},
+                "enable_token_rotation",
+            ),
+        ],
+    )
+    def test_constructor_rejects_invalid_scalar_inputs(self, kwargs, error_match):
+        with pytest.raises(OAuthError, match=error_match):
+            OAuth2Provider(**kwargs)
+
+    def test_register_client_rejects_non_boolean_is_confidential(self):
+        provider = OAuth2Provider("https://issuer.example.com")
+
+        with pytest.raises(OAuthError, match="is_confidential"):
+            provider.register_client(
+                client_id="client-a",
+                client_secret="secret",
+                redirect_uris=["https://app.example.com/callback"],
+                scopes={"read"},
+                grant_types={GrantType.AUTHORIZATION_CODE},
+                is_confidential="true",
+            )
+
+    def test_register_user_rejects_non_boolean_mfa_enabled(self):
+        provider = OAuth2Provider("https://issuer.example.com")
+
+        with pytest.raises(OAuthError, match="mfa_enabled"):
+            provider.register_user("user-a", "user-a", "user@example.com", mfa_enabled="yes")
+
+    @pytest.mark.parametrize(
+        ("field_name", "register_kwargs", "error_match"),
+        [
+            (
+                "redirect_uris",
+                {
+                    "client_id": "client-a",
+                    "client_secret": "secret",
+                    "redirect_uris": [123],
+                    "scopes": {"read"},
+                    "grant_types": {GrantType.AUTHORIZATION_CODE},
+                },
+                "redirect_uri",
+            ),
+            (
+                "scopes",
+                {
+                    "client_id": "client-a",
+                    "client_secret": "secret",
+                    "redirect_uris": ["https://app.example.com/callback"],
+                    "scopes": [None],
+                    "grant_types": {GrantType.AUTHORIZATION_CODE},
+                },
+                "scope",
+            ),
+            (
+                "grant_types",
+                {
+                    "client_id": "client-a",
+                    "client_secret": "secret",
+                    "redirect_uris": ["https://app.example.com/callback"],
+                    "scopes": {"read"},
+                    "grant_types": [None],
+                },
+                "grant_type",
+            ),
+        ],
+    )
+    def test_register_client_rejects_non_string_iterable_items(
+        self, field_name, register_kwargs, error_match
+    ):
+        provider = OAuth2Provider("https://issuer.example.com")
+
+        with pytest.raises(OAuthError, match=error_match):
+            provider.register_client(**register_kwargs)
+
+    def test_validate_access_token_rejects_invalid_required_scopes_shape(self):
+        provider = OAuth2Provider("https://issuer.example.com")
+        provider.register_client(
+            client_id="client-a",
+            client_secret="secret",
+            redirect_uris=["https://app.example.com/callback"],
+            scopes={"read"},
+            grant_types={GrantType.AUTHORIZATION_CODE},
+        )
+        access_token = provider.generate_access_token(
+            client_id="client-a",
+            user_id="user-a",
+            scopes={"read"},
+            grant_type=GrantType.AUTHORIZATION_CODE,
+        )
+
+        with pytest.raises(OAuthError, match="scopes must be an iterable of strings"):
+            provider.validate_access_token(access_token.token, required_scopes="read")

@@ -11,6 +11,7 @@ import time
 from collections.abc import Iterable
 from dataclasses import dataclass, field
 from enum import Enum
+from numbers import Integral
 from pathlib import Path
 from typing import Any
 
@@ -171,8 +172,10 @@ class OAuth2Provider:
         self.refresh_token_lifetime = self._require_positive_int(
             "refresh_token_lifetime", refresh_token_lifetime
         )
-        self.enable_pkce = enable_pkce
-        self.enable_token_rotation = enable_token_rotation
+        self.enable_pkce = self._require_bool("enable_pkce", enable_pkce)
+        self.enable_token_rotation = self._require_bool(
+            "enable_token_rotation", enable_token_rotation
+        )
 
         # Storage
         self._clients: dict[str, OAuthClient] = {}
@@ -187,17 +190,38 @@ class OAuth2Provider:
 
     @staticmethod
     def _require_text(field_name: str, value: str) -> str:
-        text = str(value).strip()
+        if not isinstance(value, str):
+            raise OAuthError(f"{field_name} must be a non-empty string")
+        text = value.strip()
         if not text:
             raise OAuthError(f"{field_name} must be a non-empty string")
         return text
 
     @staticmethod
     def _require_positive_int(field_name: str, value: int) -> int:
-        numeric = int(value)
+        if isinstance(value, bool):
+            raise OAuthError(f"{field_name} must be positive")
+        if isinstance(value, Integral):
+            numeric = int(value)
+        elif isinstance(value, str):
+            text = value.strip()
+            if not text:
+                raise OAuthError(f"{field_name} must be positive")
+            try:
+                numeric = int(text)
+            except ValueError as exc:
+                raise OAuthError(f"{field_name} must be positive") from exc
+        else:
+            raise OAuthError(f"{field_name} must be positive")
         if numeric <= 0:
             raise OAuthError(f"{field_name} must be positive")
         return numeric
+
+    @staticmethod
+    def _require_bool(field_name: str, value: bool) -> bool:
+        if not isinstance(value, bool):
+            raise OAuthError(f"{field_name} must be a boolean")
+        return value
 
     @classmethod
     def _normalize_scopes(cls, scopes: Iterable[str] | None) -> set[str]:
@@ -206,15 +230,23 @@ class OAuth2Provider:
         if isinstance(scopes, str):
             raise OAuthError("scopes must be an iterable of strings")
         normalized: set[str] = set()
-        for scope in scopes:
-            normalized.add(cls._require_text("scope", str(scope)))
+        try:
+            iterator = iter(scopes)
+        except TypeError as exc:
+            raise OAuthError("scopes must be an iterable of strings") from exc
+        for scope in iterator:
+            normalized.add(cls._require_text("scope", scope))
         return normalized
 
     @classmethod
     def _normalize_redirect_uris(cls, redirect_uris: Iterable[str]) -> list[str]:
         if isinstance(redirect_uris, str):
             raise OAuthError("redirect_uris must be an iterable of strings")
-        normalized = [cls._require_text("redirect_uri", str(uri)) for uri in redirect_uris]
+        try:
+            iterator = iter(redirect_uris)
+        except TypeError as exc:
+            raise OAuthError("redirect_uris must be an iterable of strings") from exc
+        normalized = [cls._require_text("redirect_uri", uri) for uri in iterator]
         if not normalized:
             raise OAuthError("redirect_uris must not be empty")
         return normalized
@@ -224,12 +256,16 @@ class OAuth2Provider:
         if isinstance(grant_types, (str, bytes)):
             raise OAuthError("grant_types must be an iterable of GrantType values")
         normalized: set[GrantType] = set()
-        for grant_type in grant_types:
+        try:
+            iterator = iter(grant_types)
+        except TypeError as exc:
+            raise OAuthError("grant_types must be an iterable of GrantType values") from exc
+        for grant_type in iterator:
             if isinstance(grant_type, GrantType):
                 normalized.add(grant_type)
                 continue
             try:
-                normalized.add(GrantType(cls._require_text("grant_type", str(grant_type))))
+                normalized.add(GrantType(cls._require_text("grant_type", grant_type)))
             except ValueError as exc:
                 raise OAuthError(f"Unsupported grant type: {grant_type}") from exc
         if not normalized:
@@ -317,7 +353,7 @@ class OAuth2Provider:
             redirect_uris=self._normalize_redirect_uris(redirect_uris),
             scopes=self._normalize_scopes(scopes),
             grant_types=self._normalize_grant_types(grant_types),
-            is_confidential=is_confidential,
+            is_confidential=self._require_bool("is_confidential", is_confidential),
         )
 
         self._clients[client.client_id] = client
@@ -331,7 +367,7 @@ class OAuth2Provider:
             user_id=self._require_text("user_id", user_id),
             username=self._require_text("username", username),
             email=self._require_text("email", email),
-            mfa_enabled=bool(mfa_enabled),
+            mfa_enabled=self._require_bool("mfa_enabled", mfa_enabled),
         )
 
         self._users[user.user_id] = user
@@ -397,6 +433,11 @@ class OAuth2Provider:
         self, code: str, client_id: str, redirect_uri: str, code_verifier: str | None = None
     ) -> AuthorizationCode:
         """Validate authorization code and return auth code object."""
+        code = self._require_text("code", code)
+        client_id = self._require_text("client_id", client_id)
+        redirect_uri = self._require_text("redirect_uri", redirect_uri)
+        if code_verifier is not None:
+            code_verifier = self._require_text("code_verifier", code_verifier)
         auth_code = self._auth_codes.get(code)
         if not auth_code:
             raise OAuthError("Invalid authorization code")
@@ -492,6 +533,8 @@ class OAuth2Provider:
         self, token: str, required_scopes: set[str] | None = None
     ) -> AccessToken:
         """Validate access token."""
+        token = self._require_text("token", token)
+        required_scopes = self._normalize_scopes(required_scopes)
         access_token = self._access_tokens.get(token)
         if not access_token:
             raise OAuthError("Invalid access token")
