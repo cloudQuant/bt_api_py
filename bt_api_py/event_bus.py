@@ -70,7 +70,7 @@ class EventBus:
         self._last_errors: list[tuple[str, Callable[..., Any], Exception]] = []
 
     def on(self, event_type: str, handler: Callable[..., Any]) -> None:
-        if event_type is None or not event_type:
+        if not event_type:
             raise ValueError("event_type must be a non-empty string")
         if not callable(handler):
             raise TypeError("handler must be callable")

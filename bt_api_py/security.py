@@ -119,11 +119,12 @@ class SecureCredentialManager:
         Returns:
             Masked credential (e.g., "abcd****wxyz")
         """
+        visible_chars = max(0, visible_chars)
         if not credential or len(credential) <= visible_chars * 2:
             return "****"
 
         start = credential[:visible_chars]
-        end = credential[-visible_chars:]
+        end = credential[-visible_chars:] if visible_chars > 0 else ""
         return f"{start}{'*' * (len(credential) - visible_chars * 2)}{end}"
 
     @staticmethod

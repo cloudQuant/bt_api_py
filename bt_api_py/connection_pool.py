@@ -287,10 +287,12 @@ class AsyncConnectionPool(Generic[T]):
             None
         """
         async with self._lock:
-            if conn in self._in_use:
-                self._in_use.remove(conn)
-                self._pool.append((conn, time.time()))
-                self._semaphore.release()
+            if conn not in self._in_use:
+                _logger.warning("AsyncConnectionPool.release called with unknown connection")
+                return
+            self._in_use.remove(conn)
+            self._pool.append((conn, time.time()))
+            self._semaphore.release()
 
 
 class PooledConnection(Generic[T]):
@@ -333,3 +335,44 @@ class PooledConnection(Generic[T]):
         """Release connection."""
         if self._conn:
             self._pool.release(self._conn)
+
+
+class AsyncPooledConnection(Generic[T]):
+    """
+    Async context manager for pooled connections.
+
+    Example:
+        pool = AsyncConnectionPool(factory=create_connection)
+
+        async with AsyncPooledConnection(pool) as conn:
+            await conn.execute("SELECT 1")
+    """
+
+    def __init__(self, pool: AsyncConnectionPool[T]) -> None:
+        """
+        Initialize with async connection pool.
+
+        Args:
+            pool: Async connection pool instance.
+
+        Returns:
+            None
+        """
+        self._pool = pool
+        self._conn: T | None = None
+
+    async def __aenter__(self) -> T:
+        """Acquire connection."""
+        conn = await self._pool.acquire()
+        self._conn = conn
+        return conn
+
+    async def __aexit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_val: BaseException | None,
+        exc_tb: Any,
+    ) -> None:
+        """Release connection."""
+        if self._conn:
+            await self._pool.release(self._conn)

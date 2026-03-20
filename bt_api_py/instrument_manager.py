@@ -25,33 +25,37 @@ class InstrumentManager:
     def register(self, instrument: Instrument) -> None:
         """注册 Instrument"""
         with self._lock:
-            previous = self._instruments.get(instrument.internal)
-            if previous is not None:
-                venue_instruments = self._by_venue.get(previous.venue)
-                if venue_instruments is not None:
-                    venue_instruments.pop(previous.venue_symbol, None)
-                    if not venue_instruments:
-                        self._by_venue.pop(previous.venue, None)
-
-                if previous.underlying:
-                    underlying_instruments = self._by_underlying.get(previous.underlying)
-                    if underlying_instruments is not None:
-                        filtered = [inst for inst in underlying_instruments if inst.internal != previous.internal]
-                        if filtered:
-                            self._by_underlying[previous.underlying] = filtered
-                        else:
-                            self._by_underlying.pop(previous.underlying, None)
-
-            self._instruments[instrument.internal] = instrument
-            self._by_venue.setdefault(instrument.venue, {})[instrument.venue_symbol] = instrument
-            if instrument.underlying:
-                self._by_underlying.setdefault(instrument.underlying, []).append(instrument)
+            self._register_unlocked(instrument)
 
     def register_many(self, instruments: list[Instrument]) -> None:
         """批量注册"""
         with self._lock:
             for inst in instruments:
-                self.register(inst)
+                self._register_unlocked(inst)
+
+    def _register_unlocked(self, instrument: Instrument) -> None:
+        """注册 Instrument（调用方需持有 _lock）"""
+        previous = self._instruments.get(instrument.internal)
+        if previous is not None:
+            venue_instruments = self._by_venue.get(previous.venue)
+            if venue_instruments is not None:
+                venue_instruments.pop(previous.venue_symbol, None)
+                if not venue_instruments:
+                    self._by_venue.pop(previous.venue, None)
+
+            if previous.underlying:
+                underlying_instruments = self._by_underlying.get(previous.underlying)
+                if underlying_instruments is not None:
+                    filtered = [inst for inst in underlying_instruments if inst.internal != previous.internal]
+                    if filtered:
+                        self._by_underlying[previous.underlying] = filtered
+                    else:
+                        self._by_underlying.pop(previous.underlying, None)
+
+        self._instruments[instrument.internal] = instrument
+        self._by_venue.setdefault(instrument.venue, {})[instrument.venue_symbol] = instrument
+        if instrument.underlying:
+            self._by_underlying.setdefault(instrument.underlying, []).append(instrument)
 
     def get(self, internal: str) -> Instrument | None:
         """获取 Instrument（通过内部符号）"""
