@@ -5,6 +5,7 @@ Integrate all exchange APIs using this BtApi class
 
 # 导入注册模块，确保交易所在使用前完成注册
 # 自动扫描 exchange_registers/ 下所有模块，无需手动维护 import 列表
+from copy import deepcopy
 import importlib
 import pkgutil
 import queue
@@ -108,7 +109,7 @@ class BtApi:
             debug: 是否开启 debug 模式，控制日志输出。
             event_bus: 事件总线实例，用于 BarEvent/OrderEvent 等回调；None 则创建默认实例。
         """
-        self.exchange_kwargs = exchange_kwargs or {}
+        self.exchange_kwargs = {}
         self.debug = debug
         self.data_queues = {}
         self.exchange_feeds = {}
@@ -142,6 +143,8 @@ class BtApi:
             self.logger.warning(f"Unknown log level '{level}', message: {txt}")
 
     def _parse_dataname(self, dataname: str) -> tuple[str, str, str]:
+        if not isinstance(dataname, str) or not dataname:
+            raise SubscribeError("", detail="dataname must be a non-empty string")
         parts = dataname.split(DATANAME_SEPARATOR)
         if len(parts) != 3 or not all(parts):
             raise SubscribeError("", detail=f"invalid dataname format: {dataname}")
@@ -159,6 +162,8 @@ class BtApi:
             raise InvalidOrderError(exchange_name, symbol, "volume must be > 0")
         if price < 0:
             raise InvalidOrderError(exchange_name, symbol, "price must be >= 0")
+        if not isinstance(order_type, str) or not order_type:
+            raise InvalidOrderError(exchange_name, symbol, "order_type must be a non-empty string")
 
         normalized_order_type = order_type.lower()
         if normalized_order_type not in {"limit", "market"}:
@@ -170,6 +175,36 @@ class BtApi:
         if normalized_order_type == "limit" and price <= 0:
             raise InvalidOrderError(exchange_name, symbol, "price must be > 0 for limit order")
         return normalized_order_type
+
+    @staticmethod
+    def _copy_exchange_params(exchange_params: dict[str, Any] | None) -> dict[str, Any]:
+        if exchange_params is None:
+            return {}
+        try:
+            return deepcopy(dict(exchange_params))
+        except (TypeError, ValueError) as exc:
+            raise TypeError("exchange_params must be a mapping") from exc
+
+    @staticmethod
+    def _normalize_subscribe_topics(topics: list[dict[str, Any]]) -> tuple[list[dict[str, Any]], int]:
+        if not isinstance(topics, list):
+            raise SubscribeError("", detail="topics must be a list of dict items")
+
+        normalized_topics: list[dict[str, Any]] = []
+        subscribe_bar_num = 0
+        for index, topic in enumerate(topics):
+            if not isinstance(topic, dict):
+                raise SubscribeError("", detail=f"invalid topic at index {index}: expected dict")
+            topic_name = topic.get("topic")
+            if not isinstance(topic_name, str) or not topic_name:
+                raise SubscribeError(
+                    "",
+                    detail=f"invalid topic at index {index}: missing non-empty 'topic'",
+                )
+            normalized_topics.append(deepcopy(dict(topic)))
+            if topic_name == "kline":
+                subscribe_bar_num += 1
+        return normalized_topics, subscribe_bar_num
 
     def add_exchange(self, exchange_name: str, exchange_params: dict[str, Any]) -> None:
         """Add a new exchange to the API instance.
@@ -191,12 +226,19 @@ class BtApi:
                 raise ExchangeNotFoundError(
                     exchange_name, "data_queue exists but feed does not — inconsistent state"
                 )
-            self.data_queues[exchange_name] = queue.Queue()
+            stored_exchange_params = self._copy_exchange_params(exchange_params)
+            data_queue: queue.Queue[Any] = queue.Queue()
+            self.data_queues[exchange_name] = data_queue
+            self.exchange_kwargs[exchange_name] = stored_exchange_params
             self.log(f"adding exchange: {exchange_name}")
-            data_queue = self.get_data_queue(exchange_name)
-            self.exchange_feeds[exchange_name] = ExchangeRegistry.create_feed(
-                exchange_name, data_queue, **exchange_params
-            )
+            try:
+                self.exchange_feeds[exchange_name] = ExchangeRegistry.create_feed(
+                    exchange_name, data_queue, **stored_exchange_params
+                )
+            except Exception:
+                self.data_queues.pop(exchange_name, None)
+                self.exchange_kwargs.pop(exchange_name, None)
+                raise
         else:
             self.log(f"exchange_name: {exchange_name} already exists")
 
@@ -247,10 +289,9 @@ class BtApi:
         """通过 ExchangeRegistry 查找订阅处理函数，无需硬编码交易所类型"""
         exchange, asset_type, symbol = self._parse_dataname(dataname)
         exchange_name = exchange + DATANAME_SEPARATOR + asset_type
-        exchange_params = self.exchange_kwargs.get(exchange_name, {})
-        for topic in topics:
-            if topic["topic"] == "kline":
-                self.subscribe_bar_num += 1
+        normalized_topics, subscribe_bar_num = self._normalize_subscribe_topics(topics)
+        exchange_params = self._copy_exchange_params(self.exchange_kwargs.get(exchange_name, {}))
+        self.subscribe_bar_num += subscribe_bar_num
         data_queue = self.get_data_queue(exchange_name)
         if data_queue is None:
             self.log(f"exchange_name: {exchange_name} does not exist", level="error")
@@ -258,7 +299,7 @@ class BtApi:
 
         subscribe_handler = ExchangeRegistry.get_stream_class(exchange_name, "subscribe")
         if subscribe_handler is not None:
-            subscribe_handler(data_queue, exchange_params, topics, self)
+            subscribe_handler(data_queue, exchange_params, normalized_topics, self)
         else:
             self.log(f"No subscribe handler registered for {exchange_name}", level="error")
 
@@ -356,7 +397,7 @@ class BtApi:
 
     def _calculate_aligned_stop_time(self, period: str) -> datetime:
         now = datetime.now(UTC)
-        period_seconds = int(period[:-1]) * (60 if "m" in period else 3600)
+        period_seconds = int(_calculate_time_delta(period).total_seconds())
         return now - timedelta(seconds=now.timestamp() % period_seconds)
 
     def _download_single_batch(
