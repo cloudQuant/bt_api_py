@@ -6,6 +6,7 @@
 import pickle
 import time
 from abc import ABC, abstractmethod
+from pathlib import Path
 from typing import Any
 
 import numpy as np
@@ -158,7 +159,7 @@ class BaseMLModel(ABC):
                 "last_training_time": self.last_training_time,
             }
 
-            with open(file_path, "wb") as f:
+            with Path(file_path).open("wb") as f:
                 pickle.dump(model_data, f)
 
             self.logger.info(f"Model saved to {file_path}")
@@ -178,8 +179,8 @@ class BaseMLModel(ABC):
             bool: 加载是否成功
         """
         try:
-            with open(file_path, "rb") as f:
-                model_data = pickle.load(f)
+            with Path(file_path).open("rb") as f:
+                model_data = pickle.load(f)  # noqa: S301
 
             self.model = model_data.get("model")
             self.model_name = model_data.get("model_name", self.model_name)

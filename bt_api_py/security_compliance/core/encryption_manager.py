@@ -170,11 +170,11 @@ class LocalKeyManager(KeyManager):
         metadata_file = self.key_dir / f"{key.key_id}.meta"
 
         # Store encrypted key
-        with open(key_file, "wb") as f:
+        with key_file.open("wb") as f:
             f.write(encrypted_data)
 
         # Store metadata
-        with open(metadata_file, "w", encoding="utf-8") as f:
+        with metadata_file.open("w", encoding="utf-8") as f:
             json.dump(key.to_dict(), f, indent=2)
 
     def get_key(self, key_id: str) -> EncryptionKey | None:
@@ -187,7 +187,7 @@ class LocalKeyManager(KeyManager):
 
         try:
             # Load metadata
-            with open(metadata_file, encoding="utf-8") as f:
+            with metadata_file.open(encoding="utf-8") as f:
                 metadata = json.load(f)
 
             # Decrypt key data

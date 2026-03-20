@@ -185,7 +185,7 @@ class OAuth2Provider:
     def _load_or_generate_key(self, key_path: str | None):
         """Load or generate RSA key for JWT signing."""
         if key_path and Path(key_path).exists():
-            with open(key_path, "rb") as f:
+            with Path(key_path).open("rb") as f:
                 return serialization.load_pem_private_key(
                     f.read(), password=None, backend=default_backend()
                 )

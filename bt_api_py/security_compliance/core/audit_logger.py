@@ -171,7 +171,7 @@ class AuditLogger:
             return
 
         try:
-            with open(self.log_file) as f:
+            with self.log_file.open(encoding="utf-8") as f:
                 lines = f.readlines()
                 if lines:
                     last_line = lines[-1].strip()
@@ -260,6 +260,7 @@ class AuditLogger:
             self.log_file.parent.mkdir(parents=True, exist_ok=True)
             with tempfile.NamedTemporaryFile(
                 mode="w",
+                encoding="utf-8",
                 delete=False,
                 dir=self.log_file.parent,
                 prefix=f"{self.log_file.stem}_",
@@ -268,7 +269,7 @@ class AuditLogger:
                 f.write(event_json + "\n")
                 temp_file = Path(f.name)
 
-            with open(self.log_file, "a") as f:
+            with self.log_file.open("a", encoding="utf-8") as f:
                 f.write(event_json + "\n")
 
         except Exception as e:
@@ -307,7 +308,7 @@ class AuditLogger:
         previous_hash = None
 
         try:
-            with open(self.log_file) as f:
+            with self.log_file.open(encoding="utf-8") as f:
                 for line_num, line in enumerate(f, 1):
                     line = line.strip()
                     if not line:
@@ -372,7 +373,7 @@ class AuditLogger:
         results = []
 
         try:
-            with open(self.log_file) as f:
+            with self.log_file.open(encoding="utf-8") as f:
                 for line in f:
                     line = line.strip()
                     if not line:
@@ -500,7 +501,7 @@ class AuditLogger:
         removed_count = 0
 
         try:
-            with open(self.log_file) as infile, open(temp_file, "w") as outfile:
+            with self.log_file.open(encoding="utf-8") as infile, temp_file.open("w", encoding="utf-8") as outfile:
                 for line in infile:
                     line = line.strip()
                     if not line:
