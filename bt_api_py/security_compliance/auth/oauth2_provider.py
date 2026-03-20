@@ -8,6 +8,7 @@ import base64
 import hashlib
 import secrets
 import time
+from collections.abc import Iterable
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
@@ -165,9 +166,11 @@ class OAuth2Provider:
         enable_token_rotation: bool = True,
     ):
         """Initialize OAuth 2.0 provider."""
-        self.issuer_url = issuer_url
-        self.token_lifetime = token_lifetime
-        self.refresh_token_lifetime = refresh_token_lifetime
+        self.issuer_url = self._require_text("issuer_url", issuer_url)
+        self.token_lifetime = self._require_positive_int("token_lifetime", token_lifetime)
+        self.refresh_token_lifetime = self._require_positive_int(
+            "refresh_token_lifetime", refresh_token_lifetime
+        )
         self.enable_pkce = enable_pkce
         self.enable_token_rotation = enable_token_rotation
 
@@ -182,8 +185,98 @@ class OAuth2Provider:
         self._private_key = self._load_or_generate_key(private_key_path)
         self._public_key = self._private_key.public_key()
 
+    @staticmethod
+    def _require_text(field_name: str, value: str) -> str:
+        text = str(value).strip()
+        if not text:
+            raise OAuthError(f"{field_name} must be a non-empty string")
+        return text
+
+    @staticmethod
+    def _require_positive_int(field_name: str, value: int) -> int:
+        numeric = int(value)
+        if numeric <= 0:
+            raise OAuthError(f"{field_name} must be positive")
+        return numeric
+
+    @classmethod
+    def _normalize_scopes(cls, scopes: Iterable[str] | None) -> set[str]:
+        if scopes is None:
+            return set()
+        if isinstance(scopes, str):
+            raise OAuthError("scopes must be an iterable of strings")
+        normalized: set[str] = set()
+        for scope in scopes:
+            normalized.add(cls._require_text("scope", str(scope)))
+        return normalized
+
+    @classmethod
+    def _normalize_redirect_uris(cls, redirect_uris: Iterable[str]) -> list[str]:
+        if isinstance(redirect_uris, str):
+            raise OAuthError("redirect_uris must be an iterable of strings")
+        normalized = [cls._require_text("redirect_uri", str(uri)) for uri in redirect_uris]
+        if not normalized:
+            raise OAuthError("redirect_uris must not be empty")
+        return normalized
+
+    @classmethod
+    def _normalize_grant_types(cls, grant_types: Iterable[GrantType | str]) -> set[GrantType]:
+        if isinstance(grant_types, (str, bytes)):
+            raise OAuthError("grant_types must be an iterable of GrantType values")
+        normalized: set[GrantType] = set()
+        for grant_type in grant_types:
+            if isinstance(grant_type, GrantType):
+                normalized.add(grant_type)
+                continue
+            try:
+                normalized.add(GrantType(cls._require_text("grant_type", str(grant_type))))
+            except ValueError as exc:
+                raise OAuthError(f"Unsupported grant type: {grant_type}") from exc
+        if not normalized:
+            raise OAuthError("grant_types must not be empty")
+        return normalized
+
+    @staticmethod
+    def _validate_client_scopes(client: OAuthClient, scopes: set[str]) -> None:
+        if scopes and not scopes.issubset(client.scopes):
+            raise OAuthError("Invalid scopes")
+
+    @staticmethod
+    def _supports_refresh_grant(client: OAuthClient) -> bool:
+        return bool(
+            client.grant_types
+            & {GrantType.REFRESH_TOKEN, GrantType.AUTHORIZATION_CODE, GrantType.PKCE}
+        )
+
+    def _issue_access_token(
+        self,
+        *,
+        client_id: str,
+        user_id: str | None,
+        scopes: set[str],
+        issue_refresh_token: bool,
+    ) -> AccessToken:
+        token = secrets.token_urlsafe(32)
+        access_token = AccessToken(
+            token=token,
+            token_type=TokenType.BEARER,
+            client_id=client_id,
+            user_id=user_id,
+            scopes=set(scopes),
+            expires_at=time.time() + self.token_lifetime,
+        )
+        if issue_refresh_token:
+            if user_id is None:
+                raise OAuthError("User ID required for refresh token issuance")
+            refresh_token = self._generate_refresh_token(client_id, user_id, scopes)
+            access_token.refresh_token = refresh_token.token
+        self._access_tokens[token] = access_token
+        return access_token
+
     def _load_or_generate_key(self, key_path: str | None):
         """Load or generate RSA key for JWT signing."""
+        if not CRYPTO_AVAILABLE:
+            raise OAuthError("cryptography package is required for OAuth2Provider")
         if key_path and Path(key_path).exists():
             with Path(key_path).open("rb") as f:
                 return serialization.load_pem_private_key(
@@ -202,7 +295,9 @@ class OAuth2Provider:
                     format=serialization.PrivateFormat.PKCS8,
                     encryption_algorithm=serialization.NoEncryption(),
                 )
-                Path(key_path).write_bytes(pem)
+                key_file = Path(key_path)
+                key_file.parent.mkdir(parents=True, exist_ok=True)
+                key_file.write_bytes(pem)
 
             return private_key
 
@@ -217,24 +312,29 @@ class OAuth2Provider:
     ) -> OAuthClient:
         """Register an OAuth client."""
         client = OAuthClient(
-            client_id=client_id,
-            client_secret=client_secret,
-            redirect_uris=redirect_uris,
-            scopes=scopes,
-            grant_types=grant_types,
+            client_id=self._require_text("client_id", client_id),
+            client_secret=self._require_text("client_secret", client_secret),
+            redirect_uris=self._normalize_redirect_uris(redirect_uris),
+            scopes=self._normalize_scopes(scopes),
+            grant_types=self._normalize_grant_types(grant_types),
             is_confidential=is_confidential,
         )
 
-        self._clients[client_id] = client
+        self._clients[client.client_id] = client
         return client
 
     def register_user(
         self, user_id: str, username: str, email: str, mfa_enabled: bool = False
     ) -> OAuthUser:
         """Register a resource owner."""
-        user = OAuthUser(user_id=user_id, username=username, email=email, mfa_enabled=mfa_enabled)
+        user = OAuthUser(
+            user_id=self._require_text("user_id", user_id),
+            username=self._require_text("username", username),
+            email=self._require_text("email", email),
+            mfa_enabled=bool(mfa_enabled),
+        )
 
-        self._users[user_id] = user
+        self._users[user.user_id] = user
         return user
 
     def generate_authorization_code(
@@ -247,18 +347,35 @@ class OAuth2Provider:
         code_challenge_method: str | None = None,
     ) -> str:
         """Generate authorization code for authorization flow."""
+        client_id = self._require_text("client_id", client_id)
+        user_id = self._require_text("user_id", user_id)
+        redirect_uri = self._require_text("redirect_uri", redirect_uri)
+        scopes = self._normalize_scopes(scopes)
+
         # Validate client
         client = self._clients.get(client_id)
         if not client:
             raise OAuthError("Invalid client")
 
+        user = self._users.get(user_id)
+        if not user:
+            raise OAuthError("User not found")
+        if not user.is_active:
+            raise OAuthError("User is inactive")
+
         # Validate redirect URI
         if redirect_uri not in client.redirect_uris:
             raise OAuthError("Invalid redirect URI")
 
+        self._validate_client_scopes(client, scopes)
+
         # Validate PKCE
         if code_challenge and not self.enable_pkce:
             raise OAuthError("PKCE not supported")
+        if code_challenge_method and not code_challenge:
+            raise OAuthError("Code challenge required")
+        if code_challenge_method not in (None, "plain", "S256"):
+            raise OAuthError(f"Unsupported PKCE method: {code_challenge_method}")
 
         # Generate code
         code = secrets.token_urlsafe(32)
@@ -330,6 +447,9 @@ class OAuth2Provider:
         self, client_id: str, user_id: str | None, scopes: set[str], grant_type: GrantType
     ) -> AccessToken:
         """Generate access token."""
+        client_id = self._require_text("client_id", client_id)
+        scopes = self._normalize_scopes(scopes)
+
         # Validate client
         client = self._clients.get(client_id)
         if not client:
@@ -338,25 +458,18 @@ class OAuth2Provider:
         if not client.can_use_grant_type(grant_type):
             raise OAuthError("Grant type not allowed for client")
 
-        # Generate token
-        token = secrets.token_urlsafe(32)
+        self._validate_client_scopes(client, scopes)
+        if grant_type in {GrantType.AUTHORIZATION_CODE, GrantType.PKCE, GrantType.REFRESH_TOKEN}:
+            if user_id is None:
+                raise OAuthError("User ID required for grant type")
+            user_id = self._require_text("user_id", user_id)
 
-        access_token = AccessToken(
-            token=token,
-            token_type=TokenType.BEARER,
+        return self._issue_access_token(
             client_id=client_id,
             user_id=user_id,
             scopes=scopes,
-            expires_at=time.time() + self.token_lifetime,
+            issue_refresh_token=grant_type in {GrantType.AUTHORIZATION_CODE, GrantType.PKCE},
         )
-
-        # Generate refresh token for appropriate grant types
-        if grant_type in [GrantType.AUTHORIZATION_CODE, GrantType.PKCE]:
-            refresh_token = self._generate_refresh_token(client_id, user_id, scopes)
-            access_token.refresh_token = refresh_token.token
-
-        self._access_tokens[token] = access_token
-        return access_token
 
     def _generate_refresh_token(
         self, client_id: str, user_id: str, scopes: set[str]
@@ -365,7 +478,11 @@ class OAuth2Provider:
         token = secrets.token_urlsafe(32)
 
         refresh_token = RefreshToken(
-            token=token, client_id=client_id, user_id=user_id, scopes=scopes
+            token=token,
+            client_id=client_id,
+            user_id=self._require_text("user_id", user_id),
+            scopes=set(scopes),
+            expires_at=time.time() + self.refresh_token_lifetime,
         )
 
         self._refresh_tokens[token] = refresh_token
@@ -390,6 +507,7 @@ class OAuth2Provider:
 
     def refresh_access_token(self, refresh_token: str, client_id: str) -> AccessToken:
         """Refresh access token using refresh token."""
+        client_id = self._require_text("client_id", client_id)
         token_obj = self._refresh_tokens.get(refresh_token)
         if not token_obj:
             raise OAuthError("Invalid refresh token")
@@ -400,16 +518,23 @@ class OAuth2Provider:
         if token_obj.client_id != client_id:
             raise OAuthError("Client ID mismatch")
 
-        # Mark old refresh token as used
-        token_obj.used = True
+        client = self._clients.get(client_id)
+        if not client:
+            raise OAuthError("Invalid client")
+        if not self._supports_refresh_grant(client):
+            raise OAuthError("Grant type not allowed for client")
 
-        # Generate new access token and refresh token
-        access_token = self.generate_access_token(
+        if self.enable_token_rotation:
+            token_obj.used = True
+
+        access_token = self._issue_access_token(
             client_id=token_obj.client_id,
             user_id=token_obj.user_id,
-            scopes=token_obj.scopes,
-            grant_type=GrantType.REFRESH_TOKEN,
+            scopes=set(token_obj.scopes),
+            issue_refresh_token=self.enable_token_rotation,
         )
+        if not self.enable_token_rotation:
+            access_token.refresh_token = token_obj.token
 
         return access_token
 
@@ -436,7 +561,7 @@ class OAuth2Provider:
                 "active": access_token.is_valid(),
                 "client_id": access_token.client_id,
                 "user_id": access_token.user_id,
-                "scope": " ".join(access_token.scopes),
+                "scope": " ".join(sorted(access_token.scopes)),
                 "exp": int(access_token.expires_at),
                 "iat": int(access_token.created_at),
                 "token_type": access_token.token_type.value,
@@ -449,7 +574,7 @@ class OAuth2Provider:
                 "active": refresh_token.is_valid(),
                 "client_id": refresh_token.client_id,
                 "user_id": refresh_token.user_id,
-                "scope": " ".join(refresh_token.scopes),
+                "scope": " ".join(sorted(refresh_token.scopes)),
                 "exp": int(refresh_token.expires_at),
                 "iat": int(refresh_token.created_at),
                 "token_type": "refresh_token",
@@ -481,7 +606,7 @@ class OAuth2Provider:
             "preferred_username": user.username,
             "email": user.email,
             "email_verified": True,
-            "scope": " ".join(scopes),
+            "scope": " ".join(sorted(scopes)),
         }
 
         # Sign JWT
