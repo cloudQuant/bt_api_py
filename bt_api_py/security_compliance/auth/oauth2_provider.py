@@ -94,7 +94,7 @@ class AuthorizationCode:
     code_challenge: str | None = None
     code_challenge_method: str | None = None
     created_at: float = field(default_factory=time.time)
-    expires_at: float = field(default=lambda: time.time() + 600)  # 10 minutes
+    expires_at: float = field(default_factory=lambda: time.time() + 600)  # 10 minutes
     used: bool = False
 
     def is_expired(self) -> bool:
@@ -142,7 +142,7 @@ class RefreshToken:
     user_id: str
     scopes: set[str]
     created_at: float = field(default_factory=time.time)
-    expires_at: float = field(default=lambda: time.time() + 2592000)  # 30 days
+    expires_at: float = field(default_factory=lambda: time.time() + 2592000)  # 30 days
     used: bool = False
 
     def is_expired(self) -> bool:
@@ -283,6 +283,14 @@ class OAuth2Provider:
             client.grant_types
             & {GrantType.REFRESH_TOKEN, GrantType.AUTHORIZATION_CODE, GrantType.PKCE}
         )
+
+    def _get_active_user(self, user_id: str) -> OAuthUser:
+        user = self._users.get(self._require_text("user_id", user_id))
+        if not user:
+            raise OAuthError("User not found")
+        if not user.is_active:
+            raise OAuthError("User is inactive")
+        return user
 
     def _issue_access_token(
         self,
@@ -567,6 +575,8 @@ class OAuth2Provider:
         if not self._supports_refresh_grant(client):
             raise OAuthError("Grant type not allowed for client")
 
+        self._get_active_user(token_obj.user_id)
+
         if self.enable_token_rotation:
             token_obj.used = True
 
@@ -627,9 +637,15 @@ class OAuth2Provider:
 
     def generate_jwt_id_token(self, user_id: str, client_id: str, scopes: set[str]) -> str:
         """Generate OpenID Connect ID token."""
-        user = self._users.get(user_id)
-        if not user:
-            raise OAuthError("User not found")
+        user_id = self._require_text("user_id", user_id)
+        client_id = self._require_text("client_id", client_id)
+        scopes = self._normalize_scopes(scopes)
+
+        user = self._get_active_user(user_id)
+        client = self._clients.get(client_id)
+        if not client:
+            raise OAuthError("Invalid client")
+        self._validate_client_scopes(client, scopes)
 
         # JWT header
         header = {
@@ -694,9 +710,9 @@ class OAuth2Provider:
         """Clean up expired tokens."""
         cleanup_counts = {"authorization_codes": 0, "access_tokens": 0, "refresh_tokens": 0}
 
-        # Clean expired authorization codes
+        # Clean expired or already-used authorization codes
         expired_codes = [
-            code for code, auth_code in self._auth_codes.items() if auth_code.is_expired()
+            code for code, auth_code in self._auth_codes.items() if not auth_code.is_valid()
         ]
         for code in expired_codes:
             del self._auth_codes[code]
@@ -712,11 +728,11 @@ class OAuth2Provider:
             del self._access_tokens[token]
             cleanup_counts["access_tokens"] += 1
 
-        # Clean expired refresh tokens
+        # Clean expired or revoked/used refresh tokens
         expired_refresh = [
             token
             for token, refresh_token in self._refresh_tokens.items()
-            if refresh_token.is_expired()
+            if not refresh_token.is_valid()
         ]
         for token in expired_refresh:
             del self._refresh_tokens[token]

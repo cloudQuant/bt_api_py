@@ -231,6 +231,8 @@ def load_exchange_config(config_path: str) -> ExchangeConfig:
 
     if not data:
         raise ConfigurationError(f"Config file is empty: {config_path}")
+    if not isinstance(data, dict):
+        raise ConfigurationError(f"Config file must contain a mapping object: {config_path}")
 
     return ExchangeConfig(**data)
 
@@ -254,13 +256,14 @@ def load_all_exchange_configs(config_dir: str) -> dict[str, ExchangeConfig]:
     if yaml is not None:
         load_errors = (*load_errors, yaml.YAMLError)
 
-    for filepath in path.iterdir():
+    logger = get_logger("config_loader")
+
+    for filepath in sorted(path.iterdir(), key=lambda item: item.name):
         if filepath.suffix in (".yaml", ".yml") and not filepath.name.startswith("_"):
             try:
                 config = load_exchange_config(str(filepath))
                 configs[config.id] = config
             except load_errors as e:
-                logger = get_logger("config_loader")
                 logger.warning(f"Failed to load config {filepath!s}: {e}")
 
     return configs
