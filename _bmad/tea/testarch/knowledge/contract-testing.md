@@ -130,7 +130,7 @@ describe('User API Contract', () => {
             'Content-Type': 'application/json',
             Accept: 'application/json',
           },
-          body: like(newUser),
+          body: newUser,
         })
         .willRespondWith({
           status: 201,
@@ -176,7 +176,7 @@ describe('User API Contract', () => {
 **Key Points**:
 
 - **Consumer-driven**: Frontend defines expectations, not backend
-- **Matchers**: `like`, `string`, `integer` for flexible matching
+- **Matchers (Postel's Law)**: Use `like`, `string`, `integer` matchers in `willRespondWith` (responses) for flexible matching. Do NOT use `like()` on request bodies in `withRequest` — the consumer controls what it sends, so request bodies should use exact values. This follows Postel's Law: be strict in what you send (requests), be lenient in what you accept (responses).
 - **Provider states**: given() sets up test preconditions
 - **Isolation**: No real backend needed, runs fast
 - **Pact generation**: Automatically creates JSON pact files
@@ -944,6 +944,67 @@ jobs:
 
 ---
 
+## Provider Scrutiny Protocol
+
+When generating consumer contract tests, the agent **MUST** analyze provider source code — or the provider's OpenAPI/Swagger spec — before writing any Pact interaction. Generating contracts from consumer-side assumptions alone leads to mismatches that only surface during provider verification — wrong response shapes, wrong status codes, wrong field names, wrong types, missing required fields, and wrong enum values.
+
+**Source priority**: Provider source code is the most authoritative reference. When an OpenAPI/Swagger spec exists (`openapi.yaml`, `openapi.json`, `swagger.json`), use it as a complementary or alternative source — it documents the provider's contract explicitly and can be faster to parse than tracing through handler code. When both exist, cross-reference them; if they disagree, the source code wins.
+
+### Provider Endpoint Comment
+
+Every Pact interaction MUST include a provider endpoint comment immediately above the `.given()` call:
+
+```typescript
+// Provider endpoint: server/src/routes/userRouteHandlers.ts -> GET /api/v2/users/:userId
+await provider.given('user with id 1 exists').uponReceiving('a request for user 1');
+```
+
+**Format**: `// Provider endpoint: <relative-path-to-handler> -> <METHOD> <route-pattern>`
+
+If the provider source is not accessible, use: `// Provider endpoint: TODO — provider source not accessible, verify manually`
+
+### Seven-Point Scrutiny Checklist
+
+Before generating each Pact interaction, read the provider route handler and/or OpenAPI spec and verify:
+
+| #   | Check                 | What to Read (source code / OpenAPI spec)                         | Common Mismatch                                               |
+| --- | --------------------- | ----------------------------------------------------------------- | ------------------------------------------------------------- |
+| 1   | **Response shape**    | Handler's `res.json()` calls / OpenAPI `responses.content.schema` | Nested object vs flat; array wrapper vs direct                |
+| 2   | **Status codes**      | Handler's `res.status()` calls / OpenAPI `responses` keys         | 200 vs 201 for creation; 204 vs 200 for delete                |
+| 3   | **Field names**       | Response type/DTO definitions / OpenAPI `schema.properties`       | `transaction_id` vs `transactionId`; `fraud_score` vs `score` |
+| 4   | **Enum values**       | Validation schemas, constants / OpenAPI `schema.enum`             | `"active"` vs `"ACTIVE"`; `"pending"` vs `"in_progress"`      |
+| 5   | **Required fields**   | Request validation (Joi, Zod) / OpenAPI `schema.required`         | Missing required header; optional field assumed required      |
+| 6   | **Data types**        | TypeScript types, DB models / OpenAPI `schema.type` + `format`    | `string` ID vs `number` ID; ISO date vs Unix timestamp        |
+| 7   | **Nested structures** | Response builder, serializer / OpenAPI `$ref` + `allOf`/`oneOf`   | `{ data: { items: [] } }` vs `{ items: [] }`                  |
+
+### Scrutiny Evidence Block
+
+Document what was found from provider source and/or OpenAPI spec as a block comment in the test file:
+
+```typescript
+/*
+ * Provider Scrutiny Evidence:
+ * - Handler: server/src/routes/userRouteHandlers.ts:45
+ * - OpenAPI: server/openapi.yaml paths./api/v2/users/{userId}.get (if available)
+ * - Response type: UserResponseDto (server/src/types/user.ts:12)
+ * - Status: 200 (line 52), 404 (line 48)
+ * - Fields: { id: number, name: string, email: string, role: "user" | "admin", createdAt: string }
+ * - Required request headers: Authorization (Bearer token)
+ * - Validation: Zod schema at server/src/validation/user.ts:8
+ */
+```
+
+### Graceful Degradation
+
+When provider source code is not accessible (different repo, no access, closed source):
+
+1. **OpenAPI/Swagger spec available**: Use the spec as the source of truth for response shapes, status codes, and field names
+2. **Pact Broker has existing contracts**: Use `pact_mcp` tools to fetch existing provider states and verified interactions as reference
+3. **Neither available**: Generate contracts from consumer-side types but use the TODO form of the mandatory comment: `// Provider endpoint: TODO — provider source not accessible, verify manually` and add a `provider_scrutiny: "pending"` field to the output JSON
+4. **Never silently guess**: If you cannot verify, document what you assumed and why
+
+---
+
 ## Contract Testing Checklist
 
 Before implementing contract testing, verify:
@@ -956,6 +1017,9 @@ Before implementing contract testing, verify:
 - [ ] **Webhooks configured**: Consumer changes trigger provider verification
 - [ ] **Retention policy**: Old pacts archived (keep 30 days, all production tags)
 - [ ] **Resilience tested**: Timeouts, retries, error codes in contracts
+- [ ] **Provider endpoint comments**: Every Pact interaction has `// Provider endpoint:` comment
+- [ ] **Provider scrutiny completed**: Seven-point checklist verified for each interaction
+- [ ] **Scrutiny evidence documented**: Block comment with handler, types, status codes, and fields
 
 ## Integration Points
 

@@ -196,6 +196,8 @@ await pact
 - **Message pacts**: Works identically with `MessageConsumerPact` — same `.given()` API
 - **Builder reuse**: `setJsonContent` works for both `.withRequest(...)` and `.willRespondWith(...)` callbacks (query is ignored on response builders)
 - **Body shorthand**: `setJsonBody` keeps body-only responses concise and readable
+- **Matchers check type, not value**: `string('My movie')` means "any string", `integer(1)` means "any integer". The example values are arbitrary — the provider can return different values and verification still passes as long as the type matches. Use matchers only in `.willRespondWith()` (responses), never in `.withRequest()` (requests) — Postel's Law applies.
+- **Reuse test values across files**: Interactions are uniquely identified by `uponReceiving` + `.given()`, not by placeholder values. Two test files can both use `testId: 100` without conflicting. On the provider side, shared values simplify state handlers — idempotent handlers (check if exists, create if not) only need to ensure one record exists. Use different values only when testing different states of the same entity type (e.g., `movieExists(100)` for happy paths vs. `movieNotFound(999)` for error paths).
 
 ## Related Fragments
 
