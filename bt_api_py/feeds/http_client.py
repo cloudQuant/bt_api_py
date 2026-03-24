@@ -265,8 +265,7 @@ class HttpClient:
         exc = task.exception()
         if exc is not None:
             logger.warning(
-                f"Failed to close async HTTP client for {self._venue}: "
-                f"{type(exc).__name__}: {exc}"
+                f"Failed to close async HTTP client for {self._venue}: {type(exc).__name__}: {exc}"
             )
 
     async def aclose(self) -> None:

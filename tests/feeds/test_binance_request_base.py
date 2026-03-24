@@ -1,5 +1,9 @@
 from __future__ import annotations
 
+from unittest.mock import AsyncMock
+
+import pytest
+
 from bt_api_py.containers.requestdatas.request_data import RequestData
 from bt_api_py.feeds.live_binance.request_base import BinanceRequestData
 
@@ -35,3 +39,21 @@ def test_binance_accepts_api_key_and_api_secret_aliases() -> None:
 
     assert request_data.public_key == "public-key"
     assert request_data.private_key == "secret-key"
+
+
+@pytest.mark.asyncio
+async def test_binance_async_request_uses_shared_http_client(monkeypatch) -> None:
+    request_data = BinanceRequestData(
+        public_key="public-key",
+        private_key="secret-key",
+        exchange_name="BINANCE___SPOT",
+    )
+
+    async_mock = AsyncMock(return_value={"symbol": "BTCUSDT", "price": "50000"})
+    monkeypatch.setattr(request_data._http_client, "async_request", async_mock)
+
+    result = await request_data.async_request("GET /api/v3/ticker/price", is_sign=False)
+
+    assert isinstance(result, RequestData)
+    assert result.get_input_data() == {"symbol": "BTCUSDT", "price": "50000"}
+    async_mock.assert_awaited_once()

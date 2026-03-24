@@ -48,14 +48,14 @@ def test_generate_jwt_id_token_rejects_scopes_outside_client_scopes(provider: OA
 
 
 @pytest.mark.parametrize("scopes", ["openid", [None]])
-def test_generate_jwt_id_token_rejects_invalid_scope_shapes(
-    provider: OAuth2Provider, scopes
-):
+def test_generate_jwt_id_token_rejects_invalid_scope_shapes(provider: OAuth2Provider, scopes):
     with pytest.raises(OAuthError):
         provider.generate_jwt_id_token("user-a", "client-a", scopes)
 
 
-def test_cleanup_expired_tokens_removes_used_auth_codes_and_refresh_tokens(provider: OAuth2Provider):
+def test_cleanup_expired_tokens_removes_used_auth_codes_and_refresh_tokens(
+    provider: OAuth2Provider,
+):
     auth_code = provider.generate_authorization_code(
         client_id="client-a",
         user_id="user-a",

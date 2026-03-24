@@ -39,7 +39,7 @@ async def test_phemex_async_request_allows_missing_extra_data(monkeypatch) -> No
     )
 
     async_request_mock = AsyncMock(return_value={"code": 0, "data": {}})
-    monkeypatch.setattr(request_data, "async_http_request", async_request_mock)
+    monkeypatch.setattr(request_data._http_client, "async_request", async_request_mock)
 
     result = await request_data.async_request("GET /public/time")
 
@@ -66,3 +66,22 @@ def test_bitstamp_request_allows_missing_extra_data(monkeypatch) -> None:
     assert isinstance(result, RequestData)
     assert result.get_extra_data() == {}
     assert result.get_input_data() == {"server_time": 1710000000}
+
+
+@pytest.mark.asyncio
+async def test_bitstamp_async_request_uses_shared_http_client(monkeypatch) -> None:
+    request_data = BitstampRequestData(
+        public_key="public-key",
+        private_key="secret-key",
+        exchange_name="BITSTAMP___SPOT",
+    )
+
+    async_mock = AsyncMock(return_value={"server_time": 1710000000})
+    monkeypatch.setattr(request_data._http_client, "async_request", async_mock)
+
+    result = await request_data.async_request("GET /api/v2/timestamp/")
+
+    assert isinstance(result, RequestData)
+    assert result.get_extra_data() == {}
+    assert result.get_input_data() == {"server_time": 1710000000}
+    async_mock.assert_awaited_once()

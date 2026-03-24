@@ -37,6 +37,24 @@ def test_bequant_request_allows_missing_extra_data(monkeypatch) -> None:
 
 
 @pytest.mark.asyncio
+async def test_bequant_async_request_allows_missing_extra_data(monkeypatch) -> None:
+    request_data = BeQuantRequestData(
+        public_key="public-key",
+        private_key="secret-key",
+        exchange_name="BEQUANT___SPOT",
+    )
+
+    async_request_mock = AsyncMock(return_value={"timestamp": "2024-01-01T00:00:00.000Z"})
+    monkeypatch.setattr(request_data._http_client, "async_request", async_request_mock)
+
+    result = await request_data.async_request("GET /api/3/public/time")
+
+    assert isinstance(result, RequestData)
+    assert result.get_extra_data() == {}
+    assert result.get_input_data() == {"timestamp": "2024-01-01T00:00:00.000Z"}
+
+
+@pytest.mark.asyncio
 async def test_bitget_async_request_allows_missing_extra_data(monkeypatch) -> None:
     request_data = BitgetRequestData(
         public_key="public-key",
@@ -45,7 +63,7 @@ async def test_bitget_async_request_allows_missing_extra_data(monkeypatch) -> No
     )
 
     async_request_mock = AsyncMock(return_value={"code": "00000", "data": {}})
-    monkeypatch.setattr(request_data, "async_http_request", async_request_mock)
+    monkeypatch.setattr(request_data._http_client, "async_request", async_request_mock)
 
     result = await request_data.async_request("GET /api/v2/spot/public/time")
 
@@ -80,6 +98,25 @@ def test_bitget_accepts_api_key_and_api_secret_aliases() -> None:
 
     assert request_data.public_key == "public-key"
     assert request_data.private_key == "secret-key"
+
+
+@pytest.mark.asyncio
+async def test_coinbase_async_request_uses_shared_http_client(monkeypatch) -> None:
+    request_data = CoinbaseRequestData(
+        None,
+        public_key="public-key",
+        private_key="secret-key",
+        exchange_name="COINBASE___SPOT",
+    )
+
+    async_mock = AsyncMock(return_value={"epochMillis": "1710000000000"})
+    monkeypatch.setattr(request_data._http_client, "async_request", async_mock)
+
+    result = await request_data.async_request("GET /brokerage/time")
+
+    assert isinstance(result, RequestData)
+    assert result.get_input_data() == {"epochMillis": "1710000000000"}
+    async_mock.assert_awaited_once()
 
 
 def test_coinbase_accepts_api_secret_aliases() -> None:

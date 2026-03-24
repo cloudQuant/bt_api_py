@@ -62,7 +62,7 @@ async def test_kucoin_async_request_allows_missing_extra_data(monkeypatch) -> No
     )
 
     async_request_mock = AsyncMock(return_value={"code": "200000", "data": {"serverTime": 1}})
-    monkeypatch.setattr(request_data, "async_http_request", async_request_mock)
+    monkeypatch.setattr(request_data._http_client, "async_request", async_request_mock)
 
     result = await request_data.async_request("GET /api/v1/timestamp")
 

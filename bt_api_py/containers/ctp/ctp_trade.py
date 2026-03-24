@@ -51,7 +51,7 @@ class CtpTradeData(TradeData):
         self.trade_time: str | None = None
         self.exchange_id: str | None = None
 
-        self.trade_fee: float | 0.0
+        self.trade_fee: float = 0.0
         self.trade_fee_symbol: str = "CNY"
         self._trade_offset: str | None = None
 
@@ -90,6 +90,7 @@ class CtpTradeData(TradeData):
         Returns:
             Exchange name string
         """
+        return self.exchange_name
 
     def get_asset_type(self) -> str:
         """Get asset type.
@@ -97,6 +98,7 @@ class CtpTradeData(TradeData):
         Returns:
             Asset type string
         """
+        return self.asset_type
 
     def get_symbol_name(self) -> str | None:
         """Get symbol name.

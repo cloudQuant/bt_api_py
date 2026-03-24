@@ -86,7 +86,9 @@ def test_http_client_request_wraps_generic_httpx_request_error() -> None:
 
         client = HttpClient(venue="TEST")
 
-        with pytest.raises(RequestFailedError, match="HTTP client error: broken transport") as exc_info:
+        with pytest.raises(
+            RequestFailedError, match="HTTP client error: broken transport"
+        ) as exc_info:
             client.request("GET", "https://example.com")
 
     assert exc_info.value.venue == "TEST"

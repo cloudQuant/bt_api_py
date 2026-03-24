@@ -197,9 +197,7 @@ class TickWriter:
 
         try:
             trading_day = self._trading_day(rows[0].get("timestamp", time.time()))
-            out_dir = (
-                self.base_dir / self.exchange / self.asset_type / trading_day
-            )
+            out_dir = self.base_dir / self.exchange / self.asset_type / trading_day
             out_dir.mkdir(parents=True, exist_ok=True)
             out_path = out_dir / f"{symbol}.parquet"
 
@@ -214,9 +212,7 @@ class TickWriter:
 
             pq.write_table(table, str(out_path), compression="snappy")
             self._total_flushed += len(rows)
-            logger.debug(
-                "TickWriter flushed %d rows for %s -> %s", len(rows), symbol, out_path
-            )
+            logger.debug("TickWriter flushed %d rows for %s -> %s", len(rows), symbol, out_path)
         except Exception:
             self._flush_errors += 1
             logger.exception("TickWriter flush error for %s", symbol)

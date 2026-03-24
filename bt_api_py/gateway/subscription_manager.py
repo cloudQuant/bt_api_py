@@ -133,8 +133,6 @@ class SubscriptionManager:
             return {
                 "strategy_count": len(self._strategy_symbols),
                 "symbol_count": len(self._ref_counts),
-                "strategies": {
-                    sid: sorted(syms) for sid, syms in self._strategy_symbols.items()
-                },
+                "strategies": {sid: sorted(syms) for sid, syms in self._strategy_symbols.items()},
                 "ref_counts": dict(self._ref_counts),
             }

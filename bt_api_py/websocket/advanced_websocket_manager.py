@@ -63,7 +63,7 @@ class ConnectionWrapper:
     health_score: float = 100.0
     in_use: bool = False
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         now = time.time()
         if self.created_at == 0.0:
             self.created_at = now
@@ -158,9 +158,11 @@ class PerformanceMonitor:
         self.logger = get_logger(f"perf_monitor_{pool_name}")
 
         # Metrics collection
-        self._metrics_history = defaultdict(lambda: defaultdict(list))
-        self._alerts = []
-        self._alert_callbacks = []
+        self._metrics_history: dict[str, dict[str, list[tuple[float, float]]]] = defaultdict(
+            lambda: defaultdict(list)
+        )
+        self._alerts: list[dict[str, Any]] = []
+        self._alert_callbacks: list[Callable[[dict[str, Any]], None]] = []
 
         # Performance thresholds
         self.thresholds = {

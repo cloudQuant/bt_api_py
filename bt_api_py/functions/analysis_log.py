@@ -45,10 +45,10 @@ def extract_slam_times(log_filename: Path) -> list[str]:
 def build_duration_series(log_filename: Path) -> list[float]:
     """Compute the per-pair timing durations from a log file."""
     all_slam_times = extract_slam_times(log_filename)
-    result: list[float] = []
-    for index in range(1, len(all_slam_times), 2):
-        result.append(time_subtraction(all_slam_times[index - 1], all_slam_times[index]))
-    return result
+    return [
+        time_subtraction(all_slam_times[index - 1], all_slam_times[index])
+        for index in range(1, len(all_slam_times), 2)
+    ]
 
 
 def render_report(durations: list[float], output_path: Path) -> pd.DataFrame:

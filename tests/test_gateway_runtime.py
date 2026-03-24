@@ -20,7 +20,7 @@ from bt_api_py.gateway.client import GatewayClient
 from bt_api_py.gateway.config import GatewayConfig
 from bt_api_py.gateway.health import ConnectionState, GatewayState
 from bt_api_py.gateway.models import GatewayTick
-from bt_api_py.gateway.protocol import CHANNEL_EVENT, CHANNEL_MARKET
+from bt_api_py.gateway.protocol import CHANNEL_EVENT, CHANNEL_MARKET, dumps_message, loads_message
 from bt_api_py.gateway.runtime import GatewayRuntime
 
 
@@ -126,7 +126,11 @@ def test_gateway_client_wait_for_adapter_ready_logs_last_error(monkeypatch, capl
     client = GatewayClient(exchange_type="CTP", asset_type="FUTURE", account_id="wait-1")
     client.config.startup_timeout_sec = 0.01
 
-    monkeypatch.setattr(client, "_command", lambda command, payload=None: (_ for _ in ()).throw(RuntimeError("ping failed")))
+    monkeypatch.setattr(
+        client,
+        "_command",
+        lambda command, payload=None: (_ for _ in ()).throw(RuntimeError("ping failed")),
+    )
     monkeypatch.setattr("bt_api_py.gateway.client.time.sleep", lambda _: None)
 
     with caplog.at_level("WARNING"):
@@ -173,12 +177,18 @@ def test_gateway_client_connect_cleans_up_after_initial_ping_failure(monkeypatch
             self.stopped = True
 
     fake_runtime = FakeRuntime()
-    monkeypatch.setattr("bt_api_py.gateway.client.GatewayRuntime", lambda config, **kwargs: fake_runtime)
+    monkeypatch.setattr(
+        "bt_api_py.gateway.client.GatewayRuntime", lambda config, **kwargs: fake_runtime
+    )
 
     client = GatewayClient(exchange_type="CTP", asset_type="FUTURE", account_id="connect-fail-1")
     fake_context = FakeContext()
     client.context = fake_context
-    monkeypatch.setattr(client, "_command", lambda command, payload=None: (_ for _ in ()).throw(RuntimeError("initial ping failed")))
+    monkeypatch.setattr(
+        client,
+        "_command",
+        lambda command, payload=None: (_ for _ in ()).throw(RuntimeError("initial ping failed")),
+    )
 
     with pytest.raises(RuntimeError, match="initial ping failed"):
         client.connect()
@@ -202,7 +212,9 @@ def test_gateway_client_disconnect_cleans_up_even_if_socket_close_fails(caplog):
         def close(self, linger: int = 0) -> None:
             raise RuntimeError(f"{self.name} close failed")
 
-    client = GatewayClient(exchange_type="CTP", asset_type="FUTURE", account_id="disconnect-close-1")
+    client = GatewayClient(
+        exchange_type="CTP", asset_type="FUTURE", account_id="disconnect-close-1"
+    )
     client.connected = True
     client.command_socket = FakeSocket("command")
     client.market_socket = FakeSocket("market")
@@ -240,7 +252,9 @@ def test_gateway_client_disconnect_cleans_up_even_if_runtime_stop_fails(caplog):
 
 
 def test_gateway_client_disconnect_clears_subscription_and_event_state() -> None:
-    client = GatewayClient(exchange_type="CTP", asset_type="FUTURE", account_id="disconnect-state-1")
+    client = GatewayClient(
+        exchange_type="CTP", asset_type="FUTURE", account_id="disconnect-state-1"
+    )
     client.connected = True
     client.subscribed.update({"rb2510"})
     client.tick_queues["rb2510"].append(GatewayTick(timestamp=1.0, symbol="rb2510", price=100.0))
@@ -352,7 +366,10 @@ def test_gateway_runtime_connect_background_updates_health_on_retry(monkeypatch)
     assert runtime._adapter_connected is True
     assert snap["market_connection"] == ConnectionState.CONNECTED.value
     assert snap["recent_errors"][-1]["source"] == "adapter_connect"
-    assert "attempt 1/3 RuntimeError: temporary connect failure" in snap["recent_errors"][-1]["message"]
+    assert (
+        "attempt 1/3 RuntimeError: temporary connect failure"
+        in snap["recent_errors"][-1]["message"]
+    )
 
 
 def test_gateway_runtime_stop_records_disconnect_errors(monkeypatch):
@@ -399,8 +416,13 @@ def test_gateway_runtime_start_records_bind_errors(monkeypatch):
             return None
 
     class BindFailingContext:
+        def __init__(self) -> None:
+            self.sockets: list[BindFailingSocket] = []
+
         def socket(self, socket_type: int) -> BindFailingSocket:
-            return BindFailingSocket()
+            sock = BindFailingSocket()
+            self.sockets.append(sock)
+            return sock
 
     adapter = FakeGatewayAdapter()
     monkeypatch.setattr(GatewayRuntime, "_create_adapter", lambda self: adapter)
@@ -427,6 +449,80 @@ def test_gateway_runtime_start_records_bind_errors(monkeypatch):
     assert snap["state"] == GatewayState.ERROR.value
     assert snap["recent_errors"][-1]["source"] == "runtime_start"
     assert "bind failed" in snap["recent_errors"][-1]["message"]
+
+
+def test_gateway_runtime_handle_commands_returns_error_for_invalid_payload(monkeypatch):
+    class FakeCommandSocket:
+        def __init__(self) -> None:
+            self.sent_frames: list[list[bytes]] = []
+
+        def recv_multipart(self) -> list[bytes]:
+            return [
+                b"client-1",
+                dumps_message(
+                    {
+                        "request_id": "req-bad-payload",
+                        "command": "ping",
+                        "payload": ["not-a-dict"],
+                    }
+                ),
+            ]
+
+        def send_multipart(self, frames: list[bytes]) -> None:
+            self.sent_frames.append(frames)
+
+    class FakePoller:
+        def poll(self, timeout: int = 0) -> list[tuple[Any, int]]:
+            return [(command_socket, zmq.POLLIN)]
+
+    adapter = FakeGatewayAdapter()
+    monkeypatch.setattr(GatewayRuntime, "_create_adapter", lambda self: adapter)
+
+    config = GatewayConfig.from_kwargs(
+        exchange_type="binance",
+        asset_type="swap",
+        account_id="acc-bad-payload",
+        gateway_runtime_name=f"gw-{uuid.uuid4().hex[:8]}",
+        gateway_poll_timeout_ms=10,
+    )
+    runtime = GatewayRuntime(
+        config,
+        exchange_type="BINANCE",
+        asset_type="SWAP",
+        account_id="acc-bad-payload",
+    )
+    command_socket = FakeCommandSocket()
+    published: list[tuple[str, dict[str, Any]]] = []
+    runtime.command_socket = command_socket
+    runtime.poller = FakePoller()
+    monkeypatch.setattr(
+        runtime, "_publish", lambda channel, payload: published.append((channel, payload))
+    )
+
+    runtime._handle_commands()
+
+    assert len(command_socket.sent_frames) == 1
+    identity, response_payload = command_socket.sent_frames[0]
+    response = loads_message(response_payload)
+    assert identity == b"client-1"
+    assert response["request_id"] == "req-bad-payload"
+    assert response["status"] == "error"
+    assert "invalid command payload" in response["error"]
+    assert published == [
+        (
+            CHANNEL_EVENT,
+            {
+                "kind": "command_result",
+                "request_id": "req-bad-payload",
+                "status": "error",
+                "error": response["error"],
+                "command": "ping",
+            },
+        )
+    ]
+    snap = runtime.health.snapshot()
+    assert snap["recent_errors"][-1]["source"] == "command_parse"
+    assert "command payload field must be dict" in snap["recent_errors"][-1]["message"]
 
 
 def test_gateway_runtime_main_loop_errors_transition_health_to_error(monkeypatch):
@@ -894,8 +990,15 @@ def test_binance_adapter_dispatch_routes_ticker():
         public_key="k",
         private_key="s",
     )
-    ticker_info = {"e": "bookTicker", "s": "ETHUSDT", "E": 1700000000000,
-                   "b": "2000.0", "a": "2001.0", "B": "10", "A": "20"}
+    ticker_info = {
+        "e": "bookTicker",
+        "s": "ETHUSDT",
+        "E": 1700000000000,
+        "b": "2000.0",
+        "a": "2001.0",
+        "B": "10",
+        "A": "20",
+    }
     ticker = BinanceWssTickerData(ticker_info, "ETHUSDT", "SWAP", True)
     adapter._dispatch_item(ticker)
 
@@ -915,9 +1018,16 @@ def test_okx_adapter_dispatch_routes_ticker():
         private_key="s",
         passphrase="p",
     )
-    ticker_info = {"instId": "ETH-USDT-SWAP", "ts": "1700000000000",
-                   "bidPx": "2000.0", "askPx": "2001.0", "bidSz": "10",
-                   "askSz": "20", "last": "2000.5", "lastSz": "1"}
+    ticker_info = {
+        "instId": "ETH-USDT-SWAP",
+        "ts": "1700000000000",
+        "bidPx": "2000.0",
+        "askPx": "2001.0",
+        "bidSz": "10",
+        "askSz": "20",
+        "last": "2000.5",
+        "lastSz": "1",
+    }
     ticker = OkxTickerData(ticker_info, "ETH-USDT-SWAP", "SWAP", True)
     adapter._dispatch_item(ticker)
 
@@ -947,16 +1057,24 @@ def test_backtrader_gateway_wrapper_integration(monkeypatch, tmp_path):
         gateway_command_timeout_sec=1.0,
     )
     runtime = GatewayRuntime(
-        config, exchange_type="CTP", asset_type="FUTURE", account_id="bt-acc",
-        gateway_base_dir="/tmp/btgw", gateway_runtime_name=runtime_name,
+        config,
+        exchange_type="CTP",
+        asset_type="FUTURE",
+        account_id="bt-acc",
+        gateway_base_dir="/tmp/btgw",
+        gateway_runtime_name=runtime_name,
     )
     client = GatewayClient(
-        exchange_type="CTP", asset_type="FUTURE", account_id="bt-acc",
+        exchange_type="CTP",
+        asset_type="FUTURE",
+        account_id="bt-acc",
         gateway_command_endpoint=config.command_endpoint,
         gateway_event_endpoint=config.event_endpoint,
         gateway_market_endpoint=config.market_endpoint,
-        gateway_base_dir="/tmp/btgw", gateway_runtime_name=runtime_name,
-        gateway_poll_timeout_ms=10, gateway_command_timeout_sec=1.0,
+        gateway_base_dir="/tmp/btgw",
+        gateway_runtime_name=runtime_name,
+        gateway_poll_timeout_ms=10,
+        gateway_command_timeout_sec=1.0,
         gateway_start_local_runtime=False,
     )
     runtime.start_in_thread()
@@ -991,21 +1109,29 @@ def test_backtrader_gateway_wrapper_integration(monkeypatch, tmp_path):
         assert client.poll_tick("rb2510") is None
 
         # 5. place_order (as broker would call via submit_order)
-        order = client.submit_order({
-            "data_name": "rb2510", "volume": 1, "direction": "buy",
-            "price": 3800.0, "order_type": "limit",
-        })
+        order = client.submit_order(
+            {
+                "data_name": "rb2510",
+                "volume": 1,
+                "direction": "buy",
+                "price": 3800.0,
+                "order_type": "limit",
+            }
+        )
         assert order["order_id"] == "ord-1"
         assert order["data_name"] == "rb2510"
 
         # 6. Adapter emits order event — verify poll_broker_update receives it
-        adapter.emit(CHANNEL_EVENT, {
-            "kind": "order",
-            "order_id": "ord-1",
-            "external_order_id": "ord-1",
-            "status": "submitted",
-            "data_name": "rb2510",
-        })
+        adapter.emit(
+            CHANNEL_EVENT,
+            {
+                "kind": "order",
+                "order_id": "ord-1",
+                "external_order_id": "ord-1",
+                "status": "submitted",
+                "data_name": "rb2510",
+            },
+        )
         update = None
         deadline = time.time() + 2.0
         while time.time() < deadline:
@@ -1018,14 +1144,17 @@ def test_backtrader_gateway_wrapper_integration(monkeypatch, tmp_path):
         assert update["status"] == "submitted"
 
         # 7. Adapter emits trade event — verify broker receives fill
-        adapter.emit(CHANNEL_EVENT, {
-            "kind": "trade",
-            "order_id": "ord-1",
-            "external_order_id": "ord-1",
-            "status": "filled",
-            "fill_price": 3800.0,
-            "fill_volume": 1,
-        })
+        adapter.emit(
+            CHANNEL_EVENT,
+            {
+                "kind": "trade",
+                "order_id": "ord-1",
+                "external_order_id": "ord-1",
+                "status": "filled",
+                "fill_price": 3800.0,
+                "fill_volume": 1,
+            },
+        )
         fill = None
         deadline = time.time() + 2.0
         while time.time() < deadline:
@@ -1090,8 +1219,15 @@ def test_ib_web_adapter_implements_interface():
     """IbWebGatewayAdapter implements all BaseGatewayAdapter abstract methods."""
     from bt_api_py.gateway.adapters.base import BaseGatewayAdapter
 
-    required = {"connect", "disconnect", "subscribe_symbols",
-                "get_balance", "get_positions", "place_order", "cancel_order"}
+    required = {
+        "connect",
+        "disconnect",
+        "subscribe_symbols",
+        "get_balance",
+        "get_positions",
+        "place_order",
+        "cancel_order",
+    }
     for method_name in required:
         assert hasattr(IbWebGatewayAdapter, method_name), f"missing {method_name}"
     assert issubclass(IbWebGatewayAdapter, BaseGatewayAdapter)
@@ -1112,16 +1248,25 @@ def test_ib_web_adapter_ipc_roundtrip_with_fake(monkeypatch, tmp_path):
         gateway_poll_timeout_ms=10,
         gateway_command_timeout_sec=1.0,
     )
-    runtime = GatewayRuntime(config, exchange_type="IB_WEB", asset_type="STK",
-                             account_id="test-ib", gateway_base_dir="/tmp/btgw",
-                             gateway_runtime_name=runtime_name)
+    runtime = GatewayRuntime(
+        config,
+        exchange_type="IB_WEB",
+        asset_type="STK",
+        account_id="test-ib",
+        gateway_base_dir="/tmp/btgw",
+        gateway_runtime_name=runtime_name,
+    )
     client = GatewayClient(
-        exchange_type="IB_WEB", asset_type="STK", account_id="test-ib",
+        exchange_type="IB_WEB",
+        asset_type="STK",
+        account_id="test-ib",
         gateway_command_endpoint=config.command_endpoint,
         gateway_event_endpoint=config.event_endpoint,
         gateway_market_endpoint=config.market_endpoint,
-        gateway_base_dir="/tmp/btgw", gateway_runtime_name=runtime_name,
-        gateway_poll_timeout_ms=10, gateway_command_timeout_sec=1.0,
+        gateway_base_dir="/tmp/btgw",
+        gateway_runtime_name=runtime_name,
+        gateway_poll_timeout_ms=10,
+        gateway_command_timeout_sec=1.0,
         gateway_start_local_runtime=False,
     )
     runtime.start_in_thread()
@@ -1139,8 +1284,13 @@ def test_ib_web_adapter_ipc_roundtrip_with_fake(monkeypatch, tmp_path):
         # Verify tick delivery
         adapter.emit(
             CHANNEL_MARKET,
-            GatewayTick(timestamp=time.time(), symbol="AAPL", price=150.0,
-                        exchange="IB_WEB", asset_type="STK"),
+            GatewayTick(
+                timestamp=time.time(),
+                symbol="AAPL",
+                price=150.0,
+                exchange="IB_WEB",
+                asset_type="STK",
+            ),
         )
         assert _wait_until(lambda: client.has_pending_tick("AAPL"))
         tick = client.poll_tick("AAPL")
@@ -1160,18 +1310,34 @@ def test_binance_adapter_emit_order():
     from bt_api_py.containers.orders.binance_order import BinanceSwapWssOrderData
 
     adapter = BinanceGatewayAdapter(
-        asset_type="SWAP", public_key="", private_key="",
+        asset_type="SWAP",
+        public_key="",
+        private_key="",
     )
     order_info = {
         "E": 1700000000000,
         "o": {
-            "s": "BTCUSDT", "i": "12345", "c": "client-1",
-            "X": "NEW", "S": "BUY", "p": "42000.0",
-            "q": "0.01", "z": "0.0", "o": "LIMIT",
-            "t": 0, "T": 1700000000000, "R": False,
-            "f": "GTC", "ap": "0", "sp": "0", "AP": "0",
-            "cr": "0", "wt": "CONTRACT_PRICE", "ot": "LIMIT",
-            "ps": "BOTH", "cp": False,
+            "s": "BTCUSDT",
+            "i": "12345",
+            "c": "client-1",
+            "X": "NEW",
+            "S": "BUY",
+            "p": "42000.0",
+            "q": "0.01",
+            "z": "0.0",
+            "o": "LIMIT",
+            "t": 0,
+            "T": 1700000000000,
+            "R": False,
+            "f": "GTC",
+            "ap": "0",
+            "sp": "0",
+            "AP": "0",
+            "cr": "0",
+            "wt": "CONTRACT_PRICE",
+            "ot": "LIMIT",
+            "ps": "BOTH",
+            "cp": False,
         },
     }
     order = BinanceSwapWssOrderData(order_info, "BTCUSDT", "SWAP", True)
@@ -1191,16 +1357,27 @@ def test_binance_adapter_emit_trade():
     from bt_api_py.containers.trades.binance_trade import BinanceSwapWssTradeData
 
     adapter = BinanceGatewayAdapter(
-        asset_type="SWAP", public_key="", private_key="",
+        asset_type="SWAP",
+        public_key="",
+        private_key="",
     )
     trade_info = {
         "E": 1700000000000,
         "o": {
-            "s": "ETHUSDT", "t": "99999", "i": "12345",
-            "c": "cl-1", "L": "2000.5", "l": "1.0",
-            "z": "1.0", "S": "BUY", "T": 1700000000000,
-            "m": False, "X": "FILLED", "ps": "BOTH",
-            "n": "0.01", "N": "USDT",
+            "s": "ETHUSDT",
+            "t": "99999",
+            "i": "12345",
+            "c": "cl-1",
+            "L": "2000.5",
+            "l": "1.0",
+            "z": "1.0",
+            "S": "BUY",
+            "T": 1700000000000,
+            "m": False,
+            "X": "FILLED",
+            "ps": "BOTH",
+            "n": "0.01",
+            "N": "USDT",
         },
     }
     trade = BinanceSwapWssTradeData(trade_info, "ETHUSDT", "SWAP", True)
@@ -1218,8 +1395,15 @@ def test_binance_adapter_implements_interface():
     """BinanceGatewayAdapter implements all BaseGatewayAdapter abstract methods."""
     from bt_api_py.gateway.adapters.base import BaseGatewayAdapter
 
-    required = {"connect", "disconnect", "subscribe_symbols",
-                "get_balance", "get_positions", "place_order", "cancel_order"}
+    required = {
+        "connect",
+        "disconnect",
+        "subscribe_symbols",
+        "get_balance",
+        "get_positions",
+        "place_order",
+        "cancel_order",
+    }
     for method_name in required:
         assert hasattr(BinanceGatewayAdapter, method_name), f"missing {method_name}"
     assert issubclass(BinanceGatewayAdapter, BaseGatewayAdapter)
@@ -1233,13 +1417,23 @@ def test_okx_adapter_emit_order():
     from bt_api_py.containers.orders.okx_order import OkxOrderData
 
     adapter = OkxGatewayAdapter(
-        asset_type="SWAP", public_key="", private_key="", passphrase="",
+        asset_type="SWAP",
+        public_key="",
+        private_key="",
+        passphrase="",
     )
     order_info = {
-        "instId": "BTC-USDT-SWAP", "ordId": "ord-123", "clOrdId": "cl-1",
-        "state": "live", "side": "buy", "px": "42000",
-        "sz": "1", "fillSz": "0", "ordType": "limit",
-        "cTime": "1700000000000", "uTime": "1700000000000",
+        "instId": "BTC-USDT-SWAP",
+        "ordId": "ord-123",
+        "clOrdId": "cl-1",
+        "state": "live",
+        "side": "buy",
+        "px": "42000",
+        "sz": "1",
+        "fillSz": "0",
+        "ordType": "limit",
+        "cTime": "1700000000000",
+        "uTime": "1700000000000",
     }
     order = OkxOrderData(order_info, "BTC-USDT-SWAP", "SWAP", True)
     adapter._dispatch_item(order)
@@ -1258,11 +1452,18 @@ def test_okx_adapter_emit_trade():
     from bt_api_py.containers.trades.okx_trade import OkxWssFillsData
 
     adapter = OkxGatewayAdapter(
-        asset_type="SWAP", public_key="", private_key="", passphrase="",
+        asset_type="SWAP",
+        public_key="",
+        private_key="",
+        passphrase="",
     )
     trade_info = {
-        "instId": "ETH-USDT-SWAP", "tradeId": "t-999", "ordId": "ord-456",
-        "fillPx": "2000.5", "fillSz": "1", "side": "buy",
+        "instId": "ETH-USDT-SWAP",
+        "tradeId": "t-999",
+        "ordId": "ord-456",
+        "fillPx": "2000.5",
+        "fillSz": "1",
+        "side": "buy",
         "ts": "1700000000000",
     }
     trade = OkxWssFillsData(trade_info, "ETH-USDT-SWAP", "SWAP", True)
@@ -1280,8 +1481,15 @@ def test_okx_adapter_implements_interface():
     """OkxGatewayAdapter implements all BaseGatewayAdapter abstract methods."""
     from bt_api_py.gateway.adapters.base import BaseGatewayAdapter
 
-    required = {"connect", "disconnect", "subscribe_symbols",
-                "get_balance", "get_positions", "place_order", "cancel_order"}
+    required = {
+        "connect",
+        "disconnect",
+        "subscribe_symbols",
+        "get_balance",
+        "get_positions",
+        "place_order",
+        "cancel_order",
+    }
     for method_name in required:
         assert hasattr(OkxGatewayAdapter, method_name), f"missing {method_name}"
     assert issubclass(OkxGatewayAdapter, BaseGatewayAdapter)
@@ -1305,16 +1513,25 @@ def test_binance_adapter_ipc_roundtrip_with_fake(monkeypatch, tmp_path):
         gateway_poll_timeout_ms=10,
         gateway_command_timeout_sec=1.0,
     )
-    runtime = GatewayRuntime(config, exchange_type="BINANCE", asset_type="SWAP",
-                             account_id="test-bn", gateway_base_dir="/tmp/btgw",
-                             gateway_runtime_name=runtime_name)
+    runtime = GatewayRuntime(
+        config,
+        exchange_type="BINANCE",
+        asset_type="SWAP",
+        account_id="test-bn",
+        gateway_base_dir="/tmp/btgw",
+        gateway_runtime_name=runtime_name,
+    )
     client = GatewayClient(
-        exchange_type="BINANCE", asset_type="SWAP", account_id="test-bn",
+        exchange_type="BINANCE",
+        asset_type="SWAP",
+        account_id="test-bn",
         gateway_command_endpoint=config.command_endpoint,
         gateway_event_endpoint=config.event_endpoint,
         gateway_market_endpoint=config.market_endpoint,
-        gateway_base_dir="/tmp/btgw", gateway_runtime_name=runtime_name,
-        gateway_poll_timeout_ms=10, gateway_command_timeout_sec=1.0,
+        gateway_base_dir="/tmp/btgw",
+        gateway_runtime_name=runtime_name,
+        gateway_poll_timeout_ms=10,
+        gateway_command_timeout_sec=1.0,
         gateway_start_local_runtime=False,
     )
     runtime.start_in_thread()
@@ -1343,16 +1560,25 @@ def test_okx_adapter_ipc_roundtrip_with_fake(monkeypatch, tmp_path):
         gateway_poll_timeout_ms=10,
         gateway_command_timeout_sec=1.0,
     )
-    runtime = GatewayRuntime(config, exchange_type="OKX", asset_type="SWAP",
-                             account_id="test-okx", gateway_base_dir="/tmp/btgw",
-                             gateway_runtime_name=runtime_name)
+    runtime = GatewayRuntime(
+        config,
+        exchange_type="OKX",
+        asset_type="SWAP",
+        account_id="test-okx",
+        gateway_base_dir="/tmp/btgw",
+        gateway_runtime_name=runtime_name,
+    )
     client = GatewayClient(
-        exchange_type="OKX", asset_type="SWAP", account_id="test-okx",
+        exchange_type="OKX",
+        asset_type="SWAP",
+        account_id="test-okx",
         gateway_command_endpoint=config.command_endpoint,
         gateway_event_endpoint=config.event_endpoint,
         gateway_market_endpoint=config.market_endpoint,
-        gateway_base_dir="/tmp/btgw", gateway_runtime_name=runtime_name,
-        gateway_poll_timeout_ms=10, gateway_command_timeout_sec=1.0,
+        gateway_base_dir="/tmp/btgw",
+        gateway_runtime_name=runtime_name,
+        gateway_poll_timeout_ms=10,
+        gateway_command_timeout_sec=1.0,
         gateway_start_local_runtime=False,
     )
     runtime.start_in_thread()

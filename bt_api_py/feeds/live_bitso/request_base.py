@@ -147,7 +147,13 @@ class BitsoRequestData(Feed):
             sig = self._generate_signature(nonce, method, full_path, body_s)
             headers["Authorization"] = f"Bitso {self._api_key}:{nonce}:{sig}"
 
-        res = await self.async_http_request(method, url, headers, json_body, timeout)
+        res = await self._http_client.async_request(
+            method=method,
+            url=url,
+            headers=headers,
+            json_data=json_body,
+            timeout=timeout,
+        )
         self.async_logger.info(f"async {method} {url} -> {type(res)}")
         return RequestData(res, extra_data)
 

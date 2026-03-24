@@ -1,5 +1,5 @@
-from datetime import UTC, datetime
 import queue
+from datetime import UTC, datetime
 
 import pytest
 

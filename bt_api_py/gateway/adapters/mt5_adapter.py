@@ -168,24 +168,22 @@ class Mt5GatewayAdapter(BaseGatewayAdapter):
     def get_positions(self) -> list[dict[str, Any]]:
         future = asyncio.run_coroutine_threadsafe(self._client.get_positions(), self._loop)
         positions = future.result(timeout=self._timeout)
-        result = []
-        for p in positions or []:
-            result.append(
-                {
-                    "instrument": p.get("trade_symbol", ""),
-                    "position_id": p.get("position_id"),
-                    "direction": "buy" if p.get("trade_action") == 0 else "sell",
-                    "volume": p.get("trade_volume", 0),
-                    "price": p.get("price_open", 0.0),
-                    "sl": p.get("sl", 0.0),
-                    "tp": p.get("tp", 0.0),
-                    "profit": p.get("profit", 0.0),
-                    "commission": p.get("commission", 0.0),
-                    "swap": p.get("storage", 0.0),
-                    "comment": p.get("comment", ""),
-                }
-            )
-        return result
+        return [
+            {
+                "instrument": p.get("trade_symbol", ""),
+                "position_id": p.get("position_id"),
+                "direction": "buy" if p.get("trade_action") == 0 else "sell",
+                "volume": p.get("trade_volume", 0),
+                "price": p.get("price_open", 0.0),
+                "sl": p.get("sl", 0.0),
+                "tp": p.get("tp", 0.0),
+                "profit": p.get("profit", 0.0),
+                "commission": p.get("commission", 0.0),
+                "swap": p.get("storage", 0.0),
+                "comment": p.get("comment", ""),
+            }
+            for p in (positions or [])
+        ]
 
     def place_order(self, payload: dict[str, Any]) -> dict[str, Any]:
         future = asyncio.run_coroutine_threadsafe(self._async_place_order(payload), self._loop)
@@ -255,22 +253,20 @@ class Mt5GatewayAdapter(BaseGatewayAdapter):
     def get_open_orders(self) -> list[dict[str, Any]]:
         future = asyncio.run_coroutine_threadsafe(self._client.get_orders(), self._loop)
         orders = future.result(timeout=self._timeout)
-        result = []
-        for o in orders or []:
-            result.append(
-                {
-                    "order_id": o.get("order_id"),
-                    "symbol": o.get("trade_symbol", ""),
-                    "type": o.get("trade_type"),
-                    "volume": o.get("trade_volume", 0),
-                    "price": o.get("price_order", 0.0),
-                    "sl": o.get("sl", 0.0),
-                    "tp": o.get("tp", 0.0),
-                    "state": o.get("order_state"),
-                    "comment": o.get("comment", ""),
-                }
-            )
-        return result
+        return [
+            {
+                "order_id": o.get("order_id"),
+                "symbol": o.get("trade_symbol", ""),
+                "type": o.get("trade_type"),
+                "volume": o.get("trade_volume", 0),
+                "price": o.get("price_order", 0.0),
+                "sl": o.get("sl", 0.0),
+                "tp": o.get("tp", 0.0),
+                "state": o.get("order_state"),
+                "comment": o.get("comment", ""),
+            }
+            for o in (orders or [])
+        ]
 
     # ---- Internal async methods ----
 
@@ -522,10 +518,14 @@ class Mt5GatewayAdapter(BaseGatewayAdapter):
                         "kind": "trade",
                         "exchange": "MT5",
                         "trade_id": str(deal.get("deal_id") or deal.get("deal") or ""),
-                        "external_order_id": str(deal.get("order_id") or deal.get("trade_order") or ""),
+                        "external_order_id": str(
+                            deal.get("order_id") or deal.get("trade_order") or ""
+                        ),
                         "order_ref": str(deal.get("order_id") or deal.get("trade_order") or ""),
                         "data_name": deal.get("symbol") or deal.get("trade_symbol") or "",
-                        "side": "buy" if (deal.get("entry", deal.get("trade_action", 0)) == 0) else "sell",
+                        "side": "buy"
+                        if (deal.get("entry", deal.get("trade_action", 0)) == 0)
+                        else "sell",
                         "size": abs(float(deal.get("volume") or deal.get("trade_volume") or 0)),
                         "price": float(deal.get("price") or deal.get("price_open") or 0.0),
                         "commission": float(deal.get("commission") or 0.0),
@@ -543,7 +543,9 @@ class Mt5GatewayAdapter(BaseGatewayAdapter):
                         "kind": "order",
                         "exchange": "MT5",
                         "status": status,
-                        "external_order_id": str(order.get("order_id") or order.get("trade_order") or ""),
+                        "external_order_id": str(
+                            order.get("order_id") or order.get("trade_order") or ""
+                        ),
                         "order_ref": str(order.get("order_id") or order.get("trade_order") or ""),
                         "data_name": order.get("symbol") or order.get("trade_symbol") or "",
                         "side": "buy" if order.get("order_type", 0) in (0, 2, 4) else "sell",

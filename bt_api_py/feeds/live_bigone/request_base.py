@@ -109,6 +109,8 @@ class BigONERequestData(Feed):
         """Async HTTP request using Feed.async_http_request()."""
         if params is None:
             params: dict[str, Any] = {}
+        if extra_data is None:
+            extra_data = {}
         method, endpoint = path.split(" ", 1)
         query_string = urlencode(params) if params else ""
         url = f"{self._params.rest_url}{endpoint}"
@@ -122,7 +124,13 @@ class BigONERequestData(Feed):
                 headers["Authorization"] = f"Bearer {token}"
 
         json_body = body if body and method == "POST" else None
-        res = await self.async_http_request(method, url, headers, json_body, timeout)
+        res = await self._http_client.async_request(
+            method=method,
+            url=url,
+            headers=headers,
+            json_data=json_body,
+            timeout=timeout,
+        )
         self.async_logger.info(f"async {method} {url} -> {type(res)}")
         return RequestData(res, extra_data)
 

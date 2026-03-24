@@ -1,6 +1,7 @@
 from typing import Any
 
 from bt_api_py.containers.exchanges.okx_exchange_data import OkxExchangeDataSpot
+from bt_api_py.containers.requestdatas.request_data import RequestData
 from bt_api_py.feeds.live_okx.account_wss_base import (
     OkxAccountWssData,
     OkxKlineWssData,
@@ -21,7 +22,9 @@ class OkxRequestDataSpot(OkxRequestData):
         self.request_logger = get_logger("okx_spot_feed")
         self.async_logger = get_logger("okx_spot_feed")
 
-    def _get_index_price(self, symbol: Any, extra_data: Any = None, **kwargs: Any) -> None:
+    def _get_index_price(
+        self, symbol: Any, extra_data: Any = None, **kwargs: Any
+    ) -> tuple[Any, dict[str, Any], Any]:
         request_symbol = self._params.get_symbol(symbol) if symbol is not None else ""
         request_type = "get_index_price"
         params = {
@@ -43,7 +46,7 @@ class OkxRequestDataSpot(OkxRequestData):
         return path, params, extra_data
 
     @staticmethod
-    def _get_index_price_normalize_function(input_data: Any, extra_data: Any) -> None:
+    def _get_index_price_normalize_function(input_data: Any, extra_data: Any) -> tuple[list[Any], bool]:
         if extra_data is None:
             pass
         status = input_data["code"] == "0"
@@ -52,7 +55,7 @@ class OkxRequestDataSpot(OkxRequestData):
         data = [timestamp, float(data["idxPx"])]
         return data, status
 
-    def get_index_price(self, symbol: Any, extra_data: Any = None, **kwargs: Any) -> None:
+    def get_index_price(self, symbol: Any, extra_data: Any = None, **kwargs: Any) -> RequestData:
         path, params, extra_data = self._get_index_price(symbol, extra_data, **kwargs)
         data = self.request(path, params=params, extra_data=extra_data)
         return data

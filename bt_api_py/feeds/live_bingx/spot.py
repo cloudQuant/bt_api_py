@@ -57,7 +57,9 @@ class BingXRequestDataSpot(BingXRequestData):
         return path, params, extra_data
 
     @staticmethod
-    def _get_tick_normalize_function(input_data: dict[str, Any], extra_data: Any) -> NormalizeResult:
+    def _get_tick_normalize_function(
+        input_data: dict[str, Any], extra_data: Any
+    ) -> NormalizeResult:
         if not input_data:
             return [], False
         data_list = input_data.get("data", [])
@@ -117,14 +119,22 @@ class BingXRequestDataSpot(BingXRequestData):
         return [depth], depth is not None
 
     def get_depth(
-        self, symbol: str, count: int = 20, extra_data: RequestExtraData | None = None, **kwargs: Any
+        self,
+        symbol: str,
+        count: int = 20,
+        extra_data: RequestExtraData | None = None,
+        **kwargs: Any,
     ) -> Any:
         """Get order book."""
         path, params, extra_data = self._get_depth(symbol, count, extra_data, **kwargs)
         return self.request(path, params=params, extra_data=extra_data)
 
     def async_get_depth(
-        self, symbol: str, count: int = 20, extra_data: RequestExtraData | None = None, **kwargs: Any
+        self,
+        symbol: str,
+        count: int = 20,
+        extra_data: RequestExtraData | None = None,
+        **kwargs: Any,
     ) -> None:
         """Async get orderbook."""
         path, params, extra_data = self._get_depth(symbol, count, extra_data, **kwargs)
@@ -226,9 +236,7 @@ class BingXRequestDataSpot(BingXRequestData):
         symbols = data.get("symbols", []) if isinstance(data, dict) else data
         return symbols if isinstance(symbols, list) else [symbols], True
 
-    def get_exchange_info(
-        self, extra_data: RequestExtraData | None = None, **kwargs: Any
-    ) -> Any:
+    def get_exchange_info(self, extra_data: RequestExtraData | None = None, **kwargs: Any) -> Any:
         """Get exchange info."""
         path, params, extra_data = self._get_exchange_info(extra_data, **kwargs)
         return self.request(path, params=params, extra_data=extra_data)
@@ -295,7 +303,11 @@ class BingXRequestDataSpot(BingXRequestData):
         return self.request(path, params=params, extra_data=extra_data)
 
     def _cancel_order(
-        self, symbol: str, order_id: str | int, extra_data: RequestExtraData | None = None, **kwargs: Any
+        self,
+        symbol: str,
+        order_id: str | int,
+        extra_data: RequestExtraData | None = None,
+        **kwargs: Any,
     ) -> RequestSpec:
         """Cancel order. Returns (path, params, extra_data)."""
         path = "POST /openApi/spot/v1/trade/cancel"
@@ -314,14 +326,22 @@ class BingXRequestDataSpot(BingXRequestData):
         return path, params, extra_data
 
     def cancel_order(
-        self, symbol: str, order_id: str | int, extra_data: RequestExtraData | None = None, **kwargs: Any
+        self,
+        symbol: str,
+        order_id: str | int,
+        extra_data: RequestExtraData | None = None,
+        **kwargs: Any,
     ) -> Any:
         """Cancel order."""
         path, params, extra_data = self._cancel_order(symbol, order_id, extra_data, **kwargs)
         return self.request(path, params=params, extra_data=extra_data)
 
     def _query_order(
-        self, symbol: str, order_id: str | int, extra_data: RequestExtraData | None = None, **kwargs: Any
+        self,
+        symbol: str,
+        order_id: str | int,
+        extra_data: RequestExtraData | None = None,
+        **kwargs: Any,
     ) -> RequestSpec:
         """Query order. Returns (path, params, extra_data)."""
         path = "GET /openApi/spot/v1/trade/query"
@@ -340,7 +360,11 @@ class BingXRequestDataSpot(BingXRequestData):
         return path, params, extra_data
 
     def query_order(
-        self, symbol: str, order_id: str | int, extra_data: RequestExtraData | None = None, **kwargs: Any
+        self,
+        symbol: str,
+        order_id: str | int,
+        extra_data: RequestExtraData | None = None,
+        **kwargs: Any,
     ) -> Any:
         """Query order status."""
         path, params, extra_data = self._query_order(symbol, order_id, extra_data, **kwargs)

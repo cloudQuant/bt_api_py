@@ -432,20 +432,19 @@ class PancakeSwapRequestData(Feed):
         day_datas = result.get("data", {}).get("pairDayDatas", [])
 
         # Convert to K-line format
-        klines = []
-        for data in day_datas:
-            klines.append(
-                {
-                    "symbol": symbol,
-                    "timestamp": int(data.get("date", 0)),
-                    "open": None,  # Would need historical open prices
-                    "high": None,
-                    "low": None,
-                    "close": None,
-                    "volume": float(data.get("dailyVolumeUSD", 0)),
-                    "quote_volume": float(data.get("dailyVolumeUSD", 0)),
-                }
-            )
+        klines = [
+            {
+                "symbol": symbol,
+                "timestamp": int(data.get("date", 0)),
+                "open": None,  # Would need historical open prices
+                "high": None,
+                "low": None,
+                "close": None,
+                "volume": float(data.get("dailyVolumeUSD", 0)),
+                "quote_volume": float(data.get("dailyVolumeUSD", 0)),
+            }
+            for data in day_datas
+        ]
 
         return {"klines": klines}
 

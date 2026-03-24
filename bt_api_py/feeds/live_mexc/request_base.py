@@ -416,32 +416,27 @@ class MexcRequestData(Feed):
     def _get_klines_normalize_function(input_data, extra_data):
         """Normalize klines response"""
         status = input_data is not None
-        klines = []
-
-        if status and isinstance(input_data, list):
-            for kline in input_data:
-                if len(kline) >= 6:
-                    klines.append(
-                        {
-                            "symbol": extra_data["symbol_name"],
-                            "interval": extra_data["interval"],
-                            "open_time": int(kline[0]),
-                            "open": float(kline[1]),
-                            "high": float(kline[2]),
-                            "low": float(kline[3]),
-                            "close": float(kline[4]),
-                            "volume": float(kline[5]),
-                            "close_time": int(kline[6]),
-                            "quote_volume": float(kline[7]) if len(kline) > 7 and kline[7] else 0,
-                            "trades": int(kline[8]) if len(kline) > 8 and kline[8] else 0,
-                            "taker_buy_base_volume": float(kline[9])
-                            if len(kline) > 9 and kline[9]
-                            else 0,
-                            "taker_buy_quote_volume": float(kline[10])
-                            if len(kline) > 10 and kline[10]
-                            else 0,
-                        }
-                    )
+        klines = [
+            {
+                "symbol": extra_data["symbol_name"],
+                "interval": extra_data["interval"],
+                "open_time": int(kline[0]),
+                "open": float(kline[1]),
+                "high": float(kline[2]),
+                "low": float(kline[3]),
+                "close": float(kline[4]),
+                "volume": float(kline[5]),
+                "close_time": int(kline[6]),
+                "quote_volume": float(kline[7]) if len(kline) > 7 and kline[7] else 0,
+                "trades": int(kline[8]) if len(kline) > 8 and kline[8] else 0,
+                "taker_buy_base_volume": float(kline[9]) if len(kline) > 9 and kline[9] else 0,
+                "taker_buy_quote_volume": float(kline[10])
+                if len(kline) > 10 and kline[10]
+                else 0,
+            }
+            for kline in input_data
+            if len(kline) >= 6
+        ] if status and isinstance(input_data, list) else []
 
         return [{"klines": klines}], status
 
@@ -507,19 +502,18 @@ class MexcRequestData(Feed):
             ], status
         elif status and isinstance(input_data, list):
             # Multiple tickers response
-            tickers = []
-            for ticker in input_data:
-                tickers.append(
-                    {
-                        "symbol": ticker.get("symbol"),
-                        "price_change": float(ticker.get("priceChange", 0)),
-                        "price_change_percent": float(ticker.get("priceChangePercent", 0)),
-                        "last_price": float(ticker.get("lastPrice", 0)),
-                        "volume": float(ticker.get("volume", 0)),
-                        "quote_volume": float(ticker.get("quoteVolume", 0)),
-                        "count": int(ticker.get("count", 0)),
-                    }
-                )
+            tickers = [
+                {
+                    "symbol": ticker.get("symbol"),
+                    "price_change": float(ticker.get("priceChange", 0)),
+                    "price_change_percent": float(ticker.get("priceChangePercent", 0)),
+                    "last_price": float(ticker.get("lastPrice", 0)),
+                    "volume": float(ticker.get("volume", 0)),
+                    "quote_volume": float(ticker.get("quoteVolume", 0)),
+                    "count": int(ticker.get("count", 0)),
+                }
+                for ticker in input_data
+            ]
             return [{"tickers": tickers}], status
         else:
             return [], status
@@ -753,29 +747,26 @@ class MexcRequestData(Feed):
     def _get_open_orders_normalize_function(input_data, extra_data):
         """Normalize open orders response"""
         status = input_data is not None
-        orders = []
-
-        if status and isinstance(input_data, list):
-            for order in input_data:
-                orders.append(
-                    {
-                        "symbol": extra_data["symbol_name"],
-                        "order_id": order.get("orderId"),
-                        "client_order_id": order.get("clientOrderId"),
-                        "status": order.get("status"),
-                        "side": order.get("side"),
-                        "type": order.get("type"),
-                        "time_in_force": order.get("timeInForce"),
-                        "quantity": order.get("origQty"),
-                        "executed_qty": order.get("executedQty"),
-                        "cummulative_quote_qty": order.get("cummulativeQuoteQty"),
-                        "price": order.get("price"),
-                        "stop_price": order.get("stopPrice"),
-                        "iceberg_qty": order.get("icebergQty"),
-                        "time": order.get("time"),
-                        "update_time": order.get("updateTime"),
-                    }
-                )
+        orders = [
+            {
+                "symbol": extra_data["symbol_name"],
+                "order_id": order.get("orderId"),
+                "client_order_id": order.get("clientOrderId"),
+                "status": order.get("status"),
+                "side": order.get("side"),
+                "type": order.get("type"),
+                "time_in_force": order.get("timeInForce"),
+                "quantity": order.get("origQty"),
+                "executed_qty": order.get("executedQty"),
+                "cummulative_quote_qty": order.get("cummulativeQuoteQty"),
+                "price": order.get("price"),
+                "stop_price": order.get("stopPrice"),
+                "iceberg_qty": order.get("icebergQty"),
+                "time": order.get("time"),
+                "update_time": order.get("updateTime"),
+            }
+            for order in input_data
+        ] if status and isinstance(input_data, list) else []
 
         return [{"orders": orders}], status
 
@@ -812,30 +803,27 @@ class MexcRequestData(Feed):
     def _get_all_orders_normalize_function(input_data, extra_data):
         """Normalize all orders response"""
         status = input_data is not None
-        orders = []
-
-        if status and isinstance(input_data, list):
-            for order in input_data:
-                orders.append(
-                    {
-                        "symbol": extra_data["symbol_name"],
-                        "order_id": order.get("orderId"),
-                        "client_order_id": order.get("clientOrderId"),
-                        "status": order.get("status"),
-                        "side": order.get("side"),
-                        "type": order.get("type"),
-                        "time_in_force": order.get("timeInForce"),
-                        "quantity": order.get("origQty"),
-                        "executed_qty": order.get("executedQty"),
-                        "cummulative_quote_qty": order.get("cummulativeQuoteQty"),
-                        "price": order.get("price"),
-                        "stop_price": order.get("stopPrice"),
-                        "iceberg_qty": order.get("icebergQty"),
-                        "time": order.get("time"),
-                        "update_time": order.get("updateTime"),
-                        "is_working": order.get("isWorking"),
-                    }
-                )
+        orders = [
+            {
+                "symbol": extra_data["symbol_name"],
+                "order_id": order.get("orderId"),
+                "client_order_id": order.get("clientOrderId"),
+                "status": order.get("status"),
+                "side": order.get("side"),
+                "type": order.get("type"),
+                "time_in_force": order.get("timeInForce"),
+                "quantity": order.get("origQty"),
+                "executed_qty": order.get("executedQty"),
+                "cummulative_quote_qty": order.get("cummulativeQuoteQty"),
+                "price": order.get("price"),
+                "stop_price": order.get("stopPrice"),
+                "iceberg_qty": order.get("icebergQty"),
+                "time": order.get("time"),
+                "update_time": order.get("updateTime"),
+                "is_working": order.get("isWorking"),
+            }
+            for order in input_data
+        ] if status and isinstance(input_data, list) else []
 
         return [{"orders": orders}], status
 
@@ -873,16 +861,15 @@ class MexcRequestData(Feed):
         status = input_data is not None
 
         if status:
-            balances = []
-            for balance in input_data.get("balances", []):
-                if float(balance.get("free", 0)) > 0 or float(balance.get("locked", 0)) > 0:
-                    balances.append(
-                        {
-                            "asset": balance.get("asset"),
-                            "free": float(balance.get("free", 0)),
-                            "locked": float(balance.get("locked", 0)),
-                        }
-                    )
+            balances = [
+                {
+                    "asset": balance.get("asset"),
+                    "free": float(balance.get("free", 0)),
+                    "locked": float(balance.get("locked", 0)),
+                }
+                for balance in input_data.get("balances", [])
+                if float(balance.get("free", 0)) > 0 or float(balance.get("locked", 0)) > 0
+            ]
 
             return [
                 {
@@ -933,25 +920,22 @@ class MexcRequestData(Feed):
     def _get_my_trades_normalize_function(input_data, extra_data):
         """Normalize trade history response"""
         status = input_data is not None
-        trades = []
-
-        if status and isinstance(input_data, list):
-            for trade in input_data:
-                trades.append(
-                    {
-                        "symbol": extra_data["symbol_name"],
-                        "id": trade.get("id"),
-                        "order_id": trade.get("orderId"),
-                        "price": float(trade.get("price", 0)),
-                        "qty": float(trade.get("qty", 0)),
-                        "quote_qty": float(trade.get("quoteQty", 0)),
-                        "commission": float(trade.get("commission", 0)),
-                        "commission_asset": trade.get("commissionAsset"),
-                        "time": trade.get("time"),
-                        "is_buyer": trade.get("isBuyer", False),
-                        "is_maker": trade.get("isMaker", False),
-                        "is_best_match": trade.get("isBestMatch", False),
-                    }
-                )
+        trades = [
+            {
+                "symbol": extra_data["symbol_name"],
+                "id": trade.get("id"),
+                "order_id": trade.get("orderId"),
+                "price": float(trade.get("price", 0)),
+                "qty": float(trade.get("qty", 0)),
+                "quote_qty": float(trade.get("quoteQty", 0)),
+                "commission": float(trade.get("commission", 0)),
+                "commission_asset": trade.get("commissionAsset"),
+                "time": trade.get("time"),
+                "is_buyer": trade.get("isBuyer", False),
+                "is_maker": trade.get("isMaker", False),
+                "is_best_match": trade.get("isBestMatch", False),
+            }
+            for trade in input_data
+        ] if status and isinstance(input_data, list) else []
 
         return [{"trades": trades}], status

@@ -2,7 +2,12 @@ import base64
 
 import pytest
 
-from bt_api_py.security_compliance.auth.mfa_provider import MFAConfig, MFAProvider, MFAType, WebAuthnCredential
+from bt_api_py.security_compliance.auth.mfa_provider import (
+    MFAConfig,
+    MFAProvider,
+    MFAType,
+    WebAuthnCredential,
+)
 
 
 def test_setup_totp_returns_backup_codes_copy():
@@ -44,7 +49,9 @@ def test_regenerate_backup_codes_returns_copy():
 def test_generate_backup_codes_avoids_duplicates(monkeypatch: pytest.MonkeyPatch):
     provider = MFAProvider(backup_codes_count=3)
     values = iter([123456, 123456, 234567, 234567, 345678])
-    monkeypatch.setattr("bt_api_py.security_compliance.auth.mfa_provider.secrets.randbelow", lambda _: next(values))
+    monkeypatch.setattr(
+        "bt_api_py.security_compliance.auth.mfa_provider.secrets.randbelow", lambda _: next(values)
+    )
 
     codes = provider._generate_backup_codes()
 

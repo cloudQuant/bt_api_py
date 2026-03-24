@@ -7,7 +7,6 @@ Hyperliquid uses EIP-712 signatures for authenticated requests.
 
 from typing import Any
 
-import requests
 from eth_account import Account
 
 from bt_api_py.containers.exchanges.hyperliquid_exchange_data import (
@@ -161,7 +160,13 @@ class HyperliquidRequestData(Feed):
         if self.api_key:
             headers["X-API-Key"] = self.api_key
 
-        response = self.http_request("POST", url, headers, body, timeout)
+        response = await self._http_client.async_request(
+            method="POST",
+            url=url,
+            headers=headers,
+            json_data=body,
+            timeout=timeout,
+        )
         self.async_logger.info(f"Async Request: POST {url}")
         return RequestData(response, extra_data)
 
@@ -183,10 +188,14 @@ class HyperliquidRequestData(Feed):
         url = self._params.rest_url + self._params.get_rest_path(request_type)
 
         try:
-            response = requests.post(url, json=kwargs, headers=headers, timeout=10)
-            response.raise_for_status()
-            return response.json()
-        except requests.exceptions.RequestException as e:
+            return self._http_client.request(
+                method="POST",
+                url=url,
+                headers=headers,
+                json_data=kwargs,
+                timeout=10,
+            )
+        except Exception as e:
             self.request_logger.error(f"Request failed: {e}")
             return {"status": "error", "message": str(e)}
 
@@ -556,9 +565,13 @@ class HyperliquidRequestData(Feed):
         # self.rate_limiter.wait_if_needed(request_type)
 
         try:
-            response = requests.post(url, json=kwargs, headers=headers, timeout=10)
-            response.raise_for_status()
-            return response.json()
-        except requests.exceptions.RequestException as e:
+            return self._http_client.request(
+                method="POST",
+                url=url,
+                headers=headers,
+                json_data=kwargs,
+                timeout=10,
+            )
+        except Exception as e:
             self.request_logger.error(f"Signed request failed: {e}")
             return {"status": "error", "message": str(e)}

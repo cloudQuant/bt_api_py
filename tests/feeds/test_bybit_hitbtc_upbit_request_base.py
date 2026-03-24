@@ -57,6 +57,24 @@ def test_upbit_request_allows_missing_extra_data(monkeypatch) -> None:
 
 
 @pytest.mark.asyncio
+async def test_upbit_async_request_allows_missing_extra_data(monkeypatch) -> None:
+    request_data = UpbitRequestData(
+        public_key="public-key",
+        private_key="secret-key",
+        exchange_name="UPBIT___SPOT",
+    )
+
+    async_request_mock = AsyncMock(return_value=[{"market": "KRW-BTC"}])
+    monkeypatch.setattr(request_data._http_client, "async_request", async_request_mock)
+
+    result = await request_data.async_request("GET /v1/market/all", is_sign=False)
+
+    assert isinstance(result, RequestData)
+    assert result.get_extra_data() == {}
+    assert result.get_input_data() == [{"market": "KRW-BTC"}]
+
+
+@pytest.mark.asyncio
 async def test_hitbtc_async_request_allows_missing_extra_data(monkeypatch) -> None:
     request_data = HitBtcRequestData(
         public_key="public-key",
@@ -65,7 +83,7 @@ async def test_hitbtc_async_request_allows_missing_extra_data(monkeypatch) -> No
     )
 
     async_request_mock = AsyncMock(return_value={"timestamp": "2024-01-01T00:00:00.000Z"})
-    monkeypatch.setattr(request_data, "async_http_request", async_request_mock)
+    monkeypatch.setattr(request_data._http_client, "async_request", async_request_mock)
 
     result = await request_data.async_request("GET /api/3/public/time")
 

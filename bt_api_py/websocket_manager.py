@@ -1,5 +1,19 @@
 """
 WebSocket connection management with optimized pooling and backpressure.
+
+.. deprecated::
+    This module is the **legacy** WebSocket implementation retained for backward
+    compatibility with code that depends on the ``IConnectionManager`` DI
+    singleton.  For new development, use the advanced WebSocket package instead::
+
+        from bt_api_py.websocket import (
+            AdvancedWebSocketManager,
+            subscribe_to_ticker,
+            get_websocket_manager,
+        )
+
+    The advanced package provides load-balancing strategies, health scoring,
+    failover, circuit breakers, exchange adapters, and comprehensive monitoring.
 """
 
 import asyncio
@@ -7,6 +21,7 @@ import contextlib
 import inspect
 import json
 import time
+import warnings
 import zlib
 from collections import defaultdict
 from collections.abc import Callable
@@ -23,6 +38,13 @@ from bt_api_py.logging_factory import get_logger
 from .core.async_context import AsyncTaskGroup
 from .core.dependency_injection import inject, singleton
 from .core.interfaces import IConnectionManager, IEventBus
+
+warnings.warn(
+    "bt_api_py.websocket_manager is deprecated. "
+    "Use bt_api_py.websocket (AdvancedWebSocketManager) instead.",
+    DeprecationWarning,
+    stacklevel=2,
+)
 
 
 @dataclass
@@ -89,7 +111,9 @@ class WebSocketConnection:
         self._subscription_count: dict[str, int] = defaultdict(int)
 
         # Message handling
-        self._message_queue = asyncio.Queue(maxsize=config.message_queue_size)
+        self._message_queue: asyncio.Queue[dict[str, Any]] = asyncio.Queue(
+            maxsize=config.message_queue_size
+        )
         self._processing_task: asyncio.Task | None = None
 
         # Reconnection
@@ -245,6 +269,23 @@ class WebSocketConnection:
             self.logger.error(f"Send failed: {e}")
             raise WebSocketError(self.config.exchange_name, detail=str(e)) from e
 
+    def _decode_message(self, raw_message: str | bytes) -> dict[str, Any]:
+        """Decode a raw websocket frame into a JSON object."""
+        if (
+            self.config.compression
+            and isinstance(raw_message, bytes)
+            and raw_message.startswith(b"\x78\x9c")
+        ):
+            raw_message = zlib.decompress(raw_message)
+
+        decoded_message = (
+            raw_message.decode("utf-8") if isinstance(raw_message, bytes) else str(raw_message)
+        )
+        message = json.loads(decoded_message)
+        if not isinstance(message, dict):
+            raise TypeError(f"Expected websocket JSON object, got {type(message).__name__}")
+        return cast("dict[str, Any]", message)
+
     async def _process_messages(self) -> None:
         """Process incoming messages."""
         while self._running:
@@ -254,16 +295,7 @@ class WebSocketConnection:
                     raw_message = await self._websocket.recv()
                     self._stats["messages_received"] += 1
 
-                    # Handle compression
-                    if self.config.compression and isinstance(raw_message, bytes) and raw_message.startswith(b"\x78\x9c"):
-                        raw_message = zlib.decompress(raw_message)
-
-                    # Parse message
-                    if isinstance(raw_message, bytes):
-                        message = json.loads(raw_message.decode("utf-8"))
-                    else:
-                        message = json.loads(str(raw_message))
-
+                    message = self._decode_message(raw_message)
                     # Process message
                     await self._handle_message(message)
 
@@ -271,8 +303,18 @@ class WebSocketConnection:
                 self.logger.warning("WebSocket connection closed")
                 await self._handle_disconnect()
                 break
-            except (json.JSONDecodeError, KeyError, ValueError, TypeError) as e:
-                self.logger.error(f"Message processing error: {e}")
+            except (
+                json.JSONDecodeError,
+                KeyError,
+                TypeError,
+                UnicodeDecodeError,
+                ValueError,
+                zlib.error,
+            ) as e:
+                self.logger.error(
+                    f"Message processing error for {self.connection_id} on "
+                    f"{self.config.exchange_name}: {e}"
+                )
             except OSError as e:
                 self.logger.error(f"Network error during message processing: {e}")
                 await self._handle_disconnect()

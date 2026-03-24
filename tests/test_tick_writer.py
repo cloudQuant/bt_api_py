@@ -111,8 +111,11 @@ class TestTickWriterBasic:
 class TestTickWriterLifecycle:
     def test_start_stop(self, tmp_path):
         writer = TickWriter(
-            tmp_path, "BINANCE", "SWAP",
-            flush_count=9999, flush_interval_sec=0.2,
+            tmp_path,
+            "BINANCE",
+            "SWAP",
+            flush_count=9999,
+            flush_interval_sec=0.2,
         )
         writer.start()
         assert writer._running is True
@@ -126,8 +129,11 @@ class TestTickWriterLifecycle:
 
     def test_stop_flushes_remaining(self, tmp_path):
         writer = TickWriter(
-            tmp_path, "BINANCE", "SWAP",
-            flush_count=9999, flush_interval_sec=999,
+            tmp_path,
+            "BINANCE",
+            "SWAP",
+            flush_count=9999,
+            flush_interval_sec=999,
         )
         writer.start()
         writer.write(_make_tick("BTCUSDT"))

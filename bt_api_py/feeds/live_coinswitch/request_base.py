@@ -86,6 +86,8 @@ class CoinSwitchRequestData(Feed):
         """Async HTTP request."""
         if params is None:
             params: dict[str, Any] = {}
+        if extra_data is None:
+            extra_data = {}
         method, endpoint = path.split(" ", 1)
         headers = self._get_headers()
 
@@ -97,7 +99,13 @@ class CoinSwitchRequestData(Feed):
             url = f"{self._params.rest_url}{endpoint}"
             json_body = body
 
-        res = await self.async_http_request(method, url, headers, json_body, timeout)
+        res = await self._http_client.async_request(
+            method=method,
+            url=url,
+            headers=headers,
+            json_data=json_body,
+            timeout=timeout,
+        )
         self.async_logger.info(f"async {method} {url} -> {type(res)}")
         return RequestData(res, extra_data)
 

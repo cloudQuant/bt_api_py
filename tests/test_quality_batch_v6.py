@@ -8,13 +8,9 @@ Covers:
 - oauth2_provider: Path(key_path).open("rb") for key loading
 """
 
-import ast
 import inspect
 import tempfile
 from pathlib import Path
-
-import pytest
-
 
 # ---------------------------------------------------------------------------
 # audit_logger: all text-mode open() calls should use Path.open + encoding

@@ -233,14 +233,22 @@ class KuCoinRequestData(Feed):
             request_path = endpoint
 
         headers = {}
-        if is_sign:
+        if is_sign and self.public_key and self.private_key:
             timestamp = int(time.time() * 1000)
-            body_str = json.dumps(body) if body is not None else ""
-            signature_ = self.signature(timestamp, method, request_path, self.private_key, body_str)
+            body_json = json.dumps(body) if body else ""
+            signature_ = self.signature(
+                timestamp, method, request_path, self.private_key, body_json
+            )
             encrypted_passphrase = self.get_encrypted_passphrase(self.passphrase, self.private_key)
             headers = self.get_header(self.public_key, signature_, timestamp, encrypted_passphrase)
 
-        res = await self.async_http_request(method, url, headers, body, timeout)
+        res = await self._http_client.async_request(
+            method=method,
+            url=url,
+            headers=headers,
+            json_data=body,
+            timeout=timeout,
+        )
         return RequestData(res, extra_data)
 
     def async_callback(self, future):

@@ -68,8 +68,7 @@ class Feed(AsyncBase, ConnectionMixin, CapabilityMixin):
             return url
         query_items = parse_qsl(parsed.query, keep_blank_values=True)
         sanitized_query = [
-            (key, "***" if self._is_sensitive_key(key) else value)
-            for key, value in query_items
+            (key, "***" if self._is_sensitive_key(key) else value) for key, value in query_items
         ]
         return urlunsplit(
             (
@@ -297,9 +296,7 @@ class Feed(AsyncBase, ConnectionMixin, CapabilityMixin):
         """
         raise NotImplementedError
 
-    def async_get_account(
-        self, symbol: Any = "ALL", extra_data: Any = None, **kwargs: Any
-    ) -> Any:
+    def async_get_account(self, symbol: Any = "ALL", extra_data: Any = None, **kwargs: Any) -> Any:
         """
         get account info using async
         :param symbol: default None, get all the currency, can be string, e.g. "BTC-USDT".
@@ -319,9 +316,7 @@ class Feed(AsyncBase, ConnectionMixin, CapabilityMixin):
         """
         raise NotImplementedError
 
-    def async_get_balance(
-        self, symbol: Any = None, extra_data: Any = None, **kwargs: Any
-    ) -> Any:
+    def async_get_balance(self, symbol: Any = None, extra_data: Any = None, **kwargs: Any) -> Any:
         """
         get balance by symbol using async
         :param symbol: default None, get all the currency, can be string, e.g. "BTC-USDT".
@@ -341,9 +336,7 @@ class Feed(AsyncBase, ConnectionMixin, CapabilityMixin):
         """
         raise NotImplementedError
 
-    def async_get_clear_price(
-        self, symbol: Any, extra_data: Any = None, **kwargs: Any
-    ) -> Any:
+    def async_get_clear_price(self, symbol: Any, extra_data: Any = None, **kwargs: Any) -> Any:
         """
         get clear price by symbol using async
         :param symbol: default None, get all the currency, can be string, e.g. "BTC-USDT".
@@ -429,9 +422,7 @@ class Feed(AsyncBase, ConnectionMixin, CapabilityMixin):
         """
         raise NotImplementedError
 
-    def async_get_funding_rate(
-        self, symbol: Any, extra_data: Any = None, **kwargs: Any
-    ) -> Any:
+    def async_get_funding_rate(self, symbol: Any, extra_data: Any = None, **kwargs: Any) -> Any:
         """
         get funding rate by symbol using async
         :param symbol: default None, get all the currency, can be string, e.g. "BTC-USDT".
@@ -489,9 +480,7 @@ class Feed(AsyncBase, ConnectionMixin, CapabilityMixin):
         """
         raise NotImplementedError
 
-    def async_get_open_orders(
-        self, symbol: Any, extra_data: Any = None, **kwargs: Any
-    ) -> Any:
+    def async_get_open_orders(self, symbol: Any, extra_data: Any = None, **kwargs: Any) -> Any:
         """
         get open orders by symbol using async
         :param symbol: default None, get all the currency, can be string, e.g. "BTC-USDT".
@@ -575,9 +564,7 @@ class Feed(AsyncBase, ConnectionMixin, CapabilityMixin):
         """
         raise NotImplementedError
 
-    def query_order(
-        self, symbol: Any, order_id: Any, extra_data: Any = None, **kwargs: Any
-    ) -> Any:
+    def query_order(self, symbol: Any, order_id: Any, extra_data: Any = None, **kwargs: Any) -> Any:
         """
         query order by order_id
         :param symbol: default None, get all the currency, can be string, e.g. "BTC-USDT".
@@ -611,9 +598,7 @@ class Feed(AsyncBase, ConnectionMixin, CapabilityMixin):
         """
         raise NotImplementedError
 
-    def async_get_mark_price(
-        self, symbol: Any, extra_data: Any = None, **kwargs: Any
-    ) -> Any:
+    def async_get_mark_price(self, symbol: Any, extra_data: Any = None, **kwargs: Any) -> Any:
         """
         get mark price from okx using async, it is not blocked and push data to data_queue
         :param symbol: symbol name, eg: BTC-USDT.
@@ -633,7 +618,9 @@ class Feed(AsyncBase, ConnectionMixin, CapabilityMixin):
         """
         raise NotImplementedError
 
-    def async_get_position(self, symbol: str | None = None, extra_data: Any = None, **kwargs: Any) -> Any:
+    def async_get_position(
+        self, symbol: str | None = None, extra_data: Any = None, **kwargs: Any
+    ) -> Any:
         """
         get position info by symbol using async
         :param symbol: default None, get all positions.

@@ -57,6 +57,7 @@ class _FallbackCtpModule(ModuleType):
             return lambda *args, **kwargs: None
 
         if name.startswith("disown_"):
+
             def _disown(instance, *args, **kwargs):
                 handle = getattr(instance, "this", None)
                 if handle is not None and hasattr(handle, "disown"):
@@ -66,6 +67,7 @@ class _FallbackCtpModule(ModuleType):
             return _disown
 
         if name.endswith("_swiginit"):
+
             def _swiginit(instance, handle):
                 object.__setattr__(instance, "this", handle)
                 return None
@@ -111,6 +113,7 @@ try:
         import _ctp
 except Exception as _ctp_import_error:
     _ctp = _FallbackCtpModule(_ctp_import_error)
+
 
 def _swig_setattr_nondynamic_instance_variable(setter):
     def set_instance_attr(self, name, value):

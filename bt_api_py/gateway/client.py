@@ -60,10 +60,12 @@ class GatewayClient:
         self.event_socket: zmq.Socket | None = None
         self.runtime: GatewayRuntime | None = None
         self.connected = False
-        self.tick_queues = collections.defaultdict(collections.deque)
-        self.broker_updates = collections.deque()
+        self.tick_queues: collections.defaultdict[str, collections.deque[GatewayTick]] = (
+            collections.defaultdict(collections.deque)
+        )
+        self.broker_updates: collections.deque[dict[str, Any]] = collections.deque()
         self.pending_orders: dict[str, dict[str, Any]] = {}
-        self.subscribed = set()
+        self.subscribed: set[str] = set()
 
     def connect(self) -> None:
         if self.connected:
@@ -283,7 +285,9 @@ class GatewayClient:
         if self.command_socket is None:
             raise RuntimeError("gateway client is not connected")
         request_id = make_request_id()
-        self.command_socket.send(dumps_message({"request_id": request_id, "command": command, "payload": payload or {}}))
+        self.command_socket.send(
+            dumps_message({"request_id": request_id, "command": command, "payload": payload or {}})
+        )
         timeout_ms = int(self.config.command_timeout_sec * 1000)
         if self.command_socket.poll(timeout=timeout_ms) == 0:
             raise TimeoutError(f"gateway command timed out: {command}")

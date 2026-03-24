@@ -176,11 +176,11 @@ class GateioRequestData(Feed, RequestData):
 
         self.async_logger.info(f"async {method} {url}")
 
-        response_data = await self.async_http_request(
+        response_data = await self._http_client.async_request(
             method=method,
             url=url,
             headers=headers,
-            body=body if method in ("POST", "PUT", "DELETE") else None,
+            json_data=body if method in ("POST", "PUT", "DELETE") else None,
             timeout=timeout,
         )
 

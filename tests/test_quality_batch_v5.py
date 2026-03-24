@@ -13,12 +13,10 @@ import tempfile
 from pathlib import Path
 from unittest.mock import patch
 
-import pytest
-
-
 # ---------------------------------------------------------------------------
 # encryption_manager: json at module level (not inline)
 # ---------------------------------------------------------------------------
+
 
 class TestEncryptionManagerImports:
     """Verify json is imported at module level, not inline."""
@@ -46,6 +44,7 @@ class TestEncryptionManagerImports:
 # ---------------------------------------------------------------------------
 # grafana: no redundant imports in save_dashboard_to_file
 # ---------------------------------------------------------------------------
+
 
 class TestGrafanaSaveDashboard:
     """Verify save_dashboard_to_file uses module-level imports and encoding."""
@@ -83,6 +82,7 @@ class TestGrafanaSaveDashboard:
 # ---------------------------------------------------------------------------
 # security: Path.open() usage and narrowed exceptions
 # ---------------------------------------------------------------------------
+
 
 class TestSecurityPathUsage:
     """Verify security.py uses Path.open() and narrowed exceptions."""

@@ -23,7 +23,6 @@ from bt_api_py.event_bus import EventBus
 from bt_api_py.instrument_manager import InstrumentManager
 from bt_api_py.security import SecureCredentialManager
 
-
 # ── AsyncConnectionPool.release semaphore fix ────────────────────
 
 
@@ -238,7 +237,7 @@ class TestAsyncPooledConnection:
         async def _test():
             pool = AsyncConnectionPool(factory=lambda: "conn", max_size=1)
             with pytest.raises(ValueError):
-                async with AsyncPooledConnection(pool) as conn:
+                async with AsyncPooledConnection(pool) as _conn:
                     raise ValueError("test error")
             # Connection should still be released back to pool
             c = await pool.acquire()

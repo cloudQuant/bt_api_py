@@ -153,7 +153,13 @@ class CoinExRequestData(Feed):
             if is_sign:
                 headers.update(self._generate_auth_headers(method, request_path, body_str))
 
-        res = await self.async_http_request(method, url, headers, json_body, timeout)
+        res = await self._http_client.async_request(
+            method=method,
+            url=url,
+            headers=headers,
+            json_data=json_body,
+            timeout=timeout,
+        )
         self.async_logger.info(f"async {method} {url} -> {type(res)}")
         return RequestData(res, extra_data)
 

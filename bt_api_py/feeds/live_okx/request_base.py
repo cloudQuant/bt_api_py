@@ -143,7 +143,7 @@ class OkxRequestData(
     # noinspection PyMethodMayBeStatic
     def signature(
         self, timestamp: Any, method: Any, request_path: Any, secret_key: Any, body: Any = None
-    ) -> None:
+    ) -> str:
         body = "" if body is None else str(body)
         message = str(timestamp) + str.upper(method) + request_path + body
         mac = hmac.new(
@@ -153,7 +153,7 @@ class OkxRequestData(
         return base64.b64encode(d).decode()
 
     # noinspection PyMethodMayBeStatic
-    def get_header(self, api_key: Any, sign: Any, timestamp: Any, passphrase: Any) -> None:
+    def get_header(self, api_key: Any, sign: Any, timestamp: Any, passphrase: Any) -> dict[str, Any]:
         header = {}
         header["Content-Type"] = "application/json"
         header["OK-ACCESS-KEY"] = api_key
@@ -170,7 +170,7 @@ class OkxRequestData(
         body: Any = None,
         extra_data: Any = None,
         timeout: Any = 10,
-    ) -> None:
+    ) -> RequestData:
         """http request function
         Args:
             path (TYPE): request url
@@ -231,7 +231,13 @@ class OkxRequestData(
             body_str,
         )
         headers = self.get_header(self.public_key, signature_, timestamp, self.passphrase)
-        res = await self.async_http_request(method, url, headers, body_str, timeout)
+        res = await self._http_client.async_request(
+            method=method,
+            url=url,
+            headers=headers,
+            json_data=body_str,
+            timeout=timeout,
+        )
         return RequestData(res, extra_data)
 
     def async_callback(self, future: Any) -> None:

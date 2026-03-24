@@ -147,7 +147,13 @@ class BitgetRequestData(Feed):
                 headers = self._build_auth_headers(method, request_path)
 
         json_body = json.dumps(body) if (method.upper() == "POST" and body) else None
-        res = await self.async_http_request(method, url, headers, json_body, timeout)
+        res = await self._http_client.async_request(
+            method=method,
+            url=url,
+            headers=headers,
+            data=json_body,
+            timeout=timeout,
+        )
         return RequestData(res, extra_data)
 
     def async_callback(self, future):

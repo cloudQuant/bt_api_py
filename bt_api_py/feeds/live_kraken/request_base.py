@@ -10,8 +10,6 @@ import time
 from typing import Any
 from urllib.parse import urlencode
 
-import requests as req_lib
-
 from bt_api_py.containers.exchanges.kraken_exchange_data import KrakenExchangeDataSpot
 from bt_api_py.containers.requestdatas.request_data import RequestData
 from bt_api_py.feeds.capability import Capability
@@ -122,20 +120,15 @@ class KrakenRequestData(Feed):
         try:
             if method == "POST":
                 post_data = {**params, **body}
-
-                if "/private/" in endpoint:
-                    auth_headers = self._sign_request(endpoint, post_data)
-                    headers.update(auth_headers)
-
+                headers, encoded_body = self._build_post_request(endpoint, post_data)
                 self.request_logger.info(f"POST {url}")
-                req_kwargs: dict[str, Any] = {
-                    "headers": headers,
-                    "data": urlencode(post_data) if post_data else "",
-                }
-                if self.proxies:
-                    req_kwargs["proxies"] = self.proxies
-                res = req_lib.post(url, timeout=timeout, **req_kwargs)
-                response_data = res.json()
+                response_data = self._http_client.request(
+                    method="POST",
+                    url=url,
+                    headers=headers,
+                    data=encoded_body,
+                    timeout=timeout,
+                )
             else:
                 self.request_logger.info(f"{method} {url}")
                 if params:
@@ -169,17 +162,20 @@ class KrakenRequestData(Feed):
         response_data = None
         try:
             if method == "POST":
-                import asyncio
-
                 post_data = {**params, **body}
-                loop = asyncio.get_event_loop()
-                response_data = await loop.run_in_executor(
-                    None, lambda: self._sync_post(url, post_data, endpoint, timeout)
+                headers, encoded_body = self._build_post_request(endpoint, post_data)
+                self.async_logger.info(f"POST {url}")
+                response_data = await self._http_client.async_request(
+                    method="POST",
+                    url=url,
+                    headers=headers,
+                    data=encoded_body,
+                    timeout=timeout,
                 )
             else:
                 if params:
                     url = f"{url}?{urlencode(params)}"
-                response_data = await self.async_http_request(
+                response_data = await self._http_client.async_request(
                     method=method, url=url, headers={}, timeout=timeout
                 )
         except Exception as e:
@@ -187,24 +183,13 @@ class KrakenRequestData(Feed):
 
         return RequestData(response_data, extra_data)
 
-    def _sync_post(self, url, post_data, endpoint, timeout):
-        """Helper for form-encoded POST (used by async_request via executor)."""
+    def _build_post_request(self, endpoint, post_data):
+        """Build headers and form-encoded body for Kraken POST requests."""
         headers = {"Content-Type": "application/x-www-form-urlencoded"}
         if "/private/" in endpoint:
             auth_headers = self._sign_request(endpoint, post_data)
             headers.update(auth_headers)
-        try:
-            req_kwargs: dict[str, Any] = {
-                "headers": headers,
-                "data": urlencode(post_data) if post_data else "",
-            }
-            if self.proxies:
-                req_kwargs["proxies"] = self.proxies
-            res = req_lib.post(url, timeout=timeout, **req_kwargs)
-            return res.json()
-        except Exception as e:
-            self.async_logger.error(f"Sync POST error: {e}")
-            return None
+        return headers, urlencode(post_data) if post_data else ""
 
     def async_callback(self, future):
         """Callback for async requests — push result to data queue."""

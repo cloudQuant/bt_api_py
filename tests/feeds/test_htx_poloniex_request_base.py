@@ -50,7 +50,7 @@ async def test_poloniex_async_request_allows_missing_extra_data(monkeypatch) -> 
     )
 
     async_request_mock = AsyncMock(return_value={"code": 200, "data": []})
-    monkeypatch.setattr(request_data, "async_http_request", async_request_mock)
+    monkeypatch.setattr(request_data._http_client, "async_request", async_request_mock)
 
     result = await request_data.async_request("GET /markets/BTC_USDT/ticker24h")
 

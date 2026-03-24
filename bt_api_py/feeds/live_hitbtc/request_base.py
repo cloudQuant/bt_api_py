@@ -120,7 +120,13 @@ class HitBtcRequestData(Feed):
             headers["Authorization"] = self._basic_auth_header()
 
         json_body = body if body and method in ("POST", "PUT") else None
-        res = await self.async_http_request(method, url, headers, json_body, timeout)
+        res = await self._http_client.async_request(
+            method=method,
+            url=url,
+            headers=headers,
+            json_data=json_body,
+            timeout=timeout,
+        )
         self.async_logger.info(f"async {method} {url} -> {type(res)}")
         return RequestData(res, extra_data)
 

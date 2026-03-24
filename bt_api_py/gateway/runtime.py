@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import contextlib
+import json
 import logging
 import threading
 import time
@@ -207,16 +208,59 @@ class GatewayRuntime:
         if sock not in events:
             return
         parts = sock.recv_multipart()
+        if len(parts) < 2:
+            self.health.record_error("command_parse", "ValueError: invalid command frame")
+            logger.warning(
+                "Gateway command parse failed for %s request_id=%s: %s: %s",
+                self.config.exchange_type,
+                "<unknown>",
+                "ValueError",
+                "invalid command frame",
+            )
+            return
         identity = parts[0]
-        payload = loads_message(parts[-1])
-        request_id = str(payload.get("request_id") or "")
-        command = str(payload.get("command") or "").lower()
-        data = dict(payload.get("payload") or {})
+        request_id = ""
+        command = ""
         try:
+            payload = loads_message(parts[-1])
+            if not isinstance(payload, dict):
+                raise TypeError(
+                    f"command payload must decode to dict, got {type(payload).__name__}"
+                )
+            request_id = str(payload.get("request_id") or "")
+            command = str(payload.get("command") or "").lower()
+            raw_payload = payload.get("payload")
+            if raw_payload is None:
+                data = {}
+            elif isinstance(raw_payload, dict):
+                data = dict(raw_payload)
+            else:
+                raise TypeError(
+                    f"command payload field must be dict, got {type(raw_payload).__name__}"
+                )
             result = self._dispatch(command, data)
             response = {"request_id": request_id, "status": "ok", "data": result}
+        except (json.JSONDecodeError, TypeError, UnicodeDecodeError) as exc:
+            self.health.record_error(
+                "command_parse",
+                f"{type(exc).__name__}: {exc}",
+            )
+            logger.warning(
+                "Gateway command parse failed for %s request_id=%s: %s: %s",
+                self.config.exchange_type,
+                request_id or "<unknown>",
+                type(exc).__name__,
+                exc,
+            )
+            response = {
+                "request_id": request_id,
+                "status": "error",
+                "error": f"invalid command payload: {exc}",
+            }
         except Exception as exc:
-            self.health.record_error("command", f"{command or '<empty>'}: {type(exc).__name__}: {exc}")
+            self.health.record_error(
+                "command", f"{command or '<empty>'}: {type(exc).__name__}: {exc}"
+            )
             logger.warning(
                 "Gateway command failed for %s request_id=%s command=%s: %s: %s",
                 self.config.exchange_type,
@@ -225,7 +269,11 @@ class GatewayRuntime:
                 type(exc).__name__,
                 exc,
             )
-            response = {"request_id": request_id, "status": "error", "error": str(exc)}
+            response = {
+                "request_id": request_id,
+                "status": "error",
+                "error": str(exc),
+            }
         if self.command_socket is not None:
             sock.send_multipart([identity, dumps_message(response)])
         self._publish(CHANNEL_EVENT, {"kind": "command_result", **response, "command": command})

@@ -95,18 +95,8 @@ def pytest_configure(config):
                 f"{iconv_lib}:{current_preload}" if current_preload else iconv_lib
             )
 
-    # Register custom markers
-    config.addinivalue_line("markers", "unit: Unit tests (fast, no external dependencies)")
-    config.addinivalue_line(
-        "markers", "integration: Integration tests (may require external services)"
-    )
-    config.addinivalue_line("markers", "slow: Slow tests (> 1s)")
-    config.addinivalue_line("markers", "network: Tests requiring network access")
-    config.addinivalue_line("markers", "ctp: CTP related tests")
-    config.addinivalue_line("markers", "binance: Binance exchange tests")
-    config.addinivalue_line("markers", "okx: OKX exchange tests")
-    config.addinivalue_line("markers", "htx: HTX exchange tests")
-    config.addinivalue_line("markers", "ib: Interactive Brokers tests")
+    # NOTE: Custom markers are registered in pyproject.toml [tool.pytest.ini_options].markers
+    # Do not duplicate them here.
 
 
 def pytest_collection_modifyitems(config, items):
@@ -177,7 +167,6 @@ def pytest_collection_modifyitems(config, items):
 
         # Auto-mark exchange-specific tests and skip if no API keys
         test_path = str(item.fspath).lower()
-        test_name = item.nodeid.lower()
 
         # Binance tests — add marker only, never auto-skip
         if "binance" in test_path and "binance" not in item.keywords:
@@ -186,6 +175,10 @@ def pytest_collection_modifyitems(config, items):
         # OKX tests — add marker only, never auto-skip
         if "okx" in test_path and "okx" not in item.keywords:
             item.add_marker(pytest.mark.okx)
+
+        # HTX tests — add marker only, never auto-skip
+        if "htx" in test_path and "htx" not in item.keywords:
+            item.add_marker(pytest.mark.htx)
 
         # CTP tests — add marker only, never auto-skip
         if "ctp" in test_path and "ctp" not in item.keywords:

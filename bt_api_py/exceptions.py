@@ -74,12 +74,12 @@ class BtApiError(Exception):
 
     def __repr__(self) -> str:
         cls_name = self.__class__.__name__
-        args = []
-        for cls in type(self).__mro__:
-            slots = getattr(cls, "__slots__", ())
-            for slot in slots:
-                if hasattr(self, slot):
-                    args.append(f"{slot}={getattr(self, slot)!r}")
+        args = [
+            f"{slot}={getattr(self, slot)!r}"
+            for cls in type(self).__mro__
+            for slot in getattr(cls, "__slots__", ())
+            if hasattr(self, slot)
+        ]
         return f"{cls_name}({', '.join(args)})" if args else f"{cls_name}()"
 
 

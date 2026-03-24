@@ -299,9 +299,7 @@ class BitflyerRequestDataSpot(BitflyerRequestData):
             return [input_data], True
         return [], False
 
-    def get_exchange_info(
-        self, extra_data: RequestExtraData | None = None, **kwargs: Any
-    ) -> Any:
+    def get_exchange_info(self, extra_data: RequestExtraData | None = None, **kwargs: Any) -> Any:
         """Get exchange info (markets)."""
         path, params, extra_data = self._get_exchange_info(extra_data, **kwargs)
         return self.request(path, params=params, extra_data=extra_data)

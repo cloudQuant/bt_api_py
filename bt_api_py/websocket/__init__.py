@@ -69,28 +69,6 @@ class WebSocketSystem:
         self.monitor = None
         self._initialized = False
 
-
-async def _ensure_exchange_registered(
-    manager: AdvancedWebSocketManager,
-    exchange_name: str,
-    pool_config: PoolConfiguration | None,
-) -> None:
-    """Register an exchange with default adapter-derived websocket config if missing."""
-    if exchange_name in manager._pools:
-        return
-
-    adapter = WebSocketAdapterFactory.create_adapter(exchange_name)
-    endpoints = adapter.get_endpoints(f"wss://stream.{exchange_name.lower()}.com")
-
-    config = WebSocketConfig(
-        url=endpoints[0],
-        exchange_name=exchange_name,
-        endpoints=endpoints[1:],
-        subscription_limits=adapter.get_subscription_limits(),
-    )
-
-    await manager.add_exchange(config, pool_config)
-
     def get_manager(self) -> AdvancedWebSocketManager:
         """Get WebSocket manager.
 
@@ -116,6 +94,28 @@ async def _ensure_exchange_registered(
         if not self.monitor:
             raise RuntimeError("WebSocket system not initialized")
         return self.monitor
+
+
+async def _ensure_exchange_registered(
+    manager: AdvancedWebSocketManager,
+    exchange_name: str,
+    pool_config: PoolConfiguration | None,
+) -> None:
+    """Register an exchange with default adapter-derived websocket config if missing."""
+    if exchange_name in manager._pools:
+        return
+
+    adapter = WebSocketAdapterFactory.create_adapter(exchange_name)
+    endpoints = adapter.get_endpoints(f"wss://stream.{exchange_name.lower()}.com")
+
+    config = WebSocketConfig(
+        url=endpoints[0],
+        exchange_name=exchange_name,
+        endpoints=endpoints[1:],
+        subscription_limits=adapter.get_subscription_limits(),
+    )
+
+    await manager.add_exchange(config, pool_config)
 
 
 # Global instance

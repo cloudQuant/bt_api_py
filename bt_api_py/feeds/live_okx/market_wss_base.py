@@ -45,7 +45,7 @@ class OkxWssData(MyWebsocketApp):
         self.asset_type = kwargs.get("asset_type", "SWAP")
         self.logger = get_logger("okx_market_wss")
 
-    def sign(self, content: Any) -> None:
+    def sign(self, content: Any) -> str:
         """签名
         Args:
             content (TYPE): Description

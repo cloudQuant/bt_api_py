@@ -5,12 +5,12 @@ Integrate all exchange APIs using this BtApi class
 
 # 导入注册模块，确保交易所在使用前完成注册
 # 自动扫描 exchange_registers/ 下所有模块，无需手动维护 import 列表
-from copy import deepcopy
 import importlib
 import pkgutil
 import queue
 import time
 from collections.abc import Callable
+from copy import deepcopy
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
@@ -186,7 +186,9 @@ class BtApi:
             raise TypeError("exchange_params must be a mapping") from exc
 
     @staticmethod
-    def _normalize_subscribe_topics(topics: list[dict[str, Any]]) -> tuple[list[dict[str, Any]], int]:
+    def _normalize_subscribe_topics(
+        topics: list[dict[str, Any]],
+    ) -> tuple[list[dict[str, Any]], int]:
         if not isinstance(topics, list):
             raise SubscribeError("", detail="topics must be a list of dict items")
 

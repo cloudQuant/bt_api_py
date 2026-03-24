@@ -60,6 +60,7 @@ markers = [
     "ctp: CTP related tests",
     "binance: Binance exchange tests",
     "okx: OKX exchange tests",
+    "htx: HTX exchange tests",
     "ib: Interactive Brokers tests",
     "mt5: MetaTrader 5 tests (requires MT5_LOGIN / MT5_PASSWORD env vars)",
     "asyncio: Async tests",
@@ -202,7 +203,7 @@ plugins = []
 disable_error_code = [
     "override", "name-defined", "attr-defined", "has-type", "arg-type",
     "call-overload", "return-value", "assignment", "index", "operator",
-    "var-annotated", "no-any-return", "misc", "valid-type", "empty-body",
+    "var-annotated", "no-any-return", "misc",
     "no-redef", "union-attr", "call-arg", "list-item", "dict-item",
     "import-untyped",
 ]
@@ -324,66 +325,6 @@ module = "bt_api_py.functions.update_data.download_bars_from_okex"
 disallow_untyped_defs = true
 
 [[tool.mypy.overrides]]
-module = "bt_api_py.ctp.*"
-ignore_errors = true
-
-[[tool.mypy.overrides]]
-module = "bt_api_py.containers.ctp.*"
-ignore_errors = true
-
-[[tool.mypy.overrides]]
-module = "bt_api_py.exchange_registers.*"
-ignore_errors = true
-
-[[tool.mypy.overrides]]
-module = "bt_api_py.feeds"
-ignore_errors = true
-
-[[tool.mypy.overrides]]
-module = "bt_api_py.containers"
-ignore_errors = true
-
-[[tool.mypy.overrides]]
-module = "bt_api_py.feeds.live_ctp_feed"
-ignore_errors = true
-
-[[tool.mypy.overrides]]
-module = "bt_api_py.feeds.live_kucoin.*"
-ignore_errors = true
-
-[[tool.mypy.overrides]]
-module = "bt_api_py.feeds.live_bitstamp.*"
-ignore_errors = true
-
-[[tool.mypy.overrides]]
-module = "bt_api_py.feeds.live_phemex.*"
-ignore_errors = true
-
-[[tool.mypy.overrides]]
-module = "bt_api_py.feeds.live_yobit.*"
-ignore_errors = true
-
-[[tool.mypy.overrides]]
-module = "bt_api_py.feeds.live_htx.*"
-ignore_errors = true
-
-[[tool.mypy.overrides]]
-module = "bt_api_py.feeds.live_binance.*"
-ignore_errors = true
-
-[[tool.mypy.overrides]]
-module = "bt_api_py.feeds.live_hyperliquid.*"
-ignore_errors = true
-
-[[tool.mypy.overrides]]
-module = "bt_api_py.feeds.live_gateio.*"
-ignore_errors = true
-
-[[tool.mypy.overrides]]
-module = "bt_api_py.feeds.live_gemini.*"
-ignore_errors = true
-
-[[tool.mypy.overrides]]
 module = "bt_api_py.websocket_manager"
 disallow_untyped_defs = true
 
@@ -398,42 +339,6 @@ disallow_untyped_defs = true
 [[tool.mypy.overrides]]
 module = "bt_api_py.websocket.monitoring"
 disallow_untyped_defs = true
-
-[[tool.mypy.overrides]]
-module = "bt_api_py.websocket.*"
-ignore_errors = true
-
-[[tool.mypy.overrides]]
-module = "bt_api_py.feeds.live_okx.*"
-ignore_errors = true
-
-[[tool.mypy.overrides]]
-module = "bt_api_py.feeds.live_pancakeswap.*"
-ignore_errors = true
-
-[[tool.mypy.overrides]]
-module = "bt_api_py.feeds.live_valr.*"
-ignore_errors = true
-
-[[tool.mypy.overrides]]
-module = "bt_api_py.feeds.live_localbitcoins.*"
-ignore_errors = true
-
-[[tool.mypy.overrides]]
-module = "bt_api_py.feeds.live_zebpay.*"
-ignore_errors = true
-
-[[tool.mypy.overrides]]
-module = "bt_api_py.feeds.live_zaif.*"
-ignore_errors = true
-
-[[tool.mypy.overrides]]
-module = "bt_api_py.security_compliance.*"
-ignore_errors = true
-
-[[tool.mypy.overrides]]
-module = "bt_api_py.containers.accounts.*"
-disable_error_code = ["override", "arg-type", "has-type", "assignment", "index", "return-value"]
 
 [[tool.mypy.overrides]]
 module = "bt_api_py.containers.auto_init_mixin"
@@ -598,30 +503,6 @@ disallow_untyped_defs = true
 [[tool.mypy.overrides]]
 module = "bt_api_py.feeds.live_bitunix.spot"
 disallow_untyped_defs = true
-
-[[tool.mypy.overrides]]
-module = "bt_api_py.containers.exchanges.*"
-ignore_errors = true
-
-[[tool.mypy.overrides]]
-module = "bt_api_py.containers.balances.*"
-disable_error_code = ["no-any-return", "operator", "unused-ignore", "override"]
-
-[[tool.mypy.overrides]]
-module = "bt_api_py.containers.bars.*"
-disable_error_code = ["assignment"]
-
-[[tool.mypy.overrides]]
-module = "bt_api_py.containers.orders.*"
-disable_error_code = ["index", "has-type"]
-
-[[tool.mypy.overrides]]
-module = "bt_api_py.containers.orderbooks.*"
-disable_error_code = ["no-any-return", "arg-type"]
-
-[[tool.mypy.overrides]]
-module = "bt_api_py.functions"
-ignore_errors = true
 
 [[tool.mypy.overrides]]
 module = "tests.*"

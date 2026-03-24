@@ -216,6 +216,50 @@ async def test_handle_disconnect_stops_after_websocket_error_retries_exhausted(
 
 
 @pytest.mark.asyncio
+async def test_process_messages_skips_invalid_compressed_frame_and_continues(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    config = WebSocketConfig(url="wss://example.com/ws", exchange_name="TEST___SPOT")
+    connection = WebSocketConnection(config, "test_bad_frame")
+    processed: list[dict[str, Any]] = []
+
+    class _SequencedWebSocket:
+        def __init__(self) -> None:
+            self._messages = iter(
+                [
+                    b"\x78\x9cbroken-frame",
+                    '{"event":"subscribe"}',
+                ]
+            )
+
+        async def recv(self) -> str | bytes:
+            try:
+                return next(self._messages)
+            except StopIteration as exc:
+                raise OSError("socket drained") from exc
+
+    async def fake_handle_message(message: dict[str, Any]) -> None:
+        processed.append(message)
+
+    async def fake_handle_disconnect() -> None:
+        connection._running = False
+        connection._connected = False
+
+    connection._websocket = _SequencedWebSocket()
+    connection._connected = True
+    connection._running = True
+
+    monkeypatch.setattr(connection, "_handle_message", fake_handle_message)
+    monkeypatch.setattr(connection, "_handle_disconnect", fake_handle_disconnect)
+
+    await connection._process_messages()
+
+    assert processed == [{"event": "subscribe"}]
+    assert connection._stats["messages_received"] == 2
+    assert connection.running is False
+
+
+@pytest.mark.asyncio
 async def test_close_all_clears_pools_and_resets_round_robin() -> None:
     manager = WebSocketManager(event_bus=_DummyEventBus())
     config = WebSocketConfig(url="wss://example.com/ws", exchange_name="TEST___SPOT")

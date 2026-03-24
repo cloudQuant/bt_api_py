@@ -89,7 +89,10 @@ class TestWebSocketConfig:
         [
             ({"url": "https://test.com", "exchange_name": "TEST"}, "url"),
             ({"url": "wss://test.com", "exchange_name": ""}, "exchange_name"),
-            ({"url": "wss://test.com", "exchange_name": "TEST", "max_connections": 0}, "max_connections"),
+            (
+                {"url": "wss://test.com", "exchange_name": "TEST", "max_connections": 0},
+                "max_connections",
+            ),
             (
                 {"url": "wss://test.com", "exchange_name": "TEST", "heartbeat_interval": 0},
                 "heartbeat_interval",
@@ -297,7 +300,9 @@ class TestAdvancedWebSocketConnection:
 
         assert exc_info.value.exchange_name == "TEST"
 
-    async def test_subscribe_raises_contract_compliant_websocket_error_for_open_circuit_breaker(self):
+    async def test_subscribe_raises_contract_compliant_websocket_error_for_open_circuit_breaker(
+        self,
+    ):
         config = WebSocketConfig(url="wss://test.com", exchange_name="TEST")
         connection = AdvancedWebSocketConnection(config, "test_conn")
         connection._circuit_breaker = MagicMock()
@@ -317,7 +322,7 @@ class TestAdvancedWebSocketConnection:
         connection = AdvancedWebSocketConnection(config, "test_conn")
 
         async def always_fail(endpoint: str) -> None:
-            raise RuntimeError(f"cannot connect to {endpoint}")
+            raise OSError(f"cannot connect to {endpoint}")
 
         monkeypatch.setattr(connection, "_do_connect", always_fail)
 
@@ -823,7 +828,9 @@ class TestWebSocketIntegration:
             await connection.disconnect()
             assert connection.get_state() == ConnectionState.DISCONNECTED
             assert connection._dlq is not None
-            assert connection._dlq._processing_task is None or connection._dlq._processing_task.done()
+            assert (
+                connection._dlq._processing_task is None or connection._dlq._processing_task.done()
+            )
 
     async def test_pool_load_balancing(self):
         """Test connection pool load balancing."""

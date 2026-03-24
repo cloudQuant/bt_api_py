@@ -47,6 +47,25 @@ def test_latoken_request_allows_missing_extra_data(monkeypatch) -> None:
 
 
 @pytest.mark.asyncio
+async def test_latoken_async_request_uses_shared_http_client(monkeypatch) -> None:
+    request_data = LatokenRequestData(
+        public_key="public-key",
+        private_key="secret-key",
+        exchange_name="LATOKEN___SPOT",
+    )
+
+    async_mock = AsyncMock(return_value={"status": "SUCCESS"})
+    monkeypatch.setattr(request_data._http_client, "async_request", async_mock)
+
+    result = await request_data.async_request("GET /v2/trading/pairs")
+
+    assert isinstance(result, RequestData)
+    assert result.get_extra_data() == {}
+    assert result.get_input_data() == {"status": "SUCCESS"}
+    async_mock.assert_awaited_once()
+
+
+@pytest.mark.asyncio
 async def test_mexc_async_request_allows_missing_extra_data(monkeypatch) -> None:
     request_data = MexcRequestData(
         public_key="public-key",

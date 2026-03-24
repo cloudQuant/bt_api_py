@@ -56,7 +56,9 @@ class BTCTurkRequestDataSpot(BTCTurkRequestData):
         return path, params, extra_data
 
     @staticmethod
-    def _get_tick_normalize_function(input_data: dict[str, Any], extra_data: Any) -> NormalizeResult:
+    def _get_tick_normalize_function(
+        input_data: dict[str, Any], extra_data: Any
+    ) -> NormalizeResult:
         if not input_data:
             return [], False
         data = input_data.get("data", [])
@@ -234,9 +236,7 @@ class BTCTurkRequestDataSpot(BTCTurkRequestData):
         symbols = data.get("symbols", [])
         return [symbols], symbols is not None
 
-    def get_exchange_info(
-        self, extra_data: RequestExtraData | None = None, **kwargs: Any
-    ) -> Any:
+    def get_exchange_info(self, extra_data: RequestExtraData | None = None, **kwargs: Any) -> Any:
         """Get exchange information."""
         path, params, extra_data = self._get_exchange_info(extra_data, **kwargs)
         return self.request(path, params=params, extra_data=extra_data)

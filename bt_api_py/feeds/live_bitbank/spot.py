@@ -63,7 +63,9 @@ class BitbankRequestDataSpot(BitbankRequestData):
         return path, None, extra_data
 
     @staticmethod
-    def _get_tick_normalize_function(input_data: dict[str, Any], extra_data: Any) -> NormalizeResult:
+    def _get_tick_normalize_function(
+        input_data: dict[str, Any], extra_data: Any
+    ) -> NormalizeResult:
         """Normalize ticker data."""
         if not input_data:
             return [], False
@@ -311,9 +313,7 @@ class BitbankRequestDataSpot(BitbankRequestData):
             return pairs if isinstance(pairs, list) else [pairs], True
         return [], False
 
-    def get_exchange_info(
-        self, extra_data: RequestExtraData | None = None, **kwargs: Any
-    ) -> Any:
+    def get_exchange_info(self, extra_data: RequestExtraData | None = None, **kwargs: Any) -> Any:
         """Get exchange info."""
         path, params, extra_data = self._get_exchange_info(extra_data, **kwargs)
         return self.request(path, params=params, extra_data=extra_data)

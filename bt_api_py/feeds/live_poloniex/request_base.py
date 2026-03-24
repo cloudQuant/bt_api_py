@@ -318,7 +318,13 @@ class PoloniexRequestData(Feed):
             headers["Content-Type"] = "application/json"
 
         self._rate_limiter.acquire(endpoint)
-        res = await self.async_http_request(method, url, headers, body, timeout)
+        res = await self._http_client.async_request(
+            method=method,
+            url=url,
+            headers=headers,
+            json_data=body,
+            timeout=timeout,
+        )
         return RequestData(res, extra_data)
 
     def async_callback(self, future):

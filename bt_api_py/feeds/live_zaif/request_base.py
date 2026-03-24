@@ -82,17 +82,19 @@ class ZaifRequestData(Feed):
         return self._process_response(response, extra_data)
 
     async def async_request(self, path, params=None, body=None, extra_data=None, timeout=10):
+        if extra_data is None:
+            extra_data = {}
         method = path.split()[0] if " " in path else "GET"
         endpoint = path.split()[1] if " " in path else path
         url = self._params.rest_url + endpoint
         if params:
             url = url + "?" + urlencode(params)
         headers = self._get_headers(body or "")
-        response = await self.async_http_request(
+        response = await self._http_client.async_request(
             method=method,
             url=url,
             headers=headers,
-            body=body,
+            json_data=body,
             timeout=timeout,
         )
         return self._process_response(response, extra_data)

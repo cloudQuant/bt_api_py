@@ -23,7 +23,9 @@ def test_foxbit_accepts_public_private_key_aliases(monkeypatch: Any) -> None:
 def test_btc_markets_accepts_public_private_key_aliases(monkeypatch: Any) -> None:
     private_key = base64.b64encode(b"secret-key").decode("utf-8")
     request_data = BtcMarketsRequestData(public_key="public-key", private_key=private_key)
-    monkeypatch.setattr("bt_api_py.feeds.live_btc_markets.request_base.time.time", lambda: 1700000000.0)
+    monkeypatch.setattr(
+        "bt_api_py.feeds.live_btc_markets.request_base.time.time", lambda: 1700000000.0
+    )
 
     headers = request_data._get_headers("GET", "/v3/accounts", None, None)
 

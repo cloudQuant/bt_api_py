@@ -2111,7 +2111,13 @@ class BinanceRequestData(Feed):
         headers = {
             "X-MBX-APIKEY": self.public_key,
         }
-        res = await self.async_http_request(method, url, headers, body, timeout)
+        res = await self._http_client.async_request(
+            method=method,
+            url=url,
+            headers=headers,
+            json_data=body,
+            timeout=timeout,
+        )
         # self.request_logger.info(f"""request:{get_string_tz_time()} {res}""")
         # request_type = extra_data.get('request_type')
         # data_factory = self._params.request_data_dict.get(request_type)

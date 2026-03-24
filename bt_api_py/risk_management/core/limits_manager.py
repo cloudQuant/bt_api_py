@@ -445,7 +445,7 @@ class LimitsManager:
         Returns:
             List[Dict[str, Any]]: 违规记录
         """
-        breaches = []
+        breaches: list[dict[str, Any]] = []
         current_time = int(time.time())
 
         for check_record in self.check_history:
@@ -460,20 +460,20 @@ class LimitsManager:
             result = check_record.get("result", {})
             detailed_checks = result.get("detailed_checks", [])
 
-            for check in detailed_checks:
-                if check.get("status") in [LimitStatus.BREACHED, LimitStatus.CRITICAL]:
-                    breaches.append(
-                        {
-                            "timestamp": check_record.get("timestamp"),
-                            "exchange_name": check_record.get("exchange_name"),
-                            "account_id": check_record.get("account_id"),
-                            "limit_type": check.get("limit_type"),
-                            "current_value": check.get("current_value"),
-                            "limit_value": check.get("limit_value"),
-                            "utilization_ratio": check.get("utilization_ratio"),
-                            "status": check.get("status"),
-                        }
-                    )
+            breaches.extend(
+                {
+                    "timestamp": check_record.get("timestamp"),
+                    "exchange_name": check_record.get("exchange_name"),
+                    "account_id": check_record.get("account_id"),
+                    "limit_type": check.get("limit_type"),
+                    "current_value": check.get("current_value"),
+                    "limit_value": check.get("limit_value"),
+                    "utilization_ratio": check.get("utilization_ratio"),
+                    "status": check.get("status"),
+                }
+                for check in detailed_checks
+                if check.get("status") in [LimitStatus.BREACHED, LimitStatus.CRITICAL]
+            )
 
         return sorted(breaches, key=lambda x: x["timestamp"], reverse=True)
 

@@ -198,11 +198,15 @@ class GatewayProcess:
         """Return a status dict for the gateway process."""
         pid = self.read_pid(self.pid_file)
         if pid is None and self.pid_file.exists():
-            logger.warning("PID file %s is invalid during status check; cleaning it up", self.pid_file)
+            logger.warning(
+                "PID file %s is invalid during status check; cleaning it up", self.pid_file
+            )
             self._remove_pid()
         running = pid is not None and self.is_running(pid)
         if pid is not None and not running:
-            logger.warning("Process %d is not running during status check; cleaning up PID file", pid)
+            logger.warning(
+                "Process %d is not running during status check; cleaning up PID file", pid
+            )
             self._remove_pid()
         return {
             "pid_file": str(self.pid_file),

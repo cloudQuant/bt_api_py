@@ -17,6 +17,8 @@ from enum import Enum
 from typing import Any
 from urllib.parse import urlparse
 
+from websockets import ConnectionClosed, WebSocketException
+
 from bt_api_py.exceptions import RateLimitError, WebSocketError
 from bt_api_py.logging_factory import get_logger
 
@@ -258,7 +260,7 @@ class DeadLetterQueue:
 
     def __init__(self, max_size: int = 1000):
         self.max_size = max_size
-        self._queue = asyncio.Queue(maxsize=max_size)
+        self._queue: asyncio.Queue[dict[str, Any]] = asyncio.Queue(maxsize=max_size)
         self._processing = False
         self._processing_task: asyncio.Task | None = None
         self.logger = get_logger("dlq")
@@ -352,8 +354,8 @@ class IntelligentCircuitBreaker:
         self.last_success_time = 0.0
 
         # Adaptive metrics
-        self.failure_history = deque(maxlen=100)
-        self.success_history = deque(maxlen=100)
+        self.failure_history: deque[float] = deque(maxlen=100)
+        self.success_history: deque[float] = deque(maxlen=100)
 
     async def call(self, func: Callable, *args, **kwargs) -> Any:
         """Execute function through circuit breaker."""
@@ -461,8 +463,12 @@ class AdvancedWebSocketConnection:
         self._subscription_count: dict[str, int] = defaultdict(int)
 
         # Message handling
-        self._message_queue = asyncio.Queue(maxsize=config.message_buffer_size)
-        self._send_queue = asyncio.Queue(maxsize=config.send_buffer_size)
+        self._message_queue: asyncio.Queue[dict[str, Any]] = asyncio.Queue(
+            maxsize=config.message_buffer_size
+        )
+        self._send_queue: asyncio.Queue[dict[str, Any]] = asyncio.Queue(
+            maxsize=config.send_buffer_size
+        )
         self._processing_task: asyncio.Task | None = None
         self._sender_task: asyncio.Task | None = None
         self._health_task: asyncio.Task | None = None
@@ -539,7 +545,7 @@ class AdvancedWebSocketConnection:
                 self.logger.info(f"Connected to {endpoint}")
                 return
 
-            except Exception as e:
+            except (OSError, WebSocketException, TimeoutError) as e:
                 last_exception = e
                 self._endpoint_health[endpoint] = max(
                     0, self._endpoint_health.get(endpoint, 0) - 20
@@ -674,7 +680,7 @@ class AdvancedWebSocketConnection:
 
             except TimeoutError:
                 continue
-            except Exception as e:
+            except (OSError, WebSocketException, ConnectionClosed) as e:
                 self.logger.error(f"Failed to send message: {e}")
                 self._metrics.record_error(ErrorCategory.NETWORK)
 
@@ -726,14 +732,19 @@ class AdvancedWebSocketConnection:
                 if self._websocket:
                     await self._websocket.ping()
                 continue
-            except Exception as e:
-                self.logger.error(f"Message processing error: {e}")
+            except ConnectionClosed:
+                self.logger.warning("WebSocket connection closed")
+                self._metrics.record_error(ErrorCategory.NETWORK)
+                await self._handle_disconnect()
+                break
+            except OSError as e:
+                self.logger.error(f"Network error during message processing: {e}")
+                self._metrics.record_error(ErrorCategory.NETWORK)
+                await self._handle_disconnect()
+                break
+            except (json.JSONDecodeError, UnicodeDecodeError, zlib.error) as e:
+                self.logger.error(f"Message decode error: {e}")
                 self._metrics.record_error(ErrorCategory.PROTOCOL)
-
-                # Handle connection issues
-                if "ConnectionClosed" in str(type(e)) or "Connection lost" in str(e):
-                    await self._handle_disconnect()
-                    break
 
     async def _handle_message(self, message: dict[str, Any]) -> None:
         """Handle incoming message."""
@@ -841,7 +852,7 @@ class AdvancedWebSocketConnection:
                 self.logger.info("Reconnection successful")
                 return
 
-            except Exception as e:
+            except (OSError, WebSocketException, WebSocketError, TimeoutError) as e:
                 self.logger.error(f"Reconnection attempt {attempt} failed: {e}")
                 self._metrics.record_error(ErrorCategory.NETWORK)
 
@@ -868,7 +879,7 @@ class AdvancedWebSocketConnection:
                     if self._health.health_score < 30:
                         await self._handle_disconnect()
 
-            except Exception as e:
+            except (OSError, WebSocketException, ConnectionClosed) as e:
                 self.logger.error(f"Health monitor error: {e}")
                 self._metrics.record_error(ErrorCategory.NETWORK)
 

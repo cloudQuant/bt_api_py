@@ -10,7 +10,9 @@ from bt_api_py.feeds.live_bitflyer.spot import BitflyerRequestDataSpot
 
 def test_bitflyer_private_headers_include_auth_fields(monkeypatch: Any) -> None:
     request_data = BitflyerRequestData(public_key="public-key", private_key="secret-key")
-    monkeypatch.setattr("bt_api_py.feeds.live_bitflyer.request_base.time.time", lambda: 1700000000.0)
+    monkeypatch.setattr(
+        "bt_api_py.feeds.live_bitflyer.request_base.time.time", lambda: 1700000000.0
+    )
 
     headers = request_data._get_headers("GET", "/v1/me/getbalance")
 
@@ -73,7 +75,9 @@ def test_bitflyer_falls_back_to_api_credentials_when_aliases_are_empty(monkeypat
         private_key="",
         api_secret="secret-key",
     )
-    monkeypatch.setattr("bt_api_py.feeds.live_bitflyer.request_base.time.time", lambda: 1700000000.0)
+    monkeypatch.setattr(
+        "bt_api_py.feeds.live_bitflyer.request_base.time.time", lambda: 1700000000.0
+    )
 
     headers = request_data._get_headers("GET", "/v1/me/getbalance")
 

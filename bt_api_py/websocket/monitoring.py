@@ -474,7 +474,7 @@ class WebSocketBenchmark:
         self._running = False
 
     async def run_latency_benchmark(
-        self, websocket_manager, duration: float = 60.0
+        self, websocket_manager: Any, duration: float = 60.0
     ) -> BenchmarkResult:
         """Run latency benchmark."""
         start_time = time.time()
@@ -482,7 +482,7 @@ class WebSocketBenchmark:
 
         try:
             # Send test messages and measure round-trip time
-            async def test_connection():
+            async def test_connection() -> None:
                 # This would send actual test messages through WebSocket
                 # For now, simulate latency measurements
                 await asyncio.sleep(0.01)  # Simulate network latency
@@ -535,7 +535,7 @@ class WebSocketBenchmark:
             return result
 
     async def run_throughput_benchmark(
-        self, websocket_manager, duration: float = 60.0
+        self, websocket_manager: Any, duration: float = 60.0
     ) -> BenchmarkResult:
         """Run throughput benchmark."""
         start_time = time.time()
@@ -544,7 +544,7 @@ class WebSocketBenchmark:
 
         try:
             # Simulate high message throughput
-            async def simulate_traffic():
+            async def simulate_traffic() -> None:
                 nonlocal messages_sent, messages_received
                 messages_sent += 100
                 messages_received += 95  # Simulate 5% loss
@@ -595,7 +595,7 @@ class WebSocketBenchmark:
             return result
 
     async def run_memory_benchmark(
-        self, websocket_manager, duration: float = 60.0
+        self, websocket_manager: Any, duration: float = 60.0
     ) -> BenchmarkResult:
         """Run memory usage benchmark."""
         start_time = time.time()
@@ -706,7 +706,7 @@ class WebSocketBenchmark:
 class WebSocketMonitor:
     """Comprehensive WebSocket monitoring system."""
 
-    def __init__(self, websocket_manager) -> None:
+    def __init__(self, websocket_manager: Any) -> None:
         self.websocket_manager = websocket_manager
         self.logger = get_logger("websocket_monitor")
 
