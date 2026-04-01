@@ -1,12 +1,40 @@
 """Shared SWIG infrastructure for split CTP wrapper modules."""
 
+from pathlib import Path
 import weakref
 from sys import float_info, stderr
 from traceback import print_exception
 from types import ModuleType
 
 
-# Import the low-level C/C++ module.
+def _read_text_prefix(path: Path, limit: int = 256) -> str:
+    try:
+        return path.read_text(encoding="utf-8", errors="ignore")[:limit]
+    except Exception:
+        return ""
+
+
+def _build_ctp_import_diagnostic(import_error: Exception) -> str:
+    base_message = str(import_error)
+    module_dir = Path(__file__).resolve().parent
+    framework_files = [
+        module_dir / "thostmduserapi_se.framework" / "thostmduserapi_se",
+        module_dir / "thosttraderapi_se.framework" / "thosttraderapi_se",
+    ]
+    lfs_pointer_files = []
+    for framework_file in framework_files:
+        prefix = _read_text_prefix(framework_file)
+        if prefix.startswith("version https://git-lfs.github.com/spec/v1"):
+            lfs_pointer_files.append(str(framework_file))
+    if lfs_pointer_files:
+        files = ", ".join(lfs_pointer_files)
+        return (
+            f"{base_message} | Git LFS pointer detected for CTP native SDK files: {files}. "
+            "Run 'git lfs pull' in the bt_api_py repository, or restore the actual framework binaries."
+        )
+    return base_message
+
+
 class _FallbackSwigHandle:
     def __init__(self) -> None:
         self._owned = True
@@ -25,13 +53,18 @@ class _FallbackSwigHandle:
 
 
 class _FallbackApiObject:
-    def __init__(self, api_name: str) -> None:
+    def __init__(self, api_name: str, import_error: Exception) -> None:
         self._api_name = api_name
+        self._import_error = import_error
+
+    def _raise_unavailable(self):
+        message = _build_ctp_import_diagnostic(self._import_error)
+        raise RuntimeError(f"CTP native API '{self._api_name}' is unavailable: {message}")
 
     def __getattr__(self, name: str):
         if name == "GetApiVersion":
             return lambda *args, **kwargs: "fallback-ctp"
-        return lambda *args, **kwargs: 0
+        return lambda *args, **kwargs: self._raise_unavailable()
 
     def __repr__(self) -> str:
         return f"<fallback-ctp-api {self._api_name}>"
@@ -50,7 +83,7 @@ class _FallbackCtpModule(ModuleType):
         if name.startswith("new_"):
             ctor_name = name[4:]
             if ctor_name.endswith("Api"):
-                return lambda *args, **kwargs: _FallbackApiObject(ctor_name)
+                return lambda *args, **kwargs: _FallbackApiObject(ctor_name, self._import_error)
             return lambda *args, **kwargs: _FallbackSwigHandle()
 
         if name.startswith("delete_"):
@@ -79,7 +112,7 @@ class _FallbackCtpModule(ModuleType):
 
         if name.endswith("_CreateFtdcMdApi") or name.endswith("_CreateFtdcTraderApi"):
             api_name = name.split("_", 1)[0]
-            return lambda *args, **kwargs: _FallbackApiObject(api_name)
+            return lambda *args, **kwargs: _FallbackApiObject(api_name, self._import_error)
 
         if name.endswith("_GetApiVersion"):
             return lambda *args, **kwargs: "fallback-ctp"

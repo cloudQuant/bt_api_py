@@ -40,13 +40,14 @@ def _ensure_ctp_atexit():
         _CTP_ATEXIT_REGISTERED = True
 
 
-load_dotenv(Path(__file__).resolve().parent.parent / ".env")
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+load_dotenv(PROJECT_ROOT / ".env")
 
 _td, _md, _env_name = apply_ctp_env()
 
-BROKER_ID = os.environ.get("CTP_BROKER_ID", "9999")
-USER_ID = os.environ.get("CTP_USER_ID", "")
-PASSWORD = os.environ.get("CTP_PASSWORD", "")
+BROKER_ID = os.environ.get("CTP_BROKER_ID") or os.environ.get("SIMNOW_BROKER_ID") or "9999"
+USER_ID = os.environ.get("CTP_USER_ID") or os.environ.get("SIMNOW_USER_ID") or ""
+PASSWORD = os.environ.get("CTP_PASSWORD") or os.environ.get("SIMNOW_PASSWORD") or ""
 APP_ID = os.environ.get("CTP_APP_ID", "simnow_client_test")
 AUTH_CODE = os.environ.get("CTP_AUTH_CODE", "0000000000000000")
 MD_FRONT = _md
@@ -56,7 +57,7 @@ EXCHANGE = os.environ.get("CTP_EXCHANGE", "CZCE")
 
 SKIP_REASON = ""
 if not USER_ID or not PASSWORD:
-    SKIP_REASON = "CTP_USER_ID and CTP_PASSWORD not set in .env"
+    SKIP_REASON = "CTP_USER_ID/CTP_PASSWORD or SIMNOW_USER_ID/SIMNOW_PASSWORD not set in project .env"
 
 skip_if_no_creds = pytest.mark.skipif(bool(SKIP_REASON), reason=SKIP_REASON)
 

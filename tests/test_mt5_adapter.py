@@ -341,6 +341,13 @@ class TestMt5AdapterSymbolMapping:
         assert adapter._resolve_symbol("XAUUSD") == "GOLD.r"
         assert adapter._resolve_symbol("EURUSD") == "EURUSD.r"
 
+    def test_match_broker_symbol_name_prefers_suffix_variant(self):
+        matched = Mt5GatewayAdapter._match_broker_symbol_name(
+            "NAS100",
+            ["EURUSD", "NAS100m", "USOILm"],
+        )
+        assert matched == "NAS100m"
+
 
 class TestMt5AdapterVolumeNormalization:
     def test_basic_normalization(self):
@@ -663,6 +670,53 @@ class TestMt5AdapterWithFakeClient:
         self.adapter.subscribe_symbols(["EURUSD"])
         assert "EURUSD" in self.adapter._symbol_specs
         assert self.adapter._symbol_specs["EURUSD"]["digits"] == 5
+
+    def test_subscribe_symbols_auto_resolves_broker_suffix_symbol(self):
+        self.client._symbols["NAS100m"] = FakeSymbolInfo(name="NAS100m", symbol_id=3, digits=2)
+        self.client._symbols_by_id[3] = self.client._symbols["NAS100m"]
+        self.client.symbol_names = list(self.client._symbols.keys())
+
+        result = self.adapter.subscribe_symbols(["NAS100"])
+
+        assert result["symbols"] == ["NAS100"]
+        assert "NAS100m" in self.client._subscribed
+        assert self.adapter._symbol_map["NAS100"] == "NAS100m"
+
+    def test_subscribe_symbols_reloads_cache_before_retry(self):
+        class ReloadingClient(FakeMT5WebClient):
+            def __init__(self, **kwargs):
+                super().__init__(**kwargs)
+                self._symbols = {}
+                self._symbols_by_id = {}
+                self.symbol_names = []
+                self.load_symbols_calls = 0
+                self.subscribe_attempts = 0
+
+            async def load_symbols(self):
+                self.load_symbols_calls += 1
+                self._symbols = {
+                    "USOILm": FakeSymbolInfo(name="USOILm", symbol_id=7, digits=2),
+                }
+                self._symbols_by_id = {7: self._symbols["USOILm"]}
+                self.symbol_names = ["USOILm"]
+
+            async def subscribe_symbols(self, symbols: list[str]):
+                self.subscribe_attempts += 1
+                if self.subscribe_attempts == 1:
+                    exc_type = type("SymbolNotFoundError", (Exception,), {})
+                    raise exc_type("symbols not found in cache (call load_symbols first): ['USOIL']")
+                await super().subscribe_symbols(symbols)
+
+        adapter = _make_adapter(ReloadingClient())
+        try:
+            result = adapter.subscribe_symbols(["USOIL"])
+
+            assert result["symbols"] == ["USOIL"]
+            assert adapter._client.load_symbols_calls >= 1
+            assert "USOILm" in adapter._client._subscribed
+            assert adapter._symbol_map["USOIL"] == "USOILm"
+        finally:
+            _stop_adapter(adapter)
 
 
 def test_mt5_adapter_disconnect_logs_close_failures(monkeypatch):

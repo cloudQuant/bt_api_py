@@ -83,7 +83,8 @@ SIMNOW_ENVIRONMENTS = {
 }
 
 
-load_dotenv(Path(__file__).resolve().parents[2] / ".env")
+PROJECT_ROOT = Path(__file__).resolve().parents[3]
+load_dotenv(PROJECT_ROOT / ".env")
 
 _CTP_ATEXIT_REGISTERED = False
 DEFAULT_INSTRUMENT = os.environ.get("CTP_INSTRUMENT", "SA605")
@@ -254,7 +255,7 @@ os._exit(0 if ready else 1)
 """.strip()
     result = subprocess.run(
         [sys.executable, "-c", script],
-        cwd=Path(__file__).resolve().parents[2],
+        cwd=PROJECT_ROOT,
         env=child_env,
         capture_output=True,
         text=True,

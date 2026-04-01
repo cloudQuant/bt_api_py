@@ -75,6 +75,12 @@ def _snapshot_ctp_field(field):
     return result
 
 
+def _normalize_ctp_value(value):
+    if isinstance(value, bytes):
+        return value.decode("gbk", errors="replace")
+    return value
+
+
 # ===========================================================================
 #  MdClient - 行情客户端
 # ===========================================================================
@@ -87,17 +93,27 @@ class _MdSpi(CThostFtdcMdSpi):
 
     def OnFrontConnected(self):
         self._c._connected = True
+        self._c._record_lifecycle_event("front_connected")
         field = CThostFtdcReqUserLoginField()
         field.BrokerID = self._c.broker_id
         field.UserID = self._c.user_id
         field.Password = self._c.password
-        self._c._api.ReqUserLogin(field, 1)
+        result = self._c._api.ReqUserLogin(field, 1)
+        self._c._record_lifecycle_event("req_user_login", result=result)
 
     def OnFrontDisconnected(self, nReason):
         self._c._connected = False
         self._c._loggedin = False
+        self._c._record_lifecycle_event("front_disconnected", reason=nReason)
 
     def OnRspUserLogin(self, pRspUserLogin, pRspInfo, nRequestID, bIsLast):
+        self._c._record_lifecycle_event(
+            "rsp_user_login",
+            request_id=nRequestID,
+            is_last=bIsLast,
+            error_id=getattr(pRspInfo, "ErrorID", None),
+            error_msg=_normalize_ctp_value(getattr(pRspInfo, "ErrorMsg", "")),
+        )
         if pRspInfo and pRspInfo.ErrorID == 0:
             self._c._loggedin = True
             if self._c._pending_instruments:
@@ -116,6 +132,13 @@ class _MdSpi(CThostFtdcMdSpi):
         pass
 
     def OnRspError(self, pRspInfo, nRequestID, bIsLast):
+        self._c._record_lifecycle_event(
+            "rsp_error",
+            request_id=nRequestID,
+            is_last=bIsLast,
+            error_id=getattr(pRspInfo, "ErrorID", None),
+            error_msg=_normalize_ctp_value(getattr(pRspInfo, "ErrorMsg", "")),
+        )
         if self._c.on_error:
             self._c.on_error(pRspInfo)
 
@@ -146,6 +169,27 @@ class MdClient:
         self._api = None
         self._spi = None
         self._thread = None
+        self._join_returned = False
+        self._join_error = None
+        self._lifecycle_events = []
+        self._lifecycle_lock = threading.Lock()
+
+    def _run_join(self):
+        api = self._api
+        try:
+            if api is not None:
+                api.Join()
+        except Exception as exc:
+            self._join_error = exc
+            self._record_lifecycle_event("join_error", error=repr(exc))
+        finally:
+            self._join_returned = True
+            self._record_lifecycle_event("join_returned")
+
+    def _record_lifecycle_event(self, event, **payload):
+        item = {"event": event, **{key: _normalize_ctp_value(value) for key, value in payload.items()}}
+        with self._lifecycle_lock:
+            self._lifecycle_events.append(item)
 
     def subscribe(self, instruments):
         """订阅合约列表（可在 start 前或后调用）"""
@@ -159,6 +203,8 @@ class MdClient:
         Args:
             block: True=阻塞直到断开, False=后台线程运行
         """
+        self._join_returned = False
+        self._join_error = None
         flow = _flow_dir(f"md_{self.broker_id}_{self.user_id}")
         self._api = CThostFtdcMdApi.CreateFtdcMdApi(flow)
         self._spi = _MdSpi(self)
@@ -168,13 +214,13 @@ class MdClient:
 
         if block:
             try:
-                self._api.Join()
+                self._run_join()
             except KeyboardInterrupt:
                 pass
             finally:
                 self.stop()
         else:
-            self._thread = threading.Thread(target=self._api.Join, daemon=True)
+            self._thread = threading.Thread(target=self._run_join, daemon=True)
             self._thread.start()
 
     def wait_ready(self, timeout=15):
@@ -225,30 +271,56 @@ class _TraderSpi(CThostFtdcTraderSpi):
 
     def OnFrontConnected(self):
         self._c._connected = True
+        self._c._record_lifecycle_event("front_connected")
         field = CThostFtdcReqAuthenticateField()
         field.BrokerID = self._c.broker_id
         field.UserID = self._c.user_id
         field.AppID = self._c.app_id
         field.AuthCode = self._c.auth_code
         self._c._req_id += 1
-        self._c._api.ReqAuthenticate(field, self._c._req_id)
+        result = self._c._api.ReqAuthenticate(field, self._c._req_id)
+        self._c._record_lifecycle_event(
+            "req_authenticate",
+            request_id=self._c._req_id,
+            result=result,
+        )
 
     def OnFrontDisconnected(self, nReason):
         self._c._connected = False
         self._c._ready = False
+        self._c._record_lifecycle_event("front_disconnected", reason=nReason)
 
     def OnRspAuthenticate(self, pRspAuthenticateField, pRspInfo, nRequestID, bIsLast):
+        self._c._record_lifecycle_event(
+            "rsp_authenticate",
+            request_id=nRequestID,
+            is_last=bIsLast,
+            error_id=getattr(pRspInfo, "ErrorID", None),
+            error_msg=_normalize_ctp_value(getattr(pRspInfo, "ErrorMsg", "")),
+        )
         if pRspInfo and pRspInfo.ErrorID == 0:
             field = CThostFtdcReqUserLoginField()
             field.BrokerID = self._c.broker_id
             field.UserID = self._c.user_id
             field.Password = self._c.password
             self._c._req_id += 1
-            self._c._api.ReqUserLogin(field, self._c._req_id)
+            result = self._c._api.ReqUserLogin(field, self._c._req_id)
+            self._c._record_lifecycle_event(
+                "req_user_login",
+                request_id=self._c._req_id,
+                result=result,
+            )
         elif self._c.on_error:
             self._c.on_error(pRspInfo)
 
     def OnRspUserLogin(self, pRspUserLogin, pRspInfo, nRequestID, bIsLast):
+        self._c._record_lifecycle_event(
+            "rsp_user_login",
+            request_id=nRequestID,
+            is_last=bIsLast,
+            error_id=getattr(pRspInfo, "ErrorID", None),
+            error_msg=_normalize_ctp_value(getattr(pRspInfo, "ErrorMsg", "")),
+        )
         if pRspInfo and pRspInfo.ErrorID == 0:
             self._c._front_id = pRspUserLogin.FrontID
             self._c._session_id = pRspUserLogin.SessionID
@@ -268,6 +340,13 @@ class _TraderSpi(CThostFtdcTraderSpi):
             self._c.on_error(pRspInfo)
 
     def OnRspSettlementInfoConfirm(self, pSettlementInfoConfirm, pRspInfo, nRequestID, bIsLast):
+        self._c._record_lifecycle_event(
+            "rsp_settlement_confirm",
+            request_id=nRequestID,
+            is_last=bIsLast,
+            error_id=getattr(pRspInfo, "ErrorID", None),
+            error_msg=_normalize_ctp_value(getattr(pRspInfo, "ErrorMsg", "")),
+        )
         if pRspInfo and pRspInfo.ErrorID == 0:
             self._c._ready = True
 
@@ -305,6 +384,13 @@ class _TraderSpi(CThostFtdcTraderSpi):
         )
 
     def OnRspError(self, pRspInfo, nRequestID, bIsLast):
+        self._c._record_lifecycle_event(
+            "rsp_error",
+            request_id=nRequestID,
+            is_last=bIsLast,
+            error_id=getattr(pRspInfo, "ErrorID", None),
+            error_msg=_normalize_ctp_value(getattr(pRspInfo, "ErrorMsg", "")),
+        )
         self._c._push_error_event(
             event_type="response_error",
             rsp_info=pRspInfo,
@@ -361,9 +447,32 @@ class TraderClient:
         self._order_events = queue.Queue()
         self._trade_events = queue.Queue()
         self._error_events = queue.Queue()
+        self._join_returned = False
+        self._join_error = None
+        self._lifecycle_events = []
+        self._lifecycle_lock = threading.Lock()
+
+    def _run_join(self):
+        api = self._api
+        try:
+            if api is not None:
+                api.Join()
+        except Exception as exc:
+            self._join_error = exc
+            self._record_lifecycle_event("join_error", error=repr(exc))
+        finally:
+            self._join_returned = True
+            self._record_lifecycle_event("join_returned")
+
+    def _record_lifecycle_event(self, event, **payload):
+        item = {"event": event, **{key: _normalize_ctp_value(value) for key, value in payload.items()}}
+        with self._lifecycle_lock:
+            self._lifecycle_events.append(item)
 
     def start(self, block=False):
         """启动连接（默认后台运行）"""
+        self._join_returned = False
+        self._join_error = None
         flow = _flow_dir(f"td_{self.broker_id}_{self.user_id}")
         self._api = CThostFtdcTraderApi.CreateFtdcTraderApi(flow)
         self._spi = _TraderSpi(self)
@@ -375,13 +484,13 @@ class TraderClient:
 
         if block:
             try:
-                self._api.Join()
+                self._run_join()
             except KeyboardInterrupt:
                 pass
             finally:
                 self.stop()
         else:
-            self._thread = threading.Thread(target=self._api.Join, daemon=True)
+            self._thread = threading.Thread(target=self._run_join, daemon=True)
             self._thread.start()
 
     def wait_ready(self, timeout=15):

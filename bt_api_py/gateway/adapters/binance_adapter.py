@@ -67,6 +67,7 @@ class BinanceGatewayAdapter(BaseGatewayAdapter):
         self.aliases: dict[str, set[str]] = defaultdict(set)
         self.running = False
         self.thread: threading.Thread | None = None
+        self.account_stream_thread: threading.Thread | None = None
         self.timeout = float(normalized.get("gateway_startup_timeout_sec", 10.0) or 10.0)
 
     def connect(self) -> None:
@@ -85,8 +86,26 @@ class BinanceGatewayAdapter(BaseGatewayAdapter):
         self.thread = None
         self.market_stream = None
         self.account_stream = None
+        self.account_stream_thread = None
         self.aliases = defaultdict(set)
         self.logger.info("BinanceGatewayAdapter disconnected")
+
+    def _start_account_stream_async(self, account_kwargs: dict[str, Any]) -> None:
+        try:
+            if self.asset_type == "SPOT":
+                from bt_api_py.feeds.live_binance.spot import BinanceAccountWssDataSpot
+
+                stream = BinanceAccountWssDataSpot(self.q, **account_kwargs)
+            else:
+                stream = BinanceAccountWssDataSwap(self.q, **account_kwargs)
+            stream.start()
+            self.account_stream = stream
+            self.logger.info("Binance account stream started")
+        except Exception as exc:
+            self.account_stream = None
+            self.logger.warning(f"Binance account stream unavailable: {exc}")
+        finally:
+            self.account_stream_thread = None
 
     def subscribe_symbols(self, symbols: list[str]) -> dict[str, Any]:
         topics = [{"topic": "ticker", "symbol": s} for s in symbols]
@@ -116,14 +135,13 @@ class BinanceGatewayAdapter(BaseGatewayAdapter):
                 {"topic": "order"},
                 {"topic": "trade"},
             ]
-            if self.asset_type == "SPOT":
-                from bt_api_py.feeds.live_binance.spot import BinanceAccountWssDataSpot
-
-                self.account_stream = BinanceAccountWssDataSpot(self.q, **account_kwargs)
-            else:
-                self.account_stream = BinanceAccountWssDataSwap(self.q, **account_kwargs)
-            self.account_stream.start()
-            self.logger.info("Binance account stream started")
+            if self.account_stream_thread is None or not self.account_stream_thread.is_alive():
+                self.account_stream_thread = threading.Thread(
+                    target=self._start_account_stream_async,
+                    args=(account_kwargs,),
+                    daemon=True,
+                )
+                self.account_stream_thread.start()
 
         for symbol in symbols:
             self.aliases[symbol].add(symbol)

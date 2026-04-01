@@ -141,9 +141,8 @@ class Mt5GatewayAdapter(BaseGatewayAdapter):
         self.logger.info("Mt5GatewayAdapter disconnected")
 
     def subscribe_symbols(self, symbols: list[str]) -> dict[str, Any]:
-        resolved = [self._resolve_symbol(s) for s in symbols]
         future = asyncio.run_coroutine_threadsafe(
-            self._async_subscribe(symbols, resolved), self._loop
+            self._async_subscribe(symbols), self._loop
         )
         future.result(timeout=self._timeout)
         self._subscribed_symbols.extend(symbols)
@@ -309,13 +308,26 @@ class Mt5GatewayAdapter(BaseGatewayAdapter):
                 f"Mt5GatewayAdapter failed to register position update callback: {type(exc).__name__}: {exc}"
             )
 
-    async def _async_subscribe(
-        self, standard_symbols: list[str], resolved_symbols: list[str]
-    ) -> None:
-        await self._client.subscribe_symbols(resolved_symbols)
-        for std_sym in standard_symbols:
+    async def _async_subscribe(self, standard_symbols: list[str]) -> None:
+        resolved_pairs = [
+            (standard_symbol, await self._resolve_symbol_for_subscription(standard_symbol))
+            for standard_symbol in standard_symbols
+        ]
+        resolved_symbols = [resolved_symbol for _standard_symbol, resolved_symbol in resolved_pairs]
+        try:
+            await self._client.subscribe_symbols(resolved_symbols)
+        except Exception as exc:
+            if type(exc).__name__ != "SymbolNotFoundError":
+                raise
+            await self._reload_symbol_cache(force=True)
+            resolved_pairs = [
+                (standard_symbol, await self._resolve_symbol_for_subscription(standard_symbol))
+                for standard_symbol in standard_symbols
+            ]
+            resolved_symbols = [resolved_symbol for _standard_symbol, resolved_symbol in resolved_pairs]
+            await self._client.subscribe_symbols(resolved_symbols)
+        for std_sym, mt5_sym in resolved_pairs:
             try:
-                mt5_sym = self._resolve_symbol(std_sym)
                 info = await self._client.get_full_symbol_info(mt5_sym)
                 if info:
                     self._symbol_specs[std_sym] = {
@@ -329,6 +341,64 @@ class Mt5GatewayAdapter(BaseGatewayAdapter):
                     }
             except Exception as exc:
                 logger.warning("failed to cache symbol info for %s: %s", std_sym, exc)
+
+    async def _reload_symbol_cache(self, force: bool = False) -> None:
+        if self._client is None or not hasattr(self._client, "load_symbols"):
+            return
+        symbol_names = self._get_client_symbol_names()
+        if symbol_names and not force:
+            return
+        await self._client.load_symbols()
+
+    async def _resolve_symbol_for_subscription(self, standard_symbol: str) -> str:
+        desired = self._resolve_symbol(standard_symbol)
+        await self._reload_symbol_cache(force=False)
+        resolved = self._match_broker_symbol_name(desired, self._get_client_symbol_names())
+        if resolved is not None:
+            if resolved != desired:
+                self._symbol_map.setdefault(standard_symbol, resolved)
+            return resolved
+        await self._reload_symbol_cache(force=True)
+        resolved = self._match_broker_symbol_name(desired, self._get_client_symbol_names())
+        if resolved is not None:
+            if resolved != desired:
+                self._symbol_map.setdefault(standard_symbol, resolved)
+            return resolved
+        return desired
+
+    def _get_client_symbol_names(self) -> list[str]:
+        if self._client is None:
+            return []
+        names = getattr(self._client, "symbol_names", None)
+        if isinstance(names, list):
+            return [str(name) for name in names if str(name)]
+        symbols = getattr(self._client, "_symbols", None)
+        if isinstance(symbols, dict):
+            return [str(name) for name in symbols.keys() if str(name)]
+        return []
+
+    @staticmethod
+    def _match_broker_symbol_name(desired: str, symbol_names: list[str]) -> str | None:
+        if not desired or not symbol_names:
+            return None
+        desired_upper = desired.upper()
+        exact_matches = [name for name in symbol_names if name.upper() == desired_upper]
+        if exact_matches:
+            return sorted(exact_matches, key=len)[0]
+        prefix_matches = [name for name in symbol_names if name.upper().startswith(desired_upper)]
+        if len(prefix_matches) == 1:
+            return prefix_matches[0]
+        if len(prefix_matches) > 1:
+            return sorted(prefix_matches, key=len)[0]
+        compact_desired = "".join(ch for ch in desired_upper if ch.isalnum())
+        compact_matches = [
+            name
+            for name in symbol_names
+            if "".join(ch for ch in name.upper() if ch.isalnum()).startswith(compact_desired)
+        ]
+        if compact_matches:
+            return sorted(compact_matches, key=len)[0]
+        return None
 
     async def _async_place_order(self, payload: dict[str, Any]) -> dict[str, Any]:
         symbol = str(payload.get("data_name") or payload.get("symbol") or "")

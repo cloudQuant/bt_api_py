@@ -51,6 +51,7 @@ class IbWebRequestData(Feed):
         self._session_lock = threading.Lock()
         self._last_session_check = 0
         self._session_check_interval = 60
+        self._connect_poll_interval = 0.5
         self._subscribed_conids = set()
 
         # Cookie 支持
@@ -154,14 +155,46 @@ class IbWebRequestData(Feed):
     # ── 连接管理 ──────────────────────────────────────────────
 
     def connect(self):
+        deadline = time.time() + max(float(self.timeout or 0), 0.0)
+        last_error = None
+        last_reauth_at = 0.0
         try:
-            result = self.check_auth_status()
-            self._authenticated = result.get("authenticated", False)
-            if not self._authenticated:
-                self.reauthenticate()
+            while time.time() <= deadline:
+                try:
+                    result = self.check_auth_status()
+                    self._authenticated = self._is_auth_ready(result)
+                    if self._authenticated:
+                        self._last_session_check = time.time()
+                        return
+                except Exception as e:
+                    last_error = e
+                    self.request_logger.warning(f"IB Web auth status check failed: {e}")
+                now = time.time()
+                if now - last_reauth_at >= self._connect_poll_interval:
+                    try:
+                        reauth_result = self.reauthenticate()
+                        if self._is_auth_ready(reauth_result):
+                            self._authenticated = True
+                            self._last_session_check = now
+                            return
+                    except Exception as e:
+                        last_error = e
+                        self.request_logger.warning(f"IB Web reauthenticate failed: {e}")
+                    last_reauth_at = now
+                time.sleep(self._connect_poll_interval)
         except Exception as e:
             self.request_logger.warning(f"IB Web connect failed: {e}")
-            self._authenticated = False
+            last_error = e
+        self._authenticated = False
+        if last_error is not None:
+            self.request_logger.warning(f"IB Web connect timed out after {self.timeout}s: {last_error}")
+
+    def _is_auth_ready(self, result):
+        if not isinstance(result, dict):
+            return False
+        if bool(result.get("authenticated")):
+            return True
+        return bool(result.get("connected"))
 
     def disconnect(self):
         self._authenticated = False
