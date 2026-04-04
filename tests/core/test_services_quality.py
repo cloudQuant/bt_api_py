@@ -41,7 +41,9 @@ async def test_cache_service_local_cache_isolated_from_mutation() -> None:
 
 
 @pytest.mark.asyncio
-async def test_rate_limit_service_respects_configured_remaining_tokens_before_first_acquire() -> None:
+async def test_rate_limit_service_respects_configured_remaining_tokens_before_first_acquire() -> (
+    None
+):
     service = RateLimitService()
 
     service.configure_limit("orders", 3, 60.0)

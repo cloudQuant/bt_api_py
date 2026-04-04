@@ -1,4 +1,3 @@
-import json
 import os
 import re
 import time
@@ -60,7 +59,9 @@ def load_ib_web_settings(
     base_dir: str | Path | None = None,
     env_file: str | Path | None = None,
 ) -> dict[str, Any]:
-    env_path = resolve_local_path(env_file, base_dir=base_dir) if env_file else project_root() / ".env"
+    env_path = (
+        resolve_local_path(env_file, base_dir=base_dir) if env_file else project_root() / ".env"
+    )
     env_values = dotenv_values(env_path)
     data = dict(overrides or {})
 
@@ -90,30 +91,38 @@ def load_ib_web_settings(
             return default
 
     resolved_base_dir = Path(base_dir).expanduser() if base_dir else project_root()
-    cookie_output_value = str(
-        pick("cookie_output", pick("IB_WEB_COOKIE_OUTPUT", "")) or ""
-    ).strip()
-    cookie_source_value = str(
-        pick("cookie_source", pick("IB_WEB_COOKIE_SOURCE", "")) or ""
-    ).strip()
+    cookie_output_value = str(pick("cookie_output", pick("IB_WEB_COOKIE_OUTPUT", "")) or "").strip()
+    cookie_source_value = str(pick("cookie_source", pick("IB_WEB_COOKIE_SOURCE", "")) or "").strip()
     cookie_output_path = (
         resolve_local_path(cookie_output_value, base_dir=resolved_base_dir)
         if cookie_output_value
         else default_cookie_output(base_dir=resolved_base_dir)
     )
-    normalized_cookie_source = normalize_cookie_source(cookie_source_value, base_dir=resolved_base_dir)
+    normalized_cookie_source = normalize_cookie_source(
+        cookie_source_value, base_dir=resolved_base_dir
+    )
     return {
-        "base_url": str(pick("base_url", pick("IB_WEB_BASE_URL", "https://localhost:5000/v1/api"))).strip(),
+        "base_url": str(
+            pick("base_url", pick("IB_WEB_BASE_URL", "https://localhost:5000/v1/api"))
+        ).strip(),
         "account_id": str(pick("account_id", pick("IB_WEB_ACCOUNT_ID", ""))).strip(),
         "verify_ssl": pick_bool("verify_ssl", pick_bool("IB_WEB_VERIFY_SSL", False)),
         "timeout": pick_int("timeout", pick_int("IB_WEB_TIMEOUT", 10)),
         "cookie_source": normalized_cookie_source,
-        "cookie_browser": str(pick("cookie_browser", pick("IB_WEB_COOKIE_BROWSER", "chrome"))).strip() or "chrome",
-        "cookie_path": str(pick("cookie_path", pick("IB_WEB_COOKIE_PATH", "/sso"))).strip() or "/sso",
+        "cookie_browser": str(
+            pick("cookie_browser", pick("IB_WEB_COOKIE_BROWSER", "chrome"))
+        ).strip()
+        or "chrome",
+        "cookie_path": str(pick("cookie_path", pick("IB_WEB_COOKIE_PATH", "/sso"))).strip()
+        or "/sso",
         "username": str(pick("username", pick("IB_WEB_USERNAME", ""))).strip(),
         "password": str(pick("password", pick("IB_WEB_PASSWORD", ""))).strip(),
-        "login_mode": str(pick("login_mode", pick("IB_WEB_LOGIN_MODE", "paper"))).strip().lower() or "paper",
-        "login_browser": str(pick("login_browser", pick("IB_WEB_LOGIN_BROWSER", "chrome"))).strip().lower() or "chrome",
+        "login_mode": str(pick("login_mode", pick("IB_WEB_LOGIN_MODE", "paper"))).strip().lower()
+        or "paper",
+        "login_browser": str(pick("login_browser", pick("IB_WEB_LOGIN_BROWSER", "chrome")))
+        .strip()
+        .lower()
+        or "chrome",
         "login_headless": pick_bool("login_headless", pick_bool("IB_WEB_LOGIN_HEADLESS", False)),
         "login_timeout": pick_int("login_timeout", pick_int("IB_WEB_LOGIN_TIMEOUT", 180)),
         "cookie_output": str(cookie_output_path),
@@ -137,7 +146,9 @@ def api_base_url(base_url: str) -> str:
     return value + "/v1/api"
 
 
-def auth_status(base_url: str, cookies: dict[str, str], verify_ssl: bool = False, timeout: int = 10) -> requests.Response:
+def auth_status(
+    base_url: str, cookies: dict[str, str], verify_ssl: bool = False, timeout: int = 10
+) -> requests.Response:
     return requests.post(
         f"{api_base_url(base_url)}/iserver/auth/status",
         cookies=cookies,
@@ -159,7 +170,9 @@ def auth_response_is_authenticated(response: requests.Response) -> bool:
     return bool(payload.get("authenticated", False) or payload.get("connected", False))
 
 
-def fetch_accounts(base_url: str, cookies: dict[str, str], verify_ssl: bool = False, timeout: int = 10) -> list[dict[str, Any]]:
+def fetch_accounts(
+    base_url: str, cookies: dict[str, str], verify_ssl: bool = False, timeout: int = 10
+) -> list[dict[str, Any]]:
     response = requests.get(
         f"{api_base_url(base_url)}/portfolio/accounts",
         cookies=cookies,
@@ -240,7 +253,7 @@ def _click_mode(page, login_mode: str) -> bool:
             if login_mode == "live" and checked:
                 paper_switch.first.uncheck(timeout=2000, force=True)
                 return True
-            return True
+            return False
     except Exception:
         pass
     patterns = [re.compile("paper", re.I), re.compile("demo", re.I), re.compile("sim", re.I)]
@@ -248,11 +261,11 @@ def _click_mode(page, login_mode: str) -> bool:
         patterns = [re.compile("live", re.I), re.compile("real", re.I)]
     for pattern in patterns:
         for getter in (
-            lambda: page.get_by_text(pattern),
-            lambda: page.get_by_role("tab", name=pattern),
-            lambda: page.get_by_role("button", name=pattern),
-            lambda: page.get_by_role("radio", name=pattern),
-            lambda: page.get_by_label(pattern),
+            lambda pattern=pattern: page.get_by_text(pattern),
+            lambda pattern=pattern: page.get_by_role("tab", name=pattern),
+            lambda pattern=pattern: page.get_by_role("button", name=pattern),
+            lambda pattern=pattern: page.get_by_role("radio", name=pattern),
+            lambda pattern=pattern: page.get_by_label(pattern),
         ):
             try:
                 locator = getter()
@@ -324,7 +337,9 @@ def _submit_login(page) -> None:
                 return
         except Exception:
             continue
-    submit_locator = _first_visible(page, ["button[type='submit']", "input[type='submit']", "button"])
+    submit_locator = _first_visible(
+        page, ["button[type='submit']", "input[type='submit']", "button"]
+    )
     if submit_locator is None:
         raise RuntimeError("Unable to locate login submit button on Client Portal Gateway page")
     submit_locator.click(timeout=3000)
@@ -355,7 +370,12 @@ def login_and_save_cookies(settings: dict[str, Any]) -> dict[str, Any]:
     base_url = str(settings.get("base_url") or "https://localhost:5000/v1/api")
     verify_ssl = bool(settings.get("verify_ssl", False))
     timeout = int(settings.get("timeout", 10))
-    cookie_output = str(settings.get("cookie_output") or default_cookie_output(base_dir=settings.get("cookie_base_dir")))
+    configured_account_id = str(settings.get("account_id") or "").strip()
+    settle_timeout = max(int(settings.get("login_settle_timeout", 8) or 8), 0)
+    cookie_output = str(
+        settings.get("cookie_output")
+        or default_cookie_output(base_dir=settings.get("cookie_base_dir"))
+    )
     cookie_output_path = resolve_local_path(cookie_output, base_dir=settings.get("cookie_base_dir"))
     with sync_playwright() as playwright:
         browser_type = playwright.chromium
@@ -377,11 +397,12 @@ def login_and_save_cookies(settings: dict[str, Any]) -> dict[str, Any]:
         page = context.new_page()
         page.goto(gateway_origin(base_url), wait_until="domcontentloaded", timeout=30000)
         page.wait_for_timeout(1500)
-        _click_mode(page, login_mode)
-        page.wait_for_timeout(500)
+        mode_changed = _click_mode(page, login_mode)
+        if mode_changed:
+            page.wait_for_load_state("domcontentloaded", timeout=10000)
+            page.wait_for_timeout(1000)
         _fill_credentials(page, username, password)
         page.wait_for_timeout(300)
-        _click_mode(page, login_mode)
         _submit_login(page)
         deadline = time.time() + launch_timeout
         cookies: dict[str, str] = {}
@@ -397,15 +418,68 @@ def login_and_save_cookies(settings: dict[str, Any]) -> dict[str, Any]:
                 continue
             last_status = response.status_code
             if response.status_code == 200:
-                accounts = fetch_accounts(base_url, cookies, verify_ssl=verify_ssl, timeout=timeout)
-                account_id = pick_account_id(accounts, login_mode)
+                try:
+                    accounts = fetch_accounts(
+                        base_url, cookies, verify_ssl=verify_ssl, timeout=timeout
+                    )
+                except requests.RequestException:
+                    continue
+                account_id = pick_account_id(accounts, login_mode) or configured_account_id
+                if not account_id:
+                    continue
+                if settle_timeout > 0:
+                    settle_deadline = min(time.time() + settle_timeout, deadline)
+                    stable = False
+                    while time.time() < settle_deadline:
+                        page.wait_for_timeout(2000)
+                        refreshed_cookies = _cookie_dict_from_context(
+                            context, gateway_origin(base_url)
+                        )
+                        if not refreshed_cookies:
+                            continue
+                        try:
+                            stable_response = auth_status(
+                                base_url,
+                                refreshed_cookies,
+                                verify_ssl=verify_ssl,
+                                timeout=timeout,
+                            )
+                        except requests.RequestException:
+                            continue
+                        if stable_response.status_code != 200:
+                            continue
+                        try:
+                            stable_accounts = fetch_accounts(
+                                base_url,
+                                refreshed_cookies,
+                                verify_ssl=verify_ssl,
+                                timeout=timeout,
+                            )
+                        except requests.RequestException:
+                            stable_accounts = []
+                        stable_account_id = (
+                            pick_account_id(stable_accounts, login_mode)
+                            or account_id
+                            or configured_account_id
+                        )
+                        if stable_account_id:
+                            cookies = refreshed_cookies
+                            account_id = stable_account_id
+                            stable = True
+                            break
+                    if not stable:
+                        continue
                 save_cookies_to_file(cookies, str(cookie_output_path))
                 browser.close()
                 return {
                     "cookies": cookies,
                     "cookie_output": str(cookie_output_path),
-                    "cookie_output_relative": to_relative_path(cookie_output_path, base_dir=settings.get("cookie_base_dir")),
-                    "cookie_source": normalize_cookie_source(f"file:{cookie_output_path}", base_dir=settings.get("cookie_base_dir")),
+                    "cookie_output_relative": to_relative_path(
+                        cookie_output_path, base_dir=settings.get("cookie_base_dir")
+                    ),
+                    "cookie_source": normalize_cookie_source(
+                        f"file:{cookie_output_path}", base_dir=settings.get("cookie_base_dir")
+                    ),
                     "account_id": account_id,
                     "status_code": response.status_code,
                     "used_login": True,
@@ -431,13 +505,18 @@ def ensure_authenticated_session(
                 timeout=int(settings.get("timeout", 10)),
             )
             account_id = pick_account_id(accounts, str(settings.get("login_mode") or "paper"))
-        cookie_output = str(settings.get("cookie_output") or default_cookie_output(base_dir=settings.get("cookie_base_dir")))
+        cookie_output = str(
+            settings.get("cookie_output")
+            or default_cookie_output(base_dir=settings.get("cookie_base_dir"))
+        )
         save_cookies_to_file(cookies, cookie_output)
         return {
             "cookies": cookies,
             "cookie_output": cookie_output,
             "cookie_output_relative": str(settings.get("cookie_output_relative") or ""),
-            "cookie_source": normalize_cookie_source(f"file:{cookie_output}", base_dir=settings.get("cookie_base_dir")),
+            "cookie_source": normalize_cookie_source(
+                f"file:{cookie_output}", base_dir=settings.get("cookie_base_dir")
+            ),
             "account_id": account_id,
             "status_code": 200,
             "used_login": False,

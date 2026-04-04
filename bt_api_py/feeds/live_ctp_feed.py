@@ -13,8 +13,17 @@ CTP Feed 实现
   - CTP 查询接口有流控限制: 每秒最多1次查询
 """
 
+import os
 import time
+import warnings
+from pathlib import Path
 from typing import Any
+
+try:
+    from dotenv import find_dotenv, load_dotenv
+except ImportError:
+    find_dotenv = None
+    load_dotenv = None
 
 from bt_api_py.containers.ctp.ctp_account import CtpAccountData
 from bt_api_py.containers.ctp.ctp_order import CtpOrderData
@@ -51,6 +60,71 @@ CTP_DIRECTION_FLAG = {
 _ctp_field_logger = get_logger("ctp_field_converter")
 
 
+def _load_ctp_env() -> None:
+    if load_dotenv is None:
+        return
+    env_file = Path(__file__).resolve().parents[2] / ".env"
+    if env_file.exists():
+        load_dotenv(env_file, override=False)
+        return
+    if find_dotenv is None:
+        return
+    env_path = find_dotenv(usecwd=True)
+    if env_path:
+        load_dotenv(env_path, override=False)
+
+
+def _resolve_ctp_runtime_kwargs(kwargs: dict[str, Any]) -> tuple[dict[str, Any], str]:
+    _load_ctp_env()
+    resolved = dict(kwargs)
+
+    broker_id = str(resolved.get("broker_id") or os.environ.get("CTP_BROKER_ID") or "").strip()
+    user_id = str(
+        resolved.get("user_id")
+        or resolved.get("investor_id")
+        or os.environ.get("CTP_USER_ID")
+        or ""
+    ).strip()
+    password = str(resolved.get("password") or os.environ.get("CTP_PASSWORD") or "").strip()
+    auth_code = str(
+        resolved.get("auth_code") or os.environ.get("CTP_AUTH_CODE") or "0000000000000000"
+    ).strip()
+    app_id = str(
+        resolved.get("app_id") or os.environ.get("CTP_APP_ID") or "simnow_client_test"
+    ).strip()
+    td_front = str(resolved.get("td_front") or resolved.get("td_address") or "").strip()
+    md_front = str(resolved.get("md_front") or resolved.get("md_address") or "").strip()
+    env_name = ""
+
+    if not td_front or not md_front:
+        static_td = str(os.environ.get("CTP_TD_FRONT") or "").strip()
+        static_md = str(os.environ.get("CTP_MD_FRONT") or "").strip()
+        if os.environ.get("CTP_ENV") or not static_td or not static_md:
+            from bt_api_py.ctp_env_selector import apply_ctp_env
+
+            selected_td, selected_md, env_name = apply_ctp_env()
+            td_front = td_front or selected_td
+            md_front = md_front or selected_md
+        else:
+            td_front = td_front or static_td
+            md_front = md_front or static_md
+
+    resolved["broker_id"] = broker_id
+    resolved["user_id"] = user_id
+    resolved["password"] = password
+    resolved["auth_code"] = auth_code
+    resolved["app_id"] = app_id
+    resolved["td_front"] = td_front
+    resolved["md_front"] = md_front
+    return resolved, env_name
+
+
+def _sanitize_ctp_field_value(val):
+    if isinstance(val, str):
+        return val.encode("gbk", errors="ignore").decode("gbk", errors="ignore")
+    return val
+
+
 def _ctp_field_to_dict(field):
     """将 CTP SPI 回调的 field 对象转为 dict，方便 Container 解析
     CTP SWIG 生成的对象支持属性访问，遍历常用字段提取值
@@ -63,9 +137,11 @@ def _ctp_field_to_dict(field):
         if attr.startswith("_") or attr == "this" or attr == "thisown":
             continue
         try:
-            val = getattr(field, attr)
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore", UnicodeWarning)
+                val = getattr(field, attr)
             if not callable(val):
-                result[attr] = val
+                result[attr] = _sanitize_ctp_field_value(val)
         except Exception as e:
             _ctp_field_logger.debug(
                 f"Failed to access CTP field attribute '{attr}': {e}", exc_info=False
@@ -94,24 +170,25 @@ class CtpRequestData(Feed):
 
     def __init__(self, data_queue: Any = None, **kwargs: Any) -> None:
         super().__init__(data_queue)
+        resolved_kwargs, self.ctp_env_name = _resolve_ctp_runtime_kwargs(kwargs)
         self.data_queue = data_queue
-        self.broker_id = kwargs.get("broker_id", "")
-        self.user_id = kwargs.get("user_id", "")
-        self.password = kwargs.get("password", "")
-        self.auth_code = kwargs.get("auth_code", "0000000000000000")
-        self.app_id = kwargs.get("app_id", "simnow_client_test")
-        self.td_front = kwargs.get("td_front", "")
-        self.md_front = kwargs.get("md_front", "")
-        self.asset_type = kwargs.get("asset_type", "FUTURE")
+        self.broker_id = resolved_kwargs.get("broker_id", "")
+        self.user_id = resolved_kwargs.get("user_id", "")
+        self.password = resolved_kwargs.get("password", "")
+        self.auth_code = resolved_kwargs.get("auth_code", "0000000000000000")
+        self.app_id = resolved_kwargs.get("app_id", "simnow_client_test")
+        self.td_front = resolved_kwargs.get("td_front", "")
+        self.md_front = resolved_kwargs.get("md_front", "")
+        self.asset_type = resolved_kwargs.get("asset_type", "FUTURE")
         self.exchange_name = "CTP"
         self._params = CtpExchangeDataFuture()
-        self.logger_name = kwargs.get("logger_name", "ctp_feed.log")
+        self.logger_name = resolved_kwargs.get("logger_name", "ctp_feed.log")
         self.request_logger = get_logger("ctp_feed")
         self._error_translator = CTPErrorTranslator()
         # TraderClient 实例 — 负责交易查询和下单
         self._trader = None
         self._connected = False
-        self._connect_timeout = kwargs.get("connect_timeout", 15)
+        self._connect_timeout = resolved_kwargs.get("connect_timeout", 15)
 
     def translate_error(self, raw_response):
         """将原始 CTP 错误信息翻译为 UnifiedError（如有错误），否则返回 None"""
@@ -148,10 +225,14 @@ class CtpRequestData(Feed):
         ready = self._trader.wait_ready(timeout=self._connect_timeout)
         if ready:
             self._connected = True
-            self.request_logger.info("CTP TraderClient connected and ready")
+            self.request_logger.info(
+                f"CTP TraderClient connected and ready "
+                f"(env={self.ctp_env_name or 'manual'}, td_front={self.td_front})"
+            )
         else:
             self.request_logger.error(
-                f"CTP TraderClient failed to connect within {self._connect_timeout}s"
+                f"CTP TraderClient failed to connect within {self._connect_timeout}s "
+                f"(env={self.ctp_env_name or 'manual'}, td_front={self.td_front})"
             )
 
     def disconnect(self):
@@ -243,7 +324,7 @@ class CtpRequestData(Feed):
         :param kwargs: exchange_id='CFFEX' 等额外参数
         """
         self._ensure_connected()
-        from bt_api_py.ctp.ctp_structs_order import CThostFtdcInputOrderField
+        from bt_api_py.ctp import CThostFtdcInputOrderField
 
         side, otype = order_type.split("-")
         direction = CTP_DIRECTION_FLAG.get(side.lower(), "0")
@@ -274,7 +355,7 @@ class CtpRequestData(Feed):
             # resolved a valid price via last_tick ± slippage.
             if price and float(price) > 0:
                 self.request_logger.info(
-                    "CTP market order converted to limit: %s price=%s", symbol, price
+                    f"CTP market order converted to limit: {symbol} price={price}"
                 )
                 field.OrderPriceType = "2"  # 限价
                 field.TimeCondition = "3"  # GFD
@@ -329,7 +410,7 @@ class CtpRequestData(Feed):
         :param kwargs: exchange_id, front_id, session_id, order_ref 等
         """
         self._ensure_connected()
-        from bt_api_py.ctp.ctp_structs_order import CThostFtdcInputOrderActionField
+        from bt_api_py.ctp.client import CThostFtdcInputOrderActionField
 
         field = CThostFtdcInputOrderActionField()
         field.BrokerID = self.broker_id
@@ -399,12 +480,13 @@ class CtpMarketStream(BaseDataStream):
 
     def __init__(self, data_queue: Any = None, **kwargs: Any) -> None:
         super().__init__(data_queue, **kwargs)
-        self.md_front = kwargs.get("md_front", "")
-        self.broker_id = kwargs.get("broker_id", "")
-        self.user_id = kwargs.get("user_id", "")
-        self.password = kwargs.get("password", "")
-        self.topics = kwargs.get("topics", [])
-        self.asset_type = kwargs.get("asset_type", "FUTURE")
+        resolved_kwargs, self.ctp_env_name = _resolve_ctp_runtime_kwargs(kwargs)
+        self.md_front = resolved_kwargs.get("md_front", "")
+        self.broker_id = resolved_kwargs.get("broker_id", "")
+        self.user_id = resolved_kwargs.get("user_id", "")
+        self.password = resolved_kwargs.get("password", "")
+        self.topics = resolved_kwargs.get("topics", [])
+        self.asset_type = resolved_kwargs.get("asset_type", "FUTURE")
         self._md_client = None
 
     def connect(self):
@@ -429,7 +511,10 @@ class CtpMarketStream(BaseDataStream):
         if instruments:
             self._md_client.subscribe(instruments)
         self._md_client.start(block=False)
-        self.logger.info(f"CTP MdClient connecting to {self.md_front}, subscribing {instruments}")
+        self.logger.info(
+            f"CTP MdClient connecting to {self.md_front} "
+            f"(env={self.ctp_env_name or 'manual'}), subscribing {instruments}"
+        )
 
     def _on_login(self, login_field):
         self.state = ConnectionState.AUTHENTICATED
@@ -481,13 +566,14 @@ class CtpTradeStream(BaseDataStream):
 
     def __init__(self, data_queue: Any = None, **kwargs: Any) -> None:
         super().__init__(data_queue, **kwargs)
-        self.td_front = kwargs.get("td_front", "")
-        self.broker_id = kwargs.get("broker_id", "")
-        self.user_id = kwargs.get("user_id", "")
-        self.password = kwargs.get("password", "")
-        self.auth_code = kwargs.get("auth_code", "0000000000000000")
-        self.app_id = kwargs.get("app_id", "simnow_client_test")
-        self.asset_type = kwargs.get("asset_type", "FUTURE")
+        resolved_kwargs, self.ctp_env_name = _resolve_ctp_runtime_kwargs(kwargs)
+        self.td_front = resolved_kwargs.get("td_front", "")
+        self.broker_id = resolved_kwargs.get("broker_id", "")
+        self.user_id = resolved_kwargs.get("user_id", "")
+        self.password = resolved_kwargs.get("password", "")
+        self.auth_code = resolved_kwargs.get("auth_code", "0000000000000000")
+        self.app_id = resolved_kwargs.get("app_id", "simnow_client_test")
+        self.asset_type = resolved_kwargs.get("asset_type", "FUTURE")
         self._trader = None
 
     def connect(self):
@@ -509,7 +595,9 @@ class CtpTradeStream(BaseDataStream):
         self._trader.on_login = self._on_login
         self._trader.on_error = self._on_error
         self._trader.start(block=False)
-        self.logger.info(f"CTP TraderClient connecting to {self.td_front}")
+        self.logger.info(
+            f"CTP TraderClient connecting to {self.td_front} (env={self.ctp_env_name or 'manual'})"
+        )
 
     def _on_login(self, login_field):
         self.state = ConnectionState.AUTHENTICATED

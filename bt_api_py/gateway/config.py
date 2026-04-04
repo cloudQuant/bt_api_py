@@ -65,7 +65,10 @@ class GatewayConfig:
         return cls(
             exchange_type=kwargs.get("exchange_type") or kwargs.get("provider_exchange") or "CTP",
             asset_type=kwargs.get("asset_type") or "FUTURE",
-            account_id=kwargs.get("account_id") or kwargs.get("investor_id") or kwargs.get("user_id") or "default",
+            account_id=kwargs.get("account_id")
+            or kwargs.get("investor_id")
+            or kwargs.get("user_id")
+            or "default",
             transport=kwargs.get("transport") or kwargs.get("zmq_transport") or "ipc",
             base_dir=kwargs.get("gateway_base_dir") or "",
             runtime_name=kwargs.get("gateway_runtime_name") or "",
@@ -94,7 +97,9 @@ class GatewayConfig:
         }
 
     def _build_runtime_name(self) -> str:
-        safe_account = "".join(ch if ch.isalnum() else "-" for ch in self.account_id.lower()).strip("-")
+        safe_account = "".join(ch if ch.isalnum() else "-" for ch in self.account_id.lower()).strip(
+            "-"
+        )
         safe_account = safe_account or "default"
         return f"{self.exchange_type.lower()}-{self.asset_type.lower()}-{safe_account}"
 

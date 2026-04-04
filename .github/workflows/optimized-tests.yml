@@ -1,10 +1,23 @@
-name: Optimized Test Suite
+name: Extended Validation Suite
 
 on:
-  push:
-    branches: [ main, develop ]
-  pull_request:
-    branches: [ main ]
+  workflow_dispatch:
+    inputs:
+      run_performance:
+        description: 'Run performance benchmarks'
+        required: false
+        default: false
+        type: boolean
+      run_security:
+        description: 'Run extended security checks'
+        required: false
+        default: true
+        type: boolean
+      run_build_test:
+        description: 'Run build/package validation'
+        required: false
+        default: true
+        type: boolean
   schedule:
     # Run full test suite daily at 2 AM UTC
     - cron: '0 2 * * *'
@@ -14,86 +27,24 @@ env:
   NODE_VERSION: "18"
 
 jobs:
-  # Fast PR checks
-  pr-check:
-    if: github.event_name == 'pull_request'
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    
-    steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-      
-    - name: Set up Python
-      uses: actions/setup-python@v4
-      with:
-        python-version: ${{ env.PYTHON_VERSION }}
-        
-    - name: Cache dependencies
-      uses: actions/cache@v3
-      with:
-        path: ~/.cache/pip
-        key: ${{ runner.os }}-pip-${{ hashFiles('**/pyproject.toml') }}
-        restore-keys: |
-          ${{ runner.os }}-pip-
-          
-    - name: Install dependencies
-      run: |
-        python -m pip install --upgrade pip
-        pip install -e ".[dev]"
-        
-    - name: Run fast tests
-      env:
-        PR_CHECK: "true"
-        SKIP_LIVE_TESTS: "true"
-      run: |
-        chmod +x scripts/run_optimized_tests.sh
-        ./scripts/run_optimized_tests.sh
-        
-    - name: Upload coverage to Codecov
-      if: github.event_name == 'pull_request'
-      uses: codecov/codecov-action@v3
-      with:
-        file: ./coverage.xml
-        flags: unittests
-        name: codecov-umbrella
-        
-    - name: Comment PR with coverage
-      if: github.event_name == 'pull_request'
-      uses: actions/github-script@v6
-      with:
-        script: |
-          const fs = require('fs');
-          try {
-            const coverage = fs.readFileSync('test_report.md', 'utf8');
-            github.rest.issues.createComment({
-              issue_number: context.issue.number,
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              body: '## Test Results\n\n' + coverage
-            });
-          } catch (e) {
-            console.log('Could not read test report:', e);
-          }
-
-  # Comprehensive test suite
+  # Extended cross-platform matrix validation
   full-test:
-    if: github.event_name == 'push' || github.event_name == 'schedule'
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     runs-on: ${{ matrix.os }}
     timeout-minutes: 30
     strategy:
       matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]
-        
+
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
-      
+
     - name: Set up Python
       uses: actions/setup-python@v4
       with:
         python-version: ${{ env.PYTHON_VERSION }}
-        
+
     - name: Cache dependencies
       uses: actions/cache@v3
       with:
@@ -101,19 +52,26 @@ jobs:
         key: ${{ runner.os }}-pip-${{ hashFiles('**/pyproject.toml') }}
         restore-keys: |
           ${{ runner.os }}-pip-
-          
+
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
         pip install -e ".[dev]"
-        
-    - name: Run all tests
+
+    - name: Run extended tests
       env:
         SKIP_LIVE_TESTS: "true"
       run: |
         chmod +x scripts/run_optimized_tests.sh
         ./scripts/run_optimized_tests.sh
-        
+
+    - name: Upload coverage to Codecov
+      uses: codecov/codecov-action@v3
+      with:
+        file: ./coverage.xml
+        flags: extended-${{ matrix.os }}
+        name: codecov-extended-${{ matrix.os }}
+
     - name: Run integration tests with API keys (if available)
       env:
         BINANCE_API_KEY: ${{ secrets.BINANCE_API_KEY }}
@@ -124,7 +82,7 @@ jobs:
       if: env.BINANCE_API_KEY != ''
       run: |
         pytest -m "integration and (binance or okx)" --tb=short -q
-        
+
     - name: Upload coverage
       uses: codecov/codecov-action@v3
       with:
@@ -134,28 +92,28 @@ jobs:
 
   # Performance benchmarks
   performance:
-    if: github.event_name == 'push' || github.event_name == 'schedule'
+    if: github.event_name == 'schedule' || inputs.run_performance == true
     runs-on: ubuntu-latest
     timeout-minutes: 15
-    
+
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
-      
+
     - name: Set up Python
       uses: actions/setup-python@v4
       with:
         python-version: ${{ env.PYTHON_VERSION }}
-        
+
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
         pip install -e ".[dev]"
-        
+
     - name: Run performance tests
       run: |
         pytest tests/performance/ --tb=short -v --benchmark-json=benchmark.json
-        
+
     - name: Store benchmark result
       uses: benchmark-action/github-action-benchmark@v1
       with:
@@ -169,29 +127,30 @@ jobs:
 
   # Security scanning
   security:
+    if: github.event_name == 'schedule' || inputs.run_security == true
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    
+
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
-      
+
     - name: Set up Python
       uses: actions/setup-python@v4
       with:
         python-version: ${{ env.PYTHON_VERSION }}
-        
+
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
         pip install -e ".[dev]"
         pip install bandit safety
-        
+
     - name: Run security scan
       run: |
         bandit -r bt_api_py/ -f json -o bandit-report.json || true
         safety check --json --output safety-report.json || true
-        
+
     - name: Upload security reports
       uses: actions/upload-artifact@v3
       with:
@@ -205,25 +164,25 @@ jobs:
     if: github.event_name == 'schedule'
     runs-on: ubuntu-latest
     timeout-minutes: 20
-    
+
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
-      
+
     - name: Set up Python
       uses: actions/setup-python@v4
       with:
         python-version: ${{ env.PYTHON_VERSION }}
-        
+
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
         pip install -e ".[dev]"
-        
+
     - name: Run coverage analysis
       run: |
         python scripts/analyze_coverage.py
-        
+
     - name: Create coverage issue if needed
       uses: actions/github-script@v6
       with:
@@ -231,7 +190,7 @@ jobs:
           const fs = require('fs');
           try {
             const report = fs.readFileSync('coverage_analysis.md', 'utf8');
-            
+
             // Check for critical issues
             if (report.includes('Untested exchanges:')) {
               github.rest.issues.create({
@@ -248,31 +207,32 @@ jobs:
 
   # Build and package tests
   build-test:
+    if: github.event_name == 'schedule' || inputs.run_build_test == true
     runs-on: ubuntu-latest
     timeout-minutes: 15
-    
+
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
-      
+
     - name: Set up Python
       uses: actions/setup-python@v4
       with:
         python-version: ${{ env.PYTHON_VERSION }}
-        
+
     - name: Install build dependencies
       run: |
         python -m pip install --upgrade pip
         pip install build twine
-        
+
     - name: Build package
       run: |
         python -m build
-        
+
     - name: Check package
       run: |
         twine check dist/*
-        
+
     - name: Test installation
       run: |
         pip install dist/*.whl
@@ -281,9 +241,9 @@ jobs:
   # Notify on test failures
   notify:
     if: failure()
-    needs: [pr-check, full-test, performance, security]
+    needs: [full-test, performance, security, build-test]
     runs-on: ubuntu-latest
-    
+
     steps:
     - name: Notify on failure
       uses: actions/github-script@v6
@@ -291,31 +251,21 @@ jobs:
         script: |
           const { owner, repo } = context.repo;
           const sha = context.sha;
-          
+
           // Get failed jobs
           const runs = await github.rest.actions.listJobsForWorkflowRun({
             owner,
             repo,
             run_id: context.runId,
           });
-          
+
           const failedJobs = runs.data.jobs.filter(job => job.conclusion === 'failure');
           const jobNames = failedJobs.map(job => job.name).join(', ');
-          
-          // Create issue or comment
-          if (context.event_name === 'pull_request') {
-            await github.rest.issues.createComment({
-              owner,
-              repo,
-              issue_number: context.issue.number,
-              body: `❌ **Test Failed**: ${jobNames}\n\nPlease check the [workflow run](https://github.com/${owner}/${repo}/actions/runs/${context.runId}) for details.`
-            });
-          } else {
-            await github.rest.issues.create({
-              owner,
-              repo,
-              title: `Test Suite Failed - ${sha.substring(0, 7)}`,
-              body: `**Failed Jobs**: ${jobNames}\n\n[Workflow Run](https://github.com/${owner}/${repo}/actions/runs/${context.runId})`,
-              labels: ['bug', 'ci-failure']
-            });
-          }
+
+          await github.rest.issues.create({
+            owner,
+            repo,
+            title: `Extended validation failed - ${sha.substring(0, 7)}`,
+            body: `**Failed Jobs**: ${jobNames}\n\n[Workflow Run](https://github.com/${owner}/${repo}/actions/runs/${context.runId})`,
+            labels: ['bug', 'ci-failure']
+          });

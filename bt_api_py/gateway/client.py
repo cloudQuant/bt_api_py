@@ -113,35 +113,10 @@ class GatewayClient:
 
     def _close_sockets(self) -> None:
         logger = logging.getLogger(__name__)
-        self._close_sockets()
-        self._reset_runtime_state()
-        if self.runtime is not None:
-            try:
-                self.runtime.stop()
-            except Exception as exc:
-                logger.warning(
-                    "Gateway client runtime stop failed during disconnect: %s: %s",
-                    type(exc).__name__,
-                    exc,
-                )
-            finally:
-                self.runtime = None
-
-    def stop(self) -> None:
-        self.disconnect()
-
-    def _close_sockets(self) -> None:
-        logger = logging.getLogger(__name__)
         for socket in (self.command_socket, self.market_socket, self.event_socket):
             if socket is not None:
                 try:
                     socket.close(0)
-                except Exception as exc:
-                    logger.warning(
-                        "Gateway client socket close failed during cleanup: %s: %s",
-                        type(exc).__name__,
-                        exc,
-                    )
                 except Exception as exc:
                     logger.warning(
                         "Gateway client socket close failed during cleanup: %s: %s",
@@ -309,7 +284,9 @@ class GatewayClient:
         if self.command_socket is None:
             raise RuntimeError("gateway client is not connected")
         request_id = make_request_id()
-        self.command_socket.send(dumps_message({"request_id": request_id, "command": command, "payload": payload or {}}))
+        self.command_socket.send(
+            dumps_message({"request_id": request_id, "command": command, "payload": payload or {}})
+        )
         timeout_ms = int(self.config.command_timeout_sec * 1000)
         if self.command_socket.poll(timeout=timeout_ms) == 0:
             raise TimeoutError(f"gateway command timed out: {command}")

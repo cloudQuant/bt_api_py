@@ -46,7 +46,11 @@ class InstrumentManager:
             if previous.underlying:
                 underlying_instruments = self._by_underlying.get(previous.underlying)
                 if underlying_instruments is not None:
-                    filtered = [inst for inst in underlying_instruments if inst.internal != previous.internal]
+                    filtered = [
+                        inst
+                        for inst in underlying_instruments
+                        if inst.internal != previous.internal
+                    ]
                     if filtered:
                         self._by_underlying[previous.underlying] = filtered
                     else:

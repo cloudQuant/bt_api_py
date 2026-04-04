@@ -183,9 +183,7 @@ class ExchangeConfig(BaseModel):
 
     @field_validator("connection")
     @classmethod
-    def validate_connection(
-        cls, v: ConnectionConfig, info: ValidationInfo
-    ) -> ConnectionConfig:
+    def validate_connection(cls, v: ConnectionConfig, info: ValidationInfo) -> ConnectionConfig:
         venue_type = info.data.get("venue_type")
         conn_type = v.type
         # CEX 必须使用 HTTP、WEBSOCKET 或 SPI（如 CTP）

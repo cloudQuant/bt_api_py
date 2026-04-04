@@ -300,7 +300,9 @@ class TestGatewayProcess:
             def stop(self) -> None:
                 return None
 
-        monkeypatch.setattr("bt_api_py.gateway.config.GatewayConfig.from_kwargs", lambda **kwargs: object())
+        monkeypatch.setattr(
+            "bt_api_py.gateway.config.GatewayConfig.from_kwargs", lambda **kwargs: object()
+        )
         monkeypatch.setattr("bt_api_py.gateway.runtime.GatewayRuntime", FakeRuntime)
 
         proc = GatewayProcess(
@@ -327,14 +329,18 @@ class TestGatewayProcess:
             def stop(self) -> None:
                 return None
 
-        monkeypatch.setattr("bt_api_py.gateway.config.GatewayConfig.from_kwargs", lambda **kwargs: object())
+        monkeypatch.setattr(
+            "bt_api_py.gateway.config.GatewayConfig.from_kwargs", lambda **kwargs: object()
+        )
         monkeypatch.setattr("bt_api_py.gateway.runtime.GatewayRuntime", FakeRuntime)
 
         proc = GatewayProcess(
             {"gateway_runtime_name": "gw-start-pid-fail"},
             pid_dir=str(tmp_path),
         )
-        monkeypatch.setattr(proc, "_write_pid", lambda: (_ for _ in ()).throw(OSError("pid write failed")))
+        monkeypatch.setattr(
+            proc, "_write_pid", lambda: (_ for _ in ()).throw(OSError("pid write failed"))
+        )
 
         with pytest.raises(OSError, match="pid write failed"):
             proc.start()
@@ -353,7 +359,9 @@ class TestGatewayProcess:
             def stop(self) -> None:
                 return None
 
-        monkeypatch.setattr("bt_api_py.gateway.config.GatewayConfig.from_kwargs", lambda **kwargs: object())
+        monkeypatch.setattr(
+            "bt_api_py.gateway.config.GatewayConfig.from_kwargs", lambda **kwargs: object()
+        )
         monkeypatch.setattr("bt_api_py.gateway.runtime.GatewayRuntime", FakeRuntime)
 
         proc = GatewayProcess(
@@ -383,7 +391,9 @@ class TestGatewayProcess:
             def stop(self) -> None:
                 return None
 
-        monkeypatch.setattr("bt_api_py.gateway.config.GatewayConfig.from_kwargs", lambda **kwargs: object())
+        monkeypatch.setattr(
+            "bt_api_py.gateway.config.GatewayConfig.from_kwargs", lambda **kwargs: object()
+        )
         monkeypatch.setattr("bt_api_py.gateway.runtime.GatewayRuntime", FakeRuntime)
 
         proc = GatewayProcess(
@@ -400,7 +410,9 @@ class TestGatewayProcess:
         assert "Gateway process start failed" in caplog.text
         assert "start failed" in caplog.text
 
-    def test_stop_remote_cleans_stale_pid_when_process_disappears(self, tmp_path, monkeypatch, caplog):
+    def test_stop_remote_cleans_stale_pid_when_process_disappears(
+        self, tmp_path, monkeypatch, caplog
+    ):
         proc = GatewayProcess(
             {"gateway_runtime_name": "gw-stop-remote-race"},
             pid_dir=str(tmp_path),

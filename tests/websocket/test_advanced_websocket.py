@@ -4,12 +4,17 @@ Comprehensive tests for the advanced WebSocket system.
 
 import asyncio
 import contextlib
+import hashlib
+import hmac
+import json
+import random
 import time
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+import bt_api_py.websocket.advanced_websocket_manager as advanced_ws_manager_module
 from bt_api_py.exceptions import AuthenticationError, RateLimitError, WebSocketError
 from bt_api_py.websocket.advanced_connection_manager import (
     AdvancedWebSocketConnection,
@@ -22,18 +27,24 @@ from bt_api_py.websocket.advanced_connection_manager import (
     WebSocketMetrics,
 )
 from bt_api_py.websocket.advanced_websocket_manager import (
+    AdvancedWebSocketManager,
     ConnectionWrapper,
     LoadBalancer,
+    PoolConfiguration,
 )
 from bt_api_py.websocket.exchange_adapters import (
+    AuthenticationType,
     BinanceWebSocketAdapter,
+    ExchangeCredentials,
     ExchangeType,
+    GenericWebSocketAdapter,
     OKXWebSocketAdapter,
     WebSocketAdapterFactory,
 )
 from bt_api_py.websocket.monitoring import (
     AlertManager,
     AlertSeverity,
+    BenchmarkResult,
     MetricsCollector,
     PerformanceAlert,
     WebSocketBenchmark,
@@ -54,6 +65,82 @@ class _DummyWebSocket:
 
     async def ping(self) -> None:
         self.ping_count += 1
+
+
+class _DummyEventBus:
+    def __init__(self) -> None:
+        self.events: list[tuple[str, Any]] = []
+
+    def publish(self, event_type: str, data: Any) -> None:
+        self.events.append((event_type, data))
+
+    async def publish_async(self, event_type: str, data: Any) -> None:
+        self.events.append((event_type, data))
+
+    def subscribe(self, event_type: str, handler: Any) -> None:
+        return None
+
+    def unsubscribe(self, event_type: str, handler: Any) -> None:
+        return None
+
+
+class _StubAdvancedConnection:
+    def __init__(
+        self,
+        connection_id: str,
+        *,
+        state: ConnectionState = ConnectionState.CONNECTED,
+        health_score: float = 100.0,
+    ) -> None:
+        self.connection_id = connection_id
+        self._state = state
+        self._health = ConnectionHealth(
+            is_healthy=health_score >= 70.0,
+            health_score=health_score,
+            consecutive_failures=0,
+        )
+        self._metrics = WebSocketMetrics(connection_id, "TEST")
+        self._subscriptions: dict[str, Any] = {}
+        self.connect_calls = 0
+        self.disconnect_calls = 0
+        self.subscribe_error: Exception | None = None
+
+    async def connect(self) -> None:
+        self.connect_calls += 1
+        self._state = ConnectionState.CONNECTED
+
+    async def disconnect(self) -> None:
+        self.disconnect_calls += 1
+        self._state = ConnectionState.DISCONNECTED
+
+    async def subscribe(
+        self,
+        subscription_id: str,
+        topic: str,
+        symbol: str,
+        params: dict[str, Any] | None = None,
+        callback: Any = None,
+    ) -> None:
+        if self.subscribe_error is not None:
+            raise self.subscribe_error
+        self._subscriptions[subscription_id] = {
+            "topic": topic,
+            "symbol": symbol,
+            "params": params or {},
+            "callback": callback,
+        }
+
+    async def unsubscribe(self, subscription_id: str) -> None:
+        self._subscriptions.pop(subscription_id, None)
+
+    def get_state(self) -> ConnectionState:
+        return self._state
+
+    def get_health(self) -> ConnectionHealth:
+        return self._health
+
+    def get_metrics(self) -> WebSocketMetrics:
+        return self._metrics
 
 
 class TestWebSocketConfig:
@@ -89,10 +176,30 @@ class TestWebSocketConfig:
         [
             ({"url": "https://test.com", "exchange_name": "TEST"}, "url"),
             ({"url": "wss://test.com", "exchange_name": ""}, "exchange_name"),
-            ({"url": "wss://test.com", "exchange_name": "TEST", "max_connections": 0}, "max_connections"),
+            (
+                {"url": "wss://test.com", "exchange_name": "TEST", "max_connections": 0},
+                "max_connections",
+            ),
             (
                 {"url": "wss://test.com", "exchange_name": "TEST", "heartbeat_interval": 0},
                 "heartbeat_interval",
+            ),
+            (
+                {
+                    "url": "wss://test.com",
+                    "exchange_name": "TEST",
+                    "min_connections": 2,
+                    "max_connections": 1,
+                },
+                "min_connections",
+            ),
+            (
+                {"url": "wss://test.com", "exchange_name": "TEST", "reconnect_backoff_multiplier": 0.5},
+                "reconnect_backoff_multiplier",
+            ),
+            (
+                {"url": "wss://test.com", "exchange_name": "TEST", "dead_letter_queue_size": 0},
+                "dead_letter_queue_size",
             ),
         ],
     )
@@ -138,6 +245,17 @@ class TestWebSocketMetrics:
         assert metrics.errors_by_category[ErrorCategory.NETWORK] == 1
         assert metrics.errors_by_category[ErrorCategory.PROTOCOL] == 1
         assert len(metrics.error_rate_samples) == 2
+
+    def test_latency_and_error_helpers_handle_empty_and_recent_windows(self):
+        metrics = WebSocketMetrics("test_conn", "TEST_EXCHANGE")
+
+        assert metrics.get_p95_latency() == 0.0
+        assert metrics.get_error_rate() == 0.0
+
+        with patch("time.time", return_value=100.0):
+            metrics.record_error(ErrorCategory.NETWORK)
+        with patch("time.time", return_value=170.0):
+            assert metrics.get_error_rate() == 0.0
 
 
 class TestConnectionHealth:
@@ -246,6 +364,190 @@ class TestIntelligentCircuitBreaker:
 class TestAdvancedWebSocketConnection:
     """Targeted regression tests for AdvancedWebSocketConnection."""
 
+    async def test_helper_methods_cover_message_classification_and_uptime(self):
+        config = WebSocketConfig(url="wss://test.com", exchange_name="TEST")
+        connection = AdvancedWebSocketConnection(config, "helper_conn")
+
+        assert connection._is_data_message({"data": {}}) is True
+        assert connection._is_data_message({"stream": "btcusdt@ticker"}) is True
+        assert connection._is_event_message({"event": "subscribe"}) is True
+        assert connection._is_event_message({"type": "notice"}) is True
+        assert connection._is_error_message({"error": "boom"}) is True
+        assert connection._is_error_message({"code": 500}) is True
+        assert connection._extract_topic_symbol({"topic": "ticker"}) == (None, None)
+        assert connection._format_subscription_message(
+            {"topic": "ticker", "symbol": "BTCUSDT", "params": {"limit": 5}}
+        ) == {
+            "action": "subscribe",
+            "topic": "ticker",
+            "symbol": "BTCUSDT",
+            "params": {"limit": 5},
+        }
+        assert connection._format_unsubscription_message(
+            {"topic": "ticker", "symbol": "BTCUSDT"}
+        ) == {
+            "action": "unsubscribe",
+            "topic": "ticker",
+            "symbol": "BTCUSDT",
+        }
+
+        assert connection._get_uptime_ratio() == 0.0
+        connection._state = ConnectionState.CONNECTED
+        connection._metrics.last_connection_time = time.time()
+        assert connection._get_uptime_ratio() == 1.0
+        connection._state = ConnectionState.DISCONNECTED
+        connection._metrics.last_connection_time = time.time() - 5
+        assert connection._get_uptime_ratio() == 0.8
+
+    async def test_get_metrics_updates_queue_utilization(self):
+        config = WebSocketConfig(url="wss://test.com", exchange_name="TEST", message_buffer_size=10)
+        connection = AdvancedWebSocketConnection(config, "metric_conn")
+
+        for _ in range(3):
+            await connection._message_queue.put({"payload": True})
+
+        metrics = connection.get_metrics()
+
+        assert metrics.queue_utilization == 0.3
+
+    async def test_send_message_uses_rate_limiter_and_queue(self):
+        config = WebSocketConfig(url="wss://test.com", exchange_name="TEST")
+        connection = AdvancedWebSocketConnection(config, "send_conn")
+        limiter = MagicMock()
+        limiter.acquire = AsyncMock()
+        connection._rate_limiter = limiter
+
+        await connection._send_message({"action": "ping"})
+
+        limiter.acquire.assert_awaited_once()
+        queued = await connection._send_queue.get()
+        assert queued == {"action": "ping"}
+
+    async def test_unsubscribe_noops_for_missing_subscription(self):
+        config = WebSocketConfig(url="wss://test.com", exchange_name="TEST")
+        connection = AdvancedWebSocketConnection(config, "unsubscribe_conn")
+
+        await connection.unsubscribe("missing")
+
+        assert connection._metrics.active_subscriptions == 0
+
+    async def test_handle_message_routes_error_and_dlq_paths(self):
+        config = WebSocketConfig(url="wss://test.com", exchange_name="TEST")
+        connection = AdvancedWebSocketConnection(config, "router_conn")
+        connection._dlq = AsyncMock()
+        connection._handle_data_message = AsyncMock(side_effect=RuntimeError("bad payload"))
+
+        await connection._handle_message({"data": {"foo": "bar"}})
+        await connection._handle_message({"code": 400, "msg": "exchange boom"})
+        await connection._handle_message({"mystery": True})
+
+        connection._dlq.add_message.assert_awaited()
+        assert connection._metrics.errors_by_category[ErrorCategory.PROTOCOL] >= 1
+        assert connection._metrics.errors_by_category[ErrorCategory.EXCHANGE_SPECIFIC] >= 1
+
+    async def test_handle_event_message_auth_paths(self):
+        config = WebSocketConfig(url="wss://test.com", exchange_name="TEST")
+        connection = AdvancedWebSocketConnection(config, "auth_event_conn")
+
+        await connection._handle_event_message({"event": "auth", "success": True})
+        assert connection.get_state() == ConnectionState.AUTHENTICATED
+
+        await connection._handle_event_message({"event": "auth", "success": False, "msg": "denied"})
+        assert connection._metrics.errors_by_category[ErrorCategory.AUTHENTICATION] == 1
+
+    async def test_handle_data_message_records_callback_errors(self):
+        config = WebSocketConfig(url="wss://test.com", exchange_name="TEST")
+        connection = AdvancedWebSocketConnection(config, "callback_conn")
+
+        def bad_callback(message: dict[str, Any]) -> None:
+            raise RuntimeError(f"bad callback: {message}")
+
+        connection._subscriptions = {
+            "bad": {
+                "id": "bad",
+                "topic": "ticker",
+                "symbol": "BTCUSDT",
+                "params": {},
+                "callback": bad_callback,
+                "created_at": time.time(),
+            }
+        }
+        connection._extract_topic_symbol = MagicMock(return_value=("ticker", "BTCUSDT"))
+
+        await connection._handle_data_message({"stream": "btcusdt@ticker", "data": {"price": "1"}})
+
+        assert connection._metrics.errors_by_category[ErrorCategory.EXCHANGE_SPECIFIC] == 1
+
+    async def test_process_dlq_message_retries_and_requeues(self, monkeypatch: pytest.MonkeyPatch):
+        config = WebSocketConfig(url="wss://test.com", exchange_name="TEST")
+        connection = AdvancedWebSocketConnection(config, "dlq_conn")
+        connection._dlq = AsyncMock()
+        attempts = 0
+
+        async def fake_sleep(_: float) -> None:
+            return None
+
+        async def flaky_handle(message: dict[str, Any]) -> None:
+            nonlocal attempts
+            attempts += 1
+            if attempts == 1:
+                raise RuntimeError("retry me")
+
+        monkeypatch.setattr(asyncio, "sleep", fake_sleep)
+        monkeypatch.setattr(connection, "_handle_message", flaky_handle)
+
+        await connection._process_dlq_message({"message": {"payload": 1}, "retry_count": 0})
+        connection._dlq.add_message.assert_awaited_once()
+
+        connection._dlq.reset_mock()
+        monkeypatch.setattr(connection, "_handle_message", AsyncMock(return_value=None))
+        await connection._process_dlq_message({"message": {"payload": 2}, "retry_count": 3})
+        connection._dlq.add_message.assert_not_awaited()
+
+    async def test_attempt_reconnection_stops_after_max_attempts(self, monkeypatch: pytest.MonkeyPatch):
+        config = WebSocketConfig(
+            url="wss://test.com",
+            exchange_name="TEST",
+            reconnect_interval=0.01,
+            max_reconnect_attempts=2,
+            max_reconnect_delay=0.01,
+        )
+        connection = AdvancedWebSocketConnection(config, "reconnect_conn")
+        connection._running = True
+
+        async def fake_sleep(_: float) -> None:
+            return None
+
+        async def always_fail() -> None:
+            raise RuntimeError("still down")
+
+        monkeypatch.setattr(asyncio, "sleep", fake_sleep)
+        monkeypatch.setattr(connection, "connect", always_fail)
+
+        await connection._attempt_reconnection()
+
+        assert connection._metrics.reconnections == 2
+        assert connection.get_state() == ConnectionState.ERROR
+        assert connection._running is False
+
+    async def test_restore_subscriptions_resends_all(self):
+        config = WebSocketConfig(url="wss://test.com", exchange_name="TEST")
+        connection = AdvancedWebSocketConnection(config, "restore_conn")
+        sent: list[dict[str, Any]] = []
+
+        async def fake_send_subscription(subscription: dict[str, Any]) -> None:
+            sent.append(subscription)
+
+        connection._subscriptions = {
+            "sub1": {"id": "sub1", "topic": "ticker", "symbol": "BTCUSDT", "params": {}},
+            "sub2": {"id": "sub2", "topic": "depth", "symbol": "ETHUSDT", "params": {}},
+        }
+        connection._send_subscription_message = fake_send_subscription  # type: ignore[method-assign]
+
+        await connection._restore_subscriptions()
+
+        assert [item["id"] for item in sent] == ["sub1", "sub2"]
+
     async def test_handle_data_message_supports_sync_and_async_callbacks(self):
         config = WebSocketConfig(url="wss://test.com", exchange_name="TEST")
         connection = AdvancedWebSocketConnection(config, "test_conn")
@@ -297,7 +599,9 @@ class TestAdvancedWebSocketConnection:
 
         assert exc_info.value.exchange_name == "TEST"
 
-    async def test_subscribe_raises_contract_compliant_websocket_error_for_open_circuit_breaker(self):
+    async def test_subscribe_raises_contract_compliant_websocket_error_for_open_circuit_breaker(
+        self,
+    ):
         config = WebSocketConfig(url="wss://test.com", exchange_name="TEST")
         connection = AdvancedWebSocketConnection(config, "test_conn")
         connection._circuit_breaker = MagicMock()
@@ -408,6 +712,16 @@ class TestBinanceWebSocketAdapter:
         assert len(endpoints) > 1
         assert "wss://stream.binance.com" in endpoints[0]
 
+    def test_get_endpoints_supports_futures_and_swap(self):
+        futures_adapter = BinanceWebSocketAdapter(exchange_type=ExchangeType.FUTURES)
+        swap_adapter = BinanceWebSocketAdapter(exchange_type=ExchangeType.SWAP)
+
+        futures_endpoints = futures_adapter.get_endpoints("ignored")
+        swap_endpoints = swap_adapter.get_endpoints("ignored")
+
+        assert futures_endpoints[0] == "wss://fstream.binance.com"
+        assert swap_endpoints[0] == "wss://dstream.binance.com"
+
     def test_format_subscription_message(self):
         """Test subscription message formatting."""
         adapter = BinanceWebSocketAdapter()
@@ -456,6 +770,96 @@ class TestBinanceWebSocketAdapter:
         assert normalized["volume"] == 1000.5
         assert normalized["change_24h"] == 2.5
 
+    @pytest.mark.asyncio
+    async def test_authenticate_subscribes_with_listen_key(self, monkeypatch: pytest.MonkeyPatch):
+        credentials = ExchangeCredentials(
+            exchange_name="BINANCE",
+            auth_type=AuthenticationType.API_KEY_SECRET,
+            api_key="key",
+            api_secret="secret",
+        )
+        adapter = BinanceWebSocketAdapter(credentials=credentials)
+        websocket = _DummyWebSocket()
+
+        async def fake_get_listen_key() -> None:
+            adapter._listen_key = "listen-key-123"
+
+        monkeypatch.setattr(adapter, "_get_listen_key", fake_get_listen_key)
+
+        await adapter.authenticate(websocket)
+
+        assert json.loads(websocket.sent[0]) == {
+            "method": "SUBSCRIBE",
+            "params": ["listen-key-123"],
+            "id": json.loads(websocket.sent[0])["id"],
+        }
+
+    @pytest.mark.parametrize(
+        ("topic", "params", "expected"),
+        [
+            ("depth", {"level": "5"}, "btcusdt@depth5"),
+            ("trades", {}, "btcusdt@trade"),
+            ("kline", {"interval": "5m"}, "btcusdt@kline_5m"),
+            ("aggTrades", {}, "btcusdt@aggTrade"),
+            ("markPrice", {}, "btcusdt@markPrice@1s"),
+            ("custom", {}, "btcusdt@custom"),
+        ],
+    )
+    def test_get_stream_name_covers_branch_topics(
+        self, topic: str, params: dict[str, Any], expected: str
+    ) -> None:
+        adapter = BinanceWebSocketAdapter()
+
+        assert adapter._get_stream_name(topic, "BTCUSDT", params) == expected
+
+    def test_normalize_message_supports_depth_trade_and_kline(self):
+        adapter = BinanceWebSocketAdapter()
+
+        depth = adapter.normalize_message(
+            {
+                "stream": "btcusdt@depth",
+                "data": {
+                    "bids": [["50000", "1.5"]],
+                    "asks": [["50010", "2.0"]],
+                    "lastUpdateId": 123,
+                },
+            }
+        )
+        trade = adapter.normalize_message(
+            {
+                "stream": "btcusdt@trade",
+                "data": {"p": "50000", "q": "0.1", "T": 123456, "m": True},
+            }
+        )
+        kline = adapter.normalize_message(
+            {
+                "stream": "btcusdt@kline_1m",
+                "data": {
+                    "k": {
+                        "t": 1,
+                        "T": 2,
+                        "o": "10",
+                        "h": "12",
+                        "l": "9",
+                        "c": "11",
+                        "v": "100",
+                        "x": True,
+                    }
+                },
+            }
+        )
+
+        assert depth["bids"] == [[50000.0, 1.5]]
+        assert depth["asks"] == [[50010.0, 2.0]]
+        assert depth["last_update_id"] == 123
+        assert trade["price"] == 50000.0
+        assert trade["quantity"] == 0.1
+        assert trade["is_buyer_maker"] is True
+        assert kline["open_time"] == 1
+        assert kline["close_time"] == 2
+        assert kline["close"] == 11.0
+        assert kline["is_closed"] is True
+
 
 class TestOKXWebSocketAdapter:
     """Test OKX WebSocket adapter."""
@@ -493,6 +897,23 @@ class TestOKXWebSocketAdapter:
             adapter._generate_signature("1700000000", "GET", "/users/self/verify")
 
         assert exc_info.value.exchange_name == "OKX"
+
+    def test_generate_signature_with_credentials(self):
+        credentials = ExchangeCredentials(
+            exchange_name="OKX",
+            auth_type=AuthenticationType.API_KEY_SECRET,
+            api_key="key",
+            api_secret="secret",
+            passphrase="pass",
+        )
+        adapter = OKXWebSocketAdapter(credentials=credentials)
+
+        signature = adapter._generate_signature("1700000000", "GET", "/users/self/verify")
+        expected = hmac.new(
+            b"secret", b"1700000000GET/users/self/verify", hashlib.sha256
+        ).digest()
+
+        assert signature == __import__("base64").b64encode(expected).decode()
 
     def test_extract_topic_symbol(self):
         """Test topic/symbol extraction."""
@@ -534,6 +955,82 @@ class TestOKXWebSocketAdapter:
         assert normalized["volume"] == 1000.0
         assert normalized["change_24h"] == 2.5
 
+    @pytest.mark.asyncio
+    async def test_authenticate_sends_login_message(self, monkeypatch: pytest.MonkeyPatch):
+        credentials = ExchangeCredentials(
+            exchange_name="OKX",
+            auth_type=AuthenticationType.API_KEY_SECRET,
+            api_key="key",
+            api_secret="secret",
+            passphrase="pass",
+        )
+        adapter = OKXWebSocketAdapter(credentials=credentials)
+        websocket = _DummyWebSocket()
+
+        monkeypatch.setattr(time, "time", lambda: 1700000000.0)
+        monkeypatch.setattr(adapter, "_generate_signature", lambda *args: "signed")
+
+        await adapter.authenticate(websocket)
+
+        assert json.loads(websocket.sent[0]) == {
+            "op": "login",
+            "args": [
+                {
+                    "apiKey": "key",
+                    "passphrase": "pass",
+                    "timestamp": "1700000000",
+                    "sign": "signed",
+                }
+            ],
+        }
+
+    def test_okx_channel_mapping_and_reverse_mapping(self):
+        adapter = OKXWebSocketAdapter()
+
+        assert adapter._get_okx_channel("ticker", {}) == "tickers"
+        assert adapter._get_okx_channel("depth", {}) == "books"
+        assert adapter._get_okx_channel("kline", {"interval": "5m"}) == "candle5m"
+        assert adapter._get_okx_channel("custom", {}) == "custom"
+        assert adapter._convert_okx_channel_to_generic("tickers") == "ticker"
+        assert adapter._convert_okx_channel_to_generic("books") == "depth"
+        assert adapter._convert_okx_channel_to_generic("candle1m") == "kline"
+        assert adapter._convert_okx_channel_to_generic("account") == "account"
+        assert adapter._convert_okx_channel_to_generic("custom") == "custom"
+
+    def test_normalize_message_supports_depth_trades_and_kline(self):
+        adapter = OKXWebSocketAdapter()
+
+        depth = adapter.normalize_message(
+            {
+                "arg": {"channel": "books", "instId": "BTC-USDT"},
+                "data": [{"bids": [["1", "2"]], "asks": [["3", "4"]], "checksum": 9}],
+            }
+        )
+        trades = adapter.normalize_message(
+            {
+                "arg": {"channel": "trades", "instId": "BTC-USDT"},
+                "data": [{"px": "50000", "sz": "0.2", "ts": "123", "side": "buy"}],
+            }
+        )
+        kline = adapter.normalize_message(
+            {
+                "arg": {"channel": "candle1m", "instId": "BTC-USDT"},
+                "data": [{"ts": "123", "o": "10", "h": "12", "l": "9", "c": "11", "vol": "15"}],
+            }
+        )
+
+        assert depth["bids"] == [[1.0, 2.0]]
+        assert depth["asks"] == [[3.0, 4.0]]
+        assert depth["checksum"] == 9
+        assert trades["price"] == 50000.0
+        assert trades["quantity"] == 0.2
+        assert trades["trade_time"] == 123
+        assert trades["side"] == "buy"
+        assert kline["open_time"] == 123
+        assert kline["open"] == 10.0
+        assert kline["close"] == 11.0
+        assert kline["volume"] == 15.0
+
 
 class TestWebSocketAdapterFactory:
     """Test WebSocket adapter factory."""
@@ -557,6 +1054,59 @@ class TestWebSocketAdapterFactory:
         adapter = WebSocketAdapterFactory.create_adapter("UNKNOWN_EXCHANGE")
 
         assert adapter.exchange_name == "UNKNOWN_EXCHANGE"
+        assert isinstance(adapter, GenericWebSocketAdapter)
+
+    def test_register_adapter_overrides_factory_mapping(self):
+        WebSocketAdapterFactory.register_adapter("CUSTOM_GENERIC", GenericWebSocketAdapter)
+
+        adapter = WebSocketAdapterFactory.create_adapter("CUSTOM_GENERIC")
+
+        assert isinstance(adapter, GenericWebSocketAdapter)
+
+    def test_generic_adapter_formats_and_normalizes_messages(self):
+        adapter = GenericWebSocketAdapter("CUSTOM")
+
+        subscribe_message = adapter.format_subscription_message(
+            "sub1", "ticker", "BTCUSDT", {"depth": 5}
+        )
+        unsubscribe_message = adapter.format_unsubscription_message("sub1", "ticker", "BTCUSDT")
+        normalized = adapter.normalize_message(
+            {"symbol": "BTCUSDT", "topic": "ticker", "data": {"price": 1}, "timestamp": 123}
+        )
+
+        assert subscribe_message == {
+            "action": "subscribe",
+            "topic": "ticker",
+            "symbol": "BTCUSDT",
+            "params": {"depth": 5},
+            "id": "sub1",
+        }
+        assert unsubscribe_message == {
+            "action": "unsubscribe",
+            "topic": "ticker",
+            "symbol": "BTCUSDT",
+            "id": "sub1",
+        }
+        assert adapter.extract_topic_symbol({"topic": "ticker", "symbol": "BTCUSDT"}) == (
+            "ticker",
+            "BTCUSDT",
+        )
+        assert normalized == {
+            "exchange": "CUSTOM",
+            "symbol": "BTCUSDT",
+            "topic": "ticker",
+            "data": {"price": 1},
+            "timestamp": 123,
+        }
+
+    def test_subscription_count_helpers_do_not_go_negative(self):
+        adapter = GenericWebSocketAdapter("CUSTOM")
+
+        adapter.increment_subscription_count("ticker")
+        adapter.decrement_subscription_count("ticker")
+        adapter.decrement_subscription_count("ticker")
+
+        assert adapter._subscription_counts["ticker"] == 0
 
     @pytest.mark.asyncio
     async def test_check_rate_limits_raises_contract_compliant_error(self):
@@ -618,6 +1168,195 @@ class TestLoadBalancer:
 
         assert selected is None
 
+    def test_random_selection_uses_random_choice(self, monkeypatch: pytest.MonkeyPatch):
+        balancer = LoadBalancer("random")
+        connections = [
+            ConnectionWrapper(_StubAdvancedConnection("c1")),
+            ConnectionWrapper(_StubAdvancedConnection("c2")),
+        ]
+
+        monkeypatch.setattr(random, "choice", lambda items: items[1])
+
+        assert balancer.select_connection(connections) is connections[1]
+
+    def test_weighted_selection_supports_zero_weight_and_threshold_choice(
+        self, monkeypatch: pytest.MonkeyPatch
+    ):
+        balancer = LoadBalancer("weighted")
+        zero_weight_connections = [
+            ConnectionWrapper(_StubAdvancedConnection("z1"), health_score=0.0),
+            ConnectionWrapper(_StubAdvancedConnection("z2"), health_score=0.0),
+        ]
+
+        assert balancer.select_connection(zero_weight_connections) is zero_weight_connections[0]
+
+        weighted_connections = [
+            ConnectionWrapper(_StubAdvancedConnection("w1"), health_score=10.0),
+            ConnectionWrapper(_StubAdvancedConnection("w2"), health_score=90.0),
+        ]
+        monkeypatch.setattr(random, "uniform", lambda a, b: 50.0)
+
+        assert balancer.select_connection(weighted_connections) is weighted_connections[1]
+
+    def test_selection_falls_back_to_all_connections_and_unknown_strategy_defaults(self):
+        balancer = LoadBalancer("unknown")
+        connections = [
+            ConnectionWrapper(
+                _StubAdvancedConnection("u1", state=ConnectionState.DISCONNECTED), health_score=10.0
+            ),
+            ConnectionWrapper(
+                _StubAdvancedConnection("u2", state=ConnectionState.ERROR), health_score=20.0
+            ),
+        ]
+
+        assert balancer.select_connection(connections) is connections[0]
+
+
+@pytest.mark.asyncio
+class TestAdvancedWebSocketManager:
+    async def test_start_and_stop_are_idempotent(self):
+        manager = AdvancedWebSocketManager(event_bus=_DummyEventBus())
+
+        await manager.start()
+        cleanup_task = manager._cleanup_task
+        await manager.start()
+
+        assert manager._running is True
+        assert manager._cleanup_task is cleanup_task
+
+        await manager.stop()
+        await manager.stop()
+
+        assert manager._running is False
+        assert manager._cleanup_task is None
+
+    async def test_get_connection_creates_wrapper_and_updates_metrics(
+        self, monkeypatch: pytest.MonkeyPatch
+    ):
+        manager = AdvancedWebSocketManager(event_bus=_DummyEventBus())
+        config = WebSocketConfig(url="wss://test.com", exchange_name="TEST")
+        await manager.add_exchange(config, PoolConfiguration(max_connections=1))
+        created_connections: list[_StubAdvancedConnection] = []
+
+        def fake_connection_factory(config: WebSocketConfig, connection_id: str) -> _StubAdvancedConnection:
+            connection = _StubAdvancedConnection(connection_id)
+            created_connections.append(connection)
+            return connection
+
+        async def fake_create_task(coro: Any) -> asyncio.Task[None]:
+            await coro
+            return asyncio.create_task(asyncio.sleep(0))
+
+        monkeypatch.setattr(
+            advanced_ws_manager_module,
+            "AdvancedWebSocketConnection",
+            fake_connection_factory,
+        )
+        monkeypatch.setattr(manager._task_group, "create_task", fake_create_task)
+
+        connection = await manager.get_connection("TEST")
+
+        assert connection is created_connections[0]
+        assert created_connections[0].connect_calls == 1
+        assert manager._global_metrics["total_connections"] == 1
+        assert manager._pools["TEST"][0].usage_count == 1
+        assert manager._pools["TEST"][0].in_use is True
+
+    async def test_get_connection_falls_back_to_available_or_least_used(self):
+        manager = AdvancedWebSocketManager(event_bus=_DummyEventBus())
+        config = WebSocketConfig(url="wss://test.com", exchange_name="TEST")
+        await manager.add_exchange(config, PoolConfiguration(max_connections=2))
+
+        available = ConnectionWrapper(_StubAdvancedConnection("available"), usage_count=3, in_use=False)
+        busy = ConnectionWrapper(_StubAdvancedConnection("busy"), usage_count=1, in_use=True)
+        manager._pools["TEST"] = [available, busy]
+        manager._load_balancers["TEST"] = MagicMock(select_connection=MagicMock(return_value=None))
+
+        chosen_available = await manager.get_connection("TEST")
+
+        assert chosen_available is available.connection
+        assert available.in_use is True
+
+        all_busy_low = ConnectionWrapper(_StubAdvancedConnection("low"), usage_count=1, in_use=True)
+        all_busy_high = ConnectionWrapper(_StubAdvancedConnection("high"), usage_count=5, in_use=True)
+        manager._pools["TEST"] = [all_busy_high, all_busy_low]
+
+        chosen_least_used = await manager.get_connection("TEST")
+
+        assert chosen_least_used is all_busy_low.connection
+
+    async def test_release_connection_and_subscribe_failure_rolls_back(
+        self, monkeypatch: pytest.MonkeyPatch
+    ):
+        manager = AdvancedWebSocketManager(event_bus=_DummyEventBus())
+        config = WebSocketConfig(url="wss://test.com", exchange_name="TEST")
+        await manager.add_exchange(config, PoolConfiguration(max_connections=1))
+        connection = _StubAdvancedConnection("sub_fail")
+        connection.subscribe_error = RuntimeError("subscribe failed")
+        wrapper = ConnectionWrapper(connection, in_use=True)
+        manager._pools["TEST"] = [wrapper]
+        released: list[tuple[str, _StubAdvancedConnection]] = []
+
+        async def fake_get_connection(exchange_name: str) -> _StubAdvancedConnection:
+            assert exchange_name == "TEST"
+            return connection
+
+        async def fake_release_connection(
+            exchange_name: str, released_connection: _StubAdvancedConnection
+        ) -> None:
+            released.append((exchange_name, released_connection))
+
+        monkeypatch.setattr(manager, "get_connection", fake_get_connection)
+        monkeypatch.setattr(manager, "release_connection", fake_release_connection)
+
+        with pytest.raises(RuntimeError, match="subscribe failed"):
+            await manager.subscribe("TEST", "ticker", "BTCUSDT", lambda *_: None)
+
+        assert released == [("TEST", connection)]
+
+        await AdvancedWebSocketManager.release_connection(manager, "TEST", connection)
+
+        assert wrapper.in_use is False
+
+    async def test_close_all_and_get_connection_health(self):
+        event_bus = _DummyEventBus()
+        manager = AdvancedWebSocketManager(event_bus=event_bus)
+        config = WebSocketConfig(url="wss://test.com", exchange_name="TEST")
+        await manager.add_exchange(config, PoolConfiguration(max_connections=2))
+
+        connection = _StubAdvancedConnection("health_conn", health_score=88.0)
+        connection._metrics.messages_sent = 5
+        connection._metrics.messages_received = 7
+        connection._metrics.bytes_sent = 100
+        connection._metrics.bytes_received = 200
+        connection._metrics.active_subscriptions = 1
+        connection._metrics.queue_utilization = 0.25
+        connection._subscriptions["sub1"] = {"topic": "ticker"}
+        wrapper = ConnectionWrapper(connection, usage_count=2, health_score=88.0, in_use=True)
+        manager._pools["TEST"] = [wrapper]
+        manager._global_metrics["total_connections"] = 1
+        manager._global_metrics["active_connections"] = 1
+        manager._global_metrics["total_subscriptions"] = 1
+
+        health = manager.get_connection_health("TEST", "health_conn")
+
+        assert health is not None
+        assert health["connection_id"] == "health_conn"
+        assert health["health"]["health_score"] == 88.0
+        assert health["metrics"]["messages_sent"] == 5
+        assert manager.get_connection_health("MISSING", "health_conn") is None
+
+        manager._handle_performance_alert({"severity": "warning"})
+
+        assert event_bus.events[-1] == ("performance_alert", {"severity": "warning"})
+
+        await manager.close_all()
+
+        assert manager._pools["TEST"] == []
+        assert manager._global_metrics["total_connections"] == 0
+        assert manager._global_metrics["active_connections"] == 0
+        assert manager._global_metrics["total_subscriptions"] == 0
+
 
 class TestMetricsCollector:
     """Test metrics collector functionality."""
@@ -678,6 +1417,47 @@ class TestMetricsCollector:
 
         assert len(old_points) == 0  # Should be cleaned up
         assert len(new_points) == 1  # Should remain
+
+    def test_get_metric_supports_time_window_and_empty_aggregates(self, metrics_collector):
+        with patch("time.time", return_value=1000.0):
+            metrics_collector.increment_counter("window_counter", value=1)
+        with patch("time.time", return_value=1030.0):
+            metrics_collector.increment_counter("window_counter", value=2)
+
+        with patch("time.time", return_value=1035.0):
+            recent_points = metrics_collector.get_metric("window_counter", time_window=10)
+            old_window_points = metrics_collector.get_metric("window_counter", time_window=2)
+
+        assert len(recent_points) == 1
+        assert recent_points[0].value == 3.0
+        assert old_window_points == []
+        assert metrics_collector.get_aggregated_metrics("missing_metric") == {}
+
+    def test_get_aggregated_metrics_includes_percentiles(self, metrics_collector):
+        for value in range(1, 11):
+            metrics_collector.record_histogram("percentile_histogram", float(value))
+
+        aggregated = metrics_collector.get_aggregated_metrics("percentile_histogram")
+
+        assert aggregated["count"] == 10
+        assert aggregated["p50"] == 5.5
+        assert aggregated["p90"] == 10.0
+        assert aggregated["p95"] == 10.0
+        assert aggregated["p99"] == 10.0
+
+    def test_export_prometheus_format_includes_counter_gauge_and_histogram(self, metrics_collector):
+        metrics_collector.increment_counter("requests_total")
+        metrics_collector.set_gauge("memory_usage", 42.0)
+        metrics_collector.record_histogram("latency_ms", 12.0)
+
+        exported = metrics_collector.export_prometheus_format()
+
+        assert "# TYPE requests_total counter" in exported
+        assert "requests_total 1.0" in exported
+        assert "# TYPE memory_usage gauge" in exported
+        assert "memory_usage 42.0" in exported
+        assert "# TYPE latency_ms histogram" in exported
+        assert 'latency_ms_bucket{le="0"} 12.0' in exported
 
 
 @pytest.mark.asyncio
@@ -742,6 +1522,66 @@ class TestAlertManager:
         assert alert.triggered_count == 1
         assert alert.last_triggered is not None
 
+    async def test_evaluate_condition_supports_metric_memory_and_cpu_paths(self, alert_manager):
+        alert_manager.metrics_collector.set_gauge("websocket_latency", 12.5)
+        alert_manager.metrics_collector.set_gauge("websocket_errors", 3.0)
+
+        with patch("bt_api_py.websocket.monitoring.psutil.virtual_memory") as mock_vm, patch(
+            "bt_api_py.websocket.monitoring.psutil.cpu_percent"
+        ) as mock_cpu:
+            mock_vm.return_value = MagicMock(percent=65.0)
+            mock_cpu.return_value = 35.0
+
+            assert alert_manager._evaluate_condition("avg_latency_ms") == 12.5
+            assert alert_manager._evaluate_condition("error_rate") == 3.0
+            assert alert_manager._evaluate_condition("memory_usage") == 65.0
+            assert alert_manager._evaluate_condition("cpu_usage") == 35.0
+            assert alert_manager._evaluate_condition("unknown_condition") is None
+
+    async def test_trigger_alert_notifies_handlers_and_tracks_active_and_history(self, alert_manager):
+        alert = PerformanceAlert(
+            alert_id="notify_alert",
+            name="Notify Alert",
+            severity=AlertSeverity.ERROR,
+            condition="avg_latency_ms",
+            threshold=10.0,
+            description="notification test",
+        )
+        seen: list[str] = []
+
+        def good_handler(target_alert: PerformanceAlert) -> None:
+            seen.append(target_alert.alert_id)
+
+        def failing_handler(_: PerformanceAlert) -> None:
+            raise RuntimeError("handler failed")
+
+        alert_manager.add_alert(alert)
+        alert_manager.add_notification_handler(good_handler)
+        alert_manager.add_notification_handler(failing_handler)
+
+        await alert_manager._trigger_alert(alert, 42.0)
+
+        assert seen == ["notify_alert"]
+        assert alert_manager.get_active_alerts() == [alert]
+        assert alert_manager.get_alert_history()
+
+        await alert_manager._resolve_alert(alert)
+
+        assert alert_manager.get_active_alerts() == []
+
+    async def test_get_alert_history_filters_by_time_window(self, alert_manager):
+        alert_manager._alert_history.extend(
+            [
+                {"timestamp": 100.0, "action": "triggered"},
+                {"timestamp": 200.0, "action": "resolved"},
+            ]
+        )
+
+        with patch("time.time", return_value=250.0):
+            history = alert_manager.get_alert_history(time_window=60.0)
+
+        assert history == [{"timestamp": 200.0, "action": "resolved"}]
+
 
 @pytest.mark.asyncio
 class TestWebSocketBenchmark:
@@ -786,6 +1626,68 @@ class TestWebSocketBenchmark:
         assert "avg_memory_mb" in result.metrics
         assert "peak_memory_mb" in result.metrics
 
+    async def test_get_benchmark_results_and_summary(self, ws_benchmark):
+        ws_benchmark._results.extend(
+            [
+                BenchmarkResult(
+                    benchmark_name="latency_test",
+                    exchange_name="benchmark",
+                    timestamp=100.0,
+                    metrics={"avg_latency_ms": 10.0},
+                    success=True,
+                    duration_ms=1.0,
+                ),
+                BenchmarkResult(
+                    benchmark_name="latency_test",
+                    exchange_name="benchmark",
+                    timestamp=110.0,
+                    metrics={"avg_latency_ms": 20.0},
+                    success=True,
+                    duration_ms=1.0,
+                ),
+                BenchmarkResult(
+                    benchmark_name="latency_test",
+                    exchange_name="benchmark",
+                    timestamp=120.0,
+                    metrics={},
+                    success=False,
+                    error_message="boom",
+                    duration_ms=1.0,
+                ),
+            ]
+        )
+
+        with patch("time.time", return_value=130.0):
+            results = ws_benchmark.get_benchmark_results("latency_test", time_window=40.0)
+            summary = ws_benchmark.get_benchmark_summary("latency_test", time_window=40.0)
+
+        assert len(results) == 3
+        assert summary["success_rate"] == 2 / 3
+        assert summary["total_runs"] == 3
+        assert summary["successful_runs"] == 2
+        assert summary["metrics"]["avg_latency_ms"]["mean"] == 15.0
+        assert summary["metrics"]["avg_latency_ms"]["min"] == 10.0
+        assert summary["metrics"]["avg_latency_ms"]["max"] == 20.0
+
+    async def test_get_benchmark_summary_handles_empty_and_failed_only_results(self, ws_benchmark):
+        assert ws_benchmark.get_benchmark_summary("missing") == {}
+
+        ws_benchmark._results.append(
+            BenchmarkResult(
+                benchmark_name="throughput_test",
+                exchange_name="benchmark",
+                timestamp=time.time(),
+                metrics={},
+                success=False,
+                error_message="failure",
+                duration_ms=1.0,
+            )
+        )
+
+        summary = ws_benchmark.get_benchmark_summary("throughput_test")
+
+        assert summary == {"success_rate": 0, "total_runs": 1, "successful_runs": 0}
+
 
 # Integration tests
 @pytest.mark.asyncio
@@ -823,7 +1725,9 @@ class TestWebSocketIntegration:
             await connection.disconnect()
             assert connection.get_state() == ConnectionState.DISCONNECTED
             assert connection._dlq is not None
-            assert connection._dlq._processing_task is None or connection._dlq._processing_task.done()
+            assert (
+                connection._dlq._processing_task is None or connection._dlq._processing_task.done()
+            )
 
     async def test_pool_load_balancing(self):
         """Test connection pool load balancing."""

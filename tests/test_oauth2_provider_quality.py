@@ -135,7 +135,10 @@ class TestOAuth2ProviderQuality:
         ("kwargs", "error_match"),
         [
             ({"issuer_url": None}, "issuer_url"),
-            ({"issuer_url": "https://issuer.example.com", "token_lifetime": True}, "token_lifetime"),
+            (
+                {"issuer_url": "https://issuer.example.com", "token_lifetime": True},
+                "token_lifetime",
+            ),
             (
                 {"issuer_url": "https://issuer.example.com", "refresh_token_lifetime": 0},
                 "refresh_token_lifetime",

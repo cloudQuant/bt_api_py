@@ -566,9 +566,17 @@ class TestMt5AdapterWithFakeClient:
         self.adapter._resolved_symbols["EURUSD"] = "EURUSDm"
         self.adapter._reverse_resolved_symbols["EURUSDm"] = "EURUSD"
 
-        self.adapter._on_tick_push([
-            {"symbol": "EURUSDm", "tick_time": 1700000000.0, "bid": 1.2050, "ask": 1.2052, "tick_volume": 8}
-        ])
+        self.adapter._on_tick_push(
+            [
+                {
+                    "symbol": "EURUSDm",
+                    "tick_time": 1700000000.0,
+                    "bid": 1.2050,
+                    "ask": 1.2052,
+                    "tick_volume": 8,
+                }
+            ]
+        )
 
         output = self.adapter.poll_output()
         assert output is not None

@@ -365,7 +365,9 @@ class TestOrderRefAllocator:
         data = json.loads(state_file.read_text(encoding="utf-8"))
         assert data["last_order_ref"] == 1
 
-    def test_persist_logs_warning_when_temp_state_cleanup_fails(self, tmp_path, monkeypatch, caplog):
+    def test_persist_logs_warning_when_temp_state_cleanup_fails(
+        self, tmp_path, monkeypatch, caplog
+    ):
         alloc = OrderRefAllocator("acc-1", state_dir=tmp_path)
         original_unlink = Path.unlink
         original_exists = Path.exists

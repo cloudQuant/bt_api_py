@@ -52,11 +52,13 @@ class HttpClient:
         # httpx expects proxy as a URL string, but callers may pass a
         # requests-style dict like {"http": "...", "https": "..."}.
         proxy_url = None
+        explicit_proxy_config = proxies is not None
         if proxies:
             if isinstance(proxies, dict):
                 proxy_url = proxies.get("https") or proxies.get("http") or proxies.get("all")
             else:
                 proxy_url = proxies
+        trust_env = not explicit_proxy_config
 
         transport_kwargs: dict[str, Any] = {}
         if proxy_url:
@@ -68,6 +70,7 @@ class HttpClient:
             limits=limits,
             verify=verify,
             follow_redirects=True,
+            trust_env=trust_env,
             **transport_kwargs,
         )
 
@@ -78,6 +81,7 @@ class HttpClient:
             "limits": limits,
             "verify": verify,
             "follow_redirects": True,
+            "trust_env": trust_env,
         }
         if proxy_url:
             self._async_kwargs["proxy"] = proxy_url
@@ -265,8 +269,7 @@ class HttpClient:
         exc = task.exception()
         if exc is not None:
             logger.warning(
-                f"Failed to close async HTTP client for {self._venue}: "
-                f"{type(exc).__name__}: {exc}"
+                f"Failed to close async HTTP client for {self._venue}: {type(exc).__name__}: {exc}"
             )
 
     async def aclose(self) -> None:

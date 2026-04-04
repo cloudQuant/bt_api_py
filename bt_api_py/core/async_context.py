@@ -46,7 +46,9 @@ def _validate_exception_types(exceptions: tuple[type[BaseException], ...]) -> No
 
 
 def _validate_expected_exception(expected_exception: type[BaseException]) -> None:
-    if not isinstance(expected_exception, type) or not issubclass(expected_exception, BaseException):
+    if not isinstance(expected_exception, type) or not issubclass(
+        expected_exception, BaseException
+    ):
         raise TypeError("expected_exception must be a BaseException subclass")
 
 
@@ -230,7 +232,9 @@ def async_retry(
     return decorator
 
 
-def async_timeout(timeout_seconds: float) -> Callable[[Callable[P, Awaitable[T]]], Callable[P, Awaitable[T]]]:
+def async_timeout(
+    timeout_seconds: float,
+) -> Callable[[Callable[P, Awaitable[T]]], Callable[P, Awaitable[T]]]:
     """Decorator for async functions with timeout."""
 
     _validate_positive_number("timeout_seconds", timeout_seconds)

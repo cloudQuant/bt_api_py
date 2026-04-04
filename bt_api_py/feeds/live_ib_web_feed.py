@@ -12,11 +12,13 @@ Interactive Brokers Web API Feed 实现
 import threading
 import time
 from typing import Any
+from urllib.parse import urlparse
 
 from bt_api_py.containers.exchanges.ib_web_exchange_data import (
     IbWebExchangeDataFuture,
     IbWebExchangeDataStock,
 )
+from bt_api_py.exceptions import RequestFailedError
 from bt_api_py.feeds.capability import Capability
 from bt_api_py.feeds.feed import Feed
 from bt_api_py.feeds.http_client import HttpClient
@@ -88,6 +90,7 @@ class IbWebRequestData(Feed):
         self._login_browser = auth_settings.get("login_browser", "chrome")
         self._login_headless = auth_settings.get("login_headless", False)
         self._login_timeout = auth_settings.get("login_timeout", 180)
+        self._allow_browser_login = bool(kwargs.get("allow_browser_login", False))
         self._loaded_cookies = {}
         self._load_cookies()
 
@@ -115,8 +118,43 @@ class IbWebRequestData(Feed):
             headers["Authorization"] = f"Bearer {self.access_token}"
         return headers
 
+    def _is_local_base_url(self) -> bool:
+        host = (urlparse(self.base_url).hostname or "").lower()
+        return host in {"localhost", "127.0.0.1"}
+
+    def _alternate_local_base_url(self) -> str:
+        parsed = urlparse(self.base_url)
+        scheme = (parsed.scheme or "https").lower()
+        target_scheme = "http" if scheme == "https" else "https"
+        return parsed._replace(scheme=target_scheme).geturl()
+
+    def _rebuild_http_client(self) -> None:
+        self._http.close()
+        self._http = HttpClient(
+            venue="IB_WEB",
+            timeout=self.timeout,
+            verify=self.verify_ssl,
+            proxies=self.proxies,
+        )
+
+    def _maybe_switch_local_protocol(self, exc: RequestFailedError) -> bool:
+        if not self._is_local_base_url():
+            return False
+        message = str(exc).lower()
+        if "ssl" not in message and "wrong version number" not in message:
+            return False
+        alternate = self._alternate_local_base_url()
+        if alternate == self.base_url:
+            return False
+        self.request_logger.warning(
+            f"IB Web request protocol fallback applied: {self.base_url} -> {alternate} after {exc}"
+        )
+        self.base_url = alternate
+        self._params.rest_url = alternate
+        self._rebuild_http_client()
+        return True
+
     def _request(self, method, endpoint, params=None, json_data=None, **kwargs):
-        url = f"{self.base_url}{endpoint}"
         headers = self._build_headers()
         self.request_logger.info(f"{method} {endpoint}")
 
@@ -125,15 +163,22 @@ class IbWebRequestData(Feed):
         if self._loaded_cookies:
             request_cookies = {**self._loaded_cookies, **request_cookies}
         kwargs["cookies"] = request_cookies
-
-        return self._http.request(
-            method=method,
-            url=url,
-            headers=headers,
-            params=params,
-            json_data=json_data,
-            **kwargs,
-        )
+        attempted_fallback = False
+        while True:
+            url = f"{self.base_url}{endpoint}"
+            try:
+                return self._http.request(
+                    method=method,
+                    url=url,
+                    headers=headers,
+                    params=params,
+                    json_data=json_data,
+                    **kwargs,
+                )
+            except RequestFailedError as exc:
+                if attempted_fallback or not self._maybe_switch_local_protocol(exc):
+                    raise
+                attempted_fallback = True
 
     def _get(self, endpoint, params=None, **kwargs):
         return self._request("GET", endpoint, params=params, **kwargs)
@@ -190,11 +235,13 @@ class IbWebRequestData(Feed):
         return self._last_connect_error or self._cookie_load_error
 
     def _can_initialize_session(self):
-        return bool(self._username and self._password)
+        return bool(self._allow_browser_login and self._username and self._password)
 
     def _update_auth_state(self):
         result = self.check_auth_status()
-        self._authenticated = bool(result.get("authenticated", False) or result.get("connected", False))
+        self._authenticated = bool(
+            result.get("authenticated", False) or result.get("connected", False)
+        )
         return self._authenticated
 
     def _initialize_authenticated_session(self):

@@ -264,7 +264,8 @@ class BinanceGatewayAdapter(BaseGatewayAdapter):
         prev_close = _coalesce(ticker.get_prev_close(), previous.get("prev_close"))
         merged_ts = ts or previous.get("timestamp") or 0.0
         merged_price = (
-            float(last) if last not in (None, "", 0, 0.0)
+            float(last)
+            if last not in (None, "", 0, 0.0)
             else (float(bid) + float(ask)) / 2.0
             if bid not in (None, "", 0, 0.0) and ask not in (None, "", 0, 0.0)
             else float(previous.get("price") or 0.0)

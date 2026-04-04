@@ -16,7 +16,9 @@ def make_request_id() -> str:
 
 
 def dumps_message(payload: dict[str, Any]) -> bytes:
-    return json.dumps(_normalize(payload), ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+    return json.dumps(_normalize(payload), ensure_ascii=False, separators=(",", ":")).encode(
+        "utf-8"
+    )
 
 
 def loads_message(payload: bytes) -> dict[str, Any]:

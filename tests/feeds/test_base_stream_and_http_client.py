@@ -62,6 +62,18 @@ def test_http_client_request_adds_cookie_header() -> None:
     assert request_kwargs["headers"]["Cookie"] == "session=abc"
 
 
+def test_http_client_explicit_empty_proxies_disable_env_proxy_inheritance() -> None:
+    with patch("bt_api_py.feeds.http_client.httpx.Client") as client_cls:
+        sync_client = MagicMock()
+        sync_client.is_closed = False
+        client_cls.return_value = sync_client
+
+        HttpClient(venue="TEST", proxies={})
+
+    init_kwargs = client_cls.call_args.kwargs
+    assert init_kwargs["trust_env"] is False
+
+
 def test_http_client_process_response_raises_for_404() -> None:
     with patch("bt_api_py.feeds.http_client.httpx.Client") as client_cls:
         sync_client = MagicMock()
@@ -86,7 +98,9 @@ def test_http_client_request_wraps_generic_httpx_request_error() -> None:
 
         client = HttpClient(venue="TEST")
 
-        with pytest.raises(RequestFailedError, match="HTTP client error: broken transport") as exc_info:
+        with pytest.raises(
+            RequestFailedError, match="HTTP client error: broken transport"
+        ) as exc_info:
             client.request("GET", "https://example.com")
 
     assert exc_info.value.venue == "TEST"

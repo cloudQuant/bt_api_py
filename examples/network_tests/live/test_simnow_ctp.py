@@ -82,8 +82,9 @@ SIMNOW_ENVIRONMENTS = {
     },
 }
 
-
-load_dotenv(Path(__file__).resolve().parents[2] / ".env")
+PROJECT_ROOT = Path(__file__).resolve().parents[3]
+load_dotenv(PROJECT_ROOT / ".env")
+os.environ["CTP_ENV"] = "set2"
 
 _CTP_ATEXIT_REGISTERED = False
 DEFAULT_INSTRUMENT = os.environ.get("CTP_INSTRUMENT", "SA605")
@@ -104,12 +105,20 @@ def _ensure_ctp_atexit() -> None:
 
 def get_simnow_credentials() -> tuple[str, str, str, str, str]:
     """Return broker, user, password, app_id and auth_code from env vars."""
-    broker_id = os.getenv("CTP_BROKER_ID", "9999")
+    broker_id = os.getenv("CTP_BROKER_ID") or os.getenv("SIMNOW_BROKER_ID") or "9999"
     user_id = os.getenv("CTP_USER_ID") or os.getenv("SIMNOW_USER_ID") or ""
     password = os.getenv("CTP_PASSWORD") or os.getenv("SIMNOW_PASSWORD") or ""
     app_id = os.getenv("CTP_APP_ID", "simnow_client_test")
     auth_code = os.getenv("CTP_AUTH_CODE", "0000000000000000")
     return broker_id, user_id, password, app_id, auth_code
+
+
+def _require_simnow_credentials() -> None:
+    broker_id, user_id, password, _app_id, _auth_code = get_simnow_credentials()
+    if not broker_id or not user_id or not password:
+        pytest.fail(
+            "CTP_BROKER_ID/CTP_USER_ID/CTP_PASSWORD or SIMNOW_* credentials must be configured for SimNow tests"
+        )
 
 
 def _default_env_key() -> str:
@@ -211,6 +220,7 @@ def _capture_order_insert(feed: CtpRequestDataFuture):
 
 def _connect_feed(config: dict[str, str]) -> CtpRequestDataFuture:
     _ensure_ctp_atexit()
+    _require_simnow_credentials()
     feed = CtpRequestDataFuture(queue.Queue(), connect_timeout=20, **config)
     feed.connect()
     assert feed._connected, f"Failed to connect to {config['td_front']}"
@@ -254,7 +264,7 @@ os._exit(0 if ready else 1)
 """.strip()
     result = subprocess.run(
         [sys.executable, "-c", script],
-        cwd=Path(__file__).resolve().parents[2],
+        cwd=PROJECT_ROOT,
         env=child_env,
         capture_output=True,
         text=True,
@@ -278,14 +288,13 @@ def simnow_config() -> dict[str, str]:
 def simnow_api(simnow_config):
     """Create one shared BtApi session for the main SimNow tests."""
     _ensure_ctp_atexit()
+    _require_simnow_credentials()
     api = BtApi({"CTP___FUTURE": dict(simnow_config)}, debug=True)
     feed = api.get_request_api("CTP___FUTURE")
     assert feed is not None
     feed.connect()
     if not feed._connected:
-        pytest.skip(
-            f"Skipped (connection failed, likely network): failed to connect to {simnow_config['td_front']}"
-        )
+        pytest.fail(f"Failed to connect to {simnow_config['td_front']}")
     assert feed.trader_client is not None
     assert feed.trader_client.is_ready
     try:
@@ -303,20 +312,12 @@ def simnow_feed(simnow_api) -> CtpRequestDataFuture:
     return feed
 
 
-skip_if_no_creds = pytest.mark.skipif(
-    not get_simnow_credentials()[1] or not get_simnow_credentials()[2],
-    reason="CTP_USER_ID and CTP_PASSWORD must be configured for SimNow tests",
-)
-
-
-@skip_if_no_creds
 def test_simnow_connection(simnow_feed):
     """Test live connection to the currently selected SimNow Trader front."""
     assert simnow_feed._connected
     assert simnow_feed.trader_client.is_ready
 
 
-@skip_if_no_creds
 def test_simnow_market_data(simnow_config):
     """Test CTP tick conversion logic using mock market data."""
     data_queue: queue.Queue = queue.Queue()
@@ -333,7 +334,6 @@ def test_simnow_market_data(simnow_config):
     assert tick.get_ask_price() == 3551.0
 
 
-@skip_if_no_creds
 def test_simnow_account_balance(simnow_api):
     """Test live account balance retrieval from SimNow."""
     time.sleep(1)
@@ -346,7 +346,6 @@ def test_simnow_account_balance(simnow_api):
     assert account.get_available_margin() >= 0
 
 
-@skip_if_no_creds
 def test_simnow_positions(simnow_api):
     """Test live position retrieval from SimNow."""
     time.sleep(1)
@@ -358,7 +357,6 @@ def test_simnow_positions(simnow_api):
         assert position.get_position_volume() >= 0
 
 
-@skip_if_no_creds
 def test_simnow_order_placement(simnow_feed, simnow_config):
     """Test order request construction on top of a live SimNow session."""
     time.sleep(1)
@@ -385,7 +383,6 @@ def test_simnow_order_placement(simnow_feed, simnow_config):
     assert order.session_id == simnow_feed.trader_client._session_id
 
 
-@skip_if_no_creds
 def test_simnow_full_trading_cycle(simnow_api, simnow_feed):
     """Test connect -> account -> positions -> mock order -> disconnect."""
     account_data = simnow_api.get_account("CTP___FUTURE")
@@ -412,10 +409,10 @@ def test_simnow_full_trading_cycle(simnow_api, simnow_feed):
     assert proxy.field_dict["OrderRef"]
 
 
-@skip_if_no_creds
 @pytest.mark.slow
 def test_all_simnow_environments():
     """Test connection to all known SimNow environments sequentially."""
+    _require_simnow_credentials()
     creds = get_simnow_credentials()
     success_count = 0
     results = []

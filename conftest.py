@@ -2,6 +2,7 @@
 
 import os
 import sys
+import warnings
 from pathlib import Path
 
 import pytest
@@ -74,9 +75,36 @@ def _rewrite_examples_cli_arg(arg: str) -> str:
     return arg
 
 
+_CTP_HARD_EXIT_ENABLED = False
+_CTP_HARD_EXIT_STATUS = 0
+_REAL_CTP_NETWORK_TESTS = {
+    "examples/network_tests/test_ctp_feed_network.py",
+    "examples/network_tests/live/test_simnow_ctp.py",
+}
+
+
+def _should_force_ctp_hard_exit(pytest_args: list[str]) -> bool:
+    if not sys.platform.startswith("darwin"):
+        return False
+    normalized_args = [arg.replace("\\", "/") for arg in pytest_args]
+    return any(any(arg.endswith(path) for path in _REAL_CTP_NETWORK_TESTS) for arg in normalized_args)
+
+
+def _is_real_ctp_network_test(path: str) -> bool:
+    normalized = path.replace("\\", "/")
+    return any(normalized.endswith(test_path) for test_path in _REAL_CTP_NETWORK_TESTS)
+
+
 def pytest_configure(config):
     """Configure pytest with custom settings."""
+    global _CTP_HARD_EXIT_ENABLED
     config.args[:] = [_rewrite_examples_cli_arg(arg) for arg in config.args]
+    _CTP_HARD_EXIT_ENABLED = _should_force_ctp_hard_exit(config.args)
+    warnings.filterwarnings(
+        "ignore",
+        message="Benchmarks are automatically disabled because xdist plugin is active.*",
+        module="pytest_benchmark.logger",
+    )
 
     # Set LD_LIBRARY_PATH for CTP libraries
     ctp_lib_path = Path(__file__).parent / "bt_api_py" / "ctp" / "api" / "6.7.7" / "linux"
@@ -276,6 +304,8 @@ def pytest_runtest_makereport(item, call):
     report = outcome.get_result()
     if report.when != "call" or report.outcome != "failed" or call.excinfo is None:
         return
+    if _is_real_ctp_network_test(str(item.fspath)):
+        return
 
     reason = _network_skip_reason(item, call.excinfo.value)
     if reason is None:
@@ -283,6 +313,22 @@ def pytest_runtest_makereport(item, call):
 
     report.outcome = "skipped"
     report.longrepr = (str(item.fspath), 0, reason)
+
+
+def pytest_sessionfinish(session, exitstatus):
+    global _CTP_HARD_EXIT_STATUS
+    _CTP_HARD_EXIT_STATUS = int(exitstatus)
+
+
+def pytest_unconfigure(config):
+    if not _CTP_HARD_EXIT_ENABLED:
+        return
+    with_context_status = int(_CTP_HARD_EXIT_STATUS)
+    try:
+        sys.stdout.flush()
+        sys.stderr.flush()
+    finally:
+        os._exit(with_context_status)
 
 
 @pytest.fixture(scope="session")

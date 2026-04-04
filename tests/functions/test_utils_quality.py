@@ -1,9 +1,13 @@
 from __future__ import annotations
 
-import pytest
+from typing import TYPE_CHECKING
+
 import requests
 
 from bt_api_py.functions import utils
+
+if TYPE_CHECKING:
+    import pytest
 
 
 class _JsonValueErrorResponse:
@@ -45,7 +49,9 @@ def test_from_dict_get_bool_accepts_common_string_and_int_values() -> None:
     assert utils.from_dict_get_bool(content, "zero") is False
 
 
-def test_get_public_ip_returns_none_when_fallback_json_is_invalid(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_get_public_ip_returns_none_when_fallback_json_is_invalid(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     responses = [requests.RequestException("primary failed"), _JsonValueErrorResponse()]
 
     def fake_get(*args: object, **kwargs: object) -> object:

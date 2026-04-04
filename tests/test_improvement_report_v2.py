@@ -387,7 +387,9 @@ def test_rate_limiter_rolls_back_consumed_capacity_when_later_rule_fails():
 
 
 @pytest.mark.asyncio
-async def test_rate_limiter_async_acquire_returns_false_after_timeout(monkeypatch: pytest.MonkeyPatch):
+async def test_rate_limiter_async_acquire_returns_false_after_timeout(
+    monkeypatch: pytest.MonkeyPatch,
+):
     limiter = rate_limiter.RateLimiter()
 
     monkeypatch.setattr(limiter, "acquire", lambda *args, **kwargs: False)
@@ -643,7 +645,11 @@ def test_websocket_connection_handles_text_frame_with_compression_enabled():
     # Simulate what _process_messages does with a text frame
     raw_message = '{"result": null, "id": 1}'
     # Before the fix, this would raise TypeError: startswith requires bytes
-    if config.compression and isinstance(raw_message, bytes) and raw_message.startswith(b"\x78\x9c"):
+    if (
+        config.compression
+        and isinstance(raw_message, bytes)
+        and raw_message.startswith(b"\x78\x9c")
+    ):
         import zlib
 
         raw_message = zlib.decompress(raw_message)
@@ -695,7 +701,9 @@ def test_coverage_analyzer_reads_coverage_json_from_project_root(
     assert coverage_data["totals"]["percent_covered"] == 91.0
 
 
-def test_coverage_analyzer_handles_empty_exchange_set(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+def test_coverage_analyzer_handles_empty_exchange_set(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
     script_path = Path(__file__).resolve().parents[1] / "scripts" / "analyze_coverage.py"
     spec = importlib.util.spec_from_file_location("coverage_script_empty", script_path)
     assert spec is not None

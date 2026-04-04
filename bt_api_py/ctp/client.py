@@ -34,14 +34,53 @@ import threading
 import time
 from contextlib import suppress
 
-from .ctp_md_api import CThostFtdcMdApi, CThostFtdcMdSpi
-from .ctp_structs_common import (
-    CThostFtdcReqAuthenticateField,
-    CThostFtdcReqUserLoginField,
-    CThostFtdcSettlementInfoConfirmField,
-)
-from .ctp_structs_query import CThostFtdcQryInvestorPositionField, CThostFtdcQryTradingAccountField
-from .ctp_trader_api import CThostFtdcTraderApi, CThostFtdcTraderSpi
+from ._ctp_base import get_ctp_import_error, is_ctp_native_loaded
+
+try:
+    from ctp import (
+        CThostFtdcMdApi,
+        CThostFtdcMdSpi,
+        CThostFtdcQryInvestorPositionField,
+        CThostFtdcQryTradingAccountField,
+        CThostFtdcReqAuthenticateField,
+        CThostFtdcReqUserLoginField,
+        CThostFtdcSettlementInfoConfirmField,
+        CThostFtdcTraderApi,
+        CThostFtdcTraderSpi,
+    )
+
+    _CTP_RUNTIME_SOURCE = "external_ctp_python"
+except ImportError:
+    from .ctp_md_api import CThostFtdcMdApi, CThostFtdcMdSpi
+    from .ctp_structs_common import (
+        CThostFtdcReqAuthenticateField,
+        CThostFtdcReqUserLoginField,
+        CThostFtdcSettlementInfoConfirmField,
+    )
+    from .ctp_structs_query import (
+        CThostFtdcQryInvestorPositionField,
+        CThostFtdcQryTradingAccountField,
+    )
+    from .ctp_trader_api import CThostFtdcTraderApi, CThostFtdcTraderSpi
+
+    _CTP_RUNTIME_SOURCE = "vendored_bt_api_py"
+
+
+def _check_native_module():
+    """Raise ImportError early if the CTP C++ extension is not available."""
+    if _CTP_RUNTIME_SOURCE == "external_ctp_python":
+        return
+    if not is_ctp_native_loaded():
+        err = get_ctp_import_error()
+        raise ImportError(
+            f"CTP C++ extension (_ctp) not available: {err}. "
+            "Connections will silently fail. "
+            "If using Git LFS, run: git lfs install && git lfs pull"
+        )
+
+
+def get_ctp_runtime_source() -> str:
+    return _CTP_RUNTIME_SOURCE
 
 
 def _flow_dir(prefix):
@@ -159,6 +198,7 @@ class MdClient:
         Args:
             block: True=阻塞直到断开, False=后台线程运行
         """
+        _check_native_module()
         flow = _flow_dir(f"md_{self.broker_id}_{self.user_id}")
         self._api = CThostFtdcMdApi.CreateFtdcMdApi(flow)
         self._spi = _MdSpi(self)
@@ -364,6 +404,7 @@ class TraderClient:
 
     def start(self, block=False):
         """启动连接（默认后台运行）"""
+        _check_native_module()
         flow = _flow_dir(f"td_{self.broker_id}_{self.user_id}")
         self._api = CThostFtdcTraderApi.CreateFtdcTraderApi(flow)
         self._spi = _TraderSpi(self)

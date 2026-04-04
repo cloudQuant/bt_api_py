@@ -255,7 +255,11 @@ class WebSocketConnection:
                     self._stats["messages_received"] += 1
 
                     # Handle compression
-                    if self.config.compression and isinstance(raw_message, bytes) and raw_message.startswith(b"\x78\x9c"):
+                    if (
+                        self.config.compression
+                        and isinstance(raw_message, bytes)
+                        and raw_message.startswith(b"\x78\x9c")
+                    ):
                         raw_message = zlib.decompress(raw_message)
 
                     # Parse message
@@ -495,6 +499,11 @@ class WebSocketManager(IConnectionManager):
             self._round_robin[exchange_name] = 0
 
         await self._task_group.cancel_all()
+        self._task_group = AsyncTaskGroup()
+
+    async def stop(self) -> None:
+        """Compatibility shutdown entrypoint for deterministic cleanup."""
+        await self.close_all()
 
     async def subscribe(
         self,

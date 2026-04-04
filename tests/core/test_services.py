@@ -124,7 +124,9 @@ class TestConnectionService:
     async def test_get_connection_raises_clear_error_for_unconfigured_pool(self):
         service = ConnectionService()
 
-        with pytest.raises(RuntimeError, match="Connection pool for BINANCE___SPOT is not configured"):
+        with pytest.raises(
+            RuntimeError, match="Connection pool for BINANCE___SPOT is not configured"
+        ):
             await service.get_connection("BINANCE___SPOT")
 
         assert service._stats["BINANCE___SPOT"]["active_connections"] == 0

@@ -57,6 +57,7 @@ class _FallbackCtpModule(ModuleType):
             return lambda *args, **kwargs: None
 
         if name.startswith("disown_"):
+
             def _disown(instance, *args, **kwargs):
                 handle = getattr(instance, "this", None)
                 if handle is not None and hasattr(handle, "disown"):
@@ -66,6 +67,7 @@ class _FallbackCtpModule(ModuleType):
             return _disown
 
         if name.endswith("_swiginit"):
+
             def _swiginit(instance, handle):
                 object.__setattr__(instance, "this", handle)
                 return None
@@ -110,7 +112,29 @@ try:
     else:
         import _ctp
 except Exception as _ctp_import_error:
+    import warnings as _warnings
+
+    _warnings.warn(
+        f"CTP C++ extension (_ctp) failed to load: {_ctp_import_error}. "
+        "All CTP operations will silently no-op. "
+        "If using Git LFS, run: git lfs install && git lfs pull",
+        RuntimeWarning,
+        stacklevel=1,
+    )
     _ctp = _FallbackCtpModule(_ctp_import_error)
+
+
+def is_ctp_native_loaded() -> bool:
+    """Return True if the real SWIG C++ module loaded, False if using fallback."""
+    return not isinstance(_ctp, _FallbackCtpModule)
+
+
+def get_ctp_import_error():
+    """Return the import error if using fallback module, else None."""
+    if isinstance(_ctp, _FallbackCtpModule):
+        return _ctp._import_error
+    return None
+
 
 def _swig_setattr_nondynamic_instance_variable(setter):
     def set_instance_attr(self, name, value):
@@ -177,6 +201,8 @@ __all__ = [
     "_swig_setattr_nondynamic_class_variable",
     "_swig_add_metaclass",
     "_SwigNonDynamicMeta",
+    "is_ctp_native_loaded",
+    "get_ctp_import_error",
     "print_exception",
     "stderr",
     "weakref",

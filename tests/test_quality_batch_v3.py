@@ -9,14 +9,11 @@ Covers:
 - dead np.hstack removal in ensemble_model.py
 """
 
-import importlib
 import inspect
 import tempfile
 from pathlib import Path
-from unittest.mock import MagicMock
 
 import numpy as np
-import pytest
 
 
 class TestCtpInitContextlibSuppress:
@@ -64,9 +61,7 @@ class TestCtpBaseImportOrder:
                     break
 
         # sys < traceback < types (alphabetical)
-        assert from_imports == sorted(from_imports), (
-            f"from-imports are not sorted: {from_imports}"
-        )
+        assert from_imports == sorted(from_imports), f"from-imports are not sorted: {from_imports}"
 
 
 class TestCtpBaseNoDuplicateSwigRepr:
@@ -99,9 +94,7 @@ class TestSecurityExplicitEncoding:
         open_calls = re.findall(r"^\s+with open\(.+\)", source, re.MULTILINE)
         open_calls += re.findall(r"^\s+open\(.+\)", source, re.MULTILINE)
         for call in open_calls:
-            assert "encoding" in call, (
-                f"open() call missing encoding parameter: {call.strip()}"
-            )
+            assert "encoding" in call, f"open() call missing encoding parameter: {call.strip()}"
 
     def test_create_env_template_writes_utf8(self):
         """create_env_template should produce valid UTF-8 output."""
@@ -124,7 +117,6 @@ class TestEnsembleZeroDivisionGuard:
     def _make_ensemble(self):
         """Create a minimal RiskEnsembleModel with zero-weight models."""
         from bt_api_py.risk_management.ml_models.ensemble_model import (
-            ModelWeight,
             RiskEnsembleModel,
         )
 

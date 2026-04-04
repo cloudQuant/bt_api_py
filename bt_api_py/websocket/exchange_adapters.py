@@ -554,8 +554,7 @@ class WebSocketAdapterFactory:
         adapter_class = cls._adapters.get(exchange_name.upper())
 
         if not adapter_class:
-            # Use generic adapter if exchange not supported; cache it
-            cls._adapters[exchange_name.upper()] = GenericWebSocketAdapter
+            # Use generic adapter if exchange not supported
             return GenericWebSocketAdapter(exchange_name, credentials)
 
         return adapter_class(exchange_type, credentials)  # type: ignore[arg-type]

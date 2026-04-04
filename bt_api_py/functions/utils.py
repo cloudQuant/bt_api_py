@@ -132,6 +132,14 @@ def read_account_config() -> dict[str, Any]:
     if not env_loaded:
         load_dotenv(find_dotenv(usecwd=True), override=True)
 
+    if os.environ.get("CTP_ENV"):
+        try:
+            from bt_api_py.ctp_env_selector import apply_ctp_env
+
+            apply_ctp_env()
+        except ImportError:
+            _get_logger().debug("ctp_env_selector unavailable, keeping existing CTP front envs")
+
     http_proxy = os.environ.get("HTTP_PROXY", "") or os.environ.get("http_proxy", "")
     https_proxy = os.environ.get("HTTPS_PROXY", "") or os.environ.get("https_proxy", "")
 
@@ -185,8 +193,7 @@ def read_account_config() -> dict[str, Any]:
             "password": os.environ.get("IB_WEB_PASSWORD", ""),
             "login_mode": os.environ.get("IB_WEB_LOGIN_MODE", "paper"),
             "login_browser": os.environ.get("IB_WEB_LOGIN_BROWSER", "chrome"),
-            "login_headless": os.environ.get("IB_WEB_LOGIN_HEADLESS", "false").lower()
-            == "true",
+            "login_headless": os.environ.get("IB_WEB_LOGIN_HEADLESS", "false").lower() == "true",
             "login_timeout": int(os.environ.get("IB_WEB_LOGIN_TIMEOUT", "180")),
             "cookie_output": os.environ.get("IB_WEB_COOKIE_OUTPUT", ""),
             "cookie_source": os.environ.get("IB_WEB_COOKIE_SOURCE", ""),

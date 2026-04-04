@@ -501,7 +501,10 @@ class AuditLogger:
         removed_count = 0
 
         try:
-            with self.log_file.open(encoding="utf-8") as infile, temp_file.open("w", encoding="utf-8") as outfile:
+            with (
+                self.log_file.open(encoding="utf-8") as infile,
+                temp_file.open("w", encoding="utf-8") as outfile,
+            ):
                 for line in infile:
                     line = line.strip()
                     if not line:

@@ -110,13 +110,24 @@ class CtpGatewayAdapter(BaseGatewayAdapter):
         if not rows:
             return {"cash": 0.0, "value": 0.0}
         row = rows[0].init_data()
-        return {"cash": float(row.get_available_margin() or 0.0), "value": float(row.get_margin() or 0.0)}
+        return {
+            "cash": float(row.get_available_margin() or 0.0),
+            "value": float(row.get_margin() or 0.0),
+        }
 
     def get_positions(self) -> list[dict[str, Any]]:
         out = []
         for raw in self.feed.get_position().get_data() or []:
             row = raw.init_data()
-            out.append({"instrument": row.get_symbol_name(), "direction": row.get_position_direction(), "volume": row.get_position_volume(), "price": row.get_avg_price(), "exchange_id": row.exchange_id})
+            out.append(
+                {
+                    "instrument": row.get_symbol_name(),
+                    "direction": row.get_position_direction(),
+                    "volume": row.get_position_volume(),
+                    "price": row.get_avg_price(),
+                    "exchange_id": row.exchange_id,
+                }
+            )
         return out
 
     def _get_price_tick(self, instrument: str) -> float:
@@ -143,7 +154,9 @@ class CtpGatewayAdapter(BaseGatewayAdapter):
         side = str(payload.get("side") or "buy").lower()
         is_market = "market" in str(payload.get("order_type") or "").lower()
         price = payload.get("price")
-        needs_price_conversion = is_market or price is None or (price is not None and float(price) <= 0)
+        needs_price_conversion = (
+            is_market or price is None or (price is not None and float(price) <= 0)
+        )
 
         if needs_price_conversion:
             lp = self.last_price.get(instrument or name)
@@ -158,25 +171,62 @@ class CtpGatewayAdapter(BaseGatewayAdapter):
             price = round(price, 4)
             self.logger.info(
                 "CTP order price converted: %s %s last=%.4f tick=%.4f -> limit=%.4f",
-                instrument, side, lp, pt, price,
+                instrument,
+                side,
+                lp,
+                pt,
+                price,
             )
 
         kind = "limit"
-        rsp = self.feed.make_order(instrument or name, volume=payload.get("size") or 0, price=price, order_type=f"{side}-{kind}", offset=str(payload.get("offset") or "open"), client_order_id=payload.get("client_order_id") or payload.get("bt_order_ref"), exchange_id=exchange_id or payload.get("exchange_id") or "")
+        rsp = self.feed.make_order(
+            instrument or name,
+            volume=payload.get("size") or 0,
+            price=price,
+            order_type=f"{side}-{kind}",
+            offset=str(payload.get("offset") or "open"),
+            client_order_id=payload.get("client_order_id") or payload.get("bt_order_ref"),
+            exchange_id=exchange_id or payload.get("exchange_id") or "",
+        )
         if not rsp.get_status():
             raise RuntimeError("ctp order failed")
         row = rsp.get_data()[0].init_data()
         oid = row.get_order_id() or row.get_client_order_id()
-        return {"id": oid, "order_id": oid, "external_order_id": oid, "order_ref": row.get_client_order_id(), "front_id": row.front_id, "session_id": row.session_id, "exchange_id": row.get_order_exchange_id(), "details": {"bt_order_ref": payload.get("bt_order_ref")}}
+        return {
+            "id": oid,
+            "order_id": oid,
+            "external_order_id": oid,
+            "order_ref": row.get_client_order_id(),
+            "front_id": row.front_id,
+            "session_id": row.session_id,
+            "exchange_id": row.get_order_exchange_id(),
+            "details": {"bt_order_ref": payload.get("bt_order_ref")},
+        }
 
     def cancel_order(self, payload: dict[str, Any]) -> dict[str, Any]:
-        name = str(payload.get("data_name") or payload.get("symbol") or payload.get("instrument") or "").strip()
+        name = str(
+            payload.get("data_name") or payload.get("symbol") or payload.get("instrument") or ""
+        ).strip()
         instrument, exchange_id = _split(name)
-        rsp = self.feed.cancel_order(instrument or name, order_id=payload.get("order_id") or payload.get("external_order_id"), exchange_id=exchange_id or payload.get("exchange_id") or "", front_id=payload.get("front_id"), session_id=payload.get("session_id"), order_ref=payload.get("order_ref"))
+        rsp = self.feed.cancel_order(
+            instrument or name,
+            order_id=payload.get("order_id") or payload.get("external_order_id"),
+            exchange_id=exchange_id or payload.get("exchange_id") or "",
+            front_id=payload.get("front_id"),
+            session_id=payload.get("session_id"),
+            order_ref=payload.get("order_ref"),
+        )
         if not rsp.get_status():
             raise RuntimeError("ctp cancel failed")
         data = dict((rsp.get_data() or [{}])[0])
-        return {"id": data.get("OrderSysID") or payload.get("order_id") or payload.get("order_ref"), "order_ref": data.get("OrderRef") or payload.get("order_ref"), "order_sys_id": data.get("OrderSysID") or payload.get("order_id"), "front_id": data.get("FrontID") or payload.get("front_id"), "session_id": data.get("SessionID") or payload.get("session_id"), "exchange_id": data.get("ExchangeID") or exchange_id}
+        return {
+            "id": data.get("OrderSysID") or payload.get("order_id") or payload.get("order_ref"),
+            "order_ref": data.get("OrderRef") or payload.get("order_ref"),
+            "order_sys_id": data.get("OrderSysID") or payload.get("order_id"),
+            "front_id": data.get("FrontID") or payload.get("front_id"),
+            "session_id": data.get("SessionID") or payload.get("session_id"),
+            "exchange_id": data.get("ExchangeID") or exchange_id,
+        }
 
     def _run(self) -> None:
         while self.running:
@@ -205,10 +255,36 @@ class CtpGatewayAdapter(BaseGatewayAdapter):
         stamp = time.time()
         dt = datetime.fromtimestamp(stamp)
         if len(day) == 8 and day.isdigit() and row.update_time_val:
-            dt = datetime.strptime(f"{day} {row.update_time_val}", "%Y%m%d %H:%M:%S").replace(microsecond=int(row.update_millisec or 0) * 1000)
+            dt = datetime.strptime(f"{day} {row.update_time_val}", "%Y%m%d %H:%M:%S").replace(
+                microsecond=int(row.update_millisec or 0) * 1000
+            )
             stamp = dt.timestamp()
         for alias in self.aliases.get(instrument) or {instrument}:
-            self.emit(CHANNEL_MARKET, GatewayTick(timestamp=stamp, symbol=alias, exchange=row.exchange_id or "", asset_type="futures", local_time=time.time(), price=price, volume=volume, datetime=dt, instrument_id=instrument, exchange_id=row.exchange_id or "", trading_day=row.trading_day or "", update_time=row.update_time_val or "", update_millisec=int(row.update_millisec or 0), bid_price=row.get_bid_price(), ask_price=row.get_ask_price(), bid_volume=float(row.get_bid_volume() or 0.0), ask_volume=float(row.get_ask_volume() or 0.0), openinterest=float(row.get_open_interest() or 0.0), turnover=float(row.turnover or 0.0), trade_id=f"{instrument}-{int(total)}"))
+            self.emit(
+                CHANNEL_MARKET,
+                GatewayTick(
+                    timestamp=stamp,
+                    symbol=alias,
+                    exchange=row.exchange_id or "",
+                    asset_type="futures",
+                    local_time=time.time(),
+                    price=price,
+                    volume=volume,
+                    datetime=dt,
+                    instrument_id=instrument,
+                    exchange_id=row.exchange_id or "",
+                    trading_day=row.trading_day or "",
+                    update_time=row.update_time_val or "",
+                    update_millisec=int(row.update_millisec or 0),
+                    bid_price=row.get_bid_price(),
+                    ask_price=row.get_ask_price(),
+                    bid_volume=float(row.get_bid_volume() or 0.0),
+                    ask_volume=float(row.get_ask_volume() or 0.0),
+                    openinterest=float(row.get_open_interest() or 0.0),
+                    turnover=float(row.turnover or 0.0),
+                    trade_id=f"{instrument}-{int(total)}",
+                ),
+            )
 
 
 def _split(value: str) -> tuple[str, str]:
@@ -252,9 +328,38 @@ def _order(row: CtpOrderData, aliases: dict[str, set[str]]) -> dict[str, Any]:
     instrument = row.get_symbol_name() or ""
     size = int(row.get_order_size() or 0)
     filled = int(row.get_executed_qty() or 0)
-    return {"kind": "order", "order_ref": row.get_client_order_id(), "external_order_id": row.get_order_id() or row.get_client_order_id(), "data_name": _alias(aliases, instrument), "instrument": instrument, "exchange_id": row.get_order_exchange_id(), "front_id": row.front_id, "session_id": row.session_id, "status": _status(row.get_order_status()), "status_msg": row.status_msg or "", "side": row.get_order_side(), "offset": row.get_order_offset(), "price": row.get_order_price(), "size": size, "filled": filled, "remaining": max(size - filled, 0)}
+    return {
+        "kind": "order",
+        "order_ref": row.get_client_order_id(),
+        "external_order_id": row.get_order_id() or row.get_client_order_id(),
+        "data_name": _alias(aliases, instrument),
+        "instrument": instrument,
+        "exchange_id": row.get_order_exchange_id(),
+        "front_id": row.front_id,
+        "session_id": row.session_id,
+        "status": _status(row.get_order_status()),
+        "status_msg": row.status_msg or "",
+        "side": row.get_order_side(),
+        "offset": row.get_order_offset(),
+        "price": row.get_order_price(),
+        "size": size,
+        "filled": filled,
+        "remaining": max(size - filled, 0),
+    }
 
 
 def _trade(row: CtpTradeData, aliases: dict[str, set[str]]) -> dict[str, Any]:
     instrument = row.get_symbol_name() or ""
-    return {"kind": "trade", "trade_id": row.get_trade_id(), "order_ref": row.get_client_order_id(), "external_order_id": row.get_order_id() or row.get_client_order_id(), "data_name": _alias(aliases, instrument), "instrument": instrument, "exchange_id": row.exchange_id, "side": row.get_trade_side(), "offset": row.get_trade_offset(), "price": row.get_trade_price(), "size": row.get_trade_volume()}
+    return {
+        "kind": "trade",
+        "trade_id": row.get_trade_id(),
+        "order_ref": row.get_client_order_id(),
+        "external_order_id": row.get_order_id() or row.get_client_order_id(),
+        "data_name": _alias(aliases, instrument),
+        "instrument": instrument,
+        "exchange_id": row.exchange_id,
+        "side": row.get_trade_side(),
+        "offset": row.get_trade_offset(),
+        "price": row.get_trade_price(),
+        "size": row.get_trade_volume(),
+    }

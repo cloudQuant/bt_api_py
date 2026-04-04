@@ -17,15 +17,55 @@ import atexit
 import contextlib
 import os
 import queue
+import socket
 import time
 from pathlib import Path
 
 import pytest
 from dotenv import load_dotenv
 
+from bt_api_py.ctp._ctp_base import get_ctp_import_error, is_ctp_native_loaded
 from bt_api_py.ctp_env_selector import apply_ctp_env
 
 _CTP_ATEXIT_REGISTERED = False
+
+# Fail fast if CTP C++ extension is not available (e.g. Git LFS not pulled)
+if not is_ctp_native_loaded():
+    _ctp_err = get_ctp_import_error()
+    pytest.exit(
+        f"CTP C++ extension (_ctp) not available: {_ctp_err}. "
+        "Run: git lfs install && git lfs pull",
+        returncode=1,
+    )
+
+
+def _check_ctp_service(host: str, port: int, timeout: float = 3.0) -> str:
+    """Pre-check whether a CTP front is serving the CTP protocol.
+
+    Returns:
+        "ok"             – TCP connected and server sent protocol data
+        "no_service"     – TCP connected but no CTP data (server in maintenance)
+        "refused"        – TCP connection refused (port closed)
+        "timeout"        – TCP connection timed out (network unreachable)
+        "error:<detail>" – other error
+    """
+    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    sock.settimeout(timeout)
+    try:
+        sock.connect((host, port))
+        try:
+            data = sock.recv(128)
+            return "ok" if data else "no_service"
+        except socket.timeout:
+            return "no_service"
+        finally:
+            sock.close()
+    except socket.timeout:
+        return "timeout"
+    except ConnectionRefusedError:
+        return "refused"
+    except Exception as e:
+        return f"error:{e}"
 
 
 def _ctp_atexit_handler():
@@ -40,25 +80,32 @@ def _ensure_ctp_atexit():
         _CTP_ATEXIT_REGISTERED = True
 
 
-load_dotenv(Path(__file__).resolve().parent.parent / ".env")
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+load_dotenv(PROJECT_ROOT / ".env")
+os.environ["CTP_ENV"] = "set2"
 
 _td, _md, _env_name = apply_ctp_env()
 
-BROKER_ID = os.environ.get("CTP_BROKER_ID", "9999")
-USER_ID = os.environ.get("CTP_USER_ID", "")
-PASSWORD = os.environ.get("CTP_PASSWORD", "")
+BROKER_ID = os.environ.get("CTP_BROKER_ID") or os.environ.get("SIMNOW_BROKER_ID") or "9999"
+USER_ID = os.environ.get("CTP_USER_ID") or os.environ.get("SIMNOW_USER_ID") or ""
+PASSWORD = os.environ.get("CTP_PASSWORD") or os.environ.get("SIMNOW_PASSWORD") or ""
 APP_ID = os.environ.get("CTP_APP_ID", "simnow_client_test")
 AUTH_CODE = os.environ.get("CTP_AUTH_CODE", "0000000000000000")
 MD_FRONT = _md
 TD_FRONT = _td
 INSTRUMENT = os.environ.get("CTP_INSTRUMENT", "SA605")
 EXCHANGE = os.environ.get("CTP_EXCHANGE", "CZCE")
+CONNECT_TIMEOUT = float(os.environ.get("CTP_CONNECT_TIMEOUT", "30"))
 
-SKIP_REASON = ""
-if not USER_ID or not PASSWORD:
-    SKIP_REASON = "CTP_USER_ID and CTP_PASSWORD not set in .env"
+def _require_ctp_credentials() -> None:
+    if not USER_ID or not PASSWORD:
+        pytest.fail(
+            "CTP_USER_ID/CTP_PASSWORD or SIMNOW_USER_ID/SIMNOW_PASSWORD not set in project .env"
+        )
 
-skip_if_no_creds = pytest.mark.skipif(bool(SKIP_REASON), reason=SKIP_REASON)
+def _safe_text(value: object) -> str:
+    text = str(value)
+    return text.encode("utf-8", errors="backslashreplace").decode("utf-8")
 
 EXCHANGE_PARAMS = {
     "broker_id": BROKER_ID,
@@ -71,7 +118,6 @@ EXCHANGE_PARAMS = {
 }
 
 
-@skip_if_no_creds
 @pytest.mark.network
 class TestCtpTraderIntegration:
     """TraderApi 集成测试 — 连接、查询账户、查询持仓、下单、Feed层、BtApi层
@@ -84,13 +130,23 @@ class TestCtpTraderIntegration:
     def setup_feed(self, request):
         """类级别 fixture: 创建一个共享的 CtpRequestDataFuture"""
         _ensure_ctp_atexit()
+        _require_ctp_credentials()
+
+        # Pre-check: is the CTP front actually serving the protocol?
+        td_host, td_port = TD_FRONT.replace("tcp://", "").split(":")
+        svc_status = _check_ctp_service(td_host, int(td_port))
+        print(f"\n[TD] Front probe {TD_FRONT}: {svc_status} (env={_env_name})")
+
         from bt_api_py.feeds.live_ctp_feed import CtpRequestDataFuture
 
         data_queue = queue.Queue()
-        feed = CtpRequestDataFuture(data_queue, **EXCHANGE_PARAMS)
+        feed = CtpRequestDataFuture(data_queue, connect_timeout=CONNECT_TIMEOUT, **EXCHANGE_PARAMS)
         feed.connect()
         if not feed._connected:
-            pytest.skip(f"Skipped (connection failed, likely network): failed to connect to {TD_FRONT}")
+            pytest.fail(
+                f"CTP TraderClient failed to connect to 7x24 front {TD_FRONT} "
+                f"(env={_env_name}, timeout={CONNECT_TIMEOUT}s)"
+            )
         request.cls.feed = feed
         request.cls.data_queue = data_queue
         yield
@@ -132,7 +188,7 @@ class TestCtpTraderIntegration:
         for pos in data_list:
             pos.init_data()
             print(
-                f"  {pos.get_symbol_name()} {pos.get_position_direction()} "
+                f"  {_safe_text(pos.get_symbol_name())} {pos.get_position_direction()} "
                 f"{pos.get_position_volume()}手"
             )
 
@@ -180,7 +236,6 @@ class TestCtpTraderIntegration:
         assert "CTP___FUTURE" in cash_dict
 
 
-@skip_if_no_creds
 @pytest.mark.network
 class TestCtpMdIntegration:
     """MdApi 集成测试 — 行情连接和 tick 接收
@@ -198,6 +253,13 @@ class TestCtpMdIntegration:
     def test_md_connect_receive_tick_and_convert(self):
         """通过 MdClient 连接行情，收到原始 tick，并验证 CtpTickerData 转换"""
         _ensure_ctp_atexit()
+        _require_ctp_credentials()
+
+        # Pre-check: is the CTP market front serving?
+        md_host, md_port = MD_FRONT.replace("tcp://", "").split(":")
+        svc_status = _check_ctp_service(md_host, int(md_port))
+        print(f"\n[MD] Front probe {MD_FRONT}: {svc_status} (env={_env_name})")
+
         from bt_api_py.containers.ctp.ctp_ticker import CtpTickerData
         from bt_api_py.ctp.client import MdClient
         from bt_api_py.feeds.live_ctp_feed import _ctp_field_to_dict
@@ -212,7 +274,7 @@ class TestCtpMdIntegration:
         client.subscribe([INSTRUMENT])
         client.start(block=False)
 
-        ready = client.wait_ready(timeout=15)
+        ready = client.wait_ready(timeout=CONNECT_TIMEOUT)
         assert ready, f"MdClient failed to connect to {MD_FRONT}"
         print(f"\n[MD] Connected, waiting for ticks on {INSTRUMENT}...")
 

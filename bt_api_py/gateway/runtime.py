@@ -57,6 +57,7 @@ class GatewayRuntime:
         self.health = GatewayHealth()
         self.order_ref_allocator: OrderRefAllocator | None = None
         self.tick_writer: TickWriter | None = None
+        self._last_runtime_heartbeat_monotonic = 0.0
 
         # Initialise CTP-specific OrderRefAllocator
         if config.exchange_type == "CTP":
@@ -114,6 +115,7 @@ class GatewayRuntime:
             self.tick_writer.start()
         self.running = True
         self.health.set_state(GatewayState.RUNNING)
+        self._refresh_runtime_heartbeat(force=True)
         # Connect adapter in a background thread so the command loop can
         # immediately respond to ping / health requests.
         adapter_thread = threading.Thread(
@@ -128,6 +130,7 @@ class GatewayRuntime:
                     self._handle_commands()
                     if self._adapter_connected:
                         self._flush_adapter_output()
+                    self._refresh_runtime_heartbeat()
                 except zmq.ZMQError as exc:
                     if not self.running:
                         break
@@ -216,7 +219,9 @@ class GatewayRuntime:
             result = self._dispatch(command, data)
             response = {"request_id": request_id, "status": "ok", "data": result}
         except Exception as exc:
-            self.health.record_error("command", f"{command or '<empty>'}: {type(exc).__name__}: {exc}")
+            self.health.record_error(
+                "command", f"{command or '<empty>'}: {type(exc).__name__}: {exc}"
+            )
             logger.warning(
                 "Gateway command failed for %s request_id=%s command=%s: %s: %s",
                 self.config.exchange_type,
@@ -275,6 +280,47 @@ class GatewayRuntime:
             self.config.exchange_type,
         )
 
+    def _subscribe_for_strategy(self, strategy_id: str, symbols: list[str]) -> dict[str, Any]:
+        requested_symbols = [str(symbol) for symbol in symbols if str(symbol)]
+        if not requested_symbols:
+            self._sync_health_counts()
+            return {"subscribed": [], "accepted": [], "skipped": []}
+
+        existing_symbols = self.subscriptions.get_active_symbols()
+        already_active = [symbol for symbol in requested_symbols if symbol in existing_symbols]
+        newly_requested = [symbol for symbol in requested_symbols if symbol not in existing_symbols]
+
+        accepted_new = list(newly_requested)
+        skipped_symbols: list[str] = []
+        if newly_requested:
+            adapter_result = self.adapter.subscribe_symbols(list(newly_requested))
+            if isinstance(adapter_result, dict):
+                accepted_candidate = (
+                    adapter_result.get("accepted")
+                    or adapter_result.get("symbols")
+                    or adapter_result.get("subscribed")
+                    or []
+                )
+                accepted_new = [str(symbol) for symbol in accepted_candidate if str(symbol)]
+                skipped_candidate = (
+                    adapter_result.get("skipped") or adapter_result.get("skipped_symbols") or []
+                )
+                skipped_symbols = [str(symbol) for symbol in skipped_candidate if str(symbol)]
+
+        self.subscriptions.add(strategy_id, already_active)
+        newly_subscribed = self.subscriptions.add(strategy_id, accepted_new)
+        self._sync_health_counts()
+
+        accepted_total = sorted({*already_active, *accepted_new})
+        skipped_total = sorted(
+            {symbol for symbol in skipped_symbols if symbol not in accepted_total}
+        )
+        return {
+            "subscribed": sorted(newly_subscribed),
+            "accepted": accepted_total,
+            "skipped": skipped_total,
+        }
+
     def _dispatch(self, command: str, payload: dict[str, Any]) -> Any:
         if command == "ping":
             self.health.record_heartbeat()
@@ -282,11 +328,22 @@ class GatewayRuntime:
         if command == "register_strategy":
             strategy_id = str(payload.get("strategy_id") or "")
             symbols = list(payload.get("symbols") or [])
+            if self._adapter_connected:
+                result = self._subscribe_for_strategy(strategy_id, symbols)
+                return {
+                    "strategy_id": strategy_id,
+                    "newly_subscribed": result["subscribed"],
+                    "accepted": result["accepted"],
+                    "skipped": result["skipped"],
+                }
             newly = self.subscriptions.add(strategy_id, symbols)
-            if newly and self._adapter_connected:
-                self.adapter.subscribe_symbols(list(newly))
             self._sync_health_counts()
-            return {"strategy_id": strategy_id, "newly_subscribed": sorted(newly)}
+            return {
+                "strategy_id": strategy_id,
+                "newly_subscribed": sorted(newly),
+                "accepted": sorted(symbols),
+                "skipped": [],
+            }
         if command == "unregister_strategy":
             strategy_id = str(payload.get("strategy_id") or "")
             removed = self.subscriptions.remove_strategy(strategy_id)
@@ -299,11 +356,7 @@ class GatewayRuntime:
         if command == "subscribe":
             symbols = list(payload.get("symbols") or [])
             strategy_id = str(payload.get("strategy_id") or "default")
-            newly = self.subscriptions.add(strategy_id, symbols)
-            if newly:
-                self.adapter.subscribe_symbols(list(newly))
-            self._sync_health_counts()
-            return {"subscribed": sorted(newly)}
+            return self._subscribe_for_strategy(strategy_id, symbols)
         if command == "get_balance":
             return self.adapter.get_balance()
         if command == "get_positions":
@@ -335,6 +388,15 @@ class GatewayRuntime:
         if command == "get_open_orders":
             return self.adapter.get_open_orders()
         raise ValueError(f"unsupported command: {command}")
+
+    def _refresh_runtime_heartbeat(self, *, force: bool = False) -> None:
+        if not self.running and not force:
+            return
+        now = time.monotonic()
+        if not force and (now - self._last_runtime_heartbeat_monotonic) < 1.0:
+            return
+        self.health.record_heartbeat()
+        self._last_runtime_heartbeat_monotonic = now
 
     def _flush_adapter_output(self) -> None:
         while True:

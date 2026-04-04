@@ -17,8 +17,14 @@ import json
 import threading
 import time
 from typing import Any
+from urllib.parse import urlparse
 
 from bt_api_py.feeds.base_stream import BaseDataStream, ConnectionState
+
+
+def _is_local_base_url(base_url: str) -> bool:
+    host = (urlparse(str(base_url or "")).hostname or "").lower()
+    return host in {"localhost", "127.0.0.1"}
 
 
 class IbWebDataStream(BaseDataStream):
@@ -78,7 +84,14 @@ class IbWebDataStream(BaseDataStream):
 
         self._ws_thread = threading.Thread(
             target=self._ws.run_forever,
-            kwargs={"sslopt": ssl_opts} if ssl_opts else {},
+            kwargs={
+                **({"sslopt": ssl_opts} if ssl_opts else {}),
+                **(
+                    {"http_no_proxy": ["localhost", "127.0.0.1"]}
+                    if _is_local_base_url(self.base_url)
+                    else {}
+                ),
+            },
             daemon=True,
         )
         self._ws_thread.start()
@@ -308,7 +321,14 @@ class IbWebAccountStream(BaseDataStream):
         )
         self._ws_thread = threading.Thread(
             target=self._ws.run_forever,
-            kwargs={"sslopt": ssl_opts} if ssl_opts else {},
+            kwargs={
+                **({"sslopt": ssl_opts} if ssl_opts else {}),
+                **(
+                    {"http_no_proxy": ["localhost", "127.0.0.1"]}
+                    if _is_local_base_url(self.base_url)
+                    else {}
+                ),
+            },
             daemon=True,
         )
         self._ws_thread.start()

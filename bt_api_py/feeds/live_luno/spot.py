@@ -50,9 +50,7 @@ class LunoRequestDataSpot(LunoRequestData):
         return path, {"pair": symbol}, extra_data
 
     @staticmethod
-    def _get_tick_normalize_function(
-        input_data: Any, extra_data: Any
-    ) -> tuple[list[Any], bool]:
+    def _get_tick_normalize_function(input_data: Any, extra_data: Any) -> tuple[list[Any], bool]:
         if not input_data:
             return [], False
         return [input_data], True
@@ -88,16 +86,12 @@ class LunoRequestDataSpot(LunoRequestData):
         return path, {"pair": symbol}, extra_data
 
     @staticmethod
-    def _get_depth_normalize_function(
-        input_data: Any, extra_data: Any
-    ) -> tuple[list[Any], bool]:
+    def _get_depth_normalize_function(input_data: Any, extra_data: Any) -> tuple[list[Any], bool]:
         if not input_data:
             return [], False
         return [input_data], True
 
-    def get_depth(
-        self, symbol: str, count: int = 20, extra_data: Any = None, **kwargs: Any
-    ) -> Any:
+    def get_depth(self, symbol: str, count: int = 20, extra_data: Any = None, **kwargs: Any) -> Any:
         """Get order book."""
         path, params, extra_data = self._get_depth(symbol, count, extra_data, **kwargs)
         return self.request(path, params=params, extra_data=extra_data)
@@ -137,9 +131,7 @@ class LunoRequestDataSpot(LunoRequestData):
         return path, {"pair": symbol, "since": since, "duration": duration}, extra_data
 
     @staticmethod
-    def _get_kline_normalize_function(
-        input_data: Any, extra_data: Any
-    ) -> tuple[list[Any], bool]:
+    def _get_kline_normalize_function(input_data: Any, extra_data: Any) -> tuple[list[Any], bool]:
         if not input_data:
             return [], False
         klines = input_data.get("candles", []) if isinstance(input_data, dict) else []
@@ -213,9 +205,7 @@ class LunoRequestDataSpot(LunoRequestData):
         return path, {}, extra_data
 
     @staticmethod
-    def _get_balance_normalize_function(
-        input_data: Any, extra_data: Any
-    ) -> tuple[list[Any], bool]:
+    def _get_balance_normalize_function(input_data: Any, extra_data: Any) -> tuple[list[Any], bool]:
         if not input_data:
             return [], False
         return [input_data], True
@@ -243,9 +233,7 @@ class LunoRequestDataSpot(LunoRequestData):
         return path, {}, extra_data
 
     @staticmethod
-    def _get_account_normalize_function(
-        input_data: Any, extra_data: Any
-    ) -> tuple[list[Any], bool]:
+    def _get_account_normalize_function(input_data: Any, extra_data: Any) -> tuple[list[Any], bool]:
         if not input_data:
             return [], False
         return [input_data], True
@@ -287,9 +275,7 @@ class LunoRequestDataSpot(LunoRequestData):
         return path, params, extra_data
 
     @staticmethod
-    def _make_order_normalize_function(
-        input_data: Any, extra_data: Any
-    ) -> tuple[list[Any], bool]:
+    def _make_order_normalize_function(input_data: Any, extra_data: Any) -> tuple[list[Any], bool]:
         if not input_data:
             return [], False
         return [input_data], True

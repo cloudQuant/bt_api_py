@@ -6,6 +6,7 @@ import asyncio
 import logging
 import threading
 import time
+from contextlib import suppress
 from typing import Any
 
 from bt_api_py.gateway.adapters.base import BaseGatewayAdapter
@@ -149,14 +150,17 @@ class Mt5GatewayAdapter(BaseGatewayAdapter):
         future = asyncio.run_coroutine_threadsafe(
             self._async_subscribe(symbols, resolved), self._loop
         )
-        future.result(timeout=self._timeout)
-        self._subscribed_symbols.extend(symbols)
-        return {"symbols": symbols}
+        result = future.result(timeout=self._timeout)
+        subscribed_symbols = list(result.get("symbols") or [])
+        for symbol in subscribed_symbols:
+            if symbol not in self._subscribed_symbols:
+                self._subscribed_symbols.append(symbol)
+        return result
 
     def get_balance(self) -> dict[str, Any]:
         getter = getattr(self._client, "get_account_summary", None)
         if getter is None:
-            getter = getattr(self._client, "get_account")
+            getter = self._client.get_account
         future = asyncio.run_coroutine_threadsafe(getter(), self._loop)
         acct = future.result(timeout=self._timeout)
         if isinstance(acct, dict):
@@ -325,14 +329,10 @@ class Mt5GatewayAdapter(BaseGatewayAdapter):
         # Register push callbacks
         self._client.on_tick(self._on_tick_push)
         self._client.on_disconnect(self._on_ws_disconnect)
-        try:
+        with suppress(Exception):
             self._client.on_trade_transaction(self._on_transaction_push)
-        except Exception:
-            pass
-        try:
+        with suppress(Exception):
             self._client.on_trade_result(self._on_trade_result_push)
-        except Exception:
-            pass
         try:
             self._client.on_order_update(self._on_order_update_push)
         except Exception as exc:
@@ -348,9 +348,44 @@ class Mt5GatewayAdapter(BaseGatewayAdapter):
 
     async def _async_subscribe(
         self, standard_symbols: list[str], resolved_symbols: list[str]
-    ) -> None:
-        await self._client.subscribe_symbols(resolved_symbols)
+    ) -> dict[str, Any]:
+        available_symbols = dict(getattr(self._client, "_symbols", {}) or {})
+        candidate_pairs: list[tuple[str, str]] = []
+        skipped_symbols: list[str] = []
+
         for std_sym, mt5_sym in zip(standard_symbols, resolved_symbols, strict=False):
+            if available_symbols.get(mt5_sym) is None:
+                skipped_symbols.append(std_sym)
+                logger.warning(
+                    f"skipping MT5 subscription for {std_sym}; resolved symbol {mt5_sym} not found in cache"
+                )
+                continue
+            candidate_pairs.append((std_sym, mt5_sym))
+
+        subscribed_id_set: set[int] | None = None
+        if candidate_pairs:
+            subscribe_batch = getattr(self._client, "subscribe_symbols_batch", None)
+            if subscribe_batch is not None:
+                subscribed_ids = await subscribe_batch([mt5_sym for _, mt5_sym in candidate_pairs])
+                subscribed_id_set = {int(symbol_id) for symbol_id in subscribed_ids}
+            else:
+                subscribe_symbols = getattr(self._client, "subscribe_symbols", None)
+                if subscribe_symbols is None:
+                    raise AttributeError(
+                        f"{type(self._client).__name__} has neither subscribe_symbols_batch nor subscribe_symbols"
+                    )
+                await subscribe_symbols([mt5_sym for _, mt5_sym in candidate_pairs])
+
+        subscribed_symbols: list[str] = []
+        resolved_map: dict[str, str] = {}
+        for std_sym, mt5_sym in candidate_pairs:
+            info = available_symbols.get(mt5_sym)
+            symbol_id = getattr(info, "symbol_id", None)
+            if subscribed_id_set is not None and symbol_id not in subscribed_id_set:
+                skipped_symbols.append(std_sym)
+                continue
+            subscribed_symbols.append(std_sym)
+            resolved_map[std_sym] = mt5_sym
             self._resolved_symbols[std_sym] = mt5_sym
             self._reverse_resolved_symbols[mt5_sym] = std_sym
             try:
@@ -366,7 +401,13 @@ class Mt5GatewayAdapter(BaseGatewayAdapter):
                         "margin_initial": info.get("margin_initial", 0.0),
                     }
             except Exception as exc:
-                logger.warning("failed to cache symbol info for %s: %s", std_sym, exc)
+                logger.warning(f"failed to cache symbol info for {std_sym}: {exc}")
+                skipped_symbols.append(std_sym)
+        return {
+            "symbols": subscribed_symbols,
+            "skipped_symbols": skipped_symbols,
+            "resolved_symbols": resolved_map,
+        }
 
     async def _async_place_order(self, payload: dict[str, Any]) -> dict[str, Any]:
         symbol = str(payload.get("data_name") or payload.get("symbol") or "")
@@ -534,16 +575,19 @@ class Mt5GatewayAdapter(BaseGatewayAdapter):
             return
         retcode = int(result.get("retcode", -1))
         status = _RETCODE_STATUS.get(retcode, "unknown")
-        self.emit(CHANNEL_EVENT, {
-            "kind": "order",
-            "exchange": "MT5",
-            "status": status,
-            "order_id": result.get("order"),
-            "external_order_id": str(result.get("order") or ""),
-            "deal": result.get("deal"),
-            "price": float(result.get("price") or 0.0),
-            "size": float(result.get("volume") or 0.0),
-        })
+        self.emit(
+            CHANNEL_EVENT,
+            {
+                "kind": "order",
+                "exchange": "MT5",
+                "status": status,
+                "order_id": result.get("order"),
+                "external_order_id": str(result.get("order") or ""),
+                "deal": result.get("deal"),
+                "price": float(result.get("price") or 0.0),
+                "size": float(result.get("volume") or 0.0),
+            },
+        )
 
     def _on_transaction_push(self, data: dict[str, Any]) -> None:
         if not isinstance(data, dict):
@@ -558,20 +602,25 @@ class Mt5GatewayAdapter(BaseGatewayAdapter):
             for deal in deals or []:
                 trade_action = deal.get("trade_action", -1)
                 side = "buy" if trade_action == 0 else "sell"
-                self.emit(CHANNEL_EVENT, {
-                    "kind": "trade",
-                    "exchange": "MT5",
-                    "trade_id": str(deal.get("deal_id") or deal.get("deal") or ""),
-                    "external_order_id": str(deal.get("trade_order") or deal.get("order_id") or ""),
-                    "order_ref": str(deal.get("trade_order") or deal.get("order_id") or ""),
-                    "data_name": deal.get("trade_symbol", ""),
-                    "side": side,
-                    "size": abs(float(deal.get("trade_volume") or 0.0)),
-                    "price": float(deal.get("price_order") or deal.get("price_open") or 0.0),
-                    "commission": float(deal.get("commission") or 0.0),
-                    "profit": float(deal.get("profit") or 0.0),
-                    "position_id": deal.get("position_id"),
-                })
+                self.emit(
+                    CHANNEL_EVENT,
+                    {
+                        "kind": "trade",
+                        "exchange": "MT5",
+                        "trade_id": str(deal.get("deal_id") or deal.get("deal") or ""),
+                        "external_order_id": str(
+                            deal.get("trade_order") or deal.get("order_id") or ""
+                        ),
+                        "order_ref": str(deal.get("trade_order") or deal.get("order_id") or ""),
+                        "data_name": deal.get("trade_symbol", ""),
+                        "side": side,
+                        "size": abs(float(deal.get("trade_volume") or 0.0)),
+                        "price": float(deal.get("price_order") or deal.get("price_open") or 0.0),
+                        "commission": float(deal.get("commission") or 0.0),
+                        "profit": float(deal.get("profit") or 0.0),
+                        "position_id": deal.get("position_id"),
+                    },
+                )
             return
 
         order = data.get("order")
@@ -581,21 +630,24 @@ class Mt5GatewayAdapter(BaseGatewayAdapter):
             return
         order_state = order.get("order_state")
         status = _MT5_ORDER_STATE_MAP.get(order_state, "submitted")
-        self.emit(CHANNEL_EVENT, {
-            "kind": "order",
-            "exchange": "MT5",
-            "status": status,
-            "external_order_id": str(order.get("trade_order") or order.get("order_id") or ""),
-            "order_ref": str(order.get("trade_order") or order.get("order_id") or ""),
-            "data_name": order.get("trade_symbol", ""),
-            "side": "buy" if order.get("order_type", 0) in (0, 2, 4) else "sell",
-            "price": float(order.get("price_order") or order.get("price_open") or 0.0),
-            "size": float(order.get("volume_initial") or order.get("trade_volume") or 0.0),
-            "filled": float(
-                (order.get("volume_initial") or 0.0) - (order.get("volume_current") or 0.0)
-            ),
-            "remaining": float(order.get("volume_current") or 0.0),
-        })
+        self.emit(
+            CHANNEL_EVENT,
+            {
+                "kind": "order",
+                "exchange": "MT5",
+                "status": status,
+                "external_order_id": str(order.get("trade_order") or order.get("order_id") or ""),
+                "order_ref": str(order.get("trade_order") or order.get("order_id") or ""),
+                "data_name": order.get("trade_symbol", ""),
+                "side": "buy" if order.get("order_type", 0) in (0, 2, 4) else "sell",
+                "price": float(order.get("price_order") or order.get("price_open") or 0.0),
+                "size": float(order.get("volume_initial") or order.get("trade_volume") or 0.0),
+                "filled": float(
+                    (order.get("volume_initial") or 0.0) - (order.get("volume_current") or 0.0)
+                ),
+                "remaining": float(order.get("volume_current") or 0.0),
+            },
+        )
 
     def _on_ws_disconnect(self) -> None:
         self.emit(
@@ -627,10 +679,14 @@ class Mt5GatewayAdapter(BaseGatewayAdapter):
                         "kind": "trade",
                         "exchange": "MT5",
                         "trade_id": str(deal.get("deal_id") or deal.get("deal") or ""),
-                        "external_order_id": str(deal.get("order_id") or deal.get("trade_order") or ""),
+                        "external_order_id": str(
+                            deal.get("order_id") or deal.get("trade_order") or ""
+                        ),
                         "order_ref": str(deal.get("order_id") or deal.get("trade_order") or ""),
                         "data_name": deal.get("symbol") or deal.get("trade_symbol") or "",
-                        "side": "buy" if (deal.get("entry", deal.get("trade_action", 0)) == 0) else "sell",
+                        "side": "buy"
+                        if (deal.get("entry", deal.get("trade_action", 0)) == 0)
+                        else "sell",
                         "size": abs(float(deal.get("volume") or deal.get("trade_volume") or 0)),
                         "price": float(deal.get("price") or deal.get("price_open") or 0.0),
                         "commission": float(deal.get("commission") or 0.0),
@@ -648,7 +704,9 @@ class Mt5GatewayAdapter(BaseGatewayAdapter):
                         "kind": "order",
                         "exchange": "MT5",
                         "status": status,
-                        "external_order_id": str(order.get("order_id") or order.get("trade_order") or ""),
+                        "external_order_id": str(
+                            order.get("order_id") or order.get("trade_order") or ""
+                        ),
                         "order_ref": str(order.get("order_id") or order.get("trade_order") or ""),
                         "data_name": order.get("symbol") or order.get("trade_symbol") or "",
                         "side": "buy" if order.get("order_type", 0) in (0, 2, 4) else "sell",
@@ -734,7 +792,9 @@ class Mt5GatewayAdapter(BaseGatewayAdapter):
         exact = next((str(name) for name in symbol_names if str(name).upper() == target), None)
         if exact:
             return exact
-        prefix_matches = [str(name) for name in symbol_names if str(name).upper().startswith(target)]
+        prefix_matches = [
+            str(name) for name in symbol_names if str(name).upper().startswith(target)
+        ]
         if len(prefix_matches) == 1:
             return prefix_matches[0]
         return None

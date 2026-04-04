@@ -231,7 +231,7 @@ class BinanceSpotSymbolData(SymbolData):
         self.min_qty = from_dict_get_float(self.symbol_info["filters"][1], "minQty")
         self.base_asset_digital = from_dict_get_int(self.symbol_info, "baseAssetPrecision")
         self.quote_asset_digital = from_dict_get_int(self.symbol_info, "quoteAssetPrecision")
-        self.fee_digital = max(self.base_asset_digital, self.quote_asset_digital)
+        self.fee_digital = max(self.base_asset_digital or 0, self.quote_asset_digital or 0)
         self.order_types = self.symbol_info["orderTypes"]
         self.has_been_init_data = True
 

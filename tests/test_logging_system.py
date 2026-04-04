@@ -60,9 +60,7 @@ def test_structured_formatter_includes_context_and_exception_metadata() -> None:
     assert payload["error"]["message"] == "bad input"
 
 
-def test_logging_manager_reconfigure_closes_previous_handlers(
-    tmp_path, monkeypatch
-) -> None:
+def test_logging_manager_reconfigure_closes_previous_handlers(tmp_path, monkeypatch) -> None:
     manager = LoggingManager()
     isolated_root = logging.Logger("isolated_root")
     old_handler = logging.FileHandler(tmp_path / "old.log", encoding="utf-8")
