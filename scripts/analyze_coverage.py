@@ -32,7 +32,7 @@ class CoverageAnalyzer:
         """Get exchanges that have test files."""
         tested = set()
         for test_file in self.tests_dir.rglob("test_*.py"):
-            content = test_file.read_text().lower()
+            content = test_file.read_text(encoding="utf-8", errors="ignore").lower()
             for exchange in self.get_all_exchanges():
                 if exchange in content:
                     tested.add(exchange)

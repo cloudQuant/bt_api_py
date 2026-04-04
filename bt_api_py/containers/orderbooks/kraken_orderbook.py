@@ -157,6 +157,11 @@ class KrakenRequestOrderBookData(OrderBookData):
         """Alias for symbol for compatibility with tests."""
         return self.symbol
 
+    @symbol_name.setter
+    def symbol_name(self, value):
+        """Setter for symbol_name - ignored, uses self.symbol instead."""
+        # Ignore setter, symbol_name is an alias for symbol
+
     def _calculate_stats(self):
         """Calculate order book statistics."""
         # Best bid and ask

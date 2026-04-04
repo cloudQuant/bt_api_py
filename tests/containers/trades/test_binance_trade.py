@@ -1,10 +1,189 @@
-# import json
+import json
+import pytest
+
 from bt_api_py.containers.trades.binance_trade import (
     BinanceAggTradeData,
+    BinanceTradeData,
     BinanceRequestTradeData,
     BinanceSpotWssTradeData,
     BinanceSwapWssTradeData,
 )
+
+
+class TestBinanceAggTradeData:
+    """Tests for BinanceAggTradeData."""
+
+    def test_init(self):
+        """Test initialization."""
+        data = {"e": "aggTrade", "E": 123456789, "s": "BTCUSDT"}
+        trade = BinanceAggTradeData(data, "BTC-USDT", "SWAP", True)
+
+        assert trade.exchange_name == "BINANCE"
+        assert trade.symbol_name == "BTC-USDT"
+        assert trade.asset_type == "SWAP"
+        assert trade.event == "AggTradeUpdate"
+
+    def test_init_data_with_json_string(self):
+        """Test init_data with JSON string."""
+        data = '{"e": "aggTrade", "E": 123456789, "s": "ETHUSDT", "a": 123, "p": "3000", "q": "1", "f": 1, "l": 2, "T": 123456780, "m": false}'
+        trade = BinanceAggTradeData(data, "ETH-USDT", "SWAP", False)
+        trade.init_data()
+
+        assert trade.trade_symbol_name == "ETHUSDT"
+        assert trade.trade_price == 3000.0
+        assert trade.trade_volume == 1.0
+        assert trade.trade_type == "taker"
+
+    def test_init_data_idempotent(self):
+        """Test init_data is idempotent."""
+        data = {"e": "aggTrade", "E": 123, "s": "BTCUSDT", "a": 1, "p": "50000", "q": "1", "f": 1, "l": 2, "T": 100, "m": True}
+        trade = BinanceAggTradeData(data, "BTC-USDT", "SWAP", True)
+
+        trade.init_data()
+        first_price = trade.trade_price
+
+        trade.init_data()
+        assert trade.trade_price == first_price
+
+    def test_get_all_data(self):
+        """Test get_all_data method."""
+        data = {"e": "aggTrade", "E": 123, "s": "BTCUSDT", "a": 1, "p": "50000", "q": "1", "f": 1, "l": 2, "T": 100, "m": True}
+        trade = BinanceAggTradeData(data, "BTC-USDT", "SWAP", True)
+
+        result = trade.get_all_data()
+
+        assert result["symbol_name"] == "BTC-USDT"
+        assert result["trade_price"] == 50000.0
+
+    def test_str_representation(self):
+        """Test __str__ method."""
+        data = {"e": "aggTrade", "E": 123, "s": "BTCUSDT", "a": 1, "p": "50000", "q": "1", "f": 1, "l": 2, "T": 100, "m": True}
+        trade = BinanceAggTradeData(data, "BTC-USDT", "SWAP", True)
+
+        result = str(trade)
+        parsed = json.loads(result)
+
+        assert parsed["trade_symbol_name"] == "BTCUSDT"
+
+    def test_maker_trade_type(self):
+        """Test maker trade type detection."""
+        data = {"e": "aggTrade", "E": 123, "s": "BTCUSDT", "a": 1, "p": "50000", "q": "1", "f": 1, "l": 2, "T": 100, "m": True}
+        trade = BinanceAggTradeData(data, "BTC-USDT", "SWAP", True)
+        trade.init_data()
+
+        assert trade.trade_type == "maker"
+
+    def test_taker_trade_type(self):
+        """Test taker trade type detection."""
+        data = {"e": "aggTrade", "E": 123, "s": "BTCUSDT", "a": 1, "p": "50000", "q": "1", "f": 1, "l": 2, "T": 100, "m": False}
+        trade = BinanceAggTradeData(data, "BTC-USDT", "SWAP", True)
+        trade.init_data()
+
+        assert trade.trade_type == "taker"
+
+    def test_all_getter_methods(self):
+        """Test all getter methods."""
+        data = {"e": "aggTrade", "E": 123, "s": "BTCUSDT", "a": 1, "p": "50000", "q": "1", "f": 1, "l": 2, "T": 100, "m": True}
+        trade = BinanceAggTradeData(data, "BTC-USDT", "SWAP", True)
+        trade.init_data()
+
+        assert trade.get_exchange_name() == "BINANCE"
+        assert trade.get_asset_type() == "SWAP"
+        assert trade.get_server_time() == 123.0
+        assert trade.get_local_update_time() > 0
+        assert trade.get_trade_id() == "1"
+        assert trade.get_first_trade_id() == "1"
+        assert trade.get_last_trade_id() == "2"
+        assert trade.get_trade_symbol_name() == "BTCUSDT"
+        assert trade.get_symbol_name() == "BTC-USDT"
+        assert trade.get_trade_price() == 50000.0
+        assert trade.get_trade_volume() == 1.0
+        assert trade.get_trade_type() == "maker"
+        assert trade.get_trade_time() == 100.0
+
+
+class TestBinanceRequestTradeData:
+    """Tests for BinanceRequestTradeData."""
+
+    def test_init_data_with_json_string(self):
+        """Test init_data with JSON string."""
+        data = '{"id": 123, "symbol": "BTCUSDT", "orderId": 456, "side": "BUY", "price": "50000", "qty": "1", "time": 1700000000000, "maker": true, "commission": "0.1", "commissionAsset": "USDT"}'
+        trade = BinanceRequestTradeData(data, "BTC-USDT", "SPOT", False)
+        trade.init_data()
+
+        assert trade.trade_symbol_name == "BTCUSDT"
+        assert trade.trade_price == 50000.0
+        assert trade.trade_type == "maker"
+
+    def test_init_data_idempotent(self):
+        """Test init_data is idempotent."""
+        data = {"id": 123, "symbol": "BTCUSDT", "orderId": 456, "side": "BUY", "price": "50000", "qty": "1", "time": 1700000000000, "maker": False}
+        trade = BinanceRequestTradeData(data, "BTC-USDT", "SPOT", True)
+
+        trade.init_data()
+        first_price = trade.trade_price
+
+        trade.init_data()
+        assert trade.trade_price == first_price
+
+    def test_str_representation(self):
+        """Test __str__ method."""
+        data = {"id": 123, "symbol": "BTCUSDT", "orderId": 456, "side": "BUY", "price": "50000", "qty": "1", "time": 1700000000000, "maker": False}
+        trade = BinanceRequestTradeData(data, "BTC-USDT", "SPOT", True)
+
+        result = str(trade)
+        parsed = json.loads(result)
+
+        assert parsed["trade_symbol_name"] == "BTCUSDT"
+
+
+class TestBinanceSwapWssTradeData:
+    """Tests for BinanceSwapWssTradeData."""
+
+    def test_init_data_with_json_string(self):
+        """Test init_data with JSON string."""
+        data = '{"E": 1700000000000, "o": {"s": "BTCUSDT", "c": "test", "i": 123, "L": "50000", "l": "1", "z": "1", "m": false, "T": 1700000000000, "n": "0.1", "N": "USDT", "ps": "LONG"}}'
+        trade = BinanceSwapWssTradeData(data, "BTC-USDT", "SWAP", False)
+        trade.init_data()
+
+        assert trade.trade_symbol_name == "BTCUSDT"
+        assert trade.trade_price == 50000.0
+        assert trade.trade_side == "LONG"
+
+    def test_init_data_idempotent(self):
+        """Test init_data is idempotent."""
+        data = {"E": 1700000000000, "o": {"s": "BTCUSDT", "c": "test", "i": 123, "L": "50000", "l": "1", "z": "1", "m": False, "T": 1700000000000, "n": "0.1", "N": "USDT", "ps": "LONG"}}
+        trade = BinanceSwapWssTradeData(data, "BTC-USDT", "SWAP", True)
+
+        trade.init_data()
+        first_price = trade.trade_price
+
+        trade.init_data()
+        assert trade.trade_price == first_price
+
+
+class TestBinanceSpotWssTradeData:
+    """Tests for BinanceSpotWssTradeData."""
+
+    def test_init_data(self):
+        """Test init_data with dict data."""
+        data = {"E": 1700000000000, "s": "BTCUSDT", "c": "test", "i": 123, "L": "50000", "l": "1", "z": "1", "m": False, "T": 1700000000000, "n": "0.1", "N": "USDT", "t": 456}
+        trade = BinanceSpotWssTradeData(data, "BTC-USDT", "SPOT", True)
+        trade.init_data()
+
+        assert trade.trade_symbol_name == "BTCUSDT"
+        assert trade.trade_price == 50000.0
+
+    def test_init_data_idempotent(self):
+        """Test init_data is idempotent."""
+        data = {"E": 1700000000000, "s": "BTCUSDT", "c": "test", "i": 123, "L": "50000", "l": "1", "z": "1", "m": False, "T": 1700000000000, "n": "0.1", "N": "USDT", "t": 456}
+        trade = BinanceSpotWssTradeData(data, "BTC-USDT", "SPOT", True)
+
+        trade.init_data()
+        first_price = trade.trade_price
+
+        trade.init_data()
+        assert trade.trade_price == first_price
 
 
 def test_binance_agg_trade():
