@@ -45,7 +45,7 @@ class OrderRefAllocator:
     def __init__(
         self,
         account_id: str,
-        state_dir: str | Path = "/tmp/bt_gateway_state",
+        state_dir: str | Path = "/tmp/bt_gateway_state",  # nosec B108 # intentional default
         initial_value: int = 0,
     ) -> None:
         self._account_id = account_id

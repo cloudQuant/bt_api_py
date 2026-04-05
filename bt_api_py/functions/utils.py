@@ -115,7 +115,7 @@ def read_yaml_file(file_name: str, data_root: str | Path | None = None) -> Any:
     """Read a YAML file from the package ``configs`` directory."""
     file_path = _resolve_config_root(data_root) / "configs" / file_name
     with file_path.open(encoding="utf-8") as file:
-        return yaml.load(file, Loader=yaml.FullLoader)
+        return yaml.safe_load(file)
 
 
 def read_account_config() -> dict[str, Any]:

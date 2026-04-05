@@ -85,7 +85,7 @@ def get_ctp_runtime_source() -> str:
 
 def _flow_dir(prefix):
     """Create a temp directory for CTP flow files."""
-    h = hashlib.md5(prefix.encode("utf-8")).hexdigest()
+    h = hashlib.md5(prefix.encode("utf-8"), usedforsecurity=False).hexdigest()
     path = os.path.join(tempfile.gettempdir(), "ctp_client", h) + os.sep
     os.makedirs(path, exist_ok=True)
     return path

@@ -65,7 +65,7 @@ class GatewayRuntime:
                 "state_dir",
                 config.gateway_base_dir
                 if hasattr(config, "gateway_base_dir")
-                else "/tmp/bt_gateway_state",
+                else "/tmp/bt_gateway_state",  # nosec B108
             )
             self.order_ref_allocator = OrderRefAllocator(config.account_id, state_dir=state_dir)
 
@@ -75,7 +75,7 @@ class GatewayRuntime:
             from bt_api_py.gateway.storage.tick_writer import TickWriter as _TW  # noqa: N814
 
             self.tick_writer = _TW(
-                base_dir=tick_writer_cfg.get("base_dir", "/tmp/bt_ticks"),
+                base_dir=tick_writer_cfg.get("base_dir", "/tmp/bt_ticks"),  # nosec B108
                 exchange=config.exchange_type,
                 asset_type=config.asset_type,
                 flush_count=tick_writer_cfg.get("flush_count", 1000),

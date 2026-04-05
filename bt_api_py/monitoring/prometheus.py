@@ -189,7 +189,7 @@ class PrometheusExporter:
 
     def __init__(
         self,
-        host: str = "0.0.0.0",
+        host: str = "0.0.0.0",  # nosec B104 # intentional for prometheus exporter
         port: int = 8080,
         registry: MetricRegistry | None = None,
     ) -> None:
@@ -261,7 +261,7 @@ _global_exporter: PrometheusExporter | None = None
 
 
 def start_prometheus_exporter(
-    host: str = "0.0.0.0",
+    host: str = "0.0.0.0",  # nosec B104 # intentional for prometheus exporter
     port: int = 8080,
     async_mode: bool = False,
 ) -> PrometheusExporter:

@@ -180,7 +180,7 @@ class BaseMLModel(ABC):
         """
         try:
             with Path(file_path).open("rb") as f:
-                model_data = pickle.load(f)
+                model_data = pickle.load(f)  # nosec B301 # trusted model files only
 
             self.model = model_data.get("model")
             self.model_name = model_data.get("model_name", self.model_name)

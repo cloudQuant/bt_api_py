@@ -23,7 +23,7 @@ class MonitoringConfig:
     metrics_collection_interval: float = 5.0
 
     # Prometheus exporter
-    prometheus_host: str = "0.0.0.0"
+    prometheus_host: str = "0.0.0.0"  # nosec B104 # intentional for prometheus exporter
     prometheus_port: int = 8080
     prometheus_async: bool = False
 
@@ -56,7 +56,7 @@ class MonitoringConfig:
         """Initialize config from kwargs with defaults from class attributes."""
         for key, default in {
             "metrics_collection_interval": 5.0,
-            "prometheus_host": "0.0.0.0",
+            "prometheus_host": "0.0.0.0",  # nosec B104
             "prometheus_port": 8080,
             "prometheus_async": False,
             "log_level": "INFO",
@@ -163,7 +163,7 @@ async def cleanup_monitoring() -> None:
 # Production configuration
 PRODUCTION_CONFIG = MonitoringConfig(
     metrics_collection_interval=5.0,
-    prometheus_host="0.0.0.0",
+    prometheus_host="0.0.0.0",  # nosec B104
     prometheus_port=8080,
     log_level="INFO",
     log_file="logs/bt_api_py.log",
@@ -190,6 +190,6 @@ TESTING_CONFIG = MonitoringConfig(
     prometheus_host="127.0.0.1",
     prometheus_port=9091,
     log_level="DEBUG",
-    log_file="/tmp/bt_api_py_test.log",
+    log_file="/tmp/bt_api_py_test.log",  # nosec B108
     elk_enabled=False,
 )

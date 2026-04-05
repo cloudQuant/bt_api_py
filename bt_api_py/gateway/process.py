@@ -52,7 +52,7 @@ class GatewayProcess:
 
     def __init__(self, config: dict[str, Any], *, pid_dir: str | None = None) -> None:
         self._config = dict(config)
-        self._pid_dir = Path(pid_dir or config.get("gateway_base_dir", "/tmp/bt_gateway"))
+        self._pid_dir = Path(pid_dir or config.get("gateway_base_dir", "/tmp/bt_gateway"))  # nosec B108
         self._runtime = None
         self._stopped = False
 
