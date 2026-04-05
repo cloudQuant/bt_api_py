@@ -13,6 +13,8 @@ Stage 0 基础设施测试
 - Config Loader (pydantic schema 校验)
 """
 
+from __future__ import annotations
+
 import asyncio
 
 import pytest

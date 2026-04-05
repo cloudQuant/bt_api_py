@@ -1,5 +1,7 @@
 """BeQuant 交易所注册模块."""
 
+from __future__ import annotations
+
 from bt_api_py.balance_utils import simple_balance_handler as _bequant_balance_handler
 from bt_api_py.containers.exchanges.bequant_exchange_data import BeQuantExchangeDataSpot
 from bt_api_py.feeds.live_bequant.spot import BeQuantRequestDataSpot

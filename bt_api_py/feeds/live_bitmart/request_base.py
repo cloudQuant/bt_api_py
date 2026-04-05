@@ -6,6 +6,8 @@ Signature: timestamp + "#" + memo + "#" + body_or_query
 Response format: {"code": 1000, "message": "OK", "data": {...}}
 """
 
+from __future__ import annotations
+
 import hashlib
 import hmac
 import json

@@ -1,5 +1,7 @@
 """Coinbase orderbook data container."""
 
+from __future__ import annotations
+
 import json
 import time
 from typing import Any
@@ -49,7 +51,7 @@ class CoinbaseOrderBookData(OrderBookData):
         self.all_data: dict[str, Any] | None = None
         self.has_been_init_data = False
 
-    def init_data(self) -> "CoinbaseOrderBookData":
+    def init_data(self) -> CoinbaseOrderBookData:
         """初始化并解析订单簿数据（子类需实现）.
 
         Returns:
@@ -195,7 +197,7 @@ class CoinbaseRequestOrderBookData(CoinbaseOrderBookData):
     }
     """
 
-    def init_data(self) -> "CoinbaseRequestOrderBookData":
+    def init_data(self) -> CoinbaseRequestOrderBookData:
         """初始化并解析REST API订单簿数据.
 
         Returns:

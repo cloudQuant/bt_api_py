@@ -1,5 +1,7 @@
 """Tests for CoinSpotRequestTickerData container."""
 
+from __future__ import annotations
+
 import pytest
 
 from bt_api_py.containers.tickers.coinspot_ticker import CoinSpotRequestTickerData

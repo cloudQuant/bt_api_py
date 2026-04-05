@@ -2,6 +2,8 @@
 Zaif Exchange Registration Module
 """
 
+from __future__ import annotations
+
 from bt_api_py.balance_utils import simple_balance_handler as _zaif_balance_handler
 from bt_api_py.containers.exchanges.zaif_exchange_data import ZaifExchangeDataSpot
 from bt_api_py.feeds.live_zaif.spot import ZaifRequestDataSpot

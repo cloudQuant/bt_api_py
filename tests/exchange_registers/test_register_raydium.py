@@ -1,5 +1,7 @@
 """Tests for exchange_registers/register_raydium.py."""
 
+from __future__ import annotations
+
 from bt_api_py.exchange_registers import register_raydium
 
 

@@ -1,4 +1,8 @@
+from __future__ import annotations
+
 import pytest
+
+pytest.importorskip("cryptography", reason="cryptography package required for OAuth2Provider")
 
 from bt_api_py.security_compliance.auth.oauth2_provider import (
     GrantType,

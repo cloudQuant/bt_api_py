@@ -7,6 +7,8 @@ Response: {"result": "success", "errorCode": "0", ...}
 Symbol: KRW-BTC  (quote-target)
 """
 
+from __future__ import annotations
+
 import base64
 import hashlib
 import hmac

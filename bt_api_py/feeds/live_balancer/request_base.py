@@ -6,6 +6,8 @@ traditional REST endpoints, so this class provides GraphQL query building and
 response parsing.
 """
 
+from __future__ import annotations
+
 from typing import Any
 
 from bt_api_py.containers.exchanges.balancer_exchange_data import (

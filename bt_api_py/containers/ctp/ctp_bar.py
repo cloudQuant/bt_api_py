@@ -4,6 +4,8 @@ CTP 不直接提供K线 API，通常需要从 tick 数据合成
 此容器定义了 CTP K线数据的标准格式
 """
 
+from __future__ import annotations
+
 from bt_api_py.containers.bars.bar import BarData
 from bt_api_py.functions.utils import from_dict_get_float, from_dict_get_int, from_dict_get_string
 

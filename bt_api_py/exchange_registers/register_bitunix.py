@@ -2,6 +2,8 @@
 Bitunix 交易所注册模块
 """
 
+from __future__ import annotations
+
 from bt_api_py.balance_utils import simple_balance_handler as _bitunix_balance_handler
 from bt_api_py.containers.exchanges.bitunix_exchange_data import BitunixExchangeDataSpot
 from bt_api_py.feeds.live_bitunix.spot import BitunixRequestDataSpot

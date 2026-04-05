@@ -2,6 +2,8 @@
 Provides standardized ticker data structure for Kraken exchange.
 """
 
+from __future__ import annotations
+
 import time
 from typing import Any
 
@@ -176,7 +178,7 @@ class KrakenRequestTickerData(TickerData):
         }
 
     # Base class interface methods
-    def init_data(self) -> "KrakenRequestTickerData":
+    def init_data(self) -> KrakenRequestTickerData:
         """Initialize ticker data from parsed data.
 
         This is a no-op since data is already parsed in __init__ via _parse_data.

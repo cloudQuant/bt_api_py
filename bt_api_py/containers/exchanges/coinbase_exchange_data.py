@@ -2,9 +2,12 @@
 Handles configuration loading and data structures for Coinbase exchange.
 """
 
-import os
-from typing import Any, Never
+from __future__ import annotations
 
+import os
+from typing import Any
+
+from bt_api_py._compat import Never
 from bt_api_py.containers.exchanges.exchange_data import ExchangeData
 from bt_api_py.exceptions import ConfigurationError
 from bt_api_py.logging_factory import get_logger

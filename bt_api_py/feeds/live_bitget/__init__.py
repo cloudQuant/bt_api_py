@@ -8,6 +8,8 @@ This package provides Bitget exchange API integration including:
 - WebSocket support (to be implemented)
 """
 
+from __future__ import annotations
+
 from .request_base import BitgetRequestData
 from .spot import BitgetAccountWssDataSpot, BitgetMarketWssDataSpot, BitgetRequestDataSpot
 from .swap import BitgetAccountWssDataSwap, BitgetMarketWssDataSwap, BitgetRequestDataSwap

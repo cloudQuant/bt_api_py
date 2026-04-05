@@ -4,6 +4,8 @@ Exchange health monitoring system.
 Provides health checks and status monitoring for exchange connections.
 """
 
+from __future__ import annotations
+
 import asyncio
 import contextlib
 import time

@@ -4,6 +4,8 @@ Bitso 交易所注册模块
 导入此模块即可完成注册
 """
 
+from __future__ import annotations
+
 from bt_api_py.balance_utils import simple_balance_handler as _bitso_balance_handler
 from bt_api_py.containers.exchanges.bitso_exchange_data import BitsoExchangeDataSpot
 from bt_api_py.feeds.live_bitso.spot import BitsoRequestDataSpot

@@ -1,5 +1,7 @@
 """Crypto.com OrderBook Data Container."""
 
+from __future__ import annotations
+
 import json
 import time
 from typing import Any
@@ -45,7 +47,7 @@ class CryptoComOrderBook(OrderBookData):
         self.all_data: dict[str, Any] | None = None
         self.has_been_init_data = False
 
-    def init_data(self) -> "CryptoComOrderBook":
+    def init_data(self) -> CryptoComOrderBook:
         """初始化并解析订单簿数据.
 
         Returns:
@@ -224,7 +226,7 @@ class CryptoComOrderBook(OrderBookData):
         return []
 
     @classmethod
-    def from_api_response(cls, data: dict[str, Any], symbol: str) -> "CryptoComOrderBook":
+    def from_api_response(cls, data: dict[str, Any], symbol: str) -> CryptoComOrderBook:
         """从API响应创建订单簿实例.
 
         这是一个便捷方法，主要用于测试。

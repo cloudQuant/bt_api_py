@@ -2,6 +2,8 @@
 Binance API 错误翻译器
 """
 
+from __future__ import annotations
+
 from bt_api_py.error import ErrorTranslator, UnifiedErrorCode
 
 

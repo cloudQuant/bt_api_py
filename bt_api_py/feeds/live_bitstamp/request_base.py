@@ -7,6 +7,8 @@ Market-data endpoints use /{pair}/ suffix.
 Response: direct JSON (no envelope). Errors have status="error".
 """
 
+from __future__ import annotations
+
 import hashlib
 import hmac
 import time

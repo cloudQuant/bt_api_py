@@ -2,6 +2,8 @@
 Bitbank 交易所注册模块
 """
 
+from __future__ import annotations
+
 from bt_api_py.balance_utils import simple_balance_handler as _bitbank_balance_handler
 from bt_api_py.containers.exchanges.bitbank_exchange_data import BitbankExchangeDataSpot
 from bt_api_py.feeds.live_bitbank.spot import BitbankRequestDataSpot

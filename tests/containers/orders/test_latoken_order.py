@@ -1,5 +1,7 @@
 """Tests for LatokenRequestOrderData container."""
 
+from __future__ import annotations
+
 from bt_api_py.containers.orders.latoken_order import LatokenRequestOrderData
 
 

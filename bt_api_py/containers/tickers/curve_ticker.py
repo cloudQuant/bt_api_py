@@ -3,6 +3,8 @@
 Curve doesn't have traditional tickers. This container handles pool data.
 """
 
+from __future__ import annotations
+
 import json
 import time
 from typing import Any
@@ -53,7 +55,7 @@ class CurveRequestTickerData(TickerData):
         self.rewards_apy: float | None = None
         self.has_been_init_data = False
 
-    def init_data(self) -> "CurveRequestTickerData":
+    def init_data(self) -> CurveRequestTickerData:
         """Parse Curve pool data response."""
         if not self.has_been_json_encoded:
             self.ticker_data = json.loads(self.ticker_info)

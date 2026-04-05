@@ -1,5 +1,7 @@
 """KuCoin account data container."""
 
+from __future__ import annotations
+
 import json
 import time
 from typing import Any
@@ -48,7 +50,7 @@ class KuCoinAccountData(AccountData):
         # Currency
         self.currency: str | None = None
 
-    def init_data(self) -> "KuCoinAccountData":
+    def init_data(self) -> KuCoinAccountData:
         """Initialize and parse account data.
 
         Returns:

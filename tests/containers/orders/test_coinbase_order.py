@@ -1,5 +1,7 @@
 """Tests for CoinbaseOrderData container."""
 
+from __future__ import annotations
+
 import json
 
 from bt_api_py.containers.orders.coinbase_order import (

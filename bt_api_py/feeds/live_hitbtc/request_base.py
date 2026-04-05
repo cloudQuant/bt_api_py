@@ -4,6 +4,8 @@ Handles authentication (HTTP Basic Auth), signing, and all REST API methods.
 HitBTC V3 uses HTTP Basic Auth with API key as username and secret as password.
 """
 
+from __future__ import annotations
+
 import base64
 from typing import Any
 from urllib.parse import urlencode

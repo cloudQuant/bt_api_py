@@ -4,6 +4,8 @@ Implements TOTP, HOTP, and WebAuthn for strong authentication
 following FIDO2 standards for financial services.
 """
 
+from __future__ import annotations
+
 import base64
 import json
 import secrets

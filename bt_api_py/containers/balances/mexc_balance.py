@@ -1,5 +1,7 @@
 """MEXC Balance Data Container."""
 
+from __future__ import annotations
+
 import json
 import time
 from typing import Any
@@ -56,7 +58,7 @@ class MexcBalanceData(BalanceData):
         self.all_data: dict[str, Any] | None = None
         self.has_been_init_data = False
 
-    def init_data(self) -> "MexcBalanceData":  # type: ignore[override]
+    def init_data(self) -> MexcBalanceData:  # type: ignore[override]
         """Initialize balance data from MEXC response.
 
         Parses the balance data and extracts asset, free, and locked amounts.
@@ -258,7 +260,7 @@ class MexcRequestBalanceData(MexcBalanceData):
         """
         super().__init__(balance_info, symbol_name, asset_type, has_been_json_encoded)
 
-    def init_data(self) -> "MexcRequestBalanceData":  # type: ignore[override]
+    def init_data(self) -> MexcRequestBalanceData:  # type: ignore[override]
         """Initialize balance data from REST API response.
 
         Returns:
@@ -324,7 +326,7 @@ class MexcAccountData(BalanceData):
         self.all_data: dict[str, Any] | None = None
         self.has_been_init_data = False
 
-    def init_data(self) -> "MexcAccountData":  # type: ignore[override]
+    def init_data(self) -> MexcAccountData:  # type: ignore[override]
         """Initialize account data from MEXC response.
 
         Parses the MEXC account response and extracts commissions,

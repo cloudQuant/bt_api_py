@@ -1,5 +1,7 @@
 """Tests for timer_event module."""
 
+from __future__ import annotations
+
 import time
 
 import pytest

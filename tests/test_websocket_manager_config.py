@@ -1,5 +1,7 @@
 """Tests for websocket_manager module - configuration and data classes."""
 
+from __future__ import annotations
+
 import pytest
 
 from bt_api_py.websocket_manager import Subscription, WebSocketConfig

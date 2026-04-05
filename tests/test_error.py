@@ -1,5 +1,7 @@
 """Tests for bt_api_py/error.py - Unified error framework."""
 
+from __future__ import annotations
+
 import pytest
 
 from bt_api_py.error import (

@@ -1,5 +1,7 @@
 """Tests for CoincheckExchangeData container."""
 
+from __future__ import annotations
+
 from bt_api_py.containers.exchanges.coincheck_exchange_data import CoincheckExchangeData
 
 

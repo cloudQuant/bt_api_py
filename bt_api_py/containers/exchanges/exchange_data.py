@@ -1,6 +1,10 @@
 """ExchangeData保存交易所数据."""
 
-from typing import Any, Never
+from __future__ import annotations
+
+from typing import Any
+
+from bt_api_py._compat import Never
 
 
 class ExchangeData:

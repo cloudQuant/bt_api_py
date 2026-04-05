@@ -1,5 +1,7 @@
 """Tests for Binance exchange data module."""
 
+from __future__ import annotations
+
 import pytest
 
 from bt_api_py.containers.exchanges.binance_exchange_data import BinanceExchangeData

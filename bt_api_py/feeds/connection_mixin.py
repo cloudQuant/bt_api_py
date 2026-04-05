@@ -6,6 +6,8 @@
 HTTP 场所的 connect/disconnect 默认为 no-op（保持向后兼容）。
 """
 
+from __future__ import annotations
+
 import threading
 from enum import Enum, unique
 

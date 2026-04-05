@@ -1,5 +1,7 @@
 """Tests for GeminiRequestTickerData container."""
 
+from __future__ import annotations
+
 from bt_api_py.containers.tickers.gemini_ticker import GeminiRequestTickerData
 
 

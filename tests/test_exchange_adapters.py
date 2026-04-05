@@ -1,5 +1,7 @@
 """Tests for exchange_adapters module - pure local logic."""
 
+from __future__ import annotations
+
 import pytest
 
 from bt_api_py.exceptions import RateLimitError

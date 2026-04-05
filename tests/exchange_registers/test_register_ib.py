@@ -3,6 +3,8 @@
 Note: Requires ib_exchange_data module.
 """
 
+from __future__ import annotations
+
 import pytest
 
 

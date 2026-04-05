@@ -2,6 +2,8 @@
 SushiSwap Exchange Registration Module
 """
 
+from __future__ import annotations
+
 from bt_api_py.balance_utils import simple_balance_handler as _sushiswap_balance_handler
 from bt_api_py.containers.exchanges.sushiswap_exchange_data import (
     SushiSwapChain,

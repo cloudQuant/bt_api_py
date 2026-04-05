@@ -1,5 +1,7 @@
 """Regression tests for additional market data container base classes."""
 
+from __future__ import annotations
+
 from bt_api_py.containers.fundingrates.funding_rate import FundingRateData
 from bt_api_py.containers.incomes.income import IncomeData
 from bt_api_py.containers.liquidations.liquidation import LiquidationData
@@ -8,7 +10,7 @@ from bt_api_py.containers.orderbooks.orderbook import OrderBookData
 
 
 class _SampleFundingRate(FundingRateData):
-    def init_data(self) -> "_SampleFundingRate":
+    def init_data(self) -> _SampleFundingRate:
         self.exchange_name = "BINANCE"
         self.symbol_name = "BTCUSDT"
         self.current_funding_rate = 0.001
@@ -70,7 +72,7 @@ class _SampleFundingRate(FundingRateData):
 
 
 class _SampleMarkPrice(MarkPriceData):
-    def init_data(self) -> "_SampleMarkPrice":
+    def init_data(self) -> _SampleMarkPrice:
         self.exchange_name = "BINANCE"
         self.symbol_name = "BTCUSDT"
         self.mark_price = 1.0
@@ -99,7 +101,7 @@ class _SampleMarkPrice(MarkPriceData):
 
 
 class _SampleOrderBook(OrderBookData):
-    def init_data(self) -> "_SampleOrderBook":
+    def init_data(self) -> _SampleOrderBook:
         self.exchange_name = "BINANCE"
         self.symbol_name = "BTCUSDT"
         self.bid_price_list = [1.0]
@@ -146,7 +148,7 @@ class _SampleOrderBook(OrderBookData):
 
 
 class _SampleLiquidation(LiquidationData):
-    def init_data(self) -> "_SampleLiquidation":
+    def init_data(self) -> _SampleLiquidation:
         self.exchange_name = "OKX"
         self.symbol_name = "BTC-USDT-SWAP"
         return self
@@ -171,7 +173,7 @@ class _SampleLiquidation(LiquidationData):
 
 
 class _SampleIncome(IncomeData):
-    def init_data(self) -> "_SampleIncome":
+    def init_data(self) -> _SampleIncome:
         self.exchange_name = "BINANCE"
         self.symbol_name = "BTCUSDT"
         self.income_value = 1.0

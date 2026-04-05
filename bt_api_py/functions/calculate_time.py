@@ -1,6 +1,10 @@
-from datetime import UTC, datetime, tzinfo
+from __future__ import annotations
+
+from datetime import datetime, tzinfo
 
 import pytz
+
+from bt_api_py._compat import UTC
 
 
 def get_utc_time() -> str:

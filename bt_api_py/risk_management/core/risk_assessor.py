@@ -3,6 +3,8 @@
 使用机器学习算法进行风险评估，包括历史数据分析和预测模型
 """
 
+from __future__ import annotations
+
 import time
 from decimal import Decimal
 from typing import Any, cast

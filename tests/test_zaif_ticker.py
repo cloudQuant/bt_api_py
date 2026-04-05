@@ -1,5 +1,7 @@
 """Tests for Zaif ticker data container."""
 
+from __future__ import annotations
+
 import pytest
 
 from bt_api_py.containers.tickers.zaif_ticker import ZaifRequestTickerData

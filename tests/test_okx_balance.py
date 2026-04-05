@@ -1,5 +1,7 @@
 """Tests for OKX balance module."""
 
+from __future__ import annotations
+
 import pytest
 
 from bt_api_py.containers.balances.okx_balance import OkxBalanceData

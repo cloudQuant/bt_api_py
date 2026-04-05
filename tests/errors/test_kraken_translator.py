@@ -1,5 +1,7 @@
 """Tests for KrakenTranslator."""
 
+from __future__ import annotations
+
 from bt_api_py.errors.kraken_translator import KrakenErrorTranslator
 
 

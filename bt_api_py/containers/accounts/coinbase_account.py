@@ -2,6 +2,8 @@
 Coinbase Account Data Container
 """
 
+from __future__ import annotations
+
 import json
 import time
 from typing import Any
@@ -47,7 +49,7 @@ class CoinbaseAccountData(AccountData):
         self.all_data: dict[str, Any] | None = None
         self.has_been_init_data = False
 
-    def init_data(self) -> "CoinbaseAccountData":
+    def init_data(self) -> CoinbaseAccountData:
         """初始化并解析账户数据。
 
         Returns:
@@ -223,7 +225,7 @@ class CoinbaseAccountData(AccountData):
 class CoinbaseSpotWssAccountData(CoinbaseAccountData):
     """保存WebSocket账户信息"""
 
-    def init_data(self) -> "CoinbaseSpotWssAccountData":
+    def init_data(self) -> CoinbaseSpotWssAccountData:
         """初始化并解析WebSocket账户数据。
 
         Returns:
@@ -266,7 +268,7 @@ class CoinbaseSpotWssAccountData(CoinbaseAccountData):
 class CoinbaseRequestAccountData(CoinbaseAccountData):
     """保存REST API账户信息"""
 
-    def init_data(self) -> "CoinbaseRequestAccountData":
+    def init_data(self) -> CoinbaseRequestAccountData:
         """初始化并解析REST API账户数据。
 
         Returns:

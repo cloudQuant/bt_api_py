@@ -1,5 +1,7 @@
 """Tests for functions/utils.py."""
 
+from __future__ import annotations
+
 import sys
 import types
 
@@ -195,21 +197,17 @@ class TestFileAndConfigHelpers:
             utils, "get_package_path", lambda package_name="bt_api_py": str(package_dir)
         )
         monkeypatch.delenv("CTP_ENV", raising=False)
+        monkeypatch.delenv("HTTP_PROXY", raising=False)
+        monkeypatch.delenv("http_proxy", raising=False)
+        monkeypatch.delenv("HTTPS_PROXY", raising=False)
+        monkeypatch.delenv("https_proxy", raising=False)
         config = utils.read_account_config()
         assert config["okx"]["public_key"] == "okx-key"
         assert config["binance"]["public_key"] == "binance-key"
         assert config["ib"]["port"] == 4001
         assert config["ib_web"]["verify_ssl"] is True
         assert config["ib_web"]["timeout"] == 20
-        assert (
-            config["proxies"]
-            == {
-                "http": "http://proxy",
-                "https": "http://default.mitmproxy.hub.ace-research.openai.org:80",
-            }
-            or config["proxies"] == {"http": "http://proxy"}
-            or config["proxies"] == {"http": "http://proxy", "https": "http://proxy"}
-        )
+        assert config["proxies"] == {"http": "http://proxy"}
 
     def test_read_account_config_applies_ctp_env_when_enabled(self, monkeypatch, tmp_path):
         package_dir = tmp_path / "bt_api_py"

@@ -1,5 +1,7 @@
 """Tests for PancakeSwap Pool containers."""
 
+from __future__ import annotations
+
 import json
 
 import pytest

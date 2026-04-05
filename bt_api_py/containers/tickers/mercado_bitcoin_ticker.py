@@ -1,5 +1,7 @@
 """Mercado Bitcoin Ticker Data Container."""
 
+from __future__ import annotations
+
 import json
 import time
 from typing import Any
@@ -38,7 +40,7 @@ class MercadoBitcoinRequestTickerData(TickerData):
         self.ticker_symbol_name: str | None = None
         self.has_been_init_data = False
 
-    def init_data(self) -> "MercadoBitcoinRequestTickerData":
+    def init_data(self) -> MercadoBitcoinRequestTickerData:
         """Parse Mercado Bitcoin ticker response."""
         if not self.has_been_json_encoded:
             self.ticker_data = json.loads(self.ticker_info)

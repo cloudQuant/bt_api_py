@@ -6,6 +6,8 @@ Symbol format: BTC_USDT (underscore separated).
 Response format: {"code": 1000, "message": "OK", "data": {...}}
 """
 
+from __future__ import annotations
+
 import os
 from typing import Any
 

@@ -1,5 +1,7 @@
 """EXMO Ticker Data Container."""
 
+from __future__ import annotations
+
 import json
 import time
 from typing import Any
@@ -50,7 +52,7 @@ class ExmoRequestTickerData(TickerData):
         self.all_data: dict[str, Any] | None = None
         self.has_been_init_data = False
 
-    def init_data(self) -> "ExmoRequestTickerData":
+    def init_data(self) -> ExmoRequestTickerData:
         """Parse EXMO ticker response."""
         if not self.has_been_json_encoded:
             self.ticker_data = json.loads(self.ticker_info)

@@ -10,6 +10,8 @@ Components:
 - exchange_data.py: Exchange configuration and metadata
 """
 
+from __future__ import annotations
+
 from .request_base import HyperliquidRequestData
 from .spot import (
     HyperliquidAccountWssDataSpot,

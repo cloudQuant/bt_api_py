@@ -1,5 +1,7 @@
 """Tests for LiquidationData base class."""
 
+from __future__ import annotations
+
 import pytest
 
 from bt_api_py.containers.liquidations.liquidation import LiquidationData

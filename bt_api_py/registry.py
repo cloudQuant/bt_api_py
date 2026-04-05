@@ -7,6 +7,8 @@
 2. 独立实例（测试隔离）: registry = ExchangeRegistry(); registry.register_feed(...)
 """
 
+from __future__ import annotations
+
 import threading
 from collections.abc import Callable
 from typing import Any
@@ -41,7 +43,7 @@ class ExchangeRegistry:
         registry.register_feed("TEST___SPOT", MockFeed)
     """
 
-    _default: "ExchangeRegistry | None" = None
+    _default: ExchangeRegistry | None = None
     _default_lock = threading.Lock()
     _singleton_initialized: bool
 
@@ -51,7 +53,7 @@ class ExchangeRegistry:
     _balance_handlers: dict[str, Callable[..., Any]]
     _lock: threading.RLock
 
-    def __new__(cls) -> "ExchangeRegistry":
+    def __new__(cls) -> ExchangeRegistry:
         if cls._default is not None:
             return cls._default
         with cls._default_lock:
@@ -73,7 +75,7 @@ class ExchangeRegistry:
         self._singleton_initialized = True
 
     @classmethod
-    def _get_default(cls) -> "ExchangeRegistry":
+    def _get_default(cls) -> ExchangeRegistry:
         if cls._default is None:
             cls()
             if cls._default is None:
@@ -81,7 +83,7 @@ class ExchangeRegistry:
         return cls._default
 
     @classmethod
-    def create_isolated(cls) -> "ExchangeRegistry":
+    def create_isolated(cls) -> ExchangeRegistry:
         instance = object.__new__(cls)
         instance._feed_classes = {}
         instance._stream_classes = {}

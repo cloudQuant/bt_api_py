@@ -15,6 +15,8 @@ Auto-init mixin for Container classes
   account.get_balance()  # 自动触发 init_data()
 """
 
+from __future__ import annotations
+
 __all__ = ["AutoInitMixin"]
 
 
@@ -25,7 +27,7 @@ class AutoInitMixin:
     直接调用 init_data() 仍然有效，不会重复执行。
     """
 
-    def _ensure_init(self) -> "AutoInitMixin":
+    def _ensure_init(self) -> AutoInitMixin:
         """如果尚未初始化，自动调用 init_data()"""
         if not getattr(self, "_initialized", False):
             # Guard against re-entrant calls: init_data() may call get_*

@@ -5,6 +5,8 @@ Handles HTTP requests to Raydium's public API.
 Raydium is a Solana-based DEX that doesn't require authentication for public data.
 """
 
+from __future__ import annotations
+
 import time
 from typing import Any
 

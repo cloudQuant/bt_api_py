@@ -5,6 +5,8 @@ Auth: OAuth2 Bearer token (Authorization: Bearer {token})
 Symbol: {base}_{quote} lowercase (e.g. btc_krw)
 """
 
+from __future__ import annotations
+
 import os
 from typing import Any
 

@@ -2,6 +2,8 @@
 Gate.io Spot Trading Feed Implementation
 """
 
+from __future__ import annotations
+
 from typing import Any
 
 from bt_api_py.containers.balances.gateio_balance import GateioBalanceData

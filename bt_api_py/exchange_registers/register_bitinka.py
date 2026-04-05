@@ -1,5 +1,7 @@
 """Bitinka 交易所注册模块."""
 
+from __future__ import annotations
+
 from bt_api_py.balance_utils import simple_balance_handler as _bitinka_balance_handler
 from bt_api_py.containers.exchanges.bitinka_exchange_data import BitinkaExchangeDataSpot
 from bt_api_py.feeds.live_bitinka.spot import BitinkaRequestDataSpot

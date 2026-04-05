@@ -1,5 +1,7 @@
 """Tests for DydxOrderData container."""
 
+from __future__ import annotations
+
 from bt_api_py.containers.orders.dydx_order import DydxOrderData
 
 

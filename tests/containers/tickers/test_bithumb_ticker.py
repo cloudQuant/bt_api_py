@@ -1,5 +1,7 @@
 """Tests for BithumbRequestTickerData container."""
 
+from __future__ import annotations
+
 import pytest
 
 from bt_api_py.containers.tickers.bithumb_ticker import BithumbRequestTickerData

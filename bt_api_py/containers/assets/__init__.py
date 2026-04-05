@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from bt_api_py.containers.assets.okx_asset import (
     OkxAssetBalanceData,
     OkxAssetValuationData,

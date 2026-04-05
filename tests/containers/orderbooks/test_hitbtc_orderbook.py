@@ -1,5 +1,7 @@
 """Tests for HitBtcRequestOrderBookData container."""
 
+from __future__ import annotations
+
 from bt_api_py.containers.orderbooks.hitbtc_orderbook import HitBtcRequestOrderBookData
 
 

@@ -1,5 +1,7 @@
 """Tests for BybitExchangeData container."""
 
+from __future__ import annotations
+
 from bt_api_py.containers.exchanges.bybit_exchange_data import BybitExchangeData
 
 

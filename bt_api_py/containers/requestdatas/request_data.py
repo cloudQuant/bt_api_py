@@ -4,9 +4,9 @@ from __future__ import annotations
 
 import time
 from collections.abc import Callable
-from typing import Any
+from typing import Any, Optional
 
-NormalizeResult = tuple[Any, bool | None]
+NormalizeResult = tuple[Any, Optional[bool]]
 NormalizeFunction = Callable[[Any, dict[str, Any]], NormalizeResult]
 
 

@@ -3,6 +3,8 @@
 Standardized container for Uniswap swap quotes and routing information.
 """
 
+from __future__ import annotations
+
 from dataclasses import dataclass
 from decimal import Decimal
 
@@ -102,7 +104,7 @@ class UniswapQuote:
                 self.is_valid = False
 
     @classmethod
-    def from_graphql_data(cls, data: dict) -> "UniswapQuote":
+    def from_graphql_data(cls, data: dict) -> UniswapQuote:
         """Create quote from GraphQL response data.
 
         Args:

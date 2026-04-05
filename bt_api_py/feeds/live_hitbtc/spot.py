@@ -6,6 +6,8 @@ Provides market data and trading operations through REST API.
 Thin sync/async wrappers that delegate to _get_xxx methods in request_base.
 """
 
+from __future__ import annotations
+
 from bt_api_py.feeds.live_hitbtc.request_base import HitBtcRequestData
 
 

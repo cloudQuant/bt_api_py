@@ -1,5 +1,7 @@
 """Tests for gateway/client.py."""
 
+from __future__ import annotations
+
 
 class TestClient:
     """Tests for gateway client."""

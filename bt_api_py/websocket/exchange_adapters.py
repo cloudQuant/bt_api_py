@@ -3,6 +3,8 @@ Exchange-specific WebSocket optimizations and message format handling.
 Supports different connection strategies, rate limiting, and data synchronization for each exchange.
 """
 
+from __future__ import annotations
+
 import base64
 import hashlib
 import hmac

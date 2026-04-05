@@ -3,6 +3,8 @@
 支持 Queue 模式（现有行为）和 Callback 模式（适配 CTP SPI / IB EWrapper 等回调驱动 API）
 """
 
+from __future__ import annotations
+
 import threading
 import traceback
 from collections import defaultdict

@@ -1,5 +1,7 @@
 """Regression tests for websocket system initialization and manager cleanup."""
 
+from __future__ import annotations
+
 import pytest
 
 pytest.importorskip("psutil")

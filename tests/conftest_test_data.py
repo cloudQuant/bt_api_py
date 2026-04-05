@@ -3,6 +3,8 @@ Test data fixtures for bt_api_py tests
 Centralized test data management
 """
 
+from __future__ import annotations
+
 import pytest
 
 # ============== BINANCE FIXTURES ==============

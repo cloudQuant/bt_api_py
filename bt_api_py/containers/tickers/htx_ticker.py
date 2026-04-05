@@ -1,5 +1,7 @@
 """HTX Ticker Data Container."""
 
+from __future__ import annotations
+
 import json
 import time
 from typing import Any
@@ -45,7 +47,7 @@ class HtxRequestTickerData(TickerData):
         self.all_data: dict[str, Any] | None = None
         self.has_been_init_data = False
 
-    def init_data(self) -> "HtxRequestTickerData":
+    def init_data(self) -> HtxRequestTickerData:
         """Initialize ticker data from HTX response.
 
         HTX ticker response format (from /market/detail/merged):

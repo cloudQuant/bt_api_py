@@ -3,6 +3,8 @@ IB 合约描述容器
 IB 的合约描述比加密货币和 CTP 都复杂，需要多个字段组合才能唯一确定一个合约
 """
 
+from __future__ import annotations
+
 from typing import Any
 
 
@@ -55,19 +57,19 @@ class IbContract:
 
     @classmethod
     def stock(
-        cls: type["IbContract"], symbol: Any, exchange: Any = "SMART", currency: Any = "USD"
-    ) -> "IbContract":
+        cls: type[IbContract], symbol: Any, exchange: Any = "SMART", currency: Any = "USD"
+    ) -> IbContract:
         """快速创建股票合约"""
         return cls(symbol=symbol, sec_type="STK", exchange=exchange, currency=currency)
 
     @classmethod
     def future(
-        cls: type["IbContract"],
+        cls: type[IbContract],
         symbol: Any,
         exchange: Any = "GLOBEX",
         currency: Any = "USD",
         last_trade_date: Any = "",
-    ) -> "IbContract":
+    ) -> IbContract:
         """快速创建期货合约"""
         return cls(
             symbol=symbol,
@@ -79,14 +81,14 @@ class IbContract:
 
     @classmethod
     def option(
-        cls: type["IbContract"],
+        cls: type[IbContract],
         symbol: Any,
         last_trade_date: Any,
         strike: Any,
         right: Any,
         exchange: Any = "SMART",
         currency: Any = "USD",
-    ) -> "IbContract":
+    ) -> IbContract:
         """快速创建期权合约"""
         return cls(
             symbol=symbol,
@@ -100,7 +102,7 @@ class IbContract:
 
     @classmethod
     def forex(
-        cls: type["IbContract"], symbol: Any, exchange: Any = "IDEALPRO", currency: Any = "USD"
-    ) -> "IbContract":
+        cls: type[IbContract], symbol: Any, exchange: Any = "IDEALPRO", currency: Any = "USD"
+    ) -> IbContract:
         """快速创建外汇合约"""
         return cls(symbol=symbol, sec_type="CASH", exchange=exchange, currency=currency)

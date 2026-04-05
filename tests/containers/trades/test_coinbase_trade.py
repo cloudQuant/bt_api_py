@@ -1,5 +1,7 @@
 """Tests for CoinbaseTradeData container."""
 
+from __future__ import annotations
+
 from bt_api_py.containers.trades.coinbase_trade import CoinbaseTradeData
 
 

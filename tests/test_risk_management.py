@@ -3,6 +3,8 @@
 测试风险管理器、风险评估器、限制管理器和策略引擎的基本功能
 """
 
+from __future__ import annotations
+
 import time
 from decimal import Decimal
 

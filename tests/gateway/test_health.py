@@ -1,5 +1,7 @@
 """Tests for gateway/health.py."""
 
+from __future__ import annotations
+
 from bt_api_py.gateway.health import ConnectionState, GatewayState
 
 

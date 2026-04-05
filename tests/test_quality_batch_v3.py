@@ -9,6 +9,8 @@ Covers:
 - dead np.hstack removal in ensemble_model.py
 """
 
+from __future__ import annotations
+
 import inspect
 import tempfile
 from pathlib import Path

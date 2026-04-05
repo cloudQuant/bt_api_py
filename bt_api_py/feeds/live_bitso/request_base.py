@@ -7,6 +7,8 @@ Response envelope: {success: true/false, payload: ...}
 Symbol format: lowercase underscore (btc_mxn).
 """
 
+from __future__ import annotations
+
 import hashlib
 import hmac
 import json

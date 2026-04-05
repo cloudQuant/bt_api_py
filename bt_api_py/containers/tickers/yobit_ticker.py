@@ -1,5 +1,7 @@
 """YoBit Ticker Data Container."""
 
+from __future__ import annotations
+
 import json
 import time
 from typing import Any
@@ -38,7 +40,7 @@ class YobitRequestTickerData(TickerData):
         self.ticker_symbol_name = None
         self.has_been_init_data = False
 
-    def init_data(self) -> "YobitRequestTickerData":
+    def init_data(self) -> YobitRequestTickerData:
         """Parse YoBit ticker response."""
         if not self.has_been_json_encoded:
             self.ticker_data = json.loads(self.ticker_info)

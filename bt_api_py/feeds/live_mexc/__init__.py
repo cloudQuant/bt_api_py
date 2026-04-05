@@ -4,6 +4,8 @@ MEXC exchange feed implementation
 Provides REST API and WebSocket feeds for MEXC exchange spot trading.
 """
 
+from __future__ import annotations
+
 from .request_base import MexcRequestData
 from .spot import MexcRequestDataSpot
 

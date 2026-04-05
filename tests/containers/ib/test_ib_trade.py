@@ -1,5 +1,7 @@
 """Tests for IB trade container."""
 
+from __future__ import annotations
+
 from bt_api_py.containers.ib.ib_trade import IbTradeData
 
 

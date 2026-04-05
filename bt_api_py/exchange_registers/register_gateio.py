@@ -5,6 +5,8 @@ Registers Gate.io Spot and Swap (Futures) feeds to the global ExchangeRegistry.
 Import this module to complete the registration.
 """
 
+from __future__ import annotations
+
 from bt_api_py.balance_utils import nested_balance_handler as _gateio_balance_handler
 from bt_api_py.containers.exchanges.gateio_exchange_data import (
     GateioExchangeDataSpot,

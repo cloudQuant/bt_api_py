@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import json
 import time
 from typing import Any
@@ -48,7 +50,7 @@ class BitfinexTickerData(TickerData):
         self.low: float | None = None
         self.all_data: dict[str, Any] | None = None
 
-    def init_data(self) -> "BitfinexTickerData":
+    def init_data(self) -> BitfinexTickerData:
         """Parse Bitfinex ticker response.
 
         Returns:
@@ -272,7 +274,7 @@ class BitfinexTickerData(TickerData):
 class BitfinexWssTickerData(BitfinexTickerData):
     """Bitfinex WebSocket ticker data container."""
 
-    def init_data(self) -> "BitfinexWssTickerData":
+    def init_data(self) -> BitfinexWssTickerData:
         """Parse Bitfinex WebSocket ticker response.
 
         Returns:
@@ -310,7 +312,7 @@ class BitfinexWssTickerData(BitfinexTickerData):
 class BitfinexRequestTickerData(BitfinexTickerData):
     """Bitfinex REST API ticker data container."""
 
-    def init_data(self) -> "BitfinexRequestTickerData":
+    def init_data(self) -> BitfinexRequestTickerData:
         """Parse Bitfinex REST API ticker response.
 
         Returns:

@@ -1,5 +1,7 @@
 """Tests for gateway/subscription_manager.py."""
 
+from __future__ import annotations
+
 
 class TestSubscriptionManager:
     """Tests for subscription manager."""

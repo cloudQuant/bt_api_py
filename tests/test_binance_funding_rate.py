@@ -1,5 +1,7 @@
 """Tests for Binance funding rate module."""
 
+from __future__ import annotations
+
 import pytest
 
 from bt_api_py.containers.fundingrates.binance_funding_rate import BinanceRequestFundingRateData

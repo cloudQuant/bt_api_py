@@ -1,5 +1,7 @@
 """Tests for CoinbaseBarData container."""
 
+from __future__ import annotations
+
 import pytest
 
 from bt_api_py.containers.bars.coinbase_bar import CoinbaseBarData, CoinbaseRequestBarData

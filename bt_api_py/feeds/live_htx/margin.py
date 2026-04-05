@@ -4,6 +4,8 @@ Margin trading shares spot's market data and order endpoints,
 but uses different account types (margin-api source).
 """
 
+from __future__ import annotations
+
 from typing import Any
 
 from bt_api_py.containers.exchanges.htx_exchange_data import HtxExchangeDataMargin

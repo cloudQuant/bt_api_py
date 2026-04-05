@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from bt_api_py.containers.positions.okx_position import OkxPositionData
 
 

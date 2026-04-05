@@ -5,6 +5,8 @@ BeQuant uses HitBTC V3 API (white-label).
 Authentication: HTTP Basic Auth (API key as username, secret as password).
 """
 
+from __future__ import annotations
+
 import base64
 from typing import Any
 from urllib.parse import urlencode

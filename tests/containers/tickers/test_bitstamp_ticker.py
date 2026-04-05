@@ -1,5 +1,7 @@
 """Tests for BitstampRequestTickerData container."""
 
+from __future__ import annotations
+
 from bt_api_py.containers.tickers.bitstamp_ticker import BitstampRequestTickerData
 
 

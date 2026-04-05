@@ -1,5 +1,7 @@
 """Tests for HitbtcExchangeData container."""
 
+from __future__ import annotations
+
 from bt_api_py.containers.exchanges.hitbtc_exchange_data import HitBtcExchangeData
 
 

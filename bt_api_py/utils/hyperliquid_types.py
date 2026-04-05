@@ -4,6 +4,8 @@ Hyperliquid API type definitions
 Defines constants for Hyperliquid order types and other API parameters.
 """
 
+from __future__ import annotations
+
 # Order types
 LIMIT_ORDER = "limit"
 MARKET_ORDER = "market"

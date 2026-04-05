@@ -1,5 +1,7 @@
 """Tests for instrument module."""
 
+from __future__ import annotations
+
 import dataclasses
 from datetime import datetime, timedelta
 from decimal import Decimal

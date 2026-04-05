@@ -2,6 +2,8 @@
 Async context manager utilities for modern bt_api_py.
 """
 
+from __future__ import annotations
+
 import asyncio
 import sys
 import time
@@ -10,7 +12,9 @@ from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from functools import wraps
 from types import TracebackType
-from typing import Any, ParamSpec, TypeVar
+from typing import Any, TypeVar
+
+from bt_api_py._compat import ParamSpec
 
 T = TypeVar("T")
 P = ParamSpec("P")
@@ -78,7 +82,7 @@ class _TimeoutContext:
             self._cancelled = True
             self._task.cancel()
 
-    async def __aenter__(self) -> "_TimeoutContext":
+    async def __aenter__(self) -> _TimeoutContext:
         self._task = asyncio.current_task()
         loop = asyncio.get_running_loop()
         self._cancel_handler = loop.call_later(self._timeout_seconds, self._cancel_task)
@@ -242,7 +246,10 @@ def async_timeout(
     def decorator(func: Callable[P, Awaitable[T]]) -> Callable[P, Awaitable[T]]:
         @wraps(func)
         async def wrapper(*args: P.args, **kwargs: P.kwargs) -> T:
-            return await asyncio.wait_for(func(*args, **kwargs), timeout=timeout_seconds)
+            try:
+                return await asyncio.wait_for(func(*args, **kwargs), timeout=timeout_seconds)
+            except asyncio.TimeoutError:
+                raise TimeoutError(f"Operation timed out after {timeout_seconds} seconds") from None
 
         return wrapper
 
@@ -351,7 +358,7 @@ class AsyncSemaphore:
         if timeout is not None:
             try:
                 await asyncio.wait_for(self._semaphore.acquire(), timeout=timeout)
-            except TimeoutError:
+            except asyncio.TimeoutError:
                 raise TimeoutError(
                     f"Failed to acquire semaphore within {timeout} seconds"
                 ) from None
@@ -362,7 +369,7 @@ class AsyncSemaphore:
         """Release semaphore."""
         self._semaphore.release()
 
-    async def __aenter__(self) -> "AsyncSemaphore":
+    async def __aenter__(self) -> AsyncSemaphore:
         await self.acquire()
         return self
 
@@ -389,7 +396,7 @@ class AsyncQueue:
         if timeout is not None:
             try:
                 await asyncio.wait_for(self._queue.put(item), timeout=timeout)
-            except TimeoutError:
+            except asyncio.TimeoutError:
                 raise TimeoutError(f"Failed to put item within {timeout} seconds") from None
         else:
             await self._queue.put(item)
@@ -400,7 +407,7 @@ class AsyncQueue:
         if timeout is not None:
             try:
                 return await asyncio.wait_for(self._queue.get(), timeout=timeout)
-            except TimeoutError:
+            except asyncio.TimeoutError:
                 raise TimeoutError(f"Failed to get item within {timeout} seconds") from None
         else:
             return await self._queue.get()

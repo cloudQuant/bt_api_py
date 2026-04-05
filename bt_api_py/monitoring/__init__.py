@@ -11,6 +11,8 @@ This module provides comprehensive performance monitoring capabilities including
 - ELK stack compatibility
 """
 
+from __future__ import annotations
+
 from bt_api_py.logging_system import get_logger
 
 from .collector import (

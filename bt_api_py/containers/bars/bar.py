@@ -4,6 +4,8 @@
 # Bar的数据推送和请求频率不是特别高，传入的数据直接使用json格式
 # """
 
+from __future__ import annotations
+
 from typing import Any
 
 from bt_api_py.containers.auto_init_mixin import AutoInitMixin
@@ -15,7 +17,7 @@ class BarData(AutoInitMixin):
         self.bar_info = bar_info
         self.has_been_json_encoded = has_been_json_encoded
 
-    def init_data(self) -> "BarData":
+    def init_data(self) -> BarData:
         raise NotImplementedError
 
     def get_event(self) -> str:

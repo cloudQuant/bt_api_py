@@ -2,6 +2,8 @@
 测试合并list的方法和效率
 """
 
+from __future__ import annotations
+
 from itertools import chain
 
 

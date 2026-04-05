@@ -1,5 +1,7 @@
 """Tests for IB trade module."""
 
+from __future__ import annotations
+
 import pytest
 
 from bt_api_py.containers.ib.ib_trade import IbTradeData

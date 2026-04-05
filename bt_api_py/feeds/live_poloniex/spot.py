@@ -3,6 +3,8 @@ Poloniex Spot Trading Feed
 Implements spot trading functionality for Poloniex exchange.
 """
 
+from __future__ import annotations
+
 from typing import Any
 
 from bt_api_py.containers.exchanges.poloniex_exchange_data import PoloniexExchangeDataSpot

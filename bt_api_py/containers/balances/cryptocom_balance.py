@@ -2,6 +2,8 @@
 Crypto.com Balance Data Container
 """
 
+from __future__ import annotations
+
 import time
 from typing import Any
 
@@ -48,7 +50,7 @@ class CryptoComBalance(BalanceData):
         self.has_been_init_data = True
 
     @classmethod
-    def from_api_response(cls, data: dict) -> "CryptoComBalance":
+    def from_api_response(cls, data: dict) -> CryptoComBalance:
         """Create balance from API response."""
         data = data or {}
         balance_info = {

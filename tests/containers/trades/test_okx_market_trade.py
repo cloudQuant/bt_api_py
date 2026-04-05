@@ -1,5 +1,7 @@
 """Tests for OkxMarketTradeData container."""
 
+from __future__ import annotations
+
 from bt_api_py.containers.trades.okx_market_trade import OkxMarketTradeData
 
 

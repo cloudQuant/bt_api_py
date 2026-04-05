@@ -4,6 +4,8 @@ Core metrics collection and registry system.
 Provides a lightweight Prometheus-like metrics system for bt_api_py.
 """
 
+from __future__ import annotations
+
 import logging
 import threading
 import time
@@ -257,7 +259,7 @@ class PerformanceTimer:
 
         return duration
 
-    def __enter__(self) -> "PerformanceTimer":
+    def __enter__(self) -> PerformanceTimer:
         self.start()
         return self
 
@@ -266,7 +268,7 @@ class PerformanceTimer:
 
 
 @contextmanager
-def timer(histogram: Histogram | None = None) -> "Iterator[PerformanceTimer]":
+def timer(histogram: Histogram | None = None) -> Iterator[PerformanceTimer]:
     """Context manager for timing operations."""
     perf_timer = PerformanceTimer(histogram)
     with perf_timer:

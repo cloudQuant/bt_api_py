@@ -8,6 +8,8 @@ Covers:
 - oauth2_provider: Path(key_path).open("rb") for key loading
 """
 
+from __future__ import annotations
+
 import inspect
 import tempfile
 from pathlib import Path

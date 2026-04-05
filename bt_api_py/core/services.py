@@ -2,6 +2,8 @@
 Core services for modern bt_api_py architecture.
 """
 
+from __future__ import annotations
+
 import asyncio
 import contextlib
 import copy

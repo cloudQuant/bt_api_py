@@ -3,14 +3,14 @@
 from __future__ import annotations
 
 import time as _time
-from typing import Any
+from typing import Any, Optional
 
 from bt_api_py.feeds.capability import Capability
 from bt_api_py.feeds.live_btcturk.request_base import BTCTurkRequestData
 
 RequestParams = dict[str, Any]
 RequestExtraData = dict[str, Any]
-RequestSpec = tuple[str, RequestParams | None, RequestExtraData]
+RequestSpec = tuple[str, Optional[RequestParams], RequestExtraData]
 NormalizeResult = tuple[list[Any], bool]
 
 

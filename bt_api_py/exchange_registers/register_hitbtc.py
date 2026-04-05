@@ -3,6 +3,8 @@
 导入此模块即可完成注册.
 """
 
+from __future__ import annotations
+
 from bt_api_py.balance_utils import simple_balance_handler as _hitbtc_balance_handler
 from bt_api_py.containers.exchanges.hitbtc_exchange_data import (
     HitBtcExchangeDataSpot,

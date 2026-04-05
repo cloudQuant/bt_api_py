@@ -13,7 +13,9 @@ CTP Feed 集成测试
       这是 SWIG 对象 GC 清理的已知问题，不影响测试结果。
 """
 
-import importlib.util
+from __future__ import annotations
+
+import importlib
 import queue
 import threading
 
@@ -41,7 +43,11 @@ class TestCtpImports:
         """验证安装了 ctp-python 时优先使用外部 runtime。"""
         from bt_api_py.ctp.client import get_ctp_runtime_source
 
-        has_external_ctp = importlib.util.find_spec("ctp") is not None
+        try:
+            ctp_module = importlib.import_module("ctp")
+            has_external_ctp = hasattr(ctp_module, "CThostFtdcMdApi")
+        except ImportError:
+            has_external_ctp = False
         if has_external_ctp:
             assert get_ctp_runtime_source() == "external_ctp_python"
         else:

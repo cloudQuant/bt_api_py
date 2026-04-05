@@ -13,3 +13,5 @@ HitBTC API Reference:
 - REST API: https://api.hitbtc.com/api/3
 - WebSocket: wss://api.hitbtc.com/api/3/ws/public (public), wss://api.hitbtc.com/api/3/ws/trading (private)
 """
+
+from __future__ import annotations

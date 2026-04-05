@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import json
 import time
 from typing import Any
@@ -39,7 +41,7 @@ class OkxOrderData(OrderData):
         self.all_data: dict[str, Any] | None = None
         self.has_been_init_data = False
 
-    def init_data(self) -> "OkxOrderData":
+    def init_data(self) -> OkxOrderData:
         if not self.has_been_json_encoded:
             self.order_info = json.loads(self.order_info)
             self.order_data = self.order_info["data"]

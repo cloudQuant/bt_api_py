@@ -5,6 +5,8 @@ Provides decorators to automatically monitor function execution time,
 success rates, and error rates.
 """
 
+from __future__ import annotations
+
 import functools
 import time
 from collections.abc import Callable

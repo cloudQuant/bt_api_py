@@ -2,6 +2,8 @@
 Swyftx Exchange Registration Module
 """
 
+from __future__ import annotations
+
 from bt_api_py.balance_utils import simple_balance_handler as _swyftx_balance_handler
 from bt_api_py.containers.exchanges.swyftx_exchange_data import SwyftxExchangeDataSpot
 from bt_api_py.feeds.live_swyftx.spot import SwyftxRequestDataSpot

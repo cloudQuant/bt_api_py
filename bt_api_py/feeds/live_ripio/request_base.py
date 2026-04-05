@@ -4,6 +4,8 @@ Ripio REST API request base class.
 Handles HTTP requests to Ripio's API with optional HMAC SHA256 signature authentication.
 """
 
+from __future__ import annotations
+
 import hashlib
 import hmac
 import time

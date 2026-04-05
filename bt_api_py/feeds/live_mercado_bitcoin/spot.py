@@ -2,6 +2,8 @@
 Mercado Bitcoin Spot Feed implementation.
 """
 
+from __future__ import annotations
+
 import time as _time
 from typing import Any
 

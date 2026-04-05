@@ -1,5 +1,7 @@
 """Tests for LocalBitcoinsTickerData container."""
 
+from __future__ import annotations
+
 import json
 
 from bt_api_py.containers.tickers.localbitcoins_ticker import (

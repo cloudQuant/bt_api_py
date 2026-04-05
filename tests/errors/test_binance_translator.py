@@ -1,5 +1,7 @@
 """Tests for BinanceErrorTranslator."""
 
+from __future__ import annotations
+
 from bt_api_py.errors.binance_translator import BinanceErrorTranslator
 
 

@@ -1,5 +1,7 @@
 """Tests for CurveExchangeData container."""
 
+from __future__ import annotations
+
 from bt_api_py.containers.exchanges.curve_exchange_data import CurveExchangeData
 
 

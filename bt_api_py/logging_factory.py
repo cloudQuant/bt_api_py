@@ -9,6 +9,8 @@
     logger = get_logger("api", print_info=True)  # 同时输出到控制台
 """
 
+from __future__ import annotations
+
 import os
 import threading
 from pathlib import Path
@@ -29,7 +31,7 @@ _MODULE_LOG_MAP = {
 }
 
 # 缓存已创建的 logger，避免重复创建
-_logger_cache: dict[tuple[str, bool], "_LoggerProxy"] = {}
+_logger_cache: dict[tuple[str, bool], _LoggerProxy] = {}
 _logger_cache_lock = threading.Lock()
 
 

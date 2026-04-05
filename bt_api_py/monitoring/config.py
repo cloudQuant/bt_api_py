@@ -4,6 +4,8 @@ Performance monitoring configuration and initialization.
 Setup complete monitoring system for production trading environment.
 """
 
+from __future__ import annotations
+
 from pathlib import Path
 
 from bt_api_py.logging_system import get_logger, setup_logging_for_production

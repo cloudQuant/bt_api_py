@@ -4,11 +4,21 @@ Centralized identity management supporting LDAP, SAML, OpenID Connect,
 and single sign-on for enterprise environments.
 """
 
+from __future__ import annotations
+
 import time
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any
 from uuid import uuid4
+
+try:
+    import bcrypt
+
+    BCRYPT_AVAILABLE = True
+except ImportError:  # pragma: no cover - optional dependency
+    bcrypt = None  # type: ignore[assignment]
+    BCRYPT_AVAILABLE = False
 
 
 class IdentityProvider(Enum):
@@ -155,7 +165,10 @@ class IdentityManager:
 
     def _hash_password(self, password: str) -> str:
         """Hash password securely."""
-        import bcrypt
+        if not BCRYPT_AVAILABLE:
+            raise ImportError(
+                "bcrypt is required for password hashing. Install with: pip install bcrypt"
+            )
 
         # Use bcrypt for secure password hashing
         salt = bcrypt.gensalt()
@@ -172,7 +185,10 @@ class IdentityManager:
         if not password_hash:
             return False
 
-        import bcrypt
+        if not BCRYPT_AVAILABLE:
+            raise ImportError(
+                "bcrypt is required for password verification. Install with: pip install bcrypt"
+            )
 
         return bcrypt.checkpw(password.encode("utf-8"), password_hash.encode("utf-8"))
 

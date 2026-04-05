@@ -3,6 +3,8 @@
 Standardized container for Uniswap pool information and liquidity data.
 """
 
+from __future__ import annotations
+
 from dataclasses import dataclass
 from decimal import Decimal
 
@@ -156,7 +158,7 @@ class UniswapPool:
             self.token1_price = Decimal("1") / self.token0_price
 
     @classmethod
-    def from_graphql_data(cls, data: dict) -> "UniswapPool":
+    def from_graphql_data(cls, data: dict) -> UniswapPool:
         """Create pool from GraphQL response data.
 
         Args:

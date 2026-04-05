@@ -2,6 +2,8 @@
 Curve DEX Registry Module
 """
 
+from __future__ import annotations
+
 from bt_api_py.balance_utils import simple_balance_handler as _curve_balance_handler
 from bt_api_py.containers.exchanges.curve_exchange_data import CurveExchangeDataSpot
 from bt_api_py.feeds.live_curve.spot import CurveRequestDataSpot

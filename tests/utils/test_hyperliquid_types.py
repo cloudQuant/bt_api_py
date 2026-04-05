@@ -1,5 +1,7 @@
 """Tests for utils/hyperliquid_types.py."""
 
+from __future__ import annotations
+
 from bt_api_py.utils import hyperliquid_types
 
 

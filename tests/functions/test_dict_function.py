@@ -1,3 +1,6 @@
+from __future__ import annotations
+
+
 def test_pop_item() -> None:
     content = {"name": "cloud", "age": 34}
     content.pop("name")

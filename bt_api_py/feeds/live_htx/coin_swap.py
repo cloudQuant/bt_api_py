@@ -5,6 +5,8 @@ Symbol format: BTC-USD (uppercase, dash-separated).
 Market data uses 'contract_code' parameter instead of 'symbol'.
 """
 
+from __future__ import annotations
+
 from typing import Any
 
 from bt_api_py.containers.exchanges.htx_exchange_data import HtxExchangeDataCoinSwap

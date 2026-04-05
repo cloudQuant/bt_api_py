@@ -4,9 +4,10 @@
 对非 HTTP 场所可关闭或替换为场所内置流控。
 """
 
+from __future__ import annotations
+
 import asyncio
 import contextlib
-import enum
 import fnmatch
 import threading
 import time
@@ -14,6 +15,8 @@ from collections import deque
 from dataclasses import dataclass
 from enum import unique
 from typing import Any, Literal
+
+from bt_api_py._compat import StrEnum
 
 __all__ = [
     "RateLimitType",
@@ -26,14 +29,14 @@ __all__ = [
 
 
 @unique
-class RateLimitType(enum.StrEnum):
+class RateLimitType(StrEnum):
     SLIDING_WINDOW = "sliding_window"
     FIXED_WINDOW = "fixed_window"
     TOKEN_BUCKET = "token_bucket"
 
 
 @unique
-class RateLimitScope(enum.StrEnum):
+class RateLimitScope(StrEnum):
     GLOBAL = "global"
     ENDPOINT = "endpoint"
     IP = "ip"
@@ -210,7 +213,7 @@ class RateLimiter:
                 max_wait = max(max_wait, limiter.wait_time())
         return max_wait
 
-    def __enter__(self) -> "RateLimiter":
+    def __enter__(self) -> RateLimiter:
         """进入上下文管理器（阻塞等待获取许可）."""
         return self
 

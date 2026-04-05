@@ -4,6 +4,8 @@ Curve Spot Feed implementation.
 Provides market data for Curve DEX pools.
 """
 
+from __future__ import annotations
+
 from typing import Any
 
 from bt_api_py.containers.exchanges.curve_exchange_data import CurveChain

@@ -26,6 +26,8 @@
     print(client.query_account())
 """
 
+from __future__ import annotations
+
 import hashlib
 import os
 import queue

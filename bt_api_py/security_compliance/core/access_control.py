@@ -4,6 +4,8 @@ Implements role-based access control (RBAC) with attribute-based access control 
 capabilities for financial industry compliance with zero trust principles.
 """
 
+from __future__ import annotations
+
 import enum
 import time
 from dataclasses import dataclass, field

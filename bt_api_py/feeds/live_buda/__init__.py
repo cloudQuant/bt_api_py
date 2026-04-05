@@ -2,6 +2,8 @@
 Buda Feed Module
 """
 
+from __future__ import annotations
+
 from bt_api_py.feeds.live_buda.request_base import BudaRequestData
 from bt_api_py.feeds.live_buda.spot import BudaRequestDataSpot
 

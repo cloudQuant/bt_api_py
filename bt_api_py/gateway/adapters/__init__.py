@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from bt_api_py.gateway.adapters.base import BaseGatewayAdapter
 from bt_api_py.gateway.adapters.binance_adapter import BinanceGatewayAdapter
 from bt_api_py.gateway.adapters.ctp_adapter import CtpGatewayAdapter

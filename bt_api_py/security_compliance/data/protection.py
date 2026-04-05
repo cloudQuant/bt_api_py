@@ -4,6 +4,8 @@ GDPR, CCPA, and data lifecycle management with automated
 data retention, anonymization, and right-to-be-forgotten implementation.
 """
 
+from __future__ import annotations
+
 import re
 import time
 from dataclasses import dataclass, field

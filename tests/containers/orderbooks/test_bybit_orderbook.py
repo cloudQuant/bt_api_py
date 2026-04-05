@@ -1,5 +1,7 @@
 """Tests for BybitOrderBookData container."""
 
+from __future__ import annotations
+
 from bt_api_py.containers.orderbooks.bybit_orderbook import BybitOrderBookData
 
 

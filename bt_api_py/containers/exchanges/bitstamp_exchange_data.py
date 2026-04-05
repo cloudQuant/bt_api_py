@@ -4,6 +4,8 @@ Symbol format: lowercase concatenated (btcusd).
 Endpoints use /{pair}/ suffix for market data.
 """
 
+from __future__ import annotations
+
 import os
 from typing import Any
 

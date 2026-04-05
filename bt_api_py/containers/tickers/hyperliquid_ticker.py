@@ -1,7 +1,10 @@
+from __future__ import annotations
+
 import json
 import time
-from typing import Any, Self
+from typing import Any
 
+from bt_api_py._compat import Self
 from bt_api_py.containers.tickers.ticker import TickerData
 from bt_api_py.functions.utils import from_dict_get_float
 from bt_api_py.logging_factory import get_logger
@@ -30,7 +33,7 @@ class HyperliquidTickerData(TickerData):
         self.all_data: dict[str, Any] | None = None
         self.has_been_init_data = False
 
-    def init_data(self) -> "Self":
+    def init_data(self) -> Self:
         """初始化ticker数据."""
         if self.has_been_init_data:
             return self

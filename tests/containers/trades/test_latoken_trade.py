@@ -1,5 +1,7 @@
 """Tests for LatokenSpotWssTradeData container."""
 
+from __future__ import annotations
+
 from bt_api_py.containers.trades.latoken_trade import LatokenSpotWssTradeData
 
 

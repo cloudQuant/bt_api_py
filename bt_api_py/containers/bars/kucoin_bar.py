@@ -2,6 +2,8 @@
 KuCoin kline (bar) data container.
 """
 
+from __future__ import annotations
+
 import json
 import time
 

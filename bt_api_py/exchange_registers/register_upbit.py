@@ -4,6 +4,8 @@ Registers UpbitRequestDataSpot and UpbitExchangeDataSpot with ExchangeRegistry.
 Import this module to auto-register.
 """
 
+from __future__ import annotations
+
 from bt_api_py.balance_utils import simple_balance_handler as _upbit_balance_handler
 from bt_api_py.containers.exchanges.upbit_exchange_data import UpbitExchangeDataSpot
 from bt_api_py.feeds.live_upbit.spot import UpbitRequestDataSpot

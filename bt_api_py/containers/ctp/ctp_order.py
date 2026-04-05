@@ -3,6 +3,8 @@ CTP 订单数据容器
 对应 CTP 的 CThostFtdcOrderField 结构体
 """
 
+from __future__ import annotations
+
 from typing import Any
 
 from bt_api_py.containers.orders.order import OrderData, OrderStatus
@@ -88,7 +90,7 @@ class CtpOrderData(OrderData):
         self.front_id: int | None = None
         self.session_id: int | None = None
 
-    def init_data(self) -> "CtpOrderData":
+    def init_data(self) -> CtpOrderData:
         """
         Initialize data from order_info.
 

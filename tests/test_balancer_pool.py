@@ -1,5 +1,7 @@
 """Tests for balancer_pool module."""
 
+from __future__ import annotations
+
 import pytest
 
 from bt_api_py.containers.pools.balancer_pool import BalancerPoolData

@@ -1,7 +1,10 @@
 """Tests for functions/calculate_time.py with comprehensive coverage."""
 
-from datetime import UTC, datetime
+from __future__ import annotations
 
+from datetime import datetime
+
+from bt_api_py._compat import UTC
 from bt_api_py.functions.calculate_time import (
     convert_utc_local_datetime,
     get_string_tz_time,

@@ -4,6 +4,8 @@ Ripio Spot Feed implementation.
 Provides market data access for Ripio spot trading.
 """
 
+from __future__ import annotations
+
 from typing import Any
 
 from bt_api_py.containers.exchanges.ripio_exchange_data import RipioExchangeDataSpot

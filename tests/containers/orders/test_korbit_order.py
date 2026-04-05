@@ -1,5 +1,7 @@
 """Tests for KorbitRequestOrderData container."""
 
+from __future__ import annotations
+
 from bt_api_py.containers.orders.korbit_order import KorbitRequestOrderData
 
 

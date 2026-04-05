@@ -3,6 +3,8 @@ Production-grade WebSocket manager with intelligent pooling, load balancing, and
 Supports 73+ exchanges with high reliability and performance optimization.
 """
 
+from __future__ import annotations
+
 import asyncio
 import contextlib
 import time

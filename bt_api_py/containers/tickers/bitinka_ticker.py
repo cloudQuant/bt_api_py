@@ -1,5 +1,7 @@
 """Bitinka Ticker Data Container."""
 
+from __future__ import annotations
+
 import json
 import time
 from typing import Any
@@ -43,7 +45,7 @@ class BitinkaRequestTickerData(TickerData):
         self.ticker_symbol_name = None
         self.has_been_init_data = False
 
-    def init_data(self) -> "BitinkaRequestTickerData":
+    def init_data(self) -> BitinkaRequestTickerData:
         """Parse Bitinka ticker response.
 
         Note: Actual response format may vary based on Bitinka's API.

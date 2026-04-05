@@ -3,6 +3,8 @@ OKX Account WebSocket base class.
 Handles private account channels (orders, account, positions, balance_and_position).
 """
 
+from __future__ import annotations
+
 from typing import Any
 
 from bt_api_py.feeds.live_okx.market_wss_base import OkxWssData

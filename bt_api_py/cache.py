@@ -5,6 +5,8 @@ Provides in-memory caching for frequently accessed data like exchange info,
 trading pairs, and market data.
 """
 
+from __future__ import annotations
+
 import threading
 import time
 from collections import OrderedDict

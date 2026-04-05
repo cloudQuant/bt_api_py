@@ -1,5 +1,7 @@
 """Tests for Gateio order data containers."""
 
+from __future__ import annotations
+
 import pytest
 
 from bt_api_py.containers.orders.gateio_order import GateioOrderData

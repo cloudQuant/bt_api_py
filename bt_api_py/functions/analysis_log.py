@@ -7,10 +7,21 @@ from datetime import datetime
 from pathlib import Path
 
 import pandas as pd
-from pyecharts import options as opts
-from pyecharts.charts import Boxplot, Page
-from pyecharts.components import Table
-from pyecharts.options import ComponentTitleOpts
+
+try:
+    from pyecharts import options as opts
+    from pyecharts.charts import Boxplot, Page
+    from pyecharts.components import Table
+    from pyecharts.options import ComponentTitleOpts
+
+    PYECHARTS_AVAILABLE = True
+except ImportError:  # pragma: no cover - optional dependency
+    PYECHARTS_AVAILABLE = False
+    opts = None  # type: ignore[assignment]
+    Boxplot = None  # type: ignore[assignment,misc]
+    Page = None  # type: ignore[assignment,misc]
+    Table = None  # type: ignore[assignment,misc]
+    ComponentTitleOpts = None  # type: ignore[assignment,misc]
 
 from bt_api_py.functions import get_package_path
 
@@ -53,6 +64,10 @@ def build_duration_series(log_filename: Path) -> list[float]:
 
 def render_report(durations: list[float], output_path: Path) -> pd.DataFrame:
     """Render the timing boxplot and table report to an HTML file."""
+    if not PYECHARTS_AVAILABLE:
+        raise ImportError(
+            "pyecharts is required for render_report. Install with: pip install pyecharts"
+        )
     chart = Boxplot()
     chart.add_xaxis(["时间(ms)"])
     chart.add_yaxis("swap合约对冲", chart.prepare_data([durations]))

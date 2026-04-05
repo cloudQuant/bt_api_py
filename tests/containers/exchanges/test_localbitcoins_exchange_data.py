@@ -1,5 +1,7 @@
 """Tests for LocalbitcoinsExchangeData container."""
 
+from __future__ import annotations
+
 from bt_api_py.containers.exchanges.localbitcoins_exchange_data import LocalBitcoinsExchangeData
 
 

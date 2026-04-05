@@ -1,4 +1,6 @@
 # HTX Exchange Feed
+from __future__ import annotations
+
 from bt_api_py.feeds.live_htx.coin_swap import (
     HtxAccountWssDataCoinSwap,
     HtxMarketWssDataCoinSwap,

@@ -1,5 +1,7 @@
 """Tests for exchange_registers/register_ctp.py."""
 
+from __future__ import annotations
+
 import pytest
 
 

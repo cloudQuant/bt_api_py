@@ -1,5 +1,7 @@
 """Tests for PoloniexOrderData container."""
 
+from __future__ import annotations
+
 import pytest
 
 from bt_api_py.containers.orders.poloniex_order import PoloniexOrderData

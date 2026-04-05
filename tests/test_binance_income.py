@@ -1,5 +1,7 @@
 """Tests for Binance income module."""
 
+from __future__ import annotations
+
 import pytest
 
 from bt_api_py.containers.incomes.binance_income import BinanceIncomeData

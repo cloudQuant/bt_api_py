@@ -4,6 +4,8 @@ Provides FIPS 140-2 Level 3 compliant encryption with support for AWS KMS,
 HashiCorp Vault, and hardware security modules (HSMs).
 """
 
+from __future__ import annotations
+
 import base64
 import hashlib
 import json

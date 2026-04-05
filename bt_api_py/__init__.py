@@ -4,6 +4,8 @@ This package provides a unified API for interacting with multiple cryptocurrency
  and traditional financial markets (CTP, Interactive Brokers).
 """
 
+from __future__ import annotations
+
 from bt_api_py._version import __version__
 from bt_api_py.auth_config import (
     AuthConfig,

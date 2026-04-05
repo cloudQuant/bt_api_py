@@ -1,5 +1,7 @@
 """Bybit Order Data Container."""
 
+from __future__ import annotations
+
 import time
 from typing import Any
 
@@ -55,7 +57,7 @@ class BybitOrderData(OrderData):
         self.all_data: dict[str, Any] | None = None
         self.has_been_init_data = False
 
-    def init_data(self) -> "BybitOrderData":
+    def init_data(self) -> BybitOrderData:
         """Initialize order data by parsing order_info.
 
         Returns:

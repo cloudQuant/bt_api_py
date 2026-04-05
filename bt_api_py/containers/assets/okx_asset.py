@@ -2,6 +2,8 @@
 OKX Asset/Funding Account data containers.
 """
 
+from __future__ import annotations
+
 import json
 import time
 

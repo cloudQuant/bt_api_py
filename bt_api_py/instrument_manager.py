@@ -4,6 +4,8 @@ InstrumentManager — 统一交易标的管理器
 提供 Instrument 注册、查询、双向映射功能。
 """
 
+from __future__ import annotations
+
 import threading
 
 from bt_api_py.containers.instrument import AssetType, Instrument

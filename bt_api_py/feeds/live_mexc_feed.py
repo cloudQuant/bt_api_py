@@ -3,6 +3,8 @@
 Provides WebSocket feed implementations for MEXC exchange.
 """
 
+from __future__ import annotations
+
 from typing import Any
 
 from bt_api_py.containers.exchanges.mexc_exchange_data import MexcExchangeDataSpot

@@ -6,6 +6,8 @@
 3. connect/disconnect 对 HTTP 场所默认为 no-op
 """
 
+from __future__ import annotations
+
 import asyncio
 import functools
 from typing import Any, Protocol, TypeVar, cast, runtime_checkable
@@ -135,7 +137,7 @@ class AsyncWrapperMixin:
     非 HTTP 场所继承此 Mixin，自动将同步方法包装为异步。
     """
 
-    def _sync_feed(self) -> "AbstractVenueFeed":
+    def _sync_feed(self) -> AbstractVenueFeed:
         return cast("AbstractVenueFeed", self)
 
     async def async_get_tick(self, symbol: str, extra_data: Any = None, **kwargs: Any) -> Any:

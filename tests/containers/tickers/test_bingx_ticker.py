@@ -1,5 +1,7 @@
 """Tests for BingXRequestTickerData container."""
 
+from __future__ import annotations
+
 import pytest
 
 from bt_api_py.containers.tickers.bingx_ticker import BingXRequestTickerData

@@ -26,6 +26,8 @@ Intelligent Risk Management and Compliance Monitoring System for 73+ exchanges.
 - 信用风险和保证金管理
 """
 
+from __future__ import annotations
+
 from .containers.risk_events import RiskEvent, RiskEventType, RiskLevel
 from .containers.risk_metrics import RiskMetrics
 from .core.risk_assessor import RiskAssessor

@@ -1,5 +1,7 @@
 """Tests for Balancer Pool container."""
 
+from __future__ import annotations
+
 import json
 
 from bt_api_py.containers.pools import BalancerPoolData, BalancerWssPoolData

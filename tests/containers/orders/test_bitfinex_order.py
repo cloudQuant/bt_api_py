@@ -1,5 +1,7 @@
 """Tests for BitfinexOrderData container."""
 
+from __future__ import annotations
+
 from bt_api_py.containers.orders.bitfinex_order import BitfinexOrderData
 
 

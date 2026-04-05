@@ -1,5 +1,7 @@
 """LocalBitcoins REST Feed base – HMAC-SHA256 auth, _get_xxx pattern."""
 
+from __future__ import annotations
+
 import hashlib
 import hmac
 import time

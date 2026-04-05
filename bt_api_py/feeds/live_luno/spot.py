@@ -2,6 +2,8 @@
 Luno Spot Feed implementation.
 """
 
+from __future__ import annotations
+
 import time
 from typing import Any
 

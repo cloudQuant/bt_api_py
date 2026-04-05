@@ -4,6 +4,8 @@ Provides tamper-evident, cryptographically secure audit logging with support for
 SOX, MiFID II, PCI DSS, and GDPR compliance requirements.
 """
 
+from __future__ import annotations
+
 import contextlib
 import enum
 import hashlib
@@ -120,7 +122,7 @@ class AuditEvent:
         return data
 
     @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> "AuditEvent":
+    def from_dict(cls, data: dict[str, Any]) -> AuditEvent:
         """Create event from dictionary."""
         # Convert string event_type back to enum
         if isinstance(data.get("event_type"), str):

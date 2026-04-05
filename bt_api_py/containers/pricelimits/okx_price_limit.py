@@ -2,6 +2,8 @@
 OKX Price Limit Data Container.
 """
 
+from __future__ import annotations
+
 import json
 import time
 from typing import Any
@@ -55,7 +57,7 @@ class OkxPriceLimitData:
         self.sell_limit: float | None = None
         self.all_data: dict[str, Any] | None = None
 
-    def init_data(self) -> "OkxPriceLimitData":
+    def init_data(self) -> OkxPriceLimitData:
         """Initialize and parse price limit data.
 
         Returns:

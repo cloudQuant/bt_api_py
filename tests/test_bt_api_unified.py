@@ -1,5 +1,7 @@
 """验证 BtApi 统一接口的基本正确性（不需要真实API密钥）"""
 
+from __future__ import annotations
+
 from datetime import timedelta
 
 import pytest

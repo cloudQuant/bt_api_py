@@ -1,5 +1,7 @@
 """Tests for Binance mark price module."""
 
+from __future__ import annotations
+
 import pytest
 
 from bt_api_py.containers.markprices.binance_mark_price import BinanceMarkPrice

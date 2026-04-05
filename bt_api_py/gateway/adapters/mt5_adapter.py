@@ -353,7 +353,7 @@ class Mt5GatewayAdapter(BaseGatewayAdapter):
         candidate_pairs: list[tuple[str, str]] = []
         skipped_symbols: list[str] = []
 
-        for std_sym, mt5_sym in zip(standard_symbols, resolved_symbols, strict=False):
+        for std_sym, mt5_sym in zip(standard_symbols, resolved_symbols):
             if available_symbols.get(mt5_sym) is None:
                 skipped_symbols.append(std_sym)
                 logger.warning(

@@ -1,7 +1,10 @@
+from __future__ import annotations
+
 import json
 import time
-from typing import Any, Self
+from typing import Any
 
+from bt_api_py._compat import Self
 from bt_api_py.containers.tickers.ticker import TickerData
 from bt_api_py.functions.utils import from_dict_get_float, from_dict_get_string
 
@@ -33,7 +36,7 @@ class LatokenTickerData(TickerData):
         self.all_data: dict[str, Any] | None = None
         self.has_been_init_data = False
 
-    def init_data(self) -> "Self":
+    def init_data(self) -> Self:
         if not self.has_been_json_encoded:
             self.ticker_data = json.loads(self.ticker_info)
             self.has_been_json_encoded = True
@@ -158,7 +161,7 @@ class LatokenTickerData(TickerData):
 class LatokenWssTickerData(LatokenTickerData):
     """保存 Latoken WebSocket ticker 信息."""
 
-    def init_data(self) -> "Self":
+    def init_data(self) -> Self:
         if not self.has_been_json_encoded:
             self.ticker_data = json.loads(self.ticker_info)
             self.has_been_json_encoded = True
@@ -189,7 +192,7 @@ class LatokenWssTickerData(LatokenTickerData):
 class LatokenRequestTickerData(LatokenTickerData):
     """保存 Latoken REST API ticker 信息."""
 
-    def init_data(self) -> "Self":
+    def init_data(self) -> Self:
         if not self.has_been_json_encoded:
             self.ticker_data = json.loads(self.ticker_info)
             self.has_been_json_encoded = True

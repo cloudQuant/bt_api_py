@@ -6,6 +6,8 @@ CTP 交易所注册模块
 依赖: pip install ctp-python
 """
 
+from __future__ import annotations
+
 from typing import Any
 
 from bt_api_py.balance_utils import simple_balance_handler as _ctp_balance_handler

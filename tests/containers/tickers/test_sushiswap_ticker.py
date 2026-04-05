@@ -1,5 +1,7 @@
 """Tests for SushiSwapRequestTickerData container."""
 
+from __future__ import annotations
+
 import pytest
 
 from bt_api_py.containers.tickers.sushiswap_ticker import SushiSwapRequestTickerData

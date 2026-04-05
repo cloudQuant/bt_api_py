@@ -4,6 +4,8 @@ System metrics collector for monitoring BT API performance.
 Collects system-level metrics including CPU, memory, network, and custom business metrics.
 """
 
+from __future__ import annotations
+
 import asyncio
 import contextlib
 import gc

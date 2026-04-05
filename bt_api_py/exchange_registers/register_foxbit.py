@@ -2,6 +2,8 @@
 Foxbit Exchange Registry Module
 """
 
+from __future__ import annotations
+
 from bt_api_py.balance_utils import simple_balance_handler as _foxbit_balance_handler
 from bt_api_py.containers.exchanges.foxbit_exchange_data import FoxbitExchangeDataSpot
 from bt_api_py.feeds.live_foxbit.spot import FoxbitRequestDataSpot

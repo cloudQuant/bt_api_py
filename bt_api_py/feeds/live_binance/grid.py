@@ -7,6 +7,8 @@ Implements all REST API requests related to Binance grid trading, including:
 - Futures grid income query
 """
 
+from __future__ import annotations
+
 from typing import Any
 
 from bt_api_py.containers.exchanges.binance_exchange_data import BinanceExchangeDataGrid

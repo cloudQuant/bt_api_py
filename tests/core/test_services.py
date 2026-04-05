@@ -3,6 +3,8 @@ Tests for bt_api_py.core.services
 Core service lifecycle and behavior tests
 """
 
+from __future__ import annotations
+
 import asyncio
 from unittest.mock import patch
 

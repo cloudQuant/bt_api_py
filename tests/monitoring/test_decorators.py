@@ -1,5 +1,7 @@
 """Tests for monitoring/decorators.py."""
 
+from __future__ import annotations
+
 
 class TestDecorators:
     """Tests for monitoring decorators."""

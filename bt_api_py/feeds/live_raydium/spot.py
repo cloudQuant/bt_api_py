@@ -4,6 +4,8 @@ Raydium Spot Feed implementation.
 Provides market data access for Raydium DEX pools.
 """
 
+from __future__ import annotations
+
 from typing import Any
 
 from bt_api_py.containers.exchanges.raydium_exchange_data import RaydiumExchangeDataSpot

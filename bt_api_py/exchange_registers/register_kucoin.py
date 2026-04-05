@@ -4,6 +4,8 @@ Registers KuCoin Spot and Futures feeds, exchange data, and handlers to global E
 Import this module to complete registration.
 """
 
+from __future__ import annotations
+
 from bt_api_py.balance_utils import simple_balance_handler as _kucoin_balance_handler
 from bt_api_py.containers.exchanges.kucoin_exchange_data import (
     KuCoinExchangeDataFutures,

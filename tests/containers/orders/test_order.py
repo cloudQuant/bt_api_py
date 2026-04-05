@@ -1,5 +1,7 @@
 """Tests for OrderData base class and OrderStatus enum."""
 
+from __future__ import annotations
+
 import pytest
 
 from bt_api_py.containers.orders.order import OrderData, OrderStatus

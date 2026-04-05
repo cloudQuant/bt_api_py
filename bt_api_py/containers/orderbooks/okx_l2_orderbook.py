@@ -2,6 +2,8 @@
 OKX L2 OrderBook Data Container - 400 depth tick-by-tick orderbook.
 """
 
+from __future__ import annotations
+
 import json
 import time
 

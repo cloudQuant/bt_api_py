@@ -1,5 +1,7 @@
 """Tests for audit_logger module - pure local logic."""
 
+from __future__ import annotations
+
 import time
 from unittest.mock import Mock
 

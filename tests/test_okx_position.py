@@ -1,5 +1,7 @@
 """Tests for OKX position module."""
 
+from __future__ import annotations
+
 import pytest
 
 from bt_api_py.containers.positions.okx_position import OkxPositionData

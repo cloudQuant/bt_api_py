@@ -3,6 +3,8 @@
 Note: Requires eth_account dependency.
 """
 
+from __future__ import annotations
+
 import pytest
 
 pytest.importorskip("eth_account")

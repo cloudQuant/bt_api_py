@@ -3,6 +3,8 @@ Coinbase REST API request base class.
 Handles authentication (HMAC SHA256 / JWT), signing, and all REST API methods.
 """
 
+from __future__ import annotations
+
 import base64
 import hashlib
 import hmac

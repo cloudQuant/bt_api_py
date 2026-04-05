@@ -1,5 +1,7 @@
 """Regression tests for improvement-report-v2 fixes."""
 
+from __future__ import annotations
+
 import asyncio
 import importlib.util
 import threading

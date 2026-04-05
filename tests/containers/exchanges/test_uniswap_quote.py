@@ -1,5 +1,7 @@
 """Tests for UniswapQuote container."""
 
+from __future__ import annotations
+
 from decimal import Decimal
 
 from bt_api_py.containers.exchanges.uniswap_quote import (

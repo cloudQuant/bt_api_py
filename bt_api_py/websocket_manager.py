@@ -2,6 +2,8 @@
 WebSocket connection management with optimized pooling and backpressure.
 """
 
+from __future__ import annotations
+
 import asyncio
 import contextlib
 import inspect

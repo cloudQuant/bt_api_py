@@ -2,6 +2,8 @@
 Bitstamp Spot Feed – three-layer sync/async wrappers.
 """
 
+from __future__ import annotations
+
 from bt_api_py.feeds.live_bitstamp.request_base import BitstampRequestData
 
 

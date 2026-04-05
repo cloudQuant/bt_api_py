@@ -1,5 +1,7 @@
 """Unit tests for EventBus publish/subscribe mechanism."""
 
+from __future__ import annotations
+
 import pytest
 
 from bt_api_py.event_bus import ErrorHandlerMode, EventBus

@@ -4,6 +4,8 @@ Grafana dashboard configuration for bt_api_py monitoring.
 Provides pre-built dashboards for monitoring trading API performance.
 """
 
+from __future__ import annotations
+
 import json
 from pathlib import Path
 from typing import Any
@@ -29,7 +31,7 @@ class GrafanaDashboardBuilder:
             }
         }
 
-    def add_panel(self, panel: dict[str, Any]) -> "GrafanaDashboardBuilder":
+    def add_panel(self, panel: dict[str, Any]) -> GrafanaDashboardBuilder:
         """Add a panel to the dashboard."""
         d: dict[str, Any] = self.dashboard["dashboard"]
         panels: list[Any] = d["panels"]
@@ -52,7 +54,7 @@ class GrafanaDashboardBuilder:
         panels.append(panel)
         return self
 
-    def add_system_metrics_row(self) -> "GrafanaDashboardBuilder":
+    def add_system_metrics_row(self) -> GrafanaDashboardBuilder:
         """Add system metrics row."""
         # CPU Usage
         self.add_panel(
@@ -114,7 +116,7 @@ class GrafanaDashboardBuilder:
 
         return self
 
-    def add_trading_metrics_row(self) -> "GrafanaDashboardBuilder":
+    def add_trading_metrics_row(self) -> GrafanaDashboardBuilder:
         """Add trading metrics row."""
         # Order Rate
         self.add_panel(
@@ -174,7 +176,7 @@ class GrafanaDashboardBuilder:
 
         return self
 
-    def add_latency_metrics_row(self) -> "GrafanaDashboardBuilder":
+    def add_latency_metrics_row(self) -> GrafanaDashboardBuilder:
         """Add latency metrics row."""
         # Order Latency
         self.add_panel(
@@ -244,7 +246,7 @@ class GrafanaDashboardBuilder:
 
         return self
 
-    def add_exchange_health_row(self) -> "GrafanaDashboardBuilder":
+    def add_exchange_health_row(self) -> GrafanaDashboardBuilder:
         """Add exchange health metrics row."""
         # Exchange Health Status
         self.add_panel(
@@ -326,7 +328,7 @@ class GrafanaDashboardBuilder:
 
         return self
 
-    def add_connection_metrics_row(self) -> "GrafanaDashboardBuilder":
+    def add_connection_metrics_row(self) -> GrafanaDashboardBuilder:
         """Add connection metrics row."""
         # Active Connections
         self.add_panel(
@@ -379,7 +381,7 @@ class GrafanaDashboardBuilder:
 
         return self
 
-    def add_network_metrics_row(self) -> "GrafanaDashboardBuilder":
+    def add_network_metrics_row(self) -> GrafanaDashboardBuilder:
         """Add network metrics row."""
         # Network Traffic
         self.add_panel(

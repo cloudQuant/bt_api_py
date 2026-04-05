@@ -1,5 +1,7 @@
 """Tests for gateway/models.py."""
 
+from __future__ import annotations
+
 from bt_api_py.gateway.models import GatewayTick
 
 

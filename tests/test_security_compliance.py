@@ -4,6 +4,8 @@ Tests for the security compliance framework to ensure
 proper functioning of all security components.
 """
 
+from __future__ import annotations
+
 import json
 import shutil
 import tempfile

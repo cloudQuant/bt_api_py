@@ -1,5 +1,7 @@
 """Tests for Binance symbol module."""
 
+from __future__ import annotations
+
 import pytest
 
 from bt_api_py.containers.symbols.binance_symbol import BinanceSwapSymbolData

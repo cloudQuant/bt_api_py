@@ -9,6 +9,8 @@ Interactive Brokers Web API Feed 实现
 依赖: pip install httpx pyjwt cryptography
 """
 
+from __future__ import annotations
+
 import threading
 import time
 from typing import Any

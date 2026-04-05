@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import json
 import time
 from typing import Any
@@ -61,7 +63,7 @@ class OkxSymbolData(SymbolData):
         self.contract_notional_value = None
         self.has_been_init_data = False
 
-    def init_data(self) -> "OkxSymbolData":
+    def init_data(self) -> OkxSymbolData:
         if not self.has_been_json_encoded:
             self.symbol_info = json.loads(self.symbol_info)
             self.symbol_data = self.symbol_info["data"][0]

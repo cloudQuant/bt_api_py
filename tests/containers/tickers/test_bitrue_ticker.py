@@ -1,5 +1,7 @@
 """Tests for BitrueRequestTickerData container."""
 
+from __future__ import annotations
+
 from bt_api_py.containers.tickers.bitrue_ticker import BitrueRequestTickerData
 
 

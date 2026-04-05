@@ -5,6 +5,8 @@ Public:  get_tick, get_depth, get_kline, get_trade_history, get_server_time, get
 Private: make_order, cancel_order, query_order, get_open_orders, get_deals, get_account, get_balance
 """
 
+from __future__ import annotations
+
 from typing import Any
 
 from bt_api_py.feeds.live_bitrue.request_base import BitrueRequestData

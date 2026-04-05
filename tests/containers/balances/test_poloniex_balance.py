@@ -1,5 +1,7 @@
 """Tests for Poloniex balance containers."""
 
+from __future__ import annotations
+
 import pytest
 
 from bt_api_py.containers.balances.poloniex_balance import (

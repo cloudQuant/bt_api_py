@@ -3,6 +3,8 @@ Kraken REST API request base class.
 Handles HMAC SHA512 authentication, signing, and all REST API methods.
 """
 
+from __future__ import annotations
+
 import base64
 import hashlib
 import hmac

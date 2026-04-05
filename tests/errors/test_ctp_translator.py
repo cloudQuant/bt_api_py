@@ -1,5 +1,7 @@
 """Tests for CtpTranslator."""
 
+from __future__ import annotations
+
 from bt_api_py.errors.ctp_translator import CTPErrorTranslator
 
 

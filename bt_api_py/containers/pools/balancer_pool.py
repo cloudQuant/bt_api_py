@@ -4,6 +4,8 @@ Balancer Pool Data Container.
 Handles pool information data from Balancer's GraphQL API.
 """
 
+from __future__ import annotations
+
 import json
 import time
 from typing import Any, cast

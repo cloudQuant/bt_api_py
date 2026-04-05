@@ -2,6 +2,8 @@
 Provides standardized ticker data structure for Raydium DEX.
 """
 
+from __future__ import annotations
+
 import time
 from typing import Any
 

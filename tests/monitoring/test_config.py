@@ -1,5 +1,7 @@
 """Tests for monitoring/config.py."""
 
+from __future__ import annotations
+
 import pytest
 
 pytest.importorskip("psutil")

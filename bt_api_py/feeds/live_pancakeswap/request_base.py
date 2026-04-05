@@ -2,6 +2,8 @@
 Handles GraphQL queries and REST API calls to PancakeSwap.
 """
 
+from __future__ import annotations
+
 import time
 from typing import Any
 

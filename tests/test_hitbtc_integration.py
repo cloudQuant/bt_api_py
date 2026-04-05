@@ -5,6 +5,8 @@ This module provides basic tests for HitBTC exchange integration.
 Tests basic functionality without requiring API keys.
 """
 
+from __future__ import annotations
+
 import pytest
 
 from bt_api_py.containers.balances.hitbtc_balance import HitBtcRequestBalanceData

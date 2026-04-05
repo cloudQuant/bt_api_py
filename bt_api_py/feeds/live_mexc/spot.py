@@ -4,6 +4,8 @@ MEXC Spot Trading Feed
 Implements spot trading functionality for MEXC exchange.
 """
 
+from __future__ import annotations
+
 from typing import Any
 
 from bt_api_py.containers.balances.mexc_balance import MexcRequestBalanceData

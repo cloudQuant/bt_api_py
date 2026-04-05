@@ -1,5 +1,7 @@
 """Tests for GeminiRequestOrderBookData container."""
 
+from __future__ import annotations
+
 from bt_api_py.containers.orderbooks.gemini_orderbook import GeminiRequestOrderBookData
 
 

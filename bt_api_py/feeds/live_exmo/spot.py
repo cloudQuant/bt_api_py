@@ -2,6 +2,8 @@
 EXMO Spot Feed implementation.
 """
 
+from __future__ import annotations
+
 import time as tm
 from typing import Any
 

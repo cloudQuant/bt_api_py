@@ -4,6 +4,8 @@ PancakeSwap Pool Data Container
 Provides standardized pool data structure for PancakeSwap
 """
 
+from __future__ import annotations
+
 from dataclasses import dataclass
 
 
@@ -183,7 +185,7 @@ class PancakeSwapPoolData:
         return json.dumps(self.to_dict())
 
     @classmethod
-    def from_dict(cls, data: dict) -> "PancakeSwapPoolData":
+    def from_dict(cls, data: dict) -> PancakeSwapPoolData:
         """Create from dictionary"""
         liquidity_data = PancakeSwapLiquidityData(**data["liquidity_data"])
         return cls(
@@ -203,7 +205,7 @@ class PancakeSwapPoolData:
         )
 
     @classmethod
-    def from_json(cls, json_str: str) -> "PancakeSwapPoolData":
+    def from_json(cls, json_str: str) -> PancakeSwapPoolData:
         """Create from JSON string"""
         import json
 
@@ -231,7 +233,7 @@ class PancakeSwapPoolList:
             self.total_liquidity_usd = 0.0
             self.total_volume_24h_usd = 0.0
 
-    def filter_by_tvl(self, min_tvl: float, max_tvl: float | None = None) -> "PancakeSwapPoolList":
+    def filter_by_tvl(self, min_tvl: float, max_tvl: float | None = None) -> PancakeSwapPoolList:
         """Filter pools by TVL range"""
         filtered = [
             pool
@@ -248,7 +250,7 @@ class PancakeSwapPoolList:
 
     def filter_by_volume(
         self, min_volume: float, max_volume: float | None = None
-    ) -> "PancakeSwapPoolList":
+    ) -> PancakeSwapPoolList:
         """Filter pools by 24h volume range"""
         filtered = [
             pool
@@ -264,7 +266,7 @@ class PancakeSwapPoolList:
             total_volume_24h_usd=sum(p.volume_24h_usd for p in filtered),
         )
 
-    def filter_by_symbol(self, symbol: str) -> "PancakeSwapPoolList":
+    def filter_by_symbol(self, symbol: str) -> PancakeSwapPoolList:
         """Filter pools by symbol"""
         filtered = [pool for pool in self.pools if pool.symbol == symbol]
         return PancakeSwapPoolList(
@@ -274,7 +276,7 @@ class PancakeSwapPoolList:
             total_volume_24h_usd=sum(p.volume_24h_usd for p in filtered),
         )
 
-    def sort_by_tvl(self, descending: bool = True) -> "PancakeSwapPoolList":
+    def sort_by_tvl(self, descending: bool = True) -> PancakeSwapPoolList:
         """Sort pools by TVL"""
         sorted_pools = sorted(self.pools, key=lambda p: p.tvl, reverse=descending)
         return PancakeSwapPoolList(
@@ -284,7 +286,7 @@ class PancakeSwapPoolList:
             total_volume_24h_usd=sum(p.volume_24h_usd for p in sorted_pools),
         )
 
-    def sort_by_volume(self, descending: bool = True) -> "PancakeSwapPoolList":
+    def sort_by_volume(self, descending: bool = True) -> PancakeSwapPoolList:
         """Sort pools by 24h volume"""
         sorted_pools = sorted(self.pools, key=lambda p: p.volume_24h_usd, reverse=descending)
         return PancakeSwapPoolList(
@@ -310,7 +312,7 @@ class PancakeSwapPoolList:
         return json.dumps(self.to_dict())
 
     @classmethod
-    def from_dict(cls, data: dict) -> "PancakeSwapPoolList":
+    def from_dict(cls, data: dict) -> PancakeSwapPoolList:
         """Create from dictionary"""
         pools = [PancakeSwapPoolData.from_dict(pool_data) for pool_data in data["pools"]]
         return cls(
@@ -321,7 +323,7 @@ class PancakeSwapPoolList:
         )
 
     @classmethod
-    def from_json(cls, json_str: str) -> "PancakeSwapPoolList":
+    def from_json(cls, json_str: str) -> PancakeSwapPoolList:
         """Create from JSON string"""
         import json
 

@@ -2,12 +2,16 @@
 Dependency injection container for modern bt_api_py architecture.
 """
 
+from __future__ import annotations
+
 import inspect
 import threading
 from collections.abc import Callable
 from contextlib import contextmanager
 from functools import wraps
-from typing import Any, ParamSpec, TypeVar, cast
+from typing import Any, TypeVar, cast
+
+from bt_api_py._compat import ParamSpec
 
 T = TypeVar("T")
 P = ParamSpec("P")
@@ -34,28 +38,28 @@ class DIContainer:
         self._lock = threading.RLock()
         self._current_scope: dict[type, Any] | None = None
 
-    def register_singleton(self, interface: type[T], implementation: type[T]) -> "DIContainer":
+    def register_singleton(self, interface: type[T], implementation: type[T]) -> DIContainer:
         """Register a singleton service."""
         with self._lock:
             self._clear_registration(interface)
             self._services[interface] = implementation
             return self
 
-    def register_transient(self, interface: type[T], implementation: type[T]) -> "DIContainer":
+    def register_transient(self, interface: type[T], implementation: type[T]) -> DIContainer:
         """Register a transient service (new instance each time)."""
         with self._lock:
             self._clear_registration(interface)
             self._factories[interface] = implementation
             return self
 
-    def register_scoped(self, interface: type[T], implementation: type[T]) -> "DIContainer":
+    def register_scoped(self, interface: type[T], implementation: type[T]) -> DIContainer:
         """Register a scoped service (one instance per scope)."""
         with self._lock:
             self._clear_registration(interface)
             self._scoped_services[interface] = implementation
             return self
 
-    def register_instance(self, interface: type[T], instance: T) -> "DIContainer":
+    def register_instance(self, interface: type[T], instance: T) -> DIContainer:
         """Register a specific instance."""
         with self._lock:
             self._clear_registration(interface)
@@ -220,10 +224,10 @@ def inject_method(func: Callable[P, T]) -> Callable[P, T]:
 class Container:
     """Legacy compatibility wrapper."""
 
-    _instance: "Container | None" = None
+    _instance: Container | None = None
     _instance_lock = threading.Lock()
 
-    def __new__(cls) -> "Container":
+    def __new__(cls) -> Container:
         if cls._instance is None:
             with cls._instance_lock:
                 if cls._instance is None:

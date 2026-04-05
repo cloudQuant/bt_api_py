@@ -1,5 +1,7 @@
 """Tests for monitoring/collector.py."""
 
+from __future__ import annotations
+
 
 class TestCollector:
     """Tests for monitoring collector."""

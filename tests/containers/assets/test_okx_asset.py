@@ -1,5 +1,7 @@
 """Tests for OKX Asset containers."""
 
+from __future__ import annotations
+
 import json
 
 from bt_api_py.containers.assets import (

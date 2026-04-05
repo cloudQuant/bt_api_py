@@ -7,6 +7,8 @@ Symbol: coin shortname "BTC" (no trading pair)
 No WebSocket support.
 """
 
+from __future__ import annotations
+
 import os
 from typing import Any
 

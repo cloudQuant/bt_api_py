@@ -7,6 +7,8 @@ Kline: separate endpoints for minutes/days/weeks/months.
 Response: direct JSON array/object. Errors: {"error": {"name": ..., "message": ...}}.
 """
 
+from __future__ import annotations
+
 import hashlib
 import uuid as _uuid
 from typing import Any

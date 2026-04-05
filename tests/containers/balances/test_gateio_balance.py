@@ -1,5 +1,7 @@
 """Tests for GateioBalanceData container."""
 
+from __future__ import annotations
+
 import json
 
 from bt_api_py.containers.balances.gateio_balance import (

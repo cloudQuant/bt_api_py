@@ -1,5 +1,7 @@
 """Tests for DydxTickerData container."""
 
+from __future__ import annotations
+
 import pytest
 
 from bt_api_py.containers.tickers.dydx_ticker import DydxTickerData

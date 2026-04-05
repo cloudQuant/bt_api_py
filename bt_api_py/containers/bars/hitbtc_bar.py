@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import time
 
 from bt_api_py.containers.bars.bar import BarData

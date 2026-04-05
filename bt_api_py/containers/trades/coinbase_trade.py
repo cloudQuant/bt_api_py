@@ -10,6 +10,8 @@ Pattern: Subclasses override init_data() to handle source-specific field mapping
 while reusing common initialization logic from the parent class.
 """
 
+from __future__ import annotations
+
 import json
 import time
 

@@ -1,5 +1,7 @@
 """Bitget Spot Trading Feed"""
 
+from __future__ import annotations
+
 from typing import Any
 
 from bt_api_py.containers.balances.bitget_balance import BitgetBalanceData

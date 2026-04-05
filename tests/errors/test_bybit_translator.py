@@ -1,5 +1,7 @@
 """Tests for BybitErrorTranslator."""
 
+from __future__ import annotations
+
 from bt_api_py.errors.bybit_translator import BybitErrorTranslator
 
 

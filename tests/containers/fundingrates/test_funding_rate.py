@@ -1,5 +1,7 @@
 """Tests for FundingRateData base container."""
 
+from __future__ import annotations
+
 import pytest
 
 from bt_api_py.containers.fundingrates.funding_rate import FundingRateData

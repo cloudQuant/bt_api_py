@@ -5,6 +5,8 @@ Provides efficient connection reuse and management to improve performance
 and reduce resource usage.
 """
 
+from __future__ import annotations
+
 import asyncio
 import logging
 import threading

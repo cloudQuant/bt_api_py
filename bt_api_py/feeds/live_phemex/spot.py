@@ -3,6 +3,8 @@ Phemex Spot Feed implementation.
 Provides market data and trading access for Phemex spot trading.
 """
 
+from __future__ import annotations
+
 from typing import Any
 
 from bt_api_py.containers.exchanges.phemex_exchange_data import PhemexExchangeDataSpot

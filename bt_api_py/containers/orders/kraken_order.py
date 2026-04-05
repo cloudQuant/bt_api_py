@@ -3,6 +3,8 @@ Kraken Order Data Container
 Provides standardized order data structure for Kraken exchange.
 """
 
+from __future__ import annotations
+
 import time
 from typing import Any
 

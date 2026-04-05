@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from typing import Any
 
 from bt_api_py.containers.exchanges.gemini_exchange_data import GeminiExchangeDataSpot

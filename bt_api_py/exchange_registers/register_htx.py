@@ -11,6 +11,8 @@ Supported asset types:
 - OPTION: Options trading
 """
 
+from __future__ import annotations
+
 from bt_api_py.balance_utils import simple_balance_handler as _htx_balance_handler
 from bt_api_py.containers.exchanges.htx_exchange_data import (
     HtxExchangeDataCoinSwap,

@@ -3,6 +3,8 @@
 BeQuant uses HitBTC V3 API (white-label). Same endpoints, HTTP Basic Auth.
 """
 
+from __future__ import annotations
+
 import os
 from typing import Any
 

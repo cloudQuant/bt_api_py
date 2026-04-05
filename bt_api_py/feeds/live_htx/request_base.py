@@ -3,6 +3,8 @@ HTX REST API request base class.
 Handles authentication, signing, and all REST API methods.
 """
 
+from __future__ import annotations
+
 import base64
 import hashlib
 import hmac

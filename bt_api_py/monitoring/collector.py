@@ -4,6 +4,8 @@ Main metrics collector that coordinates all monitoring components.
 Provides a unified interface for collecting performance metrics from various sources.
 """
 
+from __future__ import annotations
+
 import asyncio
 import contextlib
 import time

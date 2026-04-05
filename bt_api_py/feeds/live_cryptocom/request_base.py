@@ -3,6 +3,8 @@ Crypto.com REST API request base class.
 Handles authentication, signing, and all REST API methods.
 """
 
+from __future__ import annotations
+
 import hashlib
 import hmac
 import time

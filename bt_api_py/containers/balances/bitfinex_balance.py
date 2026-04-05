@@ -1,5 +1,7 @@
 """Bitfinex Balance Data Container."""
 
+from __future__ import annotations
+
 import json
 import time
 from typing import Any
@@ -35,7 +37,7 @@ class BitfinexSpotRequestBalanceData(BalanceData):
         self.all_data: dict[str, Any] | None = None
         self.has_been_init_data = False
 
-    def init_data(self) -> "BitfinexSpotRequestBalanceData":  # type: ignore[override]
+    def init_data(self) -> BitfinexSpotRequestBalanceData:  # type: ignore[override]
         """Initialize and parse the balance data.
 
         Returns:

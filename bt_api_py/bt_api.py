@@ -3,6 +3,8 @@ Integrate all exchange APIs using this BtApi class
 通过 ExchangeRegistry 实现交易所的即插即用，新增交易所无需修改此文件
 """
 
+from __future__ import annotations
+
 # 导入注册模块，确保交易所在使用前完成注册
 # 自动扫描 exchange_registers/ 下所有模块，无需手动维护 import 列表
 import importlib
@@ -11,9 +13,10 @@ import queue
 import time
 from collections.abc import Callable
 from copy import deepcopy
-from datetime import UTC, datetime, timedelta
+from datetime import datetime, timedelta
 from typing import Any
 
+from bt_api_py._compat import UTC
 from bt_api_py.event_bus import EventBus
 from bt_api_py.exceptions import (
     BtApiError,
@@ -516,7 +519,7 @@ class BtApi:
                         level="warning",
                     )
 
-    def __enter__(self) -> "BtApi":
+    def __enter__(self) -> BtApi:
         return self
 
     def __exit__(
@@ -527,7 +530,7 @@ class BtApi:
     ) -> None:
         self.close()
 
-    async def __aenter__(self) -> "BtApi":
+    async def __aenter__(self) -> BtApi:
         return self
 
     async def __aexit__(

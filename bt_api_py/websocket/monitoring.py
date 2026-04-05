@@ -2,6 +2,8 @@
 Provides real-time metrics, alerts, performance benchmarking, and visualization.
 """
 
+from __future__ import annotations
+
 import asyncio
 import contextlib
 import statistics

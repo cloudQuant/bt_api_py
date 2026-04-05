@@ -1,5 +1,7 @@
 """Tests for HitBtcRequestBalanceData container."""
 
+from __future__ import annotations
+
 from bt_api_py.containers.balances.hitbtc_balance import HitBtcRequestBalanceData
 
 

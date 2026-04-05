@@ -1,5 +1,7 @@
 """Tests for BitrueExchangeData container."""
 
+from __future__ import annotations
+
 import pytest
 
 from bt_api_py.containers.exchanges.bitrue_exchange_data import (

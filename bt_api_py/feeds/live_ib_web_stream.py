@@ -12,6 +12,8 @@ IB Web API WebSocket 协议:
 依赖: pip install websocket-client
 """
 
+from __future__ import annotations
+
 import contextlib
 import json
 import threading

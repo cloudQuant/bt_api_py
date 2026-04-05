@@ -18,12 +18,14 @@ import logging
 import threading
 import time
 from collections import defaultdict
-from datetime import UTC, datetime
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
 import pyarrow as pa
 import pyarrow.parquet as pq
+
+from bt_api_py._compat import UTC
 
 logger = logging.getLogger(__name__)
 

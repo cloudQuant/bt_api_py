@@ -1,4 +1,6 @@
 # import json
+from __future__ import annotations
+
 from bt_api_py.containers.accounts.okx_account import OkxAccountData
 from bt_api_py.containers.balances.balance import BalanceData
 

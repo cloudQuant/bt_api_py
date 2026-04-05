@@ -1,5 +1,7 @@
 """Independent Reserve Ticker Data Container."""
 
+from __future__ import annotations
+
 import json
 import time
 from typing import Any
@@ -46,7 +48,7 @@ class IndependentReserveRequestTickerData(TickerData):
         self.timestamp: Any = None
         self.has_been_init_data = False
 
-    def init_data(self) -> "IndependentReserveRequestTickerData":
+    def init_data(self) -> IndependentReserveRequestTickerData:
         """Parse Independent Reserve ticker response.
 
         Independent Reserve ticker response format:

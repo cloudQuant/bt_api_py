@@ -5,6 +5,8 @@ Three-layer pattern: _get_xxx (params), get_xxx (sync), async_get_xxx (async).
 Private endpoints use is_sign=True for JWT Bearer auth.
 """
 
+from __future__ import annotations
+
 from typing import Any
 
 from bt_api_py.feeds.live_bigone.request_base import BigONERequestData

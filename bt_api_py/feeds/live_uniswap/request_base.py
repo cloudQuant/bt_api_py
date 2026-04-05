@@ -6,6 +6,8 @@ traditional REST endpoints, so this class provides GraphQL query building and
 response parsing.
 """
 
+from __future__ import annotations
+
 import time
 from typing import Any
 

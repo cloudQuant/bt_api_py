@@ -1,5 +1,7 @@
 """Tests for monitoring/exchange_health.py."""
 
+from __future__ import annotations
+
 
 class TestExchangeHealth:
     """Tests for exchange health monitoring."""

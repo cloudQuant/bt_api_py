@@ -1,5 +1,7 @@
 """Tests for Mercado Bitcoin ticker data container."""
 
+from __future__ import annotations
+
 import pytest
 
 from bt_api_py.containers.tickers.mercado_bitcoin_ticker import MercadoBitcoinRequestTickerData

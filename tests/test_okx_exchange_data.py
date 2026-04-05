@@ -1,5 +1,7 @@
 """Tests for OKX exchange data module."""
 
+from __future__ import annotations
+
 import pytest
 
 from bt_api_py.containers.exchanges.okx_exchange_data import OkxExchangeData

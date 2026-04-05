@@ -1,5 +1,7 @@
 """Tests for gateway/process.py."""
 
+from __future__ import annotations
+
 
 class TestProcess:
     """Tests for gateway process."""

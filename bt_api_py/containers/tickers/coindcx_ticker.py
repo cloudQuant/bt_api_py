@@ -1,5 +1,7 @@
 """CoinDCX Ticker Data Container."""
 
+from __future__ import annotations
+
 import json
 import time
 from typing import Any
@@ -44,7 +46,7 @@ class CoinDCXRequestTickerData(TickerData):
         self.high_24h: float | None = None
         self.low_24h: float | None = None
 
-    def init_data(self) -> "CoinDCXRequestTickerData":
+    def init_data(self) -> CoinDCXRequestTickerData:
         """Parse CoinDCX ticker response."""
         if not self.has_been_json_encoded:
             self.ticker_data = json.loads(self.ticker_info)

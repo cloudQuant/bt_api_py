@@ -1,5 +1,7 @@
 """Regression tests for container base classes."""
 
+from __future__ import annotations
+
 from bt_api_py.containers.accounts.account import AccountData
 from bt_api_py.containers.balances.balance import BalanceData
 from bt_api_py.containers.orders.order import OrderData, OrderStatus
@@ -10,7 +12,7 @@ from bt_api_py.containers.trades.trade import TradeData
 
 
 class _SampleTrade(TradeData):
-    def init_data(self) -> "_SampleTrade":
+    def init_data(self) -> _SampleTrade:
         self.exchange_name = "BINANCE"
         self.symbol_name = "BTCUSDT"
         self.trade_price = 1.0
@@ -78,7 +80,7 @@ class _SampleTrade(TradeData):
 
 
 class _SampleTicker(TickerData):
-    def init_data(self) -> "_SampleTicker":
+    def init_data(self) -> _SampleTicker:
         return self
 
     def get_all_data(self) -> dict[str, object]:
@@ -128,7 +130,7 @@ class _SampleTicker(TickerData):
 
 
 class _SampleSymbol(SymbolData):
-    def init_data(self) -> "_SampleSymbol":
+    def init_data(self) -> _SampleSymbol:
         return self
 
     def get_all_data(self) -> dict[str, object]:
@@ -214,7 +216,7 @@ class _SampleSymbol(SymbolData):
 
 
 class _SampleBalance(BalanceData):
-    def init_data(self) -> "_SampleBalance":
+    def init_data(self) -> _SampleBalance:
         self.exchange_name = "BINANCE"
         self.asset_type = "SPOT"
         self.local_update_time = 0.0
@@ -281,7 +283,7 @@ class _SampleBalance(BalanceData):
 
 
 class _SampleAccount(AccountData):
-    def init_data(self) -> "_SampleAccount":
+    def init_data(self) -> _SampleAccount:
         self.exchange_name = "BINANCE"
         self.asset_type = "SPOT"
         self.account_type = "SPOT"
@@ -377,7 +379,7 @@ class _SampleAccount(AccountData):
 
 
 class _SampleOrder(OrderData):
-    def init_data(self) -> "_SampleOrder":
+    def init_data(self) -> _SampleOrder:
         self.exchange_name = "BINANCE"
         self.symbol_name = "BTCUSDT"
         self.asset_type = "SPOT"
@@ -489,7 +491,7 @@ class _SampleOrder(OrderData):
 
 
 class _SamplePosition(PositionData):
-    def init_data(self) -> "_SamplePosition":
+    def init_data(self) -> _SamplePosition:
         self.exchange_name = "BINANCE"
         self.symbol_name = "BTCUSDT"
         self.asset_type = "SWAP"

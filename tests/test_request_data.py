@@ -1,5 +1,7 @@
 """Tests for request_data module."""
 
+from __future__ import annotations
+
 import pytest
 
 from bt_api_py.containers.requestdatas.request_data import RequestData

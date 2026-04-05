@@ -1,4 +1,6 @@
 # Base request handler
+from __future__ import annotations
+
 from bt_api_py.feeds.live_bybit.request_base import BybitRequestData
 
 # Spot trading

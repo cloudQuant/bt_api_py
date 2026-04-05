@@ -2,6 +2,8 @@
 Register Gemini exchange feeds
 """
 
+from __future__ import annotations
+
 from bt_api_py.feeds.live_gemini.spot import GeminiRequestDataSpot
 from bt_api_py.logging_factory import get_logger
 from bt_api_py.registry import ExchangeRegistry

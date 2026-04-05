@@ -1,5 +1,7 @@
 """Tests for timer module."""
 
+from __future__ import annotations
+
 import pytest
 
 from bt_api_py.containers.timers.timer import TimerData

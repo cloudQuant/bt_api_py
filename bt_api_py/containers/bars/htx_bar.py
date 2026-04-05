@@ -1,5 +1,7 @@
 """HTX Bar/Kline Data Container."""
 
+from __future__ import annotations
+
 import json
 import time
 from typing import Any
@@ -68,7 +70,7 @@ class HtxRequestBarData(BarData):
         self.all_data: dict[str, Any] | None = None
         self.has_been_init_data = False
 
-    def init_data(self) -> "HtxRequestBarData":
+    def init_data(self) -> HtxRequestBarData:
         """Initialize bar data from HTX response.
 
         Parses the HTX kline response format:

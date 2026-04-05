@@ -1,5 +1,7 @@
 """Tests for SwyftxRequestTickerData container."""
 
+from __future__ import annotations
+
 import pytest
 
 from bt_api_py.containers.tickers.swyftx_ticker import SwyftxRequestTickerData

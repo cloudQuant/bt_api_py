@@ -1,5 +1,7 @@
 """Tests for feeds/abstract_feed.py."""
 
+from __future__ import annotations
+
 from bt_api_py.feeds.abstract_feed import AbstractVenueFeed, AsyncWrapperMixin
 
 
@@ -12,8 +14,8 @@ class TestAbstractVenueFeed:
 
     def test_protocol_is_runtime_checkable(self):
         """Test protocol is runtime checkable."""
-
-        assert hasattr(AbstractVenueFeed, "__protocol_attrs__")
+        assert getattr(AbstractVenueFeed, "_is_protocol", False) is True
+        assert getattr(AbstractVenueFeed, "_is_runtime_protocol", False) is True
 
 
 class TestAsyncWrapperMixin:

@@ -4,6 +4,8 @@ OKX 交易所注册模块
 导入此模块即可完成注册
 """
 
+from __future__ import annotations
+
 from bt_api_py.balance_utils import nested_balance_handler as _okx_balance_handler
 from bt_api_py.containers.exchanges.okx_exchange_data import (
     OkxExchangeDataSpot,

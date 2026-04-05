@@ -4,6 +4,8 @@ Implements secure OAuth 2.0 authorization with PKCE, token rotation,
 and financial industry compliance (PSD2, Open Banking).
 """
 
+from __future__ import annotations
+
 import base64
 import hashlib
 import secrets

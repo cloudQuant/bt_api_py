@@ -4,6 +4,8 @@ This module provides HitBTC-specific configuration and path management.
 Loads configuration from YAML file and provides REST/WSS endpoints.
 """
 
+from __future__ import annotations
+
 import os
 from typing import Any
 

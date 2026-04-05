@@ -1,5 +1,7 @@
 """Tests for CoinDCXRequestTickerData container."""
 
+from __future__ import annotations
+
 import pytest
 
 from bt_api_py.containers.tickers.coindcx_ticker import CoinDCXRequestTickerData

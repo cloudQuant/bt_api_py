@@ -1,5 +1,7 @@
 """Tests for async_send_message module."""
 
+from __future__ import annotations
+
 import pytest
 
 pytest.importorskip("aiosmtplib")

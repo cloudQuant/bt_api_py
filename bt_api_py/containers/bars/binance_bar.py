@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import json
 import time
 from typing import Any
@@ -50,7 +52,7 @@ class BinanceRequestBarData(BarData):
         self.all_data: dict[str, Any] | None = None
         self.has_been_init_data = False
 
-    def init_data(self) -> "BinanceRequestBarData":
+    def init_data(self) -> BinanceRequestBarData:
         """
         Initialize data from bar_info.
 
@@ -344,7 +346,7 @@ class BinanceWssBarData(BarData):
         self.all_data: dict[str, Any] | None = None
         self.has_been_init_data = False
 
-    def init_data(self) -> "BinanceWssBarData":
+    def init_data(self) -> BinanceWssBarData:
         """
         Initialize data from bar_info.
 

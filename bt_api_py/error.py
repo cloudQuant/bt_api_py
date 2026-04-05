@@ -12,12 +12,14 @@
     因此 ``except RateLimitError`` 也能捕获 ``UnifiedRateLimitError``。
 """
 
-import enum
+from __future__ import annotations
+
 import importlib
 from dataclasses import dataclass, field
 from enum import Enum, unique
 from typing import TYPE_CHECKING, Any, ClassVar
 
+from bt_api_py._compat import StrEnum
 from bt_api_py.exceptions import (
     AuthenticationError,
     BtApiError,
@@ -29,7 +31,7 @@ from bt_api_py.exceptions import (
 
 
 @unique
-class ErrorCategory(enum.StrEnum):
+class ErrorCategory(StrEnum):
     NETWORK = "network"
     AUTH = "auth"
     RATE_LIMIT = "rate_limit"

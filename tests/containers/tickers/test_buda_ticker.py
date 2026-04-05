@@ -1,5 +1,7 @@
 """Tests for BudaRequestTickerData container."""
 
+from __future__ import annotations
+
 import pytest
 
 from bt_api_py.containers.tickers.buda_ticker import BudaRequestTickerData

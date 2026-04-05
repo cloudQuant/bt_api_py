@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import json
 
 from bt_api_py.containers.trades.binance_trade import (

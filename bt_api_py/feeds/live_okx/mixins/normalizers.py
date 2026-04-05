@@ -3,6 +3,8 @@ Shared normalize functions for OKX API responses.
 These are used across multiple mixin modules.
 """
 
+from __future__ import annotations
+
 from typing import Any
 
 

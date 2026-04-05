@@ -7,6 +7,8 @@ Covers:
 - security: Path.open() usage, narrowed exception in get_exchange_credentials
 """
 
+from __future__ import annotations
+
 import inspect
 import json
 import tempfile

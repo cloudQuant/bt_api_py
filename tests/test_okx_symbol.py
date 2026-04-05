@@ -1,5 +1,7 @@
 """Tests for OKX symbol module."""
 
+from __future__ import annotations
+
 import pytest
 
 from bt_api_py.containers.symbols.okx_symbol import OkxSymbolData

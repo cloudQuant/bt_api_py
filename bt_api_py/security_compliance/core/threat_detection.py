@@ -4,6 +4,8 @@ Real-time security monitoring with anomaly detection, behavioral analysis,
 and automated threat response for financial systems.
 """
 
+from __future__ import annotations
+
 import time
 from collections import defaultdict, deque
 from dataclasses import dataclass, field

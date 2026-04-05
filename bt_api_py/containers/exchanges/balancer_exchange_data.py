@@ -3,9 +3,12 @@
 Defines API endpoints, chain enums, and path configurations for Balancer DEX.
 """
 
-import enum
+from __future__ import annotations
+
 from pathlib import Path
 from typing import Any
+
+from bt_api_py._compat import StrEnum
 
 # ── 配置加载缓存 ──────────────────────────────────────────────
 _balancer_config = None
@@ -49,7 +52,7 @@ def _get_balancer_config() -> Any | None:
     return _balancer_config
 
 
-class GqlChain(enum.StrEnum):
+class GqlChain(StrEnum):
     """Balancer supported chains for GraphQL queries."""
 
     MAINNET = "MAINNET"

@@ -2,6 +2,8 @@
 BingX 交易所注册模块
 """
 
+from __future__ import annotations
+
 from bt_api_py.balance_utils import simple_balance_handler as _bingx_balance_handler
 from bt_api_py.containers.exchanges.bingx_exchange_data import BingXExchangeDataSpot
 from bt_api_py.feeds.live_bingx.spot import BingXRequestDataSpot

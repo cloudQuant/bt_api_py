@@ -1,5 +1,7 @@
 """Tests for gateway/protocol.py."""
 
+from __future__ import annotations
+
 
 class TestProtocol:
     """Tests for gateway protocol."""

@@ -1,5 +1,7 @@
 """Tests for BingXExchangeData container."""
 
+from __future__ import annotations
+
 from bt_api_py.containers.exchanges.bingx_exchange_data import BingXExchangeData
 
 

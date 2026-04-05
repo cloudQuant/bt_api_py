@@ -4,6 +4,8 @@ Balancer Spot Feed implementation.
 Provides market data access for Balancer DEX pools using GraphQL queries.
 """
 
+from __future__ import annotations
+
 from typing import Any
 
 from bt_api_py.containers.exchanges.balancer_exchange_data import (

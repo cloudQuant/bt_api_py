@@ -1,5 +1,7 @@
 """Tests for OKX account Greeks data container."""
 
+from __future__ import annotations
+
 from bt_api_py.containers.greeks.okx_account_greeks import OkxAccountGreeksData
 
 

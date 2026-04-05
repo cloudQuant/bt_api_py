@@ -4,6 +4,8 @@ All classes have been moved to the ``bt_api_py.feeds.live_hyperliquid`` package.
 Import from here continues to work so that existing code is not broken.
 """
 
+from __future__ import annotations
+
 # Re-export exchange data classes for convenience
 from bt_api_py.containers.exchanges.hyperliquid_exchange_data import (
     HyperliquidExchangeDataSpot,

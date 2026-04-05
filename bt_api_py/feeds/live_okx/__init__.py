@@ -1,4 +1,6 @@
 # Base classes
+from __future__ import annotations
+
 from bt_api_py.feeds.live_okx.account_wss_base import (
     OkxAccountWssData,
     OkxKlineWssData,

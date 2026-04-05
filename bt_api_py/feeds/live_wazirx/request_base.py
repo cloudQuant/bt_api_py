@@ -2,6 +2,8 @@
 WazirX REST API request base class – Feed pattern.
 """
 
+from __future__ import annotations
+
 import hashlib
 import hmac
 from typing import Any

@@ -3,6 +3,8 @@ Coinbase Spot trading feed implementation.
 Three-layer pattern: _get_xxx() -> get_xxx() / async_get_xxx()
 """
 
+from __future__ import annotations
+
 import uuid
 from typing import Any
 

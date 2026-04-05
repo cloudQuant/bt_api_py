@@ -3,6 +3,8 @@
 Provides correlation IDs, structured JSON logging, and integration with monitoring.
 """
 
+from __future__ import annotations
+
 import json
 import logging
 import logging.handlers
@@ -423,7 +425,7 @@ class LoggingManager:
         """Generate a new correlation ID."""
         return str(uuid.uuid4())
 
-    def with_correlation_id(self, correlation_id: str) -> "_CorrelationIdContext":
+    def with_correlation_id(self, correlation_id: str) -> _CorrelationIdContext:
         """Context manager for setting correlation ID."""
         return _CorrelationIdContext(correlation_id)
 
@@ -435,7 +437,7 @@ class _CorrelationIdContext:
         self.correlation_id = correlation_id
         self.token: Token[str | None] | None = None
 
-    def __enter__(self) -> "_CorrelationIdContext":
+    def __enter__(self) -> _CorrelationIdContext:
         self.token = correlation_id_var.set(self.correlation_id)
         return self
 

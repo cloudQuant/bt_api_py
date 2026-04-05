@@ -6,6 +6,8 @@ IB Web API 分为两大组件:
   - Account Management API (/gw/api/v1 端点): 账户管理、资金、报告
 """
 
+from __future__ import annotations
+
 from typing import Any
 
 import yaml

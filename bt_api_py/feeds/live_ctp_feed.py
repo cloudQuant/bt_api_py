@@ -13,6 +13,8 @@ CTP Feed 实现
   - CTP 查询接口有流控限制: 每秒最多1次查询
 """
 
+from __future__ import annotations
+
 import os
 import time
 import warnings

@@ -1,5 +1,7 @@
 """Tests for BigONE ticker data container."""
 
+from __future__ import annotations
+
 import pytest
 
 from bt_api_py.containers.tickers.bigone_ticker import BigONERequestTickerData

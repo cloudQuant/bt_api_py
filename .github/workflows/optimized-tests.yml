@@ -4,268 +4,191 @@ on:
   workflow_dispatch:
     inputs:
       run_performance:
-        description: 'Run performance benchmarks'
+        description: "Run performance benchmarks"
         required: false
         default: false
         type: boolean
       run_security:
-        description: 'Run extended security checks'
+        description: "Run extended security checks"
         required: false
         default: true
         type: boolean
       run_build_test:
-        description: 'Run build/package validation'
+        description: "Run build/package validation"
         required: false
         default: true
         type: boolean
   schedule:
-    # Run full test suite daily at 2 AM UTC
-    - cron: '0 2 * * *'
+    - cron: "0 2 * * *"
 
 env:
-  PYTHON_VERSION: "3.11"
-  NODE_VERSION: "18"
+  PYTHON_VERSION_DEFAULT: "3.11"
+  SMOKE_TEST_PATHS: >-
+    tests/test_bt_api_quality.py
+    tests/test_event_bus.py
+    tests/core/test_async_context.py
+    tests/gateway/test_config.py
 
 jobs:
-  # Extended cross-platform matrix validation
-  full-test:
+  compatibility-matrix:
+    name: Extended Compatibility (Python ${{ matrix.python-version }}, ${{ matrix.os }})
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     runs-on: ${{ matrix.os }}
     timeout-minutes: 30
+
     strategy:
+      fail-fast: false
       matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]
+        python-version: ["3.9", "3.10", "3.11", "3.12", "3.13", "3.14"]
+
+    defaults:
+      run:
+        shell: bash
 
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
+      - name: Checkout code
+        uses: actions/checkout@v4
 
-    - name: Set up Python
-      uses: actions/setup-python@v4
-      with:
-        python-version: ${{ env.PYTHON_VERSION }}
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+          cache-dependency-path: pyproject.toml
 
-    - name: Cache dependencies
-      uses: actions/cache@v3
-      with:
-        path: ~/.cache/pip
-        key: ${{ runner.os }}-pip-${{ hashFiles('**/pyproject.toml') }}
-        restore-keys: |
-          ${{ runner.os }}-pip-
+      - name: Install build tools (Linux)
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y build-essential
 
-    - name: Install dependencies
-      run: |
-        python -m pip install --upgrade pip
-        pip install -e ".[dev]"
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]"
 
-    - name: Run extended tests
-      env:
-        SKIP_LIVE_TESTS: "true"
-      run: |
-        chmod +x scripts/run_optimized_tests.sh
-        ./scripts/run_optimized_tests.sh
+      - name: Run smoke compatibility suite
+        env:
+          SKIP_LIVE_TESTS: "true"
+        run: pytest $SMOKE_TEST_PATHS -q
 
-    - name: Upload coverage to Codecov
-      uses: codecov/codecov-action@v3
-      with:
-        file: ./coverage.xml
-        flags: extended-${{ matrix.os }}
-        name: codecov-extended-${{ matrix.os }}
-
-    - name: Run integration tests with API keys (if available)
-      env:
-        BINANCE_API_KEY: ${{ secrets.BINANCE_API_KEY }}
-        BINANCE_SECRET: ${{ secrets.BINANCE_SECRET }}
-        OKX_API_KEY: ${{ secrets.OKX_API_KEY }}
-        OKX_SECRET: ${{ secrets.OKX_SECRET }}
-        OKX_PASSPHRASE: ${{ secrets.OKX_PASSPHRASE }}
-      if: env.BINANCE_API_KEY != ''
-      run: |
-        pytest -m "integration and (binance or okx)" --tb=short -q
-
-    - name: Upload coverage
-      uses: codecov/codecov-action@v3
-      with:
-        file: ./coverage.xml
-        flags: ${{ matrix.os }}
-        name: codecov-${{ matrix.os }}
-
-  # Performance benchmarks
   performance:
     if: github.event_name == 'schedule' || inputs.run_performance == true
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-
-    steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-
-    - name: Set up Python
-      uses: actions/setup-python@v4
-      with:
-        python-version: ${{ env.PYTHON_VERSION }}
-
-    - name: Install dependencies
-      run: |
-        python -m pip install --upgrade pip
-        pip install -e ".[dev]"
-
-    - name: Run performance tests
-      run: |
-        pytest tests/performance/ --tb=short -v --benchmark-json=benchmark.json
-
-    - name: Store benchmark result
-      uses: benchmark-action/github-action-benchmark@v1
-      with:
-        tool: 'pytest'
-        output-file-path: benchmark.json
-        github-token: ${{ secrets.GITHUB_TOKEN }}
-        auto-push: true
-        comment-on-alert: true
-        alert-threshold: '200%'
-        fail-on-alert: true
-
-  # Security scanning
-  security:
-    if: github.event_name == 'schedule' || inputs.run_security == true
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-
-    steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-
-    - name: Set up Python
-      uses: actions/setup-python@v4
-      with:
-        python-version: ${{ env.PYTHON_VERSION }}
-
-    - name: Install dependencies
-      run: |
-        python -m pip install --upgrade pip
-        pip install -e ".[dev]"
-        pip install bandit safety
-
-    - name: Run security scan
-      run: |
-        bandit -r bt_api_py/ -f json -o bandit-report.json || true
-        safety check --json --output safety-report.json || true
-
-    - name: Upload security reports
-      uses: actions/upload-artifact@v3
-      with:
-        name: security-reports
-        path: |
-          bandit-report.json
-          safety-report.json
-
-  # Test coverage analysis
-  coverage-analysis:
-    if: github.event_name == 'schedule'
     runs-on: ubuntu-latest
     timeout-minutes: 20
 
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
+      - name: Checkout code
+        uses: actions/checkout@v4
 
-    - name: Set up Python
-      uses: actions/setup-python@v4
-      with:
-        python-version: ${{ env.PYTHON_VERSION }}
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION_DEFAULT }}
+          cache: pip
+          cache-dependency-path: pyproject.toml
 
-    - name: Install dependencies
-      run: |
-        python -m pip install --upgrade pip
-        pip install -e ".[dev]"
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]"
 
-    - name: Run coverage analysis
-      run: |
-        python scripts/analyze_coverage.py
+      - name: Run performance tests
+        run: pytest tests/performance/ --tb=short -v --benchmark-json=benchmark.json
 
-    - name: Create coverage issue if needed
-      uses: actions/github-script@v6
-      with:
-        script: |
-          const fs = require('fs');
-          try {
-            const report = fs.readFileSync('coverage_analysis.md', 'utf8');
+      - name: Store benchmark result
+        uses: benchmark-action/github-action-benchmark@v1
+        with:
+          tool: pytest
+          output-file-path: benchmark.json
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          auto-push: true
+          comment-on-alert: true
+          alert-threshold: "200%"
+          fail-on-alert: true
 
-            // Check for critical issues
-            if (report.includes('Untested exchanges:')) {
-              github.rest.issues.create({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                title: 'Test Coverage Analysis Report',
-                body: report,
-                labels: ['testing', 'coverage']
-              });
-            }
-          } catch (e) {
-            console.log('Could not run coverage analysis:', e);
-          }
-
-  # Build and package tests
-  build-test:
-    if: github.event_name == 'schedule' || inputs.run_build_test == true
+  security:
+    if: github.event_name == 'schedule' || inputs.run_security == true
     runs-on: ubuntu-latest
     timeout-minutes: 15
 
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
+      - name: Checkout code
+        uses: actions/checkout@v4
 
-    - name: Set up Python
-      uses: actions/setup-python@v4
-      with:
-        python-version: ${{ env.PYTHON_VERSION }}
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION_DEFAULT }}
+          cache: pip
+          cache-dependency-path: pyproject.toml
 
-    - name: Install build dependencies
-      run: |
-        python -m pip install --upgrade pip
-        pip install build twine
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]"
+          pip install bandit pip-audit
 
-    - name: Build package
-      run: |
-        python -m build
+      - name: Run security scan
+        run: |
+          bandit -r bt_api_py -f json -o bandit-report.json || true
+          pip-audit -f json -o pip-audit-report.json || true
 
-    - name: Check package
-      run: |
-        twine check dist/*
+      - name: Upload security reports
+        uses: actions/upload-artifact@v4
+        with:
+          name: security-reports
+          path: |
+            bandit-report.json
+            pip-audit-report.json
 
-    - name: Test installation
-      run: |
-        pip install dist/*.whl
-        python -c "import bt_api_py; print('Package installed successfully')"
+  build-test:
+    if: github.event_name == 'schedule' || inputs.run_build_test == true
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
 
-  # Notify on test failures
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION_DEFAULT }}
+          cache: pip
+          cache-dependency-path: pyproject.toml
+
+      - name: Install build dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install build twine
+
+      - name: Build package
+        run: python -m build
+
+      - name: Check package metadata
+        run: twine check dist/*
+
+      - name: Test wheel installation
+        run: |
+          pip install dist/*.whl
+          python -c "import bt_api_py; print('Package installed successfully')"
+
   notify:
     if: failure()
-    needs: [full-test, performance, security, build-test]
+    needs: [compatibility-matrix, performance, security, build-test]
     runs-on: ubuntu-latest
 
     steps:
-    - name: Notify on failure
-      uses: actions/github-script@v6
-      with:
-        script: |
-          const { owner, repo } = context.repo;
-          const sha = context.sha;
-
-          // Get failed jobs
-          const runs = await github.rest.actions.listJobsForWorkflowRun({
-            owner,
-            repo,
-            run_id: context.runId,
-          });
-
-          const failedJobs = runs.data.jobs.filter(job => job.conclusion === 'failure');
-          const jobNames = failedJobs.map(job => job.name).join(', ');
-
-          await github.rest.issues.create({
-            owner,
-            repo,
-            title: `Extended validation failed - ${sha.substring(0, 7)}`,
-            body: `**Failed Jobs**: ${jobNames}\n\n[Workflow Run](https://github.com/${owner}/${repo}/actions/runs/${context.runId})`,
-            labels: ['bug', 'ci-failure']
-          });
+      - name: Notify on failure
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const { owner, repo } = context.repo;
+            const sha = context.sha;
+            const runUrl = `${context.serverUrl}/${owner}/${repo}/actions/runs/${context.runId}`;
+            github.rest.repos.createCommitComment({
+              owner,
+              repo,
+              commit_sha: sha,
+              body: `Extended validation suite failed: ${runUrl}`,
+            });

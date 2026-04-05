@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import time
 from typing import Any
 
@@ -36,7 +38,7 @@ class BybitBalanceData(BalanceData):
         self.all_data: dict[str, Any] | None = None
         self.has_been_init_data = False
 
-    def init_data(self) -> "BybitBalanceData":
+    def init_data(self) -> BybitBalanceData:
         """初始化余额数据。
 
         Returns:
@@ -362,7 +364,7 @@ class BybitSpotBalanceData(BybitBalanceData):
         """
         super().__init__(balance_info, "spot", has_been_json_encoded)
 
-    def init_data(self) -> "BybitSpotBalanceData":
+    def init_data(self) -> BybitSpotBalanceData:
         """初始化现货余额数据。
 
         Returns:
@@ -383,7 +385,7 @@ class BybitSwapBalanceData(BybitBalanceData):
         """
         super().__init__(balance_info, "swap", has_been_json_encoded)
 
-    def init_data(self) -> "BybitSwapBalanceData":
+    def init_data(self) -> BybitSwapBalanceData:
         """初始化期货余额数据。
 
         Returns:

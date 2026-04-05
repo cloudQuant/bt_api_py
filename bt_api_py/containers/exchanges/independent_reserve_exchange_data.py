@@ -6,6 +6,8 @@ Public: GET /Public/...  Private: POST /Private/...
 Symbol: primaryCurrencyCode + secondaryCurrencyCode (e.g. Xbt, Aud)
 """
 
+from __future__ import annotations
+
 import os
 from typing import Any
 

@@ -1,5 +1,7 @@
 """Tests for cache module."""
 
+from __future__ import annotations
+
 import time
 
 import pytest

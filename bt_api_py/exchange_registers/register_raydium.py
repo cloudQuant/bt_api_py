@@ -4,6 +4,8 @@ Register Raydium DEX feed, exchange data to global ExchangeRegistry.
 Import this module to complete registration.
 """
 
+from __future__ import annotations
+
 from bt_api_py.balance_utils import simple_balance_handler as _raydium_balance_handler
 from bt_api_py.containers.exchanges.raydium_exchange_data import RaydiumExchangeDataSpot
 from bt_api_py.feeds.live_raydium.spot import RaydiumRequestDataSpot

@@ -1,5 +1,7 @@
 """Tests for browser_cookies module."""
 
+from __future__ import annotations
+
 import pytest
 
 from bt_api_py.functions.browser_cookies import extract_cookie_string

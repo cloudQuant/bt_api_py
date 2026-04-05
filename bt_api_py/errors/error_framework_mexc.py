@@ -4,6 +4,8 @@ MEXC Error Translation
 Provides MEXC-specific error code translation.
 """
 
+from __future__ import annotations
+
 from bt_api_py.error import ErrorTranslator, UnifiedErrorCode
 
 

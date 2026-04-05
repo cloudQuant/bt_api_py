@@ -2,6 +2,8 @@
 CoW Swap 交易所注册模块
 """
 
+from __future__ import annotations
+
 from bt_api_py.balance_utils import simple_balance_handler as _cow_swap_balance_handler
 from bt_api_py.containers.exchanges.cow_swap_exchange_data import CowSwapExchangeDataSpot
 from bt_api_py.feeds.live_cow_swap.spot import CowSwapRequestDataSpot

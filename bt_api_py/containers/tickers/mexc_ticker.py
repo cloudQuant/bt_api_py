@@ -1,7 +1,10 @@
+from __future__ import annotations
+
 import json
 import time
-from typing import Any, Self
+from typing import Any
 
+from bt_api_py._compat import Self
 from bt_api_py.containers.tickers.ticker import TickerData
 from bt_api_py.functions.utils import from_dict_get_float, from_dict_get_string
 
@@ -29,7 +32,7 @@ class MexcTickerData(TickerData):
         self.all_data: dict[str, Any] | None = None
         self.has_been_init_data = False
 
-    def init_data(self) -> "Self":
+    def init_data(self) -> Self:
         if not self.has_been_json_encoded:
             if isinstance(self.ticker_info, str):
                 self.ticker_data = json.loads(self.ticker_info)
@@ -133,7 +136,7 @@ class MexcTickerData(TickerData):
 class MexcWssTickerData(MexcTickerData):
     """保存WebSocket ticker信息."""
 
-    def init_data(self) -> "Self":
+    def init_data(self) -> Self:
         if not self.has_been_json_encoded:
             self.ticker_data = json.loads(self.ticker_info)
             self.has_been_json_encoded = True
@@ -153,7 +156,7 @@ class MexcWssTickerData(MexcTickerData):
 class MexcRequestTickerData(MexcTickerData):
     """保存请求返回的ticker信息."""
 
-    def init_data(self) -> "Self":
+    def init_data(self) -> Self:
         if not self.has_been_json_encoded:
             if isinstance(self.ticker_info, str):
                 self.ticker_data = json.loads(self.ticker_info)

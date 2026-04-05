@@ -1,5 +1,7 @@
 """SatoshiTango Exchange Registration Module."""
 
+from __future__ import annotations
+
 from bt_api_py.balance_utils import simple_balance_handler as _satoshitango_balance_handler
 from bt_api_py.containers.exchanges.satoshitango_exchange_data import SatoshiTangoExchangeDataSpot
 from bt_api_py.feeds.live_satoshitango.spot import SatoshiTangoRequestDataSpot

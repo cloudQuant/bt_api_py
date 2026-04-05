@@ -1,4 +1,6 @@
 # import json
+from __future__ import annotations
+
 from bt_api_py.containers.markprices.binance_mark_price import (
     BinanceRequestMarkPriceData,
     BinanceWssMarkPriceData,

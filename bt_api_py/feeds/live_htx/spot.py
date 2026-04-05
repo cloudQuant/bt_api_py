@@ -1,9 +1,11 @@
 """HTX Spot Trading Feed."""
 
+from __future__ import annotations
+
 import json
-from datetime import UTC
 from typing import Any
 
+from bt_api_py._compat import UTC
 from bt_api_py.containers.accounts.htx_account import HtxSpotRequestAccountData
 from bt_api_py.containers.balances.htx_balance import HtxRequestBalanceData
 from bt_api_py.containers.bars.htx_bar import HtxRequestBarData

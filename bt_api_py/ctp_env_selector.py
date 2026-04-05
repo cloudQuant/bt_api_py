@@ -10,6 +10,8 @@ CTP SimNow 环境自动选择器
     td_front, md_front, env_name = get_ctp_fronts()
 """
 
+from __future__ import annotations
+
 import os
 from datetime import datetime, time
 

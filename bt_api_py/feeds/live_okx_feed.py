@@ -7,6 +7,8 @@ This file re-exports everything for backward compatibility.
 1. okx单币种模式下，现货下单的时候返回的订单种类并不是SPOT, 而是MARGIN, 订阅orders的时候需要制定为MARGIN
 """
 
+from __future__ import annotations
+
 from bt_api_py.feeds.live_okx.account_wss_base import (
     OkxAccountWssData,
     OkxKlineWssData,

@@ -4,6 +4,8 @@
 支持连接池复用、统一错误处理、代理配置。
 """
 
+from __future__ import annotations
+
 import asyncio
 from typing import Any, cast
 
@@ -86,7 +88,7 @@ class HttpClient:
         if proxy_url:
             self._async_kwargs["proxy"] = proxy_url
 
-    def _get_async_client(self) -> "httpx.AsyncClient":
+    def _get_async_client(self) -> httpx.AsyncClient:
         """延迟初始化异步客户端"""
         if self._async_client is None or self._async_client.is_closed:
             self._async_client = httpx.AsyncClient(**self._async_kwargs)
@@ -186,7 +188,7 @@ class HttpClient:
 
         return self._process_response(response)
 
-    def _process_response(self, response: "httpx.Response") -> dict[str, Any]:
+    def _process_response(self, response: httpx.Response) -> dict[str, Any]:
         """处理响应，统一错误转换"""
         status = response.status_code
 
@@ -211,7 +213,7 @@ class HttpClient:
         # 5xx server errors, 404/410, and non-JSON 4xx: raise
         raise self._handle_error(response)
 
-    def _handle_error(self, response: "httpx.Response") -> Exception:
+    def _handle_error(self, response: httpx.Response) -> Exception:
         """统一错误处理"""
         status = response.status_code
         try:
@@ -263,7 +265,7 @@ class HttpClient:
         task = loop.create_task(async_client.aclose())
         task.add_done_callback(self._handle_async_close_result)
 
-    def _handle_async_close_result(self, task: "asyncio.Task[None]") -> None:
+    def _handle_async_close_result(self, task: asyncio.Task[None]) -> None:
         if task.cancelled():
             return
         exc = task.exception()
@@ -279,7 +281,7 @@ class HttpClient:
         if self._async_client and not self._async_client.is_closed:
             await self._async_client.aclose()
 
-    def __enter__(self) -> "HttpClient":
+    def __enter__(self) -> HttpClient:
         return self
 
     def __exit__(
@@ -290,7 +292,7 @@ class HttpClient:
     ) -> None:
         self.close()
 
-    async def __aenter__(self) -> "HttpClient":
+    async def __aenter__(self) -> HttpClient:
         return self
 
     async def __aexit__(

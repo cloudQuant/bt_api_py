@@ -28,7 +28,7 @@ def _tcp_port_triplet_available(base_port: int, host: str = "127.0.0.1") -> bool
             sock.close()
 
 
-@dataclass(slots=True)
+@dataclass
 class GatewayConfig:
     exchange_type: str
     asset_type: str

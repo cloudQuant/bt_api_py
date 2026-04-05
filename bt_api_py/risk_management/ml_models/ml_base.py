@@ -3,6 +3,8 @@
 定义机器学习模型的基础接口和通用功能
 """
 
+from __future__ import annotations
+
 import pickle
 import time
 from abc import ABC, abstractmethod

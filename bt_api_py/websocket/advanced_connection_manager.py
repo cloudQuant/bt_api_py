@@ -3,6 +3,8 @@ Advanced WebSocket connection management with intelligent pooling, circuit break
 Production-grade implementation supporting 73+ exchanges with high reliability and performance.
 """
 
+from __future__ import annotations
+
 import asyncio
 import contextlib
 import inspect

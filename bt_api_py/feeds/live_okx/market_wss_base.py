@@ -4,6 +4,8 @@ Handles public market data channels (tickers, orderbook, kline, funding rate, ma
 and private account channels (orders, account, positions, fills, liquidation_warning, account_greeks).
 """
 
+from __future__ import annotations
+
 import base64
 import hmac
 import json

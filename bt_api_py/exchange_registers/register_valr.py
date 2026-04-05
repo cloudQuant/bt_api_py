@@ -2,6 +2,8 @@
 VALR Exchange Registration Module
 """
 
+from __future__ import annotations
+
 from bt_api_py.balance_utils import simple_balance_handler as _valr_balance_handler
 from bt_api_py.containers.exchanges.valr_exchange_data import ValrExchangeDataSpot
 from bt_api_py.feeds.live_valr.spot import ValrRequestDataSpot

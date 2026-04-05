@@ -1,5 +1,7 @@
 """Gemini Bar/Candle Data Container."""
 
+from __future__ import annotations
+
 from typing import Any
 
 from bt_api_py.containers.requestdatas.request_data import RequestData
@@ -94,7 +96,7 @@ class GeminiRequestBarData(RequestData):
             self.timestamp = data.get("timestamp")
             self.exchange_timestamp = convert_utc_timestamp(self.timestamp)
 
-    def _parse_single_bar(self, bar_data: Any) -> "GeminiRequestBarData | None":
+    def _parse_single_bar(self, bar_data: Any) -> GeminiRequestBarData | None:
         """Parse a single bar/candle.
 
         Args:

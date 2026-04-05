@@ -1,5 +1,7 @@
 """Tests for feeds/base_stream.py."""
 
+from __future__ import annotations
+
 from bt_api_py.feeds.base_stream import BaseDataStream, ConnectionState
 
 

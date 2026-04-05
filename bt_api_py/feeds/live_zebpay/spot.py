@@ -2,6 +2,8 @@
 Zebpay Spot Feed – three-layer sync / async wrappers + WSS stubs.
 """
 
+from __future__ import annotations
+
 from typing import Any
 
 from bt_api_py.containers.exchanges.zebpay_exchange_data import ZebpayExchangeDataSpot

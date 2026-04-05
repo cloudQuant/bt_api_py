@@ -1,5 +1,7 @@
 """Tests for KuCoinOrderBookData container."""
 
+from __future__ import annotations
+
 import pytest
 
 from bt_api_py.containers.orderbooks.kucoin_orderbook import KuCoinOrderBookData

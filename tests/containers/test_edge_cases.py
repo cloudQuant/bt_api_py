@@ -3,6 +3,8 @@ Edge case and boundary value tests for data containers
 Target: 50+ tests for edge cases
 """
 
+from __future__ import annotations
+
 import json
 
 import pytest

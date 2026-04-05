@@ -2,6 +2,8 @@
 Tests for AbstractVenueFeed protocol conformance validation
 """
 
+from __future__ import annotations
+
 import pytest
 
 from bt_api_py.feeds.abstract_feed import (

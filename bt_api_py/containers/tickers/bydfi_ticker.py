@@ -1,9 +1,12 @@
 """BYDFi Ticker Data Container."""
 
+from __future__ import annotations
+
 import json
 import time
-from typing import Any, Self
+from typing import Any
 
+from bt_api_py._compat import Self
 from bt_api_py.containers.tickers.ticker import TickerData
 from bt_api_py.containers.tickers.ticker_utils import parse_float, parse_int
 
@@ -28,7 +31,7 @@ class BYDFiRequestTickerData(TickerData):
         self.timestamp: int | None = None
         self.has_been_init_data = False
 
-    def init_data(self) -> "Self":
+    def init_data(self) -> Self:
         """Parse BYDFi ticker response."""
         if not self.has_been_json_encoded:
             self.ticker_data = json.loads(self.ticker_info)

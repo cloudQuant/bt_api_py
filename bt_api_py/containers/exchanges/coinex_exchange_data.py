@@ -6,6 +6,8 @@ Response: {"code": 0, "data": ..., "message": "OK"}
 Symbol format: BTCUSDT (base+quote, no separator)
 """
 
+from __future__ import annotations
+
 import os
 from typing import Any
 

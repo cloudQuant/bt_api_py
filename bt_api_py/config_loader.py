@@ -4,10 +4,13 @@
 支持从 YAML 文件加载交易所/场所配置，自动校验字段合法性。
 """
 
-import enum
+from __future__ import annotations
+
 from enum import unique
 from pathlib import Path
 from typing import Any
+
+from bt_api_py._compat import StrEnum
 
 try:
     from pydantic import BaseModel, Field, ValidationError, ValidationInfo, field_validator
@@ -44,14 +47,14 @@ __all__ = [
 
 
 @unique
-class VenueType(enum.StrEnum):
+class VenueType(StrEnum):
     CEX = "cex"
     DEX = "dex"
     BROKER = "broker"
 
 
 @unique
-class AuthType(enum.StrEnum):
+class AuthType(StrEnum):
     NONE = "none"
     API_KEY = "api_key"
     HMAC_SHA256 = "hmac_sha256"
@@ -64,7 +67,7 @@ class AuthType(enum.StrEnum):
 
 
 @unique
-class ConnectionType(enum.StrEnum):
+class ConnectionType(StrEnum):
     HTTP = "http"
     WEBSOCKET = "websocket"
     SPI = "spi"

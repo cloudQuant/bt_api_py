@@ -1,5 +1,7 @@
 """Tests for YobitExchangeData container."""
 
+from __future__ import annotations
+
 from bt_api_py.containers.exchanges.yobit_exchange_data import YobitExchangeData
 
 

@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from collections import ChainMap
 from itertools import chain
 

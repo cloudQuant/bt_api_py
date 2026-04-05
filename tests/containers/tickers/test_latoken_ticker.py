@@ -1,5 +1,7 @@
 """Tests for LatokenTickerData container."""
 
+from __future__ import annotations
+
 import json
 
 from bt_api_py.containers.tickers.latoken_ticker import (

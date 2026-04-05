@@ -5,6 +5,8 @@ GMX is a decentralized perpetual exchange. This implementation uses the
 REST API for oracle/pricing data on supported chains.
 """
 
+from __future__ import annotations
+
 from typing import Any
 
 from bt_api_py.containers.exchanges.gmx_exchange_data import (

@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import base64
 import hashlib
 import hmac
@@ -12,7 +14,13 @@ from email.mime.text import MIMEText
 from pathlib import Path
 from typing import Any
 
-import aiosmtplib
+try:
+    import aiosmtplib
+
+    AIOSMTPLIB_AVAILABLE = True
+except ImportError:  # pragma: no cover - optional dependency
+    aiosmtplib = None  # type: ignore[assignment]
+    AIOSMTPLIB_AVAILABLE = False
 
 from bt_api_py.functions.async_base import AsyncBase
 from bt_api_py.logging_factory import get_logger
@@ -89,6 +97,10 @@ class EmailManagerAsync(AsyncBase):
                     "Content-Disposition", "attachment", filename=resolved_path.name
                 )
                 msg_root.attach(part_attach1)
+        if not AIOSMTPLIB_AVAILABLE:
+            raise ImportError(
+                "aiosmtplib is required for email sending. Install with: pip install aiosmtplib"
+            )
         try:
             async with aiosmtplib.SMTP(
                 hostname=sender.get("smtp_server"),

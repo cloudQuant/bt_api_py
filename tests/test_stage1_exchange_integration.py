@@ -8,6 +8,8 @@ Stage 1 Tests: Exchange Integration
   5. 协议合规性 + 向后兼容
 """
 
+from __future__ import annotations
+
 import pytest
 
 from bt_api_py.config_loader import ConnectionType, VenueType, load_exchange_config

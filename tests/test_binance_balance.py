@@ -1,5 +1,7 @@
 """Tests for Binance balance module."""
 
+from __future__ import annotations
+
 import pytest
 
 from bt_api_py.containers.balances.binance_balance import (

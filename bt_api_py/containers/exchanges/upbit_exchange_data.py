@@ -5,6 +5,8 @@ Kline uses separate endpoints for minutes/days/weeks/months.
 Auth: JWT (HS256) with SHA512 query hash.
 """
 
+from __future__ import annotations
+
 import os
 from typing import Any
 

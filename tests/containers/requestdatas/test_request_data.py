@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from bt_api_py.containers.orders.binance_order import BinanceRequestOrderData
 from bt_api_py.containers.requestdatas.request_data import RequestData
 

@@ -1,5 +1,7 @@
 """Regression tests for analysis modules that previously executed at import time."""
 
+from __future__ import annotations
+
 import importlib
 
 

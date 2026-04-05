@@ -3,6 +3,8 @@ MEXC REST API request base class.
 Handles authentication, signing, and all REST API methods.
 """
 
+from __future__ import annotations
+
 import hmac
 import time
 from typing import Any

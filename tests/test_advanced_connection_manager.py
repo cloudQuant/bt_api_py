@@ -1,5 +1,7 @@
 """Tests for advanced_connection_manager module - pure local logic."""
 
+from __future__ import annotations
+
 import time
 
 import pytest

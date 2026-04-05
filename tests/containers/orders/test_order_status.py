@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import pytest
 
 from bt_api_py.containers.orders.order import OrderStatus  # Import your OrderStatus class here

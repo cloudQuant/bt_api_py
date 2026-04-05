@@ -2,6 +2,8 @@
 OKX Market Trade Data Container - Public trade data from trades/trades-all channels.
 """
 
+from __future__ import annotations
+
 import json
 import time
 

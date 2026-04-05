@@ -5,6 +5,8 @@ Thin sync/async wrappers that delegate to _get_xxx methods in request_base.
 Mirrors HitBTC spot.py since BeQuant uses the same V3 API.
 """
 
+from __future__ import annotations
+
 from bt_api_py.feeds.live_bequant.request_base import BeQuantRequestData
 
 

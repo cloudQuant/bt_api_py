@@ -3,6 +3,8 @@
 提供VaR、CVaR、波动率、相关性、压力测试等风险指标计算
 """
 
+from __future__ import annotations
+
 import math
 import statistics
 from decimal import Decimal

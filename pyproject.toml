@@ -8,7 +8,7 @@ dynamic = ["version"]
 description = "Implement backtesting and trading of quantitative strategy"
 readme = "README.md"
 license = {text = "MIT"}
-requires-python = ">=3.11"
+requires-python = ">=3.9"
 authors = [
     {name = "cloudQuant", email = "yunjinqi@gmail.com"},
 ]
@@ -27,12 +27,17 @@ dependencies = [
     "pyzmq>=26.0.0",
     "pydantic>=2.0.0",
     "websockets>=12.0",
+    "typing-extensions>=4.8.0",
+    "eval-type-backport>=0.2.0; python_version < '3.10'",
 ]
 classifiers = [
     "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
     "Programming Language :: Python :: Implementation :: CPython",
     "License :: OSI Approved :: MIT License",
     "Operating System :: POSIX :: Linux",
@@ -118,7 +123,7 @@ directory = "htmlcov"
 
 [tool.ruff]
 line-length = 100
-target-version = "py311"
+target-version = "py39"
 exclude = [
     ".git",
     "__pycache__",
@@ -166,10 +171,13 @@ ignore = [
     "PERF401",  # list comprehension: fix gradually
     "PERF402",  # list copy: fix gradually
     "PERF403",  # dict comprehension: fix gradually
+    "PERF203",  # existing loop try/except patterns accepted for now
     "S113",  # requests timeout: fix gradually (add timeout= to all requests)
     "S108",  # /tmp path: dev defaults acceptable
     "S301",  # pickle: ML model serialization, fix with joblib/safe format
     "S506",  # yaml.FullLoader: config files from trusted source
+    "TC001",  # deferred annotations make many runtime imports appear type-only
+    "TC003",  # gradual cleanup for stdlib type-only imports
 ]
 
 [tool.ruff.lint.per-file-ignores]
@@ -185,7 +193,7 @@ quote-style = "double"
 indent-style = "space"
 
 [tool.mypy]
-python_version = "3.11"
+python_version = "3.9"
 explicit_package_bases = true
 warn_return_any = true
 warn_unused_configs = true

@@ -1,5 +1,7 @@
 """Tests for ml_base module - BaseMLModel, RiskPredictionResult, ModelMetrics, ModelComparator."""
 
+from __future__ import annotations
+
 import tempfile
 from pathlib import Path
 

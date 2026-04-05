@@ -3,6 +3,8 @@
 Handles ticker/price data from Balancer's GraphQL API.
 """
 
+from __future__ import annotations
+
 import json
 import time
 from typing import Any
@@ -55,7 +57,7 @@ class BalancerRequestTickerData(TickerData):
         self.market_cap: float | None = None
         self.liquidity: float | None = None
 
-    def init_data(self) -> "BalancerRequestTickerData":
+    def init_data(self) -> BalancerRequestTickerData:
         """Parse Balancer ticker response from GraphQL API."""
         if not self.has_been_json_encoded:
             self.ticker_data = json.loads(self.ticker_info)
@@ -171,7 +173,7 @@ class BalancerWssTickerData(BalancerRequestTickerData):
     support is added via third-party services.
     """
 
-    def init_data(self) -> "BalancerRequestTickerData":
+    def init_data(self) -> BalancerRequestTickerData:
         """Parse Balancer WebSocket ticker response."""
         if not self.has_been_json_encoded:
             self.ticker_data = json.loads(self.ticker_info)

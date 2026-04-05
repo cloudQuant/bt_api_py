@@ -1,5 +1,7 @@
 """Tests for HtxRequestBarData container."""
 
+from __future__ import annotations
+
 from bt_api_py.containers.bars.htx_bar import HtxRequestBarData
 
 

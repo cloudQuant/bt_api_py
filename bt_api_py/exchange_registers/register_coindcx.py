@@ -2,6 +2,8 @@
 CoinDCX 交易所注册模块
 """
 
+from __future__ import annotations
+
 from bt_api_py.balance_utils import simple_balance_handler as _coindcx_balance_handler
 from bt_api_py.containers.exchanges.coindcx_exchange_data import CoinDCXExchangeDataSpot
 from bt_api_py.feeds.live_coindcx.spot import CoinDCXRequestDataSpot

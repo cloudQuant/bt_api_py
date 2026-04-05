@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
-from typing import Any, Self
+from typing import Any
+
+from bt_api_py._compat import Self
 
 
 class LiquidationData:

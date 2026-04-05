@@ -5,12 +5,15 @@ Capability 机制 — 声明场所支持的功能
 上层调用前可通过 require_capability() 检查，缺失能力时抛出 NotSupportedError。
 """
 
-import enum
+from __future__ import annotations
+
 from enum import unique
+
+from bt_api_py._compat import StrEnum
 
 
 @unique
-class Capability(enum.StrEnum):
+class Capability(StrEnum):
     """场所能力枚举 — 覆盖所有可能的交易功能"""
 
     # ── 行情 ──

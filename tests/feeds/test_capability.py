@@ -1,5 +1,7 @@
 """Tests for feeds/capability.py."""
 
+from __future__ import annotations
+
 from bt_api_py.feeds.capability import Capability
 
 

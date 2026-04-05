@@ -1,5 +1,7 @@
 """Tests for Bitvavo ticker data container."""
 
+from __future__ import annotations
+
 import pytest
 
 from bt_api_py.containers.tickers.bitvavo_ticker import BitvavoRequestTickerData

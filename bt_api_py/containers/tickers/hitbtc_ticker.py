@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import json
 import time
 from typing import Any
@@ -49,7 +51,7 @@ class HitBtcRequestTickerData(TickerData):
         self.all_data: dict[str, Any] | None = None
         self.has_been_init_data = False
 
-    def init_data(self) -> "HitBtcRequestTickerData":
+    def init_data(self) -> HitBtcRequestTickerData:
         if self.has_been_init_data:
             return self
 

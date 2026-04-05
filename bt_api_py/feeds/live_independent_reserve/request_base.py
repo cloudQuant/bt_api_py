@@ -7,6 +7,8 @@ Public: GET /Public/...  Private: POST /Private/...
 Symbol: primaryCurrencyCode + secondaryCurrencyCode (e.g. Xbt, Aud)
 """
 
+from __future__ import annotations
+
 import hashlib
 import hmac
 import time

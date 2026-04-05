@@ -4,6 +4,8 @@ ELK stack integration for bt_api_py.
 Provides Elasticsearch, Logstash, and Kibana integration for log aggregation and analysis.
 """
 
+from __future__ import annotations
+
 import asyncio
 import logging
 from datetime import datetime

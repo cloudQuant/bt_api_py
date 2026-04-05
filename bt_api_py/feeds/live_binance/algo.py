@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from typing import Any
 
 from bt_api_py.containers.exchanges.binance_exchange_data import BinanceExchangeDataAlgo

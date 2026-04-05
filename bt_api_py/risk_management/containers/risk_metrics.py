@@ -3,6 +3,8 @@
 包含各种风险评估指标、市场风险指标、信用风险指标等
 """
 
+from __future__ import annotations
+
 import time
 from dataclasses import dataclass
 from decimal import Decimal

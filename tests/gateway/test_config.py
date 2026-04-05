@@ -1,5 +1,7 @@
 """Tests for gateway/config.py."""
 
+from __future__ import annotations
+
 import sys
 
 import pytest

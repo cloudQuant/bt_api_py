@@ -4,6 +4,8 @@ This module provides property-based tests to verify invariants and properties
 of the trading API across different exchanges and scenarios.
 """
 
+from __future__ import annotations
+
 import pytest
 from hypothesis import HealthCheck, assume, given, settings
 from hypothesis import strategies as st
@@ -156,12 +158,8 @@ class PropertyBasedTests:
 
         # Create orderbook structure
         orderbook = {
-            "bids": list(
-                zip(prices[: len(prices) // 2], volumes[: len(volumes) // 2], strict=False)
-            ),
-            "asks": list(
-                zip(prices[len(prices) // 2 :], volumes[len(volumes) // 2 :], strict=False)
-            ),
+            "bids": list(zip(prices[: len(prices) // 2], volumes[: len(volumes) // 2])),
+            "asks": list(zip(prices[len(prices) // 2 :], volumes[len(volumes) // 2 :])),
         }
 
         # Property: Best bid should be lower than best ask (if both exist)

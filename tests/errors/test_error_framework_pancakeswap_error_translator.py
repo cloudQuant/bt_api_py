@@ -1,5 +1,7 @@
 """Tests for ErrorFrameworkPancakeswapErrorTranslator."""
 
+from __future__ import annotations
+
 from bt_api_py.errors.error_framework_pancakeswap_error_translator import PancakeSwapErrorTranslator
 
 

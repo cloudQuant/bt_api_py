@@ -1,5 +1,7 @@
 """Tests for IB bar container."""
 
+from __future__ import annotations
+
 from bt_api_py.containers.ib.ib_bar import IbBarData
 
 

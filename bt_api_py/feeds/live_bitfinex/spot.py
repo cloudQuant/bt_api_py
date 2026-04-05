@@ -3,6 +3,8 @@ Bitfinex Spot trading feed implementation.
 Three-layer pattern: _get_xxx() -> get_xxx() / async_get_xxx()
 """
 
+from __future__ import annotations
+
 from typing import Any
 
 from bt_api_py.containers.exchanges.bitfinex_exchange_data import BitfinexExchangeDataSpot

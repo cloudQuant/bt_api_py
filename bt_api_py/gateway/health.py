@@ -11,15 +11,16 @@ Collects and exposes a unified health snapshot covering:
 
 from __future__ import annotations
 
-import enum
 import threading
 import time
 from collections import deque
 from dataclasses import dataclass
 from typing import Any
 
+from bt_api_py._compat import StrEnum
 
-class GatewayState(enum.StrEnum):
+
+class GatewayState(StrEnum):
     STARTING = "starting"
     RUNNING = "running"
     STOPPING = "stopping"
@@ -27,7 +28,7 @@ class GatewayState(enum.StrEnum):
     ERROR = "error"
 
 
-class ConnectionState(enum.StrEnum):
+class ConnectionState(StrEnum):
     DISCONNECTED = "disconnected"
     CONNECTING = "connecting"
     CONNECTED = "connected"

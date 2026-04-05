@@ -1,5 +1,7 @@
 """Tests for BTCTurkRequestTickerData container."""
 
+from __future__ import annotations
+
 import pytest
 
 from bt_api_py.containers.tickers.btcturk_ticker import BTCTurkRequestTickerData

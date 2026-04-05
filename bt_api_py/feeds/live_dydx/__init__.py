@@ -9,6 +9,8 @@ This package provides the dYdX exchange integration, supporting:
 dYdX is a decentralized derivatives exchange built on dYdX Chain.
 """
 
+from __future__ import annotations
+
 from .request_base import DydxRequestData
 from .spot import DydxRequestDataSpot
 

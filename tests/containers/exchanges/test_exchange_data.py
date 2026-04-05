@@ -1,5 +1,7 @@
 """Tests for ExchangeData base class."""
 
+from __future__ import annotations
+
 import pytest
 
 from bt_api_py.containers.exchanges.exchange_data import ExchangeData

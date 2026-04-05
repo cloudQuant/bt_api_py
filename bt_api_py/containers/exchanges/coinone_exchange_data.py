@@ -6,6 +6,8 @@ Response: {"result": "success", "errorCode": "0", ...}
 Symbol: KRW-BTC  (quote-target, dash separated)
 """
 
+from __future__ import annotations
+
 import os
 from typing import Any
 

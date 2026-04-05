@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import time
 from typing import Any
 
@@ -42,7 +44,7 @@ class BybitOrderBookData(OrderBookData):
         self.all_data: dict[str, Any] | None = None
         self.has_been_init_data = False
 
-    def init_data(self) -> "BybitOrderBookData":
+    def init_data(self) -> BybitOrderBookData:
         """初始化并解析订单簿数据.
 
         将原始订单簿数据解析为结构化的买单和卖单列表。

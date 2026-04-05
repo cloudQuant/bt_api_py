@@ -1,5 +1,7 @@
 """KuCoin Exchange Data Configuration."""
 
+from __future__ import annotations
+
 from typing import Any
 
 from bt_api_py.config_loader import get_exchange_config_path, load_exchange_config

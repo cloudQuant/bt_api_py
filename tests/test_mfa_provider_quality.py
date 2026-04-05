@@ -1,6 +1,11 @@
+from __future__ import annotations
+
 import base64
 
 import pytest
+
+pytest.importorskip("cryptography", reason="cryptography package required for WebAuthn tests")
+pytest.importorskip("pyotp", reason="pyotp package required for TOTP tests")
 
 from bt_api_py.security_compliance.auth.mfa_provider import (
     MFAConfig,

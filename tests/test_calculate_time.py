@@ -1,9 +1,12 @@
 """Tests for calculate_time module."""
 
-from datetime import UTC, datetime
+from __future__ import annotations
+
+from datetime import datetime
 
 import pytest
 
+from bt_api_py._compat import UTC
 from bt_api_py.functions.calculate_time import (
     convert_utc_local_datetime,
     datetime2str,

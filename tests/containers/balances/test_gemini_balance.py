@@ -1,5 +1,7 @@
 """Tests for Gemini balance containers."""
 
+from __future__ import annotations
+
 from bt_api_py.containers.balances.gemini_balance import (
     GeminiRequestBalanceData,
     GeminiSpotWssBalanceData,

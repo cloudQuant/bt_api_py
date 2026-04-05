@@ -1,5 +1,7 @@
 """Tests for KrakenExchangeData container."""
 
+from __future__ import annotations
+
 from bt_api_py.containers.exchanges.kraken_exchange_data import KrakenExchangeData
 
 

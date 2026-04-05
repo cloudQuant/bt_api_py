@@ -3,6 +3,8 @@ CTP 账户数据容器
 对应 CTP 的 CThostFtdcTradingAccountField 结构体
 """
 
+from __future__ import annotations
+
 from bt_api_py.containers.accounts.account import AccountData
 from bt_api_py.functions.utils import from_dict_get_float, from_dict_get_string
 

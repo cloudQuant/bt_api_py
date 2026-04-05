@@ -4,6 +4,8 @@ Uniswap 交易所注册模块
 导入此模块即可完成注册
 """
 
+from __future__ import annotations
+
 from bt_api_py.containers.exchanges.uniswap_exchange_data import UniswapExchangeDataSpot
 from bt_api_py.feeds.live_uniswap.spot import UniswapRequestDataSpot
 from bt_api_py.registry import ExchangeRegistry

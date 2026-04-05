@@ -1,5 +1,7 @@
 """Tests for CurveRequestTickerData container."""
 
+from __future__ import annotations
+
 import pytest
 
 from bt_api_py.containers.tickers.curve_ticker import CurveRequestTickerData

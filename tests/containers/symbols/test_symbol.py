@@ -1,5 +1,7 @@
 """Tests for SymbolData base container."""
 
+from __future__ import annotations
+
 import pytest
 
 from bt_api_py.containers.symbols.symbol import SymbolData

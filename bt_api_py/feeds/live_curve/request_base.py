@@ -5,6 +5,8 @@ Curve is a DEX that uses REST API for querying pool data.
 Trading is done on-chain through smart contracts.
 """
 
+from __future__ import annotations
+
 import time
 from typing import Any
 

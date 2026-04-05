@@ -1,5 +1,7 @@
 """Tests for HtxExchangeData container."""
 
+from __future__ import annotations
+
 import json
 
 from bt_api_py.containers.exchanges.htx_exchange_data import HtxExchangeData

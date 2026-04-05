@@ -1,5 +1,7 @@
 """Tests for IB contract container."""
 
+from __future__ import annotations
+
 from bt_api_py.containers.ib.ib_contract import IbContract
 
 

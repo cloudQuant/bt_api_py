@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import json
 import time
 from typing import Any
@@ -35,7 +37,7 @@ class BitfinexSpotRequestAccountData(AccountData):
         self.all_data: dict[str, Any] | None = None
         self.has_been_init_data = False
 
-    def init_data(self) -> "BitfinexSpotRequestAccountData":
+    def init_data(self) -> BitfinexSpotRequestAccountData:
         """Initialize and parse the account data.
 
         Returns:

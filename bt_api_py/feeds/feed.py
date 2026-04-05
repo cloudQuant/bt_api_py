@@ -1,5 +1,7 @@
 """feed类, 用于处理数据、获取数据、向交易所传递数据"""
 
+from __future__ import annotations
+
 import time as _time
 from collections.abc import Mapping
 from typing import Any

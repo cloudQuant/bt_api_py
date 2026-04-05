@@ -2,6 +2,8 @@
 Provides standardized ticker data structure for Ripio exchange.
 """
 
+from __future__ import annotations
+
 import time
 from typing import Any
 

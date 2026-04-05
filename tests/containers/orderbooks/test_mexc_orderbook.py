@@ -1,5 +1,7 @@
 """Tests for MexcOrderBookData container."""
 
+from __future__ import annotations
+
 from bt_api_py.containers.orderbooks.mexc_orderbook import MexcOrderBookData
 
 

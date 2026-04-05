@@ -1,5 +1,7 @@
 """Unit tests for ExchangeRegistry — both global and instance-level usage."""
 
+from __future__ import annotations
+
 import pytest
 
 from bt_api_py.exceptions import ExchangeNotFoundError

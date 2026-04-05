@@ -2,6 +2,8 @@
 Zebpay Exchange Registration Module
 """
 
+from __future__ import annotations
+
 from typing import Any
 
 from bt_api_py.balance_utils import simple_balance_handler as _zebpay_balance_handler

@@ -3,6 +3,8 @@
 Provides REST API URLs, path mappings, and configuration for MEXC exchange.
 """
 
+from __future__ import annotations
+
 import json
 import os
 from typing import Any

@@ -1,5 +1,7 @@
 """Tests for Bitget balance containers."""
 
+from __future__ import annotations
+
 from bt_api_py.containers.balances.bitget_balance import (
     BitgetBalanceData,
     BitgetRequestBalanceData,

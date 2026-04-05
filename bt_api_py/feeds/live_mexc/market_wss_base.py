@@ -4,6 +4,8 @@ MEXC Market WebSocket Base Class
 Provides base functionality for MEXC market data WebSocket connections.
 """
 
+from __future__ import annotations
+
 import json
 import threading
 import time

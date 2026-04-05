@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import json
 import time
 from typing import Any
@@ -53,7 +55,7 @@ class BinanceSpotRequestAccountData(AccountData):
         self.all_data: dict[str, Any] | None = None
         self.has_been_init_data = False
 
-    def init_data(self) -> "BinanceSpotRequestAccountData":
+    def init_data(self) -> BinanceSpotRequestAccountData:
         """初始化账户数据。
 
         Returns:
@@ -414,7 +416,7 @@ class BinanceSwapRequestAccountData(AccountData):
         self.all_data: dict[str, Any] | None = None
         self.has_been_init_data = False
 
-    def init_data(self) -> "BinanceSwapRequestAccountData":
+    def init_data(self) -> BinanceSwapRequestAccountData:
         """初始化账户数据。
 
         Returns:
@@ -765,7 +767,7 @@ class BinanceSwapWssAccountData(AccountData):
         self.all_data: dict[str, Any] | None = None
         self.has_been_init_data = False
 
-    def init_data(self) -> "BinanceSwapWssAccountData":
+    def init_data(self) -> BinanceSwapWssAccountData:
         """初始化账户数据。
 
         Returns:
@@ -1077,7 +1079,7 @@ class BinanceSpotWssAccountData(AccountData):
         self.all_data: dict[str, Any] | None = None
         self.has_been_init_data = False
 
-    def init_data(self) -> "BinanceSpotWssAccountData":
+    def init_data(self) -> BinanceSpotWssAccountData:
         """初始化账户数据。
 
         Returns:

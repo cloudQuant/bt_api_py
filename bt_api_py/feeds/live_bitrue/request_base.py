@@ -7,6 +7,8 @@ Header: X-MBX-APIKEY
 Symbol format: BTCUSDT (concatenated uppercase).
 """
 
+from __future__ import annotations
+
 import hashlib
 import hmac
 import time

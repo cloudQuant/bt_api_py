@@ -1,5 +1,7 @@
 """Tests for UpbitTranslator."""
 
+from __future__ import annotations
+
 from bt_api_py.errors.upbit_translator import UpbitErrorTranslator
 
 

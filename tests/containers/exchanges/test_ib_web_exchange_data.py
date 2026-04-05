@@ -5,6 +5,8 @@ Tests for IB Web API Exchange Data
 验证所有配置数据均从 ib.yaml 加载, Python 代码中不残留硬编码值.
 """
 
+from __future__ import annotations
+
 import os
 
 import pytest

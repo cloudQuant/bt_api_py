@@ -1,5 +1,7 @@
 """SatoshiTango Ticker Data Container."""
 
+from __future__ import annotations
+
 import json
 import time
 from typing import Any
@@ -37,7 +39,7 @@ class SatoshiTangoRequestTickerData(TickerData):
             ticker_info if has_been_json_encoded and isinstance(ticker_info, dict) else None
         )
 
-    def init_data(self) -> "SatoshiTangoRequestTickerData":
+    def init_data(self) -> SatoshiTangoRequestTickerData:
         """Parse SatoshiTango ticker response."""
         if not self.has_been_json_encoded:
             if isinstance(self.ticker_info, str):

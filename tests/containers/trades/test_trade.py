@@ -1,5 +1,7 @@
 """Tests for TradeData base class."""
 
+from __future__ import annotations
+
 import pytest
 
 from bt_api_py.containers.trades.trade import TradeData

@@ -1,5 +1,7 @@
 """Bitget Balance Data Container."""
 
+from __future__ import annotations
+
 import json
 import time
 from typing import Any
@@ -45,7 +47,7 @@ class BitgetBalanceData(BalanceData):
         self.all_data: dict[str, Any] | None = None
         self.has_been_init_data = False
 
-    def init_data(self) -> "BitgetBalanceData":
+    def init_data(self) -> BitgetBalanceData:
         """Initialize and parse the balance data.
 
         Returns:
@@ -246,7 +248,7 @@ class BitgetBalanceData(BalanceData):
 class BitgetWssBalanceData(BitgetBalanceData):
     """Bitget WebSocket Balance Data."""
 
-    def init_data(self) -> "BitgetWssBalanceData":
+    def init_data(self) -> BitgetWssBalanceData:
         """Initialize WebSocket balance data.
 
         Returns:
@@ -275,7 +277,7 @@ class BitgetWssBalanceData(BitgetBalanceData):
 class BitgetRequestBalanceData(BitgetBalanceData):
     """Bitget REST API Balance Data."""
 
-    def init_data(self) -> "BitgetRequestBalanceData":
+    def init_data(self) -> BitgetRequestBalanceData:
         """Initialize REST API balance data.
 
         Returns:
@@ -331,7 +333,7 @@ class BitgetSpotWssAccountData:
         self.has_been_init_data = False
         self.has_been_json_encoded = has_been_json_encoded
 
-    def init_data(self) -> "BitgetSpotWssAccountData":
+    def init_data(self) -> BitgetSpotWssAccountData:
         """Initialize and parse account data.
 
         Returns:

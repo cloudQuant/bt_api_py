@@ -3,6 +3,8 @@
 GMX is a decentralized perpetual exchange.
 """
 
+from __future__ import annotations
+
 import json
 import time
 from typing import Any
@@ -45,7 +47,7 @@ class GmxRequestTickerData(TickerData):
         self.low_24h: float | None = None
         self.has_been_init_data = False
 
-    def init_data(self) -> "GmxRequestTickerData":
+    def init_data(self) -> GmxRequestTickerData:
         """Parse GMX ticker response.
 
         GMX ticker response format:

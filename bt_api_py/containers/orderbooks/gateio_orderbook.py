@@ -1,5 +1,7 @@
 """Gate.io Order Book Data Container."""
 
+from __future__ import annotations
+
 import json
 import time
 from typing import Any
@@ -44,7 +46,7 @@ class GateioOrderBookData(OrderBookData):
         self.all_data: dict[str, Any] | None = None
         self.has_been_init_data = False
 
-    def init_data(self) -> "GateioOrderBookData":
+    def init_data(self) -> GateioOrderBookData:
         """初始化并解析订单簿数据.
 
         Returns:
@@ -266,7 +268,7 @@ class GateioOrderBookData(OrderBookData):
 class GateioRequestOrderBookData(GateioOrderBookData):
     """Gate.io REST API订单簿数据容器."""
 
-    def init_data(self) -> "GateioRequestOrderBookData":
+    def init_data(self) -> GateioRequestOrderBookData:
         """初始化并解析REST API订单簿数据.
 
         Returns:
@@ -313,7 +315,7 @@ class GateioRequestOrderBookData(GateioOrderBookData):
 class GateioWssOrderBookData(GateioOrderBookData):
     """Gate.io WebSocket订单簿数据容器（预留实现）."""
 
-    def init_data(self) -> "GateioWssOrderBookData":
+    def init_data(self) -> GateioWssOrderBookData:
         """初始化并解析WebSocket订单簿数据.
 
         Returns:

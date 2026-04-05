@@ -1,5 +1,7 @@
 """日志管理模块 — 支持 spdlog 高性能日志和标准库 logging 回退"""
 
+from __future__ import annotations
+
 import logging
 from pathlib import Path
 from typing import Any

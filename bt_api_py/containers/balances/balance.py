@@ -1,7 +1,8 @@
 from __future__ import annotations
 
-from typing import Any, Self
+from typing import Any
 
+from bt_api_py._compat import Self
 from bt_api_py.containers.auto_init_mixin import AutoInitMixin
 
 

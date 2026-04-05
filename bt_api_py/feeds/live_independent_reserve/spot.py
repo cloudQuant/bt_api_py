@@ -2,6 +2,8 @@
 Independent Reserve Spot Feed – three-layer sync / async wrappers.
 """
 
+from __future__ import annotations
+
 from typing import Any
 
 from bt_api_py.feeds.live_independent_reserve.request_base import IndependentReserveRequestData

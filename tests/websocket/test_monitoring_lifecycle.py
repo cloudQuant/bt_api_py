@@ -1,5 +1,7 @@
 """Regression tests for websocket monitoring lifecycle and alert state handling."""
 
+from __future__ import annotations
+
 import pytest
 
 pytest.importorskip("psutil")

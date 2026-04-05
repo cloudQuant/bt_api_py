@@ -3,6 +3,8 @@ Bitfinex REST API request base class.
 Handles authentication (HMAC SHA384), signing, and all REST API methods.
 """
 
+from __future__ import annotations
+
 import hashlib
 import hmac
 import json

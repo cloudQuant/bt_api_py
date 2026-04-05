@@ -1,5 +1,7 @@
 """Tests for BitinkaRequestTickerData container."""
 
+from __future__ import annotations
+
 import pytest
 
 from bt_api_py.containers.tickers.bitinka_ticker import BitinkaRequestTickerData

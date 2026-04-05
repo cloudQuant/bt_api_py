@@ -4,6 +4,8 @@ Reduces code duplication across 35+ exchange-specific ticker implementations
 by providing common parse helpers for numeric API responses.
 """
 
+from __future__ import annotations
+
 from typing import Any
 
 

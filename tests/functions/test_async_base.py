@@ -1,5 +1,7 @@
 """Tests for functions/async_base.py."""
 
+from __future__ import annotations
+
 
 class TestAsyncBase:
     """Tests for async_base module."""

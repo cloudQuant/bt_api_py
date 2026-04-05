@@ -1,5 +1,7 @@
 """Tests for CowSwapExchangeData container."""
 
+from __future__ import annotations
+
 from bt_api_py.containers.exchanges.cow_swap_exchange_data import CowSwapExchangeData
 
 

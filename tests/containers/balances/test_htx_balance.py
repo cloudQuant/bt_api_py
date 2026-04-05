@@ -1,5 +1,7 @@
 """Tests for HTX balance container."""
 
+from __future__ import annotations
+
 from bt_api_py.containers.balances.htx_balance import HtxRequestBalanceData
 
 

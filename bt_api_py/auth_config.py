@@ -3,6 +3,8 @@
 加密货币交易所使用 API Key，CTP 使用 Broker/User/Password，IB 使用 TWS 连接参数.
 """
 
+from __future__ import annotations
+
 from typing import Any
 from urllib.parse import urlparse
 

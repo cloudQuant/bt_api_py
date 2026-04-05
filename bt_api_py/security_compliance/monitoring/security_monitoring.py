@@ -4,6 +4,8 @@ Provides comprehensive security monitoring, alerting, and integration
 with SIEM systems for financial industry compliance.
 """
 
+from __future__ import annotations
+
 import contextlib
 import time
 from collections.abc import Callable

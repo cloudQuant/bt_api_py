@@ -1,5 +1,7 @@
 """Tests for Binance order data container."""
 
+from __future__ import annotations
+
 import pytest
 
 from bt_api_py.containers.orders.binance_order import BinanceForceOrderData

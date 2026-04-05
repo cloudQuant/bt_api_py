@@ -1,5 +1,7 @@
 """Tests for BeQuantExchangeData container."""
 
+from __future__ import annotations
+
 from bt_api_py.containers.exchanges.bequant_exchange_data import BeQuantExchangeData
 
 

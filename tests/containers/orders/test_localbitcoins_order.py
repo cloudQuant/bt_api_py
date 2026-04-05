@@ -1,5 +1,7 @@
 """Tests for LocalBitcoinsRequestOrderData container."""
 
+from __future__ import annotations
+
 from bt_api_py.containers.orders.localbitcoins_order import LocalBitcoinsRequestOrderData
 
 

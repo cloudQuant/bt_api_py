@@ -3,6 +3,8 @@
 包含风险事件的定义、类型、级别和处理信息
 """
 
+from __future__ import annotations
+
 import time
 from dataclasses import dataclass
 from enum import Enum

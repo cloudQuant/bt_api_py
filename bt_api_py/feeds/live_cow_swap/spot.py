@@ -3,6 +3,8 @@ CoW Swap Spot Feed implementation.
 CoW Swap is a DEX - market data is primarily obtained through on-chain events and subgraphs.
 """
 
+from __future__ import annotations
+
 from typing import Any
 
 from bt_api_py.feeds.capability import Capability

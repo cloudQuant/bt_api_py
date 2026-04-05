@@ -10,6 +10,8 @@ Components:
 - swap.py: Futures (USDT-M) trading feed implementation
 """
 
+from __future__ import annotations
+
 from bt_api_py.feeds.live_gateio.request_base import GateioRequestData
 from bt_api_py.feeds.live_gateio.spot import (
     GateioAccountWssDataSpot,

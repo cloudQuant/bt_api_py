@@ -2,6 +2,8 @@
 Luno REST API request base class.
 """
 
+from __future__ import annotations
+
 import base64
 from typing import Any
 

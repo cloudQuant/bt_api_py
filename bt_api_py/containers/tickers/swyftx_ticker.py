@@ -1,5 +1,7 @@
 """Swyftx Ticker Data Container."""
 
+from __future__ import annotations
+
 import json
 import time
 from typing import Any
@@ -44,7 +46,7 @@ class SwyftxRequestTickerData(TickerData):
             ticker_info if has_been_json_encoded and isinstance(ticker_info, dict) else None
         )
 
-    def init_data(self) -> "SwyftxRequestTickerData":
+    def init_data(self) -> SwyftxRequestTickerData:
         """Parse Swyftx ticker response."""
         if not self.has_been_json_encoded:
             if isinstance(self.ticker_info, str):

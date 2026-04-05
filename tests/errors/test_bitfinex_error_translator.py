@@ -1,5 +1,7 @@
 """Tests for BitfinexErrorTranslator."""
 
+from __future__ import annotations
+
 from bt_api_py.errors.bitfinex_error_translator import BitfinexErrorTranslator
 
 

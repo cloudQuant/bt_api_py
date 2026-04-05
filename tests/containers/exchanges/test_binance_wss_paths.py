@@ -3,6 +3,8 @@ Tests for Binance WebSocket API - New implementations
 测试 Binance WebSocket API 新增实现
 """
 
+from __future__ import annotations
+
 import pytest
 
 from bt_api_py.containers.exchanges.binance_exchange_data import (

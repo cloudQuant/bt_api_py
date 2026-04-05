@@ -1,5 +1,7 @@
 """Bybit Swap (Linear Futures) Trading Feed"""
 
+from __future__ import annotations
+
 from typing import Any
 
 from bt_api_py.containers.balances.bybit_balance import BybitSwapBalanceData

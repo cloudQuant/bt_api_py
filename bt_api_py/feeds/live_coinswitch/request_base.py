@@ -6,6 +6,8 @@ Response: {"data": ...} or {"error": ...}
 Symbol: pair string "BTCINR"
 """
 
+from __future__ import annotations
+
 from typing import Any
 from urllib.parse import urlencode
 

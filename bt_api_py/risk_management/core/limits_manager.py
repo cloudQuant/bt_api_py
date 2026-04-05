@@ -3,6 +3,8 @@
 支持预交易限制、仓位限制、集中度限制等
 """
 
+from __future__ import annotations
+
 import time
 from typing import Any, cast
 

@@ -4,6 +4,8 @@ PancakeSwap Registration Module
 Registers PancakeSpot feed and error translator with the system.
 """
 
+from __future__ import annotations
+
 from bt_api_py.containers.exchanges.pancakeswap_exchange_data import PancakeSwapExchangeData
 from bt_api_py.containers.pools.pancakeswap_pool import PancakeSwapPoolData, PancakeSwapPoolList
 from bt_api_py.containers.tickers.pancakeswap_ticker import PancakeSwapRequestTickerData

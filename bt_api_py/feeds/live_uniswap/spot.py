@@ -4,6 +4,8 @@ Uniswap Spot Feed implementation.
 Provides market data access for Uniswap DEX pools using GraphQL queries.
 """
 
+from __future__ import annotations
+
 from typing import Any
 
 from bt_api_py.containers.exchanges.uniswap_exchange_data import (

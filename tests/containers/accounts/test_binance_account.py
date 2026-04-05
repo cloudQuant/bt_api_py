@@ -1,4 +1,6 @@
 # import json
+from __future__ import annotations
+
 from bt_api_py.containers.accounts.binance_account import (
     BinanceSpotRequestAccountData,
     BinanceSpotWssAccountData,

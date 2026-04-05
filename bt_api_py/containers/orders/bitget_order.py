@@ -1,5 +1,7 @@
 """Bitget Order Data Container."""
 
+from __future__ import annotations
+
 import json
 import time
 from typing import Any
@@ -64,7 +66,7 @@ class BitgetOrderData(OrderData):
         self.all_data: dict[str, Any] | None = None
         self.has_been_init_data = False
 
-    def init_data(self) -> "BitgetOrderData":
+    def init_data(self) -> BitgetOrderData:
         """Initialize order data by parsing order_info.
 
         Returns:
@@ -389,7 +391,7 @@ class BitgetOrderData(OrderData):
 class BitgetWssOrderData(BitgetOrderData):
     """Bitget WebSocket order data container."""
 
-    def init_data(self) -> "BitgetWssOrderData":
+    def init_data(self) -> BitgetWssOrderData:
         """Initialize order data from WebSocket message.
 
         Returns:
@@ -435,7 +437,7 @@ class BitgetWssOrderData(BitgetOrderData):
 class BitgetRequestOrderData(BitgetOrderData):
     """Bitget REST API order data container."""
 
-    def init_data(self) -> "BitgetRequestOrderData":
+    def init_data(self) -> BitgetRequestOrderData:
         """Initialize order data from REST API response.
 
         Returns:

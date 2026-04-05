@@ -2,6 +2,8 @@
 Comprehensive tests for the advanced WebSocket system.
 """
 
+from __future__ import annotations
+
 import asyncio
 import contextlib
 import hashlib

@@ -1,5 +1,7 @@
 """Tests for OKX liquidation warning data container."""
 
+from __future__ import annotations
+
 from bt_api_py.containers.liquidations.okx_liquidation_warning import OkxLiquidationWarningData
 
 

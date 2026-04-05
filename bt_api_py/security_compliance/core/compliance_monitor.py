@@ -4,6 +4,8 @@ Implements automated compliance checking for SOX, MiFID II, PCI DSS,
 and other financial industry regulations.
 """
 
+from __future__ import annotations
+
 from collections.abc import Callable
 from dataclasses import dataclass
 from enum import Enum

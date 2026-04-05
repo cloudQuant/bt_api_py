@@ -1,5 +1,7 @@
 """YoBit Exchange Data Configuration – Feed pattern."""
 
+from __future__ import annotations
+
 import os
 from typing import Any
 

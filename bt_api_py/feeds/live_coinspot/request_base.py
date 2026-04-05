@@ -7,6 +7,8 @@ Response: {"status": "ok", ...} / {"status": "error", "message": "..."}
 Symbol: coin shortname "BTC"
 """
 
+from __future__ import annotations
+
 import hashlib
 import hmac
 import json

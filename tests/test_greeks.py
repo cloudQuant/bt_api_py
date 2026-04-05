@@ -1,5 +1,7 @@
 """Tests for greeks module."""
 
+from __future__ import annotations
+
 import pytest
 
 from bt_api_py.containers.greeks.greeks import GreeksData

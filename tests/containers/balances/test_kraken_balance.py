@@ -1,5 +1,7 @@
 """Tests for Kraken balance container."""
 
+from __future__ import annotations
+
 import pytest
 
 from bt_api_py.containers.balances.kraken_balance import (

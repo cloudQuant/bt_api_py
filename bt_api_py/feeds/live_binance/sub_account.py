@@ -7,6 +7,8 @@
 - 子账户 API Key 管理 (创建、查询、删除、IP限制)
 """
 
+from __future__ import annotations
+
 from typing import Any
 
 from bt_api_py.containers.exchanges.binance_exchange_data import BinanceExchangeDataSubAccount

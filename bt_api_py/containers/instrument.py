@@ -5,17 +5,20 @@
 提供内部符号 ↔ 场所符号双向映射能力。
 """
 
+from __future__ import annotations
+
 import dataclasses
-import enum
 from dataclasses import dataclass, field
 from datetime import datetime
 from decimal import Decimal
 from enum import unique
 from typing import Any
 
+from bt_api_py._compat import StrEnum
+
 
 @unique
-class AssetType(enum.StrEnum):
+class AssetType(StrEnum):
     """资产类型枚举"""
 
     SPOT = "spot"
@@ -77,7 +80,7 @@ class Instrument:
             return False
         return not (self.delist_time and datetime.now() > self.delist_time)
 
-    def with_params(self, **kwargs: Any) -> "Instrument":
+    def with_params(self, **kwargs: Any) -> Instrument:
         """Create a copy with updated parameters.
 
         Args:

@@ -3,6 +3,8 @@
 集成随机森林、神经网络、XGBoost等多种模型进行综合风险预测
 """
 
+from __future__ import annotations
+
 import time
 from typing import Any, cast
 

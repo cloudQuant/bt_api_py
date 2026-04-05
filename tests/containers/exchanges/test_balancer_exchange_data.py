@@ -1,5 +1,7 @@
 """Tests for BalancerExchangeData container."""
 
+from __future__ import annotations
+
 from bt_api_py.containers.exchanges.balancer_exchange_data import BalancerExchangeData, GqlChain
 
 

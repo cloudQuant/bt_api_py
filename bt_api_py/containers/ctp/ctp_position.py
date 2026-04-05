@@ -3,6 +3,8 @@ CTP 持仓数据容器
 对应 CTP 的 CThostFtdcInvestorPositionField 结构体
 """
 
+from __future__ import annotations
+
 from bt_api_py.containers.positions.position import PositionData
 from bt_api_py.functions.utils import from_dict_get_float, from_dict_get_int, from_dict_get_string
 

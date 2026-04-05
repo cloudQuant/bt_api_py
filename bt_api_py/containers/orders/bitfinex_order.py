@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import json
 import time
 from typing import Any
@@ -59,7 +61,7 @@ class BitfinexOrderData(OrderData):
         self.all_data: dict[str, Any] | None = None
         self.has_been_init_data = False
 
-    def init_data(self) -> "BitfinexOrderData":
+    def init_data(self) -> BitfinexOrderData:
         """Initialize order data by parsing order_info.
 
         Returns:

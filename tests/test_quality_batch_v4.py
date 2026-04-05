@@ -8,6 +8,8 @@ Covers:
 5. AsyncPooledConnection async context manager
 """
 
+from __future__ import annotations
+
 import asyncio
 
 import pytest

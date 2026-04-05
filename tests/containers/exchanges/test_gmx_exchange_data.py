@@ -1,5 +1,7 @@
 """Tests for GmxExchangeData container."""
 
+from __future__ import annotations
+
 from bt_api_py.containers.exchanges.gmx_exchange_data import GmxExchangeData
 
 

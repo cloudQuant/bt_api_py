@@ -1,5 +1,7 @@
 """Tests for IbWebTranslator."""
 
+from __future__ import annotations
+
 from bt_api_py.errors.ib_web_translator import IBWebErrorTranslator
 
 

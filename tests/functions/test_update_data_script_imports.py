@@ -1,5 +1,7 @@
 """Regression tests for update_data modules that should be safe to import."""
 
+from __future__ import annotations
+
 import importlib
 
 

@@ -1,5 +1,7 @@
 """Tests for monitoring/system_metrics.py."""
 
+from __future__ import annotations
+
 
 class TestSystemMetrics:
     """Tests for system metrics."""

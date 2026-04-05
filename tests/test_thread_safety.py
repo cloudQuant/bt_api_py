@@ -3,6 +3,8 @@ Thread safety and concurrency tests for bt_api_py
 Target: 20+ tests for concurrent access patterns
 """
 
+from __future__ import annotations
+
 import threading
 import time
 from queue import Empty, Queue

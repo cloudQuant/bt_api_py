@@ -2,6 +2,8 @@
 YoBit Exchange Registration Module
 """
 
+from __future__ import annotations
+
 from bt_api_py.balance_utils import simple_balance_handler as _yobit_balance_handler
 from bt_api_py.containers.exchanges.yobit_exchange_data import YobitExchangeDataSpot
 from bt_api_py.feeds.live_yobit.spot import YobitRequestDataSpot

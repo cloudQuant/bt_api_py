@@ -1,5 +1,7 @@
 """Tests for GateioOrderBookData container."""
 
+from __future__ import annotations
+
 from bt_api_py.containers.orderbooks.gateio_orderbook import GateioOrderBookData
 
 

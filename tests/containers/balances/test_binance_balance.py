@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from bt_api_py.containers.balances.binance_balance import (
     BinanceSpotRequestBalanceData,
     BinanceSpotWssBalanceData,

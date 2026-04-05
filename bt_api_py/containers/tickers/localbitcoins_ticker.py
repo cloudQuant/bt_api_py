@@ -1,7 +1,10 @@
+from __future__ import annotations
+
 import json
 import time
-from typing import Any, Self
+from typing import Any
 
+from bt_api_py._compat import Self
 from bt_api_py.containers.tickers.ticker import TickerData
 from bt_api_py.functions.utils import from_dict_get_float
 
@@ -39,7 +42,7 @@ class LocalBitcoinsTickerData(TickerData):
         self.all_data: dict[str, Any] | None = None
         self.has_been_init_data = False
 
-    def init_data(self) -> "Self":
+    def init_data(self) -> Self:
         if not self.has_been_json_encoded:
             self.ticker_data = json.loads(self.ticker_info)
             self.has_been_json_encoded = True
@@ -165,7 +168,7 @@ class LocalBitcoinsWssTickerData(LocalBitcoinsTickerData):
     This is a placeholder for future compatibility.
     """
 
-    def init_data(self) -> "Self":
+    def init_data(self) -> Self:
         if not self.has_been_json_encoded:
             self.ticker_data = json.loads(self.ticker_info)
             self.has_been_json_encoded = True
@@ -195,7 +198,7 @@ class LocalBitcoinsWssTickerData(LocalBitcoinsTickerData):
 class LocalBitcoinsRequestTickerData(LocalBitcoinsTickerData):
     """保存 LocalBitcoins REST API ticker 信息."""
 
-    def init_data(self) -> "Self":
+    def init_data(self) -> Self:
         if not self.has_been_json_encoded:
             self.ticker_data = json.loads(self.ticker_info)
             self.has_been_json_encoded = True

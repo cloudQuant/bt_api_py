@@ -1,5 +1,7 @@
 """Tests for oauth2_provider module - pure local logic."""
 
+from __future__ import annotations
+
 import time
 
 import pytest

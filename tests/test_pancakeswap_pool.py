@@ -1,5 +1,7 @@
 """Tests for PancakeSwap pool module."""
 
+from __future__ import annotations
+
 import pytest
 
 from bt_api_py.containers.pools.pancakeswap_pool import (

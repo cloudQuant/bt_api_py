@@ -3,6 +3,8 @@
 基于条件和触发器执行预定义的风险管理策略
 """
 
+from __future__ import annotations
+
 import time
 from collections.abc import Callable
 from typing import Any

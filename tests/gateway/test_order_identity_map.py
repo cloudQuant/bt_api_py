@@ -1,5 +1,7 @@
 """Tests for gateway/order_identity_map.py."""
 
+from __future__ import annotations
+
 
 class TestOrderIdentityMap:
     """Tests for order identity map."""

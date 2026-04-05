@@ -1,5 +1,7 @@
 """Tests for CTP bar container."""
 
+from __future__ import annotations
+
 from bt_api_py.containers.ctp.ctp_bar import CtpBarData
 
 

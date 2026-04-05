@@ -3,6 +3,8 @@
 Standardized container for Uniswap token price and market data.
 """
 
+from __future__ import annotations
+
 from dataclasses import dataclass
 
 
@@ -72,7 +74,7 @@ class UniswapTicker:
             self.last_updated = self.timestamp
 
     @classmethod
-    def from_graphql_data(cls, data: dict) -> "UniswapTicker":
+    def from_graphql_data(cls, data: dict) -> UniswapTicker:
         """Create ticker from GraphQL response data.
 
         Args:

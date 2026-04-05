@@ -3,6 +3,8 @@
 These will be fully implemented in subsequent iterations.
 """
 
+from __future__ import annotations
+
 from .access_control import AccessControlManager, Permission, Role
 from .audit_logger import AuditEvent, AuditLogger, EventType
 from .compliance_monitor import ComplianceMonitor

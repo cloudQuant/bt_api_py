@@ -1,5 +1,7 @@
 """Tests for KorbitTickerData container."""
 
+from __future__ import annotations
+
 import json
 
 from bt_api_py.containers.tickers.korbit_ticker import (

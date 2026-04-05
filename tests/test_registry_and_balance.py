@@ -3,6 +3,8 @@ Registry, BalanceUtils, Exceptions 单元测试
 纯单元测试，不需要网络连接
 """
 
+from __future__ import annotations
+
 import pytest
 
 from bt_api_py.balance_utils import nested_balance_handler, simple_balance_handler

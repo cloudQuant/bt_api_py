@@ -4,6 +4,8 @@ MEXC 交易所注册模块
 导入此模块即可完成注册
 """
 
+from __future__ import annotations
+
 from bt_api_py.balance_utils import simple_balance_handler as _mexc_balance_handler
 from bt_api_py.containers.exchanges.mexc_exchange_data import MexcExchangeDataSpot
 from bt_api_py.feeds.live_mexc import MexcRequestDataSpot

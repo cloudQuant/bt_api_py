@@ -1,5 +1,7 @@
 """Tests for CTP order module."""
 
+from __future__ import annotations
+
 import pytest
 
 from bt_api_py.containers.ctp.ctp_order import CTP_DIRECTION_MAP, CTP_ORDER_STATUS_MAP, CtpOrderData

@@ -1,5 +1,7 @@
 """Tests for OKX price limit module."""
 
+from __future__ import annotations
+
 import pytest
 
 from bt_api_py.containers.pricelimits.okx_price_limit import OkxPriceLimitData

@@ -2,6 +2,8 @@
 CoW Swap is a DEX (Decentralized Exchange) on Ethereum and other chains.
 """
 
+from __future__ import annotations
+
 import os
 from typing import Any
 

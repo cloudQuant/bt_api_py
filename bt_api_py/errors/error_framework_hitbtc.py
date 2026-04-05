@@ -4,6 +4,8 @@ HitBTC Error Translation
 Provides HitBTC-specific error code translation.
 """
 
+from __future__ import annotations
+
 from bt_api_py.error import ErrorCategory, ErrorTranslator, UnifiedError, UnifiedErrorCode
 
 

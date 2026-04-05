@@ -2,6 +2,8 @@
 Kraken Exchange Feed Module
 """
 
+from __future__ import annotations
+
 from bt_api_py.feeds.live_kraken.futures import (
     KrakenAccountWssDataFutures,
     KrakenMarketWssDataFutures,

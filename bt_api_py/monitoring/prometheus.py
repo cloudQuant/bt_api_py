@@ -4,6 +4,8 @@ Prometheus metrics export for bt_api_py.
 Provides Prometheus-compatible HTTP endpoint for metrics exposure.
 """
 
+from __future__ import annotations
+
 import json
 import time
 from http.server import BaseHTTPRequestHandler, HTTPServer

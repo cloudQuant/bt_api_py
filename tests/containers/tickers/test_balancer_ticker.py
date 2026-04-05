@@ -1,5 +1,7 @@
 """Tests for BalancerRequestTickerData container."""
 
+from __future__ import annotations
+
 import pytest
 
 from bt_api_py.containers.tickers.balancer_ticker import BalancerRequestTickerData

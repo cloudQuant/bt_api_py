@@ -1,5 +1,7 @@
 """Tests for calculate_numbers module."""
 
+from __future__ import annotations
+
 import random
 
 import pytest

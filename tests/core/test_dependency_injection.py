@@ -1,5 +1,7 @@
 """Tests for dependency injection container registration behavior."""
 
+from __future__ import annotations
+
 from bt_api_py.core.dependency_injection import DIContainer
 
 

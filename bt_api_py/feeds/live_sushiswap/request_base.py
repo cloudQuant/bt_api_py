@@ -5,6 +5,8 @@ Handles REST API queries to SushiSwap's API. SushiSwap uses REST endpoints
 instead of GraphQL for most operations.
 """
 
+from __future__ import annotations
+
 import time
 from typing import Any
 

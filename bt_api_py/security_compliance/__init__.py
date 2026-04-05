@@ -16,6 +16,8 @@ Compliance Standards Supported:
 - Common Criteria (ISO/IEC 15408)
 """
 
+from __future__ import annotations
+
 from .auth.mfa_provider import MFAProvider
 from .auth.oauth2_provider import OAuth2Provider
 from .core.access_control import AccessControlManager, Permission, Role

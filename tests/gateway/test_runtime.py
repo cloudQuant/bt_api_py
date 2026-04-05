@@ -1,5 +1,7 @@
 """Tests for gateway/runtime.py."""
 
+from __future__ import annotations
+
 
 class TestRuntime:
     """Tests for gateway runtime."""

@@ -1,5 +1,7 @@
 """Tests for OKX Open Interest container."""
 
+from __future__ import annotations
+
 import json
 
 from bt_api_py.containers.openinterests import OkxOpenInterestData

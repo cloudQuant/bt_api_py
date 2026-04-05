@@ -2,6 +2,8 @@
 Provides URL configurations, symbol mappings, and REST paths for Ripio API.
 """
 
+from __future__ import annotations
+
 import os
 from typing import Any
 

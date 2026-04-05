@@ -1,5 +1,7 @@
 """Tests for utils/time.py."""
 
+from __future__ import annotations
+
 from bt_api_py.utils.time import convert_utc_timestamp
 
 

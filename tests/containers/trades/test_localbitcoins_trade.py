@@ -1,5 +1,7 @@
 """Tests for LocalBitcoinsSpotWssTradeData container."""
 
+from __future__ import annotations
+
 from bt_api_py.containers.trades.localbitcoins_trade import LocalBitcoinsSpotWssTradeData
 
 

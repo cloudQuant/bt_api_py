@@ -2,6 +2,8 @@
 Mercado Bitcoin 交易所注册模块
 """
 
+from __future__ import annotations
+
 from bt_api_py.balance_utils import simple_balance_handler as _mercado_bitcoin_balance_handler
 from bt_api_py.containers.exchanges.mercado_bitcoin_exchange_data import (
     MercadoBitcoinExchangeDataSpot,

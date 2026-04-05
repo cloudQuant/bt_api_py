@@ -1,5 +1,7 @@
 """Shared SWIG infrastructure for split CTP wrapper modules."""
 
+from __future__ import annotations
+
 import weakref
 from sys import float_info, stderr
 from traceback import print_exception

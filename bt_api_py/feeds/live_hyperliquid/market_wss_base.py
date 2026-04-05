@@ -4,6 +4,8 @@ Hyperliquid Market WebSocket Base Class
 Provides common functionality for market WebSocket data handling.
 """
 
+from __future__ import annotations
+
 import json
 import threading
 from typing import Any

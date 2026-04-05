@@ -1,9 +1,11 @@
 """BTC Markets Ticker Data Container."""
 
+from __future__ import annotations
+
 import json
 import time
-from typing import Self
 
+from bt_api_py._compat import Self
 from bt_api_py.containers.tickers.ticker import TickerData
 from bt_api_py.containers.tickers.ticker_utils import parse_float
 
@@ -29,7 +31,7 @@ class BtcMarketsRequestTickerData(TickerData):
         self.high_24h: float | None = None
         self.low_24h: float | None = None
 
-    def init_data(self) -> "Self":
+    def init_data(self) -> Self:
         """Parse BTC Markets ticker response."""
         if not self.has_been_json_encoded:
             self.ticker_data = json.loads(self.ticker_info)

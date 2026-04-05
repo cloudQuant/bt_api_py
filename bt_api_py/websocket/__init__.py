@@ -3,6 +3,8 @@ WebSocket module initialization and integration.
 Provides unified API for advanced WebSocket functionality with monitoring and optimizations.
 """
 
+from __future__ import annotations
+
 from collections.abc import Awaitable, Callable
 from typing import Any
 

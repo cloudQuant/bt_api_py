@@ -1,5 +1,7 @@
 """Tests for ensemble_model module - RiskEnsembleModel and supporting classes."""
 
+from __future__ import annotations
+
 import tempfile
 from pathlib import Path
 

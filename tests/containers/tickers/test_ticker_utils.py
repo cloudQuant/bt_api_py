@@ -1,5 +1,7 @@
 """Tests for ticker_utils module."""
 
+from __future__ import annotations
+
 from bt_api_py.containers.tickers.ticker_utils import parse_float, parse_int
 
 

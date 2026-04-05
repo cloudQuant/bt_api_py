@@ -3,6 +3,8 @@
 Note: CTP is a C++ extension module.
 """
 
+from __future__ import annotations
+
 import pytest
 
 

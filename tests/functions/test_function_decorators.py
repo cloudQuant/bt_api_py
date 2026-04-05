@@ -1,5 +1,7 @@
 """Tests for functions/decorators.py."""
 
+from __future__ import annotations
+
 from bt_api_py.functions.decorators import deprecated, time_this_function
 
 

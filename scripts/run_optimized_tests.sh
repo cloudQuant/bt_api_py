@@ -22,13 +22,20 @@ PY
 detect_coverage_threshold() {
     python - <<'PY'
 from pathlib import Path
-import tomllib
+
+try:
+    import tomllib
+except ModuleNotFoundError:
+    tomllib = None
 
 pyproject = Path("pyproject.toml")
 if pyproject.exists():
-    data = tomllib.loads(pyproject.read_text())
-    report = data.get("tool", {}).get("coverage", {}).get("report", {})
-    print(report.get("fail_under", 80))
+    if tomllib is not None:
+        data = tomllib.loads(pyproject.read_text())
+        report = data.get("tool", {}).get("coverage", {}).get("report", {})
+        print(report.get("fail_under", 80))
+    else:
+        print(80)
 else:
     print(80)
 PY
@@ -147,7 +154,14 @@ except:
 ")
 
 echo "Current coverage: ${COVERAGE}%"
-if (( $(echo "$COVERAGE >= $COVERAGE_THRESHOLD" | bc -l) )); then
+if python - "$COVERAGE" "$COVERAGE_THRESHOLD" <<'PY'
+import sys
+
+coverage = float(sys.argv[1])
+threshold = float(sys.argv[2])
+raise SystemExit(0 if coverage >= threshold else 1)
+PY
+then
     echo -e "${GREEN}✅ Coverage threshold met (${COVERAGE}% >= ${COVERAGE_THRESHOLD}%)${NC}"
 else
     echo -e "${RED}❌ Coverage threshold not met (${COVERAGE}% < ${COVERAGE_THRESHOLD}%)${NC}"

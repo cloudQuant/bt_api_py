@@ -2,9 +2,12 @@
 包含 CTP 行情和交易的前置地址、REST path 映射、品种信息等.
 """
 
-import os
-from typing import Any, Never
+from __future__ import annotations
 
+import os
+from typing import Any
+
+from bt_api_py._compat import Never
 from bt_api_py.containers.exchanges.exchange_data import ExchangeData
 from bt_api_py.logging_factory import get_logger
 

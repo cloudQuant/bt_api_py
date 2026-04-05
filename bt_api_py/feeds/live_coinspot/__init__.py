@@ -2,6 +2,8 @@
 CoinSpot Feed - Spot trading for CoinSpot exchange
 """
 
+from __future__ import annotations
+
 from bt_api_py.feeds.live_coinspot.spot import CoinSpotRequestDataSpot
 
 __all__ = [

@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import requests
 
 from bt_api_py.containers.symbols.binance_symbol import BinanceSpotSymbolData, BinanceSwapSymbolData

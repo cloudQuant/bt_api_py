@@ -3,6 +3,8 @@ CoW Swap REST API request base class.
 CoW Swap is a DEX (Decentralized Exchange) that uses Ethereum smart contracts.
 """
 
+from __future__ import annotations
+
 import time
 from typing import Any
 

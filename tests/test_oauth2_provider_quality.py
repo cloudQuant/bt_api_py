@@ -1,8 +1,16 @@
+from __future__ import annotations
+
 import time
 
 import pytest
 
-from bt_api_py.security_compliance.auth.oauth2_provider import GrantType, OAuth2Provider, OAuthError
+pytest.importorskip("cryptography", reason="cryptography package required for OAuth2Provider")
+
+from bt_api_py.security_compliance.auth.oauth2_provider import (
+    GrantType,
+    OAuth2Provider,
+    OAuthError,
+)
 
 
 class TestOAuth2ProviderQuality:

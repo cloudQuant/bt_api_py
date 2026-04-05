@@ -2,6 +2,8 @@
 Mercado Bitcoin REST API request base class.
 """
 
+from __future__ import annotations
+
 import hashlib
 import hmac
 import time

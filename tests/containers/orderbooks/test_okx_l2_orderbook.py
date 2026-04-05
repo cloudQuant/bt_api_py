@@ -1,5 +1,7 @@
 """Tests for OkxL2OrderBookData container."""
 
+from __future__ import annotations
+
 from bt_api_py.containers.orderbooks.okx_l2_orderbook import OkxL2OrderBookData
 
 

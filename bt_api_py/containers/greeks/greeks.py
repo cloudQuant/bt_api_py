@@ -1,5 +1,7 @@
 """Greeks data container base class."""
 
+from __future__ import annotations
+
 
 class GreeksData:
     """Base class for account Greeks data."""

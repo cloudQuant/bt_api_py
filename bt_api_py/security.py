@@ -5,6 +5,8 @@ Provides secure storage and retrieval of API credentials using encryption
 and environment variable management.
 """
 
+from __future__ import annotations
+
 import base64
 import logging
 import os
@@ -56,7 +58,7 @@ class SecureCredentialManager:
             )
 
     @staticmethod
-    def _create_cipher(password: str, salt: bytes | None = None) -> tuple["Fernet", bytes]:
+    def _create_cipher(password: str, salt: bytes | None = None) -> tuple[Fernet, bytes]:
         """Create Fernet cipher from password.
 
         Args:

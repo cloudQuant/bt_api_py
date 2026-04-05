@@ -2,6 +2,8 @@
 CoW Swap is a DEX - ticker data comes from on-chain events and settlement contracts.
 """
 
+from __future__ import annotations
+
 import json
 import time
 from typing import Any
@@ -40,7 +42,7 @@ class CowSwapRequestTickerData(TickerData):
         self.last_price: float | None = None
         self.has_been_init_data = False
 
-    def init_data(self) -> "CowSwapRequestTickerData":
+    def init_data(self) -> CowSwapRequestTickerData:
         """Parse CoW Swap ticker response.
         Note: As a DEX, CoW Swap doesn't provide traditional ticker data.
         This container is provided for compatibility but may be populated from

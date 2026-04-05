@@ -1,5 +1,7 @@
 """SatoshiTango REST API request base class."""
 
+from __future__ import annotations
+
 from typing import Any
 
 from bt_api_py.containers.exchanges.satoshitango_exchange_data import SatoshiTangoExchangeDataSpot

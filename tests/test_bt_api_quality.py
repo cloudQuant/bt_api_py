@@ -1,8 +1,11 @@
+from __future__ import annotations
+
 import queue
-from datetime import UTC, datetime
+from datetime import datetime
 
 import pytest
 
+from bt_api_py._compat import UTC
 from bt_api_py.bt_api import BtApi
 from bt_api_py.exceptions import InvalidOrderError, SubscribeError
 

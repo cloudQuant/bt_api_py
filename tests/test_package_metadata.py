@@ -1,5 +1,7 @@
 """Tests for package metadata exposed to users."""
 
+from __future__ import annotations
+
 import bt_api_py
 from bt_api_py._version import __version__
 

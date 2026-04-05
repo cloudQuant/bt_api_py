@@ -1,5 +1,7 @@
 """Tests for BitfinexRequestTradeData container."""
 
+from __future__ import annotations
+
 from bt_api_py.containers.trades.bitfinex_trade import BitfinexRequestTradeData
 
 

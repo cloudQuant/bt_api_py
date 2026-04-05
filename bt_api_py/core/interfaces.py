@@ -1,8 +1,12 @@
 """Core interfaces for the modernized bt_api_py architecture."""
 
+from __future__ import annotations
+
 from abc import ABC, abstractmethod
 from collections.abc import Awaitable, Callable
-from typing import Any, ParamSpec, Protocol, runtime_checkable
+from typing import Any, Protocol, runtime_checkable
+
+from bt_api_py._compat import ParamSpec
 
 P = ParamSpec("P")
 

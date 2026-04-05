@@ -3,6 +3,8 @@ Kraken Balance Data Container
 Provides standardized balance data structure for Kraken exchange.
 """
 
+from __future__ import annotations
+
 import time
 from typing import Any
 

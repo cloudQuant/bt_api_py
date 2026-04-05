@@ -1,5 +1,7 @@
 """Tests for OKX currency data module."""
 
+from __future__ import annotations
+
 import pytest
 
 from bt_api_py.containers.assets.okx_asset import OkxCurrencyData

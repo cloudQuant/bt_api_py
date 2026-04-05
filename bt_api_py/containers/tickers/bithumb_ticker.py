@@ -1,5 +1,7 @@
 """Bithumb Ticker Data Container."""
 
+from __future__ import annotations
+
 import json
 import time
 from typing import Any
@@ -43,7 +45,7 @@ class BithumbRequestTickerData(TickerData):
         self.price_change_percent_24h: float | None = None
         self.has_been_init_data = False
 
-    def init_data(self) -> "BithumbRequestTickerData":
+    def init_data(self) -> BithumbRequestTickerData:
         """Parse Bithumb ticker response.
 
         Bithumb ticker format:

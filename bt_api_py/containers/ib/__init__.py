@@ -1,5 +1,7 @@
 """IB 数据容器模块"""
 
+from __future__ import annotations
+
 from .ib_account import IbAccountData
 from .ib_bar import IbBarData
 from .ib_contract import IbContract

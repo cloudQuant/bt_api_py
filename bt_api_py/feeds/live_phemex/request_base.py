@@ -4,6 +4,8 @@ Handles authentication (HMAC SHA256), signing, and all REST API methods.
 Phemex uses scaled precision (Ep/Ev suffixes) for prices and amounts.
 """
 
+from __future__ import annotations
+
 import hashlib
 import hmac
 import json

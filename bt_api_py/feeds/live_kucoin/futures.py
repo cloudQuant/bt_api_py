@@ -2,6 +2,8 @@
 KuCoin Futures trading feed implementation.
 """
 
+from __future__ import annotations
+
 import uuid
 from typing import Any
 

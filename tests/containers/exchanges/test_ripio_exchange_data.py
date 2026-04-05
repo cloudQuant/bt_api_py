@@ -1,5 +1,7 @@
 """Tests for RipioExchangeData container."""
 
+from __future__ import annotations
+
 from bt_api_py.containers.exchanges.ripio_exchange_data import RipioExchangeData
 
 

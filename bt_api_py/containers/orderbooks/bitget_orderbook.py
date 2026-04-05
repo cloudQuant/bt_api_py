@@ -1,5 +1,7 @@
 """Bitget OrderBook Data Container."""
 
+from __future__ import annotations
+
 import json
 import time
 from typing import Any
@@ -44,7 +46,7 @@ class BitgetOrderBookData(OrderBookData):
         self.all_data: dict[str, Any] | None = None
         self.has_been_init_data = False
 
-    def init_data(self) -> "BitgetOrderBookData":
+    def init_data(self) -> BitgetOrderBookData:
         """初始化并解析订单簿数据.
 
         将原始订单簿数据解析为结构化的买单和卖单列表。
@@ -253,7 +255,7 @@ class BitgetOrderBookData(OrderBookData):
 class BitgetWssOrderBookData(BitgetOrderBookData):
     """Bitget WebSocket订单簿数据容器."""
 
-    def init_data(self) -> "BitgetWssOrderBookData":
+    def init_data(self) -> BitgetWssOrderBookData:
         """初始化并解析WebSocket订单簿数据.
 
         Returns:
@@ -288,7 +290,7 @@ class BitgetWssOrderBookData(BitgetOrderBookData):
 class BitgetRequestOrderBookData(BitgetOrderBookData):
     """Bitget REST API订单簿数据容器."""
 
-    def init_data(self) -> "BitgetRequestOrderBookData":
+    def init_data(self) -> BitgetRequestOrderBookData:
         """初始化并解析REST API订单簿数据.
 
         Returns:

@@ -1,4 +1,6 @@
 # Spot trading feed
+from __future__ import annotations
+
 from bt_api_py.feeds.live_latoken.request_base import LatokenRequestData
 from bt_api_py.feeds.live_latoken.spot import (
     LatokenAccountWssDataSpot,

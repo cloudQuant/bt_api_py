@@ -1,5 +1,7 @@
 """Tests for BinanceExchangeData classes."""
 
+from __future__ import annotations
+
 import json
 from unittest.mock import patch
 

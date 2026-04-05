@@ -1,5 +1,7 @@
 """Tests for BalanceData base class."""
 
+from __future__ import annotations
+
 import pytest
 
 from bt_api_py.containers.balances.balance import BalanceData

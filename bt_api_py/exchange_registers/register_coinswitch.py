@@ -2,6 +2,8 @@
 CoinSwitch 交易所注册模块
 """
 
+from __future__ import annotations
+
 from bt_api_py.balance_utils import simple_balance_handler as _coinswitch_balance_handler
 from bt_api_py.containers.exchanges.coinswitch_exchange_data import CoinSwitchExchangeDataSpot
 from bt_api_py.feeds.live_coinswitch.spot import CoinSwitchRequestDataSpot

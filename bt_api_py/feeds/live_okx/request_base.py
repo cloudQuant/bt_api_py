@@ -4,6 +4,8 @@ Handles authentication, signing, and all REST API methods.
 API methods are organized into Mixin classes under the mixins/ package.
 """
 
+from __future__ import annotations
+
 import base64
 import hmac
 import json

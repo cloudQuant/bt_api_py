@@ -1,5 +1,7 @@
 """Tests for PancakeswapExchangeData container."""
 
+from __future__ import annotations
+
 from bt_api_py.containers.exchanges.pancakeswap_exchange_data import PancakeSwapExchangeData
 
 

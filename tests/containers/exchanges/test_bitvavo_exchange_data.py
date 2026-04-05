@@ -1,5 +1,7 @@
 """Tests for BitvavoExchangeData container."""
 
+from __future__ import annotations
+
 from bt_api_py.containers.exchanges.bitvavo_exchange_data import BitvavoExchangeData
 
 

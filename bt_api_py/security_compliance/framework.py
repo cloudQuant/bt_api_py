@@ -4,6 +4,8 @@ This module provides the main integration point for the security framework
 with bt_api_py, including configuration management and initialization.
 """
 
+from __future__ import annotations
+
 import os
 import time
 from typing import Any

@@ -1,5 +1,7 @@
 """Tests for MarkPriceData base container."""
 
+from __future__ import annotations
+
 import pytest
 
 from bt_api_py.containers.markprices.mark_price import MarkPriceData

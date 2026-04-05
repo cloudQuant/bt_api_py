@@ -4,6 +4,8 @@ HTX Error Translator
 Translate HTX (Huobi) API error codes to unified error codes
 """
 
+from __future__ import annotations
+
 from bt_api_py.error import ErrorTranslator, UnifiedErrorCode
 
 

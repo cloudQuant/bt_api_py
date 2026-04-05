@@ -1,5 +1,7 @@
 """Tests for LunoExchangeData container."""
 
+from __future__ import annotations
+
 from bt_api_py.containers.exchanges.luno_exchange_data import LunoExchangeData
 
 

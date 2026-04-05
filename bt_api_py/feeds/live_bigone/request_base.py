@@ -5,6 +5,8 @@ Public endpoints require no auth; private endpoints (under /viewer) need Bearer 
 All responses are wrapped in {"data": ...}.
 """
 
+from __future__ import annotations
+
 import time
 from typing import Any
 from urllib.parse import urlencode

@@ -4,6 +4,8 @@ This module provides performance benchmarks and load testing capabilities
 for trading operations across multiple exchanges.
 """
 
+from __future__ import annotations
+
 import asyncio
 import contextlib
 import statistics

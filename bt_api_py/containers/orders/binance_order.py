@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import json
 import time
 from typing import Any
@@ -307,7 +309,7 @@ class BinanceOrderData(OrderData):
         self.all_data: dict[str, Any] | None = None
         self.has_been_init_data = False
 
-    def init_data(self) -> "BinanceOrderData":
+    def init_data(self) -> BinanceOrderData:
         """Initialize order data by parsing order_info.
 
         Returns:
@@ -655,7 +657,7 @@ class BinanceOrderData(OrderData):
 class BinanceRequestOrderData(BinanceOrderData):
     """Binance REST API order data container."""
 
-    def init_data(self) -> "BinanceRequestOrderData":
+    def init_data(self) -> BinanceRequestOrderData:
         """Initialize order data from REST API response.
 
         Returns:
@@ -697,7 +699,7 @@ class BinanceRequestOrderData(BinanceOrderData):
 class BinanceSwapWssOrderData(BinanceOrderData):
     """Binance swap WebSocket order data container."""
 
-    def init_data(self) -> "BinanceSwapWssOrderData":
+    def init_data(self) -> BinanceSwapWssOrderData:
         """Initialize order data from WebSocket message.
 
         Returns:
@@ -740,7 +742,7 @@ class BinanceSwapWssOrderData(BinanceOrderData):
 class BinanceSpotWssOrderData(BinanceOrderData):
     """Binance spot WebSocket order data container."""
 
-    def init_data(self) -> "BinanceSpotWssOrderData":
+    def init_data(self) -> BinanceSpotWssOrderData:
         """Initialize order data from WebSocket message.
 
         Returns:

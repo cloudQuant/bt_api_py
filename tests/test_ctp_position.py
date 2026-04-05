@@ -1,5 +1,7 @@
 """Tests for CTP position module."""
 
+from __future__ import annotations
+
 import pytest
 
 from bt_api_py.containers.ctp.ctp_position import CTP_POS_DIRECTION_MAP, CtpPositionData

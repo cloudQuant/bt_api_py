@@ -1,5 +1,7 @@
 """Tests for ErrorFrameworkGemini."""
 
+from __future__ import annotations
+
 from bt_api_py.errors.error_framework_gemini import GeminiErrorTranslator
 
 

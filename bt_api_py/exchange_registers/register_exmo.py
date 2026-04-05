@@ -2,6 +2,8 @@
 EXMO Exchange Registry Module
 """
 
+from __future__ import annotations
+
 from bt_api_py.balance_utils import simple_balance_handler as _exmo_balance_handler
 from bt_api_py.containers.exchanges.exmo_exchange_data import ExmoExchangeDataSpot
 from bt_api_py.feeds.live_exmo.spot import ExmoRequestDataSpot

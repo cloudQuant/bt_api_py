@@ -1,5 +1,7 @@
 """保存整个模块使用到的数据结构"""
 
+from __future__ import annotations
+
 from ..containers.accounts.account import AccountData
 from ..containers.balances.balance import BalanceData
 from ..containers.bars.bar import BarData

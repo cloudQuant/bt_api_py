@@ -1,5 +1,7 @@
 """Focused tests for browser cookie helper utilities."""
 
+from __future__ import annotations
+
 from bt_api_py.functions.browser_cookies import (
     _format_cookie_preview,
     cookies_to_header,

@@ -1,5 +1,7 @@
 """Tests for gateway/order_ref_allocator.py."""
 
+from __future__ import annotations
+
 
 class TestOrderRefAllocator:
     """Tests for order ref allocator."""

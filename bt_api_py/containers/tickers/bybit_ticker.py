@@ -1,6 +1,9 @@
-import time
-from typing import Any, Self
+from __future__ import annotations
 
+import time
+from typing import Any
+
+from bt_api_py._compat import Self
 from bt_api_py.containers.tickers.ticker import TickerData
 from bt_api_py.functions.utils import from_dict_get_float
 from bt_api_py.logging_factory import get_logger
@@ -35,7 +38,7 @@ class BybitTickerData(TickerData):
         self.all_data: dict[str, Any] | None = None
         self.has_been_init_data = False
 
-    def init_data(self) -> "Self":
+    def init_data(self) -> Self:
         """初始化 ticker 数据."""
         if self.has_been_init_data or self.ticker_data is None:
             return self

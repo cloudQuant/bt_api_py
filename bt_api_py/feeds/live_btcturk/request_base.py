@@ -8,7 +8,7 @@ import base64
 import hashlib
 import hmac
 import time
-from typing import Any
+from typing import Any, Optional
 
 from bt_api_py.containers.exchanges.btcturk_exchange_data import BTCTurkExchangeDataSpot
 from bt_api_py.containers.requestdatas.request_data import RequestData
@@ -19,7 +19,7 @@ from bt_api_py.logging_factory import get_logger
 
 RequestParams = dict[str, Any]
 RequestExtraData = dict[str, Any]
-RequestSpec = tuple[str, RequestParams | None, RequestExtraData]
+RequestSpec = tuple[str, Optional[RequestParams], RequestExtraData]
 
 
 class BTCTurkRequestData(Feed):

@@ -4,6 +4,8 @@ Bitget 交易所注册模块
 导入此模块即可完成注册
 """
 
+from __future__ import annotations
+
 from bt_api_py.containers.exchanges.bitget_exchange_data import (
     BitgetExchangeDataSpot,
     BitgetExchangeDataSwap,

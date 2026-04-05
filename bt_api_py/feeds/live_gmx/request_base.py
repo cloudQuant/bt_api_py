@@ -10,6 +10,8 @@ Uses REST API for oracle/pricing data (not GraphQL).
 Documentation: https://docs.gmx.io/docs/api/rest/
 """
 
+from __future__ import annotations
+
 import time
 from typing import Any
 

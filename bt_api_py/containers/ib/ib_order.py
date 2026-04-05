@@ -2,8 +2,11 @@
 对应 IB TWS API 的 Order / OrderState.
 """
 
-from typing import Any, Self
+from __future__ import annotations
 
+from typing import Any
+
+from bt_api_py._compat import Self
 from bt_api_py.containers.orders.order import OrderData, OrderStatus
 
 # IB 订单状态映射

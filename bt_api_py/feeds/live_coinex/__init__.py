@@ -2,6 +2,8 @@
 CoinEx Feed - Spot trading for CoinEx exchange
 """
 
+from __future__ import annotations
+
 from bt_api_py.feeds.live_coinex.spot import CoinExRequestDataSpot
 
 __all__ = [

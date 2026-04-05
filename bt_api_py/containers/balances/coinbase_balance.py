@@ -1,5 +1,7 @@
 """Coinbase Balance Data Container."""
 
+from __future__ import annotations
+
 import json
 import time
 from typing import Any
@@ -63,7 +65,7 @@ class CoinbaseBalanceData(BalanceData):
         self.all_data: dict[str, Any] | None = None
         self.has_been_init_data = False
 
-    def init_data(self) -> "CoinbaseBalanceData":
+    def init_data(self) -> CoinbaseBalanceData:
         """Initialize balance data from Coinbase response.
 
         Parses the balance data structure and extracts currency,
@@ -241,7 +243,7 @@ class CoinbaseWssBalanceData(CoinbaseBalanceData):
     Handles balance data received through Coinbase WebSocket connection.
     """
 
-    def init_data(self) -> "CoinbaseWssBalanceData":
+    def init_data(self) -> CoinbaseWssBalanceData:
         """Initialize balance data from WebSocket response.
 
         Returns:
@@ -275,7 +277,7 @@ class CoinbaseRequestBalanceData(CoinbaseBalanceData):
     Handles balance data received through Coinbase REST API.
     """
 
-    def init_data(self) -> "CoinbaseRequestBalanceData":
+    def init_data(self) -> CoinbaseRequestBalanceData:
         """Initialize balance data from REST API response.
 
         Returns:

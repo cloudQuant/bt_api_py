@@ -1,5 +1,7 @@
 """Tests for CryptoComOrder container."""
 
+from __future__ import annotations
+
 from bt_api_py.containers.orders.cryptocom_order import CryptoComOrder
 
 

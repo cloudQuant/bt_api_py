@@ -3,6 +3,8 @@ Comprehensive tests for bt_api_py exception hierarchy
 Target: 50+ tests covering all custom exceptions
 """
 
+from __future__ import annotations
+
 import pytest
 
 from bt_api_py.exceptions import (

@@ -1,5 +1,7 @@
 """Tests for CTP exchange data module."""
 
+from __future__ import annotations
+
 import pytest
 
 from bt_api_py.containers.exchanges.ctp_exchange_data import CtpExchangeData

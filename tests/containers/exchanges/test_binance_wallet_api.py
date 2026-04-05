@@ -3,6 +3,8 @@ Tests for Binance Wallet API
 测试 Binance 钱包 API 接口
 """
 
+from __future__ import annotations
+
 from bt_api_py.containers.exchanges.binance_exchange_data import (
     BinanceExchangeDataGrid,
     BinanceExchangeDataMining,

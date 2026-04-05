@@ -3,9 +3,12 @@
 Defines API endpoints, chain enums, and path configurations for Uniswap DEX.
 """
 
-import enum
+from __future__ import annotations
+
 import os
 from typing import Any
+
+from bt_api_py._compat import StrEnum
 
 # ── 配置加载缓存 ──────────────────────────────────────────────
 _uniswap_config = None
@@ -49,7 +52,7 @@ def _get_uniswap_config() -> Any | None:
     return _uniswap_config
 
 
-class UniswapChain(enum.StrEnum):
+class UniswapChain(StrEnum):
     """Uniswap supported chains for GraphQL queries."""
 
     ETHEREUM = "ETHEREUM"

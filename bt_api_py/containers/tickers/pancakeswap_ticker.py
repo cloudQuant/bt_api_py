@@ -3,6 +3,8 @@
 Provides standardized ticker data structure for PancakeSwap
 """
 
+from __future__ import annotations
+
 from dataclasses import dataclass
 
 
@@ -94,12 +96,12 @@ class PancakeSwapRequestTickerData:
         return json.dumps(self.to_dict())
 
     @classmethod
-    def from_dict(cls, data: dict) -> "PancakeSwapRequestTickerData":
+    def from_dict(cls, data: dict) -> PancakeSwapRequestTickerData:
         """Create from dictionary."""
         return cls(**data)
 
     @classmethod
-    def from_json(cls, json_str: str) -> "PancakeSwapRequestTickerData":
+    def from_json(cls, json_str: str) -> PancakeSwapRequestTickerData:
         """Create from JSON string."""
         import json
 

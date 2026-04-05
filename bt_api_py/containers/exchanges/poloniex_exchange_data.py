@@ -4,6 +4,8 @@ This module contains exchange-specific configuration for Poloniex,
 including REST endpoints, WebSocket channels, and symbol formatting.
 """
 
+from __future__ import annotations
+
 import os
 from typing import Any
 

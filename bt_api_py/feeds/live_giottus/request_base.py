@@ -4,6 +4,8 @@ Giottus is an Indian cryptocurrency exchange.
 API documentation: https://api.giottus.com/
 """
 
+from __future__ import annotations
+
 from typing import Any
 
 from bt_api_py.containers.exchanges.giottus_exchange_data import GiottusExchangeDataSpot

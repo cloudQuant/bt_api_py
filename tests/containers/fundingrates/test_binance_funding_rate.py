@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from bt_api_py.containers.fundingrates.binance_funding_rate import (
     BinanceRequestFundingRateData,
     BinanceWssFundingRateData,

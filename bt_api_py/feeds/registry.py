@@ -5,6 +5,8 @@ This module provides a backward-compatible registry facade for exchange feeds.
 Prefer `bt_api_py.registry.ExchangeRegistry` for new code.
 """
 
+from __future__ import annotations
+
 from collections.abc import Callable
 
 from bt_api_py.logging_factory import get_logger

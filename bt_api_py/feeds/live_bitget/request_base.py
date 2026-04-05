@@ -4,6 +4,8 @@ Handles HMAC SHA256 + Base64 authentication and all REST API methods.
 Follows the standard three-layer pattern: _get_xxx() / get_xxx() / async_get_xxx()
 """
 
+from __future__ import annotations
+
 import base64
 import hashlib
 import hmac

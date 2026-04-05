@@ -1,5 +1,7 @@
 """Tests for account module."""
 
+from __future__ import annotations
+
 import pytest
 
 from bt_api_py.containers.accounts.account import AccountData

@@ -14,6 +14,8 @@ Supported chains:
 - BASE (8453)
 """
 
+from __future__ import annotations
+
 from bt_api_py.feeds.live_uniswap.spot import UniswapRequestDataSpot
 
 __all__ = [

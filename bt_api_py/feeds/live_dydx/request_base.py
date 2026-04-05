@@ -4,6 +4,8 @@ Handles authentication, signing, and all REST API methods.
 dYdX is a decentralized exchange, so authentication uses wallet signatures.
 """
 
+from __future__ import annotations
+
 from typing import Any
 from urllib.parse import urlencode
 

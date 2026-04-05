@@ -1,5 +1,7 @@
 """Tests for AsyncBase class."""
 
+from __future__ import annotations
+
 import pytest
 
 from bt_api_py.functions.async_base import AsyncBase

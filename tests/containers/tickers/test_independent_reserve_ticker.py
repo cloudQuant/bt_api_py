@@ -1,5 +1,7 @@
 """Tests for IndependentReserveRequestTickerData container."""
 
+from __future__ import annotations
+
 import pytest
 
 from bt_api_py.containers.tickers.independent_reserve_ticker import (

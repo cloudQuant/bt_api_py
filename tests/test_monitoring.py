@@ -4,6 +4,8 @@ Tests for the monitoring system.
 Covers metrics collection, logging, health monitoring, and integration components.
 """
 
+from __future__ import annotations
+
 import asyncio
 import json
 import time

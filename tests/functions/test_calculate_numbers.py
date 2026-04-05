@@ -1,5 +1,7 @@
 """Tests for functions/calculate_numbers.py."""
 
+from __future__ import annotations
+
 from types import SimpleNamespace
 
 from bt_api_py.functions.calculate_numbers import (

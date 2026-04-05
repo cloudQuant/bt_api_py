@@ -1,5 +1,7 @@
 """CTP 数据容器模块"""
 
+from __future__ import annotations
+
 from .ctp_account import CtpAccountData
 from .ctp_bar import CtpBarData
 from .ctp_order import CtpOrderData

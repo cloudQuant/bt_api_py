@@ -3,6 +3,8 @@
 所有流式数据连接器都应继承此类，实现 connect/disconnect/subscribe_topics/_run_loop 方法
 """
 
+from __future__ import annotations
+
 import threading
 from abc import ABC, abstractmethod
 from enum import Enum

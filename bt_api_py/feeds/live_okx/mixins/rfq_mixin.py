@@ -2,6 +2,8 @@
 Auto-generated from request_base.py.
 """
 
+from __future__ import annotations
+
 import json
 from collections.abc import Callable
 from typing import Any

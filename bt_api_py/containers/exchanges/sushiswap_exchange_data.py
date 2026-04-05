@@ -3,9 +3,12 @@
 Defines API endpoints, chain enums, and path configurations for SushiSwap DEX.
 """
 
-import enum
+from __future__ import annotations
+
 import os
 from typing import Any
+
+from bt_api_py._compat import StrEnum
 
 # Config loading cache
 _sushiswap_config = None
@@ -47,7 +50,7 @@ def _get_sushiswap_config() -> Any | None:
     return _sushiswap_config
 
 
-class SushiSwapChain(enum.StrEnum):
+class SushiSwapChain(StrEnum):
     """SushiSwap supported chains."""
 
     ETHEREUM = "ETHEREUM"

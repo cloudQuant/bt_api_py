@@ -1,5 +1,7 @@
 """Tests for BitgetTradeData container."""
 
+from __future__ import annotations
+
 from bt_api_py.containers.trades.bitget_trade import BitgetTradeData
 
 

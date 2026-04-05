@@ -2,6 +2,8 @@
 Latoken REST Feed – base class with HMAC-SHA512 auth and _get_xxx internal methods.
 """
 
+from __future__ import annotations
+
 import hashlib
 import hmac
 from typing import Any

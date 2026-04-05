@@ -1,5 +1,7 @@
 """Tests for IB position module."""
 
+from __future__ import annotations
+
 import pytest
 
 from bt_api_py.containers.ib.ib_position import IbPositionData

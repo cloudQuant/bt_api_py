@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import queue
 
 from bt_api_py.exceptions import RequestFailedError

@@ -1,5 +1,7 @@
 """Tests for UpbitOrderData container."""
 
+from __future__ import annotations
+
 from bt_api_py.containers.orders.upbit_order import UpbitOrderData
 
 
