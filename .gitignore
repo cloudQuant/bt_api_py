@@ -105,6 +105,7 @@ _bmad-output/
 .cursor/
 .gemini/
 .kiro/
+.opencode/
 .windsurf/
 .ruff_cache/
 
