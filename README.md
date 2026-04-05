@@ -1,57 +1,61 @@
 # bt_api_py
 
-[![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-blue.svg)](https://www.python.org/downloads/)
+[![Python 3.9-3.14](https://img.shields.io/badge/python-3.9--3.14-blue.svg)](https://www.python.org/downloads/)
+[![PyPI](https://img.shields.io/pypi/v/bt_api_py.svg)](https://pypi.org/project/bt_api_py/)
+[![Tests](https://github.com/cloudQuant/bt_api_py/actions/workflows/tests.yml/badge.svg)](https://github.com/cloudQuant/bt_api_py/actions/workflows/tests.yml)
+[![Docs](https://github.com/cloudQuant/bt_api_py/actions/workflows/docs.yml/badge.svg)](https://github.com/cloudQuant/bt_api_py/actions/workflows/docs.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](https://opensource.org/licenses/MIT)
-[![PyPI](https://img.shields.io/badge/pypi/v/bt_api_py.svg)](https://pypi.org/project/bt_api_py/)
-[![Documentation](https://img.shields.io/badge/docs-latest-blue.svg)](https://cloudquant.github.io/bt_api_py/)
-[![CI](https://github.com/cloudQuant/bt_api_py/actions/workflows/tests.yml/badge.svg)](https://github.com/cloudQuant/bt_api_py/actions/workflows/tests.yml)
 
-**bt_api_py** 是一个专业的统一多交易所交易 API 框架，专为量化交易者和机构投资者设计。支持现货、合约、期货、股票等多种交易类型，提供同步、异步和 WebSocket 三种接口模式，让您用一套代码轻松对接全球主流交易所。
+**bt_api_py** 是一个统一多交易所交易 API 框架，面向量化交易、套利执行、做市和多账户资产管理场景。它把不同交易所的 REST、异步 REST 和 WebSocket 接口统一到同一套 Python API 上，尽量减少接入层重复工作。
 
-## 核心优势
+**快速入口**
 
-- **🔌 即插即用的交易所扩展** — 基于 Registry 设计模式，新增交易所无需修改核心代码，只需注册即可使用
-- **🌐 统一的多交易所接口** — 一套 API 代码同时管理 Binance、OKX、CTP、Interactive Brokers 等多个交易所
-- **⚡ 三种 API 模式自由切换** — 同时支持同步 REST、异步 REST、WebSocket 实时推送
-- **📦 丰富的标准化数据容器** — 提供 20+ 种标准化数据类型（Ticker、OrderBook、Bar、Order、Position 等）
-- **🚀 高性能 C/C++ 扩展** — 核心计算模块使用 Cython 和 C++ 实现，适合高频交易场景
+- [在线文档](https://cloudquant.github.io/bt_api_py/)
+- [安装指南](https://cloudquant.github.io/bt_api_py/getting-started/installation/)
+- [快速开始](https://cloudquant.github.io/bt_api_py/getting-started/quickstart/)
+- [仓库内文档目录](docs/)
+- [问题反馈](https://github.com/cloudQuant/bt_api_py/issues)
 
-📚 **[在线文档](https://cloudquant.github.io/bt_api_py/)** | 🚀 [快速开始](https://cloudquant.github.io/bt_api_py/quickstart/) | [English](README.en.md) | 中文
+## 为什么用 bt_api_py
 
----
+- **统一接口**: 通过 `BtApi` 管理 Binance、OKX、HTX、CTP、Interactive Brokers 等不同交易所。
+- **三种调用模式**: 同时支持同步 REST、异步 REST、WebSocket 订阅。
+- **标准化数据模型**: `Ticker`、`OrderBook`、`Bar`、`Order`、`Position`、`Balance` 等容器统一字段语义。
+- **可扩展架构**: 基于 Registry 和 Adapter 模式，新增交易所时不需要修改核心入口。
+- **事件驱动**: 内置 `EventBus`，适合策略执行、行情转发和状态订阅。
 
 ## 适用场景
 
-- **量化交易策略开发** — 统一接口简化多交易所策略开发和回测
-- **套利交易系统** — 同时连接多个交易所，捕捉跨市场套利机会
-- **做市商系统** — 高性能 WebSocket 实时行情，支持低延迟交易
-- **资产管理平台** — 统一管理多个交易所的账户、订单和持仓
-- **交易机器人** — 事件驱动架构，轻松构建自动化交易机器人
+- **量化交易策略开发**: 用统一接口减少多交易所策略重复代码。
+- **套利交易系统**: 同时连接多个交易所，统一读取行情、账户和订单状态。
+- **做市系统**: 通过 WebSocket 推送处理低延迟行情和订单簿变化。
+- **资产管理平台**: 统一管理多交易所账户、持仓和余额。
+- **交易机器人**: 结合事件驱动机制构建自动化执行流程。
 
 ## 核心特性
 
 ### 多交易所统一接口
-通过 `BtApi` 类统一管理 Binance、OKX、CTP(中国期货)、Interactive Brokers 等交易所，一套代码适配所有平台。
+通过 `BtApi` 类统一管理 Binance、OKX、CTP（中国期货）、Interactive Brokers 等交易所，一套代码适配多个平台。
 
 ### 三种 API 模式
-- **同步 REST API** — 简单直接，适合脚本和策略回测
-- **异步 REST API** — 高并发场景，提升吞吐量
-- **WebSocket 实时推送** — 低延迟行情订阅，适合高频交易
+- **同步 REST API**: 适合脚本、小型工具和回测场景。
+- **异步 REST API**: 适合高并发采集、批量查询和任务编排。
+- **WebSocket 实时推送**: 适合低延迟行情订阅和事件驱动交易。
 
 ### 即插即用架构
-基于 Registry 设计模式，新增交易所只需实现接口并注册，无需修改核心代码，完美符合开闭原则。
+基于 Registry 设计模式，新增交易所只需实现接口并注册，无需修改核心代码。
 
 ### 事件驱动机制
-内置 EventBus 事件总线，支持回调模式，轻松处理行情更新、订单变化、成交通知等事件。
+内置 `EventBus` 事件总线，可处理行情更新、订单变化、成交通知等异步事件。
 
 ### 标准化数据容器
 提供 20+ 种标准化数据类型：
-- **行情数据**: Ticker, OrderBook, Bar, MarkPrice, FundingRate
-- **交易数据**: Order, Trade, Position, Balance, Account
-- **其他数据**: Symbol, Instrument, Liquidation, Greek 等
+- **行情数据**: `Ticker`、`OrderBook`、`Bar`、`MarkPrice`、`FundingRate`
+- **交易数据**: `Order`、`Trade`、`Position`、`Balance`、`Account`
+- **其他数据**: `Symbol`、`Instrument`、`Liquidation`、`Greek`
 
 ### 跨平台支持
-支持 Linux (x86_64)、Windows (x64)、macOS (arm64/x86_64)，一次开发，多平台部署。
+项目当前以 `Python 3.9-3.14` 为兼容目标，CI 覆盖 Linux、macOS 和 Windows。
 
 ## 支持的交易所
 
@@ -98,7 +102,14 @@
 > **说明**: 该分级采用保守口径；只有 REST、WebSocket 和测试资产同时满足时，才会提升到“完整支持”。
 <!-- END GENERATED:EXCHANGE_SUPPORT_OVERVIEW -->
 
-## 安装
+## 安装与兼容性
+
+| 项目 | 当前支持 |
+|------|----------|
+| Python | `3.9` - `3.14` |
+| 操作系统 | Linux, macOS, Windows |
+| 安装方式 | PyPI, 源码开发安装 |
+| 主要接口 | REST, Async REST, WebSocket |
 
 ### 方式一：从 PyPI 安装（推荐）
 
@@ -137,6 +148,7 @@ conda install -c conda-forge swig libiconv
 ```bash
 git clone https://github.com/cloudQuant/bt_api_py
 cd bt_api_py
+python -m pip install --upgrade pip
 pip install -e .
 ```
 
@@ -420,53 +432,63 @@ bt_api_py/
 
 ## 文档
 
-详细文档请访问: **[https://cloudquant.github.io/bt_api_py/](https://cloudquant.github.io/bt_api_py/)**
+优先访问在线文档：**[https://cloudquant.github.io/bt_api_py/](https://cloudquant.github.io/bt_api_py/)**。
+
+如果 GitHub Pages 站点暂时不可用，也可以直接查看仓库内的 [docs/](docs/) 目录。
 
 ### 核心文档
 
-- [快速入门](https://cloudquant.github.io/bt_api_py/quickstart/) - 5 分钟上手指南
-- [安装指南](https://cloudquant.github.io/bt_api_py/installation/) - 安装和配置
-- [架构设计](https://cloudquant.github.io/bt_api_py/architecture/) - 核心架构和设计模式
-- [使用指南](https://cloudquant.github.io/bt_api_py/usage_guide/) - 完整的使用教程
-- [开发者指南](https://cloudquant.github.io/bt_api_py/developer_guide/) - 如何扩展和贡献代码
-- [迁移指南](docs/MIGRATION_GUIDE.md) - 版本升级迁移说明
-- [代码质量标准](docs/CODE_QUALITY.md) - 代码规范和质量检查
-- [安全合规](docs/SECURITY_COMPLIANCE.md) - 安全框架和合规要求
+- [快速入门](https://cloudquant.github.io/bt_api_py/getting-started/quickstart/) - 5 分钟上手指南
+- [安装指南](https://cloudquant.github.io/bt_api_py/getting-started/installation/) - 安装和环境准备
+- [架构设计](https://cloudquant.github.io/bt_api_py/explanation/architecture/) - 核心架构和设计模式
+- [使用指南](https://cloudquant.github.io/bt_api_py/guides/usage_guide/) - 常见调用方式和工程集成
+- [开发者指南](https://cloudquant.github.io/bt_api_py/explanation/developer_guide/) - 如何扩展和贡献代码
+- [更新日志](https://cloudquant.github.io/bt_api_py/getting-started/change_log/) - 最近文档和能力变更
+- [仓库文档目录](docs/) - 本地浏览 `docs/` 全量内容
 
 ### 交易所指南
 
-- [Binance API](https://cloudquant.github.io/bt_api_py/binance/) - 现货/合约 API 文档
-- [OKX API](https://cloudquant.github.io/bt_api_py/okx/) - 全品类 API 文档
-- [CTP 期货](https://cloudquant.github.io/bt_api_py/ctp_quickstart/) - CTP 快速入门
-- [Interactive Brokers](https://cloudquant.github.io/bt_api_py/ib_quickstart/) - IB 快速入门
+- [Binance](https://cloudquant.github.io/bt_api_py/exchanges/binance/) - 现货、合约、杠杆和算法交易文档
+- [OKX](https://cloudquant.github.io/bt_api_py/exchanges/okx/) - 交易、资金、公共数据和算法接口
+- [CTP 期货](https://cloudquant.github.io/bt_api_py/exchanges/ctp/quickstart/) - 中国期货接入快速入门
+- [Interactive Brokers](https://cloudquant.github.io/bt_api_py/exchanges/ib/quickstart/) - IB Web API 使用指南
 
 ## 运行测试
 
-### 前置条件
-
-1. 配置 API 密钥（参考测试文件中的配置）
-2. 确保账户有足够资金（建议使用测试网）
-3. 添加 IP 到交易所白名单
-
-### 运行测试
+### 本地快速验证
 
 ```bash
-# 运行所有测试
-pytest tests -v
+# 与 CI smoke suite 保持一致
+pytest tests/test_bt_api_quality.py \
+  tests/test_event_bus.py \
+  tests/core/test_async_context.py \
+  tests/gateway/test_config.py -q
 
-# 并行运行 (推荐，速度更快)
-pytest tests -n 4
+# 代码质量
+ruff check bt_api_py tests
+mypy bt_api_py --ignore-missing-imports
+```
 
-# 运行指定交易所测试
+### 完整基线测试
+
+```bash
+# 运行非网络、非集成基线测试
+pytest tests -m "not network and not integration and not performance and not e2e" -q
+
+# 生成覆盖率报告
+pytest tests -m "not network and not integration and not performance and not e2e" \
+  --cov=bt_api_py \
+  --cov-report=html \
+  --cov-report=xml
+```
+
+### 需要真实账户或网络的测试
+
+```bash
+# 运行前请先配置 API 密钥、测试网账户和 IP 白名单
 pytest tests -m binance -v
 pytest tests -m okx -v
 pytest tests -m ctp -v
-
-# 运行指定测试文件
-pytest tests/feeds/test_live_binance_spot_wss_data.py -v
-
-# 生成测试覆盖率报告
-pytest tests --cov=bt_api_py --cov-report=html
 ```
 
 ## 路线图
@@ -490,10 +512,10 @@ pytest tests --cov=bt_api_py --cov-report=html
 ## 常见问题 (FAQ)
 
 ### Q: 支持哪些 Python 版本？
-支持 Python 3.11, 3.12, 3.13。推荐使用 Python 3.11+ 以获得最佳性能。
+当前兼容目标是 Python `3.9` 到 `3.14`。如果你希望和默认 CI 环境保持一致，优先使用 Python `3.11`。
 
 ### Q: 如何添加新的交易所？
-请参考 [开发者指南](https://cloudquant.github.io/bt_api_py/developer_guide/)，实现 `AbstractFeed` 接口并注册到 `ExchangeRegistry` 即可。基本步骤：
+请参考 [开发者指南](https://cloudquant.github.io/bt_api_py/explanation/developer_guide/)，实现 `AbstractFeed` 接口并注册到 `ExchangeRegistry` 即可。基本步骤：
 1. 在 `feeds/` 下创建交易所实现目录
 2. 在 `exchange_registers/` 下创建注册模块
 3. 在 `errors/` 下添加错误翻译器（可选）
@@ -510,11 +532,12 @@ pytest tests --cov=bt_api_py --cov-report=html
 ### Q: 如何获取技术支持？
 可以通过以下方式获取帮助：
 - [在线文档](https://cloudquant.github.io/bt_api_py/)
+- [仓库内文档目录](docs/)
 - [GitHub Issue](https://github.com/cloudQuant/bt_api_py/issues)
 - 发送邮件至 yunjinqi@gmail.com
 
 ### Q: 项目测试覆盖率如何？
-项目拥有完善的测试套件，包含 600+ 测试用例，覆盖核心模块、交易所适配器、数据容器等。运行 `pytest tests --cov=bt_api_py` 查看覆盖率报告。
+项目包含大规模单元测试和兼容性 smoke suite。当前推荐先跑 README 上面的 smoke suite，再根据需要执行完整基线测试并生成覆盖率报告。
 
 ## 贡献
 
@@ -528,7 +551,7 @@ pytest tests --cov=bt_api_py --cov-report=html
 4. 推送到分支 (`git push origin feature/AmazingFeature`)
 5. 开启一个 Pull Request
 
-详细贡献指南请查看 [CONTRIBUTING.md](CONTRIBUTING.md) 和 [开发者指南](https://cloudquant.github.io/bt_api_py/developer_guide/)。
+详细贡献指南请查看 [CONTRIBUTING.md](CONTRIBUTING.md) 和 [开发者指南](https://cloudquant.github.io/bt_api_py/explanation/developer_guide/)。
 
 ## 许可证
 
