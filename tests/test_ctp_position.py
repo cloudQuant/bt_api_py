@@ -2,7 +2,7 @@
 
 import pytest
 
-from bt_api_py.containers.ctp.ctp_position import CtpPositionData, CTP_POS_DIRECTION_MAP
+from bt_api_py.containers.ctp.ctp_position import CTP_POS_DIRECTION_MAP, CtpPositionData
 
 
 class TestCtpPositionData:
@@ -14,7 +14,7 @@ class TestCtpPositionData:
             {"InstrumentID": "IF2506"},
             symbol_name="IF2506",
             asset_type="FUTURE",
-            has_been_json_encoded=True
+            has_been_json_encoded=True,
         )
 
         assert position.exchange_name == "CTP"
@@ -38,10 +38,7 @@ class TestCtpPositionData:
             "ExchangeID": "CFFEX",
         }
         position = CtpPositionData(
-            position_info,
-            symbol_name="IF2506",
-            asset_type="FUTURE",
-            has_been_json_encoded=True
+            position_info, symbol_name="IF2506", asset_type="FUTURE", has_been_json_encoded=True
         )
         position.init_data()
 

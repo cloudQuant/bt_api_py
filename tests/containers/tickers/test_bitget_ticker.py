@@ -1,6 +1,5 @@
 """Tests for BitgetTickerData container."""
 
-import pytest
 
 from bt_api_py.containers.tickers.bitget_ticker import BitgetTickerData
 
@@ -27,7 +26,9 @@ class TestBitgetTickerData:
             "high24h": "51000.0",
             "low24h": "49000.0",
         }
-        ticker = BitgetTickerData(data, symbol_name="BTCUSDT", asset_type="SPOT", has_been_json_encoded=True)
+        ticker = BitgetTickerData(
+            data, symbol_name="BTCUSDT", asset_type="SPOT", has_been_json_encoded=True
+        )
         ticker.init_data()
 
         assert ticker.ticker_symbol_name == "BTCUSDT"
@@ -35,7 +36,9 @@ class TestBitgetTickerData:
 
     def test_get_all_data(self):
         """Test get_all_data."""
-        ticker = BitgetTickerData({}, symbol_name="BTCUSDT", asset_type="SPOT", has_been_json_encoded=True)
+        ticker = BitgetTickerData(
+            {}, symbol_name="BTCUSDT", asset_type="SPOT", has_been_json_encoded=True
+        )
         result = ticker.get_all_data()
 
         assert result["exchange_name"] == "BITGET"
@@ -43,7 +46,9 @@ class TestBitgetTickerData:
 
     def test_str_representation(self):
         """Test __str__ method."""
-        ticker = BitgetTickerData({}, symbol_name="BTCUSDT", asset_type="SPOT", has_been_json_encoded=True)
+        ticker = BitgetTickerData(
+            {}, symbol_name="BTCUSDT", asset_type="SPOT", has_been_json_encoded=True
+        )
         result = str(ticker)
 
         assert "BITGET" in result

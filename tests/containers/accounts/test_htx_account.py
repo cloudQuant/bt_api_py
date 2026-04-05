@@ -1,6 +1,5 @@
 """Tests for HTX account container."""
 
-import pytest
 
 from bt_api_py.containers.accounts.htx_account import HtxSpotRequestAccountData
 
@@ -29,9 +28,11 @@ class TestHtxSpotRequestAccountData:
                     "subtype": "",
                     "state": "working",
                 }
-            ]
+            ],
         }
-        account = HtxSpotRequestAccountData(data, symbol_name="btcusdt", asset_type="SPOT", has_been_json_encoded=True)
+        account = HtxSpotRequestAccountData(
+            data, symbol_name="btcusdt", asset_type="SPOT", has_been_json_encoded=True
+        )
         account.init_data()
 
         # Note: from_dict_get_float returns float, so id becomes "123456.0"
@@ -39,12 +40,10 @@ class TestHtxSpotRequestAccountData:
 
     def test_init_data_idempotent(self):
         """Test init_data is idempotent."""
-        data = {
-            "data": [
-                {"id": 123456}
-            ]
-        }
-        account = HtxSpotRequestAccountData(data, symbol_name="btcusdt", asset_type="SPOT", has_been_json_encoded=True)
+        data = {"data": [{"id": 123456}]}
+        account = HtxSpotRequestAccountData(
+            data, symbol_name="btcusdt", asset_type="SPOT", has_been_json_encoded=True
+        )
         account.init_data()
         first_id = account.account_id
 
@@ -68,12 +67,10 @@ class TestHtxSpotRequestAccountData:
 
     def test_get_account_id(self):
         """Test get_account_id."""
-        data = {
-            "data": [
-                {"id": 123456}
-            ]
-        }
-        account = HtxSpotRequestAccountData(data, symbol_name="btcusdt", asset_type="SPOT", has_been_json_encoded=True)
+        data = {"data": [{"id": 123456}]}
+        account = HtxSpotRequestAccountData(
+            data, symbol_name="btcusdt", asset_type="SPOT", has_been_json_encoded=True
+        )
         result = account.get_account_id()
 
         assert result == "123456.0"
@@ -99,12 +96,10 @@ class TestHtxSpotRequestAccountData:
 
     def test_get_all_data(self):
         """Test get_all_data."""
-        data = {
-            "data": [
-                {"id": 123456}
-            ]
-        }
-        account = HtxSpotRequestAccountData(data, symbol_name="btcusdt", asset_type="SPOT", has_been_json_encoded=True)
+        data = {"data": [{"id": 123456}]}
+        account = HtxSpotRequestAccountData(
+            data, symbol_name="btcusdt", asset_type="SPOT", has_been_json_encoded=True
+        )
         account.init_data()
         result = account.get_all_data()
 
@@ -113,12 +108,10 @@ class TestHtxSpotRequestAccountData:
 
     def test_str_representation(self):
         """Test __str__ method."""
-        data = {
-            "data": [
-                {"id": 123456}
-            ]
-        }
-        account = HtxSpotRequestAccountData(data, symbol_name="btcusdt", asset_type="SPOT", has_been_json_encoded=True)
+        data = {"data": [{"id": 123456}]}
+        account = HtxSpotRequestAccountData(
+            data, symbol_name="btcusdt", asset_type="SPOT", has_been_json_encoded=True
+        )
         result = str(account)
 
         assert "HTX" in result

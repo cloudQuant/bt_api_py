@@ -1,6 +1,5 @@
 """Tests for KorbitSpotWssTradeData container."""
 
-import pytest
 
 from bt_api_py.containers.trades.korbit_trade import KorbitSpotWssTradeData
 

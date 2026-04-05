@@ -11,7 +11,15 @@ from bt_api_py.security_compliance.core.threat_detection import (
 
 
 def test_detect_failed_login_returns_none_below_threshold(monkeypatch) -> None:
-    detector = ThreatDetector({"thresholds": {"failed_login_threshold": 3, "suspicious_ip_threshold": 10, "data_access_threshold": 1000}})
+    detector = ThreatDetector(
+        {
+            "thresholds": {
+                "failed_login_threshold": 3,
+                "suspicious_ip_threshold": 10,
+                "data_access_threshold": 1000,
+            }
+        }
+    )
     monkeypatch.setattr(threat_module.time, "time", lambda: 1000.0)
 
     assert detector.detect_failed_login("user1", "1.1.1.1") is None
@@ -19,7 +27,15 @@ def test_detect_failed_login_returns_none_below_threshold(monkeypatch) -> None:
 
 
 def test_detect_failed_login_escalates_to_medium_and_high(monkeypatch) -> None:
-    detector = ThreatDetector({"thresholds": {"failed_login_threshold": 1, "suspicious_ip_threshold": 10, "data_access_threshold": 1000}})
+    detector = ThreatDetector(
+        {
+            "thresholds": {
+                "failed_login_threshold": 1,
+                "suspicious_ip_threshold": 10,
+                "data_access_threshold": 1000,
+            }
+        }
+    )
     monkeypatch.setattr(threat_module.time, "time", lambda: 2000.0)
 
     medium_event = detector.detect_failed_login("user1", "2.2.2.2")
@@ -39,7 +55,15 @@ def test_detect_failed_login_escalates_to_medium_and_high(monkeypatch) -> None:
 
 
 def test_detect_suspicious_access_pattern_cleans_old_entries_and_triggers(monkeypatch) -> None:
-    detector = ThreatDetector({"thresholds": {"failed_login_threshold": 5, "suspicious_ip_threshold": 10, "data_access_threshold": 2}})
+    detector = ThreatDetector(
+        {
+            "thresholds": {
+                "failed_login_threshold": 5,
+                "suspicious_ip_threshold": 10,
+                "data_access_threshold": 2,
+            }
+        }
+    )
     detector._data_access_patterns["user1"] = [0.0]
     times = iter([4000.0, 4001.0, 4002.0])
     monkeypatch.setattr(threat_module.time, "time", lambda: next(times))
@@ -55,7 +79,15 @@ def test_detect_suspicious_access_pattern_cleans_old_entries_and_triggers(monkey
 
 
 def test_detect_unauthorized_access_attempt_escalates_to_critical(monkeypatch) -> None:
-    detector = ThreatDetector({"thresholds": {"failed_login_threshold": 5, "suspicious_ip_threshold": 1, "data_access_threshold": 1000}})
+    detector = ThreatDetector(
+        {
+            "thresholds": {
+                "failed_login_threshold": 5,
+                "suspicious_ip_threshold": 1,
+                "data_access_threshold": 1000,
+            }
+        }
+    )
     monkeypatch.setattr(threat_module.time, "time", lambda: 5000.0)
 
     high_event = detector.detect_unauthorized_access_attempt("user1", "admin", "4.4.4.4")
@@ -96,7 +128,9 @@ def test_get_threat_summary_resolve_and_recent_events_limit(monkeypatch) -> None
     detector._threat_events = [
         ThreatEvent(
             event_id=f"event-{index}",
-            threat_type=ThreatType.BRUTE_FORCE if index % 2 == 0 else ThreatType.UNAUTHORIZED_ACCESS,
+            threat_type=ThreatType.BRUTE_FORCE
+            if index % 2 == 0
+            else ThreatType.UNAUTHORIZED_ACCESS,
             level=ThreatLevel.HIGH if index % 3 == 0 else ThreatLevel.MEDIUM,
             user_id=f"user-{index}",
             ip_address=f"10.0.0.{index}",

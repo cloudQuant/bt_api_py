@@ -1,6 +1,5 @@
 """Tests for BybitErrorTranslator."""
 
-import pytest
 
 from bt_api_py.errors.bybit_translator import BybitErrorTranslator
 

@@ -2,8 +2,6 @@
 
 import json
 
-import pytest
-
 from bt_api_py.containers.exchanges.htx_exchange_data import HtxExchangeData
 
 
@@ -33,11 +31,11 @@ class TestHtxExchangeData:
 
     def test_get_wss_path_builds_subscription_message(self):
         exchange = HtxExchangeData()
-        exchange.wss_paths = {"depth": {"params": ["{symbol}.depth.{type}"], "method": "SUBSCRIBE", "id": 1}}
+        exchange.wss_paths = {
+            "depth": {"params": ["{symbol}.depth.{type}"], "method": "SUBSCRIBE", "id": 1}
+        }
 
-        payload = json.loads(
-            exchange.get_wss_path(topic="depth", symbol="BTC/USDT", type="step0")
-        )
+        payload = json.loads(exchange.get_wss_path(topic="depth", symbol="BTC/USDT", type="step0"))
 
         assert payload["sub"] == "market.btcusdt.depth.step0"
         assert payload["id"] == "depth_BTC/USDT"

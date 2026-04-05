@@ -1,6 +1,5 @@
 """Tests for DydxOrderData container."""
 
-import pytest
 
 from bt_api_py.containers.orders.dydx_order import DydxOrderData
 
@@ -31,7 +30,9 @@ class TestDydxOrderData:
             "filledSize": "0.5",
             "remainingSize": "0.5",
         }
-        order = DydxOrderData(data, symbol_name="BTC-USD", asset_type="SWAP", has_been_json_encoded=True)
+        order = DydxOrderData(
+            data, symbol_name="BTC-USD", asset_type="SWAP", has_been_json_encoded=True
+        )
         order.init_data()
 
         assert order.order_id == "123456"
@@ -40,7 +41,9 @@ class TestDydxOrderData:
 
     def test_get_all_data(self):
         """Test get_all_data."""
-        order = DydxOrderData({}, symbol_name="BTC-USD", asset_type="SWAP", has_been_json_encoded=True)
+        order = DydxOrderData(
+            {}, symbol_name="BTC-USD", asset_type="SWAP", has_been_json_encoded=True
+        )
         result = order.get_all_data()
 
         assert result["exchange_name"] == "DYDX"
@@ -48,7 +51,9 @@ class TestDydxOrderData:
 
     def test_str_representation(self):
         """Test __str__ method."""
-        order = DydxOrderData({}, symbol_name="BTC-USD", asset_type="SWAP", has_been_json_encoded=True)
+        order = DydxOrderData(
+            {}, symbol_name="BTC-USD", asset_type="SWAP", has_been_json_encoded=True
+        )
         result = str(order)
 
         assert "DYDX" in result

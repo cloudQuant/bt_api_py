@@ -1,6 +1,5 @@
 """Tests for YobitExchangeData container."""
 
-import pytest
 
 from bt_api_py.containers.exchanges.yobit_exchange_data import YobitExchangeData
 

@@ -33,7 +33,9 @@ class TestCoinbaseOrderData:
             "size": "1.0",
             "filled_size": "1.0",
         }
-        order = CoinbaseOrderData(data, symbol_name="BTC-USD", asset_type="SPOT", has_been_json_encoded=True)
+        order = CoinbaseOrderData(
+            data, symbol_name="BTC-USD", asset_type="SPOT", has_been_json_encoded=True
+        )
         order.init_data()
 
         assert order.order_id == "123456"
@@ -59,7 +61,9 @@ class TestCoinbaseOrderData:
             "done_reason": "filled",
             "settled": "true",
         }
-        order = CoinbaseOrderData(data, symbol_name="BTC-USD", asset_type="SPOT", has_been_json_encoded=True)
+        order = CoinbaseOrderData(
+            data, symbol_name="BTC-USD", asset_type="SPOT", has_been_json_encoded=True
+        )
         order.init_data()
 
         assert order.get_order_id() == "123456"
@@ -82,7 +86,9 @@ class TestCoinbaseOrderData:
 
     def test_get_all_data(self):
         """Test get_all_data."""
-        order = CoinbaseOrderData({}, symbol_name="BTC-USD", asset_type="SPOT", has_been_json_encoded=True)
+        order = CoinbaseOrderData(
+            {}, symbol_name="BTC-USD", asset_type="SPOT", has_been_json_encoded=True
+        )
         result = order.get_all_data()
 
         assert result["exchange_name"] == "COINBASE"
@@ -90,7 +96,9 @@ class TestCoinbaseOrderData:
 
     def test_str_representation(self):
         """Test __str__ method."""
-        order = CoinbaseOrderData({}, symbol_name="BTC-USD", asset_type="SPOT", has_been_json_encoded=True)
+        order = CoinbaseOrderData(
+            {}, symbol_name="BTC-USD", asset_type="SPOT", has_been_json_encoded=True
+        )
         result = str(order)
 
         assert "COINBASE" in result
@@ -111,7 +119,7 @@ class TestCoinbaseOrderData:
                     "funds": "25005.0",
                     "filled_funds": "5001.0",
                     "remaining_funds": "20004.0",
-                    "settled": "false"
+                    "settled": "false",
                 }
             ),
             symbol_name="BTC-USD",

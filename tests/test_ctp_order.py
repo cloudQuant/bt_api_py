@@ -2,7 +2,7 @@
 
 import pytest
 
-from bt_api_py.containers.ctp.ctp_order import CtpOrderData, CTP_ORDER_STATUS_MAP, CTP_DIRECTION_MAP
+from bt_api_py.containers.ctp.ctp_order import CTP_DIRECTION_MAP, CTP_ORDER_STATUS_MAP, CtpOrderData
 
 
 class TestCtpOrderData:
@@ -14,7 +14,7 @@ class TestCtpOrderData:
             {"OrderSysID": "12345"},
             symbol_name="IF2506",
             asset_type="FUTURE",
-            has_been_json_encoded=True
+            has_been_json_encoded=True,
         )
 
         assert order.exchange_name == "CTP"

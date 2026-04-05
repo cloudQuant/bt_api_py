@@ -1,6 +1,5 @@
 """Tests for IB position container."""
 
-import pytest
 
 from bt_api_py.containers.ib.ib_position import IbPositionData
 

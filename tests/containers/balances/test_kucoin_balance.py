@@ -36,7 +36,9 @@ class TestKuCoinBalanceData:
 
     def test_get_all_data(self):
         """Test get_all_data."""
-        balance = KuCoinBalanceData({}, symbol_name="BTC", asset_type="SPOT", has_been_json_encoded=True)
+        balance = KuCoinBalanceData(
+            {}, symbol_name="BTC", asset_type="SPOT", has_been_json_encoded=True
+        )
         # Set _initialized to prevent AutoInitMixin issues
         balance._initialized = True
         result = balance.get_all_data()
@@ -68,7 +70,9 @@ class TestKuCoinRequestBalanceData:
                 }
             ]
         }
-        balance = KuCoinRequestBalanceData(data, symbol_name="BTC", asset_type="SPOT", has_been_json_encoded=True)
+        balance = KuCoinRequestBalanceData(
+            data, symbol_name="BTC", asset_type="SPOT", has_been_json_encoded=True
+        )
         balance.init_data()
 
         assert balance.symbol_name == "BTC"
@@ -86,7 +90,9 @@ class TestKuCoinRequestBalanceData:
                 "holds": "1000.0",
             }
         ]
-        balance = KuCoinRequestBalanceData(data, symbol_name="USDT", asset_type="SPOT", has_been_json_encoded=True)
+        balance = KuCoinRequestBalanceData(
+            data, symbol_name="USDT", asset_type="SPOT", has_been_json_encoded=True
+        )
         balance.init_data()
 
         assert balance.symbol_name == "USDT"
@@ -113,7 +119,9 @@ class TestKuCoinWssBalanceData:
                 "holds": "0.2",
             }
         }
-        balance = KuCoinWssBalanceData(data, symbol_name="BTC", asset_type="SPOT", has_been_json_encoded=True)
+        balance = KuCoinWssBalanceData(
+            data, symbol_name="BTC", asset_type="SPOT", has_been_json_encoded=True
+        )
         balance.init_data()
 
         assert balance.symbol_name == "BTC"
@@ -128,7 +136,9 @@ class TestKuCoinWssBalanceData:
             "available": "9000.0",
             "holds": "1000.0",
         }
-        balance = KuCoinWssBalanceData(data, symbol_name="USDT", asset_type="SPOT", has_been_json_encoded=True)
+        balance = KuCoinWssBalanceData(
+            data, symbol_name="USDT", asset_type="SPOT", has_been_json_encoded=True
+        )
         balance.init_data()
 
         assert balance.symbol_name == "USDT"

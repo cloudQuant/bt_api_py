@@ -39,7 +39,9 @@ class TestPoloniexOrderData:
 
     def test_get_all_data(self):
         """Test get_all_data."""
-        order = PoloniexOrderData({}, symbol_name="BTC_USDT", asset_type="SPOT", has_been_json_encoded=True)
+        order = PoloniexOrderData(
+            {}, symbol_name="BTC_USDT", asset_type="SPOT", has_been_json_encoded=True
+        )
         # Set _initialized to prevent AutoInitMixin
         order._initialized = True
         result = order.get_all_data()

@@ -1,6 +1,5 @@
 """Tests for GateioTickerData container."""
 
-import pytest
 
 from bt_api_py.containers.tickers.gateio_ticker import GateioTickerData
 
@@ -27,7 +26,9 @@ class TestGateioTickerData:
             "high_24h": "51000.0",
             "low_24h": "49000.0",
         }
-        ticker = GateioTickerData(data, symbol_name="BTC_USDT", asset_type="SPOT", has_been_json_encoded=True)
+        ticker = GateioTickerData(
+            data, symbol_name="BTC_USDT", asset_type="SPOT", has_been_json_encoded=True
+        )
         ticker.init_data()
 
         assert ticker.ticker_symbol_name == "BTC_USDT"
@@ -35,7 +36,9 @@ class TestGateioTickerData:
 
     def test_get_all_data(self):
         """Test get_all_data."""
-        ticker = GateioTickerData({}, symbol_name="BTC_USDT", asset_type="SPOT", has_been_json_encoded=True)
+        ticker = GateioTickerData(
+            {}, symbol_name="BTC_USDT", asset_type="SPOT", has_been_json_encoded=True
+        )
         result = ticker.get_all_data()
 
         assert result["exchange_name"] == "GATEIO"
@@ -43,7 +46,9 @@ class TestGateioTickerData:
 
     def test_str_representation(self):
         """Test __str__ method."""
-        ticker = GateioTickerData({}, symbol_name="BTC_USDT", asset_type="SPOT", has_been_json_encoded=True)
+        ticker = GateioTickerData(
+            {}, symbol_name="BTC_USDT", asset_type="SPOT", has_been_json_encoded=True
+        )
         result = str(ticker)
 
         assert "GATEIO" in result

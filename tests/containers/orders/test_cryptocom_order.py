@@ -1,6 +1,5 @@
 """Tests for CryptoComOrder container."""
 
-import pytest
 
 from bt_api_py.containers.orders.cryptocom_order import CryptoComOrder
 
@@ -30,7 +29,9 @@ class TestCryptoComOrder:
             "filled_quantity": "1.0",
             "remaining_quantity": "0.0",
         }
-        order = CryptoComOrder(data, symbol_name="BTC-USDT", asset_type="SPOT", has_been_json_encoded=True)
+        order = CryptoComOrder(
+            data, symbol_name="BTC-USDT", asset_type="SPOT", has_been_json_encoded=True
+        )
         order.init_data()
 
         assert order.order_id == "123456"
@@ -39,7 +40,9 @@ class TestCryptoComOrder:
 
     def test_get_all_data(self):
         """Test get_all_data."""
-        order = CryptoComOrder({}, symbol_name="BTC-USDT", asset_type="SPOT", has_been_json_encoded=True)
+        order = CryptoComOrder(
+            {}, symbol_name="BTC-USDT", asset_type="SPOT", has_been_json_encoded=True
+        )
         result = order.get_all_data()
 
         assert result["exchange_name"] == "CRYPTOCOM"
@@ -47,7 +50,9 @@ class TestCryptoComOrder:
 
     def test_str_representation(self):
         """Test __str__ method."""
-        order = CryptoComOrder({}, symbol_name="BTC-USDT", asset_type="SPOT", has_been_json_encoded=True)
+        order = CryptoComOrder(
+            {}, symbol_name="BTC-USDT", asset_type="SPOT", has_been_json_encoded=True
+        )
         result = str(order)
 
         assert "CRYPTOCOM" in result

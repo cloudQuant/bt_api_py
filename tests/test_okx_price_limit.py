@@ -14,11 +14,15 @@ class TestOkxPriceLimitData:
             {"instId": "BTC-USDT-SWAP", "buyLmt": "50000", "sellLmt": "51000"},
             "BTC-USDT-SWAP",
             "SWAP",
-            has_been_json_encoded=True
+            has_been_json_encoded=True,
         )
 
         assert price_limit.event == "PriceLimitEvent"
-        assert price_limit.price_limit_info == {"instId": "BTC-USDT-SWAP", "buyLmt": "50000", "sellLmt": "51000"}
+        assert price_limit.price_limit_info == {
+            "instId": "BTC-USDT-SWAP",
+            "buyLmt": "50000",
+            "sellLmt": "51000",
+        }
         assert price_limit.has_been_json_encoded is True
         assert price_limit.exchange_name == "OKX"
         assert price_limit.symbol_name == "BTC-USDT-SWAP"
@@ -29,7 +33,7 @@ class TestOkxPriceLimitData:
             '{"instId": "BTC-USDT-SWAP", "buyLmt": "50000", "sellLmt": "51000"}',
             "BTC-USDT-SWAP",
             "SWAP",
-            has_been_json_encoded=False
+            has_been_json_encoded=False,
         )
 
         assert price_limit.event == "PriceLimitEvent"
@@ -39,10 +43,15 @@ class TestOkxPriceLimitData:
     def test_init_data(self):
         """Test init_data method."""
         price_limit = OkxPriceLimitData(
-            {"instId": "BTC-USDT-SWAP", "buyLmt": "50000", "sellLmt": "51000", "ts": "1705315800000"},
+            {
+                "instId": "BTC-USDT-SWAP",
+                "buyLmt": "50000",
+                "sellLmt": "51000",
+                "ts": "1705315800000",
+            },
             "BTC-USDT-SWAP",
             "SWAP",
-            has_been_json_encoded=True
+            has_been_json_encoded=True,
         )
         price_limit.init_data()
 

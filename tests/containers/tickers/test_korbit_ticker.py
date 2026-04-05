@@ -1,7 +1,6 @@
 """Tests for KorbitTickerData container."""
 
 import json
-import pytest
 
 from bt_api_py.containers.tickers.korbit_ticker import (
     KorbitRequestTickerData,
@@ -25,7 +24,9 @@ class TestKorbitTickerData:
     def test_init_data(self):
         """Test init_data with ticker info."""
         data = {"last": "50000000", "bid": "49990000", "ask": "50010000"}
-        ticker = KorbitTickerData(data, symbol_name="btc_krw", asset_type="SPOT", has_been_json_encoded=True)
+        ticker = KorbitTickerData(
+            data, symbol_name="btc_krw", asset_type="SPOT", has_been_json_encoded=True
+        )
         ticker.init_data()
 
         assert ticker.has_been_init_data is True
@@ -42,7 +43,9 @@ class TestKorbitTickerData:
             "changePercent": "0.2",
             "timestamp": 1678901234000,
         }
-        ticker = KorbitTickerData(data, symbol_name="btc_krw", asset_type="SPOT", has_been_json_encoded=True)
+        ticker = KorbitTickerData(
+            data, symbol_name="btc_krw", asset_type="SPOT", has_been_json_encoded=True
+        )
         ticker.init_data()
 
         assert ticker.get_ticker_symbol_name() == "btc_krw"
@@ -58,7 +61,9 @@ class TestKorbitTickerData:
 
     def test_get_all_data(self):
         """Test get_all_data."""
-        ticker = KorbitTickerData({}, symbol_name="btc_krw", asset_type="SPOT", has_been_json_encoded=True)
+        ticker = KorbitTickerData(
+            {}, symbol_name="btc_krw", asset_type="SPOT", has_been_json_encoded=True
+        )
         result = ticker.get_all_data()
 
         assert result["exchange_name"] == "KORBIT"
@@ -66,7 +71,9 @@ class TestKorbitTickerData:
 
     def test_str_representation(self):
         """Test __str__ method."""
-        ticker = KorbitTickerData({}, symbol_name="btc_krw", asset_type="SPOT", has_been_json_encoded=True)
+        ticker = KorbitTickerData(
+            {}, symbol_name="btc_krw", asset_type="SPOT", has_been_json_encoded=True
+        )
         result = str(ticker)
 
         assert "KORBIT" in result

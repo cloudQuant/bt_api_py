@@ -1,6 +1,5 @@
 """Tests for GmxExchangeData container."""
 
-import pytest
 
 from bt_api_py.containers.exchanges.gmx_exchange_data import GmxExchangeData
 

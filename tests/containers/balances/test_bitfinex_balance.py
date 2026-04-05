@@ -1,6 +1,5 @@
 """Tests for BitfinexSpotRequestBalanceData container."""
 
-import pytest
 
 from bt_api_py.containers.balances.bitfinex_balance import BitfinexSpotRequestBalanceData
 
@@ -24,7 +23,9 @@ class TestBitfinexSpotRequestBalanceData:
             "available": 1.0,
             "reserved": 0.5,
         }
-        balance = BitfinexSpotRequestBalanceData(data, asset_type="SPOT", has_been_json_encoded=True)
+        balance = BitfinexSpotRequestBalanceData(
+            data, asset_type="SPOT", has_been_json_encoded=True
+        )
         balance.init_data()
 
         assert balance.currency == "BTC"
@@ -35,7 +36,9 @@ class TestBitfinexSpotRequestBalanceData:
     def test_init_data_idempotent(self):
         """Test init_data is idempotent."""
         data = {"currency": "BTC", "balance": 1.0}
-        balance = BitfinexSpotRequestBalanceData(data, asset_type="SPOT", has_been_json_encoded=True)
+        balance = BitfinexSpotRequestBalanceData(
+            data, asset_type="SPOT", has_been_json_encoded=True
+        )
         balance.init_data()
         first_currency = balance.currency
 
@@ -55,7 +58,9 @@ class TestBitfinexSpotRequestBalanceData:
     def test_get_all_data(self):
         """Test get_all_data."""
         data = {"currency": "BTC", "balance": 1.0}
-        balance = BitfinexSpotRequestBalanceData(data, asset_type="SPOT", has_been_json_encoded=True)
+        balance = BitfinexSpotRequestBalanceData(
+            data, asset_type="SPOT", has_been_json_encoded=True
+        )
         result = balance.get_all_data()
 
         assert result["exchange_name"] == "BITFINEX"
@@ -66,7 +71,9 @@ class TestBitfinexSpotRequestBalanceData:
     def test_str_representation(self):
         """Test __str__ method."""
         data = {"currency": "BTC"}
-        balance = BitfinexSpotRequestBalanceData(data, asset_type="SPOT", has_been_json_encoded=True)
+        balance = BitfinexSpotRequestBalanceData(
+            data, asset_type="SPOT", has_been_json_encoded=True
+        )
         result = str(balance)
 
         assert "BITFINEX" in result

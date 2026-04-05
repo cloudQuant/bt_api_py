@@ -19,9 +19,7 @@ class TestBigONERequestTickerData:
                 "volume": 1000.0,
             }
         }
-        ticker = BigONERequestTickerData(
-            ticker_info, "BTCUSDT", "SPOT", has_been_json_encoded=True
-        )
+        ticker = BigONERequestTickerData(ticker_info, "BTCUSDT", "SPOT", has_been_json_encoded=True)
 
         assert ticker.symbol_name == "BTCUSDT"
         assert ticker.exchange_name == "BIGONE"
@@ -37,9 +35,7 @@ class TestBigONERequestTickerData:
                 "volume": 1000.0,
             }
         }
-        ticker = BigONERequestTickerData(
-            ticker_info, "BTCUSDT", "SPOT", has_been_json_encoded=True
-        )
+        ticker = BigONERequestTickerData(ticker_info, "BTCUSDT", "SPOT", has_been_json_encoded=True)
         ticker.init_data()
 
         assert ticker.last_price == 50000.0

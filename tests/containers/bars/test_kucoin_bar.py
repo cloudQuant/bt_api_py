@@ -2,7 +2,11 @@
 
 import pytest
 
-from bt_api_py.containers.bars.kucoin_bar import KuCoinBarData, KuCoinRequestBarData, KuCoinWssBarData
+from bt_api_py.containers.bars.kucoin_bar import (
+    KuCoinBarData,
+    KuCoinRequestBarData,
+    KuCoinWssBarData,
+)
 
 
 class TestKuCoinBarData:
@@ -19,14 +23,18 @@ class TestKuCoinBarData:
 
     def test_init_data_raises_not_implemented(self):
         """Test init_data raises NotImplementedError."""
-        bar = KuCoinBarData({}, symbol_name="BTC-USDT", asset_type="SPOT", has_been_json_encoded=True)
+        bar = KuCoinBarData(
+            {}, symbol_name="BTC-USDT", asset_type="SPOT", has_been_json_encoded=True
+        )
 
         with pytest.raises(NotImplementedError):
             bar.init_data()
 
     def test_get_all_data(self):
         """Test get_all_data method - raises NotImplementedError via init_data."""
-        bar = KuCoinBarData({}, symbol_name="BTC-USDT", asset_type="SPOT", has_been_json_encoded=True)
+        bar = KuCoinBarData(
+            {}, symbol_name="BTC-USDT", asset_type="SPOT", has_been_json_encoded=True
+        )
 
         with pytest.raises(NotImplementedError):
             bar.get_all_data()
@@ -75,7 +83,15 @@ class TestKuCoinWssBarData:
             {
                 "data": {
                     "symbol": "BTC-USDT",
-                    "candles": ["1688671800", "50000", "50200", "50500", "49500", "1000", "50100000"],
+                    "candles": [
+                        "1688671800",
+                        "50000",
+                        "50200",
+                        "50500",
+                        "49500",
+                        "1000",
+                        "50100000",
+                    ],
                 }
             },
             symbol_name="BTC-USDT",

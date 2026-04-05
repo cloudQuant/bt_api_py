@@ -1,6 +1,5 @@
 """Tests for advanced_connection_manager module - pure local logic."""
 
-import asyncio
 import time
 
 import pytest
@@ -151,7 +150,9 @@ class TestConnectionHealth:
 
         # Record max consecutive failures
         for _ in range(health.max_consecutive_failures):
-            health.update_health(latency_ms=100.0, error_rate=1.0, uptime_ratio=0.99, has_error=True)
+            health.update_health(
+                latency_ms=100.0, error_rate=1.0, uptime_ratio=0.99, has_error=True
+            )
 
         assert health.consecutive_failures == health.max_consecutive_failures
         assert health.is_healthy is False
@@ -225,17 +226,23 @@ class TestWebSocketConfig:
     def test_invalid_heartbeat_interval(self):
         """Test invalid heartbeat interval raises error."""
         with pytest.raises(ValueError, match="heartbeat_interval must be > 0"):
-            WebSocketConfig(url="wss://stream.example.com", exchange_name="test", heartbeat_interval=0)
+            WebSocketConfig(
+                url="wss://stream.example.com", exchange_name="test", heartbeat_interval=0
+            )
 
     def test_invalid_heartbeat_timeout(self):
         """Test invalid heartbeat timeout raises error."""
         with pytest.raises(ValueError, match="heartbeat_timeout must be > 0"):
-            WebSocketConfig(url="wss://stream.example.com", exchange_name="test", heartbeat_timeout=-1)
+            WebSocketConfig(
+                url="wss://stream.example.com", exchange_name="test", heartbeat_timeout=-1
+            )
 
     def test_invalid_connection_timeout(self):
         """Test invalid connection timeout raises error."""
         with pytest.raises(ValueError, match="connection_timeout must be > 0"):
-            WebSocketConfig(url="wss://stream.example.com", exchange_name="test", connection_timeout=0)
+            WebSocketConfig(
+                url="wss://stream.example.com", exchange_name="test", connection_timeout=0
+            )
 
     def test_invalid_idle_timeout(self):
         """Test invalid idle timeout raises error."""
@@ -245,7 +252,9 @@ class TestWebSocketConfig:
     def test_invalid_reconnect_interval(self):
         """Test invalid reconnect interval raises error."""
         with pytest.raises(ValueError, match="reconnect_interval must be > 0"):
-            WebSocketConfig(url="wss://stream.example.com", exchange_name="test", reconnect_interval=0)
+            WebSocketConfig(
+                url="wss://stream.example.com", exchange_name="test", reconnect_interval=0
+            )
 
     def test_invalid_max_reconnect_attempts(self):
         """Test invalid max reconnect attempts raises error."""
@@ -266,23 +275,33 @@ class TestWebSocketConfig:
     def test_invalid_max_reconnect_delay(self):
         """Test invalid max reconnect delay raises error."""
         with pytest.raises(ValueError, match="max_reconnect_delay must be > 0"):
-            WebSocketConfig(url="wss://stream.example.com", exchange_name="test", max_reconnect_delay=0)
+            WebSocketConfig(
+                url="wss://stream.example.com", exchange_name="test", max_reconnect_delay=0
+            )
 
     def test_invalid_buffer_sizes(self):
         """Test invalid buffer sizes raise errors."""
         with pytest.raises(ValueError, match="message_buffer_size must be > 0"):
-            WebSocketConfig(url="wss://stream.example.com", exchange_name="test", message_buffer_size=0)
+            WebSocketConfig(
+                url="wss://stream.example.com", exchange_name="test", message_buffer_size=0
+            )
 
         with pytest.raises(ValueError, match="send_buffer_size must be > 0"):
-            WebSocketConfig(url="wss://stream.example.com", exchange_name="test", send_buffer_size=0)
+            WebSocketConfig(
+                url="wss://stream.example.com", exchange_name="test", send_buffer_size=0
+            )
 
         with pytest.raises(ValueError, match="receive_buffer_size must be > 0"):
-            WebSocketConfig(url="wss://stream.example.com", exchange_name="test", receive_buffer_size=0)
+            WebSocketConfig(
+                url="wss://stream.example.com", exchange_name="test", receive_buffer_size=0
+            )
 
     def test_invalid_rate_limits(self):
         """Test invalid rate limits raise errors."""
         with pytest.raises(ValueError, match="max_requests_per_second must be > 0"):
-            WebSocketConfig(url="wss://stream.example.com", exchange_name="test", max_requests_per_second=0)
+            WebSocketConfig(
+                url="wss://stream.example.com", exchange_name="test", max_requests_per_second=0
+            )
 
         with pytest.raises(ValueError, match="max_subscriptions_per_connection must be > 0"):
             WebSocketConfig(
@@ -294,7 +313,9 @@ class TestWebSocketConfig:
     def test_invalid_dead_letter_queue_size(self):
         """Test invalid DLQ size raises error."""
         with pytest.raises(ValueError, match="dead_letter_queue_size must be > 0"):
-            WebSocketConfig(url="wss://stream.example.com", exchange_name="test", dead_letter_queue_size=0)
+            WebSocketConfig(
+                url="wss://stream.example.com", exchange_name="test", dead_letter_queue_size=0
+            )
 
 
 class TestDeadLetterQueue:

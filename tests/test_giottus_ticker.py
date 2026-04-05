@@ -16,9 +16,7 @@ class TestGiottusRequestTickerData:
             "bidPrice": 4999999.0,
             "askPrice": 5000001.0,
         }
-        ticker = GiottusRequestTickerData(
-            ticker_info, "BTCINR", "SPOT", has_been_json_encoded=True
-        )
+        ticker = GiottusRequestTickerData(ticker_info, "BTCINR", "SPOT", has_been_json_encoded=True)
 
         assert ticker.symbol_name == "BTCINR"
         assert ticker.exchange_name == "GIOTTUS"
@@ -31,9 +29,7 @@ class TestGiottusRequestTickerData:
             "bidPrice": 4999999.0,
             "askPrice": 5000001.0,
         }
-        ticker = GiottusRequestTickerData(
-            ticker_info, "BTCINR", "SPOT", has_been_json_encoded=True
-        )
+        ticker = GiottusRequestTickerData(ticker_info, "BTCINR", "SPOT", has_been_json_encoded=True)
         ticker.init_data()
 
         assert ticker.last_price == 5000000.0

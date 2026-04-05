@@ -19,14 +19,18 @@ class TestKuCoinOrderBookData:
 
     def test_init_data_raises_not_implemented(self):
         """Test init_data raises NotImplementedError."""
-        orderbook = KuCoinOrderBookData({}, symbol_name="BTC-USDT", asset_type="SPOT", has_been_json_encoded=True)
+        orderbook = KuCoinOrderBookData(
+            {}, symbol_name="BTC-USDT", asset_type="SPOT", has_been_json_encoded=True
+        )
 
         with pytest.raises(NotImplementedError):
             orderbook.init_data()
 
     def test_get_all_data(self):
         """Test get_all_data method - raises NotImplementedError via init_data."""
-        orderbook = KuCoinOrderBookData({}, symbol_name="BTC-USDT", asset_type="SPOT", has_been_json_encoded=True)
+        orderbook = KuCoinOrderBookData(
+            {}, symbol_name="BTC-USDT", asset_type="SPOT", has_been_json_encoded=True
+        )
 
         with pytest.raises(NotImplementedError):
             orderbook.get_all_data()

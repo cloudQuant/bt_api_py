@@ -1,6 +1,5 @@
 """Tests for RipioExchangeData container."""
 
-import pytest
 
 from bt_api_py.containers.exchanges.ripio_exchange_data import RipioExchangeData
 

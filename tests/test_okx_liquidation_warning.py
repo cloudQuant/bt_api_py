@@ -14,7 +14,7 @@ class TestOkxLiquidationWarningData:
             {"instId": "BTC-USDT-SWAP"},
             symbol_name="BTC-USDT-SWAP",
             asset_type="FUTURE",
-            has_been_json_encoded=True
+            has_been_json_encoded=True,
         )
 
         assert liquidation.exchange_name == "OKX"
@@ -35,7 +35,7 @@ class TestOkxLiquidationWarningData:
             liquidation_info,
             symbol_name="BTC-USDT-SWAP",
             asset_type="FUTURE",
-            has_been_json_encoded=True
+            has_been_json_encoded=True,
         )
         liquidation.init_data()
 
@@ -49,10 +49,7 @@ class TestOkxLiquidationWarningData:
     def test_liquidation_data_inheritance(self):
         """Test that OkxLiquidationWarningData inherits from LiquidationData."""
         liquidation = OkxLiquidationWarningData(
-            {},
-            symbol_name="BTC-USDT-SWAP",
-            asset_type="FUTURE",
-            has_been_json_encoded=True
+            {}, symbol_name="BTC-USDT-SWAP", asset_type="FUTURE", has_been_json_encoded=True
         )
 
         assert hasattr(liquidation, "liquidation_info")

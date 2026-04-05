@@ -1,6 +1,5 @@
 """Tests for KucoinExchangeData container."""
 
-import pytest
 
 from bt_api_py.containers.exchanges.kucoin_exchange_data import KuCoinExchangeData
 

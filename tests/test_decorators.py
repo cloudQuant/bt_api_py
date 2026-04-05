@@ -13,6 +13,7 @@ class TestDeprecated:
 
     def test_deprecated_default_message(self):
         """Test deprecated decorator with default message."""
+
         @deprecated()
         def old_function():
             return "result"
@@ -28,6 +29,7 @@ class TestDeprecated:
 
     def test_deprecated_custom_message(self):
         """Test deprecated decorator with custom message."""
+
         @deprecated(msg="Use new_function instead")
         def old_function():
             return "result"
@@ -42,6 +44,7 @@ class TestDeprecated:
 
     def test_deprecated_with_args(self):
         """Test deprecated decorator with arguments."""
+
         @deprecated(msg="This is deprecated")
         def old_function(x, y):
             return x + y
@@ -55,6 +58,7 @@ class TestDeprecated:
 
     def test_deprecated_with_kwargs(self):
         """Test deprecated decorator with keyword arguments."""
+
         @deprecated()
         def old_function(x, y=10):
             return x + y

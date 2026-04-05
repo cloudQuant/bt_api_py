@@ -1,7 +1,6 @@
 """Tests for LocalBitcoinsTickerData container."""
 
 import json
-import pytest
 
 from bt_api_py.containers.tickers.localbitcoins_ticker import (
     LocalBitcoinsRequestTickerData,
@@ -25,13 +24,17 @@ class TestLocalBitcoinsTickerData:
     def test_init_data(self):
         """Test init_data with ticker info."""
         data = {"avg_1h": "50000.0", "avg_6h": "49990.0"}
-        ticker = LocalBitcoinsTickerData(data, symbol_name="BTC-USD", asset_type="SPOT", has_been_json_encoded=True)
+        ticker = LocalBitcoinsTickerData(
+            data, symbol_name="BTC-USD", asset_type="SPOT", has_been_json_encoded=True
+        )
         ticker.init_data()
 
         assert ticker.has_been_init_data is True
 
     def test_init_data_parses_nested_symbol_payload_and_getters(self, monkeypatch):
-        monkeypatch.setattr("bt_api_py.containers.tickers.localbitcoins_ticker.time.time", lambda: 789.0)
+        monkeypatch.setattr(
+            "bt_api_py.containers.tickers.localbitcoins_ticker.time.time", lambda: 789.0
+        )
         data = {
             "btc_usd": {
                 "avg": 50000.5,
@@ -59,7 +62,9 @@ class TestLocalBitcoinsTickerData:
 
     def test_get_all_data(self):
         """Test get_all_data."""
-        ticker = LocalBitcoinsTickerData({}, symbol_name="BTC-USD", asset_type="SPOT", has_been_json_encoded=True)
+        ticker = LocalBitcoinsTickerData(
+            {}, symbol_name="BTC-USD", asset_type="SPOT", has_been_json_encoded=True
+        )
         result = ticker.get_all_data()
 
         assert result["exchange_name"] == "LOCALBITCOINS"
@@ -67,13 +72,17 @@ class TestLocalBitcoinsTickerData:
 
     def test_str_representation(self):
         """Test __str__ method."""
-        ticker = LocalBitcoinsTickerData({}, symbol_name="BTC-USD", asset_type="SPOT", has_been_json_encoded=True)
+        ticker = LocalBitcoinsTickerData(
+            {}, symbol_name="BTC-USD", asset_type="SPOT", has_been_json_encoded=True
+        )
         result = str(ticker)
 
         assert "LOCALBITCOINS" in result
 
     def test_request_and_wss_subclasses_parse_string_and_dict_payloads(self, monkeypatch):
-        monkeypatch.setattr("bt_api_py.containers.tickers.localbitcoins_ticker.time.time", lambda: 654.0)
+        monkeypatch.setattr(
+            "bt_api_py.containers.tickers.localbitcoins_ticker.time.time", lambda: 654.0
+        )
         request = LocalBitcoinsRequestTickerData(
             json.dumps({"btc_usd": {"avg": 1.0, "bid": 0.9, "ask": 1.1, "volume_btc": 2.5}}),
             symbol_name="BTC-USD",

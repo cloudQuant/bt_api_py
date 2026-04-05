@@ -1,6 +1,5 @@
 """Tests for IB contract container."""
 
-import pytest
 
 from bt_api_py.containers.ib.ib_contract import IbContract
 
@@ -133,7 +132,9 @@ class TestIbContract:
 
     def test_future_factory(self):
         """Test future factory method."""
-        contract = IbContract.future("ES", exchange="GLOBEX", currency="USD", last_trade_date="20250620")
+        contract = IbContract.future(
+            "ES", exchange="GLOBEX", currency="USD", last_trade_date="20250620"
+        )
 
         assert contract.symbol == "ES"
         assert contract.sec_type == "FUT"

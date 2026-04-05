@@ -1,6 +1,5 @@
 """Tests for monitoring/collector.py."""
 
-import pytest
 
 
 class TestCollector:
@@ -9,4 +8,5 @@ class TestCollector:
     def test_module_exists(self):
         """Test module can be imported."""
         from bt_api_py.monitoring import collector
+
         assert collector is not None

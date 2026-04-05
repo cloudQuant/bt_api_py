@@ -436,7 +436,9 @@ class TestEncryptionManager:
             self.encryption_manager.decrypt(encrypted_with_bad_algorithm)
 
     def test_chacha20_encrypt_decrypt_roundtrip(self):
-        key = self.encryption_manager.key_manager.generate_key(EncryptionAlgorithm.CHACHA20_POLY1305)
+        key = self.encryption_manager.key_manager.generate_key(
+            EncryptionAlgorithm.CHACHA20_POLY1305
+        )
 
         encrypted = self.encryption_manager.encrypt("payload", key_id=key.key_id)
         decrypted = self.encryption_manager.decrypt(encrypted)
@@ -446,7 +448,9 @@ class TestEncryptionManager:
     def test_rsa_key_pair_encrypt_decrypt_roundtrip(self):
         key_pair = self.encryption_manager.generate_key_pair()
 
-        encrypted = self.encryption_manager.encrypt_with_public_key("secret", key_pair["public_key"])
+        encrypted = self.encryption_manager.encrypt_with_public_key(
+            "secret", key_pair["public_key"]
+        )
         decrypted = self.encryption_manager.decrypt_with_private_key(
             encrypted, key_pair["private_key"]
         )
@@ -706,11 +710,14 @@ class TestIdentityManager:
         assert group.group_id in self.manager.get_user_groups(identity.identity_id)
         assert identity.identity_id in self.manager.get_group_members(group.group_id)
 
-        assert self.manager.update_identity(
-            identity.identity_id,
-            department="operations",
-            custom_flag=True,
-        ) is True
+        assert (
+            self.manager.update_identity(
+                identity.identity_id,
+                department="operations",
+                custom_flag=True,
+            )
+            is True
+        )
         assert self.manager.update_identity("missing", department="ignored") is False
 
         permissions = self.manager.get_user_permissions(identity.identity_id)
@@ -1212,9 +1219,7 @@ class TestSecurityFrameworkHelpers:
         framework_module._security_framework = DummyFramework()
         assert secured_action(user_id="user-2") == "ok"
         assert secured_action() == "ok"
-        assert calls == [
-            ("user-2", Resource.EXCHANGE_CONFIG, "update", PermissionLevel.ADMIN)
-        ]
+        assert calls == [("user-2", Resource.EXCHANGE_CONFIG, "update", PermissionLevel.ADMIN)]
 
     def test_audit_access_decorator_success_and_failure(self):
         class DummyAuditLogger:
@@ -1533,11 +1538,13 @@ class TestTLSManager:
         """Test TLSManager with custom configuration."""
         from bt_api_py.security_compliance.network.tls_manager import TLSManager
 
-        manager = TLSManager({
-            "version": "1.2",
-            "cipher_suites": [],
-            "certificate_validation": "none",
-        })
+        manager = TLSManager(
+            {
+                "version": "1.2",
+                "cipher_suites": [],
+                "certificate_validation": "none",
+            }
+        )
 
         assert manager.version == "1.2"
         assert manager.cipher_suites == []

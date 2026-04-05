@@ -14,7 +14,7 @@ class TestOkxMarkPriceData:
             {"arg": {"instId": "BTC-USDT-SWAP"}, "data": [{"markPx": "40000.0"}]},
             symbol_name="BTC-USDT-SWAP",
             asset_type="FUTURE",
-            has_been_json_encoded=True
+            has_been_json_encoded=True,
         )
 
         assert mark_price.exchange_name == "OKX"
@@ -25,13 +25,13 @@ class TestOkxMarkPriceData:
         """Test init_data method."""
         mark_price_info = {
             "arg": {"instId": "BTC-USDT-SWAP"},
-            "data": [{"ts": "1705315800000", "markPx": "40000.0"}]
+            "data": [{"ts": "1705315800000", "markPx": "40000.0"}],
         }
         mark_price = OkxMarkPriceData(
             mark_price_info,
             symbol_name="BTC-USDT-SWAP",
             asset_type="FUTURE",
-            has_been_json_encoded=False
+            has_been_json_encoded=False,
         )
         mark_price.init_data()
 
@@ -42,10 +42,7 @@ class TestOkxMarkPriceData:
     def test_mark_price_data_inheritance(self):
         """Test that OkxMarkPriceData inherits from MarkPriceData."""
         mark_price = OkxMarkPriceData(
-            {},
-            symbol_name="BTC-USDT-SWAP",
-            asset_type="FUTURE",
-            has_been_json_encoded=True
+            {}, symbol_name="BTC-USDT-SWAP", asset_type="FUTURE", has_been_json_encoded=True
         )
 
         assert hasattr(mark_price, "mark_price_info")

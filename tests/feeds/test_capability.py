@@ -1,6 +1,5 @@
 """Tests for feeds/capability.py."""
 
-import pytest
 
 from bt_api_py.feeds.capability import Capability
 

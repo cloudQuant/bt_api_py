@@ -19,14 +19,18 @@ class TestCoinbaseBarData:
 
     def test_init_data_raises_not_implemented(self):
         """Test init_data raises NotImplementedError."""
-        bar = CoinbaseBarData({}, symbol_name="BTC-USD", asset_type="SPOT", has_been_json_encoded=True)
+        bar = CoinbaseBarData(
+            {}, symbol_name="BTC-USD", asset_type="SPOT", has_been_json_encoded=True
+        )
 
         with pytest.raises(NotImplementedError):
             bar.init_data()
 
     def test_get_all_data(self):
         """Test get_all_data method - raises NotImplementedError via init_data."""
-        bar = CoinbaseBarData({}, symbol_name="BTC-USD", asset_type="SPOT", has_been_json_encoded=True)
+        bar = CoinbaseBarData(
+            {}, symbol_name="BTC-USD", asset_type="SPOT", has_been_json_encoded=True
+        )
 
         with pytest.raises(NotImplementedError):
             bar.get_all_data()

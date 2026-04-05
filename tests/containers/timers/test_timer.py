@@ -1,6 +1,5 @@
 """Tests for Timer container."""
 
-import pytest
 
 from bt_api_py.containers.timers.timer import TimerData
 

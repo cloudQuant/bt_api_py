@@ -20,19 +20,25 @@ class TestBithumbRequestTickerData:
     def test_init_data(self):
         """Test init_data with ticker info."""
         data = {"closing_price": "50000000", "max_price": "51000000", "min_price": "49000000"}
-        ticker = BithumbRequestTickerData(data, symbol_name="BTC", asset_type="SPOT", has_been_json_encoded=True)
+        ticker = BithumbRequestTickerData(
+            data, symbol_name="BTC", asset_type="SPOT", has_been_json_encoded=True
+        )
         ticker.init_data()
 
         assert ticker.has_been_init_data is True
 
     def test_get_all_data(self):
         """Test get_all_data - base class raises NotImplementedError."""
-        ticker = BithumbRequestTickerData({}, symbol_name="BTC", asset_type="SPOT", has_been_json_encoded=True)
+        ticker = BithumbRequestTickerData(
+            {}, symbol_name="BTC", asset_type="SPOT", has_been_json_encoded=True
+        )
         with pytest.raises(NotImplementedError):
             ticker.get_all_data()
 
     def test_str_representation(self):
         """Test __str__ method - base class raises NotImplementedError."""
-        ticker = BithumbRequestTickerData({}, symbol_name="BTC", asset_type="SPOT", has_been_json_encoded=True)
+        ticker = BithumbRequestTickerData(
+            {}, symbol_name="BTC", asset_type="SPOT", has_been_json_encoded=True
+        )
         with pytest.raises(NotImplementedError):
             str(ticker)

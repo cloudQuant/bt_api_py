@@ -1,6 +1,5 @@
 """Tests for HyperliquidSpotWssTradeData container."""
 
-import pytest
 
 from bt_api_py.containers.trades.hyperliquid_trade import HyperliquidSpotWssTradeData
 
@@ -27,7 +26,9 @@ class TestHyperliquidSpotWssTradeData:
             "sz": "1.0",
             "time": 1234567890.0,
         }
-        trade = HyperliquidSpotWssTradeData(data, symbol_name="BTC", asset_type="SWAP", has_been_json_encoded=True)
+        trade = HyperliquidSpotWssTradeData(
+            data, symbol_name="BTC", asset_type="SWAP", has_been_json_encoded=True
+        )
         trade.init_data()
 
         assert trade.trade_id == "123456"
@@ -35,7 +36,9 @@ class TestHyperliquidSpotWssTradeData:
 
     def test_get_all_data(self):
         """Test get_all_data."""
-        trade = HyperliquidSpotWssTradeData({}, symbol_name="BTC", asset_type="SWAP", has_been_json_encoded=True)
+        trade = HyperliquidSpotWssTradeData(
+            {}, symbol_name="BTC", asset_type="SWAP", has_been_json_encoded=True
+        )
         result = trade.get_all_data()
 
         assert result["exchange_name"] == "HYPERLIQUID"
@@ -43,7 +46,9 @@ class TestHyperliquidSpotWssTradeData:
 
     def test_str_representation(self):
         """Test __str__ method."""
-        trade = HyperliquidSpotWssTradeData({}, symbol_name="BTC", asset_type="SWAP", has_been_json_encoded=True)
+        trade = HyperliquidSpotWssTradeData(
+            {}, symbol_name="BTC", asset_type="SWAP", has_been_json_encoded=True
+        )
         result = str(trade)
 
         assert "Hyperliquid" in result

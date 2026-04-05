@@ -1,6 +1,5 @@
 """Tests for websocket/advanced_connection_manager.py."""
 
-import pytest
 
 from bt_api_py.websocket.advanced_connection_manager import ConnectionState, ErrorCategory
 

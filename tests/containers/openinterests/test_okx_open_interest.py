@@ -1,7 +1,6 @@
 """Tests for OKX Open Interest container."""
 
 import json
-import pytest
 
 from bt_api_py.containers.openinterests import OkxOpenInterestData
 
@@ -17,7 +16,9 @@ class TestOkxOpenInterestData:
             "oi": "1000000",
             "oiCcy": "BTC",
         }
-        oi = OkxOpenInterestData(data, symbol_name="BTC-USDT-SWAP", asset_type="SWAP", has_been_json_encoded=True)
+        oi = OkxOpenInterestData(
+            data, symbol_name="BTC-USDT-SWAP", asset_type="SWAP", has_been_json_encoded=True
+        )
 
         assert oi.event == "OpenInterestEvent"
         assert oi.exchange_name == "OKX"
@@ -33,7 +34,9 @@ class TestOkxOpenInterestData:
             "oiCcy": "ETH",
         }
         json_str = json.dumps(data)
-        oi = OkxOpenInterestData(json_str, symbol_name="ETH-USDT-SWAP", asset_type="SWAP", has_been_json_encoded=False)
+        oi = OkxOpenInterestData(
+            json_str, symbol_name="ETH-USDT-SWAP", asset_type="SWAP", has_been_json_encoded=False
+        )
 
         oi.init_data()
 
@@ -50,7 +53,9 @@ class TestOkxOpenInterestData:
             "oi": "1000000.5",
             "oiCcy": "BTC",
         }
-        oi = OkxOpenInterestData(data, symbol_name="BTC-USDT-SWAP", asset_type="SWAP", has_been_json_encoded=True)
+        oi = OkxOpenInterestData(
+            data, symbol_name="BTC-USDT-SWAP", asset_type="SWAP", has_been_json_encoded=True
+        )
 
         result = oi.init_data()
 
@@ -64,7 +69,9 @@ class TestOkxOpenInterestData:
     def test_init_data_idempotent(self):
         """Test that init_data is idempotent."""
         data = {"ts": "1700000000000", "instId": "BTC-USDT-SWAP", "oi": "1000000", "oiCcy": "BTC"}
-        oi = OkxOpenInterestData(data, symbol_name="BTC-USDT-SWAP", asset_type="SWAP", has_been_json_encoded=True)
+        oi = OkxOpenInterestData(
+            data, symbol_name="BTC-USDT-SWAP", asset_type="SWAP", has_been_json_encoded=True
+        )
 
         oi.init_data()
         first_oi = oi.open_interest
@@ -80,7 +87,9 @@ class TestOkxOpenInterestData:
             "oi": "1000000",
             "oiCcy": "BTC",
         }
-        oi = OkxOpenInterestData(data, symbol_name="BTC-USDT-SWAP", asset_type="SWAP", has_been_json_encoded=True)
+        oi = OkxOpenInterestData(
+            data, symbol_name="BTC-USDT-SWAP", asset_type="SWAP", has_been_json_encoded=True
+        )
         oi.init_data()
 
         all_data = oi.get_all_data()
@@ -101,7 +110,9 @@ class TestOkxOpenInterestData:
             "oi": "500000",
             "oiCcy": "ETH",
         }
-        oi = OkxOpenInterestData(data, symbol_name="ETH-USDT-SWAP", asset_type="SWAP", has_been_json_encoded=True)
+        oi = OkxOpenInterestData(
+            data, symbol_name="ETH-USDT-SWAP", asset_type="SWAP", has_been_json_encoded=True
+        )
         oi.init_data()
 
         assert oi.get_event() == "OpenInterestEvent"
@@ -122,7 +133,9 @@ class TestOkxOpenInterestData:
             "oi": "1000000",
             "oiCcy": "BTC",
         }
-        oi = OkxOpenInterestData(data, symbol_name="BTC-USDT-SWAP", asset_type="SWAP", has_been_json_encoded=True)
+        oi = OkxOpenInterestData(
+            data, symbol_name="BTC-USDT-SWAP", asset_type="SWAP", has_been_json_encoded=True
+        )
 
         str_result = str(oi)
         repr_result = repr(oi)
@@ -140,7 +153,9 @@ class TestOkxOpenInterestData:
             "oi": "1000000",
             "oiCcy": "BTC",
         }
-        oi = OkxOpenInterestData(data, symbol_name="BTC-USDT-SWAP", asset_type="SWAP", has_been_json_encoded=True)
+        oi = OkxOpenInterestData(
+            data, symbol_name="BTC-USDT-SWAP", asset_type="SWAP", has_been_json_encoded=True
+        )
         oi.init_data()
 
         all_data1 = oi.get_all_data()

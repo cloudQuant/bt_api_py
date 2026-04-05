@@ -1,6 +1,7 @@
 """Tests for PancakeSwap Pool containers."""
 
 import json
+
 import pytest
 
 from bt_api_py.containers.pools.pancakeswap_pool import (
@@ -247,23 +248,25 @@ class TestPancakeSwapPoolData:
 
     def test_from_json(self, sample_liquidity):
         """Test from_json class method."""
-        json_str = json.dumps({
-            "pool_address": "0xpool",
-            "symbol": "BTC-ETH",
-            "liquidity_data": {
-                "token0_reserve": 1000.0,
-                "token1_reserve": 2000.0,
-                "token0_symbol": "BTC",
-                "token1_symbol": "ETH",
-                "token0_address": "0xbtc",
-                "token1_address": "0xeth",
-                "token0_decimals": 18,
-                "token1_decimals": 18,
-            },
-            "volume_24h": 10000.0,
-            "volume_24h_usd": 50000.0,
-            "tvl": 100000.0,
-        })
+        json_str = json.dumps(
+            {
+                "pool_address": "0xpool",
+                "symbol": "BTC-ETH",
+                "liquidity_data": {
+                    "token0_reserve": 1000.0,
+                    "token1_reserve": 2000.0,
+                    "token0_symbol": "BTC",
+                    "token1_symbol": "ETH",
+                    "token0_address": "0xbtc",
+                    "token1_address": "0xeth",
+                    "token0_decimals": 18,
+                    "token1_decimals": 18,
+                },
+                "volume_24h": 10000.0,
+                "volume_24h_usd": 50000.0,
+                "tvl": 100000.0,
+            }
+        )
 
         pool = PancakeSwapPoolData.from_json(json_str)
 
@@ -471,12 +474,14 @@ class TestPancakeSwapPoolList:
 
     def test_from_json(self, sample_pool):
         """Test from_json class method."""
-        json_str = json.dumps({
-            "pools": [sample_pool.to_dict()],
-            "total_pools": 1,
-            "total_liquidity_usd": 100000.0,
-            "total_volume_24h_usd": 50000.0,
-        })
+        json_str = json.dumps(
+            {
+                "pools": [sample_pool.to_dict()],
+                "total_pools": 1,
+                "total_liquidity_usd": 100000.0,
+                "total_volume_24h_usd": 50000.0,
+            }
+        )
 
         pool_list = PancakeSwapPoolList.from_json(json_str)
 

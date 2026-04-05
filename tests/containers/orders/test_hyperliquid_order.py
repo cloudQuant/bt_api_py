@@ -1,6 +1,5 @@
 """Tests for HyperliquidRequestOrderData container."""
 
-import pytest
 
 from bt_api_py.containers.orders.hyperliquid_order import HyperliquidRequestOrderData
 
@@ -32,7 +31,9 @@ class TestHyperliquidRequestOrderData:
                 }
             ]
         }
-        order = HyperliquidRequestOrderData(data, symbol_name="BTC", asset_type="SWAP", has_been_json_encoded=True)
+        order = HyperliquidRequestOrderData(
+            data, symbol_name="BTC", asset_type="SWAP", has_been_json_encoded=True
+        )
         order.init_data()
 
         assert order.order_id == "123456"
@@ -40,7 +41,9 @@ class TestHyperliquidRequestOrderData:
 
     def test_get_all_data(self):
         """Test get_all_data."""
-        order = HyperliquidRequestOrderData({}, symbol_name="BTC", asset_type="SWAP", has_been_json_encoded=True)
+        order = HyperliquidRequestOrderData(
+            {}, symbol_name="BTC", asset_type="SWAP", has_been_json_encoded=True
+        )
         result = order.get_all_data()
 
         assert result["exchange_name"] == "HYPERLIQUID"
@@ -48,7 +51,9 @@ class TestHyperliquidRequestOrderData:
 
     def test_str_representation(self):
         """Test __str__ method."""
-        order = HyperliquidRequestOrderData({}, symbol_name="BTC", asset_type="SWAP", has_been_json_encoded=True)
+        order = HyperliquidRequestOrderData(
+            {}, symbol_name="BTC", asset_type="SWAP", has_been_json_encoded=True
+        )
         result = str(order)
 
         assert "HyperliquidRequestOrderData" in result

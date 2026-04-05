@@ -1,6 +1,5 @@
 """Tests for utils/hyperliquid_types.py."""
 
-import pytest
 
 from bt_api_py.utils import hyperliquid_types
 

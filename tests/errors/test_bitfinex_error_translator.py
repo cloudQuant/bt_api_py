@@ -1,6 +1,5 @@
 """Tests for BitfinexErrorTranslator."""
 
-import pytest
 
 from bt_api_py.errors.bitfinex_error_translator import BitfinexErrorTranslator
 

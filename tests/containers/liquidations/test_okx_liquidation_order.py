@@ -1,6 +1,5 @@
 """Tests for OkxLiquidationOrderData container."""
 
-import pytest
 
 from bt_api_py.containers.liquidations.okx_liquidation_order import OkxLiquidationOrderData
 
@@ -30,7 +29,9 @@ class TestOkxLiquidationOrderData:
             "bkPx": "19900",
             "ts": "1630000000000",
         }
-        liquidation = OkxLiquidationOrderData(data, symbol_name="BTC-USDT-SWAP", asset_type="SWAP", has_been_json_encoded=True)
+        liquidation = OkxLiquidationOrderData(
+            data, symbol_name="BTC-USDT-SWAP", asset_type="SWAP", has_been_json_encoded=True
+        )
         liquidation.init_data()
 
         assert liquidation.inst_id == "BTC-USDT-SWAP"
@@ -49,7 +50,9 @@ class TestOkxLiquidationOrderData:
             "instId": "BTC-USDT-SWAP",
             "tradeId": "123456",
         }
-        liquidation = OkxLiquidationOrderData(data, symbol_name="BTC-USDT-SWAP", asset_type="SWAP", has_been_json_encoded=True)
+        liquidation = OkxLiquidationOrderData(
+            data, symbol_name="BTC-USDT-SWAP", asset_type="SWAP", has_been_json_encoded=True
+        )
         liquidation.init_data()
         first_trade_id = liquidation.trade_id
 
@@ -74,49 +77,63 @@ class TestOkxLiquidationOrderData:
     def test_get_inst_id(self):
         """Test get_inst_id."""
         data = {"instId": "BTC-USDT-SWAP"}
-        liquidation = OkxLiquidationOrderData(data, symbol_name="BTC-USDT-SWAP", asset_type="SWAP", has_been_json_encoded=True)
+        liquidation = OkxLiquidationOrderData(
+            data, symbol_name="BTC-USDT-SWAP", asset_type="SWAP", has_been_json_encoded=True
+        )
 
         assert liquidation.get_inst_id() == "BTC-USDT-SWAP"
 
     def test_get_trade_id(self):
         """Test get_trade_id."""
         data = {"tradeId": "123456"}
-        liquidation = OkxLiquidationOrderData(data, symbol_name="BTC-USDT-SWAP", asset_type="SWAP", has_been_json_encoded=True)
+        liquidation = OkxLiquidationOrderData(
+            data, symbol_name="BTC-USDT-SWAP", asset_type="SWAP", has_been_json_encoded=True
+        )
 
         assert liquidation.get_trade_id() == "123456"
 
     def test_get_price(self):
         """Test get_price."""
         data = {"px": "20000"}
-        liquidation = OkxLiquidationOrderData(data, symbol_name="BTC-USDT-SWAP", asset_type="SWAP", has_been_json_encoded=True)
+        liquidation = OkxLiquidationOrderData(
+            data, symbol_name="BTC-USDT-SWAP", asset_type="SWAP", has_been_json_encoded=True
+        )
 
         assert liquidation.get_price() == 20000.0
 
     def test_get_size(self):
         """Test get_size."""
         data = {"sz": "100"}
-        liquidation = OkxLiquidationOrderData(data, symbol_name="BTC-USDT-SWAP", asset_type="SWAP", has_been_json_encoded=True)
+        liquidation = OkxLiquidationOrderData(
+            data, symbol_name="BTC-USDT-SWAP", asset_type="SWAP", has_been_json_encoded=True
+        )
 
         assert liquidation.get_size() == 100.0
 
     def test_get_side(self):
         """Test get_side."""
         data = {"side": "sell"}
-        liquidation = OkxLiquidationOrderData(data, symbol_name="BTC-USDT-SWAP", asset_type="SWAP", has_been_json_encoded=True)
+        liquidation = OkxLiquidationOrderData(
+            data, symbol_name="BTC-USDT-SWAP", asset_type="SWAP", has_been_json_encoded=True
+        )
 
         assert liquidation.get_side() == "sell"
 
     def test_get_pos_side(self):
         """Test get_pos_side."""
         data = {"posSide": "long"}
-        liquidation = OkxLiquidationOrderData(data, symbol_name="BTC-USDT-SWAP", asset_type="SWAP", has_been_json_encoded=True)
+        liquidation = OkxLiquidationOrderData(
+            data, symbol_name="BTC-USDT-SWAP", asset_type="SWAP", has_been_json_encoded=True
+        )
 
         assert liquidation.get_pos_side() == "long"
 
     def test_get_bankruptcy_price(self):
         """Test get_bankruptcy_price."""
         data = {"bkPx": "19900"}
-        liquidation = OkxLiquidationOrderData(data, symbol_name="BTC-USDT-SWAP", asset_type="SWAP", has_been_json_encoded=True)
+        liquidation = OkxLiquidationOrderData(
+            data, symbol_name="BTC-USDT-SWAP", asset_type="SWAP", has_been_json_encoded=True
+        )
 
         assert liquidation.get_bankruptcy_price() == 19900.0
 
@@ -128,7 +145,9 @@ class TestOkxLiquidationOrderData:
             "px": "20000",
             "sz": "100",
         }
-        liquidation = OkxLiquidationOrderData(data, symbol_name="BTC-USDT-SWAP", asset_type="SWAP", has_been_json_encoded=True)
+        liquidation = OkxLiquidationOrderData(
+            data, symbol_name="BTC-USDT-SWAP", asset_type="SWAP", has_been_json_encoded=True
+        )
         result = liquidation.get_all_data()
 
         assert result["exchange_name"] == "OKX"
@@ -140,7 +159,9 @@ class TestOkxLiquidationOrderData:
     def test_str_representation(self):
         """Test __str__ method."""
         data = {"instId": "BTC-USDT-SWAP"}
-        liquidation = OkxLiquidationOrderData(data, symbol_name="BTC-USDT-SWAP", asset_type="SWAP", has_been_json_encoded=True)
+        liquidation = OkxLiquidationOrderData(
+            data, symbol_name="BTC-USDT-SWAP", asset_type="SWAP", has_been_json_encoded=True
+        )
         result = str(liquidation)
 
         assert "OKX" in result

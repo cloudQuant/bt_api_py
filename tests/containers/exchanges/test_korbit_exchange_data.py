@@ -1,6 +1,5 @@
 """Tests for KorbitExchangeData container."""
 
-import pytest
 
 from bt_api_py.containers.exchanges.korbit_exchange_data import KorbitExchangeData
 

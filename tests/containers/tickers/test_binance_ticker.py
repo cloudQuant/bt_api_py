@@ -1,9 +1,10 @@
 import json
+
 import pytest
 
 from bt_api_py.containers.tickers.binance_ticker import (
-    BinanceTickerData,
     BinanceRequestTickerData,
+    BinanceTickerData,
     BinanceWssTickerData,
 )
 

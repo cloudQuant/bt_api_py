@@ -1,6 +1,5 @@
 """Tests for OkxExchangeData container."""
 
-import pytest
 
 from bt_api_py.containers.exchanges.okx_exchange_data import OkxExchangeData
 

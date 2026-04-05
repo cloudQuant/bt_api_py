@@ -42,7 +42,9 @@ class TestPoloniexBalanceData:
 
     def test_get_all_data(self):
         """Test get_all_data."""
-        balance = PoloniexBalanceData({}, symbol_name="BTC", asset_type="SPOT", has_been_json_encoded=True)
+        balance = PoloniexBalanceData(
+            {}, symbol_name="BTC", asset_type="SPOT", has_been_json_encoded=True
+        )
         # Set _initialized to prevent AutoInitMixin
         balance._initialized = True
         result = balance.get_all_data()

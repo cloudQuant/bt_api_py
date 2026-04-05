@@ -1,6 +1,5 @@
 """Tests for LocalBitcoinsSpotWssTradeData container."""
 
-import pytest
 
 from bt_api_py.containers.trades.localbitcoins_trade import LocalBitcoinsSpotWssTradeData
 

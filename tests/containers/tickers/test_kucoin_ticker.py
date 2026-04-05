@@ -33,7 +33,9 @@ class TestKuCoinTickerData:
 
     def test_get_all_data(self):
         """Test get_all_data."""
-        ticker = KuCoinTickerData({}, symbol_name="BTC-USDT", asset_type="SPOT", has_been_json_encoded=True)
+        ticker = KuCoinTickerData(
+            {}, symbol_name="BTC-USDT", asset_type="SPOT", has_been_json_encoded=True
+        )
         # Set _initialized to prevent AutoInitMixin from calling init_data
         ticker._initialized = True
         result = ticker.get_all_data()
@@ -45,7 +47,9 @@ class TestKuCoinTickerData:
         """Test __str__ method - skip since init_data raises NotImplementedError."""
         # KuCoinTickerData.__str__ calls init_data() which raises NotImplementedError
         # This is expected behavior for abstract base class
-        ticker = KuCoinTickerData({}, symbol_name="BTC-USDT", asset_type="SPOT", has_been_json_encoded=True)
+        ticker = KuCoinTickerData(
+            {}, symbol_name="BTC-USDT", asset_type="SPOT", has_been_json_encoded=True
+        )
         with pytest.raises(NotImplementedError):
             str(ticker)
 

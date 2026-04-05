@@ -1,6 +1,5 @@
 """Tests for exchange_registers/register_coinbase.py."""
 
-import pytest
 
 from bt_api_py.exchange_registers import register_coinbase
 

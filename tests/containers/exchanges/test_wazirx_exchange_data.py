@@ -1,6 +1,5 @@
 """Tests for WazirxExchangeData container."""
 
-import pytest
 
 from bt_api_py.containers.exchanges.wazirx_exchange_data import WazirxExchangeData
 

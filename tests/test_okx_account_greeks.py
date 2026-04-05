@@ -11,10 +11,7 @@ class TestOkxAccountGreeksData:
     def test_init(self):
         """Test initialization."""
         greeks = OkxAccountGreeksData(
-            {"gtD": "0.5"},
-            symbol_name="BTC",
-            asset_type="OPTION",
-            has_been_json_encoded=True
+            {"gtD": "0.5"}, symbol_name="BTC", asset_type="OPTION", has_been_json_encoded=True
         )
 
         assert greeks.exchange_name == "OKX"
@@ -35,10 +32,7 @@ class TestOkxAccountGreeksData:
             "uTime": "1700000000000",
         }
         greeks = OkxAccountGreeksData(
-            greeks_info,
-            symbol_name="BTC",
-            asset_type="OPTION",
-            has_been_json_encoded=True
+            greeks_info, symbol_name="BTC", asset_type="OPTION", has_been_json_encoded=True
         )
         greeks.init_data()
 
@@ -55,10 +49,7 @@ class TestOkxAccountGreeksData:
     def test_greeks_data_inheritance(self):
         """Test that OkxAccountGreeksData inherits from GreeksData."""
         greeks = OkxAccountGreeksData(
-            {},
-            symbol_name="BTC",
-            asset_type="OPTION",
-            has_been_json_encoded=True
+            {}, symbol_name="BTC", asset_type="OPTION", has_been_json_encoded=True
         )
 
         assert hasattr(greeks, "greeks_info")

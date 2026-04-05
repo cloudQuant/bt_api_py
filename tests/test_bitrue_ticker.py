@@ -16,9 +16,7 @@ class TestBitrueRequestTickerData:
             "bidPrice": 49999.0,
             "askPrice": 50001.0,
         }
-        ticker = BitrueRequestTickerData(
-            ticker_info, "BTCUSDT", "SPOT", has_been_json_encoded=True
-        )
+        ticker = BitrueRequestTickerData(ticker_info, "BTCUSDT", "SPOT", has_been_json_encoded=True)
 
         assert ticker.symbol_name == "BTCUSDT"
         assert ticker.exchange_name == "BITRUE"
@@ -31,9 +29,7 @@ class TestBitrueRequestTickerData:
             "bidPrice": 49999.0,
             "askPrice": 50001.0,
         }
-        ticker = BitrueRequestTickerData(
-            ticker_info, "BTCUSDT", "SPOT", has_been_json_encoded=True
-        )
+        ticker = BitrueRequestTickerData(ticker_info, "BTCUSDT", "SPOT", has_been_json_encoded=True)
         ticker.init_data()
 
         assert ticker.last_price == 50000.0

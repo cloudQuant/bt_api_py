@@ -26,7 +26,9 @@ class TestDydxTickerData:
 
     def test_get_all_data(self):
         """Test get_all_data."""
-        ticker = DydxTickerData({}, symbol_name="BTC-USD", asset_type="SWAP", has_been_json_encoded=True)
+        ticker = DydxTickerData(
+            {}, symbol_name="BTC-USD", asset_type="SWAP", has_been_json_encoded=True
+        )
         # Set _initialized to prevent AutoInitMixin from calling init_data
         ticker._initialized = True
         result = ticker.get_all_data()
@@ -38,6 +40,8 @@ class TestDydxTickerData:
         """Test __str__ method - skip since init_data raises NotImplementedError."""
         # DydxTickerData.__str__ calls init_data() which raises NotImplementedError
         # This is expected behavior for abstract base class
-        ticker = DydxTickerData({}, symbol_name="BTC-USD", asset_type="SWAP", has_been_json_encoded=True)
+        ticker = DydxTickerData(
+            {}, symbol_name="BTC-USD", asset_type="SWAP", has_been_json_encoded=True
+        )
         with pytest.raises(NotImplementedError):
             str(ticker)

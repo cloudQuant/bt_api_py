@@ -1,6 +1,5 @@
 """Tests for CoinbaseTradeData container."""
 
-import pytest
 
 from bt_api_py.containers.trades.coinbase_trade import CoinbaseTradeData
 
@@ -28,7 +27,9 @@ class TestCoinbaseTradeData:
             "size": "1.0",
             "commission": "0.01",
         }
-        trade = CoinbaseTradeData(data, symbol_name="BTC-USD", asset_type="SPOT", has_been_json_encoded=True)
+        trade = CoinbaseTradeData(
+            data, symbol_name="BTC-USD", asset_type="SPOT", has_been_json_encoded=True
+        )
         trade.init_data()
 
         assert trade.trade_id == "123456"
@@ -37,7 +38,9 @@ class TestCoinbaseTradeData:
 
     def test_get_all_data(self):
         """Test get_all_data."""
-        trade = CoinbaseTradeData({}, symbol_name="BTC-USD", asset_type="SPOT", has_been_json_encoded=True)
+        trade = CoinbaseTradeData(
+            {}, symbol_name="BTC-USD", asset_type="SPOT", has_been_json_encoded=True
+        )
         result = trade.get_all_data()
 
         assert result["exchange_name"] == "COINBASE"
@@ -45,7 +48,9 @@ class TestCoinbaseTradeData:
 
     def test_str_representation(self):
         """Test __str__ method."""
-        trade = CoinbaseTradeData({}, symbol_name="BTC-USD", asset_type="SPOT", has_been_json_encoded=True)
+        trade = CoinbaseTradeData(
+            {}, symbol_name="BTC-USD", asset_type="SPOT", has_been_json_encoded=True
+        )
         result = str(trade)
 
         assert "COINBASE" in result

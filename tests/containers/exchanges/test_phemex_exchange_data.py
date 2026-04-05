@@ -1,6 +1,5 @@
 """Tests for PhemexExchangeData container."""
 
-import pytest
 
 from bt_api_py.containers.exchanges.phemex_exchange_data import PhemexExchangeData
 

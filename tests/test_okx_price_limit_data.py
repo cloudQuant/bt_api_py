@@ -14,7 +14,7 @@ class TestOkxPriceLimitData:
             {"instId": "BTC-USDT-SWAP"},
             symbol_name="BTC-USDT-SWAP",
             asset_type="FUTURE",
-            has_been_json_encoded=True
+            has_been_json_encoded=True,
         )
 
         assert price_limit.exchange_name == "OKX"
@@ -34,7 +34,7 @@ class TestOkxPriceLimitData:
             price_limit_info,
             symbol_name="BTC-USDT-SWAP",
             asset_type="FUTURE",
-            has_been_json_encoded=True
+            has_been_json_encoded=True,
         )
         price_limit.init_data()
 
@@ -46,10 +46,7 @@ class TestOkxPriceLimitData:
     def test_event_attribute(self):
         """Test event attribute."""
         price_limit = OkxPriceLimitData(
-            {},
-            symbol_name="BTC-USDT-SWAP",
-            asset_type="FUTURE",
-            has_been_json_encoded=True
+            {}, symbol_name="BTC-USDT-SWAP", asset_type="FUTURE", has_been_json_encoded=True
         )
 
         assert price_limit.event == "PriceLimitEvent"

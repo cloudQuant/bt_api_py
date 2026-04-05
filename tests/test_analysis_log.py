@@ -6,8 +6,8 @@ from pathlib import Path
 import pytest
 
 from bt_api_py.functions.analysis_log import (
-    _require_package_path,
     TIME_PATTERN,
+    _require_package_path,
     build_duration_series,
     extract_slam_times,
     render_report,
@@ -68,7 +68,9 @@ class TestExtractSlamTimes:
 
     def test_extract_from_file(self):
         """Test extracting timestamps from file."""
-        with tempfile.NamedTemporaryFile(mode="w", suffix=".log", delete=False, encoding="utf-8") as f:
+        with tempfile.NamedTemporaryFile(
+            mode="w", suffix=".log", delete=False, encoding="utf-8"
+        ) as f:
             f.write("deal trade_data, time = 2024-01-15 10:30:00.123456\n")
             f.write("some other line\n")
             f.write("deal trade_data, time = 2024-01-15 10:30:01.654321\n")
@@ -82,7 +84,9 @@ class TestExtractSlamTimes:
 
     def test_extract_empty_file(self):
         """Test extracting from empty file."""
-        with tempfile.NamedTemporaryFile(mode="w", suffix=".log", delete=False, encoding="utf-8") as f:
+        with tempfile.NamedTemporaryFile(
+            mode="w", suffix=".log", delete=False, encoding="utf-8"
+        ) as f:
             f.flush()
 
             times = extract_slam_times(Path(f.name))
@@ -91,7 +95,9 @@ class TestExtractSlamTimes:
 
     def test_extract_no_matches(self):
         """Test extracting from file with no matches."""
-        with tempfile.NamedTemporaryFile(mode="w", suffix=".log", delete=False, encoding="utf-8") as f:
+        with tempfile.NamedTemporaryFile(
+            mode="w", suffix=".log", delete=False, encoding="utf-8"
+        ) as f:
             f.write("some log line\n")
             f.write("another log line\n")
             f.flush()
@@ -103,12 +109,16 @@ class TestExtractSlamTimes:
 
 class TestAnalysisLogHelpers:
     def test_require_package_path_returns_path(self, monkeypatch, tmp_path):
-        monkeypatch.setattr("bt_api_py.functions.analysis_log.get_package_path", lambda package_name: str(tmp_path))
+        monkeypatch.setattr(
+            "bt_api_py.functions.analysis_log.get_package_path", lambda package_name: str(tmp_path)
+        )
 
         assert _require_package_path("lv") == tmp_path
 
     def test_require_package_path_raises_when_missing(self, monkeypatch):
-        monkeypatch.setattr("bt_api_py.functions.analysis_log.get_package_path", lambda package_name: None)
+        monkeypatch.setattr(
+            "bt_api_py.functions.analysis_log.get_package_path", lambda package_name: None
+        )
 
         with pytest.raises(RuntimeError):
             _require_package_path("lv")

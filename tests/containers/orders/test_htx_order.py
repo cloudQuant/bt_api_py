@@ -1,6 +1,5 @@
 """Tests for HtxRequestOrderData container."""
 
-import pytest
 
 from bt_api_py.containers.orders.htx_order import HtxRequestOrderData
 
@@ -28,7 +27,9 @@ class TestHtxRequestOrderData:
             "field-amount": "1.0",
             "state": "filled",
         }
-        order = HtxRequestOrderData(data, symbol_name="btcusdt", asset_type="SPOT", has_been_json_encoded=True)
+        order = HtxRequestOrderData(
+            data, symbol_name="btcusdt", asset_type="SPOT", has_been_json_encoded=True
+        )
         order.init_data()
 
         assert order.order_id == "123456789"
@@ -36,7 +37,9 @@ class TestHtxRequestOrderData:
 
     def test_get_all_data(self):
         """Test get_all_data."""
-        order = HtxRequestOrderData({}, symbol_name="btcusdt", asset_type="SPOT", has_been_json_encoded=True)
+        order = HtxRequestOrderData(
+            {}, symbol_name="btcusdt", asset_type="SPOT", has_been_json_encoded=True
+        )
         result = order.get_all_data()
 
         assert result["exchange_name"] == "HTX"
@@ -44,7 +47,9 @@ class TestHtxRequestOrderData:
 
     def test_str_representation(self):
         """Test __str__ method."""
-        order = HtxRequestOrderData({}, symbol_name="btcusdt", asset_type="SPOT", has_been_json_encoded=True)
+        order = HtxRequestOrderData(
+            {}, symbol_name="btcusdt", asset_type="SPOT", has_been_json_encoded=True
+        )
         result = str(order)
 
         assert "HTX" in result

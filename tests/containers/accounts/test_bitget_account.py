@@ -1,6 +1,5 @@
 """Tests for Bitget account container."""
 
-import pytest
 
 from bt_api_py.containers.accounts.bitget_account import (
     BitgetAccountData,
@@ -34,7 +33,9 @@ class TestBitgetAccountData:
             "marginAvailable": 8000.0,
             "marginForced": 0.0,
         }
-        account = BitgetAccountData(data, symbol_name="BTCUSDT", asset_type="SPOT", has_been_json_encoded=True)
+        account = BitgetAccountData(
+            data, symbol_name="BTCUSDT", asset_type="SPOT", has_been_json_encoded=True
+        )
         account.init_data()
 
         assert account.uid == "12345"
@@ -50,7 +51,9 @@ class TestBitgetAccountData:
     def test_init_data_idempotent(self):
         """Test init_data is idempotent."""
         data = {"uid": "12345"}
-        account = BitgetAccountData(data, symbol_name="BTCUSDT", asset_type="SPOT", has_been_json_encoded=True)
+        account = BitgetAccountData(
+            data, symbol_name="BTCUSDT", asset_type="SPOT", has_been_json_encoded=True
+        )
         account.init_data()
         first_uid = account.uid
 
@@ -59,23 +62,31 @@ class TestBitgetAccountData:
 
     def test_get_exchange_name(self):
         """Test get_exchange_name."""
-        account = BitgetAccountData({}, symbol_name="BTCUSDT", asset_type="SPOT", has_been_json_encoded=True)
+        account = BitgetAccountData(
+            {}, symbol_name="BTCUSDT", asset_type="SPOT", has_been_json_encoded=True
+        )
         assert account.get_exchange_name() == "BITGET"
 
     def test_get_symbol_name(self):
         """Test get_symbol_name."""
-        account = BitgetAccountData({}, symbol_name="BTCUSDT", asset_type="SPOT", has_been_json_encoded=True)
+        account = BitgetAccountData(
+            {}, symbol_name="BTCUSDT", asset_type="SPOT", has_been_json_encoded=True
+        )
         assert account.get_symbol_name() == "BTCUSDT"
 
     def test_get_asset_type(self):
         """Test get_asset_type."""
-        account = BitgetAccountData({}, symbol_name="BTCUSDT", asset_type="SPOT", has_been_json_encoded=True)
+        account = BitgetAccountData(
+            {}, symbol_name="BTCUSDT", asset_type="SPOT", has_been_json_encoded=True
+        )
         assert account.get_asset_type() == "SPOT"
 
     def test_get_uid(self):
         """Test get_uid."""
         data = {"uid": "12345"}
-        account = BitgetAccountData(data, symbol_name="BTCUSDT", asset_type="SPOT", has_been_json_encoded=True)
+        account = BitgetAccountData(
+            data, symbol_name="BTCUSDT", asset_type="SPOT", has_been_json_encoded=True
+        )
         account.init_data()
 
         assert account.get_uid() == "12345"
@@ -83,7 +94,9 @@ class TestBitgetAccountData:
     def test_get_account_type(self):
         """Test get_account_type."""
         data = {"accountType": "spot"}
-        account = BitgetAccountData(data, symbol_name="BTCUSDT", asset_type="SPOT", has_been_json_encoded=True)
+        account = BitgetAccountData(
+            data, symbol_name="BTCUSDT", asset_type="SPOT", has_been_json_encoded=True
+        )
         account.init_data()
 
         assert account.get_account_type() == "spot"
@@ -91,7 +104,9 @@ class TestBitgetAccountData:
     def test_get_equity(self):
         """Test get_equity."""
         data = {"equity": 10000.0}
-        account = BitgetAccountData(data, symbol_name="BTCUSDT", asset_type="SPOT", has_been_json_encoded=True)
+        account = BitgetAccountData(
+            data, symbol_name="BTCUSDT", asset_type="SPOT", has_been_json_encoded=True
+        )
         account.init_data()
 
         assert account.get_equity() == 10000.0
@@ -99,7 +114,9 @@ class TestBitgetAccountData:
     def test_get_unrealized_pnl(self):
         """Test get_unrealized_pnl."""
         data = {"unrealizedPnl": 500.0}
-        account = BitgetAccountData(data, symbol_name="BTCUSDT", asset_type="SPOT", has_been_json_encoded=True)
+        account = BitgetAccountData(
+            data, symbol_name="BTCUSDT", asset_type="SPOT", has_been_json_encoded=True
+        )
         account.init_data()
 
         assert account.get_unrealized_pnl() == 500.0
@@ -107,7 +124,9 @@ class TestBitgetAccountData:
     def test_get_realized_pnl(self):
         """Test get_realized_pnl."""
         data = {"realizedPnl": 1000.0}
-        account = BitgetAccountData(data, symbol_name="BTCUSDT", asset_type="SPOT", has_been_json_encoded=True)
+        account = BitgetAccountData(
+            data, symbol_name="BTCUSDT", asset_type="SPOT", has_been_json_encoded=True
+        )
         account.init_data()
 
         assert account.get_realized_pnl() == 1000.0
@@ -115,7 +134,9 @@ class TestBitgetAccountData:
     def test_get_margin_available(self):
         """Test get_margin_available."""
         data = {"marginAvailable": 8000.0}
-        account = BitgetAccountData(data, symbol_name="BTCUSDT", asset_type="SPOT", has_been_json_encoded=True)
+        account = BitgetAccountData(
+            data, symbol_name="BTCUSDT", asset_type="SPOT", has_been_json_encoded=True
+        )
         account.init_data()
 
         assert account.get_margin_available() == 8000.0
@@ -126,7 +147,9 @@ class TestBitgetAccountData:
             "uid": "12345",
             "equity": 10000.0,
         }
-        account = BitgetAccountData(data, symbol_name="BTCUSDT", asset_type="SPOT", has_been_json_encoded=True)
+        account = BitgetAccountData(
+            data, symbol_name="BTCUSDT", asset_type="SPOT", has_been_json_encoded=True
+        )
         result = account.get_all_data()
 
         assert result["exchange_name"] == "BITGET"
@@ -136,7 +159,9 @@ class TestBitgetAccountData:
     def test_str_representation(self):
         """Test __str__ method."""
         data = {"uid": "12345"}
-        account = BitgetAccountData(data, symbol_name="BTCUSDT", asset_type="SPOT", has_been_json_encoded=True)
+        account = BitgetAccountData(
+            data, symbol_name="BTCUSDT", asset_type="SPOT", has_been_json_encoded=True
+        )
         result = str(account)
 
         assert "BITGET" in result
@@ -172,7 +197,9 @@ class TestBitgetSpotWssAccountData:
                 ]
             }
         }
-        account = BitgetSpotWssAccountData(data, symbol_name="BTCUSDT", asset_type="SPOT", has_been_json_encoded=True)
+        account = BitgetSpotWssAccountData(
+            data, symbol_name="BTCUSDT", asset_type="SPOT", has_been_json_encoded=True
+        )
         # Work around bug by setting the attribute manually
         account.has_been_json_encoded = True
         account.init_data()
@@ -188,7 +215,9 @@ class TestBitgetSpotWssAccountData:
                 ]
             }
         }
-        account = BitgetSpotWssAccountData(data, symbol_name="BTCUSDT", asset_type="SPOT", has_been_json_encoded=True)
+        account = BitgetSpotWssAccountData(
+            data, symbol_name="BTCUSDT", asset_type="SPOT", has_been_json_encoded=True
+        )
         account.has_been_json_encoded = True
         balances = account.get_balances()
 
@@ -204,7 +233,9 @@ class TestBitgetSpotWssAccountData:
                 ]
             }
         }
-        account = BitgetSpotWssAccountData(data, symbol_name="BTCUSDT", asset_type="SPOT", has_been_json_encoded=True)
+        account = BitgetSpotWssAccountData(
+            data, symbol_name="BTCUSDT", asset_type="SPOT", has_been_json_encoded=True
+        )
         account.has_been_json_encoded = True
         balance = account.get_balance("USDT")
 
@@ -219,7 +250,9 @@ class TestBitgetSpotWssAccountData:
                 ]
             }
         }
-        account = BitgetSpotWssAccountData(data, symbol_name="BTCUSDT", asset_type="SPOT", has_been_json_encoded=True)
+        account = BitgetSpotWssAccountData(
+            data, symbol_name="BTCUSDT", asset_type="SPOT", has_been_json_encoded=True
+        )
         account.has_been_json_encoded = True
         balance = account.get_balance("ETH")
 
@@ -238,7 +271,9 @@ class TestBitgetSpotWssAccountData:
                 ]
             }
         }
-        account = BitgetSpotWssAccountData(data, symbol_name="BTCUSDT", asset_type="SPOT", has_been_json_encoded=True)
+        account = BitgetSpotWssAccountData(
+            data, symbol_name="BTCUSDT", asset_type="SPOT", has_been_json_encoded=True
+        )
         account.has_been_json_encoded = True
         account.init_data()
         total = account.get_total_equity()

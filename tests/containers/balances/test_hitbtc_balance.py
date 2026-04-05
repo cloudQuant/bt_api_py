@@ -1,6 +1,5 @@
 """Tests for HitBtcRequestBalanceData container."""
 
-import pytest
 
 from bt_api_py.containers.balances.hitbtc_balance import HitBtcRequestBalanceData
 
@@ -25,7 +24,9 @@ class TestHitBtcRequestBalanceData:
             "reserved": "0.5",
             "timestamp": 1234567890.0,
         }
-        balance = HitBtcRequestBalanceData(data, symbol_name="BTC", asset_type="SPOT", has_been_json_encoded=True)
+        balance = HitBtcRequestBalanceData(
+            data, symbol_name="BTC", asset_type="SPOT", has_been_json_encoded=True
+        )
         balance.init_data()
 
         assert balance.currency == "BTC"
@@ -35,7 +36,9 @@ class TestHitBtcRequestBalanceData:
     def test_get_all_data(self):
         """Test get_all_data."""
         data = {"currency": "BTC", "available": "1.5", "reserved": "0.5"}
-        balance = HitBtcRequestBalanceData(data, symbol_name="BTC", asset_type="SPOT", has_been_json_encoded=True)
+        balance = HitBtcRequestBalanceData(
+            data, symbol_name="BTC", asset_type="SPOT", has_been_json_encoded=True
+        )
         result = balance.get_all_data()
 
         assert result["exchange_name"] == "HITBTC"
@@ -44,7 +47,9 @@ class TestHitBtcRequestBalanceData:
     def test_str_representation(self):
         """Test __str__ method."""
         data = {"currency": "BTC", "available": "1.5"}
-        balance = HitBtcRequestBalanceData(data, symbol_name="BTC", asset_type="SPOT", has_been_json_encoded=True)
+        balance = HitBtcRequestBalanceData(
+            data, symbol_name="BTC", asset_type="SPOT", has_been_json_encoded=True
+        )
         result = str(balance)
 
         assert "HITBTC" in result

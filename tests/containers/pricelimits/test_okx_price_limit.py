@@ -1,7 +1,6 @@
 """Tests for OKX Price Limit container."""
 
 import json
-import pytest
 
 from bt_api_py.containers.pricelimits import OkxPriceLimitData
 
@@ -17,7 +16,9 @@ class TestOkxPriceLimitData:
             "buyLmt": "50000",
             "sellLmt": "49000",
         }
-        pl = OkxPriceLimitData(data, symbol_name="BTC-USDT-SWAP", asset_type="SWAP", has_been_json_encoded=True)
+        pl = OkxPriceLimitData(
+            data, symbol_name="BTC-USDT-SWAP", asset_type="SWAP", has_been_json_encoded=True
+        )
 
         assert pl.event == "PriceLimitEvent"
         assert pl.exchange_name == "OKX"
@@ -33,7 +34,9 @@ class TestOkxPriceLimitData:
             "sellLmt": "2900",
         }
         json_str = json.dumps(data)
-        pl = OkxPriceLimitData(json_str, symbol_name="ETH-USDT-SWAP", asset_type="SWAP", has_been_json_encoded=False)
+        pl = OkxPriceLimitData(
+            json_str, symbol_name="ETH-USDT-SWAP", asset_type="SWAP", has_been_json_encoded=False
+        )
 
         pl.init_data()
 
@@ -50,7 +53,9 @@ class TestOkxPriceLimitData:
             "buyLmt": "50000.5",
             "sellLmt": "49000.5",
         }
-        pl = OkxPriceLimitData(data, symbol_name="BTC-USDT-SWAP", asset_type="SWAP", has_been_json_encoded=True)
+        pl = OkxPriceLimitData(
+            data, symbol_name="BTC-USDT-SWAP", asset_type="SWAP", has_been_json_encoded=True
+        )
 
         result = pl.init_data()
 
@@ -69,7 +74,9 @@ class TestOkxPriceLimitData:
             "buyLmt": "50000",
             "sellLmt": "49000",
         }
-        pl = OkxPriceLimitData(data, symbol_name="BTC-USDT-SWAP", asset_type="SWAP", has_been_json_encoded=True)
+        pl = OkxPriceLimitData(
+            data, symbol_name="BTC-USDT-SWAP", asset_type="SWAP", has_been_json_encoded=True
+        )
 
         pl.init_data()
         first_buy = pl.buy_limit
@@ -85,7 +92,9 @@ class TestOkxPriceLimitData:
             "buyLmt": "50000",
             "sellLmt": "49000",
         }
-        pl = OkxPriceLimitData(data, symbol_name="BTC-USDT-SWAP", asset_type="SWAP", has_been_json_encoded=True)
+        pl = OkxPriceLimitData(
+            data, symbol_name="BTC-USDT-SWAP", asset_type="SWAP", has_been_json_encoded=True
+        )
         pl.init_data()
 
         all_data = pl.get_all_data()
@@ -106,7 +115,9 @@ class TestOkxPriceLimitData:
             "buyLmt": "3000",
             "sellLmt": "2900",
         }
-        pl = OkxPriceLimitData(data, symbol_name="ETH-USDT-SWAP", asset_type="SWAP", has_been_json_encoded=True)
+        pl = OkxPriceLimitData(
+            data, symbol_name="ETH-USDT-SWAP", asset_type="SWAP", has_been_json_encoded=True
+        )
         pl.init_data()
 
         assert pl.get_event() == "PriceLimitEvent"
@@ -127,7 +138,9 @@ class TestOkxPriceLimitData:
             "buyLmt": "50000",
             "sellLmt": "49000",
         }
-        pl = OkxPriceLimitData(data, symbol_name="BTC-USDT-SWAP", asset_type="SWAP", has_been_json_encoded=True)
+        pl = OkxPriceLimitData(
+            data, symbol_name="BTC-USDT-SWAP", asset_type="SWAP", has_been_json_encoded=True
+        )
 
         str_result = str(pl)
         repr_result = repr(pl)
@@ -146,7 +159,9 @@ class TestOkxPriceLimitData:
             "buyLmt": "50000",
             "sellLmt": "49000",
         }
-        pl = OkxPriceLimitData(data, symbol_name="BTC-USDT-SWAP", asset_type="SWAP", has_been_json_encoded=True)
+        pl = OkxPriceLimitData(
+            data, symbol_name="BTC-USDT-SWAP", asset_type="SWAP", has_been_json_encoded=True
+        )
         pl.init_data()
 
         all_data1 = pl.get_all_data()
@@ -163,7 +178,9 @@ class TestOkxPriceLimitData:
             "sellLmt": "49000",
         }
         # Test the branch where price_limit_info is already a dict but not json_encoded
-        pl = OkxPriceLimitData(data, symbol_name="BTC-USDT-SWAP", asset_type="SWAP", has_been_json_encoded=False)
+        pl = OkxPriceLimitData(
+            data, symbol_name="BTC-USDT-SWAP", asset_type="SWAP", has_been_json_encoded=False
+        )
 
         pl.init_data()
 

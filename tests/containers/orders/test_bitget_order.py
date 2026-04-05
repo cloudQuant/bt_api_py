@@ -1,6 +1,5 @@
 """Tests for BitgetOrderData container."""
 
-import pytest
 
 from bt_api_py.containers.orders.bitget_order import BitgetOrderData
 
@@ -31,7 +30,9 @@ class TestBitgetOrderData:
             "price": "50000.0",
             "avgPrice": "49500.0",
         }
-        order = BitgetOrderData(data, symbol_name="BTCUSDT", asset_type="SPOT", has_been_json_encoded=True)
+        order = BitgetOrderData(
+            data, symbol_name="BTCUSDT", asset_type="SPOT", has_been_json_encoded=True
+        )
         order.init_data()
 
         assert order.order_id == "123456"
@@ -40,7 +41,9 @@ class TestBitgetOrderData:
 
     def test_get_all_data(self):
         """Test get_all_data."""
-        order = BitgetOrderData({}, symbol_name="BTCUSDT", asset_type="SPOT", has_been_json_encoded=True)
+        order = BitgetOrderData(
+            {}, symbol_name="BTCUSDT", asset_type="SPOT", has_been_json_encoded=True
+        )
         result = order.get_all_data()
 
         assert result["exchange_name"] == "BITGET"
@@ -48,7 +51,9 @@ class TestBitgetOrderData:
 
     def test_str_representation(self):
         """Test __str__ method."""
-        order = BitgetOrderData({}, symbol_name="BTCUSDT", asset_type="SPOT", has_been_json_encoded=True)
+        order = BitgetOrderData(
+            {}, symbol_name="BTCUSDT", asset_type="SPOT", has_been_json_encoded=True
+        )
         result = str(order)
 
         assert "BITGET" in result

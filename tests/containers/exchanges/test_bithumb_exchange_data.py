@@ -1,6 +1,5 @@
 """Tests for BithumbExchangeData container."""
 
-import pytest
 
 from bt_api_py.containers.exchanges.bithumb_exchange_data import BithumbExchangeData
 

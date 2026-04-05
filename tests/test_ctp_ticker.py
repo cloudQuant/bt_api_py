@@ -14,7 +14,7 @@ class TestCtpTickerData:
             {"InstrumentID": "IF2506"},
             symbol_name="IF2506",
             asset_type="FUTURE",
-            has_been_json_encoded=True
+            has_been_json_encoded=True,
         )
 
         assert ticker.exchange_name == "CTP"
@@ -40,10 +40,7 @@ class TestCtpTickerData:
             "LowerLimitPrice": 3700.0,
         }
         ticker = CtpTickerData(
-            ticker_info,
-            symbol_name="IF2506",
-            asset_type="FUTURE",
-            has_been_json_encoded=True
+            ticker_info, symbol_name="IF2506", asset_type="FUTURE", has_been_json_encoded=True
         )
         ticker.init_data()
 

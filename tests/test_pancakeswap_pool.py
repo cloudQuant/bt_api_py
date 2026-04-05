@@ -2,7 +2,10 @@
 
 import pytest
 
-from bt_api_py.containers.pools.pancakeswap_pool import PancakeSwapLiquidityData, PancakeSwapPoolData
+from bt_api_py.containers.pools.pancakeswap_pool import (
+    PancakeSwapLiquidityData,
+    PancakeSwapPoolData,
+)
 
 
 class TestPancakeSwapLiquidityData:

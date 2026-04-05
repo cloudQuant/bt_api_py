@@ -1,6 +1,5 @@
 """Tests for MercadoBitcoinExchangeData container."""
 
-import pytest
 
 from bt_api_py.containers.exchanges.mercado_bitcoin_exchange_data import MercadoBitcoinExchangeData
 

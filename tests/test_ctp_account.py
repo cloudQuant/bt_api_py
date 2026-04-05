@@ -14,7 +14,7 @@ class TestCtpAccountData:
             {"AccountID": "123456"},
             symbol_name="IF2506",
             asset_type="FUTURE",
-            has_been_json_encoded=True
+            has_been_json_encoded=True,
         )
 
         assert account.exchange_name == "CTP"
@@ -38,10 +38,7 @@ class TestCtpAccountData:
             "Deposit": 0.0,
         }
         account = CtpAccountData(
-            account_info,
-            symbol_name="IF2506",
-            asset_type="FUTURE",
-            has_been_json_encoded=True
+            account_info, symbol_name="IF2506", asset_type="FUTURE", has_been_json_encoded=True
         )
         account.init_data()
 

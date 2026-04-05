@@ -14,7 +14,7 @@ class TestOkxFundingRateData:
             {"instId": "BTC-USDT-SWAP"},
             symbol_name="BTC-USDT-SWAP",
             asset_type="FUTURE",
-            has_been_json_encoded=True
+            has_been_json_encoded=True,
         )
 
         assert funding_rate.exchange_name == "OKX"
@@ -39,7 +39,7 @@ class TestOkxFundingRateData:
             funding_rate_info,
             symbol_name="BTC-USDT-SWAP",
             asset_type="FUTURE",
-            has_been_json_encoded=True
+            has_been_json_encoded=True,
         )
         funding_rate.init_data()
 
@@ -57,10 +57,7 @@ class TestOkxFundingRateData:
     def test_funding_rate_data_inheritance(self):
         """Test that OkxFundingRateData inherits from FundingRateData."""
         funding_rate = OkxFundingRateData(
-            {},
-            symbol_name="BTC-USDT-SWAP",
-            asset_type="FUTURE",
-            has_been_json_encoded=True
+            {}, symbol_name="BTC-USDT-SWAP", asset_type="FUTURE", has_been_json_encoded=True
         )
 
         assert hasattr(funding_rate, "funding_rate_info")

@@ -19,9 +19,7 @@ class TestBitsoRequestTickerData:
                 "volume": 100.0,
             }
         }
-        ticker = BitsoRequestTickerData(
-            ticker_info, "BTC_MXN", "SPOT", has_been_json_encoded=True
-        )
+        ticker = BitsoRequestTickerData(ticker_info, "BTC_MXN", "SPOT", has_been_json_encoded=True)
 
         assert ticker.symbol_name == "BTC_MXN"
         assert ticker.exchange_name == "BITSO"
@@ -37,9 +35,7 @@ class TestBitsoRequestTickerData:
                 "volume": 100.0,
             }
         }
-        ticker = BitsoRequestTickerData(
-            ticker_info, "BTC_MXN", "SPOT", has_been_json_encoded=True
-        )
+        ticker = BitsoRequestTickerData(ticker_info, "BTC_MXN", "SPOT", has_been_json_encoded=True)
         ticker.init_data()
 
         assert ticker.last_price == 5000000.0

@@ -1,6 +1,5 @@
 """Tests for KrakenRequestOrderData container."""
 
-import pytest
 
 from bt_api_py.containers.orders.kraken_order import KrakenRequestOrderData, KrakenSpotWssOrderData
 
@@ -19,7 +18,9 @@ class TestKrakenRequestOrderData:
     def test_parse_response_data(self):
         """Test parsing API response data."""
         data = {"txid": "OUF4EM-FRGI2-MQMWZD"}
-        order = KrakenRequestOrderData(data, symbol="XBTUSD", asset_type="SPOT", is_response_data=True)
+        order = KrakenRequestOrderData(
+            data, symbol="XBTUSD", asset_type="SPOT", is_response_data=True
+        )
 
         assert order.order_id == "OUF4EM-FRGI2-MQMWZD"
         assert order.status == "new"
@@ -27,14 +28,18 @@ class TestKrakenRequestOrderData:
 
     def test_to_dict(self):
         """Test to_dict."""
-        order = KrakenRequestOrderData({}, symbol="XBTUSD", asset_type="SPOT", has_been_json_encoded=True)
+        order = KrakenRequestOrderData(
+            {}, symbol="XBTUSD", asset_type="SPOT", has_been_json_encoded=True
+        )
         result = order.to_dict()
 
         assert result is not None
 
     def test_str_representation(self):
         """Test __str__ method."""
-        order = KrakenRequestOrderData({}, symbol="XBTUSD", asset_type="SPOT", has_been_json_encoded=True)
+        order = KrakenRequestOrderData(
+            {}, symbol="XBTUSD", asset_type="SPOT", has_been_json_encoded=True
+        )
         result = str(order)
 
         assert "Kraken" in result

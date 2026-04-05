@@ -24,11 +24,9 @@ class TestBinanceForceOrderData:
                 "T": 1705315800000.0,
                 "l": 0.1,
                 "z": 0.1,
-            }
+            },
         }
-        order = BinanceForceOrderData(
-            order_info, "BTCUSDT", "SPOT", has_been_json_encoded=True
-        )
+        order = BinanceForceOrderData(order_info, "BTCUSDT", "SPOT", has_been_json_encoded=True)
 
         assert order.symbol_name == "BTCUSDT"
         assert order.exchange_name == "BINANCE"
@@ -50,11 +48,9 @@ class TestBinanceForceOrderData:
                 "T": 1705315800000.0,
                 "l": 0.1,
                 "z": 0.1,
-            }
+            },
         }
-        order = BinanceForceOrderData(
-            order_info, "BTCUSDT", "SPOT", has_been_json_encoded=True
-        )
+        order = BinanceForceOrderData(order_info, "BTCUSDT", "SPOT", has_been_json_encoded=True)
         order.init_data()
 
         assert order.order_symbol_name == "BTCUSDT"

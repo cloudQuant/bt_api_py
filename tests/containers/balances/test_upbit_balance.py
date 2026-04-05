@@ -1,6 +1,5 @@
 """Tests for UpbitBalanceData container."""
 
-import pytest
 
 from bt_api_py.containers.balances.upbit_balance import UpbitBalanceData
 
@@ -26,7 +25,9 @@ class TestUpbitBalanceData:
             "currency_name": "Bitcoin",
             "unit_currency": "KRW",
         }
-        balance = UpbitBalanceData(data, currency="BTC", asset_type="SPOT", has_been_json_encoded=True)
+        balance = UpbitBalanceData(
+            data, currency="BTC", asset_type="SPOT", has_been_json_encoded=True
+        )
         balance.init_data()
 
         assert balance.balance == 1.5
@@ -36,7 +37,9 @@ class TestUpbitBalanceData:
     def test_get_all_data(self):
         """Test get_all_data."""
         data = {"balance": "1.5", "locked": "0.5"}
-        balance = UpbitBalanceData(data, currency="BTC", asset_type="SPOT", has_been_json_encoded=True)
+        balance = UpbitBalanceData(
+            data, currency="BTC", asset_type="SPOT", has_been_json_encoded=True
+        )
         result = balance.get_all_data()
 
         assert result["exchange_name"] == "UPBIT"
@@ -45,7 +48,9 @@ class TestUpbitBalanceData:
     def test_str_representation(self):
         """Test __str__ method."""
         data = {"balance": "1.5", "locked": "0.5"}
-        balance = UpbitBalanceData(data, currency="BTC", asset_type="SPOT", has_been_json_encoded=True)
+        balance = UpbitBalanceData(
+            data, currency="BTC", asset_type="SPOT", has_been_json_encoded=True
+        )
         result = str(balance)
 
         assert "UpbitBalance" in result

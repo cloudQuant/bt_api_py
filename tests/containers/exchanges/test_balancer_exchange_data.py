@@ -1,6 +1,5 @@
 """Tests for BalancerExchangeData container."""
 
-import pytest
 
 from bt_api_py.containers.exchanges.balancer_exchange_data import BalancerExchangeData, GqlChain
 

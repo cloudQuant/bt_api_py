@@ -33,7 +33,7 @@ class TestTradeData:
             {"trade_id": "12345"},
             has_been_json_encoded=True,
             symbol_name="BTCUSDT",
-            asset_type="SPOT"
+            asset_type="SPOT",
         )
 
         assert trade.symbol_name == "BTCUSDT"

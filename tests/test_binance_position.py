@@ -14,7 +14,7 @@ class TestBinancePositionData:
             {"symbol": "BTCUSDT"},
             symbol_name="BTCUSDT",
             asset_type="FUTURE",
-            has_been_json_encoded=True
+            has_been_json_encoded=True,
         )
 
         assert position.exchange_name == "BINANCE"
@@ -27,7 +27,7 @@ class TestBinancePositionData:
             {"symbol": "BTCUSDT"},
             symbol_name="BTCUSDT",
             asset_type="FUTURE",
-            has_been_json_encoded=True
+            has_been_json_encoded=True,
         )
 
         with pytest.raises(NotImplementedError):
@@ -36,10 +36,7 @@ class TestBinancePositionData:
     def test_position_data_inheritance(self):
         """Test that BinancePositionData inherits from PositionData."""
         position = BinancePositionData(
-            {},
-            symbol_name="BTCUSDT",
-            asset_type="FUTURE",
-            has_been_json_encoded=True
+            {}, symbol_name="BTCUSDT", asset_type="FUTURE", has_been_json_encoded=True
         )
 
         assert hasattr(position, "position_info")

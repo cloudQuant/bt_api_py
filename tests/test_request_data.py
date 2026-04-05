@@ -11,8 +11,7 @@ class TestRequestData:
     def test_init(self):
         """Test initialization."""
         request = RequestData(
-            {"key": "value"},
-            {"exchange_name": "BINANCE", "symbol_name": "BTCUSDT"}
+            {"key": "value"}, {"exchange_name": "BINANCE", "symbol_name": "BTCUSDT"}
         )
 
         assert request.event == "RequestEvent"
@@ -22,20 +21,13 @@ class TestRequestData:
 
     def test_init_with_status(self):
         """Test initialization with status."""
-        request = RequestData(
-            {"key": "value"},
-            {"exchange_name": "BINANCE"},
-            status=True
-        )
+        request = RequestData({"key": "value"}, {"exchange_name": "BINANCE"}, status=True)
 
         assert request.status is True
 
     def test_init_data_without_normalize_func(self):
         """Test init_data without normalize function."""
-        request = RequestData(
-            {"key": "value"},
-            {"exchange_name": "BINANCE"}
-        )
+        request = RequestData({"key": "value"}, {"exchange_name": "BINANCE"})
         request.init_data()
 
         assert request.data == {"key": "value"}
@@ -43,13 +35,12 @@ class TestRequestData:
 
     def test_init_data_with_normalize_func(self):
         """Test init_data with normalize function."""
+
         def normalize_func(input_data, extra_data):
             return {"normalized": True}, True
 
         request = RequestData(
-            {"key": "value"},
-            {"exchange_name": "BINANCE"},
-            normalize_func=normalize_func
+            {"key": "value"}, {"exchange_name": "BINANCE"}, normalize_func=normalize_func
         )
         request.init_data()
 

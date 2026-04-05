@@ -34,7 +34,9 @@ class TestMexcOrderData:
             "executedQty": "1.0",
             "price": "50000.0",
         }
-        order = MexcOrderData(data, symbol_name="BTCUSDT", asset_type="SPOT", has_been_json_encoded=True)
+        order = MexcOrderData(
+            data, symbol_name="BTCUSDT", asset_type="SPOT", has_been_json_encoded=True
+        )
         order.init_data()
 
         assert order.order_id == 123456
@@ -60,7 +62,9 @@ class TestMexcOrderData:
             "updateTime": 222,
             "isWorking": True,
         }
-        order = MexcOrderData(data, symbol_name="BTCUSDT", asset_type="SPOT", has_been_json_encoded=True)
+        order = MexcOrderData(
+            data, symbol_name="BTCUSDT", asset_type="SPOT", has_been_json_encoded=True
+        )
 
         assert order.get_order_id() == 123456
         assert order.get_client_order_id() == "abc123"
@@ -83,7 +87,9 @@ class TestMexcOrderData:
 
     def test_get_all_data(self):
         """Test get_all_data."""
-        order = MexcOrderData({}, symbol_name="BTCUSDT", asset_type="SPOT", has_been_json_encoded=True)
+        order = MexcOrderData(
+            {}, symbol_name="BTCUSDT", asset_type="SPOT", has_been_json_encoded=True
+        )
         result = order.get_all_data()
 
         assert result["exchange_name"] == "MEXC"
@@ -91,7 +97,9 @@ class TestMexcOrderData:
 
     def test_str_representation(self):
         """Test __str__ method."""
-        order = MexcOrderData({}, symbol_name="BTCUSDT", asset_type="SPOT", has_been_json_encoded=True)
+        order = MexcOrderData(
+            {}, symbol_name="BTCUSDT", asset_type="SPOT", has_been_json_encoded=True
+        )
         result = str(order)
 
         assert "MEXC" in result

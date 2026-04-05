@@ -14,7 +14,7 @@ class TestIbBarData:
             {"date": "20250101 09:30"},
             symbol_name="AAPL",
             asset_type="STK",
-            has_been_json_encoded=True
+            has_been_json_encoded=True,
         )
 
         assert bar.exchange_name == "IB"
@@ -33,12 +33,7 @@ class TestIbBarData:
             "wap": 150.25,
             "barCount": 5000,
         }
-        bar = IbBarData(
-            bar_info,
-            symbol_name="AAPL",
-            asset_type="STK",
-            has_been_json_encoded=True
-        )
+        bar = IbBarData(bar_info, symbol_name="AAPL", asset_type="STK", has_been_json_encoded=True)
         bar.init_data()
 
         assert bar.date_val == "20250101 09:30"

@@ -1,10 +1,9 @@
 """Tests for functions/utils.py."""
 
-import pytest
 import sys
 import types
-from pathlib import Path
 
+import pytest
 import requests
 
 from bt_api_py.functions import utils
@@ -87,7 +86,9 @@ class TestEnvParsing:
 
 class TestNetworkAndPathHelpers:
     def test_get_public_ip_uses_primary_service(self, monkeypatch):
-        monkeypatch.setattr(utils.requests, "get", lambda *args, **kwargs: _Response(200, "1.2.3.4\n"))
+        monkeypatch.setattr(
+            utils.requests, "get", lambda *args, **kwargs: _Response(200, "1.2.3.4\n")
+        )
         assert utils.get_public_ip() == "1.2.3.4"
 
     def test_get_public_ip_falls_back_to_secondary_service(self, monkeypatch):
@@ -152,7 +153,9 @@ class TestNetworkAndPathHelpers:
     def test_get_project_log_path_uses_package_parent(self, monkeypatch, tmp_path):
         package_dir = tmp_path / "bt_api_py"
         package_dir.mkdir()
-        monkeypatch.setattr(utils, "get_package_path", lambda package_name="bt_api_py": str(package_dir))
+        monkeypatch.setattr(
+            utils, "get_package_path", lambda package_name="bt_api_py": str(package_dir)
+        )
         assert utils.get_project_log_path("app.log") == str(tmp_path / "logs" / "app.log")
 
     def test_get_project_log_path_falls_back_to_cwd(self, monkeypatch, tmp_path):
@@ -167,7 +170,10 @@ class TestFileAndConfigHelpers:
         configs_dir.mkdir()
         target = configs_dir / "sample.yaml"
         target.write_text("answer: 42\nname: test\n", encoding="utf-8")
-        assert utils.read_yaml_file("sample.yaml", data_root=tmp_path) == {"answer": 42, "name": "test"}
+        assert utils.read_yaml_file("sample.yaml", data_root=tmp_path) == {
+            "answer": 42,
+            "name": "test",
+        }
 
     def test_read_account_config_loads_env_and_proxies(self, monkeypatch, tmp_path):
         package_dir = tmp_path / "bt_api_py"
@@ -185,7 +191,9 @@ class TestFileAndConfigHelpers:
             "IB_WEB_TIMEOUT=20\n",
             encoding="utf-8",
         )
-        monkeypatch.setattr(utils, "get_package_path", lambda package_name="bt_api_py": str(package_dir))
+        monkeypatch.setattr(
+            utils, "get_package_path", lambda package_name="bt_api_py": str(package_dir)
+        )
         monkeypatch.delenv("CTP_ENV", raising=False)
         config = utils.read_account_config()
         assert config["okx"]["public_key"] == "okx-key"
@@ -193,13 +201,23 @@ class TestFileAndConfigHelpers:
         assert config["ib"]["port"] == 4001
         assert config["ib_web"]["verify_ssl"] is True
         assert config["ib_web"]["timeout"] == 20
-        assert config["proxies"] == {"http": "http://proxy", "https": "http://default.mitmproxy.hub.ace-research.openai.org:80"} or config["proxies"] == {"http": "http://proxy"} or config["proxies"] == {"http": "http://proxy", "https": "http://proxy"}
+        assert (
+            config["proxies"]
+            == {
+                "http": "http://proxy",
+                "https": "http://default.mitmproxy.hub.ace-research.openai.org:80",
+            }
+            or config["proxies"] == {"http": "http://proxy"}
+            or config["proxies"] == {"http": "http://proxy", "https": "http://proxy"}
+        )
 
     def test_read_account_config_applies_ctp_env_when_enabled(self, monkeypatch, tmp_path):
         package_dir = tmp_path / "bt_api_py"
         package_dir.mkdir()
         (tmp_path / ".env").write_text("", encoding="utf-8")
-        monkeypatch.setattr(utils, "get_package_path", lambda package_name="bt_api_py": str(package_dir))
+        monkeypatch.setattr(
+            utils, "get_package_path", lambda package_name="bt_api_py": str(package_dir)
+        )
         monkeypatch.setenv("CTP_ENV", "simnow")
         called = {"value": False}
         module = types.ModuleType("bt_api_py.ctp_env_selector")

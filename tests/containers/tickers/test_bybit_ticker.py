@@ -1,6 +1,5 @@
 """Tests for BybitTickerData container."""
 
-import pytest
 
 from bt_api_py.containers.tickers.bybit_ticker import BybitTickerData
 
@@ -33,7 +32,9 @@ class TestBybitTickerData:
                 ]
             }
         }
-        ticker = BybitTickerData(data, symbol_name="BTCUSDT", asset_type="SPOT", has_been_json_encoded=True)
+        ticker = BybitTickerData(
+            data, symbol_name="BTCUSDT", asset_type="SPOT", has_been_json_encoded=True
+        )
         ticker.init_data()
 
         assert ticker.ticker_symbol_name == "BTCUSDT"
@@ -41,7 +42,9 @@ class TestBybitTickerData:
 
     def test_get_all_data(self):
         """Test get_all_data."""
-        ticker = BybitTickerData({}, symbol_name="BTCUSDT", asset_type="SPOT", has_been_json_encoded=True)
+        ticker = BybitTickerData(
+            {}, symbol_name="BTCUSDT", asset_type="SPOT", has_been_json_encoded=True
+        )
         result = ticker.get_all_data()
 
         assert result["exchange_name"] == "BYBIT"
@@ -49,7 +52,9 @@ class TestBybitTickerData:
 
     def test_str_representation(self):
         """Test __str__ method."""
-        ticker = BybitTickerData({}, symbol_name="BTCUSDT", asset_type="SPOT", has_been_json_encoded=True)
+        ticker = BybitTickerData(
+            {}, symbol_name="BTCUSDT", asset_type="SPOT", has_been_json_encoded=True
+        )
         result = str(ticker)
 
         assert "Bybit" in result

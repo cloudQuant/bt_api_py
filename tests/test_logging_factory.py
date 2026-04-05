@@ -45,7 +45,9 @@ def test_get_logger_sanitizes_custom_file_names(monkeypatch) -> None:
         logger = logging_factory.get_logger("folder/custom logger")
 
     assert isinstance(logger, logging_factory._LoggerProxy)
-    assert created_kwargs["file_name"] == "/tmp/bt-api-tests/folder_custom_logger.log"
+    # Use Path for cross-platform path comparison
+    expected_path = str(Path("/tmp/bt-api-tests") / "folder_custom_logger.log")
+    assert created_kwargs["file_name"] == expected_path
     assert created_kwargs["logger_name"] == "folder/custom logger"
 
 

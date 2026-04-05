@@ -1,6 +1,5 @@
 """Tests for HTX balance container."""
 
-import pytest
 
 from bt_api_py.containers.balances.htx_balance import HtxRequestBalanceData
 
@@ -27,7 +26,9 @@ class TestHtxRequestBalanceData:
                 ]
             }
         }
-        balance = HtxRequestBalanceData(data, symbol_name="BTC", asset_type="SPOT", has_been_json_encoded=True)
+        balance = HtxRequestBalanceData(
+            data, symbol_name="BTC", asset_type="SPOT", has_been_json_encoded=True
+        )
         balance.init_data()
 
         assert balance.available_margin == 1.0
@@ -43,7 +44,9 @@ class TestHtxRequestBalanceData:
                 ]
             }
         }
-        balance = HtxRequestBalanceData(data, symbol_name=None, asset_type="SPOT", has_been_json_encoded=True)
+        balance = HtxRequestBalanceData(
+            data, symbol_name=None, asset_type="SPOT", has_been_json_encoded=True
+        )
         balance.init_data()
 
         assert balance.available_margin == 1000.0
@@ -66,21 +69,27 @@ class TestHtxRequestBalanceData:
     def test_get_available_margin(self):
         """Test get_available_margin."""
         data = {"data": {"list": [{"currency": "btc", "type": "trade", "balance": "1.0"}]}}
-        balance = HtxRequestBalanceData(data, symbol_name="BTC", asset_type="SPOT", has_been_json_encoded=True)
+        balance = HtxRequestBalanceData(
+            data, symbol_name="BTC", asset_type="SPOT", has_been_json_encoded=True
+        )
 
         assert balance.get_available_margin() == 1.0
 
     def test_get_used_margin(self):
         """Test get_used_margin."""
         data = {"data": {"list": [{"currency": "btc", "type": "frozen", "balance": "0.5"}]}}
-        balance = HtxRequestBalanceData(data, symbol_name="BTC", asset_type="SPOT", has_been_json_encoded=True)
+        balance = HtxRequestBalanceData(
+            data, symbol_name="BTC", asset_type="SPOT", has_been_json_encoded=True
+        )
 
         assert balance.get_used_margin() == 0.5
 
     def test_get_all_data(self):
         """Test get_all_data."""
         data = {"data": {"list": []}}
-        balance = HtxRequestBalanceData(data, symbol_name="BTC", asset_type="SPOT", has_been_json_encoded=True)
+        balance = HtxRequestBalanceData(
+            data, symbol_name="BTC", asset_type="SPOT", has_been_json_encoded=True
+        )
         result = balance.get_all_data()
 
         assert result["exchange_name"] == "HTX"
@@ -89,7 +98,9 @@ class TestHtxRequestBalanceData:
     def test_str_representation(self):
         """Test __str__ method."""
         data = {"data": {"list": []}}
-        balance = HtxRequestBalanceData(data, symbol_name="BTC", asset_type="SPOT", has_been_json_encoded=True)
+        balance = HtxRequestBalanceData(
+            data, symbol_name="BTC", asset_type="SPOT", has_been_json_encoded=True
+        )
         result = str(balance)
 
         assert "HTX" in result

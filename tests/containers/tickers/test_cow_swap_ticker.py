@@ -19,20 +19,26 @@ class TestCowSwapRequestTickerData:
     def test_init_data(self):
         """Test init_data with ticker info."""
         data = {"price": "50000.0"}
-        ticker = CowSwapRequestTickerData(data, symbol_name="WETH-USDC", asset_type="SPOT", has_been_json_encoded=True)
+        ticker = CowSwapRequestTickerData(
+            data, symbol_name="WETH-USDC", asset_type="SPOT", has_been_json_encoded=True
+        )
         ticker.init_data()
 
         assert ticker.has_been_init_data is True
 
     def test_get_all_data(self):
         """Test get_all_data."""
-        ticker = CowSwapRequestTickerData({}, symbol_name="WETH-USDC", asset_type="SPOT", has_been_json_encoded=True)
+        ticker = CowSwapRequestTickerData(
+            {}, symbol_name="WETH-USDC", asset_type="SPOT", has_been_json_encoded=True
+        )
         result = ticker.get_all_data()
 
         assert result == {}
 
     def test_str_representation(self):
         """Test __str__ method - base class raises NotImplementedError."""
-        ticker = CowSwapRequestTickerData({}, symbol_name="WETH-USDC", asset_type="SPOT", has_been_json_encoded=True)
+        ticker = CowSwapRequestTickerData(
+            {}, symbol_name="WETH-USDC", asset_type="SPOT", has_been_json_encoded=True
+        )
         with pytest.raises(NotImplementedError):
             str(ticker)

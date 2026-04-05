@@ -19,9 +19,7 @@ class TestValrRequestTickerData:
             "highPrice": 510000.0,
             "lowPrice": 490000.0,
         }
-        ticker = ValrRequestTickerData(
-            ticker_info, "BTCZAR", "SPOT", has_been_json_encoded=True
-        )
+        ticker = ValrRequestTickerData(ticker_info, "BTCZAR", "SPOT", has_been_json_encoded=True)
 
         assert ticker.symbol_name == "BTCZAR"
         assert ticker.exchange_name == "VALR"
@@ -37,9 +35,7 @@ class TestValrRequestTickerData:
             "highPrice": 510000.0,
             "lowPrice": 490000.0,
         }
-        ticker = ValrRequestTickerData(
-            ticker_info, "BTCZAR", "SPOT", has_been_json_encoded=True
-        )
+        ticker = ValrRequestTickerData(ticker_info, "BTCZAR", "SPOT", has_been_json_encoded=True)
         ticker.init_data()
 
         assert ticker.last_price == 500000.0

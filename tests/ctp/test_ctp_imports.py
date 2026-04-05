@@ -13,6 +13,7 @@ class TestCtpModule:
         """Test ctp_constants can be imported."""
         try:
             from bt_api_py.ctp import ctp_constants
+
             assert ctp_constants is not None
         except ImportError:
             pytest.skip("CTP extension not available")
@@ -21,6 +22,7 @@ class TestCtpModule:
         """Test ctp_structs_common can be imported."""
         try:
             from bt_api_py.ctp import ctp_structs_common
+
             assert ctp_structs_common is not None
         except ImportError:
             pytest.skip("CTP extension not available")

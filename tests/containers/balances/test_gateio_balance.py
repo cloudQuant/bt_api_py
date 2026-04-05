@@ -2,8 +2,6 @@
 
 import json
 
-import pytest
-
 from bt_api_py.containers.balances.gateio_balance import (
     GateioAccountBalance,
     GateioBalanceData,

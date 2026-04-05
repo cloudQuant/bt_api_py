@@ -1,6 +1,5 @@
 """Tests for GeminiRequestTradeData container."""
 
-import pytest
 
 from bt_api_py.containers.trades.gemini_trade import GeminiRequestTradeData
 

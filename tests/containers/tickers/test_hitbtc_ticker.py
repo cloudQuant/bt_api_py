@@ -1,6 +1,5 @@
 """Tests for HitBtcRequestTickerData container."""
 
-import pytest
 
 from bt_api_py.containers.tickers.hitbtc_ticker import HitBtcRequestTickerData
 
@@ -27,14 +26,18 @@ class TestHitBtcRequestTickerData:
             "high": "51000.0",
             "low": "49000.0",
         }
-        ticker = HitBtcRequestTickerData(data, symbol_name="BTCUSD", asset_type="SPOT", has_been_json_encoded=True)
+        ticker = HitBtcRequestTickerData(
+            data, symbol_name="BTCUSD", asset_type="SPOT", has_been_json_encoded=True
+        )
         ticker.init_data()
 
         assert ticker.last_price == 50000.0
 
     def test_get_all_data(self):
         """Test get_all_data."""
-        ticker = HitBtcRequestTickerData({}, symbol_name="BTCUSD", asset_type="SPOT", has_been_json_encoded=True)
+        ticker = HitBtcRequestTickerData(
+            {}, symbol_name="BTCUSD", asset_type="SPOT", has_been_json_encoded=True
+        )
         result = ticker.get_all_data()
 
         assert result["exchange_name"] == "HITBTC"
@@ -42,7 +45,9 @@ class TestHitBtcRequestTickerData:
 
     def test_str_representation(self):
         """Test __str__ method."""
-        ticker = HitBtcRequestTickerData({}, symbol_name="BTCUSD", asset_type="SPOT", has_been_json_encoded=True)
+        ticker = HitBtcRequestTickerData(
+            {}, symbol_name="BTCUSD", asset_type="SPOT", has_been_json_encoded=True
+        )
         result = str(ticker)
 
         assert "HITBTC" in result

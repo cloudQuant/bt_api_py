@@ -1,6 +1,5 @@
 """Tests for BitfinexOrderData container."""
 
-import pytest
 
 from bt_api_py.containers.orders.bitfinex_order import BitfinexOrderData
 
@@ -34,7 +33,9 @@ class TestBitfinexOrderData:
             "price": 50000.0,
             "price_avg": 49500.0,
         }
-        order = BitfinexOrderData(data, symbol_name="BTCUSD", asset_type="SPOT", has_been_json_encoded=True)
+        order = BitfinexOrderData(
+            data, symbol_name="BTCUSD", asset_type="SPOT", has_been_json_encoded=True
+        )
         order.init_data()
 
         # Verify init_data was called
@@ -42,7 +43,9 @@ class TestBitfinexOrderData:
 
     def test_get_all_data(self):
         """Test get_all_data."""
-        order = BitfinexOrderData({}, symbol_name="BTCUSD", asset_type="SPOT", has_been_json_encoded=True)
+        order = BitfinexOrderData(
+            {}, symbol_name="BTCUSD", asset_type="SPOT", has_been_json_encoded=True
+        )
         result = order.get_all_data()
 
         assert result["exchange_name"] == "BITFINEX"
@@ -50,7 +53,9 @@ class TestBitfinexOrderData:
 
     def test_str_representation(self):
         """Test __str__ method."""
-        order = BitfinexOrderData({}, symbol_name="BTCUSD", asset_type="SPOT", has_been_json_encoded=True)
+        order = BitfinexOrderData(
+            {}, symbol_name="BTCUSD", asset_type="SPOT", has_been_json_encoded=True
+        )
         result = str(order)
 
         assert "BITFINEX" in result

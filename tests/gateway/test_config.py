@@ -1,6 +1,6 @@
 """Tests for gateway/config.py."""
 
-import tempfile
+import sys
 
 import pytest
 
@@ -21,7 +21,11 @@ class TestGatewayConfig:
     def test_defaults(self):
         """Test default values."""
         config = GatewayConfig(exchange_type="binance", asset_type="spot", account_id="test")
-        assert config.transport == "ipc"
+        # On Windows, transport defaults to "tcp" instead of "ipc"
+        if sys.platform.startswith("win"):
+            assert config.transport == "tcp"
+        else:
+            assert config.transport == "ipc"
 
     def test_runtime_name_normalization(self):
         config = GatewayConfig(exchange_type="okx", asset_type="swap", account_id="User 01/alpha")
@@ -49,9 +53,17 @@ class TestGatewayConfig:
         assert data["exchange_type"] == "BINANCE"
         assert data["asset_type"] == "SPOT"
         assert data["account_id"] == "test"
-        assert data["command_endpoint"].startswith("ipc://")
+        # On Windows, transport is tcp, on other platforms it's ipc
+        if sys.platform.startswith("win"):
+            assert data["command_endpoint"].startswith("tcp://")
+        else:
+            assert data["command_endpoint"].startswith("ipc://")
 
     def test_build_endpoints_for_ipc_creates_runtime_directory(self, tmp_path):
+        # Skip on Windows since IPC is automatically converted to TCP
+        if sys.platform.startswith("win"):
+            pytest.skip("IPC transport not supported on Windows")
+
         config = GatewayConfig(
             exchange_type="binance",
             asset_type="spot",
@@ -68,7 +80,9 @@ class TestGatewayConfig:
     def test_build_endpoints_for_tcp(self, monkeypatch):
         gateway_config._TCP_PORT_ASSIGNMENTS.clear()
         gateway_config._TCP_RESERVED_BASE_PORTS.clear()
-        monkeypatch.setattr(gateway_config, "_tcp_port_triplet_available", lambda base_port, host="127.0.0.1": True)
+        monkeypatch.setattr(
+            gateway_config, "_tcp_port_triplet_available", lambda base_port, host="127.0.0.1": True
+        )
         config = GatewayConfig(
             exchange_type="okx",
             asset_type="swap",
@@ -83,15 +97,23 @@ class TestGatewayConfig:
     def test_tcp_base_port_reuses_existing_assignment(self, monkeypatch):
         gateway_config._TCP_PORT_ASSIGNMENTS.clear()
         gateway_config._TCP_RESERVED_BASE_PORTS.clear()
-        monkeypatch.setattr(gateway_config, "_tcp_port_triplet_available", lambda base_port, host="127.0.0.1": True)
-        first = GatewayConfig(exchange_type="okx", asset_type="swap", account_id="acct", transport="tcp")
-        second = GatewayConfig(exchange_type="okx", asset_type="swap", account_id="acct", transport="tcp")
+        monkeypatch.setattr(
+            gateway_config, "_tcp_port_triplet_available", lambda base_port, host="127.0.0.1": True
+        )
+        first = GatewayConfig(
+            exchange_type="okx", asset_type="swap", account_id="acct", transport="tcp"
+        )
+        second = GatewayConfig(
+            exchange_type="okx", asset_type="swap", account_id="acct", transport="tcp"
+        )
         assert first.command_endpoint == second.command_endpoint
 
     def test_tcp_base_port_raises_when_no_ports_available(self, monkeypatch):
         gateway_config._TCP_PORT_ASSIGNMENTS.clear()
         gateway_config._TCP_RESERVED_BASE_PORTS.clear()
-        monkeypatch.setattr(gateway_config, "_tcp_port_triplet_available", lambda base_port, host="127.0.0.1": False)
+        monkeypatch.setattr(
+            gateway_config, "_tcp_port_triplet_available", lambda base_port, host="127.0.0.1": False
+        )
         config = GatewayConfig(
             exchange_type="okx",
             asset_type="swap",
@@ -108,7 +130,9 @@ class TestGatewayConfig:
         monkeypatch.setattr(gateway_config.sys, "platform", "win32")
         gateway_config._TCP_PORT_ASSIGNMENTS.clear()
         gateway_config._TCP_RESERVED_BASE_PORTS.clear()
-        monkeypatch.setattr(gateway_config, "_tcp_port_triplet_available", lambda base_port, host="127.0.0.1": True)
+        monkeypatch.setattr(
+            gateway_config, "_tcp_port_triplet_available", lambda base_port, host="127.0.0.1": True
+        )
         config = GatewayConfig(
             exchange_type="binance",
             asset_type="spot",

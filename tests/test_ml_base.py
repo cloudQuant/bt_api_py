@@ -1,6 +1,5 @@
 """Tests for ml_base module - BaseMLModel, RiskPredictionResult, ModelMetrics, ModelComparator."""
 
-import pickle
 import tempfile
 from pathlib import Path
 

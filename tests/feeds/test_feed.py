@@ -152,7 +152,9 @@ class TestFeed:
         """Test sanitizing URL with sensitive query params."""
         feed = Feed()
 
-        url = "https://api.binance.com/api/v3/order?symbol=BTCUSDT&apiKey=secret123&signature=abc123"
+        url = (
+            "https://api.binance.com/api/v3/order?symbol=BTCUSDT&apiKey=secret123&signature=abc123"
+        )
         result = feed._sanitize_url_for_log(url)
 
         assert "symbol=BTCUSDT" in result

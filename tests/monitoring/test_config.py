@@ -71,7 +71,9 @@ class TestMonitoringLifecycle:
         async def fake_start_global_monitoring(interval):
             calls.append(("monitoring", interval))
 
-        monkeypatch.setattr(monitoring_config, "start_global_monitoring", fake_start_global_monitoring)
+        monkeypatch.setattr(
+            monitoring_config, "start_global_monitoring", fake_start_global_monitoring
+        )
         monkeypatch.setattr(
             monitoring_config,
             "start_prometheus_exporter",
@@ -97,7 +99,9 @@ class TestMonitoringLifecycle:
         logger = _Logger()
         calls = []
         monkeypatch.setattr(monitoring_config, "get_logger", lambda name: logger)
-        monkeypatch.setattr(monitoring_config, "setup_logging_for_production", lambda **kwargs: None)
+        monkeypatch.setattr(
+            monitoring_config, "setup_logging_for_production", lambda **kwargs: None
+        )
 
         async def fake_start_global_monitoring(interval):
             calls.append(("monitoring", interval))
@@ -108,12 +112,22 @@ class TestMonitoringLifecycle:
         async def fake_setup_grafana_dashboards(output_dir):
             calls.append(("grafana", output_dir))
 
-        monkeypatch.setattr(monitoring_config, "start_global_monitoring", fake_start_global_monitoring)
+        monkeypatch.setattr(
+            monitoring_config, "start_global_monitoring", fake_start_global_monitoring
+        )
         monkeypatch.setattr(monitoring_config, "setup_elk_integration", fake_setup_elk_integration)
-        monkeypatch.setattr(monitoring_config, "setup_grafana_dashboards", fake_setup_grafana_dashboards)
-        monkeypatch.setattr(monitoring_config, "start_prometheus_exporter", lambda **kwargs: calls.append(("prometheus", kwargs)))
+        monkeypatch.setattr(
+            monitoring_config, "setup_grafana_dashboards", fake_setup_grafana_dashboards
+        )
+        monkeypatch.setattr(
+            monitoring_config,
+            "start_prometheus_exporter",
+            lambda **kwargs: calls.append(("prometheus", kwargs)),
+        )
 
-        config = MonitoringConfig(elk_enabled=True, elasticsearch_username="user", elasticsearch_password="pass")
+        config = MonitoringConfig(
+            elk_enabled=True, elasticsearch_username="user", elasticsearch_password="pass"
+        )
         await monitoring_config.setup_monitoring(config)
 
         assert any(kind == "elk" for kind, _ in calls)

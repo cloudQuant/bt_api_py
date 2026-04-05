@@ -1,6 +1,5 @@
 """Tests for HtxRequestBarData container."""
 
-import pytest
 
 from bt_api_py.containers.bars.htx_bar import HtxRequestBarData
 
@@ -20,14 +19,18 @@ class TestHtxRequestBarData:
     def test_init_data(self):
         """Test init_data with bar info."""
         data = {"data": [[1688671955, 50000.0, 51000.0, 49000.0, 50500.0, 1000.0]]}
-        bar = HtxRequestBarData(data, symbol_name="btcusdt", asset_type="SPOT", has_been_json_encoded=True)
+        bar = HtxRequestBarData(
+            data, symbol_name="btcusdt", asset_type="SPOT", has_been_json_encoded=True
+        )
         bar.init_data()
 
         assert bar.has_been_init_data is True
 
     def test_get_all_data(self):
         """Test get_all_data method."""
-        bar = HtxRequestBarData({}, symbol_name="btcusdt", asset_type="SPOT", has_been_json_encoded=True)
+        bar = HtxRequestBarData(
+            {}, symbol_name="btcusdt", asset_type="SPOT", has_been_json_encoded=True
+        )
         result = bar.get_all_data()
 
         assert result["exchange_name"] == "HTX"

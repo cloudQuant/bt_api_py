@@ -10,10 +10,7 @@ class TestOkxCurrencyData:
 
     def test_init(self):
         """Test initialization."""
-        currency = OkxCurrencyData(
-            {"ccy": "BTC"},
-            has_been_json_encoded=True
-        )
+        currency = OkxCurrencyData({"ccy": "BTC"}, has_been_json_encoded=True)
 
         assert currency.has_been_json_encoded is True
 
@@ -29,10 +26,7 @@ class TestOkxCurrencyData:
             "canDep": "1",
             "canInternal": "1",
         }
-        currency = OkxCurrencyData(
-            currency_info,
-            has_been_json_encoded=True
-        )
+        currency = OkxCurrencyData(currency_info, has_been_json_encoded=True)
         currency.init_data()
 
         assert currency.currency == "BTC"
@@ -46,20 +40,14 @@ class TestOkxCurrencyData:
 
     def test_get_currency(self):
         """Test get_currency method."""
-        currency = OkxCurrencyData(
-            {"ccy": "BTC"},
-            has_been_json_encoded=True
-        )
+        currency = OkxCurrencyData({"ccy": "BTC"}, has_been_json_encoded=True)
         currency.init_data()
 
         assert currency.get_currency() == "BTC"
 
     def test_get_name(self):
         """Test get_name method."""
-        currency = OkxCurrencyData(
-            {"name": "Bitcoin"},
-            has_been_json_encoded=True
-        )
+        currency = OkxCurrencyData({"name": "Bitcoin"}, has_been_json_encoded=True)
         currency.init_data()
 
         assert currency.get_name() == "Bitcoin"

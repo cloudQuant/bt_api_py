@@ -14,7 +14,7 @@ class TestOkxOpenInterestData:
             {"instId": "BTC-USDT-SWAP", "oi": "1000000"},
             "BTC-USDT-SWAP",
             "SWAP",
-            has_been_json_encoded=True
+            has_been_json_encoded=True,
         )
 
         assert open_interest.event == "OpenInterestEvent"
@@ -29,7 +29,7 @@ class TestOkxOpenInterestData:
             '{"instId": "BTC-USDT-SWAP", "oi": "1000000"}',
             "BTC-USDT-SWAP",
             "SWAP",
-            has_been_json_encoded=False
+            has_been_json_encoded=False,
         )
 
         assert open_interest.event == "OpenInterestEvent"
@@ -42,7 +42,7 @@ class TestOkxOpenInterestData:
             {"instId": "BTC-USDT-SWAP", "oi": "1000000", "ts": "1705315800000"},
             "BTC-USDT-SWAP",
             "SWAP",
-            has_been_json_encoded=True
+            has_been_json_encoded=True,
         )
         open_interest.init_data()
 

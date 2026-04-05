@@ -1,6 +1,5 @@
 """Tests for OkxMarketTradeData container."""
 
-import pytest
 
 from bt_api_py.containers.trades.okx_market_trade import OkxMarketTradeData
 
@@ -27,7 +26,9 @@ class TestOkxMarketTradeData:
             "side": "buy",
             "ts": "1234567890000",
         }
-        trade = OkxMarketTradeData(data, symbol_name="BTC-USDT", asset_type="SPOT", has_been_json_encoded=True)
+        trade = OkxMarketTradeData(
+            data, symbol_name="BTC-USDT", asset_type="SPOT", has_been_json_encoded=True
+        )
         trade.init_data()
 
         assert trade.trade_id == 123456
@@ -35,7 +36,9 @@ class TestOkxMarketTradeData:
 
     def test_get_all_data(self):
         """Test get_all_data."""
-        trade = OkxMarketTradeData({}, symbol_name="BTC-USDT", asset_type="SPOT", has_been_json_encoded=True)
+        trade = OkxMarketTradeData(
+            {}, symbol_name="BTC-USDT", asset_type="SPOT", has_been_json_encoded=True
+        )
         result = trade.get_all_data()
 
         assert result["exchange_name"] == "OKX"
@@ -43,7 +46,9 @@ class TestOkxMarketTradeData:
 
     def test_str_representation(self):
         """Test __str__ method."""
-        trade = OkxMarketTradeData({}, symbol_name="BTC-USDT", asset_type="SPOT", has_been_json_encoded=True)
+        trade = OkxMarketTradeData(
+            {}, symbol_name="BTC-USDT", asset_type="SPOT", has_been_json_encoded=True
+        )
         result = str(trade)
 
         assert "OKX" in result

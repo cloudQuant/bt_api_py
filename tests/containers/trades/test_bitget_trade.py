@@ -1,6 +1,5 @@
 """Tests for BitgetTradeData container."""
 
-import pytest
 
 from bt_api_py.containers.trades.bitget_trade import BitgetTradeData
 
@@ -28,7 +27,9 @@ class TestBitgetTradeData:
             "size": "1.0",
             "fee": "0.01",
         }
-        trade = BitgetTradeData(data, symbol_name="BTCUSDT", asset_type="SPOT", has_been_json_encoded=True)
+        trade = BitgetTradeData(
+            data, symbol_name="BTCUSDT", asset_type="SPOT", has_been_json_encoded=True
+        )
         trade.init_data()
 
         assert trade.trade_id == "123456"
@@ -37,7 +38,9 @@ class TestBitgetTradeData:
 
     def test_get_all_data(self):
         """Test get_all_data."""
-        trade = BitgetTradeData({}, symbol_name="BTCUSDT", asset_type="SPOT", has_been_json_encoded=True)
+        trade = BitgetTradeData(
+            {}, symbol_name="BTCUSDT", asset_type="SPOT", has_been_json_encoded=True
+        )
         result = trade.get_all_data()
 
         assert result["exchange_name"] == "BITGET"
@@ -45,7 +48,9 @@ class TestBitgetTradeData:
 
     def test_str_representation(self):
         """Test __str__ method."""
-        trade = BitgetTradeData({}, symbol_name="BTCUSDT", asset_type="SPOT", has_been_json_encoded=True)
+        trade = BitgetTradeData(
+            {}, symbol_name="BTCUSDT", asset_type="SPOT", has_been_json_encoded=True
+        )
         result = str(trade)
 
         assert "BITGET" in result

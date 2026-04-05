@@ -2,7 +2,7 @@
 
 import pytest
 
-from bt_api_py.containers.orders.order import OrderStatus, OrderData
+from bt_api_py.containers.orders.order import OrderData, OrderStatus
 
 
 class TestOrderStatus:

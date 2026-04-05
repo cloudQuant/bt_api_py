@@ -2,8 +2,6 @@
 
 from types import SimpleNamespace
 
-import pytest
-
 from bt_api_py.functions.calculate_numbers import (
     allocate_value_to_arr,
     cal_sum_of_key_values,
@@ -34,6 +32,7 @@ class TestRoundNumber:
     def test_round_random(self):
         """Test random rounding returns valid value."""
         import random
+
         random.seed(42)  # Set seed for reproducibility
         result = round_number(1.25, 0.1, "random")
         # Random should give either 1.2 or 1.3

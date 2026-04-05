@@ -14,7 +14,7 @@ class TestBinanceMarkPrice:
             {"symbol": "BTCUSDT"},
             symbol_name="BTCUSDT",
             asset_type="FUTURE",
-            has_been_json_encoded=True
+            has_been_json_encoded=True,
         )
 
         assert mark_price.exchange_name == "BINANCE"
@@ -27,7 +27,7 @@ class TestBinanceMarkPrice:
             {"symbol": "BTCUSDT"},
             symbol_name="BTCUSDT",
             asset_type="FUTURE",
-            has_been_json_encoded=True
+            has_been_json_encoded=True,
         )
 
         with pytest.raises(NotImplementedError):
@@ -36,10 +36,7 @@ class TestBinanceMarkPrice:
     def test_mark_price_data_inheritance(self):
         """Test that BinanceMarkPrice inherits from MarkPriceData."""
         mark_price = BinanceMarkPrice(
-            {},
-            symbol_name="BTCUSDT",
-            asset_type="FUTURE",
-            has_been_json_encoded=True
+            {}, symbol_name="BTCUSDT", asset_type="FUTURE", has_been_json_encoded=True
         )
 
         assert hasattr(mark_price, "mark_price_info")

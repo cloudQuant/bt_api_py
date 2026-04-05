@@ -14,7 +14,7 @@ class TestCtpTradeData:
             {"TradeID": "12345"},
             symbol_name="IF2506",
             asset_type="FUTURE",
-            has_been_json_encoded=True
+            has_been_json_encoded=True,
         )
 
         assert trade.exchange_name == "CTP"
@@ -37,10 +37,7 @@ class TestCtpTradeData:
             "ExchangeID": "CFFEX",
         }
         trade = CtpTradeData(
-            trade_info,
-            symbol_name="IF2506",
-            asset_type="FUTURE",
-            has_been_json_encoded=True
+            trade_info, symbol_name="IF2506", asset_type="FUTURE", has_been_json_encoded=True
         )
         trade.init_data()
 

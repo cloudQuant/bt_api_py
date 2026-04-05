@@ -225,7 +225,9 @@ def test_extract_topic_symbol_supports_okx_and_unknown_messages() -> None:
 
 
 @pytest.mark.asyncio
-async def test_handle_message_routes_event_and_unknown_paths(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_handle_message_routes_event_and_unknown_paths(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     connection = WebSocketConnection(
         WebSocketConfig(url="wss://example.com/ws", exchange_name="TEST___SPOT"),
         "handle_paths",
@@ -254,7 +256,9 @@ async def test_manager_get_connection_rejects_unknown_exchange() -> None:
 @pytest.mark.asyncio
 async def test_manager_get_connection_uses_round_robin_when_pool_is_full() -> None:
     manager = WebSocketManager(event_bus=_DummyEventBus())
-    config = WebSocketConfig(url="wss://example.com/ws", exchange_name="TEST___SPOT", max_connections=2)
+    config = WebSocketConfig(
+        url="wss://example.com/ws", exchange_name="TEST___SPOT", max_connections=2
+    )
     first = _StubConnection(connection_id="c1", connected=True, subscription_count=50)
     second = _StubConnection(connection_id="c2", connected=True, subscription_count=50)
     manager._pools[config.exchange_name] = [first, second]
@@ -269,7 +273,9 @@ async def test_manager_get_connection_uses_round_robin_when_pool_is_full() -> No
 
 
 @pytest.mark.asyncio
-async def test_manager_subscribe_and_unsubscribe_publish_events(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_manager_subscribe_and_unsubscribe_publish_events(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     event_bus = _DummyEventBus()
     manager = WebSocketManager(event_bus=event_bus)
     config = WebSocketConfig(url="wss://example.com/ws", exchange_name="TEST___SPOT")
@@ -290,7 +296,9 @@ async def test_manager_subscribe_and_unsubscribe_publish_events(monkeypatch: pyt
     manager._pool_configs[config.exchange_name] = config
     manager._pool_locks[config.exchange_name] = asyncio.Lock()
 
-    subscription_id = await manager.subscribe(config.exchange_name, "ticker", "BTCUSDT", lambda _: None)
+    subscription_id = await manager.subscribe(
+        config.exchange_name, "ticker", "BTCUSDT", lambda _: None
+    )
     await manager.unsubscribe(config.exchange_name, subscription_id)
 
     assert len(subscribed) == 1

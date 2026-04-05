@@ -14,7 +14,7 @@ class TestBinanceRequestFundingRateData:
             {"symbol": "BTCUSDT"},
             symbol_name="BTCUSDT",
             asset_type="FUTURE",
-            has_been_json_encoded=True
+            has_been_json_encoded=True,
         )
 
         assert funding_rate.exchange_name == "BINANCE"
@@ -34,7 +34,7 @@ class TestBinanceRequestFundingRateData:
             funding_rate_info,
             symbol_name="BTCUSDT",
             asset_type="FUTURE",
-            has_been_json_encoded=True
+            has_been_json_encoded=True,
         )
         funding_rate.init_data()
 
@@ -46,10 +46,7 @@ class TestBinanceRequestFundingRateData:
     def test_funding_rate_data_inheritance(self):
         """Test that BinanceRequestFundingRateData inherits from FundingRateData."""
         funding_rate = BinanceRequestFundingRateData(
-            {},
-            symbol_name="BTCUSDT",
-            asset_type="FUTURE",
-            has_been_json_encoded=True
+            {}, symbol_name="BTCUSDT", asset_type="FUTURE", has_been_json_encoded=True
         )
 
         assert hasattr(funding_rate, "funding_rate_info")

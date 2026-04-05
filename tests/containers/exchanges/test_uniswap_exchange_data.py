@@ -1,6 +1,5 @@
 """Tests for UniswapExchangeData container."""
 
-import pytest
 
 from bt_api_py.containers.exchanges.uniswap_exchange_data import UniswapExchangeData
 

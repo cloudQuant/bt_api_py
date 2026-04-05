@@ -1,6 +1,5 @@
 """Tests for FoxbitExchangeData container."""
 
-import pytest
 
 from bt_api_py.containers.exchanges.foxbit_exchange_data import FoxbitExchangeData
 

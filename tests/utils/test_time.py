@@ -1,8 +1,6 @@
 """Tests for utils/time.py."""
 
-from datetime import datetime
 
-import pytest
 
 from bt_api_py.utils.time import convert_utc_timestamp
 

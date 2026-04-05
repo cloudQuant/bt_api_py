@@ -26,12 +26,16 @@ class TestPoloniexTickerData:
 
     def test_get_all_data_raises_not_implemented(self):
         """Test get_all_data - calls init_data which raises NotImplementedError."""
-        ticker = PoloniexTickerData({}, symbol_name="BTC_USDT", asset_type="SPOT", has_been_json_encoded=True)
+        ticker = PoloniexTickerData(
+            {}, symbol_name="BTC_USDT", asset_type="SPOT", has_been_json_encoded=True
+        )
         with pytest.raises(NotImplementedError):
             ticker.get_all_data()
 
     def test_str_representation_raises_not_implemented(self):
         """Test __str__ method - base class raises NotImplementedError."""
-        ticker = PoloniexTickerData({}, symbol_name="BTC_USDT", asset_type="SPOT", has_been_json_encoded=True)
+        ticker = PoloniexTickerData(
+            {}, symbol_name="BTC_USDT", asset_type="SPOT", has_been_json_encoded=True
+        )
         with pytest.raises(NotImplementedError):
             str(ticker)

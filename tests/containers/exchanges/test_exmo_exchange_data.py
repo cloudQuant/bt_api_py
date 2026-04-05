@@ -1,6 +1,5 @@
 """Tests for ExmoExchangeData container."""
 
-import pytest
 
 from bt_api_py.containers.exchanges.exmo_exchange_data import ExmoExchangeData
 

@@ -1,6 +1,5 @@
 """Tests for PancakeSwapRequestTickerData container."""
 
-import pytest
 
 from bt_api_py.containers.tickers.pancakeswap_ticker import PancakeSwapRequestTickerData
 
@@ -15,7 +14,7 @@ class TestPancakeSwapRequestTickerData:
             price=10.5,
             timestamp=1678901234,
             volume=1000.0,
-            quote_volume=10500.0
+            quote_volume=10500.0,
         )
 
         assert ticker.symbol == "CAKE-USDC"
@@ -36,7 +35,7 @@ class TestPancakeSwapRequestTickerData:
             low=10.0,
             bid=10.4,
             ask=10.6,
-            count=100
+            count=100,
         )
 
         assert ticker.high == 11.0
@@ -52,7 +51,7 @@ class TestPancakeSwapRequestTickerData:
             price=-10.5,
             timestamp=1678901234,
             volume=1000.0,
-            quote_volume=10500.0
+            quote_volume=10500.0,
         )
 
         assert ticker.price == 0.0
@@ -64,7 +63,7 @@ class TestPancakeSwapRequestTickerData:
             price=10.5,
             timestamp=1678901234,
             volume=1000.0,
-            quote_volume=10500.0
+            quote_volume=10500.0,
         )
         result = str(ticker)
 

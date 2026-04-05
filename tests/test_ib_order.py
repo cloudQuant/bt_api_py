@@ -2,7 +2,7 @@
 
 import pytest
 
-from bt_api_py.containers.ib.ib_order import IbOrderData, IB_ORDER_STATUS_MAP
+from bt_api_py.containers.ib.ib_order import IB_ORDER_STATUS_MAP, IbOrderData
 
 
 class TestIbOrderData:
@@ -11,10 +11,7 @@ class TestIbOrderData:
     def test_init(self):
         """Test initialization."""
         order = IbOrderData(
-            {"orderId": 12345},
-            symbol_name="AAPL",
-            asset_type="STK",
-            has_been_json_encoded=True
+            {"orderId": 12345}, symbol_name="AAPL", asset_type="STK", has_been_json_encoded=True
         )
 
         assert order.exchange_name == "IB"
@@ -44,10 +41,7 @@ class TestIbOrderData:
             "avgFillPrice": 150.5,
         }
         order = IbOrderData(
-            order_info,
-            symbol_name="AAPL",
-            asset_type="STK",
-            has_been_json_encoded=True
+            order_info, symbol_name="AAPL", asset_type="STK", has_been_json_encoded=True
         )
         order.init_data()
 

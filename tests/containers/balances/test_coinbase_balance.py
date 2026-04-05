@@ -1,11 +1,10 @@
 """Tests for Coinbase balance containers."""
 
-import pytest
 
 from bt_api_py.containers.balances.coinbase_balance import (
     CoinbaseBalanceData,
-    CoinbaseWssBalanceData,
     CoinbaseRequestBalanceData,
+    CoinbaseWssBalanceData,
 )
 
 

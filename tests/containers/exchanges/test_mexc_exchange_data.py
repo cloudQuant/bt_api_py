@@ -1,6 +1,5 @@
 """Tests for MexcExchangeData container."""
 
-import pytest
 
 from bt_api_py.containers.exchanges.mexc_exchange_data import MexcExchangeData
 

@@ -40,7 +40,9 @@ class TestKuCoinTradeData:
 
     def test_get_all_data(self):
         """Test get_all_data."""
-        trade = KuCoinTradeData({}, symbol_name="BTC-USDT", asset_type="SPOT", has_been_json_encoded=True)
+        trade = KuCoinTradeData(
+            {}, symbol_name="BTC-USDT", asset_type="SPOT", has_been_json_encoded=True
+        )
         # Set _initialized to prevent AutoInitMixin
         trade._initialized = True
         result = trade.get_all_data()

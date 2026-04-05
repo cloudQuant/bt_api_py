@@ -11,10 +11,7 @@ class TestIbPositionData:
     def test_init(self):
         """Test initialization."""
         position = IbPositionData(
-            {"symbol": "AAPL"},
-            symbol_name="AAPL",
-            asset_type="STK",
-            has_been_json_encoded=True
+            {"symbol": "AAPL"}, symbol_name="AAPL", asset_type="STK", has_been_json_encoded=True
         )
 
         assert position.exchange_name == "IB"
@@ -36,10 +33,7 @@ class TestIbPositionData:
             "currency": "USD",
         }
         position = IbPositionData(
-            position_info,
-            symbol_name="AAPL",
-            asset_type="STK",
-            has_been_json_encoded=True
+            position_info, symbol_name="AAPL", asset_type="STK", has_been_json_encoded=True
         )
         position.init_data()
 

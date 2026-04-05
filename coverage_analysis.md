@@ -2,18 +2,13 @@
 ==================================================
 
 ## Exchange Coverage
-Total exchanges: 72
-Tested exchanges: 69 (95.8%)
-Untested exchanges: 3
-
-**Untested exchanges:**
-- aivora
-- allinx
-- ascendex
+Total exchanges: 68
+Tested exchanges: 68 (100.0%)
+Untested exchanges: 0
 
 ## Module Test Distribution
 feeds: 34 test files
-containers: 282 test files
+containers: 285 test files
 registry: 2 test files
 event_bus: 1 test files
 exceptions: 1 test files

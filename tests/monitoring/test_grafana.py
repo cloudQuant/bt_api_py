@@ -1,6 +1,5 @@
 """Tests for monitoring/grafana.py."""
 
-import pytest
 import json
 
 from bt_api_py.monitoring import grafana
@@ -12,6 +11,7 @@ class TestGrafana:
     def test_module_exists(self):
         """Test module can be imported."""
         from bt_api_py.monitoring import grafana
+
         assert grafana is not None
 
 
@@ -63,8 +63,13 @@ class TestGrafanaFactories:
         assert system_dashboard["panels"][2]["title"] == "Process Memory"
         assert exchange_dashboard["title"] == "BINANCE Exchange Dashboard"
         assert len(exchange_dashboard["panels"]) == 4
-        assert exchange_dashboard["panels"][0]["targets"][0]["expr"] == "exchange_binance_health_status"
-        assert "binance_orders_success_total" in exchange_dashboard["panels"][2]["targets"][0]["expr"]
+        assert (
+            exchange_dashboard["panels"][0]["targets"][0]["expr"]
+            == "exchange_binance_health_status"
+        )
+        assert (
+            "binance_orders_success_total" in exchange_dashboard["panels"][2]["targets"][0]["expr"]
+        )
 
     def test_save_dashboard_to_file_and_get_all_configs(self, tmp_path):
         dashboard = grafana.create_system_dashboard()
@@ -74,6 +79,9 @@ class TestGrafanaFactories:
         all_configs = grafana.get_all_dashboard_configs()
 
         assert output.exists()
-        assert json.loads(output.read_text(encoding="utf-8"))["dashboard"]["title"] == "BT API Py System Dashboard"
+        assert (
+            json.loads(output.read_text(encoding="utf-8"))["dashboard"]["title"]
+            == "BT API Py System Dashboard"
+        )
         assert set(all_configs.keys()) == {"trading", "system", "binance", "okx"}
         assert all_configs["okx"]["dashboard"]["title"] == "okx Exchange Dashboard"

@@ -1,6 +1,5 @@
 """Tests for CurveExchangeData container."""
 
-import pytest
 
 from bt_api_py.containers.exchanges.curve_exchange_data import CurveExchangeData
 

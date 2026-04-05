@@ -1,6 +1,5 @@
 """Tests for LocalbitcoinsExchangeData container."""
 
-import pytest
 
 from bt_api_py.containers.exchanges.localbitcoins_exchange_data import LocalBitcoinsExchangeData
 

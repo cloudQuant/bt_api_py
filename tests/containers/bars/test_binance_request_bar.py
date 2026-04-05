@@ -1,4 +1,5 @@
 import json
+
 import pytest
 
 from bt_api_py.containers.bars.binance_bar import BinanceRequestBarData, BinanceWssBarData
@@ -9,7 +10,20 @@ class TestBinanceRequestBarData:
 
     def test_init(self):
         """Test initialization."""
-        data = [1607444700000, "50000", "51000", "49000", "50500", "100", 1607444759999, "5000000", 500, "50", "2500000", "0"]
+        data = [
+            1607444700000,
+            "50000",
+            "51000",
+            "49000",
+            "50500",
+            "100",
+            1607444759999,
+            "5000000",
+            500,
+            "50",
+            "2500000",
+            "0",
+        ]
         bar = BinanceRequestBarData(data, "BTC-USDT", "SPOT", True)
 
         assert bar.exchange_name == "BINANCE"
@@ -19,7 +33,22 @@ class TestBinanceRequestBarData:
 
     def test_init_data_with_json_string(self):
         """Test init_data with JSON string."""
-        data = json.dumps([1607444700000, "50000", "51000", "49000", "50500", "100", 1607444759999, "5000000", 500, "50", "2500000", "0"])
+        data = json.dumps(
+            [
+                1607444700000,
+                "50000",
+                "51000",
+                "49000",
+                "50500",
+                "100",
+                1607444759999,
+                "5000000",
+                500,
+                "50",
+                "2500000",
+                "0",
+            ]
+        )
         bar = BinanceRequestBarData(data, "BTC-USDT", "SPOT", False)
         bar.init_data()
 
@@ -28,7 +57,20 @@ class TestBinanceRequestBarData:
 
     def test_init_data_idempotent(self):
         """Test init_data is idempotent."""
-        data = [1607444700000, "50000", "51000", "49000", "50500", "100", 1607444759999, "5000000", 500, "50", "2500000", "0"]
+        data = [
+            1607444700000,
+            "50000",
+            "51000",
+            "49000",
+            "50500",
+            "100",
+            1607444759999,
+            "5000000",
+            500,
+            "50",
+            "2500000",
+            "0",
+        ]
         bar = BinanceRequestBarData(data, "BTC-USDT", "SPOT", True)
 
         bar.init_data()
@@ -39,7 +81,20 @@ class TestBinanceRequestBarData:
 
     def test_get_all_data(self):
         """Test get_all_data method."""
-        data = [1607444700000, "50000", "51000", "49000", "50500", "100", 1607444759999, "5000000", 500, "50", "2500000", "0"]
+        data = [
+            1607444700000,
+            "50000",
+            "51000",
+            "49000",
+            "50500",
+            "100",
+            1607444759999,
+            "5000000",
+            500,
+            "50",
+            "2500000",
+            "0",
+        ]
         bar = BinanceRequestBarData(data, "BTC-USDT", "SPOT", True)
 
         result = bar.get_all_data()
@@ -50,7 +105,20 @@ class TestBinanceRequestBarData:
 
     def test_str_representation(self):
         """Test __str__ method."""
-        data = [1607444700000, "50000", "51000", "49000", "50500", "100", 1607444759999, "5000000", 500, "50", "2500000", "0"]
+        data = [
+            1607444700000,
+            "50000",
+            "51000",
+            "49000",
+            "50500",
+            "100",
+            1607444759999,
+            "5000000",
+            500,
+            "50",
+            "2500000",
+            "0",
+        ]
         bar = BinanceRequestBarData(data, "BTC-USDT", "SPOT", True)
 
         result = str(bar)
@@ -60,7 +128,20 @@ class TestBinanceRequestBarData:
 
     def test_all_getter_methods(self):
         """Test all getter methods."""
-        data = [1607444700000, "50000", "51000", "49000", "50500", "100", 1607444759999, "5000000", 500, "50", "2500000", "0"]
+        data = [
+            1607444700000,
+            "50000",
+            "51000",
+            "49000",
+            "50500",
+            "100",
+            1607444759999,
+            "5000000",
+            500,
+            "50",
+            "2500000",
+            "0",
+        ]
         bar = BinanceRequestBarData(data, "BTC-USDT", "SPOT", True)
         bar.init_data()
 
@@ -117,24 +198,26 @@ class TestBinanceWssBarData:
 
     def test_init_data_with_json_string(self):
         """Test init_data with JSON string."""
-        data = json.dumps({
-            "e": "kline",
-            "E": 1607443058651,
-            "k": {
-                "t": 1607443020000,
-                "T": 1607443079999,
-                "o": "50000",
-                "c": "50500",
-                "h": "51000",
-                "l": "49000",
-                "v": "100",
-                "q": "5000000",
-                "n": 500,
-                "V": "50",
-                "Q": "2500000",
-                "x": False,
-            },
-        })
+        data = json.dumps(
+            {
+                "e": "kline",
+                "E": 1607443058651,
+                "k": {
+                    "t": 1607443020000,
+                    "T": 1607443079999,
+                    "o": "50000",
+                    "c": "50500",
+                    "h": "51000",
+                    "l": "49000",
+                    "v": "100",
+                    "q": "5000000",
+                    "n": 500,
+                    "V": "50",
+                    "Q": "2500000",
+                    "x": False,
+                },
+            }
+        )
         bar = BinanceWssBarData(data, "BTC-USDT", "SPOT", False)
         bar.init_data()
 

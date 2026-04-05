@@ -11,10 +11,7 @@ class TestIbTradeData:
     def test_init(self):
         """Test initialization."""
         trade = IbTradeData(
-            {"execId": "12345"},
-            symbol_name="AAPL",
-            asset_type="STK",
-            has_been_json_encoded=True
+            {"execId": "12345"}, symbol_name="AAPL", asset_type="STK", has_been_json_encoded=True
         )
 
         assert trade.exchange_name == "IB"
@@ -37,10 +34,7 @@ class TestIbTradeData:
             "exchange": "SMART",
         }
         trade = IbTradeData(
-            trade_info,
-            symbol_name="AAPL",
-            asset_type="STK",
-            has_been_json_encoded=True
+            trade_info, symbol_name="AAPL", asset_type="STK", has_been_json_encoded=True
         )
         trade.init_data()
 

@@ -15,16 +15,29 @@ class TestPrometheus:
     def test_module_exists(self):
         """Test module can be imported."""
         from bt_api_py.monitoring import prometheus
+
         assert prometheus is not None
 
 
 class TestPrometheusFormatter:
     def test_formatter_helpers(self):
-        assert prometheus.PrometheusFormatter.format_metric_name("btapi.metric/name") == "btapi_metric_name"
+        assert (
+            prometheus.PrometheusFormatter.format_metric_name("btapi.metric/name")
+            == "btapi_metric_name"
+        )
         assert prometheus.PrometheusFormatter.format_labels({}) == ""
-        assert prometheus.PrometheusFormatter.format_labels({"exchange": "binance"}) == '{exchange="binance"}'
-        assert prometheus.PrometheusFormatter.format_help("metric.name", "desc") == "# HELP metric_name desc"
-        assert prometheus.PrometheusFormatter.format_type("metric.name", "gauge") == "# TYPE metric_name gauge"
+        assert (
+            prometheus.PrometheusFormatter.format_labels({"exchange": "binance"})
+            == '{exchange="binance"}'
+        )
+        assert (
+            prometheus.PrometheusFormatter.format_help("metric.name", "desc")
+            == "# HELP metric_name desc"
+        )
+        assert (
+            prometheus.PrometheusFormatter.format_type("metric.name", "gauge")
+            == "# TYPE metric_name gauge"
+        )
 
     def test_format_registry_includes_metric_values(self):
         registry = MetricRegistry()
@@ -121,7 +134,9 @@ class TestMetricsHandler:
 
         missing_handler = self._make_handler(registry)
         missing_handler._handle_404()
-        assert json.loads(missing_handler.wfile.getvalue().decode("utf-8")) == {"error": "Not Found"}
+        assert json.loads(missing_handler.wfile.getvalue().decode("utf-8")) == {
+            "error": "Not Found"
+        }
 
         error_handler = self._make_handler(registry)
         error_handler._send_error(418, "teapot")
@@ -162,7 +177,9 @@ class TestPrometheusExporter:
         monkeypatch.setattr(prometheus, "HTTPServer", DummyServer)
         monkeypatch.setattr(prometheus, "Thread", DummyThread)
 
-        exporter = prometheus.PrometheusExporter(host="127.0.0.1", port=9200, registry=MetricRegistry())
+        exporter = prometheus.PrometheusExporter(
+            host="127.0.0.1", port=9200, registry=MetricRegistry()
+        )
         exporter.start()
 
         assert created["address"] == ("127.0.0.1", 9200)
@@ -197,8 +214,14 @@ class TestPrometheusExporter:
         started = []
         stopped = []
 
-        monkeypatch.setattr(prometheus.PrometheusExporter, "start", lambda self: started.append((self.host, self.port)))
-        monkeypatch.setattr(prometheus.PrometheusExporter, "stop", lambda self: stopped.append(True))
+        monkeypatch.setattr(
+            prometheus.PrometheusExporter,
+            "start",
+            lambda self: started.append((self.host, self.port)),
+        )
+        monkeypatch.setattr(
+            prometheus.PrometheusExporter, "stop", lambda self: stopped.append(True)
+        )
 
         global_exporter = prometheus.start_prometheus_exporter(host="127.0.0.1", port=9300)
         assert started == [("127.0.0.1", 9300)]

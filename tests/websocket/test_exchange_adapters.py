@@ -1,8 +1,7 @@
 """Tests for websocket/exchange_adapters.py."""
 
-import pytest
 
-from bt_api_py.websocket.exchange_adapters import ExchangeType, AuthenticationType
+from bt_api_py.websocket.exchange_adapters import AuthenticationType, ExchangeType
 
 
 class TestExchangeType:

@@ -1,6 +1,5 @@
 """Tests for BitinkaExchangeData container."""
 
-import pytest
 
 from bt_api_py.containers.exchanges.bitinka_exchange_data import BitinkaExchangeData
 

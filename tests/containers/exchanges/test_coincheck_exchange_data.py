@@ -1,6 +1,5 @@
 """Tests for CoincheckExchangeData container."""
 
-import pytest
 
 from bt_api_py.containers.exchanges.coincheck_exchange_data import CoincheckExchangeData
 

@@ -86,7 +86,9 @@ def test_validate_api_key_cases(api_key: str | None, min_length: int, expected: 
 
 
 def test_mask_credential_formats_visible_segments() -> None:
-    assert SecureCredentialManager.mask_credential("abcd1234wxyz", visible_chars=4) == "abcd****wxyz"
+    assert (
+        SecureCredentialManager.mask_credential("abcd1234wxyz", visible_chars=4) == "abcd****wxyz"
+    )
     assert SecureCredentialManager.mask_credential("abcd1234", visible_chars=0) == "********"
 
 
@@ -153,7 +155,9 @@ def test_get_exchange_credentials_plaintext_branches(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     manager = SecureCredentialManager()
-    monkeypatch.setattr(manager, "load_from_env", lambda key, default=None: env_values.get(key, default))
+    monkeypatch.setattr(
+        manager, "load_from_env", lambda key, default=None: env_values.get(key, default)
+    )
 
     assert manager.get_exchange_credentials(exchange) == expected
 
@@ -170,7 +174,9 @@ def test_get_exchange_credentials_decrypts_string_fields_only(
         "OKX_TESTNET": "true",
     }
 
-    monkeypatch.setattr(manager, "load_from_env", lambda key, default=None: env_values.get(key, default))
+    monkeypatch.setattr(
+        manager, "load_from_env", lambda key, default=None: env_values.get(key, default)
+    )
     monkeypatch.setattr(manager, "decrypt_credential", lambda value: f"decrypted:{value}")
 
     credentials = manager.get_exchange_credentials("OKX", encrypted=True)
@@ -191,7 +197,7 @@ def test_load_credentials_from_env_file_missing_file_returns_empty(tmp_path) -> 
 
 def test_load_credentials_from_env_file_manual_parse(tmp_path) -> None:
     env_file = tmp_path / ".env"
-    env_file.write_text("FOO=bar\nQUOTED=\" spaced value \"\n#IGNORED=1\n", encoding="utf-8")
+    env_file.write_text('FOO=bar\nQUOTED=" spaced value "\n#IGNORED=1\n', encoding="utf-8")
 
     with patch.dict(sys.modules, {"dotenv": None}):
         credentials = load_credentials_from_env_file(env_file)

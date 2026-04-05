@@ -18,13 +18,17 @@ class TestRipioRequestTickerData:
 
     def test_get_all_data(self):
         """Test get_all_data - base class raises NotImplementedError."""
-        ticker = RipioRequestTickerData({}, symbol="BTCARS", asset_type="SPOT", has_been_json_encoded=True)
+        ticker = RipioRequestTickerData(
+            {}, symbol="BTCARS", asset_type="SPOT", has_been_json_encoded=True
+        )
         with pytest.raises(NotImplementedError):
             ticker.get_all_data()
 
     def test_str_representation(self):
         """Test __str__ method."""
-        ticker = RipioRequestTickerData({}, symbol="BTCARS", asset_type="SPOT", has_been_json_encoded=True)
+        ticker = RipioRequestTickerData(
+            {}, symbol="BTCARS", asset_type="SPOT", has_been_json_encoded=True
+        )
         result = str(ticker)
 
         assert "Ripio" in result or "ripio" in result

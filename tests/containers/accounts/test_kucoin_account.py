@@ -70,9 +70,11 @@ class TestKuCoinRequestAccountData:
                     "available": "0.80000000",
                     "holds": "0.20000000",
                 }
-            ]
+            ],
         }
-        account = KuCoinRequestAccountData(data, symbol_name="ALL", asset_type="SPOT", has_been_json_encoded=True)
+        account = KuCoinRequestAccountData(
+            data, symbol_name="ALL", asset_type="SPOT", has_been_json_encoded=True
+        )
         account.init_data()
 
         assert account.currency == "BTC"
@@ -90,7 +92,9 @@ class TestKuCoinRequestAccountData:
             "available": "900.00",
             "holds": "100.00",
         }
-        account = KuCoinRequestAccountData(data, symbol_name="ALL", asset_type="SPOT", has_been_json_encoded=True)
+        account = KuCoinRequestAccountData(
+            data, symbol_name="ALL", asset_type="SPOT", has_been_json_encoded=True
+        )
         account.init_data()
 
         assert account.currency == "USDT"
@@ -99,12 +103,10 @@ class TestKuCoinRequestAccountData:
 
     def test_init_data_idempotent(self):
         """Test init_data is idempotent."""
-        data = {
-            "data": [
-                {"currency": "BTC", "balance": "1.0"}
-            ]
-        }
-        account = KuCoinRequestAccountData(data, symbol_name="BTC", asset_type="SPOT", has_been_json_encoded=True)
+        data = {"data": [{"currency": "BTC", "balance": "1.0"}]}
+        account = KuCoinRequestAccountData(
+            data, symbol_name="BTC", asset_type="SPOT", has_been_json_encoded=True
+        )
         account.init_data()
         first_balance = account.total_balance
 
@@ -114,7 +116,9 @@ class TestKuCoinRequestAccountData:
     def test_get_currency(self):
         """Test get_currency."""
         data = {"currency": "BTC"}
-        account = KuCoinRequestAccountData(data, symbol_name="BTC", asset_type="SPOT", has_been_json_encoded=True)
+        account = KuCoinRequestAccountData(
+            data, symbol_name="BTC", asset_type="SPOT", has_been_json_encoded=True
+        )
         account.init_data()
 
         assert account.get_currency() == "BTC"
@@ -122,7 +126,9 @@ class TestKuCoinRequestAccountData:
     def test_get_account_type(self):
         """Test get_account_type."""
         data = {"type": "trade"}
-        account = KuCoinRequestAccountData(data, symbol_name="BTC", asset_type="SPOT", has_been_json_encoded=True)
+        account = KuCoinRequestAccountData(
+            data, symbol_name="BTC", asset_type="SPOT", has_been_json_encoded=True
+        )
         account.init_data()
 
         assert account.get_account_type() == "trade"
@@ -135,7 +141,9 @@ class TestKuCoinRequestAccountData:
                 {"currency": "USDT", "balance": "1000.0"},
             ]
         }
-        account = KuCoinRequestAccountData(data, symbol_name="ALL", asset_type="SPOT", has_been_json_encoded=True)
+        account = KuCoinRequestAccountData(
+            data, symbol_name="ALL", asset_type="SPOT", has_been_json_encoded=True
+        )
         balances = account.get_balances()
 
         assert len(balances) == 2
@@ -162,9 +170,11 @@ class TestKuCoinWssAccountData:
                 "holds": "1000.00",
                 "currency": "USDT",
                 "balance": "10000.00",
-            }
+            },
         }
-        account = KuCoinWssAccountData(data, symbol_name="ALL", asset_type="SPOT", has_been_json_encoded=True)
+        account = KuCoinWssAccountData(
+            data, symbol_name="ALL", asset_type="SPOT", has_been_json_encoded=True
+        )
         account.init_data()
 
         assert account.currency == "USDT"
@@ -180,7 +190,9 @@ class TestKuCoinWssAccountData:
                 "balance": "10000.00",
             }
         }
-        account = KuCoinWssAccountData(data, symbol_name="USDT", asset_type="SPOT", has_been_json_encoded=True)
+        account = KuCoinWssAccountData(
+            data, symbol_name="USDT", asset_type="SPOT", has_been_json_encoded=True
+        )
         account.init_data()
         first_balance = account.total_balance
 
@@ -195,7 +207,9 @@ class TestKuCoinWssAccountData:
                 "balance": "10000.00",
             }
         }
-        account = KuCoinWssAccountData(data, symbol_name="USDT", asset_type="SPOT", has_been_json_encoded=True)
+        account = KuCoinWssAccountData(
+            data, symbol_name="USDT", asset_type="SPOT", has_been_json_encoded=True
+        )
         balances = account.get_balances()
 
         assert len(balances) == 1

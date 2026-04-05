@@ -1,14 +1,13 @@
 """Tests for OKX Asset containers."""
 
 import json
-import pytest
 
 from bt_api_py.containers.assets import (
-    OkxCurrencyData,
     OkxAssetBalanceData,
     OkxAssetValuationData,
-    OkxTransferStateData,
+    OkxCurrencyData,
     OkxDepositInfoData,
+    OkxTransferStateData,
     OkxWithdrawalInfoData,
 )
 
@@ -305,7 +304,9 @@ class TestOkxDepositInfoData:
             "to": "0xdef456",
             "txId": "tx789",
         }
-        deposit = OkxDepositInfoData(data, symbol_name="USDT", asset_type="SPOT", has_been_json_encoded=True)
+        deposit = OkxDepositInfoData(
+            data, symbol_name="USDT", asset_type="SPOT", has_been_json_encoded=True
+        )
 
         deposit.init_data()
 
@@ -320,8 +321,16 @@ class TestOkxDepositInfoData:
 
     def test_exchange_info(self):
         """Test exchange info methods."""
-        data = {"ccy": "BTC", "depId": "dep1", "amt": "1", "state": "pending", "ts": "1700000000000"}
-        deposit = OkxDepositInfoData(data, symbol_name="BTC", asset_type="SPOT", has_been_json_encoded=True)
+        data = {
+            "ccy": "BTC",
+            "depId": "dep1",
+            "amt": "1",
+            "state": "pending",
+            "ts": "1700000000000",
+        }
+        deposit = OkxDepositInfoData(
+            data, symbol_name="BTC", asset_type="SPOT", has_been_json_encoded=True
+        )
 
         assert deposit.get_exchange_name() == "OKX"
         assert deposit.get_symbol_name() == "BTC"
@@ -343,7 +352,9 @@ class TestOkxWithdrawalInfoData:
             "fee": "0.01",
             "txId": "tx456",
         }
-        withdrawal = OkxWithdrawalInfoData(data, symbol_name="ETH", asset_type="SPOT", has_been_json_encoded=True)
+        withdrawal = OkxWithdrawalInfoData(
+            data, symbol_name="ETH", asset_type="SPOT", has_been_json_encoded=True
+        )
 
         withdrawal.init_data()
 
@@ -368,7 +379,9 @@ class TestOkxWithdrawalInfoData:
             "fee": "1",
             "txId": "tx1",
         }
-        withdrawal = OkxWithdrawalInfoData(data, symbol_name="USDT", asset_type="SPOT", has_been_json_encoded=True)
+        withdrawal = OkxWithdrawalInfoData(
+            data, symbol_name="USDT", asset_type="SPOT", has_been_json_encoded=True
+        )
         withdrawal.init_data()
 
         assert withdrawal.get_withdrawal_id() == "wd1"

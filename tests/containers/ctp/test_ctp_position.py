@@ -1,8 +1,7 @@
 """Tests for CTP position container."""
 
-import pytest
 
-from bt_api_py.containers.ctp.ctp_position import CtpPositionData, CTP_POS_DIRECTION_MAP
+from bt_api_py.containers.ctp.ctp_position import CTP_POS_DIRECTION_MAP, CtpPositionData
 
 
 class TestCtpPositionData:

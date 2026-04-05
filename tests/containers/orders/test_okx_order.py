@@ -1,6 +1,5 @@
 """Tests for OkxOrderData container."""
 
-import pytest
 
 from bt_api_py.containers.orders.okx_order import OkxOrderData
 
@@ -21,7 +20,9 @@ class TestOkxOrderData:
         """Test init_data with order info."""
         # OKX order_data is set directly from order_info when has_been_json_encoded=True
         data = {"ordId": "123456", "instId": "BTC-USDT", "side": "buy", "state": "filled"}
-        order = OkxOrderData(data, symbol_name="BTC-USDT", asset_type="SPOT", has_been_json_encoded=True)
+        order = OkxOrderData(
+            data, symbol_name="BTC-USDT", asset_type="SPOT", has_been_json_encoded=True
+        )
         order.init_data()
 
         assert order.order_id == "123456"
@@ -29,7 +30,9 @@ class TestOkxOrderData:
 
     def test_get_all_data(self):
         """Test get_all_data."""
-        order = OkxOrderData({}, symbol_name="BTC-USDT", asset_type="SPOT", has_been_json_encoded=True)
+        order = OkxOrderData(
+            {}, symbol_name="BTC-USDT", asset_type="SPOT", has_been_json_encoded=True
+        )
         result = order.get_all_data()
 
         assert result["exchange_name"] == "OKX"
@@ -37,7 +40,9 @@ class TestOkxOrderData:
 
     def test_str_representation(self):
         """Test __str__ method."""
-        order = OkxOrderData({}, symbol_name="BTC-USDT", asset_type="SPOT", has_been_json_encoded=True)
+        order = OkxOrderData(
+            {}, symbol_name="BTC-USDT", asset_type="SPOT", has_been_json_encoded=True
+        )
         result = str(order)
 
         assert "OKX" in result

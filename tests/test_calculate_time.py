@@ -8,7 +8,6 @@ from bt_api_py.functions.calculate_time import (
     convert_utc_local_datetime,
     datetime2str,
     datetime2timestamp,
-    datetime2timestamp,
     get_string_tz_time,
     get_utc_time,
     str2datetime,

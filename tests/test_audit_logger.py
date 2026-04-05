@@ -1,8 +1,6 @@
 """Tests for audit_logger module - pure local logic."""
 
-import json
 import time
-from pathlib import Path
 from unittest.mock import Mock
 
 import pytest

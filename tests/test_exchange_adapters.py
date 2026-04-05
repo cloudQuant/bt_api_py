@@ -2,12 +2,12 @@
 
 import pytest
 
+from bt_api_py.exceptions import RateLimitError
 from bt_api_py.websocket.exchange_adapters import (
     AuthenticationType,
     BinanceWebSocketAdapter,
     ExchangeCredentials,
     ExchangeType,
-    ExchangeWebSocketAdapter,
     GenericWebSocketAdapter,
     OKXWebSocketAdapter,
     RateLimitConfig,
@@ -43,9 +43,7 @@ class TestExchangeCredentials:
 
     def test_init_defaults(self):
         """Test default initialization."""
-        creds = ExchangeCredentials(
-            exchange_name="test", auth_type=AuthenticationType.API_KEY
-        )
+        creds = ExchangeCredentials(exchange_name="test", auth_type=AuthenticationType.API_KEY)
 
         assert creds.exchange_name == "test"
         assert creds.auth_type == AuthenticationType.API_KEY
@@ -354,7 +352,7 @@ class TestBinanceWebSocketAdapter:
         # Set subscription count to limit
         adapter._subscription_counts["ticker"] = 1024
 
-        with pytest.raises(Exception):  # RateLimitError
+        with pytest.raises(RateLimitError):
             await adapter.check_rate_limits("ticker")
 
     @pytest.mark.asyncio
@@ -523,7 +521,16 @@ class TestOKXWebSocketAdapter:
 
         message = {
             "arg": {"channel": "candle1m", "instId": "BTC-USDT"},
-            "data": [{"ts": "1234567890000", "o": "50000", "h": "50100", "l": "49900", "c": "50050", "vol": "100"}],
+            "data": [
+                {
+                    "ts": "1234567890000",
+                    "o": "50000",
+                    "h": "50100",
+                    "l": "49900",
+                    "c": "50050",
+                    "vol": "100",
+                }
+            ],
         }
 
         normalized = adapter.normalize_message(message)

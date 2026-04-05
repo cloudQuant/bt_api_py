@@ -19,9 +19,7 @@ class TestCoinDCXRequestTickerData:
                 "volume": 10.5,
             }
         }
-        ticker = CoinDCXRequestTickerData(
-            ticker_info, "BTCINR", "SPOT", has_been_json_encoded=True
-        )
+        ticker = CoinDCXRequestTickerData(ticker_info, "BTCINR", "SPOT", has_been_json_encoded=True)
 
         assert ticker.symbol_name == "BTCINR"
         assert ticker.exchange_name == "COINDCX"
@@ -37,9 +35,7 @@ class TestCoinDCXRequestTickerData:
                 "volume": 10.5,
             }
         }
-        ticker = CoinDCXRequestTickerData(
-            ticker_info, "BTCINR", "SPOT", has_been_json_encoded=True
-        )
+        ticker = CoinDCXRequestTickerData(ticker_info, "BTCINR", "SPOT", has_been_json_encoded=True)
         ticker.init_data()
 
         assert ticker.last_price == 5000000.0

@@ -1,6 +1,5 @@
 """Tests for DydxExchangeData container."""
 
-import pytest
 
 from bt_api_py.containers.exchanges.dydx_exchange_data import DydxExchangeData
 

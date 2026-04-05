@@ -1,6 +1,5 @@
 """Tests for Gemini balance containers."""
 
-import pytest
 
 from bt_api_py.containers.balances.gemini_balance import (
     GeminiRequestBalanceData,

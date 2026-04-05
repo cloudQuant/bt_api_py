@@ -39,7 +39,9 @@ class TestBitmartExchangeData:
 
 class TestBitmartExchangeDataSpot:
     def test_spot_fallback_defaults(self, monkeypatch):
-        monkeypatch.setattr(BitmartExchangeDataSpot, "_load_from_config", lambda self, asset_type: False)
+        monkeypatch.setattr(
+            BitmartExchangeDataSpot, "_load_from_config", lambda self, asset_type: False
+        )
         exchange = BitmartExchangeDataSpot()
 
         assert exchange.asset_type == "SPOT"

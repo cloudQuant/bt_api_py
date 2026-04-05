@@ -1,6 +1,5 @@
 """Tests for IB ticker container."""
 
-import pytest
 
 from bt_api_py.containers.ib.ib_ticker import IbTickerData
 

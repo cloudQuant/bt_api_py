@@ -11,10 +11,7 @@ class TestOkxBalanceData:
     def test_init(self):
         """Test initialization."""
         balance = OkxBalanceData(
-            {"ccy": "USDT"},
-            symbol_name="USDT",
-            asset_type="SPOT",
-            has_been_json_encoded=True
+            {"ccy": "USDT"}, symbol_name="USDT", asset_type="SPOT", has_been_json_encoded=True
         )
 
         assert balance.exchange_name == "OKX"
@@ -33,10 +30,7 @@ class TestOkxBalanceData:
             "interest": "10.0",
         }
         balance = OkxBalanceData(
-            balance_info,
-            symbol_name="USDT",
-            asset_type="SPOT",
-            has_been_json_encoded=True
+            balance_info, symbol_name="USDT", asset_type="SPOT", has_been_json_encoded=True
         )
         balance.init_data()
 
@@ -59,10 +53,7 @@ class TestOkxBalanceData:
             "upl": "100.0",
         }
         balance = OkxBalanceData(
-            balance_info,
-            symbol_name="USDT",
-            asset_type="SPOT",
-            has_been_json_encoded=True
+            balance_info, symbol_name="USDT", asset_type="SPOT", has_been_json_encoded=True
         )
         balance.init_data()
         result = balance.get_all_data()

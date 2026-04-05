@@ -1,6 +1,5 @@
 """Tests for SushiswapExchangeData container."""
 
-import pytest
 
 from bt_api_py.containers.exchanges.sushiswap_exchange_data import SushiSwapExchangeData
 

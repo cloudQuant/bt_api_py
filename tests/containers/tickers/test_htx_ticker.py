@@ -1,6 +1,5 @@
 """Tests for HtxRequestTickerData container."""
 
-import pytest
 
 from bt_api_py.containers.tickers.htx_ticker import HtxRequestTickerData
 
@@ -20,14 +19,18 @@ class TestHtxRequestTickerData:
     def test_init_data(self):
         """Test init_data with ticker info."""
         data = {"tick": {"close": 50000, "open": 49500, "high": 51000, "low": 49000}}
-        ticker = HtxRequestTickerData(data, symbol_name="btcusdt", asset_type="SPOT", has_been_json_encoded=True)
+        ticker = HtxRequestTickerData(
+            data, symbol_name="btcusdt", asset_type="SPOT", has_been_json_encoded=True
+        )
         ticker.init_data()
 
         assert ticker.has_been_init_data is True
 
     def test_get_all_data(self):
         """Test get_all_data."""
-        ticker = HtxRequestTickerData({}, symbol_name="btcusdt", asset_type="SPOT", has_been_json_encoded=True)
+        ticker = HtxRequestTickerData(
+            {}, symbol_name="btcusdt", asset_type="SPOT", has_been_json_encoded=True
+        )
         result = ticker.get_all_data()
 
         assert result["exchange_name"] == "HTX"
@@ -35,7 +38,9 @@ class TestHtxRequestTickerData:
 
     def test_str_representation(self):
         """Test __str__ method."""
-        ticker = HtxRequestTickerData({}, symbol_name="btcusdt", asset_type="SPOT", has_been_json_encoded=True)
+        ticker = HtxRequestTickerData(
+            {}, symbol_name="btcusdt", asset_type="SPOT", has_been_json_encoded=True
+        )
         result = str(ticker)
 
         assert "HTX" in result

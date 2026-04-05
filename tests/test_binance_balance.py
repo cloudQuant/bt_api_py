@@ -2,7 +2,10 @@
 
 import pytest
 
-from bt_api_py.containers.balances.binance_balance import BinanceWssBalanceData, BinanceSpotRequestBalanceData
+from bt_api_py.containers.balances.binance_balance import (
+    BinanceSpotRequestBalanceData,
+    BinanceWssBalanceData,
+)
 
 
 class TestBinanceWssBalanceData:
@@ -13,7 +16,7 @@ class TestBinanceWssBalanceData:
         balance = BinanceWssBalanceData(
             {"a": {"B": [{"a": "USDT", "f": "1000", "l": "500"}]}},
             asset_type="SPOT",
-            has_been_json_encoded=True
+            has_been_json_encoded=True,
         )
 
         assert balance.asset_type == "SPOT"
@@ -29,11 +32,7 @@ class TestBinanceWssBalanceData:
                 ]
             }
         }
-        balance = BinanceWssBalanceData(
-            balance_info,
-            asset_type="SPOT",
-            has_been_json_encoded=True
-        )
+        balance = BinanceWssBalanceData(balance_info, asset_type="SPOT", has_been_json_encoded=True)
         balance.init_balance_data()
 
         assert len(balance.accounts) == 2
@@ -44,9 +43,7 @@ class TestBinanceWssBalanceData:
     def test_get_data(self):
         """Test get_data method."""
         balance = BinanceWssBalanceData(
-            {"a": {"B": []}},
-            asset_type="SPOT",
-            has_been_json_encoded=True
+            {"a": {"B": []}}, asset_type="SPOT", has_been_json_encoded=True
         )
         balance.init_balance_data()
 
@@ -62,7 +59,7 @@ class TestBinanceSpotRequestBalanceData:
             {"asset": "USDT", "free": "1000", "locked": "500"},
             symbol_name="USDT",
             asset_type="SPOT",
-            has_been_json_encoded=True
+            has_been_json_encoded=True,
         )
 
         assert balance.exchange_name == "BINANCE"
@@ -77,10 +74,7 @@ class TestBinanceSpotRequestBalanceData:
             "locked": "500.0",
         }
         balance = BinanceSpotRequestBalanceData(
-            balance_info,
-            symbol_name="USDT",
-            asset_type="SPOT",
-            has_been_json_encoded=True
+            balance_info, symbol_name="USDT", asset_type="SPOT", has_been_json_encoded=True
         )
         balance.init_data()
 

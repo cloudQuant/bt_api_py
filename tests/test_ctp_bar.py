@@ -11,10 +11,7 @@ class TestCtpBarData:
     def test_init(self):
         """Test initialization."""
         bar = CtpBarData(
-            {"open": 4000.0},
-            symbol_name="IF2506",
-            asset_type="FUTURE",
-            has_been_json_encoded=True
+            {"open": 4000.0}, symbol_name="IF2506", asset_type="FUTURE", has_been_json_encoded=True
         )
 
         assert bar.exchange_name == "CTP"
@@ -36,10 +33,7 @@ class TestCtpBarData:
             "settlement_price": 4002.0,
         }
         bar = CtpBarData(
-            bar_info,
-            symbol_name="IF2506",
-            asset_type="FUTURE",
-            has_been_json_encoded=True
+            bar_info, symbol_name="IF2506", asset_type="FUTURE", has_been_json_encoded=True
         )
         bar.init_data()
 

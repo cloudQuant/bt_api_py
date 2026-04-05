@@ -10,10 +10,7 @@ class TestOkxSymbolData:
 
     def test_init(self):
         """Test initialization."""
-        symbol = OkxSymbolData(
-            {"instId": "BTC-USDT-SWAP"},
-            has_been_json_encoded=True
-        )
+        symbol = OkxSymbolData({"instId": "BTC-USDT-SWAP"}, has_been_json_encoded=True)
 
         assert symbol.exchange_name == "OKX"
         assert symbol.event == "OkxSymbolEvent"
@@ -38,10 +35,7 @@ class TestOkxSymbolData:
             "st": "live",
             "listTime": "1548133413000",
         }
-        symbol = OkxSymbolData(
-            symbol_info,
-            has_been_json_encoded=True
-        )
+        symbol = OkxSymbolData(symbol_info, has_been_json_encoded=True)
         symbol.init_data()
 
         assert symbol.symbol_name == "BTC-USDT-SWAP"
@@ -51,10 +45,7 @@ class TestOkxSymbolData:
 
     def test_symbol_data_inheritance(self):
         """Test that OkxSymbolData inherits from SymbolData."""
-        symbol = OkxSymbolData(
-            {},
-            has_been_json_encoded=True
-        )
+        symbol = OkxSymbolData({}, has_been_json_encoded=True)
 
         assert hasattr(symbol, "symbol_info")
         assert hasattr(symbol, "event")

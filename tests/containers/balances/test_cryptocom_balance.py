@@ -1,6 +1,5 @@
 """Tests for CryptoComBalance container."""
 
-import pytest
 
 from bt_api_py.containers.balances.cryptocom_balance import CryptoComBalance
 

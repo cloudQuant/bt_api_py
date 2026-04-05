@@ -1,24 +1,25 @@
 """Tests for BinanceExchangeData classes."""
 
 import json
+from unittest.mock import patch
+
 import pytest
-from unittest.mock import patch, MagicMock
 
 from bt_api_py.containers.exchanges.binance_exchange_data import (
     BinanceExchangeData,
-    BinanceExchangeDataSwap,
-    BinanceExchangeDataSpot,
-    BinanceExchangeDataCoinM,
-    BinanceExchangeDataOption,
-    BinanceExchangeDataMargin,
     BinanceExchangeDataAlgo,
-    BinanceExchangeDataWallet,
-    BinanceExchangeDataSubAccount,
-    BinanceExchangeDataPortfolio,
+    BinanceExchangeDataCoinM,
     BinanceExchangeDataGrid,
-    BinanceExchangeDataStaking,
+    BinanceExchangeDataMargin,
     BinanceExchangeDataMining,
+    BinanceExchangeDataOption,
+    BinanceExchangeDataPortfolio,
+    BinanceExchangeDataSpot,
+    BinanceExchangeDataStaking,
+    BinanceExchangeDataSubAccount,
+    BinanceExchangeDataSwap,
     BinanceExchangeDataVipLoan,
+    BinanceExchangeDataWallet,
 )
 
 

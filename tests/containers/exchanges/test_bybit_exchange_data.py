@@ -1,6 +1,5 @@
 """Tests for BybitExchangeData container."""
 
-import pytest
 
 from bt_api_py.containers.exchanges.bybit_exchange_data import BybitExchangeData
 

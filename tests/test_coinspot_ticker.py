@@ -18,11 +18,9 @@ class TestCoinSpotRequestTickerData:
                     "bid": 49999.0,
                     "ask": 50001.0,
                 }
-            }
+            },
         }
-        ticker = CoinSpotRequestTickerData(
-            ticker_info, "BTC", "SPOT", has_been_json_encoded=True
-        )
+        ticker = CoinSpotRequestTickerData(ticker_info, "BTC", "SPOT", has_been_json_encoded=True)
 
         assert ticker.ticker_symbol_name == "BTC"
         assert ticker.exchange_name == "COINSPOT"
@@ -37,11 +35,9 @@ class TestCoinSpotRequestTickerData:
                     "bid": 49999.0,
                     "ask": 50001.0,
                 }
-            }
+            },
         }
-        ticker = CoinSpotRequestTickerData(
-            ticker_info, "BTC", "SPOT", has_been_json_encoded=True
-        )
+        ticker = CoinSpotRequestTickerData(ticker_info, "BTC", "SPOT", has_been_json_encoded=True)
         ticker.init_data()
 
         assert ticker.last_price == 50000.0

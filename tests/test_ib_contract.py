@@ -10,12 +10,7 @@ class TestIbContract:
 
     def test_init(self):
         """Test initialization."""
-        contract = IbContract(
-            symbol="AAPL",
-            sec_type="STK",
-            exchange="SMART",
-            currency="USD"
-        )
+        contract = IbContract(symbol="AAPL", sec_type="STK", exchange="SMART", currency="USD")
 
         assert contract.symbol == "AAPL"
         assert contract.sec_type == "STK"
@@ -24,12 +19,7 @@ class TestIbContract:
 
     def test_to_dict(self):
         """Test to_dict method."""
-        contract = IbContract(
-            symbol="AAPL",
-            sec_type="STK",
-            exchange="SMART",
-            currency="USD"
-        )
+        contract = IbContract(symbol="AAPL", sec_type="STK", exchange="SMART", currency="USD")
         result = contract.to_dict()
 
         assert "symbol" in result
@@ -38,24 +28,14 @@ class TestIbContract:
 
     def test_str(self):
         """Test __str__ method."""
-        contract = IbContract(
-            symbol="AAPL",
-            sec_type="STK",
-            exchange="SMART",
-            currency="USD"
-        )
+        contract = IbContract(symbol="AAPL", sec_type="STK", exchange="SMART", currency="USD")
 
         assert "AAPL" in str(contract)
         assert "STK" in str(contract)
 
     def test_repr(self):
         """Test __repr__ method."""
-        contract = IbContract(
-            symbol="AAPL",
-            sec_type="STK",
-            exchange="SMART",
-            currency="USD"
-        )
+        contract = IbContract(symbol="AAPL", sec_type="STK", exchange="SMART", currency="USD")
 
         assert "IbContract" in repr(contract)
 
@@ -77,7 +57,7 @@ class TestIbContract:
             currency="USD",
             last_trade_date="20250620",
             strike=150.0,
-            right="C"
+            right="C",
         )
 
         assert contract.last_trade_date == "20250620"

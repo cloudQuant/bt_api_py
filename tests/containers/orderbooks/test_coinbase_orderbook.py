@@ -20,14 +20,18 @@ class TestCoinbaseOrderBookData:
     def test_init_data(self):
         """Test init_data - base class raises NotImplementedError."""
         data = {"bids": [["50000.0", "1.0"]], "asks": [["50010.0", "1.0"]]}
-        orderbook = CoinbaseOrderBookData(data, symbol_name="BTC-USD", asset_type="SPOT", has_been_json_encoded=True)
+        orderbook = CoinbaseOrderBookData(
+            data, symbol_name="BTC-USD", asset_type="SPOT", has_been_json_encoded=True
+        )
 
         with pytest.raises(NotImplementedError):
             orderbook.init_data()
 
     def test_get_all_data(self):
         """Test get_all_data method - raises NotImplementedError via init_data."""
-        orderbook = CoinbaseOrderBookData({}, symbol_name="BTC-USD", asset_type="SPOT", has_been_json_encoded=True)
+        orderbook = CoinbaseOrderBookData(
+            {}, symbol_name="BTC-USD", asset_type="SPOT", has_been_json_encoded=True
+        )
 
         with pytest.raises(NotImplementedError):
             orderbook.get_all_data()

@@ -1,6 +1,5 @@
 """Tests for BinanceForceOrderData container."""
 
-import pytest
 
 from bt_api_py.containers.orders.binance_order import BinanceForceOrderData
 from bt_api_py.containers.orders.order import OrderStatus
@@ -36,7 +35,9 @@ class TestBinanceForceOrderData:
                 "z": "1.0",
             },
         }
-        order = BinanceForceOrderData(data, symbol_name="BTCUSDT", asset_type="SPOT", has_been_json_encoded=True)
+        order = BinanceForceOrderData(
+            data, symbol_name="BTCUSDT", asset_type="SPOT", has_been_json_encoded=True
+        )
         order.init_data()
 
         assert order.order_symbol_name == "BTCUSDT"
@@ -47,7 +48,9 @@ class TestBinanceForceOrderData:
     def test_get_all_data(self):
         """Test get_all_data."""
         data = {"E": 1234567890000, "o": {"s": "BTCUSDT", "S": "BUY"}}
-        order = BinanceForceOrderData(data, symbol_name="BTCUSDT", asset_type="SPOT", has_been_json_encoded=True)
+        order = BinanceForceOrderData(
+            data, symbol_name="BTCUSDT", asset_type="SPOT", has_been_json_encoded=True
+        )
         result = order.get_all_data()
 
         assert result["exchange_name"] == "BINANCE"
@@ -56,7 +59,9 @@ class TestBinanceForceOrderData:
     def test_str_representation(self):
         """Test __str__ method."""
         data = {"E": 1234567890000, "o": {"s": "BTCUSDT"}}
-        order = BinanceForceOrderData(data, symbol_name="BTCUSDT", asset_type="SPOT", has_been_json_encoded=True)
+        order = BinanceForceOrderData(
+            data, symbol_name="BTCUSDT", asset_type="SPOT", has_been_json_encoded=True
+        )
         result = str(order)
 
         assert "BINANCE" in result

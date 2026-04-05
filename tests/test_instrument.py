@@ -1,9 +1,10 @@
 """Tests for instrument module."""
 
 import dataclasses
-import pytest
 from datetime import datetime, timedelta
 from decimal import Decimal
+
+import pytest
 
 from bt_api_py.containers.instrument import AssetType, Instrument
 

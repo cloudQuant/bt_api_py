@@ -1,10 +1,9 @@
 """Tests for Hyperliquid balance containers."""
 
-import pytest
 
 from bt_api_py.containers.balances.hyperliquid_balance import (
-    HyperliquidSwapRequestBalanceData,
     HyperliquidSpotRequestBalanceData,
+    HyperliquidSwapRequestBalanceData,
 )
 
 
@@ -41,7 +40,9 @@ class TestHyperliquidSwapRequestBalanceData:
                 "initialMargin": "50.0",
             },
         }
-        balance = HyperliquidSwapRequestBalanceData(data, symbol_name="BTC", asset_type="SWAP", has_been_json_encoded=True)
+        balance = HyperliquidSwapRequestBalanceData(
+            data, symbol_name="BTC", asset_type="SWAP", has_been_json_encoded=True
+        )
         balance.init_data()
 
         assert balance.coin == "BTC"
@@ -71,7 +72,9 @@ class TestHyperliquidSwapRequestBalanceData:
 
     def test_get_all_data(self):
         """Test get_all_data."""
-        balance = HyperliquidSwapRequestBalanceData({}, symbol_name="BTC", asset_type="SWAP", has_been_json_encoded=True)
+        balance = HyperliquidSwapRequestBalanceData(
+            {}, symbol_name="BTC", asset_type="SWAP", has_been_json_encoded=True
+        )
         result = balance.get_all_data()
 
         assert result["exchange_name"] == "HYPERLIQUID"
@@ -79,7 +82,9 @@ class TestHyperliquidSwapRequestBalanceData:
 
     def test_str_representation(self):
         """Test __str__ method."""
-        balance = HyperliquidSwapRequestBalanceData({}, symbol_name="BTC", asset_type="SWAP", has_been_json_encoded=True)
+        balance = HyperliquidSwapRequestBalanceData(
+            {}, symbol_name="BTC", asset_type="SWAP", has_been_json_encoded=True
+        )
         result = str(balance)
 
         assert "HyperliquidSwapRequestBalanceData" in result
@@ -108,7 +113,9 @@ class TestHyperliquidSpotRequestBalanceData:
                 }
             ]
         }
-        balance = HyperliquidSpotRequestBalanceData(data, symbol_name="USDC", asset_type="SPOT", has_been_json_encoded=True)
+        balance = HyperliquidSpotRequestBalanceData(
+            data, symbol_name="USDC", asset_type="SPOT", has_been_json_encoded=True
+        )
         balance.init_data()
 
         assert balance.coin == "USDC"
@@ -124,14 +131,18 @@ class TestHyperliquidSpotRequestBalanceData:
 
     def test_get_all_data(self):
         """Test get_all_data."""
-        balance = HyperliquidSpotRequestBalanceData({}, symbol_name="USDC", asset_type="SPOT", has_been_json_encoded=True)
+        balance = HyperliquidSpotRequestBalanceData(
+            {}, symbol_name="USDC", asset_type="SPOT", has_been_json_encoded=True
+        )
         result = balance.get_all_data()
 
         assert result["exchange_name"] == "HYPERLIQUID"
 
     def test_str_representation(self):
         """Test __str__ method."""
-        balance = HyperliquidSpotRequestBalanceData({}, symbol_name="USDC", asset_type="SPOT", has_been_json_encoded=True)
+        balance = HyperliquidSpotRequestBalanceData(
+            {}, symbol_name="USDC", asset_type="SPOT", has_been_json_encoded=True
+        )
         result = str(balance)
 
         assert "HyperliquidSpotRequestBalanceData" in result

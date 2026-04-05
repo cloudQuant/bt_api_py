@@ -33,10 +33,12 @@ class TestBeQuantRequestTickerData:
         """Test initialization with JSON string."""
         import json
 
-        ticker_info = json.dumps({
-            "symbol": "BTCUSDT",
-            "last": 50000.0,
-        })
+        ticker_info = json.dumps(
+            {
+                "symbol": "BTCUSDT",
+                "last": 50000.0,
+            }
+        )
         ticker = BeQuantRequestTickerData(
             ticker_info, "BTCUSDT", "SPOT", has_been_json_encoded=False
         )

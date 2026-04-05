@@ -1,12 +1,11 @@
 """Tests for CTP order container."""
 
-import pytest
 
 from bt_api_py.containers.ctp.ctp_order import (
-    CtpOrderData,
-    CTP_ORDER_STATUS_MAP,
     CTP_DIRECTION_MAP,
     CTP_OFFSET_MAP,
+    CTP_ORDER_STATUS_MAP,
+    CtpOrderData,
 )
 from bt_api_py.containers.orders.order import OrderStatus
 

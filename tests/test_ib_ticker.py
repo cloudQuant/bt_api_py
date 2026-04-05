@@ -11,10 +11,7 @@ class TestIbTickerData:
     def test_init(self):
         """Test initialization."""
         ticker = IbTickerData(
-            {"symbol": "AAPL"},
-            symbol_name="AAPL",
-            asset_type="STK",
-            has_been_json_encoded=True
+            {"symbol": "AAPL"}, symbol_name="AAPL", asset_type="STK", has_been_json_encoded=True
         )
 
         assert ticker.exchange_name == "IB"
@@ -38,10 +35,7 @@ class TestIbTickerData:
             "time": "2025-01-01 09:30:00",
         }
         ticker = IbTickerData(
-            ticker_info,
-            symbol_name="AAPL",
-            asset_type="STK",
-            has_been_json_encoded=True
+            ticker_info, symbol_name="AAPL", asset_type="STK", has_been_json_encoded=True
         )
         ticker.init_data()
 

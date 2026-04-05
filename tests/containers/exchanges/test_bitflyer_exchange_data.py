@@ -1,6 +1,5 @@
 """Tests for BitflyerExchangeData container."""
 
-import pytest
 
 from bt_api_py.containers.exchanges.bitflyer_exchange_data import BitflyerExchangeData
 

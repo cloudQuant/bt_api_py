@@ -1,6 +1,5 @@
 """Tests for DydxBalanceData container."""
 
-import pytest
 
 from bt_api_py.containers.balances.dydx_balance import DydxBalanceData
 
@@ -31,7 +30,9 @@ class TestDydxBalanceData:
                 "accountValue": "10000.0",
             }
         }
-        balance = DydxBalanceData(data, symbol_name="BTC", asset_type="SWAP", has_been_json_encoded=True)
+        balance = DydxBalanceData(
+            data, symbol_name="BTC", asset_type="SWAP", has_been_json_encoded=True
+        )
         balance.init_data()
 
         assert balance.equity == 10000.0
@@ -45,7 +46,9 @@ class TestDydxBalanceData:
             "freeCollateral": "1.0",
             "unrealizedPnl": "100.0",
         }
-        balance = DydxBalanceData(data, symbol_name="BTC", asset_type="SWAP", has_been_json_encoded=True)
+        balance = DydxBalanceData(
+            data, symbol_name="BTC", asset_type="SWAP", has_been_json_encoded=True
+        )
         balance.init_data()
 
         assert balance.equity == 1.5
@@ -61,7 +64,9 @@ class TestDydxBalanceData:
     def test_get_all_data(self):
         """Test get_all_data."""
         data = {"subaccount": {"equity": "10000.0"}}
-        balance = DydxBalanceData(data, symbol_name="BTC", asset_type="SWAP", has_been_json_encoded=True)
+        balance = DydxBalanceData(
+            data, symbol_name="BTC", asset_type="SWAP", has_been_json_encoded=True
+        )
         result = balance.get_all_data()
 
         assert result["exchange_name"] == "DYDX"
@@ -69,7 +74,9 @@ class TestDydxBalanceData:
 
     def test_str_representation(self):
         """Test __str__ method."""
-        balance = DydxBalanceData({}, symbol_name="BTC", asset_type="SWAP", has_been_json_encoded=True)
+        balance = DydxBalanceData(
+            {}, symbol_name="BTC", asset_type="SWAP", has_been_json_encoded=True
+        )
         result = str(balance)
 
         assert "DYDX" in result

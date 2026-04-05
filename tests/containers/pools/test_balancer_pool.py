@@ -1,7 +1,6 @@
 """Tests for Balancer Pool container."""
 
 import json
-import pytest
 
 from bt_api_py.containers.pools import BalancerPoolData, BalancerWssPoolData
 

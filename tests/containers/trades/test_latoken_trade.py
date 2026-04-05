@@ -1,6 +1,5 @@
 """Tests for LatokenSpotWssTradeData container."""
 
-import pytest
 
 from bt_api_py.containers.trades.latoken_trade import LatokenSpotWssTradeData
 

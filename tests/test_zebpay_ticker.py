@@ -18,9 +18,7 @@ class TestZebpayRequestTickerData:
                 "ask": 5000001.0,
             }
         }
-        ticker = ZebpayRequestTickerData(
-            ticker_info, "BTCINR", "SPOT", has_been_json_encoded=True
-        )
+        ticker = ZebpayRequestTickerData(ticker_info, "BTCINR", "SPOT", has_been_json_encoded=True)
 
         assert ticker.symbol_name == "BTCINR"
         assert ticker.exchange_name == "ZEBPAY"
@@ -35,9 +33,7 @@ class TestZebpayRequestTickerData:
                 "ask": 5000001.0,
             }
         }
-        ticker = ZebpayRequestTickerData(
-            ticker_info, "BTCINR", "SPOT", has_been_json_encoded=True
-        )
+        ticker = ZebpayRequestTickerData(ticker_info, "BTCINR", "SPOT", has_been_json_encoded=True)
         ticker.init_data()
 
         assert ticker.last_price == 5000000.0

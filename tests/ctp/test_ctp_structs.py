@@ -13,6 +13,7 @@ class TestCtpStructs:
         """Test market structs can be imported."""
         try:
             from bt_api_py.ctp import ctp_structs_market
+
             assert ctp_structs_market is not None
         except ImportError:
             pytest.skip("CTP extension not available")
@@ -21,6 +22,7 @@ class TestCtpStructs:
         """Test order structs can be imported."""
         try:
             from bt_api_py.ctp import ctp_structs_order
+
             assert ctp_structs_order is not None
         except ImportError:
             pytest.skip("CTP extension not available")
@@ -29,6 +31,7 @@ class TestCtpStructs:
         """Test account structs can be imported."""
         try:
             from bt_api_py.ctp import ctp_structs_account
+
             assert ctp_structs_account is not None
         except ImportError:
             pytest.skip("CTP extension not available")
@@ -37,6 +40,7 @@ class TestCtpStructs:
         """Test position structs can be imported."""
         try:
             from bt_api_py.ctp import ctp_structs_position
+
             assert ctp_structs_position is not None
         except ImportError:
             pytest.skip("CTP extension not available")
@@ -45,6 +49,7 @@ class TestCtpStructs:
         """Test trade structs can be imported."""
         try:
             from bt_api_py.ctp import ctp_structs_trade
+
             assert ctp_structs_trade is not None
         except ImportError:
             pytest.skip("CTP extension not available")

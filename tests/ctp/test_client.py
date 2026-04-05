@@ -13,6 +13,7 @@ class TestCtpClient:
         """Test client module can be imported."""
         try:
             from bt_api_py.ctp import client
+
             assert client is not None
         except ImportError:
             pytest.skip("CTP extension not available")

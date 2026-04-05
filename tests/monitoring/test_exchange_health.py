@@ -1,6 +1,5 @@
 """Tests for monitoring/exchange_health.py."""
 
-import pytest
 
 
 class TestExchangeHealth:
@@ -9,4 +8,5 @@ class TestExchangeHealth:
     def test_module_exists(self):
         """Test module can be imported."""
         from bt_api_py.monitoring import exchange_health
+
         assert exchange_health is not None

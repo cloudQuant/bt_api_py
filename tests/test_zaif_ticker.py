@@ -16,9 +16,7 @@ class TestZaifRequestTickerData:
             "ask": 5000001.0,
             "volume": 100.0,
         }
-        ticker = ZaifRequestTickerData(
-            ticker_info, "BTC_JPY", "SPOT", has_been_json_encoded=True
-        )
+        ticker = ZaifRequestTickerData(ticker_info, "BTC_JPY", "SPOT", has_been_json_encoded=True)
 
         assert ticker.symbol_name == "BTC_JPY"
         assert ticker.exchange_name == "ZAIF"
@@ -31,9 +29,7 @@ class TestZaifRequestTickerData:
             "ask": 5000001.0,
             "volume": 100.0,
         }
-        ticker = ZaifRequestTickerData(
-            ticker_info, "BTC_JPY", "SPOT", has_been_json_encoded=True
-        )
+        ticker = ZaifRequestTickerData(ticker_info, "BTC_JPY", "SPOT", has_been_json_encoded=True)
         ticker.init_data()
 
         assert ticker.last_price == 5000000.0

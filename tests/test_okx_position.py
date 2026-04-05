@@ -14,7 +14,7 @@ class TestOkxPositionData:
             {"instId": "BTC-USDT-SWAP"},
             symbol_name="BTC-USDT-SWAP",
             asset_type="FUTURE",
-            has_been_json_encoded=True
+            has_been_json_encoded=True,
         )
 
         assert position.exchange_name == "OKX"
@@ -43,7 +43,7 @@ class TestOkxPositionData:
             position_info,
             symbol_name="BTC-USDT-SWAP",
             asset_type="FUTURE",
-            has_been_json_encoded=True
+            has_been_json_encoded=True,
         )
         position.init_data()
 
@@ -60,10 +60,7 @@ class TestOkxPositionData:
     def test_position_data_inheritance(self):
         """Test that OkxPositionData inherits from PositionData."""
         position = OkxPositionData(
-            {},
-            symbol_name="BTC-USDT-SWAP",
-            asset_type="FUTURE",
-            has_been_json_encoded=True
+            {}, symbol_name="BTC-USDT-SWAP", asset_type="FUTURE", has_been_json_encoded=True
         )
 
         assert hasattr(position, "position_info")

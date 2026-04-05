@@ -1,12 +1,11 @@
 """Tests for Bitget balance containers."""
 
-import pytest
 
 from bt_api_py.containers.balances.bitget_balance import (
     BitgetBalanceData,
     BitgetRequestBalanceData,
-    BitgetWssBalanceData,
     BitgetSpotWssAccountData,
+    BitgetWssBalanceData,
 )
 
 
@@ -33,7 +32,9 @@ class TestBitgetBalanceData:
             "usdValue": "1000.0",
             "eq": "1100.0",
         }
-        balance = BitgetBalanceData(data, symbol_name="BTCUSDT", asset_type="SPOT", has_been_json_encoded=True)
+        balance = BitgetBalanceData(
+            data, symbol_name="BTCUSDT", asset_type="SPOT", has_been_json_encoded=True
+        )
         balance.init_data()
 
         assert balance.coin == "USDT"
@@ -64,21 +65,27 @@ class TestBitgetBalanceData:
     def test_get_total(self):
         """Test get_total returns sum of available, frozen, stored."""
         data = {"available": "1000.0", "frozen": "100.0", "stored": "50.0"}
-        balance = BitgetBalanceData(data, symbol_name="BTCUSDT", asset_type="SPOT", has_been_json_encoded=True)
+        balance = BitgetBalanceData(
+            data, symbol_name="BTCUSDT", asset_type="SPOT", has_been_json_encoded=True
+        )
 
         assert balance.get_total() == 1150.0
 
     def test_is_empty(self):
         """Test is_empty."""
         data = {"available": "0.0", "frozen": "0.0", "stored": "0.0"}
-        balance = BitgetBalanceData(data, symbol_name="BTCUSDT", asset_type="SPOT", has_been_json_encoded=True)
+        balance = BitgetBalanceData(
+            data, symbol_name="BTCUSDT", asset_type="SPOT", has_been_json_encoded=True
+        )
 
         assert balance.is_empty() is True
 
     def test_get_all_data(self):
         """Test get_all_data."""
         data = {"coin": "USDT", "available": "1000.0"}
-        balance = BitgetBalanceData(data, symbol_name="BTCUSDT", asset_type="SPOT", has_been_json_encoded=True)
+        balance = BitgetBalanceData(
+            data, symbol_name="BTCUSDT", asset_type="SPOT", has_been_json_encoded=True
+        )
         result = balance.get_all_data()
 
         assert result["exchange_name"] == "BITGET"
@@ -97,7 +104,9 @@ class TestBitgetWssBalanceData:
             "f": "100.0",
             "s": "0.0",
         }
-        balance = BitgetWssBalanceData(data, symbol_name="BTCUSDT", asset_type="SPOT", has_been_json_encoded=True)
+        balance = BitgetWssBalanceData(
+            data, symbol_name="BTCUSDT", asset_type="SPOT", has_been_json_encoded=True
+        )
         balance.init_data()
 
         assert balance.coin == "USDT"
@@ -117,7 +126,9 @@ class TestBitgetRequestBalanceData:
             "frozen": "100.0",
             "equity": "1100.0",
         }
-        balance = BitgetRequestBalanceData(data, symbol_name="BTCUSDT", asset_type="SPOT", has_been_json_encoded=True)
+        balance = BitgetRequestBalanceData(
+            data, symbol_name="BTCUSDT", asset_type="SPOT", has_been_json_encoded=True
+        )
         balance.init_data()
 
         assert balance.coin == "USDT"
@@ -146,7 +157,9 @@ class TestBitgetSpotWssAccountData:
                 ]
             }
         }
-        account = BitgetSpotWssAccountData(data, symbol_name="BTCUSDT", asset_type="SPOT", has_been_json_encoded=True)
+        account = BitgetSpotWssAccountData(
+            data, symbol_name="BTCUSDT", asset_type="SPOT", has_been_json_encoded=True
+        )
         account.init_data()
 
         assert len(account.balances) == 2
@@ -154,7 +167,9 @@ class TestBitgetSpotWssAccountData:
     def test_get_balances(self):
         """Test get_balances."""
         data = {"data": {"balances": [{"a": "USDT", "b": "1000.0"}]}}
-        account = BitgetSpotWssAccountData(data, symbol_name="BTCUSDT", asset_type="SPOT", has_been_json_encoded=True)
+        account = BitgetSpotWssAccountData(
+            data, symbol_name="BTCUSDT", asset_type="SPOT", has_been_json_encoded=True
+        )
         balances = account.get_balances()
 
         assert len(balances) == 1
@@ -162,7 +177,9 @@ class TestBitgetSpotWssAccountData:
     def test_get_balance(self):
         """Test get_balance for specific coin."""
         data = {"data": {"balances": [{"a": "USDT", "b": "1000.0"}]}}
-        account = BitgetSpotWssAccountData(data, symbol_name="BTCUSDT", asset_type="SPOT", has_been_json_encoded=True)
+        account = BitgetSpotWssAccountData(
+            data, symbol_name="BTCUSDT", asset_type="SPOT", has_been_json_encoded=True
+        )
         balance = account.get_balance("USDT")
 
         assert balance is not None
@@ -171,7 +188,9 @@ class TestBitgetSpotWssAccountData:
     def test_get_balance_not_found(self):
         """Test get_balance returns None for missing coin."""
         data = {"data": {"balances": [{"a": "USDT", "b": "1000.0"}]}}
-        account = BitgetSpotWssAccountData(data, symbol_name="BTCUSDT", asset_type="SPOT", has_been_json_encoded=True)
+        account = BitgetSpotWssAccountData(
+            data, symbol_name="BTCUSDT", asset_type="SPOT", has_been_json_encoded=True
+        )
         balance = account.get_balance("ETH")
 
         assert balance is None

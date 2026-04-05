@@ -261,7 +261,11 @@ class TestSpdLogManager:
 
     def test_normalize_relative_log_path_to_project_logs_dir(self):
         manager = SpdLogManager(file_name="./logs/nested/test.log")
-        assert manager.file_name.endswith("logs/nested/test.log")
+        # Use Path for cross-platform path comparison (handles / vs \)
+        from pathlib import Path
+
+        expected_suffix = Path("logs") / "nested" / "test.log"
+        assert Path(manager.file_name).parts[-3:] == expected_suffix.parts
 
     def test_stdlib_fallback_disables_propagation(self, tmp_path):
         log_path = tmp_path / "fallback.log"

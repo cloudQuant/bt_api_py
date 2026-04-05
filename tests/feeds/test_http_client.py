@@ -73,7 +73,7 @@ class TestHttpClient:
             from bt_api_py.feeds.http_client import HttpClient
 
             client = HttpClient(venue="test")
-            result = client.request("GET", "https://api.example.com/test", params={"symbol": "BTC"})
+            _ = client.request("GET", "https://api.example.com/test", params={"symbol": "BTC"})
 
             mock_client.request.assert_called_once()
             call_kwargs = mock_client.request.call_args[1]

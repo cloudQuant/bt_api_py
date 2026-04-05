@@ -22,7 +22,9 @@ class TestTradeData:
     def test_init_with_params(self):
         """Test initialization with parameters."""
         data = {"test": "data"}
-        trade = TradeData(data, has_been_json_encoded=True, symbol_name="BTCUSDT", asset_type="SPOT")
+        trade = TradeData(
+            data, has_been_json_encoded=True, symbol_name="BTCUSDT", asset_type="SPOT"
+        )
 
         assert trade.has_been_json_encoded is True
         assert trade.trade_data == data

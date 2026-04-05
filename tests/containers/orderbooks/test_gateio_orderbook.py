@@ -1,6 +1,5 @@
 """Tests for GateioOrderBookData container."""
 
-import pytest
 
 from bt_api_py.containers.orderbooks.gateio_orderbook import GateioOrderBookData
 
@@ -20,14 +19,18 @@ class TestGateioOrderBookData:
     def test_init_data(self):
         """Test init_data with orderbook info."""
         data = {"bids": [["50000.0", "1.0"]], "asks": [["50010.0", "1.0"]]}
-        orderbook = GateioOrderBookData(data, symbol_name="BTC_USDT", asset_type="SPOT", has_been_json_encoded=True)
+        orderbook = GateioOrderBookData(
+            data, symbol_name="BTC_USDT", asset_type="SPOT", has_been_json_encoded=True
+        )
         orderbook.init_data()
 
         assert orderbook.has_been_init_data is True
 
     def test_get_all_data(self):
         """Test get_all_data method."""
-        orderbook = GateioOrderBookData({}, symbol_name="BTC_USDT", asset_type="SPOT", has_been_json_encoded=True)
+        orderbook = GateioOrderBookData(
+            {}, symbol_name="BTC_USDT", asset_type="SPOT", has_been_json_encoded=True
+        )
         result = orderbook.get_all_data()
 
         assert result["exchange_name"] == "GATEIO"

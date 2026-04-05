@@ -1,6 +1,5 @@
 """Tests for ensemble_model module - RiskEnsembleModel and supporting classes."""
 
-import pickle
 import tempfile
 from pathlib import Path
 
@@ -431,7 +430,11 @@ class TestRiskEnsembleModel:
 
         # Trigger limit
         model.prediction_history.append({"timestamp": 1001, "accuracy": 0.5})
-        model.prediction_history = model.prediction_history[-500:] if len(model.prediction_history) > 1000 else model.prediction_history
+        model.prediction_history = (
+            model.prediction_history[-500:]
+            if len(model.prediction_history) > 1000
+            else model.prediction_history
+        )
 
         assert len(model.prediction_history) <= 501
 

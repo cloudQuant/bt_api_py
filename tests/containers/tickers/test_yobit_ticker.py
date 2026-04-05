@@ -20,19 +20,25 @@ class TestYobitRequestTickerData:
     def test_init_data(self):
         """Test init_data with ticker info."""
         data = {"last": "50000.0", "buy": "49990.0", "sell": "50010.0"}
-        ticker = YobitRequestTickerData(data, symbol_name="BTC_USD", asset_type="SPOT", has_been_json_encoded=True)
+        ticker = YobitRequestTickerData(
+            data, symbol_name="BTC_USD", asset_type="SPOT", has_been_json_encoded=True
+        )
         ticker.init_data()
 
         assert ticker.has_been_init_data is True
 
     def test_get_all_data(self):
         """Test get_all_data - base class raises NotImplementedError."""
-        ticker = YobitRequestTickerData({}, symbol_name="BTC_USD", asset_type="SPOT", has_been_json_encoded=True)
+        ticker = YobitRequestTickerData(
+            {}, symbol_name="BTC_USD", asset_type="SPOT", has_been_json_encoded=True
+        )
         with pytest.raises(NotImplementedError):
             ticker.get_all_data()
 
     def test_str_representation(self):
         """Test __str__ method - base class raises NotImplementedError."""
-        ticker = YobitRequestTickerData({}, symbol_name="BTC_USD", asset_type="SPOT", has_been_json_encoded=True)
+        ticker = YobitRequestTickerData(
+            {}, symbol_name="BTC_USD", asset_type="SPOT", has_been_json_encoded=True
+        )
         with pytest.raises(NotImplementedError):
             str(ticker)

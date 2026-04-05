@@ -1,6 +1,5 @@
 """Tests for GiottusExchangeData container."""
 
-import pytest
 
 from bt_api_py.containers.exchanges.giottus_exchange_data import GiottusExchangeData
 

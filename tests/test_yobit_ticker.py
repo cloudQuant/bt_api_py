@@ -18,9 +18,7 @@ class TestYobitRequestTickerData:
                 "vol": 100.0,
             }
         }
-        ticker = YobitRequestTickerData(
-            ticker_info, "BTC_USD", "SPOT", has_been_json_encoded=True
-        )
+        ticker = YobitRequestTickerData(ticker_info, "BTC_USD", "SPOT", has_been_json_encoded=True)
 
         assert ticker.symbol_name == "BTC_USD"
         assert ticker.exchange_name == "YOBIT"
@@ -35,9 +33,7 @@ class TestYobitRequestTickerData:
                 "vol": 100.0,
             }
         }
-        ticker = YobitRequestTickerData(
-            ticker_info, "BTC_USD", "SPOT", has_been_json_encoded=True
-        )
+        ticker = YobitRequestTickerData(ticker_info, "BTC_USD", "SPOT", has_been_json_encoded=True)
         ticker.init_data()
 
         assert ticker.last_price == 50000.0

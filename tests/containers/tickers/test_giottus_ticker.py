@@ -1,6 +1,5 @@
 """Tests for GiottusRequestTickerData container."""
 
-import pytest
 
 from bt_api_py.containers.tickers.giottus_ticker import GiottusRequestTickerData
 
@@ -20,14 +19,18 @@ class TestGiottusRequestTickerData:
     def test_init_data(self):
         """Test init_data with ticker info."""
         data = {"lastPrice": "50000.0", "bidPrice": "49990.0", "askPrice": "50010.0"}
-        ticker = GiottusRequestTickerData(data, symbol_name="BTCINR", asset_type="SPOT", has_been_json_encoded=True)
+        ticker = GiottusRequestTickerData(
+            data, symbol_name="BTCINR", asset_type="SPOT", has_been_json_encoded=True
+        )
         ticker.init_data()
 
         assert ticker.has_been_init_data is True
 
     def test_get_all_data(self):
         """Test get_all_data."""
-        ticker = GiottusRequestTickerData({}, symbol_name="BTCINR", asset_type="SPOT", has_been_json_encoded=True)
+        ticker = GiottusRequestTickerData(
+            {}, symbol_name="BTCINR", asset_type="SPOT", has_been_json_encoded=True
+        )
         result = ticker.get_all_data()
 
         assert result["exchange_name"] == "GIOTTUS"
@@ -35,7 +38,9 @@ class TestGiottusRequestTickerData:
 
     def test_str_representation(self):
         """Test __str__ method."""
-        ticker = GiottusRequestTickerData({}, symbol_name="BTCINR", asset_type="SPOT", has_been_json_encoded=True)
+        ticker = GiottusRequestTickerData(
+            {}, symbol_name="BTCINR", asset_type="SPOT", has_been_json_encoded=True
+        )
         result = str(ticker)
 
         assert "Giottus" in result

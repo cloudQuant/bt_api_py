@@ -14,7 +14,7 @@ class TestOkxOpenInterestData:
             {"instId": "BTC-USDT-SWAP"},
             symbol_name="BTC-USDT-SWAP",
             asset_type="FUTURE",
-            has_been_json_encoded=True
+            has_been_json_encoded=True,
         )
 
         assert open_interest.exchange_name == "OKX"
@@ -34,7 +34,7 @@ class TestOkxOpenInterestData:
             open_interest_info,
             symbol_name="BTC-USDT-SWAP",
             asset_type="FUTURE",
-            has_been_json_encoded=True
+            has_been_json_encoded=True,
         )
         open_interest.init_data()
 
@@ -46,10 +46,7 @@ class TestOkxOpenInterestData:
     def test_event_attribute(self):
         """Test event attribute."""
         open_interest = OkxOpenInterestData(
-            {},
-            symbol_name="BTC-USDT-SWAP",
-            asset_type="FUTURE",
-            has_been_json_encoded=True
+            {}, symbol_name="BTC-USDT-SWAP", asset_type="FUTURE", has_been_json_encoded=True
         )
 
         assert open_interest.event == "OpenInterestEvent"

@@ -1,7 +1,6 @@
 """Tests for LatokenTickerData container."""
 
 import json
-import pytest
 
 from bt_api_py.containers.tickers.latoken_ticker import (
     LatokenRequestTickerData,
@@ -25,7 +24,9 @@ class TestLatokenTickerData:
     def test_init_data(self):
         """Test init_data with ticker info."""
         data = {"lastPrice": "50000.0", "bidPrice": "49990.0", "askPrice": "50010.0"}
-        ticker = LatokenTickerData(data, symbol_name="BTCUSDT", asset_type="SPOT", has_been_json_encoded=True)
+        ticker = LatokenTickerData(
+            data, symbol_name="BTCUSDT", asset_type="SPOT", has_been_json_encoded=True
+        )
         ticker.init_data()
 
         assert ticker.has_been_init_data is True
@@ -41,7 +42,9 @@ class TestLatokenTickerData:
             "volume": "123.4",
             "timestamp": 1700000000000,
         }
-        ticker = LatokenTickerData(data, symbol_name="BTCUSDT", asset_type="SPOT", has_been_json_encoded=True)
+        ticker = LatokenTickerData(
+            data, symbol_name="BTCUSDT", asset_type="SPOT", has_been_json_encoded=True
+        )
         ticker.init_data()
 
         assert ticker.get_ticker_symbol_name() == "BTCUSDT"
@@ -56,7 +59,9 @@ class TestLatokenTickerData:
 
     def test_get_all_data(self):
         """Test get_all_data."""
-        ticker = LatokenTickerData({}, symbol_name="BTCUSDT", asset_type="SPOT", has_been_json_encoded=True)
+        ticker = LatokenTickerData(
+            {}, symbol_name="BTCUSDT", asset_type="SPOT", has_been_json_encoded=True
+        )
         result = ticker.get_all_data()
 
         assert result["exchange_name"] == "LATOKEN"
@@ -64,7 +69,9 @@ class TestLatokenTickerData:
 
     def test_str_representation(self):
         """Test __str__ method."""
-        ticker = LatokenTickerData({}, symbol_name="BTCUSDT", asset_type="SPOT", has_been_json_encoded=True)
+        ticker = LatokenTickerData(
+            {}, symbol_name="BTCUSDT", asset_type="SPOT", has_been_json_encoded=True
+        )
         result = str(ticker)
 
         assert "LATOKEN" in result

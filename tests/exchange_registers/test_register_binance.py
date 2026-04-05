@@ -1,6 +1,5 @@
 """Tests for exchange_registers/register_binance.py."""
 
-import pytest
 
 from bt_api_py.exchange_registers import register_binance
 
@@ -17,4 +16,8 @@ class TestRegisterBinance:
         from bt_api_py.registry import ExchangeRegistry
 
         # After import, BINANCE should be registered
-        assert ExchangeRegistry.has_exchange("BINANCE___SPOT") or ExchangeRegistry.has_exchange("BINANCE___SWAP") or True
+        assert (
+            ExchangeRegistry.has_exchange("BINANCE___SPOT")
+            or ExchangeRegistry.has_exchange("BINANCE___SWAP")
+            or True
+        )

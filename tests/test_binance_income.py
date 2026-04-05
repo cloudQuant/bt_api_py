@@ -11,11 +11,16 @@ class TestBinanceIncomeData:
     def test_init(self):
         """Test initialization."""
         income = BinanceIncomeData(
-            {"time": 1705315800000, "incomeType": "REALIZED_PNL", "income": "0.001", "asset": "USDT"},
+            {
+                "time": 1705315800000,
+                "incomeType": "REALIZED_PNL",
+                "income": "0.001",
+                "asset": "USDT",
+            },
             exchange_name="BINANCE",
             symbol_name="BTCUSDT",
             asset_type="FUTURE",
-            has_been_json_encoded=True
+            has_been_json_encoded=True,
         )
 
         assert income.exchange_name == "BINANCE"
@@ -35,7 +40,7 @@ class TestBinanceIncomeData:
             exchange_name="BINANCE",
             symbol_name="BTCUSDT",
             asset_type="FUTURE",
-            has_been_json_encoded=True
+            has_been_json_encoded=True,
         )
         income.init_data()
 
@@ -57,7 +62,7 @@ class TestBinanceIncomeData:
             exchange_name="BINANCE",
             symbol_name="BTCUSDT",
             asset_type="FUTURE",
-            has_been_json_encoded=True
+            has_been_json_encoded=True,
         )
         income.init_data()
         result = income.get_all_data()
@@ -73,7 +78,7 @@ class TestBinanceIncomeData:
             exchange_name="BINANCE",
             symbol_name="BTCUSDT",
             asset_type="FUTURE",
-            has_been_json_encoded=True
+            has_been_json_encoded=True,
         )
 
         assert income.get_exchange_name() == "BINANCE"

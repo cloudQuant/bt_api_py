@@ -1,6 +1,5 @@
 """Tests for CryptocomExchangeData container."""
 
-import pytest
 
 from bt_api_py.containers.exchanges.cryptocom_exchange_data import CryptoComExchangeData
 

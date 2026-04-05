@@ -1,6 +1,5 @@
 """Tests for BingXExchangeData container."""
 
-import pytest
 
 from bt_api_py.containers.exchanges.bingx_exchange_data import BingXExchangeData
 

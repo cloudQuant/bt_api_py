@@ -1,6 +1,5 @@
 """Tests for LunoExchangeData container."""
 
-import pytest
 
 from bt_api_py.containers.exchanges.luno_exchange_data import LunoExchangeData
 

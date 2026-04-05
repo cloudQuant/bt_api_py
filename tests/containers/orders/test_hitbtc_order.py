@@ -1,6 +1,5 @@
 """Tests for HitBtcRequestOrderData container."""
 
-import pytest
 
 from bt_api_py.containers.orders.hitbtc_order import HitBtcRequestOrderData
 
@@ -30,7 +29,9 @@ class TestHitBtcRequestOrderData:
             "quantity_filled": "1.0",
             "price": "50000.0",
         }
-        order = HitBtcRequestOrderData(data, symbol_name="BTCUSD", asset_type="SPOT", has_been_json_encoded=True)
+        order = HitBtcRequestOrderData(
+            data, symbol_name="BTCUSD", asset_type="SPOT", has_been_json_encoded=True
+        )
         order.init_data()
 
         assert order.order_id == "123456"
@@ -39,7 +40,9 @@ class TestHitBtcRequestOrderData:
 
     def test_get_all_data(self):
         """Test get_all_data."""
-        order = HitBtcRequestOrderData({}, symbol_name="BTCUSD", asset_type="SPOT", has_been_json_encoded=True)
+        order = HitBtcRequestOrderData(
+            {}, symbol_name="BTCUSD", asset_type="SPOT", has_been_json_encoded=True
+        )
         result = order.get_all_data()
 
         assert result["exchange_name"] == "HITBTC"
@@ -47,7 +50,9 @@ class TestHitBtcRequestOrderData:
 
     def test_str_representation(self):
         """Test __str__ method."""
-        order = HitBtcRequestOrderData({}, symbol_name="BTCUSD", asset_type="SPOT", has_been_json_encoded=True)
+        order = HitBtcRequestOrderData(
+            {}, symbol_name="BTCUSD", asset_type="SPOT", has_been_json_encoded=True
+        )
         result = str(order)
 
         assert "HITBTC" in result

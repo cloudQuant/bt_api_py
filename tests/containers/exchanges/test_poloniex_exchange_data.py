@@ -1,6 +1,5 @@
 """Tests for PoloniexExchangeData container."""
 
-import pytest
 
 from bt_api_py.containers.exchanges.poloniex_exchange_data import PoloniexExchangeData
 

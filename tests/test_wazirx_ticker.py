@@ -19,9 +19,7 @@ class TestWazirxRequestTickerData:
             "high": 5100000.0,
             "low": 4900000.0,
         }
-        ticker = WazirxRequestTickerData(
-            ticker_info, "BTCINR", "SPOT", has_been_json_encoded=True
-        )
+        ticker = WazirxRequestTickerData(ticker_info, "BTCINR", "SPOT", has_been_json_encoded=True)
 
         assert ticker.symbol_name == "BTCINR"
         assert ticker.exchange_name == "WAZIRX"
@@ -37,9 +35,7 @@ class TestWazirxRequestTickerData:
             "high": 5100000.0,
             "low": 4900000.0,
         }
-        ticker = WazirxRequestTickerData(
-            ticker_info, "BTCINR", "SPOT", has_been_json_encoded=True
-        )
+        ticker = WazirxRequestTickerData(ticker_info, "BTCINR", "SPOT", has_been_json_encoded=True)
         ticker.init_data()
 
         assert ticker.last_price == 5000000.0

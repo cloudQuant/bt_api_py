@@ -1,6 +1,5 @@
 """Tests for CoinbaseAccountData container."""
 
-import pytest
 
 from bt_api_py.containers.accounts.coinbase_account import (
     CoinbaseAccountData,
@@ -30,7 +29,9 @@ class TestCoinbaseAccountData:
             "hold": {"value": "0.5"},
             "updated_at": "2024-01-01T00:00:00Z",
         }
-        account = CoinbaseAccountData(data, symbol_name="BTC-USD", asset_type="SPOT", has_been_json_encoded=True)
+        account = CoinbaseAccountData(
+            data, symbol_name="BTC-USD", asset_type="SPOT", has_been_json_encoded=True
+        )
         account.init_data()
 
         assert account.has_been_init_data is True

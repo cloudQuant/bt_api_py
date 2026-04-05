@@ -2,8 +2,6 @@
 
 import json
 
-import pytest
-
 from bt_api_py.containers.tickers.coinbase_ticker import (
     CoinbaseRequestTickerData,
     CoinbaseTickerData,
@@ -40,7 +38,9 @@ class TestCoinbaseTickerData:
             "best_ask": "50010.00",
             "volume_24h": "1000.0",
         }
-        ticker = CoinbaseTickerData(data, symbol_name="BTC-USD", asset_type="SPOT", has_been_json_encoded=True)
+        ticker = CoinbaseTickerData(
+            data, symbol_name="BTC-USD", asset_type="SPOT", has_been_json_encoded=True
+        )
         ticker.init_data()
 
         assert ticker.last_price == 50000.0
@@ -57,7 +57,9 @@ class TestCoinbaseTickerData:
             "bids": [["49990", "1.2"], ["49980", "0.8"]],
             "asks": [["50010", "2.0"], ["50020", "1.0"]],
         }
-        ticker = CoinbaseTickerData(data, symbol_name="BTC-USD", asset_type="SPOT", has_been_json_encoded=True)
+        ticker = CoinbaseTickerData(
+            data, symbol_name="BTC-USD", asset_type="SPOT", has_been_json_encoded=True
+        )
         ticker.init_data()
 
         assert ticker.get_ticker_symbol_name() == "BTC-USD"
@@ -72,7 +74,9 @@ class TestCoinbaseTickerData:
 
     def test_get_all_data(self):
         """Test get_all_data."""
-        ticker = CoinbaseTickerData({}, symbol_name="BTC-USD", asset_type="SPOT", has_been_json_encoded=True)
+        ticker = CoinbaseTickerData(
+            {}, symbol_name="BTC-USD", asset_type="SPOT", has_been_json_encoded=True
+        )
         result = ticker.get_all_data()
 
         assert result["exchange_name"] == "COINBASE"
@@ -80,7 +84,9 @@ class TestCoinbaseTickerData:
 
     def test_str_representation(self):
         """Test __str__ method."""
-        ticker = CoinbaseTickerData({}, symbol_name="BTC-USD", asset_type="SPOT", has_been_json_encoded=True)
+        ticker = CoinbaseTickerData(
+            {}, symbol_name="BTC-USD", asset_type="SPOT", has_been_json_encoded=True
+        )
         result = str(ticker)
 
         assert "COINBASE" in result
@@ -102,7 +108,12 @@ class TestCoinbaseTickerData:
         request.init_data()
 
         wss = CoinbaseWssTickerData(
-            {"product_id": "BTC-USD", "time": "2024-01-02T03:04:05Z", "price": "2.0", "volume_24h": "5.0"},
+            {
+                "product_id": "BTC-USD",
+                "time": "2024-01-02T03:04:05Z",
+                "price": "2.0",
+                "volume_24h": "5.0",
+            },
             symbol_name="BTC-USD",
             asset_type="SPOT",
             has_been_json_encoded=True,

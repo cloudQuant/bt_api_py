@@ -20,19 +20,25 @@ class TestBudaRequestTickerData:
     def test_init_data(self):
         """Test init_data with ticker info."""
         data = {"ticker": {"last_price": ["50000.0", "CLP"]}}
-        ticker = BudaRequestTickerData(data, symbol_name="BTC-CLP", asset_type="SPOT", has_been_json_encoded=True)
+        ticker = BudaRequestTickerData(
+            data, symbol_name="BTC-CLP", asset_type="SPOT", has_been_json_encoded=True
+        )
         ticker.init_data()
 
         assert ticker.has_been_init_data is True
 
     def test_get_all_data(self):
         """Test get_all_data - base class raises NotImplementedError."""
-        ticker = BudaRequestTickerData({}, symbol_name="BTC-CLP", asset_type="SPOT", has_been_json_encoded=True)
+        ticker = BudaRequestTickerData(
+            {}, symbol_name="BTC-CLP", asset_type="SPOT", has_been_json_encoded=True
+        )
         with pytest.raises(NotImplementedError):
             ticker.get_all_data()
 
     def test_str_representation(self):
         """Test __str__ method - base class raises NotImplementedError."""
-        ticker = BudaRequestTickerData({}, symbol_name="BTC-CLP", asset_type="SPOT", has_been_json_encoded=True)
+        ticker = BudaRequestTickerData(
+            {}, symbol_name="BTC-CLP", asset_type="SPOT", has_been_json_encoded=True
+        )
         with pytest.raises(NotImplementedError):
             str(ticker)

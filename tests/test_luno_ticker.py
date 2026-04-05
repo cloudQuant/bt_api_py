@@ -20,9 +20,7 @@ class TestLunoRequestTickerData:
             "rolling_24_hour_low": 490000.0,
             "timestamp": 1705315800,
         }
-        ticker = LunoRequestTickerData(
-            ticker_info, "XBTZAR", "SPOT", has_been_json_encoded=True
-        )
+        ticker = LunoRequestTickerData(ticker_info, "XBTZAR", "SPOT", has_been_json_encoded=True)
 
         assert ticker.symbol_name == "XBTZAR"
         assert ticker.asset_type == "SPOT"
@@ -40,9 +38,7 @@ class TestLunoRequestTickerData:
             "rolling_24_hour_low": 490000.0,
             "timestamp": 1705315800,
         }
-        ticker = LunoRequestTickerData(
-            ticker_info, "XBTZAR", "SPOT", has_been_json_encoded=True
-        )
+        ticker = LunoRequestTickerData(ticker_info, "XBTZAR", "SPOT", has_been_json_encoded=True)
         ticker.init_data()
 
         assert ticker.last_price == 500000.0
@@ -57,9 +53,7 @@ class TestLunoRequestTickerData:
     def test_init_data_missing_fields(self):
         """Test init_data with missing fields."""
         ticker_info = {"pair": "XBTZAR"}
-        ticker = LunoRequestTickerData(
-            ticker_info, "XBTZAR", "SPOT", has_been_json_encoded=True
-        )
+        ticker = LunoRequestTickerData(ticker_info, "XBTZAR", "SPOT", has_been_json_encoded=True)
         ticker.init_data()
 
         assert ticker.last_price is None

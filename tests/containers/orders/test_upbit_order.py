@@ -1,6 +1,5 @@
 """Tests for UpbitOrderData container."""
 
-import pytest
 
 from bt_api_py.containers.orders.upbit_order import UpbitOrderData
 
@@ -31,7 +30,9 @@ class TestUpbitOrderData:
             "remaining_volume": "0.0",
             "market": "KRW-BTC",
         }
-        order = UpbitOrderData(data, symbol_name="KRW-BTC", asset_type="SPOT", has_been_json_encoded=True)
+        order = UpbitOrderData(
+            data, symbol_name="KRW-BTC", asset_type="SPOT", has_been_json_encoded=True
+        )
         order.init_data()
 
         assert order.order_uuid == "123456"
@@ -40,7 +41,9 @@ class TestUpbitOrderData:
 
     def test_get_all_data(self):
         """Test get_all_data."""
-        order = UpbitOrderData({}, symbol_name="KRW-BTC", asset_type="SPOT", has_been_json_encoded=True)
+        order = UpbitOrderData(
+            {}, symbol_name="KRW-BTC", asset_type="SPOT", has_been_json_encoded=True
+        )
         result = order.get_all_data()
 
         assert result["exchange_name"] == "UPBIT"
@@ -48,7 +51,9 @@ class TestUpbitOrderData:
 
     def test_str_representation(self):
         """Test __str__ method."""
-        order = UpbitOrderData({}, symbol_name="KRW-BTC", asset_type="SPOT", has_been_json_encoded=True)
+        order = UpbitOrderData(
+            {}, symbol_name="KRW-BTC", asset_type="SPOT", has_been_json_encoded=True
+        )
         result = str(order)
 
         assert "Upbit" in result

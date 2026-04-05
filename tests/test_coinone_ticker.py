@@ -17,9 +17,7 @@ class TestCoinoneRequestTickerData:
             "ask": 50000001.0,
             "volume": 100.0,
         }
-        ticker = CoinoneRequestTickerData(
-            ticker_info, "BTC", "SPOT", has_been_json_encoded=True
-        )
+        ticker = CoinoneRequestTickerData(ticker_info, "BTC", "SPOT", has_been_json_encoded=True)
 
         assert ticker.symbol_name == "BTC"
         assert ticker.exchange_name == "COINONE"
@@ -33,9 +31,7 @@ class TestCoinoneRequestTickerData:
             "ask": 50000001.0,
             "volume": 100.0,
         }
-        ticker = CoinoneRequestTickerData(
-            ticker_info, "BTC", "SPOT", has_been_json_encoded=True
-        )
+        ticker = CoinoneRequestTickerData(ticker_info, "BTC", "SPOT", has_been_json_encoded=True)
         ticker.init_data()
 
         assert ticker.last_price == 50000000.0

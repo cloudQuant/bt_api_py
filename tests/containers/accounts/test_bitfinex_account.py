@@ -1,6 +1,5 @@
 """Tests for Bitfinex account container."""
 
-import pytest
 
 from bt_api_py.containers.accounts.bitfinex_account import (
     BitfinexSpotRequestAccountData,
@@ -42,6 +41,7 @@ class TestBitfinexSpotRequestAccountData:
     def test_init_data_with_json_string(self):
         """Test init_data with JSON string."""
         import json
+
         data = json.dumps({"id": "12345", "currency": "USD"})
         account = BitfinexSpotRequestAccountData(data, asset_type="SPOT")
         account.init_data()

@@ -1,6 +1,5 @@
 """Tests for GateioTradeData container."""
 
-import pytest
 
 from bt_api_py.containers.trades.gateio_trade import GateioTradeData
 
@@ -27,7 +26,9 @@ class TestGateioTradeData:
             "amount": "1.0",
             "fee": "0.01",
         }
-        trade = GateioTradeData(data, symbol_name="BTC_USDT", asset_type="SPOT", has_been_json_encoded=True)
+        trade = GateioTradeData(
+            data, symbol_name="BTC_USDT", asset_type="SPOT", has_been_json_encoded=True
+        )
         trade.init_data()
 
         assert trade.trade_id == "123456"
@@ -36,7 +37,9 @@ class TestGateioTradeData:
 
     def test_get_all_data(self):
         """Test get_all_data."""
-        trade = GateioTradeData({}, symbol_name="BTC_USDT", asset_type="SPOT", has_been_json_encoded=True)
+        trade = GateioTradeData(
+            {}, symbol_name="BTC_USDT", asset_type="SPOT", has_been_json_encoded=True
+        )
         result = trade.get_all_data()
 
         assert result["exchange_name"] == "GATEIO"
@@ -44,7 +47,9 @@ class TestGateioTradeData:
 
     def test_str_representation(self):
         """Test __str__ method."""
-        trade = GateioTradeData({}, symbol_name="BTC_USDT", asset_type="SPOT", has_been_json_encoded=True)
+        trade = GateioTradeData(
+            {}, symbol_name="BTC_USDT", asset_type="SPOT", has_been_json_encoded=True
+        )
         result = str(trade)
 
         assert "GATEIO" in result

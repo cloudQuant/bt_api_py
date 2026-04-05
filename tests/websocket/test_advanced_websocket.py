@@ -194,7 +194,11 @@ class TestWebSocketConfig:
                 "min_connections",
             ),
             (
-                {"url": "wss://test.com", "exchange_name": "TEST", "reconnect_backoff_multiplier": 0.5},
+                {
+                    "url": "wss://test.com",
+                    "exchange_name": "TEST",
+                    "reconnect_backoff_multiplier": 0.5,
+                },
                 "reconnect_backoff_multiplier",
             ),
             (
@@ -504,7 +508,9 @@ class TestAdvancedWebSocketConnection:
         await connection._process_dlq_message({"message": {"payload": 2}, "retry_count": 3})
         connection._dlq.add_message.assert_not_awaited()
 
-    async def test_attempt_reconnection_stops_after_max_attempts(self, monkeypatch: pytest.MonkeyPatch):
+    async def test_attempt_reconnection_stops_after_max_attempts(
+        self, monkeypatch: pytest.MonkeyPatch
+    ):
         config = WebSocketConfig(
             url="wss://test.com",
             exchange_name="TEST",
@@ -909,9 +915,7 @@ class TestOKXWebSocketAdapter:
         adapter = OKXWebSocketAdapter(credentials=credentials)
 
         signature = adapter._generate_signature("1700000000", "GET", "/users/self/verify")
-        expected = hmac.new(
-            b"secret", b"1700000000GET/users/self/verify", hashlib.sha256
-        ).digest()
+        expected = hmac.new(b"secret", b"1700000000GET/users/self/verify", hashlib.sha256).digest()
 
         assert signature == __import__("base64").b64encode(expected).decode()
 
@@ -1238,7 +1242,9 @@ class TestAdvancedWebSocketManager:
         await manager.add_exchange(config, PoolConfiguration(max_connections=1))
         created_connections: list[_StubAdvancedConnection] = []
 
-        def fake_connection_factory(config: WebSocketConfig, connection_id: str) -> _StubAdvancedConnection:
+        def fake_connection_factory(
+            config: WebSocketConfig, connection_id: str
+        ) -> _StubAdvancedConnection:
             connection = _StubAdvancedConnection(connection_id)
             created_connections.append(connection)
             return connection
@@ -1267,7 +1273,9 @@ class TestAdvancedWebSocketManager:
         config = WebSocketConfig(url="wss://test.com", exchange_name="TEST")
         await manager.add_exchange(config, PoolConfiguration(max_connections=2))
 
-        available = ConnectionWrapper(_StubAdvancedConnection("available"), usage_count=3, in_use=False)
+        available = ConnectionWrapper(
+            _StubAdvancedConnection("available"), usage_count=3, in_use=False
+        )
         busy = ConnectionWrapper(_StubAdvancedConnection("busy"), usage_count=1, in_use=True)
         manager._pools["TEST"] = [available, busy]
         manager._load_balancers["TEST"] = MagicMock(select_connection=MagicMock(return_value=None))
@@ -1278,7 +1286,9 @@ class TestAdvancedWebSocketManager:
         assert available.in_use is True
 
         all_busy_low = ConnectionWrapper(_StubAdvancedConnection("low"), usage_count=1, in_use=True)
-        all_busy_high = ConnectionWrapper(_StubAdvancedConnection("high"), usage_count=5, in_use=True)
+        all_busy_high = ConnectionWrapper(
+            _StubAdvancedConnection("high"), usage_count=5, in_use=True
+        )
         manager._pools["TEST"] = [all_busy_high, all_busy_low]
 
         chosen_least_used = await manager.get_connection("TEST")
@@ -1526,9 +1536,10 @@ class TestAlertManager:
         alert_manager.metrics_collector.set_gauge("websocket_latency", 12.5)
         alert_manager.metrics_collector.set_gauge("websocket_errors", 3.0)
 
-        with patch("bt_api_py.websocket.monitoring.psutil.virtual_memory") as mock_vm, patch(
-            "bt_api_py.websocket.monitoring.psutil.cpu_percent"
-        ) as mock_cpu:
+        with (
+            patch("bt_api_py.websocket.monitoring.psutil.virtual_memory") as mock_vm,
+            patch("bt_api_py.websocket.monitoring.psutil.cpu_percent") as mock_cpu,
+        ):
             mock_vm.return_value = MagicMock(percent=65.0)
             mock_cpu.return_value = 35.0
 
@@ -1538,7 +1549,9 @@ class TestAlertManager:
             assert alert_manager._evaluate_condition("cpu_usage") == 35.0
             assert alert_manager._evaluate_condition("unknown_condition") is None
 
-    async def test_trigger_alert_notifies_handlers_and_tracks_active_and_history(self, alert_manager):
+    async def test_trigger_alert_notifies_handlers_and_tracks_active_and_history(
+        self, alert_manager
+    ):
         alert = PerformanceAlert(
             alert_id="notify_alert",
             name="Notify Alert",
