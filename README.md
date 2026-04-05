@@ -4,6 +4,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](https://opensource.org/licenses/MIT)
 [![PyPI](https://img.shields.io/badge/pypi/v/bt_api_py.svg)](https://pypi.org/project/bt_api_py/)
 [![Documentation](https://img.shields.io/badge/docs-latest-blue.svg)](https://cloudquant.github.io/bt_api_py/)
+[![CI](https://github.com/cloudQuant/bt_api_py/actions/workflows/tests.yml/badge.svg)](https://github.com/cloudQuant/bt_api_py/actions/workflows/tests.yml)
 
 - **bt_api_py** 是一个专业的统一多交易所交易 API 框架，专为量化交易者和机构投资者设计。支持现货、合约、期货、股票等多种交易类型，提供同步、异步和 WebSocket 三种接口模式，让您用一套代码轻松对接全球主流交易所。
 
@@ -307,6 +308,9 @@ bt_api_py/
 - [架构设计](https://cloudquant.github.io/bt_api_py/architecture/) - 核心架构和设计模式
 - [使用指南](https://cloudquant.github.io/bt_api_py/usage_guide/) - 完整的使用教程
 - [开发者指南](https://cloudquant.github.io/bt_api_py/developer_guide/) - 如何扩展和贡献代码
+- [迁移指南](docs/MIGRATION_GUIDE.md) - 版本升级迁移说明
+- [代码质量标准](docs/CODE_QUALITY.md) - 代码规范和质量检查
+- [安全合规](docs/SECURITY_COMPLIANCE.md) - 安全框架和合规要求
 
 ### 交易所指南
 
