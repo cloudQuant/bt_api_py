@@ -10,20 +10,28 @@ from pathlib import Path
 import pytest
 from dotenv import load_dotenv
 
-from bt_api_py.ctp._ctp_base import get_ctp_import_error, is_ctp_native_loaded
-from bt_api_py.ctp_env_selector import apply_ctp_env
-
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 load_dotenv(PROJECT_ROOT / ".env")
 
 _CTP_ATEXIT_REGISTERED = False
 
-if not is_ctp_native_loaded():
-    _ctp_err = get_ctp_import_error()
-    pytest.exit(
-        f"CTP C++ extension (_ctp) not available: {_ctp_err}. Run: git lfs install && git lfs pull",
-        returncode=1,
-    )
+
+# Check CTP availability at module level and skip entire module if not available
+def _check_ctp_available() -> bool:
+    """Check if CTP native extension is available."""
+    try:
+        from bt_api_py.ctp._ctp_base import is_ctp_native_loaded
+
+        return is_ctp_native_loaded()
+    except ImportError:
+        return False
+
+
+# Skip entire module if CTP is not available (e.g., in CI without Git LFS)
+pytestmark = pytest.mark.skipif(
+    not _check_ctp_available(),
+    reason="CTP C++ extension (_ctp) not available. Run: git lfs install && git lfs pull",
+)
 
 
 def _ctp_atexit_handler() -> None:
@@ -59,6 +67,8 @@ def _check_ctp_service(front: str, timeout: float = 3.0) -> str:
 
 
 def _runtime_config() -> tuple[dict[str, str], str, str, str]:
+    from bt_api_py.ctp_env_selector import apply_ctp_env
+
     td_front, md_front, env_name = apply_ctp_env()
     broker_id = os.environ.get("CTP_BROKER_ID") or os.environ.get("SIMNOW_BROKER_ID") or "9999"
     user_id = os.environ.get("CTP_USER_ID") or os.environ.get("SIMNOW_USER_ID") or ""
