@@ -97,9 +97,11 @@ class CoverageAnalyzer:
             finally:
                 os.chdir(previous_cwd)
 
-            if result == 0 and coverage_json.exists():
+            if coverage_json.exists():
                 with coverage_json.open() as f:
                     coverage_data = json.load(f)
+                if result != 0:
+                    print(f"Pytest exited with status {result}, using partial coverage data")
                 return coverage_data
         except Exception as e:
             print(f"Error running coverage: {e}")

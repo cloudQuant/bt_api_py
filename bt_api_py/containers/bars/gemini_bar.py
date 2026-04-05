@@ -105,7 +105,7 @@ class GeminiRequestBarData(RequestData):
         """
         if len(bar_data) >= 6:
             bar = GeminiRequestBarData(
-                data=bar_data,
+                data=None,
                 symbol=self.symbol,
                 asset_type=self.asset_type,
                 time_frame=self.time_frame,

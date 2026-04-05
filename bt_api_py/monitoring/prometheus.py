@@ -244,7 +244,7 @@ class PrometheusExporter:
                 # Handle server shutdown gracefully
                 break
             except Exception as e:
-                _logger.debug("Prometheus server loop error, continuing: %s", e, exc_info=True)
+                _logger.debug(f"Prometheus server loop error, continuing: {e}")
                 continue
 
     def is_running(self) -> bool:

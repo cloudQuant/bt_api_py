@@ -140,3 +140,19 @@ class TestExchangeData:
             assert not key.startswith("__")
             assert not key.startswith("update")
             assert not key.startswith("to_dict")
+
+    def test_update_info_accepts_custom_fields(self):
+        exchange = ExchangeData.update_info({"custom_field": "value", "limit": 1200})
+
+        assert exchange.custom_field == "value"
+        assert exchange.limit == 1200
+
+    def test_to_dict_includes_runtime_mutable_fields(self):
+        exchange = ExchangeData()
+        exchange.rest_paths = {"get_tick": "/ticker"}
+        exchange.wss_paths = {"ticker": "stream"}
+
+        result = exchange.to_dict()
+
+        assert result["rest_paths"] == {"get_tick": "/ticker"}
+        assert result["wss_paths"] == {"ticker": "stream"}

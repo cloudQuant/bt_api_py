@@ -205,13 +205,13 @@ class KuCoinWssBarData(KuCoinBarData):
             data = self.bar_data["data"]
             candles = data.get("candles", [])
             if candles:
-                self.server_time = from_dict_get_float(candles, 0) * 1000
-                self.open = from_dict_get_float(candles, 1)
-                self.close = from_dict_get_float(candles, 2)
-                self.high = from_dict_get_float(candles, 3)
-                self.low = from_dict_get_float(candles, 4)
-                self.volume = from_dict_get_float(candles, 5)
-                self.turnover = from_dict_get_float(candles, 6)
+                self.server_time = float(candles[0]) * 1000
+                self.open = float(candles[1])
+                self.close = float(candles[2])
+                self.high = float(candles[3])
+                self.low = float(candles[4])
+                self.volume = float(candles[5])
+                self.turnover = float(candles[6]) if len(candles) > 6 else 0.0
             self.bar_symbol_name = from_dict_get_string(data, "symbol")
 
         self.period = None  # Could extract from topic string

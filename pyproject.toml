@@ -45,6 +45,7 @@ Repository = "https://github.com/cloudQuant/bt_api_py"
 [tool.pytest.ini_options]
 addopts = [
     "--dist=loadgroup",
+    "--import-mode=importlib",
     "--strict-markers",
     "--tb=short",
 ]

@@ -6,8 +6,11 @@ from pathlib import Path
 import pytest
 
 from bt_api_py.functions.analysis_log import (
+    _require_package_path,
     TIME_PATTERN,
+    build_duration_series,
     extract_slam_times,
+    render_report,
     time_subtraction,
 )
 
@@ -96,6 +99,58 @@ class TestExtractSlamTimes:
             times = extract_slam_times(Path(f.name))
 
             assert len(times) == 0
+
+
+class TestAnalysisLogHelpers:
+    def test_require_package_path_returns_path(self, monkeypatch, tmp_path):
+        monkeypatch.setattr("bt_api_py.functions.analysis_log.get_package_path", lambda package_name: str(tmp_path))
+
+        assert _require_package_path("lv") == tmp_path
+
+    def test_require_package_path_raises_when_missing(self, monkeypatch):
+        monkeypatch.setattr("bt_api_py.functions.analysis_log.get_package_path", lambda package_name: None)
+
+        with pytest.raises(RuntimeError):
+            _require_package_path("lv")
+
+    def test_build_duration_series_pairs_timestamps(self, tmp_path):
+        log_file = tmp_path / "slam.log"
+        log_file.write_text(
+            "\n".join(
+                [
+                    "deal trade_data, time = 2024-01-15 10:30:00.000000",
+                    "deal trade_data, time = 2024-01-15 10:30:00.100000",
+                    "deal trade_data, time = 2024-01-15 10:30:01.000000",
+                    "deal trade_data, time = 2024-01-15 10:30:01.250000",
+                ]
+            ),
+            encoding="utf-8",
+        )
+
+        assert build_duration_series(log_file) == [100.0, 250.0]
+
+    def test_build_duration_series_ignores_unpaired_tail(self, tmp_path):
+        log_file = tmp_path / "slam.log"
+        log_file.write_text(
+            "\n".join(
+                [
+                    "deal trade_data, time = 2024-01-15 10:30:00.000000",
+                    "deal trade_data, time = 2024-01-15 10:30:00.100000",
+                    "deal trade_data, time = 2024-01-15 10:30:01.000000",
+                ]
+            ),
+            encoding="utf-8",
+        )
+
+        assert build_duration_series(log_file) == [100.0]
+
+    def test_render_report_writes_html_and_returns_dataframe(self, tmp_path):
+        output = tmp_path / "report.html"
+        result = render_report([10.0, 20.0, 30.0], output)
+
+        assert list(result.columns) == ["consume_time"]
+        assert len(result) == 3
+        assert output.exists()
 
 
 if __name__ == "__main__":

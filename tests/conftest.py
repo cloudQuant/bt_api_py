@@ -7,4 +7,4 @@ This file is auto-discovered by pytest and provides:
 - Shared test utilities and hooks
 """
 
-pytest_plugins = ["conftest_test_data"]
+pytest_plugins = ["tests.conftest_test_data"]
