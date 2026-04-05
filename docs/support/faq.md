@@ -7,7 +7,7 @@ Common issues and solutions when using bt_api_py.
 ### Python Version Compatibility
 **Problem**: `bt_api_py requires Python 3.11 or higher`
 
-**Solution**: 
+**Solution**:
 ```bash
 # Check your Python version
 python --version
@@ -209,13 +209,13 @@ from bt_api_py.exceptions import WebSocketError
 async def resilient_stream():
     max_retries = 5
     retry_delay = 5
-    
+
     for attempt in range(max_retries):
         try:
             async for ticker in api.stream_ticker("BINANCE___SPOT", "BTCUSDT"):
                 # Process data
                 pass
-                
+
         except WebSocketError as e:
             print(f"WebSocket error: {e}")
             if attempt < max_retries - 1:
@@ -281,14 +281,14 @@ import asyncio
 
 async def get_multiple_prices():
     symbols = ["BTCUSDT", "ETHUSDT", "ADAUSDT"]
-    
+
     # Run calls concurrently
     tasks = [
         api.async_get_tick("BINANCE___SPOT", symbol)
         for symbol in symbols
     ]
     tickers = await asyncio.gather(*tasks)
-    
+
     for symbol, ticker in zip(symbols, tickers):
         ticker.init_data()
         print(f"{symbol}: ${ticker.get_last_price():.2f}")
@@ -316,15 +316,15 @@ class EfficientProcessor:
     def __init__(self, max_history=100):
         self.price_history = []
         self.max_history = max_history
-        
+
     async def process_stream(self):
         async for ticker in api.stream_ticker("BINANCE___SPOT", "BTCUSDT"):
             ticker.init_data()
             price = ticker.get_last_price()
-            
+
             # Add to history
             self.price_history.append(price)
-            
+
             # Trim old data
             if len(self.price_history) > self.max_history:
                 self.price_history.pop(0)
@@ -372,11 +372,11 @@ def test_basic_functionality():
         # Test public endpoint (no auth needed)
         ticker = api.get_tick("BINANCE___SPOT", "BTCUSDT")
         print("✅ Basic API works")
-        
+
         # Test private endpoint (auth required)
         balance = api.get_balance("BINANCE___SPOT", "USDT")
         print("✅ Authenticated API works")
-        
+
     except Exception as e:
         print(f"❌ Error: {e}")
         import traceback
@@ -414,7 +414,7 @@ test_basic_functionality()
 def get_debug_info():
     import bt_api_py
     import sys
-    
+
     return {
         "bt_api_py_version": bt_api_py.__version__,
         "python_version": sys.version,
@@ -442,4 +442,4 @@ When reporting issues, include:
 
 ---
 
-Still having issues? Check our [API patterns guide](api-patterns.md) or [examples gallery](../examples/gallery.md).
+Still having issues? Check our [API patterns guide](../guides/api-patterns.md) or [examples gallery](../examples/gallery.md).

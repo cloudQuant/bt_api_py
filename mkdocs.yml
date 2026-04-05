@@ -253,3 +253,29 @@ exclude_docs: |
   exchanges/okx/sub_account.md
   exchanges/binance/spot/sbe-market-data-streams.md
   exchanges/binance/derivatives/change-log.md
+  # Archive files (not part of main docs)
+  archive/
+  # Root level docs not in nav
+  AGENTS.md
+  CODE_QUALITY.md
+  MIGRATION_GUIDE.md
+  SECURITY_COMPLIANCE.md
+  development-guide.md
+  project-overview.md
+  project-structure-optimization.md
+  release-checklist.md
+  source-tree-analysis.md
+  test-markers-guide.md
+  # Architecture docs
+  architecture/
+  # Reference docs not in nav
+  reference/installation.md
+  # Security docs
+  security/
+  # Exchange docs not in nav
+  exchanges/EXCHANGE_CAPABILITY_MATRIX.md
+  exchanges/EXCHANGE_STATUS.md
+  exchanges/binance/algo/future-algo/twap-new-order.md
+  exchanges/binance/algo/spot-algo/fee-structure.md
+  # Plans
+  plans/

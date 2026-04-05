@@ -92,7 +92,5 @@
 
 ## 参考文档
 
-- [docs/CODE_QUALITY_IMPROVEMENTS.md](docs/CODE_QUALITY_IMPROVEMENTS.md) - 详细分析与建议
-- [docs/code-quality-improvements.md](docs/code-quality-improvements.md) - 历史优化记录
-- [AGENTS.md](AGENTS.md) - AI 代理开发指南
-- [docs/guides/security_best_practices.md](docs/guides/security_best_practices.md) - 安全实践
+- [AGENTS.md](https://github.com/cloudQuant/bt_api_py/blob/master/AGENTS.md) - AI 代理开发指南
+- [安全实践](./guides/security_best_practices.md) - 安全实践

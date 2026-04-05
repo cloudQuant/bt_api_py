@@ -1,7 +1,7 @@
 # bt_api_py 项目文档索引
 
-生成日期：2026-03-07  
-扫描级别：Exhaustive（详尽扫描）  
+生成日期：2026-03-07
+扫描级别：Exhaustive（详尽扫描）
 项目类型：Python Library
 
 ---
@@ -68,16 +68,14 @@
 
 ### 核心文档
 
-- ✅ [项目概览](./project-overview.md) - 项目完整介绍、技术栈、架构设计
-- ✅ [源代码树分析](./source-tree-analysis.md) - 完整目录结构、关键入口点、架构约束
-- ✅ [开发指南](./development-guide.md) - 开发设置、测试、代码风格、调试技巧
+- ✅ [项目概览](./getting-started/quickstart.md) - 项目完整介绍、技术栈、架构设计
+- ✅ [开发指南](./explanation/developer_guide.md) - 开发设置、测试、代码风格、调试技巧
 
 ### 现有文档
 
-- ✅ [README.md](../README.md) - 项目主要说明
-- ✅ [CONTRIBUTING.md](../CONTRIBUTING.md) - 贡献指南
-- ✅ [AGENTS.md](../AGENTS.md) - AI代理开发指南
-- ✅ [CHANGELOG.md](../CHANGELOG.md) - 变更日志
+- ✅ [README.md](https://github.com/cloudQuant/bt_api_py#readme) - 项目主要说明
+- ✅ [CONTRIBUTING.md](https://github.com/cloudQuant/bt_api_py/blob/master/CONTRIBUTING.md) - 贡献指南
+- ✅ [CHANGELOG.md](./getting-started/change_log.md) - 变更日志
 
 ---
 
