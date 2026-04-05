@@ -2,6 +2,8 @@
 
 import pytest
 
+pytest.importorskip("aiosmtplib")
+
 from bt_api_py.functions.async_send_message import FeishuManagerAsync
 
 

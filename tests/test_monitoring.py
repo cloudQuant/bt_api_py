@@ -12,6 +12,8 @@ from unittest.mock import AsyncMock, Mock, patch
 import pytest
 import pytest_asyncio
 
+pytest.importorskip("psutil")
+
 from bt_api_py.monitoring import (
     BusinessMetricsCollector,
     Counter,

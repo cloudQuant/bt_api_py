@@ -2,6 +2,8 @@
 
 import pytest
 
+pytest.importorskip("psutil")
+
 from bt_api_py.monitoring import config as monitoring_config
 from bt_api_py.monitoring.config import MonitoringConfig
 

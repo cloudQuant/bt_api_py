@@ -5,6 +5,8 @@ from pathlib import Path
 
 import pytest
 
+pytest.importorskip("pyecharts")
+
 from bt_api_py.functions.analysis_log import (
     TIME_PATTERN,
     _require_package_path,

@@ -1,7 +1,9 @@
 import socket
 from datetime import UTC, datetime
 
-import ntplib
+import pytest
+
+ntplib = pytest.importorskip("ntplib")
 
 
 def get_network_time():

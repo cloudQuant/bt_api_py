@@ -5,6 +5,8 @@ import json
 
 import pytest
 
+pytest.importorskip("psutil")
+
 from bt_api_py.monitoring import prometheus
 from bt_api_py.monitoring.metrics import Gauge, Histogram, MetricRegistry
 

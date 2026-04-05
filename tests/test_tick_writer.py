@@ -5,9 +5,11 @@ from __future__ import annotations
 import time
 from dataclasses import dataclass
 
-import pyarrow.parquet as pq
+import pytest
 
 from bt_api_py.gateway.storage.tick_writer import TICK_SCHEMA, TickWriter
+
+pq = pytest.importorskip("pyarrow.parquet")
 
 
 @dataclass

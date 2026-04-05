@@ -2,6 +2,8 @@
 
 import pytest
 
+pytest.importorskip("psutil")
+
 from bt_api_py.websocket.monitoring import (
     AlertManager,
     AlertSeverity,

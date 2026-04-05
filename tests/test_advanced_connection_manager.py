@@ -4,6 +4,8 @@ import time
 
 import pytest
 
+pytest.importorskip("psutil")
+
 from bt_api_py.websocket.advanced_connection_manager import (
     ConnectionHealth,
     ConnectionState,

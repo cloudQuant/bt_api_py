@@ -5,6 +5,8 @@ import logging
 
 import pytest
 
+pytest.importorskip("psutil")
+
 from bt_api_py.monitoring import elk
 
 

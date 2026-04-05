@@ -2,6 +2,8 @@
 
 import pytest
 
+pytest.importorskip("psutil")
+
 import bt_api_py.websocket as websocket_module
 from bt_api_py.websocket.advanced_websocket_manager import (
     AdvancedWebSocketManager,

@@ -8,6 +8,8 @@ from decimal import Decimal
 
 import pytest
 
+pytest.importorskip("sklearn")
+
 from bt_api_py.risk_management.containers.risk_events import RiskEventType, RiskLevel
 from bt_api_py.risk_management.containers.risk_metrics import RiskMetrics
 from bt_api_py.risk_management.core.limits_manager import LimitsManager

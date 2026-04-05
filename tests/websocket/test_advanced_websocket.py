@@ -14,6 +14,8 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+pytest.importorskip("psutil")
+
 import bt_api_py.websocket.advanced_websocket_manager as advanced_ws_manager_module
 from bt_api_py.exceptions import AuthenticationError, RateLimitError, WebSocketError
 from bt_api_py.websocket.advanced_connection_manager import (

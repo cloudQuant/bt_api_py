@@ -6,6 +6,8 @@ from pathlib import Path
 import numpy as np
 import pytest
 
+pytest.importorskip("sklearn")
+
 from bt_api_py.risk_management.ml_models.ml_base import (
     BaseMLModel,
     ModelComparator,

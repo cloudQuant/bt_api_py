@@ -1,5 +1,9 @@
 from typing import Any
 
+import pytest
+
+pytest.importorskip("eth_account")
+
 from bt_api_py.feeds.live_dydx.request_base import DydxRequestData
 from bt_api_py.feeds.live_hyperliquid.request_base import HyperliquidRequestData
 from bt_api_py.feeds.live_pancakeswap.request_base import PancakeSwapRequestData

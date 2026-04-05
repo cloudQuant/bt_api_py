@@ -1,5 +1,9 @@
 """Tests for monitoring/metrics.py."""
 
+import pytest
+
+pytest.importorskip("psutil")
+
 from bt_api_py.monitoring.metrics import MetricValue
 
 
