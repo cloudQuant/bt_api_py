@@ -1,6 +1,5 @@
 """Tests for BitgetTickerData container."""
 
-
 from bt_api_py.containers.tickers.bitget_ticker import BitgetTickerData
 
 

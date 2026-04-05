@@ -1,6 +1,5 @@
 """Tests for BitgetOrderData container."""
 
-
 from bt_api_py.containers.orders.bitget_order import BitgetOrderData
 
 

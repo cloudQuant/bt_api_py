@@ -1,7 +1,6 @@
 """Tests for gateway/client.py."""
 
 
-
 class TestClient:
     """Tests for gateway client."""
 

@@ -1,6 +1,5 @@
 """Tests for ZaifExchangeData container."""
 
-
 from bt_api_py.containers.exchanges.zaif_exchange_data import ZaifExchangeData
 
 

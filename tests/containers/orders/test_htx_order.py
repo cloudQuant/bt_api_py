@@ -1,6 +1,5 @@
 """Tests for HtxRequestOrderData container."""
 
-
 from bt_api_py.containers.orders.htx_order import HtxRequestOrderData
 
 

@@ -1,6 +1,5 @@
 """Tests for BinanceErrorTranslator."""
 
-
 from bt_api_py.errors.binance_translator import BinanceErrorTranslator
 
 

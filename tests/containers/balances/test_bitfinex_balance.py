@@ -1,6 +1,5 @@
 """Tests for BitfinexSpotRequestBalanceData container."""
 
-
 from bt_api_py.containers.balances.bitfinex_balance import BitfinexSpotRequestBalanceData
 
 

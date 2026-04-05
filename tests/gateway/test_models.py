@@ -1,6 +1,5 @@
 """Tests for gateway/models.py."""
 
-
 from bt_api_py.gateway.models import GatewayTick
 
 

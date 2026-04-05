@@ -1,6 +1,5 @@
 """Tests for HtxRequestTradeData container."""
 
-
 from bt_api_py.containers.trades.htx_trade import HtxRequestTradeData
 
 

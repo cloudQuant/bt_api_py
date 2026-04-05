@@ -1,6 +1,5 @@
 """Tests for websocket/exchange_adapters.py."""
 
-
 from bt_api_py.websocket.exchange_adapters import AuthenticationType, ExchangeType
 
 

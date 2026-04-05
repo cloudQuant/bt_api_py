@@ -1,6 +1,5 @@
 """Tests for GeminiExchangeData container."""
 
-
 from bt_api_py.containers.exchanges.gemini_exchange_data import GeminiExchangeData
 
 

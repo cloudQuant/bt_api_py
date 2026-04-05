@@ -1,6 +1,5 @@
 """Tests for BitfinexExchangeData container."""
 
-
 from bt_api_py.containers.exchanges.bitfinex_exchange_data import BitfinexExchangeData
 
 

@@ -1,6 +1,5 @@
 """Tests for BitfinexFundingRateData container."""
 
-
 from bt_api_py.containers.fundingrates.bitfinex_funding_rate import (
     BitfinexFundingRateData,
     BitfinexRequestFundingRateData,

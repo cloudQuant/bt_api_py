@@ -1,6 +1,5 @@
 """Tests for HTX balance container."""
 
-
 from bt_api_py.containers.balances.htx_balance import HtxRequestBalanceData
 
 

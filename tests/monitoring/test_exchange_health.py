@@ -1,7 +1,6 @@
 """Tests for monitoring/exchange_health.py."""
 
 
-
 class TestExchangeHealth:
     """Tests for exchange health monitoring."""
 

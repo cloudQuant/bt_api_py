@@ -1,6 +1,5 @@
 """Tests for GeminiRequestOrderBookData container."""
 
-
 from bt_api_py.containers.orderbooks.gemini_orderbook import GeminiRequestOrderBookData
 
 

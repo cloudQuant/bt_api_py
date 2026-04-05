@@ -1,6 +1,5 @@
 """Tests for GateioOrderBookData container."""
 
-
 from bt_api_py.containers.orderbooks.gateio_orderbook import GateioOrderBookData
 
 

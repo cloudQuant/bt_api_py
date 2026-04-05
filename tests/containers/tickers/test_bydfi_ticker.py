@@ -1,6 +1,5 @@
 """Tests for BYDFiRequestTickerData container."""
 
-
 from bt_api_py.containers.tickers.bydfi_ticker import BYDFiRequestTickerData
 
 

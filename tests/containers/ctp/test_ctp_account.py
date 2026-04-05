@@ -1,6 +1,5 @@
 """Tests for CTP account container."""
 
-
 from bt_api_py.containers.ctp.ctp_account import CtpAccountData
 
 

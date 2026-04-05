@@ -1,6 +1,5 @@
 """Tests for BtcMarketsExchangeData container."""
 
-
 from bt_api_py.containers.exchanges.btc_markets_exchange_data import BtcMarketsExchangeData
 
 

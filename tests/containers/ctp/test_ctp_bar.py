@@ -1,6 +1,5 @@
 """Tests for CTP bar container."""
 
-
 from bt_api_py.containers.ctp.ctp_bar import CtpBarData
 
 

@@ -1,7 +1,6 @@
 """Tests for gateway/subscription_manager.py."""
 
 
-
 class TestSubscriptionManager:
     """Tests for subscription manager."""
 

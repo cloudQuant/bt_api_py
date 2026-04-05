@@ -1,6 +1,5 @@
 """Tests for BitgetErrorTranslator."""
 
-
 from bt_api_py.errors.bitget_translator import BitgetErrorTranslator
 
 

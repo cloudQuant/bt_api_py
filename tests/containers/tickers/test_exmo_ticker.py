@@ -1,6 +1,5 @@
 """Tests for ExmoRequestTickerData container."""
 
-
 from bt_api_py.containers.tickers.exmo_ticker import ExmoRequestTickerData
 
 

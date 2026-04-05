@@ -1,6 +1,5 @@
 """Tests for BinanceForceOrderData container."""
 
-
 from bt_api_py.containers.orders.binance_order import BinanceForceOrderData
 from bt_api_py.containers.orders.order import OrderStatus
 

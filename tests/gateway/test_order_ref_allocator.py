@@ -1,7 +1,6 @@
 """Tests for gateway/order_ref_allocator.py."""
 
 
-
 class TestOrderRefAllocator:
     """Tests for order ref allocator."""
 

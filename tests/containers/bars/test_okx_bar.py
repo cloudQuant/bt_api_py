@@ -1,6 +1,5 @@
 """Tests for OkxBarData container."""
 
-
 from bt_api_py.containers.bars.okx_bar import OkxBarData
 
 

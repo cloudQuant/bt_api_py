@@ -1,6 +1,5 @@
 """Tests for GiottusRequestTickerData container."""
 
-
 from bt_api_py.containers.tickers.giottus_ticker import GiottusRequestTickerData
 
 

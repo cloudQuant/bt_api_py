@@ -1,6 +1,5 @@
 """Tests for HTX account container."""
 
-
 from bt_api_py.containers.accounts.htx_account import HtxSpotRequestAccountData
 
 

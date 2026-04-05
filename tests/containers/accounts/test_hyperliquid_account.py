@@ -1,6 +1,5 @@
 """Tests for Hyperliquid account container."""
 
-
 from bt_api_py.containers.accounts.hyperliquid_account import HyperliquidSpotWssAccountData
 
 

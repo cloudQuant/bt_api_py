@@ -1,6 +1,5 @@
 """Tests for BudaExchangeData container."""
 
-
 from bt_api_py.containers.exchanges.buda_exchange_data import BudaExchangeData
 
 

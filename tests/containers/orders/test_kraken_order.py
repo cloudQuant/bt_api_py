@@ -1,6 +1,5 @@
 """Tests for KrakenRequestOrderData container."""
 
-
 from bt_api_py.containers.orders.kraken_order import KrakenRequestOrderData, KrakenSpotWssOrderData
 
 

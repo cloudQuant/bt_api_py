@@ -1,6 +1,5 @@
 """Tests for HitbtcExchangeData container."""
 
-
 from bt_api_py.containers.exchanges.hitbtc_exchange_data import HitBtcExchangeData
 
 

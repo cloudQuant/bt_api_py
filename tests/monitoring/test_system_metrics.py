@@ -1,7 +1,6 @@
 """Tests for monitoring/system_metrics.py."""
 
 
-
 class TestSystemMetrics:
     """Tests for system metrics."""
 

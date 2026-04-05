@@ -1,6 +1,5 @@
 """Tests for GateioExchangeData container."""
 
-
 from bt_api_py.containers.exchanges.gateio_exchange_data import GateioExchangeData
 
 

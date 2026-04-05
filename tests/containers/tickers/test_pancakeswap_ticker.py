@@ -1,6 +1,5 @@
 """Tests for PancakeSwapRequestTickerData container."""
 
-
 from bt_api_py.containers.tickers.pancakeswap_ticker import PancakeSwapRequestTickerData
 
 

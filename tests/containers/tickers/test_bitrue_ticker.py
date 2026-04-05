@@ -1,6 +1,5 @@
 """Tests for BitrueRequestTickerData container."""
 
-
 from bt_api_py.containers.tickers.bitrue_ticker import BitrueRequestTickerData
 
 

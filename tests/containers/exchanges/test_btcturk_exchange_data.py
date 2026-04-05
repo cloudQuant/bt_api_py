@@ -1,6 +1,5 @@
 """Tests for BtcturkExchangeData container."""
 
-
 from bt_api_py.containers.exchanges.btcturk_exchange_data import BTCTurkExchangeData
 
 

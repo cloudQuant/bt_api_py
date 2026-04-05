@@ -1,6 +1,5 @@
 """Tests for CryptoComTicker container."""
 
-
 from bt_api_py.containers.tickers.cryptocom_ticker import CryptoComTicker
 
 

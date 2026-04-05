@@ -1,6 +1,5 @@
 """Tests for CoinbaseAccountData container."""
 
-
 from bt_api_py.containers.accounts.coinbase_account import (
     CoinbaseAccountData,
     CoinbaseRequestAccountData,

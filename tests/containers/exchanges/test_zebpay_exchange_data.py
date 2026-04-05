@@ -1,6 +1,5 @@
 """Tests for ZebpayExchangeData container."""
 
-
 from bt_api_py.containers.exchanges.zebpay_exchange_data import ZebpayExchangeData
 
 

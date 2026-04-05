@@ -1,6 +1,5 @@
 """Tests for Hyperliquid balance containers."""
 
-
 from bt_api_py.containers.balances.hyperliquid_balance import (
     HyperliquidSpotRequestBalanceData,
     HyperliquidSwapRequestBalanceData,

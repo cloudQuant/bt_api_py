@@ -1,6 +1,5 @@
 """Tests for BitfinexRequestBarData container."""
 
-
 from bt_api_py.containers.bars.bitfinex_bar import BitfinexRequestBarData
 
 

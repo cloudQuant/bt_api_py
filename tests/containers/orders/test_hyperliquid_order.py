@@ -1,6 +1,5 @@
 """Tests for HyperliquidRequestOrderData container."""
 
-
 from bt_api_py.containers.orders.hyperliquid_order import HyperliquidRequestOrderData
 
 

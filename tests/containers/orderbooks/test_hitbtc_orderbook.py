@@ -1,6 +1,5 @@
 """Tests for HitBtcRequestOrderBookData container."""
 
-
 from bt_api_py.containers.orderbooks.hitbtc_orderbook import HitBtcRequestOrderBookData
 
 

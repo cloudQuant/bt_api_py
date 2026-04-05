@@ -1,6 +1,5 @@
 """Tests for ValrExchangeData container."""
 
-
 from bt_api_py.containers.exchanges.valr_exchange_data import ValrExchangeData
 
 

@@ -1,6 +1,5 @@
 """Tests for Bitfinex account container."""
 
-
 from bt_api_py.containers.accounts.bitfinex_account import (
     BitfinexSpotRequestAccountData,
     BitfinexSpotWssAccountData,

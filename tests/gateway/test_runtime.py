@@ -1,7 +1,6 @@
 """Tests for gateway/runtime.py."""
 
 
-
 class TestRuntime:
     """Tests for gateway runtime."""
 

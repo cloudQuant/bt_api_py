@@ -1,6 +1,5 @@
 """Tests for BitstampExchangeData container."""
 
-
 from bt_api_py.containers.exchanges.bitstamp_exchange_data import BitstampExchangeData
 
 

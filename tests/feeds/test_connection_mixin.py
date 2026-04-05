@@ -1,6 +1,5 @@
 """Tests for feeds/connection_mixin.py."""
 
-
 from bt_api_py.feeds.connection_mixin import ConnectionMixin
 
 

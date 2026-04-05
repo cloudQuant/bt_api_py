@@ -1,6 +1,5 @@
 """Tests for feeds/abstract_feed.py."""
 
-
 from bt_api_py.feeds.abstract_feed import AbstractVenueFeed, AsyncWrapperMixin
 
 

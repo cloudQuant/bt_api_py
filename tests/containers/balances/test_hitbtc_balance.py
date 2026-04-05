@@ -1,6 +1,5 @@
 """Tests for HitBtcRequestBalanceData container."""
 
-
 from bt_api_py.containers.balances.hitbtc_balance import HitBtcRequestBalanceData
 
 

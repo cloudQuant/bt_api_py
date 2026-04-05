@@ -1,6 +1,5 @@
 """Tests for IB account container."""
 
-
 from bt_api_py.containers.ib.ib_account import IbAccountData
 
 

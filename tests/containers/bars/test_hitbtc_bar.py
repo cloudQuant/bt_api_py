@@ -1,6 +1,5 @@
 """Tests for HitBtcRequestBarData container."""
 
-
 from bt_api_py.containers.bars.hitbtc_bar import HitBtcRequestBarData
 
 

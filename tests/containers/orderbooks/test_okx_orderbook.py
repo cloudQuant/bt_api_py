@@ -1,6 +1,5 @@
 """Tests for OkxOrderBookData container."""
 
-
 from bt_api_py.containers.orderbooks.okx_orderbook import OkxOrderBookData
 
 

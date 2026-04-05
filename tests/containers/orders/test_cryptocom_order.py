@@ -1,6 +1,5 @@
 """Tests for CryptoComOrder container."""
 
-
 from bt_api_py.containers.orders.cryptocom_order import CryptoComOrder
 
 

@@ -1,6 +1,5 @@
 """Tests for BitfinexTickerData container."""
 
-
 from bt_api_py.containers.tickers.bitfinex_ticker import BitfinexTickerData
 
 

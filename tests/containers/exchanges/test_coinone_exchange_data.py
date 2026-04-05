@@ -1,6 +1,5 @@
 """Tests for CoinoneExchangeData container."""
 
-
 from bt_api_py.containers.exchanges.coinone_exchange_data import CoinoneExchangeData
 
 

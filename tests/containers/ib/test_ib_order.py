@@ -1,6 +1,5 @@
 """Tests for IB order container."""
 
-
 from bt_api_py.containers.ib.ib_order import IB_ORDER_STATUS_MAP, IbOrderData
 from bt_api_py.containers.orders.order import OrderStatus
 

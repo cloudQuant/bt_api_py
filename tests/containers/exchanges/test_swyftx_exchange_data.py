@@ -1,6 +1,5 @@
 """Tests for SwyftxExchangeData container."""
 
-
 from bt_api_py.containers.exchanges.swyftx_exchange_data import SwyftxExchangeData
 
 

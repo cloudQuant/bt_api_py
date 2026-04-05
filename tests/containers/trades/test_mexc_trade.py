@@ -1,6 +1,5 @@
 """Tests for MexcTradeData container."""
 
-
 from bt_api_py.containers.trades.mexc_trade import MexcTradeData
 
 

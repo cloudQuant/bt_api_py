@@ -1,6 +1,5 @@
 """Tests for MexcOrderBookData container."""
 
-
 from bt_api_py.containers.orderbooks.mexc_orderbook import MexcOrderBookData
 
 

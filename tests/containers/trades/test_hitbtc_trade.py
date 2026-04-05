@@ -1,6 +1,5 @@
 """Tests for HitBtcRequestTradeData container."""
 
-
 from bt_api_py.containers.trades.hitbtc_trade import HitBtcRequestTradeData
 
 

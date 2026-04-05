@@ -1,6 +1,5 @@
 """Tests for LatokenExchangeData container."""
 
-
 from bt_api_py.containers.exchanges.latoken_exchange_data import LatokenExchangeData
 
 

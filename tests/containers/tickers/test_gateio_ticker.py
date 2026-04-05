@@ -1,6 +1,5 @@
 """Tests for GateioTickerData container."""
 
-
 from bt_api_py.containers.tickers.gateio_ticker import GateioTickerData
 
 

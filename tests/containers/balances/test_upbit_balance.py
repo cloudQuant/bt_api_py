@@ -1,6 +1,5 @@
 """Tests for UpbitBalanceData container."""
 
-
 from bt_api_py.containers.balances.upbit_balance import UpbitBalanceData
 
 

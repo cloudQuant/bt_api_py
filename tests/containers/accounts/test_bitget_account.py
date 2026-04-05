@@ -1,6 +1,5 @@
 """Tests for Bitget account container."""
 
-
 from bt_api_py.containers.accounts.bitget_account import (
     BitgetAccountData,
     BitgetSpotWssAccountData,

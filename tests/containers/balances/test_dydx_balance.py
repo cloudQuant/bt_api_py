@@ -1,6 +1,5 @@
 """Tests for DydxBalanceData container."""
 
-
 from bt_api_py.containers.balances.dydx_balance import DydxBalanceData
 
 

@@ -1,6 +1,5 @@
 """Tests for HyperliquidTickerData container."""
 
-
 from bt_api_py.containers.tickers.hyperliquid_ticker import HyperliquidTickerData
 
 

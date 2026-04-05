@@ -1,6 +1,5 @@
 """Tests for KrakenRequestTickerData container."""
 
-
 from bt_api_py.containers.tickers.kraken_ticker import KrakenRequestTickerData
 
 

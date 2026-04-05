@@ -1,6 +1,5 @@
 """Tests for IB bar container."""
 
-
 from bt_api_py.containers.ib.ib_bar import IbBarData
 
 

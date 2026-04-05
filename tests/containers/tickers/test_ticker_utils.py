@@ -1,6 +1,5 @@
 """Tests for ticker_utils module."""
 
-
 from bt_api_py.containers.tickers.ticker_utils import parse_float, parse_int
 
 

@@ -1,6 +1,5 @@
 """Tests for GateioTradeData container."""
 
-
 from bt_api_py.containers.trades.gateio_trade import GateioTradeData
 
 

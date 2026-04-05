@@ -1,7 +1,6 @@
 """Tests for gateway/process.py."""
 
 
-
 class TestProcess:
     """Tests for gateway process."""
 

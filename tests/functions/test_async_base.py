@@ -1,7 +1,6 @@
 """Tests for functions/async_base.py."""
 
 
-
 class TestAsyncBase:
     """Tests for async_base module."""
 

@@ -1,6 +1,5 @@
 """Tests for DydxOrderData container."""
 
-
 from bt_api_py.containers.orders.dydx_order import DydxOrderData
 
 

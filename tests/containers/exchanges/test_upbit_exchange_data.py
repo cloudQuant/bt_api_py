@@ -1,6 +1,5 @@
 """Tests for UpbitExchangeData container."""
 
-
 from bt_api_py.containers.exchanges.upbit_exchange_data import UpbitExchangeData
 
 

@@ -1,6 +1,5 @@
 """Tests for BitfinexOrderData container."""
 
-
 from bt_api_py.containers.orders.bitfinex_order import BitfinexOrderData
 
 

@@ -1,6 +1,5 @@
 """Tests for GeminiRequestBarData container."""
 
-
 from bt_api_py.containers.bars.gemini_bar import GeminiRequestBarData
 
 

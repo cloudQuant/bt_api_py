@@ -1,7 +1,6 @@
 """Tests for gateway/order_identity_map.py."""
 
 
-
 class TestOrderIdentityMap:
     """Tests for order identity map."""
 

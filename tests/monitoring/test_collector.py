@@ -1,7 +1,6 @@
 """Tests for monitoring/collector.py."""
 
 
-
 class TestCollector:
     """Tests for monitoring collector."""
 

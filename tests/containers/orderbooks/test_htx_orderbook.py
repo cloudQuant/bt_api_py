@@ -1,6 +1,5 @@
 """Tests for HtxRequestOrderBookData container."""
 
-
 from bt_api_py.containers.orderbooks.htx_orderbook import HtxRequestOrderBookData
 
 

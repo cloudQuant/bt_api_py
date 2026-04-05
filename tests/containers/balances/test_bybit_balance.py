@@ -1,6 +1,5 @@
 """Tests for Bybit balance containers."""
 
-
 from bt_api_py.containers.balances.bybit_balance import (
     BybitBalanceData,
     BybitSpotBalanceData,

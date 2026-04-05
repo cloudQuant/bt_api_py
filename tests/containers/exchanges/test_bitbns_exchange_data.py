@@ -1,6 +1,5 @@
 """Tests for BitbnsExchangeData container."""
 
-
 from bt_api_py.containers.exchanges.bitbns_exchange_data import BitbnsExchangeData
 
 

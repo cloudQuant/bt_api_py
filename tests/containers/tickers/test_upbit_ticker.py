@@ -1,6 +1,5 @@
 """Tests for UpbitTickerData container."""
 
-
 from bt_api_py.containers.tickers.upbit_ticker import UpbitTickerData
 
 

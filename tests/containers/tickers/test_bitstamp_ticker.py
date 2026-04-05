@@ -1,6 +1,5 @@
 """Tests for BitstampRequestTickerData container."""
 
-
 from bt_api_py.containers.tickers.bitstamp_ticker import BitstampRequestTickerData
 
 

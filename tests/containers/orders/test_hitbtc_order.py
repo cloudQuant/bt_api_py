@@ -1,6 +1,5 @@
 """Tests for HitBtcRequestOrderData container."""
 
-
 from bt_api_py.containers.orders.hitbtc_order import HitBtcRequestOrderData
 
 

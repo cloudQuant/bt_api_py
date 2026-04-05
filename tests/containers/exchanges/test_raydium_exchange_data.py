@@ -1,6 +1,5 @@
 """Tests for RaydiumExchangeData container."""
 
-
 from bt_api_py.containers.exchanges.raydium_exchange_data import RaydiumExchangeData
 
 

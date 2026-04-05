@@ -1,6 +1,5 @@
 """Tests for BitunixExchangeData container."""
 
-
 from bt_api_py.containers.exchanges.bitunix_exchange_data import BitunixExchangeData
 
 

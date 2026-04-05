@@ -1,7 +1,6 @@
 """Tests for monitoring/decorators.py."""
 
 
-
 class TestDecorators:
     """Tests for monitoring decorators."""
 

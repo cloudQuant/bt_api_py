@@ -1,6 +1,5 @@
 """Tests for MexcBalanceData container."""
 
-
 from bt_api_py.containers.balances.mexc_balance import (
     MexcAccountData,
     MexcBalanceData,

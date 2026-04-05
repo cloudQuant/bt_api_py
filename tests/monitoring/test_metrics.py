@@ -1,6 +1,5 @@
 """Tests for monitoring/metrics.py."""
 
-
 from bt_api_py.monitoring.metrics import MetricValue
 
 

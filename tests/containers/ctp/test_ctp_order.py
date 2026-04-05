@@ -1,6 +1,5 @@
 """Tests for CTP order container."""
 
-
 from bt_api_py.containers.ctp.ctp_order import (
     CTP_DIRECTION_MAP,
     CTP_OFFSET_MAP,

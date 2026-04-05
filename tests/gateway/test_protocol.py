@@ -1,7 +1,6 @@
 """Tests for gateway/protocol.py."""
 
 
-
 class TestProtocol:
     """Tests for gateway protocol."""
 

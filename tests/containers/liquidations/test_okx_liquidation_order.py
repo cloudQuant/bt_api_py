@@ -1,6 +1,5 @@
 """Tests for OkxLiquidationOrderData container."""
 
-
 from bt_api_py.containers.liquidations.okx_liquidation_order import OkxLiquidationOrderData
 
 

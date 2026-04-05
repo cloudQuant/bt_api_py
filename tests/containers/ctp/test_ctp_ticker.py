@@ -1,6 +1,5 @@
 """Tests for CTP ticker container."""
 
-
 from bt_api_py.containers.ctp.ctp_ticker import CtpTickerData
 
 

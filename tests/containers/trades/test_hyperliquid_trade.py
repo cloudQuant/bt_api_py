@@ -1,6 +1,5 @@
 """Tests for HyperliquidSpotWssTradeData container."""
 
-
 from bt_api_py.containers.trades.hyperliquid_trade import HyperliquidSpotWssTradeData
 
 

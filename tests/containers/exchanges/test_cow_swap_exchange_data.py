@@ -1,6 +1,5 @@
 """Tests for CowSwapExchangeData container."""
 
-
 from bt_api_py.containers.exchanges.cow_swap_exchange_data import CowSwapExchangeData
 
 
