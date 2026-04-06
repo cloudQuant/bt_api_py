@@ -1,4 +1,12 @@
-"""Pytest configuration and shared fixtures."""
+"""Repository-wide pytest bootstrap.
+
+This file intentionally stays at the repository root.
+
+Pytest only auto-discovers ``conftest.py`` by directory hierarchy, and this
+root-level hook needs to apply not only to ``tests/`` but also to explicit
+test runs under ``examples/network_tests``. For repo-wide fixtures and hooks,
+keeping a thin root bootstrap is the conventional placement.
+"""
 
 import os
 import sys

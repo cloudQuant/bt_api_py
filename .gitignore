@@ -107,6 +107,7 @@ _bmad-output/
 .cursor/
 .gemini/
 .hal/
+hal.config.yaml
 .kiro/
 .opencode/
 .windsurf/

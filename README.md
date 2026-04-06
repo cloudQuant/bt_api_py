@@ -261,7 +261,13 @@ print(type(message).__name__, message)
 
 - 根目录只保留包管理、文档入口和自动化配置，例如 `README.md`、`pyproject.toml`、`mkdocs.yml`、`Makefile`。
 - 测试与运维脚本统一收纳到 `scripts/`，例如 `scripts/run_tests.sh`。
-- 环境模板和样例配置统一收纳到 `configs/examples/`，例如 `configs/examples/security_compliance.env.example`。
+- 环境模板和样例配置统一收纳到 `configs/examples/`，例如 `configs/examples/security_compliance.env.example`、`configs/examples/hal.config.yaml.example`。
+
+### 哪些配置文件需要留在主目录
+
+- `pyproject.toml`、`mkdocs.yml`、`.readthedocs.yaml`、`.pre-commit-config.yaml` 这类文件通常需要留在根目录，因为对应工具默认就在仓库根层自动发现它们。
+- `conftest.py` 也建议保留在根目录。这个仓库除了 `tests/` 之外，还有 `examples/network_tests/` 这类显式运行的测试入口；根层 `conftest.py` 才能统一对这些路径生效。
+- 不会被仓库工具自动发现、只是给本地工具或环境使用的样例配置，不建议继续放在根目录，应该下沉到 `configs/examples/`。
 
 ## 文档
 
