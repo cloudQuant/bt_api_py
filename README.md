@@ -60,7 +60,7 @@
 ## 支持的交易所
 
 <!-- BEGIN GENERATED:EXCHANGE_SUPPORT_OVERVIEW -->
-> 测试状态建议通过 `bash scripts/run_exchange_tests.sh <name>` 复核，当前口径更新于 2026-03-16。
+> 测试状态建议通过 `bash scripts/run_exchange_tests.sh <name>` 复核，当前口径更新于 2026-04-06。
 
 ### ✅ 已完整支持（REST + WebSocket + 测试通过）
 
@@ -71,27 +71,14 @@
 | **CTP (中国期货)** | `CTP___FUTURE` | — | ✅ | — | — | ✅ 通过 | 中国期货市场（上期所、大商所、郑商所、中金所） |
 | **Interactive Brokers** | `IB_WEB___STK` / `IB_WEB___FUT` | — | — | — | ✅ | ✅ 通过 | 美股、期货（通过 Web API） |
 
-### 🔧 已实现 API（仍需继续验证或补齐能力）
+### 🔧 已实现 API（按当前主要缺口分组）
 
-| 交易所 | 类型 | 当前状态 | 测试状态 | 备注 |
-| -------- | -------- | -------- | -------- | -------- |
-| **OKX** | CEX | REST 已实现，WebSocket 部分实现 | ⚠️ 部分失败 | mock 目标路径问题（httpx），主体逻辑正确 |
-| **Bybit** | CEX | REST 已实现，WebSocket 待继续补齐 | ✅ 37 通过 | 建议补 WebSocket 覆盖后再提升状态 |
-| **Bitget** | CEX | REST 已实现，WebSocket 待继续补齐 | ✅ 45 通过 | 建议补 WebSocket 覆盖后再提升状态 |
-| **Kraken** | CEX | REST 已实现，WebSocket 待继续补齐 | ✅ 46 通过 | 建议补 WebSocket 覆盖后再提升状态 |
-| **Gate.io** | CEX | REST 已实现，WebSocket 待继续补齐 | ✅ 56 通过 | 建议补 WebSocket 覆盖后再提升状态 |
-| **Upbit** | CEX | REST 已实现，WebSocket 待继续补齐 | ✅ 101 通过 (4 skip) | 建议补 WebSocket 覆盖后再提升状态 |
-| **Crypto.com** | CEX | REST 已实现，WebSocket 待继续补齐 | ✅ 97 通过 | 建议补 WebSocket 覆盖后再提升状态 |
-| **HitBTC** | CEX | REST 已实现，WebSocket 待继续补齐 | ✅ 103 通过 (5 skip) | 建议补 WebSocket 覆盖后再提升状态 |
-| **Phemex** | CEX | REST 已实现，WebSocket 待继续补齐 | ✅ 65 通过 (5 skip) | 建议补 WebSocket 覆盖后再提升状态 |
-| **Gemini** | CEX | REST 已实现，WebSocket 待继续补齐 | ✅ 20 通过 | 建议补 WebSocket 覆盖后再提升状态 |
-| **KuCoin** | CEX | REST 已实现，仍需补稳定性验证 | ⚠️ 16 失败 / 47 通过 | mock 目标路径问题 |
-| **MEXC** | CEX | REST 已实现，仍需补稳定性验证 | ⚠️ 11 失败 / 42 通过 | mock 目标路径问题 |
-| **Bitfinex** | CEX | REST 已实现，仍需补稳定性验证 | ⚠️ 13 失败 / 43 通过 | mock 目标路径问题 |
-| **Coinbase** | CEX | REST 已实现，仍需补稳定性验证 | ⚠️ 19 失败 / 45 通过 | 部分 import 路径变更 |
-| **Hyperliquid** | DEX | 实现存在，但当前仓库测试资产不足以提升到完整支持 | ⚠️ 待补验证 | 当前仓库缺少可执行的 Hyperliquid 测试文件 |
-| **dYdX** | DEX | 实现存在，但当前仓库测试资产不足以提升到完整支持 | ⚠️ 待补验证 | 当前仓库缺少可执行的 dYdX 测试文件 |
-| **BYDFi** | CEX | REST 已实现，仍需补稳定性验证 | ⚠️ 1 失败 / 17 通过 | JSON 解析 bug |
+首页只展示分组摘要；逐交易所测试状态见 [详细状态页](docs/exchanges/EXCHANGE_STATUS.md)。
+
+- `OKX`: REST 已实现，WebSocket 部分实现。当前主要工作是修正现有 mock 路径问题，并补齐 WebSocket 覆盖。
+- `Bybit`、`Bitget`、`Kraken`、`Gate.io`、`Upbit`、`Crypto.com`、`HitBTC`、`Phemex`、`Gemini`: REST 已实现。当前主要缺口是 WebSocket 能力、实时订阅适配和对应测试覆盖。
+- `KuCoin`、`MEXC`、`Bitfinex`、`Coinbase`、`BYDFi`: REST 已实现。当前主要工作是修复已知失败项、兼容性问题，并补稳定性回归测试。
+- `Hyperliquid`、`dYdX`: 实现存在，但仓库内测试资产仍不足。补齐可执行测试文件和验证资产后，再提升到更高支持等级。
 
 ### 📋 已注册（基础框架就绪）
 

@@ -35,6 +35,52 @@ def _render_table(headers: list[str], rows: list[list[str]]) -> str:
     )
 
 
+def _join_exchange_names(items: list[dict]) -> str:
+    return "、".join(f"`{item['name']}`" for item in items)
+
+
+def _group_implemented_api(implemented: list[dict]) -> list[tuple[str, str]]:
+    okx = [item for item in implemented if item["name"] == "OKX"]
+    websocket_gap = [item for item in implemented if "WebSocket 待继续补齐" in item["status"]]
+    stability_gap = [item for item in implemented if "仍需补稳定性验证" in item["status"]]
+    asset_gap = [
+        item
+        for item in implemented
+        if "测试资产不足" in item["status"] or item["test_status"] == "⚠️ 待补验证"
+    ]
+
+    groups: list[tuple[str, str]] = []
+    if okx:
+        groups.append(
+            (
+                _join_exchange_names(okx),
+                "REST 已实现，WebSocket 部分实现。当前主要工作是修正现有 mock 路径问题，并补齐 WebSocket 覆盖。",
+            )
+        )
+    if websocket_gap:
+        groups.append(
+            (
+                _join_exchange_names(websocket_gap),
+                "REST 已实现。当前主要缺口是 WebSocket 能力、实时订阅适配和对应测试覆盖。",
+            )
+        )
+    if stability_gap:
+        groups.append(
+            (
+                _join_exchange_names(stability_gap),
+                "REST 已实现。当前主要工作是修复已知失败项、兼容性问题，并补稳定性回归测试。",
+            )
+        )
+    if asset_gap:
+        groups.append(
+            (
+                _join_exchange_names(asset_gap),
+                "实现存在，但仓库内测试资产仍不足。补齐可执行测试文件和验证资产后，再提升到更高支持等级。",
+            )
+        )
+    return groups
+
+
 def render_readme(data: dict) -> str:
     meta = data["metadata"]
     full = data["fully_supported"]
@@ -55,16 +101,7 @@ def render_readme(data: dict) -> str:
         ]
         for item in full
     ]
-    implemented_rows = [
-        [
-            f"**{item['name']}**",
-            item["market_type"],
-            item["status"],
-            item["test_status"],
-            item["note"],
-        ]
-        for item in implemented
-    ]
+    implemented_groups = _group_implemented_api(implemented)
     return "\n".join(
         [
             f"> 测试状态建议通过 `{meta['verification_command']}` 复核，当前口径更新于 {meta['last_updated']}。",
@@ -76,12 +113,11 @@ def render_readme(data: dict) -> str:
                 full_rows,
             ),
             "",
-            "### 🔧 已实现 API（仍需继续验证或补齐能力）",
+            "### 🔧 已实现 API（按当前主要缺口分组）",
             "",
-            _render_table(
-                ["交易所", "类型", "当前状态", "测试状态", "备注"],
-                implemented_rows,
-            ),
+            "首页只展示分组摘要；逐交易所测试状态见 [详细状态页](docs/exchanges/EXCHANGE_STATUS.md)。",
+            "",
+            *[f"- {names}: {description}" for names, description in implemented_groups],
             "",
             "### 📋 已注册（基础框架就绪）",
             "",
@@ -103,19 +139,18 @@ def render_docs_index(data: dict) -> str:
         [f"**{item['name']}**", item["codes"], item["spot"], item["contract"], item["options"], item["stocks"], item["test_status"]]
         for item in full
     ]
-    implemented_rows = [
-        [item["name"], item["market_type"], item["test_status"], item["note"]]
-        for item in implemented
-    ]
+    implemented_groups = _group_implemented_api(implemented)
     return "\n".join(
         [
             "### ✅ 已完整支持（REST + WebSocket + 测试通过）",
             "",
             _render_table(["交易所", "代码", "现货", "合约", "期权", "股票", "测试状态"], full_rows),
             "",
-            "### 🔧 已实现 API（仍需继续验证或补齐能力）",
+            "### 🔧 已实现 API（按当前主要缺口分组）",
             "",
-            _render_table(["交易所", "类型", "测试状态", "备注"], implemented_rows),
+            "文档首页只展示摘要；逐交易所状态见 [交易所实现状态](exchanges/EXCHANGE_STATUS.md)。",
+            "",
+            *[f"- {names}: {description}" for names, description in implemented_groups],
             "",
             "### 📋 已注册（基础框架就绪）",
             "",

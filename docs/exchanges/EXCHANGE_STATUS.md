@@ -1,7 +1,7 @@
 <!-- BEGIN GENERATED:EXCHANGE_SUPPORT_STATUS -->
 # 交易所实现状态
 
-**最后更新：** 2026-03-16  
+**最后更新：** 2026-04-06  
 **版本：** 0.15
 
 本文档由 `docs/data/exchange_support_matrix.json` 生成，用于统一 README、文档首页和状态页的交易所支持口径。

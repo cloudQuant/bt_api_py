@@ -190,6 +190,7 @@ nav:
 
   # ── 交易所原生 API 文档 ────────────────────────────────────────
   - 交易所:
+      - 交易所状态: exchanges/EXCHANGE_STATUS.md
       - Binance:
           - 集成指南: exchanges/binance.md
           - 概览: exchanges/binance/index.md
@@ -274,7 +275,6 @@ exclude_docs: |
   security/
   # Exchange docs not in nav
   exchanges/EXCHANGE_CAPABILITY_MATRIX.md
-  exchanges/EXCHANGE_STATUS.md
   exchanges/binance/algo/future-algo/twap-new-order.md
   exchanges/binance/algo/spot-algo/fee-structure.md
   # Plans
