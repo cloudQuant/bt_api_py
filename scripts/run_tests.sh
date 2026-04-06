@@ -1,6 +1,6 @@
 #!/bin/bash
 # Run tests script for bt_api_py
-# Usage: ./run_tests.sh [OPTIONS]
+# Usage: ./scripts/run_tests.sh [OPTIONS]
 
 set -eo pipefail
 
@@ -55,7 +55,7 @@ while [[ $# -gt 0 ]]; do
             fi
             ;;
         -h|--help)
-            echo "Usage: ./run_tests.sh [OPTIONS]"
+            echo "Usage: ./scripts/run_tests.sh [OPTIONS]"
             echo ""
             echo "Options:"
             echo "  -c, --ctp              Run CTP related tests (default: false)"
@@ -71,12 +71,12 @@ while [[ $# -gt 0 ]]; do
             echo "  unit, integration, slow, network, ctp, binance, okx, ib"
             echo ""
             echo "Examples:"
-            echo "  ./run_tests.sh                      # Run all tests (no CTP), 8 processes"
-            echo "  ./run_tests.sh --fast               # Run fast tests only (no network/slow)"
-            echo "  ./run_tests.sh --ctp --cov          # Run with CTP and coverage"
-            echo "  ./run_tests.sh -m unit               # Run only unit tests"
-            echo "  ./run_tests.sh -m 'not slow' --cov   # Fast tests with coverage"
-            echo "  ./run_tests.sh --html                # Generate HTML report"
+            echo "  ./scripts/run_tests.sh                      # Run all tests (no CTP), 8 processes"
+            echo "  ./scripts/run_tests.sh --fast               # Run fast tests only (no network/slow)"
+            echo "  ./scripts/run_tests.sh --ctp --cov          # Run with CTP and coverage"
+            echo "  ./scripts/run_tests.sh -m unit              # Run only unit tests"
+            echo "  ./scripts/run_tests.sh -m 'not slow' --cov  # Fast tests with coverage"
+            echo "  ./scripts/run_tests.sh --html               # Generate HTML report"
             exit 0
             ;;
         *)

@@ -15,7 +15,6 @@ cd bt_api_py
 
 # 安装依赖
 
-pip install -r requirements.txt
 pip install -e ".[dev]"
 
 # 运行测试

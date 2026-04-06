@@ -150,6 +150,9 @@ git clone https://github.com/cloudQuant/bt_api_py
 cd bt_api_py
 python -m pip install --upgrade pip
 pip install -e .
+
+# 如果你要参与开发
+pip install -e ".[dev]"
 ```
 
 ### 可选依赖
@@ -262,8 +265,16 @@ print(type(message).__name__, message)
 - `bt_api_py/`: 核心包，包含 `BtApi`、注册表、数据容器、feeds、gateway、websocket 和风险管理模块。
 - `tests/`: 单元测试、兼容性测试、网关测试和 WebSocket 测试。
 - `docs/`: MkDocs 文档站点，按 Getting Started / Guides / Reference / Explanation 组织。
+- `scripts/`: 开发和维护脚本，统一放置测试入口、文档生成和诊断脚本。
+- `configs/`: 配置模板和示例文件，避免把环境样例继续堆在主目录。
 - `examples/`: 网络测试和使用示例。
 - `.github/workflows/`: CI、文档部署和发布流程。
+
+### 主目录约定
+
+- 根目录只保留包管理、文档入口和自动化配置，例如 `README.md`、`pyproject.toml`、`mkdocs.yml`、`Makefile`。
+- 测试与运维脚本统一收纳到 `scripts/`，例如 `scripts/run_tests.sh`。
+- 环境模板和样例配置统一收纳到 `configs/examples/`，例如 `configs/examples/security_compliance.env.example`。
 
 ## 文档
 
@@ -296,6 +307,9 @@ print(type(message).__name__, message)
 # 安装开发依赖
 pip install -e ".[dev]"
 
+# 查看仓库测试脚本帮助
+./scripts/run_tests.sh --help
+
 # 与 CI smoke suite 保持一致
 pytest tests/test_bt_api_quality.py \
   tests/test_event_bus.py \
@@ -313,6 +327,9 @@ mypy bt_api_py --ignore-missing-imports
 # 完整基线测试建议把安全相关依赖一起装上
 # 其中 security extra 包含 PyJWT、cryptography、bcrypt
 pip install -e ".[dev,security]"
+
+# 可选：使用仓库脚本跑更常见的本地测试组合
+./scripts/run_tests.sh -m "not slow and not network"
 
 # 运行非网络、非集成基线测试
 pytest tests -m "not network and not integration and not performance and not e2e" -q
@@ -378,7 +395,7 @@ pytest tests -m ctp -v
 框架内置了速率限制器 (`rate_limiter.py`)，会自动根据各交易所的限制进行请求控制。您也可以自定义限流策略。
 
 ### Q: Security Compliance 模块需要额外安装什么？
-如果你要使用 `security_compliance` 相关能力，或运行完整基线测试中的安全测试，请安装 `bt_api_py[security]`。其中包含 `PyJWT`、`cryptography` 和 `bcrypt`。
+如果你要使用 `security_compliance` 相关能力，或运行完整基线测试中的安全测试，请安装 `bt_api_py[security]`。其中包含 `PyJWT`、`cryptography` 和 `bcrypt`。仓库里的环境模板位于 `configs/examples/security_compliance.env.example`。
 
 ### Q: 如何获取技术支持？
 可以通过以下方式获取帮助：

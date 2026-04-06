@@ -8,7 +8,7 @@
 
 ### 系统要求
 
-- Python 3.11+
+- Python 3.9-3.14
 - 支持平台：Linux (x86_64)、Windows (x64)、macOS (arm64/x86_64)
 
 ### 安装
@@ -23,8 +23,7 @@ pip install bt_api_py
 
 git clone https://github.com/cloudQuant/bt_api_py
 cd bt_api_py
-pip install -r requirements.txt
-pip install .
+pip install -e .
 
 ```
 

@@ -205,7 +205,7 @@ bt_api_py/
 ├── pyproject.toml         # 项目配置
 ├── setup.py               # 安装脚本
 ├── Makefile               # 常用命令
-└── run_tests.sh           # 测试脚本
+└── scripts/run_tests.sh           # 测试脚本
 ```
 
 ### 代码统计

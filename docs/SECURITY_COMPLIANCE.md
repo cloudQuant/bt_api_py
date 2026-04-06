@@ -33,7 +33,7 @@ pip install cryptography pyotp boto3 hvac qrcode[pil] cbor2
 
 ```bash
 # Copy configuration template
-cp security_compliance.env.example .env
+cp configs/examples/security_compliance.env.example .env
 
 # Edit configuration with your security settings
 nano .env
@@ -475,17 +475,13 @@ schedule.every().day.at("08:00").do(daily_compliance_check)
 ```dockerfile
 FROM python:3.11-slim
 
+WORKDIR /app
+COPY . /app
+RUN pip install ".[security]"
+
 # Security best practices
 RUN adduser --disabled-password --gecos '' appuser
 USER appuser
-
-# Install security dependencies
-COPY requirements.txt .
-RUN pip install -r requirements.txt
-
-# Copy application with security
-COPY . /app
-WORKDIR /app
 
 # Run with security framework
 CMD ["python", "-m", "bt_api_py.security_compliance.server"]

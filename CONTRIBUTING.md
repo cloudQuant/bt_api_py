@@ -18,7 +18,6 @@ source .venv/bin/activate  # On Windows: .venv\Scripts\activate
 make install-dev
 # Or manually:
 pip install -e ".[dev]"
-pip install -r requirements.txt
 ```
 
 ### 2. Install Pre-commit Hooks (Recommended)
@@ -58,9 +57,9 @@ make test-cov          # With coverage report
 make test-html         # Generate HTML report
 
 # Direct script usage
-./run_tests.sh --help  # See all options
-./run_tests.sh --cov   # Run with coverage
-./run_tests.sh -m unit # Run specific markers
+./scripts/run_tests.sh --help  # See all options
+./scripts/run_tests.sh --cov   # Run with coverage
+./scripts/run_tests.sh -m unit # Run specific markers
 ```
 
 ### Test Markers
@@ -157,8 +156,9 @@ bt_api_py/
 │   ├── containers/     # Container tests
 │   └── ...
 ├── docs/               # Documentation
+├── scripts/            # Helper scripts and test runners
 ├── Makefile            # Common commands
-└── run_tests.sh        # Test runner script
+└── pyproject.toml      # Packaging and dependency definition
 ```
 
 ## Pull Request Process

@@ -1,6 +1,6 @@
 # 安装指南
 
-bt_api_py 支持 Python 3.11 及以上版本。
+bt_api_py 支持 Python 3.9 到 3.14。
 
 ## 从 PyPI 安装
 
@@ -14,8 +14,7 @@ pip install bt_api_py
 ```bash
 git clone <https://github.com/cloudQuant/bt_api_py>
 cd bt_api_py
-pip install -r requirements.txt
-pip install .
+pip install -e .
 
 ```
 
@@ -24,7 +23,7 @@ pip install .
 如果你需要参与开发，请安装开发依赖：
 
 ```bash
-pip install -r requirements-dev.txt
+pip install -e ".[dev]"
 
 ```
 

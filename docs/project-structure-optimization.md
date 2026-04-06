@@ -152,7 +152,7 @@ bt_api_py/
 │   ├── core/
 │   └── ...
 ├── scripts/                    # 核心脚本
-│   ├── run_tests.sh
+│   ├── scripts/run_tests.sh
 │   ├── generate_docs.py
 │   └── ...
 ├── examples/                   # 示例代码

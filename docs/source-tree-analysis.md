@@ -176,7 +176,7 @@ bt_api_py/                              # 项目根目录
 ├── pyproject.toml                      # 项目配置 [核心配置]
 ├── setup.py                            # 安装脚本 [构建配置]
 ├── Makefile                            # 常用命令 [开发工具]
-├── run_tests.sh                        # 测试运行脚本 [测试工具]
+├── scripts/run_tests.sh                        # 测试运行脚本 [测试工具]
 ├── conftest.py                         # pytest全局配置
 ├── README.md                           # 项目说明 [主要文档]
 ├── CONTRIBUTING.md                     # 贡献指南 [开发指南]

@@ -19,7 +19,7 @@ bt_api_py is a unified multi-exchange trading API framework supporting 73+ excha
 
 ```bash
 # Run all tests (excluding CTP) - DEFAULT
-./run_tests.sh
+./scripts/run_tests.sh
 # or: make test
 
 # Run single test file
@@ -35,11 +35,11 @@ pytest tests -m binance -v                 # Binance-specific tests
 pytest tests -m ctp -v                     # CTP tests
 
 # Run tests in parallel (8 workers by default)
-./run_tests.sh -p 8
+./scripts/run_tests.sh -p 8
 # or: pytest tests -n 8
 
 # Run tests with coverage
-./run_tests.sh --cov
+./scripts/run_tests.sh --cov
 # or: make test-cov
 # View report: open htmlcov/index.html
 
@@ -49,7 +49,7 @@ make test-fast          # Exclude slow/network tests
 make test-integration   # Integration tests only
 
 # Generate HTML test report
-./run_tests.sh --html
+./scripts/run_tests.sh --html
 # or: make test-html
 ```
 
@@ -408,7 +408,7 @@ bt_api_py/
 │   └── test_*.py         # Core tests
 ├── docs/                  # Documentation (MkDocs)
 ├── Makefile              # Convenient commands
-├── run_tests.sh          # Test runner script
+├── scripts/run_tests.sh          # Test runner script
 └── pyproject.toml        # Project configuration
 ```
 
@@ -416,7 +416,7 @@ bt_api_py/
 
 - **pyproject.toml** - Project metadata, dependencies, tool configs
 - **Makefile** - Convenient command shortcuts
-- **run_tests.sh** - Advanced test runner with logging
+- **scripts/run_tests.sh** - Advanced test runner with logging
 - **.pre-commit-config.yaml** - Pre-commit hooks configuration
 - **conftest.py** - Pytest fixtures and configuration
 

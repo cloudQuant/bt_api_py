@@ -2,7 +2,7 @@
 
 生成日期：2026-03-07  
 项目类型：Python Library  
-Python版本：3.11+
+Python版本：3.9-3.14
 
 ---
 
@@ -11,7 +11,7 @@ Python版本：3.11+
 ### 1. 环境要求
 
 **必需：**
-- Python 3.11+ (支持3.11, 3.12, 3.13)
+- Python 3.9+ (当前兼容目标: 3.9, 3.10, 3.11, 3.12, 3.13, 3.14)
 - pip 或 uv (包管理器)
 - Git
 
@@ -36,7 +36,6 @@ source .venv/bin/activate  # Linux/macOS
 make install-dev
 # 或手动安装
 pip install -e ".[dev]"
-pip install -r requirements.txt
 ```
 
 ### 3. 验证安装
@@ -138,22 +137,22 @@ make check
 # 运行所有测试（排除CTP）
 make test
 # 或
-./run_tests.sh
+./scripts/run_tests.sh
 
 # 快速测试（排除slow和network）
 make test-fast
 # 或
-./run_tests.sh -m "not slow and not network"
+./scripts/run_tests.sh -m "not slow and not network"
 
 # 单元测试
 make test-unit
 # 或
-./run_tests.sh -m "unit"
+./scripts/run_tests.sh -m "unit"
 
 # 集成测试
 make test-integration
 # 或
-./run_tests.sh -m "integration"
+./scripts/run_tests.sh -m "integration"
 ```
 
 #### 测试覆盖率
@@ -162,7 +161,7 @@ make test-integration
 # 带覆盖率报告
 make test-cov
 # 或
-./run_tests.sh --cov
+./scripts/run_tests.sh --cov
 
 # 查看HTML报告
 open htmlcov/index.html
@@ -174,7 +173,7 @@ open htmlcov/index.html
 # 生成HTML报告
 make test-html
 # 或
-./run_tests.sh --html --cov
+./scripts/run_tests.sh --html --cov
 
 # 报告位置
 # logs/test_YYYYMMDD_HHMMSS.log
@@ -185,13 +184,13 @@ make test-html
 
 ```bash
 # 使用8个worker（默认）
-./run_tests.sh
+./scripts/run_tests.sh
 
 # 自定义并行数
-./run_tests.sh -p 16
+./scripts/run_tests.sh -p 16
 
 # 禁用并行
-./run_tests.sh -p 0
+./scripts/run_tests.sh -p 0
 ```
 
 #### 特定测试
@@ -217,7 +216,7 @@ pytest tests -m "not slow and not network" -v
 # 运行CTP测试（需要CTP环境）
 make test-ctp
 # 或
-./run_tests.sh --ctp
+./scripts/run_tests.sh --ctp
 ```
 
 ### 测试标记

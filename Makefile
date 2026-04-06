@@ -42,29 +42,28 @@ install:
 
 install-dev:
 	pip install -e ".[dev]"
-	pip install -r requirements.txt
 
 # Testing
 test:
-	./run_tests.sh
+	./scripts/run_tests.sh
 
 test-cov:
-	./run_tests.sh --cov
+	./scripts/run_tests.sh --cov
 
 test-fast:
-	./run_tests.sh -m "not slow and not network"
+	./scripts/run_tests.sh -m "not slow and not network"
 
 test-unit:
-	./run_tests.sh -m "unit"
+	./scripts/run_tests.sh -m "unit"
 
 test-integration:
-	./run_tests.sh -m "integration"
+	./scripts/run_tests.sh -m "integration"
 
 test-ctp:
-	./run_tests.sh --ctp
+	./scripts/run_tests.sh --ctp
 
 test-html:
-	./run_tests.sh --html --cov
+	./scripts/run_tests.sh --html --cov
 
 test-performance:
 	@echo "Running performance tests..."

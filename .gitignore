@@ -79,6 +79,7 @@ cover/
 # Environments
 .env
 .venv
+.venv*/
 env/
 venv/
 
@@ -100,10 +101,12 @@ _bmad/
 _bmad-output/
 .agent/
 .agents/
+.benchmarks/
 .claude/
 .claude-skills/
 .cursor/
 .gemini/
+.hal/
 .kiro/
 .opencode/
 .windsurf/
@@ -122,4 +125,6 @@ demos/*.parquet
 */logs/
 log/
 logs/
+test.log
+tmp_keys/
 configs/ibkr_cookies.json

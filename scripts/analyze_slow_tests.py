@@ -76,7 +76,7 @@ def analyze_tests(tests: List[Dict[str, Any]], threshold: float = 1.0) -> None:
 
     if len(slow_tests) > 10:
         print("• Consider marking slow tests with @pytest.mark.slow")
-        print("• Run slow tests separately: ./run_tests.sh -m 'not slow'")
+        print("• Run slow tests separately: ./scripts/run_tests.sh -m 'not slow'")
 
     network_tests = [
         t
