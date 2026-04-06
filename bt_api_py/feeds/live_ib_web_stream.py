@@ -29,6 +29,12 @@ def _is_local_base_url(base_url: str) -> bool:
     return host in {"localhost", "127.0.0.1"}
 
 
+def _normalize_ws_message(message: Any) -> str:
+    if isinstance(message, (bytes, bytearray)):
+        return bytes(message).decode("utf-8", errors="replace")
+    return str(message)
+
+
 class IbWebDataStream(BaseDataStream):
     """IB Web API 市场数据 WebSocket 流
 
@@ -162,17 +168,18 @@ class IbWebDataStream(BaseDataStream):
     def _on_message(self, ws, message) -> Any:
         """WebSocket 消息处理"""
         try:
+            text = _normalize_ws_message(message)
             # IB WebSocket 消息格式可能是 JSON 或特殊格式
-            if message.startswith("{") or message.startswith("["):
-                data = json.loads(message)
+            if text.startswith("{") or text.startswith("["):
+                data = json.loads(text)
                 self._process_message(data)
-            elif message.startswith("hb"):
+            elif text.startswith("hb"):
                 # 心跳响应
                 pass
             else:
-                self.logger.debug(f"Unknown WS message: {message[:100]}")
+                self.logger.debug(f"Unknown WS message: {text[:100]}")
         except json.JSONDecodeError:
-            self.logger.debug(f"Non-JSON WS message: {message[:100]}")
+            self.logger.debug(f"Non-JSON WS message: {text[:100]}")
         except Exception as e:
             self.logger.warning(f"WS message processing error: {e}")
 
@@ -379,15 +386,16 @@ class IbWebAccountStream(BaseDataStream):
 
     def _on_message(self, ws, message) -> Any:
         try:
-            if message.startswith("{") or message.startswith("["):
-                data = json.loads(message)
+            text = _normalize_ws_message(message)
+            if text.startswith("{") or text.startswith("["):
+                data = json.loads(text)
                 self._process_message(data)
-            elif message.startswith("hb"):
+            elif text.startswith("hb"):
                 pass
             else:
-                self.logger.debug(f"Unknown account WS message: {message[:100]}")
+                self.logger.debug(f"Unknown account WS message: {text[:100]}")
         except json.JSONDecodeError:
-            self.logger.debug(f"Non-JSON account WS message: {message[:100]}")
+            self.logger.debug(f"Non-JSON account WS message: {text[:100]}")
         except Exception as e:
             self.logger.warning(f"Account WS message error: {e}")
 

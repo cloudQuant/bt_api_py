@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import datetime
+import os
 import random
 import ssl
 import threading
@@ -12,6 +13,18 @@ import websocket
 
 from bt_api_py.functions.utils import get_project_log_path
 from bt_api_py.logging_factory import get_logger
+
+
+_PROXY_ENV_KEYS = (
+    "HTTPS_PROXY",
+    "https_proxy",
+    "HTTP_PROXY",
+    "http_proxy",
+    "ALL_PROXY",
+    "all_proxy",
+    "SOCKS_PROXY",
+    "socks_proxy",
+)
 
 # from bt_api_py.containers.exchanges.binance_swap_exchange_data import BinanceExchangeData
 # from bt_api_py.containers.exchanges.okx_swap_exchange_data import OkxSwapExchangeData
@@ -170,6 +183,23 @@ class MyWebsocketApp:
             f"===== {time.strftime('%Y-%m-%d %H:%M:%S')} Websocket Disconnected ====="
         )
 
+    def _clear_proxy_env(self) -> None:
+        for key in _PROXY_ENV_KEYS:
+            os.environ.pop(key, None)
+
+    def _create_websocket_app(self) -> websocket.WebSocketApp:
+        if self.wss_url is None:
+            raise ValueError("wss_url is required for WebSocket connection")
+        return websocket.WebSocketApp(
+            self.wss_url,
+            on_open=self.on_open,
+            on_message=self.on_message,
+            on_error=self.on_error,
+            on_close=self.on_close,
+            on_ping=self.on_ping,
+            on_pong=self.on_pong,
+        )
+
     def run(self):
         # websocket.enableTrace(True)  # 调试
         # 设置超时
@@ -186,7 +216,6 @@ class MyWebsocketApp:
             on_ping=self.on_ping,
             on_pong=self.on_pong,
         )
-        # print("初始化run成功, self.wss_url=", self.wss_url)
         while True:
             # 检查最大重连次数
             if (
@@ -210,6 +239,9 @@ class MyWebsocketApp:
                     run_kwargs["proxy_type"] = "http"
                     if self.http_proxy_port:
                         run_kwargs["http_proxy_port"] = self.http_proxy_port
+                elif self.http_proxy_host == "":
+                    self._clear_proxy_env()
+                    run_kwargs["http_no_proxy"] = ["*"]
                 if self.ws is not None:
                     self.ws.run_forever(**run_kwargs)
                 self.wss_logger.info("----------wss running----------------")
