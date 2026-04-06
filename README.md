@@ -154,281 +154,116 @@ pip install -e .
 
 ### 可选依赖
 
-```bash
-# 安装所有可选依赖
-pip install bt_api_py[all]
+| Extra | 用途 |
+|------|------|
+| `bt_api_py[all]` | 安装所有可选依赖 |
+| `bt_api_py[dev]` | `pytest`、`ruff`、`mypy` 等开发工具 |
+| `bt_api_py[security]` | `security_compliance`、OAuth/JWT、加密、密码哈希 |
+| `bt_api_py[ib]` | Interactive Brokers 原生支持 |
+| `bt_api_py[ib_web]` | IB Web API 和浏览器自动化相关依赖 |
+| `bt_api_py[visualization]` | 图表与可视化工具 |
 
-# 或按需安装
-pip install bt_api_py[dev]          # 开发工具
-pip install bt_api_py[ib]           # Interactive Brokers 支持
-pip install bt_api_py[ib_web]       # IB Web API 支持
-pip install bt_api_py[visualization] # 可视化工具
+```bash
+pip install bt_api_py[all]
+pip install bt_api_py[dev]
+pip install bt_api_py[security]
 ```
 
 ## 快速开始
 
-### 统一多交易所 API
+### 同步行情查询
 
 ```python
 from bt_api_py import BtApi
-
-# 配置多个交易所
 
 exchange_kwargs = {
     "BINANCE___SPOT": {
         "api_key": "your_api_key",
         "secret": "your_secret",
         "testnet": True,
-    },
-    "OKX___SPOT": {
-        "api_key": "your_api_key",
-        "secret": "your_secret",
-        "passphrase": "your_passphrase",
-    },
-    "IB_WEB___STK": {
-        "auth_config": {
-            "account_id": "your_account_id",
-        }
-    },
-}
-
-# 创建统一 API 实例
-
-api = BtApi(exchange_kwargs=exchange_kwargs)
-
-# 获取行情（统一接口）
-
-ticker = api.get_ticker("BINANCE___SPOT", "BTCUSDT")
-print(f"BTC 价格: {ticker.last_price}")
-
-# 下单交易（统一接口）
-
-order = api.limit_order(
-    exchange="BINANCE___SPOT",
-    symbol="BTCUSDT",
-    side="buy",
-    quantity=0.001,
-    price=50000
-)
-
-```
-
-### CTP 期货交易
-
-```python
-from bt_api_py import BtApi, CtpAuthConfig
-
-exchange_kwargs = {
-    "CTP___FUTURE": {
-        "auth_config": CtpAuthConfig(
-            broker_id="9999",
-            user_id="your_user_id",
-            password="your_password",
-            md_front="tcp://180.168.146.187:10211",
-            td_front="tcp://180.168.146.187:10201",
-        )
     }
 }
 
 api = BtApi(exchange_kwargs=exchange_kwargs)
-ticker = api.get_ticker("CTP___FUTURE", "IF2506")
-
+ticker = api.get_tick("BINANCE___SPOT", "BTCUSDT")
+print(ticker)
 ```
 
-### WebSocket 订阅
+### 统一下单
 
 ```python
-def on_ticker(ticker):
-    print(f"价格更新: {ticker.last_price}")
-
-# 订阅行情推送
-api.subscribe_ticker("BINANCE___SPOT", "BTCUSDT", on_ticker)
-
-# 订阅订单簿
-def on_orderbook(orderbook):
-    print(f"买一: {orderbook.bids[0]}, 卖一: {orderbook.asks[0]}")
-
-api.subscribe_orderbook("BINANCE___SPOT", "BTCUSDT", on_orderbook)
-
-# 启动事件循环
-api.run()
+order = api.make_order(
+    exchange_name="BINANCE___SPOT",
+    symbol="BTCUSDT",
+    volume=0.001,
+    price=50000,
+    order_type="limit",
+)
+print(order)
 ```
 
-### 异步 API 使用
+### 异步请求
 
 ```python
 import asyncio
 from bt_api_py import BtApi
 
 async def main():
-    api = BtApi(exchange_kwargs=exchange_kwargs)
+    api = BtApi(
+        exchange_kwargs={
+            "BINANCE___SPOT": {
+                "api_key": "your_api_key",
+                "secret": "your_secret",
+                "testnet": True,
+            }
+        }
+    )
 
-    # 异步获取多个交易所行情
-    tasks = [
-        api.async_get_ticker("BINANCE___SPOT", "BTCUSDT"),
-        api.async_get_ticker("OKX___SPOT", "BTC-USDT"),
-    ]
-    results = await asyncio.gather(*tasks)
-
-    for ticker in results:
-        print(f"{ticker.symbol}: {ticker.last_price}")
+    ticker = await api.async_get_tick("BINANCE___SPOT", "BTCUSDT")
+    print(ticker)
 
 asyncio.run(main())
 ```
 
-## 项目结构
+### WebSocket 订阅
 
-```
-bt_api_py/
-├── bt_api_py/                  # 核心包
-│   ├── __init__.py             # 包入口，导出主要类
-│   ├── bt_api.py               # 统一 API 入口 (BtApi 类)
-│   ├── registry.py             # 交易所注册表 (ExchangeRegistry)
-│   ├── event_bus.py            # 事件总线 (EventBus)
-│   ├── auth_config.py          # 认证配置类
-│   ├── exceptions.py           # 异常体系
-│   ├── error.py                # 错误基类和核心错误
-│   ├── cache.py                # 缓存管理
-│   ├── rate_limiter.py         # 速率限制
-│   ├── connection_pool.py      # 连接池管理
-│   ├── config_loader.py        # 配置加载器
-│   ├── instrument_manager.py   # 合约管理器
-│   ├── websocket_manager.py    # WebSocket 管理器
-│   │
-│   ├── containers/             # 数据容器 (20+ 种类型)
-│   │   ├── accounts/           # 账户数据
-│   │   ├── balances/           # 余额数据
-│   │   ├── bars/               # K 线数据
-│   │   ├── tickers/            # 行情数据
-│   │   ├── orderbooks/         # 深度数据
-│   │   ├── orders/             # 订单数据
-│   │   ├── positions/          # 持仓数据
-│   │   ├── trades/             # 成交数据
-│   │   ├── symbols/            # 标的信息
-│   │   ├── fundingrates/       # 资金费率
-│   │   ├── markprices/         # 标记价格
-│   │   ├── liquidations/       # 强平数据
-│   │   └── exchanges/          # 交易所配置容器
-│   │
-│   ├── feeds/                  # 交易所适配层
-│   │   ├── abstract_feed.py    # 统一交易所协议
-│   │   ├── feed.py             # Feed 基类
-│   │   ├── http_client.py      # HTTP 客户端基类
-│   │   ├── base_stream.py      # WebSocket 流基类
-│   │   ├── capability.py       # 能力声明
-│   │   ├── live_binance/       # Binance 实现
-│   │   ├── live_okx/           # OKX 实现
-│   │   ├── live_htx/           # HTX (Huobi) 实现
-│   │   ├── live_bybit/         # Bybit 实现
-│   │   ├── live_gateio/        # Gate.io 实现
-│   │   ├── live_kraken/        # Kraken 实现
-│   │   ├── live_bitget/        # Bitget 实现
-│   │   ├── live_kucoin/        # KuCoin 实现
-│   │   ├── live_mexc/          # MEXC 实现
-│   │   ├── live_hyperliquid/   # Hyperliquid 实现
-│   │   ├── live_ctp_feed.py    # CTP 期货实现
-│   │   ├── live_ib_web_feed.py # IB Web API 实现
-│   │   └── live_*/              # 其他 70+ 交易所实现
-│   │
-│   ├── exchange_registers/     # 交易所注册模块
-│   │   ├── register_binance.py
-│   │   ├── register_okx.py
-│   │   ├── register_htx.py
-│   │   ├── register_ctp.py
-│   │   └── register_*.py       # 70+ 交易所注册
-│   │
-│   ├── errors/                 # 错误翻译器
-│   │   ├── binance_translator.py
-│   │   ├── okx_translator.py
-│   │   └── *_translator.py    # 各交易所错误翻译
-│   │
-│   ├── core/                   # 核心模块
-│   │   ├── async_context.py    # 异步上下文管理
-│   │   └── dependency_injection.py
-│   │
-│   ├── websocket/              # WebSocket 模块
-│   ├── gateway/                # 网关模块
-│   ├── monitoring/             # 监控模块
-│   ├── risk_management/        # 风险管理
-│   ├── security_compliance/    # 安全合规
-│   ├── functions/              # 工具函数
-│   ├── configs/                # 配置文件
-│   └── ctp/                    # CTP C++ 扩展
-│
-├── tests/                      # 测试套件
-│   ├── containers/             # 容器测试
-│   ├── feeds/                  # Feed 测试
-│   ├── core/                   # 核心模块测试
-│   ├── exchange_registers/     # 注册模块测试
-│   ├── websocket/              # WebSocket 测试
-│   ├── monitoring/             # 监控测试
-│   └── test_*.py               # 其他测试
-│
-├── docs/                       # 文档 (MkDocs)
-│   ├── getting-started/        # 入门指南
-│   ├── guides/                 # 使用指南
-│   ├── reference/              # API 参考
-│   ├── explanation/            # 概念解释
-│   ├── exchanges/              # 交易所文档
-│   └── index.md                # 文档首页
-│
-├── scripts/                    # 工具脚本
-│   ├── run_tests.sh            # 测试运行脚本
-│   ├── run_exchange_tests.sh   # 交易所测试脚本
-│   ├── generate_docs_*.py      # 文档生成脚本
-│   └── check_code_quality.py   # 代码质量检查
-│
-├── examples/                   # 示例代码
-│   ├── network_tests/          # 网络测试示例
-│   ├── monitoring_examples.py
-│   └── risk_management_*.py
-│
-├── .github/                    # GitHub 配置
-│   └── workflows/              # CI/CD 工作流
-│
-├── README.md                   # 项目说明
-├── CHANGELOG.md                # 变更日志
-├── CONTRIBUTING.md             # 贡献指南
-├── pyproject.toml              # 项目配置
-├── setup.py                    # 安装脚本
-└── Makefile                    # 构建脚本
+```python
+api.subscribe(
+    "BINANCE___SPOT___BTCUSDT",
+    [
+        {"topic": "ticker", "symbol": "BTCUSDT"},
+        {"topic": "depth", "symbol": "BTCUSDT"},
+    ],
+)
+
+data_queue = api.get_data_queue("BINANCE___SPOT")
+message = data_queue.get(timeout=10)
+print(type(message).__name__, message)
 ```
 
-## 核心架构
+## 核心 API 一览
 
-### 设计模式
-
-项目采用以下核心设计模式：
-
-- **Registry 模式** — 交易所注册机制，支持即插即用扩展
-- **Factory 模式** — 统一的数据容器创建接口
-- **Observer 模式** — 事件总线实现，支持行情和订单事件订阅
-- **Adapter 模式** — 各交易所适配器，屏蔽底层差异
-- **Strategy 模式** — 灵活的认证策略（API Key、OAuth、Cookie 等）
-
-### 核心模块说明
-
-| 模块 | 说明 |
+| 方法 | 说明 |
 |------|------|
-| `bt_api.py` | 统一 API 入口，提供 `BtApi` 类管理所有交易所 |
-| `registry.py` | 交易所注册表，管理交易所实例的创建和获取 |
-| `event_bus.py` | 事件总线，支持异步事件订阅和发布 |
-| `auth_config.py` | 认证配置类，支持多种认证方式 |
-| `containers/` | 标准化数据容器，统一各交易所数据格式 |
-| `feeds/` | 交易所适配层，实现各交易所的 REST 和 WebSocket 接口 |
-| `exchange_registers/` | 交易所注册模块，声明交易所配置和能力 |
-| `errors/` | 错误翻译器，将交易所错误码转换为统一错误类型 |
-| `websocket_manager.py` | WebSocket 连接管理，支持自动重连和心跳 |
+| `get_tick(exchange, symbol)` | 查询最新行情 |
+| `get_depth(exchange, symbol, count=20)` | 查询订单簿深度 |
+| `get_kline(exchange, symbol, period, count=20)` | 查询 K 线 |
+| `make_order(exchange, symbol, volume, price, order_type)` | 统一下单入口 |
+| `cancel_order(exchange, symbol, order_id)` | 撤单 |
+| `get_balance(exchange, symbol=None)` | 查询余额 |
+| `get_position(exchange, symbol=None)` | 查询持仓 |
+| `async_get_tick(...)` / `async_make_order(...)` | 异步接口，自动代理到对应 feed |
+| `subscribe(dataname, topics)` | 发起 WebSocket 订阅 |
+| `get_data_queue(exchange)` | 读取 WebSocket 推送结果 |
+| `get_event_bus()` | 获取事件总线实例 |
 
-### 数据容器类型
+## 仓库结构
 
-| 类别 | 容器类型 | 说明 |
-|------|----------|------|
-| 行情 | `Ticker`, `Bar`, `OrderBook`, `Trade` | 实时行情数据 |
-| 账户 | `Account`, `Balance`, `Position` | 账户和持仓信息 |
-| 交易 | `Order`, `Trade`, `Income` | 订单和成交记录 |
-| 合约 | `Symbol`, `Instrument` | 交易对和合约信息 |
-| 衍生品 | `FundingRate`, `MarkPrice`, `Liquidation`, `Greek` | 合约相关数据 |
+- `bt_api_py/`: 核心包，包含 `BtApi`、注册表、数据容器、feeds、gateway、websocket 和风险管理模块。
+- `tests/`: 单元测试、兼容性测试、网关测试和 WebSocket 测试。
+- `docs/`: MkDocs 文档站点，按 Getting Started / Guides / Reference / Explanation 组织。
+- `examples/`: 网络测试和使用示例。
+- `.github/workflows/`: CI、文档部署和发布流程。
 
 ## 文档
 
@@ -453,11 +288,14 @@ bt_api_py/
 - [CTP 期货](https://cloudquant.github.io/bt_api_py/exchanges/ctp/quickstart/) - 中国期货接入快速入门
 - [Interactive Brokers](https://cloudquant.github.io/bt_api_py/exchanges/ib/quickstart/) - IB Web API 使用指南
 
-## 运行测试
+## 开发与测试
 
 ### 本地快速验证
 
 ```bash
+# 安装开发依赖
+pip install -e ".[dev]"
+
 # 与 CI smoke suite 保持一致
 pytest tests/test_bt_api_quality.py \
   tests/test_event_bus.py \
@@ -472,6 +310,10 @@ mypy bt_api_py --ignore-missing-imports
 ### 完整基线测试
 
 ```bash
+# 完整基线测试建议把安全相关依赖一起装上
+# 其中 security extra 包含 PyJWT、cryptography、bcrypt
+pip install -e ".[dev,security]"
+
 # 运行非网络、非集成基线测试
 pytest tests -m "not network and not integration and not performance and not e2e" -q
 
@@ -481,6 +323,12 @@ pytest tests -m "not network and not integration and not performance and not e2e
   --cov-report=html \
   --cov-report=xml
 ```
+
+### CI 说明
+
+- Push / Pull Request: 运行 `Quality Gates`、`Compatibility` 矩阵和 Ubuntu 完整基线测试。
+- 兼容性矩阵: Linux、macOS、Windows GitHub-hosted runner x Python `3.9` 到 `3.14`。
+- Windows 说明: GitHub Actions 使用官方支持的 `windows-latest` hosted runner；项目兼容目标包含 Windows 11。
 
 ### 需要真实账户或网络的测试
 
@@ -521,13 +369,16 @@ pytest tests -m ctp -v
 3. 在 `errors/` 下添加错误翻译器（可选）
 
 ### Q: WebSocket 连接断开怎么办？
-框架内置了自动重连机制，会在断开后自动尝试重新连接。您也可以通过事件总线监听连接状态变化。
+框架内置了自动重连能力。推荐通过 `subscribe()` 发起订阅，再用 `get_data_queue()` 或 `get_event_bus()` 消费推送数据，这样断线恢复后上层处理逻辑不需要改写。
 
 ### Q: 支持模拟交易吗？
 支持！Binance 和 OKX 都支持测试网模式，在配置中设置 `testnet=True` 即可。CTP 也支持 SimNow 模拟环境。
 
 ### Q: 如何处理交易所 API 限流？
 框架内置了速率限制器 (`rate_limiter.py`)，会自动根据各交易所的限制进行请求控制。您也可以自定义限流策略。
+
+### Q: Security Compliance 模块需要额外安装什么？
+如果你要使用 `security_compliance` 相关能力，或运行完整基线测试中的安全测试，请安装 `bt_api_py[security]`。其中包含 `PyJWT`、`cryptography` 和 `bcrypt`。
 
 ### Q: 如何获取技术支持？
 可以通过以下方式获取帮助：
