@@ -69,6 +69,12 @@ class OkxGatewayAdapter(BaseGatewayAdapter):
         self.running = False
         self.thread: threading.Thread | None = None
         self.timeout = float(normalized.get("gateway_startup_timeout_sec", 10.0) or 10.0)
+        self._market_connect_timeout = float(
+            normalized.get("market_stream_connect_timeout_sec", 1.0) or 1.0
+        )
+        self._account_connect_timeout = float(
+            normalized.get("account_stream_connect_timeout_sec", 1.0) or 1.0
+        )
 
     def connect(self) -> None:
         if self.running:
@@ -101,33 +107,42 @@ class OkxGatewayAdapter(BaseGatewayAdapter):
                 self.market_stream = OkxMarketWssDataSpot(self.q, **wss_kwargs)
             else:
                 self.market_stream = OkxMarketWssDataSwap(self.q, **wss_kwargs)
-            self.market_stream.start()
+            self.market_stream.start(connect_timeout=self._market_connect_timeout)
             self.logger.info(f"OKX market stream started for {symbols}")
-
-        if self.account_stream is None:
-            account_kwargs = dict(wss_kwargs)
-            account_kwargs["topics"] = [
-                {"topic": "account"},
-                {"topic": "orders"},
-                {"topic": "positions"},
-            ]
-            if self.asset_type == "SPOT":
-                from bt_api_py.feeds.live_okx.spot import (
-                    OkxAccountWssDataSwap as OkxAccountWssDataSpot,
-                )
-
-                # OKX spot uses the same account WSS class
-                self.account_stream = OkxAccountWssDataSpot(self.q, **account_kwargs)
-            else:
-                self.account_stream = OkxAccountWssDataSwap(self.q, **account_kwargs)
-            self.account_stream.start()
-            self.logger.info("OKX account stream started")
 
         for symbol in symbols:
             self.aliases[symbol].add(symbol)
         return {"symbols": symbols}
 
+    def _ensure_account_stream(self) -> None:
+        if self.account_stream is not None:
+            return
+        account_kwargs = dict(self.kwargs)
+        account_kwargs["topics"] = [
+            {"topic": "account"},
+            {"topic": "orders"},
+            {"topic": "positions"},
+        ]
+        try:
+            if self.asset_type == "SPOT":
+                from bt_api_py.feeds.live_okx.spot import (
+                    OkxAccountWssDataSwap as OkxAccountWssDataSpot,
+                )
+
+                self.account_stream = OkxAccountWssDataSpot(self.q, **account_kwargs)
+            else:
+                self.account_stream = OkxAccountWssDataSwap(self.q, **account_kwargs)
+            self.account_stream.start(connect_timeout=self._account_connect_timeout)
+            self.logger.info("OKX account stream started")
+        except Exception as exc:
+            self.account_stream = None
+            self.logger.warning(
+                "OKX account stream unavailable; continuing with market data only: %s",
+                exc,
+            )
+
     def get_balance(self) -> dict[str, Any]:
+        self._ensure_account_stream()
         try:
             result = self.feed.get_balance()
             data = result.get_data() if hasattr(result, "get_data") else result
@@ -144,6 +159,7 @@ class OkxGatewayAdapter(BaseGatewayAdapter):
             return {"error": str(exc)}
 
     def get_positions(self) -> list[dict[str, Any]]:
+        self._ensure_account_stream()
         try:
             result = self.feed.get_position(symbol=None)
             data = result.get_data() if hasattr(result, "get_data") else result
@@ -161,6 +177,7 @@ class OkxGatewayAdapter(BaseGatewayAdapter):
             return []
 
     def place_order(self, payload: dict[str, Any]) -> dict[str, Any]:
+        self._ensure_account_stream()
         symbol = payload.get("data_name") or payload.get("symbol") or ""
         volume = float(payload.get("volume") or payload.get("size") or 0)
         price = payload.get("price")
@@ -191,6 +208,7 @@ class OkxGatewayAdapter(BaseGatewayAdapter):
         return {"raw": str(data)}
 
     def cancel_order(self, payload: dict[str, Any]) -> dict[str, Any]:
+        self._ensure_account_stream()
         symbol = payload.get("data_name") or payload.get("symbol") or ""
         order_id = payload.get("order_id") or payload.get("external_order_id")
         client_order_id = payload.get("client_order_id")

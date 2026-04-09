@@ -69,6 +69,12 @@ class BinanceGatewayAdapter(BaseGatewayAdapter):
         self.running = False
         self.thread: threading.Thread | None = None
         self.timeout = float(normalized.get("gateway_startup_timeout_sec", 10.0) or 10.0)
+        self._market_connect_timeout = float(
+            normalized.get("market_stream_connect_timeout_sec", 1.0) or 1.0
+        )
+        self._account_connect_timeout = float(
+            normalized.get("account_stream_connect_timeout_sec", 1.0) or 1.0
+        )
 
     def connect(self) -> None:
         if self.running:
@@ -110,30 +116,46 @@ class BinanceGatewayAdapter(BaseGatewayAdapter):
                 self.market_stream = BinanceMarketWssDataSpot(self.q, **wss_kwargs)
             else:
                 self.market_stream = BinanceMarketWssDataSwap(self.q, **wss_kwargs)
-            self.market_stream.start()
+            self.market_stream.start(connect_timeout=self._market_connect_timeout)
             self.logger.info(f"Binance market stream started for {symbols}")
-
-        if self.account_stream is None:
-            account_kwargs = dict(wss_kwargs)
-            account_kwargs["topics"] = [
-                {"topic": "account"},
-                {"topic": "order"},
-                {"topic": "trade"},
-            ]
-            if self.asset_type == "SPOT":
-                from bt_api_py.feeds.live_binance.spot import BinanceAccountWssDataSpot
-
-                self.account_stream = BinanceAccountWssDataSpot(self.q, **account_kwargs)
-            else:
-                self.account_stream = BinanceAccountWssDataSwap(self.q, **account_kwargs)
-            self.account_stream.start()
-            self.logger.info("Binance account stream started")
 
         for symbol in symbols:
             self.aliases[symbol].add(symbol)
         return {"symbols": symbols}
 
+    def _ensure_account_stream(self) -> None:
+        if self.account_stream is not None:
+            return
+        wss_kwargs = dict(self.kwargs)
+        if self.asset_type == "SPOT":
+            wss_url = "wss://stream.binance.com:9443/ws"
+        else:
+            wss_url = "wss://fstream.binance.com/ws"
+        wss_kwargs["wss_url"] = wss_url
+        wss_kwargs["wss_name"] = "binance_account_data"
+        wss_kwargs["topics"] = [
+            {"topic": "account"},
+            {"topic": "order"},
+            {"topic": "trade"},
+        ]
+        try:
+            if self.asset_type == "SPOT":
+                from bt_api_py.feeds.live_binance.spot import BinanceAccountWssDataSpot
+
+                self.account_stream = BinanceAccountWssDataSpot(self.q, **wss_kwargs)
+            else:
+                self.account_stream = BinanceAccountWssDataSwap(self.q, **wss_kwargs)
+            self.account_stream.start(connect_timeout=self._account_connect_timeout)
+            self.logger.info("Binance account stream started")
+        except Exception as exc:
+            self.account_stream = None
+            self.logger.warning(
+                "Binance account stream unavailable; continuing with market data only: %s",
+                exc,
+            )
+
     def get_balance(self) -> dict[str, Any]:
+        self._ensure_account_stream()
         try:
             result = self.feed.get_balance()
             data = result.get_data() if hasattr(result, "get_data") else result
@@ -150,6 +172,7 @@ class BinanceGatewayAdapter(BaseGatewayAdapter):
             return {"error": str(exc)}
 
     def get_positions(self) -> list[dict[str, Any]]:
+        self._ensure_account_stream()
         try:
             result = self.feed.get_position()
             data = result.get_data() if hasattr(result, "get_data") else result
@@ -167,6 +190,7 @@ class BinanceGatewayAdapter(BaseGatewayAdapter):
             return []
 
     def place_order(self, payload: dict[str, Any]) -> dict[str, Any]:
+        self._ensure_account_stream()
         symbol = payload.get("data_name") or payload.get("symbol") or ""
         volume = float(payload.get("volume") or payload.get("size") or 0)
         price = payload.get("price")
@@ -197,6 +221,7 @@ class BinanceGatewayAdapter(BaseGatewayAdapter):
         return {"raw": str(data)}
 
     def cancel_order(self, payload: dict[str, Any]) -> dict[str, Any]:
+        self._ensure_account_stream()
         symbol = payload.get("data_name") or payload.get("symbol") or ""
         order_id = payload.get("order_id") or payload.get("external_order_id")
         client_order_id = payload.get("client_order_id")

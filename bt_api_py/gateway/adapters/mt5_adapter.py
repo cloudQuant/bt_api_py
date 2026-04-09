@@ -324,7 +324,8 @@ class Mt5GatewayAdapter(BaseGatewayAdapter):
         self._client = MT5WebClient(**client_kwargs)
         await self._client.connect()
         await self._client.login(login=self._login, password=self._password)
-        await self._client.load_symbols()
+        symbol_count = await self._load_symbol_cache()
+        logger.info("MT5 symbol cache loaded: %d symbols", symbol_count)
 
         # Register push callbacks
         self._client.on_tick(self._on_tick_push)
@@ -349,17 +350,21 @@ class Mt5GatewayAdapter(BaseGatewayAdapter):
     async def _async_subscribe(
         self, standard_symbols: list[str], resolved_symbols: list[str]
     ) -> dict[str, Any]:
-        available_symbols = dict(getattr(self._client, "_symbols", {}) or {})
+        available_symbols = await self._get_available_symbols()
         candidate_pairs: list[tuple[str, str]] = []
         skipped_symbols: list[str] = []
 
         for std_sym, mt5_sym in zip(standard_symbols, resolved_symbols):
             if available_symbols.get(mt5_sym) is None:
-                skipped_symbols.append(std_sym)
-                logger.warning(
-                    f"skipping MT5 subscription for {std_sym}; resolved symbol {mt5_sym} not found in cache"
-                )
-                continue
+                discovered = self._discover_symbol(std_sym, symbol_names=available_symbols.keys())
+                if discovered and available_symbols.get(discovered) is not None:
+                    mt5_sym = discovered
+                else:
+                    skipped_symbols.append(std_sym)
+                    logger.warning(
+                        f"skipping MT5 subscription for {std_sym}; resolved symbol {mt5_sym} not found in cache"
+                    )
+                    continue
             candidate_pairs.append((std_sym, mt5_sym))
 
         subscribed_id_set: set[int] | None = None
@@ -781,23 +786,84 @@ class Mt5GatewayAdapter(BaseGatewayAdapter):
             return discovered
         return standard_symbol
 
-    def _discover_symbol(self, standard_symbol: str) -> str | None:
+    @staticmethod
+    def _normalize_symbol_key(symbol: str) -> str:
+        return "".join(ch for ch in str(symbol or "").upper() if ch.isalnum())
+
+    def _match_symbol_candidate(self, target_symbol: str, candidate_symbol: str) -> tuple[int, int] | None:
+        target_upper = str(target_symbol or "").upper()
+        candidate_upper = str(candidate_symbol or "").upper()
+        if not target_upper or not candidate_upper:
+            return None
+        if candidate_upper == target_upper:
+            return (0, len(candidate_symbol))
+
+        normalized_target = self._normalize_symbol_key(target_symbol)
+        normalized_candidate = self._normalize_symbol_key(candidate_symbol)
+        if normalized_target and normalized_candidate == normalized_target:
+            return (1, len(candidate_symbol))
+
+        if candidate_upper.startswith(target_upper):
+            return (2, len(candidate_symbol) - len(target_symbol))
+        if candidate_upper.endswith(target_upper):
+            return (3, len(candidate_symbol) - len(target_symbol))
+
+        if normalized_target:
+            if normalized_candidate.startswith(normalized_target):
+                return (4, len(normalized_candidate) - len(normalized_target))
+            if normalized_candidate.endswith(normalized_target):
+                return (5, len(normalized_candidate) - len(normalized_target))
+            if normalized_target in normalized_candidate:
+                return (6, len(normalized_candidate) - len(normalized_target))
+
+        if target_upper in candidate_upper:
+            return (7, len(candidate_symbol) - len(target_symbol))
+        return None
+
+    def _discover_symbol(
+        self,
+        standard_symbol: str,
+        symbol_names: list[str] | tuple[str, ...] | set[str] | None = None,
+    ) -> str | None:
         client = self._client
         if client is None:
             return None
-        symbol_names = list(getattr(client, "symbol_names", []) or [])
-        target = standard_symbol.upper()
-        if standard_symbol in symbol_names:
-            return standard_symbol
-        exact = next((str(name) for name in symbol_names if str(name).upper() == target), None)
-        if exact:
-            return exact
-        prefix_matches = [
-            str(name) for name in symbol_names if str(name).upper().startswith(target)
-        ]
-        if len(prefix_matches) == 1:
-            return prefix_matches[0]
-        return None
+        available_names = list(symbol_names or getattr(client, "symbol_names", []) or [])
+        ranked_matches: list[tuple[tuple[int, int], str]] = []
+        for name in available_names:
+            candidate = str(name)
+            score = self._match_symbol_candidate(standard_symbol, candidate)
+            if score is not None:
+                ranked_matches.append((score, candidate))
+        if not ranked_matches:
+            return None
+        ranked_matches.sort(key=lambda item: (item[0][0], item[0][1], len(item[1]), item[1]))
+        return ranked_matches[0][1]
+
+    async def _load_symbol_cache(self) -> int:
+        if self._client is None:
+            return 0
+        symbols = await self._client.load_symbols()
+        count = len(symbols or {})
+        if count > 0:
+            return count
+        invalidate = getattr(self._client, "invalidate_symbol_cache", None)
+        if callable(invalidate):
+            invalidate()
+        symbols = await self._client.load_symbols(use_gzip=False)
+        return len(symbols or {})
+
+    async def _get_available_symbols(self) -> dict[str, Any]:
+        available_symbols = dict(getattr(self._client, "_symbols", {}) or {})
+        if available_symbols:
+            return available_symbols
+        symbol_count = await self._load_symbol_cache()
+        available_symbols = dict(getattr(self._client, "_symbols", {}) or {})
+        if available_symbols:
+            logger.info("MT5 symbol cache reloaded before subscribe: %d symbols", symbol_count)
+        else:
+            logger.warning("MT5 symbol cache is empty before subscribe")
+        return available_symbols
 
     def _to_standard_symbol(self, raw_symbol: str) -> str:
         if not raw_symbol:
@@ -805,14 +871,14 @@ class Mt5GatewayAdapter(BaseGatewayAdapter):
         mapped = self._reverse_resolved_symbols.get(raw_symbol)
         if mapped:
             return mapped
-        raw_upper = raw_symbol.upper()
-        prefix_matches = sorted(
-            (sym for sym in self._subscribed_symbols if raw_upper.startswith(sym.upper())),
-            key=len,
-            reverse=True,
-        )
-        if prefix_matches:
-            standard = prefix_matches[0]
+        ranked_matches: list[tuple[tuple[int, int], str]] = []
+        for symbol in self._subscribed_symbols:
+            score = self._match_symbol_candidate(symbol, raw_symbol)
+            if score is not None:
+                ranked_matches.append((score, symbol))
+        if ranked_matches:
+            ranked_matches.sort(key=lambda item: (item[0][0], item[0][1], len(item[1]), item[1]))
+            standard = ranked_matches[0][1]
             self._resolved_symbols.setdefault(standard, raw_symbol)
             self._reverse_resolved_symbols[raw_symbol] = standard
             return standard

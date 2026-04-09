@@ -47,6 +47,9 @@ class OkxWssData(MyWebsocketApp):
         self.asset_type = kwargs.get("asset_type", "SWAP")
         self.logger = get_logger("okx_market_wss")
 
+    def _uses_private_wss(self) -> bool:
+        return "/private" in str(self.wss_url or "").lower()
+
     def sign(self, content: Any) -> None:
         """签名
         Args:
@@ -61,6 +64,9 @@ class OkxWssData(MyWebsocketApp):
         return sign
 
     def author(self) -> None:
+        if not self._uses_private_wss():
+            self.wss_logger.info("Skipping auth on non-private OKX websocket endpoint")
+            return
         if not self.public_key or not self.private_key:
             self.wss_logger.info("Skipping auth (no credentials) — public channels only")
             return

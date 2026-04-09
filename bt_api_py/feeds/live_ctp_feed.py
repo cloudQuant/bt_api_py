@@ -543,12 +543,30 @@ class CtpMarketStream(BaseDataStream):
 
     def subscribe_topics(self, topics):
         """追加订阅行情"""
+        existing = {
+            (
+                str(topic.get("topic", "")),
+                str(topic.get("symbol", "")),
+                tuple(str(sym) for sym in topic.get("symbol_list", []) if str(sym)),
+            )
+            for topic in self.topics
+            if isinstance(topic, dict)
+        }
         instruments = []
         for topic in topics:
-            if topic.get("topic") in ("tick", "ticker", "depth"):
-                sym = topic.get("symbol", "")
+            if not isinstance(topic, dict):
+                continue
+            topic_type = str(topic.get("topic", ""))
+            sym = str(topic.get("symbol", ""))
+            sym_list = [str(item) for item in topic.get("symbol_list", []) if str(item)]
+            key = (topic_type, sym, tuple(sym_list))
+            if key not in existing:
+                self.topics.append(dict(topic))
+                existing.add(key)
+            if topic_type in ("tick", "ticker", "depth"):
                 if sym:
                     instruments.append(sym)
+                instruments.extend(sym_list)
         if instruments and self._md_client:
             self._md_client.subscribe(instruments)
             self.logger.info(f"CTP MdClient subscribed: {instruments}")
