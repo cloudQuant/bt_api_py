@@ -16,7 +16,7 @@ import bt_api_py.exchange_registers.register_bequant  # noqa: F401
 from bt_api_py.containers.exchanges.bequant_exchange_data import (
     BeQuantExchangeDataSpot,
 )
-from bt_api_py.containers.requestdatas.request_data import RequestData
+from bt_api_base.containers.requestdatas.request_data import RequestData
 from bt_api_py.feeds.live_bequant.spot import BeQuantRequestDataSpot
 
 # ── Sample API responses ─────────────────────────────────────
@@ -577,7 +577,7 @@ class TestFeedInit:
         assert feed.api_secret == "s2"
 
     def test_capabilities(self):
-        from bt_api_py.feeds.capability import Capability
+        from bt_api_base.feeds.capability import Capability
 
         caps = BeQuantRequestDataSpot._capabilities()
         assert Capability.GET_TICK in caps

@@ -16,9 +16,8 @@ from copy import deepcopy
 from datetime import datetime, timedelta
 from typing import Any
 
-from bt_api_py._compat import UTC
-from bt_api_py.event_bus import EventBus
-from bt_api_py.exceptions import (
+from bt_api_base._compat import UTC
+from bt_api_base.exceptions import (
     BtApiError,
     CurrencyNotFoundError,
     DataParseError,
@@ -29,8 +28,10 @@ from bt_api_py.exceptions import (
     RequestTimeoutError,
     SubscribeError,
 )
-from bt_api_py.logging_factory import _LoggerProxy, get_logger
-from bt_api_py.registry import ExchangeRegistry
+from bt_api_base.logging_factory import _LoggerProxy, get_logger
+from bt_api_base.registry import ExchangeRegistry
+
+from bt_api_base.event_bus import EventBus
 
 __all__ = ["BtApi"]
 
@@ -75,13 +76,38 @@ def _parse_time(input_time: str | datetime | None) -> datetime | None:
 
 _reg_logger = get_logger("registry")
 
-import bt_api_py.exchange_registers as _exchange_reg_pkg  # noqa: E402
 
-for _finder, _name, _ispkg in pkgutil.iter_modules(_exchange_reg_pkg.__path__):
-    try:
-        importlib.import_module(f"bt_api_py.exchange_registers.{_name}")
-    except ImportError as e:
-        _reg_logger.debug(f"{_name} register skipped: {e}")
+class _RuntimeRegistrar:
+    """Minimal runtime registrar for adapter registration."""
+
+    def __init__(self) -> None:
+        self._adapters: dict[str, type] = {}
+
+    def register_adapter(self, exchange_type: str, adapter_cls: type) -> None:
+        normalized = str(exchange_type).strip().upper()
+        self._adapters[normalized] = adapter_cls
+
+    def get_adapter(self, exchange_type: str) -> type | None:
+        return self._adapters.get(str(exchange_type).strip().upper())
+
+    def list_adapters(self) -> list[str]:
+        return list(self._adapters.keys())
+
+
+_runtime_registrar = _RuntimeRegistrar()
+
+
+def _initialize_plugin_and_legacy_registrations() -> None:
+    """Load all plugins via entry points and commit registrations to the global registry."""
+    from bt_api_base.plugins.loader import PluginLoader
+
+    registry = ExchangeRegistry._get_default()
+    loader = PluginLoader(registry, _runtime_registrar)
+    loader.load_all()
+
+
+# Load plugins at module import time
+_initialize_plugin_and_legacy_registrations()
 
 
 class BtApi:

@@ -13,7 +13,7 @@ This module provides comprehensive performance monitoring capabilities including
 
 from __future__ import annotations
 
-from bt_api_py.logging_system import get_logger
+from bt_api_base.logging_factory import get_logger
 
 from .collector import (
     MetricsCollector,

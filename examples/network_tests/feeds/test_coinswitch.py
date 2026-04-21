@@ -11,7 +11,7 @@ import pytest
 
 import bt_api_py.exchange_registers.register_coinswitch  # noqa: F401
 from bt_api_py.containers.exchanges.coinswitch_exchange_data import CoinSwitchExchangeDataSpot
-from bt_api_py.containers.requestdatas.request_data import RequestData
+from bt_api_base.containers.requestdatas.request_data import RequestData
 from bt_api_py.feeds.live_coinswitch.request_base import CoinSwitchRequestData
 from bt_api_py.feeds.live_coinswitch.spot import CoinSwitchRequestDataSpot
 from bt_api_py.registry import ExchangeRegistry

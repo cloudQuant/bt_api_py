@@ -8,7 +8,7 @@ from __future__ import annotations
 import time
 from typing import Any, cast
 
-from bt_api_py.logging_factory import get_logger
+from bt_api_base.logging_factory import get_logger
 
 from ..containers.risk_metrics import RiskMetrics
 

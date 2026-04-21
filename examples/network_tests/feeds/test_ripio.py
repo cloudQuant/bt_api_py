@@ -16,9 +16,9 @@ from bt_api_py.containers.exchanges.ripio_exchange_data import (
     RipioExchangeData,
     RipioExchangeDataSpot,
 )
-from bt_api_py.containers.requestdatas.request_data import RequestData
+from bt_api_base.containers.requestdatas.request_data import RequestData
 from bt_api_py.containers.tickers.ripio_ticker import RipioRequestTickerData
-from bt_api_py.feeds.capability import Capability
+from bt_api_base.feeds.capability import Capability
 from bt_api_py.feeds.live_ripio.spot import RipioRequestDataSpot
 from bt_api_py.registry import ExchangeRegistry
 

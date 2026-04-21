@@ -14,9 +14,9 @@ import pytest
 # Import registration to auto-register Bithumb
 import bt_api_py.exchange_registers.register_bithumb  # noqa: F401
 from bt_api_py.containers.exchanges.bithumb_exchange_data import BithumbExchangeDataSpot
-from bt_api_py.containers.requestdatas.request_data import RequestData
+from bt_api_base.containers.requestdatas.request_data import RequestData
 from bt_api_py.containers.tickers.bithumb_ticker import BithumbRequestTickerData
-from bt_api_py.feeds.capability import Capability
+from bt_api_base.feeds.capability import Capability
 from bt_api_py.feeds.live_bithumb.spot import BithumbRequestDataSpot
 
 

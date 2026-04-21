@@ -17,9 +17,9 @@ import bt_api_py.exchange_registers.register_btc_markets  # noqa: F401
 from bt_api_py.containers.exchanges.btc_markets_exchange_data import (
     BtcMarketsExchangeDataSpot,
 )
-from bt_api_py.containers.requestdatas.request_data import RequestData
+from bt_api_base.containers.requestdatas.request_data import RequestData
 from bt_api_py.containers.tickers.btc_markets_ticker import BtcMarketsRequestTickerData
-from bt_api_py.feeds.capability import Capability
+from bt_api_base.feeds.capability import Capability
 from bt_api_py.feeds.live_btc_markets.spot import BtcMarketsRequestDataSpot
 from bt_api_py.registry import ExchangeRegistry
 

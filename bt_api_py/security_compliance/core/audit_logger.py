@@ -19,7 +19,7 @@ from pathlib import Path
 from typing import Any
 from uuid import uuid4
 
-from bt_api_py.exceptions import BtApiError
+from bt_api_base.exceptions import BtApiError
 
 _logger = logging.getLogger(__name__)
 

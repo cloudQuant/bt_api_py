@@ -31,7 +31,7 @@ from bt_api_py.containers.orderbooks.bitfinex_orderbook import (
 from bt_api_py.containers.orders.bitfinex_order import (
     BitfinexRequestOrderData,
 )
-from bt_api_py.containers.requestdatas.request_data import RequestData
+from bt_api_base.containers.requestdatas.request_data import RequestData
 from bt_api_py.containers.tickers.bitfinex_ticker import (
     BitfinexRequestTickerData,
 )

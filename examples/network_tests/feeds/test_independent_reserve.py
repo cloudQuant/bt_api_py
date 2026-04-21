@@ -13,7 +13,7 @@ import bt_api_py.exchange_registers.register_independent_reserve  # noqa: F401
 from bt_api_py.containers.exchanges.independent_reserve_exchange_data import (
     IndependentReserveExchangeDataSpot,
 )
-from bt_api_py.containers.requestdatas.request_data import RequestData
+from bt_api_base.containers.requestdatas.request_data import RequestData
 from bt_api_py.feeds.live_independent_reserve.request_base import IndependentReserveRequestData
 from bt_api_py.feeds.live_independent_reserve.spot import IndependentReserveRequestDataSpot
 from bt_api_py.registry import ExchangeRegistry

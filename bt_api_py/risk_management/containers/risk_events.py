@@ -10,7 +10,7 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Any
 
-from ...containers.auto_init_mixin import AutoInitMixin
+from bt_api_base.containers.auto_init_mixin import AutoInitMixin
 
 
 class RiskEventType(Enum):

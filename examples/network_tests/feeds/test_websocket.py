@@ -6,7 +6,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from bt_api_py.feeds.my_websocket_app import MyWebsocketApp  # 替换为实际模块名
+from bt_api_base.feeds.my_websocket_app import MyWebsocketApp  # 替换为实际模块名
 
 
 # Mock dependencies

@@ -4,7 +4,7 @@ import traceback
 import pytest
 
 from bt_api_py.bt_api import BtApi
-from bt_api_py.containers.requestdatas.request_data import RequestData
+from bt_api_base.containers.requestdatas.request_data import RequestData
 from bt_api_py.containers.tickers.binance_ticker import BinanceRequestTickerData
 from bt_api_py.functions.utils import read_account_config
 

@@ -14,8 +14,8 @@ import bt_api_py.exchange_registers.register_bitmart  # noqa: F401
 from bt_api_py.containers.exchanges.bitmart_exchange_data import (
     BitmartExchangeDataSpot,
 )
-from bt_api_py.containers.requestdatas.request_data import RequestData
-from bt_api_py.feeds.capability import Capability
+from bt_api_base.containers.requestdatas.request_data import RequestData
+from bt_api_base.feeds.capability import Capability
 from bt_api_py.feeds.live_bitmart.request_base import BitmartRequestData
 from bt_api_py.feeds.live_bitmart.spot import BitmartRequestDataSpot
 from bt_api_py.registry import ExchangeRegistry

@@ -11,7 +11,7 @@ import pytest
 
 import bt_api_py.exchange_registers.register_latoken  # noqa: F401
 from bt_api_py.containers.exchanges.latoken_exchange_data import LatokenExchangeDataSpot
-from bt_api_py.containers.requestdatas.request_data import RequestData
+from bt_api_base.containers.requestdatas.request_data import RequestData
 from bt_api_py.feeds.live_latoken.request_base import LatokenRequestData
 from bt_api_py.feeds.live_latoken.spot import (
     LatokenAccountWssDataSpot,

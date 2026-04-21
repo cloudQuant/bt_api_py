@@ -16,7 +16,7 @@ from bt_api_py.containers.bars.coinbase_bar import CoinbaseRequestBarData
 from bt_api_py.containers.exchanges.coinbase_exchange_data import CoinbaseExchangeDataSpot
 from bt_api_py.containers.orderbooks.coinbase_orderbook import CoinbaseRequestOrderBookData
 from bt_api_py.containers.orders.coinbase_order import CoinbaseRequestOrderData
-from bt_api_py.containers.requestdatas.request_data import RequestData
+from bt_api_base.containers.requestdatas.request_data import RequestData
 from bt_api_py.containers.tickers.coinbase_ticker import CoinbaseRequestTickerData
 from bt_api_py.feeds.live_coinbase import CoinbaseRequestDataSpot
 from bt_api_py.registry import ExchangeRegistry

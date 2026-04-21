@@ -13,7 +13,7 @@ from bt_api_py.containers.exchanges.raydium_exchange_data import (
     RaydiumChain,
     RaydiumExchangeDataSpot,
 )
-from bt_api_py.containers.requestdatas.request_data import RequestData
+from bt_api_base.containers.requestdatas.request_data import RequestData
 from bt_api_py.feeds.live_raydium.spot import RaydiumRequestDataSpot
 
 
@@ -46,7 +46,7 @@ class TestRaydiumRequestDataSpot:
 
     def test_capabilities(self, raydium_spot):
         """Test declared capabilities."""
-        from bt_api_py.feeds.capability import Capability
+        from bt_api_base.feeds.capability import Capability
 
         capabilities = raydium_spot._capabilities()
         assert Capability.GET_TICK in capabilities
@@ -320,7 +320,7 @@ class TestRaydiumBaseCapabilities:
     """Test capabilities on the base class."""
 
     def test_base_capabilities(self):
-        from bt_api_py.feeds.capability import Capability
+        from bt_api_base.feeds.capability import Capability
         from bt_api_py.feeds.live_raydium.request_base import RaydiumRequestData
 
         caps = RaydiumRequestData._capabilities()

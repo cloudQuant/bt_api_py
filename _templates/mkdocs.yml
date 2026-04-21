@@ -1,0 +1,40 @@
+site_name: "{PACKAGE_NAME} Docs"
+site_description: "{EXCHANGE_DESCRIPTION}"
+site_author: cloudQuant
+site_url: https://{DOCS_SLUG}.readthedocs.io/
+
+repo_name: cloudQuant/{REPO_NAME}
+repo_url: https://github.com/cloudQuant/{REPO_NAME}
+
+theme:
+  name: material
+  language: en
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/weather-night
+        name: Switch to dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/weather-sunny
+        name: Switch to light mode
+
+nav:
+  - Home: index.md
+  - Quick Start: quickstart.md
+  - API Reference: api.md
+  - Examples: examples.md
+
+markdown_extensions:
+  - pymdownx.highlight
+  - pymdownx.superfences
+  - admonition
+  - tables
+  - toc:
+      permalink: true

@@ -23,7 +23,7 @@ class TestCtpInitContextlibSuppress:
 
     def test_no_bare_try_except_pass(self):
         """SIM105: contextlib.suppress should replace try-except-pass."""
-        import bt_api_py.ctp as ctp_pkg
+        import bt_api_ctp.ctp as ctp_pkg
 
         source_file = Path(inspect.getfile(ctp_pkg))
         source = source_file.read_text(encoding="utf-8")
@@ -45,7 +45,7 @@ class TestCtpBaseImportOrder:
 
     def test_imports_sorted(self):
         """I001: imports should be sorted by ruff/isort rules."""
-        from bt_api_py.ctp import _ctp_base
+        from bt_api_ctp.ctp import _ctp_base
 
         source_file = Path(inspect.getfile(_ctp_base))
         source = source_file.read_text(encoding="utf-8")
@@ -71,7 +71,7 @@ class TestCtpBaseNoDuplicateSwigRepr:
 
     def test_single_swig_repr_definition(self):
         """Duplicate _swig_repr should be removed."""
-        from bt_api_py.ctp import _ctp_base
+        from bt_api_ctp.ctp import _ctp_base
 
         source_file = Path(inspect.getfile(_ctp_base))
         source = source_file.read_text(encoding="utf-8")
@@ -85,7 +85,7 @@ class TestSecurityExplicitEncoding:
 
     def test_open_calls_have_encoding(self):
         """All open() calls should specify encoding parameter."""
-        import bt_api_py.security as sec_mod
+        from bt_api_base import security as sec_mod
 
         source_file = Path(inspect.getfile(sec_mod))
         source = source_file.read_text(encoding="utf-8")
@@ -100,7 +100,7 @@ class TestSecurityExplicitEncoding:
 
     def test_create_env_template_writes_utf8(self):
         """create_env_template should produce valid UTF-8 output."""
-        from bt_api_py.security import create_env_template
+        from bt_api_base.security import create_env_template
 
         with tempfile.NamedTemporaryFile(suffix=".env", delete=False, mode="w") as f:
             tmp_path = f.name

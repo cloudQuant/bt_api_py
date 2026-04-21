@@ -8,7 +8,7 @@ from bt_api_py.containers.assets.okx_asset import (
     OkxWithdrawalInfoData,
 )
 from bt_api_py.containers.exchanges.okx_exchange_data import OkxExchangeDataSwap
-from bt_api_py.containers.requestdatas.request_data import RequestData
+from bt_api_base.containers.requestdatas.request_data import RequestData
 
 # from bt_api_py.containers.orders.okx_order import OkxOrderData
 from bt_api_py.feeds.live_okx_feed import OkxRequestDataSwap

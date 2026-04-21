@@ -13,7 +13,7 @@ from bt_api_py.containers.balances.binance_balance import (
 from bt_api_py.containers.bars.binance_bar import BinanceRequestBarData
 from bt_api_py.containers.exchanges.binance_exchange_data import BinanceExchangeDataSpot
 from bt_api_py.containers.orderbooks.binance_orderbook import BinanceRequestOrderBookData
-from bt_api_py.containers.requestdatas.request_data import RequestData
+from bt_api_base.containers.requestdatas.request_data import RequestData
 from bt_api_py.containers.tickers.binance_ticker import BinanceRequestTickerData
 from bt_api_py.feeds.live_binance_feed import BinanceRequestDataSpot
 from bt_api_py.functions.utils import read_account_config

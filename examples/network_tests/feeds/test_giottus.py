@@ -14,7 +14,7 @@ import pytest
 import bt_api_py.exchange_registers.register_giottus  # noqa: F401
 from bt_api_py.containers.exchanges.giottus_exchange_data import GiottusExchangeDataSpot
 from bt_api_py.containers.tickers.giottus_ticker import GiottusRequestTickerData
-from bt_api_py.feeds.capability import Capability
+from bt_api_base.feeds.capability import Capability
 from bt_api_py.feeds.live_giottus.spot import GiottusRequestDataSpot
 from bt_api_py.registry import ExchangeRegistry
 

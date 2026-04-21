@@ -14,7 +14,7 @@ import pytest
 
 # Import registration to auto-register Mercado Bitcoin
 import bt_api_py.exchange_registers.register_mercado_bitcoin  # noqa: F401
-from bt_api_py.containers.requestdatas.request_data import RequestData
+from bt_api_base.containers.requestdatas.request_data import RequestData
 from bt_api_py.feeds.live_mercado_bitcoin.spot import MercadoBitcoinRequestDataSpot
 from bt_api_py.registry import ExchangeRegistry
 

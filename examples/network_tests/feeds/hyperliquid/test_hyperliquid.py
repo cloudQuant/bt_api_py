@@ -179,7 +179,7 @@ class TestHyperliquidStandardInterfaces:
         rd = self._make_request_data()
         result = rd.get_tick("BTC")
 
-        from bt_api_py.containers.requestdatas.request_data import RequestData
+        from bt_api_base.containers.requestdatas.request_data import RequestData
 
         assert isinstance(result, RequestData)
         assert result.symbol_name == "BTC"
@@ -194,7 +194,7 @@ class TestHyperliquidStandardInterfaces:
         rd = self._make_request_data()
         result = rd.get_depth("BTC", count=10)
 
-        from bt_api_py.containers.requestdatas.request_data import RequestData
+        from bt_api_base.containers.requestdatas.request_data import RequestData
 
         assert isinstance(result, RequestData)
         assert result.symbol_name == "BTC"
@@ -221,7 +221,7 @@ class TestHyperliquidStandardInterfaces:
         rd = self._make_request_data()
         result = rd.get_kline("BTC", "1m", count=20)
 
-        from bt_api_py.containers.requestdatas.request_data import RequestData
+        from bt_api_base.containers.requestdatas.request_data import RequestData
 
         assert isinstance(result, RequestData)
         assert result.symbol_name == "BTC"
@@ -235,7 +235,7 @@ class TestHyperliquidStandardInterfaces:
         rd = self._make_request_data()
         result = rd.get_exchange_info()
 
-        from bt_api_py.containers.requestdatas.request_data import RequestData
+        from bt_api_base.containers.requestdatas.request_data import RequestData
 
         assert isinstance(result, RequestData)
         assert result.request_type == "get_exchange_info"
@@ -248,14 +248,14 @@ class TestHyperliquidStandardInterfaces:
         rd = self._make_request_data()
         result = rd.get_server_time()
 
-        from bt_api_py.containers.requestdatas.request_data import RequestData
+        from bt_api_base.containers.requestdatas.request_data import RequestData
 
         assert isinstance(result, RequestData)
         assert result.request_type == "get_server_time"
 
     def test_capabilities(self):
         """Test capabilities declaration"""
-        from bt_api_py.feeds.capability import Capability
+        from bt_api_base.feeds.capability import Capability
         from bt_api_py.feeds.live_hyperliquid.request_base import HyperliquidRequestData
 
         caps = HyperliquidRequestData._capabilities()
@@ -299,7 +299,7 @@ class TestHyperliquidRequestDataSpot:
         rd = self._make_spot_request()
         result = rd.make_order("BTC", 0.1, 50000.0, "limit", side="buy")
 
-        from bt_api_py.containers.requestdatas.request_data import RequestData
+        from bt_api_base.containers.requestdatas.request_data import RequestData
 
         assert isinstance(result, RequestData)
         assert result.symbol_name == "BTC"
@@ -313,7 +313,7 @@ class TestHyperliquidRequestDataSpot:
         rd = self._make_spot_request()
         result = rd.cancel_order("BTC", "12345")
 
-        from bt_api_py.containers.requestdatas.request_data import RequestData
+        from bt_api_base.containers.requestdatas.request_data import RequestData
 
         assert isinstance(result, RequestData)
         assert result.request_type == "cancel_order"
@@ -326,7 +326,7 @@ class TestHyperliquidRequestDataSpot:
         rd = self._make_spot_request()
         result = rd.query_order("BTC", "12345", user="0xabc")
 
-        from bt_api_py.containers.requestdatas.request_data import RequestData
+        from bt_api_base.containers.requestdatas.request_data import RequestData
 
         assert isinstance(result, RequestData)
         assert result.request_type == "query_order"
@@ -339,7 +339,7 @@ class TestHyperliquidRequestDataSpot:
         rd = self._make_spot_request()
         result = rd.get_open_orders("BTC", user="0xabc")
 
-        from bt_api_py.containers.requestdatas.request_data import RequestData
+        from bt_api_base.containers.requestdatas.request_data import RequestData
 
         assert isinstance(result, RequestData)
         assert result.request_type == "get_open_orders"
@@ -352,7 +352,7 @@ class TestHyperliquidRequestDataSpot:
         rd = self._make_spot_request()
         result = rd.get_account("ALL", user="0xabc")
 
-        from bt_api_py.containers.requestdatas.request_data import RequestData
+        from bt_api_base.containers.requestdatas.request_data import RequestData
 
         assert isinstance(result, RequestData)
         assert result.request_type == "get_account"
@@ -365,7 +365,7 @@ class TestHyperliquidRequestDataSpot:
         rd = self._make_spot_request()
         result = rd.get_balance("USDC", user="0xabc")
 
-        from bt_api_py.containers.requestdatas.request_data import RequestData
+        from bt_api_base.containers.requestdatas.request_data import RequestData
 
         assert isinstance(result, RequestData)
         assert result.request_type == "get_balance"

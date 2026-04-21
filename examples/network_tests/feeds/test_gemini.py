@@ -24,7 +24,7 @@ from bt_api_py.containers.exchanges.gemini_exchange_data import GeminiExchangeDa
 from bt_api_py.containers.orderbooks.gemini_orderbook import GeminiRequestOrderBookData
 from bt_api_py.containers.orders.gemini_order import GeminiRequestOrderData
 from bt_api_py.containers.tickers.gemini_ticker import GeminiRequestTickerData
-from bt_api_py.feeds.capability import Capability
+from bt_api_base.feeds.capability import Capability
 from bt_api_py.feeds.live_gemini.spot import GeminiRequestDataSpot
 from bt_api_py.registry import ExchangeRegistry
 

@@ -11,8 +11,11 @@ import logging
 from datetime import datetime
 from typing import Any, cast
 
-from bt_api_py.logging_factory import get_logger
-from bt_api_py.logging_system import LogEvent
+from bt_api_base.logging_factory import get_logger
+from typing import Any
+
+# LogEvent type - using Any for now as the original LogEvent class doesn't exist
+LogEvent = Any
 
 logger = get_logger("monitoring")
 

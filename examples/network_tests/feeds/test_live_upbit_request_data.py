@@ -80,7 +80,7 @@ class TestUpbitTickerData:
     @pytest.mark.ticker
     def test_upbit_tick_data_validation(self, upbit_feed):
         """Test ticker data structure and values."""
-        from bt_api_py.containers.requestdatas.request_data import RequestData
+        from bt_api_base.containers.requestdatas.request_data import RequestData
 
         data = upbit_feed.get_ticker("KRW-BTC")
         assert isinstance(data, (list, dict, RequestData))

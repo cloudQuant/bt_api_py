@@ -48,7 +48,7 @@ try:
 except ImportError:
     VAULT_AVAILABLE = False
 
-from bt_api_py.exceptions import BtApiError
+from bt_api_base.exceptions import BtApiError
 
 
 class EncryptionError(BtApiError):

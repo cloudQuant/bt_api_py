@@ -17,7 +17,7 @@ import bt_api_py.exchange_registers.register_bigone  # noqa: F401
 from bt_api_py.containers.exchanges.bigone_exchange_data import (
     BigONEExchangeDataSpot,
 )
-from bt_api_py.containers.requestdatas.request_data import RequestData
+from bt_api_base.containers.requestdatas.request_data import RequestData
 from bt_api_py.feeds.live_bigone.spot import BigONERequestDataSpot
 
 # ── Sample API responses (BigONE wraps in {"data": ...}) ─────
@@ -601,7 +601,7 @@ class TestFeedInit:
         assert feed.api_secret == "s2"
 
     def test_capabilities(self):
-        from bt_api_py.feeds.capability import Capability
+        from bt_api_base.feeds.capability import Capability
 
         caps = BigONERequestDataSpot._capabilities()
         assert Capability.GET_TICK in caps

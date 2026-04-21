@@ -16,8 +16,8 @@ import bt_api_py.exchange_registers.register_bitvavo  # noqa: F401
 from bt_api_py.containers.exchanges.bitvavo_exchange_data import (
     BitvavoExchangeDataSpot,
 )
-from bt_api_py.containers.requestdatas.request_data import RequestData
-from bt_api_py.feeds.capability import Capability
+from bt_api_base.containers.requestdatas.request_data import RequestData
+from bt_api_base.feeds.capability import Capability
 from bt_api_py.feeds.live_bitvavo.spot import BitvavoRequestDataSpot
 from bt_api_py.registry import ExchangeRegistry
 

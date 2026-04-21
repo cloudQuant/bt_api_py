@@ -12,7 +12,7 @@ from typing import Any, cast
 
 import numpy as np
 
-from bt_api_py.logging_factory import get_logger
+from bt_api_base.logging_factory import get_logger
 
 from ..containers.risk_metrics import (
     ComplianceRiskMetrics,

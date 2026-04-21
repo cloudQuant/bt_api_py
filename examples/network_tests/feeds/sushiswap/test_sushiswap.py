@@ -13,7 +13,7 @@ from bt_api_py.containers.exchanges.sushiswap_exchange_data import (
     SushiSwapChain,
     SushiSwapExchangeDataSpot,
 )
-from bt_api_py.containers.requestdatas.request_data import RequestData
+from bt_api_base.containers.requestdatas.request_data import RequestData
 from bt_api_py.feeds.live_sushiswap.spot import SushiSwapRequestDataSpot
 
 
@@ -48,7 +48,7 @@ class TestSushiSwapRequestDataSpot:
 
     def test_capabilities(self, sushiswap_spot):
         """Test declared capabilities."""
-        from bt_api_py.feeds.capability import Capability
+        from bt_api_base.feeds.capability import Capability
 
         capabilities = sushiswap_spot._capabilities()
         assert Capability.GET_TICK in capabilities
@@ -447,7 +447,7 @@ class TestSushiBaseCapabilities:
     """Test capabilities on the base class."""
 
     def test_base_capabilities(self):
-        from bt_api_py.feeds.capability import Capability
+        from bt_api_base.feeds.capability import Capability
         from bt_api_py.feeds.live_sushiswap.request_base import SushiSwapRequestData
 
         caps = SushiSwapRequestData._capabilities()

@@ -49,7 +49,7 @@ class TestUniswapRequestDataSpot:
 
     def test_capabilities(self, uniswap_spot):
         """Test declared capabilities."""
-        from bt_api_py.feeds.capability import Capability
+        from bt_api_base.feeds.capability import Capability
 
         capabilities = uniswap_spot._capabilities()
         assert Capability.GET_TICK in capabilities
@@ -63,7 +63,7 @@ class TestUniswapRequestDataSpot:
 
     def test_get_server_time(self, uniswap_spot):
         """Test get_server_time returns RequestData."""
-        from bt_api_py.containers.requestdatas.request_data import RequestData
+        from bt_api_base.containers.requestdatas.request_data import RequestData
 
         result = uniswap_spot.get_server_time()
         assert isinstance(result, RequestData)
@@ -649,7 +649,7 @@ class TestUniswapBaseCapabilities:
     """Test capabilities on the base class."""
 
     def test_base_capabilities(self):
-        from bt_api_py.feeds.capability import Capability
+        from bt_api_base.feeds.capability import Capability
         from bt_api_py.feeds.live_uniswap.request_base import UniswapRequestData
 
         caps = UniswapRequestData._capabilities()

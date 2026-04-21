@@ -12,7 +12,7 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any
 
-from bt_api_py.exceptions import BtApiError
+from bt_api_base.exceptions import BtApiError
 
 
 class DataProtectionError(BtApiError):

@@ -13,7 +13,7 @@ from bt_api_py.containers.exchanges.curve_exchange_data import (
     CurveChain,
     CurveExchangeDataSpot,
 )
-from bt_api_py.containers.requestdatas.request_data import RequestData
+from bt_api_base.containers.requestdatas.request_data import RequestData
 from bt_api_py.feeds.live_curve.spot import CurveRequestDataSpot
 
 
@@ -48,7 +48,7 @@ class TestCurveRequestDataSpot:
 
     def test_capabilities(self, curve_spot):
         """Test declared capabilities."""
-        from bt_api_py.feeds.capability import Capability
+        from bt_api_base.feeds.capability import Capability
 
         capabilities = curve_spot._capabilities()
         assert Capability.GET_TICK in capabilities
@@ -449,7 +449,7 @@ class TestCurveBaseCapabilities:
 
     def test_base_capabilities(self):
         """Test CurveRequestData base class capabilities."""
-        from bt_api_py.feeds.capability import Capability
+        from bt_api_base.feeds.capability import Capability
         from bt_api_py.feeds.live_curve.request_base import CurveRequestData
 
         caps = CurveRequestData._capabilities()

@@ -72,7 +72,7 @@ class TestZaifTickerData:
         if data:
             pass
             # Zaif ticker response structure
-        from bt_api_py.containers.requestdatas.request_data import RequestData
+        from bt_api_base.containers.requestdatas.request_data import RequestData
 
         assert isinstance(data, (dict, list, RequestData))
 
@@ -103,7 +103,7 @@ class TestZaifKlineData:
         if data:
             pass
             # Zaif returns an array of trades
-        from bt_api_py.containers.requestdatas.request_data import RequestData
+        from bt_api_base.containers.requestdatas.request_data import RequestData
 
         assert isinstance(data, (dict, list, RequestData))
 
@@ -126,7 +126,7 @@ class TestZaifOrderBook:
         assert data is not None
 
         # get_depth returns RequestData, not raw dict
-        from bt_api_py.containers.requestdatas.request_data import RequestData
+        from bt_api_base.containers.requestdatas.request_data import RequestData
 
         assert isinstance(data, (dict, list, RequestData))
 

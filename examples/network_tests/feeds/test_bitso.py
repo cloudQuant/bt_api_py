@@ -14,8 +14,8 @@ import bt_api_py.exchange_registers.register_bitso  # noqa: F401
 from bt_api_py.containers.exchanges.bitso_exchange_data import (
     BitsoExchangeDataSpot,
 )
-from bt_api_py.containers.requestdatas.request_data import RequestData
-from bt_api_py.feeds.capability import Capability
+from bt_api_base.containers.requestdatas.request_data import RequestData
+from bt_api_base.feeds.capability import Capability
 from bt_api_py.feeds.live_bitso.request_base import BitsoRequestData
 from bt_api_py.feeds.live_bitso.spot import BitsoRequestDataSpot
 from bt_api_py.registry import ExchangeRegistry

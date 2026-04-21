@@ -19,9 +19,9 @@ from bt_api_py.containers.exchanges.phemex_exchange_data import (
     PhemexExchangeData,
     PhemexExchangeDataSpot,
 )
-from bt_api_py.containers.requestdatas.request_data import RequestData
+from bt_api_base.containers.requestdatas.request_data import RequestData
 from bt_api_py.containers.tickers.phemex_ticker import PhemexRequestTickerData
-from bt_api_py.feeds.capability import Capability
+from bt_api_base.feeds.capability import Capability
 from bt_api_py.feeds.live_phemex.request_base import PhemexRequestData
 from bt_api_py.feeds.live_phemex.spot import PhemexRequestDataSpot
 from bt_api_py.registry import ExchangeRegistry

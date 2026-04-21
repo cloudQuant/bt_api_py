@@ -17,9 +17,9 @@ import bt_api_py.exchange_registers.register_btcturk  # noqa: F401
 from bt_api_py.containers.exchanges.btcturk_exchange_data import (
     BTCTurkExchangeDataSpot,
 )
-from bt_api_py.containers.requestdatas.request_data import RequestData
+from bt_api_base.containers.requestdatas.request_data import RequestData
 from bt_api_py.containers.tickers.btcturk_ticker import BTCTurkRequestTickerData
-from bt_api_py.feeds.capability import Capability
+from bt_api_base.feeds.capability import Capability
 from bt_api_py.feeds.live_btcturk.spot import BTCTurkRequestDataSpot
 from bt_api_py.registry import ExchangeRegistry
 

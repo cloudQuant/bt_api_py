@@ -91,7 +91,7 @@ class TestSecurityPathUsage:
 
     def test_load_credentials_uses_path_open(self):
         """load_credentials_from_env_file should use Path.open, not built-in open."""
-        from bt_api_py.security import load_credentials_from_env_file
+        from bt_api_base.security import load_credentials_from_env_file
 
         source = inspect.getsource(load_credentials_from_env_file)
         # Should contain env_path.open() pattern, not open(env_path, ...)
@@ -100,7 +100,7 @@ class TestSecurityPathUsage:
 
     def test_create_env_template_uses_path_open(self):
         """create_env_template should use Path.open, not built-in open."""
-        from bt_api_py.security import create_env_template
+        from bt_api_base.security import create_env_template
 
         source = inspect.getsource(create_env_template)
         # Should contain output_path.open() pattern
@@ -109,7 +109,7 @@ class TestSecurityPathUsage:
 
     def test_create_env_template_produces_valid_file(self):
         """create_env_template should create a valid .env template."""
-        from bt_api_py.security import create_env_template
+        from bt_api_base.security import create_env_template
 
         with tempfile.TemporaryDirectory() as tmp:
             filepath = Path(tmp) / ".env.example"
@@ -122,7 +122,7 @@ class TestSecurityPathUsage:
 
     def test_load_credentials_from_env_file_manual_parse(self):
         """Manual .env parser should work when dotenv is unavailable."""
-        from bt_api_py.security import load_credentials_from_env_file
+        from bt_api_base.security import load_credentials_from_env_file
 
         with tempfile.TemporaryDirectory() as tmp:
             env_file = Path(tmp) / ".env"
@@ -140,7 +140,7 @@ class TestSecurityPathUsage:
 
     def test_get_exchange_credentials_narrowed_exception(self):
         """Decrypt failure should catch InvalidToken, not broad Exception."""
-        from bt_api_py.security import SecureCredentialManager
+        from bt_api_base.security import SecureCredentialManager
 
         source = inspect.getsource(SecureCredentialManager.get_exchange_credentials)
         # Should NOT have bare 'except Exception'
@@ -156,6 +156,6 @@ class TestSecurityInvalidTokenImport:
 
     def test_invalid_token_fallback(self):
         """When cryptography is not installed, InvalidToken should fall back."""
-        from bt_api_py import security
+        from bt_api_base import security
 
         assert hasattr(security, "InvalidToken")

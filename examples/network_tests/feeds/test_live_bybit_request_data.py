@@ -49,7 +49,7 @@ class TestBybitTickData:
         live_bybit_spot_feed = init_req_feed()
         data = live_bybit_spot_feed.get_ticker("BTCUSDT")
         assert data is not None
-        from bt_api_py.containers.requestdatas.request_data import RequestData
+        from bt_api_base.containers.requestdatas.request_data import RequestData
 
         assert isinstance(data, (dict, RequestData))
 
@@ -78,7 +78,7 @@ class TestBybitKlineData:
         live_bybit_spot_feed = init_req_feed()
         data = live_bybit_spot_feed.get_kline("BTCUSDT", period="1", limit=2)
         assert data is not None
-        from bt_api_py.containers.requestdatas.request_data import RequestData
+        from bt_api_base.containers.requestdatas.request_data import RequestData
 
         assert isinstance(data, (dict, list, RequestData))
 
@@ -109,7 +109,7 @@ class TestBybitOrderBook:
         live_bybit_spot_feed = init_req_feed()
         data = live_bybit_spot_feed.get_depth("BTCUSDT", limit=20)
         assert data is not None
-        from bt_api_py.containers.requestdatas.request_data import RequestData
+        from bt_api_base.containers.requestdatas.request_data import RequestData
 
         assert isinstance(data, (dict, list, RequestData))
 
@@ -182,7 +182,7 @@ class TestBybitExchangeInfo:
         live_bybit_spot_feed = init_req_feed()
         data = live_bybit_spot_feed.get_exchange_info(symbol="BTCUSDT")
         assert data is not None
-        from bt_api_py.containers.requestdatas.request_data import RequestData
+        from bt_api_base.containers.requestdatas.request_data import RequestData
 
         assert isinstance(data, (dict, list, RequestData))
 

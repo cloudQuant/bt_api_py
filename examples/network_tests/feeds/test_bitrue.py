@@ -14,8 +14,8 @@ import bt_api_py.exchange_registers.register_bitrue  # noqa: F401
 from bt_api_py.containers.exchanges.bitrue_exchange_data import (
     BitrueExchangeDataSpot,
 )
-from bt_api_py.containers.requestdatas.request_data import RequestData
-from bt_api_py.feeds.capability import Capability
+from bt_api_base.containers.requestdatas.request_data import RequestData
+from bt_api_base.feeds.capability import Capability
 from bt_api_py.feeds.live_bitrue.request_base import BitrueRequestData
 from bt_api_py.feeds.live_bitrue.spot import BitrueRequestDataSpot
 from bt_api_py.registry import ExchangeRegistry

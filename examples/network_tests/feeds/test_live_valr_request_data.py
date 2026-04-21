@@ -74,7 +74,7 @@ class TestValrTickerData:
             # Create ticker container if available
             # Valr ticker structure: {symbol, lastPrice, bidPrice, askPrice,
             # ...}
-        from bt_api_py.containers.requestdatas.request_data import RequestData
+        from bt_api_base.containers.requestdatas.request_data import RequestData
 
         assert isinstance(data, (dict, list, RequestData))
 
@@ -120,7 +120,7 @@ class TestValrOrderBook:
         data = valr_feed.get_depth("BTCZAR")
         assert data is not None
 
-        from bt_api_py.containers.requestdatas.request_data import RequestData
+        from bt_api_base.containers.requestdatas.request_data import RequestData
 
         assert isinstance(data, (dict, list, RequestData))
 

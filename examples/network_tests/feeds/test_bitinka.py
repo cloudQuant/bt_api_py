@@ -14,8 +14,8 @@ import pytest
 # Import registration to auto-register Bitinka
 import bt_api_py.exchange_registers.register_bitinka  # noqa: F401
 from bt_api_py.containers.exchanges.bitinka_exchange_data import BitinkaExchangeDataSpot
-from bt_api_py.containers.requestdatas.request_data import RequestData
-from bt_api_py.feeds.capability import Capability
+from bt_api_base.containers.requestdatas.request_data import RequestData
+from bt_api_base.feeds.capability import Capability
 from bt_api_py.feeds.live_bitinka.spot import BitinkaRequestDataSpot
 from bt_api_py.registry import ExchangeRegistry
 

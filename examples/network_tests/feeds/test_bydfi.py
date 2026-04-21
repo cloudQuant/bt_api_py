@@ -14,9 +14,9 @@ import pytest
 # Import registration to auto-register BYDFi
 import bt_api_py.exchange_registers.register_bydfi  # noqa: F401
 from bt_api_py.containers.exchanges.bydfi_exchange_data import BYDFiExchangeDataSpot
-from bt_api_py.containers.requestdatas.request_data import RequestData
+from bt_api_base.containers.requestdatas.request_data import RequestData
 from bt_api_py.containers.tickers.bydfi_ticker import BYDFiRequestTickerData
-from bt_api_py.feeds.capability import Capability
+from bt_api_base.feeds.capability import Capability
 from bt_api_py.feeds.live_bydfi.spot import BYDFiRequestDataSpot
 from bt_api_py.registry import ExchangeRegistry
 

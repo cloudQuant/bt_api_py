@@ -6,7 +6,7 @@ import pytest
 from bt_api_py.containers.bars.okx_bar import OkxBarData
 from bt_api_py.containers.exchanges.okx_exchange_data import OkxExchangeDataSwap
 from bt_api_py.containers.orderbooks.okx_orderbook import OkxOrderBookData
-from bt_api_py.containers.requestdatas.request_data import RequestData
+from bt_api_base.containers.requestdatas.request_data import RequestData
 
 # from bt_api_py.containers.orders.okx_order import OkxOrderData
 from bt_api_py.containers.trades.okx_trade import OkxRequestTradeData

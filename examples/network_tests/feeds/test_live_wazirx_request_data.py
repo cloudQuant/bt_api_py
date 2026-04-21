@@ -72,7 +72,7 @@ class TestWazirXTickerData:
         if data:
             pass
             # WazirX ticker response structure
-        from bt_api_py.containers.requestdatas.request_data import RequestData
+        from bt_api_base.containers.requestdatas.request_data import RequestData
 
         assert isinstance(data, (dict, list, RequestData))
 
@@ -129,7 +129,7 @@ class TestWazirXOrderBook:
         data = wazirx_feed.get_depth("BTCINR", count=20)
         assert data is not None
 
-        from bt_api_py.containers.requestdatas.request_data import RequestData
+        from bt_api_base.containers.requestdatas.request_data import RequestData
 
         assert isinstance(data, (dict, list, RequestData))
 

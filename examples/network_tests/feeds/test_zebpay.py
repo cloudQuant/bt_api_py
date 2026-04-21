@@ -14,7 +14,7 @@ from bt_api_py.containers.exchanges.zebpay_exchange_data import (
     ZebpayExchangeData,
     ZebpayExchangeDataSpot,
 )
-from bt_api_py.containers.requestdatas.request_data import RequestData
+from bt_api_base.containers.requestdatas.request_data import RequestData
 from bt_api_py.containers.tickers.zebpay_ticker import ZebpayRequestTickerData
 from bt_api_py.feeds.live_zebpay.request_base import ZebpayRequestData
 from bt_api_py.feeds.live_zebpay.spot import (
@@ -477,7 +477,7 @@ class TestFeedInit:
         assert feed.asset_type == "SPOT"
 
     def test_capabilities(self, feed):
-        from bt_api_py.feeds.capability import Capability
+        from bt_api_base.feeds.capability import Capability
 
         caps = feed._capabilities()
         assert Capability.GET_TICK in caps

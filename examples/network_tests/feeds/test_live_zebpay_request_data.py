@@ -72,7 +72,7 @@ class TestZebpayTickerData:
         if data:
             pass
             # Zebpay ticker response structure
-        from bt_api_py.containers.requestdatas.request_data import RequestData
+        from bt_api_base.containers.requestdatas.request_data import RequestData
 
         assert isinstance(data, (dict, list, RequestData))
 
@@ -107,7 +107,7 @@ class TestZebpayKlineData:
         if data:
             pass
             # Zebpay kline structure
-        from bt_api_py.containers.requestdatas.request_data import RequestData
+        from bt_api_base.containers.requestdatas.request_data import RequestData
 
         assert isinstance(data, (dict, list, RequestData))
 
@@ -145,7 +145,7 @@ class TestZebpayOrderBook:
         data = zebpay_feed.get_depth("BTC/INR", count=20)
         assert data is not None
 
-        from bt_api_py.containers.requestdatas.request_data import RequestData
+        from bt_api_base.containers.requestdatas.request_data import RequestData
 
         assert isinstance(data, (dict, list, RequestData))
 

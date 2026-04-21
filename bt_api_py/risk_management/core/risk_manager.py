@@ -6,9 +6,9 @@ import threading
 import time
 from typing import TYPE_CHECKING, Any
 
-from bt_api_py.event_bus import EventBus
-from bt_api_py.exceptions import BtApiError
-from bt_api_py.logging_factory import get_logger
+from bt_api_base.event_bus import EventBus
+from bt_api_base.exceptions import BtApiError
+from bt_api_base.logging_factory import get_logger
 
 from ..containers.risk_events import EventStatus, RiskEvent, RiskEventType, RiskLevel
 from .limits_manager import LimitsManager

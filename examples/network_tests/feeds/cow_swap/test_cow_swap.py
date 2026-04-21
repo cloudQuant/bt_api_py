@@ -11,7 +11,7 @@ import pytest
 from bt_api_py.containers.exchanges.cow_swap_exchange_data import (
     CowSwapExchangeDataSpot,
 )
-from bt_api_py.containers.requestdatas.request_data import RequestData
+from bt_api_base.containers.requestdatas.request_data import RequestData
 from bt_api_py.feeds.live_cow_swap.spot import CowSwapRequestDataSpot
 
 
@@ -36,7 +36,7 @@ class TestCowSwapRequestDataSpot:
 
     def test_capabilities(self, cow_swap_spot):
         """Test declared capabilities."""
-        from bt_api_py.feeds.capability import Capability
+        from bt_api_base.feeds.capability import Capability
 
         capabilities = cow_swap_spot._capabilities()
         assert Capability.GET_TICK in capabilities
@@ -465,7 +465,7 @@ class TestCowSwapBaseCapabilities:
 
     def test_base_capabilities(self):
         """Test that CowSwapRequestData base class declares correct capabilities."""
-        from bt_api_py.feeds.capability import Capability
+        from bt_api_base.feeds.capability import Capability
         from bt_api_py.feeds.live_cow_swap.request_base import CowSwapRequestData
 
         caps = CowSwapRequestData._capabilities()

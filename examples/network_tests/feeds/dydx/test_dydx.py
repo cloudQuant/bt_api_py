@@ -9,7 +9,7 @@ from unittest.mock import MagicMock, Mock, patch
 import pytest
 
 from bt_api_py.containers.exchanges.dydx_exchange_data import DydxExchangeDataSwap
-from bt_api_py.containers.requestdatas.request_data import RequestData
+from bt_api_base.containers.requestdatas.request_data import RequestData
 from bt_api_py.feeds.live_dydx.spot import DydxRequestDataSpot
 
 
@@ -36,7 +36,7 @@ class TestDydxRequestDataSpot:
 
     def test_capabilities(self, dydx_spot):
         """Test declared capabilities."""
-        from bt_api_py.feeds.capability import Capability
+        from bt_api_base.feeds.capability import Capability
 
         capabilities = dydx_spot._capabilities()
         assert Capability.GET_TICK in capabilities
@@ -323,7 +323,7 @@ class TestDydxStandardCapabilities:
 
     def test_capabilities_complete(self):
         """Test that all expected capabilities are declared."""
-        from bt_api_py.feeds.capability import Capability
+        from bt_api_base.feeds.capability import Capability
         from bt_api_py.feeds.live_dydx.request_base import DydxRequestData
 
         caps = DydxRequestData._capabilities()

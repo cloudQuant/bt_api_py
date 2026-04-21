@@ -9,7 +9,7 @@ import time
 from decimal import Decimal
 from typing import Any, cast
 
-from bt_api_py.logging_factory import get_logger
+from bt_api_base.logging_factory import get_logger
 
 from ..containers.risk_events import RiskLevel
 from ..containers.risk_metrics import RiskMetrics

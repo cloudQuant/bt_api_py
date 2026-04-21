@@ -16,9 +16,9 @@ import bt_api_py.exchange_registers.register_coindcx  # noqa: F401
 from bt_api_py.containers.exchanges.coindcx_exchange_data import (
     CoinDCXExchangeDataSpot,
 )
-from bt_api_py.containers.requestdatas.request_data import RequestData
+from bt_api_base.containers.requestdatas.request_data import RequestData
 from bt_api_py.containers.tickers.coindcx_ticker import CoinDCXRequestTickerData
-from bt_api_py.feeds.capability import Capability
+from bt_api_base.feeds.capability import Capability
 from bt_api_py.feeds.live_coindcx.spot import CoinDCXRequestDataSpot
 from bt_api_py.registry import ExchangeRegistry
 

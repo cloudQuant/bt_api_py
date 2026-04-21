@@ -72,7 +72,7 @@ class TestYoBitTickerData:
         if data:
             pass
             # YoBit ticker response structure
-        from bt_api_py.containers.requestdatas.request_data import RequestData
+        from bt_api_base.containers.requestdatas.request_data import RequestData
 
         assert isinstance(data, (dict, list, RequestData))
 
@@ -120,7 +120,7 @@ class TestYoBitOrderBook:
         data = yobit_feed.get_depth("BTC/USDT", count=20)
         assert data is not None
 
-        from bt_api_py.containers.requestdatas.request_data import RequestData
+        from bt_api_base.containers.requestdatas.request_data import RequestData
 
         assert isinstance(data, (dict, list, RequestData))
 
@@ -163,7 +163,7 @@ class TestYoBitMarketInfo:
         data = yobit_feed.get_exchange_info()
         assert data is not None
 
-        from bt_api_py.containers.requestdatas.request_data import RequestData
+        from bt_api_base.containers.requestdatas.request_data import RequestData
 
         assert isinstance(data, (dict, list, RequestData))
 

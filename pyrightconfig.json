@@ -1,0 +1,4 @@
+{
+  "extraPaths": ["./bt_api_base/src", "./packages/bt_api_coinbase/src", "./packages/bt_api_coinone/src"],
+  "include": ["bt_api_py", "bt_api_base", "tests", "packages"]
+}

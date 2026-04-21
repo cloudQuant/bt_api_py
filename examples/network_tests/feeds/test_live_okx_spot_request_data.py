@@ -12,7 +12,7 @@ from bt_api_py.containers.orderbooks.okx_orderbook import OkxOrderBookData
 # from bt_api_py.containers.orders.okx_order import OkxOrderData
 # from bt_api_py.containers.trades.okx_trade import OkxRequestTradeData, OkxWssTradeData
 from bt_api_py.containers.positions.okx_position import OkxPositionData
-from bt_api_py.containers.requestdatas.request_data import RequestData
+from bt_api_base.containers.requestdatas.request_data import RequestData
 from bt_api_py.containers.tickers.okx_ticker import OkxTickerData
 from bt_api_py.feeds.live_okx_feed import OkxRequestDataSpot
 from bt_api_py.functions.utils import get_public_ip, read_account_config

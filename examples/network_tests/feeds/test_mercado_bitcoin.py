@@ -17,9 +17,9 @@ from bt_api_py.containers.exchanges.mercado_bitcoin_exchange_data import (
     MercadoBitcoinExchangeData,
     MercadoBitcoinExchangeDataSpot,
 )
-from bt_api_py.containers.requestdatas.request_data import RequestData
+from bt_api_base.containers.requestdatas.request_data import RequestData
 from bt_api_py.containers.tickers.mercado_bitcoin_ticker import MercadoBitcoinRequestTickerData
-from bt_api_py.feeds.capability import Capability
+from bt_api_base.feeds.capability import Capability
 from bt_api_py.feeds.live_mercado_bitcoin.spot import MercadoBitcoinRequestDataSpot
 from bt_api_py.registry import ExchangeRegistry
 

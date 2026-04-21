@@ -61,7 +61,7 @@ class TestDydxSpotInit:
 
     def test_capabilities(self, dydx_spot):
         """Test that declared capabilities are correct"""
-        from bt_api_py.feeds.capability import Capability
+        from bt_api_base.feeds.capability import Capability
 
         caps = dydx_spot._capabilities()
         assert Capability.GET_TICK in caps

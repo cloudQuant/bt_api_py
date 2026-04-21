@@ -14,9 +14,9 @@ import pytest
 # Import registration to auto-register Foxbit
 import bt_api_py.exchange_registers.register_foxbit  # noqa: F401
 from bt_api_py.containers.exchanges.foxbit_exchange_data import FoxbitExchangeDataSpot
-from bt_api_py.containers.requestdatas.request_data import RequestData
+from bt_api_base.containers.requestdatas.request_data import RequestData
 from bt_api_py.containers.tickers.foxbit_ticker import FoxbitRequestTickerData
-from bt_api_py.feeds.capability import Capability
+from bt_api_base.feeds.capability import Capability
 from bt_api_py.feeds.live_foxbit.spot import FoxbitRequestDataSpot
 from bt_api_py.registry import ExchangeRegistry
 

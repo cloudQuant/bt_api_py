@@ -476,19 +476,6 @@ class TestIntegration:
         business_metrics.record_api_request(success=True, latency=0.045)
         business_metrics.set_active_connections(3)
 
-        # Log trading events
-        logger.order_event(
-            event_type="placed", exchange_name="BINANCE", symbol="BTCUSDT", side="BUY", quantity=0.1
-        )
-
-        logger.api_request(
-            method="POST",
-            endpoint="/api/v3/order",
-            exchange_name="BINANCE",
-            status_code=200,
-            duration_ms=25.5,
-        )
-
         # Verify metrics were recorded
         assert business_metrics.orders_total.get() == 1
         assert business_metrics.orders_success.get() == 1

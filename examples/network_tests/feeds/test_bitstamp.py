@@ -14,8 +14,8 @@ import bt_api_py.exchange_registers.register_bitstamp  # noqa: F401
 from bt_api_py.containers.exchanges.bitstamp_exchange_data import (
     BitstampExchangeDataSpot,
 )
-from bt_api_py.containers.requestdatas.request_data import RequestData
-from bt_api_py.feeds.capability import Capability
+from bt_api_base.containers.requestdatas.request_data import RequestData
+from bt_api_base.feeds.capability import Capability
 from bt_api_py.feeds.live_bitstamp.request_base import BitstampRequestData
 from bt_api_py.feeds.live_bitstamp.spot import BitstampRequestDataSpot
 from bt_api_py.registry import ExchangeRegistry

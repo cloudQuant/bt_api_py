@@ -12,7 +12,7 @@ import pytest
 from bt_api_py.containers.exchanges.poloniex_exchange_data import (
     PoloniexExchangeDataSpot,
 )
-from bt_api_py.containers.requestdatas.request_data import RequestData
+from bt_api_base.containers.requestdatas.request_data import RequestData
 from bt_api_py.feeds.live_poloniex.spot import PoloniexRequestDataSpot
 
 # ── Sample API responses ─────────────────────────────────────
@@ -596,7 +596,7 @@ class TestFeedInit:
         assert feed.api_secret == "s2"
 
     def test_capabilities(self):
-        from bt_api_py.feeds.capability import Capability
+        from bt_api_base.feeds.capability import Capability
 
         caps = PoloniexRequestDataSpot._capabilities()
         assert Capability.GET_TICK in caps

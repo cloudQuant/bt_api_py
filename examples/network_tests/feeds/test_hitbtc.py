@@ -727,7 +727,7 @@ class TestFeedInit:
         assert feed.api_secret == "s2"
 
     def test_capabilities(self):
-        from bt_api_py.feeds.capability import Capability
+        from bt_api_base.feeds.capability import Capability
 
         caps = HitBtcSpotRequestData._capabilities()
         assert Capability.GET_TICK in caps

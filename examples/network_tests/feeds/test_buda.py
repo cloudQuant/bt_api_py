@@ -17,9 +17,9 @@ import bt_api_py.exchange_registers.register_buda  # noqa: F401
 from bt_api_py.containers.exchanges.buda_exchange_data import (
     BudaExchangeDataSpot,
 )
-from bt_api_py.containers.requestdatas.request_data import RequestData
+from bt_api_base.containers.requestdatas.request_data import RequestData
 from bt_api_py.containers.tickers.buda_ticker import BudaRequestTickerData
-from bt_api_py.feeds.capability import Capability
+from bt_api_base.feeds.capability import Capability
 from bt_api_py.feeds.live_buda.spot import BudaRequestDataSpot
 from bt_api_py.registry import ExchangeRegistry
 

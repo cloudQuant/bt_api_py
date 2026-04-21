@@ -11,7 +11,7 @@ import pytest
 
 import bt_api_py.exchange_registers.register_korbit  # noqa: F401
 from bt_api_py.containers.exchanges.korbit_exchange_data import KorbitExchangeDataSpot
-from bt_api_py.containers.requestdatas.request_data import RequestData
+from bt_api_base.containers.requestdatas.request_data import RequestData
 from bt_api_py.feeds.live_korbit.request_base import KorbitRequestData
 from bt_api_py.feeds.live_korbit.spot import (
     KorbitAccountWssDataSpot,

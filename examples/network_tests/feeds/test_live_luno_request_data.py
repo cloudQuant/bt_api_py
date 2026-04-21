@@ -14,7 +14,7 @@ import pytest
 
 # Import registration to auto-register Luno
 import bt_api_py.exchange_registers.register_luno  # noqa: F401
-from bt_api_py.containers.requestdatas.request_data import RequestData
+from bt_api_base.containers.requestdatas.request_data import RequestData
 from bt_api_py.feeds.live_luno.spot import LunoRequestDataSpot
 from bt_api_py.registry import ExchangeRegistry
 

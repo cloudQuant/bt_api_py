@@ -12,7 +12,7 @@ from dataclasses import dataclass, field
 from typing import Any
 from uuid import uuid4
 
-from bt_api_py.exceptions import BtApiError
+from bt_api_base.exceptions import BtApiError
 
 
 class AccessDeniedError(BtApiError):

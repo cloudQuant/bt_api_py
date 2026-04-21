@@ -44,7 +44,7 @@ try:
 except ImportError:
     QR_CODE_AVAILABLE = False
 
-from bt_api_py.exceptions import BtApiError
+from bt_api_base.exceptions import BtApiError
 
 
 class MFAError(BtApiError):

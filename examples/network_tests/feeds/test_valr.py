@@ -14,7 +14,7 @@ from bt_api_py.containers.exchanges.valr_exchange_data import (
     ValrExchangeData,
     ValrExchangeDataSpot,
 )
-from bt_api_py.containers.requestdatas.request_data import RequestData
+from bt_api_base.containers.requestdatas.request_data import RequestData
 from bt_api_py.feeds.live_valr.request_base import ValrRequestData
 from bt_api_py.feeds.live_valr.spot import (
     ValrAccountWssDataSpot,
@@ -399,7 +399,7 @@ class TestFeedInit:
         assert feed.asset_type == "SPOT"
 
     def test_capabilities(self, feed):
-        from bt_api_py.feeds.capability import Capability
+        from bt_api_base.feeds.capability import Capability
 
         caps = feed._capabilities()
         assert Capability.GET_TICK in caps

@@ -15,7 +15,7 @@ from bt_api_py.containers.balances.mexc_balance import MexcRequestBalanceData
 from bt_api_py.containers.exchanges.mexc_exchange_data import MexcExchangeDataSpot
 from bt_api_py.containers.orderbooks.mexc_orderbook import MexcRequestOrderBookData
 from bt_api_py.containers.orders.mexc_order import MexcRequestOrderData
-from bt_api_py.containers.requestdatas.request_data import RequestData
+from bt_api_base.containers.requestdatas.request_data import RequestData
 from bt_api_py.containers.tickers.mexc_ticker import MexcRequestTickerData
 from bt_api_py.feeds.live_mexc.spot import MexcRequestDataSpot
 from bt_api_py.registry import ExchangeRegistry

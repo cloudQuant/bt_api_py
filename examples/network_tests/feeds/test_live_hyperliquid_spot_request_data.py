@@ -15,7 +15,7 @@ from bt_api_py.containers.accounts.hyperliquid_account import HyperliquidSpotWss
 from bt_api_py.containers.balances.hyperliquid_balance import HyperliquidSpotRequestBalanceData
 from bt_api_py.containers.exchanges.hyperliquid_exchange_data import HyperliquidExchangeDataSpot
 from bt_api_py.containers.orders.hyperliquid_order import HyperliquidRequestOrderData
-from bt_api_py.containers.requestdatas.request_data import RequestData
+from bt_api_base.containers.requestdatas.request_data import RequestData
 from bt_api_py.containers.tickers.hyperliquid_ticker import HyperliquidTickerData
 from bt_api_py.feeds.live_hyperliquid_feed import HyperliquidRequestDataSpot
 from bt_api_py.functions.utils import read_account_config

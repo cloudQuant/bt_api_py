@@ -16,9 +16,9 @@ import bt_api_py.exchange_registers.register_coincheck  # noqa: F401
 from bt_api_py.containers.exchanges.coincheck_exchange_data import (
     CoincheckExchangeDataSpot,
 )
-from bt_api_py.containers.requestdatas.request_data import RequestData
+from bt_api_base.containers.requestdatas.request_data import RequestData
 from bt_api_py.containers.tickers.coincheck_ticker import CoincheckRequestTickerData
-from bt_api_py.feeds.capability import Capability
+from bt_api_base.feeds.capability import Capability
 from bt_api_py.feeds.live_coincheck.spot import CoincheckRequestDataSpot
 from bt_api_py.registry import ExchangeRegistry
 

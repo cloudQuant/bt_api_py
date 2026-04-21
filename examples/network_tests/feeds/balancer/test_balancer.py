@@ -11,7 +11,7 @@ import pytest
 from bt_api_py.containers.exchanges.balancer_exchange_data import (
     BalancerExchangeDataSpot,
 )
-from bt_api_py.containers.requestdatas.request_data import RequestData
+from bt_api_base.containers.requestdatas.request_data import RequestData
 from bt_api_py.feeds.live_balancer.spot import BalancerRequestDataSpot
 
 
@@ -49,7 +49,7 @@ class TestBalancerRequestDataSpot:
 
     def test_capabilities(self, balancer_spot):
         """Test declared capabilities."""
-        from bt_api_py.feeds.capability import Capability
+        from bt_api_base.feeds.capability import Capability
 
         capabilities = balancer_spot._capabilities()
         assert Capability.GET_TICK in capabilities
@@ -612,7 +612,7 @@ class TestBalancerBaseCapabilities:
 
     def test_base_capabilities(self):
         """Test that BalancerRequestData base class declares correct capabilities."""
-        from bt_api_py.feeds.capability import Capability
+        from bt_api_base.feeds.capability import Capability
         from bt_api_py.feeds.live_balancer.request_base import BalancerRequestData
 
         caps = BalancerRequestData._capabilities()

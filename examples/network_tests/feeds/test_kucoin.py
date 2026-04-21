@@ -19,7 +19,7 @@ from bt_api_py.containers.exchanges.kucoin_exchange_data import (
 )
 from bt_api_py.containers.orderbooks.kucoin_orderbook import KuCoinRequestOrderBookData
 from bt_api_py.containers.orders.kucoin_order import KuCoinRequestOrderData
-from bt_api_py.containers.requestdatas.request_data import RequestData
+from bt_api_base.containers.requestdatas.request_data import RequestData
 from bt_api_py.containers.tickers.kucoin_ticker import KuCoinRequestTickerData
 from bt_api_py.feeds.live_kucoin.futures import KuCoinRequestDataFutures
 from bt_api_py.feeds.live_kucoin.spot import KuCoinRequestDataSpot

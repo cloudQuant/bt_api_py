@@ -17,9 +17,9 @@ from bt_api_py.containers.exchanges.cryptocom_exchange_data import (
 )
 from bt_api_py.containers.orderbooks.cryptocom_orderbook import CryptoComOrderBook
 from bt_api_py.containers.orders.cryptocom_order import CryptoComOrder
-from bt_api_py.containers.requestdatas.request_data import RequestData
+from bt_api_base.containers.requestdatas.request_data import RequestData
 from bt_api_py.containers.tickers.cryptocom_ticker import CryptoComTicker
-from bt_api_py.feeds.capability import Capability
+from bt_api_base.feeds.capability import Capability
 from bt_api_py.feeds.live_cryptocom.request_base import CryptoComRequestData
 from bt_api_py.feeds.live_cryptocom.spot import CryptoComRequestDataSpot
 from bt_api_py.registry import ExchangeRegistry
