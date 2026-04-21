@@ -39,7 +39,7 @@
 | bt_api_bitstamp | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 
 ### ⏳ 待完成
-| bt_api_bitunix | ⏳ | ⏳ | ⏳ | ⏳ | ⏳ | ⏳ |
+| bt_api_bitunix | 🔄 | 🔄 | 🔄 | 🔄 | 🔄 | 🔄 |
 | bt_api_bitvavo | ⏳ | ⏳ | ⏳ | ⏳ | ⏳ | ⏳ |
 | bt_api_btbns | ⏳ | ⏳ | ⏳ | ⏳ | ⏳ | ⏳ |
 | bt_api_btc_markets | ⏳ | ⏳ | ⏳ | ⏳ | ⏳ | ⏳ |
