@@ -37,7 +37,7 @@
 | bt_api_bitrue | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 
 ### ⏳ 待完成
-| bt_api_bitso | ⏳ | ⏳ | ⏳ | ⏳ | ⏳ | ⏳ |
+| bt_api_bitso | 🔄 | 🔄 | 🔄 | 🔄 | 🔄 | 🔄 |
 | bt_api_bitstamp | ⏳ | ⏳ | ⏳ | ⏳ | ⏳ | ⏳ |
 | bt_api_bitunix | ⏳ | ⏳ | ⏳ | ⏳ | ⏳ | ⏳ |
 | bt_api_bitvavo | ⏳ | ⏳ | ⏳ | ⏳ | ⏳ | ⏳ |
