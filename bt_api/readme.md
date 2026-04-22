@@ -82,7 +82,7 @@
 | bt_api_upbit | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | bt_api_valr | 🔄 | 🔄 | 🔄 | 🔄 | 🔄 | 🔄 |
 | bt_api_wazirx | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| bt_api_yobit | 🔄 | 🔄 | 🔄 | 🔄 | 🔄 | 🔄 |
+| bt_api_yobit | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | bt_api_zaif | 🔄 | 🔄 | 🔄 | 🔄 | 🔄 | 🔄 |
 | bt_api_zebpay | 🔄 | 🔄 | 🔄 | 🔄 | 🔄 | 🔄 |
 
