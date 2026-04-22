@@ -69,7 +69,7 @@
 | bt_api_kraken | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | bt_api_kucoin | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | bt_api_latoken | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| bt_api_localbitcoins | 🔄 | 🔄 | 🔄 | 🔄 | 🔄 | 🔄 |
+| bt_api_localbitcoins | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | bt_api_luno | 🔄 | 🔄 | 🔄 | 🔄 | 🔄 | 🔄 |
 | bt_api_mercado_bitcoin | 🔄 | 🔄 | 🔄 | 🔄 | 🔄 | 🔄 |
 | bt_api_mexc | 🔄 | 🔄 | 🔄 | 🔄 | 🔄 | 🔄 |
@@ -90,9 +90,9 @@
 
 ## 总计
 
-- **已完成**: 30 / 65 (含本次处理完成的bt_api_ctp)
-- **进行中**: 35 / 65 (含本次并行处理的33个 + hyperliquid + independent_reserve)
-- **待完成**: 0 / 65
+- **已完成**: 43 / 60 (含本次处理完成的 bt_api_mt5, bt_api_ib_web, bt_api_ctp)
+- **进行中**: 17 / 60 (hyperliquid, ib_web, mt5 已移至已完成)
+- **待完成**: 0 / 60
 
 ---
 
