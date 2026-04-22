@@ -43,10 +43,10 @@
 | bt_api_btc_markets | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | bt_api_btcturk | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | bt_api_bydfi | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| bt_api_coinbase | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 
 ### 🔄 进行中
 | bt_api_bybit | 🔄 | 🔄 | 🔄 | 🔄 | 🔄 | 🔄 |
-| bt_api_coinbase | ⏳ | ⏳ | ⏳ | ⏳ | ⏳ | ⏳ |
 | bt_api_coincheck | ⏳ | ⏳ | ⏳ | ⏳ | ⏳ | ⏳ |
 | bt_api_coindcx | ⏳ | ⏳ | ⏳ | ⏳ | ⏳ | ⏳ |
 | bt_api_coinex | ⏳ | ⏳ | ⏳ | ⏳ | ⏳ | ⏳ |
@@ -92,8 +92,8 @@
 
 ## 总计
 
-- **已完成**: 19 / 65
-- **待完成**: 46 / 65
+- **已完成**: 20 / 65
+- **待完成**: 45 / 65
 
 ---
 
