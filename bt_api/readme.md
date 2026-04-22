@@ -70,7 +70,7 @@
 | bt_api_kucoin | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | bt_api_latoken | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | bt_api_localbitcoins | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| bt_api_luno | 🔄 | 🔄 | 🔄 | 🔄 | 🔄 | 🔄 |
+| bt_api_luno | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | bt_api_mercado_bitcoin | 🔄 | 🔄 | 🔄 | 🔄 | 🔄 | 🔄 |
 | bt_api_mexc | 🔄 | 🔄 | 🔄 | 🔄 | 🔄 | 🔄 |
 | bt_api_mt5 | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
