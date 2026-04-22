@@ -72,7 +72,7 @@
 | bt_api_localbitcoins | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | bt_api_luno | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | bt_api_mercado_bitcoin | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| bt_api_mexc | 🔄 | 🔄 | 🔄 | 🔄 | 🔄 | 🔄 |
+| bt_api_mexc | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | bt_api_mt5 | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | bt_api_phemex | 🔄 | 🔄 | 🔄 | 🔄 | 🔄 | 🔄 |
 | bt_api_poloniex | 🔄 | 🔄 | 🔄 | 🔄 | 🔄 | 🔄 |
