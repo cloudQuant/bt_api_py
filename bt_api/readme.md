@@ -78,7 +78,7 @@
 | bt_api_poloniex | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | bt_api_ripio | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | bt_api_satoshitango | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| bt_api_swyftx | 🔄 | 🔄 | 🔄 | 🔄 | 🔄 | 🔄 |
+| bt_api_swyftx | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | bt_api_upbit | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | bt_api_valr | 🔄 | 🔄 | 🔄 | 🔄 | 🔄 | 🔄 |
 | bt_api_wazirx | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
