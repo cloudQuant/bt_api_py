@@ -12,6 +12,7 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 from threading import Event, Thread
 
 from bt_api_base.logging_factory import get_logger
+
 from bt_api_py.monitoring.metrics import MetricRegistry, get_registry
 
 _logger = get_logger("prometheus")

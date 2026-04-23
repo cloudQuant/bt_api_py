@@ -12,7 +12,6 @@ from datetime import datetime
 from typing import Any, cast
 
 from bt_api_base.logging_factory import get_logger
-from typing import Any
 
 # LogEvent type - using Any for now as the original LogEvent class doesn't exist
 LogEvent = Any

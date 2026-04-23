@@ -142,9 +142,10 @@ def get_registry() -> dict[str, type]:
 def initialize_default_feeds():
     """Initialize default feeds via PluginLoader (replaces legacy explicit stub imports)."""
     try:
+        from bt_api_base.registry import ExchangeRegistry
+
         from bt_api_py.gateway.registrar import GatewayRuntimeRegistrar
         from bt_api_py.plugins.loader import PluginLoader
-        from bt_api_base.registry import ExchangeRegistry
 
         _loader = PluginLoader(ExchangeRegistry(), GatewayRuntimeRegistrar)
         _loader.load_all()

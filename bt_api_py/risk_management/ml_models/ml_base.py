@@ -12,9 +12,8 @@ from pathlib import Path
 from typing import Any
 
 import numpy as np
-from sklearn.metrics import accuracy_score, f1_score, precision_score, recall_score
-
 from bt_api_base.logging_factory import get_logger
+from sklearn.metrics import accuracy_score, f1_score, precision_score, recall_score
 
 
 class BaseMLModel(ABC):

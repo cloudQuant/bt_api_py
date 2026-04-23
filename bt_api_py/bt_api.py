@@ -7,8 +7,6 @@ from __future__ import annotations
 
 # 导入注册模块，确保交易所在使用前完成注册
 # 自动扫描 exchange_registers/ 下所有模块，无需手动维护 import 列表
-import importlib
-import pkgutil
 import queue
 import time
 from collections.abc import Callable
@@ -17,6 +15,7 @@ from datetime import datetime, timedelta
 from typing import Any
 
 from bt_api_base._compat import UTC
+from bt_api_base.event_bus import EventBus
 from bt_api_base.exceptions import (
     BtApiError,
     CurrencyNotFoundError,
@@ -30,8 +29,6 @@ from bt_api_base.exceptions import (
 )
 from bt_api_base.logging_factory import _LoggerProxy, get_logger
 from bt_api_base.registry import ExchangeRegistry
-
-from bt_api_base.event_bus import EventBus
 
 __all__ = ["BtApi"]
 
