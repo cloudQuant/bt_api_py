@@ -13,6 +13,7 @@ authors = [
     {name = "cloudQuant", email = "yunjinqi@gmail.com"},
 ]
 dependencies = [
+    "bt_api_base>=0.15.2",
     "numpy>=1.26.0",
     "python-dotenv>=1.0.0",
     "requests>=2.31.0",
