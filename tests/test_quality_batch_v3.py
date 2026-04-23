@@ -16,8 +16,10 @@ import tempfile
 from pathlib import Path
 
 import numpy as np
+import pytest
 
 
+@pytest.mark.ctp
 class TestCtpInitContextlibSuppress:
     """Verify ctp/__init__.py uses contextlib.suppress instead of try-except-pass."""
 
@@ -40,6 +42,7 @@ class TestCtpInitContextlibSuppress:
                 )
 
 
+@pytest.mark.ctp
 class TestCtpBaseImportOrder:
     """Verify _ctp_base.py imports are sorted (I001 fix)."""
 
@@ -66,6 +69,7 @@ class TestCtpBaseImportOrder:
         assert from_imports == sorted(from_imports), f"from-imports are not sorted: {from_imports}"
 
 
+@pytest.mark.ctp
 class TestCtpBaseNoDuplicateSwigRepr:
     """Verify _swig_repr is defined only once in _ctp_base.py."""
 
