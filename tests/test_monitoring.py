@@ -27,6 +27,7 @@ from bt_api_py.monitoring import (
     MetricsCollector,
     PerformanceMetrics,
     SystemMetricsCollector,
+    get_business_collector,
     get_registry,
     monitor_calls,
     monitor_execution_time,
@@ -465,13 +466,8 @@ class TestIntegration:
     @pytest.mark.asyncio
     async def test_trading_bot_monitoring_integration(self) -> None:
         """Test monitoring integration with trading bot scenario."""
-        # Create monitoring components
-        from bt_api_py.monitoring import get_business_collector, get_logger
-
         business_metrics = get_business_collector()
-        logger = get_logger("test_trading_bot")
 
-        # Simulate trading operations
         business_metrics.record_order_placed(success=True, latency=0.025)
         business_metrics.record_api_request(success=True, latency=0.045)
         business_metrics.set_active_connections(3)

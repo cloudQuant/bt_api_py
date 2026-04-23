@@ -1,0 +1,97 @@
+id: curve
+display_name: Curve Finance
+venue_type: dex
+website: https://curve.fi
+api_doc: https://docs.curve.finance/
+base_urls:
+  rest:
+    default: https://api.curve.finance
+    spot: https://api.curve.finance
+  graphql: https://api.curve.finance
+authentication:
+  type: none
+kline_periods:
+  1h: 1hour
+  1d: 1day
+  1w: 1week
+legal_currency: &id001
+- USDT
+- USD
+- EUR
+- DAI
+- USDC
+- USDT
+- ETH
+- BTC
+rate_limits:
+- name: public_api
+  type: sliding_window
+  interval: 60
+  limit: 300
+  scope: global
+chains_supported:
+- ethereum
+- arbitrum
+- optimism
+- polygon
+- avalanche
+- base
+- bsc
+- fantom
+- celo
+- gnosis
+- moonbeam
+- kava
+- aurora
+- fraxtal
+- xlayer
+asset_types:
+  ethereum:
+    exchange_name: curveEthereum
+    rest_paths:
+      get_pools: GET /v1/getPools/ethereum/main
+      get_volumes: GET /v1/getVolumes/ethereum
+      get_tvl: GET /v1/getTVL/ethereum
+      get_apys: GET /v1/getAPYs/ethereum
+      get_gauges: GET /v1/getGauges/ethereum
+    graphql_endpoints:
+      subgraph: https://api.thegraph.com/subgraphs/name/curve-fi/curve
+    symbol_format: '{base}/{quote}'
+    legal_currency: *id001
+  arbitrum:
+    exchange_name: curveArbitrum
+    rest_paths:
+      get_pools: GET /v1/getPools/arbitrum/main
+      get_volumes: GET /v1/getVolumes/arbitrum
+      get_tvl: GET /v1/getTVL/arbitrum
+      get_apys: GET /v1/getAPYs/arbitrum
+    symbol_format: '{base}/{quote}'
+    legal_currency: *id001
+  optimism:
+    exchange_name: curveOptimism
+    rest_paths:
+      get_pools: GET /v1/getPools/optimism/main
+      get_volumes: GET /v1/getVolumes/optimism
+      get_tvl: GET /v1/getTVL/optimism
+    symbol_format: '{base}/{quote}'
+    legal_currency: *id001
+  polygon:
+    exchange_name: curvePolygon
+    rest_paths:
+      get_pools: GET /v1/getPools/polygon/main
+      get_volumes: GET /v1/getVolumes/polygon
+      get_tvl: GET /v1/getTVL/polygon
+    symbol_format: '{base}/{quote}'
+    legal_currency: *id001
+  base:
+    exchange_name: curveBase
+    rest_paths:
+      get_pools: GET /v1/getPools/base/main
+      get_volumes: GET /v1/getVolumes/base
+      get_tvl: GET /v1/getTVL/base
+    symbol_format: '{base}/{quote}'
+    legal_currency: *id001
+connection:
+  type: http
+  timeout: 10
+  max_retries: 3

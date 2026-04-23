@@ -1,0 +1,28 @@
+okx:
+  public_key: xxx
+  private_key: xxx
+  passphrase: xxx
+binance:
+  public_key: xxx
+  private_key: xxx
+ctp:
+  broker_id: '9999'
+  user_id: xxx
+  password: xxx
+  auth_code: xxx
+  app_id: simnow_client_test
+  md_front: tcp://180.168.146.187:10131
+  td_front: tcp://180.168.146.187:10130
+ib:
+  host: 127.0.0.1
+  port: 7497
+  client_id: 1
+ib_web:
+  base_url: https://localhost:5000
+  account_id: ''
+  verify_ssl: false
+  timeout: 10
+connection:
+  type: http
+  timeout: 10
+  max_retries: 3
