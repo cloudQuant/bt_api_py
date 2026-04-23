@@ -67,6 +67,7 @@ AuthConfig (基类)
 
 ---
 
+<!--
 ::: bt_api_py.auth_config
     options:
       show_root_heading: false
@@ -76,3 +77,4 @@ AuthConfig (基类)
       show_if_no_docstring: true
       filters:
         - "!^_"
+-->
