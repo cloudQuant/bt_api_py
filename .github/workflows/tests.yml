@@ -20,8 +20,6 @@ env:
   COVERAGE_THRESHOLD: "40"
   SMOKE_TEST_PATHS: >-
     tests/test_bt_api_quality.py
-    tests/core/test_async_context.py
-    tests/gateway/test_config.py
   FULL_SUITE_MARKERS: "not network and not integration and not performance and not e2e"
 
 jobs:
