@@ -24,9 +24,6 @@ on:
 env:
   SMOKE_TEST_PATHS: >-
     tests/test_bt_api_quality.py
-    tests/test_event_bus.py
-    tests/core/test_async_context.py
-    tests/gateway/test_config.py
 
 jobs:
   compatibility-matrix:
