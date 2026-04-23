@@ -48,6 +48,7 @@ event_bus.off("BarEvent", on_bar)
 
 ---
 
+<!--
 ::: bt_api_py.event_bus.EventBus
     options:
       show_root_heading: true
@@ -58,3 +59,4 @@ event_bus.off("BarEvent", on_bar)
       filters:
         - "!^_"
         - "!^__"
+-->

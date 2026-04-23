@@ -41,6 +41,7 @@ print(exchanges)
 
 ---
 
+<!--
 ::: bt_api_py.registry.ExchangeRegistry
     options:
       show_root_heading: true
@@ -51,3 +52,4 @@ print(exchanges)
       filters:
         - "!^_"
         - "!^__"
+-->
