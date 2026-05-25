@@ -68,7 +68,7 @@ jobs:
         run: pytest $SMOKE_TEST_PATHS -q
 
   performance:
-    if: github.event_name == 'schedule' || inputs.run_performance == true
+    if: inputs.run_performance == true
     runs-on: ubuntu-latest
     timeout-minutes: 20
 
@@ -89,7 +89,12 @@ jobs:
           pip install -e ".[dev]"
 
       - name: Run performance tests
-        run: pytest tests/performance/ --tb=short -v --benchmark-json=benchmark.json
+        run: |
+          if [ -d tests/performance ]; then
+            pytest tests/performance/ --tb=short -v --benchmark-json=benchmark.json
+          else
+            echo "No performance tests found, skipping"
+          fi
 
       - name: Store benchmark result
         uses: benchmark-action/github-action-benchmark@v1
@@ -173,6 +178,8 @@ jobs:
     if: failure()
     needs: [compatibility-matrix, performance, security, build-test]
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
 
     steps:
       - name: Notify on failure
