@@ -133,13 +133,35 @@ conda install -c conda-forge swig libiconv
 完成前置环境后，再执行源码安装：
 
 ```bash
-git clone https://github.com/cloudQuant/bt_api_py
+git clone --recurse-submodules https://github.com/cloudQuant/bt_api_py
 cd bt_api_py
 python -m pip install --upgrade pip
 pip install -e .
 
 # 如果你要参与开发
 pip install -e ".[dev]"
+```
+
+如果已经用普通 `git clone` 拉取了仓库，需要补拉交易所插件子模块：
+
+```bash
+git submodule update --init --recursive --jobs 8
+```
+
+需要同时检查并安装 `bt_api_*` 插件包时，使用仓库内脚本。默认策略是：已安装则跳过；未安装时先尝试本地子模块源码安装；源码不可安装或安装失败时再尝试 PyPI；仍失败则在 summary 中标记。
+
+```bash
+# 安装 bt_api_py 本体，并按源码优先策略安装全部插件
+python scripts/install_bt_api_submodules.py --with-root --editable-root --strategy source-first
+
+# 只从本地子模块源码安装，不从 PyPI 兜底
+python scripts/install_bt_api_submodules.py --with-root --editable-root --strategy source-only --upgrade
+
+# 只安装指定插件
+python scripts/install_bt_api_submodules.py bt_api_base bt_api_binance bt_api_okx --strategy source-first
+
+# 只检查安装状态，不安装任何包
+python scripts/install_bt_api_submodules.py --strategy none
 ```
 
 ### 可选依赖

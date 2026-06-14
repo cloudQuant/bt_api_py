@@ -1,0 +1,195 @@
+[submodule "bt_api/bt_api_base"]
+	path = bt_api/bt_api_base
+	url = https://github.com/cloudQuant/bt_api_base.git
+[submodule "bt_api/bt_api_bequant"]
+	path = bt_api/bt_api_bequant
+	url = https://github.com/cloudQuant/bt_api_bequant.git
+[submodule "bt_api/bt_api_bigone"]
+	path = bt_api/bt_api_bigone
+	url = https://github.com/cloudQuant/bt_api_bigone.git
+[submodule "bt_api/bt_api_binance"]
+	path = bt_api/bt_api_binance
+	url = https://github.com/cloudQuant/bt_api_binance.git
+[submodule "bt_api/bt_api_bingx"]
+	path = bt_api/bt_api_bingx
+	url = https://github.com/cloudQuant/bt_api_bingx.git
+[submodule "bt_api/bt_api_bitbank"]
+	path = bt_api/bt_api_bitbank
+	url = https://github.com/cloudQuant/bt_api_bitbank.git
+[submodule "bt_api/bt_api_bitfinex"]
+	path = bt_api/bt_api_bitfinex
+	url = https://github.com/cloudQuant/bt_api_bitfinex.git
+[submodule "bt_api/bt_api_bitflyer"]
+	path = bt_api/bt_api_bitflyer
+	url = https://github.com/cloudQuant/bt_api_bitflyer.git
+[submodule "bt_api/bt_api_bitget"]
+	path = bt_api/bt_api_bitget
+	url = https://github.com/cloudQuant/bt_api_bitget.git
+[submodule "bt_api/bt_api_bithumb"]
+	path = bt_api/bt_api_bithumb
+	url = https://github.com/cloudQuant/bt_api_bithumb.git
+[submodule "bt_api/bt_api_bitinka"]
+	path = bt_api/bt_api_bitinka
+	url = https://github.com/cloudQuant/bt_api_bitinka.git
+[submodule "bt_api/bt_api_bitmart"]
+	path = bt_api/bt_api_bitmart
+	url = https://github.com/cloudQuant/bt_api_bitmart.git
+[submodule "bt_api/bt_api_bitrue"]
+	path = bt_api/bt_api_bitrue
+	url = https://github.com/cloudQuant/bt_api_bitrue.git
+[submodule "bt_api/bt_api_bitso"]
+	path = bt_api/bt_api_bitso
+	url = https://github.com/cloudQuant/bt_api_bitso.git
+[submodule "bt_api/bt_api_bitstamp"]
+	path = bt_api/bt_api_bitstamp
+	url = https://github.com/cloudQuant/bt_api_bitstamp.git
+[submodule "bt_api/bt_api_bitunix"]
+	path = bt_api/bt_api_bitunix
+	url = https://github.com/cloudQuant/bt_api_bitunix.git
+[submodule "bt_api/bt_api_bitvavo"]
+	path = bt_api/bt_api_bitvavo
+	url = https://github.com/cloudQuant/bt_api_bitvavo.git
+[submodule "bt_api/bt_api_btbns"]
+	path = bt_api/bt_api_btbns
+	url = https://github.com/cloudQuant/bt_api_btbns.git
+[submodule "bt_api/bt_api_btc_markets"]
+	path = bt_api/bt_api_btc_markets
+	url = https://github.com/cloudQuant/bt_api_btc_markets.git
+[submodule "bt_api/bt_api_btcturk"]
+	path = bt_api/bt_api_btcturk
+	url = https://github.com/cloudQuant/bt_api_btcturk.git
+[submodule "bt_api/bt_api_buda"]
+	path = bt_api/bt_api_buda
+	url = https://github.com/cloudQuant/bt_api_buda.git
+[submodule "bt_api/bt_api_bybit"]
+	path = bt_api/bt_api_bybit
+	url = https://github.com/cloudQuant/bt_api_bybit.git
+[submodule "bt_api/bt_api_bydfi"]
+	path = bt_api/bt_api_bydfi
+	url = https://github.com/cloudQuant/bt_api_bydfi.git
+[submodule "bt_api/bt_api_coinbase"]
+	path = bt_api/bt_api_coinbase
+	url = https://github.com/cloudQuant/bt_api_coinbase.git
+[submodule "bt_api/bt_api_coincheck"]
+	path = bt_api/bt_api_coincheck
+	url = https://github.com/cloudQuant/bt_api_coincheck.git
+[submodule "bt_api/bt_api_coindcx"]
+	path = bt_api/bt_api_coindcx
+	url = https://github.com/cloudQuant/bt_api_coindcx.git
+[submodule "bt_api/bt_api_coinex"]
+	path = bt_api/bt_api_coinex
+	url = https://github.com/cloudQuant/bt_api_coinex.git
+[submodule "bt_api/bt_api_coinone"]
+	path = bt_api/bt_api_coinone
+	url = https://github.com/cloudQuant/bt_api_coinone.git
+[submodule "bt_api/bt_api_coinspot"]
+	path = bt_api/bt_api_coinspot
+	url = https://github.com/cloudQuant/bt_api_coinspot.git
+[submodule "bt_api/bt_api_coinswitch"]
+	path = bt_api/bt_api_coinswitch
+	url = https://github.com/cloudQuant/bt_api_coinswitch.git
+[submodule "bt_api/bt_api_cryptocom"]
+	path = bt_api/bt_api_cryptocom
+	url = https://github.com/cloudQuant/bt_api_cryptocom.git
+[submodule "bt_api/bt_api_ctp"]
+	path = bt_api/bt_api_ctp
+	url = https://github.com/cloudQuant/bt_api_ctp.git
+[submodule "bt_api/bt_api_dydx"]
+	path = bt_api/bt_api_dydx
+	url = https://github.com/cloudQuant/bt_api_dydx.git
+[submodule "bt_api/bt_api_exmo"]
+	path = bt_api/bt_api_exmo
+	url = https://github.com/cloudQuant/bt_api_exmo.git
+[submodule "bt_api/bt_api_foxbit"]
+	path = bt_api/bt_api_foxbit
+	url = https://github.com/cloudQuant/bt_api_foxbit.git
+[submodule "bt_api/bt_api_gateio"]
+	path = bt_api/bt_api_gateio
+	url = https://github.com/cloudQuant/bt_api_gateio.git
+[submodule "bt_api/bt_api_gemini"]
+	path = bt_api/bt_api_gemini
+	url = https://github.com/cloudQuant/bt_api_gemini.git
+[submodule "bt_api/bt_api_giottus"]
+	path = bt_api/bt_api_giottus
+	url = https://github.com/cloudQuant/bt_api_giottus.git
+[submodule "bt_api/bt_api_gmx"]
+	path = bt_api/bt_api_gmx
+	url = https://github.com/cloudQuant/bt_api_gmx.git
+[submodule "bt_api/bt_api_hitbtc"]
+	path = bt_api/bt_api_hitbtc
+	url = https://github.com/cloudQuant/bt_api_hitbtc.git
+[submodule "bt_api/bt_api_htx"]
+	path = bt_api/bt_api_htx
+	url = https://github.com/cloudQuant/bt_api_htx.git
+[submodule "bt_api/bt_api_hyperliquid"]
+	path = bt_api/bt_api_hyperliquid
+	url = https://github.com/cloudQuant/bt_api_hyperliquid.git
+[submodule "bt_api/bt_api_ib_web"]
+	path = bt_api/bt_api_ib_web
+	url = https://github.com/cloudQuant/bt_api_ib_web.git
+[submodule "bt_api/bt_api_independent_reserve"]
+	path = bt_api/bt_api_independent_reserve
+	url = https://github.com/cloudQuant/bt_api_independent_reserve.git
+[submodule "bt_api/bt_api_korbit"]
+	path = bt_api/bt_api_korbit
+	url = https://github.com/cloudQuant/bt_api_korbit.git
+[submodule "bt_api/bt_api_kraken"]
+	path = bt_api/bt_api_kraken
+	url = https://github.com/cloudQuant/bt_api_kraken.git
+[submodule "bt_api/bt_api_kucoin"]
+	path = bt_api/bt_api_kucoin
+	url = https://github.com/cloudQuant/bt_api_kucoin.git
+[submodule "bt_api/bt_api_latoken"]
+	path = bt_api/bt_api_latoken
+	url = https://github.com/cloudQuant/bt_api_latoken.git
+[submodule "bt_api/bt_api_localbitcoins"]
+	path = bt_api/bt_api_localbitcoins
+	url = https://github.com/cloudQuant/bt_api_localbitcoins.git
+[submodule "bt_api/bt_api_luno"]
+	path = bt_api/bt_api_luno
+	url = https://github.com/cloudQuant/bt_api_luno.git
+[submodule "bt_api/bt_api_mercado_bitcoin"]
+	path = bt_api/bt_api_mercado_bitcoin
+	url = https://github.com/cloudQuant/bt_api_mercado_bitcoin.git
+[submodule "bt_api/bt_api_mexc"]
+	path = bt_api/bt_api_mexc
+	url = https://github.com/cloudQuant/bt_api_mexc.git
+[submodule "bt_api/bt_api_mt5"]
+	path = bt_api/bt_api_mt5
+	url = https://github.com/cloudQuant/bt_api_mt5.git
+[submodule "bt_api/bt_api_okx"]
+	path = bt_api/bt_api_okx
+	url = https://github.com/cloudQuant/bt_api_okx.git
+[submodule "bt_api/bt_api_phemex"]
+	path = bt_api/bt_api_phemex
+	url = https://github.com/cloudQuant/bt_api_phemex.git
+[submodule "bt_api/bt_api_poloniex"]
+	path = bt_api/bt_api_poloniex
+	url = https://github.com/cloudQuant/bt_api_poloniex.git
+[submodule "bt_api/bt_api_ripio"]
+	path = bt_api/bt_api_ripio
+	url = https://github.com/cloudQuant/bt_api_ripio.git
+[submodule "bt_api/bt_api_satoshitango"]
+	path = bt_api/bt_api_satoshitango
+	url = https://github.com/cloudQuant/bt_api_satoshitango.git
+[submodule "bt_api/bt_api_swyftx"]
+	path = bt_api/bt_api_swyftx
+	url = https://github.com/cloudQuant/bt_api_swyftx.git
+[submodule "bt_api/bt_api_upbit"]
+	path = bt_api/bt_api_upbit
+	url = https://github.com/cloudQuant/bt_api_upbit.git
+[submodule "bt_api/bt_api_valr"]
+	path = bt_api/bt_api_valr
+	url = https://github.com/cloudQuant/bt_api_valr.git
+[submodule "bt_api/bt_api_wazirx"]
+	path = bt_api/bt_api_wazirx
+	url = https://github.com/cloudQuant/bt_api_wazirx.git
+[submodule "bt_api/bt_api_yobit"]
+	path = bt_api/bt_api_yobit
+	url = https://github.com/cloudQuant/bt_api_yobit.git
+[submodule "bt_api/bt_api_zaif"]
+	path = bt_api/bt_api_zaif
+	url = https://github.com/cloudQuant/bt_api_zaif.git
+[submodule "bt_api/bt_api_zebpay"]
+	path = bt_api/bt_api_zebpay
+	url = https://github.com/cloudQuant/bt_api_zebpay.git
