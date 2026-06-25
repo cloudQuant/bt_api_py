@@ -6,6 +6,8 @@ and traditional financial markets (CTP, Interactive Brokers).
 
 from __future__ import annotations
 
+import os as _os
+
 from bt_api_base._compat import UTC
 
 # Re-export from bt_api_base for backward compatibility
@@ -55,7 +57,25 @@ from bt_api_base.instrument_manager import InstrumentManager, get_instrument_man
 from bt_api_base.logging_factory import _LoggerProxy, get_logger
 from bt_api_base.registry import ExchangeRegistry
 
-from bt_api_py.bt_api import BtApi
+
+_LIGHT_IMPORT = str(_os.getenv("BT_API_PY_LIGHT_IMPORT") or "").strip().lower() in {
+    "1",
+    "true",
+    "yes",
+    "on",
+}
+
+if not _LIGHT_IMPORT:
+    from bt_api_py.bt_api import BtApi
+
+
+def __getattr__(name: str):
+    if name == "BtApi":
+        from bt_api_py.bt_api import BtApi as _BtApi
+
+        globals()["BtApi"] = _BtApi
+        return _BtApi
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 __all__ = [
     "__version__",
