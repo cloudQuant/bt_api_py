@@ -15,6 +15,14 @@ class _ValidationFeed:
         return {"ok": True, "args": args, "kwargs": kwargs}
 
 
+class _TradingHistoryFeed(_ValidationFeed):
+    def get_deals(self, *args, **kwargs):
+        return {"method": "get_deals", "args": args, "kwargs": kwargs}
+
+    def get_trades(self, *args, **kwargs):
+        return {"method": "get_trades", "args": args, "kwargs": kwargs}
+
+
 class TestBtApiUnifiedInterface:
     """测试 BtApi 统一接口方法是否存在且向后兼容"""
 
@@ -55,6 +63,8 @@ class TestBtApiUnifiedInterface:
             "cancel_all",
             "query_order",
             "get_open_orders",
+            "get_deals",
+            "get_trades",
             "get_balance",
             "get_account",
             "get_position",
@@ -109,6 +119,23 @@ class TestBtApiUnifiedInterface:
 
         with pytest.raises(ExchangeNotFoundError):
             self.bt.get_balance("INVALID___EXCHANGE")
+
+    def test_unified_trade_history_methods_proxy_to_feed(self):
+        self.bt.exchange_feeds["TEST_HISTORY___SPOT"] = _TradingHistoryFeed()
+
+        deals = self.bt.get_deals("TEST_HISTORY___SPOT", "BTC-USDT", limit=20)
+        trades = self.bt.get_trades("TEST_HISTORY___SPOT", "BTC-USDT", limit=10)
+
+        assert deals == {
+            "method": "get_deals",
+            "args": ("BTC-USDT",),
+            "kwargs": {"extra_data": None, "limit": 20},
+        }
+        assert trades == {
+            "method": "get_trades",
+            "args": ("BTC-USDT",),
+            "kwargs": {"extra_data": None, "limit": 10},
+        }
 
     def test_batch_methods_return_empty_when_no_exchanges(self):
         """无交易所时批量操作应返回空字典"""
