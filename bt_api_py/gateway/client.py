@@ -73,7 +73,13 @@ _PRIVATE_EVENT_IDENTITY_KEYS = (
     "DealID",
     "exec_id",
     "execId",
+    "execID",
     "ExecID",
+    "execution_id",
+    "executionId",
+    "executionID",
+    "fill_id",
+    "fillId",
     "id",
 )
 _ORDER_EVENT_NAMES = frozenset(
@@ -455,6 +461,9 @@ class GatewayClient:
         okx_channel_kind = cls._normalized_okx_channel_kind(payload)
         if okx_channel_kind:
             return okx_channel_kind
+        topic_kind = cls._normalized_topic_kind(payload)
+        if topic_kind:
+            return topic_kind
 
         for key in ("kind", "type", "event_type", "event", "e"):
             value = payload.get(key)
@@ -495,6 +504,19 @@ class GatewayClient:
         if compact == "ordertradeupdate":
             return "order_trade_update"
         return normalized
+
+    @classmethod
+    def _normalized_topic_kind(cls, payload: dict[str, Any]) -> str:
+        topic = cls._normalize_event_name(payload.get("topic"))
+        if not topic:
+            return ""
+        if "execution" in topic or "fill" in topic or "trade" in topic:
+            return "trade"
+        if "order" in topic:
+            return "order"
+        if "error" in topic or "reject" in topic:
+            return "error"
+        return ""
 
     @classmethod
     def _normalized_okx_channel_kind(cls, payload: dict[str, Any]) -> str:

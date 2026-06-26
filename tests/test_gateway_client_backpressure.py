@@ -151,6 +151,7 @@ def test_store_event_drops_unowned_private_identity_aliases() -> None:
     client._store_event({"kind": "trade", "details": {"origClientOrderId": "binance-client-2"}})
     client._store_event({"kind": "trade", "orderLinkId": "bybit-client-1"})
     client._store_event({"kind": "error", "details": {"origOrderLinkId": "bybit-client-2"}})
+    client._store_event({"kind": "trade", "execID": "bybit-exec-1"})
     client._store_event({"kind": "position", "position_id": "pos-1"})
 
     assert list(client._event_queue) == [{"kind": "position", "position_id": "pos-1"}]
@@ -306,6 +307,92 @@ def test_store_event_normalizes_raw_okx_private_channels() -> None:
         {
             "arg": {"channel": "fills"},
             "data": [{"clOrdId": "client-1", "tradeId": "fill-1"}],
+            "kind": "trade",
+        },
+    ]
+
+
+def test_store_event_normalizes_raw_bybit_execution_topic() -> None:
+    client = GatewayClient(strategy_id="strategy-a")
+    client._remember_owned_event_ids(
+        {
+            "orderLinkId": "bybit-client-1",
+            "orderId": "bybit-order-1",
+        }
+    )
+
+    client._store_event(
+        {
+            "topic": "execution",
+            "data": [
+                {
+                    "orderLinkId": "other-client",
+                    "orderId": "other-order",
+                    "execId": "other-exec",
+                    "execQty": "1",
+                    "execPrice": "50000",
+                }
+            ],
+        }
+    )
+    client._store_event(
+        {
+            "topic": "execution",
+            "data": [
+                {
+                    "orderLinkId": "bybit-client-1",
+                    "orderId": "bybit-order-1",
+                    "execId": "bybit-exec-1",
+                    "execQty": "1",
+                    "execPrice": "50000",
+                    "execFee": "2.75",
+                }
+            ],
+        }
+    )
+    client._store_event(
+        {
+            "topic": "execution.linear",
+            "data": [
+                {
+                    "orderLinkId": "bybit-client-1",
+                    "orderId": "bybit-order-1",
+                    "execID": "bybit-exec-2",
+                    "execQty": "1",
+                    "execPrice": "50100",
+                    "execFee": "2.80",
+                }
+            ],
+        }
+    )
+
+    assert list(client._event_queue) == [
+        {
+            "topic": "execution",
+            "data": [
+                {
+                    "orderLinkId": "bybit-client-1",
+                    "orderId": "bybit-order-1",
+                    "execId": "bybit-exec-1",
+                    "execQty": "1",
+                    "execPrice": "50000",
+                    "execFee": "2.75",
+                }
+            ],
+            "kind": "trade",
+        },
+        {
+            "topic": "execution.linear",
+            "data": [
+                {
+                    "orderLinkId": "bybit-client-1",
+                    "orderId": "bybit-order-1",
+                    "execID": "bybit-exec-2",
+                    "execQty": "1",
+                    "execPrice": "50100",
+                    "execFee": "2.80",
+                }
+            ],
             "kind": "trade",
         },
     ]
