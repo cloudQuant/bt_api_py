@@ -6,12 +6,122 @@ import time
 import uuid
 from typing import Any
 
-
 DEFAULT_MAX_TICKS_PER_SYMBOL = 1_000
 DEFAULT_MAX_EVENTS = 1_000
 DEFAULT_DRAIN_MAX_MESSAGES = 250
 DEFAULT_SOCKET_RCVHWM = 1_000
+DEFAULT_MAX_OWNED_EVENT_IDS = 4_096
 _ALL_SYMBOLS = frozenset({"*", "all", "ALL"})
+_STRATEGY_ID_KEYS = (
+    "strategy_id",
+    "strategyId",
+    "gateway_strategy_id",
+    "gatewayStrategyId",
+    "owner_strategy_id",
+    "ownerStrategyId",
+)
+_TICK_SYMBOL_KEYS = (
+    "symbol",
+    "instrument",
+    "instrument_id",
+    "InstrumentID",
+    "data_name",
+    "dataname",
+    "instId",
+    "contract",
+    "ticker",
+)
+_PRIVATE_EVENT_IDENTITY_KEYS = (
+    "request_id",
+    "requestId",
+    "command_request_id",
+    "commandRequestId",
+    "client_order_id",
+    "clientOrderId",
+    "c",
+    "C",
+    "newClientOrderId",
+    "origClientOrderId",
+    "orderLinkId",
+    "origOrderLinkId",
+    "order_ref",
+    "orderRef",
+    "OrderRef",
+    "bt_order_ref",
+    "btOrderRef",
+    "ctp_order_ref",
+    "ctpOrderRef",
+    "venue_order_id",
+    "venueOrderId",
+    "external_order_id",
+    "externalOrderId",
+    "ordId",
+    "order_id",
+    "orderId",
+    "i",
+    "OrderID",
+    "order_sys_id",
+    "orderSysId",
+    "OrderSysID",
+    "clOrdId",
+    "origClOrdId",
+    "trade_id",
+    "tradeId",
+    "TradeID",
+    "deal_id",
+    "dealId",
+    "DealID",
+    "exec_id",
+    "execId",
+    "ExecID",
+    "id",
+)
+_ORDER_EVENT_NAMES = frozenset(
+    {
+        "order",
+        "orders",
+        "order_update",
+        "orderupdate",
+        "order_status",
+        "order_event",
+        "order_created",
+        "order_accepted",
+        "order_submitted",
+        "order_cancelled",
+        "order_canceled",
+        "order_rejected",
+        "execution_report",
+        "executionreport",
+    }
+)
+_TRADE_EVENT_NAMES = frozenset(
+    {
+        "trade",
+        "trades",
+        "trade_update",
+        "trade_event",
+        "fill",
+        "fills",
+        "fill_update",
+        "execution",
+        "execution_update",
+        "deal",
+        "deal_update",
+    }
+)
+_ERROR_EVENT_NAMES = frozenset(
+    {
+        "error",
+        "errors",
+        "order_error",
+        "trade_error",
+        "cancel_error",
+        "cancel_reject",
+        "cancel_rejected",
+        "reject",
+        "rejected",
+    }
+)
 
 
 def _positive_int(value: Any, default: int) -> int:
@@ -32,6 +142,10 @@ class GatewayClient:
         self.command_endpoint = str(kwargs.get("gateway_command_endpoint") or "").strip()
         self.event_endpoint = str(kwargs.get("gateway_event_endpoint") or "").strip()
         self.market_endpoint = str(kwargs.get("gateway_market_endpoint") or "").strip()
+        self.strategy_id = str(
+            kwargs.get("strategy_id") or kwargs.get("gateway_strategy_id") or "default"
+        ).strip()
+        self.drop_unowned_events = bool(kwargs.get("gateway_drop_unowned_events", True))
         self.command_timeout_sec = float(kwargs.get("gateway_command_timeout_sec") or 10.0)
         self.max_ticks_per_symbol = _positive_int(
             kwargs.get("gateway_max_ticks_per_symbol")
@@ -41,6 +155,11 @@ class GatewayClient:
         self.max_events = _positive_int(
             kwargs.get("gateway_max_events") or kwargs.get("max_events"),
             DEFAULT_MAX_EVENTS,
+        )
+        self.max_owned_event_ids = _positive_int(
+            kwargs.get("gateway_max_owned_event_ids")
+            or kwargs.get("max_owned_event_ids"),
+            DEFAULT_MAX_OWNED_EVENT_IDS,
         )
         self.drain_max_messages = _positive_int(
             kwargs.get("gateway_drain_max_messages")
@@ -61,6 +180,10 @@ class GatewayClient:
         )
         self._event_queue: collections.deque[dict[str, Any]] = collections.deque(
             maxlen=self.max_events
+        )
+        self._owned_event_ids: set[str] = set()
+        self._owned_event_id_order: collections.deque[str] = collections.deque(
+            maxlen=self.max_owned_event_ids
         )
 
     def _new_tick_queue(self) -> collections.deque[dict[str, Any]]:
@@ -104,6 +227,7 @@ class GatewayClient:
         self._ensure_connected()
         import zmq
 
+        command_payload = self._payload_with_strategy(payload)
         ctx = zmq.Context.instance()
         timeout_ms = int(max(self.command_timeout_sec, 0.1) * 1000)
         attempts = int(self.kwargs.get("gateway_command_retries") or 3)
@@ -114,12 +238,20 @@ class GatewayClient:
             sock.setsockopt(zmq.IDENTITY, uuid.uuid4().hex.encode("utf-8"))
             sock.setsockopt(zmq.SNDTIMEO, timeout_ms)
             sock.setsockopt(zmq.RCVTIMEO, timeout_ms)
+            request_id = uuid.uuid4().hex
+            self._remember_owned_event_ids(
+                {
+                    "request_id": request_id,
+                    "command": command,
+                    **command_payload,
+                }
+            )
             try:
                 sock.connect(self.command_endpoint)
                 request = {
-                    "request_id": uuid.uuid4().hex,
+                    "request_id": request_id,
                     "command": command,
-                    "payload": dict(payload or {}),
+                    "payload": command_payload,
                 }
                 sock.send(
                     json.dumps(request, ensure_ascii=False, separators=(",", ":")).encode()
@@ -138,16 +270,21 @@ class GatewayClient:
             raise RuntimeError(f"invalid gateway response for {command}: {response!r}")
         if response.get("status") != "ok":
             raise RuntimeError(str(response.get("error") or f"gateway command failed: {command}"))
-        return response.get("data")
+        data = response.get("data")
+        self._remember_owned_event_ids(data)
+        return data
 
     def _command(self, command: str, payload: dict[str, Any] | None = None) -> Any:
         return self._send_command(command, payload)
 
+    def _payload_with_strategy(self, payload: dict[str, Any] | None = None) -> dict[str, Any]:
+        data = dict(payload or {})
+        if self.strategy_id:
+            data.setdefault("strategy_id", self.strategy_id)
+        return data
+
     def subscribe(self, symbols: str | list[str]) -> dict[str, Any]:
-        if isinstance(symbols, str):
-            symbol_list = [symbols]
-        else:
-            symbol_list = list(symbols)
+        symbol_list = [symbols] if isinstance(symbols, str) else list(symbols)
         symbol_list = [_normalize_symbol(symbol) for symbol in symbol_list]
         symbol_list = [symbol for symbol in symbol_list if symbol]
         result = self._send_command("subscribe", {"symbols": symbol_list}) or {}
@@ -182,9 +319,22 @@ class GatewayClient:
         return self._send_command("place_order", dict(payload or {})) or {}
 
     def cancel_order(self, order_ref: str, dataname: str | None = None) -> dict[str, Any]:
+        payload: dict[str, Any] = {"order_ref": order_ref}
+        symbol = _normalize_symbol(dataname)
+        if symbol:
+            payload.update(
+                {
+                    "dataname": symbol,
+                    "data_name": symbol,
+                    "symbol": symbol,
+                    "instrument": symbol,
+                }
+            )
+        elif dataname is not None:
+            payload["dataname"] = dataname
         return self._send_command(
             "cancel_order",
-            {"order_ref": order_ref, "dataname": dataname},
+            payload,
         ) or {}
 
     def poll_broker_update(self) -> dict[str, Any] | None:
@@ -237,7 +387,7 @@ class GatewayClient:
             return
         self._drain_socket(
             self._event_socket,
-            self._event_queue.append,
+            self._store_event,
             max_messages=self.drain_max_messages,
         )
 
@@ -261,14 +411,16 @@ class GatewayClient:
             except zmq.Again:
                 return
             drained += 1
-            payload = json.loads(raw.decode("utf-8"))
+            try:
+                payload = json.loads(raw.decode("utf-8"))
+            except (UnicodeDecodeError, json.JSONDecodeError):
+                continue
             if isinstance(payload, dict):
                 callback(payload)
 
     def _store_tick(self, payload: dict[str, Any]) -> None:
-        symbol = _normalize_symbol(payload.get("symbol"))
-        instrument = _normalize_symbol(payload.get("instrument_id"))
-        keys = [key for key in (symbol, instrument) if key]
+        keys = [_normalize_symbol(payload.get(key)) for key in _TICK_SYMBOL_KEYS]
+        keys = [key for key in keys if key]
         keys = list(dict.fromkeys(keys))
         if not keys:
             return
@@ -278,3 +430,194 @@ class GatewayClient:
                 return
         for key in keys:
             self._tick_queues[key].append(payload)
+
+    def _store_event(self, payload: dict[str, Any]) -> None:
+        payload = self._normalize_broker_event_payload(payload)
+        if not self._event_belongs_to_strategy(payload):
+            return
+        self._event_queue.append(payload)
+
+    @classmethod
+    def _normalize_broker_event_payload(cls, payload: dict[str, Any]) -> dict[str, Any]:
+        if not isinstance(payload, dict):
+            return payload
+        normalized_kind = cls._normalized_event_kind(payload)
+        if not normalized_kind:
+            return payload
+        if payload.get("kind") == normalized_kind:
+            return payload
+        normalized = dict(payload)
+        normalized["kind"] = normalized_kind
+        return normalized
+
+    @classmethod
+    def _normalized_event_kind(cls, payload: dict[str, Any]) -> str:
+        okx_channel_kind = cls._normalized_okx_channel_kind(payload)
+        if okx_channel_kind:
+            return okx_channel_kind
+
+        for key in ("kind", "type", "event_type", "event", "e"):
+            value = payload.get(key)
+            if value in (None, ""):
+                continue
+            text = cls._normalize_event_name(value)
+            if text in {"execution_report", "executionreport"}:
+                return "trade" if cls._raw_binance_event_has_fill(payload) else "order"
+            if text == "order_trade_update":
+                return "trade" if cls._raw_binance_event_has_fill(payload) else "order"
+            if text in _ORDER_EVENT_NAMES:
+                return "order"
+            if text in _TRADE_EVENT_NAMES:
+                return "trade"
+            if text in _ERROR_EVENT_NAMES or "error" in text or "reject" in text:
+                return "error"
+        return ""
+
+    @staticmethod
+    def _normalize_event_name(value: Any) -> str:
+        text = str(value or "").strip()
+        out = []
+        previous_is_lower_or_digit = False
+        for char in text:
+            if char.isalnum():
+                if char.isupper() and previous_is_lower_or_digit:
+                    out.append("_")
+                out.append(char.lower())
+                previous_is_lower_or_digit = char.islower() or char.isdigit()
+            else:
+                if out and out[-1] != "_":
+                    out.append("_")
+                previous_is_lower_or_digit = False
+        normalized = "".join(out).strip("_")
+        compact = normalized.replace("_", "")
+        if compact == "executionreport":
+            return "execution_report"
+        if compact == "ordertradeupdate":
+            return "order_trade_update"
+        return normalized
+
+    @classmethod
+    def _normalized_okx_channel_kind(cls, payload: dict[str, Any]) -> str:
+        arg = payload.get("arg")
+        if not isinstance(arg, dict):
+            return ""
+        channel = cls._normalize_event_name(arg.get("channel"))
+        if not channel:
+            return ""
+        if "fills" in channel:
+            return "trade"
+        if "orders" in channel or channel == "order":
+            return "trade" if cls._raw_okx_channel_has_fill(payload) else "order"
+        return ""
+
+    @classmethod
+    def _raw_binance_event_has_fill(cls, payload: dict[str, Any]) -> bool:
+        details = payload.get("o") if isinstance(payload.get("o"), dict) else payload
+        execution_type = str(details.get("x") or "").strip().upper()
+        if execution_type == "TRADE":
+            return True
+        trade_id = details.get("t")
+        return str(trade_id or "").strip() not in {"", "0", "-1"}
+
+    @classmethod
+    def _raw_okx_channel_has_fill(cls, payload: dict[str, Any]) -> bool:
+        data = payload.get("data")
+        rows = data if isinstance(data, list) else [data]
+        for row in rows:
+            if not isinstance(row, dict):
+                continue
+            for key in ("tradeId", "trade_id", "fillSz", "fill_sz", "fillPx", "fill_px"):
+                value = row.get(key)
+                if value not in (None, "", "0", 0):
+                    return True
+        return False
+
+    def _event_belongs_to_strategy(self, payload: dict[str, Any]) -> bool:
+        if not isinstance(payload, dict):
+            return False
+        strategy_id = self._payload_strategy_id(payload, include_details=False)
+        if strategy_id:
+            return not self.strategy_id or strategy_id == self.strategy_id
+        strategy_id = self._payload_strategy_id(payload, include_details=True)
+        if strategy_id:
+            return not self.strategy_id or strategy_id == self.strategy_id
+
+        if self._event_matches_owned_identity(payload):
+            return True
+
+        if not self.drop_unowned_events:
+            return True
+        kind = str(payload.get("kind") or "").strip().lower()
+        if kind not in {"order", "trade", "error"}:
+            return True
+        return not self._event_has_order_identity(payload)
+
+    @classmethod
+    def _payload_strategy_id(
+        cls,
+        payload: dict[str, Any],
+        *,
+        include_details: bool = True,
+    ) -> str:
+        for key in _STRATEGY_ID_KEYS:
+            value = payload.get(key)
+            if value not in (None, ""):
+                return str(value).strip()
+        if include_details:
+            details = payload.get("details")
+            if isinstance(details, dict):
+                return cls._payload_strategy_id(details, include_details=False)
+        return ""
+
+    @classmethod
+    def _event_has_order_identity(cls, payload: Any) -> bool:
+        if isinstance(payload, (list, tuple, set)):
+            return any(cls._event_has_order_identity(item) for item in payload)
+        if not isinstance(payload, dict):
+            return False
+        for key in _PRIVATE_EVENT_IDENTITY_KEYS:
+            if payload.get(key) not in (None, ""):
+                return True
+        details = payload.get("details")
+        if isinstance(details, (dict, list, tuple, set)):
+            return cls._event_has_order_identity(details)
+        data = payload.get("data")
+        if isinstance(data, (dict, list, tuple, set)):
+            return cls._event_has_order_identity(data)
+        return False
+
+    @classmethod
+    def _event_identity_values(cls, payload: Any) -> set[str]:
+        if isinstance(payload, (list, tuple, set)):
+            values: set[str] = set()
+            for item in payload:
+                values.update(cls._event_identity_values(item))
+            return values
+        if not isinstance(payload, dict):
+            return set()
+        values: set[str] = set()
+        for key in _PRIVATE_EVENT_IDENTITY_KEYS:
+            value = payload.get(key)
+            if value in (None, ""):
+                continue
+            values.add(str(value).strip())
+        details = payload.get("details")
+        if isinstance(details, dict):
+            values.update(cls._event_identity_values(details))
+        data = payload.get("data")
+        if isinstance(data, (dict, list, tuple, set)):
+            values.update(cls._event_identity_values(data))
+        return {value for value in values if value}
+
+    def _remember_owned_event_ids(self, payload: Any) -> None:
+        for value in self._event_identity_values(payload):
+            if value in self._owned_event_ids:
+                continue
+            if len(self._owned_event_id_order) == self._owned_event_id_order.maxlen:
+                expired = self._owned_event_id_order.popleft()
+                self._owned_event_ids.discard(expired)
+            self._owned_event_ids.add(value)
+            self._owned_event_id_order.append(value)
+
+    def _event_matches_owned_identity(self, payload: dict[str, Any]) -> bool:
+        return bool(self._event_identity_values(payload) & self._owned_event_ids)
