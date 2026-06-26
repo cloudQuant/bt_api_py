@@ -439,6 +439,9 @@ class GatewayClient:
 
     def _store_event(self, payload: dict[str, Any]) -> None:
         payload = self._normalize_broker_event_payload(payload)
+        payload = self._filter_owned_event_payload(payload)
+        if payload is None:
+            return
         if not self._event_belongs_to_strategy(payload):
             return
         self._event_queue.append(payload)
@@ -573,6 +576,73 @@ class GatewayClient:
         if kind not in {"order", "trade", "error"}:
             return True
         return not self._event_has_order_identity(payload)
+
+    def _filter_owned_event_payload(self, payload: dict[str, Any]) -> dict[str, Any] | None:
+        """Drop unowned rows from batched private WS envelopes before queuing."""
+        if not isinstance(payload, dict) or not self.drop_unowned_events:
+            return payload
+        kind = str(payload.get("kind") or "").strip().lower()
+        if kind not in {"order", "trade", "error"}:
+            return payload
+
+        data = payload.get("data")
+        if not isinstance(data, (list, tuple)):
+            return payload
+
+        envelope_strategy_id = self._payload_strategy_id(payload, include_details=False)
+        envelope_matches_strategy = bool(
+            envelope_strategy_id
+            and (not self.strategy_id or envelope_strategy_id == self.strategy_id)
+        )
+        scoped_rows = [
+            row
+            for row in data
+            if isinstance(row, dict)
+            and (
+                self._payload_strategy_id(row, include_details=True)
+                or self._event_has_order_identity(row)
+            )
+        ]
+        if not scoped_rows:
+            return payload
+
+        filtered_data: list[Any] = []
+        pruned = False
+        for row in data:
+            if not isinstance(row, dict):
+                if envelope_matches_strategy:
+                    filtered_data.append(row)
+                else:
+                    pruned = True
+                continue
+
+            row_strategy_id = self._payload_strategy_id(row, include_details=True)
+            if row_strategy_id:
+                if not self.strategy_id or row_strategy_id == self.strategy_id:
+                    filtered_data.append(row)
+                else:
+                    pruned = True
+                continue
+
+            if self._event_has_order_identity(row):
+                if self._event_matches_owned_identity(row):
+                    filtered_data.append(row)
+                else:
+                    pruned = True
+                continue
+
+            if envelope_matches_strategy:
+                filtered_data.append(row)
+            else:
+                pruned = True
+
+        if not pruned:
+            return payload
+        if not filtered_data:
+            return None
+        filtered = dict(payload)
+        filtered["data"] = filtered_data
+        return filtered
 
     @classmethod
     def _payload_strategy_id(

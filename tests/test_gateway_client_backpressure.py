@@ -398,6 +398,73 @@ def test_store_event_normalizes_raw_bybit_execution_topic() -> None:
     ]
 
 
+def test_store_event_prunes_unowned_rows_from_raw_bybit_execution_batch() -> None:
+    client = GatewayClient(strategy_id="strategy-a")
+    client._remember_owned_event_ids(
+        {
+            "orderLinkId": "bybit-client-1",
+            "orderId": "bybit-order-1",
+        }
+    )
+
+    client._store_event(
+        {
+            "topic": "execution",
+            "id": "bybit-message-1",
+            "data": [
+                {
+                    "orderLinkId": "other-client",
+                    "orderId": "other-order",
+                    "execId": "other-exec",
+                    "execQty": "1",
+                    "execPrice": "50000",
+                },
+                {
+                    "orderLinkId": "bybit-client-1",
+                    "orderId": "bybit-order-1",
+                    "execId": "bybit-exec-1",
+                    "execQty": "1",
+                    "execPrice": "50100",
+                    "execFee": "2.80",
+                },
+            ],
+        }
+    )
+    client._store_event(
+        {
+            "topic": "execution",
+            "id": "bybit-message-2",
+            "data": [
+                {
+                    "orderLinkId": "other-client",
+                    "orderId": "other-order",
+                    "execId": "other-exec-2",
+                    "execQty": "1",
+                    "execPrice": "50200",
+                }
+            ],
+        }
+    )
+
+    assert list(client._event_queue) == [
+        {
+            "topic": "execution",
+            "id": "bybit-message-1",
+            "data": [
+                {
+                    "orderLinkId": "bybit-client-1",
+                    "orderId": "bybit-order-1",
+                    "execId": "bybit-exec-1",
+                    "execQty": "1",
+                    "execPrice": "50100",
+                    "execFee": "2.80",
+                }
+            ],
+            "kind": "trade",
+        }
+    ]
+
+
 def test_owned_private_identity_cache_is_bounded() -> None:
     client = GatewayClient(strategy_id="strategy-a", gateway_max_owned_event_ids=2)
 
