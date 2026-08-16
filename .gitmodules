@@ -1,27 +1,12 @@
 [submodule "bt_api/bt_api_base"]
 	path = bt_api/bt_api_base
 	url = https://github.com/cloudQuant/bt_api_base.git
-[submodule "bt_api/bt_api_bequant"]
-	path = bt_api/bt_api_bequant
-	url = https://github.com/cloudQuant/bt_api_bequant.git
-[submodule "bt_api/bt_api_bigone"]
-	path = bt_api/bt_api_bigone
-	url = https://github.com/cloudQuant/bt_api_bigone.git
 [submodule "bt_api/bt_api_binance"]
 	path = bt_api/bt_api_binance
 	url = https://github.com/cloudQuant/bt_api_binance.git
-[submodule "bt_api/bt_api_bingx"]
-	path = bt_api/bt_api_bingx
-	url = https://github.com/cloudQuant/bt_api_bingx.git
-[submodule "bt_api/bt_api_bitbank"]
-	path = bt_api/bt_api_bitbank
-	url = https://github.com/cloudQuant/bt_api_bitbank.git
 [submodule "bt_api/bt_api_bitfinex"]
 	path = bt_api/bt_api_bitfinex
 	url = https://github.com/cloudQuant/bt_api_bitfinex.git
-[submodule "bt_api/bt_api_bitflyer"]
-	path = bt_api/bt_api_bitflyer
-	url = https://github.com/cloudQuant/bt_api_bitflyer.git
 [submodule "bt_api/bt_api_bitget"]
 	path = bt_api/bt_api_bitget
 	url = https://github.com/cloudQuant/bt_api_bitget.git

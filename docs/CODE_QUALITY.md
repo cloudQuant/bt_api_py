@@ -52,7 +52,7 @@
 ### 7. 代码质量优化（2025-03 第三批）
 
 - **S113 Kraken**：`live_kraken/request_base.py` 中 `req_lib.post()` 显式传入 `timeout=` 参数，消除 Ruff S113 静态检测误报
-- **pathlib 扩展迁移**：`bitflyer`、`bitrue`、`bitunix`、`latoken`、`bigone`、`bithumb`、`satoshitango`、`mercado_bitcoin`、`zebpay`、`coincheck`、`kucoin`、`ib_web` 等 exchange_data 统一使用 `get_exchange_config_path()`
+- **pathlib 扩展迁移**：`bitrue`、`bitunix`、`latoken`、`bithumb`、`satoshitango`、`mercado_bitcoin`、`zebpay`、`coincheck`、`kucoin`、`ib_web` 等 exchange_data 统一使用 `get_exchange_config_path()`
 - **PERF 性能优化**：`pancakeswap_pool.py` 使用列表推导替代 `filter_by_tvl`/`filter_by_volume` 循环；`anomaly_detector.py`、`ensemble_model.py` 中 `_dict_to_features` 使用列表推导；`exchange_health.py`、`advanced_websocket_manager.py` 使用列表推导
 - **logging_system**：`extra.update(kwargs)` 替代循环赋值
 - **S110/S112 异常日志**：`live_ib_web_feed.py` portfolio 端点失败时记录 debug 日志；`monitoring/metrics.py` 中 metric.collect 失败时记录 debug 日志
