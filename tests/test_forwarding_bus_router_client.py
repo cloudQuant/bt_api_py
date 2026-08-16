@@ -704,6 +704,25 @@ def test_forwarding_client_exposes_backtrader_style_market_and_order_api() -> No
     assert client.get_positions()[0]["symbol"] == "RB2510"
 
 
+def test_forwarding_client_requires_explicit_side_and_order_type() -> None:
+    bus = InMemoryForwardingBus()
+    hub = MarketDataHub(bus)
+    router = OrderRouter(MockBrokerAdapter(), bus=bus)
+    client = ForwardingClient(
+        bus=bus,
+        exchange="SIM",
+        market_type="SPOT",
+        account_id="paper",
+        strategy_id="s1",
+    )
+    client.connect()
+
+    with pytest.raises(ValueError, match="side is required"):
+        client.submit_order({"symbol": "RB2510", "size": 1.0, "order_type": "market"})
+    with pytest.raises(ValueError, match="order_type is required"):
+        client.submit_order({"symbol": "RB2510", "side": "buy", "size": 1.0})
+
+
 def test_forwarding_client_normalizes_market_symbol_keys_like_topics() -> None:
     bus = InMemoryForwardingBus()
     hub = MarketDataHub(bus)
