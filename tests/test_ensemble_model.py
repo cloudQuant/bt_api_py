@@ -443,5 +443,54 @@ class TestRiskEnsembleModel:
         assert len(model.prediction_history) <= 501
 
 
+class TestEnsembleZeroDivisionGuard:
+    """Verify ensemble_model.py guards against ZeroDivisionError with no models."""
+
+    def _make_ensemble(self):
+        """Create a minimal RiskEnsembleModel with zero-weight models."""
+        ensemble = RiskEnsembleModel.__new__(RiskEnsembleModel)
+        ensemble.models = {}
+        ensemble.model_weights = {}
+        ensemble.ensemble_method = "weighted_average"
+        ensemble.is_trained = False
+        ensemble.training_history = []
+        ensemble.performance_tracker = {}
+        ensemble._prediction_cache = {}
+        ensemble._prediction_cache_maxsize = 100
+        return ensemble
+
+    def test_weighted_average_zero_weight_returns_zeros(self):
+        """_predict_weighted_average should not raise ZeroDivisionError with no models."""
+        ensemble = self._make_ensemble()
+        X = np.array([[1, 2, 3], [4, 5, 6]])
+        result = ensemble._predict_weighted_average(X)
+        assert result.shape == (2,)
+        np.testing.assert_array_equal(result, np.zeros(2, dtype=int))
+
+    def test_dynamic_weighting_zero_weight_returns_zeros(self):
+        """_predict_dynamic_weighting should not raise ZeroDivisionError with no models."""
+        ensemble = self._make_ensemble()
+        X = np.array([[1, 2, 3], [4, 5, 6]])
+        result = ensemble._predict_dynamic_weighting(X)
+        assert result.shape == (2,)
+        np.testing.assert_array_equal(result, np.zeros(2, dtype=int))
+
+    def test_proba_weighted_average_no_models_returns_default(self):
+        """_predict_proba_weighted_average with no models returns 0.5/0.5 default."""
+        ensemble = self._make_ensemble()
+        X = np.array([[1, 2, 3], [4, 5, 6]])
+        result = ensemble._predict_proba_weighted_average(X)
+        assert result.shape == (2, 2)
+        np.testing.assert_array_almost_equal(result, [[0.5, 0.5], [0.5, 0.5]])
+
+    def test_proba_dynamic_weighting_no_models_returns_default(self):
+        """_predict_proba_dynamic_weighting with no models returns 0.5/0.5 default."""
+        ensemble = self._make_ensemble()
+        X = np.array([[1, 2, 3], [4, 5, 6]])
+        result = ensemble._predict_proba_dynamic_weighting(X)
+        assert result.shape == (2, 2)
+        np.testing.assert_array_almost_equal(result, [[0.5, 0.5], [0.5, 0.5]])
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
