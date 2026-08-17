@@ -312,12 +312,21 @@ async def test_cleanup_monitoring_runs_all_steps_when_some_steps_fail(
     async def fake_shutdown_elk_integration() -> None:
         calls.append("shutdown_elk")
 
-    fake_monitoring_module = SimpleNamespace(
-        stop_global_monitoring=fake_stop_global_monitoring,
-        stop_prometheus_exporter=fake_stop_prometheus_exporter,
-        shutdown_elk_integration=fake_shutdown_elk_integration,
+    monkeypatch.setitem(
+        sys.modules,
+        "bt_api_py.monitoring.collector",
+        SimpleNamespace(stop_global_monitoring=fake_stop_global_monitoring),
     )
-    monkeypatch.setitem(sys.modules, "bt_api_py.monitoring", fake_monitoring_module)
+    monkeypatch.setitem(
+        sys.modules,
+        "bt_api_py.monitoring.prometheus",
+        SimpleNamespace(stop_prometheus_exporter=fake_stop_prometheus_exporter),
+    )
+    monkeypatch.setitem(
+        sys.modules,
+        "bt_api_py.monitoring.elk",
+        SimpleNamespace(shutdown_elk_integration=fake_shutdown_elk_integration),
+    )
 
     await monitoring_config.cleanup_monitoring()
 
