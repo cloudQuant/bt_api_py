@@ -741,6 +741,40 @@ class BtApi:
             symbol, extra_data=extra_data, **kwargs
         )
 
+    def get_deals(
+        self,
+        exchange_name: str,
+        symbol: str | None = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> Any:
+        """查询账户成交/成交明细，用于获取真实手续费。
+
+        Different exchange feeds expose private fills as ``get_deals``. Keep
+        the unified facade thin so callers can pass through exchange-specific
+        arguments such as ``limit``, ``count``, ``start_time`` or ``end_time``.
+        """
+        return self._get_feed(exchange_name).get_deals(
+            symbol, extra_data=extra_data, **kwargs
+        )
+
+    def get_trades(
+        self,
+        exchange_name: str,
+        symbol: str | None = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> Any:
+        """查询成交记录。
+
+        Some venues use this for public recent trades, while gateway adapters
+        may map it to account fills. Callers that require real account fees
+        should prefer :meth:`get_deals` when the feed supports it.
+        """
+        return self._get_feed(exchange_name).get_trades(
+            symbol, extra_data=extra_data, **kwargs
+        )
+
     # ── 账户查询（同步）────────────────────────────────────────────
 
     def get_balance(
