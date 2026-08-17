@@ -7,7 +7,7 @@ name = "bt_api_py"
 dynamic = ["version"]
 description = "Implement backtesting and trading of quantitative strategy"
 readme = "README.md"
-license = {text = "MIT"}
+license = "MIT"
 requires-python = ">=3.9"
 authors = [
     {name = "cloudQuant", email = "yunjinqi@gmail.com"},
