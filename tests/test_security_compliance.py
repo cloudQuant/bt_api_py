@@ -1746,5 +1746,27 @@ class TestSecurityMonitoring:
         assert alert.alert_id == "sec_300_0"
 
 
+def test_encryption_manager_guards_attribute_error_escapes(monkeypatch) -> None:
+    """可选依赖 boto3/hvac 抛 AttributeError 时不得逃逸，应降级为不可用。"""
+    import builtins
+    import importlib
+
+    real_import = builtins.__import__
+
+    def broken_import(name, *args, **kwargs):
+        if name.startswith("boto3") or name.startswith("hvac"):
+            raise AttributeError("cannot import name X from Y")
+        return real_import(name, *args, **kwargs)
+
+    monkeypatch.setattr(builtins, "__import__", broken_import)
+    try:
+        mod = importlib.reload(encryption_module)
+        assert mod.AWS_AVAILABLE is False
+        assert mod.VAULT_AVAILABLE is False
+    finally:
+        monkeypatch.undo()
+        importlib.reload(encryption_module)
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

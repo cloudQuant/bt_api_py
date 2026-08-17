@@ -34,21 +34,26 @@ except ImportError:
     RSAPrivateKey = object  # type: ignore[misc, assignment]
     RSAPublicKey = object  # type: ignore[misc, assignment]
 
+from bt_api_base.exceptions import BtApiError
+from bt_api_base.logging_factory import get_logger
+
+logger = get_logger("security_compliance.encryption_manager")
+
 try:
-    import boto3
+    import boto3  # noqa: F401
 
     AWS_AVAILABLE = True
-except ImportError:
+except Exception as exc:  # 包括 AttributeError(底层依赖版本冲突)
+    logger.warning(f"AWS KMS backend unavailable, degraded to local mode: {exc}")
     AWS_AVAILABLE = False
 
 try:
-    import hvac  # HashiCorp Vault client
+    import hvac  # HashiCorp Vault client  # noqa: F401
 
     VAULT_AVAILABLE = True
-except ImportError:
+except Exception as exc:  # 包括 AttributeError(底层依赖版本冲突)
+    logger.warning(f"HashiCorp Vault backend unavailable, degraded to local mode: {exc}")
     VAULT_AVAILABLE = False
-
-from bt_api_base.exceptions import BtApiError
 
 
 class EncryptionError(BtApiError):
