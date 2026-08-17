@@ -59,18 +59,19 @@ def _calculate_time_delta(period: str) -> timedelta:
 def _parse_time(input_time: str | datetime | None) -> datetime | None:
     if isinstance(input_time, str):
         try:
-            local_time = datetime.fromisoformat(input_time)
+            parsed = datetime.fromisoformat(input_time)
         except ValueError as e:
             raise DataParseError(detail=f"Invalid ISO time format: {input_time}") from e
-        return local_time.astimezone(UTC)
-    if isinstance(input_time, datetime):
-        local_time = (
-            input_time.replace(tzinfo=UTC).astimezone() if input_time.tzinfo is None else input_time
-        )
-        return local_time.astimezone(UTC)
-    if input_time is None:
+    elif isinstance(input_time, datetime):
+        parsed = input_time
+    elif input_time is None:
         return None
-    raise DataParseError(detail=f"Unsupported time format: {type(input_time)}")
+    else:
+        raise DataParseError(detail=f"Unsupported time format: {type(input_time)}")
+    # 统一语义:所有 naive 输入按 UTC 解释;带 tz 输入保持原 tz 转 UTC 返回。
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=UTC)
+    return parsed.astimezone(UTC)
 
 
 _reg_logger = get_logger("registry")
