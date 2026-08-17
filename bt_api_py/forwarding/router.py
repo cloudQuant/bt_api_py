@@ -168,12 +168,12 @@ class OrderRouter:
             order = await self.adapter.place_order(request)
         except BrokerError as exc:
             ack = self._reject(command, str(exc), payload={"error_code": str(exc.code)})
-            self._remember_ack(ack)
+            if not exc.retryable:
+                self._remember_ack(ack)
             self._publish_error(command, str(exc), error_code=str(exc.code))
             return ack
         except Exception as exc:
             ack = self._reject(command, str(exc), payload={"error_code": type(exc).__name__})
-            self._remember_ack(ack)
             self._publish_error(command, str(exc), error_code=type(exc).__name__)
             return ack
 
@@ -214,12 +214,12 @@ class OrderRouter:
             )
         except BrokerError as exc:
             ack = self._reject(command, str(exc), payload={"error_code": str(exc.code)})
-            self._remember_ack(ack)
+            if not exc.retryable:
+                self._remember_ack(ack)
             self._publish_error(command, str(exc), error_code=str(exc.code))
             return ack
         except Exception as exc:
             ack = self._reject(command, str(exc), payload={"error_code": type(exc).__name__})
-            self._remember_ack(ack)
             self._publish_error(command, str(exc), error_code=type(exc).__name__)
             return ack
 

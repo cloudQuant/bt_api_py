@@ -5,6 +5,7 @@ from typing import Optional
 import pytest
 
 import bt_api_py.forwarding.router as router_module
+from bt_api_py.brokers.errors import BrokerError, BrokerErrorCode
 from bt_api_py.brokers.mock import MockBrokerAdapter
 from bt_api_py.brokers.types import OrderRequest
 from bt_api_py.forwarding import (
@@ -1032,3 +1033,60 @@ def test_forwarding_client_returns_cached_query_snapshots_when_command_times_out
     assert client.get_balance() == {"cash": 100.0, "value": 120.0}
     assert client.get_positions() == [{"symbol": "RB2510", "size": 1}]
     assert client.fetch_open_orders() == [{"order_id": "order-1", "status": "submitted"}]
+
+
+@pytest.mark.asyncio
+async def test_router_does_not_cache_retryable_errors() -> None:
+    calls = 0
+
+    class FlakyAdapter(MockBrokerAdapter):
+        async def place_order(self, request: OrderRequest):
+            nonlocal calls
+            calls += 1
+            raise BrokerError(
+                BrokerErrorCode.NETWORK_ERROR, "timeout", retryable=True,
+            )
+
+    router = OrderRouter(FlakyAdapter())
+    cmd = OrderCommand(
+        strategy_id="s1",
+        account_id="paper",
+        symbol="RB2510",
+        side="buy",
+        size=1,
+        order_type="limit",
+        price=3500.0,
+        idempotency_key="k-retry",
+    )
+    ack1 = await router.handle_command(cmd)
+    ack2 = await router.handle_command(cmd)
+    assert ack1.accepted is False and ack2.accepted is False
+    assert calls == 2  # retry must reach the adapter again, not return the stale cached rejection
+
+
+@pytest.mark.asyncio
+async def test_router_caches_terminal_rejects() -> None:
+    calls = 0
+
+    class TerminalAdapter(MockBrokerAdapter):
+        async def place_order(self, request: OrderRequest):
+            nonlocal calls
+            calls += 1
+            raise BrokerError(
+                BrokerErrorCode.INSUFFICIENT_FUNDS, "no money", retryable=False,
+            )
+
+    router = OrderRouter(TerminalAdapter())
+    cmd = OrderCommand(
+        strategy_id="s1",
+        account_id="paper",
+        symbol="RB2510",
+        side="buy",
+        size=1,
+        order_type="limit",
+        price=3500.0,
+        idempotency_key="k-terminal",
+    )
+    await router.handle_command(cmd)
+    await router.handle_command(cmd)
+    assert calls == 1  # terminal rejection hits the cache
