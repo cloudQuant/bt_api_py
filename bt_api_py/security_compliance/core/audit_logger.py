@@ -11,7 +11,7 @@ import enum
 import hashlib
 import json
 import logging
-import tempfile
+import os
 import time
 from collections.abc import Callable
 from dataclasses import asdict, dataclass, field
@@ -26,6 +26,23 @@ _logger = logging.getLogger(__name__)
 
 class AuditError(BtApiError):
     """Audit logging related errors."""
+
+
+_SENSITIVE_KEY_PARTS = ("key", "secret", "token", "password", "passwd", "credential", "auth")
+
+
+def _redact_secrets(value: Any) -> Any:
+    """递归掩码敏感键的值（键名含 key/secret/token/password 等）。"""
+    if isinstance(value, dict):
+        return {
+            k: "***REDACTED***"
+            if any(part in str(k).lower() for part in _SENSITIVE_KEY_PARTS)
+            else _redact_secrets(v)
+            for k, v in value.items()
+        }
+    if isinstance(value, list):
+        return [_redact_secrets(v) for v in value]
+    return value
 
 
 class EventType(enum.Enum):
@@ -149,13 +166,17 @@ class AuditLogger:
         """Initialize audit logger.
 
         Args: log_file: Path to audit log file
-            encryption_key: Optional key for log encryption
+            encryption_key: Deprecated; log is written in plaintext (JSONL).
+                Passing a non-None value raises NotImplementedError.
             retention_days: Log retention period in days
             enable_real_time: Enable real-time monitoring
         """
         self.log_file = Path(log_file)
         self.log_file.parent.mkdir(parents=True, exist_ok=True)
-        self.encryption_key = encryption_key
+        if encryption_key is not None:
+            raise NotImplementedError(
+                "encryption_key is not supported; audit log is written in plaintext JSONL"
+            )
         self.retention_days = retention_days
         self.enable_real_time = enable_real_time
 
@@ -190,6 +211,9 @@ class AuditLogger:
 
         # Add compliance tags based on event type
         self._add_compliance_tags(event)
+
+        # 脱敏敏感字段（在计算 hash 之前，保证磁盘内容与 hash 一致）
+        event.details = _redact_secrets(event.details)
 
         # Recalculate hash with chain integrity after all mutations
         event.event_hash = event._calculate_hash()
@@ -254,34 +278,24 @@ class AuditLogger:
             event.compliance_tags.append("GDPR")
 
     def _write_event_atomic(self, event_json: str) -> None:
-        """Write event atomically to prevent corruption."""
-        temp_file: Path | None = None
-
+        """Write event atomically via temp file + os.replace, then chmod 0600."""
+        self.log_file.parent.mkdir(parents=True, exist_ok=True)
+        tmp_path = self.log_file.with_name(f"{self.log_file.name}.tmp")
         try:
-            self.log_file.parent.mkdir(parents=True, exist_ok=True)
-            with tempfile.NamedTemporaryFile(
-                mode="w",
-                encoding="utf-8",
-                delete=False,
-                dir=self.log_file.parent,
-                prefix=f"{self.log_file.stem}_",
-                suffix=".tmp",
-            ) as f:
+            existing = self.log_file.read_text(encoding="utf-8") if self.log_file.exists() else ""
+            with open(tmp_path, "w", encoding="utf-8") as f:
+                f.write(existing)
                 f.write(event_json + "\n")
-                temp_file = Path(f.name)
-
-            with self.log_file.open("a", encoding="utf-8") as f:
-                f.write(event_json + "\n")
-
+                f.flush()
+                os.fsync(f.fileno())
+            os.replace(tmp_path, self.log_file)
         except Exception as e:
-            if temp_file is not None and temp_file.exists():
-                with contextlib.suppress(OSError):
-                    temp_file.unlink()
+            with contextlib.suppress(OSError):
+                tmp_path.unlink()
             raise AuditError(f"Failed to write audit event: {e}") from e
         finally:
-            if temp_file is not None and temp_file.exists():
-                with contextlib.suppress(OSError):
-                    temp_file.unlink()
+            with contextlib.suppress(OSError):
+                os.chmod(self.log_file, 0o600)
 
     def _notify_subscribers(self, event: AuditEvent) -> None:
         """Notify real-time monitoring subscribers."""
