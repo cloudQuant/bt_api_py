@@ -12,7 +12,6 @@ bt_api_py 安装脚本
 import glob
 import os
 import pathlib
-import re
 import shutil
 import sys
 import sysconfig
@@ -35,23 +34,9 @@ finally:
     sys.path.pop(0)
 
 # ---------------------------------------------------------------------------
-#  版本
+#  版本 (single source of truth in pyproject.toml)
 # ---------------------------------------------------------------------------
 
-
-def _load_version() -> str:
-    version_file = pathlib.Path(__file__).parent / "bt_api_py" / "_version.py"
-    match = re.search(
-        r'^__version__\s*=\s*"(?P<version>[^"]+)"',
-        version_file.read_text(encoding="utf-8"),
-        re.MULTILINE,
-    )
-    if match is None:
-        raise RuntimeError(f"Unable to load package version from {version_file}")
-    return match.group("version")
-
-
-VERSION = _load_version()
 CTP_API_VER = "6.7.7"
 
 # ---------------------------------------------------------------------------
@@ -312,7 +297,6 @@ ext_modules = [ext for ext in (CYTHON_EXT, CTP_EXT) if ext is not None]
 #  version (dynamic) + build-time artefacts that pyproject.toml cannot express.
 # ---------------------------------------------------------------------------
 setup(
-    version=VERSION,
     packages=find_packages(include=["bt_api_py", "bt_api_py.*"], exclude=["tests"]),
     package_data=pkg_data,
     ext_modules=ext_modules,

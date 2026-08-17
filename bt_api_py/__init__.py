@@ -10,8 +10,14 @@ import os as _os
 
 from bt_api_base._compat import UTC
 
-# Re-export from bt_api_base for backward compatibility
-from bt_api_base._version import __version__
+# 版本单一源：从 pyproject.toml 经 importlib.metadata 读取。
+from importlib.metadata import PackageNotFoundError, version as _package_version
+
+try:
+    __version__ = _package_version("bt_api_py")
+except PackageNotFoundError:  # 源码树直接 import(未安装)时的兜底
+    __version__ = "0.0.0.dev0"
+
 from bt_api_base.auth_config import (
     AuthConfig,
     CryptoAuthConfig,
