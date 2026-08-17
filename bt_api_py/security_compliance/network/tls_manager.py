@@ -43,13 +43,15 @@ class TLSManager:
         if self.cipher_suites:
             context.set_ciphers(":".join(self.cipher_suites))
 
-        # Certificate validation
+        # Certificate validation（仅支持 strict；禁用验证是安全后门，一律拒绝）
         if self.certificate_validation == "strict":
             context.verify_mode = ssl.CERT_REQUIRED
             context.check_hostname = True
-        elif self.certificate_validation == "none":
-            context.verify_mode = ssl.CERT_NONE
-            context.check_hostname = False
+        else:
+            raise ValueError(
+                f"certificate_validation {self.certificate_validation!r} is not supported; "
+                "certificate validation cannot be disabled"
+            )
 
         return context
 

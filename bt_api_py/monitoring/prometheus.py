@@ -215,12 +215,18 @@ class PrometheusExporter:
 
     def __init__(
         self,
-        host: str = "0.0.0.0",
+        host: str = "127.0.0.1",
         port: int = 8080,
         registry: MetricRegistry | None = None,
     ) -> None:
         """__init__ method"""
         self.host = host
+        if host not in ("127.0.0.1", "localhost", "::1"):
+            _logger.warning(
+                "Prometheus exporter bound to non-loopback address %r; "
+                "ensure network access control before exposing metrics publicly",
+                host,
+            )
         self.port = port
         self.registry = registry or get_registry()
         self.server: HTTPServer | None = None
@@ -288,7 +294,7 @@ _global_exporter: PrometheusExporter | None = None
 
 
 def start_prometheus_exporter(
-    host: str = "0.0.0.0",
+    host: str = "127.0.0.1",
     port: int = 8080,
     async_mode: bool = False,
 ) -> PrometheusExporter:
