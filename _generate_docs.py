@@ -209,13 +209,13 @@ def get_default_info(pkg_name: str) -> dict:
 def get_supported_ops(containers: list) -> str:
     """Generate supported operations table."""
     ops = [
-        ("Ticker", "tickers" in containers or True),
-        ("OrderBook", "orderbooks" in containers or True),
-        ("Trades", "trades" in containers or True),
-        ("Bars/Klines", "bars" in containers or True),
-        ("Orders", "orders" in containers or True),
-        ("Balances", "balances" in containers or True),
-        ("Positions", "positions" in containers or True),
+        ("Ticker", "tickers" in containers),
+        ("OrderBook", "orderbooks" in containers),
+        ("Trades", "trades" in containers),
+        ("Bars/Klines", "bars" in containers),
+        ("Orders", "orders" in containers),
+        ("Balances", "balances" in containers),
+        ("Positions", "positions" in containers),
     ]
     return "\n".join([f"| {op} | {'✅' if supported else '🚧'} |" for op, supported in ops])
 
@@ -540,7 +540,7 @@ jobs:
     timeout-minutes: 15
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
@@ -555,7 +555,7 @@ jobs:
       - name: Ruff format
         run: ruff format --check src/
       - name: MyPy
-        run: mypy src/ --ignore-missing-imports || true
+        run: mypy src/ --ignore-missing-imports
 
   test:
     name: Test
@@ -568,7 +568,7 @@ jobs:
         os: [ubuntu-latest, macos-latest, windows-latest]
         python-version: ["3.9", "3.10", "3.11", "3.12"]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
@@ -578,14 +578,14 @@ jobs:
           python -m pip install --upgrade pip
           pip install -e . 2>/dev/null || pip install -e .
       - name: Test
-        run: pytest tests/ -v --tb=short || true
+        run: pytest tests/ -v --tb=short
 
   build:
     name: Build
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
@@ -602,7 +602,7 @@ jobs:
     needs: [quality, test, build]
     if: startsWith(github.ref, 'refs/tags/v')
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
