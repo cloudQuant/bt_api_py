@@ -10,9 +10,38 @@ from __future__ import annotations
 import os
 from dataclasses import asdict, dataclass
 from datetime import datetime, time
+from pathlib import Path
 from zoneinfo import ZoneInfo
 
 SHANGHAI_TZ = ZoneInfo("Asia/Shanghai")
+
+_FRONTS_CONFIG_PATH = Path(__file__).resolve().parent.parent / "configs" / "ctp_fronts.yaml"
+
+_HARDCODED_FRONTS = {
+    "set1": {"td_front": "tcp://182.254.243.31:30001", "md_front": "tcp://182.254.243.31:30011"},
+    "set2": {"td_front": "tcp://182.254.243.31:40001", "md_front": "tcp://182.254.243.31:40011"},
+}
+
+
+def _load_default_fronts() -> dict[str, dict[str, str]]:
+    """加载默认前置地址（配置文件 → 硬编码兜底）。"""
+    defaults = {k: dict(v) for k, v in _HARDCODED_FRONTS.items()}
+    try:
+        import yaml
+
+        if _FRONTS_CONFIG_PATH.exists():
+            with _FRONTS_CONFIG_PATH.open(encoding="utf-8") as f:
+                loaded = yaml.safe_load(f)
+            if isinstance(loaded, dict):
+                for key in ("set1", "set2"):
+                    section = loaded.get(key)
+                    if isinstance(section, dict):
+                        for field in ("td_front", "md_front"):
+                            if section.get(field):
+                                defaults[key][field] = str(section[field])
+    except Exception:  # noqa: BLE001 - 配置不可用时用硬编码兜底
+        pass
+    return defaults
 
 _TRADING_SESSIONS = (
     (time(9, 0), time(11, 30)),
@@ -85,8 +114,9 @@ def _select_set1(
     apply_env: bool = True,
 ) -> CtpFrontSelection:
     group = str(set1_group or os.environ.get("CTP_SET1_GROUP", "1")).strip() or "1"
-    td_front = os.environ.get(f"CTP_SET1_TD_FRONT_{group}", "tcp://182.254.243.31:30001")
-    md_front = os.environ.get(f"CTP_SET1_MD_FRONT_{group}", "tcp://182.254.243.31:30011")
+    fronts = _load_default_fronts()["set1"]
+    td_front = os.environ.get(f"CTP_SET1_TD_FRONT_{group}", fronts["td_front"])
+    md_front = os.environ.get(f"CTP_SET1_MD_FRONT_{group}", fronts["md_front"])
     if apply_env:
         _set_env_fronts(td_front, md_front)
     return CtpFrontSelection(
@@ -107,8 +137,9 @@ def _select_set2(
     selected_at: str,
     apply_env: bool = True,
 ) -> CtpFrontSelection:
-    td_front = os.environ.get("CTP_SET2_TD_FRONT", "tcp://182.254.243.31:40001")
-    md_front = os.environ.get("CTP_SET2_MD_FRONT", "tcp://182.254.243.31:40011")
+    fronts = _load_default_fronts()["set2"]
+    td_front = os.environ.get("CTP_SET2_TD_FRONT", fronts["td_front"])
+    md_front = os.environ.get("CTP_SET2_MD_FRONT", fronts["md_front"])
     if apply_env:
         _set_env_fronts(td_front, md_front)
     return CtpFrontSelection(

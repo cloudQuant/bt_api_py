@@ -7,6 +7,7 @@ forwarding client protocol underneath.
 
 from __future__ import annotations
 
+import warnings
 from typing import Any, cast
 
 from bt_api_py.forwarding.client import ZmqForwardingClient
@@ -34,6 +35,13 @@ class GatewayClient(ZmqForwardingClient):
         command_timeout_ms: int | None = None,
         **kwargs: Any,
     ) -> None:
+        if gateway_command_endpoint or gateway_event_endpoint or gateway_market_endpoint or event_endpoint:
+            warnings.warn(
+                "gateway_*_endpoint and event_endpoint are deprecated aliases; "
+                "use command_endpoint/market_endpoint/private_endpoint",
+                DeprecationWarning,
+                stacklevel=2,
+            )
         market = gateway_market_endpoint or market_endpoint or event_endpoint or gateway_event_endpoint
         command = gateway_command_endpoint or command_endpoint
         private = private_endpoint or gateway_event_endpoint or event_endpoint or market

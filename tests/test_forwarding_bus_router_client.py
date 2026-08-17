@@ -77,7 +77,7 @@ def test_market_data_hub_and_bus_stats_report_runtime_state() -> None:
     assert stats["active_subscription_count"] == 1
     assert stats["subscription_refcounts"]["SIM.SPOT.RB2510.tick"] == 2
     assert stats["bus"]["replay_size"] == 4
-    assert stats["bus"]["market_subscription_count"] == 1
+    assert stats["bus"]["market_subscription_count"] == 3
     assert stats["bus"]["private_subscription_count"] == 1
     assert stats["bus"]["market_replay_topic_count"] == 1
     assert stats["bus"]["market_sequence_topic_count"] == 1

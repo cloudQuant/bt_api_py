@@ -63,7 +63,6 @@ from bt_api_base.instrument_manager import InstrumentManager, get_instrument_man
 from bt_api_base.logging_factory import _LoggerProxy, get_logger
 from bt_api_base.registry import ExchangeRegistry
 
-from bt_api_py.backtrader import BtApiBroker
 from bt_api_py.brokers import (
     available_adapters,
     list_registered_adapters,
@@ -150,7 +149,6 @@ __all__ = [
     "InstrumentManager",
     "get_instrument_manager",
     "available_adapters",
-    "BtApiBroker",
     "ErrorCategory",
     "UnifiedErrorCode",
     "UnifiedError",

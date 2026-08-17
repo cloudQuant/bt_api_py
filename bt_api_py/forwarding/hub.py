@@ -4,7 +4,7 @@ from __future__ import annotations
 from typing import Any
 
 from bt_api_py.forwarding.memory import InMemoryForwardingBus
-from bt_api_py.forwarding.schema import MarketEvent, normalize_market_symbol
+from bt_api_py.forwarding.schema import MarketEvent, market_topic, normalize_market_symbol
 
 
 class MarketDataHub:
@@ -13,25 +13,25 @@ class MarketDataHub:
     def __init__(self, bus: InMemoryForwardingBus | None = None) -> None:
         """__init__ method"""
         self.bus = bus or InMemoryForwardingBus()
-        self.subscription_refcounts: dict[tuple[str, str, str, str], int] = {}
+        self._subscriptions: dict[tuple[str, str, str, str], list[Any]] = {}
 
     def subscribe(
         self, exchange: str, market_type: str, symbol: str, event_type: str = "tick"
     ) -> None:
         """subscribe method"""
         key = self._key(exchange, market_type, symbol, event_type)
-        self.subscription_refcounts[key] = self.subscription_refcounts.get(key, 0) + 1
+        subscription = self.bus.subscribe_market(
+            market_topic(exchange, market_type, symbol, event_type)
+        )
+        self._subscriptions.setdefault(key, []).append(subscription)
 
     def unsubscribe(
         self, exchange: str, market_type: str, symbol: str, event_type: str = "tick"
     ) -> None:
         """unsubscribe method"""
         key = self._key(exchange, market_type, symbol, event_type)
-        current = self.subscription_refcounts.get(key, 0)
-        if current <= 1:
-            self.subscription_refcounts.pop(key, None)
-        else:
-            self.subscription_refcounts[key] = current - 1
+        for subscription in self._subscriptions.pop(key, []):
+            subscription.close()
 
     def publish(self, event: MarketEvent) -> MarketEvent:
         """publish method"""
@@ -122,10 +122,10 @@ class MarketDataHub:
     def stats(self) -> dict[str, Any]:
         """stats method"""
         active_subscriptions = {
-            ".".join(key): count for key, count in self.subscription_refcounts.items()
+            ".".join(key): len(subs) for key, subs in self._subscriptions.items()
         }
         return {
-            "active_subscription_count": len(self.subscription_refcounts),
+            "active_subscription_count": len(self._subscriptions),
             "subscription_refcounts": active_subscriptions,
             "bus": self.bus.stats(),
         }

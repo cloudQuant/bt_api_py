@@ -1,0 +1,10 @@
+# CTP SimNow 前置地址默认值
+# 可被环境变量覆盖：
+#   CTP_SET1_TD_FRONT_{group} / CTP_SET1_MD_FRONT_{group}
+#   CTP_SET2_TD_FRONT / CTP_SET2_MD_FRONT
+set1:
+  td_front: "tcp://182.254.243.31:30001"
+  md_front: "tcp://182.254.243.31:30011"
+set2:
+  td_front: "tcp://182.254.243.31:40001"
+  md_front: "tcp://182.254.243.31:40011"

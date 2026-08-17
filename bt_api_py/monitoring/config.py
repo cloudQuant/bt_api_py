@@ -11,13 +11,13 @@ from pathlib import Path
 
 from bt_api_base.logging_factory import get_logger
 
-from bt_api_py.monitoring import (
+from bt_api_py.monitoring.collector import start_global_monitoring
+from bt_api_py.monitoring.elk import setup_elk_integration
+from bt_api_py.monitoring.grafana import (
     get_all_dashboard_configs,
     save_dashboard_to_file,
-    setup_elk_integration,
-    start_global_monitoring,
-    start_prometheus_exporter,
 )
+from bt_api_py.monitoring.prometheus import start_prometheus_exporter
 
 LOG_LEVELS = {
     "CRITICAL": logging.CRITICAL,
@@ -235,11 +235,9 @@ async def setup_grafana_dashboards(output_dir: str) -> None:
 
 async def cleanup_monitoring() -> None:
     """Cleanup monitoring resources."""
-    from bt_api_py.monitoring import (
-        shutdown_elk_integration,
-        stop_global_monitoring,
-        stop_prometheus_exporter,
-    )
+    from bt_api_py.monitoring.collector import stop_global_monitoring
+    from bt_api_py.monitoring.elk import shutdown_elk_integration
+    from bt_api_py.monitoring.prometheus import stop_prometheus_exporter
 
     logger = get_logger("monitoring")
 
