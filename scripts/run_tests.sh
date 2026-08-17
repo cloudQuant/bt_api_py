@@ -107,14 +107,6 @@ else
     PYTEST_CMD+=(-n "$PARALLEL")
 fi
 
-# Add CTP exclusion/inclusion
-if [ "$RUN_CTP" = false ]; then
-    echo "Excluding CTP related tests..."
-    PYTEST_CMD+=(--ignore=tests/test_ctp_feed.py)
-else
-    echo "Including CTP related tests..."
-fi
-
 # Add coverage options
 if [ "$COVERAGE" = true ]; then
     echo "Enabling coverage reporting..."

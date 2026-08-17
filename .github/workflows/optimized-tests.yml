@@ -30,50 +30,16 @@ env:
 
 jobs:
   compatibility-matrix:
-    name: Extended Compatibility (Python ${{ matrix.python-version }}, ${{ matrix.os }})
+    name: Extended Compatibility
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
-    runs-on: ${{ matrix.os }}
-    timeout-minutes: 30
-
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-latest, windows-latest, macos-latest]
-        python-version: ["3.9", "3.10", "3.11", "3.12", "3.13", "3.14"]
-
-    defaults:
-      run:
-        shell: bash
-
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v6
-
-      - name: Set up Python
-        uses: actions/setup-python@v6
-        with:
-          python-version: ${{ matrix.python-version }}
-          cache: pip
-          cache-dependency-path: pyproject.toml
-
-      - name: Install build tools (Linux)
-        if: runner.os == 'Linux'
-        run: sudo apt-get update && sudo apt-get install -y build-essential
-
-      - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install -e ".[dev]"
-
-      - name: Run smoke compatibility suite
-        env:
-          SKIP_LIVE_TESTS: "true"
-        run: pytest $SMOKE_TEST_PATHS -q
+    uses: ./.github/workflows/reusable-compat-matrix.yml
 
   performance:
-    if: inputs.run_performance == true
+    if: github.event_name == 'schedule' || inputs.run_performance == true
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    permissions:
+      contents: write
 
     steps:
       - name: Checkout code
