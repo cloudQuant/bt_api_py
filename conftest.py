@@ -98,11 +98,6 @@ def _should_force_ctp_hard_exit(pytest_args: list[str]) -> bool:
     return any(any(arg.endswith(path) for path in _REAL_CTP_NETWORK_TESTS) for arg in normalized_args)
 
 
-def _is_real_ctp_network_test(path: str) -> bool:
-    normalized = path.replace("\\", "/")
-    return any(normalized.endswith(test_path) for test_path in _REAL_CTP_NETWORK_TESTS)
-
-
 def pytest_configure(config):
     """Configure pytest with custom settings."""
     global _CTP_HARD_EXIT_ENABLED
@@ -176,41 +171,6 @@ def pytest_collection_modifyitems(config, items):
             if any(keyword in test_name for keyword in ["slow", "benchmark", "stress"]):
                 item.add_marker(pytest.mark.slow)
 
-        # Auto-mark network tests
-        if "network" not in item.keywords:
-            test_name = item.nodeid.lower()
-            if any(
-                keyword in test_name
-                for keyword in [
-                    "request",
-                    "wss",
-                    "websocket",
-                    "api",
-                    "update_exchange",
-                    "update_binance",
-                    "update_okx",
-                    "history_bar",
-                ]
-            ):
-                item.add_marker(pytest.mark.network)
-            # Also mark as network if test is in an exchange-specific path
-            if any(
-                ex in fspath
-                for ex in (
-                    "binance",
-                    "okx",
-                    "htx",
-                    "bitfinex",
-                    "coinbase",
-                    "kucoin",
-                    "mexc",
-                    "bybit",
-                    "upbit",
-                    "hyperliquid",
-                )
-            ):
-                item.add_marker(pytest.mark.network)
-
         # Auto-mark exchange-specific tests and skip if no API keys
         test_path = str(item.fspath).lower()
         test_name = item.nodeid.lower()
@@ -234,93 +194,6 @@ def pytest_collection_modifyitems(config, items):
         # Skip @pytest.mark.integration tests when SKIP_LIVE_TESTS is set
         if skip_live and "integration" in item.keywords:
             item.add_marker(pytest.mark.skip(reason="SKIP_LIVE_TESTS=true"))
-
-
-def _network_skip_reason(item, exc):
-    """Return a skip reason for network/auth-related failures, if applicable."""
-    is_network_test = "integration" in item.keywords or "network" in item.keywords
-    if not is_network_test:
-        return None
-
-    exc_name = type(exc).__name__
-    exc_msg = str(exc).lower()
-
-    if isinstance(exc, AssertionError) and any(
-        hint in exc_msg
-        for hint in [
-            "returned no data",
-            "returned none",
-            "is not none",
-            "no ticks",
-            "no response",
-            "empty response",
-            "failed to fetch",
-            "enough exchanges",
-        ]
-    ):
-        return f"Skipped (no data, likely network): {str(exc)[:80]}"
-
-    network_indicators = [
-        "authenticationerror",
-        "requestfailederror",
-        "requesterror",
-        "connectionerror",
-        "connection error",
-        "connecterror",
-        "timeout",
-        "ssl",
-        "eof",
-        "connection refused",
-        "no route to host",
-        "403",
-        "401",
-        "404",
-        "name or service not known",
-        "urlerror",
-        "socketerror",
-        "gaierror",
-        "connection reset",
-        "connection aborted",
-        "max retries exceeded",
-        "network is unreachable",
-        "endpoint gone",
-        "not found",
-        "remoteprotocolerror",
-        "server disconnected",
-        "environment variable not set",
-        "api_key",
-        "rate_limit",
-        "ratelimit",
-        "too many requests",
-        "failed to get listen key",
-        "winerror 10061",
-    ]
-    combined = exc_name.lower() + " " + exc_msg
-    if any(ind in combined for ind in network_indicators):
-        return f"Skipped (network/auth): {exc_name}: {str(exc)[:80]}"
-
-    if exc_name.lower() == "failed" and "timeout" in exc_msg:
-        return f"Skipped (timeout): {str(exc)[:80]}"
-
-    return None
-
-
-@pytest.hookimpl(hookwrapper=True)
-def pytest_runtest_makereport(item, call):
-    """Convert network/auth failures into skipped outcomes without teardown warnings."""
-    outcome = yield
-    report = outcome.get_result()
-    if report.when != "call" or report.outcome != "failed" or call.excinfo is None:
-        return
-    if _is_real_ctp_network_test(str(item.fspath)):
-        return
-
-    reason = _network_skip_reason(item, call.excinfo.value)
-    if reason is None:
-        return
-
-    report.outcome = "skipped"
-    report.longrepr = (str(item.fspath), 0, reason)
 
 
 def pytest_sessionfinish(session, exitstatus):
