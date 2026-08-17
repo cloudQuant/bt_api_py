@@ -86,7 +86,7 @@ class BtApiForwardingAdapter:
 
 def _to_payload(raw: Any) -> dict[str, Any]:
     if is_dataclass(raw):
-        return asdict(raw)
+        return asdict(raw)  # type: ignore[arg-type]  # is_dataclass 已确认是实例
     if isinstance(raw, dict):
         return dict(raw)
     payload = dict(getattr(raw, "__dict__", {}) or {})

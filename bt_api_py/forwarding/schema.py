@@ -51,7 +51,7 @@ def private_topic(kind: str, account_id: str = "", strategy_id: str = "") -> str
 
 def _clean(value: Any) -> Any:
     if is_dataclass(value):
-        return _clean(asdict(value))
+        return _clean(asdict(value))  # type: ignore[arg-type]  # is_dataclass 已确认是实例
     if isinstance(value, datetime):
         return value.isoformat()
     if isinstance(value, Mapping):

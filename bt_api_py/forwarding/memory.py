@@ -7,7 +7,7 @@ import inspect
 import math
 import threading
 from collections import defaultdict, deque
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Coroutine
 from typing import Any, Union
 
 from bt_api_py.forwarding.schema import CommandAck, MarketEvent, OrderCommand, PrivateEvent
@@ -222,8 +222,8 @@ class _LoopRunner:
         asyncio.set_event_loop(self._loop)
         self._loop.run_forever()
 
-    def submit(self, awaitable: Awaitable[Any]) -> concurrent.futures.Future[Any]:
-        return asyncio.run_coroutine_threadsafe(awaitable, self._loop)
+    def submit(self, coro: Coroutine[Any, Any, Any]) -> concurrent.futures.Future[Any]:
+        return asyncio.run_coroutine_threadsafe(coro, self._loop)
 
     @classmethod
     def get(cls) -> _LoopRunner:
@@ -258,4 +258,4 @@ def _run_awaitable_sync(awaitable: Awaitable[Any], *, timeout: float | None = No
     except concurrent.futures.TimeoutError:
         # 结果未知：协程仍在常驻 loop 上继续执行，消费其最终异常避免告警。
         future.add_done_callback(_consume_future_result)
-        raise _timeout_error(timeout) from None
+        raise _timeout_error(timeout) from None  # type: ignore[arg-type]  # 超时分支 timeout 必非 None

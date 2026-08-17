@@ -37,7 +37,7 @@ def _discover_entry_point_adapters() -> None:
     selected_entry_points = (
         entry_points.select(group=ENTRY_POINT_GROUP)
         if hasattr(entry_points, "select")
-        else entry_points.get(ENTRY_POINT_GROUP, [])
+        else entry_points.get(ENTRY_POINT_GROUP, [])  # type: ignore[attr-defined]  # 旧版 API 兼容
     )
     for entry_point in selected_entry_points:
         register = entry_point.load()

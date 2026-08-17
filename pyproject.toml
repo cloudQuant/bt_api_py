@@ -188,7 +188,7 @@ quote-style = "double"
 indent-style = "space"
 
 [tool.mypy]
-python_version = "3.9"
+python_version = "3.12"
 explicit_package_bases = true
 warn_return_any = true
 warn_unused_configs = true
@@ -206,10 +206,10 @@ ignore_missing_imports = true
 plugins = []
 # Gradual typing: disable noisy codes for brownfield codebase (can tighten later)
 disable_error_code = [
-    "override", "name-defined", "attr-defined", "has-type", "arg-type",
+    "override", "name-defined", "has-type",
     "call-overload", "return-value", "assignment", "index", "operator",
-    "var-annotated", "no-any-return", "misc", "valid-type", "empty-body",
-    "no-redef", "union-attr", "call-arg", "list-item", "dict-item",
+    "no-any-return", "misc", "valid-type", "empty-body",
+    "no-redef", "union-attr", "list-item", "dict-item",
     "import-untyped",
 ]
 

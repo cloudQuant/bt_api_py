@@ -4,7 +4,7 @@ from __future__ import annotations
 from collections import OrderedDict
 from dataclasses import asdict, dataclass, is_dataclass
 from datetime import datetime
-from typing import Any
+from typing import Any, Literal
 
 from bt_api_base.logging_factory import get_logger
 
@@ -22,18 +22,18 @@ _VALID_ORDER_TYPES = frozenset({"limit", "market"})
 _MAX_CACHED_ACKS = 10_000
 
 
-def _normalize_side(value: Any) -> str:
+def _normalize_side(value: Any) -> Literal["buy", "sell"]:
     side = str(value).strip().lower()
     if side not in _VALID_SIDES:
         raise ValueError(f"invalid side {value!r}: must be 'buy' or 'sell'")
-    return side
+    return side  # type: ignore[return-value]  # 已通过 _VALID_SIDES 白名单校验
 
 
-def _normalize_order_type(value: Any) -> str:
+def _normalize_order_type(value: Any) -> Literal["limit", "market"]:
     order_type = str(value).strip().lower()
     if order_type not in _VALID_ORDER_TYPES:
         raise ValueError(f"invalid order_type {value!r}: must be 'limit' or 'market'")
-    return order_type
+    return order_type  # type: ignore[return-value]  # 已通过 _VALID_ORDER_TYPES 白名单校验
 
 
 @dataclass
@@ -400,7 +400,7 @@ class OrderRouter:
 
 def _snapshot_to_dict(snapshot: Any) -> dict[str, Any]:
     if is_dataclass(snapshot):
-        data = asdict(snapshot)
+        data = asdict(snapshot)  # type: ignore[arg-type]  # is_dataclass 已确认是实例
     elif isinstance(snapshot, dict):
         data = dict(snapshot)
     else:

@@ -15,7 +15,7 @@ from dataclasses import dataclass, field
 from enum import Enum
 from numbers import Integral
 from pathlib import Path
-from typing import Any, cast
+from typing import Any
 
 try:
     from cryptography.hazmat.backends import default_backend
@@ -695,7 +695,7 @@ class OAuth2Provider:
                 issuer=self.issuer_url,
             )
 
-            return cast("dict[str, Any]", payload)
+            return payload
 
         except Exception as e:
             raise OAuthError(f"Invalid JWT: {e}") from e
