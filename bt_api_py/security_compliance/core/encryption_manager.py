@@ -124,6 +124,8 @@ class KeyManager(ABC):
 class LocalKeyManager(KeyManager):
     """Local file-based key management."""
 
+    _SALT_FILE = ".master_salt"
+
     def __init__(self, key_dir: str | Path, master_password: str):
         """Initialize local key manager."""
         if not CRYPTOGRAPHY_AVAILABLE:
@@ -131,16 +133,35 @@ class LocalKeyManager(KeyManager):
 
         self.key_dir = Path(key_dir)
         self.key_dir.mkdir(parents=True, exist_ok=True)
+        os.chmod(self.key_dir, 0o700)
         self.master_password = master_password
+        self._salt = self._load_or_create_salt()
         self._master_key = self._derive_master_key()
+
+    def _load_or_create_salt(self) -> bytes:
+        """加载或生成 PBKDF2 盐；旧格式（无 salt 文件）回退确定性盐并告警。"""
+        salt_file = self.key_dir / self._SALT_FILE
+        if salt_file.exists():
+            return base64.b64decode(salt_file.read_bytes())
+        # 旧格式兼容：有 .key 文件但无 salt 文件
+        if any(self.key_dir.glob("*.key")):
+            logger.warning(
+                "Legacy deterministic salt detected in %s; using sha256(password) salt",
+                self.key_dir,
+            )
+            return hashlib.sha256(self.master_password.encode()).digest()
+        # 全新：生成随机盐并持久化
+        salt = os.urandom(16)
+        salt_file.write_bytes(base64.b64encode(salt))
+        os.chmod(salt_file, 0o600)
+        return salt
 
     def _derive_master_key(self) -> bytes:
         """Derive master key from password using PBKDF2."""
-        salt = hashlib.sha256(self.master_password.encode()).digest()
         kdf = PBKDF2HMAC(
             algorithm=hashes.SHA256(),
             length=32,
-            salt=salt,
+            salt=self._salt,
             iterations=100000,
             backend=default_backend(),
         )
@@ -179,10 +200,12 @@ class LocalKeyManager(KeyManager):
         # Store encrypted key
         with key_file.open("wb") as f:
             f.write(encrypted_data)
+        os.chmod(key_file, 0o600)
 
         # Store metadata
         with metadata_file.open("w", encoding="utf-8") as f:
             json.dump(key.to_dict(), f, indent=2)
+        os.chmod(metadata_file, 0o600)
 
     def get_key(self, key_id: str) -> EncryptionKey | None:
         """Retrieve and decrypt an existing key."""
