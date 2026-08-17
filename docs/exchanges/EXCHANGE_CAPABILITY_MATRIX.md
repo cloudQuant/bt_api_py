@@ -31,8 +31,8 @@
 | **BINANCE___OPTION** | ✅ | ✅ | 20+/90% | ✅ | 期权支持完整 |
 | **HTX___SPOT** | ✅ | ✅ | 37+/95% | ✅ | 完整支持 |
 | **HTX___SWAP** | ✅ | ✅ | 40+/90% | ✅ | 合约功能完整 |
-| **BYBIT___SPOT** | ✅ | ⚠️ | 101/85% | ⚠️ | WebSocket需完善 |
-| **BYBIT___SWAP** | ✅ | ⚠️ | 95+/80% | ⚠️ | WebSocket需完善 |
+| **BYBIT___SPOT** | ✅ | ❌ | 101/85% | ⚠️ | WebSocket 未实现（REST-only） |
+| **BYBIT___SWAP** | ✅ | ❌ | 95+/80% | ⚠️ | WebSocket 未实现（REST-only） |
 | **BITGET___SPOT** | ✅ | ⚠️ | 45+/85% | ⚠️ | WebSocket需完善 |
 | **BITGET___SWAP** | ✅ | ⚠️ | 42+/80% | ⚠️ | WebSocket需完善 |
 | **KRAKEN___SPOT** | ✅ | ⚠️ | 46+/85% | ⚠️ | WebSocket需完善 |
